@@ -105,6 +105,8 @@ const RECORD_GPU_AUDIO = () => {
 };
 // the settings show at once, read only until the tab owns the saves
 const settingsReady = page => page.waitForFunction(() => !!document.querySelector('#settings .set') && !document.querySelector('#settings').hasAttribute('data-readonly'), null, { timeout: 15000 });
+// the start page's Online, Settings and Saves are tabs of one panel: a tab is shown before its controls are used
+const showTab = (page, pane) => page.click(`#tab-${pane}`);
 // settings writes are async: each one bumps #settings[data-saved]
 const saved = page => page.evaluate(() => +(document.querySelector('#settings').dataset.saved ?? 0));
 async function settle(page, before, n = 1) {
@@ -152,12 +154,14 @@ try {
   // --------------------------------------------------------- settings --
   if (want('settings') || want('play') || want('saves') || want('restore')) {
     await settingsReady(page);
+    await showTab(page, 'settings');
     await page.locator('#settings').screenshot({ path: path.join(OUT, 'settings.png') });
     let n0 = await saved(page);
     await page.click('.set[data-key="movies"] .switch'); await settle(page, n0++);          // movies: on -> off
     await page.click('.set[data-key="fps"] .opt:has-text("120")'); await settle(page, n0++);
     await page.click('#settings summary:has-text("More display")');
     await page.click('.set[data-key="fps_counter"] .opt:has-text("Detailed")'); await settle(page, n0++);
+    await showTab(page, 'online');
     await page.click('.set[data-key="roam"] .switch'); await settle(page, n0++);            // roam on (validated bool)
     await page.fill('#set-roam_name', 'Tester ; a comment'); await page.press('#set-roam_name', 'Tab'); await settle(page, n0++);
     await page.click('#online summary:has-text("More online")');
@@ -172,6 +176,7 @@ try {
     const envOk = env.NOMOVIES === '1' && env.NFSU2_FPS === '120' && env.NFSU2_FPS_COUNTER === 'detailed' &&
       env.NFSU2_ROAM_NAME === 'Tester' && env.NFSU2_ROAM === '0' && env.SNDSYNC === '0' && !('WINDOW' in env);
     // the raw editor: a refused value is kept in the file but shown as ignored
+    await showTab(page, 'settings');
     await page.click('#settings-raw summary');
     const ta = page.locator('#settings-text');
     await ta.fill((await ta.inputValue()).replace('#hud = wide', 'hud = ultrawide'));
@@ -189,6 +194,7 @@ try {
       name: document.querySelector('#set-roam_name').value,
     }));
     // Reset puts the template line back
+    await showTab(page, 'settings');
     const moreDisplay = await page.locator('#settings summary:has-text("More display")').textContent();   // fps_counter and hud
     await page.click('#settings summary:has-text("More display")');
     n0 = await saved(page);
@@ -244,6 +250,7 @@ try {
 
   // ------------------------------------------------------------ saves --
   if (want('saves') || want('restore')) {
+    await showTab(page, 'saves');
     await page.waitForSelector('#profiles .name', { timeout: 15000 });   // listed again when the game ended
     await page.waitForFunction(() => !/Counting/.test(document.querySelector('#cache-info').textContent));
     const listed = await page.locator('#profiles .name').allTextContents();
@@ -266,6 +273,7 @@ try {
     const p2 = watch(await ctx.newPage(), 'B');
     await page.close();                                               // free the Web Lock of save A... (B uses another folder anyway)
     await open(p2, `save=${SAVE2}&fresh&${ENV}`);
+    await showTab(p2, 'saves');
     await p2.waitForSelector('#profiles li');
     await p2.waitForFunction(() => !document.querySelector('#import').disabled, null, { timeout: 15000 });   // the tab owns the saves
     const before = await p2.locator('#profiles li').allTextContents();
@@ -345,6 +353,7 @@ try {
     const a = watch(await c2.newPage(), 'O1'), b = watch(await c2.newPage(), 'O2');
     await open(a, `save=${RUN}-o&fresh&env=NOMOVIES%3D1`);
     await open(b, `save=${RUN}-o`, 60000, ['waiting', 'ready', 'error']);
+    await showTab(b, 'settings');
     await b.waitForSelector('#settings[data-readonly] .set');
     const before = (await readOpfs(b, `${RUN}-o`, 'settings.ini')).text;
     const ro = await b.evaluate(() => ({ note: document.querySelector('#settings-note').textContent,

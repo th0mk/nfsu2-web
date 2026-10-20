@@ -16,22 +16,29 @@ export function playersText(c: PlayerCounts): string {
   return `On this server now: ${n(c.players, 'player', 'players')}${on}.${full}`;
 }
 
+/** The same, short, for the start page's status header: "12 playing · 3 in Online" ('' for an answer it cannot read). */
+export function playersShort(c: PlayerCounts): string {
+  if (!Number.isInteger(c.players) || c.players < 0) return '';
+  const on = Number.isInteger(c.online) && c.online! > 0 ? ` · ${c.online} in Online` : '';
+  return c.full === true ? `Server full · ${c.players} playing` : `${c.players} playing${on}`;
+}
+
 /** Whether the server answers (any answer but a 5xx from a proxy in front of it), within ms. */
 export async function serverAnswers(ms: number): Promise<boolean> {
   try { return (await fetch('/players', { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(ms) })).status < 500; }
   catch { return false; }
 }
 
-/** show(line) at once and every 15 s while idle() and the page is visible; reached(whether the server answered) */
-export function watchPlayers(show: (line: string) => void, idle: () => boolean, reached?: (ok: boolean) => void) {
+/** show(line, short) at once and every 15 s while idle() and the page is visible; reached(whether the server answered) */
+export function watchPlayers(show: (line: string, short: string) => void, idle: () => boolean, reached?: (ok: boolean) => void) {
   let gone = false;
   const ask = async () => {
     if (gone || document.visibilityState !== 'visible' || !idle()) return;
     try {
       const r = await fetch('/players', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
       reached?.(r.status < 500);
-      if (r.status === 404) { gone = true; show(''); return; }
-      if (r.ok) show(playersText(await r.json() as PlayerCounts));
+      if (r.status === 404) { gone = true; show('', ''); return; }
+      if (r.ok) { const c = await r.json() as PlayerCounts; show(playersText(c), playersShort(c)); }
     } catch { reached?.(false); }
   };
   window.setInterval(() => void ask(), EVERY_MS);

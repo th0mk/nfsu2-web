@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0d0d0d">
+<meta name="theme-color" content="#050505">
 <title>Underground 2 Revived</title>
 <meta name="description" content="Play Need for Speed: Underground 2 (2004) in Chrome and Firefox with WebGPU graphics, Web Audio, up to 120 fps widescreen, controller support, free roam and Online races with friends. Fan project, not affiliated with Electronic Arts.">
 <meta name="keywords" content="Need for Speed Underground 2, NFSU2, Underground 2 browser, play NFSU2 online, WebAssembly, WebGPU, free roam multiplayer, racing game">
@@ -41,36 +41,184 @@
 
 <main class="app" id="app">
   <header class="top">
-    <div class="top-row">
-      <h1>Underground 2 Revived</h1>
-      <div class="top-end">
-        <p class="hint">Fan project. Not affiliated with or endorsed by Electronic Arts.</p>
-        <a class="btn" href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg>Discord</a>
-      </div>
-    </div>
-    <div class="bar" id="progress" role="progressbar" aria-label="Game loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <div class="bar-fill" id="progress-fill"></div>
+    <div class="top-in">
+      <p class="brand"><i aria-hidden="true"></i><span>Underground 2 <b>Revived</b></span></p>
+      <div class="spacer"></div>
+      <button type="button" class="chip top-play" id="top-play" disabled tabindex="-1" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3v18l15-9z"/></svg>Play
+      </button>
+      <button type="button" class="icon-btn" id="open-help" aria-label="Controls and what's new" title="Controls and what's new">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M9.2 9a3 3 0 1 1 4.3 2.7c-.9.4-1.5 1.2-1.5 2.2v.4"/><circle cx="12" cy="18.5" r=".6" fill="currentColor"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="open-settings" aria-label="Settings" title="Settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+      <a class="chip discord" href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg><span>Discord</span></a>
     </div>
   </header>
 
-  <div class="side">
-    <section class="panel hero" aria-label="Play">
-      <p class="status" id="status" role="status">Loading</p>
-      <p class="status-sub" id="status-sub">Loading the game.</p>
-      <div class="row">
-        <button type="button" class="play" id="play" disabled>Play <kbd>Enter</kbd></button>
-        <button type="button" class="btn" id="retry" hidden>Retry</button>
-        <button type="button" class="btn" id="reload" hidden>Reload</button>
-        <button type="button" class="text-btn" id="log-btn" hidden>Download log</button>
-      </div>
-      <p class="msg" id="report" hidden>Help get it fixed: download the log and post it in <a href="https://discord.gg/SSHm5g43gh"target="_blank" rel="noopener noreferrer">#bug-reports on our Discord</a>, with what you were doing when it happened.</p>
-      <p class="msg" id="newer" aria-live="polite" hidden></p>
-      <ul class="problems" id="problems" aria-live="polite"></ul>
-      <p class="msg warn" id="override" hidden></p>
-    </section>
+  <div class="layout">
+    <!-- left: the game's status, Play, the game data on this PC -->
+    <div class="left">
+      <section class="frame hero" aria-label="Play">
+        <div class="frame-h status-h">
+          <p class="status" id="status" role="status">Loading</p>
+          <p class="status-sub" id="status-sub">Loading the game.</p>
+          <p class="side" id="here" hidden><span class="live" aria-hidden="true"></span><span id="here-text"></span></p>
+          <div class="bar loadbar" id="progress" role="progressbar" aria-label="Game loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="bar-fill" id="progress-fill"></div>
+          </div>
+        </div>
 
-    <section class="panel" id="controls" aria-labelledby="controls-title">
-      <h2 id="controls-title">Controls</h2>
+        <div class="inner banner">
+          <div class="hero-copy">
+            <h1>Underground 2,<br><b>in your browser.</b></h1>
+            <p class="lede">The 2004 PC game, recompiled. Widescreen up to 120 fps, free roam and Online races with friends: no install, no EA account.</p>
+          </div>
+          <div class="cta">
+            <button type="button" class="play" id="play" disabled><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 3v18l15-9z"/></svg><span class="play-txt">Play<kbd>Enter</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="inner hero-more">
+          <div class="row">
+            <button type="button" class="btn" id="retry" hidden>Retry</button>
+            <button type="button" class="btn" id="reload" hidden>Reload</button>
+            <button type="button" class="text-btn" id="log-btn" hidden>Download log</button>
+          </div>
+          <p class="msg" id="report" hidden>Help get it fixed: download the log and post it in <a href="https://discord.gg/SSHm5g43gh" target="_blank" rel="noopener noreferrer">#bug-reports on our Discord</a>, with what you were doing when it happened.</p>
+          <p class="msg" id="newer" aria-live="polite" hidden></p>
+          <ul class="problems" id="problems" aria-live="polite"></ul>
+          <p class="msg warn" id="override" hidden></p>
+        </div>
+
+        <section class="inner preload" id="game-data" aria-labelledby="game-data-title">
+          <div class="pl-top">
+            <div class="pl-ico" aria-hidden="true">
+              <svg class="ico-get" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v12m-5-5 5 5 5-5M4 21h16"/></svg>
+              <svg class="ico-done" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m5 12 5 5 9-10"/></svg>
+            </div>
+            <div class="pl-txt">
+              <h2 id="game-data-title">Game data on this PC</h2>
+              <p id="cache-info">Counting…</p>
+            </div>
+          </div>
+          <div class="bar track" id="data-bar" role="progressbar" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+            <div class="bar-fill"></div>
+          </div>
+          <div class="row pl-btns">
+            <button type="button" class="btn primary" id="fetch-all" hidden>Preload the game data</button>
+            <button type="button" class="btn ghost" id="clear-cache">Delete the game data on this PC</button>
+          </div>
+          <p class="msg" id="data-msg" role="status"></p>
+        </section>
+      </section>
+    </div>
+
+    <!-- right: Online, Settings, Saves; controls and controllers -->
+    <div class="right">
+      <section class="frame tabbed" id="panel" aria-label="Online, settings and saves">
+        <div class="frame-h">
+          <div class="tabs" role="tablist" aria-label="Online, settings and saves">
+            <button type="button" class="tab" role="tab" id="tab-online" aria-controls="online" aria-selected="true">Online</button>
+            <button type="button" class="tab" role="tab" id="tab-settings" aria-controls="settings" aria-selected="false" tabindex="-1">Settings</button>
+            <button type="button" class="tab" role="tab" id="tab-saves" aria-controls="saves" aria-selected="false" tabindex="-1">Saves <span class="tab-count" id="saves-count" hidden></span></button>
+          </div>
+        </div>
+
+        <section class="inner pane" id="online" role="tabpanel" aria-labelledby="online-title">
+          <h2 class="sr-only" id="online-title">Online</h2>
+          <p class="hint" id="online-note" hidden></p>
+          <div id="online-body"></div>
+        </section>
+
+        <section class="inner pane" id="settings" role="tabpanel" aria-labelledby="settings-title" hidden>
+          <h2 class="sr-only" id="settings-title">Settings</h2>
+          <p class="hint" id="settings-note">Saved in this browser. Changes apply the next time you press Play.</p>
+          <div id="settings-body"></div>
+          <details class="raw" id="settings-raw">
+            <summary>Edit settings.ini as text</summary>
+            <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
+            <div class="row">
+              <button type="button" class="btn" id="settings-text-save">Save file</button>
+              <span class="hint" id="settings-text-msg" role="status"></span>
+            </div>
+          </details>
+        </section>
+
+        <section class="inner pane" id="saves" role="tabpanel" aria-labelledby="saves-title" hidden>
+          <h2 class="sr-only" id="saves-title">Saves</h2>
+          <ul class="profiles" id="profiles" aria-label="Profiles in this browser"></ul>
+          <p class="hint">Quit from the game's main menu, or <kbd>F9</kbd> then Quit game, so a save in progress is never cut short.</p>
+          <div class="backup">
+            <h3>Backup</h3>
+            <p class="hint">One zip with your profiles, the game's options, settings.ini and F12 screenshots. Restoring a backup replaces all of them in this browser.</p>
+            <div class="row">
+              <button type="button" class="btn" id="export"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 21h16"/></svg>Download a backup</button>
+              <label class="btn file-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 21V9m-5 5 5-5 5 5M4 3h16"/></svg>Restore a backup<input type="file" id="import" accept=".zip,application/zip"></label>
+            </div>
+          </div>
+          <p class="msg" id="saves-msg" role="status"></p>
+          <p class="msg warn" id="storage-note" hidden></p>
+        </section>
+
+        <p class="right-foot hint" id="panel-foot">Saved in this browser · applies the next time you press Play</p>
+      </section>
+
+      <section class="frame feature-frame" aria-label="Controls and controllers">
+        <div class="inner keystrip">
+          <span><kbd>F9</kbd> Menu</span><span class="sep" aria-hidden="true"></span>
+          <span><kbd>F8</kbd> Frame rate</span><span class="sep" aria-hidden="true"></span>
+          <span><kbd>F12</kbd> Screenshot</span>
+          <button type="button" class="link-btn" id="open-controls">All controls ›</button>
+        </div>
+        <div class="inner feature">
+          <div class="pads" id="pads" aria-hidden="true">
+            <div class="pad" title="Xbox controller">
+              <svg width="30" height="22" viewBox="0 0 40 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 3h18c4 0 6.5 2.5 7.6 7l2.2 10c.7 3.5-1.6 6-4.5 6-2 0-3.3-1-4.6-2.8L27.5 20h-15l-2.2 3.2C9 25 7.7 26 5.7 26c-2.9 0-5.2-2.5-4.5-6l2.2-10C4.5 5.5 7 3 11 3z"/><path d="M10 10v6M7 13h6"/><circle cx="29" cy="10.5" r="1.3" fill="currentColor"/><circle cx="32" cy="13.5" r="1.3" fill="currentColor"/><circle cx="26" cy="13.5" r="1.3" fill="currentColor"/><circle cx="29" cy="16.5" r="1.3" fill="currentColor"/></svg>
+            </div>
+            <div class="pad" title="PlayStation controller">
+              <svg width="30" height="22" viewBox="0 0 40 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4h22c3.5 0 5.8 2.3 6.8 6l1.6 9c.6 3.8-1.4 6.5-4.4 6.5-2.2 0-3.4-1.3-4.6-3.3L28.5 19h-17L9.6 22.2C8.4 24.2 7.2 25.5 5 25.5 2 25.5 0 22.8.6 19l1.6-9C3.2 6.3 5.5 4 9 4z"/><circle cx="14" cy="17" r="2.6"/><circle cx="26" cy="17" r="2.6"/><path d="M28.5 8.6l1.8 3h-3.6zM31.8 11.2h2.6v2.6h-2.6zM23.6 11.4l2.2 2.2m0-2.2-2.2 2.2"/><path d="M9 9v5M6.5 11.5h5"/></svg>
+            </div>
+          </div>
+          <div class="grow">
+            <h3>Xbox &amp; PlayStation controllers</h3>
+            <p>Plug in and drive, with rumble on crashes and hard landings.</p>
+          </div>
+          <div class="feat-foot">
+            <span class="pill off" id="pad-pill" role="status">No controller</span>
+            <button type="button" class="btn sm" id="rumble-test">Test rumble</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <p>Fan project. Not affiliated with or endorsed by Electronic Arts. Contact for rights holders: <a href="mailto:legal@nfsu2.xyz">legal@nfsu2.xyz</a></p>
+  </footer>
+</main>
+
+<div class="stage" id="stage" hidden>
+  <div class="hud-fps" id="fps" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="toast away" id="away" role="status" hidden></div>
+  <div class="notices" id="notices" role="status" aria-live="polite"></div>
+</div>
+
+<div class="page-toast" id="page-toast" role="status" aria-live="polite"></div>
+
+<dialog class="dlg help" id="help" aria-labelledby="help-title">
+  <div class="frame">
+    <form method="dialog" class="frame-h dlg-head">
+      <h2 class="sr-only" id="help-title">Help</h2>
+      <div class="tabs" role="tablist" aria-label="Help">
+        <button type="button" class="tab" role="tab" id="tab-keys" aria-controls="help-body" aria-selected="true">Controls</button>
+        <button type="button" class="tab" role="tab" id="tab-changes" aria-controls="changes" aria-selected="false" tabindex="-1">What's new</button>
+      </div>
+      <button class="btn sm" value="close">Close</button>
+    </form>
+    <div class="inner pane" id="help-body" role="tabpanel" aria-labelledby="tab-keys">
       <div id="keys">
         <h3>Driving</h3>
         <dl class="keys">
@@ -96,94 +244,23 @@
         </dl>
         <p class="hint">In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls. Xbox and PlayStation controllers work too.</p>
       </div>
-    </section>
-
-    <section class="panel" id="changes" aria-labelledby="changes-title">
-      <h2 id="changes-title">Changes from the original</h2>
+    </div>
+    <section class="inner pane" id="changes" role="tabpanel" aria-labelledby="changes-title" hidden>
+      <h3 id="changes-title">Changes from the original</h3>
       <ul class="changes">
-        <li>The PC game's own code, recompiled to run in Chrome and Firefox, with WebGPU for the graphics and Web Audio for the sound.</li>
-        <li>Up to 120 fps, widescreen at your screen's resolution.</li>
-        <li>The original look, with the game's graphics settings at their highest.</li>
-        <li>Startup movies skip with one press.</li>
-        <li>Free roam and Online mode with friends on this server, no EA account needed.</li>
-        <li>A horn to honk at the other players, in free roam and in races.</li>
-        <li>Xbox and PlayStation controllers, with rumble.</li>
-        <li>The game pauses when its tab is in the background, except in LAN and Online play.</li>
-        <li>Autosave for every profile, and a note each time the game saves.</li>
-        <li>Saves stay in this browser, with zip backups.</li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M8 6 2 12l6 6M16 6l6 6-6 6"/></svg><p><b>The PC game's own code</b><span>Recompiled to run in Chrome and Firefox, with WebGPU for the graphics and Web Audio for the sound.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/></svg><p><b>Up to 120 fps</b><span>Widescreen at your screen's resolution.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><p><b>The original look</b><span>With the game's graphics settings at their highest.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 4l10 8-10 8zM19 5v14"/></svg><p><b>Startup movies skip</b><span>With one press.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><p><b>Free roam &amp; Online</b><span>With friends on this server, no EA account needed.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10zM17 9a4 4 0 0 1 0 6"/></svg><p><b>A horn</b><span>To honk at the other players, in free roam and in races.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3"/></svg><p><b>Xbox &amp; PlayStation controllers</b><span>With rumble.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg><p><b>Pauses in a background tab</b><span>Except in LAN and Online play.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3"/></svg><p><b>Autosave for every profile</b><span>And a note each time the game saves.</span></p></li>
+        <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg><p><b>Saves stay in this browser</b><span>With zip backups.</span></p></li>
       </ul>
     </section>
   </div>
-
-  <div class="content">
-    <section class="panel" id="saves" aria-labelledby="saves-title">
-      <h2 id="saves-title">Saves</h2>
-      <ul class="profiles" id="profiles" aria-label="Profiles in this browser"></ul>
-      <p class="hint">Quit from the game's main menu, or <kbd>F9</kbd> then Quit game, so a save in progress is never cut short.</p>
-      <h3>Backup</h3>
-      <p class="hint">One zip with your profiles, the game's options, settings.ini and F12 screenshots. Restoring a backup replaces all of them in this browser.</p>
-      <div class="row">
-        <button type="button" class="btn" id="export">Download a backup</button>
-        <label class="btn file-btn">Restore a backup<input type="file" id="import" accept=".zip,application/zip"></label>
-      </div>
-      <p class="msg" id="saves-msg" role="status"></p>
-      <p class="msg warn" id="storage-note" hidden></p>
-    </section>
-
-    <section class="panel" id="online" aria-labelledby="online-title">
-      <h2 id="online-title">Online</h2>
-      <p class="hint" id="online-note" hidden></p>
-      <div id="online-body"></div>
-    </section>
-
-    <section class="panel" id="settings" aria-labelledby="settings-title">
-      <h2 id="settings-title">Settings</h2>
-      <p class="hint" id="settings-note">Saved in this browser. Changes apply the next time you press Play.</p>
-      <div id="settings-body"></div>
-      <details class="raw" id="settings-raw">
-        <summary>Edit settings.ini as text</summary>
-        <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
-        <div class="row">
-          <button type="button" class="btn" id="settings-text-save">Save file</button>
-          <span class="hint" id="settings-text-msg" role="status"></span>
-        </div>
-      </details>
-    </section>
-
-    <section class="panel" id="game-data" aria-labelledby="game-data-title">
-      <h2 id="game-data-title">Game data on this PC</h2>
-      <p class="hint" id="cache-info">Counting…</p>
-      <div class="bar" id="data-bar" role="progressbar" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
-        <div class="bar-fill"></div>
-      </div>
-      <div class="row">
-        <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
-        <button type="button" class="btn" id="clear-cache">Delete the game data on this PC</button>
-      </div>
-      <p class="msg" id="data-msg" role="status"></p>
-    </section>
-  </div>
-
-  <footer class="foot">
-    <p class="hint">Contact for rights holders: <a href="mailto:legal@nfsu2.xyz">legal@nfsu2.xyz</a></p>
-  </footer>
-</main>
-
-<div class="stage" id="stage" hidden>
-  <div class="hud-fps" id="fps" hidden></div>
-  <div class="toast" id="toast" hidden></div>
-  <div class="toast away" id="away" role="status" hidden></div>
-  <div class="notices" id="notices" role="status" aria-live="polite"></div>
-</div>
-
-<div class="page-toast" id="page-toast" role="status" aria-live="polite"></div>
-
-<dialog class="dlg help" id="help" aria-labelledby="help-title">
-  <form method="dialog" class="dlg-head">
-    <h2 id="help-title">Controls</h2>
-    <button class="btn" value="close">Close</button>
-  </form>
-  <div id="help-body"></div>
 </dialog>
 
 <dialog class="dlg menu" id="menu" aria-labelledby="menu-title">

@@ -37,7 +37,7 @@ the ways to set that up. Each player then opens that `https://` address in the l
 
 The first start on a PC downloads about 7 MB of game code and, while playing, the game data it needs, compressed on
 the way. That PC keeps the data, so later starts are quick. To load it up front, press **Preload the game data** in
-Game data on this PC, at the bottom of the start page: 2 GB (all but the movies), about 1.4 GB over the network.
+Game data on this PC, under Play on the start page: 2 GB (all but the movies), about 1.4 GB over the network.
 After that no loading screen waits on the network, which matters on a slow line to a remote server. The movies
 stream from the server as they play; with Movies off (Settings, Game) the game never asks for them.
 
@@ -85,12 +85,12 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 
 ## 4. Settings
 
-**Online** (under Saves) and **Settings** on the start page hold this browser's `settings.ini`, the same file and
+**Online** and **Settings** (tabs beside Play on the start page, with **Saves**) hold this browser's `settings.ini`, the same file and
 keys as the Mac app. Each change is saved at once and applies the next time you press Play.
 
 | Group | Settings |
 |---|---|
-| Online | its own section under Saves: how many play on this server now, free roam with others, your name (in free roam and online), room, the game's Online mode (on by default); more: solid cars and the free-roam network |
+| Online | its own tab: how many play on this server now, free roam with others, your name (in free roam and online), room, the game's Online mode (on by default); more: solid cars and the free-roam network |
 | Game | movies, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency |
 | Display | full screen on Play (off: the game plays in the browser window), resolution scale, frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 60, 120 or 240; Online and LAN races at most 120); more: HUD layout, movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter |
 | Controller | rumble; more: controller on or off, menu buttons, dead zones |
@@ -130,7 +130,7 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
   are left out. Restore only backups you made yourself or trust.
 - **Backups are your safety net.** When the disk is nearly full, the browser may clear a site's storage unless it
   promised to keep it. Chrome decides that by itself, and the page cannot see how full the disk is, so it does not warn.
-  Firefox asks by the address bar (the Saves section says so while it asks): allow it. Make a backup now and then.
+  Firefox asks by the address bar (the Saves tab says so while it asks): allow it. Make a backup now and then.
 - **Preloading the game data:** "Preload the game data" in Game data on this PC fetches the game folder but the
   movies into this browser, compressed on the way, with its progress and the time left. You can play meanwhile:
   preloading pauses while the game runs and goes on when it ends. Stop it whenever you like; what came is kept, and

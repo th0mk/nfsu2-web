@@ -1,5 +1,5 @@
 // The settings on the start page: a form over settings.ini, in Settings and,
-// for the Online group, in a section of its own under Saves.  Every change
+// for the Online group, in a tab of its own beside Settings and Saves.  Every change
 // rewrites the one line of that key (settingsPut, bundle.m's settings_put), so
 // the file stays the source of truth and keeps the player's own comments;
 // "Reset" puts the template's commented-out line back.  Native controls

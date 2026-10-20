@@ -33,6 +33,7 @@ import { FpsOverlay, FPS_MODES, type FpsMode } from './overlay';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { moviesKept, Predownload } from './predownload';
+import { pageUi, type PageUi } from './page-ui';
 
 type Phase = 'boot' | 'ready' | 'error' | 'waiting' | 'starting' | 'playing' | 'exited';
 
@@ -88,6 +89,7 @@ let settings: SettingsPanel;
 let players: { now(): void } | null = null;
 let saves: SavesPanel;
 let download: Predownload;
+let ui: PageUi;
 /** the server does not answer: the page and the module came from this browser's copies (sw.ts), and a game
  *  runs from the game data on this PC */
 let offline = false;
@@ -165,6 +167,7 @@ function evaluate() {
 function updatePlay() {
   const ok = !!loaded && instance.owner && !blocking() && !starting && (phase === 'ready' || phase === 'exited');
   $<HTMLButtonElement>('#play').disabled = !ok;
+  $<HTMLButtonElement>('#top-play').disabled = !ok;   // Play in the top bar (page-ui.ts)
   $('#retry').hidden = checks.get('module')?.state !== 'fail';
 }
 
@@ -496,12 +499,8 @@ function pageToast(msg: string) {
   pageToastTimer = setTimeout(() => { t.textContent = ''; }, 5000);
 }
 
-/** the controls sheet of the start page, in a dialog (F9, Controls, while the game runs) */
-function openHelp() {
-  const body = $('#help-body');
-  if (!body.firstChild) body.append(...[...$('#keys').childNodes].map(n => n.cloneNode(true)));
-  $<HTMLDialogElement>('#help').showModal();
-}
+/** the controls sheet, in the help dialog (the page's ? button, and F9, Controls, while the game runs) */
+function openHelp() { ui.openHelp('help-body'); }
 
 /** free roam: a friend joined, left, went into a race (who: the friend's name the text starts with); the server
  *  full; four at most, each for 5 s (also in the log).  Friends' lines are only logged for now: with the crowds
@@ -722,6 +721,7 @@ export async function boot() {
   const dev = asked && await devServer();
   const given = takeParams(dev);
   instance = claimInstance(`nfsu2-saves:${SAVE}`);
+  ui = pageUi(() => void play(), pageToast);
   fps = new FpsOverlay($('#fps'));
   // made here once: a closure made per game (in startGame) would keep that game's scope reachable
   fps.extra = () => session?.stats() ?? {};
@@ -731,13 +731,13 @@ export async function boot() {
     readOnly: () => !instance.owner, say: pageToast,
   }, $('#online'));
   // who plays on this server now (Online): only while no game runs here
-  players = watchPlayers(line => settings.setStatus(line), () => !session && !starting, setReach);
+  players = watchPlayers((line, short) => { settings.setStatus(line); ui.here(short); }, () => !session && !starting, setReach);
   window.addEventListener('online', () => players?.now());
   window.addEventListener('resize', placeNotices);
   download = new Predownload(s => saves.showData(s), logLine);
   saves = new SavesPanel($('#saves'), $('#game-data'), {
     saveDir: SAVE, busy: () => !!session || starting || !instance.owner, confirm: confirmBox,
-    onRestored: () => { void loadSettings(); void settings.refresh(); }, download,
+    onRestored: () => { void loadSettings(); void settings.refresh(); }, download, onProfiles: n => ui.profiles(n),
   });
   $<HTMLButtonElement>('#play').onclick = () => void play();
   $<HTMLButtonElement>('#retry').onclick = () => void loadModule();
@@ -758,7 +758,7 @@ export async function boot() {
     // Enter plays only when nothing else has the focus (or Play itself does): a
     // focused link, button or field keeps its own Enter
     const t = e.target as Element | null;
-    const onPage = !t || t === document.body || t === document.documentElement || t.id === 'play';
+    const onPage = !t || t === document.body || t === document.documentElement || t.id === 'play' || t.id === 'top-play';
     if (!session && e.code === 'Enter' && onPage && !document.querySelector('dialog[open]') && !$<HTMLButtonElement>('#play').disabled) {
       e.preventDefault(); void play();
     }

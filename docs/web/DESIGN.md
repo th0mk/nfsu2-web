@@ -134,7 +134,7 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
     asked again after a growing pause, for as long as it takes: a failed read would give the game 0 bytes. The log's
     `[data]` lines name each block that waited 5 s or needed another try (`NFSU2_DATA_FAULT` tests it, the web
     suite's `datafault`). The data but the movies crosses the network in 69 % of its size (1.37 of 1.98 GB; tracks about 40 %).
-    "Preload the game data" (Game data on this PC, at the bottom of the start page) fills the cache with all but the
+    "Preload the game data" (Game data on this PC, under Play on the start page) fills the cache with all but the
     movies ahead of play from its own worker (`predownload-worker.ts`, 4 blocks at once, each at the address the game's
     own reads use, so one copy in Cloudflare's cache serves both). It runs only while no game
     runs in the tab: Play pauses it, and the game's end resumes it.

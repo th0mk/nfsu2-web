@@ -23,6 +23,8 @@ export interface SavesDeps {
   onRestored(): void;
   /** the download of the game data (all but the movies) ahead of play */
   download: Predownload;
+  /** how many profiles are listed, each time the list is read (the Saves tab shows it) */
+  onProfiles?(n: number): void;
 }
 
 // Limits for a restore, judged by each entry's declared size before anything is
@@ -150,6 +152,7 @@ export class SavesPanel {
   async refresh() {
     const files = await listFiles(this.deps.saveDir);
     this.profiles = await listProfiles(this.deps.saveDir, files);
+    this.deps.onProfiles?.(this.profiles.length);
     const busy = this.deps.busy();
     // a name being typed stays as it is (the list is shown again when the edit ends)
     if (!this.profiles.some(p => p.name === this.renaming)) { this.renaming = null; this.showProfiles(); }
@@ -186,6 +189,8 @@ export class SavesPanel {
     const fetchBtn = this.dataPanel.querySelector<HTMLButtonElement>('#fetch-all')!;
     const d = this.data, rest = d ? d.total - d.have : 0;
     bar.hidden = !active;
+    // for the section's icon: a tick once all of it is here
+    this.dataPanel.dataset.state = active ? st.state : d && rest <= 0 ? 'done' : 'idle';
     fetchBtn.disabled = this.deps.busy() && !active;
     if (active) {
       const f = d?.total ? d.have / d.total : 0;
