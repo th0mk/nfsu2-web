@@ -15,11 +15,11 @@
 // Secrets: the login messages carry PASS (the account password, XOR-masked or
 // encrypted, both reversible: as good as plain text), REGKEY (the CD key) and
 // PSES (a checksum of the player's game files).  parseFields() takes a list of
-// keys to skip, and the lobby passes SECRET_KEYS for every message: their
-// values are never decoded, so nothing after the parser can keep or log one.
+// keys to skip.  The lobby skips these values except PASS on game creation
+// and joining, where it means the room password rather than an account password.
 // redactBody() is for the dev-only frame trace (trace.mjs).
 
-/** keys whose values the server never reads: the account password, the CD key, the file checksum */
+/** keys skipped by default: the account password, the CD key, the file checksum */
 export const SECRET_KEYS = Object.freeze(['PASS', 'REGKEY', 'PSES']);
 /** keys a trace must not show (the secrets, a game's own password, and the key of a persona's Messenger login) */
 const REDACT_RE = /^(PASS\w*|REGKEY|PSES|LKEY)$/i;

@@ -16,10 +16,10 @@
 // What the server keeps: sessions, rooms, games and chat in memory only; on
 // disk only the races' public results per persona (stats.mjs) and each
 // persona's friends list (buddy.mjs), names only, under the server's --state
-// directory.  Nothing secret is ever read
-// (aries.mjs SECRET_KEYS: the password, the CD key and the file checksum are
-// passed over undecoded).  The log names players by persona and virtual
-// address only, never their real address or what they typed as a password.
+// directory.  Room passwords are checked against randomly keyed digests in
+// memory only.  Account passwords, the CD key and the file checksum are
+// passed over undecoded (aries.mjs SECRET_KEYS).  The log names players by
+// persona and virtual address only, never their real address or password.
 // The lines a client causes (logins, games, races, complaints, friends) go
 // through log(line, key) with that client's opaque group id as the key: the
 // server shows at most a few a minute per client (server.mjs logLimited; the

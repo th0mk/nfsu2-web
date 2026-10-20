@@ -33,8 +33,8 @@
 // result: rank).  A started game therefore outlives its players' sessions,
 // for raceMs at most.
 //
-// Never read: PASS (the password), REGKEY (the CD key), PSES (a checksum of
-// the player's files): aries.mjs passes over their values.  Never relayed: the
+// Never read on login: PASS (the account password).  REGKEY (the CD key) and
+// PSES (a checksum of the player's files) are never read on any command.  Never relayed: the
 // game's MID (its adapter address).  Every address in a reply is the
 // browser's virtual one, which the switch wrote into the frame.
 //
@@ -53,7 +53,7 @@
 // different browsers, reported the same places, no sooner than the race
 // type's shortest race; a ranked race needs three players for its points.
 import crypto from 'node:crypto';
-import { FrameReader, encodeFrame, encodeFields, fieldMap, MAX_FRAME } from './aries.mjs';
+import { FrameReader, encodeFrame, encodeFields, fieldMap, MAX_FRAME, SECRET_KEYS } from './aries.mjs';
 import { Stats, RACE_TYPES, decodeResult } from './stats.mjs';
 import { blockedName } from '../names.mjs';
 
@@ -113,6 +113,8 @@ const RANKED = 1 << 18;
 // counts down 10 s (0x4d2852, 0x4e5982), and the creator's game kicks the players still not ready (gset KICK, a list)
 // and starts (0x58a7e0); a start that fails clears it (0x58ab40)
 const COUNTDOWN = 1 << 12;
+// Only a randomly keyed digest of a room password lives with its game, never in a reply or on disk.
+const roomPassword = (key, value) => crypto.createHmac('sha256', key).update(value, 'latin1').digest();
 // CUSTFLAGS bit of a private game (Options: Private Room, SPEED2.EXE 0x58d55d; the game's own search always asks for
 // it clear, 0x590669: its players come by invitation)
 const PRIVATE = 1 << 8;
@@ -265,7 +267,10 @@ export class Lobby {
       if (s.gone) return;
       if (!s.msgs.take()) { this.drop(s, 'too many messages'); return; }
       if (!/^[!-~]{4}$/.test(m.kind)) { this.drop(s, 'not the lobby protocol (a message kind that is not 4 letters)'); return; }
-      const f = fieldMap(m.body);        // PASS, REGKEY, PSES: never decoded (null)
+      // SPEED2.EXE 0x58d5d0 (create) and 0x58d7bb (join) send the room password as PASS.
+      // Decode it only for these commands; account passwords still never reach a handler.
+      const roomPasswordMessage = m.kind === 'gcre' || m.kind === 'gjoi';
+      const f = fieldMap(m.body, key => SECRET_KEYS.includes(key) && !(roomPasswordMessage && key === 'PASS'));
       try { this.message(s, m.kind, f); } catch (e) {
         console.error(`[online] ${this.who(s)}: "${m.kind}" failed: ${e?.stack || e}`);
         this.drop(s, 'server error');
@@ -657,16 +662,19 @@ export class Lobby {
     if (mine.vip >= this.L.openPerVip || mine.group >= this.L.openPerGroup) return this.send(s, 'gcre', [], 'full');
     const name = cleanText(f.get('NAME'), this.L.gameNameLen);
     if (!name) return this.send(s, 'gcre', [], 'inam');
+    const password = String(f.get('PASS') ?? '');
+    const sysFlags = (Number(f.get('SYSFLAGS') ?? 0) >>> 0) & ~ACTIVE;
+    if ((sysFlags & PASSWORD) && !password) return this.send(s, 'gcre', [], 'pass');
+    const passwordKey = password ? crypto.randomBytes(32) : null;
     const old = this.gameByName(name);
     if (old && old.hostName === s.persona && old.started) this.endGame(old, 'its creator made a new one');
     else if (old) return this.send(s, 'gcre', [], 'dupl');
-    const sysFlags = (Number(f.get('SYSFLAGS') ?? 0) >>> 0) & ~ACTIVE;
     const g = {
       id: this.nextGame++, when: day(this.now()), name, hostName: s.persona, room: s.room ?? 0, vip: s.vip, group: s.group,
       maxSize: Math.min(this.L.gameSize, Math.max(2, Number(f.get('MAXSIZE') ?? 4) | 0)),
       minSize: Math.min(this.L.gameSize, Math.max(2, Number(f.get('MINSIZE') ?? 2) | 0)),
-      // a password of the game's own: not kept, so a passworded game is listed as an open one
-      custFlags: Number(f.get('CUSTFLAGS') ?? 0) >>> 0, sysFlags: (sysFlags & ~PASSWORD) >>> 0,
+      passwordKey, passwordHash: passwordKey ? roomPassword(passwordKey, password) : null,
+      custFlags: Number(f.get('CUSTFLAGS') ?? 0) >>> 0, sysFlags: ((sysFlags & ~PASSWORD) | (password ? PASSWORD : 0)) >>> 0,
       params: String(f.get('PARAMS') ?? '').slice(0, 256), players: [], started: 0, auth: '', reports: [], result: null,
       ranked: (sysFlags & RANKED) !== 0,
     };
@@ -698,10 +706,13 @@ export class Lobby {
   }
   gameJoin(s, f) {
     if (!s.acts.take()) return this.send(s, 'gjoi', [], 'full');
-    if (s.game) this.gameLeave(s, null);
     const g = this.gameByName(f.get('NAME') ?? '') ?? this.games.get(Number(f.get('IDENT')));
     if (!g || g.started) return this.send(s, 'gjoi', [], 'ugam');
     if (g.players.length >= g.maxSize) return this.send(s, 'gjoi', [], 'full');
+    if (g.passwordHash && !crypto.timingSafeEqual(g.passwordHash, roomPassword(g.passwordKey, String(f.get('PASS') ?? ''))))
+      return this.send(s, 'gjoi', [], 'pass');
+    if (s.game === g.id) return this.send(s, 'gjoi', this.gameFields(g));
+    if (s.game) this.gameLeave(s, null);
     g.players.push(this.member(s)); s.game = g.id; s.browsing = false;
     this.log(`[online] ${this.who(s)}: joined "${g.name}" (${g.players.length}/${g.maxSize})`, s.group);
     this.send(s, 'gjoi', this.gameFields(g));

@@ -182,6 +182,77 @@ test('a game: create, list, join, ready, start; +ses names every player by virtu
   assert.equal(w.host.lobby.games.size, 0, 'forgotten after raceMs');
 });
 
+test('game passwords: advertised, required for joins by name or id, never published or logged', t => {
+  const w = world(); t.after(() => w.host.stop());
+  const a = w.client('10.77.0.2').login('Alpha'), b = w.client('10.77.0.3').login('Bravo');
+  const password = 'Room Secret:%=42';
+  a.send('gcre', [['NAME', 'Locked'], ['SYSFLAGS', 1 << 16], ['PASS', password]]);
+  const id = Number(a.last('gcre').f.get('IDENT'));
+  assert.equal(Number(a.last('gcre').f.get('SYSFLAGS')) & (1 << 16), 1 << 16);
+  b.send('gsea');
+  assert.equal(Number(b.last('+gam').f.get('SYSFLAGS')) & (1 << 16), 1 << 16);
+  // A rejected join must leave the player's current game intact.
+  b.send('gcre', [['NAME', 'Other']]);
+  const other = w.host.lobby.gameByName('Other');
+  for (const fields of [
+    [['NAME', 'Locked']],
+    [['IDENT', id], ['PASS', '']],
+    [['NAME', 'Locked'], ['PASS', 'wrong']],
+    [['IDENT', id], ['PASS', password.toLowerCase()]],
+  ]) {
+    w.advance(1000);
+    b.send('gjoi', fields);
+    assert.equal(b.last('gjoi').code, 'pass');
+    assert.equal(w.host.lobby.gameByName('Locked').players.length, 1);
+    assert.equal(w.host.lobby.games.get(other.id), other);
+    assert.equal([...w.host.lobby.sessions].find(s => s.persona === 'Bravo').game, other.id);
+  }
+  // Neither the host's nor another player's gset can remove the requirement.
+  a.send('gset', [['SYSFLAGS', 0], ['PASS', '']]);
+  w.advance(1000);
+  b.send('gjoi', [['IDENT', id], ['PASS', password]]);
+  assert.equal(b.last('gjoi').code, '');
+  assert.equal(b.last('gjoi').f.get('COUNT'), '2');
+  assert.ok(!w.host.lobby.games.has(other.id));
+  b.send('gset', [['SYSFLAGS', 0], ['PASS', '']]);
+  const c = w.client('10.77.0.4').login('Charlie');
+  c.send('gjoi', [['NAME', 'Locked']]);
+  assert.equal(c.last('gjoi').code, 'pass');
+  c.send('gjoi', [['NAME', 'Locked'], ['PASS', password]]);
+  assert.equal(c.last('gjoi').code, '');
+  // Repeating a join must not duplicate a player or delete the creator's game.
+  a.send('gjoi', [['NAME', 'Locked'], ['PASS', password]]);
+  b.send('gjoi', [['IDENT', id], ['PASS', password]]);
+  const g = w.host.lobby.games.get(id);
+  assert.equal(g.players.length, 3);
+  assert.equal(Number(g.sysFlags) & (1 << 16), 1 << 16);
+  assert.ok(!JSON.stringify(g, (k, v) => k === 'players' ? undefined : v).includes(password));
+  assert.ok(!w.lines.join('\n').includes(password));
+  for (const client of [a, b, c]) for (const m of client.msgs) {
+    assert.equal(m.f.has('PASS'), false);
+    assert.equal(m.f.has('PASSWORD'), false);
+    assert.ok(!m.raw.includes(Buffer.from(password, 'latin1')));
+  }
+});
+
+test('game passwords: a supplied password sets the flag; a locked game cannot silently become open', t => {
+  const w = world(); t.after(() => w.host.stop());
+  const a = w.client('10.77.0.2').login('Alpha'), b = w.client('10.77.0.3').login('Bravo');
+  a.send('gcre', [['NAME', 'Invalid'], ['SYSFLAGS', 1 << 16]]);
+  assert.equal(a.last('gcre').code, 'pass');
+  assert.equal(w.host.lobby.games.size, 0);
+  a.send('gcre', [['NAME', 'Locked'], ['SYSFLAGS', 0], ['PASS', 'secret']]);
+  assert.equal(Number(a.last('gcre').f.get('SYSFLAGS')) & (1 << 16), 1 << 16);
+  b.send('gjoi', [['NAME', 'Locked']]);
+  assert.equal(b.last('gjoi').code, 'pass');
+  a.send('gdel');
+  a.send('gcre', [['NAME', 'Open'], ['SYSFLAGS', 0], ['PASS', '']]);
+  assert.equal(a.last('gcre').code, '');
+  assert.equal(Number(a.last('gcre').f.get('SYSFLAGS')) & (1 << 16), 0);
+  b.send('gjoi', [['NAME', 'Open']]);
+  assert.equal(b.last('gjoi').code, '');
+});
+
 test('the game list: every open game but a private one, the Filter\'s games first', () => {
   const w = world(), [a, b, c, d, e] = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'].map((n, i) => w.client(`10.77.0.${i + 2}`).login(n));
   // the game's default search: race type 0, Collision Detection and Race Breaker on, no car restriction, unranked,

@@ -484,7 +484,7 @@ paths to the VPS, so pick a VPS location between you.
   `NAME`), and the game plays under that.
   - **Kept in the state volume:** `online/stats.json` (race results and best times per persona) and
     `online/buddies.json` (EA Messenger friends lists, persona names only), each with the month a persona was last
-    seen, written atomically. No passwords (the server never reads them), CD keys, addresses or chat.
+    seen, written atomically. No passwords, CD keys, addresses or chat.
   - **The console** names online players by persona and virtual address (10.77.x.x) only, and shows at most 30
     Online lines a minute caused by one client address (then one line saying how many were left out).
   - **Who plays now:** `/players` answers anyone who reaches the server with two numbers for the start page and
