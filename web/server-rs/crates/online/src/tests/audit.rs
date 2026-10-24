@@ -469,7 +469,8 @@ fn race_types() {
 }
 
 // a ranked race's table on its players' results screens: whose reports came ($rup) until the result stands, then
-// places, times or drift scores and points in hex ($rfn) to every reporter, and to a later one; unranked: none
+// places, times or drift scores and points in hex ($rfn) to every reporter, and to a later one; unranked: none; the
+// careers of the players who reported before it stood are sent again, with the race's points (issue #12)
 #[test]
 fn ranked_table() {
     let mut w = world();
@@ -502,6 +503,10 @@ fn ranked_table() {
     }
     assert_eq!(w.c(s[0]).count("$rup"), 0, "the result stood with Ann's report");
     assert_eq!(board(&mut w, 0), ["Ann:50:0:1", "Bob:100:1:0", "Cat:0:0:1"], "the table's points are the rankings'");
+    // and the careers': Bob's report came before the result stood, and his game is told his 100 points too (STAT's
+    // circuit rating, its 9th number)
+    let rating = |w: &World, c: C| w.c(c).l("user").g("STAT").split(',').nth(8).map(str::to_string);
+    assert_eq!((rating(&w, s[1]), rating(&w, s[0])), (Some("64".into()), Some("32".into())));
     // a later report: the table to it alone
     rep(&mut w, s[2], &auth, 0, &circuit);
     assert_eq!(row(w.c(s[2]).l("$rfn"), 2), "Cat ea60,-2,0,0,0");
