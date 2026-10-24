@@ -508,6 +508,12 @@ impl LanSwitch {
         }
         let was = peer.name().to_string();
         greet(peer, msg, self.o.fpred);
+        if let Some(h) = &self.roam {
+            let names = block_names(msg);
+            if !names.is_empty() {
+                h.blocks(peer.vip, names);
+            }
+        }
         self.lan_changed(&mut m, peer);
         let list = self.list_for(&m, peer);
         self.send(peer, Out::Text(list));
@@ -621,6 +627,20 @@ pub(crate) fn lan_full() -> Bytes {
 
 /// a connection's first hello: its player's name, and whether it takes the changes to the peer list, bundles, and has
 /// LAN play open (a page of before says nothing: it gets every broadcast)
+/// A hello's "block": the names (as the game shows them over cars: printable ASCII, at most 24) of the players the page
+/// blocks, at most BLOCK_MAX of them, each trimmed; what is not a string, an empty one and those past the cap are left
+/// out, a longer one is cut
+const BLOCK_MAX: usize = 32;
+fn block_names(m: &Map<String, Value>) -> Vec<String> {
+    let Some(Value::Array(a)) = m.get("block") else { return Vec::new() };
+    a.iter()
+        .filter_map(|v| v.as_str())
+        .map(|s| s.chars().filter(|c| (' '..='~').contains(c)).take(24).collect::<String>().trim().to_string())
+        .filter(|s| !s.is_empty())
+        .take(BLOCK_MAX)
+        .collect()
+}
+
 fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool) {
     use nfsu2_util::json::is_num;
     peer.hello.store(true, Relaxed);
@@ -648,6 +668,21 @@ fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool) {
 mod tests {
     use super::*;
     use crate::LanOptions;
+
+    // a hello's "block": strings only, trimmed, printable ASCII, at most 24 characters each and BLOCK_MAX names
+    #[test]
+    fn a_hellos_block_is_names_as_the_game_shows_them() {
+        let m = |v: Value| block_names(v.as_object().unwrap());
+        assert_eq!(m(serde_json::json!({ "t": "hello" })), Vec::<String>::new());
+        assert_eq!(m(serde_json::json!({ "block": "bob" })), Vec::<String>::new());
+        let long = "x".repeat(40);
+        assert_eq!(
+            m(serde_json::json!({ "block": ["  Bob ", 7, "", "   ", "Zoë\u{0}!", long] })),
+            vec!["Bob".to_string(), "Zo!".to_string(), "x".repeat(24)]
+        );
+        let many: Vec<String> = (0..40).map(|i| format!("p{i}")).collect();
+        assert_eq!(m(serde_json::json!({ "block": many })).len(), BLOCK_MAX);
+    }
 
     /// Node sent the welcome (and a resume's whole list) before it went back to its event loop: no frame from another
     /// player could come first.  Here the other players' readers route on other cores: a newcomer they can find (the

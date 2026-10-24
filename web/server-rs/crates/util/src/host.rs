@@ -143,6 +143,9 @@ pub trait Host: Send + Sync + 'static {
     fn info(&self) -> oneshot::Receiver<serde_json::Value>;
     /// the browsers this host counts as its players now
     fn vips(&self) -> oneshot::Receiver<HashSet<u32>>;
+    /// the names browser `vip`'s page blocks (its hello's "block"): the free-roam hub links none of those players with
+    /// it, either way; the others take no notice
+    fn blocks(&self, _vip: u32, _names: Vec<String>) {}
     /// the server stops: save what is kept, end the timers
     fn stop(&self);
 }

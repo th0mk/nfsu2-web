@@ -43,7 +43,8 @@
 //!   datagram's magic, version, length and CRC), about a quarter fewer bytes for the same frames (compact.rs).
 //!   Never routed from a client (it could name any source), as a bundle in a bundle never is.
 //!
-//! Text frames are JSON control messages: {"t":"hello","name":...,"deltas":1,"lan":0|1,"bundle":1,"compact":1},
+//! Text frames are JSON control messages: {"t":"hello","name":...,"deltas":1,"lan":0|1,"bundle":1,"compact":1}
+//! (and "block":[names]: the free-roam hub's `Host::blocks`),
 //! {"t":"lan","on":0|1} and {"t":"ping","id":n} from a client; {"t":"welcome","vip":...,"vipStr":...,"mask":...,
 //! "token":...,"bundle":1}, {"t":"peers",...}, {"t":"delta",...} and {"t":"pong","id":n} from the switch.
 //!

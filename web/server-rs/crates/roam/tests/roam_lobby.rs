@@ -120,6 +120,26 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     assert_eq!(lobbies(&k), [(W(0), 9, vec![])], "a stale advert is a lobby gone");
 }
 
+// a host the player blocks by name (any case: both are "p" here) is not on its list (`Hub::blocks`)
+#[test]
+fn a_blocked_hosts_lobby_is_not_listed() {
+    let mut k = Kit::new(RoamOptions::default());
+    join(&mut k, 0, "", true);
+    join(&mut k, 1, "", true);
+    for i in 0..2 {
+        k.from(W(i), &snap(100 + i, [i as f64 * 100.0, 0.0, 0.0]));
+    }
+    k.from(W(1), &lobby(101, 1, 0, 0xA1, 0x1111, 500, 0, 0, 6, &[101]));
+    k.clear();
+    k.from(W(0), &mapreq(100, 7));
+    assert_eq!(lobbies(&k), [(W(0), 7, vec![(500, 0, 0x1111, 1, 6, 0)])]);
+    k.hub.blocks(W(0), vec!["P".into()]);
+    k.step(1100.0);
+    k.clear();
+    k.from(W(0), &mapreq(100, 8));
+    assert_eq!(lobbies(&k), [(W(0), 8, vec![])]);
+}
+
 // the wire: roam_core's advert is the hub's lobby, and the hub's LOBBIES are roam_core's lobbies
 #[test]
 fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {

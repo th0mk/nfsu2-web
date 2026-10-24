@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use bytes::{Bytes, BytesMut};
-use nfsu2_util::js;
 use nfsu2_util::json::num;
+use nfsu2_util::{js, vip_str};
 use serde_json::{Value, json};
 
 use crate::links::{Cand, Found, Grid, Heap, Near, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable};
@@ -346,6 +346,10 @@ pub struct Hub {
     order: Vec<u32>,
     holes: usize,
     by_key: HashMap<u64, u32>,
+    /// per browser (virtual address), the names of the players its page blocks (`blocks`): no link between it and a
+    /// player of one of them, either way, and neither on the other's world map or race lobby list; until it leaves the
+    /// switch
+    blocks: HashMap<u32, Vec<String>>,
     /// the endpoints of each virtual address (`max_per_vip`)
     per_vip: HashMap<u32, u32>,
     /// the players whose last HELLO named a crew: with none, a tick does not look for crews at all
@@ -389,6 +393,7 @@ impl Hub {
             order: Vec::new(),
             holes: 0,
             by_key: HashMap::new(),
+            blocks: HashMap::new(),
             per_vip: HashMap::new(),
             crewed: 0,
             map_at: HashMap::new(),
@@ -640,6 +645,9 @@ impl Hub {
             if q == slot || o.room != room || now - o.pos_at > fresh || !matches!(o.status, 2 | 5) || p.links.iter().any(|l| l.slot == q) {
                 continue;
             }
+            if blocked(&self.blocks, p, o) {
+                continue;
+            }
             let c = |x: f64| (x + 0.5).floor().clamp(-32767.0, 32767.0) as i16;
             near.push((order_key(distance(&at, &pos)), (c(pos[0]), c(pos[1]), o.heading)));
         }
@@ -680,6 +688,9 @@ impl Hub {
             if o.room != room || now - t > LOBBY_STALE_MS {
                 continue;
             }
+            if blocked(&self.blocks, p, o) {
+                continue;
+            }
             let d = distance(&at, &[l.x as f64, l.y as f64, at[2]]);
             near.push((order_key(d), (l.x, l.y, l.race, l.n, l.max, l.state)));
         }
@@ -700,11 +711,20 @@ impl Hub {
 
     /// browser `vip` left the switch
     pub fn peer_gone(&mut self, vip: u32) {
+        self.blocks.remove(&vip);
         if !self.per_vip.contains_key(&vip) {
             return;
         }
         let mine: Vec<u32> = self.order.iter().copied().filter(|&s| self.player(s).is_some_and(|p| p.vip == vip)).collect();
         self.drop_slots(&mine);
+    }
+
+    /// browser `vip`'s page blocks these players, by the name over their car (any case): logged, so that the operator
+    /// sees who many block
+    pub fn blocks(&mut self, vip: u32, names: Vec<String>) {
+        let list: Vec<String> = names.iter().map(|n| format!("{n:?}")).collect();
+        (self.log)(&format!("[roam] {} blocks {}", vip_str(vip), list.join(", ")));
+        self.blocks.insert(vip, names);
     }
 
     /// every `tick_ms`: who is linked to whom, and every player's list
@@ -785,6 +805,15 @@ impl Hub {
     /// a slow player's queue, one such buffer a second; a list of its own each was 2000 allocations a tick.
     fn lists(&mut self) {
         let s = &mut self.s;
+        // ponytail: a blocked pair is dropped here, after the links are chosen, so it still takes a place in both
+        // players' cap; weigh it in the pairing if players block enough for that to matter
+        if !self.blocks.is_empty() {
+            for &slot in &self.order {
+                let Some(Some(p)) = self.slots.get(slot as usize) else { continue };
+                let (slots, blocks) = (&self.slots, &self.blocks);
+                s.fresh[slot as usize].retain(|l| !matches!(slots.get(l.slot as usize), Some(Some(q)) if blocked(blocks, p, q)));
+            }
+        }
         for &slot in &self.order {
             let Some(Some(p)) = self.slots.get(slot as usize) else { continue };
             let links = &s.fresh[slot as usize];
@@ -1435,4 +1464,10 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         found.push(n.into_found());
     }
     (made, crew)
+}
+
+/// whether one of the two players' browsers blocks the other's name (`Hub::blocks`)
+fn blocked(blocks: &HashMap<u32, Vec<String>>, a: &Player, b: &Player) -> bool {
+    let by = |p: &Player, name: &str| blocks.get(&p.vip).is_some_and(|l| l.iter().any(|n| n.eq_ignore_ascii_case(name)));
+    by(a, &b.name) || by(b, &a.name)
 }

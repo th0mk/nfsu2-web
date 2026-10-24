@@ -411,6 +411,11 @@ Good to know:
   privacy: every browser on the server still sees your name ("Your name", or the profile name), whether you are in
   the menus or driving, and the room, and someone with their own tools could join it. Play on a server only with
   people you would show your name and car to.
+- **Blocking:** Settings, Online, Blocked players: names as they show over cars, separated by commas. You and they
+  never see each other in free roam, wherever you are: no car, no name, no quick chat, nobody on the world map, and
+  no race together. Capitals don't count. It takes effect the next time you press Play, and goes by name: a player
+  who renames is not blocked any more. The server's log says whom you block, so its operator sees who many players
+  block (and can ban them). A server of before this version takes no notice.
 - **Who sees what:** with free roam off (the default), the game does not join the server's network at all. With it
   on, everyone on the server sees your name and status, and players in free roam with you see your car and where it
   is. The server reads where your car is, to pick the players near you, and keeps nothing of it. After a multiplayer

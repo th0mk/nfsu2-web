@@ -149,6 +149,9 @@ export const KEYS: readonly KeyDef[] = [
   // the menus' and HUD's textures: a texture pack in place of the game's (runtime/web/texrep_web.c; the page fetches
   // ahead only the one picked: datacache.ts).  Not in bundle.m's table: the Mac's packs are "textures"
   { key: 'ui_textures', env: 'NFSU2_UI_TEXTURES', kind: 'enum', vals: 'original|uhud', scope: 'web' },
+  // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
+  // table: the Mac's free roam has no hub
+  { key: 'roam_block', env: 'NFSU2_ROAM_BLOCK', kind: 'text', ic: true, scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -365,6 +368,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # players who set the same name (capitals and spaces do not count).  Not
 # private: everyone on the server still sees your name.  [NFSU2_ROAM_ROOM]
 #roam_room =
+# Players you block, by the name over their car, separated by commas: you
+# and they never see each other in free roam (capitals do not count).  The
+# server's operator sees who blocks whom.  [NFSU2_ROAM_BLOCK]
+#roam_block =
 
 # Your crews, up to 4, separated by commas (e.g. Blue Room, Night Owls):
 # players in the same crew see each other in its colour (roam_crew_colours,

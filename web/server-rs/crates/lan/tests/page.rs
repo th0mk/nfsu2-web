@@ -1,4 +1,4 @@
-//! Five tests of the page (web/src/net/index.ts): the page's own code, bundled as the app bundles it, run in node
+//! Seven tests of the page (web/src/net/index.ts): the page's own code, bundled as the app bundles it, run in node
 //! (tests/page.mjs) against this switch.  Skipped (with a message) without node.
 
 mod harness;
@@ -107,5 +107,20 @@ async fn the_page_removed_by_the_operator_stays_off() {
     }
     let sw = start(opts()).await;
     page("removed", &[sw.port]).await;
+    sw.close().await;
+}
+
+// the page: its hello names the players it blocks (NetOptions.block), and the switch hands them to the free-roam hub
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_page_says_whom_it_blocks() {
+    let _s = serial().await;
+    if no_node() {
+        return;
+    }
+    let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sw = start_full(opts(), "", None, Some(std::sync::Arc::new(BlockHub(got.clone()))), None).await;
+    page("block", &[sw.port]).await;
+    let names: Vec<Vec<String>> = got.lock().unwrap().iter().map(|(_, n)| n.clone()).collect();
+    assert_eq!(names, vec![vec!["Bob".to_string(), "carl".to_string()]]);
     sw.close().await;
 }

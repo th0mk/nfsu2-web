@@ -208,6 +208,7 @@ enum Cmd {
     Attach(SwitchSend),
     Info(oneshot::Sender<serde_json::Value>),
     Vips(oneshot::Sender<HashSet<u32>>),
+    Blocks(u32, Vec<String>),
     Stop,
 }
 
@@ -359,6 +360,7 @@ fn run(
             Cmd::Vips(tx) => guard(|| {
                 let _ = tx.send(hub.vips());
             }),
+            Cmd::Blocks(vip, names) => guard(|| hub.blocks(vip, names)),
             Cmd::Stop => {
                 // no more ticks, so no more lists: the switch's send goes too (it holds the switch, which holds
                 // this hub)
@@ -402,6 +404,9 @@ impl Host for RoamHub {
         let (tx, rx) = oneshot::channel();
         let _ = self.tx.send(Cmd::Vips(tx));
         rx
+    }
+    fn blocks(&self, vip: u32, names: Vec<String>) {
+        let _ = self.tx.send(Cmd::Blocks(vip, names));
     }
     fn stop(&self) {
         let _ = self.tx.send(Cmd::Stop);

@@ -602,6 +602,9 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
   is gone already. `kick` needs them on.
 - **Banning again** replaces the earlier ban of the same player: `ban Bob perm` after `ban Bob 1d` leaves one ban,
   for good.
+- **Blocks**: players block others by name (Settings, Online, Blocked players): the free-roam hub links neither way.
+  The log has a line each time such a page joins, `[roam] 10.77.4.17 blocks "Bob", "carl"` (`who 10.77.4.17` names
+  the blocker): a name many block is one to look at (`grep blocks` in the log).
 - **What is kept**: `bans.json` in the state volume, with keyed hashes of the addresses and ids only (the key,
   `bans.key`, beside it): no address or id can be read back from them. The log has a `[ban]` line for each kick, ban
   and lift, and when a banned player is turned away (2 a minute per client at most).

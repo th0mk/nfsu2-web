@@ -720,6 +720,37 @@ impl Host for FakeHost {
     fn stop(&self) {}
 }
 
+/// a free-roam hub on the switch for the tests that keeps what it is told of blocks (`Host::blocks`): (vip, names)
+pub struct BlockHub(pub Arc<Mutex<Vec<(u32, Vec<String>)>>>);
+
+impl Host for BlockHub {
+    fn vip(&self) -> u32 {
+        ip("10.77.0.253")
+    }
+    fn name(&self) -> &str {
+        "hub"
+    }
+    fn listed(&self) -> bool {
+        false
+    }
+    fn frame(&self, _from: u32, _data: Bytes, _ctx: nfsu2_util::FrameCtx) {}
+    fn peer_gone(&self, _vip: u32) {}
+    fn info(&self) -> oneshot::Receiver<Value> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(json!({}));
+        rx
+    }
+    fn vips(&self) -> oneshot::Receiver<HashSet<u32>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(HashSet::new());
+        rx
+    }
+    fn blocks(&self, vip: u32, names: Vec<String>) {
+        self.0.lock().unwrap().push((vip, names));
+    }
+    fn stop(&self) {}
+}
+
 /// node, when it is there (the page tests skip without it)
 pub fn node() -> Option<std::path::PathBuf> {
     let out = std::process::Command::new("node").arg("--version").output().ok()?;

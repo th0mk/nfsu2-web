@@ -68,6 +68,8 @@ export interface NetOptions extends CommonOptions {
   queue?: (q: NetQueue | null) => void;
   /** this browser's own id (page-id.ts): the operator's bans name a page by it */
   id?: string;
+  /** free roam: the names of the players this one blocks: the server's hub links none of them with it */
+  block?: string[];
   /** the operator removed this player from playing with others (a kick or a ban) */
   removed?: (r: NetRemoved) => void;
 }

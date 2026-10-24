@@ -465,7 +465,7 @@ async function startGame() {
     session = await GameSession.start({
       module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks,
       netBack, netQueue, onSaved,
-      netId: net ? pageId() : undefined, netRemoved,
+      netId: net ? pageId() : undefined, netRemoved, netBlock: net ? (r.env.NFSU2_ROAM_BLOCK ?? '').split(',').map(s => s.trim()).filter(Boolean) : undefined,
       artifacts: q.get('artifacts') ?? undefined, dumpScale: q.get('dumpscale') ? +q.get('dumpscale')! : undefined,
       toggleFullscreen, padPage: PAD_PAGE, log: logLine, onFatal: stopFatal,
     });
