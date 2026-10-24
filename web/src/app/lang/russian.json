@@ -883,5 +883,14 @@
   "Shifter": "Рычаг КПП",
   "Sequential: push to shift up": "Секвентально: от себя — вверх",
   "Sequential: pull to shift up": "Секвентально: на себя — вверх",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача.",
+  "Invite link copied: {link}": "Ссылка-приглашение скопирована: {link}",
+  "Invite link: {link}": "Ссылка-приглашение: {link}",
+  "Copy invite link for {name}": "Скопировать ссылку-приглашение в «{name}»",
+  "Copy invite link": "Скопировать ссылку-приглашение",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Не вступили в «{name}»: не больше 4 команд, покиньте одну, чтобы вступить в другую.",
+  "Join the crew \"{name}\"?": "Вступить в команду «{name}»?",
+  "Play in the room \"{name}\"?": "Играть в комнате «{name}»?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "В свободной езде тогда будут видны только игроки этой комнаты. Настройки, Онлайн, Комната вернут вас ко всем.",
+  "Join room": "Войти в комнату"
 }

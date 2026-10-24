@@ -841,5 +841,14 @@
   "Shifter": "Schaltknüppel",
   "Sequential: push to shift up": "Sequenziell: Drücken schaltet hoch",
   "Sequential: pull to shift up": "Sequenziell: Ziehen schaltet hoch",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Das Spiel schaltet Gang für Gang. Sequenziell: Jedes Einlegen eines Gangs mit dem Hebel ist ein Schaltvorgang, und der Rückwärtsgang zieht die Handbremse. Handbremse: Jeder Gang zieht sie."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Das Spiel schaltet Gang für Gang. Sequenziell: Jedes Einlegen eines Gangs mit dem Hebel ist ein Schaltvorgang, und der Rückwärtsgang zieht die Handbremse. Handbremse: Jeder Gang zieht sie.",
+  "Invite link copied: {link}": "Einladungslink kopiert: {link}",
+  "Invite link: {link}": "Einladungslink: {link}",
+  "Copy invite link for {name}": "Einladungslink für {name} kopieren",
+  "Copy invite link": "Einladungslink kopieren",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Nicht beigetreten: „{name}“. Bis zu 4 Crews: Verlass eine, um einer anderen beizutreten.",
+  "Join the crew \"{name}\"?": "Der Crew „{name}“ beitreten?",
+  "Play in the room \"{name}\"?": "Im Raum „{name}“ spielen?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "Die freie Fahrt zeigt dann nur die Spieler in diesem Raum. Unter Einstellungen, Online, Raum fährst du wieder mit allen.",
+  "Join room": "Raum beitreten"
 }

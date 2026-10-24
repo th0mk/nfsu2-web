@@ -862,5 +862,14 @@
   "Shifter": "Leva del cambio",
   "Sequential: push to shift up": "Sequenziale: spingi per salire",
   "Sequential: pull to shift up": "Sequenziale: tira per salire",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Il gioco cambia una marcia alla volta. Sequenziale: ogni volta che la leva entra in una marcia è una cambiata, e la retromarcia tiene il freno a mano. Freno a mano: qualsiasi marcia lo tiene."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Il gioco cambia una marcia alla volta. Sequenziale: ogni volta che la leva entra in una marcia è una cambiata, e la retromarcia tiene il freno a mano. Freno a mano: qualsiasi marcia lo tiene.",
+  "Invite link copied: {link}": "Link di invito copiato: {link}",
+  "Invite link: {link}": "Link di invito: {link}",
+  "Copy invite link for {name}": "Copia il link di invito per {name}",
+  "Copy invite link": "Copia link di invito",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Non ti sei unito a \"{name}\": fino a 4 crew, lasciane una per unirti a un'altra.",
+  "Join the crew \"{name}\"?": "Unirti alla crew \"{name}\"?",
+  "Play in the room \"{name}\"?": "Giocare nella stanza \"{name}\"?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "La modalità Esplora mostra allora solo i giocatori in questa stanza. Impostazioni, Online, Stanza ti riporta con tutti.",
+  "Join room": "Entra nella stanza"
 }

@@ -7,6 +7,7 @@
 // - what the panel's box lets join: nothing typed, a comma, # or ;, too long, a slur, a repeat by hash, a fifth
 // - the Room setting refuses a name that reads as a slur, as Your name does
 // - Reset all settings keeps the crews, as it keeps the name
+// - an invite link (#crew=, #room=): only a name the Crews box or the Room row takes, not one the player is in already
 // - /players?crews=: the hashes in the player's order (beside room=), the counts by hash, none from an older server,
 //   and a late answer to an earlier question not shown over a later one
 // The modules are bundled from web/src with esbuild, as web/test/settings-reset.test.mjs does.
@@ -166,6 +167,26 @@ test('the Room setting: a name that reads as a slur is refused, as Your name is'
   }
   assert.match(S.checkSetting('roam_room', 'z'.repeat(64)).reason, /is not text of 1 to 63 bytes/);
   assert.equal(S.resolveEnv('roam = on\nroam_room = XxCoonXx\n', {}, {}).env.NFSU2_ROAM_ROOM, undefined, 'no room at Play');
+});
+
+test('an invite link: a name the Crews box or the Room row takes, not one the player is in', () => {
+  const { inviteOf, inviteLink } = S.UI;
+  assert.deepEqual(inviteOf('#crew=blueroom', [], ''), { key: 'roam_crew', name: 'blueroom' });
+  assert.deepEqual(inviteOf('#crew=%20Blue%20%20Room%20', ['Owls'], ''), { key: 'roam_crew', name: 'Blue Room' }, 'trimmed, as the box does');
+  assert.deepEqual(inviteOf('#room=Team%20A', [], 'Other'), { key: 'roam_room', name: 'Team A' });
+  // in it already, by hash
+  assert.equal(inviteOf('#crew=blueroom', ['Blue Room'], ''), null);
+  assert.equal(inviteOf('#room=team', [], 'TEAM'), null);
+  // whatever the box or the row would refuse, and anything else
+  for (const h of ['', '#', '#crew=', '#room=', '#room=%20%20', '#crew=a%2Cb', '#crew=%231', '#crew=a%3Bb', `#crew=${'y'.repeat(25)}`, '#crew=XxCoonXx',
+    '#room=XxCoonXx', `#room=${'z'.repeat(64)}`, '#room=Team%20%3B%20ours', '#room=a%0Ab', '#crew=100%', '#crews=a', '#env=NFSU2_ROAM_ROOM=x'])
+    assert.equal(inviteOf(h, [], ''), null, h);
+  // the link Copy invite link makes reads back as its name
+  for (const i of [{ key: 'roam_crew', name: 'Ünïcode ✓ 1' }, { key: 'roam_crew', name: 'Blue Room' }, { key: 'roam_room', name: 'a#b?c&d=e%' }]) {
+    const link = inviteLink('https://nfsu2.xyz/', i);
+    assert.deepEqual(inviteOf(new URL(link).hash, [], ''), i, link);
+  }
+  assert.equal(inviteLink('https://nfsu2.xyz/', { key: 'roam_crew', name: 'blueroom' }), 'https://nfsu2.xyz/#crew=blueroom');
 });
 
 test('Reset all settings keeps the crews and their colours', () => {

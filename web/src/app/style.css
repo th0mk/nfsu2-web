@@ -330,7 +330,7 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .crew-add input:disabled { cursor: not-allowed; }
 .crew-join:enabled { color: var(--lime); }
 .crew-add .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.set-note { font-size: 14px; line-height: 20px; color: var(--muted); }
+.set-note { font-size: 14px; line-height: 20px; color: var(--muted); overflow-wrap: break-word; }
 .set-note.warn { color: var(--warn); }
 .set-note:empty { display: none; }
 
@@ -412,7 +412,7 @@ summary:hover { color: var(--text); }
 .page-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5; max-width: calc(100vw - 32px);
   padding: 8px 16px; border: 2px solid var(--edge); border-radius: 12px; background: var(--frame);
-  font-size: 14px; line-height: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 14px; line-height: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); overflow-wrap: break-word;
 }
 .page-toast:empty { display: none; }
 
