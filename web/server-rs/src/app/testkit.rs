@@ -1,5 +1,6 @@
 //! What the route tests share: a made-up install folder, page folder and module in a temporary folder, the App on an
-//! ephemeral port of 127.0.0.1 (no Online host, no free-roam hub), and a raw client that reads whole answers.
+//! ephemeral port of 127.0.0.1 (no free-roam hub; an Online host with --online on), and a raw client that reads
+//! whole answers.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -74,9 +75,9 @@ impl Kit {
         std::fs::write(p("repo/web/dist/index.html"), b"<!doctype html>").expect("a file");
         files(&root);
         let s = |r: &str| p(r).to_string_lossy().into_owned();
-        let mut argv: Vec<String> =
-            ["--data", &s("game"), "--state", &s("state"), "--online", "off", "--roam-hub", "off"].iter().map(|a| a.to_string()).collect();
-        argv.extend(args.iter().map(|a| a.to_string()));
+        // (the test's own first: the first of an option counts)
+        let mut argv: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+        argv.extend(["--data", &s("game"), "--state", &s("state"), "--online", "off", "--roam-hub", "off"].iter().map(|a| a.to_string()));
         let o = parse(&argv, &|_| None, &s("repo"), &s(""), &RealFs).expect("the options");
         let real_state = std::fs::canonicalize(&o.state).expect("the state folder").to_string_lossy().into_owned();
         let key = etag::load_key(&o.state).expect("the ETag key");
@@ -86,7 +87,15 @@ impl Kit {
             Arc::new(nfsu2_vault::Vault::open(opts).expect("the vault"))
         });
         let bans = Arc::new(nfsu2_bans::Bans::open(std::path::Path::new(&o.state)).expect("the bans"));
-        let app = Arc::new(App::new(o, real_state, key, lan, None, None, vault, bans, 2, 0, compress_threads));
+        let online = o.online.then(|| {
+            let state_dir = Some(std::path::PathBuf::from(&o.state).join("online"));
+            nfsu2_online::OnlineHost::spawn(nfsu2_online::OnlineOptions {
+                state_dir,
+                log: Arc::new(|_: &str, _: Option<&str>| {}),
+                tap: None,
+            })
+        });
+        let app = Arc::new(App::new(o, real_state, key, lan, online, None, vault, bans, 2, 0, compress_threads));
         app.refresh_manifest().await.expect("the manifest");
         let (listener, _) = nfsu2_http::bind("127.0.0.1", 0, None).await.expect("a port");
         let addr = listener.local_addr().expect("its address");

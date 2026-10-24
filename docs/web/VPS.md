@@ -923,6 +923,10 @@ paths to the VPS, so pick a VPS location between you.
     whether the free-roam hub gives fewer than 24 links a player (its thread is busy; the start page doesn't ask
     its free-roam question then). Nothing else: no names, addresses or times, never cached. The game's own lobby
     shows its players to anyone who logs in anyway.
+  - **Rankings:** `/rankings` answers anyone with what the game's Rankings screens show anyone who logs in: per race
+    type (`circuit`, `sprint`, `drag`, `drift`, `streetx`, `url`) the first 100 overall (`all`) and this month
+    (`month`), each `{"rank":1,"name":"Alpha","points":250,"wins":3,"losses":1}`, from the boards the Online host
+    builds at most every 5 s. A 404 with `--online off`, never cached. The start page's Rankings button reads it.
   - **Limits:** 2000 lobby sessions (the Node server: 1000), 3 per browser, 8 per client address, 32 per IPv6 /48,
     and the last quarter only for a client that holds none; 600 games (Node: 300) of at most 6, 2 open and 2
     started per browser (4 and 8 per client address), one browser one player of a race; 20 lobby messages a second per session (a flood ends the session);

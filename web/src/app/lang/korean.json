@@ -778,5 +778,17 @@
   "Shifter": "변속 레버",
   "Sequential: push to shift up": "시퀀셜: 밀면 기어 올림",
   "Sequential: pull to shift up": "시퀀셜: 당기면 기어 올림",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요.",
+  "Rankings": "순위",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "이 서버에서 게임의 온라인 모드. 랭크 레이스에서 점수를 받습니다: 1위 100점, 꼴찌 0점.",
+  "Overall": "전체",
+  "This month": "이번 달",
+  "Race type": "레이스 종류",
+  "Persona": "페르소나",
+  "Points": "점수",
+  "Wins": "승",
+  "Losses": "패",
+  "Nobody has raced yet.": "아직 아무도 레이스하지 않았습니다.",
+  "This server has no Online mode.": "이 서버에는 온라인 모드가 없습니다.",
+  "The rankings could not be loaded.": "순위를 불러오지 못했습니다."
 }

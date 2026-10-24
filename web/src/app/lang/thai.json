@@ -778,5 +778,17 @@
   "Shifter": "คันเกียร์",
   "Sequential: push to shift up": "ซีเควนเชียล: ดันเพื่อเพิ่มเกียร์",
   "Sequential: pull to shift up": "ซีเควนเชียล: ดึงเพื่อเพิ่มเกียร์",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "เกมเปลี่ยนเกียร์ทีละเกียร์ ซีเควนเชียล: ทุกครั้งที่โยกคันเกียร์เข้าเกียร์จะเปลี่ยนหนึ่งเกียร์ และเกียร์ถอยหลังจะดึงเบรกมือ เบรกมือ: ทุกเกียร์จะดึงเบรกมือ"
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "เกมเปลี่ยนเกียร์ทีละเกียร์ ซีเควนเชียล: ทุกครั้งที่โยกคันเกียร์เข้าเกียร์จะเปลี่ยนหนึ่งเกียร์ และเกียร์ถอยหลังจะดึงเบรกมือ เบรกมือ: ทุกเกียร์จะดึงเบรกมือ",
+  "Rankings": "อันดับ",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "โหมดออนไลน์ของเกมบนเซิร์ฟเวอร์นี้ การแข่งแบบจัดอันดับให้คะแนน: อันดับหนึ่งได้ 100 อันดับสุดท้ายได้ 0",
+  "Overall": "รวม",
+  "This month": "เดือนนี้",
+  "Race type": "ประเภทการแข่ง",
+  "Persona": "เพอร์โซนา",
+  "Points": "คะแนน",
+  "Wins": "ชนะ",
+  "Losses": "แพ้",
+  "Nobody has raced yet.": "ยังไม่มีใครแข่ง",
+  "This server has no Online mode.": "เซิร์ฟเวอร์นี้ไม่มีโหมดออนไลน์",
+  "The rankings could not be loaded.": "โหลดอันดับไม่ได้"
 }

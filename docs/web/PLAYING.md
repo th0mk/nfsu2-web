@@ -492,6 +492,9 @@ Good to know:
   you.
 - **Who is on:** Online on the start page shows how many play on this server now, and how many of them are in Online
   mode (in its menus or racing). Only the two numbers: no names.
+- **Rankings on the start page:** Online, **Rankings** shows the game's own Rankings without starting it: per race
+  type the first 100 by rating points, overall and this month, with their wins and losses. Free roam races are not
+  in it: only the Online mode's races count.
 - Turning it off: Online, Online mode on the start page (the game then cannot connect).
 
 ## 8. When something is wrong

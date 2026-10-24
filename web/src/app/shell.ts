@@ -708,6 +708,37 @@ function openHelp() {
   $<HTMLDialogElement>('#help').showModal();
 }
 
+/** The game's Online rankings (the server's /rankings: per race type its first 100 overall and this month), asked
+ *  for each time the dialog opens; Overall / This month and the race type pick a board of what came. */
+interface RankRow { rank: number; name: string; points: number; wins: number; losses: number }
+const RACE_TYPES = [['circuit', N('circuit')], ['sprint', N('sprint')], ['drag', N('drag')], ['drift', N('drift')],
+  ['streetx', N('Street X')], ['url', N('URL race')]] as const;
+let ranks: Record<string, Record<string, RankRow[]>> | null = null, rankWhen = 'all', rankNote = '';
+async function openRankings() {
+  ranks = null; rankNote = N('Loading'); drawRankings();
+  $<HTMLDialogElement>('#rankings').showModal();
+  try {
+    const r = await fetch('/rankings', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+    if (r.ok) { ranks = await r.json(); rankNote = ''; }
+    else rankNote = r.status === 404 ? N('This server has no Online mode.') : N('The rankings could not be loaded.');
+  } catch { rankNote = N('The rankings could not be loaded.'); }
+  drawRankings();
+}
+function drawRankings() {
+  const pick = $<HTMLSelectElement>('#rankings-type'), type = pick.value || 'circuit';
+  pick.replaceChildren(...RACE_TYPES.map(([v, l]) => Object.assign(document.createElement('option'), { value: v, textContent: cap(t(l)) })));
+  pick.value = type;
+  for (const b of $('#rankings').querySelectorAll<HTMLElement>('[data-when]')) b.setAttribute('aria-selected', String(b.dataset.when === rankWhen));
+  const rows = ranks?.[rankWhen]?.[type] ?? [];
+  $('#rankings-msg').textContent = t(rankNote || (ranks && !rows.length ? N('Nobody has raced yet.') : ''));
+  $('#rankings-table').hidden = !rows.length;
+  $('#rankings-table tbody').replaceChildren(...rows.map(r => {
+    const tr = document.createElement('tr');
+    tr.append(...[r.rank, r.name, r.points, r.wins, r.losses].map(x => Object.assign(document.createElement('td'), { textContent: String(x) })));
+    return tr;
+  }));
+}
+
 /** free roam: a friend joined, left, went into a race (who: the friend's name the text starts with); the server
  *  full; four at most, each for 5 s (also in the log).  Friends' lines are only logged for now: with the crowds
  *  on the server they came too often */
@@ -1225,6 +1256,9 @@ export async function boot() {
   $<HTMLButtonElement>('#retry').onclick = () => void loadModule();
   $<HTMLButtonElement>('#reload').onclick = () => void reload();
   $<HTMLButtonElement>('#log-btn').onclick = downloadLog;
+  $<HTMLButtonElement>('#rankings-btn').onclick = () => void openRankings();
+  $('#rankings-type').onchange = drawRankings;
+  $('#rankings').addEventListener('click', e => { const w = (e.target as HTMLElement).closest<HTMLElement>('[data-when]')?.dataset.when; if (w) { rankWhen = w; drawRankings(); } });
   $('#menu').addEventListener('click', e => { const a = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-act]'); if (a) void menuAction(a.dataset.act!); });
   $('#menu').addEventListener('close', () => {
     const pop = $<HTMLDialogElement>('#crews-pop'); if (pop.open) pop.close();      // the menu's Crews go with it
@@ -1267,7 +1301,7 @@ export async function boot() {
   onLanguage(() => {
     renderProblems(); evaluate(); settings.render(); void saves.refresh(); vault.refresh(); keySheet.relabel(); lobbyPanel.redraw(); touch.relabel();
     helpSheet = null; $('#help-body').replaceChildren();
-    syncPicker();
+    syncPicker(); drawRankings();
   });
   const stageMenu = $<HTMLButtonElement>('#stage-menu');
   stageMenu.onpointerdown = e => e.preventDefault();     // the canvas keeps the focus (and with it the keyboard)

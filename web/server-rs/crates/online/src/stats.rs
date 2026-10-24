@@ -373,6 +373,27 @@ impl Stats {
         &self.boards[&(kind, monthly)]
     }
 
+    /// The start page's rankings (/rankings): the first 100 of each race type's ranking, overall (all) and for the
+    /// month, by race type name: rank, name, points, wins, losses, as the game's Rankings screens show them.
+    /// (ponytail: 12 boards on the online thread, 18 ms each at 100,000 personas, each built at most every board_ms;
+    /// cache the answer in the app if that ever shows in the lobby.)
+    pub fn top(&mut self) -> Value {
+        let mut out = serde_json::Map::new();
+        for (key, monthly) in [("all", false), ("month", true)] {
+            let mut types = serde_json::Map::new();
+            for (kind, name) in RACE_TYPES.iter().enumerate() {
+                let rows = self.ranking(kind as u32, monthly).rows.iter().take(100);
+                let rows = rows.map(|r| {
+                    serde_json::json!({ "rank": r.rank, "name": r.name, "points": json::num(r.points), "wins": json::num(r.wins),
+                        "losses": json::num(r.losses) })
+                });
+                types.insert(name.to_string(), rows.collect());
+            }
+            out.insert(key.into(), types.into());
+        }
+        out.into()
+    }
+
     /// at most max names that begin with prefix (lower case), from a sorted list built at most every board_ms
     pub fn starting_with(&mut self, prefix: &str, max: usize) -> Vec<String> {
         let now = self.now();

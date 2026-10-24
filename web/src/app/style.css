@@ -83,6 +83,7 @@ h3 { font-size: 16px; line-height: 24px; color: var(--lime); margin: 32px 0 8px;
 .panel-head h3 { margin: 0; }
 .panel-head .hint { line-height: 24px; }
 .panel-head + .msg { margin: -12px 0 16px; }
+#online .panel-head + .hint { margin: -12px 0 16px; }
 #settings[data-readonly] #settings-note, #online[data-readonly] #online-note { color: var(--warn); }
 
 /* the game's slider bar under its header, here the download */
@@ -254,13 +255,13 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 }
 .set input::placeholder { color: var(--edge); font-weight: 400; }
 /* a choice of many: the same value box, with a chevron */
-.set select {
+.set select, .dlg select {
   appearance: none; width: 240px; height: 40px; padding: 0 36px 0 12px; border: 2px solid var(--edge); border-radius: 8px;
   background: linear-gradient(45deg, transparent 50%, var(--lime) 50%) calc(100% - 20px) 50% / 6px 6px no-repeat,
     linear-gradient(135deg, var(--lime) 50%, transparent 50%) calc(100% - 14px) 50% / 6px 6px no-repeat, var(--field);
   color: var(--lime); font: italic 700 16px/24px var(--font); cursor: pointer;
 }
-.set select option { background: var(--field); color: var(--text); font-style: normal; }
+.set select option, .dlg select option { background: var(--field); color: var(--text); font-style: normal; }
 .set select:disabled { cursor: not-allowed; opacity: 0.5; }
 /* Listen beside a choice (Your horn): a play triangle in the value box's frame, a stop square while it plays; the
    word stays the button's name (and its tooltip) */
@@ -740,6 +741,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .crews-pop-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .dlg ul.crews { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .dlg p.set-note { margin: 0; }
+/* the Online rankings (shell.ts openRankings): Overall / This month, the race type, its table; a long name cut */
+.dlg.rankings { width: min(560px, calc(100vw - 32px)); }
+.rankings select { display: block; margin-bottom: 16px; }
+#rankings-msg:empty { display: none; }
+#rankings-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#rankings-table :is(th, td) { padding: 4px 0 4px 12px; text-align: right; white-space: nowrap; }
+#rankings-table th { color: var(--muted); font-weight: 400; box-shadow: inset 0 -1px var(--line); }
+#rankings-table :is(th, td):first-child { padding-left: 0; }
+#rankings-table :is(th, td):nth-child(2) { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 
 /* ---------------------------------------------------------------- narrow */
 @media (max-width: 959px) {
@@ -758,6 +768,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }
   .raw > .text-btn { float: none; order: 1; align-self: flex-start; margin: 0 0 8px; padding: 0; }
+  #rankings-table { font-size: 14px; }
 }
 /* a phone in landscape: the page menu's buttons in two columns, so Quit game needs no scrolling */
 @media (max-height: 479px) {

@@ -304,6 +304,40 @@ async fn a_file_put_in_place_meanwhile_is_answered_as_one_version() {
     assert!(bad.is_empty(), "{} of {n} answers: {:?}", bad.len(), &bad[..bad.len().min(5)]);
 }
 
+// /rankings: each race type's ranking from the Online host's stats.json, best first, overall and this month (a
+// persona's counts of an earlier month are not this month's), the fields the game shows and no others; nothing with
+// --online off
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rankings_come_from_the_online_results() {
+    let month = &nfsu2_util::js::iso_string(nfsu2_util::now_ms() as i64)[..7];
+    let stats = format!(
+        r#"{{"personas":[
+        {{"name":"Alpha","seen":"{month}","all":{{"0":{{"races":3,"rw":2,"rl":1,"points":200}}}},"month":{{"key":"{month}","t":{{"0":{{"races":1,"rw":1,"points":100}}}}}}}},
+        {{"name":"Bravo","seen":"{month}","all":{{"0":{{"races":4,"rw":1,"rl":3,"points":250}},"1":{{"races":1,"ul":1}}}},"month":{{"key":"{month}","t":{{"1":{{"races":1,"ul":1}}}}}}}},
+        {{"name":"Charlie","seen":"2026-01","all":{{"0":{{"races":1,"rl":1}}}},"month":{{"key":"2026-01","t":{{"0":{{"races":5,"rw":5,"points":500}}}}}}}}]}}"#
+    );
+    let kit = Kit::start(&["--online", "on"], |root| {
+        std::fs::create_dir_all(root.join("state/online")).unwrap();
+        std::fs::write(root.join("state/online/stats.json"), &stats).unwrap();
+    })
+    .await;
+    let a = kit.get("/rankings", &[]).await;
+    assert_eq!((a.status, a.header("content-type")), (200, Some("application/json")));
+    let v: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+    let rows = |k: &str, t: &str| serde_json::to_string(&v[k][t]).unwrap();
+    assert_eq!(
+        rows("all", "circuit"),
+        r#"[{"rank":1,"name":"Bravo","points":250,"wins":1,"losses":3},{"rank":2,"name":"Alpha","points":200,"wins":2,"losses":1},{"rank":3,"name":"Charlie","points":0,"wins":0,"losses":1}]"#
+    );
+    assert_eq!(rows("month", "circuit"), r#"[{"rank":1,"name":"Alpha","points":100,"wins":1,"losses":0}]"#);
+    assert_eq!(rows("month", "sprint"), r#"[{"rank":1,"name":"Bravo","points":0,"wins":0,"losses":1}]"#);
+    let keys: Vec<&String> = v["all"].as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["circuit", "sprint", "drag", "drift", "streetx", "url"]);
+    assert_eq!(v["month"]["drag"], serde_json::json!([]));
+    let off = Kit::start(&[], |_| {}).await;
+    assert_eq!(off.get("/rankings", &[]).await.status, 404);
+}
+
 /// an answer's whole length once its head is in (its Content-Length; none: no body)
 fn answer_len(b: &[u8]) -> Option<usize> {
     let end = b.windows(4).position(|w| w == b"\r\n\r\n")?;

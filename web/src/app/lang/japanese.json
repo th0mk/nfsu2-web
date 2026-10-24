@@ -778,5 +778,17 @@
   "Shifter": "シフター",
   "Sequential: push to shift up": "シーケンシャル: 押してシフトアップ",
   "Sequential: pull to shift up": "シーケンシャル: 引いてシフトアップ",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "このゲームのギアは1段ずつ変わります。シーケンシャル: レバーをギアに入れるたびに1段シフトし、リバースではサイドブレーキがかかります。サイドブレーキ: どのギアでもかかります。"
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "このゲームのギアは1段ずつ変わります。シーケンシャル: レバーをギアに入れるたびに1段シフトし、リバースではサイドブレーキがかかります。サイドブレーキ: どのギアでもかかります。",
+  "Rankings": "ランキング",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "このサーバーでのゲームのオンラインモード。ランクレースでポイントが入ります：1位は100、最下位は0。",
+  "Overall": "総合",
+  "This month": "今月",
+  "Race type": "レースタイプ",
+  "Persona": "ペルソナ",
+  "Points": "ポイント",
+  "Wins": "勝利",
+  "Losses": "敗北",
+  "Nobody has raced yet.": "まだ誰もレースしていません。",
+  "This server has no Online mode.": "このサーバーにはオンラインモードがありません。",
+  "The rankings could not be loaded.": "ランキングを読み込めませんでした。"
 }
