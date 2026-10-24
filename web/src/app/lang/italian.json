@@ -862,5 +862,17 @@
   "Shifter": "Leva del cambio",
   "Sequential: push to shift up": "Sequenziale: spingi per salire",
   "Sequential: pull to shift up": "Sequenziale: tira per salire",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Il gioco cambia una marcia alla volta. Sequenziale: ogni volta che la leva entra in una marcia è una cambiata, e la retromarcia tiene il freno a mano. Freno a mano: qualsiasi marcia lo tiene."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Il gioco cambia una marcia alla volta. Sequenziale: ogni volta che la leva entra in una marcia è una cambiata, e la retromarcia tiene il freno a mano. Freno a mano: qualsiasi marcia lo tiene.",
+  "Rankings": "Classifiche",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "La modalità Online del gioco su questo server. Le gare classificate danno punti: 100 al primo posto, 0 all'ultimo.",
+  "Overall": "Generale",
+  "This month": "Questo mese",
+  "Race type": "Tipo di gara",
+  "Persona": "Persona",
+  "Points": "Punti",
+  "Wins": "Vittorie",
+  "Losses": "Sconfitte",
+  "Nobody has raced yet.": "Nessuno ha ancora gareggiato.",
+  "This server has no Online mode.": "Questo server non ha la modalità Online.",
+  "The rankings could not be loaded.": "Impossibile caricare le classifiche."
 }

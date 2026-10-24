@@ -201,7 +201,10 @@
     </section>
 
     <section class="panel" id="online" aria-labelledby="online-title">
-      <h2 id="online-title" data-i18n>Online</h2>
+      <div class="panel-head">
+        <h2 id="online-title" data-i18n>Online</h2>
+        <button type="button" class="btn" id="rankings-btn" aria-haspopup="dialog" data-i18n>Rankings</button>
+      </div>
       <p class="hint" id="online-note" hidden></p>
       <div id="online-body"></div>
     </section>
@@ -258,6 +261,25 @@
     <button class="btn" value="close" data-i18n>Close</button>
   </form>
   <div id="help-body"></div>
+</dialog>
+
+<!-- the Online mode's rankings (shell.ts openRankings) -->
+<dialog class="dlg rankings" id="rankings" aria-labelledby="rankings-title">
+  <form method="dialog" class="dlg-head">
+    <h2 id="rankings-title" data-i18n>Rankings</h2>
+    <button class="btn" value="close" data-i18n>Close</button>
+  </form>
+  <p class="hint" data-i18n>The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.</p>
+  <div class="tabs" role="tablist" data-i18n-attr="aria-label" aria-label="Rankings">
+    <button type="button" class="tab" role="tab" data-when="all" data-i18n>Overall</button>
+    <button type="button" class="tab" role="tab" data-when="month" data-i18n>This month</button>
+  </div>
+  <select id="rankings-type" data-i18n-attr="aria-label" aria-label="Race type"></select>
+  <p class="hint" id="rankings-msg" role="status"></p>
+  <table id="rankings-table" hidden>
+    <thead><tr><th>#</th><th data-i18n>Persona</th><th data-i18n>Points</th><th data-i18n>Wins</th><th data-i18n>Losses</th></tr></thead>
+    <tbody></tbody>
+  </table>
 </dialog>
 
 <dialog class="dlg menu" id="menu" aria-labelledby="menu-title">

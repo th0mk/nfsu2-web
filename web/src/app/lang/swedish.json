@@ -841,5 +841,17 @@
   "Shifter": "Växelspak",
   "Sequential: push to shift up": "Sekventiell: tryck för att växla upp",
   "Sequential: pull to shift up": "Sekventiell: dra för att växla upp",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den.",
+  "Rankings": "Rankingar",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "Spelets Online-läge på den här servern. Rankade race ger poäng: 100 för förstaplatsen, 0 för sista.",
+  "Overall": "Totalt",
+  "This month": "Den här månaden",
+  "Race type": "Racetyp",
+  "Persona": "Persona",
+  "Points": "Poäng",
+  "Wins": "Segrar",
+  "Losses": "Förluster",
+  "Nobody has raced yet.": "Ingen har kört race än.",
+  "This server has no Online mode.": "Den här servern har inget Online-läge.",
+  "The rankings could not be loaded.": "Rankingarna kunde inte läsas in."
 }

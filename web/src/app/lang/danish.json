@@ -841,5 +841,17 @@
   "Shifter": "Gearstang",
   "Sequential: push to shift up": "Sekventiel: skub for at skifte op",
   "Sequential: pull to shift up": "Sekventiel: træk for at skifte op",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spillet skifter ét gear ad gangen. Sekventiel: hver gang du sætter stangen i et gear, er det ét skift, og bakgearet holder håndbremsen. Håndbremse: ethvert gear holder den."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spillet skifter ét gear ad gangen. Sekventiel: hver gang du sætter stangen i et gear, er det ét skift, og bakgearet holder håndbremsen. Håndbremse: ethvert gear holder den.",
+  "Rankings": "Ranglister",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "Spillets Online-tilstand på denne server. Rangerede løb giver point: 100 for førstepladsen, 0 for sidstepladsen.",
+  "Overall": "Samlet",
+  "This month": "Denne måned",
+  "Race type": "Løbstype",
+  "Persona": "Persona",
+  "Points": "Point",
+  "Wins": "Sejre",
+  "Losses": "Nederlag",
+  "Nobody has raced yet.": "Ingen har kørt løb endnu.",
+  "This server has no Online mode.": "Denne server har ingen Online-tilstand.",
+  "The rankings could not be loaded.": "Ranglisterne kunne ikke indlæses."
 }

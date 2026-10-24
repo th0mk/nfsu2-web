@@ -99,6 +99,7 @@ enum Event {
     PeerGone(u32),
     Info(oneshot::Sender<serde_json::Value>),
     Vips(oneshot::Sender<HashSet<u32>>),
+    Rankings(oneshot::Sender<serde_json::Value>),
     Attach(SwitchSend),
     Stop,
 }
@@ -119,6 +120,12 @@ impl OnlineHost {
     /// the switch's way to its browsers
     pub fn attach_switch(&self, send: SwitchSend) {
         let _ = self.tx.send(Event::Attach(send));
+    }
+    /// the rankings as the start page shows them (stats.rs `Stats::top`)
+    pub fn rankings(&self) -> oneshot::Receiver<serde_json::Value> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Event::Rankings(tx));
+        rx
     }
 }
 
@@ -158,6 +165,9 @@ fn run(o: OnlineOptions, rx: mpsc::Receiver<Event>) {
             }
             Some(Event::Vips(tx)) => {
                 let _ = tx.send(core.vips());
+            }
+            Some(Event::Rankings(tx)) => {
+                let _ = tx.send(core.stats.top());
             }
             Some(Event::Attach(send)) => core.attach(send),
             Some(Event::Stop) => {

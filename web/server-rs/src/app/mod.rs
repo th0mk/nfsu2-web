@@ -1,5 +1,5 @@
-//! The routes and rules: the files, the game data in blocks, the module, /players, /lan's handshake, the per-client
-//! budgets, and the answers every response carries.
+//! The routes and rules: the files, the game data in blocks, the module, /players, /rankings, /lan's handshake, the
+//! per-client budgets, and the answers every response carries.
 //!
 //! There is no access control: whoever can reach the server may play, and the firewall in front of it decides who
 //! that is.  What the server does instead is say nothing about the machine (no host name, addresses, paths, versions
@@ -150,7 +150,7 @@ const STATUS: [(u16, &str); 8] = [
     (503, "Service Unavailable"),
 ];
 
-pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /lan\nDisallow: /vault";
+pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /rankings\nDisallow: /lan\nDisallow: /vault";
 
 /// what a client may ask a file to be sent as
 const TYPES: [(&str, &str); 11] = [
@@ -566,6 +566,9 @@ impl App {
         if p == "/players" {
             return self.send_players(q, s, &u).await;
         }
+        if p == "/rankings" {
+            return self.send_rankings(q, s).await;
+        }
         if p == "/robots.txt" {
             return self.plain(q, s, 200, ROBOTS_TXT, &[], Cache::Revalidate, false).await;
         }
@@ -684,6 +687,25 @@ impl App {
             m.insert("crews".into(), serde_json::Value::Array(n));
         }
         let body = nfsu2_util::json::stringify(&serde_json::Value::Object(m));
+        let mut h = self.headers(q, Cache::Store, true);
+        h.set("content-type", "application/json");
+        h.set("content-length", body.len().to_string());
+        s.head(200, h.0);
+        if q.method != "HEAD" {
+            send(s, body.as_bytes()).await?;
+        }
+        finish(s).await
+    }
+
+    /// /rankings: the game's Online rankings for the start page, read-only: per race type the first 100 overall (all)
+    /// and this month (month), each row rank, name, points, wins, losses (nfsu2-online stats.rs `Stats::top`); only
+    /// what the game's Rankings screens show anyone.  404 with --online off; 503 when the host does not answer in 2 s
+    async fn send_rankings(&self, q: &Request, s: &mut Response) -> Res {
+        let Some(h) = &self.online else { return self.not_found(q, s).await };
+        let Some(v) = tokio::time::timeout(Duration::from_secs(2), h.rankings()).await.ok().and_then(Result::ok) else {
+            return self.plain(q, s, 503, "Busy", &[], Cache::Store, true).await;
+        };
+        let body = nfsu2_util::json::stringify(&v);
         let mut h = self.headers(q, Cache::Store, true);
         h.set("content-type", "application/json");
         h.set("content-length", body.len().to_string());

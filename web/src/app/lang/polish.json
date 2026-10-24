@@ -883,5 +883,17 @@
   "Shifter": "Drążek biegów",
   "Sequential: push to shift up": "Sekwencyjnie: pchnij, aby wrzucić wyższy",
   "Sequential: pull to shift up": "Sekwencyjnie: pociągnij, aby wrzucić wyższy",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Gra zmienia biegi po jednym. Sekwencyjnie: każde wrzucenie biegu drążkiem to jedna zmiana, a wsteczny trzyma ręczny. Ręczny: każdy bieg go trzyma."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Gra zmienia biegi po jednym. Sekwencyjnie: każde wrzucenie biegu drążkiem to jedna zmiana, a wsteczny trzyma ręczny. Ręczny: każdy bieg go trzyma.",
+  "Rankings": "Rankingi",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "Tryb sieciowy gry na tym serwerze. Wyścigi rankingowe dają punkty: 100 za pierwsze miejsce, 0 za ostatnie.",
+  "Overall": "Ogółem",
+  "This month": "Ten miesiąc",
+  "Race type": "Rodzaj wyścigu",
+  "Persona": "Profil",
+  "Points": "Punkty",
+  "Wins": "Wygrane",
+  "Losses": "Przegrane",
+  "Nobody has raced yet.": "Nikt jeszcze się nie ścigał.",
+  "This server has no Online mode.": "Ten serwer nie ma trybu sieciowego.",
+  "The rankings could not be loaded.": "Nie udało się wczytać rankingów."
 }

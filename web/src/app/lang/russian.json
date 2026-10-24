@@ -883,5 +883,17 @@
   "Shifter": "Рычаг КПП",
   "Sequential: push to shift up": "Секвентально: от себя — вверх",
   "Sequential: pull to shift up": "Секвентально: на себя — вверх",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача.",
+  "Rankings": "Рейтинги",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "Игра через Интернет на этом сервере. Рейтинговые гонки дают очки: 100 за первое место, 0 за последнее.",
+  "Overall": "Общий",
+  "This month": "Этот месяц",
+  "Race type": "Тип гонки",
+  "Persona": "Профиль",
+  "Points": "Очки",
+  "Wins": "Победы",
+  "Losses": "Поражения",
+  "Nobody has raced yet.": "Ещё никто не гонялся.",
+  "This server has no Online mode.": "На этом сервере нет игры через Интернет.",
+  "The rankings could not be loaded.": "Не удалось загрузить рейтинги."
 }

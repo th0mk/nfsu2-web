@@ -841,5 +841,17 @@
   "Shifter": "Schaltknüppel",
   "Sequential: push to shift up": "Sequenziell: Drücken schaltet hoch",
   "Sequential: pull to shift up": "Sequenziell: Ziehen schaltet hoch",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Das Spiel schaltet Gang für Gang. Sequenziell: Jedes Einlegen eines Gangs mit dem Hebel ist ein Schaltvorgang, und der Rückwärtsgang zieht die Handbremse. Handbremse: Jeder Gang zieht sie."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Das Spiel schaltet Gang für Gang. Sequenziell: Jedes Einlegen eines Gangs mit dem Hebel ist ein Schaltvorgang, und der Rückwärtsgang zieht die Handbremse. Handbremse: Jeder Gang zieht sie.",
+  "Rankings": "Ranglisten",
+  "The game's Online mode on this server. Ranked races give rating points: 100 for first place, 0 for last.": "Der Online-Modus des Spiels auf diesem Server. Gewertete Rennen geben Punkte: 100 für den ersten Platz, 0 für den letzten.",
+  "Overall": "Gesamt",
+  "This month": "Diesen Monat",
+  "Race type": "Rennart",
+  "Persona": "Persona",
+  "Points": "Punkte",
+  "Wins": "Siege",
+  "Losses": "Niederlagen",
+  "Nobody has raced yet.": "Noch ist niemand ein Rennen gefahren.",
+  "This server has no Online mode.": "Dieser Server hat keinen Online-Modus.",
+  "The rankings could not be loaded.": "Die Ranglisten konnten nicht geladen werden."
 }
