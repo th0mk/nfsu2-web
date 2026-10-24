@@ -88,7 +88,7 @@ rev in the countdown) and step aside for menus, the pause menu and free roam's c
 | Enter | Choose (menus); in free roam, start an event at its marker or take an outrun |
 | F12 | Screenshot (PNG), kept with your saves and shown in Saves on the start page |
 | **F8** | Frame-rate counter: off, on, detailed |
-| **F9** | The page menu: when the game last saved, full screen, counter, ghost mode and crews (in free roam), controls, log, **Quit game**; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
+| **F9** | The page menu: when the game last saved, your ping to the server (in free roam), full screen, counter, ghost mode and crews (in free roam), controls, log, **Quit game**; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
 | **Hold Esc** | Leave full screen (a short press still goes to the game) |
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
@@ -491,7 +491,8 @@ Good to know:
   to anyone else reaches them only while they are online. Players you block stay blocked: nothing of theirs reaches
   you.
 - **Who is on:** Online on the start page shows how many play on this server now, and how many of them are in Online
-  mode (in its menus or racing). Only the two numbers: no names.
+  mode (in its menus or racing). Only the two numbers: no names. After them, your ping to the server: the shortest
+  round trip of the page's last five questions (one every 15 s).
 - Turning it off: Online, Online mode on the start page (the game then cannot connect).
 
 ## 8. When something is wrong
@@ -515,6 +516,7 @@ Good to know:
 | No sound | Click the game or press a key. Check the sound setting and the output latency (try "Robust"). |
 | Stuck on a loading screen | F9, Quit game; then "Close the game now"; then "Stop the game". When the log ends in `[data]` lines, the game was waiting for its data from the server: it goes on when the data comes. |
 | Other players' cars stutter, freeze and jump in an Online or LAN race | All updates go through the player who created the game, so let whoever has the steadiest connection (a cable rather than Wi-Fi or mobile) and the fastest computer create it, and keep the game's tab in front. After the race, F9, Download log: its `[racenet]` lines say how each car's updates came (long waits, how many came at once after them) and each player's frame rate. |
+| Other players' cars lag or jump in free roam, everywhere and all the time | One server serves every player, wherever they are. Your ping to it is on the start page under Online, and in F9 while you play: a high one (100 ms and more) is the distance to the server, not your PC, and nothing on your PC makes it shorter. A cable rather than Wi-Fi keeps it steady. |
 | Anything odd | F9, Download log (or "Download log" on the start page after the game ended) and keep the file. It has the game's own log. Before you post it anywhere: it names your browser, its version and your system, your graphics chip, your time zone, and the names and virtual addresses of the players you met (not the server's address: only whether it was this machine, on the LAN or remote). |
 | `Port 8080 is in use` when starting | The server already runs; open its address. Or start on another port: `web/start.sh --http-port 9080`. |
 | Full screen | The game plays in the browser window. F9, Full screen goes full screen, and holding Esc leaves it (in Firefox, a press). "Full screen on Play" in Settings starts every game full screen. |
