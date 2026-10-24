@@ -20,19 +20,23 @@
 #define HOST_STATUS_NAME  16
 
 typedef struct { char name[HOST_STATUS_NAME]; double value; } HostStatusItem;   /* 24 bytes */
+#include "radio_proto.h"
+
 typedef struct {
     uint32_t magic;        /* HOST_STATUS_MAGIC */
     uint32_t seq;          /* sequence lock, even = stable */
     uint32_t count;        /* items in use */
     uint32_t period_ms;    /* how often the publisher refreshes the table */
     HostStatusItem item[HOST_STATUS_MAX];
+    HostStatusRadio radio;
 } HostStatus;
 
 _Static_assert(sizeof(HostStatusItem) == 24, "page layout (status.ts)");
-_Static_assert(sizeof(HostStatus) == 16 + 24 * HOST_STATUS_MAX, "page layout (status.ts)");
+_Static_assert(sizeof(HostStatus) == 16 + 24 * HOST_STATUS_MAX + sizeof(HostStatusRadio), "page layout (status.ts)");
 
 /* status_web.c */
 int  host_status_slot(const char *name);          /* index of a named counter (created on first use), -1 if full */
 void host_status_set(int slot, double value);
 void host_status_set_n(const int *slot, const double *value, int n);   /* in one consistent section */
+HostStatusRadio *host_status_radio(void);         /* the radio's words, shared with the page */
 #endif

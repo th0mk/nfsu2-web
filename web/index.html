@@ -270,6 +270,11 @@
     <button type="button" class="btn" data-act="fps">Frame-rate counter: off</button>
     <button type="button" class="btn" data-act="solid" data-i18n-attr="title" title="On: you drive through the other players' cars, and they through yours. Off: you collide with them." hidden>Ghost mode: off</button>
     <button type="button" class="btn" data-act="crews" aria-haspopup="dialog" hidden>Crews: none</button>
+    <div class="menu-radio">
+      <button type="button" class="btn" data-act="radio" aria-pressed="false"><span id="radio-label">Radio: off</span></button>
+      <button type="button" class="icon" tabindex="-1" data-act="radio-folder" data-i18n-attr="aria-label title" aria-label="Music folder" title="Music folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
+      <button type="button" class="icon" tabindex="-1" data-act="playlist" data-i18n-attr="aria-label title" aria-label="Playlist" title="Playlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+    </div>
     <button type="button" class="btn" data-act="help" data-i18n>Controls</button>
     <button type="button" class="btn" data-act="offline" hidden data-i18n>Stop waiting: play offline</button>
     <button type="button" class="btn" data-act="log" data-i18n>Download log</button>
@@ -285,6 +290,13 @@
   <div class="row end">
     <button type="button" class="btn selected" data-act="crews-done" data-i18n>Done</button>
   </div>
+</dialog>
+<dialog class="dlg playlist" id="playlist" aria-labelledby="playlist-title">
+  <form method="dialog" class="dlg-head">
+    <h2 id="playlist-title" data-i18n>Playlist</h2>
+    <button class="btn" value="close" data-i18n>Back</button>
+  </form>
+  <div id="playlist-body"></div>
 </dialog>
 
 <dialog class="dlg shot-view" id="shot-view" aria-labelledby="shot-title">

@@ -835,5 +835,10 @@
   "Shifter": "Versnellingspook",
   "Sequential: push to shift up": "Sequentieel: duwen schakelt op",
   "Sequential: pull to shift up": "Sequentieel: trekken schakelt op",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "De game schakelt één versnelling tegelijk. Sequentieel: elke keer dat je de pook in een versnelling zet, schakel je één keer, en de achteruit trekt de handrem aan. Handrem: elke versnelling trekt hem aan."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "De game schakelt één versnelling tegelijk. Sequentieel: elke keer dat je de pook in een versnelling zet, schakel je één keer, en de achteruit trekt de handrem aan. Handrem: elke versnelling trekt hem aan.",
+  "Radio: {mode}": "Radio: {mode}",
+  "Music folder": "Muziekmap",
+  "All": "Alles",
+  "Playlist": "Afspeellijst",
+  "No music yet: pick a folder first.": "Nog geen muziek: kies eerst een map."
 }

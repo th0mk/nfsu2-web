@@ -877,5 +877,10 @@
   "Shifter": "Рычаг КПП",
   "Sequential: push to shift up": "Секвентально: от себя — вверх",
   "Sequential: pull to shift up": "Секвентально: на себя — вверх",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Игра переключает передачи по одной. Секвентально: каждое включение передачи рычагом — одно переключение, а задняя передача держит ручник. Ручник: его держит любая передача.",
+  "Radio: {mode}": "Радио: {mode}",
+  "Music folder": "Папка с музыкой",
+  "All": "Все",
+  "Playlist": "Плейлист",
+  "No music yet: pick a folder first.": "Музыки пока нет: сначала выберите папку."
 }

@@ -7,7 +7,7 @@ const MAX = 32, NAME = 16, ITEM = 24, HEAD = 16;
 
 export class StatusReader {
   private td = new TextDecoder();
-  constructor(private memory: WebAssembly.Memory, private ptr: number) {}
+  constructor(private memory: WebAssembly.Memory, readonly ptr: number) {}
 
   /** The counters, or null if the block is not (yet) valid or was being written. */
   read(): Map<string, number> | null {

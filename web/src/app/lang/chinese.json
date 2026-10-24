@@ -772,5 +772,10 @@
   "Shifter": "排檔桿",
   "Sequential: push to shift up": "序列式：推為升檔",
   "Sequential: pull to shift up": "序列式：拉為升檔",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "遊戲一次只換一檔。序列式：排檔桿每入一個檔位就換一檔，倒檔則拉起手煞車。手煞車：任何檔位都會拉起手煞車。"
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "遊戲一次只換一檔。序列式：排檔桿每入一個檔位就換一檔，倒檔則拉起手煞車。手煞車：任何檔位都會拉起手煞車。",
+  "Radio: {mode}": "電台：{mode}",
+  "Music folder": "音樂資料夾",
+  "All": "全部",
+  "Playlist": "播放清單",
+  "No music yet: pick a folder first.": "尚無音樂：請先選擇資料夾。"
 }

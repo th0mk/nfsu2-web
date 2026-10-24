@@ -835,5 +835,10 @@
   "Shifter": "Växelspak",
   "Sequential: push to shift up": "Sekventiell: tryck för att växla upp",
   "Sequential: pull to shift up": "Sekventiell: dra för att växla upp",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den.",
+  "Radio: {mode}": "Radio: {mode}",
+  "Music folder": "Musikmapp",
+  "All": "Alla",
+  "Playlist": "Spellista",
+  "No music yet: pick a folder first.": "Ingen musik än: välj först en mapp."
 }

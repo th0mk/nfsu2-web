@@ -877,5 +877,10 @@
   "Shifter": "Drążek biegów",
   "Sequential: push to shift up": "Sekwencyjnie: pchnij, aby wrzucić wyższy",
   "Sequential: pull to shift up": "Sekwencyjnie: pociągnij, aby wrzucić wyższy",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Gra zmienia biegi po jednym. Sekwencyjnie: każde wrzucenie biegu drążkiem to jedna zmiana, a wsteczny trzyma ręczny. Ręczny: każdy bieg go trzyma."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Gra zmienia biegi po jednym. Sekwencyjnie: każde wrzucenie biegu drążkiem to jedna zmiana, a wsteczny trzyma ręczny. Ręczny: każdy bieg go trzyma.",
+  "Radio: {mode}": "Radio: {mode}",
+  "Music folder": "Folder z muzyką",
+  "All": "Wszystkie",
+  "Playlist": "Lista odtwarzania",
+  "No music yet: pick a folder first.": "Brak muzyki: najpierw wybierz folder."
 }

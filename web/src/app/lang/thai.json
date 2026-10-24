@@ -772,5 +772,10 @@
   "Shifter": "คันเกียร์",
   "Sequential: push to shift up": "ซีเควนเชียล: ดันเพื่อเพิ่มเกียร์",
   "Sequential: pull to shift up": "ซีเควนเชียล: ดึงเพื่อเพิ่มเกียร์",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "เกมเปลี่ยนเกียร์ทีละเกียร์ ซีเควนเชียล: ทุกครั้งที่โยกคันเกียร์เข้าเกียร์จะเปลี่ยนหนึ่งเกียร์ และเกียร์ถอยหลังจะดึงเบรกมือ เบรกมือ: ทุกเกียร์จะดึงเบรกมือ"
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "เกมเปลี่ยนเกียร์ทีละเกียร์ ซีเควนเชียล: ทุกครั้งที่โยกคันเกียร์เข้าเกียร์จะเปลี่ยนหนึ่งเกียร์ และเกียร์ถอยหลังจะดึงเบรกมือ เบรกมือ: ทุกเกียร์จะดึงเบรกมือ",
+  "Radio: {mode}": "วิทยุ: {mode}",
+  "Music folder": "โฟลเดอร์เพลง",
+  "All": "ทั้งหมด",
+  "Playlist": "เพลย์ลิสต์",
+  "No music yet: pick a folder first.": "ยังไม่มีเพลง: เลือกโฟลเดอร์ก่อน"
 }

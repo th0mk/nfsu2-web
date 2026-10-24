@@ -772,5 +772,10 @@
   "Shifter": "변속 레버",
   "Sequential: push to shift up": "시퀀셜: 밀면 기어 올림",
   "Sequential: pull to shift up": "시퀀셜: 당기면 기어 올림",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요.",
+  "Radio: {mode}": "라디오: {mode}",
+  "Music folder": "음악 폴더",
+  "All": "전체",
+  "Playlist": "재생 목록",
+  "No music yet: pick a folder first.": "아직 음악이 없습니다. 먼저 폴더를 선택하세요."
 }

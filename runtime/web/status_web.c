@@ -48,6 +48,8 @@ void host_status_set_n(const int *slot, const double *value, int n){
     pthread_mutex_unlock(&g_mu);
 }
 
+HostStatusRadio *host_status_radio(void){ return &g_st.radio; }
+
 /* "frames_t" is the time "frames" was read, in ms on CLOCK_MONOTONIC (the
  * page's performance.timeOrigin + now(), the same clock).  The page divides
  * the change in frames by the change in frames_t: its own sampling times
@@ -143,6 +145,8 @@ void status_web_frame(void){
 /* main_web.c, before the guest starts */
 void status_web_start(void){
     g_st.magic = HOST_STATUS_MAGIC;
+    g_st.radio.radio_magic = RADIO_MAGIC;
+    g_st.radio.radio_version = RADIO_VERSION;
     g_st.period_ms = 250;
     nfsu2_register(HOST_KIND_STATUS, &g_st, sizeof g_st);
     pthread_attr_t at; pthread_attr_init(&at);

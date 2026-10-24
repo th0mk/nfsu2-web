@@ -856,5 +856,10 @@
   "Shifter": "Palanca de cambios",
   "Sequential: push to shift up": "Secuencial: empujar para subir",
   "Sequential: pull to shift up": "Secuencial: tirar para subir",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "El juego cambia las marchas de una en una. Secuencial: cada vez que metes la palanca en una marcha es un cambio, y la marcha atrás mantiene el freno de mano. Freno de mano: cualquier marcha lo mantiene."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "El juego cambia las marchas de una en una. Secuencial: cada vez que metes la palanca en una marcha es un cambio, y la marcha atrás mantiene el freno de mano. Freno de mano: cualquier marcha lo mantiene.",
+  "Radio: {mode}": "Radio: {mode}",
+  "Music folder": "Carpeta de música",
+  "All": "Todos",
+  "Playlist": "Lista de reproducción",
+  "No music yet: pick a folder first.": "Aún no hay música: elige primero una carpeta."
 }
