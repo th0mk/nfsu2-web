@@ -595,6 +595,13 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
   site's data and changes networks comes back; no ban can stop that without accounts.
 - **Who left**: `ban` takes a player who left in the last hour too (`who` lists them), so you can ban someone who
   is gone already. `kick` needs them on.
+- **Cars that move as no car can**: the free-roam hub leaves a browser out of free roam by itself for 10 minutes
+  when its car makes six moves no car can in ten seconds (faster than 150 m/s across the map or 20 m/s up, between
+  two of its half-second position reports, by its own clock): a teleport or a speed hack makes one at each report, a
+  car that flies one while it climbs; a respawn or a jump makes one or two. Nobody sees its car, name or race lobby
+  meanwhile and it sees nobody; a reload does not end it. The log says so once, `[roam] "Bob" 10.77.4.17 left out of
+  free roam for 10 min: ...`: `ban` them by that address if it was no accident. A car that flies at the height it
+  rose to, slower than that, is not caught: the hub does not know the city's ground.
 - **Banning again** replaces the earlier ban of the same player: `ban Bob perm` after `ban Bob 1d` leaves one ban,
   for good.
 - **What is kept**: `bans.json` in the state volume, with keyed hashes of the addresses and ids only (the key,

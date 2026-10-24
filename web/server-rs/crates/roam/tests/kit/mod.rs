@@ -128,6 +128,19 @@ pub fn snap(sender: u32, pos: [f64; 3]) -> Vec<u8> {
     snap_n(sender, pos, 2, 1)
 }
 
+/// a SNAP of one state at time t_us on the sender's clock, with this status, epoch and clock
+pub fn snap_at(sender: u32, pos: [f64; 3], t_us: u32, status: u8, epoch: u8, clock: u8) -> Vec<u8> {
+    let mut d = snap_n(sender, pos, status, 1);
+    let p = &mut d[16..];
+    p[1] = epoch;
+    p[5] = clock;
+    p[6..10].copy_from_slice(&t_us.to_le_bytes());
+    let len = d.len();
+    let crc = crc32fast::hash(&d[..len - 4]);
+    d[len - 4..].copy_from_slice(&crc.to_le_bytes());
+    d
+}
+
 /// a SNAP of one state with a velocity and a heading (radians, 0 = +x, a turn about z)
 pub fn snap_moving(sender: u32, pos: [f64; 3], v: [f64; 3], heading: f64, status: u8) -> Vec<u8> {
     let mut d = snap_n(sender, pos, status, 1);

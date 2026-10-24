@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use bytes::{Bytes, BytesMut};
-use nfsu2_util::js;
 use nfsu2_util::json::num;
+use nfsu2_util::{js, vip_str};
 use serde_json::{Value, json};
 
 use crate::links::{Cand, Found, Grid, Heap, Near, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable};
@@ -59,6 +59,23 @@ const CREW_LINKS: u32 = 16;
 /// a crew of more players than this in one room gets no links first (its pairs grow as the square of its players:
 /// 64 are 2016), its players link by distance as everyone does, and it counts in `crewSkips`
 const CREW_GROUP_MAX: usize = 64;
+
+/// A car in free roam that moves as no car can is left out of free roam (`odd_move`): between two of its SNAPs in free
+/// roam, by its own clock, faster than ODD_MPS across the map (540 km/h: a car the game tunes fully does about 100
+/// m/s, and roam_core drops a velocity of 200 or more) or up faster than ODD_CLIMB_MPS (a car leaving a ramp at
+/// 25 m/s climbs about 22 on average over its first half second); ODD_HITS such moves among its last ODD_OF (10 s
+/// of SNAPs): a respawn, a jump or a hill makes one or two.  A teleport or a speed hack makes one every SNAP, a car
+/// that flies up one while it climbs.  Its browser is left out for OUT_MS (`Hub::out`, kept past its players, so a
+/// reload does not end it): nobody is linked with it, the world map and the race lobbies show none of it, its own
+/// list is empty (it drives alone), and the console says so once (grep `left out of free roam`), for `nfsu2 ban`.
+const ODD_MPS: f64 = 150.0;
+const ODD_CLIMB_MPS: f64 = 20.0;
+const ODD_OF: u32 = 20;
+const ODD_HITS: u32 = 6;
+const OUT_MS: f64 = 600_000.0;
+/// two SNAPs this far apart by the sender's clock (s) are compared; others (its clock stood, or a game that stalled)
+/// are not
+const ODD_DT: std::ops::RangeInclusive<f64> = 0.05..=2.0;
 
 /// A player's race report as a log line (one each player of a race, back in free roam: the lines of one race share
 /// its lobby), for evening out the cars: the race, how the player did, the car as its game rated it.  Grep `[race]`.
@@ -141,6 +158,11 @@ struct Player {
     reported: Option<(u32, f64)>,
     /// its links after the last tick (a HELLO of another start of the game empties them)
     links: Vec<Link>,
+    /// its last SNAP in free roam: the newest state's time on its clock (t_us), the SNAP's epoch and clock, and its
+    /// position (`odd_move` compares the next one with it); None after a SNAP not in free roam
+    last: Option<(u32, u8, u8, [f64; 3])>,
+    /// its last ODD_OF moves between SNAPs, a bit each, the newest lowest: 1 for one no car can make (`odd_move`)
+    odd: u32,
     /// its place in `order`
     at: u32,
 }
@@ -229,6 +251,8 @@ struct Stats {
     crew_skips: u64,
     /// players' race reports logged
     race_reports: u64,
+    /// browsers left out of free roam (ODD_HITS)
+    left_out: u64,
 }
 
 /// one pair of a room weighed (every pair of a room of at most `exact_room` players): since when it is linked; a and b
@@ -350,6 +374,9 @@ pub struct Hub {
     /// at once (the second security audit, 2026-10-22: a map walks every player on the hub's one thread, and a few
     /// clients asking that way kept it busy); dropped at each tick once older than map_gap_ms
     map_at: HashMap<u32, f64>,
+    /// the browsers (virtual addresses) left out of free roam, until when (ODD_HITS), kept past their players as
+    /// `map_at` is; dropped at each tick once over
+    out: HashMap<u32, f64>,
     s: Scratch,
 }
 
@@ -387,6 +414,7 @@ impl Hub {
             per_vip: HashMap::new(),
             crewed: 0,
             map_at: HashMap::new(),
+            out: HashMap::new(),
             s: Scratch::default(),
         }
     }
@@ -549,6 +577,8 @@ impl Hub {
                     join: None,
                     reported: None,
                     links: Vec::new(),
+                    last: None,
+                    odd: 0,
                     at: 0,
                 })
             }
@@ -560,6 +590,7 @@ impl Hub {
         p.hub_port = dport;
         let mut ask = None;
         let mut report = None;
+        let mut left_out = None;
         // (in a crew before this HELLO, and after it)
         let mut crewed = None;
         match m {
@@ -567,6 +598,7 @@ impl Hub {
                 // another start of the game on the same endpoint
                 if p.id != sender {
                     p.links.clear();
+                    p.last = None;
                 }
                 p.id = sender;
                 p.room = room;
@@ -581,7 +613,23 @@ impl Hub {
                 p.crews = distinct(crews);
                 crewed = Some((was, p.crews[0] != 0));
             }
-            Msg::Snap { sender, status, p: pos, v, heading } if sender == p.id => {
+            Msg::Snap { sender, status, p: pos, v, heading, t_us, epoch, clock } if sender == p.id => {
+                if let Some((across, up)) = odd_move(p, status, pos, t_us, epoch, clock)
+                    && p.odd.count_ones() >= ODD_HITS
+                    && !self.out.get(&p.vip).is_some_and(|&t| now < t)
+                {
+                    self.out.insert(p.vip, now + OUT_MS);
+                    left_out = Some(format!(
+                        "[roam] \"{}\" {} left out of free roam for {} min: {} of its last {} moves faster than {ODD_MPS} m/s \
+                         or up faster than {ODD_CLIMB_MPS} m/s (the last {across:.0} m/s, {up:.0} m/s up)",
+                        p.name,
+                        vip_str(p.vip),
+                        OUT_MS / 60_000.0,
+                        p.odd.count_ones(),
+                        ODD_OF
+                    ));
+                    p.odd = 0;
+                }
                 p.p = Some(pos);
                 p.v = v;
                 p.heading = heading;
@@ -609,6 +657,10 @@ impl Hub {
             self.st.race_reports += 1;
             (self.log)(&line);
         }
+        if let Some(line) = left_out {
+            self.st.left_out += 1;
+            (self.log)(&line);
+        }
         if let Some(req) = ask {
             self.map(slot, req, now);
         }
@@ -630,7 +682,13 @@ impl Hub {
         for &q in &self.order {
             let Some(o) = self.player(q) else { continue };
             let Some(pos) = o.p else { continue };
-            if q == slot || o.room != room || now - o.pos_at > fresh || !matches!(o.status, 2 | 5) || p.links.iter().any(|l| l.slot == q) {
+            if q == slot
+                || o.room != room
+                || now - o.pos_at > fresh
+                || !matches!(o.status, 2 | 5)
+                || p.links.iter().any(|l| l.slot == q)
+                || self.out.get(&o.vip).is_some_and(|&t| now < t)
+            {
                 continue;
             }
             let c = |x: f64| (x + 0.5).floor().clamp(-32767.0, 32767.0) as i16;
@@ -670,7 +728,7 @@ impl Hub {
         for &q in &self.order {
             let Some(o) = self.player(q) else { continue };
             let Some((l, t)) = o.lobby else { continue };
-            if o.room != room || now - t > LOBBY_STALE_MS {
+            if o.room != room || now - t > LOBBY_STALE_MS || self.out.get(&o.vip).is_some_and(|&until| now < until) {
                 continue;
             }
             let d = distance(&at, &[l.x as f64, l.y as f64, at[2]]);
@@ -712,14 +770,16 @@ impl Hub {
         self.purge();
         let gap = self.o.map_gap_ms;
         self.map_at.retain(|_, t| now - *t < gap);
+        self.out.retain(|_, t| now < *t);
 
-        // the rooms: the players with a position younger than `stale_ms`, in the order they came
+        // the rooms: the players with a position younger than `stale_ms`, in the order they came (a browser left out
+        // of free roam in none)
         let s = &mut self.s;
         s.room_of.clear();
         let mut rooms = 0;
         for &slot in &self.order {
             let Some(Some(p)) = self.slots.get(slot as usize) else { continue };
-            if p.p.is_none() || now - p.pos_at > self.o.stale_ms {
+            if p.p.is_none() || now - p.pos_at > self.o.stale_ms || self.out.contains_key(&p.vip) {
                 continue;
             }
             let r = *s.room_of.entry(p.room).or_insert_with(|| {
@@ -923,6 +983,8 @@ impl Hub {
             "crewLinks": st.crew_links,
             "crewSkips": st.crew_skips,
             "raceReports": st.race_reports,
+            "leftOut": st.left_out,
+            "out": self.out.len(),
         })
     }
 
@@ -972,6 +1034,27 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
 
 fn player(slots: &[Option<Player>], slot: u32) -> Option<&Player> {
     slots.get(slot as usize)?.as_ref()
+}
+
+/// A SNAP's move from the player's last one in free roam, by the sender's own clock (SNAPs that come at once after a
+/// stall moved no faster), into its `odd` bits: Some((across, up)), its speeds in m/s, when it is one no car can make
+/// (ODD_MPS, ODD_CLIMB_MPS).  A SNAP not in free roam ends the run: a shop, a race, a pause or a loading screen may put
+/// the car anywhere.
+fn odd_move(p: &mut Player, status: u8, pos: [f64; 3], t_us: u32, epoch: u8, clock: u8) -> Option<(f64, f64)> {
+    let last = p.last.take();
+    if status != 2 {
+        return None;
+    }
+    p.last = Some((t_us, epoch, clock, pos));
+    let (t0, e0, c0, at) = last?;
+    let dt = f64::from(t_us.wrapping_sub(t0)) / 1e6;
+    if (e0, c0) != (epoch, clock) || !ODD_DT.contains(&dt) {
+        return None;
+    }
+    let (across, up) = ((pos[0] - at[0]).hypot(pos[1] - at[1]) / dt, (pos[2] - at[2]) / dt);
+    let odd = across > ODD_MPS || up > ODD_CLIMB_MPS;
+    p.odd = (p.odd << 1 | odd as u32) & ((1 << ODD_OF) - 1);
+    odd.then_some((across, up))
 }
 
 /// the place in the room of the player in `slot` (None: not in this room)

@@ -64,13 +64,18 @@ pub(crate) enum Msg<'a> {
         crews: [u32; CREWS],
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
-    /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c)
+    /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); t_us: the newest
+    /// state's time on the sender's sync clock (µs, wraps), epoch and clock: the SNAP's (a new one starts that clock
+    /// over)
     Snap {
         sender: u32,
         status: u8,
         p: [f64; 3],
         v: [f64; 3],
         heading: u8,
+        t_us: u32,
+        epoch: u8,
+        clock: u8,
     },
     /// the world map's question (roam_core.h RC_MSG_MAPREQ): req is echoed in the answer
     MapReq {
@@ -271,7 +276,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             if !p.iter().all(|x| x.is_finite()) || p[0].abs() > 20000.0 || p[1].abs() > 20000.0 || p[2].abs() > 2000.0 {
                 return None;
             }
-            Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50) }
+            Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50), t_us: u32_le(d, 22), epoch: d[17], clock: d[21] }
         }
         MSG_MAPREQ if end == HDR + 2 => Msg::MapReq { req: u16_le(d, 16) },
         MSG_LOBBY => {

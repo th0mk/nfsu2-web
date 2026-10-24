@@ -66,9 +66,11 @@
 //! there (`in_roam()`, counted at each tick).
 //!
 //! What the hub keeps, in memory only: per player endpoint its virtual address, port, id, room hash, crews' hashes,
-//! status, name and last position; gone `gone_ms` after its last message, when it says BYE, or when it leaves the
-//! switch.  Reading positions is what choosing by distance costs: the switch itself never looks inside a frame.  At
-//! most `max_per_vip` endpoints per virtual address (a browser has one), and `max_players` in all.
+//! status, name and last position (and its last one in free roam, with its time, to see a car move as no car can:
+//! hub.rs ODD_MPS); gone `gone_ms` after its last message, when it says BYE, or when it leaves the switch; and the
+//! virtual addresses left out of free roam for such moves, until then.  Reading positions is what choosing by
+//! distance costs: the switch itself never looks inside a frame.  At most `max_per_vip` endpoints per virtual address
+//! (a browser has one), and `max_players` in all.
 //!
 //! - [`Hub`]: the hub's logic, single-threaded, with the clock, the busy measure and the sending given to it (the
 //!   tests drive it by its `frame()`, `tick()` and `info()`)
