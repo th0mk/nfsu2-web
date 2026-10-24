@@ -883,5 +883,14 @@
   "Shifter": "Drążek biegów",
   "Sequential: push to shift up": "Sekwencyjnie: pchnij, aby wrzucić wyższy",
   "Sequential: pull to shift up": "Sekwencyjnie: pociągnij, aby wrzucić wyższy",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Gra zmienia biegi po jednym. Sekwencyjnie: każde wrzucenie biegu drążkiem to jedna zmiana, a wsteczny trzyma ręczny. Ręczny: każdy bieg go trzyma."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Gra zmienia biegi po jednym. Sekwencyjnie: każde wrzucenie biegu drążkiem to jedna zmiana, a wsteczny trzyma ręczny. Ręczny: każdy bieg go trzyma.",
+  "Invite link copied: {link}": "Skopiowano link z zaproszeniem: {link}",
+  "Invite link: {link}": "Link z zaproszeniem: {link}",
+  "Copy invite link for {name}": "Kopiuj link z zaproszeniem do {name}",
+  "Copy invite link": "Kopiuj link z zaproszeniem",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Nie dołączono do „{name}”: maksymalnie 4 ekipy, opuść jedną, aby dołączyć do innej.",
+  "Join the crew \"{name}\"?": "Dołączyć do ekipy „{name}”?",
+  "Play in the room \"{name}\"?": "Grać w pokoju „{name}”?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "Przejażdżka pokaże wtedy tylko graczy w tym pokoju. Ustawienia, Sieć, Pokój przywraca jazdę ze wszystkimi.",
+  "Join room": "Wejdź do pokoju"
 }

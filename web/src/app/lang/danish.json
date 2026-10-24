@@ -841,5 +841,14 @@
   "Shifter": "Gearstang",
   "Sequential: push to shift up": "Sekventiel: skub for at skifte op",
   "Sequential: pull to shift up": "Sekventiel: træk for at skifte op",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spillet skifter ét gear ad gangen. Sekventiel: hver gang du sætter stangen i et gear, er det ét skift, og bakgearet holder håndbremsen. Håndbremse: ethvert gear holder den."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spillet skifter ét gear ad gangen. Sekventiel: hver gang du sætter stangen i et gear, er det ét skift, og bakgearet holder håndbremsen. Håndbremse: ethvert gear holder den.",
+  "Invite link copied: {link}": "Invitationslink kopieret: {link}",
+  "Invite link: {link}": "Invitationslink: {link}",
+  "Copy invite link for {name}": "Kopiér invitationslink til {name}",
+  "Copy invite link": "Kopiér invitationslink",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Ikke medlem af \"{name}\": op til 4 crews, forlad et for at blive medlem af et andet.",
+  "Join the crew \"{name}\"?": "Bliv medlem af crewet \"{name}\"?",
+  "Play in the room \"{name}\"?": "Spil i rummet \"{name}\"?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "Udforsknings-mode viser så kun spillerne i dette rum. Indstillinger, Online, Rum fører dig tilbage til alle.",
+  "Join room": "Gå ind i rummet"
 }

@@ -778,5 +778,14 @@
   "Shifter": "シフター",
   "Sequential: push to shift up": "シーケンシャル: 押してシフトアップ",
   "Sequential: pull to shift up": "シーケンシャル: 引いてシフトアップ",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "このゲームのギアは1段ずつ変わります。シーケンシャル: レバーをギアに入れるたびに1段シフトし、リバースではサイドブレーキがかかります。サイドブレーキ: どのギアでもかかります。"
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "このゲームのギアは1段ずつ変わります。シーケンシャル: レバーをギアに入れるたびに1段シフトし、リバースではサイドブレーキがかかります。サイドブレーキ: どのギアでもかかります。",
+  "Invite link copied: {link}": "招待リンクをコピーしました: {link}",
+  "Invite link: {link}": "招待リンク: {link}",
+  "Copy invite link for {name}": "クルー「{name}」の招待リンクをコピー",
+  "Copy invite link": "招待リンクをコピー",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "「{name}」に参加しませんでした: クルーは最大4つです。別のクルーに参加するには、どれかを抜けてください。",
+  "Join the crew \"{name}\"?": "クルー「{name}」に参加しますか？",
+  "Play in the room \"{name}\"?": "ルーム「{name}」でプレイしますか？",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "フリーロームにはこのルームのプレイヤーだけが表示されます。設定、オンライン、ルームで全員との走行に戻せます。",
+  "Join room": "ルームに参加"
 }

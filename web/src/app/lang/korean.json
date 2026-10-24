@@ -778,5 +778,14 @@
   "Shifter": "변속 레버",
   "Sequential: push to shift up": "시퀀셜: 밀면 기어 올림",
   "Sequential: pull to shift up": "시퀀셜: 당기면 기어 올림",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "게임은 기어를 한 단씩 바꿔요. 시퀀셜: 레버를 기어에 넣을 때마다 한 단 변속하고, 후진에서는 핸드브레이크가 걸려요. 핸드브레이크: 어느 기어에서나 걸려요.",
+  "Invite link copied: {link}": "초대 링크를 복사했어요: {link}",
+  "Invite link: {link}": "초대 링크: {link}",
+  "Copy invite link for {name}": "{name} 초대 링크 복사",
+  "Copy invite link": "초대 링크 복사",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "\"{name}\"에 가입하지 않았어요: 크루는 최대 4개예요. 다른 크루에 가입하려면 하나를 탈퇴하세요.",
+  "Join the crew \"{name}\"?": "\"{name}\" 크루에 가입할까요?",
+  "Play in the room \"{name}\"?": "\"{name}\" 방에서 플레이할까요?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "그러면 자유 주행에 이 방의 플레이어만 보여요. 설정, 온라인, 방에서 다시 모두와 달릴 수 있어요.",
+  "Join room": "방 입장"
 }

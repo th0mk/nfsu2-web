@@ -862,5 +862,14 @@
   "Shifter": "Alavanca de câmbio",
   "Sequential: push to shift up": "Sequencial: empurre para subir",
   "Sequential: pull to shift up": "Sequencial: puxe para subir",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "O jogo troca uma marcha por vez. Sequencial: cada vez que você engata uma marcha com a alavanca é uma troca, e a ré segura o freio de mão. Freio de mão: qualquer marcha o segura."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "O jogo troca uma marcha por vez. Sequencial: cada vez que você engata uma marcha com a alavanca é uma troca, e a ré segura o freio de mão. Freio de mão: qualquer marcha o segura.",
+  "Invite link copied: {link}": "Link de convite copiado: {link}",
+  "Invite link: {link}": "Link de convite: {link}",
+  "Copy invite link for {name}": "Copiar o link de convite de {name}",
+  "Copy invite link": "Copiar link de convite",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Não entrou em \"{name}\": até 4 equipes, saia de uma para entrar em outra.",
+  "Join the crew \"{name}\"?": "Entrar na equipe \"{name}\"?",
+  "Play in the room \"{name}\"?": "Jogar na sala \"{name}\"?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "O Modo Livre passa a mostrar só os jogadores desta sala. Configurações, Online, Sala leva você de volta a todos.",
+  "Join room": "Entrar na sala"
 }

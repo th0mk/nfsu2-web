@@ -862,5 +862,14 @@
   "Shifter": "Levier de vitesses",
   "Sequential: push to shift up": "Séquentiel : pousser pour monter",
   "Sequential: pull to shift up": "Séquentiel : tirer pour monter",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Le jeu passe les rapports un par un. Séquentiel : chaque passage du levier dans un rapport est un changement, et la marche arrière tient le frein à main. Frein à main : n'importe quel rapport le tient."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Le jeu passe les rapports un par un. Séquentiel : chaque passage du levier dans un rapport est un changement, et la marche arrière tient le frein à main. Frein à main : n'importe quel rapport le tient.",
+  "Invite link copied: {link}": "Lien d'invitation copié : {link}",
+  "Invite link: {link}": "Lien d'invitation : {link}",
+  "Copy invite link for {name}": "Copier le lien d'invitation de {name}",
+  "Copy invite link": "Copier le lien d'invitation",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Pas rejoint « {name} » : jusqu'à 4 équipes, quittez-en une pour en rejoindre une autre.",
+  "Join the crew \"{name}\"?": "Rejoindre l'équipe « {name} » ?",
+  "Play in the room \"{name}\"?": "Jouer dans la salle « {name} » ?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "Le mode Exploration n'affiche alors que les joueurs de cette salle. Paramètres, En ligne, Salle vous ramène avec tout le monde.",
+  "Join room": "Rejoindre la salle"
 }

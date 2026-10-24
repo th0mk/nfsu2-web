@@ -841,5 +841,14 @@
   "Shifter": "Växelspak",
   "Sequential: push to shift up": "Sekventiell: tryck för att växla upp",
   "Sequential: pull to shift up": "Sekventiell: dra för att växla upp",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "Spelet växlar en växel i taget. Sekventiell: varje gång du för spaken till en växel är det en växling, och backen håller handbromsen. Handbroms: varje växel håller den.",
+  "Invite link copied: {link}": "Inbjudningslänk kopierad: {link}",
+  "Invite link: {link}": "Inbjudningslänk: {link}",
+  "Copy invite link for {name}": "Kopiera inbjudningslänk till {name}",
+  "Copy invite link": "Kopiera inbjudningslänk",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Inte med i \"{name}\": upp till 4 crews, lämna en för att gå med i en annan.",
+  "Join the crew \"{name}\"?": "Gå med i crewen \"{name}\"?",
+  "Play in the room \"{name}\"?": "Spela i rummet \"{name}\"?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "Läget Utforska visar då bara spelarna i det här rummet. Inställningar, Online, Rum tar dig tillbaka till alla.",
+  "Join room": "Gå in i rummet"
 }

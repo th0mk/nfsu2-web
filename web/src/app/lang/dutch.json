@@ -841,5 +841,14 @@
   "Shifter": "Versnellingspook",
   "Sequential: push to shift up": "Sequentieel: duwen schakelt op",
   "Sequential: pull to shift up": "Sequentieel: trekken schakelt op",
-  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "De game schakelt één versnelling tegelijk. Sequentieel: elke keer dat je de pook in een versnelling zet, schakel je één keer, en de achteruit trekt de handrem aan. Handrem: elke versnelling trekt hem aan."
+  "The game shifts one gear at a time. Sequential: each move of the lever into a gear is one shift, and reverse holds the handbrake. Handbrake: any gear holds it.": "De game schakelt één versnelling tegelijk. Sequentieel: elke keer dat je de pook in een versnelling zet, schakel je één keer, en de achteruit trekt de handrem aan. Handrem: elke versnelling trekt hem aan.",
+  "Invite link copied: {link}": "Uitnodigingslink gekopieerd: {link}",
+  "Invite link: {link}": "Uitnodigingslink: {link}",
+  "Copy invite link for {name}": "Uitnodigingslink voor {name} kopiëren",
+  "Copy invite link": "Uitnodigingslink kopiëren",
+  "Not joined \"{name}\": up to 4 crews, leave one to join another.": "Niet aangesloten bij \"{name}\": maximaal 4 crews, verlaat er een om bij een andere aan te sluiten.",
+  "Join the crew \"{name}\"?": "Bij de crew \"{name}\" aansluiten?",
+  "Play in the room \"{name}\"?": "Spelen in de kamer \"{name}\"?",
+  "Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.": "Verkennen toont dan alleen de spelers in deze kamer. Instellingen, Online, Kamer brengt je terug bij iedereen.",
+  "Join room": "Kamer in"
 }

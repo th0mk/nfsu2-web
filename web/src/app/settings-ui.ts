@@ -112,7 +112,37 @@ function iconButton(cls: string, name: string, path: string): HTMLButtonElement 
   svg.append(p); b.append(svg);
   return b;
 }
-const PLUS = 'M12 5v14M5 12h14', CROSS = 'M6 6l12 12M18 6L6 18', PERSON = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7';
+const PLUS = 'M12 5v14M5 12h14', CROSS = 'M6 6l12 12M18 6L6 18', LINK = 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7', PERSON = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7';
+
+/** a crew or room an invite link names */
+export interface Invite { key: 'roam_crew' | 'roam_room'; name: string }
+
+/**
+ * An invite link's address part, #crew=<name> or #room=<name> (shell.ts asks on load whether to join): the crew or
+ * room it names, if the Crews box (checkCrew) or the Room row (checkSetting, without a "; comment") takes that name as
+ * it is; null for anything else, and for a crew or room the player is in already (by hash: "blueroom" is "Blue Room").
+ * The only thing the page takes from its address outside a development server: it changes nothing until the player
+ * says yes.
+ */
+export function inviteOf(hash: string, crews: readonly string[], room: string): Invite | null {
+  const m = /^#(crew|room)=(.+)$/s.exec(hash);
+  let v: string;
+  try { v = decodeURIComponent(m?.[2] ?? ''); } catch { return null; }
+  if (m?.[1] === 'crew') {
+    const c = checkCrew(v, []);
+    return c.ok && !crews.some(x => roomHash(x) === roomHash(c.name)) ? { key: 'roam_crew', name: c.name } : null;
+  }
+  const name = v.trim(), c = checkSetting('roam_room', name);
+  return name && c?.ok && c.value === name && roomHash(name) !== roomHash(room) ? { key: 'roam_room', name } : null;
+}
+/** the link inviteOf reads: base is the page's address without its # part */
+export const inviteLink = (base: string, i: Invite) => `${base}#${i.key === 'roam_crew' ? 'crew' : 'room'}=${encodeURIComponent(i.name)}`;
+/** an invite link on the clipboard; what to say then (the link itself where the browser does not let the page copy) */
+async function copyInvite(i: Invite): Promise<string> {
+  const link = inviteLink(location.origin + location.pathname, i);
+  try { await navigator.clipboard.writeText(link); return t('Invite link copied: {link}', { link }); }
+  catch { return t('Invite link: {link}', { link }); }
+}
 
 /** What a crews control shows and does: the Crews row's, and the page menu's while a game is in free roam */
 export interface CrewControl {
@@ -133,10 +163,10 @@ export interface CrewControl {
 /**
  * A crews control into ctl: one line of pills that wraps, a chip per crew in the player's order (its colour in the
  * game, a button that opens the palette under the line; its name, how many are in free roam in it when the server
- * says, and Leave), then a value box with Join in it (or Enter).  Join waits for a name that can join (crews.ts checkCrew), and the note
- * under the box says why one cannot; with 4 crews the box waits for one to be left.  A Leave keeps the others'
- * colours; a Join takes the first colour no crew has.  A line under the chips names a crew counted with more than
- * CREW_BIG players (showCrewCounts).  Returns the box's field.
+ * says, a button that copies its invite link, and Leave), then a value box with Join in it (or Enter).  Join waits
+ * for a name that can join (crews.ts checkCrew), and the note under the box says why one cannot; with 4 crews the
+ * box waits for one to be left.  A Leave keeps the others' colours; a Join takes the first colour no crew has.  A line
+ * under the chips names a crew counted with more than CREW_BIG players (showCrewCounts).  Returns the box's field.
  */
 export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement {
   const list = o.list;
@@ -152,10 +182,13 @@ export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement 
     const nm = document.createElement('span'); nm.className = 'crew-name'; nm.textContent = c.name;
     const n = document.createElement('span'); n.className = 'crew-count';
     text.append(nm, n);
+    // the copy says so in the box's note, which a screen reader reads out
+    const copy = iconButton('crew-copy', t('Copy invite link for {name}', { name: c.name }), LINK);
+    copy.onclick = () => void copyInvite({ key: 'roam_crew', name: c.name }).then(m => { note.textContent = m; note.classList.remove('warn'); });
     const leave = iconButton('crew-leave', t('Leave crew {name}', { name: c.name }), CROSS);
     // the keyboard goes on to the next crew's Leave (the last one's: the one before), or to the box
     leave.onclick = () => o.change(list.filter((_, k) => k !== i), root => root.querySelectorAll('.crew-leave')[Math.min(i, list.length - 2)]);
-    li.append(dot, text, leave);
+    li.append(dot, text, copy, leave);
     ul.append(li);
   });
   const line = document.createElement('div'); line.className = 'crew-line';
@@ -629,6 +662,11 @@ export class SettingsPanel {
       if (c.t === 'num' && c.unit) { const u = document.createElement('span'); u.className = 'unit'; u.textContent = c.unit; ctl.append(u); }
       described = inp;
     }
+    if (it.key === 'roam_room' && cur) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'text-btn'; b.textContent = t('Copy invite link');
+      b.onclick = () => void copyInvite({ key: 'roam_room', name: cur }).then(m => this.deps.say?.(m));
+      ctl.prepend(b);
+    }
     if (setInFile && c.t !== 'crews') {               // (the Crews row has none: each crew's x leaves it)
       const r = document.createElement('button'); r.type = 'button'; r.className = 'text-btn'; r.textContent = t('Reset');
       r.setAttribute('aria-label', t('Reset {label}', { label: t(it.label) }));
@@ -652,6 +690,13 @@ export class SettingsPanel {
   /** the control is described by its help line, its own note (the Crews box's) and any state line under it */
   private describe(el: HTMLElement, row: HTMLElement) {
     el.setAttribute('aria-describedby', [...row.querySelectorAll('.set-help, .set-note, .set-state')].map(p => p.id).join(' '));
+  }
+
+  /** An invite link's crew or room (inviteOf), saved as the Crews box's Join or the Room row saves it. */
+  async join(i: Invite) {
+    if (i.key === 'roam_room') return this.put('roam_room', i.name);
+    const list = crewsOf(this.current('roam_crew'), this.current('roam_crew_colours'));
+    await this.setCrews([...list, { name: i.name, rgb: freeColour(list) }], () => null);
   }
 
   /** The crews as a Leave, Join or colour left them, saved (names and colours in one write; none left: both lines

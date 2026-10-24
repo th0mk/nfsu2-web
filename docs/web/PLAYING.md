@@ -170,7 +170,9 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
   and every such line is listed under "Other variables in this file". Lines that would name a file of your saves or
   drive the game by itself (`NFSU2_REGFILE`, `NFSU2_INPUT_SCRIPT`, ...) are ignored: only the page sets those.
 - **Links:** settings in a page address (`?env=...`) work only on a development server (one started with `--dev`).
-  On yours a link cannot change your game; the start page says so when an address carries them.
+  On yours a link cannot change your game; the start page says so when an address carries them. The one exception is
+  an invite link (`#crew=<name>`, `#room=<name>`, see Crews and Rooms): it only asks, so nothing changes unless you say
+  yes, and it can set nothing but a crew or room name the Crews or Room setting would take as typed.
 - **The look:** the game looks as it did originally. Any graphics enhancement will be a separate setting, off
   unless you turn it on. One fix is always on: a car's shadow lies 1.5 cm above the road instead of 4, so its edge
   no longer cuts into the bottom of the tyres (TerminatorVasya's [Shadow Fix](https://nfsmods.xyz/mod/7328)).
@@ -406,11 +408,14 @@ Good to know:
   less common name). Capitals and spaces don't count ("Blue Room" is "blueroom"); a name that reads as a slur is no
   crew. Everyone else is still there, unlike a Room. Not private: anyone who types the same name joins, but other
   players never learn your crews: the server tells each game which players near it share one. A player on an older
-  version is in no crew.
+  version is in no crew. The link button on a crew copies its invite link (`https://nfsu2.xyz/#crew=blueroom`): a
+  friend who opens it is asked whether to join that crew. A name you are in already, or one the Crews box would
+  refuse, asks nothing; with 4 crews the page says to leave one first.
 - **Rooms:** set the same "Room" to see only some of the players' cars. A room is a filter between players, not
   privacy: every browser on the server still sees your name ("Your name", or the profile name), whether you are in
   the menus or driving, and the room, and someone with their own tools could join it. Play on a server only with
-  people you would show your name and car to.
+  people you would show your name and car to. With a room set, "Copy invite link" next to it copies a link
+  (`#room=<name>`) that asks a friend whether to play in that room.
 - **Who sees what:** with free roam off (the default), the game does not join the server's network at all. With it
   on, everyone on the server sees your name and status, and players in free roam with you see your car and where it
   is. The server reads where your car is, to pick the players near you, and keeps nothing of it. After a multiplayer

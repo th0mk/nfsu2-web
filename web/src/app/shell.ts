@@ -17,6 +17,7 @@
 //   dumpscale=<f>    their scale
 //   rendercheck=W,D  the render check's warm-up and verdict, in seconds of driving (rendercheck.ts)
 // While any of them is given, the start page says whether it is in effect.
+// The one exception, on every server: an invite link's #crew=<name> or #room=<name> (takeInvite), which only asks.
 
 import registryDefaults from '../../../app/registry-defaults.txt';
 import { browserName, check, checkBrowser, checkGpu, checkIsolation, checkStorage, firefoxVersion, fmtBytes, type Check } from './checks';
@@ -36,9 +37,9 @@ import type { NetQueue, NetRemoved } from '../net';
 import { checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
 import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, writeFile } from './savefs';
 import { turnOnAutosave } from './profile';
-import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
+import { crewControl, inviteOf, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, queueText, roomHash, serverAnswers, watchPlayers, type PlayerCounts } from './players';
-import { crewList, crewsOf, crewsValue, rgbsValue, rgbWords, type Crew } from './crews';
+import { CREW_MAX, crewList, crewsOf, crewsValue, rgbsValue, rgbWords, type Crew } from './crews';
 import { SavesPanel } from './saves-ui';
 import { saveScreenshot } from './shots';
 import { forgetLink, VaultPanel } from './vault-ui';
@@ -990,6 +991,25 @@ function quitLabel(): string {
   return [t('Quit game'), t('Close the game now'), t('Stop the game')][quitStage(session)];
 }
 
+/** An invite link (https://nfsu2.xyz/#crew=Blue%20Room, #room=<name>: Copy invite link in Settings): once this tab
+ *  owns the saves and has read them, or when one is pasted into its address later, the page asks whether to join; yes
+ *  saves it as Settings would, no changes nothing.  The # part goes from the address either way, so a reload does not
+ *  ask again.  A name the Crews box or the Room row would refuse, or one the player is in already, asks nothing. */
+async function takeInvite() {
+  const hash = location.hash;
+  if (!/^#(crew|room)=/.test(hash)) return;
+  history.replaceState(history.state, '', location.pathname + location.search);
+  const crews = crewList(settings.current('roam_crew'));
+  const inv = inviteOf(hash, crews, settings.current('roam_room'));
+  if (!inv) return;
+  const name = inv.name;
+  if (inv.key === 'roam_crew' && crews.length >= CREW_MAX) { pageToast(() => t('Not joined "{name}": up to 4 crews, leave one to join another.', { name })); return; }
+  const yes = inv.key === 'roam_crew'
+    ? await confirmBox(t('Join the crew "{name}"?', { name }), t('Friends who type the same crew name always see each other in free roam, however far apart, with names and map arrows in the crew\'s colour. Up to 4 crews. Anyone who types the name joins.'), t('Join crew'))
+    : await confirmBox(t('Play in the room "{name}"?', { name }), t('Free roam then shows only the players in this room. Settings, Online, Room takes you back to everyone.'), t('Join room'));
+  if (yes) await settings.join(inv);
+}
+
 // ------------------------------------------------------------- helpers --
 function confirmBox(title: string, body: Node | string, ok: string, danger = false, about = '', cancel = t('Cancel')): Promise<boolean> {
   return choiceBox(title, body, ok, cancel, danger, about).then(v => v === 'ok');
@@ -1299,7 +1319,8 @@ export async function boot() {
   void settings.refresh();
   void saves.refresh();
   void vault.start();
-  void instance.whenOwner.then(async () => { await loadSettings(); evaluate(); void settings.refresh(); void saves.refresh(); vault.ownerNow(); syncPicker(); });
+  void instance.whenOwner.then(async () => { await loadSettings(); evaluate(); void settings.refresh().then(takeInvite); void saves.refresh(); vault.ownerNow(); syncPicker();
+    window.addEventListener('hashchange', () => void takeInvite()); });
   void checkGpu().then(setCheck);
   // Firefox's answer to its storage prompt comes later: the check again then
   void checkStorage().then(({ answer, ...c }) => { setCheck(c); void answer?.then(setCheck); });
