@@ -140,6 +140,7 @@
   "The server is full and {n} are waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.": "伺服器已滿，有 {n} 人正在排隊等候空位。按下「開始遊戲」時，你可以選擇排隊（輪到你之前先單獨遊玩），或離線遊玩。",
   "The server is full: playing with others waits until a place frees up.": "伺服器已滿：要等有空位時才能與他人同玩。",
   "On this server now: {list}.": "目前此伺服器：{list}。",
+  "Ping to the server: {n} ms.": "到伺服器的延遲：{n} 毫秒。",
   "less than a minute": "不到 1 分鐘",
   "about {n} min": "約 {n} 分鐘",
   "about {n} h": "約 {n} 小時",

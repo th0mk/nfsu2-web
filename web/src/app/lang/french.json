@@ -152,6 +152,7 @@
   },
   "The server is full: playing with others waits until a place frees up.": "Le serveur est complet : pour jouer avec les autres, il faut attendre qu'une place se libère.",
   "On this server now: {list}.": "Sur ce serveur en ce moment : {list}.",
+  "Ping to the server: {n} ms.": "Ping vers le serveur : {n} ms.",
   "less than a minute": "moins d'une minute",
   "about {n} min": "environ {n} min",
   "about {n} h": "environ {n} h",

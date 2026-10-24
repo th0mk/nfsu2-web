@@ -734,7 +734,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .dlg-head h2 { margin: 0; }
 .menu-actions { display: grid; gap: 8px; }
-#menu-save { margin-top: -12px; }
+#menu-save, #menu-ping { margin-top: -12px; }
 #menu-save:empty { display: none; }
 /* the menu's Crews popup (a game in free roam): the Crews row's control under the help, Done under it */
 .crews-pop-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }

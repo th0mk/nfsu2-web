@@ -37,7 +37,7 @@ import { checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLA
 import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, writeFile } from './savefs';
 import { turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
-import { askCrews, queueText, roomHash, serverAnswers, watchPlayers, type PlayerCounts } from './players';
+import { askCrews, pingText, queueText, roomHash, serverAnswers, watchPlayers, type PlayerCounts } from './players';
 import { crewList, crewsOf, crewsValue, rgbsValue, rgbWords, type Crew } from './crews';
 import { SavesPanel } from './saves-ui';
 import { saveScreenshot } from './shots';
@@ -856,6 +856,10 @@ function openMenu() {
   crews.hidden = roamCrews === null || !session?.net?.crews;
   crews.textContent = crewsLabel();
   m.querySelector<HTMLButtonElement>('[data-act="quit"]')!.textContent = quitLabel();
+  // the newest round trip to the server's switch (pinged every 2 s), while connected to it
+  const net = session?.net?.stats?.() ?? {}, ping = $('#menu-ping');
+  ping.hidden = net['lan online'] !== 1 || !(net['lan rtt ms'] > 0);
+  ping.textContent = ping.hidden ? '' : pingText(net['lan rtt ms']);
   const line = $('#menu-save');
   if (saved) line.textContent = t('Last saved at {when} ({name}).', { when: when(saved.at), name: saved.name });
   else {

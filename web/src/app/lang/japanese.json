@@ -140,6 +140,7 @@
   "The server is full and {n} are waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.": "サーバーが満員で、{n}人が空きを待っています。「プレイ」を押すと、順番が来るまで一人でプレイしながら待つか、オフラインでプレイするかを選べます。",
   "The server is full: playing with others waits until a place frees up.": "サーバーが満員です。空きが出るまで、他のプレイヤーとのプレイは待機になります。",
   "On this server now: {list}.": "現在このサーバー: {list}。",
+  "Ping to the server: {n} ms.": "サーバーへのPing: {n} ms。",
   "less than a minute": "1分未満",
   "about {n} min": "約{n}分",
   "about {n} h": "約{n}時間",

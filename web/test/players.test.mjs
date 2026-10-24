@@ -155,6 +155,12 @@ test('the page\'s line', async () => {
   assert.equal(queueText({ pos: 23, of: 40, eta: 2 * 3600 }), 'The server is full. In line for a place: 23rd of 40 (about 2 h).');
   assert.equal(queueText({ pos: 101, of: 140 }), 'The server is full. In line for a place: 101st of 140.');
   assert.equal(queueText({ pos: 112, of: 140 }), 'The server is full. In line for a place: 112th of 140.');
+  // the ping: the shortest of the last answers' round trips (the first pays for the connection), none without one
+  assert.equal(playersText({ players: 3, online: 1, full: true }, '', [180.2, 41.6, 63]),
+    'On this server now: 3 players, 1 in Online mode. Ping to the server: 42 ms. The server is full: playing with others waits until a place frees up.');
+  assert.equal(playersText({ players: 0, online: 0 }, '', [97]), 'On this server now: nobody is playing. Ping to the server: 97 ms.');
+  assert.equal(playersText({ players: 3, online: 2 }, '', []), 'On this server now: 3 players, 2 in Online mode.');
+  assert.equal(playersText({}, '', [40]), '');
   assert.equal(playersText({ players: -1, online: 0 }), '');
   assert.equal(playersText({}), '');
 });

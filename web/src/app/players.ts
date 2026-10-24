@@ -1,7 +1,9 @@
 // How many play on this server now, for the start page's Multiplayer settings: the server's /players (three
 // counts, whether it is full, how many wait in line for a place and whether free roam is busy, nothing else; with a Room setting, how many are in
 // free roam in that room too, and with crews how many in each).  Asked every 15 s, and only while the start page is visible and no game runs; a
-// server without the route shows nothing.  Whether the server answered at all goes to reached() (offline mode).
+// server without the route shows nothing.  Whether the server answered at all goes to reached() (offline mode).  How long
+// the answers take is the line's ping: one server serves every player, and one far from it sees there that a stutter is
+// the distance, not their PC.
 
 /** roam: driving in free roam or paused there (null, or missing from an older server: not shown);
  *  roamBusy: free roam gives fewer cars a player now (the server's hub cut its links), so the first Play does not ask about it;
@@ -30,10 +32,13 @@ export function roomHash(name: string): number {
 }
 
 /** The line the page shows ('' for an answer it cannot read); room: the player's Room setting, when free roam is on
- *  ('' for none): free roam shows only that room's players, which the line says, with how many are there. */
-export function playersText(c: PlayerCounts, room = ''): string {
+ *  ('' for none): free roam shows only that room's players, which the line says, with how many are there; rtts: how
+ *  long the last few answers took, in ms, of which the line gives the shortest as the ping (the first answer pays for the
+ *  connection, any one may come at a busy moment; none: no ping). */
+export function playersText(c: PlayerCounts, room = '', rtts: readonly number[] = []): string {
   if (!Number.isInteger(c.players) || c.players < 0) return '';
-  if (c.players === 0) return t('On this server now: nobody is playing.');
+  const ping = rtts.length ? ' ' + pingText(Math.min(...rtts)) : '';
+  if (c.players === 0) return t('On this server now: nobody is playing.') + ping;
   const known = (k: number | null | undefined): k is number => Number.isInteger(k) && k! >= 0;
   const list = [tn(c.players, '{n} player', '{n} players')];
   if (known(c.online)) list.push(t('{n} in Online mode', { n: c.online }));
@@ -46,8 +51,11 @@ export function playersText(c: PlayerCounts, room = ''): string {
     : ' ' + (waiting ? tn(waiting, 'The server is full and {n} is waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.',
       'The server is full and {n} are waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.')
       : t('The server is full: playing with others waits until a place frees up.'));
-  return t('On this server now: {list}.', { list: list.join(', ') }) + inRoom + full;
+  return t('On this server now: {list}.', { list: list.join(', ') }) + ping + inRoom + full;
 }
+
+/** the round trip to the server, as the start page and the page menu (F9) say it */
+export const pingText = (ms: number): string => t('Ping to the server: {n} ms.', { n: Math.round(ms) });
 
 /** 1st, 2nd, 3rd, 4th, ..., 11th, 12th, 13th, ..., 21st */
 function ordinal(k: number): string {
@@ -100,21 +108,23 @@ export async function askCrews(hashes: readonly number[], ms: number): Promise<M
  *  before (the page's first question goes before settings.ini is read, the next one at once after it). */
 export function watchPlayers(show: (line: Msg, crews: Map<number, number>) => void, idle: () => boolean, reached?: (ok: boolean) => void,
                              room: () => string = () => '', crews: () => number[] = () => []) {
-  let gone = false, last: PlayerCounts | null = null, asked = 0;
+  let gone = false, last: PlayerCounts | null = null, asked = 0, rtts: number[] = [];
   const get = async (ms: number) => {
     if (gone) return;
     const n = ++asked;
     try {
       const name = room(), hash = roomHash(name), mine = crews().slice(0, 4);
       const q = [hash ? `room=${hash}` : '', mine.length ? `crews=${mine.join(',')}` : ''].filter(Boolean).join('&');
+      const t0 = performance.now();
       const r = await fetch(q ? `/players?${q}` : '/players', { cache: 'no-store', signal: AbortSignal.timeout(ms) });
+      if (r.ok) rtts = [...rtts, performance.now() - t0].slice(-5);
       reached?.(r.status < 500);
       if (r.status === 404) { gone = true; last = null; show(() => '', new Map()); return; }
       if (!r.ok) return;
-      const c = await r.json() as PlayerCounts, inRoom = hash ? name : '';
+      const c = await r.json() as PlayerCounts, inRoom = hash ? name : '', seen = rtts;
       if (n !== asked) return;
-      last = c; show(() => playersText(c, inRoom), crewCounts(c, mine));
-    } catch { reached?.(false); }
+      last = c; show(() => playersText(c, inRoom, seen), crewCounts(c, mine));
+    } catch { rtts = []; reached?.(false); }
   };
   const ask = async () => { if (document.visibilityState === 'visible' && idle()) await get(5000); };
   window.setInterval(() => void ask(), EVERY_MS);

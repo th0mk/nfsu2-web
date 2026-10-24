@@ -149,6 +149,7 @@
   },
   "The server is full: playing with others waits until a place frees up.": "De server is vol: spelen met anderen wacht tot er een plek vrijkomt.",
   "On this server now: {list}.": "Nu op deze server: {list}.",
+  "Ping to the server: {n} ms.": "Ping naar de server: {n} ms.",
   "less than a minute": "minder dan een minuut",
   "about {n} min": "ongeveer {n} min",
   "about {n} h": "ongeveer {n} uur",

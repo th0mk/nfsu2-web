@@ -140,6 +140,7 @@
   "The server is full and {n} are waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.": "서버가 가득 차서 {n}명이 자리를 기다리고 있어요. '플레이'를 누르면 차례가 올 때까지 혼자 플레이하며 기다리거나, 오프라인으로 플레이할 수 있어요.",
   "The server is full: playing with others waits until a place frees up.": "서버가 가득 찼어요. 자리가 날 때까지 다른 플레이어와의 플레이는 대기해요.",
   "On this server now: {list}.": "지금 이 서버: {list}.",
+  "Ping to the server: {n} ms.": "서버까지 핑: {n}ms.",
   "less than a minute": "1분 미만",
   "about {n} min": "약 {n}분",
   "about {n} h": "약 {n}시간",

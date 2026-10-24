@@ -140,6 +140,7 @@
   "The server is full and {n} are waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.": "เซิร์ฟเวอร์เต็ม และมี {n} คนกำลังรอคิว เมื่อกด “เล่น” คุณเลือกได้ว่าจะรอคิว โดยเล่นคนเดียวไปก่อนจนกว่าจะถึงตาคุณ หรือจะเล่นออฟไลน์",
   "The server is full: playing with others waits until a place frees up.": "เซิร์ฟเวอร์เต็ม: ต้องรอให้มีที่ว่างก่อนจึงจะเล่นกับผู้อื่นได้",
   "On this server now: {list}.": "บนเซิร์ฟเวอร์นี้ตอนนี้: {list}",
+  "Ping to the server: {n} ms.": "ปิงไปยังเซิร์ฟเวอร์: {n} มิลลิวินาที",
   "less than a minute": "ไม่ถึงหนึ่งนาที",
   "about {n} min": "ประมาณ {n} นาที",
   "about {n} h": "ประมาณ {n} ชั่วโมง",

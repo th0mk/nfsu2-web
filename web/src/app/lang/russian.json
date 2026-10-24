@@ -155,6 +155,7 @@
   },
   "The server is full: playing with others waits until a place frees up.": "Сервер заполнен: игра с другими начнётся, когда освободится место.",
   "On this server now: {list}.": "Сейчас на этом сервере: {list}.",
+  "Ping to the server: {n} ms.": "Пинг до сервера: {n} мс.",
   "less than a minute": "меньше минуты",
   "about {n} min": "около {n} мин",
   "about {n} h": "около {n} ч",
