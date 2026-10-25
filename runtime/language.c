@@ -1,7 +1,8 @@
 /* language.c -- the game's language: NFSU2_LANGUAGE (settings.ini "language").
  *
  *   english (default), french, german, italian, spanish, dutch, swedish,
- *   danish, korean, chinese, japanese, russian, thai, portuguese, polish
+ *   danish, korean, chinese, japanese, russian, thai, portuguese, polish,
+ *   turkish
  *
  * SPEED2.EXE reads its language once at startup from the registry value
  * "Language" (0x5b7955, against the names at 0x7fca08: "English US" ...
@@ -15,11 +16,11 @@
  *
  * What a language needs beyond the retail folder (the dubbed speech and
  * movies, the full Chinese, Japanese and Thai text with the fonts drawn for
- * it, Russian, Portuguese, Polish) comes from LANGPACKS/<language> in the game
- * folder, built by tools/langpacks.py: fileio.c reads a file there in place of
- * the game folder's file of the same path.  A language without a pack plays
- * its text with English voices and movies.  English's own pack, if the server
- * has one, is its text with the movies' lines whole (below).
+ * it, Russian, Portuguese, Polish, Turkish) comes from LANGPACKS/<language>
+ * in the game folder, built by tools/langpacks.py: fileio.c reads a file there
+ * in place of the game folder's file of the same path.  A language without a
+ * pack plays its text with English voices and movies.  English's own pack,
+ * if the server has one, is its text with the movies' lines whole (below).
  *
  * Two things the North American exe cannot do by itself, which the
  * multilingual mod's U2_ThaiSupport.asi patches into its code; here they are
@@ -32,11 +33,11 @@
  *    but has no entry.  In a Thai game Japanese's entry becomes Thai's: its
  *    id, its name and file ("JAPANESE" -> "THAILAND", the same length) and
  *    the font hashes of its block.
- * Russian, Portuguese (Brazil's) and Polish are no languages of the North
- * American game: they play as English, with English's files from
- * LANGPACKS/russian, /portuguese or /polish.  Polish's text spells its
- * letters with accented ones of the game's fonts, whose textures in its pack
- * draw them as the Polish ones.
+ * Russian, Portuguese (Brazil's), Polish and Turkish are no languages of the
+ * North American game: they play as English, with English's files from
+ * LANGPACKS/russian, /portuguese, /polish or /turkish.  Polish's and
+ * Turkish's texts spell their letters with accented ones of the game's fonts,
+ * whose textures in their packs draw them as the Polish or Turkish ones.
  *
  * The movies' subtitles (SUBTITLES/<movie>: when to show which of the
  * language's texts) are shown by the game's region ([0x864f24], 0x570a30),
@@ -85,6 +86,7 @@ static const struct lang { const char *key, *reg; uint32_t fonts; int thai; } LA
     { "thai",     "Thai", JA_FONTS, 1 },          /* in Japanese's entry and block */
     { "portuguese", "English", 0, 0 },
     { "polish",   "English", 0, 0 },
+    { "turkish",  "English", 0, 0 },
 };
 static const struct lang *g_lang = &LANGS[0];
 static int g_subtitles = 1;       /* NFSU2_SUBTITLES */

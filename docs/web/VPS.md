@@ -364,8 +364,9 @@ players the evening before.
 Every player picks the game's language in Settings. The North American game folder has the text of thirteen,
 but English voices and movies only, and short early versions of the Chinese, Japanese and Thai text. The rest comes
 from KyoriAsh's "Multi 13 languages" mod ([nfsmods.xyz/mod/5749](https://nfsmods.xyz/mod/5749)), for Brazilian
-Portuguese TraduMix's and MixMods' translation, for Polish PLProjekt's and for the English subtitles VileStuff's
-"English Subtitles Fixed" ([nfsmods.xyz/mod/5286](https://nfsmods.xyz/mod/5286)), as language packs: a `LANGPACKS` folder in
+Portuguese TraduMix's and MixMods' translation, for Polish PLProjekt's, for Turkish muntazam's and for the English
+subtitles VileStuff's "English Subtitles Fixed" ([nfsmods.xyz/mod/5286](https://nfsmods.xyz/mod/5286)), as language
+packs: a `LANGPACKS` folder in
 the game folder, one folder per language, whose files a game in that language reads in place of the game folder's
 (`runtime/language.c`). The game folder itself stays as it is.
 
@@ -381,19 +382,26 @@ the game folder, one folder per language, whose files a game in that language re
 4. Download the English subtitles (`English Subtitles Fixed (v1.0).7z`) and extract it into a fourth empty folder
    (`7z x`; `bsdtar` and Windows' `tar` read it too). The tool reads its Binary script; neither Binary nor the
    Extra Options mod it asks for is needed.
-5. `tools/langpacks.py "<your game folder>" --multi13 "<the mod's folder>" --ptbr "<the translation's folder>"
-   --pl "<the Polish folder>" --subs "<the subtitles' folder>"` builds `LANGPACKS` (1.6 GB) and prints what each
-   language got: the dubbed voices and movies of French, German, Italian, Spanish, Japanese and Russian, the full
-   Chinese, Japanese and Thai text with their fonts, Russian, Portuguese and Polish in English's place (Polish with
-   its fonts), the Danish, Dutch and Swedish EA logos, and English's text with the movies' lines whole (0.3 MB).
-   Korean needs nothing. Any source can be left out: the others' packs stay as they are.
-6. Copy it like the rest, from inside the game folder:
+5. Download the Turkish translation (`need_for_speed_underground_2_turkish_translation_patch_v1.1.zip`, muntazam's
+   "Need for Speed Underground 2 Turkish Translation Patch" v1.1 at
+   [moddb.com](https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch)) and extract it into
+   a fifth empty folder. It holds a Windows installer, `nfsu2tr11.exe` (Inno Setup): unpack it there with
+   [innoextract](https://constexpr.org/innoextract/) (`innoextract nfsu2tr11.exe`, into `app/`), never run. The
+   Extra Options mod it asks for is not needed either.
+6. `tools/langpacks.py "<your game folder>" --multi13 "<the mod's folder>" --ptbr "<the translation's folder>"
+   --pl "<the Polish folder>" --subs "<the subtitles' folder>" --tr "<the Turkish folder>"` builds `LANGPACKS`
+   (1.6 GB) and prints what each language got: the dubbed voices and movies of French, German, Italian, Spanish,
+   Japanese and Russian, the full Chinese, Japanese and Thai text with their fonts, Russian, Portuguese, Polish and
+   Turkish in English's place (Polish and Turkish with their fonts), the Danish, Dutch and Swedish EA logos, and
+   English's text with the movies' lines whole (0.3 MB). Korean needs nothing. Any source can be left out: the
+   others' packs stay as they are.
+7. Copy it like the rest, from inside the game folder:
    `rsync -rlt LANGPACKS root@<vps>:/srv/nfsu2/game/`, then the same `chmod`.
 
 A player's browser fetches only their own language's pack: "Preload the game data" adds about 50 MB of dubbed
 voices (Russian 94 MB), and the dubbed movies (206 MB in all) stream in place of the English ones (725 MB). Without
-`LANGPACKS` every language but Russian, Portuguese and Polish still plays its text, with English voices and movies;
-those three play in English. All but French, German, Italian and Spanish (whose texts leave the lines their dubs
+`LANGPACKS` every language but Russian, Portuguese, Polish and Turkish still plays its text, with English voices and
+movies; those four play in English. All but French, German, Italian and Spanish (whose texts leave the lines their dubs
 speak empty) show the movies' subtitles (Settings, Game, Subtitles, on by default), English only with its pack: the
 game folder's English lines stop at their first apostrophe ("But if you"). The North American game shows none.
 

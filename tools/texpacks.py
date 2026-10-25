@@ -21,7 +21,8 @@ tables, the layout and the cursor stay right without the plugin.
 
 The pack keys a texture by what the game uploads for it: CRC-32 and Adler-32 of
 its level 0, its size and its format.  A texture a language pack redrew (the
-Polish, Russian, Chinese, Japanese and Thai fonts, Japanese's menu textures)
+Polish, Turkish, Russian, Chinese, Japanese and Thai fonts, Japanese's menu
+textures)
 has other bytes, so the game keeps showing the language pack's own.  What the
 installer leaves out by default stays out: the part-category icons for the
 Unlimiter mod (its "No") and the plugin.

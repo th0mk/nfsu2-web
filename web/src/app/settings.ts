@@ -192,10 +192,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 
 # The game's language: english, french, german, italian, spanish, dutch,
 # swedish, danish, korean, chinese, japanese, russian, thai, portuguese
-# (Brazil's) or polish.  French, German, Italian, Spanish, Japanese and
-# Russian come with their dubbed voices and movies where the server has the
-# language packs; Russian, Portuguese and Polish take their text from them
-# too.  [NFSU2_LANGUAGE]
+# (Brazil's), polish or turkish.  French, German, Italian, Spanish, Japanese
+# and Russian come with their dubbed voices and movies where the server has
+# the language packs; Russian, Portuguese, Polish and Turkish take their text
+# from them too.  [NFSU2_LANGUAGE]
 #language = english
 
 # The movies' subtitles: the PSA, the tutorials and the story, in every

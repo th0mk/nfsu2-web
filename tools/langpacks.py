@@ -2,10 +2,11 @@
 """The language packs: LANGPACKS/<language> in the game folder, from the
 "Multi 13 languages" mod for NFSU2 (KyoriAsh, nfsmods.xyz/mod/5749), from
 TraduMix's and MixMods' Brazilian Portuguese translation, from PLProjekt's
-Polish one and from VileStuff's English subtitles.
+Polish one, from VileStuff's English subtitles and from muntazam's Turkish
+translation.
 
     tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>]
-                       [--pl <installer>] [--subs <subtitles folder>]
+                       [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]
 
 Each source builds its own languages' packs; the others are left as they are.
 
@@ -62,6 +63,18 @@ first apostrophe ("But if you").  English's pack holds the game's English.bin
 with those texts, and with it the port shows the movies' subtitles in English
 too (runtime/language.c).  The mod is installed with Binary and needs the
 Extra Options mod's ShowSubs; neither is used.
+
+<translation folder> (--tr) is muntazam's Turkish translation (v1.1, 2024,
+"Need for Speed Underground 2 Turkish Translation Patch" at moddb.com)
+extracted: its archive holds an Inno Setup installer, nfsu2tr11.exe, which
+`innoextract nfsu2tr11.exe` unpacks (into app/) without running it; or any
+folder below which it has LANGUAGES/English.bin.  Turkish takes English's
+place as Polish does: its text spells the Turkish letters with accented ones
+the game's fonts have (ş is ÿ, ı is í, ğ is ý, İ is Í, Ş is Þ, Ğ is Ý), and
+its fonts' textures (LanguageTextures.bin, and one in GLOBALA.BUN) draw those
+as the Turkish ones; also its memory-card texts and credits.  The port shows
+the movies' subtitles itself (runtime/language.c), so the Extra Options mod
+the translation asks for is not needed.
 Rerunning it copies only what changed.  Prints what each pack holds.
 """
 import argparse, filecmp, gzip, os, re, shutil, struct, sys
@@ -109,6 +122,15 @@ PL = [
     ('MEMCARD/LOCALE_POLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
     ('CREDITS/POLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
     ('CREDITS/POLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
+]
+# Turkish: (file in the translation, the game's file it stands in for)
+TR = [
+    ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
+    ('LANGUAGES/LanguageTextures.bin', 'LANGUAGES/LanguageTextures.bin'),
+    ('GLOBAL/GLOBALA.BUN', 'GLOBAL/GLOBALA.BUN'),
+    ('memcard/LOCALE_ENGLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
+    ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
+    ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
 ]
 
 
@@ -261,6 +283,18 @@ def pl(src, game):
     done(p, 'polish')
 
 
+def tr(src, game):
+    root = next((d for d, _, _ in os.walk(src) if find(d, 'LANGUAGES/English.bin')), None)
+    if not root: sys.exit(f'{src}: no LANGUAGES/English.bin below it, not the translation (innoextract its nfsu2tr11.exe)')
+    missing = [s for s, _ in TR if not find(root, s)]
+    if missing: sys.exit(f'{root}: the translation is not all there, missing:\n  ' + '\n  '.join(missing))
+    p = Pack(game, 'turkish')
+    if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
+        sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
+    for s, rel in TR: p.add_file(find(root, s), rel)
+    done(p, 'turkish')
+
+
 STRINGS = 0x39000           # a language file's text: its chunk's id
 
 
@@ -331,19 +365,21 @@ def subs(src, game):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>]')
+    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]')
     ap.add_argument('game')
     ap.add_argument('--multi13', metavar='MOD', help='the Multi 13 languages mod, every archive extracted')
     ap.add_argument('--ptbr', metavar='FOLDER', help='the Brazilian Portuguese translation, extracted')
     ap.add_argument('--pl', metavar='INSTALLER', help='the Polish translation\'s installer (or its folder), never run')
     ap.add_argument('--subs', metavar='FOLDER', help='the English Subtitles Fixed mod, extracted')
+    ap.add_argument('--tr', metavar='FOLDER', help='the Turkish translation, its installer extracted (innoextract), never run')
     a = ap.parse_args()
-    if not (a.multi13 or a.ptbr or a.pl or a.subs): sys.exit(__doc__)
+    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr): sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
     if a.multi13: multi13(a.multi13, a.game)
     if a.ptbr: ptbr(a.ptbr, a.game)
     if a.pl: pl(a.pl, a.game)
     if a.subs: subs(a.subs, a.game)
+    if a.tr: tr(a.tr, a.game)
 
 
 if __name__ == '__main__':

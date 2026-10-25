@@ -143,7 +143,7 @@ export const tags = s => [...s.matchAll(/<(\/?)(\d+)>/g)].map(m => m[0]);
 
 /** CLDR's plural forms (Intl.PluralRules) of each language the files are for */
 const LOCALE = { french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch: 'nl', swedish: 'sv', danish: 'da', korean: 'ko',
-  chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl' };
+  chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr' };
 export const LANGUAGE_FILES = Object.keys(LOCALE);
 export const langFile = l => path.join(WEB, 'src/app/lang', `${l}.json`);
 
