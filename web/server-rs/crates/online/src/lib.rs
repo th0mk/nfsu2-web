@@ -1,7 +1,8 @@
 //! The server's stand-in for EA's online servers of NFS Underground 2, for the game's own Online mode (main menu,
 //! Online) between browsers on this server.  It keeps the rules and the console lines of the Node server it
 //! replaced, and its two files in the state folder (online/stats.json, online/buddies.json) byte for byte as that one
-//! wrote them, so the results and friends lists kept before are read as they are.
+//! wrote them, so the results and friends lists kept before are read as they are.  What is the game's own (rooms,
+//! config, flags, race types, the report and STAT formats, the Messenger's title, the news) is a table: title.rs.
 //!
 //! - browser: lifted DirtySock -> winsock.c (pcnfs05.ea.com = 10.77.0.1) -> runtime/web/net_lan.c -> page -> /lan
 //!   WebSocket -> the switch (nfsu2-lan)
@@ -41,6 +42,7 @@ mod omap;
 mod races;
 mod stats;
 mod timers;
+pub mod title;
 mod trace;
 mod vhost;
 
@@ -60,15 +62,17 @@ use nfsu2_util::{FrameCtx, Host, SwitchSend, Tap, mono_ms, now_ms};
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
+pub use crate::title::Title;
 pub use crate::trace::LobbyTrace;
 
 /// 10.77.0.1: the server's own host on the virtual LAN, the address the switch never hands to a browser (vhost.rs)
 pub const VHOST_VIP: u32 = 0x0A4D_0001;
-/// the host's name on the switch's peer lists
-pub const VHOST_NAME: &str = "NFSU2 Online";
+/// the host's name on the switch's peer lists: NFS Underground 2's (a title's own: title.rs)
+pub const VHOST_NAME: &str = title::UG2.vhost_name;
 
-/// the online host's ports: the redirector, the lobby, EA Messenger, the web pages (see the crate's text)
-pub const PORT_REDIRECTOR: u16 = 20920;
+/// the online host's ports: the redirector (NFS Underground 2's: a title's own, title.rs), the lobby, EA Messenger,
+/// the web pages (see the crate's text)
+pub const PORT_REDIRECTOR: u16 = title::UG2.port_redirector;
 pub const PORT_LOBBY: u16 = 20922;
 pub const PORT_BUDDY: u16 = 13505;
 pub const PORT_HTTP: u16 = 80;
@@ -107,16 +111,23 @@ enum Event {
 
 /// The Online host on a thread of its own.
 pub struct OnlineHost {
+    title: &'static Title,
     tx: mpsc::Sender<Event>,
     thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl OnlineHost {
-    /// starts its thread (and reads the state folder's files)
+    /// NFS Underground 2's Online mode (title::UG2): `spawn_for`
     pub fn spawn(o: OnlineOptions) -> Arc<OnlineHost> {
+        OnlineHost::spawn_for(&title::UG2, o)
+    }
+
+    /// starts its thread (and reads the state folder's files), for the game's Online mode that `title` holds
+    pub fn spawn_for(title: &'static Title, o: OnlineOptions) -> Arc<OnlineHost> {
         let (tx, rx) = mpsc::channel();
-        let thread = std::thread::Builder::new().name("online".into()).spawn(move || run(o, rx)).expect("the online host's thread");
-        Arc::new(OnlineHost { tx, thread: Mutex::new(Some(thread)) })
+        let thread =
+            std::thread::Builder::new().name("online".into()).spawn(move || run(title, o, rx)).expect("the online host's thread");
+        Arc::new(OnlineHost { title, tx, thread: Mutex::new(Some(thread)) })
     }
     /// the switch's way to its browsers
     pub fn attach_switch(&self, send: SwitchSend) {
@@ -124,9 +135,9 @@ impl OnlineHost {
     }
 }
 
-fn run(o: OnlineOptions, rx: mpsc::Receiver<Event>) {
+fn run(title: &'static Title, o: OnlineOptions, rx: mpsc::Receiver<Event>) {
     let log = o.log.clone();
-    let mut core = core::Core::new(core::CoreOptions {
+    let mut core = core::Core::new_for(title, core::CoreOptions {
         state_dir: o.state_dir,
         log: Rc::new(move |line: &str, key: Option<&str>| log(line, key)),
         tap: o.tap,
@@ -192,7 +203,7 @@ impl Host for OnlineHost {
         VHOST_VIP
     }
     fn name(&self) -> &str {
-        VHOST_NAME
+        self.title.vhost_name
     }
     fn listed(&self) -> bool {
         true

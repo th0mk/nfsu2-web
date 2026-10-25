@@ -2,21 +2,25 @@
 //! Node server's messages, in its order: the tools, the tests, the systemd unit and the container start this server
 //! with the command lines they started that one with).
 //!
-//!   nfsu2-server --data "<NFSU2 folder>" [--http-port 8080]
+//!   nfsu2-server [--game ug2|mw] --data "<the game's folder>" [--http-port 8080]
 //!        [--tls-cert <pem> --tls-key <pem> [--port 8443] [--bind <address>] | --behind-proxy --host <name>[,<name>...]]
 //!        [--host <name>[,<name>...]] [--state <dir>]
 //!        [--trusted-proxies cloudflare,<ip>,<cidr>,...] [--real-ip-header x-forwarded-for|cf-connecting-ip]
 //!        [--max-peers 128] [--online on|off] [--roam-hub on|off] [--vault-gb 50] [--access-log]
 //!        [--dev [--artifacts <dir>] [--lan-impair <spec>] [--online-trace <file>]]
+//!   nfsu2-server [--game ug2|mw] --print-entries   (the game folder's entries the server serves, one a line)
 //!
 //! Options with a value can also come from the environment as NFSU2_<OPTION> (NFSU2_DATA, NFSU2_PORT,
-//! NFSU2_TLS_CERT, ...); switches only from the command line.
+//! NFSU2_TLS_CERT, ...); switches only from the command line.  --game (game.rs) sets the game's defaults: the program
+//! the folder must hold, what of it is served, the page, the module, the state folder, the test scripts, the Online
+//! mode.
 
 use nfsu2_headers::ProxyTrust;
 
+use crate::game::GameProfile;
 use crate::paths;
 
-pub const VALUE_OPTS: [&str; 19] = [
+pub const VALUE_OPTS: [&str; 20] = [
     "--data",
     "--dist",
     "--wasm",
@@ -36,8 +40,9 @@ pub const VALUE_OPTS: [&str; 19] = [
     "--online-trace",
     "--roam-hub",
     "--vault-gb",
+    "--game",
 ];
-pub const FLAG_OPTS: [&str; 3] = ["--behind-proxy", "--dev", "--access-log"];
+pub const FLAG_OPTS: [&str; 4] = ["--behind-proxy", "--dev", "--access-log", "--print-entries"];
 
 /// How TLS is done: by a proxy in front, with the given certificate, or not at all (this machine only).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -48,6 +53,8 @@ pub enum Tls {
 }
 
 pub struct Options {
+    /// the game served (--game)
+    pub game: &'static GameProfile,
     pub data: String,
     pub dist: String,
     /// the test pages and source maps: their own folder next to the page's, looked in only with --dev
@@ -69,7 +76,7 @@ pub struct Options {
     pub hosts: Vec<String>,
     /// a test aid of the LAN-play tests (delay, loss, reordering on the switch; nfsu2-lan implements it)
     pub lan_impair: String,
-    /// the game's Online mode (nfsu2-online): on unless --online off
+    /// the game's Online mode (nfsu2-online): on unless --online off (or the game has none yet)
     pub online: bool,
     /// free roam's hub (nfsu2-roam): each player's peers are the players nearest to it; on unless --roam-hub off
     pub roam_hub: bool,
@@ -172,6 +179,8 @@ pub trait Fs {
     fn exists(&self, p: &str) -> bool;
     /// p's real path (symbolic links followed), None where there is none
     fn realpath(&self, p: &str) -> Option<String>;
+    /// the names in folder dir (none where it cannot be read)
+    fn names(&self, dir: &str) -> Vec<String>;
 }
 
 /// The real file system.
@@ -183,6 +192,9 @@ impl Fs for RealFs {
     }
     fn realpath(&self, p: &str) -> Option<String> {
         std::fs::canonicalize(p).ok().map(|r| r.to_string_lossy().into_owned())
+    }
+    fn names(&self, dir: &str) -> Vec<String> {
+        std::fs::read_dir(dir).map_or(Vec::new(), |d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
     }
 }
 
@@ -207,10 +219,8 @@ pub fn within(a: &str, b: &str) -> bool {
     x == y || x.starts_with(&if y.ends_with('/') { y.clone() } else { format!("{y}/") })
 }
 
-/// The options from the command line (without the program's name) and the environment; Err: the message the server
-/// dies with (main's `die`).  `repo`: the repository the defaults are in; `cwd`: what relative paths are resolved
-/// against.
-pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, cwd: &str, fs: &dyn Fs) -> Result<Options, String> {
+/// every argument an option or an option's value
+fn check_names(argv: &[String]) -> Result<(), String> {
     let mut i = 0;
     while i < argv.len() {
         let a = argv[i].as_str();
@@ -225,14 +235,38 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         }
         i += 1;
     }
-    // the first occurrence of the name on the command line (its value is the next argument; None when there is none,
-    // the Node server's undefined), else NFSU2_<OPTION>, else the default
-    let arg = |name: &str, def: &str| -> Option<String> {
-        match argv.iter().position(|a| a == name) {
-            Some(i) => argv.get(i + 1).cloned(),
-            None => Some(env(&env_name(name)).unwrap_or_else(|| def.to_string())),
-        }
-    };
+    Ok(())
+}
+
+/// the first occurrence of the name on the command line (its value is the next argument; None when there is none,
+/// the Node server's undefined), else NFSU2_<OPTION>, else the default
+fn arg_of(argv: &[String], env: &dyn Fn(&str) -> Option<String>, name: &str, def: &str) -> Option<String> {
+    match argv.iter().position(|a| a == name) {
+        Some(i) => argv.get(i + 1).cloned(),
+        None => Some(env(&env_name(name)).unwrap_or_else(|| def.to_string())),
+    }
+}
+
+/// the game --game names (ug2 unless given)
+fn game_arg(argv: &[String], env: &dyn Fn(&str) -> Option<String>) -> Result<&'static GameProfile, String> {
+    let v = arg_of(argv, env, "--game", "ug2").unwrap_or_else(|| "undefined".into());
+    GameProfile::by_id(nfsu2_util::js::trim(&v)).ok_or_else(|| "--game: ug2 or mw".to_string())
+}
+
+/// The game alone, for `--print-entries`, which needs no game folder (the same refusals of an unknown option and of
+/// a --game that is no game).
+pub fn game(argv: &[String], env: &dyn Fn(&str) -> Option<String>) -> Result<&'static GameProfile, String> {
+    check_names(argv)?;
+    game_arg(argv, env)
+}
+
+/// The options from the command line (without the program's name) and the environment; Err: the message the server
+/// dies with (main's `die`).  `repo`: the repository the defaults are in; `cwd`: what relative paths are resolved
+/// against.
+pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, cwd: &str, fs: &dyn Fs) -> Result<Options, String> {
+    check_names(argv)?;
+    let game = game_arg(argv, env)?;
+    let arg = |name: &str, def: &str| arg_of(argv, env, name, def);
     let truthy = |v: &Option<String>| v.as_deref().is_some_and(|s| !s.is_empty());
     let string = |v: Option<String>| v.unwrap_or_else(|| "undefined".into());
     // a path without a value: the message Node's path.resolve(undefined) threw
@@ -259,14 +293,14 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
 
     let data_arg = arg("--data", "");
     let data = resolve(data_arg.clone())?;
-    let dist = resolve(arg("--dist", &paths::join(repo, "web/dist")))?;
+    let dist = resolve(arg("--dist", &paths::join(repo, game.dist)))?;
     let dev_dist = format!("{dist}-dev");
-    let wasm = resolve(arg("--wasm", &paths::join(repo, "out/web/nfsu2.wasm")))?;
+    let wasm = resolve(arg("--wasm", &paths::join(repo, game.wasm)))?;
     let game_json = match wasm.strip_suffix(".wasm") {
         Some(stem) => format!("{stem}.json"),
         None => wasm.clone(),
     };
-    let state = resolve(arg("--state", &paths::join(repo, "out/web/server")))?;
+    let state = resolve(arg("--state", &paths::join(repo, game.state)))?;
     let https_port = port("--port", "8443")?;
     let http_port = port("--http-port", "8080")?;
     let behind = flag("--behind-proxy");
@@ -285,7 +319,8 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         .filter(|h| !h.is_empty())
         .collect();
     let lan_impair = arg("--lan-impair", "");
-    let online = string(arg("--online", "on")).to_lowercase();
+    // (off for a game with no Online mode yet)
+    let online = string(arg("--online", if game.online.is_some() { "on" } else { "off" })).to_lowercase();
     let roam_hub = string(arg("--roam-hub", "on")).to_lowercase();
     let online_trace = resolve_if("--online-trace")?;
     // (an empty NFSU2_VAULT_GB, as compose passes one that is not set, is the default)
@@ -295,9 +330,13 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         None => f64::NAN,
     };
 
-    if !truthy(&data_arg) || !fs.exists(&paths::join(&data, "SPEED2.EXE")) {
+    // the game's program, its name in any case (Linux's disk tells SPEED2.EXE from speed2.exe; Most Wanted's is
+    // speed.exe)
+    let has_exe = || fs.exists(&paths::join(&data, game.exe)) || fs.names(&data).iter().any(|n| game.is_exe(n));
+    if !truthy(&data_arg) || !has_exe() {
         let got = if truthy(&data_arg) { data.as_str() } else { "nothing" };
-        return Err(format!("usage: nfsu2-server --data \"<folder with SPEED2.EXE>\"  (got: {got})"));
+        let g = if game.id == "ug2" { String::new() } else { format!("--game {} ", game.id) };
+        return Err(format!("usage: nfsu2-server {g}--data \"<folder with {}>\"  (got: {got})", game.exe));
     }
     if tls_cert.is_empty() != tls_key.is_empty() {
         return Err("--tls-cert and --tls-key go together".into());
@@ -326,6 +365,9 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
     }
     if online != "on" && online != "off" {
         return Err("--online: on or off".into());
+    }
+    if online == "on" && game.online.is_none() {
+        return Err(format!("--online: this server has no Online mode for {} yet", game.name));
     }
     if roam_hub != "on" && roam_hub != "off" {
         return Err("--roam-hub: on or off".into());
@@ -364,7 +406,7 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
     if real_ip != "x-forwarded-for" && real_ip != "cf-connecting-ip" {
         return Err("--real-ip-header: x-forwarded-for or cf-connecting-ip".into());
     }
-    let tests = paths::join(repo, "tests");
+    let tests = paths::join(repo, game.tests);
 
     // The state folder holds keys (the ETag key, the switch's token hashes), and a --tls-key is one: never inside a
     // folder this server serves, and the other way round (the audit's F5/DEP-6: --state inside --data served the keys
@@ -394,6 +436,7 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
     }
 
     Ok(Options {
+        game,
         data,
         dist,
         dev_dist,
@@ -515,7 +558,8 @@ mod tests {
             format!(
                 "unknown option --no-such-option\noptions: {}",
                 "--data --dist --wasm --port --http-port --bind --state --tls-cert --tls-key --trusted-proxies --real-ip-header --max-peers \
-             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --behind-proxy --dev --access-log"
+             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --behind-proxy --dev --access-log \
+             --print-entries"
             )
         );
         assert_eq!(s.err(&["--http-port"], &[]), "--http-port needs a value");
@@ -624,5 +668,63 @@ mod tests {
         assert_eq!((o.tls, o.bind.as_str(), o.bind_set), (Tls::Cert, "127.0.0.1", true));
         assert_eq!(o.tls_cert, s.p("c.pem"));
         assert_eq!(o.real_ip, "cf-connecting-ip");
+        assert_eq!(s.parse(&[], &[]).unwrap().game.id, "ug2");
+    }
+
+    // --game mw: Most Wanted's program (lower case, found in any case), its defaults, no Online mode yet
+    #[test]
+    fn most_wanted() {
+        let s = Setup::new();
+        std::fs::create_dir_all(s.p("mw/GLOBAL")).unwrap();
+        std::fs::write(s.p("mw/speed.exe"), "MZ").unwrap();
+        let data = s.p("mw");
+        let mw = |args: &[&str], env: &[(&str, &str)]| {
+            let mut a = vec!["--data", data.as_str()];
+            a.extend_from_slice(args);
+            s.parse(&a, env)
+        };
+        let o = mw(&["--game", "mw"], &[]).unwrap();
+        assert_eq!(o.game.id, "mw");
+        assert_eq!(o.dist, s.p("repo/web/dist-mw"));
+        assert_eq!(o.dev_dist, s.p("repo/web/dist-mw-dev"));
+        assert_eq!((o.wasm, o.game_json), (s.p("repo/out/web/mw/nfsmw.wasm"), s.p("repo/out/web/mw/nfsmw.json")));
+        assert_eq!(o.tests, s.p("repo/tests/mw"));
+        assert!(!o.online && o.roam_hub);
+        // from the environment too, in any case
+        assert_eq!(mw(&[], &[("NFSU2_GAME", "MW")]).unwrap().game.id, "mw");
+        // its state folder, apart from UG2's
+        let d = parse(&["--game".into(), "mw".into(), "--data".into(), s.p("mw")], &|_| None, &s.p("repo"), &s.p(""), &RealFs).unwrap();
+        assert_eq!(d.state, s.p("repo/out/web/mw/server"));
+        // the program found in any case; UG2's folder is not Most Wanted's, nor the other way round
+        std::fs::rename(s.p("mw/speed.exe"), s.p("mw/SPEED.EXE")).unwrap();
+        assert!(mw(&["--game", "mw"], &[]).is_ok());
+        assert_eq!(
+            mw(&[], &[]).err().unwrap(),
+            format!("usage: nfsu2-server --data \"<folder with SPEED2.EXE>\"  (got: {})", s.p("mw"))
+        );
+        assert_eq!(
+            s.err(&["--game", "mw"], &[]),
+            format!("usage: nfsu2-server --game mw --data \"<folder with speed.exe>\"  (got: {})", s.p("game"))
+        );
+        std::fs::rename(s.p("game/SPEED2.EXE"), s.p("game/Speed2.exe")).unwrap();
+        assert!(s.parse(&[], &[]).is_ok(), "UG2's program in another case");
+        // no Online mode to turn on; no game of another name
+        let no_online = "--online: this server has no Online mode for NFS Most Wanted yet";
+        assert_eq!(mw(&["--game", "mw", "--online", "on"], &[]).err().unwrap(), no_online);
+        assert_eq!(mw(&["--game", "mw"], &[("NFSU2_ONLINE", "on")]).err().unwrap(), no_online);
+        assert!(mw(&["--game", "mw", "--online", "off"], &[]).is_ok());
+        assert_eq!(s.err(&["--game", "nfs6"], &[]), "--game: ug2 or mw");
+        assert_eq!(s.err(&["--game"], &[]), "--game needs a value");
+    }
+
+    // --print-entries: the game alone, no folder needed, the same refusals
+    #[test]
+    fn the_game_alone() {
+        let argv = |a: &[&str]| a.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+        assert_eq!(game(&argv(&["--print-entries"]), &|_| None).unwrap().id, "ug2");
+        assert_eq!(game(&argv(&["--game", "mw", "--print-entries"]), &|_| None).unwrap().id, "mw");
+        assert_eq!(game(&argv(&["--print-entries"]), &|k| (k == "NFSU2_GAME").then(|| "mw".into())).unwrap().id, "mw");
+        assert_eq!(game(&argv(&["--print-entries", "--game", "x"]), &|_| None).err().unwrap(), "--game: ug2 or mw");
+        assert!(game(&argv(&["--print-entries", "--nope"]), &|_| None).err().unwrap().starts_with("unknown option --nope\n"));
     }
 }

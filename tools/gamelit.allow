@@ -1,0 +1,13 @@
+# Game addresses that core files may still hold (tools/gamelit.sh).
+# "<file> <literal> <reason>": file relative to runtime/, one literal of one
+# file per line, covering every use of it in that file.
+# Every line below is a UG2 (SPEED2.EXE) address that was in a core file when
+# the list was made; each moves into a UG2 file or behind runtime/game.h, and
+# its line goes with it (a line that matches nothing fails the check).
+
+# enhance.c: which render target a CreateTexture call makes, by its caller
+enhance.c 0x005BA097 UG2 road reflection target call site
+enhance.c 0x005BA10D UG2 road reflection blur target call site
+enhance.c 0x005BA1CD UG2 rear-view mirror target call site
+enhance.c 0x005BA549 UG2 environment cube target call site
+

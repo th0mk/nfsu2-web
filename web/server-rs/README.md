@@ -22,7 +22,10 @@ on 2026-10-21 it carried 1209 players on 0.7 of a core.
     out/web/server-rs/nfsu2-server --data "<NFSU2 folder>" --http-port 8081 --state /tmp/state-rs
 
 It needs Rust (https://rustup.rs) and a C compiler (zstd and mimalloc are C).  Servers can run at once on different
-ports; give each its own `--state`.  Knobs for measurements, from the environment:
+ports; give each its own `--state`.  One game per server: NFS Underground 2, or with `--game mw` (`NFSU2_GAME`) NFS
+Most Wanted, with that game's defaults (`src/game.rs`: the program the folder holds, what of it is served, the page,
+the module, the state folder; no Online mode for it yet).  `nfsu2-server [--game mw] --print-entries` prints what of
+the game's folder it serves (web/deploy/pack.sh asks).  Knobs for measurements, from the environment:
 
 | | |
 |---|---|

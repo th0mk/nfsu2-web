@@ -83,7 +83,11 @@ const SEED = process.env.NFSU2_SAVE_SEED ?? '';
 const OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player completion 6 (6 won', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save from stage 2 on: NFSU2_SAVE_SEED=<save tree>' },
 { name: 'sponsor', script: 'career_sponsor.txt', marker: 'waitfng UI_postrace.fng satisfied', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
-  seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' }];
+  seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' },
+// the thread bounds (runtime/win32_ext.c NFSU2_THREAD_TEST): 33 guest threads alive at once before the game starts, the
+// 33rd refused, no stack in the heap (tests/checks/threads.sh); then the quick race.  A worker per thread: pool 64
+{ name: 'threads', script: 'quickrace.txt', marker: '[thread] test: 33 threads asked for, 32 started, 1 refused',
+  extra: 'NFSU2_THREAD_TEST=33:4000', alarm: 400, pool: 64 }];
 
 // the environment of tests/run_suite.sh + tools/autorun.sh (DESIGN.md section 5)
 const SUITE_ENV = {
@@ -134,6 +138,7 @@ function urlFor(s) {
   q.set('reg', '/tests/web/seed/registry_perf4_native.txt');
   q.set('script', s.script.startsWith('/') ? s.script : `/tests/scripts/${s.script}`);
   if (s.net) q.set('net', s.net);
+  if (s.pool) q.set('pool', String(s.pool));
   return `${opt.base}/test/hostcheck.html?${q}`;
 }
 

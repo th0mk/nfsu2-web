@@ -24,22 +24,26 @@
  *
  * Every call runs with the guest lock held. */
 #include "cpu.h"
+#include "memmap.h"
+#include "module.h"
 #include <stdio.h>
 #include <string.h>
 
 void mem_commit(uint32_t, uint32_t);
 
-#define MH_BASE   0x01000000u
-#ifdef __wasm__
-/* wasm: the guest span is 640 MB (cpu.h) and its main stack starts at
- * 0x05000000 (runtime/web/main_web.c), so two heaps of 32 MB each:
- * 0x01000000-0x05000000.  A host session peaks at 22.6 MB (Mac, four players,
- * eight races in a row), and HeapDestroy empties a heap per session. */
-#define MH_SIZE   0x02000000u            /* 32 MB per heap */
-#else
-#define MH_SIZE   0x07000000u            /* 112 MB per heap */
-#endif
-#define MH_N      2
+/* The modheap region (runtime/memmap.h).  wasm: the guest span is 640 MB
+ * (cpu.h) and its main stack starts at 0x05000000, so two heaps of 32 MB
+ * each: 0x01000000-0x05000000; native: two of 112 MB.  A host session peaks
+ * at 22.6 MB (Mac, four players, eight races in a row), and HeapDestroy
+ * empties a heap per session.
+ *
+ * Each lifted DLL has its own part of the region (game.h modules: heap_base,
+ * heap_size, heap_n): a HeapCreate the DLL calls takes a free heap of its
+ * own part, never another DLL's.  UG2's server.dll has the whole region. */
+#define MH_BASE   MM_MODHEAP_BASE
+#define MH_SIZE   MM_MODHEAP_SIZE
+#define MH_N      MM_MODHEAP_N
+#define MH_MAX    8                      /* heaps of all modules together */
 #define HDR       16u
 #define LIVE      0x5EB7A110u
 #define FREED     0x5EB7F4EEu
@@ -48,35 +52,47 @@ void mem_commit(uint32_t, uint32_t);
 
 typedef struct {
     int used;
-    uint32_t base, top, committed;
+    uint32_t base, size, top, committed;
     uint32_t small[NSMALL];              /* free list heads (user pointers) */
     uint32_t large;                      /* free list of blocks > 4 KB */
     uint64_t live, peak, allocs, frees, created;
     int bad;                             /* double/foreign frees seen */
 } MHeap;
-static MHeap g_h[MH_N];
+static MHeap g_h[MH_MAX];
 
 static MHeap *heap_of(uint32_t h){
-    for (int i = 0; i < MH_N; i++) if (g_h[i].used && g_h[i].base == h) return &g_h[i];
+    for (int i = 0; i < MH_MAX; i++) if (g_h[i].used && g_h[i].base == h) return &g_h[i];
     return 0;
 }
 int modheap_owns(uint32_t h){ return h - MH_BASE < MH_N * MH_SIZE && heap_of(h) != 0; }
 
-uint32_t modheap_create(void){
-    for (int i = 0; i < MH_N; i++){
-        MHeap *m = &g_h[i];
+/* HeapCreate called by module mod (win32.c): a free heap of its own part.
+ * Module m's heaps are g_h[] slots from the sum of the modules' heap_n
+ * before it. */
+uint32_t modheap_create(int mod){
+    const ModLink *l = module_link(mod);
+    if (!l || l->heap_n <= 0){
+        fprintf(stderr, "[modheap] HeapCreate from module %d (%s): it has no heaps of its own (game.h modules)\n",
+                mod, l ? l->info->name : "none");
+        return 0;
+    }
+    int s0 = 0;
+    for (int k = 1; k < mod; k++) s0 += module_link(k)->heap_n;
+    for (int i = 0; i < l->heap_n && s0 + i < MH_MAX; i++){
+        MHeap *m = &g_h[s0 + i];
         if (m->used) continue;
-        uint32_t base = MH_BASE + (uint32_t)i * MH_SIZE;
+        uint32_t base = l->heap_base + (uint32_t)i * l->heap_size;
         uint32_t keep = m->committed;     /* pages of an earlier heap here stay committed */
         uint64_t created = m->created;
         memset(m, 0, sizeof *m);
-        m->used = 1; m->base = base; m->top = base + 64u;   /* the handle itself never is a block */
+        m->used = 1; m->base = base; m->size = l->heap_size;
+        m->top = base + 64u;              /* the handle itself never is a block */
         m->committed = keep ? keep : base;
         m->created = created + 1;
         if (m->committed < base + COMMIT){ mem_commit(base, COMMIT); m->committed = base + COMMIT; }
         return base;
     }
-    fprintf(stderr, "[modheap] HeapCreate: no free module heap (%d in use)\n", MH_N);
+    fprintf(stderr, "[modheap] HeapCreate: no free module heap (%d in use)\n", l->heap_n);
     return 0;
 }
 
@@ -105,7 +121,7 @@ uint32_t modheap_alloc(uint32_t h, uint32_t n, uint32_t flags){
     }
     if (!u){
         uint32_t need = HDR + cap;
-        if (m->top + need > m->base + MH_SIZE || m->top + need < m->top){
+        if (m->top + need > m->base + m->size || m->top + need < m->top){
             static int said = 0;
             if (said++ < 4) fprintf(stderr, "[modheap] heap 0x%08x full: %u bytes wanted, %llu live\n",
                                     h, n, (unsigned long long)m->live);
@@ -179,12 +195,12 @@ int modheap_destroy(uint32_t h){
 }
 
 void modheap_report(void){
-    for (int i = 0; i < MH_N; i++){
+    for (int i = 0; i < MH_MAX; i++){
         MHeap *m = &g_h[i];
         if (!m->created) continue;
         fprintf(stderr, "  module heap 0x%08x : created %llu times, %s; %llu KB live, peak %llu KB, %u KB committed\n",
-                MH_BASE + (uint32_t)i * MH_SIZE, (unsigned long long)m->created, m->used ? "in use" : "destroyed",
+                m->base, (unsigned long long)m->created, m->used ? "in use" : "destroyed",
                 (unsigned long long)(m->used ? m->live / 1024u : 0u), (unsigned long long)(m->peak / 1024u),
-                (m->committed - (MH_BASE + (uint32_t)i * MH_SIZE)) / 1024u);
+                (m->committed - m->base) / 1024u);
     }
 }

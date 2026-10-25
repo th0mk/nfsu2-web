@@ -23,9 +23,10 @@ static void icall_note(CPU *c, uint32_t addr);
  * the table, so the lifted code's inline fast path (cpu.h) passes them to
  * dispatch_indirect, which finds them here. */
 static int g_diag;
+int efx_watched(uint32_t a);                  /* EFXSTAT watches it (UG2's D3DX code: d3dx_hle.c) */
+void efx_dispatch(CPU *c, uint32_t a);        /* an indirect call into that code (d3dx_hle.c) */
 static int diag_watched(uint32_t a){
-    extern int g_efx_stat;
-    return (g_icall_want && a == g_icall_want) || (g_efx_stat && a - 0x650000u < 0x40000u);
+    return (g_icall_want && a == g_icall_want) || efx_watched(a);
 }
 static guest_fn diag_fn(uint32_t a){
     uint32_t lo = 0, hi = g_fn_count;
@@ -166,13 +167,11 @@ void dispatch_indirect(CPU *c, uint32_t addr){
         if (win32_call(c, addr - 0xF0000000u) < 0) g_guest_exited = 1;
         return;
     }
-    /* EFXSTAT: inventory of the D3DX effect vtable calls (d3dx_hle.c) */
-    { extern int g_efx_stat; extern void efx_stat_note(CPU *c, uint32_t addr);
-      if (g_efx_stat && addr - 0x650000u < 0x40000u) efx_stat_note(c, addr); }
-    /* with EFXSTAT the effect methods are not in the table: their calls into
-     * D3DX may change an effect (d3dx_hle.c, stage 9's epoch) */
-    { extern uint32_t g_fx_epoch;
-      if (addr - 0x650000u < 0x40000u && addr != 0x0066acd2u && addr != 0x0066ac17u && addr != 0x0065adcbu) g_fx_epoch++; }
+    /* a call into the exe's own D3DX code (UG2's, d3dx_hle.c): EFXSTAT's
+     * inventory of the effect vtable calls, and with EFXSTAT the effect
+     * methods are not in the table: their calls may change an effect (stage
+     * 9's epoch) */
+    efx_dispatch(c, addr);
     uint32_t off = addr - TEXT_BASE;
     if (off < TEXT_SIZE){
         guest_fn f = g_dtab[off];

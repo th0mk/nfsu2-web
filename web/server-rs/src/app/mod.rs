@@ -268,11 +268,11 @@ impl App {
             })
             .flatten();
         if let Some(k) = &kept {
-            let (k, data, roots, state) = (k.clone(), o.data.clone(), real_roots.clone(), real_state.clone());
+            let (k, game, data, roots, state) = (k.clone(), o.game, o.data.clone(), real_roots.clone(), real_state.clone());
             manifest.on_new(Arc::new(move |m: &manifest::Manifest| {
                 let (data, roots, state) = (data.clone(), roots.clone(), state.clone());
                 k.sweep(&m.etag, m.files.clone(), move |rel| {
-                    let file = files::resolve_game(&data, &format!("/{rel}"))?;
+                    let file = files::resolve_game(game, &data, &format!("/{rel}"))?;
                     let f = files::locate_sync(&roots, &state, &data, &file)?;
                     Some((f.real, f.md))
                 });
@@ -544,7 +544,7 @@ impl App {
         if let Some(rest) = p.strip_prefix("/data")
             && rest.starts_with('/')
         {
-            let file = files::resolve_game(&self.o.data, rest);
+            let file = files::resolve_game(self.o.game, &self.o.data, rest);
             return self
                 .send_file(q, s, &self.o.data, file, files::FileOpts { type_: Some("application/octet-stream"), ..Default::default() })
                 .await;
@@ -554,7 +554,7 @@ impl App {
         {
             // (the manifest's addresses since blocks are kept: the same files)
             let rest = rest.strip_prefix(blocks::V2).filter(|r| r.starts_with('/')).unwrap_or(rest);
-            let file = files::resolve_game(&self.o.data, rest);
+            let file = files::resolve_game(self.o.game, &self.o.data, rest);
             return self.send_blocks(q, s, file, &u).await;
         }
         if p == "/game.wasm" {
@@ -622,7 +622,7 @@ impl App {
 
     /// the manifest walked again: one walk at a time; a request while one is under way takes its result
     pub async fn refresh_manifest(&self) -> Result<Arc<manifest::Manifest>, String> {
-        self.manifest.refresh(&self.o.data, &self.real_state, &self.etag_key).await
+        self.manifest.refresh(self.o.game, &self.o.data, &self.real_state, &self.etag_key).await
     }
 
     /// the manifest made last

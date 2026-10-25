@@ -22,48 +22,66 @@
 #   WEB_LIFT=plain web/gen.sh <exe>      without the options (A/B)
 #   JTSWITCH=0 web/gen.sh <exe>          the options without JTSWITCH (A/B); LREGS=0, FTOL2INL=0 and
 #                                        INLINE_LIST= likewise
+#   GAME=mw web/gen.sh <speed.exe>       another game (tools/gameconf.sh): games/<id>/game.conf names
+#                                        the exe, the folders (GEN_DIR/all, GEN_DIR/server, OUT_DIR)
+#                                        and the defaults of FTOL2INL and INLINE_LIST; a list that
+#                                        names no function inlines nothing and is left off
 # gen.sh stamps the result (gen/all/stamp.txt, tools/genstamp.sh), which
 # web/build.sh checks against the checkout.  In a worktree gen/all and
 # gen/server are links to the main clone's, which every other worktree builds
 # against: replace them with directories first (or GEN_SHARED=1 to regenerate
-# the shared ones on purpose).
+# the shared ones on purpose).  The same holds for another game's GEN_DIR and
+# every folder on its way.  The paths below are UG2's (GEN_DIR gen, OUT_DIR out).
 set -e -o pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/SPEED2.EXE}}"
-[ -f "$EXE" ] || { echo "usage: web/gen.sh path/to/SPEED2.EXE"; exit 1; }
-for d in gen/all gen/server; do
+. tools/gameconf.sh
+G="$GEN_DIR"; O="$OUT_DIR"
+EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/$GC_EXE_NAME}}"
+[ -f "$EXE" ] || { echo "usage: web/gen.sh path/to/$GC_EXE_NAME"; exit 1; }
+DIRS=; p=; for d in $(echo "$G" | tr '/' ' '); do p="${p:+$p/}$d"; DIRS="$DIRS $p"; done
+for d in $DIRS "$G/all" "$G/server"; do
   if [ -L "$d" ] && [ "${GEN_SHARED:-}" != 1 ]; then
     echo "web/gen.sh: $d is a link to $(readlink "$d"), which other worktrees build against;"
     echo "  rm $d && mkdir $d to lift into this worktree, or GEN_SHARED=1 web/gen.sh to regenerate the shared one"
     exit 1
   fi
 done
+# before anything is written: a refused exe, or a core file holding a game's
+# override or hook marker (tools/genstamp.sh refuses it), leaves the last lift as it was
+gameconf_files "$EXE"
+tools/genstamp.sh check
 PY="$ROOT/.venv/bin/python"
-mkdir -p out gen/all
+mkdir -p "$O" "$G/all"
 # never label a new lift with an old run's options, never reuse an old flag table
-rm -f gen/all/web-lift.txt out/flagabi.json
+rm -f "$G/all/web-lift.txt" "$O/flagabi.json"
 if [ "${WEB_LIFT:-opt}" = plain ]; then
   ./gen.sh "$EXE"
   LIFT=plain
 else
   # flagabi.py needs the relocations, which gen.sh would only make later
   "$PY" tools/reloc2.py "$EXE"
-  echo "FLAGABI: interprocedural flag liveness -> out/flagabi.json"
+  echo "FLAGABI: interprocedural flag liveness -> $O/flagabi.json"
   # flagabi.py sees each function's control flow as the lift will, switches included
   export JTSWITCH="${JTSWITCH:-1}"
-  "$PY" tools/flagabi.py "$EXE" out/flagabi.json > out/flagabi.log 2>&1 || { tail -20 out/flagabi.log; echo "web/gen.sh: flagabi.py failed"; exit 1; }
-  grep -E "^summary|^  round" out/flagabi.log || true
-  [ -s out/flagabi.json ] || { echo "web/gen.sh: flagabi.py wrote no out/flagabi.json"; exit 1; }
-  export LREGS="${LREGS:-1}" FTOL2INL="${FTOL2INL:-1}" INLINE_LIST="${INLINE_LIST-$ROOT/tools/inline_hot.txt}"
-  FLAGABI="$ROOT/out/flagabi.json" X87OPT=1 ./gen.sh "$EXE"
+  "$PY" tools/flagabi.py "$EXE" "$O/flagabi.json" > "$O/flagabi.log" 2>&1 || { tail -20 "$O/flagabi.log"; echo "web/gen.sh: flagabi.py failed"; exit 1; }
+  grep -E "^summary|^  round" "$O/flagabi.log" || true
+  [ -s "$O/flagabi.json" ] || { echo "web/gen.sh: flagabi.py wrote no $O/flagabi.json"; exit 1; }
+  # the game's defaults (UG2: both on, the list tools/inline_hot.txt); given here, they win
+  export LREGS="${LREGS:-1}" FTOL2INL="${FTOL2INL:-$GC_FTOL2INL}" INLINE_LIST="${INLINE_LIST-${GC_INLINE_LIST:+$ROOT/$GC_INLINE_LIST}}"
+  if [ -n "$INLINE_LIST" ]; then
+    [ -f "$INLINE_LIST" ] || { echo "web/gen.sh: no $INLINE_LIST (INLINE_LIST)"; exit 1; }
+    N=$(sed 's/#.*//' "$INLINE_LIST" | grep -c '[^[:space:],]' || true)
+    [ "$N" -gt 0 ] || { echo "INLINE_LIST: $INLINE_LIST names no function: off"; INLINE_LIST=; }
+  fi
+  FLAGABI="$ROOT/$O/flagabi.json" X87OPT=1 ./gen.sh "$EXE"
   LIFT="FLAGABI X87OPT$( [ "$JTSWITCH" = 1 ] && echo " JTSWITCH" || true)$( [ "$LREGS" = 1 ] && echo " LREGS" || true)$( [ "$FTOL2INL" = 1 ] && echo " FTOL2INL" || true)$( [ -n "$INLINE_LIST" ] && echo " INLINE_LIST" || true)"
 fi
 # a lift that failed function by function still says "gen OK": every function
 # became an unsupported_insn(..., "lift-error") stub.  Refuse that.  A good
 # lift of v1.2 NA has 8 such stubs (the same 8 on the Mac: addresses that are
 # discovered as functions but never run); a broken one has thousands.
-BAD=$(cat gen/all/shard_*.c | grep -c '"lift-error"' || true)
-[ "$BAD" -le 64 ] || { echo "web/gen.sh: $BAD functions failed to lift (lift-error stubs in gen/all): not a usable lift"; rm -f gen/all/fntab.c
-                       echo "incomplete: web/gen.sh found $BAD functions that failed to lift" > gen/all/stamp.txt; exit 1; }
-echo "$LIFT" > gen/all/web-lift.txt
+BAD=$(cat "$G"/all/shard_*.c | grep -c '"lift-error"' || true)
+[ "$BAD" -le 64 ] || { echo "web/gen.sh: $BAD functions failed to lift (lift-error stubs in $G/all): not a usable lift"; rm -f "$G/all/fntab.c"
+                       echo "incomplete: web/gen.sh found $BAD functions that failed to lift" > "$G/all/stamp.txt"; exit 1; }
+echo "$LIFT" > "$G/all/web-lift.txt"
 echo "web lift options: $LIFT"

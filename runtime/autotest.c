@@ -10,11 +10,11 @@
  *                               frames and needs the window)
  *   NFSU2_TIMEOUT=<sec>         alias of ALARM (boot.c): exit after N s
  *   NFSU2_STATUS_EVERY=<n>      every n frames log: frame, wall time, guest
- *                               fps, GameFlowManager state [0x8654a4], CPU%
+ *                               fps, the game's flow state (game.h), CPU%
  *   NFSU2_LOG=<file>            stdout+stderr -> file (see autotest_early)
  *   NFSU2_FNG_LOG=1             log every change of the top front-end package
  *                               (3: also every press of tapuntil/tappaduntil)
- *   NFSU2_CAR_TRACE=<file>      CSV of every race car per frame (car_trace)
+ *   NFSU2_CAR_TRACE=<file>      CSV of every race car per frame (UG2: debug_ug2.c)
  *   NFSU2_DUMP_FRAMES / NFSU2_DUMP_DIR / NFSU2_DUMP_SCALE: see metal.m
  *
  * Script format: one event per line, '#' comments; ${NAME} is replaced by
@@ -88,9 +88,9 @@
  *                              dword at X.  TYPE f (float, default), i (int32),
  *                              x (hex dword), b (byte), w (word), d (double).
  *                              $P is the local human racer of the current race
- *                              (GRaceStatus [0x890118]: racer pointers at
- *                              +0xBD0, count +0x24; driver type [[[r]+0x14]+4]
- *                              == 1), $R0..$R9 racer slot i, 0 if none.
+ *                              (the game's, game.h racer; UG2: GRaceStatus
+ *                              [0x890118], game_ug2.c), $R0..$R9 racer slot
+ *                              i, 0 if none.
  *                              Example: i:[$P+0x1d4]+0x24
  *     untrace                  stop the periodic trace
  *     expect EXPR OP VALUE     check once: logs "[expect] PASS|FAIL ..."
@@ -145,6 +145,7 @@
  *        NUMPAD0..9 ...), or a number (0x1c = DIK code), or VK_xx / vk:0xNN.
  */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -455,18 +456,8 @@ static void load_script(const char *path){
 
 
 /* ---- front-end package tracking ----------------------------------------
- * cFEng::pInstance = [0x8384C4]; GetTopPackage (0x50C8E0) returns
- * [[cFEng+8]+0xE4] (FNGInfo*), whose +0x0C points at the "*.fng" name.
- * The name offset is found by scanning for a pointer to a printable string
- * ending in ".fng" (cached once found; +0x0C in v1.2). */
-static int g_fng_off = -1;
-static const char *fng_str(uint32_t p){
-    if (!p || !mem_is_committed(p) || !mem_is_committed(p + 63)) return 0;
-    const char *s = (const char *)(g_mem + p); int n = 0;
-    while (n < 63 && s[n] >= 0x20 && s[n] < 0x7f) n++;
-    if (s[n] != 0 || n < 5 || strncasecmp(s + n - 4, ".fng", 4)) return 0;
-    return s;
-}
+ * The top package is the game's to find (game.h top_screen); the screens the
+ * game initialises come from its own debug printf (autotest_note_screen). */
 const char *autotest_top_fng(void);
 static char g_screen[64];          /* last "Init Package"/"SwitchFEngPackages ... to" name */
 static long g_screen_frame = -1;
@@ -500,44 +491,14 @@ static int fe_is(const char *want){
     for (int i = 0; i < g_nbatch; i++) if (!strcasecmp(g_batch[i], want)) return 1;
     return 0;
 }
-const char *autotest_top_fng(void){
-    if (!mem_is_committed(0x8384c4u)) return 0;
-    uint32_t fe = MR32(0x8384c4u);
-    if (!fe || !mem_is_committed(fe + 11)) return 0;
-    uint32_t mg = MR32(fe + 8);                       /* GetTopPackage (0x50C8E0) */
-    if (!mg || !mem_is_committed(mg + 0xe7)) return 0;
-    uint32_t pk = MR32(mg + 0xe4);                    /* FNGInfo*; name ptr at +0x0C */
-    if (!pk || !mem_is_committed(pk + 255)) return 0;
-    if (g_fng_off >= 0){ const char *s = fng_str(MR32(pk + (uint32_t)g_fng_off)); if (s) return s; }
-    for (int o = 0; o < 256; o += 4){
-        const char *s = fng_str(MR32(pk + (uint32_t)o));
-        if (s){ g_fng_off = o; return s; }
-    }
-    return 0;
-}
+const char *autotest_top_fng(void){ return g_game.top_screen ? g_game.top_screen() : 0; }
 
 /* ---- periodic memory trace ("trace" command) ------------------------- */
 #define TR_MAX 24
 static struct { char name[24]; char type; char expr[80]; } g_tr[TR_MAX];
 static int g_ntr = 0; static long g_tr_every = 0;
-/* ADDR grammar (see header): returns 0 and sets *ok=0 on an unmapped read */
-static uint32_t tr_rd(uint32_t a, int *ok){
-    if (a && mem_is_committed(a) && mem_is_committed(a + 3)) return MR32(a);
-    *ok = 0; return 0;
-}
-static uint32_t tr_racer(int want_human, int slot){
-    int ok = 1; uint32_t gs = tr_rd(0x890118u, &ok);
-    if (!ok || !gs) return 0;
-    uint32_t n = tr_rd(gs + 0x24u, &ok);
-    if (!ok || n > 16) return 0;
-    if (!want_human) return (uint32_t)slot < n ? tr_rd(gs + 0xbd0u + 4u * (uint32_t)slot, &ok) : 0;
-    for (uint32_t i = 0; i < n; i++){
-        ok = 1; uint32_t r = tr_rd(gs + 0xbd0u + 4u * i, &ok);
-        uint32_t t = tr_rd(tr_rd(tr_rd(r, &ok) + 0x14u, &ok) + 4u, &ok);
-        if (ok && t == 1) return r;
-    }
-    return 0;
-}
+/* $P and $Rn: the game's racers (game.h racer) */
+static uint32_t tr_racer(int want_human, int slot){ return g_game.racer ? g_game.racer(want_human, slot) : 0u; }
 static uint32_t tr_eval(const char **pp, int *ok){
     const char *p = *pp; uint32_t v = 0;
     while (*p == ' ') p++;
@@ -975,7 +936,7 @@ static void status_line(double t, double tms, const char *label){
             label ? " " : "", label ? label : "", g_frame, tms / 1e3, dt > 0 ? nf / dt : 0.0,
             dt > 0 ? 100.0 * (cpu - g_st_cpu) / dt : 0.0,
             nf > 0 ? (gcpu - g_st_gcpu) / nf : 0.0,
-            mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u,
+            game_flow(),
             
 #ifdef __wasm__
             (long)((uintptr_t)sbrk(0) >> 20), ms);   /* no ru_maxrss: the wasm memory's size (it only grows) */
@@ -983,45 +944,6 @@ static void status_line(double t, double tms, const char *label){
             (long)(ru.ru_maxrss / (1024 * 1024)), ms);
 #endif
     g_st_t = t; g_st_f = g_frame; g_st_cpu = cpu; g_st_gcpu = gcpu;
-}
-
-/* ---- NFSU2_CAR_TRACE=<file>: every car of the race World per frame -------
- * One CSV row per Present while racing (GameFlow 6): wall-clock time
- * (CLOCK_REALTIME, shared by every instance on this Mac), frame, whether
- * a race HUD (HUD_*.fng) is the top package (not the results), the frame cap
- * [0x865558], WorldTimer/RealTimer (1/4000 s), then per car of
- * the World's list ([0x890080]: +0x10 count, +0x1C car pointers) whether it
- * is the local player's (player 1's vehicle), position +0x60 and speed
- * +0x430.  tools/lan_trace.py compares how each instance shows the others'
- * cars with where their owners had them at the same instant (LAN tests). */
-static FILE *g_ctrace;
-uint32_t autopilot_vehicle(void);        /* career.c: player 1's vehicle, 0 = none */
-static void car_trace(void){
-    static uint32_t last_w = 0;
-    if (!mem_is_committed(0x8654a7u) || MR32(0x8654a4u) != 6u) return;
-    uint32_t w = MR32(0x00890080u);
-    if (!w || !mem_is_committed(w + 0x3f)) return;
-    uint32_t n = MR32(w + 0x10); if (n > 8) n = 8;
-    uint32_t me = autopilot_vehicle();
-    if (w != last_w){
-        last_w = w;
-        fprintf(stderr, "[cartrace] f=%ld world 0x%08x cars %u, local vehicle 0x%08x:", g_frame, w, n, me);
-        for (uint32_t i = 0; i < n; i++) fprintf(stderr, " 0x%08x", MR32(w + 0x1c + 4 * i));
-        fputc('\n', stderr);
-    }
-    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
-    const char *top = autotest_top_fng();
-    fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%u,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), g_frame,
-            top && !strncasecmp(top, "HUD_", 4), (double)MRF32(0x00865558u), MR32(0x0086518cu),
-            MR32(0x008651acu), n);
-    for (uint32_t i = 0; i < n; i++){
-        uint32_t car = MR32(w + 0x1c + 4 * i);
-        if (car && mem_is_committed(car + 0x433))
-            fprintf(g_ctrace, ",%d,%.3f,%.3f,%.3f,%.3f", car == me, (double)MRF32(car + 0x60), (double)MRF32(car + 0x64),
-                    (double)MRF32(car + 0x68), (double)MRF32(car + 0x430));
-        else fprintf(g_ctrace, ",,,,,");
-    }
-    fputc('\n', g_ctrace);
 }
 
 void autotest_on_present(CPU *c){
@@ -1032,32 +954,16 @@ void autotest_on_present(CPU *c){
     { void input_web_frame(void); input_web_frame(); }   /* the game's text entry, for a phone's keyboard (runtime/web/input_web.c) */
 #endif
     g_frame++;
-    if (g_ctrace) car_trace();
+    if (g_game.on_test_frame) g_game.on_test_frame();   /* UG2: NFSU2_CAR_TRACE, the front end's dump (debug_ug2.c) */
     double t = now_ms();
     if (g_frame == 1){ g_t0 = t; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
     double tms = t - g_t0;
 
-    if (g_fng_log == 2 && (g_frame == 400 || g_frame == 1500)){
-        uint32_t fe = mem_is_committed(0x8384c4u) ? MR32(0x8384c4u) : 0;
-        uint32_t mg = (fe && mem_is_committed(fe + 11)) ? MR32(fe + 8) : 0;
-        uint32_t pk = (mg && mem_is_committed(mg + 0xe7)) ? MR32(mg + 0xe4) : 0;
-        fprintf(stderr, "[fngdbg] f=%ld fe=%08x mgr=%08x info=%08x\n", g_frame, fe, mg, pk);
-        for (int o = 0; pk && o < 0x100; o += 4){
-            uint32_t v = MR32(pk + (uint32_t)o); char buf[40] = {0};
-            if (v && mem_is_committed(v) && mem_is_committed(v + 39)){
-                const char *q = (const char *)(g_mem + v); int n = 0;
-                while (n < 39 && q[n] >= 0x20 && q[n] < 0x7f){ buf[n] = q[n]; n++; }
-                if (n < 3 || q[n]) buf[0] = 0; }
-            fprintf(stderr, "   +%02x %08x %s\n", o, v, buf);
-        }
-        for (int o = 0; fe && o < 0x40; o += 4) fprintf(stderr, "   fe+%02x %08x\n", o, MR32(fe + (uint32_t)o));
-    }
     if (g_fng_log){
         static char last[64];
         const char *t = autotest_top_fng();
         if (t && strcmp(t, last)){ snprintf(last, sizeof last, "%s", t);
-            fprintf(stderr, "[fng] f=%ld top package %s (flow=%u)\n", g_frame, t,
-                    mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u); }
+            fprintf(stderr, "[fng] f=%ld top package %s (flow=%u)\n", g_frame, t, game_flow()); }
     }
     /* scheduled releases */
     for (int i = 0; i < g_nrel; ){
@@ -1130,12 +1036,6 @@ void autotest_init(void){
     if (s && *s) load_script(s);
     const char *q = getenv("NFSU2_QUIT_FRAMES"); if (q) g_quit_frames = atol(q);
     const char *st = getenv("NFSU2_STATUS_EVERY"); if (st) g_status_every = atol(st);
-    { const char *ct = getenv("NFSU2_CAR_TRACE");
-      if (ct && *ct && (g_ctrace = fopen(ct, "w"))){
-          setvbuf(g_ctrace, 0, _IOLBF, 0);
-          fprintf(g_ctrace, "t,frame,hud,cap,worldtimer,realtimer,n");
-          for (int i = 0; i < 8; i++) fprintf(g_ctrace, ",c%dlocal,c%dx,c%dy,c%dz,c%dv", i, i, i, i, i);
-          fputc('\n', g_ctrace); } }
     { const char *fl = getenv("NFSU2_FNG_LOG"); g_fng_log = fl ? (atoi(fl) ? atoi(fl) : 1) : 0; }
     g_inited = 1;
 }

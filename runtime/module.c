@@ -1,10 +1,12 @@
-/* Second guest modules: game DLLs lifted next to SPEED2.EXE.
+/* Second guest modules: game DLLs lifted next to the exe.
  *
- * Today that is one module, server.dll, EA's LAN server, which the game loads
- * when a player hosts a LAN game (SPEED2.EXE 0x5FA300: LoadLibraryA("server"),
+ * The game's file lists them (game.h modules, a ModLink each).  For UG2 that
+ * is one module, server.dll, EA's LAN server, which the game loads when a
+ * player hosts a LAN game (SPEED2.EXE 0x5FA300: LoadLibraryA("server"),
  * GetProcAddress StartServer/StopServer/IsServerRunning, StartServer(...)).
- * gen.sh lifts it at the fixed guest base 0x00A00000 (its preferred base
- * 0x10000000 is the guest heap) into gen/server; this file maps the ORIGINAL
+ * gen.sh lifts each at a fixed guest base (UG2's server.dll at 0x00A00000:
+ * its preferred base 0x10000000 is the guest heap) into its own gen folder,
+ * with its own symbol prefix (gen/server, srv_); this file maps the ORIGINAL
  * file from the game folder at that base the way the Windows loader does:
  *
  *   1. the file must be the one the code was lifted from (SHA-256 pinned at
@@ -26,6 +28,7 @@
  * Module handles are base addresses.  The DLL's exports are cdecl, its
  * imports stdcall; nothing about calling conventions differs from the exe. */
 #include "cpu.h"
+#include "game.h"
 #include "module.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,11 +46,7 @@ void nfsu2_sha256(const void *data, size_t n, uint8_t out[32]);   /* runtime/web
 #include <fcntl.h>
 #include <unistd.h>
 
-typedef struct { uint32_t iat; const char*dll; const char*name; int nargs; } ImpEnt;
 extern const ImpEnt g_imp[];     extern const uint32_t g_imp_count;
-extern const ImpEnt g_srv_imp[]; extern const uint32_t g_srv_imp_count;
-extern const uint32_t g_srv_fn_addr[]; extern const mod_fn g_srv_fn_ptr[]; extern const uint32_t g_srv_fn_count;
-extern const ModInfo g_srv_modinfo;
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
 void mem_commit(uint32_t, uint32_t);
 int fileio_resolve_game(const char *win, char *out, size_t outsz);
@@ -57,9 +56,11 @@ int fileio_resolve_game(const char *win, char *out, size_t outsz);
 #define DLL_PROCESS_ATTACH 1u
 
 typedef struct {
-    const ModInfo *info;
+    const ModLink *l;               /* the game's entry (game.h modules) */
+    const ModInfo *info;            /* and its tables */
     const ImpEnt *imp; const uint32_t *imp_count;
     const uint32_t *fn_addr; const mod_fn *fn_ptr; const uint32_t *fn_count;
+    uint32_t imp_first;             /* its first index in the import table (win32.c) */
     uint32_t *idx;                  /* .text offset -> fn index + 1 */
     int refs, mapped, refused;
     char path[1024];                /* host file it was mapped from */
@@ -70,11 +71,33 @@ typedef struct {
     uint32_t socks[256]; int nsocks, fds_at_load;
 } GuestMod;
 
-static GuestMod g_mods[1] = {
-    { .info = &g_srv_modinfo, .imp = g_srv_imp, .imp_count = &g_srv_imp_count,
-      .fn_addr = g_srv_fn_addr, .fn_ptr = g_srv_fn_ptr, .fn_count = &g_srv_fn_count },
-};
-#define NMOD ((int)(sizeof g_mods / sizeof g_mods[0]))
+#define MOD_MAX 4
+static GuestMod g_mods[MOD_MAX];
+static int g_nmod, g_mods_init;
+#define NMOD g_nmod
+
+void module_init(void){
+    if (g_mods_init) return;
+    g_mods_init = 1;
+    int n = g_game.nmodules;
+    if (n > MOD_MAX){
+        fprintf(stderr, "[module] %s lists %d lifted DLLs, the runtime holds %d (module.c MOD_MAX): the rest are left out\n",
+                g_game.id, n, MOD_MAX);
+        n = MOD_MAX;
+    }
+    uint32_t first = g_imp_count;
+    for (int i = 0; i < n; i++){
+        const ModLink *l = &g_game.modules[i];
+        GuestMod *m = &g_mods[i];
+        m->l = l; m->info = l->info;
+        m->imp = l->imp; m->imp_count = l->imp_count;
+        m->fn_addr = l->fn_addr; m->fn_ptr = l->fn_ptr; m->fn_count = l->fn_count;
+        m->imp_first = first; first += *l->imp_count;
+    }
+    g_nmod = n;
+}
+int module_count(void){ return g_nmod; }
+const ModLink *module_link(int m){ return m >= 1 && m <= g_nmod ? g_mods[m - 1].l : 0; }
 
 static int mod_lifted(const GuestMod *m){ return m->info->name[0] && *m->fn_count; }
 
@@ -145,7 +168,7 @@ static int map_image(GuestMod *m, uint32_t *err){
     const ModInfo *mi = m->info;
     char host[1024];
     if (!fileio_resolve_game(mi->name, host, sizeof host)){
-        fprintf(stderr, "[module] %s: not found in the game folder: LAN hosting is not available\n", mi->name);
+        fprintf(stderr, "[module] %s: not found in the game folder: %s is not available\n", mi->name, m->l->feature);
         *err = 126u; return 0;                                   /* ERROR_MOD_NOT_FOUND */
     }
     FILE *f = fopen(host, "rb");
@@ -158,9 +181,9 @@ static int map_image(GuestMod *m, uint32_t *err){
     if (strcmp(sha, mi->sha256)){
         if (!m->refused++)
             fprintf(stderr, "[module] %s in the game folder (%s, %ld bytes, sha256 %s) is not the file this build"
-                            " was lifted from (sha256 %s, %u bytes): it is NOT loaded, LAN hosting is disabled."
-                            " Restore the original server.dll of NFSU2 v1.2, or re-run gen.sh with this file.\n",
-                    mi->name, host, sz, sha, mi->sha256, mi->file_size);
+                            " was lifted from (sha256 %s, %u bytes): it is NOT loaded, %s is disabled."
+                            " Restore the original %s of %s, or re-run gen.sh with this file.\n",
+                    mi->name, host, sz, sha, mi->sha256, mi->file_size, m->l->feature, mi->name, m->l->release);
         free(buf); *err = 193u; return 0;                        /* ERROR_BAD_EXE_FORMAT */
     }
     /* The hash pins the file, so these only guard against a broken gen. */
@@ -204,7 +227,7 @@ static int map_image(GuestMod *m, uint32_t *err){
     }
     MR32(base + lfa + 24 + 28) = base;                           /* the loader records the actual base */
     /* imports: one index space with the exe's (win32_call) */
-    uint32_t first = module_imp_first((int)(m - g_mods) + 1);
+    uint32_t first = m->imp_first;
     for (uint32_t j = 0; j < *m->imp_count; j++){
         uint32_t iat = m->imp[j].iat;
         if (iat - base >= imgsz){ *err = 193u; return 0; }
@@ -221,8 +244,8 @@ uint32_t module_load(CPU *c, const char *name, uint32_t *err){
     *err = 126u;
     if (!m) return 0;
     if (!mod_lifted(m)){
-        fprintf(stderr, "[module] %s: not lifted into this build (gen.sh found no %s next to SPEED2.EXE):"
-                        " LAN hosting is not available\n", m->info->name, m->info->name);
+        fprintf(stderr, "[module] %s: not lifted into this build (gen.sh found no %s next to %s):"
+                        " %s is not available\n", m->info->name, m->info->name, g_game.exe_name, m->l->feature);
         return 0;
     }
     if (m->mapped){ m->refs++; return m->info->base; }
@@ -296,25 +319,32 @@ uint32_t module_proc(uint32_t h, uint32_t nm, uint32_t *err){
 int module_file_name(uint32_t h, char *out, int n){
     GuestMod *m = by_handle(h);
     if (!m || !m->mapped) return 0;
-    snprintf(out, (size_t)n, "C:\\NFSU2\\%s", m->info->name);
+    snprintf(out, (size_t)n, "%s\\%s", g_game.vroot, m->info->name);
     return 1;
 }
 
-uint32_t module_imp_first(int m){ return m == 1 ? g_imp_count : 0u; }
-int module_of_import(uint32_t idx){ return idx >= g_imp_count ? 1 : 0; }
+uint32_t module_imp_first(int m){ return m >= 1 && m <= NMOD ? g_mods[m - 1].imp_first : 0u; }
+int module_of_import(uint32_t idx){
+    if (idx < g_imp_count) return 0;
+    for (int i = NMOD; i >= 1; i--) if (idx >= g_mods[i - 1].imp_first) return i;
+    return 0;
+}
 
 mod_fn module_fn_at(uint32_t addr){
-    GuestMod *m = &g_mods[0];
-    uint32_t off = addr - m->info->text;
-    if (off >= m->info->text_size || !m->idx) return 0;
-    uint32_t k = m->idx[off];
-    if (!k) return 0;
-    if (!m->mapped){
-        static int said = 0;
-        if (said++ < 4) fprintf(stderr, "[module] WARNING: call to 0x%08x in %s while it is not loaded\n",
-                                addr, m->info->name);
+    for (int i = 0; i < NMOD; i++){
+        GuestMod *m = &g_mods[i];
+        uint32_t off = addr - m->info->text;
+        if (off >= m->info->text_size || !m->idx) continue;
+        uint32_t k = m->idx[off];
+        if (!k) return 0;
+        if (!m->mapped){
+            static int said = 0;
+            if (said++ < 4) fprintf(stderr, "[module] WARNING: call to 0x%08x in %s while it is not loaded\n",
+                                    addr, m->info->name);
+        }
+        return m->fn_ptr[k - 1];
     }
-    return m->fn_ptr[k - 1];
+    return 0;
 }
 
 uint32_t module_nearest_fn(uint32_t a, const char **mod){
@@ -354,10 +384,10 @@ void module_report(void){
 
 /* ---- test: host start/stop cycles through the game's own glue ------------
  * Script command "srvcycle N [hold_ms]" (autotest.c), on the guest main
- * thread at Present: N times StartLANServer (SPEED2.EXE 0x5FA300, thiscall
- * on 0x89CF48: LoadLibraryA("server"), GetProcAddress x3, StartServer(name,
- * region)), keep it running hold_ms with the guest lock released, then
- * UnloadServer (0x5F08F0: StopServer, FreeLibrary).  Each cycle logs what
+ * thread at Present: N times the game's start of its LAN server (game.h
+ * lan_*; UG2: StartLANServer 0x5FA300, which loads server.dll and starts
+ * it), keep it running hold_ms with the guest lock released, then the
+ * game's stop (StopServer, FreeLibrary).  Each cycle logs what
  * would leak: threads, kernel-object slots, TLS indices, heap bytes (the
  * bytes in live blocks of the game's heaps, heap.c: the reserved address
  * space would hide a leak, because freed space is reused). */
@@ -367,30 +397,34 @@ uint32_t com_scratch(uint32_t n);
 void guest_sleep_ns(int64_t ns);             /* win32_ext.c (int64_t: a long is 32 bits on wasm) */
 int module_test_cycle(CPU *c, int n, int hold_ms){
     static uint32_t nm = 0;
+    if (!g_game.lan_start){ fprintf(stderr, "[srvcycle] the game has no LAN server glue (game.h)\n"); return n; }
     if (!nm) nm = com_scratch(64);
-    GuestMod *m = &g_mods[0];
     int bad = 0;
     for (int i = 1; i <= n; i++){
+        int was[MOD_MAX];                        /* the modules the start loads must be gone after the stop */
+        for (int k = 0; k < NMOD; k++) was[k] = g_mods[k].mapped;
         uint64_t t0 = win32_ext_threads(), e0 = win32_ext_threads_exited();
         uint32_t h0 = win32_heap_live(); int tls0 = win32_tls_in_use(), ob0 = win32_obj_live();
         snprintf((char *)(g_mem + nm), 64, "CYCLE%02d", i);
-        uint32_t ecx = c->ecx; c->ecx = 0x0089CF48u;
-        uint32_t ok = call_guest(c, 0x005FA300u, 1, &nm) & 0xFFu;
+        uint32_t ecx = c->ecx; c->ecx = g_game.lan_obj;
+        uint32_t ok = call_guest(c, g_game.lan_start, 1, &nm) & 0xFFu;
         c->ecx = ecx;
-        uint32_t isrun = MR32(0x00890128u), running = isrun ? call_guest(c, isrun, 0, 0) & 0xFFu : 0u;
+        uint32_t isrun = MR32(g_game.lan_running), running = isrun ? call_guest(c, isrun, 0, 0) & 0xFFu : 0u;
         if (hold_ms > 0) guest_sleep_ns((int64_t)hold_ms * 1000000);
         uint32_t t1 = (uint32_t)(win32_ext_threads() - t0);
-        c->ecx = 0x0089CF48u;
-        call_guest(c, 0x005F08F0u, 0, 0);
+        c->ecx = g_game.lan_obj;
+        call_guest(c, g_game.lan_stop, 0, 0);
         c->ecx = ecx;
         guest_sleep_ns((int64_t)100 * 1000000);  /* threads that were told to end, end */
         uint32_t ended = (uint32_t)(win32_ext_threads_exited() - e0);
         int dh = (int)(win32_heap_live() - h0), dtls = win32_tls_in_use() - tls0, dob = win32_obj_live() - ob0;
-        int fail = !ok || !running || m->mapped || ended != t1 || dtls != 0;
+        int left = 0;
+        for (int k = 0; k < NMOD; k++) left += g_mods[k].mapped && !was[k];
+        int fail = !ok || !running || left || ended != t1 || dtls != 0;
         bad += fail;
         fprintf(stderr, "[srvcycle] %d/%d start=%u running=%u threads +%u started, %u ended; loaded after stop=%d;"
                         " heap %+d KB, TLS indices %+d, object slots %+d%s\n",
-                i, n, ok, running, t1, ended, m->mapped, dh / 1024, dtls, dob, fail ? "  FAIL" : "");
+                i, n, ok, running, t1, ended, left, dh / 1024, dtls, dob, fail ? "  FAIL" : "");
     }
     fprintf(stderr, "[srvcycle] %d cycles, %d failed\n", n, bad);
     return bad;
@@ -399,6 +433,7 @@ int module_test_cycle(CPU *c, int n, int hold_ms){
 /* tests/srvoracle.c: map and bind the module without running DllMain (the
  * differential test calls single functions of the lifted code). */
 uint32_t module_map_for_test(const char *name){
+    module_init();
     GuestMod *m = by_name(name);
     uint32_t err = 0;
     if (!m || !mod_lifted(m) || !map_image(m, &err)) return 0;

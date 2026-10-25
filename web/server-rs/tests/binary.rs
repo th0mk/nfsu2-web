@@ -383,6 +383,87 @@ async fn the_binary_with_online_and_the_hub_off_and_one_place() {
     assert_eq!(rust.exit, Some(0));
 }
 
+/// the status of GET `path` (Host: localhost)
+async fn status_of(port: u16, path: &str) -> u16 {
+    let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let q = format!("GET {path} HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
+    s.write_all(q.as_bytes()).await.unwrap();
+    let mut r = Vec::new();
+    s.read_to_end(&mut r).await.unwrap();
+    String::from_utf8_lossy(&r).get(9..12).and_then(|c| c.parse().ok()).unwrap_or(0)
+}
+
+/// what the binary prints with these arguments, and its exit code
+fn printed(args: &[&str]) -> (String, String, Option<i32>) {
+    let o = Command::new(env!("CARGO_BIN_EXE_nfsu2-server")).args(args).output().expect("the binary runs");
+    (String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned(), o.status.code())
+}
+
+// --game mw on a made-up Most Wanted folder (its program in lower case, beside a mod loader, a widescreen fix's
+// scripts and the SAVE folder it writes profiles into): the start-up lines, no Online mode (the game has none yet),
+// of the folder only the game's own entries listed and served; --print-entries for both games, with no folder; a
+// folder of the other game refused
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_binary_for_most_wanted() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tmp.path().join("mw");
+    for d in ["GLOBAL", "SOUND/PFDATA", "SAVE", "scripts"] {
+        std::fs::create_dir_all(data.join(d)).unwrap();
+    }
+    for (f, text) in [
+        ("speed.exe", "MZ"),
+        ("GLOBAL/a.bin", "a"),
+        ("SOUND/PFDATA/m.mus", "m"),
+        ("SAVE/profile", "SECRET"),
+        ("scripts/fix.ini", "SECRET"),
+        ("dinput8.dll", "SECRET"),
+        ("foobar", ""),
+    ] {
+        std::fs::write(data.join(f), text).unwrap();
+    }
+    let wasm = tmp.path().join("nfsmw.wasm");
+    std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
+    let (port, state) = (free_port(), tmp.path().join("state"));
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--game", "mw"]), port);
+    srv.ready().await;
+    let lines = srv.lines();
+    let first = lines.iter().position(|l| l == "NFSMW web server").expect("the start-up lines");
+    let startup = &lines[first..];
+    assert_eq!(startup[1], format!("  game data : {} (6 entries of the game's own)", data.to_string_lossy()), "{startup:?}");
+    assert_eq!(startup[2], format!("  game.wasm : {}", wasm.to_string_lossy()));
+    assert!(startup.contains(&"  online    : off (this server has no Online mode for NFS Most Wanted yet)".to_string()), "{startup:?}");
+    assert!(startup.iter().any(|l| l.starts_with("  free roam : the hub at 10.77.0.253 on the switch")));
+    let (_, m) = srv.get("/data-manifest").await;
+    let m: Value = serde_json::from_str(&m).unwrap();
+    let ps: Vec<&str> = m["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();
+    assert_eq!(ps, ["GLOBAL", "GLOBAL/a.bin", "SOUND", "SOUND/PFDATA", "SOUND/PFDATA/m.mus", "speed.exe"]);
+    assert_eq!(srv.get("/data/speed.exe").await.1, "MZ");
+    for p in ["/data/SAVE/profile", "/data/scripts/fix.ini", "/data/dinput8.dll", "/data/foobar", "/data/SPEED2.EXE"] {
+        assert_eq!(status_of(port, p).await, 404, "{p}");
+    }
+    assert_eq!(srv.players().await, r#"{"players":0,"online":null,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);
+    assert_eq!(srv.stop().await, Some(0));
+
+    // the entries each game's folder is served by, one a line, with no folder
+    let ug2 = "speed2.exe server.dll server.cfg cars credits frontend global langpacks languages memcard movies nis pfdata sound speech \
+               subtitles texpacks tracks";
+    let mw = "speed.exe server.dll server.cfg cars credits frontend global languages memcard movies nis sound subtitles tracks";
+    let cases: [(&[&str], &str); 3] =
+        [(&["--print-entries"], ug2), (&["--game", "mw", "--print-entries"], mw), (&["--print-entries", "--game", "ug2"], ug2)];
+    for (args, want) in cases {
+        let (out, err, code) = printed(args);
+        assert_eq!((out.lines().collect::<Vec<_>>(), err.as_str(), code), (want.split_whitespace().collect(), "", Some(0)), "{args:?}");
+    }
+    let (_, err, code) = printed(&["--game", "nfs6", "--print-entries"]);
+    assert_eq!((err.trim_end(), code), ("--game: ug2 or mw", Some(1)));
+    // the other game's folder: no Most Wanted program in it
+    let (ug2_data, _) = game_folder(tmp.path());
+    let ug2_data = ug2_data.to_string_lossy().into_owned();
+    let (_, err, code) = printed(&["--game", "mw", "--data", &ug2_data, "--state", &state.to_string_lossy()]);
+    let usage = format!("usage: nfsu2-server --game mw --data \"<folder with speed.exe>\"  (got: {ug2_data})");
+    assert_eq!((err.trim_end(), code), (usage.as_str(), Some(1)));
+}
+
 /// the lobby trace's lines without their times (and the start line's date) and the game's own port, sorted: the
 /// switch and the Online host write theirs from threads of their own
 fn trace_lines(f: &Path, game_port: u16) -> Vec<String> {

@@ -20,6 +20,7 @@
  * closing its link at exit (the log line, checked by the .mjs).  Also SHA-256 (runtime/web/sha256.c) against FIPS
  * 180-4 vectors.  Output: one line per check, then "lan_unit: N passed, M failed". */
 #include "cpu.h"
+#include "game.h"
 #include "winsock.h"
 #include "net_proto.h"
 #include <stdarg.h>
@@ -34,7 +35,10 @@ int vlan_test_pump(void);
 void nfsu2_sha256(const void *data, size_t n, uint8_t out[32]);
 void mem_commit(uint32_t, uint32_t);
 
-void sub_0074b730_orig(CPU *c){ (void)c; }
+/* the game winsock.c serves: UG2's Online host (no exe image here, so
+ * winsock.c leaves it alone) */
+const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2",
+                         .online_host_va = 0x007fbdbcu, .online_host = "pcnfs05.ea.com" };
 void win32_set_last_error(CPU *c, uint32_t e){ if (c && c->fs_base) MR32(c->fs_base + 0x34u) = e; }
 uint32_t win32_get_last_error(CPU *c){ return c && c->fs_base ? MR32(c->fs_base + 0x34u) : 0u; }
 void guest_wait_begin(void){ }

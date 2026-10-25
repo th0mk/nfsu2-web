@@ -216,6 +216,18 @@ def abi_liveness(g, ent, callee_in, returns_flags):
     return live_in.get(ent, F_ALL), after, call_after
 
 _FTOL2INL = __import__('os').environ.get('FTOL2INL', '') == '1'
+# the CRT's _ftol2 that FTOL2INL inlines: FTOL2_VA from games/<id>/game.conf (gen.sh), UG2's by default
+_FTOL2_VA = int(__import__('os').environ.get('FTOL2_VA', '0x0075BED4'), 16)
+# LOCKSTRIP=1 (games/<id>/game.conf, gen.sh): a lock prefix on a read-modify-
+# write of memory is lifted as the plain instruction.  capstone names it
+# "lock xadd", which matched no handler and trapped (MW's PATH audio library).
+# Guest threads run one at a time (the GIL changes hands only at blocking
+# waits), so the plain read-modify-write is atomic for them.  A lock on any
+# other instruction or on a register destination is #UD on the CPU and stays
+# a trap.  Off for UG2, whose 4 `lock or` sites are data decoded as code.
+_LOCKSTRIP = __import__('os').environ.get('LOCKSTRIP', '') == '1'
+_LOCKABLE = ('add', 'adc', 'and', 'btc', 'btr', 'bts', 'cmpxchg', 'cmpxchg8b', 'dec', 'inc', 'neg', 'not',
+             'or', 'sbb', 'sub', 'xadd', 'xchg', 'xor')
 def _retpast():
     """tools/retpast.txt, next to this file: callees that can return past their caller"""
     import os as _os
@@ -569,6 +581,8 @@ class Lifter:
 
     def insn(self, i, targets):
         m=i.mnemonic; ops=i.operands; o=ops
+        if _LOCKSTRIP and m[:5] == 'lock ' and m[5:] in _LOCKABLE and ops and ops[0].type == X86_OP_MEM:
+            m = m[5:]
         E=lambda k: self.rd(o[k]); W=lambda k,v: self.wr(o[k],v)
         bits = (o[0].size*8) if o else 32
         L=[]
@@ -686,7 +700,7 @@ class Lifter:
                     self.oob_calls = getattr(self,'oob_calls',0)+1
                     return [f"PUSH32(0x{i.address+i.size:x}u); dispatch_indirect(c, 0x{t & 0xffffffff:x}u);"]
                 targets.add(t)
-                if t == 0x0075bed4 and _FTOL2INL:
+                if t == _FTOL2_VA and _FTOL2INL:
                     # FTOL2INL=1: the CRT's _ftol2 in place (cpu.h FTOL2_INL), not a call
                     return [f"PUSH32(0x{i.address+i.size:x}u); FTOL2_INL(c);"]
                 if t in self.retpast:

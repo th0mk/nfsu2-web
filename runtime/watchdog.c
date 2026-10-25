@@ -6,8 +6,8 @@
  *
  *   NFSU2_WATCHDOG=<s>   seconds without a Present before the report
  *                        (default 15; 0 turns the watchdog off).  While the
- *                        game is loading (GameFlow [0x8654a4] other than
- *                        3 = front end and 6 = in game) the limit is at
+ *                        game is loading (its flow state, game.h, neither
+ *                        the front end nor in game) the limit is at
  *                        least 20 s.  It used to be 60 s, and players stuck
  *                        on a loading screen reloaded before the report
  *                        came; a first load that waits on the network for
@@ -26,6 +26,7 @@
  * last frame, no report), so the log gets how long ago the last frame was
  * and, after 3 s or more, the report then. */
 #include "cpu.h"
+#include "game.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -113,7 +114,7 @@ __attribute__((weak)) int lifecycle_game_parked(void){ return 0; }
  * before it makes the file.  Also with NFSU2_WATCHDOG=0. */
 void watchdog_log_download(void){
     uint64_t last = atomic_load(&g_wd_present_us);
-    uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
+    uint32_t flow = game_flow();
     if (!last) fprintf(stderr, "[watchdog] log downloaded before the first frame (game flow %u)\n", flow);
     else {
         double ago = wd_since_s(wd_now_us(), last);
@@ -137,8 +138,8 @@ static void *wd_main(void *arg){
             atomic_store(&g_wd_present_us, wd_now_us());   /* the limit restarts on return */
             reported = 0; continue; }
         double stalled = wd_since_s(wd_now_us(), last);
-        uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
-        double l = (flow == 3u || flow == 6u) ? lim : (lim > 20.0 ? lim : 20.0);
+        uint32_t flow = game_flow();
+        double l = (flow == g_game.flow_fe || flow == g_game.flow_race) ? lim : (lim > 20.0 ? lim : 20.0);
         if (stalled < l){ reported = 0; continue; }
         if (!reported){ reported = 1; wd_report(stalled, flow); }
     }

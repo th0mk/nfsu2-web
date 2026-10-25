@@ -18,8 +18,9 @@ use crate::buddy::{Buddies, BuddyLimits};
 use crate::lobby::{Limits, Lobby};
 use crate::stats::{Stats, StatsOptions};
 use crate::timers::{Action, TimerId, Timers};
+use crate::title::Title;
 use crate::vhost::{Listener, VHost, VhostLimits};
-use crate::{Clocks, LogFn, PORT_BUDDY, PORT_HTTP, PORT_LOBBY, PORT_REDIRECTOR};
+use crate::{Clocks, LogFn, PORT_BUDDY, PORT_HTTP, PORT_LOBBY};
 
 /// what the core is given (`OnlineOptions`, and the limits: the defaults in the server, the tests' own)
 pub struct CoreOptions {
@@ -33,6 +34,8 @@ pub struct CoreOptions {
 }
 
 pub struct Core {
+    /// the game's Online mode: what the services say and check that is the game's own
+    pub title: &'static Title,
     pub clocks: Rc<Clocks>,
     pub log: LogFn,
     pub tap: Option<Tap>,
@@ -61,14 +64,22 @@ pub struct Core {
 }
 
 impl Core {
+    /// NFS Underground 2's Online mode (title.rs UG2)
+    #[cfg(test)]
     pub fn new(o: CoreOptions) -> Core {
+        Core::new_for(&crate::title::UG2, o)
+    }
+
+    /// the game's Online mode that `title` holds
+    pub fn new_for(title: &'static Title, o: CoreOptions) -> Core {
         let mut vh = VHost::new(o.vhost);
-        vh.listen(PORT_REDIRECTOR, Listener::Redirector);
+        vh.listen(title.port_redirector, Listener::Redirector);
         vh.listen(PORT_LOBBY, Listener::Lobby);
         vh.listen(PORT_BUDDY, Listener::Buddy);
         vh.listen(PORT_HTTP, Listener::Http);
-        let stats = Stats::new(StatsOptions::new(o.state_dir.clone(), o.clocks.clone(), o.log.clone()));
+        let stats = Stats::new(StatsOptions { title, ..StatsOptions::new(o.state_dir.clone(), o.clocks.clone(), o.log.clone()) });
         let mut core = Core {
+            title,
             clocks: o.clocks,
             log: o.log,
             tap: o.tap,
@@ -80,7 +91,7 @@ impl Core {
             timers: Timers::default(),
             tick_timer: None,
             vh,
-            lobby: Lobby::new(o.limits),
+            lobby: Lobby::new(o.limits, title.rooms),
             buddies: Buddies::new(o.state_dir, o.buddy_limits),
             stats,
             #[cfg(test)]

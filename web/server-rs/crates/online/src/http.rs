@@ -1,8 +1,8 @@
 //! The online host's web pages (port 80 of 10.77.0.1): the two addresses the server config hands the game
-//! (lobby.rs `config_fields`), NEWSURL and TOSURL.  The game fetches them with its own HTTP/1.0 client (ProtoHTTP)
-//! and runs the answer through EA's "web offer" script engine: a %{ CMD=... %} header line with the command and its
-//! fields, then the text.  Only the "news" command is ever served (a title, the text, one button that closes the
-//! page); never "card" (a credit-card form) or "prom", nor anything that collects input.
+//! (lobby.rs `config_fields`), NEWSURL (the title's news page) and TOSURL.  The game fetches them with its own
+//! HTTP/1.0 client (ProtoHTTP) and runs the answer through EA's "web offer" script engine: a %{ CMD=... %} header line
+//! with the command and its fields, then the text.  Only the "news" command is ever served (a title, the text, one
+//! button that closes the page); never "card" (a credit-card form) or "prom", nor anything that collects input.
 //!
 //! One GET per connection, at most 4 KB of request, answered and closed.  The pages hold nothing about any player.
 
@@ -11,12 +11,13 @@ use crate::jsx;
 use crate::timers::{Action, TimerId};
 use crate::vhost::{ConnId, Svc};
 
-struct Page {
+pub(crate) struct Page {
     title: &'static str,
     text: &'static str,
 }
 
-const NEWS: Page = Page {
+/// NFS Underground 2's news page (title.rs UG2)
+pub(crate) const NEWS: Page = Page {
     title: "NFSU2 Online",
     // the welcome, then only the important changes from the original game; CRLF breaks a line (the box scrolls),
     // latin1: plain quotes and hyphens only
@@ -98,7 +99,7 @@ impl Core {
         let line = jsx::latin1_decode(&h.buf[..first]);
         let m = request_line(&line);
         let page = m.and_then(|(_, p)| match p.to_lowercase().as_str() {
-            "/news" => Some(&NEWS),
+            "/news" => Some(self.title.news),
             "/tos" => Some(&TOS),
             _ => None,
         });

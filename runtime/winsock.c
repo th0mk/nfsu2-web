@@ -38,11 +38,11 @@
  * Online (the game's Online menu, browser only): the server runs its own
  * stand-in for EA's long-gone servers at 10.77.0.1 on the virtual LAN
  * (web/server-rs/crates/online).  NFSU2_ONLINE (default on in the browser, off on the
- * Mac, whose hub has no such host; 0/off turns it off): in vlan mode the guest
- * string "*pcnfs05.ea.com" at 0x7FBDBC becomes "pcnfs05.ea.com" in guest
- * memory (the '*' asks DirtySock for SSL 2.0 on port 20921, which the server
- * does not speak: without it the lobby link is plain TCP to 20920), and
- * gethostbyname("pcnfs05.ea.com") answers 10.77.0.1.  Every other name stays
+ * Mac, whose hub has no such host; 0/off turns it off): in vlan mode the game's
+ * lobby host string (game.h; UG2: "*pcnfs05.ea.com" at 0x7FBDBC) loses its
+ * '*' in guest memory (the '*' asks DirtySock for SSL 2.0 on port 20921,
+ * which the server does not speak: without it the lobby link is plain TCP to
+ * 20920), and gethostbyname of that name answers 10.77.0.1.  Every other name stays
  * unresolved.  Off: the name is not found and the game shows its own "cannot
  * connect" message.
  * In a test or debug run "lan" is refused and becomes "loopback": that is
@@ -80,6 +80,8 @@
  * WSAGetLastError / WSASetLastError use the thread's TEB+0x34, the same slot
  * as GetLastError on Windows (runtime/win32.c). */
 #include "cpu.h"
+#include "game.h"
+#include "memmap.h"
 #include "winsock.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -285,9 +287,9 @@ void winsock_test_reset(void);
 #include "nettest.h"
 static int ws_harness(void){ return nfsu2_test_run(); }
 
-/* ---- online: the server's own stand-in at 10.77.0.1 (see the top) ---- */
-#define ONLINE_HOST_VA 0x7FBDBCu                  /* SPEED2.EXE v1.2 NA: LobbyConnect's host, 0x588630 */
-#define ONLINE_HOST    "pcnfs05.ea.com"
+/* ---- online: the server's own stand-in at 10.77.0.1 (see the top) ----
+ * The lobby host's name and where the exe keeps it are the game's (game.h
+ * online_host, online_host_va; UG2: "*pcnfs05.ea.com" at 0x7FBDBC). */
 #define ONLINE_LOBBY   20922u                     /* its lobby's port (nfsu2-online PORT_LOBBY) */
 void online_lobby_read(uint32_t link, const uint8_t *p, int n);   /* online.c: the persona the server gave */
 void olfilter_lobby_mark(uint32_t link, uint8_t *p, int n);       /* olfilter.c: a search with the player's Filter */
@@ -298,16 +300,20 @@ static int env_off(const char *v){
 }
 /* the lobby host string without its '*' (no SSL): guest data, at run time; the file is never touched */
 static void online_patch(void){
-    static const char secure[16] = "*" ONLINE_HOST, plain[16] = ONLINE_HOST;
-    if (!gok(ONLINE_HOST_VA, 16)) return;                  /* not the game (a test harness) */
-    if (!memcmp(g_mem + ONLINE_HOST_VA, plain, 16)) return;
-    if (memcmp(g_mem + ONLINE_HOST_VA, secure, 16)){
-        ws_log("online: the lobby host at 0x%08x is not \"*%s\" (another game version?): online stays off", ONLINE_HOST_VA, ONLINE_HOST);
+    const char *host = g_game.online_host; uint32_t va = g_game.online_host_va;
+    if (!host || !va){ g_online = 0; return; }             /* the game has no Online lobby we know */
+    char secure[64] = "", plain[64] = "";                  /* the strings with their NULs, zero-padded */
+    snprintf(secure, sizeof secure, "*%s", host); snprintf(plain, sizeof plain, "%s", host);
+    uint32_t n = (uint32_t)strlen(secure) + 1u;           /* UG2: 16 bytes */
+    if (!gok(va, n)) return;                               /* not the game (a test harness) */
+    if (!memcmp(g_mem + va, plain, n)) return;
+    if (memcmp(g_mem + va, secure, n)){
+        ws_log("online: the lobby host at 0x%08x is not \"*%s\" (another game version?): online stays off", va, host);
         g_online = 0; return;
     }
-    memcpy(g_mem + ONLINE_HOST_VA, plain, 16);
+    memcpy(g_mem + va, plain, n);
     ws_log("online: on (NFSU2_ONLINE): the lobby link is plain TCP to %s:20920, which is the server's own host 10.77.0.1",
-           ONLINE_HOST);
+           host);
 }
 static void ws_config(void){
     if (g_initted) return;
@@ -1865,9 +1871,9 @@ out:
 }
 
 /* ---- names ---- */
-#define GBUF_BASE 0x00BE0000u     /* guest memory of this HLE: per-thread hostent / inet_ntoa */
-#define GBUF_SLOT 512u
-#define GBUF_N    64
+#define GBUF_BASE MM_WSBUF_BASE  /* guest memory of this HLE: per-thread hostent / inet_ntoa (memmap.h) */
+#define GBUF_SLOT MM_WSBUF_SLOT
+#define GBUF_N    MM_WSBUF_N
 static uint32_t g_gbuf_teb[GBUF_N];
 static uint32_t gbuf(CPU *c){
     uint32_t teb = c ? c->fs_base : 0;
@@ -1917,10 +1923,10 @@ static uint32_t ws_gethostbyname(CPU *c){
     if (own_name(name)){ n = own_addrs(ips); return make_hostent(c, g_ws_id.name, ips, n); }
     if (!strcasecmp(name, "localhost")){ ips[0] = mkip(127, 0, 0, 1); return make_hostent(c, g_ws_id.name, ips, 1); }
     if (inet_pton(AF_INET, name, &a) == 1){ ips[0] = a.s_addr; return make_hostent(c, name, ips, 1); }
-    if (g_online && !strcasecmp(name, ONLINE_HOST)){       /* the server's online host (see the top) */
+    if (g_online && g_game.online_host && !strcasecmp(name, g_game.online_host)){   /* the server's online host (see the top) */
         static int said;
-        if (!said++) ws_log("online: %s is the server's online host 10.77.0.1", ONLINE_HOST);
-        ips[0] = mkip(10, 77, 0, 1); return make_hostent(c, ONLINE_HOST, ips, 1);
+        if (!said++) ws_log("online: %s is the server's online host 10.77.0.1", g_game.online_host);
+        ips[0] = mkip(10, 77, 0, 1); return make_hostent(c, g_game.online_host, ips, 1);
     }
     if (g_ws_mode != NET_LAN){
         st_blocked++;
@@ -2013,27 +2019,6 @@ static uint32_t ws_netbios(CPU *c){
     if (MR8(ncb) & 0x80){ static int said; if (!said++) ws_log("Netbios ASYNCH: completed synchronously"); }
     MR8(ncb + 1) = rc; MR8(ncb + 0x31) = rc;
     return rc;
-}
-
-/* ======================================================================= */
-/* DirtySock's clock                                                        */
-/* ======================================================================= */
-/* NetTick (0x74B730) is SPEED2.EXE's `jmp [GetTickCount]` for all of EA's
- * network code: 60 call sites at 0x73DE1C-0x75BB12 (adverts and their
- * expiry, CommUDP / NetGameLink retransmits, keepalives and timeouts, pings,
- * lobby timers, the lobby challenge code); no game-simulation code calls it.
- * The HLE's GetTickCount is the frame-paced virtual clock, which nearly
- * stops while the game thread does not present (race loading, hitches).  On
- * Windows the network thread keeps real time meanwhile, and a Windows peer
- * expects the Mac to: so NetTick returns real monotonic milliseconds.
- * NFSU2_NETTICK=virtual restores the old clock. */
-void sub_0074b730_orig(CPU *c);
-void sub_0074b730(CPU *c){
-    static int virt = -1;
-    if (virt < 0){ const char *e = getenv("NFSU2_NETTICK"); virt = e && !strcmp(e, "virtual"); }
-    if (virt){ sub_0074b730_orig(c); return; }
-    POP32(c->eip);
-    c->eax = (uint32_t)(ws_now_us() / 1000ull);
 }
 
 /* ======================================================================= */

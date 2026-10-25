@@ -40,6 +40,8 @@
 #include <unicorn/unicorn.h>
 
 /* ---- what module.c and the lifted shards need from the runtime --------- */
+#include "game.h"
+const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2" };
 const uint32_t g_imp_count = 0;
 static char g_dll[1024];
 int fileio_resolve_game(const char *win, char *out, size_t n){ (void)win; snprintf(out, n, "%s", g_dll); return 1; }

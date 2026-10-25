@@ -1,6 +1,8 @@
 /* Win32 layer - second round: registry, window, synchronization, threads */
 #include <strings.h>
 #include "cpu.h"
+#include "game.h"
+#include "memmap.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,7 +22,7 @@ uint32_t res_data(uint32_t);
 uint32_t res_size(uint32_t);
 
 /* ---- object table (HANDLE -> kind/state) ---- */
-#define H_BASE 0x00A00000u
+#define H_BASE MM_H_BASE                  /* the game's object handle values (memmap.h) */
 typedef enum { OB_NONE=0, OB_EVENT, OB_MUTEX, OB_THREAD, OB_FILE, OB_KEY, OB_SEM } ObKind;
 typedef struct {
     ObKind kind; int signaled; int manual;
@@ -46,14 +48,15 @@ typedef struct {
  * starts for every race load, so one slot per load stays in use (measured:
  * +1 per load, heap-07); 512 would have run out after ~500 loads.  Since
  * then a full table takes such a thread's slot back (obj_reclaim). */
-#define OBJ_MAX 4096
+#define OBJ_MAX MM_H_MAX
 static Obj g_obj[OBJ_MAX];
 static int g_obj_n = 1;
 /* A handle is H_BASE + gen * OBJ_MAX + slot.  gen stays 0 until obj_reclaim
  * gives a slot to a new object: the reclaimed thread's handle then names
  * nothing (a late CloseHandle or wait on it is that of a closed handle and
- * cannot reach the slot's new object).  Handles stay below 0x00B00000. */
-#define OBJ_GENS 256u
+ * cannot reach the slot's new object).  The game's handle range holds
+ * MM_H_GENS generations (memmap.h): handles stay below 0x00B00000. */
+#define OBJ_GENS MM_H_GENS
 static int obj_slot(uint32_t h){                /* -1: not ours, or an older generation's */
     uint32_t d = h - H_BASE;                     /* below H_BASE wraps past the range */
     if (d >= OBJ_GENS * OBJ_MAX) return -1;
@@ -686,7 +689,7 @@ static void cs_owned(pthread_mutex_t *m, uint32_t tid, int d){
 }
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
 static uint32_t g_wndproc = 0;
-static uint32_t g_hwnd    = 0x00B00001u;
+static uint32_t g_hwnd    = MM_HWND_GAME;
 #define WMQ 256
 static struct { uint32_t msg, wp, lp; } g_wmq[WMQ];
 static int g_wmq_head = 0, g_wmq_tail = 0;
@@ -919,41 +922,88 @@ static Obj *obj_get(uint32_t h){
 }
 
 /* ---- guest thread ---- */
-#define GTHREAD_STACK 0x00100000u          /* 1 MB */
-#ifdef __wasm__
-static uint32_t g_tstack_next = 0x06000000u;   /* wasm: 16 x 1 MB below the heap (cpu.h) */
-#else
-static uint32_t g_tstack_next = 0x60000000u;
-#endif
+#define GTHREAD_STACK MM_TSTACK_SIZE      /* 1 MB */
+static uint32_t g_tstack_next = MM_TSTACK_LO;   /* wasm: 32 x 1 MB below the heap (memmap.h) */
 uint64_t g_threads_started = 0, g_threads_exited = 0;
 /* v12na: TEBs (0x2000 each from 0x00C20000; 0x00C60000 belongs to the timer
  * thread) and 1 MB stacks are recycled when a thread ends.  Both used to be
  * bump-allocated, and the game starts a thread per race load: after ~30
  * loads a new thread's TEB would have landed on the timer thread's, and the
  * stacks would eventually have run into the main stack at 0x7F000000. */
-#define TEB_TIMER 0x00C60000u
+#define TEB_TIMER MM_TEB_TIMER
 static uint32_t g_teb_free[256], g_stk_free[256]; static int g_nteb_free = 0, g_nstk_free = 0;
-static uint32_t g_teb_next = 0x00C20000u;
-static uint64_t g_teb_reused = 0;
+static uint32_t g_teb_next = MM_TEB_FIRST;
+static uint64_t g_teb_reused = 0, g_thread_refused = 0;
+/* Both ranges are bounded (memmap.h): the TEBs end where the next region
+ * starts (MW's server.dll), the stacks where the heap starts.  0 = none left:
+ * CreateThread then fails as on Windows instead of overrunning them. */
 static uint32_t teb_take(void){                       /* g_lock held */
     if (g_nteb_free){ g_teb_reused++; return g_teb_free[--g_nteb_free]; }
-    if (g_teb_next == TEB_TIMER) g_teb_next += 0x2000u;
-    uint32_t t = g_teb_next; g_teb_next += 0x2000u;
+    if (g_teb_next == TEB_TIMER) g_teb_next += MM_TEB_SIZE;
+    if (g_teb_next + MM_TEB_SIZE > MM_TEB_HI) return 0;
+    uint32_t t = g_teb_next; g_teb_next += MM_TEB_SIZE;
     return t;
 }
 static uint32_t stack_take(void){                     /* g_lock held */
     if (g_nstk_free) return g_stk_free[--g_nstk_free];
+    if (g_tstack_next + GTHREAD_STACK > MM_TSTACK_HI) return 0;
     uint32_t s0 = g_tstack_next; g_tstack_next += GTHREAD_STACK;
     return s0;
+}
+/* A thread that cannot have a stack or a TEB is not started, loudly. */
+static void thread_refused(CPU *c, uint32_t entry, int no_stack){
+    uint64_t n = __sync_add_and_fetch(&g_thread_refused, 1);
+    if (n > 20) return;
+    fprintf(stderr, "[thread] REFUSED: CreateThread(entry 0x%08x) gets NULL (ERROR_NOT_ENOUGH_MEMORY): ", entry);
+    if (no_stack) fprintf(stderr, "all %u thread stacks 0x%08x-0x%08x are in use", (MM_TSTACK_HI - MM_TSTACK_LO) / GTHREAD_STACK,
+                          MM_TSTACK_LO, MM_TSTACK_HI);
+    else fprintf(stderr, "all TEBs 0x%08x-0x%08x are in use", MM_TEB_FIRST, MM_TEB_HI);
+    fprintf(stderr, " (%llu threads running)%s\n", (unsigned long long)(g_threads_started - g_threads_exited),
+            n == 20 ? "; no more of these lines" : "");
+    void win32_set_last_error(CPU *, uint32_t);
+    if (c) win32_set_last_error(c, 8u);
 }
 static void thread_report(void){
     fprintf(stderr, "  threads           : %llu started, %llu ended; TEBs %llu reused (next 0x%08x), %d stacks free;"
                     " critical sections %d of %d\n",
             (unsigned long long)g_threads_started, (unsigned long long)g_threads_exited,
             (unsigned long long)g_teb_reused, g_teb_next, g_nstk_free, g_cs_used, MAXCS);
+    if (g_thread_refused) fprintf(stderr, "  threads refused   : %llu (no stack or TEB left)\n", (unsigned long long)g_thread_refused);
 #ifdef __wasm__
     win32_gil_report();
 #endif
+}
+/* NFSU2_THREAD_TEST=<n>[:<ms>]: the thread bounds' test, before the game
+ * starts (runtime/web/main_web.c).  n guest threads made through the exe's
+ * own CreateThread import, each running its Sleep import for ms (3000), so
+ * all of them are alive at once; one that gets no stack or TEB is refused as
+ * the game would see it.  The game starts once they have ended.  In the
+ * browser each thread takes a worker: n beyond the page's pool (24, the test
+ * page's pool=) would wait for one with the guest lock held. */
+void win32_thread_test(CPU *c){
+    const char *e = getenv("NFSU2_THREAD_TEST");
+    if (!e || !*e) return;
+    int n = atoi(e); const char *m = strchr(e, ':');
+    uint32_t ms = m ? (uint32_t)strtoul(m + 1, 0, 0) : 3000u;
+    uint32_t win32_import_va(const char *), call_guest(CPU *, uint32_t, int, const uint32_t *);
+    uint32_t create = win32_import_va("CreateThread"), sleep_ = win32_import_va("Sleep");
+    if (!create || !sleep_){ fprintf(stderr, "[thread] test: the exe imports no CreateThread or Sleep\n"); return; }
+    int made = 0, refused = 0; uint32_t top = 0;
+    guest_lock(c);
+    for (int i = 0; i < n; i++){
+        const uint32_t a[6] = { 0, 0, sleep_, ms, 0, 0 };
+        uint32_t h = call_guest(c, create, 6, a);
+        Obj *o = obj_get(h);
+        if (!o){ refused++; continue; }
+        made++;
+        if (o->stack_lo + GTHREAD_STACK > top) top = o->stack_lo + GTHREAD_STACK;
+    }
+    guest_unlock();
+    fprintf(stderr, "[thread] test: %d threads asked for, %d started, %d refused; the highest stack ends at 0x%08x"
+                    " (thread stacks 0x%08x-0x%08x, heap from 0x%08x)\n", n, made, refused, top,
+            MM_TSTACK_LO, MM_TSTACK_HI, MM_HEAP_LO);
+    for (uint32_t w = 0; w < ms / 10u + 1000u && g_threads_exited < (uint64_t)made; w++) usleep(10000);
+    fprintf(stderr, "[thread] test: %llu of them have ended; the game starts\n", (unsigned long long)g_threads_exited);
 }
 /* The thread ended (its entry returned, ExitThread, or a TerminateThread
  * request honoured): CPU slot, COM's cached CPU, TEB and stack given back,
@@ -985,7 +1035,7 @@ static void thread_finish(Obj *o, uint32_t code, CPU *c){
         pthread_mutex_lock(&g_lock); g_free[g_nfree++] = (int)(o - g_obj); pthread_mutex_unlock(&g_lock); }
 }
 
-typedef struct { uint32_t entry, arg, teb; Obj *ob; } TArg;
+typedef struct { uint32_t entry, arg, teb, stack; Obj *ob; } TArg;   /* TEB and stack: taken by CreateThread */
 
 void mem_altstack_install(void);
 /* Guest threads need a BIG stack: in lifted code every guest call is a host
@@ -1015,20 +1065,16 @@ static void *guest_thread_main(void *p){
     mem_altstack_install();
     TArg *t = (TArg*)p;
     CPU cpu; memset(&cpu,0,sizeof cpu);
-    uint32_t stack_lo, stack_hi;
-    pthread_mutex_lock(&g_lock);
-    stack_lo = stack_take(); stack_hi = stack_lo + GTHREAD_STACK;
-    pthread_mutex_unlock(&g_lock);
-    if (t->ob) t->ob->stack_lo = stack_lo;
+    uint32_t stack_lo = t->stack, stack_hi = stack_lo + GTHREAD_STACK;
     mem_commit(stack_lo, GTHREAD_STACK);
     cpu.esp = stack_hi - 0x1000u;
     cpu.top = 0; cpu.fcw = 0x027f;   /* Windows default: PC=53, RC near, masked */
     cpu.fs_base = t->teb; cpu.gs_base = t->teb;
-    memset(g_mem + t->teb, 0, 0x2000);                /* a recycled TEB starts clean (TLS, last error) */
+    memset(g_mem + t->teb, 0, MM_TEB_SIZE);                /* a recycled TEB starts clean (TLS, last error) */
     /* TEB */
     MR32(t->teb+0x00)=0xFFFFFFFFu; MR32(t->teb+0x04)=stack_hi; MR32(t->teb+0x08)=stack_lo;
     MR32(t->teb+0x18)=t->teb; MR32(t->teb+0x24)=t->ob?t->ob->tid:0;
-    MR32(t->teb+0x2C)=t->teb+0x1000u; MR32(t->teb+0x30)=0x00C10000u;
+    MR32(t->teb+0x2C)=t->teb+0x1000u; MR32(t->teb+0x30)=MM_PEB;
     /* stdcall: arg, then the return address */
     { CPU *c=&cpu; PUSH32(t->arg); PUSH32(0xDEAD7EADu); }
     __sync_fetch_and_add(&g_threads_started, 1);
@@ -1103,6 +1149,7 @@ typedef struct {
 static Timer    g_tm[MAXTIMER];
 static uint32_t g_timer_next_id = 1;
 static int      g_timer_running = 0;
+static uint32_t g_timer_stack = 0;      /* taken by timeSetEvent before the thread starts */
 uint64_t        g_timer_ticks = 0;
 
 /* Timers must use GAME time too; otherwise, when the emulator is slow, the
@@ -1116,16 +1163,16 @@ static void *timer_thread_main(void *p){
     CPU cpu; memset(&cpu,0,sizeof cpu);
     uint32_t stack_lo, stack_hi, teb;
     pthread_mutex_lock(&g_lock);
-    stack_lo = g_tstack_next; g_tstack_next += GTHREAD_STACK; stack_hi = g_tstack_next;
-    teb = 0x00C60000u;
+    stack_lo = g_timer_stack; stack_hi = stack_lo + GTHREAD_STACK;
+    teb = TEB_TIMER;
     pthread_mutex_unlock(&g_lock);
     mem_commit(stack_lo, GTHREAD_STACK);
-    mem_commit(teb, 0x2000);
+    mem_commit(teb, MM_TEB_SIZE);
     cpu.top = 0; cpu.fcw = 0x027f;   /* Windows default: PC=53, RC near, masked */
     cpu.fs_base = teb; cpu.gs_base = teb;
     MR32(teb+0x00)=0xFFFFFFFFu; MR32(teb+0x04)=stack_hi; MR32(teb+0x08)=stack_lo;
     MR32(teb+0x18)=teb; MR32(teb+0x24)=999u;
-    MR32(teb+0x2C)=teb+0x1000u; MR32(teb+0x30)=0x00C10000u;
+    MR32(teb+0x2C)=teb+0x1000u; MR32(teb+0x30)=MM_PEB;
 
     for (;;){
         struct timespec ts = {0, 1000000L};      /* 1 ms */
@@ -1406,11 +1453,13 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         else if (!strcasecmp(vn,"~MHz")){
             const char *e = getenv("NFSU2_TSC_MHZ"); dval = e && *e ? (uint32_t)strtoul(e,0,0) : 3000u; have_d=1; }
         else if (!strcasecmp(vn,"Language"))      sval=language_registry();   /* runtime/language.c */
-        else if (!strcasecmp(vn,"Install Dir"))   sval="C:\\NFSU2";
-        else if (!strcasecmp(vn,"CD Drive"))      sval="C:\\NFSU2";
-        else if (!strcasecmp(vn,"StreamingInstall")){ dval=0; have_d=1; }
-        else if (!strcasecmp(vn,"VERSION"))       sval="1.2.0.0";
-        else if (!strcasecmp(vn,"SIZE")){ dval=0; have_d=1; }
+        else {                                    /* the game's install profile (runtime/game.h) */
+            for (const RegDefault *d = g_game.reg_defaults; d && d->name; d++)
+                if (!strcasecmp(vn, d->name)){
+                    if (d->str) sval = d->str; else { dval = d->dword; have_d = 1; }
+                    break;
+                }
+        }
 
         if (sval){
             uint32_t need = (uint32_t)strlen(sval) + 1u;
@@ -1484,10 +1533,10 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
             wm_push(0x000Fu, 0u, 0u);   /* WM_PAINT        */
         } }
     else if (!strcmp(n,"DestroyWindow")) r=1;
-    else if (!strcmp(n,"GetDesktopWindow")) r=0x00B00000u;
-    else if (!strcmp(n,"GetActiveWindow")||!strcmp(n,"GetForegroundWindow")) r=0x00B00001u;
-    else if (!strcmp(n,"LoadIconA")||!strcmp(n,"LoadCursorA")) r=0x00B10001u;
-    else if (!strcmp(n,"SetCursor")) r=0x00B10001u;
+    else if (!strcmp(n,"GetDesktopWindow")) r=MM_HWND_DESKTOP;
+    else if (!strcmp(n,"GetActiveWindow")||!strcmp(n,"GetForegroundWindow")) r=MM_HWND_GAME;
+    else if (!strcmp(n,"LoadIconA")||!strcmp(n,"LoadCursorA")) r=MM_HICON;
+    else if (!strcmp(n,"SetCursor")) r=MM_HICON;
     else if (!strcmp(n,"ShowCursor")){ static int cnt=0; r=(uint32_t)(A(c,0)?++cnt:--cnt); }
     else if (!strcmp(n,"GetCursorPos")){ uint32_t p=A(c,0);
         if(p){ int mx=0,my=0; void metal_get_cursor(int*,int*); metal_get_cursor(&mx,&my);
@@ -1672,8 +1721,20 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         { static int sh=0; if (getenv("VERBOSE") && sh<40){ sh++;
             fprintf(stderr,"      [thread] CreateThread(attr=0x%08x stack=0x%x entry=0x%08x arg=0x%08x flags=0x%x ptid=0x%08x)\n",
                     A(c,0),A(c,1),entry,arg,A(c,4),ptid); } }
-        uint32_t h=obj_new(OB_THREAD); Obj*o=obj_get(h);
+        /* the thread's stack and TEB first: without them it does not start */
+        uint32_t stk, teb = 0;
+        pthread_mutex_lock(&g_lock);
+        stk = stack_take();
+        if (stk && !(teb = teb_take())) g_stk_free[g_nstk_free++] = stk;
+        pthread_mutex_unlock(&g_lock);
+        if (!teb) thread_refused(c, entry, !stk);
+        uint32_t h=teb ? obj_new(OB_THREAD) : 0; Obj*o=obj_get(h);
         static uint32_t next_tid=100;
+        if (teb && !o){                         /* object table full: give them back */
+            pthread_mutex_lock(&g_lock);
+            g_stk_free[g_nstk_free++] = stk; g_teb_free[g_nteb_free++] = teb;
+            pthread_mutex_unlock(&g_lock);
+        }
         if(o){
             o->tid = ++next_tid; o->guest_entry = entry; o->guest_arg = arg;
             o->creator = c->eip; o->looked = 0;   /* the return address; the game's own lookups count from here */
@@ -1682,21 +1743,23 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
             { const char *mn = 0;
               if (module_nearest_fn(entry, &mn))
                   fprintf(stderr, "[thread] tid=%u (%s, entry 0x%08x) started\n", o->tid, mn, entry); }
-            uint32_t teb;
-            pthread_mutex_lock(&g_lock);
-            teb = teb_take();
-            pthread_mutex_unlock(&g_lock);
-            o->teb = teb;
-            mem_commit(teb, 0x2000);
+            o->teb = teb; o->stack_lo = stk;
+            mem_commit(teb, MM_TEB_SIZE);
             TArg *t = calloc(1,sizeof *t);
-            t->entry=entry; t->arg=arg; t->teb=teb; t->ob=o;
+            t->entry=entry; t->arg=arg; t->teb=teb; t->stack=stk; t->ob=o;
             o->pending = t;
             if (A(c,4) & 0x4u){                 /* CREATE_SUSPENDED */
                 o->started = 0;                 /* waits for ResumeThread */
             } else {
                 if (guest_pthread_create(&o->th,guest_thread_main,t)==0){
                     o->started=1; o->pending=0; pthread_detach(o->th);
-                } else free(t);
+                } else {
+                    free(t); o->pending = 0;
+                    pthread_mutex_lock(&g_lock);
+                    g_stk_free[g_nstk_free++] = stk; g_teb_free[g_nteb_free++] = teb;
+                    pthread_mutex_unlock(&g_lock);
+                    o->teb = o->stack_lo = 0;
+                }
             }
         }
         r=h; }
@@ -1804,7 +1867,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
     else if (!strcmp(n,"GetLogicalDrives")) r=0x0000000Cu;             /* C: and D: */
     else if (!strcmp(n,"GetDriveTypeA")) r=3;                          /* DRIVE_FIXED */
     else if (!strcmp(n,"GetCurrentDirectoryA")){
-        uint32_t p=A(c,1); const char*s="C:\\NFSU2"; uint32_t l=(uint32_t)strlen(s);
+        uint32_t p=A(c,1); const char*s=g_game.vroot; uint32_t l=(uint32_t)strlen(s);
         if(p){ mem_commit(p,l+1); memcpy(g_mem+p,s,l); MR8(p+l)=0; } r=l; }
     else if (!strcmp(n,"SetCurrentDirectoryA")) r=1;
     else if (!strcmp(n,"GetLongPathNameA")||!strcmp(n,"GetShortPathNameA")){
@@ -1890,7 +1953,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         for (int i = 0; i < 4; i++){ uint32_t pp = A(c, 1 + i); if (pp){ mem_commit(pp,4); MR32(pp) = q[i]; } } }
     else if (!strcmp(n,"DeleteObject")) r = 1;
     else if (!strcmp(n,"BeginPaint")){ uint32_t ps=A(c,1);
-        if (ps){ mem_commit(ps,64); memset(g_mem+ps,0,64); } r = 0x00B20001u; }
+        if (ps){ mem_commit(ps,64); memset(g_mem+ps,0,64); } r = MM_HDC; }
     else if (!strcmp(n,"EndPaint")) r = 1;
     else if (!strcmp(n,"OutputDebugStringA")){ uint32_t p=A(c,0);
         if(p) fprintf(stderr,"[dbg] %s", (char*)(g_mem+p)); r=0; }
@@ -1903,10 +1966,18 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         if (proc && !getenv("NOTIMER")){
             pthread_mutex_lock(&g_lock);
             if (!g_timer_running){
-                g_timer_running = 1;
-                pthread_t th2;
-                if (pthread_create(&th2,0,timer_thread_main,0)==0) pthread_detach(th2);
-                else g_timer_running = 0;
+                g_timer_stack = stack_take();
+                if (!g_timer_stack){
+                    static int said = 0;      /* no timer thread yet: a later timeSetEvent tries again */
+                    if (said++ < 20) fprintf(stderr, "[timer] REFUSED: no thread stack left for the timer thread"
+                                                     " (all %u of 0x%08x-0x%08x in use)\n",
+                                             (MM_TSTACK_HI - MM_TSTACK_LO) / GTHREAD_STACK, MM_TSTACK_LO, MM_TSTACK_HI);
+                } else {
+                    g_timer_running = 1;
+                    pthread_t th2;
+                    if (pthread_create(&th2,0,timer_thread_main,0)==0) pthread_detach(th2);
+                    else { g_timer_running = 0; g_stk_free[g_nstk_free++] = g_timer_stack; }
+                }
             }
             for (int i=0;i<MAXTIMER;i++){
                 if (g_tm[i].due_us) continue;

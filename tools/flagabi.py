@@ -64,7 +64,7 @@ def analyse(G):
 
 
 if __name__ == '__main__':
-    out_path = sys.argv[2] if len(sys.argv) > 2 else 'out/flagabi.json'
+    out_path = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.environ.get('OUT_DIR', 'out'), 'flagabi.json')
     t0 = time.time()
     sys.argv = sys.argv[:2]            # genall expects argv[2]=NSHARD
     import genall                      # discover_all: genall.EXE = sys.argv[1]

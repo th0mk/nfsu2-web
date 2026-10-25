@@ -61,6 +61,9 @@ uint32_t res_find(uint32_t a, uint32_t b, int k){ return 0; }
 uint32_t res_data(uint32_t a){ return 0; }
 uint32_t res_size(uint32_t a){ return 0; }
 int      win32_caller_module(void){ return 0; }       /* SPEED2.EXE's imports */
+uint32_t win32_import_va(const char *n){ (void)n; return 0; }
+void     win32_set_last_error(CPU *c, uint32_t e){ (void)c; (void)e; }
+const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2" };
 
 static int g_fail;
 #define CHECK(cond, ...) do{ if (cond) printf("PASS " __VA_ARGS__); else { printf("FAIL " __VA_ARGS__); g_fail = 1; } \

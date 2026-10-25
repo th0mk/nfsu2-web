@@ -1,0 +1,3 @@
+# genall.py INLINE_LIST (games/mw/game.conf): the hot callees inlined at their
+# direct call sites.  Empty until a Most Wanted race has been profiled
+# (tools/inline_pick.py).

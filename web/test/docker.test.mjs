@@ -3,15 +3,26 @@
 // checkout, and none of those files has a game file's name or is a link out of its folder.  The image itself, built
 // and run with Caddy in Chrome: node web/tools/deploy-e2e.mjs --mode docker (docs/web/VPS.md).
 //   node --test web/test/docker.test.mjs
+// The games' own file names come from the server (out/web/server-rs/nfsu2-server, web/server-rs/build.sh; or
+// $NFSU2_SERVER_BIN), as web/deploy/pack.sh takes them: nfsu2-server --game <id> --print-entries.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { serverCommand } from '../tools/server-cmd.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-// the game's file names (web/deploy/pack.sh refuses the same in its bundle)
-const GAME_NAMES = /(^|\/)SPEED2\.EXE$|\.(BUN|BIN|LZC|VIV|MUS|ASF|VP6|ABK|GIN|CSI|MPF|AUD|LZW|DLL|EXE)$/i;
+// the games the server serves (its --game names)
+const GAMES = ['ug2', 'mw'];
+// the game's data files by their extensions (web/deploy/pack.sh refuses the same in its bundle)
+const GAME_EXTS = /\.(BUN|BIN|LZC|VIV|MUS|ASF|VP6|ABK|GIN|CSI|MPF|AUD|LZW|DLL|EXE)$/i;
+/** the top-level entries of a game's folder that the server serves (its program, server.dll, server.cfg, folders) */
+function entries(game) {
+  const [cmd, args] = serverCommand(['--game', game, '--print-entries']);
+  return execFileSync(cmd, args, { encoding: 'utf8' }).split('\n').filter(Boolean);
+}
 
 // the Dockerfile, its ignore file, and what may go into its build (sources only, never gen/ (the lifted game code),
 // out/ (the module) or the game folder)
@@ -40,6 +51,11 @@ test(`${DOCKERFILE} copies from the checkout only what ${IGNORE} lets in`, () =>
 });
 
 test('the build context has no game file names and no links', () => {
+  // the games' own files at the top of their folders (the folders' names are common words: their files have the
+  // extensions)
+  const tops = new Set(GAMES.flatMap(entries).filter(e => e.includes('.')));
+  assert.ok(tops.has('speed2.exe') && tops.has('speed.exe') && tops.has('server.dll'), [...tops].join(' '));
+  const gameName = f => tops.has(path.posix.basename(f).toLowerCase()) || GAME_EXTS.test(f);
   const files = [];
   const walk = rel => {
     if (excluded.includes(rel)) return;
@@ -50,6 +66,6 @@ test('the build context has no game file names and no links', () => {
   };
   for (const a of ALLOWED) walk(a.replace(/\/$/, ''));
   assert.ok(files.length > 20, `${files.length} files`);
-  const bad = files.filter(f => GAME_NAMES.test(f));
+  const bad = files.filter(gameName);
   assert.deepEqual(bad, []);
 });

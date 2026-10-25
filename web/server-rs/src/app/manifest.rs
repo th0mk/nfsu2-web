@@ -1,12 +1,13 @@
 //! The install folder's manifest (/data-manifest): the files the game reads, with size and time, walked once and
 //! again when a page asks (?refresh), at most every 10 s.
 //!
-//! Only what the game reads: its program, the LAN server module and its settings, and its data folders, compared
-//! case-insensitively.  The rest of an install folder never leaves this machine: an installer's uninstall log
-//! (unins000.dat names the PC, the Windows account and when it was installed), a SAVE folder that a widescreen fix
-//! writes the player's profiles into, mod plugins and their settings, backups, notes (the audit's PRIV-1).  Dot files
-//! are never served either, symbolic links are left out (nothing outside the folder is ever served), and the state
-//! folder (keys) is skipped wherever it is (a second guard: the start refuses one inside the folder).
+//! Only what the game reads: its program, the LAN server module and its settings, and its data folders (the game's
+//! entries, game.rs), compared case-insensitively.  The rest of an install folder never leaves this machine: an
+//! installer's uninstall log (unins000.dat names the PC, the Windows account and when it was installed), a SAVE folder
+//! that a widescreen fix writes the player's profiles into, mod plugins and their settings, backups, notes (the audit's
+//! PRIV-1).  Dot files are never served either, symbolic links are left out (nothing outside the folder is ever
+//! served), and the state folder (keys) is skipped wherever it is (a second guard: the start refuses one inside the
+//! folder).
 
 use std::io::{self, Write};
 use std::os::unix::ffi::OsStrExt;
@@ -23,39 +24,12 @@ use nfsu2_util::json::write_str;
 
 use super::blocks::V2;
 use super::etag;
+use crate::game::GameProfile;
 use crate::options::within;
-
-/// what /data/ and /data-blocks/ serve: the top-level entries of the install folder that are the game's
-pub const GAME_ENTRIES: [&str; 18] = [
-    "speed2.exe",
-    "server.dll",
-    "server.cfg",
-    "cars",
-    "credits",
-    "frontend",
-    "global",
-    "langpacks", // the language packs (tools/langpacks.py), if the folder has them
-    "languages",
-    "memcard",
-    "movies",
-    "nis",
-    "pfdata",
-    "sound",
-    "speech",
-    "subtitles",
-    "texpacks", // the texture packs (tools/texpacks.py), if the folder has them
-    "tracks",
-];
 
 /// the blocks of /data-blocks/: 1 MiB each, at most 8 in one answer
 pub const BLOCK: u64 = 1 << 20;
 pub const BLOCKS_MAX: u64 = 8;
-
-/// a top-level name of the game's, compared in lower case (Unicode's, as JS's toLowerCase: the Kelvin sign is "k")
-pub fn game_entry(name: &str) -> bool {
-    let n = name.to_lowercase();
-    GAME_ENTRIES.contains(&n.as_str())
-}
 
 pub struct Manifest {
     pub body: Bytes,
@@ -82,9 +56,17 @@ fn entries(dir: &str) -> io::Result<Vec<(String, std::fs::FileType)>> {
     Ok(v.into_iter().map(|(_, n, t)| (n, t)).collect())
 }
 
-fn walk(dir: &str, rel: &str, real_state: &str, out: &mut String, count: &mut usize, files: &mut Vec<String>) -> io::Result<()> {
+fn walk(
+    game: &GameProfile,
+    dir: &str,
+    rel: &str,
+    real_state: &str,
+    out: &mut String,
+    count: &mut usize,
+    files: &mut Vec<String>,
+) -> io::Result<()> {
     for (name, t) in entries(dir)? {
-        if name.starts_with('.') || (rel.is_empty() && !game_entry(&name)) {
+        if name.starts_with('.') || (rel.is_empty() && !game.entry(&name)) {
             continue;
         }
         let abs = format!("{dir}/{name}");
@@ -101,7 +83,7 @@ fn walk(dir: &str, rel: &str, real_state: &str, out: &mut String, count: &mut us
             write_str(out, &r);
             out.push_str(",\"d\":1}");
             *count += 1;
-            walk(&abs, &r, real_state, out, count, files)?;
+            walk(game, &abs, &r, real_state, out, count, files)?;
         } else if t.is_file() {
             let md = std::fs::metadata(&abs)?;
             if *count > 0 {
@@ -148,14 +130,14 @@ impl ManifestCell {
     }
 
     /// the walk under way, or a new one (on the runtime: the walk is a task of its own)
-    pub fn refresh(self: &Arc<Self>, data: &str, real_state: &str, key: &[u8]) -> Walk {
+    pub fn refresh(self: &Arc<Self>, game: &'static GameProfile, data: &str, real_state: &str, key: &[u8]) -> Walk {
         let mut walk = self.walk.lock();
         if let Some(w) = walk.as_ref() {
             return w.clone();
         }
         let (cell, data, state, key) = (self.clone(), data.to_string(), real_state.to_string(), key.to_vec());
         let task = tokio::spawn(async move {
-            let r = match tokio::task::spawn_blocking(move || build(&data, &state, &key)).await {
+            let r = match tokio::task::spawn_blocking(move || build(game, &data, &state, &key)).await {
                 Ok(Ok(m)) => Ok(Arc::new(m)),
                 Ok(Err(e)) => Err(e.to_string()),
                 Err(e) => Err(e.to_string()),
@@ -177,11 +159,11 @@ impl ManifestCell {
     }
 }
 
-/// the manifest of the install folder (blocking: on a blocking thread)
-pub fn build(data: &str, real_state: &str, key: &[u8]) -> io::Result<Manifest> {
+/// the manifest of the game's install folder (blocking: on a blocking thread)
+pub fn build(game: &GameProfile, data: &str, real_state: &str, key: &[u8]) -> io::Result<Manifest> {
     let mut body = String::from("{\"v\":1,\"files\":[");
     let (mut count, mut files) = (0, Vec::new());
-    walk(data, "", real_state, &mut body, &mut count, &mut files)?;
+    walk(game, data, "", real_state, &mut body, &mut count, &mut files)?;
     body.push_str(&format!("],\"blocks\":{{\"url\":\"/data-blocks{V2}/\",\"size\":{BLOCK},\"max\":{BLOCKS_MAX}}}}}"));
     let mut gz = flate2::GzBuilder::new().operating_system(3).write(Vec::new(), flate2::Compression::default());
     gz.write_all(body.as_bytes())?;
@@ -201,6 +183,7 @@ pub fn build(data: &str, real_state: &str, key: &[u8]) -> io::Result<Manifest> {
 mod tests {
     use super::*;
     use crate::app::etag::tests::set_mtime;
+    use crate::game::UG2;
 
     /// whether the file system of `dir` takes "a" and "A" for one name
     fn case_blind(dir: &std::path::Path) -> bool {
@@ -248,7 +231,7 @@ mod tests {
     fn only_the_games_entries_in_byte_order() {
         let d = folder();
         let root = d.path().to_string_lossy().into_owned();
-        let m = build(&root, "/nonexistent-state", &[0u8; 32]).unwrap();
+        let m = build(&UG2, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
         let v: serde_json::Value = serde_json::from_slice(&m.body).unwrap();
         let ps: Vec<&str> = v["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();
         let mut want = vec![
@@ -280,8 +263,48 @@ mod tests {
         // the state folder is skipped, wherever it is (build takes its real path, as run.rs gives it: on macOS the temp
         // folder is under a link, /var to /private/var)
         let real_root = std::fs::canonicalize(d.path()).unwrap().to_string_lossy().into_owned();
-        let m2 = build(&root, &format!("{real_root}/TRACKS"), &[0u8; 32]).unwrap();
+        let m2 = build(&UG2, &root, &format!("{real_root}/TRACKS"), &[0u8; 32]).unwrap();
         assert!(!String::from_utf8_lossy(&m2.body).contains("TRACKS"));
+    }
+
+    // Most Wanted's folder (--game mw): its own entries only, never the mod loader, a widescreen fix's scripts and
+    // SAVE folder, the support pages or the uninstaller's log
+    #[test]
+    fn most_wanted_entries() {
+        let d = tempfile::tempdir().unwrap();
+        let p = |r: &str| d.path().join(r);
+        for dir in ["CARS/BMWM3GTR", "SOUND/PFDATA", "TRACKS/L2RA", "SAVE", "scripts", "Support", "Uninstall"] {
+            std::fs::create_dir_all(p(dir)).unwrap();
+        }
+        for f in ["speed.exe", "server.cfg", "CARS/BMWM3GTR/TEXTURES.BIN", "SOUND/PFDATA/MW_Music.mus", "TRACKS/STREAML2RA.BUN"] {
+            std::fs::write(p(f), "game").unwrap();
+        }
+        for f in ["SAVE/profile", "scripts/fix.ini", "Support/x.log", "Uninstall/unins000.dat", "dinput8.dll", "00000000.256", "foobar"] {
+            std::fs::write(p(f), "SECRET").unwrap();
+        }
+        let root = d.path().to_string_lossy().into_owned();
+        let m = build(&crate::game::MW, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&m.body).unwrap();
+        let ps: Vec<&str> = v["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();
+        assert_eq!(
+            ps,
+            [
+                "CARS",
+                "CARS/BMWM3GTR",
+                "CARS/BMWM3GTR/TEXTURES.BIN",
+                "SOUND",
+                "SOUND/PFDATA",
+                "SOUND/PFDATA/MW_Music.mus",
+                "TRACKS",
+                "TRACKS/L2RA",
+                "TRACKS/STREAML2RA.BUN",
+                "server.cfg",
+                "speed.exe"
+            ]
+        );
+        // UG2's entries do not take Most Wanted's program
+        let u = build(&UG2, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
+        assert!(!String::from_utf8_lossy(&u.body).contains("speed.exe"));
     }
 
     // the same folder walked by the Node server's own buildManifest (copied here as it was, but for the blocks' address
@@ -290,7 +313,7 @@ mod tests {
     fn the_same_body_as_the_node_servers() {
         let d = folder();
         let root = d.path().to_string_lossy().into_owned();
-        let m = build(&root, "/nonexistent-state", &[0u8; 32]).unwrap();
+        let m = build(&UG2, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
         let script = r#"
 import fsp from 'node:fs/promises'; import path from 'node:path';
 const GAME_ENTRIES = ['speed2.exe', 'server.dll', 'server.cfg',

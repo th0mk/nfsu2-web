@@ -8,8 +8,8 @@
  * browser those threads are other workers, and a stamp taken a moment ago
  * can read a little ahead of the watchdog's now; 2026-10-25/26 logs had
  * "[watchdog] no Present for 18446744073709.6 s" (2^64 us) from that.
- * Cases, on the real watchdog thread (NFSU2_WATCHDOG=1; no guest memory, so
- * game flow 0 and the loading screen's limit of 20 s):
+ * Cases, on the real watchdog thread (NFSU2_WATCHDOG=1; no game flow reader,
+ * so game flow 0 and the loading screen's limit of 20 s):
  *   ahead-us   the game thread keeps stamping a few microseconds ahead: no report
  *   ahead-s    a stamp 2 s ahead: no report
  *   stall      the last Present 25 s ago: one report, "no Present for 25..28 s",
@@ -22,7 +22,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
-/* ---- stand-ins for win32_ext.c, mem.c and debug.c ------------------------- */
+/* ---- stand-ins for win32_ext.c, mem.c, debug.c and the game's table ------- */
+const GameOps g_game = { .id = "ug2", .flow_fe = 3u, .flow_race = 6u };   /* no flow(): game flow 0 */
 TState   g_tstate[MAXCPUS];
 CPU     *g_all_cpus[MAXCPUS];
 uint32_t g_all_tids[MAXCPUS];

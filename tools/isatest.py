@@ -6,6 +6,9 @@ sys.path.insert(0,'tools')
 # lift the tests the way gen.sh lifts the game (x87 precision control on;
 # the tests run at CW 0x037F unless they load another word)
 os.environ.setdefault('X87PC', '1')
+# lock-prefixed read-modify-writes are lifted as MW's lift does them
+# (games/mw/game.conf LOCKSTRIP=1); without it they are traps
+os.environ.setdefault('LOCKSTRIP', '1')
 from lift import RawLifter, Unsupported
 
 TESTS = []
@@ -473,6 +476,28 @@ T("cvtps2pi mm0,[m64] (nearest even)",
   [0x0F,0x2D,0x05]+a32(FC+0xE0)+[0x0F,0x7F,0x05]+a32(FC+0xE8),
   {}, memf={FC+0xE0:2.5, FC+0xE4:3.5}, fmem={FC+0xE8:2, FC+0xEC:4})
 
+# ---------------- xadd and lock-prefixed read-modify-writes ----------------
+# MW's PATH audio library: lock xadd dword [ecx],eax (0x834E2D) and [eax],ecx (0x835645)
+LK = 0x00C80000
+T("xadd [ecx],eax",
+  [0x0F,0xC1,0x01], {'ecx':LK, 'eax':3}, mem={LK:5}, expect={'eax':5,'cf':0,'zf':0}, fmem={LK:8})
+T("lock xadd [ecx],eax",
+  [0xF0,0x0F,0xC1,0x01], {'ecx':LK+0x10, 'eax':3}, mem={LK+0x10:5}, expect={'eax':5,'cf':0,'zf':0,'sf':0}, fmem={LK+0x10:8})
+T("lock xadd [ecx],eax (wraps to 0)",
+  [0xF0,0x0F,0xC1,0x01], {'ecx':LK+0x20, 'eax':1}, mem={LK+0x20:0xFFFFFFFF}, expect={'eax':0xFFFFFFFF,'cf':1,'zf':1}, fmem={LK+0x20:0})
+T("lock xadd [eax],ecx (ecx=-1: decrement)",
+  [0xF0,0x0F,0xC1,0x08], {'eax':LK+0x30, 'ecx':0xFFFFFFFF}, mem={LK+0x30:1}, expect={'ecx':1,'eax':LK+0x30,'zf':1,'cf':1}, fmem={LK+0x30:0})
+T("lock xadd [ecx+8],eax; inc eax (InterlockedIncrement)",
+  [0xF0,0x0F,0xC1,0x41,0x08, 0x40], {'ecx':LK+0x40, 'eax':1}, mem={LK+0x48:41}, expect={'eax':42}, fmem={LK+0x48:42})
+T("lock xadd byte [ecx],al",
+  [0xF0,0x0F,0xC0,0x01], {'ecx':LK+0x50, 'eax':0xAABBCC02}, mem={LK+0x50:0x112233FF}, expect={'eax':0xAABBCCFF,'cf':1}, fmem={LK+0x50:0x11223301})
+T("lock add [ecx],eax (signed overflow)",
+  [0xF0,0x01,0x01], {'ecx':LK+0x60, 'eax':1}, mem={LK+0x60:0x7FFFFFFF}, expect={'eax':1,'of':1,'sf':1,'cf':0,'zf':0}, fmem={LK+0x60:0x80000000})
+T("lock add dword [m32],1",
+  [0xF0,0x83,0x05]+a32(LK+0x70)+[0x01], {}, mem={LK+0x70:41}, expect={'zf':0}, fmem={LK+0x70:42})
+T("lock sub [ecx],eax (to 0)",
+  [0xF0,0x29,0x01], {'ecx':LK+0x80, 'eax':7}, mem={LK+0x80:7}, expect={'zf':1,'cf':0}, fmem={LK+0x80:0})
+
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the
 # tables are written there with mem=); without JTSWITCH the jmp is a tail call
@@ -558,8 +583,10 @@ def gen_c(fns, body):
     o.append('    printf("  \\033[31mFAIL\\033[0m %-38s %s = %.9g (expected %.9g)\\n",t,f,(double)got,(double)want);}}')
     o.append('int main(void){ mem_init(); mem_commit(0x00000000u,0x01000000u); mem_fault_handler_install();')
     for i,t in enumerate(TESTS):
-        if fns[i] is None: continue
         nm = t['name'].replace('"','\\"')
+        if fns[i] is None:   # the lifter refused it (build() said why): a failure, not a skip
+            o.append(f'  fail++; printf("  \\033[31mFAIL\\033[0m %-38s could not be lifted\\n", "{nm}");')
+            continue
         o.append(f'  /* --- {i}: {nm} --- */')
         o.append('  { memset(&cpu,0,sizeof cpu); cpu.esp=STK; cpu.top=0; cpu.fcw=0x037f;')
         for r,v in t['setup'].items():

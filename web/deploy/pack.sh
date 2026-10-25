@@ -82,15 +82,19 @@ if [ -n "$DATA" ] && [ -d "$DATA" ]; then
     const hit = walk(process.argv[2]).filter(p => game.has(path.basename(p).toLowerCase() + ":" + fs.statSync(p).size));
     if (hit.length) { console.log(hit.join("\n")); process.exit(1); }' "$DATA" "$B" || fail "files that match the game folder"
   echo "checked against the game folder: no file of it is in the bundle"
-  # what the server leaves out of the game folder (GAME_ENTRIES, web/server-rs/src/app/manifest.rs): copy only the
-  # rest to the VPS
-  others="$(node -e '
-    const fs = require("fs");
-    const m = /const GAME_ENTRIES: \[&str; \d+\] = \[([^\]]*)\]/.exec(fs.readFileSync(process.argv[2], "utf8"));
-    if (!m) process.exit(0);
-    const keep = new Set([...m[1].matchAll(/"([^"]+)"/g)].map(x => x[1]));
-    console.log(fs.readdirSync(process.argv[1]).filter(n => !n.startsWith(".") && !keep.has(n.toLowerCase())).join(", "));' "$DATA" web/server-rs/src/app/manifest.rs)"
-  [ -z "$others" ] || echo "NOTE: the server serves only the game's own files; these of your game folder it never serves (leave them off the VPS): $others"
+  # what the server leaves out of the game folder (the game's entries, as the server prints them: the bundle's own
+  # server where this machine runs it, else the one web/server-rs/build.sh built here; the bundle is NFS Underground
+  # 2's): copy only the rest to the VPS
+  entries="$("$B/nfsu2-server" --game ug2 --print-entries 2>/dev/null || out/web/server-rs/nfsu2-server --game ug2 --print-entries 2>/dev/null || true)"
+  if [ -z "$entries" ]; then
+    echo "NOTE: the list of the game's own files was not read: the bundle's server does not run on this machine, nor does out/web/server-rs/nfsu2-server (web/server-rs/build.sh)"
+  else
+    others="$(node -e '
+      const fs = require("fs");
+      const keep = new Set(process.argv[2].split("\n").filter(Boolean));
+      console.log(fs.readdirSync(process.argv[1]).filter(n => !n.startsWith(".") && !keep.has(n.toLowerCase())).join(", "));' "$DATA" "$entries")"
+    [ -z "$others" ] || echo "NOTE: the server serves only the game's own files; these of your game folder it never serves (leave them off the VPS): $others"
+  fi
 fi
 HOSTNAME_SHORT="$(hostname | sed 's/\.local$//')"
 for needle in "$HOME" "$HOSTNAME_SHORT"; do

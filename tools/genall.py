@@ -5,19 +5,21 @@ sys.path.insert(0,'tools')
 import pefile
 from capstone import *
 from capstone.x86 import *
-from lift import Lifter, Unsupported, _lregs
+from lift import Lifter, Unsupported, _lregs, _FTOL2_VA
 
 EXE = sys.argv[1]
 NSHARD = int(sys.argv[2]) if len(sys.argv)>2 else 128
 # GENOUT: output directory (default gen/all); COMMENTS=1: every x86 instruction is
 # written as a comment (same code; for instruction-level profiles, see tools/lift_profile.py)
-OUT = os.environ.get('GENOUT', 'gen/all')
+OUT = os.environ.get('GENOUT', os.path.join(os.environ.get('GEN_DIR', 'gen'), 'all'))
 os.makedirs(OUT, exist_ok=True)
 # Second guest modules (server.dll, tools/prepare_module.py): RELOCS = the
 # module's fixup slots, SEEDS = extra entry points (exports), SYMPFX = prefix
 # of the generated tables (g_<pfx>fn_count/addr/ptr), so a module's fntab.c
 # links next to the exe's.  Defaults reproduce the exe's output unchanged.
-RELOCS = os.environ.get('RELOCS', 'out/relocs.txt')
+# GEN_DIR and OUT_DIR (gen.sh, from games/<id>/game.conf) put the exe's
+# default paths under the game's folders (UG2: gen/all, out/relocs.txt).
+RELOCS = os.environ.get('RELOCS', os.path.join(os.environ.get('OUT_DIR', 'out'), 'relocs.txt'))
 SEEDS = os.environ.get('SEEDS', '')
 SYMPFX = os.environ.get('SYMPFX', '')
 
@@ -270,6 +272,24 @@ if __name__=='__main__':
         f.write(f"}};\nconst guest_fn g_{SYMPFX}fn_ptr[] = {{\n")
         for i in range(0,len(allf),4): f.write("  "+",".join(f"sub_{a:08x}" for a in allf[i:i+4])+",\n")
         f.write("};\n")
+    # gameinfo.h: the exe's values the runtime is built with (runtime/cpu.h
+    # includes it): its image, the .text the dispatch table covers, the entry
+    # point, the C runtime's _ftol2.  Not for a second module (SYMPFX).
+    if not SYMPFX:
+        oh = pefile.PE(EXE, fast_load=True).OPTIONAL_HEADER; ep = oh.ImageBase + oh.AddressOfEntryPoint
+        with open(f"{OUT}/gameinfo.h",'w') as f:
+            f.write("/* The lifted exe, as the runtime is built for it: written by tools/genall.py\n"
+                    " * with the shards, included by runtime/cpu.h (without this file it takes\n"
+                    " * SPEED2.EXE's values from runtime/gameinfo_ug2.h). */\n"
+                    "#ifndef GAMEINFO_H\n#define GAMEINFO_H\n"
+                    f"#define GAMEINFO_IMAGE_BASE 0x{oh.ImageBase:08x}u   /* ImageBase */\n"
+                    f"#define GAMEINFO_IMAGE_SIZE 0x{oh.SizeOfImage:08x}u   /* SizeOfImage: the image ends at 0x{oh.ImageBase + oh.SizeOfImage:08x} */\n"
+                    f"#define GAMEINFO_TEXT_BASE  0x{_Lm.TVA:08x}u   /* .text: one dispatch table slot per byte */\n"
+                    f"#define GAMEINFO_TEXT_SIZE  0x{_Lm.TSZ:08x}u\n"
+                    f"#define GAMEINFO_ENTRY      0x{ep:08x}u   /* the entry point, lifted as GAMEINFO_ENTRY_FN */\n"
+                    f"#define GAMEINFO_ENTRY_FN   sub_{ep:08x}\n"
+                    f"#define GAMEINFO_FTOL2      0x{_FTOL2_VA:08x}u   /* the C runtime's _ftol2 (FTOL2_VA) */\n"
+                    "#endif\n")
     print(f"\n=== GENERATION SUMMARY ({time.time()-t0:.0f}s) ===")
     print(f"  functions        : {len(allf)}")
     print(f"  C source size    : {bytes_/1048576:.1f} MB ({NSHARD} shards)")

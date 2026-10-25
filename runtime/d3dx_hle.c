@@ -1941,6 +1941,17 @@ void efx_stat_note(CPU *c, uint32_t addr){
         if (j == efx_npair && efx_npair < 4096) efx_pair[efx_npair++] = p;
     }
 }
+/* dispatch.c: an indirect call that did not come through the dispatch table
+ * (dispatch_indirect), into UG2's statically linked D3DX code 0x650000-
+ * 0x690000: EFXSTAT's inventory, and the effect epoch for every method but
+ * BeginPass, CommitChanges and EndPass (see g_fx_epoch) */
+#define FX_CODE(a) ((a) - 0x650000u < 0x40000u)
+int efx_watched(uint32_t a){ return g_efx_stat && FX_CODE(a); }
+void efx_dispatch(CPU *c, uint32_t addr){
+    if (!FX_CODE(addr)) return;
+    if (g_efx_stat) efx_stat_note(c, addr);
+    if (addr != 0x0066acd2u && addr != 0x0066ac17u && addr != 0x0065adcbu) g_fx_epoch++;
+}
 /* D3DXCreateEffectFromResourceA(device, module, resource, defines, include,
  * flags, pool, &effect, &errors)  stdcall, 9 arguments. */
 void sub_00640c02_orig(CPU *c);

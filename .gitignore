@@ -14,6 +14,8 @@
 node_modules
 /web/dist/
 /web/dist-dev/
+/web/dist-mw/
+/web/dist-mw-dev/
 __pycache__/
 *.pyc
 *.o

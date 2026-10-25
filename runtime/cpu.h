@@ -115,9 +115,19 @@ void dispatch_tail(struct CPU *c);
  * there calls it directly: one load and one call_indirect instead of a call
  * into the dispatcher.  Everything else (COM, Win32, server.dll, generated
  * code, misses, the addresses ICALL/EFXSTAT watch) takes dispatch_indirect /
- * dispatch_tail as before. */
-#define DISPATCH_TEXT_BASE 0x00401000u
-#define DISPATCH_TEXT_SIZE 0x00381af1u
+ * dispatch_tail as before.  The exe's .text comes from the lift's own
+ * gameinfo.h (tools/genall.py writes it into gen/<game>/all, which the build
+ * puts on the include path).  Without one (a UG2 lift made before
+ * genall.py wrote it, a test build without a lift) the values are UG2's,
+ * runtime/gameinfo_ug2.h; web/tools/gencheck.sh refuses another game's lift
+ * that has none. */
+#if __has_include("gameinfo.h")
+#include "gameinfo.h"
+#else
+#include "gameinfo_ug2.h"
+#endif
+#define DISPATCH_TEXT_BASE GAMEINFO_TEXT_BASE
+#define DISPATCH_TEXT_SIZE GAMEINFO_TEXT_SIZE
 typedef void (*guest_fn_t)(struct CPU *);
 extern guest_fn_t g_dtab[DISPATCH_TEXT_SIZE];
 static inline guest_fn_t dispatch_fast(uint32_t a){
@@ -301,10 +311,12 @@ static inline void fcompare(struct CPU *c, double a, double b){
     else if (a < b)            c->fsw |= FSW_C0;
     else                       c->fsw |= FSW_C3;
 }
-/* fcomi / fucomi: write EFLAGS directly */
-#define FCOMI(a,b) do{ double _x=(a),_y=(b); \
-    if(_x!=_x||_y!=_y){ RG_(zf)=1;RG_(pf)=1;RG_(cf)=1; } \
-    else { RG_(pf)=0; RG_(zf)=(_x==_y); RG_(cf)=(_x<_y); } RG_(of)=RG_(sf)=RG_(af)=0; }while(0)
+/* fcomi / fucomi: write EFLAGS directly.  Its locals are not named _x: an
+ * X87OPT region keeps the x87 stack in an array _x[] (tools/lift.py), and
+ * FCOMI(_x[8], _x[12]) would read the macro's own _x (MW's sub_0067edfc) */
+#define FCOMI(a,b) do{ double _fa=(a),_fb=(b); \
+    if(_fa!=_fa||_fb!=_fb){ RG_(zf)=1;RG_(pf)=1;RG_(cf)=1; } \
+    else { RG_(pf)=0; RG_(zf)=(_fa==_fb); RG_(cf)=(_fa<_fb); } RG_(of)=RG_(sf)=RG_(af)=0; }while(0)
 
 /* ---- EFLAGS pack/unpack (pushfd/popfd/sahf) --------------------------- */
 static inline uint32_t eflags_get(const struct CPU *c){
@@ -359,8 +371,8 @@ extern int      g_prof_on;          /* 1 if SAMPLE / COVERAGE is on */
 static inline void cov_hit(uint32_t va){
     if (__builtin_expect(g_prof_on, 0)){
         g_last_fn = va;
-        if (g_cov && va >= 0x00401000u && va < 0x00401000u + (3676913u))
-            g_cov[va - 0x00401000u]++;
+        if (g_cov && va >= DISPATCH_TEXT_BASE && va < DISPATCH_TEXT_BASE + (DISPATCH_TEXT_SIZE))
+            g_cov[va - DISPATCH_TEXT_BASE]++;
     }
 }
 void cov_report(const char *path);

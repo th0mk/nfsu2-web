@@ -1,4 +1,4 @@
 { "compilerOptions": { "target": "ES2023", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "noEmit": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable", "WebWorker"], "types": ["@webgpu/types"], "skipLibCheck": true, "isolatedModules": true,
-    "allowJs": true },
+    "allowJs": true, "paths": { "@game": ["./src/games/ug2/index.ts"] } },
   "include": ["src"] }

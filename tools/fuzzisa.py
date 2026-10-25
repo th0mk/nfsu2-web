@@ -15,7 +15,7 @@ import os, sys, random, struct, subprocess, hashlib
 sys.path.insert(0,'tools')
 from lift import RawLifter, Unsupported
 
-SCRATCH = 0x00A00000          # address of the memory buffer in the guest
+SCRATCH = 0x00E00000          # address of the memory buffer in the guest: test memory, outside both games' images (0x401000-0xA79000)
 MEMSZ   = 128
 BASE    = 0x00400000
 

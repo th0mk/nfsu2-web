@@ -1,16 +1,18 @@
 /* The browser entry point: tests/boot.c's main() for the wasm build.
  *
  * Same order as on the Mac: memory, the PE image, TEB/PEB, file roots,
- * dispatch, win32, overrides, autotest; then the guest's entry point on its
- * own thread.  The page (web/src/host) runs this _start on a game worker and
- * gives every guest thread a worker of its own.  There is no window loop here:
- * the renderer, audio and input are driven from the page through shared
- * memory, so this thread just waits for the guest to finish.
+ * dispatch, win32, the game's installs (runtime/game.h), autotest; then the
+ * guest's entry point on its own thread.  The page (web/src/host) runs this
+ * _start on a game worker and gives every guest thread a worker of its own.
+ * There is no window loop here: the renderer, audio and input are driven from
+ * the page through shared memory, so this thread just waits for the guest to
+ * finish.
  *
  * Paths are the host's mounts: /data is the install folder (read-only),
  * /save the save overlay (saves, registry, settings, logs). */
 #include "cpu.h"
-#include "decls.h"
+#include "game.h"
+#include "memmap.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -34,19 +36,20 @@ void win32_set_trace_max(uint32_t);
 extern uint64_t g_hook_hits, g_gs_fail;
 extern void (*g_report_fn)(void);
 
-/* Guest layout on wasm (cpu.h GUEST_END): the main stack sits below the
+/* Guest layout on wasm (runtime/memmap.h): the main stack sits below the
  * thread stacks and the heap instead of at 0x7F000000. */
-#define TEB_BASE   0x00C00000u
-#define PEB_BASE   0x00C10000u
-#define STACK_LO   0x05000000u
-#define STACK_HI   0x05FF0000u
+#define TEB_BASE   MM_TEB_MAIN
+#define PEB_BASE   MM_PEB
+#define STACK_LO   MM_STACK_LO
+#define STACK_HI   MM_STACK_HI
 
 static CPU cpu; static CPU *const c = &cpu;
 
 static void all_reports(void){
     static int done; if (done) return; done = 1;
     if (getenv("WATCH_ADDR")) watch_dump("end of run / crash", 24);
-    fprintf(stderr, "\n  CRT heap: _crtheap=0x%08x __active_heap=%u\n", MR32(0x8ba4a4u), MR32(0x8ba4a8u));
+    if (g_game.crtheap_va)                  /* the game's C runtime heap mode (game.h) */
+        fprintf(stderr, "\n  CRT heap: _crtheap=0x%08x __active_heap=%u\n", MR32(g_game.crtheap_va), MR32(g_game.active_heap_va));
     com_report(); win32_report(); { void vclock_report(void); vclock_report(); }
     { void metal_budget_report(void); metal_budget_report(); }
     { void hfr_report(void); hfr_report(); }
@@ -63,7 +66,7 @@ static void *guest_main_thread(void *unused){
         g_exit_armed = 1;
         guest_lock(&cpu);
         PUSH32(0xDEADC0DEu);
-        sub_0075bcc7(&cpu);
+        g_game.entry(&cpu);                 /* the exe's entry point (game.h) */
         guest_unlock();
         fprintf(stderr, "\n*** guest entry point returned (eip=0x%08x, eax=0x%08x)\n", cpu.eip, cpu.eax);
     } else {
@@ -75,7 +78,8 @@ static void *guest_main_thread(void *unused){
 }
 
 int main(int argc, char **argv){
-    const char *exe = argc > 1 ? argv[1] : "/data/SPEED2.EXE";
+    char dflt[300]; snprintf(dflt, sizeof dflt, "/data/%s", g_game.exe_name);
+    const char *exe = argc > 1 ? argv[1] : dflt;
     { extern void autotest_early(void); autotest_early(); }   /* NFSU2_LOG, NFSU2_TIMEOUT */
 
     mem_init();
@@ -88,17 +92,8 @@ int main(int argc, char **argv){
       if (ro && *ro && *ro != '0'){ fileio_set_readonly_root(1);
           fprintf(stderr, "file: game folder is read-only (NFSU2_READONLY_DATA)\n"); } }
     dispatch_init(); win32_init();
-    { extern void overrides_install(void); overrides_install(); }
-    { extern void language_install(void); language_install(); }   /* NFSU2_LANGUAGE: the language pack, the exe's tables */
-    { extern void sponsors_install(void); sponsors_install(); }   /* the sponsor screens' Continue (help bar) */
-    { extern void lobbyclick_install(void); lobbyclick_install(); }   /* the lobby's list ignores a click on a dialog over it */
-    { extern void menusize_install(void); menusize_install(); }       /* the help bar's buttons at the page's menu button size */
-    { extern void olfilter_install(void); olfilter_install(); }       /* the Online lobby's Filter, once set, narrows its list */
-    { extern void tunegraph_install(void); tunegraph_install(); }     /* the tuning graphs' dots follow a press and a drag */
-    { extern void regional_install(void); regional_install(); }       /* the European game's Corsa and 106 for sale, and AI racers' cars */
-    { extern void carshadow_install(void); carshadow_install(); }     /* a car's shadow 1.5 cm above the road, not 4: off its wheels */
-    { extern void hornmenu_install(void); hornmenu_install(); }   /* the horns' volume (registry HornVolume), its slider's methods */
-    { extern void powerunits_install(void); powerunits_install(); }   /* power in bhp or kW (registry PowerUnits), its row's methods */
+    fprintf(stderr, "[game] %s: %s in %s\n", g_game.id, g_game.exe_name, g_game.vroot);
+    if (g_game.install) g_game.install();   /* the game's patches and features (game_ug2.c) */
     { extern void autotest_init(void); autotest_init(); }       /* NFSU2_INPUT_SCRIPT ... */
     { extern void status_web_start(void); status_web_start(); }  /* counters for the page overlay */
     { extern void input_web_init(void); input_web_init(); }     /* the page's keys, mouse, pad, focus */
@@ -129,8 +124,10 @@ int main(int argc, char **argv){
     cpu.top = 0; cpu.fcw = 0x027f;   /* Windows default: PC=53, RC near, masked */
     cpu.fs_base = TEB_BASE;
     cpu.gs_base = TEB_BASE;
+    { void win32_thread_test(CPU *); win32_thread_test(&cpu); }   /* NFSU2_THREAD_TEST (win32_ext.c) */
 
-    fprintf(stderr, "\n=== running the entry point: 0x0075bcc7 ===\n");
+    if (!g_game.entry){ fprintf(stderr, "no game in this build: nothing to run\n"); return 1; }
+    fprintf(stderr, "\n=== running the entry point: 0x%08x ===\n", g_game.entry_va);
     fprintf(stderr, "    TEB=0x%08x  stack=0x%08x..0x%08x  esp=0x%08x\n\n", TEB_BASE, STACK_LO, STACK_HI, cpu.esp);
     {
         pthread_attr_t at; pthread_attr_init(&at);

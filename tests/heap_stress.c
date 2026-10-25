@@ -30,6 +30,8 @@ uint64_t heap_internal_live(int);
 extern int g_gh_com, g_gh_gbuf;
 
 /* heap.c's links into the rest of the runtime */
+#include "game.h"
+const GameOps g_game = { .id = "ug2", .crt_lo = 0x0075b000u, .crt_hi = 0x00772000u };   /* UG2's C runtime */
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
 long autotest_frame(void){ return 0; }
 void win32_set_last_error(CPU *c, uint32_t e){ (void)c; (void)e; }

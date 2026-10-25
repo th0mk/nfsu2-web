@@ -17,7 +17,7 @@ CPU *g_cur_cpu = 0;
 #ifndef __wasm__
 uint8_t *g_mem = 0;
 #endif
-uint32_t g_image_base = 0x400000u, g_res_dir_va = 0, g_res_dir_size = 0;
+uint32_t g_image_base = 0x400000u, g_image_size = 0, g_res_dir_va = 0, g_res_dir_size = 0;
 
 /* watch state: must be defined in every build (debug.c is optional) */
 uint32_t g_itrace[ITRACE_SIZE];
@@ -284,7 +284,7 @@ int mem_load_pe(const char *path){
       uint32_t dd = 24 + 96 + 2*8;
       uint32_t rva = *(uint32_t*)(nt + dd);
       uint32_t sz  = *(uint32_t*)(nt + dd + 4);
-      g_image_base = base; g_res_dir_va = rva ? base + rva : 0; g_res_dir_size = sz; }
+      g_image_base = base; g_image_size = imgsz; g_res_dir_va = rva ? base + rva : 0; g_res_dir_size = sz; }
     uint8_t *sh    = nt + 24 + optsz;
     mem_init();
     mem_commit(base, imgsz);                 /* the whole image range */

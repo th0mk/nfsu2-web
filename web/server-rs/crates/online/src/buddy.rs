@@ -67,6 +67,7 @@ use crate::jsx::{self, clean_text, lower, strip_at, valid_name};
 use crate::lobby::{LBucket, four_printable};
 use crate::omap::OrderedMap;
 use crate::timers::{Action, TimerId};
+use crate::title::Title;
 use crate::vhost::{ConnId, Svc};
 
 const MAX_LIST: usize = 50;
@@ -88,7 +89,6 @@ const MAIL_WAIT_MS: f64 = 3000.0;
 /// "0" has neither
 const ASKED_ME: &str = "R";
 const I_ASKED: &str = "S";
-const TITL: &str = "Need for Speed Underground 2 [PC]";
 
 /// EA Messenger's limits (see the module's text): `lists` friends lists kept, `list_rate` new ones an hour per
 /// client, `msg_rate` messages a second (burst 3 x), `heavy_rate` lists and searches a second (burst 4),
@@ -500,22 +500,30 @@ impl Buddies {
     }
 }
 
-/// a persona's presence as its friends see it
-fn presence(b: &Buddy) -> Fields {
+/// a persona's presence as its friends see it (TITL and EXTR: the title's)
+fn presence(t: &Title, b: &Buddy) -> Fields {
     fields![
         ("USER", &b.persona),
         ("SHOW", &b.show),
         ("STAT", &b.stat),
         ("PROD", &b.prod),
-        ("TITL", TITL),
-        ("EXTR", "NFS-CONSOLE-2005"),
+        ("TITL", t.messenger_titl),
+        ("EXTR", t.messenger_extr),
         ("ATTR", "D")
     ]
 }
 
 /// the presence of a persona that is not online
-fn offline(name: &str) -> Fields {
-    fields![("USER", name), ("SHOW", "DISC"), ("STAT", ""), ("PROD", ""), ("TITL", TITL), ("EXTR", "NFS-CONSOLE-2005"), ("ATTR", "D")]
+fn offline(t: &Title, name: &str) -> Fields {
+    fields![
+        ("USER", name),
+        ("SHOW", "DISC"),
+        ("STAT", ""),
+        ("PROD", ""),
+        ("TITL", t.messenger_titl),
+        ("EXTR", t.messenger_extr),
+        ("ATTR", "D")
+    ]
 }
 
 /// the error of a handler that needs the connection's persona once it is gone (the console line the Node server
@@ -548,8 +556,8 @@ impl Core {
     /// the presence of persona `name` (lower case `k`): its connection's, or offline
     fn presence_of(&self, k: &str, name: &str) -> Fields {
         match self.buddies.online.get(k).and_then(|o| self.buddies.conns.get(o)) {
-            Some(o) => presence(o),
-            None => offline(name),
+            Some(o) => presence(self.title, o),
+            None => offline(self.title, name),
         }
     }
 
@@ -741,7 +749,7 @@ impl Core {
         let x = &self.buddies.conns[&b];
         let Some(p) = x.persona.clone() else { return Err(null_persona()) };
         let me = lower(&p);
-        let what = if gone { offline(&p) } else { presence(x) };
+        let what = if gone { offline(self.title, &p) } else { presence(self.title, x) };
         let now = self.bnow();
         self.buddies.conns.get_mut(&b).expect("held").told = Some(now);
         let frame = encode_frame("PGET", "", &what)?;
@@ -842,7 +850,7 @@ impl Core {
         if let Some(o) = o {
             let bp2 = self.buddies.conns.get(&b).and_then(|x| x.persona.clone());
             self.bsend(o, "RNOT", &fields![("USER", bp2), ("CHNG", "A"), ("ATTR", 0)], "")?;
-            let p = presence(&self.buddies.conns[&b]);
+            let p = presence(self.title, &self.buddies.conns[&b]);
             self.bsend(o, "PGET", &p, "")?;
         }
         Ok(())
@@ -1143,7 +1151,7 @@ impl Core {
                 // offers to answer it, Accept, Decline or Block, 0x4D5190/0x4A1B50), then the asker's presence for
                 // that entry
                 self.bsend(o, "RNOT", &fields![("USER", bp.as_str()), ("CHNG", "A"), ("ATTR", ASKED_ME)], "")?;
-                let p = presence(&self.buddies.conns[&b]);
+                let p = presence(self.title, &self.buddies.conns[&b]);
                 self.bsend(o, "PGET", &p, "")
             }
             "RRSP" => {

@@ -12,8 +12,8 @@ use unicode_normalization::UnicodeNormalization;
 use nfsu2_headers::{Cache, etag_matches};
 use nfsu2_http::{Request, Response};
 
-use super::manifest::game_entry;
 use super::{App, Fail, Res, etag, finish, send, type_of};
+use crate::game::GameProfile;
 use crate::options::within;
 use crate::paths;
 
@@ -30,10 +30,10 @@ pub fn resolve_inside(root: &str, url_path: &str) -> Option<String> {
     (p == root || p.starts_with(&format!("{root}/"))).then_some(p)
 }
 
-/// the file of the game (GAME_ENTRIES) under the install folder that a URL path names, or None
-pub fn resolve_game(data: &str, url_path: &str) -> Option<String> {
+/// the file of the game (its entries) under the install folder that a URL path names, or None
+pub fn resolve_game(game: &GameProfile, data: &str, url_path: &str) -> Option<String> {
     let first = url_path.split('/').find(|s| !s.is_empty())?;
-    if game_entry(first) { resolve_inside(data, url_path) } else { None }
+    if game.entry(first) { resolve_inside(data, url_path) } else { None }
 }
 
 /// a test page, test script or source map, by its name as a case-insensitive disk folds it (NFKC folds "ſ" to "s",
@@ -277,13 +277,21 @@ mod tests {
         }
         // (Node: path.resolve("/", "./x") does not start with "//")
         assert_eq!(resolve_inside("/", "/x"), None);
-        assert_eq!(resolve_game("/g", "/SPEED2.EXE").as_deref(), Some("/g/SPEED2.EXE"));
-        assert_eq!(resolve_game("/g", "/global/x.bin").as_deref(), Some("/g/global/x.bin"));
-        assert_eq!(resolve_game("/g", "//TRACKS/a").as_deref(), Some("/g/TRACKS/a"));
+        let ug2 = &crate::game::UG2;
+        assert_eq!(resolve_game(ug2, "/g", "/SPEED2.EXE").as_deref(), Some("/g/SPEED2.EXE"));
+        assert_eq!(resolve_game(ug2, "/g", "/global/x.bin").as_deref(), Some("/g/global/x.bin"));
+        assert_eq!(resolve_game(ug2, "/g", "//TRACKS/a").as_deref(), Some("/g/TRACKS/a"));
         // the Kelvin sign lowercases to "k" in JS too
-        assert_eq!(resolve_game("/g", "/TRAC\u{212A}S/a").as_deref(), Some("/g/TRAC\u{212A}S/a"));
+        assert_eq!(resolve_game(ug2, "/g", "/TRAC\u{212A}S/a").as_deref(), Some("/g/TRAC\u{212A}S/a"));
         for bad in ["/unins000.dat", "/SAVE/profile", "/", "", "/scripts/mod.ini", "/.hidden"] {
-            assert_eq!(resolve_game("/g", bad), None, "{bad}");
+            assert_eq!(resolve_game(ug2, "/g", bad), None, "{bad}");
+        }
+        // Most Wanted's folder: its own program, no pfdata or speech at the top, its mod scripts and loader never
+        let mw = &crate::game::MW;
+        assert_eq!(resolve_game(mw, "/g", "/speed.exe").as_deref(), Some("/g/speed.exe"));
+        assert_eq!(resolve_game(mw, "/g", "/SOUND/PFDATA/x").as_deref(), Some("/g/SOUND/PFDATA/x"));
+        for bad in ["/SPEED2.EXE", "/pfdata/x", "/speech/x", "/SAVE/p", "/scripts/x.ini", "/dinput8.dll", "/Support/x.log", "/foobar"] {
+            assert_eq!(resolve_game(mw, "/g", bad), None, "{bad}");
         }
     }
 

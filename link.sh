@@ -22,7 +22,7 @@ LDOPT="${LDOPT} -mmacosx-version-min=$MINOS"
 WHICH="${1:-both}"
 case "$WHICH" in both|orig|hd) ;; *) echo "usage: ./link.sh [orig|hd]"; exit 1 ;; esac
 
-CSRC="mem dispatch genexec heap watchdog win32 win32_ext com debug res fileio overrides d3dx_hle vsemu enhance perflog autotest lifecycle widescreen framerate dinput_pad dikeys keyboard dinput_kbd career intro oracle drifttest discord roam roam_core roam_bsd roam_game mprace horn hornmenu radio powerunits drift carsfx racehorn racenet winsock online netrace net_vlan module modheap headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional sndlead carshadow movie photo"
+CSRC="mem memmap dispatch genexec heap watchdog win32 win32_ext com debug game_ug2 debug_ug2 res fileio overrides d3dx_hle vsemu enhance perflog autotest lifecycle widescreen framerate dinput_pad dikeys keyboard dinput_kbd career intro oracle drifttest discord roam roam_core roam_bsd roam_game mprace horn hornmenu radio powerunits drift carsfx racehorn racenet winsock online netrace net_vlan module modheap headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional sndlead carshadow movie photo"
 MSRC="metal audio bundle gamepad keyboard_mac fpscounter texrep"
 # Unicorn 2.1.4 (native arm64, x86 target only) for the two test builds,
 # ORACLE=1 and ASIPEER=1: by default the project's work/deps/unicorn-2.1.4

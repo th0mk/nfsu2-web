@@ -30,13 +30,9 @@ use serde_json::Value;
 
 use crate::jsx;
 use crate::omap::OrderedMap;
+use crate::title::Title;
 use crate::{Clocks, LogFn, files};
 
-/// the race types by the game's own numbers: the type in its race report (SPEED2.EXE 0x5fe8d0, from the game's
-/// CUSTFLAGS race bit, 0x58b0f7) and the order it reads the server config's tier points in (0x58a370); its stat
-/// blocks are taken to follow it (UNVERIFIED).  (Until 2026-10-19 drag and drift were the other way round: stats.json
-/// is kept by these numbers, so only the names changed.)
-pub const RACE_TYPES: [&str; 6] = ["circuit", "sprint", "drag", "drift", "streetx", "url"];
 const MAX_PERSONAS: usize = 100_000;
 const MAX_BEST: usize = 300;
 /// the largest figure a record takes (a report's figure past it is no car's): top speed in m/s (540 km/h), drift
@@ -55,7 +51,8 @@ pub struct Counts {
     pub dc: f64,
 }
 
-/// the counts by race type (in the file an object of the types raced, `{ "0": {...}, "3": {...} }`, in key order)
+/// the counts by race type, by the title's numbers (in the file an object of the types raced,
+/// `{ "0": {...}, "3": {...} }`, in key order)
 pub type Table = [Option<Counts>; 6];
 
 /// a persona's records, as its Personal Stats screen shows them (0: none yet): top speed (m/s), biggest drift points,
@@ -91,7 +88,7 @@ pub struct RacePlayer {
     pub time: f64,
 }
 
-/// one race's result: type (0..5, RACE_TYPES), ranked, track, the players in finishing order
+/// one race's result: type (the title's race_types), ranked, track, the players in finishing order
 #[derive(Clone, Debug)]
 pub struct Race {
     pub kind: u32,
@@ -135,11 +132,22 @@ pub struct StatsOptions {
     pub prune_months: i64,
     pub max: usize,
     pub board_ms: f64,
+    /// the game's race types and STAT field (NFS Underground 2's unless changed)
+    pub title: &'static Title,
 }
 
 impl StatsOptions {
     pub fn new(dir: Option<PathBuf>, clocks: Rc<Clocks>, log: LogFn) -> Self {
-        StatsOptions { dir, clocks, log, save_ms: 30_000.0, prune_months: 12, max: MAX_PERSONAS, board_ms: 5000.0 }
+        StatsOptions {
+            dir,
+            clocks,
+            log,
+            save_ms: 30_000.0,
+            prune_months: 12,
+            max: MAX_PERSONAS,
+            board_ms: 5000.0,
+            title: &crate::title::UG2,
+        }
     }
 }
 
@@ -151,6 +159,7 @@ pub struct Stats {
     prune_months: i64,
     max: usize,
     board_ms: f64,
+    title: &'static Title,
     /// lower-case name -> record, the least recently seen first
     p: OrderedMap<String, Record>,
     /// (race type, monthly) -> the ranking as last built
@@ -178,6 +187,7 @@ impl Stats {
             prune_months: o.prune_months,
             max: o.max,
             board_ms: o.board_ms,
+            title: o.title,
             p: OrderedMap::new(),
             boards: HashMap::new(),
             sorted: None,
@@ -274,7 +284,7 @@ impl Stats {
     /// month seen.
     pub fn add_race(&mut self, race: &Race) {
         let n = race.players.len();
-        if n < 2 || race.kind as usize >= RACE_TYPES.len() {
+        if n < 2 || race.kind as usize >= self.title.race_types.len() {
             return;
         }
         let t = race.kind as usize;
@@ -322,7 +332,7 @@ impl Stats {
     pub fn add_records(&mut self, name: &str, kind: u32, p: &ReportPlayer) {
         let fits = |x: f64, max: f64| x.is_finite() && x > 0.0 && x <= max;
         let x = [p.top, p.drift_best as f64, p.slide, p.jump];
-        let drag = (RACE_TYPES.get(kind as usize) == Some(&"drag") && fits(p.time, f64::MAX)).then_some(p.time);
+        let drag = (self.title.race_types.get(kind as usize) == Some(&"drag") && fits(p.time, f64::MAX)).then_some(p.time);
         // (nothing to keep: no record made for it)
         if drag.is_none() && !x.iter().zip(RECORD_MAX).any(|(x, max)| fits(*x, max)) {
             return;
@@ -345,12 +355,8 @@ impl Stats {
         }
     }
 
-    /// The 38 numbers of the game's STAT field (hex, each followed by a comma), as its Personal Stats screen reads
-    /// them (found by sending distinct values; SPEED2.EXE 0x4d3490 and its rows' units): [0] not shown, [1] client
-    /// disconnects, [2] host disconnects (both shown as a share of the games), [3] top speed (mm/s), [4] biggest drift
-    /// points, [5] longest powerslide (mm), [6] longest jump (ms), [7] quickest drag (ms) (the records: STAT only);
-    /// then per race type rating, ranked wins, ranked losses, unranked wins, unranked losses (Games, Wins and Losses
-    /// on the screen are their sums).
+    /// The game's STAT field of a persona (the title's `stat`: overall, with its records, or the month's, LMSTAT,
+    /// without), all zero for one with no record.
     pub fn stat_field(&mut self, name: Option<&str>, monthly: bool) -> String {
         let (table, rec): (Table, Records) = match name.filter(|n| !n.is_empty()).and_then(|n| self.rec(n, false)) {
             Some(r) => {
@@ -362,21 +368,7 @@ impl Stats {
             }
             None => Default::default(),
         };
-        let mut dc = 0.0;
-        for c in table.iter().flatten() {
-            dc += c.dc;
-        }
-        let milli = |x: f64| jsx::round(x * 1000.0);
-        let mut v = vec![0.0, dc, 0.0, milli(rec.top), rec.drift, milli(rec.slide), milli(rec.jump), milli(rec.drag)];
-        for c in &table {
-            let c = c.unwrap_or_default();
-            v.extend([c.points, c.rw, c.rl, c.uw, c.ul]);
-        }
-        let mut s = String::with_capacity(v.len() * 3);
-        for x in v {
-            s.push_str(&format!("{:x},", jsx::to_uint32(x)));
-        }
-        s
+        (self.title.stat)(&table, &rec)
     }
 
     /// a ranking: best first (points, then wins, then fewer losses, then name)
@@ -692,6 +684,30 @@ fn rec_fields(r: &Records) -> [(&'static str, f64); 5] {
 /// so the winner gets 100 and the last 0, ranked races only
 pub fn race_points(ranked: bool, n: usize, place: u32) -> f64 {
     if ranked && n >= 2 && place != 0 { jsx::round((n as f64 - place as f64) * 100.0 / (n as f64 - 1.0)) } else { 0.0 }
+}
+
+/// The 38 numbers of NFS Underground 2's STAT field (hex, each followed by a comma), as its Personal Stats screen reads
+/// them (found by sending distinct values; SPEED2.EXE 0x4d3490 and its rows' units): [0] not shown, [1] client
+/// disconnects, [2] host disconnects (both shown as a share of the games), [3] top speed (mm/s), [4] biggest drift
+/// points, [5] longest powerslide (mm), [6] longest jump (ms), [7] quickest drag (ms) (the records: STAT only); then
+/// per race type rating, ranked wins, ranked losses, unranked wins, unranked losses (Games, Wins and Losses on the
+/// screen are their sums).
+pub fn stat_v38(table: &Table, rec: &Records) -> String {
+    let mut dc = 0.0;
+    for c in table.iter().flatten() {
+        dc += c.dc;
+    }
+    let milli = |x: f64| jsx::round(x * 1000.0);
+    let mut v = vec![0.0, dc, 0.0, milli(rec.top), rec.drift, milli(rec.slide), milli(rec.jump), milli(rec.drag)];
+    for c in table {
+        let c = c.unwrap_or_default();
+        v.extend([c.points, c.rw, c.rl, c.uw, c.ul]);
+    }
+    let mut s = String::with_capacity(v.len() * 3);
+    for x in v {
+        s.push_str(&format!("{:x},", jsx::to_uint32(x)));
+    }
+    s
 }
 
 /// The game's race report (rank RESU, base64), version 3 as SPEED2.EXE writes it:

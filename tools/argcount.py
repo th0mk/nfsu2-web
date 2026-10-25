@@ -27,8 +27,10 @@ seeds={IB+pe.OPTIONAL_HEADER.AddressOfEntryPoint}
 # Second guest modules (gen.sh, server.dll): RELOCS = the module's fixup
 # slots, IMPOUT = output file, SYMPFX = table prefix (g_<pfx>imp), STRICT=1 =
 # every import must be in KNOWN (no guessed stdcall counts for a module).
+# The exe's defaults are under the game's GEN_DIR and OUT_DIR (gen.sh).
 import os
-RELOCS=os.environ.get('RELOCS','out/relocs.txt'); IMPOUT=os.environ.get('IMPOUT','gen/all/impargs.c')
+RELOCS=os.environ.get('RELOCS',os.path.join(os.environ.get('OUT_DIR','out'),'relocs.txt'))
+IMPOUT=os.environ.get('IMPOUT',os.path.join(os.environ.get('GEN_DIR','gen'),'all','impargs.c'))
 SYMPFX=os.environ.get('SYMPFX',''); STRICT=os.environ.get('STRICT','')=='1'
 for a in (int(x,16) for x in open(RELOCS)):
     v=rd32(a)
@@ -173,31 +175,54 @@ KNOWN={
  'shutdown':2,'getpeername':3,'WSAIoctl':9,
  'timeGetTime':0,'timeBeginPeriod':1,'timeEndPeriod':1,'joyGetPosEx':2,'joyGetNumDevs':0,
  'joyGetDevCapsA':3,
- 'Direct3DCreate9':1,'DirectInput8Create':5,'DirectDrawCreate':3,'DirectSoundCreate':3,'#1':3,
+ 'Direct3DCreate9':1,'DirectInput8Create':5,'DirectDrawCreate':3,'DirectSoundCreate':3,
+ # imports by ordinal: DLL#ordinal (see known() below)
+ 'DSOUND#1':3,   # DirectSoundCreate
+ 'DSOUND#6':3,   # DirectSoundCaptureCreate (MW)
  'WSAStartup':2,'WSACleanup':0,'socket':3,'bind':3,'listen':2,'accept':3,'connect':3,
  'send':4,'recv':4,'sendto':6,'recvfrom':6,'closesocket':1,'select':5,'ioctlsocket':3,
  'setsockopt':5,'getsockopt':5,'htons':1,'ntohs':1,'htonl':1,'ntohl':1,'inet_addr':1,
  'inet_ntoa':1,'gethostbyname':1,'gethostname':2,'WSAGetLastError':0,'getsockname':3,
  'GetFileTime':4,
+ # --- Most Wanted (GAME.md 3.4): its speed.exe imports these, server.dll __WSAFDIsSet too ---
+ 'GlobalMemoryStatusEx':1,'FatalAppExitA':2,'QueueUserAPC':3,'CreateProcessA':10,'CreateWaitableTimerA':3,
+ 'SetWaitableTimer':6,'HeapValidate':3,'GetTimeFormatA':6,'GetDateFormatA':6,
+ 'D3DXMatrixMultiply':3,'D3DXVec4Transform':3,'D3DXVec3Transform':3,'D3DXMatrixInverse':3,
+ 'D3DXCreateEffectFromResourceA':9,'D3DXCreateEffectPool':1,'D3DXMatrixOrthoLH':5,'D3DXMatrixPerspectiveLH':5,
+ 'D3DXMatrixTranslation':4,'D3DXVec3TransformCoordArray':6,'D3DXVec3Normalize':2,'D3DXVec3TransformNormal':3,
+ 'D3DXMatrixTranspose':2,'GetKeyState':1,'MapVirtualKeyExA':3,'GetKeyboardLayout':1,'SendInput':3,'ToUnicode':6,
+ 'waveOutGetDevCapsA':3,'waveOutGetNumDevs':0,'waveOutWrite':3,'waveOutGetPosition':3,'waveOutSetVolume':2,
+ 'waveOutReset':1,'waveOutOpen':6,'waveOutClose':1,'waveOutPrepareHeader':3,'waveOutUnprepareHeader':3,
+ 'waveInStart':1,'waveInStop':1,'waveInReset':1,'waveInAddBuffer':3,'waveInGetPosition':3,'waveInOpen':6,
+ 'waveInClose':1,'waveInGetNumDevs':0,'waveInGetDevCapsA':3,'waveInPrepareHeader':3,'waveInUnprepareHeader':3,
+ 'WSACreateEvent':0,'WSACloseEvent':1,'WSASetEvent':1,'WSAResetEvent':1,'WSARecv':7,'WSARecvFrom':9,
+ 'WSAGetOverlappedResult':5,'WSAWaitForMultipleEvents':5,'__WSAFDIsSet':2,
 }
+# An import by ordinal is named "#<n>" (in g_imp too), and ordinals are per
+# DLL: its count is KNOWN["<DLL>#<n>"], the DLL's name in capitals without .dll.
+def known(dll, nm):
+    if nm.startswith('#'):
+        nm = dll.upper().removesuffix('.DLL') + nm
+    return KNOWN.get(nm)
 hit=miss=0; rows=[]
 for a,(dll,nm) in iat.items():
     cnt=argv.get(a)
     best=cnt.most_common(1)[0][0] if cnt else 0
     rows.append((dll,nm,best,sum(cnt.values()) if cnt else 0,a))
-    if nm in KNOWN and cnt:
-        if KNOWN[nm]==best: hit+=1
-        else: miss+=1; print(f"  MISMATCH {nm}: inferred {best}, real {KNOWN[nm]}  (distribution {dict(cnt)})")
+    k=known(dll,nm)
+    if k is not None and cnt:
+        if k==best: hit+=1
+        else: miss+=1; print(f"  MISMATCH {nm}: inferred {best}, real {k}  (distribution {dict(cnt)})")
 print(f"\n=== ARGUMENT COUNT INFERENCE ACCURACY ===")
 print(f"  of {hit+miss} known functions: {hit} right, {miss} wrong = {100.0*hit/max(hit+miss,1):.1f}%")
 if STRICT:
-    unk=sorted({nm for dll,nm,n,sites,a in rows if nm not in KNOWN})
+    unk=sorted({nm if not nm.startswith('#') else f"{dll} {nm}" for dll,nm,n,sites,a in rows if known(dll,nm) is None})
     if unk: sys.exit(f"argcount: no known stdcall argument count for {', '.join(unk)} (add them to KNOWN)")
 with open(IMPOUT,'w') as f:
     f.write('#include <stdint.h>\ntypedef struct { uint32_t iat; const char*dll; const char*name; int nargs; } ImpEnt;\n')
     f.write(f'const uint32_t g_{SYMPFX}imp_count = {len(rows)};\nconst ImpEnt g_{SYMPFX}imp[] = {{\n')
     for dll,nm,n,sites,a in sorted(rows,key=lambda r:r[4]):
-        n2 = KNOWN.get(nm, n)
+        k = known(dll, nm); n2 = n if k is None else k
         f.write(f'  {{0x{a:08x}u,"{dll}","{nm}",{n2}}},\n')
     f.write('};\n')
 print(f"-> {IMPOUT} ({len(rows)} entries)")

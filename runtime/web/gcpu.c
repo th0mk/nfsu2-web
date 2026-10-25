@@ -7,8 +7,9 @@
  * sleeps, Sleep/Wait* and the present wait all release the lock).
  *
  * Per Present (autotest_on_present, the guest main thread) the frame's busy
- * time goes into a histogram per game flow ([0x8654a4]: 3 = front end,
- * 6 = racing, ...) and into a window for the next [status] line, which then
+ * time goes into a histogram per game flow (game.h flow: the game's
+ * GameFlowManager state, front end and racing named) and into a window for
+ * the next [status] line, which then
  * shows its distribution: gp=p50/p95/p99/max ms.  The exit report prints the
  * distribution per flow.
  *
@@ -19,6 +20,7 @@
  * benchmark can split the race into tier-up and warm parts and count late
  * frames itself. */
 #include "cpu.h"
+#include "game.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,11 +72,11 @@ void gcpu_frame(void){
     double b = win32_thread_busy_ms();
     if (g_last >= 0){
         double ms = b - g_last;
-        uint32_t flow = mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u;
+        uint32_t flow = game_flow();
         dist_add(&g_flow[flow & 7], ms);
         if (g_nwin < (int)(sizeof g_win / sizeof g_win[0])) g_win[g_nwin++] = (float)ms;
         if (g_fr_on < 0){ const char *e = getenv("NFSU2_GCPU_FRAMES"); g_fr_on = e && *e == '1'; }
-        if (g_fr_on && (flow & 7) == 6){
+        if (g_fr_on && (flow & 7) == g_game.flow_race){
             if (g_nfr == g_cfr){ int nc = g_cfr ? 2 * g_cfr : 16384; void *p = realloc(g_fr, (size_t)nc * sizeof *g_fr);
                 if (p){ g_fr = p; g_cfr = nc; } }
             if (g_nfr < g_cfr){ g_fr[g_nfr].busy = (float)ms; g_fr[g_nfr].t = now_ms(); g_nfr++; }
@@ -97,11 +99,13 @@ int gcpu_status(char *buf, size_t n){
 
 void gcpu_report(void){
     fprintf(stderr, "\n  guest main thread busy time per frame (ms; the guest lock held minus host waits):\n");
-    static const char *const nm[8] = { "flow 0", "flow 1", "flow 2", "flow 3 (front end)", "flow 4", "flow 5", "flow 6 (racing)", "flow 7" };
     for (int f = 0; f < 8; f++){
         const Dist *d = &g_flow[f];
         if (!d->n) continue;
-        fprintf(stderr, "    %-18s %7llu frames: mean %.2f  p50 %.2f  p95 %.2f  p99 %.2f  max %.2f\n", nm[f],
+        char nm[32];
+        snprintf(nm, sizeof nm, "flow %d%s", f, !g_game.flow ? "" : (uint32_t)f == g_game.flow_fe ? " (front end)"
+                                                 : (uint32_t)f == g_game.flow_race ? " (racing)" : "");
+        fprintf(stderr, "    %-18s %7llu frames: mean %.2f  p50 %.2f  p95 %.2f  p99 %.2f  max %.2f\n", nm,
                 (unsigned long long)d->n, d->sum / (double)d->n, dist_pct(d, 0.5), dist_pct(d, 0.95), dist_pct(d, 0.99), d->max);
     }
     if (g_nfr){

@@ -630,8 +630,65 @@ static void frame_open(uint64_t now, int slots){
  *   without:   dt = slots x period, cap = period: the vanilla quantizer in
  *     its limiter-bound state (exactly 30 ticks per frame at 60).
  * JoyLog playback ([0x8650D0]) keeps its recorded tick stream. */
+/* ---- The game's frame wait loop: sleep instead of spinning ----
+ * sub_0057ead0 (0x57eb4e..0x57eb7e), when the frame time dt is below target:
+ *     start = GetTicks(); target = (X - dt) * k;
+ *     do { elapsed = Diff(start, GetTicks()); } while (elapsed < target);
+ * GetTicks = sub_0043bdf0 = QPC >> [0x8284e4]; Diff = sub_0043be20 =
+ * (now - start) * 2^S * [0x828028] seconds.  The loop only looks at the
+ * clock; at 120 fps ~19 thousand QPCs per frame and ALL of the game
+ * thread's idle time (8.2 ms of CPU per frame, 98%) burned here: every ms
+ * saved in D3DX went here, the power draw did not change.
+ * On a QPC from the loop (return 0x43bdfe, its caller 0x57eb69) the time
+ * left is computed with the game's own formula and we sleep for (left -
+ * margin); the final margin is still waited out spinning.  The exit
+ * condition and the clock are the same, so the game's timing does not
+ * change, only the CPU goes idle.  The sleep uses kevent NOTE_CRITICAL
+ * (guest_sleep_ns): nanosleep woke 447 us late on average, kevent 41 us
+ * (98% <= 200 us).
+ * SPINSLEEP=<margin us> (default 200), SPINSLEEP=0 disables it.
+ * Stack: after POP32 [esp+0xc] = 0x57eb69, E = esp+0x14 (0057ead0's local
+ * base), target float [E+0xc] = [esp+0x20], start = EBX. */
+static int g_spin_margin = -1;
+static uint64_t g_spin_n, g_spin_us, g_spin_late[7];   /* late wake-up: <=25,50,100,200,400,800,>800 us */
+static void spin_report(void){
+    fprintf(stderr, "\n=== SPINSLEEP: the frame wait loop slept %llu times, %.2f s in total (margin %d us) ===\n",
+            (unsigned long long)g_spin_n, g_spin_us / 1e6, g_spin_margin);
+    fprintf(stderr, "  late wake-ups: <=25us %llu  <=50 %llu  <=100 %llu  <=200 %llu  <=400 %llu  <=800 %llu  >800 %llu\n",
+            (unsigned long long)g_spin_late[0], (unsigned long long)g_spin_late[1], (unsigned long long)g_spin_late[2],
+            (unsigned long long)g_spin_late[3], (unsigned long long)g_spin_late[4], (unsigned long long)g_spin_late[5],
+            (unsigned long long)g_spin_late[6]);
+    extern uint64_t g_sleep_late_ns, g_sleep_gil_ns, g_sleep_n;
+    if (g_sleep_n) fprintf(stderr, "  average: nanosleep lateness %.0f us, lock wait on wake-up %.0f us\n",
+                           g_sleep_late_ns / 1e3 / g_sleep_n, g_sleep_gil_ns / 1e3 / g_sleep_n);
+}
+uint64_t spin_slept_us(void){ return g_spin_us; }   /* perflog: frame limiter sleep */
+uint64_t host_qpc(void);                /* win32.c */
+/* every QueryPerformanceCounter of the exe (game.h on_qpc, win32.c), after
+ * its return address was taken */
+void spinsleep_qpc(CPU *c){
+    if (c->eip != 0x43bdfeu || MR32(c->esp + 0xcu) != 0x57eb69u) return;
+    if (g_spin_margin < 0){ const char *e = getenv("SPINSLEEP"); g_spin_margin = e ? atoi(e) : 200;
+                            if (g_spin_margin && getenv("QPCWHO")) atexit(spin_report); }
+    if (!g_spin_margin) return;
+    /* the game's units: F = [0x828028] per QPC tick (measured 0.001 = ms,
+     * k = [0x784550] = 1000), X = [0x865558] = 1/120 s frame target */
+    uint32_t S = MR32(0x8284e4u) & 31u;
+    float F = MRF32(0x828028u), target = MRF32(c->esp + 0x20u);
+    if (!(F > 0.0f) || !(target > 0.0f)) return;
+    uint64_t now = host_qpc();
+    int32_t d = (int32_t)((uint32_t)(now >> S) - c->ebx); if (d < 0) d = 0;
+    double left = (double)target - (double)d * (double)(1u << S) * (double)F;
+    double us = left / (double)F - (double)g_spin_margin;      /* QPC tick = us (QPF 1 MHz) */
+    if (us < 50.0 || us > 100000.0) return;                  /* short: spin; >0.1 s: unexpected */
+    void guest_sleep_ns(int64_t ns);
+    guest_sleep_ns((int64_t)(us * 1000.0));
+    g_spin_n++; g_spin_us += (uint64_t)us;
+    { double late = (double)(host_qpc() - now) - us;         /* us slept beyond what was asked */
+      int b = late <= 25 ? 0 : late <= 50 ? 1 : late <= 100 ? 2 : late <= 200 ? 3 : late <= 400 ? 4 : late <= 800 ? 5 : 6;
+      g_spin_late[b]++; }
+}
 void sub_0057ead0_orig(CPU *c);
-uint64_t spin_slept_us(void);           /* win32.c: SPINSLEEP sleep inside the game's limiter */
 static uint64_t hfr_spin_slept_us(void){ return spin_slept_us(); }
 static double   g_tick_acc = 0;
 /* A network race: the World constructor's test for the 30 fps cap

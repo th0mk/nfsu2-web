@@ -61,8 +61,9 @@ use sha2::{Digest, Sha256};
 use crate::aries::{FieldMap, Fields, FrameReader, MAX_FRAME, V, encode_fields, encode_frame, is_secret};
 use crate::core::Core;
 use crate::jsx::{self, clean_text, day, lower, valid_name};
-use crate::stats::{RACE_TYPES, Race, RacePlayer, RaceReport, decode_result, race_points};
+use crate::stats::{Race, RacePlayer, RaceReport, race_points};
 use crate::timers::{Action, TimerId};
+use crate::title::{Cfg, Title};
 use crate::vhost::{ConnId, Svc};
 use crate::{PORT_BUDDY, PORT_LOBBY};
 
@@ -157,11 +158,8 @@ impl Default for Limits {
     }
 }
 
-/// the rooms everyone shares: a lounge and one per race type
-pub const ROOMS: [&str; 7] = ["Lounge", "Circuit", "Sprint", "Drift", "Drag", "StreetX", "URL"];
+/// sessions in one room at most
 const ROOM_LIMIT: usize = 50;
-
-const TIER: &str = "0,1999,4999,9999,19999,39999,59999,79999,99999,119999";
 
 /// games in one game list search: the game's page (its search asks for this many, START a page after another).  The
 /// lobby shows one search's games until the next (the +agm updates never reach its rows), and a step past the last
@@ -171,62 +169,25 @@ const TIER: &str = "0,1999,4999,9999,19999,39999,59999,79999,99999,119999";
 /// 2026-10-25).  This many: every open game in one search.
 const GAMES_PER_UPDATE: usize = 200;
 
-/// the server config (the "news" reply, code new7) the game asks for at connect: where the buddy server is (here:
-/// this same host), the news and terms pages, the tier points per race type, the game list's page
-pub fn config_fields() -> Fields {
-    fields![
-        ("TOSURL", "http://10.77.0.1/tos"),
-        ("NEWSURL", "http://10.77.0.1/news"),
-        ("BUDDY_SERVER", "10.77.0.1"),
-        ("BUDDY_PORT", PORT_BUDDY),
-        ("GAMES_PER_UPDATE", GAMES_PER_UPDATE),
-        ("CIRCUIT_TIER_POINTS", TIER),
-        ("SPRINT_TIER_POINTS", TIER),
-        ("DRIFT_TIER_POINTS", TIER),
-        ("DRAG_TIER_POINTS", TIER),
-        ("STREET_CROSS_TIER_POINTS", TIER),
-        ("URL_TIER_POINTS", TIER),
-    ]
+/// the server config (the "news" reply, code new7) the game asks for at connect: the title's (where the buddy server
+/// is (here: this same host), the news and terms pages, the tier points per race type, the game list's page)
+pub fn config_fields(t: &Title) -> Fields {
+    t.config
+        .iter()
+        .map(|(k, v)| {
+            let v = match v {
+                Cfg::Text(s) => V::from(*s),
+                Cfg::BuddyPort => V::from(PORT_BUDDY),
+                Cfg::GamesPerUpdate => V::from(GAMES_PER_UPDATE),
+            };
+            (std::borrow::Cow::from(*k), v)
+        })
+        .collect()
 }
 
-/// OPFLAG bit of a player who is ready (gset USERFLAGS, server.dll)
-const READY: u32 = 1 << 27;
-/// SYSFLAGS bits of a game with a password and of a started one.  The password bit is the server's: the game's gcre
-/// never sets it (only RANKED, 0x58d580), and its game list asks for the password of a game that has it before it
-/// joins (0x4f1713); a wrong one is "pass" (0x49ebc3, 0x55911e)
-const PASSWORD: u32 = 1 << 16;
-const ACTIVE: u32 = 1 << 19;
-/// SYSFLAGS bit of a ranked game (Options: Game Type Ranked; the game then asks for 3 players at least, and its
-/// lobby's default search asks for unranked games: SYSMASK bits 18 and 19)
-const RANKED: u32 = 1 << 18;
-/// SYSFLAGS bit of a game counting down to its start (the creator's gset; server.dll takes the creator's SYSFLAGS):
-/// Start Race while some players are ready and others not sets it (SPEED2.EXE 0x58aa20), every game in the room then
-/// counts down 10 s (0x4d2852, 0x4e5982), and the creator's game kicks the players still not ready (gset KICK, a
-/// list) and starts (0x58a7e0); a start that fails clears it (0x58ab40)
-const COUNTDOWN: u32 = 1 << 12;
-/// CUSTFLAGS bit of a private game (Options: Private Room, SPEED2.EXE 0x58d55d; the game's own search always asks
-/// for it clear, 0x590669: its players come by invitation)
-const PRIVATE: u32 = 1 << 8;
 /// a search's code (the header's [4..7], 0 in the game's own requests) when the player left the game's Filter screen
 /// with the settings it asks for (runtime/olfilter.c)
 const FILTER_SET: &str = "filt";
-/// the Filter's defaults as a search asks for them (Circuit, no car restriction, Collision Detection and Race Breaker
-/// on, unranked, not private): CUSTFLAGS, CUSTMASK, SYSFLAGS, SYSMASK
-const FILTER_DEFAULT: [u32; 4] = [0x40000f3, 0x40001f3, 0, 0xc0000];
-/// the race types a report may name: RACE_TYPES, which have their stat blocks, and the game's seventh (a game with
-/// CUSTFLAGS bit 25, which SPEED2.EXE 0x5fe8d0 reports as 6), which has no stat block or tier points: its results
-/// count nowhere
-const REPORT_TYPES: [&str; 7] = ["circuit", "sprint", "drag", "drift", "streetx", "url", "type 6"];
-/// the shortest race of each type (REPORT_TYPES order) a result may come from, in seconds: well under the game's own
-/// shortest (one lap of the shortest track; a quarter-mile drag)
-const MIN_RACE_S: [f64; 7] = [20.0, 20.0, 5.0, 20.0, 20.0, 20.0, 20.0];
-/// the Rankings screens' six boards in their order (Circuit, Sprint, Drift, Drag, Street X, URL: SPEED2.EXE 0x58ce30,
-/// 0x582530) as race types (RACE_TYPES: drag 2, drift 3)
-const SLOT_TYPES: [u32; 6] = [0, 1, 3, 2, 4, 5];
-/// what a ranked race's results screen counts down from until its table comes, in ms ("Waiting 60 seconds for
-/// results", then "Waiting for final server results"; SPEED2.EXE 0x4e9210): a guess at how long the others take to
-/// finish and report, no limit (the table comes once the result stands)
-const RESULTS_WAIT_MS: f64 = 60_000.0;
 
 /// A token bucket: `rate` a second, at most `burst`, full at the start (on the lobby's clock)
 #[derive(Clone, Copy, Debug)]
@@ -429,7 +390,8 @@ pub struct Lobby {
 }
 
 impl Lobby {
-    pub fn new(l: Limits) -> Lobby {
+    /// the lobby with the title's rooms
+    pub fn new(l: Limits, rooms: &'static [&'static str]) -> Lobby {
         Lobby {
             l,
             sessions: BTreeSet::new(),
@@ -439,7 +401,7 @@ impl Lobby {
             by_site: HashMap::new(),
             graveyard: Vec::new(),
             by_persona: HashMap::new(),
-            rooms: ROOMS.iter().enumerate().map(|(i, n)| Room { id: i as u32 + 1, name: n, users: IndexSet::new() }).collect(),
+            rooms: rooms.iter().enumerate().map(|(i, n)| Room { id: i as u32 + 1, name: n, users: IndexSet::new() }).collect(),
             games: BTreeMap::new(),
             dead: HashMap::new(),
             agm: IndexMap::new(),
@@ -859,7 +821,7 @@ impl Core {
             "skey" => return self.lsend(s, "skey", &fields![("SKEY", format!("${}", rand::hex(16)))], ""),
             "news" => {
                 return if f.get("NAME") == Some("7") {
-                    self.lsend(s, "news", &config_fields(), "new7")
+                    self.lsend(s, "news", &config_fields(self.title), "new7")
                 } else {
                     self.lsend(s, "news", &[], "badc")
                 };
@@ -1171,7 +1133,15 @@ impl Core {
 
     fn room_fields(&self, id: u32) -> Fields {
         let r = self.lobby.room(id).expect("a room");
-        fields![("I", r.id), ("N", r.name), ("H", "NFSU2"), ("F", "CK"), ("T", r.users.len()), ("L", ROOM_LIMIT), ("P", 0)]
+        fields![
+            ("I", r.id),
+            ("N", r.name),
+            ("H", self.title.room_h),
+            ("F", self.title.room_f),
+            ("T", r.users.len()),
+            ("L", ROOM_LIMIT),
+            ("P", 0)
+        ]
     }
 
     fn move_room(&mut self, s: SessId, f: &FieldMap) {
@@ -1376,7 +1346,7 @@ impl Core {
                 ("PSINCE", t),
                 ("DCNT", 0),
                 ("ADDR", addr),
-                ("SERV", "NFSU2"),
+                ("SERV", self.title.serv),
                 ("RANK", 99999),
                 ("MESG", ""),
                 ("LMSTAT", lmstat),
@@ -1420,7 +1390,7 @@ impl Core {
             reply(self);
             return self.results_table(g, Some(s));
         }
-        let r = decode_result(f.get("RESU").unwrap_or("undefined"));
+        let r = (self.title.decode_report)(f.get("RESU").unwrap_or("undefined"));
         let mut names = Vec::new();
         let mut i = 0;
         while f.has(&format!("NAME{i}")) && i < 8 {
@@ -1485,19 +1455,19 @@ impl Core {
         } else if gm.reports.iter().any(|(v, k)| *k == key && *v != svip) {
             let ranked = gm.ranked && gm.players.len() >= 3;
             let was_ranked = gm.ranked;
-            let table = gm.ranked.then(|| self.table_frame(g, &r, &names, ranked && (r.kind as usize) < RACE_TYPES.len()));
+            let table = gm.ranked.then(|| self.table_frame(g, &r, &names, ranked && (r.kind as usize) < self.title.race_types.len()));
             let gm = self.lobby.game_mut(g).expect("held");
             gm.result = Some(key);
             gm.table = table;
             self.stats.add_race(&Race { kind: r.kind as u32, ranked, track: r.track as i64, players: order });
-            let tail = if r.kind as usize >= RACE_TYPES.len() {
+            let tail = if r.kind as usize >= self.title.race_types.len() {
                 " (no stats for this race type)"
             } else if was_ranked && !ranked {
                 " (a ranked race needs 3 players: no points)"
             } else {
                 ""
             };
-            let rt = REPORT_TYPES[r.kind as usize];
+            let rt = self.title.report_types[r.kind as usize];
             self.llog(&format!("[online] \"{gname}\" ({rt}, {}): {line}{tail}", if ranked { "ranked" } else { "unranked" }), s);
         } else {
             if !gm.reports.is_empty() && !gm.reports.iter().any(|(_, k)| *k == key) {
@@ -1531,7 +1501,7 @@ impl Core {
                 for (i, p) in gm.players.iter().take(6).enumerate() {
                     f.extend(fields![(format!("OPPO{i}"), p.name.as_str()), (format!("STAT{i}"), u32::from(p.reported))]);
                 }
-                f.extend(fields![("TIME", RESULTS_WAIT_MS)]);
+                f.extend(fields![("TIME", self.title.results_wait_ms)]);
                 encode_frame("$rup", "", &f).expect("the lobby's own fields")
             }
         };
@@ -1556,8 +1526,8 @@ impl Core {
             let want = lower(&pl.name);
             let Some(p) = r.players.iter().find(|p| lower(&names[p.index as usize]) == want) else { continue };
             let place = if p.dropped { 0 } else { p.place as u32 };
-            let first =
-                if REPORT_TYPES[r.kind as usize] == "drift" { p.score as i64 } else { (p.time * 1000.0).round().clamp(0.0, 1e9) as i64 };
+            let drift = self.title.report_types[r.kind as usize] == "drift";
+            let first = if drift { p.score as i64 } else { (p.time * 1000.0).round().clamp(0.0, 1e9) as i64 };
             let pts = race_points(points, n, place) as i64;
             let data = format!("{},{},0,0,{}", hex(first), hex(if place == 0 { -2 } else { place as i64 }), hex(pts));
             f.extend(fields![(format!("OPPO{i}"), pl.name.as_str()), (format!("DATA{i}"), data)]);
@@ -1585,16 +1555,16 @@ impl Core {
         if distinct.len() != places.len() || places.iter().any(|p| *p < 1 || *p as usize > names.len()) {
             return "places do not add up".into();
         }
-        if r.kind as usize >= REPORT_TYPES.len() {
+        if r.kind as usize >= self.title.report_types.len() {
             return format!("race type {}", r.kind);
         }
         let age = (self.now() - g.started) / 1000.0;
-        let min = MIN_RACE_S[r.kind as usize];
+        let min = self.title.min_race_s[r.kind as usize];
         if age < min {
             return format!(
                 "a race of {} s (a {} race takes {} s at least)",
                 js::to_fixed(age, 1),
-                REPORT_TYPES[r.kind as usize],
+                self.title.report_types[r.kind as usize],
                 js::number_to_string(min)
             );
         }
@@ -1636,11 +1606,11 @@ impl Core {
     /// 6..11 a race type's overall board (Overall Rankings), 12..17 the asking player's own row of it (RANGE=1
     /// FIND=$<persona>, or "$" for one's own), 18..23 the current month's board (Current Month's Leaderboard, its first
     /// two), 24..29 last month's (Last Month's Leaderboard: none, the server keeps no past month).  Each six in the
-    /// screens' order, Drift before Drag (`SLOT_TYPES`; until 2026-10-25 read as race types, so the Drift pages showed
-    /// the drag board); INDEX (the race type and the player's class, 0x58ce30) only goes back.  Rows: +snp N
-    /// (name), R (rank), P (points), S (points,wins,losses), O.  R and P in decimal (SPEED2.EXE 0x7420b0 reads digits
-    /// 0-9 only; the screen shows P, sorts its list by it and takes the player's class from it), S in hex (0x7425d0,
-    /// "l*"; the screen shows its wins and losses).
+    /// screens' order, Drift before Drag (the title's `slot_types`; until 2026-10-25 read as race types, so the Drift
+    /// pages showed the drag board); INDEX (the race type and the player's class, 0x58ce30) only goes back.  Rows:
+    /// +snp N (name), R (rank), P (points), S (points,wins,losses), O.  R and P in decimal (SPEED2.EXE 0x7420b0 reads
+    /// digits 0-9 only; the screen shows P, sorts its list by it and takes the player's class from it), S in hex
+    /// (0x7425d0, "l*"; the screen shows its wins and losses).
     fn snap(&mut self, s: SessId, f: &FieldMap) {
         let chan = jsx::to_int32(f.num("CHAN", f64::NAN));
         let index = f.get("INDEX").map_or(V::N(0.0), V::from);
@@ -1648,7 +1618,7 @@ impl Core {
         let range = 100i32.min(0i32.max(jsx::to_int32(f.num("RANGE", 0.0))));
         // (in 64 bits: CHAN - 6 does not overflow for a CHAN near -2^31)
         let at = chan as i64 - 6;
-        let kind = (0..18).contains(&at).then(|| SLOT_TYPES[(at % 6) as usize]);
+        let kind = (0..18).contains(&at).then(|| self.title.slot_types[(at % 6) as usize]);
         let (own, monthly) = ((6..12).contains(&at), at >= 12);
         let find = f.get("FIND").map(str::to_string);
         // the board as last built (stats.rs: at most every few seconds), and its rows by name
@@ -1820,7 +1790,8 @@ impl Core {
     fn game_search(&mut self, s: SessId, f: &FieldMap, filter_set: bool) {
         let n = |k: &str| jsx::to_uint32(f.num(k, 0.0));
         let (cf, cm, sf, sm) = (n("CUSTFLAGS"), n("CUSTMASK"), n("SYSFLAGS"), n("SYSMASK"));
-        let only_asked = filter_set && [cf & cm, cm, sf & sm, sm] != FILTER_DEFAULT;
+        let private = self.title.flags.private;
+        let only_asked = filter_set && [cf & cm, cm, sf & sm, sm] != self.title.filter_default;
         let start = 0i32.max(jsx::to_int32(f.num("START", 0.0))) as usize;
         let count = (0i32.max(jsx::to_int32(f.num("COUNT", 20.0))) as usize).min(GAMES_PER_UPDATE);
         let x = self.lobby.s(s);
@@ -1830,7 +1801,7 @@ impl Core {
             .lobby
             .games
             .values()
-            .filter(|g| g.started == 0.0 && g.cust_flags & PRIVATE == 0 && (room.is_none() || g.room == 0 || Some(g.room) == room))
+            .filter(|g| g.started == 0.0 && g.cust_flags & private == 0 && (room.is_none() || g.room == 0 || Some(g.room) == room))
             .collect();
         let list: Vec<GameId> = open
             .iter()
@@ -1877,7 +1848,8 @@ impl Core {
                 return self.lsend(s, "gcre", &[], "dupl");
             }
         }
-        let sys_flags = jsx::to_uint32(f.num("SYSFLAGS", 0.0)) & !ACTIVE;
+        let fl = self.title.flags;
+        let sys_flags = jsx::to_uint32(f.num("SYSFLAGS", 0.0)) & !fl.active;
         let pass = f.str("PASS");
         let password = (!pass.is_empty()).then(|| RoomPassword::new(pass));
         let l = self.lobby.l;
@@ -1896,7 +1868,7 @@ impl Core {
             max_size: size("MAXSIZE", 4.0),
             min_size: size("MINSIZE", 2.0),
             cust_flags: jsx::to_uint32(f.num("CUSTFLAGS", 0.0)),
-            sys_flags: (sys_flags & !PASSWORD) | if password.is_some() { PASSWORD } else { 0 },
+            sys_flags: (sys_flags & !fl.password) | if password.is_some() { fl.password } else { 0 },
             password,
             params: jsx::slice16(f.str("PARAMS"), 256).to_string(),
             players: vec![self.member(s)],
@@ -1905,7 +1877,7 @@ impl Core {
             reports: Vec::new(),
             result: None,
             table: None,
-            ranked: sys_flags & RANKED != 0,
+            ranked: sys_flags & fl.ranked != 0,
         };
         self.lobby.games.insert(id, g);
         let x = self.lobby.sm(s);
@@ -1942,7 +1914,7 @@ impl Core {
     fn announce(&mut self, g: GameId, gone: bool) {
         let Some(x) = self.lobby.game(g) else { return };
         // not on the game list
-        if x.cust_flags & PRIVATE != 0 {
+        if x.cust_flags & self.title.flags.private != 0 {
             return;
         }
         let room = x.room;
@@ -2049,7 +2021,7 @@ impl Core {
         };
         let mut changed = false;
         if f.has("USERFLAGS") {
-            let flags = jsx::to_uint32(f.num("USERFLAGS", f64::NAN)) & READY;
+            let flags = jsx::to_uint32(f.num("USERFLAGS", f64::NAN)) & self.title.flags.ready;
             let x = self.lobby.games.get_mut(&g).expect("live");
             match x.players.iter_mut().find(|p| p.s == Some(s)) {
                 Some(p) => {
@@ -2071,7 +2043,7 @@ impl Core {
             }
         }
         let persona = self.lobby.s(s).persona.clone().unwrap_or_default();
-        let l = self.lobby.l;
+        let (l, countdown) = (self.lobby.l, self.title.flags.countdown);
         let x = &self.lobby.games[&g];
         if persona == x.host_name && x.started == 0.0 {
             // the creator may change the game's settings
@@ -2099,7 +2071,7 @@ impl Core {
             }
             // of its SYSFLAGS only the countdown: ranked, password and started stay the server's
             if f.has("SYSFLAGS") {
-                let v = (x.sys_flags & !COUNTDOWN) | (jsx::to_uint32(f.num("SYSFLAGS", f64::NAN)) & COUNTDOWN);
+                let v = (x.sys_flags & !countdown) | (jsx::to_uint32(f.num("SYSFLAGS", f64::NAN)) & countdown);
                 if x.sys_flags != v {
                     x.sys_flags = v;
                     changed = true;
@@ -2157,7 +2129,7 @@ impl Core {
         let now = self.now();
         let x = self.lobby.games.get_mut(&g).expect("live");
         x.started = now;
-        x.sys_flags |= ACTIVE;
+        x.sys_flags |= self.title.flags.active;
         // the race's id for the result reports: the same for every player, never empty
         let auth = Md5::digest(format!("{}:{}:{}:{}", x.id, x.name, js::number_to_string(now), rand::hex(8)).as_bytes());
         x.auth = jsx::hex(&auth);

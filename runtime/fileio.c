@@ -1,6 +1,8 @@
 /* Guest file I/O -> POSIX.  Maps Windows paths to the game folder and
  * resolves them case-insensitively.                                    */
 #include "cpu.h"
+#include "game.h"
+#include "memmap.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,15 +68,23 @@ static void rel_normalize(char *rel){
     rel[k] = 0;
 }
 
+/* the virtual game folder's name without its drive ("NFSU2" of "C:\\NFSU2") */
+static const char *vroot_dir(void){
+    const char *v = g_game.vroot ? g_game.vroot : "";
+    if (v[0] && v[1] == ':') v += 2;
+    while (*v == '\\' || *v == '/') v++;
+    return v;
+}
 /* the guest path relative to the game folder, '/'-separated and normalized */
 static void rel_of(const char *win, char *rel, size_t relsz){
     size_t k=0;
     const char *p = win;
     if (p[0] && p[1]==':') p += 2;                       /* drive letter   */
     while (*p=='\\' || *p=='/') p++;
-    if (!strncasecmp(p,"NFSU2",5) && (p[5]=='\\'||p[5]=='/'||p[5]==0)){
-        p += 5; while (*p=='\\'||*p=='/') p++;           /* virtual root   */
-    }
+    { const char *v = vroot_dir(); size_t vl = strlen(v);    /* virtual root   */
+      if (vl && !strncasecmp(p,v,vl) && (p[vl]=='\\'||p[vl]=='/'||p[vl]==0)){
+          p += vl; while (*p=='\\'||*p=='/') p++;
+      } }
     while (p[0]=='.' && (p[1]=='\\'||p[1]=='/')) p += 2;
     for (; *p && k<relsz-1; p++) rel[k++] = (*p=='\\') ? '/' : *p;
     rel[k]=0;
@@ -362,8 +372,8 @@ static int write_allowed(const char *op, const char *win, const char *host){
 int fileio_open_writers(void){ return g_open_wr; }
 
 /* --- handle table --- */
-#define FH_BASE 0x00900000u
-#define FH_MAX  256
+#define FH_BASE MM_FH_BASE                         /* the game's file handle values (memmap.h) */
+#define FH_MAX  MM_FH_MAX
 typedef struct { int fd; int empty; int used; char path[512]; DIR *dir; char pat[128];
                  DIR *dir2; char path1[512];        /* dir2: game root (while the save overlay is active) */
                  int wr;                            /* wr: opened for writing (g_open_wr) */
@@ -498,16 +508,17 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         if ((flags & O_CREAT) && !wblock) mkparents(real);
         /* Language suffix fallback: this version has the "_fr.vp6" suffix
          * built into the movie path, but the folder holds "_en" files.  If
-         * the requested file is missing, try "_en" and the unsuffixed name. */
+         * the requested file is missing, try the game's suffixes in turn
+         * (game.h lang_suffixes; UG2: "_en", the unsuffixed name, ...). */
         /* (resolve found the path, so it exists: no second stat, which is
          * another round trip to the I/O worker in the browser) */
         struct stat _st;
-        if (!(flags & O_CREAT) && !ok){
+        if (!(flags & O_CREAT) && !ok && g_game.lang_suffixes){
             char alt[1024]; const char *dot = strrchr(real, '.');
             if (dot && dot - real > 3){
                 size_t base = (size_t)(dot - real);
-                const char *sfx[] = { "_en", "", "_dn", "_du", "_sw" };
-                for (int q = 0; q < 5; q++){
+                const char *const *sfx = g_game.lang_suffixes;
+                for (int q = 0; sfx[q]; q++){
                     /* remove the current language suffix (if any) */
                     size_t cut = base;
                     if (base >= 3 && real[base-3] == '_') cut = base - 3;
@@ -755,13 +766,13 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
          * 0x75FF1E) handed garbage to the profile code, which then
          * enumerated a garbage path (0xFF bytes, then a "*" pattern) and never
          * saved/found profiles.
-         * Current directory is the virtual "C:\NFSU2" (GetCurrentDirectoryA). */
+         * Current directory is the virtual root (game.h vroot, GetCurrentDirectoryA). */
         const char *src = GS(A(c,0)); uint32_t nb = A(c,1), buf = A(c,2), pfp = A(c,3);
         char full[1024];
         int abs_ = (src[0] && src[1] == ':') || src[0] == '\\' || src[0] == '/';
         if (abs_ && src[0] != '\\' && src[0] != '/') snprintf(full, sizeof full, "%s", src);
         else if (abs_) snprintf(full, sizeof full, "C:%s", src);
-        else snprintf(full, sizeof full, "C:\\NFSU2\\%s", src);
+        else snprintf(full, sizeof full, "%s\\%s", g_game.vroot, src);
         for (char *q = full; *q; q++) if (*q == '/') *q = '\\';
         uint32_t len = (uint32_t)strlen(full);
         if (!buf || nb < len + 1) r = len + 1;
@@ -779,7 +790,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
          * We return the virtual root; resolve() maps it to the game folder.
          * If it comes back empty the game cannot find its save/profile folder. */
         uint32_t pp=A(c,4);
-        if (pp){ mem_commit(pp, 260); snprintf((char*)(g_mem+pp), 260, "C:\\NFSU2"); }
+        if (pp){ mem_commit(pp, 260); snprintf((char*)(g_mem+pp), 260, "%s", g_game.vroot); }
         r=0; }
     else if (!strcmp(n,"CreateDirectoryA")){
         char real[1024]; resolve_w(GS(A(c,0)), real, sizeof real);

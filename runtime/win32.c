@@ -2,6 +2,8 @@
 #include <stdatomic.h>
 #include "enhance.h"
 #include "cpu.h"
+#include "game.h"
+#include "memmap.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -22,15 +24,13 @@ jmp_buf g_exit_jmp;
 int g_exit_code = 0;
 int g_exit_armed = 0;
 
-typedef struct { uint32_t iat; const char*dll; const char*name; int nargs; } ImpEnt;
-extern const ImpEnt g_imp[]; extern const uint32_t g_imp_count;
-/* One import index space for SPEED2.EXE and the lifted DLLs (module.c):
- * the exe's g_imp first, then server.dll's g_srv_imp.  IAT slot values are
- * IMP_MAGIC + index into this table. */
-extern const ImpEnt g_srv_imp[]; extern const uint32_t g_srv_imp_count;
-static ImpEnt *g_imps; static uint32_t g_nimps;
 #include "module.h"
-int modheap_owns(uint32_t h); uint32_t modheap_create(void); int modheap_destroy(uint32_t h);
+extern const ImpEnt g_imp[]; extern const uint32_t g_imp_count;
+/* One import index space for the exe and the lifted DLLs (module.c): the
+ * exe's g_imp first, then each module's table (UG2: server.dll's g_srv_imp).
+ * IAT slot values are IMP_MAGIC + index into this table. */
+static ImpEnt *g_imps; static uint32_t g_nimps;
+int modheap_owns(uint32_t h); uint32_t modheap_create(int mod); int modheap_destroy(uint32_t h);
 uint32_t modheap_alloc(uint32_t h, uint32_t n, uint32_t flags); int modheap_free(uint32_t h, uint32_t u);
 uint32_t modheap_realloc(uint32_t h, uint32_t u, uint32_t n, uint32_t flags); uint32_t modheap_size(uint32_t h, uint32_t u);
 void modheap_report(void);
@@ -243,61 +243,6 @@ static void qpc_report(void){
         g_qw[b].n = 0;
     }
 }
-/* ---- The game's frame wait loop: sleep instead of spinning ----
- * sub_0057ead0 (0x57eb4e..0x57eb7e), when the frame time dt is below target:
- *     start = GetTicks(); target = (X - dt) * k;
- *     do { elapsed = Diff(start, GetTicks()); } while (elapsed < target);
- * GetTicks = sub_0043bdf0 = QPC >> [0x8284e4]; Diff = sub_0043be20 =
- * (now - start) * 2^S * [0x828028] seconds.  The loop only looks at the
- * clock; at 120 fps ~19 thousand QPCs per frame and ALL of the game
- * thread's idle time (8.2 ms of CPU per frame, 98%) burned here: every ms
- * saved in D3DX went here, the power draw did not change.
- * On a QPC from the loop (return 0x43bdfe, its caller 0x57eb69) the time
- * left is computed with the game's own formula and we sleep for (left -
- * margin); the final margin is still waited out spinning.  The exit
- * condition and the clock are the same, so the game's timing does not
- * change, only the CPU goes idle.  The sleep uses kevent NOTE_CRITICAL
- * (guest_sleep_ns): nanosleep woke 447 us late on average, kevent 41 us
- * (98% <= 200 us).
- * SPINSLEEP=<margin us> (default 200), SPINSLEEP=0 disables it.
- * Stack: after POP32 [esp+0xc] = 0x57eb69, E = esp+0x14 (0057ead0's local
- * base), target float [E+0xc] = [esp+0x20], start = EBX. */
-static int g_spin_margin = -1;
-static uint64_t g_spin_n, g_spin_us, g_spin_late[7];   /* late wake-up: <=25,50,100,200,400,800,>800 us */
-static void spin_report(void){
-    fprintf(stderr, "\n=== SPINSLEEP: the frame wait loop slept %llu times, %.2f s in total (margin %d us) ===\n",
-            (unsigned long long)g_spin_n, g_spin_us / 1e6, g_spin_margin);
-    fprintf(stderr, "  late wake-ups: <=25us %llu  <=50 %llu  <=100 %llu  <=200 %llu  <=400 %llu  <=800 %llu  >800 %llu\n",
-            (unsigned long long)g_spin_late[0], (unsigned long long)g_spin_late[1], (unsigned long long)g_spin_late[2],
-            (unsigned long long)g_spin_late[3], (unsigned long long)g_spin_late[4], (unsigned long long)g_spin_late[5],
-            (unsigned long long)g_spin_late[6]);
-    extern uint64_t g_sleep_late_ns, g_sleep_gil_ns, g_sleep_n;
-    if (g_sleep_n) fprintf(stderr, "  average: nanosleep lateness %.0f us, lock wait on wake-up %.0f us\n",
-                           g_sleep_late_ns / 1e3 / g_sleep_n, g_sleep_gil_ns / 1e3 / g_sleep_n);
-}
-uint64_t spin_slept_us(void){ return g_spin_us; }   /* perflog: frame limiter sleep */
-static void qpc_spin_sleep(CPU *c){
-    if (MR32(c->esp + 0xcu) != 0x57eb69u) return;
-    if (g_spin_margin < 0){ const char *e = getenv("SPINSLEEP"); g_spin_margin = e ? atoi(e) : 200;
-                            if (g_spin_margin && ENVC("QPCWHO")) atexit(spin_report); }
-    if (!g_spin_margin) return;
-    /* the game's units: F = [0x828028] per QPC tick (measured 0.001 = ms,
-     * k = [0x784550] = 1000), X = [0x865558] = 1/120 s frame target */
-    uint32_t S = MR32(0x8284e4u) & 31u;
-    float F = MRF32(0x828028u), target = MRF32(c->esp + 0x20u);
-    if (!(F > 0.0f) || !(target > 0.0f)) return;
-    uint64_t now = host_qpc();
-    int32_t d = (int32_t)((uint32_t)(now >> S) - c->ebx); if (d < 0) d = 0;
-    double left = (double)target - (double)d * (double)(1u << S) * (double)F;
-    double us = left / (double)F - (double)g_spin_margin;      /* QPC tick = us (QPF 1 MHz) */
-    if (us < 50.0 || us > 100000.0) return;                  /* short: spin; >0.1 s: unexpected */
-    void guest_sleep_ns(int64_t ns);
-    guest_sleep_ns((int64_t)(us * 1000.0));
-    g_spin_n++; g_spin_us += (uint64_t)us;
-    { double late = (double)(host_qpc() - now) - us;         /* us slept beyond what was asked */
-      int b = late <= 25 ? 0 : late <= 50 ? 1 : late <= 100 ? 2 : late <= 200 ? 3 : late <= 400 ? 4 : late <= 800 ? 5 : 6;
-      g_spin_late[b]++; }
-}
 static void qpc_who(CPU *c){
     static int init = 0; static uint64_t tot = 0;
     if (!init){ init = 1; atexit(qpc_report); }
@@ -305,10 +250,10 @@ static void qpc_who(CPU *c){
         fprintf(stderr, "  [qpc] %llu M calls, frame %ld\n", (unsigned long long)(tot >> 20), metal_frames()); }
     uint32_t tid = (c->fs_base && mem_is_committed(c->fs_base+0x24u)) ? MR32(c->fs_base+0x24u) : 0u;
     uint32_t ra = c->eip;                       /* after POP32: return address */
-    /* sub_0043bdf0 (the game's time wrapper): sub esp,8; push arg; call.
-     * After POP32 [esp]=arg, [esp+4..0xb]=locals, [esp+0xc]=its caller. */
-    uint32_t ra2 = ra == 0x43bdfeu ? MR32(c->esp+0xcu)
-                 : (c->ebp && mem_is_committed(c->ebp+4u)) ? MR32(c->ebp+4u) : 0u;
+    /* one frame up: the game knows its own clock wrapper (game.h qpc_caller),
+     * else the caller's frame */
+    uint32_t ra2 = g_game.qpc_caller ? g_game.qpc_caller(c) : 0u;
+    if (!ra2) ra2 = (c->ebp && mem_is_committed(c->ebp+4u)) ? MR32(c->ebp+4u) : 0u;
     uint32_t h = (tid * 2654435761u ^ ra * 40503u ^ ra2) & 127u;
     for (int i = 0; i < 128; i++, h = (h + 1) & 127u){
         QpcWho *w = &g_qw[h];
@@ -381,7 +326,8 @@ static int module_known(uint32_t p){
     const char *b = nm;
     for (const char *q = nm; *q; q++) if (*q == '\\' || *q == '/') b = q + 1;
     size_t l = strlen(b);
-    if (!strcasecmp(b, "speed2.exe") || !strcasecmp(b, "speed2")) return 1;
+    { const char *x = g_game.exe_name, *dot = strrchr(x, '.');     /* the exe, with or without ".exe" */
+      if (!strcasecmp(b, x) || (dot && l == (size_t)(dot - x) && !strncasecmp(b, x, l))) return 1; }
     for (uint32_t i = 0; i < g_nimps; i++){            /* the exe's and server.dll's imports */
         const char *d = g_imps[i].dll; size_t dl = strlen(d);
         if (!strcasecmp(b, d)) return 1;
@@ -455,19 +401,27 @@ static void netlog(CPU *c, const ImpEnt *e, uint32_t r, int handled){
     }
 }
 
-/* Which module's import is being served on this thread: 0 = SPEED2.EXE,
- * 1 = server.dll (win32_ext.c gives the lifted DLL Windows' thread exit
- * semantics without changing what the exe has always been told). */
+/* Which module's import is being served on this thread: 0 = the exe, m =
+ * lifted module m (module.h; UG2: 1 = server.dll).  win32_ext.c gives the
+ * lifted DLLs Windows' thread exit semantics without changing what the exe
+ * has always been told. */
 static _Thread_local int tl_imp_mod = 0;
 int win32_caller_module(void){ return tl_imp_mod; }
 /* Real monotonic milliseconds (server.dll's GetTickCount, see win32_call). */
 static uint32_t real_ms(void){ return (uint32_t)(real_us() / 1000ull) + 1000u; }
 
+/* The address the guest calls an import at (IMP_MAGIC + index), 0 when
+ * neither the exe nor a lifted DLL imports it (win32_ext.c's thread test). */
+uint32_t win32_import_va(const char *name){
+    for (uint32_t i = 0; i < g_nimps; i++) if (!strcmp(g_imps[i].name, name)) return IMP_MAGIC + i;
+    return 0;
+}
+
 int win32_call(CPU *c, uint32_t idx){
     if (idx >= g_nimps) return 0;
     const ImpEnt *e = &g_imps[idx];
     { void win32_thread_term_check(CPU*); win32_thread_term_check(c); }   /* TerminateThread */
-    int prev_mod = tl_imp_mod; tl_imp_mod = idx >= g_imp_count;
+    int prev_mod = tl_imp_mod; tl_imp_mod = idx >= g_imp_count ? module_of_import(idx) : 0;
     stat_[idx].calls++; g_win32_calls++;
     guest_fair_yield();          /* give the other guest threads a turn */
     POP32(c->eip);                      /* take the return address */
@@ -479,13 +433,14 @@ int win32_call(CPU *c, uint32_t idx){
      * skip the name chain's ~20 strcmps the import index is cached on the
      * first match. */
     static uint32_t qpc_idx = 0xFFFFFFFFu;
-    /* server.dll runs on real time.  The HLE's GetTickCount is the frame-paced
-     * virtual clock, which nearly stops while the game does not present (loads,
-     * hitches); the LAN server's ping/idle timeouts, its advert cadence and its
-     * 33 ms service loop would stretch against Windows clients on real time.
-     * Its time() comes from GetSystemTimeAsFileTime: real UTC as well (the
-     * HLE's own is a counter that advances per call, which would end
-     * StopServer's 10 s wait after 1,000 polls instead of 10 s). */
+    /* server.dll (every lifted DLL) runs on real time.  The HLE's
+     * GetTickCount is the frame-paced virtual clock, which nearly stops while
+     * the game does not present (loads, hitches); the LAN server's ping/idle
+     * timeouts, its advert cadence and its 33 ms service loop would stretch
+     * against Windows clients on real time.  Its time() comes from
+     * GetSystemTimeAsFileTime: real UTC as well (the HLE's own is a counter
+     * that advances per call, which would end StopServer's 10 s wait after
+     * 1,000 polls instead of 10 s). */
     if (idx >= g_imp_count && !strcmp(n,"GetTickCount")) r = real_ms();
     else if (idx >= g_imp_count && !strcmp(n,"GetSystemTimeAsFileTime")){
         uint32_t p = ARG(c,0);
@@ -496,13 +451,13 @@ int win32_call(CPU *c, uint32_t idx){
     else if (idx == qpc_idx || (qpc_idx == 0xFFFFFFFFu && !strcmp(n,"QueryPerformanceCounter") && (qpc_idx = idx, 1))
              || (idx >= g_imp_count && !strcmp(n,"QueryPerformanceCounter"))){
         if (ENVC("QPCWHO")) qpc_who(c);
-        if (c->eip == 0x43bdfeu) qpc_spin_sleep(c);
+        if (g_game.on_qpc) g_game.on_qpc(c);    /* UG2: its frame wait loop sleeps (framerate.c) */
         uint64_t v = host_qpc(); uint32_t p=ARG(c,0);
         if(p){ MR32(p)=(uint32_t)v; MR32(p+4)=(uint32_t)(v>>32); } r=1; }
     /* A lifted DLL's own heaps (server.dll's CRT: HeapCreate from that DLL)
-     * are modheap.c's, in guest memory nothing else uses
-     * (0x01000000-0x0F000000); every other heap call is heap.c's. */
-    else if (g_hk[idx] > 0 && idx >= g_imp_count && !strcmp(n,"HeapCreate")) r = modheap_create();
+     * are modheap.c's, each DLL's in its own part of guest memory nothing
+     * else uses (memmap.h modheap); every other heap call is heap.c's. */
+    else if (g_hk[idx] > 0 && idx >= g_imp_count && !strcmp(n,"HeapCreate")) r = modheap_create(tl_imp_mod);
     else if (g_hk[idx] > 0 && n[0] == 'H' && !strncmp(n,"Heap",4) && modheap_owns(ARG(c,0))){
         uint32_t h = ARG(c,0);
         if      (!strcmp(n,"HeapDestroy")) r = (uint32_t)modheap_destroy(h);
@@ -572,13 +527,15 @@ int win32_call(CPU *c, uint32_t idx){
     else if (!strcmp(n,"TlsFree")){
         /* Windows clears the slot in every thread, so the next TlsAlloc of
          * this index reads NULL everywhere: here the main TEB, the created
-         * threads' TEBs (0x00C20000 + 0x2000 n) and the timer thread's. */
+         * threads' TEBs (0x00C20000 + 0x2000 n) and the timer thread's, all
+         * in the TEB range (memmap.h), which ends where the next region
+         * starts. */
         uint32_t i = ARG(c,0); r = 0;
         if (i < (uint32_t)tls_next){
             int dup = 0; for (int k = 0; k < tls_nfree; k++) dup |= tls_free[k] == i;
             if (!dup && tls_nfree < 128){
                 tls_slot[i] = 0;
-                for (uint32_t teb = 0x00C00000u; teb < 0x00D00000u; teb += 0x2000u)
+                for (uint32_t teb = MM_TEB_LO; teb + MM_TEB_SIZE <= MM_TEB_HI; teb += MM_TEB_SIZE)
                     if (mem_is_committed(teb + 0x2Cu) && MR32(teb + 0x18u) == teb){
                         uint32_t arr = MR32(teb + 0x2Cu);
                         if (arr && mem_is_committed(arr + 4u*i + 3u)) MR32(arr + 4u*i) = 0;
@@ -611,7 +568,7 @@ int win32_call(CPU *c, uint32_t idx){
         { static uint32_t seen = 0; if (f < 32u && !(seen & (1u << f))){ seen |= 1u << f;
             fprintf(stderr,"[hle] IsProcessorFeaturePresent(%u) -> %u (from 0x%08x)\n", f, r, c->eip); } } }
     else if (!strcmp(n,"GetModuleFileNameA")){ uint32_t p=ARG(c,1),sz=ARG(c,2);
-        const char*s="C:\\\\NFSU2\\\\SPEED2.EXE"; char ms[300];
+        const char*s=g_game.module_path; char ms[300];
         if (module_file_name(ARG(c,0), ms, sizeof ms)) s = ms;   /* server.dll: C:\NFSU2\server.dll */
         uint32_t l=(uint32_t)strlen(s);
         if(p&&sz){ if(l>=sz) l=sz-1; memcpy(g_mem+p,s,l); MR8(p+l)=0; } r=l; }
@@ -767,7 +724,7 @@ int win32_call(CPU *c, uint32_t idx){
     netlog(c, e, r, handled);
     if (idx >= g_imp_count && !strncasecmp(e->dll, "ws2_32", 6)){
         void module_note_socket_call(int, const char *, uint32_t, uint32_t);   /* module.c: unload report */
-        module_note_socket_call(1, n, ARG(c,0), r);
+        module_note_socket_call(tl_imp_mod, n, ARG(c,0), r);
     }
 
     c->eax = r;
@@ -777,10 +734,15 @@ int win32_call(CPU *c, uint32_t idx){
 }
 
 void win32_init(void){
-    g_nimps = g_imp_count + g_srv_imp_count;
+    module_init();
+    g_nimps = g_imp_count;
+    for (int m = 1; m <= module_count(); m++) g_nimps += *module_link(m)->imp_count;
     g_imps = calloc(g_nimps ? g_nimps : 1, sizeof *g_imps);
     memcpy(g_imps, g_imp, g_imp_count * sizeof *g_imps);
-    if (g_srv_imp_count) memcpy(g_imps + g_imp_count, g_srv_imp, g_srv_imp_count * sizeof *g_imps);
+    for (int m = 1; m <= module_count(); m++){
+        const ModLink *l = module_link(m);
+        if (*l->imp_count) memcpy(g_imps + module_imp_first(m), l->imp, *l->imp_count * sizeof *g_imps);
+    }
     stat_ = calloc(g_nimps ? g_nimps : 1, sizeof *stat_);
     heap_init();
     g_hk = calloc(g_nimps ? g_nimps : 1, 1);
@@ -789,14 +751,20 @@ void win32_init(void){
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC,&ts);
     tick0 = (uint64_t)ts.tv_sec*1000 + ts.tv_nsec/1000000;
     g_cmdline = gheap_alloc(1, 64, 1);
-    strcpy((char*)(g_mem+g_cmdline), "SPEED2.EXE");
+    snprintf((char*)(g_mem+g_cmdline), 64, "%s", g_game.exe_name);
     /* fill the IAT with magic addresses */
     for (uint32_t i=0;i<g_imp_count;i++) MR32(g_imp[i].iat) = IMP_MAGIC + i;
     com_init();
     { void watchdog_start(void); watchdog_start(); }      /* NFSU2_WATCHDOG */
     /* addresses to read later for diagnosing the CRT heap mode */
     fprintf(stderr,"win32: %u imports bound to the IAT\n", g_imp_count);
-    if (g_srv_imp_count) fprintf(stderr,"win32: server.dll lifted into this build (%u imports, bound when it is loaded)\n", g_srv_imp_count);
+    for (int m = 1; m <= module_count(); m++){
+        const ModLink *l = module_link(m);
+        if (*l->imp_count) fprintf(stderr,"win32: %s lifted into this build (%u imports, bound when it is loaded)\n",
+                                   l->info->name, *l->imp_count);
+    }
+    { extern uint32_t g_image_base, g_image_size;          /* mem_load_pe */
+      memmap_check(g_image_base, g_image_base + g_image_size, 1); }   /* the guest layout (memmap.h): stops if broken */
 }
 
 void win32_report(void){
@@ -817,8 +785,13 @@ void win32_report(void){
     { extern void d3dx_hle_report(void); d3dx_hle_report(); }
     fprintf(stderr,"  --- NOT IMPLEMENTED (called, a stub returned) ---\n");
     for (uint32_t i=0;i<g_nimps;i++)
-        if (stat_[i].unimpl)
-            fprintf(stderr,"    %s%-14s %-32s %u times\n", i >= g_imp_count ? "server!" : "", g_imps[i].dll, g_imps[i].name, stat_[i].unimpl);
+        if (stat_[i].unimpl){
+            /* a module's import, after its file name without the extension: "server!" */
+            const ModLink *l = module_link(module_of_import(i));
+            const char *mn = l ? l->info->name : "";
+            int ml = l ? (int)strcspn(mn, ".") : 0;
+            fprintf(stderr,"    %.*s%s%-14s %-32s %u times\n", ml, mn, l ? "!" : "", g_imps[i].dll, g_imps[i].name, stat_[i].unimpl);
+        }
     fprintf(stderr,"  --- 15 MOST CALLED ---\n");
     for (int k=0;k<15;k++){
         uint32_t best=0, bi=0;

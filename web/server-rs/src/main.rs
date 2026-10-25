@@ -36,6 +36,9 @@
 //! compression of the game data on a pool of its own (half the cores), the Online host and the free-roam hub on a
 //! thread each.  The repository the defaults are in (web/dist, out/web/nfsu2.wasm, out/web/server): the one this
 //! binary was built from, or NFSU2_REPO.
+//!
+//! One game per server: NFS Underground 2, or with --game mw NFS Most Wanted (its own program, entries, page, module
+//! and state folder: game.rs).  `nfsu2-server [--game mw] --print-entries` prints what of the game's folder it serves.
 
 use mimalloc::MiMalloc;
 
@@ -44,6 +47,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 mod app;
 mod ctl;
+mod game;
 mod options;
 mod paths;
 
@@ -68,6 +72,14 @@ fn main() {
     // an operator's command to the running server (src/ctl.rs), not a server
     if argv.first().is_some_and(|a| a == "ctl") {
         std::process::exit(ctl::run(&argv[1..], &env, &repo(&cwd), &cwd));
+    }
+    // the game folder's entries it serves, one a line (web/deploy/pack.sh asks), not a server
+    if argv.iter().any(|a| a == "--print-entries") {
+        let g = options::game(&argv, &env).unwrap_or_else(|m| die(&m));
+        for e in g.entries {
+            println!("{e}");
+        }
+        return;
     }
     let o = options::parse(&argv, &env, &repo(&cwd), &cwd, &options::RealFs).unwrap_or_else(|m| die(&m));
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());

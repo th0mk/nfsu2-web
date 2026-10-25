@@ -1,0 +1,10 @@
+# Files a UG2 lift may gain over the baseline (web/tools/ug2-same.sh), one per
+# line as all/<name> or server/<name>, each one reviewed: a file that only the
+# new lift has passes when it is named here.  A changed or missing file never
+# passes.  The reason goes on the comment lines above the name.
+
+# the exe's values the runtime is built with (image, .text, entry point,
+# _ftol2), written by tools/genall.py for runtime/cpu.h (TRACKER M1-08); a
+# UG2 lift's has the #define lines of runtime/gameinfo_ug2.h, the values the
+# runtime was built with before
+all/gameinfo.h

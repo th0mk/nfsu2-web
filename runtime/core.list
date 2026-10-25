@@ -1,0 +1,66 @@
+# The runtime's core: the files of runtime/ that every game's build uses as
+# they are.  One file per line, relative to runtime/; "#" starts a comment.
+# Every runtime/web/*.c is core too, without being listed here.
+#
+# A core file holds no game address (tools/gamelit.sh, with its reviewed
+# allowlist tools/gamelit.allow for the UG2 literals still to move) and no
+# override, DX_WRAP or HOOK_SITE marker: a game's overrides and hooks live in
+# its own files, and core reaches them through runtime/game.h.
+#
+# Not core yet, because they still hold UG2 overrides or hooks next to their
+# generic code: dinput_pad.c, framerate.c (the pacer), widescreen.c (the ws_*
+# mapping API).  Not core: carsfx.c (reads UG2's engine and nitrous sound
+# banks) and every UG2 feature file.
+
+# guest memory, dispatch, the lifted code's helpers
+cpu.h
+mem.c
+memmap.c
+memmap.h
+dispatch.c
+genexec.c
+heap.c
+modheap.c
+module.c
+module.h
+debug.c
+watchdog.c
+game.h
+
+# Win32, files, resources, the game's life cycle
+win32.c
+win32_ext.c
+fileio.c
+res.c
+lifecycle.c
+winsock.c
+winsock.h
+
+# D3D9, DirectInput, DirectSound
+com.c
+d3d9_tables.h
+dxrec.h
+gfx.h
+vsemu.c
+vsemu.h
+enhance.c
+enhance.h
+dikeys.c
+keyboard.c
+kbd.h
+dinput_kbd.c
+horn.c
+horn.h
+
+# test scripts and reports
+autotest.c
+
+# free roam's network core, player names
+roam_core.c
+roam_core.h
+roam_plat.h
+names.h
+nettest.h
+
+# vendored
+xxhash.h

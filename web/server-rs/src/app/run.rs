@@ -114,8 +114,8 @@ pub async fn run(o: Options, cores: usize) {
     let tap = trace.as_ref().map(|t| t.tap());
     // the lines a client causes in Online mode (logins, games, races, friends) count against that client's share of
     // the console, as its joins and refusals do (the Online audit's ONL-8)
-    let online = o.online.then(|| {
-        OnlineHost::spawn(OnlineOptions {
+    let online = o.game.online.filter(|_| o.online).map(|title| {
+        OnlineHost::spawn_for(title, OnlineOptions {
             state_dir: Some(PathBuf::from(paths::join(&o.state, "online"))),
             log: Arc::new(|line: &str, key: Option<&str>| match key {
                 None => log::line(line),
@@ -380,11 +380,11 @@ pub async fn run(o: Options, cores: usize) {
         }
     }
     let mut lines = vec![
-        "NFSU2 web server".to_string(),
+        o.game.title.to_string(),
         format!("  game data : {} ({} entries of the game's own)", o.data, app.manifest_count()),
         format!(
             "  game.wasm : {}",
-            if Path::new(&o.wasm).exists() { o.wasm.clone() } else { format!("{}  (missing: run web/build.sh)", o.wasm) }
+            if Path::new(&o.wasm).exists() { o.wasm.clone() } else { format!("{}  (missing: run {})", o.wasm, o.game.build) }
         ),
         format!(
             "  {here:<10}: {}{}",
@@ -445,6 +445,8 @@ pub async fn run(o: Options, cores: usize) {
                 "the game's Online mode at 10.77.0.1 on the switch (any name logs in; race results per persona in {})",
                 paths::join(&o.state, "online")
             )
+        } else if o.game.online.is_none() {
+            format!("off (this server has no Online mode for {} yet)", o.game.name)
         } else {
             "off (--online off)".into()
         }
