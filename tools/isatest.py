@@ -9,6 +9,9 @@ os.environ.setdefault('X87PC', '1')
 # lock-prefixed read-modify-writes are lifted as MW's lift does them
 # (games/mw/game.conf LOCKSTRIP=1); without it they are traps
 os.environ.setdefault('LOCKSTRIP', '1')
+# the x87 environment and state images are lifted as MW's lift does them
+# (games/mw/game.conf X87ENV=1); without it they are traps
+os.environ.setdefault('X87ENV', '1')
 from lift import RawLifter, Unsupported
 
 TESTS = []
@@ -497,6 +500,67 @@ T("lock add dword [m32],1",
   [0xF0,0x83,0x05]+a32(LK+0x70)+[0x01], {}, mem={LK+0x70:41}, expect={'zf':0}, fmem={LK+0x70:42})
 T("lock sub [ecx],eax (to 0)",
   [0xF0,0x29,0x01], {'ecx':LK+0x80, 'eax':7}, mem={LK+0x80:7}, expect={'zf':1,'cf':0}, fmem={LK+0x80:0})
+# 0x834EE0 and 0x834EF9: the same function adds edi, then ebx, to the counter at [esi]
+T("lock xadd [esi],edi; lock xadd [esi],ebx",
+  [0xF0,0x0F,0xC1,0x3E, 0xF0,0x0F,0xC1,0x1E], {'esi':LK+0x90, 'edi':2, 'ebx':0xFFFFFFFF}, mem={LK+0x90:10},
+  expect={'edi':10, 'ebx':12, 'esi':LK+0x90, 'cf':1, 'zf':0}, fmem={LK+0x90:11})
+
+# ---------------- MW's x87 status word and environment ----------------
+MW_ = 0x00C90000
+# FUCOMPP writes only the x87 status word.  MW's sound gain routine 0x81CDC6
+# keeps a CMP's ZF across one at 0x81CE0E (cmp ebx,-1; fld st(0); fld dword
+# [ebp+0x10]; mov byte [edi+0x12],0; fucompp; jne): codepdbh's lifter took the
+# integer flags from the compare and corrupted voice+0x118.  Here the compare
+# says the opposite of the CMP each time; edx = 1 when the jne falls through.
+def _fucompp(name, ebx, a, b, edx, cc, base):
+    T(name, [0xD9,0x05]+a32(base) + [0x83,0xFB,0xFF] + [0xD9,0xC0] + [0xD9,0x05]+a32(base+4)
+            + [0xC6,0x05]+a32(base+8)+[0x00] + [0xDA,0xE9] + [0x75,0x07] + [0xBA]+imm32(1) + [0xEB,0x05]
+            + [0xBA]+imm32(2) + [0xDF,0xE0] + [0xD9,0x1D]+a32(base+12),
+      {'ebx':ebx}, mem={base+8:0x11223344}, memf={base:a, base+4:b},
+      expect={'edx':edx, 'ah_and':(0x45, cc)}, fmem={base+8:0x11223300}, fmemf={base+12:a})
+_fucompp("cmp ebx,-1 (equal); fucompp (2.0 > 1.0); jne", 0xFFFFFFFF, 1.0, 2.0, 1, 0x00, MW_)
+_fucompp("cmp ebx,-1 (not equal); fucompp (1.0 == 1.0); jne", 5, 1.0, 1.0, 2, 0x40, MW_+0x10)
+# test r16 sets SF from bit 15 and ZF from the low 16 bits only: test bx,bx; jle
+# (edx = 2 when taken).  The upper half of ebx says the opposite each time.
+def _testw(name, ebx, edx):
+    T(name, [0x66,0x85,0xDB, 0x7E,0x07, 0xBA]+imm32(1)+[0xEB,0x05, 0xBA]+imm32(2),
+      {'ebx':ebx}, expect={'edx':edx, 'ebx':ebx})
+_testw("test bx,bx; jle (bx=0x8000, ebx > 0: taken)", 0x00018000, 2)
+_testw("test bx,bx; jle (bx=0, ebx != 0: taken)", 0x12340000, 2)
+_testw("test bx,bx; jle (bx=1, ebx < 0: not taken)", 0xFFFF0001, 1)
+_testw("test bx,bx; jle (bx=0x7FFF, ebx < 0: not taken)", 0x80007FFF, 1)
+# X87ENV=1.  The CRT's _adj_fprem (0x7D96AB) sets C3/C1/C0 through the
+# environment: fld1; mov eax,0x4100; sub esp,0x1c; fnstenv [esp]; and dword
+# [esp+4],0xbcff; or [esp+4],eax; fldenv [esp]; add esp,0x1c; fnstsw ax;
+# fstp dword [m].  ah = C3 | TOP 7 | C0; the image has CW and TW with the
+# reserved upper halves set, and FIP 0.
+_ENV = 0x00B00000 - 4 - 0x1C   # the harness's esp after the return address and the sub
+T("fnstenv/fldenv [esp]: C3|C0 into the status word (_adj_fprem)",
+  [0xD9,0xE8, 0xB8]+imm32(0x4100) + [0x83,0xEC,0x1C, 0xD9,0x34,0x24, 0x81,0x64,0x24,0x04]+imm32(0xBCFF)
+  + [0x09,0x44,0x24,0x04, 0xD9,0x24,0x24, 0x83,0xC4,0x1C, 0xDF,0xE0, 0xD9,0x1D]+a32(MW_+0x20),
+  {}, expect={'ah_and':(0xFF, 0x79)},
+  fmem={_ENV:0xFFFF037F, _ENV+4:0x00007900, _ENV+8:0xFFFFFFFF, _ENV+12:0}, fmemf={MW_+0x20:1.0})
+# fnstenv stores the control word, then masks all exceptions: fldcw [m] (0x0240);
+# fnstenv [m+0x10]; fnstcw [m+0x30]
+T("fnstenv [m32]: the image, then all exceptions masked",
+  [0xD9,0x2D]+a32(MW_+0x40) + [0xD9,0x35]+a32(MW_+0x50) + [0xD9,0x3D]+a32(MW_+0x70),
+  {}, mem={MW_+0x40:0x0240, MW_+0x5C:0x5A5A5A5A, MW_+0x68:0x5A5A5A5A, MW_+0x70:0xAAAA0000},
+  fmem={MW_+0x50:0xFFFF0240, MW_+0x54:0xFFFF0000, MW_+0x58:0xFFFFFFFF, MW_+0x5C:0, MW_+0x68:0, MW_+0x70:0xAAAA027F})
+# MW's x87 pow (0x7C474C): fnsave around the special-value helper, then frstor.
+# fld dword [a] (2.0); fld dword [b] (3.0); fldcw [cw] (0x007F); fnsave [s];
+# fnstcw [s+0x70]; fld1; fstp st(0); frstor [s]; fnstcw [s+0x74]; fstp dword [d];
+# fstp dword [d+4].  fnsave leaves CW 0x037F and an empty stack; frstor brings
+# back CW, TOP 6 and both values.  The image holds ST(0) = 3.0 and ST(1) = 2.0
+# as 80-bit values after the 28-byte environment.
+_S = MW_ + 0x100
+T("fnsave/frstor (x87 pow's special-value path)",
+  [0xD9,0x05]+a32(MW_+0x80) + [0xD9,0x05]+a32(MW_+0x84) + [0xD9,0x2D]+a32(MW_+0x88) + [0xDD,0x35]+a32(_S)
+  + [0xD9,0x3D]+a32(_S+0x70) + [0xD9,0xE8, 0xDD,0xD8] + [0xDD,0x25]+a32(_S) + [0xD9,0x3D]+a32(_S+0x74)
+  + [0xD9,0x1D]+a32(MW_+0x90) + [0xD9,0x1D]+a32(MW_+0x94),
+  {}, mem={MW_+0x88:0x007F, _S+0x70:0, _S+0x74:0}, memf={MW_+0x80:2.0, MW_+0x84:3.0},
+  fmem={_S:0xFFFF007F, _S+4:0xFFFF3000, _S+8:0xFFFFFFFF, _S+0x1C:0, _S+0x20:0xC0000000, _S+0x24:0x00004000,
+        _S+0x28:0, _S+0x2C:0x40008000, _S+0x70:0x037F, _S+0x74:0x007F},
+  fmemf={MW_+0x90:3.0, MW_+0x94:2.0})
 
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the

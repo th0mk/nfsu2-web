@@ -35,7 +35,7 @@ const exeLine = id => `exe ${conf(id).match(/^EXE_SHA256=(\w{16})/m)[1]} server.
 const STAMP = `# gen.sh 2026-10-18T00:00:00Z: what gen/all and gen/server were lifted from\n${sources}\n${exeLine('ug2')}\noptions X87PC=1 X87OPT=1 FLAGABI=0\n`;
 const MW = { GAME: 'mw' };
 const mwOrig = stamp(['overrides'], MW).split(',').filter(Boolean);
-const MW_STAMP = `# gen.sh 2026-10-25T00:00:00Z: what gen/mw/all and gen/mw/server were lifted from\n${stamp(['sources'], MW)}\n${exeLine('mw')}\noptions X87PC=1 LOCKSTRIP=1\n`;
+const MW_STAMP = `# gen.sh 2026-10-25T00:00:00Z: what gen/mw/all and gen/mw/server were lifted from\n${stamp(['sources'], MW)}\n${exeLine('mw')}\noptions X87PC=1 LOCKSTRIP=1 X87ENV=1\n`;
 
 /** a fake gen dir: decls.h with the runtime's _orig declarations, the given stamps, and a gameinfo.h when info */
 function gen(name, { all = STAMP, server = all, decls = orig, info = false } = {}) {

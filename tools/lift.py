@@ -237,6 +237,11 @@ def _retpast():
     root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     p = _os.path.join(root, _os.environ.get('RETPAST_LIST') or 'tools/retpast.txt')
     return {int(x, 16) for ln in open(p) for x in ln.split('#')[0].replace(',', ' ').split()}
+# X87ENV=1 (games/<id>/game.conf, gen.sh): fnstenv/fldenv and fnsave/frstor
+# (the 32-bit 28- and 108-byte images) are lifted; without it they are traps.
+# MW's x87 pow (0x7C464D, the CRT's special-value path) saves the FPU around
+# its helper with fnsave/frstor.  Off for UG2, whose same CRT sites stay traps.
+_X87ENV = __import__('os').environ.get('X87ENV', '') == '1'
 _LREGS = None
 def _lregs():
     """tools/lregs.py (LREGS=1), next to this file"""
@@ -876,6 +881,28 @@ class Lifter:
             return [f"/* {m}: no effect in our model */"] + (["FPOP();"] if m=='ffreep' else [])
         if m in ('finit','fninit'):
             return ["memset(c->st,0,sizeof c->st); c->top=0; c->fcw=0x037f; c->fsw=0;"]
+        # X87ENV=1: the environment image is CW, SW (TOP included), TW, then
+        # FIP, FCS/opcode, FDP, FDS: one dword each, the reserved upper halves
+        # of the first three written as ones like the hardware.  The model
+        # keeps no tag word and no instruction or operand pointers: TW is
+        # written as all empty, the pointers as 0, and loads ignore all three.
+        # fnsave appends ST(0)..ST(7) as 80-bit values and then initializes
+        # the FPU (fninit); fnstenv masks all exceptions after the store.  The
+        # 16-bit images (0x66 prefix) stay traps.
+        if _X87ENV and m in ('fnstenv','fldenv','fnsave','frstor'):
+            if not o or o[0].type!=X86_OP_MEM or i.prefix[2]==0x66: raise Unsupported(m)
+            ea=self.ea(o[0].mem)
+            if m in ('fnstenv','fnsave'):
+                st=[f"uint32_t _e={ea};", "MR32(_e) = 0xffff0000u | c->fcw;", "MR32(_e+4u) = 0xffff0000u | fsw_get(c);",
+                    "MR32(_e+8u) = 0xffffffffu;"] + [f"MR32(_e+{k}u) = 0u;" for k in (12, 16, 20, 24)]
+                if m=='fnstenv': st.append("c->fcw |= 0x3fu;")
+                else: st += [f"f80_store(g_mem + (uint32_t)(_e+{28+10*k}u), ST({k}));" for k in range(8)] \
+                          + ["memset(c->st,0,sizeof c->st); c->top=0; c->fcw=0x037f; c->fsw=0;"]
+            else:
+                st=[f"uint32_t _e={ea}; uint16_t _sw=MR16(_e+4u);", "c->fcw = MR16(_e);",
+                    "c->fsw = (uint16_t)(_sw & ~0x3800u); c->top = (int32_t)((_sw >> 11) & 7u);"]
+                if m=='frstor': st += [f"ST({k}) = f80_load(g_mem + (uint32_t)(_e+{28+10*k}u));" for k in range(8)]
+            return ["{ " + " ".join(st) + " }"]
 
         # ---------------- string instructions ----------------
         if m=='cld': return ["c->df = 0;"]

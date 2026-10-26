@@ -16,7 +16,7 @@
 #   <id>  all three in runtime/<id>/*.c; the source lines start with "game <id>"
 # For every game the lifter's hash covers its game.conf, its inline and retpast
 # lists and tools/gameconf.sh, which decide the lift too (FTOL2_VA, LOCKSTRIP,
-# SRV_BASE).
+# X87ENV, SRV_BASE).
 # Every command first refuses a core file holding "_orig", "DX_WRAP" or
 # "HOOK_SITE", comments included: runtime/core.list's files and every
 # runtime/web/*.c are shared by every game, and a marker there would put one

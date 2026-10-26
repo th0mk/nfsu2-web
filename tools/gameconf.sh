@@ -6,7 +6,7 @@
 #   is (web/gen.sh lets FTOL2INL and INLINE_LIST given there win over the
 #   game's).  The tools get the game's paths and addresses from the exports at
 #   the end: GEN_DIR (gen/all, gen/server), OUT_DIR (relocs, flag table, logs),
-#   FTOL2_VA, LOCKSTRIP and RETPAST_LIST (tools/lift.py).
+#   FTOL2_VA, LOCKSTRIP, X87ENV and RETPAST_LIST (tools/lift.py).
 #   gameconf_files <exe>   stops unless <exe>, and server.dll next to it if
 #                          there is one, are the files game.conf names (SHA-256)
 #   gameconf_nolink <script>  stops when GEN_DIR, a folder on its way there,
@@ -25,7 +25,7 @@ while IFS= read -r _l || [ -n "$_l" ]; do
   [ "$_k" != "$_l" ] || { echo "$GAME_CONF: not a KEY=VALUE line: $_l"; exit 1; }
   eval "GC_$_k=\${_l#*=}"
 done < "$GAME_CONF"
-for _k in EXE_NAME EXE_SHA256 FTOL2_VA SRV_BASE SRV_SHA256 GEN_DIR OUT_DIR FTOL2INL INLINE_LIST LOCKSTRIP RETPAST_LIST; do
+for _k in EXE_NAME EXE_SHA256 FTOL2_VA SRV_BASE SRV_SHA256 GEN_DIR OUT_DIR FTOL2INL INLINE_LIST LOCKSTRIP X87ENV RETPAST_LIST; do
   eval "_v=\${GC_$_k+set}"
   [ -n "$_v" ] || { echo "$GAME_CONF: no $_k="; exit 1; }
 done
@@ -56,4 +56,4 @@ gameconf_nolink(){
   done
 }
 
-export GAME GEN_DIR="$GC_GEN_DIR" OUT_DIR="$GC_OUT_DIR" FTOL2_VA="$GC_FTOL2_VA" LOCKSTRIP="$GC_LOCKSTRIP" RETPAST_LIST="$GC_RETPAST_LIST"
+export GAME GEN_DIR="$GC_GEN_DIR" OUT_DIR="$GC_OUT_DIR" FTOL2_VA="$GC_FTOL2_VA" LOCKSTRIP="$GC_LOCKSTRIP" X87ENV="$GC_X87ENV" RETPAST_LIST="$GC_RETPAST_LIST"
