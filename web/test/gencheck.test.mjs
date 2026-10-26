@@ -3,8 +3,12 @@
 // list, hook list or lifter (web/tools/gencheck.sh), and a plain ./gen.sh
 // leaves no web-lift.txt behind.  Per game (GAME=, games/<id>/game.conf):
 // genstamp greps UG2's files as always and another game's runtime/<id>/*.c,
-// both refuse a core file holding an override or hook marker, and gencheck
-// refuses another game's gen and an exe line that is not game.conf's.
+// both refuse a core file holding an override or hook marker, every game's
+// lifter hash covers its game.conf, gencheck refuses another game's gen, an
+// exe line that is not game.conf's and a D3DX oracle gen without a stamp of
+// this checkout, and gen.sh and web/gen.sh refuse a link to the shared gen.
+// The pipeline's switches (GAME, GEN, GEN_STALE_OK, GEN_SHARED, D3DX_ORACLE)
+// in the runner's environment are left out of every run.
 //   node --test web/test/gencheck.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,8 +20,12 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(REPO, 'out/web/test'); fs.mkdirSync(OUT, { recursive: true });
-/** the environment without a GAME (UG2, the default), plus extra */
-const envWith = (extra = {}) => { const e = { ...process.env }; delete e.GAME; return { ...e, ...extra }; };
+/** the environment without the pipeline's switches (no GAME: UG2, the default), plus extra */
+const envWith = (extra = {}) => {
+  const e = { ...process.env };
+  for (const k of ['GAME', 'GEN', 'GEN_STALE_OK', 'GEN_SHARED', 'D3DX_ORACLE']) delete e[k];
+  return { ...e, ...extra };
+};
 const stamp = (args, extra) => execFileSync('bash', [path.join(REPO, 'tools/genstamp.sh'), ...args], { encoding: 'utf8', env: envWith(extra) }).trim();
 const sources = stamp(['sources']);
 const orig = stamp(['overrides']).split(',').filter(Boolean);
@@ -25,6 +33,9 @@ const orig = stamp(['overrides']).split(',').filter(Boolean);
 const conf = id => fs.readFileSync(path.join(REPO, 'games', id, 'game.conf'), 'utf8');
 const exeLine = id => `exe ${conf(id).match(/^EXE_SHA256=(\w{16})/m)[1]} server.dll ${conf(id).match(/^SRV_SHA256=(\w{16})/m)[1]}`;
 const STAMP = `# gen.sh 2026-10-18T00:00:00Z: what gen/all and gen/server were lifted from\n${sources}\n${exeLine('ug2')}\noptions X87PC=1 X87OPT=1 FLAGABI=0\n`;
+const MW = { GAME: 'mw' };
+const mwOrig = stamp(['overrides'], MW).split(',').filter(Boolean);
+const MW_STAMP = `# gen.sh 2026-10-25T00:00:00Z: what gen/mw/all and gen/mw/server were lifted from\n${stamp(['sources'], MW)}\n${exeLine('mw')}\noptions X87PC=1 LOCKSTRIP=1\n`;
 
 /** a fake gen dir: decls.h with the runtime's _orig declarations, the given stamps, and a gameinfo.h when info */
 function gen(name, { all = STAMP, server = all, decls = orig, info = false } = {}) {
@@ -118,31 +129,52 @@ test('a plain ./gen.sh drops web-lift.txt and leaves gen/all unstamped until it 
   assert.match(fs.readFileSync(path.join(t, 'gen/all/stamp.txt'), 'utf8'), /^incomplete/);
 });
 
-test('web/gen.sh refuses to lift through a worktree\'s link to the shared gen', () => {
+test('gen.sh and web/gen.sh refuse to lift through a worktree\'s link to the shared gen', () => {
   const t = path.join(OUT, 'gencheck-shared');
   fs.rmSync(t, { recursive: true, force: true });
-  fs.mkdirSync(path.join(t, 'web'), { recursive: true }); fs.mkdirSync(path.join(t, 'shared/all'), { recursive: true }); fs.mkdirSync(path.join(t, 'gen'));
-  fs.copyFileSync(path.join(REPO, 'web/gen.sh'), path.join(t, 'web/gen.sh'));
+  fs.mkdirSync(path.join(t, 'web'), { recursive: true }); fs.mkdirSync(path.join(t, 'gen'));
+  for (const d of ['all', 'server']) { fs.mkdirSync(path.join(t, 'shared', d), { recursive: true }); fs.writeFileSync(path.join(t, 'shared', d, 'stamp.txt'), STAMP); }
   fs.writeFileSync(path.join(t, 'shared/all/web-lift.txt'), 'FLAGABI X87OPT\n');
-  fs.symlinkSync(path.join(t, 'shared/all'), path.join(t, 'gen/all'));
+  fs.writeFileSync(path.join(t, 'shared/server/shard_0000.c'), '/* lifted */\n');
+  fs.copyFileSync(path.join(REPO, 'gen.sh'), path.join(t, 'gen.sh'));
+  fs.copyFileSync(path.join(REPO, 'web/gen.sh'), path.join(t, 'web/gen.sh'));
   fs.writeFileSync(path.join(t, 'SPEED2.EXE'), 'x');
   games(t, { ids: ['ug2', 'mw'] });
-  let r = spawnSync('bash', [path.join(t, 'web/gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8' });
-  assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /gen\/all is a link to .*which other worktrees build against/);
-  assert.ok(fs.existsSync(path.join(t, 'shared/all/web-lift.txt')), 'the shared gen is untouched');
+  const SCRIPTS = { 'gen.sh': '\\./gen\\.sh', 'web/gen.sh': 'web/gen\\.sh' };
+  const lift = (script, env) => spawnSync('bash', [path.join(t, script), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith(env) });
+  const untouched = what => {
+    assert.ok(fs.existsSync(path.join(t, 'shared/all/web-lift.txt')), `${what}: the shared web-lift.txt is there`);
+    assert.ok(fs.existsSync(path.join(t, 'shared/server/shard_0000.c')), `${what}: the shared gen/server is not emptied`);
+    for (const d of ['all', 'server']) assert.equal(fs.readFileSync(path.join(t, 'shared', d, 'stamp.txt'), 'utf8'), STAMP, `${what}: the shared ${d}/stamp.txt`);
+  };
+  const refused = (link, env, hint = '') => {
+    for (const [script, re] of Object.entries(SCRIPTS)) {
+      const r = lift(script, env);
+      assert.equal(r.status, 1, `${script}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, new RegExp(`^${re}: ${link} is a link to .*which other worktrees build against;\\n.*GEN_SHARED=1 ${hint}${re} `));
+      untouched(`${script}, ${link}`);
+    }
+  };
+  fs.symlinkSync(path.join(t, 'shared/all'), path.join(t, 'gen/all'));
+  refused('gen/all');
+  fs.unlinkSync(path.join(t, 'gen/all')); fs.mkdirSync(path.join(t, 'gen/all'));
+  fs.symlinkSync(path.join(t, 'shared/server'), path.join(t, 'gen/server'));
+  refused('gen/server');
+  // GEN_SHARED=1 gets past the link (here to the exe's hash check, which stops it before it writes)
+  for (const script of Object.keys(SCRIPTS)) {
+    const r = lift(script, { GEN_SHARED: '1' });
+    assert.equal(r.status, 1, `${script}: ${r.stdout}${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /is a link/);
+    assert.match(r.stdout, /not ug2's SPEED2\.EXE/);
+    untouched(`${script}, GEN_SHARED=1`);
+  }
   // another game's GEN_DIR (gen/mw), and a link on its way there
   fs.mkdirSync(path.join(t, 'gen/mw'));
   fs.symlinkSync(path.join(t, 'shared/all'), path.join(t, 'gen/mw/all'));
-  r = spawnSync('bash', [path.join(t, 'web/gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: { ...process.env, GAME: 'mw' } });
-  assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /gen\/mw\/all is a link to /);
+  refused('gen/mw/all', MW, 'GAME=mw ');
   fs.rmSync(path.join(t, 'gen/mw'), { recursive: true });
   fs.symlinkSync(path.join(t, 'shared'), path.join(t, 'gen/mw'));
-  r = spawnSync('bash', [path.join(t, 'web/gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: { ...process.env, GAME: 'mw' } });
-  assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /gen\/mw is a link to /);
-  assert.ok(fs.existsSync(path.join(t, 'shared/all/web-lift.txt')), 'the shared gen is untouched');
+  refused('gen/mw', MW, 'GAME=mw ');
 });
 
 test('gen.sh and web/gen.sh refuse an exe that is not the game\'s (game.conf SHA-256) before writing anything', () => {
@@ -158,7 +190,7 @@ test('gen.sh and web/gen.sh refuse an exe that is not the game\'s (game.conf SHA
   fs.writeFileSync(path.join(t, 'SPEED2.EXE'), 'SPEED2.EXE with one byte changed');
   for (const [script, env, what] of [['gen.sh', {}, /not ug2's SPEED2\.EXE \(SHA-256 [0-9a-f]{64}; games\/ug2\/game\.conf wants f9dd86c0/],
                                      ['web/gen.sh', {}, /not ug2's SPEED2\.EXE/], ['web/gen.sh', { GAME: 'mw' }, /not mw's speed\.exe/]]) {
-    const r = spawnSync('bash', [path.join(t, script), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: { ...process.env, ...env } });
+    const r = spawnSync('bash', [path.join(t, script), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith(env) });
     assert.equal(r.status, 1, `${script}: ${r.stdout}${r.stderr}`);
     assert.match(r.stdout, what);
   }
@@ -166,7 +198,7 @@ test('gen.sh and web/gen.sh refuse an exe that is not the game\'s (game.conf SHA
   assert.equal(fs.readFileSync(path.join(t, 'gen/all/stamp.txt'), 'utf8'), STAMP, 'the stamp untouched');
   assert.equal(fs.readFileSync(path.join(t, 'out/relocs.txt'), 'utf8'), '00401000', 'out/ untouched');
   assert.ok(!fs.existsSync(path.join(t, 'gen/mw')) && !fs.existsSync(path.join(t, 'out/mw')), 'no game folders made');
-  const r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: { ...process.env, GAME: 'nosuch' } });
+  const r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith({ GAME: 'nosuch' }) });
   assert.equal(r.status, 1); assert.match(r.stdout, /GAME=nosuch: no games\/nosuch\/game\.conf/);
 });
 
@@ -215,10 +247,16 @@ test('genstamp: UG2 greps its files as always and names no game; GAME=mw greps r
   assert.equal(mw[0], 'game mw');
   assert.match(mw[1], /^overrides [0-9a-f]{16} \(2\)$/);
   assert.match(mw[2], /^hooks [0-9a-f]{16} \(1\)$/);
-  // MW's lifter covers its game.conf; UG2's stays the files it always was
-  fs.appendFileSync(path.join(t, 'games/mw/game.conf'), '# a change\n');
-  assert.notEqual(gs('sources', { GAME: 'mw' }).split('\n')[3], mw[3]);
-  assert.equal(gs('sources').split('\n')[2], ug2[2]);
+  // each game's lifter covers its own game.conf and tools/gameconf.sh (they decide FTOL2_VA, LOCKSTRIP, SRV_BASE)
+  const lifter = () => [gs('sources').split('\n')[2], gs('sources', { GAME: 'mw' }).split('\n')[3]];
+  let before = lifter();
+  assert.deepEqual(before, [ug2[2], mw[3]]);
+  for (const [f, changes] of [['games/mw/game.conf', [false, true]], ['games/ug2/game.conf', [true, false]], ['tools/gameconf.sh', [true, true]]]) {
+    fs.appendFileSync(path.join(t, f), '# a change\n');
+    const now = lifter();
+    for (const i of [0, 1]) assert.equal(now[i] !== before[i], changes[i], `${f}: ${['UG2', 'MW'][i]}'s lifter line`);
+    before = now;
+  }
   // without MW files: no overrides, no hooks
   fs.rmSync(path.join(t, 'runtime/mw'), { recursive: true });
   assert.equal(gs('overrides', { GAME: 'mw' }), '');
@@ -250,9 +288,6 @@ test('genstamp and gencheck refuse a core file holding _orig, DX_WRAP or HOOK_SI
 });
 
 test('gencheck: another game\'s gen is refused (GEN_STALE_OK or not), and so are an exe line that is not game.conf\'s and another game\'s lift without gameinfo.h', () => {
-  const MW = { GAME: 'mw' };
-  const mwOrig = stamp(['overrides'], MW).split(',').filter(Boolean);
-  const MW_STAMP = `# gen.sh 2026-10-25T00:00:00Z: what gen/mw/all and gen/mw/server were lifted from\n${stamp(['sources'], MW)}\n${exeLine('mw')}\noptions X87PC=1 LOCKSTRIP=1\n`;
   assert.match(MW_STAMP, /\ngame mw\n/);
   let r = check(gen('mw-ok', { all: MW_STAMP, decls: mwOrig, info: true }), MW);
   assert.equal(r.status, 0, r.stdout); assert.equal(r.stdout, '');
@@ -290,4 +325,35 @@ test('gencheck: another game\'s gen is refused (GEN_STALE_OK or not), and so are
   assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /has no stamp, so no finished gen\.sh lift: run GAME=mw web\/gen\.sh <path to speed\.exe>/);
   r = check(gen('mw-stale', { all: MW_STAMP.replace(/^lifter \S+/m, 'lifter 0000000000000000'), decls: mwOrig, info: true }), MW);
   assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /is stale/); assert.match(r.stdout, /games\/mw\/game\.conf, games\/mw\/inline_hot\.txt/);
+});
+
+test('gencheck: the D3DX oracle\'s gen (gen/<game>/d3dx) needs a stamp of this checkout unless D3DX_ORACLE=0; UG2 has none', () => {
+  const g = gen('mw-d3dx', { all: MW_STAMP, decls: mwOrig, info: true });
+  const D = path.join(g, 'd3dx');
+  fs.mkdirSync(D); fs.writeFileSync(path.join(D, 'fntab.c'), '');
+  for (const env of [{}, { GEN_STALE_OK: '1' }]) {
+    const r = check(g, { ...MW, ...env });
+    assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /mw-d3dx\/d3dx \(the D3DX oracle, linked unless D3DX_ORACLE=0\) has no stamp of a finished lift/);
+  }
+  let r = check(g, { ...MW, D3DX_ORACLE: '0' });
+  assert.equal(r.status, 0, r.stdout); assert.equal(r.stdout, '');
+  fs.writeFileSync(path.join(D, 'stamp.txt'), 'incomplete: not finished\n');
+  r = check(g, MW);
+  assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /has no stamp of a finished lift/);
+  fs.writeFileSync(path.join(D, 'stamp.txt'), MW_STAMP);
+  r = check(g, MW);
+  assert.equal(r.status, 0, r.stdout); assert.equal(r.stdout, '');
+  // another lifter, or UG2's stamp (no game line): stale; GEN_STALE_OK=1 builds anyway
+  for (const s of [MW_STAMP.replace(/^lifter \S+/m, 'lifter 0000000000000000'), STAMP]) {
+    fs.writeFileSync(path.join(D, 'stamp.txt'), s);
+    r = check(g, MW);
+    assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /d3dx \(the D3DX oracle\) is stale/);
+    r = check(g, { ...MW, GEN_STALE_OK: '1' });
+    assert.equal(r.status, 0, r.stdout); assert.match(r.stdout, /building anyway/);
+  }
+  // UG2's game.conf has no D3DX_BASE: a d3dx folder in its gen is never linked, nor checked
+  const u = gen('ug2-d3dx');
+  fs.mkdirSync(path.join(u, 'd3dx')); fs.writeFileSync(path.join(u, 'd3dx/fntab.c'), '');
+  r = check(u);
+  assert.equal(r.status, 0, r.stdout); assert.equal(r.stdout, '');
 });

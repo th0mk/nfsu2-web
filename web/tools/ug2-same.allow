@@ -6,5 +6,5 @@
 # the exe's values the runtime is built with (image, .text, entry point,
 # _ftol2), written by tools/genall.py for runtime/cpu.h (TRACKER M1-08); a
 # UG2 lift's has the #define lines of runtime/gameinfo_ug2.h, the values the
-# runtime was built with before
+# runtime was built with before (ug2-same.sh compares them)
 all/gameinfo.h

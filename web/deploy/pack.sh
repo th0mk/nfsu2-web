@@ -38,6 +38,9 @@ case "$ARCH" in amd64|arm64) ;; *) echo "pack.sh: --arch amd64 or arm64, not $AR
 cd "$ROOT"
 REV="$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- web/server-rs web/src web/index.html 2>/dev/null || echo +)"
 [ -f out/web/nfsu2.wasm ] && [ -f out/web/nfsu2.json ] || { echo "no game module: build it first (web/build.sh)"; exit 1; }
+# never a build with the D3DX oracle linked: web/build.sh writes "oracle" into the json of such a build only
+if grep -qE '"oracle"[[:space:]]*:' out/web/nfsu2.json; then
+  echo "pack.sh: REFUSED: out/web/nfsu2.json has \"oracle\": a dev-only module with the D3DX oracle (Microsoft's d3dx9_26.dll, lifted) linked; build one without it (D3DX_ORACLE=0)"; exit 1; fi
 if [ "$BUILD" = 1 ]; then (cd web && node build.mjs >/dev/null 2>&1) || { echo "the page did not build (cd web && node build.mjs)"; exit 1; }; fi
 
 STAGE="$OUT/stage"
@@ -83,11 +86,13 @@ if [ -n "$DATA" ] && [ -d "$DATA" ]; then
     if (hit.length) { console.log(hit.join("\n")); process.exit(1); }' "$DATA" "$B" || fail "files that match the game folder"
   echo "checked against the game folder: no file of it is in the bundle"
   # what the server leaves out of the game folder (the game's entries, as the server prints them: the bundle's own
-  # server where this machine runs it, else the one web/server-rs/build.sh built here; the bundle is NFS Underground
-  # 2's): copy only the rest to the VPS
-  entries="$("$B/nfsu2-server" --game ug2 --print-entries 2>/dev/null || out/web/server-rs/nfsu2-server --game ug2 --print-entries 2>/dev/null || true)"
+  # server where this machine runs it, else the one web/server-rs/build.sh built here, if it is newer than the
+  # list's source web/server-rs/src/game.rs; the bundle is NFS Underground 2's): copy only the rest to the VPS
+  LOCAL=out/web/server-rs/nfsu2-server
+  entries="$("$B/nfsu2-server" --game ug2 --print-entries 2>/dev/null || true)"
+  if [ -z "$entries" ] && [ "$LOCAL" -nt web/server-rs/src/game.rs ]; then entries="$("$LOCAL" --game ug2 --print-entries 2>/dev/null || true)"; fi
   if [ -z "$entries" ]; then
-    echo "NOTE: the list of the game's own files was not read: the bundle's server does not run on this machine, nor does out/web/server-rs/nfsu2-server (web/server-rs/build.sh)"
+    echo "NOTE: the list of the game's own files was not read: the bundle's server does not run on this machine, and $LOCAL is missing, older than web/server-rs/src/game.rs or does not run (web/server-rs/build.sh)"
   else
     others="$(node -e '
       const fs = require("fs");

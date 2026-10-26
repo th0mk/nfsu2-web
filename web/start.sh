@@ -77,7 +77,8 @@ if [ "$BUILD" = 1 ]; then
   if [ -n "$stale" ]; then
     if ls -d deps/wasi-sdk-* >/dev/null 2>&1 && [ -f gen/all/fntab.c ]; then
       say "Building the game module ($stale)"
-      if ! web/build.sh > "$STATE/build.log" 2>&1; then
+      # UG2's module, whatever GAME the shell has (web/build.sh builds another game's for GAME=mw)
+      if ! GAME=ug2 web/build.sh > "$STATE/build.log" 2>&1; then
         tail -40 "$STATE/build.log"
         echo "The game module did not build (the whole log: $STATE/build.log). The server was not started."
         exit 1

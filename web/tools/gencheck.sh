@@ -26,6 +26,11 @@
 #    finished, and gen/server comes from the same run.  A UG2 gen/all without
 #    a stamp (made before gen.sh wrote one) gets a note; another game's is
 #    refused.
+# 4. The D3DX oracle (gen/<game>/d3dx, linked when the game has a D3DX_BASE,
+#    the folder has fntab.c and D3DX_ORACLE is not 0, as web/build.sh decides)
+#    has a stamp of its own finished lift: this game's line and this
+#    checkout's override list, hook list and lifter.  One without a stamp is
+#    refused; a stale one passes with GEN_STALE_OK=1.
 set -e -o pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
 . tools/gameconf.sh
@@ -70,7 +75,6 @@ if [ "$WANT" != "$HAVE" ]; then
     case $GAME.$k in
       ug2.overrides) echo "  override list (sub_X_orig in runtime/, DX_WRAP in d3dx_hle.c: tools/genstamp.sh overrides)" ;;
       ug2.hooks) echo "  hook list (HOOK_SITE in runtime/: tools/genstamp.sh hooks)" ;;
-      ug2.lifter) echo "  lifter (tools/lift.py, lregs.py, genall.py, inline_hot.txt, retpast.txt, reloc2.py, argcount.py, flagabi.py, prepare_module.py)" ;;
       *.overrides) echo "  override list (sub_X_orig and DX_WRAP in runtime/$GAME/*.c: GAME=$GAME tools/genstamp.sh overrides)" ;;
       *.hooks) echo "  hook list (HOOK_SITE in runtime/$GAME/*.c: GAME=$GAME tools/genstamp.sh hooks)" ;;
       *.lifter) echo "  lifter (tools/lift.py, lregs.py, genall.py, retpast.txt, reloc2.py, argcount.py, flagabi.py, prepare_module.py, gameconf.sh, $GAME_CONF${GC_INLINE_LIST:+, $GC_INLINE_LIST})" ;;
@@ -81,3 +85,13 @@ if [ "$WANT" != "$HAVE" ]; then
 fi
 cmp -s "$S" "$G/server/stamp.txt" || {
   echo "$G/server is not from the gen.sh run that made $G/all ($G/server/stamp.txt differs or is missing): run $LIFT <$X>"; exit 1; }
+if [ -n "${GC_D3DX_BASE:-}" ] && [ -f "$G/d3dx/fntab.c" ] && [ "${D3DX_ORACLE:-1}" != 0 ]; then
+  D="$G/d3dx/stamp.txt"
+  if [ ! -f "$D" ] || grep -q '^incomplete' "$D"; then
+    echo "$G/d3dx (the D3DX oracle, linked unless D3DX_ORACLE=0) has no stamp of a finished lift: lift it again with this checkout's tools"; exit 1; fi
+  if [ "$(grep -E '^(game|overrides|hooks|lifter) ' "$D" || true)" != "$(tools/genstamp.sh sources | grep -E '^(game|overrides|hooks|lifter) ')" ]; then
+    echo "$G/d3dx (the D3DX oracle) is stale: its stamp names another game, override list, hook list or lifter than this checkout's (tools/genstamp.sh sources)"
+    if [ "${GEN_STALE_OK:-}" = 1 ]; then echo "  GEN_STALE_OK=1: building anyway"
+    else echo "  lift it again with this checkout's tools (GEN_STALE_OK=1 builds anyway, D3DX_ORACLE=0 builds without it)"; exit 1; fi
+  fi
+fi

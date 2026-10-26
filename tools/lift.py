@@ -223,8 +223,10 @@ _FTOL2_VA = int(__import__('os').environ.get('FTOL2_VA', '0x0075BED4'), 16)
 # "lock xadd", which matched no handler and trapped (MW's PATH audio library).
 # Guest threads run one at a time (the GIL changes hands only at blocking
 # waits), so the plain read-modify-write is atomic for them.  A lock on any
-# other instruction or on a register destination is #UD on the CPU and stays
-# a trap.  Off for UG2, whose 4 `lock or` sites are data decoded as code.
+# other instruction or on a register destination (#UD on the CPU) is not
+# decoded by capstone at all, so discovery ends the block before it, switch
+# on or off: no trap is lifted there.  Off for UG2, whose 4 `lock or` sites
+# are data decoded as code and stay traps.
 _LOCKSTRIP = __import__('os').environ.get('LOCKSTRIP', '') == '1'
 _LOCKABLE = ('add', 'adc', 'and', 'btc', 'btr', 'bts', 'cmpxchg', 'cmpxchg8b', 'dec', 'inc', 'neg', 'not',
              'or', 'sbb', 'sub', 'xadd', 'xchg', 'xor')

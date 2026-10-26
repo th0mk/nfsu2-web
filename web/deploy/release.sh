@@ -104,6 +104,9 @@ fi
 # the module: both files, one commit, not from a checkout with changes
 src="$arg"
 [ -f "$src/nfsu2.wasm" ] && [ -f "$src/nfsu2.json" ] || die "$src needs nfsu2.wasm and nfsu2.json"
+# never a build with the D3DX oracle linked: web/build.sh writes "oracle" into the json of such a build only
+! grep -qE '"oracle"[[:space:]]*:' "$src/nfsu2.json" \
+  || die "$src/nfsu2.json has \"oracle\": a dev-only module with the D3DX oracle (Microsoft's d3dx9_26.dll, lifted) linked, never released; build one without it (D3DX_ORACLE=0)"
 rev=$(grep -o '"rev":"[^"]*"' "$src/nfsu2.json" | cut -d'"' -f4)
 size=$(grep -o '"size":[0-9]*' "$src/nfsu2.json" | cut -d: -f2)
 [ -n "$rev" ] || die "$src/nfsu2.json has no rev"

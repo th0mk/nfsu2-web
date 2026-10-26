@@ -18,6 +18,7 @@
  *   out/net_harness [--vlan-hub <python> <tools/vlanhub.py>]   # exit 0 = all pass
  */
 #include "cpu.h"
+#include "game.h"
 #include "winsock.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -41,6 +42,13 @@ uint64_t winsock_blocked_count(void);
 
 /* winsock.c overrides the lifted NetTick (sub_0074b730); not used here */
 void sub_0074b730_orig(CPU *c){ (void)c; }
+/* winsock.c's Online parts (g_game's Online host, online.c, olfilter.c) run
+ * only with Online on, which it never is off the browser (the Mac's hub has
+ * no online host): stand-ins, so that the harness links at -O0 too */
+const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2" };
+void online_lobby_read(uint32_t link, const uint8_t *p, int n){ (void)link; (void)p; (void)n; }   /* online.c */
+void olfilter_lobby_mark(uint32_t link, uint8_t *p, int n){ (void)link; (void)p; (void)n; }       /* olfilter.c */
+void olfilter_lobby_sent(uint32_t link, uint8_t *p, int n){ (void)link; (void)p; (void)n; }
 /* bundle.m's Local Network notice (a weak reference in winsock.c): counted */
 static int g_notices;
 void app_local_network_notice(void){ g_notices++; }

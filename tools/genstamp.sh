@@ -11,9 +11,11 @@
 # GAME=<id> (default ug2, tools/gameconf.sh) picks the game's files:
 #   ug2   sub_X_orig in runtime/*.c and runtime/*.m, ^DX_WRAP( in
 #         runtime/d3dx_hle.c, HOOK_SITE in runtime/*.c, as always (runtime/<id>/
-#         of another game is never seen, so UG2's stamp stays what it was)
-#   <id>  all three in runtime/<id>/*.c; the source lines start with "game <id>",
-#         and the lifter's hash covers the game's game.conf and inline list
+#         of another game is never seen, so UG2's override and hook lines stay
+#         what they were)
+#   <id>  all three in runtime/<id>/*.c; the source lines start with "game <id>"
+# For every game the lifter's hash covers its game.conf, its inline list and
+# tools/gameconf.sh, which decide the lift too (FTOL2_VA, LOCKSTRIP, SRV_BASE).
 # Every command first refuses a core file holding "_orig", "DX_WRAP" or
 # "HOOK_SITE", comments included: runtime/core.list's files and every
 # runtime/web/*.c are shared by every game, and a marker there would put one
@@ -58,10 +60,10 @@ core_check(){
   return 1
 }
 sha(){ shasum -a 256 | cut -c1-16; }
-# the lifter: everything that decides gen/all's and gen/server's C (UG2: the
-# same files as always; its inline list is tools/inline_hot.txt)
-LIFTER="tools/lift.py tools/lregs.py tools/genall.py $GC_INLINE_LIST tools/retpast.txt tools/reloc2.py tools/argcount.py tools/flagabi.py tools/prepare_module.py"
-[ "$GAME" = ug2 ] || LIFTER="$LIFTER games/$GAME/game.conf tools/gameconf.sh"
+# the lifter: everything that decides gen/all's and gen/server's C, the game's
+# game.conf and the script that reads it included (UG2's inline list is
+# tools/inline_hot.txt)
+LIFTER="tools/lift.py tools/lregs.py tools/genall.py $GC_INLINE_LIST tools/retpast.txt tools/reloc2.py tools/argcount.py tools/flagabi.py tools/prepare_module.py games/$GAME/game.conf tools/gameconf.sh"
 case "${1:-}" in
   overrides|hooks|origs|sources|check) ;;
   *) echo "usage: tools/genstamp.sh overrides|hooks|origs|sources|check"; exit 2 ;;

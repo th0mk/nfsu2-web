@@ -15,6 +15,9 @@
 # the hook list and the lifter, the exe, and the lift options (and the game,
 # for another game than UG2); a build can then refuse a gen/all that is older
 # than its runtime or another game's (web/build.sh does).
+# A worktree's gen/all or gen/server that links to the shared one (or another
+# game's GEN_DIR, or a folder on its way) is refused, as web/gen.sh refuses
+# it: GEN_SHARED=1 regenerates the shared one on purpose (tools/gameconf.sh).
 # The paths here are UG2's; another game's are under its GEN_DIR and OUT_DIR.
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
@@ -22,8 +25,10 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
 G="$GEN_DIR"; O="$OUT_DIR"
 EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/$GC_EXE_NAME}}"
 [ -f "$EXE" ] || { echo "usage: ./gen.sh path/to/$GC_EXE_NAME"; exit 1; }
-# before anything is written: a refused exe, or a core file holding a game's
-# override or hook marker (tools/genstamp.sh refuses it), leaves the last lift as it was
+# before anything is written: a link to the shared gen, a refused exe, or a core
+# file holding a game's override or hook marker (tools/genstamp.sh refuses it),
+# leaves the last lift as it was
+gameconf_nolink ./gen.sh
 gameconf_files "$EXE"
 STAMP_SOURCES="$(tools/genstamp.sh sources)"
 PY="$ROOT/.venv/bin/python"
@@ -55,7 +60,7 @@ echo "gen OK -> $G/all ($(ls "$G"/all/shard_*.c | wc -l | tr -d ' ') shards)"
 # server.dll a stub module is generated: the build links, and hosting a LAN
 # game reports "unavailable".
 SRV="$(dirname "$EXE")/server.dll"
-mkdir -p "$G/server" && find "$G/server/" -mindepth 1 -delete   # empties it; a worktree's link to the shared one stays a link
+mkdir -p "$G/server" && find "$G/server/" -mindepth 1 -delete   # empties it; with GEN_SHARED=1 a link to the shared one stays a link
 if [ -f "$SRV" ]; then
   "$PY" tools/prepare_module.py "$SRV" "$GC_SRV_BASE" "$O/server" "$G/server" srv_
   GENOUT="$G/server" RELOCS="$O/server/relocs.txt" SEEDS="$O/server/seeds.txt" SYMPFX=srv_ \

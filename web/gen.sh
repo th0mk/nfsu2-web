@@ -31,21 +31,15 @@
 # gen/server are links to the main clone's, which every other worktree builds
 # against: replace them with directories first (or GEN_SHARED=1 to regenerate
 # the shared ones on purpose).  The same holds for another game's GEN_DIR and
-# every folder on its way.  The paths below are UG2's (GEN_DIR gen, OUT_DIR out).
+# every folder on its way; this script and gen.sh refuse a link there
+# (tools/gameconf.sh).  The paths below are UG2's (GEN_DIR gen, OUT_DIR out).
 set -e -o pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 . tools/gameconf.sh
 G="$GEN_DIR"; O="$OUT_DIR"
 EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/$GC_EXE_NAME}}"
 [ -f "$EXE" ] || { echo "usage: web/gen.sh path/to/$GC_EXE_NAME"; exit 1; }
-DIRS=; p=; for d in $(echo "$G" | tr '/' ' '); do p="${p:+$p/}$d"; DIRS="$DIRS $p"; done
-for d in $DIRS "$G/all" "$G/server"; do
-  if [ -L "$d" ] && [ "${GEN_SHARED:-}" != 1 ]; then
-    echo "web/gen.sh: $d is a link to $(readlink "$d"), which other worktrees build against;"
-    echo "  rm $d && mkdir $d to lift into this worktree, or GEN_SHARED=1 web/gen.sh to regenerate the shared one"
-    exit 1
-  fi
-done
+gameconf_nolink web/gen.sh
 # before anything is written: a refused exe, or a core file holding a game's
 # override or hook marker (tools/genstamp.sh refuses it), leaves the last lift as it was
 gameconf_files "$EXE"

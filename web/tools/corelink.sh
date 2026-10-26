@@ -19,9 +19,9 @@ rm -rf "$C"; mkdir -p "$C"
 # web/build.sh's target and features
 TARGET="--target=wasm32-wasip1-threads -pthread"
 FEAT="-msimd128 -mbulk-memory -mnontrapping-fptoint -mtail-call -mexception-handling -mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false"
-# the overrides' stand-ins
+# the overrides' stand-ins (UG2's, as out/web's objects are, whatever GAME the shell has)
 { echo '#include "cpu.h"'
-  tools/genstamp.sh overrides | tr ',' '\n' | grep . | while read -r a; do
+  GAME=ug2 tools/genstamp.sh overrides | tr ',' '\n' | grep . | while read -r a; do
     echo "void sub_00${a}_orig(CPU *c); void sub_00${a}(CPU *c){ sub_00${a}_orig(c); }"; done; } > "$C/overrides_stub.c"
 "$WASI/bin/clang" $TARGET -O1 $FEAT -include runtime/web/compat/wasm_plat.h -Iruntime/web/compat -Iruntime \
   -c -o "$C/overrides_stub.o" "$C/overrides_stub.c"

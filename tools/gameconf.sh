@@ -9,6 +9,11 @@
 #   FTOL2_VA and LOCKSTRIP (tools/lift.py).
 #   gameconf_files <exe>   stops unless <exe>, and server.dll next to it if
 #                          there is one, are the files game.conf names (SHA-256)
+#   gameconf_nolink <script>  stops when GEN_DIR, a folder on its way there,
+#                          GEN_DIR/all or GEN_DIR/server is a link (a worktree's
+#                          link to the shared gen, which other worktrees build
+#                          against), unless GEN_SHARED=1: gen.sh and web/gen.sh
+#                          run it before they write anything
 GAME="${GAME:-ug2}"
 case "$GAME" in ''|*[!a-z0-9]*) echo "GAME=$GAME: not a game id (games/<id>/game.conf)"; exit 1 ;; esac
 GAME_CONF="games/$GAME/game.conf"
@@ -38,6 +43,17 @@ gameconf_sha(){
 gameconf_files(){
   gameconf_sha "$1" "$GC_EXE_SHA256" "$GC_EXE_NAME"
   if [ -f "$(dirname "$1")/server.dll" ]; then gameconf_sha "$(dirname "$1")/server.dll" "$GC_SRV_SHA256" server.dll; fi
+}
+gameconf_nolink(){
+  local d p= dirs=
+  for d in $(echo "$GC_GEN_DIR" | tr '/' ' '); do p="${p:+$p/}$d"; dirs="$dirs $p"; done
+  for d in $dirs "$GC_GEN_DIR/all" "$GC_GEN_DIR/server"; do
+    if [ -L "$d" ] && [ "${GEN_SHARED:-}" != 1 ]; then
+      echo "$1: $d is a link to $(readlink "$d"), which other worktrees build against;"
+      echo "  rm $d && mkdir $d to lift into this worktree, or GEN_SHARED=1 $( [ "$GAME" = ug2 ] || echo "GAME=$GAME ")$1 to regenerate the shared one"
+      exit 1
+    fi
+  done
 }
 
 export GAME GEN_DIR="$GC_GEN_DIR" OUT_DIR="$GC_OUT_DIR" FTOL2_VA="$GC_FTOL2_VA" LOCKSTRIP="$GC_LOCKSTRIP"

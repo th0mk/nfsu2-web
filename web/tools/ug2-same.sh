@@ -12,13 +12,17 @@
 # non-ignored files (git ls-files -co --exclude-standard) go to
 # out/mw/ug2-same/tree, which links deps/ and .venv as web/tools/mkworktree.sh
 # does and has its own gen/all and gen/server.  web/gen.sh runs there in a
-# clean environment with the baseline's options (all/web-lift.txt and the
-# stamp's options line); server.dll is taken from next to the exe, as always.
-# The baseline (default out/mw/ug2-base) is a fresh UG2 lift of main's head
-# made with main's tools.
+# clean environment with no option given, as `web/gen.sh <SPEED2.EXE>` runs
+# (WEB_LIFT=plain only when the baseline's all/web-lift.txt says plain), so a
+# changed default (web/gen.sh's, gen.sh's or games/ug2/game.conf's) shows in
+# web-lift.txt, the stamp's options line or the C; server.dll is taken from
+# next to the exe, as always.  The baseline (default out/mw/ug2-base) is a
+# fresh UG2 lift of main's head made with main's tools and their defaults.
 #
 # Compared: every file of all/ and server/ except stamp.txt, byte for byte.  A
-# file only the new lift has passes when web/tools/ug2-same.allow names it.
+# file only the new lift has passes when web/tools/ug2-same.allow names it;
+# all/gameinfo.h also needs the #define lines of the copy's
+# runtime/gameinfo_ug2.h (the values UG2's runtime was built with before).
 # The stamps: the date line is ignored; exe, options, overrides and hooks must
 # match.  Another lifter hash, or another flag table hash (FLAGABI= in the
 # options line), is printed as information: the output is what must not change.
@@ -43,22 +47,10 @@ h16(){ shasum -a 256 | cut -c1-16; }
 WANT_EXE=$(sed -nE 's/^exe ([0-9a-f]+).*/\1/p' "$BASE/all/stamp.txt")
 [ "$(h16 < "$EXE")" = "$WANT_EXE" ] || die "$EXE is not the exe the baseline was lifted from (exe $WANT_EXE)"
 
-# the baseline's options: web/gen.sh's from web-lift.txt, the rest from the stamp
+# web/gen.sh's defaults, never the baseline's options passed back in: a default
+# that changed must show as a difference (web-lift.txt, the options line)
 OPTS="$(cat "$BASE/all/web-lift.txt")"
-has(){ case " $OPTS " in *" $1 "*) echo 1 ;; *) echo 0 ;; esac; }
-if [ "$OPTS" = plain ]; then LIFTENV=(WEB_LIFT=plain)
-else
-  LIFTENV=(JTSWITCH="$(has JTSWITCH)" LREGS="$(has LREGS)" FTOL2INL="$(has FTOL2INL)")
-  [ "$(has INLINE_LIST)" = 1 ] || LIFTENV+=(INLINE_LIST=)   # on: web/gen.sh's own list, from the copy
-fi
-for kv in $(sed -n 's/^options //p' "$BASE/all/stamp.txt"); do
-  k="${kv%%=*}"; v="${kv#*=}"
-  case "$k" in
-    FLAGABI|X87OPT|JTSWITCH|LREGS|FTOL2INL|INLINE_LIST) ;;   # set by web/gen.sh from the above
-    NSHARD) LIFTENV+=(NSHARD="${v%/*}" NSHARD_SRV="${v#*/}") ;;
-    *) if [ -n "$v" ]; then LIFTENV+=("$k=$v"); fi ;;
-  esac
-done
+LIFTENV=(); [ "$OPTS" != plain ] || LIFTENV=(WEB_LIFT=plain)
 KEEP=(PATH="$PATH" HOME="$HOME")
 for v in TMPDIR LANG LC_ALL LC_CTYPE; do if [ -n "${!v:-}" ]; then KEEP+=("$v=${!v}"); fi; done
 
@@ -94,6 +86,12 @@ for d in all server; do
     [ -z "$f" ] || cmp -s "$TREE/gen/$d/$f" "$BASE/$d/$f" || DIFF+=("differs  $d/$f")
   done < <(LC_ALL=C comm -12 <(echo "$NEW") <(echo "$OLD"))
 done
+# the exe's values the UG2 build compiles with (cpu.h takes gen/all/gameinfo.h
+# over runtime/gameinfo_ug2.h): allowed by name, they must still be UG2's
+GI="$TREE/gen/all/gameinfo.h"
+if [ -f "$GI" ] && ! diff <(grep '^#define' "$GI") <(grep '^#define' "$TREE/runtime/gameinfo_ug2.h" 2>/dev/null) > "$WORK/gameinfo.diff"; then
+  DIFF+=("differs  all/gameinfo.h: its #define lines are not runtime/gameinfo_ug2.h's ($WORK/gameinfo.diff)")
+fi
 S_NEW="$TREE/gen/all/stamp.txt"; S_OLD="$BASE/all/stamp.txt"
 cmp -s "$S_NEW" "$TREE/gen/server/stamp.txt" || DIFF+=("stamp    server/stamp.txt is not the one of all/stamp.txt")
 flagabi(){ sed -E 's/ FLAGABI=[0-9a-f]+/ FLAGABI=on/'; }

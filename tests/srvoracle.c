@@ -41,7 +41,12 @@
 
 /* ---- what module.c and the lifted shards need from the runtime --------- */
 #include "game.h"
-const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2" };
+#include "memmap.h"
+/* server.dll as game_ug2.c lists it (module.c maps the game's modules) */
+MODLINK_DECLARE(srv_);
+static const ModLink srv_modules[] = { { MODLINK_TABLES(srv_), .slot_lo = MM_SRV_LO, .slot_hi = MM_SRV_HI } };
+const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2",
+                         .modules = srv_modules, .nmodules = 1 };
 const uint32_t g_imp_count = 0;
 static char g_dll[1024];
 int fileio_resolve_game(const char *win, char *out, size_t n){ (void)win; snprintf(out, n, "%s", g_dll); return 1; }

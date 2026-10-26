@@ -17,7 +17,8 @@
 # The module json: pages, maxPages, guestEnd, rev, size, opt, lift (the lift
 # options, web-lift.txt) and game (the game id).  Another game's json also has
 # stamp (the lift's stamp.txt without its date line) and, when the D3DX oracle
-# is linked, "oracle":1: a dev-only module that release.sh refuses (PLAN D-09).
+# is linked, "oracle":1: a dev-only module that web/deploy/release.sh and
+# pack.sh refuse (PLAN D-09).
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 WASI="${WASI:-$(ls -d "$ROOT"/deps/wasi-sdk-*-arm64-macos "$ROOT"/deps/wasi-sdk-*-x86_64-linux 2>/dev/null | tail -1)}"
@@ -28,7 +29,8 @@ G="$GC_GEN_DIR"; WASM_NAME="${GC_WASM_NAME:?$GAME_CONF: no WASM_NAME=}"
 if [ "$GAME" = ug2 ]; then GENRUN="web/gen.sh"; OUT="$ROOT/out/web"; else GENRUN="GAME=$GAME web/gen.sh"; OUT="$ROOT/out/web/$GAME"; fi
 # its lifted DLLs, each from its own gen folder into its own object folder:
 # server.dll (gen.sh lifts it, or writes a stub module), and the D3DX oracle
-# when the game has one and it was lifted (gen/<game>/d3dx; D3DX_ORACLE=0 leaves it out)
+# when the game has one and it was lifted (gen/<game>/d3dx, whose stamp
+# web/tools/gencheck.sh checks; D3DX_ORACLE=0 leaves it out)
 MODS="server:srv"; LINK_ORACLE=""
 if [ -n "$GC_D3DX_BASE" ] && [ -f "$G/d3dx/fntab.c" ] && [ "${D3DX_ORACLE:-1}" != 0 ]; then MODS="$MODS d3dx:d3dx"; LINK_ORACLE=1; fi
 # guest memory accesses must keep their may_alias types (cpu.h)
@@ -36,8 +38,9 @@ WASI="$WASI" web/tools/aliasguard.sh > /dev/null || { WASI="$WASI" web/tools/ali
 [ -f "$G/all/fntab.c" ] || { echo "$G/all missing: run $GENRUN <path to $GC_EXE_NAME>"; exit 1; }
 [ -f "$G/server/fntab.c" ] || { echo "$G/server missing: run $GENRUN <path to $GC_EXE_NAME> (it lifts server.dll too)"; exit 1; }
 # The lift must be the one this runtime needs: its _orig declarations, and
-# gen.sh's stamp (override list, hook list, lifter; web/tools/gencheck.sh)
-web/tools/gencheck.sh
+# gen.sh's stamp (override list, hook list, lifter; web/tools/gencheck.sh) of
+# the folder compiled here, whatever GEN (gencheck's test switch) says
+GEN="$G" web/tools/gencheck.sh
 LIFT="$(cat "$G/all/web-lift.txt" 2>/dev/null || echo unknown)"
 [ "$LIFT" != unknown ] || echo "note: $G/all was not made by web/gen.sh (lift options unknown; web/gen.sh turns on FLAGABI and X87OPT)"
 CC="$WASI/bin/clang"; OBJDUMP="$WASI/bin/llvm-objdump"
@@ -69,15 +72,21 @@ HDRSUM="$( (cat runtime/cpu.h runtime/web/compat/wasm_plat.h "$GAMEINFO"; echo "
 # gen/all (SPEED2.EXE) -> out/web/obj, gen/server (server.dll, the LAN server
 # lifted as a second module, see gen.sh) -> out/web/obj/srv, any other lifted
 # DLL of the game (MODS) -> out/web/obj/<its name>: one pool, the same rule for
-# all.  A shard's key is its source, its own module's decls.h and the flags,
-# so the modules never share cache entries by accident.
-{ (cd "$G/all" && ls shard_*.c fntab.c impargs.c $( [ -f stubs.c ] && echo stubs.c ) | sed "s|^|$G/all obj |")
+# all.  A shard's key is its source, its own module's decls.h and the flags
+# (a module's modinfo.c also runtime/module.h, its ModInfo), so the modules
+# never share cache entries by accident.
+# lifted: "<gen folder> <object folder> <source>" for each file of the lift;
+# the link takes these objects only, never one an older lift left behind
+lifted(){
+  (cd "$G/all" && ls shard_*.c fntab.c impargs.c $( [ -f stubs.c ] && echo stubs.c ) | sed "s|^|$G/all obj |")
   for m in $MODS; do
-    (cd "$G/${m%%:*}" && ls shard_*.c fntab.c impargs.c modinfo.c $( [ -f stubs.c ] && echo stubs.c ) | sed "s|^|$G/${m%%:*} obj/${m#*:} |"); done; } |
-  xargs -P "$J" -n 3 sh -c '
+    (cd "$G/${m%%:*}" && ls shard_*.c fntab.c impargs.c modinfo.c $( [ -f stubs.c ] && echo stubs.c ) | sed "s|^|$G/${m%%:*} obj/${m#*:} |"); done
+}
+lifted | xargs -P "$J" -n 3 sh -c '
   gd="$1"; od="$OUT/$2"
   src="$gd/$3"; obj="$od/$(basename "$3" .c).o"
-  sum=$( (cat "$src" "$gd/decls.h"; echo "$HDRSUM") | shasum | cut -c1-40)
+  hdr=""; [ "$3" != modinfo.c ] || hdr=runtime/module.h
+  sum=$( (cat "$src" "$gd/decls.h" $hdr; echo "$HDRSUM") | shasum | cut -c1-40)
   if [ -z "$FULL" ] && [ -f "$obj" ] && [ "$(cat "$obj.sum" 2>/dev/null)" = "$sum" ]; then exit 0; fi
   mc=""; case ",$MEMCHECK," in *",$(basename "$3" .c),"*) mc="-DNFSU2_MEMCHECK" ;; esac
   [ -n "$mc" ] && sum="$sum-memchk"
@@ -120,6 +129,9 @@ else RT="$RT_CORE"; RT_GAME="$( (cd "runtime/$GAME" 2>/dev/null && ls *.c 2>/dev
 # runtime files only: a build with the D3DX oracle linked
 RTDEFS=""; [ -z "$LINK_ORACLE" ] || RTDEFS="-DNFSU2_D3DX_ORACLE=1"
 WEB="$(cd runtime/web && ls *.c | sed 's/\.c$//')"
+# every runtime object is compiled again below: none of a file that is gone
+# (or moved into core) stays to be linked
+rm -f "$OUT"/rt/*.o
 pids=""
 for f in $RT; do
   src="runtime/$f.c"; [ -f "$src" ] || src="runtime/web/$f.c"
@@ -137,7 +149,7 @@ done
 for p in $pids; do wait "$p" || { echo "runtime compile failed"; exit 1; }; done
 
 # ---- link ----
-OBJS="$(ls "$OUT"/obj/*.o) $(for m in $MODS; do ls "$OUT/obj/${m#*:}"/*.o; done) $(ls "$OUT"/rt/*.o)"
+OBJS="$(lifted | while read -r gd od f; do echo "$OUT/$od/${f%.c}.o"; done) $(ls "$OUT"/rt/*.o)"
 PAGES=$(( INITIAL_MB * 16 ))
 W="$OUT/$WASM_NAME.wasm"; rm -f "$W"
 $CC $TARGET $OPT $FEAT -o "$W" $OBJS \
@@ -160,7 +172,7 @@ fi
 printf '{"pages":%d,"maxPages":65536,"guestEnd":%d,"rev":"%s","size":%d,"opt":"%s","lift":"%s","game":"%s"%s}\n' \
   "$PAGES" "$GUEST_END" "$REV" "$SIZE" "$OPT" "$LIFT" "$GAME" "$MORE" > "$OUT/$WASM_NAME.json"
 echo "link OK: ${W#$ROOT/} ($(( SIZE / 1048576 )) MB, $PAGES initial pages, rev $REV, lift $LIFT)"
-[ -z "$LINK_ORACLE" ] || echo "note: the D3DX oracle ($G/d3dx) is linked: a dev-only module, \"oracle\":1 in its json (release.sh refuses it)"
+[ -z "$LINK_ORACLE" ] || echo "note: the D3DX oracle ($G/d3dx) is linked: a dev-only module, \"oracle\":1 in its json (web/deploy/release.sh and pack.sh refuse it)"
 # a C declaration that disagrees with the definition links on wasm but traps
 # when called ("signature_mismatch"); a long is 32 bits here, 64 on the Mac
 if grep -q "signature mismatch" "$OUT/link.log"; then
