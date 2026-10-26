@@ -1,20 +1,30 @@
 """Differential test of the two M5-01 dumpers on mutated copies of the 31 effects.
 
-  .venv/bin/python -I tools/mw/fxdiff_mutate.py <checkout> <copies per file> [seed]
+  .venv/bin/python -I tools/mw/fxdiff_mutate.py [--model] <checkout> <copies per file> [seed]
 
 A = out/mw/fx/bin/fxdump (subprocess), B = tools/fx2dump.py (imported).
 Prints a summary of agreements, refusals and differences; writes each
 differing case to out/mw/fx/diff/cases/<n>/ with a.txt/b.txt for inspection
 (game bytes: they stay under out/, which is ignored).
-"""
-import os, random, signal, struct, subprocess, sys, importlib.util, collections
 
-W = sys.argv[1]
-N = int(sys.argv[2])
-seed = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+With --model the two effect models are compared instead (docs/mw/fx-model.md
+§6.3): A = out/mw/fx/bin/fxmodeldump, B = tools/fxmodel.py (imported).  Each
+mutated copy is modelled alone or, half the time, in one pool with an
+unchanged copy of another effect, so mutated typedefs meet real ones in the
+pool.  Splits go to out/mw/fx/diff/model_cases/<n>/.
+"""
+import os, random, shutil, signal, struct, subprocess, sys, importlib.util, collections
+
+ARGS = sys.argv[1:]
+MODEL = bool(ARGS) and ARGS[0] == '--model'
+if MODEL:
+    ARGS = ARGS[1:]
+W = ARGS[0]
+N = int(ARGS[1])
+seed = int(ARGS[2]) if len(ARGS) > 2 else 1
 rnd = random.Random(seed)
 HERE = os.path.join(W, 'out', 'mw', 'fx', 'diff')
-CASES = os.path.join(HERE, 'cases')
+CASES = os.path.join(HERE, 'model_cases' if MODEL else 'cases')
 os.makedirs(CASES, exist_ok=True)
 TMP = os.path.join(HERE, 'tmp.fxo')
 
@@ -150,6 +160,84 @@ def mutate(data, loc):
             struct.pack_into('<I', b, o, v)
     return kind, bytes(b)
 
+
+def model_main():
+    spec = importlib.util.spec_from_file_location('fxmodel', os.path.join(W, 'tools', 'fxmodel.py'))
+    mb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mb)
+    am = os.path.join(W, 'out', 'mw', 'fx', 'bin', 'fxmodeldump')
+    case = os.path.join(HERE, 'model_case')
+    shutil.rmtree(CASES, ignore_errors=True)
+    os.makedirs(CASES)
+    names = sorted(f[:-4] for f in os.listdir(RES) if f.endswith('.fxo'))
+    stats, nbad = collections.Counter(), 0
+    for name in names:
+        data = open(os.path.join(RES, name + '.fxo'), 'rb').read()
+        loc = locate(data)
+        for i in range(N):
+            kind, m = mutate(data, loc)
+            shutil.rmtree(case, ignore_errors=True)
+            os.makedirs(case)
+            files = [os.path.join(case, name + '.fxo')]
+            with open(files[0], 'wb') as f:
+                f.write(m)
+            if rnd.random() < 0.5:
+                other = rnd.choice([n for n in names if n != name])
+                files.append(os.path.join(case, other + '.fxo'))
+                shutil.copyfile(os.path.join(RES, other + '.fxo'), files[-1])
+            rnd.shuffle(files)
+            ra, ta = None, ''
+            for args in (['-'], ['--ops', '-']):          # the model dump, then the Set/Get/lookup trace
+                p = subprocess.run([am] + args + files, capture_output=True, timeout=120)
+                if p.returncode == 0:
+                    ra, ta = 'ok', ta + p.stdout.decode('latin-1')
+                elif p.returncode == 1 and b'Sanitizer' not in p.stderr and b'runtime error' not in p.stderr:
+                    ra, ta = 'refused', p.stderr.decode('latin-1').strip()
+                    break
+                else:
+                    ra, ta = 'crash', p.stderr.decode('latin-1')[-3000:]
+                    break
+            signal.alarm(120)
+            try:
+                protos = mb.load(case)
+                insts, pool = mb.build(protos)
+                rb, tb = 'ok', mb.dump_all(insts, pool) + mb.ops_all(protos)
+            except SystemExit as e:
+                rb, tb = 'refused', str(e)
+            except Timeout:
+                rb, tb = 'timeout', ''
+            except RecursionError:
+                rb, tb = 'crash', 'RecursionError'
+            except Exception as e:
+                rb, tb = 'crash', '%s: %s' % (type(e).__name__, e)
+            finally:
+                signal.alarm(0)
+            if ra == rb == 'ok' and ta == tb:
+                stats['same output'] += 1
+                continue
+            if ra == rb == 'refused':
+                stats['both refused'] += 1
+                continue
+            stats['DIFFERENT output' if ra == rb == 'ok' else '%s/%s' % (ra, rb)] += 1
+            if nbad < 400:
+                d = os.path.join(CASES, '%03d_%s_%d_%s' % (nbad, name, i, kind))
+                shutil.copytree(case, d)
+                with open(os.path.join(d, 'a.txt'), 'w') as f:
+                    f.write('%s\n%s' % (ra, ta))
+                with open(os.path.join(d, 'b.txt'), 'w') as f:
+                    f.write('%s\n%s' % (rb, tb))
+            nbad += 1
+    shutil.rmtree(case, ignore_errors=True)
+    if not nbad:
+        shutil.rmtree(CASES, ignore_errors=True)
+    for k, v in sorted(stats.items()):
+        print('%-24s %d' % (k, v))
+    print('model cases written:', min(nbad, 400))
+    return 1 if nbad else 0
+
+
+if MODEL:
+    sys.exit(model_main())
 
 stats = collections.Counter()
 diffs = []

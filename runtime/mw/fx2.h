@@ -151,6 +151,33 @@ const char *fx2_class_name(uint32_t cls);
 const char *fx2_state_name(uint32_t op);        /* the names of §3.1 */
 uint32_t    fx2_value_kind(const fx2_type *t);  /* FX2_V_* */
 
+/* The state table (§3.1) as rows: what each operation sets and how.  The
+ * classes and the d3d column are docs/mw/fx-model.md §4.2's:
+ *   RENDER        D3DRENDERSTATETYPE (rows 89 and 102: the SDK's 186 and 209,
+ *                 where d3dx9_26's own table holds 53 and 171; fx-model §4.3)
+ *   STAGE         D3DTEXTURESTAGESTATETYPE
+ *   TRANSFORM     the D3DTRANSFORMSTATETYPE base: the target is d3d + index
+ *   MATERIAL      the D3DMATERIAL9 member 0..4
+ *   LIGHT         the D3DLIGHT9 member 0..12; 13 is LightEnable
+ *   VSCONST/PSCONST  the register count (0: taken from the value)
+ *   SAMPLERSTATE  D3DSAMPLERSTATETYPE
+ *   every other class 0 */
+enum { FX2_SC_RENDER, FX2_SC_STAGE, FX2_SC_NPATCH, FX2_SC_FVF, FX2_SC_TRANSFORM, FX2_SC_MATERIAL, FX2_SC_LIGHT,
+       FX2_SC_VSHADER, FX2_SC_PSHADER, FX2_SC_VSCONST, FX2_SC_PSCONST, FX2_SC_TEXTURE, FX2_SC_SAMPLERSTATE,
+       FX2_SC_SAMPLER, FX2_SC_STATEBLOCK, FX2_SC_PRESHADER_VS, FX2_SC_PRESHADER_PS, FX2_NSCLASSES };
+#define FX2_SV_DWORD      0x100u   /* value types beyond FX2_T_*: an integer state value */
+#define FX2_SV_STATEBLOCK 0x101u
+typedef struct {
+    const char *name;            /* §3.1's */
+    uint8_t  cls;                /* FX2_SC_* */
+    uint8_t  rows, cols;         /* the value size the table gives; 0x0: a register count taken from the value */
+    uint16_t vtype;              /* FX2_T_FLOAT, _BOOL, _INT, _TEXTURE, _SAMPLER, _PIXELSHADER, _VERTEXSHADER, FX2_SV_* */
+    uint16_t nindex;             /* index count: 1, 8, 256, 261; 0 = any */
+    uint32_t d3d;                /* above */
+} fx2_state_info;
+const fx2_state_info *fx2_state_get(uint32_t op);   /* NULL for op >= FX2_NSTATES */
+const char *fx2_sclass_name(uint32_t cls);          /* RENDER, STAGE, ... as in the enum; NULL past it */
+
 static inline uint32_t fx2_rd32(const uint8_t *p){
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
