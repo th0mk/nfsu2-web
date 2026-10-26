@@ -16,9 +16,12 @@
 #
 # The module json: pages, maxPages, guestEnd, rev, size, opt, lift (the lift
 # options, web-lift.txt) and game (the game id).  Another game's json also has
-# stamp (the lift's stamp.txt without its date line) and, when the D3DX oracle
-# is linked, "oracle":1: a dev-only module that web/deploy/release.sh and
-# pack.sh refuse (PLAN D-09).
+# stamp (the lift's stamp.txt without its date line).  When the D3DX oracle is
+# linked, any game's json has "oracle":1: a dev-only module that
+# web/deploy/release.sh and pack.sh refuse (PLAN D-09).
+# The lifted objects the link takes are listed in lift.objs next to the module
+# (out/web/lift.objs for UG2), for the tools that link them again
+# (web/tools/corelink.sh, web/tools/main_all.sh).
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 WASI="${WASI:-$(ls -d "$ROOT"/deps/wasi-sdk-*-arm64-macos "$ROOT"/deps/wasi-sdk-*-x86_64-linux 2>/dev/null | tail -1)}"
@@ -149,7 +152,14 @@ done
 for p in $pids; do wait "$p" || { echo "runtime compile failed"; exit 1; }; done
 
 # ---- link ----
-OBJS="$(lifted | while read -r gd od f; do echo "$OUT/$od/${f%.c}.o"; done) $(ls "$OUT"/rt/*.o)"
+# lift.objs: the lifted objects (paths under $OUT), and the stamp.txt of each
+# gen folder they come from (SHA-256 prefix; corelink.sh refuses objects older
+# than the lift)
+stampsum(){ if [ -f "$1/stamp.txt" ]; then shasum -a 256 < "$1/stamp.txt" | cut -c1-16; else echo none; fi; }
+{ echo "# web/build.sh: the lifted objects its link takes, under ${OUT#$ROOT/}"
+  for d in "$G/all" $(for m in $MODS; do echo "$G/${m%%:*}"; done); do echo "#stamp $d $(stampsum "$d")"; done
+  lifted | while read -r gd od f; do echo "$od/${f%.c}.o"; done; } > "$OUT/lift.objs"
+OBJS="$(grep -v '^#' "$OUT/lift.objs" | sed "s|^|$OUT/|") $(ls "$OUT"/rt/*.o)"
 PAGES=$(( INITIAL_MB * 16 ))
 W="$OUT/$WASM_NAME.wasm"; rm -f "$W"
 $CC $TARGET $OPT $FEAT -o "$W" $OBJS \
@@ -163,12 +173,13 @@ if [ ! -f "$W" ]; then
 REV="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)$(git diff --quiet 2>/dev/null || echo +)"
 SIZE=$(wc -c < "$W" | tr -d ' ')
 # UG2's json keeps the fields it always had and gains the game id; another
-# game's also names its lift stamp and an oracle build
+# game's also names its lift stamp; an oracle build of any game says so
 MORE=""
 if [ "$GAME" != ug2 ]; then
   STAMP="$(sed 1d "$G/all/stamp.txt" 2>/dev/null | tr -d '"\\' | awk 'NF' | paste -sd ';' - | sed 's/;/; /g')"
-  MORE=",\"stamp\":\"${STAMP:-unknown}\"$( [ -z "$LINK_ORACLE" ] || echo ',"oracle":1')"
+  MORE=",\"stamp\":\"${STAMP:-unknown}\""
 fi
+[ -z "$LINK_ORACLE" ] || MORE="$MORE,\"oracle\":1"
 printf '{"pages":%d,"maxPages":65536,"guestEnd":%d,"rev":"%s","size":%d,"opt":"%s","lift":"%s","game":"%s"%s}\n' \
   "$PAGES" "$GUEST_END" "$REV" "$SIZE" "$OPT" "$LIFT" "$GAME" "$MORE" > "$OUT/$WASM_NAME.json"
 echo "link OK: ${W#$ROOT/} ($(( SIZE / 1048576 )) MB, $PAGES initial pages, rev $REV, lift $LIFT)"

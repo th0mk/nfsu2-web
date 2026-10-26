@@ -3,9 +3,10 @@
 # WebAssembly: direct and indirect calls into the full lifted image, dispatch
 # table integrity, x87 conversions, the guest heap (TLSF + VirtualAlloc
 # semantics) and the virtual clock's stall valve.  Linked from the objects
-# web/build.sh made (all shards + the runtime, with main_all.c in place of
-# runtime/web/main_web.c) and run through the real browser host (headless
-# Chrome, /data from the local server) by the host self-test page.
+# web/build.sh made (the lifted ones it links, out/web/lift.objs, + the
+# runtime, with main_all.c in place of runtime/web/main_web.c) and run
+# through the real browser host (headless Chrome, /data from the local
+# server) by the host self-test page.
 #
 #   web/tools/main_all.sh [http://localhost:<port>]   (default: a server on 8611)
 #
@@ -19,7 +20,7 @@ BASE="${1:-http://localhost:8611}"
 WASI="${WASI:-$(ls -d "$ROOT"/deps/wasi-sdk-*-arm64-macos 2>/dev/null | tail -1)}"
 [ -x "$WASI/bin/clang" ] || { echo "wasi-sdk not found in deps/ (set WASI=...)"; exit 1; }
 OUT="$ROOT/out/web"
-[ -f "$OUT/rt/web_main_web.o" ] || { echo "run web/build.sh first"; exit 1; }
+[ -f "$OUT/rt/web_main_web.o" ] && [ -f "$OUT/lift.objs" ] || { echo "run web/build.sh first"; exit 1; }
 # Same target, features and defines as web/build.sh (keep in step with it).
 OPT="${OPT:--O3}"
 TARGET="--target=wasm32-wasip1-threads -pthread"
@@ -31,7 +32,9 @@ mkdir -p "$OUT/test" web/dist-dev/test
 LIFTDEF="$(grep -q FLAGABI gen/all/web-lift.txt 2>/dev/null && echo -DLIFT_FLAGABI)"
 "$WASI/bin/clang" $CFLAGS $LIFTDEF -c -o "$OUT/test/main_all.o" tests/main_all.c
 RT="$(ls "$OUT"/rt/*.o | grep -v '/web_main_web\.o$')"
-"$WASI/bin/clang" $TARGET $OPT -o web/dist-dev/test/nfsu2_all.wasm $(ls "$OUT"/obj/*.o) $(ls "$OUT"/obj/srv/*.o 2>/dev/null) $RT "$OUT/test/main_all.o" \
+# the lifted objects web/build.sh linked (out/web/lift.objs), never one an older lift left in out/web/obj
+LIFTED="$(grep -v '^#' "$OUT/lift.objs" | sed "s|^|$OUT/|")"
+"$WASI/bin/clang" $TARGET $OPT -o web/dist-dev/test/nfsu2_all.wasm $LIFTED $RT "$OUT/test/main_all.o" \
   -Wl,--import-memory,--export-memory,--shared-memory,--max-memory=4294967296 \
   -Wl,--initial-memory=1073741824,--global-base=671088640 \
   -Wl,-z,stack-size=$(( 8 * 1048576 )) -Wl,--no-stack-first \

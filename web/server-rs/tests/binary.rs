@@ -433,6 +433,10 @@ async fn the_binary_for_most_wanted() {
     assert_eq!(startup[2], format!("  game.wasm : {}", wasm.to_string_lossy()));
     assert!(startup.contains(&"  online    : off (this server has no Online mode for NFS Most Wanted yet)".to_string()), "{startup:?}");
     assert!(startup.iter().any(|l| l.starts_with("  free roam : the hub at 10.77.0.253 on the switch")));
+    // the operator's command names the game (ctl's own default is UG2's state folder)
+    let sock = state.join("control.sock").to_string_lossy().to_string();
+    let bans = format!("  bans      : 0; nfsu2-server ctl --game mw who, kick, ban, unban, bans (through {sock})");
+    assert!(startup.contains(&bans), "{startup:?}");
     let (_, m) = srv.get("/data-manifest").await;
     let m: Value = serde_json::from_str(&m).unwrap();
     let ps: Vec<&str> = m["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();

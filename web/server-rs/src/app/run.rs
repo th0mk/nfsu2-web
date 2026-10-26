@@ -473,8 +473,10 @@ pub async fn run(o: Options, cores: usize) {
         app.kept.as_ref().map_or_else(|| "compressed as they are sent (NFSU2_COMPRESS_THREADS=0)".into(), |k| k.summary())
     ));
     let bans = app.bans.list(nfsu2_util::now_ms()).len();
+    // (ctl goes to UG2's state folder unless told the game: ctl.rs)
+    let g = if o.game.id == "ug2" { String::new() } else { format!("--game {} ", o.game.id) };
     lines.push(if control_up {
-        format!("  bans      : {bans}; nfsu2-server ctl who, kick, ban, unban, bans (through {})", paths::join(&o.state, super::control::SOCKET))
+        format!("  bans      : {bans}; nfsu2-server ctl {g}who, kick, ban, unban, bans (through {})", paths::join(&o.state, super::control::SOCKET))
     } else {
         format!("  bans      : {bans}; no kick or ban (the control socket could not be made: above)")
     });

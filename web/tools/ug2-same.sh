@@ -7,6 +7,8 @@
 #   web/tools/ug2-same.sh --no-copy path/to/SPEED2.EXE   lift the copy the last run left, as it is
 #                                                        (a change planted there tests this check)
 #   UG2_BASE=<dir> web/tools/ug2-same.sh <exe>           compare with <dir>/{all,server}
+#   web/tools/ug2-same.sh --make-expect <commit>         write the baseline's gameinfo.expect from
+#                                                        main's sources at <commit> (see below)
 #
 # The lift runs in a copy, never in this checkout's gen/: the tracked and new
 # non-ignored files (git ls-files -co --exclude-standard) go to
@@ -16,13 +18,24 @@
 # (WEB_LIFT=plain only when the baseline's all/web-lift.txt says plain), so a
 # changed default (web/gen.sh's, gen.sh's or games/ug2/game.conf's) shows in
 # web-lift.txt, the stamp's options line or the C; server.dll is taken from
-# next to the exe, as always.  The baseline (default out/mw/ug2-base) is a
-# fresh UG2 lift of main's head made with main's tools and their defaults.
+# next to the exe, as always.
+#
+# The baseline (default out/mw/ug2-base; a new one whenever main moves) is a
+# fresh UG2 lift of main's head made with main's tools and their defaults,
+# its gen/all and gen/server copied to all/ and server/, plus gameinfo.expect:
+# `web/tools/ug2-same.sh --make-expect <that head>` writes it from main's own
+# sources at that commit, never from this checkout's: runtime/cpu.h's
+# DISPATCH_TEXT_BASE and DISPATCH_TEXT_SIZE, the image range of
+# runtime/heap.c, the entry point runtime/web/main_web.c calls and the _ftol2
+# of tools/lift.py, as the #define lines of a UG2 gameinfo.h.  A baseline
+# without it is refused; one of those sources that no longer reads as
+# expected stops --make-expect.
 #
 # Compared: every file of all/ and server/ except stamp.txt, byte for byte.  A
-# file only the new lift has passes when web/tools/ug2-same.allow names it;
-# all/gameinfo.h also needs the #define lines of the copy's
-# runtime/gameinfo_ug2.h (the values UG2's runtime was built with before).
+# file only the new lift has passes when web/tools/ug2-same.allow names it.
+# The lift's all/gameinfo.h and the copy's runtime/gameinfo_ug2.h (cpu.h takes
+# the one, or the other without it) must have the #define lines of
+# gameinfo.expect, comments and spacing aside: main's values.
 # The stamps: the date line is ignored; exe, options, overrides and hooks must
 # match.  Another lifter hash, or another flag table hash (FLAGABI= in the
 # options line), is printed as information: the output is what must not change.
@@ -31,17 +44,52 @@
 set -e -o pipefail
 die(){ echo "ug2-same: $*" >&2; exit 2; }
 abs(){ case "$1" in /*) echo "$1" ;; *) echo "$PWD/$1" ;; esac; }
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+BASE="$(abs "${UG2_BASE:-$ROOT/out/mw/ug2-base}")"
+EXPECT="$BASE/gameinfo.expect"
+# a header's #define lines, comments and spacing aside, without the include guard
+defines(){ { grep '^#define' "$1" 2>/dev/null || true; } | sed -E 's|/\*.*||; s/[[:space:]]+/ /g; s/ $//' | { grep -vx '#define GAMEINFO_H' || true; }; }
+
+if [ "${1:-}" = --make-expect ]; then
+  REV="${2:-}"; [ -n "$REV" ] || die "usage: web/tools/ug2-same.sh --make-expect <main's commit the baseline was lifted from>"
+  [ -d "$BASE/all" ] || die "no $BASE/all: make the baseline first"
+  SHA="$(git -C "$ROOT" rev-parse --verify -q "$REV^{commit}")" || die "--make-expect: $REV is not a commit"
+  # one value from main's file at that commit: the first group of the sed pattern, on exactly one line
+  val(){ local v; v="$(git -C "$ROOT" show "$SHA:$1" 2>/dev/null | sed -nE "s/$2/\1/p")" || true
+    [ -n "$v" ] && [ "$(echo "$v" | wc -l | tr -d ' ')" = 1 ] || die "--make-expect: $1 at $REV has no single line matching /$2/ (main changed it: read the value there and update this script)"
+    echo "$v"; }
+  TB="$(val runtime/cpu.h '^#define DISPATCH_TEXT_BASE (0x[0-9a-fA-F]+)u$')"
+  TS="$(val runtime/cpu.h '^#define DISPATCH_TEXT_SIZE (0x[0-9a-fA-F]+)u$')"
+  IB="$(val runtime/heap.c '.*int img = pg >= (0x[0-9a-fA-F]+)u && pg < 0x[0-9a-fA-F]+u;.*')"
+  IE="$(val runtime/heap.c '.*int img = pg >= 0x[0-9a-fA-F]+u && pg < (0x[0-9a-fA-F]+)u;.*')"
+  EP="$(val runtime/web/main_web.c '^[[:space:]]+sub_([0-9a-fA-F]{8})\(&cpu\);.*')"
+  FT="$(val tools/lift.py '.*if t == (0x[0-9a-fA-F]+) and _FTOL2INL:.*')"
+  { echo "# UG2's exe values as main's runtime and lifter have them at $REV ($SHA):"
+    echo "# runtime/cpu.h DISPATCH_TEXT_BASE/SIZE, the image range of runtime/heap.c, the entry point"
+    echo "# runtime/web/main_web.c calls, tools/lift.py's _ftol2 (web/tools/ug2-same.sh --make-expect)"
+    printf '#define GAMEINFO_IMAGE_BASE 0x%08xu\n' "$IB"
+    printf '#define GAMEINFO_IMAGE_SIZE 0x%08xu\n' "$(( IE - IB ))"
+    printf '#define GAMEINFO_TEXT_BASE 0x%08xu\n' "$TB"
+    printf '#define GAMEINFO_TEXT_SIZE 0x%08xu\n' "$TS"
+    printf '#define GAMEINFO_ENTRY 0x%08xu\n' "0x$EP"
+    printf '#define GAMEINFO_ENTRY_FN sub_%08x\n' "0x$EP"
+    printf '#define GAMEINFO_FTOL2 0x%08xu\n' "$FT"; } > "$EXPECT.tmp"
+  mv "$EXPECT.tmp" "$EXPECT"
+  echo "ug2-same: wrote $EXPECT:"; defines "$EXPECT" | sed 's/^/  /'
+  exit 0
+fi
+
 NOCOPY=0; [ "${1:-}" = --no-copy ] && { NOCOPY=1; shift; }
 EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/SPEED2.EXE}}"
 [ -f "$EXE" ] || die "usage: web/tools/ug2-same.sh [--no-copy] path/to/SPEED2.EXE"
 EXE="$(abs "$EXE")"
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-BASE="$(abs "${UG2_BASE:-$ROOT/out/mw/ug2-base}")"
 cd "$ROOT"
 WORK="$ROOT/out/mw/ug2-same"; TREE="$WORK/tree"; ALLOW="$ROOT/web/tools/ug2-same.allow"
 for f in all/stamp.txt server/stamp.txt all/web-lift.txt; do
   [ -f "$BASE/$f" ] || die "no $BASE/$f: make the baseline first (a fresh web/gen.sh lift of main's head, copied there)"
 done
+[ -f "$EXPECT" ] || die "no $EXPECT: make it with web/tools/ug2-same.sh --make-expect <main's commit the baseline was lifted from>"
+[ -n "$(defines "$EXPECT")" ] || die "$EXPECT has no #define lines (web/tools/ug2-same.sh --make-expect makes it)"
 cmp -s "$BASE/all/stamp.txt" "$BASE/server/stamp.txt" || die "$BASE: all/stamp.txt and server/stamp.txt differ (not one lift)"
 h16(){ shasum -a 256 | cut -c1-16; }
 WANT_EXE=$(sed -nE 's/^exe ([0-9a-f]+).*/\1/p' "$BASE/all/stamp.txt")
@@ -86,11 +134,14 @@ for d in all server; do
     [ -z "$f" ] || cmp -s "$TREE/gen/$d/$f" "$BASE/$d/$f" || DIFF+=("differs  $d/$f")
   done < <(LC_ALL=C comm -12 <(echo "$NEW") <(echo "$OLD"))
 done
-# the exe's values the UG2 build compiles with (cpu.h takes gen/all/gameinfo.h
-# over runtime/gameinfo_ug2.h): allowed by name, they must still be UG2's
+# the exe's values the UG2 build compiles with (cpu.h takes gen/all/gameinfo.h,
+# allowed by name, else runtime/gameinfo_ug2.h): both must be main's
 GI="$TREE/gen/all/gameinfo.h"
-if [ -f "$GI" ] && ! diff <(grep '^#define' "$GI") <(grep '^#define' "$TREE/runtime/gameinfo_ug2.h" 2>/dev/null) > "$WORK/gameinfo.diff"; then
-  DIFF+=("differs  all/gameinfo.h: its #define lines are not runtime/gameinfo_ug2.h's ($WORK/gameinfo.diff)")
+if [ -f "$GI" ] && ! diff <(defines "$EXPECT") <(defines "$GI") > "$WORK/gameinfo.diff"; then
+  DIFF+=("differs  all/gameinfo.h: its #define lines are not main's, $EXPECT ($WORK/gameinfo.diff)")
+fi
+if ! diff <(defines "$EXPECT") <(defines "$TREE/runtime/gameinfo_ug2.h") > "$WORK/gameinfo_ug2.diff"; then
+  DIFF+=("differs  runtime/gameinfo_ug2.h: its #define lines are not main's, $EXPECT ($WORK/gameinfo_ug2.diff)")
 fi
 S_NEW="$TREE/gen/all/stamp.txt"; S_OLD="$BASE/all/stamp.txt"
 cmp -s "$S_NEW" "$TREE/gen/server/stamp.txt" || DIFF+=("stamp    server/stamp.txt is not the one of all/stamp.txt")
