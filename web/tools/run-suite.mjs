@@ -14,6 +14,9 @@
 //     --script FILE     an ad-hoc scenario: tests/scripts/FILE (with --marker, --name, --net NAME;
 //                       NFSU2_SAVE_SEED seeds its save directory)
 //     --list            print the scenario table and exit
+//     --game ID         ug2 (default) or mw: that game's scenario table, test scripts and checks (tests/ or
+//                       tests/mw/: the server, started with --game mw, serves tests/mw/ at /tests/)
+//     --help            this text and the game's scenarios
 //   no scenario names: every runnable scenario of the table.
 //   NFSU2_SAVE_SEED=<dir> (as run_suite.sh): a save tree copied into the
 //   scenario's OPFS save directory first (outrun: a career in stage 2 or later,
@@ -34,6 +37,8 @@
 // per line, without the host's [tid] prefix); summary.txt and summary.json.
 // The module the server sends (/game.json: revision, lift options, hash) is
 // the run's first line, and in both summaries.
+// Each game has its own table below: Most Wanted's is empty until its first
+// scenario exists (an ad-hoc --script runs one of tests/mw/scripts/).
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,11 +46,12 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireDev, moduleLine } from './dev-server.mjs';
 import { seedSave } from './save-seed.mjs';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-// name, script, marker, extra env, time limit (s; run_suite.sh's ALARM), not runnable yet: why
-const TABLE = [
+// Underground 2's scenarios: name, script, marker, extra env, time limit (s; run_suite.sh's ALARM), not runnable yet: why
+const UG2_TABLE = [
   ['quickrace', 'quickrace.txt', 'waitmem [0x008654a4]==6 satisfied', '', 400],
   ['sprint', 'qr_mode1.txt', 'waitmem [0x008654a4]==6 satisfied', '', 400],
   ['drag', 'qr_mode2.txt', 'waitmem [0x008654a4]==6 satisfied', '', 400],
@@ -80,7 +86,7 @@ const TABLE = [
 ].map(([name, script, marker, extra, alarm, blocked, net]) => ({ name, script, marker, extra, alarm, blocked, net }));
 // opt-in (named only): needs a career save from stage 2 on (NFSU2_SAVE_SEED on the Mac)
 const SEED = process.env.NFSU2_SAVE_SEED ?? '';
-const OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player completion 6 (6 won', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
+const UG2_OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player completion 6 (6 won', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save from stage 2 on: NFSU2_SAVE_SEED=<save tree>' },
 { name: 'sponsor', script: 'career_sponsor.txt', marker: 'waitfng UI_postrace.fng satisfied', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' },
@@ -88,6 +94,10 @@ const OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player comp
 // 33rd refused, no stack in the heap (tests/checks/threads.sh); then the quick race.  A worker per thread: pool 64
 { name: 'threads', script: 'quickrace.txt', marker: '[thread] test: 33 threads asked for, 32 started, 1 refused',
   extra: 'NFSU2_THREAD_TEST=33:4000', alarm: 400, pool: 64 }];
+
+// each game's table (run when no scenario is named) and its opt-in scenarios
+const SCENARIOS = { ug2: [UG2_TABLE, UG2_OPT], mw: [[], []] };
+const NONE = { mw: 'none yet (tests/mw/scripts/ has no suite scenario; --script FILE runs one of its scripts)' };
 
 // the environment of tests/run_suite.sh + tools/autorun.sh (DESIGN.md section 5)
 const SUITE_ENV = {
@@ -97,21 +107,29 @@ const SUITE_ENV = {
 
 // ---- arguments ----
 const argv = process.argv.slice(2);
-const opt = { base: 'http://localhost:8611', run: '', jobs: 1, env: [], scale: 1, script: '', marker: '', name: '', net: '', list: false };
+const opt = { base: 'http://localhost:8611', run: '', jobs: 1, env: [], scale: 1, script: '', marker: '', name: '', net: '', list: false, help: false };
 const names = [];
+const GAME = gameOf(argv), G = GAMES[GAME], [TABLE, OPT] = SCENARIOS[GAME];
+const OF = GAME === 'ug2' ? '' : ` (${G.name})`;   // in the run's lines and summary: Underground 2's stay as they were
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i], v = () => argv[++i];
   if (a === '--base') opt.base = v(); else if (a === '--run') opt.run = v(); else if (a === '--jobs') opt.jobs = +v();
   else if (a === '--env') opt.env.push(v()); else if (a === '--timeout-scale') opt.scale = +v();
   else if (a === '--script') opt.script = v(); else if (a === '--marker') opt.marker = v(); else if (a === '--name') opt.name = v();
   else if (a === '--net') opt.net = v();
+  else if (a === '--game') v();                    // gameOf() above
+  else if (a === '--help') opt.help = true;
   else if (a === '--list') opt.list = true; else names.push(a);
 }
+const listing = () => [...TABLE, ...OPT].map(s => `${s.name.padEnd(11)} ${s.script.padEnd(22)} ${s.blocked ? 'NOT RUNNABLE YET: ' + s.blocked : `marker "${s.marker}"${s.extra ? ', ' + s.extra : ''}, ${s.alarm} s`}`);
+if (opt.help) usage(import.meta.url, GAME, 'Scenarios', listing(), NONE[GAME]);
 if (opt.list) {
-  for (const s of [...TABLE, ...OPT]) console.log(`${s.name.padEnd(11)} ${s.script.padEnd(22)} ${s.blocked ? 'NOT RUNNABLE YET: ' + s.blocked : `marker "${s.marker}"${s.extra ? ', ' + s.extra : ''}, ${s.alarm} s`}`);
+  for (const l of listing().length ? listing() : [NONE[GAME]]) console.log(l);
   process.exit(0);
 }
+if (!opt.script && !names.length && !TABLE.length) nothingFor(GAME, NONE[GAME]);
 await requireDev(opt.base);
+await requireGame(opt.base, GAME);
 // the module the server sends (/game.json): its revision and lift go with the run's results
 const MODULE = await moduleLine(opt.base);
 if (MODULE) console.log(MODULE);
@@ -132,10 +150,10 @@ const saveName = s => `suite-${run}-${s.name}`.replace(/[^\w.-]/g, '_');
 function urlFor(s) {
   const env = { ...SUITE_ENV, ...Object.fromEntries(s.extra.split(/\s+/).filter(Boolean).map(e => e.split('='))), ...extraEnv };
   const q = new URLSearchParams();
-  q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', '/data/SPEED2.EXE');
+  q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', G.exe);
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
   q.set('save', saveName(s)); if (!s.seed) q.set('fresh', '');     // a seeded save dir is prepared by seedSave
-  q.set('reg', '/tests/web/seed/registry_perf4_native.txt');
+  if (G.reg) q.set('reg', G.reg);
   q.set('script', s.script.startsWith('/') ? s.script : `/tests/scripts/${s.script}`);
   if (s.net) q.set('net', s.net);
   if (s.pool) q.set('pool', String(s.pool));
@@ -158,7 +176,7 @@ function judge(s, log, exit) {
   if (has(/unimplemented import/)) why.push('unimplemented-import');
   if (has(/RangeError|Maximum call stack/)) why.push('stack-overflow');
   if (has(/^\[(net|roam)\] BLOCKED/m)) why.push('net-blocked');
-  const chk = path.join(ROOT, 'tests/checks', `${s.name}.sh`);
+  const chk = path.join(ROOT, G.tests, 'checks', `${s.name}.sh`);
   if (fs.existsSync(chk)) {
     let out = '', ok = true;
     try { out = execFileSync(chk, [path.join(OUT, `${s.name}.log`)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
@@ -210,7 +228,7 @@ const queue = scen.filter(s => { if (s.blocked) { skipped.push(s); return false;
 // (nothing to run, every scenario named not runnable yet: no browser, only the summaries)
 const browser = queue.length ? await chromium.launch({ channel: 'chrome', headless: true,
   args: ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] }) : null;
-console.log(`web suite ${run}: ${queue.length} scenario(s), ${opt.jobs} at a time, logs in ${path.relative(ROOT, OUT)}/`);
+console.log(`web suite ${run}${OF}: ${queue.length} scenario(s), ${opt.jobs} at a time, logs in ${path.relative(ROOT, OUT)}/`);
 async function worker() {
   for (let s; (s = queue.shift());) {
     const r = await runOne(browser, s);
@@ -229,9 +247,9 @@ const rows = [
   ...skipped.map(s => `| ${s.name} | not runnable yet | - | - | ${s.blocked} |`),
 ];
 const pass = results.filter(r => r.pass).length;
-const sum = `web suite ${run}: ${pass} passed, ${results.length - pass} failed, ${skipped.length} not runnable yet\n` +
+const sum = `web suite ${run}${OF}: ${pass} passed, ${results.length - pass} failed, ${skipped.length} not runnable yet\n` +
   `${MODULE ? MODULE + '\n' : ''}\n${rows.join('\n')}\n`;
 fs.writeFileSync(path.join(OUT, 'summary.txt'), sum);
-fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify({ run, module: MODULE, env: { ...SUITE_ENV, ...extraEnv }, results, skipped: skipped.map(s => ({ name: s.name, why: s.blocked })) }, null, 1));
+fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify({ run, ...(OF ? { game: GAME } : {}), module: MODULE, env: { ...SUITE_ENV, ...extraEnv }, results, skipped: skipped.map(s => ({ name: s.name, why: s.blocked })) }, null, 1));
 console.log('\n' + sum);
 process.exitCode = results.length === pass ? 0 : 1;

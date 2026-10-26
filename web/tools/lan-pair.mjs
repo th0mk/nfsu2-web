@@ -25,6 +25,9 @@
 //                    one is left out of the judgement and of the trace check
 //        --mode drift|streetx: drift and Street X games (the mode carousel's 4th and 5th entries, as the
 //                    "mode" dumps of the runs show: Circuit, Sprint, Drag, Drift, Street X)
+//        [--game ug2|mw]   the game (ug2 unless given): its script generator, modes and results screen; Most
+//                    Wanted has none yet
+//        [--help]    this text and the game's modes
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, the game
 // folder from --data or NFSU2_DATA) and stops it by its child handle at the end.
@@ -47,14 +50,35 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { serverCommand } from './server-cmd.mjs';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
 const opts = (k) => argv.flatMap((a, i) => (a === '--' + k && i + 1 < argv.length ? [argv[i + 1]] : []));
+// each game's LAN races: the script generator with lan_race.sh's options per mode (host, joiners) and the results
+// screen
+const RACES_OF = {
+  ug2: {
+    gen: 'tools/gen_lan_race.py', results: 'screen UI_PostRaceResults.fng',
+    modes: {
+      circuit: { h: ['--mode', '0', '--race-ms', '120000'], j: ['--refresh', '--race-ms', '120000'] },
+      sprint: { h: ['--mode', '1', '--race-ms', '90000'], j: ['--filter', '1', '--race-ms', '90000'] },
+      drag: { h: ['--mode', '2', '--drag', '--race-ms', '40000'], j: ['--filter', '2', '--drag', '--race-ms', '40000'] },
+      drift: { h: ['--mode', '3', '--race-ms', '120000'], j: ['--filter', '3', '--race-ms', '120000'] },
+      streetx: { h: ['--mode', '4', '--race-ms', '120000'], j: ['--filter', '4', '--race-ms', '120000'] },
+    },
+  },
+};
+const NONE = 'none yet: no LAN menu script generator for Most Wanted (M8-12)';
+const GAME = gameOf(argv), G = GAMES[GAME], LAN = RACES_OF[GAME];
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'Modes (--mode)', Object.entries(LAN?.modes ?? {})
+  .map(([m, { h, j }]) => `${m.padEnd(8)} ${LAN.gen} host ${h.join(' ')}; join ${j.join(' ')}`), NONE);
+if (!LAN) nothingFor(GAME, NONE);
 const HTTP_PORT = +opt('http-port', 8643);
 const OWN = !argv.includes('--base');
 const BASE = opt('base', `http://localhost:${HTTP_PORT}`);
+if (!OWN) await requireGame(BASE, GAME);
 const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2'));
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/lan-pair')));
 const MODE = opt('mode', 'circuit'), RACES = +opt('races', 1), PLAYERS = Math.min(6, Math.max(2, +opt('players', 2)));
@@ -67,16 +91,10 @@ const PY = fs.existsSync(path.join(REPO, '.venv/bin/python')) ? path.join(REPO, 
 fs.mkdirSync(OUT, { recursive: true });
 
 // lan_race.sh's scripts
-const MODES = {
-  circuit: { h: ['--mode', '0', '--race-ms', '120000'], j: ['--refresh', '--race-ms', '120000'] },
-  sprint: { h: ['--mode', '1', '--race-ms', '90000'], j: ['--filter', '1', '--race-ms', '90000'] },
-  drag: { h: ['--mode', '2', '--drag', '--race-ms', '40000'], j: ['--filter', '2', '--drag', '--race-ms', '40000'] },
-  drift: { h: ['--mode', '3', '--race-ms', '120000'], j: ['--filter', '3', '--race-ms', '120000'] },
-  streetx: { h: ['--mode', '4', '--race-ms', '120000'], j: ['--filter', '4', '--race-ms', '120000'] },
-};
+const MODES = LAN.modes;
 if (!MODES[MODE]) { console.error('--mode circuit|sprint|drag|streetx|drift'); process.exit(2); }
 const NAMES = ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWEB6'];
-const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, 'tools/gen_lan_race.py'), role, '--name', name, '--car', String(car),
+const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, LAN.gen), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
 const scripts = [gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])];
 for (let i = 1; i < PLAYERS; i++) scripts.push(gen('join', NAMES[i], i, [...MODES[MODE].j, ...opts('join-arg')]));
@@ -98,8 +116,8 @@ const scriptPath = i => `/tests/lan-pair/${stamp}-i${i + 1}.txt`;
 function url(i) {
   const env = { ...COMMON };
   for (const kv of opts(i === 0 ? 'host-env' : 'join-env')) env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1);
-  const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: '/data/SPEED2.EXE',
-    reg: '/tests/web/seed/registry_perf4_native.txt', save: `lan-${stamp}-i${i + 1}`, net: NAMES[i],
+  const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
+    reg: G.reg, save: `lan-${stamp}-i${i + 1}`, net: NAMES[i],
     script: scriptPath(i) });
   if (PAGE === 'app') {
     // the player's page: no wasm/pages/arg/net (the app's own), the switch name from roam_name, free roam off
@@ -229,7 +247,7 @@ for (const x of inst) {
   if (res[x.i] !== 'done') why.push(`${n}:timeout`);
   if (x.exitCode() !== 0) why.push(`${n}:exit=${x.exitCode()}`);
   if (!log.includes('quit at guest frame')) why.push(`${n}:no-quit`);
-  if (!log.includes('screen UI_PostRaceResults.fng')) why.push(`${n}:no-results`);
+  if (!log.includes(LAN.results)) why.push(`${n}:no-results`);
   if (has(/FAULT IN GUEST|GUEST MEMORY FAULT|HOST SEGV/)) why.push(`${n}:fault`);
   if (log.includes('TIME LIMIT REACHED')) why.push(`${n}:timeout`);
   if (has(/^\[trap\]/m) || has(/^TRAP in thread/m)) why.push(`${n}:trap`);

@@ -6,6 +6,7 @@
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
 //        [--race 1-3:60:120] [--bundle] [--first 0] [--loop-ms 10] [--hold 50]
+//        [--game ug2|mw] (the game's cars and start point; Most Wanted has none yet) [--help] (this text and those)
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -39,19 +40,33 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
+import { gameOf, usage, nothingFor } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
+// each game's free roam for the bots: its player cars (CarTypeInfo +0), the one they drive without --car or --cars
+// and the new career's start (the circles' centre without --track)
+const ROAM_OF = {
+  ug2: {
+    cars: ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR', 'ESCALADE', 'TIBURON',
+      'SENTRA', 'CELICA', 'IS300', 'SUPRA', 'GOLF', 'A3', 'RSX', 'ECLIPSE', 'TT', 'RX8', '350Z', 'G35', '3000GT', 'GTO', 'MUSTANGGT', 'SKYLINE',
+      'LANCEREVO8', 'RX7', 'IMPREZAWRX'],
+    car: '350Z', start: [1695, -884, 24.1],
+  },
+};
+const NONE = 'none yet: no free-roam cars or start point for Most Wanted (M10-25)';
+const GAME = gameOf(argv), R = ROAM_OF[GAME];
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'Cars and start', R ? [`--cars all: ${R.cars.join(' ')}`,
+  `--car default: ${R.car}`, `start (circles without --track): ${R.start.join(', ')}`] : [], NONE);
+if (!R) nothingFor(GAME, NONE);
 const BASE = opt('base', 'http://localhost:8655'), N = +opt('n', 62), SECONDS = +opt('seconds', 120), ROOM = opt('room', ''), CREW = opt('crew', '');
-const SPEED = +opt('speed', 15), CAR = opt('car', '350Z'), STAGGER = +opt('stagger', 50), TRACK = opt('track', ''), OUTF = opt('out', '');
+const SPEED = +opt('speed', 15), CAR = opt('car', R.car), STAGGER = +opt('stagger', 50), TRACK = opt('track', ''), OUTF = opt('out', '');
 const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.includes('--bundle'), FIRST = +opt('first', 0);
 const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0);
 const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
-const ALL_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR', 'ESCALADE', 'TIBURON',
-  'SENTRA', 'CELICA', 'IS300', 'SUPRA', 'GOLF', 'A3', 'RSX', 'ECLIPSE', 'TT', 'RX8', '350Z', 'G35', '3000GT', 'GTO', 'MUSTANGGT', 'SKYLINE',
-  'LANCEREVO8', 'RX7', 'IMPREZAWRX'];
+const ALL_CARS = R.cars;
 const CARS = opt('cars', '') === 'all' ? ALL_CARS : opt('cars', '') ? opt('cars', '').split(',') : [CAR];
 const HUB = 0x0A4D00FD, PORT = 47210;
 
@@ -95,7 +110,7 @@ if (TRACK) {
 } else {
   track = (t, i) => {
     const r = SPREAD + (i % 6) * SPREAD, w = SPEED / r, a = w * t + i;
-    return { p: [1695 + r * Math.cos(a), -884 + r * Math.sin(a), 24.1], v: [-r * w * Math.sin(a), r * w * Math.cos(a), 0] };
+    return { p: [R.start[0] + r * Math.cos(a), R.start[1] + r * Math.sin(a), R.start[2]], v: [-r * w * Math.sin(a), r * w * Math.cos(a), 0] };
   };
 }
 

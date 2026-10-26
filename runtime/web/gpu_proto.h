@@ -20,8 +20,10 @@
 #include <stddef.h>
 
 #define GW_MAGIC   0x55504757u          /* "WGPU" */
-#define GW_VERSION 5u                   /* 2: the headlights block in the K arena (GwHL); 3: K blocks 16-byte aligned, bound in windows;
-                                           4: GwDraw.clip; 5: GW_BLIT's source rectangle, a texture read back (GwFrame.rb_*) */
+#define GW_VERSION 6u                   /* 2: the headlights block in the K arena (GwHL); 3: K blocks 16-byte aligned, bound in windows;
+                                           4: GwDraw.clip; 5: GW_BLIT's source rectangle, a texture read back (GwFrame.rb_*);
+                                           6: SM3 and depth textures (gpu-abi.md section 11): GwCtl.stages, GwDraw.tex4-7 and
+                                           smphi, GW_Z_TEX, GW_PS_DEPTH_SHIFT, GW_TF_DEPTH, the PS kinds word (GW_BK_*) */
 #define GW_NBUF    2                    /* record buffers: one being written, one handed off */
 
 /* GwDraw.kind */
@@ -37,9 +39,11 @@ typedef struct {
     uint32_t kind;        /* GW_DRAW, GW_CLEAR, GW_BLIT */
     uint32_t blend;       /* bit0 enable, 1-5 SRCBLEND, 6-10 DESTBLEND, 11-13 BLENDOP, 14-17 write mask */
     float    aref;        /* alpha test reference (0 = no test) */
-    uint32_t depth;       /* bit0 Z test, bit1 Z write, bits 2-4 D3DCMPFUNC, bits 8+ Z surface id */
+    uint32_t depth;       /* bit0 Z test, bit1 Z write, bits 2-4 D3DCMPFUNC, bits 8+ Z surface id: 0 none, 1 the
+                           * implicit one, 2-63 created surfaces, GW_Z_TEX + texid a depth texture (GW_TF_DEPTH) */
     uint32_t tex1, tex2, tex3;
-    int32_t  ps;          /* pixel shader id (0 = fixed function), +256 = stage-0 cube variant */
+    int32_t  ps;          /* pixel shader module id: bits 0-7 the game's shader (0 = fixed function), +256 = stage-0
+                           * cube variant, bits GW_PS_DEPTH_SHIFT+ the stages that sample a depth texture (one bit each) */
     uint32_t psci;        /* index of the PS constant block in the frame's pool */
     int32_t  vsid;        /* GPU vertex shader id (0 = TVert path) */
     uint32_t rawoff;      /* raw arena byte offset (raw draw) or pool offset of vertex 0 (indexed) */
@@ -59,7 +63,19 @@ typedef struct {
     int32_t  ix_base;     /* indexed draw: BaseVertexIndex */
     uint32_t clip;        /* the 2D UI on a screen narrower than 4:3: rows y0 | y1 << 16 of the back buffer
                            * (its 4:3 band), the draw kept between them; 0 = the whole target (com.c) */
+    uint32_t tex4, tex5, tex6, tex7;  /* stage 4-7 texture ids (0 = white); read only with GwCtl.stages 8 */
+    uint32_t smphi[4];    /* packed sampler keys of stages 4-7 (as smp); read only with GwCtl.stages 8 */
 } GwDraw;
+
+/* GwDraw.depth bits 8+ from this value on: a depth texture's id + GW_Z_TEX,
+ * that texture as the draw's Z (created surfaces stay below it, com.c zid_take) */
+#define GW_Z_TEX 64u
+/* GwDraw.ps bits from this one up: stage k's texture is a depth texture
+ * (GW_TF_DEPTH) and module ps & 0x1FF samples it with a depth compare; the
+ * game registers that variant under the whole id (gpu-abi.md section 11) */
+#define GW_PS_DEPTH_SHIFT 9u
+/* texture stages a game's modules and draws use (GwCtl.stages) */
+#define GW_STAGES_MAX 8u
 
 typedef struct {
     uint32_t seq;         /* guest frame number at handoff */
@@ -125,6 +141,10 @@ typedef struct {
      * rb_id once the bytes are there, rb_id | GW_RB_FLAG when it could not
      * read the texture, and notifies */
     int32_t  rb_want, rb_done;
+    /* game, set before it registers the block and never changed: the texture
+     * stages of every draw and module (tex0-7, smp0-7, VOut uv0-uv7), 4 or
+     * GW_STAGES_MAX; 0 = 4 (gpu-abi.md section 11) */
+    uint32_t stages;
     GwFrame  frame[GW_NBUF];
 } GwCtl;
 
@@ -153,11 +173,20 @@ enum {
     GW_POOL_GROW   = 4,   /* a: new size */
     GW_POOL_WRITE  = 5,   /* a: offset, bytes; payload */
     GW_SHADER_VS   = 6,   /* a: id, text bytes; payload WGSL (NUL-terminated) */
-    GW_SHADER_PS   = 7,   /* a: id, text bytes; payload WGSL (NUL-terminated) */
+    GW_SHADER_PS   = 7,   /* a: id, text bytes, binding kinds (GW_BK_*); payload WGSL (NUL-terminated) */
     GW_Z_FORGET    = 8,   /* a: zid */
 };
-#define GW_TF_RT   1u
-#define GW_TF_CUBE 2u
+#define GW_TF_RT    1u
+#define GW_TF_CUBE  2u
+#define GW_TF_DEPTH 4u    /* a depth texture (D3DUSAGE_DEPTHSTENCIL: D3DFMT_D16, D24X8 or D24S8): a draw's Z through
+                           * GW_Z_TEX, sampled with a depth compare; no uploads, no read back */
+/* GW_SHADER_PS a[2]: how the module declares the texture of each stage k,
+ * 2 bits at 2k; 0 everywhere = every stage 2D (a +256 module's stage 0 is a
+ * cube either way) */
+#define GW_BK_2D    0u    /* texture_2d<f32> + sampler */
+#define GW_BK_CUBE  1u    /* texture_cube<f32> + sampler */
+#define GW_BK_DEPTH 2u    /* texture_depth_2d + sampler_comparison (LESSEQUAL) */
+#define GW_BK(kinds, k) (((kinds) >> (2u * (k))) & 3u)
 typedef struct { uint32_t op, len; uint32_t a[6]; } GwCmd;
 #define GW_CMD_HDR 32u
 
@@ -196,7 +225,7 @@ typedef struct { uint32_t magic, n, pad[2]; GwMark m[GW_MARKS_MAX]; } GwMarks;
 /* Layout word: changes whenever a struct above changes shape. */
 #define GW_LAYOUT ((uint32_t)(sizeof(GwDraw) | sizeof(GwFrame) << 8 | (sizeof(GwCtl) & 0xFFF) << 16) ^ (GW_VERSION << 28))
 
-_Static_assert(sizeof(GwDraw) == 156, "GwDraw");
+_Static_assert(sizeof(GwDraw) == 188, "GwDraw");
 _Static_assert(offsetof(GwDraw, kind) == 16 && offsetof(GwDraw, aref) == 24 && offsetof(GwDraw, depth) == 28, "GwDraw a");
 _Static_assert(offsetof(GwDraw, ps) == 44 && offsetof(GwDraw, psci) == 48 && offsetof(GwDraw, vsid) == 52, "GwDraw b");
 _Static_assert(offsetof(GwDraw, rawoff) == 56 && offsetof(GwDraw, koff) == 60 && offsetof(GwDraw, proj) == 64, "GwDraw c");
@@ -204,18 +233,21 @@ _Static_assert(offsetof(GwDraw, smp) == 80 && offsetof(GwDraw, blit_src) == 96 &
 _Static_assert(offsetof(GwDraw, cull) == 104 && offsetof(GwDraw, fogv) == 108 && offsetof(GwDraw, clr_argb) == 124, "GwDraw e");
 _Static_assert(offsetof(GwDraw, clr_flags) == 128 && offsetof(GwDraw, clr_z) == 132 && offsetof(GwDraw, ksz) == 136, "GwDraw f");
 _Static_assert(offsetof(GwDraw, ix_isz) == 140 && offsetof(GwDraw, ix_ib) == 144 && offsetof(GwDraw, ix_base) == 148, "GwDraw g");
-_Static_assert(offsetof(GwDraw, clip) == 152, "GwDraw h");
+_Static_assert(offsetof(GwDraw, clip) == 152 && offsetof(GwDraw, tex4) == 156 && offsetof(GwDraw, tex7) == 168, "GwDraw h");
+_Static_assert(offsetof(GwDraw, smphi) == 172, "GwDraw i");
 _Static_assert(sizeof(GwFrame) == 156 && offsetof(GwFrame, rq_end) == 44 && offsetof(GwFrame, dump_label) == 72, "GwFrame");
 _Static_assert(offsetof(GwFrame, rb_id) == 136 && offsetof(GwFrame, rb_rows) == 152, "GwFrame rb");
 _Static_assert(offsetof(GwCtl, state) == 16 && offsetof(GwCtl, bell) == 20 && offsetof(GwCtl, attached) == 24, "GwCtl a");
 _Static_assert(offsetof(GwCtl, rq_head) == 28 && offsetof(GwCtl, rq_tail) == 32 && offsetof(GwCtl, rq_ptr) == 36, "GwCtl b");
 _Static_assert(offsetof(GwCtl, frames_done) == 44 && offsetof(GwCtl, view_w) == 48 && offsetof(GwCtl, features) == 60, "GwCtl c");
-_Static_assert(offsetof(GwCtl, st_draws) == 64 && offsetof(GwCtl, st_pipelines) == 84 && offsetof(GwCtl, frame) == 96, "GwCtl d");
-_Static_assert(offsetof(GwCtl, rb_want) == 88 && offsetof(GwCtl, rb_done) == 92, "GwCtl e");
-_Static_assert(sizeof(GwCtl) == 96 + 2 * 156, "GwCtl");
+_Static_assert(offsetof(GwCtl, st_draws) == 64 && offsetof(GwCtl, st_pipelines) == 84 && offsetof(GwCtl, frame) == 100, "GwCtl d");
+_Static_assert(offsetof(GwCtl, rb_want) == 88 && offsetof(GwCtl, rb_done) == 92 && offsetof(GwCtl, stages) == 96, "GwCtl e");
+_Static_assert(sizeof(GwCtl) == 100 + 2 * 156, "GwCtl");
 _Static_assert(sizeof(GwVsync) == 32 && offsetof(GwVsync, ts_ms) == 8 && offsetof(GwVsync, hz) == 24, "GwVsync");
 _Static_assert(sizeof(GwCmd) == GW_CMD_HDR, "GwCmd");
 _Static_assert(sizeof(GwHLight) == 80 && sizeof(GwHL) == GW_HL_BYTES && offsetof(GwHL, l) == 16, "GwHL");
 _Static_assert(sizeof(GwMark) == 16 && sizeof(GwMarks) == GW_MARKS_BYTES && offsetof(GwMarks, m) == 16, "GwMarks");
 _Static_assert(GW_K_MARKS >= GW_K_HL + GW_HL_BYTES, "GwMarks after GwHL");
+_Static_assert(sizeof(GwDraw) < 256, "GW_LAYOUT keeps sizeof(GwDraw) in 8 bits");
+_Static_assert(GW_PS_DEPTH_SHIFT + GW_STAGES_MAX <= 31, "GwDraw.ps depth bits");
 #endif

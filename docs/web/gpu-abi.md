@@ -1,7 +1,8 @@
 # WGSL shader ABI (translator ↔ WebGPU renderer)
 
-Status: **2026-10-18**, authoritative. Owner: track `gpu-shaders`. Consumers: track `gpu-renderer`
-(`runtime/web/gpu_web.c`, `web/src/gpu/*`).
+Status: **2026-10-18**, authoritative; §11 (Most Wanted: 8 texture stages, binding kinds, depth textures; GW_VERSION
+6) added 2026-10-25. Owner: track `gpu-shaders`. Consumers: track `gpu-renderer` (`runtime/web/gpu_web.c`,
+`web/src/gpu/*`).
 
 This is the contract between the WGSL emitted on the game thread (the D3D9 shader translator, `runtime/vsemu.c` +
 `runtime/web/vsemu_wgsl.inc`) and the TypeScript WebGPU encoder. It follows `DESIGN.md` §3; every deviation is listed in
@@ -55,7 +56,9 @@ group 1  (textures and samplers of stages 0..3)
 ```
 
 - Two pipeline layouts: **L2D** = `[G0, G1_2d]` and **LCUBE** = `[G0, G1_cube]`. A pipeline uses LCUBE iff its fragment
-  module is a cube twin (`ps ≥ 256`: `ps_<id+256>` or `ps_256`); everything else uses L2D.
+  module is a cube twin (`ps ≥ 256`: `ps_<id+256>` or `ps_256`); everything else uses L2D. This is the 4-stage layout
+  with every binding kind 2D (§11): a game with 8 stages, or a module that declares another kind, gets the group 1 of
+  §11.3 instead.
 - `setBindGroup(0, g0, [kwin, poff])`: the dynamic offsets are in binding order (K, then P) and must be multiples of
   `minUniformBufferOffsetAlignment` (256). K is a **64 KB window** of the frame's VS constant arena (4096 rows, the
   default `maxUniformBufferBindingSize`), so the VS constant buffer needs 64 KB of slack after the last block. A draw's
@@ -76,7 +79,7 @@ group 1  (textures and samplers of stages 0..3)
 ## 3. Structs
 
 ```wgsl
-struct VOut {                      // interstage, identical in every module (7 of 16 locations)
+struct VOut {                      // interstage, identical in every module (7 of 16 locations; 11 with 8 stages, §11.2)
   @builtin(position) pos: vec4f,
   @location(0) col0: vec4f,  @location(1) col1: vec4f,          // oD0, oD1 (not clamped, as on the Mac)
   @location(2) uv0: vec4f,   @location(3) uv1: vec4f,           // stage k reads uvk (TEXCOORDINDEX applied in the VS)
@@ -272,3 +275,128 @@ through `vs_0`.
 | Alpha test as an override "no-discard variant" | `ALPHA_FUNC: u32` (D3DCMP, 8 = no discard) | Same twin, plus room for the full ALPHAFUNC set |
 | `t0..t3`, `s0..s3` | `tex0..tex3`, `smp0..smp3` | Names only (the D3D register names `t#`, `r#` are used for registers); bindings are as in DESIGN |
 | (not in DESIGN) | `PS20_TEXCOORD` override, FF PS cube twin, TVert `firstVertex` convention | Documented above |
+
+## 11. Most Wanted: 8 texture stages, binding kinds, depth textures (GW_VERSION 6)
+
+The additions Most Wanted's shaders need, written before the translator, D3DX and renderer work split (MW tracker
+M1-24). They are the contract; nothing here is implemented beyond the protocol (`gpu_proto.h`, `proto.ts`), the group 1
+layouts (`shader-abi.ts` `group1Entries`) and their check (`web/tools/check-gpu-proto.mjs`). **UG2 uses none of it**:
+every new field is 0 in UG2's records, and 0 means exactly what the protocol meant before version 6.
+
+### 11.1 What the game's shaders use
+
+From Most Wanted's 31 compiled effects (blobs counted to their end token; register use from the bytecode):
+
+| Need | Where | ABI before 6 |
+|---|---|---|
+| 5 samplers, s0..s4 | the reflective world effect's ps_2_0 and ps_2_x (s4 is the shadow map) | 4 stages |
+| a cube at stage 1 (`dcl_cube s1`) | the car effect's environment map: 1 ps_2_0, 4 ps_2_x | cube only at stage 0 (+256 twin) |
+| 8 texture coordinates | ps_2_0 and ps_2_x read t0..t7 (t4..t7 in 14, 12, 4 and 8 of the 18 ps_2_x); vs_1_1 writes oT4..oT7 (20, 17, 6 and 12 of 69 shaders); vs_3_0 writes texcoord0..4, ps_3_0 reads texcoord0..4 and color0..1 | uv0..uv3, oT4..oT7 alias oT0..oT3 (§7) |
+| depth-compare sampling | the shadow map at stage 1, 2, 3 or 4 depending on the effect, read by `texldp` (1, 4 or 16 taps) and only its `.x` used | none |
+
+Not used anywhere, so not in the ABI: more than one colour output (every pixel shader writes oC0 only, ps_1_x r0), oDepth,
+vPos and vFace, dsx/dsy, texldd, texldb, texldl (the two vs_3_0 shaders fetch no textures), if/loop/call/label/break,
+predicates, boolean constants. ps_3_0 has `rep i0` with `defi i0` (a literal count) in its 2 shaders: no integer
+constants from the game. Pixel shader constants stop at c20 (ps_2_x), c7 (ps_2_0) and c3 (ps_3_0): PSPar's 32 rows
+suffice. Vertex shader constants named directly stop at c83 (vs_1_1) and c20 (vs_3_0), inside a K block's 256 rows.
+
+**Float render targets: none.** The exe's creation calls push only A8R8G8B8, X8R8G8B8, D24S8 and 'DF16' as immediate
+formats, its render-target table holds A8R8G8B8 in every format slot (the code writes only its size slots), and no
+float D3DFMT (111..116) is pushed or moved in the 30 instructions before any CreateTexture, CreateCubeTexture,
+CreateRenderTarget, CreateDepthStencilSurface, CreateOffscreenPlainSurface or CheckDeviceFormat call. So the ABI adds
+no float formats, and the MW runtime answers CheckDeviceFormat for them with D3DERR_NOTAVAILABLE (§11.4). This is a
+static reading; a run that logs CheckDeviceFormat's arguments confirms it (today's com.c answers D3D_OK for every
+format).
+
+### 11.2 Texture stages: `GwCtl.stages`
+
+The game writes `stages` before it registers the control block and never changes it: **0 (UG2) or 4** = the ABI of
+§1-§10; **8** (`GW_STAGES_MAX`) = every draw has 8 texture stages and every module of the process is built for them:
+
+- **Draws.** `GwDraw.tex4..tex7` are the texture ids of stages 4-7 (0 = white) and `GwDraw.smphi[0..3]` their packed
+  sampler keys, encoded as `smp` (com.c `smp_push`: bits 0-1 MINFILTER, 2-3 MAGFILTER, 4-5 MIPFILTER, 6-8 ADDRESSU, 9-11
+  ADDRESSV, 12-14 log2 MAXANISOTROPY). The page reads them only with 8 stages. `proj` stays 4 wide: only ps_1_x and
+  the fixed-function stage read it, and no MW ps_1_x shader samples past stage 3.
+- **Group 1.** Stage k's texture at binding `texBinding(k)` and its sampler at `smpBinding(k)` (`shader-abi.ts`):
+  stages 0-3 as in §2 (0..3 and 4..7), stages 4-7 at 8..11 and 12..15. 16 entries; WebGPU's default limits allow 16
+  sampled textures and 16 samplers per stage.
+- **VOut.** Locations 0..6 as in §3, then `@location(7) uv4: vec4f` .. `@location(10) uv7: vec4f` (`VOUT_LOCATIONS_8` =
+  11 of the 16 inter-stage variables WebGPU guarantees). Every module of the process declares the same VOut, the
+  built-ins (`vs_0`, `ps_0`, `ps_256`) included, so any vertex module still pairs with any pixel module. A vertex
+  shader's oT4..oT7 are four more registers (no `& 3` alias), and uv4..uv7 are oT4..oT7 as they are: the K header's
+  `tsel` (TEXCOORDINDEX) covers stages 0-3 only. ps_2_x and ps_3_0 inputs follow their declarations (texcoord N = uvN,
+  color0/1 = col0/col1). `vs_0` writes uv4..uv7 = 0, since a TVert holds 4 coordinates: a pixel shader that reads t4..t7
+  on the CPU vertex path reads 0 there, which is one more reason M5 allows no CPU fallback (L-083).
+
+### 11.3 Binding kinds: `GW_SHADER_PS` a[2]
+
+Each pixel shader module record says how the module declares each stage's texture: 2 bits per stage k at bit 2k
+(`GW_BK(kinds, k)`).
+
+| Kind | WGSL texture | WGSL sampler | Bind group layout entries |
+|---|---|---|---|
+| 0 `GW_BK_2D` | `texture_2d<f32>` | `sampler` | `sampleType 'float'`, `'2d'`; `'filtering'` |
+| 1 `GW_BK_CUBE` | `texture_cube<f32>` | `sampler` | `sampleType 'float'`, `'cube'`; `'filtering'` |
+| 2 `GW_BK_DEPTH` | `texture_depth_2d` | `sampler_comparison` | `sampleType 'depth'`, `'2d'`; `'comparison'` |
+| 3 | not defined: the page makes no pipeline for the module and logs it | | |
+
+- ps_2_0 and later take the kind from their declarations (`dcl_2d` 0, `dcl_cube` 1); a `dcl_volume` stays what it is
+  today, a translation that fails before registration (§1). ps_1_x and the fixed-function stage register 0 everywhere;
+  their stage-0 cube stays the +256 twin, whose stage 0 is a cube whatever the word says. A depth stage (§11.4) turns
+  its 0 into 2.
+- **The page** builds a pipeline's layout as `[G0, group1Entries(stages, kinds, ps & 256)]` and caches it by those
+  three. With 4 stages and kinds 0 that is exactly L2D or LCUBE (check-gpu-proto.mjs compares the entries).
+- **Bind groups.** Each stage gets its bound texture when that texture is of the stage's kind (a 2D texture for 0, a cube
+  for 1, a depth texture for 2), and otherwise the kind's stand-in: the 1×1 white 2D or cube texture as today, and for
+  a depth stage a 1×1 depth texture cleared to 1.0, whose compare always passes (no shadow). A texture that is the
+  pass's colour target or Z gets the stand-in too: WebGPU allows no texture as attachment and binding in one pass.
+
+### 11.4 Depth textures
+
+- **Creation.** CreateTexture with D3DUSAGE_DEPTHSTENCIL (2) and D3DFMT_D16 (80), D24X8 (77) or D24S8 (75) queues
+  `GW_TEX_CREATE` with `GW_TF_DEPTH`. The page creates it as `depth32float`, the format of every Z surface (so a
+  pipeline's `depthStencil.format` stays the one it is), with usage RENDER_ATTACHMENT | TEXTURE_BINDING. It is never
+  uploaded, never read back (`rb_*`) and no GW_BLIT source or target (such a blit is skipped and logged).
+- **As Z.** Its level-0 surface set with SetDepthStencilSurface makes the draws' and clears' `depth` field bits 8+
+  `GW_Z_TEX` + its texture id (64 + id; created Z surfaces stay at 2..63). The colour target must have the same size
+  (WebGPU; D3D9 only asks for a Z at least as large); otherwise the draw gets the page's scratch Z and a log line.
+- **As a texture.** At each draw the game finds the stages whose bound texture is a depth texture and draws with module
+  `ps = shader | 256 × (stage-0 cube twin) | stages << GW_PS_DEPTH_SHIFT` (bit 9 + k for stage k). The first draw that
+  needs such a variant registers it under that whole id: the same shader translated with those stages of kind 2. Its
+  record precedes the frame in the resource queue, as every shader's does. UG2 never sets bits 9 and up. (gpu_web.c's
+  shader table holds ids below 512 today; the implementation widens it.)
+- **Sampling** (NVIDIA's hardware shadow maps: the vendor id 0x10DE takes MW to them). `texld`, `texldp` and ps_1_x `tex`
+  on a depth stage take the coordinate after the divide the instruction asks for (`texldp`: xyz / w; ps_1_x: the
+  P.proj divide) and return `vec4f(textureSampleCompareLevel(texK, smpK, q.xy, q.z))`: the comparison result in all
+  four components. The comparison sampler has `compare: 'less-equal'` (1 when the reference is at or in front of the
+  stored depth, D3D's LESSEQUAL) and the filters of the stage's sampler key, so LINEAR gives the hardware's 2×2 PCF.
+  `textureSampleCompareLevel` reads level 0 (a depth texture has one) and is allowed in any control flow, the ps_3_0
+  `rep` loops included.
+- **Not provided: the raw-depth path.** Some of the game's shadow shaders read the map with a plain `texld` and compare
+  in the shader (ATI's DF16/DF24 and INTZ formats, where a lookup returns the stored depth). The game takes that path
+  only when CheckDeviceFormat accepts 'DF16' as a depth-stencil texture (the probe at 0x6C174E), so the MW runtime
+  answers D3DERR_NOTAVAILABLE (0x8876086A) for DF16, DF24 and INTZ, and D3D_OK for D24S8 as a depth-stencil texture
+  (0x6C1725). Kind 3 is left free for it.
+- **Not provided: a border colour.** WebGPU has none; the page approximates D3DTADDRESS_BORDER by clamping and logs it
+  (L-088). If the shadow map's sampler uses BORDER, the translator adds "outside [0, 1]: 1" to its depth stages.
+
+### 11.5 Deploy order
+
+Version 6 changes the layout word (GwDraw 156 → 188 bytes, GwCtl 408 → 412). A page and a module work together only
+from one commit: release UG2's module and image together, as for version 5. A page of one build with a module of the
+other stops at Play with "GPU control block mismatch" and reloads once around the service worker (`OtherBuild`,
+e005ab5); there is no mixed window in either direction.
+
+### 11.6 Fields, UG2 values, first users
+
+| Field | Meaning | UG2 | First used by (MW tracker) |
+|---|---|---|---|
+| `GwCtl.stages` | texture stages of every draw and module: 0/4 or 8 | 0 | the first MW world draws (ps_2_0 world shaders read t7 and s4 already at SM2): M5-12 for the translator, M5-18 for the reflective world and the car's cube |
+| `GwDraw.tex4..tex7` | stage 4-7 textures | 0 | as `stages` |
+| `GwDraw.smphi[4]` | stage 4-7 sampler keys | 0 | as `stages` |
+| VOut uv4..uv7 (locations 7..10) | coordinates 4-7 | absent (7 locations) | as `stages` |
+| `GW_SHADER_PS` a[2], `GW_BK_*` | binding kind per stage | 0 | M5-12 (cube at stage 1), M5-13 (depth) |
+| `GW_TF_DEPTH` | a depth texture | never set | M5-13 |
+| `GW_Z_TEX` | depth texture as a draw's Z | never reached (zid < 64) | M5-13 |
+| `GW_PS_DEPTH_SHIFT` bits of `GwDraw.ps` | stages sampled with a depth compare | 0 | M5-13 |
+| float render-target formats | not added (§11.1) | | |

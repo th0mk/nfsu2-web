@@ -22,19 +22,38 @@
 //     --profile DIR     keep this Chrome profile (OPFS saves) between runs; with
 //                       --keep and the same --save the next run is a later
 //                       startup of that save (registry.txt, profiles)
+//     --game ID         ug2 (default) or mw: the game's boot screens, default
+//                       script and title; Most Wanted has none yet
+//     --help            this text and the game's boot screens
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
+// each game's boot: the default script, the boot movie screens up to the title in order, the top packages that are
+// boot movies (the driver starts at the first of them), the first boot movie's line and the title screen
+const INTRO_OF = {
+  ug2: {
+    script: '/tests/web/scripts/intro_idle.txt', title: 'UG_LS_Splash.fng',
+    boot: ['MC_Bootup.fng', 'LS_BlankMovie.fng', 'LS_EAlogo.fng', 'LS_THXMovie.fng', 'LS_PSAMovie.fng', 'UG_LS_IntroFMV.fng', 'UG_LS_Splash.fng'],
+    movie: /^LS_|^UG_LS_|^MC_Bootup/, first: /^\[fng\] f=\d+ (screen|top package) (LS_BlankMovie|LS_EAlogo)\.fng/,
+  },
+};
+const NONE = 'none yet: no boot screens for Most Wanted (M3-18)';
+const GAME = gameOf(argv), G = GAMES[GAME], I = INTRO_OF[GAME];
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'Boot screens', I ? [I.boot.join(' '),
+  `title (the default --stop): ${I.title}`, `default --script: ${I.script}`] : [], NONE);
+if (!I) nothingFor(GAME, NONE);
 const o = { base: 'http://localhost:8626', run: 'intro', page: 'hostcheck', intro: '', reg: 'none', save: '', keep: false,
-  script: '/tests/web/scripts/intro_idle.txt', drive: 'none', every: 500, stop: 'UG_LS_Splash.fng', env: [], qs: [], timeout: 240, name: '',
+  script: I.script, drive: 'none', every: 500, stop: I.title, env: [], qs: [], timeout: 240, name: '',
   profile: '' };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i], v = () => argv[++i];
   if (a === '--keep') o.keep = true;
+  else if (a === '--game') v();                    // gameOf() above
   else if (a === '--env') o.env.push(v());
   else if (a === '--qs') o.qs.push(v());
   else if (a.startsWith('--') && a.slice(2) in o) o[a.slice(2)] = typeof o[a.slice(2)] === 'number' ? +v() : v();
@@ -49,13 +68,14 @@ const env = { NFSU2_SAVEDIR: '/save', NFSU2_READONLY_DATA: '1', NFSU2_DISCORD: '
 if (o.intro) env.NFSU2_INTRO = o.intro;
 for (const e of o.env) env[e.slice(0, e.indexOf('='))] = e.slice(e.indexOf('=') + 1);
 const q = new URLSearchParams();
-q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', '/data/SPEED2.EXE');
+q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', G.exe);
 for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
 q.set('save', o.save || `intro-${o.name}`); if (!o.keep) q.set('fresh', '');
 if (o.reg !== 'none') q.set('reg', o.reg);
 if (o.script) q.set('script', o.script);
 for (const e of o.qs) q.append(e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1));
 const url = `${o.base}/test/${o.page}.html?${q}`;
+await requireGame(o.base, GAME);
 
 const usesPad = o.drive.startsWith('pad');
 const launch = { channel: 'chrome', headless: true, args: ['--enable-unsafe-webgpu'] };
@@ -93,7 +113,7 @@ let driving = o.drive !== 'none';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const driver = (async () => {
   if (!driving) return;
-  while (!/^LS_|^UG_LS_|^MC_Bootup/.test(top)) { await sleep(20); if (exit !== null) return; }
+  while (!I.movie.test(top)) { await sleep(20); if (exit !== null) return; }
   let n = 0;
   while (driving && exit === null) {
     if (top === o.stop) break;
@@ -114,7 +134,7 @@ await ctx.close(); await browser?.close();
 
 // ---- analysis ----
 const fmt = ms => (ms / 1000).toFixed(2).padStart(6) + ' s';
-const BOOT = ['MC_Bootup.fng', 'LS_BlankMovie.fng', 'LS_EAlogo.fng', 'LS_THXMovie.fng', 'LS_PSAMovie.fng', 'UG_LS_IntroFMV.fng', 'UG_LS_Splash.fng'];
+const BOOT = I.boot;
 const tops = lines.filter(l => /^\[fng\] f=\d+ top package/.test(l.t)).map(l => ({ ms: l.ms, f: +/f=(\d+)/.exec(l.t)[1], name: /top package (\S+)/.exec(l.t)[1] }));
 const presses = lines.filter(l => /^\[drive\] press|^\[autotest\] .*(tapuntil|tappaduntil) tap|^\[autotest\] .*LOG press/.test(l.t)).map(l => l.ms);
 const skips = lines.filter(l => /^\[intro\]/.test(l.t));
@@ -130,9 +150,9 @@ for (let i = 0; i < tops.length; i++) {
   }
   screens.push(s);
 }
-const firstLine = lines.find(l => /^\[fng\] f=\d+ (screen|top package) (LS_BlankMovie|LS_EAlogo)\.fng/.test(l.t));
+const firstLine = lines.find(l => I.first.test(l.t));
 const first = firstLine ? { ms: firstLine.ms, f: +/f=(\d+)/.exec(firstLine.t)[1] } : null;
-const title = tops.find(t => t.name === 'UG_LS_Splash.fng');
+const title = tops.find(t => t.name === I.title);
 const res = { name: o.name, url, page: o.page, intro: o.intro || '(default)', reg: o.reg, drive: o.drive, every: o.every, exit, ok,
   bootToTitle: first && title ? title.ms - first.ms : null, framesToTitle: first && title ? title.f - first.f : null,
   screens, presses: presses.length, sequence: tops.map(t => t.name),

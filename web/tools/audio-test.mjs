@@ -2,6 +2,7 @@
 // with sound attached, in headless Chrome (muted: the output is a timer, so its
 // latency is not a device's), against a running server started with --dev:
 //   node web/tools/audio-test.mjs [--base http://localhost:8611] [--out <dir>] [--only delay,ring]
+//        [--game ug2|mw] (the game's steps; Most Wanted has none yet) [--help] (this text and those)
 // Steps (each prints PASS/FAIL with evidence; the page logs go to --out):
 //   delay  a quick race (tests/scripts/quickrace.txt): 30 s in, the game writes its
 //          sound at most SETTLED_MS ahead of the mixer again, the boot's late
@@ -22,10 +23,18 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { requireDev } from './dev-server.mjs';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
+// each game's steps: the input script each one plays
+const STEPS_OF = { ug2: { delay: '/tests/scripts/quickrace.txt', ring: '/tests/scripts/audio_ring.txt', burst: '/tests/scripts/audio_burst.txt' } };
+const NONE = 'none yet: no Most Wanted scripts for the sound writer (M7-27)';
+const GAME = gameOf(process.argv.slice(2)), G = GAMES[GAME], STEPS = STEPS_OF[GAME];
+if (process.argv.includes('--help')) usage(import.meta.url, GAME, 'Steps (--only)', Object.entries(STEPS ?? {}).map(([k, v]) => `${k.padEnd(6)} ${v}`), NONE);
+if (!STEPS) nothingFor(GAME, NONE);
 const BASE = arg('--base', 'http://localhost:8611');
 await requireDev(BASE);
+await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/audio-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `audiotest-${Date.now().toString(36)}`;
@@ -43,7 +52,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: !process.ar
 
 // Play with this input script; the page log once the game ended (exit code, lines without the [tid] prefix)
 async function play(step, script, ms, env = []) {
-  const q = new URLSearchParams({ reg: '/tests/web/seed/registry_perf4_native.txt', save: `${RUN}-${step}`, script });
+  const q = new URLSearchParams({ reg: G.reg, save: `${RUN}-${step}`, script });
   for (const e of ['NFSU2_ROAM=0', 'NFSFULL=0', 'NFSU2_AUDIO_STATUS=5', 'NFSU2_TIMEOUT=400', ...env]) q.append('env', e);
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
   page.on('pageerror', e => console.log(`  ${step} PAGEERROR ${e}`));
@@ -62,7 +71,7 @@ async function play(step, script, ms, env = []) {
 const num = (re, lines) => { for (const l of lines) { const m = re.exec(l); if (m) return m.slice(1).map(Number); } return null; };
 
 if (!ONLY || ONLY.has('delay')) {
-  const r = await play('delay', '/tests/scripts/quickrace.txt', 600000);
+  const r = await play('delay', STEPS.delay, 600000);
   const ahead = num(/sound write-ahead : the game wrote ([\d.]+) ms ahead of the mixer on average, at most ([\d.]+) ms; (\d+) slices/, r.lines);
   const ring = num(/sound output path : AudioWorklet ring, \d+-frame slices, target (\d+) frames .*?(\d+) underruns, target grew (\d+) times and came down (\d+) times \(to (\d+) frames/, r.lines);
   const lat = num(/worklet attached: (\d+) Hz, base latency ([\d.]+) ms, output latency ([\d.]+) ms/, r.lines);
@@ -76,7 +85,7 @@ if (!ONLY || ONLY.has('delay')) {
 }
 
 if (!ONLY || ONLY.has('ring')) {
-  const r = await play('ring', '/tests/scripts/audio_ring.txt', 400000);
+  const r = await play('ring', STEPS.ring, 400000);
   // the pump's lines in order, each placed after the script's "stall N" markers
   let phase = 0; const ev = [];
   for (const l of r.lines) {
@@ -98,7 +107,7 @@ if (!ONLY || ONLY.has('ring')) {
 }
 
 if (!ONLY || ONLY.has('burst')) {
-  const r = await play('burst', '/tests/scripts/audio_burst.txt', 300000, ['NFSU2_AUDIO_LATENCY=90']);
+  const r = await play('burst', STEPS.burst, 300000, ['NFSU2_AUDIO_LATENCY=90']);
   const lat = num(/worklet attached: (\d+) Hz, base latency ([\d.]+) ms/, r.lines);
   const clock = num(/sound clock backup: ([\d.]+) s on the ring, ([\d.]+) s on the wall clock \(no output\), (\d+) times ring->wall/, r.lines);
   const end = num(/sound output path : AudioWorklet ring, \d+-frame slices, target (\d+) frames .*?(\d+) underruns.* its bursts (\d+) ms apart, a ring of (\d+) frames/, r.lines);

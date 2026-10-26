@@ -7,6 +7,7 @@
 //   node web/tools/deploy-e2e.mjs --out <dir> [--mode tls|proxy|both|docker] [--menu] [--headed]
 //        [--data "<game folder>"] [--port 8527] [--http-port 8627] [--server <binary>]
 //        [--image <name>] [--module <dir>]
+//        [--game ug2|mw] (the game's title and menu screens; Most Wanted has none yet) [--help] (this text and those)
 // --server: another server than web/tools/server-cmd.mjs's, such as the nfsu2-server of an unpacked bundle
 // (web/deploy/pack.sh), with the page and the module of the folder it is in (NFSU2_REPO).
 // --proxy-cmd "<command>": in mode proxy, this command is the proxy instead of the Cloudflare stand-in
@@ -34,9 +35,16 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { makeTestCerts, startCfSim } from '../test/cf-sim.mjs';
 import { serverCommand } from './server-cmd.mjs';
+import { gameOf, usage, nothingFor } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
+// each game's screens, as the front end's log names their packages: the title Play reaches, the main menu of --menu
+const SCREENS_OF = { ug2: { title: 'UG_LS_Splash.fng', menu: 'GarageMain.fng' } };
+const NONE = 'none yet: no Most Wanted title or menu screens (M11-16)';
+const GAME = gameOf(process.argv.slice(2)), SCREENS = SCREENS_OF[GAME];
+if (process.argv.includes('--help')) usage(import.meta.url, GAME, 'Screens', SCREENS ? [`title: ${SCREENS.title}`, `--menu: ${SCREENS.menu}`] : [], NONE);
+if (!SCREENS) nothingFor(GAME, NONE);
 const OUT = path.resolve(arg('--out', 'out/web/deploy-e2e'));
 const MODES = arg('--mode', 'both') === 'both' ? ['tls', 'proxy'] : [arg('--mode')];
 const MENU = process.argv.includes('--menu');
@@ -171,7 +179,7 @@ async function run(mode) {
     await page.evaluate(() => window.__nfsu2.log.clear());
     await page.click('#play');
     const tp = Date.now();
-    await page.waitForFunction(() => window.__nfsu2.log.tail(400).some(l => /top package UG_LS_Splash\.fng/.test(l)), null, { timeout: 300000, polling: 200 });
+    await page.waitForFunction(t => window.__nfsu2.log.tail(400).some(l => l.includes(`top package ${t}`)), SCREENS.title, { timeout: 300000, polling: 200 });
     report(`${mode}: Play -> the game's title screen`, true, { ms: Date.now() - tp });
     if (MENU) {
       // Enter through the title and the profile prompt to the main menu (GarageMain), with real key events
@@ -180,7 +188,7 @@ async function run(mode) {
       while (Date.now() - tm < 120000 && !reached) {
         await page.keyboard.press('Enter');
         await page.waitForTimeout(1500);
-        reached = await page.evaluate(() => window.__nfsu2.log.tail(600).some(l => /top package GarageMain\.fng/.test(l)));
+        reached = await page.evaluate(m => window.__nfsu2.log.tail(600).some(l => l.includes(`top package ${m}`)), SCREENS.menu);
       }
       await page.waitForTimeout(2500);
       await page.screenshot({ path: path.join(OUT, `${mode}-menu.png`) });

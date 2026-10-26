@@ -7,12 +7,14 @@
 //       built with the Mac's cc), then check all of it
 //   node web/tools/shader-check.mjs --from <dir>
 //       check a dump on disk (an earlier --game run or web/tools/wgsl-xl output)
+//   node web/tools/shader-check.mjs --game mw
+//       the game run of that game (--game alone: ug2's); Most Wanted has none yet
 //
 // Options: --port <http port> (8612), --save <OPFS dir> (shadercheck), --cross
 // (every game VS x every game PS too), --timeout <ms> (game run, 600000),
 // --census (with --from: also apply the game-run census below to that dump),
 // --script <url path> (game run, default /tests/scripts/quickrace.txt), --env K=V
-// (game run, repeatable).
+// (game run, repeatable), --help (this text and the game's run).
 // Needs the server (out/web/server-rs/nfsu2-server, started with --dev) on that port and web/dist built.
 // Exit code 0 only when every module compiles, every pipeline builds, the
 // vertex-pulling and differential tests match, no translation was REJECTED
@@ -24,6 +26,7 @@ import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { gameOf, usage, nothingFor } from './rig-game.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -31,6 +34,13 @@ const port = +opt('--port', 8612), save = opt('--save', 'shadercheck');
 const out = opt('--out', 'out/web/shaders'), from = opt('--from', null);
 const timeout = +opt('--timeout', 600000);
 const origin = `http://localhost:${port}`;
+// the word after --game, unless it is another option, names the game of the run (ug2 without one)
+const gameWord = argv[argv.indexOf('--game') + 1];
+const GAME = argv.includes('--game') && gameWord !== undefined && !gameWord.startsWith('--') ? gameOf(argv) : 'ug2';
+const RUN_OF = { ug2: ['the quick race (--script /tests/scripts/quickrace.txt) to its end; at least the census of a full quick race'] };
+const NONE = 'none yet: no Most Wanted script or census floor (M3-06)';
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'The game run', RUN_OF[GAME] ?? [], NONE);
+if (!RUN_OF[GAME]) nothingFor(GAME, NONE);
 await (await import('./dev-server.mjs')).requireDev(origin);
 
 // what a whole quick race creates (gpu-shaders report section 6): distinct

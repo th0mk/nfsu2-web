@@ -2,6 +2,7 @@
 // own OPFS and localStorage) on the start page of a running server.
 //
 //   node web/tools/vault-pair.mjs --base http://127.0.0.1:8080 --backup <a "Download a backup" zip> [--state <dir>] [--play] [--headed]
+//        [--game ug2|mw] (the game's saves; Most Wanted has none yet) [--help] (this text and the game's rounds)
 //
 // A restores the backup and makes a keyphrase; B (with a screenshot of its own) types it in, in another shape, and
 // loads the saves, but A's DVD and magazine covers (a keyphrase keeps none: each 1 MB, the server takes 256 KB) and
@@ -27,8 +28,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+import { gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// each game's rounds: what the steps below do with its saves (its profile folder, its backup, its probe script)
+const ROUNDS_OF = {
+  ug2: ['A and B: the backup\'s saves (--backup, a "Download a backup" zip of Underground 2 saves) through a keyphrase',
+    '--play: C and D on fresh saves, tests/scripts/app_rw_probe.txt (a new profile ROTEST, a Quick Race)'],
+};
+const NONE = 'none yet: no Most Wanted saves to send through a keyphrase (M6-29)';
+const GAME = gameOf(process.argv.slice(2));
+if (process.argv.includes('--help')) usage(import.meta.url, GAME, 'Rounds', ROUNDS_OF[GAME] ?? [], NONE);
+if (!ROUNDS_OF[GAME]) nothingFor(GAME, NONE);
 const S = await import('data:text/javascript;base64,' + Buffer.from((await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/settings.ts')],
   bundle: true, format: 'esm', platform: 'neutral', write: false })).outputFiles[0].text).toString('base64'));
 const V = await import('data:text/javascript;base64,' + Buffer.from((await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/vault.ts')],
@@ -38,6 +49,7 @@ const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
 const BASE = opt('base'), BACKUP = opt('backup'), STATE = opt('state');
 if (!BASE || !BACKUP) { console.error('usage: node web/tools/vault-pair.mjs --base <url> --backup <zip> [--state <dir>] [--headed]'); process.exit(2); }
+await requireGame(BASE, GAME);
 
 const fails = [];
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) fails.push(what); };

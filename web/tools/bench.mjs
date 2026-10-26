@@ -32,6 +32,8 @@
 //                       another server: name=http://host:port/url (a page A/B against an older build's server)
 //     --run NAME        output directory out/web/bench/NAME (default bench-<date>-<time>)
 //     --timeout S       per-run limit (default 400)
+//     --game ID         ug2 (default) or mw: the game's race script and module; Most Wanted has none yet
+//     --help            this text and the game's race
 // Comparing builds' work: an uncapped race is not the same race twice (camera, HUD and AI timers follow real
 // time), and run to run it differs by several percent.  This plays the same race every time, and the game
 // thread's P-core cycles per frame (the cpu_begin..cpu_end window) agree within ~1-2 % between runs:
@@ -61,11 +63,18 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dist, pct } from './stats.mjs';
 import WebSocket from 'ws';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
+// each game's race: the default script and the module's json (its revision in the summary)
+const RACE_OF = { ug2: { script: '/tests/web/scripts/perf_drive.txt', json: 'out/web/nfsu2.json' } };
+const NONE = 'none yet: no Most Wanted bench scenes (M5-26)';
+const GAME = gameOf(argv), G = GAMES[GAME], RACE = RACE_OF[GAME];
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'The race', RACE ? [`--script default: ${RACE.script}`, `revision from ${RACE.json}`] : [], NONE);
+if (!RACE) nothingFor(GAME, NONE);
 const o = { base: 'http://localhost:8625', fps: 'uncapped,120', runs: 2, headed: false, size: '1800x1098',
-  script: '/tests/web/scripts/perf_drive.txt', env: [], jsFlags: '', chromeArgs: [], profile: '', warmup: 0, cpuprofile: false,
+  script: RACE.script, env: [], jsFlags: '', chromeArgs: [], profile: '', warmup: 0, cpuprofile: false,
   profFrom: 0, cpuFrom: 0, interval: 250, run: '', timeout: 400, wasm: 'game=/game.wasm', trace: 0,
   traceCats: 'toplevel,gpu,gpu.dawn,disabled-by-default-gpu.dawn,gpu.service,viz,cc,benchmark,disabled-by-default-gpu.decoder,v8' };
 for (let i = 0; i < argv.length; i++) {
@@ -77,14 +86,16 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--cpuprofile') o.cpuprofile = true; else if (a === '--prof-from') o.profFrom = +v();
   else if (a === '--interval') o.interval = +v(); else if (a === '--cpu-from') o.cpuFrom = +v(); else if (a === '--wasm') o.wasm = v(); else if (a === '--run') o.run = v(); else if (a === '--timeout') o.timeout = +v();
   else if (a === '--trace') o.trace = +v(); else if (a === '--trace-cats') o.traceCats = v();
+  else if (a === '--game') v();                    // gameOf() above
   else { console.error(`unknown option ${a}`); process.exit(2); }
 }
+await requireGame(o.base, GAME);
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
 const OUT = path.join(ROOT, 'out/web/bench', o.run || `bench-${stamp}`);
 fs.mkdirSync(OUT, { recursive: true });
 const [W, H] = o.size.split('x').map(Number);
 const modes = o.fps.split(',').filter(Boolean);
-const rev = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'out/web/nfsu2.json'), 'utf8')).rev; } catch { return '?'; } })();
+const rev = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, RACE.json), 'utf8')).rev; } catch { return '?'; } })();
 
 const SUITE_ENV = { NOMOVIES: '1', SNDSYNC: '0', NFSU2_FNG_LOG: '1', NFSU2_STATUS_EVERY: '600', NFSU2_DISCORD: '0',
   NFSU2_READONLY_DATA: '1', NFSU2_SAVEDIR: '/save', NOFOCUS: '2', GPUVS: '1', NFSU2_GCPU_FRAMES: '1' };
@@ -95,10 +106,10 @@ function urlFor(fps, spec) {
   let [wasm, extra] = spec.split('+'), base = o.base;
   if (/^https?:/.test(wasm)) { const u = new URL(wasm); base = u.origin; wasm = u.pathname; }
   q.set('wasm', wasm);
-  for (const [k, v] of new URLSearchParams(extra ?? '')) q.set(k, v); q.append('arg', '/data/SPEED2.EXE'); q.set('w', String(W)); q.set('h', String(H));
+  for (const [k, v] of new URLSearchParams(extra ?? '')) q.set(k, v); q.append('arg', G.exe); q.set('w', String(W)); q.set('h', String(H));
   q.set('gputime', ''); q.set('bench', '');
   q.set('save', `perf-bench-${process.pid}-${saveN++}`); q.set('fresh', '');
-  q.set('reg', '/tests/web/seed/registry_perf4_native.txt'); q.set('script', o.script);
+  q.set('reg', G.reg); q.set('script', o.script);
   const env = { ...SUITE_ENV, NFSU2_FPS: fps, ...Object.fromEntries(o.env.map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) };
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
   return `${base}/test/play.html?${q}`;

@@ -50,6 +50,9 @@
 //                    --seed's careers: tests/scripts/mprace_nocar_b.txt)
 //        [--seed-for Bob:<save tree>]  that page starts from its own save instead (two careers' cars in one
 //                    race: mprace_lobby_a.txt + mprace_card_b.txt at a race open in its career)
+//        [--game ug2|mw]   the game (ug2 unless given): its pair of scripts for --a and --b; Most Wanted has none
+//                    yet
+//        [--help]    this text and the game's pair
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, --dev on the given
 // ports, the game folder from --data or NFSU2_DATA) and stops it at the end.
@@ -75,23 +78,31 @@ import { fileURLToPath } from 'node:url';
 import { makeTestCerts } from '../test/cf-sim.mjs';
 import { serverCommand } from './server-cmd.mjs';
 import { seedSave } from './save-seed.mjs';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
 const opts = (k) => argv.flatMap((a, i) => (a === '--' + k && i + 1 < argv.length ? [argv[i + 1]] : []));
+// each game's pair (name:script of tests/scripts/): the driver (--a) and the one who watches it (--b)
+const PAIRS = { ug2: { a: 'Alice:roam_mp_drive.txt', b: 'Bob:roam_mp_watch.txt' } };
+const NONE = 'none yet: no free-roam scripts for Most Wanted (M10-25)';
+const GAME = gameOf(argv), G = GAMES[GAME], PAIR = PAIRS[GAME];
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'The pair', PAIR ? [`--a ${PAIR.a} (drives)`, `--b ${PAIR.b} (watches)`] : [], NONE);
+if (!PAIR) nothingFor(GAME, NONE);
 const HTTP_PORT = +opt('http-port', 8616), HTTPS_PORT = +opt('port', 8516);
 const OWN = !argv.includes('--base');
 const HTTPS = argv.includes('--https');
 const BASE = opt('base', HTTPS ? `https://localhost:${HTTPS_PORT}` : `http://localhost:${HTTP_PORT}`);
+if (!OWN) await requireGame(BASE, GAME);
 const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2'));
 const BOUNCE = argv.includes('--bounce') ? +opt('bounce', 0) * 1000 : 0;
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/roam-pair')));
 const MODE = opt('mode', 'vlan');
 const TMO = +opt('timeout', 1200) * 1000;
 const STAGGER = +opt('stagger', 2) * 1000;
-const SPECS = (argv.includes('--solo') ? [opt('a', 'Alice:roam_mp_drive.txt')]
-  : [opt('a', 'Alice:roam_mp_drive.txt'), opt('b', 'Bob:roam_mp_watch.txt'), opt('c', null), opt('d', null)])
+const SPECS = (argv.includes('--solo') ? [opt('a', PAIR.a)]
+  : [opt('a', PAIR.a), opt('b', PAIR.b), opt('c', null), opt('d', null)])
   .filter(Boolean).map(x => x.split(':'));
 const N = SPECS.length;
 const APP = opt('page', 'test') === 'app';
@@ -126,9 +137,9 @@ function url(i, name, script, own) {
     env.NFSU2_ROAM_PEERS = [...Array(N).keys()].filter(j => j !== i).map(j => `127.0.0.1:${47300 + j}`).join(',');
   }
   const q = APP
-    ? new URLSearchParams({ reg: '/tests/web/seed/registry_perf4_native.txt', script: `/tests/scripts/${script}`, save: `roam-${name}` })
-    : new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: '/data/SPEED2.EXE',
-      reg: '/tests/web/seed/registry_perf4_native.txt', script: `/tests/scripts/${script}`, save: `roam-${name}`, net: name });
+    ? new URLSearchParams({ reg: G.reg, script: `/tests/scripts/${script}`, save: `roam-${name}` })
+    : new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
+      reg: G.reg, script: `/tests/scripts/${script}`, save: `roam-${name}`, net: name });
   const play = PLAY && (!PLAY_ONLY || PLAY_ONLY === name);
   if (play) { q.set('w', String(SIZE[0])); q.set('h', String(SIZE[1])); q.set('artifacts', `/artifacts/${name}-`); q.set('dumpscale', '1'); }
   for (const [k, v] of Object.entries(env)) if (!(APP && (k === 'NFSU2_SAVEDIR'))) q.append('env', `${k}=${v}`);

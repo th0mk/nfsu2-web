@@ -35,6 +35,9 @@
 //                    that instance runs without NOFOCUS, so the game hears the page go to the background.
 //                    Fails unless the game was told (app: deactivated) and still made frames there (its [status]
 //                    lines, the fps in summary.json), as the game does in a network race.
+//        [--game ug2|mw]   the game (ug2 unless given): its generated flow, modes and screens; Most Wanted has
+//                    none yet (and the server no Online mode for it)
+//        [--help]    this text and the game's modes
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, --dev, the
 // game folder from --data or NFSU2_DATA; --online-trace <out>/trace.txt) and
@@ -52,14 +55,29 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { serverCommand } from './server-cmd.mjs';
+import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
 const opts = (k) => argv.flatMap((a, i) => (a === '--' + k && i + 1 < argv.length ? [argv[i + 1]] : []));
+// each game's Online races: the generated flow (its screens, onlineScript() below), the modes in Create Game's
+// order and the screens the judgement looks for
+const ONLINE_OF = {
+  ug2: {
+    flow: onlineScript, modes: { circuit: 0, sprint: 1, drag: 2, drift: 3, streetx: 4 },
+    main: /screen UI_OLMA[Ii][Nn]\.fng/, room: 'screen PC_OL_GameRoom.fng',
+    results: /screen UI_PostRaceResults\.fng|screen UI_PostRace_TournResults\.fng/,
+  },
+};
+const NONE = 'none yet: the server has no Online mode for Most Wanted (M9-07), nor this tool its screens (M9-17)';
+const GAME = gameOf(argv), G = GAMES[GAME], OL = ONLINE_OF[GAME];
+if (argv.includes('--help')) usage(import.meta.url, GAME, 'Modes (--mode)', Object.keys(OL?.modes ?? {}), NONE);
+if (!OL) nothingFor(GAME, NONE);
 const HTTP_PORT = +opt('http-port', 8673);
 const OWN = !argv.includes('--base');
 const BASE = opt('base', `http://localhost:${HTTP_PORT}`);
+if (!OWN) await requireGame(BASE, GAME);
 const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2'));
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/online-pair')));
 const FILES = opts('script');
@@ -70,7 +88,7 @@ const STAGGER = +opt('stagger', 3) * 1000;
 const PAGE = opt('page', 'hostcheck'), SIZE = opt('size', '960x540').split('x').map(Number), PLAY_ONLY = +opt('play-only', 0);
 const PASSWORD = opt('password', 'testpass');
 const WAIT_ROOM = +opt('wait-room', 70000), JOIN_WAIT = +opt('join-wait', 40000);
-const MODES = { circuit: 0, sprint: 1, drag: 2, drift: 3, streetx: 4 };
+const MODES = OL.modes;
 const RANKED = argv.includes('--ranked');
 const HORN = argv.includes('--horn');
 const EA_LOGIN = argv.includes('--ea-login') || argv.includes('--canary');
@@ -84,7 +102,7 @@ const NAMES = ['OLHOST', 'OLJOIN', 'OLJOIN3', 'OLJOIN4', 'OLJOIN5', 'OLJOIN6'];
 const scripts = [];
 for (let i = 0; i < PLAYERS; i++) {
   const f = FILES[i] ?? FILES[FILES.length - 1];
-  scripts.push(f ? fs.readFileSync(path.resolve(REPO, f), 'utf8') : onlineScript(i === 0 ? 'host' : 'join', NAMES[i], i + 1));
+  scripts.push(f ? fs.readFileSync(path.resolve(REPO, f), 'utf8') : OL.flow(i === 0 ? 'host' : 'join', NAMES[i], i + 1));
   fs.writeFileSync(path.join(OUT, `i${i + 1}.txt`), scripts[i]);
 }
 
@@ -294,8 +312,8 @@ function url(i) {
   const env = { ...COMMON, NFSU2_OL_NAME: NAMES[i], ...(EA_LOGIN ? {} : { NFSU2_ROAM_NAME: NAMES[i] }) };
   if (HIDE?.n === i + 1) env.NOFOCUS = '0';        // the game hears the page go to the background
   for (const kv of opts(`env-i${i + 1}`)) env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1);
-  const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: '/data/SPEED2.EXE',
-    reg: '/tests/web/seed/registry_perf4_native.txt', save: `ol-${stamp}-i${i + 1}`, net: NAMES[i], script: scriptPath(i) });
+  const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
+    reg: G.reg, save: `ol-${stamp}-i${i + 1}`, net: NAMES[i], script: scriptPath(i) });
   if (PAGE === 'app') {
     // the player's page: no wasm/pages/arg/net (the app's own), the switch name from roam_name, free roam off
     const a = new URLSearchParams({ reg: q.get('reg'), save: q.get('save'), script: q.get('script') });
@@ -443,10 +461,10 @@ for (const x of inst) {
   if (x.exitCode() !== 0) why.push(`${n}:exit=${x.exitCode()}`);
   if (!log.includes('quit at guest frame')) why.push(`${n}:no-quit`);
   if (flow) {
-    if (!has(/screen UI_OLMA[Ii][Nn]\.fng/)) why.push(`${n}:no-online-main`);
-    if (!log.includes('screen PC_OL_GameRoom.fng')) why.push(`${n}:no-game-room`);
+    if (!has(OL.main)) why.push(`${n}:no-online-main`);
+    if (!log.includes(OL.room)) why.push(`${n}:no-game-room`);
     const quitter = QUIT_MID[0] === x.i + 1;
-    if (!quitter && !has(/screen UI_PostRaceResults\.fng|screen UI_PostRace_TournResults\.fng/)) why.push(`${n}:no-results`);
+    if (!quitter && !has(OL.results)) why.push(`${n}:no-results`);
     if (quitter && !log.includes('LOG quit-mid-race')) why.push(`${n}:no-quit-mid`);
     if (RACES > 1 && !has(new RegExp(`LOG results_r${RACES}$`, 'm'))) why.push(`${n}:no-results-r${RACES}`);
   }

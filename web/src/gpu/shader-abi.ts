@@ -18,6 +18,32 @@ export const TVERT_SIZE = 112;
 export const PSCUBE = 256;
 /** Interstage locations used by VOut (col0, col1, uv0..uv3, fog). */
 export const VOUT_LOCATIONS = 7;
+/** With 8 texture stages (gpu_proto.h GwCtl.stages): uv4..uv7 at locations 7..10 after them (gpu-abi.md section 11). */
+export const VOUT_LOCATIONS_8 = 11;
+
+/** Group 1 binding of stage k's texture: 0..3 as ever, stages 4..7 at 8..11 (after smp0..smp3). */
+export function texBinding(k: number): number { return k < 4 ? k : k + 4; }
+/** Group 1 binding of stage k's sampler: 4..7, stages 4..7 at 12..15. */
+export function smpBinding(k: number): number { return k < 4 ? k + 4 : k + 8; }
+/** Stage k's binding kind in a pixel shader module's kinds word (proto.ts BK_*: 0 2D, 1 cube, 2 depth compare). */
+export function stageKind(kinds: number, k: number): number { return (kinds >>> (2 * k)) & 3; }
+
+/** The group 1 entries of a pipeline: `stages` stages (4 or 8), each a texture and a sampler of the kind the
+ *  module's kinds word gives it; a cube twin (ps >= PSCUBE) has a cube at stage 0 whatever the word says.  Kind 3 is
+ *  no binding the ABI defines (null).  4 stages, kinds 0: the layout every UG2 pipeline uses (L2D, or LCUBE for a
+ *  cube twin). */
+export function group1Entries(stages: number, kinds: number, cube0: boolean, visibility: number): GPUBindGroupLayoutEntry[] | null {
+  const tex: GPUBindGroupLayoutEntry[] = [], smp: GPUBindGroupLayoutEntry[] = [];
+  for (let k = 0; k < stages; k++) {
+    const kind = k === 0 && cube0 ? 1 : stageKind(kinds, k);
+    if (kind > 2) return null;
+    tex.push({ binding: texBinding(k), visibility,
+      texture: kind === 2 ? { sampleType: 'depth', viewDimension: '2d' } : { sampleType: 'float', viewDimension: kind === 1 ? 'cube' : '2d' } });
+    smp.push({ binding: smpBinding(k), visibility, sampler: { type: kind === 2 ? 'comparison' : 'filtering' } });
+  }
+  // in binding order: tex0..3, smp0..3, then tex4..7, smp4..7
+  return [...tex.slice(0, 4), ...smp.slice(0, 4), ...tex.slice(4), ...smp.slice(4)];
+}
 
 /** D3DCMP values for the ALPHA_FUNC override: 7 = the Mac's "a >= aref" test, 8 = no test, no discard. */
 export const ALPHA_GREATEREQUAL = 7;
@@ -56,15 +82,8 @@ export function createShaderAbi(device: GPUDevice): ShaderAbi {
       { binding: 3, visibility: F, buffer: { type: 'uniform', hasDynamicOffset: false, minBindingSize: HLPAR_SIZE } },
     ],
   });
-  const textures = (cube: boolean): GPUBindGroupLayoutEntry[] => {
-    const e: GPUBindGroupLayoutEntry[] = [];
-    for (let k = 0; k < 4; k++)
-      e.push({ binding: k, visibility: F, texture: { sampleType: 'float', viewDimension: cube && k === 0 ? 'cube' : '2d' } });
-    for (let k = 0; k < 4; k++) e.push({ binding: 4 + k, visibility: F, sampler: { type: 'filtering' } });
-    return e;
-  };
-  const group1 = device.createBindGroupLayout({ label: 'abi.group1', entries: textures(false) });
-  const group1Cube = device.createBindGroupLayout({ label: 'abi.group1.cube', entries: textures(true) });
+  const group1 = device.createBindGroupLayout({ label: 'abi.group1', entries: group1Entries(4, 0, false, F)! });
+  const group1Cube = device.createBindGroupLayout({ label: 'abi.group1.cube', entries: group1Entries(4, 0, true, F)! });
   return {
     group0, group1, group1Cube,
     layout2d: device.createPipelineLayout({ label: 'abi.layout2d', bindGroupLayouts: [group0, group1] }),

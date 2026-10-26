@@ -1,6 +1,7 @@
 // End-to-end check of the player-facing page (web/index.html) in headless
 // Chrome, against a running server (started with --dev: the test scripts):
 //   node web/tools/app-test.mjs [--base http://localhost:8615] [--out <dir>] [--only a,b,...] [--keep]
+//        [--game ug2|mw] (the game's steps; Most Wanted has none yet) [--help] (this text and those)
 // Steps (each prints PASS/FAIL with evidence; screenshots go to --out):
 //   start     the start page renders, every check passes or warns (no problem shown), the module loads
 //   settings  the settings on the page edit /save/settings.ini; the file and the derived environment
@@ -74,10 +75,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { requireDev } from './dev-server.mjs';
+import { gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
+// each game's steps (--only), as above: their scripts, screens and saves are Underground 2's
+const STEPS_OF = {
+  ug2: ['start', 'settings', 'play', 'saves', 'restore', 'pcsave', 'quit', 'stalllog', 'instance', 'readonly', 'retry', 'update',
+    'autoupdate', 'enterlink', 'late', 'quitstages', 'slowgpu', 'gpulost', 'crash', 'leak', 'cache', 'roamask', 'cloudask', 'full', 'page', 'mobile'],
+};
+const NONE = 'none yet: no Most Wanted screens or saves for the steps (M6-30, M6-31)';
+const GAME = gameOf(process.argv.slice(2));
+if (process.argv.includes('--help')) usage(import.meta.url, GAME, 'Steps (--only)', STEPS_OF[GAME] ? [STEPS_OF[GAME].join(' ')] : [], NONE);
+if (!STEPS_OF[GAME]) nothingFor(GAME, NONE);
 const BASE = arg('--base', 'http://localhost:8615');
 await requireDev(BASE);
+await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/app-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `apptest-${Date.now().toString(36)}`;
