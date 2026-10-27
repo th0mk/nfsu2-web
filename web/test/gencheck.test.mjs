@@ -212,6 +212,7 @@ function stampTree(name, files) {
   fs.copyFileSync(path.join(REPO, 'web/tools/gencheck.sh'), path.join(t, 'web/tools/gencheck.sh'));
   for (const f of ['lift.py', 'lregs.py', 'genall.py', 'inline_hot.txt', 'retpast.txt', 'reloc2.py', 'argcount.py', 'flagabi.py', 'prepare_module.py']) fs.writeFileSync(path.join(t, 'tools', f), '');
   fs.writeFileSync(path.join(t, 'games/mw/inline_hot.txt'), '# none yet\n');
+  fs.writeFileSync(path.join(t, 'games/mw/retpast.txt'), '007cf3ae\n');
   for (const [f, s] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(t, f)), { recursive: true }); fs.writeFileSync(path.join(t, f), s); }
   return t;
@@ -247,11 +248,13 @@ test('genstamp: UG2 greps its files as always and names no game; GAME=mw greps r
   assert.equal(mw[0], 'game mw');
   assert.match(mw[1], /^overrides [0-9a-f]{16} \(2\)$/);
   assert.match(mw[2], /^hooks [0-9a-f]{16} \(1\)$/);
-  // each game's lifter covers its own game.conf and tools/gameconf.sh (they decide FTOL2_VA, LOCKSTRIP, SRV_BASE)
+  // each game's lifter covers its own game.conf and tools/gameconf.sh (they decide FTOL2_VA, LOCKSTRIP, SRV_BASE) and
+  // its own retpast list
   const lifter = () => [gs('sources').split('\n')[2], gs('sources', { GAME: 'mw' }).split('\n')[3]];
   let before = lifter();
   assert.deepEqual(before, [ug2[2], mw[3]]);
-  for (const [f, changes] of [['games/mw/game.conf', [false, true]], ['games/ug2/game.conf', [true, false]], ['tools/gameconf.sh', [true, true]]]) {
+  for (const [f, changes] of [['games/mw/game.conf', [false, true]], ['games/ug2/game.conf', [true, false]], ['tools/gameconf.sh', [true, true]],
+                              ['tools/retpast.txt', [true, false]], ['games/mw/retpast.txt', [false, true]]]) {
     fs.appendFileSync(path.join(t, f), '# a change\n');
     const now = lifter();
     for (const i of [0, 1]) assert.equal(now[i] !== before[i], changes[i], `${f}: ${['UG2', 'MW'][i]}'s lifter line`);

@@ -231,9 +231,11 @@ _LOCKSTRIP = __import__('os').environ.get('LOCKSTRIP', '') == '1'
 _LOCKABLE = ('add', 'adc', 'and', 'btc', 'btr', 'bts', 'cmpxchg', 'cmpxchg8b', 'dec', 'inc', 'neg', 'not',
              'or', 'sbb', 'sub', 'xadd', 'xchg', 'xor')
 def _retpast():
-    """tools/retpast.txt, next to this file: callees that can return past their caller"""
+    """callees that can return past their caller: the game's list, RETPAST_LIST from
+    games/<id>/game.conf (gen.sh; a path in the checkout), UG2's tools/retpast.txt by default"""
     import os as _os
-    p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'retpast.txt')
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    p = _os.path.join(root, _os.environ.get('RETPAST_LIST') or 'tools/retpast.txt')
     return {int(x, 16) for ln in open(p) for x in ln.split('#')[0].replace(',', ' ').split()}
 _LREGS = None
 def _lregs():
@@ -403,7 +405,7 @@ class Lifter:
             self.secs.append((nm,self.IB+s.VirtualAddress,s.Misc_VirtualSize,s.get_data()))
         self.TVA,self.TSZ,self.TDATA = next((va,vs,d) for nm,va,vs,d in self.secs if nm=='.text')
         self.md=Cs(CS_ARCH_X86,CS_MODE_32); self.md.detail=True
-        # this module's callees from tools/retpast.txt (a call to one may not come back to the next instruction)
+        # this module's callees from the game's retpast list (a call to one may not come back to the next instruction)
         self.retpast={a for a in _retpast() if self.in_text(a)}
     def in_text(self,a): return self.TVA<=a<self.TVA+self.TSZ
 

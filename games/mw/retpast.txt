@@ -1,0 +1,9 @@
+# tools/lift.py: Most Wanted's callees that can return past their caller (UG2's
+# list and what it means: tools/retpast.txt).  Found by the same static scan of
+# the lifted functions for a ret that does not pop the function's own return
+# address (out/mw/m2-24/retskip.py of the lift stream): 410 functions drop
+# their return address, 3 of them have direct callers.  0x7c4c40 (pop eax; pop
+# ecx; xchg [esp],eax; jmp eax) and 0x85eb77 (an SEH epilog: pop ecx ...
+# push ecx; ret) go back to their own caller; only this one goes past it.
+#   address  what
+007cf3ae  # the CRT's x87 2^x core (exp), UG2's 0x7653de: |x*log2(e)| >= 32767.5 takes 'pop eax' (0x7cf360); called at 0x7cf26e (0x7cf261) and 0x7d88ae (0x7d88a8)

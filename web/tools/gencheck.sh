@@ -77,7 +77,7 @@ if [ "$WANT" != "$HAVE" ]; then
       ug2.hooks) echo "  hook list (HOOK_SITE in runtime/: tools/genstamp.sh hooks)" ;;
       *.overrides) echo "  override list (sub_X_orig and DX_WRAP in runtime/$GAME/*.c: GAME=$GAME tools/genstamp.sh overrides)" ;;
       *.hooks) echo "  hook list (HOOK_SITE in runtime/$GAME/*.c: GAME=$GAME tools/genstamp.sh hooks)" ;;
-      *.lifter) echo "  lifter (tools/lift.py, lregs.py, genall.py, retpast.txt, reloc2.py, argcount.py, flagabi.py, prepare_module.py, gameconf.sh, $GAME_CONF${GC_INLINE_LIST:+, $GC_INLINE_LIST})" ;;
+      *.lifter) echo "  lifter (tools/lift.py, lregs.py, genall.py, reloc2.py, argcount.py, flagabi.py, prepare_module.py, gameconf.sh, $GAME_CONF${GC_INLINE_LIST:+, $GC_INLINE_LIST}, $GC_RETPAST_LIST)" ;;
     esac
   done
   if [ "${GEN_STALE_OK:-}" = 1 ]; then echo "  GEN_STALE_OK=1: building anyway"

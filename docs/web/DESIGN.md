@@ -98,9 +98,10 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
     not a bottleneck (`NFSU2_FPU_PRESERVE=1` keeps PC=53: the same time).
   - A lifted call continues after the call. The CRT's x87 2^x core (`0x7653de`, under exp, sinh, cosh and tanh) does
     not come back there when its argument is out of range (|x·log2 e| ≥ 32767.5): it pops its own return address and
-    its ret goes to its caller's caller. After a direct call to a function in `tools/retpast.txt` the caller compares
-    `c->eip` with its own return address and returns as well when they differ. A static scan of the lifted functions'
-    returns found no other such function with direct callers, but it could not follow the stack in every function.
+    its ret goes to its caller's caller. After a direct call to a function in `tools/retpast.txt` (each game's list is
+    its `game.conf` RETPAST_LIST) the caller compares `c->eip` with its own return address and returns as well when
+    they differ. A static scan of the lifted functions' returns found no other such function with direct callers, but
+    it could not follow the stack in every function.
   - `web/build.sh` refuses a `gen/all` made from another override list, hook list or lifter than the checkout's,
     then does an incremental shard build through a shared content-addressed object cache
     (`~/.cache/nsfu2-web/obj`), links `out/web/nfsu2.wasm` (35 MB) and writes `nfsu2.json`.
