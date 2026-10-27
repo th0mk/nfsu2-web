@@ -30,6 +30,7 @@ game.h
 # Win32, files, resources, the game's life cycle
 win32.c
 win32_ext.c
+win32_misc.c
 fileio.c
 res.c
 lifecycle.c

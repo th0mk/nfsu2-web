@@ -107,7 +107,7 @@ def category(name, sources):
     k = sources.get(name)
     if k:
         return {'com.c': 'D3D9 layer (com.c)', 'metal.m': 'Metal (metal.m)', 'd3dx_hle.c': 'D3DX (native)',
-                'win32.c': 'Win32', 'win32_ext.c': 'Win32', 'vsemu.c': 'vsemu', 'dispatch.c': 'dispatch',
+                'win32.c': 'Win32', 'win32_ext.c': 'Win32', 'win32_misc.c': 'Win32', 'vsemu.c': 'vsemu', 'dispatch.c': 'dispatch',
                 'genexec.c': 'dispatch', 'mem.c': 'memory', 'enhance.c': 'HD (enhance)',
                 'audio.m': 'sound', 'perflog.c': 'perflog'}.get(k, k)
     if name.startswith(('x87_', 'fcompare', 'fsw_', 'FLAGS', 'parity')):

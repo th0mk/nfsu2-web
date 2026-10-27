@@ -23,7 +23,7 @@ uint32_t res_size(uint32_t);
 
 /* ---- object table (HANDLE -> kind/state) ---- */
 #define H_BASE MM_H_BASE                  /* the game's object handle values (memmap.h) */
-typedef enum { OB_NONE=0, OB_EVENT, OB_MUTEX, OB_THREAD, OB_FILE, OB_KEY, OB_SEM } ObKind;
+typedef enum { OB_NONE=0, OB_EVENT, OB_MUTEX, OB_THREAD, OB_FILE, OB_KEY, OB_SEM, OB_TIMER } ObKind;
 typedef struct {
     ObKind kind; int signaled; int manual;
     pthread_mutex_t mtx; pthread_cond_t cv;
@@ -38,6 +38,9 @@ typedef struct {
     uint32_t exit_code; int ended; volatile int term_req;
     int closed;                       /* OB_THREAD: last handle closed while it still ran */
     uint32_t teb, stack_lo;           /* OB_THREAD: recycled when the thread ends */
+    /* OB_TIMER (waitable timers, below): armed or not, the next due time on
+     * the virtual clock (host_us) and the period, 0 = one-shot */
+    int t_armed; uint64_t t_due_us, t_period_us;
     /* OB_THREAD: who started it (CreateThread's return address), its place in
      * the order threads ended, and how often an import looked its handle up
      * (waits, CloseHandle, GetExitCodeThread, DuplicateHandle, ...): obj_reclaim */
@@ -834,6 +837,7 @@ static uint32_t obj_new(ObKind k){
         o->signaled = 0; o->manual = 0; o->guest_arg = o->guest_entry = o->tid = 0;
         o->owner_tid = 0; o->rec = 0; o->started = 0; o->pending = 0; o->name[0] = 0;
         o->exit_code = 0; o->ended = 0; o->term_req = 0; o->closed = 0; o->teb = o->stack_lo = 0;
+        o->t_armed = 0; o->t_due_us = o->t_period_us = 0;
         o->creator = 0; o->end_seq = 0; o->looked = 0;
         o->refs = 1; o->kind = k;
         pthread_mutex_unlock(&o->mtx);
@@ -876,8 +880,10 @@ static void thread_report(void);
 void win32_obj_report(void){
     int k[8] = {0};
     for (int i = 1; i < g_obj_n && i < OBJ_MAX; i++) if (g_obj[i].kind < 8) k[g_obj[i].kind]++;
-    fprintf(stderr, "  object table      : %d/%d slots used (event %d, mutex %d, thread %d, key %d, semaphore %d, free %d), %llu reused, full %llu, %llu reclaimed\n",
-            g_obj_n - 1, OBJ_MAX - 1, k[OB_EVENT], k[OB_MUTEX], k[OB_THREAD], k[OB_KEY], k[OB_SEM], k[OB_NONE],
+    char tm[24] = "";                                   /* waitable timers: named only when there are some */
+    if (k[OB_TIMER]) snprintf(tm, sizeof tm, ", timer %d", k[OB_TIMER]);
+    fprintf(stderr, "  object table      : %d/%d slots used (event %d, mutex %d, thread %d, key %d, semaphore %d%s, free %d), %llu reused, full %llu, %llu reclaimed\n",
+            g_obj_n - 1, OBJ_MAX - 1, k[OB_EVENT], k[OB_MUTEX], k[OB_THREAD], k[OB_KEY], k[OB_SEM], tm, k[OB_NONE],
             (unsigned long long)g_obj_reused, (unsigned long long)g_obj_full, (unsigned long long)g_obj_reclaimed);
     /* ended threads whose handle is still open, by entry and the code that
      * started them, and how often an import looked their handles up */
@@ -902,12 +908,21 @@ void win32_obj_report(void){
 }
 /* watchdog.c: one line about a kernel object a thread waits on. */
 int win32_obj_describe(uint32_t h, char *buf, size_t n){
-    static const char *const kn[] = { "none", "event", "mutex", "thread", "file", "key", "semaphore" };
+    static const char *const kn[] = { "none", "event", "mutex", "thread", "file", "key", "semaphore", "timer" };
     int i = obj_slot(h);
     if (i < 0){ return snprintf(buf, n, "handle 0x%08x (not ours)", h); }
     Obj *o = &g_obj[i];
+    if (o->kind == OB_TIMER){                           /* a waitable timer: when it is due, on the virtual clock */
+        uint64_t host_us(void), now = host_us();
+        char due[48] = "not armed";
+        if (o->t_armed) snprintf(due, sizeof due, "%s %.1f ms", o->t_due_us >= now ? "due in" : "overdue by",
+                                 (double)(o->t_due_us >= now ? o->t_due_us - now : now - o->t_due_us) / 1000.0);
+        return snprintf(buf, n, "handle 0x%08x (timer%s%s, %s reset, signaled %d, %s, period %.1f ms)", h,
+                        o->name[0] ? " " : "", o->name, o->manual ? "manual" : "auto", o->signaled, due,
+                        (double)o->t_period_us / 1000.0);
+    }
     return snprintf(buf, n, "handle 0x%08x (%s%s%s, signaled %d, owner tid %u, thread tid %u)", h,
-                    o->kind <= OB_SEM ? kn[o->kind] : "?", o->name[0] ? " " : "", o->name,
+                    o->kind <= OB_TIMER ? kn[o->kind] : "?", o->name[0] ? " " : "", o->name,
                     o->signaled, o->owner_tid, o->tid);
 }
 /* For fileio.c to signal its overlapped completion event. */
@@ -1131,6 +1146,163 @@ void win32_signal_event(uint32_t h){
     o->signaled = 1;
     pthread_cond_broadcast(&o->cv);
     pthread_mutex_unlock(&o->mtx);
+}
+
+/* ---- waitable timers -----------------------------------------------------
+ * CreateWaitableTimerA, SetWaitableTimer, CancelWaitableTimer: Most Wanted's
+ * 100 Hz thread (0x7EC601, GAME.md 6.1) waits on a manual-reset timer that it
+ * re-arms with absolute FILETIME due times.  The timers run on the virtual
+ * clock (host_us), as the WINMM timer below does, and so does the guest's
+ * system time (vsys_ft: GetSystemTime, SystemTimeToFileTime): an absolute due
+ * time made from GetSystemTime and a relative one (negative, 100 ns units)
+ * land on one scale, and a due time in the past fires at once.
+ *
+ * Nothing drives a timer.  Whoever looks at it (a wait, SetWaitableTimer)
+ * brings it up to date first (timer_poll); a periodic timer's missed periods
+ * signal it once, as on Windows.  A waiter releases the guest lock and sleeps
+ * on the object's condition variable in slices of at most TIMER_SLICE_US of
+ * real time (shorter up to the due time), checking again under the object's
+ * lock after each: every wait is finite and none misses a wake-up (L-070).
+ * A guest INFINITE wait is such slices until the timer fires.  Completion
+ * routines (APCs) are not supported: logged, the timer still signals. */
+#define TIMER_SLICE_US 2000u
+#define FT_EPOCH 134320464000000000ull   /* 2026-08-24 12:00:00 UTC as a FILETIME: the date GetSystemTime always gave */
+#define WAIT_FAILED_ 0xFFFFFFFFu
+uint64_t host_us(void);
+void win32_set_last_error(CPU *c, uint32_t e);
+/* The guest's system time, UTC, in FILETIME units: that date plus the virtual clock. */
+static uint64_t vsys_ft(void){ return FT_EPOCH + host_us() * 10ull; }
+static uint64_t mono_us(void){
+    struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+}
+/* o->mtx held: signal the timer if it is due by now */
+static void timer_poll(Obj *o, uint64_t now){
+    if (o->kind != OB_TIMER || !o->t_armed || now < o->t_due_us) return;
+    o->signaled = 1;
+    if (o->t_period_us) o->t_due_us += o->t_period_us * ((now - o->t_due_us) / o->t_period_us + 1u);
+    else o->t_armed = 0;
+}
+/* how long to sleep before looking at o again (o->mtx held) */
+static uint64_t timer_slice_us(const Obj *o, uint64_t now, uint64_t s){
+    if (o->kind == OB_TIMER && o->t_armed && o->t_due_us > now && o->t_due_us - now < s) s = o->t_due_us - now;
+    return s < 100u ? 100u : s;
+}
+/* sleep on o's condition variable for at most us microseconds (o->mtx held) */
+static void cv_wait_us(Obj *o, uint64_t us){
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += (time_t)(us / 1000000u); ts.tv_nsec += (long)(us % 1000000u) * 1000L;
+    if (ts.tv_nsec >= 1000000000L){ ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+    pthread_cond_timedwait(&o->cv, &o->mtx, &ts);
+}
+/* WaitForSingleObject on a timer, guest lock released: WAIT_OBJECT_0, WAIT_TIMEOUT
+ * after ms of real time, or WAIT_FAILED when the handle is closed meanwhile */
+static uint32_t timer_wait(Obj *o, uint32_t ms){
+    uint64_t t0 = mono_us(), lim = (uint64_t)ms * 1000u;
+    uint32_t r;
+    pthread_mutex_lock(&o->mtx);
+    for (;;){
+        if (o->kind != OB_TIMER){ r = WAIT_FAILED_; break; }
+        uint64_t now = host_us();
+        timer_poll(o, now);
+        if (o->signaled){ if (!o->manual) o->signaled = 0; r = 0; break; }
+        uint64_t el = mono_us() - t0;
+        if (ms != 0xFFFFFFFFu && el >= lim){ r = 0x102u; break; }
+        uint64_t s = timer_slice_us(o, now, TIMER_SLICE_US);
+        if (ms != 0xFFFFFFFFu && lim - el < s) s = lim - el;
+        cv_wait_us(o, s);
+    }
+    pthread_mutex_unlock(&o->mtx);
+    return r;
+}
+/* WaitForMultipleObjects over a set that holds a waitable timer.  Only such
+ * sets come here (no UG2 set does: UG2 makes no timers); the others keep the
+ * polling loop of win32_ext_call as it always was.  Windows' rules: any (the
+ * lowest index that is ready) or all at once, WAIT_TIMEOUT after ms of real
+ * time, WAIT_FAILED for a handle that is no object, a repeated one in a wait
+ * for all, or one closed meanwhile.  Every object is looked at under its own
+ * lock (all of them, in address order, for a wait for all), then the thread
+ * sleeps at most 1 ms, less up to a timer's due time.  Guest lock released. */
+static int wfmo_has_timer(uint32_t cnt, uint32_t parr){
+    if (!parr || cnt == 0 || cnt > 64u || !mem_is_committed(parr) || !mem_is_committed(parr + 4u * cnt - 1u)) return 0;
+    for (uint32_t i = 0; i < cnt; i++){ Obj *o = obj_get(MR32(parr + 4u * i)); if (o && o->kind == OB_TIMER) return 1; }
+    return 0;
+}
+static int obj_ready(const Obj *o, uint32_t me){
+    if (o->kind == OB_MUTEX) return o->signaled || (o->owner_tid == me && o->rec > 0);
+    return o->signaled > 0;
+}
+static void obj_take(Obj *o, uint32_t me){
+    if (o->kind == OB_MUTEX){ if (o->owner_tid == me && o->rec > 0) o->rec++; else { o->signaled = 0; o->owner_tid = me; o->rec = 1; } }
+    else if (o->kind == OB_SEM) o->signaled--;
+    else if (!o->manual) o->signaled = 0;                /* auto-reset event or timer; a thread stays signaled */
+}
+static int obj_addr_cmp(const void *a, const void *b){
+    uintptr_t x = (uintptr_t)*(Obj *const *)a, y = (uintptr_t)*(Obj *const *)b;
+    return (x > y) - (x < y);
+}
+static uint32_t wait_set(Obj **ob, uint32_t cnt, int all, uint32_t ms, uint32_t me, uint32_t *err){
+    Obj *lk[64];
+    if (all){
+        memcpy(lk, ob, cnt * sizeof *lk); qsort(lk, cnt, sizeof *lk, obj_addr_cmp);
+        for (uint32_t i = 1; i < cnt; i++) if (lk[i] == lk[i - 1]){ *err = 87u; return WAIT_FAILED_; }  /* ERROR_INVALID_PARAMETER */
+    }
+    uint64_t t0 = mono_us(), lim = (uint64_t)ms * 1000u;
+    for (;;){
+        uint64_t now = host_us(), s = 1000u;
+        if (!all){
+            for (uint32_t i = 0; i < cnt; i++){
+                Obj *o = ob[i];
+                pthread_mutex_lock(&o->mtx);
+                if (o->kind == OB_NONE){ pthread_mutex_unlock(&o->mtx); *err = 6u; return WAIT_FAILED_; }
+                timer_poll(o, now);
+                if (obj_ready(o, me)){ obj_take(o, me); pthread_mutex_unlock(&o->mtx); return i; }
+                s = timer_slice_us(o, now, s);
+                pthread_mutex_unlock(&o->mtx);
+            }
+        } else {
+            int ready = 1, gone = 0;
+            for (uint32_t i = 0; i < cnt; i++) pthread_mutex_lock(&lk[i]->mtx);
+            for (uint32_t i = 0; i < cnt; i++){
+                if (lk[i]->kind == OB_NONE){ gone = 1; break; }
+                timer_poll(lk[i], now);
+                if (!obj_ready(lk[i], me)){ ready = 0; s = timer_slice_us(lk[i], now, s); }
+            }
+            if (ready && !gone) for (uint32_t i = 0; i < cnt; i++) obj_take(lk[i], me);
+            for (uint32_t i = cnt; i-- > 0; ) pthread_mutex_unlock(&lk[i]->mtx);
+            if (gone){ *err = 6u; return WAIT_FAILED_; }
+            if (ready) return 0;
+        }
+        uint64_t el = mono_us() - t0;
+        if (ms != 0xFFFFFFFFu && el >= lim) return 0x102u;
+        if (ms != 0xFFFFFFFFu && lim - el < s) s = lim - el;
+        struct timespec ts = { (time_t)(s / 1000000u), (long)(s % 1000000u) * 1000L };
+        nanosleep(&ts, 0);
+    }
+}
+/* SYSTEMTIME (16 bytes at p) of a FILETIME */
+static void ft_to_systime(uint32_t p, uint64_t ft){
+    uint64_t ms = ft / 10000ull;
+    time_t t = (time_t)(ms / 1000ull) - (time_t)11644473600LL;
+    struct tm g; gmtime_r(&t, &g);
+    mem_commit(p, 16);
+    MR16(p+0)=(uint16_t)(g.tm_year+1900); MR16(p+2)=(uint16_t)(g.tm_mon+1); MR16(p+4)=(uint16_t)g.tm_wday;
+    MR16(p+6)=(uint16_t)g.tm_mday; MR16(p+8)=(uint16_t)g.tm_hour; MR16(p+10)=(uint16_t)g.tm_min;
+    MR16(p+12)=(uint16_t)g.tm_sec; MR16(p+14)=(uint16_t)(ms % 1000ull);
+}
+/* SystemTimeToFileTime: 0 for a SYSTEMTIME Windows refuses (wDayOfWeek is not looked at) */
+static int systime_to_ft(uint32_t p, uint64_t *ft){
+    int y = MR16(p+0), mo = MR16(p+2), d = MR16(p+6), h = MR16(p+8), mi = MR16(p+10), s = MR16(p+12), ms = MR16(p+14);
+    static const uint8_t dim[12] = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+    int leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    if (y < 1601 || y > 30827 || mo < 1 || mo > 12 || d < 1 || d > dim[mo-1] + (mo == 2 && leap) ||
+        h > 23 || mi > 59 || s > 59 || ms > 999) return 0;
+    /* days since 1601-01-01: whole 400-year cycles of 146,097 days from March 1600 */
+    int yy = y - (mo <= 2), era = yy / 400, yoe = yy - era * 400;
+    int doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    int64_t days = (int64_t)era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 584694;   /* 1601-01-01 = 0 */
+    *ft = ((uint64_t)days * 86400ull + (uint64_t)(h * 3600 + mi * 60 + s)) * 10000000ull + (uint64_t)ms * 10000ull;
+    return 1;
 }
 
 /* ---- WINMM multimedia timer --------------------------------------------
@@ -1649,6 +1821,46 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
     else if (!strcmp(n,"CreateSemaphoreA")){ uint32_t h=obj_new(OB_SEM); Obj*o=obj_get(h); if(o) o->signaled=(int)A(c,1); r=h; }
     else if (!strcmp(n,"ReleaseSemaphore")){ Obj*o=obj_get(A(c,0));
         if(o){ pthread_mutex_lock(&o->mtx); o->signaled+=(int)A(c,1); pthread_cond_broadcast(&o->cv); pthread_mutex_unlock(&o->mtx);} r=1; }
+    /* --- waitable timers (see timer_poll) --- */
+    else if (!strcmp(n,"CreateWaitableTimerA")){       /* (attributes, bManualReset, lpTimerName) */
+        uint32_t h = obj_new(OB_TIMER); Obj *o = obj_get(h);
+        if (o){
+            o->manual = A(c,1) != 0;
+            if (A(c,2) && mem_is_committed(A(c,2))) snprintf(o->name, sizeof o->name, "%s", (const char *)(g_mem + A(c,2)));
+        } else win32_set_last_error(c, 8u);             /* ERROR_NOT_ENOUGH_MEMORY: the table is full */
+        { static int sh = 0; if (sh++ < 8)
+            fprintf(stderr, "[timer] CreateWaitableTimerA(%s reset%s%s) -> 0x%08x (from 0x%08x)\n",
+                    A(c,1) ? "manual" : "auto", o && o->name[0] ? ", " : "", o ? o->name : "", h, c->eip); }
+        r = h; }
+    else if (!strcmp(n,"SetWaitableTimer")){
+        /* (hTimer, const LARGE_INTEGER *pDueTime, LONG lPeriod ms, pfnCompletionRoutine, its argument, fResume) */
+        Obj *o = obj_get(A(c,0)); uint32_t pd = A(c,1); int32_t per = (int32_t)A(c,2);
+        if (!o || o->kind != OB_TIMER){ win32_set_last_error(c, 6u); r = 0; }          /* ERROR_INVALID_HANDLE */
+        else if (!pd || !mem_is_committed(pd) || !mem_is_committed(pd + 7u) || per < 0){
+            win32_set_last_error(c, 87u); r = 0; }                                      /* ERROR_INVALID_PARAMETER */
+        else {
+            int64_t due = (int64_t)((uint64_t)MR32(pd) | ((uint64_t)MR32(pd + 4u) << 32));
+            uint64_t now = host_us(), at;
+            if (due < 0) at = now + ((0ull - (uint64_t)due) + 9u) / 10u;                /* relative, 100 ns units */
+            else at = (uint64_t)due > FT_EPOCH ? ((uint64_t)due - FT_EPOCH + 9u) / 10u : 0u;   /* absolute FILETIME */
+            pthread_mutex_lock(&o->mtx);
+            o->t_due_us = at; o->t_period_us = (uint64_t)per * 1000u; o->t_armed = 1; o->signaled = 0;
+            pthread_cond_broadcast(&o->cv);
+            pthread_mutex_unlock(&o->mtx);
+            { static int sh = 0; if (sh++ < 4)
+                fprintf(stderr, "[timer] SetWaitableTimer(0x%08x): %s due time, fires %s %.1f ms, period %d ms (from 0x%08x)\n",
+                        A(c,0), due < 0 ? "relative" : "absolute", at >= now ? "in" : "at once, late by",
+                        (double)(at >= now ? at - now : now - at) / 1000.0, per, c->eip); }
+            if (A(c,3)){ static int sh = 0; if (sh++ < 4)
+                fprintf(stderr, "[timer] SetWaitableTimer(0x%08x): completion routine 0x%08x not supported (no APCs);"
+                                " the timer still signals\n", A(c,0), A(c,3)); }
+            r = 1;
+            if (A(c,5)) win32_set_last_error(c, 50u);   /* fResume: ERROR_NOT_SUPPORTED, and still TRUE (no power management) */
+        } }
+    else if (!strcmp(n,"CancelWaitableTimer")){        /* (hTimer): disarm; the signaled state stays as it is */
+        Obj *o = obj_get(A(c,0));
+        if (!o || o->kind != OB_TIMER){ win32_set_last_error(c, 6u); r = 0; }
+        else { pthread_mutex_lock(&o->mtx); o->t_armed = 0; pthread_mutex_unlock(&o->mtx); r = 1; } }
     else if (!strcmp(n,"WaitForSingleObject")){
         Obj*o=obj_get(A(c,0)); uint32_t ms=A(c,1);
         { uint32_t h=A(c,0);
@@ -1698,6 +1910,13 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
             }
             pthread_mutex_unlock(&o->mtx);
             guest_yield_end();
+        }
+        else if (o->kind == OB_TIMER){                  /* waitable timer: on the virtual clock, in finite slices */
+            ts_set(TS_WAIT, A(c,0));
+            guest_yield_begin();
+            r = timer_wait(o, ms);
+            guest_yield_end();
+            if (r == WAIT_FAILED_) win32_set_last_error(c, 6u);   /* ERROR_INVALID_HANDLE: closed during the wait */
         }
         else {
             ts_set(TS_WAIT, A(c,0));
@@ -1837,6 +2056,18 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
           nanosleep(&ts,0); }
         guest_yield_end();
         r=0; }
+    else if (!strcmp(n,"WaitForMultipleObjects") && wfmo_has_timer(A(c,0), A(c,1))){
+        /* a set with a waitable timer: Windows' rules (wait_set) */
+        uint32_t cnt = A(c,0), parr = A(c,1), err = 0; Obj *ob[64];
+        for (uint32_t i = 0; i < cnt; i++) if (!(ob[i] = obj_get(MR32(parr + 4u * i)))) err = 6u;   /* ERROR_INVALID_HANDLE */
+        if (err) r = WAIT_FAILED_;
+        else {
+            ts_set(TS_WAITM, MR32(parr));
+            guest_yield_begin();
+            r = wait_set(ob, cnt, A(c,2) != 0, A(c,3), cur_tid(c), &err);
+            guest_yield_end();
+        }
+        if (r == WAIT_FAILED_) win32_set_last_error(c, err); }
     else if (!strcmp(n,"WaitForMultipleObjects")){
         uint32_t cnt=A(c,0), parr=A(c,1), waitall=A(c,2), ms=A(c,3);
         (void)waitall;
@@ -1903,9 +2134,16 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         uint32_t p=A(c,0); if(p){ mem_commit(p,8);
             static uint64_t ft = 130000000000000000ull; ft += 100000;
             MR32(p)=(uint32_t)ft; MR32(p+4)=(uint32_t)(ft>>32); } r=0; }
-    else if (!strcmp(n,"GetLocalTime")||!strcmp(n,"GetSystemTime")){
+    else if (!strcmp(n,"GetLocalTime")){
         uint32_t p=A(c,0); if(p){ mem_commit(p,16); memset(g_mem+p,0,16);
             MR16(p)=2026; MR16(p+2)=8; MR16(p+6)=24; MR16(p+8)=12; } r=0; }
+    else if (!strcmp(n,"GetSystemTime")){              /* the same date, moving with the virtual clock (vsys_ft) */
+        uint32_t p = A(c,0); if (p) ft_to_systime(p, vsys_ft()); r = 0; }
+    else if (!strcmp(n,"SystemTimeToFileTime")){       /* (const SYSTEMTIME *, FILETIME *) */
+        uint32_t a = A(c,0), b = A(c,1); uint64_t ft = 0;
+        if (a && b && mem_is_committed(a) && mem_is_committed(a + 15u) && systime_to_ft(a, &ft)){
+            mem_commit(b, 8); MR32(b) = (uint32_t)ft; MR32(b+4) = (uint32_t)(ft >> 32); r = 1; }
+        else { win32_set_last_error(c, 87u); r = 0; } }   /* ERROR_INVALID_PARAMETER */
     /* --- copy protection / anti-debug: return failure --- */
     else if (!strcmp(n,"CreateToolhelp32Snapshot")) r=0xFFFFFFFFu;
     else if (!strcmp(n,"Process32First")||!strcmp(n,"Process32Next")) r=0;

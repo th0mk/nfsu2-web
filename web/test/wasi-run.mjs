@@ -13,6 +13,6 @@ const preopens = dir?.length === 2 ? { [dir[0]]: dir[1] } : {};
 const wasi = new WASI({ version: 'preview1', args: [file, ...args], env: {}, preopens, returnOnExit: true });
 const inst = await WebAssembly.instantiate(mod, {
   env: { memory }, wasi_snapshot_preview1: wasi.wasiImport, wasi: { 'thread-spawn': () => -1 },
-  nfsu2: { register: () => 0, now_ms: () => performance.timeOrigin + performance.now() },
+  nfsu2: { register: () => 0, now_ms: () => performance.timeOrigin + performance.now(), blocked_ms: () => 0 },
 });
 process.exitCode = wasi.start(inst);
