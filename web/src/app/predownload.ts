@@ -42,8 +42,8 @@ export class Predownload {
   private ended: (() => void) | null = null;
   private samples: { t: number; have: number }[] = [];
 
-  /** language: the game's language now (settings.ini): only its language pack is fetched; packs: the texture pack
-   *  picked ('' for none), the only one fetched, and the songs (datacache.ts Packs) */
+  /** language: the game's language now (settings.ini): only its language pack is fetched; packs: the texture packs
+   *  picked (comma-separated, '' for none), the only ones fetched, and the songs (datacache.ts Packs) */
   constructor(private onChange: (s: DownloadStatus) => void, private log: (line: string) => void, readonly language: () => string,
               readonly packs: () => Packs) {}
 

@@ -49,8 +49,10 @@ export function songsPath(path: string): string | null {
   return p.length === 2 && p[0].toLowerCase() === 'pfdata' ? [p[0], 'original', p[1]].join('/') : null;
 }
 /** The files a game in this language reads: the folder's, but where its language pack (LANGPACKS/<language>,
- *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs only the
- *  one picked; pfdata/original's files only with the original songs, and then in place of pfdata's. */
+ *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs
+ *  (TEXPACKS/<name>.pak and its <name>.tracks, runtime/web/texrep_web.c) only those picked (packs.texpack: their
+ *  names, comma-separated; '' for none); pfdata/original's files only with the original songs, and then in place
+ *  of pfdata's. */
 function gameFiles(files: DataFile[], language: string, packs: Packs): DataFile[] {
   const own = new Set(files.filter(f => { const p = parts(f); return p[0] === 'langpacks' && p[1] === language; })
     .map(f => parts(f).slice(2).join('/')));
@@ -59,7 +61,7 @@ function gameFiles(files: DataFile[], language: string, packs: Packs): DataFile[
   const replaced = new Set(original ? files.map(parts).filter(isOriginal).map(p => `pfdata/${p[2]}`) : []);
   return files.filter(f => {
     const p = parts(f);
-    if (p[0] === 'texpacks') return p.length === 2 && p[1] === `${packs.texpack}.pak`;
+    if (p[0] === 'texpacks') return p.length === 2 && packs.texpack.split(',').some(n => n && (p[1] === `${n}.pak` || p[1] === `${n}.tracks`));
     if (isOriginal(p)) return original;
     if (replaced.has(p.join('/'))) return false;
     return p[0] === 'langpacks' ? p[1] === language : !own.has(p.join('/'));

@@ -170,6 +170,9 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
+  // the minimap's and world map's maps: TEXPACKS/detailed.pak (tools/texpacks.py --detailed) the same way, with its
+  // changes to the Tracks table (detailed.tracks)
+  { key: 'minimap', env: 'NFSU2_MAP_TEXTURES', kind: 'enum', vals: 'original|detailed', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -317,6 +320,11 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # fonts stay; most phones' GPUs decode the larger textures into four times
 # the memory).  [NFSU2_UI_TEXTURES]
 #ui_textures = original
+# The minimap's and world map's maps: original = the game's; detailed =
+# JeansBig's Detailed Map (nfsmods.xyz/mod/4485): redrawn at 2048x2048 with
+# the missing shortcuts, shortcuts and off-road in their own colour, where
+# this server has the mod's texture pack.  [NFSU2_MAP_TEXTURES]
+#minimap = original
 
 # ---- Frame rate ----------------------------------------------------------
 
