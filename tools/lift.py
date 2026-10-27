@@ -242,6 +242,11 @@ def _retpast():
 # MW's x87 pow (0x7C464D, the CRT's special-value path) saves the FPU around
 # its helper with fnsave/frstor.  Off for UG2, whose same CRT sites stay traps.
 _X87ENV = __import__('os').environ.get('X87ENV', '') == '1'
+# X87ENV_DATA=<va>,... (games/<id>/game.conf, gen.sh): those four instructions
+# at these addresses stay traps with X87ENV on: data decoded as code (MW's
+# fldenv 0x4BA920 and fnstenv 0x613398), whose trap is the canary that a run
+# executes data (L-039)
+_X87ENV_DATA = {int(x, 16) for x in __import__('os').environ.get('X87ENV_DATA', '').split(',') if x.strip()}
 # CODE_RVA=<lo>-<hi> (hex RVAs; gen.sh, from a module's game.conf range such as
 # D3DX_CODE): only [lo, hi) of the module's .text is code.  d3dx9_26.dll's
 # linker merged its read-only data into .text: the IAT, constants, strings and
@@ -900,10 +905,12 @@ class Lifter:
         # keeps no tag word and no instruction or operand pointers: TW is
         # written as all empty, the pointers as 0, and loads ignore all three.
         # fnsave appends ST(0)..ST(7) as 80-bit values and then initializes
-        # the FPU (fninit); fnstenv masks all exceptions after the store.  The
-        # 16-bit images (0x66 prefix) stay traps.
+        # the FPU (fninit); fnstenv masks all exceptions after the store; frstor
+        # loads the registers with f80_load_x (cpu.h: NaN payloads and
+        # denormals come back).  The 16-bit images (0x66 prefix) and the
+        # X87ENV_DATA addresses stay traps.
         if _X87ENV and m in ('fnstenv','fldenv','fnsave','frstor'):
-            if not o or o[0].type!=X86_OP_MEM or i.prefix[2]==0x66: raise Unsupported(m)
+            if not o or o[0].type!=X86_OP_MEM or i.prefix[2]==0x66 or i.address in _X87ENV_DATA: raise Unsupported(m)
             ea=self.ea(o[0].mem)
             if m in ('fnstenv','fnsave'):
                 st=[f"uint32_t _e={ea};", "MR32(_e) = 0xffff0000u | c->fcw;", "MR32(_e+4u) = 0xffff0000u | fsw_get(c);",
@@ -914,7 +921,7 @@ class Lifter:
             else:
                 st=[f"uint32_t _e={ea}; uint16_t _sw=MR16(_e+4u);", "c->fcw = MR16(_e);",
                     "c->fsw = (uint16_t)(_sw & ~0x3800u); c->top = (int32_t)((_sw >> 11) & 7u);"]
-                if m=='frstor': st += [f"ST({k}) = f80_load(g_mem + (uint32_t)(_e+{28+10*k}u));" for k in range(8)]
+                if m=='frstor': st += [f"ST({k}) = f80_load_x(g_mem + (uint32_t)(_e+{28+10*k}u));" for k in range(8)]
             return ["{ " + " ".join(st) + " }"]
 
         # ---------------- string instructions ----------------

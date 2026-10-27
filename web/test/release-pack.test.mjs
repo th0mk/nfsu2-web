@@ -28,6 +28,21 @@ test('release.sh refuses a module whose json says "oracle"', () => {
   assert.doesNotMatch(r.stdout, /release: module/);
 });
 
+test('release.sh refuses any json of the folder it is given that says "oracle", before the names: web/build.sh\'s out/web/mw (Most Wanted\'s nfsmw.json), or nfsmw.* copied next to nfsu2.*', () => {
+  for (const [name, sub] of [['buildsh', 'mw'], ['copied', '']]) {
+    const t = path.join(base, name), m = path.join(t, sub);
+    w(t, 'nfsu2.wasm', 'wasm');
+    w(t, 'nfsu2.json', json(false, 4));
+    w(m, 'nfsmw.wasm', 'wasm');
+    w(m, 'nfsmw.json', json(true, 4).replace('"game":"ug2"', '"game":"mw"'));
+    const r = spawnSync('bash', [path.join(ROOT, 'web/deploy/release.sh'), '-n', 'root@vps.invalid', m], { cwd: base, encoding: 'utf8' });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.ok(r.stderr.includes(`${path.join(m, 'nfsmw.json')} has "oracle": a dev-only module with the D3DX oracle`), r.stderr);
+    assert.doesNotMatch(r.stderr, /needs nfsu2\.wasm/);
+    assert.doesNotMatch(r.stdout, /release: module/);
+  }
+});
+
 let n = 0;
 /** a tree with pack.sh, a page, a module, the deploy files, a local server build that prints entries, and a git commit */
 function tree({ oracle = false } = {}) {

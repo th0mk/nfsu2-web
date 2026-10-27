@@ -5,7 +5,8 @@
  *   tests/mworacle.sh [cases-per-function] [functions]   (picks, builds and runs it)
  *
  * tests/mworacle_pick.py picks the functions (fully lifted closures of at most
- * 12 functions: no indirect call or jump, no trap, no CPUID/RDTSC, no int3)
+ * 12 functions: no indirect call or jump but a switch's, no trap, no
+ * CPUID/RDTSC, no int3)
  * and reads from each one's code which stack arguments and registers it
  * dereferences, reads as a float or a double.  For every case both sides start
  * from the same state:
@@ -40,10 +41,14 @@
  * Classes that are not differences, each counted on its own:
  *   loop     both sides at their limit (the original after ORACLE_BUDGET
  *            Unicorn instructions, the lifted after ORACLE_LIFT_MS of wall
- *            clock).  A case at its limit on one side only is run again on
- *            that side with a long limit (ORACLE_LONG_S) before it counts,
- *            since the two limits are in different units (L-208); once such a
- *            re-run still stops, the function gets no more re-runs.
+ *            clock), and both still at a long limit (ORACLE_LONG_S) when run
+ *            again.  A case at its limit on one side only is run again on
+ *            that side with the long limit, one at its limit on both sides on
+ *            both, before it counts, since the two limits are in different
+ *            units (L-208): a re-run that ends one-sided (one side returns or
+ *            faults, the other is still at its limit) is a DIFF.  Once such a
+ *            re-run still stops, the function gets no more re-runs of its
+ *            kind (one side, both sides: a budget each).
  *   #DE      the original raised a divide error (a zero divisor or a quotient
  *            too large: Windows would end the game there); the lift skips a
  *            zero divisor and truncates (tools/lift.py div/idiv)
@@ -58,17 +63,29 @@
  *   range    an x87 value on the original's path was one no double holds
  *            (out of range, or a significand over 53 bits: PC=64, tbyte
  *            loads, 64-bit integers), which the lift's double registers
- *            cannot match (x87_range_check)
+ *            cannot match (x87_range_check), and the case is the same when
+ *            the x87 stack values and the bytes the original's x87 stores
+ *            wrote are left out (CMP_NOVALS: the registers, flags, x87
+ *            control word and top, XMM registers, the rest of memory)
  *   fsw      the same but for a register holding an fnstsw's low byte, where
  *            the original has x87 exception flags its status word still shows
- *            and the lift keeps none (cpu.h fsw_get)
- *   nan      the only differing values are NaNs on both sides
+ *            and the lift keeps none (cpu.h fsw_get), and the case is the
+ *            same when the original runs again with its exception flags
+ *            cleared before every fnstsw (fsw_rerun)
+ *   nan      the only differing values are NaNs on both sides, in a function
+ *            with x87 or SSE code, one of each pair the default NaN (sign
+ *            aside: the host's, which the lift makes, or the indefinite,
+ *            which x87 and SSE make); other payloads must be the same.  On
+ *            the x87 stack, whose lifted values are doubles: the lifted one
+ *            the default NaN, or the two the same in the bits a double holds
  *   order    both faulted, at different addresses, and the original touches
  *            the lifted side's address too (fault_order: clang reorders
  *            loads no store separates)
  *   dead     the original faulted, the lifted side did not, and the
- *            original given zero pages there ends exactly as the lifted side
- *            (dead_access: clang drops a load whose value is unused)
+ *            original given zero pages there ends exactly as the lifted side,
+ *            or with a divide error and then, given pages of 1s, exactly as
+ *            the lifted side (dead_access: clang drops a load whose value is
+ *            unused)
  * Everything else is a DIFF.  ORACLE_FNS=<hex,...> runs those functions only,
  * ORACLE_CASE=<n> that case only, printing both sides' state.
  *
@@ -443,7 +460,38 @@ static void x87_range_check(uc_engine *uc){
         if (e != 0x7FFF && m && (e > 16383 + 1023 || e < 16383 - 1022 || (m & 0x7FFu))) g_x87_range = 1;
     }
 }
-static void on_x87(uc_engine *uc, uint64_t a, uint32_t sz, void *u){ (void)a; (void)sz; (void)u; if (!g_x87_range) x87_range_check(uc); }
+/* What such a value explains in memory: the bytes the original's x87 value
+ * stores wrote in that re-run (fst/fstp m32/m64/m80, fist/fistp/fisttp
+ * m16/m32/m64, fbstp, fnsave's image), which the range class leaves out of
+ * the compare (x87_stored); any other byte must be the same.  A full list
+ * keeps the rest in the compare (stricter, never looser) */
+static struct { uint32_t lo, hi; } g_x87st[256]; static int g_nx87st;
+static uint32_t g_x87_ip;                    /* the instruction on_x87 saw last */
+static int is_x87_store(uint32_t a){
+    if (a < g_im.base || a + 8 > g_im.base + g_im.size) return 0;
+    uint32_t p = a;
+    while (p < a + 4 && (MR8(p) == 0x66 || MR8(p) == 0x67 || MR8(p) == 0x2E || MR8(p) == 0x3E ||
+                         MR8(p) == 0x26 || MR8(p) == 0x36 || MR8(p) == 0x64 || MR8(p) == 0x65)) p++;
+    uint8_t op = MR8(p), mrm = MR8(p + 1), reg = (uint8_t)(mrm >> 3 & 7);
+    if (mrm >= 0xC0) return 0;
+    return (op == 0xD9 && (reg == 2 || reg == 3)) || (op == 0xDB && (reg == 1 || reg == 2 || reg == 3 || reg == 7)) ||
+           (op == 0xDD && (reg == 1 || reg == 2 || reg == 3 || reg == 6)) ||
+           (op == 0xDF && (reg == 1 || reg == 2 || reg == 3 || reg == 6 || reg == 7));
+}
+static void on_x87w(uc_engine *uc, uc_mem_type t, uint64_t a, int sz, int64_t v, void *u){
+    (void)uc; (void)t; (void)v; (void)u;
+    if (!is_x87_store(g_x87_ip)) return;
+    uint32_t lo = (uint32_t)a, hi = lo + (uint32_t)sz;
+    if (g_nx87st && lo <= g_x87st[g_nx87st - 1].hi && hi >= g_x87st[g_nx87st - 1].lo){
+        if (lo < g_x87st[g_nx87st - 1].lo) g_x87st[g_nx87st - 1].lo = lo;
+        if (hi > g_x87st[g_nx87st - 1].hi) g_x87st[g_nx87st - 1].hi = hi;
+    } else if (g_nx87st < (int)(sizeof g_x87st / sizeof g_x87st[0])){ g_x87st[g_nx87st].lo = lo; g_x87st[g_nx87st].hi = hi; g_nx87st++; }
+}
+static int x87_stored(uint32_t a){
+    for (int i = 0; i < g_nx87st; i++) if (a >= g_x87st[i].lo && a < g_x87st[i].hi) return 1;
+    return 0;
+}
+static void on_x87(uc_engine *uc, uint64_t a, uint32_t sz, void *u){ (void)sz; (void)u; g_x87_ip = (uint32_t)a; if (!g_x87_range) x87_range_check(uc); }
 
 
 /* ORACLE_TRACE=1 (with ORACLE_FNS and ORACLE_CASE): every instruction the
@@ -625,21 +673,31 @@ static void run_unicorn(const Fn *f, int long_s){
 static int is_nan32(const uint8_t *p){ uint32_t v; memcpy(&v, p, 4); return (v & 0x7F800000u) == 0x7F800000u && (v & 0x7FFFFFu); }
 static int is_nan64(const uint8_t *p){ uint64_t v; memcpy(&v, p, 8); return (v & 0x7FF0000000000000ull) == 0x7FF0000000000000ull && (v & 0xFFFFFFFFFFFFFull); }
 static int is_nan80(const uint8_t *p){ uint16_t se; uint64_t m; memcpy(&m, p, 8); memcpy(&se, p + 8, 2); return (se & 0x7FFF) == 0x7FFF && (m << 1); }
+/* the default NaN, either sign: the host's quiet NaN, which the lift's
+ * arithmetic makes from non-NaN operands, and the indefinite, which x87 and
+ * SSE make (the same, negative) */
+static int is_dnan32(const uint8_t *p){ uint32_t v; memcpy(&v, p, 4); return (v & 0x7FFFFFFFu) == 0x7FC00000u; }
+static int is_dnan64(const uint8_t *p){ uint64_t v; memcpy(&v, p, 8); return (v & 0x7FFFFFFFFFFFFFFFull) == 0x7FF8000000000000ull; }
 /* the first byte of [lo, lo+n) where a and b differ other than as two NaNs
- * (a float or a double of the same aligned slot, 0 = none); *nan counts NaN pairs */
-static long mem_diff(const uint8_t *a, const uint8_t *b, uint32_t n, uint32_t base, int *nan){
+ * (a float or a double of the same aligned slot, -1 = none); *nan counts NaN
+ * pairs.  Only in a function with x87 or SSE code (fp), and only when one of
+ * the two is the default NaN: a NaN that is only copied, or that an
+ * operation passes on, keeps its payload on both sides.  skip: not the bytes
+ * the original's x87 stores wrote (x87_stored, the range class) */
+static long mem_diff(const uint8_t *a, const uint8_t *b, uint32_t n, uint32_t base, int fp, int skip, int *nan){
     for (uint32_t i = 0; i < n; ){
         if (!memcmp(a + i, b + i, n - i < 64 ? n - i : 64)){ i += 64; continue; }
         uint32_t e = i + 64 < n ? i + 64 : n;
         for (; i < e; i++){
-            if (a[i] == b[i]) continue;
+            if (a[i] == b[i] || (skip && x87_stored(base + i))) continue;
             uint32_t a4 = i & ~3u, a8 = i & ~7u, g4 = (base + a4) & 3u, g8 = (base + a8) & 7u;
-            if (!g4 && a4 + 4 <= n && is_nan32(a + a4) && is_nan32(b + a4)){
+            if (fp && !g4 && a4 + 4 <= n && is_nan32(a + a4) && is_nan32(b + a4) && (is_dnan32(a + a4) || is_dnan32(b + a4))){
                 (*nan)++;
                 if (getenv("ORACLE_DEBUG")){ uint32_t x, y; memcpy(&x, a + a4, 4); memcpy(&y, b + a4, 4);
                     fprintf(stderr, "  NaN pair at %08x: lifted %08x, original %08x\n", base + a4, x, y); }
                 i = a4 + 3; continue; }
-            if (!g8 && a8 + 8 <= n && is_nan64(a + a8) && is_nan64(b + a8)){ (*nan)++; i = a8 + 7; continue; }
+            if (fp && !g8 && a8 + 8 <= n && is_nan64(a + a8) && is_nan64(b + a8) && (is_dnan64(a + a8) || is_dnan64(b + a8))){
+                (*nan)++; i = a8 + 7; continue; }
             return (long)i;
         }
     }
@@ -658,12 +716,17 @@ static int is_div(uint32_t a){
     return (op == 0xF6 || op == 0xF7) && (reg == 6 || reg == 7);
 }
 static char g_why[256];
+/* how: CMP_NOVALS leaves out the x87 stack values and the bytes the
+ * original's x87 stores wrote (the range class), CMP_NOFSW takes no fnstsw
+ * low byte as the same (fsw_rerun) */
+enum { CMP_NOVALS = 1, CMP_NOFSW = 2 };
 /* 0 same, 1 diff (g_why says how), 2 same with NaN-only differences, 3 both
  * faulted, at different addresses (fault_order decides), 4 the original
  * raised a divide error at a div/idiv, 5 same but for x87 exception flags in
- * an fnstsw's low byte */
-static int compare(const Fn *f){
+ * an fnstsw's low byte (fsw_rerun decides) */
+static int compare(const Fn *f, int how){
     const Out *l = &g_lo, *u = &g_uo;
+    int fp = (f->tr & (T_X87 | T_SSE)) != 0;
     if (u->how == O_DE){
         if (is_div(u->where)) return 4;
         snprintf(g_why, sizeof g_why, "the original's divide error at %08x is no div/idiv", u->where); return 1;
@@ -689,7 +752,7 @@ static int compare(const Fn *f){
          * condition codes and TOP), the original's sticky ones (0x6512A0: ZE after
          * a division by zero) are still set when it returns */
         uint32_t d = l->r[i] ^ u->r[i];
-        if ((f->tr & T_FSW) && !(d & ~0xFFu) && !(l->r[i] & d) && !(d & ~(uint32_t)(u->fsw & 0xFFu))){ fsw = 1; continue; }
+        if (!(how & CMP_NOFSW) && (f->tr & T_FSW) && !(d & ~0xFFu) && !(l->r[i] & d) && !(d & ~(uint32_t)(u->fsw & 0xFFu))){ fsw = 1; continue; }
         snprintf(g_why, sizeof g_why, "%s %08x, original %08x", RN[i], l->r[i], u->r[i]); return 1;
     }
     if ((l->fl ^ u->fl) & 0x400u){ snprintf(g_why, sizeof g_why, "DF %u, original %u", l->fl >> 10 & 1, u->fl >> 10 & 1); return 1; }
@@ -700,13 +763,16 @@ static int compare(const Fn *f){
     if (l->top != u->top){ snprintf(g_why, sizeof g_why, "x87 top %d, original %d", l->top, u->top); return 1; }
     if (!(f->tr & T_MMX)){
         int live = (8 - l->top) & 7;         /* values on the stack, counted from the empty stack (top 0) */
-        if (live <= 4)
+        if (live <= 4 && !(how & CMP_NOVALS))
             for (int k = 0; k < live; k++){
                 int p = (l->top + k) & 7;
                 if (!memcmp(l->st[p], u->st[p], 10)) continue;
-                if (is_nan80(l->st[p]) && is_nan80(u->st[p])){ nan++; continue; }
                 uint64_t lm, um; uint16_t le, ue;
                 memcpy(&lm, l->st[p], 8); memcpy(&le, l->st[p] + 8, 2); memcpy(&um, u->st[p], 8); memcpy(&ue, u->st[p] + 8, 2);
+                /* a NaN pair: the lifted value is a double, so the lifted one the default NaN (either sign: an
+                 * invalid operation's indefinite, f80_load's host NaN), or the two the same in a double's bits */
+                if (is_nan80(l->st[p]) && is_nan80(u->st[p]) &&
+                    (lm == 0xC000000000000000ull || (!((le ^ ue) & 0x8000u) && lm >> 11 == um >> 11))){ nan++; continue; }
                 snprintf(g_why, sizeof g_why, "ST(%d) %04x:%016llx, original %04x:%016llx", k, le, (unsigned long long)lm, ue, (unsigned long long)um);
                 return 1;
             }
@@ -716,7 +782,7 @@ static int compare(const Fn *f){
     for (int i = 0; i < 8; i++)
         if (memcmp(l->xmm[i], u->xmm[i], 16)){
             int n2 = 0;
-            if (mem_diff(l->xmm[i], u->xmm[i], 16, 0, &n2) < 0){ nan += n2; continue; }
+            if (mem_diff(l->xmm[i], u->xmm[i], 16, 0, fp, 0, &n2) < 0){ nan += n2; continue; }
             uint64_t lq[2], uq[2]; memcpy(lq, l->xmm[i], 16); memcpy(uq, u->xmm[i], 16);
             snprintf(g_why, sizeof g_why, "xmm%d %016llx%016llx, original %016llx%016llx", i, (unsigned long long)lq[1],
                      (unsigned long long)lq[0], (unsigned long long)uq[1], (unsigned long long)uq[0]); return 1;
@@ -733,7 +799,7 @@ static int compare(const Fn *f){
     for (int i = 0, k = 0; i < g_nrw; k += (int)(g_rw[i].hi - g_rw[i].lo), i++)
         M[nm++] = (typeof(M[0])){ "image", g_l_img + k, u_img + (g_rw[i].lo - g_img_lo), g_rw[i].hi - g_rw[i].lo, g_rw[i].lo };
     for (int m = 0; m < nm; m++)
-        if ((at = mem_diff(M[m].a, M[m].b, M[m].n, M[m].base, &nan)) >= 0){
+        if ((at = mem_diff(M[m].a, M[m].b, M[m].n, M[m].base, fp, how & CMP_NOVALS, &nan)) >= 0){
             uint32_t ad = (M[m].base + (uint32_t)at) & ~3u, o4 = ad - M[m].base, lv, uv;
             memcpy(&lv, M[m].a + o4, 4); memcpy(&uv, M[m].b + o4, 4);
             snprintf(g_why, sizeof g_why, "%s [%08x] = %08x, original %08x", M[m].name, ad, lv, uv);
@@ -745,17 +811,64 @@ static int compare(const Fn *f){
 /* a hook on every instruction slows Unicorn down several times (a long re-run
  * of 0x497430 no longer finished in its 60 s), so the check runs only when an
  * x87 case differs: the original once more with it (and with the lift's
- * constants and formulas at its libm sites: an fldpi is no such value) */
+ * constants and formulas at its libm sites: an fldpi is no such value), and
+ * notes where its x87 stores write (on_x87w) */
 static int range_rerun(const Fn *f){
-    uc_hook h; Out keep = g_uo;
+    uc_hook h, hw; Out keep = g_uo;
+    g_nx87st = 0;
     uc_hook_add(g_uc, &h, UC_HOOK_CODE, (void *)on_x87, 0, 1, 0);
+    uc_hook_add(g_uc, &hw, UC_HOOK_MEM_WRITE, (void *)on_x87w, 0, 1, 0);
     uc_ctl_flush_tb(g_uc);
     g_xs_sub = 1; run_unicorn(f, 0); g_xs_sub = 0;
     int hit = g_x87_range;
-    if (g_u_ev != 5) uc_hook_del(g_uc, h);
+    if (g_u_ev != 5){ uc_hook_del(g_uc, h); uc_hook_del(g_uc, hw); }
     uc_ctl_flush_tb(g_uc);
     g_uo = keep;
     return hit;
+}
+
+/* The fsw class: the lift keeps no x87 exception flags (cpu.h fsw_get), so
+ * an fnstsw gives 0 there in the low byte where the original's sticky flags
+ * show (0x6512A0: ZE after a division by zero).  The register rule in
+ * compare() alone would also take any register that differs in those bits
+ * as the same, so the original runs once more with its exception flags,
+ * SF and ES cleared before every fnstsw (DF E0, DD /7 to memory), as the
+ * lift has them, and that run must be the same without the rule (how |
+ * CMP_NOFSW; xs: with the lift's libm formulas, as the run it replaces; with
+ * the limit the case's original ran to, g_u_long).  Its compare's result;
+ * g_why says what still differs */
+static int g_u_long;                         /* the case's original: 0 its counted run, else its long re-run's seconds */
+static void on_fnstsw(uc_engine *uc, uint64_t a, uint32_t sz, void *u){
+    (void)sz; (void)u;
+    uint32_t p = (uint32_t)a;
+    if (p < g_im.base || p + 8 > g_im.base + g_im.size) return;
+    while (p < (uint32_t)a + 4 && (MR8(p) == 0x66 || MR8(p) == 0x67 || MR8(p) == 0x2E || MR8(p) == 0x3E ||
+                                   MR8(p) == 0x26 || MR8(p) == 0x36 || MR8(p) == 0x64 || MR8(p) == 0x65)) p++;
+    uint8_t op = MR8(p), mrm = MR8(p + 1);
+    if ((op == 0xDF && mrm == 0xE0) || (op == 0xDD && (mrm >> 3 & 7) == 7 && mrm < 0xC0)){
+        uint16_t sw; uc_reg_read(uc, UC_X86_REG_FPSW, &sw);
+        sw &= (uint16_t)~0xFFu; uc_reg_write(uc, UC_X86_REG_FPSW, &sw);
+    }
+}
+static int fsw_rerun(const Fn *f, int how, int xs){
+    uc_hook h; Out keep = g_uo;
+    uc_hook_add(g_uc, &h, UC_HOOK_CODE, (void *)on_fnstsw, 0, 1, 0);
+    uc_ctl_flush_tb(g_uc);
+    g_xs_sub = xs; run_unicorn(f, g_u_long); g_xs_sub = 0;
+    if (g_u_ev != 5) uc_hook_del(g_uc, h);
+    uc_ctl_flush_tb(g_uc);
+    int r = compare(f, how | CMP_NOFSW);
+    if (r == 4) snprintf(g_why, sizeof g_why, "the original with its x87 exception flags cleared: a divide error at %08x", g_uo.where);
+    if (getenv("ORACLE_DEBUG")) fprintf(stderr, "fsw_rerun: %s\n", r == 0 || r == 2 ? "then the same" : g_why);
+    g_uo = keep;
+    return r;
+}
+/* compare(), with an fnstsw low byte taken as the same only when fsw_rerun
+ * agrees (else 1) */
+static int compare_x(const Fn *f, int how, int xs){
+    int r = compare(f, how);
+    if (r == 5){ int r2 = fsw_rerun(f, how, xs); if (r2 != 0 && r2 != 2) r = 1; }
+    return r;
 }
 
 /* Both sides faulted, at different addresses.  The lifted C makes the
@@ -811,7 +924,13 @@ static int fault_order(const Fn *f){
  * original faults on that read, the -O3 lifted code never makes it.
  * Accepted only when the original, given readable zero pages where it
  * faulted (up to four), then ends exactly as the lifted side did: same
- * outcome, registers, x87/SSE state and memory (compare). */
+ * outcome, registers, x87/SSE state and memory (compare).  Or it raises a
+ * divide error at a div/idiv (compare looks at nothing else then): 0x492130
+ * divides its hash by [ecx+4], and with a hash of 0 (an empty string) the
+ * lift's result is 0 whatever the divisor, so clang drops that load, where
+ * the original reads a zero divisor from the zero page.  Then the original
+ * runs once more with pages of 1s there (dwords of 1: a divisor that cannot
+ * fault), and must end exactly as the lifted side did. */
 static int dead_access(const Fn *f){
     Out keep = g_uo;
     uint32_t pgs[4]; int np = 0, ok = 0;
@@ -821,8 +940,18 @@ static int dead_access(const Fn *f){
         pgs[np++] = pg;
         uc_ctl_flush_tb(g_uc);
         run_unicorn(f, 0);
-        int r = compare(f);
+        int r = compare(f, 0);
         if (r == 0 || r == 2){ ok = 1; break; }
+        if (r == 4){
+            /* the divide error gave a fresh engine (run_unicorn): the pages again, of 1s */
+            static uint32_t ones[0x400];
+            if (!ones[0]) for (int i = 0; i < 0x400; i++) ones[i] = 1;
+            int m = 1;
+            for (int i = 0; i < np && m; i++)
+                m = !uc_mem_map(g_uc, pgs[i], 0x1000, UC_PROT_READ | UC_PROT_WRITE) && !uc_mem_write(g_uc, pgs[i], ones, sizeof ones);
+            if (m){ uc_ctl_flush_tb(g_uc); run_unicorn(f, 0); r = compare(f, 0); ok = r == 0 || r == 2; }
+            break;
+        }
         if (g_uo.how != O_FAULT) break;
     }
     if (getenv("ORACLE_DEBUG")) fprintf(stderr, "dead_access: %d zero pages, %s\n", np, ok ? "then the same" : "still different");
@@ -915,7 +1044,7 @@ int main(int argc, char **argv){
     for (int fi = 0; fi < g_nfns; fi++){
         const Fn *f = &g_fns[fi];
         if (only){ char h[16]; snprintf(h, sizeof h, "%x", f->va); if (!strstr(only, h)) continue; }
-        Count c = { 0 }; int shown = 0, rerun = g_long_s > 0;
+        Count c = { 0 }; int shown = 0, rerun1 = g_long_s > 0, rerun2 = rerun1;   /* re-runs of one side, of both */
         trig_hooks(f);
         g_rs = 0x9E3779B97F4A7C15ull ^ ((uint64_t)f->va << 20);
         for (int k = 0; k < ncase; k++){
@@ -923,28 +1052,35 @@ int main(int argc, char **argv){
             if (one >= 0 && k != one) continue;
             run_unicorn(f, 0);
             run_lifted(f, g_lift_ms);
-            if (rerun && (g_uo.how == O_LOOP) != (g_lo.how == O_LOOP) && g_uo.how != O_DE){
-                const char *side = g_uo.how == O_LOOP ? "original" : "lifted";
-                if (g_uo.how == O_LOOP) run_unicorn(f, g_long_s); else run_lifted(f, g_long_s * 1000);
+            /* a side at its limit runs again with the long one, both sides when both are at theirs:
+             * a re-run after which one side still stops and the other has ended is a DIFF (compare) */
+            int ul = g_uo.how == O_LOOP, ll = g_lo.how == O_LOOP;
+            g_u_long = 0;
+            if ((ul && ll ? rerun2 : rerun1) && (ul || ll) && g_uo.how != O_DE){
+                const char *side = ul && ll ? "both" : ul ? "the original" : "the lifted";
+                if (ul){ run_unicorn(f, g_long_s); g_u_long = g_long_s; }
+                if (ll) run_lifted(f, g_long_s * 1000);
                 reruns++;
-                if (g_uo.how == O_LOOP || g_lo.how == O_LOOP) rerun = 0;
-                fprintf(stderr, "  re-run %08x case %d, the %s with %d s: lifted %s, original %s\n", f->va, k, side, g_long_s,
+                if (g_uo.how == O_LOOP || g_lo.how == O_LOOP){ if (ul && ll) rerun2 = 0; else rerun1 = 0; }
+                fprintf(stderr, "  re-run %08x case %d, %s with %d s: lifted %s, original %s\n", f->va, k, side, g_long_s,
                         ONAME[g_lo.how], ONAME[g_uo.how]);
             }
             if (g_lo.how == O_JUMP && !(g_uo.how == O_JUMP && g_uo.where == g_lo.where)) run_unicorn_to(f, g_lo.where);
-            int r = compare(f);
+            int r = compare_x(f, 0, 0);
             c.cases++;
             if (r == 1 && g_xs_hit){
                 /* again with the lift's formulas at the libm-lifted x87 instructions */
                 char why[sizeof g_why]; memcpy(why, g_why, sizeof why);
                 Out keep = g_uo; int oor = g_trig_oor;
                 g_xs_sub = 1; run_unicorn(f, 0); g_xs_sub = 0;
-                int r2 = compare(f);
+                int r2 = compare_x(f, 0, 1);
                 g_uo = keep;
                 if (r2 == 0 || r2 == 2 || r2 == 5){ c.trig++; c.trig_oor += oor; continue; }
                 memcpy(g_why, why, sizeof why);
             }
-            if (r == 1 && (f->tr & T_X87) && range_rerun(f)){ c.range++; continue; }
+            /* a value no double holds explains the x87 stack values and what was stored from them, nothing
+             * else: the rest must be the same (else g_why says what differs there) */
+            if (r == 1 && (f->tr & T_X87) && range_rerun(f) && compare_x(f, CMP_NOVALS, 0) != 1){ c.range++; continue; }
             if (r == 5){ c.fsw++; continue; }
             if (r == 4){
                 c.de++;

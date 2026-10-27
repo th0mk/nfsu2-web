@@ -8,17 +8,20 @@ A function qualifies when it and every function it calls (directly, the
 closure) are fully lifted code that needs no import, no HLE and no other
 runtime help: in the lifted C no indirect call or jump (DISPATCH_CALL,
 DISPATCH_TAIL, dispatch_indirect: that is every import call and every
-virtual call), no trap (unsupported_insn), no CPUID or RDTSC shim, no int3
-(lifted as a no-op on purpose); in the x86 no far transfer, no int/into, no
-in/out, hlt or ud2; MMX and x87 not both in one closure (the lift keeps the
-MMX registers apart from the x87 stack, cpu.h); at most CLOSURE_MAX
-functions in the closure ("near-leaf").  Memory use is bounded by the test
-itself: everything outside the image, the scratch area, the stack and the TEB
-is unmapped on both sides, so a stray access is a fault compared by address.
+virtual call; the one DISPATCH_TAIL after a JTSWITCH switch aside), no trap
+(unsupported_insn), no CPUID or RDTSC shim, no int3 (lifted as a no-op on
+purpose); in the x86 no far transfer, no int/into, no in/out, hlt or ud2, no
+segment register operand; MMX and x87 not both in one closure (the lift
+keeps the MMX registers apart from the x87 stack, cpu.h); at most
+CLOSURE_MAX functions in the closure ("near-leaf").  Memory use is bounded
+by the test itself: everything outside the image, the scratch area, the
+stack and the TEB is unmapped on both sides, so a stray access is a fault
+compared by address.
 
 From the qualifying functions a seeded random sample of n is drawn, plus
 every qualifying function that returns flags (tools/flagabi.py's list: the
-only ones whose flags a caller reads).  Each line of out.txt:
+only ones whose flags a caller reads) or has a JTSWITCH switch (lifted as a
+C switch, tools/lift.py).  Each line of out.txt:
   <va> <nfn> <args> <regs> <traits> <xsites>
   args   one letter per 4-byte stack argument the function reads, from its
          code (esp/ebp tracked through its control flow, stdcall pops, what
@@ -53,16 +56,25 @@ HEAD = re.compile(r'^/\* ===== sub_([0-9a-f]{8}) ')
 CALL = re.compile(r'\bsub_([0-9a-f]{8})\(c\)')
 DENY = ('DISPATCH_CALL', 'DISPATCH_TAIL', 'dispatch_indirect', 'unsupported_insn', 'cpuid_shim', 'rdtsc_shim',
         'guest_hook', 'cov_hit', 'WCHK', '/* int3')
-body_bad, callees = {}, {}
+# A JTSWITCH switch (tools/lift.py) is followed by one DISPATCH_TAIL line, the
+# jump through the table for an index no case took or an entry that is no
+# longer the lifted one: that line alone is allowed.  The tables are in
+# read-only .text on both sides, so the test never takes it (and would see
+# it as "left", a difference, if it did)
+JT_SWITCH, JT_TAIL = '/* jump table 0x', '/* indirect tail call */'
+body_bad, callees, has_jt = {}, {}, set()
 for f in sorted(os.listdir(GEN)):
     if not re.match(r'shard_\d+\.c$', f): continue
-    cur = None
+    cur = None; sw = 0           # 1 in a switch, 2 on the line after its closing brace
     for ln in open(os.path.join(GEN, f)):
         m = HEAD.match(ln)
         if m:
-            cur = int(m.group(1), 16); body_bad[cur] = False; callees[cur] = set(); continue
+            cur = int(m.group(1), 16); body_bad[cur] = False; callees[cur] = set(); sw = 0; continue
         if cur is None: continue
-        if not body_bad[cur] and any(k in ln for k in DENY): body_bad[cur] = True
+        tail = sw == 2 and 'DISPATCH_TAIL(c, ' in ln and ln.count('DISPATCH_TAIL') == 1 and ln.rstrip().endswith(JT_TAIL)
+        sw = 1 if JT_SWITCH in ln else 2 if sw == 1 and ln.strip() == '}' else 0 if sw == 2 else sw
+        if JT_SWITCH in ln: has_jt.add(cur)
+        if not body_bad[cur] and any(k in ln for k in DENY if not (tail and k == 'DISPATCH_TAIL')): body_bad[cur] = True
         for c in CALL.findall(ln): callees[cur].add(int(c, 16))
 for a in callees: callees[a].discard(a)
 fns = sorted(body_bad)
@@ -79,6 +91,9 @@ BAD_INSN = {'int', 'into', 'int1', 'in', 'out', 'insb', 'insd', 'outsb', 'outsd'
             'lfs', 'lgs', 'lss'}
 MMX_REGS = set(range(X86_REG_MM0, X86_REG_MM7 + 1))
 XMM_REGS = set(range(X86_REG_XMM0, X86_REG_XMM7 + 1))
+# a segment register as an operand (mov r, ds; push es; mov es, r...): the
+# lift has no selectors, Unicorn the test's GDT ones
+SEG_REGS = {X86_REG_CS, X86_REG_DS, X86_REG_ES, X86_REG_FS, X86_REG_GS, X86_REG_SS}
 
 def traits(blocks):
     t = set()
@@ -94,6 +109,7 @@ def traits(blocks):
                 if o.type == X86_OP_REG:
                     if o.reg in MMX_REGS: t.add('mmx')
                     if o.reg in XMM_REGS: t.add('sse')
+                    if o.reg in SEG_REGS: t.add('bad')
                 elif o.type == X86_OP_MEM and o.mem.segment not in (0, X86_REG_DS, X86_REG_SS, X86_REG_ES):
                     if o.mem.segment == X86_REG_FS: t.add('fs')
                     else: t.add('bad')
@@ -426,23 +442,27 @@ def x87_sites(cl):
 rng = random.Random(SEED)
 pick = list(qual)
 rng.shuffle(pick)
-# and every qualifying function that returns flags (FLAGABI's list)
+# and every qualifying function that returns flags (FLAGABI's list) or has a
+# JTSWITCH switch (the lift's jump tables, few among the random ones)
 nflag = sum(1 for q in pick[N:] if q[0] in flags_out)
-pick = sorted(pick[:N] + [q for q in pick[N:] if q[0] in flags_out])
+njt = sum(1 for q in pick[N:] if q[0] in has_jt and q[0] not in flags_out)
+pick = sorted(pick[:N] + [q for q in pick[N:] if q[0] in flags_out or q[0] in has_jt])
 tc = collections.Counter()
 with open(OUT, 'w') as f:
     f.write(f"# tests/mworacle_pick.py: {len(pick)} of {len(qual)} qualifying functions (of {len(fns)}), seed {SEED}, "
-            f"closure <= {CLOSURE_MAX}; {nflag} of them added as functions that return flags\n")
+            f"closure <= {CLOSURE_MAX}; {nflag} of them added as functions that return flags, {njt} as functions "
+            f"with a jump table\n")
     for a, n, t, cl in pick:
         args, regs = spec(a)
         tr = ''.join(ch for ch, k in (('x', 'x87'), ('w', 'fsw'), ('m', 'mmx'), ('s', 'sse'), ('F', 'fs')) if k in t)
         if 'x87' in t and x87_need(a)[0]: tr = tr.replace('x', 'x%d' % min(x87_need(a)[0], 7)); tc['xin'] += 1
         if a in flags_out: tr += 'R%x' % flags_defined(a); tc['R'] += 1
+        tc['jt'] += a in has_jt
         for k in t: tc[k] += 1
         tc['args'] += len(args); tc['p'] += args.count('p') + regs.count('p'); tc['i'] += args.count('i') + regs.count('i')
         ts = x87_sites(cl)
         tc['trig'] += bool(ts)
         f.write(f"0x{a:08x} {n} {args or '-'} {regs} {tr or '-'} {','.join(ts) or '-'}\n")
 print(f"sample: {len(pick)} (seed {SEED}): x87 {tc['x87']} ({tc['xin']} with x87 stack arguments, {tc['trig']} with libm-lifted x87 instructions or constants), MMX {tc['mmx']}, "
-      f"SSE {tc['sse']}, fs {tc['fs']}, returning flags {tc['R']}, "
+      f"SSE {tc['sse']}, fs {tc['fs']}, returning flags {tc['R']}, with a jump table {tc['jt']}, "
       f"{tc['args']} stack arguments, {tc['p']} pointer and {tc['i']} index inputs", file=sys.stderr)

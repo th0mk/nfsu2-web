@@ -116,12 +116,12 @@ elif [ -d "$D" ]; then
 fi
 
 # what this lift was made from (tools/genstamp.sh; the source lines are compared by web/build.sh);
-# a game's own lifter switches (game.conf LOCKSTRIP, X87ENV) are named only when they are on
+# a game's own lifter switches (game.conf LOCKSTRIP, X87ENV, X87ENV_DATA) are named only when they are on
 h16(){ shasum -a 256 | cut -c1-16; }
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 OPTIONS="$(echo "options X87PC=$X87PC X87OPT=${X87OPT:-} JTSWITCH=${JTSWITCH:-} LREGS=${LREGS:-} FTOL2INL=${FTOL2INL:-} FLAGABI=$( [ -z "${FLAGABI:-}" ] && echo - || { [ -f "$FLAGABI" ] && h16 < "$FLAGABI" || echo missing; } )" \
        "FLAGOPT=${FLAGOPT:-} RETEIP=${RETEIP:-} INLINE=${INLINE:-} INLINE_LIST=$( [ -z "${INLINE_LIST:-}" ] && echo - || basename "$INLINE_LIST") NOCLOSURE=${NOCLOSURE:-} COMMENTS=${COMMENTS:-}" \
-       "WATCH=${WATCH:-} COVERAGE=${COVERAGE:-} NSHARD=${NSHARD:-128}/${NSHARD_SRV:-8} HOOKS=${HOOKS:-}$( [ "$LOCKSTRIP" != 1 ] || echo " LOCKSTRIP=1")$( [ "$X87ENV" != 1 ] || echo " X87ENV=1")")"
+       "WATCH=${WATCH:-} COVERAGE=${COVERAGE:-} NSHARD=${NSHARD:-128}/${NSHARD_SRV:-8} HOOKS=${HOOKS:-}$( [ "$LOCKSTRIP" != 1 ] || echo " LOCKSTRIP=1")$( [ "$X87ENV" != 1 ] || echo " X87ENV=1")$( [ -z "$X87ENV_DATA" ] || echo " X87ENV_DATA=$X87ENV_DATA")")"
 STAMP="$(echo "# gen.sh $NOW: what $G/all and $G/server were lifted from"
   echo "$STAMP_SOURCES"
   echo "exe $(h16 < "$EXE")$( [ -f "$SRV" ] && echo " server.dll $(h16 < "$SRV")")"

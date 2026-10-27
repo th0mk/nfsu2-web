@@ -591,6 +591,25 @@ static inline double f80_load(const uint8_t *p){
     uint64_t bits = ((uint64_t)sign << 63) | ((uint64_t)(uint32_t)exp << 52) | man;
     double d; memcpy(&d, &bits, 8); return d;
 }
+/* frstor's registers (tools/lift.py X87ENV): what fnsave stored with
+ * f80_store comes back as it was.  A NaN keeps its sign and the payload a
+ * double holds, quiet bit set (f80_load: the host's NaN); a value in a
+ * double's denormal range (e80 != 0, -52 < exp <= 0) becomes that denormal,
+ * truncated as f80_load truncates (f80_load: 0); the rest is f80_load's.
+ * f80_load stays as it is for fld tbyte, in both games' lifts (MW's too:
+ * 0x7D8CC0's two tbyte operands; UG2's lift must not change) */
+static inline double f80_load_x(const uint8_t *p){
+    uint64_t m80; uint16_t se;
+    memcpy(&m80, p, 8); memcpy(&se, p + 8, 2);
+    uint64_t sign = (uint64_t)(se >> 15);
+    int32_t  e80  = (int32_t)(se & 0x7FFF);
+    int32_t  exp  = e80 - 16383 + 1023;
+    uint64_t bits;
+    if (e80 == 0x7FFF && (m80 << 1)) bits = (sign << 63) | 0x7FF8000000000000ull | ((m80 >> 11) & 0xFFFFFFFFFFFFFull);
+    else if (e80 != 0 && exp <= 0 && exp > -52) bits = (sign << 63) | (m80 >> (12 - exp));
+    else return f80_load(p);
+    double d; memcpy(&d, &bits, 8); return d;
+}
 #define WCHK(ip) watch_check(ip)
 void guest_hook(CPU *c, uint32_t ip);
 

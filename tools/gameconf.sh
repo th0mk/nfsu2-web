@@ -6,7 +6,8 @@
 #   is (web/gen.sh lets FTOL2INL and INLINE_LIST given there win over the
 #   game's).  The tools get the game's paths and addresses from the exports at
 #   the end: GEN_DIR (gen/all, gen/server), OUT_DIR (relocs, flag table, logs),
-#   FTOL2_VA, LOCKSTRIP, X87ENV and RETPAST_LIST (tools/lift.py).  A game with
+#   FTOL2_VA, LOCKSTRIP, X87ENV, X87ENV_DATA and RETPAST_LIST (tools/lift.py;
+#   X87ENV_DATA optional: addresses where X87ENV leaves the trap).  A game with
 #   a D3DX_BASE (its d3dx9 DLL lifted as the dev-only D3DX oracle) names the
 #   DLL's D3DX_SHA256 and D3DX_CODE (the code in its .text) too, which gen.sh
 #   needs when D3DX_DLL asks it to lift the DLL, and may name D3DX_OPTNONE (its
@@ -72,4 +73,7 @@ gameconf_nolink(){
   done
 }
 
-export GAME GEN_DIR="$GC_GEN_DIR" OUT_DIR="$GC_OUT_DIR" FTOL2_VA="$GC_FTOL2_VA" LOCKSTRIP="$GC_LOCKSTRIP" X87ENV="$GC_X87ENV" RETPAST_LIST="$GC_RETPAST_LIST"
+[ -z "${GC_X87ENV_DATA:-}" ] || echo "$GC_X87ENV_DATA" | grep -Eqx '0x[0-9A-Fa-f]{1,8}(,0x[0-9A-Fa-f]{1,8})*' \
+  || { echo "$GAME_CONF: X87ENV_DATA=$GC_X87ENV_DATA: not a list of addresses (0x...,0x...)"; exit 1; }
+export GAME GEN_DIR="$GC_GEN_DIR" OUT_DIR="$GC_OUT_DIR" FTOL2_VA="$GC_FTOL2_VA" LOCKSTRIP="$GC_LOCKSTRIP" X87ENV="$GC_X87ENV" \
+       X87ENV_DATA="${GC_X87ENV_DATA:-}" RETPAST_LIST="$GC_RETPAST_LIST"

@@ -532,14 +532,15 @@ _testw("test bx,bx; jle (bx=0x7FFF, ebx < 0: not taken)", 0x80007FFF, 1)
 # X87ENV=1.  The CRT's _adj_fprem (0x7D96AB) sets C3/C1/C0 through the
 # environment: fld1; mov eax,0x4100; sub esp,0x1c; fnstenv [esp]; and dword
 # [esp+4],0xbcff; or [esp+4],eax; fldenv [esp]; add esp,0x1c; fnstsw ax;
-# fstp dword [m].  ah = C3 | TOP 7 | C0; the image has CW and TW with the
-# reserved upper halves set, and FIP 0.
+# fstp dword [m].  ah = C3 | TOP 7 | C0; the image has CW with the reserved
+# upper half set, and FIP 0.  TW is not checked: the model writes it as all
+# empty (tools/lift.py), the hardware with the fld1's register valid.
 _ENV = 0x00B00000 - 4 - 0x1C   # the harness's esp after the return address and the sub
 T("fnstenv/fldenv [esp]: C3|C0 into the status word (_adj_fprem)",
   [0xD9,0xE8, 0xB8]+imm32(0x4100) + [0x83,0xEC,0x1C, 0xD9,0x34,0x24, 0x81,0x64,0x24,0x04]+imm32(0xBCFF)
   + [0x09,0x44,0x24,0x04, 0xD9,0x24,0x24, 0x83,0xC4,0x1C, 0xDF,0xE0, 0xD9,0x1D]+a32(MW_+0x20),
   {}, expect={'ah_and':(0xFF, 0x79)},
-  fmem={_ENV:0xFFFF037F, _ENV+4:0x00007900, _ENV+8:0xFFFFFFFF, _ENV+12:0}, fmemf={MW_+0x20:1.0})
+  fmem={_ENV:0xFFFF037F, _ENV+4:0x00007900, _ENV+12:0}, fmemf={MW_+0x20:1.0})
 # fnstenv stores the control word, then masks all exceptions: fldcw [m] (0x0240);
 # fnstenv [m+0x10]; fnstcw [m+0x30]
 T("fnstenv [m32]: the image, then all exceptions masked",
@@ -551,16 +552,36 @@ T("fnstenv [m32]: the image, then all exceptions masked",
 # fnstcw [s+0x70]; fld1; fstp st(0); frstor [s]; fnstcw [s+0x74]; fstp dword [d];
 # fstp dword [d+4].  fnsave leaves CW 0x037F and an empty stack; frstor brings
 # back CW, TOP 6 and both values.  The image holds ST(0) = 3.0 and ST(1) = 2.0
-# as 80-bit values after the 28-byte environment.
+# as 80-bit values after the 28-byte environment.  TW is not checked (the
+# model's all empty, the hardware's two valid registers), as above.
 _S = MW_ + 0x100
 T("fnsave/frstor (x87 pow's special-value path)",
   [0xD9,0x05]+a32(MW_+0x80) + [0xD9,0x05]+a32(MW_+0x84) + [0xD9,0x2D]+a32(MW_+0x88) + [0xDD,0x35]+a32(_S)
   + [0xD9,0x3D]+a32(_S+0x70) + [0xD9,0xE8, 0xDD,0xD8] + [0xDD,0x25]+a32(_S) + [0xD9,0x3D]+a32(_S+0x74)
   + [0xD9,0x1D]+a32(MW_+0x90) + [0xD9,0x1D]+a32(MW_+0x94),
   {}, mem={MW_+0x88:0x007F, _S+0x70:0, _S+0x74:0}, memf={MW_+0x80:2.0, MW_+0x84:3.0},
-  fmem={_S:0xFFFF007F, _S+4:0xFFFF3000, _S+8:0xFFFFFFFF, _S+0x1C:0, _S+0x20:0xC0000000, _S+0x24:0x00004000,
+  fmem={_S:0xFFFF007F, _S+4:0xFFFF3000, _S+0x1C:0, _S+0x20:0xC0000000, _S+0x24:0x00004000,
         _S+0x28:0, _S+0x2C:0x40008000, _S+0x70:0x037F, _S+0x74:0x007F},
   fmemf={MW_+0x90:3.0, MW_+0x94:2.0})
+# frstor gives back what fnsave stored (cpu.h f80_load_x): a NaN with its sign
+# and payload, a double's denormal (f80_load made them the host's NaN and 0).
+# fld qword [a] (0x000000000000ABCD); fld qword [b] (0xFFF8123456789ABC);
+# fnsave [s]; frstor [s]; fstp qword [d]; fstp qword [d+8]
+_S2 = MW_ + 0x300
+T("fnsave/frstor: a NaN's payload and a denormal come back",
+  [0xDD,0x05]+a32(MW_+0x200) + [0xDD,0x05]+a32(MW_+0x208) + [0xDD,0x35]+a32(_S2) + [0xDD,0x25]+a32(_S2)
+  + [0xDD,0x1D]+a32(MW_+0x210) + [0xDD,0x1D]+a32(MW_+0x218),
+  {}, mem={MW_+0x200:0x0000ABCD, MW_+0x204:0, MW_+0x208:0x56789ABC, MW_+0x20C:0xFFF81234},
+  fmem={MW_+0x210:0x56789ABC, MW_+0x214:0xFFF81234, MW_+0x218:0x0000ABCD, MW_+0x21C:0})
+# the same for the smallest denormal (f80_load_x's lowest exponent) and a
+# negative one (its sign): fld qword [a] (0x0000000000000001); fld qword [b]
+# (0x800000000000ABCD); fnsave [s]; frstor [s]; fstp qword [d]; fstp qword [d+8]
+_S3 = MW_ + 0x380
+T("fnsave/frstor: the smallest denormal and a negative one come back",
+  [0xDD,0x05]+a32(MW_+0x220) + [0xDD,0x05]+a32(MW_+0x228) + [0xDD,0x35]+a32(_S3) + [0xDD,0x25]+a32(_S3)
+  + [0xDD,0x1D]+a32(MW_+0x230) + [0xDD,0x1D]+a32(MW_+0x238),
+  {}, mem={MW_+0x220:1, MW_+0x224:0, MW_+0x228:0x0000ABCD, MW_+0x22C:0x80000000},
+  fmem={MW_+0x230:0x0000ABCD, MW_+0x234:0x80000000, MW_+0x238:1, MW_+0x23C:0})
 
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the

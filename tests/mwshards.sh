@@ -9,14 +9,20 @@
 #
 # The lift is the web's (FLAGABI, X87OPT, JTSWITCH, LREGS, FTOL2INL: see
 # gen/mw/all/web-lift.txt), compiled with clang for arm64 instead of wasm32:
-# the same C, cpu.h's native guest accesses (g_mem).
+# the same C, cpu.h's native guest accesses (g_mem).  Those are plain types,
+# the browser's may_alias ones (L-042), so -fno-strict-aliasing, which every
+# OPT here gets.  With strict aliasing clang moved a load past a store of
+# another type to the same guest bytes: 0x7D9D20 patches a double's
+# exponent with a 16-bit store and loads the double again, and got the old
+# value back (tests/mworacle.sh; 0x68D6A0 and 0x82741D differed too, and are
+# the same without it), which the browser's build cannot do.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 G=gen/mw/all
 [ -f "$G/fntab.c" ] || { echo "no $G: run GAME=mw web/gen.sh <speed.exe>"; exit 1; }
 [ -f "$G/gameinfo.h" ] || { echo "$G has no gameinfo.h: lift it again with GAME=mw web/gen.sh"; exit 1; }
 OD="$ROOT/out/obj/mw"; mkdir -p "$OD"
-OPT="${OPT:--O3 -mcpu=apple-m1}"
+OPT="${OPT:--O3 -mcpu=apple-m1} -fno-strict-aliasing"
 J="${J:-$(sysctl -n hw.ncpu)}"
 export OPT ROOT OD FULL HDRSUM="$(cat runtime/cpu.h "$G/gameinfo.h" | shasum | cut -c1-16)"
 # a shard whose .c, decls.h, cpu.h, gameinfo.h and flags are unchanged is skipped

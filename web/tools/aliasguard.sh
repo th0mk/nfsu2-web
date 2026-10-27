@@ -18,10 +18,10 @@
 #                                         lift's include folder and define, as web/build.sh
 # --lift: lifted code reaches guest memory through those macros, and through
 # the guest base itself (g_mem, g_guest, GMEM_) only as an argument of a byte
-# copy (memcpy, memmove, memset; cpu.h's f80_load/f80_store, which copy with
-# memcpy).  Any other use of the base in the game's lifted folders (gen/all,
-# gen/server for UG2; gen/mw/all, gen/mw/server, gen/mw/d3dx for MW) would be
-# a typed access these types do not cover.
+# copy (memcpy, memmove, memset; cpu.h's f80_load, f80_load_x and f80_store,
+# which copy with memcpy).  Any other use of the base in the game's lifted
+# folders (gen/all, gen/server for UG2; gen/mw/all, gen/mw/server, gen/mw/d3dx
+# for MW) would be a typed access these types do not cover.
 # Run by web/build.sh before it compiles anything, and by web/test/alias.test.mjs.
 set -e -o pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
@@ -73,8 +73,8 @@ for d in ${LIFT_DIR:-"$GC_GEN_DIR"/all "$GC_GEN_DIR"/server "$GC_GEN_DIR"/d3dx};
   # each use of the base: the call whose arguments it is in (none: a typed access or a pointer kept)
   r=$(perl -ne 'while (/\b(g_mem|g_guest|GMEM_)\b/g) {
         my $pre = substr($_, 0, $-[0]);
-        if ($pre =~ /\b(memcpy|memmove|memset|f80_load|f80_store)\((?:[^;()]|\((?:[^;()]|\([^;()]*\))*\))*$/) { $ok++ }
-        else { $bad++; print "aliasguard: $ARGV:$.: guest base outside a byte copy: ", substr($_, 0, 160) =~ s/^\s+//r if $bad <= 5 } }
+        if ($pre =~ /\b(memcpy|memmove|memset|f80_load|f80_load_x|f80_store)\((?:[^;()]|\((?:[^;()]|\([^;()]*\))*\))*$/) { $ok++ }
+        else { $bad++; print "aliasguard: $ARGV:$.: guest base outside a byte copy: ", substr($_, 0, 160) =~ s/^\s+//r =~ s/\s*\z/\n/r if $bad <= 5 } }
         close ARGV if eof;
         END { print "#", $ok + 0, " ", $bad + 0, "\n" }' "$d"/*.c)
   ok=$(sed -n 's/^#\([0-9]*\) .*/\1/p' <<< "$r"); nb=$(sed -n 's/^#[0-9]* \([0-9]*\)$/\1/p' <<< "$r")

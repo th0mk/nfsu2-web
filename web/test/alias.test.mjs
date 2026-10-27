@@ -53,18 +53,21 @@ test('aliasguard --lift: the lifted C reaches guest memory through the macros an
   console.log(r.stdout.trim());
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, new RegExp(`${conf.GEN_DIR}/all: \\d+ files, \\d+ uses of the guest base, all in byte copies`));
-  // a lifted function with a typed access of its own, and one keeping the base in a pointer: refused
+  // a lifted function with a typed access of its own, one keeping the base in a pointer, and one on a line longer
+  // than the report shows (as lifted lines are; its report still ends its line): refused
   const dir = fs.mkdtempSync(path.join(REPO, 'out/web/aliasguard-'));
   try {
     fs.writeFileSync(path.join(dir, 'shard_0000.c'), '#include "cpu.h"\n' +
       'void sub_00401000(CPU *c){ memcpy(&c->xmm[0], g_mem + (uint32_t)(c->eax), 16); }\n' +
       'void sub_00401010(CPU *c){ *(float *)(g_mem + (uint32_t)(c->eax)) = 1.0f; }\n' +
-      'void sub_00401020(CPU *c){ uint8_t *p = g_mem + c->eax; memcpy(p, &c->ebx, 4); }\n');
+      'void sub_00401020(CPU *c){ uint8_t *p = g_mem + c->eax; memcpy(p, &c->ebx, 4); }\n' +
+      `void sub_00401030(CPU *c){ ${'c->ecx += 1; '.repeat(14)}*(uint32_t *)(g_mem + (uint32_t)(c->eax)) = c->ecx; }\n`);
     const bad = sh('web/tools/aliasguard.sh', { LIFT_DIR: dir }, ['--lift']);
     console.log(bad.stdout.trim().split('\n').slice(-3).join('\n'));
     assert.notEqual(bad.status, 0, 'the guard fails on a typed access outside the macros');
     assert.match(bad.stdout, /shard_0000\.c:3: guest base outside a byte copy/);
     assert.match(bad.stdout, /shard_0000\.c:4: guest base outside a byte copy/);
-    assert.match(bad.stdout, /2 uses of the guest base outside a byte copy/);
+    assert.match(bad.stdout, /^aliasguard: \S+shard_0000\.c:5: guest base outside a byte copy: void sub_00401030[^\n#]{100,}$/m);
+    assert.match(bad.stdout, /: 3 uses of the guest base outside a byte copy/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
