@@ -294,6 +294,21 @@ int main(int argc, char **argv){
     CHECK(again == g_bases[0] && g_heap[0] == module_link(1)->heap_base, "%s loaded again, heap 0x%08x", g_names[0], g_heap[0]);
     module_free(&cpu, again);
 
+    /* the pin: the same file with its middle byte changed is not mapped (ERROR_BAD_EXE_FORMAT) and its
+     * DllMain does not run */
+    {
+        char path[512]; snprintf(path, sizeof path, "%s/%s", g_dir, g_names[0]);
+        FILE *f = fopen(path, "r+b"); uint8_t b = 0;
+        if (!f || fseek(f, IMG_SIZE / 2, SEEK_SET) || fread(&b, 1, 1, f) != 1){ printf("FAIL cannot read %s\n", path); exit(2); }
+        b ^= 1;
+        if (fseek(f, IMG_SIZE / 2, SEEK_SET) || fwrite(&b, 1, 1, f) != 1){ printf("FAIL cannot write %s\n", path); exit(2); }
+        fclose(f);
+        uint32_t attach = g_main_calls[0][1]; err = 99;
+        uint32_t bad = module_load(&cpu, g_names[0], &err);
+        CHECK(bad == 0 && err == 193u && g_main_calls[0][1] == attach && module_by_name(g_names[0]) == 0,
+              "%s with one byte changed: LoadLibrary -> 0x%08x err %u, not mapped", g_names[0], bad, err);
+    }
+
     module_report(); modheap_report();
     fflush(stderr);
     printf("module_unit: %d passed, %d failed\n", pass, fail);

@@ -32,8 +32,9 @@ G="$GC_GEN_DIR"; WASM_NAME="${GC_WASM_NAME:?$GAME_CONF: no WASM_NAME=}"
 if [ "$GAME" = ug2 ]; then GENRUN="web/gen.sh"; OUT="$ROOT/out/web"; else GENRUN="GAME=$GAME web/gen.sh"; OUT="$ROOT/out/web/$GAME"; fi
 # its lifted DLLs, each from its own gen folder into its own object folder:
 # server.dll (gen.sh lifts it, or writes a stub module), and the D3DX oracle
-# when the game has one and it was lifted (gen/<game>/d3dx, whose stamp
-# web/tools/gencheck.sh checks; D3DX_ORACLE=0 leaves it out)
+# when the game has one and it was lifted (gen/<game>/d3dx: D3DX_DLL=<the
+# DLL> GAME=<id> web/gen.sh; web/tools/gencheck.sh checks its stamp;
+# D3DX_ORACLE=0 leaves it out)
 MODS="server:srv"; LINK_ORACLE=""
 if [ -n "$GC_D3DX_BASE" ] && [ -f "$G/d3dx/fntab.c" ] && [ "${D3DX_ORACLE:-1}" != 0 ]; then MODS="$MODS d3dx:d3dx"; LINK_ORACLE=1; fi
 # guest memory accesses must keep their may_alias types (cpu.h)

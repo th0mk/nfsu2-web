@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Prepare a game DLL for lifting as a second guest module (server.dll).
+"""Prepare a DLL for lifting as a second guest module (server.dll, MW's D3DX oracle).
 
-  prepare_module.py <game.dll> <base> <outdir> <genout> <prefix>
+  prepare_module.py <game.dll> <base> <outdir> <genout> <prefix> [<sha256>]
 
 Lifted code bakes absolute addresses into the generated C, so the DLL is
 lifted as if it were loaded at the fixed guest base the runtime maps it at
 (server.dll: 0x00A00000; its preferred base 0x10000000 is the guest heap).
 The runtime maps the ORIGINAL file at that base and applies the file's own
 base relocations, which gives the same bytes as the analysis copy written
-here.  Outputs (all derived from the game binary, never committed):
+here.  <sha256> pins the file (games/<id>/game.conf): any other file is
+refused before anything is written.  CODE_RVA=<lo>-<hi> (tools/lift.py)
+narrows the module's .text to its code: the seeds and the ModInfo's .text
+are that range.  Outputs (all derived from the game binary, never committed):
 
   <outdir>/image.dll    the analysis copy, relocated to <base>
   <outdir>/relocs.txt   VAs of every HIGHLOW fixup slot (genall.py RELOCS)
@@ -22,9 +25,11 @@ import hashlib, os, sys
 import pefile
 
 
-def main(src, base, outdir, genout, prefix):
+def main(src, base, outdir, genout, prefix, pin=None):
     raw = open(src, 'rb').read()
     sha = hashlib.sha256(raw).hexdigest()
+    if pin and sha != pin.lower():
+        sys.exit(f"{src}: not the file the lift is pinned to (SHA-256 {sha}, wants {pin.lower()}): nothing written")
     pe = pefile.PE(data=raw)
     pref = pe.OPTIONAL_HEADER.ImageBase
     size = pe.OPTIONAL_HEADER.SizeOfImage
@@ -36,6 +41,14 @@ def main(src, base, outdir, genout, prefix):
     if kinds - {0, 3}:
         sys.exit(f"{src}: relocation types {sorted(kinds - {0, 3})} are not supported (only HIGHLOW)")
     slots = sorted(base + e.rva for b in pe.DIRECTORY_ENTRY_BASERELOC for e in b.entries if e.type == 3)
+    text = next(s for s in pe.sections if s.Name.rstrip(b'\0') == b'.text')
+    tlo = base + text.VirtualAddress
+    thi = tlo + text.Misc_VirtualSize
+    if os.environ.get('CODE_RVA'):
+        lo, hi = (base + int(x, 16) for x in os.environ['CODE_RVA'].split('-'))
+        if not tlo <= lo < hi <= thi:
+            sys.exit(f"CODE_RVA={os.environ['CODE_RVA']}: not a range inside .text (RVA {tlo - base:#x}-{thi - base:#x})")
+        tlo, thi = lo, hi
     pe.relocate_image(base)
     pe.OPTIONAL_HEADER.ImageBase = base
     os.makedirs(outdir, exist_ok=True)
@@ -43,9 +56,6 @@ def main(src, base, outdir, genout, prefix):
     pe.write(img)
 
     pe = pefile.PE(img)
-    text = next(s for s in pe.sections if s.Name.rstrip(b'\0') == b'.text')
-    tlo = base + text.VirtualAddress
-    thi = tlo + text.Misc_VirtualSize
     entry = base + pe.OPTIONAL_HEADER.AddressOfEntryPoint
     seeds = [entry]
     exports = []
@@ -73,11 +83,12 @@ def main(src, base, outdir, genout, prefix):
         f.write(f'  0x{tlo:08x}u, 0x{thi - tlo:08x}u, {len(raw)}u,\n')
         f.write('};\n')
     print(f"prepare_module: {src}: {len(raw)} bytes, sha256 {sha[:16]}..., base {pref:#x} -> {base:#x}, "
-          f"size {size:#x}, .text {tlo:#x}-{thi:#x}, {len(slots)} fixups, exports "
-          + ", ".join(f"{n or '#%d' % o}@{va:#x}" for n, o, va in exports))
+          f"size {size:#x}, .text {tlo:#x}-{thi:#x}, {len(slots)} fixups, "
+          + (f"{len(exports)} exports" if len(exports) > 8 else
+             "exports " + ", ".join(f"{n or '#%d' % o}@{va:#x}" for n, o, va in exports)))
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 7):
         sys.exit(__doc__)
-    main(sys.argv[1], int(sys.argv[2], 0), sys.argv[3], sys.argv[4], sys.argv[5])
+    main(sys.argv[1], int(sys.argv[2], 0), sys.argv[3], sys.argv[4], sys.argv[5], *sys.argv[6:])

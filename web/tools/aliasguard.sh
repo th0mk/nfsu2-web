@@ -12,9 +12,24 @@
 #
 #   web/tools/aliasguard.sh               exit 0 = every macro keeps its type
 #   CPU_H=<dir> web/tools/aliasguard.sh   check <dir>/cpu.h instead (the guard's own test)
+#   web/tools/aliasguard.sh --lift        and the game's lifted C (below)
+#   LIFT_DIR=<dir> ... --lift             check the lifted C in <dir> instead (the guard's own test)
+#   GAME=mw web/tools/aliasguard.sh ...   another game (games/<id>/game.conf): its
+#                                         lift's include folder and define, as web/build.sh
+# --lift: lifted code reaches guest memory through those macros, and through
+# the guest base itself (g_mem, g_guest, GMEM_) only as an argument of a byte
+# copy (memcpy, memmove, memset; cpu.h's f80_load/f80_store, which copy with
+# memcpy).  Any other use of the base in the game's lifted folders (gen/all,
+# gen/server for UG2; gen/mw/all, gen/mw/server, gen/mw/d3dx for MW) would be
+# a typed access these types do not cover.
 # Run by web/build.sh before it compiles anything, and by web/test/alias.test.mjs.
 set -e -o pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
+LIFT=""; [ "${1:-}" != --lift ] || LIFT=1
+# the game's lift folder and define (web/build.sh's -I$G/all and -DNFSU2_GAME_<ID>)
+. tools/gameconf.sh
+GINC=""; [ ! -d "$GC_GEN_DIR/all" ] || GINC="-I$GC_GEN_DIR/all"
+[ "$GAME" = ug2 ] || GINC="$GINC -DNFSU2_GAME_$(echo "$GAME" | tr a-z A-Z)"
 WASI="${WASI:-$(ls -d "$ROOT"/deps/wasi-sdk-*-arm64-macos "$ROOT"/deps/wasi-sdk-*-x86_64-linux 2>/dev/null | tail -1 || true)}"
 [ -x "$WASI/bin/clang" ] || { echo "aliasguard: wasi-sdk not found in deps/ (set WASI=...)"; exit 1; }
 INC="${CPU_H:-runtime}"
@@ -27,7 +42,7 @@ for mc in "" "-DNFSU2_MEMCHECK" "-DNFSU2_GUEST_OBJ"; do
   # the wasm build's preprocessor (web/build.sh's target and forced include)
   OUT=$( { echo '#include "cpu.h"'; for m in $NAMES; do echo "@@ $m = $m(0x1000)"; done; } |
          "$WASI/bin/clang" --target=wasm32-wasip1-threads -pthread $mc -E -P -x c \
-           -include runtime/web/compat/wasm_plat.h -Iruntime/web/compat -I"$INC" -Iruntime - )
+           -include runtime/web/compat/wasm_plat.h -Iruntime/web/compat -I"$INC" -Iruntime $GINC - )
   for t in u16 u32 u64 f32 f64; do
     case $t in u*) base="uint${t#u}_t" ;; f32) base=float ;; f64) base=double ;; esac
     if ! grep -qE "typedef[[:space:]]+$base[[:space:]]+__attribute__\(\(may_alias\)\)[[:space:]]+gm_$t;" <<< "$OUT"; then
@@ -49,4 +64,24 @@ for mc in "" "-DNFSU2_MEMCHECK" "-DNFSU2_GUEST_OBJ"; do
   done
 done
 [ $bad -eq 0 ] || { echo "aliasguard: FAILED (runtime/cpu.h's wasm guest accesses must keep their may_alias types)"; exit 1; }
-echo "aliasguard: $n guest access expansions keep their may_alias types"
+echo "aliasguard: $n guest access expansions keep their may_alias types${GAME:+ ($GAME)}"
+[ -n "$LIFT" ] || exit 0
+nf=0
+for d in ${LIFT_DIR:-"$GC_GEN_DIR"/all "$GC_GEN_DIR"/server "$GC_GEN_DIR"/d3dx}; do
+  [ -d "$d" ] || continue
+  ls "$d"/*.c > /dev/null 2>&1 || { echo "aliasguard: $d has no lifted C"; exit 1; }
+  # each use of the base: the call whose arguments it is in (none: a typed access or a pointer kept)
+  r=$(perl -ne 'while (/\b(g_mem|g_guest|GMEM_)\b/g) {
+        my $pre = substr($_, 0, $-[0]);
+        if ($pre =~ /\b(memcpy|memmove|memset|f80_load|f80_store)\((?:[^;()]|\((?:[^;()]|\([^;()]*\))*\))*$/) { $ok++ }
+        else { $bad++; print "aliasguard: $ARGV:$.: guest base outside a byte copy: ", substr($_, 0, 160) =~ s/^\s+//r if $bad <= 5 } }
+        close ARGV if eof;
+        END { print "#", $ok + 0, " ", $bad + 0, "\n" }' "$d"/*.c)
+  ok=$(sed -n 's/^#\([0-9]*\) .*/\1/p' <<< "$r"); nb=$(sed -n 's/^#[0-9]* \([0-9]*\)$/\1/p' <<< "$r")
+  grep -v '^#' <<< "$r" || true
+  if [ "$nb" = 0 ]; then echo "aliasguard: $d: $(ls "$d"/*.c | wc -l | tr -d ' ') files, $ok uses of the guest base, all in byte copies"
+  else echo "aliasguard: $d: $nb uses of the guest base outside a byte copy"; bad=1; fi
+  nf=$((nf + 1))
+done
+[ $nf -gt 0 ] || { echo "aliasguard: --lift: no lifted folder under $GC_GEN_DIR (run ${GAME:+GAME=$GAME }web/gen.sh)"; exit 1; }
+[ $bad -eq 0 ] || { echo "aliasguard: FAILED (a lifted access that bypasses runtime/cpu.h's guest access macros)"; exit 1; }

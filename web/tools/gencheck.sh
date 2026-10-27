@@ -88,10 +88,10 @@ cmp -s "$S" "$G/server/stamp.txt" || {
 if [ -n "${GC_D3DX_BASE:-}" ] && [ -f "$G/d3dx/fntab.c" ] && [ "${D3DX_ORACLE:-1}" != 0 ]; then
   D="$G/d3dx/stamp.txt"
   if [ ! -f "$D" ] || grep -q '^incomplete' "$D"; then
-    echo "$G/d3dx (the D3DX oracle, linked unless D3DX_ORACLE=0) has no stamp of a finished lift: lift it again with this checkout's tools"; exit 1; fi
+    echo "$G/d3dx (the D3DX oracle, linked unless D3DX_ORACLE=0) has no stamp of a finished lift: D3DX_DLL=<d3dx9_26.dll> $LIFT <$X> lifts it again"; exit 1; fi
   if [ "$(grep -E '^(game|overrides|hooks|lifter) ' "$D" || true)" != "$(tools/genstamp.sh sources | grep -E '^(game|overrides|hooks|lifter) ')" ]; then
     echo "$G/d3dx (the D3DX oracle) is stale: its stamp names another game, override list, hook list or lifter than this checkout's (tools/genstamp.sh sources)"
     if [ "${GEN_STALE_OK:-}" = 1 ]; then echo "  GEN_STALE_OK=1: building anyway"
-    else echo "  lift it again with this checkout's tools (GEN_STALE_OK=1 builds anyway, D3DX_ORACLE=0 builds without it)"; exit 1; fi
+    else echo "  D3DX_DLL=<d3dx9_26.dll> $LIFT <$X> lifts it again (GEN_STALE_OK=1 builds anyway, D3DX_ORACLE=0 builds without it)"; exit 1; fi
   fi
 fi

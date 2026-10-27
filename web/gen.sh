@@ -26,6 +26,9 @@
 #                                        the exe, the folders (GEN_DIR/all, GEN_DIR/server, OUT_DIR)
 #                                        and the defaults of FTOL2INL and INLINE_LIST; a list that
 #                                        names no function inlines nothing and is left off
+#   D3DX_DLL=<d3dx9_26.dll> GAME=mw web/gen.sh <speed.exe>
+#                                        also lifts the D3DX oracle into GEN_DIR/d3dx (gen.sh), for
+#                                        dev builds only
 # gen.sh stamps the result (gen/all/stamp.txt, tools/genstamp.sh), which
 # web/build.sh checks against the checkout.  In a worktree gen/all and
 # gen/server are links to the main clone's, which every other worktree builds
@@ -40,10 +43,13 @@ G="$GEN_DIR"; O="$OUT_DIR"
 EXE="${1:-${NFSU2_DATA:+$NFSU2_DATA/$GC_EXE_NAME}}"
 [ -f "$EXE" ] || { echo "usage: web/gen.sh path/to/$GC_EXE_NAME"; exit 1; }
 gameconf_nolink web/gen.sh
-# before anything is written: a refused exe, or a core file holding a game's
+# before anything is written: a refused exe or D3DX_DLL, or a core file holding a game's
 # override or hook marker (tools/genstamp.sh refuses it), leaves the last lift as it was
 gameconf_files "$EXE"
+gameconf_d3dx
 tools/genstamp.sh check
+# a narrowed .text (tools/lift.py CODE_RVA) is gen.sh's D3DX lift's alone, never the exe's flag table's
+unset CODE_RVA
 PY="$ROOT/.venv/bin/python"
 mkdir -p "$O" "$G/all"
 # never label a new lift with an old run's options, never reuse an old flag table

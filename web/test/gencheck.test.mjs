@@ -7,8 +7,8 @@
 // lifter hash covers its game.conf, gencheck refuses another game's gen, an
 // exe line that is not game.conf's and a D3DX oracle gen without a stamp of
 // this checkout, and gen.sh and web/gen.sh refuse a link to the shared gen.
-// The pipeline's switches (GAME, GEN, GEN_STALE_OK, GEN_SHARED, D3DX_ORACLE)
-// in the runner's environment are left out of every run.
+// The pipeline's switches (GAME, GEN, GEN_STALE_OK, GEN_SHARED, D3DX_ORACLE,
+// D3DX_DLL) in the runner's environment are left out of every run.
 //   node --test web/test/gencheck.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +23,7 @@ const OUT = path.join(REPO, 'out/web/test'); fs.mkdirSync(OUT, { recursive: true
 /** the environment without the pipeline's switches (no GAME: UG2, the default), plus extra */
 const envWith = (extra = {}) => {
   const e = { ...process.env };
-  for (const k of ['GAME', 'GEN', 'GEN_STALE_OK', 'GEN_SHARED', 'D3DX_ORACLE']) delete e[k];
+  for (const k of ['GAME', 'GEN', 'GEN_STALE_OK', 'GEN_SHARED', 'D3DX_ORACLE', 'D3DX_DLL']) delete e[k];
   return { ...e, ...extra };
 };
 const stamp = (args, extra) => execFileSync('bash', [path.join(REPO, 'tools/genstamp.sh'), ...args], { encoding: 'utf8', env: envWith(extra) }).trim();
@@ -177,7 +177,7 @@ test('gen.sh and web/gen.sh refuse to lift through a worktree\'s link to the sha
   refused('gen/mw', MW, 'GAME=mw ');
 });
 
-test('gen.sh and web/gen.sh refuse an exe that is not the game\'s (game.conf SHA-256) before writing anything', () => {
+test('gen.sh and web/gen.sh refuse an exe or a D3DX_DLL that is not the game\'s (game.conf SHA-256) before writing anything', () => {
   const t = path.join(OUT, 'gencheck-exehash');
   fs.rmSync(t, { recursive: true, force: true });
   fs.mkdirSync(path.join(t, 'web'), { recursive: true }); fs.mkdirSync(path.join(t, 'gen/all'), { recursive: true }); fs.mkdirSync(path.join(t, 'out'));
@@ -200,6 +200,15 @@ test('gen.sh and web/gen.sh refuse an exe that is not the game\'s (game.conf SHA
   assert.ok(!fs.existsSync(path.join(t, 'gen/mw')) && !fs.existsSync(path.join(t, 'out/mw')), 'no game folders made');
   const r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith({ GAME: 'nosuch' }) });
   assert.equal(r.status, 1); assert.match(r.stdout, /GAME=nosuch: no games\/nosuch\/game\.conf/);
+  // the D3DX oracle's DLL (D3DX_DLL, which both scripts check right after the exe): only the file game.conf's
+  // D3DX_SHA256 names, and only for a game with a D3DX_BASE
+  fs.writeFileSync(path.join(t, 'd3dx9_26.dll'), 'd3dx9_26.dll with one byte changed');
+  for (const [env, what] of [[{ GAME: 'mw' }, /d3dx9_26\.dll: not mw's D3DX DLL \(SHA-256 [0-9a-f]{64}; games\/mw\/game\.conf wants 8ea96fe0/],
+                             [{}, /D3DX_DLL: ug2 has no D3DX oracle \(games\/ug2\/game\.conf has no D3DX_BASE\)/]]) {
+    const d = spawnSync('bash', ['-c', '. tools/gameconf.sh; gameconf_d3dx; echo passed'],
+      { cwd: t, encoding: 'utf8', env: envWith({ ...env, D3DX_DLL: path.join(t, 'd3dx9_26.dll') }) });
+    assert.equal(d.status, 1, d.stdout); assert.match(d.stdout, what);
+  }
 });
 
 /** a copy t of genstamp and gencheck with both games, empty lifter files and the given runtime files */
@@ -323,6 +332,14 @@ test('gencheck: another game\'s gen is refused (GEN_STALE_OK or not), and so are
   assert.equal(r.status, 0, r.stdout);
   r = check(gen('mw-exeline', { all: MW_STAMP.replace(exeLine('mw'), exeLine('ug2')), decls: mwOrig, info: true }), MW);
   assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /was not lifted from mw's files/);
+  // MW's gen/mw/server: lifted from another server.dll (GEN_STALE_OK or not), or from another gen.sh run
+  const mwExe = exeLine('mw').split(' ')[1];
+  for (const env of [MW, { ...MW, GEN_STALE_OK: '1' }]) {
+    r = check(gen('mw-srv', { all: MW_STAMP.replace(exeLine('mw'), `exe ${mwExe} server.dll 0123456789abcdef`), decls: mwOrig, info: true }), env);
+    assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /was not lifted from mw's files/); assert.match(r.stdout, /server\.dll c4fdd0e9e779be7f/);
+  }
+  r = check(gen('mw-server', { all: MW_STAMP, server: MW_STAMP.replace('2026-10-25T00:00:00Z', '2026-10-24T00:00:00Z'), decls: mwOrig, info: true }), MW);
+  assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /mw-server\/server is not from the gen\.sh run/);
   // MW's: no stamp, a stale lifter
   r = check(gen('mw-nostamp', { all: null, server: null, decls: mwOrig, info: true }), MW);
   assert.equal(r.status, 1, r.stdout); assert.match(r.stdout, /has no stamp, so no finished gen\.sh lift: run GAME=mw web\/gen\.sh <path to speed\.exe>/);

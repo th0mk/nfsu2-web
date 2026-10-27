@@ -128,6 +128,13 @@ if os.environ.get('INLINE_LIST'):
     INLINE_LIST = {int(x, 16) for ln in open(os.environ['INLINE_LIST']) for x in ln.split('#')[0].replace(',', ' ').split()}
 _INL_LIST_DENY = ('DISPATCH_TAIL', 'unsupported_insn', 'cpuid_shim', 'guest_hook', 'rdtsc_shim', 'cov_hit')
 OVERRIDES = {int(x,16) for x in os.environ.get('OVERRIDE','').replace('0x','').split(',') if x.strip()}
+# OPTNONE=<hex addresses> (gen.sh, a module's game.conf list such as
+# D3DX_OPTNONE): these functions are compiled without optimisation
+# (optnone, never inlined).  MW's D3DX oracle has one of 2,568 blocks that
+# clang had not compiled after 10 minutes at -O3; unoptimised, its whole shard
+# takes 11 s.  An address that is not a function of the lift is refused.
+# Empty: every function as before.
+OPTNONE = {int(x,16) for x in os.environ.get('OPTNONE','').replace('0x','').split(',') if x.strip()}
 LREGS = os.environ.get('LREGS', '') == '1'      # lift.py runs tools/lregs.py on every function
 
 def _init(inl=None):
@@ -141,7 +148,7 @@ def _init(inl=None):
 
 def _inlprobe(a):
     """leaf + small + not an override -> (address, code) or (address, None)"""
-    if a in OVERRIDES: return a, None
+    if a in OVERRIDES or a in OPTNONE: return a, None
     _L.traps = 0
     try:
         code, tg = _L.lift(a)
@@ -171,6 +178,9 @@ def _shard(args):
         if a in OVERRIDES:
             code = code.replace(f"void sub_{a:08x}(CPU *restrict c) {{",
                                 f"void sub_{a:08x}_orig(CPU *restrict c) {{")
+        if a in OPTNONE:
+            code = code.replace(f"void sub_{a:08x}(CPU *restrict c) {{",
+                                f"__attribute__((optnone, noinline)) void sub_{a:08x}(CPU *restrict c) {{")
         if _INL:
             hdr, body = code.split('{', 1)
             body = _INL_CALL.sub(lambda m: (used.add(int(m.group(1), 16)) or f"inl_{m.group(1)}(c)")
@@ -206,6 +216,7 @@ if __name__=='__main__':
     chunks=[(i, funcs[i::NSHARD]) for i in range(NSHARD)]
     hk=os.environ.get('HOOKS',''); wt=os.environ.get('WATCH','')
     if OVERRIDES: print(f"  [override: {[hex(a) for a in sorted(OVERRIDES)]}]")
+    if OPTNONE: print(f"  [optnone: {[hex(a) for a in sorted(OPTNONE)]}]")
     print(f"\nPhase 2: generating {NSHARD} shards on {mp.cpu_count()} cores..."
           + (f"  [hooks: {hk}]" if hk else "")
           + ("  [COVERAGE measurement]" if os.environ.get('COVERAGE','')=='1' else "") + ("  [WATCHPOINT instrumentation]" if wt=='1' else ""))
@@ -246,6 +257,9 @@ if __name__=='__main__':
             print(f"  [closure] shard_{idx:04d}.c: {len(d)} missed functions lifted: "
                   + " ".join(f"{a:x}" for a in d[:12]))
             missing = sorted((refs | jt_need()) - defined)
+    # an OPTNONE address that names no lifted function marks nothing: a stale list
+    if OPTNONE - defined:
+        sys.exit("OPTNONE: " + ", ".join(f"{a:#x}" for a in sorted(OPTNONE - defined)) + ": not a function of this lift")
     if missing:
         with open(f"{OUT}/stubs.c",'w') as f:
             f.write('#include "cpu.h"\n#include "decls.h"\n\n')

@@ -4,7 +4,7 @@
 // runtime/memmap.c's layout check), the test playing the lifted code.  With
 // MW's map it loads two DLLs, server.dll and d3dx9_26.dll, each in its slot
 // and with its own heap, apart from the other's; with UG2's, server.dll with
-// its two heaps.
+// its two heaps.  In both, a server.dll with one byte changed is refused.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -42,6 +42,8 @@ function run(w) {
     return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
+// the pin (module.c): the test's server.dll with one byte changed is not the file its ModInfo names
+const REFUSED = /\[module\] server\.dll in the game folder \(\/t\/server\.dll, 16384 bytes, sha256 [0-9a-f]{64}\) is not the file this build was lifted from \(sha256 [0-9a-f]{64}, 16384 bytes\): it is NOT loaded/;
 function counts(r) {
   if (r.status !== 0) console.log(r.out + r.err);
   const m = /module_unit: (\d+) passed, (\d+) failed/.exec(r.out);
@@ -52,7 +54,7 @@ function counts(r) {
 
 test('module_unit, MW\'s map: two DLLs loaded, each heap in its own part of the modheap region', { skip }, () => {
   const r = run(build('mw', ['-DNFSU2_GAME_MW']));
-  assert.ok(counts(r) >= 58, 'every check ran');
+  assert.ok(counts(r) >= 59, 'every check ran');
   assert.equal(r.status, 0);
   // the loader's own lines: both mapped at their slots, from the files the test wrote
   assert.match(r.err, /\[module\] server\.dll mapped at 0x00d00000-0x00d04000 from \/t\/server\.dll \(sha256 ok, 1 fixups, 3 imports bound\)/);
@@ -64,12 +66,14 @@ test('module_unit, MW\'s map: two DLLs loaded, each heap in its own part of the 
   assert.match(r.err, /\[modheap\] HeapFree\(0x03000000, 0x0100[0-9a-f]{4}\): not a live block \(foreign\)/);
   assert.match(r.err, /^\[modheap\] HeapDestroy\(0x01000000\): /m);
   assert.match(r.err, /^\[modheap\] HeapDestroy\(0x03000000\): /m);
+  assert.match(r.err, REFUSED, 'server.dll with one byte changed is refused');
 });
 
 test('module_unit, UG2\'s map: server.dll with its two heaps, as before', { skip }, () => {
   const r = run(build('ug2', []));
-  assert.ok(counts(r) >= 30, 'every check ran');
+  assert.ok(counts(r) >= 32, 'every check ran');
   assert.match(r.err, /\[module\] server\.dll mapped at 0x00a00000-0x00a04000 from \/t\/server\.dll/);
   assert.match(r.out, /server\.dll heap 0x01000000, its part 0x01000000-0x05000000/);
   assert.match(r.err, /\[modheap\] HeapCreate: no free module heap \(2 in use\)/);
+  assert.match(r.err, REFUSED, 'server.dll with one byte changed is refused');
 });

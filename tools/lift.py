@@ -242,6 +242,14 @@ def _retpast():
 # MW's x87 pow (0x7C464D, the CRT's special-value path) saves the FPU around
 # its helper with fnsave/frstor.  Off for UG2, whose same CRT sites stay traps.
 _X87ENV = __import__('os').environ.get('X87ENV', '') == '1'
+# CODE_RVA=<lo>-<hi> (hex RVAs; gen.sh, from a module's game.conf range such as
+# D3DX_CODE): only [lo, hi) of the module's .text is code.  d3dx9_26.dll's
+# linker merged its read-only data into .text: the IAT, constants, strings and
+# vtables before the code, the C++ EH tables and the import and export tables
+# after it.  Its relocations point at that data thousands of times, and every
+# such value would be seeded and lifted as a function (1.1 GB of C).  The rest
+# of .text stays readable as data (secs).  Not set: the whole .text is code.
+_CODE_RVA = __import__('os').environ.get('CODE_RVA', '')
 _LREGS = None
 def _lregs():
     """tools/lregs.py (LREGS=1), next to this file"""
@@ -409,6 +417,11 @@ class Lifter:
             nm=s.Name.rstrip(b'\x00').decode('latin1').strip() or '<none>'
             self.secs.append((nm,self.IB+s.VirtualAddress,s.Misc_VirtualSize,s.get_data()))
         self.TVA,self.TSZ,self.TDATA = next((va,vs,d) for nm,va,vs,d in self.secs if nm=='.text')
+        if _CODE_RVA:
+            lo, hi = (self.IB + int(x, 16) for x in _CODE_RVA.split('-'))
+            if not self.TVA <= lo < hi <= self.TVA + self.TSZ:
+                sys.exit(f"CODE_RVA={_CODE_RVA}: not a range inside .text (0x{self.TVA:08x}-0x{self.TVA + self.TSZ:08x})")
+            self.TDATA = self.TDATA[lo - self.TVA:hi - self.TVA]; self.TVA, self.TSZ = lo, hi - lo
         self.md=Cs(CS_ARCH_X86,CS_MODE_32); self.md.detail=True
         # this module's callees from the game's retpast list (a call to one may not come back to the next instruction)
         self.retpast={a for a in _retpast() if self.in_text(a)}

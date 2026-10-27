@@ -18,7 +18,9 @@
  * filled the TX ring, the answers the backend gives by itself (port
  * unreachable, echo reply, RST) limited per sender and in all, and the page
  * closing its link at exit (the log line, checked by the .mjs).  Also SHA-256 (runtime/web/sha256.c) against FIPS
- * 180-4 vectors.  Output: one line per check, then "lan_unit: N passed, M failed". */
+ * 180-4 vectors.  Output: one line per check, then "lan_unit: N passed, M failed".
+ * `lan_unit pin <file>` only hashes a game DLL as the browser's loader does (runtime/module.c's pin), and the same
+ * bytes with the middle one changed: "lan_unit: pin N bytes, sha256 <hex>, one byte changed <hex>". */
 #include "cpu.h"
 #include "game.h"
 #include "winsock.h"
@@ -132,7 +134,27 @@ static void sha_tests(void){
     }
 }
 
-int main(void){
+/* the pin of a lifted DLL: runtime/module.c maps the file only when this hash is the one its ModInfo records */
+static int pin_hash(const char *path){
+    FILE *f = fopen(path, "rb");
+    if (!f){ printf("lan_unit: pin: cannot read %s\n", path); return 1; }
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    uint8_t *b = n > 0 ? malloc((size_t)n) : 0;
+    if (!b || fread(b, 1, (size_t)n, f) != (size_t)n){ fclose(f); free(b); printf("lan_unit: pin: cannot read %s\n", path); return 1; }
+    fclose(f);
+    char hex[2][65];
+    for (int k = 0; k < 2; k++){
+        uint8_t d[32]; nfsu2_sha256(b, (size_t)n, d);
+        for (int i = 0; i < 32; i++) snprintf(hex[k] + 2 * i, 3, "%02x", d[i]);
+        b[n / 2] ^= 1;                                       /* then one byte changed */
+    }
+    free(b);
+    printf("lan_unit: pin %ld bytes, sha256 %s, one byte changed %s\n", n, hex[0], hex[1]);
+    return 0;
+}
+
+int main(int argc, char **argv){
+    if (argc == 3 && !strcmp(argv[1], "pin")) return pin_hash(argv[2]);
     setenv("NFSU2_LAN_NOTHREAD", "1", 1);
     mem_commit(0x1000, 0x00F00000u);                         /* the test's whole low memory is "guest memory" */
     g_cpu.fs_base = GA(g_teb); MR32(GA(g_teb) + 0x18) = GA(g_teb); MR32(GA(g_teb) + 0x24) = 1;

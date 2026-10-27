@@ -197,6 +197,23 @@ KNOWN={
  'waveInClose':1,'waveInGetNumDevs':0,'waveInGetDevCapsA':3,'waveInPrepareHeader':3,'waveInUnprepareHeader':3,
  'WSACreateEvent':0,'WSACloseEvent':1,'WSASetEvent':1,'WSAResetEvent':1,'WSARecv':7,'WSARecvFrom':9,
  'WSAGetOverlappedResult':5,'WSAWaitForMultipleEvents':5,'__WSAFDIsSet':2,
+ # --- d3dx9_26.dll, MW's D3DX oracle (gen.sh D3DX_DLL): its GDI32 and KERNEL32 imports not listed above ---
+ 'TranslateCharsetInfo':3,'ExtTextOutW':8,'GetCurrentObject':2,'SetTextAlign':2,'GetOutlineTextMetricsA':3,
+ 'GetGlyphOutlineA':7,'GetGlyphOutlineW':7,'CreateFontIndirectA':1,'CreateFontIndirectW':1,'GetFontLanguageInfo':1,
+ 'GetTextMetricsA':2,'GetTextMetricsW':2,'GetCharacterPlacementA':6,'GetCharacterPlacementW':6,'CreateDIBSection':6,
+ 'GetObjectW':3,'DeleteFileW':1,'MoveFileW':2,'GetTempFileNameA':4,'GetTempFileNameW':4,'FreeResource':1,
+ 'IsDBCSLeadByte':1,'ExpandEnvironmentStringsA':3,'DisableThreadLibraryCalls':1,
+ # and its C runtime, msvcrt.dll: every import is cdecl (the caller pops the
+ # arguments, the callee none), the _CI* math helpers take theirs on the x87
+ # stack, and _adjust_fdiv is a variable, not a function
+ '_except_handler3':0,'?terminate@@YAXXZ':0,'_adjust_fdiv':0,'_initterm':0,'srand':0,'_tempnam':0,'exit':0,
+ 'atol':0,'_ultoa':0,'wcstombs':0,'rand':0,'isxdigit':0,'atof':0,'_CIcosh':0,'_CIexp':0,'_CIsinh':0,'_CItanh':0,
+ '_fpclass':0,'strchr':0,'_isnan':0,'isalnum':0,'isalpha':0,'toupper':0,'tolower':0,'atoi':0,'floor':0,
+ '_strtime':0,'_strdate':0,'sscanf':0,'isspace':0,'isdigit':0,'_setjmp3':0,'longjmp':0,'ldexp':0,'frexp':0,
+ 'wcslen':0,'calloc':0,'realloc':0,'malloc':0,'_CIsqrt':0,'setlocale':0,'_strdup':0,'free':0,'ceil':0,
+ '_controlfp':0,'_vsnprintf':0,'_CIasin':0,'__CxxFrameHandler':0,'_finite':0,'_CIacos':0,'memmove':0,'qsort':0,
+ '_CIfmod':0,'_purecall':0,'_stricmp':0,'modf':0,'iswspace':0,'iswalpha':0,'iswdigit':0,'iswpunct':0,'_CIpow':0,
+ '??2@YAPAXI@Z':0,'??3@YAXPAX@Z':0,
 }
 # An import by ordinal is named "#<n>" (in g_imp too), and ordinals are per
 # DLL: its count is KNOWN["<DLL>#<n>"], the DLL's name in capitals without .dll.
