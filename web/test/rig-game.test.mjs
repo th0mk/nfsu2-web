@@ -9,6 +9,7 @@
 //    (Underground 2's of before) and a server it cannot reach let it go on.
 // 5. moduleLine: the module a server sends in one line (revision, game, lift, hash, and the stamp where the json
 //    has one); run-suite prints it first.
+// Ports: NFSU2_TEST_RIG_PORT1 (8539) and NFSU2_TEST_RIG_PORT2 (8540), the stand-in servers of 4 and 5.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,6 +19,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 8539), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 8540);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
 // a server nobody runs, should a tool get past its --help or its check (none may): no own server, nothing reached
@@ -81,7 +83,7 @@ test('run-suite: the scenario tables', () => {
 test('requireGame: the server must serve the tool\'s game', async t => {
   let json = '';
   const server = http.createServer((q, s) => { if (q.url === '/game.json' && json) { s.end(json); } else { s.statusCode = 404; s.end(); } });
-  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  await new Promise((r, j) => { server.once('error', j); server.listen(P1, '127.0.0.1', r); });
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
   const check = (b, game) => new Promise(res => {
@@ -117,7 +119,7 @@ test('moduleLine: the module the server sends, in one line; run-suite prints it 
     if (q.url === '/game.json' && json) { s.end(json); return; }
     s.statusCode = 404; s.end();
   });
-  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  await new Promise((r, j) => { server.once('error', j); server.listen(P2, '127.0.0.1', r); });
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
   const line = b => new Promise(res => {
