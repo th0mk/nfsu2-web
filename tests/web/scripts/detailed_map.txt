@@ -1,0 +1,22 @@
+# The Detailed Map texture pack (minimap = detailed, runtime/web/texrep_web.c):
+# the Quick Race menus to a Circuit (Resort Loop) and the race's minimap,
+# dumped, for an A/B against minimap = original.  Needs TEXPACKS/detailed.pak
+# and detailed.tracks in the server's game folder (tools/texpacks.py --detailed).
+#   node web/tools/run-page.mjs "<base>/test/play.html?wasm=/game.wasm&arg=/data/SPEED2.EXE&w=1920&h=1080&fresh&reg=/tests/web/seed/registry_perf4_native.txt&script=/tests/web/scripts/detailed_map.txt&env=NOMOVIES=1&env=NFSU2_MAP_TEXTURES=detailed&env=NFSU2_TEXLOG=1&artifacts=/artifacts/detailed_&dumpscale=1" 300000
+0       waitfng UG_LS_Splash.fng 12000                  # title
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++150    dump qr_track                                   # the track's map in the menu
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0      waitmem 0x8654a4 6 6000
++0      log race_loaded
++420    down UP                                         # after the intro: drive
++180    dump race_a
++240    dump race_b
++10     up UP
++30     quit

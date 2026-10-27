@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
 """The texture packs: TEXPACKS/<name>.pak in the game folder, which the
 browser's runtime (runtime/web/texrep_web.c) reads when a player picks one in
-Settings.  One so far: LunicAura106's "Upscaled HUD" (UHUD,
-nfsmods.xyz/mod/4319), the menus, HUD, fonts, icons and logos redrawn at four
-times their size.
+Settings.  Two so far:
+  uhud.pak      LunicAura106's "Upscaled HUD" (UHUD, nfsmods.xyz/mod/4319), the
+                menus, HUD, fonts, icons and logos redrawn at four times their
+                size (Menus and HUD, Upscaled)
+  detailed.pak  JeansBig's "NFSU2 Detailed Map" (nfsmods.xyz/mod/4485), the
+                minimap's and world map's maps (TRACKS/TRACKMAP*.BIN) redrawn
+                at 2048x2048 with the missing shortcuts and more (Minimap,
+                Detailed), with detailed.tracks beside it
 
     tools/texpacks.py <game folder> --uhud <mod folder>
+    .venv/bin/python tools/texpacks.py <game folder> --detailed <mod folder>
 
 <mod folder> is the mod's archive (NFSU2UHUD11192022a.7z) extracted: the
 folder with install.end and assets/ in it (`7z x`; Windows' tar and bsdtar read
-it too).
+it too).  For --detailed it is the Detailed Map's zip extracted: the folder with
+install.end and Binary/ in it.  It needs numpy, Pillow and etcpak (the mod's
+maps have no mipmaps: this makes them).
 
 The mod's installer (an endscript for the Binary tool) writes its textures into
 the game's own bundles, and its plugin (NFSU2HDContentSupport.asi) then gives
@@ -39,7 +47,7 @@ Pack layout (little-endian):
   the names, then the levels, in the order of the game files and textures they
   replace (a load reads them together)
 """
-import argparse, os, struct, sys, zlib
+import argparse, os, re, struct, sys, zlib
 
 ARGB, P8 = 21, 41                                   # D3DFORMATs
 FOURCC = {b'DXT1': 0x31545844, b'DXT3': 0x33545844, b'DXT5': 0x35545844}
@@ -255,6 +263,95 @@ def uhud(game, mod):
         if seen[k]: print(f'  {k}: {len(seen[k])}: ' + ', '.join(seen[k][:6]) + (' ...' if len(seen[k]) > 6 else ''))
 
 
+# Binary's names for the TrackInfo fields (0x128 bytes each) that the Detailed Map's script.end changes, and their
+# offsets (NFSTools' GlobalLib, Support.Underground2/Gameplay/Track); detailed.tracks names them as runtime/web/texrep_web.c
+# reads them
+TRACK_FIELDS = ('MenuMapZoomOffsetX', 'MenuMapZoomOffsetY', 'MenuMapZoomWidth', 'TrackMapCalibrationOffsetX',
+                'TrackMapCalibrationOffsetY', 'TrackMapCalibrationZoomIn')
+
+
+def mipmaps(path, lv0, w, h):
+    """a DXT5 DDS's level 0 (w x h) and its smaller levels down to 4x4, each a box filter of the one above, in DXT5"""
+    import etcpak, numpy as np
+    from PIL import Image
+    with Image.open(path) as im: img = np.asarray(im.convert('RGBA'), np.float32)
+    out, n = bytearray(lv0), 1
+    while w > 4 and h > 4:
+        img = (img[0::2, 0::2] + img[1::2, 0::2] + img[0::2, 1::2] + img[1::2, 1::2]) / 4
+        h, w = img.shape[:2]
+        out += etcpak.compress_bc3(np.rint(img).astype(np.uint8).tobytes(), w, h); n += 1
+    return n, bytes(out)
+
+
+def detailed_one(job):
+    path, = job
+    r = dds(path)
+    if not r or r[2] != FOURCC[b'DXT5']: return None
+    w, h, fmt, _, lv = r
+    levels, data = mipmaps(path, lv[:level_size(w, h, fmt)], w, h)
+    return w, h, fmt, levels, data
+
+
+def detailed(game, mod):
+    """JeansBig's Detailed Map: its default maps (not the beta tunnel's, which needs Redridesog's Beta Map mod
+    for the tunnel itself) for each TRACKMAP*.BIN's map, and its changes to the Tracks table"""
+    from concurrent.futures import ProcessPoolExecutor
+    src = os.path.join(mod, 'Binary', 'Map')
+    script = os.path.join(mod, 'Binary', 'script.end')
+    if not os.path.isdir(os.path.join(src, 'Default')) or not os.path.isfile(script):
+        sys.exit(f'{mod}: no Binary/Map/Default and Binary/script.end: not the Detailed Map mod\'s folder')
+    tracks = find(game, 'TRACKS')
+    if not tracks: sys.exit(f'{game}: no TRACKS')
+    todo, seen = [], {'not in the mod': [], 'unreadable': [], 'other shape': [], 'conflict': []}
+    for fn in sorted(os.listdir(tracks)):
+        m = re.fullmatch(r'(TRACKMAP\d+)\.BIN', fn, re.I)
+        if not m: continue
+        name = m.group(1).upper()
+        dds_path = next((p for p in (os.path.join(src, 'Default', name + '.dds'), os.path.join(src, name + '.dds'))
+                         if os.path.isfile(p)), None)
+        if not dds_path: seen['not in the mod'].append(name); continue
+        with open(os.path.join(tracks, fn), 'rb') as f: d = f.read()
+        t = next((t for t in textures(d) if t[0] == bstring_hash(name) and t[4] is not None), None)
+        if t is None: seen['unreadable'].append(f'TRACKS/{fn}'); continue
+        todo.append((name, dds_path, t))
+    ents, data = {}, bytearray()
+    with ProcessPoolExecutor() as ex:
+        for i, ((name, path, (_, ow, oh, ofmt, lv0)), r) in enumerate(zip(todo, ex.map(detailed_one, [(p,) for _, p, _ in todo]))):
+            print(f'\r  {i + 1}/{len(todo)} maps', end='', flush=True)
+            if not r: seen['unreadable'].append(path); continue
+            w, h, fmt, levels, lv = r
+            if w * oh != h * ow or w < ow: seen['other shape'].append(f'{name} ({ow}x{oh} -> {w}x{h})'); continue
+            key = (zlib.crc32(lv0), zlib.adler32(lv0))
+            if key in ents:
+                if bytes(data[ents[key]['off']:ents[key]['off'] + ents[key]['size']]) != lv:
+                    seen['conflict'].append(f'{name} (kept {ents[key]["name"]})')
+                continue
+            ents[key] = dict(key=key, ow=ow, oh=oh, ofmt=ofmt, w=w, h=h, fmt=fmt, levels=levels,
+                             off=len(data), size=len(lv), name=f'TRACKS/{name}')
+            data += lv
+            data += bytes(-len(data) % 16)
+    print()
+    if not ents: sys.exit(f'{tracks}: no TRACKMAP*.BIN map the mod redrew')
+    # update_collection GLOBAL\GLOBALB.LZC Tracks <number> <field> <value>, before the map choice (after it only
+    # textures are replaced)
+    edits = []
+    with open(script, encoding='latin1') as f:
+        for line in f:
+            w = line.split()
+            if len(w) == 6 and w[0] == 'update_collection' and w[2] == 'Tracks':
+                if w[4] not in TRACK_FIELDS: sys.exit(f'{script}: {w[4]}: a field this does not know')
+                edits.append(f'{int(w[3])} {w[4]} {float(w[5]):g}')
+    out = os.path.join(game, 'TEXPACKS', 'detailed.pak')
+    write(out, ents, data)
+    with open(out[:-4] + '.tracks.part', 'w') as f:
+        f.write('# the Detailed Map\'s changes to the Tracks table (tools/texpacks.py --detailed): number field value\n')
+        f.write(''.join(e + '\n' for e in edits))
+    os.replace(out[:-4] + '.tracks.part', out[:-4] + '.tracks')
+    print(f'detailed: {len(ents)} maps, {len(data) / 1048576:.1f} MB -> {out}; {len(edits)} track changes -> {out[:-4]}.tracks')
+    for k, v in seen.items():
+        if v: print(f'  {k}: {len(v)}: ' + ', '.join(v[:8]) + (' ...' if len(v) > 8 else ''))
+
+
 def write(path, ents, data):
     order = sorted(ents.values(), key=lambda e: e['key'])
     names = bytearray()
@@ -276,13 +373,15 @@ def write(path, ents, data):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/texpacks.py <game folder> --uhud <mod folder>')
+    ap = argparse.ArgumentParser(usage='tools/texpacks.py <game folder> [--uhud <mod folder>] [--detailed <mod folder>]')
     ap.add_argument('game')
     ap.add_argument('--uhud', metavar='MOD', help='the Upscaled HUD mod (nfsmods.xyz/mod/4319), extracted')
+    ap.add_argument('--detailed', metavar='MOD', help='the Detailed Map mod (nfsmods.xyz/mod/4485), extracted')
     a = ap.parse_args()
-    if not a.uhud: sys.exit(__doc__)
+    if not a.uhud and not a.detailed: sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
-    uhud(a.game, a.uhud)
+    if a.uhud: uhud(a.game, a.uhud)
+    if a.detailed: detailed(a.game, a.detailed)
 
 
 if __name__ == '__main__':
