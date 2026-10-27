@@ -1,8 +1,16 @@
 /* texrep_web.c -- texture packs in the browser: TEXPACKS/<name>.pak in the
  * game folder (tools/texpacks.py builds them), picked with settings.ini
- * ui_textures = original | uhud (NFSU2_UI_TEXTURES).  So far one pack:
- * LunicAura106's "Upscaled HUD", the menus, HUD, fonts, icons and logos
- * redrawn at four times their size.
+ * ui_textures = original | uhud (NFSU2_UI_TEXTURES): LunicAura106's
+ * "Upscaled HUD", the menus, HUD, fonts, icons and logos redrawn at four
+ * times their size; and minimap = original | detailed (NFSU2_MAP_TEXTURES):
+ * JeansBig's "Detailed Map", the minimap's and world map's maps redrawn at
+ * 2048x2048.  Both can be on: their entries are looked up together.
+ *
+ * A pack can have TEXPACKS/<name>.tracks beside it: changes to the game's
+ * Tracks table (TrackInfo, loaded from GLOBAL\GLOBALB.LZC), which the
+ * Detailed Map's installer makes in that file on a PC to frame its maps
+ * (the URL tracks' are placed and scaled differently).  Here they are
+ * written into the table in memory at every frame, while the pack is on.
  *
  * The game keeps reading its own files and sees every texture at its own
  * size.  When it uploads level 0 of a texture the pack has (the same CRC-32
@@ -22,6 +30,7 @@
  * but for the one texture built in (the pause menu's Photo Mode icon), whose
  * size and format they look for always. */
 #include "texrep.h"
+#include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,11 +47,16 @@ unsigned metal_level_rows(unsigned h, unsigned level, unsigned f);
 typedef struct { uint32_t crc, adler; uint16_t ow, oh; uint32_t ofmt; uint16_t w, h; uint32_t fmt, levels, off, size, name; } Ent;
 _Static_assert(sizeof(Ent) == 40, "TEXPACKS entry");
 
+/* the packs picked, each a TEXPACKS/<name>.pak; their entries are merged into one table, sorted by key */
+#define MAXPACKS 2
+typedef struct { char name[32]; FILE *fp; char *names; uint32_t names_at, names_len; } Pack;
+static Pack g_packs[MAXPACKS]; static unsigned g_npacks;
 static int g_init, g_on, g_shown = 1, g_log;
-static char g_pack[32];
-static FILE *g_fp;
-static Ent *g_ent; static unsigned g_n;
-static char *g_names; static uint32_t g_names_at, g_names_len;
+static char g_pack[72];                                   /* the packs' names, for the log */
+static Ent *g_ent; static uint8_t *g_src; static unsigned g_n;   /* g_src: an entry's pack */
+/* the packs' .tracks: a TrackInfo field of the track numbered num set to v */
+typedef struct { int16_t num; uint16_t off; float v; } TrackEdit;
+static TrackEdit *g_edits; static unsigned g_nedits;
 static uint64_t *g_shape; static unsigned g_nshape;      /* the originals' w | h << 16 | fmt << 32, sorted */
 static uint8_t *g_used;                                   /* per entry: shown at least once */
 static uint8_t *g_buf; static size_t g_bufcap;
@@ -90,7 +104,8 @@ static uint64_t shape(unsigned w, unsigned h, unsigned fmt){ return (uint64_t)w 
 static int cmp_u64(const void *a, const void *b){
     uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b; return x < y ? -1 : x > y; }
 static const char *ent_name(const Ent *e){
-    return e->name >= g_names_at && e->name < g_names_at + g_names_len ? g_names + (e->name - g_names_at) : "?";
+    const Pack *p = &g_packs[g_src[e - g_ent]];
+    return p->names && e->name >= p->names_at && e->name < p->names_at + p->names_len ? p->names + (e->name - p->names_at) : "?";
 }
 /* levels' bytes as gpu_web.c uploads them; 0 if the entry is not one it can make */
 static size_t ent_bytes(const Ent *e){
@@ -103,54 +118,102 @@ static size_t ent_bytes(const Ent *e){
     }
     return n;
 }
-static void init(void){
-    g_init = 1;
-    const char *v = getenv("NFSU2_UI_TEXTURES");
-    if (!v || !*v || !strcasecmp(v, "original")) return;
-    size_t k = 0;
-    for (; v[k] && k + 1 < sizeof g_pack; k++){
-        char c = (char)tolower((unsigned char)v[k]);
-        if (!isalnum((unsigned char)c) && c != '_' && c != '-'){ fprintf(stderr, "[texrep] ui_textures \"%s\": not a pack name\n", v); return; }
-        g_pack[k] = c;
+static int cmp_ent(const void *a, const void *b){
+    const Ent *x = a, *y = b;
+    return x->crc != y->crc ? (x->crc < y->crc ? -1 : 1) : x->adler != y->adler ? (x->adler < y->adler ? -1 : 1) : 0;
+}
+/* TrackInfo's fields a .tracks file may set (tools/texpacks.py TRACK_FIELDS), all floats */
+static const struct { const char *name; uint16_t off; } TRACK_FIELDS[] = {
+    {"TrackMapCalibrationOffsetX", 0xAC}, {"TrackMapCalibrationOffsetY", 0xB0}, {"TrackMapCalibrationZoomIn", 0xC0},
+    {"MenuMapZoomOffsetX", 0x118}, {"MenuMapZoomOffsetY", 0x11C}, {"MenuMapZoomWidth", 0x120},
+};
+static void read_tracks(const char *name){
+    char win[64], path[1024], line[160], field[48];
+    snprintf(win, sizeof win, "TEXPACKS\\%s.tracks", name);
+    FILE *f = fileio_resolve_game(win, path, sizeof path) ? fopen(path, "r") : 0;
+    if (!f) return;
+    unsigned n0 = g_nedits;
+    while (fgets(line, sizeof line, f)){
+        int num; float v; unsigned k;
+        if (line[0] == '#' || sscanf(line, "%d %47s %f", &num, field, &v) != 3) continue;
+        for (k = 0; k < sizeof TRACK_FIELDS / sizeof *TRACK_FIELDS && strcmp(field, TRACK_FIELDS[k].name); k++);
+        if (k == sizeof TRACK_FIELDS / sizeof *TRACK_FIELDS){ fprintf(stderr, "[texrep] %s: %s: not a field this reads\n", path, field); continue; }
+        TrackEdit *e = realloc(g_edits, (g_nedits + 1) * sizeof *g_edits);
+        if (!e) break;
+        g_edits = e; g_edits[g_nedits++] = (TrackEdit){(int16_t)num, TRACK_FIELDS[k].off, v};
     }
-    g_pack[k] = 0;
-    g_log = getenv("NFSU2_TEXLOG") && *getenv("NFSU2_TEXLOG") == '1';
+    fclose(f);
+    fprintf(stderr, "[texrep] %s: %u changes to the Tracks table\n", path, g_nedits - n0);
+}
+/* TEXPACKS/<pack>.pak for the setting env: its value names the pack, "original" (or unset) is none */
+static void open_pack(const char *env){
+    const char *v = getenv(env);
+    if (!v || !*v || !strcasecmp(v, "original") || g_npacks == MAXPACKS) return;
+    Pack *p = &g_packs[g_npacks];
+    size_t k = 0;
+    for (; v[k] && k + 1 < sizeof p->name; k++){
+        char c = (char)tolower((unsigned char)v[k]);
+        if (!isalnum((unsigned char)c) && c != '_' && c != '-'){ fprintf(stderr, "[texrep] %s \"%s\": not a pack name\n", env, v); return; }
+        p->name[k] = c;
+    }
+    p->name[k] = 0;
     char win[64], path[1024]; uint32_t hd[4];
-    snprintf(win, sizeof win, "TEXPACKS\\%s.pak", g_pack);
-    if (!fileio_resolve_game(win, path, sizeof path) || !(g_fp = fopen(path, "rb"))){
-        fprintf(stderr, "[texrep] %s: the game folder has no TEXPACKS/%s.pak: the game's own textures\n", g_pack, g_pack);
+    snprintf(win, sizeof win, "TEXPACKS\\%s.pak", p->name);
+    if (!fileio_resolve_game(win, path, sizeof path) || !(p->fp = fopen(path, "rb"))){
+        fprintf(stderr, "[texrep] %s: the game folder has no TEXPACKS/%s.pak: the game's own textures\n", p->name, p->name);
         return;
     }
-    if (fread(hd, sizeof hd, 1, g_fp) != 1 || memcmp(hd, "NTXP", 4) || hd[1] != 1 || !hd[2] || hd[2] > 65536u){
-        fprintf(stderr, "[texrep] %s: not a texture pack this runtime reads\n", path); fclose(g_fp); g_fp = 0; return;
+    if (fread(hd, sizeof hd, 1, p->fp) != 1 || memcmp(hd, "NTXP", 4) || hd[1] != 1 || !hd[2] || hd[2] > 65536u){
+        fprintf(stderr, "[texrep] %s: not a texture pack this runtime reads\n", path); fclose(p->fp); p->fp = 0; return;
     }
-    g_n = hd[2];
-    g_ent = calloc(g_n, sizeof *g_ent); g_used = calloc(g_n, 1); g_shape = calloc(g_n, sizeof *g_shape);
-    if (!g_ent || !g_used || !g_shape || fread(g_ent, sizeof *g_ent, g_n, g_fp) != g_n){
-        fprintf(stderr, "[texrep] %s: unreadable\n", path); fclose(g_fp); g_fp = 0; return;
+    unsigned n = hd[2];
+    Ent *ent = realloc(g_ent, (g_n + n) * sizeof *g_ent);
+    if (ent) g_ent = ent;
+    uint8_t *src = ent ? realloc(g_src, g_n + n) : 0;
+    if (src) g_src = src;
+    if (!ent || !src || fread(g_ent + g_n, sizeof *g_ent, n, p->fp) != n){
+        fprintf(stderr, "[texrep] %s: unreadable\n", path); fclose(p->fp); p->fp = 0; return;
     }
+    memset(g_src + g_n, (int)g_npacks, n);
     /* the names (for the log): from the entries to the first texture's levels */
     uint32_t first = UINT32_MAX;
-    for (unsigned i = 0; i < g_n; i++) if (g_ent[i].off < first) first = g_ent[i].off;
-    g_names_at = 16u + 40u * g_n;
-    if (first > g_names_at && first - g_names_at < (1u << 20) && (g_names = malloc(first - g_names_at + 1))){
-        g_names_len = (uint32_t)fread(g_names, 1, first - g_names_at, g_fp);
-        g_names[g_names_len] = 0;
+    for (unsigned i = g_n; i < g_n + n; i++) if (g_ent[i].off < first) first = g_ent[i].off;
+    p->names_at = 16u + 40u * n;
+    if (first > p->names_at && first - p->names_at < (1u << 20) && (p->names = malloc(first - p->names_at + 1))){
+        p->names_len = (uint32_t)fread(p->names, 1, first - p->names_at, p->fp);
+        p->names[p->names_len] = 0;
     }
     unsigned bad = 0;
-    for (unsigned i = 0; i < g_n; i++){
-        Ent *e = &g_ent[i];
-        if (ent_bytes(e) != e->size){ e->ow = 0; bad++; continue; }   /* never matched */
-        g_shape[g_nshape++] = shape(e->ow, e->oh, e->ofmt);
-    }
+    for (unsigned i = g_n; i < g_n + n; i++)
+        if (ent_bytes(&g_ent[i]) != g_ent[i].size){ g_ent[i].ow = 0; bad++; }   /* never matched */
+    fprintf(stderr, "[texrep] %s: %u textures%s\n", path, n - bad, bad ? " (some entries unreadable, left out)" : "");
+    g_n += n;
+    snprintf(g_pack + strlen(g_pack), sizeof g_pack - strlen(g_pack), "%s%s", g_npacks ? "+" : "", p->name);
+    g_npacks++;
+    read_tracks(p->name);
+}
+static void init(void){
+    g_init = 1;
+    g_log = getenv("NFSU2_TEXLOG") && *getenv("NFSU2_TEXLOG") == '1';
+    open_pack("NFSU2_UI_TEXTURES");
+    open_pack("NFSU2_MAP_TEXTURES");
+    if (!g_n) return;
+    /* one table: sorted by key, with each entry's pack beside it */
+    struct { Ent e; uint8_t src; } *both = malloc(g_n * sizeof *both);
+    g_used = calloc(g_n, 1); g_shape = calloc(g_n, sizeof *g_shape);
+    if (!both || !g_used || !g_shape){ fprintf(stderr, "[texrep] out of memory\n"); free(both); return; }
+    for (unsigned i = 0; i < g_n; i++){ both[i].e = g_ent[i]; both[i].src = g_src[i]; }
+    qsort(both, g_n, sizeof *both, cmp_ent);              /* cmp_ent reads the Ent at the start */
+    for (unsigned i = 0; i < g_n; i++){ g_ent[i] = both[i].e; g_src[i] = both[i].src; }
+    free(both);
+    for (unsigned i = 0; i < g_n; i++)
+        if (g_ent[i].ow) g_shape[g_nshape++] = shape(g_ent[i].ow, g_ent[i].oh, g_ent[i].ofmt);
     qsort(g_shape, g_nshape, sizeof *g_shape, cmp_u64);
     unsigned u = 0;
     for (unsigned i = 0; i < g_nshape; i++) if (!u || g_shape[i] != g_shape[u - 1]) g_shape[u++] = g_shape[i];
     g_nshape = u;
     crc_init();
     g_on = 1;
-    fprintf(stderr, "[texrep] %s: %u textures (%u sizes)%s\n", path, g_n - bad, g_nshape,
-            bad ? " (some entries unreadable, left out)" : "");
 }
 static int may_be(unsigned w, unsigned h, unsigned fmt){
     uint64_t s = shape(w, h, fmt);
@@ -172,8 +235,9 @@ static const uint8_t *levels_of(const Ent *e){
         if (!b) return 0;
         g_buf = b; g_bufcap = e->size;
     }
-    if (fseek(g_fp, (long)e->off, SEEK_SET) || fread(g_buf, 1, e->size, g_fp) != e->size){
-        fprintf(stderr, "[texrep] %s: %s unreadable\n", g_pack, ent_name(e)); return 0;
+    const Pack *p = &g_packs[g_src[e - g_ent]];
+    if (fseek(p->fp, (long)e->off, SEEK_SET) || fread(g_buf, 1, e->size, p->fp) != e->size){
+        fprintf(stderr, "[texrep] %s: %s unreadable\n", p->name, ent_name(e)); return 0;
     }
     return g_buf;
 }
@@ -280,7 +344,33 @@ void texrep_surface_written(unsigned mid){
     g_t[mid].st = 0;
 }
 void texrep_released(unsigned mid){ if (mid && mid < TEXREP_MAXTEX) g_t[mid].st = 0, g_bi[mid] = 0; }
-void texrep_frame(void){ }
+/* the .tracks changes, into the Tracks table (TrackInfo[], 0x128 bytes each, +0x8A the int16 number) */
+#define G_TRACKS   0x00883da0u
+#define G_TRACKS_N 0x00883da4u
+void texrep_frame(void){
+    static uint32_t tab, n;
+    static int32_t *at;                                   /* per edit: its track's index in the table, -1 none */
+    static float *was;                                    /* per edit: the game's own value */
+    if (!g_nedits || !mem_is_committed(G_TRACKS)) return;
+    uint32_t t = MR32(G_TRACKS), c = MR32(G_TRACKS_N);
+    if (!t || !c || c > 2000 || !mem_is_committed(t) || !mem_is_committed(t + c * 0x128u - 1)) return;
+    if (t != tab || c != n){                              /* (again) loaded: find each edit's track */
+        if (!at && !(at = malloc(g_nedits * sizeof *at))) return;
+        if (!was && !(was = malloc(g_nedits * sizeof *was))) return;
+        unsigned found = 0;
+        for (unsigned k = 0; k < g_nedits; k++){
+            at[k] = -1;
+            for (uint32_t i = 0; i < c; i++)
+                if ((int16_t)MR16(t + i * 0x128u + 0x8Au) == g_edits[k].num){
+                    at[k] = (int32_t)i; was[k] = MRF32(t + i * 0x128u + g_edits[k].off); found++; break;
+                }
+        }
+        tab = t; n = c;
+        fprintf(stderr, "[texrep] Tracks table: %u tracks, %u of %u changes have their track\n", c, found, g_nedits);
+    }
+    for (unsigned k = 0; k < g_nedits; k++)
+        if (at[k] >= 0) MRF32(t + (uint32_t)at[k] * 0x128u + g_edits[k].off) = g_shown ? g_edits[k].v : was[k];
+}
 void texrep_report(void){
     if (!g_on) return;
     unsigned used = 0;

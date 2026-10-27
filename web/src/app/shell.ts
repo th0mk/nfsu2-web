@@ -247,8 +247,10 @@ const DEVICE = deviceDefaults();
 function resolved(host: Record<string, string> = {}): Resolved { return resolveEnv(settingsText, ENVIRONMENT, host, DEVICE); }
 /** the game's language (runtime/language.c): which language pack the page fetches ahead and counts */
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
-/** the texture pack picked (runtime/web/texrep_web.c), '' for none: the one the page fetches ahead and counts */
-const texpack = (r: Resolved = resolved()) => { const v = (r.env.NFSU2_UI_TEXTURES ?? '').toLowerCase(); return v === 'original' ? '' : v; };
+/** the texture packs picked (runtime/web/texrep_web.c), comma-separated, '' for none: the ones the page fetches ahead
+ *  and counts.  Each setting's value names its pack */
+const texpack = (r: Resolved = resolved()) => [r.env.NFSU2_UI_TEXTURES, r.env.NFSU2_MAP_TEXTURES]
+  .map(v => (v ?? '').toLowerCase()).filter(v => v && v !== 'original').join(',');
 
 // ----------------------------------------------------------------- play --
 function stageCanvas(): HTMLCanvasElement {

@@ -43,7 +43,7 @@ export class Predownload {
   private samples: { t: number; have: number }[] = [];
 
   /** language: the game's language now (settings.ini): only its language pack is fetched; texpack: the texture
-   *  pack picked ('' for none), the only one fetched */
+   *  packs picked (comma-separated, '' for none), the only ones fetched */
   constructor(private onChange: (s: DownloadStatus) => void, private log: (line: string) => void, readonly language: () => string,
               readonly texpack: () => string) {}
 

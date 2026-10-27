@@ -424,6 +424,26 @@ own files and keeps its layout. The mod's own installer and plugin are not used.
 A player's browser fetches the pack only with Upscaled; its blocks compress to about 5 MB ("Preload the game data"
 counts its 101 MB). Without `TEXPACKS` Upscaled plays with the game's own textures.
 
+Settings, Display, More, Minimap, Detailed (Original is the default) shows JeansBig's "NFSU2 Detailed Map"
+([nfsmods.xyz/mod/4485](https://nfsmods.xyz/mod/4485)): the minimap's and world map's maps (`TRACKS/TRACKMAP*.BIN`, one
+512x512 picture of the city per race and per free roam stage) redrawn at 2048x2048, with the missing shortcuts,
+shortcuts and off-road in their own colour, and shops and parking lots left out. It is a pack of its own,
+`TEXPACKS/detailed.pak`, and plays with Upscaled or without it. The mod's installer also changes how 27 tracks frame
+their map (the drag, URL and some sprint tracks, in `GLOBAL/GLOBALB.LZC`); that comes as `TEXPACKS/detailed.tracks`,
+which the port writes into the game's track table in memory while the pack is on. The mod's beta tunnel maps are left
+out: they go with Redridesog's Beta Map mod, which changes the city itself.
+
+1. Download the mod's archive (`NFSU2 Detailed Map v1 Reup.zip`) and extract it into an empty folder, not the game
+   folder.
+2. `.venv/bin/pip install numpy pillow etcpak`, then `.venv/bin/python tools/texpacks.py "<your game folder>" --detailed
+   "<the mod's folder>"` builds `TEXPACKS/detailed.pak` (101 maps, 539 MB with the mipmaps it adds, a few seconds) and
+   `detailed.tracks`. The Outrun races' maps (4090 to 4099) are the free roam map's own bytes in the game, so they show
+   the mod's free roam map.
+3. Copy both as above.
+
+A browser fetches a map when the game loads it, about 0.5 MB each over the network, and all of them with "Preload
+the game data".
+
 ## Smaller music
 
 The game's music, `pfdata/MusicSFx.mus`, is 510 MB: 27 of its 43 songs are 4-bit ADPCM at 382 kbit/s, and 30 of its

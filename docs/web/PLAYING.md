@@ -170,7 +170,7 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
 |---|---|
 | Online | its own section under Saves: how many play on this server now, free roam with others, your name (in free roam and online), crews (with their colours), your horn, room, ghost mode, the game's Online mode (on by default); more: the free-roam network |
 | Game | language, movies, subtitles, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency |
-| Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout, movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter |
+| Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), minimap (original or detailed), HUD layout, movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter |
 | Controller | rumble; more: controller on or off, menu buttons, dead zones |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -192,6 +192,10 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
   screen. The game's layout stays as it is. Your browser fetches the pack only with Upscaled (about 5 MB to
   download). A language with fonts of its own (Russian, Polish, Chinese, Japanese, Thai) keeps them. Most phones
   decode the larger textures into four times the memory.
+- **Minimap:** Original (the default) is the game's own map. Detailed shows JeansBig's
+  [Detailed Map](https://nfsmods.xyz/mod/4485) where the server has its [texture pack](VPS.md#texture-packs): the
+  minimap and the world map redrawn at four times their size, with the missing shortcuts, and shortcuts and off-road
+  in their own colour. Your browser fetches each map as the game loads it (about 0.5 MB each).
 - **More settings:** each group's "More … settings" has the less common ones, and says how many of them you
   changed. **Reset** next to a changed setting puts its default back.
 - **Edit the file:** "Edit settings.ini as text" opens the file itself. A line the game would ignore is shown with

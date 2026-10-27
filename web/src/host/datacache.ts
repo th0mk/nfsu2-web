@@ -33,13 +33,14 @@ export const manifestFiles = (m: Manifest): DataFile[] => m.files.filter(f => !f
 const parts = (f: DataFile) => f.path.toLowerCase().split('/');
 /** The files a game in this language reads: the folder's, but where its language pack (LANGPACKS/<language>,
  *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs
- *  (TEXPACKS/<name>.pak, runtime/web/texrep_web.c) only the one picked (texpack, '' for none). */
+ *  (TEXPACKS/<name>.pak and its <name>.tracks, runtime/web/texrep_web.c) only those picked (texpack: their names,
+ *  comma-separated; '' for none). */
 function gameFiles(files: DataFile[], language: string, texpack: string): DataFile[] {
   const own = new Set(files.filter(f => { const p = parts(f); return p[0] === 'langpacks' && p[1] === language; })
     .map(f => parts(f).slice(2).join('/')));
   return files.filter(f => {
     const p = parts(f);
-    if (p[0] === 'texpacks') return p.length === 2 && p[1] === `${texpack}.pak`;
+    if (p[0] === 'texpacks') return p.length === 2 && texpack.split(',').some(n => n && (p[1] === `${n}.pak` || p[1] === `${n}.tracks`));
     return p[0] === 'langpacks' ? p[1] === language : !own.has(p.join('/'));
   });
 }
