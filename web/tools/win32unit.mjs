@@ -22,10 +22,11 @@ const LINK = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-mem
 const SRC = ['web/test/win32_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 'runtime/win32_misc.c', 'runtime/keyboard.c',
   'runtime/web/thread_exit.c'];
 
-export function buildWin32Unit(out) {
+// defs: more -D flags (['-DWIN32_UNIT_UG2']: the program with UG2's game table, its "ug2" half)
+export function buildWin32Unit(out, defs = []) {
   if (!CC) throw new Error('no wasi-sdk in deps/');
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  execFileSync(CC, [...FLAGS, '-o', out, ...SRC, ...LINK], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  execFileSync(CC, [...FLAGS, ...defs, '-o', out, ...SRC, ...LINK], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   return out;
 }
 

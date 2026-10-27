@@ -10,7 +10,9 @@
 // UG2's gen/all and gen/server (UG2's server.dll imports CompareStringA/W,
 // SetStdHandle and SetEnvironmentVariableA too).  The threaded half of the
 // program runs in the browser host: web/tools/waitstress.sh (both built by
-// web/tools/win32unit.mjs).
+// web/tools/win32unit.mjs).  Built with UG2's game table (-DWIN32_UNIT_UG2,
+// no g_game.win32_misc), those four of UG2's stay unimplemented, as they
+// always were: UG2 does not change.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -109,4 +111,16 @@ test('win32_unit hle: timers, small imports and voice devices answer as Windows 
   assert.equal((err.match(/^\[voice\] /mg) || []).length, 22, 'one [voice] line per import (21 winmm, 1 DSOUND)');
   assert.match(err, /^\*\*\* guest FatalAppExitA\("the end"\) from 0x00401234 - exiting$/m);
   assert.doesNotMatch(err, /UNIMPLEMENTED/);
+});
+
+test('win32_unit ug2: with UG2\'s game table its CompareStringA/W, SetStdHandle and SetEnvironmentVariableA stay unimplemented', { skip }, () => {
+  const w = buildWin32Unit(path.join(OUT, 'win32_unit_ug2.wasm'), ['-DWIN32_UNIT_UG2']);
+  const r = spawnSync(process.execPath, [...EXNREF, path.join(REPO, 'web/test/wasi-run.mjs'), w, 'ug2'], { encoding: 'utf8', timeout: 60000 });
+  const out = r.stdout ?? '';
+  if (r.status !== 0) console.log(out + (r.stderr ?? ''));
+  const m = /win32_unit: (\d+) passed, (\d+) failed/.exec(out);
+  assert.ok(m, 'win32_unit ran to the end');
+  assert.equal(+m[2], 0, 'no failed check');
+  assert.ok(+m[1] >= 40, `every check ran (${m[1]})`);
+  assert.equal(r.status, 0);
 });

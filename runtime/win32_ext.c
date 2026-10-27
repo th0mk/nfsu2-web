@@ -1216,14 +1216,18 @@ static uint32_t timer_wait(Obj *o, uint32_t ms){
     return r;
 }
 /* WaitForMultipleObjects over a set that holds a waitable timer.  Only such
- * sets come here (no UG2 set does: UG2 makes no timers); the others keep the
- * polling loop of win32_ext_call as it always was.  Windows' rules: any (the
+ * sets come here; the others keep the polling loop of win32_ext_call as it
+ * always was.  Before the first CreateWaitableTimerA no set is even looked at
+ * (g_timers_made): UG2 imports no timers, so its waits run as they always did.
+ * Windows' rules: any (the
  * lowest index that is ready) or all at once, WAIT_TIMEOUT after ms of real
  * time, WAIT_FAILED for a handle that is no object, a repeated one in a wait
  * for all, or one closed meanwhile.  Every object is looked at under its own
  * lock (all of them, in address order, for a wait for all), then the thread
  * sleeps at most 1 ms, less up to a timer's due time.  Guest lock released. */
+static uint32_t g_timers_made;                   /* CreateWaitableTimerA's, under the guest lock */
 static int wfmo_has_timer(uint32_t cnt, uint32_t parr){
+    if (!g_timers_made) return 0;
     if (!parr || cnt == 0 || cnt > 64u || !mem_is_committed(parr) || !mem_is_committed(parr + 4u * cnt - 1u)) return 0;
     for (uint32_t i = 0; i < cnt; i++){ Obj *o = obj_get(MR32(parr + 4u * i)); if (o && o->kind == OB_TIMER) return 1; }
     return 0;
@@ -1827,6 +1831,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         if (o){
             o->manual = A(c,1) != 0;
             if (A(c,2) && mem_is_committed(A(c,2))) snprintf(o->name, sizeof o->name, "%s", (const char *)(g_mem + A(c,2)));
+            g_timers_made++;                            /* WaitForMultipleObjects looks for timers from now on */
         } else win32_set_last_error(c, 8u);             /* ERROR_NOT_ENOUGH_MEMORY: the table is full */
         { static int sh = 0; if (sh++ < 8)
             fprintf(stderr, "[timer] CreateWaitableTimerA(%s reset%s%s) -> 0x%08x (from 0x%08x)\n",

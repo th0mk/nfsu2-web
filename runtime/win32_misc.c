@@ -1,7 +1,9 @@
 /* Win32 layer, third part: small imports answered as Windows answers them,
  * most of them new with Most Wanted (GAME.md 3.3).  win32_call (win32.c) asks
- * win32_misc_call after the other layers, under the guest lock; nothing here
- * blocks.
+ * win32_misc_call after the other layers, under the guest lock, through the
+ * game's table (g_game.win32_misc, game.h): Most Wanted's sets it, UG2's does
+ * not, so UG2's CompareStringA/W, SetStdHandle and SetEnvironmentVariableA
+ * stay unimplemented as they always were.  Nothing here blocks.
  *
  *   memory      GlobalMemoryStatusEx
  *   locale      GetDateFormatA, GetTimeFormatA (en-US, as Windows XP formats

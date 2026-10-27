@@ -98,6 +98,14 @@ typedef struct GameOps {
     void (*on_sound_unlock)(void);  /* every DirectSound buffer Unlock (com.c) */
     uint32_t online_host_va;        /* the Online server's host name in the exe ("*pcnfs05.ea.com") */
     const char *online_host;        /* that name without its '*' ("pcnfs05.ea.com") */
+
+    /* ---- the game's own Win32 imports ---- */
+    int (*win32_misc)(CPU *c, const char *dll, const char *n, uint32_t *r);
+                                    /* imports the shared layers (win32.c, win32_ext.c, fileio.c, winsock.c)
+                                     * leave unimplemented: 1 and *r when it answers n.  Most Wanted's game
+                                     * table sets win32_misc.c's win32_misc_call; UG2's leaves it 0, so the
+                                     * ones its exe and server.dll import (CompareStringA/W, SetStdHandle,
+                                     * SetEnvironmentVariableA) stay unimplemented, as they always were */
 } GameOps;
 
 extern const GameOps g_game;

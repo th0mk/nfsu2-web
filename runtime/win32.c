@@ -37,7 +37,6 @@ void modheap_report(void);
 void mem_commit(uint32_t,uint32_t);
 void guest_backtrace(CPU*,int);
 int win32_ext_call(CPU*, const char*, uint32_t*);
-int win32_misc_call(CPU*, const char*, const char*, uint32_t*);   /* win32_misc.c */
 void guest_fair_yield(void);
 int fileio_call(CPU*, const char*, uint32_t*);
 void fileio_report(void);
@@ -492,7 +491,8 @@ int win32_call(CPU *c, uint32_t idx){
         r = env; }
     else if (!strcmp(n,"FreeEnvironmentStringsA")||!strcmp(n,"FreeEnvironmentStringsW")) r=1;
     else if (!strcmp(n,"GetStartupInfoA")){ uint32_t p=ARG(c,0); if(p){ mem_commit(p,68); memset(g_mem+p,0,68); MR32(p)=68; } r=0; }
-    else if (!strcmp(n,"GetStdHandle")){         /* 0x10 + (n & 3), or what SetStdHandle set (win32_misc.c) */
+    else if (!strcmp(n,"GetStdHandle")){         /* 0x10 + (n & 3), or what SetStdHandle set (win32_misc.c:
+                                                  * only a game whose g_game.win32_misc answers it; never UG2) */
         uint32_t win32_std_handle(uint32_t); r = win32_std_handle(ARG(c,0)); }
     else if (!strcmp(n,"GetFileType")){
         /* The CRT's _open asks right after CreateFileA: files are DISK, the
@@ -721,7 +721,7 @@ int win32_call(CPU *c, uint32_t idx){
     else if (winsock_call(c, e->dll, n, &r)) { /* ws2_32, netapi32: winsock.c */ }
     else if (fileio_call(c, n, &r)) { /* file I/O */ }
     else if (win32_ext_call(c, n, &r)) { /* second-round layer */ }
-    else if (win32_misc_call(c, e->dll, n, &r)) { /* small imports, voice devices: win32_misc.c */ }
+    else if (g_game.win32_misc && g_game.win32_misc(c, e->dll, n, &r)) { /* the game's own: win32_misc.c (game.h) */ }
     else { handled = 0; g_win32_unimpl++; stat_[idx].unimpl++;
            { extern void autotest_note_unimpl(const char*,const char*,uint32_t);
              autotest_note_unimpl(e->dll, n, c->eip); }

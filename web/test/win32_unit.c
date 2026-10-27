@@ -14,6 +14,9 @@
  *                            waitable timers under 8 threads, a shared periodic timer, a
  *                            WaitForMultipleObjects ping-pong and a handle closed mid-wait;
  *                            every wait finite, a lost wake-up is a timeout and fails
+ *   win32_unit_ug2.wasm ug2  built with -DWIN32_UNIT_UG2: UG2's game table, which leaves
+ *                            g_game.win32_misc 0; the imports UG2 has of win32_misc.c's stay
+ *                            unimplemented, as UG2 always had them (web/test/win32-wasm.test.mjs)
  *
  * Prints a line per failed check and "win32_unit: <n> passed, <m> failed". */
 #include "cpu.h"
@@ -104,7 +107,15 @@ uint8_t g_cbits[1u << 15];
 #define H_TIMER0   0x00a00000u           /* memmap.h: object handles start here (UG2's map) */
 
 /* ---- runtime stand-ins: what win32*.c and keyboard.c call outside the four files ---- */
+/* the game's table: Most Wanted's answers win32_misc.c's imports; built with -DWIN32_UNIT_UG2 it is UG2's,
+ * which leaves g_game.win32_misc 0 (the "ug2" half) */
+int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);
+#ifndef WIN32_UNIT_UG2
+const GameOps g_game = { .id = "test", .exe_name = "GAME.EXE", .vroot = "C:\\GAME", .module_path = "C:\\GAME\\GAME.EXE",
+                         .win32_misc = win32_misc_call };
+#else
 const GameOps g_game = { .id = "test", .exe_name = "GAME.EXE", .vroot = "C:\\GAME", .module_path = "C:\\GAME\\GAME.EXE" };
+#endif
 CPU *g_cur_cpu;
 void mem_commit(uint32_t a, uint32_t n){ (void)a; (void)n; }
 void mem_altstack_install(void){ }
@@ -199,6 +210,7 @@ extern jmp_buf g_exit_jmp; extern int g_exit_code, g_exit_armed;
 
 /* ---- calling an import as lifted code does ---- */
 typedef struct { CPU cpu; uint32_t stack_top; } Thr;
+static int g_want_unimpl;            /* the "ug2" half: the import must reach win32.c's not-implemented path */
 static uint32_t idx_of(const char *name){
     for (uint32_t i = 0; i < g_imp_count; i++) if (!strcmp(g_imp[i].name, name)) return i;
     printf("FAIL: no import %s in the table\n", name); exit(2);
@@ -221,7 +233,8 @@ static uint32_t call_imp(Thr *t, const char *name, ...){
     CHECK(c->esp == base, "%s: esp 0x%08x after the call, 0x%08x expected (%u arguments)", name, c->esp, base, n);
     CHECK(c->eip == RET_ADDR, "%s: return address 0x%08x", name, c->eip);
     CHECK(ok, "%s: wrote into the caller's frame", name);
-    CHECK(!g_unimpl[0], "%s: not implemented (\"%s\")", name, g_unimpl);
+    if (g_want_unimpl) CHECK(!strcmp(g_unimpl, name), "%s: answered, not left unimplemented", name);
+    else CHECK(!g_unimpl[0], "%s: not implemented (\"%s\")", name, g_unimpl);
     return c->eax;
 }
 static uint32_t last_error(Thr *t){ return MR32(t->cpu.fs_base + 0x34u); }
@@ -824,19 +837,56 @@ static void test_stress(Thr *t){
     call_imp(t, "CloseHandle", e1); call_imp(t, "CloseHandle", e2); call_imp(t, "CloseHandle", tm); call_imp(t, "CloseHandle", g_shared);
 }
 
+/* UG2's game table (-DWIN32_UNIT_UG2): no g_game.win32_misc, so win32_misc.c answers nothing.  The four of its
+ * imports SPEED2.EXE and server.dll have (CompareStringA/W, SetStdHandle, SetEnvironmentVariableA) take win32.c's
+ * not-implemented path as they always did: 0 back, the last error as it was, the stack balanced.  GetStdHandle
+ * answers as it always did, and a WaitForMultipleObjects over events (no timer made) as before. */
+static void test_ug2(Thr *t){
+    set_last_error(t, 0x55u);
+    g_want_unimpl = 1;
+    CHECK(cmp_a(t, 0, "abc", -1, "abc", -1) == 0, "CompareStringA: 0");
+    CHECK(cmp_w(t, 0, "abc", -1, "abc", -1) == 0, "CompareStringW: 0");
+    CHECK(call_imp(t, "SetStdHandle", (uint32_t)-11, 0x1234u) == 0, "SetStdHandle: 0");
+    CHECK(call_imp(t, "SetEnvironmentVariableA", gstr(SCRATCH + 0x300, "NFSU2TEST"), gstr(SCRATCH + 0x330, "abc")) == 0,
+          "SetEnvironmentVariableA: 0");
+    /* the layer's others, none of them UG2's imports: the same */
+    CHECK(call_imp(t, "GlobalMemoryStatusEx", SCRATCH + 0x100) == 0 && call_imp(t, "GetKeyboardLayout", 0u) == 0 &&
+          call_imp(t, "GetEnvironmentVariableA", gstr(SCRATCH + 0x300, "NFSU2TEST"), SCRATCH + 0x340, 16u) == 0,
+          "GlobalMemoryStatusEx, GetKeyboardLayout, GetEnvironmentVariableA: 0");
+    g_want_unimpl = 0;
+    CHECK(last_error(t) == 0x55u, "the last error untouched (%u)", last_error(t));
+    CHECK(call_imp(t, "GetStdHandle", (uint32_t)-10) == 0x12u && call_imp(t, "GetStdHandle", (uint32_t)-11) == 0x11u &&
+          call_imp(t, "GetStdHandle", (uint32_t)-12) == 0x10u, "GetStdHandle as always");
+    uint32_t e1 = call_imp(t, "CreateEventA", 0u, 0u, 0u, 0u), e2 = call_imp(t, "CreateEventA", 0u, 0u, 0u, 0u), arr = SCRATCH + 0x400;
+    MR32(arr) = e1; MR32(arr + 4u) = e2;
+    call_imp(t, "SetEvent", e2);
+    CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == 1u, "WaitForMultipleObjects: the second event");
+    CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == WAIT_TIMEOUT, "WaitForMultipleObjects: auto reset");
+    call_imp(t, "CloseHandle", e1); call_imp(t, "CloseHandle", e2);
+}
+
 int main(int argc, char **argv){
+#ifndef WIN32_UNIT_UG2
     const char *mode = argc > 1 ? argv[1] : "hle";
+#else
+    const char *mode = argc > 1 ? argv[1] : "ug2";
+#endif
     memset(g_cbits, 0xFF, 64u << 20 >> 14 >> 3);                      /* the first 64 MB are committed */
     win32_init();
     Thr t; thr_init(&t, TEB_MAIN, STACK_TOP, 100u);
     guest_lock(&t.cpu);
+#ifndef WIN32_UNIT_UG2
     if (!strcmp(mode, "hle")){
         test_timers(&t);
         test_small(&t);
         test_voice(&t);
         test_fatal(&t);
     } else if (!strcmp(mode, "stress")) test_stress(&t);
-    else { printf("usage: win32_unit.wasm hle|stress\n"); return 2; }
+    else { printf("usage: win32_unit.wasm hle|stress (win32_unit_ug2.wasm: ug2)\n"); return 2; }
+#else
+    if (!strcmp(mode, "ug2")) test_ug2(&t);
+    else { printf("usage: win32_unit_ug2.wasm ug2 (win32_unit.wasm: hle|stress)\n"); return 2; }
+#endif
     guest_unlock();
     printf("win32_unit: %d passed, %d failed\n", pass, fail);
     return fail ? 1 : 0;
