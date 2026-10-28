@@ -248,14 +248,17 @@ nothing (§8). No MW name contains `@` (V).
 - `fxm_data(e, id)` returns the node's dwords (read only; `bytes/4` of them). M5-03 and M5-05 read constants and
   preshader inputs from here.
 
-### 2.5 Set and Get (W; MW uses the rows in bold)
+### 2.5 Set and Get (W, and X/O where d3dx9_26 differs; MW uses the rows in bold)
 
-W checks shapes, not types (every guard below is W's, from `effect.c`): a numeric call takes any type in a
-numeric class. Shape words: *numeric class* = SCALAR, VECTOR, MATRIX_ROWS or MATRIX_COLUMNS; *1×1* = rows = cols = 1
-and elements 0, whatever the type (only the numeric classes have rows and columns, F§2.3). `conv(to, from, w)` is
-D3DX's number conversion (W `set_number` with `get_bool`, `get_int`, `get_float`): w as it is when to = from; else 0
-when the target is not BOOL, INT or FLOAT; else a VOID source is read as its raw bits and any other source that is
-not BOOL, INT or FLOAT gives 0; else:
+W checks shapes, not types (every guard below is W's, from `effect.c`): a numeric call takes any type in a numeric
+class. Where d3dx9_26's own setters were read (X, the vtable at 0x413EA0) and run (O: the setter rounds of
+fx-preshader.md §6.3, MW's setters on every parameter a preshader reads, through D3DX and the model, compared on the
+device), the row says so; review R1-05 found them, M5-03's oracle first reached them end to end. Shape words: *numeric
+class* = SCALAR, VECTOR, MATRIX_ROWS or MATRIX_COLUMNS; *1×1* = rows = cols = 1 and elements 0, whatever the type
+(only the numeric classes have rows and columns, F§2.3). `conv(to, from, w)` is D3DX's number conversion (W
+`set_number` with `get_bool`, `get_int`, `get_float`): w as it is when to = from; else 0 when the target is not BOOL,
+INT or FLOAT; else a VOID source is read as its raw bits and any other source that is not BOOL, INT or FLOAT gives 0;
+else:
 
 | from \ to | BOOL | INT | FLOAT |
 |---|---|---|---|
@@ -263,21 +266,27 @@ not BOOL, INT or FLOAT gives 0; else:
 | INT | w ≠ 0 ? 1 : 0 | w | (float)(int32)w |
 | FLOAT | w ≠ 0 (bit test: −0.0 is TRUE) | truncation toward zero; NaN or \|x\| ≥ 2³¹ gives 0x80000000 (x86's integer indefinite; §8) | w |
 
+d3dx9_26 does not use one conversion: **SetFloat, SetFloatArray and SetVectorArray** turn a float into an INT with
+`_ftol2` (`ftol` below: truncation to 64 bits, the low dword; NaN, the infinities and \|x\| ≥ 2⁶³ give 0, so 3e9
+gives 0xB2D05E00 and −3e9 0x4D2FA200; X 0x50557F, 0x505272, 0x503BC8; O) and into a BOOL by an x87 test against
+0.0 (`nz`: −0.0 is FALSE, a NaN TRUE; X 0x50558C, 0x5052FB, 0x503C1A); SetVector into an INT vector uses `fistp`
+with truncation (conv's 0x80000000, X 0x5042F3) and into a BOOL `nz`. The rows say which.
+
 | Call | Accepts | Writes | Version (§2.6) |
 |---|---|---|---|
 | SetValue | anything but a sampler object (class OBJECT with a sampler type: E_FAIL); `bytes ≥` node bytes | node bytes, raw (BOOL not normalised), when the node's own type is VOID, BOOL, INT, FLOAT, STRING or a texture type; any other type (PIXELSHADER, VERTEXSHADER, a sampler type outside class OBJECT, a type past the table) writes nothing (W's `set_value` ends in a FIXME there) and the version still rises. For object types M5-05 does AddRef/Release before the copy, reading the old pointers with GetValue | always |
 | GetValue | same | node bytes; when the node's **own** type is BOOL, every dword normalised to 0/1 (W switches on the parameter's type: a struct's BOOL members come back raw through the struct, normalised through the member) | – |
 | SetBool / GetBool | 1×1 | conv(type, BOOL, b) / conv(BOOL, type, w), so a BOOL comes back raw (SetBool(5), GetBool → 5) | always |
-| **SetInt** | 1×1 | conv(type, INT, n) | **only if the bytes change** |
+| **SetInt** | 1×1 (X 0x50481E): INT n; BOOL n ≠ 0, written only when its truth differs from the stored dword's; FLOAT (float)n, written only when n differs from the stored float as numbers (so −0.0 stays for SetInt(0), and a stored NaN is always replaced); any other type D3DERR_INVALIDCALL | INT: **only if the bytes change**; BOOL, FLOAT: when written |
 | SetInt, colour form | not 1×1, elements 0, type FLOAT, and class VECTOR with cols ≠ 2 or class MATRIX_ROWS with cols = 1 and rows ≠ 2 (W's "vector fixup"; MW: float3 and float4) | components 0, 1, 2, 3 ← bytes 2, 1, 0, 3 of n × (1/255), the first min(rows × cols, 4) of them (W writes 3, and the 4th when rows × cols > 3, even past a smaller storage) | always |
 | **GetInt** | 1×1: conv(INT, type, w). Colour form: the reverse, each of the first min(rows × cols, 4) components clamped to [0,1], × 255, truncated, packed as bytes 2,1,0(,3); a component past them packs as 0 | – | – |
-| **SetFloat** / GetFloat | 1×1 | conv(type, FLOAT, f) / conv(FLOAT, type, w) | **only if the bytes change** |
+| **SetFloat** / GetFloat | 1×1. Set (X 0x50549E, O): FLOAT f, written only when f differs from the stored float as x87 numbers (−0.0 does not replace +0.0 nor +0.0 −0.0; a NaN, new or stored, is always written); INT `ftol`(f), BOOL `nz`(f), each written only when the dword differs; any other type D3DERR_INVALIDCALL. Get: conv(FLOAT, type, w) | **when written** |
 | SetBoolArray | class SCALAR, VECTOR or MATRIX_ROWS (any type) | k = min(count, bytes/4) dwords in storage order (across elements), each conv(type, **INT**, src) (D3DX does not crop BOOL input) | always |
-| **SetIntArray**, SetFloatArray | same | k dwords, conv(type, INT or FLOAT, src) | **always** |
+| **SetIntArray**, SetFloatArray | same | k dwords, conv(type, INT, src); SetFloatArray: INT `ftol`, BOOL `nz`, otherwise conv | **always** |
 | Get{Bool,Int,Float}Array | also MATRIX_COLUMNS; a NULL pointer is refused whatever the count (W tests it first, with no count-0 shortcut) | k dwords, conv(BOOL/INT/FLOAT, type, w) (a BOOL comes back raw) | – |
-| **SetVector** | elements 0, class SCALAR or VECTOR (any type) | INT 1×1: x, y, z, w each clamped to [0,1] × 255, truncated, packed into bits 16, 8, 0, 24. FLOAT: the first min(cols, 4) components, raw. Otherwise conv(type, FLOAT, ·) on them. Never past the storage (W writes `cols` components) | **always** |
+| **SetVector** | elements 0, class SCALAR or VECTOR (any type) | INT 1×1 (X 0x5041D4, O): each of x, y, z, w gives 255 when ≥ 1, 0 when ≤ 0, otherwise (NaN too) `_ftol2`(x × 255 + 0.5) with the multiply and the add rounded at the **caller's x87 precision** (`fxm_set_x87_pc`, 24 until set: MW's game thread); packed into bits 16, 8, 0, 24 (W truncates: SetVector(0.5, 0.25, 0.999, 0.0039) gives d3dx9_26's 0x018040FF where W gives 0x007F3FFE; 128.5/255 as a float gives 129 at 24 bits, 128 at 53). FLOAT: the first min(cols, 4) components, raw. BOOL `nz`; other types conv(type, FLOAT, ·). Never past the storage (W writes `cols` components) | **always** |
 | GetVector | same | INT 1×1: bytes 2,1,0,3 × (1/255), no clamp. Otherwise min(cols, 4) components (within the storage) as floats, the rest 0.0 | – |
-| **SetVectorArray** | class VECTOR, an array (elements > 0, W) with elements ≥ count | count elements, the first min(cols, 4) components of each source float4 (FLOAT raw, otherwise conv), element stride rows × cols | **always** |
+| **SetVectorArray** | class VECTOR, an array (elements > 0, W) with elements ≥ count | count elements, the first min(cols, 4) components of each source float4 (FLOAT raw, INT `ftol`, BOOL `nz`, otherwise conv), element stride rows × cols | **always** |
 | GetVectorArray | count 0: FXM_OK whatever the id (W returns before it looks at the handle). Otherwise as SetVectorArray | as GetVector per element | – |
 | **SetMatrix** / GetMatrix | elements 0, class MATRIX_ROWS (any type) | the top-left min(rows, 4) × min(cols, 4) of the row-major 4×4 m: `data[i·cols+k] = m[i][k]` (FLOAT raw, otherwise conv). Get fills the other cells with 0.0 | **always** |
 | SetMatrixTranspose / GetMatrixTranspose | as SetMatrix; Get also takes SCALAR and VECTOR, which come back **not** transposed, in row 0 (W calls `get_matrix(…, FALSE)` for them) | `data[i·cols+k] = m[k][i]` | always |
@@ -591,7 +600,9 @@ because step 4 lets them through. MW (V): all 1,355 constants match (reason 0 th
   reads column-major, gives `rows` `data[c·rows + r]` and `columns` `data[r·rows + c]` (its dwords come from the
   file, SetValue and the array setters in storage order; SetMatrix refuses it, §2.5). MW has no MATRIX_COLUMNS
   parameter (V). For a truncated matrix only the first `count` registers (rows or columns) go up. Components past
-  the shape are not written.
+  the shape are not written. This holds for shader uploads (d3dx9_26 under the oracle: `WorldViewProj`'s columns
+  in the vertex shader's registers). A **preshader**'s input table is filled otherwise: register r holds row r of a
+  MATRIX_ROWS parameter whatever the constant's class, and an INT reaches it exact (fx-preshader.md §4.1).
 - **Conversion** from the parameter's type to the register set's: c → float, i → int, b → bool, with conv() of §2.5
   (an INT parameter in set c becomes a float). In a preshader, set c is the input table `c` (F§4.3), so INT
   parameters reach the FXLC code as floats.
@@ -935,17 +946,19 @@ expectation.
   and `<smpa>` whose blocks feed the deps (§3.5: smp's block and element 0's of the array) and `TEXTURE[i] =
   <smpb>`, whose block does not; a creation the memory bound refuses, which leaves the pool's versions and counter
   alone (§2.6).
-- **Conversions**: every row of §2.5 with exact dwords. That includes 1.9 → 1 and −1.9 → −1 into INT; NaN and 3e9
-  → 0x80000000; −0.0 → TRUE; SetBool(5) on BOOL stored raw, then GetBool → 5 (raw: `set_number` copies equal
-types) and GetValue → 1; SetBoolArray(5) on FLOAT
-  → 5.0; the SetInt colour form on float3 and float4 and GetInt back; SetVector into INT 1×1 (clamping); SetVector
-  into a 1×2 FLOAT leaving nothing past cols; SetMatrix and SetMatrixTranspose into 3×3 and 4×3; SetMatrixArray and
+- **Conversions**: every row of §2.5 with exact dwords. That includes 1.9 → 1 and −1.9 → −1 into INT; SetFloat and
+  SetFloatArray of NaN → 0, 3e9 → 0xB2D05E00, −3e9 → 0x4D2FA200, 5e9 → 0x2A05F200 (`ftol`); SetFloat −0.0 → FALSE and
+  NaN → TRUE into BOOL; SetFloat(−0.0) leaving +0.0, SetInt(0) leaving −0.0, a NaN raising the version each time;
+  SetVector(0.5, 0.25, 0.999, 0.0039) → 0x018040FF and 128.5/255 → 129 at 24 bits, 128 at 53; SetBool(5) on BOOL
+  stored raw, then GetBool → 5 (raw: `set_number` copies equal types) and GetValue → 1; SetBoolArray(5) on FLOAT →
+  5.0; the SetInt colour form on float3 and float4 and GetInt back; SetVector into INT 1×1 (clamping); SetVector into
+  a 1×2 FLOAT leaving nothing past cols; SetMatrix and SetMatrixTranspose into 3×3 and 4×3; SetMatrixArray and
   SetVectorArray with count > elements → INVALIDCALL; SetIntArray with count 3 on INT[5] writing 3 of 5 elements and
   count 9 writing 5; every refused shape; id 0 → INVALIDCALL with nothing changed; Set* on an annotation and on
   technique and pass ids → INVALIDCALL; SetValue on a sampler → E_FAIL.
-- **Versions and changed**: per §2.5's last column. SetInt and SetFloat with the same value leave the version
-  alone; SetIntArray, SetVector and SetMatrix with the same values raise it; SetTexture with the same pointer does
-  not. `changed` follows the bytes in every case. Versions only rise.
+- **Versions and changed**: per §2.5's last column. SetInt and SetFloat with the same value (INT: the same dword;
+  FLOAT: the same number) leave the version alone; SetIntArray, SetVector and SetMatrix with the same values raise it;
+  SetTexture with the same pointer does not. `changed` follows the bytes in every case. Versions only rise.
 - **Lookups on all 31 effects**: for every parameter, element and member, `fxm_by_name(e, 0, path)` returns its id;
   for every member and element child, `fxm_by_name(e, parent, member name)` returns the member. Out-of-range,
   `[]`, leading-zero, unknown and case-changed names return 0. For every top-level parameter with a semantic,
@@ -1036,9 +1049,14 @@ Settled only by the oracle (M2-06's lifted `d3dx9_26.dll` in a unit harness, or 
 - **Rows 89 and 102** (§4.3): whether d3dx9_26 applies 53 and 171. MW does not use them.
 - **The INT TEXTURETRANSFORM literal** (§4.3): what d3dx9_26 does with a value whose type the table does not
   expect.
-- **Conversions MW uses** (§2.5, bold rows): W's rules are the contract until M5-09; in particular float→int
-  (truncation, and 0x80000000 for NaN), the SetInt colour form's factor (× 1/255 as a float or ÷ 255), and which
-  writes count as changes (versions decide what CommitChanges re-applies, so they show in the device-call stream).
+- **Conversions MW uses** (§2.5, bold rows): SetFloat's, SetFloatArray's, SetVector's and SetVectorArray's into
+  INT and BOOL, SetFloat's and SetInt's tests of "the same value", and SetVector's colour form are d3dx9_26's (X, and
+  O through the setter rounds on MW's parameter shapes: INT 1×1 and INT[5], float3, float4, float4x4). The rest is W
+  until M5-09: the Get side (GetInt, GetFloat, GetVector and their colour forms), SetInt's colour form's shapes
+  (d3dx9_26 takes FLOAT with rows 1 and cols 3 or 4 in any numeric class, X 0x5047A1; W takes VECTOR cols ≠ 2 and
+  MATRIX_ROWS cols 1, rows ≠ 2; MW's float3 and float4 are both), SetMatrix's conversion into INT or BOOL (a helper,
+  0x4FEA9A, not read; MW's matrices are FLOAT), and versions beyond those tests (they decide what CommitChanges
+  re-applies, so they show in the device-call stream).
 - **Name lookups beyond MW's** (§2.3): W matches whole paths (no `a[03]`); older D3DX may parse indices with atoi.
   MW looks up only plain top-level names.
 - **Set* on annotations, and cross-effect handles** (§2.5, §2.8): refused here; W accepts both. MW does neither.
@@ -1114,6 +1132,6 @@ Where this design departs from W on purpose (none reachable from MW's effects or
   (GetParameterBySemantic matches a NULL semantic only to a NULL query), GetParameterDesc (M5-06) would give `""`
   where W gives NULL, and MW's handle-table pass (0x6C5500, §1.4), which hashes only a non-NULL semantic, would put
   a handle under the hash of `""`. MW has no record of size 0 (V).
-- **A NaN colour component** (GetInt's colour form, SetVector into INT 1×1): W gives 255 (windef's ternary
-  `min`/`max`: NaN passes `max` and `min` returns the bound). The model gives 0 on purpose. What d3dx9_26 itself
-  does is M5-09's to check if MW ever produces one.
+- **A NaN colour component** (GetInt's colour form): W gives 255 (windef's ternary `min`/`max`: NaN passes `max`
+  and `min` returns the bound). The model gives 0 on purpose. What d3dx9_26's GetInt does is M5-09's to check if MW
+  ever produces one. SetVector into INT 1×1 gives 0 for a NaN channel in d3dx9_26 too (`_ftol2` of a NaN, X, O).

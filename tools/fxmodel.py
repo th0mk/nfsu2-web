@@ -27,6 +27,7 @@ match 3.2..3.5.  The effects and every dump are the game's data: they stay under
 of the game's this file states are the two pool parameters of GAME.md 5.5 that the pool test names.
 """
 import hashlib, importlib.util, os, struct, sys
+from fractions import Fraction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
@@ -153,6 +154,55 @@ def conv(to, frm, w):
             x = w2f(w)
             return 0x80000000 if x != x or abs(x) >= 2.0 ** 31 else int(x) & 0xFFFFFFFF
         return w
+
+
+def ftol_f(w):
+    """FLOAT to INT as d3dx9_26's SetFloat, SetFloatArray and SetVectorArray do it (fld dword; _ftol2): the value
+    truncated toward zero to 64 bits, its low dword; NaN, the infinities and |x| >= 2^63 give 0"""
+    x = w2f(w)
+    if x != x or abs(x) >= 2.0 ** 63:
+        return 0
+    return int(x) & 0xFFFFFFFF
+
+
+def nonzero_f(w):
+    """d3dx9_26's test of a float against 0.0 (fucompp): -0.0 is zero, a NaN is not"""
+    return 0 if w2f(w) == 0.0 else 1
+
+
+def same_f(a, b):
+    """two floats equal on the x87: +0 and -0 are, a NaN is equal to nothing"""
+    return w2f(a) == w2f(b)
+
+
+def colour_round(w, pc):
+    """SetVector's colour form: >= 1 gives 255, <= 0 gives 0, anything else (NaN too) trunc(x * 255 + 0.5) with
+    the product and the sum rounded at the caller's x87 precision (pc 24: to 24 bits each; NaN gives 0)"""
+    x = w2f(w)
+    if x != x:
+        return 0
+    if x >= 1.0:
+        return 255
+    if x <= 0.0:
+        return 0
+    y = Fraction(x) * 255
+    if pc == 24:
+        y = round24(round24(y) + Fraction(1, 2))
+    else:
+        y += Fraction(1, 2)
+    return int(y)
+
+
+def round24(q):
+    """q > 0 rounded to 24 significant bits, ties to even"""
+    e = q.numerator.bit_length() - q.denominator.bit_length()
+    if Fraction(2) ** e > q:
+        e -= 1
+    u = Fraction(2) ** (e - 23)
+    n, r = divmod(q, u)
+    if r > u / 2 or (r == u / 2 and n % 2):
+        n += 1
+    return n * u
 
 
 def getbool(typ, w):
@@ -720,6 +770,7 @@ class Inst:
 
     def __init__(self, proto, pool=None):
         self.p, self.pool = proto, pool
+        self.x87pc = 24                         # the caller's x87 precision, for SetVector's colour form (2.5)
         self.clock = pool.clock if pool is not None else Clock()
         self.blocks, self.slot = {}, {}
         for tid in proto.params:
@@ -849,10 +900,24 @@ class Inst:
             return INVALIDCALL, None
         return OK, conv(BOOL, n.type, self._get(n)[0][0])     # BOOL to BOOL is copied raw (W set_number)
 
+    def set_x87_pc(self, pc):
+        self.x87pc = pc if pc in (53, 64) else 24
+
     def set_int(self, nid, v):
         n = self._pn(nid)
         if n is not None and self._one(n):
-            return self._put(n, {0: conv(n.type, INT, v)}, False)
+            v &= 0xFFFFFFFF
+            old = self._get(n)[0][0]
+            if n.type == BOOL:                  # d3dx9_26 tests truth, then writes 0 or 1
+                return (OK, 0) if (v == 0) == (old == 0) else self._put(n, {0: 1 if v else 0}, True)
+            if n.type == FLOAT:                 # the int against the stored float, exactly
+                x = w2f(old)
+                if x == x and Fraction(x) == (v - (1 << 32) if v >> 31 else v):
+                    return OK, 0
+                return self._put(n, {0: conv(FLOAT, INT, v)}, True)
+            if n.type == INT:
+                return self._put(n, {0: v}, False)
+            return INVALIDCALL, 0
         if n is not None and self._colour(n):
             comps = [(v >> 16) & 255, (v >> 8) & 255, v & 255, (v >> 24) & 255][:min(n.bytes // 4, 4)]
             return self._put(n, {i: fmul(b, INV255) for i, b in enumerate(comps)}, True)
@@ -872,7 +937,13 @@ class Inst:
         n = self._pn(nid)
         if n is None or not self._one(n):
             return INVALIDCALL, 0
-        return self._put(n, {0: conv(n.type, FLOAT, f)}, False)
+        old = self._get(n)[0][0]
+        if n.type == FLOAT:                     # equal as floats: nothing written, the version stays
+            return (OK, 0) if same_f(f, old) else self._put(n, {0: f}, True)
+        if n.type not in (INT, BOOL):
+            return INVALIDCALL, 0
+        v = ftol_f(f) if n.type == INT else nonzero_f(f)
+        return (OK, 0) if v == old else self._put(n, {0: v}, True)
 
     def get_float(self, nid):
         n = self._rn(nid)
@@ -886,7 +957,14 @@ class Inst:
         if not self._num(n, (SCALAR, VECTOR, MATRIX_ROWS)) or typ not in NUMTYPES:
             return INVALIDCALL, 0
         frm = INT if typ == BOOL else typ           # D3DX does not crop BOOL input
-        return self._put(n, {i: conv(n.type, frm, src[i]) for i in range(min(count, n.bytes // 4))}, True)
+
+        def cv(w):
+            if frm == FLOAT and n.type == INT:
+                return ftol_f(w)
+            if frm == FLOAT and n.type == BOOL:
+                return nonzero_f(w)
+            return conv(n.type, frm, w)
+        return self._put(n, {i: cv(src[i]) for i in range(min(count, n.bytes // 4))}, True)
 
     def get_array(self, nid, typ, count):
         n = self._rn(nid)
@@ -900,10 +978,11 @@ class Inst:
         if not self._num(n, (SCALAR, VECTOR)) or n.elements:
             return INVALIDCALL, 0
         if self._one(n) and n.type == INT:
-            b = [to255(x) for x in v[:4]]
+            b = [colour_round(x, self.x87pc) for x in v[:4]]
             return self._put(n, {0: (b[0] << 16) | (b[1] << 8) | b[2] | (b[3] << 24)}, True)
         cols = min(n.cols, 4, n.bytes // 4)        # never past the storage (W writes `columns` floats)
-        return self._put(n, {c: v[c] if n.type == FLOAT else conv(n.type, FLOAT, v[c]) for c in range(cols)}, True)
+        return self._put(n, {c: v[c] if n.type == FLOAT else nonzero_f(v[c]) if n.type == BOOL
+                             else conv(n.type, FLOAT, v[c]) for c in range(cols)}, True)
 
     def get_vector(self, nid):
         n = self._rn(nid)
@@ -925,7 +1004,9 @@ class Inst:
         cells = {}
         for e in range(count):
             for c in range(cols):
-                cells[e * stride + c] = vs[e][c] if n.type == FLOAT else conv(n.type, FLOAT, vs[e][c])
+                w = vs[e][c]
+                cells[e * stride + c] = w if n.type == FLOAT else ftol_f(w) if n.type == INT else \
+                    nonzero_f(w) if n.type == BOOL else conv(n.type, FLOAT, w)
         return self._put(n, cells, True)
 
     def get_vector_array(self, nid, count):
@@ -1846,15 +1927,28 @@ def self_test(indir):
     ck.ok('SetFloat with a change raises the version', v1 > v0)
     eq('SetFloat -1.9 on INT', e.set_float(i, fl(-1.9)), (OK, 1))
     eq('INT after SetFloat -1.9', e.data(i), [0xFFFFFFFF])
-    eq('SetFloat NaN on INT', (e.set_float(i, 0x7FC00000), e.data(i)), ((OK, 1), [0x80000000]))
-    eq('SetFloat 3e9 on INT', (e.set_float(i, fl(3e9)), e.data(i)), ((OK, 0), [0x80000000]))
+    eq('SetFloat NaN on INT: _ftol2 gives 0', (e.set_float(i, 0x7FC00000), e.data(i)), ((OK, 1), [0]))
+    eq('SetFloat 3e9 on INT: the low dword', (e.set_float(i, fl(3e9)), e.data(i)), ((OK, 1), [0xB2D05E00]))
+    eq('SetFloat -3e9 on INT', (e.set_float(i, fl(-3e9)), e.data(i)), ((OK, 1), [0x4D2FA200]))
+    eq('SetFloat 3e9 on INT again', (e.set_float(i, fl(3e9)), e.data(i)), ((OK, 1), [0xB2D05E00]))
     v2 = e.version(i)
-    eq('SetInt same value', e.set_int(i, 0x80000000), (OK, 0))
+    eq('SetInt same value', e.set_int(i, 0xB2D05E00), (OK, 0))
     eq('SetInt same value keeps the version', e.version(i), v2)
     eq('SetFloat same bytes keeps the version', (e.set_float(i, fl(3e9)), e.version(i)), ((OK, 0), v2))
     eq('SetInt new value', e.set_int(i, 42), (OK, 1))
     ck.ok('SetInt with a change raises the version', e.version(i) > v2)
-    eq('SetFloat -0.0 on BOOL', (e.set_float(b, 0x80000000), e.data(b)), ((OK, 1), [1]))
+    eq('SetFloat -0.0 on BOOL: FALSE (fucompp)', (e.set_float(b, 0x80000000), e.data(b)), ((OK, 0), [0]))
+    eq('SetFloat NaN on BOOL: TRUE', (e.set_float(b, 0x7FC00000), e.data(b)), ((OK, 1), [1]))
+    eq('SetFloat 0 on BOOL', (e.set_float(b, 0), e.data(b)), ((OK, 1), [0]))
+    e.set_value(f, [0], 4)
+    eq('SetFloat -0.0 on +0.0: nothing written', (e.set_float(f, 0x80000000), e.data(f)), ((OK, 0), [0]))
+    vf = e.version(f)
+    eq('SetFloat NaN twice: the version rises each time', (e.set_float(f, 0x7FC00000), e.set_float(f, 0x7FC00000),
+                                                           e.version(f) - vf), ((OK, 1), (OK, 0), 2))
+    e.set_value(f, [0x80000000], 4)
+    eq('SetInt 0 on -0.0: nothing written', (e.set_int(f, 0), e.data(f)), ((OK, 0), [0x80000000]))
+    eq('SetFloatArray 3e9 on INT: _ftol2', (e.set_array(i, FLOAT, [fl(3e9)], 1), e.data(i)), ((OK, 1), [0xB2D05E00]))
+    e.set_int(i, 42)
     eq('SetBool 5 on BOOL stored raw', (e.set_bool(bb, 5), e.data(bb)), ((OK, 1), [5]))
     eq('GetBool after SetBool 5: raw (W set_number with equal types)', e.get_bool(bb), (OK, 5))
     eq('GetBoolArray after SetBool 5: raw', e.get_array(bb, BOOL, 1), (OK, [5]))
@@ -1886,10 +1980,17 @@ def self_test(indir):
     eq('GetInt colour form clamps', (e.set_vector(v4, [fl(2.0), fl(-1.0), fl(0.5), fl(1.0)]), e.get_int(v4)),
        ((OK, 1), (OK, 0xFFFF007F)))
     eq('SetInt colour form refused on float2', e.set_int(pid['v2'], 1), (INVALIDCALL, 0))
-    # x 2.0 -> 255 in bits 16..23, y 0.5 -> 127 in 8..15, z -3.0 -> 0 in 0..7, w 1.0 -> 255 in 24..31
+    # x 2.0 -> 255 in bits 16..23, y 0.5 -> 128 in 8..15 (rounded), z -3.0 -> 0 in 0..7, w 1.0 -> 255 in 24..31
     eq('SetVector into INT 1x1 clamps', (e.set_vector(i, [fl(2.0), fl(0.5), fl(-3.0), fl(1.0)]), e.data(i)),
-       ((OK, 1), [0xFFFF7F00]))
-    eq('GetVector on INT 1x1', e.get_vector(i), (OK, [fl(1.0), fmul(127, INV255), 0, fl(1.0)]))
+       ((OK, 1), [0xFFFF8000]))
+    eq('GetVector on INT 1x1', e.get_vector(i), (OK, [fl(1.0), fmul(128, INV255), 0, fl(1.0)]))
+    eq('SetVector (0.5, 0.25, 0.999, 0.0039): d3dx9_26 rounds',
+       (e.set_vector(i, [fl(0.5), fl(0.25), fl(0.999), fl(0.0039)]), e.data(i)), ((OK, 1), [0x018040FF]))
+    eq('SetVector 128.5/255 at 24 bits', (e.set_vector(i, [0x3F010101, 0, 0, 0]), e.data(i)), ((OK, 1), [0x00810000]))
+    e.set_x87_pc(53)
+    eq('SetVector 128.5/255 at 53 bits', (e.set_vector(i, [0x3F010101, 0, 0, 0]), e.data(i)), ((OK, 1), [0x00800000]))
+    e.set_x87_pc(24)
+    e.set_vector(i, [fl(2.0), fl(0.5), fl(-3.0), fl(1.0)])
     vv = e.version(pid['v2'])
     eq('SetVector into float2', (e.set_vector(pid['v2'], [fl(7), fl(8), fl(9), fl(10)]), e.data(pid['v2'])),
        ((OK, 1), [fl(7), fl(8)]))

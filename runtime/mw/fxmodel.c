@@ -52,6 +52,7 @@ typedef struct {                 /* a top-level parameter's storage */
 struct fxm_effect {
     const fx2_effect *fx;
     fxm_pool *pool;
+    int x87pc;                   /* the caller's x87 precision for SetVector's colour form (§2.5): 24, 53 or 64 */
     uint64_t own_clock, *clock;
     node *nodes;                 /* ids 1..nn; nodes[0] is not used */
     uint32_t nn, capn;
@@ -793,6 +794,7 @@ int fxm_effect_new(fxm_effect **out, const fx2_effect *fx, fxm_pool *pool, char 
     e->fx = fx; e->pool = pool; e->err = err; e->errlen = errlen;
     e->cap = (uint64_t)fx->size * 1024 + ((uint64_t)16 << 20);
     e->clock = pool ? &pool->clock : &e->own_clock;
+    e->x87pc = 24;
     if (pool) pool->effects++;
     int r = build(e);
     e->err = NULL; e->errlen = 0;
@@ -930,6 +932,25 @@ static uint32_t f2i(uint32_t w){
     return (uint32_t)(int32_t)x;
 }
 
+/* FLOAT to INT as d3dx9_26's SetFloat, SetFloatArray and SetVectorArray do it (X: fld dword, _ftol2 at 0x600050):
+ * truncation toward zero to 64 bits, the low dword; NaN, the infinities and |x| >= 2^63 give 0 (the low dword of
+ * 0x8000000000000000).  3e9 -> 0xB2D05E00, -3e9 -> 0x4D2FA200 (O) */
+static uint32_t f2i_ftol(uint32_t w){
+    uint32_t ex = w >> 23 & 0xFF, m = (w & 0x7FFFFF) | 0x800000;
+    if (ex == 0xFF || ex < 127 || ex >= 127 + 63) return 0;   /* NaN, inf, |x| < 1, |x| >= 2^63 */
+    int sh = (int)ex - 127 - 23;
+    uint64_t t = sh >= 0 ? (uint64_t)m << sh : (uint64_t)(m >> -sh);
+    return (uint32_t)(w >> 31 ? 0 - t : t);
+}
+/* d3dx9_26's test of a float against 0 (fucompp): -0 is 0, a NaN is not */
+static int f_nonzero(uint32_t w){ return (w & 0x7FFFFFFFu) != 0; }
+/* the two floats compare equal on the x87 (fucompp): -0 equals +0, a NaN equals nothing */
+static int f_equal(uint32_t a, uint32_t b){
+    if (((a & 0x7F800000u) == 0x7F800000u && (a & 0x7FFFFFu)) || ((b & 0x7F800000u) == 0x7F800000u && (b & 0x7FFFFFu)))
+        return 0;
+    return a == b || !((a | b) & 0x7FFFFFFFu);
+}
+
 /* §2.5's conv(to, from, w) (W's set_number) */
 static uint32_t conv(uint32_t to, uint32_t from, uint32_t w){
     if (to == from) return w;                            /* the same type: copied as it is */
@@ -953,6 +974,20 @@ static uint32_t to_byte(uint32_t w){
     return (uint32_t)(x * 255.0f);
 }
 static uint32_t from_byte(uint32_t b){ return fbits((float)(b & 0xFF) * (1.0f / 255.0f)); }
+/* SetVector's colour form (X 0x5041D4): a channel x >= 1 gives 255, x <= 0 gives 0; anything else, NaN included,
+ * trunc(x * 255 + 0.5) with the multiply and the add rounded at the caller's x87 precision (_ftol2: a NaN gives 0).
+ * x * 255 is exact in a double; at 24 bits each step rounds to a float's 24 bits (the values are far from the
+ * float range's ends) */
+static uint32_t to_byte_round(uint32_t w, int pc){
+    float x = fval(w);
+    if ((w & 0x7F800000u) == 0x7F800000u && (w & 0x007FFFFFu)) return 0;
+    if (x >= 1.0f) return 255;
+    if (x <= 0.0f) return 0;
+    double y = (double)x * 255.0;
+    if (pc == 24) y = (double)(float)((double)(float)y + 0.5);
+    else y += 0.5;
+    return (uint32_t)y;
+}
 
 static int valued(const node *d){ return d && d->n.kind >= FXM_K_PARAM && d->n.kind <= FXM_K_ANNOT; }
 static int writable(const node *d){ return d && d->n.kind >= FXM_K_PARAM && d->n.kind <= FXM_K_MEMBER; }
@@ -984,6 +1019,8 @@ static uint32_t done(fxm_effect *e, const node *d, int ch, int always, int *chan
     return FXM_OK;
 }
 static uint32_t refuse(int *changed, uint32_t hr){ if (changed) *changed = 0; return hr; }
+
+void fxm_set_x87_pc(fxm_effect *e, int pc){ e->x87pc = pc == 53 || pc == 64 ? pc : 24; }
 
 uint32_t fxm_set_value(fxm_effect *e, uint32_t id, const uint32_t *src, uint32_t bytes, int *changed){
     const node *d = nget(e, id);
@@ -1031,8 +1068,17 @@ uint32_t fxm_set_int(fxm_effect *e, uint32_t id, uint32_t n, int *changed){
     const node *d = nget(e, id);
     if (!writable(d)) return refuse(changed, FXM_INVALIDCALL);
     int ch = 0;
-    if (one_by_one(d)){
-        put(wr(e, d), conv(d->n.type, FX2_T_INT, n), &ch);
+    if (one_by_one(d)){                                       /* X 0x50481E: each type its own test of "the same" */
+        uint32_t *w = wr(e, d), t = d->n.type;
+        if (t == FX2_T_BOOL){ if (!n == !*w) return done(e, d, 0, 0, changed); put(w, n != 0, &ch); }
+        else if (t == FX2_T_FLOAT){                           /* the int against the stored float, exactly */
+            float x = fval(*w);
+            if (x == x && (double)x == (double)(int32_t)n) return done(e, d, 0, 0, changed);
+            put(w, conv(FX2_T_FLOAT, FX2_T_INT, n), &ch);
+            return done(e, d, ch, 1, changed);
+        }
+        else if (t == FX2_T_INT) put(w, n, &ch);
+        else return refuse(changed, FXM_INVALIDCALL);           /* no case for any other type */
         return done(e, d, ch, 0, changed);
     }
     if (!colour(d)) return refuse(changed, FXM_INVALIDCALL);
@@ -1058,9 +1104,21 @@ uint32_t fxm_get_int(const fxm_effect *e, uint32_t id, uint32_t *n){
 uint32_t fxm_set_float(fxm_effect *e, uint32_t id, uint32_t f, int *changed){
     const node *d = nget(e, id);
     if (!writable(d) || !one_by_one(d)) return refuse(changed, FXM_INVALIDCALL);
+    uint32_t *w = wr(e, d), t = d->n.type, v;
     int ch = 0;
-    put(wr(e, d), conv(d->n.type, FX2_T_FLOAT, f), &ch);
-    return done(e, d, ch, 0, changed);
+    /* X 0x505554: FLOAT compares as floats (fucompp: -0 is +0, a NaN always writes); INT and BOOL compare the
+     * dword they would store; any other type is refused */
+    if (t == FX2_T_FLOAT){
+        if (f_equal(f, *w)) return done(e, d, 0, 0, changed);
+        put(w, f, &ch);
+        return done(e, d, ch, 1, changed);
+    }
+    if (t == FX2_T_INT) v = f2i_ftol(f);
+    else if (t == FX2_T_BOOL) v = f_nonzero(f);
+    else return refuse(changed, FXM_INVALIDCALL);
+    if (v == *w) return done(e, d, 0, 0, changed);
+    put(w, v, &ch);
+    return done(e, d, ch, 1, changed);
 }
 
 uint32_t fxm_get_float(const fxm_effect *e, uint32_t id, uint32_t *f){
@@ -1075,9 +1133,14 @@ uint32_t fxm_set_array(fxm_effect *e, uint32_t id, uint32_t type, const uint32_t
     if (!writable(d) || !is_num_type(type) || d->n.cls > FX2_C_MATRIX_ROWS || (!src && count))
         return refuse(changed, FXM_INVALIDCALL);
     uint32_t k = count < d->n.bytes / 4 ? count : d->n.bytes / 4, from = type == FX2_T_BOOL ? FX2_T_INT : type;
-    uint32_t *w = wr(e, d);
+    uint32_t *w = wr(e, d), t = d->n.type;
     int ch = 0;
-    for (uint32_t i = 0; i < k; i++) put(&w[i], conv(d->n.type, from, src[i]), &ch);   /* BOOL input is not cropped */
+    for (uint32_t i = 0; i < k; i++){                         /* BOOL input is not cropped */
+        uint32_t v = from == FX2_T_FLOAT && t == FX2_T_INT ? f2i_ftol(src[i])           /* X 0x505272 */
+                   : from == FX2_T_FLOAT && t == FX2_T_BOOL ? (uint32_t)f_nonzero(src[i]) /* X 0x5052FB */
+                   : conv(t, from, src[i]);
+        put(&w[i], v, &ch);
+    }
     return done(e, d, ch, 1, changed);
 }
 
@@ -1104,9 +1167,13 @@ uint32_t fxm_set_vector(fxm_effect *e, uint32_t id, const uint32_t v[4], int *ch
     if (!writable(d) || !vec_shape(d) || !v) return refuse(changed, FXM_INVALIDCALL);
     uint32_t *w = wr(e, d);
     int ch = 0;
-    if (int_colour(d))
-        put(w, to_byte(v[0]) << 16 | to_byte(v[1]) << 8 | to_byte(v[2]) | to_byte(v[3]) << 24, &ch);
-    else for (uint32_t c = 0, n = vec_comps(d, d->n.bytes / 4); c < n; c++) put(&w[c], conv(d->n.type, FX2_T_FLOAT, v[c]), &ch);
+    if (int_colour(d)){
+        int pc = e->x87pc;
+        put(w, to_byte_round(v[0], pc) << 16 | to_byte_round(v[1], pc) << 8 | to_byte_round(v[2], pc) |
+               to_byte_round(v[3], pc) << 24, &ch);
+    }
+    else for (uint32_t c = 0, n = vec_comps(d, d->n.bytes / 4); c < n; c++)       /* BOOL: X 0x50433A */
+        put(&w[c], d->n.type == FX2_T_BOOL ? (uint32_t)f_nonzero(v[c]) : conv(d->n.type, FX2_T_FLOAT, v[c]), &ch);
     return done(e, d, ch, 1, changed);
 }
 
@@ -1134,7 +1201,11 @@ uint32_t fxm_set_vector_array(fxm_effect *e, uint32_t id, const uint32_t *v, uin
     uint32_t *w = wr(e, d), n = vec_comps(d, s);
     int ch = 0;
     for (uint32_t i = 0; i < count; i++)
-        for (uint32_t c = 0; c < n; c++) put(&w[s * i + c], conv(d->n.type, FX2_T_FLOAT, v[4 * (uint64_t)i + c]), &ch);
+        for (uint32_t c = 0; c < n; c++){
+            uint32_t x = v[4 * (uint64_t)i + c];
+            put(&w[s * i + c], d->n.type == FX2_T_INT ? f2i_ftol(x) : d->n.type == FX2_T_BOOL ? (uint32_t)f_nonzero(x)
+                               : conv(d->n.type, FX2_T_FLOAT, x), &ch);           /* X 0x503BC8, 0x503C1A */
+        }
     return done(e, d, ch, 1, changed);
 }
 

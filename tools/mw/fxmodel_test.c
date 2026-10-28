@@ -842,14 +842,38 @@ static void test_conv(void){
     CHECK(p0 == t0 + 2 && fxm_nodes(m) == p0, "the pass is the last node");
 
     /* §2.5: conversions, exact dwords */
-    struct { float in; uint32_t out; } f2i[] = { { 1.9f, 1 }, { -1.9f, 0xFFFFFFFFu }, { 3e9f, 0x80000000u }, { -3e9f, 0x80000000u },
-                                                { 2147483520.0f, 2147483520u }, { -2147483648.0f, 0x80000000u }, { -0.0f, 0 } };
+    /* SetFloat into INT is d3dx9_26's _ftol2: 64-bit truncation, the low dword; NaN and the infinities 0 (O) */
+    struct { float in; uint32_t out; } f2i[] = { { 1.9f, 1 }, { -1.9f, 0xFFFFFFFFu }, { 3e9f, 0xB2D05E00u }, { -3e9f, 0x4D2FA200u },
+                                                { 2147483520.0f, 2147483520u }, { -2147483648.0f, 0x80000000u }, { -0.0f, 0 },
+                                                { 4294967296.0f, 0 }, { 1e19f, 0 }, { 5e9f, 0x2A05F200u }, { -5e9f, 0xD5FA0E00u } };
     for (size_t k = 0; k < sizeof f2i / sizeof f2i[0]; k++){
         CHECK(fxm_set_float(m, id[P_I], fb(f2i[k].in), NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == f2i[k].out,
               "SetFloat(%g) into INT: 0x%08x, want 0x%08x", f2i[k].in, fxm_data(m, id[P_I])[0], f2i[k].out);
     }
-    CHECK(fxm_set_float(m, id[P_I], 0x7FC00000u, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x80000000u, "NaN into INT");
-    CHECK(fxm_set_float(m, id[P_B], 0x80000000u, NULL) == FXM_OK && fxm_data(m, id[P_B])[0] == 1, "-0.0 into BOOL is TRUE");
+    CHECK(fxm_set_float(m, id[P_I], 0x7FC00000u, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0, "NaN into INT: 0");
+    CHECK(fxm_set_float(m, id[P_I], 0xFF800000u, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0, "-inf into INT: 0");
+    v[0] = fb(-3e9f);
+    CHECK(fxm_set_array(m, id[P_I], FX2_T_FLOAT, v, 1, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x4D2FA200u,
+          "SetFloatArray into INT: _ftol2 too");
+    CHECK(fxm_set_float(m, id[P_B], 0x80000000u, NULL) == FXM_OK && fxm_data(m, id[P_B])[0] == 0, "-0.0 into BOOL is FALSE (fucompp)");
+    CHECK(fxm_set_float(m, id[P_B], 0x7FC00000u, NULL) == FXM_OK && fxm_data(m, id[P_B])[0] == 1, "NaN into BOOL is TRUE");
+    /* SetFloat into FLOAT and SetInt into FLOAT compare values, not bytes: -0 does not replace +0 (O) */
+    {
+        uint32_t z = 0, nz = 0x80000000u, vv[1] = { 0 };
+        int ch = 9;
+        CHECK(fxm_set_value(m, id[P_F], vv, 4, NULL) == FXM_OK && fxm_set_float(m, id[P_F], nz, &ch) == FXM_OK && !ch &&
+              fxm_data(m, id[P_F])[0] == z, "SetFloat(-0) on +0: nothing written");
+        uint64_t ver = fxm_version(m, id[P_F]);
+        CHECK(fxm_set_float(m, id[P_F], 0x7FC00000u, &ch) == FXM_OK && ch && fxm_set_float(m, id[P_F], 0x7FC00000u, &ch) == FXM_OK &&
+              !ch && fxm_version(m, id[P_F]) == ver + 2, "SetFloat(NaN) writes every time: the version rises");
+        vv[0] = nz;
+        CHECK(fxm_set_value(m, id[P_F], vv, 4, NULL) == FXM_OK && fxm_set_int(m, id[P_F], 0, &ch) == FXM_OK && !ch &&
+              fxm_data(m, id[P_F])[0] == nz, "SetInt(0) on -0.0: nothing written");
+        vv[0] = 0x4B800000u;                                    /* 16777216.0 */
+        ver = fxm_version(m, id[P_F]);
+        CHECK(fxm_set_value(m, id[P_F], vv, 4, NULL) == FXM_OK && fxm_set_int(m, id[P_F], 16777217u, &ch) == FXM_OK && !ch &&
+              fxm_version(m, id[P_F]) == ver + 2, "SetInt(2^24 + 1) on 2^24: the same float written, the version rises");
+    }
     CHECK(fxm_set_bool(m, id[P_B], 5, NULL) == FXM_OK && fxm_data(m, id[P_B])[0] == 5, "SetBool(5) on BOOL is stored raw");
     CHECK(fxm_get_bool(m, id[P_B], &w) == FXM_OK && w == 5, "GetBool on BOOL: raw (set_number with equal types; W)");
     CHECK(fxm_get_value(m, id[P_B], v, 4) == FXM_OK && v[0] == 1, "GetValue normalises BOOL");
@@ -872,14 +896,23 @@ static void test_conv(void){
     CHECK(fxm_set_vector(m, id[P_V4], vec, NULL) == FXM_OK && fxm_get_int(m, id[P_V4], &w) == FXM_OK && w == 0x7FFF0000u,
           "GetInt colour clamps: 0x%08x", w);
     /* SetVector */
+    /* SetVector into INT 1x1: each channel rounded, x * 255 + 0.5 at the caller's x87 precision (O) */
     uint32_t vin[4] = { fb(1), fb(0.5f), fb(-3), fb(2) };
-    CHECK(fxm_set_vector(m, id[P_I], vin, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0xFFFF7F00u,
+    CHECK(fxm_set_vector(m, id[P_I], vin, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0xFFFF8000u,
           "SetVector into INT 1x1 packs: 0x%08x", fxm_data(m, id[P_I])[0]);
-    CHECK(fxm_get_vector(m, id[P_I], v) == FXM_OK && v[0] == fb(255 * k255) && v[1] == fb(127 * k255) && v[2] == 0 && v[3] == fb(255 * k255),
+    CHECK(fxm_get_vector(m, id[P_I], v) == FXM_OK && v[0] == fb(255 * k255) && v[1] == fb(128 * k255) && v[2] == 0 && v[3] == fb(255 * k255),
           "GetVector from INT 1x1");
     uint32_t snan[4] = { 0x7F800001u, 0xFF800001u, 0x7FBFFFFFu, fb(0.5f) };
-    CHECK(fxm_set_vector(m, id[P_I], snan, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x7F000000u,
-          "SetVector into INT 1x1: signalling NaNs clamp to 0 (0x%08x)", fxm_data(m, id[P_I])[0]);
+    CHECK(fxm_set_vector(m, id[P_I], snan, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x80000000u,
+          "SetVector into INT 1x1: NaNs give 0 (0x%08x)", fxm_data(m, id[P_I])[0]);
+    uint32_t amb[4] = { fb(0.5f), fb(0.25f), fb(0.999f), fb(0.0039f) };
+    CHECK(fxm_set_vector(m, id[P_I], amb, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x018040FFu,
+          "SetVector(0.5, 0.25, 0.999, 0.0039): d3dx9_26's 0x018040FF, not truncation's 0x007F3FFE");
+    uint32_t half[4] = { 0x3F010101u, 0, 0, 0 };              /* 128.5 / 255 as a float */
+    CHECK(fxm_set_vector(m, id[P_I], half, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x00810000u, "128.5/255 at 24 bits: 129");
+    fxm_set_x87_pc(m, 53);
+    CHECK(fxm_set_vector(m, id[P_I], half, NULL) == FXM_OK && fxm_data(m, id[P_I])[0] == 0x00800000u, "128.5/255 at 53 bits: 128");
+    fxm_set_x87_pc(m, 24);
     uint32_t v1234[4] = { fb(1), fb(2), fb(3), fb(4) };
     CHECK(fxm_set_vector(m, id[P_V2], v1234, NULL) == FXM_OK && fxm_node_get(m, id[P_V2])->bytes == 8 &&
           fxm_data(m, id[P_V2])[0] == fb(1) && fxm_data(m, id[P_V2])[1] == fb(2), "SetVector into 1x2 writes 2");

@@ -66,6 +66,9 @@ uint32_t fxm_tech_by_name(const fxm_effect *e, const uint8_t *s, uint32_t n);
 uint32_t fxm_pass(const fxm_effect *e, uint32_t tech, uint32_t index);
 uint32_t fxm_pass_by_name(const fxm_effect *e, uint32_t tech, const uint8_t *s, uint32_t n);
 
+/* §2.5: the caller's x87 precision (24, 53 or 64; 24, MW's game thread, until set), which SetVector's colour
+ * form rounds at */
+void fxm_set_x87_pc(fxm_effect *e, int pc);
 /* §2.5: FXM_OK or an error; changed (may be NULL) is 1 when a stored byte differs */
 uint32_t fxm_set_value(fxm_effect *e, uint32_t id, const uint32_t *src, uint32_t bytes, int *changed);
 uint32_t fxm_get_value(const fxm_effect *e, uint32_t id, uint32_t *dst, uint32_t bytes);
