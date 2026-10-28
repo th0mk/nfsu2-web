@@ -368,9 +368,9 @@ struct VOut { @builtin(position) pos: vec4f; @location(0) col0: vec4f; @location
 ## 4. Testing
 
 - Without a browser:
-  - `web/tools/isatest.sh` (`WEB_LIFT=opt` for the web's lift options): the x86 ISA suite (`tools/isatest.py`, 610
-    tests, 646 with `WEB_LIFT=opt`) lifted and compiled like the game's shards, run in V8 under node:wasi. The first
-    gate after a lifter or `cpu.h` change.
+  - `web/tools/isatest.sh` (`WEB_LIFT=opt` for the web's lift options): the x86 ISA suite (`tools/isatest.py`, 718
+    tests, 754 with `WEB_LIFT=opt`, and 4 expected deviations) lifted and compiled like the game's shards, run in V8
+    under node:wasi. The first gate after a lifter or `cpu.h` change.
   - `web/tools/aliastest.sh`: guest memory type punning (`tests/web/aliastest.c`). It runs
     `web/tools/aliasguard.sh` first, a structural check that every guest access macro of `runtime/cpu.h`'s wasm
     branches keeps its `may_alias` type; `web/build.sh` runs the guard before it compiles anything.
