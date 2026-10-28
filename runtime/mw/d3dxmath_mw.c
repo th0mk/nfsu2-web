@@ -40,8 +40,8 @@
  * thunk for it (0x7E7D58-0x7E7DA0, `jmp [slot]`), and that thunk's dispatch
  * entry is the answer here (dispatch_patch_take): the game's call goes thunk
  * -> one table lookup -> the answer, as fast as a call into lifted code.  A
- * patch the table does not take leaves the slot as it was: bound to its own
- * thunk, the lifted `jmp [slot]` would call itself forever.
+ * slot is bound only once the table took its thunk's patch: bound without
+ * it, the lifted `jmp [slot]` would call itself forever.
  * NFSMW_D3DX_MATH=oracle in an oracle build leaves them to the oracle (A/B).
  *
  * Checked against the oracle's lifted kernels on 10,000+ inputs each

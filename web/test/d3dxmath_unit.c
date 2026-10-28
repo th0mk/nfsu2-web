@@ -174,8 +174,9 @@ static void known(void){
 }
 
 /* the binding as speed.exe has it: each thunk `jmp [slot]` (FF 25 <slot>), each slot on IMP_MAGIC +
- * an index (win32_init's); the table refuses Normalize's patch, so its slot must stay as it was (bound
- * to its own thunk, the lifted `jmp [slot]` would call itself) and the others go to their thunks */
+ * an index (win32_init's); the table refuses Normalize's patch, so its slot must stay on IMP_MAGIC +
+ * index (bound to its thunk without the patch, the lifted `jmp [slot]` would call itself) and the
+ * others go to their thunks */
 #define IMP_SLOT(i) (0xF0000000u + 0x100u + (uint32_t)(i))
 static void binding(void){
     const D3dxMathFn *nrm = fn_named("D3DXVec3Normalize");
