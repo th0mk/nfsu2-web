@@ -235,8 +235,19 @@ uint32_t win32_heap_used(void){ uint64_t v = 0; heap_totals(0, 0, &v, 0); return
 uint32_t win32_heap_live(void){ uint64_t l = 0; heap_totals(&l, 0, 0, 0); return (uint32_t)l; }
 
 /* --- tracing --- */
-typedef struct { uint32_t calls; uint32_t unimpl; } ImpStat;
+/* from[]: with NFSU2_IMPORTS=1 only, the first IMP_FROM different addresses
+ * the import was called from (return addresses), for the exit report's list */
+#define IMP_FROM 4
+typedef struct { uint32_t calls; uint32_t unimpl; uint32_t from[IMP_FROM]; uint32_t more; } ImpStat;
 static ImpStat *stat_;
+static int g_implist = 0;              /* NFSU2_IMPORTS: list every import called, with its callers, at exit */
+static void implist_note(ImpStat *s, uint32_t ret){
+    for (int k = 0; k < IMP_FROM; k++){
+        if (s->from[k] == ret) return;
+        if (!s->from[k]){ s->from[k] = ret; return; }
+    }
+    s->more = 1;
+}
 static uint32_t trace_n = 0, trace_max = 0;
 void win32_set_trace_max(uint32_t v){ trace_max = v; }
 static uint32_t unimpl_first = 0xffffffffu;
@@ -450,6 +461,7 @@ int win32_call(CPU *c, uint32_t idx){
     stat_[idx].calls++; g_win32_calls++;
     guest_fair_yield();          /* give the other guest threads a turn */
     POP32(c->eip);                      /* take the return address */
+    if (g_implist) implist_note(&stat_[idx], c->eip);
     int handled = 1;
     const char *n = e->name;
     uint32_t r = 0;
@@ -784,6 +796,7 @@ void win32_init(void){
         if (*l->imp_count) memcpy(g_imps + module_imp_first(m), l->imp, *l->imp_count * sizeof *g_imps);
     }
     stat_ = calloc(g_nimps ? g_nimps : 1, sizeof *stat_);
+    { const char *e = getenv("NFSU2_IMPORTS"); g_implist = e && *e && *e != '0'; }
     heap_init();
     g_hk = calloc(g_nimps ? g_nimps : 1, 1);
     for (uint32_t i=0;i<g_nimps;i++) g_hk[i] = (int8_t)heap_api_kind(g_imps[i].name);
@@ -832,6 +845,24 @@ void win32_report(void){
             int ml = l ? (int)strcspn(mn, ".") : 0;
             fprintf(stderr,"    %.*s%s%-14s %-32s %u times\n", ml, mn, l ? "!" : "", g_imps[i].dll, g_imps[i].name, stat_[i].unimpl);
         }
+    if (g_implist){                     /* NFSU2_IMPORTS=1: every import called, how often, from where */
+        uint32_t n = 0;
+        for (uint32_t i=0;i<g_nimps;i++) n += stat_[i].calls != 0;
+        fprintf(stderr,"  --- IMPORTS CALLED (NFSU2_IMPORTS): %u of %u, with the return addresses of their first callers ---\n",
+                n, g_nimps);
+        for (uint32_t i=0;i<g_nimps;i++){
+            if (!stat_[i].calls) continue;
+            const ModLink *l = module_link(module_of_import(i));
+            const char *mn = l ? l->info->name : "";
+            int ml = l ? (int)strcspn(mn, ".") : 0;
+            char fr[64]; int k = 0; fr[0] = 0;
+            for (int j = 0; j < IMP_FROM && stat_[i].from[j]; j++)
+                k += snprintf(fr + k, sizeof fr - (size_t)k, "%s0x%08x", j ? " " : "", stat_[i].from[j]);
+            fprintf(stderr,"    [import] %.*s%s%s!%s %u calls%s, from %s%s\n", ml, mn, l ? ":" : "", g_imps[i].dll,
+                    g_imps[i].name, stat_[i].calls, stat_[i].unimpl ? " (not implemented: a stub answered)" : "", fr,
+                    stat_[i].more ? " and more" : "");
+        }
+    }
     fprintf(stderr,"  --- 15 MOST CALLED ---\n");
     for (int k=0;k<15;k++){
         uint32_t best=0, bi=0;
