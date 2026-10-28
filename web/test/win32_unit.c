@@ -94,6 +94,8 @@ const ImpEnt g_imp[] = {
     { IAT(48), "WINMM.dll", "waveInPrepareHeader", 3 },
     { IAT(49), "WINMM.dll", "waveInUnprepareHeader", 3 },
     { IAT(50), "DSOUND.dll", "#6", 3 },
+    /* M2-20 */
+    { IAT(51), "KERNEL32.dll", "CreateThread", 6 },
 };
 const uint32_t g_imp_count = sizeof g_imp / sizeof *g_imp;
 
@@ -109,9 +111,11 @@ uint8_t g_cbits[1u << 15];
 /* the game's table: Most Wanted's answers win32_misc.c's imports; built with -DWIN32_UNIT_UG2 it is UG2's,
  * which leaves g_game.win32_misc 0 (the "ug2" half) */
 int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);
+extern const ThreadName mw_thread_names[];                       /* runtime/mw/threads_mw.c */
+uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
 #ifndef WIN32_UNIT_UG2
 const GameOps g_game = { .id = "test", .exe_name = "GAME.EXE", .vroot = "C:\\GAME", .module_path = "C:\\GAME\\GAME.EXE",
-                         .win32_misc = win32_misc_call };
+                         .win32_misc = win32_misc_call, .thread_names = mw_thread_names, .thread_start = mw_thread_start };
 #else
 const GameOps g_game = { .id = "test", .exe_name = "GAME.EXE", .vroot = "C:\\GAME", .module_path = "C:\\GAME\\GAME.EXE" };
 #endif
@@ -627,6 +631,25 @@ static void test_voice(Thr *t){
     CHECK(call_imp(t, "#6", 0u, ph, 0u) == 0x88780078u && MR32(ph) == 0, "DirectSoundCaptureCreate: DSERR_NODRIVER, NULL");
 }
 
+/* ======================= M2-20: the routine a new thread runs ======================= */
+/* CreateThread, CREATE_SUSPENDED (the thread never starts here): with Most Wanted's thread table (threads_mw.c)
+ * the log names the routine past _threadstartex and the game's trampoline, as the game's thread maker 0x7EC44F
+ * gives them; UG2's table names none and logs nothing new (test_ug2) */
+static uint32_t create_suspended(Thr *t, uint32_t entry, uint32_t arg){
+    uint32_t ptid = SCRATCH + 0x7f0u; MR32(ptid) = 0;
+    uint32_t h = call_imp(t, "CreateThread", 0u, 0u, entry, arg, 4u, ptid);
+    CHECK(h && MR32(ptid) > 100u, "CreateThread(0x%08x) suspended: a handle and a thread id", entry);
+    call_imp(t, "CloseHandle", h);
+    return h;
+}
+static void test_threads(Thr *t){
+    const uint32_t ptd = SCRATCH + 0x700u, blk = SCRATCH + 0x780u;
+    MR32(ptd + 0x4cu) = 0x007ec1d3u; MR32(ptd + 0x50u) = blk;          /* _beginthreadex's data: the game's trampoline */
+    MR32(blk) = 0; MR32(blk + 4u) = 0x007ec601u; MR32(blk + 8u) = 0;   /* the maker's block: the timer thread */
+    create_suspended(t, 0x0085d6e0u, ptd);
+    create_suspended(t, 0x00820bd7u, 0x009c22ecu);                      /* a direct start: the sound thread */
+}
+
 /* FatalAppExitA ends the process with STATUS_FATAL_APP_EXIT (0x40000015) */
 static void test_fatal(Thr *t){
     g_exit_armed = 1; g_exit_code = 0;
@@ -845,6 +868,10 @@ static void test_ug2(Thr *t){
     CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == 1u, "WaitForMultipleObjects: the second event");
     CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == WAIT_TIMEOUT, "WaitForMultipleObjects: auto reset");
     call_imp(t, "CloseHandle", e1); call_imp(t, "CloseHandle", e2);
+    /* UG2's table names no threads: CreateThread logs no routine (the test checks the log has no such line) */
+    const uint32_t ptd = SCRATCH + 0x700u, blk = SCRATCH + 0x780u;
+    MR32(ptd + 0x4cu) = 0x007ec1d3u; MR32(ptd + 0x50u) = blk; MR32(blk + 4u) = 0x007ec601u;
+    create_suspended(t, 0x0085d6e0u, ptd);
 }
 
 int main(int argc, char **argv){
@@ -863,6 +890,7 @@ int main(int argc, char **argv){
         test_hz100(&t);
         test_small(&t);
         test_voice(&t);
+        test_threads(&t);
         test_fatal(&t);
     } else if (!strcmp(mode, "stress")) test_stress(&t);
     else { printf("usage: win32_unit.wasm hle|stress (win32_unit_ug2.wasm: ug2)\n"); return 2; }

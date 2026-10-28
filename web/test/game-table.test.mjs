@@ -22,6 +22,7 @@ const UG2_UNSET = {
   reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
   sandbox: 'UG2 maps every path into its game folder, as it always has',
   init_tables: 'no [init] line: UG2\'s boot log stays as it was', ninit_tables: 'as init_tables', init_check: 'as init_tables',
+  thread_names: 'the watchdog\'s report and the [thread] lines stay as they were', thread_start: 'as thread_names',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -95,9 +96,12 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(ug2Table().get('reg_file'), '".nfsu2_registry"', 'UG2 keeps ~/.nfsu2_registry');
   assert.match(read('runtime/win32_misc.c'), /\nint win32_misc_call\(CPU \*c, const char \*dll, const char \*n, uint32_t \*out\)\{/,
     'win32_misc.c defines win32_misc_call as game.h\'s win32_misc');
-  // the initializer tables the boot counts
+  // the initializer tables the boot counts, the threads the watchdog names (threads_mw.c)
   assert.equal(t.get('init_tables'), 'mw_init_tables');
   assert.equal(t.get('init_check'), '0x009aa9d0u + 0x84cu');
+  assert.equal(t.get('thread_names'), 'mw_thread_names');
+  assert.equal(t.get('thread_start'), 'mw_thread_start');
+  assert.match(read('runtime/mw/threads_mw.c'), /\nconst ThreadName mw_thread_names\[\] = \{[\s\S]*\nuint32_t mw_thread_start\(uint32_t entry, uint32_t arg\)\{/);
   // server.dll always; the D3DX oracle only in a build that linked its lift (web/build.sh: -DNFSU2_D3DX_ORACLE=1)
   const src = read('runtime/mw/game_mw.c');
   assert.match(src, /MODLINK_TABLES\(srv_\), \.slot_lo = MM_SRV_LO, \.slot_hi = MM_SRV_HI/);

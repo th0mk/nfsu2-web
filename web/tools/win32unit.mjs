@@ -1,6 +1,6 @@
 // Builds web/test/win32_unit.c for wasm with web/build.sh's target and
-// features: runtime/win32.c, win32_ext.c, win32_misc.c and keyboard.c, the
-// rest of the runtime stubbed (web/test/win32-wasm.test.mjs runs its "hle"
+// features: runtime/win32.c, win32_ext.c, win32_misc.c and keyboard.c (and Most
+// Wanted's thread table, runtime/mw/threads_mw.c), the rest of the runtime stubbed (web/test/win32-wasm.test.mjs runs its "hle"
 // half under node, web/tools/waitstress.sh its "stress" half in the browser).
 //   node web/tools/win32unit.mjs <out.wasm>
 import fs from 'node:fs';
@@ -19,7 +19,8 @@ const FLAGS = ['--target=wasm32-wasip1-threads', '-pthread', '-O2', '-msimd128',
 const LINK = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=67108864,--max-memory=4294967296',
   '-Wl,--global-base=54525952,--no-stack-first', '-Wl,-z,stack-size=1048576',
   '-lsetjmp', '-lwasi-emulated-mman', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks'];
-const SRC = ['web/test/win32_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 'runtime/win32_misc.c', 'runtime/keyboard.c'];
+const SRC = ['web/test/win32_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 'runtime/win32_misc.c', 'runtime/keyboard.c',
+  'runtime/mw/threads_mw.c'];
 // pthread_exit's trampoline, compiled as web/build.sh compiles it: target and features only.  The force-include
 // renames pthread_create to nfsu2_pthread_create, so with it the trampoline's own call is to itself, an endless
 // loop: the first thread the "stress" half started never came back (web/tools/waitstress.sh timed out)
@@ -46,7 +47,9 @@ export function buildRegpathUnit(out, game, runtime = 'runtime') {
   const common = ['web/test/regpath_unit.c', ...['win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'fileio.c'].map(rt)];
   if (game === 'mw') {
     const gi = fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
-    return build(out, [...common, rt('mw/game_mw.c'), rt('mw/registry_mw.c')], ['-DNFSU2_GAME_MW', ...gi]);
+    // the table's other files, where this runtime has them (fe_mw.c, threads_mw.c: TRACKER M2-18, M2-20)
+    const more = ['mw/fe_mw.c', 'mw/threads_mw.c'].filter(f => fs.existsSync(path.resolve(REPO, rt(f)))).map(rt);
+    return build(out, [...common, rt('mw/game_mw.c'), rt('mw/registry_mw.c'), ...more], ['-DNFSU2_GAME_MW', ...gi]);
   }
   return build(out, [...common, rt('game_ug2.c')], ['-DREGPATH_UG2']);
 }

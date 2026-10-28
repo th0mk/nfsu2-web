@@ -65,6 +65,11 @@ typedef struct InitTable {
     int stop;
 } InitTable;
 
+/* A routine one of the game's threads runs, and the thread's name in the
+ * stall watchdog's report and the [thread] lines.  A table ends with a 0
+ * start. */
+typedef struct ThreadName { uint32_t start; const char *name; } ThreadName;
+
 typedef struct GameOps {
     /* ---- the game and its files ---- */
     const char *id;                 /* "ug2": the game id the module, the page and the server share */
@@ -142,18 +147,31 @@ typedef struct GameOps {
                                      * ones its exe and server.dll import (CompareStringA/W, SetStdHandle,
                                      * SetEnvironmentVariableA) stay unimplemented, as they always were */
 
-    /* ---- what the boot checks (L-051) ---- */
+    /* ---- what the boot and the stall watchdog check (L-051, L-073) ---- */
     const InitTable *init_tables;   /* the C runtime's initializer tables, in the order they run: their
                                      * functions are counted as they run and one [init] line says how many
                                      * of each ran (dispatch.c); 0 = no line */
     int ninit_tables;
     uint32_t init_check;            /* a pointer the constructors set: the [init] line reads it, and 0 there
                                      * is a constructor that did not run its body; 0 = no check */
+    const ThreadName *thread_names; /* the routines the game's threads run, named: the watchdog's report
+                                     * names each thread and gives its eip as a function and offset, and
+                                     * CreateThread logs which routine a new thread runs; 0 = the report
+                                     * and the log as they always were */
+    uint32_t (*thread_start)(uint32_t entry, uint32_t arg); /* the routine a thread CreateThread starts at
+                                     * entry with arg runs, past the C runtime's and the game's own start
+                                     * routines, read while CreateThread runs; 0 = entry */
 } GameOps;
 
 extern const GameOps g_game;
 
 /* the game's flow state, 0 while not known (or no game) */
 static inline uint32_t game_flow(void){ return g_game.flow ? g_game.flow() : 0u; }
+
+/* the game's name for a thread that runs routine (thread_names), or 0 */
+static inline const char *game_thread_name(uint32_t routine){
+    for (const ThreadName *t = g_game.thread_names; t && t->start; t++) if (t->start == routine) return t->name;
+    return 0;
+}
 
 #endif

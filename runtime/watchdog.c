@@ -19,7 +19,10 @@
  * sleeping) and since when, the guest call chain read from its stack, the
  * GIL holder, and the critical sections held with owner and recursion.  It
  * is printed once per stall; the next Present re-arms it.  The watchdog
- * only reads; it never changes what the game does.
+ * only reads; it never changes what the game does.  A game that names its
+ * threads (game.h thread_names: Most Wanted's) also gets each thread's name
+ * and routine, and its eip as a lifted function and offset (L-073); UG2's
+ * table names none, so its report keeps the lines it always had.
  *
  * The web page's Download log asks too (watchdog_log_download): players
  * download a frozen game's log before the limit (2026-10-24: 13 s after the
@@ -40,9 +43,12 @@ typedef struct { volatile int what; volatile uint32_t obj; volatile uint64_t sin
 extern TState   g_tstate[MAXCPUS];
 extern CPU     *g_all_cpus[MAXCPUS];
 extern uint32_t g_all_tids[MAXCPUS];
+extern uint32_t g_all_start[MAXCPUS];
 extern int      g_all_n;
 extern CPU     *g_cur_cpu;
 void guest_backtrace(CPU *, int);
+uint32_t guest_nearest_fn(uint32_t a);                   /* dispatch.c */
+uint32_t module_nearest_fn(uint32_t a, const char **mod); /* module.c */
 int  win32_cs_held(uint32_t *key, uint32_t *owner, int *depth, int max);
 int  win32_obj_describe(uint32_t h, char *buf, size_t n);
 
@@ -69,6 +75,23 @@ void watchdog_on_present(void){
     atomic_fetch_add(&g_wd_frames, 1);
 }
 
+/* a guest address as the lifted function it is in, " (sub_007ec601+0x14)"
+ * (" (server.dll sub_00d0a000+0x8)" in a lifted DLL), or "" */
+static void wd_symbol(uint32_t a, char *b, size_t n){
+    const char *mn = 0; uint32_t f = guest_nearest_fn(a);
+    b[0] = 0;
+    if (f) snprintf(b, n, " (sub_%08x+0x%x)", f, a - f);
+    else if (a && (f = module_nearest_fn(a, &mn)) != 0) snprintf(b, n, " (%s sub_%08x+0x%x)", mn ? mn : "?", f, a - f);
+}
+/* " timer (0x007ec601)": the name and routine of the thread in slot i (game.h thread_names) */
+static void wd_name(int i, char *b, size_t n){
+    uint32_t r = g_all_start[i];
+    const char *nm = r ? game_thread_name(r) : 0;
+    if (nm) snprintf(b, n, " %s (0x%08x)", nm, r);
+    else if (r) snprintf(b, n, " (0x%08x)", r);
+    else snprintf(b, n, " (routine not known)");
+}
+
 static pthread_mutex_t g_wd_mx = PTHREAD_MUTEX_INITIALIZER;   /* the watchdog's thread and the page's input thread */
 static void wd_report(double stalled, uint32_t flow){
     pthread_mutex_lock(&g_wd_mx);
@@ -87,9 +110,11 @@ static void wd_report(double stalled, uint32_t flow){
         if (w == TS_WAIT || w == TS_WAITM) win32_obj_describe(o, desc, sizeof desc);
         else if (w == TS_CS) snprintf(desc, sizeof desc, "0x%08x", o);
         else if (w == TS_SLEEP) snprintf(desc, sizeof desc, "%u ms", o);
-        fprintf(stderr, "  thread %d tid=%u%s: %s %s for %.1f s, esp=0x%08x eip=0x%08x\n",
-                i, g_all_tids[i], c == g_cur_cpu ? " (holds the GIL)" : "",
-                (w >= 0 && w <= TS_IDLE) ? what[w] : "?", desc, for_s, c->esp, c->eip);
+        char nm[64] = "", at[64] = "";
+        if (g_game.thread_names){ wd_name(i, nm, sizeof nm); wd_symbol(c->eip, at, sizeof at); }
+        fprintf(stderr, "  thread %d tid=%u%s%s: %s %s for %.1f s, esp=0x%08x eip=0x%08x%s\n",
+                i, g_all_tids[i], nm, c == g_cur_cpu ? " (holds the GIL)" : "",
+                (w >= 0 && w <= TS_IDLE) ? what[w] : "?", desc, for_s, c->esp, c->eip, at);
         guest_backtrace(c, 12);
     }
     uint32_t key[32], owner[32]; int depth[32];

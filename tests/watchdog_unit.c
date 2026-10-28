@@ -14,6 +14,9 @@
  *   ahead-s    a stamp 2 s ahead: no report
  *   stall      the last Present 25 s ago: one report, "no Present for 25..28 s",
  *              a thread whose since_us is ahead reads "for 0.0 s"
+ *   lines      a game table that names no threads (UG2's) keeps the thread line
+ *              as it always was: no name, no routine, no symbol after the eip
+ *              (Most Wanted's names: tests/mw_harness_unit.c threads)
  *   short      5 s ago (under the limit): no report
  *   download   the page's Download log: a stamp ahead is "0.0 s ago" and no
  *              report; 5 s ago is "5.0 s ago" with the report
@@ -27,11 +30,14 @@ const GameOps g_game = { .id = "ug2", .flow_fe = 3u, .flow_race = 6u };   /* no 
 TState   g_tstate[MAXCPUS];
 CPU     *g_all_cpus[MAXCPUS];
 uint32_t g_all_tids[MAXCPUS];
+uint32_t g_all_start[MAXCPUS];
 int      g_all_n;
 CPU     *g_cur_cpu;
 uint8_t  g_cbits[1u << 15] = {0};               /* nothing committed: game flow reads 0 */
 uint8_t *g_mem;
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
+uint32_t guest_nearest_fn(uint32_t a){ return a; }              /* would name any eip: the table names no threads */
+uint32_t module_nearest_fn(uint32_t a, const char **m){ *m = "x.dll"; return a; }
 int  win32_cs_held(uint32_t *key, uint32_t *owner, int *depth, int max){ return 0; }
 int  win32_obj_describe(uint32_t h, char *buf, size_t n){ return snprintf(buf, n, "handle 0x%08x", h); }
 
@@ -76,7 +82,7 @@ int main(void){
     if (!g_err || dup2(fileno(g_err), 2) < 0){ printf("FAIL setup: no temporary file for stderr\n"); return 1; }
     setvbuf(stderr, 0, _IONBF, 0);
     static CPU cpu;
-    g_all_cpus[0] = &cpu; g_all_tids[0] = 101; g_all_n = 1;
+    g_all_cpus[0] = &cpu; g_all_tids[0] = 101; g_all_start[0] = 0x0075bcc7u; g_all_n = 1;
     g_tstate[0].what = TS_WAIT; g_tstate[0].obj = 0x00A00002u;
 
     setenv("NFSU2_WATCHDOG", "1", 1);
@@ -112,7 +118,10 @@ int main(void){
         if (q && (q = strstr(q, " for "))) sscanf(q, " for %lf", &f);
         CHECK(watchdog_reports() == 1 && s >= 25.0 && s < 28.0,
               "stall: 25 s without a Present reports once (%llu reports, %.1f s)", (unsigned long long)watchdog_reports(), s);
-        CHECK(f == 0.0, "stall: a thread stamp ahead reads 0.0 s in the report (%.1f s)", f); }
+        CHECK(f == 0.0, "stall: a thread stamp ahead reads 0.0 s in the report (%.1f s)", f);
+        const char *l = strstr(e, "  thread 0 ");
+        CHECK(l && !strncmp(l, "  thread 0 tid=101: waiting on handle 0x00a00002 for 0.0 s, esp=0x00000000 eip=0x00000000\n", 89),
+              "lines: the thread line as it always was (%.89s)", l ? l : "none"); }
 
     /* short: under the loading screen's 20 s */
     err_mark();

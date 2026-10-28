@@ -64,7 +64,7 @@ const TASK_IMPORTS = ['CreateWaitableTimerA', 'SetWaitableTimer', 'GetSystemTime
 
 test('win32_unit: the import table\'s stdcall counts are argcount\'s KNOWN ones and the lifts\'', () => {
   const unit = unitTable(), known = knownCounts();
-  assert.equal(unit.size, 51, 'the table parsed');
+  assert.equal(unit.size, 52, 'the table parsed');
   for (const [name, { dll, nargs }] of unit) {
     const k = keyOf(name, dll);
     assert.ok(known.has(k), `${k} is in KNOWN`);
@@ -111,6 +111,9 @@ test('win32_unit hle: timers, small imports and voice devices answer as Windows 
   assert.equal((err.match(/^\[voice\] /mg) || []).length, 22, 'one [voice] line per import (21 winmm, 1 DSOUND)');
   assert.match(err, /^\*\*\* guest FatalAppExitA\("the end"\) from 0x00401234 - exiting$/m);
   assert.doesNotMatch(err, /UNIMPLEMENTED/);
+  // M2-20: a new thread's routine, past _threadstartex and the game's trampoline (Most Wanted's thread table)
+  assert.match(err, /^\[thread\] tid=\d+ runs 0x007ec601 \(timer\), CreateThread\(entry 0x0085d6e0\) from 0x00401234$/m);
+  assert.match(err, /^\[thread\] tid=\d+ runs 0x00820bd7 \(sound\), CreateThread\(entry 0x00820bd7\) from 0x00401234$/m);
 });
 
 test('win32_unit ug2: with UG2\'s game table its CompareStringA/W, SetStdHandle and SetEnvironmentVariableA stay unimplemented', { skip }, () => {
@@ -123,4 +126,6 @@ test('win32_unit ug2: with UG2\'s game table its CompareStringA/W, SetStdHandle 
   assert.equal(+m[2], 0, 'no failed check');
   assert.ok(+m[1] >= 40, `every check ran (${m[1]})`);
   assert.equal(r.status, 0);
+  // UG2's table names no threads: CreateThread's log is as it always was
+  assert.doesNotMatch(r.stderr ?? '', /\[thread\] tid=\d+ runs /);
 });

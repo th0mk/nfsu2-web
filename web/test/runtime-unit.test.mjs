@@ -37,7 +37,7 @@ test('objtable_unit: the object table takes back finished threads\' slots only',
 
 test('watchdog_unit: no false stall from a stamp ahead of the watchdog\'s clock, a real one reported', { skip, timeout: 120000 }, () => {
   const { out, pass } = run('watchdog_unit', ['-O1', '-g', '-Wall', '-Wextra', '-Wno-unused-parameter']);
-  for (const c of ['ahead-us', 'ahead-s', 'stall', 'short', 'download']) assert.ok(pass.includes(c), `case ${c} passed`);
-  assert.ok(pass.length >= 7, `every check ran (${pass.length})`);
+  for (const c of ['ahead-us', 'ahead-s', 'stall', 'lines', 'short', 'download']) assert.ok(pass.includes(c), `case ${c} passed`);
+  assert.ok(pass.length >= 8, `every check ran (${pass.length})`);
   assert.match(out, /watchdog unit tests: all passed/);
 });

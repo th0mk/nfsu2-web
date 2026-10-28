@@ -46,6 +46,7 @@ typedef struct {
      * the order threads ended, and how often an import looked its handle up
      * (waits, CloseHandle, GetExitCodeThread, DuplicateHandle, ...): obj_reclaim */
     uint32_t creator; uint64_t end_seq; uint32_t looked;
+    uint32_t routine;                 /* OB_THREAD: the routine it runs (game.h thread_start), for the watchdog */
     uint32_t gen;                     /* handle generation (obj_reclaim); kept when the slot is reused */
     /* OB_KEY with the game's key table (game.h reg_keys): which key (its index
      * + 1; 0 = the flat registry) and the access it was opened with */
@@ -93,6 +94,7 @@ static _Thread_local void *tl_obj = 0;   /* this thread's object */
 #define MAXCPUS 32
 CPU *g_all_cpus[MAXCPUS];
 uint32_t g_all_tids[MAXCPUS];
+uint32_t g_all_start[MAXCPUS];       /* the routine each runs (the main thread: the entry point), watchdog.c */
 int g_all_n = 0;
 /* Stall watchdog (watchdog.c): what each guest thread is doing right now. */
 enum { TS_RUN = 0, TS_GIL, TS_WAIT, TS_WAITM, TS_CS, TS_SLEEP, TS_IDLE };
@@ -104,13 +106,18 @@ static void ts_set(int what, uint32_t obj){
     if (tl_slot < 0) return;
     g_tstate[tl_slot].what = what; g_tstate[tl_slot].obj = obj; g_tstate[tl_slot].since_us = gil_now_us();
 }
+/* what the thread registered in slot i runs: a CreateThread's routine; the first one registered is the
+ * main thread (main_web.c, the entry point); another without a thread object (the WINMM timer) has none */
+static uint32_t slot_routine(int i){ return tl_obj ? ((Obj *)tl_obj)->routine : i == 0 ? g_game.entry_va : 0u; }
 static void reg_cpu(CPU *c){
     for (int i=0;i<g_all_n;i++) if (g_all_cpus[i]==c){ tl_slot = i; return; }
     for (int i=0;i<g_all_n;i++) if (!g_all_cpus[i]){             /* a slot an ended thread left */
-        g_all_cpus[i] = c; g_all_tids[i] = c->fs_base ? MR32(c->fs_base+0x24) : 0; tl_slot = i; return; }
+        g_all_cpus[i] = c; g_all_tids[i] = c->fs_base ? MR32(c->fs_base+0x24) : 0;
+        g_all_start[i] = slot_routine(i); tl_slot = i; return; }
     if (g_all_n < MAXCPUS){
         g_all_cpus[g_all_n] = c;
         g_all_tids[g_all_n] = c->fs_base ? MR32(c->fs_base+0x24) : 0;
+        g_all_start[g_all_n] = slot_routine(g_all_n);
         tl_slot = g_all_n;
         g_all_n++;
     }
@@ -2155,6 +2162,12 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         if(o){
             o->tid = ++next_tid; o->guest_entry = entry; o->guest_arg = arg;
             o->creator = c->eip; o->looked = 0;   /* the return address; the game's own lookups count from here */
+            /* the routine it runs, read now: the game's own start routines may keep it on the creator's stack */
+            o->routine = g_game.thread_start ? g_game.thread_start(entry, arg) : entry;
+            if (g_game.thread_names){ static int sh = 0; if (sh < 64){ sh++;
+                const char *tn = game_thread_name(o->routine);
+                fprintf(stderr, "[thread] tid=%u runs 0x%08x (%s), CreateThread(entry 0x%08x) from 0x%08x\n",
+                        o->tid, o->routine, tn ? tn : "no name", entry, o->creator); } }
             o->manual = 1;                      /* an ended thread stays signaled for every waiter */
             if(ptid) MR32(ptid)=o->tid;
             { const char *mn = 0;

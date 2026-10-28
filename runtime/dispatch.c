@@ -386,6 +386,9 @@ static uint32_t nearest_fn(uint32_t a){
         if(g_fn_addr[m]<=a){ best=g_fn_addr[m]; lo=m+1; } else hi=m; }
     return best;
 }
+/* the lifted function of the exe at or below a .text address, else 0 (the
+ * watchdog's eips) */
+uint32_t guest_nearest_fn(uint32_t a){ return a - TEXT_BASE < TEXT_SIZE ? nearest_fn(a) : 0u; }
 void guest_backtrace(CPU *c, int maxn){
     fprintf(stderr,"    guest stack trace (esp=0x%08x):\n", c->esp);
     int shown=0;

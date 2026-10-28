@@ -8,10 +8,10 @@
  * registry_mw.c; its own registry file; paths that never leave C:\NFSMW), the
  * lifted entry point, the two lifted DLLs (server.dll; d3dx9_26.dll in a D3DX
  * oracle build only, PLAN D-09), the C runtime's heap globals, win32_misc.c's
- * answers to the imports only MW needs answered (GAME.md 3.3), and the C
- * runtime's initializer tables the boot counts.  A field left 0 has its task
- * named below; core then does for MW what it does for a game without that
- * feature. */
+ * answers to the imports only MW needs answered (GAME.md 3.3), the C
+ * runtime's initializer tables the boot counts, and the threads the stall
+ * watchdog names (threads_mw.c).  A field left 0 has its task named below;
+ * core then does for MW what it does for a game without that feature. */
 #include "cpu.h"
 #include "game.h"
 #include "memmap.h"
@@ -20,6 +20,8 @@
 void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen/mw/all/gameinfo.h, through cpu.h) */
 int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);   /* win32_misc.c */
 extern const RegKey mw_reg_keys[];             /* registry_mw.c */
+extern const ThreadName mw_thread_names[];     /* threads_mw.c */
+uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
 
 /* the lifted DLLs (module.c): EA's LAN server (gen/mw/server, prefix srv_,
  * pinned in games/mw/game.conf), and Microsoft's D3DX as a dev-only oracle
@@ -87,4 +89,6 @@ const GameOps g_game = {
     .init_tables = mw_init_tables,
     .ninit_tables = (int)(sizeof mw_init_tables / sizeof mw_init_tables[0]),
     .init_check = 0x009aa9d0u + 0x84cu,         /* the bitset pointer of 0x9AA9D0's constructor */
+    .thread_names = mw_thread_names,
+    .thread_start = mw_thread_start,            /* past _threadstartex and the game's trampoline */
 };
