@@ -29,9 +29,8 @@ const MW_UNSET = {
   reg_defaults: 'its registry answers per key (reg_keys, registry_mw.c)',
   lang_suffixes: 'Q-06, the movies\' language suffix',
   install: 'no MW patches yet', hook: 'no MW hook sites (games/mw has no hook list)',
-  on_present: 'Q-24, MW\'s per-frame anchor', on_frame: 'Q-24', on_test_frame: 'Q-24', status: 'the page\'s overlay, M6',
+  on_present: 'Q-24, MW\'s per-frame anchor', on_frame: 'Q-24', status: 'the page\'s overlay, M6',
   sms_request: 'a UG2 feature', photo_input: 'a UG2 feature',
-  flow: 'M2-18', flow_fe: 'M2-18', flow_race: 'M2-18', top_screen: 'M2-18',
   racer: 'test traces, M4', text_entry: 'M3-11',
   crt_lo: 'the C runtime\'s code range is not measured', crt_hi: 'as crt_lo',
   on_qpc: 'MW\'s frame wait loop, M4', qpc_caller: 'as on_qpc',
@@ -96,11 +95,16 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(ug2Table().get('reg_file'), '".nfsu2_registry"', 'UG2 keeps ~/.nfsu2_registry');
   assert.match(read('runtime/win32_misc.c'), /\nint win32_misc_call\(CPU \*c, const char \*dll, const char \*n, uint32_t \*out\)\{/,
     'win32_misc.c defines win32_misc_call as game.h\'s win32_misc');
-  // the initializer tables the boot counts, the threads the watchdog names (threads_mw.c)
+  // the harness (fe_mw.c), the initializer tables the boot counts, the threads the watchdog names (threads_mw.c)
+  assert.equal(t.get('flow'), 'mw_flow');
+  assert.deepEqual([t.get('flow_fe'), t.get('flow_race')], ['3', '6']);
+  assert.equal(t.get('top_screen'), 'mw_top_screen');
+  assert.equal(t.get('on_test_frame'), 'mw_fe_frame');
   assert.equal(t.get('init_tables'), 'mw_init_tables');
   assert.equal(t.get('init_check'), '0x009aa9d0u + 0x84cu');
   assert.equal(t.get('thread_names'), 'mw_thread_names');
   assert.equal(t.get('thread_start'), 'mw_thread_start');
+  assert.match(read('runtime/mw/fe_mw.c'), /\nuint32_t mw_flow\(void\)\{[\s\S]*\nconst char \*mw_top_screen\(void\)\{[\s\S]*\nvoid mw_fe_frame\(void\)\{/);
   assert.match(read('runtime/mw/threads_mw.c'), /\nconst ThreadName mw_thread_names\[\] = \{[\s\S]*\nuint32_t mw_thread_start\(uint32_t entry, uint32_t arg\)\{/);
   // server.dll always; the D3DX oracle only in a build that linked its lift (web/build.sh: -DNFSU2_D3DX_ORACLE=1)
   const src = read('runtime/mw/game_mw.c');

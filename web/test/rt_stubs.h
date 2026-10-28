@@ -97,4 +97,5 @@ void watch_arm(uint32_t a){ (void)a; }
 void mprot_arm(uint32_t a){ (void)a; }
 static char g_unimpl[64];
 void autotest_note_unimpl(const char *dll, const char *name, uint32_t eip){ (void)dll; (void)eip; snprintf(g_unimpl, sizeof g_unimpl, "%s", name); }
+void autotest_note_screen(const char *nm){ (void)nm; }          /* runtime/mw/fe_mw.c's screens */
 #endif

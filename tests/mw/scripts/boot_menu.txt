@@ -1,0 +1,14 @@
+# Most Wanted: boot to the main menu and stay there (TRACKER M2-18; the run is M2-25's headless boot).
+# Every step waits for the game, never for time (L-021): GameFlowManager's state [0x925E90] and the front-end
+# packages by name, which runtime/mw/fe_mw.c reads from FEngine's active list (the top package, and each package
+# that comes up, as "[fng] f=N screen NAME").  The splash screens (LS_EALogo.fng, LS_PSA.fng, the intro movie's,
+# WS_MW_LS_Splash.fng: "press Enter") come and go by themselves; Enter goes past the splash.  The run ends by
+# NFSU2_QUIT_FRAMES, which the run sets; the marker is the main menu's line:
+#   node web/tools/run-suite.mjs --game mw --script boot_menu.txt --marker 'waitfng MainMenu.fng satisfied' \
+#     --env NFSU2_QUIT_FRAMES=7200
+# Not known before the first boot: whether a first start asks for a profile before the main menu (then this
+# script gets that screen's step).
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng 600
++0    log main menu up: the run ends by NFSU2_QUIT_FRAMES
