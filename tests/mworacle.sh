@@ -2,6 +2,9 @@
 # Differential test of Most Wanted's lifted exe (gen/mw/all) against its
 # original x86 code under Unicorn: see tests/mworacle.c.
 #   tests/mworacle.sh [cases-per-function] [functions] [seed]   (150, 1200, 1)
+#   ORACLE_SAMPLE=<file> tests/mworacle.sh [cases]   that sample, no pick
+#                                     (tests/mworacle_rules.sh); ORACLE_* as
+#                                     tests/mworacle.c reads them
 # tests/mworacle_pick.py picks the functions (a seeded sample of those that
 # need no import and no HLE) into out/mw/oracle/sample.txt; the lift is
 # compiled by tests/mwshards.sh.  Needs gen/mw/all (GAME=mw web/gen.sh), its
@@ -35,8 +38,8 @@ FLAGABI="$GC_OUT_DIR/flagabi.json"
 [ -f "$FLAGABI" ] || { echo "no $FLAGABI (GAME=mw web/gen.sh writes it)"; exit 1; }
 PY="$ROOT/.venv/bin/python"; [ -x "$PY" ] || PY=python3
 mkdir -p out/obj/mwtest "$GC_OUT_DIR/oracle"
-SAMPLE="$GC_OUT_DIR/oracle/sample.txt"
-"$PY" -I tests/mworacle_pick.py "$EXE" gen/mw/all "$FLAGABI" "$SAMPLE" "${2:-1200}" "${3:-1}"
+SAMPLE="${ORACLE_SAMPLE:-$GC_OUT_DIR/oracle/sample.txt}"
+[ -n "${ORACLE_SAMPLE:-}" ] || "$PY" -I tests/mworacle_pick.py "$EXE" gen/mw/all "$FLAGABI" "$SAMPLE" "${2:-1200}" "${3:-1}"
 tests/mwshards.sh
 clang -O2 -Iruntime -Igen/mw/all -DNFSU2_GAME_MW -I"$UNICORN_INC" -c -o out/obj/mwtest/mworacle.o tests/mworacle.c
 clang -O2 -Iruntime -c -o out/obj/mwtest/mem.o runtime/mem.c

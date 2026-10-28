@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validation suite for x86 instruction semantics.
-   Hand-encoded machine code + the results the Intel spec expects."""
+   Hand-encoded machine code + the results the Intel spec expects (one case,
+   named "(lift: doubles)", pins the lift's x87 model where it differs)."""
 import sys, os, subprocess, struct
 sys.path.insert(0,'tools')
 # lift the tests the way gen.sh lifts the game (x87 precision control on;
@@ -582,6 +583,25 @@ T("fnsave/frstor: the smallest denormal and a negative one come back",
   + [0xDD,0x1D]+a32(MW_+0x230) + [0xDD,0x1D]+a32(MW_+0x238),
   {}, mem={MW_+0x220:1, MW_+0x224:0, MW_+0x228:0x0000ABCD, MW_+0x22C:0x80000000},
   fmem={MW_+0x230:0x0000ABCD, MW_+0x234:0x80000000, MW_+0x238:1, MW_+0x23C:0})
+# The lift's model, not Intel's result: the x87 registers are doubles
+# (cpu.h), so an 80-bit value no double holds does not survive fld m80
+# (f80_load flushes a denormal to 0).  The C runtime's FDIV workaround
+# 0x7D8CC0 (UG2 0x769C90) scales an 80-bit denormal divisor by 2^63, stores
+# it and reads its significand's high dword back (0x7D8DB6 fmul, 0x7D8DBC
+# fstp, 0x7D8CC8 mov eax):
+# fld tbyte [a] (0000:00000001FFFFFFFF); fmul dword [b] (2^63); fstp tbyte
+# [c]; mov eax,[c+4].  Intel gives eax 0xFFFFFFFF and the word 0x0021 at
+# [c+8] (a value near 2^-16349); the lift 0 and ten zero bytes.  The oracle
+# takes exactly this as its read-back class (tests/mworacle.c range_subst);
+# MW never reaches 0x7D8CC0 with such an operand (_adjust_fdiv is 0).  A
+# change to the model fails this case on purpose: then the oracle's rule and
+# this note change with it.
+_FX = 0x00CA0000
+T("fld/fmul/fstp m80 of a denormal, mov eax (lift: doubles)",
+  [0xDB,0x2D]+a32(_FX) + [0xD8,0x0D]+a32(_FX+0x10) + [0xDB,0x3D]+a32(_FX+0x20) + [0xA1]+a32(_FX+0x24),
+  {'eax':0x55555555}, mem={_FX:0xFFFFFFFF, _FX+4:0x00000001, _FX+8:0, _FX+0x10:0x5F000000,
+                           _FX+0x20:0x5A5A5A5A, _FX+0x24:0x5A5A5A5A, _FX+0x28:0x5A5A5A5A},
+  expect={'eax':0}, fmem={_FX+0x20:0, _FX+0x24:0, _FX+0x28:0x5A5A0000})
 
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the
