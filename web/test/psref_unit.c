@@ -1230,8 +1230,9 @@ static int fx_mode(int argc, char **argv){
 /* ======================================================================== */
 /* Programs for the WGSL translator's differential test (--emit), which runs them on random inputs (web/tools/wgsl-xl.c:
  * colours and coordinates in [0, 1], texture coordinate z and w in [0.5, 2], vertex elements in [-1, 1], constants in
- * [0.05, 1]): every class of instruction, defined on all of those inputs, one colour output (the module ABI has one
- * target) and a POSITION0 output for the vertex shader.  Here they only have to load and run. */
+ * [0.05, 1]): every class of instruction, defined on all of those inputs, and the special values of rcp, rsq, log,
+ * nrm, cmp and pow (0, -0 and 1 made from an input, and from def); one colour output (the module ABI has one target)
+ * and a POSITION0 output for the vertex shader.  Here they only have to load and run. */
 static void t_corpus(void){
     enum { U_FOG = 11 };
     /* ps_3_0: arithmetic, predicates, if p0 / b# / if_comp, vPos, vFace, oDepth */
@@ -1292,6 +1293,54 @@ static void t_corpus(void){
     p = LD();
     for (int l = 0; l < 4; l++) for (int c = 0; c < 4; c++) Q[l].v[0][c] = 0.2f + 0.1f * (float)(c + l);
     if (PSRUN(p)) CHECK(OUT[1].depth_written && fabsf(OUT[1].depth - 0.375f) < 1e-6f, "oDepth.xyzw: %g", (double)OUT[1].depth);  /* (v0.z/2 + 1/2)/2 */
+    psref_free(p);
+
+    /* ps_3_0: the special values, made at run time (0, -0 and 1 from an input, which no compiler can fold away)
+     * and given by def: rcp and rsq of 1 are exactly 1 (their difference from 1, times 2^20, shows one ulp), of 0
+     * and -0 FLT_MAX; log of 0 and -0 -FLT_MAX, of a negative log |x|; nrm of a zero vector FLT_MAX times each
+     * component (w included); cmp at 0 and -0; pow of 0 and -0 to a positive power and of a negative base.
+     * FLT_MAX times 2^-120 is about 256, where an infinity would stay infinite. */
+    reset(); begin(PS3);
+    dcl(U_TEXCOORD, 0, D(V, 0, "xyzw"));
+    def(10, -1.f, 1.f, 0.f, -0.f); def(11, 1048576.f, 0x1p-120f, 0.5f, -4.f); def(12, 2.f, 0.25f, 3.f, 1.f);
+    IN(ADD, D(R, 12, "xyzw"), S(V, 0, "xyzw"), S(C, 10, "y"));                      /* v0 + 1 > 0 */
+    IN(CMP, D(R, 0, "xyzw"), S(R, 12, "xyzw"), S(C, 10, "y"), S(C, 10, "z"));      /* 1 */
+    IN(CMP, D(R, 1, "xyzw"), S(R, 12, "xyzw"), S(C, 10, "z"), S(C, 10, "y"));      /* 0 */
+    IN(MUL, D(R, 2, "xyzw"), S(R, 1, "xyzw"), S(C, 10, "x"));                       /* -0 */
+    IN(RCP, D(R, 3, "x"), S(R, 0, "x")); IN(RSQ, D(R, 3, "y"), S(R, 0, "y"));
+    IN(RCP, D(R, 3, "z"), S(C, 10, "y")); IN(RSQ, D(R, 3, "w"), NEG(S(C, 10, "y")));
+    IN(ADD, D(R, 3, "xyzw"), S(R, 3, "xyzw"), NEG(S(C, 10, "y")));                  /* 0 when exact */
+    IN(NRM, D(R, 6, "xyz"), S(R, 1, "xyzw")); IN(MOV, D(R, 6, "w"), S(R, 2, "w"));  /* (0, 0, 0, -0) */
+    IN(DP4, D(R, 11, "x"), ABSM(S(R, 3, "xyzw")), S(C, 12, "w"));
+    IN(DP4, D(R, 11, "y"), ABSM(S(R, 6, "xyzw")), S(C, 12, "w"));
+    IN(MAD, D(R, 11, "x"), S(R, 11, "x"), S(C, 11, "x"), S(R, 11, "y"));           /* 0 */
+    IN(RCP, D(R, 4, "x"), S(R, 1, "x")); IN(RSQ, D(R, 4, "y"), S(R, 2, "x"));
+    IN(RCP, D(R, 4, "z"), S(C, 10, "w")); IN(RSQ, D(R, 4, "w"), S(C, 10, "z"));
+    IN(MOV, D(R, 7, "xyzw"), S(R, 2, "xyzw")); IN(MOV, D(R, 7, "w"), S(R, 0, "w")); /* (-0, -0, -0, 1) */
+    IN(NRM, D(R, 8, "xyzw"), S(R, 7, "xyzw"));                                      /* (-0, -0, -0, FLT_MAX) */
+    IN(MUL, D(R, 4, "xyzw"), S(R, 4, "xyzw"), S(C, 11, "y")); IN(MUL, D(R, 8, "xyzw"), S(R, 8, "xyzw"), S(C, 11, "y"));
+    IN(DP4, D(R, 11, "y"), S(R, 4, "xyzw"), S(C, 12, "w")); IN(ADD, D(R, 11, "y"), S(R, 11, "y"), S(R, 8, "w"));   /* 5 x 256 */
+    IN(LOG, D(R, 5, "x"), S(R, 1, "y")); IN(LOG, D(R, 5, "y"), S(R, 2, "z"));
+    IN(LOG, D(R, 5, "z"), S(C, 10, "z")); IN(LOG, D(R, 5, "w"), S(C, 11, "w"));
+    IN(MUL, D(R, 5, "xyz"), S(R, 5, "xyzw"), S(C, 11, "y"));
+    IN(DP4, D(R, 11, "z"), S(R, 5, "xyzw"), S(C, 12, "w"));                         /* 3 x -256, + 2 */
+    IN(CMP, D(R, 9, "x"), S(R, 1, "x"), S(C, 12, "x"), S(C, 12, "y"));
+    IN(CMP, D(R, 9, "y"), S(R, 2, "x"), S(C, 12, "x"), S(C, 12, "y"));
+    IN(CMP, D(R, 9, "z"), S(C, 10, "w"), S(C, 12, "z"), S(C, 12, "y"));
+    IN(CMP, D(R, 9, "w"), S(C, 10, "x"), S(C, 12, "y"), S(C, 12, "w"));             /* (2, 2, 3, 1) */
+    IN(POW, D(R, 10, "x"), S(R, 1, "x"), S(C, 12, "x")); IN(POW, D(R, 10, "y"), S(R, 2, "x"), S(C, 12, "y"));
+    IN(POW, D(R, 10, "z"), S(C, 11, "w"), S(C, 11, "z")); IN(POW, D(R, 10, "w"), S(C, 10, "z"), S(C, 12, "z"));
+    IN(ADD, D(R, 9, "xyzw"), S(R, 9, "xyzw"), S(R, 10, "xyzw"));                    /* + (0, 0, 2, 0) */
+    IN(DP4, D(R, 11, "w"), S(R, 9, "xyzw"), S(C, 12, "w"));
+    IN(MOV, D(OC, 0, "xyzw"), S(R, 11, "xyzw"));
+    end();
+    p = LD();
+    for (int l = 0; l < 4; l++) for (int c = 0; c < 4; c++) Q[l].v[0][c] = 0.3f * (float)(c + l);
+    if (PSRUN(p)) for (int l = 0; l < 4; l++){
+        const float *o = OUT[l].oC[0];
+        CHECK(o[0] == 0.f && fabsf(o[1] - 1280.f) < 0.01f && fabsf(o[2] + 766.f) < 0.01f && o[3] == 10.f,
+              "special values, lane %d: (%g, %g, %g, %g)", l, (double)o[0], (double)o[1], (double)o[2], (double)o[3]);
+    }
     psref_free(p);
 
     /* ps_3_0: lookups of every kind, the same where the flow differs per pixel (of inputs: hoisted

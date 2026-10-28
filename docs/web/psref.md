@@ -166,6 +166,13 @@ translate to the same bytes as before, with the same `.pvec` vectors.
   feeding a `textureSampleGrad` in the block were not enough: on an AMD RDNA 4 GPU in Chrome the gradients of a cube
   `texldb` inside an `if_comp` came out as if from pixels that do not run the block (a level about 6 too high), while
   the lookup made at the top matched.
+- **Special values** as psref's: `rcp`/`rsq` of 0 FLT_MAX and of 1 exactly 1 (a `select` each: WGSL allows its
+  division 2.5 ulp and `inverseSqrt` 2), `log` of 0 -FLT_MAX, `nrm` of a zero vector FLT_MAX times it, `cmp` at -0
+  as at 0. A corpus program makes 0, -0 and 1 at run time from an input (no compiler can fold them) and checks these
+  and `pow` of 0 and of a negative base; its exact-1 result is the difference from 1 times 2^20, so one ulp shows.
+  Left to the GPU, as WGSL leaves them open and no test input reaches them: `min`/`max` with a NaN (psref: the
+  second source, the pages' `a < b ? a : b`) and `pow(0, y)` with y <= 0 (psref: 1 for y = 0, +inf below, as the
+  pow page's expansion `exp(src1 * log(src0))` with `log 0` = -FLT_MAX gives).
 - **Refused** (a reason from `wgsl_refusal()`; the game then has no module for it): what the module ABI has no place
   for (MRT, a vertex texture fetch, a ps_3_0 input or vs_3_0 output of another usage, an `i#`/`b#` the application
   sets, a constant past c31 in a pixel shader), a volume sampler, an implicit-LOD lookup or dsx/dsy of a temporary in

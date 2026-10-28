@@ -18,11 +18,13 @@
  *     (0, 0, 0, 0)).  The ABI has no integer or boolean constants
  *     (gpu-abi.md section 11.1): an i# or b# without its defi or defb is
  *     refused, so every loop count is a literal;
- *   - rcp and rsq of 0 = FLT_MAX, log of 0 = -FLT_MAX, pow of |x|, nrm of a
- *     zero vector = FLT_MAX times the vector (w included), lit's power
- *     clamped to +-127.9961, exp/expp = 2^x and log/logp = log2|x| (one
- *     component, as in every 2.0+ model), mova rounds halves away from zero,
- *     cmp tests >= 0, lrp is src0 * (src1 - src2) + src2;
+ *   - rcp and rsq of 0 = FLT_MAX and of 1 exactly 1, log of 0 = -FLT_MAX,
+ *     pow of |x|, nrm of a zero vector = FLT_MAX times the vector (w
+ *     included), lit's power clamped to +-127.9961, exp/expp = 2^x and
+ *     log/logp = log2|x| (one component, as in every 2.0+ model), mova rounds
+ *     halves away from zero, cmp tests >= 0, lrp is src0 * (src1 - src2) + src2;
+ *     min/max with a NaN and pow(0, y <= 0) are the GPU's (WGSL leaves them
+ *     open; psref.md says what D3D9's pages give);
  *   - flow control as WGSL blocks: if b#, if_comp, if p0, rep and loop with
  *     a literal count, break, break_comp, breakp; call and callnz inlined
  *     (D3D9 has no recursion); predicated writes per component; setp;
@@ -666,8 +668,9 @@ static int s3_ins(S3Ctx *x, const S3Ins *y){
     case S3_RCP: case S3_RSQ: case S3_LOG: case S3_LOGP:
         NEED(1);
         if (!S3SRC(&y->src[0], 1, A) || !s3_pf(PRE, PC, "let a = %s;", A)) return 0;
-        if (!s3_pf(V, VC, y->op == S3_RCP ? "select(1.0 / a, " S3_FLTMAX ", a == 0.0)"
-                         : y->op == S3_RSQ ? "select(inverseSqrt(abs(a)), " S3_FLTMAX ", a == 0.0)"
+        /* of 1 exactly 1, as D3D9 requires (WGSL allows its division 2.5 ulp and inverseSqrt 2) */
+        if (!s3_pf(V, VC, y->op == S3_RCP ? "select(select(1.0 / a, 1.0, a == 1.0), " S3_FLTMAX ", a == 0.0)"
+                         : y->op == S3_RSQ ? "select(select(inverseSqrt(abs(a)), 1.0, abs(a) == 1.0), " S3_FLTMAX ", a == 0.0)"
                          : "select(log2(abs(a)), -" S3_FLTMAX ", a == 0.0)")) return 0;
         return s3_store(x, y, PRE, V, 1, 0);
     case S3_EXP: case S3_EXPP:

@@ -61,7 +61,7 @@ const CENSUS = { vsObjects: 16, psObjects: 24, decls: 11, vsPairs: 17, psModules
 // today's unit programs (cube twins included; a program psref refuses on every input has no vectors and does
 // not count), and Most Wanted's 22 SM3-class blobs (distinct by bytes: 17 ps_2_x, 2 ps_3_0, 1 vs_3_0)
 const ABI_LIMITS = /REJECTED: (MRT|vertex texture fetch|a vs_3_0 without a POSITION0 output|a ps_3_0 input the module ABI has no place for|a vs_3_0 output the module ABI has no place for|a loop count the application sets|a b# the application sets)/;
-const SM3_FLOOR = { unit: { ps: 69, vs: 4 }, mw: { ps: 19, vs: 1 } };
+const SM3_FLOOR = { unit: { ps: 71, vs: 4 }, mw: { ps: 19, vs: 1 } };
 const problems = [];               // reasons the run fails besides the browser check
 // REJECTED translations (but those allow matches) and, for a game dump, the census
 function checkDump(dir, census, allow = null) {
