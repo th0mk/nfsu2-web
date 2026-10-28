@@ -48,9 +48,10 @@ const opts = {
 };
 for (const [k, v] of Object.entries(opts.entryPoints)) if (!fs.existsSync(v)) delete opts.entryPoints[k];
 // src/base.ts takes the page's base from where its bundle is: main.js (and sw.js) at the base, every other bundle in
-// a folder of its own right below it
-for (const k of Object.keys(opts.entryPoints)) if (k !== 'main' && k !== 'sw' && !/^[a-z]+\/[a-z-]+$/.test(k)) {
-  console.error(`build.mjs: the bundle ${k} would not find the page's base (src/base.ts): main, sw, or <folder>/<name>`);
+// a folder of its own right below it.  It knows the page's main.js by its name alone, so no other bundle is a main.js
+// (a <folder>/main would take its folder for the base).
+for (const k of Object.keys(opts.entryPoints)) if (k !== 'main' && k !== 'sw' && !/^[a-z]+\/(?!main$)[a-z-]+$/.test(k)) {
+  console.error(`build.mjs: the bundle ${k} would not find the page's base (src/base.ts): main, sw, or <folder>/<name> (not main)`);
   process.exit(2);
 }
 

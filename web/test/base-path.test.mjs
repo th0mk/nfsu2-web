@@ -9,6 +9,7 @@
 //    /data, which never leave the browser, and never with more after them), and no markup or style it builds names
 //    one (src="/x", url(/x)); its stylesheets neither; index.html and the test pages name their files relatively;
 //    manifest.json too, with no id.
+// 4. build.mjs refuses a bundle base.ts would not place.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -223,4 +224,22 @@ test('the built page names no address at the server\'s root: scripts, stylesheet
     'index.html: href="/manifest.json"', 'index.html: src="/main.js"', 'index.html: url(\'/d.png\')',
   ]);
   assert.throws(() => literals('a="b', 'x.js'), /a string that does not end/);
+});
+
+// baseOf knows the page's main.js by its name alone: a main.js in a folder would take that folder for the base, so
+// build.mjs refuses one, and any bundle neither at the base nor one folder below it (before it builds anything)
+test('build.mjs refuses a bundle base.ts would not place', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-path-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  for (const d of ['src', 'node_modules']) fs.symlinkSync(path.join(WEB, d), path.join(root, d));
+  const build = fs.readFileSync(path.join(WEB, 'build.mjs'), 'utf8');
+  const main = "'main': 'src/main.ts',";
+  assert.ok(build.includes(main));
+  for (const name of ['host/main', 'test/main', 'x', 'a/b/c', 'Host/x']) {
+    fs.writeFileSync(path.join(root, 'build.mjs'), build.replace(main, `${main} '${name}': 'src/main.ts',`));
+    const r = spawnSync(process.execPath, [path.join(root, 'build.mjs')], { cwd: os.tmpdir(), encoding: 'utf8' });
+    assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+    assert.match(r.stderr, new RegExp(`the bundle ${name} would not find the page's base`), name);
+    assert.ok(!fs.existsSync(path.join(root, 'dist')), `${name}: nothing built`);
+  }
 });
