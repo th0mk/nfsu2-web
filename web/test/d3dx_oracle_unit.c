@@ -52,6 +52,7 @@ static int pass, fail;
 #define SCR       0x07F00000u            /* the test's own guest memory: the device, out-pointers */
 #define IAT_POOL  0x008904C4u            /* speed.exe's IAT slots of D3DXCreateEffectPool, */
 #define IAT_FROMRES 0x008904C0u          /* D3DXCreateEffectFromResourceA */
+#define IAT_QPC   0x0089017Cu            /* speed.exe's IAT slot of QueryPerformanceCounter */
 #define FX_TABLE  0x008F9BE8u            /* the exe's effect table: +0 the resource name */
 #define FX_STRIDE 0x90u
 #define FX_COUNT  31
@@ -290,6 +291,17 @@ int main(int argc, char **argv){
         uint32_t v = MR32(d3dxmath_fns[f].iat);
         CHECK(to_oracle ? v - 0x00D80000u < 0x0024A000u : v == d3dxmath_fns[f].thunk, "the exe's %s slot 0x%08x -> 0x%08x, %s",
               d3dxmath_fns[f].name, d3dxmath_fns[f].iat, v, to_oracle ? "the oracle" : "its thunk");
+    }
+    /* the exe's QueryPerformanceCounter after the oracle's DllMain, which calls the oracle's own import of it
+     * first: answered too (win32.c once cached the first caller's import index, the DLL's, and left every call
+     * of the exe's unanswered) */
+    {
+        uint32_t pc = scr(8); MR32(pc) = MR32(pc + 4) = 0xBAADF00Du;
+        unsigned un = g_nunimpl;
+        uint32_t r = call_guest(c, MR32(IAT_QPC), 1, &pc);
+        CHECK(r == 1 && g_nunimpl == un && (MR32(pc) != 0xBAADF00Du || MR32(pc + 4) != 0xBAADF00Du),
+              "the exe's QueryPerformanceCounter is answered after the oracle's DllMain (returned %u, counter %08x%08x)",
+              r, MR32(pc + 4), MR32(pc));
     }
     if (argc > 3 && !strcmp(argv[3], "boot")){          /* the binding alone */
         fflush(stderr);

@@ -430,8 +430,11 @@ int win32_call(CPU *c, uint32_t idx){
     uint32_t r = 0;
 
     /* QueryPerformanceCounter is the most frequent call (frame limiter); to
-     * skip the name chain's ~20 strcmps the import index is cached on the
-     * first match. */
+     * skip the name chain's ~20 strcmps the exe's import index is cached on
+     * its first call.  Only the exe's: a lifted DLL loaded before the entry
+     * point (Most Wanted's D3DX oracle) calls it first, and a cached DLL index
+     * left the exe's own calls unanswered.  The DLLs' calls take the name
+     * test below. */
     static uint32_t qpc_idx = 0xFFFFFFFFu;
     /* server.dll (every lifted DLL) runs on real time.  The HLE's
      * GetTickCount is the frame-paced virtual clock, which nearly stops while
@@ -448,7 +451,7 @@ int win32_call(CPU *c, uint32_t idx){
             uint64_t ft = ((uint64_t)ts.tv_sec + 11644473600ull) * 10000000ull + (uint64_t)ts.tv_nsec / 100u;
             mem_commit(p, 8); MR32(p) = (uint32_t)ft; MR32(p+4) = (uint32_t)(ft >> 32); }
         r = 0; }
-    else if (idx == qpc_idx || (qpc_idx == 0xFFFFFFFFu && !strcmp(n,"QueryPerformanceCounter") && (qpc_idx = idx, 1))
+    else if (idx == qpc_idx || (qpc_idx == 0xFFFFFFFFu && idx < g_imp_count && !strcmp(n,"QueryPerformanceCounter") && (qpc_idx = idx, 1))
              || (idx >= g_imp_count && !strcmp(n,"QueryPerformanceCounter"))){
         if (ENVC("QPCWHO")) qpc_who(c);
         if (g_game.on_qpc) g_game.on_qpc(c);    /* UG2: its frame wait loop sleeps (framerate.c) */
