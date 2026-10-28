@@ -3,7 +3,9 @@
 // control):
 //   spawn(...serverCommand(args), opts)
 // Its defaults (the page, the module, the state folder) are this checkout's: NFSU2_REPO, set here for the children
-// unless it is set already (the binary's own default is the checkout it was built in).
+// unless it is set already (the binary's own default is the checkout it was built in).  Its game is the one the tool
+// names with --game, else UG2: a NFSU2_GAME in the shell is dropped here, so it never reaches the children (no
+// --game ug2 is added: a server built before Most Wanted refuses --game).
 // On Windows the binary is Linux's, so it runs in WSL: wsl.exe -e (the default distribution, or $NFSU2_WSL_DISTRO),
 // with the binary and every argument that is a Windows path as WSL sees them, and NFSU2_REPO and the NFSU2_<OPTION>
 // variables passed through WSLENV.  Killing wsl.exe stops the server in WSL too.
@@ -15,6 +17,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const WIN = process.platform === 'win32';
 export const SERVER_BIN = process.env.NFSU2_SERVER_BIN || path.join(REPO, 'out/web/server-rs/nfsu2-server');
 process.env.NFSU2_REPO ||= REPO;
+delete process.env.NFSU2_GAME;
 
 if (WIN) {
   // NFSU2_<OPTION> of the options with a value (/p: a path, translated), and the server's knobs

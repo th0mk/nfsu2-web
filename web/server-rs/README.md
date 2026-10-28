@@ -56,7 +56,8 @@ Its `binary` stage is the binary alone (6 MB), for a VPS without Docker (web/dep
 ## The JS tests and tools
 
 The tests and tools that start a server start this binary (`web/tools/server-cmd.mjs`: out/web/server-rs/nfsu2-server,
-or `NFSU2_SERVER_BIN` for another build; on Windows it runs in WSL):
+or `NFSU2_SERVER_BIN` for another build; on Windows it runs in WSL), as UG2's server unless the tool passes `--game`: a
+`NFSU2_GAME` in the shell is not passed on:
 
     node --test --test-concurrency=1 web/test/deploy.test.mjs
     node --test web/test/audit.test.mjs web/test/players.test.mjs web/test/module.test.mjs web/test/data-blocks.test.mjs

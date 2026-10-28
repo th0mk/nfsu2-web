@@ -35,8 +35,8 @@
 // on loopback).
 // Logs: out/web/runs/<run>/<scenario>.log (the game's stdout/stderr, one line
 // per line, without the host's [tid] prefix); summary.txt and summary.json.
-// The module the server sends (/game.json: revision, lift options, hash) is
-// the run's first line, and in both summaries.
+// The module the server sends (/game.json: revision, game, lift options,
+// hash) is the run's first line, and in both summaries.
 // Each game has its own table below: Most Wanted's is empty until its first
 // scenario exists (an ad-hoc --script runs one of tests/mw/scripts/).
 import { chromium } from 'playwright';
@@ -44,9 +44,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { requireDev, moduleLine } from './dev-server.mjs';
+import { requireDev } from './dev-server.mjs';
 import { seedSave } from './save-seed.mjs';
-import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
+import { GAMES, gameOf, usage, nothingFor, requireGame, moduleLine } from './rig-game.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 

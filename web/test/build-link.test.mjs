@@ -134,19 +134,22 @@ test('build.sh: another game\'s json has its stamp, and "oracle":1 only with the
   assert.match(read(t, 'out/web/mw/nfsmw.json'), /"game":"mw","stamp":"[^"]*"\}\n$/);
 });
 
+/** corelink's runtime sources: core.list, a core file and header, a runtime/web file, compat's headers (one of its
+ *  system headers in a folder of its own) and an .inc file vsemu.c takes in */
+const CORELINK_SRC = ['runtime/core.list', 'runtime/mem.c', 'runtime/cpu.h', 'runtime/web/main_web.c', 'runtime/web/compat/wasm_plat.h',
+  'runtime/web/compat/os/lock.h', 'runtime/web/vsemu_wgsl.inc'];
 /** corelink's tree: a build in out/web whose lift.objs names obj/shard_0000.o and obj/srv/fntab.o (with an
- *  object of an older lift beside them), runtime sources older than the list */
+ *  object of an older lift beside them), runtime sources older than the list, no web/build.sh */
 function corelinkTree() {
   const t = tree();
   w(t, 'web/tools/corelink.sh', read(ROOT, 'web/tools/corelink.sh'), 0o755);
   w(t, 'tools/genstamp.sh', '#!/bin/bash\n[ "$1" = overrides ] && echo "401000,402000"\n', 0o755);
-  w(t, 'runtime/core.list', 'mem.c\n');
-  for (const f of ['runtime/mem.c', 'runtime/cpu.h', 'runtime/web/main_web.c', 'runtime/web/compat/wasm_plat.h']) w(t, f);
+  for (const f of CORELINK_SRC) w(t, f, f === 'runtime/core.list' ? 'mem.c\n' : '');
   for (const d of ['all', 'server']) w(t, `gen/${d}/stamp.txt`, STAMP);
   for (const o of ['rt/mem.o', 'rt/game_ug2.o', 'rt/web_main_web.o', 'obj/shard_0000.o', 'obj/srv/fntab.o', 'obj/shard_0099.o']) w(t, `out/web/${o}`, 'object');
   w(t, 'out/web/lift.objs', `# web/build.sh: the lifted objects its link takes, under out/web\n#stamp gen/all ${h16(STAMP)}\n#stamp gen/server ${h16(STAMP)}\nobj/shard_0000.o\nobj/srv/fntab.o\n`);
   const past = new Date(Date.now() - 3600e3);
-  for (const f of ['runtime/core.list', 'runtime/mem.c', 'runtime/cpu.h', 'runtime/web/main_web.c', 'runtime/web/compat/wasm_plat.h']) fs.utimesSync(path.join(t, f), past, past);
+  for (const f of CORELINK_SRC) fs.utimesSync(path.join(t, f), past, past);
   return t;
 }
 
@@ -174,7 +177,7 @@ test('corelink.sh prints the link\'s errors on failure, a duplicate symbol and i
   assert.match(r.out, /^clang: error: linker command failed/m);
 });
 
-test('corelink.sh refuses a build older than the lift or the runtime sources, or one that is not there', () => {
+test('corelink.sh refuses a build older than the lift, the runtime sources or web/build.sh, or one that is not there', () => {
   let t = corelinkTree();
   // a new lift since web/build.sh ran: its stamp has another date line
   w(t, 'gen/all/stamp.txt', STAMP.replace('T00:00:00Z', 'T01:00:00Z'));
@@ -185,11 +188,18 @@ test('corelink.sh refuses a build older than the lift or the runtime sources, or
   t = corelinkTree(); fs.rmSync(path.join(t, 'gen/server/stamp.txt'));
   r = sh(t, 'web/tools/corelink.sh');
   assert.equal(r.code, 2, r.out); assert.match(r.out, /older than the lift in gen\/server/);
-  for (const f of ['runtime/mem.c', 'runtime/cpu.h', 'runtime/web/compat/wasm_plat.h', 'runtime/core.list']) {
+  for (const f of CORELINK_SRC) {
     t = corelinkTree(); fs.utimesSync(path.join(t, f), new Date(), new Date(Date.now() + 5000));
     r = sh(t, 'web/tools/corelink.sh');
     assert.equal(r.code, 2, `${f}: ${r.out}`); assert.match(r.out, new RegExp(`older than ${f.replace(/\./g, '\\.')} `));
   }
+  // web/build.sh's flags: one newer than the list is refused, an older one is not
+  t = corelinkTree(); w(t, 'web/build.sh');
+  fs.utimesSync(path.join(t, 'web/build.sh'), new Date(), new Date(Date.now() - 7200e3));
+  r = sh(t, 'web/tools/corelink.sh'); assert.equal(r.code, 0, r.out);
+  fs.utimesSync(path.join(t, 'web/build.sh'), new Date(), new Date(Date.now() + 5000));
+  r = sh(t, 'web/tools/corelink.sh');
+  assert.equal(r.code, 2, r.out); assert.match(r.out, /older than web\/build\.sh /);
   // another game's runtime folder is not UG2's build
   t = corelinkTree(); w(t, 'runtime/mw/x.c');
   r = sh(t, 'web/tools/corelink.sh'); assert.equal(r.code, 0, r.out);

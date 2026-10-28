@@ -219,7 +219,7 @@ async fn the_binary_starts_counts_its_players_and_stops() {
     };
     let (port, state) = (free_port(), tmp.path().join("state"));
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_nfsu2-server"));
-    cmd.args(args(port, &state)).env("NFSU2_THREADS", "2");
+    cmd.args(args(port, &state)).env("NFSU2_THREADS", "2").env_remove("NFSU2_GAME");
     let rust = normal(scenario(cmd, port, &state).await, port, &state);
     println!("{rust:#?}");
 
@@ -315,10 +315,11 @@ async fn a_state_folder_carries_over_a_restart() {
     }
 }
 
-/// the server's command, with the game folder, a port and a state folder
+/// the server's command, with the game folder, a port and a state folder (UG2's server unless extra names --game: a
+/// NFSU2_GAME in the runner's environment is not passed on)
 fn command(data: &Path, wasm: &Path, port: u16, state: &Path, extra: &[&str]) -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_nfsu2-server"));
-    c.env("NFSU2_THREADS", "2");
+    c.env("NFSU2_THREADS", "2").env_remove("NFSU2_GAME");
     c.arg("--data").arg(data).arg("--http-port").arg(port.to_string()).arg("--state").arg(state).arg("--wasm").arg(wasm);
     c.args(extra);
     c
@@ -393,9 +394,9 @@ async fn status_of(port: u16, path: &str) -> u16 {
     String::from_utf8_lossy(&r).get(9..12).and_then(|c| c.parse().ok()).unwrap_or(0)
 }
 
-/// what the binary prints with these arguments, and its exit code
+/// what the binary prints with these arguments (without the runner's NFSU2_GAME), and its exit code
 fn printed(args: &[&str]) -> (String, String, Option<i32>) {
-    let o = Command::new(env!("CARGO_BIN_EXE_nfsu2-server")).args(args).output().expect("the binary runs");
+    let o = Command::new(env!("CARGO_BIN_EXE_nfsu2-server")).args(args).env_remove("NFSU2_GAME").output().expect("the binary runs");
     (String::from_utf8_lossy(&o.stdout).into_owned(), String::from_utf8_lossy(&o.stderr).into_owned(), o.status.code())
 }
 

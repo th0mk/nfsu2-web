@@ -345,6 +345,7 @@ async fn fuzz(seed: u64, frames: usize) -> FuzzRun {
     let port = free_port();
     let mut child = Command::new(env!("CARGO_BIN_EXE_nfsu2-server"))
         .env("NFSU2_THREADS", "2")
+        .env_remove("NFSU2_GAME")
         .arg("--data")
         .arg(&data)
         .args(["--http-port", &port.to_string(), "--state"])

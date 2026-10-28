@@ -10,7 +10,8 @@
 # overrides`.  Exit 0 = the link has no undefined symbol; 1 = it failed (the
 # undefined symbols and the link's other errors are listed); 2 = no build, or
 # one older than the lift (a gen folder's stamp.txt is not the one
-# lift.objs names) or than the runtime sources: run web/build.sh first.
+# lift.objs names), than the runtime sources or than web/build.sh: run
+# web/build.sh first.
 #
 #   web/tools/corelink.sh       after web/build.sh; writes out/web/corelink/
 set -e -o pipefail
@@ -24,7 +25,11 @@ stampsum(){ if [ -f "$1/stamp.txt" ]; then shasum -a 256 < "$1/stamp.txt" | cut 
 while read -r d s; do
   [ "$(stampsum "$d")" = "$s" ] || { echo "corelink: out/web's objects are older than the lift in $d (its stamp.txt changed since web/build.sh ran): run web/build.sh"; exit 2; }
 done < <(sed -n 's/^#stamp //p' "$LIST")
-NEWER="$(find runtime runtime/web runtime/web/compat -maxdepth 1 -newer "$LIST" -type f \( -name '*.c' -o -name '*.h' -o -name core.list \) -print -quit)"
+# the runtime sources (all of runtime/ but another game's runtime/<id>/,
+# with compat's system headers and the .inc files vsemu.c takes in) and
+# web/build.sh, whose flags the objects were compiled with
+NEWER="$(find runtime \( -path 'runtime/*' -type d ! -path runtime/web ! -path 'runtime/web/*' -prune \) -o -newer "$LIST" -type f \( -name '*.[ch]' -o -name '*.inc' -o -name core.list \) -print -quit)"
+[ -n "$NEWER" ] || ! [ web/build.sh -nt "$LIST" ] || NEWER=web/build.sh
 [ -z "$NEWER" ] || { echo "corelink: out/web's objects are older than $NEWER (changed since web/build.sh ran): run web/build.sh"; exit 2; }
 while read -r o; do
   [ -f "$OUT/$o" ] || { echo "corelink: out/web/$o missing (out/web/lift.objs names it; run web/build.sh)"; exit 2; }

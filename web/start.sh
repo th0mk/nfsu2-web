@@ -124,5 +124,7 @@ if [ "$OPEN" = 1 ]; then
   ( for _ in $(seq 1 50); do curl -sf -o /dev/null "http://localhost:$HTTP_PORT/game.json" && break; sleep 0.2; done
     open -a "Google Chrome" "http://localhost:$HTTP_PORT/" 2>/dev/null || open "http://localhost:$HTTP_PORT/" ) &
 fi
-# UG2's server, whatever NFSU2_GAME the shell has (the first --game wins over it)
-exec "$SERVER" --game ug2 --data "$DATA" --http-port "$HTTP_PORT"
+# UG2's server, whatever NFSU2_GAME the shell has: it is unset (an empty one is no game to the server), and no
+# --game is passed (a server built before Most Wanted refuses it)
+unset NFSU2_GAME
+exec "$SERVER" --data "$DATA" --http-port "$HTTP_PORT"

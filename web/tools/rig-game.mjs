@@ -72,3 +72,14 @@ export async function requireGame(base, game) {
     process.exit(2);
   }
 }
+
+/** the module the server at base sends, as its /game.json names it, in one line for a run's output (a result counts
+ *  only for the module that made it): revision, game, lift options, the module's hash (/game.wasm?v=) and the lift
+ *  stamp where the json has one (Underground 2's has none).  null when there is no json to read. */
+export async function moduleLine(base) {
+  let j;
+  try { j = await (await fetch(new URL('/game.json', base))).json(); } catch { return null; }
+  if (!j || typeof j !== 'object') return null;
+  return `module: rev ${j.rev ?? '?'}, game ${j.game ?? 'ug2 (no game field)'}, lift ${j.lift || '-'}, hash ${j.module ?? '?'}` +
+    (j.stamp ? `, stamp ${j.stamp}` : '');
+}

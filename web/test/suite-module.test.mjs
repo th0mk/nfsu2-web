@@ -1,9 +1,9 @@
 // web/tools/run-suite.mjs names the module it ran against (a result counts only for the module that made it),
 // checked against a stand-in server, without a browser or the game:
 //   node --test web/test/suite-module.test.mjs
-// 1. moduleLine (web/tools/dev-server.mjs): the server's /game.json in one line, its revision, lift options and the
-//    hash the server adds (/game.wasm?v=); nothing without a json or a server.
-// 2. run-suite prints that line before anything else, and writes it into summary.txt and summary.json.
+// run-suite prints the module line (moduleLine, web/tools/rig-game.mjs: the server's /game.json in one line; its own
+// cases are in rig-game.test.mjs) before anything else, and writes it into summary.txt and summary.json, also when
+// no scenario it was given can run yet (then without starting a browser).
 // Port: NFSU2_TEST_SUITE_PORT (8541), the stand-in's.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,30 +37,11 @@ const node = (args, env = process.env) => new Promise(res => {
   c.on('exit', code => res({ code, out, err }));
 });
 
-test('moduleLine: the module the server sends, in one line', async t => {
-  let json = '';
-  const base = await standIn(t, () => json);
-  const line = async b => JSON.parse((await node(['--input-type=module', '-e',
-    `import { moduleLine } from ${JSON.stringify(path.join(REPO, 'web/tools/dev-server.mjs'))}; ` +
-    `console.log(JSON.stringify(await moduleLine(${JSON.stringify(b)})));`])).out);
-  // nfsu2.json as web/build.sh writes it, with the hash the server adds
-  json = JSON.stringify({ pages: 16384, maxPages: 65536, rev: '4eda10d+', size: 35657931, opt: '-O3', lift: LIFT, module: 'AbC-12_x' });
-  assert.equal(await line(base), `module: rev 4eda10d+, lift ${LIFT}, hash AbC-12_x`);
-  // a lift without options, a json without a revision or a hash
-  json = JSON.stringify({ rev: 'unknown', lift: '', module: 'h' });
-  assert.equal(await line(base), 'module: rev unknown, lift -, hash h');
-  json = JSON.stringify({ pages: 16384 });
-  assert.equal(await line(base), 'module: rev ?, lift -, hash ?');
-  // no json, or no server: nothing to say
-  json = '';
-  assert.equal(await line(base), null);
-  assert.equal(await line('http://127.0.0.1:9'), null);
-});
-
 test('run-suite: the module line first, and in both summaries', async t => {
   const json = JSON.stringify({ rev: '4eda10d+', lift: LIFT, module: 'AbC-12_x' });
   const base = await standIn(t, () => json);
-  const want = `module: rev 4eda10d+, lift ${LIFT}, hash AbC-12_x`;
+  // (a json of before the game field: Underground 2's)
+  const want = `module: rev 4eda10d+, game ug2 (no game field), lift ${LIFT}, hash AbC-12_x`;
   // before anything else (here it stops at the unknown scenario, before a browser starts)
   let r = await node([path.join(REPO, 'web/tools/run-suite.mjs'), '--base', base, 'nosuchscenario']);
   assert.equal(r.code, 2);

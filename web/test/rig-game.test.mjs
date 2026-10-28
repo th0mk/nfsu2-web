@@ -7,6 +7,8 @@
 // 3. run-suite: Underground 2's table is the same in --list and --help; Most Wanted's is empty.
 // 4. requireGame: a server of the other game's module stops the tool; the same game, a module json without a game
 //    (Underground 2's of before) and a server it cannot reach let it go on.
+// 5. moduleLine: the module a server sends in one line (revision, game, lift, hash, and the stamp where the json
+//    has one); run-suite prints it first.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -106,4 +108,47 @@ test('requireGame: the server must serve the tool\'s game', async t => {
   assert.equal((await check(base, 'mw')).code, 0);
   r = await check('http://127.0.0.1:9', 'mw');
   assert.equal(r.code, 0);
+});
+
+test('moduleLine: the module the server sends, in one line; run-suite prints it first', async t => {
+  let json = '';
+  const server = http.createServer((q, s) => {
+    if (q.url === '/test/hostcheck.html') { s.end('<!doctype html>'); return; }
+    if (q.url === '/game.json' && json) { s.end(json); return; }
+    s.statusCode = 404; s.end();
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const line = b => new Promise(res => {
+    const c = spawn(process.execPath, ['--input-type=module', '-e',
+      `import { moduleLine } from ${JSON.stringify(path.join(REPO, 'web/tools/rig-game.mjs'))}; console.log(JSON.stringify(await moduleLine(${JSON.stringify(b)})));`]);
+    let out = '';
+    c.stdout.on('data', d => { out += d; });
+    c.on('exit', () => res(JSON.parse(out)));
+  });
+  const LIFT = 'FLAGABI X87OPT JTSWITCH LREGS FTOL2INL INLINE_LIST';
+  // Underground 2's json (no stamp), as the server sends it (module: the hash it added)
+  json = JSON.stringify({ pages: 16384, rev: '6ea741b+', size: 35666985, opt: '-O3', lift: LIFT, game: 'ug2', module: 'AbC-12_x' });
+  assert.equal(await line(base), `module: rev 6ea741b+, game ug2, lift ${LIFT}, hash AbC-12_x`);
+  // another game's names its lift stamp; a json of before the game field is Underground 2's
+  json = JSON.stringify({ rev: 'abc', lift: '', game: 'mw', stamp: 'overrides 1 (2); exe 3', module: 'h' });
+  assert.equal(await line(base), 'module: rev abc, game mw, lift -, hash h, stamp overrides 1 (2); exe 3');
+  json = JSON.stringify({ rev: 'unknown+', lift: LIFT, module: 'h' });
+  assert.equal(await line(base), `module: rev unknown+, game ug2 (no game field), lift ${LIFT}, hash h`);
+  // no json, or no server: nothing to say
+  json = '';
+  assert.equal(await line(base), null);
+  assert.equal(await line('http://127.0.0.1:9'), null);
+  // run-suite says it before anything else (here it stops at the unknown scenario, before a browser starts)
+  json = JSON.stringify({ rev: '6ea741b+', lift: LIFT, game: 'ug2', module: 'AbC-12_x' });
+  const r = await new Promise(res => {
+    const c = spawn(process.execPath, [path.join(REPO, 'web/tools/run-suite.mjs'), '--base', base, 'nosuchscenario'], { cwd: REPO });
+    let out = '', err = '';
+    c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { err += d; });
+    c.on('exit', code => res({ code, out, err }));
+  });
+  assert.equal(r.code, 2);
+  assert.equal(r.out, `module: rev 6ea741b+, game ug2, lift ${LIFT}, hash AbC-12_x\n`);
+  assert.match(r.err, /unknown scenario nosuchscenario/);
 });

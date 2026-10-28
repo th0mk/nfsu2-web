@@ -52,6 +52,8 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // ---- the server ----
 const state = fs.mkdtempSync(path.join(os.tmpdir(), 'nfsu2-mix-'));
 const env = { ...process.env, NFSU2_REPO: REPO, ...(opt('threads', '') ? { NFSU2_THREADS: opt('threads') } : {}) };
+// UG2's server: a NFSU2_GAME left in the shell is not passed on (as web/tools/server-cmd.mjs does)
+delete env.NFSU2_GAME;
 const server = spawn(SERVER, ['--data', DATA, '--http-port', String(PORT), '--max-peers', String(MAX), '--dev', '--state', state],
   { env, stdio: ['ignore', 'pipe', 'pipe'] });
 const serverLog = [];
