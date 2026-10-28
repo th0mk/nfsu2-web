@@ -1,0 +1,61 @@
+# Most Wanted: the boot checks of TRACKER M2 that boot_menu.txt does not make, in one boot to the main menu that
+# leaves by WM_CLOSE (tests/mw/checks/boot_checks.sh reads the log; it runs boot_menu.sh's checks too):
+#   - the 100 Hz timer thread (GAME.md 6.1): its counters [0x9BB130] and [0x9BB134] traced each 60 frames;
+#   - the first start (registry_mw.c): [0x901820] = 1 when FirstTime was not there, then the GPU auto-detect
+#     0x6DF8F0 runs and SAVE_SETTINGS 0x6C1F10 writes the options; on a kept registry it is 0 and LOAD_SETTINGS
+#     0x6C1C00 reads them.  [0x982C00] is the level the auto-detect set; [0x9017B0] the options block (VERSION, SIZE,
+#     the g_* values: 33 dwords);
+#   - the effects (GAME.md 5.4): the pool [0x982C84] and each of the 31 effect objects of the table 0x93DE78..0x93DEF0
+#     (0x6D7500 creates them) holds its ID3DXEffect at +0x48, which D3DXCreateEffectFromResourceA writes only when it
+#     succeeds (the caller 0x6C60D2 drops the HRESULT);
+#   - server.dll at its pinned base 0x00D00000: loaded and freed as the LAN host's LoadLibraryA("server") does
+#     (0x741E31), by runtime/mw/debug_mw.c's loadlib.
+#   node web/tools/run-suite.mjs --game mw --script boot_checks.txt --name boot_checks \
+#     --marker 'waitfng MainMenu.fng satisfied' --env NFSU2_QUIT_FRAMES=7200
+# With the D3DX oracle as in boot_menu.txt.  Boot 2 on the first boot's registry: --save-out DIR on the first run,
+# then NFSU2_SAVE_SEED=DIR/boot_checks for the second.
+0     trace 60 tick=i:0x009bb130 tick2=i:0x009bb134
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x00901820                 # 1 on a first start
++0    peek 0x00982c00                 # the auto-detect's level
++0    peek 0x009017b0 33              # the options block
++600  tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng 600
++0    untrace
++0    expect x:0x00982c84 != 0          # the effect pool
++0    expect x:[0x0093de78]+0x48 != 0
++0    expect x:[0x0093de7c]+0x48 != 0
++0    expect x:[0x0093de80]+0x48 != 0
++0    expect x:[0x0093de84]+0x48 != 0
++0    expect x:[0x0093de88]+0x48 != 0
++0    expect x:[0x0093de8c]+0x48 != 0
++0    expect x:[0x0093de90]+0x48 != 0
++0    expect x:[0x0093de94]+0x48 != 0
++0    expect x:[0x0093de98]+0x48 != 0
++0    expect x:[0x0093de9c]+0x48 != 0
++0    expect x:[0x0093dea0]+0x48 != 0
++0    expect x:[0x0093dea4]+0x48 != 0
++0    expect x:[0x0093dea8]+0x48 != 0
++0    expect x:[0x0093deac]+0x48 != 0
++0    expect x:[0x0093deb0]+0x48 != 0
++0    expect x:[0x0093deb4]+0x48 != 0
++0    expect x:[0x0093deb8]+0x48 != 0
++0    expect x:[0x0093debc]+0x48 != 0
++0    expect x:[0x0093dec0]+0x48 != 0
++0    expect x:[0x0093dec4]+0x48 != 0
++0    expect x:[0x0093dec8]+0x48 != 0
++0    expect x:[0x0093decc]+0x48 != 0
++0    expect x:[0x0093ded0]+0x48 != 0
++0    expect x:[0x0093ded4]+0x48 != 0
++0    expect x:[0x0093ded8]+0x48 != 0
++0    expect x:[0x0093dedc]+0x48 != 0
++0    expect x:[0x0093dee0]+0x48 != 0
++0    expect x:[0x0093dee4]+0x48 != 0
++0    expect x:[0x0093dee8]+0x48 != 0
++0    expect x:[0x0093deec]+0x48 != 0
++0    expect x:[0x0093def0]+0x48 != 0
++0    peek 0x00901820
++0    peek 0x009017b0 33
++0    loadlib server.dll
++0    log main menu up: WM_CLOSE
++0    close
