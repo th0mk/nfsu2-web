@@ -170,8 +170,9 @@ function urlFor(s) {
   return `${opt.base}/test/hostcheck.html?${q}`;
 }
 
-// a script's `close` (runtime/lifecycle.c): the game exited by itself after the WM_CLOSE
-const closedByGame = log => /^app: the game exited \(code 0\) after the quit request$/m.test(log);
+// a script's `close` (runtime/lifecycle.c): the game exited by itself after the WM_CLOSE.  Games other than
+// Underground 2 only: its runs still quit by the runtime's own quit (the "quit at guest frame" line)
+const closedByGame = log => !!OF && /^app: the game exited \(code 0\) after the quit request$/m.test(log);
 
 function judge(s, log, exit) {
   const why = [];
