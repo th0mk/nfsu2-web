@@ -18,6 +18,7 @@ import * as P from './proto';
 import { C, F } from './proto';
 import { Encoder } from './encoder';
 import type { FromPng, ToPng } from './png-worker';
+import { abs } from '../base';
 
 export interface RendererOptions {
   /** where frame dumps go: a URL prefix that accepts PUT <prefix><name>.png (the dev server's /artifacts/) */
@@ -562,7 +563,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const px = rb.buf.getMappedRange().slice(0);
     rb.buf.unmap(); rb.buf.destroy();
     if (!pngWorker) {
-      const w = pngWorker = new Worker(new URL('/gpu/png-worker.js', import.meta.url), { type: 'module', name: 'png' });
+      const w = pngWorker = new Worker(abs('gpu/png-worker.js'), { type: 'module', name: 'png' });
       w.onmessage = (e: MessageEvent<FromPng>) => {
         const p = pngWaiting.get(e.data.id);
         pngWaiting.delete(e.data.id);

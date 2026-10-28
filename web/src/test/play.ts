@@ -29,6 +29,8 @@
 import { startProcess } from '../host/process';
 import { attachRenderer, type Renderer } from '../gpu/index';
 import { attachNet } from '../net/index';
+import { abs, at } from '../base';
+import { DATA_PATH, MANIFEST_PATH } from '../host/datacache';
 const q = new URLSearchParams(location.search);
 const log = (s: string) => console.log(s);
 const W = +(q.get('w') ?? 1280), H = +(q.get('h') ?? 720);
@@ -38,7 +40,7 @@ canvas.width = W; canvas.height = H;
 canvas.style.cssText = `width:${W / devicePixelRatio}px;height:${H / devicePixelRatio}px;display:block`;
 document.body.append(canvas);
 const t0 = performance.now();
-const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? '/game.wasm'));
+const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? at('game.wasm')));
 log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
 const saveDir = q.get('save') ?? 'save-play';
 if (q.has('fresh')) {
@@ -60,7 +62,7 @@ let loadT0 = 0;
 let r: Renderer | null = null;
 const p = await startProcess({
   module: mod, pool: +(q.get('pool') ?? 24), poolStart: q.get('poolstart') ? +q.get('poolstart')! : undefined, initialPages: q.get('pages') ? +q.get('pages')! : undefined,
-  cfg: { args: ['nfsu2', ...q.getAll('arg')], env: { HOME: '/save', NFSU2_DATA: '/data', ...env }, dataBase: '/data/', manifestUrl: '/data-manifest', saveDir },
+  cfg: { args: ['nfsu2', ...q.getAll('arg')], env: { HOME: '/save', NFSU2_DATA: '/data', ...env }, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir },
   onNote: log,
   onLog: (s, fd, tid) => {
     log(`[${tid}${fd === 2 ? '!' : ''}] ${s}`);

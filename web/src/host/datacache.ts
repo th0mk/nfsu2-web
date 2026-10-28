@@ -7,19 +7,28 @@
 
 export const BLOCK = 1 << 20;
 export const CACHE_DIR = 'cache';
-/** where the server has the manifest and the install folder (web/server-rs/src/app/manifest.rs) */
-export const MANIFEST_URL = '/data-manifest', DATA_BASE = '/data/';
+/** where the server has the manifest and the install folder, under the page's base (web/server-rs/src/app/manifest.rs):
+ *  the page gives the workers both absolute (base.ts abs) */
+export const MANIFEST_PATH = 'data-manifest', DATA_PATH = 'data/';
 
-/** the server's /data-manifest: every file and folder of the install folder it serves, and where it serves runs
- *  of their blocks compressed (an older server has no "blocks": byte ranges of /data/ then) */
+/** the server's data-manifest: every file and folder of the install folder it serves, and where it serves runs
+ *  of their blocks compressed (an older server has no "blocks": byte ranges of data/ then) */
 export interface Manifest {
   files: { p: string; d?: number; s?: number; m?: number }[];
   blocks?: { url: string; size: number; max: number };
 }
-/** The manifest's compressed runs, if it has them in this cache's block size: [url, most blocks a request]. */
-export function blockRuns(m: Manifest): { url: string; max: number } | null {
+/** The manifest's compressed runs, if it has them in this cache's block size: [url, most blocks a request].  The url
+ *  is resolved against the manifest's own (absolute) address, and taken only on the same server and under the
+ *  manifest's folder, the page's base: the runs never come from another origin, nor from the other game's base. */
+export function blockRuns(m: Manifest, manifestUrl: string): { url: string; max: number } | null {
   const b = m.blocks;
-  return b && typeof b.url === 'string' && b.url.startsWith('/') && b.size === BLOCK && b.max >= 1 ? { url: b.url, max: b.max } : null;
+  if (!b || typeof b.url !== 'string' || b.size !== BLOCK || !(b.max >= 1)) return null;
+  const from = new URL(manifestUrl);
+  let u: URL;
+  try { u = new URL(b.url, from); } catch { return null; }
+  // runUrl appends the file's path and its query to it
+  if (u.origin !== from.origin || !u.pathname.startsWith(new URL('./', from).pathname) || u.search || u.hash) return null;
+  return { url: u.href, max: b.max };
 }
 /** blocks first .. first+n-1 of a file, compressed: a 200 whose body (decoded by the browser) is exactly their bytes.  The
  *  file's mtime and size (m, s) make a changed file a new address, so the server lets Cloudflare keep the answer for

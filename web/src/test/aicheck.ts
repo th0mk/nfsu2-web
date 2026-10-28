@@ -11,11 +11,13 @@
 import { startProcess } from '../host/process';
 import { attachAudio, type AudioHandle } from '../audio/index';
 import { attachInput, type InputHandle } from '../input/index';
+import { abs, at } from '../base';
+import { DATA_PATH, MANIFEST_PATH } from '../host/datacache';
 
 const q = new URLSearchParams(location.search);
 const log = (s: string) => console.log(s);
 const t0 = performance.now();
-const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? '/game.wasm'));
+const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? at('game.wasm')));
 log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
 const saveDir = q.get('save') ?? 'save-test';
 if (q.has('fresh')) {
@@ -43,7 +45,7 @@ const proc = await startProcess({
   cfg: {
     args: ['nfsu2', ...q.getAll('arg')],
     env: { HOME: '/save', NFSU2_DATA: '/data', ...env, ...Object.fromEntries(q.getAll('env').map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) },
-    dataBase: '/data/', manifestUrl: '/data-manifest', saveDir,
+    dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir,
   },
   onLog: (s, fd, tid) => log(`[${tid}${fd === 2 ? '!' : ''}] ${s}`),
   onNote: log,

@@ -1,17 +1,19 @@
 // The start page in the player's language.  It is the game's own (settings.ini language, settings.ts LANGUAGES), so
 // one choice sets both, in Settings and in the list at the top; English until the player picks another.  English is
 // the source: each text is written in English where it is used, and t() looks that English up in the language's file
-// (web/src/app/lang/<language>.json, served as /lang/<language>.json, fetched once the language is picked), {name}
-// for the parts that change.  A text the file does not have stays English.  The start page's own markup is marked in
-// index.html: data-i18n (its text), data-i18n-html (a text with elements in it, which the file's text names <0>…</0>
-// in the order they open, so a language may move them), data-i18n-attr (attributes, by name).
+// (web/src/app/lang/<language>.json, served as lang/<language>.json under the page's base, fetched once the language
+// is picked), {name} for the parts that change.  A text the file does not have stays English.  The start page's own
+// markup is marked in index.html: data-i18n (its text), data-i18n-html (a text with elements in it, which the file's
+// text names <0>…</0> in the order they open, so a language may move them), data-i18n-attr (attributes, by name).
 //
 // Texts shown for longer (the status lines, the panels) are drawn again when the language changes (onLanguage, live).
 // Problems and errors carry a fixed code in every language (checks.ts, shell.ts), so a screenshot in any language
 // says which one it is; the log stays English.  web/test/i18n.test.mjs checks every file against the texts in use.
 //
-// This module touches the DOM only when called with it, and imports nothing, so the pure modules (settings.ts) can
-// use it under node.
+// This module touches the DOM only when called with it, and imports only base.ts (where the files are: '/' under
+// node), so the pure modules (settings.ts) can use it under node.
+
+import { at } from '../base';
 
 /** the game's languages (runtime/language.c), settings.ini language's values; english is the default */
 export const LANGUAGES = ['english', 'french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish', 'korean',
@@ -128,7 +130,7 @@ export async function setLanguage(l: string, log?: (s: string) => void): Promise
   let next: Record<string, string | Forms> = {};
   if (want !== 'english') {
     try {
-      const r = await fetch(`/lang/${want}.json`);
+      const r = await fetch(at(`lang/${want}.json`));
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       next = await r.json() as Record<string, string | Forms>;
     } catch (e) {

@@ -47,6 +47,12 @@ const opts = {
   loader: { '.txt': 'text', '.png': 'dataurl' },
 };
 for (const [k, v] of Object.entries(opts.entryPoints)) if (!fs.existsSync(v)) delete opts.entryPoints[k];
+// src/base.ts takes the page's base from where its bundle is: main.js (and sw.js) at the base, every other bundle in
+// a folder of its own right below it
+for (const k of Object.keys(opts.entryPoints)) if (k !== 'main' && k !== 'sw' && !/^[a-z]+\/[a-z-]+$/.test(k)) {
+  console.error(`build.mjs: the bundle ${k} would not find the page's base (src/base.ts): main, sw, or <folder>/<name>`);
+  process.exit(2);
+}
 
 // test pages and source maps go to dist-dev (same relative path: /test/x.js, /main.js.map); the rest to dist
 const devOnly = rel => rel.startsWith('test/') || rel.endsWith('.map');
@@ -73,7 +79,8 @@ fs.mkdirSync(path.join(DIST, 'lang'));
 const texts = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
 for (const f of fs.readdirSync(LANG)) if (f.endsWith('.json'))
   fs.writeFileSync(path.join(DIST, 'lang', f), JSON.stringify({ ...texts(path.join(LANG, f)), ...texts(path.join(OWN_LANG, f)) }));
-const page = name => `<!doctype html><meta charset=utf-8><title>${name}</title><script type=module src="/test/${name}.js"></script>`;
+// beside its script in test/, which it names relatively, so the pages work under any base (src/base.ts)
+const page = name => `<!doctype html><meta charset=utf-8><title>${name}</title><script type=module src="${name}.js"></script>`;
 for (const name of ['play', 'hostcheck', 'shadercheck', 'aicheck']) fs.writeFileSync(path.join(DEV, 'test', `${name}.html`), page(name));
 // the player's page takes its address's test parameters only from a server that serves this (--dev: shell.ts)
 fs.writeFileSync(path.join(DEV, 'test', 'dev.json'), '{"dev":true}\n');

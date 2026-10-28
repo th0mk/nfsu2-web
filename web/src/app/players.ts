@@ -14,6 +14,7 @@ export interface PlayerCounts {
 }
 
 import { t, tn, type Msg } from './i18n';
+import { at } from '../base';
 
 const EVERY_MS = 15_000;
 
@@ -67,7 +68,7 @@ export function queueText(q: { pos: number; of: number; eta?: number }): string 
 
 /** Whether the server answers (any answer but a 5xx from a proxy in front of it), within ms. */
 export async function serverAnswers(ms: number): Promise<boolean> {
-  try { return (await fetch('/players', { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(ms) })).status < 500; }
+  try { return (await fetch(at('players'), { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(ms) })).status < 500; }
   catch { return false; }
 }
 
@@ -87,7 +88,7 @@ export async function askCrews(hashes: readonly number[], ms: number): Promise<M
   const mine = hashes.slice(0, 4);
   if (!mine.length) return new Map();
   try {
-    const r = await fetch(`/players?crews=${mine.join(',')}`, { cache: 'no-store', signal: AbortSignal.timeout(ms) });
+    const r = await fetch(at(`players?crews=${mine.join(',')}`), { cache: 'no-store', signal: AbortSignal.timeout(ms) });
     return r.ok ? crewCounts(await r.json() as PlayerCounts, mine) : null;
   } catch { return null; }
 }
@@ -107,7 +108,7 @@ export function watchPlayers(show: (line: Msg, crews: Map<number, number>) => vo
     try {
       const name = room(), hash = roomHash(name), mine = crews().slice(0, 4);
       const q = [hash ? `room=${hash}` : '', mine.length ? `crews=${mine.join(',')}` : ''].filter(Boolean).join('&');
-      const r = await fetch(q ? `/players?${q}` : '/players', { cache: 'no-store', signal: AbortSignal.timeout(ms) });
+      const r = await fetch(at(q ? `players?${q}` : 'players'), { cache: 'no-store', signal: AbortSignal.timeout(ms) });
       reached?.(r.status < 500);
       if (r.status === 404) { gone = true; last = null; show(() => '', new Map()); return; }
       if (!r.ok) return;

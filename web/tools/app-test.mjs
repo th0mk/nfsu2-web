@@ -1,7 +1,10 @@
 // End-to-end check of the player-facing page (web/index.html) in headless
 // Chrome, against a running server (started with --dev: the test scripts):
 //   node web/tools/app-test.mjs [--base http://localhost:8615] [--out <dir>] [--only a,b,...] [--keep]
-//        [--game ug2|mw] (the game's steps; Most Wanted has none yet) [--help] (this text and those)
+//        [--game ug2|mw] (the game's steps; Most Wanted has none yet) [--requests <file>] [--help] (this text and those)
+// --base may name a path (http://localhost:8615/u2): the page served under it, every address the steps use too.
+// --requests <file>: every request of the run's pages and their workers, one line each (method, address: a path for
+// one of the server's own), into the file, and one more step that passes when every one of them stays under --base.
 // Steps (each prints PASS/FAIL with evidence; screenshots go to --out):
 //   start     the start page renders, every check passes or warns (no problem shown), the module loads
 //   settings  the settings on the page edit /save/settings.ini; the file and the derived environment
@@ -87,7 +90,9 @@ const NONE = 'none yet: no Most Wanted screens or saves for the steps (M6-30, M6
 const GAME = gameOf(process.argv.slice(2));
 if (process.argv.includes('--help')) usage(import.meta.url, GAME, 'Steps (--only)', STEPS_OF[GAME] ? [STEPS_OF[GAME].join(' ')] : [], NONE);
 if (!STEPS_OF[GAME]) nothingFor(GAME, NONE);
-const BASE = arg('--base', 'http://localhost:8615');
+const BASE = arg('--base', 'http://localhost:8615').replace(/\/+$/, '');
+// the page's base path ('/' or '/u2/'): what the steps' own addresses on the server start with
+const PATH = new URL(BASE + '/').pathname;
 await requireDev(BASE);
 await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/app-test'));
@@ -105,8 +110,23 @@ function report(step, ok, evidence) {
 }
 const want = s => !ONLY || ONLY.has(s);
 
+// --requests: every request any page (and its workers) of the run makes, and every WebSocket it opens (WS), from each
+// context as it is made; the server's own as a path
+const REQUESTS = arg('--requests', '');
+const requests = [];
+const own = a => { const u = new URL(a); return /^(http|ws)s?:$/.test(u.protocol) && u.host === new URL(BASE).host ? u.pathname + u.search : u.href; };
+const track = c => {
+  if (!REQUESTS) return c;
+  c.on('request', r => requests.push(`${r.method()} ${own(r.url())}`));
+  const sockets = p => p.on('websocket', w => requests.push(`WS ${own(w.url())}`));
+  c.pages().forEach(sockets);
+  c.on('page', sockets);
+  return c;
+};
 const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed'),
   args: ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] });
+const newContext = browser.newContext.bind(browser);
+browser.newContext = async o => track(await newContext(o));
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
 const logs = [];
 function watch(page, tag) {
@@ -272,7 +292,7 @@ try {
 
   // ------------------------------------------------------------- play --
   if (want('play') || want('saves') || want('restore') || want('pcsave')) {
-    await open(page, `save=${SAVE}&${ENV}&script=/tests/scripts/app_rw_probe.txt`);
+    await open(page, `save=${SAVE}&${ENV}&script=${PATH}tests/scripts/app_rw_probe.txt`);
     const run = await playUntilExit(page, 'rw', 400000);
     // while it runs: overlay, menu, beforeunload
     await page.waitForFunction(() => Number(document.querySelector('#fps')?.dataset.fps) > 0 && document.querySelector('#fps')?.dataset.source === 'game', null, { timeout: 60000 }).catch(() => {});
@@ -350,7 +370,7 @@ try {
     const listed = await p2.locator('#profiles .name').allTextContents();
     const ini = (await readOpfs(p2, SAVE2, 'settings.ini')).text;
     // the restored profile loads in the game
-    await open(p2, `save=${SAVE2}&${ENV}&script=/tests/scripts/app_load_probe.txt`);
+    await open(p2, `save=${SAVE2}&${ENV}&script=${PATH}tests/scripts/app_load_probe.txt`);
     const run = await playUntilExit(p2, 'load', 300000);
     const exit = await run.wait();
     const tail = await p2.evaluate(() => window.__nfsu2.log.text());
@@ -406,7 +426,7 @@ try {
     const resealed = [];
     for (let i = 0; i < Math.max(sealed.length, ed.length); i++) if (sealed[i] !== ed[i]) resealed.push(i);
     // the edited one loads in the game, with fresh game options (no registry.txt came with it), its bank as edited
-    await open(p3, `save=${SAVE3}&${ENV}&script=/tests/scripts/app_load_probe.txt`);
+    await open(p3, `save=${SAVE3}&${ENV}&script=${PATH}tests/scripts/app_load_probe.txt`);
     const run = await playUntilExit(p3, 'pcload', 300000);
     const exit = await run.wait();
     const tail = await p3.evaluate(() => window.__nfsu2.log.text());
@@ -473,7 +493,7 @@ try {
   if (want('stalllog')) {
     const c2 = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
     const st = watch(await c2.newPage(), 'L');
-    await open(st, `save=${RUN}-l&fresh&env=NOMOVIES%3D1&env=NFSU2_FNG_LOG%3D1&script=/tests/scripts/app_stall_probe.txt`);
+    await open(st, `save=${RUN}-l&fresh&env=NOMOVIES%3D1&env=NFSU2_FNG_LOG%3D1&script=${PATH}tests/scripts/app_stall_probe.txt`);
     await st.click('#play');
     await waitPhase(st, ['playing'], 60000);
     await st.waitForFunction(() => window.__nfsu2.log.tail(300).some(l => /stall 10 s \(test-only\)/.test(l)), null, { timeout: 120000 });
@@ -540,7 +560,7 @@ try {
       const c2 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       const p = watch(await c2.newPage(), useButton ? 'R2' : 'R1');
       let n = 0;
-      await p.route(u => u.pathname === '/game.wasm', route => (++n === 1 ? route.abort('internetdisconnected') : route.continue()));
+      await p.route(u => u.pathname === PATH + 'game.wasm', route => (++n === 1 ? route.abort('internetdisconnected') : route.continue()));
       await p.goto(`${BASE}/?save=${RUN}-r${useButton ? 2 : 1}&fresh`);
       await p.waitForFunction(() => window.__nfsu2?.checks().find(c => c.id === 'module')?.state === 'fail', null, { timeout: 30000, polling: 50 });
       const failed = await p.evaluate(() => ({ phase: window.__nfsu2.phase, status: document.querySelector('#status').textContent,
@@ -560,8 +580,8 @@ try {
       const c2 = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       const p = watch(await c2.newPage(), 'R3');
       let n = 0, infos = 0;
-      await p.route(u => u.pathname === '/game.json' && !u.search, route => { infos++; return route.continue(); });
-      await p.route(u => u.pathname === '/game.wasm', route => (++n === 1 ? route.fulfill({ status: 409, body: 'The game module changed' }) : route.continue()));
+      await p.route(u => u.pathname === PATH + 'game.json' && !u.search, route => { infos++; return route.continue(); });
+      await p.route(u => u.pathname === PATH + 'game.wasm', route => (++n === 1 ? route.fulfill({ status: 409, body: 'The game module changed' }) : route.continue()));
       await p.goto(`${BASE}/?save=${RUN}-r3&fresh`);
       const ph = await waitPhase(p, ['ready'], 30000).catch(() => phase(p));
       const lines = (await p.evaluate(() => window.__nfsu2.log.tail(80))).filter(l => /game module/.test(l));
@@ -638,7 +658,7 @@ try {
       const r = await route.fetch(), info = await r.json();
       await route.fulfill({ response: r, json: deployed ? { ...info, rev: deployed } : info });
     });
-    await p.route(u => u.pathname === '/game.json' && !u.search, async route => {
+    await p.route(u => u.pathname === PATH + 'game.json' && !u.search, async route => {
       const r = await route.fetch(), info = await r.json();
       await route.fulfill({ response: r, json: served ? { ...info, rev: served } : info });
     });
@@ -923,7 +943,7 @@ try {
     const b2 = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed'),
       args: ['--enable-unsafe-webgpu', '--js-flags=--expose-gc'] });
     try {
-      const c2 = await b2.newContext({ viewport: { width: 1280, height: 800 } });
+      const c2 = track(await b2.newContext({ viewport: { width: 1280, height: 800 } }));
       await c2.addInitScript(RECORD_GPU_AUDIO);
       const k = watch(await c2.newPage(), 'K');
       const ROUNDS = 3;
@@ -990,8 +1010,8 @@ try {
   if (want('cache')) {
     const dir = path.join(OUT, 'profile');
     fs.rmSync(dir, { recursive: true, force: true });
-    const pc = await chromium.launchPersistentContext(dir, { channel: 'chrome', headless: !process.argv.includes('--headed'),
-      viewport: { width: 1280, height: 800 }, args: ['--enable-unsafe-webgpu'] });
+    const pc = track(await chromium.launchPersistentContext(dir, { channel: 'chrome', headless: !process.argv.includes('--headed'),
+      viewport: { width: 1280, height: 800 }, args: ['--enable-unsafe-webgpu'] }));
     const c = watch(pc.pages()[0] ?? await pc.newPage(), 'C');
     const q = `save=${RUN}-c&env=NOMOVIES%3D1&env=NFSU2_FNG_LOG%3D1`;
     const visit = async (extra) => {
@@ -1040,7 +1060,7 @@ try {
       await waitPhase(r, ['exited'], 30000);
     };
     // free roam busy on the server (the hub gives fewer than 24 links a player): not asked, nothing written
-    const playersUrl = u => u.pathname === '/players';
+    const playersUrl = u => u.pathname === PATH + 'players';
     await r.route(playersUrl, route => route.fulfill({ contentType: 'application/json', body: '{"players":700,"online":40,"full":false,"roamBusy":true}' }));
     await r.goto(`${BASE}/`);
     await waitPhase(r, ['ready', 'error'], 60000);
@@ -1302,8 +1322,8 @@ try {
     await open(s, `save=${RUN}-p&fresh&env=NOMOVIES%3D1`);
     await settingsReady(s);
     const pageAsked = [...asked];                            // what the page asked for, before this test's own probes
-    const gone = await s.evaluate(async () => Object.fromEntries(await Promise.all(['/server-info', '/setup', '/ca.crt']
-      .map(async u => [u, (await fetch(u, { cache: 'no-store' })).status]))));
+    const gone = await s.evaluate(async p => Object.fromEntries(await Promise.all(['server-info', 'setup', 'ca.crt']
+      .map(async u => [p + u, (await fetch(p + u, { cache: 'no-store' })).status]))), PATH);
     const a11y = await s.evaluate(() => {
       const unnamed = [], undescribed = [];
       for (const el of document.querySelectorAll(':is(#settings-body, #online-body) .set :is(input, [role="radiogroup"])')) {
@@ -1338,7 +1358,7 @@ try {
     await s.evaluate(() => window.__nfsu2.session?.terminate());
     await waitPhase(s, ['exited'], 30000);
     const inertAfter = await s.evaluate(() => document.querySelector('#app').inert);
-    report('page', Object.values(gone).every(c => c === 404) && !pageAsked.some(u => /^\/(server-info|setup|ca\.crt)$/.test(u)) &&
+    report('page', Object.values(gone).every(c => c === 404) && !pageAsked.some(u => ['server-info', 'setup', 'ca.crt'].some(n => u === PATH + n)) &&
       !a11y.unnamed.length && !a11y.undescribed.length && a11y.keys >= 10 && helpKeys === a11y.keys && !a11y.dialogsOpen && inert && !inertAfter &&
       helpTabs.padShown && helpTabs.pageTab === 'keys' && !helpTabs.dupIds.length,
       { gone, ...a11y, helpKeys, helpTabs, startPageInertWhilePlaying: inert, inertAfter });
@@ -1359,6 +1379,13 @@ try {
 } catch (e) {
   report('error', false, String(e?.stack ?? e));
 } finally {
+  if (REQUESTS) {
+    // the page never asks for anything outside its base: no other origin, no path outside it (data: and blob:
+    // addresses stay in the browser)
+    fs.writeFileSync(REQUESTS, requests.join('\n') + '\n');
+    const outside = requests.filter(l => { const a = l.slice(l.indexOf(' ') + 1); return !a.startsWith(PATH) && !/^(data|blob):/.test(a); });
+    report('requests', requests.length > 0 && !outside.length, { requests: requests.length, outside: outside.slice(0, 20), file: REQUESTS });
+  }
   fs.writeFileSync(path.join(OUT, 'console.log'), logs.join('\n'));
   fs.writeFileSync(path.join(OUT, 'results.json'), JSON.stringify(results, null, 1));
   // the test's OPFS folders go with the browser profile (Playwright's is temporary)

@@ -2,11 +2,13 @@
 // (pool, I/O worker, mounts) and reports its output; title becomes DONE.
 import { startProcess } from '../host/process';
 import { attachNet } from '../net/index';
+import { abs, at } from '../base';
+import { DATA_PATH, MANIFEST_PATH } from '../host/datacache';
 const q = new URLSearchParams(location.search);
 const pre = document.createElement('pre'); document.body.append(pre);
 const log = (s: string) => { pre.append(s + '\n'); console.log(s); };
 const t0 = performance.now();
-const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? '/test/hostcheck.wasm'));
+const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? at('test/hostcheck.wasm')));
 log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
 if (q.has('fresh')) {
   const root = await navigator.storage.getDirectory();
@@ -33,7 +35,7 @@ if (script) {
 }
 const p = await startProcess({
   module: mod, pool: +(q.get('pool') ?? 24), initialPages: +(q.get('pages') ?? 1024),
-  cfg: { args: ['nfsu2', ...(q.getAll('arg'))], env: { HOME: '/save', NFSU2_DATA: '/data', ...env, ...Object.fromEntries(q.getAll('env').map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) }, dataBase: '/data/', manifestUrl: '/data-manifest', saveDir: q.get('save') ?? 'save-test' },
+  cfg: { args: ['nfsu2', ...(q.getAll('arg'))], env: { HOME: '/save', NFSU2_DATA: '/data', ...env, ...Object.fromEntries(q.getAll('env').map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) }, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir: q.get('save') ?? 'save-test' },
   onLog: (s, fd, tid) => log(`[${tid}${fd === 2 ? '!' : ''}] ${s}`),
   onNote: log,
 });

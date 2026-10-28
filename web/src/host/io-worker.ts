@@ -38,7 +38,7 @@ async function loadManifest() {
   const r = await fetch(cfg.manifestUrl, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`manifest: HTTP ${r.status}`);
   const m = await r.json() as Manifest;
-  runs = blockRuns(m);
+  runs = blockRuns(m, cfg.manifestUrl);
   dataRoot = mkdirNode('', '');
   for (const f of m.files) {
     const parts = f.p.split('/');

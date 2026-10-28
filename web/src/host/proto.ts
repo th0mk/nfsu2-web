@@ -44,8 +44,8 @@ export const E = {
 export interface BootConfig {
   args: string[];
   env: Record<string, string>;
-  dataBase: string;        // URL prefix of the install folder (".../data/")
-  manifestUrl: string;
+  dataBase: string;        // URL prefix of the install folder ("https://<host><base>data/"), absolute
+  manifestUrl: string;     // the data-manifest's URL, absolute: blocks.url is resolved against it
   saveDir: string;         // OPFS directory name for the save overlay
 }
 

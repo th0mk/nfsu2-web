@@ -59,6 +59,7 @@ import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
 import * as P from './proto';
 import { N } from '../app/i18n';
+import { at } from '../base';
 
 export interface NetOptions {
   /** the name other players see on the switch's peer list */
@@ -498,7 +499,7 @@ class Link implements NetLink {
   }
   private connect() {
     if (this.closed) return;
-    const def = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/lan`;
+    const def = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${at('lan')}`;
     const u = new URL(this.o.url ?? def, location.href);
     // the same address again: the switch waits for the hello with the token (it keeps the address for it a minute), or
     // the same place in line with the ticket; queue: this page waits in line when the server is full (nfsu2-lan

@@ -34,6 +34,7 @@ import { coverOf, profileMoney, profileName } from './profile';
 import { isScreenshot, PROFILES_DIR } from './savefs';
 import { withoutDevice } from './settings';
 import { fill, N, type Vars } from './i18n';
+import { at } from '../base';
 
 export const PREFIX = 'nfsu2-xyz';
 export const PHRASE_WORDS = 8;
@@ -218,7 +219,7 @@ export class VaultApi {
   constructor(private token: string, private f: Fetch = (u, i) => fetch(u, i), private timeoutMs = 30_000) {}
 
   private req(method: string, headers: Record<string, string> = {}, body?: Uint8Array, query = '') {
-    return this.f(`/vault${query}`, {
+    return this.f(at(`vault${query}`), {
       method, headers: { authorization: `Bearer ${this.token}`, ...headers }, body: body as BodyInit | undefined, cache: 'no-store',
       signal: AbortSignal.timeout(this.timeoutMs),
     });
@@ -256,7 +257,7 @@ export class VaultApi {
 
 /** Whether this server keeps keyphrase saves: /vault without a token answers 401 there (404 on one without). */
 export async function vaultAvailable(f: Fetch = (u, i) => fetch(u, i)): Promise<boolean> {
-  try { return (await f('/vault', { cache: 'no-store' })).status === 401; } catch { return false; }
+  try { return (await f(at('vault'), { cache: 'no-store' })).status === 401; } catch { return false; }
 }
 
 // ------------------------------------------------------------- syncing --

@@ -7,6 +7,8 @@
 // keeps): the browser and Cloudflare keep it for good, a reload reads it from
 // Chrome's HTTP cache without asking, and a new build is a new address.
 
+import { at } from '../base';
+
 export interface GameInfo { pages: number; maxPages: number; guestEnd: number; rev: string; size: number; opt: string; module?: string }
 export interface Loaded {
   module: WebAssembly.Module; info: GameInfo;
@@ -17,14 +19,14 @@ export interface Loaded {
 /** /game.json and the module it names (a server without module: /game.wasm, revalidated) */
 async function fetchModule(signal?: AbortSignal) {
   for (let tries = 1; ; tries++) {
-    const ir = await fetch('/game.json', { cache: 'no-store', signal });
-    if (!ir.ok) throw new Error(`/game.json: HTTP ${ir.status} (build the game module on the Mac: web/build.sh)`);
+    const ir = await fetch(at('game.json'), { cache: 'no-store', signal });
+    if (!ir.ok) throw new Error(`${at('game.json')}: HTTP ${ir.status} (build the game module on the Mac: web/build.sh)`);
     const info = await ir.json() as GameInfo;
-    const url = new URL(info.module ? `/game.wasm?v=${encodeURIComponent(info.module)}` : '/game.wasm', location.href).href;
+    const url = new URL(at(info.module ? `game.wasm?v=${encodeURIComponent(info.module)}` : 'game.wasm'), location.href).href;
     const r = await fetch(url, { cache: info.module ? 'default' : 'no-cache', signal });
     // 409: a new build arrived between the two answers: its /game.json
     if (r.status === 409 && tries < 3) { await r.body?.cancel(); continue; }
-    if (!r.ok) throw new Error(`/game.wasm: HTTP ${r.status}`);
+    if (!r.ok) throw new Error(`${at('game.wasm')}: HTTP ${r.status}`);
     return { info, url, r };
   }
 }
@@ -53,7 +55,7 @@ export async function loadGame(onProgress: (got: number, total: number) => void,
  *  mode (sw.ts keeps bare paths only), so asking never makes its copy of /game.json one its module is not. */
 export async function serverRev(ms: number): Promise<string | null> {
   try {
-    const r = await fetch('/game.json?latest', { cache: 'no-store', signal: AbortSignal.timeout(ms) });
+    const r = await fetch(at('game.json?latest'), { cache: 'no-store', signal: AbortSignal.timeout(ms) });
     return r.ok ? ((await r.json()) as GameInfo).rev || null : null;
   } catch { return null; }
 }

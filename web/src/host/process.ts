@@ -3,6 +3,7 @@
 import { CTL_EXIT, CTL_INTS, CTL_NEXT_TID, CTL_POOL, MAX_THREADS, POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_BYTES, type BootConfig, type ToPage } from './proto';
 import { tzEnv } from './tz';
 import { movieCodec } from './movie';
+import { abs } from '../base';
 
 export interface ProcessOptions {
   module: WebAssembly.Module;
@@ -76,7 +77,7 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     }
   };
 
-  const io = new Worker(new URL('/host/io-worker.js', import.meta.url), { type: 'module', name: 'io' });
+  const io = new Worker(abs('host/io-worker.js'), { type: 'module', name: 'io' });
   workers.push(io);
   await new Promise<void>((res, rej) => {
     io.onmessage = (e) => { if (e.data.t === 'io-ready') res(); else if (e.data.t === 'io-error') rej(new Error(e.data.msg)); };
@@ -87,7 +88,7 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   for (let s = 0; s < pool; s++) ctl[CTL_POOL + 4 * s] = POOL_NONE;   // each worker makes its slot idle when ready
   let started = 0, starting = 0, mostBusy = 0;
   const startWorker = () => {
-    const s = started++, w = new Worker(new URL('/host/game-worker.js', import.meta.url), { type: 'module', name: `game-${s}` });
+    const s = started++, w = new Worker(abs('host/game-worker.js'), { type: 'module', name: `game-${s}` });
     starting++;
     const ready = new Promise<void>(res => {
       w.onmessage = (e) => { if (e.data.t === 'ready') { starting--; w.onmessage = onMsg; res(); } else onMsg(e); };

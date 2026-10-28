@@ -6,7 +6,8 @@
 // certificate node does not trust, is left to the browser to report.)
 export async function requireDev(base) {
   let r;
-  try { r = await fetch(new URL('/test/hostcheck.html', base), { method: 'HEAD' }); } catch { return; }
+  // under base's path: a server may serve the page under one (http://localhost:8615/u2)
+  try { r = await fetch(new URL('test/hostcheck.html', base.replace(/\/*$/, '/')), { method: 'HEAD' }); } catch { return; }
   if (r.status === 404) {
     console.error(`${base} does not serve the test pages: start the server with --dev ` +
       '(out/web/server-rs/nfsu2-server --data "<game folder>" --http-port <http> --dev)');

@@ -61,6 +61,7 @@ import { PlayTime, SMS_AFTER_MS } from './playtime';
 import { pageId } from './page-id';
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
 import { moviesKept, Predownload } from './predownload';
+import { at, BASE } from '../base';
 import { movieCodec } from '../host/movie';
 import { texSplit } from '../gpu/index';
 
@@ -92,7 +93,7 @@ function takeParams(dev: boolean): string[] {
  *  (the server never serves /test/ without --dev).  At most 3 s: a server that does not answer is no dev server. */
 async function devServer(): Promise<boolean> {
   try {
-    const r = await fetch('/test/dev.json', { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+    const r = await fetch(at('test/dev.json'), { cache: 'no-store', signal: AbortSignal.timeout(3000) });
     return r.ok && (await r.json())?.dev === true;
   } catch { return false; }
 }
@@ -642,7 +643,10 @@ function setReach(ok: boolean) {
  *  for once the module has loaded, so a first visit downloads the module once (the copy is the HTTP cache's). */
 function keepForOffline() {
   if (!('serviceWorker' in navigator) || !isSecureContext) return;
-  navigator.serviceWorker.register('/sw.js').catch(e => log.add(`[app] offline mode is not available here: ${e}`));
+  // sw.ts keeps the root's addresses ('/', '/main.js', ...): under another base it would keep the root's page, and
+  // a page there must never register a worker for the root.  None, until the service worker takes the base.
+  if (BASE !== '/') { log.add(`[app] offline mode is not available under ${BASE} yet`); return; }
+  navigator.serviceWorker.register(at('sw.js')).catch(e => log.add(`[app] offline mode is not available here: ${e}`));
 }
 /** where the server is, without its name or address */
 function serverKind(): string {

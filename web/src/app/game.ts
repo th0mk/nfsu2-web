@@ -11,7 +11,8 @@ import {
   type AudioSubsystem, type InputSubsystem, type NetSubsystem, type RendererSubsystem, type Subsystem,
 } from './subsystems';
 import { StatusReader } from './status';
-import { DATA_BASE, MANIFEST_URL } from '../host/datacache';
+import { DATA_PATH, MANIFEST_PATH } from '../host/datacache';
+import { abs } from '../base';
 import type { GameInfo } from './loader';
 import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRemoved } from '../net';
@@ -80,7 +81,7 @@ export class GameSession {
     s.proc = await startProcess({
       module: o.module,
       initialPages: o.info.pages || undefined,
-      cfg: { args: ['nfsu2', '/data/SPEED2.EXE'], env: o.env, dataBase: DATA_BASE, manifestUrl: MANIFEST_URL, saveDir: o.saveDir },
+      cfg: { args: ['nfsu2', '/data/SPEED2.EXE'], env: o.env, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir: o.saveDir },
       onLog: (line, fd, t) => o.log(`${tid(t, fd)} ${line}`),
       onSaved: o.onSaved,
       onNote: o.log,

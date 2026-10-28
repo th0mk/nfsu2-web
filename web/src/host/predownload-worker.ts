@@ -5,7 +5,7 @@
 // keep), else as byte ranges.  The page starts it ("Download all game data")
 // and stops it before a game starts, since the I/O worker writes the same files.
 //
-// Page -> worker: { t: 'start', manifestUrl, dataBase, language, texpack }, { t: 'stop' }
+// Page -> worker: { t: 'start', manifestUrl, dataBase, language, texpack }, { t: 'stop' } (both addresses absolute)
 // Worker -> page: { t: 'progress', have, total }   (bytes in the cache; at most every 250 ms)
 //                 { t: 'done', have, total }       (all of it is in the cache)
 //                 { t: 'stopped' }                 (after 'stop')
@@ -47,7 +47,7 @@ async function download(cfg: { manifestUrl: string; dataBase: string; language: 
   const r = await fetch(cfg.manifestUrl, { cache: 'no-cache', signal: abort.signal });
   if (!r.ok) throw new Error(`the list of game files did not load (HTTP ${r.status})`);
   const m = await r.json() as Manifest;
-  const served = blockRuns(m), runMax = served ? 1 : RUN;
+  const served = blockRuns(m, cfg.manifestUrl), runMax = served ? 1 : RUN;
   const scan = await scanCache(aheadFiles(manifestFiles(m), cfg.language, cfg.texpack));
   const total = scan.total;
   let have = scan.have, shown = 0;
