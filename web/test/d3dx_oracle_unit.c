@@ -81,6 +81,7 @@ void metal_game_size(int *w, int *h){ if (w) *w = 640; if (h) *h = 480; }
 void metal_get_cursor(int *x, int *y){ if (x) *x = 0; if (y) *y = 0; }
 int hfr_display_live(void){ return 1; } int hfr_mode_off(void){ return 1; } uint64_t hfr_vclock_floor_us(void){ return 4000u; }
 const char *language_registry(void){ return 0; }
+void garage_profile_written(const char *p){ (void)p; } void garage_profile_deleted(const char *p){ (void)p; }   /* fileio.c's, of UG2's garage.c */
 void lifecycle_pump(void){ } int lifecycle_may_park(void){ return 0; } int lifecycle_game_parked(void){ return 0; }
 void audio_set_muted(int m){ (void)m; } double audio_time(void){ return 0; }
 void watch_arm(uint32_t a){ (void)a; }

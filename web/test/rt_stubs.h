@@ -2,8 +2,9 @@
  * win32_unit.c links runtime/win32.c, win32_ext.c, win32_misc.c and
  * keyboard.c; regpath_unit.c those and fileio.c with a game's table.  Include
  * it after cpu.h, game.h, kbd.h and module.h.
- *   RT_STUBS_FILEIO_REAL   fileio.c is linked: no stand-ins for it
- *   RT_STUBS_LANGUAGE      what language_registry() gives (UG2's language.c:
+ *   RT_STUBS_FILEIO_REAL   fileio.c is linked: no stand-ins for it, but for
+ *                          what it calls of UG2's garage.c
+ *   RT_STUBS_LANGUAGE     what language_registry() gives (UG2's language.c:
  *                          "English" by default); 0 without it
  *   RT_STUBS_MODULE_REAL   module.c and modheap.c are linked: no stand-ins for them
  *   RT_STUBS_DISPATCH_OWN  the program has its own dispatch_indirect and call_guest
@@ -68,6 +69,9 @@ void winsock_report(void){ }
 int fileio_call(CPU *c, const char *n, uint32_t *r){ (void)c; (void)n; (void)r; return 0; }
 int fileio_is_handle(uint32_t h){ (void)h; return 0; }
 void fileio_report(void){ }
+#else
+void garage_profile_written(const char *path){ (void)path; }   /* garage.c: not linked */
+void garage_profile_deleted(const char *path){ (void)path; }
 #endif
 uint32_t com_direct3dcreate9(void){ return 0; }
 uint32_t com_directinput8create(uint32_t a){ (void)a; return 0; }

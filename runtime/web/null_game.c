@@ -94,6 +94,11 @@ WEAK uint32_t dipad_effect_call(CPU *c, uint32_t self, const char *nm, int nargs
 WEAK void     dipad_effect_free(uint32_t obj){ (void)obj; }
 WEAK uint32_t dipad_input_ctx(void){ return 0; }
 
+/* ---- garage.c: no career garage's slots to keep beside a saved or deleted
+ * profile (fileio.c) */
+WEAK void garage_profile_written(const char *path){ (void)path; }
+WEAK void garage_profile_deleted(const char *path){ (void)path; }
+
 /* ---- online.c, olfilter.c: the Online lobby's traffic, as it is */
 WEAK void online_lobby_read(uint32_t link, const uint8_t *p, int n){ (void)link; (void)p; (void)n; }
 WEAK void olfilter_lobby_mark(uint32_t link, uint8_t *p, int n){ (void)link; (void)p; (void)n; }

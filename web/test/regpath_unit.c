@@ -103,11 +103,12 @@ const uint32_t g_srv_fn_addr[1]; const mod_fn g_srv_fn_ptr[1]; const uint32_t g_
 #define RT_STUBS_LANGUAGE "English"     /* runtime/language.c's answer for UG2's English */
 void overrides_install(void){ } void language_install(void){ } void sponsors_install(void){ }
 void lobbyclick_install(void){ } void menusize_install(void){ } void olfilter_install(void){ }
-void tunegraph_install(void){ } void regional_install(void){ } void carshadow_install(void){ }
-void hornmenu_install(void){ } void powerunits_install(void){ }
+void tunegraph_install(void){ } void regional_install(void){ } void garage_install(void){ }
+void carshadow_install(void){ } void hornmenu_install(void){ } void powerunits_install(void){ }
 int ws_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; } int roam_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; }
 int language_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; } int hornmenu_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; }
 int powerunits_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; } int regional_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; }
+int garage_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; }
 int sndlead_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; } int drift_hook(CPU *c, uint32_t a){ (void)c; (void)a; return 0; }
 void ug2_debug_present(CPU *c){ (void)c; } void ug2_debug_frame(void){ } void ug2_debug_sound_unlock(void){ }
 void spinsleep_qpc(CPU *c){ (void)c; }
