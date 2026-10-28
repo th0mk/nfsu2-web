@@ -10,6 +10,9 @@
 # win32_misc.c, fileio.c, winsock.c, heap.c, com.c, keyboard.c; the D3DX math: runtime/mw/d3dxmath_mw.c), from MW's
 # lift (gen/mw/all and gen/mw/server, impargs.c), 2026-10-28.  No MW run has reached any of them yet: all "no".
 # Addresses and names only.  d3dx9_26.dll's two effect imports are the D3DX oracle's in a dev oracle build.
+# winsock.c answers the eight overlapped WS2_32 imports of both modules (WSACreateEvent, WSASetEvent,
+# WSAResetEvent, WSACloseEvent, WSAWaitForMultipleEvents, WSARecv, WSARecvFrom, WSAGetOverlappedResult) since
+# TRACKER M8-06 and M8-07: no longer here.
 speed.exe  GDI32.dll!ExtTextOutA                 0x00890030 no
 speed.exe  GDI32.dll!BitBlt                      0x00890034 no
 speed.exe  GDI32.dll!GetPixel                    0x00890038 no
@@ -45,21 +48,5 @@ speed.exe  TAPI32.dll!lineClose                  0x0089030c no
 speed.exe  TAPI32.dll!lineNegotiateAPIVersion    0x00890310 no
 speed.exe  TAPI32.dll!lineOpen                   0x00890314 no
 speed.exe  USER32.dll!PostThreadMessageA         0x00890378 no
-speed.exe  WS2_32.dll!WSASetEvent                0x0089042c no
-speed.exe  WS2_32.dll!WSACreateEvent             0x00890474 no
-speed.exe  WS2_32.dll!WSACloseEvent              0x00890480 no
-speed.exe  WS2_32.dll!WSARecv                    0x00890488 no
-speed.exe  WS2_32.dll!WSARecvFrom                0x0089048c no
-speed.exe  WS2_32.dll!WSAGetOverlappedResult     0x00890498 no
-speed.exe  WS2_32.dll!WSAWaitForMultipleEvents   0x0089049c no
-speed.exe  WS2_32.dll!WSAResetEvent              0x008904a0 no
 speed.exe  d3dx9_26.dll!D3DXCreateEffectFromResourceA 0x008904c0 no
 speed.exe  d3dx9_26.dll!D3DXCreateEffectPool     0x008904c4 no
-server.dll WS2_32.dll!WSASetEvent                0x00d4d1d0 no
-server.dll WS2_32.dll!WSAGetOverlappedResult     0x00d4d1e0 no
-server.dll WS2_32.dll!WSAWaitForMultipleEvents   0x00d4d1e4 no
-server.dll WS2_32.dll!WSAResetEvent              0x00d4d1e8 no
-server.dll WS2_32.dll!WSARecvFrom                0x00d4d1ec no
-server.dll WS2_32.dll!WSARecv                    0x00d4d1f0 no
-server.dll WS2_32.dll!WSACloseEvent              0x00d4d1f4 no
-server.dll WS2_32.dll!WSACreateEvent             0x00d4d204 no

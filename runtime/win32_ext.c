@@ -48,6 +48,8 @@ typedef struct {
     uint32_t creator; uint64_t end_seq; uint32_t looked;
     uint32_t routine;                 /* OB_THREAD: the routine it runs (game.h thread_start), for the watchdog */
     uint32_t gen;                     /* handle generation (obj_reclaim); kept when the slot is reused */
+    uint32_t serial;                  /* which object the slot holds (obj_new counts them): a wait that began on
+                                       * one notices it closed even when its slot already holds the next */
     /* OB_KEY with the game's key table (game.h reg_keys): which key (its index
      * + 1; 0 = the flat registry) and the access it was opened with */
     int reg_key; uint32_t reg_access;
@@ -395,6 +397,8 @@ static void guest_yield_end_frame(void){         /* the frame pacer's: gil_acqui
 /* Host-side blocking waits inside an HLE call (metal_present) */
 void guest_wait_begin(void){ ts_set(TS_IDLE, 0); guest_yield_begin(); }   /* watchdog: host side */
 void guest_wait_end(void){ guest_yield_end(); }
+/* the same around a wait on kernel objects (winsock.c's WSAWaitForMultipleEvents): the watchdog names the first */
+void guest_wait_begin_objs(uint32_t h){ ts_set(TS_WAITM, h); guest_yield_begin(); }
 /* Sleep with the big lock released (win32.c: the game's frame wait loop). */
 uint64_t g_sleep_late_ns, g_sleep_gil_ns, g_sleep_n;    /* diagnostics: sleep lateness / lock wait */
 #ifdef __wasm__
@@ -833,6 +837,7 @@ static int obj_reclaim(void){
     g_obj_reclaimed++;
     return best;
 }
+static uint32_t g_obj_serial;                  /* objects made so far (g_lock) */
 static uint32_t obj_new(ObKind k){
     pthread_mutex_lock(&g_lock);
     int i = 0;
@@ -840,6 +845,8 @@ static uint32_t obj_new(ObKind k){
     else if (g_obj_n < OBJ_MAX) i = g_obj_n++;
     else if ((i = obj_reclaim()) != 0) {}
     else if (!g_obj_full++) fprintf(stderr, "  [object] WARNING: object table full (%d)\n", OBJ_MAX - 1);
+    uint32_t ser = i ? ++g_obj_serial : 0u;
+    if (i && !ser) ser = ++g_obj_serial;            /* 0 names no object */
     pthread_mutex_unlock(&g_lock);
     if (!i) return 0;
     Obj *o=&g_obj[i];
@@ -851,14 +858,20 @@ static uint32_t obj_new(ObKind k){
         o->t_armed = 0; o->t_due_us = o->t_period_us = 0;
         o->creator = 0; o->end_seq = 0; o->looked = 0;
         o->reg_key = 0; o->reg_access = 0;
-        o->refs = 1; o->kind = k;
+        o->refs = 1; o->kind = k; o->serial = ser;
         pthread_mutex_unlock(&o->mtx);
     } else {
-        memset(o,0,sizeof *o); o->kind=k; o->refs = 1;
+        memset(o,0,sizeof *o); o->kind=k; o->refs = 1; o->serial = ser;
         pthread_mutex_init(&o->mtx,0); pthread_cond_init(&o->cv,0); o->prim_ok = 1;
     }
     return H_BASE + o->gen * OBJ_MAX + (uint32_t)i;
 }
+/* A thread in winsock.c's WSAWaitForMultipleEvents waits on the network's
+ * event word, not on an object's condition variable: whatever signals or
+ * closes an object wakes it too (winsock_wake; it returns at once while no
+ * such wait runs, and is absent from builds without winsock.c). */
+void winsock_wake(void) __attribute__((weak));
+static void obj_wake(void){ if (winsock_wake) winsock_wake(); }
 /* CloseHandle / RegCloseKey: free the slot when the last handle is closed */
 static void obj_close(uint32_t h){
     int si = obj_slot(h);
@@ -886,6 +899,7 @@ static void obj_close(uint32_t h){
     pthread_mutex_unlock(&o->mtx);
     if (last && !getenv("NFSU2_NO_OBJREUSE")){
         pthread_mutex_lock(&g_lock); g_free[g_nfree++] = (int)i; pthread_mutex_unlock(&g_lock); }
+    if (last) obj_wake();                       /* a wait on it fails now (wait_try) */
 }
 static void thread_report(void);
 /* v12na: object table occupancy report (called by win32.c win32_report) */
@@ -1158,6 +1172,7 @@ void win32_signal_event(uint32_t h){
     o->signaled = 1;
     pthread_cond_broadcast(&o->cv);
     pthread_mutex_unlock(&o->mtx);
+    obj_wake();
 }
 
 /* ---- waitable timers -----------------------------------------------------
@@ -1257,38 +1272,56 @@ static int obj_addr_cmp(const void *a, const void *b){
     uintptr_t x = (uintptr_t)*(Obj *const *)a, y = (uintptr_t)*(Obj *const *)b;
     return (x > y) - (x < y);
 }
-static uint32_t wait_set(Obj **ob, uint32_t cnt, int all, uint32_t ms, uint32_t me, uint32_t *err){
-    Obj *lk[64];
-    if (all){
-        memcpy(lk, ob, cnt * sizeof *lk); qsort(lk, cnt, sizeof *lk, obj_addr_cmp);
-        for (uint32_t i = 1; i < cnt; i++) if (lk[i] == lk[i - 1]){ *err = 87u; return WAIT_FAILED_; }  /* ERROR_INVALID_PARAMETER */
+/* One look at a wait set, each object under its own lock: any: the lowest
+ * index that is ready, taken (WAIT_OBJECT_0 + i); all: every object ready at
+ * once, all taken (WAIT_OBJECT_0); else WAIT_TIMEOUT, and *s (us) is lowered
+ * to the nearest timer's due time.  WAIT_FAILED with *err 6
+ * (ERROR_INVALID_HANDLE) when an object was closed since the wait began: its
+ * slot is free or holds another object (ser: each object's serial then).  lk:
+ * the same objects in address order, the order a wait for all locks them in. */
+static uint32_t wait_try(Obj *const *ob, Obj *const *lk, const uint32_t *ser, uint32_t cnt, int all, uint32_t me,
+                         uint32_t *err, uint64_t *s){
+    uint64_t now = host_us();
+    if (!all){
+        for (uint32_t i = 0; i < cnt; i++){
+            Obj *o = ob[i];
+            pthread_mutex_lock(&o->mtx);
+            if (o->kind == OB_NONE || o->serial != ser[i]){ pthread_mutex_unlock(&o->mtx); *err = 6u; return WAIT_FAILED_; }
+            timer_poll(o, now);
+            if (obj_ready(o, me)){ obj_take(o, me); pthread_mutex_unlock(&o->mtx); return i; }
+            *s = timer_slice_us(o, now, *s);
+            pthread_mutex_unlock(&o->mtx);
+        }
+        return 0x102u;
     }
+    int ready = 1, gone = 0;
+    for (uint32_t i = 0; i < cnt; i++) pthread_mutex_lock(&lk[i]->mtx);
+    for (uint32_t i = 0; i < cnt; i++){
+        Obj *o = ob[i];
+        if (o->kind == OB_NONE || o->serial != ser[i]){ gone = 1; break; }
+        timer_poll(o, now);
+        if (!obj_ready(o, me)){ ready = 0; *s = timer_slice_us(o, now, *s); }
+    }
+    if (ready && !gone) for (uint32_t i = 0; i < cnt; i++) obj_take(ob[i], me);
+    for (uint32_t i = cnt; i-- > 0; ) pthread_mutex_unlock(&lk[i]->mtx);
+    if (gone){ *err = 6u; return WAIT_FAILED_; }
+    return ready ? 0u : 0x102u;
+}
+/* a wait for all: the objects in locking order; 0, or 87 (ERROR_INVALID_PARAMETER) for one named twice */
+static uint32_t wait_order(Obj *const *ob, Obj **lk, uint32_t cnt){
+    memcpy(lk, ob, cnt * sizeof *lk); qsort(lk, cnt, sizeof *lk, obj_addr_cmp);
+    for (uint32_t i = 1; i < cnt; i++) if (lk[i] == lk[i - 1]) return 87u;
+    return 0;
+}
+/* ser: the objects' serials, read when the handles were looked up (guest lock held) */
+static uint32_t wait_set(Obj **ob, const uint32_t *ser, uint32_t cnt, int all, uint32_t ms, uint32_t me, uint32_t *err){
+    Obj *lk[64];
+    if (all && (*err = wait_order(ob, lk, cnt)) != 0) return WAIT_FAILED_;
     uint64_t t0 = mono_us(), lim = (uint64_t)ms * 1000u;
     for (;;){
-        uint64_t now = host_us(), s = 1000u;
-        if (!all){
-            for (uint32_t i = 0; i < cnt; i++){
-                Obj *o = ob[i];
-                pthread_mutex_lock(&o->mtx);
-                if (o->kind == OB_NONE){ pthread_mutex_unlock(&o->mtx); *err = 6u; return WAIT_FAILED_; }
-                timer_poll(o, now);
-                if (obj_ready(o, me)){ obj_take(o, me); pthread_mutex_unlock(&o->mtx); return i; }
-                s = timer_slice_us(o, now, s);
-                pthread_mutex_unlock(&o->mtx);
-            }
-        } else {
-            int ready = 1, gone = 0;
-            for (uint32_t i = 0; i < cnt; i++) pthread_mutex_lock(&lk[i]->mtx);
-            for (uint32_t i = 0; i < cnt; i++){
-                if (lk[i]->kind == OB_NONE){ gone = 1; break; }
-                timer_poll(lk[i], now);
-                if (!obj_ready(lk[i], me)){ ready = 0; s = timer_slice_us(lk[i], now, s); }
-            }
-            if (ready && !gone) for (uint32_t i = 0; i < cnt; i++) obj_take(lk[i], me);
-            for (uint32_t i = cnt; i-- > 0; ) pthread_mutex_unlock(&lk[i]->mtx);
-            if (gone){ *err = 6u; return WAIT_FAILED_; }
-            if (ready) return 0;
-        }
+        uint64_t s = 1000u;
+        uint32_t r = wait_try(ob, lk, ser, cnt, all, me, err, &s);
+        if (r != 0x102u) return r;
         uint64_t el = mono_us() - t0;
         if (ms != 0xFFFFFFFFu && el >= lim) return 0x102u;
         if (ms != 0xFFFFFFFFu && lim - el < s) s = lim - el;
@@ -1296,6 +1329,91 @@ static uint32_t wait_set(Obj **ob, uint32_t cnt, int all, uint32_t ms, uint32_t 
         nanosleep(&ts, 0);
     }
 }
+
+/* ---- kernel objects for winsock.c ------------------------------------------
+ * WSACreateEvent, WSASetEvent, WSAResetEvent and WSACloseEvent are this
+ * table's events (ws2_32 makes them with CreateEvent: manual reset, not
+ * signaled), and WSAWaitForMultipleEvents takes any of its objects, as
+ * WaitForMultipleObjectsEx does: Most Wanted's socket thread waits on an
+ * event of CreateEventA together with WSACreateEvent's (GAME.md 3.3).  The
+ * wait itself is winsock.c's (it completes overlapped receives between its
+ * looks); these are its looks, which need no guest lock. */
+uint32_t win32_event_create(int manual, int initial){
+    uint32_t h = obj_new(OB_EVENT); Obj *o = obj_get(h);
+    if (!o) return 0;
+    pthread_mutex_lock(&o->mtx); o->manual = manual != 0; o->signaled = initial != 0; pthread_mutex_unlock(&o->mtx);
+    return h;
+}
+/* SetEvent (on 1) / ResetEvent (0) of an event; 0 when h names no event */
+int win32_event_set(uint32_t h, int on){
+    Obj *o = obj_get(h);
+    if (!o) return 0;
+    pthread_mutex_lock(&o->mtx);
+    int ok = o->kind == OB_EVENT;
+    if (ok){ o->signaled = on != 0; if (on) pthread_cond_broadcast(&o->cv); }
+    pthread_mutex_unlock(&o->mtx);
+    if (ok && on) obj_wake();
+    return ok;
+}
+/* CloseHandle of an event; 0 when h names no event */
+int win32_event_close(uint32_t h){
+    Obj *o = obj_get(h);
+    if (!o || o->kind != OB_EVENT) return 0;
+    obj_close(h);
+    return 1;
+}
+/* the object h names now (its serial), 0 for none */
+uint32_t win32_obj_serial(uint32_t h){
+    Obj *o = obj_get(h);
+    if (!o) return 0;
+    pthread_mutex_lock(&o->mtx); uint32_t s = o->kind != OB_NONE ? o->serial : 0u; pthread_mutex_unlock(&o->mtx);
+    return s;
+}
+/* sets the event h only while it is still the object with serial ser: an
+ * overlapped receive signals the event it began with, never one that took
+ * over its handle after a WSACloseEvent (Windows holds the object itself) */
+void win32_event_signal_obj(uint32_t h, uint32_t ser){
+    int i = obj_slot(h);
+    if (i < 0 || !ser) return;
+    Obj *o = &g_obj[i];
+    pthread_mutex_lock(&o->mtx);
+    int ok = o->kind == OB_EVENT && o->serial == ser;
+    if (ok){ o->signaled = 1; pthread_cond_broadcast(&o->cv); }
+    pthread_mutex_unlock(&o->mtx);
+    if (ok) obj_wake();
+}
+/* A wait's handles, looked up once (guest lock held): each object's serial,
+ * and whether all are events (every way an event is set or closed calls
+ * winsock_wake; the other kinds are looked at in short slices).  0, or 6
+ * (ERROR_INVALID_HANDLE: one names no object) or 87 (ERROR_INVALID_PARAMETER:
+ * one named twice in a wait for all). */
+uint32_t win32_wait_ids(const uint32_t *h, uint32_t cnt, int all, uint32_t *ser, int *events_only){
+    Obj *ob[64], *lk[64];
+    if (!cnt || cnt > 64u) return 87u;
+    *events_only = 1;
+    for (uint32_t i = 0; i < cnt; i++){
+        if (!(ob[i] = obj_get(h[i]))) return 6u;
+        pthread_mutex_lock(&ob[i]->mtx);
+        ser[i] = ob[i]->kind != OB_NONE ? ob[i]->serial : 0u;
+        if (ob[i]->kind != OB_EVENT) *events_only = 0;
+        pthread_mutex_unlock(&ob[i]->mtx);
+        if (!ser[i]) return 6u;
+    }
+    return all ? wait_order(ob, lk, cnt) : 0u;
+}
+/* one look (wait_try) at handles whose serials win32_wait_ids gave; no guest lock needed.  *s (us): how long the
+ * caller may sleep before the next look, lowered to the nearest timer's due time */
+uint32_t win32_wait_try(const uint32_t *h, const uint32_t *ser, uint32_t cnt, int all, uint32_t me, uint32_t *err, uint64_t *s){
+    Obj *ob[64], *lk[64];
+    for (uint32_t i = 0; i < cnt; i++){
+        int k = obj_slot(h[i]);
+        if (k < 0){ *err = 6u; return WAIT_FAILED_; }        /* the slot went to another generation (obj_reclaim) */
+        ob[i] = &g_obj[k];
+    }
+    if (all && wait_order(ob, lk, cnt)){ *err = 87u; return WAIT_FAILED_; }
+    return wait_try(ob, lk, ser, cnt, all, me, err, s);
+}
+uint32_t win32_thread_id(CPU *c){ return cur_tid(c); }
 /* SYSTEMTIME (16 bytes at p) of a FILETIME */
 static void ft_to_systime(uint32_t p, uint64_t ft){
     uint64_t ms = ft / 10000ull;
@@ -2005,7 +2123,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
             g_wstat[h-H_BASE].setter_tid =
                 (c->fs_base && mem_is_committed(c->fs_base+0x24u))
                 ? MR32(c->fs_base+0x24u) : 0u; } }
-        if(o){ pthread_mutex_lock(&o->mtx); o->signaled=1; pthread_cond_broadcast(&o->cv); pthread_mutex_unlock(&o->mtx);} r=1; }
+        if(o){ pthread_mutex_lock(&o->mtx); o->signaled=1; pthread_cond_broadcast(&o->cv); pthread_mutex_unlock(&o->mtx); obj_wake(); } r=1; }
     else if (!strcmp(n,"ResetEvent")){ Obj*o=obj_get(A(c,0));
         if(o){ pthread_mutex_lock(&o->mtx); o->signaled=0; pthread_mutex_unlock(&o->mtx);} r=1; }
     else if (!strcmp(n,"CreateMutexA")){
@@ -2265,13 +2383,16 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         r=0; }
     else if (!strcmp(n,"WaitForMultipleObjects") && wfmo_has_timer(A(c,0), A(c,1))){
         /* a set with a waitable timer: Windows' rules (wait_set) */
-        uint32_t cnt = A(c,0), parr = A(c,1), err = 0; Obj *ob[64];
-        for (uint32_t i = 0; i < cnt; i++) if (!(ob[i] = obj_get(MR32(parr + 4u * i)))) err = 6u;   /* ERROR_INVALID_HANDLE */
+        uint32_t cnt = A(c,0), parr = A(c,1), err = 0, ser[64]; Obj *ob[64];
+        for (uint32_t i = 0; i < cnt; i++){
+            if (!(ob[i] = obj_get(MR32(parr + 4u * i)))){ err = 6u; continue; }   /* ERROR_INVALID_HANDLE */
+            pthread_mutex_lock(&ob[i]->mtx); ser[i] = ob[i]->serial; pthread_mutex_unlock(&ob[i]->mtx);
+        }
         if (err) r = WAIT_FAILED_;
         else {
             ts_set(TS_WAITM, MR32(parr));
             guest_yield_begin();
-            r = wait_set(ob, cnt, A(c,2) != 0, A(c,3), cur_tid(c), &err);
+            r = wait_set(ob, ser, cnt, A(c,2) != 0, A(c,3), cur_tid(c), &err);
             guest_yield_end();
         }
         if (r == WAIT_FAILED_) win32_set_last_error(c, err); }

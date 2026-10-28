@@ -70,12 +70,13 @@
  * would be mDNS traffic).
  *
  * Threads: every call runs with the guest lock held.  A call that has to wait
- * (a blocking recv/accept/connect/send, select with a timeout, a DNS lookup)
- * waits in poll() slices of at most 50 ms with the lock released
- * (guest_wait_begin/end), so other guest threads and the renderer keep
- * running; closesocket() from another thread wakes it (WSAEINTR) and the
+ * (a blocking recv/accept/connect/send, select with a timeout, a DNS lookup,
+ * WSAWaitForMultipleEvents) waits in poll() slices of at most 50 ms with the
+ * lock released (guest_wait_begin/end), so other guest threads and the
+ * renderer keep running; closesocket() from another thread wakes it (WSAEINTR) and the
  * host fd is closed by the last waiter, so the number cannot be reused under
  * it.  Host fds are always O_NONBLOCK, FD_CLOEXEC and SO_NOSIGPIPE.
+ * Overlapped receives and WSA events (Most Wanted): see "overlapped I/O" below.
  *
  * WSAGetLastError / WSASetLastError use the thread's TEB+0x34, the same slot
  * as GetLastError on Windows (runtime/win32.c). */
@@ -721,7 +722,9 @@ static void sfinal(WsSock *s){                         /* last reference gone */
     if (s->aux_fd > 0) close(s->aux_fd);
     s->fd = -1; s->aux_fd = 0; s->used = 0; atomic_store(&s->closing, 0);
 }
+static void ov_cancel(uint32_t h);                     /* overlapped receives (below) */
 static void sclose(WsSock *s, int abortive){
+    ov_cancel(shandle(s));                             /* its pending receives end: WSA_OPERATION_ABORTED */
     if (g_ws_mode == NET_VLAN) vlan_close(s, abortive);
 #ifndef __wasm__
     else if (s->fd >= 0 && s->type == 1 && abortive){
@@ -1870,6 +1873,388 @@ out:
     return r;
 }
 
+/* ======================================================================= */
+/* overlapped I/O: WSA events, WSARecv / WSARecvFrom with an event          */
+/* OVERLAPPED, WSAGetOverlappedResult, WSAWaitForMultipleEvents             */
+/* ======================================================================= */
+/* Most Wanted's DirtySock receives on every datagram and raw socket this way,
+ * in speed.exe (socket thread 0x84AC10) and in its server.dll (0x100043C0),
+ * the same library: one WSARecvFrom (WSARecv on a raw ICMP socket) with one
+ * 576-byte WSABUF on the caller's stack, the OVERLAPPED in the socket's record
+ * with that record's WSACreateEvent as hEvent; WSA_IO_PENDING marks it
+ * pending, the thread asks WSAGetOverlappedResult (WSA_IO_INCOMPLETE: not
+ * yet), then waits INFINITE in WSAWaitForMultipleEvents on those events and a
+ * CreateEventA one the game sets with WSASetEvent to wake it.  SocketClose
+ * closes a record's event before its socket.  UG2 imports none of these.
+ *
+ * Windows' rules (the I/O manager's and AFD's):
+ * - the call clears hEvent first; a receive that finds data completes at once:
+ *   0 back, *lpNumberOfBytesRecvd and *lpFlags written, Internal (an NTSTATUS)
+ *   and InternalHigh (bytes) written, hEvent set; a truncated datagram the same
+ *   way, but SOCKET_ERROR and WSAEMSGSIZE; any other error fails the call
+ *   (neither the OVERLAPPED nor hEvent touched); else Internal =
+ *   STATUS_PENDING, SOCKET_ERROR and WSA_IO_PENDING; a non-blocking socket
+ *   changes nothing of this;
+ * - the WSABUF array is taken at the call; lpFrom and lpFromlen at completion;
+ * - pending receives complete as data arrives, in the order they were made on
+ *   their socket: Internal, InternalHigh, lpFrom, then hEvent set;
+ * - closesocket (and the last WSACleanup) ends each pending receive of the
+ *   socket with WSA_OPERATION_ABORTED (STATUS_CANCELLED), hEvent set;
+ * - WSAGetOverlappedResult reads Internal: STATUS_PENDING is FALSE with
+ *   WSA_IO_INCOMPLETE (fWait: a wait for the completion); else the bytes,
+ *   flags 0 (no MSG_PARTIAL or MSG_OOB here), TRUE or FALSE and the error;
+ *   a socket closed since then is WSAENOTSOCK, as ws2_32 checks it first.
+ * Nothing completes by itself here, so "as data arrives" is whenever a thread
+ * looks: WSARecv(From), WSAGetOverlappedResult and every round of
+ * WSAWaitForMultipleEvents complete what can complete (ov_pump, guest lock
+ * held).  WaitForSingleObject on such an event does not (neither game does
+ * that).  Completion routines (APCs) are refused with WSAEOPNOTSUPP.
+ *
+ * WSAWaitForMultipleEvents is WaitForMultipleObjectsEx over win32_ext.c's
+ * objects (ev_wait): it needs no WSAStartup, as ws2_32's does not (MW's socket
+ * thread starts waiting even when WSAStartup failed; an error there would be
+ * a busy loop).  Each round it looks at its objects (no guest lock needed),
+ * then waits with the guest lock released until the network's event word
+ * moves -- a datagram or stream data arrives (net_lan.c), an object is set or
+ * closed (winsock_wake), a receive goes pending -- or a slice ends: 50 ms for
+ * events, which always wake it, 2 ms for other objects; the Mac's sockets are
+ * polled in 1 ms slices.  An object closed during the wait: WAIT_FAILED with
+ * ERROR_INVALID_HANDLE (L-067). */
+#define OV_MAX     256                     /* pending receives, all sockets */
+#define OV_BUFS    32                      /* WSABUFs in one receive */
+#define ST_PENDING 0x00000103u             /* STATUS_PENDING, in a pending receive's Internal */
+#define WAIT_FAILED_ 0xFFFFFFFFu
+#define WAIT_TIMEOUT_ 0x102u
+typedef struct {
+    uint32_t sock, ov, ev, ev_ser;          /* the SOCKET, the OVERLAPPED, hEvent and the object it named then */
+    uint32_t pfrom, pfromlen, flags;
+    int nbuf; uint32_t buf[OV_BUFS], len[OV_BUFS];
+} WsOv;
+static WsOv g_ov[OV_MAX]; static int g_ov_n;   /* in the order they were made (guest lock) */
+static _Atomic uint32_t g_ov_gen;             /* +1 per receive that went pending */
+static _Atomic int g_ev_waiters;              /* threads in ev_wait */
+static uint64_t st_ov_now, st_ov_pend, st_ov_done, st_ov_cancel, st_ev_waits;
+/* win32_ext.c's kernel objects; absent from the harnesses that link this file alone */
+uint32_t win32_event_create(int manual, int initial) __attribute__((weak));
+int      win32_event_set(uint32_t h, int on) __attribute__((weak));
+int      win32_event_close(uint32_t h) __attribute__((weak));
+uint32_t win32_obj_serial(uint32_t h) __attribute__((weak));
+void     win32_event_signal_obj(uint32_t h, uint32_t ser) __attribute__((weak));
+uint32_t win32_wait_ids(const uint32_t *h, uint32_t cnt, int all, uint32_t *ser, int *events_only) __attribute__((weak));
+uint32_t win32_wait_try(const uint32_t *h, const uint32_t *ser, uint32_t cnt, int all, uint32_t me, uint32_t *err,
+                        uint64_t *s) __attribute__((weak));
+uint32_t win32_thread_id(CPU *c) __attribute__((weak));
+void     guest_wait_begin_objs(uint32_t h) __attribute__((weak));
+static int kobj(void){
+    if (win32_event_create && win32_event_set && win32_event_close && win32_obj_serial && win32_event_signal_obj &&
+        win32_wait_ids && win32_wait_try && win32_thread_id) return 1;
+    static int said; if (!said++) ws_log("WSA events: no kernel objects in this build (runtime/win32_ext.c not linked)");
+    return 0;
+}
+
+void winsock_wake(void){
+    if (!atomic_load(&g_ev_waiters)) return;
+#ifdef __wasm__
+    vfd_wake();
+#endif                                     /* the Mac's waits look every 1 ms */
+}
+
+/* NTSTATUS in Internal <-> the WSA error WSAGetOverlappedResult reports: the
+ * status that names each error (neither game reads Internal itself: both ask
+ * WSAGetOverlappedResult); an error this table lacks travels as a customer
+ * code, 0xE0000000 | error */
+static const struct { int e; uint32_t st; } k_ovst[] = {
+    { WSAEMSGSIZE,           0x80000005u },   /* STATUS_BUFFER_OVERFLOW */
+    { WSA_OPERATION_ABORTED, 0xC0000120u },   /* STATUS_CANCELLED */
+    { WSAECONNRESET,         0xC000020Du },   /* STATUS_CONNECTION_RESET */
+    { WSAECONNABORTED,       0xC0000241u },   /* STATUS_CONNECTION_ABORTED */
+    { WSAENOTCONN,           0xC0000140u },   /* STATUS_INVALID_CONNECTION */
+    { WSAESHUTDOWN,          0xC00000B0u },   /* STATUS_PIPE_DISCONNECTED */
+    { WSAENETUNREACH,        0xC000023Cu },   /* STATUS_NETWORK_UNREACHABLE */
+    { WSAEHOSTUNREACH,       0xC000023Du },   /* STATUS_HOST_UNREACHABLE */
+    { WSAETIMEDOUT,          0xC00000B5u },   /* STATUS_IO_TIMEOUT */
+    { WSAEINVAL,             0xC000000Du },   /* STATUS_INVALID_PARAMETER */
+    { WSAEFAULT,             0xC0000005u },   /* STATUS_ACCESS_VIOLATION */
+    { WSAENOBUFS,            0xC000009Au },   /* STATUS_INSUFFICIENT_RESOURCES */
+};
+static uint32_t ov_status(int e){
+    if (!e) return 0;
+    for (size_t i = 0; i < sizeof k_ovst / sizeof *k_ovst; i++) if (k_ovst[i].e == e) return k_ovst[i].st;
+    return 0xE0000000u | (uint32_t)(e & 0xFFFF);
+}
+static int ov_error(uint32_t st){
+    if (!st) return 0;
+    for (size_t i = 0; i < sizeof k_ovst / sizeof *k_ovst; i++) if (k_ovst[i].st == st) return k_ovst[i].e;
+    if ((st & 0xFFFF0000u) == 0xE0000000u) return (int)(st & 0xFFFFu);
+    return WSAEINVAL;
+}
+
+/* One receive into a WSABUF array (guest lock held): straight into a single
+ * buffer, else through a host buffer spread over them.  WSAEWOULDBLOCK: no
+ * data yet.  The bookkeeping is do_recv's. */
+static uint8_t g_ovtmp[65536];
+static int ov_recv(WsSock *s, uint32_t h, const uint32_t *buf, const uint32_t *len, int nbuf, int peek,
+                   uint32_t *ip, uint16_t *port, int *got){
+    uint64_t total = 0;
+    for (int i = 0; i < nbuf; i++) total += len[i];
+    *got = 0;
+    if (!total && s->type == 1){                     /* a zero-byte receive completes when data is there */
+        if (s->state != ST_CONNECTED) return WSAENOTCONN;
+        struct pollfd p = { s->fd, POLLIN, 0 };
+        if (s->fd >= 0 && poll(&p, 1, 0) > 0){ *ip = s->raddr; *port = s->rport; return 0; }
+        return WSAEWOULDBLOCK;
+    }
+    uint8_t *dst = nbuf == 1 ? g_mem + buf[0] : g_ovtmp;
+    int cap = nbuf == 1 ? (int)len[0] : (int)(total < sizeof g_ovtmp ? total : sizeof g_ovtmp);
+    int e = recv_one(s, dst, cap, peek, ip, port, got);
+    if (e && e != WSAEMSGSIZE) return e;
+    if (nbuf > 1){
+        int off = 0;
+        for (int i = 0; i < nbuf && off < *got; i++){
+            int n = *got - off < (int)len[i] ? *got - off : (int)len[i];
+            if (n > 0) memcpy(g_mem + buf[i], g_ovtmp + off, (size_t)n);
+            off += n;
+        }
+    }
+    st_recv++; st_bytes_in += (uint64_t)*got;
+    if (g_deny_strong && (*got > 0 || s->type != 1)) deny_heard(*ip);
+    if (!e && *got > 0 && !peek && s->type == 1 && g_online && s->raddr == mkip(10, 77, 0, 1) && s->rport == ONLINE_LOBBY)
+        online_lobby_read(s->conn_id ? s->conn_id : h, dst, *got);
+    return e;
+}
+
+/* a receive is over: the OVERLAPPED says how, lpFrom from whom, then its event is set */
+static void ov_finish(const WsOv *o, int e, int got, uint32_t ip, uint16_t port){
+    if (gok(o->ov, 8)){ MR32(o->ov) = ov_status(e); MR32(o->ov + 4u) = (uint32_t)got; }
+    if (o->pfrom && (!e || e == WSAEMSGSIZE)) ga_out(o->pfrom, o->pfromlen, ip, port);
+    if (o->ev) win32_event_signal_obj(o->ev, o->ev_ser);
+    else winsock_wake();                             /* a WSAGetOverlappedResult(fWait) elsewhere watches it */
+}
+static void ov_drop(int i){
+    memmove(&g_ov[i], &g_ov[i + 1], (size_t)(g_ov_n - i - 1) * sizeof *g_ov);
+    g_ov_n--;
+}
+/* Every pending receive that can complete now does, oldest first on each
+ * socket (guest lock held).  Returns how many completed. */
+static int ov_pump(void){
+    uint32_t busy[OV_MAX]; int nb = 0, done = 0;    /* sockets whose oldest receive still waits */
+    for (int i = 0; i < g_ov_n; ){
+        WsOv *o = &g_ov[i];
+        int k = 0; while (k < nb && busy[k] != o->sock) k++;
+        if (k < nb){ i++; continue; }
+        WsSock *s = sget(o->sock);
+        uint32_t ip = 0; uint16_t port = 0; int got = 0;
+        int e = s ? ov_recv(s, o->sock, o->buf, o->len, o->nbuf, (o->flags & 2u) != 0, &ip, &port, &got)
+                  : WSA_OPERATION_ABORTED;          /* (sclose ends them first: not reached) */
+        if (e == WSAEWOULDBLOCK){ busy[nb++] = o->sock; i++; continue; }
+        WsOv done_ov = *o;
+        ov_drop(i);
+        ov_finish(&done_ov, e, got, ip, port);
+        st_ov_done++; done++;
+    }
+    return done;
+}
+/* closesocket, the last WSACleanup: the socket's pending receives end with WSA_OPERATION_ABORTED */
+static void ov_cancel(uint32_t h){
+    for (int i = 0; i < g_ov_n; ){
+        if (g_ov[i].sock != h){ i++; continue; }
+        WsOv o = g_ov[i];
+        ov_drop(i);
+        ov_finish(&o, WSA_OPERATION_ABORTED, 0, 0, 0);
+        st_ov_cancel++;
+    }
+}
+
+/* The wait (guest lock held on entry and on return, released while it
+ * waits): Windows' rules over the cnt objects h (serials ser), or, with ovp,
+ * until that OVERLAPPED is no longer pending (WSAGetOverlappedResult's fWait;
+ * cnt may be 0 then).  ms: WSA_INFINITE (0xFFFFFFFF) or a timeout in ms. */
+static uint32_t ev_wait(CPU *c, const uint32_t *h, const uint32_t *ser, uint32_t cnt, int all, int events_only,
+                        uint32_t ms, uint32_t ovp, uint32_t *err){
+    uint64_t dl = ms == 0xFFFFFFFFu ? 0 : ws_now_us() + (uint64_t)ms * 1000ull;
+    uint32_t me = win32_thread_id(c), r = WAIT_TIMEOUT_;
+    int stall = 0;                                   /* a readable socket whose receive did not complete */
+    for (;;){
+        int n = ov_pump();
+        stall = n ? 0 : stall;
+        if (ovp && MR32(ovp) != ST_PENDING) return 0;
+        uint64_t sl = events_only ? 50000u : 2000u;
+        if (cnt && (r = win32_wait_try(h, ser, cnt, all, me, err, &sl)) != WAIT_TIMEOUT_) return r;
+        if (dl && ws_now_us() >= dl) return WAIT_TIMEOUT_;
+        /* the sockets of pending receives, watched with the lock released as select's are */
+        WsSock *ws[OV_MAX]; struct pollfd pf[OV_MAX]; int np = 0;
+        for (int i = 0; i < g_ov_n; i++){
+            WsSock *s = sget(g_ov[i].sock);
+            if (!s) continue;
+            int q = 0; while (q < np && ws[q] != s) q++;
+            if (q < np) continue;
+            ws[np] = s; pf[np].fd = s->fd; pf[np].events = POLLIN; pf[np].revents = 0; s->waiters++; np++;
+        }
+        uint32_t gen = atomic_load(&g_ov_gen);
+        int out = 0, ready = 0;
+        atomic_fetch_add(&g_ev_waiters, 1);
+        if (guest_wait_begin_objs && cnt) guest_wait_begin_objs(h[0]); else guest_wait_begin();
+        for (;;){
+#ifdef __wasm__
+            uint32_t seq = vfd_seq();                /* before the look: a wake-up after it is not lost */
+#endif
+            uint64_t s2 = events_only ? 50000u : 2000u;
+            if (cnt && (r = win32_wait_try(h, ser, cnt, all, me, err, &s2)) != WAIT_TIMEOUT_){ out = 1; break; }
+            if (ovp && MR32(ovp) != ST_PENDING) break;   /* another thread completed or ended it */
+            uint64_t now = ws_now_us();
+            if (dl && now >= dl){ r = WAIT_TIMEOUT_; out = 1; break; }
+            if (atomic_load(&g_ov_gen) != gen) break;    /* a new pending receive: watch its socket too */
+            if (np && !stall){
+                for (int q = 0; q < np; q++) pf[q].revents = 0;
+                if (poll(pf, (nfds_t)np, 0) > 0){ ready = 1; break; }
+            }
+            uint64_t w = s2;
+            if (dl && dl - now < w) w = dl - now;
+            int wms = (int)((w + 999u) / 1000u); if (wms < 1) wms = 1;
+#ifdef __wasm__
+            vfd_wait(seq, wms);
+#else
+            { struct timespec ts = { 0, 1000000L }; if (np && !stall) poll(pf, (nfds_t)np, 1); else nanosleep(&ts, 0); (void)wms; }
+#endif
+            stall = 0;
+        }
+        guest_wait_end();
+        atomic_fetch_sub(&g_ev_waiters, 1);
+        for (int q = 0; q < np; q++){
+            ws[q]->waiters--;
+            if (atomic_load(&ws[q]->closing) && !ws[q]->waiters) sfinal(ws[q]);
+        }
+        if (out) return r;
+        if (ready) stall = 1;                        /* cleared by a completion in the next round */
+    }
+}
+
+static uint32_t ws_wsa_wait(CPU *c){              /* WSAWaitForMultipleEvents */
+    uint32_t cnt = A(c, 0), parr = A(c, 1), all = A(c, 2) != 0, ms = A(c, 3), alert = A(c, 4);
+    if (!kobj()){ set_err(WSAENETDOWN); return WAIT_FAILED_; }
+    if (!cnt || cnt > 64u || !gok(parr, 4u * cnt)){ set_err(WSA_INVALID_PARAMETER); return WAIT_FAILED_; }
+    uint32_t h[64], ser[64], err = 0; int evonly = 0;
+    for (uint32_t i = 0; i < cnt; i++) h[i] = MR32(parr + 4u * i);
+    if ((err = win32_wait_ids(h, cnt, (int)all, ser, &evonly)) != 0){ set_err((int)err); return WAIT_FAILED_; }
+    if (alert){ static int said; if (!said++) ws_log("WSAWaitForMultipleEvents: fAlertable, but there are no APCs here"); }
+    { static int said; if (!said++) ws_log("WSAWaitForMultipleEvents: first wait, %u object(s), wait for %s, %s, from 0x%08x",
+                                           cnt, all ? "all" : "any", ms == 0xFFFFFFFFu ? "INFINITE" : "a timeout", c->eip); }
+    st_ev_waits++;
+    uint32_t r = ev_wait(c, h, ser, cnt, (int)all, evonly, ms, 0, &err);
+    if (r == WAIT_FAILED_) set_err((int)err);
+    return r;
+}
+
+/* WSARecv (from 0) and WSARecvFrom (from 1) */
+static uint32_t ws_recv_ex(CPU *c, int from){
+    if (need_startup()) return 0xFFFFFFFFu;
+    uint32_t h = A(c, 0), pb = A(c, 1), nbuf = A(c, 2), pnr = A(c, 3), pfl = A(c, 4);
+    uint32_t pfrom = from ? A(c, 5) : 0, pfromlen = from ? A(c, 6) : 0, ov = A(c, from ? 7 : 5), cr = A(c, from ? 8 : 6);
+    WsSock *s = sget(h); if (!s) FAIL(WSAENOTSOCK);
+    if (!nbuf) FAIL(WSAEINVAL);
+    if (nbuf > OV_BUFS){ static int said; if (!said++) ws_log("WSARecv: %u WSABUFs, more than %d -> WSAENOBUFS", nbuf, OV_BUFS); FAIL(WSAENOBUFS); }
+    if (!gok(pb, 8u * nbuf)) FAIL(WSAEFAULT);
+    uint32_t bl[OV_BUFS], bp[OV_BUFS];               /* WSABUF { u_long len; char *buf; }, taken now */
+    for (uint32_t i = 0; i < nbuf; i++){
+        bl[i] = MR32(pb + 8u * i); bp[i] = MR32(pb + 8u * i + 4u);
+        if ((int32_t)bl[i] < 0 || (bl[i] && !gok(bp[i], bl[i]))) FAIL(WSAEFAULT);
+    }
+    if (!pfl || !gok(pfl, 4)) FAIL(WSAEFAULT);
+    if (pnr && !gok(pnr, 4)) FAIL(WSAEFAULT);
+    if (pfrom && (!pfromlen || !gok(pfromlen, 4) || (int32_t)MR32(pfromlen) < 16 || !gok(pfrom, 16))) FAIL(WSAEFAULT);
+    if (s->type == 1) pfrom = 0;                     /* a stream socket ignores lpFrom */
+    uint32_t fl = MR32(pfl);
+    if (fl & ~0x3u){ static int said; if (!said++) ws_log("WSARecv flags 0x%x ignored", fl); }
+    if ((fl & 1u) && s->type != 1) FAIL(WSAEOPNOTSUPP);
+    int peek = (fl & 2u) != 0;
+    uint32_t ip = 0; uint16_t port = 0; int got = 0, e;
+    if (!ov){                                        /* no OVERLAPPED: recv / recvfrom with buffers */
+        uint64_t dl = deadline_ms(s->rcvtimeo);
+        for (;;){
+            e = ov_recv(s, h, bp, bl, (int)nbuf, peek, &ip, &port, &got);
+            if (!e || e == WSAEMSGSIZE){
+                if (pfrom) ga_out(pfrom, pfromlen, ip, port);
+                if (pnr) MR32(pnr) = (uint32_t)got;
+                MR32(pfl) = 0;
+                if (e) FAIL(e);
+                return 0;
+            }
+            if (e != WSAEWOULDBLOCK || s->nb) FAIL(e);
+            int w = swait(s, POLLIN, dl);
+            s = sget(h);
+            if (w == 2 || !s) FAIL(WSAEINTR);
+            if (w == 1) FAIL(WSAETIMEDOUT);
+        }
+    }
+    if (!gok(ov, 20)) FAIL(WSAEFAULT);
+    if (cr){ static int said; if (!said++) ws_log("WSARecv: completion routine 0x%08x refused (no APCs) -> WSAEOPNOTSUPP", cr);
+             FAIL(WSAEOPNOTSUPP); }
+    if (!kobj() && MR32(ov + 16u)) FAIL(WSA_INVALID_HANDLE);
+    uint32_t ev = MR32(ov + 16u), ser = 0;
+    if (ev && (!(ser = win32_obj_serial(ev)) || !win32_event_set(ev, 0))) FAIL(WSA_INVALID_HANDLE);   /* cleared first */
+    ov_pump();                                       /* the socket's earlier receives come first */
+    int queued = 0;
+    for (int i = 0; i < g_ov_n && !queued; i++) queued = g_ov[i].sock == h;
+    e = queued ? WSAEWOULDBLOCK : ov_recv(s, h, bp, bl, (int)nbuf, peek, &ip, &port, &got);
+    if (e == WSAEWOULDBLOCK){
+        if (g_ov_n == OV_MAX){ static int said; if (!said++) ws_log("WSARecv: %d receives pending -> WSAENOBUFS", OV_MAX); FAIL(WSAENOBUFS); }
+        WsOv *o = &g_ov[g_ov_n++];
+        memset(o, 0, sizeof *o);
+        o->sock = h; o->ov = ov; o->ev = ev; o->ev_ser = ser; o->pfrom = pfrom; o->pfromlen = pfromlen; o->flags = fl;
+        o->nbuf = (int)nbuf; memcpy(o->buf, bp, nbuf * sizeof *bp); memcpy(o->len, bl, nbuf * sizeof *bl);
+        MR32(ov) = ST_PENDING; MR32(ov + 4u) = 0;
+        atomic_fetch_add(&g_ov_gen, 1u);
+        winsock_wake();                              /* a WSAWaitForMultipleEvents elsewhere watches it too */
+        st_ov_pend++;
+        { static int said; if (!said++) ws_log("overlapped: first %s pending (socket 0x%x, event 0x%08x) from 0x%08x",
+                                               from ? "WSARecvFrom" : "WSARecv", h, ev, c->eip); }
+        FAIL(WSA_IO_PENDING);
+    }
+    if (e && e != WSAEMSGSIZE) FAIL(e);             /* failed at once: the OVERLAPPED and hEvent untouched */
+    WsOv o; memset(&o, 0, sizeof o);
+    o.ov = ov; o.ev = ev; o.ev_ser = ser; o.pfrom = pfrom; o.pfromlen = pfromlen;
+    ov_finish(&o, e, got, ip, port);
+    if (pnr) MR32(pnr) = (uint32_t)got;
+    MR32(pfl) = 0;
+    st_ov_now++;
+    if (e) FAIL(e);
+    return 0;
+}
+
+static uint32_t ws_ov_result(CPU *c){             /* WSAGetOverlappedResult */
+    if (need_startup()) return 0;
+    uint32_t h = A(c, 0), ov = A(c, 1), pcb = A(c, 2), wait = A(c, 3), pfl = A(c, 4);
+    if (!sget(h)){ set_err(WSAENOTSOCK); return 0; }
+    if (!gok(ov, 20) || !pcb || !gok(pcb, 4) || !pfl || !gok(pfl, 4)){ set_err(WSAEFAULT); return 0; }
+    ov_pump();
+    if (MR32(ov) == ST_PENDING){
+        if (!wait){ set_err(WSA_IO_INCOMPLETE); return 0; }
+        if (!kobj()){ set_err(WSA_INVALID_HANDLE); return 0; }
+        /* until it is over (its completion sets hEvent; the wait is on the OVERLAPPED itself, so an event that
+         * someone else set early does not end it); an OVERLAPPED that no receive owns waits for good, as on Windows */
+        uint32_t err = 0;
+        while (MR32(ov) == ST_PENDING) ev_wait(c, 0, 0, 0, 0, 1, 0xFFFFFFFFu, ov, &err);
+    }
+    MR32(pcb) = MR32(ov + 4u); MR32(pfl) = 0;
+    int e = ov_error(MR32(ov));
+    if (e){ set_err(e); return 0; }
+    return 1;
+}
+
+/* WSACreateEvent, WSASetEvent, WSAResetEvent, WSACloseEvent: win32_ext.c's events */
+static uint32_t ws_event(CPU *c, int op){
+    if (!kobj()){ set_err(op ? WSA_INVALID_HANDLE : WSA_NOT_ENOUGH_MEMORY); return 0; }
+    if (!op){                                        /* WSACreateEvent: manual reset, not signaled */
+        uint32_t h = win32_event_create(1, 0);
+        if (!h) set_err(WSA_NOT_ENOUGH_MEMORY);
+        return h;                                    /* WSA_INVALID_EVENT (0) on failure */
+    }
+    uint32_t h = A(c, 0);
+    int ok = op == 3 ? win32_event_close(h) : win32_event_set(h, op == 1);
+    if (!ok){ set_err(WSA_INVALID_HANDLE); return 0; }
+    return 1;
+}
+
 /* ---- names ---- */
 #define GBUF_BASE MM_WSBUF_BASE  /* guest memory of this HLE: per-thread hostent / inet_ntoa (memmap.h) */
 #define GBUF_SLOT MM_WSBUF_SLOT
@@ -2051,6 +2436,15 @@ int winsock_call(CPU *c, const char *dll, const char *n, uint32_t *out){
         else if (!strcmp(n, "WSAStartup")) r = ws_startup(c);
         else if (!strcmp(n, "WSACleanup")) r = ws_cleanup();
         else if (!strcmp(n, "WSAIoctl")) r = ws_wsaioctl(c);
+        /* overlapped I/O and WSA events (Most Wanted; see "overlapped I/O") */
+        else if (!strcmp(n, "WSARecvFrom")) r = ws_recv_ex(c, 1);
+        else if (!strcmp(n, "WSARecv")) r = ws_recv_ex(c, 0);
+        else if (!strcmp(n, "WSAGetOverlappedResult")) r = ws_ov_result(c);
+        else if (!strcmp(n, "WSAWaitForMultipleEvents")) r = ws_wsa_wait(c);
+        else if (!strcmp(n, "WSACreateEvent")) r = ws_event(c, 0);
+        else if (!strcmp(n, "WSASetEvent")) r = ws_event(c, 1);
+        else if (!strcmp(n, "WSAResetEvent")) r = ws_event(c, 2);
+        else if (!strcmp(n, "WSACloseEvent")) r = ws_event(c, 3);
         else return 0;
         break;
     case 'h': case 'n':
@@ -2117,6 +2511,11 @@ void winsock_report(void){
             (unsigned long long)st_sockets, (unsigned long long)st_sent, (unsigned long long)st_bytes_out,
             (unsigned long long)st_recv, (unsigned long long)st_bytes_in, (unsigned long long)st_select,
             (unsigned long long)st_waits, (unsigned long long)st_blocked);
+    if (st_ov_now || st_ov_pend || st_ev_waits)            /* overlapped I/O: Most Wanted only */
+        fprintf(stderr, "  network overlapped : %llu receives done at once, %llu pending (%llu completed later, %llu "
+                "cancelled, %d still pending), %llu WSAWaitForMultipleEvents\n", (unsigned long long)st_ov_now,
+                (unsigned long long)st_ov_pend, (unsigned long long)st_ov_done, (unsigned long long)st_ov_cancel, g_ov_n,
+                (unsigned long long)st_ev_waits);
 }
 
 /* tests/net_harness.c: start again with the current environment */
@@ -2124,6 +2523,7 @@ void winsock_test_reset(void){
     for (int i = 1; i < NSOCK; i++) if (g_s[i].used){ if (g_s[i].fd >= 0) close(g_s[i].fd); if (g_s[i].aux_fd > 0) close(g_s[i].aux_fd); memset(&g_s[i], 0, sizeof g_s[i]); }
     g_startups = 0; g_initted = 0; g_ws_mode = -1; g_vlan_up = 0; g_online = 0;
     st_sockets = st_sent = st_recv = st_bytes_out = st_bytes_in = st_blocked = st_select = st_waits = 0;
+    g_ov_n = 0; st_ov_now = st_ov_pend = st_ov_done = st_ov_cancel = st_ev_waits = 0;
     memset(g_gbuf_teb, 0, sizeof g_gbuf_teb);
 }
 uint64_t winsock_blocked_count(void){ return st_blocked; }

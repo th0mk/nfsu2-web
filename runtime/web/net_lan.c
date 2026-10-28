@@ -1113,6 +1113,16 @@ int vfd_poll(struct pollfd *p, nfds_t n, int ms){
     }
 }
 
+/* winsock.c's WSAWaitForMultipleEvents: it reads the event word, looks at its
+ * objects and sockets, then waits for the word to move (a datagram, a
+ * connection's data, or vfd_wake when an object is set or closed), at most
+ * ms: no wake-up between its look and its wait is lost (L-070) */
+uint32_t vfd_seq(void){ return ld(&g_seq); }
+void vfd_wait(uint32_t seen, int ms){
+    if (ms > 0 && ld(&g_seq) == seen) __builtin_wasm_memory_atomic_wait32((int *)&g_seq, (int)seen, (int64_t)ms * 1000000);
+}
+void vfd_wake(void){ bump(); }
+
 ssize_t vfd_send(int fd, const void *buf, size_t len, int flags){
     (void)flags;
     pthread_mutex_lock(&g_mu);

@@ -8,6 +8,7 @@
  *                          "English" by default); 0 without it
  *   RT_STUBS_MODULE_REAL   module.c and modheap.c are linked: no stand-ins for them
  *   RT_STUBS_DISPATCH_OWN  the program has its own dispatch_indirect and call_guest
+ *   RT_STUBS_WINSOCK_REAL  winsock.c is linked (wsaov_unit.c): no stand-ins for it
  * g_unimpl names the import win32.c last left unimplemented. */
 #ifndef RT_STUBS_H
 #define RT_STUBS_H
@@ -66,8 +67,10 @@ uint32_t com_scratch(uint32_t n){ (void)n; return 0; }
 int fileio_resolve_game(const char *win, char *out, size_t n){ (void)win; (void)out; (void)n; return 0; }
 #endif
 #endif
+#ifndef RT_STUBS_WINSOCK_REAL
 int winsock_call(CPU *c, const char *dll, const char *n, uint32_t *r){ (void)c; (void)dll; (void)n; (void)r; return 0; }
 void winsock_report(void){ }
+#endif
 #ifndef RT_STUBS_FILEIO_REAL
 int fileio_call(CPU *c, const char *n, uint32_t *r){ (void)c; (void)n; (void)r; return 0; }
 int fileio_is_handle(uint32_t h){ (void)h; return 0; }

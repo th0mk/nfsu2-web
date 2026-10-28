@@ -56,6 +56,13 @@
 #define WSATRY_AGAIN        11002
 #define WSANO_RECOVERY      11003
 #define WSANO_DATA          11004
+/* overlapped I/O and WSA events (winerror.h's ERROR_* values) */
+#define WSA_INVALID_HANDLE      6
+#define WSA_NOT_ENOUGH_MEMORY   8
+#define WSA_INVALID_PARAMETER   87
+#define WSA_OPERATION_ABORTED   995
+#define WSA_IO_INCOMPLETE       996
+#define WSA_IO_PENDING          997
 
 /* ---- network modes (NFSU2_NET) ---- */
 enum { NET_OFF = 0,      /* no network: WSAStartup fails (WSASYSNOTREADY)    */
@@ -119,6 +126,8 @@ const char *winsock_lan_warning(void);  /* the last identity warning, "" = none 
 int  winsock_test_route(uint32_t dst, uint32_t *out);   /* route query on that identity; 0 or WSA error */
 int  winsock_session_active(void);      /* a WSAStartup without its WSACleanup (a LAN session) */
 int  winsock_online(void);              /* the game's Online menu is served (browser, NFSU2_ONLINE) */
+void winsock_wake(void);                /* an object was set or closed: WSAWaitForMultipleEvents looks again
+                                           (win32_ext.c calls it; nothing to do while no such wait runs) */
 
 /* ---- winsock.c services for the backends ---- */
 uint64_t ws_now_us(void);

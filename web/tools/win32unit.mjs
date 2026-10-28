@@ -1,8 +1,9 @@
 // Builds web/test/win32_unit.c for wasm with web/build.sh's target and
 // features: runtime/win32.c, win32_ext.c, win32_misc.c and keyboard.c (and Most
 // Wanted's thread table, runtime/mw/threads_mw.c), the rest of the runtime stubbed (web/test/win32-wasm.test.mjs runs its "hle"
-// half under node, web/tools/waitstress.sh its "stress" half in the browser).
-//   node web/tools/win32unit.mjs <out.wasm>
+// half under node, web/tools/waitstress.sh its "stress" half in the browser).  Also web/test/wsaov_unit.c (buildWsaovUnit).
+//   node web/tools/win32unit.mjs <out.wasm>            (win32_unit)
+//   node web/tools/win32unit.mjs --wsaov <out.wasm>    (wsaov_unit)
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -127,9 +128,16 @@ export function buildD3d9Unit(out, mw) {
   return out;
 }
 
+// web/test/wsaov_unit.c: Most Wanted's overlapped Winsock (TRACKER M8-06, M8-07): runtime/winsock.c over the
+// browser's virtual LAN (runtime/web/net_lan.c) with the Win32 layer's objects (the four files); its "hle" half
+// runs under node (web/test/wsaov-wasm.test.mjs), its "stress" half in the browser host (web/tools/wsastress.sh)
+const WSAOV_SRC = ['web/test/wsaov_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 'runtime/win32_misc.c', 'runtime/keyboard.c',
+  'runtime/winsock.c', 'runtime/web/net_lan.c'];
+export function buildWsaovUnit(out) { return build(out, WSAOV_SRC, []); }
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const out = process.argv[2];
-  if (!out) { console.error('usage: node web/tools/win32unit.mjs <out.wasm>'); process.exit(2); }
-  buildWin32Unit(path.resolve(out));
+  const wsaov = process.argv[2] === '--wsaov', out = process.argv[wsaov ? 3 : 2];
+  if (!out) { console.error('usage: node web/tools/win32unit.mjs [--wsaov] <out.wasm>'); process.exit(2); }
+  (wsaov ? buildWsaovUnit : buildWin32Unit)(path.resolve(out));
   console.log(`built ${out}`);
 }

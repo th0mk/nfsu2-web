@@ -19,7 +19,7 @@ const LIST = path.join(REPO, 'games/mw/hle-reviewed.txt');
 
 test('games/mw/hle-reviewed.txt: the imports MW leaves unimplemented, none reviewed yet', () => {
   const rows = fs.readFileSync(LIST, 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean).map(l => l.split(/\s+/));
-  assert.ok(rows.length >= 50, `${rows.length} rows`);
+  assert.ok(rows.length >= 30, `${rows.length} rows`);
   // the D3DX math imports are answered natively (runtime/mw/d3dxmath_mw.c): none is listed
   const native = [...fs.readFileSync(path.join(REPO, 'runtime/mw/d3dxmath_mw.c'), 'utf8').matchAll(/\{ "(D3DX\w+)",\s+0x/g)].map(m => m[1]);
   assert.equal(native.length, 11, 'the eleven native D3DX math functions');
@@ -30,10 +30,13 @@ test('games/mw/hle-reviewed.txt: the imports MW leaves unimplemented, none revie
     assert.match(r[2], /^0x[0-9a-f]{8}$/);
   }
   const list = readReviewed('mw');
-  assert.equal(list.size, new Set(rows.map(r => r[1].replace(/^[^!]+/, d => d.toLowerCase()))).size, 'each import once (the exe\'s and server.dll\'s WSA ones are one)');
+  assert.equal(list.size, new Set(rows.map(r => r[1].replace(/^[^!]+/, d => d.toLowerCase()))).size, 'each import once (one entry for an import both modules have)');
   assert.ok([...list.values()].every(e => !e.yes), 'no MW run has reviewed one yet');
-  for (const k of ['kernel32.dll!DebugBreak', 'd3dx9_26.dll!D3DXCreateEffectFromResourceA', 'ws2_32.dll!WSARecvFrom', 'shell32.dll!ShellExecuteA'])
+  for (const k of ['kernel32.dll!DebugBreak', 'd3dx9_26.dll!D3DXCreateEffectFromResourceA', 'tapi32.dll!lineOpen', 'shell32.dll!ShellExecuteA'])
     assert.ok(list.has(k), `${k} is listed`);
+  // winsock.c answers the overlapped ones (TRACKER M8-06, M8-07)
+  for (const n of ['WSACreateEvent', 'WSASetEvent', 'WSAResetEvent', 'WSACloseEvent', 'WSAWaitForMultipleEvents', 'WSARecv', 'WSARecvFrom',
+    'WSAGetOverlappedResult']) assert.ok(!list.has(`ws2_32.dll!${n}`), `ws2_32.dll!${n} is answered, not listed`);
   // each row is an import of MW's lift, at its IAT
   for (const [mod, dir] of [['speed.exe', 'gen/mw/all'], ['server.dll', 'gen/mw/server']]) {
     const f = path.join(REPO, dir, 'impargs.c');

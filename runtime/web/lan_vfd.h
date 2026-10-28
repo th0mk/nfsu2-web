@@ -16,6 +16,10 @@
  *                 EAGAIN / EPIPE / ENOTCONN as a socket would
  *   vfd_shutdown  SHUT_WR / SHUT_RDWR sends FIN; wakes every waiter
  *   vfd_close     frees the virtual fd (a stream not yet closed sends FIN)
+ *   vfd_seq/wait  the backend's event word, and a wait (at most ms, guest
+ *                 lock released) until it moves from the value read before
+ *                 a look: WSAWaitForMultipleEvents (winsock.c)
+ *   vfd_wake      moves it: an event set or closed (winsock_wake)
  *
  * Plus the three places where winsock.c's vlan mode asks the AF_UNIX fd
  * something a virtual socket answers differently:
@@ -38,6 +42,9 @@ ssize_t vfd_send(int fd, const void *buf, size_t len, int flags);
 ssize_t vfd_recv(int fd, void *buf, size_t len, int flags);
 int     vfd_shutdown(int fd, int how);
 int     vfd_close(int fd);
+uint32_t vfd_seq(void);
+void    vfd_wait(uint32_t seen, int ms);
+void    vfd_wake(void);
 void    vlan_conn_update(struct WsSock *s);
 void    vlan_fionread(struct WsSock *s, uint32_t *v);
 void    vlan_report(void);
