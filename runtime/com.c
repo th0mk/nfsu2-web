@@ -4096,22 +4096,24 @@ int com_call(CPU *c, uint32_t magic){
             if (kind == 3) dipad_created(d, g);
             if(pp) MR32(pp)=d; r=0; }
         else if (MID(EnumDevices)){
-            /* (dwDevType, lpCallback, pvRef, dwFlags)
-             * REALLY call the callback: report a keyboard and a mouse. */
-            uint32_t devtype=A(c,1), cb=A(c,2), ref=A(c,3);
-            /* game controllers: the virtual pad (runtime/dinput_pad.c) */
-            if (cb && dipad_enum(c, devtype, cb, ref, A(c,4))) cb = 0;
-            if (cb && ENVC("DI_ENUM")){
-                for (int k=0;k<2;k++){
-                    int is_kb = (k==0);
-                    uint32_t t = is_kb ? 0x13u : 0x12u;
-                    /* 0 = DI8DEVCLASS_ALL -> all of them */
-                    if (devtype && (devtype & 0xFFu) != t && devtype > 4u) continue;
-                    uint32_t args[2] = { make_devinst(is_kb), ref };
-                    if (call_guest(c, cb, 2, args) == 0) break;   /* DIENUM_STOP */
-                }
-                g_di_enum++;
+            /* (dwDevType, lpCallback, pvRef, dwFlags), as DirectInput 8 does it (and Wine's dinput, in its
+             * order): the system mouse, then the system keyboard, each for its class or its type filter
+             * (DI8DEVCLASS_ALL 0, DI8DEVCLASS_POINTER 2 or DI8DEVTYPE_MOUSE 0x12, DI8DEVCLASS_KEYBOARD 3 or
+             * DI8DEVTYPE_KEYBOARD 0x13); neither has force feedback, so DIEDFL_FORCEFEEDBACK (0x100) leaves
+             * both out.  Then the game controllers: the virtual pad (runtime/dinput_pad.c).  The callback's
+             * DIENUM_STOP (0) ends the enumeration.  Underground 2 asks for DI8DEVCLASS_GAMECTRL only (0x5cfa4a,
+             * 0x5d00b5); Most Wanted asks for DI8DEVCLASS_ALL (0x7f1b39) and makes its keyboard and mouse
+             * from what it is offered: offering neither left it without a keyboard. */
+            uint32_t devtype=A(c,1), cb=A(c,2), ref=A(c,3), flags=A(c,4), t = devtype & 0xFFu;
+            int offered = 0;
+            for (int is_kb = 0; is_kb < 2 && cb && !(flags & 0x100u); is_kb++){
+                if (t != 0u && t != (is_kb ? 3u : 2u) && t != (is_kb ? 0x13u : 0x12u)) continue;
+                uint32_t args[2] = { make_devinst(is_kb), ref };
+                offered = 1;
+                if (call_guest(c, cb, 2, args) == 0) cb = 0;       /* DIENUM_STOP */
             }
+            g_di_enum += offered;
+            if (cb) dipad_enum(c, devtype, cb, ref, flags);
             r=0; }
         else if (MID(EnumDevicesBySemantics)){
             /* (ptszUserName, lpdiActionFormat, lpCallback, pvRef, dwFlags)
