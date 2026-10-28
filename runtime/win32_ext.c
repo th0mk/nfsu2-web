@@ -2249,7 +2249,11 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
     else if (!strcmp(n,"SetPriorityClass")) r=1;
     else if (!strcmp(n,"GetPriorityClass")) r=0x20;
     /* --- handles / misc --- */
-    else if (!strcmp(n,"Sleep")){
+    else if (!strcmp(n,"Sleep")||!strcmp(n,"SleepEx")){
+        /* the main thread's sleep moves the clock (game.h vclock_sleep_real; win32.c) */
+        uint64_t vclock_sleep_begin(void); void vclock_sleep_end(uint64_t);
+        int vs = g_game.vclock_sleep_real && tl_slot == 0 && A(c,0);
+        uint64_t t0 = vs ? vclock_sleep_begin() : 0u;
         uint32_t ms=A(c,0);
         ts_set(TS_SLEEP, ms);
         guest_yield_begin();
@@ -2257,15 +2261,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
           if(!ms){ ts.tv_nsec = 200000L; }        /* Sleep(0): just yield */
           nanosleep(&ts,0); }
         guest_yield_end();
-        r=0; }
-    else if (!strcmp(n,"SleepEx")){
-        uint32_t ms=A(c,0);
-        ts_set(TS_SLEEP, ms);
-        guest_yield_begin();
-        { struct timespec ts={ (time_t)(ms/1000u), (long)((ms%1000u)*1000000u) };
-          if(!ms) ts.tv_nsec = 200000L;
-          nanosleep(&ts,0); }
-        guest_yield_end();
+        if (vs) vclock_sleep_end(t0);
         r=0; }
     else if (!strcmp(n,"WaitForMultipleObjects") && wfmo_has_timer(A(c,0), A(c,1))){
         /* a set with a waitable timer: Windows' rules (wait_set) */

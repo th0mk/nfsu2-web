@@ -152,6 +152,37 @@ void vclock_tick(void){
 /* oracle.c (cmp): the clock stands still while one guest function runs
  * twice (under the emulator, then lifted), so both see the same QPC/ms. */
 _Atomic uint64_t g_vclock_freeze = 0;
+/* the in-frame cap (VCLOCK_MAXD, 50 ms; host_us below) */
+static uint64_t vclock_maxd(void){
+    static _Atomic uint64_t maxd = 0;
+    uint64_t m = atomic_load(&maxd);
+    if (!m){ const char *e = ENVC("VCLOCK_MAXD");
+             m = (e && *e) ? (uint64_t)strtoull(e,0,0) : 50000ull;
+             if (m < 16000ull) m = 16000ull;
+             atomic_store(&maxd, m); }
+    return m;
+}
+/* GameOps vclock_sleep_real (win32_ext.c Sleep, SleepEx): a Sleep of the game's
+ * main thread moves the clock by at least its real length.  Inside a frame that
+ * has run past the in-frame cap (before the first frame too) the clock stands at
+ * the cap and moves only by its creep, every 16th read: Most Wanted's CPU speed
+ * test at boot (0x6CAF90: QPC, rdtsc, Sleep(50), QPC, rdtsc; rdtsc is real time)
+ * saw 0 or 4 ms of its 50 go by, as the reads fell, and the auto-detect took
+ * g_PerformanceLevel 1 (an infinite MHz read as negative) or 4 (37,616 MHz).
+ * What the clock did not show of the sleep (the cap hid it, the creep made up
+ * some of it) goes to the creep, which the next frame adds to the clock as it
+ * always did: the clock moves by the sleep's real length, not by more (the
+ * other threads' reads creep it on meanwhile; added on top, the test read 2,589
+ * MHz).  A sleep inside the cap adds nothing. */
+static _Thread_local uint64_t tl_sleep_creep;
+uint64_t vclock_sleep_begin(void){ tl_sleep_creep = atomic_load(&g_vclock_creep); return real_us(); }
+void vclock_sleep_end(uint64_t t0){
+    uint64_t t1 = real_us(), rb = atomic_load(&g_real_base), m = vclock_maxd(), cr = atomic_load(&g_vclock_creep);
+    if (t1 <= t0) return;
+    uint64_t a = t0 > rb ? t0 - rb : 0ull, b = t1 > rb ? t1 - rb : 0ull;
+    uint64_t seen = (b < m ? b : m) - (a < m ? a : m) + (cr > tl_sleep_creep ? cr - tl_sleep_creep : 0ull);
+    if (t1 - t0 > seen) atomic_fetch_add(&g_vclock_creep, (t1 - t0) - seen);
+}
 uint64_t host_us(void){
     { uint64_t fz = atomic_load(&g_vclock_freeze); if (__builtin_expect(fz != 0, 0)) return fz; }
     uint64_t base = atomic_load(&g_vclock_base);
@@ -165,13 +196,7 @@ uint64_t host_us(void){
      * measured).  Removing the cap entirely does not work either: the game
      * sees the real elapsed time and enters its catch-up loop.  A three-frame
      * budget is a good middle ground. */
-    { static _Atomic uint64_t maxd = 0;
-      uint64_t m = atomic_load(&maxd);
-      if (!m){ const char *e = ENVC("VCLOCK_MAXD");
-               m = (e && *e) ? (uint64_t)strtoull(e,0,0) : 50000ull;
-               if (m < 16000ull) m = 16000ull;
-               atomic_store(&maxd, m); }
-      if (d > m) d = m; }
+    { uint64_t m = vclock_maxd(); if (d > m) d = m; }
 
     /* Safety valve for loops that spin on the clock without producing a frame.
      *
