@@ -43,58 +43,57 @@ const ImpEnt g_imp[] = {
     /* M2-09 */
     { IAT(0),  "KERNEL32.dll", "CreateWaitableTimerA", 3 },
     { IAT(1),  "KERNEL32.dll", "SetWaitableTimer", 6 },
-    { IAT(2),  "KERNEL32.dll", "CancelWaitableTimer", 1 },
-    { IAT(3),  "KERNEL32.dll", "WaitForSingleObject", 2 },
-    { IAT(4),  "KERNEL32.dll", "WaitForMultipleObjects", 4 },
-    { IAT(5),  "KERNEL32.dll", "GetSystemTime", 1 },
-    { IAT(6),  "KERNEL32.dll", "SystemTimeToFileTime", 2 },
-    { IAT(7),  "KERNEL32.dll", "CreateEventA", 4 },
-    { IAT(8),  "KERNEL32.dll", "SetEvent", 1 },
-    { IAT(9),  "KERNEL32.dll", "ResetEvent", 1 },
-    { IAT(10), "KERNEL32.dll", "CloseHandle", 1 },
-    { IAT(11), "KERNEL32.dll", "GetLastError", 0 },
+    { IAT(2),  "KERNEL32.dll", "WaitForSingleObject", 2 },
+    { IAT(3),  "KERNEL32.dll", "WaitForMultipleObjects", 4 },
+    { IAT(4),  "KERNEL32.dll", "GetSystemTime", 1 },
+    { IAT(5),  "KERNEL32.dll", "SystemTimeToFileTime", 2 },
+    { IAT(6),  "KERNEL32.dll", "CreateEventA", 4 },
+    { IAT(7),  "KERNEL32.dll", "SetEvent", 1 },
+    { IAT(8),  "KERNEL32.dll", "ResetEvent", 1 },
+    { IAT(9),  "KERNEL32.dll", "CloseHandle", 1 },
+    { IAT(10), "KERNEL32.dll", "GetLastError", 0 },
     /* M2-10 */
-    { IAT(12), "KERNEL32.dll", "GlobalMemoryStatusEx", 1 },
-    { IAT(13), "KERNEL32.dll", "GetDateFormatA", 6 },
-    { IAT(14), "KERNEL32.dll", "GetTimeFormatA", 6 },
-    { IAT(15), "KERNEL32.dll", "CompareStringA", 6 },
-    { IAT(16), "KERNEL32.dll", "CompareStringW", 6 },
-    { IAT(17), "KERNEL32.dll", "SetStdHandle", 2 },
-    { IAT(18), "KERNEL32.dll", "GetStdHandle", 1 },
-    { IAT(19), "KERNEL32.dll", "SetEnvironmentVariableA", 2 },
-    { IAT(20), "KERNEL32.dll", "GetEnvironmentVariableA", 3 },
-    { IAT(21), "USER32.dll",   "GetKeyState", 1 },
-    { IAT(22), "USER32.dll",   "GetKeyboardLayout", 1 },
-    { IAT(23), "USER32.dll",   "MapVirtualKeyA", 2 },
-    { IAT(24), "USER32.dll",   "MapVirtualKeyExA", 3 },
-    { IAT(25), "USER32.dll",   "ToUnicode", 6 },
-    { IAT(26), "USER32.dll",   "SendInput", 3 },
-    { IAT(27), "KERNEL32.dll", "QueueUserAPC", 3 },
-    { IAT(28), "KERNEL32.dll", "CreateProcessA", 10 },
-    { IAT(29), "KERNEL32.dll", "FatalAppExitA", 2 },
+    { IAT(11), "KERNEL32.dll", "GlobalMemoryStatusEx", 1 },
+    { IAT(12), "KERNEL32.dll", "GetDateFormatA", 6 },
+    { IAT(13), "KERNEL32.dll", "GetTimeFormatA", 6 },
+    { IAT(14), "KERNEL32.dll", "CompareStringA", 6 },
+    { IAT(15), "KERNEL32.dll", "CompareStringW", 6 },
+    { IAT(16), "KERNEL32.dll", "SetStdHandle", 2 },
+    { IAT(17), "KERNEL32.dll", "GetStdHandle", 1 },
+    { IAT(18), "KERNEL32.dll", "SetEnvironmentVariableA", 2 },
+    { IAT(19), "KERNEL32.dll", "GetEnvironmentVariableA", 3 },
+    { IAT(20), "USER32.dll",   "GetKeyState", 1 },
+    { IAT(21), "USER32.dll",   "GetKeyboardLayout", 1 },
+    { IAT(22), "USER32.dll",   "MapVirtualKeyA", 2 },
+    { IAT(23), "USER32.dll",   "MapVirtualKeyExA", 3 },
+    { IAT(24), "USER32.dll",   "ToUnicode", 6 },
+    { IAT(25), "USER32.dll",   "SendInput", 3 },
+    { IAT(26), "KERNEL32.dll", "QueueUserAPC", 3 },
+    { IAT(27), "KERNEL32.dll", "CreateProcessA", 10 },
+    { IAT(28), "KERNEL32.dll", "FatalAppExitA", 2 },
     /* M2-11 */
-    { IAT(30), "WINMM.dll", "waveOutGetDevCapsA", 3 },
-    { IAT(31), "WINMM.dll", "waveOutGetNumDevs", 0 },
-    { IAT(32), "WINMM.dll", "waveOutWrite", 3 },
-    { IAT(33), "WINMM.dll", "waveOutGetPosition", 3 },
-    { IAT(34), "WINMM.dll", "waveOutSetVolume", 2 },
-    { IAT(35), "WINMM.dll", "waveOutReset", 1 },
-    { IAT(36), "WINMM.dll", "waveOutOpen", 6 },
-    { IAT(37), "WINMM.dll", "waveOutClose", 1 },
-    { IAT(38), "WINMM.dll", "waveOutPrepareHeader", 3 },
-    { IAT(39), "WINMM.dll", "waveOutUnprepareHeader", 3 },
-    { IAT(40), "WINMM.dll", "waveInStart", 1 },
-    { IAT(41), "WINMM.dll", "waveInStop", 1 },
-    { IAT(42), "WINMM.dll", "waveInReset", 1 },
-    { IAT(43), "WINMM.dll", "waveInAddBuffer", 3 },
-    { IAT(44), "WINMM.dll", "waveInGetPosition", 3 },
-    { IAT(45), "WINMM.dll", "waveInOpen", 6 },
-    { IAT(46), "WINMM.dll", "waveInClose", 1 },
-    { IAT(47), "WINMM.dll", "waveInGetNumDevs", 0 },
-    { IAT(48), "WINMM.dll", "waveInGetDevCapsA", 3 },
-    { IAT(49), "WINMM.dll", "waveInPrepareHeader", 3 },
-    { IAT(50), "WINMM.dll", "waveInUnprepareHeader", 3 },
-    { IAT(51), "DSOUND.dll", "#6", 3 },
+    { IAT(29), "WINMM.dll", "waveOutGetDevCapsA", 3 },
+    { IAT(30), "WINMM.dll", "waveOutGetNumDevs", 0 },
+    { IAT(31), "WINMM.dll", "waveOutWrite", 3 },
+    { IAT(32), "WINMM.dll", "waveOutGetPosition", 3 },
+    { IAT(33), "WINMM.dll", "waveOutSetVolume", 2 },
+    { IAT(34), "WINMM.dll", "waveOutReset", 1 },
+    { IAT(35), "WINMM.dll", "waveOutOpen", 6 },
+    { IAT(36), "WINMM.dll", "waveOutClose", 1 },
+    { IAT(37), "WINMM.dll", "waveOutPrepareHeader", 3 },
+    { IAT(38), "WINMM.dll", "waveOutUnprepareHeader", 3 },
+    { IAT(39), "WINMM.dll", "waveInStart", 1 },
+    { IAT(40), "WINMM.dll", "waveInStop", 1 },
+    { IAT(41), "WINMM.dll", "waveInReset", 1 },
+    { IAT(42), "WINMM.dll", "waveInAddBuffer", 3 },
+    { IAT(43), "WINMM.dll", "waveInGetPosition", 3 },
+    { IAT(44), "WINMM.dll", "waveInOpen", 6 },
+    { IAT(45), "WINMM.dll", "waveInClose", 1 },
+    { IAT(46), "WINMM.dll", "waveInGetNumDevs", 0 },
+    { IAT(47), "WINMM.dll", "waveInGetDevCapsA", 3 },
+    { IAT(48), "WINMM.dll", "waveInPrepareHeader", 3 },
+    { IAT(49), "WINMM.dll", "waveInUnprepareHeader", 3 },
+    { IAT(50), "DSOUND.dll", "#6", 3 },
 };
 const uint32_t g_imp_count = sizeof g_imp / sizeof *g_imp;
 
@@ -326,13 +325,16 @@ static void test_timers(Thr *t){
     CHECK(call_imp(t, "WaitForSingleObject", h, 0u) == WAIT_TIMEOUT, "relative: 1 us early");
     atomic_store(&g_vclock_freeze, 5035000ull);
     CHECK(call_imp(t, "WaitForSingleObject", h, 0u) == 0, "relative: on time");
-    /* CancelWaitableTimer disarms and leaves the signaled state as it is */
-    CHECK(call_imp(t, "CancelWaitableTimer", h) == 1 && call_imp(t, "WaitForSingleObject", h, 0u) == 0, "cancel keeps the signaled state");
-    wr64(due, (uint64_t)-100000ll);
+    /* a timer set again before it fired fires at the new due time only */
+    wr64(due, (uint64_t)-100000ll);                                  /* 5,045,000 */
     call_imp(t, "SetWaitableTimer", h, due, 0u, 0u, 0u, 0u);
-    call_imp(t, "CancelWaitableTimer", h);
+    wr64(due, (uint64_t)-200000ll);                                  /* 5,055,000 */
+    call_imp(t, "SetWaitableTimer", h, due, 0u, 0u, 0u, 0u);
+    atomic_store(&g_vclock_freeze, 5045000ull);
+    CHECK(call_imp(t, "WaitForSingleObject", h, 0u) == WAIT_TIMEOUT, "set again: not at the first due time");
+    atomic_store(&g_vclock_freeze, 5055000ull);
+    CHECK(call_imp(t, "WaitForSingleObject", h, 0u) == 0, "set again: at the second");
     atomic_store(&g_vclock_freeze, 5100000ull);
-    CHECK(call_imp(t, "WaitForSingleObject", h, 0u) == WAIT_TIMEOUT, "a cancelled timer does not fire");
 
     /* a periodic auto-reset timer: one waiter per period, missed periods signal once */
     uint32_t a = call_imp(t, "CreateWaitableTimerA", 0u, 0u, gstr(SCRATCH + 0x100, "tick"));
@@ -367,8 +369,6 @@ static void test_timers(Thr *t){
     set_last_error(t, 0);
     CHECK(call_imp(t, "SetWaitableTimer", h, due, 0u, 0u, 0u, 1u) == 1 && last_error(t) == 50, "fResume: TRUE and ERROR_NOT_SUPPORTED");
     CHECK(call_imp(t, "SetWaitableTimer", h, due, 0u, 0x00401000u, 0u, 0u) == 1, "a completion routine: still set");
-    set_last_error(t, 0);
-    CHECK(call_imp(t, "CancelWaitableTimer", ev0) == 0 && last_error(t) == 6, "cancel an event");
 
     /* finite waits in real time while the clock stands still */
     wr64(due, (uint64_t)-10000000ll);                                /* 1 s away */
@@ -436,6 +436,42 @@ static void test_timers(Thr *t){
     el = now_ms() - t0;
     CHECK(r == 1 && el < 1000.0, "WFMO INFINITE: the timer after %.1f ms (%u)", el, r);
     call_imp(t, "CloseHandle", h); call_imp(t, "CloseHandle", a); call_imp(t, "CloseHandle", ev); call_imp(t, "CloseHandle", ev0);
+}
+
+/* MW's 100 Hz thread (0x7EC601, GAME.md 6.1) as the game runs it, on a clock moved by hand in frames of step us
+ * for span us: CreateWaitableTimerA(manual), the first due time GetSystemTime + SystemTimeToFileTime + 10 ms, then
+ * each time the wait comes back the count ([0x9BB130]) goes up, the due time + 10 ms, SetWaitableTimer(lPeriod 0).
+ * The thread runs whenever its timer is due; the ticks it made are returned */
+static int hz100_ticks(Thr *t, uint64_t t0, uint64_t step, uint64_t span){
+    const uint32_t st = SCRATCH + 0xC00u, due = SCRATCH + 0xC20u;
+    atomic_store(&g_vclock_freeze, t0);
+    uint32_t h = call_imp(t, "CreateWaitableTimerA", 0u, 1u, 0u);
+    call_imp(t, "GetSystemTime", st); call_imp(t, "SystemTimeToFileTime", st, due);
+    wr64(due, rd64(due) + 100000ull);
+    call_imp(t, "SetWaitableTimer", h, due, 0u, 0u, 0u, 0u);
+    int ticks = 0;
+    for (uint64_t now = t0; now <= t0 + span; now += step){
+        atomic_store(&g_vclock_freeze, now);
+        while (call_imp(t, "WaitForSingleObject", h, 0u) == 0){
+            ticks++;
+            wr64(due, rd64(due) + 100000ull);
+            call_imp(t, "SetWaitableTimer", h, due, 0u, 0u, 0u, 0u);
+        }
+    }
+    call_imp(t, "CloseHandle", h);
+    atomic_store(&g_vclock_freeze, 0ull);
+    return ticks;
+}
+static void test_hz100(Thr *t){
+    /* 100 a game second, whatever the frames: 1 ms, 4 ms (the virtual clock's smallest step), a 60 Hz frame, 50 ms
+     * (its largest: the due times a long frame passed fire at once, one after the other, and the count catches up) */
+    static const uint64_t steps[] = { 1000u, 4000u, 16667u, 50000u };
+    for (size_t i = 0; i < sizeof steps / sizeof *steps; i++){
+        uint64_t span = 3000000u - 3000000u % steps[i];               /* the last frame at or before 3 s */
+        int n = hz100_ticks(t, 6000000u, steps[i], span);
+        CHECK(n == (int)(span / 10000u), "100 Hz thread, frames of %.3f ms: %d ticks in %.3f s (want %d)",
+              (double)steps[i] / 1000.0, n, (double)span / 1e6, (int)(span / 10000u));
+    }
 }
 
 /* ======================= M2-10: small imports ======================= */
@@ -886,6 +922,7 @@ int main(int argc, char **argv){
 #ifndef WIN32_UNIT_UG2
     if (!strcmp(mode, "hle")){
         test_timers(&t);
+        test_hz100(&t);
         test_small(&t);
         test_voice(&t);
         test_fatal(&t);

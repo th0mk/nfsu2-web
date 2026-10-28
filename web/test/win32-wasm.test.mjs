@@ -64,11 +64,11 @@ const TASK_IMPORTS = ['CreateWaitableTimerA', 'SetWaitableTimer', 'GetSystemTime
 
 test('win32_unit: the import table\'s stdcall counts are argcount\'s KNOWN ones and the lifts\'', () => {
   const unit = unitTable(), known = knownCounts();
-  assert.equal(unit.size, 52, 'the table parsed');
+  assert.equal(unit.size, 51, 'the table parsed');
   for (const [name, { dll, nargs }] of unit) {
     const k = keyOf(name, dll);
-    if (known.has(k)) assert.equal(nargs, known.get(k), `${k}: KNOWN has ${known.get(k)}`);
-    else assert.equal(k, 'CancelWaitableTimer', `${k} is not in KNOWN (only CancelWaitableTimer, which no game imports, may be missing)`);
+    assert.ok(known.has(k), `${k} is in KNOWN`);
+    assert.equal(nargs, known.get(k), `${k}: KNOWN has ${known.get(k)}`);
   }
   assert.equal(TASK_IMPORTS.length, 42);           // 4 for the timer thread, 16 small ones, DSOUND #6, 21 winmm
   for (const k of TASK_IMPORTS) assert.ok([...unit].some(([n, e]) => keyOf(n, e.dll) === k), `${k} is in the unit table`);

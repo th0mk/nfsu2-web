@@ -1149,13 +1149,13 @@ void win32_signal_event(uint32_t h){
 }
 
 /* ---- waitable timers -----------------------------------------------------
- * CreateWaitableTimerA, SetWaitableTimer, CancelWaitableTimer: Most Wanted's
- * 100 Hz thread (0x7EC601, GAME.md 6.1) waits on a manual-reset timer that it
- * re-arms with absolute FILETIME due times.  The timers run on the virtual
- * clock (host_us), as the WINMM timer below does, and so does the guest's
- * system time (vsys_ft: GetSystemTime, SystemTimeToFileTime): an absolute due
- * time made from GetSystemTime and a relative one (negative, 100 ns units)
- * land on one scale, and a due time in the past fires at once.
+ * CreateWaitableTimerA, SetWaitableTimer (no game imports CancelWaitableTimer):
+ * Most Wanted's 100 Hz thread (0x7EC601, GAME.md 6.1) waits on a manual-reset
+ * timer that it re-arms with absolute FILETIME due times.  The timers run on
+ * the virtual clock (host_us), as the WINMM timer below does, and so does the
+ * guest's system time (vsys_ft: GetSystemTime, SystemTimeToFileTime): an
+ * absolute due time made from GetSystemTime and a relative one (negative,
+ * 100 ns units) land on one scale, and a due time in the past fires at once.
  *
  * Nothing drives a timer.  Whoever looks at it (a wait, SetWaitableTimer)
  * brings it up to date first (timer_poll); a periodic timer's missed periods
@@ -1219,12 +1219,12 @@ static uint32_t timer_wait(Obj *o, uint32_t ms){
  * sets come here; the others keep the polling loop of win32_ext_call as it
  * always was.  Before the first CreateWaitableTimerA no set is even looked at
  * (g_timers_made): UG2 imports no timers, so its waits run as they always did.
- * Windows' rules: any (the
- * lowest index that is ready) or all at once, WAIT_TIMEOUT after ms of real
- * time, WAIT_FAILED for a handle that is no object, a repeated one in a wait
- * for all, or one closed meanwhile.  Every object is looked at under its own
- * lock (all of them, in address order, for a wait for all), then the thread
- * sleeps at most 1 ms, less up to a timer's due time.  Guest lock released. */
+ * Windows' rules: any (the lowest index that is ready) or all at once,
+ * WAIT_TIMEOUT after ms of real time, WAIT_FAILED for a handle that is no
+ * object, a repeated one in a wait for all, or one closed meanwhile.  Every
+ * object is looked at under its own lock (all of them, in address order, for
+ * a wait for all), then the thread sleeps at most 1 ms, less up to a timer's
+ * due time.  Guest lock released. */
 static uint32_t g_timers_made;                   /* CreateWaitableTimerA's, under the guest lock */
 static int wfmo_has_timer(uint32_t cnt, uint32_t parr){
     if (!g_timers_made) return 0;
@@ -1862,10 +1862,6 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
             r = 1;
             if (A(c,5)) win32_set_last_error(c, 50u);   /* fResume: ERROR_NOT_SUPPORTED, and still TRUE (no power management) */
         } }
-    else if (!strcmp(n,"CancelWaitableTimer")){        /* (hTimer): disarm; the signaled state stays as it is */
-        Obj *o = obj_get(A(c,0));
-        if (!o || o->kind != OB_TIMER){ win32_set_last_error(c, 6u); r = 0; }
-        else { pthread_mutex_lock(&o->mtx); o->t_armed = 0; pthread_mutex_unlock(&o->mtx); r = 1; } }
     else if (!strcmp(n,"WaitForSingleObject")){
         Obj*o=obj_get(A(c,0)); uint32_t ms=A(c,1);
         { uint32_t h=A(c,0);
