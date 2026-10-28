@@ -28,6 +28,9 @@
  * download a frozen game's log before the limit (2026-10-24: 13 s after the
  * last frame, no report), so the log gets how long ago the last frame was
  * and, after 3 s or more, the report then. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE                    /* glibc's pthread_setname_np (native tests) */
+#endif
 #include "cpu.h"
 #include "game.h"
 #include <pthread.h>
@@ -153,7 +156,11 @@ void watchdog_log_download(void){
 
 static void *wd_main(void *arg){
     double lim = *(double *)arg;
-    pthread_setname_np("watchdog");
+#ifdef __linux__
+    pthread_setname_np(pthread_self(), "watchdog");
+#else
+    pthread_setname_np("watchdog");    /* macOS's, and the web build's (wasm_plat.h) */
+#endif
     int reported = 0;
     for (;;){
         sleep(1);

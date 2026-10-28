@@ -687,7 +687,8 @@ static int build_deps(fxm_effect *e){
         const fx2_pass *ps = NODE(e, id)->pass;
         for (uint32_t k = 0; k < ps->nstates; k++)
             if (dep_state(e, &ps->states[k], 1, id)) return -1;
-        qsort(e->deps + d0, e->nd - d0, sizeof *e->deps, cmp_u32);
+        if (e->nd - d0 > 1)            /* none yet: deps may still be NULL */
+            qsort(e->deps + d0, e->nd - d0, sizeof *e->deps, cmp_u32);
         NODE(e, id)->dep0 = d0; NODE(e, id)->ndeps = e->nd - d0;
     }
     free(e->mark);
@@ -870,7 +871,9 @@ uint32_t fxm_by_semantic(const fxm_effect *e, uint32_t parent, const uint8_t *s,
          * with the array's semantic); the model stops at the elements */
         const node *p = nget(e, parent);
         if (!p || !named(p) || p->n.cls != FX2_C_STRUCT) return 0;
-        ids = e->kids + p->kid0; count = p->n.members < p->nkids ? p->n.members : p->nkids;
+        count = p->n.members < p->nkids ? p->n.members : p->nkids;
+        if (!count) return 0;                  /* none: kids may still be NULL */
+        ids = e->kids + p->kid0;
     }
     for (uint32_t i = 0; i < count; i++){
         fx2_str sem = NODE(e, ids[i])->n.sem;

@@ -371,7 +371,11 @@ void cpuid_shim(CPU *c){
  * QPC + rdtsc + Sleep) found ~0 MHz and on the first run set ALL graphics
  * settings to the lowest (g_PerformanceLevel=0, 640x480).
  * Can be changed with NFSU2_TSC_MHZ. */
+#ifdef __linux__
+#include "web/compat/mach/mach_time.h"     /* native Linux (tests): the web build's monotonic clock */
+#else
 #include <mach/mach_time.h>
+#endif
 uint64_t rdtsc_shim(void){
     static mach_timebase_info_data_t tb; static uint64_t mhz = 0;
     if (!tb.denom){ mach_timebase_info(&tb);

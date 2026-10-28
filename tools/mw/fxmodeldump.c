@@ -434,7 +434,7 @@ static void free_traced(FILE *f, mfx *x, uint32_t i){
     droplist d = { NULL, 0, 0 };
     fxm_effect_free(x[i].m, collect, &d);
     x[i].m = NULL;
-    qsort(d.p, d.n, 4, cmp_drop);
+    if (d.n > 1) qsort(d.p, d.n, 4, cmp_drop);          /* none dropped: d.p is NULL */
     fprintf(f, "free %u drops %u", i, d.n);
     for (uint32_t k = 0; k < d.n; k++) fprintf(f, " %08x", d.p[k]);
     fputc('\n', f);
