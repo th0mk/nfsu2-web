@@ -527,14 +527,14 @@ A preshader is a bytecode with its own version token, the comments below, and th
 | CTAB | The inputs: constants in registers, matched to effect parameters by name (§4.2) | **V**, W, K |
 | CLIT (`0x54494C43`) | A count n, then n IEEE doubles (8 bytes each): the literal table | **V** (the comment holds exactly 1 + 2n dwords after its FOURCC), W, K |
 | FXLC (`0x434C5846`) | An instruction count m, m instructions, then a trailer | **V**, W, K |
-| Trailer | Two dwords, `0xF0F0F0F0 0x0F0F0F0F`, after the last instruction. Neither Wine nor recomp-kit reads them | **V** (all 616) |
+| Trailer | Two dwords, `0xF0F0F0F0 0x0F0F0F0F`, after the last instruction. Neither Wine nor recomp-kit reads them; d3dx9_26's own compiler writes them and its loader and interpreter never read them (fx-preshader.md §1) | **V** (all 616) |
 
 **Instruction**:
 
 | Word | Layout | Src |
 |---|---|---|
-| Token | Bits 0..15 component count (1..4); 16..19 zero; 20..30 opcode; 31 scalar flag | **V** (bits 16..19 are 0 in all 739 instructions), W, K |
-| Input count k | Must equal the opcode's (D3DX picks the table row by opcode and count) | **V**, W |
+| Token | Bits 0..15 component count (1..4); 16..19 zero; 20..30 opcode; 31 scalar flag. d3dx9_26 reads bits 0..19 as the count (fx-preshader.md §2.3) | **V** (bits 16..19 are 0 in all 739 instructions), W, K |
+| Input count k | Wine requires the opcode's own count (it picks the table row by opcode and count); d3dx9_26 takes any count and reads fixed input slots (fx-preshader.md §2.3, §3.3) | **V**, W |
 | Operands | k inputs, then one output | **V**, W, K |
 
 **Operand**: a flag word, then registers of two words each (table code, offset):
@@ -583,16 +583,20 @@ component = offset % 4, except where noted.
 | 0x204 | 2 | `add` | |
 | 0x205 | 2 | `mul` | |
 | 0x206 | 2 | `atan2` | |
-| 0x208 | 2 | `div` | Wine returns 0 ("according to the test results"; fxc emits rcp and mul instead) |
+| 0x208 | 2 | `div` | Wine returns 0 ("according to the test results"; fxc emits rcp and mul instead); d3dx9_26's interpreter has no case for it and writes nothing (fx-preshader.md §3.2) |
 | 0x300 | 3 | `cmp` | x ≥ 0 ? y : z (K) |
-| 0x301 | 3 | `movc` | x ≠ 0 ? y : z. **K only**: not in Wine's table |
+| 0x301 | 3 | `movc` | x ≠ 0 ? y : z. **K only**: not in Wine's table; d3dx9_26 writes nothing (fx-preshader.md §3.2) |
 | 0x500 | 2 | `dot` | all components at once: the sum of the products of the n components, written to component 0 (W) |
-| 0x70e | 6 | `dotswiz6` | per output component j, the 3-component dot of inputs (0,3), (1,4), (2,5) at component j (W) |
-| 0x70e | 8 | `dotswiz8` | the same with 4 components: inputs (0,4), (1,5), (2,6), (3,7) (W) |
+| 0x70e | 6 | `dotswiz6` | W: per output component j, the 3-component dot of inputs (0,3), (1,4), (2,5) at component j. **d3dx9_26 differs** (fx-preshader.md §3.2): output component 0 only, the sum of input i times input ⌊k/2⌋ + i at component 0 for i < ⌊k/2⌋, whatever the component count |
+| 0x70e | 8 | `dotswiz8` | the same with 4 components: inputs (0,4), (1,5), (2,6), (3,7) (W); d3dx9_26 as the row above |
 
-With the scalar flag, input 0 is read at component 0 for every output component (W, K). The operations work on
-doubles; the literal table holds doubles, while Wine keeps inputs, temporaries and outputs as floats (W; K keeps
-temporaries as doubles). The evaluator's exact results are M5-03's, checked against the oracle.
+With the scalar flag, input 0 is read at component 0 for every output component (W, K). **d3dx9_26 differs**
+(fx-preshader.md §3.2): only min, max, lt, ge, add, mul, atan2 and dot (0x200..0x206, 0x500) have a scalar form;
+add, mul and dot load input 1's component j and take input 0's component 0 as the memory operand; with the flag every
+other opcode, mov and the noise opcodes included, does nothing. The operations work on doubles; the literal table
+holds doubles, while Wine keeps inputs, temporaries and outputs as floats (W; K keeps temporaries as doubles). The
+rows above are W's and K's; what d3dx9_26 computes, every opcode and form checked against the oracle, is M5-03's:
+`docs/mw/fx-preshader.md` §3 (it also has 0x502 and 0x711, noise; `div` and `movc` do nothing there).
 
 ### 4.4 PRES and PRSI in a shader (W; not in MW)
 
@@ -935,10 +939,11 @@ Run on 2026-10-26 over the 31 files `tools/fxres.py` wrote. C1..C7 and C9 used a
   MW.
 - **d3dx9_26's rows 89 and 102** (§3.5): whether its runtime uses the table's value (STENCILFAIL, BLENDOP) instead of
   D3D9's (CCW_STENCILFAIL, BLENDOPALPHA). Not used by MW.
-- **The FXLC trailer** `0xF0F0F0F0 0x0F0F0F0F` (§4.3): constant in MW, read by neither Wine nor recomp-kit; its meaning
-  is unknown.
+- **The FXLC trailer** `0xF0F0F0F0 0x0F0F0F0F` (§4.3): constant in MW, read by neither Wine nor recomp-kit. Settled by
+  M5-03: d3dx9_26's compiler writes it and nothing reads it (fx-preshader.md §1).
 - **PRSI** (§4.4): no source gives its layout and MW has none.
 - **CTAB default values** (§4.2): their layout is not decoded; the dump prints only whether one is present.
-- **`movc` (0x301)** comes from recomp-kit only; Wine's table does not have it. Not in MW.
+- **`movc` (0x301)** comes from recomp-kit only; Wine's table does not have it. Settled by M5-03: d3dx9_26 executes
+  nothing for it (fx-preshader.md §3.2). Not in MW.
 - **The INT 1×1 TEXTURETRANSFORM value** (§3.4): how D3DX applies a state whose value type does not fit the table
   (M5-04/05, against the oracle).
