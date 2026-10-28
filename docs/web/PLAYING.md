@@ -169,7 +169,7 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
 | Group | Settings |
 |---|---|
 | Online | its own section under Saves: how many play on this server now, free roam with others, your name (in free roam and online), crews (with their colours), your horn, room, ghost mode, the game's Online mode (on by default); more: the free-roam network |
-| Game | language, movies, subtitles, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency |
+| Game | language, voices, movies, subtitles, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency |
 | Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout, movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter |
 | Controller | rumble; more: controller on or off, menu buttons, dead zones |
 
@@ -181,6 +181,9 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
   The start page follows the same choice (the list at its top sets it too): its text, settings and messages in
   that language, English until you pick another. Its problems and errors carry a short code (`GPU-ADAPTER-WIN`),
   the same in every language, to quote when you ask for help; the log stays English.
+- **Voices and movies:** Dubbed (the default) plays with the language pack's dubbed voices and movies in languages
+  that have a dub (French, German, Italian, Spanish, Japanese, Russian, and Portuguese with ZANIT's dubbing). Original
+  plays the base English voices and movies with the chosen language's text.
 - **Subtitles:** on by default: the movies' lines as text (the PSA, the tutorials and the story) in every language
   but French, German, Italian and Spanish, whose movies are dubbed. English's are VileStuff's
   [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), with who says each line, where the server has its

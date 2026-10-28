@@ -21,18 +21,18 @@ const STOP_WAIT_MS = 3000;
 
 /** Whether every movie a game in this language can play is in this browser's cache (they are not downloaded ahead:
  *  only one that played is), in VP6 or, where the browser plays them in AV1 (av1), their AV1 copies. */
-export async function moviesKept(language: string, av1: boolean): Promise<boolean> {
+export async function moviesKept(language: string, av1: boolean, voices = 'dubbed'): Promise<boolean> {
   const r = await fetch(MANIFEST_URL, { cache: 'no-cache' });
   if (!r.ok) return false;
-  const s = await scanCache(languageMovies(manifestFiles(await r.json() as Manifest), language, av1));
+  const s = await scanCache(languageMovies(manifestFiles(await r.json() as Manifest), language, av1, voices));
   return s.have >= s.total;
 }
 
 /** How much of what the download fetches (all but the movies) this browser keeps: bytes in the cache, of their total. */
-export async function gameDataKept(language: string, texpack: string): Promise<{ have: number; total: number }> {
+export async function gameDataKept(language: string, texpack: string, voices = 'dubbed'): Promise<{ have: number; total: number }> {
   const r = await fetch(MANIFEST_URL, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const s = await scanCache(aheadFiles(manifestFiles(await r.json() as Manifest), language, texpack));
+  const s = await scanCache(aheadFiles(manifestFiles(await r.json() as Manifest), language, texpack, voices));
   return { have: s.have, total: s.total };
 }
 
@@ -43,9 +43,9 @@ export class Predownload {
   private samples: { t: number; have: number }[] = [];
 
   /** language: the game's language now (settings.ini): only its language pack is fetched; texpack: the texture
-   *  pack picked ('' for none), the only one fetched */
+   *  pack picked ('' for none), the only one fetched; voices: 'dubbed' | 'original' */
   constructor(private onChange: (s: DownloadStatus) => void, private log: (line: string) => void, readonly language: () => string,
-              readonly texpack: () => string) {}
+              readonly texpack: () => string, readonly voices: () => string = () => 'dubbed') {}
 
   get running() { return this.w !== null; }
 
@@ -55,7 +55,7 @@ export class Predownload {
     this.samples = [];
     w.onmessage = (e: MessageEvent<FromPredownload>) => this.message(w, e.data);
     w.onerror = e => this.message(w, { t: 'error', msg: e.message || 'it stopped unexpectedly' });
-    w.postMessage({ t: 'start', manifestUrl: MANIFEST_URL, dataBase: DATA_BASE, language: this.language(), texpack: this.texpack() } satisfies ToPredownload);
+    w.postMessage({ t: 'start', manifestUrl: MANIFEST_URL, dataBase: DATA_BASE, language: this.language(), texpack: this.texpack(), voices: this.voices() } satisfies ToPredownload);
     this.set({ state: 'running', have: 0, total: 0, rate: 0, error: undefined });     // counted again by the worker
     this.log('[app] predownload: started');
   }

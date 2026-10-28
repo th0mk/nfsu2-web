@@ -33,14 +33,26 @@ export const manifestFiles = (m: Manifest): DataFile[] => m.files.filter(f => !f
 const parts = (f: DataFile) => f.path.toLowerCase().split('/');
 /** The files a game in this language reads: the folder's, but where its language pack (LANGPACKS/<language>,
  *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs
- *  (TEXPACKS/<name>.pak, runtime/web/texrep_web.c) only the one picked (texpack, '' for none). */
-function gameFiles(files: DataFile[], language: string, texpack: string): DataFile[] {
-  const own = new Set(files.filter(f => { const p = parts(f); return p[0] === 'langpacks' && p[1] === language; })
-    .map(f => parts(f).slice(2).join('/')));
+ *  (TEXPACKS/<name>.pak, runtime/web/texrep_web.c) only the one picked (texpack, '' for none).  With voices 'original',
+ *  speech banks and dubbed cutscenes from the language pack are ignored so original English audio plays. */
+export function gameFiles(files: DataFile[], language: string, texpack: string, voices = 'dubbed'): DataFile[] {
+  const skipDub = voices === 'original';
+  const isDubFile = (p: string[]) => p[2] === 'speech' || p[2] === 'movies';
+  const own = new Set(files.filter(f => {
+    const p = parts(f);
+    if (p[0] !== 'langpacks' || p[1] !== language) return false;
+    if (skipDub && isDubFile(p)) return false;
+    return true;
+  }).map(f => parts(f).slice(2).join('/')));
   return files.filter(f => {
     const p = parts(f);
     if (p[0] === 'texpacks') return p.length === 2 && p[1] === `${texpack}.pak`;
-    return p[0] === 'langpacks' ? p[1] === language : !own.has(p.join('/'));
+    if (p[0] === 'langpacks') {
+      if (p[1] !== language) return false;
+      if (skipDub && isDubFile(p)) return false;
+      return true;
+    }
+    return !own.has(p.join('/'));
   });
 }
 const isMovie = (f: DataFile) => { const p = parts(f); return (p[0] === 'langpacks' ? p[2] : p[0]) === 'movies'; };
@@ -54,12 +66,12 @@ export function av1Path(path: string): string | null {
 /** What "Preload the game data" fetches: all but the movies (MOVIES/, a third of the folder in VP6 video that
  *  does not compress, and their AV1 copies).  They stream as they play, and with Movies off the game never opens
  *  them. */
-export const aheadFiles = (files: DataFile[], language: string, texpack = '') =>
-  gameFiles(files, language, texpack).filter(f => !isMovie(f));
+export const aheadFiles = (files: DataFile[], language: string, texpack = '', voices = 'dubbed') =>
+  gameFiles(files, language, texpack, voices).filter(f => !isMovie(f));
 /** The movies a game in this language can open: its VP6 files, or where it plays AV1 (av1) their AV1 copies, the
  *  VP6 file where a movie has none (as the I/O worker opens them, io-worker.ts dataFile). */
-export function languageMovies(files: DataFile[], language: string, av1 = false): DataFile[] {
-  const all = gameFiles(files, language, '').filter(isMovie), byPath = new Map(all.map(f => [f.path.toLowerCase(), f]));
+export function languageMovies(files: DataFile[], language: string, av1 = false, voices = 'dubbed'): DataFile[] {
+  const all = gameFiles(files, language, '', voices).filter(isMovie), byPath = new Map(all.map(f => [f.path.toLowerCase(), f]));
   return all.filter(f => av1Path(f.path) !== null).map(f => (av1 && byPath.get(av1Path(f.path)!.toLowerCase())) || f);
 }
 export const dataUrl = (base: string, path: string) => base + path.split('/').map(encodeURIComponent).join('/');

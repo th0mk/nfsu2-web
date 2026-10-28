@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """The language packs: LANGPACKS/<language> in the game folder, from the
 "Multi 13 languages" mod for NFSU2 (KyoriAsh, nfsmods.xyz/mod/5749), from
-TraduMix's and MixMods' Brazilian Portuguese translation, from PLProjekt's
-Polish one, from VileStuff's English subtitles and from muntazam's Turkish
-translation.
+TraduMix's and MixMods' Brazilian Portuguese translation (and ZANIT's dubbing),
+from PLProjekt's Polish one, from VileStuff's English subtitles and from
+muntazam's Turkish translation.
 
     tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>]
-                       [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]
+                       [--ptbr-dub <dub folder>] [--pl <installer>] [--subs <subtitles folder>]
+                       [--tr <translation folder>]
 
 Each source builds its own languages' packs; the others are left as they are.
 
@@ -37,11 +38,13 @@ of the same path.
 <translation folder> is the Brazilian Portuguese translation's archive
 extracted ("Tradução PT-BR, V1.1 (TraduMix e MixMods)", joao13traducoes.com;
 its password is "João13"), or any folder below which it has
-LANGUAGES/English.bin.  Portuguese takes English's place as Russian does: its
-text (accented in the game's own fonts) and credits, and the game folder's own
-Brazilian Portuguese memory-card texts ("Carregado." for "Load complete.").
-The rest of the archive is the Extra Options mod, for its ShowSubs: the port
-shows the subtitles itself (runtime/language.c).
+LANGUAGES/English.bin.  Optionally includes the Brazilian Portuguese dubbing
+by ZANIT (speech/UG2_Speech.big, MOVIES/*.vp6), or pass it via --ptbr-dub.
+Portuguese takes English's place as Russian does: its text (accented in the
+game's own fonts) and credits, and the game folder's own Brazilian Portuguese
+memory-card texts ("Carregado." for "Load complete."), along with dubbed
+voices and movies.  The rest of the archive is the Extra Options mod, for its
+ShowSubs: the port shows the subtitles itself (runtime/language.c).
 
 <installer> is either installer of the Polish translation (v1.1, 2009,
 NFSU2PLv1.1US.exe or NFSU2PLv1.1UK.exe, from its archive at portal24h.pl), or
@@ -230,17 +233,31 @@ def multi13(mod, game):
         done(p, lang)
 
 
-def ptbr(src, game):
-    root = next((d for d, _, _ in os.walk(src) if find(d, 'LANGUAGES/English.bin')), None)
-    if not root: sys.exit(f'{src}: no LANGUAGES/English.bin below it, not the translation')
-    missing = [s for s, _ in PTBR if not find(root, s)]
-    if missing: sys.exit(f'{root}: the translation is not all there, missing:\n  ' + '\n  '.join(missing))
+def ptbr(src, game, dub=None):
     p = Pack(game, 'portuguese')
-    if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
-        sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
-    for s, rel in PTBR: p.add_file(find(root, s), rel)
-    loc = find(game, 'memcard/LOCALE_BRAZILIAN_PORTUGUESE.loc')
-    if loc: p.add_file(loc, 'memcard/LOCALE_ENGLISH.loc')
+    if src:
+        root = next((d for d, _, _ in os.walk(src) if find(d, 'LANGUAGES/English.bin')), None)
+        if not root: sys.exit(f'{src}: no LANGUAGES/English.bin below it, not the translation')
+        missing = [s for s, _ in PTBR if not find(root, s)]
+        if missing: sys.exit(f'{root}: the translation is not all there, missing:\n  ' + '\n  '.join(missing))
+        if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
+            sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
+        for s, rel in PTBR: p.add_file(find(root, s), rel)
+        loc = find(game, 'memcard/LOCALE_BRAZILIAN_PORTUGUESE.loc')
+        if loc: p.add_file(loc, 'memcard/LOCALE_ENGLISH.loc')
+
+    dub_dir = dub or (src if (src and (find(src, 'speech') or find(src, 'Dublagem/speech'))) else None)
+    if dub_dir:
+        sdir = find(dub_dir, 'speech') or find(dub_dir, 'Dublagem/speech')
+        if sdir:
+            for n in sorted(os.listdir(sdir)):
+                if n.lower().startswith('ug2_speech'):
+                    p.add_file(os.path.join(sdir, n), f'speech/{n}')
+        mdir = find(dub_dir, 'MOVIES') or find(dub_dir, 'Dublagem/MOVIES')
+        if mdir:
+            for n in sorted(os.listdir(mdir)):
+                if n.lower().endswith('.vp6'):
+                    p.add_file(os.path.join(mdir, n), f'MOVIES/{n}')
     done(p, 'portuguese')
 
 
@@ -365,18 +382,19 @@ def subs(src, game):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]')
+    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--ptbr-dub <dub folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]')
     ap.add_argument('game')
     ap.add_argument('--multi13', metavar='MOD', help='the Multi 13 languages mod, every archive extracted')
     ap.add_argument('--ptbr', metavar='FOLDER', help='the Brazilian Portuguese translation, extracted')
+    ap.add_argument('--ptbr-dub', metavar='FOLDER', help='the Brazilian Portuguese dubbing (ZANIT), extracted')
     ap.add_argument('--pl', metavar='INSTALLER', help='the Polish translation\'s installer (or its folder), never run')
     ap.add_argument('--subs', metavar='FOLDER', help='the English Subtitles Fixed mod, extracted')
     ap.add_argument('--tr', metavar='FOLDER', help='the Turkish translation, its installer extracted (innoextract), never run')
     a = ap.parse_args()
-    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr): sys.exit(__doc__)
+    if not (a.multi13 or a.ptbr or a.ptbr_dub or a.pl or a.subs or a.tr): sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
     if a.multi13: multi13(a.multi13, a.game)
-    if a.ptbr: ptbr(a.ptbr, a.game)
+    if a.ptbr or a.ptbr_dub: ptbr(a.ptbr, a.game, dub=a.ptbr_dub)
     if a.pl: pl(a.pl, a.game)
     if a.subs: subs(a.subs, a.game)
     if a.tr: tr(a.tr, a.game)

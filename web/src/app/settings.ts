@@ -157,6 +157,8 @@ export const KEYS: readonly KeyDef[] = [
   // the menus' and HUD's textures: a texture pack in place of the game's (runtime/web/texrep_web.c; the page fetches
   // ahead only the one picked: datacache.ts).  Not in bundle.m's table: the Mac's packs are "textures"
   { key: 'ui_textures', env: 'NFSU2_UI_TEXTURES', kind: 'enum', vals: 'original|uhud', scope: 'web', device: true },
+  // voices and cutscenes in languages with a dub (dubbed by default; original = English audio with localized text)
+  { key: 'voices', env: 'NFSU2_VOICES', kind: 'enum', vals: 'dubbed|original', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -209,6 +211,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # with who says each line, where the server has its language pack.
 # [NFSU2_SUBTITLES]
 #subtitles = on
+
+# Voices and cutscene movies in languages with a dub (Portuguese, French,
+# German, Italian, Spanish, Japanese, Russian): dubbed = use the language
+# pack's dubbed voices and movies; original = play English voices and movies
+# with the chosen language's text.  [NFSU2_VOICES]
+#voices = dubbed
 
 # Sound output.  [NOSOUND, inverted]
 #sound = on

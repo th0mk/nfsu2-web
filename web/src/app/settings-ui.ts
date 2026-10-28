@@ -63,6 +63,7 @@ const GROUPS: Group[] = [
   ] },
   { title: N('Game'), more: N('More game settings'), items: [
     { key: 'language', label: N('Language'), help: N('The game\'s menus and subtitles, the voices in languages with a dub, and this page.'), c: { t: 'select', opts: LANGUAGE_OPTS } },
+    { key: 'voices', label: N('Voices and movies'), help: N('Dubbed: voices and cutscene movies in languages with a dub (including Brazilian Portuguese PT-BR by ZANIT). Original: original English voices and movies with the chosen language.'), c: { t: 'seg', opts: [['dubbed', N('Dubbed')], ['original', N('Original')]] } },
     { key: 'movies', label: N('Movies'), help: N('Intro, story and FMV movies.'), c: { t: 'switch' } },
     { key: 'subtitles', label: N('Subtitles'), help: N('The movies\' lines as text. English\'s are VileStuff\'s English Subtitles Fixed, with who says each line.'), link: { text: N('English Subtitles Fixed'), href: 'https://nfsmods.xyz/mod/5286' }, c: { t: 'switch' } },
     { key: 'autosave', label: N('Autosave'), help: N('Sets each profile\'s Save option in the game to Autosave once, so races, purchases and changes are saved without asking. Prompt or Off chosen afterwards in the game\'s Options, Gameplay stays.'), c: { t: 'switch' } },
@@ -554,7 +555,14 @@ export class SettingsPanel {
     label.textContent = t(it.label);
     if (label instanceof HTMLLabelElement) label.htmlFor = id;
     const help = document.createElement('p'); help.className = 'set-help'; help.id = `${id}-help`;
-    const helpText = t(it.help), linkText = it.link ? t(it.link.text) : '';
+    let helpText = t(it.help);
+    if (it.key === 'voices') {
+      const curLang = this.current('language').toLowerCase();
+      if (curLang === 'portuguese') {
+        helpText = t(N('Dubbed: Brazilian Portuguese (PT-BR) voices and cutscenes by ZANIT. Original: original English voices and movies with Portuguese text.'));
+      }
+    }
+    const linkText = it.link ? t(it.link.text) : '';
     const at = it.link ? helpText.indexOf(linkText) : -1;
     if (at < 0) help.textContent = helpText;
     else {
@@ -576,6 +584,13 @@ export class SettingsPanel {
       const seg = document.createElement('div'); seg.className = 'seg';
       seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-labelledby', label.id);
       const opts = [...c.opts];
+      if (it.key === 'voices') {
+        const curLang = this.current('language').toLowerCase();
+        if (curLang === 'portuguese') {
+          const dubbedIdx = opts.findIndex(([v]) => v === 'dubbed');
+          if (dubbedIdx >= 0) opts[dubbedIdx] = ['dubbed', 'Dubbed (PT-BR)'];
+        }
+      }
       if (cur && !opts.some(([v]) => v.toLowerCase() === cur.toLowerCase())) opts.push([cur, cur]);   // a value set in the file
       opts.forEach(([v, l], i) => {
         const o = document.createElement('label'); o.className = 'opt';
@@ -597,7 +612,10 @@ export class SettingsPanel {
         o.selected = v.toLowerCase() === (cur || '').toLowerCase();
         sel.append(o);
       }
-      sel.onchange = () => void this.put(it.key, sel.value);
+      sel.onchange = () => {
+        void this.put(it.key, sel.value);
+        if (it.key === 'language') this.rerow('voices');
+      };
       ctl.append(sel);
       if (c.preview) {
         // plays what the list shows (also before it is saved); a second press stops it
