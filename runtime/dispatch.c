@@ -88,13 +88,20 @@ static void patch_apply(void){
         for (uint32_t i = 0; i < g_fn_count; i++)
             if (g_fn_addr[i] - TEXT_BASE < TEXT_SIZE && diag_watched(g_fn_addr[i])) g_dtab[g_fn_addr[i] - TEXT_BASE] = 0;
 }
-void dispatch_patch(uint32_t a, guest_fn f){
+/* 1 when the patch is taken; 0, logged, when the address is not a guest
+ * function's or the table is full (the caller keeps its own path then) */
+int dispatch_patch_take(uint32_t a, guest_fn f){
     if (a >= 0xE0000000u){        /* the order in dispatch_indirect relies on this */
         fprintf(stderr,"dispatch_patch: address %08x outside the text range, ignored\n", a);
-        return; }
-    if (g_patch_n < PATCH_MAX){ g_patch[g_patch_n].addr=a; g_patch[g_patch_n].fn=f; g_patch_n++; }
+        return 0; }
+    if (g_patch_n >= PATCH_MAX){
+        fprintf(stderr,"dispatch_patch: the table is full (%d patches), %08x not patched\n", PATCH_MAX, a);
+        return 0; }
+    g_patch[g_patch_n].addr=a; g_patch[g_patch_n].fn=f; g_patch_n++;
     if (g_dtab_ready) patch_apply();
+    return 1;
 }
+void dispatch_patch(uint32_t a, guest_fn f){ (void)dispatch_patch_take(a, f); }
 static guest_fn patch_at(uint32_t addr){
     for (int i = 0; i < g_patch_n; i++) if (g_patch[i].addr == addr) return g_patch[i].fn;
     return 0;

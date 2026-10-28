@@ -38,8 +38,10 @@
  *
  * The binding: each import's IAT slot holds the address of the exe's own
  * thunk for it (0x7E7D58-0x7E7DA0, `jmp [slot]`), and that thunk's dispatch
- * entry is the answer here (dispatch_patch): the game's call goes thunk ->
- * one table lookup -> the answer, as fast as a call into lifted code.
+ * entry is the answer here (dispatch_patch_take): the game's call goes thunk
+ * -> one table lookup -> the answer, as fast as a call into lifted code.  A
+ * patch the table does not take leaves the slot as it was: bound to its own
+ * thunk, the lifted `jmp [slot]` would call itself forever.
  * NFSMW_D3DX_MATH=oracle in an oracle build leaves them to the oracle (A/B).
  *
  * Checked against the oracle's lifted kernels on 10,000+ inputs each
@@ -53,7 +55,7 @@
 #pragma clang fp contract(off)
 #pragma STDC FP_CONTRACT OFF
 
-void dispatch_patch(uint32_t a, void (*f)(CPU *));
+int dispatch_patch_take(uint32_t a, void (*f)(CPU *));
 uint64_t g_d3dxmath_exact;                     /* outputs with a NaN: the lane-by-lane pass ran (tests) */
 
 typedef float v4 __attribute__((vector_size(16), aligned(4)));
@@ -401,7 +403,9 @@ const D3dxMathFn d3dxmath_fns[D3DXMATH_COUNT] = {
 
 /* game_mw.c's install, after win32_init (the slots hold IMP_MAGIC + index) and before module.c's
  * module_load_imports, which leaves a slot bound here to this answer.  Each thunk is checked first:
- * `jmp [slot]` (FF 25 <slot>) */
+ * `jmp [slot]` (FF 25 <slot>).  A slot is bound only once the dispatch table took its thunk's patch;
+ * one it did not take stays on IMP_MAGIC + index: the oracle's export where one is linked, else an
+ * [hle] UNIMPLEMENTED line at its first call */
 int d3dxmath_install(int oracle_linked){
     const char *e = getenv("NFSMW_D3DX_MATH");
     if (e && !strcmp(e, "oracle")){
@@ -418,8 +422,11 @@ int d3dxmath_install(int oracle_linked){
             fprintf(stderr, "[d3dx] %s: no `jmp [0x%08x]` at 0x%08x, left unanswered\n", f->name, f->iat, f->thunk);
             continue;
         }
+        if (!dispatch_patch_take(f->thunk, f->fn)){
+            fprintf(stderr, "[d3dx] %s: the dispatch table took no patch at 0x%08x, its import left unbound\n", f->name, f->thunk);
+            continue;
+        }
         MR32(f->iat) = f->thunk;
-        dispatch_patch(f->thunk, f->fn);
         n++;
     }
     fprintf(stderr, "[d3dx] %d of %d D3DX math imports answered natively\n", n, D3DXMATH_COUNT);

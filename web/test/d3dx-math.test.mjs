@@ -57,7 +57,10 @@ test('the native D3DX math alone: known answers, stdcall on every case, the orac
   const m = /d3dxmath_unit: (\d+) passed, (\d+) failed/.exec(r.out);
   assert.ok(m, 'ran to the end');
   assert.equal(+m[2], 0, 'no failed check');
-  assert.ok(+m[1] >= 41, `every check ran (${m[1]})`);
+  assert.ok(+m[1] >= 42, `every check ran (${m[1]})`);
+  // a patch the dispatch table does not take leaves its slot on IMP_MAGIC + index, not on its own thunk
+  assert.match(r.out, /^T binding: 10 of 11 answered, 10 patches taken, Normalize's slot 0xf0000108$/m);
+  assert.match(r.err, /^\[d3dx\] D3DXVec3Normalize: the dispatch table took no patch at 0x007e7d9a, its import left unbound$/m);
   assert.equal(r.status, 0);
   assert.deepEqual(digests(r.out), DIGESTS);
 });

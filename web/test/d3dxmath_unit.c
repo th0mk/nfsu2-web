@@ -4,7 +4,7 @@
  *   d3dxmath_unit.wasm
  *
  * Each answer is called as speed.exe's thunk calls it (stdcall, the return
- * address at esp).  Two parts:
+ * address at esp).  Three parts:
  *   - known answers: results that follow from the kernels' operations by hand
  *     (exact products, the default NaN of 0 x inf, which NaN operand an SSE
  *     operation keeps, the operand order D3DXVec3TransformNormal takes by the
@@ -12,6 +12,8 @@
  *     Translation's bit copies, Transpose in place, an exact inverse, a
  *     singular matrix, the 1/w step of D3DXVec3TransformCoordArray on both of
  *     its paths);
+ *   - the binding: d3dxmath_install binds a slot to its thunk only when the
+ *     dispatch table took the thunk's patch (one refused here);
  *   - the cases of web/test/d3dxmath_cases.h: each call returns to its
  *     caller with its arguments popped and the caller's registers kept, and a
  *     digest of the answers per function.  web/test/d3dx_oracle_unit.c "math"
@@ -36,8 +38,10 @@ static void tr(const char *fmt, ...){
     printf("T %s\n", b);
 }
 
-/* ---- what d3dxmath_mw.c needs of the runtime ---- */
-void dispatch_patch(uint32_t a, void (*f)(CPU *)){ (void)a; (void)f; }
+/* ---- what d3dxmath_mw.c needs of the runtime: dispatch.c's patch table, which here takes every
+ * patch but one at g_refuse (0: none) ---- */
+static uint32_t g_refuse, g_taken;
+int dispatch_patch_take(uint32_t a, void (*f)(CPU *)){ (void)f; if (a == g_refuse) return 0; g_taken++; return 1; }
 
 /* guest memory: linear memory below the program's data (0x28000000, web/tools/win32unit.mjs) */
 #define WIN     0x07F80000u              /* the cases' window: d3dx_oracle_unit.c's MATH_W (eax is in the digest) */
@@ -169,8 +173,33 @@ static void known(void){
             && MRF32(O + 60u) == 1.0f && MR32(O + 44u) == 0u, "OrthoLH(2, 4, 1, 3)"); }
 }
 
+/* the binding as speed.exe has it: each thunk `jmp [slot]` (FF 25 <slot>), each slot on IMP_MAGIC +
+ * an index (win32_init's); the table refuses Normalize's patch, so its slot must stay as it was (bound
+ * to its own thunk, the lifted `jmp [slot]` would call itself) and the others go to their thunks */
+#define IMP_SLOT(i) (0xF0000000u + 0x100u + (uint32_t)(i))
+static void binding(void){
+    const D3dxMathFn *nrm = fn_named("D3DXVec3Normalize");
+    for (int i = 0; i < D3DXMATH_COUNT; i++){
+        const D3dxMathFn *f = &d3dxmath_fns[i];
+        MR8(f->thunk) = 0xFFu; MR8(f->thunk + 1u) = 0x25u; MR32(f->thunk + 2u) = f->iat;
+        MR32(f->iat) = IMP_SLOT(i);
+    }
+    g_refuse = nrm->thunk; g_taken = 0;
+    int n = d3dxmath_install(0), slots = 0;
+    g_refuse = 0;
+    for (int i = 0; i < D3DXMATH_COUNT; i++){
+        const D3dxMathFn *f = &d3dxmath_fns[i];
+        slots += MR32(f->iat) == (f == nrm ? IMP_SLOT(i) : f->thunk);
+    }
+    tr("binding: %d of %d answered, %u patches taken, Normalize's slot 0x%08x", n, D3DXMATH_COUNT, g_taken,
+       MR32(nrm->iat));
+    CHECK(n == D3DXMATH_COUNT - 1 && g_taken == (uint32_t)D3DXMATH_COUNT - 1u && slots == D3DXMATH_COUNT,
+          "install: a slot bound to its thunk only when the table took the patch (%d answered, %d slots right)", n, slots);
+}
+
 int main(void){
     known();
+    binding();
     for (int f = 0; f < D3DXMATH_COUNT; f++){
         const D3dxMathFn *fn = &d3dxmath_fns[f];
         uint64_t h = MC_FNV0; int regs_bad = 0;
