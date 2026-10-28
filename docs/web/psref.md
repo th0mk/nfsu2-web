@@ -176,7 +176,8 @@ a 16-pixel-wide target, or 64 vertices) and psref's results (`ps_<id>.p3vec`, `v
 texture of the coordinate and level of detail; `web/src/test/shadercheck.ts` runs the module on the GPU with the same
 texture function and compares (1e-3 relative for pixels, 1e-4 for vertices, the kill flag exactly). A result that
 psref itself moves past the tolerance when every input moves by 1e-5 (a comparison at its threshold) is counted as
-fragile, not as a failure.
+fragile, not as a failure. A quad psref refuses (an undefined read, say) is left out; a module psref refuses on all
+64 gets no vectors, so it does not count as checked.
 
 ```
 node web/tools/shader-check.mjs --sm3      # the unit tests' programs and, with NFSMW_DATA, Most Wanted's 31 effects

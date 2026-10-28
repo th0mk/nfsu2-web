@@ -364,6 +364,8 @@ static int write_sm3_ps_vectors(const char *dir, int id, const uint32_t *tok, si
         for (int l = 0; l < 4; l++) fragile += qw[l][6] != 0.f;
     }
     psref_free(p);
+    /* psref refused every quad (an undefined read on every input, say): nothing to compare, no file */
+    if (skipped == P3_NQ){ fprintf(stderr, "ps_%d: psref refused all %d quads: no vectors\n", id, P3_NQ); return 0; }
     char path[1024]; snprintf(path, sizeof path, "%s/ps_%d.p3vec", dir, id);
     FILE *f = fopen(path, "wb");
     if (!f){ perror(path); exit(1); }
@@ -377,7 +379,7 @@ static int write_sm3_ps_vectors(const char *dir, int id, const uint32_t *tok, si
     fclose(f);
     if (skipped) fprintf(stderr, "ps_%d: psref refused %d of %d quads\n", id, skipped, P3_NQ);
     if (fragile) fprintf(stderr, "ps_%d: %d of %d pixels fragile\n", id, fragile, P3_NQ * 4);
-    return skipped < P3_NQ;
+    return 1;
 }
 
 /* vs_<id>.v3vec: u32 'V3V1', nverts, stride, 0; the vertex bytes; 256 x 4 f32
