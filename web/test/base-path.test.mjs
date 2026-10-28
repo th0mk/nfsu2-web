@@ -5,8 +5,10 @@
 // 2. blockRuns: the manifest's blocks.url, resolved against the manifest's address, is taken only on the same server
 //    and under the manifest's folder (the base).
 // 3. The page as web/build.mjs builds it (into a scratch folder, for each game): no script of it holds an address of
-//    the server's root ('/players', '/game.json', ...), only the game's own file paths (/save, /data, which never
-//    leave the browser); index.html and the test pages name their files relatively; manifest.json too, with no id.
+//    the server's root ('/players', '/game.json', '/?x', '/' + x, `/${x}`, ...), only the game's own file paths (/save,
+//    /data, which never leave the browser, and never with more after them), and no markup or style it builds names
+//    one (src="/x", url(/x)); its stylesheets neither; index.html and the test pages name their files relatively;
+//    manifest.json too, with no id.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -77,25 +79,38 @@ const NOT_ADDRESSES = new Set(['/save', '/data', '/dev', '/save/registry.txt', '
 // Offline mode's service worker still knows the root only: shell.ts registers it only where the base is '/'.
 const ROOT_ONLY = new Set(['sw.js']);
 
+// A path at the server's root: '/' and a name's first character, or the root's query or fragment ('/?x', '/#x')
+const ROOT_PATH = /^\/[A-Za-z0-9_.~%?#-]/;
+// an address at the root in markup or style: an attribute's value, a CSS url() or @import (escapes kept: the text of a
+// script's literal); never '//' (another server's)
+const ROOT_ATTR = /(?<![\w-])(?:src|href|action|formaction|poster|srcset)\s*=\s*(\\?["']?)\/(?!\/)[^"'\s>\\]*\1/gi;
+const ROOT_URL = /(?:url\(\s*|@import\s+)(\\?["']?)\/(?!\/)[^"')\s;\\]*\1\)?/gi;
+
 const BEFORE_EXPR = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
-/** The string literals of a script and the first part of each template literal (its middle and tail parts follow an
- *  expression, so they never start an address), as written (escapes kept).  A scanner, not a parser (the
- *  TypeScript here has no JavaScript API): a '/' starts a regular expression where no value comes before it, as in
- *  esbuild's output; it stops at a string, template, comment or regular expression that does not end, which is where
- *  that rule would have lost its way. */
-function startLiterals(code, name) {
+/** The text of a script's string and template literals, as written (escapes kept), each part with
+ *  first: it starts its literal (a string, a template's head: a template's middle and tail parts follow an
+ *  expression, so they never start an address), and
+ *  then: the start of a value whose rest an expression gives (a + after the string, the head's ${), where no + or +=
+ *  comes before the literal (that is the middle of a join: a + '/' + b).
+ *  A scanner, not a parser (the TypeScript here has no JavaScript API): a '/' starts a regular expression where no
+ *  value comes before it, as in esbuild's output; it stops at a string, template, comment or regular expression that
+ *  does not end, which is where that rule would have lost its way. */
+function literals(code, name) {
   const out = [];
   const fail = (what, at) => { throw new Error(`${name}: ${what} at ${at} (${JSON.stringify(code.slice(Math.max(0, at - 40), at + 40))})`); };
+  // the code's first character after `at` that is not white space; whether a + or += comes right before `at`
+  const after = at => { while (at < code.length && /\s/.test(code[at])) at++; return code[at]; };
+  const joins = at => { at--; while (at >= 0 && /\s/.test(code[at])) at--; return code[at] === '+' || (code[at] === '=' && code[at - 1] === '+'); };
   let i = 0, regexOk = true, depth = 0;
   const subs = [];                                  // the brace depth each open template substitution started at
-  const template = first => {
+  const template = (first, joined) => {
     let s = '';
     for (;;) {
       if (i >= code.length) fail('a template that does not end', i);
       const c = code[i];
       if (c === '\\') { s += code.slice(i, i + 2); i += 2; continue; }
-      if (c === '`') { i++; if (first) out.push(s); regexOk = false; return; }
-      if (c === '$' && code[i + 1] === '{') { i += 2; if (first) out.push(s); subs.push(depth); regexOk = true; return; }
+      if (c === '`') { i++; out.push({ s, first, then: false }); regexOk = false; return; }
+      if (c === '$' && code[i + 1] === '{') { i += 2; out.push({ s, first, then: first && !joined }); subs.push(depth); regexOk = true; return; }
       s += c; i++;
     }
   };
@@ -107,9 +122,9 @@ function startLiterals(code, name) {
         if (code[j] === '\\') { s += code.slice(j, j + 2); j++; } else if (code[j] === '\n') fail('a string that does not end', i); else s += code[j];
       }
       if (j >= code.length) fail('a string that does not end', i);
-      out.push(s); i = j + 1; regexOk = false; continue;
+      out.push({ s, first: true, then: after(j + 1) === '+' && !joins(i) }); i = j + 1; regexOk = false; continue;
     }
-    if (c === '`') { i++; template(true); continue; }
+    if (c === '`') { const joined = joins(i); i++; template(true, joined); continue; }
     if (c === '/' && code[i + 1] === '/') { const e = code.indexOf('\n', i); i = e < 0 ? code.length : e; continue; }
     if (c === '/' && code[i + 1] === '*') { const e = code.indexOf('*/', i + 2); if (e < 0) fail('a comment that does not end', i); i = e + 2; continue; }
     if (c === '/' && regexOk) {
@@ -131,7 +146,7 @@ function startLiterals(code, name) {
     if (/\s/.test(c)) { i++; continue; }
     if (c === '{') { depth++; regexOk = true; i++; continue; }
     if (c === '}') {
-      if (subs.length && subs[subs.length - 1] === depth) { subs.pop(); i++; template(false); continue; }
+      if (subs.length && subs[subs.length - 1] === depth) { subs.pop(); i++; template(false, false); continue; }
       depth--; regexOk = false; i++; continue;
     }
     regexOk = c !== ')' && c !== ']'; i++;
@@ -143,16 +158,26 @@ function startLiterals(code, name) {
 /** What of a built page (dist, its dev folder) names an address at the server's root. */
 function audit(dist, dev) {
   const bad = [];
-  const scripts = d => fs.readdirSync(d, { recursive: true }).map(String).filter(f => f.endsWith('.js'));
-  for (const [dir, f] of [...scripts(dist).map(f => [dist, f]), ...scripts(path.join(dev, 'test')).map(f => [dev, path.join('test', f)])]) {
+  const files = (d, ext) => fs.readdirSync(d, { recursive: true }).map(String).filter(f => f.endsWith(ext));
+  for (const [dir, f] of [...files(dist, '.js').map(f => [dist, f]), ...files(path.join(dev, 'test'), '.js').map(f => [dev, path.join('test', f)])]) {
     if (ROOT_ONLY.has(f)) continue;
-    for (const s of startLiterals(fs.readFileSync(path.join(dir, f), 'utf8'), f))
-      if (/^\/[A-Za-z0-9_.~%-]/.test(s) && !NOT_ADDRESSES.has(s)) bad.push(`${f}: ${JSON.stringify(s)}`);
+    for (const { s, first, then } of literals(fs.readFileSync(path.join(dir, f), 'utf8'), f)) {
+      if (first && ROOT_PATH.test(s) && !NOT_ADDRESSES.has(s)) bad.push(`${f}: ${JSON.stringify(s)}`);
+      // a root path whose rest an expression gives ('/' + x, `/${x}`), the game's own paths too: '/data' + x is the
+      // server's /data/ as much as the game's folder
+      else if (first && then && (s === '/' || NOT_ADDRESSES.has(s))) bad.push(`${f}: ${JSON.stringify(s)} + …`);
+      // markup or style the script builds
+      else for (const m of [...s.matchAll(ROOT_ATTR), ...s.matchAll(ROOT_URL)]) bad.push(`${f}: ${m[0]}`);
+    }
   }
+  for (const f of files(dist, '.css')) for (const m of fs.readFileSync(path.join(dist, f), 'utf8').matchAll(ROOT_URL)) bad.push(`${f}: ${m[0]}`);
   const pages = [[dist, 'index.html'], ...fs.readdirSync(path.join(dev, 'test')).filter(f => f.endsWith('.html')).map(f => [dev, path.join('test', f)])];
-  for (const [dir, f] of pages)
-    for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/\s(?:src|href|content|action|poster)\s*=\s*(["']?)([^"'\s>]*)\1/gi))
+  for (const [dir, f] of pages) {
+    const html = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const m of html.matchAll(/\s(?:src|href|content|action|formaction|poster|srcset)\s*=\s*(["']?)([^"'\s>]*)\1/gi))
       if (/^\/(?!\/)/.test(m[2])) bad.push(`${f}: ${m[0].trim()}`);
+    for (const m of html.matchAll(ROOT_URL)) bad.push(`${f}: ${m[0]}`);
+  }
   const man = JSON.parse(fs.readFileSync(path.join(dist, 'manifest.json'), 'utf8'));
   const strings = [];
   const each = v => { if (typeof v === 'string') strings.push(v); else if (v && typeof v === 'object') Object.values(v).forEach(each); };
@@ -163,7 +188,7 @@ function audit(dist, dev) {
   return bad;
 }
 
-test('the built page names no address at the server\'s root: scripts, pages, manifest.json (each game)', { timeout: 120_000 }, t => {
+test('the built page names no address at the server\'s root: scripts, stylesheets, pages, manifest.json (each game)', { timeout: 120_000 }, t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-path-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   // build.mjs builds the folder it is in: this page's sources, linked
@@ -178,13 +203,24 @@ test('the built page names no address at the server\'s root: scripts, pages, man
     console.log(`${g}: ${bad.length ? bad.join('\n  ') : 'no address at the root'}`);
     assert.deepEqual(bad, [], g);
   }
-  // the audit finds what it looks for: the literals of the page before it had a base, and not a path's joins
+  // the audit finds what it looks for: the literals of the page before it had a base; the root's query and fragment; a
+  // root path or a game's path that an expression goes on with; markup and style with a root address, built in a
+  // script, in a stylesheet, in a page.  And not a path's joins, another server's address, or one from an expression.
   fs.writeFileSync(path.join(root, 'dist', 'probe.js'), 'fetch("/players");fetch(`/lang/${x}.json`);new Worker(new URL("/host/io-worker.js",import.meta.url));' +
-    'a.split("/");b="/"+c;d=`${e}/f`;g="/save";h=/"\\/x"/.test(i)?1/j:k;l=`${m?`/n`:"o"}`;');
-  fs.writeFileSync(path.join(root, 'dist', 'index.html'), '<link rel="manifest" href="/manifest.json"><script type="module" src="/main.js"></script><a href="https://x.example/">');
+    'a.split("/");b=c+"/"+d;b+="/"+c;d=`${e}/f`;g="/save";h=/"\\/x"/.test(i)?1/j:k;l=`${m?`/n`:"o"}`;q=r?"/":"s";t=u+`/${v}`;' +
+    'fetch("/?a");location.href="/#b";c="/"+d;e=`/${f}`;g="/data"+h;i=`/save${j}`;' +
+    'k.innerHTML=\'<img src="/l.png">\';m.innerHTML=`<a href="${n}">`;o.innerHTML=`<i>${p}</i><img src="/q.png">`;' +
+    'r.style.background="url(/s.png)";t.innerHTML="<img src=\\"//cdn.example/u.png\\">";');
+  fs.writeFileSync(path.join(root, 'dist', 'probe.css'), 'a{background:url(/bg.png)}b{background:url(data:x)}@import "/x.css";' +
+    'c{background:url( "//cdn.example/x.png")}');
+  fs.writeFileSync(path.join(root, 'dist', 'index.html'), '<link rel="manifest" href="/manifest.json"><script type="module" src="/main.js"></script><a href="https://x.example/">' +
+    '<div style="background:url(\'/d.png\')"></div>');
   assert.deepEqual(audit(path.join(root, 'dist'), path.join(root, 'dist-dev')), [
     'probe.js: "/players"', 'probe.js: "/lang/"', 'probe.js: "/host/io-worker.js"', 'probe.js: "/n"',
-    'index.html: href="/manifest.json"', 'index.html: src="/main.js"',
+    'probe.js: "/?a"', 'probe.js: "/#b"', 'probe.js: "/" + …', 'probe.js: "/" + …', 'probe.js: "/data" + …', 'probe.js: "/save" + …',
+    'probe.js: src="/l.png"', 'probe.js: src="/q.png"', 'probe.js: url(/s.png)',
+    'probe.css: url(/bg.png)', 'probe.css: @import "/x.css"',
+    'index.html: href="/manifest.json"', 'index.html: src="/main.js"', 'index.html: url(\'/d.png\')',
   ]);
-  assert.throws(() => startLiterals('a="b', 'x.js'), /a string that does not end/);
+  assert.throws(() => literals('a="b', 'x.js'), /a string that does not end/);
 });
