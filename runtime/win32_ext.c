@@ -48,8 +48,11 @@ typedef struct {
     uint32_t creator; uint64_t end_seq; uint32_t looked;
     uint32_t routine;                 /* OB_THREAD: the routine it runs (game.h thread_start), for the watchdog */
     uint32_t gen;                     /* handle generation (obj_reclaim); kept when the slot is reused */
-    uint32_t serial;                  /* which object the slot holds (obj_new counts them): a wait that began on
-                                       * one notices it closed even when its slot already holds the next */
+    uint32_t serial;                  /* which object the slot holds (obj_new counts them): WSAWaitForMultipleEvents
+                                       * and a WaitForMultipleObjects with a waitable timer (wait_set) notice an
+                                       * object closed during the wait even when its slot already holds the next,
+                                       * and an overlapped receive sets only the event it began with;
+                                       * WaitForSingleObject and the other WaitForMultipleObjects do not look at it */
     /* OB_KEY with the game's key table (game.h reg_keys): which key (its index
      * + 1; 0 = the flat registry) and the access it was opened with */
     int reg_key; uint32_t reg_access;
