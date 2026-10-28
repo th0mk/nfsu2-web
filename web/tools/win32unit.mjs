@@ -19,14 +19,20 @@ const FLAGS = ['--target=wasm32-wasip1-threads', '-pthread', '-O2', '-msimd128',
 const LINK = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=67108864,--max-memory=4294967296',
   '-Wl,--global-base=54525952,--no-stack-first', '-Wl,-z,stack-size=1048576',
   '-lsetjmp', '-lwasi-emulated-mman', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks'];
-const SRC = ['web/test/win32_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 'runtime/win32_misc.c', 'runtime/keyboard.c',
-  'runtime/web/thread_exit.c'];
+const SRC = ['web/test/win32_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 'runtime/win32_misc.c', 'runtime/keyboard.c'];
+// pthread_exit's trampoline, compiled as web/build.sh compiles it: target and features only.  The force-include
+// renames pthread_create to nfsu2_pthread_create, so with it the trampoline's own call is to itself, an endless
+// loop: the first thread the "stress" half started never came back (web/tools/waitstress.sh timed out)
+const THREAD_EXIT = 'runtime/web/thread_exit.c';
+const PLAIN = FLAGS.slice(0, FLAGS.indexOf('-D_WASI_EMULATED_MMAN'));
 
 // defs: more -D flags (['-DWIN32_UNIT_UG2']: the program with UG2's game table, its "ug2" half)
 export function buildWin32Unit(out, defs = []) {
   if (!CC) throw new Error('no wasi-sdk in deps/');
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  execFileSync(CC, [...FLAGS, ...defs, '-o', out, ...SRC, ...LINK], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
+  execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
+  try { execFileSync(CC, [...FLAGS, ...defs, '-o', out, ...SRC, te, ...LINK], opt); } finally { fs.rmSync(te, { force: true }); }
   return out;
 }
 

@@ -676,6 +676,9 @@ static void *frame_thread(void *u){                    /* the game's Present: th
 }
 #define NT 8
 #define TICKS 1000
+/* A read of the virtual clock while vclock_tick moves it (win32.c: the frame base and the real base are two
+ * stores) can be one frame step off either way, and vclock_tick caps a step at 50 ms */
+#define CLOCK_SLACK_US 50000ull
 typedef struct { Thr t; int id; uint32_t h, h2, peer; _Atomic int done; int ticks, early, bad, wakes; } Job;
 static Job g_job[NT + 2];
 static uint32_t job_stack(int i){ return STACK_TOP - 0x20000u * (uint32_t)(i + 1); }
@@ -693,9 +696,8 @@ static void *tick_thread(void *u){
         uint32_t r = call_imp(t, "WaitForSingleObject", h, INF);
         uint64_t now = FT_EPOCH + host_us() * 10ull;
         if (r != 0) j->bad++;
-        /* signaled before its due time; a read of the clock while vclock_tick moves it
-         * (its frame base and real base are two stores) may run up to a frame ahead */
-        if (now + 500000ull < rd64(due)) j->early++;
+        /* signaled before its due time, by more than a read of the clock can be off */
+        if (now + CLOCK_SLACK_US * 10ull < rd64(due)) j->early++;
         j->ticks++;
         wr64(due, rd64(due) + 10000ull);
         call_imp(t, "SetWaitableTimer", h, due, 0u, 0u, 0u, 0u);
@@ -768,6 +770,9 @@ static int start_job(int i, void *(*fn)(void *)){
 static void test_stress(Thr *t){
     pthread_t fr;
     atomic_store(&g_vclock_freeze, 0ull);
+    /* the clock from a frame on, as the game's after its first Present: before any frame host_us reads up to
+     * 50 ms (no frame base yet) and goes back to one frame's step at the first */
+    vclock_tick();
     if (pthread_create(&fr, 0, frame_thread, 0)){ printf("FAIL: no threads here (run it in the browser host)\n"); fail++; return; }
     guest_unlock();                                                   /* the main thread lets the others run */
 
@@ -780,26 +785,29 @@ static void test_stress(Thr *t){
     int ticks = 0, early = 0, bad = 0;
     for (int i = 0; i < NT; i++){ ticks += g_job[i].ticks; early += g_job[i].early; bad += g_job[i].bad; }
     CHECK(ticks == NT * TICKS && !early && !bad, "%d threads: %d ticks (want %d), %d early, %d bad waits", NT, ticks, NT * TICKS, early, bad);
-    CHECK((double)(v1 - v0) / 1000.0 >= TICKS, "the %d ticks took %.0f ms of virtual time (at least %d)", TICKS, (double)(v1 - v0) / 1000.0, TICKS);
+    CHECK(v1 - v0 + 2u * CLOCK_SLACK_US >= TICKS * 1000ull, "the %d ticks took %.0f ms of virtual time (at least %d, less two reads' slack)",
+          TICKS, (double)(v1 - v0) / 1000.0, TICKS);
     printf("  tick threads: %d x %d ticks in %.0f ms real, %.0f ms virtual\n", NT, TICKS, el, (double)(v1 - v0) / 1000.0);
 
-    /* 2. 4 waiters on one 2 ms periodic auto-reset timer for 1 s */
+    /* 2. 4 waiters on one 2 ms periodic auto-reset timer for 1 s: each period lets one through, so the wakes are
+     * at most the periods from the set to the last waiter's end (the waiters in a wait when the stop comes take
+     * a period or two more) */
     guest_lock(&t->cpu);
     g_shared = call_imp(t, "CreateWaitableTimerA", 0u, 0u, 0u);
     wr64(SCRATCH + 0x30u, (uint64_t)-20000ll);
+    v0 = host_us();
     call_imp(t, "SetWaitableTimer", g_shared, SCRATCH + 0x30u, 2u, 0u, 0u, 0u);
     guest_unlock();
     atomic_store(&g_shared_stop, 0);
-    v0 = host_us();
     for (int i = 0; i < 4; i++) start_job(i, shared_waiter);
     usleep(1000000);
     atomic_store(&g_shared_stop, 1);
-    v1 = host_us();
     ok = wait_jobs(0, 4, 5000.0);
+    v1 = host_us();
     int wakes = 0; bad = 0;
     for (int i = 0; i < 4; i++){ wakes += g_job[i].wakes; bad += g_job[i].bad; }
-    double periods = (double)(v1 - v0) / 2000.0;
-    CHECK(ok && !bad && wakes <= periods + 2.0 && wakes >= periods / 4.0, "shared timer: %d wakes in %.0f periods (%s, %d bad)",
+    double periods = (double)(v1 - v0) / 2000.0, most = (double)(v1 - v0 + CLOCK_SLACK_US) / 2000.0;
+    CHECK(ok && !bad && wakes <= most && wakes >= periods / 4.0, "shared timer: %d wakes in %.0f periods (%s, %d bad)",
           wakes, periods, ok ? "all ended" : "STUCK", bad);
     printf("  shared timer: 4 waiters, %d wakes in %.0f periods of 2 ms\n", wakes, periods);
 
