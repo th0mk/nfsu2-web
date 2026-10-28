@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Validation suite for x86 instruction semantics.
-   Hand-encoded machine code + the results the Intel spec expects (one case,
-   named "(lift: doubles)", pins the lift's x87 model where it differs)."""
+   Hand-encoded machine code + the results the Intel spec expects.  A case
+   marked xfail= also expects Intel's result, where the lift's model is known
+   to differ (its reason says how): its checks are counted as expected
+   deviations, apart from the passes and the failures, and one that gives
+   Intel's result reads "now matches Intel" (then drop the mark)."""
 import sys, os, subprocess, struct
 sys.path.insert(0,'tools')
 # lift the tests the way gen.sh lifts the game (x87 precision control on;
@@ -19,11 +22,13 @@ TESTS = []
 # calls: offsets in code of further functions the test calls (each is lifted as a
 # function of its own); retpast: offsets of callees that may return past their
 # caller (the lifter's tools/retpast.txt list); env: lifter options set while
-# the test is lifted (e.g. RETEIP=0)
-def T(name, code, setup=None, mem=None, expect=None, fmem=None, memf=None, fmemf=None, calls=(), retpast=(), env=None):
+# the test is lifted (e.g. RETEIP=0); xfail: why the lift's result differs
+# from Intel's (expect/fmem/fmemf keep Intel's; the esp balance is checked as
+# in any case)
+def T(name, code, setup=None, mem=None, expect=None, fmem=None, memf=None, fmemf=None, calls=(), retpast=(), env=None, xfail=None):
     TESTS.append(dict(name=name, code=bytes(code), setup=setup or {},
                       mem=mem or {}, expect=expect or {}, fmem=fmem or {},
-                      memf=memf or {}, fmemf=fmemf or {}, calls=calls, retpast=retpast, env=env or {}))
+                      memf=memf or {}, fmemf=fmemf or {}, calls=calls, retpast=retpast, env=env or {}, xfail=xfail))
 
 def imm32(v): return list(struct.pack('<I', v & 0xffffffff))
 MOV_EAX = lambda v: [0xB8]+imm32(v)
@@ -583,25 +588,28 @@ T("fnsave/frstor: the smallest denormal and a negative one come back",
   + [0xDD,0x1D]+a32(MW_+0x230) + [0xDD,0x1D]+a32(MW_+0x238),
   {}, mem={MW_+0x220:1, MW_+0x224:0, MW_+0x228:0x0000ABCD, MW_+0x22C:0x80000000},
   fmem={MW_+0x230:0x0000ABCD, MW_+0x234:0x80000000, MW_+0x238:1, MW_+0x23C:0})
-# The lift's model, not Intel's result: the x87 registers are doubles
-# (cpu.h), so an 80-bit value no double holds does not survive fld m80
-# (f80_load flushes a denormal to 0).  The C runtime's FDIV workaround
-# 0x7D8CC0 (UG2 0x769C90) scales an 80-bit denormal divisor by 2^63, stores
-# it and reads its significand's high dword back (0x7D8DB6 fmul, 0x7D8DBC
-# fstp, 0x7D8CC8 mov eax):
+# An expected deviation (xfail): Intel's result, which the lift's model does
+# not give.  The x87 registers are doubles (cpu.h), so an 80-bit value no
+# double holds does not survive fld m80 (f80_load flushes a denormal to 0).
+# The C runtime's FDIV workaround 0x7D8CC0 (UG2 0x769C90) scales an 80-bit
+# denormal divisor by 2^63, stores it and reads its significand's high dword
+# back (0x7D8DB6 fmul, 0x7D8DBC fstp, 0x7D8CC8 mov eax):
 # fld tbyte [a] (0000:00000001FFFFFFFF); fmul dword [b] (2^63); fstp tbyte
-# [c]; mov eax,[c+4].  Intel gives eax 0xFFFFFFFF and the word 0x0021 at
-# [c+8] (a value near 2^-16349); the lift 0 and ten zero bytes.  The oracle
-# takes exactly this as its read-back class (tests/mworacle.c range_subst);
-# MW never reaches 0x7D8CC0 with such an operand (_adjust_fdiv is 0).  A
-# change to the model fails this case on purpose: then the oracle's rule and
-# this note change with it.
+# [c]; mov eax,[c+4].  Intel: 0x1FFFFFFFF * 2^-16382 exactly, a normal
+# extended value, 0021:FFFFFFFF80000000 at [c], so eax 0xFFFFFFFF (Unicorn
+# stores the same at 0x7D8DBC in the oracle's 0x7D8CC0 case 71).  The lift
+# gives eax 0 and ten zero bytes.  The oracle takes exactly this as its
+# read-back class (tests/mworacle.c range_subst); MW never reaches 0x7D8CC0
+# with such an operand (_adjust_fdiv is 0).  A model that gets it right turns
+# these checks into "now matches Intel": then drop the mark, and the oracle's
+# rule and this note change with it.
 _FX = 0x00CA0000
-T("fld/fmul/fstp m80 of a denormal, mov eax (lift: doubles)",
+T("fld/fmul/fstp m80 of a denormal, mov eax",
   [0xDB,0x2D]+a32(_FX) + [0xD8,0x0D]+a32(_FX+0x10) + [0xDB,0x3D]+a32(_FX+0x20) + [0xA1]+a32(_FX+0x24),
   {'eax':0x55555555}, mem={_FX:0xFFFFFFFF, _FX+4:0x00000001, _FX+8:0, _FX+0x10:0x5F000000,
                            _FX+0x20:0x5A5A5A5A, _FX+0x24:0x5A5A5A5A, _FX+0x28:0x5A5A5A5A},
-  expect={'eax':0}, fmem={_FX+0x20:0, _FX+0x24:0, _FX+0x28:0x5A5A0000})
+  expect={'eax':0xFFFFFFFF}, fmem={_FX+0x20:0x80000000, _FX+0x24:0xFFFFFFFF, _FX+0x28:0x5A5A0021},
+  xfail="the lift's x87 registers are doubles: f80_load flushes the 80-bit denormal to 0 (cpu.h)")
 
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the
@@ -679,7 +687,15 @@ def gen_c(fns, body):
     if lr: o.append('#undef RG_\n#define RG_(x) c->x')
     o.append('static CPU cpu; static CPU *const c=&cpu;')
     o.append('#define STK 0x00B00000u')
-    o.append('static int pass=0, fail=0;')
+    o.append('static int pass=0, fail=0, xfail=0, xpass=0;')
+    # an xfail case's checks: Intel's result expected, the lift's known to differ
+    o.append('static void chkx(const char*t,const char*f,uint32_t got,uint32_t want,const char*why){')
+    o.append('  if(got==want){xpass++;')
+    o.append('    printf("  \\033[33mnow matches Intel\\033[0m %-38s %s = 0x%08x (an expected deviation: drop its xfail)\\n",t,f,got);}')
+    o.append('  else {xfail++;')
+    o.append('    printf("  xfail %-38s %s = 0x%08x (Intel 0x%08x: %s)\\n",t,f,got,want,why);}}')
+    o.append('static void chkxf(const char*t,const char*f,float got,float want,const char*why){')
+    o.append('  uint32_t g,w; memcpy(&g,&got,4); memcpy(&w,&want,4); chkx(t,f,g,w,why);}')
     o.append('static void chk(const char*t,const char*f,uint32_t got,uint32_t want){')
     o.append('  if(got==want){pass++;} else {fail++;')
     o.append('    printf("  \\033[31mFAIL\\033[0m %-38s %s = 0x%08x (expected 0x%08x)\\n",t,f,got,want);}}')
@@ -704,21 +720,27 @@ def gen_c(fns, body):
         o.append('    PUSH32(0xDEADC0DEu);')
         o.append(f'    {fns[i]}(&cpu);')
         o.append(f'    chk("{nm}","esp balance",cpu.esp,esp0);')
+        # an xfail case: the same checks, counted as expected deviations (chkx)
+        xf = t['xfail']
+        why = ', "' + xf.replace('\\', '\\\\').replace('"', '\\"') + '"' if xf else ''
+        ck, ckf = ('chkx', 'chkxf') if xf else ('chk', 'chkf')
         for k,v in t['expect'].items():
             if k=='ah_and':
                 mask,want = v
-                o.append(f'    chk("{nm}","ah&0x{mask:02x}",((cpu.eax>>8)&0x{mask:02x}u),0x{want:02x}u);')
+                o.append(f'    {ck}("{nm}","ah&0x{mask:02x}",((cpu.eax>>8)&0x{mask:02x}u),0x{want:02x}u{why});')
             elif k in REGS:
-                o.append(f'    chk("{nm}","{k}",cpu.{k},0x{v & 0xffffffff:x}u);')
+                o.append(f'    {ck}("{nm}","{k}",cpu.{k},0x{v & 0xffffffff:x}u{why});')
             elif k in FLAGS:
-                o.append(f'    chk("{nm}","{k}",cpu.{k},{v}u);')
+                o.append(f'    {ck}("{nm}","{k}",cpu.{k},{v}u{why});')
         for a,v in t['fmem'].items():
-            o.append(f'    chk("{nm}","mem[0x{a:x}]",MR32(0x{a:x}u),0x{v & 0xffffffff:x}u);')
+            o.append(f'    {ck}("{nm}","mem[0x{a:x}]",MR32(0x{a:x}u),0x{v & 0xffffffff:x}u{why});')
         for a,v in t.get('fmemf',{}).items():
-            o.append(f'    chkf("{nm}","fmem[0x{a:x}]",MRF32(0x{a:x}u),{v!r}f);')
+            o.append(f'    {ckf}("{nm}","fmem[0x{a:x}]",MRF32(0x{a:x}u),{v!r}f{why});')
         o.append('  }')
-    o.append('  printf("\\n  ISA tests: \\033[32m%d passed\\033[0m, %s%d failed\\033[0m\\n",')
-    o.append('         pass, fail?"\\033[31m":"", fail);')
+    o.append('  printf("\\n  ISA tests: \\033[32m%d passed\\033[0m, %s%d failed\\033[0m", pass, fail?"\\033[31m":"", fail);')
+    o.append('  if(xfail) printf(", %d expected deviation%s (xfail: the lift\'s model, not Intel\'s result)", xfail, xfail==1?"":"s");')
+    o.append('  if(xpass) printf(", \\033[33m%d now match%s Intel\\033[0m (drop the xfail)", xpass, xpass==1?"es":"");')
+    o.append('  printf("\\n");')
     o.append('  return fail?1:0; }')
     return '\n'.join(o)
 

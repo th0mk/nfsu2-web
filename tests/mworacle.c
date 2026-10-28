@@ -41,35 +41,44 @@
  * Classes that are not differences, each counted on its own:
  *   loop     both sides at their limit (the original after ORACLE_BUDGET
  *            Unicorn instructions, the lifted after ORACLE_LIFT_MS of wall
- *            clock), and both still at a long limit (ORACLE_LONG_S) when run
- *            again.  The two limits are in different units (L-208), so a case
- *            at its limit runs again before it counts: a lifted side at its
- *            limit with ORACLE_LONG_S (when the original is at its limit too
- *            and the lifted side still is, the original also with
- *            ORACLE_LONG_S); then, when the lifted side has ended and the
- *            original has not, the original with what is left of
- *            ORACLE_LONG_ORIG_S, a time budget per function (the
- *            original-loop re-run; ORACLE_LONG_S once it is spent).  Unicorn
- *            needs 8 to 61 times the native lifted code's time on a long
- *            loop: 0x852570 5.0 s lifted, 67.5 s Unicorn; 0x5B4E70 3.6 s,
- *            84.5 s; 0x7FD823 2.0 s, 122 s; 0x8184E5 21.3 s, 181 s.  So the
- *            original gets the longer limit, and a lifted side still at its
- *            limit after ORACLE_LONG_S where the original returned is a
- *            difference, not a slow emulator.  A re-run that
- *            ends one-sided (one side returns or faults, the other is still
- *            at its limit) is a DIFF, both ways: that lifted side, and an
+ *            clock), and both still at a long limit when run again.  The two
+ *            limits are in different units (L-208), so a case at its limit
+ *            runs again before it counts: a lifted side at its limit with
+ *            ORACLE_LONG_S; when the original is at its limit too, then the
+ *            original with what is left of ORACLE_LONG_ORIG_S (600 s), a time
+ *            budget per function (ORACLE_LONG_S once it is spent), whether
+ *            the lifted side ended or not; and when the lifted side has ended
+ *            in its first run and the original has not, the original alone
+ *            with what is left of that budget (the original-loop re-run; a
+ *            loop on both sides that used the budget up leaves the
+ *            function's later cases ORACLE_LONG_S, as before that re-run).
+ *            Unicorn needs 8 to 61 times the native lifted code's time on a
+ *            long loop: 0x852570 5.0 s lifted, 67.5 s Unicorn; 0x5B4E70
+ *            3.6 s, 84.5 s; 0x7FD823 2.0 s, 122 s; 0x8184E5 21.3 s, 181 s.
+ *            So the original gets the longer limit, and a lifted side still
+ *            at its limit where the original returned is a difference, not a
+ *            slow emulator: when the original needed more than ORACLE_LONG_S,
+ *            the lifted side runs again with as long as the original took,
+ *            and a lifted side still at its limit then is a DIFF ("lifted
+ *            loop, original ret").  The original of a case whose lifted side
+ *            is still at its limit after ORACLE_LONG_S runs with the loop
+ *            proof (on_lp): the same machine state twice at the address
+ *            where its counted run stopped proves that it never ends, and the
+ *            case is a loop without using up the budget.  A re-run that ends
+ *            one-sided (one side returns or faults, the other is still at
+ *            its limit) is a DIFF, both ways: that lifted side, and an
  *            original still at its limit when the budget is spent where the
  *            lifted side returned.  Once a re-run of the lifted side, of the
  *            original alone (after the budget) or of both still stops, the
  *            function gets no more re-runs of that kind (a budget each); the
  *            both-sides one also goes when its original needed more than
  *            ORACLE_LONG_S, so a later case at its limit on both sides counts
- *            as a loop, as it did before the original-loop re-run: the
- *            budget pays for at most one both-sides case that needs more
- *            than ORACLE_LONG_S, besides the one-sided ones.  ORACLE_MUTATE=
- *            loop (test only) makes every lifted run end at its limit,
- *            ORACLE_MUTATE=eax flips bit 0 of the lifted side's eax after a
- *            return: both must give DIFFs (tests/mworacle_rules.sh)
+ *            as a loop without a re-run: the budget pays for at most one
+ *            both-sides case that needs more than ORACLE_LONG_S, besides the
+ *            one-sided ones.  ORACLE_MUTATE=loop (test only) makes every
+ *            lifted run end at its limit, ORACLE_MUTATE=eax flips bit 0 of the
+ *            lifted side's eax after a return: both must give DIFFs
+ *            (tests/mworacle_rules.sh)
  *   #DE      the original raised a divide error (a zero divisor or a quotient
  *            too large: Windows would end the game there); the lift skips a
  *            zero divisor and truncates (tools/lift.py div/idiv)
@@ -94,17 +103,22 @@
  *            original runs again with each fstp m80 of a value no double
  *            holds writing that value as the lift holds it, the 80-bit image
  *            of the nearest double (f80_rne) or of f80_load's double (the
- *            lift's fld m80) -- the lifted side's own bytes there when they
- *            are one of those two images, else the nearest double's -- and a
- *            non-x87 instruction reads such bytes before anything else writes
- *            them (range_subst).  Every register and every other byte must
- *            be the same then.  0x7D8CC0, the C runtime's FDIV workaround,
- *            scales an 80-bit denormal divisor by 2^63, stores it and loads
- *            its significand's high dword into eax (0x7D8DBC, 0x7D8CC8):
- *            x87 keeps a value below 2^-16319, the lift 0 (cpu.h f80_load
- *            flushes the denormal; tools/isatest.py pins that sequence, the
- *            lift's model and not Intel's result).  Nothing in MW passes it such
- *            an operand: it runs only when _adjust_fdiv [0x9BA9F4] is 1
+ *            lift's fld m80): the lifted side's own bytes there, which must
+ *            be one of those two images (else the class fails, unless the
+ *            original writes over the site later), and a non-x87 instruction
+ *            reads such bytes before anything else writes them
+ *            (range_subst).  Every register and every other byte must be the
+ *            same then, the substituted bytes too (byte for byte against the
+ *            lifted side: only the other x87 stores are left out).
+ *            ORACLE_MUTATE=f80 (test only) flips a byte of the lifted side's
+ *            first such store and must give a DIFF.  0x7D8CC0, the C
+ *            runtime's FDIV workaround, scales an 80-bit denormal divisor by
+ *            2^63, stores it and loads its significand's high dword into eax
+ *            (0x7D8DBC, 0x7D8CC8): x87 keeps a value below 2^-16319, the lift
+ *            0 (cpu.h f80_load flushes the denormal; tools/isatest.py has
+ *            that sequence with Intel's result as an expected deviation of
+ *            the lift's model).  Nothing in MW passes it such an operand: it
+ *            runs only when _adjust_fdiv [0x9BA9F4] is 1
  *            (IsProcessorFeaturePresent(0), else the FDIV test 0x7CD9C0: 0)
  *   fsw      the same but for a register holding an fnstsw's low byte, where
  *            the original has x87 exception flags its status word still shows
@@ -617,8 +631,14 @@ static uint8_t *g_l_img;                     /* its writable image pages (by g_r
 static size_t g_budget = 20000000u;          /* Unicorn instructions per case (ORACLE_BUDGET) */
 static int g_lift_ms = 500;                  /* lifted: wall clock per case (ORACLE_LIFT_MS) */
 static int g_long_s = 60;                    /* re-run of the lifted side, or of both (ORACLE_LONG_S, 0: none) */
-static int g_long_orig_s = 1800;             /* the original-loop re-runs' budget per function (ORACLE_LONG_ORIG_S, 0: none) */
-static int g_mutate;                         /* ORACLE_MUTATE (test only): 1 eax, 2 loop */
+/* the original's long re-runs' budget per function (ORACLE_LONG_ORIG_S, 0: none).  600 s: three times
+ * the most a function used in the 10-28 seed runs (191 s, 0x7FDA46; the slowest single case 181 s,
+ * 0x8184E5) and more than 8 times ORACLE_LONG_S, the slowest ratio measured (so an original that
+ * returns within it while the lifted side is still at its limit is caught).  A loop that never ends
+ * and does not come back to the same state (a counter: 0x4FD070, 0x78A220 shift 1 << cl until it
+ * is >= a value above 2^30) uses it up: with 1800 s that made seed 3 about 3 hours */
+static int g_long_orig_s = 600;
+static int g_mutate;                         /* ORACLE_MUTATE (test only): 1 eax, 2 loop, 3 f80 */
 static int g_u_long;                         /* the case's original: 0 its counted run, else its long re-run's seconds */
 static double now_s(void){ struct timeval tv; gettimeofday(&tv, 0); return (double)tv.tv_sec + tv.tv_usec / 1e6; }
 
@@ -665,19 +685,81 @@ static void run_lifted(const Fn *f, int ms){
 /* the lifted side's bytes [a, a+n) after its run (its copies of the scratch
  * area, the stack, the TEB and the writable image pages); 0 when they are
  * not all in one of them */
-static int lifted_bytes(uint32_t a, uint8_t *out, uint32_t n){
-    struct { uint32_t lo, hi; const uint8_t *p; } R[3 + 16]; int nr = 0;
+static uint8_t *lifted_ptr(uint32_t a, uint32_t n){
+    struct { uint32_t lo, hi; uint8_t *p; } R[3 + 16]; int nr = 0;
     R[nr].lo = SCR; R[nr].hi = SCR + SCRSZ; R[nr++].p = g_l_scr;
     R[nr].lo = STK; R[nr].hi = STK + STKSZ; R[nr++].p = g_l_stk;
     R[nr].lo = TEB; R[nr].hi = TEB + TEBSZ; R[nr++].p = g_l_teb;
     for (int i = 0, k = 0; i < g_nrw; k += (int)(g_rw[i].hi - g_rw[i].lo), i++){
         R[nr].lo = g_rw[i].lo; R[nr].hi = g_rw[i].hi; R[nr++].p = g_l_img + k; }
     for (int i = 0; i < nr; i++)
-        if (a >= R[i].lo && a < R[i].hi && R[i].hi - a >= n){ memcpy(out, R[i].p + (a - R[i].lo), n); return 1; }
+        if (a >= R[i].lo && a < R[i].hi && R[i].hi - a >= n) return R[i].p + (a - R[i].lo);
     return 0;
 }
 
-/* long_s 0: at most g_budget instructions; else no count, long_s seconds */
+/* The loop proof: a run of the original that comes to the same machine state
+ * twice at one address can never end (Unicorn is deterministic, and the
+ * state is everything the next instruction depends on: the general
+ * registers, EFLAGS, the segment registers, the x87 registers, status,
+ * control and tag words and its last instruction and operand pointers, the
+ * XMM registers, MXCSR, and every writable byte: the scratch area, the stack,
+ * the TEB, the GDT page and the image's writable pages).  Used for a case at
+ * its limit on both sides whose lifted side is still at its limit after
+ * g_long_s, so that a loop that never ends need not use up the original's
+ * budget: a code hook at g_lp_at (where the original's counted run stopped,
+ * in its loop) compares the state there with one kept at passes 1, 2, 4, 8,
+ * ... (Brent), memory only when the registers are the same.  The hook slows a
+ * tight loop down many times, so it stays for the first LOOP_PROOF_S seconds
+ * of the run only; the rest runs without it */
+#define LOOP_PROOF_S 10
+static uint32_t g_u_eip;                     /* where the original's last run stopped */
+static uint32_t g_lp_at;                     /* the loop proof's address for the next long run (0: none) */
+static int g_lp_proven; static uint64_t g_lp_n, g_lp_pow, g_lp_lam;
+static const int LP_R[9] = { UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EDX, UC_X86_REG_EBX, UC_X86_REG_ESP,
+                             UC_X86_REG_EBP, UC_X86_REG_ESI, UC_X86_REG_EDI, UC_X86_REG_EFLAGS };
+static uint32_t g_lp_r[9];
+enum { LPX = 8 * 10 + 8 * 16 + 16 * 8 };
+static uint8_t g_lp_x[LPX], *g_lp_mem;
+static void lp_regs(uc_engine *uc, uint32_t r[9]){
+    void *v[9]; for (int i = 0; i < 9; i++){ r[i] = 0; v[i] = &r[i]; }
+    uc_reg_read_batch(uc, LP_R, v, 9);
+}
+static void lp_rest(uc_engine *uc, uint8_t *x){
+    static const int R[16] = { UC_X86_REG_FPSW, UC_X86_REG_FPCW, UC_X86_REG_FPTAG, UC_X86_REG_MXCSR, UC_X86_REG_FIP,
+                               UC_X86_REG_FCS, UC_X86_REG_FDP, UC_X86_REG_FDS, UC_X86_REG_FOP, UC_X86_REG_CS,
+                               UC_X86_REG_DS, UC_X86_REG_ES, UC_X86_REG_FS, UC_X86_REG_GS, UC_X86_REG_SS, UC_X86_REG_EIP };
+    memset(x, 0, LPX);
+    for (int i = 0; i < 8; i++){ uc_reg_read(uc, UC_X86_REG_FP0 + i, x + 10 * i); uc_reg_read(uc, UC_X86_REG_XMM0 + i, x + 80 + 16 * i); }
+    for (int i = 0; i < 16; i++) uc_reg_read(uc, R[i], x + 208 + 8 * i);
+}
+/* every writable byte the original has: save (1) into m, or compare (0) with m */
+static int lp_mem(uint8_t *m, int save){
+    const uint8_t *p[4 + 16]; uint32_t n[4 + 16]; int k = 0;
+    p[k] = u_scr; n[k++] = SCRSZ; p[k] = u_stk; n[k++] = STKSZ; p[k] = u_teb; n[k++] = TEBSZ; p[k] = u_gdt; n[k++] = sizeof u_gdt;
+    for (int i = 0; i < g_nrw; i++){ p[k] = u_img + (g_rw[i].lo - g_img_lo); n[k++] = g_rw[i].hi - g_rw[i].lo; }
+    for (int i = 0; i < k; m += n[i], i++){
+        if (save) memcpy(m, p[i], n[i]);
+        else if (memcmp(m, p[i], n[i])) return 0;
+    }
+    return 1;
+}
+static void on_lp(uc_engine *uc, uint64_t a, uint32_t sz, void *u){
+    (void)a; (void)sz; (void)u;
+    uint32_t r[9]; lp_regs(uc, r);
+    if (g_lp_n){
+        if (!memcmp(r, g_lp_r, sizeof r)){
+            uint8_t x[LPX]; lp_rest(uc, x);
+            if (!memcmp(x, g_lp_x, LPX) && lp_mem(g_lp_mem, 0)){ g_lp_proven = 1; uc_emu_stop(uc); return; }
+        }
+        if (++g_lp_lam < g_lp_pow){ g_lp_n++; return; }
+        g_lp_pow *= 2; g_lp_lam = 0;
+    }
+    g_lp_n++;
+    memcpy(g_lp_r, r, sizeof r); lp_rest(uc, g_lp_x); lp_mem(g_lp_mem, 1);
+}
+
+/* long_s 0: at most g_budget instructions; else no count, long_s seconds
+ * (with the loop proof at g_lp_at for its first LOOP_PROOF_S seconds) */
 static void run_unicorn(const Fn *f, int long_s){
     Out *o = &g_uo;
     reset_memory(0);
@@ -702,12 +784,30 @@ static void run_unicorn(const Fn *f, int long_s){
      * it had used its budget): Unicorn stops before it fetches there, or the
      * unmapped fetch's hook does */
     g_phase = 2;
-    uc_err e = uc_emu_start(g_uc, f->va, SENTINEL, long_s ? (uint64_t)long_s * 1000000u : 0, long_s ? 0 : g_budget);
+    uc_err e;
+    g_lp_proven = 0;
+    if (long_s && g_lp_at){
+        if (!g_lp_mem){ size_t t = SCRSZ + STKSZ + TEBSZ + sizeof u_gdt; for (int i = 0; i < g_nrw; i++) t += g_rw[i].hi - g_rw[i].lo;
+                        g_lp_mem = malloc(t); }
+        g_lp_n = 0; g_lp_pow = 1; g_lp_lam = 0;
+        uc_hook h; uc_hook_add(g_uc, &h, UC_HOOK_CODE, (void *)on_lp, 0, g_lp_at, g_lp_at);
+        uc_ctl_flush_tb(g_uc);
+        int s1 = long_s < LOOP_PROOF_S ? long_s : LOOP_PROOF_S;
+        double t0 = now_s();
+        e = uc_emu_start(g_uc, f->va, SENTINEL, (uint64_t)s1 * 1000000u, 0);
+        uc_hook_del(g_uc, h);
+        uc_ctl_flush_tb(g_uc);
+        uint32_t ip = 0; uc_reg_read(g_uc, UC_X86_REG_EIP, &ip);
+        double left = long_s - (now_s() - t0);
+        if (e == UC_ERR_OK && !g_u_ev && !g_lp_proven && ip != SENTINEL && left > 0.01)
+            e = uc_emu_start(g_uc, ip, SENTINEL, (uint64_t)(left * 1e6), 0);
+    } else e = uc_emu_start(g_uc, f->va, SENTINEL, long_s ? (uint64_t)long_s * 1000000u : 0, long_s ? 0 : g_budget);
     g_phase = 0;
     /* blocks translated without the instruction count would be reused by the
      * next counted run, which then never stops (tests/srvoracle.c): drop them */
     if (long_s) uc_ctl_flush_tb(g_uc);
     uint32_t eip = 0; uc_reg_read(g_uc, UC_X86_REG_EIP, &eip);
+    g_u_eip = eip;
     if (getenv("ORACLE_DEBUG")) fprintf(stderr, "  unicorn %s: err %d (%s), eip %08x, event %d at %08x\n", long_s ? "long" : "counted",
                                         e, uc_strerror(e), eip, g_u_ev, g_u_addr);
     if (g_u_ev == 1 || (!g_u_ev && e == UC_ERR_OK && eip == SENTINEL)){ o->how = O_RET; o->where = SENTINEL; }
@@ -779,7 +879,7 @@ static int is_div(uint32_t a){
     uint8_t op = MR8(p), reg = (uint8_t)(MR8(p + 1) >> 3 & 7);
     return (op == 0xF6 || op == 0xF7) && (reg == 6 || reg == 7);
 }
-static char g_why[256];
+static char g_why[512];
 /* how: CMP_NOVALS leaves out the x87 stack values and the bytes the
  * original's x87 stores wrote (the range class), CMP_NOFSW takes no fnstsw
  * low byte as the same (fsw_rerun) */
@@ -927,21 +1027,43 @@ static int is_fstp_m80(uint32_t a){
     uint32_t p = skip_prefixes(a);
     return MR8(p) == 0xDB && MR8(p + 1) < 0xC0 && (MR8(p + 1) >> 3 & 7) == 7;
 }
-static struct { uint32_t lo, hi; } g_sub[64]; static int g_nsub, g_nsub_all, g_sub_read, g_sub_lift;
+/* the substituted fstp m80 sites the original has not written over since
+ * (lo == hi: a free slot); bad: the lifted side's bytes there are neither
+ * image of the value */
+static struct { uint32_t lo, hi; int bad; uint8_t lb[10], rne[10], ld[10]; } g_sub[64];
+static int g_nsub, g_nsub_all, g_sub_read, g_sub_lift, g_sub_over, g_sub_mutated;
 static int g_sub_pend; static uint32_t g_sub_ip, g_sub_at; static uint8_t g_sub_v[10];
-/* the store has been made: its bytes become the lift's for the value */
+/* the store has been made: its bytes become the lift's for the value.  The
+ * lifted side's own bytes there when they are one of the two images, else
+ * the nearest double's, and the site is marked bad: if the original does not
+ * write over it later (a later write leaves that write's bytes on both
+ * sides, which the compare sees as any other), the class fails */
 static void sub_apply(uc_engine *uc){
-    uint8_t rne[10], ld[10], lb[10], *w = rne;
+    uint8_t rne[10], ld[10], lb[10] = { 0 }, *w = rne;
     f80_store(rne, f80_rne(g_sub_v)); f80_store(ld, f80_load(g_sub_v));
-    if (lifted_bytes(g_sub_at, lb, 10) && (!memcmp(lb, rne, 10) || !memcmp(lb, ld, 10))){ w = lb; g_sub_lift++; }
+    uint8_t *lp = lifted_ptr(g_sub_at, 10);
+    /* ORACLE_MUTATE=f80 (test only): a wrong byte in the lifted side's first such store */
+    if (lp && g_mutate == 3 && !g_sub_mutated){ lp[8] ^= 0x01u; g_sub_mutated = 1; }
+    int img = lp && (memcpy(lb, lp, 10), !memcmp(lb, rne, 10) || !memcmp(lb, ld, 10));
+    if (img){ w = lb; g_sub_lift++; }
     uc_mem_write(uc, g_sub_at, w, 10);
-    if (g_nsub < (int)(sizeof g_sub / sizeof g_sub[0])){ g_sub[g_nsub].lo = g_sub_at; g_sub[g_nsub].hi = g_sub_at + 10u; g_nsub++; }
+    int k = -1;
+    for (int i = 0; i < g_nsub; i++){        /* an earlier substitution there is written over */
+        if (g_sub_at < g_sub[i].hi && g_sub_at + 10u > g_sub[i].lo) g_sub[i].lo = g_sub[i].hi = 0;
+        if (k < 0 && g_sub[i].lo == g_sub[i].hi) k = i;
+    }
+    if (k < 0 && g_nsub < (int)(sizeof g_sub / sizeof g_sub[0])) k = g_nsub++;
+    if (k >= 0){
+        g_sub[k].lo = g_sub_at; g_sub[k].hi = g_sub_at + 10u; g_sub[k].bad = !img;
+        memcpy(g_sub[k].lb, lb, 10); memcpy(g_sub[k].rne, rne, 10); memcpy(g_sub[k].ld, ld, 10);
+    } else g_sub_over = 1;                   /* more live sites than the list holds: not all checked */
     g_nsub_all++;
     if (getenv("ORACLE_DEBUG")){
         uint64_t m; uint16_t se; memcpy(&m, g_sub_v, 8); memcpy(&se, g_sub_v + 8, 2);
         uint64_t wm; uint16_t wse; memcpy(&wm, w, 8); memcpy(&wse, w + 8, 2);
         fprintf(stderr, "  range_subst: fstp m80 at %08x to %08x: %04x:%016llx -> %04x:%016llx (%s)\n", g_sub_ip, g_sub_at,
-                se, (unsigned long long)m, wse, (unsigned long long)wm, w == lb ? "the lifted side's" : "the nearest double");
+                se, (unsigned long long)m, wse, (unsigned long long)wm,
+                img ? "the lifted side's" : lp ? "the nearest double; the lifted side's bytes are neither image" : "the nearest double; no lifted bytes");
     }
 }
 static void on_sub_code(uc_engine *uc, uint64_t a, uint32_t sz, void *u){
@@ -956,9 +1078,10 @@ static void on_sub_code(uc_engine *uc, uint64_t a, uint32_t sz, void *u){
     }
 }
 static void on_sub_w(uc_engine *uc, uc_mem_type t, uint64_t a, int sz, int64_t v, void *u){
-    on_x87w(uc, t, a, sz, v, u);             /* the bytes this run's x87 stores write (CMP_NOVALS) */
     uint32_t lo = (uint32_t)a, hi = lo + (uint32_t)sz;
+    /* the substituted store's own bytes stay in the compare, byte for byte against the lifted side */
     if (g_sub_pend && g_x87_ip == g_sub_ip){ if (g_sub_pend == 1 || lo < g_sub_at) g_sub_at = lo; g_sub_pend = 2; return; }
+    on_x87w(uc, t, a, sz, v, u);             /* the bytes the other x87 stores write (CMP_NOVALS leaves them out) */
     for (int i = 0; i < g_nsub; i++)         /* written over: no longer the substituted bytes */
         if (lo < g_sub[i].hi && hi > g_sub[i].lo) g_sub[i].lo = g_sub[i].hi = 0;
 }
@@ -973,7 +1096,7 @@ static void on_sub_r(uc_engine *uc, uc_mem_type t, uint64_t a, int sz, int64_t v
  * such bytes); else 0 and g_why says what differs */
 static int range_subst(const Fn *f){
     uc_hook hc, hw, hr; Out keep = g_uo;
-    g_nx87st = 0; g_nsub = g_nsub_all = g_sub_read = g_sub_lift = 0; g_sub_pend = 0; g_sub_at = 0;
+    g_nx87st = 0; g_nsub = g_nsub_all = g_sub_read = g_sub_lift = g_sub_over = g_sub_mutated = 0; g_sub_pend = 0; g_sub_at = 0;
     uc_hook_add(g_uc, &hc, UC_HOOK_CODE, (void *)on_sub_code, 0, 1, 0);
     uc_hook_add(g_uc, &hw, UC_HOOK_MEM_WRITE, (void *)on_sub_w, 0, 1, 0);
     uc_hook_add(g_uc, &hr, UC_HOOK_MEM_READ, (void *)on_sub_r, 0, 1, 0);
@@ -981,8 +1104,17 @@ static int range_subst(const Fn *f){
     g_xs_sub = 1; run_unicorn(f, g_u_long); g_xs_sub = 0;
     if (g_u_ev != 5){ uc_hook_del(g_uc, hc); uc_hook_del(g_uc, hw); uc_hook_del(g_uc, hr); }
     uc_ctl_flush_tb(g_uc);
-    int r = 1;
+    int r = 1, bad = -1;
+    for (int i = 0; i < g_nsub && bad < 0; i++) if (g_sub[i].lo != g_sub[i].hi && g_sub[i].bad) bad = i;
     if (!g_nsub_all) snprintf(g_why, sizeof g_why, "range_subst: no fstp m80 of a value no double holds");
+    else if (bad >= 0){
+        uint64_t m[3]; uint16_t e[3]; const uint8_t *b[3] = { g_sub[bad].lb, g_sub[bad].rne, g_sub[bad].ld };
+        for (int j = 0; j < 3; j++){ memcpy(&m[j], b[j], 8); memcpy(&e[j], b[j] + 8, 2); }
+        snprintf(g_why, sizeof g_why, "range_subst: the lifted fstp m80 bytes at %08x are neither image of the value "
+                 "(lifted %04x:%016llx; the nearest double %04x:%016llx, the lift's fld m80 %04x:%016llx)", g_sub[bad].lo,
+                 e[0], (unsigned long long)m[0], e[1], (unsigned long long)m[1], e[2], (unsigned long long)m[2]);
+    }
+    else if (g_sub_over) snprintf(g_why, sizeof g_why, "range_subst: more than %d substituted fstp m80 sites at once", g_nsub);
     else if (!g_sub_read) snprintf(g_why, sizeof g_why, "range_subst: no integer read of the %d substituted fstp m80", g_nsub_all);
     else r = compare(f, CMP_NOVALS);
     if (getenv("ORACLE_DEBUG")) fprintf(stderr, "range_subst: %d stores (%d with the lifted side's bytes), integer reads %d: %s\n",
@@ -1166,10 +1298,11 @@ int main(int argc, char **argv){
     if ((e = getenv("ORACLE_LONG_S"))) g_long_s = atoi(e) < 0 ? 0 : atoi(e);
     if ((e = getenv("ORACLE_LONG_ORIG_S"))) g_long_orig_s = atoi(e) < 0 ? 0 : atoi(e);
     if ((e = getenv("ORACLE_MUTATE"))){
-        g_mutate = !strcmp(e, "eax") ? 1 : !strcmp(e, "loop") ? 2 : -1;
-        if (g_mutate < 0){ fprintf(stderr, "ORACLE_MUTATE=%s: eax or loop\n", e); return 2; }
-        fprintf(stderr, "mworacle: ORACLE_MUTATE=%s (a test of the compare rules: every lifted %s)\n", e,
-                g_mutate == 1 ? "return gets eax ^ 1" : "run ends at its limit");
+        g_mutate = !strcmp(e, "eax") ? 1 : !strcmp(e, "loop") ? 2 : !strcmp(e, "f80") ? 3 : -1;
+        if (g_mutate < 0){ fprintf(stderr, "ORACLE_MUTATE=%s: eax, loop or f80\n", e); return 2; }
+        fprintf(stderr, "mworacle: ORACLE_MUTATE=%s (a test of the compare rules: %s)\n", e,
+                g_mutate == 1 ? "every lifted return gets eax ^ 1" : g_mutate == 2 ? "every lifted run ends at its limit"
+                : "a byte of the lifted side's first substituted fstp m80 in a case flipped");
     }
     g_keep_snan = getenv("ORACLE_SNAN") && atoi(getenv("ORACLE_SNAN"));
     const char *only = getenv("ORACLE_FNS");
@@ -1208,7 +1341,7 @@ int main(int argc, char **argv){
     signal(SIGALRM, on_alarm);
 
     printf("Most Wanted: lifted C (gen/mw/all) against the original x86 (Unicorn), %d functions, %d cases each\n", g_nfns, ncase);
-    printf("  limits: %zu Unicorn instructions, %d ms lifted, re-runs %d s, the original's when the lifted side ended %d s a function\n",
+    printf("  limits: %zu Unicorn instructions, %d ms lifted, re-runs %d s, the original's long re-runs %d s a function\n",
            g_budget, g_lift_ms, g_long_s, g_long_orig_s);
     Count tot = { 0 }; int nfn = 0, reruns = 0, fn_ret = 0, fn_ret10 = 0;
     long fault_fn = 0;
@@ -1225,8 +1358,11 @@ int main(int argc, char **argv){
             run_unicorn(f, 0);
             run_lifted(f, g_lift_ms);
             /* a side at its limit runs again with a long one: the lifted side with g_long_s, and when the
-             * original was at its limit too, the original: with g_long_s while the lifted side still stops,
-             * else with what is left of the function's g_long_orig_s (g_long_s once that is spent).  The
+             * original was at its limit too, the original with what is left of the function's
+             * g_long_orig_s (g_long_s once that is spent), whether the lifted side then ended or not; while
+             * the lifted side still stops, with the loop proof (on_lp), and an original that then ends
+             * after more than g_long_s gives the lifted side as long again (native code is never slower
+             * than Unicorn: a lifted side still at its limit then is a DIFF, not a slow lift).  The
              * both-sides budget goes as soon as a side would still stop after g_long_s, as before the
              * original-loop re-run (it then took more than g_long_s).  An original at its limit where the
              * lifted side ended in its first run gets what is left of g_long_orig_s (g_long_s under the
@@ -1235,6 +1371,7 @@ int main(int argc, char **argv){
             int ul = g_uo.how == O_LOOP, ll = g_lo.how == O_LOOP;
             g_u_long = 0;
             if (ll && (ul ? rerun2 : rerun1) && g_uo.how != O_DE){
+                uint32_t stop = g_u_eip;     /* where the original's counted run stopped: in its loop */
                 double t0 = now_s();
                 run_lifted(f, g_long_s * 1000);
                 double tl = now_s() - t0;
@@ -1243,13 +1380,24 @@ int main(int argc, char **argv){
                         ul ? "both" : "the lifted side", g_long_s, ONAME[g_lo.how], tl);
                 if (!ul){ if (g_lo.how == O_LOOP) rerun1 = 0; }
                 else {
-                    int budget = g_lo.how != O_LOOP && orig_left >= 1.0, lim = budget ? (int)orig_left : g_long_s;
+                    int lloop = g_lo.how == O_LOOP, budget = orig_left >= 1.0, lim = budget ? (int)orig_left : g_long_s;
+                    g_lp_at = lloop ? stop : 0;
                     t0 = now_s(); run_unicorn(f, lim); double tu = now_s() - t0;
+                    g_lp_at = 0;
                     g_u_long = lim;
                     if (budget) orig_left -= tu;
+                    char pv[96] = "";
+                    if (g_lp_proven) snprintf(pv, sizeof pv, " (proven: the same state again at %08x, pass %llu)", stop,
+                                              (unsigned long long)g_lp_n + 1);
+                    fprintf(stderr, "  re-run %08x case %d, the original with %d s%s: original %s after %.1f s%s\n", f->va, k, lim,
+                            lloop ? "" : " (the lifted side ended)", ONAME[g_uo.how], tu, pv);
+                    if (lloop && g_uo.how != O_LOOP && tu > g_long_s){
+                        int ms = (int)(tu * 1000.0) + 1000;
+                        t0 = now_s(); run_lifted(f, ms); tl = now_s() - t0;
+                        fprintf(stderr, "  re-run %08x case %d, the lifted side with %d s (the original's time): lifted %s after %.1f s\n",
+                                f->va, k, ms / 1000, ONAME[g_lo.how], tl);
+                    }
                     if (g_lo.how == O_LOOP || g_uo.how == O_LOOP || tu > g_long_s) rerun2 = 0;
-                    fprintf(stderr, "  re-run %08x case %d, the original with %d s%s: original %s after %.1f s\n", f->va, k, lim,
-                            budget ? " (the lifted side ended)" : "", ONAME[g_uo.how], tu);
                 }
             } else if (ul && !ll){
                 int budget = orig_left >= 1.0, lim = budget ? (int)orig_left : rerun1 ? g_long_s : 0;
@@ -1282,7 +1430,8 @@ int main(int argc, char **argv){
                 if (compare_x(f, CMP_NOVALS, 0) != 1){ c.range++; continue; }
                 char why[sizeof g_why]; memcpy(why, g_why, sizeof why);
                 if (range_subst(f)){ c.rback++; continue; }
-                memcpy(g_why, why, sizeof why);
+                char sw[sizeof g_why]; memcpy(sw, g_why, sizeof sw);
+                snprintf(g_why, sizeof g_why, "%s; read back: %s", why, sw);
             }
             if (r == 5){ c.fsw++; continue; }
             if (r == 4){
