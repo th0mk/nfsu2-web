@@ -40,7 +40,7 @@ const DIGESTS = {
   D3DXMatrixPerspectiveLH: 'a7cdb070a80a55dd',
   D3DXMatrixTranslation: '05f31f3d64cc1085',
   D3DXVec3TransformCoordArray: 'b894fef85be62fa1',
-  D3DXVec3Normalize: 'b5bf150ab96180f9',
+  D3DXVec3Normalize: 'e151f4cd9aaa7cd9',
   D3DXVec3TransformNormal: '8b6a9a8d3dcde41f',
   D3DXMatrixTranspose: 'bf249810ff0e2f9e',
 };

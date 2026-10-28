@@ -8,10 +8,11 @@
  * pointing into the window, aliased, overlapping or misaligned the ways a
  * caller can), and the caller's x87 control word.  Most inputs are ordinary
  * floats; some cases inject special values (zeros of both signs, infinities,
- * quiet and signalling NaNs, denormals, the extremes, Normalize's 2^-46
- * threshold), some take random bit patterns throughout, some are dense with
- * NaNs (which of two NaN operands an operation keeps).  Matrices are
- * sometimes affine (last column 0 0 0 1), sometimes singular. */
+ * quiet and signalling NaNs, denormals, the extremes), some take random bit
+ * patterns throughout, some are dense with NaNs (which of two NaN operands an
+ * operation keeps).  Normalize's first cases put |v|^2 exactly on its 2^-46
+ * threshold and one ulp either side (mc_norm_at).  Matrices are sometimes
+ * affine (last column 0 0 0 1), sometimes singular. */
 #ifndef D3DXMATH_CASES_H
 #define D3DXMATH_CASES_H
 #include <stdint.h>
@@ -44,8 +45,22 @@ static const uint32_t mc_specials[] = {
     0x00000001u, 0x807fffffu, 0x00012345u,           /* denormals */
     0x00800000u, 0x7f7fffffu, 0xff7fffffu,           /* the smallest normal, the largest finite */
     0x80000000u, 0x00000000u, 0x5f000000u, 0x1f000000u, 0x3f800001u,
-    0x28800000u, 0x287fffffu,                        /* 2^-46 (Normalize's threshold) and just below */
+    0x28800000u, 0x287fffffu,                        /* 2^-46 and just below (as a component: a square near 2^-92) */
 };
+/* Normalize's cases 0..13: x, y, z whose s = (x x + y y) + z z, each step rounded to f32, is exactly
+ * the kernel's 2^-46 (it normalises), one ulp below (the zero vector) or one ulp above, s built from
+ * one, two or three components; then x one ulp either side of 2^-23 (s two ulps either side) */
+static const uint32_t mc_norm_at[][3] = {
+    { 0x34000000u, 0, 0 }, { 0, 0x34000000u, 0 }, { 0, 0, 0xb4000000u },          /* s = 2^-46 */
+    { 0x33b504f4u, 0x33b504f3u, 0 }, { 0x3393cd2eu, 0x3393cd3bu, 0x3393cd45u },
+    { 0x33ffffffu, 0x2e000000u, 0x2e000000u },
+    { 0x33ffffffu, 0x2e000000u, 0 }, { 0x2e000000u, 0, 0x33ffffffu },              /* s = 0x287fffff */
+    { 0x3393cd2eu, 0x3393cd39u, 0x3393cd46u },
+    { 0x33ffffffu, 0x2e800000u, 0 }, { 0x2e800000u, 0, 0xb3ffffffu },              /* s = 0x28800001 */
+    { 0x3393cd2eu, 0x3393cd3cu, 0x3393cd46u },
+    { 0x33ffffffu, 0, 0 }, { 0x34000001u, 0, 0 },                                  /* s = 0x287ffffe, 0x28800002 */
+};
+#define MC_NNORM_AT (int)(sizeof mc_norm_at / sizeof mc_norm_at[0])
 #define MC_NSPEC (sizeof mc_specials / sizeof mc_specials[0])
 static int mc_mode;                                  /* 0 ordinary, 1 some specials, 2 random bits, 3 NaN-dense */
 static uint32_t mc_value(void){
@@ -115,6 +130,8 @@ static void mc_case(int f, int i, uint32_t W, MathCase *mc){
     case 8: {                                        /* D3DXVec3Normalize(out, v) */
         if (mc_rnd() % 8u == 0)                      /* near the threshold: |v|^2 around 2^-46 */
             for (uint32_t k = 0; k < 3; k++) mc_put(V + 4u * k, mc_fbits(mc_range(-1.5f, 1.5f) * 0x1p-24f));
+        if (i < MC_NNORM_AT)                         /* on the threshold and either side of it */
+            for (uint32_t k = 0; k < 3; k++) mc_put(V + 4u * k, mc_norm_at[i][k]);
         a[0] = mc_rnd() % 4u == 0 ? V : O; a[1] = V; mc->nargs = 2; break; }
     case 10: {                                       /* D3DXMatrixTranspose(out, m) */
         uint32_t q = mc_rnd() % 8u;
