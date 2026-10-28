@@ -414,12 +414,24 @@ static int crt_sscanf(const char *in, const char *fmt, uint32_t ap){
 }
 
 /* ---- qsort: in place, the comparator always given two elements of the array (as msvcrt does);
- * insertion for a few elements, heapsort above.  Not stable, as msvcrt's is not; D3DX sorts tables
- * whose keys do not tie, where every sort gives the same order ---- */
+ * insertion for a few elements, heapsort above.  Not stable, as msvcrt's is not, and not msvcrt's
+ * algorithm: elements the comparator ties may end in another order than there.  Where nothing ties
+ * every sort gives the same order; the effect-creation path's sorts never tie (140 calls, 2,071
+ * comparisons of 4-byte elements by one comparator for the 31 effects: web/test/d3dx_oracle_unit.c).
+ * A comparator that ties two elements is logged once ---- */
 typedef struct { CPU *c; uint32_t base, width, cmp; uint8_t *tmp; } Sort;
+static void s_tie(uint32_t cmp, CPU *c){
+    static uint32_t seen[8]; static int n;
+    for (int k = 0; k < n; k++) if (seen[k] == cmp) return;
+    if (n < 8) seen[n++] = cmp;
+    fprintf(stderr, "[msvcrt] qsort: the comparator at 0x%08x tied two elements, whose order may differ from msvcrt's"
+                    " (from 0x%08x)\n", cmp, c->eip);
+}
 static int s_cmp(Sort *s, uint32_t i, uint32_t j){
     uint32_t a[2] = { s->base + i * s->width, s->base + j * s->width };
-    return (int32_t)crt_call(s->c, s->cmp, 2, a);
+    int r = (int32_t)crt_call(s->c, s->cmp, 2, a);
+    if (!r && i != j) s_tie(s->cmp, s->c);
+    return r;
 }
 static void s_swap(Sort *s, uint32_t i, uint32_t j){
     uint8_t *a = g_mem + s->base + i * s->width, *b = g_mem + s->base + j * s->width;

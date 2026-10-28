@@ -57,4 +57,6 @@ test('the D3DX oracle: DllMain, the exe\'s slots, D3DXCreateEffectPool and all 3
   const crt = [...err.matchAll(/^\[msvcrt\] (\S+): first call/gm)].map(x => x[1]).sort();
   assert.deepEqual(crt, ['??2@YAPAXI@Z', '??3@YAXPAX@Z', '_initterm', '_stricmp', 'malloc', 'qsort'].sort(), `msvcrt on the path: ${crt}`);
   assert.doesNotMatch(out + err, /not implemented|UNIMPLEMENTED/);
+  // its sorts never tie two elements, so msvcrt's own qsort would give the same orders (msvcrt_mw.c)
+  assert.doesNotMatch(err, /qsort: the comparator at \S+ tied/);
 });

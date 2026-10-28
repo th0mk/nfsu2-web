@@ -62,7 +62,10 @@ test('msvcrt: every import against the documented results, served as the oracle\
   for (const l of ['[msvcrt] _adjust_fdiv = 0 at 0x', '[msvcrt] free(0x01000040): not a block of this DLL\'s heap',
     '[msvcrt] _controlfp unmasks x87 exceptions (control word 0x0243): the runtime raises none',
     '[msvcrt] setlocale(0, "German"): only "C" is here', '[msvcrt] _tempnam: no temporary files here, NULL',
-    '*** guest exit(7) (msvcrt) - exiting']) assert.ok(r.err.includes(l), l);
+    '*** guest exit(7) (msvcrt) - exiting',
+    // 1000 ints below 5000 tie: logged once, as the order of tied elements may differ from msvcrt's
+    '[msvcrt] qsort: the comparator at 0x00d90000 tied two elements, whose order may differ from msvcrt\'s']) assert.ok(r.err.includes(l), l);
+  assert.equal(r.err.split('qsort: the comparator').length - 1, 1, 'a comparator\'s ties logged once');
   assert.doesNotMatch(r.err, /UNIMPLEMENTED/);
   const first = new Set([...r.err.matchAll(/^\[msvcrt\] (\S+): first call \(from 0x00d81234\)$/gm)].map(x => x[1]));
   assert.equal(first.size, 58, 'all but the five that end the process were called');
