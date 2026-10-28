@@ -606,9 +606,11 @@ try {
       const r = await route.fetch(), info = await r.json();
       await route.fulfill({ response: r, json: deployed ? { ...info, rev: deployed } : info });
     });
-    const state = () => p.evaluate(async () => ({ newer: window.__nfsu2.newer(), reloadShown: !document.querySelector('#reload').hidden,
+    // (kept: offline mode's copy of game.json, by its address under the page's base: '/game.json' at the root, where
+    // sw.ts keeps it)
+    const state = () => p.evaluate(async path => ({ newer: window.__nfsu2.newer(), reloadShown: !document.querySelector('#reload').hidden,
       line: document.querySelector('#newer').hidden ? null : document.querySelector('#newer').textContent,
-      kept: await (await caches.match('/game.json'))?.json().then(j => j.rev).catch(() => null) ?? null }));
+      kept: await (await caches.match(path + 'game.json'))?.json().then(j => j.rev).catch(() => null) ?? null }), PATH);
     const shown = () => p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     await open(p, `save=${RUN}-u&fresh&env=NOMOVIES%3D1`);
     const rev = await p.evaluate(() => window.__nfsu2.checks().find(c => c.id === 'module').label.split(' ').pop());
