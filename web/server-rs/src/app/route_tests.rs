@@ -304,6 +304,238 @@ async fn a_file_put_in_place_meanwhile_is_answered_as_one_version() {
     assert!(bad.is_empty(), "{} of {n} answers: {:?}", bad.len(), &bad[..bad.len().min(5)]);
 }
 
+/// the status of a WebSocket upgrade to `path` on the name `host` (Origin: that name's page, when given)
+async fn upgrade_status(kit: &Kit, host: &str, path: &str, origin: Option<&str>) -> u16 {
+    let mut s = tokio::net::TcpStream::connect(kit.addr).await.unwrap();
+    let origin = origin.map_or(String::new(), |o| format!("Origin: {o}\r\n"));
+    let q = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n{origin}\
+         Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+    );
+    s.write_all(q.as_bytes()).await.unwrap();
+    let mut b = [0u8; 64];
+    let n = tokio::time::timeout(Duration::from_secs(5), s.read(&mut b)).await.expect("an answer in time").unwrap();
+    String::from_utf8_lossy(&b[..n]).get(9..12).and_then(|c| c.parse().ok()).unwrap_or(0)
+}
+
+/// a module and its json where the game's defaults look (`wasm`: the module's path in the repo)
+fn module(root: &std::path::Path, wasm: &str) {
+    let p = root.join("repo").join(wasm);
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::write(&p, data(5000, true)).unwrap();
+    std::fs::write(p.with_extension("json"), br#"{"rev":"abc"}"#).unwrap();
+}
+
+// The routes per base (PLAN D-38): UG2 at the root on its own name and this machine's, as ever; under /u2 on the
+// site it shares with Most Wanted: there "/u2" goes to "/u2/", no other path answers but the root files (robots.txt
+// naming both games' bases), and the manifest names its blocks under /u2, with an ETag of its own.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ug2_under_u2_on_the_shared_site_and_at_the_root_elsewhere() {
+    let kit = Kit::start(&["--host", "nfsu2.xyz,nfsrevived.xyz"], |root| {
+        module(root, "out/web/nfsu2.wasm");
+        std::fs::write(root.join("repo/web/dist/main.js"), b"// the page").unwrap();
+    })
+    .await;
+    let get = |host: &'static str, path: &'static str| kit.request_to(host, "GET", path, &[], b"");
+    let shared = "nfsrevived.xyz";
+    // under /u2: the page (the one indexable answer), the module, the game's files, the players
+    let a = get(shared, "/u2/").await;
+    assert_eq!((a.status, a.body.as_slice(), a.header("x-robots-tag")), (200, &b"<!doctype html>"[..], Some("index, follow")));
+    for p in ["/u2/index.html", "/u2/main.js", "/u2/game.json", "/u2/game.wasm", "/u2/players", "/u2/data/SPEED2.EXE", "/u2/data-manifest"]
+    {
+        let a = get(shared, p).await;
+        assert_eq!(a.status, 200, "{p}");
+        let want = if p == "/u2/index.html" { "index, follow" } else { "noindex, nofollow" };
+        assert_eq!(a.header("x-robots-tag"), Some(want), "{p}");
+    }
+    assert_eq!(get(shared, "/u2/data/SPEED2.EXE").await.body, b"MZ the game");
+    let a = get(shared, "/u2/data-blocks/v2/GLOBAL/small.bin?b=0&n=1").await;
+    assert_eq!((a.status, a.body.len()), (200, 1000));
+    // the base itself: 308 to its folder, the query kept; for GET and HEAD only
+    let a = get(shared, "/u2").await;
+    assert_eq!((a.status, a.header("location"), a.header("x-robots-tag")), (308, Some("/u2/"), Some("noindex, nofollow")));
+    assert_eq!(get(shared, "/u2?bc=0&a=%C3%A9").await.header("location"), Some("/u2/?bc=0&a=%C3%A9"));
+    let h = kit.request_to(shared, "HEAD", "/u2", &[], b"").await;
+    assert_eq!((h.status, h.header("location"), h.body.len()), (308, Some("/u2/"), 0));
+    assert_eq!(kit.request_to(shared, "PUT", "/u2", &[], b"x").await.status, 405);
+    // the rest of that origin: no route of UG2's (other spellings are the edge's to redirect)
+    for p in [
+        "/",
+        "/index.html",
+        "/main.js",
+        "/game.json",
+        "/game.wasm",
+        "/players",
+        "/data-manifest",
+        "/data/SPEED2.EXE",
+        "/data-blocks/v2/GLOBAL/small.bin?b=0&n=1",
+        "/vault",
+        "/u2x/",
+        "/u2.html",
+        "/U2/",
+        "/U2",
+        "/mw/",
+        "/mw",
+        "/u2/../game.json",
+        "/u2/%2e%2e/game.json",
+        "/u%32/x/../../game.json",
+    ] {
+        assert_eq!(get(shared, p).await.status, 404, "{p}");
+    }
+    assert_eq!(kit.request_to(shared, "PUT", "/vault", &[], b"x").await.status, 405);
+    // robots.txt: at the root only, naming both games' bases
+    assert_eq!(get(shared, "/u2/robots.txt").await.status, 404);
+    let r = get(shared, "/robots.txt").await;
+    assert_eq!(
+        (r.status, r.header("x-robots-tag"), r.header("content-type")),
+        (200, Some("index, follow"), Some("text/plain; charset=utf-8"))
+    );
+    let want = "User-agent: *\nAllow: /\nDisallow: /u2/data/\nDisallow: /u2/data-manifest\nDisallow: /u2/game.wasm\nDisallow: /u2/game.json\n\
+                Disallow: /u2/players\nDisallow: /u2/lan\nDisallow: /u2/vault\nDisallow: /mw/data/\nDisallow: /mw/data-manifest\n\
+                Disallow: /mw/game.wasm\nDisallow: /mw/game.json\nDisallow: /mw/players\nDisallow: /mw/lan\nDisallow: /mw/vault\n";
+    assert_eq!(String::from_utf8_lossy(&r.body), want);
+    // keyphrase saves under /u2 (no token: 401, how a page tells a server with them)
+    assert_eq!(get(shared, "/u2/vault").await.status, 401);
+    // /lan: under /u2 there, at the root here
+    assert_eq!(upgrade_status(&kit, shared, "/u2/lan", Some("https://nfsrevived.xyz")).await, 101);
+    assert_eq!(upgrade_status(&kit, shared, "/lan", None).await, 404);
+    assert_eq!(upgrade_status(&kit, "localhost", "/u2/lan", None).await, 404);
+    assert_eq!(upgrade_status(&kit, "nfsu2.xyz", "/lan", Some("https://nfsu2.xyz")).await, 101);
+    // the old site and this machine: everything at the root, as ever, and nothing under /u2
+    for host in ["nfsu2.xyz", "localhost", "127.0.0.1"] {
+        let r = kit.request_to(host, "GET", "/robots.txt", &[], b"").await;
+        assert_eq!((r.status, String::from_utf8_lossy(&r.body)), (200, format!("{}\n", super::ROBOTS_TXT).into()), "{host}");
+        for p in ["/", "/game.json", "/players", "/data/SPEED2.EXE", "/data-manifest"] {
+            assert_eq!(kit.request_to(host, "GET", p, &[], b"").await.status, 200, "{host} {p}");
+        }
+        for p in ["/u2", "/u2/", "/u2/game.json"] {
+            assert_eq!(kit.request_to(host, "GET", p, &[], b"").await.status, 404, "{host} {p}");
+        }
+    }
+    // the manifest: the same files; the blocks under the base; one ETag per base, the root's the manifest's of before
+    let (root, u2) = (get("nfsu2.xyz", "/data-manifest").await, get(shared, "/u2/data-manifest").await);
+    let (rv, uv): (serde_json::Value, serde_json::Value) =
+        (serde_json::from_slice(&root.body).unwrap(), serde_json::from_slice(&u2.body).unwrap());
+    assert_eq!(rv["files"], uv["files"]);
+    assert_eq!((rv["blocks"]["url"].as_str(), uv["blocks"]["url"].as_str()), (Some("/data-blocks/v2/"), Some("/u2/data-blocks/v2/")));
+    let (re, ue) = (root.header("etag").unwrap(), u2.header("etag").unwrap());
+    assert_ne!(re, ue);
+    let local = get("localhost", "/data-manifest").await;
+    assert_eq!((&local.body, local.header("etag")), (&root.body, Some(re)));
+    let key = super::etag::load_key(&kit.path("state").to_string_lossy()).unwrap();
+    let before =
+        super::manifest::build(&crate::game::UG2, &[String::new()], &kit.path("game").to_string_lossy(), "/nonexistent-state", &key)
+            .unwrap();
+    assert_eq!((&root.body[..], re), (&before.bodies[0].body[..], before.bodies[0].etag.as_str()));
+    let not_modified = kit.request_to(shared, "GET", "/u2/data-manifest", &[("If-None-Match", ue)], b"").await;
+    assert_eq!(not_modified.status, 304);
+    assert_eq!(kit.request_to(shared, "GET", "/u2/data-manifest", &[("If-None-Match", re)], b"").await.status, 200);
+    let gz = kit.request_to(shared, "GET", "/u2/data-manifest?refresh", &[("Accept-Encoding", "gzip")], b"").await;
+    assert_eq!((gz.status, gz.header("content-encoding"), gz.header("etag")), (200, Some("gzip"), Some(ue)));
+    let mut un = Vec::new();
+    std::io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&gz.body[..]), &mut un).unwrap();
+    assert_eq!(un, u2.body);
+}
+
+// Random targets on the shared site, spelled every way the URL parser reads (case, escapes, dot segments, slashes):
+// an answer only under /u2/ (the vault's 401 at /u2/vault), the root's robots.txt, and /u2 itself to /u2/; nothing
+// else but 400 and 404, whatever the spelling
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn nothing_outside_the_base_answers() {
+    let kit = Kit::start(&["--host", "nfsrevived.xyz"], |root| module(root, "out/web/nfsu2.wasm")).await;
+    let words: Vec<&str> =
+        r"/ u2 U2 u 2 %32 %75 %2e %2E . .. %2f %5c \ ? x index.html game.json robots.txt data -manifest lan vault players % %00 // ; mw &"
+            .split(' ')
+            .collect();
+    let mut x = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        x
+    };
+    let mut seen = std::collections::BTreeMap::new();
+    for _ in 0..2000 {
+        let mut t = String::from("/");
+        for _ in 0..1 + next() % 6 {
+            t.push_str(words[(next() % words.len() as u64) as usize]);
+        }
+        let a = kit.request_to("nfsrevived.xyz", "GET", &t, &[], b"").await;
+        // the path the routes read: the URL parser's, decoded
+        let p = super::url::decode_uri_component(&super::url::parse_path(&t).pathname);
+        let p = p.as_deref().unwrap_or("(none)");
+        match a.status {
+            200 => assert!(p.starts_with("/u2/") || p == "/robots.txt", "{t:?}: 200 for {p:?}"),
+            401 => assert_eq!(p, "/u2/vault", "{t:?}"),
+            308 => assert_eq!((p, a.header("location").map(|l| l.starts_with("/u2/"))), ("/u2", Some(true)), "{t:?}"),
+            400 | 404 => {}
+            s => panic!("{t:?}: {s} for {p:?}"),
+        }
+        *seen.entry(a.status).or_insert(0) += 1;
+    }
+    assert!([200, 308, 400, 404].iter().all(|s| seen.contains_key(s)), "every kind of answer seen: {seen:?}");
+}
+
+// --base-path: this machine's name stands in for the shared site (the tests' one-origin layouts), its root files and
+// all; "*" moves every other name
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn base_path_moves_a_name() {
+    let kit = Kit::start(&["--base-path", "localhost=/u2,*=/x"], |_| {}).await;
+    let get = |host: &'static str, path: &'static str| kit.request_to(host, "GET", path, &[], b"");
+    assert_eq!(get("localhost:9", "/u2/").await.status, 200);
+    assert_eq!(get("localhost", "/").await.status, 404);
+    let r = get("localhost", "/robots.txt").await;
+    assert!(String::from_utf8_lossy(&r.body).starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n"));
+    assert!(String::from_utf8_lossy(&r.body).ends_with("Disallow: /mw/vault\n"));
+    assert_eq!(get("127.0.0.1", "/x/").await.status, 200);
+    assert_eq!(get("127.0.0.1", "/x").await.header("location"), Some("/x/"));
+    assert_eq!(get("127.0.0.1", "/u2/").await.status, 404);
+    let r = get("127.0.0.1", "/robots.txt").await;
+    assert!(String::from_utf8_lossy(&r.body).starts_with("User-agent: *\nAllow: /\nDisallow: /x/data/\n"));
+    let m: serde_json::Value = serde_json::from_slice(&get("127.0.0.1", "/x/data-manifest").await.body).unwrap();
+    assert_eq!(m["blocks"]["url"], "/x/data-blocks/v2/");
+    let m: serde_json::Value = serde_json::from_slice(&get("localhost", "/u2/data-manifest").await.body).unwrap();
+    assert_eq!(m["blocks"]["url"], "/u2/data-blocks/v2/");
+    // (a body for each base the names have: /x, and /u2 of localhost and the shared site; no name is at the root)
+    let bases: Vec<String> = kit.app.current_manifest().unwrap().bodies.iter().map(|b| b.base.clone()).collect();
+    assert_eq!(bases, ["/x", "/u2"]);
+}
+
+// Most Wanted: under /mw on every name, this machine's too; no root files of its own (UG2's server answers the shared
+// site's root)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn most_wanted_under_mw_everywhere() {
+    let kit = Kit::start(&["--game", "mw"], |root| {
+        std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw")).unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html><title>mw</title>").unwrap();
+        module(root, "out/web/mw/nfsmw.wasm");
+    })
+    .await;
+    for host in ["localhost", "127.0.0.1:8080"] {
+        let get = |path: &'static str| kit.request_to(host, "GET", path, &[], b"");
+        let a = get("/mw/").await;
+        assert_eq!((a.status, a.header("x-robots-tag")), (200, Some("index, follow")), "{host}");
+        assert_eq!(a.body, b"<!doctype html><title>mw</title>");
+        for p in ["/mw/game.json", "/mw/game.wasm", "/mw/players", "/mw/data/speed.exe", "/mw/data-manifest"] {
+            assert_eq!(get(p).await.status, 200, "{host} {p}");
+        }
+        assert_eq!(get("/mw/vault").await.status, 401, "{host}");
+        assert_eq!(get("/mw").await.header("location"), Some("/mw/"), "{host}");
+        for p in
+            ["/", "/robots.txt", "/mw/robots.txt", "/game.json", "/players", "/data-manifest", "/data/speed.exe", "/u2/", "/MW/", "/mwx"]
+        {
+            assert_eq!(get(p).await.status, 404, "{host} {p}");
+        }
+        let m: serde_json::Value = serde_json::from_slice(&get("/mw/data-manifest").await.body).unwrap();
+        assert_eq!(m["blocks"]["url"], "/mw/data-blocks/v2/");
+        assert_eq!(upgrade_status(&kit, host, "/mw/lan", None).await, 101, "{host}");
+        assert_eq!(upgrade_status(&kit, host, "/lan", None).await, 404, "{host}");
+    }
+    // a name it does not have: 421 before any path
+    assert_eq!(kit.request_to("nfsrevived.xyz", "GET", "/mw/", &[], b"").await.status, 421);
+}
+
 /// an answer's whole length once its head is in (its Content-Length; none: no body)
 fn answer_len(b: &[u8]) -> Option<usize> {
     let end = b.windows(4).position(|w| w == b"\r\n\r\n")?;

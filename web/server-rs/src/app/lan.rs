@@ -81,7 +81,8 @@ impl App {
         if !self.own_host(&q) {
             return self.refuse(up, 421).await;
         }
-        if u.pathname != "/lan" {
+        // (under the base of the name asked for: /u2/lan)
+        if u.pathname.strip_prefix(self.base_of(&q, &u)) != Some("/lan") {
             return self.refuse(up, 404).await;
         }
         // a WebSocket handshake, checked here so that every refusal looks the same

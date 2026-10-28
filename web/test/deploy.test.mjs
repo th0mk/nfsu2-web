@@ -1,7 +1,8 @@
 // The server as it would face the internet (out/web/server-rs/nfsu2-server, web/tools/server-cmd.mjs):
 //   node --test --test-concurrency=1 web/test/deploy.test.mjs
 // - the no-leak crawl: every route and error path, in each TLS mode (none:
-//   this machine only, a certificate, behind a Cloudflare-like proxy, --dev): no host name,
+//   this machine only, a certificate, behind a Cloudflare-like proxy, --dev)
+//   and under a base path (--base-path localhost=/u2): no host name,
 //   local address, home folder, user name, absolute path, Node version or
 //   stack trace in any status line, header, body, WebSocket message or close
 //   reason, and the security and cache headers on every response
@@ -172,9 +173,21 @@ const closeOf = (ws, ms = 0) => new Promise(r => {
 });
 
 // ---- the crawl ----
-function crawlRequests(mode) {
+// base: the routes' base path ('/u2': each path under it, as the server serves a name that has one, PLAN D-38), with
+// the paths around it besides: the origin's root files, the bare base, and the root's own routes
+function crawlRequests(base = '') {
   const r = [];
   const add = (name, data, o = {}) => r.push({ name, data, ...o });
+  crawlPaths(add, (method, p, o) => req(method, p.startsWith('/') ? base + p : p, o), (p, extra) => upgrade(base + p, extra));
+  if (base) {
+    add('root robots', req('GET', '/robots.txt')); add('bare base', req('GET', base)); add('bare base query', req('GET', `${base}?a=1`));
+    add('root index', req('GET', '/')); add('root path', req('GET', '/game.json')); add('root manifest', req('GET', '/data-manifest'));
+    add('root lan', upgrade('/lan'));
+  }
+  return r;
+}
+// (req and upgrade: the base's own)
+function crawlPaths(add, req, upgrade) {
   add('index', req('GET', '/')); add('index.html', req('GET', '/index.html')); add('HEAD /', req('HEAD', '/'));
   add('main.js', req('GET', '/main.js')); add('main.css', req('GET', '/main.css'));
   add('io-worker', req('GET', '/host/io-worker.js')); add('game-worker', req('GET', '/host/game-worker.js'));
@@ -214,19 +227,19 @@ function crawlRequests(mode) {
   add('upgrade bad protocol 2', upgrade('/lan', { 'Sec-WebSocket-Protocol': 'x,,y' }));
   add('dev bypass', req('GET', '/%2ftest/play.html')); add('dev bypass 2', req('GET', '/te%C5%BFt/play.html'));
   add('upgrade h2c', req('GET', '/', { headers: { Upgrade: 'h2c', 'HTTP2-Settings': 'AAMAAABkAARAAAAAAAIAAAAA' } }).replace('Connection: close', 'Connection: Upgrade, HTTP2-Settings'));
-  return r;
 }
 
-async function crawl(label, target, { viaProxy = false } = {}) {
+// indexable: the requests whose answer search engines may index (INDEXABLE at the root)
+async function crawl(label, target, { viaProxy = false, base = '', indexable = INDEXABLE } = {}) {
   const results = [];
   let etag = null;
-  for (const r of crawlRequests()) {
+  for (const r of crawlRequests(base)) {
     // the first module request waits for its compression (seconds on a busy machine)
     const res = await rawRequest({ ...target, data: r.data, timeout: r.br ? 180_000 : 30_000 });
     results.push({ ...r, res });
     if (r.name === 'data range') etag = res.headers.etag;
   }
-  if (etag) results.push({ name: 'data 304', res: await rawRequest({ ...target, data: req('GET', '/data/SPEED2.EXE', { headers: { 'If-None-Match': etag } }) }) });
+  if (etag) results.push({ name: 'data 304', res: await rawRequest({ ...target, data: req('GET', `${base}/data/SPEED2.EXE`, { headers: { 'If-None-Match': etag } }) }) });
   const problems = [];
   for (const { name, res, binary, br, gz } of results) {
     if (!res.status) { problems.push(`${label} ${name}: no HTTP answer (${JSON.stringify(res.head.slice(0, 80))})`); continue; }
@@ -239,7 +252,7 @@ async function crawl(label, target, { viaProxy = false } = {}) {
     if (res.status >= 400 && body.length > 64) problems.push(`${label} ${name} (${res.status}): error body of ${body.length} bytes`);
     // through the proxy, a request it refuses itself (as Cloudflare's edge would) never reaches the server
     const fromProxy = viaProxy && !('content-security-policy' in res.headers) && [400, 417, 431, 502, 505].includes(res.status);
-    const hp = headerProblems(res, { viaProxy, indexable: INDEXABLE.has(name) });
+    const hp = headerProblems(res, { viaProxy, indexable: indexable.has(name) });
     if (hp.length && !fromProxy) problems.push(`${label} ${name} (${res.status}): ${hp.join('; ')}`);
   }
   return { results, problems, statuses: Object.fromEntries(results.map(r => [r.name, r.res.status])) };
@@ -332,6 +345,30 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
       expect(cb.code === 1013 && cb.reason === 'LAN full', `a full switch closes with ${cb.code} ${cb.reason}`);
       a.ws.close();
     } finally { await sim.close(); await s.stop(); }
+  }
+  // 5. under a base (PLAN D-38): this machine's name standing in for the site UG2 shares with Most Wanted, as
+  // --base-path puts it under /u2: every answer with the same headers and nothing about the machine; the page's index
+  // the one indexable answer under /u2 and robots.txt at the root alone, naming both games' bases
+  {
+    const s = await startServer(['--http-port', String(P2), '--base-path', 'localhost=/u2']);
+    try {
+      const http = await crawl('base /u2', { port: P2 }, { base: '/u2', indexable: new Set(['index', 'index.html', 'HEAD /', 'root robots']) });
+      all.push(...http.problems);
+      summary['base /u2'] = http.statuses;
+      for (const n of ['server-info', 'setup', 'ca.crt', 'robots', 'main.js.map', 'test page', 'test script', 'root index', 'root path', 'root manifest'])
+        is('base', http.statuses, n, 404);
+      for (const n of ['index', 'index.html', 'main.js', 'game.json', 'manifest', 'root robots']) is('base', http.statuses, n, 200);
+      is('base', http.statuses, 'bare base', 308); is('base', http.statuses, 'root lan', 404);
+      const body = n => http.results.find(r => r.name === n).res;
+      expect(body('bare base').headers.location === '/u2/', `base: /u2 goes to ${body('bare base').headers.location}`);
+      expect(body('bare base query').headers.location === '/u2/?a=1', `base: /u2?a=1 goes to ${body('bare base query').headers.location}`);
+      expect(JSON.parse(body('manifest').body).blocks.url === '/u2/data-blocks/v2/', 'base: the manifest names its blocks under /u2');
+      const robots = body('root robots').body.toString();
+      expect(/^Disallow: \/u2\/data\/$/m.test(robots) && /^Disallow: \/mw\/vault$/m.test(robots) && !/^Disallow: \/data\/$/m.test(robots),
+        `base: the root's robots.txt names both games' bases: ${JSON.stringify(robots)}`);
+      const w = await wsCrawl('base /u2', `ws://localhost:${P2}/u2/lan`, { headers: { Origin: `http://localhost:${P2}` } });
+      all.push(...w.problems);
+    } finally { await s.stop(); }
   }
   console.log('statuses:', JSON.stringify(summary));
   assert.deepEqual(all, [], all.join('\n'));

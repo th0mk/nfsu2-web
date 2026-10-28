@@ -32,15 +32,36 @@ pub const BLOCK: u64 = 1 << 20;
 pub const BLOCKS_MAX: u64 = 8;
 
 pub struct Manifest {
-    pub body: Bytes,
-    pub gz: Bytes,
-    pub etag: String,
+    /// the same files, one body for each base the server has (its blocks' address is under the base): the first is
+    /// the default base's
+    pub bodies: Vec<Body>,
     /// entries (folders and files)
     pub count: usize,
     /// when it was made (ms since the epoch)
     pub at: i64,
     /// the files' paths in the folder (kept.rs keeps their blocks)
     pub files: Vec<String>,
+}
+
+/// The manifest as the pages under one base read it
+pub struct Body {
+    /// "" (the root) or "/u2"
+    pub base: String,
+    pub body: Bytes,
+    pub gz: Bytes,
+    pub etag: String,
+}
+
+impl Manifest {
+    /// the body for the pages under `base` (the default's for a base the server does not have)
+    pub fn under(&self, base: &str) -> &Body {
+        self.bodies.iter().find(|b| b.base == base).unwrap_or(&self.bodies[0])
+    }
+
+    /// the walk's own ETag (the default base's): what the kept blocks' sweep tells walks apart by
+    pub fn etag(&self) -> &str {
+        &self.bodies[0].etag
+    }
 }
 
 /// one entry of the walk, in the order Node's readdir gives them (libuv's scandir: sorted by byte)
@@ -130,14 +151,14 @@ impl ManifestCell {
     }
 
     /// the walk under way, or a new one (on the runtime: the walk is a task of its own)
-    pub fn refresh(self: &Arc<Self>, game: &'static GameProfile, data: &str, real_state: &str, key: &[u8]) -> Walk {
+    pub fn refresh(self: &Arc<Self>, game: &'static GameProfile, bases: &[String], data: &str, real_state: &str, key: &[u8]) -> Walk {
         let mut walk = self.walk.lock();
         if let Some(w) = walk.as_ref() {
             return w.clone();
         }
-        let (cell, data, state, key) = (self.clone(), data.to_string(), real_state.to_string(), key.to_vec());
+        let (cell, bases, data, state, key) = (self.clone(), bases.to_vec(), data.to_string(), real_state.to_string(), key.to_vec());
         let task = tokio::spawn(async move {
-            let r = match tokio::task::spawn_blocking(move || build(game, &data, &state, &key)).await {
+            let r = match tokio::task::spawn_blocking(move || build(game, &bases, &data, &state, &key)).await {
                 Ok(Ok(m)) => Ok(Arc::new(m)),
                 Ok(Err(e)) => Err(e.to_string()),
                 Err(e) => Err(e.to_string()),
@@ -159,24 +180,31 @@ impl ManifestCell {
     }
 }
 
-/// the manifest of the game's install folder (blocking: on a blocking thread)
-pub fn build(game: &GameProfile, data: &str, real_state: &str, key: &[u8]) -> io::Result<Manifest> {
-    let mut body = String::from("{\"v\":1,\"files\":[");
+/// the manifest of the game's install folder, one body for each of `bases` (at least one; blocking: on a blocking
+/// thread)
+pub fn build(game: &GameProfile, bases: &[String], data: &str, real_state: &str, key: &[u8]) -> io::Result<Manifest> {
+    let mut head = String::from("{\"v\":1,\"files\":[");
     let (mut count, mut files) = (0, Vec::new());
-    walk(game, data, "", real_state, &mut body, &mut count, &mut files)?;
-    body.push_str(&format!("],\"blocks\":{{\"url\":\"/data-blocks{V2}/\",\"size\":{BLOCK},\"max\":{BLOCKS_MAX}}}}}"));
-    let mut gz = flate2::GzBuilder::new().operating_system(3).write(Vec::new(), flate2::Compression::default());
-    gz.write_all(body.as_bytes())?;
-    let gz = gz.finish()?;
-    let hex: String = Sha256::digest(body.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
-    Ok(Manifest {
-        etag: etag::etag_of(key, &["manifest", &hex]),
-        body: Bytes::from(body),
-        gz: Bytes::from(gz),
-        count,
-        at: nfsu2_util::now_ms(),
-        files,
-    })
+    walk(game, data, "", real_state, &mut head, &mut count, &mut files)?;
+    let mut bodies = Vec::with_capacity(bases.len());
+    for (i, base) in bases.iter().enumerate() {
+        let mut body = if i + 1 == bases.len() { std::mem::take(&mut head) } else { head.clone() };
+        body.push_str(&format!("],\"blocks\":{{\"url\":\"{base}/data-blocks{V2}/\",\"size\":{BLOCK},\"max\":{BLOCKS_MAX}}}}}"));
+        let mut gz = flate2::GzBuilder::new().operating_system(3).write(Vec::new(), flate2::Compression::default());
+        gz.write_all(body.as_bytes())?;
+        let gz = gz.finish()?;
+        let hex: String = Sha256::digest(body.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+        bodies.push(Body {
+            base: base.clone(),
+            etag: etag::etag_of(key, &["manifest", &hex]),
+            body: Bytes::from(body),
+            gz: Bytes::from(gz),
+        });
+    }
+    if bodies.is_empty() {
+        return Err(io::Error::other("a manifest for no base"));
+    }
+    Ok(Manifest { bodies, count, at: nfsu2_util::now_ms(), files })
 }
 
 #[cfg(test)]
@@ -227,11 +255,17 @@ mod tests {
         d
     }
 
+    /// the root's body alone
+    fn at_root(game: &GameProfile, root: &str, state: &str) -> Manifest {
+        build(game, &[String::new()], root, state, &[0u8; 32]).unwrap()
+    }
+
     #[test]
     fn only_the_games_entries_in_byte_order() {
         let d = folder();
         let root = d.path().to_string_lossy().into_owned();
-        let m = build(&UG2, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
+        let m = at_root(&UG2, &root, "/nonexistent-state");
+        let m = &m.bodies[0];
         let v: serde_json::Value = serde_json::from_slice(&m.body).unwrap();
         let ps: Vec<&str> = v["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();
         let mut want = vec![
@@ -253,7 +287,7 @@ mod tests {
             want.retain(|p| *p != "GLOBAL/B.bin");
         }
         assert_eq!(ps, want);
-        assert_eq!(m.count, ps.len());
+        assert_eq!(at_root(&UG2, &root, "/nonexistent-state").count, ps.len());
         let exe = ps.iter().position(|p| *p == "SPEED2.EXE").unwrap();
         assert_eq!(v["files"][exe], serde_json::json!({ "p": "SPEED2.EXE", "s": 7, "m": 1_700_000_001u64 }));
         assert_eq!(v["blocks"], serde_json::json!({ "url": "/data-blocks/v2/", "size": 1048576, "max": 8 }));
@@ -263,8 +297,43 @@ mod tests {
         // the state folder is skipped, wherever it is (build takes its real path, as run.rs gives it: on macOS the temp
         // folder is under a link, /var to /private/var)
         let real_root = std::fs::canonicalize(d.path()).unwrap().to_string_lossy().into_owned();
-        let m2 = build(&UG2, &root, &format!("{real_root}/TRACKS"), &[0u8; 32]).unwrap();
-        assert!(!String::from_utf8_lossy(&m2.body).contains("TRACKS"));
+        let m2 = at_root(&UG2, &root, &format!("{real_root}/TRACKS"));
+        assert!(!String::from_utf8_lossy(&m2.bodies[0].body).contains("TRACKS"));
+    }
+
+    // One walk, a body for each base: the same files, the blocks' address under the base, an ETag of its own; the
+    // root's body and ETag as a manifest of the root alone has them
+    #[test]
+    fn a_body_for_each_base() {
+        let d = folder();
+        let root = d.path().to_string_lossy().into_owned();
+        let key = [7u8; 32];
+        let alone = build(&UG2, &[String::new()], &root, "/nonexistent-state", &key).unwrap();
+        let m = build(&UG2, &[String::new(), "/u2".into(), "/mw".into()], &root, "/nonexistent-state", &key).unwrap();
+        assert_eq!(m.bodies.iter().map(|b| b.base.as_str()).collect::<Vec<_>>(), ["", "/u2", "/mw"]);
+        let (r, u2) = (m.under(""), m.under("/u2"));
+        assert_eq!((&r.body, &r.gz, &r.etag), (&alone.bodies[0].body, &alone.bodies[0].gz, &alone.bodies[0].etag));
+        assert_eq!(m.etag(), alone.etag());
+        let (rv, uv): (serde_json::Value, serde_json::Value) =
+            (serde_json::from_slice(&r.body).unwrap(), serde_json::from_slice(&u2.body).unwrap());
+        assert_eq!(rv["files"], uv["files"]);
+        assert_eq!(uv["blocks"], serde_json::json!({ "url": "/u2/data-blocks/v2/", "size": 1048576, "max": 8 }));
+        assert_eq!(m.under("/mw").body.len(), r.body.len() + 3);
+        let hex: String = Sha256::digest(&u2.body).iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(u2.etag, etag::etag_of(&key, &["manifest", &hex]));
+        let etags: std::collections::HashSet<&str> = m.bodies.iter().map(|b| b.etag.as_str()).collect();
+        assert_eq!(etags.len(), 3, "an ETag each");
+        let mut un = Vec::new();
+        io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&u2.gz[..]), &mut un).unwrap();
+        assert_eq!(un, u2.body);
+        // a base it has no body for: the default's; Most Wanted's bodies alone
+        assert_eq!(m.under("/x").etag, r.etag);
+        let mw = build(&crate::game::MW, &["/mw".into()], &root, "/nonexistent-state", &key).unwrap();
+        assert_eq!(mw.bodies.len(), 1);
+        assert!(
+            String::from_utf8_lossy(&mw.under("/mw").body).ends_with(r#"],"blocks":{"url":"/mw/data-blocks/v2/","size":1048576,"max":8}}"#)
+        );
+        assert!(build(&UG2, &[], &root, "/nonexistent-state", &key).is_err());
     }
 
     // Most Wanted's folder (--game mw): its own entries only, never the mod loader, a widescreen fix's scripts and
@@ -283,8 +352,8 @@ mod tests {
             std::fs::write(p(f), "SECRET").unwrap();
         }
         let root = d.path().to_string_lossy().into_owned();
-        let m = build(&crate::game::MW, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
-        let v: serde_json::Value = serde_json::from_slice(&m.body).unwrap();
+        let m = at_root(&crate::game::MW, &root, "/nonexistent-state");
+        let v: serde_json::Value = serde_json::from_slice(&m.bodies[0].body).unwrap();
         let ps: Vec<&str> = v["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();
         assert_eq!(
             ps,
@@ -303,8 +372,8 @@ mod tests {
             ]
         );
         // UG2's entries do not take Most Wanted's program
-        let u = build(&UG2, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
-        assert!(!String::from_utf8_lossy(&u.body).contains("speed.exe"));
+        let u = at_root(&UG2, &root, "/nonexistent-state");
+        assert!(!String::from_utf8_lossy(&u.bodies[0].body).contains("speed.exe"));
     }
 
     // the same folder walked by the Node server's own buildManifest (copied here as it was, but for the blocks' address
@@ -313,7 +382,8 @@ mod tests {
     fn the_same_body_as_the_node_servers() {
         let d = folder();
         let root = d.path().to_string_lossy().into_owned();
-        let m = build(&UG2, &root, "/nonexistent-state", &[0u8; 32]).unwrap();
+        let m = at_root(&UG2, &root, "/nonexistent-state");
+        let m = &m.bodies[0];
         let script = r#"
 import fsp from 'node:fs/promises'; import path from 'node:path';
 const GAME_ENTRIES = ['speed2.exe', 'server.dll', 'server.cfg',

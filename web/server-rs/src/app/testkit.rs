@@ -112,8 +112,13 @@ impl Kit {
 
     /// any request, with a body (a Content-Length for it when there is one): the whole answer
     pub async fn request(&self, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
+        self.request_to("localhost", method, path, headers, body).await
+    }
+
+    /// `request` for the name `host` (its Host header)
+    pub async fn request_to(&self, host: &str, method: &str, path: &str, headers: &[(&str, &str)], body: &[u8]) -> Answer {
         let mut s = TcpStream::connect(self.addr).await.expect("connect");
-        let mut req = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\n");
+        let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\n");
         for (k, v) in headers {
             req.push_str(&format!("{k}: {v}\r\n"));
         }

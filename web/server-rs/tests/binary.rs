@@ -438,15 +438,23 @@ async fn the_binary_for_most_wanted() {
     let sock = state.join("control.sock").to_string_lossy().to_string();
     let bans = format!("  bans      : 0; nfsu2-server ctl --game mw who, kick, ban, unban, bans (through {sock})");
     assert!(startup.contains(&bans), "{startup:?}");
-    let (_, m) = srv.get("/data-manifest").await;
+    // its routes under /mw, on every name (PLAN D-38)
+    let paths = "  paths     : under /mw/ for localhost (/mw redirects there; any other path 404)";
+    assert!(startup.contains(&paths.to_string()), "{startup:?}");
+    let (_, m) = srv.get("/mw/data-manifest").await;
     let m: Value = serde_json::from_str(&m).unwrap();
     let ps: Vec<&str> = m["files"].as_array().unwrap().iter().map(|f| f["p"].as_str().unwrap()).collect();
     assert_eq!(ps, ["GLOBAL", "GLOBAL/a.bin", "SOUND", "SOUND/PFDATA", "SOUND/PFDATA/m.mus", "speed.exe"]);
-    assert_eq!(srv.get("/data/speed.exe").await.1, "MZ");
-    for p in ["/data/SAVE/profile", "/data/scripts/fix.ini", "/data/dinput8.dll", "/data/foobar", "/data/SPEED2.EXE"] {
+    assert_eq!(m["blocks"]["url"], "/mw/data-blocks/v2/");
+    assert_eq!(srv.get("/mw/data/speed.exe").await.1, "MZ");
+    for p in ["/mw/data/SAVE/profile", "/mw/data/scripts/fix.ini", "/mw/data/dinput8.dll", "/mw/data/foobar", "/mw/data/SPEED2.EXE"] {
         assert_eq!(status_of(port, p).await, 404, "{p}");
     }
-    assert_eq!(srv.players().await, r#"{"players":0,"online":null,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);
+    for p in ["/data/speed.exe", "/data-manifest", "/players", "/game.json", "/robots.txt", "/"] {
+        assert_eq!(status_of(port, p).await, 404, "{p}: outside /mw");
+    }
+    assert_eq!(status_of(port, "/mw").await, 308);
+    assert_eq!(srv.get("/mw/players").await.1, r#"{"players":0,"online":null,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);
     assert_eq!(srv.stop().await, Some(0));
 
     // the entries each game's folder is served by, one a line, with no folder

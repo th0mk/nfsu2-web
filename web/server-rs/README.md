@@ -24,8 +24,12 @@ on 2026-10-21 it carried 1209 players on 0.7 of a core.
 It needs Rust (https://rustup.rs) and a C compiler (zstd and mimalloc are C).  Servers can run at once on different
 ports; give each its own `--state`.  One game per server: NFS Underground 2, or with `--game mw` (`NFSU2_GAME`) NFS
 Most Wanted, with that game's defaults (`src/game.rs`: the program the folder holds, what of it is served, the page,
-the module, the state folder; no Online mode for it yet).  `nfsu2-server [--game mw] --print-entries` prints what of
-the game's folder it serves (web/deploy/pack.sh asks).  Knobs for measurements, from the environment:
+the module, the state folder, where its routes are; no Online mode for it yet).  Most Wanted's routes are under `/mw/`
+on every name (`/mw/game.json`, `/mw/lan`, ...; `/mw` redirects to `/mw/`, the rest is 404); UG2's are at the root, but
+under `/u2/` on nfsrevived.xyz, the site it shares with Most Wanted, whose `/robots.txt` it answers for both games.
+`--base-path <name>=<path>` moves a name (`localhost=/u2` stands in for that site on this machine; `*` is every other
+name).  `nfsu2-server [--game mw] --print-entries` prints what of the game's folder it serves (web/deploy/pack.sh
+asks).  Knobs for measurements, from the environment:
 
 | | |
 |---|---|

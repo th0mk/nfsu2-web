@@ -54,6 +54,34 @@ fn vault_line(s: &Sweep, max: u64, seconds: f64) -> String {
     l
 }
 
+/// where the routes are on the server's names, when any of them has them under a base (none: everything at the root,
+/// as ever; a "*.zone" name has the base of names --base-path does not give)
+fn paths_line(o: &Options, names: &[String]) -> Option<String> {
+    let mut by: Vec<(&str, Vec<&str>)> = Vec::new();
+    for n in names {
+        let b = o.bases.of(n);
+        match by.iter_mut().find(|(x, _)| *x == b) {
+            Some((_, ns)) => ns.push(n),
+            None => by.push((b, vec![n])),
+        }
+    }
+    if by.iter().all(|(b, _)| b.is_empty()) {
+        return None;
+    }
+    let rest = if o.game.root_files { "any other path 404 but /robots.txt, which names each game's" } else { "any other path 404" };
+    let parts: Vec<String> = by
+        .iter()
+        .map(|(b, ns)| {
+            if b.is_empty() {
+                format!("at the root for {}", ns.join(", "))
+            } else {
+                format!("under {b}/ for {} ({b} redirects there; {rest})", ns.join(", "))
+            }
+        })
+        .collect();
+    Some(format!("  paths     : {}", parts.join("; ")))
+}
+
 /// a measurement knob from the environment (a whole number), else the default
 fn env_num(name: &str, def: u64) -> u64 {
     std::env::var(name).ok().and_then(|v| v.trim().parse().ok()).unwrap_or(def)
@@ -417,6 +445,9 @@ pub async fn run(o: Options, cores: usize) {
         );
     }
     lines.push(format!("  names     : {} (other Host names get 421)", names.join(", ")));
+    if let Some(l) = paths_line(o, &names) {
+        lines.push(l);
+    }
     lines.push(format!("  switch    : at most {} players", o.max_peers));
     lines.push(format!(
         "  free roam : {}",

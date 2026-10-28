@@ -151,6 +151,26 @@ const STATUS: [(u16, &str); 8] = [
 ];
 
 pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /lan\nDisallow: /vault";
+/// what ROBOTS_TXT keeps search engines out of, under each base
+const DISALLOW: [&str; 7] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/lan", "/vault"];
+
+/// /robots.txt for an origin with the games under these bases ("" the root: ROBOTS_TXT)
+pub fn robots_txt(bases: &[String]) -> String {
+    let mut s = String::from("User-agent: *\nAllow: /");
+    for b in bases {
+        for d in DISALLOW {
+            s.push_str("\nDisallow: ");
+            s.push_str(b);
+            s.push_str(d);
+        }
+    }
+    s
+}
+
+/// the name a request asked for: an absolute URL's host, else its Host header
+fn host_of<'a>(q: &'a Request, u: &'a url::Url) -> &'a str {
+    if q.url.starts_with('/') { q.headers.get("host").unwrap_or("") } else { &u.host }
+}
 
 /// what a client may ask a file to be sent as
 const TYPES: [(&str, &str); 11] = [
@@ -271,7 +291,7 @@ impl App {
             let (k, game, data, roots, state) = (k.clone(), o.game, o.data.clone(), real_roots.clone(), real_state.clone());
             manifest.on_new(Arc::new(move |m: &manifest::Manifest| {
                 let (data, roots, state) = (data.clone(), roots.clone(), state.clone());
-                k.sweep(&m.etag, m.files.clone(), move |rel| {
+                k.sweep(m.etag(), m.files.clone(), move |rel| {
                     let file = files::resolve_game(game, &data, &format!("/{rel}"))?;
                     let f = files::locate_sync(&roots, &state, &data, &file)?;
                     Some((f.real, f.md))
@@ -393,6 +413,25 @@ impl App {
     /// same headers as every answer, nothing else (a code it has none for: the 400)
     pub fn raw_response(&self, code: u16) -> Vec<u8> {
         self.raw.get(&code).cloned().unwrap_or_else(|| self.raw[&400].clone())
+    }
+
+    /// where the routes are on the name the request asked for (PLAN D-38): "" (the root) or a base path ("/u2": its
+    /// routes are /u2/, /u2/game.json, /u2/lan, ...)
+    fn base_of(&self, q: &Request, u: &url::Url) -> &str {
+        self.o.bases.of(host_of(q, u))
+    }
+
+    /// /robots.txt at the root of a name where this game's routes are under a base (the origin it shares with the
+    /// other game, whose routes it names too: crawlers read only the root's)
+    fn shared_robots(&self, host: &str) -> String {
+        let mut bases = vec![self.o.bases.of(host).to_string()];
+        for g in crate::game::GAMES.into_iter().filter(|g| g.id != self.o.game.id) {
+            let b = crate::game::Bases::of_game(g).of(host).to_string();
+            if !b.is_empty() && !bases.contains(&b) {
+                bases.push(b);
+            }
+        }
+        robots_txt(&bases)
     }
 
     /// the request's Host (and an absolute-form URL's host) is one of this server's names
@@ -521,11 +560,17 @@ impl App {
         if p.chars().any(|c| c <= '\u{1f}' || c == '\u{7f}' || c == '\\') || p.contains("//") {
             return self.bad_request(q, s).await;
         }
-        if q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
+        // the routes under the base of the name asked for (D-38): "/u2/x" is the route "/x" there; "/u2" itself and
+        // the rest of that origin are no route of this game's (below)
+        let base = self.base_of(q, &u);
+        let rest = if base.is_empty() { None } else { p.strip_prefix(base).filter(|r| r.starts_with('/')).map(str::to_string) };
+        let under = base.is_empty() || rest.is_some();
+        let p = rest.unwrap_or(p);
+        if under && q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
             return self.put_artifact(q, s, &p[11..]).await;
         }
         // keyphrase saves: their own methods and bodies (vault.rs)
-        if p == "/vault" {
+        if under && p == "/vault" {
             return self.vault(q, s, &u).await;
         }
         if q.method != "GET" && q.method != "HEAD" {
@@ -537,8 +582,25 @@ impl App {
         if js_to_number(q.headers.get("content-length").unwrap_or("0")) > 0.0 || present(q, "transfer-encoding") {
             return self.plain(q, s, 413, "Too large", CLOSE, Cache::Store, true).await;
         }
+        if !under {
+            // the base without its "/": to the page at its folder, the query kept (an edge redirects other spellings
+            // there first)
+            if p == base {
+                let to = match &u.query {
+                    Some(query) => format!("{base}/?{query}"),
+                    None => format!("{base}/"),
+                };
+                return self.plain(q, s, 308, "Permanent redirect", &[("location", to.as_str())], Cache::Store, true).await;
+            }
+            // that origin's root files, which belong to no game's base (UG2's server answers them: game.rs)
+            if self.o.game.root_files && p == "/robots.txt" {
+                let text = self.shared_robots(host_of(q, &u));
+                return self.plain(q, s, 200, &text, &[], Cache::Revalidate, false).await;
+            }
+            return self.not_found(q, s).await;
+        }
         if p == "/data-manifest" {
-            return self.send_manifest(q, s, &u).await;
+            return self.send_manifest(q, s, &u, base).await;
         }
         // the game's files are bytes for the game, whatever their names say
         if let Some(rest) = p.strip_prefix("/data")
@@ -566,7 +628,11 @@ impl App {
         if p == "/players" {
             return self.send_players(q, s, &u).await;
         }
+        // (crawlers read it at an origin's root only: under a base it is no route)
         if p == "/robots.txt" {
+            if !base.is_empty() {
+                return self.not_found(q, s).await;
+            }
             return self.plain(q, s, 200, ROBOTS_TXT, &[], Cache::Revalidate, false).await;
         }
         // test aids (--dev only): the repo's test scripts, and the test pages and source maps from their own folder
@@ -593,12 +659,13 @@ impl App {
         self.send_file(q, s, &root, None, files::FileOpts { found, cache, noindex: !indexable, ..Default::default() }).await
     }
 
-    /// /data-manifest: built at the start, again on ?refresh at most every 10 s
-    async fn send_manifest(&self, q: &Request, s: &mut Response, u: &url::Url) -> Res {
+    /// /data-manifest: built at the start, again on ?refresh at most every 10 s; the body for the pages under `base`
+    async fn send_manifest(&self, q: &Request, s: &mut Response, u: &url::Url, base: &str) -> Res {
         let m = match self.current_manifest() {
             Some(m) if !(u.has_param("refresh") && nfsu2_util::now_ms() - m.at > 10_000) => m,
             _ => self.refresh_manifest().await.map_err(|e| Fail::Error(format!("the manifest: {e}")))?,
         };
+        let m = m.under(base);
         let gz = has_word(q.headers.get("accept-encoding").unwrap_or(""), "gzip");
         let mut h = self.headers(q, Cache::Revalidate, true);
         h.set("content-type", "application/json");
@@ -622,7 +689,7 @@ impl App {
 
     /// the manifest walked again: one walk at a time; a request while one is under way takes its result
     pub async fn refresh_manifest(&self) -> Result<Arc<manifest::Manifest>, String> {
-        self.manifest.refresh(self.o.game, &self.o.data, &self.real_state, &self.etag_key).await
+        self.manifest.refresh(self.o.game, &self.o.bases.all(), &self.o.data, &self.real_state, &self.etag_key).await
     }
 
     /// the manifest made last
@@ -824,6 +891,15 @@ mod tests {
         }
         assert!(is_loopback4("127.0.0.1") && is_loopback4("127.10.200.3"));
         assert!(!is_loopback4("127.0.0") && !is_loopback4("128.0.0.1") && !is_loopback4("127.0.0.x"));
+    }
+
+    // robots.txt at a root of one game's (as ever), and of the shared site's two bases
+    #[test]
+    fn robots_for_each_site() {
+        assert_eq!(robots_txt(&[String::new()]), ROBOTS_TXT);
+        let two = robots_txt(&["/u2".into(), "/mw".into()]);
+        assert_eq!(two.lines().count(), 2 + 2 * DISALLOW.len());
+        assert!(two.starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n") && two.ends_with("\nDisallow: /mw/vault"));
     }
 
     #[test]

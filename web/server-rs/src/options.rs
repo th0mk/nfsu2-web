@@ -7,20 +7,23 @@
 //!        [--host <name>[,<name>...]] [--state <dir>]
 //!        [--trusted-proxies cloudflare,<ip>,<cidr>,...] [--real-ip-header x-forwarded-for|cf-connecting-ip]
 //!        [--max-peers 128] [--online on|off] [--roam-hub on|off] [--vault-gb 50] [--access-log]
+//!        [--base-path <name>=<path>[,<name>=<path>...]]
 //!        [--dev [--artifacts <dir>] [--lan-impair <spec>] [--online-trace <file>]]
 //!   nfsu2-server [--game ug2|mw] --print-entries   (the game folder's entries the server serves, one a line)
 //!
 //! Options with a value can also come from the environment as NFSU2_<OPTION> (NFSU2_DATA, NFSU2_PORT,
 //! NFSU2_TLS_CERT, ...); switches only from the command line.  --game (game.rs) sets the game's defaults: the program
 //! the folder must hold, what of it is served, the page, the module, the state folder, the test scripts, the Online
-//! mode.
+//! mode, where its routes are on each name (its base path: Most Wanted's /mw, UG2's the root but on the site it
+//! shares with Most Wanted).  --base-path gives a name another (a layout, as --host is: "localhost=/u2" stands in for
+//! the shared site on this machine; "*" is every name it does not give).
 
 use nfsu2_headers::ProxyTrust;
 
-use crate::game::GameProfile;
+use crate::game::{Bases, GameProfile};
 use crate::paths;
 
-pub const VALUE_OPTS: [&str; 20] = [
+pub const VALUE_OPTS: [&str; 21] = [
     "--data",
     "--dist",
     "--wasm",
@@ -41,6 +44,7 @@ pub const VALUE_OPTS: [&str; 20] = [
     "--roam-hub",
     "--vault-gb",
     "--game",
+    "--base-path",
 ];
 pub const FLAG_OPTS: [&str; 4] = ["--behind-proxy", "--dev", "--access-log", "--print-entries"];
 
@@ -74,6 +78,8 @@ pub struct Options {
     pub max_peers: usize,
     /// the public names (a domain), comma-separated; '*.' covers one label
     pub hosts: Vec<String>,
+    /// where the routes are on each name: the game's bases, --base-path's on top
+    pub bases: Bases,
     /// a test aid of the LAN-play tests (delay, loss, reordering on the switch; nfsu2-lan implements it)
     pub lan_impair: String,
     /// the game's Online mode (nfsu2-online): on unless --online off (or the game has none yet)
@@ -357,6 +363,8 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
             return Err(format!("--host: \"{h}\" is not a host name"));
         }
     }
+    let mut bases = Bases::of_game(game);
+    bases.add(&string(arg("--base-path", "")))?;
     if !artifacts.is_empty() && !dev {
         return Err("--artifacts is a test aid: it needs --dev".into());
     }
@@ -453,6 +461,7 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         artifacts,
         max_peers: max_peers as usize,
         hosts,
+        bases,
         lan_impair: lan_impair.unwrap_or_default(),
         online: online == "on",
         roam_hub: roam_hub == "on",
@@ -558,7 +567,7 @@ mod tests {
             format!(
                 "unknown option --no-such-option\noptions: {}",
                 "--data --dist --wasm --port --http-port --bind --state --tls-cert --tls-key --trusted-proxies --real-ip-header --max-peers \
-             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --behind-proxy --dev --access-log \
+             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --base-path --behind-proxy --dev --access-log \
              --print-entries"
             )
         );
@@ -607,6 +616,12 @@ mod tests {
             s.err(&["--behind-proxy", "--http-port", "8080", "--host", "not a name"], &[]),
             "--host: \"not a name\" is not a host name"
         );
+        assert_eq!(
+            s.err(&["--base-path", "localhost=/U2"], &[]),
+            "--base-path: \"localhost=/U2\" is not <name>=<path>: a name (or * for every other name) and / (the root) or /<word> \
+             (lower case letters, digits, - and _)"
+        );
+        assert!(s.err(&[], &[("NFSU2_BASE_PATH", "http://localhost:8080")]).starts_with("--base-path: \"http://localhost:8080\" is not"));
         assert!(s.err(&["--trusted-proxies", "example.com"], &[]).contains("not an address"));
         assert_eq!(s.err(&["--real-ip-header", "x-real-ip"], &[]), "--real-ip-header: x-forwarded-for or cf-connecting-ip");
         // the audit's F5 / DEP-6: keys never inside what the server serves
@@ -669,6 +684,14 @@ mod tests {
         assert_eq!(o.tls_cert, s.p("c.pem"));
         assert_eq!(o.real_ip, "cf-connecting-ip");
         assert_eq!(s.parse(&[], &[]).unwrap().game.id, "ug2");
+        // the routes: at the root but on the shared site; --base-path (or NFSU2_BASE_PATH) on top
+        let o = s.parse(&[], &[]).unwrap();
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsu2.xyz"), o.bases.of("nfsrevived.xyz")), ("", "", "/u2"));
+        let o = s.parse(&["--base-path", "localhost=/u2"], &[("NFSU2_BASE_PATH", "*=/x")]).unwrap();
+        assert_eq!((o.bases.of("localhost:1"), o.bases.of("127.0.0.1"), o.bases.of("nfsrevived.xyz")), ("/u2", "", "/u2"));
+        let o = s.parse(&[], &[("NFSU2_BASE_PATH", "*=/x")]).unwrap();
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz")), ("/x", "/u2"));
+        assert_eq!(s.parse(&[], &[("NFSU2_BASE_PATH", "")]).unwrap().bases, crate::game::Bases::of_game(&crate::game::UG2));
     }
 
     // --game mw: Most Wanted's program (lower case, found in any case), its defaults, no Online mode yet
@@ -690,6 +713,8 @@ mod tests {
         assert_eq!((o.wasm, o.game_json), (s.p("repo/out/web/mw/nfsmw.wasm"), s.p("repo/out/web/mw/nfsmw.json")));
         assert_eq!(o.tests, s.p("repo/tests/mw"));
         assert!(!o.online && o.roam_hub);
+        // under /mw on every name
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz"), o.bases.all()), ("/mw", "/mw", vec!["/mw".to_string()]));
         // from the environment too, in any case
         assert_eq!(mw(&[], &[("NFSU2_GAME", "MW")]).unwrap().game.id, "mw");
         // its state folder, apart from UG2's
