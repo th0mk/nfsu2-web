@@ -181,8 +181,8 @@ static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned c
     }
     int ok = 1;
     for (int i = 0; i < NP; i++){
-        float o[5]; int killed = 0;
-        if (!ps_ref_run(p, &P, &in[i], ftex, cubemask, o, &killed)) ok = 0;
+        float o[5] = { 0, 0, 0, 0, 0 }; int killed = 0;
+        if (!ps_ref_run(p, &P, &in[i], ftex, cubemask, o, &killed)) ok = 0;   /* refused (ps_2_x, ps_3_0): zeros */
         o[4] = (float)killed;
         fwrite(o, 4, 5, f);
     }

@@ -10,7 +10,13 @@
  * alpha test ">= aref" and vertex fog.  One exception: the ps_2_0 t#
  * registers hold the coordinates, as in D3D (the Mac leaves them at 0).
  * Texture sampling goes through a callback so the test can use the same
- * analytic "texture" on both sides. */
+ * analytic "texture" on both sides.
+ *
+ * ps_1_x and ps_2_0 only: ps_2_x and ps_3_0 are refused (return 0).  Their
+ * reference is web/tools/psref.c, which follows D3D9 (docs/web/psref.md);
+ * this interpreter's shortcuts (r & 15, t & 3, no projective divide in
+ * texldp) would agree with a translator that copied them, and 10 of Most
+ * Wanted's 18 ps_2_x shaders use r16 and above. */
 /* PSRefIn, PSRefPar and PSRefTex are declared in wgsl.h. */
 typedef struct {
     const VSProg *p; const PSRefPar *P; const PSRefIn *in;
@@ -63,6 +69,7 @@ static float psr_sat(float x){ return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
 
 int ps_ref_run(const VSProg *p, const PSRefPar *P, const PSRefIn *in, PSRefTex tex,
                unsigned cubemask, float out[4], int *killed){
+    if (p->version > 0x0200) return 0;
     PSRefExec e; memset(&e, 0, sizeof e);
     e.p = p; e.P = P; e.in = in;
     memcpy(e.v[0], in->col[0], 16); memcpy(e.v[1], in->col[1], 16);

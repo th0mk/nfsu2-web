@@ -257,6 +257,8 @@ early gives a smaller dump and fails (`--script` and `--env` run another scene f
      registers, §8). Colours within 1e-3
      relative; kill flags equal, except an alpha-test decision that flips because both alphas are within that
      tolerance of `aref` (counted as `edgeFlips`; SwiftShader/Vulkan has one, Metal none).
+     `ps_ref_run` covers ps_1_x and ps_2_0 only: it refuses ps_2_x and ps_3_0 (their vectors hold zeros), whose
+     reference is `web/tools/psref.c`, which follows D3D9 instead of the Mac (`docs/web/psref.md`); vs_3_0's is too.
 
 Results on Chrome 155 / Apple M4 Pro (2026-10-18): 167 modules, 0 compile errors, 307 pipelines, 0 errors; vertex
 pulling 3,328/3,328 exact; 96 vertex shader modules max relative error 2.0e-6; 68 pixel shader modules max relative

@@ -21,9 +21,9 @@ int wgsl_ff_module(int id, char *out, size_t cap, unsigned cubemask);
 int wgsl_pull_test_module(char *out, size_t cap);
 
 #ifdef VSEMU_WGSL
-/* Native test tools only: reference pixel shader interpreter with the Mac's
- * semantics (runtime/web/vsemu_psref.inc), the oracle of the differential
- * test in web/tools/wgsl-xl.c. */
+/* Native test tools only: ps_1_x/ps_2_0 reference with the Mac's semantics
+ * (runtime/web/vsemu_psref.inc), the oracle of web/tools/wgsl-xl.c; it refuses
+ * ps_2_x and ps_3_0, whose reference is web/tools/psref.h (D3D9's rules). */
 typedef struct { float col[2][4], uv[4][4], fog; } PSRefIn;
 typedef struct { float aref, proj[4], c[32][4], fog[4]; } PSRefPar;
 typedef void (*PSRefTex)(int stage, const float *coord, int ncoord, float out[4]);
