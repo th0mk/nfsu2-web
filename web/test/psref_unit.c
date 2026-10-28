@@ -1281,6 +1281,19 @@ static void t_corpus(void){
     for (int l = 0; l < 4; l++) for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) Q[l].v[r][c] = 0.25f + 0.1f * (float)(r + c + l);
     PSRUN(p); psref_free(p);
 
+    /* ps_3_0: oDepth with the full write mask (how an assembler may encode `mov oDepth, ...`): component x */
+    reset(); begin(PS3);
+    dcl(U_TEXCOORD, 0, D(V, 0, "xyzw"));
+    def(10, 0.25f, 0.5f, 0.125f, 1.f);
+    IN(MAD, D(R, 0, "xyzw"), S(V, 0, "wzyx"), S(C, 10, "xyzw"), S(C, 10, "zyxw"));
+    IN(MOV, D(OC, 0, "xyzw"), S(R, 0, "xyzw"));
+    IN(MUL, SAT(D(OD, 0, "xyzw")), S(R, 0, "yxwz"), S(C, 10, "y"));
+    end();
+    p = LD();
+    for (int l = 0; l < 4; l++) for (int c = 0; c < 4; c++) Q[l].v[0][c] = 0.2f + 0.1f * (float)(c + l);
+    if (PSRUN(p)) CHECK(OUT[1].depth_written && fabsf(OUT[1].depth - 0.375f) < 1e-6f, "oDepth.xyzw: %g", (double)OUT[1].depth);  /* (v0.z/2 + 1/2)/2 */
+    psref_free(p);
+
     /* ps_3_0: lookups of every kind, the same where the flow differs per pixel (of inputs: hoisted
      * derivatives), dsx/dsy, loop with aL and v[aL] and a per-pixel break, rep with breakp, call, callnz, texkill */
     reset(); begin(PS3);

@@ -98,7 +98,7 @@ test('WGSL translator: psref\'s unit programs, refused only for what the module 
   assert.deepEqual(bad, []);
   // every class of instruction in t_corpus translates, with vectors (psref_unit.c); a program psref refuses
   // on every input (an undefined read, say) gets none
-  assert.ok(fs.readdirSync(dir).filter(f => f.endsWith('.p3vec')).length >= 67);
+  assert.ok(fs.readdirSync(dir).filter(f => f.endsWith('.p3vec')).length >= 69);
   assert.ok(fs.readdirSync(dir).filter(f => f.endsWith('.v3vec')).length >= 4);
 });
 

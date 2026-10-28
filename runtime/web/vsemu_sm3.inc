@@ -449,7 +449,8 @@ static int s3_store(S3Ctx *x, const S3Ins *y, const char *pre, const char *val, 
         snprintf(name, sizeof name, "oC0"); break;
     case R_DEPTHOUT:
         if (p->model == S3_VS3) return s3_fail("oDepth in a vertex shader");
-        if (d->mask != 1u) return s3_fail("oDepth written past .x");
+        /* .x or .xyzw (the assembler's full mask), as psref takes it; either writes component x */
+        if (d->mask != 1u && d->mask != 0xFu) return s3_fail("oDepth with a write mask other than .x or .xyzw");
         x->odepth = 1; snprintf(name, sizeof name, "oDepth"); break;
     case R_OUTPUT:
         if (p->model != S3_VS3) return s3_fail("an output register in a pixel shader");
@@ -467,8 +468,11 @@ static int s3_store(S3Ctx *x, const S3Ins *y, const char *pre, const char *val, 
         return 0;
     int ident = !swz || (swz[0] == 0 && swz[1] == 1 && swz[2] == 2 && swz[3] == 3);
     if (d->type == R_DEPTHOUT){
-        /* a scalar register: component x of the value */
-        const char *e = kind == 2 ? ".x" : "";
+        /* a scalar register: component x of the value (kind 0 with .xyzw: the first of four; kind 2:
+         * the component the swizzle puts at x) */
+        char e[4] = "";
+        if (kind == 2) snprintf(e, sizeof e, ".%c", "xyzw"[swz ? swz[0] & 3u : 0u]);
+        else if (kind == 0 && n == 4) snprintf(e, sizeof e, ".x");
         char pc[32] = "";
         if (y->pred) s3_pc(x, y, 0, pc, sizeof pc);
         if (y->pred) return s3_line(x, "{ %s let e = (%s)%s; oDepth = select(oDepth, e, %s); }", pre ? pre : "", T->sv, e, pc);
