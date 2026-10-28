@@ -7,6 +7,8 @@
  * out by hand from the D3D9 instruction pages.
  *
  *   psref_unit                 the unit tests
+ *   psref_unit --emit <dir>    the unit tests, and every distinct program they load
+ *                              written to <dir> (the translator's corpus)
  *   psref_unit --fx <fxo>...   every ps_2_x, ps_3_0 and vs_3_0 blob of these
  *                              compiled effects, loaded and run (web/test/psref.test.mjs
  *                              gives it Most Wanted's 31) */
@@ -75,10 +77,24 @@ static void dclt(int n, const char *m){ dcl(0, 0, D(A, n, m)); }                
 /* ---- loading and running ---- */
 static PsrefCaps CAPS;
 static char err[1024];
+/* --emit <dir>: every distinct program the tests load, as <dir>/u<line>_<n>.bin, a corpus for the WGSL
+ * translator's differential test (web/tools/wgsl-xl.c, shadercheck.ts) */
+static const char *g_emit;
+static void emit(int line){
+    static uint32_t seen[1024]; static int nseen;
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < nT; i++){ h ^= T[i]; h *= 16777619u; }
+    for (int i = 0; i < nseen; i++) if (seen[i] == h) return;
+    if (nseen < 1024) seen[nseen++] = h;
+    char path[1024]; snprintf(path, sizeof path, "%s/u%04d_%d.bin", g_emit, line, nseen);
+    FILE *f = fopen(path, "wb");
+    if (f){ fwrite(T, 4, (size_t)nT, f); fclose(f); }
+}
 static PsrefProg *ld(int line){
     PsrefProg *p = psref_load(T, (size_t)nT, &CAPS, err, sizeof err);
     checks++;
     if (!p){ failed++; printf("FAIL %s:%d: refused: %s\n", __FILE__, line, err); }
+    else if (g_emit) emit(line);
     return p;
 }
 #define LD() ld(__LINE__)
@@ -1211,8 +1227,202 @@ static int fx_mode(int argc, char **argv){
     return bad ? 1 : 0;
 }
 
+/* ======================================================================== */
+/* Programs for the WGSL translator's differential test (--emit), which runs them on random inputs (web/tools/wgsl-xl.c:
+ * colours and coordinates in [0, 1], texture coordinate z and w in [0.5, 2], vertex elements in [-1, 1], constants in
+ * [0.05, 1]): every class of instruction, defined on all of those inputs, one colour output (the module ABI has one
+ * target) and a POSITION0 output for the vertex shader.  Here they only have to load and run. */
+static void t_corpus(void){
+    enum { U_FOG = 11 };
+    /* ps_3_0: arithmetic, predicates, if p0 / b# / if_comp, vPos, vFace, oDepth */
+    reset(); begin(PS3);
+    dcl(U_TEXCOORD, 0, D(V, 0, "xyzw")); dcl(U_TEXCOORD, 1, D(V, 1, "xyzw")); dcl(U_COLOR, 0, D(V, 2, "xyzw"));
+    IN(DCL, 0x80000000u, D(MISC, 0, "xy")); IN(DCL, 0x80000000u, D(MISC, 1, "xyzw"));
+    def(10, 0.5f, -0.25f, 2.f, 0.75f); def(11, 0.f, 1.f, 0.6f, 0.3f); defb(0, 1); defb(1, 0);
+    IN(MUL, D(R, 0, "xyzw"), S(V, 0, "xyzw"), S(V, 1, "wzyx"));
+    IN(RCP, D(R, 1, "x"), S(V, 0, "w")); IN(RSQ, D(R, 1, "y"), NEG(S(V, 1, "z")));
+    IN(LOG, D(R, 1, "z"), S(V, 2, "x")); IN(EXP, D(R, 1, "w"), NEG(S(V, 1, "x")));
+    INC(SETP, LT, D(P, 0, "xyzw"), S(V, 0, "xyzw"), S(C, 11, "z"));
+    IN(MOV, D(R, 2, "xyzw"), S(C, 10, "xyzw"));
+    INP(ADD, D(R, 2, "xyzw"), S(P, 0, "xyzw"), S(R, 2, "xyzw"), S(V, 1, "xyzw"));
+    INP(MOV, D(R, 2, "yw"), NOT(S(P, 0, "wzyx")), S(V, 2, "xyzw"));
+    INC(SETP, EQ, D(P, 0, "x"), S(R, 1, "x"), S(R, 1, "x"));
+    INC(SETP, NE, D(P, 0, "y"), S(V, 0, "y"), S(C, 11, "z"));
+    INC(SETP, LE, D(P, 0, "z"), S(V, 1, "z"), S(C, 10, "z"));
+    IN(MOV, D(R, 3, "xyzw"), S(C, 11, "x"));
+    IN(IF, S(P, 0, "z")); IN(ADD, D(R, 3, "xyzw"), S(R, 3, "xyzw"), S(V, 0, "xyzw"));
+    IN0(ELSE); IN(SUB, D(R, 3, "xyzw"), S(R, 3, "xyzw"), S(V, 1, "yzwx")); IN0(ENDIF);
+    IN(IF, NOT(S(P, 0, "x"))); IN(MOV, D(R, 3, "x"), S(C, 10, "y")); IN0(ENDIF);
+    INC(IFC, EQ, S(V, 0, "x"), S(V, 0, "x")); IN(MAD, D(R, 3, "y"), S(R, 3, "y"), S(C, 10, "z"), S(V, 2, "w")); IN0(ENDIF);
+    INC(IFC, LE, S(V, 1, "y"), S(C, 10, "x")); IN(ADD, D(R, 3, "z"), S(R, 3, "z"), S(C, 11, "y")); IN0(ENDIF);
+    INC(IFC, NE, S(V, 2, "y"), S(C, 11, "w")); IN(MUL, D(R, 3, "w"), S(R, 3, "w"), S(C, 10, "w")); IN0(ENDIF);
+    IN(IF, S(B, 0, "x")); IN(ADD, D(R, 3, "xyzw"), S(R, 3, "xyzw"), S(C, 11, "z")); IN0(ENDIF);
+    IN(IF, NOT(S(B, 1, "x"))); IN(MUL, D(R, 3, "xyzw"), S(R, 3, "xyzw"), S(C, 10, "w")); IN0(ENDIF);
+    IN(MOV, D(R, 4, "xyzw"), S(C, 11, "xyzw"));
+    INC(IFC, GT, S(MISC, 1, "x"), S(C, 11, "x")); IN(MOV, D(R, 4, "x"), S(C, 10, "z")); IN0(ENDIF);
+    IN(MAD, D(R, 4, "yz"), S(MISC, 0, "xyxy"), S(C, 11, "w"), S(C, 10, "y"));
+    IN(FRC, D(R, 4, "w"), S(R, 4, "y"));
+    IN(DP2ADD, D(R, 5, "x"), S(R, 4, "yz"), S(C, 10, "xy"), S(C, 10, "z"));
+    IN(LRP, D(R, 5, "y"), S(V, 2, "x"), S(R, 0, "y"), S(R, 1, "z"));
+    IN(CMP, D(R, 5, "zw"), S(R, 2, "xyzw"), S(R, 3, "zwxy"), NEG(S(R, 4, "xyzw")));
+    IN(NRM, D(R, 6, "xyz"), S(R, 0, "xyzw"));
+    IN(POW, D(R, 6, "w"), ABSM(S(V, 0, "x")), S(C, 10, "z"));
+    IN(MIN, D(R, 7, "xy"), S(R, 2, "xy"), S(R, 3, "zw")); IN(MAX, D(R, 7, "zw"), S(R, 1, "xy"), S(R, 4, "zw"));
+    IN(SINCOS, D(R, 8, "xy"), S(V, 1, "x"));
+    IN(CRS, D(R, 9, "xyz"), S(R, 6, "xyzw"), S(V, 2, "xyzw")); IN(ABS, D(R, 9, "w"), S(R, 3, "x"));
+    IN(ADD, D(R, 10, "xyzw"), S(R, 2, "xyzw"), S(R, 3, "xyzw"));
+    IN(MAD, D(R, 10, "xyzw"), S(R, 5, "xyzw"), S(C, 10, "w"), S(R, 10, "xyzw"));
+    IN(MAD, D(R, 10, "xyzw"), S(R, 6, "xyzw"), S(R, 7, "wzyx"), S(R, 10, "xyzw"));
+    IN(MAD, D(R, 10, "xy"), S(R, 8, "xy"), S(R, 9, "zw"), S(R, 10, "xy"));
+    IN(ADD, D(OC, 0, "xyzw"), S(R, 10, "xyzw"), ABSM(S(R, 1, "xyzw")));
+    IN(MOV, SAT(D(OD, 0, "x")), S(R, 5, "x"));
+    end();
+    PsrefProg *p = LD();
+    for (int l = 0; l < 4; l++) for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) Q[l].v[r][c] = 0.25f + 0.1f * (float)(r + c + l);
+    PSRUN(p); psref_free(p);
+
+    /* ps_3_0: lookups of every kind, the same where the flow differs per pixel (of inputs: hoisted
+     * derivatives), dsx/dsy, loop with aL and v[aL] and a per-pixel break, rep with breakp, call, callnz, texkill */
+    reset(); begin(PS3);
+    dcl(U_TEXCOORD, 0, D(V, 0, "xyzw")); dcl(U_TEXCOORD, 1, D(V, 1, "xyzw")); dcl(U_TEXCOORD, 2, D(V, 2, "xyzw"));
+    dcls(2, 0); dcls(3, 1); dcls(2, 2);
+    def(10, 0.5f, 0.25f, 1.f, 0.f); def(11, 0.3f, 0.1f, 0.7f, 2.f); defi(0, 5, 0, 0, 0); defi(1, 2, 0, 1, 0); defb(0, 0);
+    IN(TEX, D(R, 0, "xyzw"), S(V, 0, "xyzw"), S(SMP, 0, "xyzw"));
+    INC(TEX, 1, D(R, 1, "xyzw"), S(V, 1, "xyzw"), S(SMP, 2, "wzyx"));
+    INC(TEX, 2, D(R, 2, "xyzw"), S(V, 2, "xyzw"), S(SMP, 1, "xyzw"));
+    IN(TEXLDL, D(R, 3, "xyzw"), S(V, 0, "xyzw"), S(SMP, 2, "xyzw"));
+    IN(TEXLDD, D(R, 4, "xyzw"), S(V, 1, "xyzw"), S(SMP, 0, "xyzw"), S(V, 2, "xyzw"), S(R, 0, "xyzw"));
+    IN(DSX, D(R, 5, "xyzw"), S(V, 0, "xyzw")); IN(DSY, D(R, 6, "xyzw"), S(R, 0, "xyzw"));
+    INC(IFC, GT, S(V, 0, "x"), S(C, 10, "x"));
+      IN(TEX, D(R, 7, "xyzw"), S(V, 1, "xyzw"), S(SMP, 0, "xyzw"));
+      INC(TEX, 1, D(R, 8, "xyzw"), S(V, 2, "xyzw"), S(SMP, 2, "xyzw"));
+      IN(DSY, D(R, 9, "xyzw"), NEG(S(V, 2, "yxwz")));
+      INC(TEX, 2, D(R, 10, "xyzw"), S(V, 0, "xyzw"), S(SMP, 1, "xyzw"));
+    IN0(ELSE);
+      IN(MOV, D(R, 7, "xyzw"), S(C, 10, "xyzw")); IN(MOV, D(R, 8, "xyzw"), S(C, 11, "xyzw"));
+      IN(MOV, D(R, 9, "xyzw"), S(C, 10, "wzyx")); IN(MOV, D(R, 10, "xyzw"), S(C, 11, "wzyx"));
+    IN0(ENDIF);
+    IN(MOV, D(R, 11, "xyzw"), S(C, 10, "w"));
+    IN(LOOP, S(AL, 0, "xyzw"), S(I, 1, "xyzw"));
+      IN(ADD, D(R, 11, "xyzw"), S(R, 11, "xyzw"), REL(S(V, 0, "xyzw")), S(AL, 0, "xxxx"));
+      INC(BREAKC, GT, S(R, 11, "x"), S(C, 11, "z"));
+    IN0(ENDLOOP);
+    IN(MOV, D(R, 12, "xyzw"), S(C, 10, "w"));
+    INC(SETP, GT, D(P, 0, "x"), S(V, 1, "y"), S(C, 10, "x"));
+    IN(REP, S(I, 0, "xyzw"));
+      IN(ADD, D(R, 12, "xyzw"), S(R, 12, "xyzw"), S(C, 11, "xyzw"));
+      IN(BREAKP, S(P, 0, "x"));
+    IN0(ENDREP);
+    IN(MOV, D(R, 13, "xyzw"), S(C, 10, "w"));
+    IN(CALL, S(LBL, 0, "xyzw"));
+    IN(CALLNZ, S(LBL, 1, "xyzw"), S(P, 0, "x"));
+    IN(CALLNZ, S(LBL, 1, "xyzw"), NOT(S(B, 0, "x")));
+    IN(SUB, D(R, 14, "xyzw"), S(V, 2, "xyzw"), S(C, 11, "x"));
+    IN(TEXKILL, D(R, 14, "xy"));
+    IN(ADD, D(R, 15, "xyzw"), S(R, 0, "xyzw"), S(R, 1, "xyzw"));
+    IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 2, "xyzw")); IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 3, "xyzw"));
+    IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 4, "xyzw")); IN(MAD, D(R, 15, "xyzw"), S(R, 5, "xyzw"), S(C, 10, "z"), S(R, 15, "xyzw"));
+    IN(MAD, D(R, 15, "xyzw"), S(R, 6, "xyzw"), S(C, 11, "y"), S(R, 15, "xyzw")); IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 7, "xyzw"));
+    IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 8, "xyzw")); IN(MAD, D(R, 15, "xyzw"), S(R, 9, "xyzw"), S(C, 11, "z"), S(R, 15, "xyzw"));
+    IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 10, "xyzw")); IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 11, "xyzw"));
+    IN(ADD, D(R, 15, "xyzw"), S(R, 15, "xyzw"), S(R, 12, "xyzw"));
+    IN(MAD, D(OC, 0, "xyzw"), S(R, 13, "xyzw"), S(C, 11, "y"), S(R, 15, "xyzw"));
+    IN0(RET);
+    IN(LABEL, S(LBL, 0, "xyzw")); IN(MAD, D(R, 13, "xyzw"), S(V, 1, "xyzw"), S(C, 11, "w"), S(R, 13, "xyzw")); IN0(RET);
+    IN(LABEL, S(LBL, 1, "xyzw")); IN(ADD, D(R, 13, "xyzw"), S(R, 13, "xyzw"), S(C, 10, "zzzx")); IN0(RET);
+    end();
+    p = LD();
+    for (int l = 0; l < 4; l++) for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++)
+        Q[l].v[r][c] = (c < 2 ? 0.2f : 0.7f) + 0.11f * (float)(r + l) + 0.05f * (float)c;
+    PSRUN(p); psref_free(p);
+
+    /* ps_2_x: t#, colours partly declared, texldp/texldb on a cube, sincos with its constants, predicates,
+     * rep with break_comp, dsx/dsy of a coordinate */
+    reset(); begin(PS2X);
+    dcl(0, 0, D(V, 0, "xyz")); dcl(0, 0, D(V, 1, "xyzw"));
+    dclt(0, "xyzw"); dclt(1, "xy"); dclt(4, "xyzw"); dclt(7, "xyzw");
+    dcls(2, 0); dcls(3, 1); dcls(2, 4);
+    def(0, -1.55009923e-6f, -2.17013894e-5f, 0.00260416674f, 0.00026041668f);
+    def(1, -0.020833334f, -0.125f, 1.f, 0.5f);
+    def(2, 0.5f, 0.25f, 2.f, 0.1f); defi(0, 4, 0, 0, 0);
+    IN(TEX, D(R, 0, "xyzw"), S(A, 0, "xyzw"), S(SMP, 0, "xyzw"));
+    INC(TEX, 1, D(R, 1, "xyzw"), S(A, 4, "xyzw"), S(SMP, 4, "xyzw"));
+    INC(TEX, 2, D(R, 2, "xyzw"), S(A, 7, "xyzw"), S(SMP, 1, "xyzw"));
+    INC(TEX, 1, D(R, 3, "xyzw"), S(A, 7, "xyzw"), S(SMP, 1, "xyzw"));
+    IN(MOV, D(R, 4, "xyzw"), S(V, 0, "xyzw"));
+    IN(SINCOS, D(R, 5, "xy"), S(A, 1, "x"), S(C, 0, "xyzw"), S(C, 1, "xyzw"));
+    IN(DSX, D(R, 6, "xyzw"), S(A, 4, "xyzw")); IN(DSY, D(R, 7, "xyzw"), S(A, 4, "wzyx"));
+    INC(SETP, GT, D(P, 0, "xyzw"), S(V, 1, "xyzw"), S(C, 2, "x"));
+    IN(MOV, D(R, 8, "xyzw"), S(C, 2, "xyzw"));
+    INP(MUL, D(R, 8, "xyzw"), S(P, 0, "xyzw"), S(R, 8, "xyzw"), S(V, 1, "xyzw"));
+    IN(MOV, D(R, 9, "xyzw"), S(C, 2, "w"));
+    IN(REP, S(I, 0, "xyzw"));
+      IN(MAD, D(R, 9, "xyzw"), S(R, 9, "xyzw"), S(C, 2, "z"), S(A, 0, "xyzw"));
+      INC(BREAKC, GE, S(R, 9, "x"), S(C, 1, "z"));
+    IN0(ENDREP);
+    IN(CMP, D(R, 10, "xyzw"), S(R, 0, "xyzw"), S(R, 1, "xyzw"), S(R, 2, "xyzw"));
+    IN(DP2ADD, D(R, 10, "x"), S(R, 5, "xy"), S(C, 2, "xy"), S(C, 2, "w"));
+    IN(LRP, D(R, 11, "xyzw"), S(R, 4, "wwww"), S(R, 3, "xyzw"), S(R, 8, "xyzw"));
+    IN(ADD, D(R, 11, "xyzw"), S(R, 11, "xyzw"), S(R, 9, "xyzw"));
+    IN(MAD, D(R, 11, "xyzw"), S(R, 6, "xyzw"), S(C, 2, "z"), S(R, 11, "xyzw"));
+    IN(MAD, D(R, 11, "xyzw"), S(R, 7, "xyzw"), S(C, 2, "z"), S(R, 11, "xyzw"));
+    IN(ADD, SAT(D(OC, 0, "xyzw")), S(R, 11, "xyzw"), S(R, 10, "xyzw"));
+    end();
+    p = LD();
+    for (int l = 0; l < 4; l++){
+        for (int r = 0; r < 2; r++) for (int c = 0; c < 4; c++) Q[l].v[r][c] = 0.3f + 0.1f * (float)(r + c + l);
+        for (int t = 0; t < 8; t++) for (int c = 0; c < 4; c++) Q[l].t[t][c] = c < 2 ? 0.2f + 0.05f * (float)(t + l) : 1.f;
+    }
+    PSRUN(p); psref_free(p);
+
+    /* vs_3_0: the vertex instructions, a0 and aL relative constants (one past c255: (0, 0, 0, 0)), o[aL],
+     * packed outputs, fog, static and dynamic ifs, setp and predicates, callnz p0 */
+    reset(); begin(VS3);
+    dcl(U_POSITION, 0, D(V, 0, "xyzw")); dcl(U_NORMAL, 0, D(V, 1, "xyzw")); dcl(U_TEXCOORD, 0, D(V, 2, "xyzw"));
+    dcl(U_POSITION, 0, D(O, 0, "xyzw")); dcl(U_TEXCOORD, 0, D(O, 1, "xyzw")); dcl(U_TEXCOORD, 1, D(O, 2, "xyzw"));
+    dcl(U_COLOR, 0, D(O, 3, "xyzw")); dcl(U_COLOR, 1, D(O, 4, "xy")); dcl(U_TEXCOORD, 2, D(O, 4, "zw"));
+    dcl(U_FOG, 0, D(O, 5, "x"));
+    def(20, 0.5f, 2.f, -1.f, 0.25f); def(200, 1.f, 0.f, 3.f, 0.125f); defi(0, 3, 0, 1, 0); defb(0, 1);
+    IN(M4x4, D(O, 0, "xyzw"), S(V, 0, "xyzw"), S(C, 0, "xyzw"));
+    IN(SLT, D(R, 0, "xyzw"), S(V, 0, "xyzw"), S(V, 1, "xyzw")); IN(SGE, D(R, 1, "xyzw"), S(V, 1, "xyzw"), S(V, 2, "zwxy"));
+    IN(MOV, D(R, 2, "xyzw"), S(C, 200, "xyzw")); IN(MOV, D(R, 3, "xyzw"), S(C, 200, "xyzw"));
+    IN(SGN, D(R, 4, "xyzw"), S(V, 1, "xyzw"), S(R, 2, "xyzw"), S(R, 3, "xyzw"));
+    IN(LIT, D(R, 5, "xyzw"), S(V, 2, "xyxy")); IN(DST, D(R, 6, "xyzw"), S(V, 0, "xyzw"), S(V, 1, "xyzw"));
+    IN(EXPP, D(R, 7, "x"), S(V, 1, "x")); IN(LOGP, D(R, 7, "y"), S(V, 2, "y"));
+    IN(LOG, D(R, 7, "z"), S(V, 0, "z")); IN(FRC, D(R, 7, "w"), S(V, 1, "y"));
+    IN(MOVA, D(A, 0, "xy"), S(V, 2, "xyzw"));
+    IN(ADD, D(R, 8, "xyzw"), S(R, 0, "xyzw"), REL(S(C, 5, "xyzw")), S(A, 0, "xxxx"));
+    IN(ADD, D(R, 8, "xyzw"), S(R, 8, "xyzw"), REL(S(C, 255, "xyzw")), S(A, 0, "yyyy"));
+    IN(ADD, D(R, 8, "xyzw"), S(R, 8, "xyzw"), REL(S(C, 20, "xyzw")), S(A, 0, "xxxx"));
+    IN(MOV, D(R, 9, "xyzw"), S(C, 200, "w"));
+    IN(LOOP, S(AL, 0, "xyzw"), S(I, 0, "xyzw"));
+      IN(ADD, D(R, 9, "xyzw"), S(R, 9, "xyzw"), REL(S(C, 10, "xyzw")), S(AL, 0, "xxxx"));
+      IN(MUL, REL(D(O, 1, "xyzw")), S(AL, 0, "xxxx"), S(R, 9, "xyzw"), S(V, 2, "xyzw"));
+    IN0(ENDLOOP);
+    IN(MOV, D(R, 10, "xyzw"), S(C, 200, "xyzw"));
+    IN(IF, S(B, 0, "x")); IN(ADD, D(R, 10, "xyzw"), S(R, 10, "xyzw"), S(V, 0, "xyzw")); IN0(ELSE); IN(MOV, D(R, 10, "xyzw"), S(V, 1, "xyzw")); IN0(ENDIF);
+    INC(IFC, LT, S(V, 0, "x"), S(V, 1, "x")); IN(MUL, D(R, 10, "xyzw"), S(R, 10, "xyzw"), S(C, 20, "x")); IN0(ENDIF);
+    INC(SETP, GE, D(P, 0, "xyzw"), S(V, 1, "xyzw"), S(V, 2, "xyzw"));
+    INP(ADD, D(R, 10, "xyzw"), S(P, 0, "xyzw"), S(R, 10, "xyzw"), S(C, 200, "zzzz"));
+    IN(CALLNZ, S(LBL, 2, "xyzw"), S(P, 0, "x"));
+    IN(NRM, D(R, 11, "xyz"), S(V, 1, "xyzw")); IN(CRS, D(R, 12, "xyz"), S(V, 1, "xyzw"), S(V, 2, "xyzw"));
+    IN(MOV, D(R, 11, "w"), S(C, 20, "w")); IN(MOV, D(R, 12, "w"), S(C, 20, "y"));
+    IN(MAD, D(O, 2, "xyzw"), S(R, 5, "xyzw"), S(R, 6, "xyzw"), S(R, 8, "xyzw"));
+    IN(MAD, SAT(D(O, 3, "xyzw")), S(R, 4, "xyzw"), S(R, 7, "xyzw"), S(R, 10, "xyzw"));
+    IN(ADD, D(O, 4, "xy"), S(R, 11, "xy"), S(R, 1, "zw"));
+    IN(MAD, D(O, 4, "zw"), S(R, 12, "zzzw"), S(C, 20, "y"), S(R, 1, "xyxy"));
+    IN(MAX, D(O, 5, "x"), S(R, 9, "x"), S(R, 11, "w"));
+    IN0(RET);
+    IN(LABEL, S(LBL, 2, "xyzw")); IN(MAD, D(R, 10, "xyzw"), S(R, 10, "xyzw"), S(C, 20, "x"), S(V, 2, "xyzw")); IN0(RET);
+    end();
+    p = LD();
+    for (int r = 0; r < 3; r++) for (int c = 0; c < 4; c++) VIN[r][c] = 0.3f - 0.15f * (float)(r + c);
+    VSRUN(p); psref_free(p);
+}
+
 int main(int argc, char **argv){
     if (argc > 1 && !strcmp(argv[1], "--fx")) return fx_mode(argc, argv);
+    if (argc > 2 && !strcmp(argv[1], "--emit")) g_emit = argv[2];
     t_arith();
     t_flow();
     t_loops();
@@ -1222,6 +1432,7 @@ int main(int argc, char **argv){
     t_face_pos();
     t_limits();
     t_misc();
+    t_corpus();
     printf("psref_unit: %d checks, %d failed\n", checks, failed);
     return failed ? 1 : 0;
 }

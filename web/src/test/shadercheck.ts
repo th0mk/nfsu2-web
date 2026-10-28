@@ -2,12 +2,14 @@
 // of a shader dump in this browser's WebGPU, builds render pipelines with the
 // ABI's explicit layouts, and runs the vertex-pulling compute test against a
 // CPU decoder with com.c decl_fetch semantics, and runs every vertex shader
-// that has test vectors (vs_<id>.vec) against the CPU interpreter.  Result: one line
-// "SHADERCHECK {json}" and document.title = 'DONE'.
+// that has test vectors (vs_<id>.vec) against the CPU interpreter, every
+// ps_2_x, ps_3_0 and vs_3_0 module with vectors (.p3vec, .v3vec) against
+// psref, the D3D9 reference.  Result: one line "SHADERCHECK {json}" and
+// document.title = 'DONE'.
 //
 //   /test/shadercheck.html?opfs=<dir>/<sub>   the dump in OPFS (default shadercheck/shaders)
 //   &cross                                    also every game VS (ids < 1000) x every game PS
-import { ALPHA_ALWAYS, ALPHA_GREATEREQUAL, KWIN_SIZE, HLPAR_SIZE, createShaderAbi, isCubePs, type ShaderAbi } from '../gpu/shader-abi';
+import { ALPHA_ALWAYS, ALPHA_GREATEREQUAL, KWIN_SIZE, HLPAR_SIZE, createShaderAbi, group1Entries, isCubePs, type ShaderAbi } from '../gpu/shader-abi';
 
 const q = new URLSearchParams(location.search);
 const pre = document.createElement('pre'); document.body.append(pre);
@@ -18,21 +20,27 @@ interface Summary {
   adapter: string; modules: number; vs: number; ps: number; psCube: number; compileErrors: number; warnings: number;
   compileMsTotal: number; compileMsMax: number; pipelines: number; pipelineErrors: number; pipelineMsTotal: number;
   pipelineMsMax: number; pull: { cases: number; exact: number; maxUlp: number; flushed: number; bad: number } | null;
-  diff: DiffResult | null; psdiff: DiffResult | null; failures: string[]; ok: boolean;
+  diff: DiffResult | null; psdiff: DiffResult | null; vs3diff: DiffResult | null; ps3diff: DiffResult | null;
+  failures: string[]; ok: boolean;
 }
 
-async function readDump(path: string): Promise<{ files: Map<string, string>; vecs: Map<string, ArrayBuffer> }> {
+async function readDump(path: string): Promise<{ files: Map<string, string>; vecs: Map<string, ArrayBuffer>; vecs3: Map<string, ArrayBuffer> }> {
   let dir = await navigator.storage.getDirectory();
   for (const part of path.split('/').filter(Boolean)) dir = await dir.getDirectoryHandle(part);
-  const files = new Map<string, string>(), vecs = new Map<string, ArrayBuffer>();
+  const files = new Map<string, string>(), vecs = new Map<string, ArrayBuffer>(), vecs3 = new Map<string, ArrayBuffer>();
   for await (const [name, h] of (dir as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
     if (h.kind !== 'file') continue;
     const file = await (h as FileSystemFileHandle).getFile();
     if (name.endsWith('.wgsl')) files.set(name, await file.text());
     else if (name.endsWith('.vec') || name.endsWith('.pvec')) vecs.set(name.replace(/\.p?vec$/, ''), await file.arrayBuffer());
+    else if (name.endsWith('.p3vec') || name.endsWith('.v3vec')) vecs3.set(name.replace(/\.[pv]3vec$/, ''), await file.arrayBuffer());
   }
-  return { files, vecs };
+  return { files, vecs, vecs3 };
 }
+
+/** what a module's first line says: its texture stages (", 8 stages"; else 4) and binding kinds (", kinds 0x..") */
+function moduleStages(code: string): number { return /^\/\/[^\n]*, 8 stages/.test(code) ? 8 : 4; }
+function moduleKinds(code: string): number { const m = /^\/\/[^\n]*, kinds 0x([0-9a-f]+)/.exec(code); return m ? parseInt(m[1], 16) : 0; }
 
 // ---- differential test: the WGSL vertex function vs the CPU interpreter ----
 // vs_<id>.vec comes from web/tools/wgsl-xl --pairs (vs_run on the same bytes
@@ -40,7 +48,10 @@ async function readDump(path: string): Promise<{ files: Map<string, string>; vec
 // a compute shader that stores the 29 VOut floats per vertex.
 interface DiffResult { modules: number; vertices: number; components: number; bad: number; maxRel: number; worst: string;
   /** pixel shaders: alpha-test decisions that differ only because alpha is within the tolerance of aref */
-  edgeFlips?: number }
+  edgeFlips?: number;
+  /** psref vectors: pixels or vertices the reference marks fragile (its own result jumps past the tolerance when
+   *  its inputs move by 1e-5: a comparison at its threshold), how many of them differ (not counted as bad) */
+  fragile?: number; fragileDiffer?: number }
 async function vsDiff(device: GPUDevice, name: string, code: string, vec: ArrayBuffer, res: DiffResult, failures: string[]) {
   const u = new Uint32Array(vec, 0, 4);
   if (u[0] !== 0x31565356) { failures.push(`${name}.vec: bad magic`); return; }
@@ -288,9 +299,212 @@ var<private> KILL: u32;
   res.modules++; res.vertices += np; res.bad += bad;
 }
 
+// ---- ps_2_x, ps_3_0 and vs_3_0 against psref, the D3D9 reference ----
+// The vectors come from web/tools/wgsl-xl.c (write_sm3_ps_vectors,
+// write_sm3_vs_vectors).  The texture is the analytic function of its sm3_tex,
+// with the level of detail from the coordinate's fine derivatives (implicit),
+// plus the bias, the level, or texldd's gradients.  Only products, sums and
+// floor (a GPU's sin may be 2^-11 off, enough to flip a depth comparison).
+const FTEX3 = `
+fn bump(t: f32) -> f32 { let u = t - floor(t); return 4.0 * u * (1.0 - u); }
+fn ftc(k: u32, x: f32, y: f32, lod: f32) -> vec4f {
+  let f = f32(k);
+  return vec4f(0.1 + 0.8 * bump(x * 3.1 + f * 0.37 + 0.05 * lod), 0.1 + 0.8 * bump(y * 2.3 + f * 0.5),
+               0.1 + 0.8 * bump((x + y) * 1.7 + f * 0.13), 0.1 + 0.8 * bump(x * y * 5.3 + 0.2 * f));
+}
+fn flod(gx: vec2f, gy: vec2f) -> f32 {
+  let g = max(max(abs(gx.x), abs(gx.y)), max(abs(gy.x), abs(gy.y))) * 256.0;
+  return select(-16.0, log2(g), g > 0.0);
+}
+fn ft2(k: u32, c: vec2f) -> vec4f { return ftc(k, c.x, c.y, flod(dpdxFine(c), dpdyFine(c))); }
+fn ft2Bias(k: u32, c: vec2f, b: f32) -> vec4f { return ftc(k, c.x, c.y, flod(dpdxFine(c), dpdyFine(c)) + b); }
+fn ft2Level(k: u32, c: vec2f, l: f32) -> vec4f { return ftc(k, c.x, c.y, l); }
+fn ft2Grad(k: u32, c: vec2f, gx: vec2f, gy: vec2f) -> vec4f { return ftc(k, c.x, c.y, flod(gx, gy)); }
+fn ft3(k: u32, c: vec3f) -> vec4f { return ftc(k, c.x + c.z * 0.3, c.y - c.z * 0.2, flod(dpdxFine(c).xy, dpdyFine(c).xy)); }
+fn ft3Bias(k: u32, c: vec3f, b: f32) -> vec4f { return ftc(k, c.x + c.z * 0.3, c.y - c.z * 0.2, flod(dpdxFine(c).xy, dpdyFine(c).xy) + b); }
+fn ft3Level(k: u32, c: vec3f, l: f32) -> vec4f { return ftc(k, c.x + c.z * 0.3, c.y - c.z * 0.2, l); }
+fn ft3Grad(k: u32, c: vec3f, gx: vec3f, gy: vec3f) -> vec4f { return ftc(k, c.x + c.z * 0.3, c.y - c.z * 0.2, flod(gx.xy, gy.xy)); }
+`;
+const P3_NIN = 42, P3_W = 16;            // inputs per pixel; the target is 16 pixels (8 quads) wide
+/** A pixel shader module runs as the fragment stage of a full-target draw, one 2x2 quad per vector quad, so
+ *  dpdxFine/dpdyFine see the quad's four pixels; the inputs come from a storage buffer by pixel position. */
+async function ps3Diff(device: GPUDevice, name: string, code: string, vec: ArrayBuffer, res: DiffResult, failures: string[]) {
+  const u = new Uint32Array(vec, 0, 4);
+  if (u[0] !== 0x31563350) { failures.push(`${name}.p3vec: bad magic`); return; }
+  const nq = u[1], npx = nq * 4, rows = Math.ceil(nq / 8) * 2;
+  const par = new Uint8Array(vec, 16, 560);
+  const inputs = new Float32Array(vec, 576, npx * P3_NIN);
+  const want = new Float32Array(vec, 576 + npx * P3_NIN * 4, npx * 8);     // rgba, killed, depth, fragile, 0
+  const head = code.match(/@fragment fn (ps_\d+)\(i: VOut(, @builtin\(front_facing\) ff: bool)?\) -> (@location\(0\) vec4f|PSOut) \{/);
+  if (!head) { failures.push(`${name}: no fragment entry point`); return; }
+  const depth = head[3] === 'PSOut', stages8 = /@location\(7\) uv4/.test(code);
+  const cube = new Set([...code.matchAll(/var tex(\d+): texture_cube<f32>/g)].map(m => +m[1]));
+  const body = code.replace(head[0], `fn psfn(i: VOut, ff: bool) -> ${depth ? 'PSOut' : 'vec4f'} {`)
+    .replace(/textureSample(Bias|Level|Grad)?\(tex(\d+), smp\d+, /g, (_m, kind, k) => `ft${cube.has(+k) ? 3 : 2}${kind ?? ''}(${k}u, `);
+  const uvs = Array.from({ length: stages8 ? 8 : 4 }, (_, k) =>
+    `  i.uv${k} = vec4f(PIN[b + ${8 + 4 * k}u], PIN[b + ${9 + 4 * k}u], PIN[b + ${10 + 4 * k}u], PIN[b + ${11 + 4 * k}u]);`).join('\n');
+  const twin = body + FTEX3 + `
+@group(0) @binding(4) var<storage, read> PIN: array<f32>;
+struct TOut { @location(0) c: vec4f, @location(1) k: vec4f }
+@vertex fn tvs(@builtin(vertex_index) v: u32) -> @builtin(position) vec4f {
+  let p = array(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  return vec4f(p[v], 0.0, 1.0);
+}
+@fragment fn tfs(@builtin(position) fp: vec4f) -> TOut {
+  let px = vec2u(fp.xy);
+  let b = (((px.y >> 1u) * 8u + (px.x >> 1u)) * 4u + (px.x & 1u) + ((px.y & 1u) << 1u)) * ${P3_NIN}u;
+  var i: VOut;
+  i.pos = fp;
+  i.col0 = vec4f(PIN[b], PIN[b + 1u], PIN[b + 2u], PIN[b + 3u]);
+  i.col1 = vec4f(PIN[b + 4u], PIN[b + 5u], PIN[b + 6u], PIN[b + 7u]);
+${uvs}
+  i.fog = PIN[b + 40u];
+  let r = psfn(i, PIN[b + 41u] > 0.0);
+  var o: TOut;
+  o.c = ${depth ? 'r.c' : 'r'};
+  o.k = vec4f(0.0, ${depth ? 'r.z' : '0.0'}, 0.0, 0.0);
+  return o;
+}`;
+  const module = device.createShaderModule({ code: twin, label: name + '.quad' });
+  const ci = await module.getCompilationInfo();
+  const errs = ci.messages.filter(m => m.type === 'error');
+  if (errs.length) { failures.push(`${name} (quad twin): ${errs.map(m => `${m.lineNum}:${m.linePos} ${m.message}`).join('; ')}`); return; }
+  const fmt: GPUTextureFormat = 'rgba32float';
+  const pipe = await device.createRenderPipelineAsync({ layout: 'auto', vertex: { module, entryPoint: 'tvs' },
+    fragment: { module, entryPoint: 'tfs', targets: [{ format: fmt }, { format: fmt }] }, primitive: { topology: 'triangle-list' } });
+  const mk = (size: number, usage: number) => device.createBuffer({ size, usage });
+  const pb = mk(560, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
+  device.queue.writeBuffer(pb, 0, par);
+  const ib = mk(inputs.byteLength, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
+  device.queue.writeBuffer(ib, 0, inputs);
+  const tex = [0, 1].map(() => device.createTexture({ size: [P3_W, rows], format: fmt, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC }));
+  const rb = [0, 1].map(() => mk(P3_W * 16 * rows, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST));
+  const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+    { binding: 2, resource: { buffer: pb } }, { binding: 4, resource: { buffer: ib } }] });
+  const enc = device.createCommandEncoder();
+  // target 1 starts at x = 1 and the shader writes 0 there: a pixel left at 1 was discarded
+  const pass = enc.beginRenderPass({ colorAttachments: [
+    { view: tex[0].createView(), loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0] },
+    { view: tex[1].createView(), loadOp: 'clear', storeOp: 'store', clearValue: [1, 0, 0, 0] }] });
+  pass.setPipeline(pipe); pass.setBindGroup(0, bg); pass.draw(3); pass.end();
+  for (let t = 0; t < 2; t++) enc.copyTextureToBuffer({ texture: tex[t] }, { buffer: rb[t], bytesPerRow: P3_W * 16 }, [P3_W, rows]);
+  device.queue.submit([enc.finish()]);
+  const got: Float32Array[] = [];
+  for (const b of rb) { await b.mapAsync(GPUMapMode.READ); got.push(new Float32Array(b.getMappedRange().slice(0))); b.unmap(); }
+  pb.destroy(); ib.destroy(); for (const t of tex) t.destroy(); for (const b of rb) b.destroy();
+  const aref = new Float32Array(vec, 16, 1)[0], TOL = 1e-3;
+  let bad = 0;
+  for (let p = 0; p < npx; p++) {
+    const w = want.subarray(p * 8, p * 8 + 8), fragile = w[6] !== 0;
+    if (w[4] < 0) continue;                            // psref refused this quad (D3D9 leaves it undefined)
+    const qd = p >> 2, l = p & 3, x = (qd % 8) * 2 + (l & 1), y = Math.floor(qd / 8) * 2 + (l >> 1), o = (y * P3_W + x) * 4;
+    const gc = got[0].subarray(o, o + 4), gk = got[1][o] !== 0 ? 1 : 0, gz = got[1][o + 1];
+    res.components++;
+    if (fragile) res.fragile = (res.fragile ?? 0) + 1;
+    let differ = '';
+    if (gk !== w[4]) {
+      // an alpha test whose two alphas are both within the tolerance of aref may go either way
+      const tol = TOL * Math.max(1, Math.abs(aref));
+      if (Math.abs(gc[3] - aref) <= tol && Math.abs(w[3] - aref) <= tol) { res.edgeFlips = (res.edgeFlips ?? 0) + 1; continue; }
+      differ = `${name} pixel ${p}: kill gpu ${gk} ref ${w[4]} (alpha gpu ${gc[3]} ref ${w[3]}, aref ${aref})`;
+    } else if (w[4]) continue;                          // discarded on both sides
+    else for (let c = 0; c < (depth ? 5 : 4) && !differ; c++) {
+      const g = c < 4 ? gc[c] : gz, r = c < 4 ? w[c] : w[5];
+      res.components++;
+      if (g === r || (Number.isNaN(g) && Number.isNaN(r))) continue;
+      const rel = Math.abs(g - r) / Math.max(1, Math.abs(r));
+      if (!fragile && rel > res.maxRel) { res.maxRel = rel; res.worst = `${name} pixel ${p}.${'rgbaz'[c]}: gpu ${g} ref ${r}`; }
+      if (!(rel <= TOL)) differ = `${name} pixel ${p}.${'rgbaz'[c]}: gpu ${g} ref ${r}`;
+    }
+    if (!differ) continue;
+    if (fragile) { res.fragileDiffer = (res.fragileDiffer ?? 0) + 1; continue; }
+    bad++;
+    if (bad <= 3) failures.push(differ);
+  }
+  res.modules++; res.vertices += npx; res.bad += bad;
+}
+
+/** A vs_3_0 module as a compute function, as vsDiff; 45 outputs (pos, col0, col1, uv0..uv7, fog), compared where
+ *  the shader's output declarations cover them. */
+async function vs3Diff(device: GPUDevice, name: string, code: string, vec: ArrayBuffer, res: DiffResult, failures: string[]) {
+  const u = new Uint32Array(vec, 0, 4);
+  if (u[0] !== 0x31563356) { failures.push(`${name}.v3vec: bad magic`); return; }
+  const nv = u[1], stride = u[2];
+  const vbBytes = new Uint8Array(vec, 16, nv * stride);
+  const consts = new Float32Array(vec, 16 + nv * stride, 1024);
+  const care = new Float32Array(vec, 16 + nv * stride + 4096, 45);
+  const want = new Float32Array(vec, 16 + nv * stride + 4096 + 180, nv * 46);    // 45 outputs, fragile
+  const head = code.match(/@vertex fn (vs_\d+)\(@builtin\(vertex_index\) vid: u32, @builtin\(instance_index\) iid: u32\) -> VOut \{/);
+  if (!head) { failures.push(`${name}: no vertex entry point`); return; }
+  const stages8 = /@location\(7\) uv4/.test(code);
+  const KB = 37;
+  const fields = ['pos', 'col0', 'col1', 'uv0', 'uv1', 'uv2', 'uv3', ...(stages8 ? ['uv4', 'uv5', 'uv6', 'uv7'] : [])];
+  const cs = code.replace(head[0], 'fn vsfn(vid: u32, iid: u32) -> VOut {') + `
+@group(0) @binding(3) var<storage, read_write> OUTV: array<f32>;
+@compute @workgroup_size(64) fn cs(@builtin(global_invocation_id) g: vec3u) {
+  if (g.x >= arrayLength(&OUTV) / 45u) { return; }
+  let o = vsfn(g.x, ${KB}u);
+  let b = g.x * 45u;
+  for (var c = 0u; c < 4u; c++) {
+${fields.map((f, k) => `    OUTV[b + ${4 * k}u + c] = o.${f}[c];`).join('\n')}
+  }
+  OUTV[b + 44u] = o.fog;
+}`;
+  const module = device.createShaderModule({ code: cs, label: name + '.cs' });
+  const ci = await module.getCompilationInfo();
+  const errs = ci.messages.filter(m => m.type === 'error');
+  if (errs.length) { failures.push(`${name} (compute twin): ${errs.map(m => m.message).join('; ')}`); return; }
+  const pipe = await device.createComputePipelineAsync({ layout: 'auto', compute: { module } });
+  const vbSize = Math.max(16, (vbBytes.length + 3) & ~3);
+  const vb = device.createBuffer({ size: vbSize, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const vbCopy = new Uint8Array(vbSize); vbCopy.set(vbBytes);
+  device.queue.writeBuffer(vb, 0, vbCopy);
+  const k = new ArrayBuffer(KWIN_SIZE);
+  new Float32Array(k).fill(-7.25);
+  new Uint32Array(k, KB * 16, 4).set([stride, 0x03020100, 0, 0]);
+  new Float32Array(k, KB * 16 + 16, 1024).set(consts);
+  const kb = device.createBuffer({ size: KWIN_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  device.queue.writeBuffer(kb, 0, k);
+  const out = device.createBuffer({ size: nv * 45 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const rd = device.createBuffer({ size: nv * 45 * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  // a shader that reads no vertex element never touches VB, and the 'auto' layout leaves it out
+  const usesVB = /\bld\w*\(B \+/.test(code);
+  const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+    ...(usesVB ? [{ binding: 0, resource: { buffer: vb } }] : []), { binding: 1, resource: { buffer: kb } }, { binding: 3, resource: { buffer: out } }] });
+  const enc = device.createCommandEncoder();
+  const pass = enc.beginComputePass(); pass.setPipeline(pipe); pass.setBindGroup(0, bg); pass.dispatchWorkgroups(Math.ceil(nv / 64)); pass.end();
+  enc.copyBufferToBuffer(out, 0, rd, 0, nv * 45 * 4);
+  device.queue.submit([enc.finish()]);
+  await rd.mapAsync(GPUMapMode.READ);
+  const got = new Float32Array(rd.getMappedRange().slice(0)); rd.unmap();
+  vb.destroy(); kb.destroy(); out.destroy(); rd.destroy();
+  const FIELD = ['pos', 'col0', 'col1', 'uv0', 'uv1', 'uv2', 'uv3', 'uv4', 'uv5', 'uv6', 'uv7'];
+  let bad = 0;
+  for (let v = 0; v < nv; v++) {
+    const fragile = want[v * 46 + 45] !== 0;
+    if (fragile) res.fragile = (res.fragile ?? 0) + 1;
+    let differ = '';
+    for (let c = 0; c < 45; c++) {
+      if (!care[c]) continue;
+      const g = got[v * 45 + c], w = want[v * 46 + c];
+      res.components++;
+      if (g === w || (Number.isNaN(g) && Number.isNaN(w))) continue;
+      const rel = Math.abs(g - w) / Math.max(1, Math.abs(w));
+      const what = `${name} v${v} ${c === 44 ? 'fog' : FIELD[c >> 2] + '.' + 'xyzw'[c & 3]}: gpu ${g} ref ${w}`;
+      if (!fragile && rel > res.maxRel) { res.maxRel = rel; res.worst = what; }
+      if (!(rel <= 1e-4) && !differ) differ = what;
+    }
+    if (!differ) continue;
+    if (fragile) { res.fragileDiffer = (res.fragileDiffer ?? 0) + 1; continue; }
+    bad++;
+    if (bad <= 3) failures.push(differ);
+  }
+  res.modules++; res.vertices += nv; res.bad += bad;
+}
+
 async function main() {
   const path = q.get('opfs') ?? 'shadercheck/shaders';
-  const { files, vecs } = await readDump(path);
+  const { files, vecs, vecs3 } = await readDump(path);
   const failures: string[] = [];
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) throw new Error('no WebGPU adapter');
@@ -323,6 +537,20 @@ async function main() {
   const idOf = (n: string) => parseInt(n.slice(3), 10);
 
   // ---- 2. pipelines with the explicit ABI layouts ----
+  // 4 stages and kinds 0: L2D or LCUBE; else group 1 from the pixel module's stages and kinds (gpu-abi.md 11.3)
+  const layouts = new Map<string, GPUPipelineLayout>();
+  function layoutOf(ps: string): GPUPipelineLayout {
+    const code = files.get(ps + '.wgsl')!, stages = moduleStages(code), kinds = moduleKinds(code), cube = isCubePs(idOf(ps));
+    if (stages === 4 && kinds === 0) return cube ? abi.layoutCube : abi.layout2d;
+    const key = `${stages} ${kinds} ${cube}`;
+    let l = layouts.get(key);
+    if (!l) {
+      const g1 = device.createBindGroupLayout({ label: `abi.group1 ${key}`, entries: group1Entries(stages, kinds, cube, GPUShaderStage.FRAGMENT)! });
+      l = device.createPipelineLayout({ label: `abi.layout ${key}`, bindGroupLayouts: [abi.group0, g1] });
+      layouts.set(key, l);
+    }
+    return l;
+  }
   const pipeMs: number[] = [];
   let pipelineErrors = 0;
   async function pipeline(vs: string, ps: string, constants: Record<string, number>) {
@@ -330,7 +558,7 @@ async function main() {
     try {
       await device.createRenderPipelineAsync({
         label: `${vs}+${ps} ${JSON.stringify(constants)}`,
-        layout: isCubePs(idOf(ps)) ? abi.layoutCube : abi.layout2d,
+        layout: layoutOf(ps),
         vertex: { module: mods.get(vs)!, entryPoint: vs },
         fragment: { module: mods.get(ps)!, entryPoint: ps, constants, targets: [{ format: 'bgra8unorm' }] },
         primitive: { topology: 'triangle-list', frontFace: 'cw', cullMode: 'back' },
@@ -369,6 +597,19 @@ async function main() {
     log(`vertex shader differential test: ${diff.modules} modules, ${diff.vertices} vertices, ${diff.bad} components over 1e-4 relative, max ${diff.maxRel.toExponential(2)} (${diff.worst})`);
     log(`pixel shader differential test: ${psdiff.modules} modules, ${psdiff.vertices} pixels, ${psdiff.bad} mismatches (kill flag or over 1e-3 relative), ${psdiff.edgeFlips} alpha-test flips within 1e-3 of aref accepted, max ${psdiff.maxRel.toExponential(2)} (${psdiff.worst})`);
   }
+  // ps_2_x, ps_3_0 and vs_3_0 against psref
+  let vs3diff: DiffResult | null = null, ps3diff: DiffResult | null = null;
+  if (vecs3.size) {
+    vs3diff = { modules: 0, vertices: 0, components: 0, bad: 0, maxRel: 0, worst: '' };
+    ps3diff = { modules: 0, vertices: 0, components: 0, bad: 0, maxRel: 0, worst: '', edgeFlips: 0 };
+    for (const [n, vec] of vecs3) {
+      if (!files.has(n + '.wgsl')) { failures.push(`${n}: vectors without a module`); continue; }
+      if (n.startsWith('vs_')) await vs3Diff(device, n, files.get(n + '.wgsl')!, vec, vs3diff, failures);
+      else await ps3Diff(device, n, files.get(n + '.wgsl')!, vec, ps3diff, failures);
+    }
+    log(`vs_3_0 against psref: ${vs3diff.modules} modules, ${vs3diff.vertices} vertices, ${vs3diff.components} components, ${vs3diff.bad} vertices over 1e-4 relative, ${vs3diff.fragile ?? 0} fragile (${vs3diff.fragileDiffer ?? 0} of them differ), max ${vs3diff.maxRel.toExponential(2)} (${vs3diff.worst})`);
+    log(`ps_2_x/ps_3_0 against psref: ${ps3diff.modules} modules, ${ps3diff.vertices} pixels, ${ps3diff.components} components, ${ps3diff.bad} pixels mismatch (kill flag or over 1e-3 relative), ${ps3diff.edgeFlips} alpha-test flips within 1e-3 of aref accepted, ${ps3diff.fragile ?? 0} fragile (${ps3diff.fragileDiffer ?? 0} of them differ), max ${ps3diff.maxRel.toExponential(2)} (${ps3diff.worst})`);
+  }
 
   // ---- 4. vertex pulling ----
   const pull = files.has('pulltest.wgsl') ? await pullTest(device, files.get('pulltest.wgsl')!, failures) : null;
@@ -384,9 +625,10 @@ async function main() {
     compileErrors: results.filter(r => r.errors.length).length, warnings: results.reduce((a, r) => a + r.warnings, 0),
     compileMsTotal: +cms.reduce((a, b) => a + b, 0).toFixed(1), compileMsMax: +Math.max(0, ...cms).toFixed(1),
     pipelines: pipeMs.length, pipelineErrors, pipelineMsTotal: +pipeMs.reduce((a, b) => a + b, 0).toFixed(1),
-    pipelineMsMax: +Math.max(0, ...pipeMs).toFixed(1), pull, diff, psdiff, failures, ok: false,
+    pipelineMsMax: +Math.max(0, ...pipeMs).toFixed(1), pull, diff, psdiff, vs3diff, ps3diff, failures, ok: false,
   };
-  s.ok = failures.length === 0 && s.compileErrors === 0 && pipelineErrors === 0 && !!pull && pull.bad === 0 && (!diff || diff.bad === 0) && (!psdiff || psdiff.bad === 0);
+  s.ok = failures.length === 0 && s.compileErrors === 0 && pipelineErrors === 0 && !!pull && pull.bad === 0 && (!diff || diff.bad === 0) &&
+    (!psdiff || psdiff.bad === 0) && (!vs3diff || vs3diff.bad === 0) && (!ps3diff || ps3diff.bad === 0);
   for (const r of results) log(`module ${r.name} ${r.bytes} B ${r.ms.toFixed(1)} ms${r.errors.length ? ' ERROR' : ''}${r.warnings ? ` ${r.warnings} warnings` : ''}`);
   log('SHADERCHECK ' + JSON.stringify(s));
 }

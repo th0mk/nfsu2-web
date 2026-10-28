@@ -19,6 +19,16 @@ int wgsl_tvert_module(char *out, size_t cap);
 int wgsl_ff_module(int id, char *out, size_t cap, unsigned cubemask);
 /* Compute module checking the vertex-pulling helpers (shadercheck test). */
 int wgsl_pull_test_module(char *out, size_t cap);
+/* Texture stages of every module, 4 (the default) or 8 (gpu-abi.md section
+ * 11.2): set once, before the first translation. */
+void wgsl_set_stages(unsigned n);
+unsigned wgsl_get_stages(void);
+/* The binding kinds (GW_BK_*, 2 bits per stage) of the last pixel shader
+ * translated: how its module declares each stage (GW_SHADER_PS a[2]). */
+unsigned wgsl_ps_kinds(void);
+/* Why the last ps_2_x, ps_3_0 or vs_3_0 translation returned 0 ("" when it
+ * did not; runtime/web/vsemu_sm3.inc). */
+const char *wgsl_refusal(void);
 
 #ifdef VSEMU_WGSL
 /* Native test tools only: ps_1_x/ps_2_0 reference with the Mac's semantics

@@ -228,6 +228,7 @@ Run it all with one command (the server on port 8612, `web/dist` built, the wasm
 ```
 node web/tools/shader-check.mjs --game        # dump + pairs + check; exit 0 = all good
 node web/tools/shader-check.mjs --from <dir>  # re-check a dump on disk (--census: also the game-run floor)
+node web/tools/shader-check.mjs --sm3         # ps_2_x, ps_3_0 and vs_3_0 against psref (psref.md; no game build)
 ```
 
 Exit 0 means all of: every check below passes; no `REJECTED` line in the dump's `index.txt` or in `pairs.txt`; and for
@@ -282,7 +283,9 @@ through `vs_0`.
 
 The additions Most Wanted's shaders need, written before the translator, D3DX and renderer work split (MW tracker
 M1-24). They are the contract; nothing here is implemented beyond the protocol (`gpu_proto.h`, `proto.ts`), the group 1
-layouts (`shader-abi.ts` `group1Entries`) and their check (`web/tools/check-gpu-proto.mjs`). **UG2 uses none of it**:
+layouts (`shader-abi.ts` `group1Entries`) and their check (`web/tools/check-gpu-proto.mjs`), and the translator's side:
+modules for 8 stages (`wgsl_set_stages(8)`, which nothing in the game calls yet), a pixel module's binding kinds
+(`wgsl_ps_kinds()`, not yet sent in `GW_SHADER_PS` a[2]) and ps_2_x, ps_3_0 and vs_3_0 (psref.md). **UG2 uses none of it**:
 every new field is 0 in UG2's records, and 0 means exactly what the protocol meant before version 6.
 
 ### 11.1 What the game's shaders use

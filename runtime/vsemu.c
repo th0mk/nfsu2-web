@@ -41,7 +41,7 @@ enum { O_NOP=0, O_MOV, O_ADD, O_SUB, O_MAD, O_MUL, O_RCP, O_RSQ, O_DP3, O_DP4,
        /* --- pixel shader instructions (D3D numbering) --- */
        O_TEXCOORD=64, O_TEXKILL=65, O_TEX=66,   /* ps_1_x tex / ps_2_0 texld */
        O_EXPP=78, O_LOGP=79, O_CND=80, O_DEF=81,
-       O_CMP=88, O_DP2ADD=90, O_TEXLDD=95, O_TEXLDL=97,
+       O_CMP=88, O_DP2ADD=90, O_TEXLDD=93, O_TEXLDL=95,
        O_END=0xFFFF };
 
 typedef struct {
@@ -82,6 +82,11 @@ struct VSProg {
     int       smptype[16];      /* s# texture type: 2=2D 3=CUBE 4=VOLUME, 0=not declared */
     int       maxreg;           /* highest temp register used (r#) */
     unsigned  unknown;
+    /* ps_2_x, ps_3_0 and vs_3_0: the program's tokens from the version token
+     * to the end token, which the WGSL translator of those models decodes
+     * itself (runtime/web/vsemu_sm3.inc); 0 for the other models */
+    uint32_t *raw;
+    size_t    nraw;
 };
 
 static int is_param(uint32_t t){ return (t & 0x80000000u) != 0; }
@@ -268,10 +273,21 @@ VSProg *vs_compile(const uint32_t *tok, size_t max_dw){
       }
       if (mr > 31) mr = 31;
       p->maxreg = mr; }
+    if (ver == 0xFFFF0201u || ver == 0xFFFF0300u || ver == 0xFFFE0300u){
+        /* to the end token by the instruction lengths (every SM2+ token has one) */
+        size_t nd = 1;
+        while (nd < max_dw && OPC(tok[nd]) != O_END)
+            nd += 1 + (OPC(tok[nd]) == 0xFFFEu ? (tok[nd] >> 16 & 0x7FFFu) : (tok[nd] >> 24 & 0xFu));
+        nd = nd < max_dw ? nd + 1 : max_dw;
+        p->raw = malloc(nd * sizeof *p->raw);
+        if (!p->raw){ vs_free(p); return 0; }
+        memcpy(p->raw, tok, nd * sizeof *p->raw);
+        p->nraw = nd;
+    }
     return p;
 }
 
-void vs_free(VSProg *p){ if (p){ free(p->ins); free(p); } }
+void vs_free(VSProg *p){ if (p){ free(p->ins); free(p->raw); free(p); } }
 unsigned vs_version(const VSProg *p){ return p ? p->version : 0; }
 unsigned vs_ninstr(const VSProg *p){ return p ? p->n : 0; }
 unsigned vs_unknown(const VSProg *p){ return p ? p->unknown : 0; }

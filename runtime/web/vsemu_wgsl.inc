@@ -41,6 +41,19 @@ static void wb_put(WBuf *b, const char *fmt, ...){
     b->n += (size_t)w;
 }
 
+/* Texture stages of every module (gpu-abi.md section 11.2, GwCtl.stages): 4
+ * (UG2, the default; the modules are exactly what they were before 8 stages
+ * existed) or 8: VOut gains uv4..uv7, a vertex shader's oT4..oT7 are their
+ * own registers, ps_2_0 reads t0..t7 and s0..s7 with the declared sampler
+ * types, and every module's first line says "8 stages".  Set once, before
+ * the first translation. */
+static unsigned g_wstages = 4;
+void wgsl_set_stages(unsigned n){ g_wstages = n == 8 ? 8u : 4u; }
+unsigned wgsl_get_stages(void){ return g_wstages; }
+/* binding kinds (GW_BK_*, 2 bits per stage) of the last pixel shader translated */
+static unsigned g_wkinds;
+unsigned wgsl_ps_kinds(void){ return g_wkinds; }
+
 /* ---- shared module text (gpu-abi.md sections 2-5) ---- */
 static const char W_VOUT[] =
     "struct VOut {\n"
@@ -49,6 +62,16 @@ static const char W_VOUT[] =
     "  @location(2) uv0: vec4f, @location(3) uv1: vec4f, @location(4) uv2: vec4f, @location(5) uv3: vec4f,\n"
     "  @location(6) fog: f32,\n"
     "}\n";
+static const char W_VOUT8[] =
+    "struct VOut {\n"
+    "  @builtin(position) pos: vec4f,\n"
+    "  @location(0) col0: vec4f, @location(1) col1: vec4f,\n"
+    "  @location(2) uv0: vec4f, @location(3) uv1: vec4f, @location(4) uv2: vec4f, @location(5) uv3: vec4f,\n"
+    "  @location(6) fog: f32,\n"
+    "  @location(7) uv4: vec4f, @location(8) uv5: vec4f, @location(9) uv6: vec4f, @location(10) uv7: vec4f,\n"
+    "}\n";
+static const char *w_vout(void){ return g_wstages == 8 ? W_VOUT8 : W_VOUT; }
+static const char *w_st8(void){ return g_wstages == 8 ? ", 8 stages" : ""; }
 /* K is a 64 KB window of the frame's VS constant arena, bound once for many
  * draws; a draw's block {stride, tsel, base, pad; c[0..255]} starts at row
  * kb = instance_index (the draw's firstInstance), so a draw no longer needs a
@@ -136,6 +159,14 @@ static void w_textures(WBuf *b, unsigned cubemask){
                ((cubemask >> k) & 1u) ? "texture_cube<f32>" : "texture_2d<f32>");
     for (int k = 0; k < 4; k++)
         wb_put(b, "@group(1) @binding(%d) var smp%d: sampler;\n", 4 + k, k);
+    /* 8 stages: stages 4..7 after them (texBinding/smpBinding in shader-abi.ts) */
+    if (g_wstages == 8){
+        for (int k = 4; k < 8; k++)
+            wb_put(b, "@group(1) @binding(%d) var tex%d: %s;\n", k + 4, k,
+                   ((cubemask >> k) & 1u) ? "texture_cube<f32>" : "texture_2d<f32>");
+        for (int k = 4; k < 8; k++)
+            wb_put(b, "@group(1) @binding(%d) var smp%d: sampler;\n", k + 8, k);
+    }
 }
 
 /* f32 literal that survives a round trip (9 significant digits) and always
@@ -167,7 +198,7 @@ static void w_reg(WCtx *x, char *o, size_t cap, unsigned tok, unsigned rel){
     case R_INPUT: n &= vs ? 15 : 1;  x->v |= 1u << n; snprintf(o, cap, "v%d", n); return;
     case R_ADDR:
         if (vs){ x->a0 = 1; snprintf(o, cap, "vec4f(a0)"); }
-        else   { n &= 3; x->t |= 1u << n; snprintf(o, cap, "t%d", n); }
+        else   { n &= (g_wstages == 8 && p->version >= 0x0200) ? 7 : 3; x->t |= 1u << n; snprintf(o, cap, "t%d", n); }
         return;
     case R_LOOP:     x->aL = 1; snprintf(o, cap, "vec4f(f32(aL))"); return;
     case R_COLOROUT: x->oC = 1; snprintf(o, cap, "oC"); return;
@@ -300,10 +331,23 @@ static int w_plain(unsigned tok, int ty, int n){
  * Pixel shader (ps_to_msl_ex2)
  * ==================================================================== */
 #define WEX 4096
+/* ps_2_x, ps_3_0 and vs_3_0: vsemu_sm3.inc (D3D9's semantics) */
+static int ps_to_wgsl_sm3(const VSProg *p, int id, char *out, size_t cap, unsigned cubemask);
+static int vs_to_wgsl_sm3(const VSProg *p, int id, const int decl[16][2], char *out, size_t cap);
 int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cubemask, int reflk){
+    g_wkinds = 0;
     if (!p || !out || cap < 512) return 0;
     if (reflk >= 0) return 0;                   /* HD reflection variants: Mac-only */
+    if (p->raw) return ps_to_wgsl_sm3(p, id, out, cap, cubemask);
     if (!w_defs_finite(p)) return 0;
+    /* 8 stages: ps_2_0 samples s0..s7 as they are declared (a cube is a
+     * texture_cube, a volume is refused), as ps_2_x does */
+    unsigned smask = (g_wstages == 8 && p->version >= 0x0200) ? 7u : 3u;
+    if (smask == 7u)
+        for (int k = 0; k < 8; k++){
+            if (p->smptype[k] == 4) return 0;
+            if (p->smptype[k] == 3){ cubemask |= 1u << k; g_wkinds |= GW_BK_CUBE << (2 * k); }
+        }
     WCtx x; memset(&x, 0, sizeof x); x.p = p; x.vs = 0;
     char *bodybuf = malloc(cap);
     if (!bodybuf) return 0;
@@ -321,7 +365,7 @@ int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cube
         for (unsigned q = 0; q < p->n; q++){
             const VSIns *y = &p->ins[q];
             if (y->op != O_DCL || RT(y->dst) != R_ADDR) continue;
-            int k = RN(y->dst) & 3;
+            int k = RN(y->dst) & (int)smask;
             x.t |= 1u << k;
             wb_put(&bb, "  t%d = select(vec4f(0.0), i.uv%d, PS20_TEXCOORD);\n", k, k);
         }
@@ -358,7 +402,7 @@ int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cube
              * A cube stage samples the 3-component vector (no divide). */
             int dn = RN(y->dst) & 3, smp, crd = -1;
             const char *cs = 0;
-            if (y->nsrc >= 2){ smp = RN(y->src[1]) & 3; cs = s0; }
+            if (y->nsrc >= 2){ smp = RN(y->src[1]) & (int)smask; cs = s0; }
             else if (y->nsrc == 1 && RT(y->src[0]) == R_ADDR){ smp = dn; crd = RN(y->src[0]) & 3; }
             else if (y->nsrc == 1){ smp = dn; cs = s0; }
             else { smp = dn; crd = dn; }
@@ -457,16 +501,17 @@ int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cube
     int usec = ps_uses_colorout(p);
     if (usec) x.oC = 1; else x.r |= 1u;          /* the result register */
     WBuf ob; wb_init(&ob, out, cap);
-    wb_put(&ob, "// ps_%d: %s_%u_%u, %u instructions%s%s\n", id, "ps", p->version >> 8, p->version & 0xFF,
-           p->n, (cubemask & 1u) ? ", stage 0 cube" : "", hl_used ? ", other cars' headlights" : "");
-    wb_put(&ob, "%s%s", W_VOUT, W_PSPAR);
+    wb_put(&ob, "// ps_%d: %s_%u_%u, %u instructions%s%s%s", id, "ps", p->version >> 8, p->version & 0xFF,
+           p->n, (cubemask & 1u) ? ", stage 0 cube" : "", hl_used ? ", other cars' headlights" : "", w_st8());
+    if (g_wkinds) wb_put(&ob, ", kinds 0x%x", g_wkinds);
+    wb_put(&ob, "\n%s%s", w_vout(), W_PSPAR);
     w_textures(&ob, cubemask);
     if (hl_used) wb_put(&ob, "%s", W_HL);
     wb_put(&ob, "@fragment fn ps_%d(i: VOut) -> @location(0) vec4f {\n", id);
     w_decls(&ob, &x, 16);
     if (x.v & 1u) wb_put(&ob, "  var v0 = i.col0;\n");
     if (x.v & 2u) wb_put(&ob, "  var v1 = i.col1;\n");
-    for (int t = 0; t < 4; t++) if (x.t & (1u << t)) wb_put(&ob, "  var t%d = vec4f(0.0);\n", t);
+    for (int t = 0; t < 8; t++) if (x.t & (1u << t)) wb_put(&ob, "  var t%d = vec4f(0.0);\n", t);
     if (x.oC) wb_put(&ob, "  var oC = vec4f(0.0);\n");
     wb_put(&ob, "%s", bodybuf);
     wb_put(&ob, "  return ps_end(%s, i.fog);\n}\n", usec ? "oC" : "r0");
@@ -528,13 +573,14 @@ static int w_vsdst(WCtx *x, char *o, size_t cap, unsigned tok){
                     if (n == 1){ snprintf(o, cap, "oFog"); return 0; }
                     x->dummy = 1; snprintf(o, cap, "dummy"); return 0;
     case R_ATTROUT: snprintf(o, cap, "oD%d", n & 1); return 0;
-    case R_OUTPUT:  snprintf(o, cap, "oT%d", n & 3); return 0;
+    case R_OUTPUT:  snprintf(o, cap, "oT%d", n & (int)(g_wstages - 1)); return 0;   /* 4 stages: oT4..7 alias oT0..3 */
     default:        x->dummy = 1; snprintf(o, cap, "dummy"); return 0;
     }
 }
 
 int vs_to_wgsl(const VSProg *p, int id, const int decl[16][2], char *out, size_t cap){
     if (!p || !out || cap < 1024) return 0;
+    if (p->raw) return vs_to_wgsl_sm3(p, id, decl, out, cap);
     if (!w_defs_finite(p)) return 0;
     WCtx x; memset(&x, 0, sizeof x); x.p = p; x.vs = 1;
     char *bodybuf = malloc(cap);
@@ -644,9 +690,9 @@ int vs_to_wgsl(const VSProg *p, int id, const int decl[16][2], char *out, size_t
     if (x.bad || !bb.ok) goto done;
 
     WBuf ob; wb_init(&ob, out, cap);
-    wb_put(&ob, "// vs_%d: vs_%u_%u, %u instructions, vs_kmax %d\n", id, p->version >> 8, p->version & 0xFF,
-           p->n, vs_kmax(p));
-    wb_put(&ob, "%s%s%s%s", W_VOUT, W_VSPAR, W_PULL, W_TPICK);
+    wb_put(&ob, "// vs_%d: vs_%u_%u, %u instructions, vs_kmax %d%s\n", id, p->version >> 8, p->version & 0xFF,
+           p->n, vs_kmax(p), w_st8());
+    wb_put(&ob, "%s%s%s%s", w_vout(), W_VSPAR, W_PULL, W_TPICK);
     wb_put(&ob, "@vertex fn vs_%d(@builtin(vertex_index) vid: u32, @builtin(instance_index) iid: u32) -> VOut {\n", id);
     /* kb <= GW_KWIN_ROWS - 257 (the renderer's window choice): every row
      * below, relative addressing's clamp included, stays inside the window */
@@ -662,6 +708,8 @@ int vs_to_wgsl(const VSProg *p, int id, const int decl[16][2], char *out, size_t
                 "  var oD0 = vec4f(1.0); var oD1 = vec4f(0.0);\n"
                 "  var oT0 = vec4f(0.0); var oT1 = vec4f(0.0); var oT2 = vec4f(0.0); var oT3 = vec4f(0.0);\n"
                 "  var oFog = vec4f(1.0);\n");
+    if (g_wstages == 8)
+        wb_put(&ob, "  var oT4 = vec4f(0.0); var oT5 = vec4f(0.0); var oT6 = vec4f(0.0); var oT7 = vec4f(0.0);\n");
     wb_put(&ob, "%s", bodybuf);
     /* Epilogue as the Mac: no half-pixel offset, no colour clamp;
      * D3DTSS_TEXCOORDINDEX applied here so the pixel stage reads plain
@@ -673,8 +721,10 @@ int vs_to_wgsl(const VSProg *p, int id, const int decl[16][2], char *out, size_t
                 "  o.uv1 = tpick((KH.y >> 8u) & 3u, oT0, oT1, oT2, oT3);\n"
                 "  o.uv2 = tpick((KH.y >> 16u) & 3u, oT0, oT1, oT2, oT3);\n"
                 "  o.uv3 = tpick((KH.y >> 24u) & 3u, oT0, oT1, oT2, oT3);\n"
-                "  o.fog = oFog.x;\n"
-                "  return o;\n}\n");
+                "  o.fog = oFog.x;\n");
+    /* 8 stages: uv4..uv7 are oT4..oT7 as they are (tsel covers stages 0-3) */
+    if (g_wstages == 8) wb_put(&ob, "  o.uv4 = oT4; o.uv5 = oT5; o.uv6 = oT6; o.uv7 = oT7;\n");
+    wb_put(&ob, "  return o;\n}\n");
     if (ob.ok) rc = (int)ob.n;
 done:
     free(bodybuf); free(ex); free(s0); free(s1); free(s2); free(val);
@@ -687,8 +737,9 @@ done:
  * ==================================================================== */
 int wgsl_tvert_module(char *out, size_t cap){
     WBuf ob; wb_init(&ob, out, cap);
-    wb_put(&ob, "// vs_0: TVert pass-through (CPU-transformed vertices, metal.m vmain)\n");
-    wb_put(&ob, "%s%s", W_VOUT, W_VSPAR);
+    /* 8 stages: uv4..uv7 stay 0 (a TVert holds four coordinates) */
+    wb_put(&ob, "// vs_0: TVert pass-through (CPU-transformed vertices, metal.m vmain)%s\n", w_st8());
+    wb_put(&ob, "%s%s", w_vout(), W_VSPAR);
     /* TVert (gfx.h): pos xyzw, oD0, oD1, t[4][4]: 28 f32 = 112 bytes.  The
      * renderer draws with firstVertex = MDraw.first from the start of the
      * TVert arena: no K block. */
@@ -707,8 +758,8 @@ int wgsl_tvert_module(char *out, size_t cap){
 int wgsl_ff_module(int id, char *out, size_t cap, unsigned cubemask){
     WBuf ob; wb_init(&ob, out, cap);
     int cube = cubemask & 1u;
-    wb_put(&ob, "// ps_%d: fixed-function fragment col0 * tex0 (metal.m fmain)%s\n", id, cube ? ", stage 0 cube" : "");
-    wb_put(&ob, "%s%s", W_VOUT, W_PSPAR);
+    wb_put(&ob, "// ps_%d: fixed-function fragment col0 * tex0 (metal.m fmain)%s%s\n", id, cube ? ", stage 0 cube" : "", w_st8());
+    wb_put(&ob, "%s%s", w_vout(), W_PSPAR);
     w_textures(&ob, cubemask);
     wb_put(&ob, "@fragment fn ps_%d(i: VOut) -> @location(0) vec4f {\n"
                 "  return ps_end(i.col0 * textureSample(tex0, smp0, i.uv0.%s), i.fog);\n}\n",
@@ -736,6 +787,9 @@ int wgsl_pull_test_module(char *out, size_t cap){
     wb_put(&ob, "}\n");
     return ob.ok ? (int)ob.n : 0;
 }
+
+/* ps_2_x, ps_3_0 and vs_3_0 */
+#include "vsemu_sm3.inc"
 
 #ifdef VSEMU_WGSL
 /* reference interpreter for the pixel shader differential test (tools only) */

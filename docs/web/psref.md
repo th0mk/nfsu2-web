@@ -8,8 +8,8 @@ whose every `.c` file goes into the game's module.
 
 Why a second interpreter: `ps_ref_run` follows the Mac port's semantics on purpose (gpu-abi.md §8), with its
 shortcuts: temporaries `r & 15`, texture coordinates `t & 3`, colours `v & 1`, no projective divide in `texldp`,
-unknown instructions skipped. The WGSL translator has the same shortcuts, so a differential test between the two
-cannot see them. Ten of Most Wanted's 18 ps_2_x shaders use r16..r30, and with `r & 15` seven of them give other
+unknown instructions skipped. The WGSL translator of the older models has the same shortcuts, so a differential test
+between the two cannot see them (ps_2_x, ps_3_0 and vs_3_0 now have a translator of their own, below). Ten of Most Wanted's 18 ps_2_x shaders use r16..r30, and with `r & 15` seven of them give other
 results (measured below). psref decodes the bytecode itself, shares no code with `vsemu.c`, and follows the D3D9
 documents; `ps_ref_run` now refuses ps_2_x and ps_3_0 (returns 0) so it can no longer act as their oracle.
 
@@ -144,3 +144,46 @@ and on Most Wanted's 18 ps_2_x and 2 vs_3_0 blobs, `ps_ref_run` and `vs_run` wit
 r0..r31, given inputs on which their semantics and D3D9's coincide (t4..t7 = t0..t3, w = 1, no alpha test or fog),
 agree with psref within 4.2e-6 relative on all 16,128 values (most bit for bit), while with `r & 15` as shipped 2,229
 values of 7 ps_2_x shaders differ.
+
+## The WGSL translator of these models
+
+`runtime/web/vsemu_sm3.inc` (included by `vsemu_wgsl.inc`) translates ps_2_x, ps_3_0 and vs_3_0 with these
+semantics; `vs_compile` keeps such a program's tokens (`VSProg.raw`) and `ps_to_wgsl` / `vs_to_wgsl` hand them over.
+The older models' path is unchanged: UG2 has none of these three models, and its 40 distinct shaders (from SPEED2.EXE)
+translate to the same bytes as before, with the same `.pvec` vectors.
+
+- **Registers.** r0..r31; ps_2_x t0..t7 and v0/v1 (a colour outside its declaration reads (0, 0, 0, 1)); ps_3_0
+  v0..v9 and vs_3_0 o0..o11 by their declarations, packed ones included (texcoord N = `uvN`, color0/1 = `col0/col1`,
+  fog); vPos (the pixel's corner) and vFace. Constants: the program's own `def`/`defi`/`defb`, then `P.c` (32 rows)
+  or the draw's K block (256 rows; a relative read outside them is 0).
+- **8 stages.** t4..t7, s4..s7 and the outputs texcoord4..7 need the 8-stage modules (gpu-abi.md §11.2,
+  `wgsl_set_stages(8)`); every Most Wanted effect needs them (with 4 stages, 17 of its 95 distinct shaders are refused).
+  `wgsl_ps_kinds()` gives the last pixel module's binding kinds (§11.3), also in its first line (`, kinds 0x..`).
+- **Flow control** as WGSL blocks: `if` b#/p0/comparison, `rep`/`loop` with literal counts, the breaks, `call` and
+  `callnz` inlined, predicated writes per component. WGSL takes implicit derivatives only in uniform flow; inside
+  flow that may differ per pixel, a lookup with an implicit level of detail of an input or a constant is made at the
+  top of the function and the block uses its result, and dsx/dsy of one are taken there. Derivatives taken at the top
+  feeding a `textureSampleGrad` in the block were not enough: on an AMD RDNA 4 GPU in Chrome the gradients of a cube
+  `texldb` inside an `if_comp` came out as if from pixels that do not run the block (a level about 6 too high), while
+  the lookup made at the top matched.
+- **Refused** (a reason from `wgsl_refusal()`; the game then has no module for it): what the module ABI has no place
+  for (MRT, a vertex texture fetch, a ps_3_0 input or vs_3_0 output of another usage, an `i#`/`b#` the application
+  sets, a constant past c31 in a pixel shader), a volume sampler, an implicit-LOD lookup or dsx/dsy of a temporary in
+  per-pixel flow (D3D9 forbids it), and bytecode it cannot decode. None of Most Wanted's shaders is refused.
+
+The differential test: `web/tools/wgsl-xl.c` writes for each translated SM3-class module random inputs (64 quads of
+a 16-pixel-wide target, or 64 vertices) and psref's results (`ps_<id>.p3vec`, `vs_<id>.v3vec`), with an analytic
+texture of the coordinate and level of detail; `web/src/test/shadercheck.ts` runs the module on the GPU with the same
+texture function and compares (1e-3 relative for pixels, 1e-4 for vertices, the kill flag exactly). A result that
+psref itself moves past the tolerance when every input moves by 1e-5 (a comparison at its threshold) is counted as
+fragile, not as a failure.
+
+```
+node web/tools/shader-check.mjs --sm3      # the unit tests' programs and, with NFSMW_DATA, Most Wanted's 31 effects
+node --test web/test/psref.test.mjs        # without a GPU: both translate (with ASan, UBSan), refusals as allowed
+```
+
+Measured 2026-10-28, 8 stages: Most Wanted's 95 distinct shaders all translate, the 20 distinct SM3-class ones (17
+ps_2_x, 2 ps_3_0, 1 vs_3_0) with vectors, and the unit tests' 65 programs give 47 modules (18 refused as above); 0
+mismatches on Chrome's SwiftShader (each shader's own seed and three more) and on an AMD RDNA 4 GPU (its own seed
+and two more).
