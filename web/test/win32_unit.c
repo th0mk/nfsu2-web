@@ -645,6 +645,23 @@ static void test_small(Thr *t){
     kbd_set_key(KSRC_SCRIPT, 0x3A, 1); call_imp(t, "GetKeyState", 0x14u); kbd_set_key(KSRC_SCRIPT, 0x3A, 0);
     uint32_t c3 = call_imp(t, "GetKeyState", 0x14u);
     CHECK((c1 & 0x8001u) == 0x8001u && c2 == 1u && c3 == 0u, "caps lock toggles: 0x%x 0x%x 0x%x", c1, c2, c3);
+    /* a toggle flips at every press, asked about or not: two presses with no call between leave it, three flip it */
+    for (int i = 0; i < 2; i++){ kbd_set_key(KSRC_SCRIPT, 0x3A, 1); kbd_set_key(KSRC_SCRIPT, 0x3A, 0); }
+    CHECK(call_imp(t, "GetKeyState", 0x14u) == 0u, "two presses between calls: caps lock off still");
+    for (int i = 0; i < 3; i++){ kbd_set_key(KSRC_SCRIPT, 0x3A, 1); kbd_set_key(KSRC_SCRIPT, 0x3A, 0); }
+    CHECK(call_imp(t, "GetKeyState", 0x14u) == 1u, "three presses between calls: caps lock on");
+    kbd_set_key(KSRC_SCRIPT, 0x3A, 1); kbd_set_key(KSRC_SCRIPT, 0x3A, 0);
+    kbd_set_key(KSRC_SCRIPT, 0x45, 1);                               /* DIK_NUMLOCK (DIK_PAUSE is 0xC5) */
+    uint32_t n1 = call_imp(t, "GetKeyState", 0x90u), p1 = call_imp(t, "GetKeyState", 0x13u);
+    kbd_set_key(KSRC_SCRIPT, 0x45, 0);
+    CHECK((n1 & 0x8001u) == 0x8001u && p1 == 0u && call_imp(t, "GetKeyState", 0x90u) == 1u && call_imp(t, "GetKeyState", 0x14u) == 0u,
+          "num lock down and on (0x%x), not pause (0x%x); caps lock off", n1, p1);
+    kbd_set_key(KSRC_SCRIPT, 0xC5, 1);                               /* DIK_PAUSE */
+    CHECK((call_imp(t, "GetKeyState", 0x13u) & 0x8000u) && !(call_imp(t, "GetKeyState", 0x90u) & 0x8000u), "pause down, num lock up");
+    kbd_set_key(KSRC_SCRIPT, 0xC5, 0);
+    kbd_set_key(KSRC_SCRIPT, 0x9C, 1);                               /* DIK_NUMPADENTER */
+    CHECK(call_imp(t, "GetKeyState", 0x0Du) & 0x8000u, "the number pad's Enter is VK_RETURN");
+    kbd_set_key(KSRC_SCRIPT, 0x9C, 0);
     kbd_set_key(KSRC_SCRIPT, 0xCB, 1);                               /* DIK_LEFT: an extended key */
     CHECK(call_imp(t, "GetKeyState", 0x25u) & 0x8000u, "left arrow down");
     kbd_set_key(KSRC_SCRIPT, 0xCB, 0);

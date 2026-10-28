@@ -438,25 +438,46 @@ static uint32_t us_char(uint32_t vk, int shift, int caps, int ctrl, int alt){
     }
     return 0;
 }
-/* GetKeyState: down from keyboard.c; toggled flips at each press this call sees */
-static uint8_t g_key_prev[256], g_key_tog[256];
-static int vk_down(uint32_t vk){
-    switch (vk){                                                  /* either side */
-    case 0x10: return kbd_key_down(0x2A) || kbd_key_down(0x36);
-    case 0x11: return kbd_key_down(0x1D) || kbd_key_down(0x9D);
-    case 0x12: return kbd_key_down(0x38) || kbd_key_down(0xB8);
+/* GetKeyState: down from keyboard.c's key state; toggled flips at every
+ * press, as Windows flips it whether or not anyone asks: the presses come
+ * from keyboard.c's record of key changes (DirectInput's buffered data), read
+ * from where the last call stopped */
+static uint8_t g_key_tog[256];
+static uint32_t g_key_seq = 1;                                    /* the next change not looked at (keyboard.c starts at 1) */
+/* the DirectInput keys of a virtual key (n of them, at most 2) */
+static int vk_diks(uint32_t vk, unsigned dik[2]){
+    switch (vk){
+    case 0x10: dik[0] = 0x2A; dik[1] = 0x36; return 2;            /* either side */
+    case 0x11: dik[0] = 0x1D; dik[1] = 0x9D; return 2;
+    case 0x12: dik[0] = 0x38; dik[1] = 0xB8; return 2;
+    case 0x0D: dik[0] = 0x1C; dik[1] = 0x9C; return 2;            /* Enter, the number pad's too */
+    case 0x2C: dik[0] = 0xB7; return 1;                           /* Print Screen: DIK_SYSRQ */
+    case 0x90: dik[0] = 0x45; return 1;                           /* Num Lock: DIK_NUMLOCK, not extended there (0xC5 is Pause) */
     }
     uint32_t sc = vk < 256u ? k_vk_sc[vk] : 0u;
     if (!sc) return 0;
-    if (sc == 0xE11Du) return kbd_key_down(0xC5);                 /* DIK_PAUSE */
-    return kbd_key_down((sc & 0xFFu) | (sc >> 8 == 0xE0u ? 0x80u : 0u));
+    dik[0] = sc == 0xE11Du ? 0xC5u : (sc & 0xFFu) | (sc >> 8 == 0xE0u ? 0x80u : 0u);   /* DIK_PAUSE; 0x80 = extended */
+    return 1;
+}
+static void key_toggles(void){
+    uint32_t head = kbd_ev_head();
+    if (head - g_key_seq > 1024u) g_key_seq = head - 1024u;       /* the record keeps the last 1,024 */
+    for (KbdEv e; g_key_seq != head; g_key_seq++){
+        int got = kbd_ev_get(g_key_seq, &e);
+        if (got == 0) break;                                      /* not written yet */
+        if (got < 0 || !e.down) continue;                         /* overwritten meanwhile, or a release */
+        for (uint32_t vk = 1; vk < 256u; vk++){
+            unsigned d[2]; int n = vk_diks(vk, d);
+            for (int i = 0; i < n; i++) if (d[i] == e.dik) g_key_tog[vk] ^= 1u;
+        }
+    }
 }
 static uint32_t get_key_state(uint32_t vk){
     if (vk >= 256u) return 0;
-    int d = vk_down(vk);
-    if (d && !g_key_prev[vk]) g_key_tog[vk] ^= 1u;
-    g_key_prev[vk] = (uint8_t)d;
-    return (uint32_t)(int32_t)(int16_t)((d ? 0xFF80u : 0u) | g_key_tog[vk]);   /* a SHORT, sign-extended */
+    key_toggles();
+    unsigned d[2]; int n = vk_diks(vk, d), down = 0;
+    for (int i = 0; i < n; i++) down |= kbd_key_down(d[i]);
+    return (uint32_t)(int32_t)(int16_t)((down ? 0xFF80u : 0u) | g_key_tog[vk]);   /* a SHORT, sign-extended */
 }
 
 /* ---- the voice devices: none ------------------------------------------------ */
@@ -517,7 +538,8 @@ int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *out){
         if (i < 3u){ g_std[i] = A(c,1); g_std_set[i] = 1; r = 1; }
         else { win32_set_last_error(c, ERROR_INVALID_HANDLE); r = 0; } }
     else if (!strcmp(n, "SetEnvironmentVariableA")){              /* (lpName, lpValue): NULL value deletes */
-        char nm[256], val[4096]; uint32_t pv = A(c,1);
+        static char val[32768];                                   /* Windows' longest value, 32,767; guest lock held */
+        char nm[256]; uint32_t pv = A(c,1);
         if (!g_str(A(c,0), nm, sizeof nm) || !nm[0] || strchr(nm + 1, '=') || (pv && !g_str(pv, val, sizeof val))){
             win32_set_last_error(c, ERROR_INVALID_PARAMETER); r = 0; }
         else {
@@ -563,7 +585,7 @@ int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *out){
         } }
     else if (!strcmp(n, "SendInput")){                            /* (cInputs, pInputs, cbSize): accepted, not injected */
         uint32_t cnt = A(c,0);
-        if (A(c,2) != 28u || !g_ok(A(c,1), cnt * 28u)){ win32_set_last_error(c, ERROR_INVALID_PARAMETER); r = 0; }
+        if (A(c,2) != 28u || cnt > 0x10000u || !g_ok(A(c,1), cnt * 28u)){ win32_set_last_error(c, ERROR_INVALID_PARAMETER); r = 0; }
         else {
             r = cnt;
             static int sh = 0; if (!sh++)
