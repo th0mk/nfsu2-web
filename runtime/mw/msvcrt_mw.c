@@ -420,10 +420,17 @@ static int crt_sscanf(const char *in, const char *fmt, uint32_t ap){
  * comparisons of 4-byte elements by one comparator for the 31 effects: web/test/d3dx_oracle_unit.c).
  * A comparator that ties two elements is logged once ---- */
 typedef struct { CPU *c; uint32_t base, width, cmp; uint8_t *tmp; } Sort;
+#define TIE_SEEN 8
 static void s_tie(uint32_t cmp, CPU *c){
-    static uint32_t seen[8]; static int n;
+    static uint32_t seen[TIE_SEEN]; static int n, full;
     for (int k = 0; k < n; k++) if (seen[k] == cmp) return;
-    if (n < 8) seen[n++] = cmp;
+    if (n == TIE_SEEN){                           /* the rest unlogged rather than each of their ties */
+        if (!full){ full = 1;
+            fprintf(stderr, "[msvcrt] qsort: the comparator at 0x%08x tied two elements; ties of comparators past the"
+                            " first %d are not logged (from 0x%08x)\n", cmp, TIE_SEEN, c->eip); }
+        return;
+    }
+    seen[n++] = cmp;
     fprintf(stderr, "[msvcrt] qsort: the comparator at 0x%08x tied two elements, whose order may differ from msvcrt's"
                     " (from 0x%08x)\n", cmp, c->eip);
 }

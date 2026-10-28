@@ -65,7 +65,12 @@ test('msvcrt: every import against the documented results, served as the oracle\
     '*** guest exit(7) (msvcrt) - exiting',
     // 1000 ints below 5000 tie: logged once, as the order of tied elements may differ from msvcrt's
     '[msvcrt] qsort: the comparator at 0x00d90000 tied two elements, whose order may differ from msvcrt\'s']) assert.ok(r.err.includes(l), l);
-  assert.equal(r.err.split('qsort: the comparator').length - 1, 1, 'a comparator\'s ties logged once');
+  // a comparator's ties logged once, for the first 8 comparators that tie; then one line for the rest (11 more
+  // comparators tie, each in two sorts)
+  const ties = [...r.err.matchAll(/^\[msvcrt\] qsort: the comparator at (0x[0-9a-f]{8}) tied two elements, whose order may differ from msvcrt's \(from 0x[0-9a-f]{8}\)$/gm)].map(x => x[1]);
+  assert.deepEqual(ties, ['0x00d90000', '0x00d90100', '0x00d90110', '0x00d90120', '0x00d90130', '0x00d90140', '0x00d90150', '0x00d90160']);
+  assert.match(r.err, /^\[msvcrt\] qsort: the comparator at 0x00d90170 tied two elements; ties of comparators past the first 8 are not logged \(from 0x[0-9a-f]{8}\)$/m);
+  assert.equal(r.err.split('qsort: the comparator').length - 1, 9, 'nothing more about ties');
   assert.doesNotMatch(r.err, /UNIMPLEMENTED/);
   const first = new Set([...r.err.matchAll(/^\[msvcrt\] (\S+): first call \(from 0x00d81234\)$/gm)].map(x => x[1]));
   assert.equal(first.size, 58, 'all but the five that end the process were called');

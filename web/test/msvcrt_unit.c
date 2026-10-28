@@ -67,6 +67,8 @@ uint8_t g_cbits[1u << 15];              /* every page counts as committed: the m
 #define FN_CMP     0x00D90000u           /* "guest functions": qsort's comparator, _initterm's table */
 #define FN_INIT1   0x00D90010u
 #define FN_INIT2   0x00D90020u
+#define FN_CMPS    0x00D90100u           /* more comparators: guest_cmp at FN_CMPS + 16 k, k < N_CMPS */
+#define N_CMPS     11u
 
 /* ---- the game's table (its file is linked) and the rest of the runtime ---- */
 void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
@@ -95,6 +97,7 @@ static void guest_init1(CPU *c){ g_init_order = g_init_order * 10u + 1u; c->fcw 
 static void guest_init2(CPU *c){ g_init_order = g_init_order * 10u + 2u; POP32(c->eip); }
 void dispatch_indirect(CPU *c, uint32_t a){
     if (a == FN_CMP) guest_cmp(c);
+    else if (a - FN_CMPS < 16u * N_CMPS && !(a & 15u)) guest_cmp(c);
     else if (a == FN_INIT1) guest_init1(c);
     else if (a == FN_INIT2) guest_init2(c);
     else { printf("FAIL dispatch_indirect: no guest function at 0x%08x\n", a); fail++; POP32(c->eip); }
@@ -419,6 +422,15 @@ static void crt_tests(void){
               "qsort: the caller's registers kept");
     }
     CHECK(call("qsort", BUF, 5u, 0u, FN_CMP, END) == 0, "qsort with width 0 does nothing");
+    /* ties: a line for each of the first 8 comparators that tie (FN_CMP's above among them), then one line
+     * for the rest; N_CMPS more comparators, each sorting five equal ints twice */
+    for (uint32_t k = 0; k < N_CMPS; k++)
+        for (int twice = 0; twice < 2; twice++){
+            g_arr = BUF + 0x1000u; g_arr_end = g_arr + 20u; g_cmp_outside = 0;
+            for (uint32_t i = 0; i < 5u; i++) MR32(g_arr + 4u * i) = 42u;
+            call("qsort", g_arr, 5u, 4u, FN_CMPS + 16u * k, END);
+            CHECK(!g_cmp_outside, "qsort with comparator %u: given only the array's elements", k + 2u);
+        }
 
     /* ---- _initterm: the table's functions in order, empty slots skipped; the control word they set stays ---- */
     { uint32_t t = BUF + 0x700u; MR32(t) = FN_INIT1; MR32(t + 4) = 0; MR32(t + 8) = FN_INIT2;
