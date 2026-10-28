@@ -47,11 +47,51 @@ export function buildRegpathUnit(out, game, runtime = 'runtime') {
   const common = ['web/test/regpath_unit.c', ...['win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'fileio.c'].map(rt)];
   if (game === 'mw') {
     const gi = fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
-    // the table's other files, where this runtime has them (fe_mw.c, threads_mw.c: TRACKER M2-18, M2-20)
-    const more = ['mw/fe_mw.c', 'mw/threads_mw.c'].filter(f => fs.existsSync(path.resolve(REPO, rt(f)))).map(rt);
+    // the table's other files, where this runtime has them (fe_mw.c, threads_mw.c, msvcrt_mw.c: TRACKER M2-18, M2-20, M2-07)
+    const more = ['mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c'].filter(f => fs.existsSync(path.resolve(REPO, rt(f)))).map(rt);
     return build(out, [...common, rt('mw/game_mw.c'), rt('mw/registry_mw.c'), ...more], ['-DNFSU2_GAME_MW', ...gi]);
   }
   return build(out, [...common, rt('game_ug2.c')], ['-DREGPATH_UG2']);
+}
+
+// web/test/msvcrt_unit.c: Most Wanted's msvcrt.dll (runtime/mw/msvcrt_mw.c) with the four files, module.c and
+// modheap.c and MW's real table with the D3DX oracle's entry, as GAME=mw web/build.sh builds an oracle build.  Its
+// guest addresses go up to the oracle's heap (0x05000000) and the arrays at 0x06000000, so the program's own data
+// starts where the game module's does (0x28000000; run it with WASI_PAGES=16384, 1 GB)
+const LINK_BIG = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=1073741824,--max-memory=4294967296',
+  '-Wl,--global-base=671088640,--no-stack-first', '-Wl,-z,stack-size=1048576',
+  '-lsetjmp', '-lwasi-emulated-mman', '-lwasi-emulated-signal', '-lwasi-emulated-process-clocks'];
+export function buildMsvcrtUnit(out) {
+  if (!CC) throw new Error('no wasi-sdk in deps/');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
+  const gi = fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
+  const src = ['web/test/msvcrt_unit.c', ...['win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'module.c', 'modheap.c',
+    'web/sha256.c', 'mw/game_mw.c', 'mw/registry_mw.c', 'mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c'].map(f => `runtime/${f}`)];
+  execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
+  try { execFileSync(CC, [...FLAGS, '-DNFSU2_GAME_MW', '-DNFSU2_D3DX_ORACLE=1', ...gi, '-o', out, ...src, te, ...LINK_BIG], opt); }
+  finally { fs.rmSync(te, { force: true }); }
+  return out;
+}
+
+// web/test/d3dx_oracle_unit.c: the D3DX oracle on its effect-creation path, with the runtime's own files and the
+// oracle's objects GAME=mw web/build.sh compiled (out/web/mw/obj/d3dx, listed in out/web/mw/lift.objs; dev builds
+// only).  Returns null when there is no oracle build to link.
+export function buildD3dxOracleUnit(out) {
+  if (!CC) throw new Error('no wasi-sdk in deps/');
+  const list = path.join(REPO, 'out/web/mw/lift.objs');
+  if (!fs.existsSync(list) || !fs.existsSync(path.join(REPO, 'gen/mw/all/impargs.c'))) return null;
+  const objs = fs.readFileSync(list, 'utf8').split('\n').filter(l => l.startsWith('obj/d3dx/')).map(l => path.join(REPO, 'out/web/mw', l));
+  if (!objs.length || !objs.every(f => fs.existsSync(f))) return null;
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
+  const src = ['web/test/d3dx_oracle_unit.c', 'gen/mw/all/impargs.c', ...['mem.c', 'res.c', 'fileio.c', 'heap.c', 'dispatch.c',
+    'win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'module.c', 'modheap.c', 'web/sha256.c', 'web/tz.c', 'mw/game_mw.c',
+    'mw/registry_mw.c', 'mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/fx2.c'].map(f => `runtime/${f}`)];
+  execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
+  try { execFileSync(CC, [...FLAGS, '-DNFSU2_GAME_MW', '-DNFSU2_D3DX_ORACLE=1', '-Igen/mw/all', '-o', out, ...src, ...objs, te, ...LINK_BIG], opt); }
+  finally { fs.rmSync(te, { force: true }); }
+  return out;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

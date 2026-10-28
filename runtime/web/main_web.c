@@ -66,6 +66,7 @@ static void *guest_main_thread(void *unused){
     if (setjmp(g_exit_jmp) == 0){
         g_exit_armed = 1;
         guest_lock(&cpu);
+        { void module_load_imports(CPU *); module_load_imports(&cpu); }   /* lifted DLLs the exe imports (module.c) */
         PUSH32(0xDEADC0DEu);
         g_game.entry(&cpu);                 /* the exe's entry point (game.h) */
         guest_unlock();

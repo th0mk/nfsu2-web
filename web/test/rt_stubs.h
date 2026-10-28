@@ -5,6 +5,8 @@
  *   RT_STUBS_FILEIO_REAL   fileio.c is linked: no stand-ins for it
  *   RT_STUBS_LANGUAGE      what language_registry() gives (UG2's language.c:
  *                          "English" by default); 0 without it
+ *   RT_STUBS_MODULE_REAL   module.c and modheap.c are linked: no stand-ins for them
+ *   RT_STUBS_DISPATCH_OWN  the program has its own dispatch_indirect and call_guest
  * g_unimpl names the import win32.c last left unimplemented. */
 #ifndef RT_STUBS_H
 #define RT_STUBS_H
@@ -17,8 +19,11 @@ void mem_altstack_install(void){ }
 uint32_t g_image_base = 0x00400000u, g_image_size = 0x00200000u;
 int memmap_check(uint32_t lo, uint32_t hi, int fatal){ (void)lo; (void)hi; (void)fatal; return 0; }
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
+#ifndef RT_STUBS_DISPATCH_OWN
+int g_guest_exited;
 void dispatch_indirect(CPU *c, uint32_t a){ (void)c; (void)a; }
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args){ (void)c; (void)fn; (void)nargs; (void)args; return 0; }
+#endif
 void heap_init(void){ }
 void heap_report(void){ }
 int heap_api_kind(const char *name){ (void)name; return 0; }
@@ -27,6 +32,7 @@ static uint32_t g_bump = 0x00300000u;
 uint32_t gheap_alloc(int heap, uint32_t n, int zero){ (void)heap; uint32_t p = g_bump; g_bump += (n + 15u) & ~15u; if (zero) memset(g_mem + p, 0, n); return p; }
 uint32_t gheap_usize(uint32_t p){ (void)p; return 0; }
 void heap_totals(uint64_t *live, uint64_t *peak, uint64_t *va, uint64_t *held){ if (live) *live = 0; if (peak) *peak = 0; if (va) *va = 0; if (held) *held = 0; }
+#ifndef RT_STUBS_MODULE_REAL
 int modheap_owns(uint32_t h){ (void)h; return 0; }
 uint32_t modheap_create(int mod){ (void)mod; return 0; }
 int modheap_destroy(uint32_t h){ (void)h; return 0; }
@@ -50,6 +56,12 @@ int module_file_name(uint32_t h, char *out, int n){ (void)h; (void)out; (void)n;
 void module_note_socket_call(int m, const char *n, uint32_t a, uint32_t r){ (void)m; (void)n; (void)a; (void)r; }
 void module_report(void){ }
 uint32_t module_nearest_fn(uint32_t addr, const char **mod){ (void)addr; (void)mod; return 0; }
+#else
+uint32_t com_scratch(uint32_t n){ (void)n; return 0; }
+#ifndef RT_STUBS_FILEIO_REAL
+int fileio_resolve_game(const char *win, char *out, size_t n){ (void)win; (void)out; (void)n; return 0; }
+#endif
+#endif
 int winsock_call(CPU *c, const char *dll, const char *n, uint32_t *r){ (void)c; (void)dll; (void)n; (void)r; return 0; }
 void winsock_report(void){ }
 #ifndef RT_STUBS_FILEIO_REAL

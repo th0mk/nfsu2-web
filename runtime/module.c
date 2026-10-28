@@ -168,8 +168,15 @@ static int map_image(GuestMod *m, uint32_t *err){
     const ModInfo *mi = m->info;
     char host[1024];
     if (!fileio_resolve_game(mi->name, host, sizeof host)){
-        fprintf(stderr, "[module] %s: not found in the game folder: %s is not available\n", mi->name, m->l->feature);
-        *err = 126u; return 0;                                   /* ERROR_MOD_NOT_FOUND */
+        /* a system DLL: where the game's file says the host keeps it (game.h modules, file_env) */
+        const char *e = m->l->file_env ? getenv(m->l->file_env) : 0;
+        if (!e || !*e){
+            fprintf(stderr, "[module] %s: not found in the game folder%s%s%s: %s is not available\n", mi->name,
+                    m->l->file_env ? " and " : "", m->l->file_env ? m->l->file_env : "", m->l->file_env ? " names no file" : "",
+                    m->l->feature);
+            *err = 126u; return 0;                               /* ERROR_MOD_NOT_FOUND */
+        }
+        snprintf(host, sizeof host, "%s", e);
     }
     FILE *f = fopen(host, "rb");
     if (!f){ fprintf(stderr, "[module] %s: cannot read %s\n", mi->name, host); *err = 126u; return 0; }
@@ -227,15 +234,20 @@ static int map_image(GuestMod *m, uint32_t *err){
     }
     MR32(base + lfa + 24 + 28) = base;                           /* the loader records the actual base */
     /* imports: one index space with the exe's (win32_call) */
-    uint32_t first = m->imp_first;
+    uint32_t first = m->imp_first, nvar = 0;
     for (uint32_t j = 0; j < *m->imp_count; j++){
-        uint32_t iat = m->imp[j].iat;
+        uint32_t iat = m->imp[j].iat, v = m->l->bind ? m->l->bind(&m->imp[j]) : 0u;
         if (iat - base >= imgsz){ *err = 193u; return 0; }
-        MR32(iat) = IMP_MAGIC + first + j;
+        MR32(iat) = v ? v : IMP_MAGIC + first + j;
+        nvar += v != 0;
     }
     snprintf(m->path, sizeof m->path, "%s", host);
-    fprintf(stderr, "[module] %s mapped at 0x%08x-0x%08x from %s (sha256 ok, %u fixups, %u imports bound)\n",
-            mi->name, base, base + imgsz, host, nfix, *m->imp_count);
+    if (nvar)
+        fprintf(stderr, "[module] %s mapped at 0x%08x-0x%08x from %s (sha256 ok, %u fixups, %u imports bound, %u of them"
+                        " variables)\n", mi->name, base, base + imgsz, host, nfix, *m->imp_count, nvar);
+    else
+        fprintf(stderr, "[module] %s mapped at 0x%08x-0x%08x from %s (sha256 ok, %u fixups, %u imports bound)\n",
+                mi->name, base, base + imgsz, host, nfix, *m->imp_count);
     return 1;
 }
 
@@ -292,10 +304,8 @@ uint32_t module_by_name(const char *name){
 
 /* GetProcAddress on a mapped module: export by name, or by ordinal when
  * the "name" is <= 0xFFFF. */
-uint32_t module_proc(uint32_t h, uint32_t nm, uint32_t *err){
-    GuestMod *m = by_handle(h);
-    *err = 127u;                                                 /* ERROR_PROC_NOT_FOUND */
-    if (!m || !m->mapped){ *err = 126u; return 0; }
+/* the export want (a name, or with want 0 the ordinal ord) of a mapped module, 0 when there is none */
+static uint32_t export_va(const GuestMod *m, const char *want, uint32_t ord){
     uint32_t base = m->info->base, lfa = MR32(base + 0x3c);
     uint32_t ed = MR32(base + lfa + 24 + 96), esz = MR32(base + lfa + 24 + 96 + 4);
     if (!ed) return 0;
@@ -303,17 +313,48 @@ uint32_t module_proc(uint32_t h, uint32_t nm, uint32_t *err){
     uint32_t obase = MR32(E + 0x10), nfun = MR32(E + 0x14), nnam = MR32(E + 0x18);
     uint32_t funs = base + MR32(E + 0x1c), nams = base + MR32(E + 0x20), ords = base + MR32(E + 0x24);
     uint32_t fi = 0xFFFFFFFFu;
-    if (nm <= 0xFFFFu){ if (nm >= obase && nm - obase < nfun) fi = nm - obase; }
-    else if (mem_is_committed(nm)){
-        const char *want = (const char *)(g_mem + nm);
-        for (uint32_t i = 0; i < nnam; i++)
-            if (!strcmp((const char *)(g_mem + base + MR32(nams + 4*i)), want)){ fi = MR16(ords + 2*i); break; }
-    }
+    if (!want){ if (ord >= obase && ord - obase < nfun) fi = ord - obase; }
+    else for (uint32_t i = 0; i < nnam; i++)
+        if (!strcmp((const char *)(g_mem + base + MR32(nams + 4*i)), want)){ fi = MR16(ords + 2*i); break; }
     if (fi >= nfun) return 0;
     uint32_t frva = MR32(funs + 4*fi);
     if (!frva || (frva >= ed && frva < ed + esz)) return 0;      /* empty or forwarded */
-    *err = 0;
     return base + frva;
+}
+uint32_t module_proc(uint32_t h, uint32_t nm, uint32_t *err){
+    GuestMod *m = by_handle(h);
+    *err = 127u;                                                 /* ERROR_PROC_NOT_FOUND */
+    if (!m || !m->mapped){ *err = 126u; return 0; }
+    uint32_t va = 0;
+    if (nm <= 0xFFFFu) va = export_va(m, 0, nm);
+    else if (mem_is_committed(nm)) va = export_va(m, (const char *)(g_mem + nm), 0);
+    if (va) *err = 0;
+    return va;
+}
+
+void module_load_imports(CPU *c){
+    for (int i = 0; i < NMOD; i++){
+        GuestMod *m = &g_mods[i];
+        uint32_t want = 0;
+        for (uint32_t j = 0; j < g_imp_count; j++) want += m->info->name[0] && !strcasecmp(g_imp[j].dll, m->info->name);
+        if (!want) continue;
+        uint32_t err = 0;
+        if (!module_load(c, m->info->name, &err)){
+            fprintf(stderr, "[module] %s: the exe's %u imports of it stay on the runtime's answers (it did not load,"
+                            " error %u)\n", m->info->name, want, err);
+            continue;
+        }
+        uint32_t bound = 0;
+        for (uint32_t j = 0; j < g_imp_count; j++){
+            const ImpEnt *e = &g_imp[j];
+            if (strcasecmp(e->dll, m->info->name)) continue;
+            uint32_t va = e->name[0] == '#' ? export_va(m, 0, (uint32_t)strtoul(e->name + 1, 0, 10)) : export_va(m, e->name, 0);
+            if (va){ MR32(e->iat) = va; bound++; }
+            else fprintf(stderr, "[module] %s exports no %s: the exe's import stays on the runtime's answer\n",
+                         m->info->name, e->name);
+        }
+        fprintf(stderr, "[module] %s: %u of the exe's %u imports of it bound to its exports\n", m->info->name, bound, want);
+    }
 }
 
 int module_file_name(uint32_t h, char *out, int n){

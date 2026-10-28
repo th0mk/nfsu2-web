@@ -10,7 +10,9 @@
  *               it: the runtime reports XP, GetVersion), CompareStringA/W
  *   process     SetStdHandle (GetStdHandle answers it), Set/GetEnvironment-
  *               VariableA; QueueUserAPC and CreateProcessA refused with a log
- *               line (FatalAppExitA ends the process: win32.c)
+ *               line (FatalAppExitA ends the process: win32.c);
+ *               DisableThreadLibraryCalls (the D3DX oracle's DllMain): TRUE,
+ *               the runtime sends a DLL no thread notifications anyway
  *   keyboard    the US layout: GetKeyboardLayout, MapVirtualKeyA/ExA,
  *               ToUnicode, GetKeyState (keyboard.c's key state); SendInput
  *               accepted, nothing injected
@@ -592,6 +594,7 @@ int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *out){
                 fprintf(stderr, "[hle] SendInput(%u input(s), first of type %u) accepted, nothing injected (from 0x%08x)\n",
                         cnt, cnt ? MR32(A(c,1)) : 0u, c->eip);
         } }
+    else if (!strcmp(n, "DisableThreadLibraryCalls")) r = 1;     /* (hLibModule): no DLL_THREAD_* calls are made */
     /* --- refused, with a log line --- */
     else if (!strcmp(n, "QueueUserAPC")){                         /* (pfnAPC, hThread, dwData) */
         static int sh = 0; if (sh++ < 8)

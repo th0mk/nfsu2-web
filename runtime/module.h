@@ -41,6 +41,14 @@ typedef struct ModLink {
     int heap_n;
     const char *feature;                /* what the game cannot do without it: "LAN hosting" */
     const char *release;                /* the game release whose file it is: "NFSU2 v1.2" */
+    /* Optional (UG2's server.dll leaves both 0):
+     *   file_env  an environment variable naming the file on the host, for a DLL the game folder does not
+     *             hold (a system DLL, which Windows takes from its own folder); read only when the game
+     *             folder has no such file
+     *   bind      the value of the DLL's IAT slot for import e when that import is no function the runtime
+     *             answers (a variable the DLL reads through its slot: msvcrt's _adjust_fdiv); 0 = the HLE */
+    const char *file_env;
+    uint32_t (*bind)(const ImpEnt *e);
 } ModLink;
 
 /* The tables of the module whose names start with g_<p>:
@@ -58,6 +66,11 @@ int      module_count(void);                           /* the modules are 1 .. m
 const ModLink *module_link(int m);                     /* module m, 0 when there is none */
 /* Module handles are the base addresses (as on Windows). */
 uint32_t module_load(struct CPU *c, const char *name, uint32_t *err);  /* LoadLibraryA */
+/* The lifted DLLs the exe itself imports (Most Wanted's d3dx9_26.dll in a D3DX oracle build), loaded as
+ * Windows loads them: before the exe's entry point, with the exe's IAT slots of each DLL bound to its
+ * exports.  On the guest's main thread with the guest lock held (main_web.c); nothing for UG2, whose exe
+ * imports no lifted DLL. */
+void     module_load_imports(struct CPU *c);
 int      module_free(struct CPU *c, uint32_t h);                       /* FreeLibrary; 0 = not a module */
 int      module_handle(uint32_t h);                    /* h is a lifted module (mapped or not) */
 uint32_t module_by_name(const char *name);             /* GetModuleHandleA: base if mapped, else 0 */

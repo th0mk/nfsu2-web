@@ -10,7 +10,12 @@
  * DllMain calls HeapCreate through its own IAT slot as the DLL's C runtime
  * does, routed as win32_call routes it (modheap_create of the module the
  * import index belongs to), and takes blocks from that heap.  Prints a line
- * per check and "module_unit: <n> passed, <m> failed". */
+ * per check and "module_unit: <n> passed, <m> failed".
+ * MW's d3dx9_26.dll is a system DLL, not in the game folder: the test writes
+ * it to /t/sys and the game's file names it through an environment variable
+ * (ModLink file_env).  Its fourth import is a variable the game's file binds
+ * (ModLink bind, msvcrt's _adjust_fdiv), and the exe imports two of its
+ * functions, which module_load_imports binds to its export (or leaves). */
 #include "cpu.h"
 #include "game.h"
 #include "memmap.h"
@@ -18,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #define IMP_MAGIC 0xF0000000u            /* module.c, win32.c */
 void nfsu2_sha256(const void *data, size_t n, uint8_t out[32]);   /* runtime/web/sha256.c */
@@ -32,9 +38,16 @@ static int pass, fail;
 
 static const char *g_dir;
 
-/* ---- the exe's imports: two, before the modules' in the index space ---- */
+/* ---- the exe's imports, before the modules' in the index space: two of KERNEL32 (MW: and two of the
+ * d3dx DLL, its export "Work" and a function it does not export) ---- */
+#ifdef NFSU2_GAME_MW
+const ImpEnt g_imp[] = { {0x00401000u, "KERNEL32.dll", "GetTickCount", 0}, {0x00401004u, "KERNEL32.dll", "Sleep", 1},
+                         {0x00401008u, "d3dx9_26.dll", "Work", 1}, {0x0040100cu, "d3dx9_26.dll", "Missing", 2} };
+const uint32_t g_imp_count = 4;
+#else
 const ImpEnt g_imp[] = { {0x00401000u, "KERNEL32.dll", "GetTickCount", 0}, {0x00401004u, "KERNEL32.dll", "Sleep", 1} };
 const uint32_t g_imp_count = 2;
+#endif
 
 /* ---- the DLLs: layout of each file and image ---- */
 #define IMG_SIZE  0x4000u
@@ -58,12 +71,14 @@ static const uint32_t g_bases[NMOD] = { MM_SRV_LO };
 
 static char g_sha[NMOD][65];
 static ModInfo g_info[NMOD];
-static ImpEnt g_mimp[NMOD][3];
+static ImpEnt g_mimp[NMOD][4];
 static const uint32_t g_mimp_count[NMOD] = { 3
 #if NMOD > 1
-    , 3
+    , 4                                  /* and the variable */
 #endif
 };
+#define VAR_ADDR 0x00C30000u             /* where the game's file keeps that variable */
+static uint32_t bind_var(const ImpEnt *e){ return !strcmp(e->name, "_adjust_fdiv") ? VAR_ADDR : 0u; }
 static uint32_t g_fn_addr[NMOD][2];
 static mod_fn g_fn_ptr[NMOD][2];
 static const uint32_t g_fn_count[NMOD] = { 2
@@ -164,7 +179,7 @@ static void make_dll(int k){
     memcpy(f + RVA_EXP + 0x70, "Work", 5); memcpy(f + RVA_EXP + 0x80, g_names[k], strlen(g_names[k]) + 1);
     w32(f + RVA_REL, 0x1000); w32(f + RVA_REL + 4, 12); w16(f + RVA_REL + 8, 0x3000u | (RVA_FIXED - 0x1000u));
     f[0x200 + k] = (uint8_t)k;                                   /* the two files differ */
-    char path[512]; snprintf(path, sizeof path, "%s/%s", g_dir, g_names[k]);
+    char path[512]; snprintf(path, sizeof path, "%s/%s%s", g_dir, k ? "sys/" : "", g_names[k]);
     FILE *o = fopen(path, "wb");
     if (!o || fwrite(f, 1, sizeof f, o) != sizeof f){ printf("FAIL cannot write %s\n", path); exit(2); }
     fclose(o);
@@ -174,6 +189,7 @@ static void make_dll(int k){
     g_info[k] = (ModInfo){ g_names[k], g_sha[k], b, PREF, IMG_SIZE, b + RVA_MAIN, b + 0x1000u, 0x1000u, IMG_SIZE };
     static const char *const in[3] = { "HeapCreate", "HeapAlloc", "HeapDestroy" };
     for (int j = 0; j < 3; j++) g_mimp[k][j] = (ImpEnt){ b + RVA_DATA + 4u * (uint32_t)j, "KERNEL32.dll", in[j], j == 2 ? 1 : 3 };
+    if (k) g_mimp[k][3] = (ImpEnt){ b + RVA_DATA + 12u, "msvcrt.dll", "_adjust_fdiv", 0 };
     g_fn_addr[k][0] = b + RVA_MAIN; g_fn_addr[k][1] = b + RVA_WORK;
 }
 
@@ -182,6 +198,9 @@ static int inside(uint32_t a, uint32_t n, uint32_t lo, uint32_t hi){ return a >=
 int main(int argc, char **argv){
     if (argc < 2){ fprintf(stderr, "usage: module_unit <folder>\n"); return 2; }
     g_dir = argv[1];
+#if NMOD > 1
+    { char sys[512]; snprintf(sys, sizeof sys, "%s/sys", g_dir); mkdir(sys, 0755); }
+#endif
     g_fn_ptr[0][0] = main0; g_fn_ptr[0][1] = work0;
 #if NMOD > 1
     g_fn_ptr[1][0] = main1; g_fn_ptr[1][1] = work1;
@@ -197,6 +216,7 @@ int main(int argc, char **argv){
 #if NMOD > 1
     g_links[1].slot_lo = MM_D3DX_LO; g_links[1].slot_hi = MM_D3DX_HI;
     g_links[1].heap_base = MM_D3DX_HEAP_BASE; g_links[1].heap_size = MM_D3DX_HEAP_SIZE; g_links[1].heap_n = MM_D3DX_HEAP_N;
+    g_links[1].file_env = "MODULE_UNIT_SYS"; g_links[1].bind = bind_var;
 #endif
 
     /* the layout check sees both DLLs, their slots and their heaps */
@@ -220,6 +240,12 @@ int main(int argc, char **argv){
 
     /* LoadLibraryA of each, by the names a game uses */
     CPU cpu; memset(&cpu, 0, sizeof cpu); cpu.esp = 0x00C10000u;
+#if NMOD > 1
+    /* the system DLL is not in the game folder: without its variable there is none to load */
+    { uint32_t err = 99, r = module_load(&cpu, g_names[1], &err);
+      CHECK(r == 0 && err == 126u && g_main_calls[1][1] == 0, "%s without MODULE_UNIT_SYS -> 0x%08x err %u", g_names[1], r, err);
+      char sys[512]; snprintf(sys, sizeof sys, "%s/sys/%s", g_dir, g_names[1]); setenv("MODULE_UNIT_SYS", sys, 1); }
+#endif
     static const char *const ask[2] = { "SERVER", "D3DX9_26.DLL" };
     uint32_t h[NMOD];
     for (int k = 0; k < NMOD; k++){
@@ -231,6 +257,8 @@ int main(int argc, char **argv){
         for (uint32_t j = 0; j < 3; j++)
             CHECK(MR32(g_bases[k] + RVA_DATA + 4u * j) == IMP_MAGIC + module_imp_first(k + 1) + j,
                   "%s IAT slot %u bound to 0x%08x", g_names[k], j, MR32(g_bases[k] + RVA_DATA + 4u * j));
+        if (k) CHECK(MR32(g_bases[k] + RVA_DATA + 12u) == VAR_ADDR, "%s's variable bound to 0x%08x", g_names[k],
+                     MR32(g_bases[k] + RVA_DATA + 12u));
         CHECK(g_main_calls[k][1] == 1, "%s's DllMain(PROCESS_ATTACH) ran once", g_names[k]);
         CHECK(module_by_name(g_names[k]) == g_bases[k], "GetModuleHandle(%s)", g_names[k]);
     }
@@ -308,6 +336,25 @@ int main(int argc, char **argv){
         CHECK(bad == 0 && err == 193u && g_main_calls[0][1] == attach && module_by_name(g_names[0]) == 0,
               "%s with one byte changed: LoadLibrary -> 0x%08x err %u, not mapped", g_names[0], bad, err);
     }
+
+    /* the exe's own imports of a lifted DLL: loaded before its entry point, the slots bound to the DLL's
+     * exports (one it does not export keeps its value); UG2's exe imports none, and nothing happens */
+    mem_commit(0x00401000u, 0x1000u);
+    for (uint32_t j = 0; j < g_imp_count; j++) MR32(g_imp[j].iat) = IMP_MAGIC + j;
+    uint32_t att[NMOD]; for (int k = 0; k < NMOD; k++) att[k] = g_main_calls[k][1];
+    module_load_imports(&cpu);
+#if NMOD > 1
+    CHECK(module_by_name(g_names[1]) == g_bases[1] && g_main_calls[1][1] == att[1] + 1, "%s loaded for the exe's imports", g_names[1]);
+    CHECK(module_by_name(g_names[0]) == 0 && g_main_calls[0][1] == att[0], "%s, which the exe does not import, not loaded", g_names[0]);
+    CHECK(MR32(0x00401008u) == g_bases[1] + RVA_WORK, "the exe's Work slot bound to 0x%08x", MR32(0x00401008u));
+    CHECK(MR32(0x0040100cu) == IMP_MAGIC + 3u, "the exe's Missing slot kept 0x%08x", MR32(0x0040100cu));
+    CHECK(MR32(0x00401000u) == IMP_MAGIC && MR32(0x00401004u) == IMP_MAGIC + 1u, "the exe's KERNEL32 slots kept");
+    { uint32_t a = 5, r = call_guest(&cpu, MR32(0x00401008u), 1, &a);
+      CHECK(r == 205u, "the exe's call through its Work slot -> %u", r); }
+#else
+    for (int k = 0; k < NMOD; k++) CHECK(module_by_name(g_names[k]) == 0 && g_main_calls[k][1] == att[k], "nothing loaded");
+    for (uint32_t j = 0; j < g_imp_count; j++) CHECK(MR32(g_imp[j].iat) == IMP_MAGIC + j, "the exe's slot %u kept", j);
+#endif
 
     module_report(); modheap_report();
     fflush(stderr);

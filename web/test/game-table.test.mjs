@@ -86,7 +86,10 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(t.get('exe_name'), '"speed.exe"');
   for (const f of ['vroot', 'module_path']) assert.match(t.get(f), /^"C:\\\\NFSMW/, `${f} is under C:\\NFSMW`);
   assert.equal(t.get('entry'), 'GAMEINFO_ENTRY_FN');
-  assert.equal(t.get('win32_misc'), 'win32_misc_call');
+  // the imports the shared layers leave: msvcrt.dll's (the D3DX oracle's C runtime, msvcrt_mw.c), then win32_misc.c's
+  assert.equal(t.get('win32_misc'), 'mw_imports');
+  assert.match(read('runtime/mw/game_mw.c'), /static int mw_imports\(CPU \*c, const char \*dll, const char \*n, uint32_t \*r\)\{\s+if \(!strcasecmp\(dll, "msvcrt\.dll"\)\) return msvcrt_call\(c, n, r\);\s+return win32_misc_call\(c, dll, n, r\);/);
+  assert.match(read('runtime/mw/msvcrt_mw.c'), /\nint msvcrt_call\(CPU \*c, const char \*n, uint32_t \*out\)\{/);
   // its registry (registry_mw.c) in its own file, never UG2's; paths that never leave C:\NFSMW (fileio.c)
   assert.equal(t.get('reg_keys'), 'mw_reg_keys');
   assert.match(read('runtime/mw/registry_mw.c'), /\nconst RegKey mw_reg_keys\[\] = \{/);
@@ -110,6 +113,9 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   const src = read('runtime/mw/game_mw.c');
   assert.match(src, /MODLINK_TABLES\(srv_\), \.slot_lo = MM_SRV_LO, \.slot_hi = MM_SRV_HI/);
   assert.match(src, /#if NFSU2_D3DX_ORACLE\s+\{ MODLINK_TABLES\(d3dx_\), \.slot_lo = MM_D3DX_LO, \.slot_hi = MM_D3DX_HI[^}]*\},\s+#endif/);
+  // the oracle is a system DLL (NFSMW_D3DX names it), with msvcrt's variable bound; UG2's server.dll has neither
+  assert.match(src, /MODLINK_TABLES\(d3dx_\)[^}]*\.file_env = "NFSMW_D3DX", \.bind = msvcrt_bind \}/);
+  assert.doesNotMatch(read('runtime/game_ug2.c'), /file_env|\.bind\b/, 'UG2\'s server.dll entry sets neither');
 });
 
 test('each game\'s table is in its own build only', () => {

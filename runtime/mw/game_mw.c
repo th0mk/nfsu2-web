@@ -17,9 +17,11 @@
 #include "game.h"
 #include "memmap.h"
 #include "module.h"
+#include <strings.h>
 
 void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen/mw/all/gameinfo.h, through cpu.h) */
 int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);   /* win32_misc.c */
+int msvcrt_call(CPU *c, const char *n, uint32_t *r); uint32_t msvcrt_bind(const ImpEnt *e);    /* msvcrt_mw.c */
 extern const RegKey mw_reg_keys[];             /* registry_mw.c */
 uint32_t mw_flow(void); const char *mw_top_screen(void); void mw_fe_frame(void);  /* fe_mw.c */
 extern const ThreadName mw_thread_names[];     /* threads_mw.c */
@@ -29,7 +31,12 @@ uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
  * pinned in games/mw/game.conf), and Microsoft's D3DX as a dev-only oracle
  * (gen/mw/d3dx, prefix d3dx_), linked when web/build.sh finds its lift: the
  * build then passes -DNFSU2_D3DX_ORACLE=1 and writes "oracle":1 into the
- * module's json, which release.sh refuses */
+ * module's json, which release.sh refuses.  The exe imports the oracle
+ * itself, so it is loaded before the entry point and those 13 IAT slots are
+ * bound to its exports (module.c module_load_imports).  The game folder does
+ * not hold d3dx9_26.dll (a system DLL): NFSMW_D3DX names Microsoft's file on
+ * the host (GAME.md 5.1).  Its C runtime is msvcrt.dll: msvcrt_mw.c, with
+ * _adjust_fdiv bound as a variable. */
 MODLINK_DECLARE(srv_);
 #if NFSU2_D3DX_ORACLE
 MODLINK_DECLARE(d3dx_);
@@ -41,7 +48,8 @@ static const ModLink mw_modules[] = {
 #if NFSU2_D3DX_ORACLE
     { MODLINK_TABLES(d3dx_), .slot_lo = MM_D3DX_LO, .slot_hi = MM_D3DX_HI,
       .heap_base = MM_D3DX_HEAP_BASE, .heap_size = MM_D3DX_HEAP_SIZE, .heap_n = MM_D3DX_HEAP_N,
-      .feature = "the D3DX oracle (dev builds)", .release = "DirectX 9.0c, June 2005 (9.07.239.0000)" },
+      .feature = "the D3DX oracle (dev builds)", .release = "DirectX 9.0c, June 2005 (9.07.239.0000)",
+      .file_env = "NFSMW_D3DX", .bind = msvcrt_bind },
 #endif
 };
 
@@ -56,6 +64,13 @@ static const InitTable mw_init_tables[] = {
     { "C initializers", "__xi", 0x008eb168u, 0x008eb180u, 0x007ca570u, 0x007ca2e4u, 0x007ca596u, 1 },
     { "C++ constructors", "__xc", 0x008ea000u, 0x008eb164u, 0x007ca540u, 0x007ca311u, 0x007ca558u, 0 },
 };
+
+/* The imports the shared layers leave to the game (game.h win32_misc): msvcrt.dll's, which only the D3DX
+ * oracle imports, then win32_misc.c's */
+static int mw_imports(CPU *c, const char *dll, const char *n, uint32_t *r){
+    if (!strcasecmp(dll, "msvcrt.dll")) return msvcrt_call(c, n, r);
+    return win32_misc_call(c, dll, n, r);
+}
 
 /* Left 0, and why:
  *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
@@ -86,7 +101,7 @@ const GameOps g_game = {
     .nmodules = (int)(sizeof mw_modules / sizeof mw_modules[0]),
     .crtheap_va = 0x009c5318u,                  /* _heap_init 0x7CD4B0: HeapCreate's handle, then __heap_select's */
     .active_heap_va = 0x009c531cu,              /* answer (3 = the small-block heap) */
-    .win32_misc = win32_misc_call,              /* win32_misc.c: memory, locale, keyboard, voice devices */
+    .win32_misc = mw_imports,                   /* win32_misc.c: memory, locale, keyboard, voice devices; msvcrt_mw.c */
     .flow = mw_flow,                            /* fe_mw.c: GameFlowManager's state [0x925E90] */
     .flow_fe = 3,
     .flow_race = 6,
