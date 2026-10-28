@@ -416,9 +416,9 @@ static int crt_sscanf(const char *in, const char *fmt, uint32_t ap){
 /* ---- qsort: in place, the comparator always given two elements of the array (as msvcrt does);
  * insertion for a few elements, heapsort above.  Not stable, as msvcrt's is not, and not msvcrt's
  * algorithm: elements the comparator ties may end in another order than there.  Where nothing ties
- * every sort gives the same order; the effect-creation path's sorts never tie (140 calls, 2,071
- * comparisons of 4-byte elements by one comparator for the 31 effects: web/test/d3dx_oracle_unit.c).
- * A comparator that ties two elements is logged once ---- */
+ * every sort gives the same order; the effect-creation path's sorts never tie (web/test/
+ * d3dx-oracle.test.mjs: creating the 31 effects through the oracle logs no tie).  A comparator that
+ * ties two elements is logged once (the first 8 such, then one line for the rest) ---- */
 typedef struct { CPU *c; uint32_t base, width, cmp; uint8_t *tmp; } Sort;
 #define TIE_SEEN 8
 static void s_tie(uint32_t cmp, CPU *c){
