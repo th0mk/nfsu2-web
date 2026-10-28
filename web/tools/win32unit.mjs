@@ -26,14 +26,29 @@ const SRC = ['web/test/win32_unit.c', 'runtime/win32.c', 'runtime/win32_ext.c', 
 const THREAD_EXIT = 'runtime/web/thread_exit.c';
 const PLAIN = FLAGS.slice(0, FLAGS.indexOf('-D_WASI_EMULATED_MMAN'));
 
-// defs: more -D flags (['-DWIN32_UNIT_UG2']: the program with UG2's game table, its "ug2" half)
-export function buildWin32Unit(out, defs = []) {
+function build(out, src, defs) {
   if (!CC) throw new Error('no wasi-sdk in deps/');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
   execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
-  try { execFileSync(CC, [...FLAGS, ...defs, '-o', out, ...SRC, te, ...LINK], opt); } finally { fs.rmSync(te, { force: true }); }
+  try { execFileSync(CC, [...FLAGS, ...defs, '-o', out, ...src, te, ...LINK], opt); } finally { fs.rmSync(te, { force: true }); }
   return out;
+}
+// defs: more -D flags (['-DWIN32_UNIT_UG2']: the program with UG2's game table, its "ug2" half)
+export function buildWin32Unit(out, defs = []) { return build(out, SRC, defs); }
+
+// web/test/regpath_unit.c: the four files and fileio.c with a game's real table, as web/build.sh builds that game
+// (Most Wanted: -DNFSU2_GAME_MW, its lift's gameinfo.h when gen/mw/all is here; UG2: -DREGPATH_UG2).  runtime is
+// the folder the runtime's files come from: another one builds the same program on an older runtime (its files
+// include their own headers first; the program itself reads no game table)
+export function buildRegpathUnit(out, game, runtime = 'runtime') {
+  const rt = f => path.join(runtime, f);
+  const common = ['web/test/regpath_unit.c', ...['win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'fileio.c'].map(rt)];
+  if (game === 'mw') {
+    const gi = fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
+    return build(out, [...common, rt('mw/game_mw.c'), rt('mw/registry_mw.c')], ['-DNFSU2_GAME_MW', ...gi]);
+  }
+  return build(out, [...common, rt('game_ug2.c')], ['-DREGPATH_UG2']);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
