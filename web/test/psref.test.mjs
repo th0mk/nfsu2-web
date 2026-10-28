@@ -121,4 +121,8 @@ test('WGSL translator: every shader of Most Wanted\'s 31 effects, for 8 stages',
   assert.equal(models.ps_2_x, 17); assert.equal(models.ps_3_0, 2); assert.equal(models.vs_3_0, 1);
   assert.equal(fs.readdirSync(dir).filter(f => f.endsWith('.p3vec')).length, 19);
   assert.equal(fs.readdirSync(dir).filter(f => f.endsWith('.v3vec')).length, 1);
+  // the older models (ps_1_x, ps_2_0, vs_1_1), with 8 stages, get vectors from ps_ref_run and vs_run: 46 pixel
+  // shaders and their cube twins, 29 vertex shaders
+  assert.equal(fs.readdirSync(dir).filter(f => f.endsWith('.pvec')).length, 92);
+  assert.equal(fs.readdirSync(dir).filter(f => f.endsWith('.vec')).length, 29);
 });

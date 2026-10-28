@@ -149,8 +149,11 @@ values of 7 ps_2_x shaders differ.
 
 `runtime/web/vsemu_sm3.inc` (included by `vsemu_wgsl.inc`) translates ps_2_x, ps_3_0 and vs_3_0 with these
 semantics; `vs_compile` keeps such a program's tokens (`VSProg.raw`) and `ps_to_wgsl` / `vs_to_wgsl` hand them over.
-The older models' path is unchanged: UG2 has none of these three models, and its 40 distinct shaders (from SPEED2.EXE)
-translate to the same bytes as before, with the same `.pvec` vectors.
+The older models' path keeps the Mac's semantics and, with 4 stages, is unchanged: UG2 has none of these three models,
+and its 45 distinct shaders in SPEED2.EXE (18 vs_1_1, 22 ps_1_1, 3 ps_1_4, 2 ps_2_0) translate to the same bytes as
+before, with the same `.pvec` vectors. With 8 stages its modules (Most Wanted's other 75 shaders: 29 vs_1_1, 28
+ps_1_1, 3 ps_1_4, 15 ps_2_0) are checked against `vs_run` and `ps_ref_run`, which follow the 8-stage rules too
+(gpu-abi.md §9), not against psref.
 
 - **Registers.** r0..r31; ps_2_x t0..t7 and v0/v1 (a colour outside its declaration reads (0, 0, 0, 1)); ps_3_0
   v0..v9 and vs_3_0 o0..o11 by their declarations, packed ones included (texcoord N = `uvN`, color0/1 = `col0/col1`,
@@ -195,3 +198,10 @@ Measured 2026-10-28, 8 stages: Most Wanted's 95 distinct shaders all translate, 
 ps_2_x, 2 ps_3_0, 1 vs_3_0) with vectors, and the unit tests' 65 programs give 47 modules (18 refused as above); 0
 mismatches on Chrome's SwiftShader (each shader's own seed and three more) and on an AMD RDNA 4 GPU (its own seed
 and two more).
+
+Measured 2026-10-29 on Chrome's SwiftShader only (each shader's own seed), 8 stages: the unit tests' 67 programs
+give 49 modules, 71 pixel modules (cube twins included) and 4 vertex modules compared with psref; Most Wanted's 19
+pixel and 1 vertex SM3-class modules with psref, its 92 older-model pixel modules (46 shaders and their twins) with
+`ps_ref_run` and its 29 vs_1_1 modules with `vs_run`: 0 mismatches. Three translators changed on purpose fail it:
+`rcp 1` one ulp low (512 pixels, all in the special-value program and its twin), and for the older models oT5 written
+as oT4 or ps_2_0's t4..t7 read as t0..t3.

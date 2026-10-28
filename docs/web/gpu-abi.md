@@ -260,6 +260,13 @@ early gives a smaller dump and fails (`--script` and `--env` run another scene f
      tolerance of `aref` (counted as `edgeFlips`; SwiftShader/Vulkan has one, Metal none).
      `ps_ref_run` covers ps_1_x and ps_2_0 only: it refuses ps_2_x and ps_3_0 (their vectors hold zeros), whose
      reference is `web/tools/psref.c`, which follows D3D9 instead of the Mac (`docs/web/psref.md`); vs_3_0's is too.
+   - with 8 stages (§11.2) both references follow the 8-stage rules: `vs_run` keeps oT0..oT7 apart, `ps_ref_run` reads
+     ps_2_0's t0..t7 and samples s0..s7 by their declared types (ps_1_x keeps four). `web/tools/wgsl-xl` then writes
+     these vectors in every mode (with 4 stages only `--pairs` does, as before): `.vec` magic `VSV2` with uv4..uv7
+     after the fog (45 floats a vertex), `.pvec` magic `PSV2` with uv4..uv7 after the fog (41 inputs a pixel) and
+     material constants in [0.05, 1] as psref's vectors have them (Most Wanted's shaders raise a saturated dot product
+     to c2.x, and with a negative constant a 0 there gives an infinity, which WGSL leaves open), and the check takes
+     each texture's kind from the module's declarations.
 
 Results on Chrome 155 / Apple M4 Pro (2026-10-18): 167 modules, 0 compile errors, 307 pipelines, 0 errors; vertex
 pulling 3,328/3,328 exact; 96 vertex shader modules max relative error 2.0e-6; 68 pixel shader modules max relative

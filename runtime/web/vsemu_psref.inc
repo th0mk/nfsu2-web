@@ -16,11 +16,16 @@
  * reference is web/tools/psref.c, which follows D3D9 (docs/web/psref.md);
  * this interpreter's shortcuts (r & 15, t & 3, no projective divide in
  * texldp) would agree with a translator that copied them, and 10 of Most
- * Wanted's 18 ps_2_x shaders use r16 and above. */
+ * Wanted's 18 ps_2_x shaders use r16 and above.
+ *
+ * With 8 stages (wgsl_set_stages), as the translator: ps_2_0 reads t0..t7
+ * and samples s0..s7, each by its declared type (a cube adds to cubemask, a
+ * volume is refused); ps_1_x keeps the Mac's four. */
 /* PSRefIn, PSRefPar and PSRefTex are declared in wgsl.h. */
 typedef struct {
     const VSProg *p; const PSRefPar *P; const PSRefIn *in;
-    float r[16][4], t[4][4], v[2][4], oC[4];
+    float r[16][4], t[8][4], v[2][4], oC[4];
+    int tm;                                 /* t# and s# mask: 7 (ps_2_0, 8 stages) or 3 */
 } PSRefExec;
 
 static void psr_reg(PSRefExec *e, unsigned tok, float o[4]){
@@ -30,7 +35,7 @@ static void psr_reg(PSRefExec *e, unsigned tok, float o[4]){
     switch (ty){
     case R_TEMP:     b = e->r[n & 15]; break;
     case R_INPUT:    b = e->v[n & 1]; break;
-    case R_ADDR:     b = e->t[n & 3]; break;
+    case R_ADDR:     b = e->t[n & e->tm]; break;
     case R_COLOROUT: b = e->oC; break;
     case R_CONSTINT:
         if (n >= 0 && n < 16){ for (int i = 0; i < 4; i++) o[i] = (float)p->defi[n][i]; return; }
@@ -72,11 +77,17 @@ int ps_ref_run(const VSProg *p, const PSRefPar *P, const PSRefIn *in, PSRefTex t
     if (p->version > 0x0200) return 0;
     PSRefExec e; memset(&e, 0, sizeof e);
     e.p = p; e.P = P; e.in = in;
+    const int tm = e.tm = (wgsl_get_stages() == 8 && p->version >= 0x0200) ? 7 : 3;
+    if (tm == 7)
+        for (int k = 0; k < 8; k++){
+            if (p->smptype[k] == 4) return 0;
+            if (p->smptype[k] == 3) cubemask |= 1u << k;
+        }
     memcpy(e.v[0], in->col[0], 16); memcpy(e.v[1], in->col[1], 16);
     *killed = 0;
-    float tc[4][2];
-    for (int k = 0; k < 4; k++){
-        int m = ((int)P->proj[k]) >> 4;
+    float tc[8][2];                         /* ps_1_x reads 0..3; 4..7 only keep a bad index in bounds */
+    for (int k = 0; k < 8; k++){
+        int m = k < 4 ? ((int)P->proj[k]) >> 4 : 0;
         float d = m == 2 ? in->uv[k][3] : (m == 1 ? in->uv[k][2] : 1.f);
         tc[k][0] = in->uv[k][0] / d; tc[k][1] = in->uv[k][1] / d;
     }
@@ -85,16 +96,16 @@ int ps_ref_run(const VSProg *p, const PSRefPar *P, const PSRefIn *in, PSRefTex t
     if (p->version >= 0x0200)
         for (unsigned q = 0; q < p->n; q++)
             if (p->ins[q].op == O_DCL && RT(p->ins[q].dst) == R_ADDR)
-                memcpy(e.t[RN(p->ins[q].dst) & 3], in->uv[RN(p->ins[q].dst) & 3], 16);
+                memcpy(e.t[RN(p->ins[q].dst) & tm], in->uv[RN(p->ins[q].dst) & tm], 16);
     for (unsigned q = 0; q < p->n; q++){
         const VSIns *x = &p->ins[q];
         float s[3][4], d[4] = { 0, 0, 0, 0 };
         for (unsigned i = 0; i < x->nsrc && i < 3; i++) psr_src(&e, x->src[i], s[i]);
         switch (x->op){
         case O_TEX: case O_TEXLDD: case O_TEXLDL: {
-            int dn = RN(x->dst) & 3, smp;
+            int dn = RN(x->dst) & tm, smp;
             float c[3];
-            if (x->nsrc >= 2){ smp = RN(x->src[1]) & 3; c[0] = s[0][0]; c[1] = s[0][1]; c[2] = s[0][2]; }
+            if (x->nsrc >= 2){ smp = RN(x->src[1]) & tm; c[0] = s[0][0]; c[1] = s[0][1]; c[2] = s[0][2]; }
             else if (x->nsrc == 1 && RT(x->src[0]) == R_ADDR){
                 int m = RN(x->src[0]) & 3; smp = dn;
                 if ((cubemask >> smp) & 1u){ c[0] = in->uv[m][0]; c[1] = in->uv[m][1]; c[2] = in->uv[m][2]; }
@@ -107,14 +118,14 @@ int ps_ref_run(const VSProg *p, const PSRefPar *P, const PSRefIn *in, PSRefTex t
             }
             tex(smp, c, ((cubemask >> smp) & 1u) ? 3 : 2, d);
             break; }
-        case O_TEXCOORD: memcpy(e.t[RN(x->dst) & 3], in->uv[RN(x->dst) & 3], 16); continue;
+        case O_TEXCOORD: memcpy(e.t[RN(x->dst) & tm], in->uv[RN(x->dst) & tm], 16); continue;
         case O_TEXKILL: {
             /* the register is the destination token (no sources); ps_1_x:
              * the first three components of coordinate set N (tN) or of rN,
              * ps_2_0+: all four (vsemu_wgsl.inc O_TEXKILL) */
             int kty = RT(x->dst);
             float k[4];
-            if (kty == R_ADDR && p->version < 0x0200) memcpy(k, in->uv[RN(x->dst) & 3], 16);
+            if (kty == R_ADDR && p->version < 0x0200) memcpy(k, in->uv[RN(x->dst) & tm], 16);
             else if (kty == R_TEMP || kty == R_ADDR) psr_reg(&e, x->dst, k);
             else return 0;
             for (int i = 0; i < (p->version >= 0x0200 ? 4 : 3); i++) if (k[i] < 0.f) *killed = 1;
@@ -154,7 +165,7 @@ int ps_ref_run(const VSProg *p, const PSRefPar *P, const PSRefIn *in, PSRefTex t
         if (!x->has_dst) continue;
         int dty = RT(x->dst), dnum = RN(x->dst);
         float *dst = dty == R_TEMP ? e.r[dnum & 15] : dty == R_INPUT ? e.v[dnum & 1] :
-                     dty == R_ADDR ? e.t[dnum & 3] : dty == R_COLOROUT ? e.oC : 0;
+                     dty == R_ADDR ? e.t[dnum & tm] : dty == R_COLOROUT ? e.oC : 0;
         if (!dst) return 0;
         int sh = DSHIFT(x->dst);
         unsigned m = WMASK(x->dst); if (!m) m = 0xFu;

@@ -18,7 +18,9 @@
  * reference (write_sm3_ps_vectors, write_sm3_vs_vectors): ps_<id>.p3vec and
  * vs_<id>.v3vec, which web/src/test/shadercheck.ts runs against the WGSL on
  * the GPU.  The other models keep the Mac-semantics oracles below (.vec,
- * .pvec), with 4 stages only.
+ * .pvec: vs_run, ps_ref_run), which follow the 8-stage rules too: with 8
+ * stages every module of every mode gets them ('VSV2', 'PSV2'); with 4 only
+ * --pairs writes them, as before.
  *
  * --pairs takes an in-game dump (NFSU2_SHADER_DUMP) and translates every
  * distinct vertex shader object against every distinct vertex declaration the
@@ -75,7 +77,9 @@ static unsigned char *slurp(const char *path, size_t *n){
  * 29 f32 expected outputs: pos, col0, col1, uv0..uv3 (TEXCOORDINDEX = identity),
  * fog.  The expected values come from vs_run on inputs decoded by a copy of
  * com.c decl_fetch, i.e. the Mac's CPU vertex path.  The shader check runs the
- * WGSL vertex function as a compute shader on the same bytes and compares. */
+ * WGSL vertex function as a compute shader on the same bytes and compares.
+ * With 8 stages the magic is 'VSV2' and each vertex has 45: uv4..uv7 (oT4..oT7,
+ * which vs_run keeps apart) after the fog. */
 static uint32_t g_rng;
 static uint32_t rnd(void){ g_rng ^= g_rng << 13; g_rng ^= g_rng >> 17; g_rng ^= g_rng << 5; return g_rng; }
 static float rndf(float lo, float hi){ return lo + (hi - lo) * (float)(rnd() >> 8) / 16777216.f; }
@@ -127,11 +131,11 @@ static void write_vectors(const char *dir, int id, const VSProg *p, const int dc
         }
     static VSConst k; memset(&k, 0, sizeof k);
     for (int r = 0; r < 256; r++) for (int c = 0; c < 4; c++) k.f[r][c] = rndf(-1.f, 1.f);
-    int wf = vs_writes_fog(p);
+    int wf = vs_writes_fog(p), s8 = wgsl_get_stages() == 8, no = s8 ? 45 : 29;
     char path[1024]; snprintf(path, sizeof path, "%s/vs_%d.vec", dir, id);
     FILE *f = fopen(path, "wb");
     if (!f){ perror(path); exit(1); }
-    uint32_t hdr[4] = { 0x31565356u, NV, (uint32_t)stride, (uint32_t)wf };
+    uint32_t hdr[4] = { s8 ? 0x32565356u : 0x31565356u, NV, (uint32_t)stride, (uint32_t)wf };
     fwrite(hdr, 4, 4, f);
     fwrite(vb, (size_t)stride, NV, f);
     fwrite(k.f, 16, 256, f);
@@ -141,11 +145,12 @@ static void write_vectors(const char *dir, int id, const VSProg *p, const int dc
         for (int i = 0; i < 16; i++)
             if (dcl[i][0] >= 0) decl_fetch(vb + (size_t)v * stride + dcl[i][0], (unsigned)dcl[i][1], in[i]);
         VSOut o; vs_run(p, &k, (const float (*)[4])in, &o);
-        float e[29];
+        float e[45];
         memcpy(e, o.pos, 16); memcpy(e + 4, o.col[0], 16); memcpy(e + 8, o.col[1], 16);
         memcpy(e + 12, o.tex[0], 64);
         e[28] = wf ? o.fog : 1.f;          /* GPU semantics: unwritten oFog = 1 (no fog) */
-        fwrite(e, 4, 29, f);
+        memcpy(e + 29, o.tex[4], 64);      /* 8 stages: oT4..oT7 (vs_run keeps all eight) */
+        fwrite(e, 4, (size_t)no, f);
     }
     fclose(f); free(vb);
 }
@@ -156,7 +161,10 @@ static void write_vectors(const char *dir, int id, const VSProg *p, const int dc
  * f32 inputs (col0, col1, uv0..uv3, fog); per pixel 5 f32 expected outputs
  * (rgba after alpha test and fog, killed 0/1).  Textures are an analytic
  * function of the coordinate (ftex below; the shader check substitutes the
- * same function for textureSample). */
+ * same function for textureSample).  With 8 stages the magic is 'PSV2', each
+ * pixel has 41 inputs (uv4..uv7 after the fog), and the shader check takes
+ * each binding's kind from the module (ps_ref_run adds ps_2_0's declared cubes
+ * to cubemask itself). */
 static void ftex(int k, const float *c, int n, float o[4]){
     float x = c[0], y = c[1], f = (float)k;
     if (n == 3){ x = c[0] + c[2] * 0.3f; y = c[1] - c[2] * 0.2f; }
@@ -167,17 +175,20 @@ static void ftex(int k, const float *c, int n, float o[4]){
 }
 static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned cubemask){
     enum { NP = 256 };
+    int s8 = wgsl_get_stages() == 8, nin = s8 ? 41 : 25;
     g_rng = 0x85EBCA6Bu ^ (uint32_t)id * 2246822519u;
     static PSRefPar P; memset(&P, 0, sizeof P);
     P.aref = rndf(0.f, 0.5f);
     for (int k = 0; k < 4; k++) P.proj[k] = (float)(k + 16 * (int)(rnd() % 3u));
-    for (int r = 0; r < 32; r++) for (int c = 0; c < 4; c++) P.c[r][c] = rndf(-1.f, 1.f);
+    /* 8 stages (Most Wanted): material constants positive, as for psref's vectors; its shaders raise a saturated
+     * dot product to c2.x, and a power <= 0 of 0 is infinite (WGSL leaves it open) */
+    for (int r = 0; r < 32; r++) for (int c = 0; c < 4; c++) P.c[r][c] = s8 ? rndf(0.05f, 1.f) : rndf(-1.f, 1.f);
     for (int c = 0; c < 3; c++) P.fog[c] = rndf(0.f, 1.f);
     P.fog[3] = (float)(id & 1);
     char path[1024]; snprintf(path, sizeof path, "%s/ps_%d.pvec", dir, id);
     FILE *f = fopen(path, "wb");
     if (!f){ perror(path); exit(1); }
-    uint32_t hdr[4] = { 0x31565350u, NP, cubemask, 0 };
+    uint32_t hdr[4] = { s8 ? 0x32565350u : 0x31565350u, NP, cubemask, 0 };
     fwrite(hdr, 4, 4, f);
     float blk[140] = { 0 };                    /* PSPar: aref usec pad pad, proj, c[32], fog */
     blk[0] = P.aref; memcpy(blk + 4, P.proj, 16); memcpy(blk + 8, P.c, 512); memcpy(blk + 136, P.fog, 16);
@@ -192,9 +203,14 @@ static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned c
             in[i].uv[k][2] = rndf(0.5f, 2.f); in[i].uv[k][3] = rndf(0.5f, 2.f);
         }
         in[i].fog = rndf(-0.2f, 1.2f);
-        float row[25];
+        for (int k = 4; k < (s8 ? 8 : 4); k++){
+            in[i].uv[k][0] = rndf(0.f, 1.f); in[i].uv[k][1] = rndf(0.f, 1.f);
+            in[i].uv[k][2] = rndf(0.5f, 2.f); in[i].uv[k][3] = rndf(0.5f, 2.f);
+        }
+        float row[41];
         memcpy(row, in[i].col, 32); memcpy(row + 8, in[i].uv, 64); row[24] = in[i].fog;
-        fwrite(row, 4, 25, f);
+        memcpy(row + 25, in[i].uv[4], 64);
+        fwrite(row, 4, (size_t)nin, f);
     }
     int ok = 1;
     for (int i = 0; i < NP; i++){
@@ -484,7 +500,7 @@ static int game_ps_vectors(const char *dump, const char *dir){
         size_t bn; unsigned char *b = slurp(bp, &bn);
         if (!b) continue;
         if (bn >= 4 && is_sm3(((const uint32_t *)b)[0])) n += write_sm3_ps_vectors(dir, id, (const uint32_t *)b, bn / 4);
-        else if (wgsl_get_stages() == 4){
+        else {
             VSProg *p = vs_compile((const uint32_t *)b, bn / 4);
             if (p){ n += write_ps_vectors(dir, id, p, 0u); n += write_ps_vectors(dir, id + 256, p, 1u); vs_free(p); }
         }
@@ -515,7 +531,7 @@ static int game_vectors(const char *dump, const char *dir){
         size_t bn; unsigned char *b = slurp(bp, &bn);
         if (!b) continue;
         if (bn >= 4 && is_sm3(((const uint32_t *)b)[0])) n += write_sm3_vs_vectors(dir, gid, (const uint32_t *)b, bn / 4, (const int (*)[2])dcl);
-        else if (wgsl_get_stages() == 4){
+        else {
             VSProg *p = vs_compile((const uint32_t *)b, bn / 4);
             if (p){ write_vectors(dir, gid, p, (const int (*)[2])dcl); n++; vs_free(p); }
         }
@@ -583,7 +599,7 @@ static int pairs(const char *dump, const char *dir){
             if (n > 0){
                 put(dir, name, g_buf, (size_t)n); ok++;
                 if (sm3) write_sm3_vs_vectors(dir, id, (const uint32_t *)vs[v].b, vs[v].n / 4, (const int (*)[2])dcl);
-                else if (wgsl_get_stages() == 4) write_vectors(dir, id, p, (const int (*)[2])dcl);
+                else write_vectors(dir, id, p, (const int (*)[2])dcl);
             } else fail++;
             fprintf(ix, "vs %d = %s x %s %s%s%s\n", id, vs[v].name, dc[k].name, n > 0 ? "ok" : "REJECTED",
                     n > 0 || !sm3 ? "" : ": ", n > 0 || !sm3 ? "" : wgsl_refusal());
@@ -617,8 +633,13 @@ static int translate_one(const char *dir, FILE *ix, const uint32_t *tok, size_t 
         fprintf(ix, "ps %d src=%s instr=%u unknown=%u len=%d cube=%d", id, base, vs_ninstr(p), vs_unknown(p), n, nc);
         if (sm3 && n <= 0) fprintf(ix, " REJECTED: %s", why);
         fprintf(ix, "\n");
-        /* vectors where psref runs it (a program it refuses or cannot run on any input gets none: stderr says why) */
+        /* vectors where psref runs it (a program it refuses or cannot run on any input gets none: stderr says why);
+         * the older models' from ps_ref_run, with 8 stages (with 4 the blob and effect modes write none, as before) */
         if (sm3 && n > 0 && write_sm3_ps_vectors(dir, id, tok, dw) && nc > 0) write_sm3_ps_vectors(dir, id + 256, tok, dw);
+        if (!sm3 && wgsl_get_stages() == 8){
+            if (n > 0 && !write_ps_vectors(dir, id, p, 0u)) fprintf(stderr, "ps_%d: ps_ref_run refused it\n", id);
+            if (nc > 0 && !write_ps_vectors(dir, id + 256, p, 1u)) fprintf(stderr, "ps_%d: ps_ref_run refused it\n", id + 256);
+        }
     } else {
         /* synthetic declaration: usage -> type, packed in register order */
         static const int ty_of_usage[14] = { 2, 3, 4, 2, 0, 1, 2, 2, 0, 3, 4, 0, 0, 0 };
@@ -641,6 +662,7 @@ static int translate_one(const char *dir, FILE *ix, const uint32_t *tok, size_t 
         if (sm3 && n <= 0) fprintf(ix, " REJECTED: %s", wgsl_refusal());
         fprintf(ix, "\n");
         if (sm3 && n > 0) write_sm3_vs_vectors(dir, id, tok, dw, (const int (*)[2])dcl);
+        else if (n > 0 && wgsl_get_stages() == 8) write_vectors(dir, id, p, (const int (*)[2])dcl);
     }
     vs_free(p);
     return ok;
