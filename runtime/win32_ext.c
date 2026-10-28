@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <pthread.h>
 #include <time.h>
 #include <sys/event.h>
@@ -46,6 +47,9 @@ typedef struct {
      * (waits, CloseHandle, GetExitCodeThread, DuplicateHandle, ...): obj_reclaim */
     uint32_t creator; uint64_t end_seq; uint32_t looked;
     uint32_t gen;                     /* handle generation (obj_reclaim); kept when the slot is reused */
+    /* OB_KEY with the game's key table (game.h reg_keys): which key (its index
+     * + 1; 0 = the flat registry) and the access it was opened with */
+    int reg_key; uint32_t reg_access;
 } Obj;
 /* v12na: 4096 (was 512).  The game never closes the handle of the thread it
  * starts for every race load, so one slot per load stays in use (measured:
@@ -839,6 +843,7 @@ static uint32_t obj_new(ObKind k){
         o->exit_code = 0; o->ended = 0; o->term_req = 0; o->closed = 0; o->teb = o->stack_lo = 0;
         o->t_armed = 0; o->t_due_us = o->t_period_us = 0;
         o->creator = 0; o->end_seq = 0; o->looked = 0;
+        o->reg_key = 0; o->reg_access = 0;
         o->refs = 1; o->kind = k;
         pthread_mutex_unlock(&o->mtx);
     } else {
@@ -1419,7 +1424,8 @@ static uint32_t A(CPU *c, int i){ return MR32(c->esp + 4u*(uint32_t)i); }
 
 /* --- simple persistent registry ----------------------------------------
  * The settings the game writes (graphics detail, resolution, sound) used to
- * be thrown away.  Here they are kept and written to ~/.nfsu2_registry. */
+ * be thrown away.  Here they are kept and written to ~/.nfsu2_registry (the
+ * game's own file, game.h reg_file: Most Wanted's is ~/.nfsmw_registry). */
 /* 512: DirectInput user maps (dinput_kbd.c) add an entry per rebound key */
 #define MAXREG 512
 static struct { char name[64]; int is_str; uint32_t dw; char sv[128]; } g_reg[MAXREG];
@@ -1432,7 +1438,7 @@ static const char *reg_path(void){
     const char *rf = getenv("NFSU2_REGFILE");
     if (rf && *rf){ snprintf(pth, sizeof pth, "%s", rf); return pth; }
     const char *h = getenv("HOME");
-    snprintf(pth, sizeof pth, "%s/.nfsu2_registry", h ? h : ".");
+    snprintf(pth, sizeof pth, "%s/%s", h ? h : ".", g_game.reg_file ? g_game.reg_file : ".nfsu2_registry");
     return pth;
 }
 static void reg_load(void){
@@ -1518,6 +1524,210 @@ int win32_reg_get_dword(const char *nm, uint32_t *out){
 }
 void win32_reg_put_dword(const char *nm, uint32_t v){ reg_put_dword(nm, v); }
 
+/* The CPU's clock as the registry's ~MHz gives it: the speed rdtsc counts
+ * at (dispatch.c), NFSU2_TSC_MHZ or 3,000. */
+uint32_t win32_cpu_mhz(void){
+    const char *e = getenv("NFSU2_TSC_MHZ");
+    return e && *e ? (uint32_t)strtoul(e,0,0) : 3000u;
+}
+
+/* RegQueryValueExA's answer, a REG_SZ (sval) or a REG_DWORD (have_d): the
+ * type, the size, the data when it fits (ERROR_MORE_DATA 234 when not), or
+ * ERROR_FILE_NOT_FOUND for neither */
+static uint32_t reg_answer(uint32_t ptype, uint32_t pdata, uint32_t pcb, const char *sval, uint32_t dval, int have_d){
+    uint32_t r;
+    if (sval){
+        uint32_t need = (uint32_t)strlen(sval) + 1u;
+        if (ptype){ mem_commit(ptype,4); MR32(ptype)=1u; }      /* REG_SZ */
+        if (!pdata){ if(pcb){ mem_commit(pcb,4); MR32(pcb)=need; } r=ERROR_SUCCESS; }
+        else {
+            uint32_t cap = pcb ? MR32(pcb) : need;
+            if (cap < need){ if(pcb) MR32(pcb)=need; r=234u; } /* ERROR_MORE_DATA */
+            else { mem_commit(pdata,need); memcpy(g_mem+pdata, sval, need);
+                   if(pcb) MR32(pcb)=need; r=ERROR_SUCCESS; }
+        }
+    } else if (have_d){
+        if (ptype){ mem_commit(ptype,4); MR32(ptype)=4u; }      /* REG_DWORD */
+        if (!pdata){ if(pcb){ mem_commit(pcb,4); MR32(pcb)=4u; } r=ERROR_SUCCESS; }
+        else {
+            uint32_t cap = pcb ? MR32(pcb) : 4u;
+            if (cap < 4u){ if(pcb) MR32(pcb)=4u; r=234u; }
+            else { mem_commit(pdata,4); MR32(pdata)=dval;
+                   if(pcb) MR32(pcb)=4u; r=ERROR_SUCCESS; }
+        }
+    } else {
+        if(pcb){ mem_commit(pcb,4); MR32(pcb)=0; }
+        r=ERROR_FILE_NOT_FOUND;
+    }
+    return r;
+}
+
+/* ---- the game's registry keys (game.h reg_keys: Most Wanted's) ----------
+ * The registry as the game's machine has it: the keys of the table and no
+ * others, each answering for its own values; what the game writes is kept in
+ * the registry file (above) when its key keeps values (store).  As Windows:
+ * a key the table lacks does not open (ERROR_FILE_NOT_FOUND) and cannot be
+ * made (our machine adds no keys: ERROR_ACCESS_DENIED), a handle opened
+ * without KEY_SET_VALUE cannot write (L-056) and one without KEY_QUERY_VALUE
+ * cannot read, a value nothing stored and the table does not name is not
+ * there.  Every call logs one "[reg]" line with what it answered.  UG2 has no
+ * key table: its registry is the flat one of win32_ext_call, as always. */
+#define ERROR_ACCESS_DENIED   5u
+#define ERROR_INVALID_HANDLE  6u
+#define KEY_QUERY_VALUE 0x0001u
+#define KEY_SET_VALUE   0x0002u
+#define KEY_ALL_ACCESS  0x000F003Fu
+static unsigned g_reglog_n;                    /* "[reg]" lines so far: the first 2,000 are written */
+#define REGLOG(...) do { if (g_reglog_n++ < 2000u) fprintf(stderr, __VA_ARGS__); } while (0)
+/* the predefined keys' short names, 0 for any other handle */
+static const char *reg_root_name(uint32_t h){
+    switch (h){
+    case 0x80000000u: return "HKCR"; case 0x80000001u: return "HKCU"; case 0x80000002u: return "HKLM";
+    case 0x80000003u: return "HKU";  case 0x80000004u: return "HKPD"; case 0x80000005u: return "HKCC";
+    case 0x80000006u: return "HKDD";
+    default: return 0;
+    }
+}
+/* two key paths name the same key: part by part without case, extra backslashes ignored */
+static int reg_path_eq(const char *a, const char *b){
+    for (;;){
+        while (*a == '\\') a++;
+        while (*b == '\\') b++;
+        if (!*a || !*b) return !*a && !*b;
+        for (; *a && *a != '\\' && *b && *b != '\\'; a++, b++)
+            if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return 0;
+        if ((*a && *a != '\\') || (*b && *b != '\\')) return 0;
+    }
+}
+/* a value as the log shows it: REG_SZ quoted, bytes below 0x20 as \xNN */
+static const char *reg_show(const char *sval, uint32_t dval, int have_d, char *out, size_t n){
+    if (have_d){ snprintf(out, n, "%u", dval); return out; }
+    if (!sval){ snprintf(out, n, "-"); return out; }
+    size_t k = 0; out[k++] = '"';
+    for (const unsigned char *s = (const unsigned char *)sval; *s && k + 6 < n; s++){
+        if (*s < 0x20) k += (size_t)snprintf(out + k, n - k, "\\x%02x", *s);
+        else out[k++] = (char)*s;
+    }
+    out[k++] = '"'; out[k] = 0;
+    return out;
+}
+/* the table key a handle names (0: none) */
+static const RegKey *reg_key_of(uint32_t h, Obj **po){
+    Obj *o = obj_get(h);
+    if (po) *po = o;
+    return o && o->kind == OB_KEY && o->reg_key ? &g_game.reg_keys[o->reg_key - 1] : 0;
+}
+/* RegOpenKeyA, RegOpenKeyExA, RegCreateKeyA, RegCreateKeyExA */
+static uint32_t reg_open(CPU *c, const char *n){
+    int ex = !strcmp(n, "RegOpenKeyExA"), cex = !strcmp(n, "RegCreateKeyExA"), create = !strncmp(n, "RegCreate", 9);
+    uint32_t hk = A(c,0), psub = A(c,1);
+    uint32_t access = ex ? A(c,3) : cex ? A(c,5) : KEY_ALL_ACCESS;
+    uint32_t phk = ex ? A(c,4) : cex ? A(c,7) : A(c,2);
+    const char *sub = psub && mem_is_committed(psub) ? (const char *)(g_mem + psub) : "";
+    char path[400]; uint32_t root; const RegKey *pk = reg_key_of(hk, 0);
+    if (reg_root_name(hk)){ root = hk; snprintf(path, sizeof path, "%s", sub); }
+    else if (pk){ root = pk->root; snprintf(path, sizeof path, "%s\\%s", pk->path, sub); }
+    else {
+        REGLOG("[reg] %s(0x%08x, \"%s\"): not a key, error 6 (from 0x%08x)\n", n, hk, sub, c->eip);
+        if (phk){ mem_commit(phk,4); MR32(phk) = 0; }
+        return ERROR_INVALID_HANDLE;
+    }
+    if (reg_root_name(hk) && !*sub){                    /* the predefined key itself */
+        if (phk){ mem_commit(phk,4); MR32(phk) = hk; }
+        if (cex && A(c,8)){ mem_commit(A(c,8),4); MR32(A(c,8)) = 2u; }  /* REG_OPENED_EXISTING_KEY */
+        return ERROR_SUCCESS;
+    }
+    const char *rn = reg_root_name(root);
+    int k = 0;
+    for (int i = 0; g_game.reg_keys[i].path; i++)
+        if (g_game.reg_keys[i].root == root && reg_path_eq(g_game.reg_keys[i].path, path)){ k = i + 1; break; }
+    if (!k){
+        REGLOG("[reg] %s(%s\\%s): %s (from 0x%08x)\n", n, rn, path,
+               create ? "this machine makes no keys of its own, error 5" : "no such key, error 2", c->eip);
+        if (phk){ mem_commit(phk,4); MR32(phk) = 0; }
+        return create ? ERROR_ACCESS_DENIED : ERROR_FILE_NOT_FOUND;
+    }
+    uint32_t h = obj_new(OB_KEY); Obj *o = obj_get(h);
+    if (!o){ if (phk){ mem_commit(phk,4); MR32(phk) = 0; } return 14u; }   /* ERROR_OUTOFMEMORY */
+    o->reg_key = k; o->reg_access = access;
+    if (phk){ mem_commit(phk,4); MR32(phk) = h; }
+    if (cex && A(c,8)){ mem_commit(A(c,8),4); MR32(A(c,8)) = 2u; }      /* REG_OPENED_EXISTING_KEY */
+    REGLOG("[reg] %s(%s\\%s, access 0x%x) -> 0x%08x (from 0x%08x)\n", n, rn, g_game.reg_keys[k - 1].path,
+           access, h, c->eip);
+    return ERROR_SUCCESS;
+}
+/* RegQueryValueExA(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData) */
+static uint32_t reg_query(CPU *c){
+    uint32_t hk = A(c,0), pname = A(c,1), ptype = A(c,3), pdata = A(c,4), pcb = A(c,5);
+    const char *vn = pname && mem_is_committed(pname) ? (const char *)(g_mem + pname) : "";
+    Obj *o; const RegKey *k = reg_key_of(hk, &o);
+    if (!k){
+        uint32_t e = reg_root_name(hk) ? ERROR_FILE_NOT_FOUND : ERROR_INVALID_HANDLE;
+        REGLOG("[reg] RegQueryValueExA(0x%08x, \"%s\"): %s, error %u (from 0x%08x)\n", hk, vn,
+               e == ERROR_INVALID_HANDLE ? "not a key" : "no such value", e, c->eip);
+        if (pcb){ mem_commit(pcb,4); MR32(pcb) = 0; }
+        return e;
+    }
+    if (!(o->reg_access & KEY_QUERY_VALUE)){
+        REGLOG("[reg] RegQueryValueExA(%s\\%s): opened without KEY_QUERY_VALUE (0x%x), error 5 (from 0x%08x)\n",
+               k->path, vn, o->reg_access, c->eip);
+        return ERROR_ACCESS_DENIED;
+    }
+    const RegDefault *d = 0;
+    for (const RegDefault *v = k->values; v && v->name; v++) if (!strcasecmp(v->name, vn)){ d = v; break; }
+    const char *sval = 0, *from = "not there"; uint32_t dval = 0; int have_d = 0, ri;
+    if (d && (d->str_fn || d->dword_fn)){
+        if (d->str_fn) sval = d->str_fn(); else { dval = d->dword_fn(); have_d = 1; }
+        from = "the runtime's";
+    } else if (k->store && *vn && (ri = reg_find(vn)) >= 0){
+        if (g_reg[ri].is_str) sval = g_reg[ri].sv; else { dval = g_reg[ri].dw; have_d = 1; }
+        from = "stored";
+    } else if (d){
+        if (d->str) sval = d->str; else { dval = d->dword; have_d = 1; }
+        from = "the default";
+    }
+    uint32_t r = reg_answer(ptype, pdata, pcb, sval, dval, have_d);
+    char sh[200];
+    if (sval || have_d)
+        REGLOG("[reg] %s\\%s = %s (%s, %s)%s (from 0x%08x)\n", k->path, vn, reg_show(sval, dval, have_d, sh, sizeof sh),
+               have_d ? "REG_DWORD" : "REG_SZ", from, r == 234u ? ": too long for its buffer, error 234" : "", c->eip);
+    else REGLOG("[reg] %s\\%s: not there, error 2 (from 0x%08x)\n", k->path, vn, c->eip);
+    return r;
+}
+/* RegSetValueExA(hKey, lpValueName, Reserved, dwType, lpData, cbData) */
+static uint32_t reg_set(CPU *c){
+    uint32_t hk = A(c,0), pname = A(c,1), type = A(c,3), pdata = A(c,4), cb = A(c,5);
+    const char *vn = pname && mem_is_committed(pname) ? (const char *)(g_mem + pname) : "";
+    Obj *o; const RegKey *k = reg_key_of(hk, &o);
+    const char *why = 0; uint32_t e = ERROR_ACCESS_DENIED;
+    if (!k){ why = "not a key"; e = ERROR_INVALID_HANDLE; }
+    else if (!(o->reg_access & KEY_SET_VALUE)) why = "opened without KEY_SET_VALUE";
+    else if (!k->store) why = "this key keeps nothing";
+    else if (!*vn) why = "the key's default value is not kept";
+    else if (type == 4u){
+        if (cb < 4u || !pdata || !mem_is_committed(pdata) || !mem_is_committed(pdata + 3u)){ why = "no 4 bytes of data"; e = 87u; }
+    } else if (type == 1u){
+        if (cb && (!pdata || !mem_is_committed(pdata) || !mem_is_committed(pdata + cb - 1u))){ why = "no data"; e = 87u; }
+    } else { why = "only REG_SZ and REG_DWORD are kept"; e = 50u; }               /* ERROR_NOT_SUPPORTED */
+    if (why){
+        REGLOG("[reg] RegSetValueExA(%s\\%s, type %u, %u bytes): %s, error %u (from 0x%08x)\n",
+               k ? k->path : "?", vn, type, cb, why, e, c->eip);
+        return e;
+    }
+    char sv[128], sh[200];
+    if (type == 4u){
+        reg_put_dword(vn, MR32(pdata));
+        REGLOG("[reg] %s\\%s := %s (REG_DWORD) (from 0x%08x)\n", k->path, vn, reg_show(0, MR32(pdata), 1, sh, sizeof sh), c->eip);
+    } else {                                     /* REG_SZ: its bytes up to the first NUL, at most 127 */
+        uint32_t l = 0;
+        while (l < cb && l < sizeof sv - 1 && MR8(pdata + l)) { sv[l] = (char)MR8(pdata + l); l++; }
+        sv[l] = 0;
+        reg_put_string(vn, sv);
+        REGLOG("[reg] %s\\%s := %s (REG_SZ, %u bytes) (from 0x%08x)\n", k->path, vn, reg_show(sv, 0, 0, sh, sizeof sh), cb, c->eip);
+    }
+    return ERROR_SUCCESS;
+}
+
 /* GetTimeZoneInformation: the host's real zone.  TIME_ZONE_INFORMATION
  * (172 bytes): Bias@0, StandardName[32 WCHAR]@4, StandardDate@68,
  * StandardBias@84, DaylightName@88, DaylightDate@152, DaylightBias@168.
@@ -1586,7 +1796,17 @@ static uint32_t disk_space(uint64_t *fr, uint64_t *tot){
 int win32_ext_call(CPU *c, const char *n, uint32_t *out){
     uint32_t r = 0;
     /* --- Registry --- */
-    if (!strcmp(n,"RegOpenKeyA")){ uint32_t p=A(c,2); if(p) MR32(p)=obj_new(OB_KEY); r=ERROR_SUCCESS; }
+    /* the game's key table (Most Wanted): its keys and values (reg_open ...) */
+    if (g_game.reg_keys && (!strcmp(n,"RegOpenKeyA") || !strcmp(n,"RegOpenKeyExA") ||
+                            !strcmp(n,"RegCreateKeyA") || !strcmp(n,"RegCreateKeyExA"))) r = reg_open(c, n);
+    else if (g_game.reg_keys && !strcmp(n,"RegQueryValueExA")) r = reg_query(c);
+    else if (g_game.reg_keys && !strcmp(n,"RegSetValueExA")) r = reg_set(c);
+    else if (g_game.reg_keys && !strcmp(n,"RegCloseKey")){
+        Obj *o = obj_get(A(c,0));
+        if (o && o->kind == OB_KEY){ obj_close(A(c,0)); r = ERROR_SUCCESS; }
+        else r = reg_root_name(A(c,0)) ? ERROR_SUCCESS : ERROR_INVALID_HANDLE; }
+    /* the flat registry (UG2): every key opens, values by name alone */
+    else if (!strcmp(n,"RegOpenKeyA")){ uint32_t p=A(c,2); if(p) MR32(p)=obj_new(OB_KEY); r=ERROR_SUCCESS; }
     else if (!strcmp(n,"RegOpenKeyExA")){
         if (getenv("REGLOG")){ uint32_t sp=A(c,1);
             fprintf(stderr,"  [registry] OpenKeyEx(\"%s\")\n",
@@ -1626,8 +1846,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
          * in the same frame); since the virtual clock advances at most
          * ~250 ms within a frame, it spun forever on the movie path.  Same
          * speed as rdtsc. */
-        else if (!strcasecmp(vn,"~MHz")){
-            const char *e = getenv("NFSU2_TSC_MHZ"); dval = e && *e ? (uint32_t)strtoul(e,0,0) : 3000u; have_d=1; }
+        else if (!strcasecmp(vn,"~MHz")){ dval = win32_cpu_mhz(); have_d=1; }
         else if (!strcasecmp(vn,"Language"))      sval=language_registry();   /* runtime/language.c */
         else {                                    /* the game's install profile (runtime/game.h) */
             for (const RegDefault *d = g_game.reg_defaults; d && d->name; d++)
@@ -1637,29 +1856,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
                 }
         }
 
-        if (sval){
-            uint32_t need = (uint32_t)strlen(sval) + 1u;
-            if (ptype){ mem_commit(ptype,4); MR32(ptype)=1u; }      /* REG_SZ */
-            if (!pdata){ if(pcb){ mem_commit(pcb,4); MR32(pcb)=need; } r=ERROR_SUCCESS; }
-            else {
-                uint32_t cap = pcb ? MR32(pcb) : need;
-                if (cap < need){ if(pcb) MR32(pcb)=need; r=234u; } /* ERROR_MORE_DATA */
-                else { mem_commit(pdata,need); memcpy(g_mem+pdata, sval, need);
-                       if(pcb) MR32(pcb)=need; r=ERROR_SUCCESS; }
-            }
-        } else if (have_d){
-            if (ptype){ mem_commit(ptype,4); MR32(ptype)=4u; }      /* REG_DWORD */
-            if (!pdata){ if(pcb){ mem_commit(pcb,4); MR32(pcb)=4u; } r=ERROR_SUCCESS; }
-            else {
-                uint32_t cap = pcb ? MR32(pcb) : 4u;
-                if (cap < 4u){ if(pcb) MR32(pcb)=4u; r=234u; }
-                else { mem_commit(pdata,4); MR32(pdata)=dval;
-                       if(pcb) MR32(pcb)=4u; r=ERROR_SUCCESS; }
-            }
-        } else {
-            if(pcb){ mem_commit(pcb,4); MR32(pcb)=0; }
-            r=ERROR_FILE_NOT_FOUND;
-        }
+        r = reg_answer(ptype, pdata, pcb, sval, dval, have_d);
     }
     else if (!strcmp(n,"RegQueryValueA")){ r=ERROR_FILE_NOT_FOUND; }
     else if (!strcmp(n,"RegSetValueExA")||!strcmp(n,"RegSetValueA")){

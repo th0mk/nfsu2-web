@@ -370,6 +370,7 @@ const GameOps g_game = {
     .vroot = "C:\\NFSU2",
     .module_path = "C:\\\\NFSU2\\\\SPEED2.EXE",   /* with doubled backslashes, as UG2 has always been told */
     .reg_defaults = ug2_reg,
+    .reg_file = ".nfsu2_registry",              /* ~/.nfsu2_registry without NFSU2_REGFILE, as always */
     .lang_suffixes = ug2_lang_suffixes,
     .entry = GAMEINFO_ENTRY_FN,
     .entry_va = GAMEINFO_ENTRY,

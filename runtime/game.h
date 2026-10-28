@@ -16,12 +16,25 @@ struct ModLink;                     /* module.h */
 
 /* A registry value the game reads but finds nothing stored for
  * (RegQueryValueExA, win32_ext.c): text, or a DWORD when str is 0.  A table
- * ends with a 0 name. */
+ * ends with a 0 name.  In a key of reg_keys (below) a value can instead be
+ * one the machine or the page decides: str_fn or dword_fn answers it every
+ * time, whatever was stored (str_fn's 0: not there). */
 typedef struct RegDefault {
     const char *name;               /* the value's name, matched without case */
     const char *str;                /* REG_SZ text, or 0 */
     uint32_t dword;                 /* REG_DWORD, when str is 0 */
+    const char *(*str_fn)(void);    /* REG_SZ, decided now (reg_keys only) */
+    uint32_t (*dword_fn)(void);     /* REG_DWORD, decided now (reg_keys only) */
 } RegDefault;
+
+/* A registry key of the game's machine (RegOpenKey*, win32_ext.c): which
+ * keys there are, and what each answers.  A table ends with a 0 path. */
+typedef struct RegKey {
+    uint32_t root;                  /* the predefined key it is under: HKEY_LOCAL_MACHINE 0x80000002 ... */
+    const char *path;               /* its path under root, matched without case */
+    int store;                      /* 1: the values the game writes here are kept (the registry file) */
+    const RegDefault *values;       /* what it answers for values nothing stored, ends with a 0 name */
+} RegKey;
 
 /* What the page's overlay and touch controls need of the game, at every
  * Present (runtime/web/status_web.c publishes each value that changed). */
@@ -47,6 +60,11 @@ typedef struct GameOps {
     const char *vroot;              /* the folder the game believes it is installed in, "C:\\NFSU2" */
     const char *module_path;        /* GetModuleFileNameA(NULL): the exe's path, as the game reads it */
     const RegDefault *reg_defaults; /* answers for registry values nothing stored */
+    const RegKey *reg_keys;         /* the registry's keys and each key's answers; 0 = one flat registry
+                                     * (UG2's): every key opens, and a value is the stored one or
+                                     * reg_defaults', whichever key it is asked of */
+    const char *reg_file;           /* where the values the game writes are kept when NFSU2_REGFILE names no
+                                     * file: this file in $HOME (".nfsu2_registry", also when 0) */
     const char *const *lang_suffixes; /* a missing file "<name>_xx.<ext>" is looked for with each of
                                      * these in place of "_xx", in order (fileio.c); ends with 0 */
     void (*entry)(CPU *c);          /* the exe's entry point, lifted: the lift's GAMEINFO_ENTRY_FN (cpu.h) */

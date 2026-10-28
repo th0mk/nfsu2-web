@@ -19,10 +19,11 @@ const read = f => fs.readFileSync(path.join(REPO, f), 'utf8').replace(/\/\*[\s\S
 const UG2_UNSET = {
   on_frame: 'UG2 hooks its main loop through on_present and hook',
   win32_misc: 'win32_misc.c answers Most Wanted\'s imports; UG2\'s stay unimplemented as they always were',
+  reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
-  reg_defaults: 'M2-12, the registry per value',
+  reg_defaults: 'its registry answers per key (reg_keys, registry_mw.c)',
   lang_suffixes: 'Q-06, the movies\' language suffix',
   install: 'no MW patches yet', hook: 'no MW hook sites (games/mw has no hook list)',
   on_present: 'Q-24, MW\'s per-frame anchor', on_frame: 'Q-24', on_test_frame: 'Q-24', status: 'the page\'s overlay, M6',
@@ -84,6 +85,11 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   for (const f of ['vroot', 'module_path']) assert.match(t.get(f), /^"C:\\\\NFSMW/, `${f} is under C:\\NFSMW`);
   assert.equal(t.get('entry'), 'GAMEINFO_ENTRY_FN');
   assert.equal(t.get('win32_misc'), 'win32_misc_call');
+  // its registry (registry_mw.c) in its own file, never UG2's
+  assert.equal(t.get('reg_keys'), 'mw_reg_keys');
+  assert.match(read('runtime/mw/registry_mw.c'), /\nconst RegKey mw_reg_keys\[\] = \{/);
+  assert.equal(t.get('reg_file'), '".nfsmw_registry"');
+  assert.equal(ug2Table().get('reg_file'), '".nfsu2_registry"', 'UG2 keeps ~/.nfsu2_registry');
   assert.match(read('runtime/win32_misc.c'), /\nint win32_misc_call\(CPU \*c, const char \*dll, const char \*n, uint32_t \*out\)\{/,
     'win32_misc.c defines win32_misc_call as game.h\'s win32_misc');
   // server.dll always; the D3DX oracle only in a build that linked its lift (web/build.sh: -DNFSU2_D3DX_ORACLE=1)

@@ -4,12 +4,13 @@
  * is the one MW builds link and UG2's never see; runtime/web/null_game.c's
  * weak stand-ins answer for every feature MW has no file of its own for yet.
  *
- * What the table holds now: the game and its files, the lifted entry point,
- * the two lifted DLLs (server.dll; d3dx9_26.dll in a D3DX oracle build only,
- * PLAN D-09), the C runtime's heap globals, and win32_misc.c's answers to the
- * imports only MW needs answered (GAME.md 3.3).  A field left 0 has its task
- * named below; core then does for MW what it does for a game without that
- * feature. */
+ * What the table holds now: the game and its files (its registry keys,
+ * registry_mw.c, and its own registry file), the lifted entry point, the two
+ * lifted DLLs (server.dll; d3dx9_26.dll in a D3DX oracle build only, PLAN
+ * D-09), the C runtime's heap globals, and win32_misc.c's answers to the
+ * imports only MW needs answered (GAME.md 3.3).
+ * A field left 0 has its task named below; core then does for MW what it does
+ * for a game without that feature. */
 #include "cpu.h"
 #include "game.h"
 #include "memmap.h"
@@ -17,6 +18,7 @@
 
 void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen/mw/all/gameinfo.h, through cpu.h) */
 int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);   /* win32_misc.c */
+extern const RegKey mw_reg_keys[];             /* registry_mw.c */
 
 /* the lifted DLLs (module.c): EA's LAN server (gen/mw/server, prefix srv_,
  * pinned in games/mw/game.conf), and Microsoft's D3DX as a dev-only oracle
@@ -39,7 +41,7 @@ static const ModLink mw_modules[] = {
 };
 
 /* Left 0, and why:
- *   reg_defaults        M2-12 (the registry, per value)
+ *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
  *   lang_suffixes       Q-06 (the movies' language suffix)
  *   install, hook       no MW patches or hook sites yet (games/mw has no override or hook list)
  *   on_present, on_frame, on_test_frame, status   Q-24 (MW's per-frame anchor), the page's overlay (M6)
@@ -57,8 +59,10 @@ static const ModLink mw_modules[] = {
 const GameOps g_game = {
     .id = "mw",
     .exe_name = "speed.exe",
-    .vroot = "C:\\NFSMW",                       /* M2-13 checks the paths */
+    .vroot = "C:\\NFSMW",
     .module_path = "C:\\NFSMW\\speed.exe",
+    .reg_keys = mw_reg_keys,                    /* registry_mw.c: the keys speed.exe opens, all HKLM */
+    .reg_file = ".nfsmw_registry",              /* never UG2's ~/.nfsu2_registry */
     .entry = GAMEINFO_ENTRY_FN,
     .entry_va = GAMEINFO_ENTRY,
     .modules = mw_modules,
