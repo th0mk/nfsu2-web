@@ -4579,13 +4579,16 @@ static void fill_caps(uint32_t p){
     MR32(p+0xA0)=8; MR32(p+0xA4)=6; MR32(p+0xA8)=4; MR32(p+0xAC)=8;
     MRF32(p+0xB0)=256.0f; MR32(p+0xB4)=1048575; MR32(p+0xB8)=1048575;
     MR32(p+0xBC)=16; MR32(p+0xC0)=508;
-    { /* Shader version settable from the environment (SM=0 -> fixed function) */
+    { /* Shader version settable from the environment (SM=0 -> fixed function;
+       * 30 -> vs_3_0/ps_3_0, which the renderer does not translate yet: for
+       * Most Wanted's effect census, GAME.md 5.3) */
       const char *sm = ENVC("D3D_SM");
       uint32_t vs=0xFFFE0200u, ps=0xFFFF0200u;
       if (sm){ int v=atoi(sm);
         if (v==0){ vs=0; ps=0; }
         else if (v==11){ vs=0xFFFE0101u; ps=0xFFFF0101u; }
         else if (v==14){ vs=0xFFFE0101u; ps=0xFFFF0104u; }
+        else if (v==30){ vs=0xFFFE0300u; ps=0xFFFF0300u; }
       }
       MR32(p+0xC4)=vs; MR32(p+0xC8)=256; MR32(p+0xCC)=ps; }
     MRF32(p+0xD0)=8.0f; MR32(p+0xD4)=0x00000051;

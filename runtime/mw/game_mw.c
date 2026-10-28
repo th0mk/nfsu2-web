@@ -73,7 +73,9 @@ static const InitTable mw_init_tables[] = {
  * oracle in an oracle build */
 static void mw_install(void){
 #if NFSU2_D3DX_ORACLE
+    void fxcensus_init(void);                  /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census */
     d3dxmath_install(1);
+    fxcensus_init();
 #else
     d3dxmath_install(0);
 #endif

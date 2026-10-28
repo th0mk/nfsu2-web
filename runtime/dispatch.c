@@ -28,6 +28,10 @@ static int g_init_on;                         /* the initializer tables are bein
 extern int g_efx_stat;                        /* EFXSTAT (d3dx_hle.c) */
 int efx_watched(uint32_t a);                  /* EFXSTAT watches it (UG2's D3DX code: d3dx_hle.c) */
 void efx_dispatch(CPU *c, uint32_t a);        /* an indirect call into that code (d3dx_hle.c) */
+#if NFSU2_D3DX_ORACLE
+extern int g_fxcensus;                        /* NFSMW_FXCENSUS (runtime/mw/fxcensus_mw.c) */
+void fxcensus_call(CPU *c, uint32_t addr, guest_fn f);
+#endif
 static int diag_watched(uint32_t a){
     return (g_icall_want && a == g_icall_want) || efx_watched(a);
 }
@@ -301,6 +305,12 @@ void dispatch_indirect(CPU *c, uint32_t addr){
     else {
         guest_fn f = patch_at(addr);
         if (!f) f = module_fn_at(addr);
+#if NFSU2_D3DX_ORACLE
+        /* Most Wanted's dev builds with the D3DX oracle, NFSMW_FXCENSUS=1: the
+         * game's calls into the oracle's effects, with their answers
+         * (runtime/mw/fxcensus_mw.c) */
+        if (f && __builtin_expect(g_fxcensus, 0)){ g_stat_indirect_ok++; fxcensus_call(c, addr, f); return; }
+#endif
         if (f){ g_stat_indirect_ok++; f(c); return; }
     }
     /* No lifted counterpart.  The game may have generated code at this
