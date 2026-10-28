@@ -24,7 +24,8 @@
 //   e.g. the Mac port's work/seed/career/s4_outrun; sponsor: one in stage 2
 //   before its sponsor, work/seed/career/s2_start).
 //
-// Pass (as run_suite.sh): exit code 0, "quit at guest frame", the scenario's
+// Pass (as run_suite.sh): exit code 0, "quit at guest frame" (or, for a script
+// that ends by `close`, the game's own exit after the WM_CLOSE), the scenario's
 // marker, tests/checks/<name>.sh passes, and G-01 (web/tools/g01.mjs): no fault
 // marker (FAULT IN GUEST, GUEST MEMORY FAULT, HOST SEGV), no "TIME LIMIT
 // REACHED" (the runner's timeout writes it), no "[trap]" line, no "UNRESOLVED
@@ -40,7 +41,8 @@
 // Logs: out/web/runs/<run>/<scenario>.log (the game's stdout/stderr, one line
 // per line, without the host's [tid] prefix); summary.txt and summary.json.
 // The module the server sends (/game.json: revision, game, lift options,
-// hash) is the run's first line, and in both summaries.
+// hash) is the run's first line, and in both summaries; for a game other than
+// Underground 2 also each scenario log's first line (L-020).
 // Each game has its own table below: Most Wanted's is empty until its first
 // scenario exists (an ad-hoc --script runs one of tests/mw/scripts/).
 import { chromium } from 'playwright';
@@ -168,11 +170,14 @@ function urlFor(s) {
   return `${opt.base}/test/hostcheck.html?${q}`;
 }
 
+// a script's `close` (runtime/lifecycle.c): the game exited by itself after the WM_CLOSE
+const closedByGame = log => /^app: the game exited \(code 0\) after the quit request$/m.test(log);
+
 function judge(s, log, exit) {
   const why = [];
   const has = re => re.test(log);
   if (exit === null) why.push('no-exit'); else if (exit !== 0) why.push(`exit=${exit}`);
-  if (!log.includes('quit at guest frame')) why.push('no-quit');
+  if (!log.includes('quit at guest frame') && !closedByGame(log)) why.push('no-quit');
   why.push(...g01(log, GAME, REVIEWED));
   if (s.marker && !log.includes(s.marker)) why.push(`missing:'${s.marker}'`);
   if (has(/^TRAP in thread/m)) why.push('wasm-trap');
@@ -220,7 +225,7 @@ async function saveOut(page, dir, out) {
 
 async function runOne(browser, s) {
   const logPath = path.join(OUT, `${s.name}.log`);
-  const lines = [];
+  const lines = OF && MODULE ? [MODULE] : [];     // the module under test in the log itself (Underground 2's stay as they were)
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   let exit = null;
@@ -251,7 +256,8 @@ async function runOne(browser, s) {
   fs.writeFileSync(logPath, log);
   const why = judge(s, log, timedOut ? null : exit);
   const st = (log.match(/^\[status\] .*$/gm) ?? []).pop()?.replace(/^\[status\] /, '') ?? '';
-  const frame = /quit at guest frame (\d+)/.exec(log)?.[1] ?? '-';
+  const frame = /quit at guest frame (\d+)/.exec(log)?.[1]
+    ?? (closedByGame(log) ? `${/^\s*Present \(frames\)\s*:\s*(\d+)/m.exec(log)?.[1] ?? '?'} (WM_CLOSE)` : '-');
   return { name: s.name, pass: why.length === 0, why, wall, frame, status: st, log: path.relative(ROOT, logPath) };
 }
 
