@@ -71,5 +71,6 @@ test('wsaov_unit hle: WSA events and overlapped receives answer as Windows does,
   assert.match(err, /^\[net\] WSAWaitForMultipleEvents: first wait, 1 object\(s\), wait for any, a timeout, from 0x00401234$/m);
   assert.match(err, /^\[net\] overlapped: first WSARecvFrom pending \(socket 0x[0-9a-f]+, event 0x00a[0-9a-f]{5}\) from 0x00401234$/m);
   assert.match(err, /^\[net\] WSARecv: completion routine 0x00401000 refused \(no APCs\) -> WSAEOPNOTSUPP$/m);
+  assert.match(err, /^\[net\] WSARecv: 256 receives pending -> WSAENOBUFS$/m);
   assert.doesNotMatch(err, /UNIMPLEMENTED|no kernel objects/);
 });

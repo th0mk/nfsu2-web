@@ -383,17 +383,42 @@ static void test_overlapped(Thr *t){
       MR32(f1) = 0;
       CHECK(call_imp(t, "WSARecv", u, w1, 1u, G(0x3A34), f1, ov, 0u) == 0 && MR32(G(0x3A34)) == 12 && same(G(0x3B00), 12, 10), "... and the datagram is still there"); }
 
-    /* refused at once: the OVERLAPPED and hEvent untouched */
+    /* refused at once.  Before the receive reaches AFD (the socket, the buffers): the OVERLAPPED and hEvent untouched;
+     * by AFD for the socket's state (here also at OV_MAX pending): the OVERLAPPED untouched, hEvent left clear, as
+     * the I/O manager clears it first.  hEvent is set before each, so a clear always shows. */
     { uint32_t ov = ovl(G(0x3C00), ev), w1 = wsabuf(G(0x3C20), 64, G(0x3D00)), f1 = u32p(G(0x3C30), 0);
       uint32_t ub = call_imp(t, "socket", 2u, 2u, 0u);
-      call_imp(t, "WSAResetEvent", ev); MR32(ov) = 0x1234u;
+      call_imp(t, "WSASetEvent", ev); MR32(ov) = 0x1234u;
       set_last_error(t, 0);
       CHECK(call_imp(t, "WSARecv", ub, w1, 1u, 0u, f1, ov, 0u) == SE && last_error(t) == WSAEINVAL, "an unbound UDP socket: WSAEINVAL at once (%u)", last_error(t));
-      CHECK(MR32(ov) == 0x1234u && wfme(t, 1, a1, 0, 0) == WAIT_TIMEOUT, "... Internal and hEvent untouched");
+      CHECK(MR32(ov) == 0x1234u && wfme(t, 1, a1, 0, 0) == WAIT_TIMEOUT, "... Internal untouched (0x%x), hEvent left clear", MR32(ov));
+      uint32_t tc = call_imp(t, "socket", 2u, 1u, 0u);
+      call_imp(t, "WSASetEvent", ev);
+      set_last_error(t, 0);
+      CHECK(call_imp(t, "WSARecv", tc, w1, 1u, 0u, f1, ov, 0u) == SE && last_error(t) == WSAENOTCONN, "a stream not connected: WSAENOTCONN at once (%u)", last_error(t));
+      CHECK(MR32(ov) == 0x1234u && wfme(t, 1, a1, 0, 0) == WAIT_TIMEOUT, "... Internal untouched (0x%x), hEvent left clear", MR32(ov));
+      call_imp(t, "closesocket", tc);
+      /* OV_MAX (256) receives pending, all sockets: the next is refused with WSAENOBUFS */
+      { uint32_t fb = udp(t, 0), fw = wsabuf(G(0x3C60), 64, G(0x3D00)), ff = u32p(G(0x3C70), 0);
+        int n = 0;
+        for (; n < 300; n++){
+            set_last_error(t, 0);
+            if (call_imp(t, "WSARecv", fb, fw, 1u, 0u, ff, ovl(G(0x10000) + 0x20u * (uint32_t)n, 0), 0u) != SE || last_error(t) != WSA_IO_PENDING) break;
+        }
+        CHECK(n == 256 && last_error(t) == WSAENOBUFS, "256 receives pending, the 257th refused: WSAENOBUFS (%d, %u)", n, last_error(t));
+        call_imp(t, "WSASetEvent", ev); MR32(ov) = 0x1234u;
+        set_last_error(t, 0);
+        CHECK(call_imp(t, "WSARecv", fb, w1, 1u, 0u, f1, ov, 0u) == SE && last_error(t) == WSAENOBUFS, "... with hEvent too: WSAENOBUFS (%u)", last_error(t));
+        CHECK(MR32(ov) == 0x1234u && wfme(t, 1, a1, 0, 0) == WAIT_TIMEOUT, "... Internal untouched (0x%x), hEvent left clear", MR32(ov));
+        call_imp(t, "closesocket", fb);
+        int ab = 0; for (int i = 0; i < 256; i++) ab += MR32(G(0x10000) + 0x20u * (uint32_t)i) == ST_CANCELLED;
+        CHECK(ab == 256, "closesocket ended all 256 (%d)", ab); }
+      call_imp(t, "WSASetEvent", ev); MR32(ov) = 0x1234u;
       set_last_error(t, 0);
       CHECK(call_imp(t, "WSARecv", 0x1234u, w1, 1u, 0u, f1, ov, 0u) == SE && last_error(t) == WSAENOTSOCK, "not a socket: WSAENOTSOCK");
       set_last_error(t, 0);
       CHECK(call_imp(t, "WSARecv", u, w1, 1u, 0u, 0u, ov, 0u) == SE && last_error(t) == WSAEFAULT, "lpFlags NULL: WSAEFAULT");
+      CHECK(MR32(ov) == 0x1234u && wfme(t, 1, a1, 0, 0) == 0, "... both before AFD: Internal (0x%x) and hEvent untouched", MR32(ov));
       set_last_error(t, 0); MR32(f1) = 1;
       CHECK(call_imp(t, "WSARecv", u, w1, 1u, 0u, f1, ov, 0u) == SE && last_error(t) == WSAEOPNOTSUPP, "MSG_OOB on a datagram socket: WSAEOPNOTSUPP");
       set_last_error(t, 0); MR32(f1) = 0;

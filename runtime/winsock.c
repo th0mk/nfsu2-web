@@ -1888,13 +1888,18 @@ out:
  * closes a record's event before its socket.  UG2 imports none of these.
  *
  * Windows' rules (the I/O manager's and AFD's):
- * - the call clears hEvent first; a receive that finds data completes at once:
- *   0 back, *lpNumberOfBytesRecvd and *lpFlags written, Internal (an NTSTATUS)
- *   and InternalHigh (bytes) written, hEvent set; a truncated datagram the same
- *   way, but SOCKET_ERROR and WSAEMSGSIZE; any other error fails the call
- *   (neither the OVERLAPPED nor hEvent touched); else Internal =
- *   STATUS_PENDING, SOCKET_ERROR and WSA_IO_PENDING; a non-blocking socket
- *   changes nothing of this;
+ * - a call refused before the receive reaches AFD (the socket, the buffers,
+ *   hEvent itself) touches neither the OVERLAPPED nor hEvent; else the I/O
+ *   manager clears hEvent before AFD sees the receive (NtDeviceIoControlFile);
+ *   a receive that finds data completes at once: 0 back,
+ *   *lpNumberOfBytesRecvd and *lpFlags written, Internal (an NTSTATUS) and
+ *   InternalHigh (bytes) written, hEvent set; a truncated datagram the same
+ *   way, but SOCKET_ERROR and WSAEMSGSIZE; one AFD refuses at once for the
+ *   socket's state (not bound, not connected, receives shut down; here also
+ *   OV_MAX pending) fails with the OVERLAPPED untouched and hEvent left clear
+ *   (a request failed at once writes no IO_STATUS_BLOCK and sets no event);
+ *   else Internal = STATUS_PENDING, SOCKET_ERROR and WSA_IO_PENDING; a
+ *   non-blocking socket changes nothing of this;
  * - the WSABUF array is taken at the call; lpFrom and lpFromlen at completion;
  * - pending receives complete as data arrives, in the order they were made on
  *   their socket: Internal, InternalHigh, lpFrom, then hEvent set;
@@ -2191,7 +2196,7 @@ static uint32_t ws_recv_ex(CPU *c, int from){
              FAIL(WSAEOPNOTSUPP); }
     if (!kobj() && MR32(ov + 16u)) FAIL(WSA_INVALID_HANDLE);
     uint32_t ev = MR32(ov + 16u), ser = 0;
-    if (ev && (!(ser = win32_obj_serial(ev)) || !win32_event_set(ev, 0))) FAIL(WSA_INVALID_HANDLE);   /* cleared first */
+    if (ev && (!(ser = win32_obj_serial(ev)) || !win32_event_set(ev, 0))) FAIL(WSA_INVALID_HANDLE);   /* cleared before AFD sees it */
     ov_pump();                                       /* the socket's earlier receives come first */
     int queued = 0;
     for (int i = 0; i < g_ov_n && !queued; i++) queued = g_ov[i].sock == h;
@@ -2210,7 +2215,7 @@ static uint32_t ws_recv_ex(CPU *c, int from){
                                                from ? "WSARecvFrom" : "WSARecv", h, ev, c->eip); }
         FAIL(WSA_IO_PENDING);
     }
-    if (e && e != WSAEMSGSIZE) FAIL(e);             /* failed at once: the OVERLAPPED and hEvent untouched */
+    if (e && e != WSAEMSGSIZE) FAIL(e);             /* AFD refused it: the OVERLAPPED untouched, hEvent left clear */
     WsOv o; memset(&o, 0, sizeof o);
     o.ov = ov; o.ev = ev; o.ev_ser = ser; o.pfrom = pfrom; o.pfromlen = pfromlen;
     ov_finish(&o, e, got, ip, port);
