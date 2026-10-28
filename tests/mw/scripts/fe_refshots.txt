@@ -1,0 +1,52 @@
+# Most Wanted: the front end's reference screenshots (TRACKER M3-01, M3-26), from a first start: the title
+# (MW_LS_Splash.fng before and after its "CLICK to continue" fades in), the first start's "Create a new alias?"
+# (MC_Main.fng), the main menu and each of its items, the options and each of their screens, the Alias Manager and
+# the screen its first item opens.  Every frame is dumped twice, 3 frames apart: a renderer that falls behind drops a
+# flagged frame (the dump names carry the frame number).  The steps wait for the game where it names its screens
+# (waitfng, tapuntil; L-021); the menus' own moves have no screen of their own, so those steps count frames.
+# It needs the renderer: the play page (test/play.html), not run-suite's hostcheck page, e.g.
+#   test/play.html?wasm=/game.wasm&arg=/data/speed.exe&script=/tests/scripts/fe_refshots.txt
+#     &artifacts=/artifacts/fe_&dumpscale=1&w=1280&h=720&env=NOMOVIES=1&env=GPUVS=1&env=NFSU2_FNG_LOG=1 ...
+# from a server started with --dev --artifacts <dir> --game mw, in an oracle build (tests/mw/scripts/boot_menu.txt
+# says how the page gets d3dx9_26.dll: NFSMW_D3DX=/save/d3dx9_26.dll and a seeded save folder).  The pictures are
+# the game's: they stay out of the repo (out/mw/refshots/, named by screen).
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    waitfng MW_LS_Splash.fng 3000
++30   dump splash
++3    dump splash
++150  dump title                      # "CLICK to continue" has faded in
++3    dump title
++0    tapuntil RETURN MC_Main.fng 90 3000
++60   dump alias_ask                  # a first start: "Create a new alias?", No highlighted
++3    dump alias_ask
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng 600
++720  dump mainmenu                   # the camera's swing in runs on the clock: 6 s at up to 120 fps
++3    dump mainmenu
++0    loop 7                          # Career .. Options, one item a step
++40   tap RIGHT
++50   dump mainmenu_item
++3    dump mainmenu_item
++0    endloop
++0    tap RETURN                      # Options
++150  dump options
++3    dump options
++0    loop 6                          # each options item: its screen, back, the next item
++0    tap RETURN
++120  dump options_screen
++3    dump options_screen
++0    tap ESCAPE
++90   tap RIGHT
++60   dump options_item
++3    dump options_item
++0    endloop
++0    tap ESCAPE                      # back to the main menu, on Options
++120  tap LEFT                        # Alias Manager
++60   tap RETURN
++150  dump alias_manager
++3    dump alias_manager
++0    tap RETURN                      # its first item
++120  dump alias_item
++3    dump alias_item
++1800 log fe_refshots: done
++0    close
