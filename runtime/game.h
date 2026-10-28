@@ -53,6 +53,18 @@ typedef struct StatusOut {
  * in the exe and the bytes it has room for (com.c rewrites the labels). */
 typedef struct ResLabel { uint32_t va, cap; } ResLabel;
 
+/* One of the C runtime's tables of initializers (dispatch.c counts how many
+ * of its functions ran at boot, L-051): the slots lo..hi (hi exclusive), each
+ * a function or 0, which the runner calls one by one through `call [edx]`
+ * (edx the slot), leaving ret on the stack; the runner itself is called at
+ * from.  With stop set the runner ends at the first function that returns
+ * non-zero (_initterm_e). */
+typedef struct InitTable {
+    const char *what, *name;        /* "C++ constructors", "__xc" */
+    uint32_t lo, hi, runner, from, ret;
+    int stop;
+} InitTable;
+
 typedef struct GameOps {
     /* ---- the game and its files ---- */
     const char *id;                 /* "ug2": the game id the module, the page and the server share */
@@ -129,6 +141,14 @@ typedef struct GameOps {
                                      * table sets win32_misc.c's win32_misc_call; UG2's leaves it 0, so the
                                      * ones its exe and server.dll import (CompareStringA/W, SetStdHandle,
                                      * SetEnvironmentVariableA) stay unimplemented, as they always were */
+
+    /* ---- what the boot checks (L-051) ---- */
+    const InitTable *init_tables;   /* the C runtime's initializer tables, in the order they run: their
+                                     * functions are counted as they run and one [init] line says how many
+                                     * of each ran (dispatch.c); 0 = no line */
+    int ninit_tables;
+    uint32_t init_check;            /* a pointer the constructors set: the [init] line reads it, and 0 there
+                                     * is a constructor that did not run its body; 0 = no check */
 } GameOps;
 
 extern const GameOps g_game;

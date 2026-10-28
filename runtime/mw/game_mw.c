@@ -7,10 +7,11 @@
  * What the table holds now: the game and its files (its registry keys,
  * registry_mw.c; its own registry file; paths that never leave C:\NFSMW), the
  * lifted entry point, the two lifted DLLs (server.dll; d3dx9_26.dll in a D3DX
- * oracle build only, PLAN D-09), the C runtime's heap globals, and
- * win32_misc.c's answers to the imports only MW needs answered (GAME.md 3.3).
- * A field left 0 has its task named below; core then does for MW what it does
- * for a game without that feature. */
+ * oracle build only, PLAN D-09), the C runtime's heap globals, win32_misc.c's
+ * answers to the imports only MW needs answered (GAME.md 3.3), and the C
+ * runtime's initializer tables the boot counts.  A field left 0 has its task
+ * named below; core then does for MW what it does for a game without that
+ * feature. */
 #include "cpu.h"
 #include "game.h"
 #include "memmap.h"
@@ -38,6 +39,18 @@ static const ModLink mw_modules[] = {
       .heap_base = MM_D3DX_HEAP_BASE, .heap_size = MM_D3DX_HEAP_SIZE, .heap_n = MM_D3DX_HEAP_N,
       .feature = "the D3DX oracle (dev builds)", .release = "DirectX 9.0c, June 2005 (9.07.239.0000)" },
 #endif
+};
+
+/* The C runtime's initializer tables, as _cinit (0x7CA2C0) runs them
+ * (GAME.md 2.6): first the C initializers of __xi with _initterm_e, which
+ * stops at one that returns non-zero, then the C++ constructors of __xc with
+ * _initterm.  Each runner's `call [edx]` returns to ret.  The tables hold 5
+ * of 6 and 870 of 1,113 slots (counted in the exe).  The constructor of the
+ * global at 0x9AA9D0 (0x889DD0, slot 0x8EAED0) sets its +0x84C to the bitset
+ * 0x9A2DE0: the pointer an unrun constructor leaves 0 (L-051). */
+static const InitTable mw_init_tables[] = {
+    { "C initializers", "__xi", 0x008eb168u, 0x008eb180u, 0x007ca570u, 0x007ca2e4u, 0x007ca596u, 1 },
+    { "C++ constructors", "__xc", 0x008ea000u, 0x008eb164u, 0x007ca540u, 0x007ca311u, 0x007ca558u, 0 },
 };
 
 /* Left 0, and why:
@@ -71,4 +84,7 @@ const GameOps g_game = {
     .crtheap_va = 0x009c5318u,                  /* _heap_init 0x7CD4B0: HeapCreate's handle, then __heap_select's */
     .active_heap_va = 0x009c531cu,              /* answer (3 = the small-block heap) */
     .win32_misc = win32_misc_call,              /* win32_misc.c: memory, locale, keyboard, voice devices */
+    .init_tables = mw_init_tables,
+    .ninit_tables = (int)(sizeof mw_init_tables / sizeof mw_init_tables[0]),
+    .init_check = 0x009aa9d0u + 0x84cu,         /* the bitset pointer of 0x9AA9D0's constructor */
 };

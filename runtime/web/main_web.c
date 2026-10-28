@@ -48,6 +48,7 @@ static CPU cpu; static CPU *const c = &cpu;
 static void all_reports(void){
     static int done; if (done) return; done = 1;
     if (getenv("WATCH_ADDR")) watch_dump("end of run / crash", 24);
+    { void initcount_report(void); initcount_report(); }        /* [init], if the tables never finished */
     if (g_game.crtheap_va)                  /* the game's C runtime heap mode (game.h) */
         fprintf(stderr, "\n  CRT heap: _crtheap=0x%08x __active_heap=%u\n", MR32(g_game.crtheap_va), MR32(g_game.active_heap_va));
     com_report(); win32_report(); { void vclock_report(void); vclock_report(); }
@@ -94,6 +95,7 @@ int main(int argc, char **argv){
     dispatch_init(); win32_init();
     fprintf(stderr, "[game] %s: %s in %s\n", g_game.id, g_game.exe_name, g_game.vroot);
     if (g_game.install) g_game.install();   /* the game's patches and features (game_ug2.c) */
+    { void initcount_install(void); initcount_install(); }      /* the C runtime's initializers, counted (game.h) */
     { extern void autotest_init(void); autotest_init(); }       /* NFSU2_INPUT_SCRIPT ... */
     { extern void status_web_start(void); status_web_start(); }  /* counters for the page overlay */
     { extern void input_web_init(void); input_web_init(); }     /* the page's keys, mouse, pad, focus */

@@ -21,6 +21,7 @@ const UG2_UNSET = {
   win32_misc: 'win32_misc.c answers Most Wanted\'s imports; UG2\'s stay unimplemented as they always were',
   reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
   sandbox: 'UG2 maps every path into its game folder, as it always has',
+  init_tables: 'no [init] line: UG2\'s boot log stays as it was', ninit_tables: 'as init_tables', init_check: 'as init_tables',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -94,6 +95,9 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(ug2Table().get('reg_file'), '".nfsu2_registry"', 'UG2 keeps ~/.nfsu2_registry');
   assert.match(read('runtime/win32_misc.c'), /\nint win32_misc_call\(CPU \*c, const char \*dll, const char \*n, uint32_t \*out\)\{/,
     'win32_misc.c defines win32_misc_call as game.h\'s win32_misc');
+  // the initializer tables the boot counts
+  assert.equal(t.get('init_tables'), 'mw_init_tables');
+  assert.equal(t.get('init_check'), '0x009aa9d0u + 0x84cu');
   // server.dll always; the D3DX oracle only in a build that linked its lift (web/build.sh: -DNFSU2_D3DX_ORACLE=1)
   const src = read('runtime/mw/game_mw.c');
   assert.match(src, /MODLINK_TABLES\(srv_\), \.slot_lo = MM_SRV_LO, \.slot_hi = MM_SRV_HI/);
