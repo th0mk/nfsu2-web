@@ -5,10 +5,10 @@
  * weak stand-ins answer for every feature MW has no file of its own for yet.
  *
  * What the table holds now: the game and its files (its registry keys,
- * registry_mw.c, and its own registry file), the lifted entry point, the two
- * lifted DLLs (server.dll; d3dx9_26.dll in a D3DX oracle build only, PLAN
- * D-09), the C runtime's heap globals, and win32_misc.c's answers to the
- * imports only MW needs answered (GAME.md 3.3).
+ * registry_mw.c; its own registry file; paths that never leave C:\NFSMW), the
+ * lifted entry point, the two lifted DLLs (server.dll; d3dx9_26.dll in a D3DX
+ * oracle build only, PLAN D-09), the C runtime's heap globals, and
+ * win32_misc.c's answers to the imports only MW needs answered (GAME.md 3.3).
  * A field left 0 has its task named below; core then does for MW what it does
  * for a game without that feature. */
 #include "cpu.h"
@@ -63,6 +63,7 @@ const GameOps g_game = {
     .module_path = "C:\\NFSMW\\speed.exe",
     .reg_keys = mw_reg_keys,                    /* registry_mw.c: the keys speed.exe opens, all HKLM */
     .reg_file = ".nfsmw_registry",              /* never UG2's ~/.nfsu2_registry */
+    .sandbox = 1,                               /* fileio.c: nothing outside C:\NFSMW, the game folder read-only */
     .entry = GAMEINFO_ENTRY_FN,
     .entry_va = GAMEINFO_ENTRY,
     .modules = mw_modules,

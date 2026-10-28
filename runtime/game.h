@@ -65,6 +65,11 @@ typedef struct GameOps {
                                      * reg_defaults', whichever key it is asked of */
     const char *reg_file;           /* where the values the game writes are kept when NFSU2_REGFILE names no
                                      * file: this file in $HOME (".nfsu2_registry", also when 0) */
+    int sandbox;                    /* 1: the game sees its virtual root and nothing else: a path outside it
+                                     * (another drive, the drive's own root, a UNC or device path, '..' above
+                                     * it, a device name) names no file, and the game folder is never written
+                                     * (fileio.c); 0 (UG2): every path maps into the game folder, as it
+                                     * always has */
     const char *const *lang_suffixes; /* a missing file "<name>_xx.<ext>" is looked for with each of
                                      * these in place of "_xx", in order (fileio.c); ends with 0 */
     void (*entry)(CPU *c);          /* the exe's entry point, lifted: the lift's GAMEINFO_ENTRY_FN (cpu.h) */

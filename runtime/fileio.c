@@ -75,8 +75,83 @@ static const char *vroot_dir(void){
     while (*v == '\\' || *v == '/') v++;
     return v;
 }
-/* the guest path relative to the game folder, '/'-separated and normalized */
-static void rel_of(const char *win, char *rel, size_t relsz){
+/* --- the sandbox (game.h sandbox: Most Wanted) -----------------------------
+ * The guest path as Windows resolves it: from the current directory (the
+ * virtual root, GetCurrentDirectoryA) when relative, from its drive's root
+ * when it starts with a backslash (no drive: the virtual root's drive), with
+ * "." and ".." taken out (".." stops at the drive's root).  Inside the
+ * virtual root it names what it always did; outside, nothing: another drive
+ * ("D:\bin.dat": MW's disc probe sub_006C25A0, which its drive scan 0x6C2620
+ * runs on every drive GetLogicalDrives reports), the drive's own root
+ * ("C:\bin.dat"), a UNC or device path ("\\server\share", "\\.\", "\\?\"),
+ * '..' above the root, a device name (CON, NUL, COM1 ...), a stream
+ * ("file:stream") or a character Windows refuses in a name.  The error is the
+ * one Windows gives for where it would be: ERROR_FILE_NOT_FOUND (2) for a
+ * file at the root of C: or D: (the drives GetLogicalDrives reports,
+ * win32_ext.c) and for a device name, ERROR_INVALID_NAME (123) for a stream
+ * or a bad character, ERROR_PATH_NOT_FOUND (3) for anything else. */
+static int dev_name(const char *s, size_t l){            /* a DOS device, with or without an extension */
+    size_t b = 0;
+    while (b < l && s[b] != '.') b++;
+    while (b && s[b-1] == ' ') b--;
+    static const char *const dev[] = { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", 0 };
+    for (int i = 0; dev[i]; i++) if (b == strlen(dev[i]) && !strncasecmp(s, dev[i], b)) return 1;
+    return b == 4 && (!strncasecmp(s, "COM", 3) || !strncasecmp(s, "LPT", 3)) && s[3] >= '1' && s[3] <= '9';
+}
+/* add s's parts to the '/'-joined path ab (n bytes, *k used; at[] where each
+ * part starts, *d of them): 0, or the error for a part Windows refuses */
+static uint32_t parts_add(char *ab, size_t n, size_t *k, size_t *at, int *d, const char *s){
+    while (*s){
+        while (*s == '\\' || *s == '/') s++;
+        size_t l = 0;
+        while (s[l] && s[l] != '\\' && s[l] != '/') l++;
+        if (!l) break;
+        if (l == 1 && s[0] == '.'){ s += l; continue; }
+        if (l == 2 && s[0] == '.' && s[1] == '.'){                 /* up a part, never above the drive's root */
+            if (*d){ --*d; *k = at[*d] ? at[*d] - 1 : 0; ab[*k] = 0; }
+            s += l; continue; }
+        for (size_t i = 0; i < l; i++)
+            if ((unsigned char)s[i] < 0x20 || strchr(":*?\"<>|", s[i])) return 123u;   /* ERROR_INVALID_NAME */
+        if (dev_name(s, l)) return 2u;
+        if (*d >= 255 || *k + l + 2 > n) return 206u;                                /* ERROR_FILENAME_EXCED_RANGE */
+        at[(*d)++] = *k ? *k + 1 : 0;
+        if (*k) ab[(*k)++] = '/';
+        memcpy(ab + *k, s, l); *k += l; ab[*k] = 0;
+        s += l;
+    }
+    return 0;
+}
+/* 0 and the path relative to the virtual root (as rel_of gives it), or the
+ * Win32 error for a path outside it */
+static uint32_t sandbox_rel(const char *win, char *rel, size_t relsz){
+    const char *v = g_game.vroot ? g_game.vroot : "", *p = win ? win : "";
+    char vdrive = v[0] && v[1] == ':' ? (char)toupper((unsigned char)v[0]) : 'C', drive = vdrive;
+    rel[0] = 0;
+    if (!*p) return 3u;
+    if ((p[0] == '\\' || p[0] == '/') && (p[1] == '\\' || p[1] == '/')) return 3u;   /* UNC, \\.\, \\?\ */
+    char vr[512]; size_t vk = 0, vat[256]; int vd = 0;                            /* the root's parts */
+    vr[0] = 0;
+    if (parts_add(vr, sizeof vr, &vk, vat, &vd, vroot_dir())) return 3u;
+    char ab[1024]; size_t k = 0, at[256]; int d = 0;
+    ab[0] = 0;
+    if (isalpha((unsigned char)p[0]) && p[1] == ':'){ drive = (char)toupper((unsigned char)p[0]); p += 2; }
+    if (*p != '\\' && *p != '/' && drive == vdrive){       /* relative: from the current directory */
+        memcpy(ab, vr, vk + 1); k = vk; memcpy(at, vat, sizeof at[0] * (size_t)vd); d = vd; }
+    uint32_t e = parts_add(ab, sizeof ab, &k, at, &d, p);
+    if (e) return e;
+    if (drive == vdrive && k >= vk && !strncasecmp(ab, vr, vk) && (ab[vk] == '/' || !ab[vk])){
+        const char *r = ab + vk + (ab[vk] == '/');
+        if (strlen(r) >= relsz) return 206u;
+        memcpy(rel, r, strlen(r) + 1);
+        return 0;
+    }
+    return d <= 1 && (drive == 'C' || drive == 'D') ? 2u : 3u;
+}
+
+/* the guest path relative to the game folder, '/'-separated and normalized:
+ * 0 when the sandbox says it is outside the virtual root (rel is then "") */
+static int rel_of(const char *win, char *rel, size_t relsz){
+    if (g_game.sandbox) return !sandbox_rel(win, rel, relsz);
     size_t k=0;
     const char *p = win;
     if (p[0] && p[1]==':') p += 2;                       /* drive letter   */
@@ -89,10 +164,13 @@ static void rel_of(const char *win, char *rel, size_t relsz){
     for (; *p && k<relsz-1; p++) rel[k++] = (*p=='\\') ? '/' : *p;
     rel[k]=0;
     rel_normalize(rel);
+    return 1;
 }
+/* -> 1 and the host path of a file that exists; 0 and the path it would have
+ * (a write makes it there), or "" for a path the sandbox refuses */
 static int resolve_in(const char *root, const char *win, char *out, size_t outsz){
     char rel[1024];
-    rel_of(win, rel, sizeof rel);
+    if (!rel_of(win, rel, sizeof rel)){ if (outsz) out[0] = 0; return 0; }
     if (!rel[0]){ snprintf(out,outsz,"%s",root); return 1; }
 
     snprintf(out, outsz, "%s/%s", root, rel);
@@ -159,7 +237,8 @@ static struct { char name[64]; unsigned gen; signed char game_dir, in_ov; } g_ov
 static int g_ovc_n;
 static uint64_t g_ovc_skips;
 static int overlay_cannot_have(const char *win){
-    char rel[1024]; rel_of(win, rel, sizeof rel);
+    char rel[1024];
+    if (!rel_of(win, rel, sizeof rel)) return 0;
     char *sl = strchr(rel, '/');
     if (!sl) return 0;                                   /* a file at the top: always looked up */
     *sl = 0;
@@ -227,7 +306,8 @@ int fileio_set_language_pack(const char *rel){
 }
 static int lpack_resolve(const char *win, char *out, size_t outsz){
     if (!g_lnf) return 0;
-    char rel[1024]; rel_of(win, rel, sizeof rel);
+    char rel[1024];
+    if (!rel_of(win, rel, sizeof rel)) return 0;
     for (char *k = rel; *k; k++) *k = (char)tolower((unsigned char)*k);
     struct lfile key = { rel, 0 };
     const struct lfile *f = bsearch(&key, g_lf, (size_t)g_lnf, sizeof *g_lf, lfile_cmp);
@@ -273,11 +353,13 @@ static void copy_up(const char *win, const char *wpath){
  * so any run shows exactly what the game writes and where.  With
  * fileio_set_readonly_root(1) (the .app, which runs against the user's
  * original install) a write that would land inside the game folder is
- * refused instead, unless it is inside the save overlay. */
+ * refused instead, unless it is inside the save overlay.  A sandboxed game's
+ * folder (game.h sandbox: Most Wanted's) is always read-only. */
 static int g_ro_root = 0;
 static uint64_t g_wr_ops = 0, g_wr_blocked = 0, g_wr_in_root = 0;
 static _Atomic int g_open_wr = 0;          /* write handles still open */
 void fileio_set_readonly_root(int on){ g_ro_root = on; }
+static int ro_root(void){ return g_ro_root || g_game.sandbox; }
 static int path_under(const char *path, const char *dir){
     size_t l = strlen(dir);
     return l && !strncmp(path, dir, l) && (path[l] == '/' || path[l] == 0);
@@ -359,7 +441,7 @@ static void gf_forget(void){}
 
 static int write_allowed(const char *op, const char *win, const char *host){
     int in_root = path_under(host, g_root) && !(g_wroot[0] && path_under(host, g_wroot));
-    int blocked = in_root && g_ro_root;
+    int blocked = in_root && ro_root();
     g_wr_ops++; g_ov_gen++;                  /* the overlay may change: forget what it lacked */
     gf_forget();                             /* and the game folder's files kept (GF_CACHE) */
     if (in_root) g_wr_in_root++;
@@ -406,6 +488,40 @@ static uint32_t errno_to_win(int e){
 static uint32_t A(CPU *c,int i){ return MR32(c->esp + 4u*(uint32_t)i); }
 #define GS(a) ((const char*)(g_mem + (uint32_t)(a)))
 #define INVALID_HANDLE 0xFFFFFFFFu
+
+/* A sandboxed game's file call on a path outside its virtual root
+ * (sandbox_rel): it fails as Windows fails it, before any lookup, and says so
+ * in the log.  -> 1 when it answered (*out, the guest's last error). */
+static int sandbox_check(CPU *c, const char *n, uint32_t *out){
+    static const struct { const char *name; uint32_t fail; int paths; } calls[] = {
+        { "CreateFileA", INVALID_HANDLE, 1 }, { "GetFileAttributesA", 0xFFFFFFFFu, 1 },
+        { "SetFileAttributesA", 0, 1 }, { "DeleteFileA", 0, 1 }, { "CreateDirectoryA", 0, 1 },
+        { "RemoveDirectoryA", 0, 1 }, { "MoveFileA", 0, 2 }, { "CopyFileA", 0, 2 },
+        { "FindFirstFileA", INVALID_HANDLE, 1 }, { 0, 0, 0 } };
+    int i;
+    for (i = 0; calls[i].name && strcmp(n, calls[i].name); i++) {}
+    if (!calls[i].name) return 0;
+    for (int a = 0; a < calls[i].paths; a++){
+        char win[1024], rel[1024];
+        snprintf(win, sizeof win, "%s", A(c,a) && mem_is_committed(A(c,a)) ? GS(A(c,a)) : "");
+        if (!strcmp(n, "FindFirstFileA")){               /* the folder it lists; the pattern may hold * and ? */
+            char *bs = strrchr(win, '\\'), *fs = strrchr(win, '/'), *sep = bs > fs ? bs : fs;
+            if (sep) sep[sep == win || sep[-1] == ':'] = 0;
+            else if (win[0] && win[1] == ':') win[2] = 0;
+            else snprintf(win, sizeof win, ".");
+        }
+        uint32_t e = sandbox_rel(win, rel, sizeof rel);
+        if (!e) continue;
+        static unsigned said = 0;
+        if (said++ < 200) fprintf(stderr, "[file] %s(\"%s\"): names no file of %s, error %u (from 0x%08x)\n",
+                                  n, A(c,a) && mem_is_committed(A(c,a)) ? GS(A(c,a)) : "", g_game.vroot, e, c->eip);
+        if (!strcmp(n, "CreateFileA")) g_file_fail++;
+        set_err(c, e);
+        *out = calls[i].fail;
+        return 1;
+    }
+    return 0;
+}
 
 /* Give the next name of a directory scan: the write root first, then the game root. */
 /* Windows wildcard matching (* and ?, case-insensitive; "*.*" matches everything). */
@@ -469,6 +585,7 @@ static char g_last_read[512];
 const char *fileio_last_read(void){ return g_last_read[0] ? g_last_read : 0; }
 int fileio_call(CPU *c, const char *n, uint32_t *out){
     uint32_t r = 0;
+    if (g_game.sandbox && sandbox_check(c, n, out)) return 1;    /* outside the virtual root: nothing */
     if (!strcmp(n,"CreateFileA")){
         uint32_t pn=A(c,0), access=A(c,1), disp=A(c,4);
         char real[1024];
@@ -818,7 +935,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         else {
             mkparents(b);
             /* If the source is in the game root (read-only), copy instead of moving. */
-            if ((g_wroot[0] && !path_under(a, g_wroot)) || (g_ro_root && path_under(a, g_root)))
+            if ((g_wroot[0] && !path_under(a, g_wroot)) || (ro_root() && path_under(a, g_root)))
                 r = (uint32_t)copy_file(a, b);
             else r = write_allowed("MoveFileA (source)", GS(A(c,0)), a) && rename(a,b)==0;
         }
@@ -876,7 +993,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
 void fileio_report(void){
     fprintf(stderr,"  file: %llu write operations, %llu inside the game folder, %llu blocked (read-only)%s\n",
             (unsigned long long)g_wr_ops, (unsigned long long)g_wr_in_root,
-            (unsigned long long)g_wr_blocked, g_ro_root ? "" : "  [game folder writable]");
+            (unsigned long long)g_wr_blocked, ro_root() ? "" : "  [game folder writable]");
     if (g_overlapped_reads)
         fprintf(stderr,"  file: %llu asynchronous (overlapped) reads\n",
                 (unsigned long long)g_overlapped_reads);

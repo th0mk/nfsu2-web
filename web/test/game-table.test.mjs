@@ -20,6 +20,7 @@ const UG2_UNSET = {
   on_frame: 'UG2 hooks its main loop through on_present and hook',
   win32_misc: 'win32_misc.c answers Most Wanted\'s imports; UG2\'s stay unimplemented as they always were',
   reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
+  sandbox: 'UG2 maps every path into its game folder, as it always has',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -85,10 +86,11 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   for (const f of ['vroot', 'module_path']) assert.match(t.get(f), /^"C:\\\\NFSMW/, `${f} is under C:\\NFSMW`);
   assert.equal(t.get('entry'), 'GAMEINFO_ENTRY_FN');
   assert.equal(t.get('win32_misc'), 'win32_misc_call');
-  // its registry (registry_mw.c) in its own file, never UG2's
+  // its registry (registry_mw.c) in its own file, never UG2's; paths that never leave C:\NFSMW (fileio.c)
   assert.equal(t.get('reg_keys'), 'mw_reg_keys');
   assert.match(read('runtime/mw/registry_mw.c'), /\nconst RegKey mw_reg_keys\[\] = \{/);
   assert.equal(t.get('reg_file'), '".nfsmw_registry"');
+  assert.equal(t.get('sandbox'), '1');
   assert.equal(ug2Table().get('reg_file'), '".nfsu2_registry"', 'UG2 keeps ~/.nfsu2_registry');
   assert.match(read('runtime/win32_misc.c'), /\nint win32_misc_call\(CPU \*c, const char \*dll, const char \*n, uint32_t \*out\)\{/,
     'win32_misc.c defines win32_misc_call as game.h\'s win32_misc');
