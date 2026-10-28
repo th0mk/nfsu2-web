@@ -1,0 +1,12 @@
+# G-01's markers fail a run-suite run (TRACKER M2-19): UG2 boots to its first menu screen, then the script plants
+# one line of each marker Most Wanted added ("log" writes it into the game's log) and stalls the game thread for
+# 20 s with the guest lock held, which the watchdog reports (its own line, not a planted one).  This run must FAIL:
+#   node web/tools/run-suite.mjs --script g01_plant.txt --name g01_plant
+#   want: FAIL ... cxx-throw(class std::length_error) genexec-bail(1) unimplemented(KERNEL32.dll!DebugBreak) watchdog-stall
+0     waitfng MC_Bootup.fng 3000
++0    log *** GUEST RAISEEXCEPTION: code 0xe06d7363 (C++ exception (throw)), flags 0x1, 3 args, from 0x007c56fb (thread 1)
++0    log thrown type .?AVlength_error@std@@
++0    log generated guest code: 1 calls, 9 instructions, 1 FAILED (last: 0xd9 @0x0a1b2c3d; seen: d9)
++0    log [hle] UNIMPLEMENTED KERNEL32.dll!DebugBreak (first call, from 0x006c1b2e, frame 12)
++0    stall 20
++60   quit

@@ -1,0 +1,75 @@
+# Most Wanted's imports the runtime leaves unimplemented, and which of them a run has reviewed (GAME.md 3.3,
+# its Reviewed column; PLAN G-01).  An import here answers 0 with its arguments popped and logs
+# "[hle] UNIMPLEMENTED <dll>!<name>" at its first call (runtime/autotest.c).  web/tools/g01.mjs reads this file:
+# such a line fails a run's G-01 unless every row of that import says "yes", which a run that reached the call
+# and saw the game cope with the 0 earns; the run's name follows the "yes".
+#
+# <module> <dll>!<name> <IAT> <yes|no> [<run>]
+#
+# The list: speed.exe v1.3's and server.dll's imports that no layer answers (runtime/win32.c, win32_ext.c,
+# win32_misc.c, fileio.c, winsock.c, heap.c, com.c, keyboard.c), from MW's lift (gen/mw/all and gen/mw/server,
+# impargs.c), 2026-10-28.  No MW run has reached any of them yet: all "no".  Addresses and names only.
+speed.exe  GDI32.dll!ExtTextOutA                 0x00890030 no
+speed.exe  GDI32.dll!BitBlt                      0x00890034 no
+speed.exe  GDI32.dll!GetPixel                    0x00890038 no
+speed.exe  GDI32.dll!DeleteDC                    0x00890040 no
+speed.exe  GDI32.dll!SetBkMode                   0x00890044 no
+speed.exe  GDI32.dll!SetBkColor                  0x00890048 no
+speed.exe  GDI32.dll!SetTextColor                0x0089004c no
+speed.exe  GDI32.dll!CreateFontA                 0x00890050 no
+speed.exe  GDI32.dll!CreateBitmap                0x00890054 no
+speed.exe  GDI32.dll!SelectObject                0x00890058 no
+speed.exe  GDI32.dll!CreateCompatibleDC          0x0089005c no
+speed.exe  KERNEL32.dll!DebugBreak               0x00890110 no
+speed.exe  KERNEL32.dll!SetupComm                0x00890114 no
+speed.exe  KERNEL32.dll!SetCommTimeouts          0x00890118 no
+speed.exe  KERNEL32.dll!GetCommConfig            0x0089011c no
+speed.exe  KERNEL32.dll!SetCommConfig            0x00890120 no
+speed.exe  KERNEL32.dll!GetCommState             0x00890124 no
+speed.exe  KERNEL32.dll!SetCommState             0x00890128 no
+speed.exe  KERNEL32.dll!PurgeComm                0x0089012c no
+speed.exe  KERNEL32.dll!SetCommMask              0x00890134 no
+speed.exe  KERNEL32.dll!WaitCommEvent            0x0089013c no
+speed.exe  KERNEL32.dll!IsValidLocale            0x00890280 no
+speed.exe  KERNEL32.dll!EnumSystemLocalesA       0x0089028c no
+speed.exe  KERNEL32.dll!GetUserDefaultLCID       0x00890290 no
+speed.exe  SHELL32.dll!ShellExecuteA             0x008902e4 no
+speed.exe  TAPI32.dll!lineGetDevCaps             0x008902f4 no
+speed.exe  TAPI32.dll!lineShutdown               0x008902f8 no
+speed.exe  TAPI32.dll!lineInitialize             0x008902fc no
+speed.exe  TAPI32.dll!lineAnswer                 0x00890300 no
+speed.exe  TAPI32.dll!lineMakeCall               0x00890304 no
+speed.exe  TAPI32.dll!lineGetID                  0x00890308 no
+speed.exe  TAPI32.dll!lineClose                  0x0089030c no
+speed.exe  TAPI32.dll!lineNegotiateAPIVersion    0x00890310 no
+speed.exe  TAPI32.dll!lineOpen                   0x00890314 no
+speed.exe  USER32.dll!PostThreadMessageA         0x00890378 no
+speed.exe  WS2_32.dll!WSASetEvent                0x0089042c no
+speed.exe  WS2_32.dll!WSACreateEvent             0x00890474 no
+speed.exe  WS2_32.dll!WSACloseEvent              0x00890480 no
+speed.exe  WS2_32.dll!WSARecv                    0x00890488 no
+speed.exe  WS2_32.dll!WSARecvFrom                0x0089048c no
+speed.exe  WS2_32.dll!WSAGetOverlappedResult     0x00890498 no
+speed.exe  WS2_32.dll!WSAWaitForMultipleEvents   0x0089049c no
+speed.exe  WS2_32.dll!WSAResetEvent              0x008904a0 no
+speed.exe  d3dx9_26.dll!D3DXMatrixMultiply       0x008904b0 no
+speed.exe  d3dx9_26.dll!D3DXVec4Transform        0x008904b4 no
+speed.exe  d3dx9_26.dll!D3DXVec3Transform        0x008904b8 no
+speed.exe  d3dx9_26.dll!D3DXMatrixInverse        0x008904bc no
+speed.exe  d3dx9_26.dll!D3DXCreateEffectFromResourceA 0x008904c0 no
+speed.exe  d3dx9_26.dll!D3DXCreateEffectPool     0x008904c4 no
+speed.exe  d3dx9_26.dll!D3DXMatrixOrthoLH        0x008904c8 no
+speed.exe  d3dx9_26.dll!D3DXMatrixPerspectiveLH  0x008904cc no
+speed.exe  d3dx9_26.dll!D3DXMatrixTranslation    0x008904d0 no
+speed.exe  d3dx9_26.dll!D3DXVec3TransformCoordArray 0x008904d4 no
+speed.exe  d3dx9_26.dll!D3DXVec3Normalize        0x008904d8 no
+speed.exe  d3dx9_26.dll!D3DXVec3TransformNormal  0x008904dc no
+speed.exe  d3dx9_26.dll!D3DXMatrixTranspose      0x008904e0 no
+server.dll WS2_32.dll!WSASetEvent                0x00d4d1d0 no
+server.dll WS2_32.dll!WSAGetOverlappedResult     0x00d4d1e0 no
+server.dll WS2_32.dll!WSAWaitForMultipleEvents   0x00d4d1e4 no
+server.dll WS2_32.dll!WSAResetEvent              0x00d4d1e8 no
+server.dll WS2_32.dll!WSARecvFrom                0x00d4d1ec no
+server.dll WS2_32.dll!WSARecv                    0x00d4d1f0 no
+server.dll WS2_32.dll!WSACloseEvent              0x00d4d1f4 no
+server.dll WS2_32.dll!WSACreateEvent             0x00d4d204 no

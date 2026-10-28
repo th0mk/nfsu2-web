@@ -24,15 +24,18 @@
 //   before its sponsor, work/seed/career/s2_start).
 //
 // Pass (as run_suite.sh): exit code 0, "quit at guest frame", the scenario's
-// marker, no fault marker (FAULT IN GUEST, GUEST MEMORY FAULT, HOST SEGV), no
-// "TIME LIMIT REACHED" (the runner's timeout writes it), no "[trap]" line, no
-// "UNRESOLVED INDIRECT", no "[expect] FAIL", tests/checks/<name>.sh passes.
-// The browser adds: no trap in a worker ("TRAP in thread"), no page error,
-// no unimplemented host import, no stack overflow (RangeError).  As
-// run_suite.sh: no "[net] BLOCKED" / "[roam] BLOCKED" line.  Scenarios marked
-// net attach the page's virtual LAN (&net=<name>, web/src/net): lan_host hosts
-// a LAN game with the lifted server.dll on the server's switch (the Mac runs it
-// on loopback).
+// marker, tests/checks/<name>.sh passes, and G-01 (web/tools/g01.mjs): no fault
+// marker (FAULT IN GUEST, GUEST MEMORY FAULT, HOST SEGV), no "TIME LIMIT
+// REACHED" (the runner's timeout writes it), no "[trap]" line, no "UNRESOLVED
+// INDIRECT", no "[expect] FAIL", no "[net] BLOCKED" / "[roam] BLOCKED" line, and
+// what Most Wanted added for every game: no C++ throw stop, no genexec bail, no
+// "[hle] UNIMPLEMENTED" import off the game's reviewed list
+// (games/<id>/hle-reviewed.txt), no watchdog stall report, no [init] line short
+// of its tables.  The browser adds: no trap in a worker ("TRAP in thread"), no
+// page error, no unimplemented host import, no stack overflow (RangeError).
+// Scenarios marked net attach the page's virtual LAN (&net=<name>,
+// web/src/net): lan_host hosts a LAN game with the lifted server.dll on the
+// server's switch (the Mac runs it on loopback).
 // Logs: out/web/runs/<run>/<scenario>.log (the game's stdout/stderr, one line
 // per line, without the host's [tid] prefix); summary.txt and summary.json.
 // The module the server sends (/game.json: revision, game, lift options,
@@ -47,6 +50,7 @@ import { fileURLToPath } from 'node:url';
 import { requireDev } from './dev-server.mjs';
 import { seedSave } from './save-seed.mjs';
 import { GAMES, gameOf, usage, nothingFor, requireGame, moduleLine } from './rig-game.mjs';
+import { g01, readReviewed } from './g01.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -145,6 +149,9 @@ const OUT = path.join(ROOT, 'out/web/runs', run);
 fs.mkdirSync(OUT, { recursive: true });
 const extraEnv = Object.fromEntries(opt.env.map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)]));
 
+// the imports a run of this game has reviewed (G-01: an [hle] UNIMPLEMENTED line off the list fails a run)
+const REVIEWED = readReviewed(GAME);
+
 const saveName = s => `suite-${run}-${s.name}`.replace(/[^\w.-]/g, '_');
 
 function urlFor(s) {
@@ -165,17 +172,12 @@ function judge(s, log, exit) {
   const has = re => re.test(log);
   if (exit === null) why.push('no-exit'); else if (exit !== 0) why.push(`exit=${exit}`);
   if (!log.includes('quit at guest frame')) why.push('no-quit');
-  if (has(/FAULT IN GUEST|GUEST MEMORY FAULT|HOST SEGV/)) why.push('fault');
-  if (log.includes('TIME LIMIT REACHED')) why.push('timeout');
-  if (has(/^\[trap\]/m)) why.push('trap');
-  if (log.includes('UNRESOLVED INDIRECT')) why.push('unresolved-icall');
-  if (has(/^\[expect\] FAIL/m)) why.push('expect-failed');
+  why.push(...g01(log, GAME, REVIEWED));
   if (s.marker && !log.includes(s.marker)) why.push(`missing:'${s.marker}'`);
   if (has(/^TRAP in thread/m)) why.push('wasm-trap');
   if (has(/^PAGEERROR|^WORKERERROR|^CRASH/m)) why.push('page-error');
   if (has(/unimplemented import/)) why.push('unimplemented-import');
   if (has(/RangeError|Maximum call stack/)) why.push('stack-overflow');
-  if (has(/^\[(net|roam)\] BLOCKED/m)) why.push('net-blocked');
   const chk = path.join(ROOT, G.tests, 'checks', `${s.name}.sh`);
   if (fs.existsSync(chk)) {
     let out = '', ok = true;
