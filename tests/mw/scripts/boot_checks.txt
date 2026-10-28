@@ -19,7 +19,7 @@
 +0    peek 0x00901820                 # 1 on a first start
 +0    peek 0x00982c00                 # the auto-detect's level
 +0    peek 0x009017b0 33              # the options block
-+600  tapuntil RETURN MainMenu.fng 90 6000
++0    tapuntil RETURN MainMenu.fng 90 6000
 +0    waitfng MainMenu.fng 600
 +0    untrace
 +0    expect x:0x00982c84 != 0          # the effect pool
