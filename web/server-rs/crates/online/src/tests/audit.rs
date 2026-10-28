@@ -359,8 +359,10 @@ fn onl6_blocked_list_follows_the_name() {
     let b2 = w.buddy(g2, &k2);
     w.send(b2, "RGET", fields![("LIST", "I"), ("PRES", "Y"), ("PEND", "Y"), ("ID", 2)]);
     assert_eq!([w.c(b2).l("RGET").g("SIZE"), w.c(b2).l("ROST").g("USER"), w.c(b2).l("ROST").g("ID")], ["1", "Mallory", "2"]);
+    assert!(w.core.buddies.blocked("mallory"), "the lobby's chat knows Mallory is blocked");
     // unblocked: gone from the file
     w.send(b2, "RDEL", fields![("LIST", "I"), ("USER", "Mallory")]);
+    assert!(!w.core.buddies.blocked("mallory"));
     w.core.buddy_save();
     assert!(!std::fs::read_to_string(dir.join("buddies.json")).unwrap().contains(r#""I""#));
 }
@@ -418,6 +420,32 @@ fn onl7_results() {
         report(&mut w, c, &auth, &["Quick1", "Quick2"], &[(0, 1, 1.5), (1, 2, 2.0)], 0);
     }
     assert!(!board(&mut w, 0).iter().any(|r| r.starts_with("Quick")), "a 3-second circuit race is not taken");
+}
+
+// a race won in under 40 % of the next finisher's time is a [cheat] line with the winner's address, once (the report
+// that makes the result); a close race, and a drift race (won by points), are none
+#[test]
+fn a_race_won_far_ahead_is_a_cheat_line() {
+    let mut w = world();
+    let cheats = |w: &World| w.text().iter().filter(|l| l.starts_with("[cheat]")).cloned().collect::<Vec<_>>();
+    let mut race_of = |w: &mut World, name: &str, a: &str, b: &str, players: &[(u8, u8, f32)], kind: u8| {
+        let (ga, gb) = (client(w, &format!("10.77.1.{}", name.len())), client(w, &format!("10.77.2.{}", name.len())));
+        let (x, y) = (login(w, ga, a), login(w, gb, b));
+        let auth = race(w, name, &[x, y], vec![]).unwrap();
+        w.advance(61_000.0);
+        for c in [x, y] {
+            report(w, c, &auth, &[a, b], players, kind);
+        }
+    };
+    race_of(&mut w, "close", "Fast1", "Slow1", &[(0, 1, 40.0), (1, 2, 55.0)], 1);
+    race_of(&mut w, "drifty", "Fast2", "Slow2", &[(0, 1, 21.0), (1, 2, 64.0)], 3);
+    assert_eq!(cheats(&w), Vec::<String>::new());
+    race_of(&mut w, "far", "Warp", "Honest", &[(1, 2, 64.0), (0, 1, 21.0)], 1);
+    assert_eq!(
+        cheats(&w),
+        ["[cheat] 10.77.1.3 \"Warp\": won the online race \"far\" (sprint) in 0:21.00, under 40 % of the next finisher's \
+          1:04.00 (\"Honest\")"]
+    );
 }
 
 // results: race types by the game's numbers (drag 2, drift 3); its seventh (6) is a result that counts nowhere

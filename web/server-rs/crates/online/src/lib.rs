@@ -14,7 +14,8 @@
 //! Race traffic never comes here: the players' browsers send it to each other through the switch (UDP 3658, a star
 //! around the game's creator), as in LAN play.  Every address a player learns is a virtual one (10.77.x.x).
 //!
-//! What the server keeps: sessions, rooms, games and chat in memory only; on disk only the races' public results per
+//! What the server keeps: sessions, rooms, games and chat in memory only (of chat, each persona's last lines for a
+//! complaint about it, which writes them to the log: lobby.rs `said`); on disk only the races' public results per
 //! persona (stats.rs) and each persona's friends list (buddy.rs), names only, under the server's --state directory,
 //! and from a stop to the next start the races going on (races.rs).
 //! Nothing secret is ever read (aries.rs SECRET_KEYS: the password, the CD key and the file checksum are passed over

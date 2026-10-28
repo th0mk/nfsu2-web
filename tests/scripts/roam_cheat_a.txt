@@ -1,0 +1,39 @@
+# The server's cheat watch (web/server-rs/crates/roam/src/watch.rs), the honest player, with roam_cheat_b.txt (the
+# cheater): from a career save into free roam, parked where the cheater can find it, then the game's own jumps an
+# honest player makes (Respawn, the pad's View/Back: three times parked, then twice off the road), and a long drive on
+# the autopilot.  The server's log should have [cheat] lines of the cheaters only.
+#   node web/tools/roam-pair.mjs --seed <career save> --a Ann:roam_cheat_a.txt --b Bob:roam_cheat_b.txt
+#        --c Cat:roam_cheat_c.txt --speedhack Cat:3 --timeout 1500
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    log PHASE parked
++0    roam mp waitcars 1 6000
++7200 roam mp status
++0    log PHASE respawns
++0    pad connect
++60   tappad BACK
++300  tappad BACK
++60   tappad BACK
++300  log PHASE off the road, then Respawn
++0    trigger RT 1
++0    axis LX 1
++240  axis LX 0
++120  trigger RT 0
++120  tappad BACK
++300  trigger RT 1
++0    axis LX -1
++300  axis LX 0
++120  trigger RT 0
++120  tappad BACK
++600  roam mp status
++0    log PHASE drive
++0    autopilot on
++7200 autopilot off
++0    roam mp status
++0    pad connect
++60   tappad BACK
++600  roam mp status
++60   quit

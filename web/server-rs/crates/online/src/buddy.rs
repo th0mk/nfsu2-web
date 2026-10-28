@@ -179,6 +179,9 @@ pub struct Buddies {
     /// lower-case persona -> the personas (lower case) whose friend requests wait for its answer (each kept in the
     /// asker's list, `r`)
     asked: HashMap<String, HashSet<String>>,
+    /// lower-case persona -> how many lists block it (the lobby's chat looks at each hearer's list only for a line of
+    /// a persona some list blocks)
+    blockers: HashMap<String, u32>,
     /// the messages waiting, on all lists
     mail: usize,
     /// when requests and messages that waited too long were last let go
@@ -234,6 +237,7 @@ impl Buddies {
             fans: HashMap::new(),
             met_by: HashMap::new(),
             asked: HashMap::new(),
+            blockers: HashMap::new(),
             mail: 0,
             pruned: f64::NEG_INFINITY,
             made: HashMap::new(),
@@ -320,6 +324,9 @@ impl Buddies {
             for k in l.r.keys() {
                 self.asked.entry(k.clone()).or_default().insert(owner.clone());
             }
+            for k in l.i.keys() {
+                *self.blockers.entry(k.clone()).or_default() += 1;
+            }
             self.mail += l.m.len();
         }
     }
@@ -344,6 +351,24 @@ impl Buddies {
     /// owner (lower case) blocks k
     pub fn blocks(&self, owner: &str, k: &str) -> bool {
         self.lists.get(owner).is_some_and(|l| l.i.contains_key(k))
+    }
+
+    /// some list blocks k (lower case)
+    pub fn blocked(&self, k: &str) -> bool {
+        self.blockers.contains_key(k)
+    }
+
+    /// k (lower case) on one more blocked list, or on one less
+    fn blocked_more(&mut self, k: &str) {
+        *self.blockers.entry(k.to_string()).or_default() += 1;
+    }
+    fn blocked_less(&mut self, k: &str) {
+        if let Some(n) = self.blockers.get_mut(k) {
+            *n -= 1;
+            if *n == 0 {
+                self.blockers.remove(k);
+            }
+        }
     }
 
     /// from's friend request to `to` (both lower case) while it waits: the asker's name
@@ -387,6 +412,9 @@ impl Buddies {
             }
             for k in l.r.keys() {
                 self.unindex(k, owner);
+            }
+            for k in l.i.keys() {
+                self.blocked_less(k);
             }
             self.mail -= l.m.len();
         }
@@ -877,7 +905,9 @@ impl Core {
         if self.buddies.list(me_name).is_some_and(|l| l.i.len() >= MAX_LIST && !l.i.contains_key(&k)) || !self.make_list(me_name, group) {
             return false;
         }
-        self.buddies.lists.get_mut(&me).expect("made").i.insert(k.clone(), who);
+        if self.buddies.lists.get_mut(&me).expect("made").i.insert(k.clone(), who).is_none() {
+            self.buddies.blocked_more(&k);
+        }
         self.buddies.unask(&k, &me);
         self.touch_lists();
         true
@@ -1081,6 +1111,7 @@ impl Core {
                             return self.bsend(b, kind, &with_id, "full");
                         }
                     } else if self.buddies.lists.get_mut(&me).is_some_and(|l| l.i.shift_remove(&k).is_some()) {
+                        self.buddies.blocked_less(&k);
                         self.touch_lists();
                     }
                     return self.bsend(b, kind, &with_id, "");

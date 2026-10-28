@@ -1,0 +1,48 @@
+# The career garage's 10 slots (runtime/garage.c), 4 of 4: 2 more a stage.
+# A new profile's new career (as career_bot.txt: the 206 from the car lot)
+# has 2 slots open.  The profile is named GARAGE: its file
+# ("GARAGE/GARAGE") is not the GARAGE file beside it (GARAGE.DAT).  It the career bot then plays until stage 2 starts, which
+# opens 2 more (slots 3 and 4), not 3.  Good: "[garage] a new stage: 4 of 10
+# slots open", no [expect] FAIL, garage_stage_end.  Takes a while (stage 1's
+# races):
+#   node web/tools/run-suite.mjs --base <server> --script garage_stage.txt --marker garage_stage_end --timeout-scale 15
+0     tapuntil RETURN MC_Background.fng 120 12000   # with movies the PSA plays first
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type GARAGE
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 12000   # story FMV and NIS first (movies on)
++300  tap RETURN                      # SMS: Continue
++0    waitfng HUD_SingleRace.fng 3000
++0    expect b:0x840ed8 == 0                # slots 1 and 2 open
++0    expect b:0x8416d0 == 0
++0    expect b:0x841ec8 == 1                # slot 3 not yet
++600  shopgo CC_CAR_LOT_1
++600  tapuntil RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # Enter Shop
++0    waitfng GarageMain.fng 3000
++600  tap RETURN                      # buy the 206
++180  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1200
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++0    waitfng HUD_SingleRace.fng 3000
++120  bot on
++0    waitexpr b:0x8426c0 == 0              # slot 4 open: stage 2
++0    expect i:0x862838 == 2                # the stage (Career +0x7AF8): 2, not 1
++600  expect b:0x841ec8 == 0                # slot 3 too
++0    expect b:0x842eb8 == 1                # slot 5 not yet
++0    careerlist
++0    status garage_stage_end
++10   quit

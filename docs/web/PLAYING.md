@@ -213,6 +213,14 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
 - **The European cars:** the Peugeot 106 and the Vauxhall Corsa 1.8, which only the European release sold, are in the
   car lot and on every car select (Quick Race, Customize, LAN and Online), and AI racers drive them too. The North
   American game has their files but hid them.
+- **The garage:** the career keeps up to 10 cars, not 5. A new career opens 2 slots and each stage 2 more (10 from
+  stage 5); a career from before, or from the PC game, gets 2 for each stage it has reached when it loads. Trade Car
+  on the crib's car list (C, or tap it) takes a car away for 80 % of what you spent on it, as the game's own trade-in
+  question says, when you have two cars or more. The car lot's cars are free, so that is 80 % of the parts. Slots 6 to
+  10 are kept in a file beside the profile, which backups, cloud saves and Rename carry along. The PC game loads the
+  profile with its first 5 cars, driving the first one when yours was one of the other 5. A profile changed
+  elsewhere (played in the PC game) loads here with its 5 too: the other 5 are kept aside in the profile's folder,
+  as `GARAGE.OLD`.
 - **Power Units:** the game's Options, Gameplay (also in the pause menu's) has a row after Speedometer Units: the
   engine's power in bhp or kW wherever the game shows it (the dyno, the performance shop's parts), whatever the
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).
@@ -503,6 +511,12 @@ Good to know:
   `i`), gaps and repeated letters read as the word they spell; a number (a year, two digits at the end) is a number
   (`Hakan1995` and `Dani99` are names). The same goes for Nazi names (and `1488` in a name), hate aimed at a group,
   terror and sexual violence. Swear words are fine.
+- **Chat in the Lobby and in a game room** is read the same way, word by word: a line with a slur in it reaches no
+  one but you, and after three of them in ten minutes you cannot chat for ten minutes. Swear words are fine. A player
+  you block in EA Messenger is not heard there either.
+- **Submit Complaint** (choose a player in a game room) tells the server's operator about that player, with their
+  last few chat lines (of the last ten minutes) that you could see; the operator decides what happens. Without a
+  complaint no chat is written down anywhere.
 - **Your name is yours while you are online**, and while you race. Someone else can use it when you are not; the
   rankings and your EA Messenger lists follow the name, so whoever plays under it while you are away sees your
   friends, the players you block, your friend requests and the messages waiting for you, and can change them. If
@@ -515,8 +529,8 @@ Good to know:
   sends it to the server only lightly scrambled (the server never reads it).
 - **Kept on the server:** only race results per name (Rankings) and your EA Messenger lists: your friends and the
   players you block (names), the friend requests you sent until they are answered (30 days at most), and your friends'
-  messages that came while you were away until you are back (7 days at most). Never your password: the server does
-  not read it.
+  messages that came while you were away until you are back (7 days at most). Of chat, only your last five lines, for
+  ten minutes and in memory, for a complaint. Never your password: the server does not read it.
 - **Game passwords:** the game asks for the password of a game created with one, and only the same password joins
   it. The server keeps no copy of it, only a check value for that game while it is open, and never shows or logs it.
 - **Others see** your name, your game, your chat and your results, never your real address.

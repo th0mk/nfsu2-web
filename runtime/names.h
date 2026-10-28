@@ -24,7 +24,8 @@
  * The other offensive names go the same way (picked from the live server's
  * names, 2026-10-26): Nazi ones, hate aimed at a group, terror, sexual
  * violence; and a name with 1488 in it (the neo-Nazi code).  A swear word is
- * no such name.
+ * no such name.  A "pid" word (pidor, pidar, pidr) right after a vowel is an
+ * English word's end: rapid, cupid, stupid ("RapidRacer").
  * Header only: no state.
  */
 #ifndef NAMES_H
@@ -111,7 +112,9 @@ static inline int name_blocked(const char *name){
     s[n] = 0;
     for (int j = 0; anywhere[j]; j++){
         name_word(anywhere[j], w);
-        for (int i = 0; i < n; i++) if (name_at(s, i, w) >= 0) return 1;
+        int pid = !strncmp(w, "pid", 3);
+        for (int i = 0; i < n; i++)
+            if (name_at(s, i, w) >= 0 && !(pid && i && strchr("aeiouy", s[i - 1]))) return 1;
     }
     return name_whole(s, whole);
 }

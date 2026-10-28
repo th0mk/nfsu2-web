@@ -37,6 +37,9 @@
 //                    no names or addresses), as <out>/<name>.download.log
 //        [--fetch snd.raw]  a file of each page's save folder (OPFS) copied out as <out>/<name>.<file>,
 //                    e.g. the sound output of --env SNDDUMP=/save/snd.raw (s16le stereo, 44.1 kHz)
+//        [--speedhack Cat:3]  that page's game threads (each game-worker.js, as it loads) see performance.now and
+//                    Date.now run 3 times as fast, as a speed hack in the browser makes them: the whole game runs
+//                    faster (the server's cheat watch sees it: tests/scripts/roam_cheat_c.txt)
 //        [--hide Bob:60:8]  that page reports itself hidden (document.hidden + visibilitychange, as when
 //                    its tab goes to the background; headless pages are never really hidden) at 60 s
 //                    after the first page opened, for 8 s
@@ -114,6 +117,7 @@ const FRESH = opts('fresh');                 // pages that start from a fresh pr
 const SEED_FOR = new Map(opts('seed-for').map(s => [s.slice(0, s.indexOf(':')), s.slice(s.indexOf(':') + 1)]));   // a page's own
 const seedOf = name => SEED_FOR.get(name) || (FRESH.includes(name) ? '' : SEED);
 const seeded = name => !!seedOf(name);
+const SPEEDHACK = new Map(opts('speedhack').map(x => [x.split(':')[0], +(x.split(':')[1] ?? 3)]));
 const HIDE = opts('hide').map(x => { const [n, at, dur] = x.split(':'); return { name: n, at: +at * 1000, dur: +(dur ?? 8) * 1000 }; });
 const TOUCH = argv.includes('--touch');      // the pages take taps (`log TAP <selector>`): the touch controls show
 fs.mkdirSync(OUT, { recursive: true });
@@ -233,6 +237,15 @@ async function start(i, name, script, own) {
     }
   });
   page.on('pageerror', e => w('PAGEERROR ' + e));
+  // a speed hack: the game threads' clocks k times as fast from their start (a worker's own loop never yields to
+  // anything sent to it later, so the hack goes in with its script, as a browser extension's does)
+  const k = SPEEDHACK.get(name);
+  if (k) await ctx.route(r => r.pathname.endsWith('/host/game-worker.js'), async (route) => {
+    const res = await route.fetch();
+    const hook = `{ const p = performance, real = p.now.bind(p), rd = Date.now, d0 = rd(); p.now = () => real() * ${k}; Date.now = () => d0 + (rd() - d0) * ${k}; }\n`;
+    w(`[speedhack] ${route.request().url()}: its clocks ${k} times as fast`);
+    await route.fulfill({ response: res, body: hook + await res.text() });
+  });
   const u = url(i, name, script, own);
   if (seeded(name)) w(`[roam-pair] save seed: ${await seedSave(page, BASE, `roam-${name}`, seedOf(name))} files from ${seedOf(name)}`);
   w(`URL ${u}`);

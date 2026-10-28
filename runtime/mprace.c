@@ -632,17 +632,10 @@ void mprace_perf_survey(CPU *c, uint32_t car){
  * written over (players' reports, 2026-10-22).  A career's car is none of
  * them until the player has a car of their own: a new career's is "CAREER_0"
  * (0x532830), the prologue's 350Z, until the first car is bought (then
- * CAREER_SLOT_n). */
+ * CAREER_SLOT_n; slots 6-10 are garage.c's, beside the table). */
 #define G_FECARS        0x0083ad90u
-#define FECARS_N        0x5bu
-int mprace_car_ok(void){
-    uint32_t h = rd(G_CAREER_CAR);
-    for (uint32_t i = 0; h && i < FECARS_N; i++){
-        uint32_t e = rd(G_FECARS + 0x9bd8u + 4u * i);
-        if (e && rd(e + 8u) == h) return 1;
-    }
-    return 0;
-}
+uint32_t garage_find(uint32_t db, uint32_t h);
+int mprace_car_ok(void){ return garage_find(G_FECARS, rd(G_CAREER_CAR)) != 0; }
 
 /* UI_Pause's messages: in the race, the one that ends it by Quit's Yes (at
  * once, or held back until the screen's next 0xE1FDE1D1) is the player

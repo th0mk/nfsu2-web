@@ -950,14 +950,13 @@ static int fe_record_type(uint32_t r){
     }
     return -1;
 }
+uint32_t garage_find(uint32_t db, uint32_t h);   /* the table's, then the garage's slots 6-10 */
 static void fe_car(int career, char *out, size_t osz){
     out[0] = 0;
     uint32_t h = R32(career ? G_FE_CAR_CAR : G_FE_CAR_QR);
     if (!h || !committed_range(G_FE_CARS + 0x9bd8u, 0x5bu * 4u)) return;
-    for (uint32_t i = 0; i < 0x5bu; i++){
-        uint32_t r = MR32(G_FE_CARS + 0x9bd8u + i * 4u);
-        if (r && R32(r + 8) == h){ int t = fe_record_type(r); if (t >= 0) car_type_name((uint32_t)t, out, osz); return; }
-    }
+    uint32_t r = garage_find(G_FE_CARS, h);
+    if (r){ int t = fe_record_type(r); if (t >= 0) car_type_name((uint32_t)t, out, osz); }
 }
 static const char *ordinal(int n){
     static char b[16];

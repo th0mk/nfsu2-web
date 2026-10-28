@@ -1,0 +1,70 @@
+# The career garage's 10 slots and Trade Car (runtime/garage.c), 1 of 4.
+# From a career save in stage 3 with 3 cars and no GARAGE file (2 a stage: 6
+# open): the car lot sells three cars into slots 4, 5 and 6 (6 is one of
+# ours), each followed by the game's "save the profile?" (Yes, and with it the
+# GARAGE file); a car bought is the one the career drives.  Then the crib's
+# car select (UI_CareerCarSelect.fng, its 2nd item) shows 6 cars and Trade
+# Car; C on the 6th asks, Yes trades it in for 80 % of what was spent on it (a
+# new car: nothing), the career then drives slot 1's, and leaving the crib
+# saves again.  Good: the [garage] lines, no [expect] FAIL, garage_end.
+#   NFSU2_SAVE_SEED=<a stage-3 career save> node web/tools/run-suite.mjs --base <server> --script garage_slots.txt
+#        --marker garage_end --save-out <dir>
+# Then garage_drive.txt on its saves, garage_reload.txt on those.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect b:0x840ed8 == 0                # slots 1-3 open (the game's), 4 and 5 too (ours: 2 a stage)
++0    expect b:0x8426c0 == 0
++0    expect b:0x842eb8 == 0
++0    loop 3
++0    log BUY a car at the car lot
++0    shopgo CC_CAR_LOT_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the car lot
++0    waitfe UI_CareerCarLot.fng 3000
++300  tap RIGHT                       # the next car
++90   tap RETURN                      # trade for it
++120  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1200
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++120  tapuntil ESCAPE HUD_SingleRace.fng 120 3000
++0    waitroam 4000
++300  endloop
++0    expect x:0x863480 == 0x319a8ca6       # the career drives the car bought last: slot 6 (CAREER_SLOT_5)
++0    log GO the crib
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Car Select
++0    waitfe UI_CareerCarSelect.fng 600
++120  loop 5
++0    tap RIGHT
++40   endloop
++60   log TRADE the car in slot 6
++0    tap C
++120  fnglist
++0    tap LEFT
++30   tap RETURN                      # Yes
++240  fnglist
++0    expect x:0x863480 == 0x319a8ca1       # ... then slot 1's
++0    tap ESCAPE                      # back to the crib
++240  tap LEFT
++40   tap LEFT
++60   tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 900
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++0    waitroam 4000
++600  status garage_end
++10   quit

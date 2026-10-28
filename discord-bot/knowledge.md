@@ -141,8 +141,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say
   where (Power Units in Options, Gameplay; drift mode with X; wheels; quick chat; ghost mode in F9; Upscaled HUD in
-  Settings, Display; photo mode with F12 or the pause menu's Photo Mode, from the release after 8d42385 on; the guide
-  lists them all).
+  Settings, Display; photo mode with F12 or the pause menu's Photo Mode, from the release after 8d42385 on; a garage
+  of 10 cars, 2 slots more each stage, and Trade Car on the crib's car list, from the release after 06ff511 on; the
+  guide lists them all).
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
 - A "bug" that is how the original game behaves (drift races have no music; a part's info screen; hidden races): say so

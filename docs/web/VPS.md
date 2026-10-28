@@ -562,6 +562,17 @@ laps and cars), the player's nickname, place (or "did not finish", "quit") and t
 type, the game's class and rating, the race's average rating, power, weight, top speed, and the factor its engine
 power had in the race). For evening out the cars: `docker compose logs -t server --since 24h | grep '\[race\]'`.
 
+Cheats are `[cheat]` lines, each with the player's virtual address and nickname, as [kick and ban](#kick-and-ban)
+take them. In free roam: a teleport (the car went 300 m or more farther than any car drives, in one jump or in short
+hops), a car over 450 km/h for 2 s, or a game whose clock runs 1.3 times as fast as the server's or more for a
+minute (a speed hack); a teleport's or a fast car's line names the players within 40 m of where it came to, and a
+race lobby that starts there. In Online mode: a race won in under 40 % of the next finisher's time. The game's own
+jumps (Respawn, Jump to Garage, shops, events and races) are none, nor is a bad connection (delays, stalls, a backlog
+that comes at once), nor a car that flies (an edited save) unless it does one of those. The lines are for you to
+read: nobody is kicked or banned by them. A player gets 5 lines, then one every 2 minutes; the rest are counted, and summed up every 10 minutes and when
+it leaves free roam. The cheats that bother others:
+`docker compose logs -t server --since 24h | grep '\[cheat\]' | grep -e 'next to' -e 'race lobby' -e 'online race'`.
+
 - **No player's real IP address** is written, and the page sends the server nothing about the player but the
   nickname, a random id the browser keeps for [bans](#kick-and-ban), and after a multiplayer race its car and place.
 - **`--access-log`** adds a line per request with the client's IP address and the URL. It is off by default, for

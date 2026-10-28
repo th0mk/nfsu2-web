@@ -124,6 +124,7 @@ test('a player\'s folder packs far below what the server takes; the hash is of t
   assert.ok(!V.keeps('gamefile.bin') && V.keptBy(1)('gamefile.bin') && V.keptBy(2)('gamefile.bin') && V.keptBy(3)('gamefile.bin'));
   assert.ok(!V.keptBy(4)('gamefile.bin') && !V.keptBy(4)('registry.txt') && V.keptBy(4)('settings.ini') && V.keptBy(4)(at('THOM')));
   assert.ok(!V.keeps(`${DIR}/THOM DVD 1/THOM DVD 1`) && !V.keeps(`${DIR}/THOM Magazine 12/THOM Magazine 12`));
+  assert.ok(V.keeps(`${DIR}/THOM/GARAGE.DAT`) && V.keeps(`${DIR}/THOM/GARAGE.OLD`), 'the garage\'s slots 6-10 go with their profile (runtime/garage.c)');
   assert.ok(V.isCover(`${DIR}/THOM DVD 1/THOM DVD 1`) && !V.isCover(at('THOM')) && !V.isCover('THOM DVD 1'));
   await assert.rejects(V.unpack(enc.encode('not deflate')), /damaged/);
 });

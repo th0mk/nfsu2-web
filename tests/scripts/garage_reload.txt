@@ -1,0 +1,46 @@
+# The career garage's 10 slots (runtime/garage.c), 3 of 4: loading them.  On
+# garage_drive.txt's saves (6 cars, the career driving slot 6's, the profile
+# naming slot 1's in its place): DRIVE is the car the career drives once the
+# profile is loaded (CAREER_SLOT_n's handle, 0x319a8ca0 + the slot): slot 6's
+# with the GARAGE file (put back after the load), slot 1's without it (the
+# profile's own: what the PC game drives) or with one of another save (kept
+# aside as GARAGE.OLD).  Then Trade Car on slot 1: the last car moves into
+# slot 1 (the career's car with it), 80 % of what was spent on the traded one
+# to the bank; leaving the crib saves; the career bot races once.  Good: the
+# [garage] lines, no [expect] FAIL, the bot's "segment done".
+#   NFSU2_SAVE_SEED=<garage_drive's saves> node web/tools/run-suite.mjs --base <server> --script garage_reload.txt
+#        --marker "segment done" --env NFSU2_CAREER_BOT_RACES=1 --env DRIVE=0x319a8ca6 --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    expect x:0x863480 == ${DRIVE}
++0    log GO the crib: TRADE slot 1
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++40   tap RIGHT
++60   tap RETURN                      # Car Select
++0    waitfe UI_CareerCarSelect.fng 600
++180  tap C                           # the first car
++120  tap LEFT
++30   tap RETURN                      # Yes
++240  expect x:0x863480 == 0x319a8ca1       # slot 1: the car moved there, or the one there
++0    expect b:0x840ed9 == 1                # slot 1 has a car
++0    tap ESCAPE                      # back to the crib
++240  tap LEFT
++40   tap LEFT
++60   tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 900
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++120  tapuntil ESCAPE HUD_SingleRace.fng 120 3000
++0    waitroam 4000
++300  log RACE
++0    bot on
++0    waitx 0 1

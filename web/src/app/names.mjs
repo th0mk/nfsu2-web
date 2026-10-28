@@ -19,7 +19,7 @@
 //    "Big1Fag"); the name's letters together count as one too ("F A G").  "Dyke" after "Van" is the surname.
 // The other offensive names go the same way (picked from the live server's names, 2026-10-26): Nazi ones, hate
 // aimed at a group, terror, sexual violence; and a name with 1488 in it (the neo-Nazi code).  A swear word is no
-// such name.
+// such name.  A "pid" word (pidor, pidar, pidr) right after a vowel is an English word's end ("RapidRacer").
 export const SLURS = Object.freeze({
   anywhere: Object.freeze(['nigg', 'niqq', 'faggot', 'tranny', 'trannie', 'retard', 'ibne', 'wetback', 'beaner',
     'raghead', 'towelhead', 'chingchong', 'jigaboo', 'porchmonkey', 'junglebunny',
@@ -72,6 +72,9 @@ function at(s, i, w) {
   }
   return i;
 }
+/** a "pid" word of the anywhere list (pidor, pidar, pidr) at s[i] right after a vowel is the end of an English
+ *  word: rapid, cupid, stupid, tepid ("RapidRacer", "CupidRacer", "Stupidrift"; "vladpidr" is one) */
+const englishPid = (s, i, w) => w.startsWith('pid') && i > 0 && 'aeiouy'.includes(s[i - 1]);
 /** t is all one of words, or its plural */
 function whole(t, words) {
   return words.some(w => {
@@ -101,5 +104,8 @@ export function blockedName(name) {
     else if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) low = ch >= 'a';
     if (num) i += r - 1;
   }
-  return ANYWHERE.some(w => { for (let i = 0; i < s.length; i++) if (at(s, i, w) >= 0) return true; return false; }) || whole(s, WHOLE);
+  return ANYWHERE.some(w => {
+    for (let i = 0; i < s.length; i++) if (at(s, i, w) >= 0 && !englishPid(s, i, w)) return true;
+    return false;
+  }) || whole(s, WHOLE);
 }

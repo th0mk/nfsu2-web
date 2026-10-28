@@ -69,9 +69,13 @@
 //! cars; it asks at a later Play once the cap is back.  /players also says how many drive in free roam, or are paused
 //! there (`in_roam()`, counted at each tick).
 //!
+//! The hub also watches how each player's car moves (watch.rs): a teleport, a car faster than any of the game's, or a
+//! game whose clock runs fast (a speed hack) is a `[cheat]` line with the player's address and name, and who was
+//! next to where its car came to.  Lines only: the operator decides (`nfsu2-server ctl kick|ban`).
+//!
 //! What the hub keeps, in memory only: per player endpoint its virtual address, port, id, room hash, crews' hashes,
-//! status, name and last position; gone `gone_ms` after its last message, when it says BYE, or when it leaves the
-//! switch.  Reading positions is what choosing by distance costs: the switch itself never looks inside a frame.  At
+//! status, name and last position (and what its watch counted); gone `gone_ms` after its last message, when it says
+//! BYE, or when it leaves the switch.  Reading positions is what choosing by distance costs: the switch itself never looks inside a frame.  At
 //! most `max_per_vip` endpoints per virtual address (a browser has one), and `max_players` in all.
 //!
 //! - [`Hub`]: the hub's logic, single-threaded, with the clock, the busy measure and the sending given to it (the
@@ -86,6 +90,7 @@
 
 mod hub;
 mod links;
+mod watch;
 mod wire;
 
 use std::collections::{HashMap, HashSet};

@@ -134,6 +134,74 @@ fn rooms_and_chat() {
     assert_eq!(w.c(a).l("+usr").g("T"), "1", "Bravo left the room");
 }
 
+// a line that reads as a slur reaches only its sender (three mute it), a blocked persona is not heard, and a
+// complaint logs what the player said where the complainer could hear it
+#[test]
+fn slurs_blocks_and_complaints() {
+    // a minute, not ten: a session says nothing for two at most
+    let limits = Limits { slur_window_ms: 60_000.0, slur_mute_ms: 60_000.0, said_ms: 60_000.0, ..Limits::default() };
+    let mut w = World::new(Opts { limits, ..Opts::default() });
+    let (a, _) = messenger(&mut w, "10.77.0.2", "Alpha");
+    let (b, bm) = messenger(&mut w, "10.77.0.3", "Bravo");
+    let (c, _) = messenger(&mut w, "10.77.0.4", "Charlie");
+    for x in [a, b, c] {
+        w.send(x, "move", fields![("NAME", "Lounge")]);
+    }
+    let heard = |w: &World, x: C, t: &str| w.c(x).msgs.iter().any(|m| m.kind == "+msg" && m.get("T") == Some(t));
+    // the sender sees its line as said; the room does not
+    w.send(a, "mesg", fields![("TEXT", "nate higgers")]);
+    assert!(heard(&w, a, "nate higgers") && !heard(&w, b, "nate higgers") && !heard(&w, c, "nate higgers"));
+    assert!(w.logged("\"Alpha\": a line with \"nate higgers\" in it, shown to no one else"));
+    // swearing goes through
+    w.advance(2000.0);
+    w.send(a, "mesg", fields![("TEXT", "merci kurwa")]);
+    assert!(heard(&w, b, "merci kurwa") && heard(&w, c, "merci kurwa"));
+    // private lines: one to Charlie, one to Bravo
+    w.advance(2000.0);
+    w.send(a, "mesg", fields![("TEXT", "psst charlie"), ("PRIV", "Charlie")]);
+    w.send(a, "mesg", fields![("TEXT", "psst bravo"), ("PRIV", "bravo")]);
+    assert!(heard(&w, c, "psst charlie") && heard(&w, b, "psst bravo"));
+    // the third line that reads as a slur in the window mutes the sender
+    w.advance(2000.0);
+    w.send(a, "mesg", fields![("TEXT", "n i g g e r")]);
+    assert!(!w.logged("muted for 60 s"));
+    w.advance(2000.0);
+    w.send(a, "mesg", fields![("TEXT", "SIEG HEIL")]);
+    assert!(w.logged("\"Alpha\": a line with \"SIEG HEIL\" in it, shown to no one else; muted for 60 s"));
+    w.advance(2000.0);
+    w.send(a, "mesg", fields![("TEXT", "hello?")]);
+    assert_eq!(w.c(a).l("mesg").code, "mute");
+    assert!(!heard(&w, b, "hello?"));
+    // Bravo blocks Charlie (EA Messenger): Charlie's lines reach Alpha, not Bravo
+    w.send(bm, "RADD", fields![("USER", "Charlie"), ("LIST", "I"), ("ID", 9)]);
+    w.send(c, "mesg", fields![("TEXT", "hi all")]);
+    assert!(heard(&w, a, "hi all") && !heard(&w, b, "hi all") && heard(&w, c, "hi all"));
+    w.advance(2000.0);
+    w.send(c, "mesg", fields![("TEXT", "hi bravo"), ("PRIV", "Bravo")]);
+    assert!(!heard(&w, b, "hi bravo"));
+    // ... until Bravo takes the block back
+    w.send(bm, "RDEL", fields![("USER", "Charlie"), ("LIST", "I"), ("ID", 10)]);
+    w.advance(2000.0);
+    w.send(c, "mesg", fields![("TEXT", "hi again")]);
+    assert!(heard(&w, b, "hi again") && !w.core.buddies.blocked("charlie"));
+    // Bravo's complaint about Alpha: its address, its last five lines but the private one to Charlie
+    w.send(b, "rept", fields![("PERS", "Alpha"), ("LANG", "EN"), ("TYPE", "0")]);
+    assert_eq!(w.c(b).l("rept").g("TEXT"), "Report complete");
+    let line = w.text().into_iter().find(|l| l.contains("a complaint about")).expect("the complaint's line");
+    assert_eq!(
+        line,
+        "[online] 10.77.0.3 \"Bravo\": a complaint about 10.77.0.2 \"Alpha\", who said: \"merci kurwa\" \"psst bravo\" \
+         \"n i g g e r\" (shown to no one) \"SIEG HEIL\" (shown to no one)"
+    );
+    // a minute on, nothing is kept, and Alpha may speak again
+    w.advance(61_000.0);
+    assert!(!w.core.lobby.said.contains_key("alpha"));
+    w.send(c, "rept", fields![("PERS", "Alpha")]);
+    assert!(w.logged("\"Charlie\": a complaint about 10.77.0.2 \"Alpha\" (no lines of its kept)"));
+    w.send(a, "mesg", fields![("TEXT", "sorry")]);
+    assert!(heard(&w, b, "sorry"));
+}
+
 // a game: create, list, join, ready, start; +ses names every player by virtual address
 #[test]
 fn a_game() {

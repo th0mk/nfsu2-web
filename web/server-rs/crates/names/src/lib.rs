@@ -15,9 +15,12 @@
 //!    part of the name on its own, and plural: the parts are split where a character is no letter and where a
 //!    capital follows a small letter, digits and signs read as letters between them or not ("f4g_42", "XxCoonXx",
 //!    "Big1Fag"); the name's letters together count as one too ("F A G").  "Dyke" after "Van" is the surname.
+//!
 //! The other offensive names go the same way (picked from the live server's names, 2026-10-26): Nazi ones, hate
 //! aimed at a group, terror, sexual violence; and a name with 1488 in it (the neo-Nazi code).  A swear word is no
-//! such name.
+//! such name.  A "pid" word (pidor, pidar, pidr) right after a vowel is an English word's end ("RapidRacer").
+//!
+//! The Online lobby's chat is read with the same lists, a word at a time ([`chat_slur`]); here only.
 
 use unicode_general_category::{GeneralCategory, get_general_category};
 use unicode_normalization::UnicodeNormalization;
@@ -165,6 +168,19 @@ const fn words<const N: usize>(list: &[&str]) -> [Word; N] {
 const ANYWHERE_WORDS: [Word; ANYWHERE.len()] = words(ANYWHERE);
 const WHOLE_WORDS: [Word; WHOLE.len()] = words(WHOLE);
 const DYKE: [Word; 1] = words(&["dyke"]);
+
+/// The anywhere words by their first letter (a to z), as bits of their index: a word is at s[i] only when s[i] is
+/// its first letter, so only those are looked for there (the lobby's chat reads every line).
+const ANYWHERE_FIRST: [u128; 26] = {
+    assert!(ANYWHERE.len() <= 128);
+    let mut t = [0; 26];
+    let mut i = 0;
+    while i < ANYWHERE_WORDS.len() {
+        t[(ANYWHERE_WORDS[i].letters[0] - b'a') as usize] |= 1 << i;
+        i += 1;
+    }
+    t
+};
 
 /// The Cyrillic and Greek letters that look like Latin ones read as those, and a few Latin ones NFKD keeps (dotless
 /// i, L, O and D with a stroke, eng, script g), the inverted exclamation mark and the euro sign.
@@ -348,16 +364,43 @@ impl Letters {
     }
 }
 
-/// names.mjs `blockedName(name)`: the name reads as a slur (above)
-pub fn blocked_name(name: &str) -> bool {
+/// A "pid" word of the anywhere list (pidor, pidar, pidr) at s[i] right after a vowel is the end of an English word:
+/// rapid, cupid, stupid, tepid ("RapidRacer", "CupidRacer", "Stupidrift"; "vladpidr" is one)
+fn english_pid(s: &[u8], i: usize, w: &[u8]) -> bool {
+    w.starts_with(b"pid") && i > 0 && b"aeiouy".contains(&s[i - 1])
+}
+
+/// a word of the anywhere list is in s (letters)
+fn anywhere(s: &[u8]) -> bool {
+    (0..s.len()).any(|i| {
+        let mut m = ANYWHERE_FIRST[(s[i] - b'a') as usize];
+        while m != 0 {
+            let w = ANYWHERE_WORDS[m.trailing_zeros() as usize].letters();
+            if at(s, i, w).is_some() && !english_pid(s, i, w) {
+                return true;
+            }
+            m &= m - 1;
+        }
+        false
+    })
+}
+
+/// A name read: its letters, and whether each of its parts is one letter ("F A G", "f.a.g")
+struct Scan {
+    s: Letters,
+    single: bool,
+}
+
+/// The name's letters, None when 1488 or a part of its own that is a word of the whole list is in it
+fn scan(name: &str) -> Option<Scan> {
     let str = read(name);
     if str.windows(CODE.len()).any(|w| w == CODE) {
-        return true;
+        return None;
     }
     // s: all the name's letters; t: the part being read
     let (mut s, mut t) = (Letters::new(), Letters::new());
     // the part before was "van"; the last letter (not a digit or sign read as one) was a small one
-    let (mut after_van, mut low) = (false, false);
+    let (mut after_van, mut low, mut single) = (false, false, true);
     let mut i = 0;
     while i <= str.len() {
         let ch = str.get(i).copied();
@@ -366,9 +409,10 @@ pub fn blocked_name(name: &str) -> bool {
         let c = if num { None } else { ch.and_then(letter) };
         if (c.is_none() || (low && ch.is_some_and(|ch| ch.is_ascii_uppercase()))) && t.len > 0 {
             if whole(t.get(), &WHOLE_WORDS) && !(after_van && whole(t.get(), &DYKE)) {
-                return true;
+                return None;
             }
             after_van = t.get() == b"van";
+            single &= t.len == 1;
             t.len = 0;
         }
         match (c, ch) {
@@ -383,6 +427,80 @@ pub fn blocked_name(name: &str) -> bool {
         }
         i += if num { r } else { 1 };
     }
-    let s = s.get();
-    ANYWHERE_WORDS.iter().any(|w| (0..s.len()).any(|i| at(s, i, w.letters()).is_some())) || whole(s, &WHOLE_WORDS)
+    Some(Scan { s, single })
+}
+
+/// names.mjs `blockedName(name)`: the name reads as a slur (above)
+pub fn blocked_name(name: &str) -> bool {
+    scan(name).is_none_or(|n| anywhere(n.s.get()) || whole(n.s.get(), &WHOLE_WORDS))
+}
+
+/// The most one-letter words in a row read as a word of the whole list ("f a g s")
+const WHOLE_RUN: usize = 8;
+
+/// A chat line's words that read as a slur (the Online lobby's chat, nfsu2-online): the first such span of the
+/// line, None for none.  The line is no name: its letters all together would read words across its words ("rapid
+/// race" has "pidr" in it, "go ok" is "gook"), so it is read a word (between spaces, without the ! at its end) at a
+/// time:
+///  - a word as a name: 1488 or a part of the whole list in it, a word of the anywhere list in its letters; its
+///    letters together only when each part is one letter ("f.a.g", not "go,ok"); "Dyke" after "van" is the surname
+///  - two words in a row: a word of the anywhere list across them ("nig ger", "sieg heil", "nate higgers")
+///  - one-letter words in a row: their letters, for the anywhere list ("n i g g a"), and three to eight of them for
+///    the whole list ("F A G", "u r a f a g")
+pub fn chat_slur(line: &str) -> Option<&str> {
+    let mut words: Vec<(usize, usize)> = Vec::new();
+    let mut from = None;
+    for (i, ch) in line.char_indices().chain([(line.len(), ' ')]) {
+        match (ch.is_whitespace(), from) {
+            (true, Some(f)) => {
+                // the ! at a word's end is punctuation, not an i
+                let e = f + line[f..i].trim_end_matches('!').len();
+                if e > f {
+                    words.push((f, e));
+                }
+                from = None;
+            }
+            (false, None) => from = Some(i),
+            _ => {}
+        }
+    }
+    // each word's letters
+    let mut letters: Vec<Vec<u8>> = Vec::with_capacity(words.len());
+    for (k, &(a, b)) in words.iter().enumerate() {
+        // a word after "van" is read with it, as the name "van ..." ("van Dyke")
+        let after_van = k > 0 && letters[k - 1] == b"van";
+        let (n, skip) = match scan(&line[a..b]) {
+            None if after_van => (scan(&line[words[k - 1].0..b]), 3),
+            n => (n, 0),
+        };
+        let s = match n {
+            Some(n) if !anywhere(n.s.get()) && !(n.single && whole(n.s.get(), &WHOLE_WORDS)) => n.s.get()[skip..].to_vec(),
+            _ => return Some(&line[a..b]),
+        };
+        if k > 0 && anywhere(&[letters[k - 1].as_slice(), &s].concat()) {
+            return Some(&line[words[k - 1].0..b]);
+        }
+        letters.push(s);
+    }
+    // the one-letter words in a row
+    let mut k = 0;
+    while k < words.len() {
+        let n = letters[k..].iter().take_while(|s| s.len() == 1).count();
+        if n >= 3 {
+            let s: Vec<u8> = letters[k..k + n].iter().map(|s| s[0]).collect();
+            let span = |i: usize, j: usize| &line[words[k + i].0..words[k + j - 1].1];
+            if anywhere(&s) {
+                return Some(span(0, n));
+            }
+            for i in 0..n {
+                for j in i + 3..=(i + WHOLE_RUN).min(n) {
+                    if whole(&s[i..j], &WHOLE_WORDS) {
+                        return Some(span(i, j));
+                    }
+                }
+            }
+        }
+        k += n.max(1);
+    }
+    None
 }

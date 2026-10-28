@@ -13,6 +13,7 @@
 //     --timeout-scale X multiply every scenario's time limit (default 1)
 //     --script FILE     an ad-hoc scenario: tests/scripts/FILE (with --marker, --name, --net NAME;
 //                       NFSU2_SAVE_SEED seeds its save directory)
+//     --save-out DIR    each scenario's save directory afterwards, as DIR/<scenario>/ (a seed for the next run)
 //     --list            print the scenario table and exit
 //     --game ID         ug2 (default) or mw: that game's scenario table, test scripts and checks (tests/ or
 //                       tests/mw/: the server, started with --game mw, serves tests/mw/ at /tests/)
@@ -111,7 +112,7 @@ const SUITE_ENV = {
 
 // ---- arguments ----
 const argv = process.argv.slice(2);
-const opt = { base: 'http://localhost:8611', run: '', jobs: 1, env: [], scale: 1, script: '', marker: '', name: '', net: '', list: false, help: false };
+const opt = { base: 'http://localhost:8611', run: '', jobs: 1, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', list: false, help: false };
 const names = [];
 const GAME = gameOf(argv), G = GAMES[GAME], [TABLE, OPT] = SCENARIOS[GAME];
 const OF = GAME === 'ug2' ? '' : ` (${G.name})`;   // in the run's lines and summary: Underground 2's stay as they were
@@ -120,7 +121,7 @@ for (let i = 0; i < argv.length; i++) {
   if (a === '--base') opt.base = v(); else if (a === '--run') opt.run = v(); else if (a === '--jobs') opt.jobs = +v();
   else if (a === '--env') opt.env.push(v()); else if (a === '--timeout-scale') opt.scale = +v();
   else if (a === '--script') opt.script = v(); else if (a === '--marker') opt.marker = v(); else if (a === '--name') opt.name = v();
-  else if (a === '--net') opt.net = v();
+  else if (a === '--net') opt.net = v(); else if (a === '--save-out') opt.saveOut = v();
   else if (a === '--game') v();                    // gameOf() above
   else if (a === '--help') opt.help = true;
   else if (a === '--list') opt.list = true; else names.push(a);
@@ -189,6 +190,34 @@ function judge(s, log, exit) {
   return why;
 }
 
+// the page's OPFS save directory dir into the folder out (files, as the page has them)
+async function saveOut(page, dir, out) {
+  try {
+    const files = await page.evaluate(async dir => {
+      const got = [];
+      async function walk(d, rel) {
+        for await (const [name, h] of d.entries()) {
+          const r = rel ? `${rel}/${name}` : name;
+          if (h.kind === 'directory') await walk(h, r);
+          else {
+            const b = new Uint8Array(await (await h.getFile()).arrayBuffer());
+            let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+            got.push([r, btoa(s)]);
+          }
+        }
+      }
+      await walk(await (await navigator.storage.getDirectory()).getDirectoryHandle(dir), '');
+      return got;
+    }, dir);
+    fs.rmSync(out, { recursive: true, force: true });
+    for (const [rel, b64] of files) {
+      fs.mkdirSync(path.dirname(path.join(out, rel)), { recursive: true });
+      fs.writeFileSync(path.join(out, rel), Buffer.from(b64, 'base64'));
+    }
+    return `${files.length} files to ${out}`;
+  } catch (e) { return `failed: ${e}`; }
+}
+
 async function runOne(browser, s) {
   const logPath = path.join(OUT, `${s.name}.log`);
   const lines = [];
@@ -215,6 +244,7 @@ async function runOne(browser, s) {
   let timedOut = false;
   try { await page.waitForFunction(() => document.title === 'DONE', null, { timeout: limit, polling: 1000 }); }
   catch { timedOut = true; lines.push(`TIME LIMIT REACHED: the web suite runner stopped the run after ${(limit / 1000).toFixed(0)} s`); }
+  if (opt.saveOut) lines.push(`[suite] save out: ${await saveOut(page, saveName(s), path.join(opt.saveOut, s.name))}`);
   const wall = (Date.now() - t0) / 1000;
   await ctx.close().catch(() => {});
   const log = lines.join('\n') + '\n';

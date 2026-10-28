@@ -329,6 +329,23 @@ static int resolve(const char *win, char *out, size_t outsz){
 static int resolve_w(const char *win, char *out, size_t outsz){
     return resolve_in(g_wroot[0] ? g_wroot : g_root, win, out, outsz);
 }
+/* runtime/garage.c: a file the game could read, by its guest path */
+int fileio_resolve_save(const char *win, char *out, size_t outsz){ return resolve(win, out, outsz); }
+/* A profile the game saves, "<root>/NFS Underground 2/<NAME>/<NAME>" (any
+ * case): garage.c keeps its slots 6-10 in a file beside it. */
+void garage_profile_written(const char *path);
+void garage_profile_deleted(const char *path);
+static int is_profile(const char *path){
+    static const char dir[] = "NFS Underground 2";
+    const char *b = strrchr(path, '/'), *d, *e;
+    if (!b || b == path) return 0;
+    for (d = b - 1; d > path && *d != '/'; d--) {}
+    if (*d != '/' || d == path) return 0;
+    size_t n = (size_t)(b - d - 1);
+    if (!n || strlen(b + 1) != n || strncasecmp(d + 1, b + 1, n)) return 0;
+    for (e = d - 1; e > path && *e != '/'; e--) {}
+    return *e == '/' && (size_t)(d - e - 1) == sizeof dir - 1 && !strncasecmp(e + 1, dir, sizeof dir - 1);
+}
 static int copy_file(const char *a, const char *b){
     FILE *fa = fopen(a, "rb"); if (!fa) return 0;
     mkparents(b);
@@ -858,7 +875,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
 #endif
         if(f->fd>=0) close(f->fd);
         if(f->dir) closedir(f->dir);
-        if(f->wr) g_open_wr--;
+        if(f->wr){ if (f->fd >= 0 && is_profile(f->path)) garage_profile_written(f->path); g_open_wr--; }
         f->used=0; r=1;
     }
     else if (!strcmp(n,"GetFileAttributesA")){
@@ -875,7 +892,8 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
     else if (!strcmp(n,"DeleteFileA")){
         char real[1024]; resolve_w(GS(A(c,0)), real, sizeof real);
         if (!write_allowed("DeleteFileA", GS(A(c,0)), real)){ r = 0; set_err(c, 5u); }   /* ERROR_ACCESS_DENIED */
-        else { r = (unlink(real)==0); if (!r) set_err(c, errno_to_win(errno)); }
+        else { r = (unlink(real)==0); if (!r) set_err(c, errno_to_win(errno));
+               else if (is_profile(real)) garage_profile_deleted(real); }
     }
     else if (!strcmp(n,"GetFullPathNameA")){
         /* (lpFileName, nBufferLength, lpBuffer, lpFilePart)  v12na: was a stub
@@ -938,6 +956,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
             if ((g_wroot[0] && !path_under(a, g_wroot)) || (ro_root() && path_under(a, g_root)))
                 r = (uint32_t)copy_file(a, b);
             else r = write_allowed("MoveFileA (source)", GS(A(c,0)), a) && rename(a,b)==0;
+            if (r && is_profile(b)) garage_profile_written(b);
         }
     }
     else if (!strcmp(n,"CopyFileA")){

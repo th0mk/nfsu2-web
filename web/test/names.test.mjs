@@ -36,7 +36,9 @@ const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'musta
   'Hakan1993TR', 'Dani9912', 'Strannik', 'VanDyke', 'Van Dyke',
   // the live names with the new words' letters in them, other numbers with 88
   'Spider', 'MR.SPIDER', 'Shinigami', 'Zuniga', 'Vlado', 'Ataliba_Neto', 'Grapes', 'Trapezio', 'Adolf', 'Nazim',
-  'Nazif', 'Nygaard', 'Mongol', 'Churkin', 'jacob88', 'Jane8848', 'Ahmet1448'];
+  'Nazif', 'Nygaard', 'Mongol', 'Churkin', 'jacob88', 'Jane8848', 'Ahmet1448',
+  // English words that end in "pid" before an r or a
+  'RapidRacer', 'rapid racer', 'CupidRacer', 'Stupidrift', 'StupidArmy', 'TepidRide'];
 
 test('names.mjs: the lists\' words, the ways round them, and not the other words', () => {
   for (const w of [...SLURS.anywhere, ...SLURS.whole]) assert.ok(blockedName(w), w);

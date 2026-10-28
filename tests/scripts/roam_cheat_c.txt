@@ -1,0 +1,15 @@
+# The server's cheat watch, a speed hacker, with roam_cheat_a.txt and roam_cheat_b.txt: roam-pair --speedhack Cat:3
+# makes this page's game run 3 times as fast (its clocks), and it drives on the autopilot (24000 frames: about 2 min
+# at 3 times the speed, as long as the server's clock check takes twice).
+#   node web/tools/roam-pair.mjs --seed <career save> --a Ann:roam_cheat_a.txt --b Bob:roam_cheat_b.txt
+#        --c Cat:roam_cheat_c.txt --speedhack Cat:3 --timeout 1500
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    log PHASE speedhack drive
++60   autopilot on
++24000 autopilot off
++0    roam mp status
++60   quit

@@ -1,0 +1,64 @@
+# The career garage's 10 slots (runtime/garage.c), 2 of 4: driving a car of
+# slots 6-10.  On garage_slots.txt's saves (5 cars, 6 of 10 slots open, slots
+# 6-10 empty): a car into slot 6 at the car lot, which the career then drives;
+# the save's profile names the car of slot 1 in its place (what the PC game
+# can load), the GARAGE file slot 6's.  The Performance Shop's first ECU
+# package goes on it (0x5289F0 finds it by the career cars' lookup), saved
+# again; then the career bot races it (NFSU2_CAREER_BOT_RACES=1) and saves.
+# Good: "slots 6-10 saved (1 cars), the career's car one of them", the
+# [trace] lines in the race with the model of the GARAGE file's first car
+# (its record +28) and drive 319a8ca6, no [expect] FAIL, the bot's "segment
+# done".
+#   NFSU2_SAVE_SEED=<garage_slots' saves> node web/tools/run-suite.mjs --base <server> --script garage_drive.txt
+#        --marker "segment done" --env NFSU2_CAREER_BOT_RACES=1 --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank (Career +0x7134): the parts' money
++0    log BUY a car into slot 6
++0    shopgo CC_CAR_LOT_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the car lot
++0    waitfe UI_CareerCarLot.fng 3000
++300  loop 4
++0    tap RIGHT
++40   endloop                         # a car of another model than slot 1's
++90   tap RETURN                      # trade for it
++120  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1200
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++120  tapuntil ESCAPE HUD_SingleRace.fng 120 3000
++0    waitroam 4000
++0    expect x:0x863480 == 0x319a8ca6       # the career drives slot 6
++300  log GO the Performance Shop: an ECU package
++0    shopgo CC_PERF_SHOP
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the shop
++0    waitfe GarageMain.fng 3000
++600  tap RIGHT
++60   tap RETURN                      # ECU
++300  tap RIGHT                       # the first package
++120  tap RETURN
++120  tap LEFT
++30   tap RETURN                      # buy and install: Yes
++300  tap RETURN                      # brands: Continue
++200  tap ESCAPE
++200  tap ESCAPE
++200  tap LEFT
++30   tap RETURN                      # back to Explore Mode: Yes
++0    waitfe MC_Main.fng 900
++60   tap LEFT
++30   tap RETURN                      # save: Yes
++300  tap RETURN                      # Save complete: Continue
++120  tapuntil ESCAPE HUD_SingleRace.fng 120 3000
++0    waitroam 4000
++0    expect x:0x863480 == 0x319a8ca6
++300  log RACE it
++0    trace 300 type=x:[[[0x8900ac]+4]+0xc]+0xd0 drive=x:0x863480   # the player's car's model (CarTypeInfo +0xD0), the car driven
++0    bot on
++0    waitx 0 1

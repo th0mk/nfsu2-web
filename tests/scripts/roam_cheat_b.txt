@@ -1,0 +1,37 @@
+# The server's cheat watch, the cheater, with roam_cheat_a.txt (the honest player): first as honest players do (a
+# drive on the autopilot, Respawn three times), then what cheats do with the car's place (the game's own hot-position
+# jump, as a memory editor would write it): a teleport far off, one onto the other player, short hops that add up;
+# then back next to the other player.  A speed hack is roam_cheat_c.txt's.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 6000
++0    log PHASE drive
++60   autopilot on
++3600 autopilot off
++0    log PHASE respawns
++0    pad connect
++60   tappad BACK
++300  tappad BACK
++60   tappad BACK
++600  roam mp status
++0    log PHASE far
++0    roam mp follow Ann 2500 0
++600  roam mp status
++0    log PHASE onto
++0    roam mp follow Ann 8 0
++600  roam mp status
++0    log PHASE hops
++0    roam mp follow Ann 250 0
++30   roam mp follow Ann 500 0
++30   roam mp follow Ann 750 0
++30   roam mp follow Ann 1000 0
++30   roam mp follow Ann 1250 0
++30   roam mp follow Ann 1500 0
++600  roam mp status
++0    log PHASE back onto
++0    roam mp follow Ann 20 0
++600  roam mp status
++60   quit

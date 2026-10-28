@@ -65,6 +65,11 @@ int language_no_profile(const char *name){ return !strcasecmp(name, "No Profile"
 /* ---- stub for winsock.c: a LAN session is open ------------------------ */
 static int g_test_lan;
 int winsock_session_active(void){ return g_test_lan; }
+/* ---- stub for garage.c: a car record by handle (the table's; no slots 6-10 here) */
+uint32_t garage_find(uint32_t db, uint32_t h){
+    for (uint32_t i = 0; h && i < 0x5bu; i++){ uint32_t r = MR32(db + 0x9bd8u + i * 4u); if (r && MR32(r + 8u) == h) return r; }
+    return 0;
+}
 
 /* ---- synthetic guest memory ----------------------------------------- */
 #define HEAP 0x10000000u

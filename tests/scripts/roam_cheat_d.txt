@@ -1,0 +1,24 @@
+# The server's cheat watch, an honest player who drives (with roam_cheat_a/b/c.txt): into free roam, then the
+# autopilot for 4 min, with the game's Respawn (the pad's View/Back) every 40 s.  On a bad connection too, its log
+# should have no [cheat] line of this player.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    log PHASE drive
++0    pad connect
++60   autopilot on
++2400 tappad BACK
++60   autopilot on
++2400 tappad BACK
++60   autopilot on
++2400 tappad BACK
++60   autopilot on
++2400 tappad BACK
++60   autopilot on
++2400 tappad BACK
++60   autopilot on
++2400 autopilot off
++0    roam mp status
++60   quit

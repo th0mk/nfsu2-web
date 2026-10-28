@@ -177,6 +177,13 @@ pub(crate) const ALLOWED: &[&str] = &[
     "jacob88",
     "Jane8848",
     "Ahmet1448",
+    // English words that end in "pid" before an r or a
+    "RapidRacer",
+    "rapid racer",
+    "CupidRacer",
+    "Stupidrift",
+    "StupidArmy",
+    "TepidRide",
 ];
 
 // names.mjs: the lists' words, the ways round them, and not the other words
@@ -252,6 +259,60 @@ fn parts_and_runs() {
     assert!(blocked_name("F A G") && blocked_name("f.a.g.s") && !blocked_name("f a g x"));
     assert!(!blocked_name("Van Dyke") && !blocked_name("VanDyke") && blocked_name("Dyke") && blocked_name("X Dyke"));
     assert!(blocked_name("Van Fag") && blocked_name("Vanfag Dyke"));
+}
+
+#[test]
+fn a_pid_word_after_a_vowel_is_english() {
+    assert!(!blocked_name("RapidRacer") && !blocked_name("xStupidorx") && !blocked_name("Insipidar"));
+    assert!(blocked_name("vladpidr") && blocked_name("Pidr228") && blocked_name("xpidrx") && blocked_name("rapid_pidr"));
+}
+
+// the lobby's chat: a word at a time, two words together for the anywhere list, one-letter words in a row
+#[test]
+fn chat_lines() {
+    let slur = |l: &str| chat_slur(l).map(str::to_string);
+    for (line, span) in [
+        ("you nigger", "nigger"),
+        ("Sranie> nate higgers", "nate higgers"),
+        ("nig ger lol", "nig ger"),
+        ("SIEG HEIL", "SIEG HEIL"),
+        ("n i g g e r", "n i g g e r"),
+        ("so F A G", "F A G"),
+        ("u r a f a g", "f a g"),
+        ("f.a.g.s", "f.a.g.s"),
+        ("ur a fag!!", "fag"),
+        ("you n!gger", "n!gger"),
+        ("N1GG4 pls", "N1GG4"),
+        ("go 1488", "1488"),
+        ("porch monkey", "porch monkey"),
+        ("van Dyke_fag", "Dyke_fag"),
+        ("van dyke-nigger", "dyke-nigger"),
+    ] {
+        assert_eq!(slur(line).as_deref(), Some(span), "{line}");
+    }
+    // swearing stays, and so do the words across words that the letters all together would read
+    for line in [
+        "merci kurwa",
+        "SEN? MERC? AMK",
+        "HACI> DOM TORETTO H?S FATHER",
+        "rapid race",
+        "stupid race",
+        "go ok",
+        "go,ok",
+        "fa g",
+        "Van Dyke",
+        "a b c d e",
+        "the spice must flow",
+        "hi! I'm Nigel from Nigeria",
+        "lap 1:48.8",
+        "",
+        "   ",
+    ] {
+        assert_eq!(slur(line), None, "{line}");
+    }
+    // the span is the line's own text
+    let line = "a\u{a0}nate  higgers b";
+    assert_eq!(chat_slur(line), Some("nate  higgers"));
 }
 
 #[test]
