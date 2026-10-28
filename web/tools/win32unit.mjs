@@ -109,6 +109,21 @@ export function buildD3dxOracleUnit(out) {
   return out;
 }
 
+// web/test/d3d9_unit.c: the Direct3D 9 device (runtime/com.c) with the renderer and the rest of the runtime stubbed
+// in the program; a function of the runtime a tested path does not reach is left out (a trapping stub, so a path
+// that reaches one fails loudly).  mw: Most Wanted's answers (-DD3D9_UNIT_MW), else UG2's.
+export function buildD3d9Unit(out, mw) {
+  if (!CC) throw new Error('no wasi-sdk in deps/');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
+  execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
+  try {
+    execFileSync(CC, [...FLAGS, ...(mw ? ['-DD3D9_UNIT_MW'] : []), '-o', out, 'web/test/d3d9_unit.c', 'runtime/com.c', te, ...LINK,
+      '-Wl,--unresolved-symbols=ignore-all'], opt);
+  } finally { fs.rmSync(te, { force: true }); }
+  return out;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const out = process.argv[2];
   if (!out) { console.error('usage: node web/tools/win32unit.mjs <out.wasm>'); process.exit(2); }
