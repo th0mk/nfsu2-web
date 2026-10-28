@@ -160,7 +160,10 @@ ps_1_1, 3 ps_1_4, 15 ps_2_0) are checked against `vs_run` and `ps_ref_run`, whic
   fog); vPos (the pixel's corner) and vFace. Constants: the program's own `def`/`defi`/`defb`, then `P.c` (32 rows)
   or the draw's K block (256 rows; a relative read outside them is 0).
 - **8 stages.** t4..t7, s4..s7 and the outputs texcoord4..7 need the 8-stage modules (gpu-abi.md §11.2,
-  `wgsl_set_stages(8)`); every Most Wanted effect needs them (with 4 stages, 17 of its 95 distinct shaders are refused).
+  `wgsl_set_stages(8)`); every Most Wanted effect needs them. With 4 stages 17 of its 95 distinct shaders are refused,
+  all for a texture coordinate 4..7, under three reasons: 14 ps_2_x read t4..t7 ("texture coordinate 4..7 without 8
+  stages"), the 2 ps_3_0 declare such an input and the vs_3_0 such an output ("a ps_3_0 input" / "a vs_3_0 output
+  the module ABI has no place for").
   `wgsl_ps_kinds()` gives the last pixel module's binding kinds (§11.3), also in its first line (`, kinds 0x..`).
 - **Flow control** as WGSL blocks: `if` b#/p0/comparison, `rep`/`loop` with literal counts, the breaks, `call` and
   `callnz` inlined, predicated writes per component. WGSL takes implicit derivatives only in uniform flow; inside
