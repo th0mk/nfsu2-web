@@ -78,6 +78,7 @@ uint32_t module_nearest_fn(uint32_t a, const char **mod){
 void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
 int  win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r){ (void)c; (void)dll; (void)n; (void)r; return 0; }
 int  msvcrt_call(CPU *c, const char *n, uint32_t *r){ (void)c; (void)n; (void)r; return 0; }
+int  d3dxmath_install(int oracle_linked){ (void)oracle_linked; return 0; }
 const RegKey mw_reg_keys[] = { { 0, 0, 0, 0 } };
 const ModInfo g_srv_modinfo = { "", "", 0, 0, 0, 0, 0, 0, 0 };
 const ImpEnt g_srv_imp[1]; const uint32_t g_srv_imp_count = 0;

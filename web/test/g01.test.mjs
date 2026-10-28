@@ -19,7 +19,11 @@ const LIST = path.join(REPO, 'games/mw/hle-reviewed.txt');
 
 test('games/mw/hle-reviewed.txt: the imports MW leaves unimplemented, none reviewed yet', () => {
   const rows = fs.readFileSync(LIST, 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean).map(l => l.split(/\s+/));
-  assert.ok(rows.length >= 60, `${rows.length} rows`);
+  assert.ok(rows.length >= 50, `${rows.length} rows`);
+  // the D3DX math imports are answered natively (runtime/mw/d3dxmath_mw.c): none is listed
+  const native = [...fs.readFileSync(path.join(REPO, 'runtime/mw/d3dxmath_mw.c'), 'utf8').matchAll(/\{ "(D3DX\w+)",\s+0x/g)].map(m => m[1]);
+  assert.equal(native.length, 11, 'the eleven native D3DX math functions');
+  for (const n of native) assert.ok(!rows.some(r => r[1] === `d3dx9_26.dll!${n}`), `${n} is answered natively, not listed`);
   for (const r of rows) {
     assert.ok(r.length === 4 || r.length >= 5 && r[3] === 'yes', `<module> <dll>!<name> <IAT> <yes|no> [<run>]: ${r.join(' ')}`);
     assert.match(r[0], /^(speed\.exe|server\.dll)$/);

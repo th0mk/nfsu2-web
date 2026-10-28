@@ -7,8 +7,9 @@
 # <module> <dll>!<name> <IAT> <yes|no> [<run>]
 #
 # The list: speed.exe v1.3's and server.dll's imports that no layer answers (runtime/win32.c, win32_ext.c,
-# win32_misc.c, fileio.c, winsock.c, heap.c, com.c, keyboard.c), from MW's lift (gen/mw/all and gen/mw/server,
-# impargs.c), 2026-10-28.  No MW run has reached any of them yet: all "no".  Addresses and names only.
+# win32_misc.c, fileio.c, winsock.c, heap.c, com.c, keyboard.c; the D3DX math: runtime/mw/d3dxmath_mw.c), from MW's
+# lift (gen/mw/all and gen/mw/server, impargs.c), 2026-10-28.  No MW run has reached any of them yet: all "no".
+# Addresses and names only.  d3dx9_26.dll's two effect imports are the D3DX oracle's in a dev oracle build.
 speed.exe  GDI32.dll!ExtTextOutA                 0x00890030 no
 speed.exe  GDI32.dll!BitBlt                      0x00890034 no
 speed.exe  GDI32.dll!GetPixel                    0x00890038 no
@@ -52,19 +53,8 @@ speed.exe  WS2_32.dll!WSARecvFrom                0x0089048c no
 speed.exe  WS2_32.dll!WSAGetOverlappedResult     0x00890498 no
 speed.exe  WS2_32.dll!WSAWaitForMultipleEvents   0x0089049c no
 speed.exe  WS2_32.dll!WSAResetEvent              0x008904a0 no
-speed.exe  d3dx9_26.dll!D3DXMatrixMultiply       0x008904b0 no
-speed.exe  d3dx9_26.dll!D3DXVec4Transform        0x008904b4 no
-speed.exe  d3dx9_26.dll!D3DXVec3Transform        0x008904b8 no
-speed.exe  d3dx9_26.dll!D3DXMatrixInverse        0x008904bc no
 speed.exe  d3dx9_26.dll!D3DXCreateEffectFromResourceA 0x008904c0 no
 speed.exe  d3dx9_26.dll!D3DXCreateEffectPool     0x008904c4 no
-speed.exe  d3dx9_26.dll!D3DXMatrixOrthoLH        0x008904c8 no
-speed.exe  d3dx9_26.dll!D3DXMatrixPerspectiveLH  0x008904cc no
-speed.exe  d3dx9_26.dll!D3DXMatrixTranslation    0x008904d0 no
-speed.exe  d3dx9_26.dll!D3DXVec3TransformCoordArray 0x008904d4 no
-speed.exe  d3dx9_26.dll!D3DXVec3Normalize        0x008904d8 no
-speed.exe  d3dx9_26.dll!D3DXVec3TransformNormal  0x008904dc no
-speed.exe  d3dx9_26.dll!D3DXMatrixTranspose      0x008904e0 no
 server.dll WS2_32.dll!WSASetEvent                0x00d4d1d0 no
 server.dll WS2_32.dll!WSAGetOverlappedResult     0x00d4d1e0 no
 server.dll WS2_32.dll!WSAWaitForMultipleEvents   0x00d4d1e4 no

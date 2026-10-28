@@ -14,8 +14,11 @@
  * MW's d3dx9_26.dll is a system DLL, not in the game folder: the test writes
  * it to /t/sys and the game's file names it through an environment variable
  * (ModLink file_env).  Its fourth import is a variable the game's file binds
- * (ModLink bind, msvcrt's _adjust_fdiv), and the exe imports two of its
- * functions, which module_load_imports binds to its export (or leaves). */
+ * (ModLink bind, msvcrt's _adjust_fdiv), and the exe imports three of its
+ * functions, which module_load_imports binds to its export (or leaves); the
+ * third the game's install has bound to an answer of its own, which it keeps
+ * (MW's native D3DX math), and with all three bound so it does not load the
+ * DLL at all. */
 #include "cpu.h"
 #include "game.h"
 #include "memmap.h"
@@ -38,12 +41,14 @@ static int pass, fail;
 
 static const char *g_dir;
 
-/* ---- the exe's imports, before the modules' in the index space: two of KERNEL32 (MW: and two of the
- * d3dx DLL, its export "Work" and a function it does not export) ---- */
+/* ---- the exe's imports, before the modules' in the index space: two of KERNEL32 (MW: and three of the
+ * d3dx DLL, its export "Work", a function it does not export and "Native", which the game answers) ---- */
 #ifdef NFSU2_GAME_MW
 const ImpEnt g_imp[] = { {0x00401000u, "KERNEL32.dll", "GetTickCount", 0}, {0x00401004u, "KERNEL32.dll", "Sleep", 1},
-                         {0x00401008u, "d3dx9_26.dll", "Work", 1}, {0x0040100cu, "d3dx9_26.dll", "Missing", 2} };
-const uint32_t g_imp_count = 4;
+                         {0x00401008u, "d3dx9_26.dll", "Work", 1}, {0x0040100cu, "d3dx9_26.dll", "Missing", 2},
+                         {0x00401010u, "d3dx9_26.dll", "Native", 2} };
+const uint32_t g_imp_count = 5;
+#define GAME_ANSWER 0x00401800u          /* what the game's install binds "Native" to */
 #else
 const ImpEnt g_imp[] = { {0x00401000u, "KERNEL32.dll", "GetTickCount", 0}, {0x00401004u, "KERNEL32.dll", "Sleep", 1} };
 const uint32_t g_imp_count = 2;
@@ -340,14 +345,25 @@ int main(int argc, char **argv){
     /* the exe's own imports of a lifted DLL: loaded before its entry point, the slots bound to the DLL's
      * exports (one it does not export keeps its value); UG2's exe imports none, and nothing happens */
     mem_commit(0x00401000u, 0x1000u);
-    for (uint32_t j = 0; j < g_imp_count; j++) MR32(g_imp[j].iat) = IMP_MAGIC + j;
     uint32_t att[NMOD]; for (int k = 0; k < NMOD; k++) att[k] = g_main_calls[k][1];
+#if NMOD > 1
+    /* every slot of the DLL bound by the game's install: the DLL is not loaded */
+    for (uint32_t j = 0; j < g_imp_count; j++) MR32(g_imp[j].iat) = j >= 2 ? GAME_ANSWER + 4u * j : IMP_MAGIC + j;
+    module_load_imports(&cpu);
+    CHECK(module_by_name(g_names[1]) == 0 && g_main_calls[1][1] == att[1], "%s not loaded: the game answers all its imports", g_names[1]);
+    for (uint32_t j = 2; j < g_imp_count; j++) CHECK(MR32(g_imp[j].iat) == GAME_ANSWER + 4u * j, "the exe's slot %u kept", j);
+#endif
+    for (uint32_t j = 0; j < g_imp_count; j++) MR32(g_imp[j].iat) = IMP_MAGIC + j;
+#if NMOD > 1
+    MR32(0x00401010u) = GAME_ANSWER;      /* the game's install answers "Native" */
+#endif
     module_load_imports(&cpu);
 #if NMOD > 1
     CHECK(module_by_name(g_names[1]) == g_bases[1] && g_main_calls[1][1] == att[1] + 1, "%s loaded for the exe's imports", g_names[1]);
     CHECK(module_by_name(g_names[0]) == 0 && g_main_calls[0][1] == att[0], "%s, which the exe does not import, not loaded", g_names[0]);
     CHECK(MR32(0x00401008u) == g_bases[1] + RVA_WORK, "the exe's Work slot bound to 0x%08x", MR32(0x00401008u));
     CHECK(MR32(0x0040100cu) == IMP_MAGIC + 3u, "the exe's Missing slot kept 0x%08x", MR32(0x0040100cu));
+    CHECK(MR32(0x00401010u) == GAME_ANSWER, "the exe's Native slot kept on the game's answer 0x%08x", MR32(0x00401010u));
     CHECK(MR32(0x00401000u) == IMP_MAGIC && MR32(0x00401004u) == IMP_MAGIC + 1u, "the exe's KERNEL32 slots kept");
     { uint32_t a = 5, r = call_guest(&cpu, MR32(0x00401008u), 1, &a);
       CHECK(r == 205u, "the exe's call through its Work slot -> %u", r); }

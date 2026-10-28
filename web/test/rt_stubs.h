@@ -25,6 +25,8 @@ int g_guest_exited;
 void dispatch_indirect(CPU *c, uint32_t a){ (void)c; (void)a; }
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args){ (void)c; (void)fn; (void)nargs; (void)args; return 0; }
 #endif
+/* dispatch.c's patch table (a game's install; MW's d3dxmath_mw.c): none applied in these units */
+void dispatch_patch(uint32_t a, void (*f)(CPU *)){ (void)a; (void)f; }
 void heap_init(void){ }
 void heap_report(void){ }
 int heap_api_kind(const char *name){ (void)name; return 0; }

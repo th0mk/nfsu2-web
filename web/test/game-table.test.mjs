@@ -28,7 +28,7 @@ const UG2_UNSET = {
 const MW_UNSET = {
   reg_defaults: 'its registry answers per key (reg_keys, registry_mw.c)',
   lang_suffixes: 'Q-06, the movies\' language suffix',
-  install: 'no MW patches yet', hook: 'no MW hook sites (games/mw has no hook list)',
+  hook: 'no MW hook sites (games/mw has no hook list)',
   on_present: 'Q-24, MW\'s per-frame anchor', on_frame: 'Q-24', status: 'the page\'s overlay, M6',
   sms_request: 'a UG2 feature', photo_input: 'a UG2 feature',
   racer: 'test traces, M4', text_entry: 'M3-11',
@@ -116,6 +116,10 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   // the oracle is a system DLL (NFSMW_D3DX names it), with msvcrt's variable bound; UG2's server.dll has neither
   assert.match(src, /MODLINK_TABLES\(d3dx_\)[^}]*\.file_env = "NFSMW_D3DX", \.bind = msvcrt_bind \}/);
   assert.doesNotMatch(read('runtime/game_ug2.c'), /file_env|\.bind\b/, 'UG2\'s server.dll entry sets neither');
+  // its install: the D3DX math imports answered natively (d3dxmath_mw.c), told whether the oracle is linked
+  assert.equal(t.get('install'), 'mw_install');
+  assert.match(src, /static void mw_install\(void\)\{\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+#else\s+d3dxmath_install\(0\);\s+#endif\s+\}/);
+  assert.match(read('runtime/mw/d3dxmath_mw.c'), /\nint d3dxmath_install\(int oracle_linked\)\{/);
 });
 
 test('each game\'s table is in its own build only', () => {

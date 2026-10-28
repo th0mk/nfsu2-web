@@ -7,7 +7,8 @@
  * What the table holds now: the game and its files (its registry keys,
  * registry_mw.c; its own registry file; paths that never leave C:\NFSMW), the
  * lifted entry point, the two lifted DLLs (server.dll; d3dx9_26.dll in a D3DX
- * oracle build only, PLAN D-09), the C runtime's heap globals, win32_misc.c's
+ * oracle build only, PLAN D-09), the D3DX math imports answered natively
+ * (its install, d3dxmath_mw.c, D-10), the C runtime's heap globals, win32_misc.c's
  * answers to the imports only MW needs answered (GAME.md 3.3), what the test
  * harness reads (the game flow, the front end's screens: fe_mw.c), the C
  * runtime's initializer tables the boot counts, and the threads the stall
@@ -17,6 +18,7 @@
 #include "game.h"
 #include "memmap.h"
 #include "module.h"
+#include "d3dxmath_mw.h"
 #include <strings.h>
 
 void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen/mw/all/gameinfo.h, through cpu.h) */
@@ -32,8 +34,9 @@ uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
  * (gen/mw/d3dx, prefix d3dx_), linked when web/build.sh finds its lift: the
  * build then passes -DNFSU2_D3DX_ORACLE=1 and writes "oracle":1 into the
  * module's json, which release.sh refuses.  The exe imports the oracle
- * itself, so it is loaded before the entry point and those 13 IAT slots are
- * bound to its exports (module.c module_load_imports).  The game folder does
+ * itself, so it is loaded before the entry point and the IAT slots of its two
+ * effect imports are bound to its exports (module.c module_load_imports); the
+ * other 11, the math, stay on mw_install's native answers.  The game folder does
  * not hold d3dx9_26.dll (a system DLL): NFSMW_D3DX names Microsoft's file on
  * the host (GAME.md 5.1).  Its C runtime is msvcrt.dll: msvcrt_mw.c, with
  * _adjust_fdiv bound as a variable. */
@@ -65,6 +68,17 @@ static const InitTable mw_init_tables[] = {
     { "C++ constructors", "__xc", 0x008ea000u, 0x008eb164u, 0x007ca540u, 0x007ca311u, 0x007ca558u, 0 },
 };
 
+/* After win32_init, before the entry point (main_web.c): the D3DX math imports answered natively
+ * (d3dxmath_mw.c, PLAN D-10), before module_load_imports binds what is left of d3dx9_26.dll's to the
+ * oracle in an oracle build */
+static void mw_install(void){
+#if NFSU2_D3DX_ORACLE
+    d3dxmath_install(1);
+#else
+    d3dxmath_install(0);
+#endif
+}
+
 /* The imports the shared layers leave to the game (game.h win32_misc): msvcrt.dll's, which only the D3DX
  * oracle imports, then win32_misc.c's */
 static int mw_imports(CPU *c, const char *dll, const char *n, uint32_t *r){
@@ -75,7 +89,7 @@ static int mw_imports(CPU *c, const char *dll, const char *n, uint32_t *r){
 /* Left 0, and why:
  *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
  *   lang_suffixes       Q-06 (the movies' language suffix)
- *   install, hook       no MW patches or hook sites yet (games/mw has no override or hook list)
+ *   hook                no MW hook sites yet (games/mw has no override or hook list)
  *   on_present, on_frame, status   Q-24 (MW's per-frame anchor), the page's overlay (M6)
  *   sms_request, photo_input   UG2 features, not ported
  *   racer, text_entry   test traces (M4), DirectInput text entry (M3-11)
@@ -99,6 +113,7 @@ const GameOps g_game = {
     .entry_va = GAMEINFO_ENTRY,
     .modules = mw_modules,
     .nmodules = (int)(sizeof mw_modules / sizeof mw_modules[0]),
+    .install = mw_install,                      /* d3dxmath_mw.c: the D3DX math imports, native */
     .crtheap_va = 0x009c5318u,                  /* _heap_init 0x7CD4B0: HeapCreate's handle, then __heap_select's */
     .active_heap_va = 0x009c531cu,              /* answer (3 = the small-block heap) */
     .win32_misc = mw_imports,                   /* win32_misc.c: memory, locale, keyboard, voice devices; msvcrt_mw.c */

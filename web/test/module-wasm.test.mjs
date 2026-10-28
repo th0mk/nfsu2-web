@@ -7,7 +7,9 @@
 // its two heaps.  In both, a server.dll with one byte changed is refused.
 // MW's d3dx9_26.dll comes from outside the game folder (ModLink file_env), has a
 // variable bound (ModLink bind), and the exe's own imports of it are bound to its
-// export before the entry point (module_load_imports); UG2's exe imports none.
+// export before the entry point (module_load_imports), but for one the game's install
+// answers itself (MW's native D3DX math), and with all answered it is not loaded at all;
+// UG2's exe imports none.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -57,16 +59,19 @@ function counts(r) {
 
 test('module_unit, MW\'s map: two DLLs loaded, each heap in its own part of the modheap region', { skip }, () => {
   const r = run(build('mw', ['-DNFSU2_GAME_MW']));
-  assert.ok(counts(r) >= 68, 'every check ran');
+  assert.ok(counts(r) >= 73, 'every check ran');
   assert.equal(r.status, 0);
   // the loader's own lines: both mapped at their slots, from the files the test wrote
   assert.match(r.err, /\[module\] server\.dll mapped at 0x00d00000-0x00d04000 from \/t\/server\.dll \(sha256 ok, 1 fixups, 3 imports bound\)/);
   // the system DLL: not in the game folder, then from where its variable names it, with its variable bound
   assert.match(r.err, /\[module\] d3dx9_26\.dll: not found in the game folder and MODULE_UNIT_SYS names no file: the test is not available/);
   assert.match(r.err, /\[module\] d3dx9_26\.dll mapped at 0x00d80000-0x00d84000 from \/t\/sys\/d3dx9_26\.dll \(sha256 ok, 1 fixups, 4 imports bound, 1 of them variables\)/);
-  // the exe's own imports of it: bound before its entry point, the one it does not export left
+  // the exe's own imports of it: with all three answered by the game, not loaded; then bound before its entry point,
+  // the one it does not export left, the one the game answers kept
+  assert.match(r.err, /^\[module\] d3dx9_26\.dll: the game answers all 3 of the exe's imports of it, not loaded$/m);
   assert.match(r.err, /^\[module\] d3dx9_26\.dll exports no Missing: the exe's import stays on the runtime's answer$/m);
-  assert.match(r.err, /^\[module\] d3dx9_26\.dll: 1 of the exe's 2 imports of it bound to its exports$/m);
+  assert.match(r.err, /^\[module\] d3dx9_26\.dll: 1 of the exe's 3 imports of it bound to its exports, 1 kept on the game's own answers$/m);
+  assert.doesNotMatch(r.err, /exports no Native/, 'the slot the game answers is not looked up');
   assert.match(r.err, /^\[mem\] mw: image 0x00400000-0x00a79000, server\.dll 0x00d00000-0x00d6f000, d3dx9_26\.dll 0x00d80000-0x00fca000, /m);
   // the heaps: server.dll's in 0x01000000-0x03000000, the oracle's in 0x03000000-0x05000000
   assert.match(r.out, /server\.dll heap 0x01000000, its part 0x01000000-0x03000000/);

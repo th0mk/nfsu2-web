@@ -332,28 +332,39 @@ uint32_t module_proc(uint32_t h, uint32_t nm, uint32_t *err){
     return va;
 }
 
+/* the exe's import j still holds what win32_init wrote: the game's install (game.h) bound no answer of
+ * its own to it */
+static int imp_unbound(uint32_t j){ return MR32(g_imp[j].iat) == IMP_MAGIC + j; }
 void module_load_imports(CPU *c){
     for (int i = 0; i < NMOD; i++){
         GuestMod *m = &g_mods[i];
-        uint32_t want = 0;
-        for (uint32_t j = 0; j < g_imp_count; j++) want += m->info->name[0] && !strcasecmp(g_imp[j].dll, m->info->name);
+        uint32_t want = 0, native = 0;
+        for (uint32_t j = 0; j < g_imp_count; j++)
+            if (m->info->name[0] && !strcasecmp(g_imp[j].dll, m->info->name)){ want++; native += !imp_unbound(j); }
         if (!want) continue;
+        if (native == want){
+            fprintf(stderr, "[module] %s: the game answers all %u of the exe's imports of it, not loaded\n", m->info->name, want);
+            continue;
+        }
         uint32_t err = 0;
         if (!module_load(c, m->info->name, &err)){
             fprintf(stderr, "[module] %s: the exe's %u imports of it stay on the runtime's answers (it did not load,"
-                            " error %u)\n", m->info->name, want, err);
+                            " error %u)\n", m->info->name, want - native, err);
             continue;
         }
         uint32_t bound = 0;
         for (uint32_t j = 0; j < g_imp_count; j++){
             const ImpEnt *e = &g_imp[j];
-            if (strcasecmp(e->dll, m->info->name)) continue;
+            if (strcasecmp(e->dll, m->info->name) || !imp_unbound(j)) continue;
             uint32_t va = e->name[0] == '#' ? export_va(m, 0, (uint32_t)strtoul(e->name + 1, 0, 10)) : export_va(m, e->name, 0);
             if (va){ MR32(e->iat) = va; bound++; }
             else fprintf(stderr, "[module] %s exports no %s: the exe's import stays on the runtime's answer\n",
                          m->info->name, e->name);
         }
-        fprintf(stderr, "[module] %s: %u of the exe's %u imports of it bound to its exports\n", m->info->name, bound, want);
+        if (native)
+            fprintf(stderr, "[module] %s: %u of the exe's %u imports of it bound to its exports, %u kept on the game's own"
+                            " answers\n", m->info->name, bound, want, native);
+        else fprintf(stderr, "[module] %s: %u of the exe's %u imports of it bound to its exports\n", m->info->name, bound, want);
     }
 }
 

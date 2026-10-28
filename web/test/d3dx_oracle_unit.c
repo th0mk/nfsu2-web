@@ -1,33 +1,42 @@
-/* The D3DX oracle on its effect-creation path, without a boot (TRACKER
- * M2-07): Microsoft's d3dx9_26.dll lifted into gen/mw/d3dx (dev only, PLAN
- * D-09), loaded and called as Most Wanted's boot loads and calls it.
+/* The D3DX oracle without a boot: Microsoft's d3dx9_26.dll lifted into
+ * gen/mw/d3dx (dev only, PLAN D-09), loaded and called as Most Wanted's boot
+ * loads and calls it.
  *
- *   d3dx_oracle_unit.wasm <speed.exe> <d3dx9_26.dll>
+ *   d3dx_oracle_unit.wasm <speed.exe> <d3dx9_26.dll>        its effect-creation path (TRACKER M2-07)
+ *   d3dx_oracle_unit.wasm <speed.exe> <d3dx9_26.dll> math   the native D3DX math against it (M2-08)
+ *   d3dx_oracle_unit.wasm <speed.exe> <d3dx9_26.dll> boot   the boot's binding of the exe's slots alone
+ * K=V arguments after the mode are set in the program's environment
+ * (NFSMW_D3DX_MATH=oracle: the math left to the oracle).
  *
  * The runtime's own files do the work: mem.c maps speed.exe (its resources
  * hold the 31 effects), fileio.c, res.c, heap.c, dispatch.c, win32.c,
  * win32_ext.c, win32_misc.c, keyboard.c, module.c and modheap.c, MW's table
- * with the oracle's entry (game_mw.c, registry_mw.c, fe_mw.c, threads_mw.c)
- * and its C runtime (msvcrt_mw.c); the exe's import table is gen/mw/all's,
- * the oracle's code GAME=mw web/build.sh's objects.  What is not linked is
- * stubbed below; the Direct3D device is a stand-in that records which of
- * its methods the oracle calls (com_call), with the caps com.c reports.
+ * with the oracle's entry (game_mw.c, registry_mw.c, fe_mw.c, threads_mw.c),
+ * its native D3DX math (d3dxmath_mw.c) and the oracle's C runtime
+ * (msvcrt_mw.c); the exe's import table is gen/mw/all's, the oracle's code
+ * GAME=mw web/build.sh's objects.  What is not linked is stubbed below; the
+ * Direct3D device is a stand-in that records which of its methods the
+ * oracle calls (com_call), with the caps com.c reports.
  *
- * In order, as the game's boot does it: win32_init binds the exe's IAT;
- * module_load_imports (main_web.c's call before the entry point) maps the
- * oracle from NFSMW_D3DX, runs its DllMain and binds the exe's 13 d3dx9_26
- * slots to its exports; then D3DXCreateEffectPool through the exe's slot
- * 0x8904C4, as the game keeps the pool (0x982C84), and for each of the 31
- * entries of the exe's effect table (0x8F9BE8, stride 0x90) the call the game
- * makes at 0x6C60D2 through the slot 0x8904C0: D3DXCreateEffectFromResourceA
- * (device, NULL, name, NULL, NULL, 0, pool, &effect, &errors).  Results are
- * "T" lines, a failed check "FAIL", the end "d3dx_oracle_unit: <n> passed,
- * <m> failed". */
+ * In order, as the game's boot does it: win32_init binds the exe's IAT; the
+ * game's install answers the 11 math imports natively (each slot to its
+ * thunk, the thunk to d3dxmath_mw.c); module_load_imports (main_web.c's call
+ * before the entry point) maps the oracle from NFSMW_D3DX, runs its DllMain
+ * and binds the exe's other two d3dx9_26 slots to its exports.  Then
+ * D3DXCreateEffectPool through the exe's slot 0x8904C4, as the game keeps
+ * the pool (0x982C84), and for each of the 31 entries of the exe's effect
+ * table (0x8F9BE8, stride 0x90) the call the game makes at 0x6C60D2 through
+ * the slot 0x8904C0: D3DXCreateEffectFromResourceA (device, NULL, name,
+ * NULL, NULL, 0, pool, &effect, &errors); or with "math" the cases of
+ * d3dxmath_cases.h (math_run below).  Results are "T" lines, a failed check
+ * "FAIL", the end "d3dx_oracle_unit: <n> passed, <m> failed". */
 #include "cpu.h"
 #include "game.h"
 #include "module.h"
 #include "d3d9_tables.h"
 #include "mw/fx2.h"
+#include "mw/d3dxmath_mw.h"
+#include "d3dxmath_cases.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -183,9 +192,76 @@ static void tr(const char *fmt, ...){
     printf("T %s\n", b);
 }
 
+/* ---- "math": the native D3DX math (d3dxmath_mw.c) against the oracle's lifted functions (TRACKER M2-08) ----
+ * Each case of web/test/d3dxmath_cases.h runs twice from the same window: through the oracle's export (its
+ * lifted code: the export's jmp through d3dx9_26's CPU table, filled by the first call, to the SSE kernel or
+ * the x87 code) and through speed.exe's IAT slot as the game calls it (its thunk, then the native answer).
+ * Compared: the whole window, eax, and that each returned to the caller with its arguments popped and
+ * ebx, esi, edi, ebp, the x87 control word and top unchanged. */
+#define MATH_W  0x07F80000u              /* the cases' window, in SCR (d3dxmath_unit.c's WIN: eax is in the digest) */
+#define MATH_RA 0x00401000u              /* the "caller" */
+typedef struct { uint32_t eax, esp, eip, ebx, esi, edi, ebp; uint16_t fcw; int32_t top; } Regs;
+static void math_call(CPU *c, uint32_t target, const MathCase *mc, Regs *o){
+    c->esp = STACK_HI - 0x4000u;
+    c->eax = 0xA1A1A1A1u; c->ecx = 0xC1C1C1C1u; c->edx = 0xD1D1D1D1u;
+    c->ebx = 0x0B0B0B0Bu; c->esi = 0x05050505u; c->edi = 0x0D0D0D0Du; c->ebp = 0x0E0E0E0Eu;
+    c->fcw = mc->fcw; c->top = 5;
+    for (int k = mc->nargs - 1; k >= 0; k--) PUSH32(mc->args[k]);
+    PUSH32(MATH_RA);
+    dispatch_indirect(c, target);
+    *o = (Regs){ c->eax, c->esp, c->eip, c->ebx, c->esi, c->edi, c->ebp, c->fcw, c->top };
+}
+static int math_regs_ok(const Regs *r, const MathCase *mc){
+    return r->esp == STACK_HI - 0x4000u && r->eip == MATH_RA && r->ebx == 0x0B0B0B0Bu && r->esi == 0x05050505u
+        && r->edi == 0x0D0D0D0Du && r->ebp == 0x0E0E0E0Eu && r->fcw == mc->fcw && r->top == 5;
+}
+extern uint64_t g_d3dxmath_exact;
+static void math_run(CPU *c, uint32_t base){
+    static uint8_t before[MC_WIN], oracle[MC_WIN];
+    mem_commit(MATH_W, MC_WIN);
+    for (int f = 0; f < D3DXMATH_COUNT; f++){
+        const D3dxMathFn *fn = &d3dxmath_fns[f];
+        uint32_t nm = scr(64), err = 0;
+        memcpy(g_mem + nm, fn->name, strlen(fn->name) + 1);
+        uint32_t ex = module_proc(base, nm, &err), slot = MR32(fn->iat);
+        CHECK(ex && !err, "%s: the oracle exports it (0x%08x, error %u)", fn->name, ex, err);
+        CHECK(slot == fn->thunk, "%s: speed.exe's slot 0x%08x holds its thunk 0x%08x (0x%08x)", fn->name, fn->iat, fn->thunk, slot);
+        if (!ex) continue;
+        int bad = 0, regs_bad = 0; uint64_t h = MC_FNV0, exact0 = g_d3dxmath_exact;
+        for (int i = 0; i < MC_CASES; i++){
+            MathCase mc; Regs ro, rn;
+            mc_case(f, i, MATH_W, &mc);
+            memcpy(before, g_mem + MATH_W, MC_WIN);
+            math_call(c, ex, &mc, &ro);
+            memcpy(oracle, g_mem + MATH_W, MC_WIN); memcpy(g_mem + MATH_W, before, MC_WIN);
+            math_call(c, slot, &mc, &rn);
+            h = mc_fnv(mc_fnv(h, g_mem + MATH_W, MC_WIN), &rn.eax, 4);
+            regs_bad += !math_regs_ok(&ro, &mc) || !math_regs_ok(&rn, &mc);
+            if (!memcmp(oracle, g_mem + MATH_W, MC_WIN) && ro.eax == rn.eax) continue;
+            if (bad++ < 6){
+                uint32_t k = 0; while (k < MC_WIN && !memcmp(oracle + k, g_mem + MATH_W + k, 4)) k += 4;
+                uint32_t wo, wn; memcpy(&wo, oracle + k, 4); memcpy(&wn, g_mem + MATH_W + k, 4);
+                printf("  %s case %d (fcw 0x%04x, args 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x): window +0x%03x oracle 0x%08x"
+                       " native 0x%08x, eax 0x%08x / 0x%08x\n", fn->name, i, mc.fcw, mc.args[0], mc.args[1], mc.args[2],
+                       mc.args[3], mc.args[4], mc.args[5], k, wo, wn, ro.eax, rn.eax);
+            }
+        }
+        tr("math %s: %d cases, %d differ, %d with registers off, %llu passes by the NaN rule, digest %016llx", fn->name, MC_CASES, bad,
+           regs_bad, (unsigned long long)(g_d3dxmath_exact - exact0), (unsigned long long)h);
+        CHECK(bad == 0, "%s: native and oracle the same on all %d cases (%d differ)", fn->name, MC_CASES, bad);
+        CHECK(regs_bad == 0, "%s: each call returns to its caller, stdcall, the caller's registers kept (%d not)", fn->name, regs_bad);
+    }
+}
+
 int main(int argc, char **argv){
-    if (argc < 3){ fprintf(stderr, "usage: d3dx_oracle_unit <speed.exe> <d3dx9_26.dll>\n"); return 2; }
+    if (argc < 3){ fprintf(stderr, "usage: d3dx_oracle_unit <speed.exe> <d3dx9_26.dll> [math|boot]\n"); return 2; }
+    int math = argc > 3 && !strcmp(argv[3], "math");
     setenv("NFSMW_D3DX", argv[2], 1);
+    for (int i = 4; i < argc; i++){                     /* K=V after the mode: the program's environment (WASI gives none) */
+        char kv[128]; snprintf(kv, sizeof kv, "%s", argv[i]);
+        char *eq = strchr(kv, '=');
+        if (eq){ *eq = 0; setenv(kv, eq + 1, 1); }
+    }
     if (mem_load_pe(argv[1])){ printf("FAIL cannot load %s\n", argv[1]); return 2; }
     mem_commit(TEB_MAIN, 0x20000); mem_commit(STACK_LO, STACK_HI - STACK_LO); mem_commit(SCR, 0x00100000u);
     fileio_set_root(argv[1]);
@@ -197,7 +273,9 @@ int main(int argc, char **argv){
     c->esp = STACK_HI - 0x1000u; c->fcw = 0x027F; c->fs_base = TEB_MAIN; c->gs_base = TEB_MAIN;
     guest_lock(c);
 
-    /* the boot: the oracle loaded before the entry point, the exe's slots bound to its exports */
+    /* the boot (main_web.c): the game's install (the D3DX math, native), then the oracle loaded before the
+     * entry point and the exe's slots it does not answer bound to its exports: the two effect imports */
+    if (g_game.install) g_game.install();
     module_load_imports(c);
     uint32_t base = module_by_name("d3dx9_26.dll");
     CHECK(base == 0x00D80000u, "the oracle is loaded at 0x%08x", base);
@@ -205,9 +283,26 @@ int main(int argc, char **argv){
     tr("speed.exe's D3DXCreateEffectPool slot 0x%08x, D3DXCreateEffectFromResourceA slot 0x%08x", slot_pool, slot_res);
     CHECK(slot_pool >= 0x00D80000u && slot_pool < 0x00FCA000u && slot_res >= 0x00D80000u && slot_res < 0x00FCA000u,
           "the exe's slots lead into the oracle");
-    for (uint32_t a = 0x008904B0u; a <= 0x008904E0u; a += 4)
-        CHECK(MR32(a) - 0x00D80000u < 0x0024A000u, "the exe's d3dx9_26 slot 0x%08x -> 0x%08x", a, MR32(a));
+    /* the math slots: their thunks (the native answers), or with NFSMW_D3DX_MATH=oracle the oracle's exports */
+    const char *ab = getenv("NFSMW_D3DX_MATH");
+    int to_oracle = ab && !strcmp(ab, "oracle");
+    for (int f = 0; f < D3DXMATH_COUNT; f++){
+        uint32_t v = MR32(d3dxmath_fns[f].iat);
+        CHECK(to_oracle ? v - 0x00D80000u < 0x0024A000u : v == d3dxmath_fns[f].thunk, "the exe's %s slot 0x%08x -> 0x%08x, %s",
+              d3dxmath_fns[f].name, d3dxmath_fns[f].iat, v, to_oracle ? "the oracle" : "its thunk");
+    }
+    if (argc > 3 && !strcmp(argv[3], "boot")){          /* the binding alone */
+        fflush(stderr);
+        printf("d3dx_oracle_unit: %d passed, %d failed\n", pass, fail);
+        return fail ? 1 : 0;
+    }
 
+    if (math){
+        math_run(c, base);
+        fflush(stderr);
+        printf("d3dx_oracle_unit: %d passed, %d failed\n", pass, fail);
+        return fail ? 1 : 0;
+    }
     /* D3DXCreateEffectPool(&pool) */
     uint32_t ppool = scr(4), ok = 0;
     uint32_t hr = call_guest(c, slot_pool, 1, &ppool);

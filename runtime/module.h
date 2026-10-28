@@ -68,8 +68,9 @@ const ModLink *module_link(int m);                     /* module m, 0 when there
 uint32_t module_load(struct CPU *c, const char *name, uint32_t *err);  /* LoadLibraryA */
 /* The lifted DLLs the exe itself imports (Most Wanted's d3dx9_26.dll in a D3DX oracle build), loaded as
  * Windows loads them: before the exe's entry point, with the exe's IAT slots of each DLL bound to its
- * exports.  On the guest's main thread with the guest lock held (main_web.c); nothing for UG2, whose exe
- * imports no lifted DLL. */
+ * exports.  A slot the game's install bound to an answer of its own keeps it (Most Wanted's D3DX math);
+ * a DLL none of whose imports is left is not loaded.  On the guest's main thread with the guest lock
+ * held (main_web.c); nothing for UG2, whose exe imports no lifted DLL. */
 void     module_load_imports(struct CPU *c);
 int      module_free(struct CPU *c, uint32_t h);                       /* FreeLibrary; 0 = not a module */
 int      module_handle(uint32_t h);                    /* h is a lifted module (mapped or not) */
