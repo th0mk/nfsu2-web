@@ -88,6 +88,16 @@ static int mw_imports(CPU *c, const char *dll, const char *n, uint32_t *r){
     return win32_misc_call(c, dll, n, r);
 }
 
+/* The display modes the adapter lists (com.c EnumAdapterModes): the six 4:3
+ * modes of the game's own table first (0x8F9414 widths, 0x8F942C heights).
+ * The game marks each of them the list holds (0x6C15B0, [0x93DBEC+4i]) and
+ * the options' resolution arrows step over unmarked ones without a bound
+ * (0x50F998), so all six are listed; the wide modes after them match no row. */
+static const uint32_t mw_modes[][2] = {
+    {640,480},{800,600},{1024,768},{1280,960},{1280,1024},{1600,1200},
+    {1280,720},{1920,1080},{2560,1440},{3840,2160},{0,0},
+};
+
 /* Left 0, and why:
  *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
  *   lang_suffixes       Q-06 (the movies' language suffix)
@@ -100,7 +110,9 @@ static int mw_imports(CPU *c, const char *dll, const char *n, uint32_t *r){
  *                       estimate only); with 0 it names the runtime's own caller
  *   on_qpc, qpc_caller  MW's frame wait loop is not studied (M4)
  *   lan_*               MW's LAN server glue is not studied (M8)
- *   res_labels, on_sound_unlock   M3-03 (the resolution rows), UG2 debugging only
+ *   res_labels          the options show the table's own labels ("800x600"); the rows' real device sizes
+ *                       are com.c's res_pick, as for UG2
+ *   on_sound_unlock     UG2 debugging only
  *   online_host_va, online_host   M9: the lobby is "*pcnfs06.ea.com" at 0x8F42C8 on port 30920
  *                       (Q-14), which the server's Online stand-in does not serve; Online stays off */
 const GameOps g_game = {
@@ -119,6 +131,9 @@ const GameOps g_game = {
     .crtheap_va = 0x009c5318u,                  /* _heap_init 0x7CD4B0: HeapCreate's handle, then __heap_select's */
     .active_heap_va = 0x009c531cu,              /* answer (3 = the small-block heap) */
     .win32_misc = mw_imports,                   /* win32_misc.c: memory, locale, keyboard, voice devices; msvcrt_mw.c */
+    .d3d_modes = mw_modes,                      /* the 4:3 modes first (GAME.md 5.7) */
+    .d3d9_strict = 1,                           /* D3D9's answers: level sizes, failed creators, no multisampling */
+    .vclock_sleep_real = 1,                     /* the boot's CPU speed test (0x6CAF90) sees its Sleep(50) */
     .flow = mw_flow,                            /* fe_mw.c: GameFlowManager's state [0x925E90] */
     .flow_fe = 3,
     .flow_race = 6,

@@ -135,6 +135,17 @@ typedef struct GameOps {
                                      * srvcycle test (module.c): the object (thiscall), its start(name) and
                                      * stop methods, the pointer to the server's IsServerRunning */
     const ResLabel *res_labels;     /* the settings menu's 6 resolution labels (com.c), 0 = leave them */
+    const uint32_t (*d3d_modes)[2]; /* the display modes EnumAdapterModes lists, in order, up to a {0,0} row
+                                     * (com.c); 0 = UG2's rows: its own 6-row table, with the 4K row's stand-in */
+    int d3d9_strict;                /* 1: D3D9's documented answers where UG2's runtime keeps answers of its own
+                                     * (com.c): GetLevelDesc and GetDesc give the level's size, the type, usage and
+                                     * pool, GetType names cube textures and buffers, CheckDeviceMultiSampleType
+                                     * offers only what the renderer draws, a texture the renderer could not make
+                                     * fails its CreateTexture, a size beyond 8192 fails Reset; 0 = UG2's */
+    int vclock_sleep_real;          /* 1: a Sleep of the game's main thread moves the virtual clock by at least
+                                     * its real length, also in a frame past the in-frame cap (win32.c), so a
+                                     * speed test that sleeps between two clock reads sees its sleep; 0 = UG2's
+                                     * clock, which stands at the cap there apart from its creep */
     void (*on_sound_unlock)(void);  /* every DirectSound buffer Unlock (com.c) */
     uint32_t online_host_va;        /* the Online server's host name in the exe ("*pcnfs05.ea.com") */
     const char *online_host;        /* that name without its '*' ("pcnfs05.ea.com") */
