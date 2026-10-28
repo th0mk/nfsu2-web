@@ -477,6 +477,50 @@ async fn the_binary_for_most_wanted() {
     assert_eq!((err.trim_end(), code), (usage.as_str(), Some(1)));
 }
 
+/// the image's health check (Dockerfile): its command, as the container's shell runs it
+fn health_check() -> String {
+    let file = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Dockerfile")).unwrap();
+    let mut cmd = String::new();
+    for l in file.lines().skip_while(|l| !l.starts_with("HEALTHCHECK ")) {
+        cmd.push_str(l.strip_suffix('\\').unwrap_or(l).trim());
+        cmd.push(' ');
+        if !l.ends_with('\\') {
+            break;
+        }
+    }
+    cmd.split_once(" CMD ").expect("HEALTHCHECK ... CMD").1.trim().to_string()
+}
+
+// The image's health check passes for either game it runs (UG2 at the root, Most Wanted under /mw), once the module
+// is there, and fails without it
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_images_health_check_for_each_game() {
+    if Command::new("wget").arg("--version").output().is_err() {
+        eprintln!("no wget: the health check's run is skipped");
+        return;
+    }
+    let check = health_check();
+    assert!(check.contains("game.json"), "{check}");
+    let tmp = tempfile::tempdir().unwrap();
+    for (game, exe) in [("ug2", "SPEED2.EXE"), ("mw", "speed.exe")] {
+        let root = tmp.path().join(game);
+        std::fs::create_dir_all(root.join("game")).unwrap();
+        std::fs::write(root.join("game").join(exe), "MZ").unwrap();
+        let wasm = root.join("game.wasm");
+        std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
+        std::fs::write(wasm.with_extension("json"), r#"{"rev":"abc"}"#).unwrap();
+        let port = free_port();
+        let mut srv = Server::spawn(command(&root.join("game"), &wasm, port, &root.join("state"), &["--game", game]), port);
+        srv.ready().await;
+        let run = || Command::new("sh").args(["-c", &check]).env("NFSU2_HTTP_PORT", port.to_string()).status().unwrap().success();
+        assert!(run(), "{game}: healthy");
+        // (the module's json gone: game.json answers 404 at every base)
+        std::fs::remove_file(wasm.with_extension("json")).unwrap();
+        assert!(!run(), "{game}: not healthy without its module");
+        assert_eq!(srv.stop().await, Some(0));
+    }
+}
+
 /// the lobby trace's lines without their times (and the start line's date) and the game's own port, sorted: the
 /// switch and the Online host write theirs from threads of their own
 fn trace_lines(f: &Path, game_port: u16) -> Vec<String> {

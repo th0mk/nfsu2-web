@@ -69,8 +69,10 @@ ENV NFSU2_REPO=/app \
 # (a uid without a name: this stage runs nothing, so building it for arm64 needs no emulation)
 USER 1000:1000
 VOLUME /state
-# the module is there and the server answers (over the HTTP port, which stays on 127.0.0.1)
+# the module is there and the server answers (over the HTTP port, which stays on 127.0.0.1): game.json at the game's
+# base on this machine's names, UG2's root or Most Wanted's /mw (src/game.rs), whichever --game the image runs with;
+# a server answers one of them only (tests/binary.rs runs this line against both games)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --start-interval=2s \
-  CMD wget -q -O /dev/null "http://127.0.0.1:${NFSU2_HTTP_PORT:-8080}/game.json" || exit 1
+  CMD for b in "" /mw; do wget -q -O /dev/null "http://127.0.0.1:${NFSU2_HTTP_PORT:-8080}$b/game.json" && exit 0; done; exit 1
 ENTRYPOINT ["/app/nfsu2-server"]
 CMD ["--behind-proxy"]

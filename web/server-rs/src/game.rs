@@ -295,4 +295,19 @@ mod tests {
         assert_eq!(base_path(&format!("/{}", "a".repeat(32))).map(|p| p.len()), Some(33));
         assert_eq!(base_path(&format!("/{}", "a".repeat(33))), None);
     }
+
+    // The image's health check (Dockerfile) asks for game.json at each game's base on this machine's names: one image
+    // runs either game, and the check cannot see --game (tests/binary.rs runs it against both)
+    #[test]
+    fn the_images_health_check_asks_at_each_games_base() {
+        let bases: Vec<String> = GAMES
+            .iter()
+            .map(|g| match Bases::of_game(g).of("127.0.0.1") {
+                "" => "\"\"".to_string(),
+                b => b.to_string(),
+            })
+            .collect();
+        let want = format!("for b in {}; do", bases.join(" "));
+        assert!(include_str!("../Dockerfile").contains(&want), "the HEALTHCHECK's loop is not `{want}`");
+    }
 }
