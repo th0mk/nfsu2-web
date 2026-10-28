@@ -714,7 +714,7 @@ mod tests {
         assert_eq!(o.tests, s.p("repo/tests/mw"));
         assert!(!o.online && o.roam_hub);
         // under /mw on every name
-        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz"), o.bases.all()), ("/mw", "/mw", vec!["/mw".to_string()]));
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz"), o.bases.all(|_| true)), ("/mw", "/mw", vec!["/mw".to_string()]));
         // from the environment too, in any case
         assert_eq!(mw(&[], &[("NFSU2_GAME", "MW")]).unwrap().game.id, "mw");
         // its state folder, apart from UG2's

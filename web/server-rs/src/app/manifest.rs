@@ -32,8 +32,8 @@ pub const BLOCK: u64 = 1 << 20;
 pub const BLOCKS_MAX: u64 = 8;
 
 pub struct Manifest {
-    /// the same files, one body for each base the server has (its blocks' address is under the base): the first is
-    /// the default base's
+    /// the same files, one body for each base of the server's names when it walked (its blocks' address is under the
+    /// base): the first is the default base's
     pub bodies: Vec<Body>,
     /// entries (folders and files)
     pub count: usize,
@@ -53,7 +53,12 @@ pub struct Body {
 }
 
 impl Manifest {
-    /// the body for the pages under `base` (the default's for a base the server does not have)
+    /// whether it has a body for the pages under `base`
+    pub fn has(&self, base: &str) -> bool {
+        self.bodies.iter().any(|b| b.base == base)
+    }
+
+    /// the body for the pages under `base` (the default's for a base it has none for)
     pub fn under(&self, base: &str) -> &Body {
         self.bodies.iter().find(|b| b.base == base).unwrap_or(&self.bodies[0])
     }

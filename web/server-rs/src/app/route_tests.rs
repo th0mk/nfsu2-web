@@ -496,9 +496,43 @@ async fn base_path_moves_a_name() {
     assert_eq!(m["blocks"]["url"], "/x/data-blocks/v2/");
     let m: serde_json::Value = serde_json::from_slice(&get("localhost", "/u2/data-manifest").await.body).unwrap();
     assert_eq!(m["blocks"]["url"], "/u2/data-blocks/v2/");
-    // (a body for each base the names have: /x, and /u2 of localhost and the shared site; no name is at the root)
+    // (a body for each base of its names: /x, and localhost's /u2; no name is at the root.  The shared site's name is
+    // none of its own, no --host, so its /u2 alone would make none)
     let bases: Vec<String> = kit.app.current_manifest().unwrap().bodies.iter().map(|b| b.base.clone()).collect();
     assert_eq!(bases, ["/x", "/u2"]);
+}
+
+/// the bases the manifest that is in place has a body for
+fn bodies(kit: &Kit) -> Vec<String> {
+    kit.app.current_manifest().unwrap().bodies.iter().map(|b| b.base.clone()).collect()
+}
+
+// A manifest body only for the bases of the server's own names: UG2's server for nfsu2.xyz alone makes none for the
+// shared site's /u2, where it answers 421.  A name it takes on later (a new certificate's) gets its body at its first
+// request, from a walk then; the root's body and ETag stay as they were.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_manifest_body_only_for_the_bases_of_its_names() {
+    let kit = Kit::start(&["--host", "nfsu2.xyz"], |_| {}).await;
+    let get = |host: &'static str, path: &'static str| kit.request_to(host, "GET", path, &[], b"");
+    assert_eq!(bodies(&kit), [""]);
+    let root = get("nfsu2.xyz", "/data-manifest").await;
+    assert_eq!(get("nfsrevived.xyz", "/u2/data-manifest").await.status, 421);
+    let walked = kit.app.current_manifest().unwrap();
+    assert_eq!(bodies(&kit), [""], "no walk for a name it does not answer");
+    kit.app.host_check.set_cert_names(&["nfsrevived.xyz".to_string()]);
+    let u2 = get("nfsrevived.xyz", "/u2/data-manifest").await;
+    assert_eq!(u2.status, 200);
+    let m: serde_json::Value = serde_json::from_slice(&u2.body).unwrap();
+    assert_eq!(m["blocks"]["url"], "/u2/data-blocks/v2/");
+    assert!(!Arc::ptr_eq(&walked, &kit.app.current_manifest().unwrap()), "walked again");
+    assert_eq!(bodies(&kit), ["", "/u2"]);
+    let again = get("nfsu2.xyz", "/data-manifest").await;
+    assert_eq!((&again.body, again.header("etag")), (&root.body, root.header("etag")));
+    assert_ne!(u2.header("etag"), root.header("etag"));
+    // and no walk for each request after it
+    let now = kit.app.current_manifest().unwrap();
+    assert_eq!(get("nfsrevived.xyz", "/u2/data-manifest").await.header("etag"), u2.header("etag"));
+    assert!(Arc::ptr_eq(&now, &kit.app.current_manifest().unwrap()));
 }
 
 // Most Wanted: under /mw on every name, this machine's too; no root files of its own (UG2's server answers the shared

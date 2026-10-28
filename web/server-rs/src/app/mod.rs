@@ -661,10 +661,19 @@ impl App {
 
     /// /data-manifest: built at the start, again on ?refresh at most every 10 s; the body for the pages under `base`
     async fn send_manifest(&self, q: &Request, s: &mut Response, u: &url::Url, base: &str) -> Res {
-        let m = match self.current_manifest() {
+        let fail = |e: String| Fail::Error(format!("the manifest: {e}"));
+        let mut m = match self.current_manifest() {
             Some(m) if !(u.has_param("refresh") && nfsu2_util::now_ms() - m.at > 10_000) => m,
-            _ => self.refresh_manifest().await.map_err(|e| Fail::Error(format!("the manifest: {e}")))?,
+            _ => self.refresh_manifest().await.map_err(fail)?,
         };
+        // a base the walk made no body for: a name the server took on since (a new certificate's), walked again now
+        // that it is one (twice at most: a walk already under way when the name came has none either)
+        for _ in 0..2 {
+            if m.has(base) {
+                break;
+            }
+            m = self.refresh_manifest().await.map_err(fail)?;
+        }
         let m = m.under(base);
         let gz = has_word(q.headers.get("accept-encoding").unwrap_or(""), "gzip");
         let mut h = self.headers(q, Cache::Revalidate, true);
@@ -687,9 +696,11 @@ impl App {
         finish(s).await
     }
 
-    /// the manifest walked again: one walk at a time; a request while one is under way takes its result
+    /// the manifest walked again: one walk at a time; a request while one is under way takes its result.  A body for
+    /// each base of the names the server answers now (none for the shared site's /u2 where that name gets 421)
     pub async fn refresh_manifest(&self) -> Result<Arc<manifest::Manifest>, String> {
-        self.manifest.refresh(self.o.game, &self.o.bases.all(), &self.o.data, &self.real_state, &self.etag_key).await
+        let bases = self.o.bases.all(|n| self.host_check.check(Some(n)));
+        self.manifest.refresh(self.o.game, &bases, &self.o.data, &self.real_state, &self.etag_key).await
     }
 
     /// the manifest made last

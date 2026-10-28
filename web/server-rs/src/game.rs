@@ -185,11 +185,12 @@ impl Bases {
         self.names.iter().find(|(name, _)| *name == n).map_or(self.default.as_str(), |(_, b)| b.as_str())
     }
 
-    /// every base there is, each once: the default's first
-    pub fn all(&self) -> Vec<String> {
+    /// the bases of the names `own` takes (the server's own: a name it answers 421 for never asks for its base), each
+    /// once, and the default's first (whatever `own` says: the names `names` does not give have it)
+    pub fn all(&self, own: impl Fn(&str) -> bool) -> Vec<String> {
         let mut all = vec![self.default.clone()];
-        for (_, b) in &self.names {
-            if !all.contains(b) {
+        for (n, b) in &self.names {
+            if !all.contains(b) && own(n) {
                 all.push(b.clone());
             }
         }
@@ -247,12 +248,15 @@ mod tests {
             assert_eq!(u.of(h), "/u2", "{h}");
         }
         assert_eq!(u.of("a.nfsrevived.xyz"), "");
-        assert_eq!(u.all(), ["", "/u2"]);
+        assert_eq!(u.all(|_| true), ["", "/u2"]);
+        // (a server whose names leave the shared site out: no base of its)
+        assert_eq!(u.all(|n| n == "nfsu2.xyz"), [""]);
+        assert_eq!(u.all(|n| n == "nfsrevived.xyz"), ["", "/u2"]);
         let m = Bases::of_game(&MW);
         for h in ["localhost", "127.0.0.1", "nfsrevived.xyz", "nfsu2.xyz", ""] {
             assert_eq!(m.of(h), "/mw", "{h}");
         }
-        assert_eq!(m.all(), ["/mw"]);
+        assert_eq!(m.all(|_| false), ["/mw"]);
         assert!(UG2.root_files && !MW.root_files);
         // --base-path: names as --host takes them, "*" for the rest; the last word on a name counts
         let mut b = Bases::of_game(&UG2);
@@ -261,10 +265,12 @@ mod tests {
             (b.of("localhost:9780"), b.of("[::1]:1"), b.of("127.0.0.1"), b.of("nfsrevived.xyz"), b.of("x")),
             ("/u2", "/u2", "/x_1-2", "", "")
         );
-        assert_eq!(b.all(), ["", "/u2", "/x_1-2"]);
+        assert_eq!(b.all(|_| true), ["", "/u2", "/x_1-2"]);
+        assert_eq!(b.all(|n| n != "localhost" && n != "nfsrevived.xyz"), ["", "/u2", "/x_1-2"]);
+        assert_eq!(b.all(|n| n == "127.0.0.1"), ["", "/x_1-2"]);
         b.add("*=/mw,localhost=/").unwrap();
         assert_eq!((b.of("localhost"), b.of("x"), b.of("[::1]")), ("", "/mw", "/u2"));
-        assert_eq!(b.all(), ["/mw", "/u2", "/x_1-2", ""]);
+        assert_eq!(b.all(|_| true), ["/mw", "/u2", "/x_1-2", ""]);
         for bad in [
             "x",
             "x=",
