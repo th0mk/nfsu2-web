@@ -14,7 +14,7 @@
 +0    waitfng MW_LS_Splash.fng 3000
 +30   dump splash
 +3    dump splash
-+150  dump title                      # "CLICK to continue" has faded in
++720  dump title                      # "CLICK to continue" has faded in (on the clock, as below)
 +3    dump title
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +60   dump alias_ask                  # a first start: "Create a new alias?", No highlighted
