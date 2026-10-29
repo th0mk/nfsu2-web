@@ -170,6 +170,7 @@ typedef struct {
     int      starving;        /* the last slice was mixed before the game wrote it */
     double   wtime;           /* when the game last wrote it (mono_s) */
     float    down[8][2];      /* 3 to 8 channels: each one's share of left and right (downmix_gains) */
+    int      freq_said;       /* SetFrequency took it off its own rate, said once (audio_set_freq) */
     uint64_t owed;            /* wall clock: output frames of the pump's backlog that were due before its Play
                                  (buf_ahead_locked): the mixer moves it on from the first frame after them */
 } SndBuf;
@@ -240,7 +241,7 @@ int audio_register(uint32_t data, uint32_t bytes, uint32_t rate,
         b->chans = chans; b->bits = bits;
         b->used = 1; b->playing = 0; b->loop = 0; b->cursor = 0.0; b->vol = 1.f;
         b->wpos = 0; b->wseen = 0; b->trim = 1.0; b->target = 0.0; b->over = 0;
-        b->freq = 1.0; b->plays = b->stops = 0; b->owed = 0;
+        b->freq = 1.0; b->freq_said = 0; b->plays = b->stops = 0; b->owed = 0;
         b->wr_bytes = b->wr_calls = b->wr_nonzero = 0;
         downmix_gains(b->down, chans);
         fprintf(stderr, "  [sound] buffer #%d: %u Hz, %u channels, %u bit, %u bytes (%.2f s)\n",
@@ -297,6 +298,16 @@ void audio_set_freq(int id, uint32_t hz){
             if (f > 8.00) f = 8.00;
             g_snd[id].freq = f;
         }
+        /* a frequency off its own rate puts a buffer on the resampler
+         * (mix_into), as a rate other than 44,100 Hz does (logged when it is
+         * made): said the first time for each, so a game that does it shows
+         * in the log (the resampler is not Underground 2's path) */
+        static int said = 0;
+        if (g_snd[id].freq != 1.0 && !g_snd[id].freq_said){
+            g_snd[id].freq_said = 1;
+            if (++said <= 16)
+                fprintf(stderr, "  [sound] buffer #%d: SetFrequency %u Hz, its own rate %u Hz: resampled\n", id, hz, g_snd[id].rate);
+        }
     }
     pthread_mutex_unlock(&g_slock);
 }
@@ -307,7 +318,7 @@ int audio_duplicate(int src){
     if (g_snd[src].used && (id = snd_new_id()) != 0){
         g_snd[id] = g_snd[src];
         g_snd[id].playing = 0; g_snd[id].cursor = 0.0; g_snd[id].trim = 1.0;
-        g_snd[id].target = 0.0; g_snd[id].over = 0; g_snd[id].owed = 0;
+        g_snd[id].target = 0.0; g_snd[id].over = 0; g_snd[id].owed = 0; g_snd[id].freq_said = 0;
         g_snd[id].plays = g_snd[id].stops = 0;
         g_snd[id].wr_bytes = g_snd[id].wr_calls = g_snd[id].wr_nonzero = 0;
     }
