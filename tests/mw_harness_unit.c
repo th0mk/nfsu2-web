@@ -24,7 +24,9 @@
  *   nobitset  the constructor leaves its pointer 0: the line says NULL
  *   exit      the boot stops before the C++ table: the exit report's line says so
  *   fe        GameFlow [0x925E90], the top package and the screens of every frame
- *             (fe_mw.c) over a front end built as FEngine keeps it
+ *             (fe_mw.c) over a front end built as FEngine keeps it, and the
+ *             scripts' names within it (mw_fe_match: the package that takes
+ *             input, @HASH, NAME|NAME alternatives, bare ones too)
  *   threads   mw_thread_start past _threadstartex and the game's trampoline, and a
  *             forced stall report that names each thread, its routine, wait, eip
  *             as a function and offset, and the GIL holder (L-073) */
@@ -286,6 +288,24 @@ static void test_fe(void){
     t = g_game.top_screen(); s = noted();
     CHECK(t && !strcmp(t, "MainMenu_Sub.fng") && !strcmp(s, "Chyron_FE.fng, MainMenu.fng, MainMenu_Sub.fng"),
           "fe: the main menu: the tail is on top (%s), the new ones noted head to tail: %s", t ? t : "-", s);
+    /* the scripts' names within a package (fe_mw.c mw_fe_match; autotest.c fe_is hands it any name with a
+     * qualifier or a '|'): the top package that takes input, its highlighted object (@HASH), alternatives */
+    g_mem[PKG(2) + 0x28u] = 1;                      /* MainMenu_Sub.fng takes input */
+    MR32(PKG(2) + 0x8cu) = 0x00a50000u; MR32(0x00a50000u + 0x10u) = 0x4b4e388bu;   /* on its 2nd item */
+    int (*m)(const char *) = g_game.fe_match;
+    CHECK(m && m("MainMenu_Sub.fng") && m("MainMenu_Sub.fng@4b4e388b") && !m("MainMenu_Sub.fng@4b4e388a"),
+          "fe: a package that takes input on top, and its highlighted item");
+    CHECK(!m("MainMenu.fng") && !m("Chyron_FE.fng@4b4e388b") && !m("Options.fng"),
+          "fe: packages that take no input, or are not up, match nothing");
+    CHECK(m("Options.fng|MainMenu_Sub.fng") && m("MainMenu_Sub.fng|Options.fng") && !m("MainMenu.fng|Chyron_FE.fng"),
+          "fe: bare alternatives: one of them up and taking input (not the first only)");
+    CHECK(m("MainMenu.fng:5dfb6667|MainMenu_Sub.fng@4b4e388b") && !m("MainMenu.fng:5dfb6667|MainMenu_Sub.fng@4b4e388a") &&
+          m("MainMenu_Sub.fng@4b4e388a|Chyron_FE.fng|MainMenu_Sub.fng@4b4e388b"),
+          "fe: qualified and bare alternatives mixed, three of them");
+    g_mem[PKG(1) + 0x28u] = 1;                      /* MainMenu.fng under it takes input too */
+    CHECK(!m("MainMenu.fng") && !m("MainMenu.fng|Options.fng") && m("MainMenu.fng|MainMenu_Sub.fng"),
+          "fe: a package under another that takes input does not match");
+    g_mem[PKG(1) + 0x28u] = 0; g_mem[PKG(2) + 0x28u] = 0; MR32(PKG(2) + 0x8cu) = 0;
     pkg(1, "Options.fng"); frame();                 /* another package where MainMenu.fng was */
     s = noted();
     CHECK(!strcmp(s, "Options.fng"), "fe: a new package at a freed one's address is noted: %s", s);
