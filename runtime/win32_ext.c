@@ -1249,22 +1249,41 @@ static uint32_t timer_wait(Obj *o, uint32_t ms){
     pthread_mutex_unlock(&o->mtx);
     return r;
 }
-/* WaitForSingleObject on a semaphore, guest lock released: Windows' rules.  A
- * count above 0 lets one waiter through and goes down by one; WAIT_TIMEOUT
- * after ms of real time (none for INFINITE); WAIT_FAILED when the handle is
- * closed meanwhile.  ReleaseSemaphore wakes every waiter, each looks again
- * under the lock, so a wake-up another waiter took, or none at all, is no
- * early return; the sleep is cut into slices of at most SEM_SLICE_US, after
- * each of which the semaphore and the time are looked at again.  (The
- * generic wait below used to take the whole count at once and gave up after
- * one sleep of at most 2 s, INFINITE too.) */
+/* A wait's own reference to a semaphore, taken under the guest lock before
+ * the wait gives that away (sem_hold) and let go under it again (sem_drop).
+ * On Windows a wait holds on to its object: a CloseHandle meanwhile leaves
+ * the semaphore to the wait, which goes on.  So it does here, and the slot,
+ * which obj_new would otherwise give the next object at once, stays this
+ * semaphore's until its last wait has let go: a waiter never takes a count
+ * of a new semaphore made in its place.  The last reference ends it as
+ * obj_close does. */
+static void sem_hold(Obj *o){
+    pthread_mutex_lock(&o->mtx); o->refs++; pthread_mutex_unlock(&o->mtx);
+}
+static void sem_drop(Obj *o){
+    pthread_mutex_lock(&o->mtx);
+    int last = --o->refs <= 0;
+    if (last){ o->kind = OB_NONE; pthread_cond_broadcast(&o->cv); }
+    pthread_mutex_unlock(&o->mtx);
+    if (last && !getenv("NFSU2_NO_OBJREUSE")){
+        pthread_mutex_lock(&g_lock); g_free[g_nfree++] = (int)(o - g_obj); pthread_mutex_unlock(&g_lock); }
+}
+/* WaitForSingleObject on a semaphore, guest lock released, the wait's
+ * reference held (sem_hold): Windows' rules.  A count above 0 lets one waiter
+ * through and goes down by one; WAIT_TIMEOUT after ms of real time (none for
+ * INFINITE).  ReleaseSemaphore wakes every waiter, each looks again under the
+ * lock, so a wake-up another waiter took, or none at all, is no early
+ * return; the sleep is cut into slices of at most SEM_SLICE_US, after each of
+ * which the semaphore and the time are looked at again.  (The generic wait
+ * below used to take the whole count at once and gave up after one sleep of
+ * at most 2 s, INFINITE too.) */
 #define SEM_SLICE_US 50000u
 static uint32_t sem_wait_one(Obj *o, uint32_t ms){
     uint64_t t0 = mono_us(), lim = (uint64_t)ms * 1000u;
     uint32_t r;
     pthread_mutex_lock(&o->mtx);
     for (;;){
-        if (o->kind != OB_SEM){ r = WAIT_FAILED_; break; }
+        if (o->kind != OB_SEM){ r = WAIT_FAILED_; break; }         /* never while the wait's reference is held */
         if (o->signaled > 0){ o->signaled--; r = 0; break; }
         uint64_t el = mono_us() - t0;
         if (ms != 0xFFFFFFFFu && el >= lim){ r = 0x102u; break; }
@@ -1282,7 +1301,8 @@ static uint32_t sem_wait_one(Obj *o, uint32_t ms){
  * imports neither, so its waits run as they always did.
  * Windows' rules: any (the lowest index that is ready) or all at once,
  * WAIT_TIMEOUT after ms of real time, WAIT_FAILED for a handle that is no
- * object, a repeated one in a wait for all, or one closed meanwhile.  Every
+ * object, a repeated one in a wait for all, or one closed meanwhile (not a
+ * semaphore: the wait holds on to those, sem_hold).  Every
  * object is looked at under its own lock (all of them, in address order, for
  * a wait for all), then the thread sleeps at most 1 ms, less up to a timer's
  * due time.  Guest lock released. */
@@ -2315,9 +2335,11 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         }
         else if (o->kind == OB_SEM){                    /* semaphore: one of its count, in finite slices */
             ts_set(TS_WAIT, A(c,0));
+            sem_hold(o);
             guest_yield_begin();
             r = sem_wait_one(o, ms);
             guest_yield_end();
+            sem_drop(o);
             if (r == WAIT_FAILED_) win32_set_last_error(c, 6u);
         }
         else {
@@ -2470,9 +2492,12 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         if (err) r = WAIT_FAILED_;
         else {
             ts_set(TS_WAITM, MR32(parr));
+            uint64_t held = 0;                          /* the semaphores' references, one per handle in the set */
+            for (uint32_t i = 0; i < cnt; i++) if (ob[i]->kind == OB_SEM){ sem_hold(ob[i]); held |= 1ull << i; }
             guest_yield_begin();
             r = wait_set(ob, ser, cnt, A(c,2) != 0, A(c,3), cur_tid(c), &err);
             guest_yield_end();
+            for (uint32_t i = 0; i < cnt; i++) if (held >> i & 1u) sem_drop(ob[i]);
         }
         if (r == WAIT_FAILED_) win32_set_last_error(c, err); }
     else if (!strcmp(n,"WaitForMultipleObjects")){

@@ -16,7 +16,7 @@
  *                            semaphores: 8 threads x 20,000 release/wait pairs, as pairs that
  *                            hand two semaphores back and forth and as four releasers and four
  *                            takers on one; every wait finite, a lost wake-up is a timeout and
- *                            fails
+ *                            fails; a semaphore closed under a wait
  *   win32_unit_ug2.wasm ug2  built with -DWIN32_UNIT_UG2: UG2's game table, which leaves
  *                            g_game.win32_misc 0; the imports UG2 has of win32_misc.c's stay
  *                            unimplemented, as UG2 always had them (web/test/win32-wasm.test.mjs)
@@ -745,7 +745,7 @@ static void *frame_thread(void *u){                    /* the game's Present: th
 /* A read of the virtual clock while vclock_tick moves it (win32.c: the frame base and the real base are two
  * stores) can be one frame step off either way, and vclock_tick caps a step at 50 ms */
 #define CLOCK_SLACK_US 50000ull
-typedef struct { Thr t; int id; uint32_t h, h2, peer; _Atomic int done; int ticks, early, bad, wakes; } Job;
+typedef struct { Thr t; int id; uint32_t h, h2, peer, ms; _Atomic int done; int ticks, early, bad, wakes; double t_end; } Job;
 static Job g_job[NT + 2];
 static uint32_t job_stack(int i){ return STACK_TOP - 0x20000u * (uint32_t)(i + 1); }
 static uint32_t job_teb(int i){ return TEB_MAIN + 0x1000u * (uint32_t)(i + 1); }
@@ -838,6 +838,19 @@ static void *sem_counting(void *u){
         else if (call_imp(t, "WaitForSingleObject", j->h, 2000u) == 0) j->wakes++;
         else j->bad++;
     }
+    guest_unlock();
+    atomic_store(&j->done, 1);
+    return 0;
+}
+/* one semaphore wait of ms (INFINITE too), by WaitForMultipleObjects when h2 is set: its answer, last error and end */
+static void *sem_waiter(void *u){
+    Job *j = u; Thr *t = &j->t;
+    const uint32_t arr = SCRATCH + 0x2400u + 0x10u * (uint32_t)j->id;
+    guest_lock(&t->cpu);
+    MR32(arr) = j->h; set_last_error(t, 0);
+    uint32_t r = j->h2 ? call_imp(t, "WaitForMultipleObjects", 1u, arr, 0u, j->ms) : call_imp(t, "WaitForSingleObject", j->h, j->ms);
+    j->t_end = now_ms();
+    j->wakes = (int)r; j->bad = (int)last_error(t);
     guest_unlock();
     atomic_store(&j->done, 1);
     return 0;
@@ -970,6 +983,34 @@ static void test_stress(Thr *t){
           "counting semaphore: %d posted, %d taken, %d bad, %s (%s, %.0f ms)", posted, taken, bad, d, ok ? "all ended" : "STUCK", el);
     printf("  counting semaphore: %d releasers and %d takers x %d in %.0f ms\n", NT / 2, NT / 2, SEM_PAIRS, el);
     guest_lock(&t->cpu); call_imp(t, "CloseHandle", sc); guest_unlock();
+
+    /* 7. a semaphore closed during a 300 ms wait (WaitForSingleObject, then WaitForMultipleObjects): the wait holds
+     * on to it, as on Windows, and runs out on it; a semaphore made meanwhile, in the slot a close frees, keeps its
+     * count (the wait used to fail, or take that count) */
+    for (int k = 0; k < 2; k++){
+        guest_lock(&t->cpu);
+        uint32_t sx = call_imp(t, "CreateSemaphoreA", 0u, 0u, 1u, 0u);
+        guest_unlock();
+        g_job[0].h = sx; g_job[0].h2 = (uint32_t)k; g_job[0].ms = 300u;
+        t0 = now_ms();
+        start_job(0, sem_waiter);
+        usleep(50000);
+        guest_lock(&t->cpu);
+        call_imp(t, "CloseHandle", sx);
+        uint32_t sy = call_imp(t, "CreateSemaphoreA", 0u, 1u, 1u, 0u);
+        guest_unlock();
+        ok = wait_jobs(0, 1, 5000.0);
+        el = g_job[0].t_end - t0;
+        guest_lock(&t->cpu);
+        int kept = call_imp(t, "WaitForSingleObject", sy, 0u) == 0;
+        call_imp(t, "CloseHandle", sy);
+        guest_unlock();
+        CHECK(ok && (uint32_t)g_job[0].wakes == WAIT_TIMEOUT && el >= 299.0 && kept,
+              "%s, the semaphore closed mid-wait: 0x%x (error %d) after %.0f ms, WAIT_TIMEOUT after 300 wanted; the new one's count %s (%s)",
+              k ? "WFMO" : "WaitForSingleObject", (uint32_t)g_job[0].wakes, g_job[0].bad, el, kept ? "kept" : "TAKEN", ok ? "returned" : "STUCK");
+        printf("  semaphore closed mid-wait (%s): 0x%x after %.0f ms, the new one's count %s\n",
+               k ? "WFMO" : "WaitForSingleObject", (uint32_t)g_job[0].wakes, el, kept ? "kept" : "TAKEN");
+    }
 
     atomic_store(&g_frames_stop, 1);
     pthread_join(fr, 0);
