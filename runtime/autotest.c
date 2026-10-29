@@ -46,7 +46,8 @@
  *                              PACKAGE:LABEL a language label shown, @HASH the
  *                              highlighted object, 'TEXT a text shown, ^TEXT
  *                              that text highlighted; NAME|NAME any of them,
- *                              bare packages too (the game's to judge as well)
+ *                              bare packages too (the game's to judge as well);
+ *                              -PACKAGE that package gone (MW)
  *     tapuntil KEY NAME [every] [tmo]  tap KEY every `every` frames (default
  *                              90) until the top package is NAME (or NAME's
  *                              state, as waitfng)
@@ -498,10 +499,10 @@ const char *autotest_screen_batch(int i){ return i >= 0 && i < g_nbatch ? g_batc
  * screen initialised together with it.  A NAME with a qualifier after the
  * package's (MC_Main.fng:LABEL, MainMenu.fng@HASH ...) names a state within
  * that package, the game's to judge (game.h fe_match), as are alternatives
- * (A.fng|B.fng:LABEL), bare packages among them; a game without fe_match
+ * (A.fng|B.fng:LABEL), bare packages among them, and -NAME, the package gone; a game without fe_match
  * (UG2) compares every NAME whole, as before */
 static int fe_is(const char *want){
-    if (g_game.fe_match && want[strcspn(want, ":@'^|")]) return g_game.fe_match(want);
+    if (g_game.fe_match && (want[0] == '-' || want[strcspn(want, ":@'^|")])) return g_game.fe_match(want);
     const char *t = autotest_top_fng();
     if ((t && !strcasecmp(t, want)) || (g_screen[0] && !strcasecmp(g_screen, want))) return 1;
     for (int i = 0; i < g_nbatch; i++) if (!strcasecmp(g_batch[i], want)) return 1;

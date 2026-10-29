@@ -30,7 +30,10 @@
 #     (about 45 frames) does nothing (20 frames on, the mailbox stayed and the car did not move; 120 frames on, it
 #     closed), and its closing shows on no screen.  So Escape is tapped every 60 frames until the free roam's
 #     pause menu takes input (Pause_Main.fng, on Resume Free Roam, label 0x01BD185C on 0x4B4E388A): one Escape
-#     closes the mailbox, the next opens the pause menu, which only the game itself can show.  Enter resumes.
+#     closes the mailbox, the next opens the pause menu, which only the game itself can show.  Enter resumes: the
+#     menu drops its input in the next frame and leaves the package list about 40 frames later, and the car takes
+#     the gas from then on (a probe run, the gas held from the Enter: still at f+43, the menu gone at f+42, moving
+#     at f+46), so the gas waits for -Pause_Main.fng, the menu gone (fe_mw.c).
 # Every prologue race autosaves ALPHA before its GO (Autosave_Overlay.fng), and Resume Career from such a save starts
 # that race.  After a race's Enter the next wait starts once slot #0 of the race status is no longer finished (the
 # next race set up), so a winner's screen still taking input in that frame is not taken for the next one.  The free
@@ -100,7 +103,8 @@
 +0    waitfng SMS_MailBoxes.fng@cf31e520 600             # the mailbox
 +0    tapuntil ESCAPE Pause_Main.fng:01bd185c@4b4e388a 60 900   # Back, then the pause menu (*)
 +0    tap RETURN                                         # Resume Free Roam
-+20   down UP                                            # gas
++0    waitfng -Pause_Main.fng 300                        # the pause menu gone (*)
++0    down UP                                            # gas
 +300  where
 +0    up UP
 +0    log career_start: drove

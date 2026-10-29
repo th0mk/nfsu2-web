@@ -6,8 +6,8 @@
 # races 2, 3 and 4 won over the line (the winner's screen, then the race status: the player racer 1, slot #0
 # finished, the race won), "six days later" between races 3 and 4, the race over and no longer racing after race 5
 # (the world unloads), the car lot, the car bought; then free roam (GameFlow 6, a career with no race: 0 racers),
-# ALPHA written by the free roam's autosave after the purchase, and the car moved at least 5 m by the gas held 300
-# frames; all in that order; the game left by WM_CLOSE.  Prints the frames from Start Career to free roam, the races
+# ALPHA written by the free roam's autosave after the purchase, the pause menu gone after Resume Free Roam, and the
+# car moved at least 5 m by the gas held 300 frames; all in that order; the game left by WM_CLOSE.  Prints the frames from Start Career to free roam, the races
 # raced again, and the distance driven.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
@@ -30,7 +30,7 @@ miss=$(inorder "$W" 'LOG career_start: ALPHA saved' 'waitfng MainMenu_Sub.fng:60
   'LOG career_start: car lot' 'tapuntil Dialog.fng@b8a7c6cc satisfied' "$W" 'waitfng SMS_Message.fng:8cd6bd6d satisfied' \
   'LOG career_start: free roam' 'racestatus flow 6 racers 0 active 0 won 0 player -1: none; mode 2' \
   'waitfng SMS_MailBoxes.fng@cf31e520 satisfied' 'tapuntil Pause_Main.fng:01bd185c@4b4e388a satisfied' \
-  'LOG career_start: drove') || fail "missing, or out of order: $miss"
+  'waitfng -Pause_Main.fng satisfied' 'LOG career_start: drove') || fail "missing, or out of order: $miss"
 # five races started in the prologue, and one more for each lost race raced again; three winner's screens
 lost=$(grep -cE '^\[mwrace\] f=[0-9]+ autopilot: the race was lost: Enter on its results$' "$LOG")
 n=$(awk '/LOG career_start: prologue$/ { p = 1 } /LOG career_start: car lot$/ { p = 0 }

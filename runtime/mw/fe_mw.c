@@ -198,6 +198,10 @@ static int str_is(uint32_t o, void *ctx){
  * its highlight and not the Alias Manager's under it, which takes input too; MC_List.fng sits above MC_Main.fng
  * while it is up, and MC_Main.fng keeps its last dialog's strings drawn under it).  TEXT matches a string's
  * first characters, '_' a space: the log's spelling (NFSU2_FNG_LOG=3).  1 when all of that holds now.
+ * -PACKAGE (no qualifier) is 1 once that package is gone: not in the active list, whatever its input (a closing
+ * Pause_Main.fng drops its input in the frame after the RETURN that closes it and leaves the list about 30 frames
+ * later; HUD_SingleRace.fng and Autosave_Overlay.fng never take input and stay in the list all through free roam,
+ * NFSU2_FNG_LOG=2).
  * NAME|NAME...: any of them (a race's end: the winner's InGamePhotoMaster.fng or the loser's PostRace_Results.fng);
  * a bare PACKAGE there is the top package that takes input. */
 int mw_fe_match(const char *name){
@@ -208,12 +212,15 @@ int mw_fe_match(const char *name){
         memcpy(a, name, m); a[m] = 0;
         return mw_fe_match(a) || mw_fe_match(bar + 1);
     }
+    int gone = *name == '-';
+    name += gone;
     size_t n = strcspn(name, QUALS);
-    uint32_t e = engine(), pkg = 0; int k = 0;
-    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < LIST_MAX && !pkg; p = rd(p + PKG_NEXT), k++){
-        const char *nm = pkg_name(p);
-        if (nm && strlen(nm) == n && !strncasecmp(nm, name, n)) pkg = p;
+    uint32_t e = engine(), pkg = 0, q = e ? rd(e + ENG_HEAD) : 0u; int k = 0;
+    for (; q && k < LIST_MAX && !pkg; q = rd(q + PKG_NEXT), k++){
+        const char *nm = pkg_name(q);
+        if (nm && strlen(nm) == n && !strncasecmp(nm, name, n)) pkg = q;
     }
+    if (gone) return e && !pkg && !q && !name[n];       /* the whole list walked and the package not in it */
     if (!pkg || !(rd(pkg + PKG_INPUT) & 0xffu)) return 0;
     for (uint32_t p = rd(pkg + PKG_NEXT); p && k < LIST_MAX; p = rd(p + PKG_NEXT), k++)
         if (rd(p + PKG_INPUT) & 0xffu) return 0;

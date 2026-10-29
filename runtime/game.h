@@ -137,7 +137,8 @@ typedef struct GameOps {
     int (*fe_match)(const char *name);  /* the scripts' waitfng/tapuntil names with a qualifier after the
                                      * package's (':', '@', '\'' or '^', autotest.c fe_is) or alternatives
                                      * ('|'): 1 while the front end is in that state within the package (or
-                                     * one of them); 0 = no such names */
+                                     * one of them); and "-PACKAGE": 1 once that package is gone; 0 = no such
+                                     * names */
     uint32_t (*racer)(int human, int slot); /* test traces' $P (human 1: the local human racer) and $Rn
                                      * (racer slot n) of the current race, 0 = none */
     uint32_t (*fe_object)(const char *package, uint32_t hash); /* test expressions' $O(PACKAGE:HASH)
