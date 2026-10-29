@@ -662,7 +662,7 @@ static void present(void){ call(g_dev, "Present", 4, 0u, 0u, 0u, 0u); }
 static void t_hostback(void){
     const uint32_t N = 1024;
     unsigned vb0 = gk_count("vb"), tx0 = gk_count("tex");
-    uint32_t vb = vb_make(N), p, q;
+    uint32_t vb = vb_make(N), p, q, t;
     p = vb_lock(vb, 0, 0, 0); pat(p, N, 1); vb_unlock(vb);
     q = vb_lock(vb, 0, 0, LK_RO); int ok = is_pat(q, N, 1); vb_unlock(vb);
     check(p && ok, "hb-roundtrip", "Lock 0x%08x, a whole Lock's writes read back %d", p, ok);
@@ -680,6 +680,22 @@ static void t_hostback(void){
           is_pat(q + 220, N - 220, PAT_AT(1, 220)));
     vb_unlock(vb); release(vb);
 
+    /* written outside the locked range, as D3D9's managed copy (one mapping of the whole buffer) and UG2's block
+     * take it: kept, and another buffer's window, locked meanwhile, keeps its own bytes */
+    vb = vb_make(N); p = vb_lock(vb, 0, 0, 0); pat(p, N, 2); vb_unlock(vb);
+    uint32_t nb = vb_make(N); p = vb_lock(nb, 0, 0, 0); pat(p, N, 3); vb_unlock(nb);
+    p = vb_lock(vb, 100, 50, 0);
+    uint32_t nq = vb_lock(nb, 0, 0, 0);
+    if (p){ memset(g_mem + p + 50, 0xE1, 300); memset(g_mem + p - 100, 0xE2, 100); }   /* [150,450) and [0,100) */
+    int nb_ok = is_pat(nq, N, 3); vb_unlock(nb); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO);
+    int past = is_byte(q + 150, 300, 0xE1), before = is_byte(q, 100, 0xE2), rest = is_pat(q + 450, N - 450, PAT_AT(2, 450));
+    vb_unlock(vb);
+    nq = vb_lock(nb, 0, 0, LK_RO); nb_ok = nb_ok && is_pat(nq, N, 3); vb_unlock(nb);
+    check(past && before && rest && nb_ok, "hb-past-range", "Lock(100,50), then [150,450) and [0,100) written: kept %d %d, the rest %d; "
+          "the other buffer's bytes %d", past, before, rest, nb_ok);
+    release(nb); release(vb);
+
     /* locked every frame: the data of the last Lock, and a Lock of part points into the same window */
     vb = vb_make(N);
     for (int i = 0; i < 8; i++){ p = vb_lock(vb, 0, 0, 0); pat(p, N, (uint8_t)(20 + i)); vb_unlock(vb); present(); }
@@ -689,7 +705,7 @@ static void t_hostback(void){
     release(vb);
 
     /* a texture level: a round trip, and the level kept over a Reset */
-    uint32_t t = tex_make(64, 64);
+    t = tex_make(64, 64);
     p = tex_lock(t, 0); pat(p, 64*64*4, 11); tex_unlock(t);
     q = tex_lock(t, LK_RO); ok = is_pat(q, 64*64*4, 11); tex_unlock(t);
     check(p && ok, "hb-tex-roundtrip", "LockRect 0x%08x, read back %d", p, ok);

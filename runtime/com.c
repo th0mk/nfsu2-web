@@ -207,9 +207,11 @@ static void gbuf_free(uint32_t p){
  *
  * An entry is keyed by the guest address of the field that holds the window
  * (a texture's level slot, a buffer's +8), which is 0 while nothing is locked.
- * Lock: a window of the locked range, filled from the copy (unless the copy was
- * never written, or the lock discards); Unlock: the window back into the copy
- * (unless the lock was read-only) and freed.  Draws read a buffer's copy (buf_src).
+ * Lock: a window of the whole buffer or level, as D3D9's managed copy is one
+ * mapping (a game may touch bytes outside the range it locked), filled from the
+ * copy (unless the copy was never written, or the lock discards), the pointer at
+ * the locked offset; Unlock: the window back into the copy (unless the lock was
+ * read-only) and freed.  Draws read a buffer's copy (buf_src).
  * A resource that is locked again within HB_PIN_FRAMES presents of its last
  * Unlock, HB_PIN_TIMES times in a row, keeps its window from then on (a
  * per-frame lock copies no more than before); its copy goes. */
@@ -221,7 +223,7 @@ static uint64_t g_present;                /* Presents so far (below) */
 typedef struct {
     uint32_t key, size;                   /* the window's field; the copy's size */
     uint8_t *host;                        /* the copy (NULL: never written, reads as zeros) */
-    uint32_t woff, wlen, wflags;          /* the locked range (buffers) and the lock's flags */
+    uint32_t wlen, wflags;                /* the window's length (the whole buffer or level) and the lock's flags */
     uint32_t last_unlock, near;           /* the Present count at the last Unlock; Locks soon after one, in a row */
     uint8_t kind, pinned;                 /* its census kind (GK_*); 1: the window stays, no copy */
 } HBack;
@@ -286,26 +288,25 @@ static uint8_t *hb_host(HBack *e, uint32_t size){
     e->host = p; e->size = size;
     return p;
 }
-/* Lock: the window for [off, off + len) of entry x, len bytes (+ slack) of the buffer heap.
+/* Lock: the window of entry x, the whole copy (at least len bytes; + slack) in the buffer heap.
  * Pinned: the window stays from then on and the copy goes. */
-static uint32_t hb_lock(uint32_t x, uint32_t off, uint32_t len, uint32_t flags){
+static uint32_t hb_lock(uint32_t x, uint32_t len, uint32_t flags){
     HBack *e = &g_hb[x];
     /* locked again a few presents after its Unlock (not within one frame: a load fills a buffer in parts) */
     uint32_t d = (uint32_t)g_present - e->last_unlock;
     if (!e->last_unlock || d >= HB_PIN_FRAMES) e->near = 0; else if (d) e->near++;
     int pin = e->near >= HB_PIN_TIMES;
-    /* the whole copy for a window that stays */
-    if (pin){ off = 0; if (len < e->size) len = e->size; }
-    uint32_t w = gbuf_alloc_kz(len, e->kind, !e->host || pin);
+    if (len < e->size) len = e->size;
+    uint32_t w = gbuf_alloc_kz(len, e->kind, !e->host);
     if (!w) return 0;
     if (e->host && !(flags & 0x2000u)){           /* D3DLOCK_DISCARD: nothing to keep */
-        uint32_t n = off < e->size ? e->size - off : 0u; if (n > len) n = len;
-        memcpy(g_mem + w, e->host + off, n);
+        uint32_t n = e->size < len ? e->size : len;
+        memcpy(g_mem + w, e->host, n);
         if (n < len) memset(g_mem + w + n, 0, len - n);
         g_hb_copied += n; g_hb_copyin += n;
     } else if (e->host) memset(g_mem + w, 0, len);
     g_hb_locks++; if (e->host) g_hb_relocks++;
-    e->woff = off; e->wlen = len; e->wflags = flags;
+    e->wlen = len; e->wflags = flags;
     if (pin){ e->pinned = 1; g_hb_pins++;
         if (e->host){ free(e->host); g_hb_bytes -= e->size; e->host = 0; } }
     return w;
@@ -315,8 +316,8 @@ static void hb_unlock(uint32_t x, uint32_t w){
     HBack *e = &g_hb[x];
     if (e->pinned || !w) return;
     if (!(e->wflags & 0x10u)){                   /* D3DLOCK_READONLY: nothing written */
-        uint8_t *h = hb_host(e, e->woff + e->wlen);
-        if (h){ memcpy(h + e->woff, g_mem + w, e->wlen); g_hb_copied += e->wlen; }
+        uint8_t *h = hb_host(e, e->wlen);
+        if (h){ memcpy(h, g_mem + w, e->wlen); g_hb_copied += e->wlen; }
     }
     e->last_unlock = (uint32_t)g_present; if (!e->last_unlock) e->last_unlock = 1;
     gbuf_free(w);
@@ -4294,22 +4295,14 @@ int com_call(CPU *c, uint32_t magic){
              * (see dip_indexed). */
             if (self && (iface==IF_VB || iface==IF_IB)){
                 MR32(self+48) = MR32(self+48) + 1u; MR32(self+52) = (uint32_t)g_present; }
-            /* host backing: a window of the locked range, filled from the copy */
+            /* host backing: a window of the whole buffer, filled from the copy, the pointer at the offset */
             uint32_t x = (self && (iface==IF_VB || iface==IF_IB) && hb_on()) ? MR32(self+BUF_HB) : 0u;
             if (x && x < HB_N && !g_hb[x].pinned){
                 uint32_t size = MR32(self+4), w = MR32(self+8);
                 if (off >= size) off = 0;
-                if (!sz || sz > size - off) sz = size - off;
-                if (w){                                 /* locked again before its Unlock */
-                    g_hb_nested++;
-                    if (off >= g_hb[x].woff && off + sz <= g_hb[x].woff + g_hb[x].wlen){
-                        if (pp) MR32(pp) = w + off - g_hb[x].woff;
-                        r = 0; goto lock_done; }
-                    hb_unlock(x, w); MR32(self+8) = 0;
-                }
-                w = hb_lock(x, off, sz, A(c,4));
-                MR32(self+8) = w;
-                if (pp) MR32(pp) = w ? w + off - g_hb[x].woff : 0u;
+                if (w) g_hb_nested++;                   /* locked again before its Unlock: the same window */
+                else { w = hb_lock(x, size, A(c,4)); MR32(self+8) = w; }
+                if (pp) MR32(pp) = w ? w + off : 0u;
                 r = w ? 0u : 0x8876086Cu;                /* no window: D3DERR_INVALIDCALL */
                 goto lock_done;
             }
@@ -4346,7 +4339,7 @@ int com_call(CPU *c, uint32_t magic){
                 uint32_t x = (kind == GK_TEX && slot && hb_on() && !(MR32(self+TEX_USAGE) & 1u))
                            ? hb_make(slot, pitch*rows + 64u, kind) : 0u;
                 if (x && !g_hb[x].pinned)
-                    buf = hb_lock(x, 0, pitch*rows + 64u, is_cube ? A(c,5) : A(c,4));
+                    buf = hb_lock(x, pitch*rows + 64u, is_cube ? A(c,5) : A(c,4));
                 else buf = gbuf_alloc_k(pitch*rows + 64u, kind);
                 if(slot) MR32(slot)=buf; }
             /* a render target the game made lockable (CreateRenderTarget):
