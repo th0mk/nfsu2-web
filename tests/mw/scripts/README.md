@@ -13,3 +13,7 @@ The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anch
 the race), `race_loop.txt` (25 Quick
 Races in a row, each ended by `racewin`) and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the
 line, saved; seeded with `profiles_make.txt`'s saves).
+
+The frame rate: `menu_hold.txt` (the main menu held for 60 s, a `[status]` line over it and the clocks' rates in
+peeks: the page's frame-rate setting `NFSU2_FPS`, runtime/mw/framerate_mw.c; `NFSU2_HFR_LOG=1` adds a `[mwpace]` line a
+second with the slots and the simulation's steps).

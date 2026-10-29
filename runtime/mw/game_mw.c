@@ -172,7 +172,8 @@ static const PadLate mw_pad_late = {
  *   crt_lo, crt_hi      HEAPSTAT's call sites: the C runtime's code range is not measured (its heap's
  *                       HeapAlloc/HeapReAlloc/HeapFree calls are at 0x7D10EF-0x7D5E6C; GAME.md 2.11 has an
  *                       estimate only); with 0 it names the runtime's own caller
- *   on_qpc, qpc_caller  MW's frame wait loop is not studied (M4)
+ *   on_qpc, qpc_caller  MW has no QPC wait loop: its frame limiter sleeps in the Sim timer's step (0x642E60),
+ *                       which framerate_mw.c replaces with the host's slot pacer
  *   lan_*               MW's LAN server glue is not studied (M8)
  *   res_labels          the options show the table's own labels ("800x600"); the rows' real device sizes
  *                       are com.c's res_pick, as for UG2

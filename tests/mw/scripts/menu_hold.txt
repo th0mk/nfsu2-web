@@ -1,0 +1,23 @@
+# Most Wanted: the main menu held for 60 s of wall time, for the frame rate there (TRACKER M7-29).  Boots to the
+# main menu as boot_menu.txt does, waits 10 s for the menu's camera swing and loads to settle, then takes a
+# [status] line over the next 60 s (`status` prints one over the window since the line before it: fps, guest busy
+# ms per frame p50/p95/p99/max, the guest lock and the pacer's spin), and closes the game by WM_CLOSE.  On the
+# renderer's test page (test/play.html, WebGPU) with the page's frame-rate setting (NFSU2_FPS):
+#   .../test/play.html?arg=/data/speed.exe&script=/tests/scripts/menu_hold.txt&env=NFSU2_FPS=120&...
+# The peeks at both ends give the clocks' rates over the window: the front end's camera track time [0x925AB4]
+# (0x64C2D0, s; the main menu's camera moves along it), RealTimeFrames [0x8F82F4] (1/60 s units, at least one
+# a frame: 0x65C6D0) and RealTimer [0x925B14] (1/4000 s).
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng 600
++10000ms status menu_settle
++0    peek 0x00925ab4
++0    peek 0x008f82f4
++0    peek 0x00925b14
++60000ms status menu_hold60
++0    peek 0x00925ab4
++0    peek 0x008f82f4
++0    peek 0x00925b14
++0    log menu_hold: 60 s held
++0    close
