@@ -140,6 +140,9 @@ export class Encoder {
 
   // stats
   totalDraws = 0; totalPasses = 0; pipelinesMade = 0; missingTarget = 0; noVs = 0; zMismatch = 0; conflicts = 0;
+  /** 8 stages, frames the page drew: draws whose group 1 binds a depth texture (not the stand-in), passes whose Z
+   *  is a depth texture (the C side's counts include the frames the page dropped) */
+  depthTexDraws = 0; depthZPasses = 0;
   /** the game's textures on the GPU, bytes: all of them, those unpacked from DXT and those DXT1 as ASTC (no
    *  texture-compression-bc) */
   texBytes = 0; unpackBytes = 0; astcBytes = 0;
@@ -778,7 +781,7 @@ export class Encoder {
         // a depth texture as the Z (gpu-abi.md 11.4): of the target's size, else the scratch Z
         const zt = this.tex[zid - P.Z_TEX];
         if (zt?.depth && zt.w === w && zt.h === h) {
-          zv = zt.view;
+          zv = zt.view; this.depthZPasses++;
           if (zt.zpend !== undefined) { zclear = true; zval = zt.zpend; zt.zpend = undefined; }
         } else this.zMismatch++;
       } else if (zid && zid < 64) {
@@ -1048,7 +1051,7 @@ export class Encoder {
   private bind8(p: GPURenderPassEncoder, w: number, ps: number, cube: boolean, passTex: number, passZ: number): Tex {
     const u32 = this.u32, b = this.b8, v = this.v8, kinds = this.psKinds.get(ps) ?? 0;
     const kc = kinds * 2 + (cube ? 1 : 0);
-    let same = b[0] === kc;
+    let same = b[0] === kc, dt = false;
     b[0] = kc;
     for (let k = 0; k < 8; k++) {
       const id = k === 0 ? u32[w + D.tex] : k < 4 ? u32[w + D.tex1 + k - 1] : u32[w + D.tex4 + k - 4];
@@ -1056,8 +1059,10 @@ export class Encoder {
       const t = this.texForKind(id, kind, passTex, passZ);
       const sk = (k < 4 ? u32[w + D.smp + k] : u32[w + D.smpHi + k - 4]) + (kind === 2 ? 65536 : 0);
       v[k] = t;
+      if (kind === 2 && t !== this.whiteDepth) dt = true;
       if (b[1 + k] !== t.serial || b[9 + k] !== sk) { same = false; b[1 + k] = t.serial; b[9 + k] = sk; }
     }
+    if (dt) this.depthTexDraws++;
     if (same) return v[0];
     const k1 = b.join(',');
     let g = this.bg1.get(k1);

@@ -89,7 +89,9 @@ static unsigned g_cur_tex1, g_cur_tex2, g_cur_tex3;
 static unsigned g_cur_texhi[4], g_cur_smphi[4];  /* stages 4-7, with GwCtl.stages 8 (metal_set_stage_hi) */
 static int      g_stages8;                   /* GwCtl.stages is 8 (GameOps gpu_stages) */
 static unsigned g_cur_dbias;                 /* the depth bias, packed (GW_ZBIAS_SHIFT), with 8 stages */
-static unsigned long g_dz_draws, g_dt_draws; /* draws with a depth texture as Z, draws sampling one */
+static unsigned long g_dz_draws, g_dt_draws; /* recorded draws (also those of frames the page drops) with a depth
+                                              * texture as Z, recorded draws sampling one; what the GPU drew: the
+                                              * page's stats, depthZPasses and depthTexDraws */
 static int      g_ps_maxid;                  /* the highest pixel shader id registered below the cube twins */
 static int      g_cur_ps;
 static float    g_cur_psc[PSC_N][4];
@@ -1103,6 +1105,7 @@ void metal_budget_report(void){
                     "overflows draw %u tvert %u raw %u const %u\n",
             g_vs_n, g_ps_n, g_msl_vs, g_msl_ps, g_ov_d, g_ov_v, g_ov_rv, g_ov_kb);
     if (g_stages8)
-        fprintf(stderr, "  [gpu] 8 stages: pixel shader ids up to %d, %lu draws with a depth texture as Z (shadow maps), "
-                        "%lu draws sampling one\n", g_ps_maxid, g_dz_draws, g_dt_draws);
+        fprintf(stderr, "  [gpu] 8 stages: pixel shader ids up to %d, %lu recorded draws with a depth texture as Z "
+                        "(shadow maps), %lu recorded draws sampling one (dropped frames included)\n",
+                g_ps_maxid, g_dz_draws, g_dt_draws);
 }
