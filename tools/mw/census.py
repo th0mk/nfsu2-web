@@ -13,7 +13,11 @@ Prints markdown tables, read at run time from the game folder (nothing of the ga
   - MOVIES and NIS: the file counts;
   - with LOGs of runs made with NFSU2_FNG_LOG=3 that stepped a Quick Race track list (Track_Select.fng): each
     list's tracks, their names from LANGUAGES/English.bin, their lengths and whether the list offers them (its
-    Accept button, label 0x2B65A216, drawn) or shows them locked.
+    Accept button, label 0x2B65A216, drawn) or shows them locked.  tests/mw/scripts/content_probe.txt steps all five
+    Custom Race lists once around (its check, tests/mw/checks/content_probe.sh, wants each seen whole):
+      node web/tools/run-suite.mjs --game mw --script content_probe.txt --marker 'content_probe: done' \\
+        --env NFSU2_FNG_LOG=3 --env NFSU2_QUIT_FRAMES=60000 --timeout-scale 4
+      tools/mw/census.py "<game folder>" out/web/runs/<run>/content_probe.log
 
 Formats (speed.exe v1.3's data; read here, checked against the game's own screens):
   VPAK: 'VPAK', count, string block offset and size, then per vault {name offset, bin size, vlt size, bin offset,
@@ -236,10 +240,7 @@ def quick_race(G, logs):
     T = language(os.path.join(G, 'LANGUAGES', 'English.bin'))
     seen = {}
     for path in logs:
-        mode = None
         for line in open(path, encoding='latin1'):
-            m = re.search(r'LOG \S+ mode (\w+)', line)
-            if m: mode = m.group(1); continue
             if 'Track_Select.fng shows' not in line: continue
             toks = re.findall(r":([0-9a-f]{8})'(\S*)", line)
             title = trk = length = None; nums = []

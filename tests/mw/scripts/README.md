@@ -24,6 +24,7 @@ one track, picked on the screens by the kind's menu item and the track's name la
 `racewin`), `race_drag.txt` (a Custom Race drag the game's AI drives to its end) and `race_tollbooth.txt` (the
 Challenge Series' first event, a Tollbooth Time Trial: Quick Race has no tollbooth; seeded with `profiles_make.txt`'s
 saves, as the Challenge Series needs a profile).  The track labels are those of `tools/mw/census.py`, which reads
-the lists off runs made with `NFSU2_FNG_LOG=3` and names them from the game's English.bin.  With no profile loaded,
+the lists off `content_probe.txt`'s runs (every Custom Race track list stepped once around with `NFSU2_FNG_LOG=3`)
+and names them from the game's English.bin.  With no profile loaded,
 Quick Race offers 19 of its 137 tracks (the list draws its Accept button); the others show "This track is locked"
 and take no Enter.
