@@ -985,6 +985,11 @@ static void status_line(double t, double tms, const char *label){
 #else
             (long)(ru.ru_maxrss / (1024 * 1024)), ms);
 #endif
+    if (getenv("NFSU2_MEMCENSUS")){                                     /* test-only: the guest window's census */
+        int heap_census_line(char *, size_t);
+        char ml[768]; heap_census_line(ml, sizeof ml);
+        fprintf(stderr, "[mem] f=%ld flow=%u%s\n", g_frame, game_flow(), ml);
+    }
     g_st_t = t; g_st_f = g_frame; g_st_cpu = cpu; g_st_gcpu = gcpu;
 }
 

@@ -108,10 +108,62 @@ static uint32_t gbuf_slack(void){
     if (s < 0){ const char *e = getenv("NFSU2_HEAPCHECK"); s = (e && *e && *e != '0') ? 0 : 256; }
     return (uint32_t)s;
 }
-static uint32_t gbuf_alloc(uint32_t n){
+/* The census of the buffer heap by kind ([mem] lines, heap.c heap_census_line):
+ * live bytes and blocks per kind, the kind of each live block in a small
+ * host-side table (open addressing, deletion by backward shift). */
+enum { GK_OTHER, GK_TEX, GK_TEXDYN, GK_SURF, GK_VB, GK_VBDYN, GK_IB, GK_IBDYN, GK_SND, GK_N };
+static const char *const g_gk_name[GK_N] = { "other", "tex", "texdyn", "surf", "vb", "vbdyn", "ib", "ibdyn", "snd" };
+static uint64_t g_gk_bytes[GK_N];
+static uint32_t g_gk_n[GK_N];
+#define GKH_N (1u << 17)
+static uint32_t g_gkh_key[GKH_N];
+static uint8_t  g_gkh_kind[GKH_N];
+static uint32_t g_gkh_size[GKH_N];
+static inline uint32_t gkh_slot(uint32_t p){ return (p >> 4) * 2654435761u >> 15; }
+static void gk_note(uint32_t p, uint32_t n, int kind){
+    if (!p) return;
+    uint32_t i = gkh_slot(p) & (GKH_N - 1u);
+    for (uint32_t probe = 0; probe < GKH_N; probe++, i = (i + 1u) & (GKH_N - 1u))
+        if (!g_gkh_key[i]){ g_gkh_key[i] = p; g_gkh_kind[i] = (uint8_t)kind; g_gkh_size[i] = n;
+                            g_gk_bytes[kind] += n; g_gk_n[kind]++; return; }
+}
+static void gk_forget(uint32_t p){
+    if (!p) return;
+    uint32_t i = gkh_slot(p) & (GKH_N - 1u);
+    for (uint32_t probe = 0; probe < GKH_N && g_gkh_key[i]; probe++, i = (i + 1u) & (GKH_N - 1u)){
+        if (g_gkh_key[i] != p) continue;
+        g_gk_bytes[g_gkh_kind[i]] -= g_gkh_size[i]; g_gk_n[g_gkh_kind[i]]--;
+        g_gkh_key[i] = 0;
+        /* backward shift: pull later entries of the run into the hole */
+        for (uint32_t j = (i + 1u) & (GKH_N - 1u); g_gkh_key[j]; j = (j + 1u) & (GKH_N - 1u)){
+            uint32_t h = gkh_slot(g_gkh_key[j]) & (GKH_N - 1u);
+            if (((j - h) & (GKH_N - 1u)) >= ((j - i) & (GKH_N - 1u))){
+                g_gkh_key[i] = g_gkh_key[j]; g_gkh_kind[i] = g_gkh_kind[j]; g_gkh_size[i] = g_gkh_size[j];
+                g_gkh_key[j] = 0; i = j; }
+        }
+        return;
+    }
+}
+int com_gbuf_census(char *buf, size_t n){
+    int k = snprintf(buf, n, " gbuf:");
+    for (int i = 0; i < GK_N && k > 0 && k < (int)n - 32; i++)
+        if (g_gk_n[i]) k += snprintf(buf + k, n - (size_t)k, " %s=%.1fMB/%u", g_gk_name[i], g_gk_bytes[i] / 1048576.0, g_gk_n[i]);
+    int com_hostback_census(char *, size_t);
+    if (k > 0 && k < (int)n - 1) k += com_hostback_census(buf + k, n - (size_t)k);
+    return k;
+}
+static uint32_t gbuf_alloc_kz(uint32_t n, int kind, int zero);
+static uint32_t gbuf_alloc_k(uint32_t n, int kind){ return gbuf_alloc_kz(n, kind, 1); }
+static uint32_t gbuf_alloc(uint32_t n){ return gbuf_alloc_k(n, GK_OTHER); }
+int heap_census_line(char *buf, size_t n);
+static uint32_t gbuf_alloc_kz(uint32_t n, int kind, int zero){
     if (!gheap_bump()){
-        uint32_t p = gheap_alloc_c(g_com_cpu, g_gh_gbuf, n + gbuf_slack(), 1);
-        if (p) g_gbuf_bytes += n + gbuf_slack();
+        uint32_t p = gheap_alloc_c(g_com_cpu, g_gh_gbuf, n + gbuf_slack(), zero);
+        if (p){ g_gbuf_bytes += n + gbuf_slack(); gk_note(p, n + gbuf_slack(), kind); }
+        else { static int sh = 0;                     /* the guest's window is full: say what holds it */
+            if (sh++ < 4){ char ml[768]; heap_census_line(ml, sizeof ml);
+                fprintf(stderr, "[mem] a %s buffer of %u bytes FAILED (caller 0x%08x):%s\n", g_gk_name[kind], n,
+                        g_com_cpu ? g_com_cpu->eip : 0u, ml); } }
         return p; }
     n=(n+63)&~63u;
     if (gbuf_ptr+n > GBUF_MAX) return 0;
@@ -142,7 +194,173 @@ uint32_t gheap_usize(uint32_t p);
 static void gbuf_free(uint32_t p){
     if (!p || gheap_bump()) return;
     uint32_t n = gheap_usize(p);
+    gk_forget(p);
     gheap_free_c(g_com_cpu, g_gh_gbuf, p); g_gbuf_bytes -= n;
+}
+
+/* ---- host backing (game.h d3d_host_backing) --------------------------------
+ * A texture level's or a vertex or index buffer's copy lives in the runtime's
+ * memory, outside the guest's window; the guest sees it only between Lock and
+ * Unlock, in a window of the buffer heap: D3D9 keeps a managed resource's copy
+ * where the game sees it only through Lock.  Dynamic resources (D3DUSAGE_DYNAMIC,
+ * locked every frame) stay in the guest's memory as before.
+ *
+ * An entry is keyed by the guest address of the field that holds the window
+ * (a texture's level slot, a buffer's +8), which is 0 while nothing is locked.
+ * Lock: a window of the locked range, filled from the copy (unless the copy was
+ * never written, or the lock discards); Unlock: the window back into the copy
+ * (unless the lock was read-only) and freed.  Draws read a buffer's copy (buf_src).
+ * A resource that is locked again within HB_PIN_FRAMES presents of its last
+ * Unlock, HB_PIN_TIMES times in a row, keeps its window from then on (a
+ * per-frame lock copies no more than before); its copy goes. */
+#define HB_N          (1u << 17)
+#define HB_PIN_FRAMES 4u
+#define HB_PIN_TIMES  3u
+#define BUF_HB        56u                 /* VB / IB: the entry's index, 0 = in the guest's memory */
+static uint64_t g_present;                /* Presents so far (below) */
+typedef struct {
+    uint32_t key, size;                   /* the window's field; the copy's size */
+    uint8_t *host;                        /* the copy (NULL: never written, reads as zeros) */
+    uint32_t woff, wlen, wflags;          /* the locked range (buffers) and the lock's flags */
+    uint32_t last_unlock, near;           /* the Present count at the last Unlock; Locks soon after one, in a row */
+    uint8_t kind, pinned;                 /* its census kind (GK_*); 1: the window stays, no copy */
+} HBack;
+static HBack   *g_hb;                     /* entries; index 0 unused */
+static uint32_t g_hb_free_head, g_hb_top = 1;
+static uint32_t *g_hb_map;                /* key -> index, open addressing */
+static uint64_t g_hb_bytes, g_hb_locks, g_hb_relocks, g_hb_copied, g_hb_copyin, g_hb_pins, g_hb_full, g_hb_nested;
+static int hb_on(void){
+    static int v = -1;
+    if (v < 0){ const char *e = getenv("NFSU2_HOSTBACK");   /* NFSU2_HOSTBACK=0: the A/B escape hatch */
+                v = g_game.d3d_host_backing && !gheap_bump() && !(e && *e == '0'); }
+    return v;
+}
+static inline uint32_t hb_slot(uint32_t key){ return (key >> 2) * 2654435761u >> 15; }
+static uint32_t hb_find(uint32_t key){
+    if (!g_hb_map || !key) return 0;
+    for (uint32_t i = hb_slot(key) & (HB_N - 1u), q = 0; q < HB_N && g_hb_map[i]; q++, i = (i + 1u) & (HB_N - 1u))
+        if (g_hb[g_hb_map[i]].key == key) return g_hb_map[i];
+    return 0;
+}
+static uint32_t hb_make(uint32_t key, uint32_t size, int kind){
+    if (!g_hb){ g_hb = calloc(HB_N, sizeof *g_hb); g_hb_map = calloc(HB_N, sizeof *g_hb_map);
+                if (!g_hb || !g_hb_map){ free(g_hb); free(g_hb_map); g_hb = 0; g_hb_map = 0; } }
+    if (!g_hb) return 0;
+    uint32_t x = hb_find(key);
+    if (x) return x;
+    if (g_hb_free_head){ x = g_hb_free_head; g_hb_free_head = g_hb[x].key; }
+    else if (g_hb_top < HB_N * 3u / 4u) x = g_hb_top++;     /* the map stays at most 3/4 full */
+    else { g_hb_full++; return 0; }
+    g_hb[x] = (HBack){ .key = key, .size = size, .kind = (uint8_t)kind };
+    uint32_t i = hb_slot(key) & (HB_N - 1u);
+    while (g_hb_map[i]) i = (i + 1u) & (HB_N - 1u);
+    g_hb_map[i] = x;
+    return x;
+}
+/* the entry's copy goes (its window, if any, is the caller's: the field still names it) */
+static void hb_drop(uint32_t key){
+    if (!g_hb_map || !key) return;
+    uint32_t i = hb_slot(key) & (HB_N - 1u);
+    for (uint32_t q = 0; q < HB_N && g_hb_map[i]; q++, i = (i + 1u) & (HB_N - 1u)){
+        uint32_t x = g_hb_map[i];
+        if (g_hb[x].key != key) continue;
+        if (g_hb[x].host){ free(g_hb[x].host); g_hb_bytes -= g_hb[x].size; }
+        g_hb[x] = (HBack){0}; g_hb[x].key = g_hb_free_head; g_hb_free_head = x;
+        g_hb_map[i] = 0;
+        for (uint32_t j = (i + 1u) & (HB_N - 1u); g_hb_map[j]; j = (j + 1u) & (HB_N - 1u)){
+            uint32_t h = hb_slot(g_hb[g_hb_map[j]].key) & (HB_N - 1u);
+            if (((j - h) & (HB_N - 1u)) >= ((j - i) & (HB_N - 1u))){ g_hb_map[i] = g_hb_map[j]; g_hb_map[j] = 0; i = j; }
+        }
+        return;
+    }
+}
+/* the copy at least size bytes (zeros past what it held) */
+static uint8_t *hb_host(HBack *e, uint32_t size){
+    if (size < e->size) size = e->size;
+    if (e->host && size == e->size) return e->host;
+    uint8_t *p = realloc(e->host, size);
+    if (!p) return 0;
+    if (!e->host) memset(p, 0, size);
+    else if (size > e->size) memset(p + e->size, 0, size - e->size);
+    g_hb_bytes += size - (e->host ? e->size : 0u);
+    e->host = p; e->size = size;
+    return p;
+}
+/* Lock: the window for [off, off + len) of entry x, len bytes (+ slack) of the buffer heap.
+ * Pinned: the window stays from then on and the copy goes. */
+static uint32_t hb_lock(uint32_t x, uint32_t off, uint32_t len, uint32_t flags){
+    HBack *e = &g_hb[x];
+    /* locked again a few presents after its Unlock (not within one frame: a load fills a buffer in parts) */
+    uint32_t d = (uint32_t)g_present - e->last_unlock;
+    if (!e->last_unlock || d >= HB_PIN_FRAMES) e->near = 0; else if (d) e->near++;
+    int pin = e->near >= HB_PIN_TIMES;
+    /* the whole copy for a window that stays */
+    if (pin){ off = 0; if (len < e->size) len = e->size; }
+    uint32_t w = gbuf_alloc_kz(len, e->kind, !e->host || pin);
+    if (!w) return 0;
+    if (e->host && !(flags & 0x2000u)){           /* D3DLOCK_DISCARD: nothing to keep */
+        uint32_t n = off < e->size ? e->size - off : 0u; if (n > len) n = len;
+        memcpy(g_mem + w, e->host + off, n);
+        if (n < len) memset(g_mem + w + n, 0, len - n);
+        g_hb_copied += n; g_hb_copyin += n;
+    } else if (e->host) memset(g_mem + w, 0, len);
+    g_hb_locks++; if (e->host) g_hb_relocks++;
+    e->woff = off; e->wlen = len; e->wflags = flags;
+    if (pin){ e->pinned = 1; g_hb_pins++;
+        if (e->host){ free(e->host); g_hb_bytes -= e->size; e->host = 0; } }
+    return w;
+}
+/* Unlock: the window at w back into the copy, and freed (not a pinned entry's) */
+static void hb_unlock(uint32_t x, uint32_t w){
+    HBack *e = &g_hb[x];
+    if (e->pinned || !w) return;
+    if (!(e->wflags & 0x10u)){                   /* D3DLOCK_READONLY: nothing written */
+        uint8_t *h = hb_host(e, e->woff + e->wlen);
+        if (h){ memcpy(h + e->woff, g_mem + w, e->wlen); g_hb_copied += e->wlen; }
+    }
+    e->last_unlock = (uint32_t)g_present; if (!e->last_unlock) e->last_unlock = 1;
+    gbuf_free(w);
+}
+/* A draw's vertex or index data: a buffer's host copy (p, len bytes from p) or
+ * guest memory at ga (0: none), whose pages are checked as it is read. */
+typedef struct { const uint8_t *p; uint32_t ga, len; } BSrc;
+static BSrc buf_src(uint32_t o, uint32_t off){
+    uint32_t x = MR32(o + BUF_HB);
+    if (x && x < HB_N && g_hb && !g_hb[x].pinned){
+        HBack *e = &g_hb[x];
+        uint32_t n = MR32(o + 4u);                        /* the buffer's length */
+        if (!e->host && !hb_host(e, n)) return (BSrc){ 0, 0u, 0u };
+        if (off >= n || off >= e->size) return (BSrc){ 0, 0u, 0u };
+        return (BSrc){ e->host + off, 0u, n - off };
+    }
+    uint32_t a = MR32(o + 8u);
+    return (BSrc){ 0, a ? a + off : 0u, 0u };
+}
+static inline BSrc guest_src(uint32_t a){ return (BSrc){ 0, a, 0u }; }
+/* n bytes at off, or NULL (past the copy, or guest pages not committed) */
+static inline const uint8_t *bsrc_at(BSrc s, uint32_t off, uint32_t n){
+    if (s.p) return ((uint64_t)off + n <= s.len) ? s.p + off : NULL;
+    if (!s.ga) return NULL;
+    uint32_t a = s.ga + off;
+    return (mem_is_committed(a) && mem_is_committed(a + n - 1u)) ? g_mem + a : NULL;
+}
+static inline uint32_t bsrc_index(const uint8_t *p, uint32_t isz){
+    if (isz == 2u){ uint16_t v; memcpy(&v, p, 2); return v; }
+    uint32_t v; memcpy(&v, p, 4); return v;
+}
+/* [mem] lines: the copies outside the window, and the Lock traffic since the last line */
+int com_hostback_census(char *buf, size_t n){
+    static uint64_t locks0, relocks0, copied0, copyin0;
+    uint32_t live = g_hb_top - 1u;
+    for (uint32_t x = g_hb_free_head; x && live; x = g_hb[x].key) live--;
+    int k = snprintf(buf, n, " host: %.1fMB in %u entries, %llu locks (%llu again) %.1fMB copied (%.1fMB in), %llu pinned,"
+                             " %llu nested%s",
+                     g_hb_bytes / 1048576.0, live, (unsigned long long)(g_hb_locks - locks0),
+                     (unsigned long long)(g_hb_relocks - relocks0), (g_hb_copied - copied0) / 1048576.0,
+                     (g_hb_copyin - copyin0) / 1048576.0, (unsigned long long)g_hb_pins,
+                     (unsigned long long)g_hb_nested, g_hb_full ? " FULL" : "");
+    locks0 = g_hb_locks; relocks0 = g_hb_relocks; copied0 = g_hb_copied; copyin0 = g_hb_copyin;
+    return k;
 }
 
 typedef struct { const char *name; const Method *m; unsigned n; } Iface;
@@ -1049,6 +1267,8 @@ static void com_destroy(uint32_t o){
         for (uint32_t k = 0; k < 8u; k++){ gbuf_free(MR32(o + 32u + 4u*k)); MR32(o + 32u + 4u*k) = 0; }
         if (CH_FLAGS(o) & CF_CUBE)
             for (uint32_t k = 0; k < 8u; k++){ gbuf_free(MR32(o + 104u + 4u*k)); MR32(o + 104u + 4u*k) = 0; }
+        if (g_hb_map)                                 /* the levels' copies (host backing) */
+            for (uint32_t k = 0; k < 8u; k++){ hb_drop(o + 32u + 4u*k); hb_drop(o + 104u + 4u*k); }
         for (uint32_t k = 0; k < 10u; k++){
             uint32_t sf = MR32(o + 64u + 4u*k);
             if (sf && com_valid(sf) && CH_PARENT(sf) == o){ gbuf_free(MR32(sf + 32u)); com_drop(sf); }
@@ -1056,6 +1276,7 @@ static void com_destroy(uint32_t o){
         break; }
     case IF_VB: case IF_IB:
         gbuf_free(MR32(o + 8u)); MR32(o + 8u) = 0;
+        if (MR32(o + BUF_HB)){ hb_drop(o + 8u); MR32(o + BUF_HB) = 0; }   /* its copy (host backing) */
         if (metal_available()){ metal_mirror_forget(o); if (iface == IF_IB) metal_mirror_forget(o + 2u); }
         break;
     case IF_SURF:
@@ -2140,15 +2361,16 @@ static int dip_indexed(uint32_t pt, uint32_t basev, uint32_t starti, uint32_t nt
     if (pt != 4u || !g_gpuvs){ g_dip_ixfb[0]++; return 0; }         /* strip/fan: old path */
     uint32_t vb = g_ss_vb, ib = g_ib_obj, stride = g_ss_stride, so = g_ss_off;
     if (!mem_is_committed(vb+63) || !mem_is_committed(ib+63)){ g_dip_ixfb[1]++; return 0; }
-    uint32_t vsz = MR32(vb+4), vba = MR32(vb+8), isb = MR32(ib+4), iba = MR32(ib+8);
+    uint32_t vsz = MR32(vb+4), isb = MR32(ib+4);
     /* locked in the last 4 frames, so its contents may be changing: rather than
      * re-mirror every frame, take the old path (dynamic buffers always go there) */
     if ((uint32_t)g_present - MR32(vb+52) < 4u || (uint32_t)g_present - MR32(ib+52) < 4u){
         g_dip_ixfb[2]++; return 0; }
     uint32_t ni = ntri * 3u;
-    if ((stride & 3u) || (so & 3u) || (int32_t)basev < 0 || !vba || !iba || !vsz || !isb ||
-        (uint64_t)(starti + ni) * isz > isb ||
-        !mem_is_committed(vba + vsz - 1u) || !mem_is_committed(iba + isb - 1u)){
+    const uint8_t *vbp = vsz ? bsrc_at(buf_src(vb, 0), 0, vsz) : NULL;
+    const uint8_t *ibp = isb ? bsrc_at(buf_src(ib, 0), 0, isb) : NULL;
+    if ((stride & 3u) || (so & 3u) || (int32_t)basev < 0 || !vbp || !ibp ||
+        (uint64_t)(starti + ni) * isz > isb){
         g_dip_ixfb[3]++; return 0; }
     /* A Metal index offset must be a multiple of 4; for an odd start with
      * 16-bit indices a second mirror of the IB, shifted by 2 bytes, is used
@@ -2157,8 +2379,8 @@ static int dip_indexed(uint32_t pt, uint32_t basev, uint32_t starti, uint32_t nt
     uint32_t sh = ((starti * isz) & 3u) ? 2u : 0u;
     if (sh && isz != 2u){ g_dip_ixfb[3]++; return 0; }
     uint32_t voff, ioff, imax;
-    if (!metal_mirror(vb, MR32(vb+48), g_mem + vba, vsz, 0, &voff, NULL) ||
-        !metal_mirror(ib + sh, MR32(ib+48), g_mem + iba + sh, isb - sh, isz, &ioff, &imax)){
+    if (!metal_mirror(vb, MR32(vb+48), vbp, vsz, 0, &voff, NULL) ||
+        !metal_mirror(ib + sh, MR32(ib+48), ibp + sh, isb - sh, isz, &ioff, &imax)){
         g_dip_ixfb[4]++; return 0; }
     /* Bound: if the largest index of the whole IB fits this VB, no scan;
      * if not (one IB serves several VBs), scan the draw's range. */
@@ -2188,11 +2410,13 @@ static int dip_indexed(uint32_t pt, uint32_t basev, uint32_t starti, uint32_t nt
  * The run goes out as lists (D3D9's order: a strip's odd triangle is
  * (k+1, k, k+2), a fan's (0, k+1, k+2), a line strip's segment (k, k+1)),
  * copied through the index scratch in chunks draw_up takes.  0 = a vertex or
- * index outside committed memory (nothing more is drawn). */
+ * index outside committed memory or past a host copy (nothing more is drawn).
+ * The vertices and indices are guest memory or a buffer's host copy (buf_src). */
 static uint64_t g_prim_runs[8], g_prim_bad = 0;
-static int draw_prims(uint32_t pt, uint32_t nprim, uint32_t vb, uint32_t stride,
-                      uint32_t ip, uint32_t isz, int32_t base){
+static int draw_prims(uint32_t pt, uint32_t nprim, BSrc vb, uint32_t stride,
+                      BSrc ip, uint32_t isz, int32_t base){
     if (pt < 1u || pt > 6u || !nprim || !stride || stride > 256u) return 1;
+    int indexed = ip.p || ip.ga;
     g_prim_runs[pt]++;
     if (!g_idx_scratch) g_idx_scratch = gbuf_alloc(4096u*64u);
     if (!g_idx_scratch) return 0;
@@ -2214,14 +2438,15 @@ static int draw_prims(uint32_t pt, uint32_t nprim, uint32_t vb, uint32_t stride,
             }
             for (uint32_t q = 0; q < per; q++){
                 uint32_t vi = k[q];
-                if (ip){
-                    uint32_t ia = ip + vi * isz;
-                    if (!mem_is_committed(ia) || !mem_is_committed(ia + isz - 1u)){ g_prim_bad++; return 0; }
-                    vi = (isz == 2u ? MR16(ia) : MR32(ia)) + (uint32_t)base;
+                if (indexed){
+                    const uint8_t *ia = bsrc_at(ip, vi * isz, isz);
+                    if (!ia){ g_prim_bad++; return 0; }
+                    vi = bsrc_index(ia, isz) + (uint32_t)base;
                 }
-                uint32_t src = vb + vi * stride, dst = g_idx_scratch + (p * per + q) * stride;
-                if (!mem_is_committed(src) || !mem_is_committed(src + stride - 1u)){ g_prim_bad++; return 0; }
-                memcpy(g_mem + dst, g_mem + src, stride);
+                uint32_t dst = g_idx_scratch + (p * per + q) * stride;
+                const uint8_t *src = bsrc_at(vb, vi * stride, stride);
+                if (!src){ g_prim_bad++; return 0; }
+                memcpy(g_mem + dst, src, stride);
             }
         }
         draw_up(lt, n * per, g_idx_scratch, stride);
@@ -2848,8 +3073,9 @@ int com_call(CPU *c, uint32_t magic){
                 r=0;
                 if (metal_available() && g_ss_vb && g_ib_obj && g_ss_stride &&
                     nprim && nprim < 200000u){
-                    uint32_t vbase = MR32(g_ss_vb+8) + g_ss_off;
-                    uint32_t ibase = MR32(g_ib_obj+8);
+                    /* the stream's vertices and the indices: guest memory or a buffer's host copy */
+                    BSrc vsrc = buf_src(g_ss_vb, g_ss_off), isrc = buf_src(g_ib_obj, 0u);
+                    int vbase = vsrc.p || vsrc.ga, ibase = isrc.p || isrc.ga;
                     uint32_t ifmt  = MR32(g_ib_obj+12);
                     uint32_t isz   = (ifmt==102u) ? 4u : 2u;   /* INDEX32 : INDEX16 */
                     uint32_t ntri  = (pt==4u||pt==5u||pt==6u) ? nprim : 0u;
@@ -2858,7 +3084,7 @@ int com_call(CPU *c, uint32_t magic){
                      * corner, which flat shading sees; UG2 draws only lists, its 3 sites push type 4) */
                     int listed = (pt >= 1u && pt <= 3u) || (g_game.d3d9_strict && (pt == 5u || pt == 6u));
                     if (listed && vbase && ibase){
-                        if (draw_prims(pt, nprim, vbase, g_ss_stride, ibase + starti*isz, isz, (int32_t)basev))
+                        if (draw_prims(pt, nprim, vsrc, g_ss_stride, buf_src(g_ib_obj, starti*isz), isz, (int32_t)basev))
                             g_dip_draws++;
                         else g_dip_skip++; }
                     else if (!ntri || !vbase || !ibase){ g_dip_skip++; }
@@ -2880,13 +3106,13 @@ int com_call(CPU *c, uint32_t magic){
                                 else { i0=0u; i1=g+1u; i2=g+2u; }
                                 uint32_t idx[3] = { i0, i1, i2 };
                                 for (int k=0;k<3;k++){
-                                    uint32_t ia = ibase + (starti + idx[k])*isz;
-                                    if (!mem_is_committed(ia+isz-1u)){ ok=0; break; }
-                                    uint32_t vi = (isz==2u) ? MR16(ia) : MR32(ia);
-                                    uint32_t src = vbase + (basev + vi)*g_ss_stride;
+                                    const uint8_t *ia = bsrc_at(isrc, (starti + idx[k])*isz, isz);
+                                    if (!ia){ ok=0; break; }
+                                    uint32_t vi = bsrc_index(ia, isz);
                                     uint32_t dst = g_idx_scratch + (t*3u+(uint32_t)k)*g_ss_stride;
-                                    if (!mem_is_committed(src + g_ss_stride - 1u)){ ok=0; break; }
-                                    memcpy(g_mem+dst, g_mem+src, g_ss_stride);
+                                    const uint8_t *src = bsrc_at(vsrc, (basev + vi)*g_ss_stride, g_ss_stride);
+                                    if (!src){ ok=0; break; }
+                                    memcpy(g_mem+dst, src, g_ss_stride);
                                 }
                             }
                             if (!ok){ g_dip_skip++; break; }
@@ -2915,7 +3141,7 @@ int com_call(CPU *c, uint32_t magic){
                         mem_is_committed(vp) && mem_is_committed(vp + nv*stride - 1))
                         draw_up(pt, nv, vp, stride);
                     /* a longer run in chunks (game.h d3d9_strict; UG2 leaves it out) */
-                    else if (g_game.d3d9_strict && vp && nv >= 4096u) draw_prims(pt, nprim, vp, stride, 0u, 0u, 0);
+                    else if (g_game.d3d9_strict && vp && nv >= 4096u) draw_prims(pt, nprim, guest_src(vp), stride, guest_src(0u), 0u, 0);
                 }
                 if (dd_on()){
                     static uint32_t last_decl = 0xFFFFFFFFu; static int nd = 0;
@@ -2969,8 +3195,8 @@ int com_call(CPU *c, uint32_t magic){
                  * and its logs name only DrawIndexedPrimitive and DrawPrimitiveUP ([draw-name]) */
                 uint32_t pt=A(c,1), startv=A(c,2), nprim=A(c,3);
                 if (metal_available() && g_ss_vb && g_ss_stride && nprim && nprim < 1000000u){
-                    uint32_t vbase = MR32(g_ss_vb+8);
-                    if (vbase) draw_prims(pt, nprim, vbase + g_ss_off + startv*g_ss_stride, g_ss_stride, 0u, 0u, 0);
+                    BSrc vsrc = buf_src(g_ss_vb, g_ss_off + startv*g_ss_stride);
+                    if (vsrc.p || vsrc.ga) draw_prims(pt, nprim, vsrc, g_ss_stride, guest_src(0u), 0u, 0);
                 }
             }
             else if (MID(DrawIndexedPrimitiveUP)){
@@ -2978,7 +3204,7 @@ int com_call(CPU *c, uint32_t magic){
                  *  IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride) (UG2 draws none, above) */
                 uint32_t pt=A(c,1), nprim=A(c,4), ip=A(c,5), ifmt=A(c,6), vp=A(c,7), stride=A(c,8);
                 if (metal_available() && ip && vp && nprim && nprim < 1000000u)
-                    draw_prims(pt, nprim, vp, stride, ip, ifmt == 102u ? 4u : 2u, 0);
+                    draw_prims(pt, nprim, guest_src(vp), stride, guest_src(ip), ifmt == 102u ? 4u : 2u, 0);
             }
             r=0; }
         else if (MID(SetVertexShader)){
@@ -3758,15 +3984,21 @@ int com_call(CPU *c, uint32_t magic){
             /* (this, Length, Usage, FVF | Format, Pool, ppBuffer, pShared) */
             int ib = MID(CreateIndexBuffer);
             uint32_t pp=A(c,5); uint32_t b=com_new(ib ? IF_IB : IF_VB,64);
-            uint32_t mem = b ? gbuf_alloc(A(c,1)?A(c,1):64) : 0u;
+            int dyn = (A(c,2) & 0x200u) != 0;            /* D3DUSAGE_DYNAMIC */
+            int kind = ib ? (dyn ? GK_IBDYN : GK_IB) : (dyn ? GK_VBDYN : GK_VB);
+            /* host backing: the contents outside the guest's window, seen there between Lock and Unlock */
+            uint32_t x = 0;
+            if (b && !dyn && A(c,1) && hb_on()){ hb_drop(b + 8u); x = hb_make(b + 8u, A(c,1), kind); }
+            uint32_t mem = (b && !x) ? gbuf_alloc_k(A(c,1)?A(c,1):64, kind) : 0u;
             int made = b != 0;
-            if (b && !mem){ com_release(b); b = 0; }
+            if (b && !mem && !x){ com_release(b); b = 0; }
             if (!b)                         /* the game seldom checks: say so, for the fault that follows */
-                fprintf(stderr, "[d3d] %s(%u bytes, usage 0x%x, pool %u) failed: no %s (ret 0x%08x)\n",
+                fprintf(stderr, "[d3d] %s(%u bytes, usage 0x%x, pool %u) failed: no %s (ret 0x%08x)
+",
                         ib ? "CreateIndexBuffer" : "CreateVertexBuffer", A(c,1), A(c,2), A(c,4),
                         made ? "memory" : "object", c->eip);
             if (b){
-                MR32(b+4)=A(c,1); MR32(b+8)=mem;
+                MR32(b+4)=A(c,1); MR32(b+8)=mem; MR32(b+BUF_HB)=x;
                 MR32(b+48)=buf_serial();    /* mirror generation: unique even if the address is reused */
                 if (ib) MR32(b+12)=A(c,3);  /* Format: 101=16bit, 102=32bit */
                 else MR32(b+BUF_FVF)=A(c,3);
@@ -4062,9 +4294,29 @@ int com_call(CPU *c, uint32_t magic){
              * (see dip_indexed). */
             if (self && (iface==IF_VB || iface==IF_IB)){
                 MR32(self+48) = MR32(self+48) + 1u; MR32(self+52) = (uint32_t)g_present; }
+            /* host backing: a window of the locked range, filled from the copy */
+            uint32_t x = (self && (iface==IF_VB || iface==IF_IB) && hb_on()) ? MR32(self+BUF_HB) : 0u;
+            if (x && x < HB_N && !g_hb[x].pinned){
+                uint32_t size = MR32(self+4), w = MR32(self+8);
+                if (off >= size) off = 0;
+                if (!sz || sz > size - off) sz = size - off;
+                if (w){                                 /* locked again before its Unlock */
+                    g_hb_nested++;
+                    if (off >= g_hb[x].woff && off + sz <= g_hb[x].woff + g_hb[x].wlen){
+                        if (pp) MR32(pp) = w + off - g_hb[x].woff;
+                        r = 0; goto lock_done; }
+                    hb_unlock(x, w); MR32(self+8) = 0;
+                }
+                w = hb_lock(x, off, sz, A(c,4));
+                MR32(self+8) = w;
+                if (pp) MR32(pp) = w ? w + off - g_hb[x].woff : 0u;
+                r = w ? 0u : 0x8876086Cu;                /* no window: D3DERR_INVALIDCALL */
+                goto lock_done;
+            }
             uint32_t base = self?MR32(self+8):0;
             if(!base){ base=gbuf_alloc(sz?sz:65536); if(self) MR32(self+8)=base; }
-            if(pp) MR32(pp)=base+off; r=0; }
+            if(pp) MR32(pp)=base+off; r=0;
+          lock_done:; }
         else if (MID(LockRect)){
             /* 2D texture  : (Level, pLockedRect, pRect, Flags)
              * CUBE texture: (FaceType, Level, pLockedRect, pRect, Flags)
@@ -4088,7 +4340,15 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t slot = self ? (is_cube ? (self + 104u + 4u*(face & 7u))
                                             : (self + 32u + 4u*level)) : 0;
             uint32_t buf = slot ? MR32(slot) : 0;
-            if(!buf){ buf = gbuf_alloc(pitch*rows + 64u); if(slot) MR32(slot)=buf; }
+            if(!buf){
+                int kind = iface != IF_TEX ? GK_SURF : (MR32(self+TEX_USAGE) & 0x200u) ? GK_TEXDYN : GK_TEX;
+                /* host backing: a texture's level (not a dynamic one's, nor a render target's) */
+                uint32_t x = (kind == GK_TEX && slot && hb_on() && !(MR32(self+TEX_USAGE) & 1u))
+                           ? hb_make(slot, pitch*rows + 64u, kind) : 0u;
+                if (x && !g_hb[x].pinned)
+                    buf = hb_lock(x, 0, pitch*rows + 64u, is_cube ? A(c,5) : A(c,4));
+                else buf = gbuf_alloc_k(pitch*rows + 64u, kind);
+                if(slot) MR32(slot)=buf; }
             /* a render target the game made lockable (CreateRenderTarget):
              * what the GPU drew there, the cover shoot's picture (gpu_web.c) */
             if (iface==IF_SURF && self && MR32(self+40)==3u && MR32(self+28) && metal_available()){
@@ -4126,9 +4386,17 @@ int com_call(CPU *c, uint32_t magic){
                     fprintf(stderr,"\n");
                 }
             }
+            /* host backing: the window back into the level's copy, and freed */
+            if (iface==IF_TEX && self && buf && hb_on()){
+                uint32_t sl = is_cube2 ? self + 104u + 4u*(face2 & 7u) : self + 32u + 4u*level;
+                uint32_t x = hb_find(sl);
+                if (x && !g_hb[x].pinned){ hb_unlock(x, buf); MR32(sl) = 0; }
+            }
             r=0; }
         else if (MID(Unlock) && (iface==IF_VB || iface==IF_IB)){
             gheap_check_block(c, self ? MR32(self+8) : 0u, "LOCK BUFFER OVERRUN (Unlock)");
+            uint32_t x = (self && hb_on()) ? MR32(self+BUF_HB) : 0u;
+            if (x && x < HB_N && !g_hb[x].pinned && MR32(self+8)){ hb_unlock(x, MR32(self+8)); MR32(self+8) = 0; }
             r=0; }
         else if (MID(GetLevelCount)) r=(self&&MR32(self+24))?MR32(self+24):1u;
         else if (MID(GetType) && g_game.d3d9_strict)       /* D3DRESOURCETYPE */
@@ -4211,7 +4479,7 @@ int com_call(CPU *c, uint32_t magic){
                 guest_backtrace(c, 10);
             }
             if(!bytes || bytes>0x400000u) bytes=65536u;
-            MR32(b+4)=bytes; MR32(b+8)=gbuf_alloc(bytes); MR32(b+12)=0;
+            MR32(b+4)=bytes; MR32(b+8)=gbuf_alloc_k(bytes, GK_SND); MR32(b+12)=0;
             ds_share(MR32(b+8), +1);
             /* Bytes/second from WAVEFORMATEX: the play cursor must advance
              * REALISTICALLY.  The video player drives frames by the audio

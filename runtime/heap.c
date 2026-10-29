@@ -785,6 +785,7 @@ static uint32_t virtual_query(uint32_t addr, uint32_t mbi, uint32_t len){
     return 28;
 }
 
+int heap_census_line(char *buf, size_t n);
 /* Bump mode keeps the old semantics of every call exactly (VirtualAlloc =
  * a fresh zeroed block whatever the flags, VirtualFree/GlobalFree no-ops). */
 uint32_t heap_api(CPU *c, int k){
@@ -818,7 +819,9 @@ uint32_t heap_api(CPU *c, int k){
         if (!r){ win32_set_last_error(c, 8);
             static int sh = 0;
             if (sh++ < 8) fprintf(stderr, "[heap] HeapAlloc(%d, 0x%x, %u) FAILED (caller 0x%08x)%s\n",
-                                  h, fl, n, ra, (fl & 4u) ? " -- HEAP_GENERATE_EXCEPTIONS" : ""); }
+                                  h, fl, n, ra, (fl & 4u) ? " -- HEAP_GENERATE_EXCEPTIONS" : "");
+            if (sh == 1){ char ml[768]; UNLOCK(); heap_census_line(ml, sizeof ml); LOCK();
+                          fprintf(stderr, "[mem] at the failure:%s\n", ml); } }
         break; }
     case HK_HeapFree: {
         int h = (int)ARG(c, 0); uint32_t p = ARG(c, 2);
@@ -931,6 +934,34 @@ int  memstat_line(char *buf, size_t n){
                     (unsigned long long)(va >> 20), (unsigned long long)(cb >> 10), (unsigned long long)objs,
                     bb / 1048576.0, (unsigned long long)(ma >> 20), (unsigned long long)(mt >> 20), lt, ts,
                     win32_obj_live(), fileio_open_handles(), win32_threads_live());
+}
+
+/* One [mem] census line: each heap's live bytes and the VA it holds, the
+ * VirtualAlloc regions, the region's VA in use and its largest free run (what
+ * the next big block can get).  Printed at the first failed HeapAlloc and,
+ * with NFSU2_MEMCENSUS, beside each [status] line (autotest.c). */
+int com_gbuf_census(char *buf, size_t n) __attribute__((weak));   /* com.c: absent in unit builds without it */
+int heap_census_line(char *buf, size_t n){
+    int k = 0;
+    LOCK();
+    for (int i = 1; i < MAXHEAP && k < (int)n - 64; i++){
+        GHeap *H = &g_heap[i];
+        if (!H->used) continue;
+        k += snprintf(buf + k, n - (size_t)k, " h%d(%s)=%.1f/%.1fMB", i, H->name ? H->name : "game",
+                      H->st.live / 1048576.0, H->st.held / 1048576.0);
+    }
+    uint64_t bv = 0; uint32_t run = 0, best = 0;
+    if (!g_bump) for (uint32_t g = 0; g < VA_NG; g++){
+        if (vbit(g_va_bits, g)){ run = 0; if (g_va_start[g] == g && g_va[g].kind == VK_VIRTUAL) bv += (uint64_t)g_va[g].ng * VA_GRAN; }
+        else if (++run > best) best = run;
+    }
+    if (k < (int)n - 1)
+        k += snprintf(buf + k, n - (size_t)k, " virtual=%.1fMB va=%.1f/%.1fMB freerun=%.1fMB",
+                      bv / 1048576.0, g_va_reserved / 1048576.0, (GH_LIMIT - GH_BASE) / 1048576.0,
+                      (double)best * VA_GRAN / 1048576.0);
+    UNLOCK();
+    if (com_gbuf_census && k > 0 && k < (int)n - 1) k += com_gbuf_census(buf + k, n - (size_t)k);
+    return k;
 }
 
 void heap_report(void){

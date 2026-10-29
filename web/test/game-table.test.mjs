@@ -28,6 +28,7 @@ const UG2_UNSET = {
   thread_names: 'the watchdog\'s report and the [thread] lines stay as they were', thread_start: 'as thread_names',
   d3d_modes: 'EnumAdapterModes lists UG2\'s own 6-row mode table (com.c g_modes), with the 4K row\'s stand-in',
   d3d9_strict: 'UG2\'s runtime keeps its own D3D9 answers (descriptors, GetType, multisampling, failed creators, Reset sizes)',
+  d3d_host_backing: 'UG2\'s Lock buffers stay in the guest\'s memory for the resource\'s life, as they always have',
   vclock_sleep_real: 'UG2\'s virtual clock stands at the in-frame cap apart from its creep, as it always has',
   fe_object: 'UG2\'s scripts wait on its screens and memory: $O names no object there',
   on_sound_position: 'Most Wanted\'s sound thread watch; UG2\'s GetCurrentPosition answers as it always did',

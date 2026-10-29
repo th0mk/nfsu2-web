@@ -55,6 +55,7 @@ void gheap_free_c(CPU *c, int heap, uint32_t p){ (void)c; (void)heap; (void)p; }
 int gheap_bump(void){ return 0; }
 uint32_t gheap_usize(uint32_t p){ (void)p; return 0; }
 int gheap_check_block(CPU *c, uint32_t p, const char *w){ (void)c; (void)p; (void)w; return 0; }
+int heap_census_line(char *b, size_t n){ return n ? (b[0] = 0) : 0; }   /* heap.c's [mem] line: none here */
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
 void dispatch_indirect(CPU *c, uint32_t a){ (void)c; (void)a; }
 uint64_t host_us(void){ return 0; }

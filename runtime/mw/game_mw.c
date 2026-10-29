@@ -205,6 +205,9 @@ const GameOps g_game = {
     .d3d9_strict = 1,                           /* D3D9's answers: level sizes, failed creators, no multisampling */
     .gpu_stages = 8,                            /* t4..t7 and s4..s7 at SM2 already, depth textures (GAME.md 5.9) */
     .d3d_sm3 = 1,                               /* vs/ps 3.0: the ps_2_x and SM3 techniques (GAME.md 5.3) */
+    .d3d_host_backing = 1,                      /* textures' and buffers' copies outside the guest's 512 MB:
+                                                 * a race's world (~170 MB of them) and the game's own heap
+                                                 * (~200 MB) no longer share it */
     .vclock_sleep_real = 1,                     /* the boot's CPU speed test (0x6CAF90) sees its Sleep(50) */
     .flow = mw_flow,                            /* fe_mw.c: GameFlowManager's state [0x925E90] */
     .flow_fe = 3,
