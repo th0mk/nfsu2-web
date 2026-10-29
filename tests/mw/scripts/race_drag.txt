@@ -1,0 +1,51 @@
+# Most Wanted: Custom Race drags on one track, from the load to the results screen, MWK_RUNS times in a row (TRACKER
+# M4-05).  As race_kind.txt: Drag is "custom race mode select"'s 3rd item (0x4B4E388C), its list "drag track select"
+# (0x136C5C90), RIGHT until the track's name label MWK_TRACK is up, the options as they come, the car the list
+# starts on; a drag asks no transmission (no "Select your transmission" dialog comes).  The race is driven over the
+# line: from GO the game's AI drives the player's car (autopilot, Game.ForceAIControl), its gear changes included
+# (where logs the speed on the way: 60, 100 and 126 km/h at 5, 10 and 15 s in the first runs), until the race's end
+# screen takes input: the winner's InGamePhotoMaster.fng (its "WINNER" label 0x5DFB6667 up) or PostRace_Results.fng
+# (the player lost, or its car was out of the race: a drag ends a racer that crashes); racestatus says where the
+# player came and whether it was finished.  Enter until the "quick race" menu is back.  No racewin: the race's own
+# script finishes every racer.
+#   node web/tools/run-suite.mjs --game mw --script race_drag.txt --marker 'race_drag: done' \
+#     --env MWK_TRACK=4af3c8df --env MWK_RUNS=2 --env NFSU2_FNG_LOG=3 --env NFSU2_QUIT_FRAMES=100000 --timeout-scale 6
+# tests/mw/checks/race_drag.sh wants every pass at its end screen and prints the results, top speeds and loads.
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    loop ${MWK_RUNS}
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@4b4e388c 40 600   # Drag
++0    tap RETURN
++0    waitfng Track_Select.fng:136c5c90 600              # "drag track select"
++0    tapuntil RIGHT Track_Select.fng:136c5c90:${MWK_TRACK} 40 3000   # the track
++0    log race_drag: track ${MWK_TRACK}
++0    tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the drag options, on their first row, as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    log race_drag: load
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    log race_drag: racing
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_drag: GO
++0    autopilot on
++300  where
++300  where
++300  where
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng 9000   # the race's end screen takes input
++0    log race_drag: results
++0    racestatus
++0    autopilot off
++0    tapuntil RETURN MainMenu_Sub.fng:cdf0cc03@4b4e388b 90 1800   # back in the "quick race" menu, on Custom Race
++0    endloop
++0    log race_drag: done
++0    close

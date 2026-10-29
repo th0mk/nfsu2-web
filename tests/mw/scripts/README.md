@@ -18,3 +18,12 @@ The frame rate: `menu_hold.txt` (the main menu's camera swing-in traced, then th
 line over it and the clocks in peeks; its check wants the swing over in 6 s of wall time and RealTimeFrames at 60 a
 second at the page's frame-rate setting `NFSU2_FPS`, runtime/mw/framerate_mw.c; `NFSU2_HFR_LOG=1` adds a `[mwpace]`
 line a second with the slots and the steps the simulation ran).
+
+The race kinds (TRACKER M4-05, M4-06): `race_kind.txt` (a Custom Race circuit, sprint, lap knockout or speedtrap on
+one track, picked on the screens by the kind's menu item and the track's name label, `MWK_RUNS` times, each ended by
+`racewin`), `race_drag.txt` (a Custom Race drag the game's AI drives to its end) and `race_tollbooth.txt` (the
+Challenge Series' first event, a Tollbooth Time Trial: Quick Race has no tollbooth; seeded with `profiles_make.txt`'s
+saves, as the Challenge Series needs a profile).  The track labels are those of `tools/mw/census.py`, which reads
+the lists off runs made with `NFSU2_FNG_LOG=3` and names them from the game's English.bin.  With no profile loaded,
+Quick Race offers 19 of its 137 tracks (the list draws its Accept button); the others show "This track is locked"
+and take no Enter.

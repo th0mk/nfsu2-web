@@ -197,8 +197,17 @@ static int str_is(uint32_t o, void *ctx){
  * and the package is the top one that takes input: the keys reach that one (LEFT on a dialog of MC_Main.fng moves
  * its highlight and not the Alias Manager's under it, which takes input too; MC_List.fng sits above MC_Main.fng
  * while it is up, and MC_Main.fng keeps its last dialog's strings drawn under it).  TEXT matches a string's
- * first characters, '_' a space: the log's spelling (NFSU2_FNG_LOG=3).  1 when all of that holds now. */
+ * first characters, '_' a space: the log's spelling (NFSU2_FNG_LOG=3).  1 when all of that holds now.
+ * NAME|NAME...: any of them (a race's end: the winner's InGamePhotoMaster.fng or the loser's PostRace_Results.fng);
+ * a bare PACKAGE there is the top package that takes input. */
 int mw_fe_match(const char *name){
+    const char *bar = strchr(name, '|');
+    if (bar){
+        char a[256]; size_t m = (size_t)(bar - name);
+        if (m >= sizeof a) return 0;
+        memcpy(a, name, m); a[m] = 0;
+        return mw_fe_match(a) || mw_fe_match(bar + 1);
+    }
     size_t n = strcspn(name, QUALS);
     uint32_t e = engine(), pkg = 0; int k = 0;
     for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < LIST_MAX && !pkg; p = rd(p + PKG_NEXT), k++){
@@ -226,8 +235,8 @@ int mw_fe_match(const char *name){
 struct shows { char *b; int o, cap; uint32_t h; };
 static int str_shows(uint32_t o, void *ctx){
     struct shows *s = ctx;
-    if (rd(o + OBJ_TYPE) != 2u || s->o >= s->cap - 40) return 0;
-    char t[20]; str_text(o, t, sizeof t);
+    if (rd(o + OBJ_TYPE) != 2u || s->o >= s->cap - 64) return 0;
+    char t[40]; str_text(o, t, sizeof t);       /* a dialog's question to its 39th character */
     for (char *c = t; *c; c++) if (*c == ' ') *c = '_';
     uint32_t sc = rd(o + OBJ_SCRIPT);
     s->o += snprintf(s->b + s->o, (size_t)(s->cap - s->o), " :%08x%s%s", rd(o + STR_LABEL),
@@ -246,7 +255,7 @@ static void state_log(uint32_t pkg, int lv){
         fprintf(stderr, "[fng] f=%ld %s input %u @%08x\n", autotest_frame(), nm ? nm : "?", (unsigned)input, focus);
     st[i].input = input; st[i].focus = focus;
     if (lv < 3 || !input) return;
-    char b[1024]; struct shows s = { b, 0, (int)sizeof b, 2166136261u };
+    char b[2048]; struct shows s = { b, 0, (int)sizeof b, 2166136261u };   /* Track_Select.fng draws ~40 strings */
     b[0] = 0; drawn(pkg, str_shows, &s);
     for (const char *c = b; *c; c++) s.h = (s.h ^ (uint8_t)*c) * 16777619u;
     if (s.h != st[i].shows) fprintf(stderr, "[fng] f=%ld %s shows%s\n", autotest_frame(), nm ? nm : "?", b);

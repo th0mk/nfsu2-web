@@ -1,0 +1,52 @@
+# Most Wanted: the Challenge Series' first event, a Tollbooth Time Trial, from the load to the results screen,
+# MWK_RUNS times in a row (TRACKER M4-06: Quick Race has no tollbooth; its "custom race mode select" lists Circuit,
+# Sprint, Drag, Lap Knockout and Speedtrap).  Seeded with the save tree profiles_make.txt leaves (ALPHA and BRAVO;
+# NFSU2_SAVE_SEED), it loads ALPHA from the start's Load list (as race_win.txt does), takes the main menu's Challenge
+# Series (its 2nd item, 0x4B4E388B; without a profile the item asks for one), whose list (ChallengeSeries.fng,
+# "1 / 69") opens on its first event, a tollbooth ("Complete this Tollbooth Time Trial in under ..."), launches it
+# ("Are you sure you want to launch this event?": Enter on the dialog's default 0xB8A7C6CD declines, its other
+# button 0xB8A7C6CC, one LEFT away, launches) and takes automatic gears.  From GO the game's AI drives the player's car
+# (autopilot) for MWK_DRIVE frames, then the shortcut finish (racewin, runtime/mw/career_mw.c) and the race's end
+# screen (the winner's InGamePhotoMaster.fng or PostRace_Results.fng); Enter until the Challenge Series list is
+# back.  Every step waits for its screen or the game's state.
+#   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script race_tollbooth.txt \
+#     --marker 'race_tollbooth: done' --env MWK_RUNS=20 --env MWK_DRIVE=1200 --env NFSU2_FNG_LOG=3 \
+#     --env NFSU2_QUIT_FRAMES=400000 --timeout-scale 12
+# tests/mw/checks/race_tollbooth.sh counts the loads, GOs, finishes and end screens and prints the load times.
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; profiles_make's tree holds it)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 600    # "Load complete.", its Continue highlighted
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue (race_win.txt's note)
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log race_tollbooth: ALPHA loaded
++0    tapuntil RIGHT MainMenu.fng@4b4e388b 40 600        # Challenge Series
++0    tap RETURN
++0    loop ${MWK_RUNS}
++0    waitfng ChallengeSeries.fng:e04d3a4d 1200          # the list ("challenge series")
++0    tapuntil LEFT ChallengeSeries.fng:e04d3a4d@09c9a0f9 40 1200   # on its first event
++0    log race_tollbooth: event
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    log race_tollbooth: load
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    log race_tollbooth: racing
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_tollbooth: GO
++0    autopilot on
++${MWK_DRIVE} where
++0    autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng 1200   # the race's end screen takes input
++0    log race_tollbooth: results
++0    racestatus
++0    tapuntil RETURN ChallengeSeries.fng 90 1800        # back in the Challenge Series list
++0    endloop
++0    log race_tollbooth: done
++0    close
