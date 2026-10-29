@@ -122,6 +122,8 @@ void itrace_dump(int n){ (void)n; } void watch_dump(const char *w, int n){ (void
 uint64_t g_gs_fail; uint32_t g_watch_addr;
 void sms_request(int id){ (void)id; } int sms_delivered(void){ return 0; }
 void photo_input(int cmd, int a, int b){ (void)cmd; (void)a; (void)b; }
+void ug2_pad_rescan(int on){ (void)on; } unsigned ug2_pad_trigger_axes(uint32_t dev){ (void)dev; return 3u; }
+float ug2_pad_jolt(void){ return 0.f; }
 int career_fe_active(const char *name){ (void)name; return 0; } int hfr_rate_now(void){ return 0; }
 int roam_exploring(void){ return 0; } int roam_game_cars(void){ return 0; } int roam_game_friends(void){ return 0; }
 uint64_t ws_now_us(void){ return 0; }
