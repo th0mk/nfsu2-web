@@ -120,6 +120,19 @@
  *            the lift's model).  Nothing in MW passes it such an operand: it
  *            runs only when _adjust_fdiv [0x9BA9F4] is 1
  *            (IsProcessorFeaturePresent(0), else the FDIV test 0x7CD9C0: 0)
+ *   doubles  the same, but a result computed on from such a value differs
+ *            outside the x87 stack: the lift's registers hold the nearest
+ *            double at once (an infinity past DBL_MAX, 0 or a denormal below
+ *            DBL_MIN, 53 bits), and what follows from there can differ in any
+ *            register or byte.  The case is the same with no rule left out
+ *            (compare how 0) when the original runs again with each x87
+ *            register that holds a value no double holds set to its nearest
+ *            double (f80_rne) before every instruction, as the lift holds it
+ *            (dbl_rerun).  0x819F0B multiplies up to 255 int32s and then a
+ *            float: past DBL_MAX before a factor 0, x87 gives -0 and fistp 0,
+ *            the lift inf * 0, a NaN, and fistp's integer indefinite
+ *            0x80000000 (tools/isatest.py has that sequence with Intel's
+ *            result as an expected deviation of the lift's model)
  *   fsw      the same but for a register holding an fnstsw's low byte, where
  *            the original has x87 exception flags its status word still shows
  *            and the lift keeps none (cpu.h fsw_get), and the case is the
@@ -868,7 +881,7 @@ static long mem_diff(const uint8_t *a, const uint8_t *b, uint32_t n, uint32_t ba
     return -1;
 }
 
-typedef struct { long cases, same, fault, loop, de, nan, diff, jump, order, dead, trig, trig_oor, fsw, range, rback; } Count;
+typedef struct { long cases, same, fault, loop, de, nan, diff, jump, order, dead, trig, trig_oor, fsw, range, rback, dbl; } Count;
 /* a divide error's instruction: div or idiv (F6 /6, F6 /7, F7 /6, F7 /7, after
  * operand-size and segment prefixes) */
 static int is_div(uint32_t a){
@@ -1119,6 +1132,41 @@ static int range_subst(const Fn *f){
     else r = compare(f, CMP_NOVALS);
     if (getenv("ORACLE_DEBUG")) fprintf(stderr, "range_subst: %d stores (%d with the lifted side's bytes), integer reads %d: %s\n",
                                         g_nsub_all, g_sub_lift, g_sub_read, r == 0 || r == 2 ? "then the same" : g_why);
+    g_uo = keep;
+    return r == 0 || r == 2;
+}
+
+/* The doubles class (dbl_rerun): before every instruction each x87 register
+ * that holds a value no double holds gets its nearest double (f80_rne), the
+ * lift's model (cpu.h: double registers, rounded to the precision control as
+ * x87 rounds), so the original computes on from there as the lift does.  The
+ * case must then be the same with no rule left out (how 0; xs: the lift's
+ * libm formulas, as range_rerun's run; the limit the case's original ran to,
+ * g_u_long).  1 = the same; else g_why says what still differs */
+static int compare_x(const Fn *f, int how, int xs);
+static long g_dbl_n;                         /* x87 registers set to their nearest double */
+static void on_dbl(uc_engine *uc, uint64_t a, uint32_t sz, void *u){
+    (void)a; (void)sz; (void)u;
+    static const int R[8] = { UC_X86_REG_FP0, UC_X86_REG_FP1, UC_X86_REG_FP2, UC_X86_REG_FP3,
+                              UC_X86_REG_FP4, UC_X86_REG_FP5, UC_X86_REG_FP6, UC_X86_REG_FP7 };
+    uint8_t b[8][10]; void *v[8]; for (int i = 0; i < 8; i++) v[i] = b[i];
+    uc_reg_read_batch(uc, R, v, 8);
+    for (int i = 0; i < 8; i++)
+        if (no_double(b[i])){ f80_store(b[i], f80_rne(b[i])); uc_reg_write(uc, R[i], b[i]); g_dbl_n++; }
+}
+static int dbl_rerun(const Fn *f){
+    uc_hook h; Out keep = g_uo;
+    g_dbl_n = 0;
+    uc_hook_add(g_uc, &h, UC_HOOK_CODE, (void *)on_dbl, 0, 1, 0);
+    uc_ctl_flush_tb(g_uc);
+    g_xs_sub = 1; run_unicorn(f, g_u_long); g_xs_sub = 0;
+    if (g_u_ev != 5) uc_hook_del(g_uc, h);
+    uc_ctl_flush_tb(g_uc);
+    int r = 1;
+    if (!g_dbl_n) snprintf(g_why, sizeof g_why, "dbl_rerun: no x87 register held a value no double holds");
+    else r = compare_x(f, 0, 1);
+    if (getenv("ORACLE_DEBUG")) fprintf(stderr, "dbl_rerun: %ld registers set to their nearest double: %s\n", g_dbl_n,
+                                        r == 0 || r == 2 ? "then the same" : g_why);
     g_uo = keep;
     return r == 0 || r == 2;
 }
@@ -1431,7 +1479,9 @@ int main(int argc, char **argv){
                 char why[sizeof g_why]; memcpy(why, g_why, sizeof why);
                 if (range_subst(f)){ c.rback++; continue; }
                 char sw[sizeof g_why]; memcpy(sw, g_why, sizeof sw);
-                snprintf(g_why, sizeof g_why, "%s; read back: %s", why, sw);
+                if (dbl_rerun(f)){ c.dbl++; continue; }
+                char dw[sizeof g_why]; memcpy(dw, g_why, sizeof dw);
+                snprintf(g_why, sizeof g_why, "%s; read back: %.160s; as doubles: %.160s", why, sw, dw);
             }
             if (r == 5){ c.fsw++; continue; }
             if (r == 4){
@@ -1461,20 +1511,21 @@ int main(int argc, char **argv){
         nfn++;
         tot.cases += c.cases; tot.same += c.same; tot.fault += c.fault; tot.loop += c.loop; tot.de += c.de;
         tot.nan += c.nan; tot.diff += c.diff; tot.jump += c.jump; tot.order += c.order; tot.dead += c.dead; tot.trig += c.trig;
-        tot.fsw += c.fsw; tot.range += c.range; tot.rback += c.rback; tot.trig_oor += c.trig_oor;
+        tot.fsw += c.fsw; tot.range += c.range; tot.rback += c.rback; tot.dbl += c.dbl; tot.trig_oor += c.trig_oor;
         if (c.same + c.nan) fn_ret++;
         if (c.same + c.nan >= 10) fn_ret10++;
         if (!(c.same + c.nan + c.jump)) fault_fn++;
         if (c.diff || getenv("ORACLE_VERBOSE"))
-            printf("  %08x %2d %-8s %-7s cases %4ld: same %4ld, fault %4ld (order %ld, dead %ld), jump %3ld, loop %3ld, #DE %3ld, libm %ld, range %ld, read back %ld, fsw %ld, nan %3ld, DIFF %ld\n",
-                   f->va, f->nfn, f->args[0] ? f->args : "-", f->regs, c.cases, c.same, c.fault, c.order, c.dead, c.jump, c.loop, c.de, c.trig, c.range, c.rback, c.fsw, c.nan, c.diff);
+            printf("  %08x %2d %-8s %-7s cases %4ld: same %4ld, fault %4ld (order %ld, dead %ld), jump %3ld, loop %3ld, #DE %3ld, libm %ld, range %ld, read back %ld, doubles %ld, fsw %ld, nan %3ld, DIFF %ld\n",
+                   f->va, f->nfn, f->args[0] ? f->args : "-", f->regs, c.cases, c.same, c.fault, c.order, c.dead, c.jump, c.loop, c.de, c.trig, c.range, c.rback, c.dbl, c.fsw, c.nan, c.diff);
     }
     printf("functions %d, cases %ld: returned the same %ld, faulted at the same address %ld, faulted in another order %ld, "
            "faulted on a load the lift drops %ld, jumped to the same address %ld, loop %ld, #DE %ld, "
            "libm x87 formulas %ld (%ld with a sine/cosine/tangent operand >= 2^63), "
-           "x87 values no double holds %ld, x87 values read back as integers %ld, x87 exception flags %ld, NaN-only %ld, DIFF %ld\n",
+           "x87 values no double holds %ld, x87 values read back as integers %ld, x87 results as the lift's doubles %ld, "
+           "x87 exception flags %ld, NaN-only %ld, DIFF %ld\n",
            nfn, tot.cases, tot.same, tot.fault, tot.order, tot.dead, tot.jump, tot.loop, tot.de, tot.trig, tot.trig_oor,
-           tot.range, tot.rback, tot.fsw, tot.nan, tot.diff);
+           tot.range, tot.rback, tot.dbl, tot.fsw, tot.nan, tot.diff);
     printf("functions with a returning case: %d (with 10 or more: %d); with none (every case faulted or looped): %ld; re-runs: %d\n",
            fn_ret, fn_ret10, fault_fn, reruns);
     if (g_nde){ printf("divide errors at %d div/idiv instruction%s:", g_nde, g_nde > 1 ? "s" : ""); for (int q = 0; q < g_nde; q++) printf(" %08x", g_de[q]); printf("\n"); }

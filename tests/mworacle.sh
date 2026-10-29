@@ -10,7 +10,8 @@
 # compiled by tests/mwshards.sh.  Needs gen/mw/all (GAME=mw web/gen.sh), its
 # flag table (out/mw/flagabi.json), speed.exe (NFSMW_DATA=<MW's folder>, else
 # the ignored mw/ folder of this checkout or of the main clone) and a native
-# arm64 Unicorn 2.1.x: by default the project's work/deps/unicorn-2.1.4 (as
+# Unicorn 2.1.x (arm64 Mac or x86-64 Linux, x86 target enough): by default
+# the project's work/deps/unicorn-2.1.4 (as
 # link.sh; or the native port's, ../nsfu2/work/deps next to the main clone),
 # or UNICORN_INC=<unicorn source>/include UNICORN_LIB=<build>/libunicorn.a.
 # Test-only binary (Unicorn is GPLv2): out/obj/mwtest/mworacle is never linked

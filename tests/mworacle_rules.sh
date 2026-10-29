@@ -21,6 +21,9 @@
 # 5. the loop proof: 0x8267DC case 14 (shl edx,1 until edx >= ecx, edx 0
 #    there) is the same state again after a few passes: a loop at once, not
 #    after the function's budget.
+# 6. as doubles: 0x819F0B case 41 multiplies int32s past DBL_MAX, then by 0,
+#    and converts with fistp (x87 0, the lift's NaN 0x80000000); the doubles
+#    class takes it, and ORACLE_MUTATE=eax makes it a DIFF.
 # Exit 0 = every check as expected.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
@@ -28,6 +31,7 @@ D=out/mw/oracle; mkdir -p "$D"
 echo '0x007d8cc0 1 vvvvvvvv vvvvvvv x -' > "$D/rules-7d8cc0.txt"
 echo '0x00852570 1 ppvv vvvvvvv - -' > "$D/rules-852570.txt"
 echo '0x008267dc 5 ppvv vvvvvvv - -' > "$D/rules-8267dc.txt"
+echo '0x00819f0b 1 p vvvvvvv x -' > "$D/rules-819f0b.txt"
 fail=0; n=0
 # check <name> <want: pass|diff> <grep pattern that must be in the output> <sample> <env...>
 check(){
@@ -48,6 +52,8 @@ for k in 71 72 148; do
 done
 check "0x7D8CC0 case 0, lifted side at its limit: DIFF" diff "DIFF 007d8cc0 case 0: outcome: lifted loop at 00000000, original ret" \
   "$D/rules-7d8cc0.txt" ORACLE_FNS=7d8cc0 ORACLE_CASE=0 ORACLE_MUTATE=loop
+check "0x819F0B case 41: the same as the lift's doubles" pass "x87 results as the lift's doubles 1," "$D/rules-819f0b.txt" ORACLE_FNS=819f0b ORACLE_CASE=41
+check "0x819F0B case 41, eax ^ 1: DIFF" diff "DIFF 00819f0b case 41: eax 80000001" "$D/rules-819f0b.txt" ORACLE_FNS=819f0b ORACLE_CASE=41 ORACLE_MUTATE=eax
 check "0x852570 case 3, original-loop budget 5 s: DIFF" diff "DIFF 00852570 case 3: outcome: lifted ret at fffe0000, original loop" \
   "$D/rules-852570.txt" ORACLE_FNS=852570 ORACLE_CASE=3 ORACLE_LONG_ORIG_S=5
 if [ -z "${QUICK:-}" ]; then

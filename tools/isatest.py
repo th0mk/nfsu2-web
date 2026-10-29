@@ -610,6 +610,19 @@ T("fld/fmul/fstp m80 of a denormal, mov eax",
                            _FX+0x20:0x5A5A5A5A, _FX+0x24:0x5A5A5A5A, _FX+0x28:0x5A5A5A5A},
   expect={'eax':0xFFFFFFFF}, fmem={_FX+0x20:0x80000000, _FX+0x24:0xFFFFFFFF, _FX+0x28:0x5A5A0021},
   xfail="the lift's x87 registers are doubles: f80_load flushes the 80-bit denormal to 0 (cpu.h)")
+# An expected deviation (xfail) of the same model: a product past DBL_MAX,
+# which x87 keeps, then multiplied by 0.  0x819F0B multiplies up to 255
+# int32s and then a float, and converts with fistp: fld qword [a] (2^1000);
+# fmul st0,st0 (2^2000); fmul dword [b] (0.0); fistp dword [c]; mov eax,[c].
+# Intel: 0 (Unicorn gives 0 in the oracle's 0x819F0B cases); the lift has
+# inf * 0, a NaN, and fistp's integer indefinite 0x80000000.  The oracle's
+# doubles class (tests/mworacle.c dbl_rerun) takes exactly this.
+_FY = _FX + 0x40
+T("fld/fmul past DBL_MAX, fmul by 0, fistp, mov eax",
+  [0xDD,0x05]+a32(_FY) + [0xD8,0xC8] + [0xD8,0x0D]+a32(_FY+8) + [0xDB,0x1D]+a32(_FY+0x10) + [0xA1]+a32(_FY+0x10),
+  {'eax':0x55555555}, mem={_FY:0, _FY+4:0x7E700000, _FY+8:0, _FY+0x10:0x5A5A5A5A},
+  expect={'eax':0}, fmem={_FY+0x10:0},
+  xfail="the lift's x87 registers are doubles: 2^2000 is an infinity there and inf * 0 a NaN (cpu.h)")
 
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the

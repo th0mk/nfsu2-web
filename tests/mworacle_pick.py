@@ -10,7 +10,10 @@ runtime help: in the lifted C no indirect call or jump (DISPATCH_CALL,
 DISPATCH_TAIL, dispatch_indirect: that is every import call and every
 virtual call; the one DISPATCH_TAIL after a JTSWITCH switch aside), no trap
 (unsupported_insn), no CPUID or RDTSC shim, no int3 (lifted as a no-op on
-purpose); in the x86 no far transfer, no int/into, no in/out, hlt or ud2, no
+purpose), no instruction hook (guest_hook) and no function the game's runtime
+overrides (the lift names its body sub_X_orig; a call to sub_X runs the
+runtime's code, which tests/mwshards.sh gives the test only as a stand-in
+that stops the run); in the x86 no far transfer, no int/into, no in/out, hlt or ud2, no
 segment register operand; MMX and x87 not both in one closure (the lift
 keeps the MMX registers apart from the x87 stack, cpu.h); at most
 CLOSURE_MAX functions in the closure ("near-leaf").  Memory use is bounded
@@ -62,7 +65,8 @@ DENY = ('DISPATCH_CALL', 'DISPATCH_TAIL', 'dispatch_indirect', 'unsupported_insn
 # read-only .text on both sides, so the test never takes it (and would see
 # it as "left", a difference, if it did)
 JT_SWITCH, JT_TAIL = '/* jump table 0x', '/* indirect tail call */'
-body_bad, callees, has_jt = {}, {}, set()
+body_bad, callees, has_jt, overridden = {}, {}, set(), set()
+ORIG = re.compile(r'^void sub_([0-9a-f]{8})_orig\(')   # the body of a function the game's runtime overrides
 for f in sorted(os.listdir(GEN)):
     if not re.match(r'shard_\d+\.c$', f): continue
     cur = None; sw = 0           # 1 in a switch, 2 on the line after its closing brace
@@ -71,6 +75,8 @@ for f in sorted(os.listdir(GEN)):
         if m:
             cur = int(m.group(1), 16); body_bad[cur] = False; callees[cur] = set(); sw = 0; continue
         if cur is None: continue
+        mo = ORIG.match(ln)
+        if mo: overridden.add(int(mo.group(1), 16))
         tail = sw == 2 and 'DISPATCH_TAIL(c, ' in ln and ln.count('DISPATCH_TAIL') == 1 and ln.rstrip().endswith(JT_TAIL)
         sw = 1 if JT_SWITCH in ln else 2 if sw == 1 and ln.strip() == '}' else 0 if sw == 2 else sw
         if JT_SWITCH in ln: has_jt.add(cur)
@@ -144,7 +150,8 @@ why = collections.Counter()
 for a in fns:
     cl = closure(a)
     if cl is None: why['closure > %d' % CLOSURE_MAX] += 1; continue
-    if any(x not in body_bad or body_bad[x] for x in cl): why['indirect, trap, shim or int3'] += 1; continue
+    if cl & overridden: why['the runtime overrides'] += 1; continue
+    if any(x not in body_bad or body_bad[x] for x in cl): why['indirect, trap, shim, int3 or hook'] += 1; continue
     t = set()
     for x in cl: t |= get(x)['traits']
     if 'bad' in t: why['instruction'] += 1; continue

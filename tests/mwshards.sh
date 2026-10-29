@@ -1,14 +1,17 @@
 #!/bin/bash
 # Compile Most Wanted's lifted exe (gen/mw/all, GAME=mw web/gen.sh) for the
-# Mac, for the native tests that link it: tests/mwmemmove.sh,
-# tests/mworacle.sh.  Objects in out/obj/mw (shard_*.o, fntab.o), the same
-# content-digest incremental rule as build.sh (FULL=1 compiles all of them).
+# Mac (arm64) or Linux (x86-64), for the native tests that link it:
+# tests/mwmemmove.sh, tests/mworacle.sh.  Objects in out/obj/mw (shard_*.o,
+# fntab.o), the same content-digest incremental rule as build.sh (FULL=1
+# compiles all of them).
 #
 #   tests/mwshards.sh            exit 0 = every object is up to date
-#   OPT="-O1" tests/mwshards.sh  another optimisation level (default build.sh's -O3)
+#   OPT="-O1" tests/mwshards.sh  another optimisation level (default build.sh's
+#                                -O3; on the Mac with -mcpu=apple-m1, on Linux
+#                                for the baseline x86-64)
 #
 # The lift is the web's (FLAGABI, X87OPT, JTSWITCH, LREGS, FTOL2INL: see
-# gen/mw/all/web-lift.txt), compiled with clang for arm64 instead of wasm32:
+# gen/mw/all/web-lift.txt), compiled with clang for the host instead of wasm32:
 # the same C, cpu.h's native guest accesses (g_mem).  Those are plain types,
 # the browser's may_alias ones (L-042), so -fno-strict-aliasing, which every
 # OPT here gets.  With strict aliasing clang moved a load past a store of
@@ -22,8 +25,9 @@ G=gen/mw/all
 [ -f "$G/fntab.c" ] || { echo "no $G: run GAME=mw web/gen.sh <speed.exe>"; exit 1; }
 [ -f "$G/gameinfo.h" ] || { echo "$G has no gameinfo.h: lift it again with GAME=mw web/gen.sh"; exit 1; }
 OD="$ROOT/out/obj/mw"; mkdir -p "$OD"
-OPT="${OPT:--O3 -mcpu=apple-m1} -fno-strict-aliasing"
-J="${J:-$(sysctl -n hw.ncpu)}"
+[ "$(uname -s)" = Darwin ] && MCPU="-mcpu=apple-m1" || MCPU=""
+OPT="${OPT:--O3 $MCPU} -fno-strict-aliasing"
+J="${J:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}"
 export OPT ROOT OD FULL HDRSUM="$(cat runtime/cpu.h "$G/gameinfo.h" | shasum | cut -c1-16)"
 # a shard whose .c, decls.h, cpu.h, gameinfo.h and flags are unchanged is skipped
 (cd "$G" && ls shard_*.c fntab.c $( [ -f stubs.c ] && echo stubs.c )) | xargs -P "$J" -n 1 sh -c '
@@ -38,4 +42,17 @@ export OPT ROOT OD FULL HDRSUM="$(cat runtime/cpu.h "$G/gameinfo.h" | shasum | c
   echo "$sum" > "$obj.sum"' sh
 # the objects of this lift, never one an older lift left behind
 (cd "$G" && ls shard_*.c fntab.c $( [ -f stubs.c ] && echo stubs.c )) | sed -E "s|^(.*)\.c$|$OD/\1.o|" > "$OD/objs.list"
-echo "mwshards: $(wc -l < "$OD/objs.list" | tr -d ' ') objects in out/obj/mw ($OPT)"
+NOBJ=$(wc -l < "$OD/objs.list" | tr -d ' ')
+# What the lift takes from the game's runtime, which these tests do not link:
+# the functions the runtime overrides (the lift calls sub_X and names its own
+# body sub_X_orig) and the instruction hooks (guest_hook) get stand-ins that
+# stop the run (tests/mworacle_pick.py never picks a closure that reaches
+# either; tests/mwmemmove.c calls neither), in objs.list too
+ST="$OD/stand.c"
+{ printf '#include "cpu.h"\n#include <stdio.h>\n#include <stdlib.h>\n'
+  printf 'static void stand(const char *n){ fprintf(stderr, "%%s ran, a stand-in: the game runtime is not in this test\\n", n); abort(); }\n'
+  printf 'void guest_hook(CPU *c, uint32_t ip){ (void)c; (void)ip; stand("guest_hook"); }\n'
+  grep -hoE '^void sub_[0-9a-f]{8}_orig\(' "$G"/shard_*.c | sed -E 's/^void (sub_[0-9a-f]{8})_orig\(/void \1(CPU *c){ (void)c; stand("\1"); }/' || true; } > "$ST"
+clang $OPT -c -Iruntime -I"$G" -DNFSU2_GAME_MW -o "$OD/stand.o" "$ST"
+echo "$OD/stand.o" >> "$OD/objs.list"
+echo "mwshards: $NOBJ objects in out/obj/mw ($OPT), stand-ins for guest_hook and $(grep -c '^void sub_' "$ST") overridden functions"
