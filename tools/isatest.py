@@ -623,6 +623,27 @@ T("fld/fmul past DBL_MAX, fmul by 0, fistp, mov eax",
   {'eax':0x55555555}, mem={_FY:0, _FY+4:0x7E700000, _FY+8:0, _FY+0x10:0x5A5A5A5A},
   expect={'eax':0}, fmem={_FY+0x10:0},
   xfail="the lift's x87 registers are doubles: 2^2000 is an infinity there and inf * 0 a NaN (cpu.h)")
+# Expected deviations the oracle found in 0x81A707 and 0x827C9B, which no
+# class takes (tests/mworacle.sh seed 1).  PC=24 double rounding: fldcw
+# [a] (0x007F); fild dword [a+4] (0x2000B3E0); fsub dword [a+8] (2^-63);
+# fstp dword [a+12].  x87 rounds the exact difference, just below the tie
+# 0x2000B3E0 between two floats, once: 0x2000B3C0.  The lift's double
+# loses 2^-63, lands on the tie and rounds it to even: 0x2000B400.
+_FZ = _FX + 0x60
+T("fild/fsub at PC=24: one rounding, not two",
+  [0xD9,0x2D]+a32(_FZ) + [0xDB,0x05]+a32(_FZ+4) + [0xD8,0x25]+a32(_FZ+8) + [0xD9,0x1D]+a32(_FZ+12),
+  {}, mem={_FZ:0x007F, _FZ+4:0x2000B3E0, _FZ+8:0x20000000, _FZ+12:0x5A5A5A5A},
+  expect={}, fmem={_FZ+12:0x4E0002CF},
+  xfail="the lift rounds to a double first, then to PC=24: a double rounding (cpu.h x87_r2pc)")
+# Two QNaNs with the same significand: fld dword [a] (-NaN); fld dword [a+4]
+# (+NaN, the same payload); fsubp st(1); fstp dword [a+8].  The positive
+# one, as Unicorn and SoftFloat's 8086 rules give it (not run on a real CPU
+# here); the lift returns its first operand, st(1), the negative one.
+T("fsubp of two QNaNs with one significand -> the positive one",
+  [0xD9,0x05]+a32(_FZ+0x10) + [0xD9,0x05]+a32(_FZ+0x14) + [0xDE,0xE9] + [0xD9,0x1D]+a32(_FZ+0x18),
+  {}, mem={_FZ+0x10:0xFFCB06A9, _FZ+0x14:0x7FCB06A9, _FZ+0x18:0x5A5A5A5A},
+  expect={}, fmem={_FZ+0x18:0x7FCB06A9},
+  xfail="x87_r2_nan returns the first operand when the significands are equal (cpu.h)")
 
 # ---------------- switch jump tables (JTSWITCH=1 only) ----------------
 # Lifted as a C switch whose cases check the table entry in guest memory (the
