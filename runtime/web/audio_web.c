@@ -377,16 +377,16 @@ void audio_set_muted(int on){
 }
 
 /* ---- the resampler for a buffer at another rate ---------------------------
- * A buffer at 44,100 Hz with its own frequency plays as it always did, sample
- * for sample (the step is 1).  One at another rate, or one the game gave
- * another frequency (SetFrequency), is resampled band-limited instead of by
- * the nearest sample, which doubled every sample of a 22,050 Hz mix (Most
- * Wanted's at a low performance level, GAME.md 7.1) and mirrored its top
- * octave into the output: a 16-tap Blackman-windowed sinc in 256 phases, its
- * cut-off at the lower of the two Nyquist rates (codepdbh's fix for the
- * crackle of a linear 22,050 -> 48,000 Hz resampler, LESSONS L-095).  A
- * looping buffer's taps wrap around it; a one-shot's beyond its ends are
- * silence. */
+ * A buffer at 44,100 Hz played at its own frequency mixes as it always did,
+ * sample for sample (the step is 1).  One at another rate, or one the game
+ * gave another frequency (SetFrequency), is resampled band-limited instead of
+ * by the nearest sample, which doubled every sample of a 22,050 Hz mix (Most
+ * Wanted's at a low performance level, GAME.md 7.1) and mirrored its band
+ * into the octave above: a 16-tap Blackman-windowed sinc in 256 phases, its
+ * cut-off at the lower of the two Nyquist rates.  Measured on Most Wanted's
+ * 22,050 Hz menu mix: 16.5-22 kHz holds -75 dB of the energy, -22 dB by the
+ * nearest sample.  A looping buffer's taps wrap around it; a one-shot's
+ * beyond its ends are silence. */
 #define RS_TAPS   16
 #define RS_PHASES 256
 #define RS_CACHE  8
