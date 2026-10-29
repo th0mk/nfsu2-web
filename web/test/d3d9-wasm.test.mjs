@@ -9,8 +9,11 @@
 //     is a count, the descriptor structs, the mode list, CheckDeviceMultiSampleType, CheckDeviceFormat and
 //     CheckDepthStencilMatch (Most Wanted's agree with what the creators make);
 //   - every primitive type through DrawPrimitiveUP, DrawPrimitive, DrawIndexedPrimitive and DrawIndexedPrimitiveUP
-//     against a CPU reference of D3D9's vertex order (the fans with Most Wanted's strides 48, 24 and 32).
-// Built twice: with Most Wanted's answers (game.h d3d_modes, d3d9_strict) and with UG2's, which stay as they were.
+//     against a CPU reference of D3D9's vertex order (the fans with Most Wanted's strides 48, 24 and 32), every
+//     triangle from its first vertex (only UG2's indexed strips may start at another corner);
+//   - stdcall: every method takes exactly its arguments.
+// Built twice: with Most Wanted's real game table (runtime/mw/game_mw.c: d3d_modes, d3d9_strict) and with UG2's
+// GameOps defaults, whose answers stay as they were.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

@@ -111,14 +111,17 @@ export function buildD3dxOracleUnit(out) {
 
 // web/test/d3d9_unit.c: the Direct3D 9 device (runtime/com.c) with the renderer and the rest of the runtime stubbed
 // in the program; a function of the runtime a tested path does not reach is left out (a trapping stub, so a path
-// that reaches one fails loudly).  mw: Most Wanted's answers (-DD3D9_UNIT_MW), else UG2's.
+// that reaches one fails loudly).  mw: Most Wanted's answers, its real game table (runtime/mw/game_mw.c, built as
+// GAME=mw web/build.sh builds it: -DNFSU2_GAME_MW, the lift's gameinfo.h when gen/mw/all is here), else UG2's.
 export function buildD3d9Unit(out, mw) {
   if (!CC) throw new Error('no wasi-sdk in deps/');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
+  const gi = mw && fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
+  const game = mw ? ['-DD3D9_UNIT_MW', '-DNFSU2_GAME_MW', ...gi] : [], table = mw ? ['runtime/mw/game_mw.c'] : [];
   execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
   try {
-    execFileSync(CC, [...FLAGS, ...(mw ? ['-DD3D9_UNIT_MW'] : []), '-o', out, 'web/test/d3d9_unit.c', 'runtime/com.c', te, ...LINK,
+    execFileSync(CC, [...FLAGS, ...game, '-o', out, 'web/test/d3d9_unit.c', 'runtime/com.c', ...table, te, ...LINK,
       '-Wl,--unresolved-symbols=ignore-all'], opt);
   } finally { fs.rmSync(te, { force: true }); }
   return out;

@@ -5,8 +5,11 @@
  * is stubbed: texture creation hands out ids (or fails on request) and every
  * draw com.c hands it is recorded, so the vertices it draws can be checked
  * against a CPU reference of D3D9's primitive rules.
- *   -DD3D9_UNIT_MW  Most Wanted's answers (game.h d3d_modes, d3d9_strict);
- *                   without it UG2's, which this step leaves as they were.
+ *   -DD3D9_UNIT_MW  Most Wanted's answers: its real game table, runtime/mw/
+ *                   game_mw.c linked as GAME=mw web/build.sh builds it (game.h
+ *                   d3d_modes, d3d9_strict); without it UG2's, the GameOps
+ *                   defaults (game_ug2.c leaves both fields 0:
+ *                   web/test/game-table.test.mjs).
  * web/test/d3d9-wasm.test.mjs builds both (web/tools/win32unit.mjs) and runs
  * them; every check prints "ok <name>" or "FAIL <name>: why". */
 #include "cpu.h"
@@ -23,11 +26,7 @@
 #include <string.h>
 
 #ifdef D3D9_UNIT_MW
-static const uint32_t unit_modes[][2] = {
-    {640,480},{800,600},{1024,768},{1280,960},{1280,1024},{1600,1200},{1280,720},{1920,1080},{0,0},
-};
-const GameOps g_game = { .id = "mw", .d3d_modes = unit_modes, .d3d9_strict = 1, .vclock_sleep_real = 1 };
-#define MW 1
+#define MW 1                                       /* g_game: game_mw.c's */
 #else
 const GameOps g_game = { .id = "ug2" };
 #define MW 0
@@ -191,9 +190,10 @@ static uint32_t call(uint32_t obj, const char *name, int n, ...){
     PUSH32(obj);
     PUSH32(0x00401234u);                       /* the return address com_call pops */
     com_call(c, MR32(MR32(obj) + 4u * (uint32_t)slot));
-    /* stdcall: the callee took this and the arguments (a cube's method one more, the table's count +1) */
-    if (c->esp != STACK && c->esp != STACK + 4u && !g_stack_bad++)
-        printf("FAIL stack: %s left esp 0x%08x\n", name, c->esp);
+    /* stdcall: the callee took this and exactly the arguments pushed, never one more or one fewer (a cube's
+     * GetCubeMapSurface, in the texture table's GetSurfaceLevel slot, is called with its own three) */
+    if (c->esp != STACK && !g_stack_bad++)
+        printf("FAIL stack: %s left esp 0x%08x (%d bytes off)\n", name, c->esp, (int)(c->esp - STACK));
     return c->eax;
 }
 static uint32_t addref(uint32_t o){ return call(o, "AddRef", 0); }
@@ -252,8 +252,15 @@ static void t_lifetimes(void){
     call(g_dev, "SetRenderTarget", 2, 0u, face[5]);
     uint32_t left = release(cube);
     check(alive(cube) && alive(face[5]), "cube-kept-by-face", "the cube went while its face was bound (%u left)", left);
-    call(g_dev, "SetRenderTarget", 2, 0u, 0u);
-    check(!alive(cube) && !alive(face[0]), "cube-freed", "the cube outlived its last reference");
+    /* the back buffer bound again (D3D9 refuses a NULL render target 0) */
+    MR32(OUT) = 0;
+    call(g_dev, "GetBackBuffer", 4, 0u, 0u, 0u, OUT);
+    uint32_t bb = MR32(OUT);
+    uint32_t rb = call(g_dev, "SetRenderTarget", 2, 0u, bb);
+    release(bb);
+    check(rb == 0u && alive(bb) && !alive(cube) && !alive(face[0]), "cube-freed",
+          "SetRenderTarget(back buffer 0x%08x) 0x%08x: the cube outlived its last reference (%d) or the back buffer went (%d)",
+          bb, rb, alive(cube), !alive(bb));
 
     /* reference counts in the guest wrapper: Create 1, AddRef 2, Release 1, a texture's surface shares the count */
     MR32(OUT) = 0;
@@ -384,8 +391,17 @@ static void t_state(void){
     uint32_t past = call(g_d3d, "EnumAdapterModes", 4, 0u, 22u, n, DESC);
     static const uint32_t classic[6][2] = {{640,480},{800,600},{1024,768},{1280,960},{1280,1024},{1600,1200}};
     int first = n >= 6u; for (int i = 0; i < 6 && first; i++) first = got[i][0] == classic[i][0] && got[i][1] == classic[i][1];
-    if (MW) check(n == 8u && !bad && first && got[6][0] == 1280u && past == D3DERR_INVALIDCALL, "modes",
-                  "%u modes, %u failed, classic first %d, mode 6 %ux%u, past the end 0x%08x", n, bad, first, got[6][0], got[6][1], past);
+    if (MW){
+        /* game_mw.c's own rows, in order: the six classic 4:3 modes, then wide ones that match none of them */
+        uint32_t rows = 0, same = 1, wide = 1;
+        while (g_game.d3d_modes && rows < 16u && g_game.d3d_modes[rows][0]) rows++;
+        for (uint32_t i = 0; i < rows && i < n; i++) same &= got[i][0] == g_game.d3d_modes[i][0] && got[i][1] == g_game.d3d_modes[i][1];
+        for (uint32_t i = 6; i < n && i < 16; i++) for (int k = 0; k < 6; k++)
+            if (got[i][0] == classic[k][0] && got[i][1] == classic[k][1]) wide = 0;
+        check(rows > 6u && n == rows && same && !bad && first && wide && past == D3DERR_INVALIDCALL, "modes",
+              "%u modes of the table's %u, as the table %d, %u failed, classic first %d, the rest wide %d, past the end 0x%08x",
+              n, rows, same, bad, first, wide, past);
+    }
     else    check(n == 6u && !bad && past == D3DERR_INVALIDCALL, "modes-ug2", "%u modes, %u failed, past the end 0x%08x", n, bad, past);
 
     /* multisampling: MW is told what the renderer draws (none), UG2 keeps D3D_OK */
@@ -535,8 +551,9 @@ static void t_prim(int api, uint32_t pt, uint32_t nprim, uint32_t stride){
     unsigned nr = recorded(raw, &rp), ng;
     if (pt <= 3) ng = unquad(raw, nr, pt, got); else { memcpy(got, raw, nr * sizeof *got); ng = nr; }
     int ok = ng == nw;
-    /* triangles: D3D9's order, or (UG2's indexed strips and fans, the old path) the same winding from another corner */
-    if (ok && pt >= 4) ok = same_tris(got, want, nw, api == 2);
+    /* triangles: D3D9's order, each from its first vertex (flat shading's); only UG2's indexed strips and fans, the
+     * old path, may give the same winding from another corner */
+    if (ok && pt >= 4) ok = same_tris(got, want, nw, api == 2 && !MW);
     else if (ok) for (unsigned i = 0; i < nw && ok; i++) ok = got[i] == want[i];
     char name[64]; snprintf(name, sizeof name, "prim-%s-%s-%u", AN[api], PTN[pt], stride);
     check(ok && !g_rec_over, name, "%u primitives: %u vertices recorded (type %u, %u calls), %u expected; first got %d %d %d want %d %d %d",

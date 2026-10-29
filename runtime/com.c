@@ -2791,7 +2791,11 @@ int com_call(CPU *c, uint32_t magic){
                     uint32_t ifmt  = MR32(g_ib_obj+12);
                     uint32_t isz   = (ifmt==102u) ? 4u : 2u;   /* INDEX32 : INDEX16 */
                     uint32_t ntri  = (pt==4u||pt==5u||pt==6u) ? nprim : 0u;
-                    if (pt >= 1u && pt <= 3u && vbase && ibase){         /* point and line lists, strips */
+                    /* point and line lists and strips; with game.h d3d9_strict triangle strips and fans too,
+                     * in D3D9's order (the old path below turns a strip's odd triangle to start at another
+                     * corner, which flat shading sees; UG2 draws only lists, its 3 sites push type 4) */
+                    int listed = (pt >= 1u && pt <= 3u) || (g_game.d3d9_strict && (pt == 5u || pt == 6u));
+                    if (listed && vbase && ibase){
                         if (draw_prims(pt, nprim, vbase, g_ss_stride, ibase + starti*isz, isz, (int32_t)basev))
                             g_dip_draws++;
                         else g_dip_skip++; }
