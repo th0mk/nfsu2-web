@@ -156,9 +156,12 @@ static uint32_t gbuf_alloc_kz(uint32_t n, int kind, int zero);
 static uint32_t gbuf_alloc_k(uint32_t n, int kind){ return gbuf_alloc_kz(n, kind, 1); }
 static uint32_t gbuf_alloc(uint32_t n){ return gbuf_alloc_k(n, GK_OTHER); }
 int heap_census_line(char *buf, size_t n);
+static int hb_park_flush(void);
 static uint32_t gbuf_alloc_kz(uint32_t n, int kind, int zero){
     if (!gheap_bump()){
         uint32_t p = gheap_alloc_c(g_com_cpu, g_gh_gbuf, n + gbuf_slack(), zero);
+        if (!p && hb_park_flush())                    /* the windows parked after their Unlock go first */
+            p = gheap_alloc_c(g_com_cpu, g_gh_gbuf, n + gbuf_slack(), zero);
         if (p){ g_gbuf_bytes += n + gbuf_slack(); gk_note(p, n + gbuf_slack(), kind); }
         else { static int sh = 0;                     /* the guest's window is full: say what holds it */
             if (sh++ < 4){ char ml[768]; heap_census_line(ml, sizeof ml);
@@ -210,17 +213,24 @@ static void gbuf_free(uint32_t p){
  * Lock: a window of the whole buffer or level, as D3D9's managed copy is one
  * mapping (a game may touch bytes outside the range it locked), filled from the
  * copy (zeros if it was never written; also for D3DLOCK_DISCARD, which is valid
- * on dynamic resources only), the pointer at the locked offset; Unlock: the window back into the copy (unless the lock was
- * read-only) and freed.  Locks nest as D3D9 counts them: a Lock before the
- * Unlock points into the same window, which stays until the last Unlock and is
- * written back unless every Lock of the nest was read-only.  Draws read a
- * buffer's copy (buf_src).
+ * on dynamic resources only), the pointer at the locked offset.  Unlock: the
+ * window back into the copy (unless the lock was read-only), then parked: it
+ * stays where it was, its resource's, until HB_PARK_N later windows or
+ * HB_PARK_BYTES of them push it out (freed), and a Lock meanwhile takes it back
+ * as it is.  D3D9 keeps a managed copy at the address Lock gave, so a pointer the
+ * game kept past its Unlock still reads its own resource, and its writes stay
+ * there, instead of landing in the next owner of a freed block.  Locks nest as
+ * D3D9 counts them: a Lock before the Unlock points into the same window, which
+ * stays until the last Unlock and is written back unless every Lock of the nest
+ * was read-only.  Draws read a buffer's copy (buf_src).
  * A resource that is locked again within HB_PIN_FRAMES presents of its last
  * Unlock, HB_PIN_TIMES times in a row, keeps its window from then on (a
  * per-frame lock copies no more than before); its copy goes. */
 #define HB_N          (1u << 17)
 #define HB_PIN_FRAMES 4u
 #define HB_PIN_TIMES  3u
+#define HB_PARK_N     1024u               /* windows parked after their Unlock, at most (a power of two) ... */
+#define HB_PARK_BYTES (8u << 20)          /* ... and their bytes (a window past a quarter of it is freed at once) */
 #define BUF_HB        56u                 /* VB / IB: the entry's index, 0 = in the guest's memory */
 static uint64_t g_present;                /* Presents so far (below) */
 typedef struct {
@@ -228,6 +238,7 @@ typedef struct {
     uint8_t *host;                        /* the copy (NULL: never written, reads as zeros) */
     uint32_t wlen, wflags;                /* the window's length (the whole buffer or level) and the lock's flags */
     uint32_t locks;                       /* Locks not matched by an Unlock yet */
+    uint32_t park, pslot;                 /* the window parked after its Unlock (0: none) and its place in g_park */
     uint32_t last_unlock, near;           /* the Present count at the last Unlock; Locks soon after one, in a row */
     uint8_t kind, pinned;                 /* its census kind (GK_*); 1: the window stays, no copy */
 } HBack;
@@ -235,6 +246,9 @@ static HBack   *g_hb;                     /* entries; index 0 unused */
 static uint32_t g_hb_free_head, g_hb_top = 1;
 static uint32_t *g_hb_map;                /* key -> index, open addressing */
 static uint64_t g_hb_bytes, g_hb_locks, g_hb_relocks, g_hb_copied, g_hb_copyin, g_hb_pins, g_hb_full, g_hb_nested;
+static uint32_t g_park[HB_PARK_N];        /* parked entries, the oldest at g_park_h; 0: taken back or dropped */
+static uint32_t g_park_h, g_park_n, g_park_live;   /* the queue's start and length; the windows in it */
+static uint64_t g_park_bytes, g_park_back;         /* their bytes; Locks that took one back */
 static int hb_on(void){
     static int v = -1;
     if (v < 0){ const char *e = getenv("NFSU2_HOSTBACK");   /* NFSU2_HOSTBACK=0: the A/B escape hatch */
@@ -263,13 +277,41 @@ static uint32_t hb_make(uint32_t key, uint32_t size, int kind){
     g_hb_map[i] = x;
     return x;
 }
-/* the entry's copy goes (its window, if any, is the caller's: the field still names it) */
+/* the entry's parked window leaves the queue: taken back by a Lock (keep 1) or freed */
+static void hb_unpark(HBack *e, int keep){
+    if (!e->park) return;
+    g_park[e->pslot] = 0; g_park_bytes -= e->wlen; g_park_live--;
+    if (!keep) gbuf_free(e->park);
+    e->park = 0;
+}
+static void hb_park_pop(void){                    /* the oldest parked window is freed */
+    uint32_t x = g_park[g_park_h];
+    if (x) hb_unpark(&g_hb[x], 0);
+    g_park_h = (g_park_h + 1u) & (HB_PARK_N - 1u); g_park_n--;
+}
+/* Unlock: the window at w stays, the entry's, while the queue holds it */
+static void hb_park(uint32_t x, uint32_t w){
+    HBack *e = &g_hb[x];
+    if (e->wlen > HB_PARK_BYTES / 4u){ gbuf_free(w); return; }
+    if (g_park_n == HB_PARK_N) hb_park_pop();
+    e->pslot = (g_park_h + g_park_n++) & (HB_PARK_N - 1u);
+    g_park[e->pslot] = x; e->park = w; g_park_bytes += e->wlen; g_park_live++;
+    while (g_park_bytes > HB_PARK_BYTES) hb_park_pop();
+}
+/* the buffer heap is short: every parked window is freed (gbuf_alloc_kz); 1 if there was one */
+static int hb_park_flush(void){
+    int any = 0;
+    while (g_park_n){ any |= g_park[g_park_h] != 0; hb_park_pop(); }
+    return any;
+}
+/* the entry's copy and parked window go (a window it has locked is the caller's: the field still names it) */
 static void hb_drop(uint32_t key){
     if (!g_hb_map || !key) return;
     uint32_t i = hb_slot(key) & (HB_N - 1u);
     for (uint32_t q = 0; q < HB_N && g_hb_map[i]; q++, i = (i + 1u) & (HB_N - 1u)){
         uint32_t x = g_hb_map[i];
         if (g_hb[x].key != key) continue;
+        hb_unpark(&g_hb[x], 0);
         if (g_hb[x].host){ free(g_hb[x].host); g_hb_bytes -= g_hb[x].size; }
         g_hb[x] = (HBack){0}; g_hb[x].key = g_hb_free_head; g_hb_free_head = x;
         g_hb_map[i] = 0;
@@ -301,15 +343,21 @@ static uint32_t hb_lock(uint32_t x, uint32_t len, uint32_t flags){
     if (!e->last_unlock || d >= HB_PIN_FRAMES) e->near = 0; else if (d) e->near++;
     int pin = e->near >= HB_PIN_TIMES;
     if (len < e->size) len = e->size;
-    uint32_t w = gbuf_alloc_kz(len, e->kind, !e->host);
-    if (!w) return 0;
-    /* D3DLOCK_DISCARD and NOOVERWRITE are valid on dynamic resources only, and these are static: a
-     * DISCARD Lock still shows the old bytes, as the managed copy does, so bytes it leaves unwritten stay */
-    if (e->host){
-        uint32_t n = e->size < len ? e->size : len;
-        memcpy(g_mem + w, e->host, n);
-        if (n < len) memset(g_mem + w + n, 0, len - n);
-        g_hb_copied += n; g_hb_copyin += n;
+    uint32_t w = e->park;
+    if (w && e->wlen >= len){                     /* its parked window, as the last Unlock left it */
+        len = e->wlen; hb_unpark(e, 1); g_park_back++;
+    } else {
+        hb_unpark(e, 0);
+        w = gbuf_alloc_kz(len, e->kind, !e->host);
+        if (!w) return 0;
+        /* D3DLOCK_DISCARD and NOOVERWRITE are valid on dynamic resources only, and these are static: a
+         * DISCARD Lock still shows the old bytes, as the managed copy does, so bytes it leaves unwritten stay */
+        if (e->host){
+            uint32_t n = e->size < len ? e->size : len;
+            memcpy(g_mem + w, e->host, n);
+            if (n < len) memset(g_mem + w + n, 0, len - n);
+            g_hb_copied += n; g_hb_copyin += n;
+        }
     }
     g_hb_locks++; if (e->host) g_hb_relocks++;
     e->wlen = len; e->wflags = flags; e->locks = 1;
@@ -323,7 +371,7 @@ static void hb_nest(uint32_t x, uint32_t flags){
     e->locks++; g_hb_nested++;
     if (!(flags & 0x10u)) e->wflags &= ~0x10u;
 }
-/* Unlock: at the last of a nest, the window at w back into the copy and freed (1: the field is cleared;
+/* Unlock: at the last of a nest, the window at w back into the copy and parked (1: the field is cleared;
  * not a pinned entry's) */
 static int hb_unlock(uint32_t x, uint32_t w){
     HBack *e = &g_hb[x];
@@ -335,7 +383,7 @@ static int hb_unlock(uint32_t x, uint32_t w){
         if (h){ memcpy(h, g_mem + w, e->wlen); g_hb_copied += e->wlen; }
     }
     e->last_unlock = (uint32_t)g_present; if (!e->last_unlock) e->last_unlock = 1;
-    gbuf_free(w);
+    hb_park(x, w);
     return 1;
 }
 /* A draw's vertex or index data: a buffer's host copy (p, len bytes from p) or
@@ -370,13 +418,14 @@ int com_hostback_census(char *buf, size_t n){
     static uint64_t locks0, relocks0, copied0, copyin0;
     uint32_t live = g_hb_top - 1u;
     for (uint32_t x = g_hb_free_head; x && live; x = g_hb[x].key) live--;
-    int k = snprintf(buf, n, " host: %.1fMB in %u entries, %llu locks (%llu again) %.1fMB copied (%.1fMB in), %llu pinned,"
-                             " %llu nested%s",
+    static uint64_t back0;
+    int k = snprintf(buf, n, " host: %.1fMB in %u entries, %llu locks (%llu again, %llu from parked) %.1fMB copied"
+                             " (%.1fMB in), %llu pinned, %llu nested, parked %.1fMB/%u%s",
                      g_hb_bytes / 1048576.0, live, (unsigned long long)(g_hb_locks - locks0),
-                     (unsigned long long)(g_hb_relocks - relocks0), (g_hb_copied - copied0) / 1048576.0,
-                     (g_hb_copyin - copyin0) / 1048576.0, (unsigned long long)g_hb_pins,
-                     (unsigned long long)g_hb_nested, g_hb_full ? " FULL" : "");
-    locks0 = g_hb_locks; relocks0 = g_hb_relocks; copied0 = g_hb_copied; copyin0 = g_hb_copyin;
+                     (unsigned long long)(g_hb_relocks - relocks0), (unsigned long long)(g_park_back - back0),
+                     (g_hb_copied - copied0) / 1048576.0, (g_hb_copyin - copyin0) / 1048576.0, (unsigned long long)g_hb_pins,
+                     (unsigned long long)g_hb_nested, g_park_bytes / 1048576.0, g_park_live, g_hb_full ? " FULL" : "");
+    locks0 = g_hb_locks; relocks0 = g_hb_relocks; copied0 = g_hb_copied; copyin0 = g_hb_copyin; back0 = g_park_back;
     return k;
 }
 

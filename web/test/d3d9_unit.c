@@ -748,6 +748,43 @@ static void t_hostback(void){
     release(t);
     check(dv && dt, "hb-discard-static", "8 of a DISCARD Lock's bytes written, the rest kept: buffer %d, texture %d", dv, dt);
 
+    /* a pointer kept after Unlock (D3D9 MANAGED: the copy stays there): it reads its resource's data, another
+     * resource's window is not put there, and a write through it is its own resource's */
+    uint32_t a = vb_make(N), b = vb_make(N);
+    uint32_t pa = vb_lock(a, 0, 0, 0); pat(pa, N, 5); vb_unlock(a);
+    int reads = is_pat(pa, N, 5);
+    uint32_t pb = vb_lock(b, 0, 0, 0); pat(pb, N, 9);
+    if (pa) MR8(pa + 40) = 0x99;                        /* the game writes through A's old pointer */
+    vb_unlock(b);
+    q = vb_lock(b, 0, 0, LK_RO); int b_ok = is_pat(q, N, 9); vb_unlock(b);
+    q = vb_lock(a, 0, 0, LK_RO); int in_a = MR8(q + 40) == 0x99 && is_pat(q, 40, 5); vb_unlock(a);
+    release(a); release(b);
+    uint32_t ta = tex_make(32, 32), tb = tex_make(32, 32);
+    pa = tex_lock(ta, 0); pat(pa, 32*32*4, 7); tex_unlock(ta);
+    int treads = is_pat(pa, 32*32*4, 7);
+    pb = tex_lock(tb, 0); pat(pb, 32*32*4, 8);
+    if (pa) MR8(pa + 40) = 0x99;
+    tex_unlock(tb);
+    q = tex_lock(tb, LK_RO); int tb_ok = is_pat(q, 32*32*4, 8); tex_unlock(tb);
+    release(ta); release(tb);
+    check(reads && pb != pa && b_ok && in_a && treads && tb_ok, "hb-stale-pointer",
+          "buffers: A's old pointer reads A %d, B's window elsewhere %d, B kept %d, the write in A %d; textures: reads %d, B kept %d",
+          reads, pb != pa, b_ok, in_a, treads, tb_ok);
+    if (MW){                                            /* the parked windows are bounded: 1,024 of them, 8 MB */
+        enum { NS = 3000, NL = 200 }; static uint32_t v[NS]; unsigned vb1 = gk_count("vb"), most = 0, most2 = 0;
+        for (int i = 0; i < NS; i++){ v[i] = vb_make(1024); p = vb_lock(v[i], 0, 0, 0); pat(p, 1024, (uint8_t)i); vb_unlock(v[i]); }
+        most = gk_count("vb") - vb1;
+        for (int i = 0; i < NS; i++) release(v[i]);
+        for (int i = 0; i < NL; i++){ v[i] = vb_make(65536); p = vb_lock(v[i], 0, 0, 0); pat(p, 65536, (uint8_t)i); vb_unlock(v[i]); }
+        most2 = gk_count("vb") - vb1;
+        unsigned wrong = 0;
+        for (int i = 0; i < NL; i++){ q = vb_lock(v[i], 0, 0, LK_RO); if (!is_pat(q, 65536, (uint8_t)i)) wrong++; vb_unlock(v[i]); }
+        for (int i = 0; i < NL; i++) release(v[i]);
+        check(most <= 1024u && most2 <= 128u && !wrong && gk_count("vb") == vb1, "hb-park-bounds",
+              "parked: %u of %u 1 KB windows, %u of %u 64 KB ones; %u read back wrong; %u blocks left", most, NS, most2, NL, wrong,
+              gk_count("vb") - vb1);
+    }
+
     /* locked every frame: the data of the last Lock, and a Lock of part points into the same window */
     vb = vb_make(N);
     for (int i = 0; i < 8; i++){ p = vb_lock(vb, 0, 0, 0); pat(p, N, (uint8_t)(20 + i)); vb_unlock(vb); present(); }

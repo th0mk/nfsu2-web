@@ -13,7 +13,8 @@
 //     triangle from its first vertex (only UG2's indexed strips may start at another corner);
 //   - Lock: what was written through any Lock reads back, as D3D9's MANAGED pool keeps it (Most Wanted's host
 //     backing, game.h d3d_host_backing, and UG2's one block per resource), over a buffer heap that reuses and
-//     poisons freed blocks; nothing left in the buffer heap after the resources go;
+//     poisons freed blocks, also through a pointer kept past its Unlock; nothing left in the buffer heap after the
+//     resources go, and Most Wanted's windows parked after their Unlock bounded;
 //   - stdcall: every method takes exactly its arguments.
 // Built twice: with Most Wanted's real game table (runtime/mw/game_mw.c: d3d_modes, d3d9_strict) and with UG2's
 // GameOps defaults, whose answers stay as they were.
@@ -53,14 +54,14 @@ const PRIMS = (game) => {
   return all;
 };
 const HOSTBACK = ['hb-roundtrip', 'hb-partial', 'hb-nooverwrite', 'hb-past-range', 'hb-nested', 'hb-nested-disjoint',
-  'hb-nested-readonly', 'hb-tex-nested', 'hb-discard-static', 'hb-per-frame', 'hb-tex-roundtrip', 'hb-reset', 'hb-no-leak',
-  'hb-many'];
+  'hb-nested-readonly', 'hb-tex-nested', 'hb-discard-static', 'hb-stale-pointer', 'hb-per-frame', 'hb-tex-roundtrip',
+  'hb-reset', 'hb-no-leak', 'hb-many'];
 
 test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every primitive type', { skip }, () => {
   const { out, ok } = run('mw');
   for (const c of [...LIFETIMES, 'creator-gpu-refused', 'reset-failed-lost', 'reset-ok-clears', 'reset-size', 'levelcount',
     'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'volumedesc', 'modes', 'multisample', 'checkformat',
-    'depthtex', 'caps-sm3', ...PRIMS('mw'), ...HOSTBACK])
+    'depthtex', 'caps-sm3', ...PRIMS('mw'), ...HOSTBACK, 'hb-park-bounds'])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(mw\): (\d+) passed, 0 failed$/m);
 });
