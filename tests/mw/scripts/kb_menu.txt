@@ -1,33 +1,34 @@
 # Most Wanted: the main menu, the options and back by keys only (TRACKER M3-07).  MW reads its keyboard as raw
 # 256-byte snapshots (GetDeviceState with c_dfDIKeyboard from 0x7F216A, once a frame), so every key here is a tap
-# held for frames, never a press and release between two of the game's polls.  The steps wait for the screens the
-# game names (waitfng; runtime/mw/fe_mw.c): the main menu's Options (its 8th item, 7 steps right of Career) opens
-# MainMenu_Sub.fng, whose first item opens Options.fng; Escape goes back one screen at a time.  Career's sub menu is
-# MainMenu_Sub.fng too, but its first item asks for an alias (MC_Main.fng), so reaching Options.fng is the proof that
-# the 7 steps arrived.  The menus' own moves have no screen of their own: those gaps count frames.  On the options
-# screen a held key meets a focus loss: the page lets go of it (runtime/web/input_web.c release_all) and the game's
-# next snapshot has it up (tests/mw/checks/kb_menu.sh reads the [dikbd] line of NFSU2_KEY_LOG=1):
+# held for frames, never a press and release between two of the game's polls.  Every step acts on its screen
+# (L-021): the screens the game names, and within one the item it highlights once it takes input (waitfng NAME@HASH,
+# runtime/mw/fe_mw.c mw_fe_match): the main menu's items are 0x4B4E388A on from Career, Options its 8th
+# (0xB51549B8), which opens MainMenu_Sub.fng, whose first item (0x4B4E388A) opens Options.fng (its first item
+# 0xB2980BA8, the next 0xB2980BA9); Escape goes back one screen at a time.  On the options screen a held key meets a
+# focus loss: the game takes the Down (the highlight moves), the page lets go of it on the loss (runtime/web/
+# input_web.c release_all) and the game's next snapshot has it up (tests/mw/checks/kb_menu.sh reads the [dikbd]
+# line of NFSU2_KEY_LOG=1).  The focus stays away 30 frames and the key is let go 30 frames after it is back, for
+# the game's polls to see each state:
 #   node web/tools/run-suite.mjs --game mw --script kb_menu.txt --marker 'kb_menu: back at the main menu' \
 #     --env NFSU2_KEY_LOG=1 --env NFSU2_QUIT_FRAMES=7200
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000
-+0    waitfng MainMenu.fng 600
-+240  log kb_menu: main menu, on Career
-+0    loop 7                          # Career .. Options, one item a step
-+40   tap RIGHT
-+0    endloop
-+60   tap RETURN                      # Options
-+0    waitfng MainMenu_Sub.fng 600
-+120  tap RETURN                      # its first item
-+0    waitfng Options.fng 600
-+120  nsdown DOWN                     # held through a focus loss
-+30   nsfocus out
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    log kb_menu: main menu, on Career
++0    tapuntil RIGHT MainMenu.fng@b51549b8 40 600        # Career .. Options, one item a step
++0    tap RETURN                                         # Options
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # its first item
++0    tap RETURN
++0    waitfng Options.fng@b2980ba8 600                   # the options screen, on its first item
++0    nsdown DOWN                                        # held through a focus loss
++0    waitfng Options.fng@b2980ba9 300                   # the game took it
++0    nsfocus out
 +30   nsfocus in
 +30   nsup DOWN
-+60   tap ESCAPE
-+0    waitfng MainMenu_Sub.fng 600
-+120  tap ESCAPE
-+0    waitfng MainMenu.fng 600
++0    tap ESCAPE
++0    waitfng MainMenu_Sub.fng@4b4e388a 600
++0    tap ESCAPE
++0    waitfng MainMenu.fng@b51549b8 600                  # the main menu, on Options
 +0    log kb_menu: back at the main menu
 +0    close

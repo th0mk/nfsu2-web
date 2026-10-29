@@ -17,7 +17,7 @@ D='"C:\NFSMW\NFS Most Wanted'
 grep -qF '[file] Find -> "BRAVO" attr=0x10' "$LOG" || fail "no scan found BRAVO's folder"
 grep -qF "[file] FindFirstFileA($D/BRAVO/BRAVO\") -> found" "$LOG" || fail "the start's scan did not find BRAVO's save"
 grep -qE '^\[fng\] f=[0-9]+ screen MC_List\.fng' "$LOG" && fail "the start asked which alias to load: more than one is left"
-miss=$(inorder 'tapuntil MC_Main.fng satisfied' "[file] CreateFileA($D/BRAVO/BRAVO\") -> " 'waitfng MainMenu.fng satisfied' \
+miss=$(inorder 'tapuntil MC_Main.fng satisfied' "[file] CreateFileA($D/BRAVO/BRAVO\") -> " 'waitfng MainMenu.fng' \
   'LOG profiles_gone: BRAVO loaded') || fail "missing, or out of order: $miss"
 grep -qF 'app: quit requested (autotest close) -> WM_CLOSE to the game' "$LOG" || fail "no WM_CLOSE sent"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"

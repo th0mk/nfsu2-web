@@ -39,9 +39,16 @@
  *     waitfng NAME [tmo]       wait until the top front-end package, or the
  *                              current screen (last "Init Package"/"Switch-
  *                              FEngPackages ... to" seen by the game's debug
- *                              printf 0x50D510), is NAME (e.g. UI_QRTrackSelect.fng)
+ *                              printf 0x50D510), is NAME (e.g. UI_QRTrackSelect.fng).
+ *                              A qualifier after the package's name waits for
+ *                              a state within it, where the game has them
+ *                              (game.h fe_match; MW: fe_mw.c mw_fe_match):
+ *                              PACKAGE:LABEL a language label shown, @HASH the
+ *                              highlighted object, 'TEXT a text shown, ^TEXT
+ *                              that text highlighted
  *     tapuntil KEY NAME [every] [tmo]  tap KEY every `every` frames (default
- *                              90) until the top package is NAME
+ *                              90) until the top package is NAME (or NAME's
+ *                              state, as waitfng)
  *     peek ADDR [count]        log count dwords at ADDR (hex + float); ADDR
  *                              "@in+OFF" is relative to the player's input
  *                              controller (runtime/dinput_pad.c)
@@ -487,8 +494,11 @@ const char *autotest_screen(void){ return g_screen[0] ? g_screen : 0; }
  * the current one last), or 0 past the end (runtime/discord.c) */
 const char *autotest_screen_batch(int i){ return i >= 0 && i < g_nbatch ? g_batch[i] : 0; }
 /* NAME matches the top package (GetTopPackage), the current screen, or a
- * screen initialised together with it */
+ * screen initialised together with it.  A NAME with a qualifier after the
+ * package's (MC_Main.fng:LABEL, MainMenu.fng@HASH ...) names a state within
+ * that package, the game's to judge (game.h fe_match) */
 static int fe_is(const char *want){
+    if (g_game.fe_match && want[strcspn(want, ":@'^")]) return g_game.fe_match(want);
     const char *t = autotest_top_fng();
     if ((t && !strcasecmp(t, want)) || (g_screen[0] && !strcasecmp(g_screen, want))) return 1;
     for (int i = 0; i < g_nbatch; i++) if (!strcasecmp(g_batch[i], want)) return 1;

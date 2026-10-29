@@ -13,7 +13,7 @@ grep -qE '^module: rev [0-9a-f]+\+?, game mw, .* stamp game mw;' "$LOG" || fail 
 grep -q 'waitfng .* TIMEOUT\|tapuntil .* TIMEOUT' "$LOG" && fail "a screen did not come up: $(grep -m1 'TIMEOUT' "$LOG")"
 D='"C:\NFSMW\NFS Most Wanted'
 miss=$(inorder "[write] CreateDirectoryA $D/ALPHA\"" "[write] CreateFileA(CREATE_ALWAYS, 0x40000000) $D/ALPHA/ALPHA\"" \
-  'LOG profiles_make: ALPHA saved' 'waitfng MC_ProfileManager.fng satisfied' \
+  'LOG profiles_make: ALPHA saved' 'waitfng MC_ProfileManager.fng' \
   "[write] CreateDirectoryA $D/BRAVO\"" "[write] CreateFileA(CREATE_ALWAYS, 0x40000000) $D/BRAVO/BRAVO\"" \
   'LOG profiles_make: BRAVO saved') || fail "missing, or out of order: $miss"
 grep -qF 'app: quit requested (autotest close) -> WM_CLOSE to the game' "$LOG" || fail "no WM_CLOSE sent"

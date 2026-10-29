@@ -3,13 +3,18 @@
 # the order FindFirstFileA gives them, which is NTFS's on Windows (runtime/fileio.c, game.h find_sorted), so ALPHA
 # comes first.  This run loads ALPHA there, saves it from the Alias Manager (a save writes the current alias, so the
 # write of ALPHA/ALPHA shows the load took), loads BRAVO from the Alias Manager and saves it, then deletes ALPHA.
-# The Alias Manager (MC_ProfileManager.fng): Create, Load, Save, Delete, left to right, no wrap, so each item is
-# reached from an end: Left x3 is Create.  The dialogs (inside MC_Main.fng, so the gaps count frames):
+# Every step acts on its screen or dialog (L-021): the dialogs inside MC_Main.fng by what it shows and highlights,
+# the list's rows by name, highlighted (kb_alias.txt says how; runtime/mw/fe_mw.c mw_fe_match).  The list leaves
+# in the frame its Enter is taken and the dialog under it shows the answer a frame or two later, while that Enter
+# is still held (a tap holds a key 6 frames): the dialog's own Enter waits 8 frames, or the game would see one press.
+# The Alias Manager (MC_ProfileManager.fng): Create, Load, Save, Delete (0x4B4E388A on), left to right, no wrap; it
+# keeps its highlight under the dialogs.  The dialogs:
 #   the boot list: Enter on ALPHA; "Load complete.": Enter, the main menu;
 #   Save: "Are you sure you want to save the alias named ALPHA?" (No highlighted): Left, Enter; "Do you want to
 #   overwrite previously saved game?" (No): Left, Enter; "Save complete.": Enter;
 #   Load: "Loading a new alias will result in the loss of any unsaved changes to the current alias. Are you sure
-#   you want to load a new alias?" (No): Left, Enter; the list: Down to BRAVO, Enter; "Load complete.": Enter;
+#   you want to load a new alias?" (label 0x87C7577E, No): Left, Enter; the list: Down to BRAVO, Enter; "Load
+#   complete.": Enter;
 #   Delete: the list: Enter on ALPHA; "Are you sure you want to delete ALPHA?" (No): Left, Enter; "Save game
 #   deleted.": Enter.
 # tests/mw/checks/profiles_load.sh wants ALPHA read, ALPHA written, BRAVO read, BRAVO written, ALPHA deleted:
@@ -17,60 +22,60 @@
 #     --marker 'profiles_load: ALPHA deleted' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=12000 --save-out DIR
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
-+0    waitfng MC_List.fng 600
-+300  tap RETURN                      # ALPHA
-+300  tap RETURN                      # Load complete.  Continue
-+0    waitfng MainMenu.fng 900
++0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete. 600
++8    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
 +0    log profiles_load: ALPHA loaded
-+300  loop 6                          # Career .. Alias Manager
-+40   tap RIGHT
-+0    endloop
-+60   tap RETURN
-+0    waitfng MC_ProfileManager.fng 600
-+120  loop 3                          # Create, then Save
-+40   tap LEFT
-+0    endloop
-+40   tap RIGHT
-+40   tap RIGHT
-+60   tap RETURN
-+300  tap LEFT                        # save the alias named ALPHA?  Yes
-+100  tap RETURN
-+300  tap LEFT                        # overwrite?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # Save complete.  Continue
-+300  log profiles_load: ALPHA saved
-+0    loop 3                          # Create, then Load
-+40   tap LEFT
-+0    endloop
-+40   tap RIGHT
-+60   tap RETURN
-+300  tap LEFT                        # load a new alias?  Yes
-+100  tap RETURN
-+0    waitfng MC_List.fng 600
-+300  tap DOWN                        # BRAVO
-+60   tap RETURN
-+300  tap RETURN                      # Load complete.  Continue
-+300  log profiles_load: BRAVO loaded
-+0    loop 3                          # Create, then Save
-+40   tap LEFT
-+0    endloop
-+40   tap RIGHT
-+40   tap RIGHT
-+60   tap RETURN
-+300  tap LEFT                        # save the alias named BRAVO?  Yes
-+100  tap RETURN
-+300  tap LEFT                        # overwrite?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # Save complete.  Continue
-+300  log profiles_load: BRAVO saved
-+0    loop 3                          # Delete
-+40   tap RIGHT
-+0    endloop
-+60   tap RETURN
-+0    waitfng MC_List.fng 600
-+300  tap RETURN                      # ALPHA
-+300  tap LEFT                        # delete ALPHA?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # Save game deleted.  Continue
-+300  log profiles_load: ALPHA deleted
-+60   close
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388c 40 300   # Save
++0    tap RETURN
++0    waitfng MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cc 600          # save the alias named ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cc 600               # overwrite?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cd 30 300       # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388c 600         # back on Save
++0    log profiles_load: ALPHA saved
++0    tapuntil LEFT MC_ProfileManager.fng@4b4e388b 40 300    # Load
++0    tap RETURN
++0    waitfng MC_Main.fng:87c7577e@b8a7c6cc 600          # load a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:87c7577e@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_List.fng^ALPHA 600                      # the list, ALPHA highlighted
++0    tapuntil DOWN MC_List.fng^BRAVO 40 300             # BRAVO
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete. 600
++8    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388b 600         # back on Load
++0    log profiles_load: BRAVO loaded
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388c 40 300   # Save
++0    tap RETURN
++0    waitfng MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cc 600          # save the alias named BRAVO?  (No)
++0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cc 600               # overwrite?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cd 30 300       # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388c 600         # back on Save
++0    log profiles_load: BRAVO saved
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388d 40 300   # Delete
++0    tap RETURN
++0    waitfng MC_List.fng^ALPHA 600                      # the list, ALPHA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Are_you_sure_you_want_to_delete@b8a7c6cc 600        # delete ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_delete@b8a7c6cd 30 300  # Yes
++8    tap RETURN
++0    waitfng MC_Main.fng'Save_game_deleted. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388d 600         # back on Delete
++0    log profiles_load: ALPHA deleted
++0    close

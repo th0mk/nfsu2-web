@@ -25,6 +25,7 @@ void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen
 int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);   /* win32_misc.c */
 int msvcrt_call(CPU *c, const char *n, uint32_t *r); uint32_t msvcrt_bind(const ImpEnt *e);    /* msvcrt_mw.c */
 extern const RegKey mw_reg_keys[];             /* registry_mw.c */
+int mw_fe_match(const char *name);              /* fe_mw.c */
 uint32_t mw_flow(void); const char *mw_top_screen(void); void mw_fe_frame(void);  /* fe_mw.c */
 uint32_t mw_fe_object(const char *package, uint32_t hash);
 extern const ThreadName mw_thread_names[];     /* threads_mw.c */
@@ -141,7 +142,8 @@ const GameOps g_game = {
     .flow = mw_flow,                            /* fe_mw.c: GameFlowManager's state [0x925E90] */
     .flow_fe = 3,
     .flow_race = 6,
-    .top_screen = mw_top_screen,                /* the active packages' tail, [[[0x91CADC]]+0xE4] */
+    .fe_match = mw_fe_match,                    /* the scripts' names within a package: dialogs, highlights */
+    .top_screen = mw_top_screen,               /* the active packages' tail, [[[0x91CADC]]+0xE4] */
     .on_test_frame = mw_fe_frame,               /* the screens the game brings up, for waitfng and [fng] */
     .fe_object = mw_fe_object,                  /* the scripts' $O: an active package's object by name hash */
     .init_tables = mw_init_tables,

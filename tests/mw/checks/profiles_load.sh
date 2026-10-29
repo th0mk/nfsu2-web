@@ -15,7 +15,7 @@ grep -q 'waitfng .* TIMEOUT\|tapuntil .* TIMEOUT' "$LOG" && fail "a screen did n
 D='"C:\NFSMW\NFS Most Wanted'
 grep -qF "[file] FindFirstFileA($D/ALPHA/ALPHA\") -> found" "$LOG" || fail "the start's scan did not find the seeded ALPHA"
 grep -qF "[file] FindFirstFileA($D/BRAVO/BRAVO\") -> found" "$LOG" || fail "the start's scan did not find the seeded BRAVO"
-miss=$(inorder 'waitfng MC_List.fng satisfied' "[file] CreateFileA($D/ALPHA/ALPHA\") -> " 'LOG profiles_load: ALPHA loaded' \
+miss=$(inorder 'waitfng MC_List.fng' "[file] CreateFileA($D/ALPHA/ALPHA\") -> " 'LOG profiles_load: ALPHA loaded' \
   "$D/ALPHA/ALPHA\" -> \"/save/" 'LOG profiles_load: ALPHA saved' \
   "[file] CreateFileA($D/BRAVO/BRAVO\") -> " 'LOG profiles_load: BRAVO loaded' \
   "$D/BRAVO/BRAVO\" -> \"/save/" 'LOG profiles_load: BRAVO saved' \

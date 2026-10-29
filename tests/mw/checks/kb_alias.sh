@@ -10,11 +10,11 @@ grep -q 'waitfng .* TIMEOUT\|tapuntil .* TIMEOUT' "$LOG" && fail "a screen did n
 grep -qF '[write] CreateDirectoryA "C:\NFSMW\NFS Most Wanted/ROTEST"' "$LOG" || fail "no save folder ROTEST: the name typed was $(grep -m1 -oE 'CreateDirectoryA "C:.NFSMW.NFS Most Wanted/[^"]*"' "$LOG" || echo nothing)"
 grep -qE '^\[write\] CreateFileA\(CREATE_ALWAYS, [^)]*\) "C:\\NFSMW\\NFS Most Wanted/ROTEST/ROTEST"' "$LOG" || fail "the save ROTEST/ROTEST was not written"
 for s in MainMenu.fng MC_ProfileManager.fng MC_List.fng; do
-  grep -qE "^\[autotest\] f=[0-9]+ waitfng $s satisfied" "$LOG" || fail "$s did not come up"
+  grep -qE "^\[autotest\] f=[0-9]+ waitfng $s[^ ]* satisfied" "$LOG" || fail "$s did not come up"
 done
 # the list's folder scan, after the list was asked for: the alias folder and its save file
 awk '
-  /waitfng MC_ProfileManager\.fng satisfied/ { pm = 1 }
+  /waitfng MC_ProfileManager\.fng[^ ]* satisfied/ { pm = 1 }
   pm && /\[file\] Find -> "ROTEST" attr=0x10/ { dir = 1 }
   pm && dir && /\[file\] FindFirstFileA\("C:\\NFSMW\\NFS Most Wanted\/ROTEST\/ROTEST"\) -> found/ { ok = 1; exit }
   END { exit !ok }' "$LOG" || fail "the Load list did not find ROTEST in the save folder"

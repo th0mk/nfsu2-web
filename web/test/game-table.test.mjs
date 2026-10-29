@@ -22,6 +22,7 @@ const UG2_UNSET = {
   reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
   sandbox: 'UG2 maps every path into its game folder, as it always has',
   find_sorted: 'UG2\'s folder scans keep the host\'s order, as they always have',
+  fe_match: 'UG2\'s scripts wait on package names only: waitfng and tapuntil match as they always have',
   init_tables: 'no [init] line: UG2\'s boot log stays as it was', ninit_tables: 'as init_tables', init_check: 'as init_tables',
   thread_names: 'the watchdog\'s report and the [thread] lines stay as they were', thread_start: 'as thread_names',
   d3d_modes: 'EnumAdapterModes lists UG2\'s own 6-row mode table (com.c g_modes), with the 4K row\'s stand-in',
@@ -112,6 +113,8 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(t.get('top_screen'), 'mw_top_screen');
   assert.equal(t.get('on_test_frame'), 'mw_fe_frame');
   assert.equal(t.get('fe_object'), 'mw_fe_object');
+  assert.equal(t.get('fe_match'), 'mw_fe_match', 'the scripts\' dialog and highlight waits');
+  assert.match(read('runtime/mw/fe_mw.c'), /\nint mw_fe_match\(const char \*name\)\{/);
   assert.equal(t.get('init_tables'), 'mw_init_tables');
   assert.equal(t.get('init_check'), '0x009aa9d0u + 0x84cu');
   assert.equal(t.get('thread_names'), 'mw_thread_names');

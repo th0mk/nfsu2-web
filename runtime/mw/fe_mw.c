@@ -37,7 +37,35 @@
  * +0x10 (the splash's prompt 0xC6CC55A4, whose script 0x5A3147 starts) and
  * its data at +0x2C, which begins with its colour as four dwords, blue,
  * green, red and alpha: a script fading an object moves that alpha (seen in
- * MW_LS_Splash.fng's objects, frame by frame). */
+ * MW_LS_Splash.fng's objects, frame by frame).
+ *
+ * Within a package (game.h fe_match: the scripts' names PACKAGE:LABEL,
+ * PACKAGE@HASH, PACKAGE'TEXT, PACKAGE^TEXT; mw_fe_match below).  MW's
+ * dialogs live inside MC_Main.fng, the only package that changes while they
+ * come and go (the NFSU2_FNG_LOG=2 package list), so a dialog is told by what
+ * its package shows and by the package's state, all seen in headless runs of
+ * tests/mw/scripts and named from them:
+ *   - FEPackage +0x28, a byte, takes input: 0 while the package comes in or
+ *     goes, 1 while it answers keys.  MC_Main.fng's drops to 0 in the frame a
+ *     RETURN answers a dialog and comes back once the next dialog is in.
+ *     FEngine's thiscall 0x5B07F0 (package, flag) writes it.
+ *   - FEPackage +0x8C, the highlighted object (FEng's current button): LEFT on
+ *     a Yes/No dialog moves it from 0xB8A7C6CC (No, the default) to
+ *     0xB8A7C6CD (Yes); the main menu's items are 0x4B4E388A on, one a step to
+ *     the right, and the Alias Manager's (MC_ProfileManager.fng) too.
+ *   - A package's objects: the first at +0x4C, the next at +4; a group (type
+ *     +0x18 == 5) holds its own from +0x64.  An object's name hash is at +0x10, its flags
+ *     at +0x1C, bit 0 set on the objects not drawn (MC_Main's unused
+ *     buttons, MC_List's empty rows, the dialog message while the name field
+ *     is up), and the script it runs at +0x54, whose name hash is at +0x30:
+ *     0x249DB7B7 is bStringHash("HIGHLIGHT"), which the highlighted button or
+ *     list row loops (0x7AB5521A "UNHIGHLIGHT" when it loses the highlight).
+ *   - A string (type 2) has its language label's hash at +0x60 (the dialog's
+ *     message, "Generic Message" 0x1E2640FA, shows a label per dialog) and its
+ *     text, UTF-16, at +0x64 (the alias names in MC_List's rows and in the
+ *     name field).
+ * MC_List.fng moves no +0x8C: its highlighted row is the one running
+ * HIGHLIGHT (the ^ form). */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,11 +79,19 @@
 #define PKG_NEXT   0x04u
 #define PKG_NAME   0x0cu
 #define PKG_HASH   0x10u
+#define PKG_INPUT  0x28u            /* byte: the package takes input */
 #define PKG_OBJS   0x4cu            /* the first object */
+#define PKG_FOCUS  0x8cu            /* the highlighted object */
 #define OBJ_NEXT   0x04u
 #define OBJ_HASH   0x10u
-#define OBJ_TYPE   0x18u            /* 5: a group */
+#define OBJ_TYPE   0x18u            /* 2: a string, 5: a group */
+#define OBJ_FLAGS  0x1cu            /* bit 0: not drawn */
+#define OBJ_SCRIPT 0x54u            /* the script it runs */
 #define GRP_OBJS   0x64u            /* a group's first object */
+#define STR_LABEL  0x60u            /* a string's language label hash */
+#define STR_TEXT   0x64u            /* and its text, UTF-16 */
+#define SCR_HASH   0x30u            /* a script's name hash */
+#define SCR_HIGHLIGHT 0x249db7b7u   /* bStringHash("HIGHLIGHT") */
 
 static uint32_t rd(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
 
@@ -81,6 +117,7 @@ const char *mw_top_screen(void){
 void autotest_note_screen(const char *nm);
 long autotest_frame(void);          /* autotest.c: the test frame number, the [fng] lines' f= */
 #define LIST_MAX 32                 /* the walk's bound: the front end has a dozen at most */
+static void state_log(uint32_t pkg, int lv);
 void mw_fe_frame(void){
     static struct { uint32_t pkg, hash; } seen[LIST_MAX];
     static int nseen;
@@ -110,6 +147,110 @@ void mw_fe_frame(void){
     }
     for (int i = 0; i < n; i++){ seen[i].pkg = pk[i]; seen[i].hash = hs[i]; }
     nseen = n;
+    if (lv >= 2) for (int i = 0; i < n; i++) state_log(pk[i], lv);
+}
+
+/* ---- within a package: the scripts' qualified names (game.h fe_match) ---- */
+
+/* the objects of a package that are drawn, at any depth of its groups (one not drawn hides what it holds), until
+ * fn says stop (nonzero) */
+typedef int (*ObjFn)(uint32_t obj, void *ctx);
+static int walk_drawn(uint32_t first, int depth, ObjFn fn, void *ctx, int *budget){
+    for (uint32_t o = rd(first); o && --*budget > 0; o = rd(o + OBJ_NEXT)){
+        if (rd(o + OBJ_FLAGS) & 1u) continue;
+        if (fn(o, ctx)) return 1;
+        if (depth < 8 && rd(o + OBJ_TYPE) == 5u && walk_drawn(o + GRP_OBJS, depth + 1, fn, ctx, budget)) return 1;
+    }
+    return 0;
+}
+static int drawn(uint32_t pkg, ObjFn fn, void *ctx){ int budget = 4096; return walk_drawn(pkg + PKG_OBJS, 0, fn, ctx, &budget); }
+
+/* a string's text in ASCII ('?' for the rest), at most cap - 1 characters */
+static void str_text(uint32_t obj, char *out, int cap){
+    uint32_t s = rd(obj + STR_TEXT); int n = 0;
+    for (; s && n < cap - 1 && mem_is_committed(s + 1u); s += 2u){
+        unsigned c = g_mem[s] | (unsigned)g_mem[s + 1u] << 8;
+        if (!c) break;
+        out[n++] = c >= 0x20 && c < 0x7f ? (char)c : '?';
+    }
+    out[n] = 0;
+}
+
+struct want { char kind; uint32_t v; char text[64]; };
+static int str_is(uint32_t o, void *ctx){
+    const struct want *w = ctx;
+    if (rd(o + OBJ_TYPE) != 2u) return 0;
+    if (w->kind == ':') return rd(o + STR_LABEL) == w->v;
+    char t[64]; str_text(o, t, sizeof t);
+    for (int i = 0; w->text[i]; i++)
+        if (!t[i] || (w->text[i] == '_' ? t[i] != ' ' && t[i] != '_' : t[i] != w->text[i])) return 0;
+    uint32_t s = rd(o + OBJ_SCRIPT);
+    return w->kind == '\'' || (s && rd(s + SCR_HASH) == SCR_HIGHLIGHT);
+}
+
+#define QUALS ":@'^"
+/* NAME is PACKAGE followed by one or more of
+ *   :LABEL   one of its drawn strings shows the language label of that hash (hex): MC_Main.fng's dialogs
+ *   @HASH    its highlighted object has that name hash (hex): a dialog's buttons, the menus' items
+ *   'TEXT    one of its drawn strings begins with TEXT: an alias name in a list or in the name field
+ *   ^TEXT    and that string runs its HIGHLIGHT script: MC_List.fng's highlighted row
+ * and the package is the top one that takes input: the keys reach that one (LEFT on a dialog of MC_Main.fng moves
+ * its highlight and not the Alias Manager's under it, which takes input too; MC_List.fng sits above MC_Main.fng
+ * while it is up, and MC_Main.fng keeps its last dialog's strings drawn under it).  TEXT matches a string's
+ * first characters, '_' a space: the log's spelling (NFSU2_FNG_LOG=3).  1 when all of that holds now. */
+int mw_fe_match(const char *name){
+    size_t n = strcspn(name, QUALS);
+    uint32_t e = engine(), pkg = 0; int k = 0;
+    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < LIST_MAX && !pkg; p = rd(p + PKG_NEXT), k++){
+        const char *nm = pkg_name(p);
+        if (nm && strlen(nm) == n && !strncasecmp(nm, name, n)) pkg = p;
+    }
+    if (!pkg || !(rd(pkg + PKG_INPUT) & 0xffu)) return 0;
+    for (uint32_t p = rd(pkg + PKG_NEXT); p && k < LIST_MAX; p = rd(p + PKG_NEXT), k++)
+        if (rd(p + PKG_INPUT) & 0xffu) return 0;
+    for (const char *q = name + n; *q; ){
+        struct want w = { .kind = *q++ };
+        size_t len = strcspn(q, QUALS);
+        if (!len || len >= sizeof w.text) return 0;
+        memcpy(w.text, q, len); w.text[len] = 0; q += len;
+        w.v = (uint32_t)strtoul(w.text, 0, 16);
+        if (w.kind == '@'){ uint32_t f = rd(pkg + PKG_FOCUS); if (!f || rd(f + OBJ_HASH) != w.v) return 0; }
+        else if (!drawn(pkg, str_is, &w)) return 0;
+    }
+    return 1;
+}
+
+/* NFSU2_FNG_LOG=2: a package's input and highlighted object whenever they change ("[fng] f=N MC_Main.fng input 1
+ * @b8a7c6cc"); 3 also what its drawn strings show while it takes input (":label'text ...", ^ for ' when the string
+ * runs HIGHLIGHT): the names for the scripts' qualified waits */
+struct shows { char *b; int o, cap; uint32_t h; };
+static int str_shows(uint32_t o, void *ctx){
+    struct shows *s = ctx;
+    if (rd(o + OBJ_TYPE) != 2u || s->o >= s->cap - 40) return 0;
+    char t[20]; str_text(o, t, sizeof t);
+    for (char *c = t; *c; c++) if (*c == ' ') *c = '_';
+    uint32_t sc = rd(o + OBJ_SCRIPT);
+    s->o += snprintf(s->b + s->o, (size_t)(s->cap - s->o), " :%08x%s%s", rd(o + STR_LABEL),
+                     sc && rd(sc + SCR_HASH) == SCR_HIGHLIGHT ? "^" : "'", t);
+    return 0;
+}
+static void state_log(uint32_t pkg, int lv){
+    static struct { uint32_t pkg, input, focus, shows; } st[64];
+    static int next;
+    int i = 0;
+    while (i < 64 && st[i].pkg != pkg) i++;
+    if (i == 64){ i = next; next = (next + 1) % 64; st[i].pkg = pkg; st[i].input = st[i].focus = st[i].shows = ~0u; }
+    const char *nm = pkg_name(pkg);
+    uint32_t input = rd(pkg + PKG_INPUT) & 0xffu, f = rd(pkg + PKG_FOCUS), focus = f ? rd(f + OBJ_HASH) : 0u;
+    if (input != st[i].input || focus != st[i].focus)
+        fprintf(stderr, "[fng] f=%ld %s input %u @%08x\n", autotest_frame(), nm ? nm : "?", (unsigned)input, focus);
+    st[i].input = input; st[i].focus = focus;
+    if (lv < 3 || !input) return;
+    char b[1024]; struct shows s = { b, 0, (int)sizeof b, 2166136261u };
+    b[0] = 0; drawn(pkg, str_shows, &s);
+    for (const char *c = b; *c; c++) s.h = (s.h ^ (uint8_t)*c) * 16777619u;
+    if (s.h != st[i].shows) fprintf(stderr, "[fng] f=%ld %s shows%s\n", autotest_frame(), nm ? nm : "?", b);
+    st[i].shows = s.h;
 }
 
 /* the object of name hash `hash` in the active package `package`, depth first as the game walks them (groups

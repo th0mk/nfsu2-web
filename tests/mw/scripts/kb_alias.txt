@@ -2,41 +2,53 @@
 # list (TRACKER M3-11).  The name is typed through the page's own keyboard path (nstype, nstap: runtime/web/
 # input_web.c, as a browser's key events arrive), Shift and all.  The name field takes WM_CHAR (the window procedure
 # 0x6DB6C0 hands it to 0x5A95F0): runs with only DirectInput keys and WM_KEYDOWN left the default NAME in place.
-# The steps (a first start; the dialogs are inside MC_Main.fng, so those gaps count frames):
-#   "Create a new alias?" (No highlighted): Left, Enter; two autosave notes: Enter, Enter; "Enter name: NAME":
-#   Backspace x4, ROTEST, Enter (Accept); "Do you want to save the alias ROTEST?" (No highlighted): Left, Enter;
-#   "Save complete.": Enter until the main menu; the main menu's Alias Manager (its 7th item, 6 steps right of
-#   Career) opens MC_ProfileManager.fng; its 2nd item, Load, asks "Are you sure you want to load a new alias?" (No
-#   highlighted): Left, Enter; the list (MC_List.fng) reads the save folder and shows ROTEST.
+# Every step acts on its screen or dialog (L-021).  The dialogs are inside MC_Main.fng, so they are waited for by
+# what that package shows and highlights (PACKAGE:LABEL, 'TEXT, @HASH; runtime/mw/fe_mw.c mw_fe_match, the names
+# as an NFSU2_FNG_LOG=3 run logs them): each key goes once, when its dialog takes input, and the next wait needs
+# what that key brings.  The steps (a first start):
+#   "Create a new alias?" (label 0xBE97590F, No highlighted, 0xB8A7C6CC): Left to Yes (0xB8A7C6CD), Enter; two
+#   autosave notes (0xB01BE5DD, 0xB380362F): Enter, Enter; "Enter name: NAME" (its Accept button, 0x4F876B6F):
+#   Backspace x4, ROTEST, Enter once the field shows it; "Do you want to save the alias ROTEST?" (No): Left, Enter;
+#   "Save complete.": Enter; the main menu (its items 0x4B4E388A on, Career first): Right to the Alias Manager, the
+#   7th, Enter; MC_ProfileManager.fng (Create 0x4B4E388A, Load 0x4B4E388B): Right to Load, Enter; "Are you sure
+#   you want to load a new alias?" (0x87C7577E, No): Left, Enter; the list (MC_List.fng) reads the save folder and
+#   shows ROTEST, highlighted.
+# The Backspaces are typed 20 frames apart, as a key is tapped, inside the one field.
 # tests/mw/checks/kb_alias.sh wants the save ROTEST/ROTEST written and the list's folder scan finding it:
 #   node web/tools/run-suite.mjs --game mw --script kb_alias.txt --marker 'kb_alias: the Load list is up' \
 #     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=9000
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
-+300  tap LEFT                        # Create a new alias?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # the autosave notes
-+300  tap RETURN
-+300  loop 4                          # Enter name: NAME
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
 +0    nstap BACK
 +20   endloop
-+60   nstype ROTEST
-+120  log kb_alias: typed ROTEST
-+0    tap RETURN                      # Accept
-+300  tap LEFT                        # save the alias ROTEST?  Yes
-+100  tap RETURN
-+300  tapuntil RETURN MainMenu.fng 90 3000    # Save complete.  Continue
-+0    waitfng MainMenu.fng 600
-+300  loop 6                          # Career .. Alias Manager
-+40   tap RIGHT
-+0    endloop
-+60   tap RETURN
-+0    waitfng MC_ProfileManager.fng 600
-+120  tap RIGHT                       # Load
-+100  tap RETURN
-+300  tap LEFT                        # load a new alias?  Yes
-+100  tap RETURN
-+0    waitfng MC_List.fng 600
++0    nstype ROTEST
++0    waitfng MC_Main.fng'ROTEST 600
++0    log kb_alias: typed ROTEST
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ROTEST?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388b 40 300   # Load
++0    tap RETURN
++0    waitfng MC_Main.fng:87c7577e@b8a7c6cc 600          # load a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:87c7577e@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_List.fng^ROTEST 600                     # the list, ROTEST highlighted
 +0    log kb_alias: the Load list is up
-+60   close
++0    close

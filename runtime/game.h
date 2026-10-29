@@ -119,6 +119,9 @@ typedef struct GameOps {
     uint32_t (*flow)(void);         /* the game's flow state (its GameFlowManager), 0 = not known yet */
     uint32_t flow_fe, flow_race;    /* its values in the front end and while racing */
     const char *(*top_screen)(void);    /* the top front-end package's name ("UI_Main.fng"), or 0 */
+    int (*fe_match)(const char *name);  /* the scripts' waitfng/tapuntil names with a qualifier after the
+                                     * package's (':', '@', '\'' or '^', autotest.c fe_is): 1 while the front
+                                     * end is in that state within the package; 0 = no such names */
     uint32_t (*racer)(int human, int slot); /* test traces' $P (human 1: the local human racer) and $Rn
                                      * (racer slot n) of the current race, 0 = none */
     uint32_t (*fe_object)(const char *package, uint32_t hash); /* test expressions' $O(PACKAGE:HASH)

@@ -1,12 +1,14 @@
 # Most Wanted: the first of three runs that make, load and delete aliases across restarts (TRACKER M3-20; the save
 # tree each run leaves seeds the next: profiles_load.txt, then profiles_gone.txt).  This one, from a first start,
 # makes ALPHA and saves it (as kb_alias.txt makes ROTEST), then makes BRAVO with the Alias Manager's Create and saves
-# that too.  The dialogs are inside MC_Main.fng, so the gaps count frames.  The steps after the first alias:
-#   the main menu's Alias Manager (its 7th item) opens MC_ProfileManager.fng: Create, Load, Save, Delete, left to
-#   right (no wrap); Create asks "Creating a new alias will result in any unsaved changes to the current alias being
-#   lost. Are you sure you want to create a new alias?" (No highlighted): Left, Enter; the two autosave notes:
-#   Enter, Enter; "Enter name: NAME": Backspace x4, BRAVO, Enter (Accept); "Do you want to save the alias BRAVO?"
-#   (No highlighted): Left, Enter; "Save complete.": Enter, back to the Alias Manager with BRAVO the current alias.
+# that too.  Every step acts on its screen or dialog (L-021): the dialogs inside MC_Main.fng by what it shows and
+# highlights (kb_alias.txt says how; runtime/mw/fe_mw.c mw_fe_match).  The steps after the first alias:
+#   the main menu's Alias Manager (its 7th item, 0x4B4E3890) opens MC_ProfileManager.fng: Create, Load, Save, Delete,
+#   left to right (no wrap; 0x4B4E388A on); Create asks "Creating a new alias will result in any unsaved changes to
+#   the current alias being lost. Are you sure you want to create a new alias?" (label 0x7209349F, No highlighted):
+#   Left, Enter; the two autosave notes: Enter, Enter; "Enter name: NAME": Backspace x4, BRAVO, Enter (Accept);
+#   "Do you want to save the alias BRAVO?" (No highlighted): Left, Enter; "Save complete.": Enter, back to the Alias
+#   Manager with BRAVO the current alias.
 # tests/mw/checks/profiles_make.sh wants both saves written, in that order:
 #   node web/tools/run-suite.mjs --game mw --script profiles_make.txt --marker 'profiles_make: BRAVO saved' \
 #     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=9000 --save-out DIR
@@ -14,37 +16,50 @@
 # too, so it seeds the next run as it is)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
-+300  tap LEFT                        # Create a new alias?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # the autosave notes
-+300  tap RETURN
-+300  loop 4                          # Enter name: NAME
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
 +0    nstap BACK
 +20   endloop
-+60   nstype ALPHA
-+120  tap RETURN                      # Accept
-+300  tap LEFT                        # save the alias ALPHA?  Yes
-+100  tap RETURN
-+300  tapuntil RETURN MainMenu.fng 90 3000    # Save complete.  Continue
-+0    waitfng MainMenu.fng 600
++0    nstype ALPHA
++0    waitfng MC_Main.fng'ALPHA 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
 +0    log profiles_make: ALPHA saved
-+300  loop 6                          # Career .. Alias Manager
-+40   tap RIGHT
-+0    endloop
-+60   tap RETURN
-+0    waitfng MC_ProfileManager.fng 600
-+120  tap RETURN                      # Create
-+300  tap LEFT                        # unsaved changes lost, sure?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # the autosave notes
-+300  tap RETURN
-+300  loop 4                          # Enter name: NAME
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tap RETURN                                         # Create
++0    waitfng MC_Main.fng:7209349f@b8a7c6cc 600          # unsaved changes lost, sure?  (No)
++0    tapuntil LEFT MC_Main.fng:7209349f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
 +0    nstap BACK
 +20   endloop
-+60   nstype BRAVO
-+120  tap RETURN                      # Accept
-+300  tap LEFT                        # save the alias BRAVO?  Yes
-+100  tap RETURN
-+300  tap RETURN                      # Save complete.  Continue
-+300  log profiles_make: BRAVO saved
-+60   close
++0    nstype BRAVO
++0    waitfng MC_Main.fng'BRAVO 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias BRAVO?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # back in the Alias Manager
++0    log profiles_make: BRAVO saved
++0    close

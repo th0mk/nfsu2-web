@@ -6,8 +6,9 @@
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
 grep -qE '^module: rev [0-9a-f]+\+?, game mw, .* stamp game mw;' "$LOG" || fail "no module line naming its revision and lift stamp"
-grep -q 'waitfng .* TIMEOUT' "$LOG" && fail "a screen did not come up: $(grep -m1 'waitfng .* TIMEOUT' "$LOG")"
-got=$(grep -oE '^\[autotest\] f=[0-9]+ waitfng [A-Za-z_]+\.fng satisfied' "$LOG" | awk '{print $4}' | tr '\n' ' ')
+grep -q 'waitfng .* TIMEOUT\|tapuntil .* TIMEOUT' "$LOG" && fail "a screen did not come up: $(grep -m1 'TIMEOUT' "$LOG")"
+# each screen once, however many of its states the script waited for (MainMenu.fng@HASH: the package's name)
+got=$(grep -oE '^\[autotest\] f=[0-9]+ waitfng [A-Za-z_]+\.fng[^ ]* satisfied' "$LOG" | awk '{ sub(/[:@^'\''].*/, "", $4); print $4 }' | uniq | tr '\n' ' ')
 want='MainMenu.fng MainMenu_Sub.fng Options.fng MainMenu_Sub.fng MainMenu.fng '
 [ "$got" = "$want" ] || fail "the screens came up as '$got', not '$want'"
 # the held Down arrow (DIK 0xD0): down in a snapshot before the focus loss, up in a snapshot between the focus loss
