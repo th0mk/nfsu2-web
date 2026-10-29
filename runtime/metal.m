@@ -3591,6 +3591,11 @@ void metal_resize(unsigned w, unsigned h){
 void metal_set_stage_tex(unsigned t1, unsigned t2, unsigned t3){
     g_cur_tex1 = t1; g_cur_tex2 = t2; g_cur_tex3 = t3;
 }
+/* stages 4-7 (com.c, a game with 8 stages): the Mac renderer has 4 */
+void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]){ (void)t; (void)k; }
+void metal_set_depth_bias(unsigned b){ (void)b; }
+unsigned metal_create_texture_depth(unsigned w, unsigned h, unsigned f){ (void)w; (void)h; (void)f; return 0; }
+int metal_tex_is_depth(unsigned id){ (void)id; return 0; }
 /* The guest's active pixel shader and its constants. */
 void metal_set_ps(int psid, const float *c32){
     g_cur_ps = psid;

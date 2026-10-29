@@ -153,7 +153,13 @@ The older models' path keeps the Mac's semantics and, with 4 stages, is unchange
 and its 45 distinct shaders in SPEED2.EXE (18 vs_1_1, 22 ps_1_1, 3 ps_1_4, 2 ps_2_0) translate to the same bytes as
 before, with the same `.pvec` vectors. With 8 stages its modules (Most Wanted's other 75 shaders: 29 vs_1_1, 28
 ps_1_1, 3 ps_1_4, 15 ps_2_0) are checked against `vs_run` and `ps_ref_run`, which follow the 8-stage rules too
-(gpu-abi.md §9), not against psref.
+(gpu-abi.md §9), not against psref. One of those rules is D3D9's and not the Mac's: with 8 stages a ps_2_0 `texldp`
+divides x, y and z by w (both sides; with 4 stages it reads xy as it always did).
+
+**Depth stages** (gpu-abi.md §11.4): `wgsl_set_depth_stages(mask)` before a pixel translation makes each 2D stage in
+the mask a `texture_depth_2d` with a `sampler_comparison` (binding kind 2), and its lookups (`texld`, `texldp`, ps_1_x
+`tex`) `vec4f(textureSampleCompareLevel(texK, smpK, uv, ref))` with uv and ref after the divide the instruction asks
+for. The game's draws ask for such a variant when a depth texture is bound (gpu_web.c `ps_depth`).
 
 - **Registers.** r0..r31; ps_2_x t0..t7 and v0/v1 (a colour outside its declaration reads (0, 0, 0, 1)); ps_3_0
   v0..v9 and vs_3_0 o0..o11 by their declarations, packed ones included (texcoord N = `uvN`, color0/1 = `col0/col1`,

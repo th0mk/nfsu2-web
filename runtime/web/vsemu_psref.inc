@@ -105,7 +105,11 @@ int ps_ref_run(const VSProg *p, const PSRefPar *P, const PSRefIn *in, PSRefTex t
         case O_TEX: case O_TEXLDD: case O_TEXLDL: {
             int dn = RN(x->dst) & tm, smp;
             float c[3];
-            if (x->nsrc >= 2){ smp = RN(x->src[1]) & tm; c[0] = s[0][0]; c[1] = s[0][1]; c[2] = s[0][2]; }
+            if (x->nsrc >= 2){
+                smp = RN(x->src[1]) & tm; c[0] = s[0][0]; c[1] = s[0][1]; c[2] = s[0][2];
+                /* ps_2_0 texldp with 8 stages: divided by w, as D3D9 (and the translator) */
+                if (tm == 7 && x->op == O_TEX && x->cmp == 1u){ c[0] /= s[0][3]; c[1] /= s[0][3]; c[2] /= s[0][3]; }
+            }
             else if (x->nsrc == 1 && RT(x->src[0]) == R_ADDR){
                 int m = RN(x->src[0]) & 3; smp = dn;
                 if ((cubemask >> smp) & 1u){ c[0] = in->uv[m][0]; c[1] = in->uv[m][1]; c[2] = in->uv[m][2]; }

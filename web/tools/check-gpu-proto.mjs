@@ -44,7 +44,7 @@ const consts = {
   OP_POOL_GROW: 'GW_POOL_GROW', OP_POOL_WRITE: 'GW_POOL_WRITE', OP_SHADER_VS: 'GW_SHADER_VS', OP_SHADER_PS: 'GW_SHADER_PS',
   OP_Z_FORGET: 'GW_Z_FORGET', TF_RT: 'GW_TF_RT', TF_CUBE: 'GW_TF_CUBE', TF_DEPTH: 'GW_TF_DEPTH',
   FEAT_BC: 'GW_FEAT_BC', FEAT_SWIZZLE: 'GW_FEAT_SWIZZLE',
-  Z_TEX: 'GW_Z_TEX', PS_DEPTH_SHIFT: 'GW_PS_DEPTH_SHIFT', STAGES_MAX: 'GW_STAGES_MAX',
+  Z_TEX: 'GW_Z_TEX', ZBIAS_SHIFT: 'GW_ZBIAS_SHIFT', PS_DEPTH_SHIFT: 'GW_PS_DEPTH_SHIFT', STAGES_MAX: 'GW_STAGES_MAX',
   BK_2D: 'GW_BK_2D', BK_CUBE: 'GW_BK_CUBE', BK_DEPTH: 'GW_BK_DEPTH',
 };
 // GW_BK over a kinds word with every value at some stage: stage k of KINDS_WORD
@@ -91,7 +91,7 @@ eq('GW_CMD_HDR', C['CMD_HDR'], T.CMD_HDR);
 eq('GW_DRAW', C['KIND_DRAW'], T.Kind.Draw); eq('GW_CLEAR', C['KIND_CLEAR'], T.Kind.Clear); eq('GW_BLIT', C['KIND_BLIT'], T.Kind.Blit);
 for (const [c, t] of [['PAD', 'Pad'], ['TEX_CREATE', 'TexCreate'], ['TEX_UPLOAD', 'TexUpload'], ['TEX_FREE', 'TexFree'], ['POOL_GROW', 'PoolGrow'],
   ['POOL_WRITE', 'PoolWrite'], ['SHADER_VS', 'ShaderVs'], ['SHADER_PS', 'ShaderPs'], ['Z_FORGET', 'ZForget']]) eq(`GW_${c}`, C[`OP_${c}`], T.Op[t]);
-for (const n of ['TF_RT', 'TF_CUBE', 'TF_DEPTH', 'FEAT_BC', 'FEAT_SWIZZLE', 'Z_TEX', 'PS_DEPTH_SHIFT', 'STAGES_MAX', 'BK_2D', 'BK_CUBE', 'BK_DEPTH'])
+for (const n of ['TF_RT', 'TF_CUBE', 'TF_DEPTH', 'FEAT_BC', 'FEAT_SWIZZLE', 'Z_TEX', 'ZBIAS_SHIFT', 'PS_DEPTH_SHIFT', 'STAGES_MAX', 'BK_2D', 'BK_CUBE', 'BK_DEPTH'])
   eq(`GW_${n}`, C[n], T[n]);
 
 // shader-abi.ts: the group 1 layouts (gpu-abi.md sections 2 and 11)

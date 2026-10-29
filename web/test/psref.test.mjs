@@ -111,6 +111,9 @@ test('WGSL translator: every shader of Most Wanted\'s 31 effects, for 8 stages',
   const fx = fs.readdirSync(res).filter(f => f.endsWith('.fxo')).sort().map(f => path.join(res, f));
   const out = run(XL, ['--stages', '8', '--fx', dir, ...fx]);
   assert.match(out, /^31 effects: 95 distinct shaders \(30 vertex, 65 pixel\), 47 repeated; 0 translation failures$/m, out);
+  // each pixel shader's depth variant (every 2D stage sampled with a depth compare, gpu-abi.md 11.4) translates
+  const dv = /^depth variants: 65 pixel shaders, (\d+) with a depth lookup, 0 failures$/m.exec(out);
+  assert.ok(dv && +dv[1] > 0, out);
   const first = f => fs.readFileSync(path.join(dir, f), 'utf8').split('\n')[0];
   const models = {};
   for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.wgsl'))) {

@@ -26,6 +26,10 @@ unsigned wgsl_get_stages(void);
 /* The binding kinds (GW_BK_*, 2 bits per stage) of the last pixel shader
  * translated: how its module declares each stage (GW_SHADER_PS a[2]). */
 unsigned wgsl_ps_kinds(void);
+/* The stages (bit k) that sample a depth texture with a depth compare in the
+ * pixel shaders translated until it is set again: a draw's depth variant
+ * (gpu-abi.md section 11.4).  8 stages only; 0 = none (the default). */
+void wgsl_set_depth_stages(unsigned mask);
 /* Why the last ps_2_x, ps_3_0 or vs_3_0 translation returned 0 ("" when it
  * did not; runtime/web/vsemu_sm3.inc). */
 const char *wgsl_refusal(void);

@@ -289,10 +289,11 @@ through `vs_0`.
 ## 11. Most Wanted: 8 texture stages, binding kinds, depth textures (GW_VERSION 6)
 
 The additions Most Wanted's shaders need, written before the translator, D3DX and renderer work split (MW tracker
-M1-24). They are the contract; nothing here is implemented beyond the protocol (`gpu_proto.h`, `proto.ts`), the group 1
-layouts (`shader-abi.ts` `group1Entries`) and their check (`web/tools/check-gpu-proto.mjs`), and the translator's side:
-modules for 8 stages (`wgsl_set_stages(8)`, which nothing in the game calls yet), a pixel module's binding kinds
-(`wgsl_ps_kinds()`, not yet sent in `GW_SHADER_PS` a[2]) and ps_2_x, ps_3_0 and vs_3_0 (psref.md). **UG2 uses none of it**:
+M1-24). They are the contract, and implemented: a game whose GameOps has `gpu_stages = 8` (Most Wanted's) gets them
+from `gpu_web.c` (`GwCtl.stages`, `GwDraw.tex4..7` and `smphi` from com.c's stages 4-7, the kinds word of each pixel
+module, depth textures and their variants), the translator (`wgsl_set_stages(8)`, `wgsl_ps_kinds()`,
+`wgsl_set_depth_stages()`, ps_2_x, ps_3_0 and vs_3_0: psref.md) and the page (`encoder.ts`: group 1 by kinds, the
+stand-ins, the comparison samplers, depth textures as Z). **UG2 uses none of it**: its GameOps leaves `gpu_stages` 0,
 every new field is 0 in UG2's records, and 0 means exactly what the protocol meant before version 6.
 
 ### 11.1 What the game's shaders use
@@ -375,8 +376,10 @@ Each pixel shader module record says how the module declares each stage's textur
 - **As a texture.** At each draw the game finds the stages whose bound texture is a depth texture and draws with module
   `ps = shader | 256 × (stage-0 cube twin) | stages << GW_PS_DEPTH_SHIFT` (bit 9 + k for stage k). The first draw that
   needs such a variant registers it under that whole id: the same shader translated with those stages of kind 2. Its
-  record precedes the frame in the resource queue, as every shader's does. UG2 never sets bits 9 and up. (gpu_web.c's
-  shader table holds ids below 512 today; the implementation widens it.)
+  record precedes the frame in the resource queue, as every shader's does. UG2 never sets bits 9 and up. (gpu_web.c
+  keeps the variants it registered in a bitmap of ids below 2^17, com.c keeps each pixel shader's program for them
+  (`com_ps_depth_variant`), and the page gives a variant a pipeline-key slot of 512..1023; a variant that does not
+  translate is logged once and the draw keeps the shader's own module, whose stage then gets the 2D stand-in.)
 - **Sampling** (NVIDIA's hardware shadow maps: the vendor id 0x10DE takes MW to them). `texld`, `texldp` and ps_1_x `tex`
   on a depth stage take the coordinate after the divide the instruction asks for (`texldp`: xyz / w; ps_1_x: the
   P.proj divide) and return `vec4f(textureSampleCompareLevel(texK, smpK, q.xy, q.z))`: the comparison result in all

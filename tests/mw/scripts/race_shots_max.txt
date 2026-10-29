@@ -1,0 +1,48 @@
+# Most Wanted: race pictures at the highest Shadow Detail (race_shots.txt with g_ShadowDetail set to 2, the maximum
+# [0x9018B8] the game offers at SM3; TRACKER M5-14).  race_shots.txt's header:
+# Most Wanted: race pictures (TRACKER M5-13, M5-14, M3-19): the Custom Race circuit of race_frames.txt (its header
+# says the menu path: City Perimeter, the first car, automatic gears), the shadow options logged at the front end and
+# again on the track (g_ShadowDetail [0x901830], its maximum [0x9018B8], the hardware shadow map's kind [0x982C08]:
+# 1 = a D24S8 depth texture sampled with a compare, GAME.md 5.6), then the game's AI drives (autopilot) and the race
+# is dumped at the start line, after 300 and after 900 frames, each twice, 3 frames apart (a renderer that falls
+# behind drops a flagged frame).  With NFSMW_FXCENSUS=1 in an oracle build the log names each technique as a draw
+# site first sets it (the effect census, runtime/mw/fxcensus_mw.c).  It needs the renderer: the play page
+# (test/play.html), as fe_refshots.txt; e.g. &script=/tests/scripts/race_shots.txt&artifacts=/artifacts/race_
+# &dumpscale=1&w=1280&h=720.  The pictures are the game's: they stay out of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x00901830                 # g_ShadowDetail
++0    peek 0x009018b8                 # its maximum
++0    peek 0x00982c08                 # the shadow map's kind
++0    poke 0x00901830 2               # Shadow Detail at its maximum (as the Video options set it, without their Reset)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++30   tap RETURN                                         # (at once, a slow renderer's dialog missed it)
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_shots: GO
++0    peek 0x00901830
++0    peek 0x009018b8
++0    peek 0x00982c08
++0    dump race_go
++3    dump race_go
++0    autopilot on
++300  dump race_300
++3    dump race_300
++600  dump race_900
++3    dump race_900
++0    log race_shots: done
++0    close

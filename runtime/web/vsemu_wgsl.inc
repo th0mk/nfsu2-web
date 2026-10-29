@@ -53,6 +53,11 @@ unsigned wgsl_get_stages(void){ return g_wstages; }
 /* binding kinds (GW_BK_*, 2 bits per stage) of the last pixel shader translated */
 static unsigned g_wkinds;
 unsigned wgsl_ps_kinds(void){ return g_wkinds; }
+/* the stages (bit k) whose texture is a depth texture, for the pixel shaders
+ * translated until it is set again (gpu-abi.md 11.4: a draw's depth variant);
+ * 8 stages only, 2D stages only */
+static unsigned g_wdepth;
+void wgsl_set_depth_stages(unsigned mask){ g_wdepth = g_wstages == 8 ? mask & 0xFFu : 0u; }
 
 /* ---- shared module text (gpu-abi.md sections 2-5) ---- */
 static const char W_VOUT[] =
@@ -153,19 +158,23 @@ static const char W_PSPAR[] =
     "  return q.xy / select(select(1.0, q.z, m == 1), q.w, m == 2);\n"
     "}\n";
 
-static void w_textures(WBuf *b, unsigned cubemask){
+/* a stage's texture and sampler types: a depth stage (wgsl_set_depth_stages, never
+ * with 4 stages) is texture_depth_2d with a comparison sampler */
+static const char *w_textype(unsigned cubemask, unsigned depthmask, int k){
+    return ((depthmask >> k) & 1u) ? "texture_depth_2d" : ((cubemask >> k) & 1u) ? "texture_cube<f32>" : "texture_2d<f32>";
+}
+static const char *w_smptype(unsigned depthmask, int k){ return ((depthmask >> k) & 1u) ? "sampler_comparison" : "sampler"; }
+static void w_textures(WBuf *b, unsigned cubemask, unsigned depthmask){
     for (int k = 0; k < 4; k++)
-        wb_put(b, "@group(1) @binding(%d) var tex%d: %s;\n", k, k,
-               ((cubemask >> k) & 1u) ? "texture_cube<f32>" : "texture_2d<f32>");
+        wb_put(b, "@group(1) @binding(%d) var tex%d: %s;\n", k, k, w_textype(cubemask, depthmask, k));
     for (int k = 0; k < 4; k++)
-        wb_put(b, "@group(1) @binding(%d) var smp%d: sampler;\n", 4 + k, k);
+        wb_put(b, "@group(1) @binding(%d) var smp%d: %s;\n", 4 + k, k, w_smptype(depthmask, k));
     /* 8 stages: stages 4..7 after them (texBinding/smpBinding in shader-abi.ts) */
     if (g_wstages == 8){
         for (int k = 4; k < 8; k++)
-            wb_put(b, "@group(1) @binding(%d) var tex%d: %s;\n", k + 4, k,
-                   ((cubemask >> k) & 1u) ? "texture_cube<f32>" : "texture_2d<f32>");
+            wb_put(b, "@group(1) @binding(%d) var tex%d: %s;\n", k + 4, k, w_textype(cubemask, depthmask, k));
         for (int k = 4; k < 8; k++)
-            wb_put(b, "@group(1) @binding(%d) var smp%d: sampler;\n", k + 8, k);
+            wb_put(b, "@group(1) @binding(%d) var smp%d: %s;\n", k + 8, k, w_smptype(depthmask, k));
     }
 }
 
@@ -348,6 +357,11 @@ int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cube
             if (p->smptype[k] == 4) return 0;
             if (p->smptype[k] == 3){ cubemask |= 1u << k; g_wkinds |= GW_BK_CUBE << (2 * k); }
         }
+    /* the depth stages of a draw's depth variant (wgsl_set_depth_stages; 8 stages only) */
+    const unsigned dmask = g_wdepth & ~cubemask & (smask == 7u ? 0xFFu : 0xFu);
+    for (int k = 0; k < 8; k++) if ((dmask >> k) & 1u) g_wkinds |= GW_BK_DEPTH << (2 * k);
+    /* ps_2_0's texldp divides its coordinate by w (8 stages: D3D9's rule; with 4 the Mac's, which reads xy) */
+    const int pdiv = g_wstages == 8 && p->version >= 0x0200;
     WCtx x; memset(&x, 0, sizeof x); x.p = p; x.vs = 0;
     char *bodybuf = malloc(cap);
     if (!bodybuf) return 0;
@@ -407,9 +421,24 @@ int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cube
             else if (y->nsrc == 1){ smp = dn; cs = s0; }
             else { smp = dn; crd = dn; }
             int cube = (cubemask >> smp) & 1u;
-            if (crd >= 0){
+            int proj = pdiv && y->op == O_TEX && y->cmp == 1u && y->nsrc >= 2;     /* ps_2_0 texldp */
+            if ((dmask >> smp) & 1u){
+                /* a depth texture (gpu-abi.md 11.4): the coordinate after the divide the
+                 * instruction asks for, the comparison result in all four components */
+                if (crd >= 0)
+                    w = snprintf(ex, WEX, "vec4f(textureSampleCompareLevel(tex%d, smp%d, tc%d, i.uv%d.z / "
+                                 "select(select(1.0, i.uv%d.z, (i32(P.proj[%d]) >> 4u) == 1), i.uv%d.w, (i32(P.proj[%d]) >> 4u) == 2)))",
+                                 smp, smp, crd, crd, crd, crd, crd, crd);
+                else if (proj)
+                    w = snprintf(ex, WEX, "vec4f(textureSampleCompareLevel(tex%d, smp%d, (%s).xy / (%s).w, (%s).z / (%s).w))",
+                                 smp, smp, cs, cs, cs, cs);
+                else
+                    w = snprintf(ex, WEX, "vec4f(textureSampleCompareLevel(tex%d, smp%d, (%s).xy, (%s).z))", smp, smp, cs, cs);
+            } else if (crd >= 0){
                 if (cube) w = snprintf(ex, WEX, "textureSample(tex%d, smp%d, i.uv%d.xyz)", smp, smp, crd);
                 else      w = snprintf(ex, WEX, "textureSample(tex%d, smp%d, tc%d)", smp, smp, crd);
+            } else if (proj){
+                w = snprintf(ex, WEX, "textureSample(tex%d, smp%d, (%s).%s / (%s).w)", smp, smp, cs, cube ? "xyz" : "xy", cs);
             } else {
                 w = snprintf(ex, WEX, "textureSample(tex%d, smp%d, (%s).%s)", smp, smp, cs, cube ? "xyz" : "xy");
             }
@@ -505,7 +534,7 @@ int ps_to_wgsl_ex2(const VSProg *p, int id, char *out, size_t cap, unsigned cube
            p->n, (cubemask & 1u) ? ", stage 0 cube" : "", hl_used ? ", other cars' headlights" : "", w_st8());
     if (g_wkinds) wb_put(&ob, ", kinds 0x%x", g_wkinds);
     wb_put(&ob, "\n%s%s", w_vout(), W_PSPAR);
-    w_textures(&ob, cubemask);
+    w_textures(&ob, cubemask, dmask);
     if (hl_used) wb_put(&ob, "%s", W_HL);
     wb_put(&ob, "@fragment fn ps_%d(i: VOut) -> @location(0) vec4f {\n", id);
     w_decls(&ob, &x, 16);
@@ -760,7 +789,7 @@ int wgsl_ff_module(int id, char *out, size_t cap, unsigned cubemask){
     int cube = cubemask & 1u;
     wb_put(&ob, "// ps_%d: fixed-function fragment col0 * tex0 (metal.m fmain)%s%s\n", id, cube ? ", stage 0 cube" : "", w_st8());
     wb_put(&ob, "%s%s", w_vout(), W_PSPAR);
-    w_textures(&ob, cubemask);
+    w_textures(&ob, cubemask, 0u);
     wb_put(&ob, "@fragment fn ps_%d(i: VOut) -> @location(0) vec4f {\n"
                 "  return ps_end(i.col0 * textureSample(tex0, smp0, i.uv0.%s), i.fog);\n}\n",
            id, cube ? "xyz" : "xy");

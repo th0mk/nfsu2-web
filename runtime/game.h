@@ -170,6 +170,15 @@ typedef struct GameOps {
                                      * offer only what the renderer draws and makes, a texture the renderer could not
                                      * make fails its CreateTexture; and the renderer's own limit: a back buffer past
                                      * 8192 a side, which it cannot resize to, fails Reset; 0 = UG2's */
+    int gpu_stages;                 /* 8: every draw and shader module has 8 texture stages (docs/web/gpu-abi.md
+                                     * section 11.2: GwCtl.stages, GwDraw.tex4-7 and smphi, VOut uv4..uv7), a pixel
+                                     * module's record names its binding kinds (11.3), and a depth-stencil texture
+                                     * (D16, D24X8, D24S8) is made and sampled with a depth compare (11.4);
+                                     * 0 = UG2's 4 stages and none of it */
+    int d3d_sm3;                    /* 1: the caps report vs_3_0 and ps_3_0 (D3DCAPS9 offsets 196 and 204) with
+                                     * the fields that go with them (VS20Caps and PS20Caps with 32 temporaries, the
+                                     * 3.0 instruction slots); 0 = UG2's 2.0 caps.  D3D_SM in the environment
+                                     * overrides either (com.c fill_caps) */
     int vclock_sleep_real;          /* 1: a Sleep of the game's main thread moves the virtual clock by at least
                                      * its real length, also in a frame past the in-frame cap (win32.c), so a
                                      * speed test that sleeps between two clock reads sees its sleep; 0 = UG2's

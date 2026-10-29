@@ -144,6 +144,10 @@ WEAK void metal_set_ps(int id, const float *c){ (void)id; (void)c; }
 WEAK void metal_set_render_target(unsigned t){ (void)t; }
 WEAK void metal_set_samplers(const unsigned k[4]){ (void)k; }
 WEAK void metal_set_stage_tex(unsigned a, unsigned b, unsigned c3){ (void)a; (void)b; (void)c3; }
+WEAK void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]){ (void)t; (void)k; }
+WEAK unsigned metal_create_texture_depth(unsigned w, unsigned h, unsigned f){ (void)w; (void)h; (void)f; return 0; }
+WEAK int metal_tex_is_depth(unsigned id){ (void)id; return 0; }
+WEAK void metal_set_depth_bias(unsigned b){ (void)b; }
 WEAK void metal_set_texproj(const float p[4]){ (void)p; }
 WEAK void metal_set_ui_aspect(float ax, float ay){ (void)ax; (void)ay; }
 WEAK void metal_set_zsurf(unsigned z){ (void)z; }

@@ -49,6 +49,9 @@
 
 static char g_buf[256 * 1024];
 /* the SM3-class version tokens, whose oracle is psref */
+/* --fx with 8 stages: each pixel shader's depth variant too (every 2D stage a depth stage, gpu-abi.md 11.4):
+ * translated and counted, not written (the game asks for them at its draws, gpu_web.c ps_depth) */
+static int g_dv, g_dv_fail, g_dv_depth;
 static int is_sm3(uint32_t v){ return v == PSREF_PS_2_X || v == PSREF_PS_3_0 || v == PSREF_VS_3_0; }
 static int write_sm3_ps_vectors(const char *dir, int id, const uint32_t *tok, size_t ndw);
 static int write_sm3_vs_vectors(const char *dir, int id, const uint32_t *tok, size_t ndw, const int dcl[16][2]);
@@ -626,6 +629,14 @@ static int translate_one(const char *dir, FILE *ix, const uint32_t *tok, size_t 
         char why[256]; snprintf(why, sizeof why, "%s", sm3 ? wgsl_refusal() : "");
         if (n > 0){ snprintf(name, sizeof name, "ps_%d.wgsl", id); put(dir, name, g_buf, (size_t)n); }
         else ok = 0;
+        if (n > 0 && g_dv >= 0 && wgsl_get_stages() == 8){
+            wgsl_set_depth_stages(0xFFu);
+            int nd = ps_to_wgsl_ex(p, id | 0xFF << 9, g_buf, sizeof g_buf, 0u);
+            wgsl_set_depth_stages(0);
+            g_dv++;
+            if (nd <= 0){ g_dv_fail++; fprintf(stderr, "%s: no depth variant\n", base); }
+            else if (strstr(g_buf, "textureSampleCompareLevel")) g_dv_depth++;      /* it looks a depth stage up */
+        }
         int nc = ps_to_wgsl_ex(p, id + 256, g_buf, sizeof g_buf, 1u);
         if (nc > 0){ snprintf(name, sizeof name, "ps_%d.wgsl", id + 256); put(dir, name, g_buf, (size_t)nc); }
         /* an SM3-class shader that looks up a 2D s0 has no stage-0 cube twin (D3D9 binds no cube there) */
@@ -717,7 +728,9 @@ static int fx(const char *dir, int nf, char **files){
     fclose(ix);
     printf("%d effects: %d distinct shaders (%d vertex, %d pixel), %d repeated; %d translation failures\n",
            nf, nvs + nps, nvs, nps, dups, fails);
-    return fails ? 1 : 0;
+    if (wgsl_get_stages() == 8)
+        printf("depth variants: %d pixel shaders, %d with a depth lookup, %d failures\n", g_dv, g_dv_depth, g_dv_fail);
+    return fails || g_dv_fail ? 1 : 0;
 }
 
 int main(int argc, char **argv){

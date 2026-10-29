@@ -547,6 +547,11 @@ static int s3_hoistable(const S3Prog *p, const S3Opd *o){
     }
 }
 
+/* stage s samples a depth texture with a depth compare: the depth stages of
+ * the module being translated (wgsl_set_depth_stages, a draw's depth variant),
+ * a 2D sampler only */
+static int s3_depth(const S3Prog *p, int s){ return s >= 0 && s < 8 && (g_wdepth >> s & 1u) && p->smp[s] == 2; }
+
 /* texld, texldp, texldb, texldl, texldd */
 static int s3_tex(S3Ctx *x, const S3Ins *y){
     const S3Prog *p = x->p;
@@ -563,6 +568,17 @@ static int s3_tex(S3Ctx *x, const S3Ins *y){
     int proj = y->op == S3_TEX && (y->ctrl & 3u) == 1, bias = y->op == S3_TEX && (y->ctrl & 3u) == 2;
     if (y->op == S3_TEX && (y->ctrl & 3u) == 3) return s3_fail("an unknown texld variant");
     if (!S3SRC(&y->src[0], 4, T->a) || !s3_pf(T->pre, sizeof T->pre, "let q = %s;", T->a)) return 0;
+    if (s3_depth(p, s)){
+        /* a depth texture (docs/web/gpu-abi.md 11.4, NVIDIA's hardware shadow
+         * map): the coordinate after the divide the instruction asks for
+         * (texldp: xyz / w), and the comparison result (LESSEQUAL; the
+         * sampler's filter, linear being the 2x2 PCF) in all four components.
+         * Level 0, the only one; allowed in any flow.  A bias, level or
+         * gradients have nothing to choose from. */
+        if (!s3_pf(T->val, sizeof T->val, proj ? "vec4f(textureSampleCompareLevel(tex%d, smp%d, q.xy / q.w, q.z / q.w))"
+                                               : "vec4f(textureSampleCompareLevel(tex%d, smp%d, q.xy, q.z))", s, s)) return 0;
+        return s3_store(x, y, T->pre, T->val, 2, y->src[1].swz);
+    }
     char crd[32];
     snprintf(crd, sizeof crd, proj ? "q.%s / q.w" : "q.%s", cs);
     int ok;
@@ -897,6 +913,7 @@ static int s3_vfield(int usage, int index, char *out, size_t cap){
 static unsigned s3_kinds(const S3Prog *p, unsigned used){
     unsigned k = 0;
     for (int s = 0; s < 8; s++) if ((used >> s & 1u) && p->smp[s] == 3) k |= GW_BK_CUBE << (2 * s);
+    for (int s = 0; s < 8; s++) if ((used >> s & 1u) && s3_depth(p, s)) k |= GW_BK_DEPTH << (2 * s);
     return k;
 }
 
@@ -928,8 +945,10 @@ static void s3_kc(WBuf *ob, const S3Prog *p){
 static void s3_textures(WBuf *ob, const S3Prog *p, unsigned used){
     for (int s = 0; s < 8; s++){
         if (!(used >> s & 1u)) continue;
-        wb_put(ob, "@group(1) @binding(%d) var tex%d: %s;\n", s < 4 ? s : s + 4, s, p->smp[s] == 3 ? "texture_cube<f32>" : "texture_2d<f32>");
-        wb_put(ob, "@group(1) @binding(%d) var smp%d: sampler;\n", s < 4 ? s + 4 : s + 8, s);
+        int dep = s3_depth(p, s);
+        wb_put(ob, "@group(1) @binding(%d) var tex%d: %s;\n", s < 4 ? s : s + 4, s,
+               dep ? "texture_depth_2d" : p->smp[s] == 3 ? "texture_cube<f32>" : "texture_2d<f32>");
+        wb_put(ob, "@group(1) @binding(%d) var smp%d: %s;\n", s < 4 ? s + 4 : s + 8, s, dep ? "sampler_comparison" : "sampler");
     }
 }
 

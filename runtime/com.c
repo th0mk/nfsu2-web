@@ -794,6 +794,16 @@ static void rs_apply(void){
       unsigned zf = g_rs[23] ? (g_rs[23] & 7u) : 4u;
       unsigned dm = (g_rs[7] ? 1u : 0u) | (g_rs[14] ? 2u : 0u) | (zf << 2);
       metal_set_depth(dm); }
+    /* 8 stages (Most Wanted): 195=DEPTHBIAS and 175=SLOPESCALEDEPTHBIAS, floats; its shadow-map pass sets
+     * 2^-22 (4 units of a 24-bit Z) and 4.0.  Packed as gpu_proto.h GW_ZBIAS_SHIFT says: 4 bits each */
+    if (g_game.gpu_stages == 8){
+        void metal_set_depth_bias(unsigned);
+        float cb, sb; memcpy(&cb, &g_rs[195], 4); memcpy(&sb, &g_rs[175], 4);
+        float u = cb * 16777216.f;
+        unsigned cu = (u > 0.f) ? (u >= 15.f ? 15u : (unsigned)lroundf(u)) : 0u;
+        unsigned su = (sb > 0.f) ? (sb >= 15.f ? 15u : (unsigned)lroundf(sb)) : 0u;
+        metal_set_depth_bias(cu | su << 4);
+    }
 }
 static uint64_t g_rt_set=0, g_rt_screen=0;
 static uint64_t g_rt_tex=0;
@@ -1389,6 +1399,29 @@ int com_ps_refl_variant(int base, int cube, int k, int vid){
     return 1;
 }
 #endif
+/* With 8 stages (GameOps gpu_stages): each pixel shader's program, kept for
+ * the depth variants a draw may need (gpu_web.c rec_draw, gpu-abi.md 11.4) */
+static VSProg *g_ps8[PSCUBE];
+/* register module `full`: pixel shader id (full & 0xFF), its stage-0 cube
+ * twin (bit 8) and the stages that sample a depth texture (bits 9+); 1 when
+ * it is translated */
+int com_ps_depth_variant(unsigned full){
+#ifdef __wasm__
+    unsigned id = full & 0xFFu, cube = (full >> 8) & 1u, dm = full >> 9;
+    if (!id || !dm || !g_ps8[id]) return 0;
+    static char msl[SHADER_TEXT_CAP];
+    wgsl_set_depth_stages(dm);
+    int n = ps_to_wgsl_ex(g_ps8[id], (int)full, msl, sizeof msl, cube);
+    wgsl_set_depth_stages(0);
+    if (wgsl_dump_on()) wgsl_dump_ps((int)full, (int)id, msl, n);
+    if (n <= 0) return 0;
+    void metal_register_ps(int, const char *);
+    metal_register_ps((int)full, msl);
+    return 1;
+#else
+    (void)full; return 0;
+#endif
+}
 static uint32_t g_req_w = 0, g_req_h = 0;   /* the resolution the game believes it has */
 unsigned long g_asp_persp = 0, g_asp_ortho = 0;
 /* Perspective draws the renderer rescaled into an off-screen target
@@ -1637,8 +1670,9 @@ static const VSConst *fixmat_apply(const VSConst *vsk){
  * Previously all of it was ignored and everything was drawn linear+mip-linear. */
 static void smp_push(void){
     void metal_set_samplers(const unsigned k[4]);
-    unsigned k[4];
-    for (int st = 0; st < 4; st++){
+    unsigned k[8];
+    const int n = g_game.gpu_stages == 8 ? 8 : 4;
+    for (int st = 0; st < n; st++){
         unsigned mn = g_smp_raw[st][6], mg = g_smp_raw[st][5], mp = g_smp_raw[st][7];
         unsigned au = g_smp_raw[st][1], av = g_smp_raw[st][2], an = g_smp_raw[st][10];
         if (mn < 1u || mn > 3u) mn = 2u;          /* invalid/unset -> LINEAR */
@@ -1652,6 +1686,16 @@ static void smp_push(void){
               | ((au & 7u) << 6) | ((av & 7u) << 9) | ((al & 7u) << 12);
     }
     metal_set_samplers(k);
+    if (n == 8){
+        /* stages 4-7 (docs/web/gpu-abi.md 11.2): their textures and sampler keys */
+        void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]);
+        unsigned t[4];
+        for (int st = 4; st < 8; st++){
+            uint32_t to = g_raw_tex[st];
+            t[st - 4] = (to && mem_is_committed(to+28)) ? MR32(to+28) : 0;
+        }
+        metal_set_stage_hi(t, k + 4);
+    }
 }
 
 static void texproj_push(void){
@@ -2701,7 +2745,12 @@ int com_call(CPU *c, uint32_t magic){
              * Wanted asks for D24S8 at 0x6C1725 and 'DF16' at 0x6C175D and creates its shadow map in the
              * one it is given, 0x6C87A2).  A plain surface and a buffer: any. */
             uint32_t usage = A(c,4), rtype = A(c,5), f = A(c,6), ok;
-            if (rtype >= 3u && rtype <= 5u) ok = !(usage & 2u) && fmt_makes(f);  /* D3DUSAGE_DEPTHSTENCIL 2 */
+            /* With 8 stages (GameOps gpu_stages) the renderer has depth textures: D16, D24X8 and D24S8 as a
+             * 2D texture with D3DUSAGE_DEPTHSTENCIL (docs/web/gpu-abi.md 11.4), sampled with a hardware compare
+             * as NVIDIA's; 'DF16', 'DF24', 'INTZ' and the rest D3DERR_NOTAVAILABLE, so Most Wanted takes the
+             * D24S8 shadow map (0x6C1725) and not the raw-depth one ('DF16', 0x6C175D) */
+            if (rtype == 3u && (usage & 2u) && g_game.gpu_stages == 8) ok = f == 75u || f == 77u || f == 80u;
+            else if (rtype >= 3u && rtype <= 5u) ok = !(usage & 2u) && fmt_makes(f);  /* D3DUSAGE_DEPTHSTENCIL 2 */
             else if (rtype == 1u) ok = (usage & 2u) ? fmt_is_depth(f) : (usage & 1u) ? fmt_makes(f) : 1;
             else ok = 1;
             r = ok ? 0u : 0x8876086Au; }                                       /* D3DERR_NOTAVAILABLE */
@@ -3592,7 +3641,11 @@ int com_call(CPU *c, uint32_t magic){
             if (ekind == ENH_ROAD){ mlev = 1u; for (uint32_t q = mw > mh ? mw : mh; q > 1u; q >>= 1) mlev++; }
             if (metal_available()){
                 /* D3DUSAGE_RENDERTARGET = 1 */
-                uint32_t tid = metal_create_texture_ex(mw,mh,mlev,fmt,(usage & 1u)?1u:0u);
+                /* D3DUSAGE_DEPTHSTENCIL = 2: a depth texture (D16, D24X8, D24S8) with 8 stages */
+                unsigned metal_create_texture_depth(unsigned, unsigned, unsigned);
+                uint32_t tid = (g_game.gpu_stages == 8 && (usage & 2u))
+                    ? metal_create_texture_depth(mw,mh,fmt)
+                    : metal_create_texture_ex(mw,mh,mlev,fmt,(usage & 1u)?1u:0u);
                 MR32(t+28)=tid;
                 if (ekind == ENH_ROAD && tid){ void metal_hd_mark_road(unsigned,unsigned,unsigned);
                                                metal_hd_mark_road(tid, w, h); }
@@ -3604,7 +3657,7 @@ int com_call(CPU *c, uint32_t magic){
                     if (sr3<6){ sr3++;
                         fprintf(stderr,"  [RT-tex] %ux%u fmt=%u levels=%u -> id=%u\n",
                                 w,h,fmt,lev?lev:1u,tid); } }
-                if (tid && !(usage & 1u)) texrep_created(tid, w, h, mlev, fmt, usage, pool);
+                if (tid && !(usage & 3u)) texrep_created(tid, w, h, mlev, fmt, usage, pool);
                 if (!tid){ g_tex_fail++;
                     static uint32_t bad[16]; static int nb=0; int seen=0;
                     for (int q=0;q<nb;q++) if (bad[q]==fmt) seen=1;
@@ -3761,6 +3814,12 @@ int com_call(CPU *c, uint32_t magic){
             if (sf){
                 zid = 1;   /* unrecognised surface: implicit */
                 if (mem_is_committed(sf+59) && MR32(sf+56)==ZSURF_MAGIC) zid = MR32(sf+52);
+                /* a depth texture's level (8 stages): that texture as the Z (gpu-abi.md 11.4) */
+                else if (g_game.gpu_stages == 8 && mem_is_committed(sf+43) && MR32(sf+40) == 2u){
+                    int metal_tex_is_depth(unsigned);
+                    uint32_t tid = MR32(sf+28);
+                    if (metal_tex_is_depth(tid)) zid = 64u + tid;             /* GW_Z_TEX */
+                }
             }
             g_cur_zid = zid;
             if (metal_available()){ void metal_set_zsurf(unsigned); metal_set_zsurf(zid); }
@@ -3887,6 +3946,8 @@ int com_call(CPU *c, uint32_t magic){
                     if (id < PSCUBE && !g_psprog[id]) g_psprog[id] = pp3;
                     else
 #endif
+                    if (g_game.gpu_stages == 8 && pl > 0 && id < PSCUBE && !g_ps8[id]) g_ps8[id] = pp3;
+                    else
                     vs_free(pp3);
                 }
             }
@@ -4929,17 +4990,34 @@ static void fill_caps(uint32_t p){
     MR32(p+0xA0)=8; MR32(p+0xA4)=6; MR32(p+0xA8)=4; MR32(p+0xAC)=8;
     MRF32(p+0xB0)=256.0f; MR32(p+0xB4)=1048575; MR32(p+0xB8)=1048575;
     MR32(p+0xBC)=16; MR32(p+0xC0)=508;
-    { /* Shader version settable from the environment (SM=0 -> fixed function;
-       * 30 -> vs_3_0/ps_3_0, which the renderer does not translate yet: for
-       * Most Wanted's effect census, GAME.md 5.3) */
+    { /* Shader versions: 2.0 (UG2), 3.0 for a game with GameOps d3d_sm3 (the
+       * translator's vs_3_0, ps_2_x and ps_3_0, docs/web/psref.md); D3D_SM in
+       * the environment overrides either (0 fixed function, 11, 14, 20, 30) */
       const char *sm = ENVC("D3D_SM");
       uint32_t vs=0xFFFE0200u, ps=0xFFFF0200u;
+      if (g_game.d3d_sm3){ vs=0xFFFE0300u; ps=0xFFFF0300u; }
       if (sm){ int v=atoi(sm);
         if (v==0){ vs=0; ps=0; }
         else if (v==11){ vs=0xFFFE0101u; ps=0xFFFF0101u; }
         else if (v==14){ vs=0xFFFE0101u; ps=0xFFFF0104u; }
+        else if (v==20){ vs=0xFFFE0200u; ps=0xFFFF0200u; }
         else if (v==30){ vs=0xFFFE0300u; ps=0xFFFF0300u; }
       }
-      MR32(p+0xC4)=vs; MR32(p+0xC8)=256; MR32(p+0xCC)=ps; }
+      MR32(p+0xC4)=vs; MR32(p+0xC8)=256; MR32(p+0xCC)=ps;
+      if (g_game.d3d_sm3 && ps >= 0xFFFF0300u){
+          /* what goes with 3.0 (D3DCAPS9 after DevCaps2): one adapter in its
+           * group, one render target (every MW pixel shader writes oC0 only),
+           * StretchRect's point and linear filters; VS20Caps and PS20Caps at
+           * their 3.0 values (predication, 24 dynamic and 4 static flow
+           * control levels, 32 temporaries: ten of MW's ps_2_x use r16..r30,
+           * GAME.md 5.3; the arbitrary-swizzle, gradient, predication and
+           * no-limit bits, 512 slots), no vertex texture filters (the
+           * translator has no vertex texture fetch), 65535 instructions
+           * executed, 512 slots of 3.0 code */
+          MR32(p+0xE8)=1; MR32(p+0xF0)=1; MR32(p+0xF4)=0x03030000u;
+          MR32(p+0xF8)=1; MR32(p+0xFC)=24; MR32(p+0x100)=32; MR32(p+0x104)=4;
+          MR32(p+0x108)=0x1F; MR32(p+0x10C)=24; MR32(p+0x110)=32; MR32(p+0x114)=4; MR32(p+0x118)=512;
+          MR32(p+0x120)=65535; MR32(p+0x124)=65535; MR32(p+0x128)=512; MR32(p+0x12C)=512;
+      } }
     MRF32(p+0xD0)=8.0f; MR32(p+0xD4)=0x00000051;
 }

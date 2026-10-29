@@ -108,6 +108,14 @@ unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned l, unsigned f,
     unsigned b; (void)w; (void)h; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
 unsigned metal_create_texture_cube(unsigned e, unsigned l, unsigned f, unsigned rt){
     unsigned b; (void)e; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
+/* depth textures (8 stages, Most Wanted): D16, D24X8, D24S8 */
+static unsigned char g_dtex[4096];
+unsigned metal_create_texture_depth(unsigned w, unsigned h, unsigned f){
+    (void)w; (void)h;
+    if (g_fail_tex || (f != 75u && f != 77u && f != 80u)) return 0u;
+    unsigned id = ++g_texid; if (id < sizeof g_dtex) g_dtex[id] = 1; return id; }
+int metal_tex_is_depth(unsigned id){ return id < sizeof g_dtex ? g_dtex[id] : 0; }
+void metal_set_depth_bias(unsigned b){ (void)b; }
 static unsigned g_freed = 0;
 void metal_free_texture(unsigned id){ (void)id; g_freed++; }
 void metal_mirror_forget(uint32_t o){ (void)o; }
@@ -126,6 +134,7 @@ void metal_set_blendcolor(uint32_t c){ (void)c; }
 void metal_set_fog(unsigned a, unsigned b){ (void)a; (void)b; }
 void metal_set_samplers(const unsigned k[4]){ (void)k; }
 void metal_set_stage_tex(unsigned a, unsigned b, unsigned c){ (void)a; (void)b; (void)c; }
+void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]){ (void)t; (void)k; }
 void metal_set_ps(int id, const float *c){ (void)id; (void)c; }
 void metal_set_texproj(const float p[4]){ (void)p; }
 void metal_set_ui_clip(float s){ (void)s; }
@@ -415,8 +424,9 @@ static void t_state(void){
                   "NONMASKABLE 0x%08x quality %u, NONE 0x%08x quality %u", ms, q, m0, MR32(OUT));
     else    check(ms == 0u && q == 0xCDCDCDCDu, "multisample-ug2", "0x%08x quality 0x%08x (UG2's answer)", ms, q);
 
-    /* CheckDeviceFormat: MW is told what the creators make, a texture format CreateTexture makes and no depth
-     * texture (its shadow-map probes: D24S8 at 0x6C1725, 'DF16' at 0x6C175D); UG2 keeps D3D_OK */
+    /* CheckDeviceFormat: MW is told what the creators make, a texture format CreateTexture makes and the depth
+     * textures of 8 stages (D16, D24X8, D24S8; its shadow-map probes: D24S8 at 0x6C1725 made, 'DF16' at 0x6C175D,
+     * DF24 and INTZ not, docs/web/gpu-abi.md 11.4); UG2 keeps D3D_OK */
     static const uint32_t fm[] = { 21u, 22u, 23u, 25u, 28u, 41u, 75u, 113u, 0x31545844u, 0x35545844u, 0x36314644u, 0x5A544E49u };
     unsigned agree = 0;
     for (unsigned k = 0; k < NELM(fm); k++) for (uint32_t u = 0; u < 2u; u++){        /* plain, render target */
@@ -428,12 +438,33 @@ static void t_state(void){
     }
     uint32_t d24 = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 3u, 75u);
     uint32_t df16 = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 3u, 0x36314644u);
+    /* the depth textures the renderer makes and those it does not, each against CreateTexture */
+    static const uint32_t dfm[] = { 75u, 77u, 80u, 0x36314644u, 0x34324644u, 0x5A544E49u, 113u, 21u };
+    unsigned dagree = 0, dmade = 0;
+    for (unsigned k = 0; k < NELM(dfm); k++){
+        uint32_t ck = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 3u, dfm[k]);
+        MR32(OUT) = 0;
+        uint32_t cr = call(g_dev, "CreateTexture", 8, 64u, 64u, 1u, 2u, dfm[k], 0u, OUT, 0u);
+        if (!cr){ dmade++; release(MR32(OUT)); }
+        if ((ck == 0u) == (cr == 0u)) dagree++;
+    }
+    if (MW) check(dagree == NELM(dfm) && dmade == 3u, "depthtex", "%u of %u depth-texture answers agree with CreateTexture, "
+                  "%u made (D16, D24X8, D24S8)", dagree, (unsigned)NELM(dfm), dmade);
+    /* the caps' shader versions (offsets 196 and 204): MW 3.0 with PS20Caps.NumTemps 32 (GameOps d3d_sm3),
+     * UG2 2.0 */
+    MR32(OUT) = 0; mem_commit(OUT, 0x130);
+    uint32_t gc = call(g_d3d, "GetDeviceCaps", 3, 0u, 1u, OUT);
+    uint32_t vsv = MR32(OUT + 196u), psv = MR32(OUT + 204u), ntemps = MR32(OUT + 0x110u);
+    if (MW) check(gc == 0u && vsv == 0xFFFE0300u && psv == 0xFFFF0300u && ntemps == 32u, "caps-sm3",
+                  "GetDeviceCaps 0x%08x: vs 0x%08x ps 0x%08x, PS20Caps.NumTemps %u", gc, vsv, psv, ntemps);
+    else    check(gc == 0u && vsv == 0xFFFE0200u && psv == 0xFFFF0200u && ntemps == 0u, "caps-sm2-ug2",
+                  "GetDeviceCaps 0x%08x: vs 0x%08x ps 0x%08x, PS20Caps.NumTemps %u (UG2's 2.0)", gc, vsv, psv, ntemps);
     uint32_t dss = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 1u, 75u);
     uint32_t dsc = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 1u, 21u);
     uint32_t rts = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 1u, 1u, 23u);
     uint32_t dm = call(g_d3d, "CheckDepthStencilMatch", 5, 0u, 1u, 22u, 22u, 75u);
     uint32_t dmc = call(g_d3d, "CheckDepthStencilMatch", 5, 0u, 1u, 22u, 22u, 21u);
-    if (MW) check(agree == 2u * NELM(fm) && d24 == D3DERR_NOTAVAILABLE && df16 == D3DERR_NOTAVAILABLE && dss == 0u
+    if (MW) check(agree == 2u * NELM(fm) && d24 == 0u && df16 == D3DERR_NOTAVAILABLE && dss == 0u
                   && dsc == D3DERR_NOTAVAILABLE && rts == D3DERR_NOTAVAILABLE && dm == 0u && dmc == D3DERR_NOTAVAILABLE,
                   "checkformat", "%u of %u agree with CreateTexture; depth textures D24S8 0x%08x DF16 0x%08x; depth surface "
                   "D24S8 0x%08x A8R8G8B8 0x%08x; R5G6B5 target 0x%08x; depth match 0x%08x, with a colour format 0x%08x",

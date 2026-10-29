@@ -23,7 +23,7 @@
 import * as P from './proto';
 import { D, F, Kind, Op } from './proto';
 import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
-import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE } from './shader-abi';
+import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE, group1Entries, stageKind, texBinding, smpBinding } from './shader-abi';
 import { unpackDxt } from './dxt';
 import { dxt1HasPunch, dxt1ToAstc } from './astc';
 
@@ -43,6 +43,8 @@ interface Tex {
   filled: boolean;                 // a level has gone up (an ASTC texture's choice is made at its first upload)
   bytes: number;                   // its size on the GPU, every level and face
   face0?: GPUTextureView;          // a cube's face 0, level 0 as a 2D view (StretchRect from it), made at its first use
+  depth?: boolean;                 // a depth texture (P.TF_DEPTH, depth32float): a draw's Z (P.Z_TEX) and sampled with a compare
+  zpend?: number;                  // a depth texture's Clear not yet made (its value; undefined = none)
 }
 
 const enum Src { TVert = 0, Raw = 1, Pool = 2 }
@@ -97,6 +99,19 @@ export class Encoder {
   // 4 sampler keys; [0] = -1 when the pass has none bound yet)
   private dyn = new Uint32Array(2);
   private b1 = new Int32Array(9);
+  // 8 texture stages (docs/web/gpu-abi.md section 11, C.stages): the pixel modules' binding kinds, group 1's
+  // layouts by kinds and stage-0 cube, the depth stand-in (a 1x1 depth texture at 1.0: every compare passes),
+  // module ids past 511 (depth variants) as pipeline-key slots 512..1023, and the previous draw's group 1 tuple
+  // (kinds * 2 + cube, 8 texture serials, 8 sampler keys; [0] = -1 when the pass has none bound yet)
+  private stages = 4;
+  private psKinds = new Map<number, number>();
+  private layouts8 = new Map<number, { bgl: GPUBindGroupLayout; pl: GPUPipelineLayout } | null>();
+  private whiteDepth: Tex | null = null;
+  private psSlot = new Map<number, number>();
+  private biasSlot = new Map<number, number>();
+  private cmpSamplers = new Map<number, GPUSampler>();
+  private b8 = new Float64Array(17);
+  private v8: Tex[] = [];
 
   // layouts and built-in pipelines
   private bgl0: GPUBindGroupLayout; private bgl1: GPUBindGroupLayout; private bgl1c: GPUBindGroupLayout;
@@ -161,6 +176,17 @@ export class Encoder {
     this.pBuf = buf('pspar', 1 << 20, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     this.pool = buf('pool', 1 << 16, GPUBufferUsage.STORAGE | GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
     this.white = this.makeWhite(false); this.whiteCube = this.makeWhite(true);
+    // the module's stage count, written before it registered the block (gpu_web.c gw_init)
+    if (this.u32[this.ctlW + P.C.stages] === P.STAGES_MAX) {
+      this.stages = 8;
+      const t = d.createTexture({ label: 'white-depth', size: [1, 1], format: 'depth32float', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT });
+      const e = d.createCommandEncoder();
+      e.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: t.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } }).end();
+      this.queue.submit([e.finish()]);
+      this.whiteDepth = { serial: 0, tex: t, fmt: P.Fmt.D24S8, w: 1, h: 1, levels: 1, cube: false, rt: false, expandA8: false, bc: false, unpack: false,
+        astc: false, filled: true, rtViews: [], view: t.createView(), bytes: 0, depth: true };
+      log('[gpu] 8 texture stages (gpu-abi.md section 11)');
+    }
   }
 
   private module(label: string, code: string): GPUShaderModule {
@@ -215,6 +241,7 @@ export class Encoder {
           const text = new TextDecoder().decode(this.u8.slice(data, data + Math.max(0, a1 - 1)));
           const mod = this.module(`${op === Op.ShaderVs ? 'vs' : 'ps'}_${a0}`, text);
           (op === Op.ShaderVs ? this.vsMods : this.psMods).set(a0, mod);
+          if (op === Op.ShaderPs && this.stages === 8) this.psKinds.set(a0, a2);
           if (this.logShaders) this.log(`[shader ${op === Op.ShaderVs ? 'vs' : 'ps'}_${a0}]\n${text}\n[/shader]`);
           const h = fnv(text);
           if (op === Op.ShaderVs) { this.vsHash.set(a0, h); this.vsByHash.set(h, a0); } else { this.psHash.set(a0, h); this.psByHash.set(h, a0); }
@@ -247,6 +274,16 @@ export class Encoder {
   /** unpack: DXT unpacked to BGRA8 even where it could go up as ASTC (a DXT1 texture with transparent texels) */
   private texCreate(id: number, w: number, h: number, levels: number, fmt: number, flags: number, unpack = false): void {
     this.texFree(id);
+    if (flags & P.TF_DEPTH) {
+      // a depth texture (gpu-abi.md 11.4): depth32float as every Z, one level, never uploaded or read back
+      const tex = this.device.createTexture({ label: `t${id} depth`, size: [w, h], format: 'depth32float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+      const view = tex.createView();
+      this.texBytes += w * h * 4;
+      this.tex[id] = { serial: this.serial++, tex, fmt, w, h, levels: 1, cube: false, rt: false, view, rtViews: [], expandA8: false, bc: false,
+        unpack: false, astc: false, filled: true, bytes: w * h * 4, depth: true, zpend: 1 };
+      return;
+    }
     let gf = this.gpuFormat(fmt);
     if (!gf) { this.log(`[gpu] texture ${id}: format ${fmt} not supported`); return; }
     // ASTC wants whole blocks (as BC does without texture-compression-unaligned): a level 0 of another size unpacks
@@ -297,7 +334,7 @@ export class Encoder {
   private texUpload(id: number, level: number, face: number, lw: number, lh: number, pitch: number, rows: number, data: number): void {
     let t = this.tex[id];
     if (t && this.traceDumps) this.uploads.set(t.serial, (this.uploads.get(t.serial) ?? 0) + 1);
-    if (!t || level >= t.levels) return;
+    if (!t || level >= t.levels || t.depth) return;
     if (t.astc) {
       const bw = (lw + 3) >> 2, bh = (lh + 3) >> 2;
       if (!t.filled && dxt1HasPunch(this.u8, data, pitch, bw, bh)) {
@@ -445,10 +482,12 @@ export class Encoder {
     pass.end();
   }
 
-  private pipeDesc(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean): GPURenderPipelineDescriptor | null {
+  private pipeDesc(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean, zb = 0): GPURenderPipelineDescriptor | null {
     // the translator's modules (vs_0 / ps_0 / ps_256 included once registered), else the built-in fallbacks
-    const cube = ps >= PSCUBE;
+    const cube = (ps & PSCUBE) !== 0;
     const vq = this.vsMods.get(vs), pq = this.psMods.get(ps);
+    let layout = cube ? this.plCube : this.pl2d;
+    if (this.stages === 8) { const l = this.layout8(this.psKinds.get(ps) ?? 0, cube); if (!l) return null; layout = l.pl; }
     const vmod = vq ?? (vs === 0 ? this.tvertMod : undefined);
     const fmod = pq ?? (ps === 0 ? this.ffMod : ps === PSCUBE ? this.ffCubeMod : undefined);
     if (!vmod || !fmod) return null;
@@ -463,18 +502,80 @@ export class Encoder {
       bs = { color: { srcFactor: s, dstFactor: d, operation: o }, alpha: { srcFactor: s, dstFactor: d, operation: o } };
     }
     return {
-      label: `p${key}`, layout: cube ? this.plCube : this.pl2d,
+      label: `p${key}`, layout,
       vertex: { module: vmod, entryPoint: vq ? undefined : 'vs_tvert' },
       fragment: { module: fmod, entryPoint: pq ? undefined : 'fs_ff', targets: [{ format: 'bgra8unorm', blend: bs, writeMask: mask }],
         constants: { ALPHA_FUNC: alphaFunc(nd ? 0 : 1) } },
       primitive: { topology: 'triangle-list', frontFace: 'cw', cullMode: cull === 1 ? 'none' : cull === 2 ? 'front' : 'back' },
-      depthStencil: { format: 'depth32float', depthWriteEnabled: (dm & 2) !== 0, depthCompare: (dm & 1) ? CMP[(dm >> 2) & 7] : 'always' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: (dm & 2) !== 0, depthCompare: (dm & 1) ? CMP[(dm >> 2) & 7] : 'always',
+        ...(zb ? { depthBias: zb & 15, depthBiasSlopeScale: zb >>> 4 } : {}) },
     };
   }
 
+  /** group 1's layout and the pipeline layout for 8 stages, a module's binding kinds and stage-0 cube; null for kind 3 */
+  private layout8(kinds: number, cube: boolean): { bgl: GPUBindGroupLayout; pl: GPUPipelineLayout } | null {
+    const k = kinds * 2 + (cube ? 1 : 0);
+    let l = this.layouts8.get(k);
+    if (l === undefined) {
+      const e = group1Entries(8, kinds, cube, GPUShaderStage.FRAGMENT);
+      if (!e) { this.log(`[gpu] binding kinds ${kinds.toString(16)}: a kind the ABI does not define (no pipeline)`); l = null; }
+      else {
+        const bgl = this.device.createBindGroupLayout({ label: `abi.group1.8.${k.toString(16)}`, entries: e });
+        l = { bgl, pl: this.device.createPipelineLayout({ label: `abi.layout8.${k.toString(16)}`, bindGroupLayouts: [this.bgl0, bgl] }) };
+      }
+      this.layouts8.set(k, l);
+    }
+    return l;
+  }
+
+  /** a depth bias (gpu_proto.h GW_ZBIAS_SHIFT, nonzero) as a pipeline-key slot 1..3 (-1: more than three) */
+  private biasKey(zb: number): number {
+    let k = this.biasSlot.get(zb);
+    if (k === undefined) {
+      k = this.biasSlot.size < 3 ? this.biasSlot.size + 1 : -1;
+      if (k < 0) this.log(`[gpu] depth bias ${zb.toString(16)}: more than three biases (not drawn)`);
+      this.biasSlot.set(zb, k);
+    }
+    return k;
+  }
+
+  /** the pipeline-key field of module id ps: itself below 512, a slot 512..1023 for a depth variant (-1: none left) */
+  private psKey(ps: number): number {
+    if (ps < 512) return ps;
+    let k = this.psSlot.get(ps);
+    if (k === undefined) {
+      k = this.psSlot.size < 512 ? 512 + this.psSlot.size : -1;
+      if (k < 0) this.log(`[gpu] ps ${ps}: more than 512 depth variants (not drawn)`);
+      this.psSlot.set(ps, k);
+    }
+    return k;
+  }
+
+  /** a stage's texture of binding kind `kind` (0 2D, 1 cube, 2 depth), or that kind's stand-in: also for the pass's
+   *  own target or Z (WebGPU allows no texture as attachment and binding in one pass) */
+  private texForKind(id: number, kind: number, passTex: number, passZ: number): Tex {
+    const t = id ? this.tex[id] : undefined;
+    const stand = kind === 2 ? this.whiteDepth! : kind === 1 ? this.whiteCube : this.white;
+    if (!t || (kind === 2) !== !!t.depth || (kind === 1) !== t.cube) return stand;
+    if (id === passTex || id === passZ) { this.conflicts++; return stand; }
+    return t;
+  }
+
+  /** the comparison sampler of sampler key k (LESSEQUAL; its filters: linear is the 2x2 PCF; BORDER as clamp) */
+  private cmpSampler(k: number): GPUSampler {
+    let s = this.cmpSamplers.get(k);
+    if (!s) {
+      const mn = k & 3, mg = (k >> 2) & 3, au = (k >> 6) & 7, av = (k >> 9) & 7;
+      s = this.device.createSampler({ compare: 'less-equal', minFilter: mn === 1 ? 'nearest' : 'linear', magFilter: mg === 1 ? 'nearest' : 'linear',
+        addressModeU: ADDR[au < 6 ? au : 1], addressModeV: ADDR[av < 6 ? av : 1], lodMinClamp: 0, lodMaxClamp: 0 });
+      this.cmpSamplers.set(k, s);
+    }
+    return s;
+  }
+
   /** a pipeline needed now: created synchronously (a first use may hitch; warmUp() avoids most) */
-  private pipeline(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean): GPURenderPipeline | null {
-    const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd);
+  private pipeline(key: number, blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean, zb = 0): GPURenderPipeline | null {
+    const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd, zb);
     if (!desc) { this.pipes.set(key, null); return null; }
     this.device.pushErrorScope('validation');
     const tp = performance.now();
@@ -627,7 +728,7 @@ export class Encoder {
     const lastPF = new Float32Array(8);
 
     let pass: GPURenderPassEncoder | null = null;
-    let curT = -1, curZ = -1, realZ = false, passKey = -2, passCube = -1;
+    let curT = -1, curZ = -1, realZ = false, passKey = -2, passCube = -1, passZ = -1;
     let screenTouched = false;
     const touched = new Set<number>();
     let clearArgb = u32[fw + F.clearArgb];
@@ -654,7 +755,15 @@ export class Encoder {
       passKey = target ? (target & 0xFFFF) : -1;
       const first = key === -1 ? !screenTouched : !touched.has(key);
       let zv: GPUTextureView | undefined, zclear = false, zval = 1;
-      if (zid && zid < 64) {
+      passZ = zid >= P.Z_TEX ? zid - P.Z_TEX : -1;
+      if (zid >= P.Z_TEX) {
+        // a depth texture as the Z (gpu-abi.md 11.4): of the target's size, else the scratch Z
+        const zt = this.tex[zid - P.Z_TEX];
+        if (zt?.depth && zt.w === w && zt.h === h) {
+          zv = zt.view;
+          if (zt.zpend !== undefined) { zclear = true; zval = zt.zpend; zt.zpend = undefined; }
+        } else this.zMismatch++;
+      } else if (zid && zid < 64) {
         let z = this.zTex[zid];
         if (!z || z.width !== w || z.height !== h) {
           if (!z || zid === 1) {
@@ -679,7 +788,7 @@ export class Encoder {
       if (key === -1) screenTouched = true; else touched.add(key);
       passes++; this.calls.pass++;
       if (tr) tr.push(`  pass ${passes}: ${target ? `tex ${target & 0xFFFF}${(target >>> 16) ? ` face ${(target >>> 16) - 1}` : ''}` : 'SCREEN'} ${w}x${h} color ${first ? `clear ${c.toString(16)}` : 'load'}, z ${zv ? `zid ${zid} ${zclear ? `clear ${zval}` : 'load'}` : `none (zid ${zid})`}`);
-      cPipe = null; cSrc = -1; cK = -1; cP = -1; b1[0] = -1; cBcol = -1; cIx = ''; cClip = 0;
+      cPipe = null; cSrc = -1; cK = -1; cP = -1; b1[0] = -1; this.b8[0] = -1; cBcol = -1; cIx = ''; cClip = 0;
       return p;
     };
 
@@ -692,7 +801,7 @@ export class Encoder {
         const sTex = sid ? st?.tex : this.screen!, dTex = tgt ? dt?.tex : this.screen!;
         const r0 = u32[w + D.first], r1 = u32[w + D.count];   // a source rectangle (r1 0: the whole source)
         if (tr) tr.push(`  #${i} blit ${sid || 'SCREEN'}${r1 ? ` (${r0 & 0xFFFF},${r0 >>> 16})-(${r1 & 0xFFFF},${r1 >>> 16})` : ''} -> ${tgt ? tgt & 0xFFFF : 'SCREEN'}${!sTex || !dTex ? ' (missing: skipped)' : ''}`);
-        if (!sTex || !dTex || sTex === dTex || (tgt && !dt!.rt)) { skipped++; continue; }
+        if (!sTex || !dTex || sTex === dTex || (tgt && !dt!.rt) || st?.depth) { skipped++; continue; }
         endPass(); curT = -1; curZ = -1;
         if (r1 && this.blitRect(enc, sTex, r0, r1, tgt ? dt!.rtViews[0] : this.screenView!, !sid)) passes++;
         else if (sTex.width === dTex.width && sTex.height === dTex.height && sTex.format === dTex.format && sTex.depthOrArrayLayers === 1 && dTex.depthOrArrayLayers === 1)
@@ -706,7 +815,7 @@ export class Encoder {
         if (tgt) touched.add((tgt & 0xFFFF) * 8 + ((tgt >>> 16) & 7)); else screenTouched = true;
         continue;
       }
-      const depth = u32[w + D.depth], zid = depth >>> 8, target = u32[w + D.target];
+      const depth = u32[w + D.depth], zid = (depth >>> 8) & 0xFFFF, target = u32[w + D.target];
       if (kind === Kind.Clear) {
         const fl = u32[w + D.clrFlags];
         if (tr) tr.push(`  #${i} clear flags ${fl} argb ${u32[w + D.clrArgb].toString(16)} z ${f32[w + D.clrZ]} target ${target & 0xFFFF} zid ${zid}`);
@@ -714,6 +823,10 @@ export class Encoder {
         if ((fl & 2) && zid && zid < 64) {
           const z = f32[w + D.clrZ];
           this.zpend[zid] = 1; this.zpendV[zid] = z < 0 ? 0 : z > 1 ? 1 : z;
+          if (pass && curZ === zid) { endPass(); curT = -1; }
+        } else if ((fl & 2) && zid >= P.Z_TEX) {
+          const zt = this.tex[zid - P.Z_TEX], z = f32[w + D.clrZ];
+          if (zt?.depth) zt.zpend = z < 0 ? 0 : z > 1 ? 1 : z;
           if (pass && curZ === zid) { endPass(); curT = -1; }
         }
       }
@@ -735,12 +848,19 @@ export class Encoder {
       const blend = u32[w + D.blend] & 0x3FFFF, cull = u32[w + D.cull] & 3, dm = realZ ? (depth & 63) : 0;
       // a pixel shader without a module draws with the fixed-function stage; its cube twin when tex0 is a cube
       const t0 = u32[w + D.tex];
-      let psEff = psid > 0 && this.psMods.has(psid) ? psid : psid >= PSCUBE ? PSCUBE : 0;
+      // (a depth variant without its module: its own shader, ps & 511)
+      const psb = psid & 511;
+      let psEff = psid > 0 && this.psMods.has(psid) ? psid : psb > 0 && this.psMods.has(psb) ? psb : psb >= PSCUBE ? PSCUBE : 0;
       if (psEff === 0 && t0 && this.tex[t0]?.cube) psEff = PSCUBE;
       const nd = !(aref > 0);
-      const key = blend + psEff * 262144 + vsid * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0);
+      const pk = psEff < 512 ? psEff : this.psKey(psEff);
+      if (pk < 0) { skipped++; continue; }
+      // the depth bias (8 stages, gpu_proto.h GW_ZBIAS_SHIFT) as a slot 0..3 of the key's top bits
+      const zb = realZ ? depth >>> P.ZBIAS_SHIFT : 0, zs = zb ? this.biasKey(zb) : 0;
+      if (zs < 0) { skipped++; continue; }
+      const key = blend + pk * 262144 + vsid * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0) + zs * 70368744177664;
       let pipe = key === lastKey ? lastPipe : this.pipes.get(key);
-      if (pipe === undefined) pipe = this.pipeline(key, blend, psEff, vsid, cull, dm, nd);
+      if (pipe === undefined) pipe = this.pipeline(key, blend, psEff, vsid, cull, dm, nd, zb);
       lastKey = key; lastPipe = pipe;
       if (!pipe) { skipped++; if (tr) tr.push(`  #${i} draw skipped: no pipeline (ps ${psEff} vs ${vsid})`); continue; }
       if (pipe !== cPipe) { p.setPipeline(pipe); cPipe = pipe; this.calls.pipe++; }
@@ -782,13 +902,15 @@ export class Encoder {
       const kb = koff >= 0 ? (koff - cK) >> 4 : 0;
 
       // group 1: textures and samplers (a texture bound as this pass's target samples white)
-      const cube = psEff >= PSCUBE;
+      const cube = (psEff & PSCUBE) !== 0;
       const t1 = u32[w + D.tex1], t2 = u32[w + D.tex2], t3 = u32[w + D.tex3];
       const s0 = u32[w + D.smp], s1 = u32[w + D.smp + 1], s2 = u32[w + D.smp + 2], s3 = u32[w + D.smp + 3];
-      const v0 = this.texFor(t0, cube, passCube), v1 = this.texFor(t1, false, passCube), v2 = this.texFor(t2, false, passCube), v3 = this.texFor(t3, false, passCube);
+      const st8 = this.stages === 8;
+      const v0 = st8 ? this.bind8(p, w, psEff, cube, passCube, passZ) : this.texFor(t0, cube, passCube);
+      const v1 = st8 ? v0 : this.texFor(t1, false, passCube), v2 = st8 ? v0 : this.texFor(t2, false, passCube), v3 = st8 ? v0 : this.texFor(t3, false, passCube);
       // the same textures and samplers as the previous draw (the common case): nothing to do
-      if (b1[0] !== (cube ? 1 : 0) || b1[1] !== v0.serial || b1[2] !== v1.serial || b1[3] !== v2.serial || b1[4] !== v3.serial
-          || b1[5] !== s0 || b1[6] !== s1 || b1[7] !== s2 || b1[8] !== s3) {
+      if (!st8 && (b1[0] !== (cube ? 1 : 0) || b1[1] !== v0.serial || b1[2] !== v1.serial || b1[3] !== v2.serial || b1[4] !== v3.serial
+          || b1[5] !== s0 || b1[6] !== s1 || b1[7] !== s2 || b1[8] !== s3)) {
         const k1 = `${cube ? 1 : 0}${v0.serial},${v1.serial},${v2.serial},${v3.serial}|${s0},${s1},${s2},${s3}`;
         let g = this.bg1.get(k1);
         if (!g) {
@@ -895,12 +1017,46 @@ export class Encoder {
   /** diagnostics: texture `id` (level 0, face 0) drawn into a new bgra8 texture of its size, or null */
   snapshot(enc: GPUCommandEncoder, id: number): { tex: GPUTexture; info: string } | null {
     const t = this.tex[id];
-    if (!t) return null;
+    if (!t || t.depth) return null;
     const out = this.device.createTexture({ size: [t.w, t.h], format: 'bgra8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
     const v = t.tex.createView({ dimension: '2d', baseArrayLayer: 0, arrayLayerCount: 1, baseMipLevel: 0, mipLevelCount: 1 });
     this.copyQuad(enc, v, out.createView(), 'bgra8unorm', this.nearest, undefined, true);
     this.destroyLater.push(out);
     return { tex: out, info: `${t.w}x${t.h} ${t.tex.format} fmt ${t.fmt} levels ${t.levels}${t.cube ? ' cube' : ''}${t.rt ? ' rt' : ''}` };
+  }
+
+  /** group 1 with 8 stages (gpu-abi.md 11.2-11.4): each stage's texture of the kind module ps declares, else
+   *  that kind's stand-in, and its sampler (a comparison sampler on a depth stage); set only when the tuple differs
+   *  from the previous draw's.  Returns stage 0's texture (for the trace). */
+  private bind8(p: GPURenderPassEncoder, w: number, ps: number, cube: boolean, passTex: number, passZ: number): Tex {
+    const u32 = this.u32, b = this.b8, v = this.v8, kinds = this.psKinds.get(ps) ?? 0;
+    const kc = kinds * 2 + (cube ? 1 : 0);
+    let same = b[0] === kc;
+    b[0] = kc;
+    for (let k = 0; k < 8; k++) {
+      const id = k === 0 ? u32[w + D.tex] : k < 4 ? u32[w + D.tex1 + k - 1] : u32[w + D.tex4 + k - 4];
+      const kind = k === 0 && cube ? 1 : stageKind(kinds, k);
+      const t = this.texForKind(id, kind, passTex, passZ);
+      const sk = (k < 4 ? u32[w + D.smp + k] : u32[w + D.smpHi + k - 4]) + (kind === 2 ? 65536 : 0);
+      v[k] = t;
+      if (b[1 + k] !== t.serial || b[9 + k] !== sk) { same = false; b[1 + k] = t.serial; b[9 + k] = sk; }
+    }
+    if (same) return v[0];
+    const k1 = b.join(',');
+    let g = this.bg1.get(k1);
+    if (!g) {
+      const l = this.layout8(kinds, cube)!;
+      const entries: GPUBindGroupEntry[] = [];
+      for (let k = 0; k < 8; k++) {
+        const sk = b[9 + k];
+        entries.push({ binding: texBinding(k), resource: v[k].view },
+          { binding: smpBinding(k), resource: sk >= 65536 ? this.cmpSampler(sk - 65536) : this.sampler(sk) });
+      }
+      g = this.device.createBindGroup({ layout: l.bgl, entries });
+      this.bg1.set(k1, g); this.calls.bg1New++;
+    }
+    p.setBindGroup(1, g); this.calls.bg1++;
+    return v[0];
   }
 
   private texFor(id: number, cube: boolean, passTex: number): Tex {

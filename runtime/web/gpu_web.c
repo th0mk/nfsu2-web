@@ -21,6 +21,7 @@
  * recording on.  Without it this file behaves like the null renderer: ids
  * and sizes for com.c, every draw dropped. */
 #include "cpu.h"
+#include "game.h"
 #include "gfx.h"
 #include "host_abi.h"
 #include "gpu_proto.h"
@@ -85,6 +86,11 @@ static int g_cur = 0;
 static unsigned g_cur_target = 0, g_cur_blend = 0, g_cur_bcol = 0xFFFFFFFFu, g_cur_cull = 3u;
 static unsigned g_cur_depth = 1u << 8, g_cur_dmode = 0, g_cur_zid = 1;
 static unsigned g_cur_tex1, g_cur_tex2, g_cur_tex3;
+static unsigned g_cur_texhi[4], g_cur_smphi[4];  /* stages 4-7, with GwCtl.stages 8 (metal_set_stage_hi) */
+static int      g_stages8;                   /* GwCtl.stages is 8 (GameOps gpu_stages) */
+static unsigned g_cur_dbias;                 /* the depth bias, packed (GW_ZBIAS_SHIFT), with 8 stages */
+static unsigned long g_dz_draws, g_dt_draws; /* draws with a depth texture as Z, draws sampling one */
+static int      g_ps_maxid;                  /* the highest pixel shader id registered below the cube twins */
 static int      g_cur_ps;
 static float    g_cur_psc[PSC_N][4];
 static unsigned g_psc_ver = 1;
@@ -108,7 +114,7 @@ static long     g_dump_req = -1;
 static char     g_dump_label[64];
 
 /* ---- init / attach ----------------------------------------------------- */
-static void shader_put(int op, int id, const char *src);
+static void shader_put(int op, int id, const char *src, unsigned kinds);
 static void *zalloc(size_t n){ void *p = aligned_alloc(64, (n + 63) & ~(size_t)63); if (p) memset(p, 0, n); return p; }
 
 static void gw_init(void){
@@ -118,6 +124,10 @@ static void gw_init(void){
     g_vs  = zalloc(sizeof *g_vs);
     if (!g_ctl || !g_vs){ fprintf(stderr, "[gpu] out of memory for the control block\n"); return; }
     g_ctl->magic = GW_MAGIC; g_ctl->version = GW_VERSION; g_ctl->layout = GW_LAYOUT; g_ctl->size = sizeof *g_ctl;
+    /* 8 texture stages for every draw and module (gpu-abi.md 11.2): set before
+     * the first translation (com.c's shaders come after CreateDevice, whose
+     * metal_available() runs this) and before the page reads the block */
+    if (g_game.gpu_stages == 8){ g_ctl->stages = GW_STAGES_MAX; wgsl_set_stages(8); g_stages8 = 1; }
     const char *r = getenv("NFSU2_RENDERER");
     int want = r && !strcmp(r, "webgpu");
     if (want){
@@ -146,9 +156,9 @@ static void gw_init(void){
         /* the translator's built-in modules (docs/web/gpu-abi.md section 1): vs_0
          * for TVert draws, ps_0 / ps_256 for draws without a pixel shader */
         static char t[16384];
-        if (wgsl_tvert_module(t, sizeof t) > 0) shader_put(GW_SHADER_VS, 0, t);
-        if (wgsl_ff_module(0, t, sizeof t, 0u) > 0) shader_put(GW_SHADER_PS, 0, t);
-        if (wgsl_ff_module(256, t, sizeof t, 1u) > 0) shader_put(GW_SHADER_PS, 256, t);
+        if (wgsl_tvert_module(t, sizeof t) > 0) shader_put(GW_SHADER_VS, 0, t, 0u);
+        if (wgsl_ff_module(0, t, sizeof t, 0u) > 0) shader_put(GW_SHADER_PS, 0, t, 0u);
+        if (wgsl_ff_module(256, t, sizeof t, 1u) > 0) shader_put(GW_SHADER_PS, 256, t, 0u);
     }
     nfsu2_register(HOST_KIND_GPU, g_ctl, sizeof *g_ctl);
     nfsu2_register(HOST_KIND_VSYNC, g_vs, sizeof *g_vs);
@@ -244,7 +254,7 @@ static void rq_commit(GwCmd *c){
  * name the id.  pack: a texture pack's texture stands in for the game's
  * (metal_replace_texture), whose own uploads are dropped from then on. */
 #define MAXTEX 16384
-static struct { uint16_t w, h; uint8_t levels, cube, rt, live, pack; uint32_t fmt, lvlmask; } g_tex[MAXTEX];
+static struct { uint16_t w, h; uint8_t levels, cube, rt, live, pack, depth; uint32_t fmt, lvlmask; } g_tex[MAXTEX];
 static unsigned g_texn = 1;
 static unsigned g_tfree[MAXTEX], g_ntfree = 0;
 #define TFQ 16384
@@ -280,7 +290,7 @@ static unsigned tex_new(unsigned w, unsigned h, unsigned levels, unsigned f, uns
     if (!id) return 0;
     if (!levels) levels = 1;
     g_tex[id].w = (uint16_t)w; g_tex[id].h = (uint16_t)h; g_tex[id].levels = (uint8_t)(levels > 255 ? 255 : levels);
-    g_tex[id].cube = cube ? 1 : 0; g_tex[id].rt = rt ? 1 : 0; g_tex[id].live = 1; g_tex[id].pack = 0;
+    g_tex[id].cube = cube ? 1 : 0; g_tex[id].rt = rt ? 1 : 0; g_tex[id].live = 1; g_tex[id].pack = 0; g_tex[id].depth = 0;
     g_tex[id].fmt = f; g_tex[id].lvlmask = 0;
     g_tex_created++;
     GwCmd *c = rq_begin(GW_TEX_CREATE, 0);
@@ -291,6 +301,25 @@ static unsigned tex_new(unsigned w, unsigned h, unsigned levels, unsigned f, uns
 unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned levels, unsigned f, unsigned is_rt){
     return tex_new(w, h, levels, f, is_rt, 0);
 }
+/* A depth texture (gpu-abi.md 11.4): D3DUSAGE_DEPTHSTENCIL with D3DFMT_D24S8 (75), D24X8 (77) or D16
+ * (80), with 8 stages only (0 otherwise: no such texture).  One level; never uploaded or read back;
+ * a draw's Z through GW_Z_TEX + id (metal_set_zsurf) and sampled with a depth compare (rec_draw). */
+unsigned metal_create_texture_depth(unsigned w, unsigned h, unsigned f){
+    gw_init();
+    if (!g_stages8 || (f != 75u && f != 77u && f != 80u) || !w || !h || w > 8192 || h > 8192) return 0;
+    unsigned id = 0;
+    if (g_ntfree) id = g_tfree[--g_ntfree];
+    else if (g_texn < MAXTEX) id = g_texn++;
+    if (!id) return 0;
+    g_tex[id].w = (uint16_t)w; g_tex[id].h = (uint16_t)h; g_tex[id].levels = 1;
+    g_tex[id].cube = 0; g_tex[id].rt = 0; g_tex[id].live = 1; g_tex[id].pack = 0; g_tex[id].depth = 1;
+    g_tex[id].fmt = f; g_tex[id].lvlmask = 0;
+    g_tex_created++;
+    GwCmd *c = rq_begin(GW_TEX_CREATE, 0);
+    if (c){ c->a[0] = id; c->a[1] = w; c->a[2] = h; c->a[3] = 1; c->a[4] = f; c->a[5] = GW_TF_DEPTH; rq_commit(c); }
+    return id;
+}
+int metal_tex_is_depth(unsigned id){ return id && id < MAXTEX && g_tex[id].live ? g_tex[id].depth : 0; }
 unsigned metal_create_texture(unsigned w, unsigned h, unsigned levels, unsigned f){ return tex_new(w, h, levels, f, 0, 0); }
 /* Cube maps are always render targets (the game draws the car's environment
  * map face by face) and can also be written with LockRect. */
@@ -548,13 +577,17 @@ const uint8_t *metal_pool_cpu(void){ return g_pool; }
 #define MAXVSF 512
 #define MAXPS  512
 static uint8_t g_vs_ok[MAXVSF], g_ps_ok[MAXPS];
+/* depth variants (gpu-abi.md 11.4): id | stages << GW_PS_DEPTH_SHIFT, registered at their first draw */
+#define PSV_IDS (1u << (GW_PS_DEPTH_SHIFT + GW_STAGES_MAX))
+static uint32_t g_psv_ok[PSV_IDS / 32];
 static unsigned g_vs_n = 0, g_ps_n = 0, g_msl_vs = 0, g_msl_ps = 0;
 static int is_wgsl(const char *s){ return s && (strstr(s, "@vertex") || strstr(s, "@fragment")); }
-static void shader_put(int op, int id, const char *src){
+static void shader_put(int op, int id, const char *src, unsigned kinds){
     uint32_t n = (uint32_t)strlen(src) + 1u;
     GwCmd *c = rq_begin((uint32_t)op, n);
     if (!c) return;
     c->a[0] = (uint32_t)id; c->a[1] = n;
+    if (op == GW_SHADER_PS) c->a[2] = kinds;  /* binding kinds (gpu-abi.md 11.3) */
     memcpy((uint8_t *)c + GW_CMD_HDR, src, n);
     rq_commit(c);
 }
@@ -563,7 +596,7 @@ void metal_register_vs(int id, const char *src){
     if (id <= 0 || id >= MAXVSF || !src || g_vs_ok[id]) return;
     if (!g_on) return;
     if (!is_wgsl(src)){ g_msl_vs++; return; }
-    shader_put(GW_SHADER_VS, id, src);
+    shader_put(GW_SHADER_VS, id, src, 0u);
     g_vs_ok[id] = 1; g_vs_n++;
 }
 /* Without a renderer every shader "compiles" (draws are dropped anyway and the
@@ -571,9 +604,17 @@ void metal_register_vs(int id, const char *src){
 int metal_vs_ready(int id){ return !g_on ? 1 : (id > 0 && id < MAXVSF && g_vs_ok[id]); }
 void metal_register_ps(int id, const char *src){
     gw_init();
+    if (id >= MAXPS && id < (int)PSV_IDS && g_stages8 && src && g_on){
+        if (g_psv_ok[id >> 5] >> (id & 31) & 1u) return;
+        if (!is_wgsl(src)) return;
+        shader_put(GW_SHADER_PS, id, src, wgsl_ps_kinds());
+        g_psv_ok[id >> 5] |= 1u << (id & 31); g_ps_n++;
+        return;
+    }
     if (id <= 0 || id >= MAXPS || !src || g_ps_ok[id] || !g_on) return;
     if (!is_wgsl(src)){ g_msl_ps++; return; }
-    shader_put(GW_SHADER_PS, id, src);
+    shader_put(GW_SHADER_PS, id, src, g_stages8 ? wgsl_ps_kinds() : 0u);
+    if (id < 256 && id > g_ps_maxid) g_ps_maxid = id;
     g_ps_ok[id] = 1; g_ps_n++;
 }
 
@@ -583,7 +624,11 @@ void metal_set_blendcolor(unsigned argb){ g_cur_bcol = argb; }
 void metal_set_clear_color(unsigned argb){ g_clear_argb = argb; }
 void metal_set_cull(unsigned m){ g_cur_cull = (m >= 1u && m <= 3u) ? m : 3u; }
 void metal_set_depth(unsigned mode){ g_cur_dmode = mode & 63u; g_cur_depth = g_cur_dmode | (g_cur_zid << 8); }
-void metal_set_zsurf(unsigned zid){ if (zid >= 64u) zid = 0; g_cur_zid = zid; g_cur_depth = g_cur_dmode | (g_cur_zid << 8); }
+void metal_set_zsurf(unsigned zid){
+    /* a depth texture as Z (GW_Z_TEX + its id, com.c SetDepthStencilSurface) */
+    if (zid >= GW_Z_TEX && !(g_stages8 && metal_tex_is_depth(zid - GW_Z_TEX))) zid = 0;
+    g_cur_zid = zid; g_cur_depth = g_cur_dmode | (g_cur_zid << 8);
+}
 void metal_set_fog(unsigned enable, unsigned argb){
     static int off = -1;
     if (off < 0){ const char *e = ENVC("NOFOG"); off = (e && *e && *e != '0'); }
@@ -596,6 +641,11 @@ void metal_set_fog(unsigned enable, unsigned argb){
 void metal_set_render_target(unsigned t){ g_cur_target = t; }
 void metal_set_samplers(const unsigned k[4]){ for (int i = 0; i < 4; i++) g_cur_smp[i] = k[i]; }
 void metal_set_stage_tex(unsigned a, unsigned b, unsigned c3){ g_cur_tex1 = a; g_cur_tex2 = b; g_cur_tex3 = c3; }
+/* stages 4-7 with 8 stages: their texture ids and sampler keys (com.c smp_push) */
+void metal_set_depth_bias(unsigned bits){ g_cur_dbias = bits & 0xFFu; }
+void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]){
+    memcpy(g_cur_texhi, t, sizeof g_cur_texhi); memcpy(g_cur_smphi, k, sizeof g_cur_smphi);
+}
 void metal_set_ps(int id, const float *c32){
     g_cur_ps = id;
     if (c32 && memcmp(g_cur_psc, c32, sizeof g_cur_psc)){ memcpy(g_cur_psc, c32, sizeof g_cur_psc); g_psc_ver++; }
@@ -626,6 +676,22 @@ static unsigned psc_put(Buf *B){
 static int ps_of(unsigned tex){
     return (g_cur_ps > 0 && g_cur_ps < PSCUBE && metal_tex_is_cube(tex)) ? g_cur_ps + PSCUBE : g_cur_ps;
 }
+/* module id ps (the stage-0 cube twin bit included) with the stages in dm sampling a depth texture:
+ * registered by com.c at its first use; ps itself when it cannot be (logged once a shader) */
+int com_ps_depth_variant(unsigned full);
+static int ps_depth(int ps, unsigned dm){
+    unsigned full = (unsigned)ps | dm << GW_PS_DEPTH_SHIFT;
+    if (ps >= MAXPS || full >= PSV_IDS) return ps;
+    if (g_psv_ok[full >> 5] >> (full & 31) & 1u) return (int)full;
+    static uint8_t failed[MAXPS];
+    if (failed[ps]) return ps;
+    if (!com_ps_depth_variant(full) || !(g_psv_ok[full >> 5] >> (full & 31) & 1u)){
+        failed[ps] = 1;
+        fprintf(stderr, "[gpu] ps %d: no depth variant for stages 0x%x (drawn with its 2D module)\n", ps, dm);
+        return ps;
+    }
+    return (int)full;
+}
 /* the record every draw shares: state at the time of the call */
 static GwDraw *rec_draw(Buf *B, unsigned tex){
     GwDraw *D = &B->d[B->dn];
@@ -639,6 +705,19 @@ static GwDraw *rec_draw(Buf *B, unsigned tex){
     D->bcol = g_cur_bcol; D->cull = g_cur_cull;
     memcpy(D->fogv, g_cur_fog, sizeof D->fogv);
     D->clip = g_cur_clip;
+    if (g_stages8){
+        D->tex4 = g_cur_texhi[0]; D->tex5 = g_cur_texhi[1]; D->tex6 = g_cur_texhi[2]; D->tex7 = g_cur_texhi[3];
+        memcpy(D->smphi, g_cur_smphi, sizeof D->smphi);
+        /* the stages whose texture is a depth texture: the shader's depth variant (gpu-abi.md 11.4),
+         * registered at its first draw, before the frame in the resource queue */
+        const unsigned st[8] = { tex, g_cur_tex1, g_cur_tex2, g_cur_tex3, g_cur_texhi[0], g_cur_texhi[1], g_cur_texhi[2], g_cur_texhi[3] };
+        unsigned dm = 0;
+        for (int k = 0; k < 8; k++) if (metal_tex_is_depth(st[k])) dm |= 1u << k;
+        if (dm && D->ps > 0) D->ps = ps_depth(D->ps, dm);
+        if (dm) g_dt_draws++;
+        if (g_cur_zid >= GW_Z_TEX) g_dz_draws++;
+        D->depth |= g_cur_dbias << GW_ZBIAS_SHIFT;
+    }
     return D;
 }
 void metal_draw_tv(const TVert *src, unsigned nverts, unsigned prim, unsigned tex){
@@ -1023,4 +1102,7 @@ void metal_budget_report(void){
     fprintf(stderr, "  [gpu] shaders: %u VS + %u PS WGSL, %u VS + %u PS without WGSL (CPU vertex path / built-in fragment); "
                     "overflows draw %u tvert %u raw %u const %u\n",
             g_vs_n, g_ps_n, g_msl_vs, g_msl_ps, g_ov_d, g_ov_v, g_ov_rv, g_ov_kb);
+    if (g_stages8)
+        fprintf(stderr, "  [gpu] 8 stages: pixel shader ids up to %d, %lu draws with a depth texture as Z (shadow maps), "
+                        "%lu draws sampling one\n", g_ps_maxid, g_dz_draws, g_dt_draws);
 }

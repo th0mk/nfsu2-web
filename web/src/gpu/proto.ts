@@ -30,6 +30,9 @@ export const enum D {
 }
 // D.depth bits 8+ from Z_TEX on: a depth texture's id + Z_TEX, that texture as the draw's Z (below it: the Z surfaces)
 export const Z_TEX = 64;
+// D.depth bits from ZBIAS_SHIFT up (8 stages): the depth bias, 4 bits constant (x 2^-24) then 4 bits slope scale;
+// the Z surface id is bits 8-23
+export const ZBIAS_SHIFT = 24;
 // D.ps bits from PS_DEPTH_SHIFT up: stage k samples a depth texture (TF_DEPTH) with a depth compare, in the module
 // registered under the whole id; ps & 0x1FF is the game's shader (+256: the stage-0 cube twin)
 export const PS_DEPTH_SHIFT = 9;
