@@ -25,7 +25,8 @@
  *                    for 146.5 asked, ~0 ~5 ~0 did not lift it), the
  *                    way Game.WarpPlayerToTrigger moves it (its ISimable's interface 0x4040E0, method +0x68)
  *   where            log the local player's position, heading and speed
- *   racestatus       log the race: its racers' progress and finish flags, its own flags
+ *   racestatus       log the race: its racers' progress and finish flags, its own flags, and which racer the
+ *                    local player is ("player 1": Game.GetRacerIndex, slot #0)
  *   frames           log the Presents and the main loop's passes so far (M4-01: one pass a Present)
  *
  * The game's objects, from speed.exe v1.3's code (GAME.md 13.4; the names are its Lua bindings', registered
@@ -124,9 +125,12 @@ static void log_where(CPU *c){
             rdf(p), rdf(p + 4u), rdf(p + 8u), kmh);
 }
 
-static void log_status(void){
+/* the race, and which racer the local player is (Game.GetRacerIndex, 1-based: racer 1 is slot #0) */
+static void log_status(CPU *c){
     uint32_t rs = rd(G_RACESTATUS);
     if (!rs){ fprintf(stderr, "[mwrace] f=%ld racestatus: no GRaceStatus\n", autotest_frame()); return; }
+    uint32_t s = player_simable(c), a = s;
+    int me = s ? (int)gcall(c, FN_RACER_INDEX, 0, 1, &a) : -1;
     int n = (int)rd(rs + RS_NRACERS);
     char b[640]; int o = 0;
     for (int i = 0; i < n && i < 16 && o < (int)sizeof b - 48; i++){
@@ -134,13 +138,13 @@ static void log_status(void){
         o += snprintf(b + o, sizeof b - (size_t)o, " #%d %.1f%%%s %.2fs", i, rdf(ri + RI_PCT),
                       MR8(ri + RI_FINISHED) ? " finished" : "", rdf(ri + RI_TIME));
     }
-    fprintf(stderr, "[mwrace] f=%ld racestatus flow %u racers %d active %u won %u:%s\n", autotest_frame(),
-            game_flow(), n, MR8(rs + RS_ACTIVE), MR8(rs + RS_WON), o ? b : " none");
+    fprintf(stderr, "[mwrace] f=%ld racestatus flow %u racers %d active %u won %u player %d:%s\n", autotest_frame(),
+            game_flow(), n, MR8(rs + RS_ACTIVE), MR8(rs + RS_WON), me, o ? b : " none");
 }
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
-enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_TELEPORT, Q_WHERE };
+enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_TELEPORT, Q_WHERE, Q_STATUS };
 static struct { int op, done, rel; float v[6]; } Q;
 
 void mw_frame(CPU *c){
@@ -149,7 +153,7 @@ void mw_frame(CPU *c){
     switch (Q.op){
     case Q_RACEWIN: {
         uint32_t s = player_simable(c), a = s;
-        int idx = s ? (int)gcall(c, FN_RACER_INDEX, 0, 1, &a) : -1;
+        int idx = s && rd(G_RACESTATUS) ? (int)gcall(c, FN_RACER_INDEX, 0, 1, &a) : -1;   /* it reads GRaceStatus */
         if (game_flow() != g_game.flow_race || idx < 1){
             fprintf(stderr, "[mwrace] f=%ld racewin: not in a race (flow %u, racer %d)\n", f, game_flow(), idx);
             break; }
@@ -159,8 +163,9 @@ void mw_frame(CPU *c){
         if (all) gcall(c, FN_POSTRACE, 0, 0, 0);
         fprintf(stderr, "[mwrace] f=%ld racewin: racer %d finished through NotifyRaceFinished; all humans done %d%s\n",
                 f, idx, all, all ? ": EnterPostRaceFlow" : "");
-        log_status();
+        log_status(c);
         break; }
+    case Q_STATUS: log_status(c); break;
     case Q_AI_ON: case Q_AI_OFF: {
         uint32_t zero = 0;
         gcall(c, Q.op == Q_AI_ON ? FN_FORCE_AI : FN_CLEAR_AI, 0, 1, &zero);
@@ -204,7 +209,6 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (sscanf(line, "%31s %n", cmd, &used) < 1) return 1;
     const char *p = line + used;
     long f = autotest_frame();
-    if (!strcasecmp(cmd, "racestatus")){ log_status(); return 1; }
     if (!strcasecmp(cmd, "frames")){
         fprintf(stderr, "[mwrace] f=%ld frames: presents %u main-loop passes %llu flow %u\n", f,
                 com_present_no(), (unsigned long long)debug_frame_passes(), game_flow());
@@ -222,6 +226,7 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     memset(&Q, 0, sizeof Q);
     if (!strcasecmp(cmd, "racewin")) Q.op = Q_RACEWIN;
     else if (!strcasecmp(cmd, "where")) Q.op = Q_WHERE;
+    else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
     else if (!strcasecmp(cmd, "autopilot")){
         sscanf(p, "%31s", a1);
         Q.op = !strcasecmp(a1, "off") ? Q_AI_OFF : Q_AI_ON;

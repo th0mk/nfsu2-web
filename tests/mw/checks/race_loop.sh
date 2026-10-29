@@ -12,11 +12,11 @@ for m in load racing GO results; do
   n=$(grep -c "LOG race_loop: $m\$" "$LOG")
   [ "$n" = 25 ] || fail "$n of 25 races reached '$m'"
 done
-n=$(grep -cE '^\[mwrace\] f=[0-9]+ racewin: racer [0-9]+ finished .*all humans done 1: EnterPostRaceFlow' "$LOG")
-[ "$n" = 25 ] || fail "$n of 25 races were finished by racewin through EnterPostRaceFlow"
-# the race's state racewin logs after its finish
+n=$(grep -cE '^\[mwrace\] f=[0-9]+ racewin: racer 1 finished .*all humans done 1: EnterPostRaceFlow' "$LOG")
+[ "$n" = 25 ] || fail "$n of 25 races had racewin finish racer 1 (the player: Game.GetRacerIndex) through EnterPostRaceFlow"
+# the race's state racewin logs after its finish: the player is racer 1 (slot #0), finished, and the race won
 n=$(awk '/^\[mwrace\] f=[0-9]+ racewin: / { w = 1; next }
-  w && /^\[mwrace\] f=[0-9]+ racestatus / { if ($0 ~ /racestatus flow 6 racers [0-9]+ active 1 won 1: #0 100\.0% finished/) n++; w = 0 }
+  w && /^\[mwrace\] f=[0-9]+ racestatus / { if ($0 ~ /racestatus flow 6 racers [0-9]+ active 1 won 1 player 1: #0 100\.0% finished/) n++; w = 0 }
   END { print n + 0 }' "$LOG")
 [ "$n" = 25 ] || fail "$n of 25 races ended with the player first and finished"
 # 0x684710..0x684786 is the lookup (a red-black tree's lower bound, map::operator[]); a stall report names each

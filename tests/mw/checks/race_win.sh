@@ -13,8 +13,8 @@ R="[file] CreateFileA(\"$D/ALPHA/ALPHA\") -> " W="[write] CreateFileA(CREATE_ALW
   index($0, r) && !k { k = 1 }
   /LOG race_win: ALPHA loaded$/ && k == 1 { k = 2 }
   /LOG race_win: GO$/ && k == 2 { k = 3 }
-  /\[mwrace\] f=[0-9]+ racewin: racer [0-9]+ finished .*all humans done 1: EnterPostRaceFlow/ && k == 3 { k = 4 }
-  /\[mwrace\] f=[0-9]+ racestatus flow 6 racers [0-9]+ active 1 won 1: #0 100\.0% finished/ && k == 4 { k = 5 }
+  /\[mwrace\] f=[0-9]+ racewin: racer 1 finished .*all humans done 1: EnterPostRaceFlow/ && k == 3 { k = 4 }
+  /\[mwrace\] f=[0-9]+ racestatus flow 6 racers [0-9]+ active 1 won 1 player 1: #0 100\.0% finished/ && k == 4 { k = 5 }
   /LOG race_win: won$/ && k == 5 { k = 6 }
   index($0, w) && k == 6 { k = 7 }
   /LOG race_win: ALPHA saved$/ && k == 7 { k = 8 }
