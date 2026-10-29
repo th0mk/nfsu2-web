@@ -105,9 +105,9 @@ static int    g_sync_mode = -1;
 /* the status line's window: the playback rate's extremes since the last line */
 static double g_win_rmin = 9.0, g_win_rmax = 0.0, g_win_tmin = 9.0, g_win_tmax = 0.0;
 static double g_win_fmin = 9.0, g_win_fmax = 0.0; static uint64_t g_win_over = 0;
-/* how far ahead of the mixer the game has written (ms, the game's share of the
- * sound's delay), and the slices mixed before the game wrote them (each one a
- * glitch): the status line's window and the whole run */
+/* how far ahead of the play cursor it reads the game has written (ms, the
+ * game's share of the sound's delay), and the slices mixed before the game
+ * wrote them (each one a glitch): the status line's window and the whole run */
 static double g_win_lmin = 1e9, g_win_lmax = 0.0, g_lead_sum = 0.0, g_lead_max = 0.0;
 static uint64_t g_lead_n = 0, g_starved = 0, g_win_starved = 0, g_skips = 0;
 static _Atomic int g_reported = 0;   /* the game is ending (audio_report): its writer stops, no skip */
@@ -331,6 +331,19 @@ void audio_stop(int id){
  * career races at once (2026-10-24): 30 ms made 1-4 skips a run there, 12 ms
  * 4-5, 50 ms none. */
 #define WRITE_LEAD_MS 50u
+/* the play cursor the game reads, in source frames (g_slock held): the mixed
+ * one, and on the wall clock that one moved on by the ahead output frames
+ * since its slices were due (wall_ahead_locked) */
+static double play_cursor_locked(const SndBuf *b, double ahead){
+    uint32_t bpf = b->chans * (b->bits/8u);
+    double cur = b->cursor;
+    if (ahead > 0.0 && b->playing && bpf){
+        double nsrc = (double)(b->bytes / bpf);
+        cur += ahead * (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq;
+        if (nsrc > 0.0 && cur >= nsrc) cur = fmod(cur, nsrc);
+    }
+    return cur;
+}
 void audio_cursors(int id, uint32_t *play, uint32_t *write){
     uint32_t p = 0, w = 0;
     if (id > 0 && id < MAXSND){
@@ -339,12 +352,7 @@ void audio_cursors(int id, uint32_t *play, uint32_t *write){
             SndBuf *b = &g_snd[id];
             uint32_t bpf = b->chans * (b->bits/8u);
             uint32_t sz  = b->bytes;
-            double cur = b->cursor, ahead = b->playing ? wall_ahead_locked() : 0.0;
-            if (ahead > 0.0 && bpf){                    /* the wall clock's, between slices */
-                double nsrc = (double)(sz / bpf);
-                cur += ahead * (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq;
-                if (nsrc > 0.0 && cur >= nsrc) cur = fmod(cur, nsrc);
-            }
+            double cur = play_cursor_locked(b, b->playing ? wall_ahead_locked() : 0.0);
             p = (uint32_t)(cur * (double)bpf) % sz;
             uint32_t lead = (g_snd[id].rate * WRITE_LEAD_MS / 1000u) * bpf;
             if (lead >= sz) lead = sz / 4u;
@@ -430,6 +438,11 @@ static void mix_into(float *out, unsigned frames){
     if (g_rate_ratio > g_win_rmax) g_win_rmax = g_rate_ratio;
 
     pthread_mutex_lock(&g_slock);
+    /* the game's fill and write-ahead below are measured from the cursor it
+     * reads, which on the wall clock runs ahead of this slice's by up to
+     * WALL_INTERP_S (wall_ahead_locked): from the mixed one, a pump that woke
+     * late (150 ms) counted a skip at every wake of a game that wrote on time */
+    double ahead = wall_ahead_locked();
     for (int i = 1; i < g_sndn; i++){
         SndBuf *b = &g_snd[i];
         if (!b->used || !b->playing || !b->bytes) continue;
@@ -438,6 +451,7 @@ static void mix_into(float *out, unsigned frames){
         if (!bpf) continue;
         uint32_t nsrc = b->bytes / bpf;
         if (!nsrc) continue;
+        uint32_t pbyte = b->wseen ? ((uint32_t)(play_cursor_locked(b, ahead) * (double)bpf)) % b->bytes : 0u;
         /* audio.m locks the play cursor to the game's write position (a
          * PLL, +-3 %) against a free-running cursor drifting through the
          * unwritten region.  The game's writer follows the play cursor
@@ -449,7 +463,6 @@ static void mix_into(float *out, unsigned frames){
          * semitone.  Off by default (SNDSERVO=1 turns it on); the fill and
          * the overrun count are still measured for the status line. */
         if (b->wseen){
-            uint32_t pbyte = ((uint32_t)(b->cursor * (double)bpf)) % b->bytes;
             uint32_t avail = (b->wpos + b->bytes - pbyte) % b->bytes;
             double frac = (double)avail / (double)b->bytes;
             double want;
@@ -489,9 +502,9 @@ static void mix_into(float *out, unsigned frames){
         active++;
         if (b->settled < SETTLE_SLICES) b->settled++;
         else if (b->wseen && !atomic_load(&g_out_muted) && !atomic_load(&g_reported)){
-            /* has the game written the part this slice plays?  (it writes at
-             * most 50 + 30 + 200 ms ahead: more is the cursor past the writer) */
-            uint32_t pbyte = ((uint32_t)(b->cursor * (double)bpf)) % b->bytes;
+            /* has the game written a slice past the cursor it reads?  (it
+             * writes at most 50 + 30 + 200 ms ahead: more is the cursor past
+             * the writer) */
             uint32_t avail = (b->wpos + b->bytes - pbyte) % b->bytes;
             if ((double)avail > 0.3 * (double)b->rate * (double)bpf || (double)avail < step * (double)frames * (double)bpf){
                 g_starved++; g_win_starved++;
