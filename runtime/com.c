@@ -4356,6 +4356,10 @@ int com_call(CPU *c, uint32_t magic){
                     buf = hb_lock(x, pitch*rows + 64u, is_cube ? A(c,5) : A(c,4));
                 else buf = gbuf_alloc_k(pitch*rows + 64u, kind);
                 if(slot) MR32(slot)=buf; }
+            else if (iface == IF_TEX && hb_on()){      /* locked again before its UnlockRect: the same window */
+                uint32_t x = hb_find(slot);
+                if (x && !g_hb[x].pinned && g_hb[x].locks) hb_nest(x, is_cube ? A(c,5) : A(c,4));
+            }
             /* a render target the game made lockable (CreateRenderTarget):
              * what the GPU drew there, the cover shoot's picture (gpu_web.c) */
             if (iface==IF_SURF && self && MR32(self+40)==3u && MR32(self+28) && metal_available()){
@@ -4393,7 +4397,8 @@ int com_call(CPU *c, uint32_t magic){
                     fprintf(stderr,"\n");
                 }
             }
-            /* host backing: the window back into the level's copy, and freed */
+            /* host backing: the window back into the level's copy, and freed, at the last UnlockRect of a
+             * nest (each UnlockRect uploads the level, as UG2's path does) */
             if (iface==IF_TEX && self && buf && hb_on()){
                 uint32_t sl = is_cube2 ? self + 104u + 4u*(face2 & 7u) : self + 32u + 4u*level;
                 uint32_t x = hb_find(sl);

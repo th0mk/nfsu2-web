@@ -723,6 +723,20 @@ static void t_hostback(void){
     check(MR8(q + 30) == 0x55, "hb-nested-readonly", "a writing Lock inside a READONLY one: the write %s", MR8(q + 30) == 0x55 ? "kept" : "lost");
     vb_unlock(vb); release(vb);
 
+    /* one texture level locked twice before its UnlockRects: one window, uploaded at each UnlockRect, the
+     * writes between them kept */
+    t = tex_make(64, 64); p = tex_lock(t, 0); pat(p, 64*64*4, 10); tex_unlock(t);
+    unsigned u0 = g_uploads;
+    p1 = tex_lock(t, 0); p2 = tex_lock(t, 0);
+    tex_unlock(t); unsigned u1 = g_uploads;
+    if (p1) MR8(p1 + 4) = 0x5E;
+    tex_unlock(t); unsigned u2 = g_uploads;
+    q = tex_lock(t, LK_RO);
+    check(p1 && p1 == p2 && u1 - u0 == 1u && u2 - u1 == 1u && MR8(q + 4) == 0x5E && is_pat(q + 5, 64*64*4 - 5, PAT_AT(10, 5)), "hb-tex-nested",
+          "same pointer %d; uploads at the 1st UnlockRect %u, at the 2nd %u; the write between them %s", p1 == p2, u1 - u0, u2 - u1,
+          MR8(q + 4) == 0x5E ? "kept" : "lost");
+    tex_unlock(t); release(t);
+
     /* locked every frame: the data of the last Lock, and a Lock of part points into the same window */
     vb = vb_make(N);
     for (int i = 0; i < 8; i++){ p = vb_lock(vb, 0, 0, 0); pat(p, N, (uint8_t)(20 + i)); vb_unlock(vb); present(); }
