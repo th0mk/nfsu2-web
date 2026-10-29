@@ -696,6 +696,33 @@ static void t_hostback(void){
           "the other buffer's bytes %d", past, before, rest, nb_ok);
     release(nb); release(vb);
 
+    /* nested Locks (D3D9: one lock count; every pointer stays valid until the last Unlock) */
+    vb = vb_make(N); p = vb_lock(vb, 0, 0, 0); pat(p, N, 3); vb_unlock(vb);
+    uint32_t p1 = vb_lock(vb, 0, 0, 0), p2 = vb_lock(vb, 0, 0, 0);
+    if (p2) MR8(p2 + 10) = 0x11;
+    vb_unlock(vb);
+    if (p1) MR8(p1 + 20) = 0x22;                        /* between the two Unlocks */
+    vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO);
+    check(p1 && p1 == p2 && MR8(q + 10) == 0x11 && MR8(q + 20) == 0x22 && is_pat(q + 21, N - 21, PAT_AT(3, 21)), "hb-nested",
+          "same pointer %d; written before the 1st Unlock %d, between the Unlocks %d", p1 == p2, MR8(q + 10) == 0x11, MR8(q + 20) == 0x22);
+    vb_unlock(vb);
+    p1 = vb_lock(vb, 0, 64, 0); p2 = vb_lock(vb, 128, 64, 0);
+    if (p1) memset(g_mem + p1, 0x33, 64);
+    if (p2) memset(g_mem + p2, 0x44, 64);
+    vb_unlock(vb); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO);
+    check(is_byte(q, 64, 0x33) && is_byte(q + 128, 64, 0x44) && is_pat(q + 64, 64, PAT_AT(3, 64)), "hb-nested-disjoint",
+          "Lock(0,64) + Lock(128,64), both written after both Locks: [0,64) %d, [128,192) %d, [64,128) kept %d",
+          is_byte(q, 64, 0x33), is_byte(q + 128, 64, 0x44), is_pat(q + 64, 64, PAT_AT(3, 64)));
+    vb_unlock(vb);
+    p1 = vb_lock(vb, 0, 0, LK_RO); p2 = vb_lock(vb, 0, 0, 0);
+    if (p2) MR8(p2 + 30) = 0x55;
+    vb_unlock(vb); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO);
+    check(MR8(q + 30) == 0x55, "hb-nested-readonly", "a writing Lock inside a READONLY one: the write %s", MR8(q + 30) == 0x55 ? "kept" : "lost");
+    vb_unlock(vb); release(vb);
+
     /* locked every frame: the data of the last Lock, and a Lock of part points into the same window */
     vb = vb_make(N);
     for (int i = 0; i < 8; i++){ p = vb_lock(vb, 0, 0, 0); pat(p, N, (uint8_t)(20 + i)); vb_unlock(vb); present(); }

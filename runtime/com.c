@@ -211,7 +211,10 @@ static void gbuf_free(uint32_t p){
  * mapping (a game may touch bytes outside the range it locked), filled from the
  * copy (unless the copy was never written, or the lock discards), the pointer at
  * the locked offset; Unlock: the window back into the copy (unless the lock was
- * read-only) and freed.  Draws read a buffer's copy (buf_src).
+ * read-only) and freed.  Locks nest as D3D9 counts them: a Lock before the
+ * Unlock points into the same window, which stays until the last Unlock and is
+ * written back unless every Lock of the nest was read-only.  Draws read a
+ * buffer's copy (buf_src).
  * A resource that is locked again within HB_PIN_FRAMES presents of its last
  * Unlock, HB_PIN_TIMES times in a row, keeps its window from then on (a
  * per-frame lock copies no more than before); its copy goes. */
@@ -224,6 +227,7 @@ typedef struct {
     uint32_t key, size;                   /* the window's field; the copy's size */
     uint8_t *host;                        /* the copy (NULL: never written, reads as zeros) */
     uint32_t wlen, wflags;                /* the window's length (the whole buffer or level) and the lock's flags */
+    uint32_t locks;                       /* Locks not matched by an Unlock yet */
     uint32_t last_unlock, near;           /* the Present count at the last Unlock; Locks soon after one, in a row */
     uint8_t kind, pinned;                 /* its census kind (GK_*); 1: the window stays, no copy */
 } HBack;
@@ -306,21 +310,31 @@ static uint32_t hb_lock(uint32_t x, uint32_t len, uint32_t flags){
         g_hb_copied += n; g_hb_copyin += n;
     } else if (e->host) memset(g_mem + w, 0, len);
     g_hb_locks++; if (e->host) g_hb_relocks++;
-    e->wlen = len; e->wflags = flags;
+    e->wlen = len; e->wflags = flags; e->locks = 1;
     if (pin){ e->pinned = 1; g_hb_pins++;
         if (e->host){ free(e->host); g_hb_bytes -= e->size; e->host = 0; } }
     return w;
 }
-/* Unlock: the window at w back into the copy, and freed (not a pinned entry's) */
-static void hb_unlock(uint32_t x, uint32_t w){
+/* A Lock before the Unlock: the same window, one more Unlock to come; a writing Lock makes the nest write back */
+static void hb_nest(uint32_t x, uint32_t flags){
     HBack *e = &g_hb[x];
-    if (e->pinned || !w) return;
+    e->locks++; g_hb_nested++;
+    if (!(flags & 0x10u)) e->wflags &= ~0x10u;
+}
+/* Unlock: at the last of a nest, the window at w back into the copy and freed (1: the field is cleared;
+ * not a pinned entry's) */
+static int hb_unlock(uint32_t x, uint32_t w){
+    HBack *e = &g_hb[x];
+    if (e->pinned || !w) return 0;
+    if (e->locks > 1){ e->locks--; return 0; }
+    e->locks = 0;
     if (!(e->wflags & 0x10u)){                   /* D3DLOCK_READONLY: nothing written */
         uint8_t *h = hb_host(e, e->wlen);
         if (h){ memcpy(h, g_mem + w, e->wlen); g_hb_copied += e->wlen; }
     }
     e->last_unlock = (uint32_t)g_present; if (!e->last_unlock) e->last_unlock = 1;
     gbuf_free(w);
+    return 1;
 }
 /* A draw's vertex or index data: a buffer's host copy (p, len bytes from p) or
  * guest memory at ga (0: none), whose pages are checked as it is read. */
@@ -4300,7 +4314,7 @@ int com_call(CPU *c, uint32_t magic){
             if (x && x < HB_N && !g_hb[x].pinned){
                 uint32_t size = MR32(self+4), w = MR32(self+8);
                 if (off >= size) off = 0;
-                if (w) g_hb_nested++;                   /* locked again before its Unlock: the same window */
+                if (w) hb_nest(x, A(c,4));              /* locked again before its Unlock: the same window */
                 else { w = hb_lock(x, size, A(c,4)); MR32(self+8) = w; }
                 if (pp) MR32(pp) = w ? w + off : 0u;
                 r = w ? 0u : 0x8876086Cu;                /* no window: D3DERR_INVALIDCALL */
@@ -4383,13 +4397,13 @@ int com_call(CPU *c, uint32_t magic){
             if (iface==IF_TEX && self && buf && hb_on()){
                 uint32_t sl = is_cube2 ? self + 104u + 4u*(face2 & 7u) : self + 32u + 4u*level;
                 uint32_t x = hb_find(sl);
-                if (x && !g_hb[x].pinned){ hb_unlock(x, buf); MR32(sl) = 0; }
+                if (x && hb_unlock(x, buf)) MR32(sl) = 0;
             }
             r=0; }
         else if (MID(Unlock) && (iface==IF_VB || iface==IF_IB)){
             gheap_check_block(c, self ? MR32(self+8) : 0u, "LOCK BUFFER OVERRUN (Unlock)");
             uint32_t x = (self && hb_on()) ? MR32(self+BUF_HB) : 0u;
-            if (x && x < HB_N && !g_hb[x].pinned && MR32(self+8)){ hb_unlock(x, MR32(self+8)); MR32(self+8) = 0; }
+            if (x && x < HB_N && hb_unlock(x, MR32(self+8))) MR32(self+8) = 0;
             r=0; }
         else if (MID(GetLevelCount)) r=(self&&MR32(self+24))?MR32(self+24):1u;
         else if (MID(GetType) && g_game.d3d9_strict)       /* D3DRESOURCETYPE */
