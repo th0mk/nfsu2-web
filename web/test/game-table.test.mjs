@@ -32,6 +32,8 @@ const UG2_UNSET = {
   fe_object: 'UG2\'s scripts wait on its screens and memory: $O names no object there',
   on_sound_position: 'Most Wanted\'s sound thread watch; UG2\'s GetCurrentPosition answers as it always did',
   sound_wall_catchup: 'the wall clock\'s old rule: a backlog over 100 ms dropped, the cursors a slice at a time',
+  pad_late: 'UG2 finds a late controller by its own 32-frame rescan (pad_rescan)',
+  pad_buttons: 'UG2\'s pad keeps the button order its layouts (pad_ug2.c) were made for',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -45,6 +47,9 @@ const MW_UNSET = {
   lan_obj: 'MW\'s LAN glue, M8', lan_start: 'M8', lan_stop: 'M8', lan_running: 'M8',
   res_labels: 'M3-03', on_sound_unlock: 'UG2 debugging only',
   online_host_va: 'M9: no MW lobby on the server yet', online_host: 'M9',
+  pad_rescan: 'MW enumerates its devices once: a late pad comes through pad_late',
+  pad_trigger_axes: 'MW\'s driving layout, M6-37', pad_jolt: 'MW\'s rumble, M6-37',
+  pad_hold_screen: 'MW\'s controls screen, M6-37', pad_fe_keys: 'MW\'s menus take the pad\'s buttons themselves',
 };
 // the page's events (input_web.c) and the feature each reaches
 const EVENTS = { IEV_SMS: ['sms_request', 'sms_request'], IEV_PHOTO: ['photo_input', 'photo_input'] };
@@ -162,4 +167,21 @@ test('the page\'s events reach their features through the game table', () => {
     assert.match(input, new RegExp(`case ${ev}:[^;]*g_game\\.${field}\\(`), `input_web.c: ${ev} calls g_game.${field}`);
     assert.equal(t.get(field), fn, `game_ug2.c: .${field} = ${fn}`);
   }
+});
+
+test('the game pad is core\'s, and each game\'s own parts are reached through its table', () => {
+  assert.match(fs.readFileSync(path.join(REPO, 'runtime/core.list'), 'utf8'), /^dinput_pad\.c\b/m, 'dinput_pad.c is a core file');
+  const build = read('web/build.sh'), ug2 = /^RT_UG2="([^"]*)"/m.exec(build)[1].split(/\s+/);
+  assert.ok(ug2.includes('pad_ug2') && !ug2.includes('dinput_pad'), 'RT_UG2 has pad_ug2.c; dinput_pad.c comes with the core');
+  const u = ug2Table(), m = table('runtime/mw/game_mw.c');
+  assert.deepEqual(['pad_rescan', 'pad_trigger_axes', 'pad_jolt', 'pad_hold_screen', 'pad_fe_keys'].map(f => u.get(f)),
+    ['ug2_pad_rescan', 'ug2_pad_trigger_axes', 'ug2_pad_jolt', '"UI_Options_PC_Controller.fng"', '1']);
+  // UG2's overrides of its profile lookup, its Joypad page and its input controller stay in its own file
+  const p = read('runtime/pad_ug2.c');
+  for (const f of ['sub_005b81b0', 'sub_005b8460', 'sub_005c1720', 'sub_00407750']) assert.match(p, new RegExp(`\\nvoid ${f}\\(CPU \\*c\\)\\{`));
+  // Most Wanted: a late pad through its input manager's callback, then its input set-up; a DualShock's button order
+  assert.equal(m.get('pad_late'), '&mw_pad_late');
+  assert.match(read('runtime/mw/game_mw.c'),
+    /static const PadLate mw_pad_late = \{\s+\.cb = 0x007f1a6bu, \.setup = 0x0063f850u, \.setup_this = 0x00920de8u, \.setup_vtbl = 0x008a7b9cu,\s+\};/);
+  assert.equal(m.get('pad_buttons'), '"X A B Y LB RB LT RT BACK START LS RS"');
 });

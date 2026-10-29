@@ -127,7 +127,7 @@ lifted | xargs -P "$J" -n 3 sh -c '
 # (objects mw_<name>.o).  What core calls of a game that has no such file
 # yet, runtime/web/null_game.c's weak stand-ins answer.
 RT_CORE="$(sed 's/#.*//' runtime/core.list | awk 'NF{print $1}' | grep '\.c$' | sed 's/\.c$//' | tr '\n' ' ')"
-RT_UG2="game_ug2 debug_ug2 overrides d3dx_hle oracle widescreen framerate dinput_pad career intro drifttest roam roam_game mprace hornmenu optslider tonemenu powerunits radio drift carsfx racehorn racenet online netrace headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional garage sndlead carshadow movie photo"
+RT_UG2="game_ug2 debug_ug2 overrides d3dx_hle oracle widescreen framerate pad_ug2 career intro drifttest roam roam_game mprace hornmenu optslider tonemenu powerunits radio drift carsfx racehorn racenet online netrace headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional garage sndlead carshadow movie photo"
 if [ "$GAME" = ug2 ]; then RT="$RT_CORE $RT_UG2"; RT_GAME=""
 else RT="$RT_CORE"; RT_GAME="$( (cd "runtime/$GAME" 2>/dev/null && ls *.c 2>/dev/null) | sed 's/\.c$//' | tr '\n' ' ')"; fi
 # runtime files only: a build with the D3DX oracle linked

@@ -8,8 +8,8 @@
 # its own files, and core reaches them through runtime/game.h.
 #
 # Not core yet, because they still hold UG2 overrides or hooks next to their
-# generic code: dinput_pad.c, framerate.c (the pacer), widescreen.c (the ws_*
-# mapping API).  Not core: carsfx.c (reads UG2's engine and nitrous sound
+# generic code: framerate.c (the pacer), widescreen.c (the ws_* mapping API).
+# Not core: carsfx.c (reads UG2's engine and nitrous sound
 # banks) and every UG2 feature file.
 
 # guest memory, dispatch, the lifted code's helpers
@@ -50,6 +50,8 @@ dikeys.c
 keyboard.c
 kbd.h
 dinput_kbd.c
+dinput_pad.c
+gamepad.h
 horn.c
 horn.h
 

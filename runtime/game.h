@@ -70,6 +70,15 @@ typedef struct InitTable {
  * start. */
 typedef struct ThreadName { uint32_t start; const char *name; } ThreadName;
 
+/* A controller connected after the game enumerated its devices and found
+ * none, for a game that never enumerates again (game.h pad_late): at a
+ * Present its EnumDevices callback cb gets the device, with the pvRef of
+ * that enumeration, as a new enumeration would offer it; then, where the
+ * game set its input up for the controllers it found, that routine runs
+ * again: setup, a thiscall without arguments on the object whose pointer is
+ * at setup_this, when that object's vtable is setup_vtbl (0 setup: none). */
+typedef struct PadLate { uint32_t cb, setup, setup_this, setup_vtbl; } PadLate;
+
 typedef struct GameOps {
     /* ---- the game and its files ---- */
     const char *id;                 /* "ug2": the game id the module, the page and the server share */
@@ -174,6 +183,29 @@ typedef struct GameOps {
                                      * 100 ms and moves them a slice at a time, as it always did */
     uint32_t online_host_va;        /* the Online server's host name in the exe ("*pcnfs05.ea.com") */
     const char *online_host;        /* that name without its '*' ("pcnfs05.ea.com") */
+
+    /* ---- the game pad (dinput_pad.c: a controller as a DirectInput 8 joystick, offered once one exists) ---- */
+    void (*pad_rescan)(int on);     /* the game's own search for controllers plugged in after its enumeration:
+                                     * on while it should look (UG2: EnumDevices every 32 frames, pad_ug2.c);
+                                     * 0 = it has none: the device stays one kind, whichever controller
+                                     * drives it, and a late controller needs pad_late */
+    const PadLate *pad_late;        /* how a game without a search takes a controller connected after its
+                                     * enumeration found none (dinput_pad.c dipad_present); 0 = a controller
+                                     * must be there when the game looks */
+    const char *pad_buttons;        /* the pad buttons behind DirectInput's buttons 0..11, by name (A B X Y LB
+                                     * RB BACK START LS RS, LT and RT the triggers pulled to the end), when the
+                                     * game's own layout expects another controller's order; 0 = the pad's
+                                     * order "A B X Y LB RB BACK START LS RS LT RT" (an Xbox pad's) */
+    unsigned (*pad_trigger_axes)(uint32_t dev); /* which triggers of the IDirectInputDevice8 dev the game reads as
+                                     * an axis now (bit 0 the left, bit 1 the right): their buttons press at the
+                                     * end of the travel, the others' at half travel; 0 = both are axes */
+    float (*pad_jolt)(void);        /* every poll of the pad with force feedback on: the game's jolt now, 0..1,
+                                     * rumbled on top of its effects (UG2: the player car's hits); 0 = none */
+    const char *pad_hold_screen;    /* the front-end screen (autotest_screen) that keeps an unplugged pad,
+                                     * at rest, until it is left (UG2's controls page); 0 = none */
+    int pad_fe_keys;                /* 1: in the front end (flow_fe) the pad's A, B and View also post Enter,
+                                     * Escape and Q to the window (UG2's text fields and quit prompt take
+                                     * characters only); 0 = the pad's buttons are DirectInput's alone */
 
     /* ---- the game's own Win32 imports ---- */
     int (*win32_misc)(CPU *c, const char *dll, const char *n, uint32_t *r);

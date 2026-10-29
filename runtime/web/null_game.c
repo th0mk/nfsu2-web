@@ -4,11 +4,12 @@
  *
  * Every definition is weak: a build with the game's files (UG2's
  * game_ug2.c, widescreen.c, framerate.c, career.c, roam*.c, d3dx_hle.c,
- * dinput_pad.c, ...) replaces them at link time, so they change nothing
+ * pad_ug2.c, ...) replaces them at link time, so they change nothing
  * there.  A build without those files links with these instead and behaves
  * as if the feature were absent: no game to run, no aspect mapping, no
  * frame-rate modes, no free roam, no D3DX statistics, no headlight ramps, no
- * test career commands, no game pad, no Online lobby hooks.
+ * test career commands, no player input controller to peek, no Online lobby
+ * hooks.
  * web/tools/corelink.sh links such a build. */
 #include "cpu.h"
 #include "game.h"
@@ -81,17 +82,8 @@ WEAK void roam_game_report(void){ }
 WEAK int  mprace_owns_input(void){ return 0; }
 WEAK void carsfx_mix(float *acc, unsigned frames, unsigned rate){ (void)acc; (void)frames; (void)rate; }
 
-/* ---- dinput_pad.c: no game pad (EnumDevices offers none, so the game never
- * creates one or calls its methods) */
-WEAK int      dipad_guid(uint32_t g){ (void)g; return 0; }
-WEAK void     dipad_created(uint32_t obj, uint32_t guid){ (void)obj; (void)guid; }
-WEAK int      dipad_enum(CPU *c, uint32_t devtype, uint32_t cb, uint32_t ref, uint32_t flags){
-    (void)c; (void)devtype; (void)cb; (void)ref; (void)flags; return 0; }
-WEAK uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint32_t *a){
-    (void)c; (void)self; (void)nm; (void)nargs; (void)a; return 0x80004001u; }     /* E_NOTIMPL */
-WEAK uint32_t dipad_effect_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint32_t *a){
-    (void)c; (void)self; (void)nm; (void)nargs; (void)a; return 0x80004001u; }
-WEAK void     dipad_effect_free(uint32_t obj){ (void)obj; }
+/* ---- pad_ug2.c: no player input controller for the scripts' "@in+OFF"
+ * peeks (the game pad itself is core's dinput_pad.c) */
 WEAK uint32_t dipad_input_ctx(void){ return 0; }
 
 /* ---- garage.c: no career garage's slots to keep beside a saved or deleted

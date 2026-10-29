@@ -368,6 +368,7 @@ static const ModLink ug2_modules[] = {
 };
 
 void photo_input(int cmd, int a, int b);       /* photo.c: photo mode, as the page drives it */
+void ug2_pad_rescan(int on); unsigned ug2_pad_trigger_axes(uint32_t dev); float ug2_pad_jolt(void);  /* pad_ug2.c */
 
 const GameOps g_game = {
     .id = "ug2",
@@ -411,4 +412,9 @@ const GameOps g_game = {
     .on_sound_unlock = ug2_debug_sound_unlock,
     .online_host_va = 0x007fbdbcu,              /* SPEED2.EXE v1.2 NA: LobbyConnect's host, 0x588630 */
     .online_host = "pcnfs05.ea.com",
+    .pad_rescan = ug2_pad_rescan,               /* pad_ug2.c: the 32-frame rescan's flag [0x8364E8] */
+    .pad_trigger_axes = ug2_pad_trigger_axes,   /* what the pad's input channel reads (0x874C40 + n*0x370) */
+    .pad_jolt = ug2_pad_jolt,                   /* the player car's hits as rumble */
+    .pad_hold_screen = "UI_Options_PC_Controller.fng",  /* the Controls page: a lost pad crashes it */
+    .pad_fe_keys = 1,                           /* text fields and the quit prompt take characters only */
 };

@@ -3294,6 +3294,8 @@ int com_call(CPU *c, uint32_t magic){
             { extern void guest_cpu_mark(void); guest_cpu_mark(); }
             /* the game's own work at every Present (UG2: its debugging switches, debug_ug2.c) */
             if (g_game.on_present) g_game.on_present(c);
+            /* a controller connected since the game's enumeration found none (game.h pad_late_enum) */
+            { void dipad_present(CPU *c); dipad_present(c); }
             /* PRESENTBT: work out the structure of the main loop. */
             { const char *pb = ENVC("PRESENTBT");
               static int nb = 0;

@@ -63,6 +63,7 @@ void frame_pace(void){ }
 void autotest_on_present(CPU *c){ (void)c; }
 void watchdog_on_present(void){ }
 void discord_on_present(void){ }
+void dipad_present(CPU *c){ (void)c; }
 void guest_cpu_mark(void){ }
 void mprot_rearm(void){ }
 void mprot_arm(uint32_t a){ (void)a; }

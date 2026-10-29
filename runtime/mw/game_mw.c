@@ -117,6 +117,47 @@ static const uint32_t mw_modes[][2] = {
     {1280,720},{1920,1080},{2560,1440},{3840,2160},{0,0},
 };
 
+/* The game pad (dinput_pad.c): speed.exe enumerates its input devices once,
+ * in its DirectInput manager's constructor (0x7F1B3F, made by 0x7F1889 from
+ * 0x62847A and kept in [0x9BB410] for the game's life): EnumDevices
+ * (DI8DEVCLASS_ALL, callback 0x7F1A6B, pvRef the manager, ATTACHEDONLY) from
+ * 0x7F1B26, and nothing calls it again.  The callback makes a joystick for
+ * device types 0x14..0x18 (0x4A4 bytes, 0x7F2735: c_dfDIJoystick2 0x8C152C,
+ * GetCapabilities with 0x2C, autocentre off, Acquire), which joins the
+ * manager's poll list (0x7F1DAA) and goes to the game's handler at manager
+ * +0xC (0x6283D0: a joystick is appended to [0x91F150], count [0x9203B8]; the
+ * game reads the first, [0x91F150], where it wants one).  So the callback,
+ * a static function, and its pvRef, the manager, stay valid, and a
+ * controller connected later is offered through them (pad_late_cb).  A second
+ * enumeration, DI8DEVCLASS_GAMECTRL with callback 0x6D81D0 and no pvRef from
+ * 0x6DC5AD on another IDirectInput8 ([0x982D14]), keeps force-feedback
+ * devices in [0x93DF00 + 4n]; it gets a controller there at the start only.
+ * Every frame the pad's poll (0x7F28A4) does Poll (Acquire again while it
+ * fails with DIERR_INPUTLOST), then GetDeviceState with 0x110 bytes
+ * (0x7F2918), and keeps the state at device +0x234 (axes, then one dword per
+ * button from +0xC, the POVs at +0x220).
+ * The actions read it through the binding table [0x91F418] (0x3DC dwords,
+ * the defaults at 0x8F6D80, 0x628410): per action a name and four bindings
+ * of (type, device or key, code), the keyboard's in the first two, a
+ * joystick's in the last two (0x628560); type 2 a button, 3 a POV 0
+ * direction (0 up, 1 right, 2 down, 3 left), 4..9 axes (0x628940, jump table
+ * 0x628BB8).  Its front-end defaults are a DualShock's under DirectInput:
+ * FE_ACTION_ACCEPT button 1, CANCEL 2, START 9, LTRIG 4, RTRIG 5, B5 0, the
+ * D-pad moving; none for driving.  Hence pad_buttons: Cross (the pad's A) is
+ * button 1, Circle 2, Square 0, Triangle 3, the triggers 6 and 7, Share 8,
+ * Options (Start) 9, the sticks 10 and 11.
+ * The PC input device ([0x920DE8], vtable 0x8A7B9C; 0x634370 gives its
+ * holder) sets itself up once at the start (method 3, 0x63F850): with a
+ * joystick it polls it, keeps its state as the rest state (0x91F1E8) and
+ * picks the joystick's bindings by its product name (0x63CD80, also run by
+ * the profile load when the saved joystick is another, 0x56E27D); with none,
+ * 0x63CD80 moves the front end's directions off the POV, so a pad that came
+ * later had its buttons but no D-pad (seen in tests/mw/scripts/pad_menu.txt
+ * runs).  That set-up runs again after a late pad. */
+static const PadLate mw_pad_late = {
+    .cb = 0x007f1a6bu, .setup = 0x0063f850u, .setup_this = 0x00920de8u, .setup_vtbl = 0x008a7b9cu,
+};
+
 /* Left 0, and why:
  *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
  *   lang_suffixes       Q-06 (the movies' language suffix)
@@ -133,7 +174,11 @@ static const uint32_t mw_modes[][2] = {
  *                       are com.c's res_pick, as for UG2
  *   on_sound_unlock     UG2 debugging only
  *   online_host_va, online_host   M9: the lobby is "*pcnfs06.ea.com" at 0x8F42C8 on port 30920
- *                       (Q-14), which the server's Online stand-in does not serve; Online stays off */
+ *                       (Q-14), which the server's Online stand-in does not serve; Online stays off
+ *   pad_rescan          no search after the start (above): the pad stays one device, whichever
+ *                       controller drives it (a wheel after a pad included)
+ *   pad_trigger_axes, pad_jolt, pad_hold_screen, pad_fe_keys   UG2's pad features: MW's driving
+ *                       layout, its rumble and its controls screen are M6-37's */
 const GameOps g_game = {
     .id = "mw",
     .exe_name = "speed.exe",
@@ -172,4 +217,6 @@ const GameOps g_game = {
     .frame_site = MW_FRAME_SITE,                /* MainLoop's 0x663EC6, above */
     .hook = mw_debug_hook,                      /* debug_mw.c: the frame anchor is core's, so only a debugging
                                                  * lift's HOOKS=... reach it (NFSMW_HOOKLOG) */
+    .pad_late = &mw_pad_late,                   /* a late pad: the input manager's callback, then the input set-up */
+    .pad_buttons = "X A B Y LB RB LT RT BACK START LS RS",  /* a DualShock's order, which its layout expects */
 };

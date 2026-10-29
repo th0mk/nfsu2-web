@@ -1,85 +1,70 @@
-/* dinput_pad.c -- the virtual game pad (runtime/gamepad.m) as a DirectInput8
- * gamepad device.
+/* dinput_pad.c -- the virtual game pad (runtime/gamepad.h: a browser
+ * controller, the Mac's GameController.framework, or the test script's) as a
+ * DirectInput 8 joystick device, the same for every game.
  *
- * How SPEED2.EXE (v1.2 NA) uses game controllers (static analysis):
- *   - IDirectInput8 #1 [0x8709ec]: EnumDevices(DI8DEVCLASS_GAMECTRL, 0x5cef00,
- *     ATTACHEDONLY) once at start-up (0x5d00b5).  The rescan every 32 frames
- *     at 0x5cfa4a is gated by [0x8364e8], which nothing ever sets.
- *   - 0x5cef00 skips two Nostromo devices, 0x5cd1f0 creates at most two
- *     devices (slots [0x86ffb4], [0x86ffb8]): c_dfDIJoystick2, cooperative
- *     level EXCLUSIVE|FOREGROUND, EnumObjects -> DIPROP_RANGE -10000..10000
- *     per axis (0x5c8660), DIDOI_FFACTUATOR objects counted in [0x86ff80].
- *   - Every frame 0x5c8700 does Poll + GetDeviceState(DIJOYSTATE2) into
- *     0x86ffc0 + slot*0x110 (DIERR_INPUTLOST releases the slot).
- *   - 0x5ca690 gives each slot a free input channel (0x874c40 + n*0x370);
- *     0x5c11a0 sets that channel's defaults: button/POV -> action tables at
- *     +0x18 (in game), +0x98 (front end), +0x118, +0x198 and the analog axes
- *     at +0x344..+0x368.  0x5b81b0 is the built-in profile lookup by
- *     guidProduct (nine Logitech/Microsoft/Saitek/... pads).
- *   - The channel bindings (+0x18 table, axes) are saved with the profile
- *     (0x5b9420, restored by 0x5b9570) keyed by the device's guidInstance.
- *
- * So the pad is a classic DIJOYSTATE2 gamepad with a STABLE guidInstance
- * (bindings persist) and our own entry in the game's profile lookup
- * (sub_005b81b0 below) giving the default layout.  Layout:
+ * The device is a classic DIJOYSTATE2 gamepad (c_dfDIJoystick2, 0x110 bytes;
+ * DIJOYSTATE's 0x50 too) with a STABLE guidInstance: a game keys the
+ * bindings it saves on it.  Layout:
  *   axes    X/Y = left stick, Z = left trigger, Rx/Ry = right stick,
  *           Rz = right trigger (triggers rest at the minimum)
  *   POV 0   D-pad;  POV 1  left stick as four directions (menus)
  *   buttons 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 View, 7 Menu, 8 LS, 9 RS,
  *           10 LT and 11 RT pressed to the end of their travel (as a
  *           DualShock 4 under DirectInput reports L2/R2 twice), or half
- *           way when the game reads that trigger as no axis (fill_state)
+ *           way when the game reads that trigger as no axis (fill_state,
+ *           game.h pad_trigger_axes); or in the order the game's own
+ *           layout expects (game.h pad_buttons: Most Wanted's is a
+ *           DualShock's, Cross = button 1)
  *
  * A steering wheel (PadState.wheel: the page maps the wheel to LX, the gas
  * and brake pedals to RT and LT, its buttons onto the pad's, see
  * web/src/input/wheel.ts) is offered as a driving device instead, with an
- * instance GUID of its own, so the game keeps its bindings apart from the
- * pad's and gives it the wheel layout below (g_prof_wheel).  The device type
- * matters: 0x5cd1f0 marks a driving device's slot ([0x86e5bc + slot], read by
- * 0x5c1000), and the steering then takes 0x4061c0, the wheel's position
- * straight to the car's steering angle, where a pad's or the keyboard's goes
- * through 0x416bb0, which turns the car's wheels towards it at a limited rate
- * (input controller +0x1e0, full left from straight ahead: the wheel's in the
- * first frame, the pad's within 16 standing, not within 45 at speed;
- * tests/scripts/pad_wheel_switch.txt).  The game creates its device once, so when a
- * controller of the other kind takes over (a wheel after a pad, or back), the
- * device of the old kind is let go as in hotplug mode (two polls at rest,
- * then DIERR_INPUTLOST) and the game's rescan finds the new one.
+ * instance GUID of its own, so a game keeps its bindings apart from the pad's.
+ *
+ * The device is offered only once a controller exists (LESSONS L-105): with
+ * none, EnumDevices offers no game controller, as on Windows, so a keyboard
+ * player never meets a pad in the game's controller screens.  A controller
+ * connected later reaches the game through its own search where it has one
+ * (game.h pad_rescan: UG2 enumerates again every 32 frames while a flag is
+ * set), or else through the callback of the game's enumeration that found
+ * none, where the game's file names that callback (game.h pad_late:
+ * Most Wanted enumerates once, dipad_present).  A game with a search of its
+ * own also gets a device of the other kind when a wheel takes over from a pad
+ * or back: the old one is let go as in hotplug mode (two polls at rest, then
+ * DIERR_INPUTLOST) and the search finds the new one.  Without a search the
+ * device stays and reads whichever controller drives it.
  *
  *   NFSU2_PAD=0         no game pad device (also off/no/false)
  *   NFSU2_PAD=hotplug   the device exists only while a controller is
  *                       connected (DirectInput-faithful: unplugging reports
- *                       DIERR_INPUTLOST and the game's own 32-frame rescan
- *                       is switched on).  Default: the device appears once
- *                       a controller has been connected (at start-up or
- *                       later, through the same rescan) and then stays,
- *                       reading centred while nothing is connected, so
- *                       bindings survive unplugging.
+ *                       DIERR_INPUTLOST, and the game's search stays on).
+ *                       Default: the device appears once a controller has
+ *                       been connected (at start-up or later) and then
+ *                       stays, reading centred while nothing is connected,
+ *                       so bindings survive unplugging.
  *   NFSU2_PAD_TRIGGER_CLICK=<f>  trigger travel (0..1) at which buttons 10/11
  *                       press while the game reads the trigger as an axis
  *                       (default 0.97)
  *   NFSU2_PAD_LOG=1     log enumeration, properties and state changes
  *
- * Force feedback (rumble): the game plays DirectInput effects on a device
- * whose axes are force-feedback actuators (0x5c9150 ... 0x5ca072 create
- * spring, constant force, damper, square, sine, triangle and sawtooth
- * effects; the controller options have a Vibration switch).  When the
- * platform can drive the controller's motors (gamepad_rumble_ok: the
- * browser's dual-rumble; the Mac's gamepad.m has no motors and keeps the old
- * answer), the pad reports force feedback and plays the effects itself: every
- * frame the running ones are mixed into two motor levels (see ff_mix).
- * Those effects are made for wheels (0x5cd1f0 sorts a device by its type:
- * 0x16 driving, 0x14 joystick, 0x15 gamepad; the constant force, the springs
- * and the steering feel are a wheel's).  On a gamepad the game makes one
- * sine or square "rumble" with every level at zero and never changes it
- * (measured with NFSU2_FF_LOG in quick races: crashes, full-lock turns,
- * revving at the start), so the pad also rumbles on the player car's own
- * jolts, as the console versions do (ff_jolt).
+ * Force feedback (rumble): when the platform can drive the controller's
+ * motors (gamepad_rumble_ok: the browser's dual-rumble; the Mac's gamepad.m
+ * has no motors and keeps the old answer), the pad reports force feedback
+ * and plays the game's effects itself: every frame the running ones are mixed
+ * into two motor levels (see ff_mix), with the jolts the game's file measures
+ * on top (game.h pad_jolt: UG2's player car, as the console versions rumble).
  *   NFSU2_FF=0          no force feedback and no rumble (the pad as before;
  *                       settings.ini "rumble = off")
  *   NFSU2_FF_LOG=1      log the effects the game creates, changes, starts and
- *                       stops, and the motor levels when they change      */
+ *                       stops, and the motor levels when they change
+ *
+ * What one game needs beyond this (its own profile lookup and Joypad page,
+ * its input channels, its search flag, its front-end keystrokes) is in that
+ * game's files, reached through runtime/game.h: runtime/pad_ug2.c for UG2,
+ * runtime/mw/game_mw.c's table for Most Wanted.  A core file: no game
+ * address here (tools/gamelit.sh, runtime/core.list). */
 #include "cpu.h"
+#include "game.h"
 #include "gamepad.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -128,6 +113,11 @@ static int pad_log(void){
     if (l < 0) l = gamepad_env_flag("NFSU2_PAD_LOG", 0);
     return l;
 }
+/* for the games' pad files (pad_ug2.c, mw/pad_mw.c) */
+int dipad_on(void){ return pad_mode() != MODE_OFF; }
+int dipad_log(void){ return pad_log(); }
+/* the game's own search for controllers (game.h pad_rescan), on or off; nothing for a game without one */
+static void pad_rescan(int on){ if (g_game.pad_rescan) g_game.pad_rescan(on); }
 
 /* ---- objects ---------------------------------------------------------------
  * Axes 0..5, POVs 6..7, buttons 8..19.  Object GUIDs are dinput.h's
@@ -148,6 +138,43 @@ static const int k_axis_src[NAXES] = {PAD_AXIS_LX, PAD_AXIS_LY, PAD_AXIS_LT,
 static const int k_btn_src[NBTNS] = {PAD_A, PAD_B, PAD_X, PAD_Y, PAD_LB, PAD_RB,
                                      PAD_BACK, PAD_START, PAD_LS, PAD_RS,
                                      SRC_LT_FULL, SRC_RT_FULL};
+/* The pad button behind each DirectInput button: k_btn_src, or the game's own
+ * order (game.h pad_buttons: the names of NBTNS buttons, LT and RT the
+ * triggers pulled to the end), read once.  An order that does not name
+ * NBTNS buttons is refused with a line, and the default stays. */
+static const int *btn_src(void){
+    static int order[NBTNS], done;
+    if (done) return order;
+    done = 1;
+    memcpy(order, k_btn_src, sizeof order);
+    const char *p = g_game.pad_buttons;
+    if (!p) return order;
+    int got[NBTNS], n = 0;
+    while (*p){
+        size_t l = strspn(p, " "); p += l;
+        if (!*p) break;
+        l = strcspn(p, " ");
+        char tok[12];
+        int s = -100;
+        if (l < sizeof tok && n < NBTNS){
+            memcpy(tok, p, l); tok[l] = 0;
+            s = !strcasecmp(tok, "LT") ? SRC_LT_FULL : !strcasecmp(tok, "RT") ? SRC_RT_FULL : gamepad_button_by_name(tok);
+            if (s == -1 && strcasecmp(tok, "LT")) s = -100;     /* no such button */
+        }
+        if (s == -100){ n = -1; break; }
+        got[n++] = s; p += l;
+    }
+    if (n == NBTNS) memcpy(order, got, sizeof order);
+    else fprintf(stderr, "[pad] the game's button order \"%s\" does not name %d buttons: the pad's own order instead\n",
+                 g_game.pad_buttons, NBTNS);
+    return order;
+}
+/* the default position of DirectInput button i's pad button, for its name (-1: none there) */
+static int btn_name_slot(int i){
+    int src = btn_src()[i];
+    for (int j = 0; j < NBTNS; j++) if (k_btn_src[j] == src) return j;
+    return -1;
+}
 
 static uint32_t obj_ofs(int i){
     return i < NAXES ? k_axis_ofs[i] : i < NAXES + NPOVS ? 0x20u + 4u * (uint32_t)(i - NAXES)
@@ -174,7 +201,8 @@ static const char *wheel_obj_name(int i, int fam){
     if (i < NAXES) return ax[i];
     if (i == NAXES) return "D-pad";
     if (i < NAXES + NPOVS) return "Wheel Directions";
-    return btn[fam == PADF_XBOX ? 1 : fam == PADF_PLAYSTATION ? 2 : 0][i - NAXES - NPOVS];
+    int j = btn_name_slot(i - NAXES - NPOVS);
+    return j < 0 ? "Button" : btn[fam == PADF_XBOX ? 1 : fam == PADF_PLAYSTATION ? 2 : 0][j];
 }
 static const char *obj_name(int i, int fam, int wheel){
     if (wheel) return wheel_obj_name(i, fam);
@@ -197,7 +225,8 @@ static const char *obj_name(int i, int fam, int wheel){
     if (i < NAXES) return ax[i];
     if (i == NAXES) return "D-pad";
     if (i < NAXES + NPOVS) return "Left Stick Directions";
-    return btn[fam][i - NAXES - NPOVS];
+    int j = btn_name_slot(i - NAXES - NPOVS);
+    return j < 0 ? "Button" : btn[fam][j];
 }
 static int obj_by_ofs(uint32_t ofs){
     for (int i = 0; i < NOBJS; i++) if (obj_ofs(i) == ofs) return i;
@@ -302,6 +331,17 @@ void dipad_created(uint32_t obj, uint32_t guid){
 
 /* ---- enumeration ------------------------------------------------------------- */
 static int g_kind = -1;                  /* the device last offered: 0 the pad, 1 the wheel (-1: none yet) */
+static int g_seen;                       /* a device was offered */
+static struct { uint32_t cb, ref, type; } g_late;   /* the enumeration that found none (game.h pad_late) */
+/* the device instance an enumeration offers: the pad, or the wheel (wheel) */
+static uint32_t offer(const PadState *s, int wheel){
+    static uint32_t ddi = 0;
+    if (!ddi) ddi = com_scratch(0x260);
+    g_seen = 1;
+    g_kind = wheel;
+    write_devinst(ddi, 0x244u, s, wheel);
+    return ddi;
+}
 /* IDirectInput8::EnumDevices: offer the pad for DI8DEVCLASS_ALL, _GAMECTRL
  * and DI8DEVTYPE_GAMEPAD, or the wheel (a wheel drives the pad) for _ALL,
  * _GAMECTRL and DI8DEVTYPE_DRIVING.  Returns 1 when the callback said
@@ -318,29 +358,65 @@ int dipad_enum(CPU *c, uint32_t devtype, uint32_t cb, uint32_t ref, uint32_t fla
     int wheel = s.connected ? !!s.wheel : g_kind > 0;
     uint32_t t = devtype & 0xFFu;
     if (t != 0u && t != 4u && t != (wheel ? DI8DEVTYPE_DRIVING : DI8DEVTYPE_GAMEPAD)) return 0;
-    /* The game's own rescan every 32 frames (0x5cfa10 reads [0x8364e8]
-     * every frame) finds a controller plugged in later.  Hotplug mode keeps
-     * it on.  The default mode offers the device once a controller has been
-     * seen and keeps it from then on (rescan off again): with no controller
-     * there is no game pad, as in the original game.  A device that nothing
-     * drives would leave a keyboard player stuck on the Joypad page's
-     * "Press a button" prompt, which only a pad button ends. */
-    static int seen = 0;
-    if (mode == MODE_HOTPLUG || !seen){
-        if (mem_is_committed(0x8364e8u)) MR32(0x8364e8u) = mode == MODE_HOTPLUG || !s.connected;
-        if (!s.connected) return 0;
+    /* The game's own search (game.h pad_rescan) finds a controller plugged in
+     * later.  Hotplug mode keeps it on.  The default mode offers the device
+     * once a controller has been seen and keeps it from then on (the search
+     * off again): with no controller there is no game pad, as in the original
+     * game.  A device that nothing drives would leave a keyboard player stuck
+     * on UG2's Joypad page "Press a button" prompt, which only a pad button
+     * ends. */
+    if (mode == MODE_HOTPLUG || !g_seen){
+        pad_rescan(mode == MODE_HOTPLUG || !s.connected);
+        if (!s.connected){
+            /* a game with no search of its own takes a controller connected
+             * later through the callback it names (dipad_present) */
+            if (g_game.pad_late && cb == g_game.pad_late->cb && !g_seen){ g_late.cb = cb; g_late.ref = ref; g_late.type = t; }
+            return 0;
+        }
     }
-    else if (mem_is_committed(0x8364e8u)) MR32(0x8364e8u) = 0;   /* the rescan after a change of kind: done */
-    seen = 1;
-    g_kind = wheel;
-    static uint32_t ddi = 0;
-    if (!ddi) ddi = com_scratch(0x260);
-    write_devinst(ddi, 0x244u, &s, wheel);
+    else pad_rescan(0);                                     /* the search after a change of kind: done */
+    uint32_t ddi = offer(&s, wheel);
     static int nlog = 0;
     if (pad_log() && nlog < 8){ nlog++;
         fprintf(stderr, "[pad] EnumDevices(type 0x%x) -> \"%s\"\n", devtype, (char *)(g_mem + ddi + 0x12c)); }
     uint32_t args[2] = { ddi, ref };
     return call_guest(c, cb, 2, args) == 0u;
+}
+
+/* Every Present (com.c), on the game's thread: a controller connected since
+ * the game's enumeration found none, for a game that takes it through that
+ * enumeration's callback (game.h pad_late): the callback gets the
+ * device as the enumeration would have offered it, with its pvRef, once.  A
+ * Present is outside the game's input update, so the device the callback
+ * makes joins the game's list between two of its polls. */
+void dipad_present(CPU *c){
+    if (!g_late.cb || g_seen) return;
+    PadState s; gamepad_read(&s);
+    if (!s.connected) return;
+    int wheel = !!s.wheel;
+    uint32_t t = g_late.type, cb = g_late.cb, ref = g_late.ref;
+    if (t != 0u && t != 4u && t != (wheel ? DI8DEVTYPE_DRIVING : DI8DEVTYPE_GAMEPAD)) return;
+    g_late.cb = 0;
+    uint32_t ddi = offer(&s, wheel);
+    fprintf(stderr, "[pad] %s connected after the game's enumeration: \"%s\" offered to its callback 0x%08x\n",
+            s.name, (char *)(g_mem + ddi + 0x12c), cb);
+    uint32_t args[2] = { ddi, ref };
+    call_guest(c, cb, 2, args);
+    /* the game's own set-up for the controllers it found, again: it ran at
+     * the start with none */
+    const PadLate *pl = g_game.pad_late;
+    if (!pl->setup) return;
+    uint32_t obj = mem_is_committed(pl->setup_this + 3u) ? MR32(pl->setup_this) : 0u;
+    if (!obj || !mem_is_committed(obj + 3u) || MR32(obj) != pl->setup_vtbl){
+        fprintf(stderr, "[pad] the game's input set-up 0x%08x not run again: no object of vtable 0x%08x at [0x%08x]\n",
+                pl->setup, pl->setup_vtbl, pl->setup_this);
+        return;
+    }
+    uint32_t ecx = c->ecx;
+    c->ecx = obj;
+    call_guest(c, pl->setup, 0, 0);
+    c->ecx = ecx;
+    if (pad_log()) fprintf(stderr, "[pad] the game's input set-up 0x%08x run again on 0x%08x\n", pl->setup, obj);
 }
 
 /* ---- state ---------------------------------------------------------------------- */
@@ -378,26 +454,6 @@ static uint32_t stick_pov(Dev *d, float x, float y){
     static const uint32_t P[5] = {0xFFFFFFFFu, 0u, 9000u, 18000u, 27000u};
     return P[dir];
 }
-/* The game's input channel that reads this device (0x874c40 + n*0x370, six
- * of them: +0x230 the device's slot in [0x86ffb4], +0x234 its type), or 0. */
-static uint32_t dev_channel(const Dev *d){
-    for (uint32_t s = 0; s < 2u; s++){
-        if (!d->obj || MR32(0x86ffb4u + 4u * s) != d->obj) continue;
-        for (uint32_t ch = 0x874c40u; ch < 0x876310u; ch += 0x370u){
-            uint8_t t = MR8(ch + 0x234u);
-            if (MR32(ch + 0x230u) == s && t >= 0x14u && t <= 0x16u) return ch;
-        }
-    }
-    return 0;
-}
-/* whether the channel reads the axis at state offset ofs as the steering or
- * a pedal (0x5c1fba: +0x364..+0x367 switch the axes +0x344..+0x350 on, and
- * +0x368 with +0x367 makes one axis both pedals) */
-static int chan_reads_axis(uint32_t ch, uint32_t ofs){
-    if (MR8(ch + 0x364u) && MR32(ch + 0x344u) == ofs) return 1;
-    if (MR8(ch + 0x368u) && MR8(ch + 0x367u)) return MR32(ch + 0x350u) == ofs;
-    return (MR8(ch + 0x365u) && MR32(ch + 0x348u) == ofs) || (MR8(ch + 0x366u) && MR32(ch + 0x34cu) == ofs);
-}
 static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     uint8_t st[0x110];
     memset(st, 0, sizeof st);
@@ -420,20 +476,18 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
                       if (click < 0.05f || click > 1.f) click = 0.97f; }
     /* A trigger the game reads as a pedal presses its button at the end of
      * its travel (the digital top of the pedal, see the default layout).  One
-     * it reads as no axis is a plain button (shifting, in the PS2 layout): it
-     * presses at half travel and lets go below 0.4.  Not while the Joypad
-     * page waits for the steering or a pedal (+0x33c 1..4): a trigger should
-     * bind there as its axis (past 5 % of its travel), and the page looks at
-     * the buttons first (0x5ca720), so a fast pull could bind the button. */
-    uint32_t ch = dev_channel(d);
-    int axis_bind = ch && MR32(ch + 0x33cu) - 1u < 4u;
+     * it reads as no axis is a plain button (shifting, in UG2's PS2 layout):
+     * it presses at half travel and lets go below 0.4.  Which is which is the
+     * game's to say (game.h pad_trigger_axes); a game that does not say has
+     * both read as axes. */
+    unsigned axes = g_game.pad_trigger_axes ? g_game.pad_trigger_axes(d->obj) : 3u;
     for (int k = 0; k < 2; k++){
         float v = s->axis[k ? PAD_AXIS_RT : PAD_AXIS_LT];
-        if (!ch || axis_bind || chan_reads_axis(ch, k_axis_ofs[k ? 5 : 2])) d->trig[k] = v >= click;
+        if (axes & (1u << k)) d->trig[k] = v >= click;
         else d->trig[k] = v >= (d->trig[k] ? 0.4f : 0.5f);
     }
     for (int i = 0; i < NBTNS; i++){
-        int src = k_btn_src[i];
+        int src = btn_src()[i];
         int on = src == SRC_LT_FULL ? d->trig[0] : src == SRC_RT_FULL ? d->trig[1] : !!(b & (1u << src));
         if (on) st[0x30 + i] = 0x80;
     }
@@ -441,14 +495,12 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
 }
 
 /* ---- front-end keystrokes ----------------------------------------------------------
- * Some front-end input exists only as characters from the window procedure
- * (0x5ccf50 -> FESendKeystroke 0x55dbd0), not as DirectInput actions: text
- * fields (the profile name) take Enter and Escape that way, and the "Are you
- * sure you want to quit?" prompt opens on 'Q'/'q' (0x558b70, if
- * [0x836494] allows it).  A keyboard key produces both the action and the
- * character.  So while the game is in the front end (GameFlowManager
- * [0x8654a4] == 3) A, B and View also post Enter, Escape and Q.  (In a text
- * field View therefore types a 'q', as the Q key would.)
+ * Some of a game's front-end input can exist only as characters from the
+ * window procedure, not as DirectInput actions (UG2's text fields and its quit
+ * prompt, runtime/pad_ug2.c).  A keyboard key produces both the action and the
+ * character.  So for a game that asks (game.h pad_fe_keys), while it is in the
+ * front end (its flow state flow_fe) A, B and View also post Enter, Escape
+ * and Q.  (In a text field View therefore types a 'q', as the Q key would.)
  * NFSU2_PAD_FE_KEYS=0 (or off) turns this off. */
 void win32_post_message(uint32_t msg, uint32_t wp, uint32_t lp);
 static void fe_key(int *down, int pressed, int released, int fe, uint32_t vk, uint32_t scan,
@@ -466,111 +518,15 @@ static void fe_key(int *down, int pressed, int released, int fe, uint32_t vk, ui
 }
 static void fe_keys(Dev *d, uint32_t buttons){
     static int on = -1;
-    if (on < 0) on = gamepad_env_flag("NFSU2_PAD_FE_KEYS", 1);
+    if (on < 0) on = g_game.pad_fe_keys && gamepad_env_flag("NFSU2_PAD_FE_KEYS", 1);
     uint32_t press = buttons & ~d->fe_prev, rel = d->fe_prev & ~buttons;
     d->fe_prev = buttons;
-    if (!on || !mem_is_committed(0x8654a7u)) return;
-    int fe = MR32(0x8654a4u) == 3u;
+    if (!on) return;
+    int fe = game_flow() == g_game.flow_fe;
     fe_key(&d->fe_down[0], !!(press & 1u << PAD_A), !!(rel & 1u << PAD_A), fe, 0x0D, 0x1C, 0x0D);
     fe_key(&d->fe_down[1], !!(press & 1u << PAD_B), !!(rel & 1u << PAD_B), fe, 0x1B, 0x01, 0x1B);
     fe_key(&d->fe_down[2], !!(press & 1u << PAD_BACK), !!(rel & 1u << PAD_BACK), fe, 'Q', 0x10, 'q');
 }
-
-/* ---- the default layout ------------------------------------------------------------
- * Tables of 32 action ids: buttons 0..15, then per POV 0..3 the directions
- * down, up, left, right (0x5c1b00 tests cos/sin of the hat angle in that
- * order).  The ids are the uAppData values of the game's keyboard action
- * maps (0x7fcac0, 0x7fd7e0), i.e. bits of the channel's action mask.
- *
- * In game this is the game's own built-in layout for its known gamepads
- * (0x7fe7f8 entry 2, Logitech Dual Action / RumblePad 2: X brake, A throttle,
- * B look back, Y camera, LB nitrous, RB e-brake, LT/RT shift, Back reset,
- * Start pause, sticks hydraulics, D-pad engage/legend/map/SMS), except that
- * throttle and brake move to the analog triggers and shifting moves to the
- * buttons they free (A shift up, X shift down).  A trigger pressed to the
- * end also sends the digital throttle/brake: the analog path tops out at
- * channel byte 253 (0x7f + trunc(10000 * 0.0127)) and the game's throttle
- * curve (0x7ea004, steep above 0.95) then gives 0.958, the digital 1.0.
- * Front end: A select, B back, X customise ("C"), Y preset ("P"), LB/RB
- * L1/R1, Menu = FENG_START (the "comma" action, as on Xbox ports), View =
- * quit ("Q"; the prompt itself comes from the posted 'q', see fe_keys),
- * D-pad and left stick navigate.
- * The game's generic defaults (0x5c11a0, no profile) do not fit this pad:
- * no pause or reset, and the combined pedal axis would be Rz, our right
- * trigger, which rests at -10000 and so reads as full throttle. */
-static const uint32_t g_prof_game[32] = {
-    0x07, 0x09, 0x08, 0x0a, 0x06, 0x05, 0x0e, 0x0c, 0x16, 0x13, 0x02, 0x01, 0, 0, 0, 0,
-    0x12, 0x0f, 0x10, 0x11,   0, 0, 0, 0,   0, 0, 0, 0,   0, 0, 0, 0 };
-static const uint32_t g_prof_fe[32] = {
-    0x1f, 0x22, 0x23, 0x2e, 0x26, 0x27, 0x2f, 0x24, 0, 0, 0, 0, 0, 0, 0, 0,
-    0x1c, 0x1b, 0x1d, 0x1e,   0x1c, 0x1b, 0x1d, 0x1e,   0, 0, 0, 0,   0, 0, 0, 0 };
-/* The wheel's, in game: the paddles shift (right up, left down), the bottom
- * face button (A, Cross) is nitrous, the left one (X, Square) the e-brake,
- * the others, the pedals pressed to the floor, the D-pad and the rest as the
- * pad's.  Its front end is the pad's. */
-static const uint32_t g_prof_wheel[32] = {
-    0x06, 0x09, 0x05, 0x0a, 0x08, 0x07, 0x0e, 0x0c, 0x16, 0x13, 0x02, 0x01, 0, 0, 0, 0,
-    0x12, 0x0f, 0x10, 0x11,   0, 0, 0, 0,   0, 0, 0, 0,   0, 0, 0, 0 };
-
-static void apply_profile(uint32_t ch, int wheel){
-    for (int i = 0; i < 32; i++){
-        MR32(ch + 0x018 + 4u * (uint32_t)i) = (wheel ? g_prof_wheel : g_prof_game)[i];
-        MR32(ch + 0x098 + 4u * (uint32_t)i) = g_prof_fe[i];
-        MR32(ch + 0x118 + 4u * (uint32_t)i) = 0;            /* secondary tables unused */
-        MR32(ch + 0x198 + 4u * (uint32_t)i) = 0;
-    }
-    /* analog: steer = X, throttle = Rz (right trigger), brake = Z (left
-     * trigger), as separate pedals (what the joypad screen stores when two
-     * different axes are bound; 0x5b8250).  The channel turns them into
-     * +0x12 steer and +0x10 throttle / +0x11 brake, 0..254 (0x5c1fba). */
-    MR32(ch + 0x344) = 0x00;  MR32(ch + 0x354) = 1;          /* steer: offset, sign */
-    MR32(ch + 0x348) = 0x14;  MR32(ch + 0x358) = 1;          /* throttle */
-    MR32(ch + 0x34c) = 0x08;  MR32(ch + 0x35c) = 1;          /* brake */
-    MR32(ch + 0x350) = 0x14;  MR32(ch + 0x360) = 1;          /* combined pedal (unused) */
-    MR8(ch + 0x364) = 1; MR8(ch + 0x365) = 1; MR8(ch + 0x366) = 1;
-    MR8(ch + 0x367) = 0; MR8(ch + 0x368) = 0;
-    if (pad_log()) fprintf(stderr, "[pad] default %s layout applied to input channel 0x%08x\n", wheel ? "wheel" : "pad", ch);
-}
-/* 0x5b81b0(devinfo, tableA, tableB): the game's built-in profile lookup,
- * called from the channel set-up 0x5c11a0 (device attach, and "reset to
- * default" in the controls screen).  cdecl, returns al = 1 when found. */
-void sub_005b81b0_orig(CPU *c);
-void sub_005b81b0(CPU *c){
-    uint32_t ddi = MR32(c->esp + 4u), ta = MR32(c->esp + 8u);
-    int ours = pad_mode() != MODE_OFF && ddi ? dipad_guid(ddi + 4u) : 0;
-    if (ours && ta > 0x18u){
-        apply_profile(ta - 0x18u, ours == 2);
-        c->eax = (c->eax & 0xFFFFFF00u) | 1u;
-        POP32(c->eip);
-        return;
-    }
-    sub_005b81b0_orig(c);
-}
-
-/* ---- binding on the Joypad page -------------------------------------------------------
- * The page has two columns.  For the steering and the pedals (actions 1..4)
- * an axis, while one is on, shows in the first column and the action's
- * button in the second (0x5b8a90).  Binding a button (0x5b8460) or a hat
- * direction (0x5c1720) replaces the action's other buttons but leaves its
- * axis on, and nothing on the page turns an axis off: with the gas and brake
- * moved to buttons and the triggers to shifting (the PS2 layout), a trigger
- * still accelerated or braked as it shifted.  Here a button or hat direction
- * bound to the throttle or the brake in the first column takes the axis's
- * place, as the column shows: the axis goes off (and pulling a trigger there
- * binds it again).  The steering keeps its axis (left and right are the one
- * stick axis), and so does one axis bound to both pedals (+0x368).  Channel
- * (thiscall ecx): +0x33c the action being bound, +0x340 the column (0 the
- * first), +0x365/+0x366 the throttle/brake axis on; saved with the profile. */
-static void bind_takes_axis(uint32_t ch){
-    uint32_t act = MR32(ch + 0x33cu);
-    if ((act != 1u && act != 2u) || MR32(ch + 0x340u) != 0u || MR8(ch + 0x368u) || !MR8(ch + 0x364u + act)) return;
-    MR8(ch + 0x364u + act) = 0;
-    if (pad_log()) fprintf(stderr, "[pad] %s bound to a button: its axis is off\n", act == 1u ? "throttle" : "brake");
-}
-void sub_005b8460_orig(CPU *c);
-void sub_005b8460(CPU *c){ bind_takes_axis(c->ecx); sub_005b8460_orig(c); }
-void sub_005c1720_orig(CPU *c);
-void sub_005c1720(CPU *c){ bind_takes_axis(c->ecx); sub_005c1720_orig(c); }
 
 /* ---- IDirectInputDevice8 methods for the pad --------------------------------------- */
 static void write_objinst(uint32_t p, uint32_t size, int i, int fam, int wheel){
@@ -595,15 +551,14 @@ static void write_objinst(uint32_t p, uint32_t size, int i, int fam, int wheel){
     }
 }
 
-/* The Controls page lists the devices it found when it opened (0x4ace00).
- * Losing the pad while it is open crashes the game as soon as one of the
- * pad's bindings is edited (Enter: 0x4f9340 reads a NULL object at +0x64),
- * so there an unplugged pad reads at rest and is lost once the page is
- * left. */
+/* A controls page that lists the devices it found when it opened must not
+ * lose one (UG2's crashes as soon as one of the pad's bindings is edited,
+ * pad_ug2.c): on the game's screen of that kind (game.h pad_hold_screen) an
+ * unplugged pad reads at rest and is lost once the page is left. */
 const char *autotest_screen(void);              /* autotest.c */
 static int on_controls_page(void){
-    const char *sc = autotest_screen();
-    return sc && !strcasecmp(sc, "UI_Options_PC_Controller.fng");
+    const char *sc = g_game.pad_hold_screen ? autotest_screen() : 0;
+    return sc && !strcasecmp(sc, g_game.pad_hold_screen);
 }
 
 /* ---- force feedback ---------------------------------------------------------------
@@ -632,6 +587,7 @@ static Eff g_eff[NEFF];
 static uint32_t g_ff_gain = 10000u;     /* DIPROP_FFGAIN */
 static int g_ff_paused, g_ff_actoff;    /* SendForceFeedbackCommand */
 static int ff_log(void){ static int v = -1; if (v < 0){ const char *e = getenv("NFSU2_FF_LOG"); v = e && *e && *e != '0'; } return v; }
+int dipad_ff_log(void){ return ff_log(); }
 /* force feedback is reported when the platform can rumble the controller
  * (NFSU2_FF=0: never); decided once, when the game first asks */
 int dipad_ff_on(void){
@@ -709,61 +665,6 @@ static uint32_t eff_set(Eff *e, uint32_t p, uint32_t fl){
     if (fl & DIEP_START) eff_start(e, 1u, 0u);
     return DI_OK;
 }
-/* The player car's jolts: impacts and hard landings.  car+0x70 is the
- * velocity (m/s), [0x865154] this frame's world step (s; 0 while the world
- * stands), [0x8654a4] 6 in the world.  A change of velocity over the last
- * 30 ms of world time (the same window at 60 and 120 fps: a crash may take
- * two steps at 120) that driving cannot make (more than 40 m/s^2, about 4 g)
- * is a hit: its excess sets the level (4 m/s and more: full), on the strong
- * motor and a little of it on the weak one, decaying with a time constant of
- * 0.12 s.  A jump of more than 60 m/s is the game putting the car back (a
- * reset, a teleport), not a hit, and so is everything in the car's first
- * second (the race intro drops it onto the grid: 8.8 m/s, measured).
- * Measured in a quick race at 60 fps: 6.4 m/s for a wall at 23 m/s, 16 m/s
- * for a crash, 1.2 to 5 m/s scraping along a barrier. */
-static float g_jolt;                    /* 0..1, decaying */
-static uint32_t g_jolt_car;
-#define JOLT_HIST 32
-static struct { float v[3], t; } g_jh[JOLT_HIST];   /* velocity at world time t (s), newest at g_jhn - 1 */
-static int g_jhn;
-static float g_jolt_age, g_jolt_logt;   /* world seconds since this car appeared; since the last speed line */
-static void ff_jolt(void){
-    uint32_t pl = mem_is_committed(0x8900acu + 3u) ? MR32(0x8900acu) : 0u;
-    uint32_t car = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0u;
-    float dt = MRF32(0x865154u);
-    if (MR32(0x8654a4u) != 6u || !car || !mem_is_committed(car + 0x7bu)){ g_jolt_car = 0; g_jolt = 0; return; }
-    float v[3] = { MRF32(car + 0x70u), MRF32(car + 0x74u), MRF32(car + 0x78u) };
-    if (!isfinite(v[0]) || !isfinite(v[1]) || !isfinite(v[2])) return;
-    if (!(dt > 0.f && dt < 0.25f)) return;              /* the world stands (pause, a menu over it) */
-    g_jolt_age = car == g_jolt_car ? g_jolt_age + dt : 0.f;
-    if (ff_log() && (g_jolt_logt += dt) >= 2.f){
-        g_jolt_logt = 0.f;
-        fprintf(stderr, "[ff] car speed %.1f m/s\n", (double)sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]));
-    }
-    if (car != g_jolt_car) g_jhn = 0;
-    float now = g_jolt_age;
-    if (car == g_jolt_car && g_jolt_age > 1.f && g_jhn > 0){
-        /* the oldest sample still inside the 30 ms window (or the oldest kept) */
-        int k = g_jhn - 1;
-        while (k > 0 && now - g_jh[(k - 1) % JOLT_HIST].t <= 0.030f && g_jhn - k < JOLT_HIST - 1) k--;
-        const float *o = g_jh[k % JOLT_HIST].v;
-        float span = now - g_jh[k % JOLT_HIST].t;
-        float dx = v[0] - o[0], dy = v[1] - o[1], dz = v[2] - o[2];
-        float dv = sqrtf(dx * dx + dy * dy + dz * dz);
-        float hit = dv - 40.f * span;
-        if (dv < 60.f && hit > 0.f){
-            float lvl = hit / 4.f;
-            if (lvl > 1.f) lvl = 1.f;
-            if (lvl > g_jolt + 0.05f && ff_log()) fprintf(stderr, "[ff] jolt %.2f m/s in %.1f ms: level %.2f\n", (double)dv, (double)span * 1000.0, (double)lvl);
-            if (lvl > g_jolt) g_jolt = lvl;
-        }
-    }
-    { int n = g_jhn % JOLT_HIST; g_jh[n].v[0] = v[0]; g_jh[n].v[1] = v[1]; g_jh[n].v[2] = v[2]; g_jh[n].t = now; g_jhn++; }
-    g_jolt *= expf(-dt / 0.12f);
-    if (g_jolt < 0.01f) g_jolt = 0.f;
-    g_jolt_car = car;
-}
-
 /* Every frame (GetDeviceState): the running effects as two motor levels.
  * A periodic effect is a vibration: slow ones (period 60 ms and more, 16 Hz
  * and less) on the strong, low-frequency motor, fast ones (25 ms and less)
@@ -801,8 +702,8 @@ static void ff_mix(void){
             else { strong += a * 0.5; weak += a * 0.5; }
         } else if (e->kind == EF_CONST || e->kind == EF_RAMP) weak += a * 0.5;
     }
-    ff_jolt();
-    strong += g_jolt; weak += g_jolt * 0.4f;
+    float jolt = g_game.pad_jolt ? g_game.pad_jolt() : 0.f;    /* the game's own jolts (UG2: the player car's) */
+    strong += jolt; weak += jolt * 0.4f;
     if (g_ff_actoff){ strong = 0; weak = 0; }
     float s = strong > 1 ? 1.f : (float)strong, w = weak > 1 ? 1.f : (float)weak;
     gamepad_rumble(s, w);
@@ -962,20 +863,21 @@ uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
     Dev *d = dev_of(self, 1);
     PadState s; gamepad_read(&s);
     /* a controller of the other kind drives the pad (a wheel, and this is the
-     * pad, or back): this device makes way for one of that kind */
-    int other = s.connected && !!s.wheel != d->wheel;
+     * pad, or back): this device makes way for one of that kind, where the
+     * game's search will find that one (game.h pad_rescan) */
+    int other = g_game.pad_rescan && s.connected && !!s.wheel != d->wheel;
     int lost = ((pad_mode() == MODE_HOTPLUG && !s.connected) || other) && !on_controls_page();
     (void)nargs;
     if (!strcmp(nm, "GetDeviceState")){
         uint32_t cb = a[1], p = a[2];
         /* Unplugged (hotplug mode), or the other kind: answer two polls with
-         * the pad at rest before DIERR_INPUTLOST.  The game drops the
-         * device's channel with its last values, which then stay applied
-         * (steering, throttle, held buttons) until its next 32-frame rescan,
-         * about 0.3 s, which then finds the device of the new kind. */
+         * the pad at rest before DIERR_INPUTLOST.  UG2 drops the device's
+         * channel with its last values, which then stay applied (steering,
+         * throttle, held buttons) until its next 32-frame rescan, about
+         * 0.3 s, which then finds the device of the new kind. */
         if (lost && d->rest >= 2){
             if (other && !d->gone){
-                if (mem_is_committed(0x8364e8u)) MR32(0x8364e8u) = 1;
+                pad_rescan(1);
                 fprintf(stderr, "[pad] %s drives the pad: the game's %s device makes way for a %s\n",
                         s.name, d->wheel ? "wheel" : "pad", s.wheel ? "wheel" : "pad");
             }
@@ -1109,26 +1011,9 @@ uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
      * otherwise answered like a device without force feedback */
     { int64_t r = ff_dev_call(c, nm, a); if (r >= 0) return (uint32_t)r; }
     if (!strcmp(nm, "Escape")) return DI_OK;
-    if (!strcmp(nm, "BuildActionMap") || !strcmp(nm, "SetActionMap") ||
-        !strcmp(nm, "GetImageInfo") || !strcmp(nm, "RunControlPanel")) return DIERR_UNSUPPORTED;
-    return DI_OK;
-}
-
-/* ---- test hook: the player's input controller ----------------------------------
- * 0x407750 is the player's steering joy-event handler (cdecl: port, id,
- * value, ctx), registered by 0x41e060 for JOY_EVENT_STEER/_STEER_ANALOG.
- * ctx is the object the car reads its input from (0x407750, 0x416de0,
- * 0x407eb0, 0x407f40): +0x2c8 steer (-1..1, positive = left), +0x2d4
- * throttle, +0x2dc brake, +0x2ec e-brake (0..1).  Only observed here, so
- * the autotest script can peek it as "@in+<offset>". */
-static uint32_t g_in_ctx;
-uint32_t dipad_input_ctx(void){ return g_in_ctx; }
-void sub_00407750_orig(CPU *c);
-void sub_00407750(CPU *c){
-    uint32_t ctx = MR32(c->esp + 0x10u);
-    if (ctx != g_in_ctx){
-        g_in_ctx = ctx;
-        if (pad_log()) fprintf(stderr, "[pad] player input controller at 0x%08x\n", ctx);
-    }
-    sub_00407750_orig(c);
+    int unsup = !strcmp(nm, "BuildActionMap") || !strcmp(nm, "SetActionMap") ||
+                !strcmp(nm, "GetImageInfo") || !strcmp(nm, "RunControlPanel");
+    static int nlog;
+    if (pad_log() && nlog < 16){ nlog++; fprintf(stderr, "[pad] %s: %s\n", nm, unsup ? "not supported" : "nothing to do"); }
+    return unsup ? DIERR_UNSUPPORTED : DI_OK;
 }
