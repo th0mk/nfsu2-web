@@ -16,7 +16,8 @@
  *                            semaphores: 8 threads x 20,000 release/wait pairs, as pairs that
  *                            hand two semaphores back and forth and as four releasers and four
  *                            takers on one; every wait finite, a lost wake-up is a timeout and
- *                            fails; a semaphore closed under a wait
+ *                            fails; a semaphore closed under a wait; waits a release ends
+ *                            after 120 ms and, INFINITE, after 2.5 s
  *   win32_unit_ug2.wasm ug2  built with -DWIN32_UNIT_UG2: UG2's game table, which leaves
  *                            g_game.win32_misc 0; the imports UG2 has of win32_misc.c's stay
  *                            unimplemented, as UG2 always had them (web/test/win32-wasm.test.mjs)
@@ -693,6 +694,8 @@ static void test_semaphores(Thr *t){
     uint32_t r = call_imp(t, "WaitForSingleObject", s, 30u);
     double el = now_ms() - t0;
     CHECK(r == WAIT_TIMEOUT && el >= 29.0 && el < 1000.0, "a 30 ms wait on count 0: 0x%x after %.1f ms", r, el);
+    t0 = now_ms(); r = call_imp(t, "WaitForSingleObject", s, 120u); el = now_ms() - t0;
+    CHECK(r == WAIT_TIMEOUT && el >= 119.0 && el < 1000.0, "a 120 ms wait on count 0 (three 50 ms slices): 0x%x after %.1f ms", r, el);
     /* release: the count before goes to lpPreviousCount */
     MR32(prev) = 0xDEADu;
     CHECK(call_imp(t, "ReleaseSemaphore", s, 3u, prev) == 1 && MR32(prev) == 0u, "release 3: previous count 0 (%u)", MR32(prev));
@@ -1010,6 +1013,27 @@ static void test_stress(Thr *t){
               k ? "WFMO" : "WaitForSingleObject", (uint32_t)g_job[0].wakes, g_job[0].bad, el, kept ? "kept" : "TAKEN", ok ? "returned" : "STUCK");
         printf("  semaphore closed mid-wait (%s): 0x%x after %.0f ms, the new one's count %s\n",
                k ? "WFMO" : "WaitForSingleObject", (uint32_t)g_job[0].wakes, el, kept ? "kept" : "TAKEN");
+    }
+
+    /* 8. waits that a release ends after more than one 50 ms slice: a 1 s wait released after 120 ms, and an
+     * INFINITE one released after 2.5 s (the generic wait gave up after one sleep of at most 2 s, INFINITE too) */
+    static const uint32_t rel_ms[2] = { 120u, 2500u }, for_ms[2] = { 1000u, INF };
+    for (int k = 0; k < 2; k++){
+        guest_lock(&t->cpu);
+        uint32_t sw = call_imp(t, "CreateSemaphoreA", 0u, 0u, 1u, 0u);
+        guest_unlock();
+        g_job[0].h = sw; g_job[0].h2 = 0; g_job[0].ms = for_ms[k];
+        t0 = now_ms();
+        start_job(0, sem_waiter);
+        usleep(rel_ms[k] * 1000u);
+        guest_lock(&t->cpu); call_imp(t, "ReleaseSemaphore", sw, 1u, 0u); guest_unlock();
+        ok = wait_jobs(0, 1, 5000.0);
+        el = g_job[0].t_end - t0;
+        CHECK(ok && g_job[0].wakes == 0 && el >= (double)rel_ms[k] && el < (double)rel_ms[k] + 500.0,
+              "a %s wait released after %u ms: 0x%x after %.0f ms (%s)", k ? "INFINITE" : "1 s", rel_ms[k],
+              (uint32_t)g_job[0].wakes, el, ok ? "returned" : "STUCK");
+        printf("  semaphore wait (%s) released after %u ms: 0x%x after %.0f ms\n", k ? "INFINITE" : "1 s", rel_ms[k], (uint32_t)g_job[0].wakes, el);
+        guest_lock(&t->cpu); call_imp(t, "CloseHandle", sw); guest_unlock();
     }
 
     atomic_store(&g_frames_stop, 1);

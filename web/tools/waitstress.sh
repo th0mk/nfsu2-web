@@ -6,9 +6,9 @@
 # a WaitForMultipleObjects ping-pong through sets that hold a timer, a timer
 # closed under an INFINITE wait, and semaphores: 8 threads x 20,000
 # release/wait pairs (four pairs handing two semaphores back and forth, then
-# four releasers and four takers on one), a semaphore closed under a wait.  A
-# lost wake-up shows as a timeout, a stuck thread as a deadline missed: both
-# fail.
+# four releasers and four takers on one), a semaphore closed under a wait,
+# and waits a release ends after 120 ms and, INFINITE, after 2.5 s.  A lost
+# wake-up shows as a timeout, a stuck thread as a deadline missed: both fail.
 #   web/tools/waitstress.sh [http://localhost:<port>]   (a running server, started with --dev)
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
