@@ -10,6 +10,7 @@
 //   the claim itself, with Cloudflare Turnstile's answer when the server asks for its check (turnstile below).
 
 import { blockedName } from './names.mjs';
+import { at } from '../base';
 
 /** a claim holds this long after the player last played under it (nfsu2-claims HOLD_DAYS) */
 export const HOLD_DAYS = 180;
@@ -86,7 +87,7 @@ export class NameClaims {
     const u = new URLSearchParams({ name });
     if (alt) u.set('alt', alt);
     try {
-      const r = await this.f(`/names?${u}`, { headers: await this.headers(), cache: 'no-store', signal: AbortSignal.timeout(8000) });
+      const r = await this.f(`${at('names')}?${u}`, { headers: await this.headers(), cache: 'no-store', signal: AbortSignal.timeout(8000) });
       if (r.status === 404) { this.here = false; return null; }
       if (!r.ok) return null;
       this.here = true;
@@ -97,7 +98,7 @@ export class NameClaims {
   /** this player's keyphrase claims `name` (a change when it had another), with Turnstile's answer when asked for */
   async claim(name: string, captcha: string | null): Promise<Claimed> {
     try {
-      const r = await this.f('/names', {
+      const r = await this.f(at('names'), {
         method: 'POST', headers: { ...await this.headers(), 'content-type': 'application/json' }, cache: 'no-store',
         body: JSON.stringify({ name, ...(captcha ? { captcha } : {}) }), signal: AbortSignal.timeout(20_000),
       });
