@@ -12,8 +12,11 @@
  *                            and the words above the arguments are untouched
  *   win32_unit.wasm stress   the waits with threads (the browser host, web/tools/waitstress.sh):
  *                            waitable timers under 8 threads, a shared periodic timer, a
- *                            WaitForMultipleObjects ping-pong and a handle closed mid-wait;
- *                            every wait finite, a lost wake-up is a timeout and fails
+ *                            WaitForMultipleObjects ping-pong, a handle closed mid-wait, and
+ *                            semaphores: 8 threads x 20,000 release/wait pairs, as pairs that
+ *                            hand two semaphores back and forth and as four releasers and four
+ *                            takers on one; every wait finite, a lost wake-up is a timeout and
+ *                            fails
  *   win32_unit_ug2.wasm ug2  built with -DWIN32_UNIT_UG2: UG2's game table, which leaves
  *                            g_game.win32_misc 0; the imports UG2 has of win32_misc.c's stay
  *                            unimplemented, as UG2 always had them (web/test/win32-wasm.test.mjs)
@@ -96,6 +99,9 @@ const ImpEnt g_imp[] = {
     { IAT(50), "DSOUND.dll", "#6", 3 },
     /* M2-20 */
     { IAT(51), "KERNEL32.dll", "CreateThread", 6 },
+    /* M3-16 */
+    { IAT(52), "KERNEL32.dll", "CreateSemaphoreA", 4 },
+    { IAT(53), "KERNEL32.dll", "ReleaseSemaphore", 3 },
 };
 const uint32_t g_imp_count = sizeof g_imp / sizeof *g_imp;
 
@@ -664,6 +670,69 @@ static void test_fatal(Thr *t){
     CHECK(!came_back && g_exit_code == 0x40000015, "FatalAppExitA: exit code 0x%x, %s", (unsigned)g_exit_code, came_back ? "returned" : "exited");
 }
 
+/* ======================= M3-16: semaphores ======================= */
+/* Windows' rules (CreateSemaphoreA, ReleaseSemaphore, the waits): MW takes them through its wrapper at 0x834E20
+ * (maximum 0x3FFFFFFF, WaitForSingleObject with a timeout, ReleaseSemaphore of n, its own count by lock xadd) */
+static void test_semaphores(Thr *t){
+    const uint32_t prev = SCRATCH + 0x500u, arr = SCRATCH + 0x510u;
+    char d[160];
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "CreateSemaphoreA", 0u, 0u, 0u, 0u) == 0 && last_error(t) == 87, "maximum 0: NULL, ERROR_INVALID_PARAMETER");
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "CreateSemaphoreA", 0u, 3u, 2u, 0u) == 0 && last_error(t) == 87, "initial count above the maximum: refused");
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "CreateSemaphoreA", 0u, (uint32_t)-1, 2u, 0u) == 0 && last_error(t) == 87, "a negative initial count: refused");
+    uint32_t s = call_imp(t, "CreateSemaphoreA", 0u, 2u, 0x3fffffffu, gstr(SCRATCH + 0x540u, "PATHsem"));
+    CHECK(s != 0, "CreateSemaphoreA(2 of at most 0x3FFFFFFF)");
+    CHECK(win32_obj_describe(s, d, sizeof d) > 0 && strstr(d, "semaphore PATHsem, count 2 of at most 1073741823"), "describe: %s", d);
+    /* a wait takes one of the count (it used to take all of it) */
+    CHECK(call_imp(t, "WaitForSingleObject", s, 0u) == 0, "wait 1 of 2");
+    CHECK(call_imp(t, "WaitForSingleObject", s, 0u) == 0, "wait 2 of 2");
+    CHECK(call_imp(t, "WaitForSingleObject", s, 0u) == WAIT_TIMEOUT, "count 0: WAIT_TIMEOUT");
+    double t0 = now_ms();
+    uint32_t r = call_imp(t, "WaitForSingleObject", s, 30u);
+    double el = now_ms() - t0;
+    CHECK(r == WAIT_TIMEOUT && el >= 29.0 && el < 1000.0, "a 30 ms wait on count 0: 0x%x after %.1f ms", r, el);
+    /* release: the count before goes to lpPreviousCount */
+    MR32(prev) = 0xDEADu;
+    CHECK(call_imp(t, "ReleaseSemaphore", s, 3u, prev) == 1 && MR32(prev) == 0u, "release 3: previous count 0 (%u)", MR32(prev));
+    CHECK(call_imp(t, "ReleaseSemaphore", s, 1u, prev) == 1 && MR32(prev) == 3u, "release 1: previous count 3 (%u)", MR32(prev));
+    CHECK(call_imp(t, "ReleaseSemaphore", s, 1u, 0u) == 1, "release with no previous-count pointer");
+    CHECK(win32_obj_describe(s, d, sizeof d) > 0 && strstr(d, "count 5 of"), "describe: %s", d);
+    for (int k = 0; k < 5; k++) CHECK(call_imp(t, "WaitForSingleObject", s, 0u) == 0, "wait %d of 5", k + 1);
+    CHECK(call_imp(t, "WaitForSingleObject", s, 0u) == WAIT_TIMEOUT, "all five taken");
+    /* refusals: a count below 1, past the maximum (the count stays), a handle that is no semaphore */
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "ReleaseSemaphore", s, 0u, prev) == 0 && last_error(t) == 87, "release 0: ERROR_INVALID_PARAMETER");
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "ReleaseSemaphore", s, (uint32_t)-2, prev) == 0 && last_error(t) == 87, "release -2: ERROR_INVALID_PARAMETER");
+    uint32_t s2 = call_imp(t, "CreateSemaphoreA", 0u, 1u, 2u, 0u);
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "ReleaseSemaphore", s2, 2u, prev) == 0 && last_error(t) == 298, "past the maximum: ERROR_TOO_MANY_POSTS (%u)", last_error(t));
+    CHECK(call_imp(t, "ReleaseSemaphore", s2, 1u, prev) == 1 && MR32(prev) == 1u, "up to the maximum: previous count 1");
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "ReleaseSemaphore", s2, 1u, prev) == 0 && last_error(t) == 298, "at the maximum: refused");
+    CHECK(win32_obj_describe(s2, d, sizeof d) > 0 && strstr(d, "count 2 of at most 2"), "the refusals left the count: %s", d);
+    uint32_t ev = call_imp(t, "CreateEventA", 0u, 0u, 0u, 0u);
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "ReleaseSemaphore", ev, 1u, prev) == 0 && last_error(t) == 6, "an event is no semaphore: ERROR_INVALID_HANDLE");
+    set_last_error(t, 0);
+    CHECK(call_imp(t, "ReleaseSemaphore", 0x1234u, 1u, prev) == 0 && last_error(t) == 6, "no such handle: ERROR_INVALID_HANDLE");
+    CHECK(call_imp(t, "WaitForSingleObject", ev, 0u) == WAIT_TIMEOUT, "the event untouched");
+    /* WaitForMultipleObjects: Windows' rules for a set with a semaphore (the lowest index ready, one of the count) */
+    MR32(arr) = ev; MR32(arr + 4u) = s2;
+    CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == 1, "WFMO: the semaphore, index 1");
+    CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == 1, "WFMO: its second count");
+    CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 0u) == WAIT_TIMEOUT, "WFMO: count 0");
+    call_imp(t, "SetEvent", ev); call_imp(t, "ReleaseSemaphore", s2, 1u, 0u);
+    CHECK(call_imp(t, "WaitForMultipleObjects", 2u, arr, 1u, 0u) == 0, "WFMO all: both ready");
+    CHECK(call_imp(t, "WaitForSingleObject", s2, 0u) == WAIT_TIMEOUT && call_imp(t, "WaitForSingleObject", ev, 0u) == WAIT_TIMEOUT,
+          "WFMO all took one of each");
+    t0 = now_ms(); r = call_imp(t, "WaitForMultipleObjects", 2u, arr, 0u, 30u); el = now_ms() - t0;
+    CHECK(r == WAIT_TIMEOUT && el >= 29.0 && el < 1000.0, "WFMO 30 ms: 0x%x after %.1f ms", r, el);
+    call_imp(t, "CloseHandle", s); call_imp(t, "CloseHandle", s2); call_imp(t, "CloseHandle", ev);
+}
+
 /* ======================= stress: the waits with threads ======================= */
 static _Atomic int g_frames_stop;
 static void *frame_thread(void *u){                    /* the game's Present: the virtual clock's frames */
@@ -741,6 +810,34 @@ static void *close_waiter(void *u){
     guest_lock(&t->cpu);
     uint32_t r = call_imp(t, "WaitForSingleObject", j->h, INF);
     j->wakes = (int)r; j->bad = (int)last_error(t);
+    guest_unlock();
+    atomic_store(&j->done, 1);
+    return 0;
+}
+/* semaphores: 20,000 release/wait pairs a thread.  In a pair of threads one releases its peer's semaphore and
+ * waits on its own, the other waits first; a counting job releases (odd ids) or takes (even ids) one shared
+ * semaphore.  Every wait 2 s at most: a lost wake-up is a timeout */
+#define SEM_PAIRS 20000
+static void *sem_pingpong(void *u){
+    Job *j = u; Thr *t = &j->t;
+    guest_lock(&t->cpu);
+    for (int k = 0; k < SEM_PAIRS; k++){
+        if (!(j->id & 1) && call_imp(t, "ReleaseSemaphore", j->peer, 1u, 0u) != 1) j->bad++;
+        if (call_imp(t, "WaitForSingleObject", j->h, 2000u) == 0) j->wakes++; else j->bad++;
+        if ((j->id & 1) && call_imp(t, "ReleaseSemaphore", j->peer, 1u, 0u) != 1) j->bad++;
+    }
+    guest_unlock();
+    atomic_store(&j->done, 1);
+    return 0;
+}
+static void *sem_counting(void *u){
+    Job *j = u; Thr *t = &j->t;
+    guest_lock(&t->cpu);
+    for (int k = 0; k < SEM_PAIRS; k++){
+        if (j->id & 1){ if (call_imp(t, "ReleaseSemaphore", j->h, 1u, 0u) == 1) j->wakes++; else j->bad++; }
+        else if (call_imp(t, "WaitForSingleObject", j->h, 2000u) == 0) j->wakes++;
+        else j->bad++;
+    }
     guest_unlock();
     atomic_store(&j->done, 1);
     return 0;
@@ -836,6 +933,44 @@ static void test_stress(Thr *t){
     CHECK(ok && (uint32_t)g_job[0].wakes == WAIT_FAILED && g_job[0].bad == 6, "closed mid-wait: 0x%x, error %d (%s)",
           (uint32_t)g_job[0].wakes, g_job[0].bad, ok ? "returned" : "STUCK");
 
+    /* 5. semaphores, 8 threads x 20,000 release/wait pairs: four pairs handing two semaphores back and forth */
+    uint32_t sa[NT];
+    guest_lock(&t->cpu);
+    for (int i = 0; i < NT; i++) sa[i] = call_imp(t, "CreateSemaphoreA", 0u, 0u, 0x3fffffffu, 0u);
+    guest_unlock();
+    for (int i = 0; i < NT; i++){ g_job[i].h = sa[i]; g_job[i].peer = sa[i ^ 1]; }
+    t0 = now_ms();
+    for (int i = 0; i < NT; i++) start_job(i, sem_pingpong);
+    ok = wait_jobs(0, NT, 120000.0);
+    el = now_ms() - t0;
+    wakes = 0; bad = 0;
+    for (int i = 0; i < NT; i++){ wakes += g_job[i].wakes; bad += g_job[i].bad; }
+    int left = 0;
+    guest_lock(&t->cpu);
+    for (int i = 0; i < NT; i++){ if (call_imp(t, "WaitForSingleObject", sa[i], 0u) == 0) left++; call_imp(t, "CloseHandle", sa[i]); }
+    guest_unlock();
+    CHECK(ok && !bad && wakes == NT * SEM_PAIRS && !left, "semaphore pairs: %d of %d waits, %d bad, %d counts left over (%s, %.0f ms)",
+          wakes, NT * SEM_PAIRS, bad, left, ok ? "all ended" : "STUCK", el);
+    printf("  semaphore pairs: %d threads x %d release/wait pairs in %.0f ms\n", NT, SEM_PAIRS, el);
+
+    /* 6. four releasers and four takers on one semaphore (the count goes up and down by one under contention) */
+    guest_lock(&t->cpu);
+    uint32_t sc = call_imp(t, "CreateSemaphoreA", 0u, 0u, 0x3fffffffu, 0u);
+    guest_unlock();
+    for (int i = 0; i < NT; i++) g_job[i].h = sc;
+    t0 = now_ms();
+    for (int i = 0; i < NT; i++) start_job(i, sem_counting);
+    ok = wait_jobs(0, NT, 120000.0);
+    el = now_ms() - t0;
+    int taken = 0, posted = 0; bad = 0;
+    for (int i = 0; i < NT; i++){ if (i & 1) posted += g_job[i].wakes; else taken += g_job[i].wakes; bad += g_job[i].bad; }
+    char d[160] = "";
+    win32_obj_describe(sc, d, sizeof d);
+    CHECK(ok && !bad && taken == NT / 2 * SEM_PAIRS && posted == NT / 2 * SEM_PAIRS && strstr(d, "count 0 of"),
+          "counting semaphore: %d posted, %d taken, %d bad, %s (%s, %.0f ms)", posted, taken, bad, d, ok ? "all ended" : "STUCK", el);
+    printf("  counting semaphore: %d releasers and %d takers x %d in %.0f ms\n", NT / 2, NT / 2, SEM_PAIRS, el);
+    guest_lock(&t->cpu); call_imp(t, "CloseHandle", sc); guest_unlock();
+
     atomic_store(&g_frames_stop, 1);
     pthread_join(fr, 0);
     guest_lock(&t->cpu);
@@ -891,6 +1026,7 @@ int main(int argc, char **argv){
         test_small(&t);
         test_voice(&t);
         test_threads(&t);
+        test_semaphores(&t);
         test_fatal(&t);
     } else if (!strcmp(mode, "stress")) test_stress(&t);
     else { printf("usage: win32_unit.wasm hle|stress (win32_unit_ug2.wasm: ug2)\n"); return 2; }

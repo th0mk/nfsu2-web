@@ -56,6 +56,7 @@ typedef struct {
     /* OB_KEY with the game's key table (game.h reg_keys): which key (its index
      * + 1; 0 = the flat registry) and the access it was opened with */
     int reg_key; uint32_t reg_access;
+    int sem_max;                      /* OB_SEM: its maximum count (its count is signaled) */
 } Obj;
 /* v12na: 4096 (was 512).  The game never closes the handle of the thread it
  * starts for every race load, so one slot per load stays in use (measured:
@@ -860,7 +861,7 @@ static uint32_t obj_new(ObKind k){
         o->exit_code = 0; o->ended = 0; o->term_req = 0; o->closed = 0; o->teb = o->stack_lo = 0;
         o->t_armed = 0; o->t_due_us = o->t_period_us = 0;
         o->creator = 0; o->end_seq = 0; o->looked = 0;
-        o->reg_key = 0; o->reg_access = 0;
+        o->reg_key = 0; o->reg_access = 0; o->sem_max = 0;
         o->refs = 1; o->kind = k; o->serial = ser;
         pthread_mutex_unlock(&o->mtx);
     } else {
@@ -950,6 +951,9 @@ int win32_obj_describe(uint32_t h, char *buf, size_t n){
                         o->name[0] ? " " : "", o->name, o->manual ? "manual" : "auto", o->signaled, due,
                         (double)o->t_period_us / 1000.0);
     }
+    if (o->kind == OB_SEM)
+        return snprintf(buf, n, "handle 0x%08x (semaphore%s%s, count %d of at most %d)", h,
+                        o->name[0] ? " " : "", o->name, o->signaled, o->sem_max);
     return snprintf(buf, n, "handle 0x%08x (%s%s%s, signaled %d, owner tid %u, thread tid %u)", h,
                     o->kind <= OB_TIMER ? kn[o->kind] : "?", o->name[0] ? " " : "", o->name,
                     o->signaled, o->owner_tid, o->tid);
@@ -1245,10 +1249,37 @@ static uint32_t timer_wait(Obj *o, uint32_t ms){
     pthread_mutex_unlock(&o->mtx);
     return r;
 }
-/* WaitForMultipleObjects over a set that holds a waitable timer.  Only such
- * sets come here; the others keep the polling loop of win32_ext_call as it
- * always was.  Before the first CreateWaitableTimerA no set is even looked at
- * (g_timers_made): UG2 imports no timers, so its waits run as they always did.
+/* WaitForSingleObject on a semaphore, guest lock released: Windows' rules.  A
+ * count above 0 lets one waiter through and goes down by one; WAIT_TIMEOUT
+ * after ms of real time (none for INFINITE); WAIT_FAILED when the handle is
+ * closed meanwhile.  ReleaseSemaphore wakes every waiter, each looks again
+ * under the lock, so a wake-up another waiter took, or none at all, is no
+ * early return; the sleep is cut into slices of at most SEM_SLICE_US, after
+ * each of which the semaphore and the time are looked at again.  (The
+ * generic wait below used to take the whole count at once and gave up after
+ * one sleep of at most 2 s, INFINITE too.) */
+#define SEM_SLICE_US 50000u
+static uint32_t sem_wait_one(Obj *o, uint32_t ms){
+    uint64_t t0 = mono_us(), lim = (uint64_t)ms * 1000u;
+    uint32_t r;
+    pthread_mutex_lock(&o->mtx);
+    for (;;){
+        if (o->kind != OB_SEM){ r = WAIT_FAILED_; break; }
+        if (o->signaled > 0){ o->signaled--; r = 0; break; }
+        uint64_t el = mono_us() - t0;
+        if (ms != 0xFFFFFFFFu && el >= lim){ r = 0x102u; break; }
+        uint64_t s = SEM_SLICE_US;
+        if (ms != 0xFFFFFFFFu && lim - el < s) s = lim - el;
+        cv_wait_us(o, s);
+    }
+    pthread_mutex_unlock(&o->mtx);
+    return r;
+}
+/* WaitForMultipleObjects over a set that holds a waitable timer or a
+ * semaphore.  Only such sets come here; the others keep the polling loop of
+ * win32_ext_call as it always was.  Before the first CreateWaitableTimerA or
+ * CreateSemaphoreA no set is even looked at (g_timers_made, g_sems_made): UG2
+ * imports neither, so its waits run as they always did.
  * Windows' rules: any (the lowest index that is ready) or all at once,
  * WAIT_TIMEOUT after ms of real time, WAIT_FAILED for a handle that is no
  * object, a repeated one in a wait for all, or one closed meanwhile.  Every
@@ -1256,10 +1287,11 @@ static uint32_t timer_wait(Obj *o, uint32_t ms){
  * a wait for all), then the thread sleeps at most 1 ms, less up to a timer's
  * due time.  Guest lock released. */
 static uint32_t g_timers_made;                   /* CreateWaitableTimerA's, under the guest lock */
+static uint32_t g_sems_made;                     /* CreateSemaphoreA's, under the guest lock */
 static int wfmo_has_timer(uint32_t cnt, uint32_t parr){
-    if (!g_timers_made) return 0;
+    if (!g_timers_made && !g_sems_made) return 0;
     if (!parr || cnt == 0 || cnt > 64u || !mem_is_committed(parr) || !mem_is_committed(parr + 4u * cnt - 1u)) return 0;
-    for (uint32_t i = 0; i < cnt; i++){ Obj *o = obj_get(MR32(parr + 4u * i)); if (o && o->kind == OB_TIMER) return 1; }
+    for (uint32_t i = 0; i < cnt; i++){ Obj *o = obj_get(MR32(parr + 4u * i)); if (o && (o->kind == OB_TIMER || o->kind == OB_SEM)) return 1; }
     return 0;
 }
 static int obj_ready(const Obj *o, uint32_t me){
@@ -2147,9 +2179,46 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
                } else { o->signaled=1; pthread_cond_broadcast(&o->cv); r=1; }
                pthread_mutex_unlock(&o->mtx); }
     }
-    else if (!strcmp(n,"CreateSemaphoreA")){ uint32_t h=obj_new(OB_SEM); Obj*o=obj_get(h); if(o) o->signaled=(int)A(c,1); r=h; }
-    else if (!strcmp(n,"ReleaseSemaphore")){ Obj*o=obj_get(A(c,0));
-        if(o){ pthread_mutex_lock(&o->mtx); o->signaled+=(int)A(c,1); pthread_cond_broadcast(&o->cv); pthread_mutex_unlock(&o->mtx);} r=1; }
+    /* Semaphores, Windows' rules (Most Wanted takes them through a wrapper that
+     * keeps its own count with lock xadd; UG2 imports none).  CreateSemaphoreA(
+     * attributes, lInitialCount, lMaximumCount, lpName): NULL with
+     * ERROR_INVALID_PARAMETER for a maximum below 1 or an initial count
+     * outside 0..maximum.  A name makes no shared
+     * object here (one process, no other opener), it is only kept for the logs.
+     * ReleaseSemaphore(hSemaphore, lReleaseCount, lpPreviousCount): FALSE with
+     * ERROR_INVALID_PARAMETER for a count below 1, ERROR_TOO_MANY_POSTS past the
+     * maximum (the count stays), ERROR_INVALID_HANDLE for a handle that is no
+     * semaphore; on success the count before goes to lpPreviousCount (if any)
+     * and every waiter looks again (sem_wait_one, wait_set). */
+    else if (!strcmp(n,"CreateSemaphoreA")){
+        int32_t ini = (int32_t)A(c,1), mx = (int32_t)A(c,2); uint32_t nm = A(c,3);
+        r = 0;
+        if (mx < 1 || ini < 0 || ini > mx) win32_set_last_error(c, 87u);
+        else if (!(r = obj_new(OB_SEM))) win32_set_last_error(c, 8u);      /* ERROR_NOT_ENOUGH_MEMORY: the table is full */
+        else {
+            Obj *o = obj_get(r);
+            pthread_mutex_lock(&o->mtx);
+            o->signaled = ini; o->sem_max = mx;
+            if (nm && mem_is_committed(nm)) snprintf(o->name, sizeof o->name, "%s", (const char *)(g_mem + nm));
+            pthread_mutex_unlock(&o->mtx);
+            g_sems_made++;
+            static int sh = 0;
+            if (sh++ < 8) fprintf(stderr, "[sem] CreateSemaphoreA(%d of at most %d%s%s) -> 0x%08x (from 0x%08x)\n",
+                                  ini, mx, o->name[0] ? ", " : "", o->name, r, c->eip);
+        } }
+    else if (!strcmp(n,"ReleaseSemaphore")){
+        Obj *o = obj_get(A(c,0)); int32_t add = (int32_t)A(c,1); uint32_t pp = A(c,2), err = 0; int prev = 0;
+        if (!o) err = 6u;
+        else {
+            pthread_mutex_lock(&o->mtx);
+            if (o->kind != OB_SEM) err = 6u;
+            else if (add < 1) err = 87u;
+            else if ((int64_t)o->signaled + add > (int64_t)o->sem_max) err = 298u;      /* ERROR_TOO_MANY_POSTS */
+            else { prev = o->signaled; o->signaled += add; pthread_cond_broadcast(&o->cv); }
+            pthread_mutex_unlock(&o->mtx);
+        }
+        if (err){ win32_set_last_error(c, err); r = 0; }
+        else { if (pp){ mem_commit(pp, 4); MR32(pp) = (uint32_t)prev; } r = 1; } }
     /* --- waitable timers (see timer_poll) --- */
     else if (!strcmp(n,"CreateWaitableTimerA")){       /* (attributes, bManualReset, lpTimerName) */
         uint32_t h = obj_new(OB_TIMER); Obj *o = obj_get(h);
@@ -2243,6 +2312,13 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
             r = timer_wait(o, ms);
             guest_yield_end();
             if (r == WAIT_FAILED_) win32_set_last_error(c, 6u);   /* ERROR_INVALID_HANDLE: closed during the wait */
+        }
+        else if (o->kind == OB_SEM){                    /* semaphore: one of its count, in finite slices */
+            ts_set(TS_WAIT, A(c,0));
+            guest_yield_begin();
+            r = sem_wait_one(o, ms);
+            guest_yield_end();
+            if (r == WAIT_FAILED_) win32_set_last_error(c, 6u);
         }
         else {
             ts_set(TS_WAIT, A(c,0));
@@ -2385,7 +2461,7 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         if (vs) vclock_sleep_end(t0);
         r=0; }
     else if (!strcmp(n,"WaitForMultipleObjects") && wfmo_has_timer(A(c,0), A(c,1))){
-        /* a set with a waitable timer: Windows' rules (wait_set) */
+        /* a set with a waitable timer or a semaphore: Windows' rules (wait_set) */
         uint32_t cnt = A(c,0), parr = A(c,1), err = 0, ser[64]; Obj *ob[64];
         for (uint32_t i = 0; i < cnt; i++){
             if (!(ob[i] = obj_get(MR32(parr + 4u * i)))){ err = 6u; continue; }   /* ERROR_INVALID_HANDLE */

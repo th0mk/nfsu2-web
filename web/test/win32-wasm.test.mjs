@@ -64,7 +64,7 @@ const TASK_IMPORTS = ['CreateWaitableTimerA', 'SetWaitableTimer', 'GetSystemTime
 
 test('win32_unit: the import table\'s stdcall counts are argcount\'s KNOWN ones and the lifts\'', () => {
   const unit = unitTable(), known = knownCounts();
-  assert.equal(unit.size, 52, 'the table parsed');
+  assert.equal(unit.size, 54, 'the table parsed');
   for (const [name, { dll, nargs }] of unit) {
     const k = keyOf(name, dll);
     assert.ok(known.has(k), `${k} is in KNOWN`);
