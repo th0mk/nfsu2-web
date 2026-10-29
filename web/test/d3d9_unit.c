@@ -450,15 +450,17 @@ static void t_state(void){
     }
     if (MW) check(dagree == NELM(dfm) && dmade == 3u, "depthtex", "%u of %u depth-texture answers agree with CreateTexture, "
                   "%u made (D16, D24X8, D24S8)", dagree, (unsigned)NELM(dfm), dmade);
-    /* the caps' shader versions (offsets 196 and 204): MW 3.0 with PS20Caps.NumTemps 32 (GameOps d3d_sm3),
-     * UG2 2.0 */
+    /* the caps' shader versions (offsets 196 and 204): MW 3.0 with PS20Caps.NumTemps 32 (GameOps d3d_sm3) and
+     * StretchRectFilterCaps (0xF4) min and mag point/linear, UG2 2.0 and none */
     MR32(OUT) = 0; mem_commit(OUT, 0x130);
     uint32_t gc = call(g_d3d, "GetDeviceCaps", 3, 0u, 1u, OUT);
-    uint32_t vsv = MR32(OUT + 196u), psv = MR32(OUT + 204u), ntemps = MR32(OUT + 0x110u);
-    if (MW) check(gc == 0u && vsv == 0xFFFE0300u && psv == 0xFFFF0300u && ntemps == 32u, "caps-sm3",
-                  "GetDeviceCaps 0x%08x: vs 0x%08x ps 0x%08x, PS20Caps.NumTemps %u", gc, vsv, psv, ntemps);
-    else    check(gc == 0u && vsv == 0xFFFE0200u && psv == 0xFFFF0200u && ntemps == 0u, "caps-sm2-ug2",
-                  "GetDeviceCaps 0x%08x: vs 0x%08x ps 0x%08x, PS20Caps.NumTemps %u (UG2's 2.0)", gc, vsv, psv, ntemps);
+    uint32_t vsv = MR32(OUT + 196u), psv = MR32(OUT + 204u), ntemps = MR32(OUT + 0x110u), srf = MR32(OUT + 0xF4u);
+    if (MW) check(gc == 0u && vsv == 0xFFFE0300u && psv == 0xFFFF0300u && ntemps == 32u && srf == 0x03000300u, "caps-sm3",
+                  "GetDeviceCaps 0x%08x: vs 0x%08x ps 0x%08x, PS20Caps.NumTemps %u, StretchRectFilterCaps 0x%08x",
+                  gc, vsv, psv, ntemps, srf);
+    else    check(gc == 0u && vsv == 0xFFFE0200u && psv == 0xFFFF0200u && ntemps == 0u && srf == 0u, "caps-sm2-ug2",
+                  "GetDeviceCaps 0x%08x: vs 0x%08x ps 0x%08x, PS20Caps.NumTemps %u, StretchRectFilterCaps 0x%08x "
+                  "(UG2's 2.0)", gc, vsv, psv, ntemps, srf);
     uint32_t dss = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 1u, 75u);
     uint32_t dsc = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 1u, 21u);
     uint32_t rts = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 1u, 1u, 23u);

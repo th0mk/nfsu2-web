@@ -5008,14 +5008,15 @@ static void fill_caps(uint32_t p){
       if (g_game.d3d_sm3 && ps >= 0xFFFF0300u){
           /* what goes with 3.0 (D3DCAPS9 after DevCaps2): one adapter in its
            * group, one render target (every MW pixel shader writes oC0 only),
-           * StretchRect's point and linear filters; VS20Caps and PS20Caps at
+           * StretchRect's point and linear filters (D3DPTFILTERCAPS_MINFPOINT,
+           * MINFLINEAR, MAGFPOINT, MAGFLINEAR); VS20Caps and PS20Caps at
            * their 3.0 values (predication, 24 dynamic and 4 static flow
            * control levels, 32 temporaries: ten of MW's ps_2_x use r16..r30,
            * GAME.md 5.3; the arbitrary-swizzle, gradient, predication and
            * no-limit bits, 512 slots), no vertex texture filters (the
            * translator has no vertex texture fetch), 65535 instructions
            * executed, 512 slots of 3.0 code */
-          MR32(p+0xE8)=1; MR32(p+0xF0)=1; MR32(p+0xF4)=0x03030000u;
+          MR32(p+0xE8)=1; MR32(p+0xF0)=1; MR32(p+0xF4)=0x03000300u;
           MR32(p+0xF8)=1; MR32(p+0xFC)=24; MR32(p+0x100)=32; MR32(p+0x104)=4;
           MR32(p+0x108)=0x1F; MR32(p+0x10C)=24; MR32(p+0x110)=32; MR32(p+0x114)=4; MR32(p+0x118)=512;
           MR32(p+0x120)=65535; MR32(p+0x124)=65535; MR32(p+0x128)=512; MR32(p+0x12C)=512;
