@@ -1,0 +1,55 @@
+# Most Wanted: a quick race won by the test aid and saved (TRACKER M4-02, L-022).  Seeded with the save tree
+# profiles_make.txt leaves (ALPHA and BRAVO; NFSU2_SAVE_SEED), this run loads ALPHA from the start's Load list (as
+# profiles_load.txt does), takes the random Quick Race (race_loop.txt says how), lets the game's AI drive the
+# player's car for 600 frames after GO, and finishes the race through the game's own path (racewin,
+# runtime/mw/career_mw.c: NotifyRaceFinished, then EnterPostRaceFlow, as the race's script calls them at the finish
+# line).  After the winner's post-race screen (InGamePhotoMaster.fng) it goes back to the main menu and saves ALPHA
+# from the Alias Manager (as profiles_load.txt does), so the save tree it leaves (--save-out) next to the seed's
+# shows what the game itself wrote for the win (L-022: nothing here edits a reward or the career).
+# tests/mw/checks/race_win.sh wants the load, the win and the save, in that order:
+#   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script race_win.txt \
+#     --marker 'race_win: ALPHA saved' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=20000 --save-out DIR2
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; profiles_make's tree holds it)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete. 600
++8    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log race_win: ALPHA loaded
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # its first item: the random Quick Race
++0    tap RETURN
++0    waitfng Quick_Race_Brief.fng:ba458180 600          # the race's brief takes input
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_win: GO
++0    autopilot on
++600  autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_win: won
++0    racestatus
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng@4b4e388a 1200             # back in the Quick Race sub menu
++0    tap ESCAPE
++0    waitfng MainMenu.fng@4b4e388c 900                  # the main menu, on Quick Race
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388c 40 300   # Save
++0    tap RETURN
++0    waitfng MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cc 600          # save the alias named ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cc 600               # overwrite?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cd 30 300       # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388c 600         # back on Save
++0    log race_win: ALPHA saved
++0    close

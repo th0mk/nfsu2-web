@@ -1,0 +1,39 @@
+# Most Wanted: 25 quick races in a row (TRACKER M4-04, Q-31: the race-loading hang another recompilation reported,
+# the main thread spinning in 0x684710).  Each pass takes the Quick Race sub menu's first item (the random Quick Race: its track, kind and
+# opponents vary, L-023), its brief (Quick_Race_Brief.fng, taking input once its "quick_play_brief" label
+# 0xBA458180 is up), the load (Loading.fng, GameFlow 4 and 5) and the race (GameFlow 6), GO (the player's race
+# timer runs: byte +0x154 of the first GRacerInfo, GRaceStatus [0x91E000] +0x16C), the game's AI driving the
+# player's car for 1,200 frames, then the finish through the game's own path (racewin, runtime/mw/career_mw.c:
+# NotifyRaceFinished, then EnterPostRaceFlow as the race's script calls them at the finish line), the winner's
+# post-race screen (InGamePhotoMaster.fng, once it takes input with its "WINNER" label 0x5DFB6667 up), and Enter,
+# which goes back to the Quick Race sub menu.  Every step waits for its screen or the game's state (L-021).
+# tests/mw/checks/race_loop.sh wants 25 loads, 25 GOs and 25 post-race screens, no stall report (the watchdog
+# would name the main thread's function, 0x684710's for Q-31), and prints the load times:
+#   node web/tools/run-suite.mjs --game mw --script race_loop.txt --marker 'race_loop: 25 races' \
+#     --env NFSU2_QUIT_FRAMES=200000 --timeout-scale 12
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    loop 25
++0    waitfng MainMenu_Sub.fng@4b4e388a 1200             # its first item: the random Quick Race
++0    tap RETURN
++0    waitfng Quick_Race_Brief.fng:ba458180 600          # the race's brief takes input
++0    log race_loop: load
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    log race_loop: racing
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_loop: GO
++0    autopilot on
++1200 autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_loop: results
++0    tap RETURN
++0    endloop
++0    waitfng MainMenu_Sub.fng@4b4e388a 1200
++0    log race_loop: 25 races
++0    close

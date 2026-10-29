@@ -1,0 +1,30 @@
+# Most Wanted: the per-frame anchor in a race (TRACKER M4-01, Q-24).  Core runs MW's on_frame at MainLoop's
+# 0x663EC6, between the game's update and its render (runtime/mw/game_mw.c MW_FRAME_SITE; runtime/debug.c
+# guest_hook counts the passes), and the race aids (runtime/mw/career_mw.c) run there.  The script takes the main
+# menu's Quick Race (its 3rd item, 0x4B4E388C), the sub menu's first item, the random Quick Race, and its brief
+# (Quick_Race_Brief.fng, taking input once its "quick_play_brief" label 0xBA458180 is up), then waits for the race
+# (GameFlow 6) and for GO: the player's race timer runs (GRaceStatus [0x91E000], its first racer's GRacerInfo at
+# +0x18, whose byte +0x154 says its timer runs: GRacerInfo::+0x16C from GRaceStatus).  The game's AI then drives the
+# player's car (autopilot) for 10,000 frames, and the script logs the Presents and the anchor's passes at both ends;
+# tests/mw/checks/race_frames.sh wants one pass a Present over them, give or take one:
+#   node web/tools/run-suite.mjs --game mw --script race_frames.txt --marker 'race_frames: 10000 frames' \
+#     --env NFSU2_QUIT_FRAMES=20000 --timeout-scale 3
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # its first item: the random Quick Race
++0    tap RETURN
++0    waitfng Quick_Race_Brief.fng:ba458180 600          # the race's brief takes input
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_frames: GO
++0    autopilot on
++0    frames
++10000 frames
++0    log race_frames: 10000 frames
++0    racestatus
++0    close
