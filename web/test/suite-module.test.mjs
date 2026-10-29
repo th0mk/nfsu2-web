@@ -22,6 +22,9 @@ async function standIn(t, json) {
   const server = http.createServer((q, s) => {
     if (q.url === '/test/hostcheck.html') { s.end('<!doctype html>'); return; }
     if (q.url === '/game.json' && json()) { s.end(json()); return; }
+    // this checkout's scripts, as run-suite requires of the server it runs against (requireOwnCheckout)
+    const sc = /^\/tests\/scripts\/([\w.-]+)$/.exec(q.url);
+    if (sc && fs.existsSync(path.join(REPO, 'tests/scripts', sc[1]))) { s.end(fs.readFileSync(path.join(REPO, 'tests/scripts', sc[1]))); return; }
     s.statusCode = 404; s.end();
   });
   await new Promise((r, j) => { server.once('error', j); server.listen(PORT, '127.0.0.1', r); });

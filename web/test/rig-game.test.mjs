@@ -25,7 +25,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 8539), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 8540);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
-const FOR_MW = new Set(['run-suite', 'intro-test']);   // the tools that have something for Most Wanted (3. checks what)
+const FOR_MW = new Set(['run-suite', 'intro-test', 'lan-pair']);   // the tools that have something for Most Wanted (3. checks what)
 // a server nobody runs, should a tool get past its --help or its check (none may): no own server, nothing reached
 const NOWHERE = { 'lan-pair': ['--base', 'http://127.0.0.1:9'], 'online-pair': ['--base', 'http://127.0.0.1:9'],
   'roam-pair': ['--base', 'http://127.0.0.1:9'], 'run-suite': ['--base', 'http://127.0.0.1:9'], 'app-test': ['--base', 'http://127.0.0.1:9'],
@@ -173,6 +173,9 @@ test('run-suite --game mw: its table; on a D3DX oracle module without the D3DX s
   const server = http.createServer((q, s) => {
     if (q.url === '/test/hostcheck.html') { s.end('<!doctype html>'); return; }
     if (q.url === '/game.json') { s.end(JSON.stringify({ rev: 'abc', lift: '', game: 'mw', stamp: 'x', module: 'h', oracle: 1 })); return; }
+    // this checkout's scripts, as run-suite requires of the server it runs against (requireOwnCheckout)
+    const sc = /^\/tests\/scripts\/([\w.-]+)$/.exec(q.url);
+    if (sc && fs.existsSync(path.join(REPO, 'tests/mw/scripts', sc[1]))) { s.end(fs.readFileSync(path.join(REPO, 'tests/mw/scripts', sc[1]))); return; }
     s.statusCode = 404; s.end();
   });
   await new Promise((r, j) => { server.once('error', j); server.listen(P1, '127.0.0.1', r); });
