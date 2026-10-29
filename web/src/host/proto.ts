@@ -55,4 +55,6 @@ export type ToPage =
   | { t: 'trap'; tid: number; msg: string; stack?: string }
   | { t: 'ready'; slot: number }
   // a thread took a pool worker, or found none idle: the page starts more (process.ts)
-  | { t: 'pool' };
+  | { t: 'pool' }
+  // a starting worker asks for the page's clock (game-worker.ts alignClock); the page answers { t: 'clock', now }
+  | { t: 'clock' };

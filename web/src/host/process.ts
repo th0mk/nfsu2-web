@@ -91,7 +91,11 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     const s = started++, w = new Worker(abs('host/game-worker.js'), { type: 'module', name: `game-${s}` });
     starting++;
     const ready = new Promise<void>(res => {
-      w.onmessage = (e) => { if (e.data.t === 'ready') { starting--; w.onmessage = onMsg; res(); } else onMsg(e); };
+      w.onmessage = (e) => {
+        // the worker sets its clock by the page's (game-worker.ts alignClock): one timeline in every worker
+        if (e.data.t === 'clock') w.postMessage({ t: 'clock', now: performance.timeOrigin + performance.now() });
+        else if (e.data.t === 'ready') { starting--; w.onmessage = onMsg; res(); } else onMsg(e);
+      };
     });
     w.onerror = (e) => o.onNote?.(`[pool] game worker ${s}: ${e.message}`);
     w.postMessage({ mod: o.module, memory, ctl: ctlBuf, rpc, slot: s, pool, cfg });

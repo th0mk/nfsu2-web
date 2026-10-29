@@ -52,13 +52,37 @@ function io(op: Op, ...args: (number | bigint)[]): number {
   return r;
 }
 
-const monoNs = () => BigInt(Math.round(performance.now() * 1e3)) * 1000n + BigInt(Math.round(performance.timeOrigin * 1e3)) * 1000n;
+// The clock every guest thread reads (clock_time_get, now_ms): the page's, performance.timeOrigin + performance.now()
+// there.  A worker's own timeOrigin is the wall clock when it was made, so a worker made after a step of the system
+// clock (WSL steps it: 1.92 s in a LAN run of 2026-10-30) runs that far from the others, and a guest thread on it
+// saw time jump when it read another's stamps: the game's LAN link (DirtySock, its threads on two workers) took a
+// peer for broken and gave up ("Could not connect to the other player").  So each worker asks the page for its clock
+// before it runs a thread (alignClock) and keeps the offset: T0MS is the page's clock at this worker's
+// performance.now() 0, read once, not on each of the guest's ~1,000 timer reads a frame.
+let T0MS = performance.timeOrigin;
+let T0US = Math.round(T0MS * 1e3);
+const monoNs = () => BigInt(Math.round(performance.now() * 1e3)) * 1000n + BigInt(T0US) * 1000n;
 // clock_time_get is the guest's most frequent host import (QueryPerformanceCounter, timeGetTime: ~100 calls
 // in a race frame).  It writes the same values as BigInt µs × 1000 would, but from integer microseconds held in doubles
 // (exact below 2^53) as two u32 halves: no BigInt and no DataView per call.
-const T0US = Math.round(performance.timeOrigin * 1e3);
-// the time origin is fixed for the worker's life: read once, not on each of the guest's ~1,000 timer reads a frame
-const T0MS = performance.timeOrigin;
+let clockReply: ((pageNow: number | null) => void) | null = null;
+/** the page's clock against this worker's: the round trip of a 'clock' message, the shortest of up to 5 (a page that
+ *  does not answer in 2 s leaves this worker's own clock); a note when the offset is worth a line */
+async function alignClock(): Promise<string> {
+  let best = Infinity, off = 0;
+  for (let k = 0; k < 5 && best > 2; k++) {
+    const t1 = performance.now();
+    const pageNow = await new Promise<number | null>(res => { clockReply = res; post({ t: 'clock' }); setTimeout(() => res(null), 2000); });
+    clockReply = null;
+    const t2 = performance.now();
+    if (pageNow === null) break;
+    if (t2 - t1 < best) { best = t2 - t1; off = pageNow - (performance.timeOrigin + (t1 + t2) / 2); }
+  }
+  if (best === Infinity) return '';
+  T0MS = performance.timeOrigin + off; T0US = Math.round(T0MS * 1e3);
+  return Math.abs(off) >= 20 ? `[clock] game worker ${slot}: its own clock was ${off.toFixed(1)} ms off the page's `
+    + `(a step of the system clock); it keeps the page's (round trip ${best.toFixed(1)} ms)` : '';
+}
 let u32v: Uint32Array | null = null;
 function writeUsAsNs(p: number, us: number) {
   if (p & 7) { dv().setBigUint64(p, BigInt(us) * 1000n, true); return; }
@@ -230,9 +254,12 @@ function hostImports(): Record<string, (...a: any[]) => any> {
   };
 }
 
-onmessage = async (e: MessageEvent<Init>) => {
+onmessage = async (e: MessageEvent<Init | { t: 'clock'; now: number }>) => {
+  if ('t' in e.data) { clockReply?.(e.data.now); return; }     // the page's clock (alignClock)
   const m = e.data;
   memory = m.memory; ctl = new Int32Array(m.ctl); slot = m.slot; POOL = m.pool; cfg = m.cfg;
+  const clockNote = await alignClock();
+  if (clockNote) post({ t: 'log', s: clockNote, fd: 2, tid: 0 });
   rpcI32 = new Int32Array(m.rpc); rpcI64 = new BigInt64Array(m.rpc);
   const imports: WebAssembly.Imports = {
     env: { memory },
