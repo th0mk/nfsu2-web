@@ -151,7 +151,7 @@ function url(i) {
   if (!G.reg) q.delete('reg');      // a game without a registry seed starts from its own first start (run-suite)
   if (PAGE === 'app') {
     // the player's page: no wasm/pages/arg/net (the app's own), the switch name from roam_name, free roam off
-    const a = new URLSearchParams({ reg: q.get('reg'), save: q.get('save'), script: q.get('script') });
+    const a = new URLSearchParams({ ...(G.reg ? { reg: G.reg } : {}), save: q.get('save'), script: q.get('script') });
     for (const [k, v] of Object.entries({ ...env, NFSU2_ROAM: '0', NFSU2_ROAM_NAME: NAMES[i] })) if (k !== 'NFSU2_SAVEDIR') a.append('env', `${k}=${v}`);
     return `${BASE}/?${a}${SEED ? '' : '&fresh'}`;
   }
