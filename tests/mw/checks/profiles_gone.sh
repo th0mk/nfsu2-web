@@ -1,7 +1,9 @@
 #!/bin/bash
 # Suite check for "profiles_gone" (tests/mw/scripts/profiles_gone.txt, TRACKER M3-20), a start seeded with
 # profiles_load's saves, where ALPHA was deleted: the module under test is named (L-020); no file line names ALPHA
-# (no scan finds it, nothing opens it: the FILELIST=1 lines of runtime/fileio.c); the start's scans found BRAVO
+# (no scan finds it, nothing opens it: the FILELIST=1 lines of runtime/fileio.c; the seed holds the folders the
+# delete left empty too, web/tools/run-suite.mjs --save-out and save-seed.mjs, so a folder of ALPHA left behind
+# would be found here); the start's scans found BRAVO
 # alone, so it loaded BRAVO with no Load list (the list comes up for two or more); and the game left by WM_CLOSE.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }

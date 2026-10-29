@@ -207,31 +207,37 @@ function judge(s, log, exit) {
   return why;
 }
 
-// the page's OPFS save directory dir into the folder out (files, as the page has them)
+// the page's OPFS save directory dir into the folder out (files, and folders left empty, as the page has them: a
+// folder a delete left behind seeds the next run too, save-seed.mjs)
 async function saveOut(page, dir, out) {
   try {
-    const files = await page.evaluate(async dir => {
-      const got = [];
+    const { files, empty } = await page.evaluate(async dir => {
+      const files = [], empty = [];
       async function walk(d, rel) {
+        let n = 0;
         for await (const [name, h] of d.entries()) {
           const r = rel ? `${rel}/${name}` : name;
+          n++;
           if (h.kind === 'directory') await walk(h, r);
           else {
             const b = new Uint8Array(await (await h.getFile()).arrayBuffer());
             let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-            got.push([r, btoa(s)]);
+            files.push([r, btoa(s)]);
           }
         }
+        if (!n && rel) empty.push(rel);
       }
       await walk(await (await navigator.storage.getDirectory()).getDirectoryHandle(dir), '');
-      return got;
+      return { files, empty };
     }, dir);
     fs.rmSync(out, { recursive: true, force: true });
+    fs.mkdirSync(out, { recursive: true });
     for (const [rel, b64] of files) {
       fs.mkdirSync(path.dirname(path.join(out, rel)), { recursive: true });
       fs.writeFileSync(path.join(out, rel), Buffer.from(b64, 'base64'));
     }
-    return `${files.length} files to ${out}`;
+    for (const rel of empty) fs.mkdirSync(path.join(out, rel), { recursive: true });
+    return `${files.length} files${empty.length ? ` and ${empty.length} empty folder(s) (${empty.join(', ')})` : ''} to ${out}`;
   } catch (e) { return `failed: ${e}`; }
 }
 
