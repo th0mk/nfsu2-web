@@ -25,6 +25,8 @@
  *                    post-race flows only (race_loop.txt); a run that looks at rewards or the save lets the
  *                    autopilot drive over the line instead (race_win.txt).
  *   autopilot on|off the game's AI drives the local player's car (Game.ForceAIControl / ClearAIControl)
+ *   autopilot races  the same at every race's GO from now on, for races that follow each other with no menu
+ *                    between (the career's prologue), with the races' edges logged; autopilot off ends it
  *   teleport X Y Z DX DY DZ   move the local player's car to X Y Z (~N: N from where it is), facing DX DY DZ
  *                    (the game's simulation space, as where logs it: Y is the height, and the warp sets
  *                    the car on the surface at X, Z: ~40 ~1 ~0 moved it 40 m along X and left it at Y 163.5
@@ -39,7 +41,8 @@
  * with their strings from 0x61E900 on):
  *   GRaceStatus, [0x91E000]: its racers (GRacerInfo, 0x194 bytes each) from +0x18, their count at +0x1958;
  *     +0x198A (byte) actively racing, written by SetActivelyRacing (0x604050); +0x4554 (byte) has been won
- *     (SetHasBeenWon 0x604080).  GetRacerInfo(i) is 0x5DBED0 (thiscall, 0-based).
+ *     (SetHasBeenWon 0x604080); +0x1964 the game mode, 2 in a career (Game.IsCareerMode 0x605610).
+ *     GetRacerInfo(i) is 0x5DBED0 (thiscall, 0-based).
  *   GRacerInfo: +0x00 the racer's simable handle, +0x18 (float) the share of the race done (100 at the
  *     finish, NotifyRaceFinished sets it), +0x21 (byte) finished (0x5E97B0, which also stops its timer),
  *     +0x150 (float) its race time.
@@ -70,6 +73,8 @@ uint64_t debug_frame_passes(void);
 #define RS_NRACERS       0x1958u
 #define RS_ACTIVE        0x198au
 #define RS_WON           0x4554u
+#define RS_GO            0x16cu          /* the first racer's timer flag (GRacerInfo +0x154): the race's GO */
+#define RS_MODE          0x1964u         /* the game mode: 2 career (Game.IsCareerMode 0x605610 tests it) */
 #define RACER_SIZE       0x194u
 #define RI_HANDLE        0x00u
 #define RI_PCT           0x18u
@@ -144,16 +149,42 @@ static void log_status(CPU *c){
         o += snprintf(b + o, sizeof b - (size_t)o, " #%d %.1f%%%s %.2fs", i, rdf(ri + RI_PCT),
                       MR8(ri + RI_FINISHED) ? " finished" : "", rdf(ri + RI_TIME));
     }
-    fprintf(stderr, "[mwrace] f=%ld racestatus flow %u racers %d active %u won %u player %d:%s\n", autotest_frame(),
-            game_flow(), n, MR8(rs + RS_ACTIVE), MR8(rs + RS_WON), me, o ? b : " none");
+    fprintf(stderr, "[mwrace] f=%ld racestatus flow %u racers %d active %u won %u player %d:%s; mode %u\n",
+            autotest_frame(), game_flow(), n, MR8(rs + RS_ACTIVE), MR8(rs + RS_WON), me, o ? b : " none",
+            rd(rs + RS_MODE));
+}
+
+/* ---- autopilot races: the game's AI takes the player's car at each race's GO ----
+ * A career runs races back to back with no menu between them (the prologue's), and the game drops a
+ * ForceAIControl when a race ends, so this mode watches the race at every anchor: when the race is actively
+ * racing with its timer running (GRaceStatus +0x198A and the first racer's timer flag, +0x16C) and that was not
+ * so the frame before, or the player's car is another one, it calls Game.ForceAIControl(0) again.  It logs the
+ * race's edges as it sees them (active, GO, slot #0 finished, won), so a log shows each race's start and end. */
+static int auto_ai;
+static struct { uint32_t rs, sim; int active, go, fin, won; } W;
+static void watch_race(CPU *c){
+    uint32_t rs = rd(G_RACESTATUS), s = player_simable(c);
+    int active = rs ? MR8(rs + RS_ACTIVE) : 0, go = rs ? MR8(rs + RS_GO) != 0 : 0;
+    int fin = rs && rd(rs + RS_NRACERS) ? MR8(rs + RS_RACERS + RI_FINISHED) : 0, won = rs ? MR8(rs + RS_WON) : 0;
+    long f = autotest_frame();
+    if (active != W.active || go != W.go || fin != W.fin || won != W.won)
+        fprintf(stderr, "[mwrace] f=%ld race: active %d go %d #0 finished %d won %d (flow %u)\n", f, active, go, fin,
+                won, game_flow());
+    if (active && go && s && (!(W.active && W.go) || s != W.sim || rs != W.rs)){
+        uint32_t zero = 0;
+        gcall(c, FN_FORCE_AI, 0, 1, &zero);
+        fprintf(stderr, "[mwrace] f=%ld autopilot on: the race's GO\n", f);
+    }
+    W.rs = rs; W.sim = s; W.active = active; W.go = go; W.fin = fin; W.won = won;
 }
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
-enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_TELEPORT, Q_WHERE, Q_STATUS };
+enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_TELEPORT, Q_WHERE, Q_STATUS };
 static struct { int op, done, rel; float v[6]; } Q;
 
 void mw_frame(CPU *c){
+    if (auto_ai) watch_race(c);
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
     switch (Q.op){
@@ -175,8 +206,14 @@ void mw_frame(CPU *c){
     case Q_AI_ON: case Q_AI_OFF: {
         uint32_t zero = 0;
         gcall(c, Q.op == Q_AI_ON ? FN_FORCE_AI : FN_CLEAR_AI, 0, 1, &zero);
+        if (Q.op == Q_AI_OFF) auto_ai = 0;
         fprintf(stderr, "[mwrace] f=%ld autopilot %s\n", f, Q.op == Q_AI_ON ? "on" : "off");
         break; }
+    case Q_AI_RACES:
+        memset(&W, 0, sizeof W);        /* a race at its GO now is taken at the next anchor */
+        auto_ai = 1;
+        fprintf(stderr, "[mwrace] f=%ld autopilot races: the AI takes each race at its GO\n", f);
+        break;
     case Q_TELEPORT: {
         uint32_t s = player_simable(c);
         uint32_t obj = s ? rd(s + 4u) : 0u, id = IID_WARP;
@@ -235,7 +272,7 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
     else if (!strcasecmp(cmd, "autopilot")){
         sscanf(p, "%31s", a1);
-        Q.op = !strcasecmp(a1, "off") ? Q_AI_OFF : Q_AI_ON;
+        Q.op = !strcasecmp(a1, "off") ? Q_AI_OFF : !strcasecmp(a1, "races") ? Q_AI_RACES : Q_AI_ON;
     } else if (!strcasecmp(cmd, "teleport")){
         char t[6][24]; int used2 = 0, k = 0;
         while (k < 6 && sscanf(p, "%23s %n", t[k], &used2) == 1){ p += used2; k++; }
