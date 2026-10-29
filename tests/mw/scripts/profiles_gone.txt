@@ -1,0 +1,13 @@
+# Most Wanted: the last of three runs (TRACKER M3-20), seeded with the save tree profiles_load.txt left, where ALPHA
+# was deleted: a deleted alias stays deleted (L-059).  The start's scans find BRAVO alone, and with one alias the
+# start loads it with no Load list (MC_List.fng comes up only for two or more, as in profiles_load.txt); "Load
+# complete.": Enter, the main menu, and the run leaves by WM_CLOSE.  tests/mw/checks/profiles_gone.sh wants no trace
+# of ALPHA and no Load list:
+#   NFSU2_SAVE_SEED=DIR/profiles_load node web/tools/run-suite.mjs --game mw --script profiles_gone.txt \
+#     --marker 'profiles_gone: BRAVO loaded' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=7200
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++300  tap RETURN                      # Load complete.  Continue
++0    waitfng MainMenu.fng 900
++0    log profiles_gone: BRAVO loaded
++60   close
