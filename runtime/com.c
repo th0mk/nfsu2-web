@@ -796,13 +796,25 @@ static void rs_apply(void){
       unsigned dm = (g_rs[7] ? 1u : 0u) | (g_rs[14] ? 2u : 0u) | (zf << 2);
       metal_set_depth(dm); }
     /* 8 stages (Most Wanted): 195=DEPTHBIAS and 175=SLOPESCALEDEPTHBIAS, floats; its shadow-map pass sets
-     * 2^-22 (4 units of a 24-bit Z) and 4.0.  Packed as gpu_proto.h GW_ZBIAS_SHIFT says: 4 bits each */
+     * 2^-22 (4 units of a 24-bit Z) and 4.0.  Packed as gpu_proto.h GW_ZBIAS_SHIFT says: 4 bits each, so a
+     * negative or larger constant and a fractional or larger slope scale change; each such pair is logged
+     * (the first 8), to show whether the game asks for one */
     if (g_game.gpu_stages == 8){
         void metal_set_depth_bias(unsigned);
         float cb, sb; memcpy(&cb, &g_rs[195], 4); memcpy(&sb, &g_rs[175], 4);
         float u = cb * 16777216.f;
         unsigned cu = (u > 0.f) ? (u >= 15.f ? 15u : (unsigned)lroundf(u)) : 0u;
         unsigned su = (sb > 0.f) ? (sb >= 15.f ? 15u : (unsigned)lroundf(sb)) : 0u;
+        if (!(fabsf(u - (float)cu) < 1e-3f && fabsf(sb - (float)su) < 1e-3f)){
+            static uint32_t seen[8][2]; static int nseen;
+            int k = 0;
+            while (k < nseen && (seen[k][0] != g_rs[195] || seen[k][1] != g_rs[175])) k++;
+            if (k == nseen && nseen < 8){
+                seen[nseen][0] = g_rs[195]; seen[nseen][1] = g_rs[175]; nseen++;
+                fprintf(stderr, "[d3d] depth bias %g, slope scale %g: drawn with %u x 2^-24 and %u (GW_ZBIAS_SHIFT)\n",
+                        (double)cb, (double)sb, cu, su);
+            }
+        }
         metal_set_depth_bias(cu | su << 4);
     }
 }

@@ -72,7 +72,9 @@ typedef struct {
 #define GW_Z_TEX 64u
 /* GwDraw.depth bits from this one up (8 stages only; 0 in UG2's records): the draw's depth bias, bits 24-27 the
  * constant part in units of 2^-24 (D3DRS_DEPTHBIAS x 2^24, 0..15), bits 28-31 the slope scale
- * (D3DRS_SLOPESCALEDEPTHBIAS rounded, 0..15); the Z surface id stays in bits 8-23 (gpu-abi.md section 11.4) */
+ * (D3DRS_SLOPESCALEDEPTHBIAS rounded, 0..15); the Z surface id stays in bits 8-23 (gpu-abi.md section 11.4).
+ * The page's depth32float Z applies a unit of 2^(e-23), e the exponent of the primitive's largest z: 2^-24 for
+ * z in [0.5, 1), smaller nearer the camera (gpu-abi.md says what else is approximate) */
 #define GW_ZBIAS_SHIFT 24u
 /* GwDraw.ps bits from this one up: stage k's texture is a depth texture
  * (GW_TF_DEPTH) and module ps & 0x1FF samples it with a depth compare; the

@@ -535,12 +535,13 @@ export class Encoder {
     return l;
   }
 
-  /** a depth bias (gpu_proto.h GW_ZBIAS_SHIFT, nonzero) as a pipeline-key slot 1..3 (-1: more than three) */
+  /** a depth bias (gpu_proto.h GW_ZBIAS_SHIFT, nonzero) as a pipeline-key slot 1..127 (pipeKey's top bits; the key
+   *  stays below 2^53); 0 past those: drawn without its bias, logged once */
   private biasKey(zb: number): number {
     let k = this.biasSlot.get(zb);
     if (k === undefined) {
-      k = this.biasSlot.size < 3 ? this.biasSlot.size + 1 : -1;
-      if (k < 0) this.log(`[gpu] depth bias ${zb.toString(16)}: more than three biases (not drawn)`);
+      k = this.biasSlot.size < 127 ? this.biasSlot.size + 1 : 0;
+      if (!k) this.log(`[gpu] depth bias ${zb.toString(16)}: more than 127 depth biases (drawn without it)`);
       this.biasSlot.set(zb, k);
     }
     return k;
@@ -639,10 +640,9 @@ export class Encoder {
       const vs = this.vsByHash.get(e.v), ps = this.psByHash.get(e.p);
       if (vs === undefined || ps === undefined) return true;
       const blend = e.s % 262144, cull = Math.floor(e.s / 262144) % 4, dm = Math.floor(e.s / 1048576) % 64;
-      const nd = Math.floor(e.s / 67108864) % 2 === 1, zb = Math.floor(e.s / 134217728) % 256;
+      const nd = Math.floor(e.s / 67108864) % 2 === 1, zb0 = Math.floor(e.s / 134217728) % 256;
       // the key the draws use: a depth variant's module id through its slot, the bias through its slot
-      const zs = zb ? this.biasKey(zb) : 0;
-      if (zs < 0) return false;
+      const zs = zb0 ? this.biasKey(zb0) : 0, zb = zs ? zb0 : 0;
       const key = this.pipeKey(blend, ps, vs, cull, dm, nd, zs);
       if (key < 0 || this.pipes.has(key)) return false;
       const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd, zb);
@@ -874,9 +874,8 @@ export class Encoder {
       let psEff = psid > 0 && this.psMods.has(psid) ? psid : psb > 0 && this.psMods.has(psb) ? psb : psb >= PSCUBE ? PSCUBE : 0;
       if (psEff === 0 && t0 && this.tex[t0]?.cube) psEff = PSCUBE;
       const nd = !(aref > 0);
-      // the depth bias (8 stages, gpu_proto.h GW_ZBIAS_SHIFT) as a slot 0..3 of the key's top bits
-      const zb = realZ ? depth >>> P.ZBIAS_SHIFT : 0, zs = zb ? this.biasKey(zb) : 0;
-      if (zs < 0) { skipped++; continue; }
+      // the depth bias (8 stages, gpu_proto.h GW_ZBIAS_SHIFT) as a slot of the key's top bits (none left: no bias)
+      const zb0 = realZ ? depth >>> P.ZBIAS_SHIFT : 0, zs = zb0 ? this.biasKey(zb0) : 0, zb = zs ? zb0 : 0;
       const key = this.pipeKey(blend, psEff, vsid, cull, dm, nd, zs);
       if (key < 0) { skipped++; continue; }
       let pipe = key === lastKey ? lastPipe : this.pipes.get(key);

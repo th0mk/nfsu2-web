@@ -399,7 +399,12 @@ Each pixel shader module record says how the module declares each stage's textur
 - **Depth bias.** Most Wanted's shadow-map pass sets D3DRS_DEPTHBIAS 2^-22 and D3DRS_SLOPESCALEDEPTHBIAS 4.0. With 8
   stages com.c packs them into `GwDraw.depth` bits 24-31 (`GW_ZBIAS_SHIFT`: 4 bits of the constant in units of
   2^-24, 4 bits of the slope scale, each rounded and clamped to 0..15) and the page draws with `depthBias` and
-  `depthBiasSlopeScale`; the Z surface id keeps bits 8-23. UG2's records leave those bits 0.
+  `depthBiasSlopeScale`; the Z surface id keeps bits 8-23. UG2's records leave those bits 0. That is approximate in
+  three ways: a negative constant becomes 0 and the slope scale a whole number (com.c logs each pair it changes,
+  `[d3d] depth bias`, the first 8); and on a depth32float Z WebGPU's bias unit is 2^(e-23) for the exponent e of
+  the primitive's largest z, so 2^-24 only for z in [0.5, 1), half that in [0.25, 0.5) and so on, where D3D9's
+  24-bit Z has 2^-24 everywhere (the shadow pass's 4 units are exact in the far half of the range). The page keys
+  up to 127 distinct biases into its pipelines; a draw with another one is drawn without its bias (logged).
 
 ### 11.5 Deploy order
 

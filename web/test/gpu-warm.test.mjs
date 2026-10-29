@@ -1,6 +1,7 @@
 // The pipeline warm-up (web/src/gpu/encoder.ts loadWarm / warmUp): a pipeline an earlier session made is made again,
 // as its shaders arrive, under the key the draws look it up by: a depth variant's (pixel module id 512 and up, a
-// pipeline-key slot) and a depth-biased one's with 8 stages, and UG2's 4-stage ones under the key they always had.
+// pipeline-key slot) and a depth-biased one's with 8 stages, and UG2's 4-stage ones under the key they always had;
+// and the depth-bias slots of the key (biasKey).
 //   node --test web/test/gpu-warm.test.mjs
 // A fake GPUDevice: every call returns a stand-in, pipelines and layouts keep their descriptors.
 import { test } from 'node:test';
@@ -38,9 +39,9 @@ function session(stages) {
   return { enc: new Encoder(device(), mem, ctl, s => log.push(s)), log };
 }
 const settle = () => new Promise(r => setImmediate(r));
-/** a draw's pipeline as the draw loop makes it (biasKey, pipeKey, pipeline) */
-function draw(enc, blend, ps, vs, cull, dm, nd, zb) {
-  const zs = zb ? enc.biasKey(zb) : 0;
+/** a draw's pipeline as the draw loop makes it (biasKey, pipeKey, pipeline; no slot left: no bias) */
+function draw(enc, blend, ps, vs, cull, dm, nd, zb0) {
+  const zs = zb0 ? enc.biasKey(zb0) : 0, zb = zs ? zb0 : 0;
   const key = enc.pipeKey(blend, ps, vs, cull, dm, nd, zs);
   return { key, pipe: enc.pipes.get(key) ?? enc.pipeline(key, blend, ps, vs, cull, dm, nd, zb) };
 }
@@ -82,6 +83,18 @@ test('8 stages: a depth variant and its bias are warmed under the key its draws 
   assert.equal(p.desc.vertex.module.label, 'vs_6');
   assert.equal(p.desc.depthStencil.depthBias, undefined);
   assert.equal(b.enc.pipelinesSync, 0);
+});
+
+test('8 stages: 127 depth biases in the key (below 2^53), a draw with one more keeps its pipeline, without it', () => {
+  const a = session(P.STAGES_MAX);
+  a.enc.shaderPut(true, 5, VS, 0); a.enc.shaderPut(false, 37, PS, 0);
+  for (let zb = 1; zb <= 127; zb++) assert.equal(a.enc.biasKey(zb), zb);
+  assert.ok(Number.isSafeInteger(a.enc.pipeKey(0x3FFFF, 511, 511, 3, 63, true, 127)));
+  assert.equal(draw(a.enc, blend, 37, 5, cull, dm, nd, 127).pipe.desc.depthStencil.depthBias, 15);
+  const { pipe } = draw(a.enc, blend, 37, 5, cull, dm, nd, 200);
+  assert.ok(pipe, 'drawn');
+  assert.equal(pipe.desc.depthStencil.depthBias, undefined);
+  assert.ok(a.log.some(l => /more than 127 depth biases/.test(l)));
 });
 
 test('4 stages (UG2): the persisted state and the warmed key are as before', async () => {
