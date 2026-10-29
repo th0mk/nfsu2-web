@@ -287,7 +287,7 @@ function lanUdp(log) {
   const m = [...log.matchAll(/^\[net\] virtual LAN at exit: .*?udp out (\d+) \(broadcast (\d+)[^)]*\) in (\d+)/gm)].pop();
   return m ? { out: +m[1] - +m[2], broadcast: +m[2], in: +m[3] } : null;
 }
-const summary ={ mode: MODE, races: RACES, players: PLAYERS, result: {}, why: [] };
+const summary = { mode: MODE, races: RACES, players: PLAYERS, result: {}, why: [] };
 for (const x of inst) {
   const log = fs.readFileSync(path.join(x.dir, 'log.txt'), 'utf8'), has = (re) => re.test(log), n = `i${x.i + 1}`;
   const why = [];
