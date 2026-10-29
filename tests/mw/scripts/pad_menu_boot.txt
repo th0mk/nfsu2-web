@@ -1,0 +1,23 @@
+# Most Wanted: tests/mw/scripts/pad_menu.txt with the pad plugged in from the first frame, so the game's own
+# enumeration at the start offers it (to its input manager and to its force-feedback devices) and its input set-up
+# finds it (TRACKER M3-09):
+#   node web/tools/run-suite.mjs --game mw --script pad_menu_boot.txt --marker 'pad_menu: back at the main menu' \
+#     --env NFSU2_PAD_LOG=1 --env NFSU2_QUIT_FRAMES=7200
+0     pad connect
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tappaduntil A MainMenu.fng 90 6000                 # the splash, then the first start's MC_Main.fng
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    log pad_menu: main menu, on Career
++0    tappaduntil DRIGHT MainMenu.fng@b51549b8 40 600    # Career .. Options, one item a step
++0    tappad A                                           # Options
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # its first item
++0    tappad A
++0    waitfng Options.fng@b2980ba8 600                   # the options screen, on its first item
++0    tappad DDOWN
++0    waitfng Options.fng@b2980ba9 300                   # the next item
++0    tappad B
++0    waitfng MainMenu_Sub.fng@4b4e388a 600
++0    tappad B
++0    waitfng MainMenu.fng@b51549b8 600                  # the main menu, on Options
++0    log pad_menu: back at the main menu
++0    close

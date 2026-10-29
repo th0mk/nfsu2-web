@@ -1,0 +1,31 @@
+# Most Wanted: the main menu, the options and back by the game pad only (TRACKER M3-09).  The script's controller
+# (runtime/autotest.c pad: the same GameController -> DirectInput path as a real one) is plugged in once the front
+# end is up, after the game enumerated its devices, found no controller and set its input up without one, as a
+# browser's pad that shows itself only when a button is pressed: the game's input manager gets it through its own
+# enumeration callback and its input set-up runs again (runtime/dinput_pad.c dipad_present, game.h pad_late;
+# tests/mw/scripts/pad_menu_boot.txt has the pad there at the start).  The game's front end reads a DualShock's
+# DirectInput order (game.h pad_buttons): A (Cross) accepts, B (Circle) goes back, the D-pad moves.  Every step acts
+# on its screen (L-021), as tests/mw/scripts/kb_menu.txt by keys: the main menu's items 0x4B4E388A on from Career,
+# Options its 8th (0xB51549B8), MainMenu_Sub.fng's first item (0x4B4E388A) opens Options.fng (its first item
+# 0xB2980BA8, the next 0xB2980BA9).
+#   node web/tools/run-suite.mjs --game mw --script pad_menu.txt --marker 'pad_menu: back at the main menu' \
+#     --env NFSU2_PAD_LOG=1 --env NFSU2_QUIT_FRAMES=7200
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3): the game enumerated its devices and found none
++0    pad connect                     # plugged in now: offered to the game's own callback at the next Present
++0    tappaduntil A MainMenu.fng 90 6000                 # the splash, then the first start's MC_Main.fng
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    log pad_menu: main menu, on Career
++0    tappaduntil DRIGHT MainMenu.fng@b51549b8 40 600    # Career .. Options, one item a step
++0    tappad A                                           # Options
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # its first item
++0    tappad A
++0    waitfng Options.fng@b2980ba8 600                   # the options screen, on its first item
++0    tappad DDOWN
++0    waitfng Options.fng@b2980ba9 300                   # the next item
++0    tappad B
++0    waitfng MainMenu_Sub.fng@4b4e388a 600
++0    tappad B
++0    waitfng MainMenu.fng@b51549b8 600                  # the main menu, on Options
++0    log pad_menu: back at the main menu
++0    close

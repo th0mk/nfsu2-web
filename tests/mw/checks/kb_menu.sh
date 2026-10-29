@@ -22,7 +22,10 @@ awk '
   END { exit !(down && up) }' "$LOG" \
   || fail "the Down arrow held across the focus loss was not down before it and up in the game's snapshot after it"
 grep -qF '[key] autotest nsfocus inactive: 1 held key(s) released' "$LOG" || fail "the focus loss released no held key"
+# a keyboard-only run never sees a joystick (L-105): no controller, so no game pad offered or made
+grep -qE 'CreateDevice GUID .* -> GAMEPAD|\[pad\] EnumDevices\(|connected after the game' "$LOG" \
+  && fail "a keyboard-only run was offered a game pad: $(grep -m1 -E 'GAMEPAD|\[pad\] EnumDevices|connected after' "$LOG")"
 grep -qF 'app: quit requested (autotest close) -> WM_CLOSE to the game' "$LOG" || fail "no WM_CLOSE sent"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
-echo "main menu -> Options sub menu -> options -> back -> main menu by keys; the key held across the focus loss went up in the game's snapshot; the game left by WM_CLOSE"
+echo "main menu -> Options sub menu -> options -> back -> main menu by keys; the key held across the focus loss went up in the game's snapshot; no game pad; the game left by WM_CLOSE"
