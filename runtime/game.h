@@ -87,6 +87,9 @@ typedef struct GameOps {
                                      * it, a device name) names no file, and the game folder is never written
                                      * (fileio.c); 0 (UG2): every path maps into the game folder, as it
                                      * always has */
+    int find_sorted;                /* 1: FindFirstFileA/FindNextFileA give a folder's names in NTFS order, as
+                                     * Windows does (fileio.c; MW lists its aliases in that order); 0 (UG2):
+                                     * in the host's order, as it always has */
     const char *const *lang_suffixes; /* a missing file "<name>_xx.<ext>" is looked for with each of
                                      * these in place of "_xx", in order (fileio.c); ends with 0 */
     void (*entry)(CPU *c);          /* the exe's entry point, lifted: the lift's GAMEINFO_ENTRY_FN (cpu.h) */

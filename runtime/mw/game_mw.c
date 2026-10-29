@@ -126,6 +126,7 @@ const GameOps g_game = {
     .reg_keys = mw_reg_keys,                    /* registry_mw.c: the keys speed.exe opens, all HKLM */
     .reg_file = ".nfsmw_registry",              /* never UG2's ~/.nfsu2_registry */
     .sandbox = 1,                               /* fileio.c: nothing outside C:\NFSMW, the game folder read-only */
+    .find_sorted = 1,                           /* fileio.c: folder scans in NTFS order (the alias lists) */
     .entry = GAMEINFO_ENTRY_FN,
     .entry_va = GAMEINFO_ENTRY,
     .modules = mw_modules,

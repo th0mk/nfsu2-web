@@ -476,6 +476,7 @@ int fileio_open_writers(void){ return g_open_wr; }
 typedef struct { int fd; int empty; int used; char path[512]; DIR *dir; char pat[128];
                  DIR *dir2; char path1[512];        /* dir2: game root (while the save overlay is active) */
                  int wr;                            /* wr: opened for writing (g_open_wr) */
+                 char **names; int nnames, inames;  /* a sorted scan (game.h find_sorted): "name\0full path" each */
                  int gf; unsigned gf_gen; int64_t pos, size; } FH;   /* gf: a game folder file's name + 1 (GF_CACHE) */
 static FH g_fh[FH_MAX];
 static int g_fh_peak = 0; static uint64_t g_fh_full = 0;   /* v12na: leak check */
@@ -560,7 +561,7 @@ static int wild_match(const char *p, const char *s){
  * attributes/size).  Every entry used to be returned regardless of the
  * pattern and as a "file"; the game never saw its profile folders
  * (FILE_ATTRIBUTE_DIRECTORY). */
-static int find_next(FH *f, char *nm, size_t nsz, char *full, size_t fsz){
+static int find_next_dir(FH *f, char *nm, size_t nsz, char *full, size_t fsz){
     struct dirent *e;
     if (f->dir){
         while ((e = readdir(f->dir))){
@@ -581,6 +582,53 @@ static int find_next(FH *f, char *nm, size_t nsz, char *full, size_t fsz){
             snprintf(full, fsz, "%s/%s", f->path, e->d_name); return 1; }
     }
     return 0;
+}
+/* game.h find_sorted (Most Wanted): a scan gives its names in the order Windows gives them on an NTFS volume,
+ * which compares names ordinally after upper-casing them.  Here ASCII letters are upper-cased and every other
+ * byte compares by its value (NTFS upper-cases by its UTF-16 table, so names with bytes 0x80 and up can sort
+ * apart from Windows).  The host's own order means nothing (OPFS's in the browser, the file system's
+ * natively), and MW lists its aliases in scan order.  The whole folder is read at FindFirstFileA. */
+static int ntfs_cmp(const void *a, const void *b){
+    const unsigned char *x = *(const unsigned char *const *)a, *y = *(const unsigned char *const *)b;
+    for (;; x++, y++){
+        unsigned cx = *x >= 'a' && *x <= 'z' ? *x - 32u : *x, cy = *y >= 'a' && *y <= 'z' ? *y - 32u : *y;
+        if (cx != cy || !cx) return (int)cx - (int)cy;
+    }
+}
+static void find_close_dirs(FH *f){
+    if (f->dir) closedir(f->dir);
+    if (f->dir2) closedir(f->dir2);
+    f->dir = f->dir2 = 0;
+}
+static void find_end(FH *f){
+    find_close_dirs(f);
+    for (int i = 0; i < f->nnames; i++) free(f->names[i]);
+    free(f->names); f->names = 0; f->nnames = f->inames = 0;
+    f->used = 0;
+}
+static void find_sort(FH *f){
+    char nm[260], full[1300]; int cap = 0;
+    while (find_next_dir(f, nm, sizeof nm, full, sizeof full)){
+        size_t a = strlen(nm) + 1, b = strlen(full) + 1;
+        char *e = malloc(a + b);
+        if (!e) break;
+        memcpy(e, nm, a); memcpy(e + a, full, b);
+        if (f->nnames == cap){
+            char **g = realloc(f->names, (size_t)(cap ? cap * 2 : 16) * sizeof *g);
+            if (!g){ free(e); break; }
+            f->names = g; cap = cap ? cap * 2 : 16;
+        }
+        f->names[f->nnames++] = e;
+    }
+    find_close_dirs(f);
+    if (f->nnames > 1) qsort(f->names, (size_t)f->nnames, sizeof *f->names, ntfs_cmp);
+}
+static int find_next(FH *f, char *nm, size_t nsz, char *full, size_t fsz){
+    if (!f->names) return find_next_dir(f, nm, nsz, full, fsz);
+    if (f->inames >= f->nnames) return 0;
+    const char *e = f->names[f->inames++];
+    snprintf(nm, nsz, "%s", e); snprintf(full, fsz, "%s", e + strlen(e) + 1);
+    return 1;
 }
 /* WIN32_FIND_DATAA: +0 attr, +4/+12/+20 FILETIME, +28 sizeHigh, +32 sizeLow, +44 cFileName */
 static void find_fill(uint32_t fd_, const char *nm, const char *full){
@@ -875,6 +923,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
 #endif
         if(f->fd>=0) close(f->fd);
         if(f->dir) closedir(f->dir);
+        if(f->names){ f->dir = 0; find_end(f); }   /* a sorted scan's names (its folders are closed) */
         if(f->wr){ if (f->fd >= 0 && is_profile(f->path)) garage_profile_written(f->path); g_open_wr--; }
         f->used=0; r=1;
     }
@@ -986,23 +1035,23 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
                else { f->dir=d1; f->dir2=d2; snprintf(f->pat,sizeof f->pat,"%s",pat);
                       snprintf(f->path1,sizeof f->path1,"%s",wreal);
                       snprintf(f->path,sizeof f->path,"%s",real);
+                      if (g_game.find_sorted) find_sort(f);
                       char nm[260], full[1300];
                       if (!find_next(f, nm, sizeof nm, full, sizeof full)){
-                          if(f->dir) closedir(f->dir); if(f->dir2) closedir(f->dir2);
-                          f->used=0; r=INVALID_HANDLE; set_err(c, 2u); }   /* ERROR_FILE_NOT_FOUND */
+                          find_end(f); r=INVALID_HANDLE; set_err(c, 2u); }   /* ERROR_FILE_NOT_FOUND */
                       else { find_fill(A(c,1), nm, full); r=h; } } }
         if (getenv("FILELIST")) fprintf(stderr, "  [file] FindFirstFileA(\"%s\") -> %s\n", spec,
                                         r == INVALID_HANDLE ? "NONE" : "found");
     }
     else if (!strcmp(n,"FindNextFileA")){
         FH*f=fh_get(A(c,0)); r=0; char nm[260], full[1300];
-        if(f && (f->dir || f->dir2) && find_next(f, nm, sizeof nm, full, sizeof full)){
+        if(f && (f->dir || f->dir2 || f->names) && find_next(f, nm, sizeof nm, full, sizeof full)){
             find_fill(A(c,1), nm, full); r=1; }
         else set_err(c, 18u);                                    /* ERROR_NO_MORE_FILES */
     }
     else if (!strcmp(n,"FindClose")){
         FH*f=fh_get(A(c,0));
-        if(f){ if(f->dir) closedir(f->dir); if(f->dir2) closedir(f->dir2); f->used=0; } r=1;
+        if(f) find_end(f); r=1;
     }
     else return 0;
     *out = r;

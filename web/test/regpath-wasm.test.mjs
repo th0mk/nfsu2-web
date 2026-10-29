@@ -161,6 +161,17 @@ test('Most Wanted\'s paths: C:\\NFSMW and nothing outside it, the bin.dat probe 
   assert.deepEqual(tree(path.join(dir, 'game')), game, 'the game folder unchanged without a save overlay');
 });
 
+test('Most Wanted\'s folder scans: NTFS order whatever the host\'s, a deleted alias gone, the game folder and the overlay in one order', { skip }, () => {
+  const w = wasm('mw'), dir = folder('mw-scan', 'speed.exe');
+  const s = run(w, 'scan', dir);
+  assert.ok(s.passed >= 100, `scan: every check ran (${s.passed})`);
+  assert.match(s.out, /^T scan "C:\\NFSMW\\NFS Most Wanted\\\*": AB Alpha a_b bravo CHARLIE _x$/m);
+  assert.match(s.out, /^T scan "C:\\NFSMW\\NFS Most Wanted\/\*": AB a_b bravo CHARLIE _x$/m);
+  assert.deepEqual([...tree(path.join(dir, 'save')).keys()].filter(k => k.startsWith('NFS Most Wanted/') && k !== 'NFS Most Wanted/').sort(),
+    ['NFS Most Wanted/AB/', 'NFS Most Wanted/CHARLIE/', 'NFS Most Wanted/_x/', 'NFS Most Wanted/a_b/', 'NFS Most Wanted/bravo/'],
+    'the save overlay holds the folders left');
+});
+
 test('UG2\'s registry and paths: the flat registry, every path into the game folder, ~/.nfsu2_registry, as always', { skip }, () => {
   const w = wasm('ug2'), dir = folder('ug2', 'SPEED2.EXE');
   const u = run(w, 'ug2', dir);

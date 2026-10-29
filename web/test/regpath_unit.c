@@ -20,6 +20,8 @@
  *     paths    C:\NFSMW, the exe's names, SHGetFolderPathA, a save in the overlay, the bin.dat probe
  *              on every drive letter, escapes (drives, '..', UNC, devices, streams)
  *     ro       no save overlay: the game folder is never written
+ *     scan     folder scans in NTFS order whatever order the host lists (game.h find_sorted), a deleted
+ *              folder gone from the next scan, the game folder and the overlay in one order
  *   regpath_ug2.wasm (-DREGPATH_UG2)
  *     ug2      the flat registry and the paths as UG2 always had them
  *     ug2home  no NFSU2_REGFILE: the file is $HOME/.nfsu2_registry
@@ -34,6 +36,7 @@
 #include "game.h"
 #include "kbd.h"
 #include "module.h"
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -504,6 +507,63 @@ static void test_ro(void){
     CHECK(call_imp("MoveFileA", gs("bin.dat"), gs("moved.dat")) == 0, "MoveFileA in the game folder: refused");
     OPENS("bin.dat");
 }
+/* a whole folder scan: FindFirstFileA, FindNextFileA to the end, FindClose; the names, or -1 for no handle */
+static int scan(const char *spec, char got[][64], int max){
+    uint32_t fd = BUF + 0x800; int n = 0;
+    set_last_error(0);
+    uint32_t h = call_imp("FindFirstFileA", gs(spec), fd);
+    if (h == INVALID) return -1;
+    do { if (n < max) snprintf(got[n], 64, "%s", gstr(fd + 44)); n++; } while (call_imp("FindNextFileA", h, fd));
+    CHECK(last_error() == 18u, "%s: the scan ends with ERROR_NO_MORE_FILES, not %u", spec, last_error());
+    CHECK(call_imp("FindClose", h) == 1, "%s: FindClose", spec);
+    char line[600] = ""; for (int i = 0; i < n && i < max; i++){ strcat(line, " "); strncat(line, got[i], 40); }
+    tr("scan \"%s\":%s", spec, line);
+    return n;
+}
+/* NTFS's order for ASCII names: upper-cased, then by byte */
+static int ntfs_before(const char *a, const char *b){
+    for (;; a++, b++){
+        int x = toupper((unsigned char)*a), y = toupper((unsigned char)*b);
+        if (x != y || !x) return x < y;
+    }
+}
+/* folder scans in NTFS order (game.h find_sorted): MW lists its aliases in the order the scan gives them (GAME.md 10) */
+static void test_scan(void){
+    static const char *const made[] = { "bravo", "CHARLIE", "_x", "Alpha", "AB", "a_b" };
+    static const char *const want[] = { "AB", "Alpha", "a_b", "bravo", "CHARLIE", "_x" };
+    char got[16][64], p[300];
+    CHECK(call_imp("CreateDirectoryA", gs("C:\\NFSMW\\NFS Most Wanted"), 0u) == 1, "CreateDirectoryA of the save folder");
+    for (int i = 0; i < 6; i++){
+        snprintf(p, sizeof p, "C:\\NFSMW\\NFS Most Wanted/%s", made[i]);
+        CHECK(call_imp("CreateDirectoryA", gs(p), 0u) == 1, "CreateDirectoryA(\"%s\")", p);
+    }
+    int n = scan("C:\\NFSMW\\NFS Most Wanted\\*", got, 16);
+    CHECK(n == 6, "the alias folder scan: %d names, 6 expected", n);
+    for (int i = 0; i < 6 && i < n; i++) CHECK(!strcmp(got[i], want[i]), "name %d: \"%s\", \"%s\" expected", i, got[i], want[i]);
+    /* a deleted one is gone from the next scan */
+    CHECK(call_imp("RemoveDirectoryA", gs("C:\\NFSMW\\NFS Most Wanted/Alpha")) == 1, "RemoveDirectoryA of Alpha");
+    n = scan("C:\\NFSMW\\NFS Most Wanted/*", got, 16);
+    CHECK(n == 5, "after the delete: %d names, 5 expected", n);
+    for (int i = 0; i < n && i < 16; i++) CHECK(strcmp(got[i], "Alpha"), "the deleted Alpha is in the scan");
+    /* the game folder and the save overlay in one scan, in one order; bin.dat, in both, once */
+    n = scan("C:\\NFSMW\\*", got, 16);
+    int dat = 0, nfs = 0, glob = 0;
+    for (int i = 0; i < n && i < 16; i++){
+        dat += !strcasecmp(got[i], "bin.dat"); nfs += !strcmp(got[i], "NFS Most Wanted"); glob += !strcmp(got[i], "GLOBAL");
+        if (i) CHECK(ntfs_before(got[i - 1], got[i]), "\"%s\" before \"%s\": not NTFS order", got[i - 1], got[i]);
+    }
+    CHECK(dat == 1 && nfs == 1 && glob == 1, "the root scan: bin.dat %d, NFS Most Wanted %d, GLOBAL %d times", dat, nfs, glob);
+    /* a pattern, and a scan that matches nothing */
+    n = scan("C:\\NFSMW\\NFS Most Wanted\\?_*", got, 16);
+    CHECK(n == 1 && !strcmp(got[0], "a_b"), "the pattern ?_*: %d names", n);
+    CHECK(scan("C:\\NFSMW\\NFS Most Wanted\\zz*", got, 16) == -1 && last_error() == 2u, "no match: no handle, error %u", last_error());
+    /* a scan left before its end: FindClose frees it, and so does CloseHandle */
+    uint32_t fd = BUF + 0x800, h = call_imp("FindFirstFileA", gs("C:\\NFSMW\\NFS Most Wanted\\*"), fd);
+    CHECK(h != INVALID && !strcmp(gstr(fd + 44), "AB"), "the first name again: \"%s\"", gstr(fd + 44));
+    CHECK(call_imp("FindClose", h) == 1, "FindClose before the end");
+    h = call_imp("FindFirstFileA", gs("C:\\NFSMW\\NFS Most Wanted\\*"), fd);
+    CHECK(h != INVALID && call_imp("CloseHandle", h) == 1, "CloseHandle of a scan");
+}
 #else
 /* ========== UG2: the flat registry and its paths, as they always were ========== */
 #define UG2_KEY "Software\\EA Games\\Need for Speed Underground 2"
@@ -629,7 +689,8 @@ int main(int argc, char **argv){
     else if (!strcmp(mode, "home")) test_home();
     else if (!strcmp(mode, "paths")) test_paths();
     else if (!strcmp(mode, "ro")) test_ro();
-    else { printf("usage: regpath_mw.wasm boot1|boot2|keys|home|paths|ro\n"); return 2; }
+    else if (!strcmp(mode, "scan")) test_scan();
+    else { printf("usage: regpath_mw.wasm boot1|boot2|keys|home|paths|ro|scan\n"); return 2; }
 #else
     if (!strcmp(mode, "ug2")) test_ug2();
     else if (!strcmp(mode, "ug2home")) test_ug2home();
