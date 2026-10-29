@@ -19,7 +19,8 @@
  * RealTimer there still holds the frame before's time, so the sleep answers the frame before the last:
  * frame times d alternate around d(k+1) = w + P - d(k-1) (w the work), on average (P + w) / 2, and every
  * sleep is in whole ms on the browser's timers (Windows Chrome's workers wake on its 15.6 ms timer).
- * That is the cap: about 110 fps headless (w ~ 2 ms) and 67-71 fps in Windows Chrome, menus and races.
+ * That is the cap: 102-108 fps headless on the main menu (NFSU2_FPS=off; w 2.2-3.3 ms a frame), 85-91 fps
+ * headless in races (w 5.5-7 ms) and 67-71 fps in Windows Chrome, menus and races.
  * At exactly 1/60 a frame the accumulator sits on its boundary (RealTimer moves 67, 67, 66 units: 0.99
  * + 0.01 steps), and a float rounding decides between 1, 1, 1 and 2, 1, 0 steps: only the clock's own
  * jitter keeps the original off it.
@@ -49,7 +50,8 @@
  * starting again above about 40 Hz, WidescreenFixesPack #1218; NOS trails; physics) is TRACKER M7-21.  So
  * outside the front end the content rate stays at the sim rate (60): above it a race frame steps 0 or 1
  * times and its cameras move only with the steps (0x64A680), so every other frame would show the frame
- * before again at twice the work.  NFSMW_RACE_HFR=1 (research) lifts that cap.
+ * before again at twice the work (read from the code; no frame dumps compared).  NFSMW_RACE_HFR=1
+ * (research) lifts that cap.
  *
  * Two clocks that counted frames, fixed for content rates above 60 (the original runs them at 60 at most
  * with vsync on; this port's limiter ran them at 70-110 before this file):
