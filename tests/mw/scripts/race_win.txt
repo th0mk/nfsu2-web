@@ -14,8 +14,8 @@
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
 +0    tap RETURN
-+0    waitfng MC_Main.fng'Load_complete. 600
-+8    tap RETURN                                         # Continue
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 600    # "Load complete.", its Continue highlighted
++0    tap RETURN                                         # Continue
 +0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
 +0    log race_win: ALPHA loaded
 +0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
