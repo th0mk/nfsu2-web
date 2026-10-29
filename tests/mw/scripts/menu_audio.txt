@@ -1,0 +1,25 @@
+# Most Wanted: the front end's sound.  Boots to the main menu as boot_menu.txt does, logs the sound set-up the game
+# chose, stays at the main menu for ${MENU_MS} ms (set it: --env MENU_MS=600000 for ten minutes), then quits by
+# WM_CLOSE.  What to read in the log:
+#   peek [0x00982c00]   g_PerformanceLevel: at 0 or 1 the game asks its sound library for 22,050 Hz, at 2 or more
+#                       for 44,100 (0x4C41D7); [0x008ee650] is that rate, [0x009c2044] +2 the library's own output
+#                       rate (a word) and [0x009c205c] +3 its output channels (a byte)
+#   [sound] buffer ...  the DirectSound buffers it made (with SNDBUF=1 also the formats it asked for)
+#   [mw-sound] ...      the sound thread's count of polls with a still cursor (runtime/mw/sound_mw.c; 100 rebuilds
+#                       DirectSound)
+#   [audio] ...         the mixer's status every NFSU2_AUDIO_STATUS seconds: mixed= against t= is the cursors' pace
+#   generated guest code: ... calls, ... instructions   (no FAILED: genexec ran all of the sound banks' code)
+# A recording: --env SNDDUMP=/save/menu.raw (44,100 Hz s16le stereo) with run-suite's --save-out <dir>.
+#   node web/tools/run-suite.mjs --game mw --script menu_audio.txt --marker 'idle at the main menu: done' \
+#     --env MENU_MS=60000 --env NFSU2_AUDIO_STATUS=10
+# (with the D3DX oracle linked, as boot_menu.txt says: NFSU2_SAVE_SEED and --env NFSMW_D3DX=/save/d3dx9_26.dll)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng 600
++0    log main menu up: the sound set-up
++0    peek 0x00982c00
++0    peek 0x008ee650
++0    peek 0x009c2044
++0    peek 0x009c205c
++${MENU_MS}ms log idle at the main menu: done
++0    close

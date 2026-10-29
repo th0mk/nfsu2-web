@@ -4148,7 +4148,18 @@ int com_call(CPU *c, uint32_t magic){
               uint32_t rate = 44100u, chans = 2u, bits = 16u;
               if (pfmt && mem_is_committed(pfmt+15)){
                   uint32_t ch = MR16(pfmt+2), sr = MR32(pfmt+4), bt = MR16(pfmt+14);
-                  if (ch>=1u && ch<=2u) chans = ch;
+                  /* WAVEFORMATEX(TENSIBLE): wFormatTag@0 nChannels@2 nSamplesPerSec@4
+                   * ... wBitsPerSample@14 cbSize@16, then (tag 0xFFFE) Samples@18
+                   * dwChannelMask@20.  The EA sound libraries of both games try
+                   * 1, 2, 4 and 6 channels at start-up (Most Wanted's 4 and 6
+                   * extensible, masks 0x33 and 0x3F), then make their output
+                   * stereo.  Up to 8 channels are kept as they are and mixed
+                   * down to stereo (audio_web.c); 1 and 2 as ever. */
+                  if (ENVC("SNDBUF"))
+                      fprintf(stderr, "  [sound] CreateSoundBuffer format: tag %04x, %u channels, %u Hz, %u bit, mask %08x\n",
+                              MR16(pfmt), ch, sr, bt,
+                              (MR16(pfmt) == 0xFFFEu && mem_is_committed(pfmt+23)) ? MR32(pfmt+20) : 0u);
+                  if (ch>=1u && ch<=8u) chans = ch;
                   if (sr>=4000u && sr<=192000u) rate = sr;
                   if (bt==8u || bt==16u) bits = bt;
               }
@@ -4347,6 +4358,7 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t p=A(c,1); if(p){mem_commit(p,4); MR32(p)= (self&&MR32(self+12))?1u:0u;} r=0; }
         else if (MID(GetCurrentPosition)){
             int break_gcp = 0;
+            if (g_game.on_sound_position) g_game.on_sound_position();
             /* The play cursor advances by ELAPSED TIME (not a fake fixed
              * step): the video player drives its frames by this clock. */
             uint32_t p1=A(c,1), p2=A(c,2);

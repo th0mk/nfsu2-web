@@ -48,9 +48,9 @@ export function buildRegpathUnit(out, game, runtime = 'runtime') {
   const common = ['web/test/regpath_unit.c', ...['win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'fileio.c'].map(rt)];
   if (game === 'mw') {
     const gi = fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
-    // the table's other files, where this runtime has them (fe_mw.c, threads_mw.c, msvcrt_mw.c, d3dxmath_mw.c: TRACKER
-    // M2-18, M2-20, M2-07, M2-08)
-    const more = ['mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/d3dxmath_mw.c'].filter(f => fs.existsSync(path.resolve(REPO, rt(f)))).map(rt);
+    // the table's other files, where this runtime has them (fe_mw.c, threads_mw.c, msvcrt_mw.c, d3dxmath_mw.c, sound_mw.c: TRACKER
+    // M2-18, M2-20, M2-07, M2-08, M3-12)
+    const more = ['mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/d3dxmath_mw.c', 'mw/sound_mw.c'].filter(f => fs.existsSync(path.resolve(REPO, rt(f)))).map(rt);
     return build(out, [...common, rt('mw/game_mw.c'), rt('mw/registry_mw.c'), ...more], ['-DNFSU2_GAME_MW', ...gi]);
   }
   return build(out, [...common, rt('game_ug2.c')], ['-DREGPATH_UG2']);
@@ -69,7 +69,7 @@ export function buildMsvcrtUnit(out) {
   const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
   const gi = fs.existsSync(path.join(REPO, 'gen/mw/all/gameinfo.h')) ? ['-Igen/mw/all'] : [];
   const src = ['web/test/msvcrt_unit.c', ...['win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'module.c', 'modheap.c',
-    'web/sha256.c', 'mw/game_mw.c', 'mw/registry_mw.c', 'mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/d3dxmath_mw.c']
+    'web/sha256.c', 'mw/game_mw.c', 'mw/registry_mw.c', 'mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/d3dxmath_mw.c', 'mw/sound_mw.c']
     .map(f => `runtime/${f}`)];
   execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
   try { execFileSync(CC, [...FLAGS, '-DNFSU2_GAME_MW', '-DNFSU2_D3DX_ORACLE=1', ...gi, '-o', out, ...src, te, ...LINK_BIG], opt); }
@@ -103,7 +103,7 @@ export function buildD3dxOracleUnit(out) {
   const opt = { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }, te = `${out}.thread_exit.o`;
   const src = ['web/test/d3dx_oracle_unit.c', 'gen/mw/all/impargs.c', ...['mem.c', 'res.c', 'fileio.c', 'heap.c', 'dispatch.c',
     'win32.c', 'win32_ext.c', 'win32_misc.c', 'keyboard.c', 'module.c', 'modheap.c', 'web/sha256.c', 'web/tz.c', 'mw/game_mw.c',
-    'mw/registry_mw.c', 'mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/d3dxmath_mw.c', 'mw/fx2.c'].map(f => `runtime/${f}`)];
+    'mw/registry_mw.c', 'mw/fe_mw.c', 'mw/threads_mw.c', 'mw/msvcrt_mw.c', 'mw/d3dxmath_mw.c', 'mw/fx2.c', 'mw/sound_mw.c'].map(f => `runtime/${f}`)];
   execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
   try { execFileSync(CC, [...FLAGS, '-DNFSU2_GAME_MW', '-DNFSU2_D3DX_ORACLE=1', '-Igen/mw/all', '-o', out, ...src, ...objs, te, ...LINK_BIG], opt); }
   finally { fs.rmSync(te, { force: true }); }

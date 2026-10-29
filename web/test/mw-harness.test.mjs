@@ -100,7 +100,7 @@ ${lifted('sub_007ca570')}
   fs.writeFileSync(genFile, gen);
   const b = spawnSync('clang', ['-O1', '-g', '-Wall', '-Wno-unused-parameter', '-Wno-unused-label', '-Wno-parentheses-equality',
     '-Wno-unused-function', '-Wno-unused-but-set-variable', '-Wno-unused-variable', '-DNFSU2_GAME_MW', '-Iruntime', `-I${LIFT}`, '-o', exe, 'tests/mw_harness_unit.c', 'runtime/dispatch.c',
-    'runtime/mw/game_mw.c', 'runtime/mw/fe_mw.c', 'runtime/mw/threads_mw.c', genFile], { cwd: REPO, encoding: 'utf8' });
+    'runtime/mw/game_mw.c', 'runtime/mw/fe_mw.c', 'runtime/mw/threads_mw.c', 'runtime/mw/sound_mw.c', genFile], { cwd: REPO, encoding: 'utf8' });
   assert.equal(b.status, 0, `tests/mw_harness_unit.c builds:\n${b.stderr}`);
   built = { exe, xi: xi.length, xc: xc.length, xiSlots: slots(XI).length, xcSlots: slots(XC).length };
   return built;

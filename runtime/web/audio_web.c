@@ -28,7 +28,15 @@
  * consumed anything for STALL_MS (or two of its gaps, below), or the page
  * reports a context that is not running, the pump falls back to the wall
  * clock: it keeps mixing slices at 44.1 kHz real time and drops them.  Cursors
- * keep moving; nothing is heard.
+ * keep moving; nothing is heard.  A pump that slept past its time (a busy
+ * machine; a background tab, whose timers wake it seldom) finds a backlog: a
+ * game that asks for it (game.h sound_wall_catchup: Most Wanted, whose sound
+ * thread rebuilds DirectSound under its own feet after 100 polls without a
+ * cursor move) has all of it made up, and its cursors run on the wall clock
+ * between the slices too (wall_ahead_locked), so they keep real time however
+ * seldom the pump wakes; Underground 2 keeps the old rule, a backlog over
+ * 100 ms dropped (a pump woken every 150 ms moves the cursors at 8 % of real
+ * time that way; that game is parked in a background tab anyway).
  *
  * Chrome runs the worklet once per render quantum, but in bursts: two output
  * callbacks' worth back to back (measured headless), so 8 quanta every 23 ms
@@ -53,8 +61,16 @@
  *                             to a burst and a slice, if more)
  *   NFSU2_AUDIO_STATUS=<s>    an "[audio]" status line every s seconds
  *                             (default 5 when NFSU2_STATUS_EVERY is set)
+ *   NFSU2_AUDIO_CATCHUP=0|1   the wall clock's backlog rule, whatever the
+ *                             game's (sound_wall_catchup): 1 made up, 0 dropped
+ *                             over 100 ms (an A/B in one build)
+ *   NFSU2_AUDIO_WAKE_MS=<n>   test-only: on the wall clock the pump sleeps n ms
+ *                             between wake-ups, as a background tab's timers do
+ *   NFSU2_AUDIO_NEAREST=1     test-only: a buffer at another rate by the nearest
+ *                             sample, as before the resampler (rs_table; an A/B)
  *   SNDDUMP, SNDCSV, SNDSTAT, SNDGAP   the Mac's diagnostics, unchanged */
 #include "cpu.h"                 /* g_mem: guest memory is linear memory from 0 */
+#include "game.h"                /* g_game.sound_wall_catchup */
 #include "host_abi.h"
 #include "audio_proto.h"
 #include "horn.h"
@@ -132,6 +148,9 @@ static void update_rate_ratio(void){
 #define BURST_N    9             /* the time between bursts: the median of the last BURST_N */
 #define PACE       1.05          /* ring mode: slices at most this much faster than real time (the target caps it) */
 #define CATCHUP_S  0.03          /* ... and at most this much made up at once after the pump was late */
+#define WALL_DROP_S 0.1          /* wall clock, the old rule: a backlog over this is dropped */
+#define WALL_MIX_S 0.5           /* ... sound_wall_catchup's: a backlog up to this is mixed slice by slice, and the */
+                                 /* cursors skip what is more (a frozen tab; nothing is heard on the wall clock) */
 
 #define MAXSND 128
 #define SETTLE_SLICES 90          /* ~1 s: a stream's start (a cleared buffer) is no glitch */
@@ -150,7 +169,34 @@ typedef struct {
     unsigned settled;         /* slices mixed since it played from the top (to SETTLE_SLICES) */
     int      starving;        /* the last slice was mixed before the game wrote it */
     double   wtime;           /* when the game last wrote it (mono_s) */
+    float    down[8][2];      /* 3 to 8 channels: each one's share of left and right (downmix_gains) */
 } SndBuf;
+
+/* A buffer of 3 to 8 channels is mixed down to stereo: the channels in the
+ * order of DirectSound's default layout for their number (KSAUDIO_SPEAKER_*:
+ * the masks Most Wanted asks for, 0x33 for 4 and 0x3F for 6), each speaker with
+ * the ITU-R BS.775 downmix's share (centre and surrounds at -3 dB, LFE left
+ * out). */
+static void downmix_gains(float g[8][2], uint32_t chans){
+    static const uint32_t layout[9] = { 0, 0, 0, 0x7u, 0x33u, 0x37u, 0x3Fu, 0x13Fu, 0x63Fu };
+    const float h = 0.70710678f;
+    uint32_t mask = chans < 9u ? layout[chans] : 0u, k = 0;
+    memset(g, 0, sizeof(float) * 16);
+    for (uint32_t bit = 1u; bit && k < chans; bit <<= 1){
+        if (!(mask & bit)) continue;
+        float l = 0.f, r = 0.f;
+        switch (bit){
+        case 0x001u: l = 1.f; break;              /* front left */
+        case 0x002u: r = 1.f; break;              /* front right */
+        case 0x004u: l = r = h; break;            /* front centre */
+        case 0x008u: break;                       /* LFE */
+        case 0x010u: case 0x200u: l = h; break;   /* back left, side left */
+        case 0x020u: case 0x400u: r = h; break;   /* back right, side right */
+        case 0x100u: l = r = 0.5f; break;         /* back centre */
+        }
+        g[k][0] = l; g[k][1] = r; k++;
+    }
+}
 
 static SndBuf g_snd[MAXSND];
 static int    g_sndn = 1;                    /* 0 = no slot */
@@ -163,6 +209,8 @@ static pthread_mutex_t g_slock = PTHREAD_MUTEX_INITIALIZER;
 static int g_audio_on = 0;                   /* the output is wanted (not NOSOUND) */
 static _Atomic int g_pump_started = 0;
 static uint64_t g_mixed_frames = 0, g_active_peak = 0;
+static uint64_t g_cursor_frames = 0;         /* g_slock: output frames the cursors moved (mix_into, skip_locked) */
+static double wall_ahead_locked(void);       /* the wall clock's cursors between slices (below) */
 static uint64_t g_replay = 0, g_reissue = 0;
 static uint64_t g_out_frames = 0, g_out_zero = 0, g_gap_cb = 0;
 
@@ -179,7 +227,7 @@ int audio_register(uint32_t data, uint32_t bytes, uint32_t rate,
                    uint32_t chans, uint32_t bits){
     if (!data || !bytes) return 0;
     if (rate < 4000u || rate > 192000u) rate = 44100u;
-    if (chans < 1u || chans > 2u) chans = 1u;
+    if (chans < 1u || chans > 8u) chans = 1u;
     if (bits != 8u && bits != 16u) bits = 16u;
     pthread_mutex_lock(&g_slock);
     int id = snd_new_id();
@@ -191,6 +239,7 @@ int audio_register(uint32_t data, uint32_t bytes, uint32_t rate,
         b->wpos = 0; b->wseen = 0; b->trim = 1.0; b->target = 0.0; b->over = 0;
         b->freq = 1.0; b->plays = b->stops = 0;
         b->wr_bytes = b->wr_calls = b->wr_nonzero = 0;
+        downmix_gains(b->down, chans);
         fprintf(stderr, "  [sound] buffer #%d: %u Hz, %u channels, %u bit, %u bytes (%.2f s)\n",
                 id, rate, chans, bits, bytes,
                 (double)bytes / (double)(rate * chans * (bits/8u)));
@@ -287,9 +336,16 @@ void audio_cursors(int id, uint32_t *play, uint32_t *write){
     if (id > 0 && id < MAXSND){
         pthread_mutex_lock(&g_slock);
         if (g_snd[id].used && g_snd[id].bytes){
-            uint32_t bpf = g_snd[id].chans * (g_snd[id].bits/8u);
-            uint32_t sz  = g_snd[id].bytes;
-            p = (uint32_t)(g_snd[id].cursor * (double)bpf) % sz;
+            SndBuf *b = &g_snd[id];
+            uint32_t bpf = b->chans * (b->bits/8u);
+            uint32_t sz  = b->bytes;
+            double cur = b->cursor, ahead = b->playing ? wall_ahead_locked() : 0.0;
+            if (ahead > 0.0 && bpf){                    /* the wall clock's, between slices */
+                double nsrc = (double)(sz / bpf);
+                cur += ahead * (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq;
+                if (nsrc > 0.0 && cur >= nsrc) cur = fmod(cur, nsrc);
+            }
+            p = (uint32_t)(cur * (double)bpf) % sz;
             uint32_t lead = (g_snd[id].rate * WRITE_LEAD_MS / 1000u) * bpf;
             if (lead >= sz) lead = sz / 4u;
             w = (p + lead) % sz;
@@ -318,6 +374,49 @@ void audio_set_muted(int on){
         atomic_store(&RH(AR_MUTED), on ? 1u : 0u);
         fprintf(stderr, "sound: output %s\n", on ? "muted (game inactive)" : "unmuted");
     }
+}
+
+/* ---- the resampler for a buffer at another rate ---------------------------
+ * A buffer at 44,100 Hz with its own frequency plays as it always did, sample
+ * for sample (the step is 1).  One at another rate, or one the game gave
+ * another frequency (SetFrequency), is resampled band-limited instead of by
+ * the nearest sample, which doubled every sample of a 22,050 Hz mix (Most
+ * Wanted's at a low performance level, GAME.md 7.1) and mirrored its top
+ * octave into the output: a 16-tap Blackman-windowed sinc in 256 phases, its
+ * cut-off at the lower of the two Nyquist rates (codepdbh's fix for the
+ * crackle of a linear 22,050 -> 48,000 Hz resampler, LESSONS L-095).  A
+ * looping buffer's taps wrap around it; a one-shot's beyond its ends are
+ * silence. */
+#define RS_TAPS   16
+#define RS_PHASES 256
+#define RS_CACHE  8
+typedef struct { int key; float w[RS_PHASES + 1][RS_TAPS]; } RsTable;
+static RsTable *g_rs[RS_CACHE];
+static int g_rs_n = 0;
+static int g_rs_nearest = 0;                  /* NFSU2_AUDIO_NEAREST=1 (test-only): the nearest sample, as before */
+/* the weights for a cut-off of fc (of the source's Nyquist rate, 0 < fc <= 1),
+ * fc in 1/64 steps; every phase's weights add up to 1 (g_slock held) */
+static const RsTable *rs_table(double fc){
+    int key = (int)(fc * 64.0 + 0.5);
+    if (key < 1) key = 1;
+    if (key > 64) key = 64;
+    for (int i = 0; i < g_rs_n; i++) if (g_rs[i]->key == key) return g_rs[i];
+    RsTable *t = g_rs_n < RS_CACHE ? malloc(sizeof *t) : g_rs[RS_CACHE - 1];
+    if (!t) return 0;
+    if (g_rs_n < RS_CACHE) g_rs[g_rs_n++] = t;
+    double f = key / 64.0, half = RS_TAPS / 2;
+    t->key = key;
+    for (int p = 0; p <= RS_PHASES; p++){
+        double frac = (double)p / RS_PHASES, sum = 0.0, w[RS_TAPS];
+        for (int j = 0; j < RS_TAPS; j++){
+            double x = (double)(j - (RS_TAPS / 2 - 1)) - frac;              /* the tap's distance from the position */
+            double s = fabs(x) < 1e-9 ? 1.0 : sin(M_PI * f * x) / (M_PI * f * x);
+            double win = fabs(x) >= half ? 0.0 : 0.42 + 0.5 * cos(M_PI * x / half) + 0.08 * cos(2.0 * M_PI * x / half);
+            w[j] = f * s * win; sum += w[j];
+        }
+        for (int j = 0; j < RS_TAPS; j++) t->w[p][j] = (float)(sum != 0.0 ? w[j] / sum : 0.0);
+    }
+    return t;
 }
 
 /* ---- the mixer: audio.m's mix_into, float output ------------------------ */
@@ -410,6 +509,7 @@ static void mix_into(float *out, unsigned frames){
                 if (ms > g_win_lmax) g_win_lmax = ms;
             }
         }
+        const RsTable *rs = (b->rate != OUT_RATE || b->freq != 1.0) && !g_rs_nearest ? rs_table(step > 1.0 ? 1.0 / step : 1.0) : 0;
         for (unsigned f = 0; f < frames; f++){
             double sp = b->cursor + step * (double)f;
             if (sp >= (double)nsrc){
@@ -417,6 +517,42 @@ static void mix_into(float *out, unsigned frames){
                 else { b->playing = 0; break; }
             }
             uint32_t si = (uint32_t)sp;
+            if (rs){                               /* another rate: band-limited (rs_table) */
+                const float *w = rs->w[(int)((sp - (double)si) * RS_PHASES + 0.5)];
+                float ch[8] = { 0 };
+                for (int j = 0; j < RS_TAPS; j++){
+                    int64_t k = (int64_t)si + j - (RS_TAPS / 2 - 1);
+                    if (k < 0 || k >= (int64_t)nsrc){
+                        if (!b->loop) continue;
+                        k = ((k % (int64_t)nsrc) + (int64_t)nsrc) % (int64_t)nsrc;
+                    }
+                    uint32_t off = b->data + (uint32_t)k * bpf;
+                    for (uint32_t q = 0; q < b->chans; q++){
+                        float s;
+                        if (b->bits == 16u){ int16_t v; memcpy(&v, g_mem + off + q*bps, 2); s = (float)v / 32768.f; }
+                        else s = ((float)g_mem[off + q*bps] - 128.f) / 128.f;
+                        ch[q] += s * w[j];
+                    }
+                }
+                float l, r;
+                if (b->chans == 1u) l = r = ch[0];
+                else if (b->chans == 2u){ l = ch[0]; r = ch[1]; }
+                else { l = r = 0.f; for (uint32_t q = 0; q < b->chans; q++){ l += ch[q] * b->down[q][0]; r += ch[q] * b->down[q][1]; } }
+                acc[f*OUT_CH] += l * b->vol; acc[f*OUT_CH + 1] += r * b->vol;
+                continue;
+            }
+            if (b->chans > 2u){                    /* mixed down (downmix_gains) */
+                float l = 0.f, r = 0.f;
+                for (uint32_t k = 0; k < b->chans; k++){
+                    uint32_t off = b->data + si*bpf + k*bps;
+                    float s;
+                    if (b->bits == 16u){ int16_t v; memcpy(&v, g_mem + off, 2); s = (float)v / 32768.f; }
+                    else s = ((float)g_mem[off] - 128.f) / 128.f;
+                    l += s * b->down[k][0]; r += s * b->down[k][1];
+                }
+                acc[f*OUT_CH] += l * b->vol; acc[f*OUT_CH + 1] += r * b->vol;
+                continue;
+            }
             for (int c = 0; c < OUT_CH; c++){
                 uint32_t sc = (b->chans == 2u) ? (uint32_t)c : 0u;
                 uint32_t off = b->data + si*bpf + sc*bps;
@@ -445,6 +581,7 @@ static void mix_into(float *out, unsigned frames){
             else { b->cursor = 0.0; b->playing = 0; }
         }
     }
+    g_cursor_frames += frames;
     pthread_mutex_unlock(&g_slock);
     if (active > g_active_peak) g_active_peak = active;
     g_mixed_frames += frames;
@@ -495,6 +632,69 @@ static void mix_into(float *out, unsigned frames){
         for (unsigned k = 0; k < frames * OUT_CH; k++) s16[k] = (int16_t)(out[k] * 32767.f);
         fwrite(s16, sizeof(int16_t), (size_t)frames * OUT_CH, g_dump);
     }
+}
+
+/* the wall clock's long backlog: every playing buffer's cursor moves as far as
+ * mix_into would have moved it in frames, nothing is read or mixed (the horns
+ * and friends' car sounds, which free roam plays over the game's, wait) */
+static uint64_t g_skipped_frames = 0;
+static int g_wall_catchup = 0;                /* the wall clock's backlog rule (sound_wall_catchup, NFSU2_AUDIO_CATCHUP) */
+static void skip_locked(uint64_t frames){            /* g_slock held */
+    for (int i = 1; i < g_sndn; i++){
+        SndBuf *b = &g_snd[i];
+        if (!b->used || !b->playing || !b->bytes) continue;
+        uint32_t bpf = b->chans * (b->bits / 8u);
+        uint32_t nsrc = bpf ? b->bytes / bpf : 0u;
+        if (!nsrc) continue;
+        b->cursor += (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq * (double)frames;
+        if (b->cursor >= (double)nsrc){
+            if (b->loop) b->cursor = fmod(b->cursor, (double)nsrc);
+            else { b->cursor = 0.0; b->playing = 0; }
+        }
+        b->starving = 0;
+    }
+    g_cursor_frames += frames;
+}
+static void skip_frames(uint64_t frames){
+    update_rate_ratio();
+    pthread_mutex_lock(&g_slock);
+    skip_locked(frames);
+    pthread_mutex_unlock(&g_slock);
+    g_mixed_frames += frames;
+    g_skipped_frames += frames;
+}
+/* The wall clock's cursors between the pump's slices (sound_wall_catchup).  A
+ * cursor that moves only when the pump mixes moves in 11.6 ms steps, and in
+ * steps as long as the pump's sleeps when its timers are coarse; Most
+ * Wanted's sound thread, which polls every ~10 ms and faster while the game
+ * loads, counted up to 24 polls without a move at a boot's load.  So on the
+ * wall clock the cursors a game reads run on with the time since the frames
+ * the pump mixed were due, at most WALL_INTERP_S ahead (nothing is heard
+ * there; what the game writes ahead of them is never overtaken: it writes
+ * ahead of the write cursor).  Leaving the wall clock for the ring, the pump
+ * moves them on to where they were read last, so no cursor ever goes back. */
+#define WALL_INTERP_S 0.25
+static int      g_wall_interp = 0;            /* g_slock: the cursors run on between slices */
+static uint64_t g_wall_base = 0;              /* g_slock: g_cursor_frames when the wall clock took over, */
+static double   g_wall_since = 0.0;           /* ... and when (mono_s) */
+static double wall_ahead_locked(void){        /* g_slock held: frames the cursors run ahead of the mixed ones */
+    if (!g_wall_interp) return 0.0;
+    double a = (mono_s() - g_wall_since) * OUT_RATE - (double)(g_cursor_frames - g_wall_base);
+    return a < 0.0 ? 0.0 : a > OUT_RATE * WALL_INTERP_S ? OUT_RATE * WALL_INTERP_S : a;
+}
+static void wall_interp_begin(double now){
+    pthread_mutex_lock(&g_slock);
+    g_wall_interp = g_wall_catchup; g_wall_base = g_cursor_frames; g_wall_since = now;
+    pthread_mutex_unlock(&g_slock);
+}
+static void wall_interp_end(void){
+    pthread_mutex_lock(&g_slock);
+    double a = wall_ahead_locked();
+    uint64_t n = (uint64_t)ceil(a);
+    if (n) skip_locked(n);
+    g_wall_interp = 0;
+    pthread_mutex_unlock(&g_slock);
+    g_mixed_frames += n; g_skipped_frames += n;
 }
 
 /* ---- output statistics: what goes to the ring --------------------------- */
@@ -596,6 +796,10 @@ static unsigned burst_need(void){
  * the worklet underruns as on a starved device */
 static _Atomic int g_test_stall_ms = 0;
 void audio_test_stall(int ms){ atomic_store(&g_test_stall_ms, ms > 0 ? ms : 1); }
+static _Atomic uint32_t g_never = 0;          /* a word nothing notifies: a plain timed sleep */
+/* the wall clock's long sleeps (g_wall_catchup), and NFSU2_AUDIO_WAKE_MS (test-only) */
+static int g_wake_ms = 0;
+static uint64_t g_wall_skips = 0;
 
 static void status_line(double now, int mode){
     uint32_t w = atomic_load(&RH(AR_W)), r = atomic_load(&RH(AR_R));
@@ -659,9 +863,8 @@ static void *pump_main(void *unused){
         if (g_status_every > 0 && now >= next_status){ status_line(now, mode); next_status = now + g_status_every; }
         int stall = atomic_exchange(&g_test_stall_ms, 0);
         if (stall){
-            static _Atomic uint32_t never = 0;
             fprintf(stderr, "sound: audiostall: the pump mixes nothing for %d ms (test-only)\n", stall);
-            wait_word(&never, 0, stall / 1000.0);
+            wait_word(&g_never, 0, stall / 1000.0);
             continue;
         }
         uint32_t r = atomic_load(&RH(AR_R)), w = atomic_load(&RH(AR_W));
@@ -692,7 +895,7 @@ static void *pump_main(void *unused){
                        (now < grace_end || (now - t_r) * 1000.0 < stall_ms() || fill + SLICE <= g_target);
         if (consumer){
             if (mode != AR_MODE_RING){
-                if (mode == AR_MODE_WALL) g_to_ring++;
+                if (mode == AR_MODE_WALL){ g_to_ring++; wall_interp_end(); }
                 /* the page says which part of the ring its worklet reads
                  * before it reports a running context */
                 uint32_t pf = atomic_load(&RH(AR_PAGE_FRAMES));
@@ -783,11 +986,22 @@ static void *pump_main(void *unused){
                     !g_audio_on ? "sound is off (NOSOUND)" : !running ? "no running AudioContext" : "the AudioWorklet stopped consuming");
             mode = AR_MODE_WALL; atomic_store(&RH(AR_MODE), AR_MODE_WALL);
             wall_t0 = now; wall_done = 0;
+            wall_interp_begin(now);
         }
         double due = (now - wall_t0) * OUT_RATE - (double)wall_done;
-        if (due > OUT_RATE * 0.1){             /* the pump was starved: do not burst-mix the backlog */
-            wall_done = (uint64_t)((now - wall_t0) * OUT_RATE) - SLICE;
-            due = SLICE;
+        if (!g_wall_catchup){
+            if (due > OUT_RATE * WALL_DROP_S){     /* the pump was starved: do not burst-mix the backlog */
+                wall_done = (uint64_t)((now - wall_t0) * OUT_RATE) - SLICE;
+                due = SLICE;
+            }
+        } else if (due > OUT_RATE * WALL_MIX_S){   /* asleep for long: skip to the last WALL_DROP_S, mix that */
+            uint64_t skip = (uint64_t)(due - OUT_RATE * WALL_DROP_S) / SLICE * SLICE;
+            skip_frames(skip);
+            wall_done += skip; g_wall_frames += skip; g_wall_skips++;
+            if (g_wall_skips <= 10)
+                fprintf(stderr, "sound: the pump slept %.0f ms on the wall clock: the DirectSound cursors skip %.0f ms of it\n",
+                        due * 1000.0 / OUT_RATE, (double)skip * 1000.0 / OUT_RATE);
+            due -= (double)skip;
         }
         if (due >= SLICE){
             mix_timed(scratch, SLICE);
@@ -800,6 +1014,7 @@ static void *pump_main(void *unused){
         }
         double sleep_s = (SLICE - due) / OUT_RATE;
         if (sleep_s > 0.005) sleep_s = 0.005;     /* notice a consumer coming back */
+        if (g_wake_ms > 0){ wait_word(&g_never, 0, g_wake_ms / 1000.0); continue; }   /* test-only */
         wait_word(&RH(AR_R), r, sleep_s);
     }
     return 0;
@@ -816,6 +1031,13 @@ void audio_init(void){
     { const char *e = getenv("NFSU2_AUDIO_STATUS");
       if (e && *e) g_status_every = atof(e);
       else if (getenv("NFSU2_STATUS_EVERY")) g_status_every = 5.0; }
+    { const char *e = getenv("NFSU2_AUDIO_CATCHUP");
+      g_wall_catchup = e && *e ? *e != '0' : g_game.sound_wall_catchup;
+      e = getenv("NFSU2_AUDIO_WAKE_MS"); g_wake_ms = e && *e ? atoi(e) : 0;
+      if (g_wake_ms < 0 || g_wake_ms > 5000) g_wake_ms = 0;
+      if (g_wake_ms) fprintf(stderr, "sound: NFSU2_AUDIO_WAKE_MS: on the wall clock the pump wakes every %d ms (test-only)\n", g_wake_ms);
+      g_rs_nearest = env_on("NFSU2_AUDIO_NEAREST");
+      if (g_rs_nearest) fprintf(stderr, "sound: NFSU2_AUDIO_NEAREST: buffers at another rate by the nearest sample (test-only)\n"); }
     { const char *d = getenv("SNDDUMP");
       if (d && *d){ g_dump = fopen(d, "wb");
           fprintf(stderr, "sound: output dump -> %s (%d Hz s16le %d channels)\n", d, OUT_RATE, OUT_CH); } }
@@ -892,6 +1114,9 @@ void audio_report(void){
             g_rhythm_ms, g_burst_ms, g_ring_n);
     fprintf(stderr, "  sound clock backup: %.1f s on the ring, %.1f s on the wall clock (no output), %llu times ring->wall, %llu times wall->ring\n",
             (double)g_ring_frames / OUT_RATE, g_wall_s, (unsigned long long)g_to_wall, (unsigned long long)g_to_ring);
+    if (g_wall_catchup)
+        fprintf(stderr, "  sound wall clock  : every backlog made up (sound_wall_catchup), %.1f s of it skipped in %llu long sleeps\n",
+                (double)g_skipped_frames / OUT_RATE, (unsigned long long)g_wall_skips);
     fprintf(stderr, "  sound mixer       : %.3f s in total (%.2f%% of the mixed time), longest slice %.3f ms\n",
             g_mix_s, g_mixed_frames ? 100.0 * g_mix_s / ((double)g_mixed_frames / OUT_RATE) : 0.0, g_mix_max_s * 1000.0);
     fprintf(stderr, "  sound output level: peak %.1f dBFS, %.1f%% of slices not silent, worklet %u non-silent quanta\n",

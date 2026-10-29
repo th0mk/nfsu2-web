@@ -30,6 +30,7 @@ uint32_t mw_fe_object(const char *package, uint32_t hash);
 extern const ThreadName mw_thread_names[];     /* threads_mw.c */
 uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
 void fxcensus_init(void);                      /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census (oracle builds) */
+void mw_sound_position(void);                  /* sound_mw.c */
 
 /* the lifted DLLs (module.c): EA's LAN server (gen/mw/server, prefix srv_,
  * pinned in games/mw/game.conf), and Microsoft's D3DX as a dev-only oracle
@@ -146,4 +147,6 @@ const GameOps g_game = {
     .init_check = 0x009aa9d0u + 0x84cu,         /* the bitset pointer of 0x9AA9D0's constructor */
     .thread_names = mw_thread_names,
     .thread_start = mw_thread_start,            /* past _threadstartex and the game's trampoline */
+    .on_sound_position = mw_sound_position,     /* sound_mw.c: the sound thread's stall count, watched */
+    .sound_wall_catchup = 1,                    /* its cursors keep real time with no output (GAME.md 7.2) */
 };

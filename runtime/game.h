@@ -152,6 +152,14 @@ typedef struct GameOps {
                                      * speed test that sleeps between two clock reads sees its sleep; 0 = UG2's
                                      * clock, which stands at the cap there apart from its creep */
     void (*on_sound_unlock)(void);  /* every DirectSound buffer Unlock (com.c) */
+    void (*on_sound_position)(void);    /* every DirectSound buffer GetCurrentPosition (com.c), on the
+                                     * calling thread, before it answers */
+    int sound_wall_catchup;         /* with no output to pace it (no running AudioContext, a stalled one,
+                                     * NOSOUND) the mixer (runtime/web/audio_web.c) runs on the wall clock:
+                                     * 1 makes up all the time its pump slept past and runs the DirectSound
+                                     * cursors on between its slices, so they keep real time however coarse
+                                     * its wake-ups are (a background tab's); 0 (UG2) drops a backlog over
+                                     * 100 ms and moves them a slice at a time, as it always did */
     uint32_t online_host_va;        /* the Online server's host name in the exe ("*pcnfs05.ea.com") */
     const char *online_host;        /* that name without its '*' ("pcnfs05.ea.com") */
 
