@@ -29,8 +29,13 @@
 //                    and the play page's /game.wasm): a game of another version in the same race
 //        --mode drift|streetx: drift and Street X games (the mode carousel's 4th and 5th entries, as the
 //                    "mode" dumps of the runs show: Circuit, Sprint, Drag, Drift, Street X)
-//        [--game ug2|mw]   the game (ug2 unless given): its script generator, modes and results screen; Most
-//                    Wanted has none yet
+//        [--game ug2|mw]   the game (ug2 unless given): its script generator, modes and results screen (Most
+//                    Wanted: tools/gen_lan_race_mw.py; its own server serves the game at the root of
+//                    localhost, --base-path localhost=/, where the test pages load /game.wasm; no car trace
+//                    yet, so no trace check)
+//        [--seed <save tree>]  every instance starts from that save (web/tools/save-seed.mjs, as run-suite's
+//                    NFSU2_SAVE_SEED): a Most Wanted module with the D3DX oracle needs d3dx9_26.dll there and
+//                    --env NFSMW_D3DX=/save/d3dx9_26.dll (tests/mw/scripts/boot_menu.txt)
 //        [--help]    this text and the game's modes
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, the game
@@ -56,6 +61,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { serverCommand } from './server-cmd.mjs';
 import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
+import { seedSave } from './save-seed.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -74,8 +80,17 @@ const RACES_OF = {
       streetx: { h: ['--mode', '4', '--race-ms', '120000'], j: ['--filter', '4', '--race-ms', '120000'] },
     },
   },
+  // the Quick Race kinds of the LAN main menu (OL_Quickrace_Main.fng): host and joiners pick the same one; the
+  // script ends by WM_CLOSE (`close`), as run-suite's Most Wanted scenarios; no car trace yet (M8-15)
+  mw: {
+    gen: 'tools/gen_lan_race_mw.py', results: 'LOG lan: results', ended: 'app: the game exited (code 0) after the quit request',
+    trace: false, server: ['--base-path', 'localhost=/'],
+    modes: {
+      sprint: { h: ['--kind', '0', '--race-ms', '90000'], j: ['--kind', '0', '--race-ms', '90000'] },
+    },
+  },
 };
-const NONE = 'none yet: no LAN menu script generator for Most Wanted (M8-12)';
+const NONE = 'none';
 const GAME = gameOf(argv), G = GAMES[GAME], LAN = RACES_OF[GAME];
 if (argv.includes('--help')) usage(import.meta.url, GAME, 'Modes (--mode)', Object.entries(LAN?.modes ?? {})
   .map(([m, { h, j }]) => `${m.padEnd(8)} ${LAN.gen} host ${h.join(' ')}; join ${j.join(' ')}`), NONE);
@@ -86,19 +101,20 @@ const BASE = opt('base', `http://localhost:${HTTP_PORT}`);
 if (!OWN) await requireGame(BASE, GAME);
 const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2'));
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/lan-pair')));
-const MODE = opt('mode', 'circuit'), RACES = +opt('races', 1), PLAYERS = Math.min(6, Math.max(2, +opt('players', 2)));
+const MODE = opt('mode', Object.keys(LAN.modes)[0]), RACES = +opt('races', 1), PLAYERS = Math.min(6, Math.max(2, +opt('players', 2)));
 const TMO = +opt('timeout', 1200 * RACES) * 1000;
 const STAGGER = +opt('stagger', 3) * 1000;
 const BOUNCE = argv.includes('--bounce') ? +opt('bounce', 0) * 1000 : 0;
 const DROP = opt('drop', '') ? opt('drop', '').split(':').map(Number) : null;   // [instance (1-based), seconds]
 const PAGE = opt('page', 'hostcheck'), SIZE = opt('size', '960x540').split('x').map(Number), PLAY_ONLY = +opt('play-only', 0);
+const SEED = opt('seed', '');               // a save tree each instance starts from
 const WASM_OF = new Map(opts('wasm-of').map(kv => [+kv.slice(0, kv.indexOf('=')), path.resolve(kv.slice(kv.indexOf('=') + 1))]));
 const PY = fs.existsSync(path.join(REPO, '.venv/bin/python')) ? path.join(REPO, '.venv/bin/python') : 'python3';
 fs.mkdirSync(OUT, { recursive: true });
 
 // lan_race.sh's scripts
 const MODES = LAN.modes;
-if (!MODES[MODE]) { console.error('--mode circuit|sprint|drag|streetx|drift'); process.exit(2); }
+if (!MODES[MODE]) { console.error(`--mode ${Object.keys(MODES).join('|')}`); process.exit(2); }
 const NAMES = ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWEB6'];
 const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, LAN.gen), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
@@ -125,16 +141,17 @@ function url(i) {
   const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
     reg: G.reg, save: `lan-${stamp}-i${i + 1}`, net: NAMES[i],
     script: scriptPath(i) });
+  if (!G.reg) q.delete('reg');      // a game without a registry seed starts from its own first start (run-suite)
   if (PAGE === 'app') {
     // the player's page: no wasm/pages/arg/net (the app's own), the switch name from roam_name, free roam off
     const a = new URLSearchParams({ reg: q.get('reg'), save: q.get('save'), script: q.get('script') });
     for (const [k, v] of Object.entries({ ...env, NFSU2_ROAM: '0', NFSU2_ROAM_NAME: NAMES[i] })) if (k !== 'NFSU2_SAVEDIR') a.append('env', `${k}=${v}`);
-    return `${BASE}/?${a}&fresh`;
+    return `${BASE}/?${a}${SEED ? '' : '&fresh'}`;
   }
   const page = PAGE === 'play' && (!PLAY_ONLY || PLAY_ONLY === i + 1) ? 'play' : 'hostcheck';
   if (page === 'play'){ q.set('w', String(SIZE[0])); q.set('h', String(SIZE[1])); q.set('artifacts', `/artifacts/i${i + 1}-`); q.set('dumpscale', '1'); }
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
-  return `${BASE}/test/${page}.html?${q}&fresh`;
+  return `${BASE}/test/${page}.html?${q}${SEED ? '' : '&fresh'}`;
 }
 
 // our own server (stopped by its child handle only)
@@ -142,7 +159,7 @@ let server = null;
 const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'), { flags: 'a' });
 async function startServer() {
   const c = spawn(...serverCommand(['--data', DATA,
-    '--http-port', String(HTTP_PORT), '--dev', '--artifacts', OUT, ...(opt('impair', '') ? ['--lan-impair', opt('impair', '')] : [])]), { stdio: ['ignore', 'pipe', 'pipe'] });
+    '--http-port', String(HTTP_PORT), '--dev', '--artifacts', OUT, ...(GAME === 'ug2' ? [] : ['--game', GAME]), ...(LAN.server ?? []), ...(opt('impair', '') ? ['--lan-impair', opt('impair', '')] : [])]), { stdio: ['ignore', 'pipe', 'pipe'] });
   c.stdout.pipe(serverLog, { end: false }); c.stderr.pipe(serverLog, { end: false });
   await new Promise((res, rej) => {
     let out = '';
@@ -189,6 +206,7 @@ async function start(i) {
   });
   page.on('pageerror', e => { w('PAGEERROR ' + e); lines.push(`PAGEERROR ${e}`); });
   page.on('crash', () => lines.push('CRASH (renderer process)'));
+  if (SEED) w(`[lan-pair] save seed: ${await seedSave(page, BASE, `lan-${stamp}-i${i + 1}`, SEED)} files from ${SEED}`);
   const u = url(i);
   w(`URL ${u}`);
   await page.goto(u);
@@ -253,7 +271,7 @@ for (const x of inst) {
   }
   if (res[x.i] !== 'done') why.push(`${n}:timeout`);
   if (x.exitCode() !== 0) why.push(`${n}:exit=${x.exitCode()}`);
-  if (!log.includes('quit at guest frame')) why.push(`${n}:no-quit`);
+  if (!log.includes(LAN.ended ?? 'quit at guest frame')) why.push(`${n}:no-quit`);
   if (!log.includes(LAN.results)) why.push(`${n}:no-results`);
   if (has(/FAULT IN GUEST|GUEST MEMORY FAULT|HOST SEGV/)) why.push(`${n}:fault`);
   if (log.includes('TIME LIMIT REACHED')) why.push(`${n}:timeout`);
@@ -277,14 +295,16 @@ for (const x of inst) {
   summary.why.push(...why);
 }
 let trace = '';
-try { trace = execFileSync(PY, [path.join(REPO, 'tools/lan_trace.py'), OUT], { encoding: 'utf8' }); }
+if (LAN.trace === false) trace = `no car trace for ${G.name} yet: no trace check
+`;
+else try { trace = execFileSync(PY, [path.join(REPO, 'tools/lan_trace.py'), OUT], { encoding: 'utf8' }); }
 catch (e) { trace = `lan_trace.py failed: ${e.stdout ?? ''}${e.stderr ?? e}`; }
 fs.writeFileSync(path.join(OUT, 'trace.txt'), trace);
 console.log(trace);
 const near = [...trace.matchAll(/within \d+ m of the viewer: (\d+) samples, err median \S+ m, p95 (\S+) m; jumps (\d+)/g)];
 const pairs = PLAYERS * (PLAYERS - 1);
 const nearOk = near.length === pairs && near.every(([, n, p, j]) => +n >= 500 && +p < 1.5 && +j === 0);
-if (!nearOk && !DROP) summary.why.push('trace');
+if (!nearOk && !DROP && LAN.trace !== false) summary.why.push('trace');
 summary.pass = summary.why.length === 0;
 fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
 console.log(JSON.stringify(summary, null, 2));
