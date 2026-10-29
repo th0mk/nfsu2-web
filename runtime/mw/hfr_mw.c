@@ -1,7 +1,8 @@
 /* hfr_mw.c -- Most Wanted's simulation at a step other than 1/60 s (TRACKER M7-21, M7-22): the fixes per
  * subsystem.  framerate_mw.c keeps the game's step, 1/60; its research switch NFSMW_WORLD_HFR=1 (or
  * NFSMW_SIM_HZ) steps a world at the page's rate; this file keeps what was written for 60 steps a second
- * working at 120 and 240.  At the game's own step it changes nothing (the stopped-traffic option below aside).
+ * working at 120 and 240.  At the game's own step it changes nothing (unless the stopped-traffic option below is
+ * set).
  *
  * The scheduler's tasks (GAME.md 6.3).  SimSystem::AddTask 0x6ED0F0 (thiscall on [0x9885E0]: schedule, rate,
  * handler, start offset, mode) makes a task of 0x28 bytes (0x6ECCD0): +0 rate (at most 1), +4 handler, +8 its
@@ -37,17 +38,19 @@
  *
  * The same stop at 60 (the game's own step): there the traffic thinks with dT 1/6, so a stopped car's target is
  * 0.333, still under the driver's 0.5: in a lockstep race at 60 a traffic car sat at 0.0000 m/s with target
- * 0.3333 and BRAKE for 16 s to the run's end.  Only at 40 steps a second or fewer (2 dT >= 0.5) does a stopped
- * car get going again; the cadence fix keeps 120 and 240 as 60, stops and all.  So the stop itself is
- * the game's bug at its own rate (Carbon's traffic does not stop for good at any rate, per WidescreenFixesPack
- * #1218), fixed here at every rate: below 0.5 m/s AIActionTraffic's cap counts dT as at least 0.25 s (its
- * value at 40 Hz), so a stopped car whose wanted speed is 0.5 or more gets 0.5 and the driver gives it gas; a
- * car that wants under 0.5 (a car ahead, a dead end) still brakes.  dT is read nowhere else in 0x411820
- * (checked over its stack slots), and a car at 0.5 m/s or more keeps the game's cap.
+ * 0.3333 and BRAKE for 16 s to the run's end.  Only at 40 frames a second or fewer (2 dT >= 0.5) does a stopped
+ * car get going again; the cadence fix keeps 120 and 240 as 60, stops and all.  So the stop is the game's own at
+ * its own rate, and changing it changes the game's traffic at 60 too: an option, off by default.
+ * NFSMW_TRAFFIC_RESTART=1: a car within 0.05 m/s of 0 whose cap (current + 2 dT) is under 0.5 gets dT 0.275 s
+ * for the call, so its cap is current + 0.55, over 0.5: wanting 0.5 or more, its target is over 0.5 and the
+ * driver gives it gas.  Wanting under 0.5 (a car ahead, a dead end) it still brakes, toward the wanted speed
+ * instead of the cap; on 0x411820's path that skips the cap (0x411A2C) dT is not read and the target is the
+ * same either way.  dT is read nowhere else in 0x411820 (checked over its stack slots); a moving car, or one
+ * whose cap already reaches 0.5, keeps the game's.
  *
  * Options (test only): NFSMW_HFR_AILOG=1 logs AIActionTraffic's speed for a car under 0.6 m/s ("[hfrai]",
- * BRAKE when the target is under the driver's 0.5); NFSMW_HFR_TASKS=0 turns the cadence fix off and
- * NFSMW_TRAFFIC_RESTART=0 the stop fix (A/B). */
+ * BRAKE when the target is under the driver's 0.5); NFSMW_HFR_TASKS=0 turns the cadence fix off;
+ * NFSMW_TRAFFIC_RESTART=1 the stopped-traffic restart on (above). */
 #include "cpu.h"
 #include "game.h"
 #include <stdio.h>
@@ -89,14 +92,15 @@ void sub_006ecd90(CPU *c){
 }
 
 /* AIActionTraffic's target speed (0x411820, thiscall (current speed, dT), the target on st0; ret 8): the
- * stopped car's cap (above) */
+ * stopped car's cap with NFSMW_TRAFFIC_RESTART=1 (above) */
 void sub_00411820_orig(CPU *c);
 void sub_00411820(CPU *c){
     static int log = -1, fix = -1; static long n = 0;
-    if (log < 0){ log = env_int("NFSMW_HFR_AILOG", 0); fix = env_int("NFSMW_TRAFFIC_RESTART", 1) != 0; }
+    if (log < 0){ log = env_int("NFSMW_HFR_AILOG", 0); fix = env_int("NFSMW_TRAFFIC_RESTART", 0) != 0; }
     float cur = MRF32(c->esp + 4u), dt = MRF32(c->esp + 8u);
     uint32_t self = c->ecx;
-    if (fix && cur < 0.5f && dt < 0.25f) MRF32(c->esp + 8u) = 0.25f;     /* the callee's own argument slot */
+    if (fix && cur > -0.05f && cur < 0.05f && cur + 2.f * dt < 0.5f)
+        MRF32(c->esp + 8u) = 0.275f;                                       /* the callee's own argument slot */
     sub_00411820_orig(c);
     if (log && cur < 0.6f && n < 4000){
         n++;
