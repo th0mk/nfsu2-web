@@ -1,0 +1,104 @@
+# Most Wanted: a new career from its first screen to the first free drive (TRACKER M4-09, M4-03; L-021, L-022).
+# From a first start this run makes the alias ALPHA and saves it (as profiles_make.txt does), then opens Career: the
+# career menu of a new alias (MainMenu_Sub.fng) has the one item Start Career (label 0x6005281E on 0x4B4E388A).
+# Start Career loads the world (Loading.fng, GameFlow 4; FadeScreen.fng, 5) and the prologue plays in GameFlow 6, its
+# races back to back with no menu between them; `autopilot races` (runtime/mw/career_mw.c) lets the game's AI take
+# the player's car at each race's GO, so every race ends through the game's own finish path, and logs each race's
+# edges.  That AI loses a race now and then (race 2 in one of the first 10 runs, by 4.8 s); a lost story race shows
+# PostRace_Results.fng, whose Enter goes back to the career menu, and Resume Career loads the race again from the
+# autosave made before it, so the aid does that, as a player would (logged; the check counts the races raced
+# again), and the waits for a race's winner's screen leave room for that.  The prologue as headless runs play it (NOMOVIES=1: the story movies storyfmv_rac01, _raz08, _pin11 and
+# _bus12 do not open and the game goes on without them; the in-engine NIS scenes play):
+#   - the intro NIS (NIS/Scene_IntroNisDD_BundleB.bun) with BUSTED_OVERLAY.fng and BLACK_BACKGROUND.fng, then race 1
+#     (2 racers; its HUD clock stands at 86 s): the game's script cuts it about half way (FadeScreenNoLoadingBar.fng,
+#     InGameBackground.fng, no result);
+#   - race 2 (2 racers) to the line: the winner's screen (InGamePhotoMaster.fng, WINNER), Enter;
+#   - NIS IntroNis05, race 3 (2 racers): the winner's screen, Enter;
+#   - SixDaysLater.fng, NIS IntroNis10, race 4 (4 racers): the winner's screen, Enter;
+#   - NIS EndingNis03, BLACK_FADE_OUT.fng, NIS IntroNis04, race 5 (2 racers), which the game's script ends (no winner
+#     screen: the AI-driven car is not let win), the busted movie, GameFlow 8, and the front end's car lot:
+#     Car_Select.fng (Funds 30,000; its first car costs 27,000);
+#   - Enter on the first car: Dialog.fng "Are you sure you wish to buy ..." with No highlighted (0xB8A7C6CD; Yes is
+#     0xB8A7C6CC, to its left: the other way round from MC_Main.fng's dialogs), Yes, Enter;
+#   - free roam (GameFlow 6, HUD_SingleRace.fng, no race: racestatus says 0 racers): the autosave writes ALPHA, and the
+#     first text message opens over the mailbox (SMS_Message.fng: Re-Play, Done, Delete; SMS_MailBoxes.fng under it).
+#     Enter does not close it: Escape (Done) closes the message, Escape again (Back) the mailbox.  (*) The mailbox
+#     says it takes input in the frame after the first Escape, but an Escape while the message is still leaving
+#     (about 45 frames) does nothing (20 frames on, the mailbox stayed and the car did not move; 120 frames on, it
+#     closed), and its closing shows on no screen.  So Escape is tapped every 60 frames until the free roam's
+#     pause menu takes input (Pause_Main.fng, on Resume Free Roam, label 0x01BD185C on 0x4B4E388A): one Escape
+#     closes the mailbox, the next opens the pause menu, which only the game itself can show.  Enter resumes.
+# Every prologue race autosaves ALPHA before its GO (Autosave_Overlay.fng), and Resume Career from such a save starts
+# that race.  After a race's Enter the next wait starts once slot #0 of the race status is no longer finished (the
+# next race set up), so a winner's screen still taking input in that frame is not taken for the next one.  The free
+# drive: Up (gas) held 300 frames moves the car (`where` before and after).  The save the free roam's autosave wrote
+# is what career_resume.txt loads after a restart (--save-out keeps it; it is game content made by the run: it stays
+# outside the repository).
+# tests/mw/checks/career_start.sh wants the alias saved, the prologue's races in order, the car bought, the save
+# written in free roam, and the car driven:
+#   node web/tools/run-suite.mjs --game mw --script career_start.txt --marker 'career_start: drove' \
+#     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=150000 --timeout-scale 4 --save-out DIR
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype ALPHA
++0    waitfng MC_Main.fng'ALPHA 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log career_start: ALPHA saved
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:6005281e@4b4e388a 600     # the career menu of a new alias, on Start Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6): the intro NIS
++0    log career_start: prologue
++0    autopilot races                                    # the AI takes each race at its GO
++0    waitfng InGamePhotoMaster.fng:5dfb6667 60000       # race 2 won (the game cut race 1 half way)
++0    log career_start: race 2 won
++0    racestatus
++0    tap RETURN
++0    waitexpr b:[0x0091e000]+0x39 == 0 3000             # the next race set up: slot #0 not finished
++0    waitfng InGamePhotoMaster.fng:5dfb6667 60000       # race 3 won
++0    log career_start: race 3 won
++0    racestatus
++0    tap RETURN
++0    waitexpr b:[0x0091e000]+0x39 == 0 3000
++0    waitfng InGamePhotoMaster.fng:5dfb6667 60000       # race 4 won (after "six days later")
++0    log career_start: race 4 won
++0    racestatus
++0    tap RETURN
++0    waitexpr b:[0x0091e000]+0x39 == 0 3000
++0    waitfng Car_Select.fng:d18d600a 40000              # race 5, ended by the game; the car lot takes input
++0    log career_start: car lot
++0    tap RETURN                                         # the first car
++0    waitfng Dialog.fng@b8a7c6cd 600                    # buy it?  (No)
++0    tapuntil LEFT Dialog.fng@b8a7c6cc 30 300           # Yes
++0    tap RETURN
++0    waitfng SMS_Message.fng:8cd6bd6d 3000              # free roam: the first text message, its Done drawn
++0    log career_start: free roam
++0    racestatus
++0    where
++0    tap ESCAPE                                         # Done
++0    waitfng SMS_MailBoxes.fng@cf31e520 600             # the mailbox
++0    tapuntil ESCAPE Pause_Main.fng:01bd185c@4b4e388a 60 900   # Back, then the pause menu (*)
++0    tap RETURN                                         # Resume Free Roam
++20   down UP                                            # gas
++300  where
++0    up UP
++0    log career_start: drove
++0    close

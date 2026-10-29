@@ -6,8 +6,10 @@ Input scripts for runtime/autotest.c, served at `/tests/scripts/` by a server st
 Besides autotest.c's commands, Most Wanted's runs take `call ADDR [ecx=X] [ARG ...]` and `loadlib NAME`
 (runtime/mw/debug_mw.c), both test-only, and the race aids of runtime/mw/career_mw.c, test-only too, which run at
 the game's per-frame anchor: `racewin` (a shortcut finish: the player is finished where it is, with three of the
-calls the race's script makes at the line), `autopilot on|off` (the game's AI drives the player's car), `teleport X Y
-Z DX DY DZ`, `where`, `racestatus` and `frames`.
+calls the race's script makes at the line), `autopilot on|off` (the game's AI drives the player's car), `autopilot
+races` (the same at every race's GO from then on, for races that follow each other with no menu between, with each
+race's start and end logged; a lost race is raced again as a player would: Enter on its results, then Resume Career),
+`teleport X Y Z DX DY DZ`, `where`, `racestatus` and `frames`.
 
 The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of
 the race), `race_loop.txt` (25 Quick
@@ -30,3 +32,8 @@ with `profiles_make.txt`'s saves, as the Challenge Series needs a profile).  The
 once around with `NFSU2_FNG_LOG=3`) and names them from the game's English.bin.  With no profile loaded, Quick Race
 offers 19 of its 137 tracks (the list draws its Accept button); the others show "This track is locked" and take no
 Enter.
+
+The career (career saves made by these runs stay outside the repository, ../seed/README.md): `career_new.txt` (a
+new alias loads to a career menu with Start Career; seeded with `profiles_make.txt`'s saves), `career_start.txt`
+(a new alias's career from Start Career through the prologue to the first free drive, saved) and
+`career_resume.txt` (that save loaded after a restart, back into free roam; seeded with `career_start.txt`'s save).
