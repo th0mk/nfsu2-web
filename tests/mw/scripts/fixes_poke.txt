@@ -1,0 +1,23 @@
+# Most Wanted: the null guards of runtime/mw/fixes_mw.c reached by poke (TRACKER M4-29; L-063, L-018).
+# In the front end (GameFlow 3, no world loaded):
+#   - Attrib::StringToLowerCaseKey (0x4549B0) called with a null name: the fix logs "[fix] ... StringToLowerCaseKey(null)"
+#     and gives the empty name's key; NFSU2_TEST_ATTRIB_NULLKEY=1 runs the game's code (0x4549BF reads the name).
+#   - the cop and roadblock unload (0x57D0F0) over a list of one null entry: in the front end the list is empty, its
+#     first-entry pointer [0x92FD8C] pointing at its own two-entry store at 0x92FD98 (`expect` checks that); the
+#     store's first entry is poked to 0, the count [0x92FD94] to 1, the unload is called and the count put back to
+#     0.  The fix logs "[fix] ... cop unload: entry 0 ... is null" and passes it over; NFSU2_TEST_COPLIST_NULL=1
+#     runs the game's code, which calls through the null entry (0x57D105 `mov edx,[ecx]; call [edx+0xC]`):
+#     UNRESOLVED INDIRECT CALL target=0, the Repro check's failure.
+#   node web/tools/run-suite.mjs --game mw --script fixes_poke.txt --marker 'fixes_poke: done'
+#     (and with --env NFSU2_TEST_ATTRIB_NULLKEY=1 --env NFSU2_TEST_COPLIST_NULL=1 for the game's way)
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++60   call 0x004549b0 0
++0    expect i:0x0092fd8c == 0x0092fd98
++0    expect i:0x0092fd94 == 0
++0    poke 0x0092fd98 0
++0    poke 0x0092fd94 1
++0    call 0x0057d0f0
++0    poke 0x0092fd94 0
++0    log fixes_poke: done
++0    close

@@ -222,8 +222,8 @@ const GameOps g_game = {
     .sound_wall_catchup = 1,                    /* its cursors keep real time with no output (GAME.md 7.2) */
     .on_frame = mw_frame,                       /* career_mw.c: the queued test aids, between update and render */
     .frame_site = MW_FRAME_SITE,                /* MainLoop's 0x663EC6, above */
-    .hook = mw_debug_hook,                      /* debug_mw.c: the frame anchor is core's, so only a debugging
-                                                 * lift's HOOKS=... reach it (NFSMW_HOOKLOG) */
+    .hook = mw_debug_hook,                      /* debug_mw.c: the frame anchor is core's; the crash fixes'
+                                                 * sites (fixes_mw.c) and a debugging lift's HOOKS=... reach it */
     .pad_late = &mw_pad_late,                   /* a late pad: the input manager's callback, then the input set-up */
     .pad_buttons = "X A B Y LB RB LT RT BACK START LS RS",  /* a DualShock's order, which its layout expects */
 };

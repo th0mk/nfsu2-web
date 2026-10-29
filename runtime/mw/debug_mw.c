@@ -145,11 +145,13 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
     return 1;
 }
 
-/* The game's instruction hooks (game.h hook): MW's own one, the frame anchor, is core's (frame_site), so a hit
- * here is a debugging one, an address a lift was given with gen.sh's HOOKS=... (a function's first
- * instruction, say).  NFSMW_HOOKLOG=1 logs the first 20 hits of each address, with the return address and
+/* The game's instruction hooks (game.h hook): the frame anchor is core's (frame_site); the crash fixes' sites
+ * (fixes_mw.c HOOK_SITE) go to mw_fix_hook first; any other hit is a debugging one, an address a lift was given
+ * with gen.sh's HOOKS=... (a function's first instruction, say).  NFSMW_HOOKLOG=1 logs the first 20 hits of each address, with the return address and
  * the first three stack arguments at a function's entry: "[hook] f=N 0xADDR from RET args A1 A2 A3 ecx X". */
+int mw_fix_hook(CPU *c, uint32_t va);          /* fixes_mw.c: the crash fixes' instruction hooks */
 int mw_debug_hook(CPU *c, uint32_t va){
+    if (mw_fix_hook(c, va)) return 1;
     static int on = -1;
     if (on < 0){ const char *e = getenv("NFSMW_HOOKLOG"); on = e && atoi(e); }
     if (!on) return 0;
