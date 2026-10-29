@@ -10,14 +10,20 @@
  * AID_WAIT frames: MainLoop is not the only way to a Present (loading screens present from 0x6618C3, 0x663D1A
  * and 0x664952), so a command queued while the anchor does not run logs a TIMEOUT line and is dropped.
  *
- *   racewin          finish the local player now, as the race's script does when a racer crosses the
- *                    finish line: Game.NotifyRaceFinished(racer), then, when Game.AllHumanPlayersDone(),
- *                    Game.EnterPostRaceFlow() (the game's own finish path; the script's calls at the line,
- *                    seen with NFSMW_HOOKLOG on the Lua bindings while the AI drove the player over it, are
- *                    NotifyCheckpointReached, NotifyLapFinished, SetRacerLapsLeft(n, 0), CalculateRanking,
- *                    NotifyRaceFinished, NotifyRacePlacement, RacerIsHuman, AllHumanPlayersDone,
- *                    EnterPostRaceFlow; the lap bookkeeping before and the placement message after are left
- *                    out)
+ *   racewin          a shortcut finish: the local player is finished where it is, with three of the calls
+ *                    the race's script makes at the finish line: Game.NotifyRaceFinished(racer), then, when
+ *                    Game.AllHumanPlayersDone(), Game.EnterPostRaceFlow().  The script's calls at the line
+ *                    (seen with NFSMW_HOOKLOG on the Lua bindings while the AI drove the player over it) are
+ *                    NotifyCheckpointReached(racer, 0), NotifyLapFinished(racer, 1), SetRacerLapsLeft(1, 0),
+ *                    CalculateRanking(racer, 1) (the racer's place, 1 when there is none), NotifyRaceFinished
+ *                    (racer), NotifyRacePlacement(p, racer, 1), RacerIsHuman(1), AllHumanPlayersDone(),
+ *                    EnterPostRaceFlow() (the values one race's).  racewin leaves out the lap bookkeeping
+ *                    (NotifyLapFinished hands the racer's lap timer, GRacerInfo +0x158, to 0x5DC260), the
+ *                    ranking and the placement message (p is a pointer the script holds, not identified).  So
+ *                    the player is the only racer finished and wins, its race time is the time so far (3 to
+ *                    6 s in runs), and the game extrapolates the others' (961 s for one at 1.4 %).  For
+ *                    post-race flows only (race_loop.txt); a run that looks at rewards or the save lets the
+ *                    autopilot drive over the line instead (race_win.txt).
  *   autopilot on|off the game's AI drives the local player's car (Game.ForceAIControl / ClearAIControl)
  *   teleport X Y Z DX DY DZ   move the local player's car to X Y Z (~N: N from where it is), facing DX DY DZ
  *                    (the game's simulation space, as where logs it: Y is the height, and the warp sets

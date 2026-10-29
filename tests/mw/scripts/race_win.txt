@@ -1,14 +1,21 @@
-# Most Wanted: a quick race won by the test aid and saved (TRACKER M4-02, L-022).  Seeded with the save tree
-# profiles_make.txt leaves (ALPHA and BRAVO; NFSU2_SAVE_SEED), this run loads ALPHA from the start's Load list (as
-# profiles_load.txt does), takes the random Quick Race (race_loop.txt says how), lets the game's AI drive the
-# player's car for 600 frames after GO, and finishes the race through the game's own path (racewin,
-# runtime/mw/career_mw.c: NotifyRaceFinished, then EnterPostRaceFlow, as the race's script calls them at the finish
-# line).  After the winner's post-race screen (InGamePhotoMaster.fng) it goes back to the main menu and saves ALPHA
-# from the Alias Manager (as profiles_load.txt does), so the save tree it leaves (--save-out) next to the seed's
-# shows what the game itself wrote for the win (L-022: nothing here edits a reward or the career).
+# Most Wanted: a quick race won over the finish line by the game's AI driving the player's car, and saved (TRACKER
+# M4-02, L-022).  Seeded with the save tree profiles_make.txt leaves (ALPHA and BRAVO; NFSU2_SAVE_SEED), this run
+# loads ALPHA from the start's Load list (as profiles_load.txt does) and sets up a Custom Race the AI-driven car can
+# win: Quick Race, Custom Race (the "quick race" menu's 2nd item), Sprint ("custom race mode select": Circuit,
+# Sprint, Drag, Lap Knockout, Speedtrap), the first track, Seaside & Power Station (3.8 miles), and in "sprint
+# options" (rows Traffic Level, Opponents, Difficulty, Catch Up; LEFT steps a value back) no traffic, 1 opponent,
+# Easy and no catch-up; the car the car list starts on, automatic gears ("Select your transmission": Auto).  From GO the
+# game's AI drives the player's car (autopilot) until the player's racer is finished (GRaceStatus [0x91E000] slot
+# #0's byte +0x21 at +0x39): the race's own script runs the whole finish (checkpoints, laps, ranking, placement),
+# not the racewin shortcut (runtime/mw/career_mw.c), so the race and lap times are driven ones.  After the winner's
+# post-race screen (InGamePhotoMaster.fng) it goes back to the main menu and saves ALPHA from the Alias Manager (as
+# profiles_load.txt does), so the save tree it leaves (--save-out) next to the seed's shows what the game itself
+# wrote for the win (L-022: nothing here edits a reward or the career).  The AI can lose: the winner's screen then
+# never comes (TIMEOUT), and the racestatus before it says where the player came.
 # tests/mw/checks/race_win.sh wants the load, the win and the save, in that order:
 #   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script race_win.txt \
-#     --marker 'race_win: ALPHA saved' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=20000 --save-out DIR2
+#     --marker 'race_win: ALPHA saved' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=60000 --timeout-scale 3 \
+#     --save-out DIR2
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; profiles_make's tree holds it)
 # (*) The load is quick: "Load complete." is up, taking input with Continue highlighted, 3 frames after the boot
 # list's RETURN.  A RETURN tapped at once is dropped (one 8 or 30 frames on is taken; the dialog shows no change in
@@ -24,21 +31,42 @@
 +0    log race_win: ALPHA loaded
 +0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
 +0    tap RETURN
-+0    waitfng MainMenu_Sub.fng@4b4e388a 600              # its first item: the random Quick Race
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
 +0    tap RETURN
-+0    waitfng Quick_Race_Brief.fng:ba458180 600          # the race's brief takes input
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@4b4e388b 40 600   # Sprint
++0    tap RETURN
++0    waitfng Track_Select.fng:c2d85652:4d36c3b8 600     # "sprint track select", on Seaside & Power Station
++0    tap RETURN
++0    waitfng Track_Options.fng:b80bfc8a@b2980ba8 600    # "sprint options", on Traffic Level
++0    tapuntil LEFT Track_Options.fng:8cdc3937@b2980ba8 40 300   # None
++0    tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980ba9'1 40 300  # 1
++0    tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300             # Difficulty
++0    tapuntil LEFT Track_Options.fng:61973e01@b2980baa 40 300   # Easy
++0    tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300             # Catch Up
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bab 40 300   # Off
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
 +0    tap RETURN
 +0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
 +0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
 +0    log race_win: GO
 +0    autopilot on
-+600  autopilot off
-+0    racewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 40000            # the player's racer finished, over the line
++0    log race_win: finished
++0    racestatus
 +0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
 +0    log race_win: won
 +0    racestatus
 +0    tap RETURN
-+0    waitfng MainMenu_Sub.fng@4b4e388a 1200             # back in the Quick Race sub menu
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388b 1200    # back in the "quick race" menu, on Custom Race
 +0    tap ESCAPE
 +0    waitfng MainMenu.fng@4b4e388c 900                  # the main menu, on Quick Race
 +0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # .. Alias Manager
