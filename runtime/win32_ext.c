@@ -2203,8 +2203,12 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
      * keeps its own count with lock xadd; UG2 imports none).  CreateSemaphoreA(
      * attributes, lInitialCount, lMaximumCount, lpName): NULL with
      * ERROR_INVALID_PARAMETER for a maximum below 1 or an initial count
-     * outside 0..maximum.  A name makes no shared
-     * object here (one process, no other opener), it is only kept for the logs.
+     * outside 0..maximum.  A name is only kept for the logs: on Windows a
+     * second CreateSemaphoreA with the same name opens the first one (and
+     * says ERROR_ALREADY_EXISTS), in the same process too; that is not done
+     * here (CreateEventA and CreateMutexA leave their names out too).  Most
+     * Wanted's wrapper (0x834E3F) passes a name only when its caller set one;
+     * the one semaphore it makes by the main menu has none.
      * ReleaseSemaphore(hSemaphore, lReleaseCount, lpPreviousCount): FALSE with
      * ERROR_INVALID_PARAMETER for a count below 1, ERROR_TOO_MANY_POSTS past the
      * maximum (the count stays), ERROR_INVALID_HANDLE for a handle that is no
