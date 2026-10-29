@@ -16,7 +16,7 @@
 //     --save-out DIR    each scenario's save directory afterwards, as DIR/<scenario>/ (a seed for the next run)
 //     --reg PATH        the registry every scenario starts from, as the server serves it (/tests/seed/X.txt),
 //                       instead of the game's own (Underground 2's registry_perf4_native.txt, Most Wanted's none)
-//     --list           print the scenario table and exit
+//     --list            print the scenario table and exit
 //     --game ID         ug2 (default) or mw: that game's scenario table, test scripts and checks (tests/ or
 //                       tests/mw/: the server, started with --game mw, serves tests/mw/ at /tests/)
 //     --help            this text and the game's scenarios

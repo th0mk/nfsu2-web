@@ -1,10 +1,11 @@
 # Most Wanted: the career saved in free roam loads back into free roam after a restart (TRACKER M4-09, M4-03; L-025).
 # Seeded with the save tree career_start.txt leaves (--save-out; NFSU2_SAVE_SEED), whose ALPHA the free roam's
-# autosave wrote after the prologue, this run loads ALPHA (**) and opens Career:the career menu of an alias with a career has Resume Career (label 0xE072DB21 on 0x4B4E388A), Start New
-# Career (0x17E18F87) and Load (0x0018ECFF), left to right.  Resume Career loads the world (Loading.fng, GameFlow 4;
-# FadeScreen.fng, 5; GameFlow 6) straight into free roam: no race, the car where the career's free roam began (the
-# autosave writes ALPHA again as it starts), and no prologue race replayed (`autopilot races` logs any race that
-# starts).  Then the free drive: Up (gas) held 300 frames moves the car.
+# autosave wrote after the prologue, this run loads ALPHA (**) and opens Career: the career menu of an alias with a
+# career has Resume Career (label 0xE072DB21 on 0x4B4E388A), Start New Career (0x17E18F87) and Load (0x0018ECFF),
+# left to right.  Resume Career loads the world (Loading.fng, GameFlow 4; FadeScreen.fng, 5; GameFlow 6) straight
+# into free roam: no race, the car where the career's free roam began (the autosave writes ALPHA again as it
+# starts), and no prologue race replayed (`autopilot races` logs any race that starts).  Then the free drive: Up
+# (gas) held 300 frames moves the car.
 # tests/mw/checks/career_resume.sh wants the save read, Resume Career, free roam with no race, the car at the free
 # roam's start and moved by the gas:
 #   NFSU2_SAVE_SEED=DIR/career_start node web/tools/run-suite.mjs --game mw --script career_resume.txt \
