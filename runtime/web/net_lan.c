@@ -60,6 +60,7 @@
 #include "net_proto.h"
 #include "lan_vfd.h"
 #include "racenet.h"
+#include "game.h"                  /* g_game.flow_race: NFSU2_TEST_RACE_SILENCE */
 #include <errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -388,6 +389,7 @@ static void icmp_cksum(uint8_t *m, int n){
  * where they sent lately): the latest sender to that address, else a socket
  * connected to it, else the first binder that is not connected elsewhere
  * (a notice an unconnected socket gets is dropped by its next recv). */
+static void race_log(const char *what, uint32_t ip_n, uint16_t sport, uint16_t dport, const uint8_t *p, int n);
 static void unreach_deliver(uint32_t src_n, uint16_t sport, uint16_t dport){
     VSock *sender = 0, *conn = 0, *first = 0; uint32_t best = 0;
     for (int i = 1; i < NVS; i++){
@@ -402,6 +404,12 @@ static void unreach_deliver(uint32_t src_n, uint16_t sport, uint16_t dport){
     VSock *to = sender ? sender : conn ? conn : first;
     if (sender) S.unreach_sender++; else if (conn) S.unreach_conn++; else if (first) S.unreach_first++; else S.unreach_none++;
     if (to) dg_push(to, src_n, sport, 1, 0, 0);
+    if (sport == 3658 || dport == 3658){
+        char w[64]; snprintf(w, sizeof w, "unreachable to socket #%d (%s%s)", to ? (int)(to - g_vs) : -1,
+                             sender ? "its sender" : conn ? "connected to it" : first ? "first binder" : "nobody",
+                             to && to->has_peer ? ", connected" : "");
+        race_log(w, src_n, sport, dport, 0, 0);
+    }
 }
 /* a unicast from v to ip:port on the switch (network order) */
 static void sent_note(VSock *v, uint32_t ip, uint16_t port){
@@ -442,6 +450,58 @@ static void race_note(uint32_t ip_h, int rx){
     }
     s->ip_h = ip_h; s->n++;
     g_race[k].rx_at = now;
+}
+/* NFSU2_TEST_RACE_SILENCE=A:L (test only, TRACKER M8-14, L-139): the race link goes quiet for L seconds, A seconds
+ * after this browser first sent on it while racing (game.h flow_race): every UDP datagram from or to port 3658 is
+ * dropped then, both ways, as an outage that loses them, and the start, the end and the count are logged.  Run on one
+ * instance of a pair, it shows how long the game keeps a race whose peer went silent (g_mu held). */
+static struct { int init, on; uint64_t a_us, l_us, t0, from; uint64_t dropped; int phase; } g_sil;
+static void silence_racing(void){
+    if (!g_sil.init){
+        g_sil.init = 1;
+        const char *e = getenv("NFSU2_TEST_RACE_SILENCE"); double a, l;
+        if (e && sscanf(e, "%lf:%lf", &a, &l) == 2 && a >= 0 && l > 0){
+            g_sil.on = 1; g_sil.a_us = (uint64_t)(a * 1e6); g_sil.l_us = (uint64_t)(l * 1e6);
+            ws_log("virtual LAN: test switch NFSU2_TEST_RACE_SILENCE: the race link goes quiet for %.1f s, %.1f s into "
+                   "the race", l, a);
+        }
+    }
+    if (g_sil.on && !g_sil.t0 && game_flow() == g_game.flow_race){ g_sil.t0 = now_us(); g_sil.from = g_sil.t0 + g_sil.a_us; }
+}
+static int silence_drop(void){
+    if (!g_sil.on || !g_sil.t0) return 0;
+    uint64_t now = now_us();
+    int in = now >= g_sil.from && now < g_sil.from + g_sil.l_us;
+    if (in && g_sil.phase == 0){ g_sil.phase = 1; ws_log("virtual LAN: race link silence starts (NFSU2_TEST_RACE_SILENCE)"); }
+    if (!in && g_sil.phase == 1){
+        g_sil.phase = 2;
+        ws_log("virtual LAN: race link silence ends after %.1f s: %llu datagrams dropped", (double)(now - g_sil.from) / 1e6,
+               (unsigned long long)g_sil.dropped);
+    }
+    if (in) g_sil.dropped++;
+    return in;
+}
+/* NFSU2_VLAN_DEBUG: the race link's datagrams (its first RACE_LOG_N each way per peer, and the first after a pause of
+ * RACE_LOG_GAP_US or more: a link that starts again), every port-unreachable notice and what it did (the race link's
+ * setup: who sent first, before whose bind) (g_mu held) */
+#define RACE_LOG_N 24
+#define RACE_LOG_GAP_US 500000u
+static void race_log(const char *what, uint32_t ip_n, uint16_t sport, uint16_t dport, const uint8_t *p, int n){
+    if (!dbg()) return;
+    static struct { const char *what; uint32_t ip; int k; uint64_t last; } t[32]; static int nt, other;
+    int data = p != 0, i;
+    for (i = 0; i < nt && !(t[i].what == what && t[i].ip == ip_n); i++) {}
+    if (i == nt && nt < 32){ t[nt].what = what; t[nt].ip = ip_n; t[nt].k = 0; t[nt].last = 0; nt++; }
+    uint64_t now = now_us();
+    if (i < nt){
+        int show = t[i].k < RACE_LOG_N || (data && now - t[i].last >= RACE_LOG_GAP_US);
+        t[i].last = now;
+        if (!show) return;
+        t[i].k++;
+    } else if (++other > RACE_LOG_N) return;
+    char b[16], hx[2 * 40 + 1] = "";
+    for (int j = 0; p && j < n && j < 40; j++) snprintf(hx + 2 * j, 3, "%02x", p[j]);
+    ws_log("virtual LAN: race %s %s :%u -> :%u, %d bytes %s", what, ipn(ip_n, b), sport, dport, n, hx);
 }
 
 /* ---- the LAN thread: received frames ------------------------------------------------- */
@@ -497,9 +557,12 @@ static void rx_frame(const net_slot *sl){
             unreach_deliver(src_n, sport, dport);
             break;
         }
+        if (!bc && (sport == RACE_PORT || dport == RACE_PORT) && silence_drop()) break;
         S.udp_in++;
         if (!bc && (sport == RACE_PORT || dport == RACE_PORT)) race_note(sl->src_ip, 1);
-        if (!udp_deliver(src_n, sport, bc ? 0xFFFFFFFFu : own_n(), dport, p, pn, bc) && !bc){
+        int got = udp_deliver(src_n, sport, bc ? 0xFFFFFFFFu : own_n(), dport, p, pn, bc);
+        if (!bc && (sport == RACE_PORT || dport == RACE_PORT)) race_log(got ? "in" : "in, no socket: port unreachable back", src_n, sport, dport, p, pn);
+        if (!got && !bc){
             S.udp_noport++;
             if (auto_ok(sl->src_ip, NET_LAN_HDR))
                 tx(NET_KIND_LAN_UDP, sl->src_ip, dport, sport, NET_LAN_UDP_UNREACH, 64, 0, 0, 0);   /* "ICMP port unreachable" */
@@ -508,6 +571,7 @@ static void rx_frame(const net_slot *sl){
     case NET_KIND_LAN_ICMP:
         if (pn < 8) break;
         S.icmp_in++;
+        race_log(p[0] == 8 ? "icmp echo request in" : p[0] == 0 ? "icmp echo reply in" : "icmp in", src_n, 0, 0, p, pn);
         icmp_deliver(src_n, p, pn);                              /* raw sockets see every ICMP message */
         if (p[0] == 8 && !bc && auto_ok(sl->src_ip, n)){         /* echo request: answered by this "host" */
             uint8_t rep[NET_MAX_PAYLOAD];
@@ -939,6 +1003,7 @@ int vlan_sendto(WsSock *s, const uint8_t *buf, int len, uint32_t ip, uint16_t po
     char b[16];
     if (v->kind == 3){                                            /* ICMP (ProtoPing) */
         S.icmp_out++;
+        race_log(loop || self ? "icmp out (local)" : "icmp out", ip, 0, 0, buf, len);
         if (loop || self){
             if (len >= 8 && buf[0] == 8){
                 uint8_t rep[2048]; int n = len < (int)sizeof rep ? len : (int)sizeof rep;
@@ -966,9 +1031,11 @@ int vlan_sendto(WsSock *s, const uint8_t *buf, int len, uint32_t ip, uint16_t po
         S.udp_bcast_out++;
         udp_deliver(own_n(), v->bport, 0xFFFFFFFFu, port, buf, len, 1);   /* our own copy, as on Windows */
         tx(NET_KIND_LAN_UDP, NET_BROADCAST, v->bport, port, NET_LAN_UDP_DATA, (uint8_t)s->ip_ttl, 0, buf, (uint32_t)len);
+    } else if (in_subnet_h(ip_h) && (port == RACE_PORT || v->bport == RACE_PORT) && (silence_racing(), silence_drop())){
+        /* NFSU2_TEST_RACE_SILENCE: lost on the way */
     } else if (in_subnet_h(ip_h)){
         if (tx(NET_KIND_LAN_UDP, ip_h, v->bport, port, NET_LAN_UDP_DATA, (uint8_t)s->ip_ttl, 0, buf, (uint32_t)len)) sent_note(v, ip, port);
-        if (port == RACE_PORT || v->bport == RACE_PORT) race_note(ip_h, 0);
+        if (port == RACE_PORT || v->bport == RACE_PORT){ race_note(ip_h, 0); race_log(s->has_peer ? "out (connected)" : "out", ip, v->bport, port, buf, len); }
     } else {
         S.udp_outside++;
         static uint32_t said[8]; static int ns;
@@ -992,6 +1059,8 @@ int vlan_recvfrom(WsSock *s, uint8_t *buf, int len, int peek, uint32_t *ip, uint
             /* a connected socket hears of its own peer only (as a kernel
              * matches an ICMP error to a connected socket's peer) */
             int ours = s->has_peer && d->ip == s->raddr && d->port == s->rport;
+            if (v->bport == RACE_PORT || d->port == RACE_PORT)
+                race_log(ours ? "notice read: WSAECONNRESET to the game" : "notice read: dropped (not the connected peer)", d->ip, d->port, v->bport, 0, 0);
             v->qh = d->next; if (!v->qh) v->qt = 0; v->qn--; free(d);
             if (ours){ e = WSAECONNRESET; break; }
             continue;

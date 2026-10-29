@@ -176,7 +176,20 @@ static int parse_ip(const char *s, uint32_t *out){
 void win32_set_last_error(CPU *c, uint32_t e);
 uint32_t win32_get_last_error(CPU *c);
 static _Thread_local CPU *g_curc;                    /* the calling guest thread (one host thread each) */
-static void set_err(int e){ win32_set_last_error(g_curc, (uint32_t)e); }
+/* NFSU2_VLAN_DEBUG: the errors winsock hands the game (not WSAEWOULDBLOCK or WSA_IO_PENDING, the ordinary ones),
+ * each error and caller once, at most WS_ERRLOG lines: what the game saw when a link failed */
+#define WS_ERRLOG 48
+static int ws_dbg(void){ static int v = -1; if (v < 0){ const char *e = getenv("NFSU2_VLAN_DEBUG"); v = e && *e && *e != '0'; } return v; }
+static void err_note(int e, const char *what){
+    if (!ws_dbg() || e == 10035 || e == 997) return;
+    static struct { int e; uint32_t at; } seen[WS_ERRLOG]; static int n;
+    uint32_t at = g_curc ? g_curc->eip : 0;          /* where the game called from (as BLOCKED's lines) */
+    for (int i = 0; i < n; i++) if (seen[i].e == e && seen[i].at == at) return;
+    if (n >= WS_ERRLOG) return;
+    seen[n].e = e; seen[n].at = at; n++;
+    ws_log("error %d to the game%s%s (caller 0x%08x)", e, what ? ": " : "", what ? what : "", at);
+}
+static void set_err(int e){ err_note(e, 0); win32_set_last_error(g_curc, (uint32_t)e); }
 static uint32_t get_err(void){ return win32_get_last_error(g_curc); }
 #define FAIL(e) do { set_err(e); return 0xFFFFFFFFu; } while (0)   /* SOCKET_ERROR / INVALID_SOCKET */
 
@@ -1061,6 +1074,8 @@ static uint32_t ws_closesocket(CPU *c){
     if (need_startup()) return 0xFFFFFFFFu;
     WsSock *s = sget(A(c, 0)); if (!s) FAIL(WSAENOTSOCK);
     if (g_probe.h == A(c, 0)) g_probe.h = 0;          /* deny_tick: no second try on another socket */
+    if (ws_dbg() && s->type != 1) ws_log("closesocket: %s socket 0x%x from 0x%08x", s->type == 3 ? "raw" : "udp", A(c, 0),
+                                         c->eip);
     sclose(s, s->linger_on && !s->linger_s);
     return 0;
 }
@@ -1230,6 +1245,8 @@ static uint32_t ws_connect(CPU *c){
         }
 #endif
         s->has_peer = 1; s->raddr = ip; s->rport = port; s->udp_reset = 0;
+        if (ws_dbg()){ char b[16]; ws_log("connect: %s socket 0x%x -> %s:%u (a default destination) from 0x%08x",
+                                          s->type == 3 ? "raw" : "udp", h, ipstr(ip, b), port, c->eip); }
         return 0;
     }
     if (s->state == ST_CONNECTING) FAIL(WSAEALREADY);
@@ -2030,6 +2047,7 @@ static int ov_recv(WsSock *s, uint32_t h, const uint32_t *buf, const uint32_t *l
 
 /* a receive is over: the OVERLAPPED says how, lpFrom from whom, then its event is set */
 static void ov_finish(const WsOv *o, int e, int got, uint32_t ip, uint16_t port){
+    if (e && e != WSAEMSGSIZE) err_note(e, "an overlapped receive completes with it");
     if (gok(o->ov, 8)){ MR32(o->ov) = ov_status(e); MR32(o->ov + 4u) = (uint32_t)got; }
     if (o->pfrom && (!e || e == WSAEMSGSIZE)) ga_out(o->pfrom, o->pfromlen, ip, port);
     if (o->ev) win32_event_signal_obj(o->ev, o->ev_ser);
