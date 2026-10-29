@@ -120,4 +120,5 @@ void mprot_arm(uint32_t a){ (void)a; }
 static char g_unimpl[64];
 void autotest_note_unimpl(const char *dll, const char *name, uint32_t eip){ (void)dll; (void)eip; snprintf(g_unimpl, sizeof g_unimpl, "%s", name); }
 void autotest_note_screen(const char *nm){ (void)nm; }          /* runtime/mw/fe_mw.c's screens */
+long autotest_frame(void){ return 0; }                          /* and its [fng] lines' frame number */
 #endif
