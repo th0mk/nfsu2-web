@@ -262,15 +262,25 @@ static uint32_t hb_find(uint32_t key){
         if (g_hb[g_hb_map[i]].key == key) return g_hb_map[i];
     return 0;
 }
+/* a host allocation failed, or the table is full: a [mem] line with what holds the memory (a few per site) */
+static void hb_warn(int *said, const char *what, int kind, uint32_t bytes){
+    if ((*said)++ >= 4) return;
+    char ml[768]; heap_census_line(ml, sizeof ml);
+    fprintf(stderr, "[mem] host backing: %s (a %s, %u bytes):%s\n", what, g_gk_name[kind], bytes, ml);
+}
+/* the entry for key, made if new (0: none, the resource then stays in the guest's memory as UG2's do) */
 static uint32_t hb_make(uint32_t key, uint32_t size, int kind){
+    static int said_table, said_full;
     if (!g_hb){ g_hb = calloc(HB_N, sizeof *g_hb); g_hb_map = calloc(HB_N, sizeof *g_hb_map);
-                if (!g_hb || !g_hb_map){ free(g_hb); free(g_hb_map); g_hb = 0; g_hb_map = 0; } }
+                if (!g_hb || !g_hb_map){ free(g_hb); free(g_hb_map); g_hb = 0; g_hb_map = 0;
+                    hb_warn(&said_table, "no memory for its table, resources stay in the guest's memory", kind, size); } }
     if (!g_hb) return 0;
     uint32_t x = hb_find(key);
     if (x) return x;
     if (g_hb_free_head){ x = g_hb_free_head; g_hb_free_head = g_hb[x].key; }
     else if (g_hb_top < HB_N * 3u / 4u) x = g_hb_top++;     /* the map stays at most 3/4 full */
-    else { g_hb_full++; return 0; }
+    else { if (!g_hb_full++) hb_warn(&said_full, "its table is FULL, new resources stay in the guest's memory", kind, size);
+           return 0; }
     g_hb[x] = (HBack){ .key = key, .size = size, .kind = (uint8_t)kind };
     uint32_t i = hb_slot(key) & (HB_N - 1u);
     while (g_hb_map[i]) i = (i + 1u) & (HB_N - 1u);
@@ -380,7 +390,14 @@ static int hb_unlock(uint32_t x, uint32_t w){
     e->locks = 0;
     if (!(e->wflags & 0x10u)){                   /* D3DLOCK_READONLY: nothing written */
         uint8_t *h = hb_host(e, e->wlen);
-        if (h){ memcpy(h, g_mem + w, e->wlen); g_hb_copied += e->wlen; }
+        if (!h){                                  /* no room for the copy: the window, which holds it all, stays */
+            static int said;
+            hb_warn(&said, "no memory for a copy, its window stays in the guest's memory", e->kind, e->wlen);
+            e->pinned = 1; g_hb_pins++;
+            if (e->host){ free(e->host); g_hb_bytes -= e->size; e->host = 0; }
+            return 0;
+        }
+        memcpy(h, g_mem + w, e->wlen); g_hb_copied += e->wlen;
     }
     e->last_unlock = (uint32_t)g_present; if (!e->last_unlock) e->last_unlock = 1;
     hb_park(x, w);
@@ -394,7 +411,10 @@ static BSrc buf_src(uint32_t o, uint32_t off){
     if (x && x < HB_N && g_hb && !g_hb[x].pinned){
         HBack *e = &g_hb[x];
         uint32_t n = MR32(o + 4u);                        /* the buffer's length */
-        if (!e->host && !hb_host(e, n)) return (BSrc){ 0, 0u, 0u };
+        if (!e->host && !hb_host(e, n)){                  /* never written: its zeros */
+            static int said;
+            hb_warn(&said, "no memory for zeros, a draw from a buffer never written is skipped", e->kind, n);
+            return (BSrc){ 0, 0u, 0u }; }
         if (off >= n || off >= e->size) return (BSrc){ 0, 0u, 0u };
         return (BSrc){ e->host + off, 0u, n - off };
     }
