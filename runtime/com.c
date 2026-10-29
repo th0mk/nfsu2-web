@@ -2846,7 +2846,9 @@ int com_call(CPU *c, uint32_t magic){
                 if (metal_available()){
                     uint32_t nprim=A(c,2), vp=A(c,3);
                     uint32_t nv = prim_verts(pt, nprim);
-                    /* points: draw_points (UG2 draws none) */
+                    /* points: draw_points.  UG2 draws none: its 11 DrawPrimitiveUP sites in SPEED2.EXE
+                     * (calls through the device's +0x14C) push the types 6, 5 and 3 only, so its draws
+                     * here are as before (the 3 of a line strip and the 5/6 of a quad have nv >= 2) */
                     if (vp && stride && pt >= 1u && pt <= 6u && nv >= 1u && nv < 4096u &&
                         mem_is_committed(vp) && mem_is_committed(vp + nv*stride - 1))
                         draw_up(pt, nv, vp, stride);
@@ -2900,7 +2902,9 @@ int com_call(CPU *c, uint32_t magic){
                 }
             }
             else if (MID(DrawPrimitive)){
-                /* (this, PrimitiveType, StartVertex, PrimitiveCount): stream 0's vertices (UG2 draws none) */
+                /* (this, PrimitiveType, StartVertex, PrimitiveCount): stream 0's vertices.  UG2 draws none:
+                 * SPEED2.EXE has no call through the device's +0x144, nor DrawIndexedPrimitiveUP's +0x150,
+                 * and its logs name only DrawIndexedPrimitive and DrawPrimitiveUP ([draw-name]) */
                 uint32_t pt=A(c,1), startv=A(c,2), nprim=A(c,3);
                 if (metal_available() && g_ss_vb && g_ss_stride && nprim && nprim < 1000000u){
                     uint32_t vbase = MR32(g_ss_vb+8);
@@ -2909,7 +2913,7 @@ int com_call(CPU *c, uint32_t magic){
             }
             else if (MID(DrawIndexedPrimitiveUP)){
                 /* (this, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData,
-                 *  IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride) (UG2 draws none) */
+                 *  IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride) (UG2 draws none, above) */
                 uint32_t pt=A(c,1), nprim=A(c,4), ip=A(c,5), ifmt=A(c,6), vp=A(c,7), stride=A(c,8);
                 if (metal_available() && ip && vp && nprim && nprim < 1000000u)
                     draw_prims(pt, nprim, vp, stride, ip, ifmt == 102u ? 4u : 2u, 0);
