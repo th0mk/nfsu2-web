@@ -2,8 +2,8 @@
 //   node --test web/test/rig-game.test.mjs
 // 1. Every tool's --help prints its own header comment and then what it has for the game: Underground 2's (the
 //    default) or Most Wanted's, "none yet" with the reason until it has some (run-suite has some); it starts nothing.
-// 2. --game mw stops a tool that has nothing for Most Wanted yet, before it starts a server, a browser or a build;
-//    an unknown game stops every tool.
+// 2. --game mw stops a tool that has nothing for Most Wanted yet, before it starts a server, a browser or a build
+//    (run-suite has something: 6.); an unknown game stops every tool.
 // 3. run-suite: each game's table is the same in --list and --help; Most Wanted's has datafault.
 // 4. requireGame: a server of the other game's module stops the tool; the same game, a module json without a game
 //    (Underground 2's of before) and a server it cannot reach let it go on.
@@ -62,7 +62,8 @@ for (const name of TOOLS) {
     } else assert.match(mw, /^\n\n.+ for NFS Most Wanted \(--game mw\):\n {2}none yet\b.+\n$/);
   });
 
-  test(`${name}: --game mw stops it before it starts anything${FOR_MW.has(name) ? ' (it has something)' : ''}; an unknown game stops it`, () => {
+  // a tool with something for Most Wanted (run-suite) goes on with --game mw: 6. checks what it runs
+  test(`${name}: ${FOR_MW.has(name) ? '' : '--game mw stops it before it starts anything; '}an unknown game stops it`, () => {
     let r;
     if (!FOR_MW.has(name)) {
       r = tool(name, ['--game', 'mw', ...NOWHERE[name]]);
