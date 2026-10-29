@@ -25,8 +25,8 @@
 +0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
 +0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
 +0    loop ${MWK_RUNS}
-+0    tap RETURN
-+0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil RETURN MainMenu_Sub.fng:1f203817 90 900  # Custom Race: "custom race mode select" (a RETURN that
+#                                                       falls in the last one's hold is dropped, so it presses again)
 +0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@${MWK_MODE} 40 600   # the kind
 +0    tap RETURN
 +0    waitfng Track_Select.fng:${MWK_TITLE} 600          # its track list
