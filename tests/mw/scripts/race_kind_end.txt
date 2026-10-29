@@ -1,0 +1,56 @@
+# Most Wanted: Custom Races of one kind on one track driven by the game's AI to the race's own end, MWK_RUNS times in a
+# row (TRACKER M4-05, M4-06): no racewin, so the kind's own rules end the race (its laps, a knockout each lap, the
+# speedtraps' total).  The screens as race_kind.txt's (the kind MWK_MODE and its list's title MWK_TITLE, the track's
+# name label MWK_TRACK; the options as they come, the car the list starts on, automatic gears).  From GO the game's AI
+# drives the player's car (autopilot on, "where" three times in the first 900 frames for its speed) and a trace logs
+# every 300 frames the first four racers' share of the race done (GRacerInfo +0x18, slots 0..3 of GRaceStatus
+# [0x91E000] from +0x18, 0x194 bytes each; slot 0 is the player, racestatus's "player 1: #0") and their finished
+# bytes (+0x21); the race's end screen (the winner's InGamePhotoMaster.fng with its "WINNER" label 0x5DFB6667, or
+# PostRace_Results.fng) within MWK_END frames, then racestatus; Enter until the "quick race" menu is back.
+#   node web/tools/run-suite.mjs --game mw --script race_kind_end.txt --marker 'race_kind_end: done' \
+#     --env MWK_MODE=4b4e388d --env MWK_TITLE=d6d65640 --env MWK_TRACK=4b2a015c --env MWK_RUNS=1 \
+#     --env MWK_END=120000 --env NFSU2_FNG_LOG=3 --env NFSU2_QUIT_FRAMES=400000 --timeout-scale 8
+# tests/mw/checks/race_kind_end.sh counts the passes and prints, for each, the end screen, the player's place and
+# race time and what the trace saw (the racers finished, or out, before the player's end).  (an oracle build also
+# needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    loop ${MWK_RUNS}
++0    tapuntil RETURN MainMenu_Sub.fng:1f203817 90 900  # Custom Race: "custom race mode select" (a RETURN that
+#                                                       falls in the last one's hold is dropped, so it presses again)
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@${MWK_MODE} 40 600   # the kind
++0    tap RETURN
++0    waitfng Track_Select.fng:${MWK_TITLE} 600          # its track list
++0    tapuntil RIGHT Track_Select.fng:${MWK_TITLE}:${MWK_TRACK} 40 3000   # the track
++0    log race_kind_end: track ${MWK_TRACK}
++0    tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the kind's options, on their first row, as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    log race_kind_end: load
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    log race_kind_end: racing
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_kind_end: GO
++0    trace 300 r0=f:[0x0091e000]+0x30 r1=f:[0x0091e000]+0x1c4 r2=f:[0x0091e000]+0x358 r3=f:[0x0091e000]+0x4ec f0=b:[0x0091e000]+0x39 f1=b:[0x0091e000]+0x1cd f2=b:[0x0091e000]+0x361 f3=b:[0x0091e000]+0x4f5
++0    autopilot on
++300  where
++300  where
++300  where
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng ${MWK_END}   # the race's end screen takes input
++0    untrace
++0    log race_kind_end: results
++0    racestatus
++0    autopilot off
++0    tapuntil RETURN MainMenu_Sub.fng:cdf0cc03@4b4e388b 90 1800   # back in the "quick race" menu, on Custom Race
++0    endloop
++0    log race_kind_end: done
++0    close

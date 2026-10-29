@@ -1,7 +1,9 @@
 #!/bin/bash
 # Suite check for "race_kind" (tests/mw/scripts/race_kind.txt, TRACKER M4-05, M4-06): the module under test is
-# named (L-020); every pass picked its track, loaded, reached GO, was finished through the game's finish path
-# (racewin) and showed the race's end screen, every wait in time; no stall report; the game left by WM_CLOSE.
+# named (L-020); every pass picked its track, loaded, reached GO, was ended by the shortcut finish (racewin: three of
+# the calls the race's script makes at the line, before any lap is done, so no lap, knockout or speedtrap total is
+# tested here; race_kind_end.sh has races driven to their own end) and showed the race's end screen, every wait in
+# time; no stall report; the game left by WM_CLOSE.
 # Prints the passes, the end screens, the track and the load times (the transmission's Enter to the race, GameFlow
 # 6, and to GO, in seconds of the page's clock).
 LOG="$1"
@@ -28,5 +30,5 @@ awk -v n="$n" -v t="$t" -v w="$w" '/LOG race_kind: load$/ { match($0, /t=[0-9]+m
      /LOG race_kind: racing$/ { match($0, /t=[0-9]+ms/); r = substr($0, RSTART + 2, RLENGTH - 4); x = (r - l) / 1000; s += x; c++;
                                  if (c == 1 || x < lo) lo = x; if (x > hi) hi = x }
      /LOG race_kind: GO$/ { match($0, /t=[0-9]+ms/); g = (substr($0, RSTART + 2, RLENGTH - 4) - l) / 1000; sg += g }
-     END { printf "%d races on track %s loaded, reached GO, were finished and showed the end screen (%d the winner'"'"'s); load to the race %.1f s mean (%.1f..%.1f), to GO %.1f s mean; ", n, t, w, s / c, lo, hi, sg / c }' "$LOG"
+     END { printf "%d races on track %s loaded, reached GO, were ended by racewin (a shortcut finish) and showed the end screen (%d the winner'"'"'s); load to the race %.1f s mean (%.1f..%.1f), to GO %.1f s mean; ", n, t, w, s / c, lo, hi, sg / c }' "$LOG"
 echo "the game left by WM_CLOSE"

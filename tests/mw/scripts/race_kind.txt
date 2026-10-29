@@ -1,5 +1,8 @@
-# Most Wanted: Custom Races of one kind on one track, from the load to the results screen, MWK_RUNS times in a row
-# (TRACKER M4-05, M4-06).  The kind and the track are picked on the screens (L-021): Quick Race, Custom Race (the
+# Most Wanted: Custom Races of one kind on one track, from the load to the results screen through a shortcut finish,
+# MWK_RUNS times in a row (TRACKER M4-05, M4-06).  The finish is racewin's, MWK_DRIVE frames after GO (1200 in the
+# runs: a race time of about 13 s): no lap is completed, so the kind's own rules (lap counting, a knockout each lap,
+# the speedtraps' total) never come into play here; race_kind_end.txt drives a race of each kind to its own end.
+# The kind and the track are picked on the screens (L-021): Quick Race, Custom Race (the
 # "quick race" menu's 2nd item), the kind in "custom race mode select" (its item MWK_MODE: 4b4e388a Circuit, ..8b
 # Sprint, ..8d Lap Knockout, ..8e Speedtrap; ..8c Drag is race_drag.txt's), then RIGHT in the kind's track list (its
 # title label MWK_TITLE: 3de80a85 circuit, c2d85652 sprint, d6d65640 lap knockout, 3070453a speedtrap) until the
