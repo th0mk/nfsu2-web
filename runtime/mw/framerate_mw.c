@@ -13,7 +13,9 @@
  *                     if dt < P ([+0x20] = 1/60, the constructor's argument pushed at 0x666100):
  *                         SleepEx(trunc((P - dt) * 1000) ms)          (0x64CF00, called from 0x642ED2)
  *                     n = trunc(dt / P + [+0x1C]), [+0x1C] = the rest; 0x642DB0(n) runs n steps of P
- *                   and it returns n * P, the world's time step (0x64A680).
+ *                   (at most 6, 2 while [0x9203AC] is set, 1 while [+0x24] is; mode 5 unlimited; its count
+ *                   in [+0x28]) and it returns n * P, the world's time step (0x64A680), n before those
+ *                   limits.  0x661280's cap keeps n at 5 at most: dt is 4/60 s and a carry.
  * RealTimer there still holds the frame before's time, so the sleep answers the frame before the last:
  * frame times d alternate around d(k+1) = w + P - d(k-1) (w the work), on average (P + w) / 2, and every
  * sleep is in whole ms on the browser's timers (Windows Chrome's workers wake on its 15.6 ms timer).
@@ -28,6 +30,10 @@
  *     the next slot of the content period on the grid locked to the page's display clock (the rAF vsync
  *     feed, gpu_web.c), sleeping with the guest lock released (win32_ext.c guest_sleep_frame_ns: the
  *     learned spin margin and the timer probe), and the frame's dt is its slots x the period, exactly;
+ *     a frame stands for the game's own cap at most (4/60 s: [0x8F8304] x [0x8970F0], or x [0x892B64] =
+ *     0.02 s while [0x8F82F0] is 0; 4 slots at 60, 8 at 120): after a hitch the slots beyond it are
+ *     dropped with the missed ones, so the steps the slots owe stay within what the original steps and
+ *     no debt carries over (UG2's framerate.c keeps the game's 50 ms clamp the same way);
  *   - the step's own sleep is skipped (0x64CF00 from 0x642ED7);
  *   - the step count follows the slots exactly: the slots so far x S / R steps (S the sim rate 1/P, R the
  *     content rate), given to the original through its carry, so 60 is 1 step a frame, 120 is 0, 1, 0, 1,
@@ -59,7 +65,8 @@
  *                              1/60 otherwise); 0 or unset = the game's
  *   NFSMW_RACE_HFR = 1         research only (M7-21): outside the front end too the page's rate, the sim
  *                              at its own (frames that do not step show the one before)
- *   NFSU2_HFR_LOG = 1          one [mwpace] line a second: frames, slots, missed, steps, sleep, work
+ *   NFSU2_HFR_LOG = 1          one [mwpace] line a second: frames, slots, missed, the steps 0x642DB0 ran a
+ *                              frame (its [+0x28] count), frames cut to the cap, sleep, work
  */
 #include "cpu.h"
 #include "game.h"
@@ -81,6 +88,11 @@ int  metal_display_hz(void);            /* gpu_web.c: the page's measured refres
 #define SIM_LAST      0x14u         /*   RealTimer at its last step */
 #define SIM_CARRY     0x1cu         /*   the accumulator's rest, in steps */
 #define SIM_STEP      0x20u         /*   the step P, s */
+#define SIM_RUNS      0x28u         /*   the steps 0x642DB0 ran so far */
+#define A_CAP_MUL     0x008f8304u   /* 4.0: a frame's time is at most this many units (0x6612D3) */
+#define A_CAP_60      0x008f82f0u   /*   nonzero: the unit is 1/60 s ([0x8970F0]), else [0x892B64] (0.02 s) */
+#define A_SIXTIETH    0x008970f0u
+#define A_FIFTIETH    0x00892b64u
 #define A_SIMMODE     0x009b0fa0u   /* 5: the step's clock is 0x735840's (0x6277D0), not RealTimer */
 #define A_SKIP4       0x00925854u   /* the step's argument: 4 steps, no sleep */
 #define A_FLOW        0x00925e90u   /* GameFlowManager's state: 3 front end, 6 racing */
@@ -238,8 +250,9 @@ static int      g_frame_slots = 1;  /* the slots of this frame */
 static uint64_t g_slots_tot = 0;    /* slots since the rate last changed */
 static uint64_t g_steps_tot = 0;    /* steps owed for them: floor(slots x S / R) */
 static double   g_sim_hz_f = 60.0;  /* S of the frame */
-/* statistics: this second and all; steps a frame 0..3, 4+ */
-typedef struct { uint64_t frames, slots, missed, sleep_ns, work_ns, steps[5]; } Stat;
+/* statistics: this second and all; the steps 0x642DB0 ran a frame 0..3, 4+; frames cut to the game's cap
+ * (their slots beyond it count as missed); frames whose steps 0x642DB0 limited below the steps owed */
+typedef struct { uint64_t frames, slots, missed, sleep_ns, work_ns, steps[5], cut, short_run; } Stat;
 static Stat g_sec, g_tot;
 static uint64_t g_t_open = 0, g_sec_t0 = 0, g_rtf_undone = 0;
 
@@ -247,17 +260,28 @@ static void stat_close(uint64_t now){
     if (!g_sec_t0) g_sec_t0 = now;
     if (now - g_sec_t0 < 1000000000ull) return;
     if (g_log && g_sec.frames)
-        fprintf(stderr, "[mwpace] rate %d flow %u: %llu frames, %llu slots, %llu missed, steps 0:%llu 1:%llu 2:%llu 3:%llu 4+:%llu, "
-                "sleep %.2f ms/f, work %.2f ms/f\n", atomic_load(&g_rate_now), MR32(A_FLOW),
+        fprintf(stderr, "[mwpace] rate %d flow %u: %llu frames, %llu slots, %llu missed, steps run 0:%llu 1:%llu 2:%llu 3:%llu 4+:%llu, "
+                "%llu cut to the cap, %llu short, sleep %.2f ms/f, work %.2f ms/f\n", atomic_load(&g_rate_now), MR32(A_FLOW),
                 (unsigned long long)g_sec.frames, (unsigned long long)g_sec.slots, (unsigned long long)g_sec.missed,
                 (unsigned long long)g_sec.steps[0], (unsigned long long)g_sec.steps[1], (unsigned long long)g_sec.steps[2],
                 (unsigned long long)g_sec.steps[3], (unsigned long long)g_sec.steps[4],
+                (unsigned long long)g_sec.cut, (unsigned long long)g_sec.short_run,
                 g_sec.sleep_ns / 1e6 / (double)g_sec.frames, g_sec.work_ns / 1e6 / (double)g_sec.frames);
     g_tot.frames += g_sec.frames; g_tot.slots += g_sec.slots; g_tot.missed += g_sec.missed;
     g_tot.sleep_ns += g_sec.sleep_ns; g_tot.work_ns += g_sec.work_ns;
+    g_tot.cut += g_sec.cut; g_tot.short_run += g_sec.short_run;
     for (int i = 0; i < 5; i++) g_tot.steps[i] += g_sec.steps[i];
     memset(&g_sec, 0, sizeof g_sec);
     g_sec_t0 = now;
+}
+
+/* the most slots a frame stands for: the game's cap on a frame's time (0x6612D3), in whole slots */
+static int cap_slots(int rate){
+    double unit = MR32(A_CAP_60) ? (double)MRF32(A_SIXTIETH) : (double)MRF32(A_FIFTIETH);
+    double cap = (double)MRF32(A_CAP_MUL) * unit;
+    if (!(cap > 0.0 && cap < 1.0)) cap = 4.0 / 60.0;
+    int k = (int)floor(cap * (double)rate + 1e-6);
+    return k < 1 ? 1 : k;
 }
 
 /* MainLoop's real time 0x661280 (cdecl, [esp+4] = the frame's dt in s, from WinMain's QPC ticker) */
@@ -278,6 +302,8 @@ void sub_00661280(CPU *c){
         uint64_t slept = 0, missed = 0;
         int slots = pace(g_lockstep && g_lock_wall > 0 ? g_lock_wall : rate, &slept, &missed);
         if (g_lockstep){ slots = 1; missed = 0; }
+        int most = cap_slots(rate);
+        if (slots > most){ missed += (uint64_t)(slots - most); slots = most; g_sec.cut++; }
         MRF32(c->esp + 4u) = (float)((double)slots / rate);
         g_paced = 1; g_rate_f = rate;
         g_frame_slots = slots; g_slots_tot += (uint64_t)slots;
@@ -303,25 +329,30 @@ void sub_00642e60(CPU *c){
     float P = MRF32(sim + SIM_STEP);
     int skip4 = MR8(c->esp + 4u) != 0;
     long owed = -1;
-    if (g_paced == 1 && P > 0.f && MR32(A_SIMMODE) != 5u && !skip4){
+    if (g_paced == 1 && P > 0.f){
         /* the steps the slots owe: floor(slots x S / R), S = 1/P (60 = the game's 1/60 within float) */
         double S = 1.0 / (double)P;
         double sr = floor(S + 0.5); if (fabs(S - sr) < 1e-3 * S) S = sr;
         if (S != g_sim_hz_f){ g_sim_hz_f = S; g_slots_tot = (uint64_t)g_frame_slots; g_steps_tot = 0; }
         uint64_t want = (uint64_t)floor((double)g_slots_tot * S / (double)g_rate_f + 1e-9);
-        owed = (long)(want - g_steps_tot);
-        g_steps_tot = want;
-        /* the original computes n = trunc(dt / P + carry) with dt from RealTimer as it does: a carry
-         * that puts dt / P + carry at owed + 0.5 makes n = owed, whatever its rounding */
-        int32_t d = (int32_t)(MR32(A_REALTIMER) - MR32(sim + SIM_LAST));
-        double dt = (double)d * 0.00025;
-        if (d > 0) MRF32(sim + SIM_CARRY) = (float)((double)owed + 0.5 - dt / (double)P);
-        else owed = 0;               /* dt <= 0: the original steps not (and keeps its carry) */
+        long due = (long)(want - g_steps_tot);
+        g_steps_tot = want;          /* steps a frame does not take here are dropped: no debt */
+        if (MR32(A_SIMMODE) != 5u && !skip4){
+            /* the original computes n = trunc(dt / P + carry) with dt from RealTimer as it does: a carry
+             * that puts dt / P + carry at owed + 0.5 makes n = owed, whatever its rounding */
+            int32_t d = (int32_t)(MR32(A_REALTIMER) - MR32(sim + SIM_LAST));
+            double dt = (double)d * 0.00025;
+            owed = due;
+            if (d > 0) MRF32(sim + SIM_CARRY) = (float)((double)owed + 0.5 - dt / (double)P);
+            else owed = 0;           /* dt <= 0: the original steps not (and keeps its carry) */
+        }
     }
+    uint32_t runs0 = MR32(sim + SIM_RUNS);
     sub_00642e60_orig(c);
     if (owed >= 0) MRF32(sim + SIM_CARRY) = 0.f;     /* no rest of its own: the slots keep it */
-    int n = owed >= 0 ? (int)owed : -1;
-    if (n >= 0) g_sec.steps[n < 4 ? n : 4]++;
+    uint32_t ran = MR32(sim + SIM_RUNS) - runs0;     /* what 0x642DB0 ran, after its own limits */
+    g_sec.steps[ran < 4u ? ran : 4u]++;
+    if (owed > (long)ran) g_sec.short_run++;
 }
 
 /* the sleep 0x64CF00 (cdecl ms; SleepEx(ms, TRUE) through 0x7EC298): the step's limiter sleep is the
@@ -385,12 +416,14 @@ void hfr_report(void){
     if (!g_tot.frames) return;
     fprintf(stderr, "\n=== frame rate (Most Wanted): mode %s, display %d Hz, content rate %d%s%s ===\n", mode_name(),
             display_hz(), atomic_load(&g_rate_now), g_lockstep ? ", LOCKSTEP" : "", g_sim_hz > 0 ? ", sim rate set" : "");
-    fprintf(stderr, "  %llu frames, %llu slots, %llu missed, %llu on the vsync grid; steps a frame 0:%llu 1:%llu 2:%llu 3:%llu 4+:%llu; "
+    fprintf(stderr, "  %llu frames, %llu slots, %llu missed, %llu on the vsync grid; steps run a frame 0:%llu 1:%llu 2:%llu 3:%llu 4+:%llu; "
             "sleep %.2f ms/f, work %.2f ms/f\n",
             (unsigned long long)g_tot.frames, (unsigned long long)g_tot.slots, (unsigned long long)g_tot.missed,
             (unsigned long long)g_lock_ok, (unsigned long long)g_tot.steps[0], (unsigned long long)g_tot.steps[1],
             (unsigned long long)g_tot.steps[2], (unsigned long long)g_tot.steps[3], (unsigned long long)g_tot.steps[4],
             g_tot.sleep_ns / 1e6 / (double)g_tot.frames, g_tot.work_ns / 1e6 / (double)g_tot.frames);
+    fprintf(stderr, "  %llu frames cut to the game's cap on a frame's time; %llu frames 0x642DB0 ran fewer steps than owed\n",
+            (unsigned long long)g_tot.cut, (unsigned long long)g_tot.short_run);
     fprintf(stderr, "  RealTimeFrames' forced one undone %llu times; front-end camera frames: %llu without a step, %llu with\n",
             (unsigned long long)g_rtf_undone, (unsigned long long)g_cam_zero, (unsigned long long)g_cam_step);
 }
