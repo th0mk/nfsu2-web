@@ -9,6 +9,7 @@ the game's per-frame anchor: `racewin` (a shortcut finish: the player is finishe
 calls the race's script makes at the line), `autopilot on|off` (the game's AI drives the player's car), `teleport X Y
 Z DX DY DZ`, `where`, `racestatus` and `frames`.
 
-The races: `race_frames.txt` (one Quick Race, the anchor counted over 10,000 frames), `race_loop.txt` (25 Quick
+The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of
+the race), `race_loop.txt` (25 Quick
 Races in a row, each ended by `racewin`) and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the
 line, saved; seeded with `profiles_make.txt`'s saves).
