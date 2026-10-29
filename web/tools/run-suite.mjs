@@ -162,11 +162,23 @@ const run = opt.run || `suite-${stamp}`;
 const OUT = path.join(ROOT, 'out/web/runs', run);
 fs.mkdirSync(OUT, { recursive: true });
 const extraEnv = Object.fromEntries(opt.env.map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)]));
+// Most Wanted's module with the D3DX oracle ("oracle":1 in /game.json, web/build.sh) loads d3dx9_26.dll before the
+// game's entry point, from the page's save folder: without a seed holding it and NFSMW_D3DX naming it the start
+// stops at its first effect import (an unimplemented D3DXCreateEffectPool), so the runs would fail for that alone
+const ORACLE_SEED = 'this module has the D3DX oracle, which loads d3dx9_26.dll from the save folder: ' +
+  'NFSU2_SAVE_SEED=<a folder holding it> and --env NFSMW_D3DX=/save/d3dx9_26.dll (tests/mw/scripts/boot_menu.txt)';
+if (GAME === 'mw' && !(SEED && extraEnv.NFSMW_D3DX) && await isOracle(opt.base))
+  for (const s of scen) s.blocked ??= ORACLE_SEED;
 
 // the imports a run of this game has reviewed (G-01: an [hle] UNIMPLEMENTED line off the list fails a run)
 const REVIEWED = readReviewed(GAME);
 
 const saveName = s => `suite-${run}-${s.name}`.replace(/[^\w.-]/g, '_');
+
+// the module the server sends has the D3DX oracle ("oracle":1 in its /game.json); false when there is no json
+async function isOracle(base) {
+  try { return !!(await (await fetch(new URL('game.json', base.replace(/\/*$/, '/')))).json())?.oracle; } catch { return false; }
+}
 
 function urlFor(s) {
   const env = { ...SUITE_ENV, ...Object.fromEntries(s.extra.split(/\s+/).filter(Boolean).map(e => e.split('='))), ...extraEnv };

@@ -9,7 +9,9 @@
 //    (Underground 2's of before) and a server it cannot reach let it go on.
 // 5. moduleLine: the module a server sends in one line (revision, game, lift, hash, and the stamp where the json
 //    has one); run-suite prints it first.
-// Ports: NFSU2_TEST_RIG_PORT1 (8539) and NFSU2_TEST_RIG_PORT2 (8540), the stand-in servers of 4 and 5.
+// 6. run-suite --game mw with no scenario named takes Most Wanted's table; on a module with the D3DX oracle and no
+//    D3DX seed it runs none of it and says why (no browser starts).
+// Ports: NFSU2_TEST_RIG_PORT1 (8539) and NFSU2_TEST_RIG_PORT2 (8540), the stand-in servers of 4, 5 and 6.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -162,4 +164,31 @@ test('moduleLine: the module the server sends, in one line; run-suite prints it 
   assert.equal(r.code, 2);
   assert.equal(r.out, `module: rev 6ea741b+, game ug2, lift ${LIFT}, hash AbC-12_x\n`);
   assert.match(r.err, /unknown scenario nosuchscenario/);
+});
+
+test('run-suite --game mw: its table; on a D3DX oracle module without the D3DX seed, none of it runs', async t => {
+  const server = http.createServer((q, s) => {
+    if (q.url === '/test/hostcheck.html') { s.end('<!doctype html>'); return; }
+    if (q.url === '/game.json') { s.end(JSON.stringify({ rev: 'abc', lift: '', game: 'mw', stamp: 'x', module: 'h', oracle: 1 })); return; }
+    s.statusCode = 404; s.end();
+  });
+  await new Promise((r, j) => { server.once('error', j); server.listen(P1, '127.0.0.1', r); });
+  t.after(() => server.close());
+  const run = `rig-game-test-${process.pid}`;
+  t.after(() => fs.rmSync(path.join(REPO, 'out/web/runs', run), { recursive: true, force: true }));
+  const env = { ...process.env };
+  delete env.NFSU2_SAVE_SEED;
+  const r = await new Promise(res => {
+    const c = spawn(process.execPath, [path.join(REPO, 'web/tools/run-suite.mjs'), '--game', 'mw', '--base', `http://127.0.0.1:${P1}`,
+      '--run', run], { cwd: REPO, env });
+    let out = '', err = '';
+    c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { err += d; });
+    c.on('exit', code => res({ code, out, err }));
+  });
+  assert.equal(r.code, 0, r.out + r.err);
+  const table = tool('run-suite', ['--game', 'mw', '--list']).stdout.split('\n').filter(Boolean).map(l => l.split(' ')[0]);
+  assert.ok(table.length >= 1);
+  assert.match(r.out, new RegExp(`\\(NFS Most Wanted\\): 0 passed, 0 failed, ${table.length} not runnable yet\\n`));
+  for (const name of table)
+    assert.match(r.out, new RegExp(`^\\| ${name} \\| not runnable yet \\| - \\| - \\| this module has the D3DX oracle, .*NFSU2_SAVE_SEED=.*NFSMW_D3DX=`, 'm'));
 });
