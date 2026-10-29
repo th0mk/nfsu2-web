@@ -189,6 +189,18 @@ export class Encoder {
     }
   }
 
+  /** a translated module the game registered (Op.ShaderVs / Op.ShaderPs): id, WGSL text, and a pixel module's
+   *  binding kinds (8 stages) */
+  private shaderPut(vs: boolean, id: number, text: string, kinds: number): void {
+    const mod = this.module(`${vs ? 'vs' : 'ps'}_${id}`, text);
+    (vs ? this.vsMods : this.psMods).set(id, mod);
+    if (!vs && this.stages === 8) this.psKinds.set(id, kinds);
+    if (this.logShaders) this.log(`[shader ${vs ? 'vs' : 'ps'}_${id}]\n${text}\n[/shader]`);
+    const h = fnv(text);
+    if (vs) { this.vsHash.set(id, h); this.vsByHash.set(h, id); } else { this.psHash.set(id, h); this.psByHash.set(h, id); }
+    this.warmUp();
+  }
+
   private module(label: string, code: string): GPUShaderModule {
     const m = this.device.createShaderModule({ label, code });
     m.getCompilationInfo().then(ci => { for (const e of ci.messages) if (e.type === 'error') this.log(`[gpu] WGSL ${label}:${e.lineNum}: ${e.message}`); });
@@ -237,17 +249,9 @@ export class Encoder {
         case Op.TexFree: if (this.watchTex.has(a0)) this.log(`[watch] tex ${a0} free`); this.texFree(a0); break;
         case Op.PoolGrow: this.poolGrow(a0); break;
         case Op.PoolWrite: if (this.pool && a0 + a1 <= this.pool.size) this.queue.writeBuffer(this.pool, a0, this.u8, data, a1); break;
-        case Op.ShaderVs: case Op.ShaderPs: {
-          const text = new TextDecoder().decode(this.u8.slice(data, data + Math.max(0, a1 - 1)));
-          const mod = this.module(`${op === Op.ShaderVs ? 'vs' : 'ps'}_${a0}`, text);
-          (op === Op.ShaderVs ? this.vsMods : this.psMods).set(a0, mod);
-          if (op === Op.ShaderPs && this.stages === 8) this.psKinds.set(a0, a2);
-          if (this.logShaders) this.log(`[shader ${op === Op.ShaderVs ? 'vs' : 'ps'}_${a0}]\n${text}\n[/shader]`);
-          const h = fnv(text);
-          if (op === Op.ShaderVs) { this.vsHash.set(a0, h); this.vsByHash.set(h, a0); } else { this.psHash.set(a0, h); this.psByHash.set(h, a0); }
-          this.warmUp();
+        case Op.ShaderVs: case Op.ShaderPs:
+          this.shaderPut(op === Op.ShaderVs, a0, new TextDecoder().decode(this.u8.slice(data, data + Math.max(0, a1 - 1))), a2);
           break;
-        }
         case Op.ZForget: if (a0 < 64 && this.zTex[a0]) { this.zTex[a0]!.destroy(); this.zTex[a0] = undefined; this.zView[a0] = undefined; } break;
         default: this.log(`[gpu] unknown resource op ${op}`);
       }
@@ -551,6 +555,14 @@ export class Encoder {
     return k;
   }
 
+  /** the pipeline key of a draw's state (-1: not drawable): blend, pixel module id ps (psKey's field), vertex module
+   *  id vs, cull, depth mode dm, alpha test off nd, depth-bias slot zs (biasKey's); the draws and the warm-up alike */
+  private pipeKey(blend: number, ps: number, vs: number, cull: number, dm: number, nd: boolean, zs: number): number {
+    const pk = this.psKey(ps);
+    if (pk < 0) return -1;
+    return blend + pk * 262144 + vs * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0) + zs * 70368744177664;
+  }
+
   /** a stage's texture of binding kind `kind` (0 2D, 1 cube, 2 depth), or that kind's stand-in: also for the pass's
    *  own target or Z (WebGPU allows no texture as attachment and binding in one pass) */
   private texForKind(id: number, kind: number, passTex: number, passZ: number): Tex {
@@ -586,10 +598,11 @@ export class Encoder {
     this.device.popErrorScope().then(e => { if (e) { this.log(`[gpu] pipeline ps=${ps} vs=${vs} blend=${blend.toString(16)}: ${e.message}`); this.pipes.set(key, null); } });
     this.pipes.set(key, p);
     this.pipelinesMade++; this.pipelinesSync++;
-    // remember it for the next session, by the modules' text hashes
+    // remember it for the next session, by the modules' text hashes (the state: blend, cull, depth mode, alpha test
+    // off, depth bias; an entry from before the bias has none there)
     const vh = this.vsHash.get(vs), ph = this.psHash.get(ps);
     if (vh !== undefined && ph !== undefined) {
-      const st = blend + cull * 262144 + dm * 1048576 + (nd ? 67108864 : 0), k = `${vh}:${ph}:${st}`;
+      const st = blend + cull * 262144 + dm * 1048576 + (nd ? 67108864 : 0) + zb * 134217728, k = `${vh}:${ph}:${st}`;
       if (!this.warmSeen.has(k)) { this.warmSeen.add(k); this.warmList.push({ v: vh, p: ph, s: st }); this.warmDirty = true; }
     }
     return p;
@@ -622,10 +635,14 @@ export class Encoder {
     this.warmTodo = this.warmTodo.filter(e => {
       const vs = this.vsByHash.get(e.v), ps = this.psByHash.get(e.p);
       if (vs === undefined || ps === undefined) return true;
-      const blend = e.s % 262144, cull = Math.floor(e.s / 262144) % 4, dm = Math.floor(e.s / 1048576) % 64, nd = e.s >= 67108864;
-      const key = blend + ps * 262144 + vs * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0);
-      if (this.pipes.has(key)) return false;
-      const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd);
+      const blend = e.s % 262144, cull = Math.floor(e.s / 262144) % 4, dm = Math.floor(e.s / 1048576) % 64;
+      const nd = Math.floor(e.s / 67108864) % 2 === 1, zb = Math.floor(e.s / 134217728) % 256;
+      // the key the draws use: a depth variant's module id through its slot, the bias through its slot
+      const zs = zb ? this.biasKey(zb) : 0;
+      if (zs < 0) return false;
+      const key = this.pipeKey(blend, ps, vs, cull, dm, nd, zs);
+      if (key < 0 || this.pipes.has(key)) return false;
+      const desc = this.pipeDesc(key, blend, ps, vs, cull, dm, nd, zb);
       if (!desc) return false;
       this.device.createRenderPipelineAsync(desc).then(p => {
         if (!this.pipes.has(key)) { this.pipes.set(key, p); this.pipelinesMade++; this.pipelinesAsync++; }
@@ -854,12 +871,11 @@ export class Encoder {
       let psEff = psid > 0 && this.psMods.has(psid) ? psid : psb > 0 && this.psMods.has(psb) ? psb : psb >= PSCUBE ? PSCUBE : 0;
       if (psEff === 0 && t0 && this.tex[t0]?.cube) psEff = PSCUBE;
       const nd = !(aref > 0);
-      const pk = psEff < 512 ? psEff : this.psKey(psEff);
-      if (pk < 0) { skipped++; continue; }
       // the depth bias (8 stages, gpu_proto.h GW_ZBIAS_SHIFT) as a slot 0..3 of the key's top bits
       const zb = realZ ? depth >>> P.ZBIAS_SHIFT : 0, zs = zb ? this.biasKey(zb) : 0;
       if (zs < 0) { skipped++; continue; }
-      const key = blend + pk * 262144 + vsid * 268435456 + cull * 137438953472 + dm * 549755813888 + (nd ? 35184372088832 : 0) + zs * 70368744177664;
+      const key = this.pipeKey(blend, psEff, vsid, cull, dm, nd, zs);
+      if (key < 0) { skipped++; continue; }
       let pipe = key === lastKey ? lastPipe : this.pipes.get(key);
       if (pipe === undefined) pipe = this.pipeline(key, blend, psEff, vsid, cull, dm, nd, zb);
       lastKey = key; lastPipe = pipe;
