@@ -209,8 +209,8 @@ static void gbuf_free(uint32_t p){
  * (a texture's level slot, a buffer's +8), which is 0 while nothing is locked.
  * Lock: a window of the whole buffer or level, as D3D9's managed copy is one
  * mapping (a game may touch bytes outside the range it locked), filled from the
- * copy (unless the copy was never written, or the lock discards), the pointer at
- * the locked offset; Unlock: the window back into the copy (unless the lock was
+ * copy (zeros if it was never written; also for D3DLOCK_DISCARD, which is valid
+ * on dynamic resources only), the pointer at the locked offset; Unlock: the window back into the copy (unless the lock was
  * read-only) and freed.  Locks nest as D3D9 counts them: a Lock before the
  * Unlock points into the same window, which stays until the last Unlock and is
  * written back unless every Lock of the nest was read-only.  Draws read a
@@ -303,12 +303,14 @@ static uint32_t hb_lock(uint32_t x, uint32_t len, uint32_t flags){
     if (len < e->size) len = e->size;
     uint32_t w = gbuf_alloc_kz(len, e->kind, !e->host);
     if (!w) return 0;
-    if (e->host && !(flags & 0x2000u)){           /* D3DLOCK_DISCARD: nothing to keep */
+    /* D3DLOCK_DISCARD and NOOVERWRITE are valid on dynamic resources only, and these are static: a
+     * DISCARD Lock still shows the old bytes, as the managed copy does, so bytes it leaves unwritten stay */
+    if (e->host){
         uint32_t n = e->size < len ? e->size : len;
         memcpy(g_mem + w, e->host, n);
         if (n < len) memset(g_mem + w + n, 0, len - n);
         g_hb_copied += n; g_hb_copyin += n;
-    } else if (e->host) memset(g_mem + w, 0, len);
+    }
     g_hb_locks++; if (e->host) g_hb_relocks++;
     e->wlen = len; e->wflags = flags; e->locks = 1;
     if (pin){ e->pinned = 1; g_hb_pins++;

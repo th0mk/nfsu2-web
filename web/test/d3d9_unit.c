@@ -737,6 +737,17 @@ static void t_hostback(void){
           MR8(q + 4) == 0x5E ? "kept" : "lost");
     tex_unlock(t); release(t);
 
+    /* DISCARD on a static buffer or texture (valid only on DYNAMIC ones): the bytes not written stay */
+    vb = vb_make(N); p = vb_lock(vb, 0, 0, 0); pat(p, N, 4); vb_unlock(vb);
+    p = vb_lock(vb, 300, 16, LK_DISC); if (p) memset(g_mem + p, 0xCC, 8); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO); int dv = is_byte(q + 300, 8, 0xCC) && is_pat(q + 308, N - 308, PAT_AT(4, 308)) && is_pat(q, 300, 4); vb_unlock(vb);
+    release(vb);
+    t = tex_make(64, 64); p = tex_lock(t, 0); pat(p, 64*64*4, 6); tex_unlock(t);
+    p = tex_lock(t, LK_DISC); if (p) memset(g_mem + p, 0xCC, 8); tex_unlock(t);
+    q = tex_lock(t, LK_RO); int dt = is_byte(q, 8, 0xCC) && is_pat(q + 8, 64*64*4 - 8, PAT_AT(6, 8)); tex_unlock(t);
+    release(t);
+    check(dv && dt, "hb-discard-static", "8 of a DISCARD Lock's bytes written, the rest kept: buffer %d, texture %d", dv, dt);
+
     /* locked every frame: the data of the last Lock, and a Lock of part points into the same window */
     vb = vb_make(N);
     for (int i = 0; i < 8; i++){ p = vb_lock(vb, 0, 0, 0); pat(p, N, (uint8_t)(20 + i)); vb_unlock(vb); present(); }

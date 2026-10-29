@@ -53,7 +53,8 @@ const PRIMS = (game) => {
   return all;
 };
 const HOSTBACK = ['hb-roundtrip', 'hb-partial', 'hb-nooverwrite', 'hb-past-range', 'hb-nested', 'hb-nested-disjoint',
-  'hb-nested-readonly', 'hb-tex-nested', 'hb-per-frame', 'hb-tex-roundtrip', 'hb-reset', 'hb-no-leak', 'hb-many'];
+  'hb-nested-readonly', 'hb-tex-nested', 'hb-discard-static', 'hb-per-frame', 'hb-tex-roundtrip', 'hb-reset', 'hb-no-leak',
+  'hb-many'];
 
 test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every primitive type', { skip }, () => {
   const { out, ok } = run('mw');
