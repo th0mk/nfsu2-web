@@ -46,7 +46,9 @@
  * driver gives it gas.  Wanting under 0.5 (a car ahead, a dead end) it still brakes, toward the wanted speed
  * instead of the cap; on 0x411820's path that skips the cap (0x411A2C) dT is not read and the target is the
  * same either way.  dT is read nowhere else in 0x411820 (checked over its stack slots); a moving car, or one
- * whose cap already reaches 0.5, keeps the game's.
+ * whose cap already reaches 0.5, keeps the game's.  It does not do what it is for: in a lockstep race at 120
+ * (traffic at its 60 Hz cadence) a car at 0.0000 m/s got target 0.55 at each of 62 thinks, 10 s, and did not
+ * move, so the stop needs more than the target (TRACKER M7-21).
  *
  * Options (test only): NFSMW_HFR_AILOG=1 logs AIActionTraffic's speed for a car under 0.6 m/s ("[hfrai]",
  * BRAKE when the target is under the driver's 0.5), =2 for every car (the first 4000); NFSMW_HFR_TASKS=0 turns the cadence fix off;
