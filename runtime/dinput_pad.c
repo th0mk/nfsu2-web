@@ -113,7 +113,7 @@ static int pad_log(void){
     if (l < 0) l = gamepad_env_flag("NFSU2_PAD_LOG", 0);
     return l;
 }
-/* for the games' pad files (pad_ug2.c, mw/pad_mw.c) */
+/* for a game's own pad code (runtime/pad_ug2.c; Most Wanted has only game_mw.c's table) */
 int dipad_on(void){ return pad_mode() != MODE_OFF; }
 int dipad_log(void){ return pad_log(); }
 /* the game's own search for controllers (game.h pad_rescan), on or off; nothing for a game without one */
@@ -263,7 +263,7 @@ int dipad_guid(uint32_t g){
     return MR8(g + 15) == 0x01 ? 1 : MR8(g + 15) == 0x02 ? 2 : 0;
 }
 /* A HID-style product GUID {PIDVID-0000-0000-0000-504944564944}; the VID/PID
- * collide with none of the game's own lists (0x7fe7f8, 0x800588, 0x5cef00). */
+ * collide with none of a game's own controller lists (UG2's: runtime/pad_ug2.c). */
 static uint32_t family_vidpid(int fam, int wheel){
     if (wheel) return 0x55451209u;                    /* pid.codes test range, as the generic pad */
     switch (fam){
@@ -730,8 +730,8 @@ static int64_t ff_dev_call(CPU *c, const char *nm, const uint32_t *a){
         if (!dipad_ff_on()) return DIERR_UNSUPPORTED;
         int k = guid_kind(g);
         if (!k || !pp) return DIERR_INVALIDPARAM;
-        /* The game changes a rumble by Unload (0x5bfff0) and a new effect, and
-         * never releases the old one: on Windows Unload frees the effect's
+        /* UG2 changes a rumble by Unload and a new effect (runtime/pad_ug2.c),
+         * and never releases the old one: on Windows Unload frees the effect's
          * place in the device, so an unloaded effect's slot is taken once
          * none is free (64 changes in, every CreateEffect failed, and the game
          * logged two errors every frame from then on). */
@@ -900,9 +900,13 @@ uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
         }
         return DI_OK;
     }
-    /* An unplugged pad fails GetDeviceState only: 0x5c8700 polls first and,
-     * when Poll fails, just re-acquires and returns, so only a failing
-     * GetDeviceState reaches the game's release path (0x5c883f). */
+    /* An unplugged pad fails GetDeviceState only, never Poll or Acquire.  UG2
+     * polls first and, when Poll fails, just re-acquires and returns, so only
+     * a failing GetDeviceState reaches its release path (runtime/pad_ug2.c).
+     * Most Wanted, when Poll fails, calls Acquire again for as long as it
+     * answers DIERR_INPUTLOST, with no other way out of that loop
+     * (runtime/mw/game_mw.c): Acquire must never answer DIERR_INPUTLOST, or
+     * Most Wanted spins in that loop for good. */
     if (!strcmp(nm, "Poll"))    return DI_NOEFFECT;
     if (!strcmp(nm, "Acquire")) return DI_OK;
     if (!strcmp(nm, "Unacquire") || !strcmp(nm, "SetCooperativeLevel") ||

@@ -132,9 +132,12 @@ static const uint32_t mw_modes[][2] = {
  * enumeration, DI8DEVCLASS_GAMECTRL with callback 0x6D81D0 and no pvRef from
  * 0x6DC5AD on another IDirectInput8 ([0x982D14]), keeps force-feedback
  * devices in [0x93DF00 + 4n]; it gets a controller there at the start only.
- * Every frame the pad's poll (0x7F28A4) does Poll (Acquire again while it
- * fails with DIERR_INPUTLOST), then GetDeviceState with 0x110 bytes
- * (0x7F2918), and keeps the state at device +0x234 (axes, then one dword per
+ * Every frame the pad's poll (0x7F28A4) does Poll; when that fails it calls
+ * Acquire, and while Acquire answers DIERR_INPUTLOST it calls it again with
+ * SleepEx(0, TRUE) between (0x7F28EC..0x7F2904, no other way out), then
+ * returns without a state, so dinput_pad.c's Poll and Acquire never fail.
+ * Otherwise it does GetDeviceState with 0x110 bytes (0x7F2918) and keeps
+ * the state at device +0x234 (axes, then one dword per
  * button from +0xC, the POVs at +0x220).
  * The actions read it through the binding table [0x91F418] (0x3DC dwords,
  * the defaults at 0x8F6D80, 0x628410): per action a name and four bindings

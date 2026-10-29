@@ -13,7 +13,9 @@
  *     level EXCLUSIVE|FOREGROUND, EnumObjects -> DIPROP_RANGE -10000..10000
  *     per axis (0x5c8660), DIDOI_FFACTUATOR objects counted in [0x86ff80].
  *   - Every frame 0x5c8700 does Poll + GetDeviceState(DIJOYSTATE2) into
- *     0x86ffc0 + slot*0x110 (DIERR_INPUTLOST releases the slot).
+ *     0x86ffc0 + slot*0x110 (DIERR_INPUTLOST releases the slot).  When Poll
+ *     fails it just re-acquires and returns, so only a failing GetDeviceState
+ *     reaches the release path (0x5c883f): dinput_pad.c fails that alone.
  *   - 0x5ca690 gives each slot a free input channel (0x874c40 + n*0x370);
  *     0x5c11a0 sets that channel's defaults: button/POV -> action tables at
  *     +0x18 (in game), +0x98 (front end), +0x118, +0x198 and the analog axes
@@ -22,7 +24,9 @@
  *   - The channel bindings (+0x18 table, axes) are saved with the profile
  *     (0x5b9420, restored by 0x5b9570) keyed by the device's guidInstance.
  * So the pad gets our own entry in the game's profile lookup (sub_005b81b0
- * below), which gives the default layout.
+ * below), which gives the default layout.  The VID/PID of dinput_pad.c's
+ * product GUIDs (family_vidpid) collide with none of the game's own lists
+ * (0x7fe7f8, 0x800588, 0x5cef00).
  *
  * The device type matters: 0x5cd1f0 marks a driving device's slot
  * ([0x86e5bc + slot], read by 0x5c1000), and the steering then takes
@@ -43,7 +47,10 @@
  * wheel's).  On a gamepad the game makes one sine or square "rumble" with
  * every level at zero and never changes it (measured with NFSU2_FF_LOG in
  * quick races: crashes, full-lock turns, revving at the start), so the pad
- * also rumbles on the player car's own jolts (ug2_pad_jolt).
+ * also rumbles on the player car's own jolts (ug2_pad_jolt).  The game
+ * changes a rumble by Unload (0x5bfff0) and a new effect and never releases
+ * the old one (dinput_pad.c ff_dev_call: an unloaded effect's place is taken
+ * again once none is free).
  *
  * The front end: A, B and View also post Enter, Escape and Q there (game.h
  * pad_fe_keys, dinput_pad.c fe_keys): text fields (the profile name) take
