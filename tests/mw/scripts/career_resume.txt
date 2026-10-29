@@ -39,10 +39,10 @@
 +0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
 +0    autopilot races                                    # logs a race, should one start
 +0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # the race status in career mode (Game.IsCareerMode)
-+0    log career_resume: free roam                       # the car takes the gas now (***)
++0    log career_resume: free roam
 +0    racestatus
 +0    where
-+0    down UP                                            # gas
++0    down UP                                            # gas: the car takes it from GameFlow 6 on (***)
 +0    loop 10                                            # where it is, every 30 frames (+)
 +30   where
 +0    endloop
