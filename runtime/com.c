@@ -3759,7 +3759,12 @@ int com_call(CPU *c, uint32_t magic){
             int ib = MID(CreateIndexBuffer);
             uint32_t pp=A(c,5); uint32_t b=com_new(ib ? IF_IB : IF_VB,64);
             uint32_t mem = b ? gbuf_alloc(A(c,1)?A(c,1):64) : 0u;
+            int made = b != 0;
             if (b && !mem){ com_release(b); b = 0; }
+            if (!b)                         /* the game seldom checks: say so, for the fault that follows */
+                fprintf(stderr, "[d3d] %s(%u bytes, usage 0x%x, pool %u) failed: no %s (ret 0x%08x)\n",
+                        ib ? "CreateIndexBuffer" : "CreateVertexBuffer", A(c,1), A(c,2), A(c,4),
+                        made ? "memory" : "object", MR32(c->esp - 4u));
             if (b){
                 MR32(b+4)=A(c,1); MR32(b+8)=mem;
                 MR32(b+48)=buf_serial();    /* mirror generation: unique even if the address is reused */
