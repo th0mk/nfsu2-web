@@ -6,7 +6,9 @@
  *
  * Where they run: a command is queued and runs at the game's per-frame anchor (game.h on_frame, game_mw.c
  * MW_FRAME_SITE: MainLoop between its update and its render), on the game's thread, with the CPU state put
- * back afterwards (com.c call_guest); a command waits (autotest's next frames) until its work has run.
+ * back afterwards (com.c call_guest); a command waits (autotest's next frames) until its work has run, at most
+ * AID_WAIT frames: MainLoop is not the only way to a Present (loading screens present from 0x6618C3, 0x663D1A
+ * and 0x664952), so a command queued while the anchor does not run logs a TIMEOUT line and is dropped.
  *
  *   racewin          finish the local player now, as the race's script does when a racer crosses the
  *                    finish line: Game.NotifyRaceFinished(racer), then, when Game.AllHumanPlayersDone(),
@@ -92,8 +94,9 @@ static uint32_t gcall(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t 
     return r;
 }
 /* a call that returns a float on the x87 stack: call_guest puts the whole CPU back, x87 stack too, so the
- * value is read inside it */
+ * value is read inside it; no function (a method slot read from memory not committed) is 0, as call_guest's */
 static float gcall_f(CPU *c, uint32_t fn, uint32_t self){
+    if (!fn) return 0.0f;
     CPU save = *c;
     c->ecx = self;
     PUSH32(0xDEADBEEFu);
@@ -136,6 +139,7 @@ static void log_status(void){
 }
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
+#define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
 enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_TELEPORT, Q_WHERE };
 static struct { int op, done, rel; float v[6]; } Q;
 
@@ -195,19 +199,24 @@ int mw_aid_is_cmd(const char *cmd){
 
 /* line = "<cmd> <args>"; 1 = done, 0 = call again next frame (the queued work has not run yet) */
 int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
-    (void)c; (void)wait_start;
+    (void)c;
     char cmd[32] = {0}, a1[32] = {0}; int used = 0;
     if (sscanf(line, "%31s %n", cmd, &used) < 1) return 1;
     const char *p = line + used;
+    long f = autotest_frame();
     if (!strcasecmp(cmd, "racestatus")){ log_status(); return 1; }
     if (!strcasecmp(cmd, "frames")){
-        fprintf(stderr, "[mwrace] f=%ld frames: presents %u main-loop passes %llu flow %u\n", autotest_frame(),
+        fprintf(stderr, "[mwrace] f=%ld frames: presents %u main-loop passes %llu flow %u\n", f,
                 com_present_no(), (unsigned long long)debug_frame_passes(), game_flow());
         return 1;
     }
     if (Q.op != Q_NONE){                /* this line's work was queued: done once the anchor ran it */
-        if (!Q.done) return 0;
-        Q.op = Q_NONE; Q.done = 0;
+        if (Q.done){ Q.op = Q_NONE; Q.done = 0; *wait_start = -1; return 1; }
+        if (*wait_start < 0) *wait_start = f;
+        if (f - *wait_start < AID_WAIT) return 0;
+        fprintf(stderr, "[mwrace] f=%ld %s TIMEOUT after %ld frames: the main loop's frame anchor never ran it\n",
+                f, cmd, f - *wait_start);
+        memset(&Q, 0, sizeof Q); *wait_start = -1;
         return 1;
     }
     memset(&Q, 0, sizeof Q);
@@ -227,5 +236,6 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
         }
         Q.op = Q_TELEPORT;
     }
+    *wait_start = f;                    /* queued: the wait for the anchor starts now */
     return 0;
 }
