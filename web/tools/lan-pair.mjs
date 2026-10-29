@@ -32,7 +32,8 @@
 //        [--game ug2|mw]   the game (ug2 unless given): its script generator, modes and results screen (Most
 //                    Wanted: tools/gen_lan_race_mw.py; its own server serves the game at the root of
 //                    localhost, --base-path localhost=/, where the test pages load /game.wasm; no car trace
-//                    yet, so no trace check)
+//                    yet, so no trace check: instead every wait of the scripts satisfied, the race reached
+//                    on every instance and at least 1000 UDP packets each way, RACES_OF.mw)
 //        [--seed <save tree>]  every instance starts from that save (web/tools/save-seed.mjs, as run-suite's
 //                    NFSU2_SAVE_SEED): a Most Wanted module with the D3DX oracle needs d3dx9_26.dll there and
 //                    --env NFSMW_D3DX=/save/d3dx9_26.dll (tests/mw/scripts/boot_menu.txt)
@@ -81,10 +82,16 @@ const RACES_OF = {
     },
   },
   // the Quick Race kinds of the LAN main menu (OL_Quickrace_Main.fng): host and joiners pick the same one; the
-  // script ends by WM_CLOSE (`close`), as run-suite's Most Wanted scenarios; no car trace yet (M8-15)
+  // script ends by WM_CLOSE (`close`), as run-suite's Most Wanted scenarios.  A wait that runs out goes on to the
+  // next line (runtime/autotest.c), so the script's own log lines prove nothing: the results are its wait for the
+  // results screen satisfied, every wait must be satisfied (waits), every instance must have raced (racing:
+  // GameFlow 6), and, with no car trace yet (M8-15), each instance must have sent and received at least peerUdp
+  // UDP packets (the virtual LAN's count at exit; sent without its broadcasts): a race of two sends about 5,500
+  // each way, a pair that never left the game room sent under 10
   mw: {
-    gen: 'tools/gen_lan_race_mw.py', results: 'LOG lan: results', ended: 'app: the game exited (code 0) after the quit request',
-    trace: false, server: ['--base-path', 'localhost=/'],
+    gen: 'tools/gen_lan_race_mw.py', results: /^\[autotest\] f=\d+ waitfng PostRace_Results\.fng satisfied/m,
+    racing: /^\[autotest\] f=\d+ waitmem \[0x00925e90\]==6 satisfied/m, waits: true, peerUdp: 1000,
+    ended: 'app: the game exited (code 0) after the quit request', trace: false, server: ['--base-path', 'localhost=/'],
     modes: {
       sprint: { h: ['--kind', '0', '--race-ms', '90000'], j: ['--kind', '0', '--race-ms', '90000'] },
     },
@@ -259,7 +266,15 @@ await stopServer();
 serverLog.end();
 
 // judge as tests/net/lan_race.sh
-const summary = { mode: MODE, races: RACES, players: PLAYERS, result: {}, why: [] };
+// a check is a line of the log (string) or a pattern; a wait of the script that ran out (tests/mw/checks/kb_menu.sh)
+const seen = (log, p) => (typeof p === 'string' ? log.includes(p) : p.test(log));
+const WAIT_OUT = /^\[autotest\] f=\d+ .* TIMEOUT/m;
+// the UDP packets the virtual LAN counted at exit (runtime/web/net_lan.c): sent without broadcasts, received
+function lanUdp(log) {
+  const m = [...log.matchAll(/^\[net\] virtual LAN at exit: .*?udp out (\d+) \(broadcast (\d+)[^)]*\) in (\d+)/gm)].pop();
+  return m ? { out: +m[1] - +m[2], broadcast: +m[2], in: +m[3] } : null;
+}
+const summary ={ mode: MODE, races: RACES, players: PLAYERS, result: {}, why: [] };
 for (const x of inst) {
   const log = fs.readFileSync(path.join(x.dir, 'log.txt'), 'utf8'), has = (re) => re.test(log), n = `i${x.i + 1}`;
   const why = [];
@@ -272,7 +287,11 @@ for (const x of inst) {
   if (res[x.i] !== 'done') why.push(`${n}:timeout`);
   if (x.exitCode() !== 0) why.push(`${n}:exit=${x.exitCode()}`);
   if (!log.includes(LAN.ended ?? 'quit at guest frame')) why.push(`${n}:no-quit`);
-  if (!log.includes(LAN.results)) why.push(`${n}:no-results`);
+  if (!seen(log, LAN.results)) why.push(`${n}:no-results`);
+  if (LAN.waits && has(WAIT_OUT)) why.push(`${n}:wait-ran-out`);
+  if (LAN.racing && !seen(log, LAN.racing)) why.push(`${n}:no-race`);
+  const udp = LAN.peerUdp ? lanUdp(log) : null;
+  if (LAN.peerUdp && !(udp && udp.out >= LAN.peerUdp && udp.in >= LAN.peerUdp)) why.push(`${n}:no-peer-traffic`);
   if (has(/FAULT IN GUEST|GUEST MEMORY FAULT|HOST SEGV/)) why.push(`${n}:fault`);
   if (log.includes('TIME LIMIT REACHED')) why.push(`${n}:timeout`);
   if (has(/^\[trap\]/m) || has(/^TRAP in thread/m)) why.push(`${n}:trap`);
@@ -290,6 +309,8 @@ for (const x of inst) {
     status: grab(/^\[status\]/).slice(-3),
     lobby: grab(/^\[guest\] .*(auth|Server ready|login)/).slice(0, 8),
     page: grab(/^NET \{/).pop() ?? null,
+    ...(LAN.waits ? { ranOut: grab(WAIT_OUT).slice(0, 4) } : {}),
+    ...(LAN.peerUdp ? { udp } : {}),
     why,
   };
   summary.why.push(...why);
