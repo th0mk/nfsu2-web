@@ -33,7 +33,7 @@
  * game that asks for it (game.h sound_wall_catchup: Most Wanted, whose sound
  * thread rebuilds DirectSound under its own feet after 100 polls without a
  * cursor move) has all of it made up, and its cursors run on the wall clock
- * between the slices too (wall_ahead_locked), so they keep real time however
+ * between the slices too (buf_ahead_locked), so they keep real time however
  * seldom the pump wakes; Underground 2 keeps the old rule, a backlog over
  * 100 ms dropped (a pump woken every 150 ms moves the cursors at 8 % of real
  * time that way; that game is parked in a background tab anyway).
@@ -170,6 +170,8 @@ typedef struct {
     int      starving;        /* the last slice was mixed before the game wrote it */
     double   wtime;           /* when the game last wrote it (mono_s) */
     float    down[8][2];      /* 3 to 8 channels: each one's share of left and right (downmix_gains) */
+    uint64_t owed;            /* wall clock: output frames of the pump's backlog that were due before its Play
+                                 (buf_ahead_locked): the mixer moves it on from the first frame after them */
 } SndBuf;
 
 /* A buffer of 3 to 8 channels is mixed down to stereo: the channels in the
@@ -210,7 +212,8 @@ static int g_audio_on = 0;                   /* the output is wanted (not NOSOUN
 static _Atomic int g_pump_started = 0;
 static uint64_t g_mixed_frames = 0, g_active_peak = 0;
 static uint64_t g_cursor_frames = 0;         /* g_slock: output frames the cursors moved (mix_into, skip_locked) */
-static double wall_ahead_locked(void);       /* the wall clock's cursors between slices (below) */
+static double wall_backlog_locked(void);     /* the wall clock's cursors between slices (below) */
+static double buf_ahead_locked(const SndBuf *b, double back);
 static uint64_t g_replay = 0, g_reissue = 0;
 static uint64_t g_out_frames = 0, g_out_zero = 0, g_gap_cb = 0;
 
@@ -237,7 +240,7 @@ int audio_register(uint32_t data, uint32_t bytes, uint32_t rate,
         b->chans = chans; b->bits = bits;
         b->used = 1; b->playing = 0; b->loop = 0; b->cursor = 0.0; b->vol = 1.f;
         b->wpos = 0; b->wseen = 0; b->trim = 1.0; b->target = 0.0; b->over = 0;
-        b->freq = 1.0; b->plays = b->stops = 0;
+        b->freq = 1.0; b->plays = b->stops = 0; b->owed = 0;
         b->wr_bytes = b->wr_calls = b->wr_nonzero = 0;
         downmix_gains(b->down, chans);
         fprintf(stderr, "  [sound] buffer #%d: %u Hz, %u channels, %u bit, %u bytes (%.2f s)\n",
@@ -252,8 +255,13 @@ void audio_play(int id, int loop){
     pthread_mutex_lock(&g_slock);
     if (g_snd[id].used){
         /* a buffer that already plays keeps its cursor: the game re-issues
-         * Play on its stream all the time */
-        if (!g_snd[id].playing){ g_snd[id].cursor = 0.0; g_snd[id].settled = 0; g_replay++; }
+         * Play on its stream all the time.  One that starts begins at its
+         * Play: on the wall clock after the frames the pump has yet to mix
+         * (owed, buf_ahead_locked), so its cursor reads 0 then, as on Windows */
+        if (!g_snd[id].playing){
+            g_snd[id].cursor = 0.0; g_snd[id].settled = 0; g_replay++;
+            g_snd[id].owed = (uint64_t)wall_backlog_locked();
+        }
         else g_reissue++;
         g_snd[id].playing = 1;
         g_snd[id].loop = loop;
@@ -299,7 +307,7 @@ int audio_duplicate(int src){
     if (g_snd[src].used && (id = snd_new_id()) != 0){
         g_snd[id] = g_snd[src];
         g_snd[id].playing = 0; g_snd[id].cursor = 0.0; g_snd[id].trim = 1.0;
-        g_snd[id].target = 0.0; g_snd[id].over = 0;
+        g_snd[id].target = 0.0; g_snd[id].over = 0; g_snd[id].owed = 0;
         g_snd[id].plays = g_snd[id].stops = 0;
         g_snd[id].wr_bytes = g_snd[id].wr_calls = g_snd[id].wr_nonzero = 0;
     }
@@ -332,12 +340,12 @@ void audio_stop(int id){
  * 4-5, 50 ms none. */
 #define WRITE_LEAD_MS 50u
 /* the play cursor the game reads, in source frames (g_slock held): the mixed
- * one, and on the wall clock that one moved on by the ahead output frames
- * since its slices were due (wall_ahead_locked) */
-static double play_cursor_locked(const SndBuf *b, double ahead){
+ * one, and on the wall clock that one moved on by the time since its slices
+ * were due (back: the pump's backlog, wall_backlog_locked; buf_ahead_locked) */
+static double play_cursor_locked(const SndBuf *b, double back){
     uint32_t bpf = b->chans * (b->bits/8u);
-    double cur = b->cursor;
-    if (ahead > 0.0 && b->playing && bpf){
+    double cur = b->cursor, ahead = buf_ahead_locked(b, back);
+    if (ahead > 0.0 && bpf){
         double nsrc = (double)(b->bytes / bpf);
         cur += ahead * (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq;
         if (nsrc > 0.0 && cur >= nsrc) cur = fmod(cur, nsrc);
@@ -352,7 +360,7 @@ void audio_cursors(int id, uint32_t *play, uint32_t *write){
             SndBuf *b = &g_snd[id];
             uint32_t bpf = b->chans * (b->bits/8u);
             uint32_t sz  = b->bytes;
-            double cur = play_cursor_locked(b, b->playing ? wall_ahead_locked() : 0.0);
+            double cur = play_cursor_locked(b, wall_backlog_locked());
             p = (uint32_t)(cur * (double)bpf) % sz;
             uint32_t lead = (g_snd[id].rate * WRITE_LEAD_MS / 1000u) * bpf;
             if (lead >= sz) lead = sz / 4u;
@@ -440,9 +448,9 @@ static void mix_into(float *out, unsigned frames){
     pthread_mutex_lock(&g_slock);
     /* the game's fill and write-ahead below are measured from the cursor it
      * reads, which on the wall clock runs ahead of this slice's by up to
-     * WALL_INTERP_S (wall_ahead_locked): from the mixed one, a pump that woke
+     * WALL_INTERP_S (buf_ahead_locked): from the mixed one, a pump that woke
      * late (150 ms) counted a skip at every wake of a game that wrote on time */
-    double ahead = wall_ahead_locked();
+    double back = wall_backlog_locked();
     for (int i = 1; i < g_sndn; i++){
         SndBuf *b = &g_snd[i];
         if (!b->used || !b->playing || !b->bytes) continue;
@@ -451,7 +459,15 @@ static void mix_into(float *out, unsigned frames){
         if (!bpf) continue;
         uint32_t nsrc = b->bytes / bpf;
         if (!nsrc) continue;
-        uint32_t pbyte = b->wseen ? ((uint32_t)(play_cursor_locked(b, ahead) * (double)bpf)) % b->bytes : 0u;
+        uint32_t pbyte = b->wseen ? ((uint32_t)(play_cursor_locked(b, back) * (double)bpf)) % b->bytes : 0u;
+        /* on the wall clock a buffer Play started after the frames this
+         * slice begins with starts with the first frame after them (owed) */
+        unsigned f0 = 0;
+        if (b->owed){
+            f0 = b->owed < frames ? (unsigned)b->owed : frames;
+            b->owed -= f0;
+            if (f0 == frames) continue;
+        }
         /* audio.m locks the play cursor to the game's write position (a
          * PLL, +-3 %) against a free-running cursor drifting through the
          * unwritten region.  The game's writer follows the play cursor
@@ -523,8 +539,8 @@ static void mix_into(float *out, unsigned frames){
             }
         }
         const RsTable *rs = (b->rate != OUT_RATE || b->freq != 1.0) && !g_rs_nearest ? rs_table(step > 1.0 ? 1.0 / step : 1.0) : 0;
-        for (unsigned f = 0; f < frames; f++){
-            double sp = b->cursor + step * (double)f;
+        for (unsigned f = f0; f < frames; f++){
+            double sp = b->cursor + step * (double)(f - f0);
             if (sp >= (double)nsrc){
                 if (b->loop) sp = fmod(sp, (double)nsrc);
                 else { b->playing = 0; break; }
@@ -588,7 +604,7 @@ static void mix_into(float *out, unsigned frames){
                 if (!g_mem[b->data + ((p0 + q) % b->bytes)]) z++;
             fprintf(g_csv, "%.4f\n", nby ? (double)z/(double)nby : 0.0);
         }
-        b->cursor += step * (double)frames;
+        b->cursor += step * (double)(frames - f0);
         if (b->cursor >= (double)nsrc){
             if (b->loop) b->cursor = fmod(b->cursor, (double)nsrc);
             else { b->cursor = 0.0; b->playing = 0; }
@@ -652,20 +668,21 @@ static void mix_into(float *out, unsigned frames){
  * and friends' car sounds, which free roam plays over the game's, wait) */
 static uint64_t g_skipped_frames = 0;
 static int g_wall_catchup = 0;                /* the wall clock's backlog rule (sound_wall_catchup, NFSU2_AUDIO_CATCHUP) */
-static void skip_locked(uint64_t frames){            /* g_slock held */
-    for (int i = 1; i < g_sndn; i++){
-        SndBuf *b = &g_snd[i];
-        if (!b->used || !b->playing || !b->bytes) continue;
-        uint32_t bpf = b->chans * (b->bits / 8u);
-        uint32_t nsrc = bpf ? b->bytes / bpf : 0u;
-        if (!nsrc) continue;
-        b->cursor += (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq * (double)frames;
-        if (b->cursor >= (double)nsrc){
-            if (b->loop) b->cursor = fmod(b->cursor, (double)nsrc);
-            else { b->cursor = 0.0; b->playing = 0; }
-        }
-        b->starving = 0;
+static void skip_buf_locked(SndBuf *b, uint64_t frames){    /* g_slock held; the frames before its Play (owed) first */
+    if (!b->used || !b->playing || !b->bytes) return;
+    uint32_t bpf = b->chans * (b->bits / 8u);
+    uint32_t nsrc = bpf ? b->bytes / bpf : 0u;
+    if (!nsrc) return;
+    if (b->owed){ uint64_t o = b->owed < frames ? b->owed : frames; b->owed -= o; frames -= o; }
+    b->cursor += (double)b->rate / (double)OUT_RATE * g_rate_ratio * b->trim * b->freq * (double)frames;
+    if (b->cursor >= (double)nsrc){
+        if (b->loop) b->cursor = fmod(b->cursor, (double)nsrc);
+        else { b->cursor = 0.0; b->playing = 0; }
     }
+    b->starving = 0;
+}
+static void skip_locked(uint64_t frames){            /* g_slock held */
+    for (int i = 1; i < g_sndn; i++) skip_buf_locked(&g_snd[i], frames);
     g_cursor_frames += frames;
 }
 static void skip_frames(uint64_t frames){
@@ -684,16 +701,27 @@ static void skip_frames(uint64_t frames){
  * wall clock the cursors a game reads run on with the time since the frames
  * the pump mixed were due, at most WALL_INTERP_S ahead (nothing is heard
  * there; what the game writes ahead of them is never overtaken: it writes
- * ahead of the write cursor).  Leaving the wall clock for the ring, the pump
- * moves them on to where they were read last, so no cursor ever goes back. */
+ * ahead of the write cursor).  A buffer that Play starts in between runs on
+ * from its Play only: the frames due before it (owed) do not move it, in the
+ * slices that mix them either, so its cursor reads 0 at its Play, as on
+ * Windows, not up to WALL_INTERP_S.  Leaving the wall clock for the ring, the
+ * pump moves each cursor on to where it was read last, so none ever goes
+ * back. */
 #define WALL_INTERP_S 0.25
 static int      g_wall_interp = 0;            /* g_slock: the cursors run on between slices */
 static uint64_t g_wall_base = 0;              /* g_slock: g_cursor_frames when the wall clock took over, */
 static double   g_wall_since = 0.0;           /* ... and when (mono_s) */
-static double wall_ahead_locked(void){        /* g_slock held: frames the cursors run ahead of the mixed ones */
+static double wall_backlog_locked(void){      /* g_slock held: output frames due on the wall clock, not mixed yet */
     if (!g_wall_interp) return 0.0;
     double a = (mono_s() - g_wall_since) * OUT_RATE - (double)(g_cursor_frames - g_wall_base);
-    return a < 0.0 ? 0.0 : a > OUT_RATE * WALL_INTERP_S ? OUT_RATE * WALL_INTERP_S : a;
+    return a < 0.0 ? 0.0 : a;
+}
+/* g_slock held: the output frames b's cursor runs ahead of its mixed one, of
+ * the backlog back the part since its Play */
+static double buf_ahead_locked(const SndBuf *b, double back){
+    double a = back - (double)b->owed;
+    if (!b->playing || a <= 0.0) return 0.0;
+    return a > OUT_RATE * WALL_INTERP_S ? OUT_RATE * WALL_INTERP_S : a;
 }
 static void wall_interp_begin(double now){
     pthread_mutex_lock(&g_slock);
@@ -702,9 +730,15 @@ static void wall_interp_begin(double now){
 }
 static void wall_interp_end(void){
     pthread_mutex_lock(&g_slock);
-    double a = wall_ahead_locked();
-    uint64_t n = (uint64_t)ceil(a);
-    if (n) skip_locked(n);
+    double back = wall_backlog_locked();
+    uint64_t n = (uint64_t)ceil(back > OUT_RATE * WALL_INTERP_S ? OUT_RATE * WALL_INTERP_S : back);
+    for (int i = 1; i < g_sndn; i++){             /* each cursor on to where it was read last */
+        SndBuf *b = &g_snd[i];
+        uint64_t nb = n ? (uint64_t)ceil(buf_ahead_locked(b, back)) : 0u;
+        b->owed = 0;
+        if (n) skip_buf_locked(b, nb);
+    }
+    g_cursor_frames += n;
     g_wall_interp = 0;
     pthread_mutex_unlock(&g_slock);
     g_mixed_frames += n; g_skipped_frames += n;
