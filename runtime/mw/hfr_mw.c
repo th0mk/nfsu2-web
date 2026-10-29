@@ -23,18 +23,21 @@
  * a target of 0.333 at 60 and of 0.167 at 120, both under 0.5, so it brakes for good: the traffic that stops
  * and never starts again above about 40 Hz (WidescreenFixesPack #1218; 2 dT = 0.5 at 40).  Seen in a lockstep
  * race at 120: a traffic car at 0.0000 m/s with target 0.1667 every think, 11 s to the run's end.
- * The fix: a mode-0 task whose rate is under 1 keeps its 60 Hz cadence in time, rate x 60 / S at S steps a
- * second, so it thinks as often and with the same dT as at 60 (the racers); mode-1 tasks (the traffic, 0x43B0F1)
- * are not scaled: at 120 the traffic still thinks every 1/12 s with dT 1/12.  A task of rate 1 (every step: the
- * physics, the player) runs every step with the step's time as before.  The rate is
+ * The fix: a task of mode 0 or 1 whose rate is under 1 keeps its 60 Hz cadence in time, rate x 60 / S at S
+ * steps a second, so it thinks as often and with the same dT as at 60: a mode-0 task (the racers) by the steps,
+ * a mode-1 task (the traffic 0x43B0F1, AITrafficManager 0x441A2D, 0x442EC0, 0x6B9E06) by the frames, one step a
+ * frame in a world at the page's rate (framerate_mw.c keeps a world's content rate at its steps), its +0x1C
+ * gathering their time: the traffic every 1/6 s with dT 1/6 at 120 and 240.  A frame that runs two steps (the
+ * page fell behind) is one mode-1 run with both steps' time, as at 60.  A start offset counts in runs of the
+ * task, so it keeps its time too.  A task of rate 1 (every step or frame: the physics, the player) runs as
+ * before.  The rate is
  * scaled only for the call and put back after it, so SetRate and the game's own reads see the game's values.
  *
  *
  * The same stop at 60 (the game's own step): there the traffic thinks with dT 1/6, so a stopped car's target is
  * 0.333, still under the driver's 0.5: in a lockstep race at 60 a traffic car sat at 0.0000 m/s with target
  * 0.3333 and BRAKE for 16 s to the run's end.  Only at 40 steps a second or fewer (2 dT >= 0.5) does a stopped
- * car get going again; with the traffic's cadence kept too, 120 and 240 would be as 60, stops and all.  So the
- * stop itself is
+ * car get going again; the cadence fix keeps 120 and 240 as 60, stops and all.  So the stop itself is
  * the game's bug at its own rate (Carbon's traffic does not stop for good at any rate, per WidescreenFixesPack
  * #1218), fixed here at every rate: below 0.5 m/s AIActionTraffic's cap counts dT as at least 0.25 s (its
  * value at 40 Hz), so a stopped car whose wanted speed is 0.5 or more gets 0.5 and the driver gives it gas; a
@@ -66,15 +69,14 @@ static double sim_hz(void){
 }
 
 /* a task's run 0x6ECD90 (thiscall, ecx = the task, [esp+4] = the step's time, [esp+8] = a frame's steps' time
- * on its first step, else 0; ret 8): only mode 0 is scaled here, mode 1 (the traffic) goes to the original as it
- * is and still runs once a step at 120 and 240 (TRACKER M7-21) */
+ * on its first step, else 0; ret 8): modes 0 and 1 scaled (above), any other mode as the game's */
 void sub_006ecd90_orig(CPU *c);
 void sub_006ecd90(CPU *c){
     static int on = -1;
     if (on < 0) on = env_int("NFSMW_HFR_TASKS", 1) != 0;
     uint32_t t = c->ecx;
     double S = on ? sim_hz() : 60.0;
-    if (S <= 60.5 || !t || (MR32(t + TASK_MODE) & 0xfu) != 0u){ sub_006ecd90_orig(c); return; }
+    if (S <= 60.5 || !t || (MR32(t + TASK_MODE) & 0xfu) > 1u){ sub_006ecd90_orig(c); return; }
     float rate = MRF32(t + TASK_RATE);
     if (!(rate > 0.f && rate < 1.f)){ sub_006ecd90_orig(c); return; }
     float scaled = (float)((double)rate * 60.0 / S);
