@@ -106,7 +106,8 @@ static const uint32_t mw_modes[][2] = {
  *   hook                no MW hook sites yet (games/mw has no override or hook list)
  *   on_present, on_frame, status   Q-24 (MW's per-frame anchor), the page's overlay (M6)
  *   sms_request, photo_input   UG2 features, not ported
- *   racer, text_entry   test traces (M4), DirectInput text entry (M3-11)
+ *   racer, text_entry   test traces (M4), the page's phone text field (M6-21: the alias name field takes
+ *                       WM_CHAR through the window procedure 0x6DB6C0, tests/mw/scripts/kb_alias.txt)
  *   crt_lo, crt_hi      HEAPSTAT's call sites: the C runtime's code range is not measured (its heap's
  *                       HeapAlloc/HeapReAlloc/HeapFree calls are at 0x7D10EF-0x7D5E6C; GAME.md 2.11 has an
  *                       estimate only); with 0 it names the runtime's own caller

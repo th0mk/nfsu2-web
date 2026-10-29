@@ -1,0 +1,42 @@
+# Most Wanted: a first start makes the alias ROTEST by keyboard, saves it, and finds it in the Alias Manager's Load
+# list (TRACKER M3-11).  The name is typed through the page's own keyboard path (nstype, nstap: runtime/web/
+# input_web.c, as a browser's key events arrive), Shift and all.  The name field takes WM_CHAR (the window procedure
+# 0x6DB6C0 hands it to 0x5A95F0): runs with only DirectInput keys and WM_KEYDOWN left the default NAME in place.
+# The steps (a first start; the dialogs are inside MC_Main.fng, so those gaps count frames):
+#   "Create a new alias?" (No highlighted): Left, Enter; two autosave notes: Enter, Enter; "Enter name: NAME":
+#   Backspace x4, ROTEST, Enter (Accept); "Do you want to save the alias ROTEST?" (No highlighted): Left, Enter;
+#   "Save complete.": Enter until the main menu; the main menu's Alias Manager (its 7th item, 6 steps right of
+#   Career) opens MC_ProfileManager.fng; its 2nd item, Load, asks "Are you sure you want to load a new alias?" (No
+#   highlighted): Left, Enter; the list (MC_List.fng) reads the save folder and shows ROTEST.
+# tests/mw/checks/kb_alias.sh wants the save ROTEST/ROTEST written and the list's folder scan finding it:
+#   node web/tools/run-suite.mjs --game mw --script kb_alias.txt --marker 'kb_alias: the Load list is up' \
+#     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=9000
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++300  tap LEFT                        # Create a new alias?  Yes
++100  tap RETURN
++300  tap RETURN                      # the autosave notes
++300  tap RETURN
++300  loop 4                          # Enter name: NAME
++0    nstap BACK
++20   endloop
++60   nstype ROTEST
++120  log kb_alias: typed ROTEST
++0    tap RETURN                      # Accept
++300  tap LEFT                        # save the alias ROTEST?  Yes
++100  tap RETURN
++300  tapuntil RETURN MainMenu.fng 90 3000    # Save complete.  Continue
++0    waitfng MainMenu.fng 600
++300  loop 6                          # Career .. Alias Manager
++40   tap RIGHT
++0    endloop
++60   tap RETURN
++0    waitfng MC_ProfileManager.fng 600
++120  tap RIGHT                       # Load
++100  tap RETURN
++300  tap LEFT                        # load a new alias?  Yes
++100  tap RETURN
++0    waitfng MC_List.fng 600
++0    log kb_alias: the Load list is up
++60   close
