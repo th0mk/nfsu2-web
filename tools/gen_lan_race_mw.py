@@ -5,8 +5,12 @@ tools/gen_lan_race.py's).
 
   tools/gen_lan_race_mw.py host|join [options] > script.txt
 
-Every step waits for its screen (NFSU2_FNG_LOG's names, runtime/mw/fe_mw.c),
-never for time alone, apart from the joiner's wait for the host's game.
+Every step that depends on the game, or on the other instance, waits for its
+screen (NFSU2_FNG_LOG's names, runtime/mw/fe_mw.c).  A wait that runs out
+goes on to the next line (runtime/autotest.c); lan-pair fails the run on it.
+The waits for time alone are pauses only: --room-wait before the --room
+steps, --race-ms before the results wait, and the joiner's pause between two
+searches.
 
 Both: a first start: the alias (MC_Main.fng: Create a new alias? Yes, the two
 autosave notes, the name, save it: Yes), the main menu's LAN Play (its 5th
@@ -20,10 +24,13 @@ host: once the search is over, key 1 (the screen's Host message,
 join: waits until the host's server is listed (its name in the list), Enter
       joins it (UI_PC_LAN.fng, the name, Enter: OL_MAIN.fng).
 OL_MAIN.fng's first item, Quick Race (OL_Quickrace_Main.fng), its race kind
-(--kind N: N taps DOWN), Enter searches (OL_Find_Session.fng).  The host
-searches first: "No suitable matches" (OL_Dialog_Stacked_Buttons.fng) and
-Accept creates the game (OL_GameRoom.fng); a joiner searches after
---join-wait ms and joins that game.
+(--kind N: N taps DOWN), Enter searches (OL_Find_Session.fng).  A search that
+finds no game ends on "No suitable matches" (OL_Dialog_Stacked_Buttons.fng:
+Accept, Cancel and an unlabelled third button).  The host takes Accept there,
+which creates the game (OL_GameRoom.fng).  A joiner whose search found no game
+yet (the host's is not made yet) goes back (Escape: OL_MAIN.fng, on Quick
+Race) and searches again, up to --searches times, until a search joins the
+host's game (OL_GameRoom.fng).
 In the room nobody presses anything: with the room's minimum of players in it
 the game starts the race by itself (about a minute after the second player
 came in, in the runs of 2026-10-29; Enter there opens the room's car select,
@@ -36,10 +43,10 @@ Options:
   --name NAME          the alias and LAN name (host: the server's name too)
   --car N              unused yet (the room's car is the alias's first)
   --kind N             the Quick Race kind: N taps DOWN (host and joiners)
-  --join-wait MS       join: real time on the kinds before searching (default
-                       20000: the host has created its game by then)
-  --room-wait MS       time in the game room before the --room steps (default
-                       20000)
+  --searches N         join: searches for the host's game before giving up
+                       (default 30)
+  --room-wait MS       with --room: time in the game room before those steps
+                       (default 20000)
   --room LINES         script lines in the game room (none by default)
   --race-ms MS         time of the race before the results wait (default
                        120000)
@@ -83,13 +90,27 @@ def alias(w, name):
 
 
 def lan_name(w, name):
-    """UI_PC_LAN.fng: the field holds NAME; the player's name, Enter"""
+    """UI_PC_LAN.fng: the player's name, NAME in the field, Enter.  The field is
+    no front-end string a wait can read (waitfng UI_PC_LAN.fng'NAME ran out in
+    the run of 2026-10-29 with the name typed), so Enter waits for the typing's
+    own schedule (nstype: a character every 4 frames, runtime/autotest.c) and
+    30 frames more; the host's name is checked by the joiner, which waits for
+    it in the server list"""
     w('+0    waitfng UI_PC_LAN.fng 900')
     w('+30   loop 8')
     w('+0    nstap BACK')
     w('+10   endloop')
     w('+0    nstype %s' % name)
-    w('+60   tap RETURN')
+    w('+%-4d tap RETURN' % (4 * len(name) + 30))
+
+
+def quick_race(w, kind):
+    """OL_MAIN.fng, on Quick Race: its race kind, Enter searches (OL_Find_Session.fng)"""
+    w('+30   tap RETURN')
+    w('+0    waitfng OL_Quickrace_Main.fng@4b4e388a 900')
+    for _ in range(kind):
+        w('+30   tap DOWN')
+    w('+30   tap RETURN                                         # search (OL_Find_Session.fng)')
 
 
 def main():
@@ -98,7 +119,7 @@ def main():
     ap.add_argument('--name', default=None)
     ap.add_argument('--car', type=int, default=0)
     ap.add_argument('--kind', type=int, default=0)
-    ap.add_argument('--join-wait', type=int, default=20000)
+    ap.add_argument('--searches', type=int, default=30)
     ap.add_argument('--room-wait', type=int, default=20000)
     ap.add_argument('--room', default='')
     ap.add_argument('--race-ms', type=int, default=120000)
@@ -129,21 +150,27 @@ def main():
     lan_name(w, name)
     w('+0    waitfng OL_MAIN.fng@4b4e388a 3600                  # connected: the LAN main menu, on Quick Race')
     w('+0    log lan: lobby')
-    w('+30   tap RETURN')
-    w('+0    waitfng OL_Quickrace_Main.fng@4b4e388a 900')
-    for _ in range(a.kind):
-        w('+30   tap DOWN')
-    if not host:
-        w('+%dms log lan: search' % a.join_wait)
-    w('+30   tap RETURN                                         # search (OL_Find_Session.fng)')
     if host:
+        quick_race(w, a.kind)
         w("+0    waitfng OL_Dialog_Stacked_Buttons.fng'No_suitable@b8a7c6cc 3600   # No suitable matches (Accept)")
         w('+30   tap RETURN                                         # Accept: create the game')
+    else:
+        w("+0    loop %d                                            # until a search finds the host's game" % a.searches)
+        w('+0    log lan: search')
+        quick_race(w, a.kind)
+        w("+0    waitfng OL_GameRoom.fng|OL_Dialog_Stacked_Buttons.fng'No_suitable 3600")
+        w('+0    breakfng OL_GameRoom.fng                           # joined')
+        w('+0    log lan: no game yet')
+        w('+0    tap ESCAPE                                         # back to the LAN main menu')
+        w('+0    waitfng OL_MAIN.fng@4b4e388a 900')
+        w('+300  endloop                                            # a pause between two searches')
     w('+0    waitfng OL_GameRoom.fng 3600')
     w('+0    log lan: room')
-    w('+%dms log lan: start' % a.room_wait)
-    for ln in [s.strip() for s in a.room.split(';') if s.strip()]:
-        w(ln)
+    room = [s.strip() for s in a.room.split(';') if s.strip()]
+    if room:
+        w('+%dms log lan: room steps' % a.room_wait)
+        for ln in room:
+            w(ln)
     w('+0    waitmem %s 6 36000                         # racing' % FLOW)
     w('+0    log lan: racing')
     w('+0    autopilot on')
