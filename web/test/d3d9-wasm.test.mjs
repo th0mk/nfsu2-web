@@ -11,6 +11,9 @@
 //   - every primitive type through DrawPrimitiveUP, DrawPrimitive, DrawIndexedPrimitive and DrawIndexedPrimitiveUP
 //     against a CPU reference of D3D9's vertex order (the fans with Most Wanted's strides 48, 24 and 32), every
 //     triangle from its first vertex (only UG2's indexed strips may start at another corner);
+//   - Lock: what was written through any Lock reads back, as D3D9's MANAGED pool keeps it (Most Wanted's host
+//     backing, game.h d3d_host_backing, and UG2's one block per resource), over a buffer heap that reuses and
+//     poisons freed blocks; nothing left in the buffer heap after the resources go;
 //   - stdcall: every method takes exactly its arguments.
 // Built twice: with Most Wanted's real game table (runtime/mw/game_mw.c: d3d_modes, d3d9_strict) and with UG2's
 // GameOps defaults, whose answers stay as they were.
@@ -49,12 +52,14 @@ const PRIMS = (game) => {
   if (game === 'mw') all.push('prim-vb-triangles-32', 'prim-indexed-lines-48', 'prim-up-triangles-32');
   return all;
 };
+const HOSTBACK = ['hb-roundtrip', 'hb-partial', 'hb-nooverwrite', 'hb-per-frame', 'hb-tex-roundtrip', 'hb-reset', 'hb-no-leak',
+  'hb-many'];
 
 test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every primitive type', { skip }, () => {
   const { out, ok } = run('mw');
   for (const c of [...LIFETIMES, 'creator-gpu-refused', 'reset-failed-lost', 'reset-ok-clears', 'reset-size', 'levelcount',
     'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'volumedesc', 'modes', 'multisample', 'checkformat',
-    'depthtex', 'caps-sm3', ...PRIMS('mw')])
+    'depthtex', 'caps-sm3', ...PRIMS('mw'), ...HOSTBACK])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(mw\): (\d+) passed, 0 failed$/m);
 });
@@ -63,7 +68,7 @@ test('d3d9_unit, UG2: the same rules, UG2\'s own answers where Most Wanted\'s di
   const { out, ok } = run('ug2');
   for (const c of [...LIFETIMES, 'creator-gpu-refused-ug2', 'reset-failed-lost', 'reset-ok-clears', 'reset-size-ug2',
     'levelcount', 'leveldesc-ug2', 'modes-ug2', 'multisample-ug2', 'checkformat-ug2', 'caps-sm2-ug2',
-    ...PRIMS('ug2')])
+    ...PRIMS('ug2'), ...HOSTBACK])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(ug2\): (\d+) passed, 0 failed$/m);
 });

@@ -42,18 +42,38 @@ uint32_t g_image_base = 0x00400000u, g_image_size = 0x00100000u;
 #define HEAP_HI 0x02E00000u
 static uint32_t g_bump = HEAP_LO;
 static int g_fail_alloc = 0;                       /* the next allocations fail (a creator's out of memory) */
+/* The buffer heap (Lock buffers) as heap.c's reuses it: a freed block goes back at once (the newest of its size
+ * first) and is poisoned with 0xDD, so a pointer kept past a free reads garbage and its writes land in the next
+ * owner's block.  The object heap is never reused, so a destroyed object stays readable (alive() below). */
+#define HEAP_SZN ((HEAP_HI - HEAP_LO) >> 4)
+static uint32_t *g_blk_sz;                         /* a live buffer block's size by (p - HEAP_LO) >> 4 */
+#define FREEN 65536
+static uint32_t g_free_p[FREEN], g_free_n[FREEN], g_nfree = 0;
 uint32_t gheap_alloc_c(CPU *c, int heap, uint32_t n, int zero){
-    (void)c; (void)heap;
+    (void)c;
     if (g_fail_alloc) return 0;
-    uint32_t p = (g_bump + 15u) & ~15u;
-    if (p + n > HEAP_HI) return 0;
-    g_bump = p + n;
+    if (!g_blk_sz && !(g_blk_sz = calloc(HEAP_SZN, 4))) return 0;
+    n = (n + 15u) & ~15u; if (!n) n = 16u;
+    uint32_t p = 0;
+    if (heap == g_gh_gbuf)
+        for (int i = (int)g_nfree - 1; i >= 0; i--) if (g_free_n[i] == n){
+            p = g_free_p[i]; g_nfree--; g_free_p[i] = g_free_p[g_nfree]; g_free_n[i] = g_free_n[g_nfree]; break; }
+    if (!p){ p = (g_bump + 15u) & ~15u; if (p + n > HEAP_HI) return 0; g_bump = p + n; }
+    if (heap == g_gh_gbuf) g_blk_sz[(p - HEAP_LO) >> 4] = n;
     if (zero) memset(g_mem + p, 0, n);
     return p;
 }
-void gheap_free_c(CPU *c, int heap, uint32_t p){ (void)c; (void)heap; (void)p; }
+void gheap_free_c(CPU *c, int heap, uint32_t p){
+    (void)c;
+    if (heap != g_gh_gbuf || !g_blk_sz || p < HEAP_LO || p >= HEAP_HI) return;
+    uint32_t n = g_blk_sz[(p - HEAP_LO) >> 4];
+    if (!n) return;
+    memset(g_mem + p, 0xDD, n);
+    g_blk_sz[(p - HEAP_LO) >> 4] = 0;
+    if (g_nfree < FREEN){ g_free_p[g_nfree] = p; g_free_n[g_nfree] = n; g_nfree++; }
+}
 int gheap_bump(void){ return 0; }
-uint32_t gheap_usize(uint32_t p){ (void)p; return 0; }
+uint32_t gheap_usize(uint32_t p){ return (g_blk_sz && p >= HEAP_LO && p < HEAP_HI) ? g_blk_sz[(p - HEAP_LO) >> 4] : 0u; }
 int gheap_check_block(CPU *c, uint32_t p, const char *w){ (void)c; (void)p; (void)w; return 0; }
 int heap_census_line(char *b, size_t n){ return n ? (b[0] = 0) : 0; }   /* heap.c's [mem] line: none here */
 void guest_backtrace(CPU *c, int n){ (void)c; (void)n; }
@@ -105,6 +125,15 @@ unsigned metal_level_pitch(unsigned w, unsigned level, unsigned f){
     if (!lw) lw = 1;
     return blk == 1 ? lw * bpb : ((lw + blk - 1) / blk) * bpb;
 }
+unsigned metal_level_rows(unsigned h, unsigned level, unsigned f){
+    unsigned bpb, blk = stub_blk(f, &bpb), lh = h >> level;
+    if (!blk) return 0;
+    if (!lh) lh = 1;
+    return blk == 1 ? lh : (lh + blk - 1) / blk;
+}
+static unsigned g_uploads = 0;                     /* texture levels handed to the renderer (UnlockRect) */
+void metal_upload_texture(unsigned id, unsigned level, const void *d, unsigned pitch, unsigned w, unsigned h, unsigned f){
+    (void)id; (void)level; (void)d; (void)pitch; (void)w; (void)h; (void)f; g_uploads++; }
 unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned l, unsigned f, unsigned rt){
     unsigned b; (void)w; (void)h; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
 unsigned metal_create_texture_cube(unsigned e, unsigned l, unsigned f, unsigned rt){
@@ -598,6 +627,98 @@ static void t_prim(int api, uint32_t pt, uint32_t nprim, uint32_t stride){
     if (ib){ call(g_dev, "SetIndices", 1, 0u); release(ib); }
 }
 
+/* ---- what the game sees through Lock: D3D9's MANAGED pool, whose copy stays where Lock showed it -------------
+ * Most Wanted keeps a static buffer's or texture level's copy outside the guest (game.h d3d_host_backing) and
+ * shows it in a window of the buffer heap between Lock and Unlock; UG2 keeps one block for the resource's life.
+ * Both must read back what was written through any Lock. */
+#define LK_RO   0x10u                              /* D3DLOCK_READONLY */
+#define LK_NOOV 0x1000u                            /* D3DLOCK_NOOVERWRITE */
+#define LK_DISC 0x2000u                            /* D3DLOCK_DISCARD */
+int com_gbuf_census(char *, size_t);
+static unsigned gk_count(const char *kind){        /* live buffer-heap blocks of one kind ([mem] census) */
+    char b[1024], k[16]; com_gbuf_census(b, sizeof b); snprintf(k, sizeof k, " %s=", kind);
+    const char *s = strstr(b, k); float mb; unsigned n = 0;
+    if (s) sscanf(s + strlen(k), "%fMB/%u", &mb, &n);
+    return n;
+}
+static uint32_t vb_make(uint32_t len){ MR32(OUT) = 0; call(g_dev, "CreateVertexBuffer", 6, len, 0u, 0u, 1u, OUT, 0u); return MR32(OUT); }
+static uint32_t vb_lock(uint32_t vb, uint32_t off, uint32_t sz, uint32_t fl){
+    MR32(OUT + 4u) = 0; call(vb, "Lock", 4, off, sz, OUT + 4u, fl); return MR32(OUT + 4u); }
+static void vb_unlock(uint32_t vb){ call(vb, "Unlock", 0); }
+static uint32_t tex_make(uint32_t w, uint32_t h){ MR32(OUT) = 0; call(g_dev, "CreateTexture", 8, w, h, 1u, 0u, 21u, 1u, OUT, 0u); return MR32(OUT); }
+static uint32_t tex_lock(uint32_t t, uint32_t fl){ MR32(OUT + 20u) = 0; call(t, "LockRect", 4, 0u, OUT + 16u, 0u, fl); return MR32(OUT + 20u); }
+static void tex_unlock(uint32_t t){ call(t, "UnlockRect", 1, 0u); }
+static void pat(uint32_t p, uint32_t n, uint8_t seed){ for (uint32_t i = 0; i < n; i++) MR8(p + i) = (uint8_t)(seed + i * 7u); }
+static int is_pat(uint32_t p, uint32_t n, uint8_t seed){
+    if (!p) return 0;
+    for (uint32_t i = 0; i < n; i++) if (MR8(p + i) != (uint8_t)(seed + i * 7u)) return 0;
+    return 1; }
+#define PAT_AT(seed, off) ((uint8_t)((seed) + (off) * 7u))   /* the pattern's seed for the bytes from off */
+static int is_byte(uint32_t p, uint32_t n, uint8_t v){
+    if (!p) return 0;
+    for (uint32_t i = 0; i < n; i++) if (MR8(p + i) != v) return 0;
+    return 1; }
+static void present(void){ call(g_dev, "Present", 4, 0u, 0u, 0u, 0u); }
+static void t_hostback(void){
+    const uint32_t N = 1024;
+    unsigned vb0 = gk_count("vb"), tx0 = gk_count("tex");
+    uint32_t vb = vb_make(N), p, q;
+    p = vb_lock(vb, 0, 0, 0); pat(p, N, 1); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO); int ok = is_pat(q, N, 1); vb_unlock(vb);
+    check(p && ok, "hb-roundtrip", "Lock 0x%08x, a whole Lock's writes read back %d", p, ok);
+    /* a Lock of part: its window holds the buffer's bytes there; the rest stays */
+    p = vb_lock(vb, 100, 50, 0); int pre = is_pat(p, 50, PAT_AT(1, 100)); if (p) memset(g_mem + p, 0xAA, 50); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO);
+    check(pre && is_byte(q + 100, 50, 0xAA) && is_pat(q, 100, 1) && is_pat(q + 150, N - 150, PAT_AT(1, 150)), "hb-partial",
+          "Lock(100,50): the old bytes there %d, written %d, before kept %d, after kept %d", pre, is_byte(q + 100, 50, 0xAA),
+          is_pat(q, 100, 1), is_pat(q + 150, N - 150, PAT_AT(1, 150)));
+    vb_unlock(vb);
+    p = vb_lock(vb, 200, 20, LK_NOOV); pre = is_pat(p, 20, PAT_AT(1, 200)); if (p) memset(g_mem + p, 0xBB, 20); vb_unlock(vb);
+    q = vb_lock(vb, 0, 0, LK_RO);
+    check(pre && is_byte(q + 200, 20, 0xBB) && is_pat(q + 220, N - 220, PAT_AT(1, 220)), "hb-nooverwrite",
+          "NOOVERWRITE(200,20): the old bytes there %d, written %d, after kept %d", pre, is_byte(q + 200, 20, 0xBB),
+          is_pat(q + 220, N - 220, PAT_AT(1, 220)));
+    vb_unlock(vb); release(vb);
+
+    /* locked every frame: the data of the last Lock, and a Lock of part points into the same window */
+    vb = vb_make(N);
+    for (int i = 0; i < 8; i++){ p = vb_lock(vb, 0, 0, 0); pat(p, N, (uint8_t)(20 + i)); vb_unlock(vb); present(); }
+    q = vb_lock(vb, 0, 0, LK_RO); ok = is_pat(q, N, 27); vb_unlock(vb);
+    p = vb_lock(vb, 64, 32, 0); vb_unlock(vb);
+    check(ok && p == q + 64u, "hb-per-frame", "eight per-frame Locks: the last kept %d; Lock(64,32) at the window + 64 %d", ok, p == q + 64u);
+    release(vb);
+
+    /* a texture level: a round trip, and the level kept over a Reset */
+    uint32_t t = tex_make(64, 64);
+    p = tex_lock(t, 0); pat(p, 64*64*4, 11); tex_unlock(t);
+    q = tex_lock(t, LK_RO); ok = is_pat(q, 64*64*4, 11); tex_unlock(t);
+    check(p && ok, "hb-tex-roundtrip", "LockRect 0x%08x, read back %d", p, ok);
+    vb = vb_make(N); p = vb_lock(vb, 0, 0, 0); pat(p, N, 13); vb_unlock(vb);
+    present_params(1280, 720, 1); call(g_dev, "Reset", 1, PP);
+    q = vb_lock(vb, 0, 0, LK_RO); ok = is_pat(q, N, 13); vb_unlock(vb);
+    uint32_t qt = tex_lock(t, LK_RO); int okt = is_pat(qt, 64*64*4, 11); tex_unlock(t);
+    check(ok && okt, "hb-reset", "after a Reset: the buffer %d, the texture %d", ok, okt);
+    release(vb); release(t);
+
+    /* 2,000 resources made, written, read and released: nothing left in the buffer heap */
+    for (int i = 0; i < 2000; i++){
+        vb = vb_make(4096); p = vb_lock(vb, 0, 0, 0); pat(p, 4096, (uint8_t)i); vb_unlock(vb);
+        if (i & 1){ vb_lock(vb, 0, 0, LK_RO); vb_unlock(vb); }
+        release(vb);
+        t = tex_make(64, 64); p = tex_lock(t, 0); pat(p, 64*64*4, (uint8_t)i); tex_unlock(t); release(t);
+    }
+    check(gk_count("vb") == vb0 && gk_count("tex") == tx0, "hb-no-leak", "vertex buffer blocks %u (%u before), texture blocks %u (%u before)",
+          gk_count("vb"), vb0, gk_count("tex"), tx0);
+
+    /* 20,000 live textures, a pseudo-random half released, the rest read back */
+    enum { NT = 20000 }; static uint32_t tex[NT]; uint32_t bad = 0, rnd = 12345u;
+    for (int i = 0; i < NT; i++){ tex[i] = tex_make(16, 16); p = tex_lock(tex[i], 0); pat(p, 16*16*4, (uint8_t)(i * 13)); tex_unlock(tex[i]); }
+    for (int i = 0; i < NT; i++){ rnd = rnd * 1103515245u + 12345u; if ((rnd >> 16) & 1){ release(tex[i]); tex[i] = 0; } }
+    for (int i = 0; i < NT; i++) if (tex[i]){ q = tex_lock(tex[i], LK_RO); if (!is_pat(q, 16*16*4, (uint8_t)(i * 13))) bad++; tex_unlock(tex[i]); }
+    for (int i = 0; i < NT; i++) if (tex[i]) release(tex[i]);
+    check(!bad && gk_count("tex") == tx0, "hb-many", "%u textures read back wrong; texture blocks %u after (%u before)", bad, gk_count("tex"), tx0);
+}
+
 int main(void){
     for (uint32_t pg = 0; pg < (0x03000000u >> 14); pg++) g_cbits[pg >> 3] |= (uint8_t)(1u << (pg & 7));
     g_cpu.esp = STACK;
@@ -624,6 +745,7 @@ int main(void){
         t_prim(2, 2, 2500, 48);
         t_prim(0, 4, 1400, 32);                                /* 4,200 vertices: DrawPrimitiveUP in chunks */
     }
+    t_hostback();
     check(!g_stack_bad, "stdcall", "%d calls left the stack wrong", g_stack_bad);
     printf("d3d9_unit (%s): %d passed, %d failed\n", MW ? "mw" : "ug2", g_pass, g_fail);
     return g_fail ? 1 : 0;
