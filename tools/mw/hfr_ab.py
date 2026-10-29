@@ -19,6 +19,18 @@ import re, sys
 TR = re.compile(r'^\[hfrtr\] f=(\d+) t=([\d.]+) st=(\d+)(.*)$')
 
 
+BAD = re.compile(r'\[expect\] FAIL|waitexpr TIMEOUT')
+
+
+def invalid(path):
+    """the first line that makes a run no evidence: a failed expect, or (older runs, before the script's
+    expects) a timed-out waitexpr, after which the script went on as if GO had come"""
+    for line in open(path, errors='replace'):
+        if BAD.search(line):
+            return line.strip()
+    return None
+
+
 def load(path):
     rows = {}
     for line in open(path, errors='replace'):
@@ -79,11 +91,18 @@ def tsum(tr):
 
 
 def main():
+    bad = invalid(sys.argv[1])
+    if bad:
+        sys.exit(f"ref {sys.argv[1]}: not a valid run: {bad}")
     ref = load(sys.argv[1])
     print(f"ref {sys.argv[1]}: {len(ref)} samples to t={max(ref) if ref else 0:.2f}")
     if ref:
         print('  ' + tsum(traffic(ref)))
     for path in sys.argv[2:]:
+        bad = invalid(path)
+        if bad:
+            print(f"run {path}: left out, not a valid run: {bad}")
+            continue
         run = load(path)
         common = sorted(set(ref) & set(run))
         print(f"run {path}: {len(run)} samples, {len(common)} in common")

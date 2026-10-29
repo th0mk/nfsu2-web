@@ -34,7 +34,9 @@
 +0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
 +0    tap RETURN
 +0    waitmem 0x00925e90 6 24000                         # racing (GameFlow 6)
++0    expect x:0x00925e90 == 6                           # a wait that timed out goes on: this fails the run
 +0    waitexpr b:[0x0091e000]+0x16c != 0 12000           # GO: the player's race timer runs (frames: 240 fps too)
++0    expect b:[0x0091e000]+0x16c != 0                   # no GO: T0 below would not be GO, the run fails
 +0    log hfr_race: GO
 +0    autopilot on
 +0    mark T0 f:[0x009203b0]+0x18
