@@ -4,8 +4,12 @@
 # career has Resume Career (label 0xE072DB21 on 0x4B4E388A), Start New Career (0x17E18F87) and Load (0x0018ECFF),
 # left to right.  Resume Career loads the world (Loading.fng, GameFlow 4; FadeScreen.fng, 5; GameFlow 6) straight
 # into free roam: no race, the car where the career's free roam began (the autosave writes ALPHA again as it
-# starts), and no prologue race replayed (`autopilot races` logs any race that starts).  Then the free drive: Up
-# (gas) held 300 frames moves the car.  (***) The drive starts with GameFlow 6, as no screen comes later to wait
+# starts), and no prologue race replayed: a prologue race, the intro's or one Resume Career loads from its autosave,
+# opens its NIS scene bundle (NIS/Scene_*.bun, FILELIST=1) while the world loads (seen in every career_start.txt
+# run, and in its Resume Career after a lost race), and none opens here.  `autopilot races` logs a race that goes
+# active while the run lasts (a race Resume Career loaded went active 630 frames after GameFlow 6 in a probe run,
+# and 840 to 870 frames after the Enter on Resume Career in career_start.txt runs; the intro's race 1 only 2,700 to
+# 4,300 frames after GameFlow 6, past this run's end).  Then the free drive: Up (gas) held 300 frames moves the car.  (***) The drive starts with GameFlow 6, as no screen comes later to wait
 # on: the car takes the gas from GameFlow 6's first frame (a probe run, the gas held from that frame: 10.7 km/h 21
 # frames on, while FadeScreen.fng and Autosave_Overlay.fng were up), HUD_SingleRace.fng never takes input, and
 # Autosave_Overlay.fng stays in the package list all through free roam (NFSU2_FNG_LOG=2).

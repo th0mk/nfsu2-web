@@ -2,9 +2,11 @@
 # Suite check for "career_resume" (tests/mw/scripts/career_resume.txt, TRACKER M4-09), a start seeded with the save
 # career_start.txt left: the module under test is named (L-020); every wait in time; the start read the seeded
 # ALPHA, the main menu came, Career showed the career menu of an alias with a career (Resume Career), and
-# Resume Career put the car in free roam: GameFlow 6, a career with no race (0 racers) and none started in the run,
-# the car within 50 m of where the career's free roam begins (-2148.45 153.03 981.90 in the runs that made the
-# seed), then moved at least 5 m by the gas held 300 frames; all in that order; the game left by WM_CLOSE.
+# Resume Career put the car in free roam: GameFlow 6, a career with no race (0 racers, before the drive and after
+# it), no prologue race loaded (no NIS scene bundle opened after Resume Career: every prologue race opens one while
+# its world loads) and none going active in the run, the car within 50 m of where the career's free roam begins
+# (-2148.45 153.03 981.90 in the runs that made the seed), then moved at least 5 m by the gas held 300 frames; all
+# in that order; the game left by WM_CLOSE.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
 # the fixed strings given must occur in the log in this order, each on a later line; prints the first one missing
@@ -19,6 +21,8 @@ miss=$(inorder "[file] CreateFileA($D/ALPHA/ALPHA\") -> " 'LOG career_resume: AL
   'autopilot races: the AI takes each race at its GO' 'LOG career_resume: free roam' \
   'racestatus flow 6 racers 0 active 0 won 0 player -1: none; mode 2' 'LOG career_resume: drove' \
   'racestatus flow 6 racers 0 active 0 won 0 player -1: none; mode 2') || fail "missing, or out of order: $miss"
+nis=$(awk '/LOG career_resume: Resume Career$/ { p = 1 } p && index($0, "/NIS\\Scene_") { print; exit }' "$LOG")
+[ -z "$nis" ] || fail "a prologue scene loaded after Resume Career:$nis"
 grep -qE '^\[mwrace\] f=[0-9]+ race: active 1' "$LOG" && fail "a race started: $(grep -m1 -E '^\[mwrace\] f=[0-9]+ race: active 1' "$LOG")"
 # the two positions logged after "free roam": the first near the free roam's start, the second 5 m or more from it
 r=$(awk 'BEGIN { n = 0 } /LOG career_resume: free roam$/ { p = 1 } p && /^\[mwrace\] f=[0-9]+ where -?[0-9]/ { x[n] = $4; z[n] = $6; n++ }
