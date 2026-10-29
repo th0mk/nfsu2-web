@@ -370,6 +370,7 @@ async fn ug2_under_u2_on_the_shared_site_and_at_the_root_elsewhere() {
         "/data/SPEED2.EXE",
         "/data-blocks/v2/GLOBAL/small.bin?b=0&n=1",
         "/vault",
+        "/names",
         "/u2x/",
         "/u2.html",
         "/U2/",
@@ -391,8 +392,9 @@ async fn ug2_under_u2_on_the_shared_site_and_at_the_root_elsewhere() {
         (200, Some("index, follow"), Some("text/plain; charset=utf-8"))
     );
     let want = "User-agent: *\nAllow: /\nDisallow: /u2/data/\nDisallow: /u2/data-manifest\nDisallow: /u2/game.wasm\nDisallow: /u2/game.json\n\
-                Disallow: /u2/players\nDisallow: /u2/lan\nDisallow: /u2/vault\nDisallow: /mw/data/\nDisallow: /mw/data-manifest\n\
-                Disallow: /mw/game.wasm\nDisallow: /mw/game.json\nDisallow: /mw/players\nDisallow: /mw/lan\nDisallow: /mw/vault\n";
+                Disallow: /u2/players\nDisallow: /u2/lan\nDisallow: /u2/vault\nDisallow: /u2/names\nDisallow: /mw/data/\n\
+                Disallow: /mw/data-manifest\nDisallow: /mw/game.wasm\nDisallow: /mw/game.json\nDisallow: /mw/players\nDisallow: /mw/lan\n\
+                Disallow: /mw/vault\nDisallow: /mw/names\n";
     assert_eq!(String::from_utf8_lossy(&r.body), want);
     // keyphrase saves under /u2 (no token: 401, how a page tells a server with them)
     assert_eq!(get(shared, "/u2/vault").await.status, 401);
@@ -486,7 +488,7 @@ async fn base_path_moves_a_name() {
     assert_eq!(get("localhost", "/").await.status, 404);
     let r = get("localhost", "/robots.txt").await;
     assert!(String::from_utf8_lossy(&r.body).starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n"));
-    assert!(String::from_utf8_lossy(&r.body).ends_with("Disallow: /mw/vault\n"));
+    assert!(String::from_utf8_lossy(&r.body).ends_with("Disallow: /mw/vault\nDisallow: /mw/names\n"));
     assert_eq!(get("127.0.0.1", "/x/").await.status, 200);
     assert_eq!(get("127.0.0.1", "/x").await.header("location"), Some("/x/"));
     assert_eq!(get("127.0.0.1", "/u2/").await.status, 404);

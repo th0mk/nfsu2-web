@@ -926,7 +926,10 @@ mod tests {
         assert_eq!(robots_txt(&[String::new()]), ROBOTS_TXT);
         let two = robots_txt(&["/u2".into(), "/mw".into()]);
         assert_eq!(two.lines().count(), 2 + 2 * DISALLOW.len());
-        assert!(two.starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n") && two.ends_with("\nDisallow: /mw/vault"));
+        assert!(
+            two.starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n")
+                && two.ends_with("\nDisallow: /mw/vault\nDisallow: /mw/names")
+        );
     }
 
     #[test]
