@@ -50,7 +50,7 @@ const PRIMS = (game) => {
 test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every primitive type', { skip }, () => {
   const { out, ok } = run('mw');
   for (const c of [...LIFETIMES, 'creator-gpu-refused', 'reset-failed-lost', 'reset-ok-clears', 'reset-size', 'levelcount',
-    'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'modes', 'multisample', 'checkformat',
+    'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'volumedesc', 'modes', 'multisample', 'checkformat',
     ...PRIMS('mw')])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(mw\): (\d+) passed, 0 failed$/m);

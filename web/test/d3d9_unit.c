@@ -355,6 +355,22 @@ static void t_state(void){
         uint32_t gt = call(MR32(OUT + 12u), "GetType", 0), gi = call(MR32(OUT + 16u), "GetType", 0);
         check(gt == 6u && gi == 7u, "gettype", "vertex buffer %u, index buffer %u", gt, gi);
         release(MR32(OUT + 12u)); release(MR32(OUT + 16u));
+        /* a volume texture: its own type and D3DVOLUME_DESC (28 bytes, nothing past it) */
+        MR32(OUT + 20u) = 0;
+        call(g_dev, "CreateVolumeTexture", 9, 16u, 8u, 4u, 2u, 0u, 21u, 1u, OUT + 20u, 0u);
+        uint32_t vt = MR32(OUT + 20u);
+        uint32_t vty = call(vt, "GetType", 0), vlc = call(vt, "GetLevelCount", 0);
+        memset(g_mem + DESC, 0xAB, 64);
+        uint32_t vh = call(vt, "GetLevelDesc", 2, 1u, DESC);
+        int volok = vh == 0u && MR32(DESC) == 21u && MR32(DESC + 4) == 2u && MR32(DESC + 8) == 0u && MR32(DESC + 12) == 1u
+               && MR32(DESC + 16) == 8u && MR32(DESC + 20) == 4u && MR32(DESC + 24) == 2u && MR32(DESC + 28) == 0xABABABABu;
+        uint32_t vpast = call(vt, "GetLevelDesc", 2, 2u, DESC);
+        uint32_t tty = call(t, "GetType", 0);
+        check(vty == 4u && vlc == 2u && volok && vpast == D3DERR_INVALIDCALL && tty == 3u, "volumedesc",
+              "type %u (a texture's %u), %u levels, level 1: hr 0x%08x fmt %u type %u %ux%ux%u past 0x%08x, level 2 0x%08x",
+              vty, tty, vlc, vh, MR32(DESC), MR32(DESC + 4), MR32(DESC + 16), MR32(DESC + 20), MR32(DESC + 24),
+              MR32(DESC + 28), vpast);
+        release(vt);
     }
     release(t);
 

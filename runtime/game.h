@@ -139,9 +139,11 @@ typedef struct GameOps {
                                      * (com.c); 0 = UG2's rows: its own 6-row table, with the 4K row's stand-in */
     int d3d9_strict;                /* 1: D3D9's documented answers where UG2's runtime keeps answers of its own
                                      * (com.c): GetLevelDesc and GetDesc give the level's size, the type, usage and
-                                     * pool, GetType names cube textures and buffers, CheckDeviceMultiSampleType
-                                     * offers only what the renderer draws, a texture the renderer could not make
-                                     * fails its CreateTexture, a size beyond 8192 fails Reset; 0 = UG2's */
+                                     * pool (a volume texture's level its D3DVOLUME_DESC), GetType names cube and
+                                     * volume textures and buffers, CheckDeviceMultiSampleType and CheckDeviceFormat
+                                     * offer only what the renderer draws and makes, a texture the renderer could not
+                                     * make fails its CreateTexture; and the renderer's own limit: a back buffer past
+                                     * 8192 a side, which it cannot resize to, fails Reset; 0 = UG2's */
     int vclock_sleep_real;          /* 1: a Sleep of the game's main thread moves the virtual clock by at least
                                      * its real length, also in a frame past the in-frame cap (win32.c), so a
                                      * speed test that sleeps between two clock reads sees its sleep; 0 = UG2's

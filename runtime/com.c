@@ -192,6 +192,7 @@ static uint64_t g_com_del_n[NEL(g_if)];   /* ... and destroyed (last Release) */
 #define CF_DEVICE 2u      /* owned by the device: Release never destroys it */
 #define CF_CHILD  4u      /* surface of a texture: AddRef/Release go to the parent */
 #define CF_DEAD   8u
+#define CF_VOLUME 16u     /* volume texture (game.h d3d9_strict only: GetType, GetLevelDesc) */
 static uint32_t g_vtab[NEL(g_if)];
 static uint64_t g_com_live = 0, g_com_overrel = 0, g_com_bad = 0;
 int com_frees(void){
@@ -808,6 +809,9 @@ static void cube_mark(uint32_t obj){
 static int is_cube_tex(uint32_t obj){
     return obj && !(obj & 15u) && mem_is_committed(obj - 12u) && (CH_FLAGS(obj) & CF_CUBE);
 }
+static int is_volume_tex(uint32_t obj){
+    return obj && !(obj & 15u) && mem_is_committed(obj - 12u) && (CH_FLAGS(obj) & CF_VOLUME);
+}
 
 /* ---- reference counting (see com_new) ------------------------------------ */
 void metal_free_texture(unsigned);
@@ -881,11 +885,12 @@ static uint32_t tex_child(uint32_t t, uint32_t face, uint32_t level, int cube){
     return sf;
 }
 /* Fields the descriptor methods read, beside the sizes and formats:
- *   texture  +140 Usage, +144 Pool (as created)
+ *   texture  +140 Usage, +144 Pool (as created), +148 a volume texture's depth
  *   surface  +12 Usage, +16 Pool, +48 mip level of a texture's surface
  *   VB / IB  +32 Usage, +36 Pool, +40 FVF (VB); +48 and +52 are the mirror's (Lock) */
 #define TEX_USAGE 140u
 #define TEX_POOL  144u
+#define TEX_DEPTH 148u
 #define SURF_USAGE 12u
 #define SURF_POOL  16u
 #define BUF_USAGE 32u
@@ -895,7 +900,8 @@ static uint32_t tex_child(uint32_t t, uint32_t face, uint32_t level, int cube){
  * struct the interface's method fills, nothing past it.  A texture's level
  * has its own size (at least 1); a texture's surface is its level of the
  * texture, with the texture's usage and pool; the back buffer is a render
- * target and the implicit depth surface a depth-stencil, both D3DPOOL_DEFAULT. */
+ * target and the implicit depth surface a depth-stencil, both D3DPOOL_DEFAULT;
+ * a volume texture's level is a D3DVOLUME_DESC. */
 static uint32_t res_desc(uint32_t iface, uint32_t self, uint32_t level, uint32_t p){
     if (!p || !com_valid(self)) return 0x8876086Cu;                     /* D3DERR_INVALIDCALL */
     if (iface == IF_VB || iface == IF_IB){
@@ -907,6 +913,21 @@ static uint32_t res_desc(uint32_t iface, uint32_t self, uint32_t level, uint32_t
         MR32(p + 12) = MR32(self + BUF_POOL);
         MR32(p + 16) = MR32(self + 4u);
         if (iface == IF_VB) MR32(p + 20) = MR32(self + BUF_FVF);
+        return 0;
+    }
+    if (iface == IF_TEX && is_volume_tex(self)){
+        /* a volume texture's level: D3DVOLUME_DESC {Format, Type, Usage, Pool, Width, Height, Depth}, 28 bytes */
+        uint32_t nlev = MR32(self + 24u) ? MR32(self + 24u) : 1u;
+        if (level >= nlev) return 0x8876086Cu;
+        uint32_t vw = MR32(self + 4u) >> level, vh = MR32(self + 8u) >> level, vd = MR32(self + TEX_DEPTH) >> level;
+        mem_commit(p, 28);
+        MR32(p)      = MR32(self + 20u) ? MR32(self + 20u) : 22u;
+        MR32(p + 4)  = 2u;                          /* D3DRTYPE_VOLUME */
+        MR32(p + 8)  = MR32(self + TEX_USAGE);
+        MR32(p + 12) = MR32(self + TEX_POOL);
+        MR32(p + 16) = vw ? vw : 1u;
+        MR32(p + 20) = vh ? vh : 1u;
+        MR32(p + 24) = vd ? vd : 1u;
         return 0;
     }
     uint32_t tex = 0, w, h, fmt, usage, pool;
@@ -3457,7 +3478,8 @@ int com_call(CPU *c, uint32_t magic){
              * TestCooperativeLevel D3DERR_DEVICENOTRESET) until a Reset succeeds; a game
              * that went on drawing after a failed Reset crashed (GAME.md 5.7).  It fails on
              * no parameters, more than 3 back buffers (D3DPRESENT_BACK_BUFFERS_MAX) and,
-             * with game.h d3d9_strict, a size past 8192 (UG2 keeps its old size there). */
+             * with game.h d3d9_strict, a size past 8192 a side: the renderer's limit, not
+             * D3D9's (metal_resize ignores a larger size; UG2 keeps its old size there). */
             int rbad = !pp3 || !mem_is_committed(pp3) || !mem_is_committed(pp3+55u);
             if (!rbad && MR32(pp3+12) > 3u) rbad = 1;
             if (!rbad && g_game.d3d9_strict && (MR32(pp3) > 8192u || MR32(pp3+4) > 8192u)) rbad = 1;
@@ -3642,6 +3664,16 @@ int com_call(CPU *c, uint32_t magic){
             if(pp) MR32(pp)=sf; r=0;
           cube_done:; }
         else if (MID(CreateVolumeTexture)){ uint32_t pp=A(c,8), v=com_new(IF_TEX,160);   /* same layout as 2D (child slots) */
+            /* (this, Width, Height, Depth, Levels, Usage, Format, Pool, ppVolumeTexture, pShared).  The
+             * renderer has no volume textures, so nothing is made there; with game.h d3d9_strict the object
+             * keeps what it was made as, for GetType, GetLevelCount and GetLevelDesc.  Its levels
+             * (GetVolumeLevel, LockBox) are not modelled: Most Wanted makes none (its device calls through
+             * [0x982BDC] create textures and cubes only, and it imports no D3DX volume function). */
+            if (v && g_game.d3d9_strict){
+                CH_FLAGS(v) |= CF_VOLUME;
+                MR32(v+4)=A(c,1); MR32(v+8)=A(c,2); MR32(v+TEX_DEPTH)=A(c,3); MR32(v+24)=A(c,4)?A(c,4):1u;
+                MR32(v+TEX_USAGE)=A(c,5); MR32(v+20)=A(c,6); MR32(v+TEX_POOL)=A(c,7);
+            }
             if(pp) MR32(pp)=v;
             r = v ? 0u : 0x8007000Eu; }
         /* Every creator says when it made nothing (E_OUTOFMEMORY, the pointer NULL): an
@@ -4011,7 +4043,8 @@ int com_call(CPU *c, uint32_t magic){
             r=0; }
         else if (MID(GetLevelCount)) r=(self&&MR32(self+24))?MR32(self+24):1u;
         else if (MID(GetType) && g_game.d3d9_strict)       /* D3DRESOURCETYPE */
-            r = iface==IF_TEX ? (is_cube_tex(self) ? 5u : 3u) : iface==IF_SURF ? 1u : iface==IF_VB ? 6u : 7u;
+            r = iface==IF_TEX ? (is_cube_tex(self) ? 5u : is_volume_tex(self) ? 4u : 3u)
+              : iface==IF_SURF ? 1u : iface==IF_VB ? 6u : 7u;
         else if (MID(GetType)) r=(iface==IF_TEX)?3u:(iface==IF_SURF?1u:(iface==IF_VB?4u:5u));
         else if ((MID(GetDesc)||MID(GetLevelDesc)) && g_game.d3d9_strict) r = res_desc(iface, self, A(c,1), A(c,nargs-1));
         else if (MID(GetSurfaceLevel)||MID(GetCubeMapSurface)){
