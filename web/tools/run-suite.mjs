@@ -116,6 +116,9 @@ const MW_TABLE = [
   // (the start reads no file as far as a 16th block, Underground 2's), and the cache on this PC fills up at the 40th
   // block; tests/mw/checks/datafault.sh wants each of them seen
   ['datafault', 'boot_menu.txt', 'waitfng MainMenu.fng satisfied', 'NFSU2_DATA_FAULT=fail:7,hang:29,stall:3000,deny:4,full:40', 400],
+  // a random Quick Race to GO, then 10,000 frames of the game's AI driving: the per-frame anchor once a Present
+  // (TRACKER M4-01; runtime/mw/career_mw.c's aids run there); 25 races in a row are race_loop.txt's, ad hoc
+  ['race_frames', 'race_frames.txt', 'race_frames: 10000 frames', 'NFSU2_QUIT_FRAMES=20000', 600],
 // NFSU2_SAVE_SEED seeds each, as an ad-hoc scenario: a build with the D3DX oracle needs d3dx9_26.dll in the save
 // folder (and --env NFSMW_D3DX=/save/d3dx9_26.dll; tests/mw/scripts/boot_menu.txt)
 ].map(([name, script, marker, extra, alarm, blocked, net]) => ({ name, script, marker, extra, alarm, blocked, net, seed: !!SEED }));

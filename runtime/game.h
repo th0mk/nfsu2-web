@@ -106,7 +106,13 @@ typedef struct GameOps {
 
     /* ---- every frame ---- */
     void (*on_present)(CPU *c);     /* every Present, on the game's thread (com.c) */
-    void (*on_frame)(CPU *c);       /* once per pass of the game's main loop */
+    void (*on_frame)(CPU *c);       /* once per pass of the game's main loop: guest_hook (debug.c) runs it
+                                     * at frame_site, on the game's thread, and counts the passes
+                                     * (debug_frame_passes) */
+    uint32_t frame_site;            /* the instruction of the main loop on_frame runs before (an instruction
+                                     * hook the game's table marks for the lift), between the game's update
+                                     * and its render; 0 = none (UG2: its features hook its GameLoop
+                                     * themselves, through hook) */
     void (*on_test_frame)(void);    /* every Present, after the test frame counter moved and before the
                                      * test script's lines of that frame (autotest.c) */
     void (*status)(StatusOut *s);   /* the drive, pause, text message and free-roam state for the page */

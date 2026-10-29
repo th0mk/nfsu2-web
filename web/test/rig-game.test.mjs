@@ -85,6 +85,7 @@ test('run-suite: the scenario tables', () => {
   const mw = tool('run-suite', ['--game', 'mw', '--list']);
   assert.equal(mw.status, 0);
   assert.match(mw.stdout, /^datafault {3}boot_menu\.txt {10}marker "waitfng MainMenu\.fng satisfied", NFSU2_DATA_FAULT=fail:7,hang:29,stall:3000,deny:4,full:40, 400 s$/m);
+  assert.match(mw.stdout, /^race_frames race_frames\.txt {7}marker "race_frames: 10000 frames", NFSU2_QUIT_FRAMES=20000, 600 s$/m);
   assert.ok(tool('run-suite', ['--game', 'mw', '--help']).stdout.endsWith(mw.stdout.split('\n').filter(Boolean).map(l => `  ${l}`).join('\n') + '\n'));
   // a named scenario of the other game is unknown
   const r = tool('run-suite', ['--game', 'mw', '--base', 'http://127.0.0.1:9', 'quickrace']);

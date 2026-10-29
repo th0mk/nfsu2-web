@@ -77,8 +77,15 @@ void watch_dump(const char *why, int maxn){
  * The lift emits guest_hook(c, va) before every hooked instruction; which
  * sites are hooked, and what they do, is the game's (runtime/game.h). */
 uint64_t g_hook_hits = 0, g_gs_fail = 0;
+static uint64_t g_frame_passes;      /* the main loop's passes through frame_site (game.h) */
+uint64_t debug_frame_passes(void){ return g_frame_passes; }
 void guest_hook(CPU *c, uint32_t ip){
     g_hook_hits++;
+    if (ip == g_game.frame_site && ip){
+        g_frame_passes++;
+        if (g_game.on_frame) g_game.on_frame(c);
+        return;
+    }
     if (g_game.hook) g_game.hook(c, ip);
 }
 

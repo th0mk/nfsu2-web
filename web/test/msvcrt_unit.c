@@ -72,6 +72,9 @@ uint8_t g_cbits[1u << 15];              /* every page counts as committed: the m
 
 /* ---- the game's table (its file is linked) and the rest of the runtime ---- */
 void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
+/* the race aids (career_mw.c) and the debugging hook (debug_mw.c) the table names: not linked here */
+void mw_frame(CPU *c){ (void)c; }
+int  mw_debug_hook(CPU *c, uint32_t va){ (void)c; (void)va; return 0; }
 const ModInfo g_srv_modinfo; const ImpEnt g_srv_imp[1]; const uint32_t g_srv_imp_count;
 const uint32_t g_srv_fn_addr[1]; const mod_fn g_srv_fn_ptr[1]; const uint32_t g_srv_fn_count;
 #define RT_STUBS_MODULE_REAL

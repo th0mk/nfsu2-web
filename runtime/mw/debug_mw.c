@@ -13,7 +13,8 @@
  *                                 DllMain), then FreeLibrary; a lifted DLL
  *                                 the game loads only later (server.dll for
  *                                 a LAN host) can be checked at boot
- * Numbers take C's prefixes (0x...). */
+ * Numbers take C's prefixes (0x...).  The race aids (racewin, autopilot, teleport, where, racestatus,
+ * frames) are career_mw.c's; career_cmd hands them on. */
 #include "cpu.h"
 #include "game.h"
 #include "module.h"
@@ -25,15 +26,18 @@
 long autotest_frame(void);
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
 
+int mw_aid_is_cmd(const char *cmd); int mw_aid_cmd(CPU *c, const char *line, long *wait_start);  /* career_mw.c */
+
 int career_is_cmd(const char *cmd){
-    return !strcasecmp(cmd, "call") || !strcasecmp(cmd, "loadlib");
+    return !strcasecmp(cmd, "call") || !strcasecmp(cmd, "loadlib") || mw_aid_is_cmd(cmd);
 }
 
-/* line = "<cmd> <args>"; 1 = done (these never wait) */
+/* line = "<cmd> <args>"; 1 = done (these two never wait; the race aids of career_mw.c wait for the frame
+ * anchor) */
 int career_cmd(CPU *c, const char *line, long *wait_start){
-    (void)wait_start;
     char cmd[32] = {0}; int used = 0;
     if (sscanf(line, "%31s %n", cmd, &used) < 1) return 1;
+    if (mw_aid_is_cmd(cmd)) return mw_aid_cmd(c, line, wait_start);
     const char *p = line + used;
     if (!strcasecmp(cmd, "call")){
         uint32_t fn = 0, ecx = 0, arg[15]; int na = 0, have_fn = 0;
@@ -60,5 +64,24 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
         if (h) fprintf(stderr, "[mwtest] f=%ld freelib %s -> %d\n", autotest_frame(), nm, module_free(c, h));
         return 1;
     }
+    return 1;
+}
+
+/* The game's instruction hooks (game.h hook): MW's own one, the frame anchor, is core's (frame_site), so a hit
+ * here is a debugging one, an address a lift was given with gen.sh's HOOKS=... (a function's first
+ * instruction, say).  NFSMW_HOOKLOG=1 logs the first 20 hits of each address, with the return address and
+ * the first three stack arguments at a function's entry: "[hook] f=N 0xADDR from RET args A1 A2 A3 ecx X". */
+int mw_debug_hook(CPU *c, uint32_t va){
+    static int on = -1;
+    if (on < 0){ const char *e = getenv("NFSMW_HOOKLOG"); on = e && atoi(e); }
+    if (!on) return 0;
+    static struct { uint32_t va; int n; } seen[512];
+    static int ns;
+    int i = 0;
+    while (i < ns && seen[i].va != va) i++;
+    if (i == ns){ if (ns == 512) return 0; seen[ns].va = va; seen[ns].n = 0; ns++; }
+    if (seen[i].n++ >= 20) return 0;
+    fprintf(stderr, "[hook] f=%ld 0x%08x from 0x%08x args %08x %08x %08x ecx %08x\n", autotest_frame(), va,
+            MR32(c->esp), MR32(c->esp + 4u), MR32(c->esp + 8u), MR32(c->esp + 12u), c->ecx);
     return 1;
 }

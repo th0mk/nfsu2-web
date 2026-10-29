@@ -76,6 +76,9 @@ uint32_t module_nearest_fn(uint32_t a, const char **mod){
 }
 /* ---- game_mw.c's: what this unit does not link --------------------------- */
 void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
+/* the race aids (career_mw.c) and the debugging hook (debug_mw.c) the table names: not linked here */
+void mw_frame(CPU *c){ (void)c; }
+int  mw_debug_hook(CPU *c, uint32_t va){ (void)c; (void)va; return 0; }
 int  win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r){ (void)c; (void)dll; (void)n; (void)r; return 0; }
 int  msvcrt_call(CPU *c, const char *n, uint32_t *r){ (void)c; (void)n; (void)r; return 0; }
 int  d3dxmath_install(int oracle_linked){ (void)oracle_linked; return 0; }

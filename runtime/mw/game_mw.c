@@ -32,6 +32,22 @@ extern const ThreadName mw_thread_names[];     /* threads_mw.c */
 uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
 void fxcensus_init(void);                      /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census (oracle builds) */
 void mw_sound_position(void);                  /* sound_mw.c */
+void mw_frame(CPU *c);                         /* career_mw.c: the test aids' work, once a pass of the main loop */
+int mw_debug_hook(CPU *c, uint32_t va);        /* debug_mw.c: NFSMW_HOOKLOG, a debugging lift's extra hooks */
+
+/* An instruction the lift hooks (gen.sh collects every HOOK_SITE of the C files in runtime/mw into HOOKS):
+ * guest_hook (debug.c) runs before it. */
+#define HOOK_SITE(va) (va##u)
+
+/* The game's per-frame anchor (Q-24).  The C runtime's main (0x666590) loops on [0x9257EC] == 0 and calls
+ * MainLoop (0x663D30) once a pass, from 0x66667D with the milliseconds since the last pass.  MainLoop runs the
+ * game's update and then its render: World_Service (0x75AAD0, the reader of the world's first timestep
+ * 0x903290) from 0x663E5A, and the render wrapper 0x64A7C0 from 0x663ECF, whose 0x6E7220 presents (a PRESENTBT
+ * backtrace at the main menu).  The render is skipped while [0x925854] is set or the frame-skip count
+ * [0x925850] is above 0.  0x663EC6 (mov al, [0x925854]) is where the update's branches meet before that
+ * test: every pass reaches it once, after the update and before the render, so the work there is seen in the
+ * same frame's picture. */
+#define MW_FRAME_SITE HOOK_SITE(0x00663ec6)
 
 /* the lifted DLLs (module.c): EA's LAN server (gen/mw/server, prefix srv_,
  * pinned in games/mw/game.conf), and Microsoft's D3DX as a dev-only oracle
@@ -104,8 +120,7 @@ static const uint32_t mw_modes[][2] = {
 /* Left 0, and why:
  *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
  *   lang_suffixes       Q-06 (the movies' language suffix)
- *   hook                no MW hook sites yet (games/mw has no override or hook list)
- *   on_present, on_frame, status   Q-24 (MW's per-frame anchor), the page's overlay (M6)
+ *   on_present, status  the page's overlay (M6)
  *   sms_request, photo_input   UG2 features, not ported
  *   racer, text_entry   test traces (M4), the page's phone text field (M6-21: the alias name field takes
  *                       WM_CHAR through the window procedure 0x6DB6C0, tests/mw/scripts/kb_alias.txt)
@@ -153,4 +168,8 @@ const GameOps g_game = {
     .thread_start = mw_thread_start,            /* past _threadstartex and the game's trampoline */
     .on_sound_position = mw_sound_position,     /* sound_mw.c: the sound thread's stall count, watched */
     .sound_wall_catchup = 1,                    /* its cursors keep real time with no output (GAME.md 7.2) */
+    .on_frame = mw_frame,                       /* career_mw.c: the queued test aids, between update and render */
+    .frame_site = MW_FRAME_SITE,                /* MainLoop's 0x663EC6, above */
+    .hook = mw_debug_hook,                      /* debug_mw.c: the frame anchor is core's, so only a debugging
+                                                 * lift's HOOKS=... reach it (NFSMW_HOOKLOG) */
 };

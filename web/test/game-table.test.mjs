@@ -18,6 +18,7 @@ const read = f => fs.readFileSync(path.join(REPO, f), 'utf8').replace(/\/\*[\s\S
 // the fields UG2 leaves 0, and why
 const UG2_UNSET = {
   on_frame: 'UG2 hooks its main loop through on_present and hook',
+  frame_site: 'as on_frame: guest_hook hands every hit to hook, as it always has',
   win32_misc: 'win32_misc.c answers Most Wanted\'s imports; UG2\'s stay unimplemented as they always were',
   reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
   sandbox: 'UG2 maps every path into its game folder, as it always has',
@@ -36,8 +37,7 @@ const UG2_UNSET = {
 const MW_UNSET = {
   reg_defaults: 'its registry answers per key (reg_keys, registry_mw.c)',
   lang_suffixes: 'Q-06, the movies\' language suffix',
-  hook: 'no MW hook sites (games/mw has no hook list)',
-  on_present: 'Q-24, MW\'s per-frame anchor', on_frame: 'Q-24', status: 'the page\'s overlay, M6',
+  on_present: 'the page\'s overlay, M6', status: 'the page\'s overlay, M6',
   sms_request: 'a UG2 feature', photo_input: 'a UG2 feature',
   racer: 'test traces, M4', text_entry: 'M3-11',
   crt_lo: 'the C runtime\'s code range is not measured', crt_hi: 'as crt_lo',
@@ -119,6 +119,15 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(t.get('init_check'), '0x009aa9d0u + 0x84cu');
   assert.equal(t.get('thread_names'), 'mw_thread_names');
   assert.equal(t.get('thread_start'), 'mw_thread_start');
+  // the per-frame anchor (Q-24): core runs on_frame at frame_site, a hook site of MW's own file the lift collects
+  // (tools/genstamp.sh hooks: HOOK_SITE in runtime/mw/*.c); its other hooks are a debugging lift's (debug_mw.c)
+  assert.equal(t.get('on_frame'), 'mw_frame');
+  assert.equal(t.get('frame_site'), 'MW_FRAME_SITE');
+  assert.match(read('runtime/mw/game_mw.c'), /#define MW_FRAME_SITE HOOK_SITE\(0x00663ec6\)/);
+  assert.match(read('runtime/mw/career_mw.c'), /\nvoid mw_frame\(CPU \*c\)\{/);
+  assert.equal(t.get('hook'), 'mw_debug_hook');
+  assert.match(read('runtime/debug.c'), /if \(ip == g_game\.frame_site && ip\)\{\s+g_frame_passes\+\+;\s+if \(g_game\.on_frame\) g_game\.on_frame\(c\);\s+return;\s+\}\s+if \(g_game\.hook\) g_game\.hook\(c, ip\);/,
+    'guest_hook runs on_frame at frame_site and hands every other hit to hook; UG2 (frame_site 0) as always');
   assert.match(read('runtime/mw/fe_mw.c'), /\nuint32_t mw_flow\(void\)\{[\s\S]*\nconst char \*mw_top_screen\(void\)\{[\s\S]*\nvoid mw_fe_frame\(void\)\{[\s\S]*\nuint32_t mw_fe_object\(const char \*package, uint32_t hash\)\{/);
   assert.match(read('runtime/mw/threads_mw.c'), /\nconst ThreadName mw_thread_names\[\] = \{[\s\S]*\nuint32_t mw_thread_start\(uint32_t entry, uint32_t arg\)\{/);
   // server.dll always; the D3DX oracle only in a build that linked its lift (web/build.sh: -DNFSU2_D3DX_ORACLE=1)
