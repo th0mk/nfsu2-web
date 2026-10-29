@@ -1,0 +1,43 @@
+# Most Wanted at other frame rates, lockstep A/B (TRACKER M7-21, M7-22; runtime/mw/framerate_mw.c, hfr_mw.c).
+# race_frames.txt's Custom Race circuit (City Perimeter, 3 opponents) with Traffic Level at Maximum (two RIGHTs
+# from Minimum), the game's AI driving the player's car from GO, then 90 s of the simulation's time (the Sim
+# timer [0x9203B0] +0x18, steps x step) and the race's status.  With NFSMW_HFR_TRACE=1 runtime/mw/career_mw.c
+# logs the racers and every vehicle's speed every 0.25 s of game time from GO, so runs at different rates line
+# up: tools/mw/hfr_ab.py REF.log RUN.log... compares them (the player's car, the racers' progress, the traffic's
+# stops).  NFSMW_HFR_AILOG=1 adds the traffic AI's target speed for cars under 0.6 m/s.  Lockstep makes each
+# frame exactly one slot of game time (NFSU2_HFR_LOCKSTEP=1); the race still differs from run to run at the
+# same rate (GO's step, the AI), so compare several runs a rate:
+#   node web/tools/run-suite.mjs --game mw --script hfr_race.txt --marker 'hfr_race: 90 s of game time' \
+#     --env NFSU2_HFR_LOCKSTEP=1 --env NFSU2_FPS=120 --env NFSMW_HFR_TRACE=1 --timeout-scale 6
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", on Traffic Level
++0    tap RIGHT                                          # Moderate
++20   tap RIGHT                                          # Maximum
++20   waitfng Track_Options.fng:a6ed015d 300
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 24000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 12000           # GO: the player's race timer runs (frames: 240 fps too)
++0    log hfr_race: GO
++0    autopilot on
++0    mark T0 f:[0x009203b0]+0x18
++0    log hfr_race: sim clock marked
++0    waitexpr f:[0x009203b0]+0x18 >= @T0+90             # the Sim timer's time, s (+0x18)
++0    log hfr_race: 90 s of game time
++0    racestatus
++0    quit

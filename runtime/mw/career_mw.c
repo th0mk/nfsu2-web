@@ -224,8 +224,56 @@ static void watch_race(CPU *c){
 enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_TELEPORT, Q_WHERE, Q_STATUS };
 static struct { int op, done, rel; float v[6]; } Q;
 
+/* NFSMW_HFR_TRACE=1 (test only, M7-21; tests/mw/scripts/hfr_race.txt, tools/mw/hfr_ab.py): from GO (the player's
+ * race timer running) an [hfrtr] line every 0.25 s of simulation time (steps x step, so runs at different
+ * rates line up): the racers' share of the race (GRacerInfo +0x18), position and speed of the first four
+ * simables of the list at 0x90D664 (the racers, the player first), and the speed of every vehicle of the
+ * list at 0x92D0DC (racers first, then traffic).  Both lists are {vtable, base, capacity, count} with the
+ * entries at base (seen in a race: simables 4 of 20, vehicles 4 of 160 before the traffic came). */
+#define G_SIMLIST 0x0090d664u
+#define G_VEHLIST 0x0092d0dcu
+static void hfr_trace(CPU *c){
+    static int on = -1; static long last = -1;
+    if (on < 0){ const char *e = getenv("NFSMW_HFR_TRACE"); on = e && *e == '1'; }
+    static uint32_t go_st = 0, go_sim = 0; static int go = 0;
+    if (!on || game_flow() != 6u){ go = 0; return; }
+    uint32_t sim = rd(0x009203b0u), rs = rd(G_RACESTATUS);
+    if (!sim || !rs) return;
+    uint32_t st = rd(sim + 0x28u); float P = rdf(sim + 0x20u);
+    if (!go || go_sim != sim){         /* GO: the player's race timer runs (race_frames.txt) */
+        if (!MR8(rs + 0x16cu)) return;
+        go = 1; go_sim = sim; go_st = st; last = -1;
+        fprintf(stderr, "[hfrtr] GO f=%ld st=%u step %.6f\n", autotest_frame(), st, (double)P);
+    }
+    double t = (double)(st - go_st) * (double)P;
+    long k = (long)floor(t * 4.0 + 1e-6);
+    if (k == last) return;
+    last = k;
+    char b[8192]; int o = 0;
+    o += snprintf(b + o, sizeof b - (size_t)o, "[hfrtr] f=%ld t=%.4f st=%u", autotest_frame(), t, st);
+    for (int i = 0; i < (int)rd(rs + RS_NRACERS) && i < 8; i++)
+        o += snprintf(b + o, sizeof b - (size_t)o, " r%d=%.3f", i, rdf(rs + RS_RACERS + (uint32_t)i * RACER_SIZE + RI_PCT));
+    uint32_t sb = rd(G_SIMLIST), sn = rd(G_SIMLIST + 8u), vb = rd(G_VEHLIST), vn = rd(G_VEHLIST + 8u);
+    o += snprintf(b + o, sizeof b - (size_t)o, " ns=%u nv=%u", sn, vn);
+    for (uint32_t i = 0; sb && i < sn && i < 4; i++){          /* the racers: position, speed */
+        uint32_t s = rd(sb + 4u * i);
+        uint32_t p = s ? gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0) : 0;
+        uint32_t v = s ? gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0) : 0;
+        float sp = v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) : -1.0f;
+        o += snprintf(b + o, sizeof b - (size_t)o, " %x:%.2f,%.2f,%.2f,%.3f", s, p ? rdf(p) : 0, p ? rdf(p + 4u) : 0,
+                      p ? rdf(p + 8u) : 0, sp);
+    }
+    o += snprintf(b + o, sizeof b - (size_t)o, " |");
+    for (uint32_t i = 0; vb && i < vn && i < 160 && o < (int)sizeof b - 32; i++){   /* every vehicle: speed */
+        uint32_t v = rd(vb + 4u * i);
+        o += snprintf(b + o, sizeof b - (size_t)o, " %x=%.2f", v, v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) : -1.0f);
+    }
+    fprintf(stderr, "%s\n", b);
+}
+
 void mw_frame(CPU *c){
     if (auto_ai) watch_race(c);
+    hfr_trace(c);
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
     switch (Q.op){
