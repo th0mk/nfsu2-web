@@ -1,6 +1,7 @@
 /* Most Wanted's game flow and front end, as core's logs and the test
- * scripts read them (runtime/game.h flow, top_screen, on_test_frame;
- * runtime/autotest.c waitmem, waitfng, tapuntil and the [fng] lines).  It
+ * scripts read them (runtime/game.h flow, top_screen, on_test_frame,
+ * fe_object; runtime/autotest.c waitmem, waitfng, tapuntil, $O and the
+ * [fng] lines).  It
  * only reads.  The addresses are speed.exe v1.3's, from its code (GAME.md
  * 13.1, 13.2).
  *
@@ -27,7 +28,16 @@
  * retail exe has neither string.  So at every Present (on_test_frame) the
  * active list is walked and each package that was not in it the frame before
  * is noted (autotest_note_screen), which gives MW the same screen lines,
- * waitfng and tapuntil matches. */
+ * waitfng and tapuntil matches.
+ *
+ * A package's objects, for the scripts' $O(PACKAGE:HASH) (game.h fe_object),
+ * as FEPackage::ForAllObjects (0x5B1560) walks them: the first at the
+ * package's +0x4C, the next at +4; an object of type 5 (+0x18), a group,
+ * holds its own list from +0x64 (0x5B1510).  An object's name hash is at
+ * +0x10 (the splash's prompt 0xC6CC55A4, whose script 0x5A3147 starts) and
+ * its data at +0x2C, which begins with its colour as four dwords, blue,
+ * green, red and alpha: a script fading an object moves that alpha (seen in
+ * MW_LS_Splash.fng's objects, frame by frame). */
 #include "cpu.h"
 #include <string.h>
 #include <strings.h>
@@ -39,6 +49,11 @@
 #define PKG_NEXT   0x04u
 #define PKG_NAME   0x0cu
 #define PKG_HASH   0x10u
+#define PKG_OBJS   0x4cu            /* the first object */
+#define OBJ_NEXT   0x04u
+#define OBJ_HASH   0x10u
+#define OBJ_TYPE   0x18u            /* 5: a group */
+#define GRP_OBJS   0x64u            /* a group's first object */
 
 static uint32_t rd(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
 
@@ -78,4 +93,24 @@ void mw_fe_frame(void){
     }
     for (int i = 0; i < n; i++){ seen[i].pkg = pk[i]; seen[i].hash = hs[i]; }
     nseen = n;
+}
+
+/* the object of name hash `hash` in the active package `package`, depth first as the game walks them (groups
+ * nest 8 deep at most here, 4096 objects in all), 0: no such package or object */
+static uint32_t obj_in(uint32_t first, uint32_t hash, int depth, int *budget){
+    for (uint32_t o = rd(first); o && --*budget > 0; o = rd(o + OBJ_NEXT)){
+        if (rd(o + OBJ_HASH) == hash) return o;
+        if (depth < 8 && rd(o + OBJ_TYPE) == 5u){ uint32_t f = obj_in(o + GRP_OBJS, hash, depth + 1, budget); if (f) return f; }
+    }
+    return 0;
+}
+uint32_t mw_fe_object(const char *package, uint32_t hash){
+    uint32_t e = engine(); int n = 0;
+    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && n < LIST_MAX; p = rd(p + PKG_NEXT), n++){
+        const char *nm = pkg_name(p);
+        if (!nm || strcasecmp(nm, package)) continue;
+        int budget = 4096;
+        return obj_in(p + PKG_OBJS, hash, 0, &budget);
+    }
+    return 0;
 }

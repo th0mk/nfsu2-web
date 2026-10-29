@@ -91,6 +91,9 @@
  *                              (the game's, game.h racer; UG2: GRaceStatus
  *                              [0x890118], game_ug2.c), $R0..$R9 racer slot
  *                              i, 0 if none.
+ *                              $O(PACKAGE:HASH) is the object of that name
+ *                              hash in the active front-end package PACKAGE
+ *                              (game.h fe_object; MW: fe_mw.c), 0 if none.
  *                              Example: i:[$P+0x1d4]+0x24
  *     untrace                  stop the periodic trace
  *     expect EXPR OP VALUE     check once: logs "[expect] PASS|FAIL ..."
@@ -505,6 +508,14 @@ static uint32_t tr_eval(const char **pp, int *ok){
     if (*p == '$'){
         if (p[1] == 'P'){ v = tr_racer(1, 0); p += 2; }
         else if (p[1] == 'R' && isdigit((unsigned char)p[2])){ v = tr_racer(0, p[2] - '0'); p += 3; }
+        else if (p[1] == 'O' && p[2] == '('){          /* $O(PACKAGE:HASH): a front-end object (game.h fe_object) */
+            char pkg[64]; int n = 0;
+            for (p += 3; *p && *p != ':' && *p != ')' && n < 63; p++) pkg[n++] = *p;
+            pkg[n] = 0;
+            uint32_t h = *p == ':' ? (uint32_t)strtoul(p + 1, (char **)&p, 0) : 0u;
+            if (*p == ')') p++;
+            v = g_game.fe_object && h ? g_game.fe_object(pkg, h) : 0u;
+        }
         else p++;
         if (!v) *ok = 0;
     } else if (*p == '['){

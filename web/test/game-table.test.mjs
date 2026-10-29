@@ -26,6 +26,7 @@ const UG2_UNSET = {
   d3d_modes: 'EnumAdapterModes lists UG2\'s own 6-row mode table (com.c g_modes), with the 4K row\'s stand-in',
   d3d9_strict: 'UG2\'s runtime keeps its own D3D9 answers (descriptors, GetType, multisampling, failed creators, Reset sizes)',
   vclock_sleep_real: 'UG2\'s virtual clock stands at the in-frame cap apart from its creep, as it always has',
+  fe_object: 'UG2\'s scripts wait on its screens and memory: $O names no object there',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -106,11 +107,12 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.deepEqual([t.get('flow_fe'), t.get('flow_race')], ['3', '6']);
   assert.equal(t.get('top_screen'), 'mw_top_screen');
   assert.equal(t.get('on_test_frame'), 'mw_fe_frame');
+  assert.equal(t.get('fe_object'), 'mw_fe_object');
   assert.equal(t.get('init_tables'), 'mw_init_tables');
   assert.equal(t.get('init_check'), '0x009aa9d0u + 0x84cu');
   assert.equal(t.get('thread_names'), 'mw_thread_names');
   assert.equal(t.get('thread_start'), 'mw_thread_start');
-  assert.match(read('runtime/mw/fe_mw.c'), /\nuint32_t mw_flow\(void\)\{[\s\S]*\nconst char \*mw_top_screen\(void\)\{[\s\S]*\nvoid mw_fe_frame\(void\)\{/);
+  assert.match(read('runtime/mw/fe_mw.c'), /\nuint32_t mw_flow\(void\)\{[\s\S]*\nconst char \*mw_top_screen\(void\)\{[\s\S]*\nvoid mw_fe_frame\(void\)\{[\s\S]*\nuint32_t mw_fe_object\(const char \*package, uint32_t hash\)\{/);
   assert.match(read('runtime/mw/threads_mw.c'), /\nconst ThreadName mw_thread_names\[\] = \{[\s\S]*\nuint32_t mw_thread_start\(uint32_t entry, uint32_t arg\)\{/);
   // server.dll always; the D3DX oracle only in a build that linked its lift (web/build.sh: -DNFSU2_D3DX_ORACLE=1)
   const src = read('runtime/mw/game_mw.c');

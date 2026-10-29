@@ -26,6 +26,7 @@ int win32_misc_call(CPU *c, const char *dll, const char *n, uint32_t *r);   /* w
 int msvcrt_call(CPU *c, const char *n, uint32_t *r); uint32_t msvcrt_bind(const ImpEnt *e);    /* msvcrt_mw.c */
 extern const RegKey mw_reg_keys[];             /* registry_mw.c */
 uint32_t mw_flow(void); const char *mw_top_screen(void); void mw_fe_frame(void);  /* fe_mw.c */
+uint32_t mw_fe_object(const char *package, uint32_t hash);
 extern const ThreadName mw_thread_names[];     /* threads_mw.c */
 uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
 void fxcensus_init(void);                      /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census (oracle builds) */
@@ -139,6 +140,7 @@ const GameOps g_game = {
     .flow_race = 6,
     .top_screen = mw_top_screen,                /* the active packages' tail, [[[0x91CADC]]+0xE4] */
     .on_test_frame = mw_fe_frame,               /* the screens the game brings up, for waitfng and [fng] */
+    .fe_object = mw_fe_object,                  /* the scripts' $O: an active package's object by name hash */
     .init_tables = mw_init_tables,
     .ninit_tables = (int)(sizeof mw_init_tables / sizeof mw_init_tables[0]),
     .init_check = 0x009aa9d0u + 0x84cu,         /* the bitset pointer of 0x9AA9D0's constructor */

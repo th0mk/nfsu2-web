@@ -118,6 +118,9 @@ typedef struct GameOps {
     const char *(*top_screen)(void);    /* the top front-end package's name ("UI_Main.fng"), or 0 */
     uint32_t (*racer)(int human, int slot); /* test traces' $P (human 1: the local human racer) and $Rn
                                      * (racer slot n) of the current race, 0 = none */
+    uint32_t (*fe_object)(const char *package, uint32_t hash); /* test expressions' $O(PACKAGE:HASH)
+                                     * (autotest.c): the object of that name hash in the active front-end
+                                     * package of that name, at any depth of its groups, 0 = none */
     uint32_t (*text_entry)(uint32_t *kind, uint32_t *len, uint8_t *text, uint32_t cap);
                                     /* while the game's text entry is up: the most it takes (0 = not up),
                                      * its kind, its text (cap bytes at most) and length */

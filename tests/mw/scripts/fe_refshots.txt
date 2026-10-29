@@ -2,8 +2,12 @@
 # (MW_LS_Splash.fng before and after its "CLICK to continue" fades in), the first start's "Create a new alias?"
 # (MC_Main.fng), the main menu and each of its items, the options and each of their screens, the Alias Manager and
 # the screen its first item opens.  Every frame is dumped twice, 3 frames apart: a renderer that falls behind drops a
-# flagged frame (the dump names carry the frame number).  The steps wait for the game where it names its screens
-# (waitfng, tapuntil; L-021); the menus' own moves have no screen of their own, so those steps count frames.
+# flagged frame (the dump names carry the frame number).  The steps wait for the game, never for time (L-021):
+# every screen change for its screen by name (waitfng, tapuntil), the title's two fades for their objects in the
+# splash package ($O, game.h fe_object; an object's colour alpha is the int at [object+0x2C]+0xC,
+# runtime/mw/fe_mw.c): its text 0x69EF31D7 fades in as the screen comes up, then the prompt 0xC6CC55A4 (the object
+# whose script the splash's code starts, 0x5A3147) fades in to full and pulses from there.  Frame counts are only
+# settling time on a screen that is up, and the highlight's moves within one, which bring up no screen.
 # It needs the renderer: the play page (test/play.html), not run-suite's hostcheck page, e.g.
 #   test/play.html?wasm=/game.wasm&arg=/data/speed.exe&script=/tests/scripts/fe_refshots.txt
 #     &artifacts=/artifacts/fe_&dumpscale=1&w=1280&h=720&env=NOMOVIES=1&env=GPUVS=1&env=NFSU2_FNG_LOG=1 ...
@@ -12,40 +16,75 @@
 # the game's: they stay out of the repo (out/mw/refshots/, named by screen).
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    waitfng MW_LS_Splash.fng 3000
-+30   dump splash
++0    waitexpr i:[$O(MW_LS_Splash.fng:0x69EF31D7)+0x2c]+0xc >= 255 600     # its text has faded in
++0    dump splash
 +3    dump splash
-+720  dump title                      # "CLICK to continue" has faded in (on the clock, as below)
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
++0    dump title
 +3    dump title
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +60   dump alias_ask                  # a first start: "Create a new alias?", No highlighted
 +3    dump alias_ask
 +0    tapuntil RETURN MainMenu.fng 90 6000
 +0    waitfng MainMenu.fng 600
-+720  dump mainmenu                   # the camera's swing in runs on the clock: 6 s at up to 120 fps
++720  dump mainmenu                   # the camera's swing in: 6 s on the clock, 720 frames at the 120 fps cap
 +3    dump mainmenu
-+0    loop 7                          # Career .. Options, one item a step
++0    loop 7                          # Career .. Options, one item a step (the highlight: no screen)
 +40   tap RIGHT
 +50   dump mainmenu_item
 +3    dump mainmenu_item
 +0    endloop
-+0    tap RETURN                      # Options
-+150  dump options
++0    tapuntil RETURN MainMenu_Sub.fng 90 600   # Options: its items
++140  dump options
 +3    dump options
-+0    loop 6                          # each options item: its screen, back, the next item
-+0    tap RETURN
-+120  dump options_screen
++0    tapuntil RETURN Options.fng 90 600        # each item's screen, back, the next item
++110  dump options_screen
 +3    dump options_screen
-+0    tap ESCAPE
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600
 +90   tap RIGHT
 +60   dump options_item
 +3    dump options_item
-+0    endloop
-+0    tap ESCAPE                      # back to the main menu, on Options
-+120  tap LEFT                        # Alias Manager
-+60   tap RETURN
-+150  dump alias_manager
++0    tapuntil RETURN OptionsPCDisplay.fng 90 600
++110  dump options_screen
++3    dump options_screen
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600
++90   tap RIGHT
++60   dump options_item
++3    dump options_item
++0    tapuntil RETURN Options.fng 90 600
++110  dump options_screen
++3    dump options_screen
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600
++90   tap RIGHT
++60   dump options_item
++3    dump options_item
++0    tapuntil RETURN Options.fng 90 600
++110  dump options_screen
++3    dump options_screen
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600
++90   tap RIGHT
++60   dump options_item
++3    dump options_item
++0    tapuntil RETURN Options_PC_Controller.fng 90 600
++110  dump options_screen
++3    dump options_screen
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600
++90   tap RIGHT
++60   dump options_item
++3    dump options_item
++0    tapuntil RETURN EA_Trax_Jukebox.fng 90 600
++110  dump options_screen
++3    dump options_screen
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600
++90   tap RIGHT
++60   dump options_item
++3    dump options_item
++0    tapuntil ESCAPE MainMenu.fng 90 600       # back to the main menu, on Options
++120  tap LEFT                        # Alias Manager (the highlight)
++60   tapuntil RETURN MC_ProfileManager.fng 90 600   # once the highlight is there
++140  dump alias_manager
 +3    dump alias_manager
-+0    tap RETURN                      # its first item
++0    tapuntil RETURN MC_Main.fng 90 600        # its first item
 +120  dump alias_item
 +3    dump alias_item
 +1800 log fe_refshots: done
