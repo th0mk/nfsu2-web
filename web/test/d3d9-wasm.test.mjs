@@ -54,7 +54,7 @@ test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every pri
   const { out, ok } = run('mw');
   for (const c of [...LIFETIMES, 'creator-gpu-refused', 'reset-failed-lost', 'reset-ok-clears', 'reset-size', 'levelcount',
     'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'volumedesc', 'modes', 'multisample', 'checkformat',
-    ...PRIMS('mw')])
+    'depthtex', 'caps-sm3', ...PRIMS('mw')])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(mw\): (\d+) passed, 0 failed$/m);
 });
@@ -62,7 +62,8 @@ test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every pri
 test('d3d9_unit, UG2: the same rules, UG2\'s own answers where Most Wanted\'s differ', { skip }, () => {
   const { out, ok } = run('ug2');
   for (const c of [...LIFETIMES, 'creator-gpu-refused-ug2', 'reset-failed-lost', 'reset-ok-clears', 'reset-size-ug2',
-    'levelcount', 'leveldesc-ug2', 'modes-ug2', 'multisample-ug2', 'checkformat-ug2', ...PRIMS('ug2')])
+    'levelcount', 'leveldesc-ug2', 'modes-ug2', 'multisample-ug2', 'checkformat-ug2', 'caps-sm2-ug2',
+    ...PRIMS('ug2')])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(ug2\): (\d+) passed, 0 failed$/m);
 });
