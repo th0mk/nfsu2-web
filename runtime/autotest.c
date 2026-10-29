@@ -90,6 +90,9 @@
  *                              exercise the stall watchdog (watchdog.c)
  *     loop N                   repeat the lines up to the matching "endloop"
  *     endloop                  N times (loops may nest; N=0 means forever)
+ *     breakfng NAME            in a loop: when NAME (as waitfng) holds now,
+ *                              leave the innermost loop (the next line is
+ *                              the one after its "endloop"); else nothing
  *     trace EVERY NAME=EXPR... log the expressions every EVERY frames (one
  *                              "[trace]" line; up to 24; replaces the last set).
  *                              EXPR = [TYPE:]ADDR, ADDR = number | [ADDR] |
@@ -247,7 +250,7 @@ enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
        C_COVRESET, C_COVDUMP, C_TRACE, C_UNTRACE, C_EXPECT, C_WAITEXPR, C_MARK, C_EDGE, C_ROAM,
-       C_SRVCYCLE, C_CLICK, C_PHOTO };
+       C_SRVCYCLE, C_CLICK, C_PHOTO, C_BREAKFNG };
 /* roam.c: free-roam multiplayer research probes ("roam <sub> ...") */
 int roam_cmd(CPU *c, const char *line, long *wait_start);
 #define PAD_PLUG 0xFFFFu           /* C_PAD: "pad connect|disconnect" */
@@ -408,6 +411,7 @@ static void load_script(const char *path){
             e.val = (uint32_t)strtoul(a2, 0, 0); }
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
+        else if (!strcasecmp(cmd, "breakfng")){ e.cmd = C_BREAKFNG; snprintf(e.text, sizeof e.text, "%s", a1); }
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
         else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
@@ -507,6 +511,17 @@ static int fe_is(const char *want){
     if ((t && !strcasecmp(t, want)) || (g_screen[0] && !strcasecmp(g_screen, want))) return 1;
     for (int i = 0; i < g_nbatch; i++) if (!strcasecmp(g_batch[i], want)) return 1;
     return 0;
+}
+/* NAME may list alternatives, A|B: any of them (a wait for one of two outcomes) */
+static int fe_is(const char *want){
+    if (!strchr(want, '|')) return fe_is1(want);
+    char one[200];
+    for (const char *p = want;; p++){
+        size_t n = strcspn(p, "|");
+        if (n && n < sizeof one){ memcpy(one, p, n); one[n] = 0; if (fe_is1(one)) return 1; }
+        p += n;
+        if (!*p) return 0;
+    }
 }
 const char *autotest_top_fng(void){ return g_game.top_screen ? g_game.top_screen() : 0; }
 
@@ -865,6 +880,19 @@ static int fire(CPU *c, Ev *e, double tms){
             } else g_nl--;
         }
         break;
+    case C_BREAKFNG:                         /* leave the innermost loop when NAME holds now */
+        if (g_nl && fe_is(e->text)){
+            int depth = 0, i;
+            for (i = g_iev + 1; i < g_nev; i++){
+                if (g_ev[i].cmd == C_LOOP) depth++;
+                else if (g_ev[i].cmd == C_ENDLOOP && depth-- == 0) break;
+            }
+            fprintf(stderr, "[autotest] f=%ld breakfng %s: out of the loop (line %d) in pass %ld\n",
+                    g_frame, e->text, g_ev[g_lstk[g_nl - 1].start].line, g_lstk[g_nl - 1].pass);
+            g_nl--;
+            g_iev = i < g_nev ? i : g_nev - 1;   /* the caller's g_iev++ goes on after its endloop */
+        } else fprintf(stderr, "[autotest] f=%ld breakfng %s: no%s\n", g_frame, e->text, g_nl ? "" : " (not in a loop)");
+        break;
     case C_STATUS: {                         /* inside a loop the label gets the pass number */
         char lb[112]; snprintf(lb, sizeof lb, "%s", e->text[0] ? e->text : "mark");
         if (g_nl) snprintf(lb + strlen(lb), sizeof lb - strlen(lb), "_%ld", g_lstk[g_nl - 1].pass);
@@ -908,7 +936,7 @@ static int fire(CPU *c, Ev *e, double tms){
     }
     (void)c;
     if (e->cmd != C_LOG && e->cmd != C_WAITMEM && e->cmd != C_PEEK && e->cmd != C_WAITFNG && e->cmd != C_TAPUNTIL &&
-        e->cmd != C_TAPPADUNTIL && e->cmd != C_NSTAPUNTIL && e->cmd != C_LOOP && e->cmd != C_ENDLOOP &&
+        e->cmd != C_TAPPADUNTIL && e->cmd != C_NSTAPUNTIL && e->cmd != C_LOOP && e->cmd != C_ENDLOOP && e->cmd != C_BREAKFNG &&
         e->cmd != C_STATUS && e->cmd != C_CAREER && e->cmd != C_WAITEXPR && e->cmd != C_ROAM && getenv("NFSU2_INPUT_LOG"))
         fprintf(stderr, "[autotest] f=%ld line %d fired\n", g_frame, e->line);
     return 1;
