@@ -79,12 +79,11 @@ const char *mw_top_screen(void){
 
 /* every Present: the packages new in the active list, head to tail */
 void autotest_note_screen(const char *nm);
+long autotest_frame(void);          /* autotest.c: the test frame number, the [fng] lines' f= */
 #define LIST_MAX 32                 /* the walk's bound: the front end has a dozen at most */
 void mw_fe_frame(void){
     static struct { uint32_t pkg, hash; } seen[LIST_MAX];
     static int nseen;
-    static long frame;              /* autotest.c's frame number: it calls this once a Present, after counting it */
-    frame++;
     uint32_t pk[LIST_MAX], hs[LIST_MAX]; int n = 0;
     uint32_t e = engine();
     for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && n < LIST_MAX; p = rd(p + PKG_NEXT)){
@@ -107,7 +106,7 @@ void mw_fe_frame(void){
             const char *nm = pkg_name(pk[i]);
             o += snprintf(line + o, sizeof line - (size_t)o, " %s", nm ? nm : "?");
         }
-        fprintf(stderr, "[fng] f=%ld active:%s\n", frame, n ? line : " none");
+        fprintf(stderr, "[fng] f=%ld active:%s\n", autotest_frame(), n ? line : " none");
     }
     for (int i = 0; i < n; i++){ seen[i].pkg = pk[i]; seen[i].hash = hs[i]; }
     nseen = n;
