@@ -1,0 +1,58 @@
+# Most Wanted: the Speedbreaker on the keyboard, its drain and its refill (TRACKER M4-19; the pad:
+# speedbreaker_pad.txt).  A Custom Race circuit, as race_frames.txt picks it (City Perimeter, the car list's first
+# car, automatic gears).  From GO the gas is held (Up) down the start's straight; above 55 mph (the game ignores
+# GAMEBREAKER below 30 mph, 0x6EDC90) Right Ctrl, the keyboard's GAMEBREAKER, switches the Speedbreaker on and at
+# once off again, then G (the action's other key) on, all on the straight; each key is held until the game has
+# switched.  Then the game's AI drives the car (`autopilot on`) while the charge runs out (0.1 a second: 10 s from
+# full) and the game switches it off, and on until the charge has risen by 0.4: the game refills it by 1/25 a
+# second (25 s from empty to full), and only while the car is above 100 mph.  The presses come before the AI first
+# takes the car: after `autopilot on` and `off` in a race, 6 of 6 runs saw no press switch it, keys and pad alike.
+# The waits are on the game's state (runtime/mw/career_mw.c `breaker`: the player's IPlayer +0x34 on, +0x38 the
+# charge; `breaker watch` logs a line at every tenth of the charge with the car's speed).
+#   NFSU2_SAVE_SEED=DIR/new node web/tools/run-suite.mjs --game mw --script speedbreaker.txt #     --marker 'speedbreaker: refilled' --env NFSU2_QUIT_FRAMES=20000
+# (the seed holds only the oracle's d3dx9_26.dll, as boot_menu.txt's header says; no profile is needed)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log speedbreaker: GO
++0    breaker watch
++0    down UP                                            # the gas, held: the start's straight
++0    breaker wait above 55 3000
++0    down RCONTROL                                      # GAMEBREAKER: Right Ctrl (or G), held until the game has seen it
++0    breaker wait on 60
++0    up RCONTROL
++0    log speedbreaker: on by Right Ctrl
++0    breaker                                            # (a frame between the release and the next press)
++0    down RCONTROL
++0    breaker wait off 60
++0    up RCONTROL
++0    log speedbreaker: off by Right Ctrl
++0    breaker
++0    down G                                             # the action's other key
++0    breaker wait on 60
++0    up G
++0    log speedbreaker: on by G
++0    up UP
++0    autopilot on                                       # the AI keeps the car going (and above 30 mph)
++0    breaker wait off 1200                              # at an empty charge
++0    log speedbreaker: switched off by the game
++0    breaker wait rise 0.4 9000
++0    log speedbreaker: refilled
++0    close

@@ -42,9 +42,14 @@
  *                    local player is ("player 1": Game.GetRacerIndex, slot #0)
  *   frames           log the Presents and the main loop's passes so far (M4-01: one pass a Present)
  *   NFSU2_CAR_TRACE=<file> (no command): every race car per frame, UG2's CSV for tools/lan_trace.py (car_trace below)
- *   pursuit [watch]  log the player's pursuit state (heat, the pursuit object, its length), once or whenever it
- *                    changes; pursuit wait on|off [N] waits up to N frames for a pursuit to be there or gone
- *                    (the state's addresses: log_pursuit below)
+ *   pursuit [watch]  log the player's pursuit state (heat, the pursuit's heat range, the pursuit object, its length,
+ *                    the bust timer), once or whenever it changes; pursuit wait on|off [N] waits up to N frames for a
+ *                    pursuit to be there or gone; while watching, the pursuit's end is logged as the game decides it:
+ *                    busted or evaded (the state's addresses and the end's sites: log_pursuit and mw_aid_hook below)
+ *   breaker [watch]  log the player's Speedbreaker (on or off, its charge, the car's speed), once or whenever it
+ *                    changes (a tenth of the charge); breaker wait on|off|full|empty [N] waits up to N frames for it,
+ *                    breaker wait above MPH [N] for the car's speed, breaker wait charge X [N] for a charge of X or more,
+ *                    breaker wait rise X [N] for the charge X above where it is (or full)
  *
  * The game's objects, from speed.exe v1.3's code (GAME.md 13.4; the names are its Lua bindings', registered
  * with their strings from 0x61E900 on):
@@ -267,25 +272,50 @@ static void wedge_watch(CPU *c){
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
-enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_AI_GO, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT };
+enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_AI_GO, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT,
+       Q_BREAKER, Q_BWATCH, Q_BWAIT };
 
-/* The player's pursuit state (exploration, wave 7: offsets read in runs, their meaning where a run showed it):
+/* The player's pursuit state (offsets read in runs, their meaning where a run showed it or the code says it):
  *   IPerpetrator, interface 0x4037E0 of the player's ISimable object (vtable 0x892988): +0x1C the heat, a float
  *     (GetHeat, method +4, 0x409400; SetHeat, method +8, 0x409060, is what Game.SetWorldHeat 0x612660 calls);
  *     +0x20 the bounty (Game.GetPlayerBounty 0x612300 gave the same, 0 before a pursuit and 100 after it);
  *     +0x24 went 0 -> 100 during a pursuit and back to 0 at its end (not identified).
  *   the vehicle's AI interface, 0x403700 (vtable 0x8929F0): +0x70 the pursuit object (vtable 0x892770) from the
- *     pursuit's start (Game.ForcePursuitStart 0x60AAC0) to its end, else 0; the pursuit's +0xB4, a float its
- *     method +0x18 (0x4338C0) returns, grows with the pursuit's length (seconds, inferred).
- * `pursuit` logs these once, `pursuit watch` whenever one changes (each frame anchor), `pursuit wait on|off [N]`
- * waits (at most N frames, default 6000) for a pursuit object to be there, or gone. */
+ *     pursuit's start (Game.ForcePursuitStart 0x60AAC0) to its end, else 0.
+ *   the pursuit object (AIPursuit; the pointer is its base + 0x48, the base built by 0x442D00): +0xB4 its length
+ *     in seconds (method +0x18, 0x4338C0); +0x9C and +0xA0 the heat range it holds the player's heat in (floats:
+ *     its update, 0x443C40.., sets the heat to clamp(heat + escalation, +0x9C, +0xA0) through SetHeat every few
+ *     frames, so a heat set from outside does not stay above +0xA0); +0xDC the bust timer (seconds the player has
+ *     been held: the update sets the busted flag, +0xE8, when it passes 5.0, and then posts MPerpBusted).
+ *   The range is set when the pursuit is made (0x442FEB..0x443171): in a career (GRaceStatus +0x1964 == 2) from
+ *     the current Blacklist bin (GRaceStatus +0x196C, an Attrib instance: MinHeatLevel 0x8F186AC4 and
+ *     MaxHeatLevel 0xE8C24416 of the race_bin_NN collection: 1-2 in bins 15-13, up to 3 in 12-9, 4 in 8-5, 5 in
+ *     4-1; the prologue's bin 16 inherits race_bin's 0-1), 6-6 for the final pursuit (0x5FC560), and an event's
+ *     own MinHeatLevel/MaxHeatLevel (0xE4211F4F int, 0xF5A03629 float) for a pursuit event (0x45F2AD6C set: the
+ *     Challenge Series' pursuits); outside a career 1-5.  Game.ForcePursuitStart(N) passes N as the message's
+ *     MinHeatLevel (MForcePursuitStart, +0x10), and the cop manager (0x42EBF0) raises the heat to N first.
+ * `pursuit` logs these once, `pursuit watch` whenever one changes (each frame anchor; the bust timer by whole
+ * seconds), `pursuit wait on|off [N]` waits (at most N frames, default 6000) for a pursuit object to be there, or
+ * gone.  While watching, the end is logged from the game's own code (hooks, mw_aid_hook): "busted" when the
+ * pursuit's update posts MPerpBusted for the player (0x444695; 0x444711 is an AI racer's), "evaded" when the cop
+ * manager's evade method runs (vtable 0x891900 +0x10, 0x411070: it counts pursuits_in_a_row and posts
+ * MPerpEscaped). */
 #define IID_PERP         0x004037e0u
 #define IID_AIVEH        0x00403700u
 #define PERP_HEAT        0x1cu
 #define AIVEH_PURSUIT    0x70u
 #define PURSUIT_TIME     0xb4u
+#define PURSUIT_HEAT_MIN 0x9cu
+#define PURSUIT_HEAT_MAX 0xa0u
+#define PURSUIT_BUST_T   0xdcu
+#define PURSUIT_BUSTED   0xe8u
+#define PURSUIT_COPS     0x20u      /* the number of cops in the pursuit (its list at +0x18; the update walks it) */
+#define HOOK_SITE(va) (va##u)
+#define SITE_BUSTED      HOOK_SITE(0x00444695)   /* the pursuit update's MPerpBusted post for the player */
+#define SITE_BUSTED_AI   HOOK_SITE(0x00444711)   /* ... for an AI racer (AIRacerBusted) */
+#define SITE_EVADED      HOOK_SITE(0x00411070)   /* the cop manager's evade method (the pursuit is its argument) */
 static int pw_on;
-static uint32_t pw_last[5];
+static uint32_t pw_last[8];
 static uint32_t pursuit_obj(CPU *c, uint32_t *perp){
     uint32_t s = player_simable(c), obj = s ? rd(s + 4u) : 0u, id = IID_PERP, id2 = IID_AIVEH;
     uint32_t p = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u, a = obj ? gcall(c, FN_QUERY, obj, 1, &id2) : 0u;
@@ -294,12 +324,71 @@ static uint32_t pursuit_obj(CPU *c, uint32_t *perp){
 }
 static void log_pursuit(CPU *c, int only_changes){
     uint32_t p = 0, po = pursuit_obj(c, &p);
-    uint32_t v[5] = { rd(p + PERP_HEAT), rd(p + 0x20u), rd(p + 0x24u), po, game_flow() };
+    float bt = po ? rdf(po + PURSUIT_BUST_T) : 0.0f;
+    uint32_t v[8] = { rd(p + PERP_HEAT), rd(p + 0x20u), rd(p + 0x24u), po, game_flow(),
+                      po ? (uint32_t)(bt > 0.0f ? bt : 0.0f) : 0u, po ? MR8(po + PURSUIT_BUSTED) : 0u,
+                      po ? rd(po + PURSUIT_COPS) : 0u };
     if (only_changes && !memcmp(v, pw_last, sizeof v)) return;
     memcpy(pw_last, v, sizeof v);
     float h, t; memcpy(&h, &v[0], 4); t = rdf(po + PURSUIT_TIME);
-    fprintf(stderr, "[mwpursuit] f=%ld heat %.2f pursuit %08x time %.1f bounty %u perp+24 %u flow %u\n",
-            autotest_frame(), h, po, po ? t : 0.0f, v[1], v[2], v[4]);
+    char r[96] = "";
+    if (po) snprintf(r, sizeof r, " range %.2f-%.2f cops %u bust %.1f%s", rdf(po + PURSUIT_HEAT_MIN),
+                     rdf(po + PURSUIT_HEAT_MAX), v[7], bt, v[6] ? " busted" : "");
+    fprintf(stderr, "[mwpursuit] f=%ld heat %.2f pursuit %08x time %.1f%s bounty %u perp+24 %u flow %u\n",
+            autotest_frame(), h, po, po ? t : 0.0f, r, v[1], v[2], v[4]);
+}
+
+/* the pursuit's end as the game decides it (the sites above; logged while `pursuit watch` is on) */
+int mw_aid_hook(CPU *c, uint32_t va){
+    if (va != SITE_BUSTED && va != SITE_BUSTED_AI && va != SITE_EVADED) return 0;
+    if (!pw_on) return 1;
+    if (va == SITE_EVADED)              /* cop manager +0x10 (pursuit): ecx the cop manager, the pursuit at [esp+4] */
+        fprintf(stderr, "[mwpursuit] f=%ld evaded: pursuit %08x (the cop manager's evade, 0x411070)\n",
+                autotest_frame(), MR32(c->esp + 4u));
+    else                                /* the pursuit's update: esi its base + 8, so the pursuit object is esi + 0x40 */
+        fprintf(stderr, "[mwpursuit] f=%ld busted: pursuit %08x%s\n", autotest_frame(), c->esi + 0x40u,
+                va == SITE_BUSTED ? " (MPerpBusted for the player, 0x444695)" : " (an AI racer, 0x444711)");
+    return 1;
+}
+
+/* The player's Speedbreaker (the game's "game breaker"; exploration, M4-19).  The IPlayer interface (the entries of
+ * the player array [0x92D87C], vtable 0x8B0B38) sits at the player object's +0x4C: +0x34 (byte) on, +0x38 (float)
+ * the charge, 0..1.  The input action GAMEBREAKER (Right Ctrl or G) runs IPlayer method +0x28 (0x6EDD10): off when
+ * on, else on when the charge is above 0 (0x6E9AA0 switches it); it does nothing (but switch off) unless the
+ * car is at 30 mph or more ([0x8B01C0]) and a few of the car's states allow it (0x6EDC90).  Each frame 0x6EDD60 (the player's update)
+ * drains the charge while on (0.1 a second of its second time argument, unless the byte [0x988E1C] is set) and
+ * refills it while off, by 1/25 a second ([0x901AE4] = 25 s from empty to full), but only while the car is faster
+ * than [0x901AE8] = 100 mph (m/s x 2.23699, [0x8967E0]); it switches off at an empty charge.  The speed below is
+ * the car's (ISimable's vehicle, +0x2C, m/s) in mph as that code converts it. */
+#define PL_BREAKER_ON    0x34u
+#define PL_BREAKER       0x38u
+#define MPH_PER_MS       2.23699f
+static int bw_on;
+static int bw_last[2] = { -1, -1 };
+static uint32_t player_iface(void){ return rd(G_NPLAYERS) ? rd(rd(G_PLAYERS)) : 0u; }
+static float player_mph(CPU *c){
+    uint32_t s = player_simable(c), v = s ? gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0) : 0u;
+    return v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) * MPH_PER_MS : 0.0f;
+}
+static void log_breaker(CPU *c, int only_changes){
+    uint32_t pl = player_iface();
+    int on = pl ? MR8(pl + PL_BREAKER_ON) : -1;
+    float ch = pl ? rdf(pl + PL_BREAKER) : 0.0f;
+    int tenth = (int)floorf(ch * 10.0f + 1e-4f);
+    if (only_changes && on == bw_last[0] && tenth == bw_last[1]) return;
+    bw_last[0] = on; bw_last[1] = tenth;
+    if (!pl){ fprintf(stderr, "[mwbreaker] f=%ld no player\n", autotest_frame()); return; }
+    fprintf(stderr, "[mwbreaker] f=%ld %s charge %.3f speed %.1f mph\n", autotest_frame(), on ? "on" : "off", ch,
+            player_mph(c));
+}
+/* breaker wait: v[0] 1 on, 0 off, 2 full, 3 empty, 4 the car above x mph, 5 the charge at x or more, 6 the charge
+ * x above where it was when the wait began (from, at most full) */
+static int breaker_met(CPU *c, int want, float x, float from){
+    uint32_t pl = player_iface();
+    if (!pl) return 0;
+    int on = MR8(pl + PL_BREAKER_ON); float ch = rdf(pl + PL_BREAKER);
+    return want == 1 ? on : want == 0 ? !on : want == 2 ? ch >= 1.0f : want == 3 ? ch <= 0.0f
+         : want == 4 ? player_mph(c) > x : want == 5 ? ch >= x : ch >= fminf(from + x, 1.0f) - 1e-4f;
 }
 static struct { int op, done, rel; float v[6]; long since; } Q;
 
@@ -417,6 +506,7 @@ void mw_frame(CPU *c){
     hfr_trace(c);
     car_trace(c);
     if (pw_on) log_pursuit(c, 1);
+    if (bw_on) log_breaker(c, 1);
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
     switch (Q.op){
@@ -465,12 +555,23 @@ void mw_frame(CPU *c){
         log_pursuit(c, 0);
         break; }
     case Q_PWATCH: pw_on = 1; memset(pw_last, 0xff, sizeof pw_last); break;
+    case Q_BREAKER: log_breaker(c, 0); break;
+    case Q_BWATCH: bw_on = 1; bw_last[0] = bw_last[1] = -2; log_breaker(c, 1); break;
+    case Q_BWAIT: {                     /* done once v[0] holds (breaker_met), or after v[1] frames */
+        static const char *const nm[] = { "off", "on", "full", "empty", "above", "charge", "rise" };
+        int met = breaker_met(c, (int)Q.v[0], Q.v[2], Q.v[3]);
+        if (!met && f - Q.since < (long)Q.v[1]) return;
+        fprintf(stderr, "[mwbreaker] f=%ld breaker wait %s: %s after %ld frames\n", f, nm[(int)Q.v[0] % 7],
+                met ? "satisfied" : "TIMEOUT", f - Q.since);
+        log_breaker(c, 0);
+        break; }
     }
     Q.done = 1;
 }
 
 int mw_aid_is_cmd(const char *cmd){
-    static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", "pursuit", 0 };
+    static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", "pursuit",
+                                     "breaker", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -490,7 +591,7 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (Q.op != Q_NONE){                /* this line's work was queued: done once the anchor ran it */
         if (Q.done){ Q.op = Q_NONE; Q.done = 0; *wait_start = -1; return 1; }
         if (*wait_start < 0) *wait_start = f;
-        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT ? (long)Q.v[1] : 0L)) return 0;
+        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT || Q.op == Q_BWAIT ? (long)Q.v[1] : 0L)) return 0;
         fprintf(stderr, "[mwrace] f=%ld %s TIMEOUT after %ld frames: the main loop's frame anchor never ran it\n",
                 f, cmd, f - *wait_start);
         memset(&Q, 0, sizeof Q); *wait_start = -1;
@@ -505,6 +606,22 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
         sscanf(p, "%31s %31s %ld", a1, a2, &n);
         Q.op = !strcasecmp(a1, "watch") ? Q_PWATCH : !strcasecmp(a1, "wait") ? Q_PWAIT : Q_PURSUIT;
         Q.v[0] = strcasecmp(a2, "off") ? 1.0f : 0.0f; Q.v[1] = (float)n; Q.since = f;
+    }
+    else if (!strcasecmp(cmd, "breaker")){
+        /* breaker [watch] | breaker wait on|off|full|empty [N] | breaker wait above MPH [N] | breaker wait charge X [N]
+         * | breaker wait rise X [N] (the charge X above where it is now, or full) */
+        long n = 6000; char a2[32] = {0}; float x = 0.0f; int used2 = 0, used3 = 0;
+        if (sscanf(p, "%31s %31s %n", a1, a2, &used2) == 2){
+            const char *q = p + used2;
+            if (!strcasecmp(a2, "above") || !strcasecmp(a2, "charge") || !strcasecmp(a2, "rise")){
+                sscanf(q, "%f %n", &x, &used3); q += used3; }
+            sscanf(q, "%ld", &n);
+        }                               /* (one word: a1 holds it, "watch" or nothing) */
+        Q.op = !strcasecmp(a1, "watch") ? Q_BWATCH : !strcasecmp(a1, "wait") ? Q_BWAIT : Q_BREAKER;
+        Q.v[0] = !strcasecmp(a2, "off") ? 0.0f : !strcasecmp(a2, "full") ? 2.0f : !strcasecmp(a2, "empty") ? 3.0f
+               : !strcasecmp(a2, "above") ? 4.0f : !strcasecmp(a2, "charge") ? 5.0f : !strcasecmp(a2, "rise") ? 6.0f : 1.0f;
+        Q.v[1] = (float)n; Q.v[2] = x; Q.since = f;
+        { uint32_t pl = player_iface(); Q.v[3] = pl ? rdf(pl + PL_BREAKER) : 0.0f; }   /* rise: from here */
     }
     else if (!strcasecmp(cmd, "autopilot")){
         sscanf(p, "%31s", a1);

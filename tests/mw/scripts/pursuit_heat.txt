@@ -1,0 +1,28 @@
+# Most Wanted: what holds a pursuit's heat (TRACKER M4-16).  Seeded as pursuit_start.txt is, this run resumes the
+# career into free roam and starts a pursuit with Game.ForcePursuitStart(2): the Lua binding's argument is the
+# message's MinHeatLevel (MForcePursuitStart +0x10), and the cop manager (0x42EBF0) raises the player's heat to it
+# first.  The pursuit then holds the heat in its own range (`pursuit watch` logs it: "range MIN-MAX", the pursuit
+# object's +0x9C and +0xA0), which its update (0x443C40..) applies through SetHeat every few frames: in a career
+# the current Blacklist bin's MinHeatLevel and MaxHeatLevel (race_bin_NN; runtime/mw/career_mw.c has the table),
+# so a heat above the bin's maximum falls back to it within frames.  The game's AI drives (`autopilot on`) until
+# the pursuit ends; while watching, the aid logs how the game ended it (evaded or busted).
+#   NFSU2_SAVE_SEED=DIR/freeroam node web/tools/run-suite.mjs --game mw --script pursuit_heat.txt \
+#     --marker 'pursuit_heat: ended' --env NFSU2_QUIT_FRAMES=20000
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # ALPHA loaded: "Load complete.", on Continue
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # the race status in career mode: free roam
++0    pursuit watch
++0    call 0x0060aac0 2                                  # Game.ForcePursuitStart(2): MinHeatLevel 2
++0    pursuit wait on 600
++0    log pursuit_heat: started
++0    autopilot on
++0    pursuit wait off 6000
++0    log pursuit_heat: ended
++0    close

@@ -1,0 +1,44 @@
+# Most Wanted: the Speedbreaker on the pad (TRACKER M4-19; the keyboard, the drain and the refill: speedbreaker.txt).
+# The pad is plugged in from the first frame, so the game's own enumeration at the start offers it and its input
+# set-up binds it (a pad plugged in mid-race is offered to the game but its buttons do nothing in the race, as
+# pad_menu_boot.txt's header says for the front end).  The race as in speedbreaker.txt, the gas (Up) held from
+# GO; above 55 mph the pad's Y switches the Speedbreaker on and at once off again (each press held until
+# the game has switched).
+#   NFSU2_SAVE_SEED=DIR/new node web/tools/run-suite.mjs --game mw --script speedbreaker_pad.txt \
+#     --marker 'speedbreaker_pad: off by Y' --env NFSU2_QUIT_FRAMES=12000
+0     pad connect
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log speedbreaker_pad: GO
++0    breaker watch
++0    down UP                                            # the gas (the keyboard's), held: the start's straight
++0    breaker wait above 55 3000
++0    pad Y                                              # the pad's GAMEBREAKER, held until the game has seen it
++0    breaker wait on 60
++0    pad Y up
++0    log speedbreaker_pad: on by Y
++0    breaker                                            # (a frame between the release and the next press)
++0    pad Y
++0    breaker wait off 60
++0    pad Y up
++0    log speedbreaker_pad: off by Y
++0    up UP
++0    close

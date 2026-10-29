@@ -5,14 +5,17 @@ Input scripts for runtime/autotest.c, served at `/tests/scripts/` by a server st
 
 Besides autotest.c's commands, Most Wanted's runs take `call ADDR [ecx=X] [ARG ...]`, `loadlib NAME`, `objects` (the
 kernel objects in use by kind and creator), `movie NAME` (a movie played as the front end plays one), `movieup` and
-`movieend` (wait until it is up, then gone) and `waitgone PACKAGE` (runtime/mw/debug_mw.c), all test-only, and the
-race aids of runtime/mw/career_mw.c, test-only too, which run at the game's per-frame anchor: `racewin` (a shortcut
-finish: the player is finished where it is, with three of the calls the race's script makes at the line), `autopilot
-on|off` (the game's AI drives the player's car), `autopilot races` (the same at every race's GO from then on, for
-races that follow each other with no menu between, with each race's start and end logged; a lost race is raced again
-as a player would: Enter on its results, then Resume Career), `teleport X Y Z DX DY DZ`, `where`, `racestatus`,
-`frames` and `pursuit [watch]` / `pursuit wait on|off [N]` (the player's pursuit state: heat, the pursuit object, its
-length; the waits are on the game's state).
+`movieend` (wait until it is up, then gone) and `waitgone PACKAGE` (runtime/mw/debug_mw.c), all test-only, and the race
+aids of runtime/mw/career_mw.c, test-only too, which run at the game's per-frame anchor: `racewin` (a shortcut finish:
+the player is finished where it is, with three of the calls the race's script makes at the line), `autopilot on|off`
+(the game's AI drives the player's car), `autopilot races` (the same at every race's GO from then on, for races that
+follow each other with no menu between, with each race's start and end logged; a lost race is raced again as a player
+would: Enter on its results, then Resume Career), `teleport X Y Z DX DY DZ`, `where`, `racestatus`, `frames`, `pursuit
+[watch]` / `pursuit wait on|off [N]` (the player's pursuit state: heat, the pursuit's heat range, the pursuit object,
+its length, its cops and bust timer; while watching, the game's own end of the pursuit, evaded or busted; the waits are
+on the game's state) and `breaker [watch]` / `breaker wait on|off|full|empty [N]`, `breaker wait above MPH [N]`,
+`breaker wait charge X [N]`, `breaker wait rise X [N]` (the player's Speedbreaker: on or off, its charge, the car's
+speed).
 
 The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of the
 race), `race_loop.txt` (25 Quick Races in a row, each ended by `racewin`, with the kernel objects before each load)
@@ -49,7 +52,12 @@ new alias loads to a career menu with Start Career; seeded with `profiles_make.t
 `career_resume.txt` (that save loaded after a restart, back into free roam; seeded with `career_start.txt`'s save).
 
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
-Game.ForcePursuitStart, the game's AI driving, waited on to its end).
+Game.ForcePursuitStart, the game's AI driving, waited on to its end, which the game decides: evaded or busted) and
+`pursuit_heat.txt` (the same save: Game.ForcePursuitStart(2) raises the heat to 2, and the pursuit holds it in its
+heat range, the Blacklist bin's; that save's bin keeps it at 1).
+
+The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
+switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).
 
 Crash fixes (runtime/mw/fixes_mw.c): `fixes_poke.txt` reaches the null guards of the cop unload (0x57D105) and of
 Attrib::StringToLowerCaseKey (0x4549BF) by poke, in the front end; with `NFSU2_TEST_COPLIST_NULL=1` and
