@@ -23,6 +23,9 @@ const UG2_UNSET = {
   sandbox: 'UG2 maps every path into its game folder, as it always has',
   init_tables: 'no [init] line: UG2\'s boot log stays as it was', ninit_tables: 'as init_tables', init_check: 'as init_tables',
   thread_names: 'the watchdog\'s report and the [thread] lines stay as they were', thread_start: 'as thread_names',
+  d3d_modes: 'EnumAdapterModes lists UG2\'s own 6-row mode table (com.c g_modes), with the 4K row\'s stand-in',
+  d3d9_strict: 'UG2\'s runtime keeps its own D3D9 answers (descriptors, GetType, multisampling, failed creators, Reset sizes)',
+  vclock_sleep_real: 'UG2\'s virtual clock stands at the in-frame cap apart from its creep, as it always has',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -116,10 +119,12 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   // the oracle is a system DLL (NFSMW_D3DX names it), with msvcrt's variable bound; UG2's server.dll has neither
   assert.match(src, /MODLINK_TABLES\(d3dx_\)[^}]*\.file_env = "NFSMW_D3DX", \.bind = msvcrt_bind \}/);
   assert.doesNotMatch(read('runtime/game_ug2.c'), /file_env|\.bind\b/, 'UG2\'s server.dll entry sets neither');
-  // its install: the D3DX math imports answered natively (d3dxmath_mw.c), told whether the oracle is linked
+  // its install: the D3DX math imports answered natively (d3dxmath_mw.c), told whether the oracle is linked; an
+  // oracle build also reads NFSMW_FXCENSUS, the effect census (fxcensus_mw.c), which no other build has
   assert.equal(t.get('install'), 'mw_install');
-  assert.match(src, /static void mw_install\(void\)\{\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+#else\s+d3dxmath_install\(0\);\s+#endif\s+\}/);
+  assert.match(src, /static void mw_install\(void\)\{\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+fxcensus_init\(\);\s+#else\s+d3dxmath_install\(0\);\s+#endif\s+\}/);
   assert.match(read('runtime/mw/d3dxmath_mw.c'), /\nint d3dxmath_install\(int oracle_linked\)\{/);
+  assert.match(read('runtime/mw/fxcensus_mw.c'), /\nvoid fxcensus_init\(void\)\{/);
 });
 
 test('each game\'s table is in its own build only', () => {

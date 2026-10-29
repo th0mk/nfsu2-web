@@ -28,6 +28,7 @@ extern const RegKey mw_reg_keys[];             /* registry_mw.c */
 uint32_t mw_flow(void); const char *mw_top_screen(void); void mw_fe_frame(void);  /* fe_mw.c */
 extern const ThreadName mw_thread_names[];     /* threads_mw.c */
 uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
+void fxcensus_init(void);                      /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census (oracle builds) */
 
 /* the lifted DLLs (module.c): EA's LAN server (gen/mw/server, prefix srv_,
  * pinned in games/mw/game.conf), and Microsoft's D3DX as a dev-only oracle
@@ -70,10 +71,9 @@ static const InitTable mw_init_tables[] = {
 
 /* After win32_init, before the entry point (main_web.c): the D3DX math imports answered natively
  * (d3dxmath_mw.c, PLAN D-10), before module_load_imports binds what is left of d3dx9_26.dll's to the
- * oracle in an oracle build */
+ * oracle in an oracle build, which also reads NFSMW_FXCENSUS (fxcensus_mw.c) */
 static void mw_install(void){
 #if NFSU2_D3DX_ORACLE
-    void fxcensus_init(void);                  /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census */
     d3dxmath_install(1);
     fxcensus_init();
 #else
