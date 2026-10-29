@@ -1,0 +1,23 @@
+# Most Wanted: the new-alias seed loads to its screen (TRACKER M4-03, L-025).  Seeded with the save tree
+# profiles_make.txt leaves (ALPHA and BRAVO, made and saved, no career played; NFSU2_SAVE_SEED), this run loads ALPHA
+# from the start's Load list (as profiles_load.txt does) and opens Career: the career menu (MainMenu_Sub.fng) of an
+# alias with no career has the one item Start Career (label 0x6005281E on 0x4B4E388A); one with a career has Resume
+# Career (0xE072DB21), Start New Career (0x17E18F87) and Load (0x0018ECFF), left to right from 0x4B4E388A
+# (career_resume.txt).  Nothing is started or saved.
+# tests/mw/checks/career_new.sh wants the seeded save read, the main menu, then Start Career:
+#   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script career_new.txt \
+#     --marker 'career_new: Start Career' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=9000
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; profiles_make's tree holds it)
+# (*) as race_win.txt: Continue is pressed until the main menu comes.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 600    # "Load complete.", its Continue highlighted
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue (*)
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log career_new: ALPHA loaded
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:6005281e@4b4e388a 600     # the career menu, on Start Career
++0    log career_new: Start Career
++0    close
