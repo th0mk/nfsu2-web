@@ -6,7 +6,8 @@
 //     after each face lookup and while a face is bound, counts live in the guest wrapper, a creator that made
 //     nothing answers E_OUTOFMEMORY with a NULL pointer;
 //   - state rules: a failed Reset reads as lost (TestCooperativeLevel, Present) until a Reset works, GetLevelCount
-//     is a count, the descriptor structs, the mode list, CheckDeviceMultiSampleType;
+//     is a count, the descriptor structs, the mode list, CheckDeviceMultiSampleType, CheckDeviceFormat and
+//     CheckDepthStencilMatch (Most Wanted's agree with what the creators make);
 //   - every primitive type through DrawPrimitiveUP, DrawPrimitive, DrawIndexedPrimitive and DrawIndexedPrimitiveUP
 //     against a CPU reference of D3D9's vertex order (the fans with Most Wanted's strides 48, 24 and 32).
 // Built twice: with Most Wanted's answers (game.h d3d_modes, d3d9_strict) and with UG2's, which stay as they were.
@@ -49,7 +50,8 @@ const PRIMS = (game) => {
 test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every primitive type', { skip }, () => {
   const { out, ok } = run('mw');
   for (const c of [...LIFETIMES, 'creator-gpu-refused', 'reset-failed-lost', 'reset-ok-clears', 'reset-size', 'levelcount',
-    'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'modes', 'multisample', ...PRIMS('mw')])
+    'leveldesc', 'leveldesc-past', 'surfacedesc-level', 'bufferdesc', 'gettype', 'modes', 'multisample', 'checkformat',
+    ...PRIMS('mw')])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(mw\): (\d+) passed, 0 failed$/m);
 });
@@ -57,7 +59,7 @@ test('d3d9_unit, Most Wanted: lifetimes, D3D9 state rules and answers, every pri
 test('d3d9_unit, UG2: the same rules, UG2\'s own answers where Most Wanted\'s differ', { skip }, () => {
   const { out, ok } = run('ug2');
   for (const c of [...LIFETIMES, 'creator-gpu-refused-ug2', 'reset-failed-lost', 'reset-ok-clears', 'reset-size-ug2',
-    'levelcount', 'leveldesc-ug2', 'modes-ug2', 'multisample-ug2', ...PRIMS('ug2')])
+    'levelcount', 'leveldesc-ug2', 'modes-ug2', 'multisample-ug2', 'checkformat-ug2', ...PRIMS('ug2')])
     assert.ok(ok.has(c), `case ${c} passed`);
   assert.match(out, /^d3d9_unit \(ug2\): (\d+) passed, 0 failed$/m);
 });

@@ -390,6 +390,13 @@ static uint32_t game_mode_count(void){
     while (g_game.d3d_modes && n < 64u && g_game.d3d_modes[n][0]) n++;
     return n;
 }
+/* the formats the renderer makes textures and targets in: its own format table, which
+ * metal_level_pitch reads (0 for a format it has none for), as metal_create_texture_ex does */
+static int fmt_makes(uint32_t f){ return metal_level_pitch(1u, 0u, f) != 0u; }
+/* D3D9's depth-stencil formats (D16_LOCKABLE, D32, D15S1, D24S8, D24X8, D24X4S4, D16, D32F_LOCKABLE, D24FS8) */
+static int fmt_is_depth(uint32_t f){
+    return f == 70u || f == 71u || f == 73u || f == 75u || f == 77u || f == 79u || f == 80u || f == 82u || f == 83u;
+}
 
 uint32_t g_rs[256] = {0};        /* also read by d3dx_hle.c's in-line no-op check */
 /* RSLOG=1: measure WHICH render states the game sets.  Instead of applying
@@ -572,6 +579,8 @@ enum {
     MID_CheckDeviceMultiSampleType,
     MID_DrawPrimitive,
     MID_DrawIndexedPrimitiveUP,
+    MID_CheckDeviceFormat,
+    MID_CheckDepthStencilMatch,
     MID__count
 };
 static const char *const g_midname[MID__count] = {
@@ -706,6 +715,8 @@ static const char *const g_midname[MID__count] = {
     "CheckDeviceMultiSampleType",
     "DrawPrimitive",
     "DrawIndexedPrimitiveUP",
+    "CheckDeviceFormat",
+    "CheckDepthStencilMatch",
 };
 static int mid_resolve(const char *nm){
     for (int i = 1; i < MID__count; i++)
@@ -2660,6 +2671,23 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t q = A(c,6), none = A(c,5) == 0u;
             if (q){ mem_commit(q,4); MR32(q) = none ? 1u : 0u; }
             r = none ? 0u : 0x8876086Au; }
+        else if (MID(CheckDeviceFormat) && g_game.d3d9_strict){
+            /* (this, Adapter, DeviceType, AdapterFormat, Usage, RType, CheckFormat): what the creators
+             * make, so a game that asks first never gets a creator's failure.  A texture, cube or volume
+             * texture and a render-target surface: a format the renderer makes (CreateTexture,
+             * CreateCubeTexture and CreateRenderTarget fail for any other).  A depth-stencil surface: a
+             * D3D9 depth format.  A depth-stencil texture: none, the renderer has no depth textures (Most
+             * Wanted asks for D24S8 at 0x6C1725 and 'DF16' at 0x6C175D and creates its shadow map in the
+             * one it is given, 0x6C87A2).  A plain surface and a buffer: any. */
+            uint32_t usage = A(c,4), rtype = A(c,5), f = A(c,6), ok;
+            if (rtype >= 3u && rtype <= 5u) ok = !(usage & 2u) && fmt_makes(f);  /* D3DUSAGE_DEPTHSTENCIL 2 */
+            else if (rtype == 1u) ok = (usage & 2u) ? fmt_is_depth(f) : (usage & 1u) ? fmt_makes(f) : 1;
+            else ok = 1;
+            r = ok ? 0u : 0x8876086Au; }                                       /* D3DERR_NOTAVAILABLE */
+        else if (MID(CheckDepthStencilMatch) && g_game.d3d9_strict){
+            /* (this, Adapter, DeviceType, AdapterFormat, RenderTargetFormat, DepthStencilFormat): every
+             * depth surface goes with every target the renderer makes */
+            r = (fmt_is_depth(A(c,5)) && fmt_makes(A(c,4))) ? 0u : 0x8876086Au; }
         else r=0;                       /* Check* -> D3D_OK */
     }
     /* --- IDirect3DDevice9 --- */

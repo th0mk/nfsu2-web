@@ -88,8 +88,26 @@ int ws_take_border_quad(void){ return 0; }
 static unsigned g_texid = 0;
 static int g_fail_tex = 0;                         /* the renderer refuses the next textures */
 int metal_available(void){ return 1; }
-unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned l, unsigned f, unsigned rt){ (void)w; (void)h; (void)l; (void)f; (void)rt; return g_fail_tex ? 0u : ++g_texid; }
-unsigned metal_create_texture_cube(unsigned e, unsigned l, unsigned f, unsigned rt){ (void)e; (void)l; (void)f; (void)rt; return g_fail_tex ? 0u : ++g_texid; }
+/* the renderer's format table (gpu_web.c fmt_blk): A8R8G8B8, X8R8G8B8, A8, L8 and DXT1/3/5, nothing else */
+static unsigned stub_blk(unsigned f, unsigned *bpb){
+    switch (f){
+    case 21: case 22: *bpb = 4; return 1;
+    case 28: case 41: *bpb = 1; return 1;
+    case 0x31545844u: *bpb = 8; return 4;
+    case 0x33545844u: case 0x35545844u: *bpb = 16; return 4;
+    default: *bpb = 0; return 0;
+    }
+}
+unsigned metal_level_pitch(unsigned w, unsigned level, unsigned f){
+    unsigned bpb, blk = stub_blk(f, &bpb), lw = w >> level;
+    if (!blk) return 0;
+    if (!lw) lw = 1;
+    return blk == 1 ? lw * bpb : ((lw + blk - 1) / blk) * bpb;
+}
+unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned l, unsigned f, unsigned rt){
+    unsigned b; (void)w; (void)h; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
+unsigned metal_create_texture_cube(unsigned e, unsigned l, unsigned f, unsigned rt){
+    unsigned b; (void)e; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
 static unsigned g_freed = 0;
 void metal_free_texture(unsigned id){ (void)id; g_freed++; }
 void metal_mirror_forget(uint32_t o){ (void)o; }
@@ -363,6 +381,32 @@ static void t_state(void){
     if (MW) check(ms == D3DERR_NOTAVAILABLE && q == 0u && m0 == 0u && MR32(OUT) == 1u, "multisample",
                   "NONMASKABLE 0x%08x quality %u, NONE 0x%08x quality %u", ms, q, m0, MR32(OUT));
     else    check(ms == 0u && q == 0xCDCDCDCDu, "multisample-ug2", "0x%08x quality 0x%08x (UG2's answer)", ms, q);
+
+    /* CheckDeviceFormat: MW is told what the creators make, a texture format CreateTexture makes and no depth
+     * texture (its shadow-map probes: D24S8 at 0x6C1725, 'DF16' at 0x6C175D); UG2 keeps D3D_OK */
+    static const uint32_t fm[] = { 21u, 22u, 23u, 25u, 28u, 41u, 75u, 113u, 0x31545844u, 0x35545844u, 0x36314644u, 0x5A544E49u };
+    unsigned agree = 0;
+    for (unsigned k = 0; k < NELM(fm); k++) for (uint32_t u = 0; u < 2u; u++){        /* plain, render target */
+        uint32_t ck = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, u, 3u, fm[k]);
+        MR32(OUT) = 0;
+        uint32_t cr = call(g_dev, "CreateTexture", 8, 16u, 16u, 1u, u, fm[k], u ? 0u : 1u, OUT, 0u);
+        if (!cr) release(MR32(OUT));
+        if ((ck == 0u) == (cr == 0u)) agree++;
+    }
+    uint32_t d24 = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 3u, 75u);
+    uint32_t df16 = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 3u, 0x36314644u);
+    uint32_t dss = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 1u, 75u);
+    uint32_t dsc = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 2u, 1u, 21u);
+    uint32_t rts = call(g_d3d, "CheckDeviceFormat", 6, 0u, 1u, 22u, 1u, 1u, 23u);
+    uint32_t dm = call(g_d3d, "CheckDepthStencilMatch", 5, 0u, 1u, 22u, 22u, 75u);
+    uint32_t dmc = call(g_d3d, "CheckDepthStencilMatch", 5, 0u, 1u, 22u, 22u, 21u);
+    if (MW) check(agree == 2u * NELM(fm) && d24 == D3DERR_NOTAVAILABLE && df16 == D3DERR_NOTAVAILABLE && dss == 0u
+                  && dsc == D3DERR_NOTAVAILABLE && rts == D3DERR_NOTAVAILABLE && dm == 0u && dmc == D3DERR_NOTAVAILABLE,
+                  "checkformat", "%u of %u agree with CreateTexture; depth textures D24S8 0x%08x DF16 0x%08x; depth surface "
+                  "D24S8 0x%08x A8R8G8B8 0x%08x; R5G6B5 target 0x%08x; depth match 0x%08x, with a colour format 0x%08x",
+                  agree, 2u * NELM(fm), d24, df16, dss, dsc, rts, dm, dmc);
+    else    check(d24 == 0u && df16 == 0u && dss == 0u && dsc == 0u && dmc == 0u, "checkformat-ug2",
+                  "D24S8 0x%08x DF16 0x%08x, surfaces 0x%08x 0x%08x, match 0x%08x (UG2's D3D_OK)", d24, df16, dss, dsc, dmc);
 }
 
 /* ---- M3-04: every primitive type against D3D9's rules (CPU reference) ----- */
