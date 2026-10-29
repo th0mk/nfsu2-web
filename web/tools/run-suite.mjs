@@ -168,6 +168,7 @@ if (opt.script) scen = [{ name: opt.name || path.basename(opt.script, '.txt'), s
 else if (names.length) {
   scen = names.map(n => [...TABLE, ...OPT].find(s => s.name === n) ?? (console.error(`unknown scenario ${n} (--list)`), process.exit(2)));
 } else scen = TABLE;
+await requireOwnCheckout(opt.base, scen);
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
 const run = opt.run || `suite-${stamp}`;
 const OUT = path.join(ROOT, 'out/web/runs', run);
@@ -185,6 +186,34 @@ if (GAME === 'mw' && !(SEED && extraEnv.NFSMW_D3DX) && await isOracle(opt.base))
 const REVIEWED = readReviewed(GAME);
 
 const saveName = s => `suite-${run}-${s.name}`.replace(/[^\w.-]/g, '_');
+
+// The server at base serves this checkout: the checks are this checkout's (tests/checks/, tests/mw/checks/), so the
+// scenarios' scripts it serves at /tests/scripts/ must be this checkout's too, or the run is refused (a server
+// started for another worktree, by its NFSU2_REPO or by the binary's own default, the checkout it was built in,
+// serves that one's scripts and module: web/tools/server-cmd.mjs sets NFSU2_REPO for the tools that start one).  A
+// module other than this checkout's own build (out/web/nfsu2.json, out/web/mw/nfsmw.json) only gets a note: --wasm
+// serves another on purpose, and the module line names the one a result is for.
+async function requireOwnCheckout(base, list) {
+  const at = p => new URL(p, base.replace(/\/*$/, '/'));
+  for (const s of list) {
+    if (!s.script || s.script.startsWith('/')) continue;
+    const local = path.join(ROOT, G.tests, 'scripts', s.script);
+    let mine; try { mine = fs.readFileSync(local, 'utf8'); } catch { continue; }    // the run says what is missing
+    let r; try { r = await fetch(at(`tests/scripts/${s.script}`)); } catch { return; }
+    const served = r.ok ? await r.text() : null;
+    if (served === mine) continue;
+    console.error(`${base} serves another checkout's tests: its /tests/scripts/${s.script} ` +
+      `${served === null ? `is missing (HTTP ${r.status}), unlike` : 'is not'} this checkout's ${path.relative(ROOT, local)}; start the ` +
+      `server with NFSU2_REPO=${ROOT} (and --wasm for another module)`);
+    process.exit(2);
+  }
+  const own = { ug2: 'out/web/nfsu2.json', mw: 'out/web/mw/nfsmw.json' }[GAME];
+  let j, o;
+  try { j = await (await fetch(at('game.json'))).json(); o = JSON.parse(fs.readFileSync(path.join(ROOT, own), 'utf8')); } catch { return; }
+  if (j?.rev !== o?.rev || j?.size !== o?.size)
+    console.log(`note: the server sends another module (rev ${j?.rev}, ${j?.size} bytes) than this checkout's ${own} ` +
+      `(rev ${o?.rev}, ${o?.size} bytes)`);
+}
 
 // the module the server sends has the D3DX oracle ("oracle":1 in its /game.json); false when there is no json
 async function isOracle(base) {
