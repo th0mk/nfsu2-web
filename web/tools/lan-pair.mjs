@@ -40,7 +40,8 @@
 //        [--help]    this text and the game's modes
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, the game
-// folder from --data or NFSU2_DATA) and stops it by its child handle at the end.
+// folder from --data or NFSU2_DATA; Underground 2 has a default, Most Wanted's
+// must be given and hold speed.exe) and stops it by its child handle at the end.
 // --bounce <s>: stops that server <s> s after the first page opened and starts
 // it again 3 s later (the pages reconnect; TCP connections are reset).
 //
@@ -106,7 +107,18 @@ const HTTP_PORT = +opt('http-port', 8643);
 const OWN = !argv.includes('--base');
 const BASE = opt('base', `http://localhost:${HTTP_PORT}`);
 if (!OWN) await requireGame(BASE, GAME);
-const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2'));
+// the game folder: Underground 2's default; another game's has none (a NFSU2_DATA in the shell is usually
+// Underground 2's), so its folder must be given and must hold its program
+const DATA = opt('data', process.env.NFSU2_DATA || (GAME === 'ug2' ? path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2') : ''));
+if (OWN && GAME !== 'ug2') {
+  const exe = path.basename(G.exe).toLowerCase();
+  let has = false;
+  try { has = fs.readdirSync(DATA || '.').some(f => f.toLowerCase() === exe); } catch {}
+  if (!DATA || !has) {
+    console.error(`--data <${G.name}'s game folder> (or NFSU2_DATA): ${DATA ? `${DATA} has no ${path.basename(G.exe)}` : 'none given'}`);
+    process.exit(2);
+  }
+}
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/lan-pair')));
 const MODE = opt('mode', Object.keys(LAN.modes)[0]), RACES = +opt('races', 1), PLAYERS = Math.min(6, Math.max(2, +opt('players', 2)));
 const TMO = +opt('timeout', 1200 * RACES) * 1000;
