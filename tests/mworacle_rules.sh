@@ -13,7 +13,8 @@
 #    on 0x7D8CC0 case 0 is a DIFF.
 # 3. the original-loop re-run: 0x852570 case 3, where the lifted side returns
 #    after about 5 s and Unicorn after about 70-85 s, is the same with the
-#    default budget and a DIFF with ORACLE_LONG_ORIG_S=5.
+#    default budget and a DIFF with ORACLE_LONG_END_S=5 (the budget where
+#    the lifted side has ended).
 # 4. a lifted side still at its limit after the 60 s re-run where the original
 #    returns later: ORACLE_MUTATE=loop on 0x852570 case 3 is a DIFF with the
 #    default budgets (the original gets the function's budget, with the loop
@@ -54,8 +55,8 @@ check "0x7D8CC0 case 0, lifted side at its limit: DIFF" diff "DIFF 007d8cc0 case
   "$D/rules-7d8cc0.txt" ORACLE_FNS=7d8cc0 ORACLE_CASE=0 ORACLE_MUTATE=loop
 check "0x819F0B case 41: the same as the lift's doubles" pass "x87 results as the lift's doubles 1," "$D/rules-819f0b.txt" ORACLE_FNS=819f0b ORACLE_CASE=41
 check "0x819F0B case 41, eax ^ 1: DIFF" diff "DIFF 00819f0b case 41: eax 80000001" "$D/rules-819f0b.txt" ORACLE_FNS=819f0b ORACLE_CASE=41 ORACLE_MUTATE=eax
-check "0x852570 case 3, original-loop budget 5 s: DIFF" diff "DIFF 00852570 case 3: outcome: lifted ret at fffe0000, original loop" \
-  "$D/rules-852570.txt" ORACLE_FNS=852570 ORACLE_CASE=3 ORACLE_LONG_ORIG_S=5
+check "0x852570 case 3, the budget where the lifted side ended 5 s: DIFF" diff "DIFF 00852570 case 3: outcome: lifted ret at fffe0000, original loop" \
+  "$D/rules-852570.txt" ORACLE_FNS=852570 ORACLE_CASE=3 ORACLE_LONG_END_S=5
 if [ -z "${QUICK:-}" ]; then
   check "0x852570 case 3, the default budget: the same" pass "original ret after" \
     "$D/rules-852570.txt" ORACLE_FNS=852570 ORACLE_CASE=3

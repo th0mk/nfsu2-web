@@ -45,13 +45,20 @@
  *            limits are in different units (L-208), so a case at its limit
  *            runs again before it counts: a lifted side at its limit with
  *            ORACLE_LONG_S; when the original is at its limit too, then the
- *            original with what is left of ORACLE_LONG_ORIG_S (600 s), a time
- *            budget per function (ORACLE_LONG_S once it is spent), whether
- *            the lifted side ended or not; and when the lifted side has ended
+ *            original with a time budget per function (ORACLE_LONG_S once it
+ *            is spent): what is left of ORACLE_LONG_ORIG_S (600 s) while the
+ *            lifted side is still at its limit, of ORACLE_LONG_END_S
+ *            (3600 s) when it has ended; and when the lifted side has ended
  *            in its first run and the original has not, the original alone
- *            with what is left of that budget (the original-loop re-run; a
- *            loop on both sides that used the budget up leaves the
- *            function's later cases ORACLE_LONG_S, as before that re-run).
+ *            with what is left of ORACLE_LONG_END_S (the original-loop
+ *            re-run; a loop on both sides that used its budget up leaves the
+ *            function's later such cases ORACLE_LONG_S, as before that
+ *            re-run).  Two budgets, because a loop on both sides that never
+ *            ends and never comes back to the same state (a counter) uses
+ *            its budget up, while an original whose lifted side ended is
+ *            worth the wait: on a loaded machine 0x7FD8B8 and 0x7FE7F5 (the
+ *            lifted side 3 to 26 s) needed about 400 s, and more than 600 s
+ *            in a seed run, 0x727480 2632 s (the lifted side 57 s).
  *            Unicorn needs 8 to 61 times the native lifted code's time on a
  *            long loop: 0x852570 5.0 s lifted, 67.5 s Unicorn; 0x5B4E70
  *            3.6 s, 84.5 s; 0x7FD823 2.0 s, 122 s; 0x8184E5 21.3 s, 181 s.
@@ -644,13 +651,18 @@ static uint8_t *g_l_img;                     /* its writable image pages (by g_r
 static size_t g_budget = 20000000u;          /* Unicorn instructions per case (ORACLE_BUDGET) */
 static int g_lift_ms = 500;                  /* lifted: wall clock per case (ORACLE_LIFT_MS) */
 static int g_long_s = 60;                    /* re-run of the lifted side, or of both (ORACLE_LONG_S, 0: none) */
-/* the original's long re-runs' budget per function (ORACLE_LONG_ORIG_S, 0: none).  600 s: three times
- * the most a function used in the 10-28 seed runs (191 s, 0x7FDA46; the slowest single case 181 s,
- * 0x8184E5) and more than 8 times ORACLE_LONG_S, the slowest ratio measured (so an original that
- * returns within it while the lifted side is still at its limit is caught).  A loop that never ends
- * and does not come back to the same state (a counter: 0x4FD070, 0x78A220 shift 1 << cl until it
- * is >= a value above 2^30) uses it up: with 1800 s that made seed 3 about 3 hours */
+/* the original's long re-runs' budget per function while the lifted side is still at its limit
+ * (ORACLE_LONG_ORIG_S, 0: none).  600 s: three times the most a function used in the 10-28 seed runs
+ * (191 s, 0x7FDA46; the slowest single case 181 s, 0x8184E5) and more than 8 times ORACLE_LONG_S, the
+ * slowest ratio measured (so an original that returns within it while the lifted side is still at its
+ * limit is caught).  A loop that never ends and does not come back to the same state (a counter:
+ * 0x4FD070, 0x78A220 shift 1 << cl until it is >= a value above 2^30) uses it up: with 1800 s that
+ * made seed 3 about 3 hours */
 static int g_long_orig_s = 600;
+/* the original's budget per function where the lifted side has ended (ORACLE_LONG_END_S, 0: none).
+ * 3600 s: on a loaded machine 0x727480 case 11 (seed 2; a counter past 2^31 that ends in a fault)
+ * needed 2632 s, its lifted side 57 s; an original that never ends spends it once a function */
+static int g_long_end_s = 3600;
 static int g_mutate;                         /* ORACLE_MUTATE (test only): 1 eax, 2 loop, 3 f80 */
 static int g_u_long;                         /* the case's original: 0 its counted run, else its long re-run's seconds */
 static double now_s(void){ struct timeval tv; gettimeofday(&tv, 0); return (double)tv.tv_sec + tv.tv_usec / 1e6; }
@@ -1345,6 +1357,7 @@ int main(int argc, char **argv){
     if ((e = getenv("ORACLE_LIFT_MS"))) g_lift_ms = atoi(e);
     if ((e = getenv("ORACLE_LONG_S"))) g_long_s = atoi(e) < 0 ? 0 : atoi(e);
     if ((e = getenv("ORACLE_LONG_ORIG_S"))) g_long_orig_s = atoi(e) < 0 ? 0 : atoi(e);
+    if ((e = getenv("ORACLE_LONG_END_S"))) g_long_end_s = atoi(e) < 0 ? 0 : atoi(e);
     if ((e = getenv("ORACLE_MUTATE"))){
         g_mutate = !strcmp(e, "eax") ? 1 : !strcmp(e, "loop") ? 2 : !strcmp(e, "f80") ? 3 : -1;
         if (g_mutate < 0){ fprintf(stderr, "ORACLE_MUTATE=%s: eax, loop or f80\n", e); return 2; }
@@ -1389,15 +1402,16 @@ int main(int argc, char **argv){
     signal(SIGALRM, on_alarm);
 
     printf("Most Wanted: lifted C (gen/mw/all) against the original x86 (Unicorn), %d functions, %d cases each\n", g_nfns, ncase);
-    printf("  limits: %zu Unicorn instructions, %d ms lifted, re-runs %d s, the original's long re-runs %d s a function\n",
-           g_budget, g_lift_ms, g_long_s, g_long_orig_s);
+    printf("  limits: %zu Unicorn instructions, %d ms lifted, re-runs %d s, the original's long re-runs %d s a function "
+           "(%d s where the lifted side ended)\n", g_budget, g_lift_ms, g_long_s, g_long_orig_s, g_long_end_s);
     Count tot = { 0 }; int nfn = 0, reruns = 0, fn_ret = 0, fn_ret10 = 0;
     long fault_fn = 0;
     for (int fi = 0; fi < g_nfns; fi++){
         const Fn *f = &g_fns[fi];
         if (only){ char h[16]; snprintf(h, sizeof h, "%x", f->va); if (!strstr(only, h)) continue; }
         Count c = { 0 }; int shown = 0, rerun1 = g_long_s > 0, rerun2 = rerun1;   /* re-runs of the lifted side, of both */
-        double orig_left = g_long_orig_s;    /* the original-loop re-runs' budget (s) */
+        double orig_left = g_long_orig_s;    /* the original's long re-runs' budget (s), the lifted side at its limit */
+        double end_left = g_long_end_s;      /* the same where the lifted side has ended */
         trig_hooks(f);
         g_rs = 0x9E3779B97F4A7C15ull ^ ((uint64_t)f->va << 20);
         for (int k = 0; k < ncase; k++){
@@ -1406,14 +1420,14 @@ int main(int argc, char **argv){
             run_unicorn(f, 0);
             run_lifted(f, g_lift_ms);
             /* a side at its limit runs again with a long one: the lifted side with g_long_s, and when the
-             * original was at its limit too, the original with what is left of the function's
-             * g_long_orig_s (g_long_s once that is spent), whether the lifted side then ended or not; while
-             * the lifted side still stops, with the loop proof (on_lp), and an original that then ends
+             * original was at its limit too, the original with what is left of the function's budget
+             * (g_long_s once that is spent): g_long_end_s when the lifted side then ended, g_long_orig_s
+             * while it still stops, then with the loop proof (on_lp), and an original that then ends
              * after more than g_long_s gives the lifted side as long again (native code is never slower
              * than Unicorn: a lifted side still at its limit then is a DIFF, not a slow lift).  The
              * both-sides budget goes as soon as a side would still stop after g_long_s, as before the
              * original-loop re-run (it then took more than g_long_s).  An original at its limit where the
-             * lifted side ended in its first run gets what is left of g_long_orig_s (g_long_s under the
+             * lifted side ended in its first run gets what is left of g_long_end_s (g_long_s under the
              * one-side budget once that is spent).  A re-run after which one side still stops and the other
              * has ended is a DIFF (compare) */
             int ul = g_uo.how == O_LOOP, ll = g_lo.how == O_LOOP;
@@ -1428,12 +1442,14 @@ int main(int argc, char **argv){
                         ul ? "both" : "the lifted side", g_long_s, ONAME[g_lo.how], tl);
                 if (!ul){ if (g_lo.how == O_LOOP) rerun1 = 0; }
                 else {
-                    int lloop = g_lo.how == O_LOOP, budget = orig_left >= 1.0, lim = budget ? (int)orig_left : g_long_s;
+                    int lloop = g_lo.how == O_LOOP;
+                    double *left = lloop ? &orig_left : &end_left;
+                    int budget = *left >= 1.0, lim = budget ? (int)*left : g_long_s;
                     g_lp_at = lloop ? stop : 0;
                     t0 = now_s(); run_unicorn(f, lim); double tu = now_s() - t0;
                     g_lp_at = 0;
                     g_u_long = lim;
-                    if (budget) orig_left -= tu;
+                    if (budget) *left -= tu;
                     char pv[96] = "";
                     if (g_lp_proven) snprintf(pv, sizeof pv, " (proven: the same state again at %08x, pass %llu)", stop,
                                               (unsigned long long)g_lp_n + 1);
@@ -1448,11 +1464,11 @@ int main(int argc, char **argv){
                     if (g_lo.how == O_LOOP || g_uo.how == O_LOOP || tu > g_long_s) rerun2 = 0;
                 }
             } else if (ul && !ll){
-                int budget = orig_left >= 1.0, lim = budget ? (int)orig_left : rerun1 ? g_long_s : 0;
+                int budget = end_left >= 1.0, lim = budget ? (int)end_left : rerun1 ? g_long_s : 0;
                 if (lim){
                     double t0 = now_s(); run_unicorn(f, lim); double tu = now_s() - t0;
                     g_u_long = lim; reruns++;
-                    if (budget) orig_left -= tu; else if (g_uo.how == O_LOOP) rerun1 = 0;
+                    if (budget) end_left -= tu; else if (g_uo.how == O_LOOP) rerun1 = 0;
                     fprintf(stderr, "  re-run %08x case %d, the original with %d s%s (the lifted side: %s): original %s after %.1f s\n",
                             f->va, k, lim, budget ? "" : " (its budget spent)", ONAME[g_lo.how], ONAME[g_uo.how], tu);
                 }
