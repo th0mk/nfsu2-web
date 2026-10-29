@@ -14,6 +14,7 @@ the race), `race_loop.txt` (25 Quick
 Races in a row, each ended by `racewin`) and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the
 line, saved; seeded with `profiles_make.txt`'s saves).
 
-The frame rate: `menu_hold.txt` (the main menu held for 60 s, a `[status]` line over it and the clocks' rates in
-peeks: the page's frame-rate setting `NFSU2_FPS`, runtime/mw/framerate_mw.c; `NFSU2_HFR_LOG=1` adds a `[mwpace]` line a
-second with the slots and the simulation's steps).
+The frame rate: `menu_hold.txt` (the main menu's camera swing-in traced, then the menu held for 60 s, a `[status]`
+line over it and the clocks in peeks; its check wants the swing over in 6 s of wall time and RealTimeFrames at 60 a
+second at the page's frame-rate setting `NFSU2_FPS`, runtime/mw/framerate_mw.c; `NFSU2_HFR_LOG=1` adds a `[mwpace]`
+line a second with the slots and the steps the simulation ran).
