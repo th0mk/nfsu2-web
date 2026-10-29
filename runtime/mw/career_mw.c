@@ -26,7 +26,8 @@
  *                    autopilot drive over the line instead (race_win.txt).
  *   autopilot on|off the game's AI drives the local player's car (Game.ForceAIControl / ClearAIControl)
  *   autopilot races  the same at every race's GO from now on, for races that follow each other with no menu
- *                    between (the career's prologue), with the races' edges logged; autopilot off ends it
+ *                    between (the career's prologue), with the races' edges logged; a lost race is raced again
+ *                    the way a player does it (watch_race below); autopilot off ends it
  *   teleport X Y Z DX DY DZ   move the local player's car to X Y Z (~N: N from where it is), facing DX DY DZ
  *                    (the game's simulation space, as where logs it: Y is the height, and the warp sets
  *                    the car on the surface at X, Z: ~40 ~1 ~0 moved it 40 m along X and left it at Y 163.5
@@ -154,14 +155,44 @@ static void log_status(CPU *c){
             rd(rs + RS_MODE));
 }
 
+/* racewin's calls: the local player finished where it is (Game.NotifyRaceFinished), then, when every human is done,
+ * the post-race flow; `why` goes in the log line */
+static void race_win(CPU *c, const char *why){
+    long f = autotest_frame();
+    uint32_t s = player_simable(c), a = s;
+    int idx = s && rd(G_RACESTATUS) ? (int)gcall(c, FN_RACER_INDEX, 0, 1, &a) : -1;   /* it reads GRaceStatus */
+    if (game_flow() != g_game.flow_race || idx < 1){
+        fprintf(stderr, "[mwrace] f=%ld racewin: not in a race (flow %u, racer %d)\n", f, game_flow(), idx);
+        return; }
+    uint32_t arg = s;
+    gcall(c, FN_NOTIFY_FINISHED, 0, 1, &arg);
+    int all = (int)(gcall(c, FN_ALL_HUMANS_DONE, 0, 0, 0) & 0xffu);
+    if (all) gcall(c, FN_POSTRACE, 0, 0, 0);
+    fprintf(stderr, "[mwrace] f=%ld racewin%s: racer %d finished through NotifyRaceFinished; all humans done %d%s\n",
+            f, why, idx, all, all ? ": EnterPostRaceFlow" : "");
+    log_status(c);
+}
+
 /* ---- autopilot races: the game's AI takes the player's car at each race's GO ----
  * A career runs races back to back with no menu between them (the prologue's), and the game drops a
  * ForceAIControl when a race ends, so this mode watches the race at every anchor: when the race is actively
  * racing with its timer running (GRaceStatus +0x198A and the first racer's timer flag, +0x16C) and that was not
  * so the frame before, or the player's car is another one, it calls Game.ForceAIControl(0) again.  It logs the
- * race's edges as it sees them (active, GO, slot #0 finished, won), so a log shows each race's start and end. */
+ * race's edges as it sees them (active, GO, slot #0 finished, won), so a log shows each race's start and end.
+ * The AI that drives the player's car loses now and then (a prologue race in one of 10 runs, by 4.8 s), and a
+ * story race has to be won to go on.  What a player does then, the aid does: a lost race (slot #0 finished, the
+ * race not won) shows PostRace_Results.fng, whose Enter goes back to the career menu (MainMenu_Sub.fng), where
+ * Resume Career loads the race again from the autosave made before it (seen in a run); so from LOST_WAIT frames
+ * after the loss, every LOST_EVERY frames, it taps Enter on either screen while it takes input, until a race's GO.
+ * racewin's shortcut is no way out here: after it the prologue's own script never saw the player at the line,
+ * and the winner's screen took no Enter (3 runs; one with the car stopped far from the line). */
+#define LOST_WAIT  240
+#define LOST_EVERY 120
+#define DIK_RETURN 0x1cu
+int mw_fe_match(const char *name);       /* fe_mw.c: the top package taking input, and its state */
+void autotest_tap(unsigned dik, long frames);
 static int auto_ai;
-static struct { uint32_t rs, sim; int active, go, fin, won; } W;
+static struct { uint32_t rs, sim; int active, go, fin, won; long lost; } W;
 static void watch_race(CPU *c){
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c);
     int active = rs ? MR8(rs + RS_ACTIVE) : 0, go = rs ? MR8(rs + RS_GO) != 0 : 0;
@@ -173,9 +204,17 @@ static void watch_race(CPU *c){
     if (active && go && s && (!(W.active && W.go) || s != W.sim || rs != W.rs)){
         uint32_t zero = 0;
         gcall(c, FN_FORCE_AI, 0, 1, &zero);
+        W.lost = 0;
         fprintf(stderr, "[mwrace] f=%ld autopilot on: the race's GO\n", f);
     }
+    if (active && fin && !won && !W.lost && !(W.fin && !W.won)) W.lost = f;   /* finished, not won: maybe lost */
     W.rs = rs; W.sim = s; W.active = active; W.go = go; W.fin = fin; W.won = won;
+    if (!W.lost || f - W.lost < LOST_WAIT || (f - W.lost) % LOST_EVERY) return;
+    const char *what = mw_fe_match("PostRace_Results.fng") ? "the race was lost: Enter on its results"
+                     : mw_fe_match("MainMenu_Sub.fng:e072db21@4b4e388a") ? "the career menu: Enter on Resume Career" : 0;
+    if (!what) return;
+    autotest_tap(DIK_RETURN, 6);
+    fprintf(stderr, "[mwrace] f=%ld autopilot: %s\n", f, what);
 }
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
@@ -188,20 +227,7 @@ void mw_frame(CPU *c){
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
     switch (Q.op){
-    case Q_RACEWIN: {
-        uint32_t s = player_simable(c), a = s;
-        int idx = s && rd(G_RACESTATUS) ? (int)gcall(c, FN_RACER_INDEX, 0, 1, &a) : -1;   /* it reads GRaceStatus */
-        if (game_flow() != g_game.flow_race || idx < 1){
-            fprintf(stderr, "[mwrace] f=%ld racewin: not in a race (flow %u, racer %d)\n", f, game_flow(), idx);
-            break; }
-        uint32_t arg = s;
-        gcall(c, FN_NOTIFY_FINISHED, 0, 1, &arg);
-        int all = (int)(gcall(c, FN_ALL_HUMANS_DONE, 0, 0, 0) & 0xffu);
-        if (all) gcall(c, FN_POSTRACE, 0, 0, 0);
-        fprintf(stderr, "[mwrace] f=%ld racewin: racer %d finished through NotifyRaceFinished; all humans done %d%s\n",
-                f, idx, all, all ? ": EnterPostRaceFlow" : "");
-        log_status(c);
-        break; }
+    case Q_RACEWIN: race_win(c, ""); break;
     case Q_STATUS: log_status(c); break;
     case Q_AI_ON: case Q_AI_OFF: {
         uint32_t zero = 0;
