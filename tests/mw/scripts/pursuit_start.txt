@@ -1,0 +1,34 @@
+# Most Wanted: a pursuit in free roam, from its start to its end (TRACKER M4-16, first part).  Seeded with the save
+# tree career_start.txt leaves (as career_resume.txt is), this run resumes the career into free roam, starts a
+# pursuit with Game.ForcePursuitStart(1) (0x60AAC0, the Lua binding the game's own scripts start pursuits with: it
+# posts MForcePursuitStart to the AICopManager), lets the game's AI drive the player's car (`autopilot on`), and
+# waits on the game's state: the pursuit object on the car's AI interface (`pursuit wait on`), then its end
+# (`pursuit wait off`, runtime/mw/career_mw.c log_pursuit).  `pursuit watch` logs every change of the pursuit state
+# ([mwpursuit] lines: heat, the pursuit object, its length).  In the wave-7 runs a pursuit started this way ended
+# after about 25 s with the post-pursuit screen PostRace_MilestoneRewards.fng, the car parked or driven (busted or
+# escaped: which one, not identified yet); the heat stayed 1.00.  The [status] lines give the frame rate in it.
+#   NFSU2_SAVE_SEED=DIR/career_start node web/tools/run-suite.mjs --game mw --script pursuit_start.txt \
+#     --marker 'pursuit_start: ended' --env NFSU2_QUIT_FRAMES=20000
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; career_start's tree holds it)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # ALPHA loaded: "Load complete.", on Continue
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # the race status in career mode: free roam
++0    pursuit watch
++0    where
++0    call 0x00612300                                    # Game.GetPlayerBounty()
++0    call 0x0060aac0 1                                  # Game.ForcePursuitStart(1)
++0    pursuit wait on 600
++0    log pursuit_start: started
++0    autopilot on
++0    pursuit wait off 6000
++0    log pursuit_start: ended
++0    where
++0    call 0x00612300                                    # Game.GetPlayerBounty()
++0    close

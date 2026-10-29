@@ -11,7 +11,8 @@ the game's per-frame anchor: `racewin` (a shortcut finish: the player is finishe
 calls the race's script makes at the line), `autopilot on|off` (the game's AI drives the player's car), `autopilot
 races` (the same at every race's GO from then on, for races that follow each other with no menu between, with each
 race's start and end logged; a lost race is raced again as a player would: Enter on its results, then Resume Career),
-`teleport X Y Z DX DY DZ`, `where`, `racestatus` and `frames`.
+`teleport X Y Z DX DY DZ`, `where`, `racestatus`, `frames` and `pursuit [watch]` / `pursuit wait on|off [N]` (the
+player's pursuit state: heat, the pursuit object, its length; the waits are on the game's state).
 
 The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of
 the race), `race_loop.txt` (25 Quick
@@ -46,3 +47,10 @@ The career (career saves made by these runs stay outside the repository, ../seed
 new alias loads to a career menu with Start Career; seeded with `profiles_make.txt`'s saves), `career_start.txt`
 (a new alias's career from Start Career through the prologue to the first free drive, saved) and
 `career_resume.txt` (that save loaded after a restart, back into free roam; seeded with `career_start.txt`'s save).
+
+Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
+Game.ForcePursuitStart, the game's AI driving, waited on to its end).
+
+Crash fixes (runtime/mw/fixes_mw.c): `fixes_poke.txt` reaches the null guards of the cop unload (0x57D105) and of
+Attrib::StringToLowerCaseKey (0x4549BF) by poke, in the front end; with `NFSU2_TEST_COPLIST_NULL=1` and
+`NFSU2_TEST_ATTRIB_NULLKEY=1` it runs the game's code instead.

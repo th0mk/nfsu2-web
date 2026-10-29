@@ -37,6 +37,9 @@
  *   racestatus       log the race: its racers' progress and finish flags, its own flags, and which racer the
  *                    local player is ("player 1": Game.GetRacerIndex, slot #0)
  *   frames           log the Presents and the main loop's passes so far (M4-01: one pass a Present)
+ *   pursuit [watch]  log the player's pursuit state (heat, the pursuit object, its length), once or whenever it
+ *                    changes; pursuit wait on|off [N] waits up to N frames for a pursuit to be there or gone
+ *                    (the state's addresses: log_pursuit below)
  *
  * The game's objects, from speed.exe v1.3's code (GAME.md 13.4; the names are its Lua bindings', registered
  * with their strings from 0x61E900 on):
@@ -221,8 +224,41 @@ static void watch_race(CPU *c){
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
-enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_TELEPORT, Q_WHERE, Q_STATUS };
-static struct { int op, done, rel; float v[6]; } Q;
+enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT };
+
+/* The player's pursuit state (exploration, wave 7: offsets read in runs, their meaning where a run showed it):
+ *   IPerpetrator, interface 0x4037E0 of the player's ISimable object (vtable 0x892988): +0x1C the heat, a float
+ *     (GetHeat, method +4, 0x409400; SetHeat, method +8, 0x409060, is what Game.SetWorldHeat 0x612660 calls);
+ *     +0x20 the bounty (Game.GetPlayerBounty 0x612300 gave the same, 0 before a pursuit and 100 after it);
+ *     +0x24 went 0 -> 100 during a pursuit and back to 0 at its end (not identified).
+ *   the vehicle's AI interface, 0x403700 (vtable 0x8929F0): +0x70 the pursuit object (vtable 0x892770) from the
+ *     pursuit's start (Game.ForcePursuitStart 0x60AAC0) to its end, else 0; the pursuit's +0xB4, a float its
+ *     method +0x18 (0x4338C0) returns, grows with the pursuit's length (seconds, inferred).
+ * `pursuit` logs these once, `pursuit watch` whenever one changes (each frame anchor), `pursuit wait on|off [N]`
+ * waits (at most N frames, default 6000) for a pursuit object to be there, or gone. */
+#define IID_PERP         0x004037e0u
+#define IID_AIVEH        0x00403700u
+#define PERP_HEAT        0x1cu
+#define AIVEH_PURSUIT    0x70u
+#define PURSUIT_TIME     0xb4u
+static int pw_on;
+static uint32_t pw_last[5];
+static uint32_t pursuit_obj(CPU *c, uint32_t *perp){
+    uint32_t s = player_simable(c), obj = s ? rd(s + 4u) : 0u, id = IID_PERP, id2 = IID_AIVEH;
+    uint32_t p = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u, a = obj ? gcall(c, FN_QUERY, obj, 1, &id2) : 0u;
+    if (perp) *perp = p;
+    return rd(a + AIVEH_PURSUIT);
+}
+static void log_pursuit(CPU *c, int only_changes){
+    uint32_t p = 0, po = pursuit_obj(c, &p);
+    uint32_t v[5] = { rd(p + PERP_HEAT), rd(p + 0x20u), rd(p + 0x24u), po, game_flow() };
+    if (only_changes && !memcmp(v, pw_last, sizeof v)) return;
+    memcpy(pw_last, v, sizeof v);
+    float h, t; memcpy(&h, &v[0], 4); t = rdf(po + PURSUIT_TIME);
+    fprintf(stderr, "[mwpursuit] f=%ld heat %.2f pursuit %08x time %.1f bounty %u perp+24 %u flow %u\n",
+            autotest_frame(), h, po, po ? t : 0.0f, v[1], v[2], v[4]);
+}
+static struct { int op, done, rel; float v[6]; long since; } Q;
 
 /* NFSMW_HFR_TRACE=1 (test only, M7-21; tests/mw/scripts/hfr_race.txt, tools/mw/hfr_ab.py): from GO (the player's
  * race timer running) an [hfrtr] line every 0.25 s of simulation time (steps x step, so runs at different
@@ -274,6 +310,7 @@ static void hfr_trace(CPU *c){
 void mw_frame(CPU *c){
     if (auto_ai) watch_race(c);
     hfr_trace(c);
+    if (pw_on) log_pursuit(c, 1);
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
     switch (Q.op){
@@ -311,12 +348,21 @@ void mw_frame(CPU *c){
         log_where(c);
         break; }
     case Q_WHERE: log_where(c); break;
+    case Q_PURSUIT: log_pursuit(c, 0); break;
+    case Q_PWAIT: {                     /* done once the pursuit is there (v[0] 1) or gone (0), or after v[1] frames */
+        int on = pursuit_obj(c, 0) != 0;
+        if (on != (int)Q.v[0] && f - Q.since < (long)Q.v[1]) return;
+        fprintf(stderr, "[mwpursuit] f=%ld pursuit wait %s: %s after %ld frames\n", f, Q.v[0] ? "on" : "off",
+                on == (int)Q.v[0] ? "satisfied" : "TIMEOUT", f - Q.since);
+        log_pursuit(c, 0);
+        break; }
+    case Q_PWATCH: pw_on = 1; memset(pw_last, 0xff, sizeof pw_last); break;
     }
     Q.done = 1;
 }
 
 int mw_aid_is_cmd(const char *cmd){
-    static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", 0 };
+    static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", "pursuit", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -336,7 +382,7 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (Q.op != Q_NONE){                /* this line's work was queued: done once the anchor ran it */
         if (Q.done){ Q.op = Q_NONE; Q.done = 0; *wait_start = -1; return 1; }
         if (*wait_start < 0) *wait_start = f;
-        if (f - *wait_start < AID_WAIT) return 0;
+        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT ? (long)Q.v[1] : 0L)) return 0;
         fprintf(stderr, "[mwrace] f=%ld %s TIMEOUT after %ld frames: the main loop's frame anchor never ran it\n",
                 f, cmd, f - *wait_start);
         memset(&Q, 0, sizeof Q); *wait_start = -1;
@@ -346,6 +392,12 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (!strcasecmp(cmd, "racewin")) Q.op = Q_RACEWIN;
     else if (!strcasecmp(cmd, "where")) Q.op = Q_WHERE;
     else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
+    else if (!strcasecmp(cmd, "pursuit")){
+        long n = 6000; char a2[32] = {0};
+        sscanf(p, "%31s %31s %ld", a1, a2, &n);
+        Q.op = !strcasecmp(a1, "watch") ? Q_PWATCH : !strcasecmp(a1, "wait") ? Q_PWAIT : Q_PURSUIT;
+        Q.v[0] = strcasecmp(a2, "off") ? 1.0f : 0.0f; Q.v[1] = (float)n; Q.since = f;
+    }
     else if (!strcasecmp(cmd, "autopilot")){
         sscanf(p, "%31s", a1);
         Q.op = !strcasecmp(a1, "off") ? Q_AI_OFF : !strcasecmp(a1, "races") ? Q_AI_RACES : Q_AI_ON;
