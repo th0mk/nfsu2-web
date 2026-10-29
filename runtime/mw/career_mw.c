@@ -156,8 +156,8 @@ static void log_status(CPU *c){
 }
 
 /* racewin's calls: the local player finished where it is (Game.NotifyRaceFinished), then, when every human is done,
- * the post-race flow; `why` goes in the log line */
-static void race_win(CPU *c, const char *why){
+ * the post-race flow */
+static void race_win(CPU *c){
     long f = autotest_frame();
     uint32_t s = player_simable(c), a = s;
     int idx = s && rd(G_RACESTATUS) ? (int)gcall(c, FN_RACER_INDEX, 0, 1, &a) : -1;   /* it reads GRaceStatus */
@@ -168,8 +168,8 @@ static void race_win(CPU *c, const char *why){
     gcall(c, FN_NOTIFY_FINISHED, 0, 1, &arg);
     int all = (int)(gcall(c, FN_ALL_HUMANS_DONE, 0, 0, 0) & 0xffu);
     if (all) gcall(c, FN_POSTRACE, 0, 0, 0);
-    fprintf(stderr, "[mwrace] f=%ld racewin%s: racer %d finished through NotifyRaceFinished; all humans done %d%s\n",
-            f, why, idx, all, all ? ": EnterPostRaceFlow" : "");
+    fprintf(stderr, "[mwrace] f=%ld racewin: racer %d finished through NotifyRaceFinished; all humans done %d%s\n",
+            f, idx, all, all ? ": EnterPostRaceFlow" : "");
     log_status(c);
 }
 
@@ -227,7 +227,7 @@ void mw_frame(CPU *c){
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
     switch (Q.op){
-    case Q_RACEWIN: race_win(c, ""); break;
+    case Q_RACEWIN: race_win(c); break;
     case Q_STATUS: log_status(c); break;
     case Q_AI_ON: case Q_AI_OFF: {
         uint32_t zero = 0;
