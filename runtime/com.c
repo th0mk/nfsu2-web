@@ -4153,8 +4153,12 @@ int com_call(CPU *c, uint32_t magic){
                    * dwChannelMask@20.  The EA sound libraries of both games try
                    * 1, 2, 4 and 6 channels at start-up (Most Wanted's 4 and 6
                    * extensible, masks 0x33 and 0x3F), then make their output
-                   * stereo.  Up to 8 channels are kept as they are and mixed
-                   * down to stereo (audio_web.c); 1 and 2 as ever. */
+                   * with the channel count their settings ask for: 2 by
+                   * default (Most Wanted: 0x81ED00; no direct caller of its
+                   * setter), so stereo.  Asked for 6, Most Wanted's (0x82007E)
+                   * would make a 6-channel output buffer.  Up to 8 channels
+                   * are kept as they are and mixed down to stereo
+                   * (audio_web.c); 1 and 2 as ever. */
                   if (ENVC("SNDBUF"))
                       fprintf(stderr, "  [sound] CreateSoundBuffer format: tag %04x, %u channels, %u Hz, %u bit, mask %08x\n",
                               MR16(pfmt), ch, sr, bt,
