@@ -34,6 +34,13 @@
  *     0.02 s while [0x8F82F0] is 0; 4 slots at 60, 8 at 120): after a hitch the slots beyond it are
  *     dropped with the missed ones, so the steps the slots owe stay within what the original steps and
  *     no debt carries over (UG2's framerate.c keeps the game's 50 ms clamp the same way);
+ *   - the frame's real time exact (as UG2's framerate.c F1 ticks fix and its RealTimer fix): 0x661280's
+ *     carry is 0 on a paced frame, so its ticks are slots x 3600 / R exactly (30 a slot at 120, 15 at 240)
+ *     and [0x9259BC] = ticks / 3600; its carry in the other domain (1/4000 s units) had made the ticks
+ *     30, 30, 31 at 120 (1.1 % fast), 15, 15, 14 at 240 (2.2 % slow) and 60, 60, 59 at 60 (0.6 % slow),
+ *     which RealTimeFrames and every reader of [0x9259BC] took.  RealTimer then moves by
+ *     round(ticks x 4000 / 3600) with the fraction carried here (33, 33, 34 at 120): without that carry
+ *     it would run 1 % slow at 120 (33 units a frame);
  *   - the step's own sleep is skipped (0x64CF00 from 0x642ED7);
  *   - the step count follows the slots exactly: the slots so far x S / R steps (S the sim rate 1/P, R the
  *     content rate), given to the original through its carry, so 60 is 1 step a frame, 120 is 0, 1, 0, 1,
@@ -84,6 +91,8 @@ int  metal_display_hz(void);            /* gpu_web.c: the page's measured refres
 
 #define A_REALTIMER   0x00925b14u   /* RealTimer, 1/4000 s (0x65C6D0 adds the frame's real dt) */
 #define A_REALDT      0x009259bcu   /* the frame's real dt, s (0x661280) */
+#define A_TICKS       0x0092595cu   /*   the same in ticks of 1/3600 s */
+#define A_TICK_CARRY  0x00925964u   /*   0x661280's carry, s (the rest of the 1/4000 s units) */
 #define A_SIMOBJ      0x009203b0u   /* the Sim timer object (constructor 0x6482D0 through 0x6484E0) */
 #define SIM_LAST      0x14u         /*   RealTimer at its last step */
 #define SIM_CARRY     0x1cu         /*   the accumulator's rest, in steps */
@@ -305,6 +314,7 @@ void sub_00661280(CPU *c){
         int most = cap_slots(rate);
         if (slots > most){ missed += (uint64_t)(slots - most); slots = most; g_sec.cut++; }
         MRF32(c->esp + 4u) = (float)((double)slots / rate);
+        MRF32(A_TICK_CARRY) = 0.f;   /* the ticks exact: slots x 3600 / R (above) */
         g_paced = 1; g_rate_f = rate;
         g_frame_slots = slots; g_slots_tot += (uint64_t)slots;
         g_sec.frames++; g_sec.slots += (uint64_t)slots; g_sec.missed += missed; g_sec.sleep_ns += slept;
@@ -367,12 +377,14 @@ void sub_0064cf00(CPU *c){
     sub_0064cf00_orig(c);
 }
 
-/* RealTimeFrames 0x65C6D0 (MainLoop's last call; MiniMainLoop's too): without the forced minimum of one
- * a frame above 60 (above) */
+/* RealTimeFrames and RealTimer 0x65C6D0 (MainLoop's last call; MiniMainLoop's too): without the forced
+ * minimum of one RealTimeFrame a frame above 60, and RealTimer by the frame's ticks exactly (above) */
+static double g_rt_carry = 0;       /* RealTimer's fraction, 1/4000 s units */
 void sub_0065c6d0_orig(CPU *c);
 void sub_0065c6d0(CPU *c){
-    int undo = 0;
-    if (g_paced == 1 && g_rate_f > 60 && MR32(c->esp) == RET_MAIN_RTF){
+    int undo = 0, paced = g_paced == 1 && MR32(c->esp) == RET_MAIN_RTF;
+    uint32_t timer0 = MR32(A_REALTIMER), ticks = MR32(A_TICKS);
+    if (paced && g_rate_f > 60){
         /* the original's count: trunc((dt + carry) x 60), dt = [0x9259BC] */
         double x = ((double)MRF32(A_REALDT) + (double)MRF32(A_RTF_CARRY)) * 60.0;
         undo = x < 1.0;
@@ -381,6 +393,12 @@ void sub_0065c6d0(CPU *c){
     if (undo && MR32(A_RTF_TICK) == 1u){
         MR32(A_RTF) -= 1u; MR32(A_RTF_COPY) -= 1u; MR32(A_RTF_TICK) = 0u;
         g_rtf_undone++;
+    }
+    if (paced && (int32_t)ticks > 0){
+        /* the original adds round(dt x 4000), dt = ticks / 3600 */
+        double ex = (double)ticks * (4000.0 / 3600.0) + g_rt_carry, u = floor(ex + 0.5);
+        g_rt_carry = ex - u;
+        MR32(A_REALTIMER) = timer0 + (uint32_t)(int32_t)u;
     }
 }
 
