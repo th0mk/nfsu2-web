@@ -9,8 +9,8 @@
 # ALPHA written by the free roam's autosave after the purchase, the pause menu gone after Resume Free Roam, and the
 # car driven by the gas held 300 frames: moved at least 5 m, at 20 km/h or more at one of the positions logged during
 # the drive (the car meets something about 19 m on: career_resume.txt); all in that order; the game left by
-# WM_CLOSE.  Prints the frames from Start Career to free roam, the races raced again, the distance driven and the
-# top speed.
+# WM_CLOSE.  Prints the time from the prologue's world to free roam (wall seconds, frames and so the frame rate),
+# the races raced again, the distance driven and the top speed.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
 # the fixed strings given must occur in the log in this order, each on a later line; prints the first one missing
@@ -50,8 +50,12 @@ awk -v d="$d" 'BEGIN { exit !(d >= 5) }' || fail "the gas moved the car $d m (wa
 awk -v v="$v" 'BEGIN { exit !(v >= 20) }' || fail "the car's top speed in the drive was $v km/h (want 20 km/h or more)"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
-f=$(awk '/waitfng MainMenu_Sub.fng:6005281e@4b4e388a satisfied/ { match($0, /f=[0-9]+/); a = substr($0, RSTART + 2, RLENGTH - 2) }
-  /LOG career_start: free roam$/ { match($0, /f=[0-9]+/); print substr($0, RSTART + 2, RLENGTH - 2) - a; exit }' "$LOG")
+# the prologue's length from its world (GameFlow 6) to free roam: wall time and frames, so the frame rate (frames
+# depend on it: the game steps by the time a frame took)
+t=$(awk 'function at(k) { match($0, k "=[0-9]+"); return substr($0, RSTART + length(k) + 1, RLENGTH - length(k) - 1) + 0 }
+  /LOG career_start: prologue$/ { f0 = at("f"); t0 = at("t") }
+  /LOG career_start: free roam$/ { s = (at("t") - t0) / 1000; printf "%.0f s, %d frames at %.0f fps", s, at("f") - f0,
+                                   (s > 0 ? (at("f") - f0) / s : 0); exit }' "$LOG")
 echo "ALPHA made; the prologue played (5 races, 3 won by the AI over the line, $lost lost and raced again; race 5" \
-  "ended by the game), the car bought, free roam saved ($f frames after Start Career), the car driven $d m at up to" \
+  "ended by the game: $t), the car bought, free roam saved, the car driven $d m at up to" \
   "$v km/h; the game left by WM_CLOSE"
