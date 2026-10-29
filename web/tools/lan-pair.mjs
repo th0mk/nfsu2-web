@@ -92,6 +92,7 @@ const RACES_OF = {
   mw: {
     gen: 'tools/gen_lan_race_mw.py', results: /^\[autotest\] f=\d+ waitfng PostRace_Results\.fng satisfied/m,
     racing: /^\[autotest\] f=\d+ waitmem \[0x00925e90\]==6 satisfied/m, waits: true, peerUdp: 1000,
+    hostName: '--host-name',          // the joiners' option for the host's name (theirs to find in the list)
     ended: 'app: the game exited (code 0) after the quit request', trace: false, server: ['--base-path', 'localhost=/'],
     modes: {
       sprint: { h: ['--kind', '0', '--race-ms', '90000'], j: ['--kind', '0', '--race-ms', '90000'] },
@@ -138,7 +139,7 @@ const NAMES = ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWE
 const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, LAN.gen), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
 const scripts = [gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])];
-for (let i = 1; i < PLAYERS; i++) scripts.push(gen('join', NAMES[i], i, [...MODES[MODE].j, ...opts('join-arg')]));
+for (let i = 1; i < PLAYERS; i++) scripts.push(gen('join', NAMES[i], i, [...(LAN.hostName ? [LAN.hostName, NAMES[0]] : []), ...MODES[MODE].j, ...opts('join-arg')]));
 fs.writeFileSync(path.join(OUT, 'host.txt'), scripts[0]);
 fs.writeFileSync(path.join(OUT, 'join.txt'), scripts[1]);
 

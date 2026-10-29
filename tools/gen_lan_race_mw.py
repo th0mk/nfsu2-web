@@ -21,7 +21,7 @@ host: once the search is over, key 1 (the screen's Host message,
       UI_PC_LAN.fng, the player's name; Enter starts EA's server.dll
       (0x741E20: LoadLibrary("server"), StartServer(name)) and joins it
       (UI_OLISPConnect.fng, then OL_MAIN.fng).
-join: waits until the host's server is listed (its name in the list), Enter
+join: waits until the host's server is listed (--host-name in the list), Enter
       joins it (UI_PC_LAN.fng, the name, Enter: OL_MAIN.fng).
 OL_MAIN.fng's first item, Quick Race (OL_Quickrace_Main.fng), its race kind
 (--kind N: N taps DOWN), Enter searches (OL_Find_Session.fng).  A search that
@@ -41,6 +41,8 @@ results screen (--results SCREEN).
 
 Options:
   --name NAME          the alias and LAN name (host: the server's name too)
+  --host-name NAME     join: the host's --name, its server's name in the list
+                       (default HOSTWEB)
   --car N              unused yet (the room's car is the alias's first)
   --kind N             the Quick Race kind: N taps DOWN (host and joiners)
   --searches N         join: searches for the host's game before giving up
@@ -117,6 +119,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('role', choices=['host', 'join'])
     ap.add_argument('--name', default=None)
+    ap.add_argument('--host-name', default='HOSTWEB')
     ap.add_argument('--car', type=int, default=0)
     ap.add_argument('--kind', type=int, default=0)
     ap.add_argument('--searches', type=int, default=30)
@@ -144,7 +147,7 @@ def main():
         w('+0    log lan: host')
         w('+0    tap 1                                              # Host (PAD_BUTTON1)')
     else:
-        w("+0    waitfng UI_PC_LAN_ServerSelect.fng'HOSTWEB 7200    # the host's server is listed")
+        w("+0    waitfng UI_PC_LAN_ServerSelect.fng'%s 7200    # the host's server is listed" % a.host_name)
         w('+0    log lan: join')
         w('+30   tap RETURN')
     lan_name(w, name)
