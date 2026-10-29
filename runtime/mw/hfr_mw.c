@@ -49,7 +49,7 @@
  * whose cap already reaches 0.5, keeps the game's.
  *
  * Options (test only): NFSMW_HFR_AILOG=1 logs AIActionTraffic's speed for a car under 0.6 m/s ("[hfrai]",
- * BRAKE when the target is under the driver's 0.5); NFSMW_HFR_TASKS=0 turns the cadence fix off;
+ * BRAKE when the target is under the driver's 0.5), =2 for every car (the first 4000); NFSMW_HFR_TASKS=0 turns the cadence fix off;
  * NFSMW_TRAFFIC_RESTART=1 the stopped-traffic restart on (above). */
 #include "cpu.h"
 #include "game.h"
@@ -102,7 +102,7 @@ void sub_00411820(CPU *c){
     if (fix && cur > -0.05f && cur < 0.05f && cur + 2.f * dt < 0.5f)
         MRF32(c->esp + 8u) = 0.275f;                                       /* the callee's own argument slot */
     sub_00411820_orig(c);
-    if (log && cur < 0.6f && n < 4000){
+    if (log && (log > 1 || cur < 0.6f) && n < 4000){
         n++;
         fprintf(stderr, "[hfrai] f=%ld traffic %08x speed %.4f dT %.5f target %.4f%s\n", autotest_frame(), self, cur, dt,
                 (double)ST(0), ST(0) < 0.5 ? " BRAKE" : "");
