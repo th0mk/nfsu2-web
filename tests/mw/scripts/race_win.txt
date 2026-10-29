@@ -10,12 +10,16 @@
 #   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script race_win.txt \
 #     --marker 'race_win: ALPHA saved' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=20000 --save-out DIR2
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; profiles_make's tree holds it)
+# (*) The load is quick: "Load complete." is up, taking input with Continue highlighted, 3 frames after the boot
+# list's RETURN.  A RETURN tapped at once is dropped (one 8 or 30 frames on is taken; the dialog shows no change in
+# between, so the cause is taken to be that first tap still holding the key, 6 frames: no new press).  So Continue
+# is pressed until the main menu comes: a press that falls in the hold is followed by one 90 frames on.
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
 +0    tap RETURN
 +0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 600    # "Load complete.", its Continue highlighted
-+0    tap RETURN                                         # Continue
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue (*)
 +0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
 +0    log race_win: ALPHA loaded
 +0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
