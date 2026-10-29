@@ -3,21 +3,21 @@
 Input scripts for runtime/autotest.c, served at `/tests/scripts/` by a server started with `--game mw --dev`
 (see ../README.md).
 
-Besides autotest.c's commands, Most Wanted's runs take `call ADDR [ecx=X] [ARG ...]`, `loadlib NAME`, `objects`
-(the kernel objects in use by kind and creator), `movie NAME` (a movie played as the front end plays one),
-`movieup` and `movieend` (wait until it is up, then gone) and `waitgone PACKAGE` (runtime/mw/debug_mw.c), all
-test-only, and the race aids of runtime/mw/career_mw.c, test-only too, which run at
-the game's per-frame anchor: `racewin` (a shortcut finish: the player is finished where it is, with three of the
-calls the race's script makes at the line), `autopilot on|off` (the game's AI drives the player's car), `autopilot
-races` (the same at every race's GO from then on, for races that follow each other with no menu between, with each
-race's start and end logged; a lost race is raced again as a player would: Enter on its results, then Resume Career),
-`teleport X Y Z DX DY DZ`, `where`, `racestatus`, `frames` and `pursuit [watch]` / `pursuit wait on|off [N]` (the
-player's pursuit state: heat, the pursuit object, its length; the waits are on the game's state).
+Besides autotest.c's commands, Most Wanted's runs take `call ADDR [ecx=X] [ARG ...]`, `loadlib NAME`, `objects` (the
+kernel objects in use by kind and creator), `movie NAME` (a movie played as the front end plays one), `movieup` and
+`movieend` (wait until it is up, then gone) and `waitgone PACKAGE` (runtime/mw/debug_mw.c), all test-only, and the
+race aids of runtime/mw/career_mw.c, test-only too, which run at the game's per-frame anchor: `racewin` (a shortcut
+finish: the player is finished where it is, with three of the calls the race's script makes at the line), `autopilot
+on|off` (the game's AI drives the player's car), `autopilot races` (the same at every race's GO from then on, for
+races that follow each other with no menu between, with each race's start and end logged; a lost race is raced again
+as a player would: Enter on its results, then Resume Career), `teleport X Y Z DX DY DZ`, `where`, `racestatus`,
+`frames` and `pursuit [watch]` / `pursuit wait on|off [N]` (the player's pursuit state: heat, the pursuit object, its
+length; the waits are on the game's state).
 
-The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of
-the race), `race_loop.txt` (25 Quick
-Races in a row, each ended by `racewin`, with the kernel objects before each load) and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the
-line, saved; seeded with `profiles_make.txt`'s saves).
+The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of the
+race), `race_loop.txt` (25 Quick Races in a row, each ended by `racewin`, with the kernel objects before each load)
+and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the line, saved; seeded with
+`profiles_make.txt`'s saves).
 
 The movies: `intro_idle.txt` and `intro_title.txt` (the boot movies and the title, for web/tools/intro-test.mjs
 --game mw), `movies.txt` (all 32 movies of the game folder played to their end and skipped),
