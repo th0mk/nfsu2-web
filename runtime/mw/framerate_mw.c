@@ -46,14 +46,17 @@
  *   - the step count follows the slots exactly: the slots so far x S / R steps (S the sim rate 1/P, R the
  *     content rate), given to the original through its carry, so 60 is 1 step a frame, 120 is 0, 1, 0, 1,
  *     30 is 2 a frame; the game's own +0x18 total, +0x14 time, 0x642DB0 call and return are its own.
- * A world (a race, free roam: GameFlow 6) steps at the page's rate: P = 1/R for R above 60 (1/60 at 60 and
- * 30), set when the front end is left for the world's loading and kept until the front end comes back, so a
- * frame is one step at 60, 120 and 240 (two at 30), as UG2's races.  The front end keeps the game's 1/60 and
- * the camera fix below.  A world at a step under 1/60 needs the fixes of runtime/mw/hfr_mw.c (the scheduler's
- * tasks at their 60 Hz cadence: the traffic that stopped for good above about 40 Hz, WidescreenFixesPack
- * #1218).  In a world the content rate is at most its steps a second: a frame that did not step would show
- * the one before (its cameras move only with the steps, 0x64A680), so a rate the page takes up after the
- * world began waits for the next world.
+ * A world (a race, free roam: GameFlow 6) keeps the game's step, 1/60 s.  In a world the content rate is at
+ * most its steps a second: a frame that did not step would show the one before (its cameras move only with
+ * the steps, 0x64A680), so a world runs at 60 frames a second at most.  The front end keeps the game's 1/60
+ * and the camera fix below.
+ * Research (TRACKER M7-21, M7-22), NFSMW_WORLD_HFR=1: a world steps at the page's rate, P = 1/R for R above 60
+ * (1/60 at 60 and 30), set when the front end is left for the world's loading and kept until the front end
+ * comes back, so a frame is one step at 60, 120 and 240 (two at 30), as UG2's races; a rate the page takes up
+ * after the world began waits for the next world.  A step under 1/60 needs the fixes of runtime/mw/hfr_mw.c
+ * (the scheduler's tasks at their 60 Hz cadence) and what M7-21 still lists (the NOS trail, sites not yet
+ * classified, Speedbreaker, lockstep A/Bs at 120 and 240 within the spread of runs at 60) before it can be
+ * the default.
  *
  * Two clocks that counted frames, fixed for content rates above 60 (the original runs them at 60 at most
  * with vsync on; this port's limiter ran them at 70-110 before this file):
@@ -72,8 +75,9 @@
  *               no game limiter (benchmarks), the steps from the game's accumulator
  *   NFSU2_HFR_LOCKSTEP = 1     test only: every frame is exactly one slot of game time and steps, whatever
  *                              the wall clock did (NFSU2_HFR_LOCKSTEP_WALL=<fps> paces the wall at that rate)
- *   NFSMW_SIM_HZ = <hz>        research only (M7-21): a world's steps a second (the page's rate, at least
- *                              60, otherwise); 0 or unset = that
+ *   NFSMW_WORLD_HFR = 1        research only (M7-21, M7-22): a world steps at the page's rate (above)
+ *   NFSMW_SIM_HZ = <hz>        research only (M7-21): a world's steps a second, 10-1000; 0 or unset = the
+ *                              game's 60, or the page's rate (at least 60) with NFSMW_WORLD_HFR=1
  *   NFSMW_RACE_HFR = 1         research only (M7-21): in a world too the page's rate when it is above the
  *                              world's steps (frames that do not step show the one before)
  *   NFSU2_HFR_LOG = 1          one [mwpace] line a second: frames, slots, missed, the steps 0x642DB0 ran a
@@ -128,7 +132,7 @@ int  metal_display_hz(void);            /* gpu_web.c: the page's measured refres
 #define M_UNCAPPED (-2)
 #define M_AUTO     (-3)
 
-static int g_mode = M_AUTO, g_lockstep = 0, g_lock_wall = 0, g_log = 0, g_race_hfr = 0;
+static int g_mode = M_AUTO, g_lockstep = 0, g_lock_wall = 0, g_log = 0, g_race_hfr = 0, g_world_hfr = 0;
 static double g_sim_hz = 0;
 static _Atomic int g_rate_now = 0;
 
@@ -162,6 +166,7 @@ static void resolve_once(void){
     if (!(g_sim_hz >= 10.0 && g_sim_hz <= 1000.0)) g_sim_hz = 0.0;
     e = getenv("NFSU2_HFR_LOG"); g_log = e ? atoi(e) : 0;
     e = getenv("NFSMW_RACE_HFR"); g_race_hfr = e && *e == '1';
+    e = getenv("NFSMW_WORLD_HFR"); g_world_hfr = e && *e == '1';
 }
 static void resolve(void){ static pthread_once_t once = PTHREAD_ONCE_INIT; pthread_once(&once, resolve_once); }
 static int mode_rate(void){
@@ -298,13 +303,15 @@ static int cap_slots(int rate){
     return k < 1 ? 1 : k;
 }
 
-/* The world's step (above): 1/60 in the front end; leaving it (the loading of a world) the page's rate, at
- * least 60 (NFSMW_SIM_HZ when set), latched until the world is left for the front end again, so the world's
- * tasks and objects never see the step change under them.  A rate the page takes up later (a display measured
- * at 120 after the world began) waits for the next world; until then the world runs at its own steps. */
+/* The world's step (above): the game's own, never written, unless the research switches are set.  With them:
+ * 1/60 in the front end; leaving it (the loading of a world) the page's rate, at least 60 (NFSMW_SIM_HZ when
+ * set), latched until the world is left for the front end again, so the world's tasks and objects never see
+ * the step change under them.  A rate the page takes up later (a display measured at 120 after the world
+ * began) waits for the next world; until then the world runs at its own steps. */
 static double g_world_hz = 60.0;
 static void world_step(int rate){
     static int seen_fe = 0;            /* the boot (before the first front end) keeps the game's step */
+    if (!g_world_hfr && g_sim_hz <= 0) return;
     uint32_t flow = MR32(A_FLOW), sim = MR32(A_SIMOBJ);
     if (flow == FLOW_FE){ g_world_hz = 60.0; seen_fe = 1; }
     else if (flow != FLOW_RACING && seen_fe) g_world_hz = g_sim_hz > 0 ? g_sim_hz : rate > 60 ? (double)rate : 60.0;

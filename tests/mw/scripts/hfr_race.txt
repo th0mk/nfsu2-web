@@ -6,9 +6,11 @@
 # up: tools/mw/hfr_ab.py REF.log RUN.log... compares them (the player's car, the racers' progress, the traffic's
 # stops).  NFSMW_HFR_AILOG=1 adds the traffic AI's target speed for cars under 0.6 m/s.  Lockstep makes each
 # frame exactly one slot of game time (NFSU2_HFR_LOCKSTEP=1); the race still differs from run to run at the
-# same rate (GO's step, the AI), so compare several runs a rate:
+# same rate (GO's step, the AI), so compare several runs a rate.  A world steps at 60 unless NFSMW_WORLD_HFR=1
+# (research, framerate_mw.c) steps it at the page's rate:
 #   node web/tools/run-suite.mjs --game mw --script hfr_race.txt --marker 'hfr_race: 90 s of game time' \
-#     --env NFSU2_HFR_LOCKSTEP=1 --env NFSU2_FPS=120 --env NFSMW_HFR_TRACE=1 --timeout-scale 6
+#     --env NFSU2_HFR_LOCKSTEP=1 --env NFSU2_FPS=120 --env NFSMW_WORLD_HFR=1 --env NFSMW_HFR_TRACE=1 \
+#     --timeout-scale 6
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000

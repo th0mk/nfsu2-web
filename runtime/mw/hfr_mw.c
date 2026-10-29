@@ -1,6 +1,7 @@
 /* hfr_mw.c -- Most Wanted's simulation at a step other than 1/60 s (TRACKER M7-21, M7-22): the fixes per
- * subsystem.  framerate_mw.c sets the step (the page's rate in a world, 1/60 in the front end); this file keeps
- * what was written for 60 steps a second working at 120 and 240.
+ * subsystem.  framerate_mw.c keeps the game's step, 1/60; its research switch NFSMW_WORLD_HFR=1 (or
+ * NFSMW_SIM_HZ) steps a world at the page's rate; this file keeps what was written for 60 steps a second
+ * working at 120 and 240.  At the game's own step it changes nothing (the stopped-traffic option below aside).
  *
  * The scheduler's tasks (GAME.md 6.3).  SimSystem::AddTask 0x6ED0F0 (thiscall on [0x9885E0]: schedule, rate,
  * handler, start offset, mode) makes a task of 0x28 bytes (0x6ECCD0): +0 rate (at most 1), +4 handler, +8 its
