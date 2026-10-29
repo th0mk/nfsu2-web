@@ -6,7 +6,9 @@
 Prints markdown tables, read at run time from the game folder (nothing of the game is kept here):
   - GLOBAL/gameplay.bin, a VPAK of 272 Attrib vaults: the race bins race_bin_01..15 (the Blacklist: each bin's
     boss collection, its races by kind, its engage list, reward cards and unlocks), the event vaults by kind, the
-    Challenge Series bins;
+    Challenge Series bins.  A race's kind is its parent collection's, but a circuit with KnockoutsPerLap set is a
+    lap knockout (the field gpcore's "lapknockout" sets over its parent "circuit"; two races of the bins set it
+    themselves under "circuit"); the races whose name's kind digit disagrees are listed (none);
   - GLOBAL/attributes.bin (one vault, "db"): the pvehicle class's collections (cars, cops, traffic) by parent;
   - MOVIES and NIS: the file counts;
   - with LOGs of runs made with NFSU2_FNG_LOG=3 that stepped a Quick Race track list (Track_Select.fng): each
@@ -122,6 +124,12 @@ def language(path):
 CHILDREN = 0x916E0E78
 KINDS = {'circuit': 'circuit', 'p2p': 'sprint', 'lapknockout': 'lap knockout', 'tollboothrace': 'tollbooth',
          'speedtraprace': 'speedtrap', 'drag': 'drag'}
+# KnockoutsPerLap (h32): the one field gpcore's "lapknockout" collection (3 fields, parent "circuit") sets to 1 over
+# its parent's 0.  A race under "circuit" that sets it to 1 itself is a lap knockout (two in the bins).
+KNOCKOUTS_PER_LAP = 0x181462DA
+# the kind digit of an event's name (15_1_1_circuit: bin 15, kind 1, its 1st), for the cross-check
+KIND_DIGIT = {'1': 'circuit', '2': 'sprint', '3': 'lap knockout', '4': 'tollbooth', '5': 'speedtrap', '7': 'drag',
+              '8': 'pursuit race'}
 
 
 def array(bn, tgt):
@@ -133,8 +141,29 @@ def gameplay(G):
     V = vpak(os.path.join(G, 'GLOBAL', 'gameplay.bin')); H = names_of(V)
     leaf = lambda k: H.get(k, '0x%08X' % k).split('/')[-1]
     f32 = lambda v: struct.unpack('<f', struct.pack('<I', v))[0]
+    every = {}                                  # every vault's collections: key -> (parent, fields)
+    for bn, vl in V.values():
+        for key, _, par, ents in collections_of(bn, vl): every.setdefault(key, (par, ents))
+
+    def field(key, f):
+        """a field's value as the collection has it, itself or from its parents (None: nowhere on the way)"""
+        for _ in range(16):
+            if key not in every: return None
+            par, ents = every[key]
+            if f in ents: return ents[f][0]
+            key = par
+        return None
+
+    def kind(key, par):
+        """a race's kind: its parent's, but a circuit with knockouts each lap is a lap knockout"""
+        k = KINDS[leaf(par)]
+        return 'lap knockout' if k == 'circuit' and field(key, KNOCKOUTS_PER_LAP) else k
+
+    moved, digit_off = [], []
     print('## The Blacklist race bins (GLOBAL/gameplay.bin, vaults race_bin_01..15)\n')
-    print('A race is a top-level collection of the bin whose parent is a race kind; the engage list is the bin\'s '
+    print('A race is a top-level collection of the bin whose parent is a race kind, counted by that kind, except a '
+          'circuit with KnockoutsPerLap set (by itself or its parents), a lap knockout as gpcore\'s "lapknockout" '
+          'is; the engage list is the bin\'s '
           '"engage" collection\'s Children (the events offered while that rival is next); rewards and unlocks are '
           'the Children of its "rewards" and "unlocks" folders.  The boss collection\'s two fields have no name '
           'in the data: 0x3B798AA2 (an int) and 0xB1ECE070 (a float).\n')
@@ -145,7 +174,11 @@ def gameplay(G):
         bn, vl = V[nm]; kinds = collections.Counter(); boss = bi = bf = ''; eng = 0; rew = unl = []
         for key, _, par, ents in collections_of(bn, vl):
             n = H.get(key, ''); pn = leaf(par)
-            if pn in KINDS and n.count('/') == 1: kinds[KINDS[pn]] += 1; total[KINDS[pn]] += 1
+            if pn in KINDS and n.count('/') == 1:
+                k = kind(key, par); kinds[k] += 1; total[k] += 1
+                if k != KINDS[pn]: moved.append('%s (parent %s, KnockoutsPerLap %d)' % (n, pn, field(key, KNOCKOUTS_PER_LAP)))
+                d = re.match(r'\d+_(\d)_', n.split('/')[-1])
+                if d and KIND_DIGIT.get(d.group(1)) != k: digit_off.append('%s (%s)' % (n, k))
             if pn == 'boss':
                 boss = n.split('/')[-1]
                 if 0x3B798AA2 in ents: bi = str(ents[0x3B798AA2][0])
@@ -158,22 +191,23 @@ def gameplay(G):
         print('| %s | %s | %s | %s | %s | %d | %s | %s |' % (nm[-2:], boss, bi, bf,
               ', '.join('%s %d' % kv for kv in sorted(kinds.items())), eng, ' '.join(rew), ' '.join(unl)))
     print('\nRaces in the 15 bins by kind: %s\n' % ', '.join('%s %d' % kv for kv in sorted(total.items())))
+    print('Counted under another kind than their parent\'s: %d%s\n' % (len(moved), ': ' + ', '.join(moved) if moved else ''))
+    print('Races whose name\'s kind digit is not the kind counted: %d%s\n'
+          % (len(digit_off), ': ' + ', '.join(digit_off) if digit_off else ''))
     print('## The other bins\n')
     for nm in ('race_bin_challenge', 'race_bin_challenge_tollbooth', 'race_bin_collectors', 'race_bin_opm'):
         bn, vl = V[nm]; kinds = collections.Counter(); items = []
         for key, _, par, _ in collections_of(bn, vl):
             n = H.get(key, ''); pn = leaf(par)
             if n.count('/') == 1 and (pn.startswith('challengerace') or pn in KINDS or pn == 'boss'):
-                kinds[pn] += 1; items.append(n.split('/')[-1])
+                kinds[kind(key, par) if pn in KINDS else pn] += 1; items.append(n.split('/')[-1])
         print('- %s: %d (%s): %s' % (nm, sum(kinds.values()), ', '.join('%s %d' % kv for kv in sorted(kinds.items())),
                                      ' '.join(sorted(items))))
     print('\n## The vaults by name (VPAK directory: %d vaults)\n' % len(V))
     cat = collections.defaultdict(list)
-    kind_digit = {'1': 'circuit', '2': 'sprint', '3': 'lap knockout', '4': 'tollbooth', '5': 'speedtrap', '7': 'drag',
-                  '8': 'pursuit race'}
     for nm in V:
         m = re.match(r'(\d+)_(\d)_', nm)
-        if m: cat['event, kind digit %s (%s)' % (m.group(2), kind_digit.get(m.group(2), '?'))].append(nm)
+        if m: cat['event, kind digit %s (%s)' % (m.group(2), KIND_DIGIT.get(m.group(2), '?'))].append(nm)
         elif nm.lower().startswith('challenge_tollbooth'): cat['Challenge Series tollbooth'].append(nm)
         elif nm.startswith('challenge_'): cat['Challenge Series, other'].append(nm)
         else: cat['other'].append(nm)
