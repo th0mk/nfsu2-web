@@ -9,12 +9,17 @@
 # run, and in its Resume Career after a lost race), and none opens here.  `autopilot races` logs a race that goes
 # active while the run lasts (a race Resume Career loaded went active 630 frames after GameFlow 6 in a probe run,
 # and 840 to 870 frames after the Enter on Resume Career in career_start.txt runs; the intro's race 1 only 2,700 to
-# 4,300 frames after GameFlow 6, past this run's end).  Then the free drive: Up (gas) held 300 frames moves the car.  (***) The drive starts with GameFlow 6, as no screen comes later to wait
-# on: the car takes the gas from GameFlow 6's first frame (a probe run, the gas held from that frame: 10.7 km/h 21
-# frames on, while FadeScreen.fng and Autosave_Overlay.fng were up), HUD_SingleRace.fng never takes input, and
-# Autosave_Overlay.fng stays in the package list all through free roam (NFSU2_FNG_LOG=2).
+# 4,300 frames after GameFlow 6, past this run's end).  Then the free drive: Up (gas) held 300 frames moves the car,
+# `where` every 30 frames (+).
+# (***) The drive starts with GameFlow 6, as no screen comes later to wait on: the car takes the gas from GameFlow
+# 6's first frame (a probe run, the gas held from that frame: 10.7 km/h 21 frames on, while FadeScreen.fng and
+# Autosave_Overlay.fng were up), HUD_SingleRace.fng never takes input, and Autosave_Overlay.fng stays in the package
+# list all through free roam (NFSU2_FNG_LOG=2).
+# (+) The car meets something about 19 m ahead of the free roam's start: in a probe run it reached 51.9 km/h, then
+# was at 2.0 km/h 21 frames later and did not move again with the gas held (19.2 to 19.3 m in every run; what it
+# meets is not known).  So the check wants the top speed `where` logs, 20 km/h or more, besides the distance.
 # tests/mw/checks/career_resume.sh wants the save read, Resume Career, free roam with no race, the car at the free
-# roam's start and moved by the gas:
+# roam's start and driven by the gas (5 m or more, 20 km/h or more):
 #   NFSU2_SAVE_SEED=DIR/career_start node web/tools/run-suite.mjs --game mw --script career_resume.txt \
 #     --marker 'career_resume: drove' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=20000 --save-out DIR2
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; career_start's tree holds it)
@@ -38,7 +43,9 @@
 +0    racestatus
 +0    where
 +0    down UP                                            # gas
-+300  where
++0    loop 10                                            # where it is, every 30 frames (+)
++30   where
++0    endloop
 +0    up UP
 +0    log career_resume: drove
 +600  racestatus

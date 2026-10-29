@@ -37,11 +37,12 @@
 # Every prologue race autosaves ALPHA before its GO (Autosave_Overlay.fng), and Resume Career from such a save starts
 # that race.  After a race's Enter the next wait starts once slot #0 of the race status is no longer finished (the
 # next race set up), so a winner's screen still taking input in that frame is not taken for the next one.  The free
-# drive: Up (gas) held 300 frames moves the car (`where` before and after).  The save the free roam's autosave wrote
-# is what career_resume.txt loads after a restart (--save-out keeps it; it is game content made by the run: it stays
-# outside the repository).
+# drive: Up (gas) held 300 frames moves the car (`where` before it and every 30 frames in it; the car meets
+# something about 19 m on, as in career_resume.txt (+), so the check wants the top speed besides the distance).  The
+# save the free roam's autosave wrote is what career_resume.txt loads after a restart (--save-out keeps it; it is
+# game content made by the run: it stays outside the repository).
 # tests/mw/checks/career_start.sh wants the alias saved, the prologue's races in order, the car bought, the save
-# written in free roam, and the car driven:
+# written in free roam, and the car driven (5 m or more, 20 km/h or more):
 #   node web/tools/run-suite.mjs --game mw --script career_start.txt --marker 'career_start: drove' \
 #     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=150000 --timeout-scale 4 --save-out DIR
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
@@ -105,7 +106,9 @@
 +0    tap RETURN                                         # Resume Free Roam
 +0    waitfng -Pause_Main.fng 300                        # the pause menu gone (*)
 +0    down UP                                            # gas
-+300  where
++0    loop 10                                            # where it is, every 30 frames
++30   where
++0    endloop
 +0    up UP
 +0    log career_start: drove
 +0    close

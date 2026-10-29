@@ -7,8 +7,10 @@
 # finished, the race won), "six days later" between races 3 and 4, the race over and no longer racing after race 5
 # (the world unloads), the car lot, the car bought; then free roam (GameFlow 6, a career with no race: 0 racers),
 # ALPHA written by the free roam's autosave after the purchase, the pause menu gone after Resume Free Roam, and the
-# car moved at least 5 m by the gas held 300 frames; all in that order; the game left by WM_CLOSE.  Prints the frames from Start Career to free roam, the races
-# raced again, and the distance driven.
+# car driven by the gas held 300 frames: moved at least 5 m, at 20 km/h or more at one of the positions logged during
+# the drive (the car meets something about 19 m on: career_resume.txt); all in that order; the game left by
+# WM_CLOSE.  Prints the frames from Start Career to free roam, the races raced again, the distance driven and the
+# top speed.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
 # the fixed strings given must occur in the log in this order, each on a later line; prints the first one missing
@@ -38,14 +40,18 @@ n=$(awk '/LOG career_start: prologue$/ { p = 1 } /LOG career_start: car lot$/ { 
 [ "$n" = $((5 + lost)) ] || fail "$n races reached GO in the prologue, not 5 and $lost raced again"
 n=$(grep -c 'waitfng InGamePhotoMaster.fng:5dfb6667 satisfied' "$LOG")
 [ "$n" = 3 ] || fail "$n winner's screens, not 3"
-# the drive: the two positions logged after "free roam" (before and after the gas), apart in the ground plane
-d=$(awk 'BEGIN { n = 0 } /LOG career_start: free roam$/ { p = 1 } p && /^\[mwrace\] f=[0-9]+ where -?[0-9]/ { x[n] = $4; z[n] = $6; n++ }
-  END { if (n < 2) print -1; else printf "%.1f", sqrt((x[1] - x[0]) ^ 2 + (z[1] - z[0]) ^ 2) }' "$LOG")
+# the drive: the positions logged from "free roam" to "drove" (the first before the gas, the last at its end), the
+# first and the last apart in the ground plane, and the top speed among them
+r=$(awk 'BEGIN { n = 0; v = 0 } /LOG career_start: free roam$/ { p = 1 } /LOG career_start: drove$/ { p = 0 }
+  p && /^\[mwrace\] f=[0-9]+ where -?[0-9]/ { x[n] = $4; z[n] = $6; n++; if ($8 + 0 > v) v = $8 + 0 }
+  END { if (n < 2) print "-1 -1"; else printf "%.1f %.1f", sqrt((x[n - 1] - x[0]) ^ 2 + (z[n - 1] - z[0]) ^ 2), v }' "$LOG")
+read -r d v <<< "$r"
 awk -v d="$d" 'BEGIN { exit !(d >= 5) }' || fail "the gas moved the car $d m (want 5 m or more)"
+awk -v v="$v" 'BEGIN { exit !(v >= 20) }' || fail "the car's top speed in the drive was $v km/h (want 20 km/h or more)"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
 f=$(awk '/waitfng MainMenu_Sub.fng:6005281e@4b4e388a satisfied/ { match($0, /f=[0-9]+/); a = substr($0, RSTART + 2, RLENGTH - 2) }
   /LOG career_start: free roam$/ { match($0, /f=[0-9]+/); print substr($0, RSTART + 2, RLENGTH - 2) - a; exit }' "$LOG")
 echo "ALPHA made; the prologue played (5 races, 3 won by the AI over the line, $lost lost and raced again; race 5" \
-  "ended by the game), the car bought, free roam saved ($f frames after Start Career), the car driven $d m; the game" \
-  "left by WM_CLOSE"
+  "ended by the game), the car bought, free roam saved ($f frames after Start Career), the car driven $d m at up to" \
+  "$v km/h; the game left by WM_CLOSE"

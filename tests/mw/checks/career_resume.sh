@@ -5,8 +5,9 @@
 # Resume Career put the car in free roam: GameFlow 6, a career with no race (0 racers, before the drive and after
 # it), no prologue race loaded (no NIS scene bundle opened after Resume Career: every prologue race opens one while
 # its world loads) and none going active in the run, the car within 50 m of where the career's free roam begins
-# (-2148.45 153.03 981.90 in the runs that made the seed), then moved at least 5 m by the gas held 300 frames; all
-# in that order; the game left by WM_CLOSE.
+# (-2148.45 153.03 981.90 in the runs that made the seed), then driven by the gas held 300 frames: moved at least
+# 5 m, at 20 km/h or more at one of the positions logged during the drive (the car meets something about 19 m on:
+# career_resume.txt); all in that order; the game left by WM_CLOSE.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
 # the fixed strings given must occur in the log in this order, each on a later line; prints the first one missing
@@ -24,14 +25,18 @@ miss=$(inorder "[file] CreateFileA($D/ALPHA/ALPHA\") -> " 'LOG career_resume: AL
 nis=$(awk '/LOG career_resume: Resume Career$/ { p = 1 } p && index($0, "/NIS\\Scene_") { print; exit }' "$LOG")
 [ -z "$nis" ] || fail "a prologue scene loaded after Resume Career:$nis"
 grep -qE '^\[mwrace\] f=[0-9]+ race: active 1' "$LOG" && fail "a race started: $(grep -m1 -E '^\[mwrace\] f=[0-9]+ race: active 1' "$LOG")"
-# the two positions logged after "free roam": the first near the free roam's start, the second 5 m or more from it
-r=$(awk 'BEGIN { n = 0 } /LOG career_resume: free roam$/ { p = 1 } p && /^\[mwrace\] f=[0-9]+ where -?[0-9]/ { x[n] = $4; z[n] = $6; n++ }
-  END { if (n < 2) { print "-1 -1"; exit }
-        printf "%.1f %.1f", sqrt((x[0] + 2148.45) ^ 2 + (z[0] - 981.90) ^ 2), sqrt((x[1] - x[0]) ^ 2 + (z[1] - z[0]) ^ 2) }' "$LOG")
-s=${r% *} d=${r#* }
+# the positions logged from "free roam" to "drove": the first near the free roam's start, the last 5 m or more from
+# it, and the top speed among them
+r=$(awk 'BEGIN { n = 0; v = 0 } /LOG career_resume: free roam$/ { p = 1 } /LOG career_resume: drove$/ { p = 0 }
+  p && /^\[mwrace\] f=[0-9]+ where -?[0-9]/ { x[n] = $4; z[n] = $6; n++; if ($8 + 0 > v) v = $8 + 0 }
+  END { if (n < 2) { print "-1 -1 -1"; exit }
+        printf "%.1f %.1f %.1f", sqrt((x[0] + 2148.45) ^ 2 + (z[0] - 981.90) ^ 2),
+               sqrt((x[n - 1] - x[0]) ^ 2 + (z[n - 1] - z[0]) ^ 2), v }' "$LOG")
+read -r s d v <<< "$r"
 awk -v s="$s" 'BEGIN { exit !(s >= 0 && s <= 50) }' || fail "the car is $s m from the free roam's start (want 50 m or less)"
 awk -v d="$d" 'BEGIN { exit !(d >= 5) }' || fail "the gas moved the car $d m (want 5 m or more)"
+awk -v v="$v" 'BEGIN { exit !(v >= 20) }' || fail "the car's top speed in the drive was $v km/h (want 20 km/h or more)"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
 echo "after a restart: ALPHA loaded, Resume Career put the car in free roam ($s m from its start, no race), the gas" \
-  "moved it $d m; the game left by WM_CLOSE"
+  "moved it $d m, at up to $v km/h; the game left by WM_CLOSE"
