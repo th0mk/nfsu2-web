@@ -569,6 +569,7 @@ export class Encoder {
       s = this.device.createSampler({ compare: 'less-equal', minFilter: mn === 1 ? 'nearest' : 'linear', magFilter: mg === 1 ? 'nearest' : 'linear',
         addressModeU: ADDR[au < 6 ? au : 1], addressModeV: ADDR[av < 6 ? av : 1], lodMinClamp: 0, lodMaxClamp: 0 });
       this.cmpSamplers.set(k, s);
+      this.log(`[gpu] depth-compare sampler: filters ${mn}/${mg}, address modes ${au}/${av}${au >= 4 || av >= 4 ? ' (BORDER/MIRRORONCE approximated)' : ''}`);
     }
     return s;
   }

@@ -393,7 +393,13 @@ Each pixel shader module record says how the module declares each stage's textur
   answers D3DERR_NOTAVAILABLE (0x8876086A) for DF16, DF24 and INTZ, and D3D_OK for D24S8 as a depth-stencil texture
   (0x6C1725). Kind 3 is left free for it.
 - **Not provided: a border colour.** WebGPU has none; the page approximates D3DTADDRESS_BORDER by clamping and logs it
-  (L-088). If the shadow map's sampler uses BORDER, the translator adds "outside [0, 1]: 1" to its depth stages.
+  (L-088). If the shadow map's sampler uses BORDER, the translator adds "outside [0, 1]: 1" to its depth stages
+  (not done: the page logs each comparison sampler's address modes, `[gpu] depth-compare sampler`, to show whether
+  the game asks for it).
+- **Depth bias.** Most Wanted's shadow-map pass sets D3DRS_DEPTHBIAS 2^-22 and D3DRS_SLOPESCALEDEPTHBIAS 4.0. With 8
+  stages com.c packs them into `GwDraw.depth` bits 24-31 (`GW_ZBIAS_SHIFT`: 4 bits of the constant in units of
+  2^-24, 4 bits of the slope scale, each rounded and clamped to 0..15) and the page draws with `depthBias` and
+  `depthBiasSlopeScale`; the Z surface id keeps bits 8-23. UG2's records leave those bits 0.
 
 ### 11.5 Deploy order
 
