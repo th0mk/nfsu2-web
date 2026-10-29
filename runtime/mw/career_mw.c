@@ -179,8 +179,8 @@ static void race_win(CPU *c){
  * racing with its timer running (GRaceStatus +0x198A and the first racer's timer flag, +0x16C) and that was not
  * so the frame before, or the player's car is another one, it calls Game.ForceAIControl(0) again.  It logs the
  * race's edges as it sees them (active, GO, slot #0 finished, won), so a log shows each race's start and end.
- * The AI that drives the player's car loses now and then (a prologue race in one of 10 runs, by 4.8 s), and a
- * story race has to be won to go on.  What a player does then, the aid does: a lost race (slot #0 finished, the
+ * The AI that drives the player's car loses now and then (in 4 of 10 career_start.txt runs it lost one prologue
+ * race, race 2 or race 3: 4 of the 30 races it had to win), and a story race has to be won to go on.  What a player does then, the aid does: a lost race (slot #0 finished, the
  * race not won) shows PostRace_Results.fng, whose Enter goes back to the career menu (MainMenu_Sub.fng), where
  * Resume Career loads the race again from the autosave made before it (seen in a run); so from LOST_WAIT frames
  * after the loss, every LOST_EVERY frames, it taps Enter on either screen while it takes input, until a race's GO.
