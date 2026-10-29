@@ -25,7 +25,10 @@
  *                    6 s in runs), and the game extrapolates the others' (961 s for one at 1.4 %).  For
  *                    post-race flows only (race_loop.txt); a run that looks at rewards or the save lets the
  *                    autopilot drive over the line instead (race_win.txt).
- *   autopilot on|off the game's AI drives the local player's car (Game.ForceAIControl / ClearAIControl)
+ *   autopilot on|off the game's AI drives the local player's car (Game.ForceAIControl / ClearAIControl); a car
+ *                    it wedges against a wall is logged (wedge_watch below)
+ *   autopilot go     the same at the GO of each race from now on (a ForceAIControl before the GO did not hold for a
+ *                    LAN Lap KO joiner, run ko of 2026-10-30), with the races' edges logged; no lost-race handling
  *   autopilot races  the same at every race's GO from now on, for races that follow each other with no menu
  *                    between (the career's prologue), with the races' edges logged; a lost race is raced again
  *                    the way a player does it (watch_race below); autopilot off ends it
@@ -38,6 +41,7 @@
  *   racestatus       log the race: its racers' progress and finish flags, its own flags, and which racer the
  *                    local player is ("player 1": Game.GetRacerIndex, slot #0)
  *   frames           log the Presents and the main loop's passes so far (M4-01: one pass a Present)
+ *   NFSU2_CAR_TRACE=<file> (no command): every race car per frame, UG2's CSV for tools/lan_trace.py (car_trace below)
  *   pursuit [watch]  log the player's pursuit state (heat, the pursuit object, its length), once or whenever it
  *                    changes; pursuit wait on|off [N] waits up to N frames for a pursuit to be there or gone
  *                    (the state's addresses: log_pursuit below)
@@ -67,6 +71,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 
 long autotest_frame(void);
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
@@ -218,6 +223,7 @@ static void watch_race(CPU *c){
         W.lost = 0;
         fprintf(stderr, "[mwrace] f=%ld autopilot on: the race's GO\n", f);
     }
+    if (auto_ai == 2){ W.rs = rs; W.sim = s; W.active = active; W.go = go; W.fin = fin; W.won = won; return; }
     if (active && fin && !won && !W.lost && !(W.fin && !W.won)) W.lost = f;   /* finished, not won: maybe lost */
     W.rs = rs; W.sim = s; W.active = active; W.go = go; W.fin = fin; W.won = won;
     if (!W.lost || f - W.lost < LOST_WAIT || (f - W.lost) % LOST_EVERY) return;
@@ -228,9 +234,40 @@ static void watch_race(CPU *c){
     fprintf(stderr, "[mwrace] f=%ld autopilot: %s\n", f, what);
 }
 
+/* ---- a car the autopilot wedged: logged ----
+ * The game's AI that drives the player's car (ForceAIControl) can wedge it against a wall and keep pushing, a few
+ * metres forward and back: in LAN sprints of 2026-10-30 the joiner's car stayed within 30 m of one spot for nine
+ * minutes (run a1), the host's after its Speedbreaker test (sb), and in a Lap KO race the host's (ko); the race then
+ * never reaches the results.  The game resets the AI racers it drives itself, not the player's car.  R (the RESET
+ * binding, GAME 13.1), tapped with the AI let go (ClearAIControl), did not move the car in two runs, so nothing is
+ * done to the car: while the autopilot drives and the race runs (GRaceStatus active, GO, the local racer not
+ * finished), a car that moved less than STUCK_M metres in STUCK_FRAMES frames is logged, once a wedge, so a run that
+ * misses its results says why. */
+#define STUCK_FRAMES 600
+#define STUCK_M 25.0f
+static int ai_on;                       /* autopilot on: the AI drives the local player's car */
+static struct { long since; float p[3]; int said; } U;
+static void wedge_watch(CPU *c){
+    long f = autotest_frame();
+    uint32_t rs = rd(G_RACESTATUS), s = player_simable(c), a = s;
+    if (!rs || !s || game_flow() != g_game.flow_race || !MR8(rs + RS_ACTIVE) || !MR8(rs + RS_GO)){ U.since = 0; return; }
+    int idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a);
+    if (idx >= 1 && idx <= 16 && MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_FINISHED)){ U.since = 0; return; }
+    uint32_t p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
+    if (!p || !mem_is_committed(p + 11u)) return;
+    float q[3] = { rdf(p), rdf(p + 4u), rdf(p + 8u) };
+    float d = sqrtf((q[0] - U.p[0]) * (q[0] - U.p[0]) + (q[1] - U.p[1]) * (q[1] - U.p[1]) + (q[2] - U.p[2]) * (q[2] - U.p[2]));
+    if (!U.since || d >= STUCK_M){ U.since = f; memcpy(U.p, q, sizeof q); U.said = 0; return; }
+    if (f - U.since < STUCK_FRAMES || U.said) return;
+    U.said = 1;
+    fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %ld frames (at %.1f %.1f %.1f): wedged\n", f, d,
+            f - U.since, q[0], q[1], q[2]);
+    log_status(c);
+}
+
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
-enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT };
+enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_AI_GO, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT };
 
 /* The player's pursuit state (exploration, wave 7: offsets read in runs, their meaning where a run showed it):
  *   IPerpetrator, interface 0x4037E0 of the player's ISimable object (vtable 0x892988): +0x1C the heat, a float
@@ -313,9 +350,72 @@ static void hfr_trace(CPU *c){
     fprintf(stderr, "%s\n", b);
 }
 
+/* NFSU2_CAR_TRACE=<file> (test only; lan-pair sets it, tools/lan_trace.py reads it): UG2's CSV (debug_ug2.c car_trace)
+ * for Most Wanted, one row per pass of the main loop while racing (GameFlow 6): wall-clock time (CLOCK_REALTIME),
+ * frame, hud (1 while the race runs: GRaceStatus active and the first racer's timer going), cap (the sim step P,
+ * [0x9203B0]+0x20), worldtimer (the sim's steps x P in 1/4000 s: the game time simulated), realtimer (RealTimer
+ * [0x925B14], 1/4000 s), then per simable of the list at 0x90D664 (the racers: in a LAN race the players' cars)
+ * whether it is the local player's, its position (ISimable +0x60; Y is the height) and its speed in m/s (vehicle
+ * +0x2C).  With it, a [mwrace] racestatus line every RS_EVERY frames while racing and one at every change of the
+ * race's flags (active, GO, the local racer finished, won), so a log shows where each race stood. */
+#define RS_EVERY 600
+static FILE *g_ctrace;
+static void car_trace(CPU *c){
+    static int init; static long last_rs = -1; static uint32_t last_flags = 0xffffffffu, last_list;
+    if (!init){
+        init = 1;
+        const char *ct = getenv("NFSU2_CAR_TRACE");
+        if (ct && *ct && (g_ctrace = fopen(ct, "w"))){
+            setvbuf(g_ctrace, 0, _IOLBF, 0);
+            fprintf(g_ctrace, "t,frame,hud,cap,worldtimer,realtimer,n");
+            for (int i = 0; i < 8; i++) fprintf(g_ctrace, ",c%dlocal,c%dx,c%dy,c%dz,c%dv", i, i, i, i, i);
+            fputc('\n', g_ctrace);
+        }
+    }
+    if (!g_ctrace) return;
+    long f = autotest_frame();
+    if (game_flow() != 6u){ last_rs = -1; last_flags = 0xffffffffu; return; }
+    uint32_t rs = rd(G_RACESTATUS), sim = rd(0x009203b0u), me = player_simable(c);
+    int active = rs ? MR8(rs + RS_ACTIVE) : 0, go = rs ? MR8(rs + RS_GO) != 0 : 0, won = rs ? MR8(rs + RS_WON) : 0;
+    int idx = -1, fin = 0;
+    if (rs && me){ uint32_t a = me; idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a); }
+    if (rs && idx >= 1 && idx <= 16) fin = MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_FINISHED);
+    uint32_t flags = (uint32_t)active | (uint32_t)go << 1 | (uint32_t)fin << 2 | (uint32_t)won << 3;
+    if (flags != last_flags || last_rs < 0 || f - last_rs >= RS_EVERY){
+        if (flags != last_flags)
+            fprintf(stderr, "[mwrace] f=%ld race: active %d go %d player finished %d won %d\n", f, active, go, fin, won);
+        log_status(c);
+        last_flags = flags; last_rs = f;
+    }
+    uint32_t sb = rd(G_SIMLIST), sn = rd(G_SIMLIST + 8u); if (sn > 8) sn = 8;
+    if (sb != last_list){
+        last_list = sb;
+        fprintf(stderr, "[cartrace] f=%ld simables %u, local 0x%08x:", f, sn, me);
+        for (uint32_t i = 0; sb && i < sn; i++) fprintf(stderr, " 0x%08x", rd(sb + 4u * i));
+        fputc('\n', stderr);
+    }
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    double P = sim ? (double)rdf(sim + 0x20u) : 0.0;
+    fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%lld,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), f,
+            active && go, P, sim ? (long long)llround((double)rd(sim + 0x28u) * P * 4000.0) : 0LL, rd(0x00925b14u),
+            sb ? sn : 0u);
+    for (uint32_t i = 0; sb && i < sn; i++){
+        uint32_t s = rd(sb + 4u * i);
+        uint32_t p = s ? gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0) : 0;
+        uint32_t v = s ? gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0) : 0;
+        if (p && mem_is_committed(p + 11u))
+            fprintf(g_ctrace, ",%d,%.3f,%.3f,%.3f,%.3f", s == me, (double)rdf(p), (double)rdf(p + 4u), (double)rdf(p + 8u),
+                    v ? (double)gcall_f(c, rd(rd(v) + VEH_SPEED), v) : 0.0);
+        else fprintf(g_ctrace, ",,,,,");
+    }
+    fputc('\n', g_ctrace);
+}
+
 void mw_frame(CPU *c){
     if (auto_ai) watch_race(c);
+    if (auto_ai || ai_on) wedge_watch(c);
     hfr_trace(c);
+    car_trace(c);
     if (pw_on) log_pursuit(c, 1);
     if (Q.op == Q_NONE || Q.done) return;
     long f = autotest_frame();
@@ -326,12 +426,14 @@ void mw_frame(CPU *c){
         uint32_t zero = 0;
         gcall(c, Q.op == Q_AI_ON ? FN_FORCE_AI : FN_CLEAR_AI, 0, 1, &zero);
         if (Q.op == Q_AI_OFF) auto_ai = 0;
+        ai_on = Q.op == Q_AI_ON; U.since = 0;
         fprintf(stderr, "[mwrace] f=%ld autopilot %s\n", f, Q.op == Q_AI_ON ? "on" : "off");
         break; }
-    case Q_AI_RACES:
+    case Q_AI_RACES: case Q_AI_GO:
         memset(&W, 0, sizeof W);        /* a race at its GO now is taken at the next anchor */
-        auto_ai = 1;
-        fprintf(stderr, "[mwrace] f=%ld autopilot races: the AI takes each race at its GO\n", f);
+        auto_ai = Q.op == Q_AI_GO ? 2 : 1;
+        fprintf(stderr, "[mwrace] f=%ld autopilot %s: the AI takes each race at its GO\n", f,
+                auto_ai == 2 ? "go" : "races");
         break;
     case Q_TELEPORT: {
         uint32_t s = player_simable(c);
@@ -406,7 +508,8 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     }
     else if (!strcasecmp(cmd, "autopilot")){
         sscanf(p, "%31s", a1);
-        Q.op = !strcasecmp(a1, "off") ? Q_AI_OFF : !strcasecmp(a1, "races") ? Q_AI_RACES : Q_AI_ON;
+        Q.op = !strcasecmp(a1, "off") ? Q_AI_OFF : !strcasecmp(a1, "races") ? Q_AI_RACES : !strcasecmp(a1, "go") ? Q_AI_GO
+             : Q_AI_ON;
     } else if (!strcasecmp(cmd, "teleport")){
         char t[6][24]; int used2 = 0, k = 0;
         while (k < 6 && sscanf(p, "%23s %n", t[k], &used2) == 1){ p += used2; k++; }

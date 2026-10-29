@@ -1,0 +1,63 @@
+# Most Wanted: what Speedbreaker (G, the GAMEBREAKER binding) does in a single-player Custom Race, the control for the
+# LAN race test of TRACKER M8-22 (lan-pair --game mw, the host taps G with the AI let go).  One Custom Race of kind
+# MWK_MODE on track MWK_TRACK (as race_kind.txt picks them); from GO the game's AI drives (autopilot on) for 600
+# frames, lets go (autopilot off), G is tapped, and `where` logs the car's position and speed every 30 frames for
+# 6 s: in slow motion the car covers less than its speed's worth of ground in the 30 frames.  Then the AI drives
+# again, racewin ends the race and Enter goes back to the menu.
+#   node web/tools/run-suite.mjs --game mw --script race_speedbreaker.txt --marker 'race_speedbreaker: done' \
+#     --env MWK_MODE=4b4e388a --env MWK_TITLE=3de80a85 --env MWK_TRACK=4d36bf77 --env MWK_RUNS=1 \
+#     --env NFSU2_FNG_LOG=3 --env NFSU2_QUIT_FRAMES=100000 --timeout-scale 6
+# (the labels as race_kind.txt's; an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    loop ${MWK_RUNS}
++0    tapuntil RETURN MainMenu_Sub.fng:1f203817 90 900  # Custom Race: "custom race mode select" (a RETURN that
+#                                                       falls in the last one's hold is dropped, so it presses again)
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@${MWK_MODE} 40 600   # the kind
++0    tap RETURN
++0    waitfng Track_Select.fng:${MWK_TITLE} 600          # its track list
++0    tapuntil RIGHT Track_Select.fng:${MWK_TITLE}:${MWK_TRACK} 40 3000   # the track
++0    log race_speedbreaker: track ${MWK_TRACK}
++0    tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the kind's options, on their first row, as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    log race_speedbreaker: load
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    log race_speedbreaker: racing
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_speedbreaker: GO
++0    autopilot on
++600  autopilot off
++30   where
++0    tap G                                              # Speedbreaker
++0    log race_speedbreaker: G
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++30   where
++0    autopilot on
++600  autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng 1200   # the race's end screen takes input
++0    log race_speedbreaker: results
++0    tapuntil RETURN MainMenu_Sub.fng:cdf0cc03@4b4e388b 90 1800   # back in the "quick race" menu, on Custom Race
++0    endloop
++0    log race_speedbreaker: done
++0    close

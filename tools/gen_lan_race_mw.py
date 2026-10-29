@@ -36,8 +36,9 @@ the game starts the race by itself (about a minute after the second player
 came in, in the runs of 2026-10-29; Enter there opens the room's car select,
 which the start does not wait for).  --room LINES (';'-separated) are steps
 in the room all the same.  Then both wait for the race (GameFlow [0x925E90]
-== 6), hand the car to the game's AI driver (autopilot) and wait for the
-results screen (--results SCREEN).
+== 6), hand the car to the game's AI driver at the race's GO (autopilot go:
+a ForceAIControl before the GO did not hold for a Lap KO joiner) and wait for
+the results screen (--results SCREEN).
 
 Options:
   --name NAME          the alias and LAN name (host: the server's name too)
@@ -176,7 +177,7 @@ def main():
             w(ln)
     w('+0    waitmem %s 6 36000                         # racing' % FLOW)
     w('+0    log lan: racing')
-    w('+0    autopilot on')
+    w('+0    autopilot go                                       # the AI takes the car at the GO')
     w('+0    log race-start')
     for ln in [s.strip() for s in a.after.split(';') if s.strip()]:
         w(ln)

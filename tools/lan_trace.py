@@ -81,7 +81,8 @@ def results_frame(path):
     try:
         with open(log, errors='replace') as f:
             for line in f:
-                if 'screen UI_PostRaceResults.fng' in line and line.startswith('[fng] f='):
+                if line.startswith('[fng] f=') and ('screen UI_PostRaceResults.fng' in line
+                                                    or 'screen PostRace_Results.fng' in line):   # UG2, MW
                     return int(line.split('f=')[1].split()[0])
     except OSError:
         pass
