@@ -8,9 +8,9 @@
 # focus loss: the game takes the Down (the highlight moves), the page lets go of it on the loss (runtime/web/
 # input_web.c release_all) and the game's next snapshot has it up (tests/mw/checks/kb_menu.sh reads the [dikbd]
 # line of NFSU2_KEY_LOG=1).  The focus stays away 30 frames and the key is let go 30 frames after it is back, for
-# the game's polls to see each state:
+# the game's polls to see each state.  NFSU2_PAD_LOG=1 lets the check see a pad offered by the enumeration too:
 #   node web/tools/run-suite.mjs --game mw --script kb_menu.txt --marker 'kb_menu: back at the main menu' \
-#     --env NFSU2_KEY_LOG=1 --env NFSU2_QUIT_FRAMES=7200
+#     --env NFSU2_KEY_LOG=1 --env NFSU2_PAD_LOG=1 --env NFSU2_QUIT_FRAMES=7200
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000

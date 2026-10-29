@@ -8,11 +8,17 @@
 # on its screen (L-021), as tests/mw/scripts/kb_menu.txt by keys: the main menu's items 0x4B4E388A on from Career,
 # Options its 8th (0xB51549B8), MainMenu_Sub.fng's first item (0x4B4E388A) opens Options.fng (its first item
 # 0xB2980BA8, the next 0xB2980BA9).
+# What the set-up does is read in the game's binding table (0x91F418, runtime/mw/game_mw.c): FE_ACTION_RIGHT
+# (entry 20, 0x34 bytes each) has its first joystick binding at +0x1C, (type, device, code) = (5, 0, 0), an axis,
+# after a start with no pad, and (3, 0, 1), the D-pad's right, once the set-up has seen one.
 #   node web/tools/run-suite.mjs --game mw --script pad_menu.txt --marker 'pad_menu: back at the main menu' \
 #     --env NFSU2_PAD_LOG=1 --env NFSU2_QUIT_FRAMES=7200
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3): the game enumerated its devices and found none
++0    waitmem 0x0091f844 5 60         # FE_ACTION_RIGHT's first joystick binding: an axis, set up with no pad
 +0    pad connect                     # plugged in now: offered to the game's own callback at the next Present
++0    waitmem 0x0091f844 3 600        # the set-up ran again with the pad: that binding is POV 0 ...
++0    waitmem 0x0091f84c 1 60         # ... to the right
 +0    tappaduntil A MainMenu.fng 90 6000                 # the splash, then the first start's MC_Main.fng
 +0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
 +0    log pad_menu: main menu, on Career

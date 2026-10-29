@@ -1,10 +1,13 @@
 # Most Wanted: tests/mw/scripts/pad_menu.txt with the pad plugged in from the first frame, so the game's own
 # enumeration at the start offers it (to its input manager and to its force-feedback devices) and its input set-up
-# finds it (TRACKER M3-09):
+# finds it (TRACKER M3-09): FE_ACTION_RIGHT's first joystick binding is the D-pad's right from the start (the
+# binding table of tests/mw/scripts/pad_menu.txt):
 #   node web/tools/run-suite.mjs --game mw --script pad_menu_boot.txt --marker 'pad_menu: back at the main menu' \
 #     --env NFSU2_PAD_LOG=1 --env NFSU2_QUIT_FRAMES=7200
 0     pad connect
 +0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    waitmem 0x0091f844 3 60         # FE_ACTION_RIGHT's first joystick binding: POV 0 ...
++0    waitmem 0x0091f84c 1 60         # ... to the right
 +0    tappaduntil A MainMenu.fng 90 6000                 # the splash, then the first start's MC_Main.fng
 +0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
 +0    log pad_menu: main menu, on Career
