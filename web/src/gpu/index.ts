@@ -418,6 +418,18 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       log(`[gpu] canvas ${w}x${h} for the view's ${viewW}x${viewH}${w !== viewW || h !== viewH ? ': the picture stretched by CSS, no composite' : ''}`);
     }
   };
+  // Exposure and White Level (runtime/tonemenu.c): the frame's GwTone (mult, white, knee), or null while they leave
+  // the picture as drawn (or the module has none), when the frame may draw straight into the canvas
+  let toneSaid = '';
+  const toneOf = (b: number): Float32Array | null => {
+    const U = u32(), fw = cw + C.frame + b * (P.FRAME_BYTES >> 2), at = U[fw + F.k] + P.K_TONE;
+    const t = U[at >>> 2] === P.TONE_MAGIC ? new Float32Array(mem.buffer, at + 4, 3) : null;
+    const on = !!t && t[0] > 0 && t[1] > 0 && t[2] >= 0 && t[2] < 1 && (Math.abs(t[0] - 1) > 1e-4 || t[1] < 0.9999);
+    const said = on ? `x${t![0].toFixed(2)}, white ${Math.round(t![1] * 100)} %` : 'off';
+    if (said !== toneSaid && (toneSaid || on)) log(`[gpu] Exposure and White Level: ${said}`);
+    toneSaid = said;
+    return on ? t : null;
+  };
   const encodeAndSubmit = (b: number) => {
     const t0 = performance.now();
     const ce = device.createCommandEncoder();
@@ -427,7 +439,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const cur = ctx.getCurrentTexture();
     sinceRaf++; winUnshownFrames++;
     if (t0 - winUnshownT > SUMMARY_MS) summary(t0);
-    const st = enc.encodeFrame(b, ce, direct ? cur : undefined);
+    const tone = toneOf(b);
+    const st = enc.encodeFrame(b, ce, direct && !tone ? cur : undefined);
     burn?.(ce);
     const scr = enc.screen!;   // the canvas texture itself, or the back buffer
     const tsEnd: GPURenderPassTimestampWrites | undefined = slot >= 0 ? { querySet: qs!, endOfPassWriteIndex: 2 * slot + 1 } : undefined;
@@ -442,7 +455,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       // waits for every pass that drew there (a pass without that dependency may run early)
       if (tsEnd) enc.copyQuad(ce, enc.screenView!, tsView(), 'bgra8unorm', nearest, undefined, true, tsEnd);
     } else {
-      // composite: the back buffer aspect-fit into the canvas at its own resolution
+      // composite: the back buffer aspect-fit into the canvas at its own resolution, with Exposure and White Level
       const cvw = cur.width, cvh = cur.height;
       const sc = Math.min(cvw / scr.width, cvh / scr.height);
       const w = Math.round(scr.width * sc), h = Math.round(scr.height * sc);
@@ -450,7 +463,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       const rect: [number, number, number, number] = [Math.floor((cvw - w) / 2), Math.floor((cvh - h) / 2), w, h];
       imgRect = { x: rect[0], y: rect[1], w, h };
       // the back buffer's own view: its bind group is made once (Encoder.copyBg), not every frame
-      enc.copyQuad(ce, enc.screenView!, cur.createView(), canvasFormat, one ? nearest : linear, rect, true, tsEnd);
+      if (tone) enc.toneQuad(ce, enc.screenView!, cur.createView(), canvasFormat, one ? nearest : linear, tone, rect, tsEnd);
+      else enc.copyQuad(ce, enc.screenView!, cur.createView(), canvasFormat, one ? nearest : linear, rect, true, tsEnd);
     }
     if (slot >= 0) {
       ce.resolveQuerySet(qs!, 2 * slot, 2, qResolve!, 256 * slot);     // resolve offsets are 256-aligned

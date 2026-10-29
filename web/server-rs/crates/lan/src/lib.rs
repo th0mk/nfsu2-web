@@ -43,7 +43,8 @@
 //!   datagram's magic, version, length and CRC), about a quarter fewer bytes for the same frames (compact.rs).
 //!   Never routed from a client (it could name any source), as a bundle in a bundle never is.
 //!
-//! Text frames are JSON control messages: {"t":"hello","name":...,"deltas":1,"lan":0|1,"bundle":1,"compact":1},
+//! Text frames are JSON control messages: {"t":"hello","name":...,"deltas":1,"lan":0|1,"bundle":1,"compact":1}
+//! (and "id", "claim", "block": below),
 //! {"t":"lan","on":0|1} and {"t":"ping","id":n} from a client; {"t":"welcome","vip":...,"vipStr":...,"mask":...,
 //! "token":...,"bundle":1}, {"t":"peers",...}, {"t":"delta",...} and {"t":"pong","id":n} from the switch.
 //!
@@ -134,6 +135,19 @@
 //! operator's `who` ([`LanSwitch::who`]): each player's address and name, the opaque id the server gave its client
 //! address (`AttachOpts::ident`, a keyed hash) and its page's id, and the same of the players who left in the last
 //! `GONE_MS`, so that one who just left can still be banned.  None of it is ever sent to a peer.
+//!
+//! ## Claimed names
+//!
+//! A hello may name the token of the keyphrase its page plays with ("claim", at most 64 characters): the server's
+//! `AttachOpts::on_claim` makes of it the owner the hosts are told of with each frame (`FrameCtx::owner`, a hash:
+//! nfsu2-claims), so the Online lobby and the free-roam hub let a claimed name be played by its keyphrase only.  The
+//! token itself is neither kept nor shown, nor ever sent to a peer.
+//!
+//! ## Blocks
+//!
+//! A hello may name the players its page blocks in free roam ("block": names as the game shows them over cars, at
+//! most 32, each cut to 24 printable characters: members.rs `block_names`): the switch hands them to the free-roam hub
+//! with the page's address (`Host::blocks`), which links the two with none of them.  They go with the connection.
 //!
 //! ## Test aids
 //!
@@ -472,6 +486,8 @@ pub type OnJoin = Box<dyn Fn(u32, bool, usize) + Send + Sync>;
 pub type OnLeave = Box<dyn Fn(u32, &str, usize) + Send + Sync>;
 /// `AttachOpts::on_hello`: the id the hello names -> the control message that turns the client away, or None
 pub type OnHello = Box<dyn Fn(&str) -> Option<Bytes> + Send + Sync>;
+/// `AttachOpts::on_claim`: the hello's "claim" (a keyphrase's token) -> the owner the hosts are told of, or None
+pub type OnClaim = Box<dyn Fn(&str) -> Option<Arc<str>> + Send + Sync>;
 
 /// What the server tells the switch about a new connection (never its address: the crate doc's What a peer learns).
 #[derive(Default)]
@@ -495,6 +511,9 @@ pub struct AttachOpts {
     pub refuse: Option<Bytes>,
     /// the hello's id (its page's own): a message back turns the client away as `refuse` does
     pub on_hello: Option<OnHello>,
+    /// the hello's "claim" (the token of the keyphrase its page plays with): the owner its frames name to the hosts
+    /// (`FrameCtx::owner`); never kept or shown otherwise
+    pub on_claim: Option<OnClaim>,
 }
 
 /// What the players on the switch do (`LanSwitch::breakdown`).
@@ -727,6 +746,7 @@ pub(crate) struct AttachCtx {
     on_leave: Option<OnLeave>,
     ident: Option<Arc<str>>,
     on_hello: Option<OnHello>,
+    on_claim: Option<OnClaim>,
 }
 
 /// The sender's buckets while the Online host handles its frame: what the host sends because of it is spent from
@@ -964,6 +984,7 @@ impl LanSwitch {
             on_leave: opts.on_leave,
             ident: opts.ident.map(Arc::from),
             on_hello: opts.on_hello,
+            on_claim: opts.on_claim,
         });
         let conn = Arc::new(Conn::new(self.conn_ids.fetch_add(1, Relaxed)));
         // a banned client hears why and goes (its reader answers the close handshake); without ?resume the welcome
@@ -1156,7 +1177,7 @@ impl LanSwitch {
     }
 
     /// a hello (the first control message of a connection) whose id the server turns away: the connection goes, and
-    /// true.  The id is kept for `who` either way.
+    /// true.  The id is kept for `who` either way, and the owner its claim names for the hosts.
     pub(crate) fn hello_refused(&self, conn: &Arc<Conn>, ctx: &AttachCtx, b: &Bytes) -> bool {
         if b.len() > self.o.max_text || !conn.open() {
             return false;
@@ -1164,6 +1185,14 @@ impl LanSwitch {
         let Some(serde_json::Value::Object(m)) = text::parse_json(b) else { return false };
         if m.get("t").and_then(serde_json::Value::as_str) != Some("hello") {
             return false;
+        }
+        if let Some(owner) = m
+            .get("claim")
+            .and_then(serde_json::Value::as_str)
+            .filter(|c| c.len() <= 64)
+            .and_then(|c| ctx.on_claim.as_ref().and_then(|f| f(c)))
+        {
+            let _ = conn.owner.set(owner);
         }
         let Some(id) = m.get("id").and_then(serde_json::Value::as_str).filter(|i| !i.is_empty() && i.len() <= 64) else {
             return false;
@@ -1471,7 +1500,18 @@ mod tests {
         for i in 0..ADDRS {
             assert_eq!(slot(vip_at(i)), Some(i));
         }
-        for v in [BASE, BASE | 1, BASE | 252, BASE | 255, BASE | 0x1800 | 2, BASE | 0x1F00 | 2, BASE | 0x2000 | 2, 0, BROADCAST, BASE | 0x1700 | 0xFD] {
+        for v in [
+            BASE,
+            BASE | 1,
+            BASE | 252,
+            BASE | 255,
+            BASE | 0x1800 | 2,
+            BASE | 0x1F00 | 2,
+            BASE | 0x2000 | 2,
+            0,
+            BROADCAST,
+            BASE | 0x1700 | 0xFD,
+        ] {
             assert_eq!(slot(v), None, "{v:x}");
         }
     }

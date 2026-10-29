@@ -27,6 +27,7 @@
 // the page is a real secure origin.  Nothing listens beyond 127.0.0.1 except
 // the server's own TLS port in mode tls.  Exit 0 = every check passed.
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
@@ -134,7 +135,7 @@ async function run(mode) {
     sim = startCfSim({ port: P1, target: P2, certs, fakeClientIp: '198.51.100.7' });
     await sim.ready;
   }
-  const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed'), args: [
+  const browser = await chromium.launch({ ...pickBrowser(), headless: !process.argv.includes('--headed'), args: [
     '--enable-unsafe-webgpu', `--host-resolver-rules=MAP nfsu2.test 127.0.0.1`,
     `--ignore-certificate-errors-spki-list=${certs.spki.join(',')}`] });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });

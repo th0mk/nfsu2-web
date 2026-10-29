@@ -23,6 +23,7 @@
 // the same bytes, and renames it; C's next Play takes the rename before the game starts.  Prints each step, PASS or
 // FAIL at the end (exit code 1).
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -143,7 +144,7 @@ async function rename(page, from, to) {
   await until(`${to} in the list`, async () => (await profiles(page)).includes(to));
 }
 
-const browser = await chromium.launch({ channel: 'chrome', headless: !argv.includes('--headed'), args: ['--enable-unsafe-webgpu'] });
+const browser = await chromium.launch({ ...pickBrowser(), headless: !argv.includes('--headed'), args: ['--enable-unsafe-webgpu'] });
 try {
   // (A may write the clipboard: the eye copies the keyphrase; reading it back the page's own policy refuses)
   const a = await (await browser.newContext({ permissions: ['clipboard-write'] })).newPage(), b = await (await browser.newContext()).newPage();

@@ -129,7 +129,13 @@ impl App {
         // the operator's bans (control.rs): by the address's keyed hash now, by its page's id at its hello
         let ident = (!key_.is_empty()).then(|| self.bans.addr(&key_));
         let refuse = ident.as_ref().and_then(|a| self.bans.by_addr(a, nfsu2_util::now_ms())).map(|b| {
-            log::limited("ban", "turned away", &key_, &format!("[ban] turned away a client of ban #{} \"{}\" (its address)", b.id, b.name), 2);
+            log::limited(
+                "ban",
+                "turned away",
+                &key_,
+                &format!("[ban] turned away a client of ban #{} \"{}\" (its address)", b.id, b.name),
+                2,
+            );
             bytes::Bytes::from(b.message())
         });
         let (bans, a, k0) = (self.bans.clone(), ident.clone(), key_.clone());
@@ -158,6 +164,8 @@ impl App {
             ident,
             refuse,
             on_hello: Some(on_hello),
+            // the keyphrase the page plays with, for the claimed names (names.rs): its owner, never the token
+            on_claim: self.names.as_ref().map(|_| Box::new(nfsu2_claims::owner_of_token) as nfsu2_lan::OnClaim),
         };
         self.lan.attach(Held { inner: r, _share: share.clone() }, Held { inner: w, _share: share }, pre, opts);
     }

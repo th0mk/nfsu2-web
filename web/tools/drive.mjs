@@ -40,6 +40,7 @@
 // A fake gamepad is installed only when a step uses one: navigator.getGamepads()
 // then returns it (Chrome exposes no controller to headless pages).
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 
 const [url, tmo, stepsFile] = process.argv.slice(2);
@@ -61,8 +62,8 @@ const args = ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.en
 const cdp = opt('--cdp'), osPid = opt('--os-pid');
 const ctx = cdp ? (await chromium.connectOverCDP(cdp)).contexts()[0]
   : profile
-  ? await chromium.launchPersistentContext(profile, { channel: 'chrome', headless: !headed, args, viewport, bypassCSP: true })
-  : await (await chromium.launch({ channel: 'chrome', headless: !headed, args })).newContext({ viewport, bypassCSP: true });   // string waitForFunction needs eval; the server's CSP forbids it
+  ? await chromium.launchPersistentContext(profile, { ...pickBrowser(), headless: !headed, args, viewport, bypassCSP: true })
+  : await (await chromium.launch({ ...pickBrowser(), headless: !headed, args })).newContext({ viewport, bypassCSP: true });   // string waitForFunction needs eval; the server's CSP forbids it
 const page = ctx.pages()[0] ?? await ctx.newPage();
 if (usesPad) await page.addInitScript((spec) => {
   // a controller (standard mapping unless padinit says otherwise) whose state the driver sets

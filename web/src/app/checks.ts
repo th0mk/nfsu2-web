@@ -56,7 +56,7 @@ export function checkBrowser(): Check {
   }
   const c = chromeVersion();
   const other = N('Only Google Chrome and Firefox are tested. This browser may work if every other check passes.');
-  if (homeScreenInstead()) return check('browser', N('Browser'), 'warn', N('Only Google Chrome and Firefox are tested. On an iPhone a web page cannot go full screen: to play without the browser\'s bars, add this page to the Home Screen (in the Share menu) and start the game from its icon. That copy keeps its own saves: a keyphrase (Cloud saves) brings yours over.'), 'BROWSER-IPHONE');
+  if (homeScreenInstead()) return check('browser', N('Browser'), 'warn', N('Only Google Chrome and Firefox are tested. On an iPhone a web page cannot go full screen: to play without the browser\'s bars, add this page to the Home Screen (in the Share menu) and start the game from its icon. That copy keeps its own saves: a passphrase (Cloud saves) brings yours over.'), 'BROWSER-IPHONE');
   if (!c) return check('browser', N('Browser'), 'warn', other, 'BROWSER-OTHER');
   if (c.major < MIN_CHROME) return check('browser', 'Chrome {v}', 'warn', N('Only the latest Chrome is tested ({min} or newer). Update Chrome (Help, About Google Chrome) if something does not work.'), 'BROWSER-CHROME-OLD', { v: c.major, min: MIN_CHROME });
   if (c.brand !== 'Google Chrome') return check('browser', '{brand} {v}', 'warn', other, 'BROWSER-CHROMIUM', { brand: c.brand, v: c.major });

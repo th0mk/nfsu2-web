@@ -26,7 +26,7 @@ static struct {
     int song_slot[2], reuse_addresses, song_on_both_sides, voices;
     int noyield, stop_noyield;                     /* guest_noyield's depth now, and in the last stop */
 } g;
-static struct { int next_id, served_seq, silent; uint32_t track_steps; } pg;
+static struct { int next_id, served_seq, silent; uint32_t track_steps, frames_per_step; } pg;
 static CPU cpu;
 static char t_note[200];
 static int t_failed;
@@ -60,7 +60,7 @@ static void page_step(void){
     uint32_t seq = g_page.request.req_seq;
     if (pg.silent || !seq) return;
     if ((int)seq != pg.served_seq) page_serves_track(seq);
-    if (g_page.reply.written < g_page.reply.total && g_page.reply.written - g_page.rings.read < PAGE_RING_FRAMES) g_page.reply.written += STEP_FRAMES;
+    if (g_page.reply.written < g_page.reply.total && g_page.reply.written - g_page.rings.read < PAGE_RING_FRAMES) g_page.reply.written += pg.frames_per_step ? pg.frames_per_step : STEP_FRAMES;
 }
 
 static unsigned add_input(float marker, float left, float right){

@@ -144,6 +144,8 @@ pub(crate) struct Conn {
     pub(crate) expelled: AtomicBool,
     /// the id its page keeps (its hello's "id"), for `who`
     pub(crate) browser: std::sync::OnceLock<Arc<str>>,
+    /// the keyphrase its page plays with, as the server knows it (its hello's "claim": `AttachOpts::on_claim`)
+    pub(crate) owner: std::sync::OnceLock<Arc<str>>,
 }
 
 impl Conn {
@@ -168,6 +170,7 @@ impl Conn {
             wait: Mutex::new(Default::default()),
             expelled: AtomicBool::new(false),
             browser: Default::default(),
+            owner: Default::default(),
         }
     }
 

@@ -13,6 +13,7 @@ import { readText, writeFile } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { roomHash } from './players';
+import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
 
@@ -49,12 +50,13 @@ const LANGUAGE_OPTS = LANGUAGES.map(l => [l, LANGUAGE_NAMES[l]] as [string, stri
 const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), status: true, own: true, items: [
     { key: 'roam', label: N('Free roam with others'), help: N('Everyone on this server who turns this on sees your car in career free roam, and you see theirs, with their names over them.'), c: { t: 'switch' } },
-    { key: 'roam_name', label: N('Your name'), help: N('What other players see over your car in free roam, and your name in the Online menu (there only letters, digits, - and _, at most 15). Empty uses your profile name.'), c: { t: 'text', placeholder: N('profile name') } },
+    { key: 'roam_name', label: N('Your name'), help: N('What other players see over your car in free roam and in the Online menu: 3 to 15 letters, digits, - or _. Empty uses your profile name.'), c: { t: 'text', placeholder: N('profile name') } },
     { key: 'roam_crew', label: N('Crews'), help: N('Friends who type the same crew name always see each other in free roam, however far apart, with names and map arrows in the crew\'s colour. Up to 4 crews. Anyone who types the name joins.'), c: { t: 'crews', placeholder: N('Crew name') } },
     { key: 'horn', label: N('Your horn'), help: N('N or the controller\'s left stick click, in free roam and in races with other players.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
     { key: 'roam_room', label: N('Room'), help: N('Leave empty to drive with everyone. With a name, free roam shows only the players who set the same name. Not private: everyone on this server still sees your name.'), c: { t: 'text', placeholder: N('everyone') } },
+    { key: 'roam_block', label: N('Blocked players'), help: N('Names over cars, separated by commas: you and they never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('You drive through the other players\' cars, and they through yours. Off: you collide with them, and a car that appears on yours lets you through until you are apart.'), c: { t: 'switch', inv: true } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Say one of your sixteen phrases to the players near you in free roam: 1 to 4, then 1 to 4 (on a controller, the right stick twice; on a touch screen, the chat button). Theirs show over their cars.'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Which sixteen quick chat has, in four groups of four. Everyone reads what you say in their own language.'), c: { t: 'phrases' } },
@@ -342,6 +344,8 @@ export interface SettingsDeps {
   onLoaded?(): void;
   /** the page's question box (Reset all settings asks first) */
   confirm?(title: string, body: string, ok: string, danger?: boolean): Promise<boolean>;
+  /** Your name's row as made: its claim line and button go in (claim-ui.ts NameRow) */
+  nameRow?(row: HTMLElement, input: HTMLInputElement, ctl: HTMLElement): void;
 }
 
 export class SettingsPanel {
@@ -399,6 +403,9 @@ export class SettingsPanel {
   private ro() { return !!this.deps.readOnly?.(); }
 
   /** key's line, and also's (a row's second key: COMPANION) in the same write */
+  /** Your name written (a claim made under it: claim-ui.ts) */
+  async putName(name: string) { await this.put('roam_name', name); }
+
   private async put(key: string, value: string | null, also: [string, string | null][] = []) {
     if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
     let next = this.text ?? TEMPLATE, removed = 0;
@@ -627,7 +634,9 @@ export class SettingsPanel {
       else if (c.placeholder) inp.placeholder = t(c.placeholder);
       inp.value = cur;
       inp.onchange = () => {
-        const v = inp.value.trim();
+        let v = inp.value.trim();
+        // Your name in the form the Online menu and free roam both use (claim.ts)
+        if (it.key === 'roam_name' && v) v = onlineName(v) ?? v;
         if (v === this.current(it.key) && (v !== '' || !this.resolved.file[it.key]?.raw)) return;   // unchanged (a late change event)
         if (v === '') { void this.put(it.key, null); return; }
         const chk = checkSetting(it.key, v);
@@ -651,6 +660,7 @@ export class SettingsPanel {
       ctl.prepend(r);                                // first: the control keeps its place at the right edge
     }
     row.append(label, help, ctl);
+    if (it.key === 'roam_name' && c.t === 'text') this.deps.nameRow?.(row, ctl.querySelector('input')!, ctl);
     const bad = ([[it.key, f], [comp, f2]] as const).filter(([, x]) => x?.refused)
       .map(([k, x]) => t('settings.ini line {line}: {key} = {why}, so the default is used.', { line: x!.phys, key: k!, why: x!.why ? tvars(x!.why.t, x!.why.v) : x!.refused! }));
     if (bad.length) this.state(row, bad.join(' '), 'bad');

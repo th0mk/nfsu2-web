@@ -312,6 +312,7 @@ async fn measure_the_online_hosts_queue_behind_a_slow_thread() {
             t2.fetch_add(1, Relaxed);
             std::thread::sleep(std::time::Duration::from_micros(100));
         })),
+        claims: None,
     });
     let sw = start(LanOptions { max_peers: 2000, max_payload: 1 << 20, ..LanOptions::default() }, Some(online.clone()), None).await;
     let mut floods = Vec::new();

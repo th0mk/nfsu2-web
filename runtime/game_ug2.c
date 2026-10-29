@@ -25,7 +25,7 @@
 void overrides_install(void); void language_install(void); void sponsors_install(void);
 void lobbyclick_install(void); void menusize_install(void); void olfilter_install(void);
 void tunegraph_install(void); void regional_install(void); void garage_install(void);
-void carshadow_install(void); void hornmenu_install(void); void powerunits_install(void);
+void carshadow_install(void); void hornmenu_install(void); void tonemenu_install(void); void powerunits_install(void);
 void ug2_debug_present(CPU *c); void ug2_debug_frame(void); void ug2_debug_sound_unlock(void);   /* debug_ug2.c */
 void spinsleep_qpc(CPU *c);                                           /* framerate.c */
 
@@ -40,13 +40,15 @@ static void ug2_install(void){
     regional_install();     /* the European game's Corsa and 106 for sale, and AI racers' cars */
     garage_install();       /* the career garage's slots 6-10 and Trade Car */
     carshadow_install();    /* a car's shadow 1.5 cm above the road, not 4: off its wheels */
-    hornmenu_install();     /* the horns' volume (registry HornVolume), its slider's methods */
+    hornmenu_install();     /* the horns' volume (registry HornVolume) */
+    tonemenu_install();     /* Exposure and White Level (registry) to the renderer */
     powerunits_install();   /* power in bhp or kW (registry PowerUnits), its row's methods */
 }
 
 /* ---- instruction hooks: the features' sites, then UG2's debugging ones ---- */
 int ws_hook(CPU *, uint32_t); int roam_hook(CPU *, uint32_t); int language_hook(CPU *, uint32_t);
-int hornmenu_hook(CPU *, uint32_t); int powerunits_hook(CPU *, uint32_t); int regional_hook(CPU *, uint32_t);
+int hornmenu_hook(CPU *, uint32_t); int tonemenu_hook(CPU *, uint32_t); int powerunits_hook(CPU *, uint32_t);
+int regional_hook(CPU *, uint32_t);
 int garage_hook(CPU *, uint32_t); int sndlead_hook(CPU *, uint32_t); int drift_hook(CPU *, uint32_t);
 void itrace_dump(int); void watch_dump(const char *, int); void guest_backtrace(CPU *, int);
 extern uint64_t g_gs_fail;                     /* debug.c: printed at exit */
@@ -71,6 +73,7 @@ static int ug2_hook(CPU *c, uint32_t ip){
     if (roam_hook(c, ip)) return 1;
     if (language_hook(c, ip)) return 1;
     if (hornmenu_hook(c, ip)) return 1;
+    if (tonemenu_hook(c, ip)) return 1;
     if (powerunits_hook(c, ip)) return 1;
     if (regional_hook(c, ip)) return 1;
     if (garage_hook(c, ip)) return 1;

@@ -1,0 +1,38 @@
+# Options > Display: Exposure and White Level (runtime/tonemenu.c), the third
+# and fourth rows, after Level Of Detail.  Exposure three steps left, White
+# Level six: the log says "[tone] exposure -0.1" .. "-0.3", then "[tone]
+# white level 95 %" .. "70 %", and the page "[gpu] Exposure and White Level:
+# x0.81, white 70 %" (its dumps keep the colours as drawn).
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    waitfng GarageMain.fng 3000
++400  tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++40   tap RIGHT
++90   tap RETURN                                   # Options
++0    waitfng UI_OptionsMain.fng 600
++300  tap RIGHT
++120  tap RETURN                                   # Display
++300  dump display
++0    tap DOWN
++40   tap DOWN
++90   dump exposure_row
++0    tap LEFT
++40   tap LEFT
++40   tap LEFT
++90   dump exposure_m03
++0    tap DOWN
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++40   tap LEFT
++90   dump white_70
++0    tap DOWN                                      # Customize Display Settings, after them
++90   dump customize_row
++0    tap ESCAPE
++300  dump left
++60   quit

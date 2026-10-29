@@ -73,6 +73,7 @@
 // <out>/summary.json; then runs tools/roam_compare.py for the first (the driver)
 // against every other instance.
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -187,7 +188,7 @@ if (CROWD) {
     { cwd: REPO, stdio: ['ignore', log, log] });
 }
 
-const browser = await chromium.launch({ channel: 'chrome', headless: !argv.includes('--headed') });
+const browser = await chromium.launch({ ...pickBrowser(), headless: !argv.includes('--headed') });
 const t0 = Date.now();
 const inst = [];
 async function start(i, name, script, own) {

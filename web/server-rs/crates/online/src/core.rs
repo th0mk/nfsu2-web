@@ -27,6 +27,7 @@ pub struct CoreOptions {
     pub state_dir: Option<PathBuf>,
     pub log: LogFn,
     pub tap: Option<Tap>,
+    pub claims: Option<Arc<nfsu2_claims::Claims>>,
     pub clocks: Rc<Clocks>,
     pub limits: Limits,
     pub buddy_limits: BuddyLimits,
@@ -46,6 +47,8 @@ pub struct Core {
     pub races_read: bool,
     /// the budgets of the frame being handled (what the host sends for it is charged to its sender)
     pub cause: Option<Arc<dyn Charge>>,
+    /// the claimed names (OnlineOptions::claims)
+    pub claims: Option<Arc<nfsu2_claims::Claims>>,
     /// the browsers that spoke to this host and are still on the switch
     here: HashSet<u32>,
     pub timers: Timers,
@@ -78,6 +81,7 @@ impl Core {
         vh.listen(PORT_BUDDY, Listener::Buddy);
         vh.listen(PORT_HTTP, Listener::Http);
         let stats = Stats::new(StatsOptions { title, ..StatsOptions::new(o.state_dir.clone(), o.clocks.clone(), o.log.clone()) });
+        let started = (o.clocks.now)() as i64;
         let mut core = Core {
             title,
             clocks: o.clocks,
@@ -87,12 +91,13 @@ impl Core {
             state_dir: o.state_dir.clone(),
             races_read: false,
             cause: None,
+            claims: o.claims.clone(),
             here: HashSet::new(),
             timers: Timers::default(),
             tick_timer: None,
             vh,
             lobby: Lobby::new(o.limits, title.rooms),
-            buddies: Buddies::new(o.state_dir, o.buddy_limits),
+            buddies: Buddies::with_claims(o.state_dir, o.buddy_limits, o.claims.clone(), started),
             stats,
             #[cfg(test)]
             probe: Vec::new(),

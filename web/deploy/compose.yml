@@ -43,6 +43,9 @@ services:
       NFSU2_THREADS: ${NFSU2_THREADS:-}
       # the room for keyphrase saves, in GB (docs/web/VPS.md, "Keyphrase saves"; 50 when not set, 0: none)
       NFSU2_VAULT_GB: ${NFSU2_VAULT_GB:-}
+      # Cloudflare Turnstile's keys for claiming a name (docs/web/VPS.md, "Claimed names"; none: no check)
+      NFSU2_TURNSTILE_SITE: ${NFSU2_TURNSTILE_SITE:-}
+      NFSU2_TURNSTILE_SECRET: ${NFSU2_TURNSTILE_SECRET:-}
     volumes:
       - ${NFSU2_DATA:-./game}:/game:ro
       - ${NFSU2_MODULE:-./module}:/module:ro

@@ -68,6 +68,9 @@
                                        flags, type, class (u8), 3 bytes 0; rating, field, factor, kW, kg, km/h, time (f32);
                                        the name (16 bytes, NUL padded) */
 #define RC_RACEREP_NAME  16         /* its car type's name */
+#define RC_RACERES_HEAD  12         /* a RACERES's payload: lobby, race (u32); mode, laps, n (u8), a byte 0; then n rows */
+#define RC_RACERES_ROW   20         /* ...each: the player's id (u32), flags (u8), 3 bytes 0, its time, how far it came,
+                                       the way it drove (f32) */
 #define RC_SAY_INBOX     16         /* SAY messages held for the game side */
 
 /* message types (header byte 5) */
@@ -96,10 +99,18 @@ enum { RC_MSG_HELLO = 1, RC_MSG_PEERS = 2, RC_MSG_SNAP = 3, RC_MSG_CFG = 4, RC_M
         * each player reads it in their own language, nobody types), to every
         * established peer whose HELLO carries RC_HF_SAY; seq tells a repeat
         * from a new one.  Two more bytes, 0 for now */
-       RC_MSG_SAY = 15 };
+       RC_MSG_SAY = 15,
+       /* the race's results as the reporter's game showed them (rc_raceres), only to the hub, with its RACEREP: every
+        * racer's place in them, by its player's id, its time and how far it came.  The server compares the players'
+        * games' results for a racer far ahead of the others (a teleport to the finish, a speed hack).  A hub before it
+        * ignores the type, and no player is sent one */
+       RC_MSG_RACERES = 16 };
 /* RACEREP flags */
 #define RC_RR_HOST       0x01       /* the reporter hosted the race */
 #define RC_RR_QUIT       0x02       /* ...left it with its pause menu's Quit */
+/* RACERES row flags */
+#define RC_RS_FINISHED   0x01       /* the racer finished (its time is the race's) */
+#define RC_RS_OURS       0x02       /* the reporter's own row (one at most) */
 /* LOBBY ops.  lobby: the host's id for it (nonzero); race: the career race's
  * name hash (race record +8, the same table in every game); x, y: where it
  * starts (m); ids: the players in it, the host first */
@@ -288,6 +299,17 @@ typedef struct {
     char     name[RC_RACEREP_NAME + 1];   /* the car type's name, printable */
 } rc_racerep;
 
+/* a RACERES: the race (its lobby and the career race's name hash, the network race's type and laps) and its results'
+ * rows in the game's order (1 .. RC_LOBBY_MAX): each racer's player id (0: a racer the reporter could not name),
+ * whether it finished and is ours (RC_RS_*), its row's time (s: a finisher's its finish; one still on the way, when
+ * the race ended, 30 s after the first), how far it came (laps: the game's count, a finisher as many whole laps as
+ * the farthest) and the way it drove (m: its average speed for its time, as the game counts it) */
+typedef struct {
+    uint32_t lobby, race;
+    uint8_t  mode, laps, n;
+    struct { uint32_t id; uint8_t flags; float time, done, dist; } row[RC_LOBBY_MAX];
+} rc_raceres;
+
 typedef struct {
     rc_hdr h;
     union {
@@ -308,6 +330,7 @@ typedef struct {
         struct { uint16_t req; uint8_t n; const uint8_t *data; } lobbies;   /* data: n entries */
         rc_racerep racerep;
         struct { uint8_t phrase, seq; } say;
+        rc_raceres raceres;
     } u;
 } rc_msg;
 
@@ -582,6 +605,8 @@ int  rc_send_lobby(rc_session *s, const rc_lobby *l);
 int  rc_take_lobby(rc_session *s, uint32_t *from, rc_lobby *l);
 /* a race report to the hub (RC_MSG_RACEREP), while it answers; 1 when sent */
 int  rc_send_racerep(rc_session *s, const rc_racerep *r);
+/* the race's results to the hub (RC_MSG_RACERES), while it answers; 1 when sent */
+int  rc_send_raceres(rc_session *s, const rc_raceres *r);
 /* a quick-chat phrase to every established peer whose HELLO said it takes
  * them; how many it went to */
 int  rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq);

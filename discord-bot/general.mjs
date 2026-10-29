@@ -113,7 +113,7 @@ const FIXES = {
   'name-digits': {
     when: 'their online name got four digits at its end by itself ("why am I NAME4821 now?")',
     re: /\d{4}/,
-    en: 'Someone else was online under your name, so you played under it with four digits in place of its end; your stats stay with your own name. Set Online, Your name on the start page to keep yours.',
+    en: 'Someone else claimed or was using your name, so you played under it with four digits in place of its end. Claim your own name under Online, Your name on the start page: then it stays yours.',
   },
   'no-webgpu-device': {
     when: 'the game does not run in a TV\'s or a game console\'s browser (Xbox, PlayStation, a smart TV)',

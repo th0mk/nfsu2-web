@@ -43,6 +43,7 @@ pub const USAGE: &str = "commands:
   ban <player> <for> [message]  off until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
   unban <name | #ban>           lift the bans of that name, or that number
   bans                          the bans
+  unclaim <name>                the name's claim goes: anyone may take it again
 <player>: an address (10.77.x.y) or a name, as who shows them";
 
 /// The socket's file as this server made it, for its stop (`remove`)
@@ -253,6 +254,16 @@ impl App {
                     })
                     .collect::<Vec<_>>()
                     .join("\n"))
+            }
+            "unclaim" if !word(1).is_empty() => {
+                let Some(n) = &self.names else { return Err("no claimed names here (keyphrase saves are off)".into()) };
+                match n.claims.unclaim(word(1)) {
+                    Some(name) => {
+                        log::line(&format!("[names] the operator freed \"{name}\""));
+                        Ok(format!("\"{name}\" is free"))
+                    }
+                    None => Err(format!("nobody claimed \"{}\"", word(1))),
+                }
             }
             "" | "help" => Ok(USAGE.into()),
             _ => Err(USAGE.into()),

@@ -69,7 +69,7 @@ test('keyphrases: made from the list, read back however they are typed', () => {
   assert.match(V.readPhrase('').bad, /Type or paste/);
   assert.match(V.readPhrase('nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged').bad, /8 words .* this has 7/);
   assert.match(V.readPhrase(p + '-agent').bad, /this has 9/);
-  assert.match(V.readPhrase('nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agnet').bad, /"agnet" is not a keyphrase word/);
+  assert.match(V.readPhrase('nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agnet').bad, /"agnet" is not a passphrase word/);
 });
 
 test('the key and token: PBKDF2-SHA-256, 100,000 rounds; sealed saves open with their keyphrase only', async () => {
@@ -89,11 +89,11 @@ test('the key and token: PBKDF2-SHA-256, 100,000 rounds; sealed saves open with 
   assert.equal(Buffer.concat([d.update(box.subarray(13, box.length - 16)), d.final()]).toString(), 'the saves');
   assert.deepEqual(await V.unseal(k.key, box), plain);
   const other = await V.keysOf('nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agile');
-  await assert.rejects(V.unseal(other.key, box), /do not open with this keyphrase/);
+  await assert.rejects(V.unseal(other.key, box), /do not open with this passphrase/);
   const bent = box.slice(); bent[20] ^= 1;
   await assert.rejects(V.unseal(k.key, bent), /do not open/);
   const v2 = box.slice(); v2[0] = 2;
-  await assert.rejects(V.unseal(k.key, v2), /not a keyphrase's saves/);
+  await assert.rejects(V.unseal(k.key, v2), /not a passphrase's saves/);
   // two seals of the same saves differ (a new IV each time)
   assert.notDeepEqual(await V.seal(k.key, plain), box);
 });

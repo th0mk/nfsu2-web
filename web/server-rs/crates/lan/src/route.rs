@@ -214,6 +214,7 @@ impl LanSwitch {
             site: peer.site.as_ref().map(|s| s.id.clone()),
             cause: cause.map(|c| c as Arc<dyn nfsu2_util::Charge>),
             slot: None,
+            owner: peer.conn.owner.get().cloned(),
         }
     }
 
@@ -419,6 +420,7 @@ pub(crate) mod tests {
             on_leave: None,
             ident: None,
             on_hello: None,
+            on_claim: None,
         });
         let p = sw.admit(&conn, &ctx, None).expect("admitted");
         (conn, ctx, p)

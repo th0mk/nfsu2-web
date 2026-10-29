@@ -1,0 +1,25 @@
+# The server's race check (web/server-rs/crates/roam/src/results.rs), a cheater who joins a free-roam lobby race
+# (with mprace_lobby_a.txt, the host) and finishes it 10 s in (racewin: the game's own finish of the player, as a
+# teleport to the finish ends it).  The server's log should have a [cheat] line of this player's win.
+#   node web/tools/roam-pair.mjs --seed <s2_r7> --a Ann:mprace_lobby_a.txt --b Bob:mprace_cheat_b.txt
+#        --env MP_RACE=S2_SPRINT_3 --env MP_PLAYERS=2
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++600  racewin
++0    roam mp waittrip 40000
++0    log LOBBY DONE
++60   quit

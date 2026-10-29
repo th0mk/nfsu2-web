@@ -445,6 +445,18 @@ summary:hover { color: var(--text); }
   color: var(--lime); font: 14px/24px var(--mono); user-select: all;
 }
 .dlg p.keyphrase { margin-bottom: 4px; }
+/* claimed names (claim-ui.ts): the line under Your name in its state's colour, Cloudflare's check under it; Play's
+ * check stays out of sight (and its backdrop clear) unless it wants a click */
+.set-state.ok { color: var(--lime); }
+.set-state.free { color: var(--muted); }
+.set-state .text-btn { padding: 0; height: auto; }
+.set .claim-check { grid-column: 1 / -1; margin-top: 8px; }
+.dlg .claim-check { margin-bottom: 16px; }
+.claim-line[data-state="bad"] { color: var(--bad); }
+.claim-line[data-state="env"] { color: var(--warn); }
+.claim-line[data-state="ok"] { color: var(--lime); }
+#claim-check.quiet { visibility: hidden; }
+#claim-check.quiet::backdrop { background: transparent; }
 .keyphrase-do { gap: 4px 16px; margin-bottom: 12px; }
 .keyphrase-do .text-btn { padding: 0; height: 24px; }
 #cache-info { font-variant-numeric: tabular-nums; }

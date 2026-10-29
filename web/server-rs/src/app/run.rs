@@ -142,18 +142,24 @@ pub async fn run(o: Options, cores: usize) {
     let tap = trace.as_ref().map(|t| t.tap());
     // the lines a client causes in Online mode (logins, games, races, friends) count against that client's share of
     // the console, as its joins and refusals do (the Online audit's ONL-8)
+    // claimed names (nfsu2-claims): with keyphrase saves only (a name is claimed by a keyphrase)
+    let claims = (o.vault_gb > 0.0).then(|| Arc::new(nfsu2_claims::Claims::open(Path::new(&o.state), nfsu2_util::now_ms())));
     let online = o.game.online.filter(|_| o.online).map(|title| {
-        OnlineHost::spawn_for(title, OnlineOptions {
-            state_dir: Some(PathBuf::from(paths::join(&o.state, "online"))),
-            log: Arc::new(|line: &str, key: Option<&str>| match key {
-                None => log::line(line),
-                Some(k) => log::limited("online", "Online lines", k, line, 30),
-            }),
-            tap: tap.clone(),
-        })
+        OnlineHost::spawn_for(
+            title,
+            OnlineOptions {
+                state_dir: Some(PathBuf::from(paths::join(&o.state, "online"))),
+                log: Arc::new(|line: &str, key: Option<&str>| match key {
+                    None => log::line(line),
+                    Some(k) => log::limited("online", "Online lines", k, line, 30),
+                }),
+                tap: tap.clone(),
+                claims: claims.clone(),
+            },
+        )
     });
     // (its lines: the cap on the players' links going down while the server is busy and back up, at most one every 5 s)
-    let roam = o.roam_hub.then(|| RoamHub::spawn(RoamOptions::default(), Arc::new(|line: &str| log::line(line))));
+    let roam = o.roam_hub.then(|| RoamHub::spawn_with(RoamOptions::default(), Arc::new(|line: &str| log::line(line)), claims.clone()));
     // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
     let vault = (o.vault_gb > 0.0).then(|| {
         let dir = paths::join(&o.state, "vault");
@@ -192,6 +198,16 @@ pub async fn run(o: Options, cores: usize) {
 
     // the operator's bans, and the control socket that makes them (control.rs)
     let bans = Arc::new(nfsu2_bans::Bans::open(Path::new(&o.state)).unwrap_or_else(|e| die(&format!("{}/bans.json: {e}", o.state))));
+    // Cloudflare's check for a claim (turnstile.rs: off without its two keys)
+    let turnstile = super::turnstile::Turnstile::from_env();
+    if let Some(c) = &claims {
+        log::line(&format!(
+            "[names] {} names claimed; Cloudflare's check {}",
+            c.count(nfsu2_util::now_ms()),
+            if turnstile.is_some() { "on" } else { "off (no NFSU2_TURNSTILE_SITE and NFSU2_TURNSTILE_SECRET)" }
+        ));
+    }
+    let names = claims.clone().map(|c| super::names::NamesRoute::new(c, turnstile));
     let app = Arc::new(App::new(
         o,
         real_state,
@@ -200,6 +216,7 @@ pub async fn run(o: Options, cores: usize) {
         online,
         roam.clone(),
         vault.clone(),
+        names,
         bans,
         (cores / 2).max(2),
         lan_sndbuf,
@@ -238,7 +255,16 @@ pub async fn run(o: Options, cores: usize) {
                     "[players] {} on the switch: {} in Online mode, {} on the LAN or Online screens, {} in free roam, {} on an older page \
                      (until its tab closes), {} leaving or starting; {} of all of them bundling (a page loaded since the server has \
                      bundles); {} more than a second behind on their connection, {} getting fewer car updates ({} left out since the last count)",
-                    b.players, b.online, b.lan, b.roam, b.older, b.other, b.bundles, b.behind, b.thinning, b.thinned - thinned
+                    b.players,
+                    b.online,
+                    b.lan,
+                    b.roam,
+                    b.older,
+                    b.other,
+                    b.bundles,
+                    b.behind,
+                    b.thinning,
+                    b.thinned - thinned
                 ));
                 // the line (nfsu2-lan queue.rs): pages waiting for a place, and how long the longest of those let in
                 // waited
@@ -298,6 +324,16 @@ pub async fn run(o: Options, cores: usize) {
                 app.lan_opens.prune();
                 if let Some(v) = &app.vault {
                     v.prune();
+                }
+                // the claimed names: the ended ones go, names.json written when anything changed
+                if let Some(n) = &app.names {
+                    n.prune();
+                    let now = nfsu2_util::now_ms();
+                    n.claims.prune(now);
+                    let c = n.claims.clone();
+                    if let Ok(Err(e)) = tokio::task::spawn_blocking(move || c.save(now)).await {
+                        log::error(&format!("names.json: {e}"));
+                    }
                 }
             }
         });
@@ -369,11 +405,11 @@ pub async fn run(o: Options, cores: usize) {
         });
     }
 
-    // SIGTERM, SIGINT: the switch saves its addresses, the hosts stop, the control socket's file goes, then the process
-    // ends
+    // SIGTERM, SIGINT: the switch saves its addresses, the hosts stop, the claimed names are written, the control
+    // socket's file goes, then the process ends
     let control_up = control.is_some();
     {
-        let (lan, trace) = (lan.clone(), trace.clone());
+        let (lan, trace, claims) = (lan.clone(), trace.clone(), claims.clone());
         let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| die(&format!("SIGTERM: {e}")));
         let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| die(&format!("SIGINT: {e}")));
         tokio::spawn(async move {
@@ -385,6 +421,11 @@ pub async fn run(o: Options, cores: usize) {
                 lan.stop();
                 if let Some(t) = &trace {
                     t.close();
+                }
+                if let Some(c) = &claims
+                    && let Err(e) = c.save(nfsu2_util::now_ms())
+                {
+                    log::error(&format!("names.json: {e}"));
                 }
                 if let Some(c) = &control {
                     c.remove();
@@ -507,7 +548,10 @@ pub async fn run(o: Options, cores: usize) {
     // (ctl goes to UG2's state folder unless told the game: ctl.rs)
     let g = if o.game.id == "ug2" { String::new() } else { format!("--game {} ", o.game.id) };
     lines.push(if control_up {
-        format!("  bans      : {bans}; nfsu2-server ctl {g}who, kick, ban, unban, bans (through {})", paths::join(&o.state, super::control::SOCKET))
+        format!(
+            "  bans      : {bans}; nfsu2-server ctl {g}who, kick, ban, unban, bans (through {})",
+            paths::join(&o.state, super::control::SOCKET)
+        )
     } else {
         format!("  bans      : {bans}; no kick or ban (the control socket could not be made: above)")
     });

@@ -1,0 +1,33 @@
+# Quick Race, pause, Options, Display: Exposure and White Level
+# (runtime/tonemenu.c) after Level Of Detail, as in the menus' Display.
+# Exposure two steps right, White Level two left: the log says "[tone]
+# exposure +0.1", "+0.2", "[tone] white level 95 %", "90 %".
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++600  tap ESCAPE
++120  tap RIGHT                                    # Restart
++60   tap RIGHT                                    # Options
++60   tap RETURN
++0    waitfng UI_PauseOptionsMain.fng 600
++200  tap RIGHT
++90   tap RETURN                                   # Display
++200  dump pause_display
++0    tap DOWN
++40   tap DOWN
++40   tap RIGHT
++40   tap RIGHT
++90   dump pause_exposure_p02
++0    tap DOWN
++40   tap LEFT
++40   tap LEFT
++90   dump pause_white_90
++0    tap ESCAPE
++120  tap ESCAPE
++200  dump race
++60   quit

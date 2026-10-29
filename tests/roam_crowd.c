@@ -11,7 +11,7 @@ __attribute__((import_module("crowd"), import_name("send"))) void js_send(uint32
 __attribute__((import_module("crowd"), import_name("event"))) void js_event(int ev, const char *t, int n);
 
 /* the C library this needs: roam_core.c calls memcmp, its name filter (names.h)
- * strcmp, strstr, strlen and memcpy, the compiler may call the others */
+ * strcmp, strncmp, strchr, strstr, strlen and memcpy, the compiler may call the others */
 void *memcpy(void *d, const void *s, unsigned long n){ unsigned char *o = d; const unsigned char *i = s; while (n--) *o++ = *i++; return d; }
 void *memmove(void *d, const void *s, unsigned long n){
     unsigned char *o = d; const unsigned char *i = s;
@@ -28,6 +28,16 @@ unsigned long strlen(const char *s){ unsigned long n = 0; while (s[n]) n++; retu
 int strcmp(const char *a, const char *b){
     while (*a && *a == *b){ a++; b++; }
     return (unsigned char)*a - (unsigned char)*b;
+}
+int strncmp(const char *a, const char *b, unsigned long n){
+    for (; n && *a && *a == *b; n--){ a++; b++; }
+    return n ? (unsigned char)*a - (unsigned char)*b : 0;
+}
+char *strchr(const char *s, int c){
+    for (; ; s++){
+        if (*s == (char)c) return (char *)s;
+        if (!*s) return 0;
+    }
 }
 char *strstr(const char *h, const char *n){
     for (; ; h++){

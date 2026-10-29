@@ -26,6 +26,7 @@
 //                       script and title; Most Wanted has none yet
 //     --help            this text and the game's boot screens
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,7 +79,7 @@ const url = `${o.base}/test/${o.page}.html?${q}`;
 await requireGame(o.base, GAME);
 
 const usesPad = o.drive.startsWith('pad');
-const launch = { channel: 'chrome', headless: true, args: ['--enable-unsafe-webgpu'] };
+const launch = { ...pickBrowser(), headless: true, args: ['--enable-unsafe-webgpu'] };
 const browser = o.profile ? null : await chromium.launch(launch);
 const ctx = o.profile ? await chromium.launchPersistentContext(o.profile, { ...launch, viewport: { width: 1280, height: 720 } })
   : await browser.newContext({ viewport: { width: 1280, height: 720 } });

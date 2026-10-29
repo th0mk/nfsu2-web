@@ -216,6 +216,18 @@ typedef struct { uint32_t magic, n, pad[2]; GwMark m[GW_MARKS_MAX]; } GwMarks;
 #define GW_K_MARKS     1024u
 #define GW_MARKS_BYTES 528u
 
+/* Exposure and White Level (tonemenu.c): every frame's VS constant arena
+ * holds this block at GW_K_TONE, which the page reads with the frame it
+ * encodes.  Its last pass takes each colour channel c (0 .. 1, as drawn) to
+ * y = min(1, c * mult), and a y above knee * white bends down so that 1
+ * lands on white (web/src/gpu/wgsl.ts TONE).  mult 1 and white 1: the
+ * picture as drawn, without that pass.  magic: GW_TONE_MAGIC (where a module
+ * without the block has zeros).  The page binds none of it. */
+#define GW_TONE_MAGIC  0x454E4F54u        /* "TONE" */
+typedef struct { uint32_t magic; float mult, white, knee; } GwTone;
+#define GW_K_TONE      1552u
+#define GW_TONE_BYTES  16u
+
 /* The page binds the VS constant arena (K) in windows of GW_KWIN_ROWS rows of
  * 16 bytes: 64 KB, the default maxUniformBufferBindingSize.  A draw's block
  * (16-byte header + c[0..255]) starts at row firstInstance of its window, so
@@ -248,6 +260,7 @@ _Static_assert(sizeof(GwCmd) == GW_CMD_HDR, "GwCmd");
 _Static_assert(sizeof(GwHLight) == 80 && sizeof(GwHL) == GW_HL_BYTES && offsetof(GwHL, l) == 16, "GwHL");
 _Static_assert(sizeof(GwMark) == 16 && sizeof(GwMarks) == GW_MARKS_BYTES && offsetof(GwMarks, m) == 16, "GwMarks");
 _Static_assert(GW_K_MARKS >= GW_K_HL + GW_HL_BYTES, "GwMarks after GwHL");
+_Static_assert(sizeof(GwTone) == GW_TONE_BYTES && GW_K_TONE >= GW_K_MARKS + GW_MARKS_BYTES, "GwTone after GwMarks");
 _Static_assert(sizeof(GwDraw) < 256, "GW_LAYOUT keeps sizeof(GwDraw) in 8 bits");
 _Static_assert(GW_PS_DEPTH_SHIFT + GW_STAGES_MAX <= 31, "GwDraw.ps depth bits");
 #endif

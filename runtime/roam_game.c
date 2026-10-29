@@ -3657,9 +3657,27 @@ static void mp_report(void){
     m.kw = rr_in(r.car.power / 1000.f, 0.f, 10000.f); m.kg = rr_in(r.car.mass, 0.f, 50000.f); m.kmh = rr_in(r.car.top * 3.6f, 0.f, 2000.f);
     m.time = rr_in(r.time, 0.f, 100000.f);
     for (int i = 0; i < RC_RACEREP_NAME && r.car.name[i]; i++){ char ch = r.car.name[i]; m.name[i] = ch >= 0x20 && ch < 0x7f ? ch : '?'; }
-    roam_plat_lock(); int sent = rc_send_racerep(&g_s, &m); roam_plat_unlock();
-    rlog("[roam] f=%ld race lobby %08x: its race reported to the server%s: place %d of %d, %s rated %.1f (the cars' average %.1f)\n", rh_frame(),
-         m.lobby, sent ? "" : " (not sent: no hub)", m.place, m.players, m.name, (double)m.rating, (double)m.field);
+    /* and the race's results as our game showed them, each row by its player's id (the LAN names the trip gave the
+     * lobby's players): the server compares every player's results for a racer far ahead of the others */
+    MpResult res[MPRACE_RESULTS_MAX]; int nr = mprace_results(res, MPRACE_RESULTS_MAX);
+    rc_raceres q; memset(&q, 0, sizeof q);
+    q.lobby = m.lobby; q.race = m.race; q.mode = m.mode; q.laps = m.laps;
+    for (int k = 0; k < nr && q.n < RC_LOBBY_MAX; k++){
+        uint32_t id = 0;
+        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++)
+            if (res[k].name[0] && !strcasecmp(g_mp.lan[i], res[k].name)) id = g_mp.l.ids[i];
+        if (res[k].ours) id = g_s.conf.self_id;
+        q.row[q.n].id = id;
+        q.row[q.n].flags = (uint8_t)((res[k].finished ? RC_RS_FINISHED : 0) | (res[k].ours ? RC_RS_OURS : 0));
+        q.row[q.n].time = rr_in(res[k].clock, 0.f, 100000.f);
+        q.row[q.n].done = rr_in(res[k].done, 0.f, 1000.f);
+        q.row[q.n].dist = rr_in(res[k].dist, 0.f, 1e6f);
+        q.n++;
+    }
+    roam_plat_lock(); int sent = rc_send_racerep(&g_s, &m), sent_res = q.n && rc_send_raceres(&g_s, &q); roam_plat_unlock();
+    rlog("[roam] f=%ld race lobby %08x: its race reported to the server%s: place %d of %d, %s rated %.1f (the cars' average %.1f); "
+         "its results, %d rows%s\n", rh_frame(), m.lobby, sent ? "" : " (not sent: no hub)", m.place, m.players, m.name, (double)m.rating,
+         (double)m.field, q.n, sent_res ? "" : " (not sent)");
 }
 /* we open a lobby for race r */
 static int mp_open(int64_t host, uint32_t r){

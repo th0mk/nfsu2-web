@@ -14,6 +14,7 @@
 // On Windows (the server in WSL) the steps stop at proxy502: WSL's mirrored networking holds the port on Windows'
 // side for 25 s and more after the server ended, so nothing there can stand on it (2026-10-21).
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -64,7 +65,7 @@ function report(step, ok, evidence) {
 }
 
 await startServer();
-const pc = await chromium.launchPersistentContext(path.join(OUT, 'profile'), { channel: 'chrome', headless: !process.argv.includes('--headed'),
+const pc = await chromium.launchPersistentContext(path.join(OUT, 'profile'), { ...pickBrowser(), headless: !process.argv.includes('--headed'),
   viewport: { width: 1280, height: 800 }, args: ['--enable-unsafe-webgpu'] });
 // game data the page asked of the network and did not get
 const failedData = [];

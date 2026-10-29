@@ -65,6 +65,16 @@ macro_rules! csp_tail {
 /// The Content-Security-Policy without hashes (every response but a page with inline code of its own).
 pub const CSP: &str = concat!(csp_head!(), csp_mid!(), csp_tail!());
 
+/// [`CSP`] with Cloudflare Turnstile's script and frame (challenges.cloudflare.com), for a server whose claimed names
+/// ask for its check (the server's turnstile.rs)
+pub const CSP_TURNSTILE: &str = concat!(
+    csp_head!(),
+    " https://challenges.cloudflare.com",
+    csp_mid!(),
+    "; font-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; \
+     frame-src https://challenges.cloudflare.com; frame-ancestors 'none'"
+);
+
 /// The policy with a page's own hashes in script-src and style-src.  Everything comes from this origin.
 /// WebAssembly needs 'wasm-unsafe-eval' (compiling the module, in the page and in its workers, whose scripts carry
 /// this header too).  'self' covers the module workers, the audio worklet and the /lan WebSocket (CSP 3: ws: and

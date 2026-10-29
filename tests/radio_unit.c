@@ -97,6 +97,7 @@ static void in_main_menu(void){ MR32(FLOW + FLOW_MODE) = 1u; MR32(GAME_STATE) = 
 static void in_race(void){ MR32(FLOW + FLOW_MODE) = 2u; MR32(GAME_STATE) = 6u; }
 static void radio_switched_on(void){ g_page.on = 1; steps(1); }
 static void radio_switched_off(void){ g_page.on++; }
+static void radio_switched_on_unseen(void){ g_page.on++; }
 static void page_offers(unsigned places){ g_page.offer.places = places; }
 static void page_never_answers(void){ pg.silent = 1; }
 static void folder_song_lasts(int steps_long){ pg.track_steps = (uint32_t)steps_long; }
@@ -424,6 +425,24 @@ TEST(radio_on_in_main_menu__game_song_replaced_at_once){
     steps(SETTLED);
     expect_folder_song(1);
 }
+TEST(radio_switched_on__song_starts_before_the_mixer_sees_it){
+    g_page.on = 1;
+    in_main_menu();
+    game_song_starts(3);
+    steps(SETTLED);
+    expect_folder_song(1);
+    expect_plaques(1, 1);
+}
+TEST(radio_off_and_on__song_starts_before_the_mixer_sees_it){
+    folder_song_plays_in_main_menu();
+    radio_switched_off();
+    radio_switched_on_unseen();
+    game_stops_song();
+    game_song_starts(4);
+    steps(SETTLED);
+    expect_folder_song(2);
+    expect_plaques(2, 2);
+}
 TEST(radio_off__game_song_comes_back){
     folder_song_plays_in_main_menu();
     radio_switched_off();
@@ -518,6 +537,57 @@ TEST(free_roam__folder_song_plays){
     to_race(20);
     expect_folder_song(1);
     expect_plaques(1, 1);
+}
+
+/* The mixer's rate decides how fast the rings are read: the reader hands the mixer frames at that rate (the game's
+ * own song is converted to it), and the rings hold the track at RADIO_RATE.  Ramp: ring frame k holds k / 1e6. */
+static void mixer_runs_at(unsigned rate){ MR16(MIXER_RATE) = (uint16_t)rate; pg.frames_per_step = 4u * STEP_FRAMES; }
+static void rings_hold_a_ramp(void){ for (uint32_t k = 0; k < RING_FRAMES; k++) g_radio.ring[k] = g_radio.ring[RING_FRAMES + k] = (float)k * 1e-6f; }
+static float heard_at(unsigned k){ return MRF32(OUT + 4u * k) / PIPELINE_SCALE * 1e6f; }
+static void expect_ring_read_in_10_steps(uint32_t frames){
+    uint32_t before = g_page.rings.read;
+    steps(10);
+    expect(g_page.rings.read - before + 1u >= frames && g_page.rings.read - before <= frames + 1u, "the rings are read at the track's speed");
+}
+
+TEST(mixer_at_44100__track_is_read_frame_for_frame){
+    mixer_runs_at(44100);
+    folder_song_plays_in_main_menu();
+    expect_folder_song(1);
+    expect_ring_read_in_10_steps(10u * STEP_FRAMES);
+}
+TEST(mixer_at_22050__track_is_read_two_frames_for_one){
+    mixer_runs_at(22050);
+    folder_song_plays_in_main_menu();
+    expect_folder_song(1);
+    expect_ring_read_in_10_steps(20u * STEP_FRAMES);
+}
+TEST(mixer_at_22050__a_frame_is_the_mean_of_two){
+    mixer_runs_at(22050);
+    folder_song_plays_in_main_menu();
+    rings_hold_a_ramp();
+    uint32_t before = g_song.read[1];
+    steps(1);
+    float want = (float)(before + 2u * 100u) + 0.5f, got = heard_at(100);
+    expect(got > want - 0.1f && got < want + 0.1f, "frame 100 is the mean of ring frames 2*100 and 2*100+1");
+}
+TEST(mixer_at_48000__track_is_read_slower_than_frame_for_frame){
+    mixer_runs_at(48000);
+    folder_song_plays_in_main_menu();
+    expect_ring_read_in_10_steps(10u * STEP_FRAMES * 44100u / 48000u);
+}
+TEST(mixer_rate_not_known__track_is_read_frame_for_frame){
+    mixer_runs_at(0);
+    folder_song_plays_in_main_menu();
+    expect_ring_read_in_10_steps(10u * STEP_FRAMES);
+}
+TEST(mixer_at_22050__track_lasts_half_as_many_steps){
+    mixer_runs_at(22050);
+    folder_song_lasts(100);
+    folder_song_plays_in_main_menu();
+    expect_folder_song(1);
+    steps(40);
+    expect_folder_song(2);
 }
 
 int main(void){

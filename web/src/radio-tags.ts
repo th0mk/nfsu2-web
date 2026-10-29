@@ -40,9 +40,10 @@ export function plaqueTags(tags: Lines, album = 'My music'): Lines {
 
 const synchsafe = (b: Uint8Array, at: number) => ((b[at] & 0x7f) << 21) | ((b[at + 1] & 0x7f) << 14) | ((b[at + 2] & 0x7f) << 7) | (b[at + 3] & 0x7f);
 
+// Encoding 1 is UTF-16 with a BOM that says the byte order (none: big-endian, as ID3 says); the label "utf-16" would always be little-endian.
 function id3Text(b: Uint8Array): string {
-  const enc = ['latin1', 'utf-16', 'utf-16be', 'utf-8'][b[0]] ?? 'latin1';
-  return new TextDecoder(enc).decode(b.subarray(1)).replace(/\0[\s\S]*$/, '').trim();
+  const enc = b[0] === 1 ? (b[1] === 0xff && b[2] === 0xfe ? 'utf-16le' : 'utf-16be') : ['latin1', '', 'utf-16be', 'utf-8'][b[0]] || 'latin1';
+  return new TextDecoder(enc).decode(b.subarray(1)).replace(/\0[\s\S]*$/, '').replace(/^\uFEFF+/, '').trim();   // an encoder may write the BOM twice
 }
 
 /** Artist, title and album: the ID3v2 tags at the start of an mp3, else what the file name says.  Reads one file, its first megabyte at most. */

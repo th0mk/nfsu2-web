@@ -110,7 +110,8 @@ fn the_lists_mark_crew_mates_and_name_no_other_crews() {
     for (how, o) in ways() {
         let mut k = Kit::new(o);
         // A (x, y), B (y, z), C a core 7 (z, x), D in no crew, E (z, w): all within 40 m, so all linked
-        let who: [(Option<&[u32]>, bool); 5] = [(Some(&[x, y]), true), (Some(&[y, z]), true), (Some(&[z, x]), false), (None, true), (Some(&[z, w]), true)];
+        let who: [(Option<&[u32]>, bool); 5] =
+            [(Some(&[x, y]), true), (Some(&[y, z]), true), (Some(&[z, x]), false), (None, true), (Some(&[z, w]), true)];
         for (i, &(crews, hubcrew)) in who.iter().enumerate() {
             let i = i as u32;
             k.from(V(i), &hello_with(100 + i, &HelloOpts { core: if hubcrew { 8 } else { 7 }, crews, hubcrew, ..Default::default() }));
@@ -118,7 +119,8 @@ fn the_lists_mark_crew_mates_and_name_no_other_crews() {
         }
         k.hub.tick();
         let sent = k.sent.lock().clone();
-        let of = |i: u32| sent.iter().find(|(vip, _)| *vip == V(i)).map(|(_, f)| f.clone()).unwrap_or_else(|| panic!("{how}: a list to {i}"));
+        let of =
+            |i: u32| sent.iter().find(|(vip, _)| *vip == V(i)).map(|(_, f)| f.clone()).unwrap_or_else(|| panic!("{how}: a list to {i}"));
         let mark = |i: u32, j: u32| {
             let f = of(i);
             let at = peers_of(&f).iter().position(|e| e.vip == V(j)).unwrap_or_else(|| panic!("{how}: {j} on {i}'s list"));
@@ -128,14 +130,22 @@ fn the_lists_mark_crew_mates_and_name_no_other_crews() {
             assert_eq!(peers_of(&of(i)).len(), 4, "{how}: {i} linked with the 4 others");
         }
         assert_eq!(crew_marks(&of(0)).map(|m| m.0), Some(vec![x, y]), "{how}: A's own crews");
-        assert_eq!([mark(0, 1), mark(0, 2), mark(0, 3), mark(0, 4)], [0b10, 0b01, 0, 0], "{how}: B in y, C in x (a core 7: the hub has its crews)");
+        assert_eq!(
+            [mark(0, 1), mark(0, 2), mark(0, 3), mark(0, 4)],
+            [0b10, 0b01, 0, 0],
+            "{how}: B in y, C in x (a core 7: the hub has its crews)"
+        );
         assert_eq!(crew_marks(&of(1)).map(|m| m.0), Some(vec![y, z]), "{how}: B's own crews");
         assert_eq!([mark(1, 0), mark(1, 2), mark(1, 3), mark(1, 4)], [0b01, 0b10, 0, 0b10], "{how}: A in y, C and E in z");
         assert_eq!([mark(4, 0), mark(4, 1), mark(4, 2), mark(4, 3)], [0, 0b01, 0b01, 0], "{how}: E (z, w): B and C in z");
         for (i, why) in [(2, "a core 7"), (3, "in no crew")] {
             let f = of(i);
             assert_eq!(crew_marks(&f), None, "{how}: {why}: no marks");
-            assert_eq!(&f[16..], &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..], "{how}: {why}: a list of before");
+            assert_eq!(
+                &f[16..],
+                &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..],
+                "{how}: {why}: a list of before"
+            );
         }
         // no crew of anyone but the receiver in its datagram (C's x and z are A's and B's too: w is E's alone)
         let has = |f: &[u8], h: u32| f.windows(4).any(|b| b == h.to_le_bytes());
@@ -419,7 +429,7 @@ fn in_free_roam_by_crew() {
 }
 
 fn ctx() -> FrameCtx {
-    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None }
+    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None }
 }
 
 // on its thread the hub keeps the crews' counts of its last tick for /players

@@ -1,0 +1,37 @@
+# The pause menu's Replay plays the race back, also after skipping back and forward: the game re-drives the race
+# from a snapshot and checks a checksum of WorldTimer and every car's position against the one it recorded, each
+# frame (0x5FA770); on the first difference it leaves the replay (0x4D8020) and marks the recorder
+# ([0x8650b8]+0xC).  At 120 and 240 fps WorldTimer must tick as it did in the race (framerate.c, timer fix).
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
+7000wms autopilot on
+40000wms tapuntil ESCAPE UI_Pause.fng 60 600
++60   tap RIGHT                                    # Restart
++40   tap RIGHT                                    # Options
++40   tap RIGHT                                    # Replay
++40   tap RETURN
++0    waitfng UI_ReplayControl.fng 600
++0    log replay_open
++0    trace 60 scr=x:0x8363ec bad=i:[0x8650b8]+0xc wt=i:0x86518c
++900  expect x:0x8363ec != 0                      # the replay screen is still up
++0    expect i:[0x8650b8]+0xc == 0                # and never lost the race
++0    tap LBRACKET                                 # skip back
++300  tap LBRACKET                                 # and back again (the race's start)
++900  log replay_back
++0    expect x:0x8363ec != 0
++0    expect i:[0x8650b8]+0xc == 0
++0    tap RBRACKET                                 # skip forward
++900  log replay_forward
++0    expect x:0x8363ec != 0
++0    expect i:[0x8650b8]+0xc == 0
++0    untrace
++0    tapuntil ESCAPE UI_Pause.fng 60 900
++0    log back_to_pause
++10   quit

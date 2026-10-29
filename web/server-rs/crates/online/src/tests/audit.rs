@@ -428,7 +428,7 @@ fn onl7_results() {
 fn a_race_won_far_ahead_is_a_cheat_line() {
     let mut w = world();
     let cheats = |w: &World| w.text().iter().filter(|l| l.starts_with("[cheat]")).cloned().collect::<Vec<_>>();
-    let mut race_of = |w: &mut World, name: &str, a: &str, b: &str, players: &[(u8, u8, f32)], kind: u8| {
+    let race_of = |w: &mut World, name: &str, a: &str, b: &str, players: &[(u8, u8, f32)], kind: u8| {
         let (ga, gb) = (client(w, &format!("10.77.1.{}", name.len())), client(w, &format!("10.77.2.{}", name.len())));
         let (x, y) = (login(w, ga, a), login(w, gb, b));
         let auth = race(w, name, &[x, y], vec![]).unwrap();
@@ -446,6 +446,61 @@ fn a_race_won_far_ahead_is_a_cheat_line() {
         ["[cheat] 10.77.1.3 \"Warp\": won the online race \"far\" (sprint) in 0:21.00, under 40 % of the next finisher's \
           1:04.00 (\"Honest\")"]
     );
+}
+
+/// the game's race report with each player's average speed: (index, place, time, average m/s, dropped or still on the
+/// way when the race ended: flags 0x0b)
+fn resu_avg(kind: u8, players: &[(u8, u8, f32, f32, bool)]) -> String {
+    let mut b = vec![0u8; 8 + 55 * players.len()];
+    b[0] = 3;
+    b[1] = players.len() as u8;
+    b[2] = kind;
+    b[4..6].copy_from_slice(&4102u16.to_be_bytes());
+    b[7] = 1;
+    for (i, (index, place, time, avg, out)) in players.iter().enumerate() {
+        let o = 8 + 55 * i;
+        b[o] = *index;
+        b[o + 1] = *place;
+        b[o + 2] = if *out { 0x0b } else { 1 };
+        b[o + 8..o + 12].copy_from_slice(&time.to_be_bytes());
+        b[o + 16..o + 20].copy_from_slice(&avg.to_be_bytes());
+        if *out {
+            b[o + 32..o + 36].copy_from_slice(&(-1.0f32).to_be_bytes());
+        }
+    }
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(b)
+}
+
+// what each player's game saw that no racer does is a [cheat] line, the report taken or not: a race the game ended at
+// once (a test's racewin, its real report: 4.77 s, 65 m driven, the other racer 1021 m by the race's end), a teleport
+// to the finish at 25 s (212 m/s on average); an honest sprint (a test's real one) is none
+#[test]
+fn a_race_no_racer_drives_is_a_cheat_line() {
+    let mut w = world();
+    let cheats = |w: &World| w.text().iter().filter(|l| l.starts_with("[cheat]")).cloned().collect::<Vec<_>>();
+    let race_of = |w: &mut World, name: &str, a: &str, b: &str, players: &[(u8, u8, f32, f32, bool)]| {
+        let (ga, gb) = (client(w, &format!("10.77.3.{}", name.len())), client(w, &format!("10.77.4.{}", name.len())));
+        let (x, y) = (login(w, ga, a), login(w, gb, b));
+        let auth = race(w, name, &[x, y], vec![]).unwrap();
+        w.advance(61_000.0);
+        for c in [x, y] {
+            w.send(c, "rank", fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, players)), ("NAME0", a), ("NAME1", b)]);
+        }
+    };
+    race_of(&mut w, "honest", "Fast1", "Slow1", &[(0, 1, 56.49, 29.83, false), (1, 2, 58.15, 29.64, false)]);
+    assert_eq!(cheats(&w), Vec::<String>::new());
+    race_of(&mut w, "warp", "Honest", "Warp", &[(1, 1, 4.77, 13.58, false), (0, 2, 34.76, 29.36, true)]);
+    let l = cheats(&w);
+    assert_eq!(
+        l[0],
+        "[cheat] 10.77.4.4 \"Warp\": won the online race \"warp\" (sprint) in 0:04.77, under the 20 s a sprint race takes at \
+         least, having driven 65 m, under half the 1021 m \"Honest\" drove: as Honest's game saw it"
+    );
+    assert!(l.len() == 2 && l[1].ends_with(": as Warp's game saw it"), "{l:?}");
+    race_of(&mut w, "tele", "Honest2", "Tele", &[(1, 1, 25.0, 212.0, false), (0, 2, 55.0, 29.0, true)]);
+    let l = cheats(&w);
+    assert!(l.len() == 4 && l[2].contains("\"Tele\": won the online race \"tele\" (sprint) in 0:25.00, 763 km/h on average"), "{l:?}");
 }
 
 // results: race types by the game's numbers (drag 2, drift 3); its seventh (6) is a result that counts nowhere

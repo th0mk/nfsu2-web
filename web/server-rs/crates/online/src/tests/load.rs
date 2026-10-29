@@ -139,7 +139,7 @@ fn frame_flood() {
     use crate::vhost::{DATA, lan_frame};
     use crate::{OnlineHost, OnlineOptions, VHOST_VIP};
 
-    let host = OnlineHost::spawn(OnlineOptions { state_dir: None, log: Arc::new(|_: &str, _: Option<&str>| {}), tap: None });
+    let host = OnlineHost::spawn(OnlineOptions { state_dir: None, log: Arc::new(|_: &str, _: Option<&str>| {}), tap: None, claims: None });
     let out = Arc::new(AtomicUsize::new(0));
     let o2 = out.clone();
     host.attach_switch(Arc::new(move |_, _, _| {
@@ -157,7 +157,7 @@ fn frame_flood() {
                     let vip = 0x0A4D_0100 + k;
                     let payload: &[u8] = if kind == 5 { &[8, 0, 0, 0, 0, 1, 0, 1] } else { b"x" };
                     let f = Bytes::from(lan_frame(kind, vip, VHOST_VIP, 3658, 3658, op, 1, payload));
-                    let ctx = FrameCtx { group: format!("client {k}").into(), site: None, cause: None, slot: None };
+                    let ctx = FrameCtx { group: format!("client {k}").into(), site: None, cause: None, slot: None, owner: None };
                     for _ in 0..per_thread {
                         host.frame(vip, f.clone(), ctx.clone());
                     }

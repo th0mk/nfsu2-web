@@ -20,6 +20,7 @@
 //          and the paced pump leaves the game's writer no more behind than a
 //          desktop does (at most 2 skips; 178 when it refilled a burst at once)
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { requireDev } from './dev-server.mjs';
@@ -46,7 +47,7 @@ function report(step, ok, evidence) {
   results.push({ step, ok, evidence });
   console.log(`${ok ? 'PASS' : 'FAIL'} ${step}: ${evidence}`);
 }
-const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed'),
+const browser = await chromium.launch({ ...pickBrowser(), headless: !process.argv.includes('--headed'),
   args: ['--enable-unsafe-webgpu', '--autoplay-policy=no-user-gesture-required', '--mute-audio',
     ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] });
 

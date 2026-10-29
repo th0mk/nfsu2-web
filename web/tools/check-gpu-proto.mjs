@@ -51,7 +51,8 @@ const consts = {
 const KINDS_WORD = 0x9E24;   // stages 0..7: 0, 1, 2, 0, 2, 3, 1, 2
 for (const [n, e] of Object.entries(consts)) c += `printf("${n} %u\\n", (unsigned)(${e}));\n`;
 for (let k = 0; k < 8; k++) c += `printf("BK${k} %u\\n", (unsigned)GW_BK(${KINDS_WORD}u, ${k}u));\n`;
-c += 'printf("K_MARKS %u\\n", (unsigned)GW_K_MARKS);\nprintf("MARKS_BYTES %u\\n", (unsigned)sizeof(GwMarks));\nprintf("MARKS_MAX %u\\n", (unsigned)GW_MARKS_MAX);\nprintf("MARKS_MAGIC %u\\n", (unsigned)GW_MARKS_MAGIC);\nreturn 0; }\n';
+c += 'printf("K_MARKS %u\\n", (unsigned)GW_K_MARKS);\nprintf("MARKS_BYTES %u\\n", (unsigned)sizeof(GwMarks));\nprintf("MARKS_MAX %u\\n", (unsigned)GW_MARKS_MAX);\nprintf("MARKS_MAGIC %u\\n", (unsigned)GW_MARKS_MAGIC);\n';
+c += 'printf("K_TONE %u\\n", (unsigned)GW_K_TONE);\nprintf("TONE_BYTES %u\\n", (unsigned)sizeof(GwTone));\nprintf("TONE_MAGIC %u\\n", (unsigned)GW_TONE_MAGIC);\nreturn 0; }\n';
 fs.writeFileSync(path.join(tmp, 'p.c'), c);
 execFileSync(path.join(ROOT, 'deps', wasi, 'bin/clang'), ['--target=wasm32-wasip1', '-O1', '-I', path.join(ROOT, 'runtime/web'), '-o', path.join(tmp, 'p.wasm'), path.join(tmp, 'p.c')]);
 let out = '';
@@ -84,6 +85,7 @@ eq('GW_K_HL', C['K_HL'], T.K_HL); eq('GwHL size', C['HL_BYTES'], T.HL_BYTES); eq
 eq('GW_KWIN_ROWS', C['KWIN_ROWS'], T.KWIN_ROWS);
 eq('GW_K_MARKS', C['K_MARKS'], T.K_MARKS); eq('GwMarks size', C['MARKS_BYTES'], T.MARKS_BYTES); eq('GW_MARKS_MAX', C['MARKS_MAX'], T.MARKS_MAX);
 eq('GW_MARKS_MAGIC', C['MARKS_MAGIC'], T.MARKS_MAGIC);
+eq('GW_K_TONE', C['K_TONE'], T.K_TONE); eq('GwTone size', C['TONE_BYTES'], T.TONE_BYTES); eq('GW_TONE_MAGIC', C['TONE_MAGIC'], T.TONE_MAGIC);
 eq('GW_MAGIC', C['MAGIC'], T.GW_MAGIC); eq('GW_VERSION', C['VERSION'], T.GW_VERSION); eq('GW_NBUF', C['NBUF'], T.GW_NBUF);
 eq('GW_CMD_HDR', C['CMD_HDR'], T.CMD_HDR);
 eq('GW_DRAW', C['KIND_DRAW'], T.Kind.Draw); eq('GW_CLEAR', C['KIND_CLEAR'], T.Kind.Clear); eq('GW_BLIT', C['KIND_BLIT'], T.Kind.Blit);

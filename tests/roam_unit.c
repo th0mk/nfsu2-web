@@ -249,6 +249,36 @@ static void t_roundtrip(void){
           CHECK(rc_decode(c, n, &d) == RC_E_FIELD, "RACEREP with a bad field refused (%d)", k);
       }
       r->place = 7; CHECK(rc_encode(&m, b, sizeof b) < 0, "RACEREP with a place past its cars not encoded"); }
+    /* RACERES: RC_RACERES_HEAD + n rows of RC_RACERES_ROW; no lobby, no race, no rows or more than RC_LOBBY_MAX, an
+       unknown flag, two rows ours, a time or a distance out of range refused, a byte more refused */
+    memset(&m, 0, sizeof m); m.h.type = RC_MSG_RACERES; m.h.sender = 7;
+    { rc_raceres *r = &m.u.raceres;
+      r->lobby = 0x1234ABCDu; r->race = 0x9E3779B9u; r->mode = 1; r->laps = 2; r->n = 3;
+      r->row[0].id = 7; r->row[0].flags = RC_RS_FINISHED | RC_RS_OURS; r->row[0].time = 21.5f; r->row[0].done = 2.f; r->row[0].dist = 5800.f;
+      r->row[1].id = 8; r->row[1].flags = 0; r->row[1].done = 0.61f; r->row[1].dist = 1750.5f;
+      r->row[2].id = 0; r->row[2].flags = 0; r->row[2].done = 0.f;
+      int n = rc_encode(&m, b, sizeof b);
+      const rc_raceres *e = &d.u.raceres;
+      CHECK(n == RC_HDR + RC_RACERES_HEAD + 3 * RC_RACERES_ROW + RC_CRC && rc_decode(b, n, &d) == RC_OK && e->lobby == 0x1234ABCDu &&
+            e->race == 0x9E3779B9u && e->mode == 1 && e->laps == 2 && e->n == 3 && e->row[0].id == 7 &&
+            e->row[0].flags == (RC_RS_FINISHED | RC_RS_OURS) && e->row[0].time == 21.5f && e->row[0].done == 2.f &&
+            e->row[0].dist == 5800.f &&
+            e->row[1].id == 8 && !e->row[1].flags && e->row[1].done == 0.61f && e->row[1].dist == 1750.5f && !e->row[2].id,
+            "RACERES round trip (%d bytes)", n);
+      static const struct { int at; uint8_t v; int zero3; } bad[] = { { RC_HDR, 0, 1 }, { RC_HDR + 4, 0, 1 }, { RC_HDR + 10, 0, 0 },
+          { RC_HDR + 10, 7, 0 }, { RC_HDR + 16, 4, 0 }, { RC_HDR + 36, 2, 0 }, { RC_HDR + 23, 0xFF, 0 }, { RC_HDR + 27, 0x7F, 0 },
+          { RC_HDR + 31, 0xFF, 0 } };
+      int nb = (int)(sizeof bad / sizeof bad[0]);
+      for (int k = 0; k < nb; k++){
+          uint8_t c[RC_MAX_DGRAM]; memcpy(c, b, (size_t)n);
+          c[bad[k].at] = bad[k].v;
+          if (bad[k].zero3) for (int j = 1; j < 4; j++) c[bad[k].at + j] = 0;
+          uint32_t crc = rc_crc32(c, (uint32_t)n - RC_CRC); for (int j = 0; j < 4; j++) c[n - 4 + j] = (uint8_t)(crc >> (8 * j));
+          int got = rc_decode(c, n, &d);
+          CHECK(got == RC_E_FIELD || got == RC_E_SHORT || got == RC_E_TRAIL, "RACERES with a bad field refused (%d: %d)", k, got);
+      }
+      r->n = 0; CHECK(rc_encode(&m, b, sizeof b) < 0, "RACERES of no rows not encoded");
+      r->n = 3; r->row[1].flags = RC_RS_OURS; CHECK(rc_encode(&m, b, sizeof b) < 0, "RACERES with two rows ours not encoded"); }
     /* car record */
     rc_carcfg cc, c2; memset(&cc, 0, sizeof cc);
     cc.type_hash = 0x12345678u; strcpy(cc.type_name, "350Z"); cc.ride_b[3] = 1;
@@ -289,10 +319,10 @@ static void t_roundtrip(void){
 
 /* ---- 3. hostile datagrams ----------------------------------------------------------------- */
 static void t_fuzz(long iters){
-    uint8_t b[1600], base[15][RC_MAX_DGRAM]; int bn[15];
+    uint8_t b[1600], base[16][RC_MAX_DGRAM]; int bn[16];
     rc_msg m;
     /* one valid datagram of each type, to mutate */
-    for (int t = 1; t <= 15; t++){
+    for (int t = 1; t <= 16; t++){
         memset(&m, 0, sizeof m); m.h.type = (uint8_t)t; m.h.sender = 9;
         if (t == RC_MSG_HELLO){ strcpy(m.u.hello.name, "abc"); m.u.hello.n_seen = 2; }
         if (t == RC_MSG_PEERS){ m.u.peers.n = 2; m.u.peers.e[0].ip = 0x7f000001u; m.u.peers.e[0].port = 1; m.u.peers.e[0].id = 1; m.u.peers.e[1] = m.u.peers.e[0]; }
@@ -307,6 +337,9 @@ static void t_fuzz(long iters){
         if (t == RC_MSG_RACEREP){ m.u.racerep.lobby = 5; m.u.racerep.race = 6; m.u.racerep.players = 2; m.u.racerep.place = 1;
                                   m.u.racerep.factor = 1.f; strcpy(m.u.racerep.name, "350Z"); }
         if (t == RC_MSG_SAY){ m.u.say.phrase = 3; m.u.say.seq = 1; }
+        if (t == RC_MSG_RACERES){ m.u.raceres.lobby = 5; m.u.raceres.race = 6; m.u.raceres.n = 2; m.u.raceres.row[0].id = 9;
+                                  m.u.raceres.row[0].flags = RC_RS_FINISHED | RC_RS_OURS; m.u.raceres.row[0].time = 60.f;
+                                  m.u.raceres.row[0].done = 2.f; m.u.raceres.row[1].id = 10; m.u.raceres.row[1].done = 1.5f; }
         bn[t - 1] = rc_encode(&m, base[t - 1], RC_MAX_DGRAM);
     }
     rc_session s; rc_config cf; memset(&cf, 0, sizeof cf); cf.self_id = 1; cf.port = 1; cf.max_players = 8; cf.rate_hz = 20; cf.test_mode = 1;
@@ -319,7 +352,7 @@ static void t_fuzz(long iters){
         int kind = (int)(rnd() % 4);
         if (kind == 0){ len = (int)(rnd() % 1300); for (int i = 0; i < len; i++) b[i] = (uint8_t)rnd(); }
         else {
-            int t = (int)(rnd() % 15); len = bn[t]; memcpy(b, base[t], (size_t)len);
+            int t = (int)(rnd() % 16); len = bn[t]; memcpy(b, base[t], (size_t)len);
             int nm = 1 + (int)(rnd() % 6);
             for (int k = 0; k < nm; k++) b[rnd() % (uint32_t)len] = (uint8_t)rnd();
             if (kind == 2) len = (int)(rnd() % (uint32_t)(len + 1));

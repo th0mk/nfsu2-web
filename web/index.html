@@ -187,15 +187,16 @@
         <form class="vault-row" id="vault-form">
           <div class="keybox masked" id="vault-box">
             <div class="keyfield">
-              <input type="text" id="vault-input" placeholder="Enter your keyphrase" spellcheck="false" autocomplete="off" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Keyphrase">
+              <input type="text" id="vault-input" placeholder="Enter your passphrase" spellcheck="false" autocomplete="off" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
               <span class="keymask" id="vault-mask" aria-hidden="true"></span>
             </div>
-            <button type="button" class="icon-btn" id="vault-file" data-i18n-attr="aria-label" aria-label="Download keyphrase" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
-            <button type="button" class="icon-btn eye" id="vault-eye" aria-label="Show keyphrase" aria-pressed="false"><svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1Q11.3 5 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.3-.5 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button>
+            <button type="button" class="icon-btn" id="vault-file" data-i18n-attr="aria-label" aria-label="Download passphrase" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+            <button type="button" class="icon-btn eye" id="vault-eye" aria-label="Show passphrase" aria-pressed="false"><svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1Q11.3 5 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.3-.5 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button>
           </div>
           <button type="submit" class="btn" id="vault-load" data-i18n>Load</button>
         </form>
-        <p class="hint" id="vault-about" data-i18n>Make a keyphrase, or enter yours to load your saves.</p>
+        <p class="hint" id="vault-about" data-i18n>Make a passphrase, or enter yours to load your saves.</p>
+        <p class="hint" id="vault-claim" hidden></p>
         <p class="hint warn" id="vault-status" role="status"></p>
         <div id="vault-sides"></div>
         <div class="row" id="vault-conflict" hidden>
@@ -332,6 +333,13 @@
     <button type="button" class="btn" data-act="download" data-i18n>Download</button>
     <button type="button" class="btn danger" data-act="delete" data-i18n>Delete</button>
   </div>
+</dialog>
+
+<dialog class="dlg confirm" id="claim-check" aria-labelledby="claim-check-title">
+  <h2 id="claim-check-title"></h2>
+  <p class="claim-about"></p>
+  <div class="claim-check"></div>
+  <div class="row end"><button type="button" class="btn claim-no"></button></div>
 </dialog>
 
 <dialog class="dlg confirm" id="confirm" aria-labelledby="confirm-title">

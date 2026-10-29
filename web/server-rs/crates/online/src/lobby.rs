@@ -12,8 +12,9 @@
 //! - acct -> "create account": logs in the same way
 //! - cper/dper -> a persona for this session, or one less (at most `personas`)
 //! - pers -> the persona to play as; LKEY.  One holder per name while online or racing (the holder's own browser
-//!   takes it back): a name another browser holds is given with four digits in place of its end, and the game takes
-//!   it for its own (runtime/online.c)
+//!   takes it back), and a claimed name only for the keyphrase that claimed it (nfsu2-claims; the owner the page's
+//!   hello named, `FrameCtx::owner`), whose session takes it from anyone else's: a name another player holds or
+//!   claimed is given with four digits in place of its end, and the game takes it for its own (runtime/online.c)
 //! - move -> into a room (+who, +usr, +pop), or out (an unknown NAME)
 //! - mesg -> chat in the room, or to one persona (PRIV; the game's challenge invites are private messages too): +msg.
 //!   Not to a persona that blocks the sender (EA Messenger's blocked list, buddy.rs).  A line that reads as a slur
@@ -211,6 +212,10 @@ const FILTER_SET: &str = "filt";
 /// the finish, a speed hack.  Real races are far closer (a car twice as slow is lapped in a circuit race long before
 /// it finishes); a drift race (the title's report type "drift") is won by points, and is left out.
 const FAR_AHEAD: f64 = 0.4;
+/// no car of the game averages this over a race (m/s: 350 km/h; the fastest tuned cars make 350 at the most)
+const RACE_MPS: f64 = 350.0 / 3.6;
+/// a finisher who drove less than this share of what another racer drove (`race_cheats`)
+const DROVE_SHARE: f64 = 0.5;
 
 /// A token bucket: `rate` a second, at most `burst`, full at the start (on the lobby's clock)
 #[derive(Clone, Copy, Debug)]
@@ -242,6 +247,8 @@ pub struct Session {
     pub vip: u32,
     pub group: Arc<str>,
     pub site: Option<Arc<str>>,
+    /// the keyphrase its page plays with (nfsu2-claims' owner), if it named one
+    pub owner: Option<Arc<str>>,
     pub addr: String,
     reader: FrameReader,
     pub account: Option<String>,
@@ -662,6 +669,61 @@ fn fit(fields: Fields, max: usize, drop: &[&str]) -> Fields {
     f
 }
 
+/// The `[cheat]` lines of one report (`reporter`'s game's view of the race), one a finisher that did what no racer
+/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), RACE_MPS or
+/// more on average, or the way it drove (its average times its time) under DROVE_SHARE of another racer's, finished or
+/// not (a cheat that ends its race at once: a test's racewin won a sprint in 4.77 s having driven 65 m, the other racer
+/// 1021 m by the race's end 30 s later; an honest finisher drives the whole way, and nobody twice as much before the
+/// race ends).  A drift race (the title's report type "drift") is won by points and is left out.
+fn race_cheats(
+    game: &str,
+    r: &RaceReport,
+    report_types: &[&str],
+    min_race_s: &[f64],
+    names: &[String],
+    players: &[Player],
+    reporter: &str,
+) -> Vec<String> {
+    let type_name = report_types.get(r.kind as usize).copied();
+    if type_name == Some("drift") {
+        return Vec::new();
+    }
+    let ty = type_name.unwrap_or("race");
+    let name_of = |p: &crate::stats::ReportPlayer| names.get(p.index as usize).map(|n| n.as_str()).unwrap_or("?");
+    let mut lines = Vec::new();
+    for p in r.players.iter().filter(|p| !p.dropped && p.place >= 1 && p.time > 0.0) {
+        let drove = p.avg * p.time;
+        let mut why = Vec::new();
+        if let Some(&min) = min_race_s.get(r.kind as usize)
+            && p.time < min
+        {
+            why.push(format!("under the {} s a {ty} race takes at least", js::number_to_string(min)));
+        }
+        if p.avg >= RACE_MPS {
+            why.push(format!("{:.0} km/h on average, which no car does", p.avg * 3.6));
+        }
+        let most = r.players.iter().filter(|o| o.index != p.index).map(|o| (o.avg * o.time, name_of(o))).max_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((d, other)) = most
+            && drove < DROVE_SHARE * d
+        {
+            why.push(format!("having driven {drove:.0} m, under half the {d:.0} m \"{other}\" drove"));
+        }
+        if why.is_empty() {
+            continue;
+        }
+        let me = name_of(p);
+        let vip = players.iter().find(|x| lower(&x.name) == lower(me)).map_or(0, |x| x.vip);
+        let place = if p.place == 1 { "won".to_string() } else { format!("finished {} in", p.place) };
+        lines.push(format!(
+            "[cheat] {} \"{me}\": {place} the online race \"{game}\" ({ty}) in {}, {}: as {reporter}'s game saw it",
+            vip_str(vip),
+            fmt_time(p.time),
+            why.join(", ")
+        ));
+    }
+    lines
+}
+
 /// The `[cheat]` line of a race whose winner (the quickest finisher) took under FAR_AHEAD of the next finisher's time,
 /// with the winner's address for `nfsu2-server ctl kick|ban`; None for any other race and for a drift race (the
 /// title's `report_types` name the race types)
@@ -798,6 +860,7 @@ impl Core {
         let t = self.now();
         let id = self.lobby.next_user;
         self.lobby.next_user += 1;
+        let owner = self.conn_owner(c);
         self.lobby.sess.insert(
             id,
             Session {
@@ -806,6 +869,7 @@ impl Core {
                 vip,
                 group,
                 site,
+                owner,
                 addr: peer,
                 reader: FrameReader::new(MAX_FRAME),
                 account: None,
@@ -1058,7 +1122,8 @@ impl Core {
         // the game finds itself among a race's players by them (one that kept the name it asked for raced against
         // itself)
         let asked = mine.clone();
-        let mine = if self.name_taken(&mine, s) {
+        let claimed = !self.may_claim(&mine, s);
+        let mine = if claimed || self.name_taken(&mine, s) {
             match self.free_variant(&mine, s) {
                 Some(v) => v,
                 None => return self.lsend(s, "pers", &[], "pset"),
@@ -1066,6 +1131,10 @@ impl Core {
         } else {
             mine
         };
+        // a claim holds 180 days from its owner's last game
+        if let (Some(c), Some(o)) = (&self.claims, &self.lobby.s(s).owner) {
+            c.seen(&mine, o, self.now() as i64);
+        }
         let old = self.lobby.s(s).persona.clone();
         if let Some(old) = old.filter(|o| *o != mine) {
             self.lobby.by_persona.remove(&lower(&old));
@@ -1076,7 +1145,11 @@ impl Core {
         x.lkey = Some(rand::hex(15));
         let addr = x.addr.clone();
         self.lobby.by_persona.insert(lower(&mine), s);
-        let taken = if mine != asked { format!(" (\"{asked}\" is taken)") } else { String::new() };
+        let taken = match (mine != asked, claimed) {
+            (false, _) => String::new(),
+            (true, false) => format!(" (\"{asked}\" is taken)"),
+            (true, true) => format!(" (\"{asked}\" is claimed)"),
+        };
         self.llog(&format!("[online] {addr}: plays as \"{mine}\"{taken}"), s);
         let r = self.pers_fields(s, &mine);
         self.lsend(s, "pers", &r, "");
@@ -1087,21 +1160,38 @@ impl Core {
     }
 
     /// name's holder gives way to s when it is s's browser's own older session (its game logged in again) or its
-    /// game is gone (a stale session)
+    /// game is gone (a stale session), and to the keyphrase that claimed the name (nfsu2-claims): a holder that is not
+    /// its owner leaves the lobby (its game logs in again under the name with digits)
     fn give_way(&mut self, name: &str, s: SessId) {
         let Some(h) = self.lobby.by_persona.get(&lower(name)).copied() else { return };
         if h == s {
             return;
         }
         let Some(hx) = self.lobby.sess.get(&h) else { return };
+        let owner = self.lobby.s(s).owner.clone();
+        let by_owner = owner.is_some() && hx.owner != owner && self.may_claim(name, s) && !self.may_claim_as(name, hx.owner.as_deref());
         if hx.gone || hx.vip == self.lobby.s(s).vip || self.now() - hx.last_in >= 30_000.0 {
             self.ldrop(h, "the persona logged in again");
+        } else if by_owner {
+            self.ldrop(h, "the name's owner logged in");
         }
+    }
+
+    /// s may play under name as far as the claims go: nobody claimed it, or s's keyphrase did
+    fn may_claim(&self, name: &str, s: SessId) -> bool {
+        self.may_claim_as(name, self.lobby.s(s).owner.as_deref())
+    }
+
+    fn may_claim_as(&self, name: &str, owner: Option<&str>) -> bool {
+        self.claims.as_ref().is_none_or(|c| c.may_use(name, owner, self.now() as i64))
     }
 
     /// name is another player's: a session that holds it, or a player racing under it (a race this server started,
     /// the player not back yet) from another browser that is still on the switch, who comes back to it
     fn name_taken(&self, name: &str, s: SessId) -> bool {
+        if !self.may_claim(name, s) {
+            return true;
+        }
         let k = lower(name);
         if let Some(h) = self.lobby.by_persona.get(&k)
             && *h != s
@@ -1465,6 +1555,23 @@ impl Core {
         let why = self.check_result(g, r.as_ref(), &names);
         let spers = tpl(&self.lobby.s(s).persona).to_string();
         let gname = self.lobby.game(g).expect("held").name.clone();
+        // what this player's game saw of the others (and of itself) that no racer does, whether its report is taken
+        // or not (a time too short for the race is not)
+        if let Some(r) = &r
+            && r.players.len() == names.len()
+        {
+            for line in race_cheats(
+                &gname,
+                r,
+                self.title.report_types,
+                self.title.min_race_s,
+                &names,
+                &self.lobby.game(g).expect("held").players,
+                &spers,
+            ) {
+                self.llog(&line, s);
+            }
+        }
         if !why.is_empty() {
             self.llog(&format!("[online] \"{gname}\": {spers}'s race report not taken: {why}"), s);
             reply(self);

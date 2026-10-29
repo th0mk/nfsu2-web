@@ -223,7 +223,10 @@ fn the_wire_the_hubs_crew_marks_colour_a_sessions_peers() {
     };
     let list = peers_of(&f);
     assert_eq!(list.len(), 4);
-    let expect: Vec<String> = list.iter().map(|e| format!("{}.{}.{}.{}:{}:{}", e.vip >> 24, e.vip >> 16 & 255, e.vip >> 8 & 255, e.vip & 255, e.port, want(e))).collect();
+    let expect: Vec<String> = list
+        .iter()
+        .map(|e| format!("{}.{}.{}.{}:{}:{}", e.vip >> 24, e.vip >> 16 & 255, e.vip >> 8 & 255, e.vip & 255, e.port, want(e)))
+        .collect();
     assert_eq!(run(&["hubcrew", &hex(&f[16..])]), format!("ok {}", expect.join(" ")), "the session's crews by the hub's marks");
     assert!(!f.windows(4).any(|b| b == red.to_le_bytes()), "no crew of another player's on its list");
 }
@@ -756,7 +759,7 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
 // back, a departure is forgotten') ----
 
 fn ctx() -> FrameCtx {
-    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None }
+    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None }
 }
 
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {

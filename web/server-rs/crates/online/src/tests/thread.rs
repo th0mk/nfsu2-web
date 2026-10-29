@@ -49,6 +49,7 @@ fn on_its_own_thread() {
         state_dir: Some(dir.clone()),
         log: Arc::new(move |s: &str, k: Option<&str>| l2.lock().push((s.to_string(), k.map(str::to_string)))),
         tap: None,
+        claims: None,
     });
     let out: Arc<Mutex<Vec<(u32, Bytes)>>> = Arc::default();
     let o2 = out.clone();
@@ -61,7 +62,13 @@ fn on_its_own_thread() {
     }));
     let a = ip("10.77.0.2");
     let budget = Arc::new(Budget { spent: Mutex::new(0), over: AtomicBool::new(false) });
-    let ctx = |b: &Arc<Budget>| FrameCtx { group: "client a".into(), site: None, cause: Some(b.clone() as Arc<dyn Charge>), slot: None };
+    let ctx = |b: &Arc<Budget>| FrameCtx {
+        group: "client a".into(),
+        site: None,
+        cause: Some(b.clone() as Arc<dyn Charge>),
+        slot: None,
+        owner: None,
+    };
     let send = |op: u8, data: &[u8]| Bytes::from(lan_frame(4, a, VHOST_VIP, 50000, PORT_LOBBY, op, 7, data));
     host.frame(a, send(SYN, &[]), ctx(&budget));
     for (kind, f) in
@@ -96,7 +103,12 @@ fn stop_writes_what_is_kept() {
     let dir = tmp.path().join("online");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("buddies.json"), r#"{"personas":[{"name":"Alpha","seen":"2025-01","B":["Bravo"]}]}"#).unwrap();
-    let host = OnlineHost::spawn(OnlineOptions { state_dir: Some(dir.clone()), log: Arc::new(|_: &str, _: Option<&str>| {}), tap: None });
+    let host = OnlineHost::spawn(OnlineOptions {
+        state_dir: Some(dir.clone()),
+        log: Arc::new(|_: &str, _: Option<&str>| {}),
+        tap: None,
+        claims: None,
+    });
     let out: Arc<Mutex<Vec<Bytes>>> = Arc::default();
     let o2 = out.clone();
     host.attach_switch(Arc::new(move |_, f, _| {
@@ -104,7 +116,7 @@ fn stop_writes_what_is_kept() {
         SendResult::Sent
     }));
     let a = ip("10.77.0.2");
-    let ctx = FrameCtx { group: "g".into(), site: None, cause: None, slot: None };
+    let ctx = FrameCtx { group: "g".into(), site: None, cause: None, slot: None, owner: None };
     let send = |op: u8, port: u16, cid: u32, data: &[u8]| Bytes::from(lan_frame(4, a, VHOST_VIP, 50000 + cid as u16, port, op, cid, data));
     host.frame(a, send(SYN, PORT_LOBBY, 1, &[]), ctx.clone());
     host.frame(a, send(DATA, PORT_LOBBY, 1, &encode_frame("auth", "", &fields![("NAME", "Alpha")]).unwrap()), ctx.clone());

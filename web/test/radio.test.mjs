@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const load = async f => await import('data:text/javascript;base64,' + Buffer.from(
   (await esbuild.build({ entryPoints: [path.join(ROOT, f)], bundle: true, format: 'esm', write: false })).outputFiles[0].text).toString('base64'));
 const { Radio } = await load('web/src/radio.ts');
-const { plaqueTags, gameText } = await load('web/src/radio-tags.ts');
+const { plaqueTags, gameText, tagsOf } = await load('web/src/radio-tags.ts');
 const { pickMusic, keptFolder } = await load('web/src/radio-folder.ts');
 const { RadioLink, RADIO_WORDS, RADIO_MAGIC, RADIO_VERSION } = await load('web/src/app/radio-link.ts');
 const W = Object.fromEntries(RADIO_WORDS.map((n, i) => [n, i]));
@@ -159,6 +159,17 @@ test('the plaque keeps "&", has no artist in the title, lines that fit, ASCII le
     { artist: 'Rook & Vale', title: 'Long Way Back Home (Quiet Hours Remix...', album: 'x' });
   assert.equal(gameText('Щука Zoë Łódź ★'), 'Shchuka Zoe Lodz ?');
   assert.deepEqual(plaqueTags({ artist: '', title: 'Привет', album: '' }, 'Моя'), { artist: 'Unknown artist', title: 'Privet', album: 'Moya' });
+});
+
+test('ID3 text frames: UTF-16 by its BOM (big-endian when none), a doubled BOM and a UTF-8 BOM', async () => {
+  const be = t => Buffer.concat([...t].map(c => Buffer.from([c.charCodeAt(0) >> 8, c.charCodeAt(0) & 255]))), le = t => Buffer.from(t, 'utf16le');
+  const frame = (id, ...body) => { const b = Buffer.concat(body.map(x => Buffer.from(x))), h = Buffer.alloc(10); h.write(id); h.writeUInt32BE(b.length, 4); return Buffer.concat([h, b]); };
+  const file = (...frames) => { const f = Buffer.concat(frames), h = Buffer.alloc(10); h.write('ID3'); h[3] = 3; h[6] = (f.length >> 21) & 127; h[7] = (f.length >> 14) & 127; h[8] = (f.length >> 7) & 127; h[9] = f.length & 127; return Buffer.concat([h, f]); };
+  const read = async buf => tagsOf({ name: 'x.mp3', getFile: async () => ({ slice: () => ({ arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) }) }) });
+  assert.deepEqual(await read(file(
+    frame('TIT2', [1, 0xfe, 0xff, 0xfe, 0xff], be('ヤラララ')), frame('TPE1', [1, 0xff, 0xfe], le('Zoë')), frame('TALB', [1], be('Alb')))),
+    { title: 'ヤラララ', artist: 'Zoë', album: 'Alb' });
+  assert.equal((await read(file(frame('TIT2', [3, 0xef, 0xbb, 0xbf], 'Ünï', [0], 'junk')))).title, 'Ünï');
 });
 
 test('a folder of 0, 1, 27, 28 or 10 000 files plays, and choosing it reads at most the tags of the tracks to come', async () => {

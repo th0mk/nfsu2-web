@@ -1,4 +1,4 @@
-// Keyphrase saves: this browser's saves kept on the server too, under a keyphrase only the player has, so the career
+// Passphrase saves: this browser's saves kept on the server too, under a keyphrase only the player has, so the career
 // goes on in any browser the keyphrase is typed into (docs/web/PLAYING.md, Saves).  The server keeps what it is sent
 // and gives it back to whoever shows the token (web/server-rs/crates/vault: the caps, the copy of an earlier day, two
 // years unused); all that knows a save is here, so the server never sees one:
@@ -68,10 +68,10 @@ export function readPhrase(text: string): { phrase: string } | { bad: string; wh
   const bad = (t: string, v?: Vars) => ({ bad: fill(t, v), why: { t, v } });
   let w = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   if (w[0] === 'nfsu2' && w[1] === 'xyz') w = w.slice(2);
-  if (!w.length) return bad(N('Type or paste your keyphrase.'));
+  if (!w.length) return bad(N('Type or paste your passphrase.'));
   const unknown = w.find(x => !WORD_SET.has(x));
-  if (unknown) return bad(N('"{word}" is not a keyphrase word. Keyphrases are made for you by Enable cloud saving: check the spelling, or make one there.'), { word: unknown });
-  if (w.length !== PHRASE_WORDS) return bad(N('A keyphrase has {n} words after {prefix}; this has {got}.'), { n: PHRASE_WORDS, prefix: PREFIX, got: w.length });
+  if (unknown) return bad(N('"{word}" is not a passphrase word. Passphrases are made for you by Enable cloud saving: check the spelling, or make one there.'), { word: unknown });
+  if (w.length !== PHRASE_WORDS) return bad(N('A passphrase has {n} words after {prefix}; this has {got}.'), { n: PHRASE_WORDS, prefix: PREFIX, got: w.length });
   return { phrase: [PREFIX, ...w].join('-') };
 }
 
@@ -97,10 +97,10 @@ export async function seal(key: CryptoKey, plain: Uint8Array): Promise<Uint8Arra
 }
 
 export async function unseal(key: CryptoKey, box: Uint8Array): Promise<Uint8Array> {
-  if (box.length < 13 + 16 || box[0] !== 1) throw new VaultError(N('what the server holds for this keyphrase is not a keyphrase\'s saves'), 'VAULT-NOT-SAVES');
+  if (box.length < 13 + 16 || box[0] !== 1) throw new VaultError(N('what the server holds for this passphrase is not a passphrase\'s saves'), 'VAULT-NOT-SAVES');
   try {
     return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: box.slice(1, 13), additionalData: enc.encode(AAD) }, key, box.slice(13)));
-  } catch { throw new VaultError(N('these saves do not open with this keyphrase'), 'VAULT-WRONG-KEY'); }
+  } catch { throw new VaultError(N('these saves do not open with this passphrase'), 'VAULT-WRONG-KEY'); }
 }
 
 export interface SaveFile { path: string; data: Uint8Array; mtime?: number }
@@ -143,7 +143,7 @@ async function bytesOf(s: ReadableStream<Uint8Array>, max = Infinity): Promise<U
     for (;;) {
       const { done, value } = await rd.read();
       if (done) break;
-      if ((n += value.length) > max) throw new VaultError(N('these saves are larger than a keyphrase keeps'), 'VAULT-TOO-LARGE');
+      if ((n += value.length) > max) throw new VaultError(N('these saves are larger than a passphrase keeps'), 'VAULT-TOO-LARGE');
       parts.push(value);
     }
   } catch (e) { void rd.cancel().catch(() => {}); throw e; }
@@ -355,6 +355,8 @@ export class VaultSync {
     return this.keys.k;
   }
   private api(k: Keys, timeoutMs?: number) { return new VaultApi(k.token, this.d.fetch, timeoutMs); }
+  /** the linked keyphrase's token (what claims a name: claim.ts), null without one */
+  async token(): Promise<string | null> { return this.link ? (await this.keysFor(this.link.phrase)).token : null; }
   private set(state: SyncState) { this.state = state; this.onChange(); }
   /** the state when no job runs and nothing waits for the player */
   private rest(): SyncState { return !this.link ? { s: 'off' } : this.link.gone ? { s: 'gone' } : { s: 'synced' }; }
@@ -463,7 +465,7 @@ export class VaultSync {
 
   /** A new keyphrase for the saves here, their first version sent: the keyphrase. */
   create(): Promise<string> {
-    return this.run(N('Making keyphrase'), async () => {
+    return this.run(N('Making passphrase'), async () => {
       for (;;) {
         const phrase = newPhrase(), k = await this.keysFor(phrase), files = await this.d.files();
         const r = await this.api(k).put(await this.boxOf(k, files), null);

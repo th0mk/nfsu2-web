@@ -140,7 +140,8 @@ The rest of this guide is reference.
 
 ## Keyphrase saves
 
-A player can keep their saves on the server under a keyphrase (`nfsu2-xyz-` and 8 words), and load them in any
+A player can keep their saves on the server under a keyphrase (`nfsu2-xyz-` and 8 words; the page calls it a
+passphrase, the server's code, console and these notes a keyphrase), and load them in any
 browser by typing it (the page's Cloud saves: PLAYING.md, Saves). The page locks them before they leave the browser (AES-GCM, with a key made
 from the keyphrase); the server keeps those bytes under the SHA-256 of a token also made from the keyphrase. It never
 sees a keyphrase, a key or a save, and its files name no player.
@@ -171,6 +172,24 @@ sees a keyphrase, a key or a save, and its files name no player.
   while the disk under the state folder has less than 2 GB or 100,000 inodes free, whatever `NFSU2_VAULT_GB` says.
 - **Backups:** copy `vault/` while the server runs: each file is replaced whole, by a rename. Without the folder the
   players' copies on the server are gone; their browsers keep their own.
+
+## Claimed names
+
+With keyphrase saves on, a player's keyphrase can claim their name (PLAYING.md, Online: "Your name is yours"): while
+the claim holds (180 days after they last played under it) nobody else plays under it in the Online menu or free
+roam, and EA Messenger keeps its lists for it. The server keeps `names.json` in the state folder: each name, a code
+made from its keyphrase's token (never the keyphrase), when it was claimed and last played. Written whole within a
+minute of a change. A keyphrase deleted from the cloud frees its name.
+
+- **Cloudflare Turnstile** (a check that a person, not a script, claims a name): create a widget in the Cloudflare
+  dashboard (Turnstile, Add widget: the site's hostname, mode Managed), then put its two keys in `.env`:
+  `NFSU2_TURNSTILE_SITE=<site key>` and `NFSU2_TURNSTILE_SECRET=<secret key>`, and `docker compose up -d server`.
+  The start-up line says `[names] N names claimed; Cloudflare's check on`. With the keys the page's
+  Content-Security-Policy lets in Cloudflare's script and frame (`challenges.cloudflare.com`), and the server asks
+  Cloudflare (HTTPS out to challenges.cloudflare.com) once per claim. Without them claims need no check.
+- **What one client may do:** 10 claims, then 10 a day (one per keyphrase, a change once a week), and 120 checks of
+  a name, then 2 a second.
+- **The operator:** `nfsu2-server ctl unclaim <name>` frees a name (the console says which).
 
 ## Sizing
 
@@ -560,18 +579,34 @@ After each multiplayer race from free roam, every player's game reports it once 
 `[race]` line for each: the race (its lobby, which every player's line of that race shares, the race type, track,
 laps and cars), the player's nickname, place (or "did not finish", "quit") and the car as the game rated it (its
 type, the game's class and rating, the race's average rating, power, weight, top speed, and the factor its engine
-power had in the race). For evening out the cars: `docker compose logs -t server --since 24h | grep '\[race\]'`.
+power had in the race) and its time. For evening out the cars:
+`docker compose logs -t server --since 24h | grep '\[race\]'`.
 
 Cheats are `[cheat]` lines, each with the player's virtual address and nickname, as [kick and ban](#kick-and-ban)
-take them. In free roam: a teleport (the car went 300 m or more farther than any car drives, in one jump or in short
-hops), a car over 450 km/h for 2 s, or a game whose clock runs 1.3 times as fast as the server's or more for a
-minute (a speed hack); a teleport's or a fast car's line names the players within 40 m of where it came to, and a
-race lobby that starts there. In Online mode: a race won in under 40 % of the next finisher's time. The game's own
-jumps (Respawn, Jump to Garage, shops, events and races) are none, nor is a bad connection (delays, stalls, a backlog
-that comes at once), nor a car that flies (an edited save) unless it does one of those. The lines are for you to
-read: nobody is kicked or banned by them. A player gets 5 lines, then one every 2 minutes; the rest are counted, and summed up every 10 minutes and when
-it leaves free roam. The cheats that bother others:
-`docker compose logs -t server --since 24h | grep '\[cheat\]' | grep -e 'next to' -e 'race lobby' -e 'online race'`.
+take them. The lines are for you to read: nobody is kicked or banned by them.
+
+- **In races**: every racer's game reports the race's results too (each racer's time, how far it came, the way it
+  drove), and once all of them came, or 90 s after the first, the server judges the race: its winner is the one most
+  reports had first, at the slowest time any report gave it, and the race's length is what the other racers drove. A
+  line (`won the race of lobby …`) when the winner averaged 350 km/h or more over it, which no car does (a free-roam
+  sprint's average: 107 km/h), or finished in under 40 % of another finisher's time; a cheat that ends the race at
+  once says how little of the way it drove ("having driven 0.6 % of the way"). One player's report cannot make a
+  winner or a time, and the line says how many of the race's reports saw it. In Online mode each report is looked at
+  as it comes (`won the online race …`): a time under the shortest its race type takes (the result is not taken
+  either), 350 km/h or more on average, the way a finisher drove under half another racer's, or a race won in under
+  40 % of the next finisher's time; the line says whose game saw it. A drift race is won by points and is left out.
+- **In free roam**: a teleport (the car went 300 m or more farther than any car drives, in one jump or in short hops),
+  a car over 450 km/h for 2 s, or a game whose clock runs 1.3 times as fast as the server's or more for a minute (a
+  speed hack); a teleport's or a fast car's line names the players within 40 m of where it came to, and a race lobby
+  that starts there. A player gets 5 of these lines, then one every 2 minutes; the rest are counted, and summed up
+  every 10 minutes and when it leaves free roam.
+- **None**: the game's own jumps (Respawn, the World Map's jump to an event or a shop, the garage, shops and races),
+  a bad connection (delays, stalls, a backlog that comes at once), a car that flies (an edited save) unless it does
+  one of those, an honest winner over racers who stood still. The World Map's jump stays in free roam, so a
+  teleport that lands within 25 m of an event's start or a shop's door is taken for one, whoever made it.
+
+The races won by cheating: `docker compose logs -t server --since 24h | grep '\[cheat\]' | grep 'race'`; and the
+cheats that bother others in free roam: `... | grep -e 'next to' -e 'race lobby'`.
 
 - **No player's real IP address** is written, and the page sends the server nothing about the player but the
   nickname, a random id the browser keeps for [bans](#kick-and-ban), and after a multiplayer race its car and place.
@@ -623,6 +658,10 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
   is gone already. `kick` needs them on.
 - **Banning again** replaces the earlier ban of the same player: `ban Bob perm` after `ban Bob 1d` leaves one ban,
   for good.
+- **Blocks**: players block others by name (Settings, Online, More online settings, Blocked players): the free-roam
+  hub links neither way, nor with the host of a race lobby the other is in. The log has a line each time such a page
+  connects (again after a dropped connection), `[roam] 10.77.4.17 blocks "Bob", "carl"` (`who 10.77.4.17` names the
+  blocker): a name many block is one to look at (`grep blocks` in the log).
 - **What is kept**: `bans.json` in the state volume, with keyed hashes of the addresses and ids only (the key,
   `bans.key`, beside it): no address or id can be read back from them. The log has a `[ban]` line for each kick, ban
   and lift, and when a banned player is turned away (2 a minute per client at most).

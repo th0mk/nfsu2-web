@@ -243,6 +243,8 @@ impl App {
                     return self.too_many(q, s).await;
                 }
                 if self.vault_io(v, move || store.delete(&id)).await? {
+                    // its claimed name is free (names.rs)
+                    self.release_names(&id);
                     self.plain(q, s, 200, "Deleted", &[], Cache::Store, true).await
                 } else {
                     self.not_found(q, s).await
@@ -382,7 +384,7 @@ mod tests {
         // HEAD: the headers alone
         let h = kit.request("HEAD", "/vault", &[BEARER], b"").await;
         assert_eq!((h.status, h.header("content-length"), h.body.len()), (200, Some("262144"), 0));
-        assert!(super::super::ROBOTS_TXT.ends_with("Disallow: /vault"));
+        assert!(super::super::ROBOTS_TXT.contains("Disallow: /vault\n"));
     }
 
     #[tokio::test]

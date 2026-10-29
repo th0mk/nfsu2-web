@@ -73,6 +73,7 @@
 //             setting has a name and a description, the controls sheet is on the page and in F9's dialog
 //   mobile    the start page at phone size
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import { WebSocket } from 'ws';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -123,7 +124,7 @@ const track = c => {
   c.on('page', sockets);
   return c;
 };
-const browser = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed'),
+const browser = await chromium.launch({ ...pickBrowser(), headless: !process.argv.includes('--headed'),
   args: ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] });
 const newContext = browser.newContext.bind(browser);
 browser.newContext = async o => track(await newContext(o));
@@ -942,7 +943,7 @@ try {
   // (1 GB or more) must be collectable.  Round 2 has free roam on (settings.ini,
   // which Play reads again), so the network link ends too.  Its own Chrome, for --expose-gc.
   if (want('leak')) {
-    const b2 = await chromium.launch({ channel: 'chrome', headless: !process.argv.includes('--headed'),
+    const b2 = await chromium.launch({ ...pickBrowser(), headless: !process.argv.includes('--headed'),
       args: ['--enable-unsafe-webgpu', '--js-flags=--expose-gc'] });
     try {
       const c2 = track(await b2.newContext({ viewport: { width: 1280, height: 800 } }));
@@ -1012,7 +1013,7 @@ try {
   if (want('cache')) {
     const dir = path.join(OUT, 'profile');
     fs.rmSync(dir, { recursive: true, force: true });
-    const pc = track(await chromium.launchPersistentContext(dir, { channel: 'chrome', headless: !process.argv.includes('--headed'),
+    const pc = track(await chromium.launchPersistentContext(dir, { ...pickBrowser(), headless: !process.argv.includes('--headed'),
       viewport: { width: 1280, height: 800 }, args: ['--enable-unsafe-webgpu'] }));
     const c = watch(pc.pages()[0] ?? await pc.newPage(), 'C');
     const q = `save=${RUN}-c&env=NOMOVIES%3D1&env=NFSU2_FNG_LOG%3D1`;

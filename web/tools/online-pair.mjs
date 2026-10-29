@@ -14,6 +14,8 @@
 //        [--horn]    in the race each instance holds N (its horn, runtime/racehorn.c) for a second, one after the
 //                    other: instance n 3 + 4 (n - 1) s after the start; the others' logs say "[horn] <name>'s horn"
 //        [--quit-mid N:MS]   instance N's game quits MS after its race started (the others race on)
+//        [--racewin N:MS]   instance N's game ends its race MS after it started, the way not driven (racewin: as a
+//                    cheat that finishes the race at once does; the server's [cheat] lines see it)
 //        [--wait-room MS] [--join-wait MS]   host: time in the room before Start Race (default 70000); joiners:
 //                    time in the lobby before Refresh and Join Game (default 40000)
 //        [--ea-login]  through the game's EA Login screens (no player name: the instances' fresh saves have no
@@ -49,6 +51,7 @@
 // menu (UI_OLMain/UI_OLMAIN), the game room and the results screen, and logs no
 // fault / timeout / trap / unresolved call / "[net] BLOCKED" / page error.
 import { chromium } from 'playwright';
+import { chromeExe, pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -94,6 +97,7 @@ const HORN = argv.includes('--horn');
 const EA_LOGIN = argv.includes('--ea-login') || argv.includes('--canary');
 // --quit-mid N:MS: instance N quits its game MS after its race started (the others race on)
 const QUIT_MID = opt('quit-mid', '') ? opt('quit-mid', '').split(':').map(Number) : [0, 0];
+const RACEWIN = opt('racewin', '') ? opt('racewin', '').split(':').map(Number) : [0, 0];
 // --hide N[:FROM[:TO]]: instance N's tab in the background from its script's "log FROM" to "log TO"
 const HIDE = opt('hide', '') ? (([n, from, to]) => ({ n: +n, from: from || (+n === 1 ? 'race-start' : 'ready'), to: to || 'results' }))(opt('hide', '').split(':')) : null;
 fs.mkdirSync(OUT, { recursive: true });
@@ -271,6 +275,7 @@ function raceFlow(w, host, race, raceMs, inst) {
     w('+0    autopilot on 6000'); w('+0    wzero'); w('+0    log race-start');
   }
   if (HORN && race === 1) { w(`+${3000 + 4000 * (inst - 1)}ms log horn`); w('+0    down N'); w('+1000ms up N'); }
+  if (RACEWIN[0] === inst) { w(`+${RACEWIN[1]}ms log racewin`); w('+0    racewin'); }
   if (QUIT_MID[0] === inst) {
     // this player's process ends in the middle of the race (sockets closed, nothing more sent)
     w(`+${QUIT_MID[1]}ms dump quit_mid`);
@@ -356,8 +361,10 @@ if (HIDE) {
   // made visible; a page of the default context without it goes to the background like a player's tab
   const prof = path.join(OUT, 'chrome-profile');
   fs.rmSync(prof, { recursive: true, force: true });
-  const exe = process.env.CHROME_PATH || (process.platform === 'darwin'
-    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/opt/google/chrome/chrome');
+  // CHROME_PATH, else Google Chrome, else Playwright's full Chromium (npx playwright install chromium: --headless=new
+  // is the full browser's, not the headless shell's)
+  const exe = process.env.CHROME_PATH || (pickBrowser().channel ? chromeExe() : chromium.executablePath());
+  if (!exe || !fs.existsSync(exe)) throw new Error(`--hide: no browser at ${exe || 'Google Chrome\'s place'} (CHROME_PATH names one)`);
   chrome = spawn(exe, [...(argv.includes('--headed') ? [] : ['--headless=new']), '--remote-debugging-port=0', `--user-data-dir=${prof}`,
     '--no-first-run', '--no-default-browser-check', '--use-mock-keychain', '--password-store=basic', ...CHROME_ARGS, 'about:blank'],
   { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -368,7 +375,7 @@ if (HIDE) {
     chrome.on('exit', code => { clearTimeout(t); rej(new Error(`Chrome exited (${code}): ${err}`)); });
   });
   browser = await chromium.connectOverCDP(ws, { noDefaults: true });
-} else browser = await chromium.launch({ channel: 'chrome', headless: !argv.includes('--headed'), args: CHROME_ARGS });
+} else browser = await chromium.launch({ ...pickBrowser(), headless: !argv.includes('--headed'), args: CHROME_ARGS });
 const t0 = Date.now();
 const inst = [];
 async function start(i) {

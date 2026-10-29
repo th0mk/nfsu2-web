@@ -46,6 +46,7 @@
 // Each game has its own table below: Most Wanted's is empty until its first
 // scenario exists (an ad-hoc --script runs one of tests/mw/scripts/).
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -73,6 +74,9 @@ const UG2_TABLE = [
   // the Horn Volume slider (runtime/hornmenu.c): Options > Audio, and the pause menu's, whose bar is made of copies
   ['hornvolume', 'options_horn.txt', '[horn] volume 85 %', '', 400],
   ['hornpause', 'pause_horn.txt', 'parts as SLIDER_BASE_8 SLIDER_KNOB_8 SLIDER_HANDLE_8 SLIDER_BEG_8 SLIDER_END_8', '', 400],
+  // Exposure and White Level (runtime/tonemenu.c): Options > Display after Level Of Detail, and the pause menu's
+  ['tone', 'options_tone.txt', '[tone] white level 70 %', '', 400],
+  ['tonepause', 'pause_tone.txt', '[tone] white level 90 %', '', 400],
   // Power Units (runtime/powerunits.c): a row of Options > Gameplay after Speedometer Units
   ['powerunits', 'options_units.txt', '[units] power in bhp', '', 400],
   // the European game's Corsa and 106 (runtime/regional.c): Quick Race in the Corsa
@@ -81,6 +85,9 @@ const UG2_TABLE = [
   ['photo', 'photo_mode.txt', "the pause menu's Photo Mode", '', 400],
   // the pause menu's Replay (runtime/photo.c leaves it to the game): after some driving it plays the race back
   ['replay', 'replay_pause.txt', 'LOG back_to_pause', '', 400],
+  // ...and at 240 fps to the end, also after skipping back to the start and forward: it checks every frame that
+  // WorldTimer ticks as in the race (framerate.c's timer fix follows the game's own clock, which a replay restores)
+  ['replay240', 'replay_sync.txt', 'LOG back_to_pause', 'NFSU2_FPS=240 NFSU2_HFR_LOCKSTEP=1', 400],
   // ns* commands: without a page input layer, runtime/web/input_web.c translates them into the event ring
   ['keyboard', 'kb_rebind_save.txt', 'waitmem [0x008654a4]==6 satisfied', '', 400],
   ['careerbot', 'career_bot.txt', 'segment done', 'NFSU2_CAREER_BOT_RACES=2', 600],
@@ -294,7 +301,7 @@ async function runOne(browser, s) {
 const results = [], skipped = [];
 const queue = scen.filter(s => { if (s.blocked) { skipped.push(s); return false; } return true; });
 // (nothing to run, every scenario named not runnable yet: no browser, only the summaries)
-const browser = queue.length ? await chromium.launch({ channel: 'chrome', headless: true,
+const browser = queue.length ? await chromium.launch({ ...pickBrowser(), headless: true,
   args: ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] }) : null;
 console.log(`web suite ${run}${OF}: ${queue.length} scenario(s), ${opt.jobs} at a time, logs in ${path.relative(ROOT, OUT)}/`);
 async function worker() {

@@ -82,9 +82,13 @@ let cacheDir: FileSystemDirectoryHandle | null = null;
 // The cache files open now, the least recently used first.  WebKit gives a page 251 sync access handles at once
 // (Playwright WebKit 27.2; then "UnknownError: Invalid platform file handle"), and a cache file holds two: kept open
 // for good, the files of a long free roam took them all in 13 min, the game data's cache stopped, and so would have
-// any file of the save folder the game opened after.  At most CACHE_OPEN stay open; opening one again takes < 1 ms.
-const CACHE_OPEN = 64;
-const cacheFiles = new Map<string, Promise<CacheFile | null>>();
+// any file of the save folder the game opened after.  So at most CACHE_OPEN stay open, 64 there.  A file opened again
+// is no small thing though: its two handles take ~25 ms to open, and closing them holds up this worker and every read
+// waiting on it, ~8 ms in Firefox and ~2 ms in Chrome (NVMe disk, 2026-10-29; a hard disk takes longer).  Among a
+// free-roam crowd's cars 64 were too few: some 230 files were closed and opened again a minute.  Chrome and Firefox
+// on Windows took 2000 handles at once without a word, so there 512 stay open.
+const CACHE_OPEN = /Windows/.test(navigator.userAgent) && /\b(Chrome|Firefox)\//.test(navigator.userAgent) ? 512 : 64;
+const cacheFiles = new Map<string, Promise<CacheFile | null>>(), cacheSeen = new Set<string>();
 let keeping = true, kept = 0;                              // blocks still go into the cache (keepBlock)
 
 // Use the file at once, in the same task: a file that is not among the CACHE_OPEN newest is closed.
@@ -93,13 +97,24 @@ async function cacheFile(n: DNode) {
   const k = cacheKey(n);
   let p = cacheFiles.get(k);
   if (p) { cacheFiles.delete(k); cacheFiles.set(k, p); return p; }
-  p = openCacheFile(cacheDir, n).catch(e => { if (keeping) note(`[data] ${n.path} is not kept on this PC: ${e}`); return null; });
+  const t0 = performance.now(), again = cacheSeen.has(k);
+  cacheSeen.add(k);
+  p = openCacheFile(cacheDir, n).then(cf => {
+    const ms = performance.now() - t0;
+    sum.opened++; sum.openMs += ms; if (ms > sum.openMax) sum.openMax = ms; if (again) sum.reopened++;
+    return cf;
+  }, e => { if (keeping) note(`[data] ${n.path} is not kept on this PC: ${e}`); return null; });
   cacheFiles.set(k, p);
   for (const [ok, op] of cacheFiles) {
     if (cacheFiles.size <= CACHE_OPEN) break;
     cacheFiles.delete(ok);
     // after the reactions already waiting for it (a reader that just opened it uses it first)
-    void op.then(cf => { if (cf) { cf.h.flush(); cf.h.close(); cf.haveH.flush(); cf.haveH.close(); } }).catch(() => {});
+    void op.then(cf => {
+      if (!cf) return;
+      const t = performance.now();
+      cf.h.flush(); cf.h.close(); cf.haveH.flush(); cf.haveH.close();
+      sum.closed++; sum.closeMs += performance.now() - t;
+    }).catch(() => {});
   }
   return p;
 }
@@ -190,17 +205,22 @@ async function fetchOnce(url: string, start: number, len: number, ranged: boolea
   } finally { clearTimeout(timer); }
 }
 // A line a minute for the log while blocks come from the server (a first game, a new area): how many, how fast, how
-// many had to be asked again, and what this device's cache read meanwhile.  A game the cache has wholly says nothing.
+// many had to be asked again, and what this device's cache read meanwhile; also while cache files are closed and
+// opened again (CACHE_OPEN), with what that took.  A game the cache has wholly, its files open, says nothing.
 const SUM_MS = 60_000;
-let sum = { t: 0, fetched: 0, bytes: 0, ms: 0, maxMs: 0, again: 0, local: 0, ahead: 0 };
+const sumZero = () => ({ t: 0, fetched: 0, bytes: 0, ms: 0, maxMs: 0, again: 0, local: 0, ahead: 0,
+  opened: 0, openMs: 0, openMax: 0, reopened: 0, closed: 0, closeMs: 0 });
+let sum = sumZero();
 function dataSummary(now: number) {
   if (!sum.t) { sum.t = now; return; }
   if (now - sum.t < SUM_MS) return;
-  if (sum.fetched || sum.again)
+  if (sum.fetched || sum.again || sum.reopened)
     note(`[data] ${((now - sum.t) / 1000).toFixed(0)} s: ${sum.fetched} blocks from the server (${(sum.bytes / 1048576).toFixed(1)} MB, ` +
          `${sum.fetched ? (sum.ms / sum.fetched).toFixed(0) : 0} ms on average, the slowest ${sum.maxMs.toFixed(0)} ms${sum.again ? `, ${sum.again} tries again` : ''}${sum.ahead ? `, ${sum.ahead} read ahead` : ''}), ` +
-         `${sum.local} from this device's cache, ${cacheFiles.size} cache files open, ${(memBytes / 1048576).toFixed(0)} MB in memory${keeping ? '' : ', no longer kept on this device'}`);
-  sum = { t: now, fetched: 0, bytes: 0, ms: 0, maxMs: 0, again: 0, local: 0, ahead: 0 };
+         `${sum.local} from this device's cache, ${cacheFiles.size} cache files open (${sum.opened} opened, ${sum.reopened} of them again, ` +
+         `${sum.opened ? (sum.openMs / sum.opened).toFixed(0) : 0} ms on average, the slowest ${sum.openMax.toFixed(0)} ms; ${sum.closed} closed, ` +
+         `${sum.closed ? (sum.closeMs / sum.closed).toFixed(1) : 0} ms each), ${(memBytes / 1048576).toFixed(0)} MB in memory${keeping ? '' : ', no longer kept on this device'}`);
+  sum = { ...sumZero(), t: now };
 }
 async function fetchBlock(n: DNode, bi: number, start: number, len: number, t: Ticket): Promise<Uint8Array> {
   if (!mayFetch(t) || fetchWait.some(w => w.t.pri >= t.pri)) await new Promise<void>(go => fetchWait.push({ t, go }));

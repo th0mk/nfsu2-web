@@ -321,6 +321,8 @@ pub struct Opts {
     pub compact: bool,
     /// its page's id (the hello's "id")
     pub id: Option<&'static str>,
+    /// the players its page blocks (the hello's "block")
+    pub block: Option<&'static [&'static str]>,
 }
 
 pub fn deltas() -> Opts {
@@ -375,6 +377,9 @@ impl Client {
         }
         if let Some(id) = o.id {
             extra.insert("id".into(), id.into());
+        }
+        if let Some(b) = o.block {
+            extra.insert("block".into(), b.into());
         }
         let q = match (resume.is_some(), query.is_empty()) {
             (true, true) => "?resume".to_string(),
@@ -719,6 +724,40 @@ impl Host for FakeHost {
         let (tx, rx) = oneshot::channel();
         let _ = tx.send(self.vips.lock().unwrap().clone());
         rx
+    }
+    fn stop(&self) {}
+}
+
+/// a free-roam hub on the switch for the tests that keeps what it is told of blocks (`Host::blocks`): (vip, names), and
+/// (vip, none) for a browser that left (`Host::peer_gone`)
+pub struct BlockHub(pub Arc<Mutex<Vec<(u32, Vec<String>)>>>);
+
+impl Host for BlockHub {
+    fn vip(&self) -> u32 {
+        ip("10.77.0.253")
+    }
+    fn name(&self) -> &str {
+        "hub"
+    }
+    fn listed(&self) -> bool {
+        false
+    }
+    fn frame(&self, _from: u32, _data: Bytes, _ctx: nfsu2_util::FrameCtx) {}
+    fn peer_gone(&self, vip: u32) {
+        self.0.lock().unwrap().push((vip, Vec::new()));
+    }
+    fn info(&self) -> oneshot::Receiver<Value> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(json!({}));
+        rx
+    }
+    fn vips(&self) -> oneshot::Receiver<HashSet<u32>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(HashSet::new());
+        rx
+    }
+    fn blocks(&self, vip: u32, names: Vec<String>) {
+        self.0.lock().unwrap().push((vip, names));
     }
     fn stop(&self) {}
 }

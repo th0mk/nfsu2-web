@@ -711,6 +711,57 @@ async fn lan_impairment_hold_releases_a_links_datagrams_at_once_in_order() {
     sw.close().await;
 }
 
+// LAN impairment's legs (each player's own way to the server): a datagram takes its sender's leg up and its
+// receiver's leg down; one passed on by a third browser takes four legs; leg.N is browser N's own
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn lan_impairment_legs_add_up_per_player() {
+    let _s = serial().await;
+    let sw = start_full(opts(), "leg=60", None, None, None).await;
+    let mut a = Client::connect(sw.port, "A").await;
+    a.welcome().await;
+    let mut b = Client::connect(sw.port, "B").await;
+    b.welcome().await;
+    let mut c = Client::connect(sw.port, "C").await;
+    c.welcome().await;
+    // A to B straight: 120 ms; A to C, then C passing it on to B: 240 ms
+    let t0 = Instant::now();
+    a.udp(c.vip, 3658, 3658, b"via-c", 3, 0);
+    a.udp(b.vip, 3659, 3659, b"straight", 3, 0);
+    c.until(|g| g.frames.iter().find(|f| f.0[0] == 3).map(|f| f.1)).await;
+    c.udp(b.vip, 3658, 3658, b"via-c", 3, 0);
+    b.until_ms(3000, |g| (g.frames.iter().filter(|f| f.0[0] == 3).count() == 2).then_some(())).await;
+    let got: Vec<(String, f64)> = b
+        .got()
+        .frames
+        .iter()
+        .filter(|f| f.0[0] == 3)
+        .map(|f| (String::from_utf8_lossy(&f.0[16..]).to_string(), f.1.duration_since(t0).as_secs_f64() * 1000.0))
+        .collect();
+    println!("legs: {got:?}");
+    assert_eq!(got[0].0, "straight", "{got:?}");
+    assert!((115.0..200.0).contains(&got[0].1) && (235.0..340.0).contains(&got[1].1), "{got:?}");
+    assert_eq!(sw.info().await["impair"]["leg"], 60);
+    a.close().await;
+    b.close().await;
+    c.close().await;
+    sw.close().await;
+    // leg.2: the first browser on the switch (host number 2) has a way of its own
+    let sw = start_full(opts(), "leg=60,leg.2=150", None, None, None).await;
+    let mut a = Client::connect(sw.port, "A").await;
+    a.welcome().await;
+    let mut b = Client::connect(sw.port, "B").await;
+    b.welcome().await;
+    assert_eq!(a.vip & 0x1fff, 2);
+    let t0 = Instant::now();
+    a.udp(b.vip, 3658, 3658, b"own", 3, 0);
+    let r = b.until(|g| g.frames.iter().find(|f| f.0[0] == 3).map(|f| f.1)).await;
+    let ms = r.duration_since(t0).as_secs_f64() * 1000.0;
+    assert!((205.0..300.0).contains(&ms), "A's own leg (150) and B's (60): {ms:.1} ms");
+    a.close().await;
+    b.close().await;
+    sw.close().await;
+}
+
 // ---- the audit's F1: a departed player's address and the frames meant for it ----
 
 // a departed player's address goes only to its token: an attacker who asks first gets nothing of it

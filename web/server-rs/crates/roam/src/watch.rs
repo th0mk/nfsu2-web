@@ -7,10 +7,12 @@
 //!   LEAK_MPS (50 m) a second, takes off again, down to nothing: one jump across the map, and many short ones within a
 //!   few seconds, both count; two of the Respawn button's jumps do not, however soon after each other.  A cheat
 //!   that writes the car's place (a memory editor, the browser's developer tools) is one.  The game's own jumps are
-//!   not: the Respawn button puts the car back on the road near it (well under JUMP_M), and Jump to Garage (or a
-//!   shop, an event, a race, and back) goes through the menus or a loading screen, a status other than free roam (2, or
-//!   5 paused there), which starts the watch afresh.  Nothing else does: a long silence lets the car go as far as
-//!   DRIVE_MPS takes it in that time, and no farther.
+//!   not: the Respawn button puts the car back on the road near it (well under JUMP_M); the World Map's jump moves the
+//!   car within free roam, with no loading screen, onto an event's trigger or 15 m beside a shop's, and a jump that
+//!   lands within MAP_JUMP_M of one (jumps.rs) is left be (nfsu2.xyz, 2026-10-28: some 95 players' lines in an hour,
+//!   all of them such jumps, before it was); a shop's or the garage's menus and a race go through a loading screen, a
+//!   status other than free roam (2, or 5 paused there), which starts the watch afresh.  Nothing else does: a long
+//!   silence lets the car go as far as DRIVE_MPS takes it in that time, and no farther.
 //! - too fast: DRIVE_MPS or more between SNAPs for FAST_MS (2 s) on end.
 //! - a fast clock: the player's clock went CLOCK_RATE (1.3) times as fast as the server's, over two counts of CLOCK_MS
 //!   (30 s) on end.  A speed hack that makes the browser's time run faster makes the whole game faster, its car too.
@@ -38,12 +40,17 @@
 
 use nfsu2_util::vip_str;
 
+use crate::jumps;
+
 /// what a car of the game drives at most, with room to spare (m/s: 450 km/h; the fastest tuned cars make about 350)
 pub(crate) const DRIVE_MPS: f64 = 125.0;
 /// a teleport goes this much farther than DRIVE_MPS takes a car (m): the Respawn button's jump stays well under it;
 /// what a car went past DRIVE_MPS goes down by LEAK_MPS a second too (m/s)
 pub(crate) const JUMP_M: f64 = 300.0;
 const LEAK_MPS: f64 = 50.0;
+/// a teleport that lands this near an event's or a shop's trigger is the World Map's jump (m): it lands on an event's,
+/// and 15 m beside a shop's (20 m off an event's once, of some 170 on nfsu2.xyz)
+const MAP_JUMP_M: f64 = 25.0;
 /// a run over DRIVE_MPS this long (ms) is told
 const FAST_MS: f64 = 2000.0;
 /// the player's clock this many times as fast as the server's, over CLOCK_MS at least (ms), is told; the count
@@ -194,8 +201,11 @@ impl Watch {
         let way = if self.over >= JUMP_M {
             let over = std::mem::take(&mut self.over);
             self.end_run();
-            self.jumps += 1;
-            Some(Seen::Jump { from: self.over_from, to: p, d: distance(&self.over_from, &p), ms: self.over_ms, over })
+            // (the World Map's jump: neither a line nor a count)
+            (!map_jump(&p)).then(|| {
+                self.jumps += 1;
+                Seen::Jump { from: self.over_from, to: p, d: distance(&self.over_from, &p), ms: self.over_ms, over }
+            })
         } else if past >= 0.0 {
             if self.run_ms == 0.0 {
                 self.run_from = last.p;
@@ -356,6 +366,11 @@ pub(crate) fn distance(a: &[f64; 3], b: &[f64; 3]) -> f64 {
     (x * x + y * y + z * z).sqrt()
 }
 
+/// a car there came by the World Map's jump: near an event's or a shop's trigger (jumps.rs)
+fn map_jump(p: &[f64; 3]) -> bool {
+    jumps::TRIGGERS.iter().any(|&(x, y)| (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) < MAP_JUMP_M * MAP_JUMP_M)
+}
+
 fn plural(n: u32) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
@@ -456,7 +471,22 @@ mod tests {
         assert_eq!(from, x(580.0), "then the third and fourth");
     }
 
-    // a status out of free roam (Jump to Garage, a shop) between two SNAPs: no teleport
+    // the World Map's jump, 1-2 km onto an event's trigger or 15 m beside a shop's (two of nfsu2.xyz's, 2026-10-28), is
+    // no teleport; 100 m off the trigger it is
+    #[test]
+    fn the_world_maps_jump_is_no_teleport() {
+        let jump = |from: [f64; 3], to: [f64; 3]| {
+            let mut d = Drive::new();
+            d.snap(from);
+            let [seen, _] = d.snap(to);
+            (seen.is_some(), d.w.jumps)
+        };
+        assert_eq!(jump([-1261.0, 782.0, 48.0], [226.0, -478.0, 18.0]), (false, 0), "onto an event's trigger");
+        assert_eq!(jump([-408.0, 22.0, 14.0], [352.0, -749.0, 14.0]), (false, 0), "beside the Performance Shop's");
+        assert_eq!(jump([-1261.0, 782.0, 48.0], [326.0, -478.0, 18.0]), (true, 1), "100 m off the event's");
+    }
+
+    // a status out of free roam (a shop's or the garage's menus) between two SNAPs: no teleport
     #[test]
     fn out_of_free_roam_starts_afresh() {
         let mut d = Drive::new();

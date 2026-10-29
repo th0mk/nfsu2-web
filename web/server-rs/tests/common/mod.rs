@@ -112,6 +112,7 @@ pub fn online_host() -> (Arc<OnlineHost>, Arc<Mutex<Vec<String>>>) {
         state_dir: None,
         log: Arc::new(move |line: &str, _key: Option<&str>| l2.lock().unwrap().push(line.to_string())),
         tap: None,
+        claims: None,
     });
     (h, lines)
 }
@@ -202,7 +203,9 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
     }
     let pre = Bytes::copy_from_slice(&buf[end..]);
     let (r, w) = s.into_split();
-    lan.attach(r, w, pre, AttachOpts { resume, group, site, ..AttachOpts::default() });
+    // the hello's "claim" names the keyphrase's owner, as the server's lan.rs has it
+    let on_claim: nfsu2_lan::OnClaim = Box::new(nfsu2_claims::owner_of_token);
+    lan.attach(r, w, pre, AttachOpts { resume, group, site, on_claim: Some(on_claim), ..AttachOpts::default() });
 }
 
 impl Switch {
@@ -305,7 +308,11 @@ pub fn dgram(kind: u8, sender: u32, payload: &[u8]) -> Vec<u8> {
 
 /// a HELLO: room 0, in free roam (status 2), named "p", core version 1
 pub fn roam_hello(sender: u32) -> Vec<u8> {
-    let name = b"p";
+    roam_hello_named(sender, b"p")
+}
+
+/// a free-roam HELLO under `name` (core version 1, in free roam, room 0)
+pub fn roam_hello_named(sender: u32, name: &[u8]) -> Vec<u8> {
     let mut p = vec![0u8; 13 + name.len() + 1];
     p[0..2].copy_from_slice(&1u16.to_le_bytes());
     p[2] = 1;

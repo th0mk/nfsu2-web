@@ -120,6 +120,64 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     assert_eq!(lobbies(&k), [(W(0), 9, vec![])], "a stale advert is a lobby gone");
 }
 
+// a host the player blocks by name (any case: both are "p" here) is not on its list (`Hub::blocks`)
+#[test]
+fn a_blocked_hosts_lobby_is_not_listed() {
+    let mut k = Kit::new(RoamOptions::default());
+    join(&mut k, 0, "", true);
+    join(&mut k, 1, "", true);
+    for i in 0..2 {
+        k.from(W(i), &snap(100 + i, [i as f64 * 100.0, 0.0, 0.0]));
+    }
+    k.from(W(1), &lobby(101, 1, 0, 0xA1, 0x1111, 500, 0, 0, 6, &[101]));
+    k.clear();
+    k.from(W(0), &mapreq(100, 7));
+    assert_eq!(lobbies(&k), [(W(0), 7, vec![(500, 0, 0x1111, 1, 6, 0)])]);
+    k.hub.blocks(W(0), vec!["P".into()]);
+    k.step(1100.0);
+    k.clear();
+    k.from(W(0), &mapreq(100, 8));
+    assert_eq!(lobbies(&k), [(W(0), 8, vec![])]);
+}
+
+// carl hosts a lobby at its start with anna in it; Bob, whom anna blocks, stops at the start: Bob is not linked with
+// carl (the link Bob would hear of the lobby and join it by, and race anna), and neither the lobby nor carl is on
+// Bob's map; dave is linked with all three and sees the lobby.  Once anna is out of the lobby, Bob is linked with carl
+// again.  And the other way round: Bob in the lobby, anna at the start.  (every pair | the grid)
+#[test]
+fn a_lobby_is_not_there_for_one_kept_apart_from_its_players() {
+    let link = |k: &Kit, i: u32, j: u32| k.lists().get(&format!("{}:47210", W(i))).is_some_and(|l| l.iter().any(|e| e.vip == W(j)));
+    for (way, o) in ways() {
+        for (member, outsider) in [(1u32, 2u32), (2, 1)] {
+            let mut k = Kit::new(o.clone());
+            for (i, name, x) in [(0u32, &b"carl"[..], 0.0), (1, b"anna", 4.0), (2, b"Bob", 8.0), (3, b"dave", 12.0)] {
+                let h = hello_with(100 + i, &HelloOpts { core: 5, name, ..Default::default() });
+                k.from(W(i), &with_flags(h, 0x0080));
+                k.from(W(i), &snap(100 + i, [x, 0.0, 0.0]));
+            }
+            k.hub.blocks(W(1), vec!["bob".into()]);
+            k.from(W(0), &lobby(100, 1, 0, 0xC1, 0x1111, 0, 0, 0, 6, &[100, 100 + member]));
+            k.hub.tick();
+            assert!(link(&k, 0, member) && !link(&k, 0, outsider) && !link(&k, outsider, 0), "{way}: not carl and {outsider}");
+            assert!(!link(&k, 1, 2) && link(&k, 3, 0) && link(&k, 3, 1) && link(&k, 3, 2), "{way}: dave with all of them");
+            k.clear();
+            k.from(W(outsider), &mapreq(100 + outsider, 1));
+            let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| map_of(f)).flat_map(|m| m.4).collect();
+            assert_eq!(lobbies(&k), [(W(outsider), 1, vec![])], "{way}: no lobby on {outsider}'s map");
+            assert!(!map.iter().any(|e| e.0 == 0), "{way}: nor carl: {map:?}");
+            k.clear();
+            k.from(W(3), &mapreq(103, 1));
+            assert_eq!(lobbies(&k).first().map(|l| l.2.len()), Some(1), "{way}: dave sees it");
+            // the member leaves the lobby
+            k.step(600.0);
+            k.from(W(0), &lobby(100, 1, 0, 0xC1, 0x1111, 0, 0, 0, 6, &[100]));
+            k.clear();
+            k.hub.tick();
+            assert!(link(&k, 0, outsider) && !link(&k, 1, 2), "{way}: {outsider} with carl again");
+        }
+    }
+}
+
 // the wire: roam_core's advert is the hub's lobby, and the hub's LOBBIES are roam_core's lobbies
 #[test]
 fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {

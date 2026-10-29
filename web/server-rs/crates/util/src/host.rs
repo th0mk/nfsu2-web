@@ -60,6 +60,9 @@ pub struct FrameCtx {
     pub cause: Option<Arc<dyn Charge>>,
     /// the frame's place in the host's backlog ([`Backlog`]): given back when the host has handled it (drops it)
     pub slot: Option<Arc<Slot>>,
+    /// the keyphrase its page plays with, as the server knows it (nfsu2-claims: an owner of claimed names), from the
+    /// hello's "claim"; None: none
+    pub owner: Option<Arc<str>>,
 }
 
 /// The frames a host has been posted and not handled yet.  Node's hosts could never fall behind: they ran inside the
@@ -143,6 +146,9 @@ pub trait Host: Send + Sync + 'static {
     fn info(&self) -> oneshot::Receiver<serde_json::Value>;
     /// the browsers this host counts as its players now
     fn vips(&self) -> oneshot::Receiver<HashSet<u32>>;
+    /// the names browser `vip`'s page blocks (its hello's "block"): the free-roam hub links none of those players with
+    /// it, either way; the others take no notice
+    fn blocks(&self, _vip: u32, _names: Vec<String>) {}
     /// the server stops: save what is kept, end the timers
     fn stop(&self);
 }

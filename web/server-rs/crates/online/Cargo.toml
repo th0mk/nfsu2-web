@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 nfsu2-util.workspace = true
 nfsu2-names.workspace = true
+nfsu2-claims.workspace = true
 tokio.workspace = true
 bytes.workspace = true
 parking_lot.workspace = true

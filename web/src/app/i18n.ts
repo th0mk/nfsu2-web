@@ -112,11 +112,15 @@ function draw(el: Element, f: Msg, code?: string) {
   el.textContent = f();
   if (code) el.append(codeOf(code));
 }
-/** a problem's code as the page shows it (beside its text, in any language) */
-export function codeOf(code: string): HTMLElement {
+/** a problem's code as the page shows it (beside its text, in any language), after a line break opportunity: the text
+ *  ends with no space before it, so without one its last word and the code were one piece, wider than a phone's box
+ *  where both are long (Spanish "comprobaciones." and BROWSER-CHROMIUM at 320 px); now the code takes the next line */
+export function codeOf(code: string): DocumentFragment {
   const c = document.createElement('code');
   c.className = 'err-code'; c.textContent = code;
-  return c;
+  const f = document.createDocumentFragment();
+  f.append(document.createElement('wbr'), c);
+  return f;
 }
 
 /**

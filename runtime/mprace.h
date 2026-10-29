@@ -45,9 +45,11 @@ void mprace_ack(void);
 int  mprace_place(void);
 int  mprace_prize(void);
 /* the race's results as the game showed them (its results' rows, in their order): each racer's LAN name, whether it
- * finished, its time (s) or, in a drift race, its points, and which is ours; how many (0: no results) */
+ * finished, its time (s) or, in a drift race, its points, its row's time whether it finished or not (s: one still on
+ * the way when the race ended, 30 s after the first, has that), how far it came (laps), the way it drove (m: its
+ * average speed for its time) and which is ours; how many (0: no results) */
 #define MPRACE_RESULTS_MAX 6
-typedef struct { char name[16]; int finished, ours, points; float time; } MpResult;
+typedef struct { char name[16]; int finished, ours, points; float time, clock, done, dist; } MpResult;
 int  mprace_results(MpResult *r, int max);
 /* our car's engine power in the race as evened out (1: as it was) */
 float mprace_factor(void);

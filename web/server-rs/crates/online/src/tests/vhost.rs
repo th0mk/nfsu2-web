@@ -49,6 +49,7 @@ fn host(o: VhostLimits) -> (Core, Arc<Mutex<Vec<F>>>) {
         state_dir: None,
         log: Rc::new(|_: &str, _: Option<&str>| {}),
         tap: None,
+        claims: None,
         clocks: Rc::new(Clocks { now: Box::new(move || t.get()), timer: Box::new(move || t2.get()) }),
         limits: Default::default(),
         buddy_limits: Default::default(),
@@ -65,7 +66,7 @@ fn host(o: VhostLimits) -> (Core, Arc<Mutex<Vec<F>>>) {
 }
 
 fn frame(h: &mut Core, from: u32, f: &[u8]) {
-    h.frame(from, f, &FrameCtx { group: format!("vip {from}").into(), site: None, cause: None, slot: None });
+    h.frame(from, f, &FrameCtx { group: format!("vip {from}").into(), site: None, cause: None, slot: None, owner: None });
 }
 
 // TCP: refused, accepted, data both ways, FIN, RST, a browser that leaves

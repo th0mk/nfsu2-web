@@ -687,6 +687,7 @@ int mprace_report(MpReport *r){
     r->mode = M.rep_mode; r->track = M.rep_track; r->laps = M.rep_laps; r->cars = M.rep_cars;
     r->place = M.place; r->host = M.r.host; r->quit = M.quit_race;
     r->field = M.rep_field; r->factor = M.rep_factor; r->car = M.rep_car;
+    for (int k = 0; k < M.nres; k++) if (M.res[k].ours && M.res[k].finished) r->time = M.res[k].time;
     return 1;
 }
 const char *mprace_why(void){ return M.why[0] ? M.why : "unknown"; }
@@ -740,10 +741,11 @@ static int results_place(void){
 }
 /* The results' rows (0x515DB0 fills them, from the network race's record of each car where it has one), in their
  * order: +4 the car's id, +8 1, +0xC its time (G_TICKER's units), +0xC8 how far it came (laps), +0x104 a drift's
- * points.  +8 is 1 for every racer, the ones still on the way when the race ended too (30 s after the first was over
- * the line: a player who stood still had a time and 2nd place), so a racer finished where it came as many whole laps
- * as the farthest (not the race's laps: a downhill drift is one run of a 2-lap network race).  Into M.res; log: each
- * in the log too */
+ * points, +0x10C its top speed and +0x110 its average speed (m/s: what an online race's report sends of them,
+ * 0x5FE8D0; so the way it drove is its average times its time).  +8 is 1 for every racer, the ones still on the way
+ * when the race ended too (30 s after the first was over the line: a player who stood still had a time and 2nd
+ * place), so a racer finished where it came as many whole laps as the farthest (not the race's laps: a downhill drift
+ * is one run of a 2-lap network race).  Into M.res; log: each in the log too */
 static void results_read(int log){
     uint32_t pl = rd(G_PLAYER1), car = pl ? rd(pl + 4u) : 0, n = rd(G_RESULTS_N), e[MPRACE_RESULTS_MAX];
     int ours = okm(car, 0xc) ? (int)(uint16_t)MR16(car + 0xau) : -1, drift = rd(G_NET + N_MODE) == 3u, ne = 0;
@@ -759,14 +761,19 @@ static void results_read(int log){
         MpResult *r = &M.res[M.nres++];
         memset(r, 0, sizeof *r);
         uint32_t id = MR32(e[k] + 4u) & 0xffffu, np = id < 8u ? rd(G_NETPLAYERS + 4u * id) : 0, t = MR32(e[k] + 0xcu);
-        float laps = MRF32(e[k] + 0xc8u), pts = MRF32(e[k] + 0x104u);
+        float laps = MRF32(e[k] + 0xc8u), pts = MRF32(e[k] + 0x104u), avg = MRF32(e[k] + 0x110u), top = MRF32(e[k] + 0x10cu);
         if (okm(np, 0x22)) for (int i = 0; i < (int)sizeof r->name - 1 && MR8(np + 0x12u + (uint32_t)i); i++) r->name[i] = (char)MR8(np + 0x12u + (uint32_t)i);
         r->ours = (int)id == ours;
+        r->done = laps >= 0.f && laps < 1000.f ? laps : 0.f;
+        r->clock = t < 4000u * 3600u ? (float)t / 4000.f : 0.f;
+        r->dist = avg >= 0.f && avg < 1000.f && t < 4000u * 3600u ? avg * (float)t / 4000.f : 0.f;
         r->finished = MR32(e[k] + 8u) == 1u && far >= 1.f && laps < 1000.f && floorf(laps) >= floorf(far);
         if (r->finished && drift) r->points = pts > 0.f && pts < 1e7f ? (int)(pts + 0.5f) : 0;
         else if (r->finished) r->time = t < 4000u * 3600u ? (float)t / 4000.f : 0.f;
-        if (log) fprintf(stderr, "[mprace]   row %d: car %04x%s, %s, %s, %.2f s, %.0f points, %.3f laps\n", k + 1, id, r->ours ? " (ours)" : "", r->name,
-                         r->finished ? "finished" : "not finished", (double)t / 4000.0, (double)pts, (double)laps);
+        if (log) fprintf(stderr, "[mprace]   row %d: car %04x%s, %s, %s, %.2f s, %.0f points, %.3f laps, "
+                         "average %.2f m/s (%.0f m), top %.2f m/s\n", k + 1, id, r->ours ? " (ours)" : "", r->name,
+                         r->finished ? "finished" : "not finished", (double)t / 4000.0, (double)pts, (double)laps, (double)avg,
+                         (double)r->dist, (double)top);
     }
 }
 int mprace_results(MpResult *r, int max){

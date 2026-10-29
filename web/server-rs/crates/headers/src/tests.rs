@@ -377,3 +377,13 @@ fn https_and_the_forwarded_host() {
     assert_eq!(forwarded_host(&q("::1", &[("x-forwarded-host", ", x")]), &t), None);
     assert_eq!(forwarded_host(&q("::1", &[]), &t), None);
 }
+
+// Cloudflare Turnstile's script and frame, and nothing else more than the default policy
+#[test]
+fn the_policy_with_turnstile() {
+    let cf = "https://challenges.cloudflare.com";
+    assert_eq!(
+        CSP_TURNSTILE,
+        CSP.replace("'wasm-unsafe-eval'", &format!("'wasm-unsafe-eval' {cf}")).replace("frame-src 'none'", &format!("frame-src {cf}"))
+    );
+}

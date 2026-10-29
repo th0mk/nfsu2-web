@@ -33,6 +33,7 @@
 // dump has at least the shader census of a full quick race (CENSUS below).
 // The dump is game-derived: keep it out of git.
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -89,7 +90,7 @@ function checkDump(dir, census, allow = null) {
   return got;
 }
 
-const browser = await chromium.launch({ channel: 'chrome', headless: !argv.includes('--headed'),
+const browser = await chromium.launch({ ...pickBrowser(), headless: !argv.includes('--headed'),
   args: ['--enable-unsafe-webgpu', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] });
 const page = await browser.newPage();
 let lastExit = null, result = null;

@@ -66,8 +66,10 @@ static int      g_detached;      /* the page never attached: dropped back to nul
 #define RQ_CAP (64u * 1024u * 1024u)        /* resource queue ring (bytes, power of two) */
 #define KZERO  256u                         /* K arena bytes [0, 256): an all-zero block for TVert draws (base 0) */
 #define KFIRST 2048u                        /* [GW_K_HL, + GW_HL_BYTES): the frame's headlights; [GW_K_MARKS, + GW_MARKS_BYTES):
-                                               quick chat's places; the draws' blocks from here */
-_Static_assert(GW_K_HL >= KZERO && GW_K_HL + GW_HL_BYTES <= KFIRST && GW_K_MARKS + GW_MARKS_BYTES <= KFIRST, "K arena");
+                                               quick chat's places; [GW_K_TONE, + GW_TONE_BYTES): Exposure and
+                                               White Level; the draws' blocks from here */
+_Static_assert(GW_K_HL >= KZERO && GW_K_HL + GW_HL_BYTES <= KFIRST && GW_K_MARKS + GW_MARKS_BYTES <= KFIRST
+               && GW_K_TONE + GW_TONE_BYTES <= KFIRST, "K arena");
 
 typedef struct {
     GwDraw  *d;  unsigned dn;
@@ -870,6 +872,9 @@ void gw_marks(const GwMark *m, int n){
     if (n > 0) memcpy(k->m, m, sizeof *m * (size_t)n);
     k->n = n > 0 ? (uint32_t)n : 0;
 }
+/* tonemenu.c: Exposure (as a multiplier) and White Level for every frame from the next handed over */
+static GwTone g_tone = { GW_TONE_MAGIC, 1.f, 1.f, 1.f };
+void gw_tone(float mult, float white, float knee){ g_tone.mult = mult; g_tone.white = white; g_tone.knee = knee; }
 void metal_request_dump(long guest_frame, const char *label){
     snprintf(g_dump_label, sizeof g_dump_label, "%s", label ? label : "dump");
     for (char *q = g_dump_label; *q; q++) if (*q == '/' || *q == ' ' || *q == '\\') *q = '_';
@@ -883,6 +888,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     F->seq = g_gframe; F->dn = B->dn; F->vn = B->vn; F->rvn = B->rvn; F->kn = B->kn; F->pscn = B->pscn;
     F->draws = (uint32_t)(uintptr_t)B->d; F->tv = (uint32_t)(uintptr_t)B->v; F->raw = (uint32_t)(uintptr_t)B->rv;
     F->k = (uint32_t)(uintptr_t)B->kb; F->psc = (uint32_t)(uintptr_t)B->psc;
+    memcpy(B->kb + GW_K_TONE, &g_tone, sizeof g_tone);
     F->rq_end = (uint32_t)g_ctl->rq_head;
     unsigned vw, vh; view_wh(&vw, &vh);
     F->bb_w = g_bb_w ? g_bb_w : vw; F->bb_h = g_bb_h ? g_bb_h : vh;

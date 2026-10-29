@@ -180,13 +180,20 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     requestAnimationFrame(fit);
   };
   /** a label too long for the drawing (another language's words) a little smaller, so it stays inside the 336 px;
-   *  measured once the tab shows (a hidden one has no size) */
+   *  measured once the tab shows (a hidden one has no size).  Measured again after each change: a renderer that draws
+   *  at a rounded size keeps the width for a while as the size goes down (Chromium on Linux draws a Japanese label
+   *  63 units wide at 10.5 px and at 10 px), so one step in proportion can leave it past the drawing's edge; while it
+   *  is (the first step aims 1 unit inside), the next steps take at least 3 % off.  Where the width follows the size,
+   *  the first step fits and nothing changes. */
   const fit = () => {
     if (pad.hidden) return;
     for (const el of svg.querySelectorAll<SVGTextElement>('.pad-label, .pad-sub')) {
       el.style.fontSize = '';
-      const b = el.getBBox(), over = Math.max(1 - b.x, b.x + b.width - 335);
-      if (b.width && over > 0) el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * (b.width - over) / b.width}px`;
+      for (let step = 0; step < 8; step++) {
+        const b = el.getBBox(), over = Math.max(1 - b.x, b.x + b.width - 335);
+        if (!b.width || over <= (step ? 1 : 0)) break;
+        el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * Math.min((b.width - over) / b.width, step ? 0.97 : 1)}px`;
+      }
     }
   };
 

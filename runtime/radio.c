@@ -54,6 +54,9 @@ void guest_noyield(int d);        /* win32_ext.c: no fair yield, a free mutex ta
 #define MIXER_MAX_FRAMES   4096u         /* the mixer asks a reader for 256 */
 #define GUEST_START        0x10000u
 #define GUEST_END          0x28000000u   /* the guest's memory ends here (web/build.sh) */
+#define MIXER_RATE         0x008b44c6u   /* word: the rate the game mixes at (44100, or 22050 on a machine its performance level rates low) */
+#define MIXER_RATE_MIN     11025u        /* the game keeps its mixer rate between these (0x8b44a0, 0x8b44a2) */
+#define MIXER_RATE_MAX     48000u
 #define READER_SPEED       0x1cu         /* in the reader: 0 while the game has the sound paused */
 #define MUSIC_INPUTS       2u            /* a song is a pair of inputs, left and right */
 #define MUSIC_STREAM       0x18u         /* in the music player: the handle of its sound stream */
@@ -82,7 +85,7 @@ void guest_noyield(int d);        /* win32_ext.c: no fair yield, a free mutex ta
 enum { SONG_GAME, SONG_WAITING, SONG_FOLDER, SONG_SILENT };   /* who makes the sound of the song playing now */
 
 typedef struct { uint32_t reader[MUSIC_INPUTS], count; uint8_t side[MUSIC_INPUTS]; int paused; } Music;   /* the song's readers: none while the game has no song in the mixer */
-typedef struct { int who, over, ended, again; uint32_t place, seq, read[CHANNELS], waited, starved; } Song;   /* place: 0 menus, 1 driving */
+typedef struct { int who, over, ended, again; uint32_t place, seq, read[CHANNELS], phase[CHANNELS], waited, starved; } Song;   /* place: 0 menus, 1 driving */
 typedef struct {
     int was_on;
     int lent;                                      /* the table entry lent the page's tags, or NO_TAGS_LENT */
@@ -234,8 +237,8 @@ static void stop_game_song(CPU *c){
     g_radio.stopping = 0;
 }
 
-/* the radio was switched on (1), or cannot be: there is no room for the rings (0) */
-static int switch_on(HostStatusRadio *r){
+/* the radio was switched on (1), or cannot be: there is no room for the rings (0); stop: the song playing is the game's and is stopped */
+static int switch_on(HostStatusRadio *r, int stop){
     g_radio.on_seen = __atomic_load_n(&r->on, __ATOMIC_ACQUIRE);
     if (!g_radio.ring) g_radio.ring = malloc(RING_BYTES);
     if (!g_radio.ring){
@@ -247,7 +250,7 @@ static int switch_on(HostStatusRadio *r){
     g_music.paused = 0;
     __atomic_store_n(&r->rings.ring_frames, RING_FRAMES, __ATOMIC_RELAXED);
     __atomic_store_n(&r->rings.ring, (uint32_t)(uintptr_t)g_radio.ring, __ATOMIC_RELEASE);
-    g_radio.stop = "radio on";
+    g_radio.stop = stop ? "radio on" : NULL;
     return 1;
 }
 
@@ -302,6 +305,30 @@ static float track_volume(void){
     return MR32(GAME_STATE) == 6u && slider >= 0.0f && slider <= 1.0f ? PIPELINE_SCALE * slider : PIPELINE_SCALE;
 }
 
+/* The rings hold the track at RADIO_RATE, the reader hands the mixer frames at the mixer's rate: a song of the game is
+ * 32 kHz and its reader converts it, so the mixer rate decides how fast the rings are read.  Frames of the rings per
+ * frame handed over, in 16.16: 1.0 at 44100, 2.0 at 22050 (each frame then is the mean of two). */
+static uint32_t ring_step(void){
+    uint32_t rate = MR16(MIXER_RATE);
+    return rate < MIXER_RATE_MIN || rate > MIXER_RATE_MAX ? 1u << 16 : (uint32_t)(((uint64_t)RADIO_RATE << 16) / rate);
+}
+
+/* One frame handed over from the rings: the mean of `step` frames of the rings (one tap per whole frame of step,
+ * each between two frames of the rings) from the position `at`, 16.16 frames after `from`.  0: not all of them are in yet. */
+static int ring_frame(const float *ring, uint32_t from, uint32_t have, uint64_t at, uint32_t step, float *v){
+    uint32_t taps = (step + 0xffffu) >> 16;
+    *v = 0.0f;
+    for (uint32_t t = 0; t < taps; t++){
+        uint64_t q = at + (uint64_t)t * step / taps;
+        uint32_t i = (uint32_t)(q >> 16), f = (uint32_t)(q & 0xffffu);
+        if (i + (f != 0) >= have) return 0;
+        float a = ring[(from + i) & (RING_FRAMES - 1u)];
+        if (f) a += (ring[(from + i + 1u) & (RING_FRAMES - 1u)] - a) * (float)f / 65536.0f;
+        *v += a / (float)taps;
+    }
+    return 1;
+}
+
 /* What the page wrote is only trusted so far: `have` is cut to the ring, the ring index is masked, a sample is
  * NaN (silence) or limited to full scale, `total` only ends a track, and a page that stops writing ends it after as
  * long as a wait for a track.  Returns 1 when the track is over. */
@@ -312,20 +339,25 @@ static int read_folder_track(HostStatusRadio *r, unsigned ch, uint32_t out, uint
         return 0;
     }
     uint32_t total = __atomic_load_n(&r->reply.total, __ATOMIC_RELAXED);
-    uint32_t have = __atomic_load_n(&r->reply.written, __ATOMIC_ACQUIRE) - g_song.read[ch];
+    uint32_t written = __atomic_load_n(&r->reply.written, __ATOMIC_ACQUIRE);
+    uint32_t have = written - g_song.read[ch];
     const float *ring = g_radio.ring + ch * RING_FRAMES;
     float volume = track_volume();
+    uint32_t step = ring_step(), made = 0;
     if (have > RING_FRAMES) have = 0;
-    uint32_t take = n < have ? n : have;
-    for (uint32_t k = 0; k < n; k++){
-        float v = k < take ? ring[(g_song.read[ch] + k) & (RING_FRAMES - 1u)] : 0.0f;
-        MRF32(out + 4u * k) = (v != v ? 0.0f : v > 1.0f ? 1.0f : v < -1.0f ? -1.0f : v) * volume;
+    for (; made < n; made++){
+        float v;
+        if (!ring_frame(ring, g_song.read[ch], have, g_song.phase[ch] + (uint64_t)made * step, step, &v)) break;
+        MRF32(out + 4u * made) = (v != v ? 0.0f : v > 1.0f ? 1.0f : v < -1.0f ? -1.0f : v) * volume;
     }
-    g_song.read[ch] += take;
+    for (uint32_t k = made; k < n; k++) MRF32(out + 4u * k) = 0.0f;
+    uint64_t moved = g_song.phase[ch] + (uint64_t)made * step;
+    g_song.phase[ch] = (uint32_t)(moved & 0xffffu);
+    g_song.read[ch] += (uint32_t)(moved >> 16);
     if (ch == 0) __atomic_store_n(&r->rings.read, g_song.read[0], __ATOMIC_RELEASE);
-    if (take) g_song.starved = 0;
+    if (made) g_song.starved = 0;
     else g_song.starved += n;
-    g_song.over = take == 0 && (g_song.read[ch] >= total || g_song.starved > WAIT_FRAMES);
+    g_song.over = made == 0 && (g_song.read[ch] >= total || written >= total || g_song.starved > WAIT_FRAMES);
     return g_song.over;
 }
 
@@ -341,7 +373,7 @@ void sub_007292bc(CPU *c){
         sub_007292bc_orig(c);
         return;
     }
-    if (on && __atomic_load_n(&r->on, __ATOMIC_ACQUIRE) != g_radio.on_seen) on = switch_on(r);
+    if (on && __atomic_load_n(&r->on, __ATOMIC_ACQUIRE) != g_radio.on_seen) on = switch_on(r, 1);
     if (!on) switch_off();
     g_radio.was_on = on;
     if (on && g_song.who == SONG_SILENT && page_has_track_for(r, g_song.place)) g_radio.stop = "a track fits this place now";
@@ -364,7 +396,10 @@ void sub_004580e0(CPU *c){
     unsigned index = MR32(c->esp + TRAX_START_INDEX) & 0xffffu;
     return_tags();
     g_song.again = 0;
-    if (radio_on(r) && index < RADIO_TRACKS) start_radio_song(r, index);
+    /* the page switched the radio on and the game starts a song before the mixer step has seen it: the switch is taken here, or
+     * the step would later drop this song's request and stop it, and the game's own song would play under the folder's tags */
+    if (radio_on(r) && __atomic_load_n(&r->on, __ATOMIC_ACQUIRE) != g_radio.on_seen && !switch_on(r, 0)) g_song.who = SONG_GAME;
+    else if (radio_on(r) && index < RADIO_TRACKS) start_radio_song(r, index);
     else g_song.who = SONG_GAME;
     g_radio.stop = NULL;
     sub_004580e0_orig(c);

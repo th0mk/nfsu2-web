@@ -4,7 +4,8 @@ The game's server, in Rust: it serves the page, the game module and the game's o
 (the virtual LAN switch, the free-roam hub and the game's Online mode).  Its options are in `src/options.rs`, and the
 crates' docs say why each rule is what it is, with the audits they name.  The state folder keeps `etag.key`,
 `lan-addresses.json`, `online/stats.json`, `online/buddies.json`, `online/races.json` (the races going on, from a stop
-to the next start), `vault/` and the operator's bans (`bans.json`, `bans.key`: nfsu2-bans), and has the control
+to the next start), `vault/`, the claimed names (`names.json`: nfsu2-claims) and the operator's bans (`bans.json`,
+`bans.key`: nfsu2-bans), and has the control
 socket, `control.sock`, which `nfsu2-server ctl` talks to (who is on, kick, ban: src/app/control.rs, docs/web/VPS.md
 "Kick and ban").
 
@@ -214,6 +215,7 @@ behind, the switch dropped their snapshots; the server stayed at 1.5 cores): 400
 | nfsu2-roam | the free-roam hub |
 | nfsu2-online | the game's Online mode |
 | nfsu2-vault | keyphrase saves (`/vault`): each player's saves as the page sealed them, one file per keyphrase, the copy of an earlier day, the caps, the sweep of the unused |
+| nfsu2-claims | claimed names (`/names`): which keyphrase may play under a name, for 180 days after it last played; one name a keyphrase, a change a week; read by the Online lobby, EA Messenger and the free-roam hub |
 | nfsu2-server (src/) | the routes, the rules, the wiring, the start-up |
 | nfsu2-roamload | thousands of simulated players: driving or idle, in line, leaving and coming back (as web/tools/roam-crowd.mjs, lighter) |
 

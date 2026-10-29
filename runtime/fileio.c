@@ -787,7 +787,11 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
          * to 280 ms per read and stalled the game thread and the DirectSound
          * feeder.  The FH table is static, so f stays valid. */
         void guest_wait_begin(void); void guest_wait_end(void);
-#define READ_UNLOCKED(stmt) do { guest_wait_begin(); stmt; guest_wait_end(); } while (0)
+        /* NFSU2_TEST_READ_MS=N (test aid): every read takes N ms more, a slow
+         * PC's disk or file thread (tests/scripts/roam_crowd_stream.txt) */
+        static int read_ms = -1;
+        if (read_ms < 0){ const char *e = getenv("NFSU2_TEST_READ_MS"); read_ms = e ? atoi(e) : 0; }
+#define READ_UNLOCKED(stmt) do { guest_wait_begin(); if (read_ms > 0) usleep((useconds_t)read_ms * 1000u); stmt; guest_wait_end(); } while (0)
 #else
 #define READ_UNLOCKED(stmt) do { stmt; } while (0)
 #endif

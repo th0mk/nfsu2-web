@@ -1,0 +1,39 @@
+# Free-roam blocking (Settings, Online, Blocked players: roam_block): Ann blocks Bob, Cat blocks nobody.  All three
+# start a new career, at the same spot.  Ann and Bob each have Cat only for a friend, Cat has both (mp status: the
+# peers), for the whole run; with --bounce (the server stops and starts again) the pages come back with their
+# addresses and the blocks hold.  The server's log: `[roam] <Ann's address> blocks "bob"`, again after the bounce.
+#   roam-pair --page app --a "Ann:roam_mp_blocked.txt:NFSU2_ROAM_BLOCK=bob,PEERS=1"
+#        --b "Bob:roam_mp_blocked.txt:PEERS=1" --c "Cat:roam_mp_blocked.txt:PEERS=2" [--bounce 200]
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${PEERS} 6000
++0    roam mp waitcars ${PEERS} 3000
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++1800 roam mp status
++0    roam mp waitpeers ${PEERS} 3000
++0    roam mp status
++10   quit

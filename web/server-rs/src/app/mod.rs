@@ -17,12 +17,14 @@ mod files;
 mod kept;
 mod lan;
 mod manifest;
+mod names;
 mod pool;
 #[cfg(test)]
 mod route_tests;
 mod run;
 #[cfg(test)]
 mod testkit;
+mod turnstile;
 mod url;
 mod vault;
 mod wasm;
@@ -150,9 +152,9 @@ const STATUS: [(u16, &str); 8] = [
     (503, "Service Unavailable"),
 ];
 
-pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /lan\nDisallow: /vault";
+pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /lan\nDisallow: /vault\nDisallow: /names";
 /// what ROBOTS_TXT keeps search engines out of, under each base
-const DISALLOW: [&str; 7] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/lan", "/vault"];
+const DISALLOW: [&str; 8] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/lan", "/vault", "/names"];
 
 /// /robots.txt for an origin with the games under these bases ("" the root: ROBOTS_TXT)
 pub fn robots_txt(bases: &[String]) -> String {
@@ -244,6 +246,8 @@ pub struct App {
     pub roam: Option<Arc<nfsu2_roam::RoamHub>>,
     /// keyphrase saves (/vault), none with --vault-gb 0
     pub vault: Option<vault::VaultRoute>,
+    /// claimed names (/names), none without keyphrase saves
+    pub names: Option<names::NamesRoute>,
     /// the operator's bans (the control socket: control.rs), checked at /lan
     pub bans: Arc<nfsu2_bans::Bans>,
     /// SO_SNDBUF for /lan connections (NFSU2_LAN_SNDBUF, a measurement knob; 0: the kernel's own, which Linux grows
@@ -269,6 +273,7 @@ impl App {
         online: Option<Arc<OnlineHost>>,
         roam: Option<Arc<nfsu2_roam::RoamHub>>,
         vault: Option<Arc<nfsu2_vault::Vault>>,
+        names: Option<names::NamesRoute>,
         bans: Arc<nfsu2_bans::Bans>,
         pool_threads: usize,
         lan_sndbuf: usize,
@@ -304,6 +309,13 @@ impl App {
                 for cache in [Cache::Store, Cache::Revalidate, Cache::Immutable] {
                     let mut h: Vec<(String, String)> =
                         security_headers(hsts, noindex).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+                    // Cloudflare's check where names are claimed (turnstile.rs): its script and frame
+                    if names.as_ref().is_some_and(|n| n.turnstile.is_some()) {
+                        for (k, v) in h.iter_mut().filter(|(k, _)| k == "content-security-policy") {
+                            let _ = k;
+                            *v = nfsu2_headers::CSP_TURNSTILE.to_string();
+                        }
+                    }
                     for (k, v) in cache_headers(cache) {
                         h.push((k.to_string(), v.to_string()));
                     }
@@ -353,6 +365,7 @@ impl App {
             online,
             roam,
             vault: vault.map(vault::VaultRoute::new),
+            names,
             bans,
             lan_sndbuf,
             o,
@@ -569,9 +582,12 @@ impl App {
         if under && q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
             return self.put_artifact(q, s, &p[11..]).await;
         }
-        // keyphrase saves: their own methods and bodies (vault.rs)
+        // keyphrase saves and claimed names: their own methods and bodies (vault.rs, names.rs)
         if under && p == "/vault" {
             return self.vault(q, s, &u).await;
+        }
+        if under && p == "/names" {
+            return self.names(q, s, &u).await;
         }
         if q.method != "GET" && q.method != "HEAD" {
             return self

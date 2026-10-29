@@ -31,6 +31,8 @@ movies:career_movies.txt:tapuntil UI_StartCareer.fng satisfied:NOMOVIES=0
 options:options_display.txt:[D3D] Reset:
 hornvolume:options_horn.txt:[horn] volume 85 %:
 hornpause:pause_horn.txt:parts as SLIDER_BASE_8 SLIDER_KNOB_8 SLIDER_HANDLE_8 SLIDER_BEG_8 SLIDER_END_8:
+tone:options_tone.txt:[tone] white level 70 %:
+tonepause:pause_tone.txt:[tone] white level 90 %:
 powerunits:options_units.txt:[units] power in bhp:
 eucars:qr_eucars.txt:[expect] PASS:
 keyboard:kb_rebind_save.txt:waitmem [0x008654a4]==6 satisfied:

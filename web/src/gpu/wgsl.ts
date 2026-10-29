@@ -77,3 +77,17 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f }
 }
 @fragment fn fs_copy(i: BOut) -> @location(0) vec4f { return textureSample(src, smp, i.uv); }
 @fragment fn fs_opaque(i: BOut) -> @location(0) vec4f { return vec4f(textureSample(src, smp, i.uv).rgb, 1.0); }`;
+
+// The composite with Exposure and White Level (runtime/tonemenu.c, GwTone): each channel times mult (at most 1),
+// then a value above knee * white bends down so that 1 lands on white (a rational shoulder: slope 1 where it starts,
+// so no edge shows).  tone: mult, white, knee.
+export const TONE = COPY + /* wgsl */`
+@group(0) @binding(2) var<uniform> tone: vec4f;
+@fragment fn fs_tone(i: BOut) -> @location(0) vec4f {
+  let y = min(textureSample(src, smp, i.uv).rgb * tone.x, vec3f(1.0));
+  let s = tone.z * tone.y;
+  let m = (1.0 - s) / (tone.y - s);
+  let t = max(y - s, vec3f(0.0)) / (1.0 - s);
+  let b = s + (tone.y - s) * (m * t) / (1.0 + (m - 1.0) * t);
+  return vec4f(select(y, b, y > vec3f(s)), 1.0);
+}`;

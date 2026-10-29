@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { webkit, chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
@@ -98,7 +99,7 @@ const KIND = ['four colours', 'three colours', 'three with holes (dual plane)', 
 let failed = false;
 for (const name of which === 'both' ? ['chrome', 'webkit'] : [which]) {
   const browser = name === 'chrome'
-    ? await chromium.launch({ channel: 'chrome', headless: true, args: ['--enable-unsafe-webgpu'] })
+    ? await chromium.launch({ ...pickBrowser(), headless: true, args: ['--enable-unsafe-webgpu'] })
     : await webkit.launch({ headless: false });
   const page = await browser.newPage();
   await page.route('https://astc.test/', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>astc</title>' }));

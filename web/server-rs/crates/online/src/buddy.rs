@@ -39,15 +39,23 @@
 //! 0x74D660 the deletes); how its screens show each was checked only in part.
 //!
 //! Kept in <state>/online/buddies.json, so they hold over a restart: each persona's friends and blocked (names), the
-//! friend requests it sent that wait for an answer, and the messages from friends that wait for it.  A persona
-//! belongs to whoever plays under its name (there are no accounts), so whoever takes a name that is not online sees
-//! and can change its lists and gets its waiting messages (docs/web/PLAYING.md; the blocked list was the session's
-//! own until 2026-10-23, the Online audit's ONL-6, and is kept since for the players who block).  Invites are passed
-//! on and forgotten (to a persona online now).  Limits: 50 friends, 50 blocked, `MAX_ASKED` requests waiting from one
-//! persona, `MAX_MAIL` messages waiting for one (the oldest goes) and `ALL_MAIL` in all; `lists` lists, the least
-//! recently seen going first, new ones `list_rate` an hour per client; messages `msg_rate` a second (burst 3 x), the
-//! lists and the search `heavy_rate` a second (burst 4), over that: closed (the Online audit's ONL-1, ONL-3); chat
-//! messages 2 a second (burst 5) and 500 characters; a blocked persona's messages, invites and requests never arrive.
+//! friend requests it sent that wait for an answer, and the messages from friends that wait for it; but only for a
+//! claimed name (nfsu2-claims), with the keyphrase that claimed it (`owner`).  Before names could be claimed a persona
+//! was whoever played under its name, so players who kept the same name (NAME, the default, most of all) saw and
+//! changed one another's lists (a player's report, 2026-10-28).  Now:
+//! - a claimed name's lists are its owner's: made, read and kept for its keyphrase only (the lobby lets nobody else
+//!   play under it).  A list of before (no owner) goes to the first keyphrase that claims its name, and one whose
+//!   claim ended goes; NAME's and Player's of before went.  An owner that changed its name finds its lists under the
+//!   new one, and its friends find it there on theirs (`move_list`).
+//! - a name nobody claimed gets lists for the session (`temp`): never written, gone with the persona.
+//!
+//! Without claims (OnlineOptions::claims None) every list is kept for its name, as before.  The blocked list was the
+//! session's own until 2026-10-23 (the Online audit's ONL-6).  Invites are passed on and forgotten (to a persona
+//! online now).  Limits: 50 friends, 50 blocked, `MAX_ASKED` requests waiting from one persona, `MAX_MAIL` messages
+//! waiting for one (the oldest goes) and `ALL_MAIL` in all; `lists` lists, the least recently seen going first, new
+//! ones `list_rate` an hour per client; messages `msg_rate` a second (burst 3 x), the lists and the search
+//! `heavy_rate` a second (burst 4), over that: closed (the Online audit's ONL-1, ONL-3); chat messages 2 a second
+//! (burst 5) and 500 characters; a blocked persona's messages, invites and requests never arrive.
 //!
 //! A buddy connection's state stays readable until the event that closed it is over, so the code still handling that
 //! event goes on with it (a handler whose own answer closed the connection goes on with no persona, and fails where
@@ -127,11 +135,24 @@ pub struct FriendsList {
     pub r: IndexMap<String, (String, f64)>,
     pub m: Vec<Mail>,
     pub seen: String,
+    /// the keyphrase that claimed the name (nfsu2-claims; `owner` in buddies.json); None: a list of before claims
+    pub owner: Option<Arc<str>>,
+    /// a list of a name nobody claimed: for its session only, never written
+    pub temp: bool,
 }
 
 impl FriendsList {
     fn new(name: &str, seen: String) -> FriendsList {
-        FriendsList { name: name.to_string(), b: IndexMap::new(), i: IndexMap::new(), r: IndexMap::new(), m: Vec::new(), seen }
+        FriendsList {
+            name: name.to_string(),
+            b: IndexMap::new(),
+            i: IndexMap::new(),
+            r: IndexMap::new(),
+            m: Vec::new(),
+            seen,
+            owner: None,
+            temp: false,
+        }
     }
 
     /// nothing in it to keep
@@ -168,6 +189,11 @@ pub struct Buddies {
     pub l: BuddyLimits,
     dir: Option<PathBuf>,
     save_ms: f64,
+    /// the claimed names (the module's text); None: every list kept for its name
+    claims: Option<Arc<nfsu2_claims::Claims>>,
+    /// lower-case persona -> a list of before claims whose name nobody claimed yet: kept (written) for the first
+    /// keyphrase that does, read by nobody until then
+    dormant: HashMap<String, FriendsList>,
     /// lower-case persona -> its friends list, least recently seen first
     pub lists: OrderedMap<String, FriendsList>,
     /// lower-case persona -> buddy connection
@@ -227,11 +253,19 @@ fn write_names<'a>(s: &mut String, key: &str, names: impl Iterator<Item = &'a St
 }
 
 impl Buddies {
+    #[cfg(test)]
     pub fn new(dir: Option<PathBuf>, l: BuddyLimits) -> Buddies {
+        Buddies::with_claims(dir, l, None, 0)
+    }
+
+    /// the store of `dir` (none: in memory) as of `now` (ms since 1970: the claims that hold then)
+    pub fn with_claims(dir: Option<PathBuf>, l: BuddyLimits, claims: Option<Arc<nfsu2_claims::Claims>>, now: i64) -> Buddies {
         let mut b = Buddies {
             l,
             dir,
             save_ms: 10_000.0,
+            claims,
+            dormant: HashMap::new(),
             lists: OrderedMap::new(),
             online: OrderedMap::new(),
             fans: HashMap::new(),
@@ -248,7 +282,7 @@ impl Buddies {
             next: 0,
         };
         if b.dir.is_some() {
-            b.load();
+            b.load(now);
         }
         b
     }
@@ -257,7 +291,7 @@ impl Buddies {
         self.dir.as_ref().map(|d| d.join("buddies.json"))
     }
 
-    fn load(&mut self) {
+    fn load(&mut self, now: i64) {
         let Some(file) = self.file() else { return };
         let Ok(bytes) = std::fs::read(&file) else { return };
         let Ok(j) = crate::jsonparse::parse(&String::from_utf8_lossy(&bytes)) else { return };
@@ -284,6 +318,11 @@ impl Buddies {
         let from = rows.len().saturating_sub(self.l.lists as usize);
         for (r, name, seen) in rows.drain(from..) {
             let mut l = FriendsList::new(&name, seen);
+            l.owner = r
+                .get("owner")
+                .and_then(Value::as_str)
+                .filter(|o| o.len() == 22 && o.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
+                .map(Arc::from);
             read_names(r.get("B"), &mut l.b);
             if v3 {
                 read_names(r.get("I"), &mut l.i);
@@ -312,23 +351,97 @@ impl Buddies {
                     }
                 }
             }
-            if !l.is_empty() {
-                self.lists.insert(lower(&name), l);
+            if l.is_empty() {
+                continue;
             }
+            let k = lower(&name);
+            if let Some(c) = &self.claims {
+                match &l.owner {
+                    // its owner's while the claim holds; gone with the claim
+                    Some(o) => {
+                        if c.holder(&name, now).as_deref() != Some(&**o) {
+                            self.dirty = true;
+                            continue;
+                        }
+                    }
+                    // a list of before claims: NAME's and Player's were everyone's and go; the others wait for their
+                    // name's first claim
+                    None => {
+                        if nfsu2_claims::canonical(&name).is_some_and(|n| nfsu2_claims::UNCLAIMABLE.contains(&n.as_str())) {
+                            self.dirty = true;
+                        } else {
+                            self.dormant.insert(k, l);
+                        }
+                        continue;
+                    }
+                }
+            }
+            self.lists.insert(k, l);
         }
         // (a name twice in the file: the later list, in the earlier one's place)
-        for (owner, l) in self.lists.iter() {
-            for k in l.b.keys() {
-                self.fans.entry(k.clone()).or_default().insert(owner.clone());
-            }
-            for k in l.r.keys() {
-                self.asked.entry(k.clone()).or_default().insert(owner.clone());
-            }
-            for k in l.i.keys() {
-                *self.blockers.entry(k.clone()).or_default() += 1;
-            }
-            self.mail += l.m.len();
+        let keys: Vec<String> = self.lists.iter().map(|(k, _)| k.clone()).collect();
+        for k in keys {
+            self.index(&k);
         }
+    }
+
+    /// the store's indexes learn of the list of `owner` (lower case), which is in `lists`
+    fn index(&mut self, owner: &str) {
+        let Some(l) = self.lists.get(owner) else { return };
+        for k in l.b.keys() {
+            self.fans.entry(k.clone()).or_default().insert(owner.to_string());
+        }
+        for k in l.r.keys() {
+            self.asked.entry(k.clone()).or_default().insert(owner.to_string());
+        }
+        for k in l.i.keys() {
+            *self.blockers.entry(k.clone()).or_default() += 1;
+        }
+        self.mail += l.m.len();
+    }
+
+    /// a list into the store, at the most recently seen end
+    fn put_list(&mut self, k: String, l: FriendsList) {
+        self.drop_list(&k);
+        self.lists.insert(k.clone(), l);
+        self.index(&k);
+    }
+
+    /// the persona `old`'s list (lower case) is `name`'s now: its owner changed its name (nfsu2-claims), and the lists
+    /// that had it as a friend have the new name instead
+    fn move_list(&mut self, old: &str, name: &str) {
+        let Some(mut l) = self.take_list(old) else { return };
+        let k = lower(name);
+        l.name = name.to_string();
+        self.put_list(k.clone(), l);
+        if let Some(fans) = self.fans.remove(old) {
+            for f in &fans {
+                if let Some(fl) = self.lists.get_mut(f)
+                    && fl.b.shift_remove(old).is_some()
+                {
+                    fl.b.insert(k.clone(), name.to_string());
+                }
+            }
+            self.fans.entry(k).or_default().extend(fans);
+        }
+    }
+
+    /// a list out of the store (and its indexes)
+    fn take_list(&mut self, owner: &str) -> Option<FriendsList> {
+        let l = self.lists.get(owner)?;
+        let (b, r, i, m): (Vec<String>, Vec<String>, Vec<String>, usize) =
+            (l.b.keys().cloned().collect(), l.r.keys().cloned().collect(), l.i.keys().cloned().collect(), l.m.len());
+        for k in &b {
+            self.unfan(k, owner);
+        }
+        for k in &r {
+            self.unindex(k, owner);
+        }
+        for k in &i {
+            self.blocked_less(k);
+        }
+        self.mail -= m;
+        self.lists.remove(owner)
     }
 
     /// a friend on owner's list (false: it has none)
@@ -404,20 +517,20 @@ impl Buddies {
         }
     }
 
-    /// a list goes (the store is full)
+    /// a list goes (the store is full, its claim ended, its session ended)
     fn drop_list(&mut self, owner: &str) {
-        if let Some(l) = self.lists.remove(owner) {
-            for k in l.b.keys() {
-                self.unfan(k, owner);
-            }
-            for k in l.r.keys() {
-                self.unindex(k, owner);
-            }
-            for k in l.i.keys() {
-                self.blocked_less(k);
-            }
-            self.mail -= l.m.len();
+        self.take_list(owner);
+    }
+
+    /// the lists of names nobody claimed whose persona is not online go (they are for its session only): true when
+    /// any did
+    fn drop_temp(&mut self) -> bool {
+        let gone: Vec<String> =
+            self.lists.iter().filter(|(k, l)| l.temp && !self.online.contains_key(*k)).map(|(k, _)| k.clone()).collect();
+        for k in &gone {
+            self.drop_list(k);
         }
+        !gone.is_empty()
     }
 
     fn unfan(&mut self, k: &str, owner: &str) {
@@ -459,7 +572,9 @@ impl Buddies {
             "{\"v\":3,\"note\":\"NFSU2 online Messenger lists (persona names; friend requests and messages waiting for their persona)\",\"personas\":[",
         );
         let mut first = true;
-        for l in self.lists.values().filter(|l| !l.is_empty()) {
+        let mut dormant: Vec<&FriendsList> = self.dormant.values().collect();
+        dormant.sort_by(|a, b| a.seen.cmp(&b.seen).then_with(|| a.name.cmp(&b.name)));
+        for l in dormant.into_iter().chain(self.lists.values()).filter(|l| !l.is_empty() && !l.temp) {
             if !first {
                 s.push(',');
             }
@@ -468,6 +583,10 @@ impl Buddies {
             json::write_str(&mut s, &l.name);
             s.push_str(",\"seen\":");
             json::write_str(&mut s, &l.seen);
+            if let Some(o) = &l.owner {
+                s.push_str(",\"owner\":");
+                json::write_str(&mut s, o);
+            }
             write_names(&mut s, "B", l.b.values());
             if !l.i.is_empty() {
                 write_names(&mut s, "I", l.i.values());
@@ -689,6 +808,8 @@ impl Core {
             x.persona = None;
             x.key.clear();
         }
+        // (a name nobody claimed: its session's lists go with it)
+        self.buddies.drop_temp();
     }
 
     fn touch_lists(&mut self) {
@@ -713,6 +834,7 @@ impl Core {
         if self.buddies.prune(now) {
             self.buddies.dirty = true;
         }
+        self.buddies.drop_temp();
         if !self.buddies.dirty {
             return;
         }
@@ -753,8 +875,61 @@ impl Core {
             self.buddies.drop_list(&old);
             self.buddies.dirty = true;
         }
-        self.buddies.lists.insert(k, FriendsList::new(name, jsx::month_of(now)));
+        let mut list = FriendsList::new(name, jsx::month_of(now));
+        // a claimed name's list is its owner's; one nobody claimed is for its session
+        if let Some(c) = &self.buddies.claims {
+            list.owner = c.holder(name, now as i64);
+            list.temp = list.owner.is_none();
+        }
+        self.buddies.lists.insert(k, list);
         true
+    }
+
+    /// The lists of the persona b logs in as, by the claims: a claimed name's are its owner's (b's lobby session's
+    /// keyphrase: the lobby gave the name to nobody else), a list of before claims becomes theirs, one of a claim that
+    /// ended goes, and an owner that changed its name finds its lists under the new one; a name nobody claimed has
+    /// none but its session's own.
+    fn lists_at_login(&mut self, persona: &str, owner: Option<Arc<str>>) {
+        let Some(c) = self.buddies.claims.clone() else { return };
+        let k = lower(persona);
+        let now = self.bnow() as i64;
+        let holder = c.holder(persona, now);
+        let mine = holder.is_some() && holder == owner;
+        let (temp, of) = match self.buddies.lists.get(&k) {
+            Some(l) => (l.temp, l.owner.clone()),
+            None => (false, None),
+        };
+        if self.buddies.lists.contains_key(&k) {
+            if mine && (temp || of.is_none()) {
+                // claimed during its session (or by its first keyphrase): kept from now on
+                let l = self.buddies.lists.get_mut(&k).expect("there");
+                l.temp = false;
+                l.owner = owner.clone();
+                self.touch_lists();
+            } else if (mine && of != owner) || (!mine && !temp) {
+                // a list of a claim that ended
+                self.buddies.drop_list(&k);
+                self.touch_lists();
+            }
+            if self.buddies.lists.contains_key(&k) {
+                return;
+            }
+        }
+        if !mine {
+            return;
+        }
+        if let Some(mut l) = self.buddies.dormant.remove(&k) {
+            l.owner = owner;
+            l.name = persona.to_string();
+            self.buddies.put_list(k, l);
+            self.touch_lists();
+        } else if let Some(old) = owner.as_deref().and_then(|o| c.previous(o, now))
+            && self.buddies.lists.get(&old).is_some_and(|l| l.owner == owner)
+        {
+            self.buddies.move_list(&old, persona);
+            (self.log)(&format!("[online] \"{persona}\": EA Messenger lists moved from \"{old}\" (a name change)"), None);
+            self.touch_lists();
+        }
     }
 
     /// a persona was seen: its list moves to the most recently seen end
@@ -1015,6 +1190,8 @@ impl Core {
                 x.key = k.clone();
             }
             self.buddies.online.insert(k, b);
+            let owner = self.lobby.s(s).owner.clone();
+            self.lists_at_login(&persona, owner);
             self.seen_list(&persona);
             // (requests and messages that waited too long go, at most once an hour)
             let now = self.bnow();

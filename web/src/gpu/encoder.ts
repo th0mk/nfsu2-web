@@ -22,7 +22,7 @@
 // drew them on the screen).
 import * as P from './proto';
 import { D, F, Kind, Op } from './proto';
-import { COPY, FF_FS, TVERT_VS } from './wgsl';
+import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE } from './shader-abi';
 import { unpackDxt } from './dxt';
 import { dxt1HasPunch, dxt1ToAstc } from './astc';
@@ -105,6 +105,10 @@ export class Encoder {
   private copyMod: GPUShaderModule; private copyBgl: GPUBindGroupLayout;
   private copyPipes = new Map<string, GPURenderPipeline>();
   private linear: GPUSampler; private nearest: GPUSampler;
+  // the composite with Exposure and White Level (toneQuad), made at its first use
+  private toneRes: { mod: GPUShaderModule; bgl: GPUBindGroupLayout; buf: GPUBuffer; pipes: Map<string, GPURenderPipeline>;
+    bgs: WeakMap<GPUTextureView, Map<GPUSampler, GPUBindGroup>> } | null = null;
+  private toneArgs = new Float32Array(4);
 
   // back buffer (the game's device-size "screen"), and the texture the current frame
   // draws its screen into: the back buffer, or the canvas texture when sizes match
@@ -405,6 +409,37 @@ export class Encoder {
     const pass = enc.beginRenderPass({ colorAttachments: [{ view: dst, loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }], timestampWrites: ts });
     pass.setPipeline(this.copyPipe(format, opaque));
     pass.setBindGroup(0, this.copyBg(src, smp));
+    if (vp) pass.setViewport(vp[0], vp[1], vp[2], vp[3], 0, 1);
+    pass.draw(3);
+    pass.end();
+  }
+
+  /** copyQuad's opaque composite with Exposure and White Level (wgsl.ts TONE): tone = mult, white, knee */
+  toneQuad(enc: GPUCommandEncoder, src: GPUTextureView, dst: GPUTextureView, format: GPUTextureFormat, smp: GPUSampler,
+           tone: ArrayLike<number>, vp?: [number, number, number, number], ts?: GPURenderPassTimestampWrites): void {
+    const d = this.device;
+    const r = this.toneRes ??= {
+      mod: this.module('tone', TONE),
+      bgl: d.createBindGroupLayout({ entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }] }),
+      buf: d.createBuffer({ label: 'tone', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+      pipes: new Map(), bgs: new WeakMap(),
+    };
+    let p = r.pipes.get(format);
+    if (!p) r.pipes.set(format, p = d.createRenderPipeline({ label: `tone ${format}`, layout: d.createPipelineLayout({ bindGroupLayouts: [r.bgl] }),
+      vertex: { module: r.mod, entryPoint: 'vs_full' }, fragment: { module: r.mod, entryPoint: 'fs_tone', targets: [{ format }] },
+      primitive: { topology: 'triangle-list' } }));
+    let m = r.bgs.get(src);
+    if (!m) r.bgs.set(src, m = new Map());
+    let g = m.get(smp);
+    if (!g) m.set(smp, g = d.createBindGroup({ layout: r.bgl, entries: [{ binding: 0, resource: src }, { binding: 1, resource: smp }, { binding: 2, resource: { buffer: r.buf } }] }));
+    this.toneArgs.set([tone[0], tone[1], tone[2], 0]);
+    this.queue.writeBuffer(r.buf, 0, this.toneArgs);
+    const pass = enc.beginRenderPass({ colorAttachments: [{ view: dst, loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }], timestampWrites: ts });
+    pass.setPipeline(p);
+    pass.setBindGroup(0, g);
     if (vp) pass.setViewport(vp[0], vp[1], vp[2], vp[3], 0, 1);
     pass.draw(3);
     pass.end();

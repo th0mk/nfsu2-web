@@ -125,3 +125,59 @@ fn another_start_of_the_game_starts_its_watch_afresh() {
     k.from(V(1), &snap(999, [9000.0, 0.0, 0.0]));
     assert_eq!(cheats(&k), Vec::<String>::new());
 }
+
+/// a RACERES datagram as roam_core.c lays it out: lobby, race, mode, laps, n, 0; rows (id, flags, 3 bytes 0, time,
+/// done, dist)
+fn raceres(sender: u32, lobby: u32, rows: &[(u32, u8, f32, f32, f32)]) -> Vec<u8> {
+    let mut p = vec![0u8; 12 + 20 * rows.len()];
+    p[0..4].copy_from_slice(&lobby.to_le_bytes());
+    p[4..8].copy_from_slice(&0x7C80_E775u32.to_le_bytes());
+    p[8] = 1;
+    p[9] = 1;
+    p[10] = rows.len() as u8;
+    for (k, &(id, flags, time, done, dist)) in rows.iter().enumerate() {
+        let o = 12 + 20 * k;
+        p[o..o + 4].copy_from_slice(&id.to_le_bytes());
+        p[o + 4] = flags;
+        p[o + 8..o + 12].copy_from_slice(&time.to_le_bytes());
+        p[o + 12..o + 16].copy_from_slice(&done.to_le_bytes());
+        p[o + 16..o + 20].copy_from_slice(&dist.to_le_bytes());
+    }
+    dgram(16, sender, &p)
+}
+
+// a race the game ended at once for Bob (a test's racewin, its real rows): his win is a [cheat] line once both reports
+// came, naming him by his address though he left first
+#[test]
+fn a_race_won_by_cheating_names_its_winner() {
+    let mut k = two();
+    // (rows: Bob 101 first, Ann 100; flags 2: the reporter's own)
+    k.from(V(1), &raceres(101, 0xA1, &[(101, 2, 4.75, 0.006, 38.0), (100, 0, 34.75, 0.168, 901.0)]));
+    k.from(V(1), &bye(101));
+    k.lines.lock().clear();
+    k.hub.tick();
+    assert_eq!(cheats(&k), Vec::<String>::new(), "one of two reports");
+    k.from(V(0), &raceres(100, 0xA1, &[(101, 0, 4.75, 0.006, 38.0), (100, 2, 34.75, 0.168, 901.0)]));
+    k.hub.tick();
+    let l = cheats(&k);
+    assert!(
+        l.len() == 1
+            && l[0].starts_with("[cheat] 10.77.0.11 \"Bob\": won the race of lobby 000000a1 (race 7c80e775: sprint, 1 lap) in 0:04.8, ")
+            && l[0].contains("which no car does, having driven 0.6 % of the way")
+            && l[0].ends_with(": as 2 of 2 players' games saw it"),
+        "{l:?}"
+    );
+}
+
+// an honest race (a test's real rows): no line
+#[test]
+fn an_honest_race_is_none() {
+    let mut k = two();
+    // (flags 1 finished, 2 the reporter's own)
+    let own = |me: u32, id: u32| 1 | if me == id { 2 } else { 0 };
+    let rows = |me: u32| [(101, own(me, 101), 176.49, 1.0, 5265.0), (100, own(me, 100), 178.15, 1.0, 5281.0)];
+    k.from(V(1), &raceres(101, 0xA2, &rows(101)));
+    k.from(V(0), &raceres(100, 0xA2, &rows(100)));
+    k.hub.tick();
+    assert_eq!(cheats(&k), Vec::<String>::new());
+}

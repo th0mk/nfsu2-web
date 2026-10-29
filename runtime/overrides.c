@@ -947,6 +947,95 @@ void sub_0061c600(CPU *c){
     sub_0061c600_orig(c);
 }
 
+/* --- sub_00579810(read, priority, chunk): a queued read's priority, cdecl ---
+ * The game's reads wait in one queue (0x57B4A0 puts one on 0x865220) and go
+ * in order of priority, the lowest first (0x57E800 sorts the queue with
+ * 0x5735C0 before it starts one), at most three at once and only those of
+ * one file; the frame's service (0x57EF60, from the main loop at 0x5814C7)
+ * finishes at most one of them.  Every read has priority 5 (0x57B410), the
+ * track streamer's sections too: it sets 5 again here, with a 32 MB chunk
+ * (0x5E61C0, 0x5E6230, the only callers), and keeps two of them under way.
+ * In free roam the friends' cars load through the same queue (a car's
+ * GEOMETRY.BIN alone is some 80 reads, merged 16 at a time), so a section
+ * could wait behind whole cars.  When the streamer falls behind the player,
+ * the city shows black holes and the world stops on its "Loading" screen
+ * (HUD_World_Loading: 0x5DF810, the player less than 0.5 s from a section
+ * that is not in): 20 s and more in a player's log of 2026-10-28 (every
+ * block from the device's cache, 22 frames a second, twenty friends' cars
+ * coming and going, 6-7 s each).  The sections go first now, 4 ahead of the
+ * 5 of every other read.  Not shown to be the whole story: on a fast PC the
+ * sections waited about as long either way (tests/scripts/
+ * roam_crowd_stream.txt); the "[stream]" lines below tell, in a slow PC's
+ * log, how long they wait.  NFSU2_TEST_STREAM_FIFO=1 (test aid): the game's
+ * way. */
+#define STREAM_READ_PRIORITY 4u
+void sub_00579810_orig(CPU *c);
+void sub_00579810(CPU *c){
+    static int fifo = -1;
+    if (fifo < 0){ const char *e = getenv("NFSU2_TEST_STREAM_FIFO"); fifo = e && *e == '1'; }
+    if (!fifo && MR32(c->esp + 8u) == 5u) MR32(c->esp + 8u) = STREAM_READ_PRIORITY;
+    sub_00579810_orig(c);
+}
+/* Every frame (roam.c's frame hook, before the main loop's service), for the
+ * log: how long the streamer's sections waited, from their place in the
+ * queue to their read's end, how many reads the queue held, and the world's
+ * Loading screens.  A line a minute while sections are read
+ * ("[stream] 60 s: ..."), and one at the end of each Loading screen (its
+ * frames too: a game in the background runs almost none). */
+#define READS_QUEUE      0x00865220u   /* reads waiting (list head): +0x5C callback, +0x6C id */
+#define READS_STARTED    0x00865550u   /* reads under way (list head), the oldest first */
+#define GAME_FLOW        0x008900d8u   /* -> the game's state machine: +0 state (1 loading), +8 its mode (2 in the world) */
+static double ms_now(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
+void reads_frame(CPU *c){
+    (void)c;
+    /* the streamer's reads (callbacks 0x5DF110, a section, and 0x5E4F10, several) by id: seen this frame or done */
+    static struct { uint32_t id; double t0; int seen; } sec[32];
+    static int nsec, qmax, n, ld_n, ld_q, ld_sec;
+    static long ld_f0;
+    static double t_min, wsum, wmax, ld_t0, ld_s, ld_w;
+    double now = ms_now();
+    if (!t_min) t_min = now;
+    for (int i = 0; i < nsec; i++) sec[i].seen = 0;
+    int q = 0;
+    for (int l = 0; l < 2; l++){
+        uint32_t head = l ? READS_STARTED : READS_QUEUE, r = MR32(head);
+        for (int k = 0; r != head && r && k < 512; k++, r = MR32(r)){
+            if (!l) q++;
+            uint32_t cb = MR32(r + 0x5cu), id = MR32(r + 0x6cu);
+            if (cb != 0x005df110u && cb != 0x005e4f10u) continue;
+            int i = 0;
+            while (i < nsec && sec[i].id != id) i++;
+            if (i == nsec && nsec < 32){ sec[nsec].id = id; sec[nsec].t0 = now; nsec++; }
+            if (i < nsec) sec[i].seen = 1;
+        }
+    }
+    if (q > qmax) qmax = q;
+    if (q > ld_q) ld_q = q;
+    for (int i = 0; i < nsec; ){
+        if (sec[i].seen){ i++; continue; }
+        double w = now - sec[i].t0;
+        n++; wsum += w; if (w > wmax) wmax = w;
+        ld_sec++; if (w > ld_w) ld_w = w;
+        sec[i] = sec[--nsec];
+    }
+    uint32_t fl = MR32(GAME_FLOW);
+    int loading = fl && MR32(fl) == 1u && MR32(fl + 8u) == 2u;
+    if (loading && !ld_t0){ ld_t0 = now; ld_f0 = autotest_frame(); ld_sec = 0; ld_q = q; ld_w = 0; }
+    if (!loading && ld_t0){
+        double s = (now - ld_t0) / 1e3;
+        ld_n++; ld_s += s; ld_t0 = 0;
+        fprintf(stderr, "[stream] f=%ld the world waited %.1f s (%ld frames) on its Loading screen: %d section read(s) meanwhile, "
+                "the longest wait %.0f ms, the game's queue up to %d reads\n", autotest_frame(), s, autotest_frame() - ld_f0, ld_sec, ld_w, ld_q);
+    }
+    if (now - t_min >= 60e3){
+        if (n || ld_n)
+            fprintf(stderr, "[stream] %.0f s: %d section read(s), each waited %.0f ms on average, the longest %.0f ms; "
+                    "the game's queue up to %d reads; %d Loading screen(s), %.1f s\n",
+                    (now - t_min) / 1e3, n, n ? wsum / n : 0.0, wmax, qmax, ld_n, ld_s);
+        t_min = now; n = 0; wsum = wmax = 0; qmax = 0; ld_n = 0; ld_s = 0;
+    }
+}
+
 /* --- sub_00631e20(list, ride, ...): a ride's texture names, cdecl -----------
  * A ride's textures by name hash, into two lists of 69 (list +0 and +0x114,
  * their counts at +0x228 and +0x22c): for the car loader's Load (0x63AE70,

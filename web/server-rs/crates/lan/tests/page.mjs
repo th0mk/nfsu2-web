@@ -1,4 +1,4 @@
-// Six tests of the page (web/src/net/index.ts, bundled as the app bundles it) against the Rust switch, started by
+// Seven tests of the page (web/src/net/index.ts, bundled as the app bundles it) against the Rust switch, started by
 // tests/page.rs, which passes its ports.  What they read of the switch's insides (its peers, info(), reserved) comes
 // from the harness's GET /state.
 //   node page.mjs <case> <port> [<port> ...]
@@ -383,6 +383,18 @@ const cases = {
       await sleep(300);
       assert.equal(await size(), 0);
     } finally { link.close(); banned.close(); }
+  },
+
+  // the page: its hello names the players it blocks (NetOptions.block): page.rs reads what the hub was told
+  async block([port]) {
+    const { attachNet } = await pageNet(port);
+    const memory = new WebAssembly.Memory({ initial: 10, maximum: 10, shared: true }), roam = mailbox(memory, 0);
+    const link = attachNet(fakeGame(memory, { 4: roam }), { url: `ws://127.0.0.1:${port}/lan`, name: 'P', block: ['Bob', 'carl'], pingMs: 60_000 });
+    try {
+      want(roam, 1);
+      await link.online;
+      await until(async () => (await state(port)).peers.some(p => p.hello));
+    } finally { link.close(); }
   },
 
   // the page: what C queued at once goes as one bundle, a snapshot to several friends once; bundles from the switch are

@@ -1,0 +1,46 @@
+# A drive through the city among friends' cars coming and going, the way players met "Loading" screens in the
+# middle of free roam (2026-10-28 report): the world streams its sections through the game's one queue of reads,
+# the same one the friends' cars load through (runtime/overrides.c, sub_00579810).  A new career's player drives
+# on the autopilot for DRIVES x 3000 frames (~13 km across the city) among web/tools/roam-crowd.mjs's bots
+# (--n 300 --spread 10 --speed 20 --cars all on a server with --max-peers 1000: they circle round the start, so
+# the hub's links churn and friends' cars load all the time).  Ghost cars (NFSU2_ROAM_COLLIDE=0), or the solid
+# crowd boxes the car in at the start.  Read the "[stream]" lines (sections' waits, the queue, Loading screens)
+# and count "[fng] ... screen HUD_World_Loading.fng" between "drive: start" and "drive: end".  Seen 2026-10-28
+# on a fast PC (page on 4 CPUs, 30 fps): no Loading screen, sections waited ~55 ms either way, the game's own
+# order (NFSU2_TEST_STREAM_FIFO=1) or theirs first; with every read 50 ms slower (NFSU2_TEST_READ_MS=50) ~130 ms
+# either way, and a Loading screen now and then.  NFSU2_ROAM_POSELOG=/save/pose.csv with run-suite's --save-out
+# shows the route.
+#   web: run-suite.mjs --script roam_crowd_stream.txt --marker drive_end --net <name> --env NFSU2_ROAM=1
+#        --env NFSU2_ROAM_WEBTEST=vlan --env ROAM_PROFILE=<name> --env ROAM_CROWD_CARS=20 --env DRIVES=4
+#        --env NFSU2_ROAM_MAX_CARS=20 --env NFSU2_FPS=30 --env NFSU2_ROAM_COLLIDE=0 --timeout-scale 5
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++300  status crowd
++0    trace 30 state=i:[0x8900d8] sections=i:0x88eb20 reads=i:0x8650f4
++0    log drive: start
++0    loop ${DRIVES}
++0    autopilot on
++3000 status drive
++0    endloop
++0    log drive: end
++0    untrace
++60   status drive_end
++60   quit

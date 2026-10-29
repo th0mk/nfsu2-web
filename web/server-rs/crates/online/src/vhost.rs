@@ -99,6 +99,8 @@ pub struct VConn {
     /// the client's ids (a test without a switch: the browser's own address stands for its client)
     pub group: Arc<str>,
     pub site: Option<Arc<str>>,
+    /// the keyphrase its page plays with (FrameCtx::owner, as of its first frame)
+    pub owner: Option<Arc<str>>,
     pub rx_fin: bool,
     pub tx_fin: bool,
     pub bytes_in: u64,
@@ -289,6 +291,7 @@ impl Core {
                         cid,
                         group: ctx.group.clone(),
                         site: ctx.site.clone(),
+                        owner: ctx.owner.clone(),
                         rx_fin: false,
                         tx_fin: false,
                         bytes_in: 0,
@@ -513,6 +516,11 @@ impl Core {
     /// the connection's peer address, group and site
     pub fn conn_ids(&self, id: ConnId) -> Option<ConnIds> {
         self.vh.conns.get(&id).map(|c| (c.vip, c.peer(), c.group.clone(), c.site.clone()))
+    }
+
+    /// the keyphrase the connection's page plays with (nfsu2-claims' owner), if it named one
+    pub fn conn_owner(&self, id: ConnId) -> Option<Arc<str>> {
+        self.vh.conns.get(&id).and_then(|c| c.owner.clone())
     }
 
     /// the connection is still there (not closed, reset or gone with its browser)

@@ -21,6 +21,7 @@
 //             is the pack, and it is all that is fetched
 // The game module is out/web/nfsu2.wasm, as for the server (--wasm to use another).
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import http from 'node:http';
@@ -101,7 +102,7 @@ function report(step, ok, evidence) {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${step}: ${typeof evidence === 'string' ? evidence : JSON.stringify(evidence)}`);
 }
 
-const pc = await chromium.launchPersistentContext(path.join(OUT, 'profile'), { channel: 'chrome', headless: !process.argv.includes('--headed'),
+const pc = await chromium.launchPersistentContext(path.join(OUT, 'profile'), { ...pickBrowser(), headless: !process.argv.includes('--headed'),
   viewport: { width: 1280, height: 900 }, args: ['--enable-unsafe-webgpu'] });
 // requests for the game's files, whoever makes them (the page's workers too)
 let dataRequests = 0;

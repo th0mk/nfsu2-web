@@ -99,6 +99,9 @@ pub struct OnlineOptions {
     pub log: Arc<dyn Fn(&str, Option<&str>) + Send + Sync>,
     /// the dev trace: sees every frame the host sends (the switch's own tap sees what the browsers send)
     pub tap: Option<Tap>,
+    /// the claimed names (nfsu2-claims): who may play under a name, and whose EA Messenger lists are kept; None: every
+    /// name is anyone's, and every list is kept (as before names could be claimed)
+    pub claims: Option<Arc<nfsu2_claims::Claims>>,
 }
 
 enum Event {
@@ -142,6 +145,7 @@ fn run(title: &'static Title, o: OnlineOptions, rx: mpsc::Receiver<Event>) {
         state_dir: o.state_dir,
         log: Rc::new(move |line: &str, key: Option<&str>| log(line, key)),
         tap: o.tap,
+        claims: o.claims,
         clocks: Rc::new(Clocks { now: Box::new(|| now_ms() as f64), timer: Box::new(mono_ms) }),
         limits: Default::default(),
         buddy_limits: Default::default(),

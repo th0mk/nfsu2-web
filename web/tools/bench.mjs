@@ -56,6 +56,7 @@
 //   machine load: the 1-minute load average (macOS) or the busy cores (elsewhere) sampled every 5 s during the
 //   run (min/mean/max), plus uptime before/after.
 import { chromium } from 'playwright';
+import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -343,7 +344,7 @@ async function runOnce(fps, label, timed, wasm = variants[0].url) {
   // always a persistent context with a known directory: it finds this run's Chrome processes for the
   // per-thread CPU times (a fresh, deleted directory unless --profile keeps one)
   const dir = o.profile || fs.mkdtempSync(path.join(TMP, 'chprof-'));
-  const ctx = await chromium.launchPersistentContext(dir, { channel: 'chrome', headless: !o.headed, args, viewport: null });
+  const ctx = await chromium.launchPersistentContext(dir, { ...pickBrowser(), headless: !o.headed, args, viewport: null });
   const page = ctx.pages()[0] ?? await ctx.newPage();
   const browser = { close: async () => { await ctx.close(); if (!o.profile) fs.rmSync(dir, { recursive: true, force: true }); } };
   const lines = [], loads = [];
