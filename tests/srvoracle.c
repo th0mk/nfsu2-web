@@ -47,6 +47,8 @@ MODLINK_DECLARE(srv_);
 static const ModLink srv_modules[] = { { MODLINK_TABLES(srv_), .slot_lo = MM_SRV_LO, .slot_hi = MM_SRV_HI } };
 const GameOps g_game = { .id = "ug2", .exe_name = "SPEED2.EXE", .vroot = "C:\\NFSU2",
                          .modules = srv_modules, .nmodules = 1 };
+/* the exe's import table, which module.c reads when it binds a module's imports: empty here */
+const ImpEnt g_imp[1];
 const uint32_t g_imp_count = 0;
 static char g_dll[1024];
 int fileio_resolve_game(const char *win, char *out, size_t n){ (void)win; snprintf(out, n, "%s", g_dll); return 1; }
