@@ -86,7 +86,6 @@ const uint32_t g_srv_fn_addr[1]; const mod_fn g_srv_fn_ptr[1]; const uint32_t g_
 /* ---- fe_mw.c's: the screens it notes ------------------------------------ */
 static char g_noted[16][64]; static int g_nnoted;
 void autotest_note_screen(const char *nm){ if (g_nnoted < 16) snprintf(g_noted[g_nnoted++], 64, "%s", nm); }
-long autotest_frame(void){ return 0; }   /* the frame number of NFSU2_FNG_LOG=2's active-list lines */
 
 /* ---- mw_harness_gen.c's -------------------------------------------------- */
 extern const uint32_t mwt_tables[];      /* the words of 0x8EA000-0x8EB198 */

@@ -44,8 +44,6 @@
 #include <string.h>
 #include <strings.h>
 
-long autotest_frame(void);          /* autotest.c */
-
 #define G_FLOW     0x00925e90u      /* GameFlowManager's state */
 #define G_CFENG    0x0091cadcu      /* cFEng* */
 #define ENG_HEAD   0xe0u            /* FEngine: the active packages' head */
@@ -85,6 +83,8 @@ void autotest_note_screen(const char *nm);
 void mw_fe_frame(void){
     static struct { uint32_t pkg, hash; } seen[LIST_MAX];
     static int nseen;
+    static long frame;              /* autotest.c's frame number: it calls this once a Present, after counting it */
+    frame++;
     uint32_t pk[LIST_MAX], hs[LIST_MAX]; int n = 0;
     uint32_t e = engine();
     for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && n < LIST_MAX; p = rd(p + PKG_NEXT)){
@@ -98,7 +98,7 @@ void mw_fe_frame(void){
     /* NFSU2_FNG_LOG=2: the whole active list, head to tail, whenever it changes (a package can come back to the
      * list, or move up it, without being new to it) */
     static int lv = -1;
-    if (lv < 0){ const char *e = getenv("NFSU2_FNG_LOG"); lv = e ? atoi(e) : 0; }
+    if (lv < 0){ const char *v = getenv("NFSU2_FNG_LOG"); lv = v ? atoi(v) : 0; }
     int changed = n != nseen;
     for (int i = 0; i < n && !changed; i++) changed = seen[i].pkg != pk[i] || seen[i].hash != hs[i];
     if (lv >= 2 && changed){
@@ -107,7 +107,7 @@ void mw_fe_frame(void){
             const char *nm = pkg_name(pk[i]);
             o += snprintf(line + o, sizeof line - (size_t)o, " %s", nm ? nm : "?");
         }
-        fprintf(stderr, "[fng] f=%ld active:%s\n", autotest_frame(), n ? line : " none");
+        fprintf(stderr, "[fng] f=%ld active:%s\n", frame, n ? line : " none");
     }
     for (int i = 0; i < n; i++){ seen[i].pkg = pk[i]; seen[i].hash = hs[i]; }
     nseen = n;
