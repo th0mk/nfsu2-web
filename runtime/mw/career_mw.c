@@ -12,7 +12,8 @@
  *
  *   racewin          a shortcut finish: the local player is finished where it is, with three of the calls
  *                    the race's script makes at the finish line: Game.NotifyRaceFinished(racer), then, when
- *                    Game.AllHumanPlayersDone(), Game.EnterPostRaceFlow().  The script's calls at the line
+ *                    Game.AllHumanPlayersDone(), Game.EnterPostRaceFlow(); a race not yet won is set won first
+ *                    (RaceStatus.SetHasBeenWon, the script's own call), as some race kinds' finish skips it.  The script's calls at the line
  *                    (seen with NFSMW_HOOKLOG on the Lua bindings while the AI drove the player over it) are
  *                    NotifyCheckpointReached(racer, 0), NotifyLapFinished(racer, 1), SetRacerLapsLeft(1, 0),
  *                    CalculateRanking(racer, 1) (the racer's place, 1 when there is none), NotifyRaceFinished
@@ -92,6 +93,7 @@ uint64_t debug_frame_passes(void);
 #define FN_RACER_INDEX   0x0060dae0u
 #define FN_ALL_HUMANS_DONE 0x0060e0a0u
 #define FN_POSTRACE      0x00611f20u
+#define FN_SET_WON       0x00604080u     /* RaceStatus.SetHasBeenWon(bool) (thiscall, ecx = GRaceStatus): Lua method, the script calls it when the player wins */
 #define FN_QUERY         0x005d59f0u
 #define IID_WARP         0x004040e0u     /* the interface WarpPlayerToTrigger moves the car with */
 #define WARP_METHOD      0x68u
@@ -169,6 +171,10 @@ static void race_win(CPU *c){
         return; }
     uint32_t arg = s;
     gcall(c, FN_NOTIFY_FINISHED, 0, 1, &arg);
+    /* some race kinds finish without the script's win call (NotifyRacePlacement only posts a message): the
+     * player is first here, so the race is won as the script's SetHasBeenWon(true) makes it */
+    uint32_t rs = rd(G_RACESTATUS), yes = 1;
+    if (rs && !MR8(rs + RS_WON)) gcall(c, FN_SET_WON, rs, 1, &yes);
     int all = (int)(gcall(c, FN_ALL_HUMANS_DONE, 0, 0, 0) & 0xffu);
     if (all) gcall(c, FN_POSTRACE, 0, 0, 0);
     fprintf(stderr, "[mwrace] f=%ld racewin: racer %d finished through NotifyRaceFinished; all humans done %d%s\n",
