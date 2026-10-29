@@ -21,6 +21,8 @@
  *                             The fix hands it the empty string instead, which gives the empty name's key (0).
  *                             (This port reads guest address 0 as zeros, so here the game's code gives the same
  *                             key; the fix keeps it from depending on that, and says when it happens.)
+ *   NFSU2_TEST_NAME_FORMAT=1  a player name with a % in it, taken as a printf format by the game room (0x573140
+ *                             from three sites; sub_00573140 below): hashed as text instead (TRACKER M8-19, L-184).
  * Each fix logs its first 20 hits ("[fix] f=N ..."). */
 #include "cpu.h"
 #include "game.h"
@@ -109,4 +111,49 @@ void sub_004549b0(CPU *c){
     MR32(c->esp + 4u) = empty;          /* the caller's argument slot, put back below (cdecl: the caller pops it) */
     sub_004549b0_orig(c);
     MR32(c->esp) = 0u;                  /* after its `ret`, esp is at the argument */
+}
+
+/* M8-19 (L-184): player names as printf formats.  0x573140 (cdecl (format, ...)) prints into a 256-byte buffer on
+ * its stack (vsprintf 0x4643D0) and returns the string hash (0x460BF0) of what it printed.  Three callers in the LAN
+ * and Online game room (the function around 0x555C80, its player rows) hand it a name as the format, with no
+ * arguments: 0x555C9E the local player's LAN name (0x56E340), 0x555CE2 the name at +0x2A of the record at [+0x54],
+ * 0x55601B the name at +0x2A of each player of the room's list (other players' names, from the network).  A name
+ * with a % in it is then a format: %s and %n read and write through whatever is on the stack, %300d runs past the
+ * 256 bytes.  At those three sites a name with a % is hashed as the text it is (0x460BF0 on the name, what the
+ * printing gives for a name without one); a name without a % takes the game's own path.  NFSU2_TEST_NAME_FORMAT=1
+ * brings back the game's way.  NFSU2_FNG_LOG=3 logs the first names each site hashes. */
+#define FN_NAME_HASH   0x00460bf0u      /* the string hash, cdecl (const char *) -> eax */
+#define NAMEFMT_N      3
+static const uint32_t namefmt_ret[NAMEFMT_N] = { 0x00555ca3u, 0x00555ce7u, 0x00556020u };   /* after the calls */
+void sub_00573140_orig(CPU *c);
+void sub_00573140(CPU *c){
+    uint32_t ret = MR32(c->esp), fmt = MR32(c->esp + 4u);
+    int site = -1;
+    for (int i = 0; i < NAMEFMT_N; i++) if (ret == namefmt_ret[i]) site = i;
+    if (site < 0 || !fmt){ sub_00573140_orig(c); return; }
+    char name[64]; int n = 0, pct = 0;
+    for (; n < 63 && mem_is_committed(fmt + (uint32_t)n) && g_mem[fmt + (uint32_t)n]; n++){
+        name[n] = (char)g_mem[fmt + (uint32_t)n];
+        pct |= name[n] == '%';
+    }
+    name[n] = 0;
+    for (int k = n; k < 256 && !pct && mem_is_committed(fmt + (uint32_t)k) && g_mem[fmt + (uint32_t)k]; k++)
+        pct = g_mem[fmt + (uint32_t)k] == '%';
+    static int lv = -1, seen[NAMEFMT_N], off = -1, hits;
+    if (lv < 0){ const char *v = getenv("NFSU2_FNG_LOG"); lv = v ? atoi(v) : 0; }
+    if (lv >= 3 && seen[site]++ < 4)
+        fprintf(stderr, "[fix] f=%ld game room: name hash at 0x%08x of \"%s\"\n", autotest_frame(), ret - 5u, name);
+    if (!pct || test_switch("NFSU2_TEST_NAME_FORMAT", &off)){
+        if (pct && hit_log(&hits))
+            fprintf(stderr, "[fix] f=%ld TEST: the name \"%s\" is a printf format at 0x%08x (the game's way)\n",
+                    autotest_frame(), name, ret - 5u);
+        sub_00573140_orig(c);
+        return;
+    }
+    uint32_t h = call_guest(c, FN_NAME_HASH, 1, &fmt);
+    if (hit_log(&hits))
+        fprintf(stderr, "[fix] f=%ld the name \"%s\" holds a %%: hashed as text at 0x%08x, not printed as a format\n",
+                autotest_frame(), name, ret - 5u);
+    POP32(c->eip);                      /* the game's `ret` (cdecl: the caller pops the format) */
+    c->eax = h;
 }
