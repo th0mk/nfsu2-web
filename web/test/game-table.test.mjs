@@ -21,6 +21,7 @@ const UG2_UNSET = {
   win32_misc: 'win32_misc.c answers Most Wanted\'s imports; UG2\'s stay unimplemented as they always were',
   reg_keys: 'UG2\'s registry is the flat one: every key opens, values by name alone, as always',
   sandbox: 'UG2 maps every path into its game folder, as it always has',
+  find_sorted: 'UG2\'s folder scans keep the host\'s order, as they always have',
   init_tables: 'no [init] line: UG2\'s boot log stays as it was', ninit_tables: 'as init_tables', init_check: 'as init_tables',
   thread_names: 'the watchdog\'s report and the [thread] lines stay as they were', thread_start: 'as thread_names',
   d3d_modes: 'EnumAdapterModes lists UG2\'s own 6-row mode table (com.c g_modes), with the 4K row\'s stand-in',
@@ -101,6 +102,7 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.match(read('runtime/mw/registry_mw.c'), /\nconst RegKey mw_reg_keys\[\] = \{/);
   assert.equal(t.get('reg_file'), '".nfsmw_registry"');
   assert.equal(t.get('sandbox'), '1');
+  assert.equal(t.get('find_sorted'), '1', 'its folder scans in NTFS order (the alias lists)');
   assert.equal(ug2Table().get('reg_file'), '".nfsu2_registry"', 'UG2 keeps ~/.nfsu2_registry');
   assert.match(read('runtime/win32_misc.c'), /\nint win32_misc_call\(CPU \*c, const char \*dll, const char \*n, uint32_t \*out\)\{/,
     'win32_misc.c defines win32_misc_call as game.h\'s win32_misc');
