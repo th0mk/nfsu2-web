@@ -512,17 +512,6 @@ static int fe_is(const char *want){
     for (int i = 0; i < g_nbatch; i++) if (!strcasecmp(g_batch[i], want)) return 1;
     return 0;
 }
-/* NAME may list alternatives, A|B: any of them (a wait for one of two outcomes) */
-static int fe_is(const char *want){
-    if (!strchr(want, '|')) return fe_is1(want);
-    char one[200];
-    for (const char *p = want;; p++){
-        size_t n = strcspn(p, "|");
-        if (n && n < sizeof one){ memcpy(one, p, n); one[n] = 0; if (fe_is1(one)) return 1; }
-        p += n;
-        if (!*p) return 0;
-    }
-}
 const char *autotest_top_fng(void){ return g_game.top_screen ? g_game.top_screen() : 0; }
 
 /* ---- periodic memory trace ("trace" command) ------------------------- */
