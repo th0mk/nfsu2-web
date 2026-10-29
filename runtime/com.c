@@ -36,6 +36,7 @@ long metal_frames_dropped(void);
 long metal_tex_created(void);
 long metal_tex_uploaded(void);
 void metal_begin_frame(void);
+int  metal_tex_is_depth(unsigned id);       /* a depth texture (8 stages, gpu-abi.md 11.4) */
 #include "gfx.h"
 #include "vsemu.h"
 #ifdef __wasm__
@@ -3657,7 +3658,7 @@ int com_call(CPU *c, uint32_t magic){
                     if (sr3<6){ sr3++;
                         fprintf(stderr,"  [RT-tex] %ux%u fmt=%u levels=%u -> id=%u\n",
                                 w,h,fmt,lev?lev:1u,tid); } }
-                if (tid && !(usage & 3u)) texrep_created(tid, w, h, mlev, fmt, usage, pool);
+                if (tid && !(usage & 1u) && !metal_tex_is_depth(tid)) texrep_created(tid, w, h, mlev, fmt, usage, pool);
                 if (!tid){ g_tex_fail++;
                     static uint32_t bad[16]; static int nb=0; int seen=0;
                     for (int q=0;q<nb;q++) if (bad[q]==fmt) seen=1;
