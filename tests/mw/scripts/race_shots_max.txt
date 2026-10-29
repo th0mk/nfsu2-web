@@ -30,7 +30,7 @@
 +0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
 +0    tap RETURN
 +0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
-+30   tap RETURN                                         # (at once, a slow renderer's dialog missed it)
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen (a slow renderer's dialog may miss one tap)
 +0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
 +0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
 +0    log race_shots: GO
