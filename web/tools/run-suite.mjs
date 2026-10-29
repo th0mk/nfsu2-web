@@ -102,9 +102,20 @@ const UG2_OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player 
 { name: 'threads', script: 'quickrace.txt', marker: '[thread] test: 33 threads asked for, 32 started, 1 refused',
   extra: 'NFSU2_THREAD_TEST=33:4000', alarm: 400, pool: 64 }];
 
+// Most Wanted's scenarios (tests/mw/scripts/, tests/mw/checks/), as Underground 2's
+const MW_TABLE = [
+  // Underground 2's datafault on the start to the main menu (the races and the world are M4's): every 7th request to
+  // the game data's server is lost, every 29th left unanswered, every 4th block's compressed address never answers
+  // (the start reads no file as far as a 16th block, Underground 2's), and the cache on this PC fills up at the 40th
+  // block; tests/mw/checks/datafault.sh wants each of them seen
+  ['datafault', 'boot_menu.txt', 'waitfng MainMenu.fng satisfied', 'NFSU2_DATA_FAULT=fail:7,hang:29,stall:3000,deny:4,full:40', 400],
+// NFSU2_SAVE_SEED seeds each, as an ad-hoc scenario: a build with the D3DX oracle needs d3dx9_26.dll in the save
+// folder (and --env NFSMW_D3DX=/save/d3dx9_26.dll; tests/mw/scripts/boot_menu.txt)
+].map(([name, script, marker, extra, alarm, blocked, net]) => ({ name, script, marker, extra, alarm, blocked, net, seed: !!SEED }));
+
 // each game's table (run when no scenario is named) and its opt-in scenarios
-const SCENARIOS = { ug2: [UG2_TABLE, UG2_OPT], mw: [[], []] };
-const NONE = { mw: 'none yet (tests/mw/scripts/ has no suite scenario; --script FILE runs one of its scripts)' };
+const SCENARIOS = { ug2: [UG2_TABLE, UG2_OPT], mw: [MW_TABLE, []] };
+const NONE = {};    // a game whose table is empty: why ("none yet" when not given)
 
 // the environment of tests/run_suite.sh + tools/autorun.sh (DESIGN.md section 5)
 const SUITE_ENV = {
@@ -131,7 +142,7 @@ for (let i = 0; i < argv.length; i++) {
 const listing = () => [...TABLE, ...OPT].map(s => `${s.name.padEnd(11)} ${s.script.padEnd(22)} ${s.blocked ? 'NOT RUNNABLE YET: ' + s.blocked : `marker "${s.marker}"${s.extra ? ', ' + s.extra : ''}, ${s.alarm} s`}`);
 if (opt.help) usage(import.meta.url, GAME, 'Scenarios', listing(), NONE[GAME]);
 if (opt.list) {
-  for (const l of listing().length ? listing() : [NONE[GAME]]) console.log(l);
+  for (const l of listing().length ? listing() : [NONE[GAME] ?? 'none yet']) console.log(l);
   process.exit(0);
 }
 if (!opt.script && !names.length && !TABLE.length) nothingFor(GAME, NONE[GAME]);

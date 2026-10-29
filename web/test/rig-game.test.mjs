@@ -1,10 +1,10 @@
 // The test tools' --game (web/tools/rig-game.mjs), checked without a server, a browser or the game:
 //   node --test web/test/rig-game.test.mjs
 // 1. Every tool's --help prints its own header comment and then what it has for the game: Underground 2's (the
-//    default) or Most Wanted's, "none yet" with the reason until it has some; it starts nothing.
+//    default) or Most Wanted's, "none yet" with the reason until it has some (run-suite has some); it starts nothing.
 // 2. --game mw stops a tool that has nothing for Most Wanted yet, before it starts a server, a browser or a build;
 //    an unknown game stops every tool.
-// 3. run-suite: Underground 2's table is the same in --list and --help; Most Wanted's is empty.
+// 3. run-suite: each game's table is the same in --list and --help; Most Wanted's has datafault.
 // 4. requireGame: a server of the other game's module stops the tool; the same game, a module json without a game
 //    (Underground 2's of before) and a server it cannot reach let it go on.
 // 5. moduleLine: the module a server sends in one line (revision, game, lift, hash, and the stamp where the json
@@ -22,6 +22,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 8539), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 8540);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
+const FOR_MW = new Set(['run-suite']);   // the tools that have something for Most Wanted (3. checks what)
 // a server nobody runs, should a tool get past its --help or its check (none may): no own server, nothing reached
 const NOWHERE = { 'lan-pair': ['--base', 'http://127.0.0.1:9'], 'online-pair': ['--base', 'http://127.0.0.1:9'],
   'roam-pair': ['--base', 'http://127.0.0.1:9'], 'run-suite': ['--base', 'http://127.0.0.1:9'], 'app-test': ['--base', 'http://127.0.0.1:9'],
@@ -48,18 +49,25 @@ for (const name of TOOLS) {
     const ug2 = r.stdout.slice(header(name).length);
     assert.match(ug2, /^\n\n.+ for NFS Underground 2 \(--game ug2\):\n {2}\S/);
     assert.doesNotMatch(ug2, /none yet/);
-    // the same with --game ug2, and with --game mw: Most Wanted's, none yet and why
+    // the same with --game ug2, and with --game mw: Most Wanted's, or none yet and why
     assert.equal(tool(name, ['--game', 'ug2', '--help', ...NOWHERE[name]]).stdout, r.stdout);
     r = tool(name, ['--game', 'mw', '--help', ...NOWHERE[name]]);
     assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout.slice(header(name).length), /^\n\n.+ for NFS Most Wanted \(--game mw\):\n {2}none yet\b.+\n$/);
+    const mw = r.stdout.slice(header(name).length);
+    if (FOR_MW.has(name)) {
+      assert.match(mw, /^\n\n.+ for NFS Most Wanted \(--game mw\):\n {2}\S/);
+      assert.doesNotMatch(mw, /none yet/);
+    } else assert.match(mw, /^\n\n.+ for NFS Most Wanted \(--game mw\):\n {2}none yet\b.+\n$/);
   });
 
-  test(`${name}: --game mw stops it before it starts anything; an unknown game stops it`, () => {
-    let r = tool(name, ['--game', 'mw', ...NOWHERE[name]]);
-    assert.equal(r.status, 2, r.stdout + r.stderr);
-    assert.match(r.stderr, /^--game mw: none yet\b/);
-    assert.equal(r.stdout, '');
+  test(`${name}: --game mw stops it before it starts anything${FOR_MW.has(name) ? ' (it has something)' : ''}; an unknown game stops it`, () => {
+    let r;
+    if (!FOR_MW.has(name)) {
+      r = tool(name, ['--game', 'mw', ...NOWHERE[name]]);
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.match(r.stderr, /^--game mw: none yet\b/);
+      assert.equal(r.stdout, '');
+    }
     r = tool(name, ['--game', 'nfs6', '--help', ...NOWHERE[name]]);
     assert.equal(r.status, 2);
     assert.match(r.stderr, /^--game nfs6: no such game \(ug2, mw\)/);
@@ -73,7 +81,8 @@ test('run-suite: the scenario tables', () => {
   assert.ok(tool('run-suite', ['--help']).stdout.endsWith(list.stdout.split('\n').filter(Boolean).map(l => `  ${l}`).join('\n') + '\n'));
   const mw = tool('run-suite', ['--game', 'mw', '--list']);
   assert.equal(mw.status, 0);
-  assert.match(mw.stdout, /^none yet .*--script FILE/);
+  assert.match(mw.stdout, /^datafault {3}boot_menu\.txt {10}marker "waitfng MainMenu\.fng satisfied", NFSU2_DATA_FAULT=fail:7,hang:29,stall:3000,deny:4,full:40, 400 s$/m);
+  assert.ok(tool('run-suite', ['--game', 'mw', '--help']).stdout.endsWith(mw.stdout.split('\n').filter(Boolean).map(l => `  ${l}`).join('\n') + '\n'));
   // a named scenario of the other game is unknown
   const r = tool('run-suite', ['--game', 'mw', '--base', 'http://127.0.0.1:9', 'quickrace']);
   assert.equal(r.status, 2);
