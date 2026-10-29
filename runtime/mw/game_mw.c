@@ -150,10 +150,11 @@ static const uint32_t mw_modes[][2] = {
  * holder) sets itself up once at the start (method 3, 0x63F850): with a
  * joystick it polls it, keeps its state as the rest state (0x91F1E8) and
  * picks the joystick's bindings by its product name (0x63CD80, also run by
- * the profile load when the saved joystick is another, 0x56E27D); with none,
- * 0x63CD80 moves the front end's directions off the POV, so a pad that came
- * later had its buttons but no D-pad (seen in tests/mw/scripts/pad_menu.txt
- * runs).  That set-up runs again after a late pad. */
+ * the profile load when the saved joystick is another, 0x56E27D).  After a
+ * start with none, FE_ACTION_RIGHT's first joystick binding read (5, 0, 0),
+ * an axis, where a start with the pad had (3, 0, 1), the POV, and a pad that
+ * came later had its buttons but no D-pad (tests/mw/scripts/pad_menu.txt
+ * runs, the table peeked).  So that set-up runs again after a late pad. */
 static const PadLate mw_pad_late = {
     .cb = 0x007f1a6bu, .setup = 0x0063f850u, .setup_this = 0x00920de8u, .setup_vtbl = 0x008a7b9cu,
 };
