@@ -57,8 +57,11 @@ export function alphaFunc(alphaRef: number): number {
 /** Override constants every pixel shader module declares (unknown keys are a pipeline error). */
 export interface PsConstants { ALPHA_FUNC: number; PS20_TEXCOORD?: number }
 
-/** True when pixel shader module `ps_<id>` is a cube twin and needs the cube layout. */
-export function isCubePs(id: number): boolean { return id >= PSCUBE; }
+/** True when pixel shader module `ps_<id>` is a cube twin and needs the cube layout (its PSCUBE bit: a depth
+ *  variant's id, 512 and up, carries its stages above it, gpu-abi.md section 11.4). */
+export function isCubePs(id: number): boolean { return (id & PSCUBE) !== 0; }
+/** True when pixel shader module `ps_<id>` is a depth variant (8 stages, gpu-abi.md section 11.4). */
+export function isDepthPs(id: number): boolean { return id >= 512; }
 
 export interface ShaderAbi {
   /** group 0: VB (storage), K and P (uniform, dynamic offsets in that order), H (uniform, the frame's). */

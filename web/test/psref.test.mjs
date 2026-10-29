@@ -114,9 +114,14 @@ test('WGSL translator: every shader of Most Wanted\'s 31 effects, for 8 stages',
   // each pixel shader's depth variant (every 2D stage sampled with a depth compare, gpu-abi.md 11.4) translates
   const dv = /^depth variants: 65 pixel shaders, (\d+) with a depth lookup, 0 failures$/m.exec(out);
   assert.ok(dv && +dv[1] > 0, out);
-  const first = f => fs.readFileSync(path.join(dir, f), 'utf8').split('\n')[0];
+  // written beside the modules as ps_<id | 0xFF << 9> (shader-check compiles them): one per pixel shader
+  const text = f => fs.readFileSync(path.join(dir, f), 'utf8'), first = f => text(f).split('\n')[0];
+  const id = f => +(/^[pv]s_(\d+)\.wgsl$/.exec(f)?.[1] ?? -1);
+  const variants = fs.readdirSync(dir).filter(f => f.startsWith('ps_') && id(f) >= 512);
+  assert.equal(variants.length, 65);
+  assert.equal(variants.filter(f => text(f).includes('textureSampleCompareLevel')).length, +dv[1]);
   const models = {};
-  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.wgsl'))) {
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.wgsl') && id(f) < 512)) {
     const m = /^\/\/ [pv]s_\d+: ([pv]s_\d_[0-9x])/.exec(first(f));
     if (m) models[m[1]] = (models[m[1]] ?? 0) + 1;
   }

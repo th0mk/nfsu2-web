@@ -9,7 +9,7 @@
 //
 //   /test/shadercheck.html?opfs=<dir>/<sub>   the dump in OPFS (default shadercheck/shaders)
 //   &cross                                    also every game VS (ids < 1000) x every game PS
-import { ALPHA_ALWAYS, ALPHA_GREATEREQUAL, KWIN_SIZE, HLPAR_SIZE, createShaderAbi, group1Entries, isCubePs, type ShaderAbi } from '../gpu/shader-abi';
+import { ALPHA_ALWAYS, ALPHA_GREATEREQUAL, KWIN_SIZE, HLPAR_SIZE, createShaderAbi, group1Entries, isCubePs, isDepthPs, type ShaderAbi } from '../gpu/shader-abi';
 
 const q = new URLSearchParams(location.search);
 const pre = document.createElement('pre'); document.body.append(pre);
@@ -17,7 +17,7 @@ const log = (s: string) => { pre.textContent += s + '\n'; console.log(s); };
 
 interface ModuleResult { name: string; bytes: number; ms: number; errors: string[]; warnings: number }
 interface Summary {
-  adapter: string; modules: number; vs: number; ps: number; psCube: number; compileErrors: number; warnings: number;
+  adapter: string; modules: number; vs: number; ps: number; psCube: number; psDepth: number; compileErrors: number; warnings: number;
   compileMsTotal: number; compileMsMax: number; pipelines: number; pipelineErrors: number; pipelineMsTotal: number;
   pipelineMsMax: number; pull: { cases: number; exact: number; maxUlp: number; flushed: number; bad: number } | null;
   diff: DiffResult | null; psdiff: DiffResult | null; vs3diff: DiffResult | null; ps3diff: DiffResult | null;
@@ -631,8 +631,9 @@ async function main() {
   const s: Summary = {
     adapter: `${info.vendor} ${info.architecture}`.trim(), modules: results.length,
     vs: results.filter(r => r.name.startsWith('vs_')).length,
-    ps: results.filter(r => r.name.startsWith('ps_') && !isCubePs(idOf(r.name))).length,
-    psCube: results.filter(r => r.name.startsWith('ps_') && isCubePs(idOf(r.name))).length,
+    ps: results.filter(r => r.name.startsWith('ps_') && !isCubePs(idOf(r.name)) && !isDepthPs(idOf(r.name))).length,
+    psCube: results.filter(r => r.name.startsWith('ps_') && isCubePs(idOf(r.name)) && !isDepthPs(idOf(r.name))).length,
+    psDepth: results.filter(r => r.name.startsWith('ps_') && isDepthPs(idOf(r.name))).length,
     compileErrors: results.filter(r => r.errors.length).length, warnings: results.reduce((a, r) => a + r.warnings, 0),
     compileMsTotal: +cms.reduce((a, b) => a + b, 0).toFixed(1), compileMsMax: +Math.max(0, ...cms).toFixed(1),
     pipelines: pipeMs.length, pipelineErrors, pipelineMsTotal: +pipeMs.reduce((a, b) => a + b, 0).toFixed(1),

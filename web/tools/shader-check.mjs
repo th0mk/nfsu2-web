@@ -63,9 +63,10 @@ const CENSUS = { vsObjects: 16, psObjects: 24, decls: 11, vsPairs: 17, psModules
 // field: against psref (ps3diff, vs3diff) today's unit programs (cube twins included; a program psref refuses
 // on every input has no vectors and does not count) and Most Wanted's 22 SM3-class blobs (distinct by bytes:
 // 17 ps_2_x, 2 ps_3_0, 1 vs_3_0); against ps_ref_run and vs_run (psdiff, diff) its 75 older-model shaders,
-// 46 pixel (each with its stage-0 cube twin) and 29 vertex
+// 46 pixel (each with its stage-0 cube twin) and 29 vertex; compiled, with their pipelines, Most Wanted's 65 depth
+// variants (psDepth: each pixel shader with every 2D stage a depth stage, gpu-abi.md section 11.4)
 const ABI_LIMITS = /REJECTED: (MRT|vertex texture fetch|a vs_3_0 without a POSITION0 output|a ps_3_0 input the module ABI has no place for|a vs_3_0 output the module ABI has no place for|a loop count the application sets|a b# the application sets)/;
-const SM3_FLOOR = { unit: { ps3diff: 71, vs3diff: 4 }, mw: { ps3diff: 19, vs3diff: 1, psdiff: 92, diff: 29 } };
+const SM3_FLOOR = { unit: { ps3diff: 71, vs3diff: 4 }, mw: { ps3diff: 19, vs3diff: 1, psdiff: 92, diff: 29, psDepth: 65 } };
 const problems = [];               // reasons the run fails besides the browser check
 // REJECTED translations (but those allow matches) and, for a game dump, the census
 function checkDump(dir, census, allow = null) {
@@ -170,7 +171,7 @@ if (argv.includes('--sm3')) {
     for (const f of failures ?? []) console.log(`  FAIL ${s.name}: ${f}`);
     if (!r.ok) problems.push(`${s.name}: shader check failed`);
     for (const [k, min] of Object.entries(s.floor)) {
-      const got = r[k]?.modules ?? 0;
+      const got = (typeof r[k] === 'number' ? r[k] : r[k]?.modules) ?? 0;
       if (got < min) problems.push(`${s.name}: ${got} modules checked in ${k} < ${min}`);
     }
     fs.writeFileSync(path.join(s.dir, 'shadercheck.json'), JSON.stringify({ ...r, problems }, null, 1));

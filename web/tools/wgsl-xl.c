@@ -49,8 +49,9 @@
 
 static char g_buf[256 * 1024];
 /* the SM3-class version tokens, whose oracle is psref */
-/* --fx with 8 stages: each pixel shader's depth variant too (every 2D stage a depth stage, gpu-abi.md 11.4):
- * translated and counted, not written (the game asks for them at its draws, gpu_web.c ps_depth) */
+/* 8 stages: each pixel shader's depth variant too (every 2D stage a depth stage, gpu-abi.md 11.4), written as
+ * ps_<id | 0xFF << 9>.wgsl, so shader-check compiles it and builds its pipelines (the game asks for the variants
+ * its draws need, gpu_web.c ps_depth); --fx counts them */
 static int g_dv, g_dv_fail, g_dv_depth;
 static int is_sm3(uint32_t v){ return v == PSREF_PS_2_X || v == PSREF_PS_3_0 || v == PSREF_VS_3_0; }
 static int write_sm3_ps_vectors(const char *dir, int id, const uint32_t *tok, size_t ndw);
@@ -635,7 +636,10 @@ static int translate_one(const char *dir, FILE *ix, const uint32_t *tok, size_t 
             wgsl_set_depth_stages(0);
             g_dv++;
             if (nd <= 0){ g_dv_fail++; fprintf(stderr, "%s: no depth variant\n", base); }
-            else if (strstr(g_buf, "textureSampleCompareLevel")) g_dv_depth++;      /* it looks a depth stage up */
+            else {
+                if (strstr(g_buf, "textureSampleCompareLevel")) g_dv_depth++;      /* it looks a depth stage up */
+                snprintf(name, sizeof name, "ps_%d.wgsl", id | 0xFF << 9); put(dir, name, g_buf, (size_t)nd);
+            }
         }
         int nc = ps_to_wgsl_ex(p, id + 256, g_buf, sizeof g_buf, 1u);
         if (nc > 0){ snprintf(name, sizeof name, "ps_%d.wgsl", id + 256); put(dir, name, g_buf, (size_t)nc); }

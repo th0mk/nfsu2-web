@@ -159,7 +159,10 @@ divides x, y and z by w (both sides; with 4 stages it reads xy as it always did)
 **Depth stages** (gpu-abi.md §11.4): `wgsl_set_depth_stages(mask)` before a pixel translation makes each 2D stage in
 the mask a `texture_depth_2d` with a `sampler_comparison` (binding kind 2), and its lookups (`texld`, `texldp`, ps_1_x
 `tex`) `vec4f(textureSampleCompareLevel(texK, smpK, uv, ref))` with uv and ref after the divide the instruction asks
-for. The game's draws ask for such a variant when a depth texture is bound (gpu_web.c `ps_depth`).
+for. The game's draws ask for such a variant when a depth texture is bound (gpu_web.c `ps_depth`). With 8 stages
+`web/tools/wgsl-xl` also writes each pixel shader's variant with every 2D stage a depth stage, as
+`ps_<id | 0xFF << 9>.wgsl`, so `shader-check.mjs --sm3` compiles them and builds their pipelines (`psDepth`). No
+oracle compares their lookups yet: psref has no depth compare.
 
 - **Registers.** r0..r31; ps_2_x t0..t7 and v0/v1 (a colour outside its declaration reads (0, 0, 0, 1)); ps_3_0
   v0..v9 and vs_3_0 o0..o11 by their declarations, packed ones included (texcoord N = `uvN`, color0/1 = `col0/col1`,
