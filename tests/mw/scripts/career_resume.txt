@@ -5,7 +5,10 @@
 # left to right.  Resume Career loads the world (Loading.fng, GameFlow 4; FadeScreen.fng, 5; GameFlow 6) straight
 # into free roam: no race, the car where the career's free roam began (the autosave writes ALPHA again as it
 # starts), and no prologue race replayed (`autopilot races` logs any race that starts).  Then the free drive: Up
-# (gas) held 300 frames moves the car.
+# (gas) held 300 frames moves the car.  (***) The drive starts with GameFlow 6, as no screen comes later to wait
+# on: the car takes the gas from GameFlow 6's first frame (a probe run, the gas held from that frame: 10.7 km/h 21
+# frames on, while FadeScreen.fng and Autosave_Overlay.fng were up), HUD_SingleRace.fng never takes input, and
+# Autosave_Overlay.fng stays in the package list all through free roam (NFSU2_FNG_LOG=2).
 # tests/mw/checks/career_resume.sh wants the save read, Resume Career, free roam with no race, the car at the free
 # roam's start and moved by the gas:
 #   NFSU2_SAVE_SEED=DIR/career_start node web/tools/run-suite.mjs --game mw --script career_resume.txt \
@@ -27,7 +30,7 @@
 +0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
 +0    autopilot races                                    # logs a race, should one start
 +0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # the race status in career mode (Game.IsCareerMode)
-+600  log career_resume: free roam
++0    log career_resume: free roam                       # the car takes the gas now (***)
 +0    racestatus
 +0    where
 +0    down UP                                            # gas
