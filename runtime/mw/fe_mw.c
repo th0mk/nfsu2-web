@@ -39,8 +39,12 @@
  * green, red and alpha: a script fading an object moves that alpha (seen in
  * MW_LS_Splash.fng's objects, frame by frame). */
 #include "cpu.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+
+long autotest_frame(void);          /* autotest.c */
 
 #define G_FLOW     0x00925e90u      /* GameFlowManager's state */
 #define G_CFENG    0x0091cadcu      /* cFEng* */
@@ -90,6 +94,20 @@ void mw_fe_frame(void){
         const char *nm = old ? 0 : pkg_name(p);
         if (nm) autotest_note_screen(nm);
         n++;
+    }
+    /* NFSU2_FNG_LOG=2: the whole active list, head to tail, whenever it changes (a package can come back to the
+     * list, or move up it, without being new to it) */
+    static int lv = -1;
+    if (lv < 0){ const char *e = getenv("NFSU2_FNG_LOG"); lv = e ? atoi(e) : 0; }
+    int changed = n != nseen;
+    for (int i = 0; i < n && !changed; i++) changed = seen[i].pkg != pk[i] || seen[i].hash != hs[i];
+    if (lv >= 2 && changed){
+        char line[512]; int o = 0;
+        for (int i = 0; i < n && o < (int)sizeof line - 72; i++){
+            const char *nm = pkg_name(pk[i]);
+            o += snprintf(line + o, sizeof line - (size_t)o, " %s", nm ? nm : "?");
+        }
+        fprintf(stderr, "[fng] f=%ld active:%s\n", autotest_frame(), n ? line : " none");
     }
     for (int i = 0; i < n; i++){ seen[i].pkg = pk[i]; seen[i].hash = hs[i]; }
     nseen = n;

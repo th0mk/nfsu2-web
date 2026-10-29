@@ -105,6 +105,7 @@ typedef struct {
     int      acquired;
     uint32_t cursor;             /* next key event (kbd_ev_*) to report */
     uint64_t events;
+    uint8_t  snap[256];          /* NFSU2_KEY_LOG: the keys the last GetDeviceState reported down */
 } KDev;
 static KDev g_kd[8];
 static int  g_nkd;
@@ -384,6 +385,14 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
         if (!d->acquired) return DIERR_NOTACQUIRED;
         if (!p || !cb || cb > 4096u) return DIERR_INVALIDPARAM;
         uint8_t st[256]; kbd_state(st, 256);
+        /* a game that polls snapshots (Most Wanted's keyboard, once a frame) sees a key change only here: the
+         * log names each key whose state differs from the one this device reported last */
+        if (kbd_log()){
+            for (int k = 1; k < 256; k++)
+                if (st[k] != d->snap[k])
+                    fprintf(stderr, "[dikbd] snapshot 0x%08x: key 0x%02x %s\n", d->self, k, st[k] ? "down" : "up");
+            memcpy(d->snap, st, sizeof d->snap);
+        }
         mem_commit(p, cb); memset(g_mem + p, 0, cb);
         for (int k = 1; k < 256; k++){
             if (!st[k]) continue;
