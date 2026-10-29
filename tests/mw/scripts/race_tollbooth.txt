@@ -1,9 +1,13 @@
-# Most Wanted: the Challenge Series' first event, a Tollbooth Time Trial, from the load to the results screen,
-# MWK_RUNS times in a row (TRACKER M4-06: Quick Race has no tollbooth; its "custom race mode select" lists Circuit,
-# Sprint, Drag, Lap Knockout and Speedtrap).  Seeded with the save tree profiles_make.txt leaves (ALPHA and BRAVO;
-# NFSU2_SAVE_SEED), it loads ALPHA from the start's Load list (as race_win.txt does), takes the main menu's Challenge
-# Series (its 2nd item, 0x4B4E388B; without a profile the item asks for one), whose list (ChallengeSeries.fng,
-# "1 / 69") opens on its first event, a tollbooth ("Complete this Tollbooth Time Trial in under ..."), launches it
+# Most Wanted: the Challenge Series' first event, a Tollbooth Time Trial, from the load to the results screen through
+# a shortcut finish (racewin MWK_DRIVE frames after GO: the tollbooths' checkpoints and their time limits never come
+# into play), MWK_RUNS times in a row (TRACKER M4-06: Quick Race has no tollbooth; its "custom race mode select"
+# lists Circuit, Sprint, Drag, Lap Knockout and Speedtrap).  Seeded with the save tree profiles_make.txt leaves
+# (ALPHA and BRAVO; NFSU2_SAVE_SEED), it loads ALPHA from the start's Load list (as race_win.txt does), takes the main
+# menu's Challenge Series (its 2nd item, 0x4B4E388B; without a profile the item asks for one), whose list
+# (ChallengeSeries.fng,
+# "1 / 69") opens on its first event, a tollbooth ("Complete this Tollbooth Time Trial in under ..."; the script
+# waits for the list's highlighted row to draw the kind's label 0x5444F256, "Tollbooth Time Trial", and the check
+# reads that label and the "1 / 69" counter off the list's last drawn strings before each launch), launches it
 # ("Are you sure you want to launch this event?": Enter on the dialog's default 0xB8A7C6CD declines, its other
 # button 0xB8A7C6CC, one LEFT away, launches) and takes automatic gears.  From GO the game's AI drives the player's car
 # (autopilot) for MWK_DRIVE frames, then the shortcut finish (racewin, runtime/mw/career_mw.c) and the race's end
@@ -26,7 +30,8 @@
 +0    tap RETURN
 +0    loop ${MWK_RUNS}
 +0    waitfng ChallengeSeries.fng:e04d3a4d 1200          # the list ("challenge series")
-+0    tapuntil LEFT ChallengeSeries.fng:e04d3a4d@09c9a0f9 40 1200   # on its first event
++0    tapuntil LEFT ChallengeSeries.fng:e04d3a4d@09c9a0f9 40 1200   # on its first row
++0    waitfng ChallengeSeries.fng:e04d3a4d:5444f256@09c9a0f9 600   # whose event is a Tollbooth Time Trial
 +0    log race_tollbooth: event
 +0    tap RETURN
 +0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
