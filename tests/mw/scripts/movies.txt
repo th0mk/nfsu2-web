@@ -1,0 +1,368 @@
+# Most Wanted: every movie of the game folder through the game's own VP6 decoder (TRACKER M4-41; GAME 8.1: 32
+# files, 25.3 min).  From the main menu each one is played as the Blacklist rap sheet plays one (the "movie" aid,
+# runtime/mw/debug_mw.c: the name in 0x8F3750, FEAnyMovie.fng brought up) to its end, then again with Enter 6 s in:
+# the game's own rule (0x559880) lets input end a front-end movie 5 s after its start for a player who is not on
+# the Blacklist, as here (a first start with no alias).  Every step waits for the game (L-021): FEAnyMovie.fng in
+# the front end's active list ("movieup"), then gone ("movieend" logs how long it was up, and how long after the
+# press it went).  tests/mw/checks/movies.sh compares each play with the file's length at 29.97 fps and each skip
+# with the press:
+#   node web/tools/run-suite.mjs --game mw --script movies.txt --marker 'movies: 32 played' --env NOMOVIES=0 \
+#     --env NFSU2_QUIT_FRAMES=400000 --timeout-scale 12
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    movie ealogo
++0    movieup
++0    log movie ealogo: start
++0    movieend 30000
++0    log movie ealogo: end
++0    movie ealogo
++0    movieup
++6000ms tap RETURN
++0    log movie ealogo: press
++0    movieend 3000
++0    log movie ealogo: skipped
++0    movie psa
++0    movieup
++0    log movie psa: start
++0    movieend 30000
++0    log movie psa: end
++0    movie psa
++0    movieup
++6000ms tap RETURN
++0    log movie psa: press
++0    movieend 3000
++0    log movie psa: skipped
++0    movie attract_movie
++0    movieup
++0    log movie attract_movie: start
++0    movieend 30000
++0    log movie attract_movie: end
++0    movie attract_movie
++0    movieup
++6000ms tap RETURN
++0    log movie attract_movie: press
++0    movieend 3000
++0    log movie attract_movie: skipped
++0    movie blacklist_01
++0    movieup
++0    log movie blacklist_01: start
++0    movieend 30000
++0    log movie blacklist_01: end
++0    movie blacklist_01
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_01: press
++0    movieend 3000
++0    log movie blacklist_01: skipped
++0    movie blacklist_02
++0    movieup
++0    log movie blacklist_02: start
++0    movieend 30000
++0    log movie blacklist_02: end
++0    movie blacklist_02
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_02: press
++0    movieend 3000
++0    log movie blacklist_02: skipped
++0    movie blacklist_03
++0    movieup
++0    log movie blacklist_03: start
++0    movieend 30000
++0    log movie blacklist_03: end
++0    movie blacklist_03
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_03: press
++0    movieend 3000
++0    log movie blacklist_03: skipped
++0    movie blacklist_04
++0    movieup
++0    log movie blacklist_04: start
++0    movieend 30000
++0    log movie blacklist_04: end
++0    movie blacklist_04
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_04: press
++0    movieend 3000
++0    log movie blacklist_04: skipped
++0    movie blacklist_05
++0    movieup
++0    log movie blacklist_05: start
++0    movieend 30000
++0    log movie blacklist_05: end
++0    movie blacklist_05
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_05: press
++0    movieend 3000
++0    log movie blacklist_05: skipped
++0    movie blacklist_06
++0    movieup
++0    log movie blacklist_06: start
++0    movieend 30000
++0    log movie blacklist_06: end
++0    movie blacklist_06
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_06: press
++0    movieend 3000
++0    log movie blacklist_06: skipped
++0    movie blacklist_07
++0    movieup
++0    log movie blacklist_07: start
++0    movieend 30000
++0    log movie blacklist_07: end
++0    movie blacklist_07
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_07: press
++0    movieend 3000
++0    log movie blacklist_07: skipped
++0    movie blacklist_08
++0    movieup
++0    log movie blacklist_08: start
++0    movieend 30000
++0    log movie blacklist_08: end
++0    movie blacklist_08
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_08: press
++0    movieend 3000
++0    log movie blacklist_08: skipped
++0    movie blacklist_09
++0    movieup
++0    log movie blacklist_09: start
++0    movieend 30000
++0    log movie blacklist_09: end
++0    movie blacklist_09
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_09: press
++0    movieend 3000
++0    log movie blacklist_09: skipped
++0    movie blacklist_10
++0    movieup
++0    log movie blacklist_10: start
++0    movieend 30000
++0    log movie blacklist_10: end
++0    movie blacklist_10
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_10: press
++0    movieend 3000
++0    log movie blacklist_10: skipped
++0    movie blacklist_11
++0    movieup
++0    log movie blacklist_11: start
++0    movieend 30000
++0    log movie blacklist_11: end
++0    movie blacklist_11
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_11: press
++0    movieend 3000
++0    log movie blacklist_11: skipped
++0    movie blacklist_12
++0    movieup
++0    log movie blacklist_12: start
++0    movieend 30000
++0    log movie blacklist_12: end
++0    movie blacklist_12
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_12: press
++0    movieend 3000
++0    log movie blacklist_12: skipped
++0    movie blacklist_13
++0    movieup
++0    log movie blacklist_13: start
++0    movieend 30000
++0    log movie blacklist_13: end
++0    movie blacklist_13
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_13: press
++0    movieend 3000
++0    log movie blacklist_13: skipped
++0    movie blacklist_14
++0    movieup
++0    log movie blacklist_14: start
++0    movieend 30000
++0    log movie blacklist_14: end
++0    movie blacklist_14
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_14: press
++0    movieend 3000
++0    log movie blacklist_14: skipped
++0    movie blacklist_15
++0    movieup
++0    log movie blacklist_15: start
++0    movieend 30000
++0    log movie blacklist_15: end
++0    movie blacklist_15
++0    movieup
++6000ms tap RETURN
++0    log movie blacklist_15: press
++0    movieend 3000
++0    log movie blacklist_15: skipped
++0    movie bounty_tutorial
++0    movieup
++0    log movie bounty_tutorial: start
++0    movieend 30000
++0    log movie bounty_tutorial: end
++0    movie bounty_tutorial
++0    movieup
++6000ms tap RETURN
++0    log movie bounty_tutorial: press
++0    movieend 3000
++0    log movie bounty_tutorial: skipped
++0    movie drag_tutorial
++0    movieup
++0    log movie drag_tutorial: start
++0    movieend 30000
++0    log movie drag_tutorial: end
++0    movie drag_tutorial
++0    movieup
++6000ms tap RETURN
++0    log movie drag_tutorial: press
++0    movieend 3000
++0    log movie drag_tutorial: skipped
++0    movie pursuit_tutorial
++0    movieup
++0    log movie pursuit_tutorial: start
++0    movieend 30000
++0    log movie pursuit_tutorial: end
++0    movie pursuit_tutorial
++0    movieup
++6000ms tap RETURN
++0    log movie pursuit_tutorial: press
++0    movieend 3000
++0    log movie pursuit_tutorial: skipped
++0    movie speedtrap_tutorial
++0    movieup
++0    log movie speedtrap_tutorial: start
++0    movieend 30000
++0    log movie speedtrap_tutorial: end
++0    movie speedtrap_tutorial
++0    movieup
++6000ms tap RETURN
++0    log movie speedtrap_tutorial: press
++0    movieend 3000
++0    log movie speedtrap_tutorial: skipped
++0    movie tollbooth_tutorial
++0    movieup
++0    log movie tollbooth_tutorial: start
++0    movieend 30000
++0    log movie tollbooth_tutorial: end
++0    movie tollbooth_tutorial
++0    movieup
++6000ms tap RETURN
++0    log movie tollbooth_tutorial: press
++0    movieend 3000
++0    log movie tollbooth_tutorial: skipped
++0    movie storyfmv_bla134
++0    movieup
++0    log movie storyfmv_bla134: start
++0    movieend 30000
++0    log movie storyfmv_bla134: end
++0    movie storyfmv_bla134
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_bla134: press
++0    movieend 3000
++0    log movie storyfmv_bla134: skipped
++0    movie storyfmv_bus12
++0    movieup
++0    log movie storyfmv_bus12: start
++0    movieend 30000
++0    log movie storyfmv_bus12: end
++0    movie storyfmv_bus12
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_bus12: press
++0    movieend 3000
++0    log movie storyfmv_bus12: skipped
++0    movie storyfmv_cro06_coh06a
++0    movieup
++0    log movie storyfmv_cro06_coh06a: start
++0    movieend 30000
++0    log movie storyfmv_cro06_coh06a: end
++0    movie storyfmv_cro06_coh06a
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_cro06_coh06a: press
++0    movieend 3000
++0    log movie storyfmv_cro06_coh06a: skipped
++0    movie storyfmv_her136
++0    movieup
++0    log movie storyfmv_her136: start
++0    movieend 30000
++0    log movie storyfmv_her136: end
++0    movie storyfmv_her136
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_her136: press
++0    movieend 3000
++0    log movie storyfmv_her136: skipped
++0    movie storyfmv_pin11
++0    movieup
++0    log movie storyfmv_pin11: start
++0    movieend 30000
++0    log movie storyfmv_pin11: end
++0    movie storyfmv_pin11
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_pin11: press
++0    movieend 3000
++0    log movie storyfmv_pin11: skipped
++0    movie storyfmv_rac01
++0    movieup
++0    log movie storyfmv_rac01: start
++0    movieend 30000
++0    log movie storyfmv_rac01: end
++0    movie storyfmv_rac01
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_rac01: press
++0    movieend 3000
++0    log movie storyfmv_rac01: skipped
++0    movie storyfmv_rap30
++0    movieup
++0    log movie storyfmv_rap30: start
++0    movieend 30000
++0    log movie storyfmv_rap30: end
++0    movie storyfmv_rap30
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_rap30: press
++0    movieend 3000
++0    log movie storyfmv_rap30: skipped
++0    movie storyfmv_raz08
++0    movieup
++0    log movie storyfmv_raz08: start
++0    movieend 30000
++0    log movie storyfmv_raz08: end
++0    movie storyfmv_raz08
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_raz08: press
++0    movieend 3000
++0    log movie storyfmv_raz08: skipped
++0    movie storyfmv_saf25
++0    movieup
++0    log movie storyfmv_saf25: start
++0    movieend 30000
++0    log movie storyfmv_saf25: end
++0    movie storyfmv_saf25
++0    movieup
++6000ms tap RETURN
++0    log movie storyfmv_saf25: press
++0    movieend 3000
++0    log movie storyfmv_saf25: skipped
++0    log movies: 32 played
++0    close

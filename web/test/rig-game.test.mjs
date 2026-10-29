@@ -1,9 +1,10 @@
 // The test tools' --game (web/tools/rig-game.mjs), checked without a server, a browser or the game:
 //   node --test web/test/rig-game.test.mjs
 // 1. Every tool's --help prints its own header comment and then what it has for the game: Underground 2's (the
-//    default) or Most Wanted's, "none yet" with the reason until it has some (run-suite has some); it starts nothing.
+//    default) or Most Wanted's, "none yet" with the reason until it has some (run-suite and intro-test have
+//    some); it starts nothing.
 // 2. --game mw stops a tool that has nothing for Most Wanted yet, before it starts a server, a browser or a build
-//    (run-suite has something: 6.); an unknown game stops every tool.
+//    (run-suite and intro-test have something; 6. for run-suite); an unknown game stops every tool.
 // 3. run-suite: each game's table is the same in --list and --help; Most Wanted's has datafault.
 // 4. requireGame: a server of the other game's module stops the tool; the same game, a module json without a game
 //    (Underground 2's of before) and a server it cannot reach let it go on.
@@ -24,7 +25,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 8539), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 8540);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
-const FOR_MW = new Set(['run-suite']);   // the tools that have something for Most Wanted (3. checks what)
+const FOR_MW = new Set(['run-suite', 'intro-test']);   // the tools that have something for Most Wanted (3. checks what)
 // a server nobody runs, should a tool get past its --help or its check (none may): no own server, nothing reached
 const NOWHERE = { 'lan-pair': ['--base', 'http://127.0.0.1:9'], 'online-pair': ['--base', 'http://127.0.0.1:9'],
   'roam-pair': ['--base', 'http://127.0.0.1:9'], 'run-suite': ['--base', 'http://127.0.0.1:9'], 'app-test': ['--base', 'http://127.0.0.1:9'],

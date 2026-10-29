@@ -868,6 +868,9 @@ static uint32_t obj_new(ObKind k){
         memset(o,0,sizeof *o); o->kind=k; o->refs = 1; o->serial = ser;
         pthread_mutex_init(&o->mtx,0); pthread_cond_init(&o->cv,0); o->prim_ok = 1;
     }
+    /* the code that made it, for win32_obj_creators (an import's return address: the calling thread's eip
+     * while the import runs); a thread's is set again where it starts, the same value */
+    o->creator = tl_cpu ? tl_cpu->eip : 0u;
     return H_BASE + o->gen * OBJ_MAX + (uint32_t)i;
 }
 /* A thread in winsock.c's WSAWaitForMultipleEvents waits on the network's
@@ -935,6 +938,39 @@ void win32_obj_report(void){
         fprintf(stderr, "\n");
     }
     thread_report();
+}
+/* The objects in use now by kind and by the code that made them (obj_new's creator), one line: "[objects]
+ * f=N 12 in use: event 0x007ecc5b 2, ...; thread 0x0085d69b 3 (1 ended), ...".  Not part of the exit
+ * report; the test scripts ask for it (Most Wanted's "objects" command, runtime/mw/debug_mw.c), so the
+ * objects a load leaves behind are named with their creator. */
+void win32_obj_creators(long frame){
+    static const char *const kn[] = { "none", "event", "mutex", "thread", "file", "key", "semaphore", "timer" };
+    struct { int kind; uint32_t creator; int n, ended; } g[48]; int ng = 0, total = 0, more = 0;
+    pthread_mutex_lock(&g_lock);
+    for (int i = 1; i < g_obj_n && i < OBJ_MAX; i++){
+        Obj *o = &g_obj[i];
+        if (o->kind == OB_NONE || o->kind >= 8) continue;
+        total++;
+        int j = 0;
+        while (j < ng && (g[j].kind != (int)o->kind || g[j].creator != o->creator)) j++;
+        if (j == ng){ if (ng == 48){ more++; continue; } g[ng].kind = (int)o->kind; g[ng].creator = o->creator; g[ng].n = g[ng].ended = 0; ng++; }
+        g[j].n++; if (o->kind == OB_THREAD && o->ended) g[j].ended++;
+    }
+    pthread_mutex_unlock(&g_lock);
+    char line[2048]; int w = snprintf(line, sizeof line, "[objects] f=%ld %d in use:", frame, total);
+    for (int k = 1; k < 8; k++){
+        int first = 1;
+        for (int j = 0; j < ng && w < (int)sizeof line - 64; j++){
+            if (g[j].kind != k) continue;
+            if (first) w += snprintf(line + w, sizeof line - (size_t)w, "%s%s ", ng && line[w - 1] != ':' ? "; " : " ", kn[k]);
+            else       w += snprintf(line + w, sizeof line - (size_t)w, ", ");
+            w += snprintf(line + w, sizeof line - (size_t)w, "0x%08x %d", g[j].creator, g[j].n);
+            if (g[j].ended) w += snprintf(line + w, sizeof line - (size_t)w, " (%d ended)", g[j].ended);
+            first = 0;
+        }
+    }
+    if (more) snprintf(line + w, sizeof line - (size_t)w, "; %d more in other groups", more);
+    fprintf(stderr, "%s\n", line);
 }
 /* watchdog.c: one line about a kernel object a thread waits on. */
 int win32_obj_describe(uint32_t h, char *buf, size_t n){

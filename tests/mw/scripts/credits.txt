@@ -1,0 +1,27 @@
+# Most Wanted: Options > Credits (Credits.fng, the text of CREDITS\<language>.TXT) rolls to its end by itself
+# (TRACKER M3-22, L-056): from a first start (no alias: "Create a new alias?" answered No, as boot_menu.txt does) to
+# the main menu, Options, its last item Credits; the credits come up, roll, close by themselves, and the Options sub
+# menu takes input again on Credits.  On the play page it also dumps the credits twice as they roll (TRACKER M3-26;
+# the pictures stay out of the repo).  Every step waits for the game (L-021):
+#   node web/tools/run-suite.mjs --game mw --script credits.txt --marker 'credits: back on the Options menu' \
+#     --env NFSU2_QUIT_FRAMES=400000 --timeout-scale 12
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e3891 40 600        # Options, the eighth item
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # Audio
++0    tapuntil RIGHT MainMenu_Sub.fng@4b4e3890 40 600    # Credits, the seventh
++0    tap RETURN
++0    waitfng Credits.fng 600
++0    log credits: up
++300  dump credits
++3    dump credits
++1500 dump credits_later
++3    dump credits_later
++0    waitgone Credits.fng 100000                        # rolled to their end and closed (runtime/mw/debug_mw.c)
++0    log credits: ended
++0    waitfng MainMenu_Sub.fng@4b4e3890 1200             # the Options sub menu takes input again, on Credits
++0    log credits: back on the Options menu
++0    close

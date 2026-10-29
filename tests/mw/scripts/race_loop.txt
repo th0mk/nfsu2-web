@@ -13,6 +13,8 @@
 #   node web/tools/run-suite.mjs --game mw --script race_loop.txt --marker 'race_loop: 25 races' \
 #     --env NFSU2_QUIT_FRAMES=200000 --timeout-scale 12
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+# Before each load and after the last race, "objects" logs the kernel objects in use by kind and creator
+# (runtime/mw/debug_mw.c): what each load leaves open (TRACKER M3-29).
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000
 +0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
@@ -20,6 +22,7 @@
 +0    tap RETURN
 +0    loop 25
 +0    waitfng MainMenu_Sub.fng@4b4e388a 1200             # its first item: the random Quick Race
++0    objects
 +0    tap RETURN
 +0    waitfng Quick_Race_Brief.fng:ba458180 600          # the race's brief takes input
 +0    log race_loop: load
@@ -36,5 +39,6 @@
 +0    tap RETURN
 +0    endloop
 +0    waitfng MainMenu_Sub.fng@4b4e388a 1200
++0    objects
 +0    log race_loop: 25 races
 +0    close

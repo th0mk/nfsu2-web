@@ -1,0 +1,7 @@
+# Most Wanted's boot movies with no input (web/tools/intro-test.mjs --game mw): wait for the title screen
+# (MW_LS_Splash.fng, after LS_EAlogo.fng, LS_PSA.fng and the attract movie's MW_LS_AttractFMV.fng), stay two
+# seconds, quit.
+1     log boot
++0    waitfng MW_LS_Splash.fng 20000
++2000ms log title
++0    quit

@@ -3,8 +3,10 @@
 Input scripts for runtime/autotest.c, served at `/tests/scripts/` by a server started with `--game mw --dev`
 (see ../README.md).
 
-Besides autotest.c's commands, Most Wanted's runs take `call ADDR [ecx=X] [ARG ...]` and `loadlib NAME`
-(runtime/mw/debug_mw.c), both test-only, and the race aids of runtime/mw/career_mw.c, test-only too, which run at
+Besides autotest.c's commands, Most Wanted's runs take `call ADDR [ecx=X] [ARG ...]`, `loadlib NAME`, `objects`
+(the kernel objects in use by kind and creator), `movie NAME` (a movie played as the front end plays one),
+`movieup` and `movieend` (wait until it is up, then gone) and `waitgone PACKAGE` (runtime/mw/debug_mw.c), all
+test-only, and the race aids of runtime/mw/career_mw.c, test-only too, which run at
 the game's per-frame anchor: `racewin` (a shortcut finish: the player is finished where it is, with three of the
 calls the race's script makes at the line), `autopilot on|off` (the game's AI drives the player's car), `autopilot
 races` (the same at every race's GO from then on, for races that follow each other with no menu between, with each
@@ -13,8 +15,13 @@ race's start and end logged; a lost race is raced again as a player would: Enter
 
 The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of
 the race), `race_loop.txt` (25 Quick
-Races in a row, each ended by `racewin`) and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the
+Races in a row, each ended by `racewin`, with the kernel objects before each load) and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the
 line, saved; seeded with `profiles_make.txt`'s saves).
+
+The movies: `intro_idle.txt` and `intro_title.txt` (the boot movies and the title, for web/tools/intro-test.mjs
+--game mw), `movies.txt` (all 32 movies of the game folder played to their end and skipped),
+`media_refshots.txt` (the play page's pictures of the movie screens and the new alias's name entry) and
+`credits.txt` (Options > Credits rolled to their end).
 
 The frame rate: `menu_hold.txt` (the main menu's camera swing-in traced, then the menu held for 60 s, a `[status]`
 line over it and the clocks in peeks; its check wants the swing over in 6 s of wall time and RealTimeFrames at 60 a

@@ -1,0 +1,32 @@
+# Most Wanted: the reference screenshots fe_refshots.txt cannot take (TRACKER M3-26), from a first start with the
+# movies on (NOMOVIES=0): the EA logo, the PSA and the attract movie as they play, and the new alias's name entry
+# after Yes (MC_Main.fng's "Enter name"), empty and typed (credits.txt takes the credits).  Every frame is dumped
+# twice, 3 frames apart.  The steps wait for the game (L-021); frame counts are only time on a screen that is
+# up.  The play page and an oracle build, as fe_refshots.txt says; the pictures stay out of the repo.
+0     waitfng LS_EAlogo.fng 3600
++90   dump ealogo
++3    dump ealogo
++0    waitfng LS_PSA.fng 3600
++300  dump psa
++3    dump psa
++0    waitfng MW_LS_AttractFMV.fng 3600
++600  dump attract
++3    dump attract
++0    tapuntil RETURN MW_LS_Splash.fng 90 3000
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tapuntil RETURN MC_Main.fng:b01be5dd 60 600        # the autosave notes (a press a second at a slow
++0    tapuntil RETURN MC_Main.fng:b380362f 60 600        # renderer: one can fall between two dialogs)
++0    tapuntil RETURN MC_Main.fng:4f876b6f 60 600        # Enter name: NAME
++60   dump alias_name
++3    dump alias_name
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype REFSHOT
++0    waitfng MC_Main.fng'REFSHOT 600
++30   dump alias_name_typed
++3    dump alias_name_typed
++0    close

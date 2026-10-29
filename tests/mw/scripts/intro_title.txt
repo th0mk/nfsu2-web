@@ -1,0 +1,10 @@
+# Most Wanted's boot movies and title passed by the input web/tools/intro-test.mjs --game mw gives (--drive
+# key:Enter, click, tap or pad:0 with --stop MC_Main.fng): the movies end on their own or by a press, the title
+# (MW_LS_Splash.fng, "CLICK to continue") takes a press once it answers input, and a first start then asks
+# "Create a new alias?" (MC_Main.fng).  The script itself presses nothing.
+1     log boot
++0    waitfng MW_LS_Splash.fng 20000
++0    log title
++0    waitfng MC_Main.fng 20000
++60   log past the title
++0    quit

@@ -113,6 +113,16 @@ const char *mw_top_screen(void){
     return e ? pkg_name(rd(e + ENG_TAIL)) : 0;
 }
 
+/* 1 while a package of this name is in the active list (debug_mw.c's movie wait) */
+int mw_fe_active(const char *name){
+    uint32_t e = engine(); int k = 0;
+    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < 32; p = rd(p + PKG_NEXT), k++){
+        const char *nm = pkg_name(p);
+        if (nm && !strcasecmp(nm, name)) return 1;
+    }
+    return 0;
+}
+
 /* every Present: the packages new in the active list, head to tail */
 void autotest_note_screen(const char *nm);
 long autotest_frame(void);          /* autotest.c: the test frame number, the [fng] lines' f= */
