@@ -13,7 +13,11 @@ were that far apart: a WorldTimer offset of a second or more in the last
 lines, and ~50 m errors for every pair with that instance, while the game's
 own [racenet] "their race clock ... off ours" said tens of ms; a step in a
 race steps every trace alike: forward, a gap the comparison skips; back, the
-rows until the clock is past the last one again are left out and counted),
+rows until the clock is past the last one again are left out and counted, the
+game time they held still counts in the frame time below, and every pair's
+samples within SEAM_S of the step are left out: there a row of one trace and
+the other's rows at the same time may be from either side of the step, its
+size apart),
 the frame cap, WorldTimer and every race car with a flag for the local
 player's car.  Frames whose top package is not the race HUD (pre-race
 screen, results) are left out when the trace says so.  For every pair (owner A, viewer B) this tool finds A's car in
@@ -28,9 +32,11 @@ reports, over the time both are racing and A's car moves (> 2 m/s):
           compare with the jumps in A's own trace (the game resetting a
           crashed car onto the track is a real teleport, seen by everyone).
           The frame time is the longer of the wall-clock step and the game
-          time the frame simulated (B's WorldTimer: the next row's minus
-          this row's, as a row's cars are logged after the frame's
-          simulation and its WorldTimer before it).  After a stall of an
+          time between the two rows' cars (B's WorldTimer in the line after
+          each row, as a row's cars are logged after the frame's simulation
+          and its WorldTimer before it; lines left out between the two rows
+          after a step back of the wall clock count too: the cars moved in
+          them).  After a stall of an
           instance (for example 106 and 208 ms) a network race's
           world clock catches up in one frame and every car moves that far,
           which is no jump.  A jump within BACK_S seconds after a frame in
@@ -69,6 +75,7 @@ BACK_S = 1.0                                  # s after it: a jump there is the 
 FAR_V = 0.5                                   # m/s: a shown speed below this while the owner moves = the far-car mode
 STALL_MS = 100.0                              # a frame longer than this: the instance stalled
 STALL_S = 1.0                                 # s after the stall's end: a jump there is its correction
+SEAM_S = 0.5                                  # s either side of a step back of the wall clock: no samples there
 
 def stall_ends(times):
     """wall times at which a frame of an instance ended after more than STALL_MS"""
@@ -77,6 +84,10 @@ def stall_ends(times):
 def after(ends, t):
     i = bisect_left(ends, t + 1e-9)
     return i > 0 and t - ends[i - 1] <= STALL_S
+
+def close_to(times, t, w):
+    i = bisect_left(times, t - w)
+    return i < len(times) and times[i] <= t + w
 
 def results_frame(path):
     """first frame of the results screen in the instance's log, if any"""
@@ -91,10 +102,14 @@ def results_frame(path):
         pass
     return None
 
-BACKS = {}                                    # trace -> [rows left out, largest step back (s)]
+BACKS = {}                                    # trace -> [rows left out, largest step back (s), [wall time before each step]]
 
 def load(path):
-    rows = []
+    """the racing rows (t, cap, WorldTimer, cars, world step); the world step is the game time (s) from the previous
+    row's cars to this row's, from the WorldTimer of the racing line after each row (that row's cars' time, also when
+    the line is left out for a step back of the wall clock; a line without the race HUD may have it reset), 0 for the
+    last row"""
+    rows, after = [], []
     stop = results_frame(path)
     last = None
     with open(path) as f:
@@ -105,8 +120,14 @@ def load(path):
                 continue
             if stop is not None and int(r['frame']) >= stop:
                 break                         # the race is over (results screen)
+            if after and after[-1] is None and r.get('hud') != '0':
+                try:                          # the racing line after a row, kept or not: the WorldTimer of its cars
+                    after[-1] = int(r['worldtimer'] or 0)
+                except (ValueError, KeyError, TypeError):
+                    pass
             if last is not None and t < last:
-                b = BACKS.setdefault(path, [0, 0.0])   # the system clock stepped back: wait until it is past
+                b = BACKS.setdefault(path, [0, 0.0, []])   # the system clock stepped back: wait until it is past
+                if not b[2] or b[2][-1] != last: b[2].append(last)
                 b[0] += 1; b[1] = max(b[1], last - t)
                 continue
             last = t
@@ -120,18 +141,24 @@ def load(path):
             if r.get('hud') == '0':
                 continue                      # results / post-race scene, not racing
             rows.append((t, float(r['cap'] or 0), int(r['worldtimer'] or 0), cars))
-    return rows
+            after.append(None)
+    out, prev = [], rows[0][2] if rows else 0
+    for (t, cap, wt, cars), a in zip(rows, after):
+        out.append((t, cap, wt, cars, (a - prev) / WT_HZ if a is not None else 0.0))
+        if a is not None: prev = a
+    return out
 
 WT_HZ = 4000.0                                # WorldTimer ticks per second
 
 def world_steps(rows):
-    """per row: the game time (s) its frame simulated"""
-    return [(rows[i + 1][2] - rows[i][2]) / WT_HZ if i + 1 < len(rows) else 0.0 for i in range(len(rows))]
+    """per row: the game time (s) from the previous row's cars to its own (load); without lines left out between the
+    two, the game time its frame simulated"""
+    return [r[4] for r in rows]
 
 def own_track(rows):
     tr = []
     ws = world_steps(rows)
-    for i, (t, cap, wt, cars) in enumerate(rows):
+    for i, (t, cap, wt, cars, _) in enumerate(rows):
         for c in cars:
             if c and c[0]:
                 tr.append((t, c[1], c[2], c[3], c[4], ws[i])); break
@@ -158,9 +185,10 @@ def main(argv):
         print('need two or more traces'); return 2
     data = {os.path.basename(os.path.dirname(f)) or f: load(f) for f in files}
     tracks = {k: own_track(v) for k, v in data.items()}
-    for f, (n, b) in BACKS.items():
+    seams = {os.path.basename(os.path.dirname(f)) or f: BACKS.get(f, [0, 0, []])[2] for f in files}
+    for f, (n, b, at) in BACKS.items():
         print(f'{os.path.basename(os.path.dirname(f)) or f}: the wall clock went back up to {b * 1000:.0f} ms (a step of the '
-              f'system clock): {n} rows left out')
+              f'system clock, {len(at)} time(s)): {n} rows left out, and the samples of every pair within {SEAM_S:.1f} s of it')
     print('instance  rows  racing span (s)  fps   cap (fps)  own car samples')
     for k, rows in data.items():
         if not rows: print(f'{k:8s}  no rows'); continue
@@ -184,7 +212,7 @@ def main(argv):
             best = None
             for j in range(ncar):
                 d = []
-                for t, cap, wt, cars in rows[::10]:
+                for t, cap, wt, cars, _ in rows[::10]:
                     if j >= len(cars) or not cars[j] or cars[j][0]: continue
                     p = interp(tra, ts, t)
                     if p: d.append(math.dist(p[:3], cars[j][1:4]))
@@ -199,14 +227,15 @@ def main(argv):
             stalls = sorted(stall_ends(ts) + stall_ends([r[0] for r in rows]))
             prev = None
             ws = world_steps(rows)
+            seam = sorted(seams[a] + seams[b])
             back_t = None
-            for i, (t, cap, wt, cars) in enumerate(rows):
+            for i, (t, cap, wt, cars, _) in enumerate(rows):
                 if ws[i] < BACK: back_t = t
                 if j >= len(cars) or not cars[j]: prev = None; continue
                 c = cars[j]
                 me = next((x for x in cars if x and x[0]), None)
                 near = me is not None and math.dist(me[1:4], c[1:4]) <= NEAR
-                p = interp(tra, ts, t)
+                p = None if close_to(seam, t, SEAM_S) else interp(tra, ts, t)
                 if p and p[3] > 2.0:
                     e = math.dist(p[:3], c[1:4]); err.append(e); lag.append(e / p[3] * 1000); n += 1
                     part[near][0].append(e)
@@ -243,7 +272,7 @@ def main(argv):
         ht = [x[0] for x in h]
         for k in keys[1:]:
             d = []
-            for t, cap, wt, cars in data[k]:
+            for t, cap, wt, cars, _ in data[k]:
                 i = bisect_left(ht, t)
                 if 0 < i < len(h) and h[i][0] - h[i - 1][0] < 0.5:
                     a, b = h[i - 1], h[i]
