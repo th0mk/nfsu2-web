@@ -12,7 +12,7 @@
 //    has one); run-suite prints it first.
 // 6. run-suite --game mw with no scenario named takes Most Wanted's table; on a module with the D3DX oracle and no
 //    D3DX seed it runs none of it and says why (no browser starts).
-// Ports: NFSU2_TEST_RIG_PORT1 (8539) and NFSU2_TEST_RIG_PORT2 (8540), the stand-in servers of 4, 5 and 6.
+// Ports: NFSU2_TEST_RIG_PORT1 (9791) and NFSU2_TEST_RIG_PORT2 (9792), the stand-in servers of 4, 5 and 6.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -22,7 +22,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 8539), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 8540);
+const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 9791), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 9792);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
 const FOR_MW = new Set(['run-suite', 'intro-test', 'lan-pair']);   // the tools that have something for Most Wanted (3. checks what)
