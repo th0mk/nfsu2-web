@@ -101,8 +101,8 @@ const CREW_GROUP_MAX: usize = 64;
 
 /// A player's race report as a log line (one each player of a race, back in free roam: the lines of one race share
 /// its lobby), for evening out the cars: the race, how the player did, the car as its game rated it.  Grep `[race]`.
-fn race_line(player: &str, r: &wire::RaceRep) -> String {
-    let mode = results::mode_name(r.mode);
+fn race_line(game: u8, player: &str, r: &wire::RaceRep) -> String {
+    let mode = results::mode_name(game, r.mode);
     let how = match r.place {
         0 if r.quit => "quit".to_string(),
         0 => "did not finish".to_string(),
@@ -826,7 +826,7 @@ impl Hub {
             // one report a race (its lobby), and none within REPORT_GAP_MS of the player's last; its results the same
             Msg::RaceRep(r) if sender == p.id && !p.reported.is_some_and(|(l, t)| l == r.lobby || now - t < REPORT_GAP_MS) => {
                 p.reported = Some((r.lobby, now));
-                report = Some(race_line(&p.name, &r));
+                report = Some(race_line(self.o.game, &p.name, &r));
             }
             Msg::RaceRes(r) if sender == p.id && !p.resulted.is_some_and(|(l, t)| l == r.lobby || now - t < REPORT_GAP_MS) => {
                 p.resulted = Some((r.lobby, now));
@@ -1103,7 +1103,7 @@ impl Hub {
         // the races whose results all came (or a while ago): the ones won by cheating
         for v in self.results.due(now) {
             let who = |id: u32| v.names.get(&id).cloned().or_else(|| self.who(id)).unwrap_or_else(|| format!("player {id:08x}"));
-            let line = results::line(&v, &who);
+            let line = results::line(self.o.game, &v, &who);
             self.st.cheat_lines += 1;
             (self.log)(&line);
         }

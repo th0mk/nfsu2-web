@@ -92,8 +92,14 @@ pub(crate) struct Results {
     best: HashMap<(u32, u8), f64>,
 }
 
-/// a race's mode as a word (roam_core.h rc_racerep)
-pub(crate) fn mode_name(mode: u8) -> &'static str {
+/// a race's mode as a word (roam_core.h rc_racerep), in its game's words (`game`: roam_core.h RC_GAME_*).  Most
+/// Wanted's mode is its own race type (GRaceType, the invite's GAMEMODE: 0 sprint, 1 circuit, 2 drag, 3 lap knockout,
+/// 4 tollbooth, 5 speedtrap); Underground 2's its race mode (drift, URL and Street X are its own).
+pub(crate) fn mode_name(game: u8, mode: u8) -> &'static str {
+    if game == crate::GAME_MW {
+        const MODES: [&str; 6] = ["sprint", "circuit", "drag", "lap knockout", "tollbooth", "speedtrap"];
+        return MODES.get(mode as usize).copied().unwrap_or("race");
+    }
     const MODES: [&str; 5] = ["circuit", "sprint", "drag", "drift", "URL"];
     MODES.get(mode as usize).copied().unwrap_or(if mode == 10 { "Street X" } else { "race" })
 }
@@ -104,13 +110,13 @@ fn clock(s: f64) -> String {
 }
 
 /// A verdict's `[cheat]` line; `who`: a player's address and name by its id (`10.77.3.41 "Bob"`)
-pub(crate) fn line(v: &Verdict, who: &dyn Fn(u32) -> String) -> String {
+pub(crate) fn line(game: u8, v: &Verdict, who: &dyn Fn(u32) -> String) -> String {
     let mut s = format!(
         "[cheat] {}: won the race of lobby {:08x} (race {:08x}: {}, {} lap{}) in {}",
         who(v.winner),
         v.lobby,
         v.race,
-        mode_name(v.mode),
+        mode_name(game, v.mode),
         v.laps,
         if v.laps == 1 { "" } else { "s" },
         clock(v.time)
@@ -312,7 +318,7 @@ mod tests {
         assert_eq!(judged_in(&mut x, &[(3, rep_of(0xA2, &clean, 3)), (4, rep_of(0xA2, &clean, 4))]), None);
         let v = judged_in(&mut x, &tele(0xA3)).expect("a verdict");
         assert_eq!((v.winner, v.quickest, v.length, v.next), (2, Some(180.0), None, None));
-        let l = line(&v, &|id| format!("p{id}"));
+        let l = line(0, &v, &|id| format!("p{id}"));
         assert!(l.contains("in 0:21.0, under 50 % of the race's quickest clean win (3:00.0); nobody else finished"), "{l}");
         // (a win alone, or by one report, is no clean win: it says nothing of the race)
         let mut y = Results::default();
@@ -333,8 +339,19 @@ mod tests {
         let v = judged(&[(1, r.0), (2, r.1)]).expect("a verdict");
         assert_eq!((v.winner, v.time, v.next, v.length), (2, 4.76, None, None));
         assert!((v.drove.unwrap() - 0.006).abs() < 1e-9, "{v:?}");
-        let l = line(&v, &|id| format!("p{id}"));
+        let l = line(0, &v, &|id| format!("p{id}"));
         assert!(l.contains("in 0:04.8, having driven 0.6 % of the way; nobody else finished"), "{l}");
+    }
+
+    // the modes in each game's words: Underground 2's as its [race] and [cheat] lines always had them, Most Wanted's
+    // its own race types
+    #[test]
+    fn the_modes_in_each_games_words() {
+        let ug2: Vec<&str> = (0..=11).map(|m| mode_name(crate::GAME_UG2, m)).collect();
+        assert_eq!(ug2, ["circuit", "sprint", "drag", "drift", "URL", "race", "race", "race", "race", "race", "Street X", "race"]);
+        let mw: Vec<&str> = (0..=7).map(|m| mode_name(crate::GAME_MW, m)).collect();
+        assert_eq!(mw, ["sprint", "circuit", "drag", "lap knockout", "tollbooth", "speedtrap", "race", "race"]);
+        assert_eq!(mode_name(crate::GAME_MW, 10), "race", "no Street X in Most Wanted");
     }
 
     // an honest race (a real one's numbers: 186.82 s and 187.67 s, 5.8 km), an honest winner over a racer who stood

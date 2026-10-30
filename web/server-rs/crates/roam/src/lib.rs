@@ -130,6 +130,9 @@ pub const ROAM_HUB_VIP: u32 = 0x0A4D_00FD;
 
 /// the most crews a player is in (roam_core.h RC_CREW_MAX), and so the most /players counts for one question
 pub const CREWS: usize = wire::CREWS;
+/// the games (roam_core.h RC_GAME_*): `RoamOptions::game`
+pub const GAME_UG2: u8 = 0;
+pub const GAME_MW: u8 = 1;
 
 /// The hub's options.  exact_room: a room of at most this many players sorts every pair of them; a larger one takes
 /// the pairs in the same order but only as far as it needs them: each player's nearest one after another (a grid)

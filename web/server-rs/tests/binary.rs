@@ -462,7 +462,34 @@ async fn the_binary_for_most_wanted() {
     }
     assert_eq!(status_of(port, "/mw").await, 308);
     assert_eq!(srv.get("/mw/players").await.1, r#"{"players":0,"online":null,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);
+    // its console kept in its state folder too (a release's new container keeps its state, not Docker's log)
+    let kept = state.join("log/console.log");
+    let log_line = format!(
+        "  log       : these lines also in {} (each after its time; past 32 MB it turns over, 8 files at most), kept past restarts and releases",
+        kept.to_string_lossy()
+    );
+    assert!(startup.contains(&log_line), "{startup:?}");
     assert_eq!(srv.stop().await, Some(0));
+    let first_run = std::fs::read_to_string(&kept).unwrap();
+    assert!(first_run.lines().any(|l| l.len() == 24 + 17 && l.as_bytes()[23] == b'Z' && &l[24..] == " NFSMW web server"), "{first_run}");
+    assert_eq!(std::fs::metadata(&kept).unwrap().permissions().mode() & 0o777, 0o600);
+    assert_eq!(std::fs::metadata(state.join("log")).unwrap().permissions().mode() & 0o777, 0o700);
+    // started again (a module of the other game beside it now: not served, and the start-up says why): the lines of
+    // before are still there, the new ones after them
+    std::fs::write(wasm.with_extension("json"), r#"{"rev":"abc","game":"ug2"}"#).unwrap();
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--game", "mw"]), port);
+    srv.ready().await;
+    let refused = format!(
+        "  game.wasm : {}  (not served: its json names game \"ug2\", not \"mw\": GAME=mw web/build.sh builds this game's)",
+        wasm.to_string_lossy()
+    );
+    assert!(srv.lines().contains(&refused), "{:?}", srv.lines());
+    assert_eq!(status_of(port, "/mw/game.json").await, 503);
+    assert_eq!(srv.stop().await, Some(0));
+    let both = std::fs::read_to_string(&kept).unwrap();
+    assert!(both.starts_with(&first_run), "the first run's lines kept");
+    assert!(both[first_run.len()..].contains("(not served: its json names game \"ug2\""), "{both}");
+    assert!(both[first_run.len()..].contains("[module] not served: its json names game \"ug2\""), "{both}");
 
     // the entries each game's folder is served by, one a line, with no folder
     let ug2 = "speed2.exe server.dll server.cfg cars credits frontend global langpacks languages memcard movies nis pfdata sound speech \
@@ -484,6 +511,59 @@ async fn the_binary_for_most_wanted() {
     assert_eq!((err.trim_end(), code), (usage.as_str(), Some(1)));
 }
 
+// Most Wanted's box as compose starts it with an empty .env (each of its variables there, empty: compose.yml,
+// compose.mw.yml): it starts, says it is Most Wanted's, has no vault of its own and forwards none, keeps its console;
+// given the U2 box's vault and the credential, it says where its saves go, and its state folder still holds no vault
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn most_wanted_with_an_empty_env() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tmp.path().join("mw");
+    std::fs::create_dir_all(data.join("GLOBAL")).unwrap();
+    std::fs::write(data.join("speed.exe"), "MZ").unwrap();
+    let wasm = tmp.path().join("nfsmw.wasm");
+    std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
+    std::fs::write(wasm.with_extension("json"), r#"{"rev":"abc","game":"mw"}"#).unwrap();
+    let empty = [
+        "NFSU2_VAULT_GB",
+        "NFSU2_VAULT_FORWARD",
+        "NFSU2_VAULT_BOX_KEY",
+        "NFSU2_CF_ACCESS_CLIENT_ID",
+        "NFSU2_CF_ACCESS_CLIENT_SECRET",
+        "NFSU2_TURNSTILE_SITE",
+        "NFSU2_TURNSTILE_SECRET",
+    ];
+    for forward in [false, true] {
+        let (port, state) = (free_port(), tmp.path().join(format!("state-{forward}")));
+        let mut cmd = command(&data, &wasm, port, &state, &["--game", "mw"]);
+        for k in empty {
+            cmd.env(k, "");
+        }
+        if forward {
+            cmd.env("NFSU2_VAULT_FORWARD", "http://127.0.0.1:1/vault").env("NFSU2_VAULT_BOX_KEY", "k".repeat(40));
+        }
+        let mut srv = Server::spawn(cmd, port);
+        srv.ready().await;
+        let lines = srv.lines();
+        let first = lines.iter().position(|l| l == "NFSMW web server").expect("the start-up lines");
+        let startup = &lines[first..];
+        let saves = startup.iter().find(|l| l.starts_with("  saves     : ")).expect("the saves line");
+        if forward {
+            assert_eq!(saves, "  saves     : keyphrase saves forwarded to http://127.0.0.1:1/vault");
+        } else {
+            assert_eq!(saves, "  saves     : no keyphrase saves (none forwarded: NFSU2_VAULT_FORWARD)");
+        }
+        assert!(startup.contains(&"  online    : off (this server has no Online mode for NFS Most Wanted yet)".to_string()));
+        assert!(startup.iter().any(|l| l.starts_with("  log       : these lines also in ")), "{startup:?}");
+        assert!(!startup.iter().any(|l| l.contains("[names]") || l.contains("covers")), "{startup:?}");
+        assert!(!lines.iter().any(|l| l.contains(&"k".repeat(40))), "the credential in no line");
+        assert_eq!(status_of(port, "/mw/game.json").await, 200);
+        assert_eq!(srv.stop().await, Some(0));
+        let names: Vec<String> =
+            std::fs::read_dir(&state).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert!(!names.iter().any(|n| n.contains("vault") || n == "names.json" || n == "covers"), "{names:?}");
+    }
+}
+
 /// the image's health check (Dockerfile): its command, as the container's shell runs it
 fn health_check() -> String {
     let file = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Dockerfile")).unwrap();
@@ -499,7 +579,7 @@ fn health_check() -> String {
 }
 
 // The image's health check passes for either game it runs (UG2 at the root, Most Wanted under /mw), once the module
-// is there, and fails without it
+// is there, and fails without it, and with the other game's (a release mix-up, PLAN R-22: its game.json answers 503)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_images_health_check_for_each_game() {
     if Command::new("wget").arg("--version").output().is_err() {
@@ -515,12 +595,15 @@ async fn the_images_health_check_for_each_game() {
         std::fs::write(root.join("game").join(exe), "MZ").unwrap();
         let wasm = root.join("game.wasm");
         std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
-        std::fs::write(wasm.with_extension("json"), r#"{"rev":"abc"}"#).unwrap();
+        std::fs::write(wasm.with_extension("json"), format!(r#"{{"rev":"abc","game":"{game}"}}"#)).unwrap();
         let port = free_port();
         let mut srv = Server::spawn(command(&root.join("game"), &wasm, port, &root.join("state"), &["--game", game]), port);
         srv.ready().await;
         let run = || Command::new("sh").args(["-c", &check]).env("NFSU2_HTTP_PORT", port.to_string()).status().unwrap().success();
         assert!(run(), "{game}: healthy");
+        let other = if game == "mw" { "ug2" } else { "mw" };
+        std::fs::write(wasm.with_extension("json"), format!(r#"{{"rev":"abc","game":"{other}"}}"#)).unwrap();
+        assert!(!run(), "{game}: not healthy with {other}'s module");
         // (the module's json gone: game.json answers 404 at every base)
         std::fs::remove_file(wasm.with_extension("json")).unwrap();
         assert!(!run(), "{game}: not healthy without its module");

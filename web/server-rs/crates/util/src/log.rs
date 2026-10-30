@@ -23,6 +23,75 @@ fn write_line(o: &mut impl Write, s: &str) {
     let _ = o.write_all(s.as_bytes());
     let _ = o.write_all(b"\n");
     let _ = o.flush();
+    keep_line(s);
+}
+
+/// The console kept in files of its own as well, past a restart and a new container (`keep`): console.log in a
+/// folder, each line after its time (UTC), and when it would grow past KEEP_BYTES it becomes console.1.log (that one
+/// console.2.log, ...), at most KEEP_FILES in all.  Docker's own log of a container goes with the container, at every
+/// release (LESSONS L-178).
+pub const KEEP_BYTES: u64 = 32 << 20;
+pub const KEEP_FILES: usize = 8;
+
+struct Kept {
+    dir: std::path::PathBuf,
+    file: std::fs::File,
+    size: u64,
+    max: u64,
+}
+
+fn kept() -> &'static OnceLock<Mutex<Kept>> {
+    static K: OnceLock<Mutex<Kept>> = OnceLock::new();
+    &K
+}
+
+/// the name of the n-th kept file (0: the one written to)
+pub fn kept_name(n: usize) -> String {
+    if n == 0 { "console.log".into() } else { format!("console.{n}.log") }
+}
+
+/// From now on every console line (and every error line) also goes into `dir`/console.log (the folder private to this
+/// user, the files 0600), after what an earlier start left there.  Once a process; Err: the folder or the file cannot
+/// be made.
+pub fn keep(dir: &std::path::Path) -> std::io::Result<()> {
+    keep_sized(dir, KEEP_BYTES)
+}
+
+fn keep_sized(dir: &std::path::Path, max: u64) -> std::io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+    std::fs::DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
+    let file = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(dir.join(kept_name(0)))?;
+    // (one an earlier start left, or made otherwise: private too)
+    use std::os::unix::fs::PermissionsExt;
+    let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+    let size = file.metadata()?.len();
+    let _ = kept().set(Mutex::new(Kept { dir: dir.to_path_buf(), file, size, max }));
+    Ok(())
+}
+
+/// a line into the kept files, when they are on (a line that cannot be written there is lost there only)
+fn keep_line(s: &str) {
+    let Some(k) = kept().get() else { return };
+    let line = format!("{} {s}\n", crate::js::iso_string(now_ms()));
+    let mut k = k.lock();
+    if k.size > 0 && k.size + line.len() as u64 > k.max {
+        // the oldest goes, each other moves up one, and a new console.log begins
+        let _ = std::fs::remove_file(k.dir.join(kept_name(KEEP_FILES - 1)));
+        for n in (0..KEEP_FILES - 1).rev() {
+            let _ = std::fs::rename(k.dir.join(kept_name(n)), k.dir.join(kept_name(n + 1)));
+        }
+        use std::os::unix::fs::OpenOptionsExt;
+        match std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(k.dir.join(kept_name(0))) {
+            Ok(f) => {
+                k.file = f;
+                k.size = 0;
+            }
+            Err(_) => return,
+        }
+    }
+    if k.file.write_all(line.as_bytes()).is_ok() {
+        k.size += line.len() as u64;
+    }
 }
 
 /// stdout, locked: one writer at a time (in this crate's own tests, a buffer they read back)
@@ -40,6 +109,7 @@ pub fn error(s: &str) {
     let _ = o.write_all(s.as_bytes());
     let _ = o.write_all(b"\n");
     let _ = o.flush();
+    keep_line(s);
 }
 
 struct Quiet {
@@ -223,6 +293,41 @@ mod tests {
         let g = SINK.lock();
         let all = String::from_utf8_lossy(&g.borrow()).into_owned();
         all.lines().filter(|l| l.starts_with(prefix)).map(str::to_string).collect()
+    }
+
+    // The kept files: every console and error line after its time, after what was there before; past their size the
+    // file turns over, at most KEEP_FILES of them, the newest lines always in console.log.  (The only test that turns
+    // them on: once a process.)
+    #[test]
+    fn the_kept_files_take_every_line_and_turn_over() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tempfile::tempdir().unwrap();
+        let dir = d.path().join("log");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("console.log"), "2026-01-01T00:00:00.000Z from the start before\n").unwrap();
+        keep_sized(&dir, 400).unwrap();
+        line("[kept] one");
+        error("[kept] an error");
+        let s = std::fs::read_to_string(dir.join("console.log")).unwrap();
+        let mine: Vec<&str> = s.lines().filter(|l| l.contains("[kept]") || l.contains("before")).collect();
+        assert_eq!(mine[0], "2026-01-01T00:00:00.000Z from the start before", "{s}");
+        for (l, want) in mine[1..].iter().zip(["[kept] one", "[kept] an error"]) {
+            let (t, rest) = l.split_once(' ').unwrap();
+            assert_eq!(rest, want);
+            assert!(t.len() == 24 && t.ends_with('Z') && t.as_bytes()[10] == b'T', "{l}");
+        }
+        assert_eq!(std::fs::metadata(dir.join("console.log")).unwrap().permissions().mode() & 0o777, 0o600);
+        for i in 0..200 {
+            line(&format!("[kept] line {i:03} {}", "x".repeat(40)));
+        }
+        let names: Vec<String> = (0..KEEP_FILES + 2).map(kept_name).filter(|n| dir.join(n).exists()).collect();
+        assert_eq!(names, (0..KEEP_FILES).map(kept_name).collect::<Vec<_>>(), "turned over, the oldest gone");
+        let newest = std::fs::read_to_string(dir.join("console.log")).unwrap();
+        assert!(newest.contains("[kept] line 199") && newest.len() <= 400, "{newest}");
+        for n in 0..KEEP_FILES {
+            assert!(std::fs::metadata(dir.join(kept_name(n))).unwrap().len() <= 400);
+        }
+        assert_eq!(std::fs::metadata(dir.join("console.log")).unwrap().permissions().mode() & 0o777, 0o600);
     }
 
     // the counts keep the order they began in, a count that comes back goes to the end

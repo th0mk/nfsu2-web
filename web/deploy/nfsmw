@@ -6,6 +6,10 @@
 #   ./nfsmw ban <player> <for> [message]   off until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
 #   ./nfsmw unban <name | #ban>            lift a ban
 #   ./nfsmw bans                           the bans
+#   ./nfsmw log [n]                        the server's last n console lines (200), each after its time: kept in its
+#                                          state volume past restarts and releases (/state/log/console.log, the older
+#                                          ones console.1.log to console.7.log), which Docker's own log is not
 # <player> is an address (10.77.x.y) or a name, as `who` shows them; the message needs no quotes.  Run it on the box
 # itself: its own server, state folder and bans (the server's control socket in Most Wanted's state volume).
+[ "$1" = log ] && cd "$(dirname "$0")" && exec docker compose exec -T server tail -n "${2:-200}" /state/log/console.log
 cd "$(dirname "$0")" && exec docker compose exec -T server /app/nfsu2-server ctl --game mw "$@"

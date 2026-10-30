@@ -125,6 +125,13 @@ async fn reload_cert(app: &Arc<App>, tls: &Arc<TlsState>) {
 
 pub async fn run(o: Options, cores: usize) {
     let real_state = state_folder(&o);
+    // the console kept in the state folder too, from its first line (a game whose box keeps it: game.rs keeps_log)
+    if o.game.keeps_log {
+        let dir = paths::join(&o.state, "log");
+        if let Err(e) = log::keep(Path::new(&dir)) {
+            die(&format!("{dir}: {e}"));
+        }
+    }
     if !o.artifacts.is_empty()
         && let Err(e) = std::fs::create_dir_all(&o.artifacts)
     {
@@ -487,7 +494,15 @@ pub async fn run(o: Options, cores: usize) {
         format!("  game data : {} ({} entries of the game's own)", o.data, app.manifest_count()),
         format!(
             "  game.wasm : {}",
-            if Path::new(&o.wasm).exists() { o.wasm.clone() } else { format!("{}  (missing: run {})", o.wasm, o.game.build) }
+            if !Path::new(&o.wasm).exists() {
+                format!("{}  (missing: run {})", o.wasm, o.game.build)
+            } else {
+                // a module of another game, or a dev build without --dev: not served (game.rs module_refusal)
+                match App::module_json_now(&o.game_json).and_then(|m| o.game.module_refusal(&m, o.dev)) {
+                    Some(r) => format!("{}  (not served: {})", o.wasm, r.why),
+                    None => o.wasm.clone(),
+                }
+            }
         ),
         format!(
             "  {here:<10}: {}{}",
@@ -604,6 +619,15 @@ pub async fn run(o: Options, cores: usize) {
     } else {
         format!("  bans      : {bans}; no kick or ban (the control socket could not be made: above)")
     });
+    if o.game.keeps_log {
+        lines.push(format!(
+            "  log       : these lines also in {} (each after its time; past {} MB it turns over, {} files at most), \
+             kept past restarts and releases",
+            paths::join(&paths::join(&o.state, "log"), &log::kept_name(0)),
+            log::KEEP_BYTES >> 20,
+            log::KEEP_FILES
+        ));
+    }
     if !o.online_trace.is_empty() {
         lines.push(format!("  trace     : lobby messages (secrets redacted) into {}", o.online_trace));
     }

@@ -323,7 +323,10 @@ fn module(root: &std::path::Path, wasm: &str) {
     let p = root.join("repo").join(wasm);
     std::fs::create_dir_all(p.parent().unwrap()).unwrap();
     std::fs::write(&p, data(5000, true)).unwrap();
-    std::fs::write(p.with_extension("json"), br#"{"rev":"abc"}"#).unwrap();
+    // (Underground 2's as its builds of before the game id wrote it; Most Wanted's names its game, or its server
+    // refuses it)
+    let json: &[u8] = if wasm.contains("/mw/") { br#"{"rev":"abc","game":"mw"}"# } else { br#"{"rev":"abc"}"# };
+    std::fs::write(p.with_extension("json"), json).unwrap();
 }
 
 // The routes per base (PLAN D-38): UG2 at the root on its own name and this machine's, as ever; under /u2 on the
@@ -623,6 +626,50 @@ async fn most_wanted_under_mw_everywhere() {
     }
     // a name it does not have: 421 before any path
     assert_eq!(kit.request_to("nfsrevived.xyz", "GET", "/mw/", &[], b"").await.status, 421);
+}
+
+// A module of the other game, or a dev build with the D3DX oracle on a server without --dev: /game.json and
+// /game.wasm answer 503 and say no more (PLAN D-09, R-22); the right one is served at once, a json read each time
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_module_of_another_game_or_a_dev_build_is_not_served() {
+    let mw_folder = |root: &std::path::Path| {
+        std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw")).unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html>").unwrap();
+        module(root, "out/web/mw/nfsmw.wasm");
+    };
+    for dev in [false, true] {
+        let args: &[&str] = if dev { &["--game", "mw", "--dev"] } else { &["--game", "mw"] };
+        let kit = Kit::start(args, mw_folder).await;
+        let json = kit.path("repo/out/web/mw/nfsmw.json");
+        let get = |p: &'static str| kit.request_to("localhost", "GET", p, &[], b"");
+        assert_eq!((get("/mw/game.json").await.status, get("/mw/game.wasm").await.status), (200, 200));
+        for (body, served, text) in [
+            (&br#"{"rev":"abc","game":"ug2"}"#[..], false, "The game module is another game's\n"),
+            (br#"{"rev":"abc"}"#, false, "The game module is another game's\n"),
+            (br#"{"rev":"abc","game":"mw","oracle":1}"#, dev, "The game module is a dev build\n"),
+            (br#"{"rev":"abc","game":"mw"}"#, true, ""),
+        ] {
+            std::fs::write(&json, body).unwrap();
+            for p in ["/mw/game.json", "/mw/game.wasm", "/mw/game.wasm?v=x"] {
+                let a = get(p).await;
+                if served {
+                    assert_ne!(a.status, 503, "--dev {dev} {p} {}", String::from_utf8_lossy(body));
+                } else {
+                    assert_eq!((a.status, String::from_utf8_lossy(&a.body).as_ref()), (503, text), "--dev {dev} {p}");
+                    assert_eq!(a.header("cache-control").map(|c| c.contains("no-store")), Some(true));
+                }
+            }
+        }
+    }
+    // Underground 2's server: its own modules (with the game id or without), never Most Wanted's
+    let kit = Kit::start(&[], |root| module(root, "out/web/nfsu2.wasm")).await;
+    let json = kit.path("repo/out/web/nfsu2.json");
+    let cases = [(&br#"{"rev":"abc","game":"ug2"}"#[..], 200), (br#"{"rev":"abc","game":"mw"}"#, 503), (br#"{"rev":"abc"}"#, 200)];
+    for (body, status) in cases {
+        std::fs::write(&json, body).unwrap();
+        assert_eq!(kit.request_to("localhost", "GET", "/game.json", &[], b"").await.status, status, "{}", String::from_utf8_lossy(body));
+    }
 }
 
 /// an answer's whole length once its head is in (its Content-Length; none: no body)

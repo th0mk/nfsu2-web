@@ -43,6 +43,17 @@ pub struct GameProfile {
     /// it keeps the keyphrase saves (/vault: the U2 box's, for both games); false: its server keeps none and forwards
     /// its pages' /vault to the U2 box's (PLAN D-37, U-26; app/vault_forward.rs)
     pub own_vault: bool,
+    /// its console also goes into files in its state folder (<state>/log, nfsu2_util::log::keep), so that the lines
+    /// of before a restart or a release stay (Docker's log of a container goes with it); Underground 2's box has
+    /// only Docker's
+    pub keeps_log: bool,
+}
+
+/// What a module json says that a server refuses it for (`GameProfile::module_refusal`): the answer's short text,
+/// and the console's longer one
+pub struct Refusal {
+    pub body: &'static str,
+    pub why: String,
 }
 
 /// Underground 2's move from its old address (nfsu2.xyz) to the one it shares with Most Wanted (nfsrevived.xyz/u2/):
@@ -142,12 +153,15 @@ pub const UG2: GameProfile = GameProfile {
     handover: Some(&UG2_HANDOVER),
     roam_game: 0,
     own_vault: true,
+    keeps_log: false,
 };
 
 /// NFS Most Wanted (2005, PC, v1.3): what is known so far.
+// Its box's capacity is Underground 2's, the same code with the same defaults: the image's 6000 places (Dockerfile
+// NFSU2_MAX_PEERS), the line's 5000 and the hub's 6144 (nfsu2-lan, nfsu2-roam), until a load test on its own box
+// says otherwise (web/tools/mix-load.mjs --game mw; TRACKER M11-12, M12-16: cloudflared's share above all).
 // TODO(M6-29): the keyphrase saves' caps from measured Most Wanted saves.
-// TODO(M10-14): free roam's hub data (race-line modes, Rockport's tuning).
-// TODO(M11-05): the box's defaults (capacity), and refusing a module json of another game.
+// TODO(M10-14): free roam's hub data (Rockport's tuning).
 pub const MW: GameProfile = GameProfile {
     id: "mw",
     name: "NFS Most Wanted",
@@ -187,6 +201,7 @@ pub const MW: GameProfile = GameProfile {
     handover: None,
     roam_game: 1,
     own_vault: false,
+    keeps_log: true,
 };
 
 /// the games --game names
@@ -286,6 +301,37 @@ impl GameProfile {
     pub fn is_exe(&self, name: &str) -> bool {
         name.to_lowercase() == self.exe.to_lowercase()
     }
+
+    /// Why this game's server does not serve the module whose json (web/build.sh writes it beside the module) is
+    /// `json`: another game's module (its "game"; Underground 2's builds of before it had one have none, and are
+    /// Underground 2's), or, without --dev (`dev`), a dev build with the D3DX oracle ("oracle":1, which no public
+    /// server serves: PLAN D-09, R-22).  None: it is served.
+    pub fn module_refusal(&self, json: &serde_json::Map<String, serde_json::Value>, dev: bool) -> Option<Refusal> {
+        let game = json.get("game");
+        let ours = match game {
+            None => self.id == UG2.id,
+            Some(g) => g.as_str() == Some(self.id),
+        };
+        if !ours {
+            let named = match game.and_then(|g| g.as_str()) {
+                Some(g) => format!("game \"{}\"", nfsu2_util::js::printable(g, 16)),
+                None if game.is_some() => "a game that is no name".to_string(),
+                None => "no game".to_string(),
+            };
+            return Some(Refusal {
+                body: "The game module is another game's",
+                why: format!("its json names {named}, not \"{}\": {} builds this game's", self.id, self.build),
+            });
+        }
+        let oracle = json.get("oracle").is_some_and(|v| v.as_f64().is_some_and(|n| n != 0.0) || v.as_bool() == Some(true));
+        if oracle && !dev {
+            return Some(Refusal {
+                body: "The game module is a dev build",
+                why: "a dev build with the D3DX oracle (\"oracle\":1 in its json): only a server started with --dev serves it".to_string(),
+            });
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -307,6 +353,45 @@ mod tests {
         assert_eq!(GameProfile::by_id("MW").map(|g| g.id), Some("mw"));
         assert!(GameProfile::by_id("ug3").is_none());
         assert!(UG2.online.is_some() && MW.online.is_none());
+    }
+
+    // The module a server serves: its own game's (Underground 2's builds of before the game id have none), never
+    // another's; a dev build with the D3DX oracle only with --dev (PLAN D-09, R-22)
+    #[test]
+    fn the_modules_each_game_serves() {
+        let j = |s: &str| match serde_json::from_str::<serde_json::Value>(s).unwrap() {
+            serde_json::Value::Object(m) => m,
+            _ => panic!(),
+        };
+        for dev in [false, true] {
+            assert!(UG2.module_refusal(&j(r#"{"pages":1}"#), dev).is_none());
+            assert!(UG2.module_refusal(&j(r#"{"game":"ug2"}"#), dev).is_none());
+            assert!(MW.module_refusal(&j(r#"{"game":"mw","stamp":"x"}"#), dev).is_none());
+            for (g, json, named) in [
+                (&MW, r#"{"pages":1}"#, "no game"),
+                (&MW, r#"{"game":"ug2"}"#, "game \"ug2\""),
+                (&MW, r#"{"game":"MW"}"#, "game \"MW\""),
+                (&MW, r#"{"game":1}"#, "a game that is no name"),
+                (&UG2, r#"{"game":"mw","oracle":1}"#, "game \"mw\""),
+                (&UG2, r#"{"game":"\u0007mwmwmwmwmwmwmwmwmwmw"}"#, "game \"?mwmwmwmwmwmwmwm\""),
+            ] {
+                let r = g.module_refusal(&j(json), dev).unwrap_or_else(|| panic!("{} took {json}", g.id));
+                assert_eq!(r.body, "The game module is another game's");
+                assert_eq!(r.why, format!("its json names {named}, not \"{}\": {} builds this game's", g.id, g.build));
+            }
+        }
+        for g in GAMES {
+            let json = format!(r#"{{"game":"{}","oracle":1}}"#, g.id);
+            let r = g.module_refusal(&j(&json), false).expect("an oracle build without --dev");
+            assert_eq!(r.body, "The game module is a dev build");
+            assert!(r.why.contains("D3DX oracle") && r.why.contains("--dev"));
+            assert!(g.module_refusal(&j(&json), true).is_none(), "with --dev");
+            assert!(g.module_refusal(&j(&format!(r#"{{"game":"{}","oracle":true}}"#, g.id)), false).is_some());
+            assert!(g.module_refusal(&j(&format!(r#"{{"game":"{}","oracle":0}}"#, g.id)), false).is_none());
+        }
+        // (short enough for an error answer: the deploy test's crawl allows 64 bytes)
+        assert!(["The game module is another game's", "The game module is a dev build"].iter().all(|b| b.len() < 63));
+        const { assert!(MW.keeps_log && !UG2.keeps_log) };
     }
 
     // UG2 at the root but on the shared site, Most Wanted under /mw everywhere; --base-path on top

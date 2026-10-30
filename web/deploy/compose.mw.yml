@@ -14,7 +14,8 @@
 #   COMPOSE_FILE=compose.yml:compose.tunnel.yml:compose.mw.yml     so that plain "docker compose ..." uses all three
 #   NFSU2_DATA=/srv/nfsmw/game       your NFS Most Wanted folder (the one with speed.exe; default ./game)
 # then:  docker compose up -d && docker compose logs -f server
-# The operator's commands to this server: web/deploy/nfsmw (copy it next to this file).
+# The operator's commands to this server: web/deploy/nfsmw (copy it next to this file).  The server's console is also
+# kept in its state volume, past restarts and releases (Docker's log goes with each container): ./nfsmw log.
 name: nfsmw-web
 services:
   net:

@@ -119,8 +119,19 @@ test('Most Wanted\'s compose: Underground 2\'s settings with its own names', { s
   assert.equal(mw.services.server.environment.NFSU2_WASM, '/module/nfsmw.wasm');
   for (const [cfg, slice] of [[ug2, 'nfsu2.slice'], [mw, 'nfsmw.slice']])
     for (const [name, s] of Object.entries(cfg.services)) if (name !== 'caddy') assert.equal(s.cgroup_parent, slice, `${cfg.name} ${name}`);
+  // its keyphrase saves forwarded to the U2 box's (src/app/vault_forward.rs): where to, and the Access service token,
+  // from .env on the MW box only (none set here: empty, which the server takes for none)
+  for (const k of ['NFSU2_VAULT_FORWARD', 'NFSU2_CF_ACCESS_CLIENT_ID', 'NFSU2_CF_ACCESS_CLIENT_SECRET']) {
+    assert.equal(mw.services.server.environment[k], '', k);
+    assert.equal(ug2.services.server.environment[k], undefined, `UG2: no ${k}`);
+  }
   // the same image and the same settings, but for the names
-  const same = s => { const c = structuredClone(s); delete c.cgroup_parent; delete c.command; delete c.environment?.NFSU2_WASM; return c; };
+  const same = s => {
+    const c = structuredClone(s);
+    delete c.cgroup_parent; delete c.command;
+    for (const k of ['NFSU2_WASM', 'NFSU2_VAULT_FORWARD', 'NFSU2_CF_ACCESS_CLIENT_ID', 'NFSU2_CF_ACCESS_CLIENT_SECRET']) delete c.environment?.[k];
+    return c;
+  };
   for (const name of ['server', 'net', 'cloudflared']) assert.deepEqual(same(mw.services[name]), same(ug2.services[name]), name);
   const srv = mw.services.server;
   assert.equal(srv.network_mode, 'service:net');
@@ -147,5 +158,8 @@ test('each box\'s operator command: ctl in its own server, Most Wanted\'s with -
   const last = f => fs.readFileSync(path.join(DEPLOY, f), 'utf8').trim().split('\n').at(-1);
   assert.equal(last('nfsu2'), 'cd "$(dirname "$0")" && exec docker compose exec -T server /app/nfsu2-server ctl "$@"');
   assert.equal(last('nfsmw'), 'cd "$(dirname "$0")" && exec docker compose exec -T server /app/nfsu2-server ctl --game mw "$@"');
+  // and Most Wanted's console kept in its state volume (the server's <state>/log, src/game.rs keeps_log)
+  assert.ok(fs.readFileSync(path.join(DEPLOY, 'nfsmw'), 'utf8').includes(
+    '[ "$1" = log ] && cd "$(dirname "$0")" && exec docker compose exec -T server tail -n "${2:-200}" /state/log/console.log\n'));
   if (process.platform !== 'win32') for (const f of ['nfsu2', 'nfsmw']) assert.ok(fs.statSync(path.join(DEPLOY, f)).mode & 0o100, `${f} is executable`);
 });

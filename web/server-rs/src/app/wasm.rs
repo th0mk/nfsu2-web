@@ -103,6 +103,9 @@ impl App {
     /// compressed body is made from the bytes hashed).  Another (a new build since): 409, and the page asks
     /// /game.json again; a copy of this module is never kept under another's address.
     pub async fn send_wasm(&self, q: &Request, s: &mut Response, u: &Url) -> Res {
+        if let Some(r) = self.module_refused().await {
+            return self.plain(q, s, 503, r.body, &[], Cache::Store, true).await;
+        }
         let v = u.param("v");
         let c = self.compressed_wasm().await;
         if let (Some(v), Some(c)) = (&v, &c)
@@ -153,6 +156,9 @@ impl App {
         let Some((mut m, hash)) = info else {
             return self.send_file(q, s, &dir, None, files::FileOpts { found: f, ..Default::default() }).await;
         };
+        if let Some(r) = self.refusal_of(&m) {
+            return self.plain(q, s, 503, r.body, &[], Cache::Store, true).await;
+        }
         m.insert("module".into(), Value::String(hash));
         let body = nfsu2_util::json::stringify(&js_numbers(Value::Object(m)));
         let mut h = self.headers(q, Cache::Store, true);
@@ -163,6 +169,43 @@ impl App {
             send(s, body.as_bytes()).await?;
         }
         finish(s).await
+    }
+}
+
+impl App {
+    /// The module json beside the module, read now (None: there is none, or it is no JSON object).
+    pub fn module_json_now(path: &str) -> Option<serde_json::Map<String, Value>> {
+        let b = std::fs::read(path).ok()?;
+        match serde_json::from_str::<Value>(&String::from_utf8_lossy(&b)) {
+            Ok(Value::Object(m)) => Some(m),
+            _ => None,
+        }
+    }
+
+    /// Whether the module on disk now is one this server refuses (game.rs `module_refusal`: another game's, or a
+    /// dev build without --dev): /game.json and /game.wasm then answer 503, and the console says why, once a minute
+    /// at most.  A module without a json is served as ever.
+    pub async fn module_refused(&self) -> Option<crate::game::Refusal> {
+        let b = tokio::fs::read(&self.o.game_json).await.ok()?;
+        match serde_json::from_str::<Value>(&String::from_utf8_lossy(&b)) {
+            Ok(Value::Object(m)) => self.refusal_of(&m),
+            _ => None,
+        }
+    }
+
+    fn refusal_of(&self, m: &serde_json::Map<String, Value>) -> Option<crate::game::Refusal> {
+        // (the last line said and when: another reason at once, the same one again after a minute)
+        static SAID: Mutex<(String, i64)> = parking_lot::const_mutex((String::new(), 0));
+        let r = self.o.game.module_refusal(m, self.o.dev)?;
+        let line = format!("[module] not served: {} ({})", r.why, self.o.game_json);
+        let now = nfsu2_util::now_ms();
+        let mut said = SAID.lock();
+        if said.0 != line || now - said.1 >= 60_000 {
+            *said = (line.clone(), now);
+            drop(said);
+            log::line(&line);
+        }
+        Some(r)
     }
 }
 
