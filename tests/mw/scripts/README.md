@@ -101,7 +101,9 @@ impound it takes a car that can be driven in Car_Select.fng (M4-48).  It stops a
 driven) and at a career menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
 race I` and `bot pursuit` do one race or one pursuit, `bot bust N [pay]` lets the cops bust the standing car N times
-(`pay`: no marker spent), `bot wait [N]` waits for the bot to stop.  `bot_impound.txt` runs `bot bust ${BUST_N}
+(`pay`: no marker spent), `bot car` takes the career's next car at the safehouse (as after two lost rival challenges;
+bot_probe.txt with `BOT_A=car BOT_B=car` from bin11_start does it from the safehouse menu, then from free roam),
+`bot wait [N]` waits for the bot to stop.  `bot_impound.txt` runs `bot bust ${BUST_N}
 ${BUST_PAY}` from a safehouse save (bin13_start: the third bust spends a marker, or with `pay` impounds the first car
 and the bot takes the second; bin15_start with `pay`: game over, the bot stops there).  `career_bot.txt`
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
