@@ -35,7 +35,7 @@
 //                    instead: frame dumps go to the server's /artifacts/ as <name>-*.png (a server of our own
 //                    gets --artifacts <out>); --play-only: only that instance renders, the others run hostcheck
 //        [--page-arg bc=0]  more of the page address (each page's, repeated for several): play.html's bc=0 takes a
-//                    phone's texture path (DXT1 as ASTC, the rest unpacked) on this Mac
+//                    phone's texture path (DXT as ASTC, DXT1 with transparent texels unpacked) on this Mac
 //        [--download-log]  with --page app: at the end each page's Download log, as a player gets it (privacy.ts:
 //                    no names or addresses), as <out>/<name>.download.log
 //        [--fetch snd.raw]  a file of each page's save folder (OPFS) copied out as <out>/<name>.<file>,
