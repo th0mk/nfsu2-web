@@ -8,7 +8,10 @@
 //   node web/tools/shader-check.mjs --from <dir>
 //       check a dump on disk (an earlier --game run or web/tools/wgsl-xl output)
 //   node web/tools/shader-check.mjs --game mw
-//       the game run of that game (--game alone: ug2's); Most Wanted has none yet
+//       the game run of that game (--game alone: ug2's): Most Wanted's boots to
+//       its main menu (tests/mw/scripts/boot_menu.txt) and leaves by WM_CLOSE;
+//       NFSU2_SAVE_SEED=<dir> seeds the save directory first (the D3DX oracle
+//       module's d3dx9_26.dll, with --env NFSMW_D3DX=/save/d3dx9_26.dll)
 //   node web/tools/shader-check.mjs --sm3 [--out out/web/sm3]
 //       the ps_2_x, ps_3_0 and vs_3_0 translator against psref, the D3D9
 //       reference (docs/web/psref.md): the programs of psref's unit tests
@@ -23,21 +26,24 @@
 // Options: --port <http port> (8612), --save <OPFS dir> (shadercheck), --cross
 // (every game VS x every game PS too), --timeout <ms> (game run, 600000),
 // --census (with --from: also apply the game-run census below to that dump),
-// --script <url path> (game run, default /tests/scripts/quickrace.txt), --env K=V
+// --script <url path> (game run, default the game's: RUNS below), --env K=V
 // (game run, repeatable), --help (this text and the game's run).
-// Needs the server (out/web/server-rs/nfsu2-server, started with --dev) on that port and web/dist built.
+// Needs the server (out/web/server-rs/nfsu2-server, started with --dev, and
+// --game mw for Most Wanted) on that port and web/dist built.
 // Exit code 0 only when every module compiles, every pipeline builds, the
 // vertex-pulling and differential tests match, no translation was REJECTED
-// (index.txt, pairs.txt) and, for a game run, the game ran the whole quick race
-// (EXIT 0, the race reached, "quit at guest frame", no fault marker) and its
-// dump has at least the shader census of a full quick race (CENSUS below).
+// (index.txt, pairs.txt) and, for a game run, the game ran its whole script
+// (EXIT 0, the race or the menu reached, the script's end, no fault marker) and
+// its dump has at least that run's shader census (RUNS below): a run that
+// stops early has a smaller dump, which fails (L-083).
 // The dump is game-derived: keep it out of git.
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { gameOf, usage, nothingFor } from './rig-game.mjs';
+import { GAMES, gameOf, usage, nothingFor } from './rig-game.mjs';
+import { seedSave } from './save-seed.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -48,16 +54,35 @@ const origin = `http://localhost:${port}`;
 // the word after --game, unless it is another option, names the game of the run (ug2 without one)
 const gameWord = argv[argv.indexOf('--game') + 1];
 const GAME = argv.includes('--game') && gameWord !== undefined && !gameWord.startsWith('--') ? gameOf(argv) : 'ug2';
-const RUN_OF = { ug2: ['the quick race (--script /tests/scripts/quickrace.txt) to its end; at least the census of a full quick race'] };
-const NONE = 'none yet: no Most Wanted script or census floor (M3-06)';
+// each game's run: its script, the log lines that show it got where it goes and ran to its end, and what a whole
+// run creates, the census floor: distinct vertex / pixel shader objects and declarations, registered (shader,
+// declaration) vertex modules, pixel shader modules (with the cube twins).  Underground 2's is a full quick race's
+// (gpu-shaders report section 6); Most Wanted's a boot to the main menu's (TRACKER M3-06: the main menu, its car
+// and garage, the front end's own shaders).
+const RUNS = {
+  ug2: {
+    what: 'the quick race (--script /tests/scripts/quickrace.txt) to its end; at least the census of a full quick race',
+    script: '/tests/scripts/quickrace.txt',
+    reached: ['waitmem [0x008654a4]==6 satisfied', 'the race was not reached'],
+    ended: ['quit at guest frame', 'no "quit at guest frame" (the script did not finish)'],
+    census: { vsObjects: 16, psObjects: 24, decls: 11, vsPairs: 17, psModules: 68 },
+  },
+  mw: {
+    what: 'the boot to the main menu (--script /tests/scripts/boot_menu.txt) and its WM_CLOSE; at least the census of that boot',
+    script: '/tests/scripts/boot_menu.txt',
+    reached: ['waitfng MainMenu.fng satisfied', 'the main menu was not reached'],
+    ended: ['app: the game exited (code 0) after the quit request', 'the game did not leave by WM_CLOSE (the script did not finish)'],
+    // a boot to the main menu with the menu's car (headless, rev 162bdc2+, M3-06's run)
+    census: { vsObjects: 30, psObjects: 65, decls: 19, vsPairs: 14, psModules: 244 },
+  },
+};
+const RUN_OF = Object.fromEntries(Object.entries(RUNS).map(([g, r]) => [g, [r.what]]));
+const NONE = 'none yet: no script or census floor for this game';
 if (argv.includes('--help')) usage(import.meta.url, GAME, 'The game run', RUN_OF[GAME] ?? [], NONE);
 if (!RUN_OF[GAME]) nothingFor(GAME, NONE);
 await (await import('./dev-server.mjs')).requireDev(origin);
 
-// what a whole quick race creates (gpu-shaders report section 6): distinct
-// vertex / pixel shader objects and declarations, registered (shader,
-// declaration) vertex modules, pixel shader modules (with the cube twins)
-const CENSUS = { vsObjects: 16, psObjects: 24, decls: 11, vsPairs: 17, psModules: 68 };
+const RUN = RUNS[GAME], CENSUS = RUN.census;
 // --sm3: what the module ABI has no place for (gpu-abi.md section 11.1; runtime/web/vsemu_sm3.inc), which
 // psref's unit programs use and the game's shaders do not; and the modules checked at least, by the result's
 // field: against psref (ps3diff, vs3diff) today's unit programs (cube twins included; a program psref refuses
@@ -186,19 +211,22 @@ if (argv.includes('--game')) {
   // DESIGN.md section 5 suite environment + the dump
   const env = ['NOMOVIES=1', 'SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_DISCORD=0',
     'NFSU2_SHADER_DUMP=/save/shaders', ...argv.flatMap((a, i) => a === '--env' ? [argv[i + 1]] : [])];
-  const u = `${origin}/test/hostcheck.html?wasm=/game.wasm&pages=16384&arg=/data/SPEED2.EXE&save=${save}&fresh` +
-    `&reg=/tests/web/seed/registry_perf4_native.txt&script=${opt('--script', '/tests/scripts/quickrace.txt')}` +
+  // NFSU2_SAVE_SEED: a save tree in the save directory first (as run-suite.mjs), so no &fresh
+  const SEED = process.env.NFSU2_SAVE_SEED ?? '';
+  if (SEED) console.log(`save seed: ${await seedSave(page, origin, save, SEED)} files from ${SEED}`);
+  const u = `${origin}/test/hostcheck.html?wasm=/game.wasm&pages=16384&arg=${GAMES[GAME].exe}&save=${save}${SEED ? '' : '&fresh'}` +
+    `${GAMES[GAME].reg ? `&reg=${GAMES[GAME].reg}` : ''}&script=${opt('--script', RUN.script)}` +
     env.map(e => `&env=${encodeURIComponent(e)}`).join('');
   console.log('game: ' + u);
   await page.goto(u);
   if (!await waitDone(timeout)) { console.log('TIMEOUT (game run)'); await browser.close(); process.exit(2); }
   console.log('game ' + (lastExit ?? 'no EXIT line'));
-  // a crash, a stop before the race or an early exit gives a smaller dump
-  // that would otherwise still pass
+  // a crash, a stop before the race or the menu or an early exit gives a
+  // smaller dump that would otherwise still pass
   const glog = gameLog.join('\n');
   if (lastExit !== 'EXIT 0') problems.push(`game: ${lastExit ?? 'no EXIT line'}`);
-  if (!glog.includes('quit at guest frame')) problems.push('game: no "quit at guest frame" (the script did not finish)');
-  if (!glog.includes('waitmem [0x008654a4]==6 satisfied')) problems.push('game: the race was not reached');
+  if (!glog.includes(RUN.ended[0])) problems.push(`game: ${RUN.ended[1]}`);
+  if (!glog.includes(RUN.reached[0])) problems.push(`game: ${RUN.reached[1]}`);
   const fault = gameLog.find(l => /FAULT IN GUEST|GUEST MEMORY FAULT|HOST SEGV|TIME LIMIT REACHED|TRAP in thread|unimplemented import|RangeError|PAGEERROR/.test(l));
   if (fault) problems.push(`game: ${fault}`);
   // copy the dump out of OPFS
@@ -219,7 +247,10 @@ if (argv.includes('--game')) {
   // every VS object x every declaration that feeds it + CPU test vectors
   if (!argv.includes('--no-pairs')) {
     buildXl();
-    console.log(execFileSync(xl, ['--pairs', out, out]).toString().trim());
+    // wgsl-xl exits 1 when a pair is REJECTED: the dump is still checked (checkDump names the pairs.txt lines)
+    const r = spawnSync(xl, ['--pairs', out, out], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    console.log(String(r.stdout ?? '').trim());
+    if (r.status !== 0) problems.push(`wgsl-xl --pairs: exit ${r.status}`);
     await upload(out);
   }
 } else if (from) {
