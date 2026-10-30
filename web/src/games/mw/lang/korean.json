@@ -1,0 +1,14 @@
+{
+  "The game's menus and text in English, French, German, Italian, Spanish, Dutch, Swedish, Danish or Polish (in the other languages the game stays in English), and this page.": "게임의 메뉴와 텍스트(영어, 프랑스어, 독일어, 이탈리아어, 스페인어, 네덜란드어, 스웨덴어, 덴마크어 또는 폴란드어이며, 다른 언어에서는 게임이 영어로 유지돼요), 그리고 이 페이지.",
+  "The EA logo, the PSA and the attract movie. Skippable: Enter, Esc, Space, a left click, or A, B or Start ends each one. Original: as in the game, where the EA logo plays to its end.": "EA 로고, PSA, 데모 영상. 건너뛰기 가능: Enter, Esc, 스페이스, 왼쪽 클릭 또는 A, B, Start로 각각 끝낼 수 있어요. 원본: 게임과 같이 EA 로고는 끝까지 재생돼요.",
+  "Auto follows the display (120 on a 120 Hz screen, 240 on a 240 Hz one). 30 is steadier where 60 stutters, and easier on the battery.": "'자동'은 디스플레이에 맞춰요(120 Hz 화면에서는 120, 240 Hz에서는 240). 60에서 끊길 때는 30이 더 안정적이고 배터리에도 좋아요.",
+  "Pause freezes the game and its sound, as alt-tab does on Windows.": "'일시정지'는 Windows에서 Alt+Tab을 할 때처럼 게임과 사운드를 멈춰요.",
+  "The game's own force feedback, on controllers that have rumble.": "진동을 지원하는 컨트롤러에서 게임 본래의 포스 피드백.",
+  "Change camera": "카메라 변경",
+  "Speedbreaker": "Speedbreaker",
+  "The PC game's own code (version 1.3), recompiled to run in the browser with WebGPU graphics and Web Audio sound, with the original look at its highest settings.": "PC 게임 원래의 코드(버전 1.3)를 다시 컴파일해 WebGPU 그래픽과 Web Audio 사운드로 브라우저에서 실행되며, 원작의 모습을 최고 설정으로 보여 줘요.",
+  "Play on a keyboard or a controller, with your aliases saved in this browser. Download them as a backup, restore them, or bring in the aliases from the PC game's NFS Most Wanted folder.": "키보드나 컨트롤러로 플레이하고, 프로필은 이 브라우저에 저장돼요. 백업으로 다운로드하거나 복원할 수 있고, PC 게임의 NFS Most Wanted 폴더에서 프로필을 가져올 수도 있어요.",
+  "A fan project from the makers of Underground 2 Revived: Most Wanted as it was on the PC, in the browser, with nothing to install.": "Underground 2 Revived 제작자들의 팬 프로젝트: PC판 그대로의 Most Wanted를 아무것도 설치하지 않고 브라우저에서.",
+  "Rights holders can email <0>legal@nfsrevived.xyz</0>. Support emails won't be answered: for help, ask on <1>our Discord</1>.": "권리자는 <0>legal@nfsrevived.xyz</0>로 이메일을 보내 주세요. 지원 문의 이메일에는 답변하지 않으니, 도움이 필요하면 <1>저희 Discord</1>에서 물어봐 주세요.",
+  "The source code is on <0>GitHub</0>. This port uses the same static recompiler as Underground 2 Revived, which is based on <1>NFSU2Recomp</1> by Talha Müderrisoğlu, following the method of <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "소스 코드는 <0>GitHub</0>에 있습니다. 이 포트는 Underground 2 Revived와 같은 정적 리컴파일러를 사용합니다. 이 리컴파일러는 Talha Müderrisoğlu의 <1>NFSU2Recomp</1>를 기반으로 하며, <2>N64: Recompiled</2>와 <3>XenonRecomp</3>의 방식을 따릅니다."
+}

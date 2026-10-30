@@ -45,8 +45,9 @@ interface Group { title: string; more: string; items: Item[]; status?: boolean; 
 /** each language's name in English (translated where it is shown), beside its own name */
 const LANGUAGE_NAMES: Record<Language, string> = {
   english: N('English'), french: N('French'), german: N('German'), italian: N('Italian'), spanish: N('Spanish'), dutch: N('Dutch'),
-  swedish: N('Swedish'), danish: N('Danish'), korean: N('Korean'), chinese: N('Chinese'), japanese: N('Japanese'), russian: N('Russian'),
-  thai: N('Thai'), portuguese: N('Portuguese (Brazil)'), polish: N('Polish'), turkish: N('Turkish'), hungarian: N('Hungarian'),
+  swedish: N('Swedish'), danish: N('Danish'), finnish: N('Finnish'), korean: N('Korean'), chinese: N('Chinese'), japanese: N('Japanese'),
+  russian: N('Russian'), thai: N('Thai'), portuguese: N('Portuguese (Brazil)'), polish: N('Polish'), turkish: N('Turkish'),
+  hungarian: N('Hungarian'),
 };
 const LANGUAGE_OPTS = LANGUAGES.map(l => [l, LANGUAGE_NAMES[l]] as [string, string]);
 

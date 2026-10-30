@@ -14,12 +14,13 @@ export { REGISTRY_DEFAULTS } from './registry';
 export { TEMPLATE as SETTINGS_TEMPLATE } from './template';
 export { STORAGE } from './storage';
 export { MOVIE_SIZE } from './movies';
+/** Underground 2's and Finnish: one setting for the page and the game (PLAN U-05), registry_mw.c maps it */
+export { LANGUAGES } from './languages';
 export { LAUNCHED, KEYPHRASE_WORD } from './launch';
 export { DERIVE_INFO as VAULT_DERIVE_INFO, SEAL_AAD as VAULT_AAD } from './keyphrase';
 // the same as Underground 2's
 // APP_DEFAULTS: each variable's reader is in the runtime both games share (runtime/core.list, runtime/web: com.c,
-// autotest.c, audio_web.c, gpu_web.c, main_web.c) or the page; LANGUAGES: one setting for the page and the game
-// (PLAN U-05), registry_mw.c maps it; VAULT_PREFIX: the one keyphrase (D-37)
-export { APP_DEFAULTS, LANGUAGES, VAULT_PREFIX } from '../ug2';
+// autotest.c, audio_web.c, gpu_web.c, main_web.c) or the page; VAULT_PREFIX: the one keyphrase (D-37)
+export { APP_DEFAULTS, VAULT_PREFIX } from '../ug2';
 
 export type Checked = Profile<typeof self>;

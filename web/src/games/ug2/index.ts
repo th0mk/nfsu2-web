@@ -9,7 +9,7 @@ export { EXE, PROFILES_DIR, LOG_MARK, FILE_PREFIX } from './run';
 export { REGISTRY_DEFAULTS } from './registry';
 export { TEMPLATE as SETTINGS_TEMPLATE } from './template';
 export { APP_DEFAULTS } from '../../app/settings';
-export { LANGUAGES } from '../../app/i18n';
+export { LANGUAGES } from './languages';
 export { PREFIX as VAULT_PREFIX } from '../../app/vault';
 export { STORAGE } from './storage';
 export { MOVIE_SIZE } from './movies';

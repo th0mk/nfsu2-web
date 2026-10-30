@@ -6,9 +6,11 @@
 //    A new or changed English text fails here until each language has it: `node web/tools/i18n-keys.mjs <language>`
 //    lists what one lacks, `node web/tools/i18n-keys.mjs --check` what is wrong.
 //    Both for each game the page is built for (web/src/games/<id>, web/build.mjs --game): a game's texts are the
-//    shared sources' and its own folder's, its files the shared ones with its own (web/src/games/<id>/lang) over them.
+//    shared sources' and its own folder's, its files the shared ones with its own (web/src/games/<id>/lang) over them,
+//    and its own alone for a language only it has (Most Wanted's Finnish); its languages are its files' and its list's
+//    (web/src/games/<id>/languages.ts).
 // 3. The same rules on a made-up page of two games: a text only one game uses, a game's own wording of a shared text,
-//    and what is wrong when a text sits in the wrong file.
+//    what is wrong when a text sits in the wrong file, and a language only one game has.
 // 4. t(), tn() and tvars() as the page calls them: English as written, a language's text and plural forms once its
 //    file is in (fetched, as the page fetches /lang/<language>.json), English for a text the file lacks.
 import test from 'node:test';
@@ -18,7 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
-import { catalog, check, GAMES, gamesIn, langFile, langTexts, LANGUAGE_FILES } from '../tools/i18n-keys.mjs';
+import { catalog, check, GAMES, gamesIn, langFile, langTexts, languageProblems, languages, LANGUAGE_FILES, ownLangFile } from '../tools/i18n-keys.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,13 +38,32 @@ for (const game of GAMES) {
     for (const [k, e] of keys) for (const w of e.where) assert.ok(!w.startsWith('games/') || w.startsWith(`games/${game}/`), `${JSON.stringify(k)} from ${w}`);
   });
 
-  for (const lang of LANGUAGE_FILES) {
+  // the page's languages: the files' (the shared ones, every game's, and the game's own of a language only it has), as
+  // the game lists them (src/games/<id>/languages.ts: the picker, settings.ini's values) and as its page has them
+  test(`${game}: its languages, the files' and the list's`, async () => {
+    assert.deepEqual(languageProblems(game), []);
+    for (const l of LANGUAGE_FILES) assert.ok(languages(game).includes(l), l);
+    const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/i18n.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral',
+      alias: { '@game': path.join(HERE, '../src/games', game) } });
+    const I = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+    assert.deepEqual([...I.LANGUAGES].filter(l => l !== 'english').sort(), [...languages(game)].sort());
+    for (const l of I.LANGUAGES) assert.ok(I.LOCALE[l] && I.NATIVE[l], l);
+  });
+
+  for (const lang of languages(game)) {
     test(`${game} ${lang}: every text, as the English has it`, () => {
-      assert.ok(fs.existsSync(langFile(lang)), `web/src/app/lang/${lang}.json`);
+      assert.ok(fs.existsSync(langFile(lang)) || fs.existsSync(ownLangFile(game, lang)), `${lang}.json`);
       assert.deepEqual(check(lang, keys, game), []);
     });
   }
 }
+
+test('Finnish: Most Wanted\'s page only, every text in its own file', () => {
+  assert.ok(!fs.existsSync(langFile('finnish')), 'no shared file: Underground 2\'s page has no Finnish');
+  assert.ok(!languages('ug2').includes('finnish'));
+  assert.ok(languages('mw').includes('finnish'));
+  assert.deepEqual(Object.keys(langTexts('mw', 'finnish')).sort(), [...catalog('mw').keys.keys()].sort());
+});
 
 test('a page of two games: shared texts, each game\'s own, and texts in the wrong file', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'i18n-games-'));
@@ -74,13 +95,24 @@ test('a page of two games: shared texts, each game\'s own, and texts in the wron
   assert.deepEqual(check('french', null, 'two', root), ['not in use: "Only one"']);
   w('src/games/two/lang/french.json', '{ broken');
   assert.match(check('french', null, 'two', root).join('\n'), /^games\/two\/lang\/french\.json: /);
+  w('src/games/two/lang/french.json', { 'Only two': 'Seulement deux', 'Two again': 'Encore deux' });
+  // a language only two has: its own file has every text, and two lists it
+  w('src/games/two/lang/finnish.json', { 'Only two': 'Vain kaksi', 'Shared markup': 'Jaettu merkintä' });
+  assert.deepEqual(languages('one', root), ['french']);
+  assert.deepEqual(languages('two', root), ['french', 'finnish']);
+  assert.deepEqual(check('finnish', null, 'two', root), ['missing (games/two/lang/finnish.json): "Shared text"', 'missing (games/two/lang/finnish.json): "Two again"']);
+  w('src/games/two/languages.ts', 'export const LANGUAGES = [\'english\', \'french\'];');
+  assert.deepEqual(languageProblems('two', root), ['finnish: a file of the page, not in games/two/languages.ts']);
+  w('src/games/two/languages.ts', 'export const LANGUAGES = [\'english\', \'french\', \'finnish\', \'danish\'];');
+  assert.deepEqual(languageProblems('two', root), ['games/two/languages.ts lists danish, which has no file']);
+  w('src/games/two/lang/klingon.json', {});
+  assert.deepEqual(languageProblems('two', root), ['games/two/lang/klingon.json: not a language the page has (i18n.ts LOCALE)', 'games/two/languages.ts lists danish, which has no file']);
 });
 
 test('t(), tn() and tvars(): English, then a language\'s text and plural forms', async () => {
   const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/i18n.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral' });
   const I = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
-  assert.deepEqual([...I.LANGUAGES].filter(l => l !== 'english').sort(), [...LANGUAGE_FILES].sort());
-  for (const l of I.LANGUAGES) assert.ok(I.LOCALE[l] && I.NATIVE[l], l);
+  assert.equal(I.isLanguage('finnish'), false, 'Underground 2\'s page (tsconfig.json\'s @game) has no Finnish');
   assert.equal(I.t('Saved: {what}, {value}.', { what: 'Movies', value: 'off' }), 'Saved: Movies, off.');
   assert.equal(I.tn(1, '{n} lap', '{n} laps'), '1 lap');
   assert.equal(I.tn(5, '{n} lap', '{n} laps'), '5 laps');

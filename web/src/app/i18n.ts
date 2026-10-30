@@ -1,8 +1,8 @@
 // The start page in the player's language.  It is the game's own (settings.ini language, settings.ts LANGUAGES), so
 // one choice sets both, in Settings and in the list at the top; English until the player picks another.  English is
 // the source: each text is written in English where it is used, and t() looks that English up in the language's file
-// (web/src/app/lang/<language>.json, served as lang/<language>.json under the page's base, fetched once the language
-// is picked), {name} for the parts that change.  A text the file does not have stays English.  The start page's own
+// (web/src/app/lang/<language>.json with the game's own web/src/games/<id>/lang/<language>.json over it, served as
+// lang/<language>.json under the page's base, fetched once the language is picked), {name} for the parts that change.  A text the file does not have stays English.  The start page's own
 // markup is marked in index.html: data-i18n (its text), data-i18n-html (a text with elements in it, which the file's
 // text names <0>…</0> in the order they open, so a language may move them), data-i18n-attr (attributes, by name).
 //
@@ -11,15 +11,18 @@
 // says which one it is; the log stays English.  web/test/i18n.test.mjs checks every file against the texts in use.
 //
 // This module touches the DOM only when called with it, and imports only base.ts (where the files are: '/' under
-// node), so the pure modules (settings.ts) can use it under node.
+// node) and the game's languages ('@game/languages'), so the pure modules (settings.ts) can use it under node.
 
 import { SHARED_STORAGE } from '../games/shared-storage';
+import { LANGUAGES as GAME_LANGUAGES } from '@game/languages';
 import { at } from '../base';
 
-/** the game's languages (runtime/language.c), settings.ini language's values; english is the default */
-export const LANGUAGES = ['english', 'french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish', 'korean',
+/** every language a game's page may be in (LOCALE and NATIVE have each) */
+const ALL = ['english', 'french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish', 'finnish', 'korean',
   'chinese', 'japanese', 'russian', 'thai', 'portuguese', 'polish', 'turkish', 'hungarian'] as const;
-export type Language = typeof LANGUAGES[number];
+export type Language = typeof ALL[number];
+/** this game's languages (src/games/<id>/languages.ts), settings.ini language's values; english is the default */
+export const LANGUAGES: readonly Language[] = GAME_LANGUAGES;
 type Forms = Partial<Record<Intl.LDMLPluralRule, string>>;
 export type Vars = Record<string, string | number>;
 
@@ -27,13 +30,13 @@ export type Vars = Record<string, string | number>;
  *  Traditional Chinese) */
 export const LOCALE: Record<Language, string> = {
   english: 'en', french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch: 'nl', swedish: 'sv', danish: 'da',
-  korean: 'ko', chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr',
+  finnish: 'fi', korean: 'ko', chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr',
   hungarian: 'hu',
 };
 /** each language in its own words (the pickers) */
 export const NATIVE: Record<Language, string> = {
   english: 'English', french: 'Français', german: 'Deutsch', italian: 'Italiano', spanish: 'Español', dutch: 'Nederlands',
-  swedish: 'Svenska', danish: 'Dansk', korean: '한국어', chinese: '繁體中文', japanese: '日本語', russian: 'Русский', thai: 'ไทย',
+  swedish: 'Svenska', danish: 'Dansk', finnish: 'Suomi', korean: '한국어', chinese: '繁體中文', japanese: '日本語', russian: 'Русский', thai: 'ไทย',
   portuguese: 'Português (Brasil)', polish: 'Polski', turkish: 'Türkçe', hungarian: 'Magyar',
 };
 

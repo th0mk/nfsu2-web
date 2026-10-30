@@ -1,6 +1,6 @@
 // The start page's English texts, as the page looks them up in a language's file (web/src/app/i18n.ts):
 //   node web/tools/i18n-keys.mjs              every text, with where it is and its plural's one form (JSON)
-//   node web/tools/i18n-keys.mjs <language>   the texts web/src/app/lang/<language>.json does not have yet
+//   node web/tools/i18n-keys.mjs <language>   the texts the game's page does not have in that language yet
 //   node web/tools/i18n-keys.mjs --check      what is wrong in each game's language files (--check <language>: one)
 //   --game <id>                               one game's page (web/build.mjs --game): ug2 by default, with --check
 //                                             every game
@@ -9,7 +9,9 @@
 // elements in it, data-i18n-attr: the attributes named).  A game's page has the texts of the shared sources and of its
 // own folder, web/src/games/<id>, and its language files are the shared web/src/app/lang/<language>.json with the
 // game's own web/src/games/<id>/lang/<language>.json over it (web/build.mjs merges them the same way).  So the shared
-// file holds the texts every game uses, and a game's file the texts only it uses and those it words differently.
+// file holds the texts every game uses, and a game's file the texts only it uses (also those only its body.json puts
+// in the page) and those it words differently.  A language only one game's page has (src/games/<id>/languages.ts) has
+// no shared file: the game's own file has every text of its page.
 // web/test/i18n.test.mjs checks every game's language files with it.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -151,7 +153,9 @@ export function catalog(game = 'ug2', root = WEB) {
     for (const k of r.keys) add(k.key, rel, k);
     bad.push(...r.bad.map(b => `${rel}: ${b}`));
   }
-  for (const k of htmlKeys(pageHtml(game, root))) add(k.key, k.where, k);
+  // a text only the game's body.json puts in the page is the game's own
+  const shared = new Set(htmlKeys(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).map(k => k.key));
+  for (const k of htmlKeys(pageHtml(game, root))) add(k.key, shared.has(k.key) ? k.where : `games/${game}/body.json`, k);
   return { keys: all, bad };
 }
 
@@ -173,13 +177,34 @@ export const holes = s => new Set([...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]));
 /** the <k> tags of a text, in order, opening and closing */
 export const tags = s => [...s.matchAll(/<(\/?)(\d+)>/g)].map(m => m[0]);
 
-/** CLDR's plural forms (Intl.PluralRules) of each language the files are for */
-const LOCALE = { french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch: 'nl', swedish: 'sv', danish: 'da', korean: 'ko',
-  chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr', hungarian: 'hu' };
-export const LANGUAGE_FILES = Object.keys(LOCALE);
+/** CLDR's plural forms (Intl.PluralRules) of each language the files may be for (i18n.ts LOCALE) */
+const LOCALE = { french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch: 'nl', swedish: 'sv', danish: 'da', finnish: 'fi',
+  korean: 'ko', chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr',
+  hungarian: 'hu' };
 export const langFile = (l, root = WEB) => path.join(root, 'src/app/lang', `${l}.json`);
 /** a game's own texts in a language, over the shared file's */
 export const ownLangFile = (game, l, root = WEB) => path.join(root, 'src/games', game, 'lang', `${l}.json`);
+/** the shared files' languages: every game's page has them */
+export const LANGUAGE_FILES = Object.keys(LOCALE).filter(l => fs.existsSync(langFile(l)));
+/** a game's page's languages but English: the shared files' and those of the game's own files that have no shared one
+ *  (a language only that game's page has, whose own file has every text) */
+export const languages = (game, root = WEB) => Object.keys(LOCALE).filter(l => fs.existsSync(langFile(l, root)) || fs.existsSync(ownLangFile(game, l, root)));
+
+/** What is wrong with a game's languages: a file that is no language (LOCALE), and a language its list
+ *  (src/games/<id>/languages.ts, the page's picker and settings.ini's values) and its files do not both have */
+export function languageProblems(game, root = WEB) {
+  const out = [], have = languages(game, root);
+  for (const [dir, name] of [[path.join(root, 'src/app/lang'), ''], [path.join(root, 'src/games', game, 'lang'), `games/${game}/lang/`]])
+    for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) if (!(f.replace(/\.json$/, '') in LOCALE)) out.push(`${name}${f}: not a language the page has (i18n.ts LOCALE)`);
+  const list = path.join(root, 'src/games', game, 'languages.ts');
+  if (!fs.existsSync(list)) return out;
+  const m = /\bLANGUAGES\b[^=]*=\s*\[([^\]]*)\]/.exec(fs.readFileSync(list, 'utf8'));
+  const listed = m ? [...m[1].matchAll(/'(\w+)'/g)].map(x => x[1]) : [];
+  if (listed[0] !== 'english') out.push(`games/${game}/languages.ts: english is not first`);
+  for (const l of listed.slice(1)) if (!have.includes(l)) out.push(`games/${game}/languages.ts lists ${l}, which has no file`);
+  for (const l of have) if (!listed.includes(l)) out.push(`${l}: a file of the page, not in games/${game}/languages.ts`);
+  return out;
+}
 
 /** a language's texts on a game's page: the shared file, the game's own file (if any) over it, as web/build.mjs
  *  writes /lang/<language>.json; throws when a file does not read */
@@ -189,16 +214,18 @@ export function langTexts(game, lang, root = WEB) {
 }
 function langFiles(game, lang, root) {
   const read = (f, name) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { throw new Error(`${name}: ${e.message}`); } };
-  const own = ownLangFile(game, lang, root);
-  return { shared: read(langFile(lang, root), `${lang}.json`), own: fs.existsSync(own) ? read(own, `games/${game}/lang/${lang}.json`) : {} };
+  const own = ownLangFile(game, lang, root), sharedFile = langFile(lang, root);
+  // a language only this game has: no shared file
+  return { shared: fs.existsSync(sharedFile) || !fs.existsSync(own) ? read(sharedFile, `${lang}.json`) : {},
+    own: fs.existsSync(own) ? read(own, `games/${game}/lang/${lang}.json`) : {}, gameOnly: !fs.existsSync(sharedFile) };
 }
 
 /** What is wrong with a game's texts in a language against the texts its page uses: [] when nothing. */
 export function check(lang, keys, game = 'ug2', root = WEB) {
   keys ??= catalog(game, root).keys;
   const out = [];
-  let shared, own;
-  try { ({ shared, own } = langFiles(game, lang, root)); } catch (e) { return [e.message]; }
+  let shared, own, gameOnly;
+  try { ({ shared, own, gameOnly } = langFiles(game, lang, root)); } catch (e) { return [e.message]; }
   const have = { ...shared, ...own }, ownName = `games/${game}/lang/${lang}.json`;
   for (const [k, v] of Object.entries(own)) if (k in shared && JSON.stringify(v) === JSON.stringify(shared[k])) out.push(`${ownName} says it as the shared file does: ${JSON.stringify(k)}`);
   const forms = new Intl.PluralRules(LOCALE[lang]).resolvedOptions().pluralCategories;
@@ -211,8 +238,8 @@ export function check(lang, keys, game = 'ug2', root = WEB) {
     return [...b].every(h => a.has(h)) && [...a].every(h => b.has(h) || (h === 'n' && (mayDropN || a.has('pos'))) || (h === 'pos' && b.has('n')));
   };
   for (const [k, e] of keys) {
-    // a text only the game's own folder uses goes in the game's file
-    if (!(k in have)) { out.push(`missing${e.where.every(w => w.startsWith(`games/${game}/`)) ? ` (${ownName})` : ''}: ${JSON.stringify(k)}`); continue; }
+    // a text only the game's own folder uses goes in the game's file, and every text of a language only it has
+    if (!(k in have)) { out.push(`missing${gameOnly || e.where.every(w => w.startsWith(`games/${game}/`)) ? ` (${ownName})` : ''}: ${JSON.stringify(k)}`); continue; }
     const v = have[k];
     const en = e.plural ? [e.one, k].join(' ') : k;
     const texts = typeof v === 'string' ? [[v, false]] : v && typeof v === 'object' && e.plural ? Object.entries(v).map(([f, x]) => [x, f !== 'other', f]) : null;
@@ -242,7 +269,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     for (const g of only ? [only] : GAMES) {
       const { keys, bad } = catalog(g);
       for (const x of bad) console.error(`${g}: not a literal: ${x}`);
-      for (const l of b ? [b] : LANGUAGE_FILES) { const p = check(l, keys, g); n += p.length; console.log(`${g} ${l}: ${p.length ? p.length + ' problems' : 'ok'}`); for (const x of p) console.log(`  ${x}`); }
+      const lp = languageProblems(g);
+      n += lp.length;
+      for (const x of lp) console.log(`${g}: ${x}`);
+      for (const l of b ? [b] : languages(g)) { const p = check(l, keys, g); n += p.length; console.log(`${g} ${l}: ${p.length ? p.length + ' problems' : 'ok'}`); for (const x of p) console.log(`  ${x}`); }
     }
     process.exit(n ? 1 : 0);
   }

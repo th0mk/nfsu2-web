@@ -21,10 +21,13 @@ if (!/^[a-z0-9]+$/.test(GAME) || !fs.existsSync(path.join('src/games', GAME, 'in
 }
 const DIST = GAME === 'ug2' ? 'dist' : `dist-${GAME}`, DEV = GAME === 'ug2' ? 'dist-dev' : `dist-${GAME}-dev`;
 // the start page's languages: the shared texts (src/app/lang/<language>.json) with the game's own over them
-// (src/games/<id>/lang/<language>.json); web/tools/i18n-keys.mjs checks both
+// (src/games/<id>/lang/<language>.json), and a language only this game has in its own file alone, which then has
+// every text of the page; web/tools/i18n-keys.mjs checks both, and that they are the languages the game lists
+// (src/games/<id>/languages.ts)
 const LANG = 'src/app/lang', OWN_LANG = path.join('src/games', GAME, 'lang');
-for (const f of fs.existsSync(OWN_LANG) ? fs.readdirSync(OWN_LANG) : []) if (f.endsWith('.json') && !fs.existsSync(path.join(LANG, f))) {
-  console.error(`build.mjs: ${OWN_LANG}/${f} has no shared ${LANG}/${f}`);
+const LANG_FILES = [...new Set([LANG, OWN_LANG].flatMap(d => fs.existsSync(d) ? fs.readdirSync(d) : []).filter(f => f.endsWith('.json')))].sort();
+if (LANG_FILES.includes('english.json')) {
+  console.error(`build.mjs: English is the page's own text: no english.json in ${LANG} or ${OWN_LANG}`);
   process.exit(2);
 }
 const opts = {
@@ -110,7 +113,7 @@ for (const f of fs.readdirSync(STATIC)) fs.copyFileSync(path.join(STATIC, f), pa
 fs.rmSync(path.join(DIST, 'lang'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'lang'));
 const texts = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
-for (const f of fs.readdirSync(LANG)) if (f.endsWith('.json'))
+for (const f of LANG_FILES)
   fs.writeFileSync(path.join(DIST, 'lang', f), JSON.stringify({ ...texts(path.join(LANG, f)), ...texts(path.join(OWN_LANG, f)) }));
 // beside its script in test/, which it names relatively, so the pages work under any base (src/base.ts)
 const page = name => `<!doctype html><meta charset=utf-8><title>${name}</title><script type=module src="${name}.js"></script>`;

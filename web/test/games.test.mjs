@@ -139,17 +139,27 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   r = build('--game', 'two');
   assert.equal(r.status, 2);
   assert.match(r.stderr, /no game "two"/);
+  // a language only one game has: its own file alone, with no shared one
+  w('src/games/one/lang/finnish.json', { A: 'a' });
+  r = build('--game', 'one');
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(read('dist-one/lang/finnish.json')), { A: 'a' });
+  r = build();
+  assert.ok(!fs.existsSync(path.join(root, 'dist/lang/finnish.json')), 'not on another game\'s page');
   w('src/games/one/lang/english.json', { A: 'a' });
   r = build('--game', 'one');
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /src\/games\/one\/lang\/english\.json has no shared src\/app\/lang\/english\.json/);
+  assert.match(r.stderr, /English is the page's own text: no english\.json/);
 });
 
-test('Most Wanted\'s page body: its name and keys, no Underground 2 panel (src/games/mw/body.json)', () => {
+test('Most Wanted\'s page body: its name, keys and panels, no Underground 2 text (src/games/mw/body.json)', () => {
   assert.equal(pageHtml('ug2'), fs.readFileSync(path.join(WEB, 'index.html'), 'utf8'), 'Underground 2\'s page is index.html');
   const mw = pageHtml('mw'), body = mw.slice(mw.indexOf('<body'));
   assert.match(body, /<h1>Most Wanted Revived<\/h1>/);
-  assert.doesNotMatch(body, /Underground 2|Hydraulics|Drift mode|Quick chat|outrun|Photo mode|Garage &gt; Save|id="about"|id="changes"/);
+  assert.doesNotMatch(body, /Underground 2(?! Revived)|Hydraulics|Drift mode|Quick chat|outrun|Photo mode|Garage &gt; Save/);
+  // its own changes, about and credits (TRACKER M6-11), none of Underground 2's paragraphs
+  assert.match(body, /<section class="panel" id="changes"[^]*?version 1\.3[^]*?<section class="panel" id="about"[^]*?makers of Underground 2 Revived[^]*?ko-fi\.com[^]*?legal@nfsrevived\.xyz[^]*?same static recompiler/);
+  assert.doesNotMatch(body, /Drive with friends|My brother|legal@nfsu2\.xyz|language packs|240 fps|WidescreenFix/);
   assert.match(body, /<section class="panel" id="online" aria-labelledby="online-title" hidden>/);
   assert.match(body, /<kbd>G<\/kbd><\/dt><dd data-i18n>Speedbreaker<\/dd>/);
 });

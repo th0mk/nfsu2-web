@@ -1,0 +1,14 @@
+{
+  "The game's menus and text in English, French, German, Italian, Spanish, Dutch, Swedish, Danish or Polish (in the other languages the game stays in English), and this page.": "遊戲的選單與文字（英文、法文、德文、義大利文、西班牙文、荷蘭文、瑞典文、丹麥文或波蘭文；其他語言下遊戲維持英文），以及此頁面。",
+  "The EA logo, the PSA and the attract movie. Skippable: Enter, Esc, Space, a left click, or A, B or Start ends each one. Original: as in the game, where the EA logo plays to its end.": "EA 標誌、PSA 和展示影片。可略過：按 Enter、Esc、空白鍵、滑鼠左鍵，或 A、B、Start 鍵即可結束每一段。原版：與原遊戲相同，EA 標誌會播放到結束。",
+  "Auto follows the display (120 on a 120 Hz screen, 240 on a 240 Hz one). 30 is steadier where 60 stutters, and easier on the battery.": "自動：跟隨螢幕（120 Hz 螢幕為 120，240 Hz 螢幕為 240）。在 60 會卡頓的裝置上，30 會更穩定，也更省電。",
+  "Pause freezes the game and its sound, as alt-tab does on Windows.": "暫停：凍結遊戲與聲音，就像在 Windows 上按 Alt+Tab 一樣。",
+  "The game's own force feedback, on controllers that have rumble.": "遊戲本身的力回饋，適用於支援震動的控制器。",
+  "Change camera": "切換視角",
+  "Speedbreaker": "Speedbreaker",
+  "The PC game's own code (version 1.3), recompiled to run in the browser with WebGPU graphics and Web Audio sound, with the original look at its highest settings.": "PC 版遊戲本身的程式碼（1.3 版），重新編譯後能在瀏覽器中執行，使用 WebGPU 圖形與 Web Audio 音效，並以最高設定呈現原版畫面。",
+  "Play on a keyboard or a controller, with your aliases saved in this browser. Download them as a backup, restore them, or bring in the aliases from the PC game's NFS Most Wanted folder.": "可使用鍵盤或控制器遊玩，玩家檔案保存在此瀏覽器中。可下載為備份、還原，或從 PC 版遊戲的 NFS Most Wanted 資料夾匯入玩家檔案。",
+  "A fan project from the makers of Underground 2 Revived: Most Wanted as it was on the PC, in the browser, with nothing to install.": "Underground 2 Revived 製作者的粉絲專案：PC 版原汁原味的 Most Wanted，在瀏覽器中遊玩，無需安裝任何東西。",
+  "Rights holders can email <0>legal@nfsrevived.xyz</0>. Support emails won't be answered: for help, ask on <1>our Discord</1>.": "權利人可寄信至 <0>legal@nfsrevived.xyz</0>。客服相關的電子郵件不會回覆：需要協助請到<1>我們的 Discord</1> 詢問。",
+  "The source code is on <0>GitHub</0>. This port uses the same static recompiler as Underground 2 Revived, which is based on <1>NFSU2Recomp</1> by Talha Müderrisoğlu, following the method of <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "原始碼公開在 <0>GitHub</0> 上。本移植版使用與 Underground 2 Revived 相同的靜態重編譯器，它以 Talha Müderrisoğlu 的 <1>NFSU2Recomp</1> 為基礎，並沿用 <2>N64: Recompiled</2> 與 <3>XenonRecomp</3> 的方法。"
+}

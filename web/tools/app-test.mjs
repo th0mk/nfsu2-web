@@ -84,8 +84,9 @@ import { gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
 // each game's steps (--only), as above: their scripts, screens and saves are Underground 2's.  Most Wanted's (mwSteps
 // below; its scripts tests/mw/scripts/app_*_probe.txt):
-//   start     the start page renders as Most Wanted's (its title and name, no Underground 2 panel), every check passes
-//             or warns, the module loads, settings.ini is its template (only the rows its runtime reads)
+//   start     the start page renders as Most Wanted's (its title and name, its own Changes and About panels, no
+//             Underground 2 panel), every check passes or warns, the module loads, settings.ini is its template (only the
+//             rows its runtime reads), Finnish among the languages
 //   play      Play -> a first start makes the alias ROTEST and saves it, a Custom Race to GO and 600 frames of it, then the
 //             game's own quit: exit 0; registry.txt seeded with its FirstTime, the alias's 63,596 bytes in the save
 //             folder, the page saw it saved, the log's session line is its own; F9's menu while it runs; beforeunload asks
@@ -281,14 +282,16 @@ async function mwSteps() {
       sections: [...document.querySelectorAll('section.panel')].filter(s => !s.hidden).map(s => s.id || 'play'),
       rows: [...document.querySelectorAll('#settings .set[data-key]')].map(e => e.dataset.key),
       keys: [...document.querySelectorAll('#keys dl.keys dd')].map(e => e.textContent),
+      langs: [...document.querySelectorAll('#lang-pick option')].map(e => e.value),
     }));
     await page.waitForTimeout(400);
     await shot(page, 'mw-start.png');
     const ug2Rows = ['roam', 'horn', 'online', 'subtitles', 'autosave', 'show_hidden_races', 'hud', 'ui_textures'];
     report('start', p === 'ready' && !checks.some(c => c.endsWith(':fail')) && problems.every(t => /tested/.test(t)) &&
       look.title === 'Most Wanted Revived' && look.name === 'Most Wanted Revived' && !!tmpl?.text?.startsWith('# NFS Most Wanted settings') &&
-      ['controls', 'saves', 'settings', 'game-data'].every(s => look.sections.includes(s)) && !['online', 'about', 'changes'].some(s => look.sections.includes(s)) &&
-      look.rows.includes('fps') && look.rows.includes('language') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)),
+      ['controls', 'saves', 'settings', 'game-data', 'changes', 'about'].every(s => look.sections.includes(s)) && !look.sections.includes('online') &&
+      look.rows.includes('fps') && look.rows.includes('language') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
+      look.langs[0] === 'english' && look.langs.includes('finnish'),
       { phase: p, checks, problems, ...look, templateBytes: tmpl?.size });
   }
 
