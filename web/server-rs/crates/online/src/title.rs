@@ -71,6 +71,11 @@ pub struct Title {
     /// the game's rooms are user sets (ucre, usea, ujoi, ulea, udel, uadm: lobby/usersets.rs), and its chat's +msg
     /// carries the sender's ATTR letters in F
     pub(crate) user_sets: bool,
+    /// a name another player holds or claimed gets its digits at the login (auth: the account and its persona), not
+    /// only when the game asks for the persona (pers): the title's game keeps the name it logged in with (Most Wanted's
+    /// lobby library holds three copies of it, which a persona given later left as they were, and a joiner renamed at
+    /// pers left its game room before the race: a run of 2026-10-30)
+    pub(crate) name_at_auth: bool,
     /// what a ranked race's results screen counts down from until its table comes, in ms
     pub(crate) results_wait_ms: f64,
     /// EA Messenger: TITL and EXTR in a persona's presence
@@ -148,6 +153,7 @@ pub const UG2: Title = Title {
     // (the race coordinator's racer entries, raised by the runtime: runtime/netrace.c; the lobby's own limit is the same)
     game_size: 6.0,
     user_sets: false,
+    name_at_auth: false,
     // ("Waiting 60 seconds for results", then "Waiting for final server results"; SPEED2.EXE 0x4e9210): a guess at how
     // long the others take to finish and report, no limit (the table comes once the result stands)
     results_wait_ms: 60_000.0,
@@ -198,6 +204,7 @@ pub const MW: Title = Title {
     game_size: 4.0,
     // its Quick Race searches and joins user sets (server.dll's answers in a LAN race, traced 2026-10-30)
     user_sets: true,
+    name_at_auth: true,
     results_wait_ms: 60_000.0,
     // (the PGET parser 0x846640 takes TITL and EXTR; the values are inferred)
     messenger_titl: "Need for Speed Most Wanted [PC]",

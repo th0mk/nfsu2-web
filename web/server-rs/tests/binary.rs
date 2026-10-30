@@ -467,7 +467,8 @@ async fn the_binary_for_most_wanted() {
         assert_eq!(status_of(port, p).await, 404, "{p}: outside /mw");
     }
     assert_eq!(status_of(port, "/mw").await, 308);
-    assert_eq!(srv.get("/mw/players").await.1, r#"{"players":0,"online":null,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);
+    // (its Online mode on: none in it yet)
+    assert_eq!(srv.get("/mw/players").await.1, r#"{"players":0,"online":0,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);
     // its console kept in its state folder too (a release's new container keeps its state, not Docker's log)
     let kept = state.join("log/console.log");
     let log_line = format!(

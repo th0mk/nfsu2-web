@@ -1091,13 +1091,31 @@ impl Core {
         if !valid_name(&name) || nfsu2_names::blocked_name(&name) {
             return self.lsend(s, kind, &[], if kind == "acct" { "inam" } else { "imst" });
         }
+        // a title whose game keeps the name it logged in with (`name_at_auth`): a name another player holds or claimed
+        // is given with its digits here already, as the account and its persona, and the runtime puts it in the game's
+        // own fields (runtime/mw/online_mw.c) before the game asks for the persona
+        let asked = name.clone();
+        let name = if self.title.name_at_auth {
+            self.give_way(&name, s);
+            if self.name_taken(&name, s) {
+                match self.free_variant(&name, s) {
+                    Some(v) => v,
+                    None => return self.lsend(s, kind, &[], if kind == "acct" { "inam" } else { "imst" }),
+                }
+            } else {
+                name
+            }
+        } else {
+            name
+        };
         let x = self.lobby.sm(s);
         x.account = Some(name.clone());
         // the account's personas: the name itself (cper adds more for this session)
         x.personas = vec![name.clone()];
         let addr = x.addr.clone();
         self.lobby.stats.logins += 1;
-        self.llog(&format!("[online] {addr}: logged in as \"{name}\" ({} connected)", self.lobby.sessions.len()), s);
+        let taken = if name != asked { format!(" (\"{asked}\" is taken)") } else { String::new() };
+        self.llog(&format!("[online] {addr}: logged in as \"{name}\"{taken} ({} connected)", self.lobby.sessions.len()), s);
         let t = day(self.now());
         // the game keeps the reply's text in 122 bytes: the optional fields go first
         let personas = self.lobby.s(s).personas.join(",");

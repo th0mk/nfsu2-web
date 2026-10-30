@@ -63,6 +63,37 @@ fn login_config_and_sele() {
     assert_eq!((s.g("USERSETS"), s.g("USERSET0")), ("1", "093.Razor"));
 }
 
+// a taken name gets its digits at the login already (name_at_auth): the account and its only persona, which the game
+// then asks for; Underground 2's login keeps the name and gives the digits at pers
+#[test]
+fn taken_name_at_login() {
+    let mut w = world();
+    let a = w.client("10.77.0.2");
+    let b = w.client("10.77.0.3");
+    w.login(a, "Razor");
+    let c = w.connect(b, PORT_LOBBY);
+    w.send(c, "auth", fields![("NAME", "Razor"), ("PASS", "Razor"), ("MAC", "$024e564c0102")]);
+    let auth = w.c(c).l("auth");
+    let given = auth.g("NAME").to_string();
+    assert!(given.len() == 9 && given.starts_with("Razor") && given[5..].bytes().all(|d| d.is_ascii_digit()), "{given}");
+    assert_eq!(auth.g("PERSONAS"), given);
+    w.send(c, "pers", fields![("PERS", given.as_str())]);
+    assert_eq!(w.c(c).l("pers").g("PERS"), given);
+    assert!(w.text().iter().any(|l| l.contains(&format!("logged in as \"{given}\" (\"Razor\" is taken)"))));
+    // the first one's own browser logging in again takes its name back (an older session of its own gives way)
+    let again = w.connect(a, PORT_LOBBY);
+    w.send(again, "auth", fields![("NAME", "Razor"), ("PASS", "Razor")]);
+    assert_eq!(w.c(again).l("auth").g("NAME"), "Razor");
+    let mut u = World::new(Opts::default());
+    let (x, y) = (u.client("10.77.0.2"), u.client("10.77.0.3"));
+    u.login(x, "Razor");
+    let c = u.connect(y, PORT_LOBBY);
+    u.send(c, "auth", fields![("NAME", "Razor"), ("PASS", "Razor")]);
+    assert_eq!(u.c(c).l("auth").g("NAME"), "Razor", "Underground 2: the digits come at pers");
+    u.send(c, "pers", fields![("PERS", "Razor")]);
+    assert_ne!(u.c(c).l("pers").g("PERS"), "Razor");
+}
+
 // four players at most (U-09 (a)): a game asked for 8 takes 4, a gset cannot raise it, the fifth finds it full
 #[test]
 fn four_players() {
