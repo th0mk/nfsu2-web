@@ -25,12 +25,13 @@ test('every game\'s profile has the same fields and its own id', async () => {
   const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
   const fields = Object.keys(P.ug2).sort();
   assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE',
-    'SITE_NAME', 'STORAGE', 'VAULT_PREFIX']);
+    'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
   for (const g of GAMES) {
     assert.deepEqual(Object.keys(P[g]).sort(), fields, g);
     assert.equal(P[g].GAME, g);
     for (const f of fields)
-      assert.ok(typeof P[g][f] === 'boolean' || P[g][f] && (typeof P[g][f] === 'string' ? P[g][f].trim() : typeof P[g][f] === 'object'), `${g} ${f}`);
+      assert.ok(typeof P[g][f] === 'boolean' || (f === 'VAULT_DERIVE_INFO' && P[g][f] === null) ||
+        P[g][f] && (typeof P[g][f] === 'string' ? P[g][f].trim() : typeof P[g][f] === 'object'), `${g} ${f}`);
     assert.equal(P[g].LANGUAGES[0], 'english', g);
   }
   assert.equal(P.ug2.SITE_NAME, 'Underground 2 Revived');
@@ -41,6 +42,9 @@ test('every game\'s profile has the same fields and its own id', async () => {
   assert.equal(P.ug2.LAUNCHED, false);
   assert.deepEqual([P.ug2.KEYPHRASE_WORD, P.mw.KEYPHRASE_WORD], ['nfsu2-xyz', 'nfsrevived']);
   for (const g of GAMES) assert.equal(P[g].VAULT_PREFIX, 'nfsu2-xyz', g);
+  // one keyphrase, each game's own key, token and sealing (vault.test.mjs): Underground 2's as it always was
+  assert.deepEqual([P.ug2.VAULT_DERIVE_INFO, P.ug2.VAULT_AAD], [null, 'nfsu2-xyz keyphrase saves v1']);
+  assert.ok(P.mw.VAULT_DERIVE_INFO && P.mw.VAULT_AAD !== P.ug2.VAULT_AAD);
   // the browser's storage: Underground 2's names as they always were, Most Wanted's its own; one game's offline copies
   // are never another's older ones (sw.ts deletes the names that start with its prefix)
   assert.deepEqual(P.ug2.STORAGE, { OFFLINE_CACHE: 'nfsu2-offline-2', OFFLINE_PREFIX: 'nfsu2-offline-' });

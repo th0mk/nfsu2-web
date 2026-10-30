@@ -7,7 +7,9 @@
 //   always derived as "nfsu2-xyz-" and the words; shown with the game's KEYPHRASE_WORD (src/games/<id>/launch.ts:
 //   Underground 2's own word until its launch switch is on, the shared one after it and in Most Wanted);
 // - PBKDF2-SHA-256 of it (100,000 rounds, a fixed salt: the keyphrase is all there is) gives 64 bytes: an AES-GCM key
-//   and a token.  The server keeps the keyphrase under the token's SHA-256 and never sees the key;
+//   and a token (Most Wanted: 64 bytes of HKDF-SHA-256 over them, with its own info, and its own AAD: one keyphrase,
+//   each game's own box; src/games/<id>/keyphrase.ts).  The server keeps the keyphrase under the token's SHA-256 and
+//   never sees the key;
 // - what is sent (kept()): the save folder but the F12 screenshots, the DVD and magazine covers, the game's graphics
 //   options (registry.txt), the LAN server's file (gamefile.bin), a test's input script and the device's own lines of
 //   settings.ini, as a stored zip (zip.ts), deflated, then sealed: a version byte (1), a 12-byte IV, the AES-256-GCM
@@ -38,6 +40,7 @@ import { withoutDevice } from './settings';
 import { fill, N, type Vars } from './i18n';
 import { at } from '../base';
 import { KEYPHRASE_WORD } from '@game/launch';
+import { DERIVE_INFO, SEAL_AAD } from '@game/keyphrase';
 
 /** the keyphrase's first word as the derivation takes it, whatever word it is shown with (SHOWN) */
 export const PREFIX = 'nfsu2-xyz';
@@ -51,7 +54,8 @@ export const KDF_ROUNDS = 100_000;
 export const MAX_BOX = 256 << 10;
 /** the most a keyphrase's zip inflates to: a backup's saves and settings (saves-ui.ts MAX_OTHER) */
 const MAX_PLAIN = 256 << 20;
-const SALT = 'nfsu2-xyz keyphrase saves v1', AAD = 'nfsu2-xyz keyphrase saves v1';
+// the KDF's input is the same for both games (one keyphrase); what a game seals with is its own (@game/keyphrase)
+const SALT = 'nfsu2-xyz keyphrase saves v1', AAD = SEAL_AAD;
 const WORD_SET = new Set(WORDS);
 const enc = new TextEncoder(), dec = new TextDecoder();
 
@@ -93,10 +97,16 @@ export interface Keys { key: CryptoKey; token: string }
 const base64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 
-/** The key that seals a keyphrase's saves and the token the server keeps them under. */
+/** The key that seals a keyphrase's saves and the token the server keeps them under: the 64 PBKDF2 bytes of the
+ *  keyphrase, the same for both games; a game with DERIVE_INFO (@game/keyphrase: Most Wanted) takes 64 bytes of its
+ *  own from them through HKDF-SHA-256, so its key and token are neither Underground 2's nor tell anything of them. */
 export async function keysOf(phrase: string): Promise<Keys> {
   const base = await crypto.subtle.importKey('raw', enc.encode(phrase), 'PBKDF2', false, ['deriveBits']);
-  const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(SALT), iterations: KDF_ROUNDS }, base, 512));
+  let bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(SALT), iterations: KDF_ROUNDS }, base, 512));
+  if (DERIVE_INFO !== null) {
+    const ikm = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveBits']);
+    bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode(DERIVE_INFO) }, ikm, 512));
+  }
   const key = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']);
   return { key, token: base64url(bits.subarray(32)) };
 }

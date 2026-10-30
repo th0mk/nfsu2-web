@@ -11,5 +11,6 @@ export { PROFILES_DIR, REGISTRY_DEFAULTS, SETTINGS_TEMPLATE, APP_DEFAULTS, LANGU
 // its own
 export { STORAGE } from './storage';
 export { LAUNCHED, KEYPHRASE_WORD } from './launch';
+export { DERIVE_INFO as VAULT_DERIVE_INFO, SEAL_AAD as VAULT_AAD } from './keyphrase';
 
 export type Checked = Profile<typeof self>;

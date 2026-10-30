@@ -808,8 +808,8 @@ test('saves past the cap name their largest files in the log; one stuck on the L
 // The word a keyphrase is shown with (src/games/<id>/launch.ts KEYPHRASE_WORD): Underground 2's own "nfsu2-xyz" until
 // its launch switch is on, the shared "nfsrevived" after it and in Most Wanted.  Every build reads both words, and
 // none, and derives from "nfsu2-xyz-" and the words whatever was typed: the pinned phrase's token is the same three
-// ways, and the same in each build.  (The switch on: Underground 2's launch.ts as it is, with LAUNCHED true, the way a
-// test turns it on.)
+// ways, Underground 2's with its switch off or on (Most Wanted's is its own: the next test).  (The switch on:
+// Underground 2's launch.ts as it is, with LAUNCHED true, the way a test turns it on.)
 test('the word a keyphrase is shown with: Underground 2\'s until its launch, the shared one after it and in Most Wanted; read either way', async () => {
   const fs = await import('node:fs');
   const pinned = 'nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agent', TOKEN = 'Ec0iIUolQixwifl_FxyyfA9X-foBclMDwN_l-F2BSCw';
@@ -832,11 +832,13 @@ test('the word a keyphrase is shown with: Underground 2\'s until its launch, the
   for (const [name, B, word] of [['off', builds.off, 'nfsu2-xyz'], ['on', builds.on, 'nfsrevived'], ['mw', builds.mw, 'nfsrevived']]) {
     assert.equal(B.PREFIX, 'nfsu2-xyz', name);
     assert.equal(B.SHOWN, word, name);
+    const token = (await B.keysOf(pinned)).token;
+    if (name !== 'mw') assert.equal(token, TOKEN, name);
     for (const typed of [pinned, 'nfsrevived-acid-acorn-acre-acts-afar-affix-aged-agent', 'NFSREVIVED acid acorn acre acts afar affix aged agent',
       'acid-acorn-acre-acts-afar-affix-aged-agent']) {
       const r = B.readPhrase(typed);
       assert.deepEqual(r, { phrase: pinned }, `${name}: ${typed}`);
-      assert.equal((await B.keysOf(r.phrase)).token, TOKEN, `${name}: ${typed}`);
+      assert.equal((await B.keysOf(r.phrase)).token, token, `${name}: ${typed}`);
     }
     const p = B.newPhrase();
     assert.ok(p.startsWith('nfsu2-xyz-'), `${name}: derived from nfsu2-xyz-`);
@@ -850,4 +852,51 @@ test('the word a keyphrase is shown with: Underground 2\'s until its launch, the
   }
   // with the switch off, Underground 2's page shows and reads its keyphrases as before
   assert.equal(V.shownPhrase(pinned), pinned);
+});
+
+// One keyphrase, each game's own key and token (src/games/<id>/keyphrase.ts): Underground 2's the keyphrase's PBKDF2
+// bytes as they always were, Most Wanted's 64 bytes of HKDF-SHA-256 over them with its own info, and its own sealing
+// (AAD): the pinned phrase's tokens, as node:crypto derives them; neither game's box opens with the other's key.  And
+// each game's page asks for the vault under its own base (MW /mw/vault: its server forwards it to the one vault).
+test('one keyphrase, each game\'s own key, token and box; each game\'s vault under its base', async () => {
+  const pinned = 'nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agent';
+  // the base of the page, as base.ts gives it under /u2/ or /mw/ (a stand-in for import.meta.url's)
+  const underBase = base => ({
+    name: 'base',
+    setup(b) {
+      b.onResolve({ filter: /\/base$/ }, () => ({ path: 'base', namespace: 'stand-in' }));
+      b.onLoad({ filter: /.*/, namespace: 'stand-in' }, () => ({ contents: `export const BASE = '${base}'; export const at = r => BASE + r; export const abs = at;`, loader: 'js' }));
+    },
+  });
+  const build = async (game, base) => {
+    const code = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/vault.ts')], bundle: true, format: 'esm', write: false, platform: 'neutral',
+      alias: { '@game': path.join(ROOT, 'web/src/games', game) }, plugins: [underBase(base)] })).outputFiles[0].text;
+    return import('data:text/javascript;base64,' + Buffer.from(code + `\n// ${game} ${base}`).toString('base64'));
+  };
+  const [U, M] = [await build('ug2', '/u2/'), await build('mw', '/mw/')];
+  const bits = crypto.pbkdf2Sync(pinned, 'nfsu2-xyz keyphrase saves v1', 100000, 64, 'sha256');
+  const mwBits = Buffer.from(crypto.hkdfSync('sha256', bits, Buffer.alloc(0), 'nfsmw keyphrase saves v1: key and token', 64));
+  const [ku, km] = [await U.keysOf(pinned), await M.keysOf(pinned)];
+  assert.equal(ku.token, 'Ec0iIUolQixwifl_FxyyfA9X-foBclMDwN_l-F2BSCw', 'Underground 2\'s, as it always was');
+  assert.equal(ku.token, bits.subarray(32).toString('base64url'));
+  assert.equal(km.token, mwBits.subarray(32).toString('base64url'));
+  assert.equal(km.token, 'yhhD0nx4rrRWWDQvAgqCb4tHkBqZ1GvSgPGNHrwxSUw', 'Most Wanted\'s, fixed for good');
+  assert.match(km.token, /^[A-Za-z0-9_-]{43}$/);
+  // each game's box: its own key and additional data; neither opens with the other's
+  const plain = enc.encode('the saves');
+  const [bu, bm] = [await U.seal(ku.key, plain), await M.seal(km.key, plain)];
+  assert.deepEqual(await U.unseal(ku.key, bu), plain);
+  assert.deepEqual(await M.unseal(km.key, bm), plain);
+  await assert.rejects(M.unseal(km.key, bu), /do not open with this passphrase/);
+  await assert.rejects(U.unseal(ku.key, bm), /do not open with this passphrase/);
+  const d = crypto.createDecipheriv('aes-256-gcm', mwBits.subarray(0, 32), bm.subarray(1, 13));
+  d.setAAD(Buffer.from('nfsmw keyphrase saves v1'));
+  d.setAuthTag(bm.subarray(bm.length - 16));
+  assert.equal(Buffer.concat([d.update(bm.subarray(13, bm.length - 16)), d.final()]).toString(), 'the saves');
+  // the vault under each page's base
+  for (const [B, want] of [[U, '/u2/vault'], [M, '/mw/vault']]) {
+    const asked = [];
+    assert.equal(await B.vaultAvailable(async u => { asked.push(u); return new Response('', { status: 401 }); }), true);
+    assert.deepEqual(asked, [want]);
+  }
 });

@@ -36,6 +36,10 @@ export interface GameProfile {
   readonly LAUNCHED: boolean;
   /** the word a keyphrase is shown with (the derivation always takes VAULT_PREFIX's) */
   readonly KEYPHRASE_WORD: string;
+  /** how a keyphrase's key and token derive (src/games/<id>/keyphrase.ts): HKDF-SHA-256's info over its PBKDF2
+   *  bytes (null: those bytes themselves, Underground 2's), and the additional data a box is sealed with */
+  readonly VAULT_DERIVE_INFO: string | null;
+  readonly VAULT_AAD: string;
 }
 
 /** A game's names in the storage the browser keeps per origin (Cache Storage, OPFS, local and session storage, Web
