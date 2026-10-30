@@ -111,6 +111,8 @@ static long     g_presents = 0, g_tris = 0, g_dropped = 0, g_replaced = 0, g_tex
 static unsigned long g_tex_released = 0;
 static unsigned g_ov_rv = 0, g_ov_kb = 0, g_ov_d = 0, g_ov_v = 0;
 static double   g_wait_present_ms = 0, g_wait_rq_ms = 0;
+static long     g_hold_n = 0;                /* handoffs a pending frame to dump held for the page (in the present waits) */
+static double   g_hold_ms = 0, g_hold_max = 0;
 static unsigned long long g_rq_bytes = 0;
 
 static unsigned g_bb_w = 0, g_bb_h = 0;      /* device size (metal_resize) */
@@ -1018,7 +1020,8 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     int mailbox = hfr_mailbox();
     int32_t mine = g_cur + 1;
     double t0 = now_ms();
-    int unlocked = 0, late = 0;
+    int unlocked = 0, late = 0, held = 0;
+    double th = 0;
     for (;;){
         int32_t s = ald(&g_ctl->state);
         int ready = GW_ST_READY(s), enc = GW_ST_ENC(s);
@@ -1030,13 +1033,20 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
         /* (the page clears its encode claim before it can detach: both run on its main thread) */
         /* A frame to dump (the autotest's dump) waits for an attached page, up to 10 s: replaced, its dump moved to a
          * later frame under the first one's name, or was lost to a newer dump, so a page that fell behind (the first
-         * race frames compile pipelines) dumped other moments than the script named, or none */
+         * race frames compile pipelines) dumped other moments than the script named, or none.  Uncapped (mailbox)
+         * too, so a scripted run's timing changes at each dump: the summary counts the holds and their time, and a
+         * hold that runs out is logged */
         int attached = ald(&g_ctl->attached) == GW_ATTACHED;
         GwFrame *old = &g_ctl->frame[ready - 1];
         int hold = old->dump && attached && now_ms() - t0 < 10000.0;
+        if (hold && !held){ held = 1; th = now_ms(); }
         int replace = !enc && !hold && (mailbox || !attached || (late && now_ms() - t0 >= 60.0));
         if (replace){
             if (__atomic_compare_exchange_n(&g_ctl->state, &s, (s & ~3) | mine, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)){
+                if (held && old->dump)
+                    fprintf(stderr, "[gpu] frame %d to dump (%s): the page did not take it in %.0f ms, %s\n",
+                            (int)old->dump_frame, old->dump_label, now_ms() - th,
+                            F->dump ? "a newer dump replaces it" : "its dump moves to a later frame");
                 if (old->dump && !F->dump){   /* a requested dump moves to the frame that replaces it */
                     F->dump = 1; F->dump_frame = old->dump_frame; memcpy(F->dump_label, old->dump_label, sizeof F->dump_label); }
                 if (mailbox) g_replaced++; else g_dropped++;
@@ -1050,6 +1060,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
         if (wait32(&g_ctl->state, s, left > 1.0 ? left : 1.0) == 2 || now_ms() - t0 >= 60.0) late = 1;
     }
     if (unlocked) guest_wait_end();
+    if (held){ double w = now_ms() - th; g_hold_n++; g_hold_ms += w; if (w > g_hold_max) g_hold_max = w; }
     g_wait_present_ms += now_ms() - t0;
     ring_bell();
     /* the other buffer is free now (the page released it before taking ours, or it was replaced) */
@@ -1163,6 +1174,9 @@ void metal_budget_report(void){
     fprintf(stderr, "  [gpu] textures %ld created, %ld uploads, %lu released; resource queue %.1f MB, waited %.0f ms; present waits %.3f ms/frame\n",
             g_tex_created, g_tex_uploaded, g_tex_released, g_rq_bytes / 1048576.0, g_wait_rq_ms,
             g_presents ? g_wait_present_ms / (double)g_presents : 0.0);
+    if (g_hold_n)
+        fprintf(stderr, "  [gpu] frames to dump held the game for the page %ld times, %.0f ms in all, longest %.0f ms\n",
+                g_hold_n, g_hold_ms, g_hold_max);
     fprintf(stderr, "  [gpu] mirrors: %lu built (%.1f MB), %lu live, %lu dropped, %lu table-full, pool %.1f MB\n",
             g_mir_build, g_mir_bytes / 1048576.0, g_mir_live, g_mir_drop, g_mir_full, g_pool_cap / 1048576.0);
     fprintf(stderr, "  [gpu] shaders: %u VS + %u PS WGSL, %u VS + %u PS without WGSL (CPU vertex path / built-in fragment); "

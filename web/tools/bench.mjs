@@ -10,7 +10,9 @@
 //     --size WxH        canvas size in device pixels (default 1800x1098)
 //     --script PATH     input script (default /tests/web/scripts/perf_drive.txt = hfr_drive.txt with "log cpu_begin" at
 //                       15 s and "log cpu_end" at 45 s of race time; needs "log race_loaded"/"log drive_end")
-//                       (perf_nodump.txt: the same without the frame dumps, for counting late frames)
+//                       (perf_nodump.txt: the same without the frame dumps, for counting late frames and for
+//                       timing: a frame to dump waits for the page to take it, uncapped too, and two of
+//                       perf_drive's four fall in the CPU window; the [gpu] summary says how long they held the game)
 //     --env K=V         extra game environment (repeatable)
 //     --js-flags S      V8 flags for Chrome (experiments only: a player's Chrome has none)
 //     --chrome-arg A    extra Chrome argument (repeatable)
