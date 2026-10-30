@@ -5,8 +5,10 @@
 //       copy the dump from OPFS to --out, add every vertex shader x declaration
 //       pair and the CPU-interpreter test vectors (web/tools/wgsl-xl --pairs,
 //       built with the Mac's cc), then check all of it
-//   node web/tools/shader-check.mjs --from <dir>
-//       check a dump on disk (an earlier --game run or web/tools/wgsl-xl output)
+//   node web/tools/shader-check.mjs --from <dir> [--game mw] [--census]
+//       check a dump on disk (an earlier --game run or web/tools/wgsl-xl output);
+//       with --from, --game only names the dump's game (its census floor for
+//       --census): there is no game run
 //   node web/tools/shader-check.mjs --game mw
 //       the game run of that game (--game alone: ug2's): Most Wanted's boots to
 //       its main menu (tests/mw/scripts/boot_menu.txt) and leaves by WM_CLOSE;
@@ -25,7 +27,8 @@
 //
 // Options: --port <http port> (8612), --save <OPFS dir> (shadercheck), --cross
 // (every game VS x every game PS too), --timeout <ms> (game run, 600000),
-// --census (with --from: also apply the game-run census below to that dump),
+// --census (with --from: also apply the game-run census below, of the game
+// --game names, to that dump),
 // --script <url path> (game run, default the game's: RUNS below), --env K=V
 // (game run, repeatable), --help (this text and the game's run).
 // Needs the server (out/web/server-rs/nfsu2-server, started with --dev, and
@@ -51,9 +54,11 @@ const port = +opt('--port', 8612), save = opt('--save', 'shadercheck');
 const out = opt('--out', 'out/web/shaders'), from = opt('--from', null);
 const timeout = +opt('--timeout', 600000);
 const origin = `http://localhost:${port}`;
-// the word after --game, unless it is another option, names the game of the run (ug2 without one)
+// the word after --game, unless it is another option, names the game of the run (ug2 without one); with --from it
+// names the dump's game and nothing runs
 const gameWord = argv[argv.indexOf('--game') + 1];
 const GAME = argv.includes('--game') && gameWord !== undefined && !gameWord.startsWith('--') ? gameOf(argv) : 'ug2';
+const gameRun = argv.includes('--game') && !from;
 // each game's run: its script, the log lines that show it got where it goes and ran to its end, and what a whole
 // run creates, the census floor: distinct vertex / pixel shader objects and declarations, registered (shader,
 // declaration) vertex modules, pixel shader modules (with the cube twins).  Underground 2's is a full quick race's
@@ -217,7 +222,7 @@ if (argv.includes('--sm3')) {
   process.exit(problems.length ? 1 : 0);
 }
 
-if (argv.includes('--game')) {
+if (gameRun) {
   // DESIGN.md section 5 suite environment + the dump
   const env = ['NOMOVIES=1', 'SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_DISCORD=0',
     'NFSU2_SHADER_DUMP=/save/shaders', ...argv.flatMap((a, i) => a === '--env' ? [argv[i + 1]] : [])];
@@ -266,7 +271,7 @@ if (argv.includes('--game')) {
 } else if (from) {
   await upload(from);
 } else { console.log('need --game, --from <dir> or --sm3'); await browser.close(); process.exit(2); }
-const census = checkDump(argv.includes('--game') ? out : from, argv.includes('--game') || argv.includes('--census'));
+const census = checkDump(gameRun ? out : from, gameRun || argv.includes('--census'));
 if (census) console.log('CENSUS ' + JSON.stringify(census) + ' (floor ' + JSON.stringify(CENSUS) + ')');
 
 await pageCheck();
@@ -276,8 +281,8 @@ const { failures, ...summary } = result;
 console.log('SHADERCHECK ' + JSON.stringify(summary));
 for (const f of failures ?? []) console.log('  FAIL ' + f);
 for (const p of problems) console.log('  FAIL ' + p);
-if (argv.includes('--game') || from) {
-  const dst = from && !argv.includes('--game') ? from : out;
+if (gameRun || from) {
+  const dst = gameRun ? out : from;
   fs.writeFileSync(path.join(dst, 'shadercheck.json'), JSON.stringify({ ...result, census, problems }, null, 1));
 }
 const ok = result.ok && problems.length === 0;
