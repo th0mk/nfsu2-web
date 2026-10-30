@@ -290,7 +290,7 @@ static void watch_race(CPU *c){
 #define FN_INPUT_CLEAR   0x0047cc50u     /* the input handler's call after a reset: the controllers' held state cleared */
 #define G_SIM            0x009203b0u     /* the simulation: +0x20 its step (float, s), +0x28 the steps it ran */
 static int ai_on;                       /* autopilot on: the AI drives the local player's car */
-static struct { double since; float p[3]; int resets, futile, moved; uint32_t sim; } U;
+static struct { double since; float p[3]; int resets, futile, moved, racing; uint32_t sim; } U;
 static struct { float p[3]; double t; } TRAIL[TRAIL_N];
 static int trail_n, trail_head;           /* points kept, the next one's slot */
 double mw_game_time(void){
@@ -352,7 +352,7 @@ static void wedge_watch(CPU *c){
         U.sim = s; U.since = 0;
     }
     int racing = MR8(rs + RS_ACTIVE) && MR8(rs + RS_GO);
-    if (!racing){ U.moved = 0; trail_n = 0; }
+    if (racing != U.racing){ U.racing = racing; U.moved = 0; trail_n = 0; }   /* a race's GO or end: a new start */
     if (!racing && !ai_on){ U.since = 0; return; }            /* a race before its GO, or its end, with `autopilot go` */
     int idx = 1;
     if (racing){
