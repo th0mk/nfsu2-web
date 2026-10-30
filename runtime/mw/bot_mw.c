@@ -12,7 +12,10 @@
  *                   bot run N keep races the current car (else pick_car's)
  *   bot race I      engage race I of the bin's list and race it, then stop (a probe)
  *   bot pursuit     one pursuit in free roam, then stop (a probe)
- *   bot save        save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
+ *   bot chase S     pursuits one after another (the AI driving, a new one forced 5 s after the last one's end) until
+ *                   they have lasted S game seconds in all, then stop (a long pursuit at the heat the career allows:
+ *                   the heat stays on the car between pursuits; game over stops it, as everywhere)
+ *   bot save       save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
  *   bot wait [N]    (career_mw.c) wait up to N frames for the bot to stop
  *
  * Its order in a bin (decide): performance packages from a customization shop with the cash the career has (once a
@@ -48,9 +51,9 @@
  * PostRace_Results.fng, PostRace_MilestoneRewards.fng and PostRace_Pursuit.fng after a pursuit and the loading
  * screen's "Press Enter" with Enter; a text message (SMS_Message.fng) and the mailbox under it with Escape (Enter does
  * not close them); EngageEventDialog.fng with LEFT then Enter when the bot engaged it (else Enter: Decline); the
- * safehouse menu, the pause menu and their dialogs as the state wants (below); any other screen that takes input
- * (after a bust: Infractions.fng, Car_Select.fng) is logged and answered with Enter after a pause, a few times, then
- * left (the log says so). */
+ * safehouse menu, the pause menu and their dialogs as the state wants (below); the infractions sheet after a bust
+ * (Infractions.fng) with Enter, which pays the fines and takes the strike; any other screen that takes input (after a
+ * bust: Car_Select.fng) is logged and answered with Enter after a pause, a few times, then left (the log says so). */
 #include "cpu.h"
 #include "game.h"
 #include <math.h>
@@ -69,6 +72,9 @@ int mw_aid_where(CPU *c, float pos[3], float *kmh);
 int mw_aid_teleport(CPU *c, const float pos[3], const float dir[3]);
 void mw_aid_autopilot(CPU *c, int mode);
 int mw_reset_car(CPU *c);
+int mw_aid_last_end(void);                    /* career_mw.c: 1 busted, 2 evaded since the last read */
+void mw_aid_rapsheet(CPU *c, const char *why); /* pursuit_mw.c */
+void mw_aid_icons(CPU *c, int type);
 double mw_game_time(void);
 
 #define G_PROFILES       0x0091cf90u     /* [+0x10] the user profile */
@@ -293,6 +299,8 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define ENGAGE_EVERY  90                /* frames between them */
 #define RACE_START_MAX 6000             /* frames from Accept to the race going active */
 #define PURSUIT_NATURAL_S 60.0          /* game seconds of free driving for a pursuit to start by itself */
+#define CHASE_NATURAL_S   5.0           /* ... in bot chase */
+#define BUST_FLOW_MAX     3600          /* frames from a bust's end of the pursuit to its infractions sheet, at most */
 #define SKIP_MAX      3
 #define BOSS_TRIES    12                /* the rival's challenge engaged at most this often (each lost one is a try) */
 #define RIVAL_NEXT_WAIT 1800            /* frames the bot waits in free roam for the rival's next race to come by itself */
@@ -325,6 +333,10 @@ static struct {
     uint32_t want_car;                  /* the car to race (pick_car), 0 = the current one */
     int want_pos, car_entered;          /* its place in Car Select's list ('k / N'), and Enter given there */
     long sh_total0, sh_spent, sh_cash0;
+    double chase_s, chase_acc, last_t;  /* bot chase: the game seconds asked, those in pursuits so far, the last frame's */
+    int pursuits, busts, evades;
+    long end_f;                         /* the frame the pursuit object went (0: on, or none yet) */
+    int end_kind, sheet_seen;           /* how it ended (mw_aid_last_end), the infractions sheet seen since */
     struct gates g;
 } B;
 static void set_state(int st, const char *why){
@@ -586,7 +598,7 @@ static void pursuit_frame(CPU *c){
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
                     B.forced ? " (forced)" : " (by itself)", rdf(perp + PERP_HEAT), rdf(po + 0x9cu), rdf(po + 0xa0u),
                     rd(po + PURSUIT_COPS));
-        } else if (B.tries == 1 && t - B.t0 >= PURSUIT_NATURAL_S && free_roam(c)){
+        } else if (B.tries == 1 && t - B.t0 >= (B.chase_s > 0.0 ? CHASE_NATURAL_S : PURSUIT_NATURAL_S) && free_roam(c)){
             /* at the bin's top heat (the pursuit holds it in the bin's range anyway): forced at heat 1 the pursuits of
              * bin 14 mostly ended within 12 s for 100 bounty, while the one at heat 1.96 ran 176 s for 7,700 (bot run
              * of 2026-10-30) */
@@ -600,6 +612,9 @@ static void pursuit_frame(CPU *c){
     }
     if (po){
         B.plen = rdf(po + PURSUIT_TIME);
+        B.end_f = 0;
+        if (B.last_t > 0.0 && t > B.last_t && t - B.last_t < 1.0) B.chase_acc += t - B.last_t;
+        B.last_t = t;
         /* The AI drives the whole pursuit.  What was tried to make chases longer or to save a boxed-in car from the bust,
          * and dropped (bot runs of 2026-10-30): letting the car stand when the cops lost it (state +0x218 == 2, the
          * cops' search) did not bring them back, the cooldown ran out, and cops that did come busted the standing car;
@@ -660,13 +675,33 @@ static void pursuit_frame(CPU *c){
         }
         return;
     }
-    if (!settled(c)) return;            /* the pursuit's end: its screens first */
+    B.last_t = 0.0;
+    /* The pursuit's end: its screens first.  A bust's come late: the pursuit object goes, free roam goes on for a few
+     * seconds, then the arrest, the infractions sheet (Infractions.fng: Enter pays the fines, a strike on the car), the
+     * car lot's choice (Car_Select.fng) and the safehouse.  A pursuit forced in those seconds took the bust's place:
+     * no sheet, no strike (bot chase run of 2026-10-30, the first of two busts), so after a bust the bot waits for
+     * the sheet, BUST_FLOW_MAX frames at most. */
+    if (!B.end_f){ B.end_f = f; B.end_kind = mw_aid_last_end(); B.sheet_seen = 0; }
+    if (B.end_kind == 1 && !B.sheet_seen && f - B.end_f < BUST_FLOW_MAX) return;
+    if (!settled(c)) return;
     struct gates g; read_gates(c, &g);
+    int end = B.end_kind;
+    B.end_f = 0;
+    B.pursuits++; B.busts += end == 1; B.evades += end == 2;
     fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit over (%.0f s long, %.0f s of game time in all, %d escapes, %d rejoined): "
-            "bounty %d -> %d, milestones %d -> %d\n", f, t, B.plen, t - B.t0, B.escapes, B.rejoins, B.bounty0, g.bounty,
-            B.g.ms, g.ms);
+            "%s; bounty %d -> %d, milestones %d -> %d; pursuits %d, busted %d, evaded %d\n", f, t, B.plen, t - B.t0,
+            B.escapes, B.rejoins, end == 1 ? "busted" : end == 2 ? "evaded" : "ended (no bust or evade seen)", B.bounty0,
+            g.bounty, B.g.ms, g.ms, B.pursuits, B.busts, B.evades);
+    mw_aid_rapsheet(c, end == 1 ? "after a bust" : end == 2 ? "after an evade" : "after a pursuit");
+    mw_aid_icons(c, 13);                /* the world map's icons by type, the pursuit breakers' one by one */
     mw_aid_autopilot(c, AP_STAND);
     B.raced = 0; B.pursuit = 0; B.forced = 0;
+    if (B.chase_s > 0.0){               /* bot chase: the next pursuit, until they have lasted chase_s in all */
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f chase: %.0f s of %.0f s in pursuits\n", f, t, B.chase_acc, B.chase_s);
+        if (B.chase_acc >= B.chase_s){ set_state(B_DONE, "the chase's time is reached"); return; }
+        B.g = g; B.tries = 0; B.t0 = t;
+        return;
+    }
     if (B.once && !B.after){ set_state(B_DONE, "the probe's pursuit is over"); return; }
     int back = B.after ? B.after : B_ROAM;
     B.after = 0;
@@ -825,6 +860,13 @@ void mw_bot_present(void){
         } else what = "Enter on Decline (not the bot's)";
     }
     else if (!strcasecmp(nm, "SMS_Message.fng") || !strcasecmp(nm, "SMS_MailBoxes.fng")){ key = DIK_ESCAPE; what = "Escape"; }
+    else if (!strcasecmp(nm, "Infractions.fng")){
+        /* after a bust: the default button (0xB8A7C6CD) pays the fines from the cash and puts a strike on the car
+         * (the screen's handler 0x5A162E: strikes +3 of the career record up by one, its evades +6 to 0, the heat
+         * +0xC to 1.0; the car impounded once the strikes reach +2); the other (0xB8A7C6CC) spends an Out of Jail
+         * marker instead (type 0x11, 0x576C90), no strike.  The bot pays. */
+        B.sheet_seen = 1; what = "Enter: pay the fines (a strike on the car)";
+    }
     else if (!strcasecmp(nm, "SafehouseMarkers.fng")){
         /* the beaten rival's markers ("You can now select 2 markers", the cards face down): Enter turns the highlighted
          * card and takes it, and the highlight stays on that card, so the next is RIGHT, then Enter (bot run of
@@ -977,6 +1019,11 @@ void mw_bot_cmd(CPU *c, const char *args){
     }
     if (!strcasecmp(a1, "save")){ S.save_same = 0; S.save_last = 0; set_state(B_SAVE, "bot save"); return; }
     if (!strcasecmp(a1, "pursuit")){ B.once = 1; read_gates(c, &B.g); set_state(B_PURSUIT, "bot pursuit"); return; }
+    if (!strcasecmp(a1, "chase")){
+        B.once = 1; B.chase_s = n > 0 ? n : 1800; read_gates(c, &B.g);
+        fprintf(stderr, "[mwbot] f=%ld bot chase: pursuits for %.0f game seconds\n", f, B.chase_s);
+        set_state(B_PURSUIT, "bot chase"); return;
+    }
     if (!strcasecmp(a1, "race")){
         struct gates g; struct race r[MAX_RACES];
         read_gates(c, &g); B.g = g;
@@ -988,5 +1035,5 @@ void mw_bot_cmd(CPU *c, const char *args){
         go_to(c, &r[n]);
         return;
     }
-    fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | off\n");
+    fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | chase S | save | off\n");
 }

@@ -1,0 +1,42 @@
+# Most Wanted: why Speedbreaker presses do nothing after the AI has driven (TRACKER M4-47 (a)).  A Custom Race circuit
+# as speedbreaker.txt picks it; from GO the game's AI drives (`autopilot on`, Game.ForceAIControl) for 600 frames and
+# lets go (`autopilot off`, Game.ClearAIControl); the gas is held and G (GAMEBREAKER) is held down until the game
+# switches the Speedbreaker on, for up to 900 frames.  `breaker watch` logs, besides the charge, every change of what
+# the game's CanUse (0x6EDC90) tests: "can" its answer, "blocks" the bits that say no (1 [0x988E04], 2 [0x9885C8],
+# 4 under 30 mph, 8/16/32 the car interface's methods +0xBC/+0x20/+0x5C; runtime/mw/career_mw.c breaker_blocks).
+#   NFSU2_SAVE_SEED=<a folder holding d3dx9_26.dll> node web/tools/run-suite.mjs --game mw --script breaker_ai.txt \
+#     --marker 'breaker_ai: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_QUIT_FRAMES=200
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log breaker_ai: GO
++0    breaker watch
++0    autopilot on
++600  autopilot off
++0    log breaker_ai: the AI let go
++0    down UP
++0    down G
++0    breaker wait on 900
++0    up G
++0    log breaker_ai: on
++0    breaker
++0    up UP
++60   log breaker_ai: done
++0    close

@@ -1,0 +1,19 @@
+# Most Wanted: the rap sheet as a save gives it back (TRACKER M4-18).  Seeded with the save tree pursuit_rap.txt left
+# (--save-out), this run loads the profile (the boot's autoload), resumes the career to the safehouse menu and logs the
+# rap sheet, the impound strikes and markers (`rapsheet`, runtime/mw/pursuit_mw.c): its lines must equal the ones
+# pursuit_rap.txt logged after its save (tests/mw/checks/pursuit_load.sh compares them when PR_SAVED_LOG names that
+# run's log).
+#   NFSU2_SAVE_SEED=<pursuit_rap's save tree> node web/tools/run-suite.mjs --game mw --script pursuit_load.txt \
+#     --marker 'pursuit_load: loaded' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e596c4a3 900              # the safehouse menu
++0    rapsheet
++0    log pursuit_load: loaded
++60   close

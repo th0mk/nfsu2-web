@@ -48,12 +48,17 @@
  *   NFSU2_CAR_TRACE=<file> (no command): every race car per frame, UG2's CSV for tools/lan_trace.py (car_trace below)
  *   pursuit [watch]  log the player's pursuit state (heat, the pursuit's heat range, the pursuit object, its length,
  *                    the bust timer), once or whenever it changes; pursuit wait on|off [N] waits up to N frames for a
- *                    pursuit to be there or gone; while watching, the pursuit's end is logged as the game decides it:
+ *                    pursuit to be there or gone, pursuit wait breaker [N] for a pursuit breaker to come down
+ *                    (pursuit_mw.c's hook); while watching, the pursuit's end is logged as the game decides it:
  *                    busted or evaded (the state's addresses and the end's sites: log_pursuit and mw_aid_hook below)
  *   breaker [watch]  log the player's Speedbreaker (on or off, its charge, the car's speed), once or whenever it
  *                    changes (a tenth of the charge); breaker wait on|off|full|empty [N] waits up to N frames for it,
  *                    breaker wait above MPH [N] for the car's speed, breaker wait charge X [N] for a charge of X or more,
  *                    breaker wait rise X [N] for the charge X above where it is (or full)
+ *   rapsheet         log the rap sheet, the impound strikes and markers (pursuit_mw.c, which says what it reads)
+ *   icons [T]        log the world map's icons, those of type T one by one (13 pursuit breakers, 12 hiding spots);
+ *                    icons go T K DX DY DZ moves the car to icon K of type T (as teleport does), facing DX DY DZ
+ *   pools [watch]    log the game's memory pools and the frame arena, with their peaks since `pools watch`
  *
  * The game's objects, from speed.exe v1.3's code (GAME.md 13.4; the names are its Lua bindings', registered
  * with their strings from 0x61E900 on):
@@ -336,10 +341,20 @@ static void wedge_watch(CPU *c){
     U.since = t; memcpy(U.p, n, sizeof n);
 }
 
+/* an icon's place (pursuit_mw.c: GManager's icon +0x10..+0x18, the world's axes, Z up) as simulation space (Y up),
+ * the swizzle the game's bVector3 -> UMath::Vector3 conversions use: (-y, z, x) */
+static void icon_to_sim(const float w[3], float s[3]){ s[0] = -w[1]; s[1] = w[2]; s[2] = w[0]; }
+
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
 enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_AI_GO, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT,
-       Q_BREAKER, Q_BWATCH, Q_BWAIT, Q_BOT, Q_BOTWAIT, Q_RESET };
+       Q_BREAKER, Q_BWATCH, Q_BWAIT, Q_BOT, Q_BOTWAIT, Q_RESET, Q_RAP, Q_ICONS, Q_ICONGO, Q_POOLS };
+void mw_aid_rapsheet(CPU *c, const char *why);  /* pursuit_mw.c: the rap sheet, the world map's icons, the pools */
+void mw_aid_icons(CPU *c, int type);
+int mw_aid_icon_place(int type, int k, float pos[3]);
+void mw_aid_pools(CPU *c, int watch);
+void mw_pursuit_frame(CPU *c);
+unsigned long mw_pursuit_breakers(void);
 void mw_bot_cmd(CPU *c, const char *args);     /* bot_mw.c: the career bot's commands, run at the anchor */
 void mw_bot_frame(CPU *c);                     /* bot_mw.c: its work, each pass of the main loop */
 int mw_bot_idle(void);                         /* bot_mw.c: 1 once the bot has stopped (done, or off) */
@@ -384,32 +399,42 @@ int mw_bot_idle(void);                         /* bot_mw.c: 1 once the bot has s
 #define SITE_BUSTED_AI   HOOK_SITE(0x00444711)   /* ... for an AI racer (AIRacerBusted) */
 #define SITE_EVADED      HOOK_SITE(0x00411070)   /* the cop manager's evade method (the pursuit is its argument) */
 static int pw_on;
-static uint32_t pw_last[8];
+static uint32_t pw_last[16];
 static uint32_t pursuit_obj(CPU *c, uint32_t *perp){
     uint32_t s = player_simable(c), obj = s ? rd(s + 4u) : 0u, id = IID_PERP, id2 = IID_AIVEH;
     uint32_t p = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u, a = obj ? gcall(c, FN_QUERY, obj, 1, &id2) : 0u;
     if (perp) *perp = p;
     return rd(a + AIVEH_PURSUIT);
 }
+/* pursuit_mw.c: the pursuit's state and the counts the game keeps by name, appended to the line (x: 8 values for the
+ * change test; the heat by tenths, so the escalation shows) */
+void mw_pursuit_extras(CPU *c, uint32_t po, uint32_t sig[8], char *out, size_t n);
 static void log_pursuit(CPU *c, int only_changes){
     uint32_t p = 0, po = pursuit_obj(c, &p);
     float bt = po ? rdf(po + PURSUIT_BUST_T) : 0.0f;
-    uint32_t v[8] = { rd(p + PERP_HEAT), rd(p + 0x20u), rd(p + 0x24u), po, game_flow(),
+    char x[256];
+    uint32_t v[16] = { (uint32_t)(int)(rdf(p + PERP_HEAT) * 10.0f), rd(p + 0x20u), rd(p + 0x24u), po, game_flow(),
                       po ? (uint32_t)(bt > 0.0f ? bt : 0.0f) : 0u, po ? MR8(po + PURSUIT_BUSTED) : 0u,
                       po ? rd(po + PURSUIT_COPS) : 0u };
+    mw_pursuit_extras(c, po, v + 8, x, sizeof x);
     if (only_changes && !memcmp(v, pw_last, sizeof v)) return;
     memcpy(pw_last, v, sizeof v);
-    float h, t; memcpy(&h, &v[0], 4); t = rdf(po + PURSUIT_TIME);
+    float h = rdf(p + PERP_HEAT), t = rdf(po + PURSUIT_TIME);
     char r[96] = "";
     if (po) snprintf(r, sizeof r, " range %.2f-%.2f cops %u bust %.1f%s", rdf(po + PURSUIT_HEAT_MIN),
                      rdf(po + PURSUIT_HEAT_MAX), v[7], bt, v[6] ? " busted" : "");
-    fprintf(stderr, "[mwpursuit] f=%ld heat %.2f pursuit %08x time %.1f%s bounty %u perp+24 %u flow %u\n",
-            autotest_frame(), h, po, po ? t : 0.0f, r, v[1], v[2], v[4]);
+    fprintf(stderr, "[mwpursuit] f=%ld heat %.2f pursuit %08x time %.1f%s bounty %u perp+24 %u flow %u%s\n",
+            autotest_frame(), h, po, po ? t : 0.0f, r, v[1], v[2], v[4], x);
 }
 
-/* the pursuit's end as the game decides it (the sites above; logged while `pursuit watch` is on) */
+/* the pursuit's end as the game decides it (the sites above; logged while `pursuit watch` is on, and kept for the
+ * career bot: mw_aid_last_end) */
+static int last_end;                    /* 1 busted, 2 evaded (the player's), 0 none since the last read */
+int mw_aid_last_end(void){ int e = last_end; last_end = 0; return e; }
+int mw_aid_pw_on(void){ return pw_on; }
 int mw_aid_hook(CPU *c, uint32_t va){
     if (va != SITE_BUSTED && va != SITE_BUSTED_AI && va != SITE_EVADED) return 0;
+    if (va == SITE_EVADED) last_end = 2; else if (va == SITE_BUSTED) last_end = 1;
     if (!pw_on) return 1;
     if (va == SITE_EVADED)              /* cop manager +0x10 (pursuit): ecx the cop manager, the pursuit at [esp+4] */
         fprintf(stderr, "[mwpursuit] f=%ld evaded: pursuit %08x (the cop manager's evade, 0x411070)\n",
@@ -433,17 +458,35 @@ int mw_aid_hook(CPU *c, uint32_t va){
 #define PL_BREAKER       0x38u
 #define MPH_PER_MS       2.23699f
 static int bw_on;
-static int bw_last[2] = { -1, -1 };
+static int bw_last[4] = { -1, -1, -1, -1 };
 static uint32_t player_iface(void){ return rd(G_NPLAYERS) ? rd(rd(G_PLAYERS)) : 0u; }
 static float player_mph(CPU *c){
     uint32_t s = player_simable(c), v = s ? gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0) : 0u;
     return v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) * MPH_PER_MS : 0.0f;
 }
+/* CanUse (0x6EDC90, thiscall on the player object, IPlayer - 0x4C) and what it tests, as bits: 1 [0x988E04] set,
+ * 2 [0x9885C8] set, 4 under 30 mph, 8 vehicle method +0xBC, 16 +0x20, 32 +0x5C (the car interface 0x4040E0's) */
+#define FN_BREAKER_CANUSE 0x006edc90u
+static int breaker_blocks(CPU *c, uint32_t pl, int *can){
+    uint32_t s = player_simable(c), obj = s ? rd(s + 4u) : 0u, id = IID_WARP;
+    uint32_t w = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u;
+    int b = (rd(0x00988e04u) ? 1 : 0) | (rd(0x009885c8u) ? 2 : 0) | (player_mph(c) < 30.0f ? 4 : 0);
+    if (w){
+        b |= (gcall(c, rd(rd(w) + 0xbcu), w, 0, 0) & 0xffu) ? 8 : 0;
+        b |= (gcall(c, rd(rd(w) + 0x20u), w, 0, 0) & 0xffu) ? 16 : 0;
+        b |= (gcall(c, rd(rd(w) + 0x5cu), w, 0, 0) & 0xffu) ? 32 : 0;
+    }
+    *can = (int)(gcall(c, FN_BREAKER_CANUSE, pl - 0x4cu, 0, 0) & 0xffu);
+    return b;
+}
 static void log_breaker(CPU *c, int only_changes){
     uint32_t pl = player_iface();
-    int on = pl ? MR8(pl + PL_BREAKER_ON) : -1;
+    int on = pl ? MR8(pl + PL_BREAKER_ON) : -1, can = 0;
     float ch = pl ? rdf(pl + PL_BREAKER) : 0.0f;
-    int tenth = (int)floorf(ch * 10.0f + 1e-4f);
+    int tenth = (int)floorf(ch * 10.0f + 1e-4f), blk = pl ? breaker_blocks(c, pl, &can) : 0;
+    if (pl && (!only_changes || (blk & ~4) != bw_last[2] || can != bw_last[3]))   /* its own line: the watch's */
+        fprintf(stderr, "[mwbreaker] f=%ld can %d blocks %d\n", autotest_frame(), can, blk);  /* tenths stay apart */
+    bw_last[2] = blk & ~4; bw_last[3] = can;
     if (only_changes && on == bw_last[0] && tenth == bw_last[1]) return;
     bw_last[0] = on; bw_last[1] = tenth;
     if (!pl){ fprintf(stderr, "[mwbreaker] f=%ld no player\n", autotest_frame()); return; }
@@ -623,6 +666,7 @@ void mw_frame(CPU *c){
     if (auto_ai) watch_race(c);
     if (auto_ai || ai_on) wedge_watch(c);
     mw_bot_frame(c);
+    mw_pursuit_frame(c);
     hfr_trace(c);
     car_trace(c);
     if (pw_on) log_pursuit(c, 1);
@@ -661,17 +705,34 @@ void mw_frame(CPU *c){
         log_where(c);
         break; }
     case Q_WHERE: log_where(c); break;
+    case Q_RAP: mw_aid_rapsheet(c, "asked"); break;
+    case Q_ICONS: mw_aid_icons(c, (int)Q.v[0]); break;
+    case Q_ICONGO: {                    /* the car to icon v[1] of type v[0], at its place, facing v[2..4] */
+        float pos[3], dir[3] = { Q.v[2], Q.v[3], Q.v[4] };
+        if (!mw_aid_icon_place((int)Q.v[0], (int)Q.v[1], pos)){
+            fprintf(stderr, "[mwicon] f=%ld icon go: no icon %d of type %d\n", f, (int)Q.v[1], (int)Q.v[0]); break; }
+        float sim[3];
+        icon_to_sim(pos, sim);
+        fprintf(stderr, "[mwicon] f=%ld icon go: icon %d of type %d at %.1f %.1f %.1f\n", f, (int)Q.v[1], (int)Q.v[0],
+                sim[0], sim[1], sim[2]);
+        if (!mw_aid_teleport(c, sim, dir)) fprintf(stderr, "[mwicon] f=%ld icon go: no player car\n", f);
+        log_where(c);
+        break; }
+    case Q_POOLS: mw_aid_pools(c, (int)Q.v[0]); break;
     case Q_PURSUIT: log_pursuit(c, 0); break;
-    case Q_PWAIT: {                     /* done once the pursuit is there (v[0] 1) or gone (0), or after v[1] frames */
-        int on = pursuit_obj(c, 0) != 0;
+    case Q_PWAIT: {                     /* done once the pursuit is there (v[0] 1) or gone (0), or a pursuit breaker came
+                                         * down since the wait began (2: more than v[2] of them), or after v[1] frames */
+        if (Q.v[0] == 2.0f && Q.v[2] < 0.0f) Q.v[2] = (float)mw_pursuit_breakers();
+        int on = Q.v[0] == 2.0f ? ((float)mw_pursuit_breakers() > Q.v[2] ? 2 : 0) : pursuit_obj(c, 0) != 0;
         if (on != (int)Q.v[0] && f - Q.since < (long)Q.v[1]) return;
-        fprintf(stderr, "[mwpursuit] f=%ld pursuit wait %s: %s after %ld frames\n", f, Q.v[0] ? "on" : "off",
-                on == (int)Q.v[0] ? "satisfied" : "TIMEOUT", f - Q.since);
+        fprintf(stderr, "[mwpursuit] f=%ld pursuit wait %s: %s after %ld frames\n", f,
+                Q.v[0] == 2.0f ? "breaker" : Q.v[0] ? "on" : "off", on == (int)Q.v[0] ? "satisfied" : "TIMEOUT",
+                f - Q.since);
         log_pursuit(c, 0);
         break; }
     case Q_PWATCH: pw_on = 1; memset(pw_last, 0xff, sizeof pw_last); break;
     case Q_BREAKER: log_breaker(c, 0); break;
-    case Q_BWATCH: bw_on = 1; bw_last[0] = bw_last[1] = -2; log_breaker(c, 1); break;
+    case Q_BWATCH: bw_on = 1; bw_last[0] = bw_last[1] = bw_last[2] = bw_last[3] = -2; log_breaker(c, 1); break;
     case Q_BWAIT: {                     /* done once v[0] holds (breaker_met), or after v[1] frames */
         static const char *const nm[] = { "off", "on", "full", "empty", "above", "charge", "rise" };
         int met = breaker_met(c, (int)Q.v[0], Q.v[2], Q.v[3]);
@@ -686,7 +747,7 @@ void mw_frame(CPU *c){
 
 int mw_aid_is_cmd(const char *cmd){
     static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", "pursuit",
-                                     "breaker", "bot", "carreset", 0 };
+                                     "breaker", "bot", "carreset", "rapsheet", "icons", "pools", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -717,11 +778,22 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     else if (!strcasecmp(cmd, "where")) Q.op = Q_WHERE;
     else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
     else if (!strcasecmp(cmd, "carreset")) Q.op = Q_RESET;
+    else if (!strcasecmp(cmd, "rapsheet")) Q.op = Q_RAP;
+    else if (!strcasecmp(cmd, "pools")){ sscanf(p, "%31s", a1); Q.op = Q_POOLS; Q.v[0] = !strcasecmp(a1, "watch"); }
+    else if (!strcasecmp(cmd, "icons")){
+        /* icons [T] | icons go T K DX DY DZ: the car to icon K of type T, facing DX DY DZ */
+        int t = -1, k = 0; float d[3] = { 1.0f, 0.0f, 0.0f };
+        if (sscanf(p, "%31s", a1) == 1 && !strcasecmp(a1, "go")){
+            sscanf(p, "%*s %d %d %f %f %f", &t, &k, &d[0], &d[1], &d[2]);
+            Q.op = Q_ICONGO; Q.v[0] = (float)t; Q.v[1] = (float)k; Q.v[2] = d[0]; Q.v[3] = d[1]; Q.v[4] = d[2];
+        } else { sscanf(p, "%d", &t); Q.op = Q_ICONS; Q.v[0] = (float)t; }
+    }
     else if (!strcasecmp(cmd, "pursuit")){
         long n = 6000; char a2[32] = {0};
         sscanf(p, "%31s %31s %ld", a1, a2, &n);
         Q.op = !strcasecmp(a1, "watch") ? Q_PWATCH : !strcasecmp(a1, "wait") ? Q_PWAIT : Q_PURSUIT;
-        Q.v[0] = strcasecmp(a2, "off") ? 1.0f : 0.0f; Q.v[1] = (float)n; Q.since = f;
+        Q.v[0] = !strcasecmp(a2, "breaker") ? 2.0f : strcasecmp(a2, "off") ? 1.0f : 0.0f; Q.v[1] = (float)n; Q.since = f;
+        Q.v[2] = -1.0f;                 /* breaker: the count when the wait begins, read at the anchor */
     }
     else if (!strcasecmp(cmd, "breaker")){
         /* breaker [watch] | breaker wait on|off|full|empty [N] | breaker wait above MPH [N] | breaker wait charge X [N]

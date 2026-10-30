@@ -49,11 +49,15 @@ static int test_switch(const char *name, int *cache){
 }
 static int hit_log(int *n){ return (*n)++ < 20; }
 
-/* M4-28: the hook at 0x43E005 (game.h hook, through debug_mw.c) */
+/* M4-28: the hook at 0x43E005 (game.h hook, through debug_mw.c); its runs are counted for the test aids (the
+ * Repro check: how often the guarded call ran, pursuit_mw.c's [mwpursuit] line) */
+static unsigned long purecall_site_runs;
+unsigned long mw_fix_purecall_calls(void){ return purecall_site_runs; }
 int mw_fix_hook(CPU *c, uint32_t va){
     if (va != PURECALL_SITE) return 0;
     static int off = -1, hits;
     static uint32_t stand_in;
+    purecall_site_runs++;
     if (MR32(c->edx + 0x80u) != CRT_PURECALL) return 1;
     if (test_switch("NFSU2_TEST_PURECALL", &off)){
         if (hit_log(&hits))

@@ -1,0 +1,37 @@
+# Most Wanted: a pursuit breaker brought down by script (TRACKER M4-17).  From a career save past the prologue (a
+# safehouse save), the career bot takes the car to free roam and lets the game's AI drive until a pursuit is on
+# (`bot pursuit`: Game.ForcePursuitStart(1) after 60 s without one); then the bot lets go, the car is put about 50 m
+# before the breaker the AI brought down in a bot chase of 2026-10-30 (MBreakerStopCops at -4016.9 177.9 1535.2, the
+# car coming from the north-east: `teleport`, the way Game.WarpPlayerToTrigger moves it), facing it, and the gas is
+# held until the game posts MBreakerStopCops (`pursuit wait breaker`, runtime/mw/pursuit_mw.c's hook) or 900 frames
+# pass.  Then the AI drives the pursuit to the end the game decides, and the rap sheet is logged (a busted pursuit's
+# counts do not reach it: only an evaded one's).
+#   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script pursuit_breaker.txt \
+#     --marker 'pursuit_breaker: over' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
+#     --env "PB_AT=-3984.9 178 1573.7 -0.64 0 -0.77" --timeout-scale 30
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e596c4a3 900              # the safehouse menu
++0    rapsheet
++0    pursuit watch
++30   bot pursuit
++0    pursuit wait on 30000
++0    bot off                                            # the bot and the AI let go
++0    teleport ${PB_AT}
++0    log pursuit_breaker: at the breaker
++0    down UP
++0    pursuit wait breaker 900
++0    up UP
++0    log pursuit_breaker: breaker
++0    autopilot on
++0    pursuit wait off 60000
++0    autopilot off
++0    rapsheet
++0    log pursuit_breaker: over
++60   close

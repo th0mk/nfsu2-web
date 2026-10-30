@@ -92,10 +92,20 @@ career save's Quick Race track lists (M4-44).
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
 Game.ForcePursuitStart, the game's AI driving, waited on to its end, which the game decides: evaded or busted) and
 `pursuit_heat.txt` (the same save: Game.ForcePursuitStart(2) raises the heat to 2, and the pursuit holds it in its
-heat range, the Blacklist bin's; that save's bin keeps it at 1).
+heat range, the Blacklist bin's; that save's bin keeps it at 1).  `pursuit_rap.txt` (from a career save past the
+prologue: the rap sheet at the safehouse, the career bot's `PR_BOT`, `pursuit` for one pursuit or `chase S` for
+pursuits one after another for S game seconds, the AI driving each to the end the game decides, then the rap sheet
+again and a save) and `pursuit_load.txt` (that save loaded after a restart: its rap sheet must equal the saved one).
+Their aids (runtime/mw/pursuit_mw.c, test-only): `rapsheet` (the rap sheet's ten values, the best pursuit's, their
+Most Wanted ranks, the cash, the impound markers and each career car's record with its impound strikes), `icons [T]`
+(the world map's icons, those of type T one by one; `icons go T K DX DY DZ` moves the car to one), `pools [watch]`
+(the game's memory pools and frame arena, with their peaks); `pursuit watch` also logs the counts the game keeps by
+name (helicopters, roadblocks and spike strips dodged, cops damaged and destroyed), roadblocks put up and pursuit
+breakers come down (hooks), and how often the purecall guard's call ran.
 
 The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
 switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).
+`breaker_ai.txt` holds G after the AI has driven and let go (TRACKER M4-47), with what the game's CanUse says.
 
 Crash fixes (runtime/mw/fixes_mw.c): `fixes_poke.txt` reaches the null guards of the cop unload (0x57D105) and of
 Attrib::StringToLowerCaseKey (0x4549BF) by poke, in the front end; with `NFSU2_TEST_COPLIST_NULL=1` and
