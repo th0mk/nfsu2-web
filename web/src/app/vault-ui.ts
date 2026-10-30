@@ -19,7 +19,7 @@ import { listFiles, readBytes, readText, removeSaveDir, writeFile } from './save
 import { backupItems, readVault, restoreVault } from './saves-ui';
 import { downloadBlob } from './logs';
 import { zip } from './zip';
-import { kept, keeps, keptBy, profilesIn, readPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side } from './vault';
+import { kept, keeps, keptBy, profilesIn, readPhrase, shownPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side } from './vault';
 import { codeOf, dateLocale, live, N, t, tn, tvars, type Msg } from './i18n';
 
 export interface VaultPanelDeps {
@@ -363,10 +363,11 @@ export class VaultPanel {
   }
   /** Play offered them: not again in this browser. */
   offered() { try { localStorage.setItem(offerKey(this.d.saveDir), 'asked'); } catch { /* storage off */ } }
-  /** Cloud saves turned on from Play's question: the keyphrase made, or why not (the section says it too). */
+  /** Cloud saves turned on from Play's question: the keyphrase made, as the player sees it, or why not (the section
+   *  says it too). */
   async enable(): Promise<{ phrase: string } | { why: string }> {
     const l = await this.make() ? this.sync?.link : null, st = this.sync?.state;
-    return l ? { phrase: l.phrase } : { why: st?.s === 'error' ? tvars(st.why.t, st.why.v) : '' };
+    return l ? { phrase: shownPhrase(l.phrase) } : { why: st?.s === 'error' ? tvars(st.why.t, st.why.v) : '' };
   }
   /** the linked keyphrase's token (claim.ts: the claimed names), null without one */
   // (it waits for `start`: asked before the section knew its link, it answered none, and the line under Your name
@@ -384,7 +385,7 @@ export class VaultPanel {
     p.textContent = name ? t('This passphrase also holds your claim on {name}.', { name }) : '';
   }
   /** the linked keyphrase as a file */
-  download() { if (this.sync?.link) downloadBlob(`${this.sync.link.phrase}\n`, 'nfsu2-passphrase.txt', 'text/plain'); }
+  download() { if (this.sync?.link) downloadBlob(`${shownPhrase(this.sync.link.phrase)}\n`, 'nfsu2-passphrase.txt', 'text/plain'); }
 
   // ---- the buttons ----
 
@@ -472,7 +473,7 @@ export class VaultPanel {
     await s.forget().catch(() => {});
     // the keyphrase stays in the box, to keep or to load again (the job's end showed the box empty)
     this.holdsLink = false;
-    this.input.value = phrase;
+    this.input.value = shownPhrase(phrase);
     this.show();
     this.msg(() => t('Stopped syncing. Your saves stay here and in the cloud.'));
   }
@@ -549,7 +550,7 @@ export class VaultPanel {
     note.hidden = !l && !working;
     note.textContent = st.s === 'working' ? `${t(st.what)}…` : l ? t('Synced {when}', { when: short(l.saved) }) : '';
     // the box: the linked keyphrase (read only, with its download), or one to type in and load
-    if (l) { this.input.value = l.phrase; this.holdsLink = true; }
+    if (l) { this.input.value = shownPhrase(l.phrase); this.holdsLink = true; }
     else if (this.holdsLink) { this.input.value = ''; this.holdsLink = false; }
     this.input.readOnly = !!l;
     this.$('#vault-file').hidden = !l;

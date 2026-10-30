@@ -3,7 +3,9 @@
 // and gives it back to whoever shows the token (web/server-rs/crates/vault: the caps, the copy of an earlier day, two
 // years unused); all that knows a save is here, so the server never sees one:
 // - the keyphrase: "nfsu2-xyz-" and 8 of vault-words.ts's 1296 words (about 2^83), from crypto.getRandomValues; read
-//   back in any case, with any separators, "nfsu2-xyz" optional;
+//   back in any case, with any separators, "nfsu2-xyz" or "nfsrevived" (the word both games share) optional, and
+//   always derived as "nfsu2-xyz-" and the words; shown with the game's KEYPHRASE_WORD (src/games/<id>/launch.ts:
+//   Underground 2's own word until its launch switch is on, the shared one after it and in Most Wanted);
 // - PBKDF2-SHA-256 of it (100,000 rounds, a fixed salt: the keyphrase is all there is) gives 64 bytes: an AES-GCM key
 //   and a token.  The server keeps the keyphrase under the token's SHA-256 and never sees the key;
 // - what is sent (kept()): the save folder but the F12 screenshots, the DVD and magazine covers, the game's graphics
@@ -35,8 +37,14 @@ import { isScreenshot, PROFILES_DIR } from './savefs';
 import { withoutDevice } from './settings';
 import { fill, N, type Vars } from './i18n';
 import { at } from '../base';
+import { KEYPHRASE_WORD } from '@game/launch';
 
+/** the keyphrase's first word as the derivation takes it, whatever word it is shown with (SHOWN) */
 export const PREFIX = 'nfsu2-xyz';
+/** the word both games' keyphrases may be shown with: read in every build (no list word has 10 letters) */
+export const NEUTRAL = 'nfsrevived';
+/** the word keyphrases are shown with here */
+export const SHOWN = KEYPHRASE_WORD;
 export const PHRASE_WORDS = 8;
 export const KDF_ROUNDS = 100_000;
 /** what the server takes (crates/vault VaultOptions::sized) */
@@ -63,15 +71,20 @@ export function newPhrase(): string {
   return [PREFIX, ...words].join('-');
 }
 
-/** A keyphrase as typed or pasted (any case, any separators, the prefix optional), or what is wrong with it. */
+/** A keyphrase as the player sees it: with the word it is shown with here (SHOWN) in place of PREFIX. */
+export const shownPhrase = (phrase: string) => phrase.startsWith(PREFIX + '-') ? SHOWN + phrase.slice(PREFIX.length) : phrase;
+
+/** A keyphrase as typed or pasted (any case, any separators, its first word nfsu2-xyz, nfsrevived or none), as the
+ *  derivation takes it (PREFIX and the words), or what is wrong with it. */
 export function readPhrase(text: string): { phrase: string } | { bad: string; why: { t: string; v?: Vars } } {
   const bad = (t: string, v?: Vars) => ({ bad: fill(t, v), why: { t, v } });
   let w = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   if (w[0] === 'nfsu2' && w[1] === 'xyz') w = w.slice(2);
+  else if (w[0] === NEUTRAL) w = w.slice(1);
   if (!w.length) return bad(N('Type or paste your passphrase.'));
   const unknown = w.find(x => !WORD_SET.has(x));
   if (unknown) return bad(N('"{word}" is not a passphrase word. Passphrases are made for you by Enable cloud saving: check the spelling, or make one there.'), { word: unknown });
-  if (w.length !== PHRASE_WORDS) return bad(N('A passphrase has {n} words after {prefix}; this has {got}.'), { n: PHRASE_WORDS, prefix: PREFIX, got: w.length });
+  if (w.length !== PHRASE_WORDS) return bad(N('A passphrase has {n} words after {prefix}; this has {got}.'), { n: PHRASE_WORDS, prefix: SHOWN, got: w.length });
   return { phrase: [PREFIX, ...w].join('-') };
 }
 

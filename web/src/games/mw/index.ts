@@ -10,5 +10,6 @@ export const SITE_NAME = 'Most Wanted';
 export { PROFILES_DIR, REGISTRY_DEFAULTS, SETTINGS_TEMPLATE, APP_DEFAULTS, LANGUAGES, VAULT_PREFIX } from '../ug2';
 // its own
 export { STORAGE } from './storage';
+export { LAUNCHED, KEYPHRASE_WORD } from './launch';
 
 export type Checked = Profile<typeof self>;

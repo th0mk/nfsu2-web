@@ -804,3 +804,50 @@ test('saves past the cap name their largest files in the log; one stuck on the L
   assert.equal(new DataView(sent.find(e => e.name === at('THOM')).data.buffer, sent.find(e => e.name === at('THOM')).data.byteOffset).getUint32(0xA16A, true), 5000);
   assert.deepEqual(b2.logs, []);
 });
+
+// The word a keyphrase is shown with (src/games/<id>/launch.ts KEYPHRASE_WORD): Underground 2's own "nfsu2-xyz" until
+// its launch switch is on, the shared "nfsrevived" after it and in Most Wanted.  Every build reads both words, and
+// none, and derives from "nfsu2-xyz-" and the words whatever was typed: the pinned phrase's token is the same three
+// ways, and the same in each build.  (The switch on: Underground 2's launch.ts as it is, with LAUNCHED true, the way a
+// test turns it on.)
+test('the word a keyphrase is shown with: Underground 2\'s until its launch, the shared one after it and in Most Wanted; read either way', async () => {
+  const fs = await import('node:fs');
+  const pinned = 'nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agent', TOKEN = 'Ec0iIUolQixwifl_FxyyfA9X-foBclMDwN_l-F2BSCw';
+  const launched = {
+    name: 'launched',
+    setup(b) {
+      b.onLoad({ filter: /games[\\/]ug2[\\/]launch\.ts$/ }, a => {
+        const src = fs.readFileSync(a.path, 'utf8');
+        assert.ok(src.includes('export const LAUNCHED = false;'), 'the switch, as the launch commit turns it on');
+        return { contents: src.replace('export const LAUNCHED = false;', 'export const LAUNCHED = true;'), loader: 'ts' };
+      });
+    },
+  };
+  const build = async (game, plugins = []) => {
+    const code = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/vault.ts')], bundle: true, format: 'esm', write: false, platform: 'neutral',
+      alias: { '@game': path.join(ROOT, 'web/src/games', game) }, plugins })).outputFiles[0].text;
+    return import('data:text/javascript;base64,' + Buffer.from(code + `\n// ${game} ${plugins.length}`).toString('base64'));
+  };
+  const builds = { off: V, on: await build('ug2', [launched]), mw: await build('mw') };
+  for (const [name, B, word] of [['off', builds.off, 'nfsu2-xyz'], ['on', builds.on, 'nfsrevived'], ['mw', builds.mw, 'nfsrevived']]) {
+    assert.equal(B.PREFIX, 'nfsu2-xyz', name);
+    assert.equal(B.SHOWN, word, name);
+    for (const typed of [pinned, 'nfsrevived-acid-acorn-acre-acts-afar-affix-aged-agent', 'NFSREVIVED acid acorn acre acts afar affix aged agent',
+      'acid-acorn-acre-acts-afar-affix-aged-agent']) {
+      const r = B.readPhrase(typed);
+      assert.deepEqual(r, { phrase: pinned }, `${name}: ${typed}`);
+      assert.equal((await B.keysOf(r.phrase)).token, TOKEN, `${name}: ${typed}`);
+    }
+    const p = B.newPhrase();
+    assert.ok(p.startsWith('nfsu2-xyz-'), `${name}: derived from nfsu2-xyz-`);
+    const seen = B.shownPhrase(p);
+    assert.equal(seen, `${word}-${p.slice('nfsu2-xyz-'.length)}`, name);
+    assert.deepEqual(B.readPhrase(seen), { phrase: p }, `${name}: what is shown reads back`);
+    assert.equal(B.readPhrase('nfsrevived-acid-acorn').bad, `A passphrase has 8 words after ${word}; this has 2.`, name);
+    // "nfsrevived" is never a list word; another first word is
+    assert.ok(!WORDS.includes('nfsrevived'));
+    assert.match(B.readPhrase('nfsrevive-acid-acorn-acre-acts-afar-affix-aged-agent').bad, /"nfsrevive" is not a passphrase word/, name);
+  }
+  // with the switch off, Underground 2's page shows and reads its keyphrases as before
+  assert.equal(V.shownPhrase(pinned), pinned);
+});

@@ -31,6 +31,11 @@ export interface GameProfile {
   readonly VAULT_PREFIX: string;
   /** the game's names in the browser's storage (src/games/<id>/storage.ts) */
   readonly STORAGE: StorageNames;
+  /** the launch switch (src/games/<id>/launch.ts): Underground 2's, off until the release that opens its new
+   *  address */
+  readonly LAUNCHED: boolean;
+  /** the word a keyphrase is shown with (the derivation always takes VAULT_PREFIX's) */
+  readonly KEYPHRASE_WORD: string;
 }
 
 /** A game's names in the storage the browser keeps per origin (Cache Storage, OPFS, local and session storage, Web

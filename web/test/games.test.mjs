@@ -24,16 +24,23 @@ test('every game\'s profile has the same fields and its own id', async () => {
     platform: 'neutral', loader: { '.txt': 'text', '.png': 'dataurl' } })).outputFiles[0].text;
   const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
   const fields = Object.keys(P.ug2).sort();
-  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'LANGUAGES', 'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_PREFIX']);
+  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE',
+    'SITE_NAME', 'STORAGE', 'VAULT_PREFIX']);
   for (const g of GAMES) {
     assert.deepEqual(Object.keys(P[g]).sort(), fields, g);
     assert.equal(P[g].GAME, g);
-    for (const f of fields) assert.ok(P[g][f] && (typeof P[g][f] === 'string' ? P[g][f].trim() : typeof P[g][f] === 'object'), `${g} ${f}`);
+    for (const f of fields)
+      assert.ok(typeof P[g][f] === 'boolean' || P[g][f] && (typeof P[g][f] === 'string' ? P[g][f].trim() : typeof P[g][f] === 'object'), `${g} ${f}`);
     assert.equal(P[g].LANGUAGES[0], 'english', g);
   }
   assert.equal(P.ug2.SITE_NAME, 'Underground 2 Revived');
   // the site's name is not chosen yet
   assert.equal(P.mw.SITE_NAME, 'Most Wanted');
+  // Underground 2's launch switch is off until the launch release; until then its keyphrases show its own word, and
+  // every keyphrase derives from VAULT_PREFIX's (vault.test.mjs turns the switch on)
+  assert.equal(P.ug2.LAUNCHED, false);
+  assert.deepEqual([P.ug2.KEYPHRASE_WORD, P.mw.KEYPHRASE_WORD], ['nfsu2-xyz', 'nfsrevived']);
+  for (const g of GAMES) assert.equal(P[g].VAULT_PREFIX, 'nfsu2-xyz', g);
   // the browser's storage: Underground 2's names as they always were, Most Wanted's its own; one game's offline copies
   // are never another's older ones (sw.ts deletes the names that start with its prefix)
   assert.deepEqual(P.ug2.STORAGE, { OFFLINE_CACHE: 'nfsu2-offline-2', OFFLINE_PREFIX: 'nfsu2-offline-' });
