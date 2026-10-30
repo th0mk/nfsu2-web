@@ -99,8 +99,9 @@ uint8_t g_cbits[1u << 15];
 /* ---- the game's table (its file is linked) and the rest of the runtime ---- */
 /* the table names the lifted entry point and server.dll's tables: not linked here */
 void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
-/* the race aids (career_mw.c) and the debugging hook (debug_mw.c) the table names: not linked here */
+/* the race aids (career_mw.c, bot_mw.c) and the debugging hook (debug_mw.c) the table names: not linked here */
 void mw_frame(CPU *c){ (void)c; }
+void mw_bot_present(void){}                 /* the career bot (bot_mw.c, test only) */
 int  mw_debug_hook(CPU *c, uint32_t va){ (void)c; (void)va; return 0; }
 const ModInfo g_srv_modinfo; const ImpEnt g_srv_imp[1]; const uint32_t g_srv_imp_count;
 const uint32_t g_srv_fn_addr[1]; const mod_fn g_srv_fn_ptr[1]; const uint32_t g_srv_fn_count;

@@ -75,8 +75,8 @@ test('blockRuns: the same server, under the manifest\'s folder, resolved against
 
 // ---- the built page ------------------------------------------------------------------------------------------------
 // Strings that start like an address of the server's root but are none: the game's own file system (the wasm
-// program's paths, runtime/web), which the page hands to the game, and a texture format's cache key (gpu/encoder.ts).
-const NOT_ADDRESSES = new Set(['/save', '/data', '/dev', '/save/registry.txt', '/save/autotest-script.txt', '/data/SPEED2.EXE', '/o']);
+// program's paths, runtime/web), which the page hands to the game, and a texture format's cache key (gpu/encoder.ts: '/o' opaque, '/ms' multisampled).
+const NOT_ADDRESSES = new Set(['/save', '/data', '/dev', '/save/registry.txt', '/save/autotest-script.txt', '/data/SPEED2.EXE', '/o', '/ms']);
 // Offline mode's service worker still knows the root only: shell.ts registers it only where the base is '/'.
 const ROOT_ONLY = new Set(['sw.js']);
 
