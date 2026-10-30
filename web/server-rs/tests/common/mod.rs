@@ -614,6 +614,19 @@ impl Browser {
     /// `xff`: the client's address as a proxy on this machine names it (X-Forwarded-For): a client of its own for the
     /// binary's limits per address
     pub async fn open_from(host: &str, port: u16, query: &str, rcvbuf: Option<u32>, first: Option<String>, xff: Option<&str>) -> Browser {
+        Browser::open_under("", host, port, query, rcvbuf, first, xff).await
+    }
+
+    /// the same under a game's base path ("/mw": its /mw/lan; "": the root's /lan)
+    pub async fn open_under(
+        base: &str,
+        host: &str,
+        port: u16,
+        query: &str,
+        rcvbuf: Option<u32>,
+        first: Option<String>,
+        xff: Option<&str>,
+    ) -> Browser {
         use tokio_tungstenite::tungstenite::client::IntoClientRequest;
         let sock = TcpSocket::new_v4().unwrap();
         if let Some(n) = rcvbuf {
@@ -621,7 +634,7 @@ impl Browser {
         }
         let s = sock.connect(([127, 0, 0, 1], port).into()).await.expect("connect");
         let _ = s.set_nodelay(true);
-        let mut q = format!("ws://{host}/lan{query}").into_client_request().unwrap();
+        let mut q = format!("ws://{host}{base}/lan{query}").into_client_request().unwrap();
         if let Some(a) = xff {
             q.headers_mut().insert("x-forwarded-for", a.parse().unwrap());
         }

@@ -866,10 +866,15 @@ async fn turned_away(host: &str, port: u16, xff: &str, id: &str) -> (Vec<Value>,
 
 /// the same, with this hello
 async fn turned_away_hello(host: &str, port: u16, xff: &str, hello: Value) -> (Vec<Value>, Option<(u16, String)>) {
+    turned_away_under("", host, port, xff, hello).await
+}
+
+/// the same under a game's base path ("/mw": its /mw/lan)
+async fn turned_away_under(base: &str, host: &str, port: u16, xff: &str, hello: Value) -> (Vec<Value>, Option<(u16, String)>) {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
     let s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    let mut q = format!("ws://{host}/lan").into_client_request().unwrap();
+    let mut q = format!("ws://{host}{base}/lan").into_client_request().unwrap();
     q.headers_mut().insert("x-forwarded-for", xff.parse().unwrap());
     let (ws, _) = tokio_tungstenite::client_async(q, s).await.expect("the handshake");
     let (mut sink, mut stream) = ws.split();
@@ -1048,6 +1053,91 @@ async fn kicks_and_bans_through_the_control_socket() {
     assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its page or keyphrase)"), "{lines:?}");
     assert!(lines.iter().any(|l| l == "[ban] lifted #1 \"Ann\""), "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("[ban] #2 \"Racer\" (c1) for 1 d (until ")), "{lines:?}");
+    assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
+}
+
+/// `nfsu2-server ctl --game mw <words>` as Most Wanted's operator command runs it in the image (web/deploy/nfsmw): the
+/// state folder from NFSU2_STATE, as the image sets it
+fn mw_ctl(state: &Path, words: &[&str]) -> (i32, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_nfsu2-server"))
+        .env("NFSU2_STATE", state)
+        .env_remove("NFSU2_GAME")
+        .args(["ctl", "--game", "mw"])
+        .args(words)
+        .output()
+        .unwrap();
+    let text = if out.status.success() { out.stdout } else { out.stderr };
+    (out.status.code().unwrap_or(-1), String::from_utf8_lossy(&text).trim_end().to_string())
+}
+
+// The operator's commands on Most Wanted's server (--game mw, its switch at /mw/lan), as web/deploy/nfsmw gives them:
+// who, a kick, a ban (told, and turned away by its address), bans, unban, on Most Wanted's own state folder; the
+// folder keeps no address or page id; a ctl for another state folder (Underground 2's) reaches no server
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn kicks_and_bans_on_most_wanted() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tmp.path().join("mw");
+    std::fs::create_dir_all(data.join("GLOBAL")).unwrap();
+    std::fs::write(data.join("speed.exe"), "MZ").unwrap();
+    let wasm = tmp.path().join("nfsmw.wasm");
+    std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
+    let (port, state) = (free_port(), tmp.path().join("mw-state"));
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--game", "mw", "--roam-hub", "off"]), port);
+    srv.ready().await;
+    let sock = state.join("control.sock").to_string_lossy().to_string();
+    let line = format!("  bans      : 0; nfsu2-server ctl --game mw who, kick, ban, unban, bans (through {sock})");
+    assert!(srv.lines().contains(&line), "{:?}", srv.lines());
+    let host = format!("localhost:{port}");
+    let hello = |name: &str, id: &str| serde_json::json!({ "t": "hello", "name": name, "id": id }).to_string();
+    let open = |xff: &'static str| Browser::open_under("/mw", &host, port, "", None, None, Some(xff));
+    let ann = open("192.0.2.1").await;
+    ann.text(&hello("Ann", "page-ann"));
+    let bob = open("192.0.2.2").await;
+    bob.text(&hello("Bob", "page-bob"));
+    let t0 = Instant::now();
+    let mut who = mw_ctl(&state, &["who"]);
+    while !who.1.contains("\"Bob\"") && t0.elapsed() < Duration::from_secs(3) {
+        sleep(50).await;
+        who = mw_ctl(&state, &["who"]);
+    }
+    assert_eq!(who.0, 0, "{}", who.1);
+    assert!(who.1.starts_with("2 on the switch\n"), "{}", who.1);
+    let ann_vip = nfsu2_util::vip_str(ann.vip);
+    assert!(who.1.contains(&format!("{ann_vip:<13}\"Ann\"")), "{}", who.1);
+
+    // a kick: told, closed; back in after it
+    assert_eq!(mw_ctl(&state, &["kick", "Ann", "Stop", "ramming"]), (0, format!("kicked {ann_vip} \"Ann\"")));
+    assert_eq!(ann.until_ms(3000, |g| g.closed.clone()).await, (4001, "kicked".into()));
+    assert_eq!(ann.got().ctl.iter().find(|m| m["t"] == "kick").map(|m| m["msg"].clone()), Some(Value::from("Stop ramming")));
+    let ann = open("192.0.2.1").await;
+    ann.text(&hello("Ann", "page-ann"));
+    sleep(200).await;
+    assert!(ann.is_open(), "a kick is no ban");
+
+    // a ban: told, closed, and turned away by its address on its next visit; Bob is left be
+    let ban = mw_ctl(&state, &["ban", "Ann", "1d", "Ramming"]);
+    assert_eq!(ban.0, 0, "{}", ban.1);
+    assert!(ban.1.starts_with("ban #1: \"Ann\" for 1 d (until "), "{}", ban.1);
+    assert_eq!(ann.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
+    let hi = serde_json::json!({ "t": "hello", "name": "Anna", "id": "page-other" });
+    let (got, closed) = turned_away_under("/mw", &host, port, "192.0.2.1", hi).await;
+    assert_eq!((kinds(&got), closed), (vec!["ban".to_string()], Some((4003, "banned".to_string()))), "by its address");
+    sleep(100).await;
+    assert!(bob.is_open(), "Bob is left be");
+    let bans = mw_ctl(&state, &["bans"]);
+    assert!(bans.0 == 0 && bans.1.starts_with("#1   \"Ann\""), "{bans:?}");
+    let file = std::fs::read_to_string(state.join("bans.json")).unwrap();
+    for secret in ["192.0.2", "page-"] {
+        assert!(!file.contains(secret), "{secret}: {file}");
+    }
+    // another game's state folder: no server there
+    assert_eq!(ctl(&tmp.path().join("ug2-state"), &["who"]).0, 1);
+    assert_eq!(mw_ctl(&state, &["unban", "ann"]), (0, "lifted #1 \"Ann\"".into()));
+    assert_eq!(mw_ctl(&state, &["bans"]), (0, "no bans".into()));
+    assert_eq!(srv.stop().await, Some(0));
+    let lines = srv.lines();
+    assert!(lines.iter().any(|l| l.starts_with("[ban] #1 \"Ann\" for 1 d (until ")), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "[ban] lifted #1 \"Ann\""), "{lines:?}");
     assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
 }
 

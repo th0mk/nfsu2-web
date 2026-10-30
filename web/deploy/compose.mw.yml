@@ -1,0 +1,29 @@
+# NFS Most Wanted's box (docs/web/VPS.md): compose.yml and compose.tunnel.yml with this file on top, in /srv/nfsmw
+# (Underground 2's box stays /srv/nfsu2 with compose.yml and its own front).  The same image as Underground 2's (it
+# holds both games' pages) and the same settings: the VPS's firewall or the tunnel's namespace, 65536 open files,
+# 8 GB of memory, small receive buffers in the tunnel's namespace, four cloudflared copies; the server's listen
+# backlog and send buffers are its own (crates/http).  What this file changes is Most Wanted's names: the compose
+# project nfsmw-web (its containers, its state volume nfsmw-web_state), the systemd slice nfsmw.slice
+# (web/deploy/nfsmw.slice), the server's --game mw and its module, nfsmw.wasm and nfsmw.json (GAME=mw web/build.sh
+# writes them to out/web/mw; web/deploy/release.sh --game mw puts them into /srv/nfsmw/module).  A Cloudflare Tunnel
+# is the front (no open port for the game, the box's address stays hidden), so compose.tunnel.yml comes before this
+# file.
+#
+# In .env next to these files (besides NFSU2_HOST, NFSU2_DATA and NFSU2_MODULE, compose.yml, and TUNNEL_TOKEN,
+# compose.tunnel.yml):
+#   COMPOSE_FILE=compose.yml:compose.tunnel.yml:compose.mw.yml     so that plain "docker compose ..." uses all three
+#   NFSU2_DATA=/srv/nfsmw/game       your NFS Most Wanted folder (the one with speed.exe; default ./game)
+# then:  docker compose up -d && docker compose logs -f server
+# The operator's commands to this server: web/deploy/nfsmw (copy it next to this file).
+name: nfsmw-web
+services:
+  net:
+    cgroup_parent: ${NFSU2_SLICE:-nfsmw.slice}
+  cloudflared:
+    cgroup_parent: ${NFSU2_SLICE:-nfsmw.slice}
+  server:
+    command: ["--game", "mw", "--behind-proxy"]
+    environment:
+      # the image's default is Underground 2's module (nfsu2.wasm)
+      NFSU2_WASM: /module/nfsmw.wasm
+    cgroup_parent: ${NFSU2_SLICE:-nfsmw.slice}

@@ -3,17 +3,20 @@
 #
 #   docker build -f web/server-rs/Dockerfile -t nfsu2-web-rs .
 #
-# The image holds the server (one static binary) and the page (web/dist, without the test pages and source maps).  It
-# never holds the game or anything made from it (this Dockerfile's .dockerignore lets only the server's and the page's
-# sources into the build); those are mounted:
-#   /game     the NFS Underground 2 folder (the one with SPEED2.EXE), read-only, readable by everyone
-#   /module   nfsu2.wasm and nfsu2.json, built with web/build.sh from the image's revision, read-only
+# The image holds the server (one static binary) and each game's page (web/dist for NFS Underground 2, web/dist-mw for
+# NFS Most Wanted, without the test pages and source maps): one image for both games, the server's --game picks the
+# page.  It never holds the game, its module or anything made from it, such as a lifted DLL (this Dockerfile's
+# .dockerignore lets only the server's and the page's sources into the build); those are mounted:
+#   /game     the game's folder (the one with SPEED2.EXE, or Most Wanted's speed.exe), read-only, readable by everyone
+#   /module   the module and its json (nfsu2.wasm and nfsu2.json; Most Wanted's nfsmw.wasm and nfsmw.json), built with
+#             web/build.sh from the image's revision, read-only
 #   /state    the server's keys (ETags, the switch's tokens), the Online mode's records and the bans: a volume, kept across
 #             updates (a new ETag key would make every browser download the game data again)
 # The server runs as uid 1000 (the user of the Node server's image before it, so a state volume that one wrote stays
 # writable) and listens on 127.0.0.1:8080 of the network it is given: the VPS's own, with Caddy in front
 # (web/deploy/compose.yml), or a tunnel's (compose.tunnel.yml).  Its command line is the server's options; by default
-# --behind-proxy, which needs NFSU2_HOST, the name players open.
+# --behind-proxy, which needs NFSU2_HOST, the name players open (Most Wanted's box: --game mw --behind-proxy and
+# NFSU2_WASM=/module/nfsmw.wasm, web/deploy/compose.mw.yml).
 #
 # Both stages that build run on the build machine's platform: the binary is cross-compiled (cargo-zigbuild, static
 # musl) for the image's, so building it for arm64 on amd64 needs no emulation.
@@ -25,7 +28,8 @@ RUN npm ci --no-audit --no-fund
 COPY app/registry-defaults.txt /src/app/
 COPY web/build.mjs web/index.html ./
 COPY web/src src
-RUN node build.mjs && mkdir /state
+# each game's page: web/dist (Underground 2) and web/dist-mw (build.mjs --game mw)
+RUN node build.mjs && node build.mjs --game mw && mkdir /state
 
 FROM --platform=$BUILDPLATFORM rust:1-bookworm AS server
 ARG TARGETARCH
@@ -58,9 +62,11 @@ LABEL org.opencontainers.image.title="nfsu2-web-rs" \
       org.opencontainers.image.licenses="MIT"
 WORKDIR /app
 COPY --from=page /src/web/dist web/dist
+COPY --from=page /src/web/dist-mw web/dist-mw
 COPY --from=server /nfsu2-server /app/nfsu2-server
 COPY --from=page --chown=1000:1000 --chmod=700 /state /state
-# NFSU2_REPO: where the server finds the page (web/dist); its own default is the checkout it was built in
+# NFSU2_REPO: where the server finds the page (web/dist, with --game mw web/dist-mw: src/game.rs); its own default is
+# the checkout it was built in.  NFSU2_WASM is Underground 2's module: Most Wanted's compose names its own
 ENV NFSU2_REPO=/app \
     NFSU2_DATA=/game \
     NFSU2_WASM=/module/nfsu2.wasm \

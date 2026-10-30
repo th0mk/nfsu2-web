@@ -1,0 +1,12 @@
+# NFS Most Wanted's share of its VPS (web/deploy/compose.mw.yml puts the server, cloudflared and its namespace into
+# this slice), as nfsu2.slice is Underground 2's: CPUQuota is the most of the CPU they get between them, so the rest of
+# the VPS always keeps the remainder.  1400 % is 14 of 16 vCPU, as on Underground 2's box (the same kind of VPS; Most
+# Wanted's load is not measured yet); for another VPS, its vCPUs less what the rest needs, x 100.
+#   cp web/deploy/nfsmw.slice /etc/systemd/system/ && systemctl daemon-reload
+# then recreate the containers (docker compose up -d --force-recreate).  Needs Docker's systemd cgroup driver.
+[Unit]
+Description=NFS Most Wanted in the browser: its containers' share of the CPU
+
+[Slice]
+CPUAccounting=yes
+CPUQuota=1400%
