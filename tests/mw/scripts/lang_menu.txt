@@ -17,5 +17,6 @@
 +0    tapuntil RETURN MainMenu.fng 90 6000
 +0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
 +60   dump menu
-+30   log lang_menu: main menu         # the dump written before the close
+# 30 frames for the play page to write the dump before the close
++30   log lang_menu: main menu
 +0    close
