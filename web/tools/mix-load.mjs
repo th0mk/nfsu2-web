@@ -50,7 +50,9 @@ const GAME = opt('game', 'ug2').toLowerCase();
 if (GAME !== 'ug2' && GAME !== 'mw') { console.error(`--game ${GAME}: ug2 or mw`); process.exit(2); }
 const GBASE = GAME === 'mw' ? '/mw' : '';
 if (GAME === 'mw' && !argv.includes('--online')) N.online = 0;
-const DATA = opt('data', GAME === 'mw' ? process.env.NFSMW_DATA : process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/work/gamedata-ro'));
+// (Most Wanted's folder has no default: --data or NFSMW_DATA)
+const DATA = opt('data', GAME === 'mw' ? process.env.NFSMW_DATA : (process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/work/gamedata-ro')));
+if (!DATA) { console.error(`--game ${GAME}: no game folder (--data "<the folder with speed.exe>", or NFSMW_DATA)`); process.exit(2); }
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/mix-load')));
 fs.mkdirSync(OUT, { recursive: true });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
