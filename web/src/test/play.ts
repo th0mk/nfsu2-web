@@ -8,7 +8,8 @@
 //   dumpscale   scale of the dump PNGs (0.6 of 1800x1098 = the Mac references' 1080x658)
 //   trace       log every record of these guest frames (comma list), or "dumps" for every dumped frame
 //   shaders     log the WGSL of every registered shader module
-//   dumptex     with every dump also write these texture ids (comma list)
+//   dumptex     with every dump also write these texture ids (comma list); a depth texture as its depth in
+//               24 bits (red the high byte)
 //   watchtex    log every create / upload / free of these texture ids
 //   resizeat    <seconds>:<w>x<h>: resize the canvas then (tests the device reset that follows)
 //   gputime     measure GPU time per frame with timestamp queries (in the stats)

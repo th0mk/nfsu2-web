@@ -125,6 +125,8 @@ export class Encoder {
   private copyMod: GPUShaderModule; private copyBgl: GPUBindGroupLayout;
   private copyPipes = new Map<string, GPURenderPipeline>();
   private linear: GPUSampler; private nearest: GPUSampler;
+  private depthSnapMod: GPUShaderModule | null = null;     // snapshot() of a depth texture, made at its first use
+  private depthSnapPipe: GPURenderPipeline | null = null;
   // the composite with Exposure and White Level (toneQuad), made at its first use
   private toneRes: { mod: GPUShaderModule; bgl: GPUBindGroupLayout; buf: GPUBuffer; pipes: Map<string, GPURenderPipeline>;
     bgs: WeakMap<GPUTextureView, Map<GPUSampler, GPUBindGroup>> } | null = null;
@@ -1063,7 +1065,7 @@ export class Encoder {
       } else if (vsid > 0) p.draw(count, 1, 0, kb);
       else p.draw(count, 1, u32[w + D.first], 0);
       draws++; this.calls.draw++;
-      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)} koff ${koff} kb ${kb} poff ${poff}`);
+      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}`);
     }
     endPass();
     if (tr) {
@@ -1139,17 +1141,38 @@ export class Encoder {
    *  that format (its level 0 is copied), else its level 0 drawn into a new one (alpha 1); null when there is none */
   readable(enc: GPUCommandEncoder, id: number): GPUTexture | null {
     const t = this.tex[id];
-    if (!t) return null;
+    if (!t || t.depth) return null;
     return t.tex.format === 'bgra8unorm' && !t.cube ? t.tex : this.snapshot(enc, id)?.tex ?? null;
   }
 
-  /** diagnostics: texture `id` (level 0, face 0) drawn into a new bgra8 texture of its size, or null */
+  /** diagnostics: texture `id` (level 0, face 0) drawn into a new bgra8 texture of its size, or null; a depth texture
+   *  as its depth in 24 bits, red the high byte (round(z * (2^24 - 1)), z clamped to 0..1), alpha 1 */
   snapshot(enc: GPUCommandEncoder, id: number): { tex: GPUTexture; info: string } | null {
     const t = this.tex[id];
-    if (!t || t.depth) return null;
+    if (!t) return null;
     const out = this.device.createTexture({ size: [t.w, t.h], format: 'bgra8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
     const v = t.tex.createView({ dimension: '2d', baseArrayLayer: 0, arrayLayerCount: 1, baseMipLevel: 0, mipLevelCount: 1 });
-    this.copyQuad(enc, v, out.createView(), 'bgra8unorm', this.nearest, undefined, true);
+    if (t.depth) {
+      const d = this.device;
+      const mod = this.depthSnapMod ??= this.module('depth snapshot', `
+@group(0) @binding(0) var z: texture_depth_2d;
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+  return vec4f(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
+}
+@fragment fn fs(@builtin(position) p: vec4f) -> @location(0) vec4f {
+  let u = u32(round(clamp(textureLoad(z, vec2i(p.xy), 0), 0.0, 1.0) * 16777215.0));
+  return vec4f(f32(u >> 16u), f32((u >> 8u) & 255u), f32(u & 255u), 255.0) / 255.0;
+}`);
+      const pipe = this.depthSnapPipe ??= d.createRenderPipeline({ label: 'depth snapshot', layout: 'auto',
+        vertex: { module: mod, entryPoint: 'vs' }, fragment: { module: mod, entryPoint: 'fs', targets: [{ format: 'bgra8unorm' }] },
+        primitive: { topology: 'triangle-list' } });
+      const pass = enc.beginRenderPass({ colorAttachments: [{ view: out.createView(), loadOp: 'clear', clearValue: [0, 0, 0, 1], storeOp: 'store' }] });
+      pass.setPipeline(pipe);
+      pass.setBindGroup(0, d.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: v }] }));
+      pass.draw(3);
+      pass.end();
+    } else this.copyQuad(enc, v, out.createView(), 'bgra8unorm', this.nearest, undefined, true);
     this.destroyLater.push(out);
     return { tex: out, info: `${t.w}x${t.h} ${t.tex.format} fmt ${t.fmt} levels ${t.levels}${t.cube ? ' cube' : ''}${t.rt ? ' rt' : ''}` };
   }

@@ -28,7 +28,8 @@ export interface RendererOptions {
   dumpScale?: number;
   /** log every record of these guest frames, or of every dumped frame ('dumps') */
   trace?: number[] | 'dumps';
-  /** diagnostics: with every dumped frame also write these textures (level 0, face 0) */
+  /** diagnostics: with every dumped frame also write these textures (level 0, face 0; a depth texture as its depth
+   *  in 24 bits, Encoder.snapshot) */
   dumpTex?: number[];
   /** diagnostics: log every create / upload / free of these texture ids */
   watchTex?: number[];
