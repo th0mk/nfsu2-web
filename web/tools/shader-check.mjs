@@ -262,8 +262,9 @@ if (gameRun) {
   // every VS object x every declaration that feeds it + CPU test vectors
   if (!argv.includes('--no-pairs')) {
     buildXl();
-    // wgsl-xl exits 1 when a pair is REJECTED: the dump is still checked (checkDump names the pairs.txt lines)
-    const r = spawnSync(xl, ['--pairs', out, out], { encoding: 'utf8', maxBuffer: 64 << 20 });
+    // wgsl-xl exits 1 when a pair is REJECTED: the dump is still checked (checkDump names the pairs.txt lines);
+    // its stderr (fragile vertices, a stage count that does not match the dump's) goes straight through
+    const r = spawnSync(xl, ['--pairs', out, out], { encoding: 'utf8', maxBuffer: 64 << 20, stdio: ['ignore', 'pipe', 'inherit'] });
     console.log(String(r.stdout ?? '').trim());
     if (r.status !== 0) problems.push(`wgsl-xl --pairs: exit ${r.status}`);
     await upload(out);
