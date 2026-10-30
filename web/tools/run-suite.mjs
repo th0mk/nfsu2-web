@@ -25,6 +25,8 @@
 //   scenario's OPFS save directory first (outrun: a career in stage 2 or later,
 //   e.g. the Mac port's work/seed/career/s4_outrun; sponsor: one in stage 2
 //   before its sponsor, work/seed/career/s2_start).
+//   NFSU2_SUITE_LIVE=1: each scenario's log also as it comes, in <scenario>.live.log
+//   (a long run can be followed; the .log is written at the end as always).
 //
 // Pass (as run_suite.sh): exit code 0, "quit at guest frame" (or, for a script
 // that ends by `close`, the game's own exit after the WM_CLOSE), the scenario's
@@ -299,6 +301,11 @@ async function saveOut(page, dir, out) {
 async function runOne(browser, s) {
   const logPath = path.join(OUT, `${s.name}.log`);
   const lines = OF && MODULE ? [MODULE] : [];     // the module under test in the log itself (Underground 2's stay as they were)
+  // NFSU2_SUITE_LIVE=1: each line also goes to <scenario>.live.log as it comes (a long run, such as the career bot's,
+  // can be followed while it runs; the .log is written at the end as always)
+  const live = process.env.NFSU2_SUITE_LIVE === '1' ? fs.createWriteStream(path.join(OUT, `${s.name}.live.log`)) : null;
+  if (live) for (const l of lines) live.write(l + '\n');
+  const add = l => { lines.push(l); live?.write(l + '\n'); };
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   let exit = null;
@@ -307,15 +314,15 @@ async function runOne(browser, s) {
     const t = m.text();
     // the test page prefixes game output with [tid] or [tid!] (stderr)
     const g = /^\[\d+!?\] ([^]*)$/.exec(t);
-    if (g) lines.push(g[1]);
+    if (g) add(g[1]);
     else {
       const e = /^EXIT (-?\d+)$/.exec(t);
       if (e) exit = +e[1];
-      lines.push(t);
+      add(t);
     }
   });
-  page.on('pageerror', e => lines.push(`PAGEERROR ${e}`));
-  page.on('crash', () => lines.push('CRASH (renderer process)'));
+  page.on('pageerror', e => add(`PAGEERROR ${e}`));
+  page.on('crash', () => add('CRASH (renderer process)'));
   const limit = s.alarm * opt.scale * 1000;
   if (s.seed) lines.push(`[suite] save seed: ${await seedSave(page, opt.base, saveName(s), SEED)} files from ${SEED}`);
   await page.goto(urlFor(s));
@@ -326,6 +333,7 @@ async function runOne(browser, s) {
   const wall = (Date.now() - t0) / 1000;
   await ctx.close().catch(() => {});
   const log = lines.join('\n') + '\n';
+  live?.end();
   fs.writeFileSync(logPath, log);
   const why = judge(s, log, timedOut ? null : exit);
   const st = (log.match(/^\[status\] .*$/gm) ?? []).pop()?.replace(/^\[status\] /, '') ?? '';
