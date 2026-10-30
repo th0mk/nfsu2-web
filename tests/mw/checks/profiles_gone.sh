@@ -12,7 +12,8 @@ inorder(){ awk 'BEGIN { n = ARGC - 2; for (i = 1; i <= n; i++) { p[i] = ARGV[i];
                 k <= n && index($0, p[k]) { k++ }
                 END { if (k <= n) { print p[k]; exit 1 } }' "$@" "$LOG"; }
 grep -qE '^module: rev [0-9a-f]+\+?, game mw, .* stamp game mw;' "$LOG" || fail "no module line naming its revision and lift stamp"
-grep -q 'waitfng .* TIMEOUT\|tapuntil .* TIMEOUT' "$LOG" && fail "a screen did not come up: $(grep -m1 'TIMEOUT' "$LOG")"
+# any wait of the script that ran out (waitfng, tapuntil, waitmem, waitexpr ...), not only a screen's
+grep -qE '^\[autotest\] f=[0-9]+ .* TIMEOUT' "$LOG" && fail "a wait of the script ran out: $(grep -m1 -E '^\[autotest\] f=[0-9]+ .* TIMEOUT' "$LOG")"
 grep -qF '[suite] save seed: ' "$LOG" || fail "the run was not seeded with a save tree"
 grep -qE '\[(file|write)\].*ALPHA' "$LOG" && fail "the deleted ALPHA came back: $(grep -m1 -E '\[(file|write)\].*ALPHA' "$LOG")"
 D='"C:\NFSMW\NFS Most Wanted'

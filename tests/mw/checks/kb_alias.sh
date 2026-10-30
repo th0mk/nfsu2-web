@@ -6,7 +6,8 @@
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
 grep -qE '^module: rev [0-9a-f]+\+?, game mw, .* stamp game mw;' "$LOG" || fail "no module line naming its revision and lift stamp"
-grep -q 'waitfng .* TIMEOUT\|tapuntil .* TIMEOUT' "$LOG" && fail "a screen did not come up: $(grep -m1 'TIMEOUT' "$LOG")"
+# any wait of the script that ran out (waitfng, tapuntil, waitmem, waitexpr ...), not only a screen's
+grep -qE '^\[autotest\] f=[0-9]+ .* TIMEOUT' "$LOG" && fail "a wait of the script ran out: $(grep -m1 -E '^\[autotest\] f=[0-9]+ .* TIMEOUT' "$LOG")"
 grep -qF '[write] CreateDirectoryA "C:\NFSMW\NFS Most Wanted/ROTEST"' "$LOG" || fail "no save folder ROTEST: the name typed was $(grep -m1 -oE 'CreateDirectoryA "C:.NFSMW.NFS Most Wanted/[^"]*"' "$LOG" || echo nothing)"
 grep -qE '^\[write\] CreateFileA\(CREATE_ALWAYS, [^)]*\) "C:\\NFSMW\\NFS Most Wanted/ROTEST/ROTEST"' "$LOG" || fail "the save ROTEST/ROTEST was not written"
 for s in MainMenu.fng MC_ProfileManager.fng MC_List.fng; do

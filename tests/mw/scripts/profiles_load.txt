@@ -17,6 +17,9 @@
 #   complete.": Enter;
 #   Delete: the list: Enter on ALPHA; "Are you sure you want to delete ALPHA?" (No): Left, Enter; "Save game
 #   deleted.": Enter.
+# (*) A dialog's Enter is pressed until what it leads to is up (as race_win.txt's Continue): a press that falls in
+# the list's held Enter is dropped and is followed by one 90 frames on; the Alias Manager takes no input while a
+# dialog is over it, so its highlight is only matched once the dialog has gone.
 # tests/mw/checks/profiles_load.sh wants ALPHA read, ALPHA written, BRAVO read, BRAVO written, ALPHA deleted:
 #   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script profiles_load.txt \
 #     --marker 'profiles_load: ALPHA deleted' --env FILELIST=1 --env NFSU2_QUIT_FRAMES=12000 --save-out DIR
@@ -25,7 +28,7 @@
 +0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
 +0    tap RETURN
 +0    waitfng MC_Main.fng'Load_complete. 600
-+8    tap RETURN                                         # Continue
++0    tapuntil RETURN MainMenu.fng@4b4e388a 90 900        # Continue (*)
 +0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
 +0    log profiles_load: ALPHA loaded
 +0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
@@ -52,7 +55,7 @@
 +0    tapuntil DOWN MC_List.fng^BRAVO 40 300             # BRAVO
 +0    tap RETURN
 +0    waitfng MC_Main.fng'Load_complete. 600
-+8    tap RETURN                                         # Continue
++0    tapuntil RETURN MC_ProfileManager.fng@4b4e388b 90 900   # Continue (*)
 +0    waitfng MC_ProfileManager.fng@4b4e388b 600         # back on Load
 +0    log profiles_load: BRAVO loaded
 +0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388c 40 300   # Save
@@ -73,7 +76,7 @@
 +0    tap RETURN
 +0    waitfng MC_Main.fng'Are_you_sure_you_want_to_delete@b8a7c6cc 600        # delete ALPHA?  (No)
 +0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_delete@b8a7c6cd 30 300  # Yes
-+8    tap RETURN
++0    tapuntil RETURN MC_Main.fng'Save_game_deleted. 90 900   # Yes (*)
 +0    waitfng MC_Main.fng'Save_game_deleted. 600
 +0    tap RETURN                                         # Continue
 +0    waitfng MC_ProfileManager.fng@4b4e388d 600         # back on Delete
