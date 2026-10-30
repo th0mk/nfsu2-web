@@ -84,9 +84,9 @@ static void roam_state(int cars, int friends){
 }
 /* "engage", "roam_near": for the touch controls' free-roam buttons
  * (web/src/app/touch.ts), from the game's StatusOut (game_ug2.c): "engage" is
- * 1 while Engage does something in free roam, so Start shows only then;
- * "roam_near", friends' cars within a horn's reach, so Horn and Quick chat
- * show only then. */
+ * 1 while Engage (Enter, the pad's D-pad Up) does something in free roam, so
+ * Start shows only then; "roam_near", friends' cars within a horn's reach, so
+ * Horn and Quick chat show only then. */
 static void touch_state(int engage, int near_){
     static int slot[2] = { -2, -2 };
     static double last[2] = { -1, -1 };
