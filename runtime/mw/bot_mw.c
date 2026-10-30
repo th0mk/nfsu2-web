@@ -103,7 +103,8 @@ double mw_game_time(void);
 #define PURSUIT_COPS     0x20u
 #define PURSUIT_TIME     0xb4u           /* the chase's length (s): it stops while the cops search */
 #define PURSUIT_BUST_T   0xdcu           /* the bust timer (s; 5 = busted) */
-#define PURSUIT_STATE    0x218u          /* 0 the chase, 2 the cops' search (the cooldown, +0xFC filling to 1), 3 busted */
+#define PURSUIT_STATE    0x218u          /* 0 the chase, 2 the cops' search (the cooldown, +0xFC filling to 1), 3 busted;
+                                            1 a chase too (one cop on the car for 100 s, the bust timer rising in it) */
 #define DIK_ESCAPE 0x01u
 #define DIK_RETURN 0x1cu
 #define DIK_LEFT   0xcbu
@@ -564,10 +565,12 @@ static void pursuit_frame(CPU *c){
          * (the car boxed in), is broken off the way the bot reaches a race: the car set at the place of one of the
          * bin's races at least ESCAPE_FAR_M away (the farthest), the AI driving on from there.  The cops lose it, their
          * search runs its cooldown and the game ends the pursuit as evaded, banking the bounty and the milestones
-         * itself. */
+         * itself (a bin-13 chase broken off once at 129 s: 39,000 bounty and its three milestones banked).  Not in the
+         * cops' search (state 2) nor once busted (3): in state 1, a chase with one cop on the car, a car standing with
+         * the bust timer at 2.8 was busted when only state 0 was broken off. */
         float bust = rdf(po + PURSUIT_BUST_T), len = rdf(po + PURSUIT_TIME);
         uint32_t pst = rd(po + PURSUIT_STATE);
-        if (pst == 0 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
+        if (pst < 2 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
             (bust >= ESCAPE_BUST || len >= ESCAPE_LEN) && !mw_fe_input_top(0))
             pursuit_escape(c, len, bust, rd(perp + 0x20u));
         if (t >= B.next_log){
@@ -676,7 +679,8 @@ static struct { char name[64]; uint32_t focus, save_last; long since, last; int 
 static int shows_logged(const char *nm){
     static const char *const k[] = { "SafehouseMarkers.fng", "SafeHouseRivalChallenge.fng", "PostRace_Results.fng",
         "PostRace_MilestoneRewards.fng", "PostRace_Pursuit.fng", "InGameRivalChallenge.fng", "Infractions.fng",
-        "Car_Select.fng", "GameOver.fng", "SafeHouseRivalBio.fng", "ShoppingCart.fng", 0 };
+        "Car_Select.fng", "GameOver.fng", "SafeHouseRivalBio.fng", "ShoppingCart.fng", "InGameDialog.fng",
+        "SafeHouseRegionUnlock.fng", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(nm, k[i])) return 1;
     return 0;
 }

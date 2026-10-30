@@ -1,0 +1,29 @@
+# Most Wanted: Blacklist #15 beaten, a regression script (TRACKER M4-13; FEATURES F-004: in another port the stats
+# screen after beating #15 stuck and the Blacklist's counter stayed at 15, codepdbh #84).  Seeded with a safehouse
+# save at bin 15 whose rival's requirements are met (3 races won, 3 milestones, bounty 20,000: the career bot's
+# bin15_ready seed, made through the game's own paths).  The career bot (runtime/mw/bot_mw.c) engages Sonny's
+# challenge at its first race's start (InGameRivalChallenge.fng, whose Enter accepts it) and the game's AI races
+# both races; after the win the screens come in this order (bot runs of 2026-10-30): InGamePhotoMaster.fng,
+# SafeHouseRivalChallenge.fng (the beaten rival's stats: Enter leaves it), SafehouseMarkers.fng (two markers taken),
+# SafeHouseRivalBio.fng (the next rival's bio), the text messages; then free roam with the bin at 14.
+#   NFSU2_SAVE_SEED=<bin15_ready> node web/tools/run-suite.mjs --game mw --script career_bl15.txt \
+#     --marker 'career_bl15: Blacklist 14' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 --timeout-scale 10
+# tests/mw/checks/career_bl15.sh wants the challenge won, those screens in order, none of them left stuck, and the
+# bin at 14 (the counter moved on).
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    log career_bl15: resumed
++30   bot gates
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 15
++0    bot run 14                                         # the safehouse menu, free roam, the rival's challenge
++0    bot wait 120000                                    # a lost race of the challenge is raced again
++0    bot gates
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 14
++0    log career_bl15: Blacklist 14
++60   close

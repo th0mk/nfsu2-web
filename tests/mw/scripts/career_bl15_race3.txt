@@ -1,0 +1,28 @@
+# Most Wanted: Blacklist #15's third race, a regression script (TRACKER M4-13; FEATURES F-004: in another port the game
+# crashed entering the third race of #15, codepdbh #112).  Seeded with a safehouse save at bin 15 with two of the
+# bin's races won (the career bot's bin15_two seed: `bot run 14 races 2` from bin15_start, through the game's own
+# paths).  The career bot (runtime/mw/bot_mw.c) engages a race the bin has not won yet at its engage trigger
+# (EngageEventDialog.fng, Accept), the race loads and the game's AI races it from its GO; `racestatus` once the car
+# is 15 % into it (past the first corner); the bot stops once the third race is won (a lost one is raced again).
+#   NFSU2_SAVE_SEED=<bin15_two> node web/tools/run-suite.mjs --game mw --script career_bl15_race3.txt \
+#     --marker 'career_bl15_race3: three races' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 --timeout-scale 10
+# tests/mw/checks/career_bl15_race3.sh wants the third race engaged, past 15 %, won, and three of the bin's races won.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    log career_bl15_race3: resumed
++30   bot gates
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 15
++0    bot run 14 races 3                                 # the safehouse menu, free roam, a race not won yet
++0    waitexpr f:[0x0091e000]+0x30 >= 15 20000           # the race: the player (racer slot #0) 15 % into it
++0    racestatus
++0    log career_bl15_race3: past the first corner
++0    bot wait 40000
++0    bot gates
++0    log career_bl15_race3: three races
++60   close
