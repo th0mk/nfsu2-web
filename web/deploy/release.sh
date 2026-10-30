@@ -8,6 +8,14 @@
 #                                                          only the page or the server (the module stays the same)
 #   web/deploy/release.sh root@<vps> --undo                back to the module and image before the last release
 #   -n first: only say what it would do
+#   --game mw first (after -n): NFS Most Wanted's box instead, with its own names: the folder /srv/nfsmw, whose
+#   compose files are compose.mw.yml's (web/deploy/compose.mw.yml), and the module nfsmw.wasm and nfsmw.json
+#   (GAME=mw web/build.sh: out/web/mw); the same image (it holds both games' pages)
+#     web/deploy/release.sh --game mw root@<mw-vps> out/web/mw
+#   It refuses a module json of another game ("game" in it; one with none is Underground 2's, as web/build.sh wrote
+#   them before Most Wanted), a folder on the VPS that is not the game's (Most Wanted's only /srv/nfsmw; Underground
+#   2's never /srv/nfsmw) and, on the VPS, a folder whose .env does not run the game's compose files, before it
+#   changes anything there.
 #
 # What it does: checks that the folder holds both files of one commit and that the registry has the image's tag;
 # copies the files to <dir>/module.new; then on the VPS pulls the image first (the running server reads its module
@@ -22,49 +30,70 @@
 # what is live, though nfsu2.json still names the module's.  A try again of a release whose server is up already
 # restarts nothing and only writes that file.
 #
-#   NFSU2_DIR    the folder on the VPS (default /srv/nfsu2)
+#   NFSU2_DIR    the folder on the VPS (default /srv/nfsu2; with --game mw /srv/nfsmw, and only that)
 #   NFSU2_REPO   the image without its tag (default ghcr.io/th0mk/nfsu2-web-rs)
 set -euo pipefail
 
 dry=0
 [ "${1:-}" = -n ] && { dry=1; shift; }
-vps="${1:-}"; arg="${2:-}"
-dir="${NFSU2_DIR:-/srv/nfsu2}"
-repo="${NFSU2_REPO:-ghcr.io/th0mk/nfsu2-web-rs}"
+game=ug2
+if [ "${1:-}" = --game ]; then game="${2:-}"; shift $(( $# < 2 ? $# : 2 )); fi
 die(){ echo "release: $*" >&2; exit 1; }
-[ -n "$vps" ] && [ -n "$arg" ] || die "usage: release.sh [-n] user@vps <module folder> [commit] | release.sh [-n] user@vps --undo"
+# each game's names (one image holds both games' pages): the folder on the VPS, the module's file names
+case "$game" in
+  ug2) gdir=/srv/nfsu2 name=nfsu2 ;;
+  mw) gdir=/srv/nfsmw name=nfsmw ;;
+  *) die "--game: ug2 or mw" ;;
+esac
+vps="${1:-}"; arg="${2:-}"
+dir="${NFSU2_DIR:-$gdir}"
+repo="${NFSU2_REPO:-ghcr.io/th0mk/nfsu2-web-rs}"
+[ -n "$vps" ] && [ -n "$arg" ] || die "usage: release.sh [-n] [--game mw] user@vps <module folder> [commit] | release.sh [-n] [--game mw] user@vps --undo"
+# the folder on the VPS: Most Wanted's is /srv/nfsmw and no other, and no other game's is (one game's module in the
+# other's folder is the mix-up this refuses: a box serves one game)
+case "$game:${dir%/}" in
+  mw:/srv/nfsmw) ;;
+  mw:*) die "$dir is not Most Wanted's folder: --game mw releases to /srv/nfsmw only" ;;
+  *:/srv/nfsmw) die "$dir is Most Wanted's folder: --game mw" ;;
+esac
 
-# the part that runs on the VPS: $1 what (release or undo), $2 the image, $3 the module's commit
+# the part that runs on the VPS: $1 what (release or undo), $2 the image, $3 the module's commit, $4 the game, $5 its
+# module's file name.  First, the folder is the game's: its .env runs Most Wanted's compose file (compose.mw.yml) for
+# mw, and never for ug2 (else nothing is pulled, kept or moved)
 remote=$(cat <<'REMOTE'
 set -euo pipefail
-what=$1 img=$2 rev=$3
+what=$1 img=$2 rev=$3 game=${4:-ug2} name=${5:-nfsu2}
 cd "$NFSU2_DIR"
 say(){ echo "  [vps] $*"; }
+mwfiles=0
+grep -q '^COMPOSE_FILE=.*compose\.mw\.yml' .env 2>/dev/null && mwfiles=1
+if [ "$game" = mw ] && [ $mwfiles = 0 ]; then echo "release: $NFSU2_DIR is not Most Wanted's: its .env's COMPOSE_FILE has no compose.mw.yml" >&2; exit 1; fi
+if [ "$game" != mw ] && [ $mwfiles = 1 ]; then echo "release: $NFSU2_DIR is Most Wanted's (compose.mw.yml in its .env): --game mw" >&2; exit 1; fi
 if [ "$what" = undo ]; then
-  [ -f module.prev/nfsu2.wasm ] && [ -f module.prev/nfsu2.json ] && [ -f .env.prev ] || { echo "release: no earlier release kept here" >&2; exit 1; }
+  [ -f module.prev/$name.wasm ] && [ -f module.prev/$name.json ] && [ -f .env.prev ] || { echo "release: no earlier release kept here" >&2; exit 1; }
   mkdir -p module.new
-  cp -p module.prev/nfsu2.wasm module.prev/nfsu2.json module.new/
-  rev=$(grep -o '"rev":"[^"]*"' module.new/nfsu2.json | cut -d'"' -f4)
+  cp -p module.prev/$name.wasm module.prev/$name.json module.new/
+  rev=$(grep -o '"rev":"[^"]*"' module.new/$name.json | cut -d'"' -f4)
   img=$(grep '^NFSU2_IMAGE=' .env.prev | cut -d= -f2- || true)
 fi
-[ -f module.new/nfsu2.wasm ] && [ -f module.new/nfsu2.json ] || { echo "release: no module in $NFSU2_DIR/module.new" >&2; exit 1; }
+[ -f module.new/$name.wasm ] && [ -f module.new/$name.json ] || { echo "release: no module in $NFSU2_DIR/module.new" >&2; exit 1; }
 say "image: ${img:-as compose.yml says}"
 NFSU2_IMAGE="$img" docker compose pull -q server
 if [ "$what" = release ]; then
   # the module and image of this release in place already (a try that stopped after the move): the ones kept stay
-  if cmp -s module/nfsu2.json module.new/nfsu2.json && [ "$(grep '^NFSU2_IMAGE=' .env | cut -d= -f2- || true)" = "$img" ]; then
+  if cmp -s module/$name.json module.new/$name.json && [ "$(grep '^NFSU2_IMAGE=' .env | cut -d= -f2- || true)" = "$img" ]; then
     say "this release again: the module and .env of before it stay kept"
   else
     rm -rf module.prev && mkdir module.prev
-    cp -p module/nfsu2.wasm module/nfsu2.json module.prev/ 2>/dev/null || true
+    cp -p module/$name.wasm module/$name.json module.prev/ 2>/dev/null || true
     cp -p .env .env.prev
   fi
 fi
-chmod 644 module.new/nfsu2.wasm module.new/nfsu2.json
-mv -f module.new/nfsu2.wasm module/nfsu2.wasm
-mv -f module.new/nfsu2.json module/nfsu2.json
+chmod 644 module.new/$name.wasm module.new/$name.json
+mv -f module.new/$name.wasm module/$name.wasm
+mv -f module.new/$name.json module/$name.json
 rmdir module.new
-say "module: $(grep -o '"rev":"[^"]*"' module/nfsu2.json)"
+say "module: $(grep -o '"rev":"[^"]*"' module/$name.json)"
 if [ -n "$img" ]; then
   if grep -q '^NFSU2_IMAGE=' .env; then sed -i "s#^NFSU2_IMAGE=.*#NFSU2_IMAGE=$img#" .env; else echo "NFSU2_IMAGE=$img" >> .env; fi
 else
@@ -97,7 +126,7 @@ REMOTE
 if [ "$arg" = --undo ]; then
   echo "release: $vps:$dir back to the module and image of before the last release"
   [ $dry = 1 ] && exit 0
-  ssh "$vps" "NFSU2_DIR='$dir' bash -s -- undo '' ''" <<<"$remote"
+  ssh "$vps" "NFSU2_DIR='$dir' bash -s -- undo '' '' '$game' '$name'" <<<"$remote"
   exit 0
 fi
 
@@ -105,19 +134,23 @@ fi
 src="$arg"
 # never a build with the D3DX oracle linked: web/build.sh writes "oracle" into the json of such a build only.  Every
 # json of the folder given, before the names: another game's module is named after it (web/build.sh writes Most
-# Wanted's to out/web/mw/nfsmw.json).  Not its subfolders: only nfsu2.wasm and nfsu2.json are uploaded
+# Wanted's to out/web/mw/nfsmw.json).  Not its subfolders: only the game's two files are uploaded (nfsu2.wasm and
+# nfsu2.json; with --game mw nfsmw.wasm and nfsmw.json)
 for j in "$src"/*.json; do
   [ -f "$j" ] || continue
   ! grep -qE '"oracle"[[:space:]]*:' "$j" \
     || die "$j has \"oracle\": a dev-only module with the D3DX oracle (Microsoft's d3dx9_26.dll, lifted) linked, never released; build one without it (D3DX_ORACLE=0)"
 done
-[ -f "$src/nfsu2.wasm" ] && [ -f "$src/nfsu2.json" ] || die "$src needs nfsu2.wasm and nfsu2.json"
-rev=$(grep -o '"rev":"[^"]*"' "$src/nfsu2.json" | cut -d'"' -f4)
-size=$(grep -o '"size":[0-9]*' "$src/nfsu2.json" | cut -d: -f2)
-[ -n "$rev" ] || die "$src/nfsu2.json has no rev"
+[ -f "$src/$name.wasm" ] && [ -f "$src/$name.json" ] || die "$src needs $name.wasm and $name.json"
+# the module's game (web/build.sh writes "game"; Underground 2's json had none before Most Wanted): the one --game says
+mgame=$(grep -o '"game":"[^"]*"' "$src/$name.json" | cut -d'"' -f4 || true)
+[ "${mgame:-ug2}" = "$game" ] || die "$src/$name.json is a module of ${mgame:-ug2}, not of $game (--game)"
+rev=$(grep -o '"rev":"[^"]*"' "$src/$name.json" | cut -d'"' -f4)
+size=$(grep -o '"size":[0-9]*' "$src/$name.json" | cut -d: -f2)
+[ -n "$rev" ] || die "$src/$name.json has no rev"
 case "$rev" in *+*) die "the module was built from a checkout with changes ($rev): build it from a commit";; esac
-have=$(wc -c < "$src/nfsu2.wasm" | tr -d ' ')
-[ "$size" = "$have" ] || die "nfsu2.json says $size bytes, nfsu2.wasm has $have: not one build"
+have=$(wc -c < "$src/$name.wasm" | tr -d ' ')
+[ "$size" = "$have" ] || die "$name.json says $size bytes, $name.wasm has $have: not one build"
 
 # the image: its tag in the registry (a commit's image is missing when CI cancelled it for a newer push)
 commit="${3:-$rev}"
@@ -136,6 +169,7 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" \
 echo "release: module $rev ($have bytes) and image $img to $vps:$dir"
 [ $dry = 1 ] && exit 0
 ssh "$vps" "mkdir -p '$dir/module.new'"
-scp -q "$src/nfsu2.wasm" "$src/nfsu2.json" "$vps:$dir/module.new/"
-ssh "$vps" "NFSU2_DIR='$dir' bash -s -- release '$img' '$rev'" <<<"$remote"
-echo "release: done. Undo: web/deploy/release.sh $vps --undo"
+scp -q "$src/$name.wasm" "$src/$name.json" "$vps:$dir/module.new/"
+ssh "$vps" "NFSU2_DIR='$dir' bash -s -- release '$img' '$rev' '$game' '$name'" <<<"$remote"
+again=""; [ "$game" = ug2 ] || again="--game $game "
+echo "release: done. Undo: web/deploy/release.sh $again$vps --undo"
