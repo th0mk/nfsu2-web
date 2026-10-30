@@ -20,9 +20,9 @@
 # Rap Sheet yet); each used once.  Save asks twice (MC_Main.fng, No 0xB8A7C6CC first, Yes 0xB8A7C6CD to its left:
 # "Are you sure you want to save the alias", then "Do you want to overwrite"), then "Save complete.".  Resume Free
 # Roam asks "Are you sure you want to leave the Safe House?" (Dialog.fng: No 0xB8A7C6CD, Yes 0xB8A7C6CC to its
-# left) and loads free roam behind Loading_Tips.fng (its "Press Enter to continue" came after this run's first visit and not after a
-# save's: the script takes either).  At bin 15 the pause menu has Resume
-# Free Roam, Jump to Safe House 0x3C14C420, Performance Tuning 0x6A3672A2, Options: Jump to Safe House and
+# left) and loads free roam behind Loading_Tips.fng (its "Press Enter to continue" came after this run's first
+# visit and not after a save's: the script takes either).  At bin 15 the pause menu has Resume Free Roam, Jump to
+# Safe House 0x3C14C420, Performance Tuning 0x6A3672A2, Options: Jump to Safe House and
 # Performance Tuning ask in InGameDialog.fng (Cancel 0xB8A7C6CD first, OK 0xB8A7C6CC to its left; Performance
 # Tuning only tells "You must upgrade your vehicle with tunable parts" and OK closes it).  M opens the world map
 # (WorldMapMain.fng) and Escape closes it.  Last, Jump to Safe House with OK: the safehouse menu again.  The run

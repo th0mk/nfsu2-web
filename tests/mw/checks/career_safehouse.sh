@@ -36,4 +36,6 @@ r=$(awk '/LOG career_safehouse: free roam at bin 15$/ { p = 1 } p && /^\[mwrace\
 awk -v d="$r" 'BEGIN { exit !(d <= 20) }' || fail "the car left the safehouse $r m from its respawn point (want 20 m or less)"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
-echo "free roam at bin 16, its pause menu; the drive into the safehouse trigger; the Blacklist intro at bin 15 and its four screens; the safehouse menu's four items, a completed save; the bin-15 pause menu, the world map, Jump to Safe House; the game left by WM_CLOSE"
+echo "free roam at bin 16, its pause menu; the drive into the safehouse trigger; the Blacklist intro at bin 15 and" \
+  "its four screens; the safehouse menu's four items, a completed save; the bin-15 pause menu, the world map, Jump" \
+  "to Safe House; the game left by WM_CLOSE"
