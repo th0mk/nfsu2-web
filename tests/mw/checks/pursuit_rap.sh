@@ -3,7 +3,7 @@
 # module under test is named (L-020); no wait ran out; the rap sheet was logged at the safehouse, after the pursuits and
 # after the save; the bot ran at least one pursuit to its end, stopped by itself (not at game over) and saved; the game
 # left by WM_CLOSE.  Prints what the pursuits showed: how many, busted and evaded, the highest heat, cops, helicopters,
-# roadblocks (spawned, dodged), spike strips dodged, pursuit breakers, the purecall guard's runs, and the rap sheet
+# roadblocks (tries past the road checks and those made, dodged), spike strips dodged, pursuit breakers, the purecall guard's runs, and the rap sheet
 # before and after.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
@@ -21,7 +21,7 @@ last=$(grep -E '\[mwbot\] .* pursuit over \(' "$LOG" | tail -1 | grep -oE 'pursu
 # pursuit's count, not "total_cops")
 max(){ grep -E '^\[mwpursuit\] f=[0-9]+ heat .* pursuit [0-9a-f]*[1-9a-f][0-9a-f]* ' "$LOG" | grep -oE " $1 [0-9.]+" |
   awk '{ if ($2 + 0 > m) m = $2 + 0 } END { print m + 0 }'; }
-rb=$(grep -E '^\[mwpursuit\] f=[0-9]+ heat ' "$LOG" | tail -1 | grep -oE 'roadblocks [0-9]+ breakers [0-9]+ guard [0-9]+')
+rb=$(grep -E '^\[mwpursuit\] f=[0-9]+ heat ' "$LOG" | tail -1 | grep -oE 'roadblocks [0-9]+ \(made [0-9]+\) breakers [0-9]+ guard [0-9]+')
 rap(){ grep -E '^\[mwrap\] f=[0-9]+ rapsheet \(asked\)' "$LOG" | sed -n "$1p" | sed 's/.*(asked)://'; }
 # each career car's impound strikes of max (its record's bytes 3 and 2) and the cash, at the first and the last rap sheet
 strikes(){ grep -E '^\[mwrap\] f=[0-9]+   (car [0-9]+ |cash )' "$LOG" | awk -v which="$1" '

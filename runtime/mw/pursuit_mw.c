@@ -55,7 +55,15 @@
  *     [0x915F94] is set).
  *
  * The hooks (HOOK_SITE; counted always, logged while `pursuit watch` is on):
- *   0x43DD30  the roadblock spawner's entry (its callers 0x43E7D1, 0x43EC35; the purecall guard 0x43E005 is in it)
+ *   0x43DD30  the roadblock spawner's entry, thiscall on the pursuit (vehicle, n, ?, list).  Two callers: the
+ *             pursuit's own (0x43EC35, list 0: new cars, 0x426610 makes one a try) and a cop's roadblock plan
+ *             (0x43E770 -> 0x43E7D1: the list of the plan's cars at plan+8, the plan in state 1 at +0x78 until a try
+ *             makes the roadblock, then 2; the purecall guard 0x43E005 is in its loop).  0x43DF43 is past its road
+ *             checks; then the cars it needs by the road's width (3/3/4/4/5/5/6 at 0x43DF43..0x43DF82), fewer than
+ *             that less one gives up (0x43E147), and a layout for that width and count (0x4063D0; none gives up,
+ *             0x43E1DA).  Each try past the road checks is logged with its caller, what came of it (the callers'
+ *             al, 0x43E7D6 and 0x43EC3A), the cars and the layout: a try that gives up is tried again on the next
+ *             update, so a place where it cannot be made gives a try or two a frame ("storms", M4-49)
  *   0x439E60  MBreakerStopCops' handler (the cop manager): a pursuit breaker came down; the message holds its place
  *             (+0x10..+0x18), its radius (+0x1C) and a time (+0x20).  (EPursuitBreaker, 0x641670, is the
  *             Speedbreaker's slow motion, not a pursuit breaker: 0x6E9AE9 and the player's destructor make it.)
@@ -122,7 +130,13 @@ static const struct { uint32_t name; const char *tag; } gm_names[] = {
 #define SITE_ROADBLOCK   HOOK_SITE(0x0043df43)   /* ... past its road checks: a roadblock is put up (its cars by heat) */
 #define SITE_BREAKER     HOOK_SITE(0x00439e60)   /* MBreakerStopCops' handler */
 #define SITE_COPCAR      HOOK_SITE(0x0041ecd0)   /* the cop manager's cop car by name */
-static unsigned long n_roadblock_try, n_roadblock, n_breaker;
+#define SITE_RB_CARS     HOOK_SITE(0x0043e147)   /* ... `cmp ebp, esi`: the cars it has, the cars it needs less one */
+#define SITE_RB_LAYOUT   HOOK_SITE(0x0043e1da)   /* ... ecx: the layout 0x4063D0 found (0: none) */
+#define SITE_RB_RET_PLAN HOOK_SITE(0x0043e7d6)   /* the cop's plan's call returned (al 1: made) */
+#define SITE_RB_RET_NEW  HOOK_SITE(0x0043ec3a)   /* the pursuit's own call returned */
+static unsigned long n_roadblock_try, n_roadblock, n_roadblock_made, n_breaker;
+static struct { uint32_t from, list, cars, need, layout; int past; } rbt;   /* the try under way */
+static unsigned long n_rbt_lines;
 unsigned long mw_pursuit_breakers(void){ return n_breaker; }     /* career_mw.c: `pursuit wait breaker` */
 /* the cop cars asked for by name since the last pursuit's end (the names are the game's own strings) */
 #define N_COPNAMES 16
@@ -141,15 +155,36 @@ static void copcar_count(uint32_t s, uint32_t from){
         fprintf(stderr, "[mwpursuit] f=%ld cop car asked: %s (from 0x%08x)\n", autotest_frame(), nm, from);
 }
 int mw_pursuit_hook(CPU *c, uint32_t va){
-    if (va == SITE_ROADBLOCK_TRY){ n_roadblock_try++; return 1; }
-    if (va == SITE_COPCAR){ copcar_count(MR32(c->esp + 4u), MR32(c->esp)); return 1; }
-    if (va == SITE_ROADBLOCK){
-        n_roadblock++;
-        if (mw_aid_pw_on())
-            fprintf(stderr, "[mwpursuit] f=%ld roadblock: put up (0x43DF43, after %lu tries), roadblock %lu\n",
-                    autotest_frame(), n_roadblock_try, n_roadblock);
+    if (va == SITE_ROADBLOCK_TRY){
+        n_roadblock_try++;
+        rbt.from = MR32(c->esp) - 5u; rbt.list = MR32(c->esp + 16u);
+        rbt.cars = rbt.need = rbt.layout = 0xffffffffu; rbt.past = 0;
         return 1;
     }
+    if (va == SITE_ROADBLOCK){ n_roadblock++; rbt.past = 1; return 1; }
+    if (va == SITE_RB_CARS){ rbt.cars = c->ebp; rbt.need = c->esi + 1u; return 1; }
+    if (va == SITE_RB_LAYOUT){ rbt.layout = c->ecx; return 1; }
+    if (va == SITE_RB_RET_PLAN || va == SITE_RB_RET_NEW){
+        int made = (c->eax & 0xffu) == 1u;
+        if (made) n_roadblock_made++;
+        if (rbt.past && mw_aid_pw_on() && n_rbt_lines++ < 4000){
+            char l[160] = ""; size_t o = 0;
+            if (rbt.list){                      /* the plan's cars and their vtables (0x890970: torn down) */
+                uint32_t b = rd(rbt.list + 4u), k = rd(rbt.list + 0xcu);
+                o += (size_t)snprintf(l + o, sizeof l - o, "; the plan's %u cars:", k);
+                for (uint32_t i = 0; i < k && i < 6u && o < sizeof l; i++)
+                    o += (size_t)snprintf(l + o, sizeof l - o, " %08x (vtable %08x)", rd(b + 4u * i), rd(rd(b + 4u * i)));
+            }
+            const char *w = made || rbt.cars == 0xffffffffu ? "" : (int)rbt.cars < (int)rbt.need - 1 ? ", too few cars" :
+                            rbt.layout == 0u ? ", no layout fits" : "";
+            fprintf(stderr, "[mwpursuit] f=%ld roadblock try %lu (0x%08x, %s): %s; cars %d of %d%s, layout %08x%s\n",
+                    autotest_frame(), n_roadblock_try, rbt.from, rbt.list ? "a cop's plan" : "new cars",
+                    made ? "made" : "not made", (int)rbt.cars, (int)rbt.need, w, rbt.layout, l);   /* -1: not reached */
+        }
+        rbt.past = 0;
+        return 1;
+    }
+    if (va == SITE_COPCAR){ copcar_count(MR32(c->esp + 4u), MR32(c->esp)); return 1; }
     if (va == SITE_BREAKER){
         n_breaker++;
         uint32_t m = MR32(c->esp + 4u);
@@ -182,9 +217,9 @@ void mw_pursuit_extras(CPU *c, uint32_t po, uint32_t sig[8], char *out, size_t n
         o += (size_t)(ok ? snprintf(out + o, n - o, " %s %.0f", gm_names[i].tag, v)
                          : snprintf(out + o, n - o, " %s -", gm_names[i].tag));
     }
-    sig[7] = (uint32_t)(n_roadblock * 1000u + n_breaker);
-    if (o < n) o += (size_t)snprintf(out + o, n - o, " roadblocks %lu breakers %lu guard %lu", n_roadblock, n_breaker,
-                                     mw_fix_purecall_calls());
+    sig[7] = (uint32_t)(n_roadblock_made * 1000u + n_breaker);
+    if (o < n) o += (size_t)snprintf(out + o, n - o, " roadblocks %lu (made %lu) breakers %lu guard %lu", n_roadblock,
+                                     n_roadblock_made, n_breaker, mw_fix_purecall_calls());
     if (po && rd(po + PURSUIT_STATE) == 2u && o < n){  /* the cops' search: the meter by tenths, its parts */
         float m = rdf(po + PURSUIT_METER);
         sig[0] |= (uint32_t)(int)(m * 10.0f) << 8;
@@ -205,8 +240,8 @@ void mw_pursuit_end(CPU *c, const char *how){
         if (copcar[i].n) o += snprintf(b + o, sizeof b - (size_t)o, " %s %lu", copcar[i].name, copcar[i].n);
         copcar[i].n = 0;
     }
-    fprintf(stderr, "[mwpursuit] f=%ld end (%s): cop cars asked by name:%s; roadblocks %lu, breakers %lu, guard %lu\n",
-            autotest_frame(), how, o ? b : " none", n_roadblock, n_breaker, mw_fix_purecall_calls());
+    fprintf(stderr, "[mwpursuit] f=%ld end (%s): cop cars asked by name:%s; roadblocks %lu (made %lu), breakers %lu, "
+            "guard %lu\n", autotest_frame(), how, o ? b : " none", n_roadblock, n_roadblock_made, n_breaker, mw_fix_purecall_calls());
     if (pools_on) mw_aid_pools(c, 0);
 }
 
