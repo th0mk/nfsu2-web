@@ -129,19 +129,19 @@ impl App {
         let method = q.method.clone();
         if !matches!(method.as_str(), "GET" | "HEAD" | "PUT" | "DELETE") {
             return self
-                .plain(q, s, 405, "Method not allowed", &[("allow", "GET, HEAD, PUT, DELETE"), ("connection", "close")], Cache::Store, true)
+                .vault_plain(q, s, forwarded, 405, "Method not allowed", &[("allow", "GET, HEAD, PUT, DELETE"), ("connection", "close")])
                 .await;
         }
         if method != "PUT" && (js_to_number(q.headers.get("content-length").unwrap_or("0")) > 0.0 || present(q, "transfer-encoding")) {
-            return self.plain(q, s, 413, "Too large", CLOSE, Cache::Store, true).await;
+            return self.vault_plain(q, s, forwarded, 413, "Too large", CLOSE).await;
         }
         let Some(id) = token(q).map(|t| id_of(t.as_bytes())) else {
-            return self.plain(q, s, 401, "A keyphrase's token is needed", &[], Cache::Store, true).await;
+            return self.vault_plain(q, s, forwarded, 401, "A keyphrase's token is needed", &[]).await;
         };
         let (key, site) = if forwarded {
             let ip = nfsu2_headers::bare_ip(q.headers.get(super::vault_forward::CLIENT_HEADER).unwrap_or(""));
             if ip.is_empty() {
-                return self.plain(q, s, 400, "Bad request", &[], Cache::Store, true).await;
+                return self.vault_plain(q, s, forwarded, 400, "Bad request", &[]).await;
             }
             (nfsu2_headers::address_key(&ip), nfsu2_headers::site_key(&ip))
         } else {
@@ -153,7 +153,7 @@ impl App {
         match method.as_str() {
             "GET" | "HEAD" => {
                 if !v.reads.take(&key, &site) || !v.misses.check(&key, &site) {
-                    return self.too_many(q, s).await;
+                    return self.too_many(q, s, forwarded).await;
                 }
                 let want = if u.has_param("earlier") { Want::Earlier } else { Want::Current };
                 // a page that has the current version asks with its ETag: the head is enough for the 304
@@ -164,7 +164,7 @@ impl App {
                     if let Some(m) = meta
                         && nfsu2_headers::etag_matches(inm.as_deref(), &etag(m.cur.rev))
                     {
-                        let mut h = self.headers(q, Cache::Store, true);
+                        let mut h = self.vault_hdrs(q, forwarded);
                         vault_headers(&mut h, m.cur.rev, m.cur.saved, m.prev.map(|p| p.saved), v.store.is_launch_copy(&m));
                         s.head(304, h.0);
                         return finish(s).await;
@@ -180,9 +180,9 @@ impl App {
                 });
                 let Some((ver, earlier, copy, body)) = found else {
                     v.misses.take(&key, &site);
-                    return self.not_found(q, s).await;
+                    return self.vault_plain(q, s, forwarded, 404, "Not found", &[]).await;
                 };
-                let mut h = self.headers(q, Cache::Store, true);
+                let mut h = self.vault_hdrs(q, forwarded);
                 h.set("content-type", "application/octet-stream");
                 h.set("content-length", body.len().to_string());
                 vault_headers(&mut h, ver.rev, ver.saved, earlier, copy);
@@ -196,28 +196,28 @@ impl App {
                 let cond = match (q.headers.get("if-match"), q.headers.get("if-none-match")) {
                     (Some(m), _) => match if_match(m) {
                         Some(r) => Cond::Rev(r),
-                        None => return self.plain(q, s, 412, "Changed elsewhere", &[], Cache::Store, true).await,
+                        None => return self.vault_plain(q, s, forwarded, 412, "Changed elsewhere", &[]).await,
                     },
                     (None, Some(n)) if js::trim(n) == "*" => Cond::New,
-                    _ => return self.plain(q, s, 428, "If-Match or If-None-Match: * is needed", &[], Cache::Store, true).await,
+                    _ => return self.vault_plain(q, s, forwarded, 428, "If-Match or If-None-Match: * is needed", &[]).await,
                 };
                 if !v.writes.take(&key, &site) || (cond == Cond::New && !v.news.take(&key, &site)) {
-                    return self.too_many(q, s).await;
+                    return self.too_many(q, s, forwarded).await;
                 }
                 let max = store.options().max_body;
                 if js_to_number(q.headers.get("content-length").unwrap_or("0")) > max as f64 {
-                    return self.plain(q, s, 413, "Too large", CLOSE, Cache::Store, true).await;
+                    return self.vault_plain(q, s, forwarded, 413, "Too large", CLOSE).await;
                 }
                 let body = match q.read_body(max).await {
                     Ok(b) => b,
-                    Err(nfsu2_http::BodyError::TooLarge) => return self.plain(q, s, 413, "Too large", CLOSE, Cache::Store, true).await,
+                    Err(nfsu2_http::BodyError::TooLarge) => return self.vault_plain(q, s, forwarded, 413, "Too large", CLOSE).await,
                     Err(nfsu2_http::BodyError::Broken) => {
                         s.destroy();
                         return Err(Fail::Gone);
                     }
                 };
                 let put = self.vault_io(v, move || store.put(&id, cond, &body, now)).await?;
-                let mut h = self.headers(q, Cache::Store, true);
+                let mut h = self.vault_hdrs(q, forwarded);
                 let (code, text) = match put {
                     Put::Saved { meta, created } => {
                         vault_headers(&mut h, meta.cur.rev, meta.cur.saved, meta.prev.map(|p| p.saved), false);
@@ -280,21 +280,41 @@ impl App {
             }
             _ => {
                 if !v.writes.take(&key, &site) {
-                    return self.too_many(q, s).await;
+                    return self.too_many(q, s, forwarded).await;
                 }
                 if self.vault_io(v, move || store.delete(&id)).await? {
                     // its claimed name is free (names.rs)
                     self.release_names(&id);
-                    self.plain(q, s, 200, "Deleted", &[], Cache::Store, true).await
+                    self.vault_plain(q, s, forwarded, 200, "Deleted", &[]).await
                 } else {
-                    self.not_found(q, s).await
+                    self.vault_plain(q, s, forwarded, 404, "Not found", &[]).await
                 }
             }
         }
     }
 
-    async fn too_many(&self, q: &Request, s: &mut Response) -> Res {
-        self.plain(q, s, 429, "Too many requests", &[("retry-after", "60")], Cache::Store, true).await
+    /// a short answer of the vault's; to a forward it took, with the mark that it is the vault's own (`x-vault-box:
+    /// taken`: vault_forward.rs passes on only those, and the way there's own answers, a wrong address's 404, an
+    /// edge's 403 or a busy box's 429, are its unreachable 503)
+    async fn vault_plain(&self, q: &Request, s: &mut Response, fwd: bool, code: u16, text: &str, extra: &[(&str, &str)]) -> Res {
+        let mut e = extra.to_vec();
+        if fwd {
+            e.push((super::vault_forward::BOX_HEADER, super::vault_forward::TAKEN));
+        }
+        self.plain(q, s, code, text, &e, Cache::Store, true).await
+    }
+
+    async fn too_many(&self, q: &Request, s: &mut Response, fwd: bool) -> Res {
+        self.vault_plain(q, s, fwd, 429, "Too many requests", &[("retry-after", "60")]).await
+    }
+
+    /// the usual headers of the vault's answers; to a forward it took, with that mark
+    fn vault_hdrs(&self, q: &Request, fwd: bool) -> Hdrs {
+        let mut h = self.headers(q, Cache::Store, true);
+        if fwd {
+            h.set(super::vault_forward::BOX_HEADER, super::vault_forward::TAKEN);
+        }
+        h
     }
 
     /// a file operation on a blocking thread, IO_AT_ONCE of them at most; an error is the 500's (no path in it)

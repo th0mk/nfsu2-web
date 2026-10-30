@@ -8,11 +8,14 @@
 //! U2 server takes in place of a browser's Origin check, and only with which it counts the address it is told (one
 //! not its own, or any when it has none, it refuses with a 403 and `x-vault-box: refused`, and both boxes log it); and
 //! the Access service token (`CF-Access-Client-Id`, `CF-Access-Client-Secret`).  No other header of the browser's goes
-//! on (its own `CF-Access-*` never).  What comes back, the vault's answer, goes to the page with the headers that
-//! matter (the ETag, `x-vault-*`, Retry-After): every 2xx, 3xx and 4xx, and its 503 (busy, with Retry-After) and 507
-//! (full).  Anything else (no connection in 5 s, no answer in 20 s, another 5xx, which is the tunnel's or the edge's
-//! error page, an answer that does not read, the credential refused) is a 503 with the code VAULT-UNREACHABLE, which the page shows as a sync
-//! failure while it keeps its local saves.  No retry here: the page asks again.
+//! on (its own `CF-Access-*` never).  What comes back goes to the page only when the vault gave it (every answer it
+//! gives a forward it took says so: `x-vault-box: taken`), with the headers that matter (the ETag, `x-vault-*`,
+//! Retry-After): its 2xx, 304 and 4xx, its 503 (busy, with Retry-After) and 507 (full).  Anything else is a 503 with the
+//! code VAULT-UNREACHABLE, which the page shows as a sync failure while it keeps its local saves: no connection in 5 s,
+//! no answer in 20 s, an answer that does not read, the credential refused, and an answer of the way there, which the
+//! page would take for the vault's (a wrong address's or a vault-less box's 404 for "no such keyphrase", a 405, 421,
+//! an edge's or Access's 401, 403 or 302, the U2 box's own 429 for this box, a tunnel's 5xx).  No retry here: the page
+//! asks again.
 //!
 //! Before anything goes on, this server's own checks: its own pages only (as vault.rs), the four methods, a body only
 //! with a PUT and none over the vault's 256 KB.  At most 32 forwards at once; no state written (no folder, no cache of
@@ -47,6 +50,8 @@ pub const BOX_HEADER: &str = "x-vault-box";
 pub const CLIENT_HEADER: &str = "x-vault-client";
 /// the U2 box's answer to a forward whose credential is not its own (or when it has none), in BOX_HEADER
 pub const REFUSED: &str = "refused";
+/// in BOX_HEADER, on every answer the U2 box's vault gives a forward it took: what the page may get
+pub const TAKEN: &str = "taken";
 /// the shortest box-to-box credential taken
 pub const MIN_KEY: usize = 32;
 /// the vault's headers a page reads, passed back as they came
@@ -276,11 +281,18 @@ async fn talk<S: AsyncRead + AsyncWrite + Unpin>(mut s: S, req: &[u8], head: boo
     Ok(Answer { status, headers, body })
 }
 
-/// the vault's own answer, which the page gets as it is: not a 5xx of the way there (an edge's or a tunnel's error
-/// page), but the vault's 503 (busy for now, with Retry-After) and 507 (full)
-fn the_vaults(a: &Answer) -> bool {
-    let has = |k: &str| a.headers.iter().any(|(n, _)| n == k);
-    a.status < 500 || (a.status == 503 && has("retry-after")) || a.status == 507
+/// whose answer it is: the vault's own (it says so in BOX_HEADER), which the page gets as it is; the credential
+/// refused; or another's of the way there (Err: the line's word for it): a 404 of a wrong address or of a U2 box with
+/// no vault, a 405 of a wrong path, a 421 of a name the U2 box does not serve, an edge's or Access's 401, 403 or 302,
+/// the U2 box's 429 for this box (all its players are one client there), a tunnel's 5xx.  Only the vault's goes to the
+/// page: any other would read as the vault's (a 404 as "no such keyphrase").
+fn whose(a: &Answer) -> Result<(), &'static str> {
+    match a.headers.iter().find(|(n, _)| n == BOX_HEADER).map(|(_, v)| v.as_str()) {
+        Some(TAKEN) => Ok(()),
+        Some(REFUSED) => Err("the credential refused"),
+        _ if a.status >= 500 => Err("an error of the way there"),
+        _ => Err("an answer not the vault's"),
+    }
 }
 
 impl App {
@@ -351,24 +363,32 @@ impl App {
         let (client, _, _) = self.client(q);
         let req = f.request(q, u.has_param("earlier"), &client, &body);
         let a = match f.exchange(&req, method == "HEAD").await {
-            // the U2 box refused the credential: a setting of the boxes', said here too (that box says so as well)
-            Ok(a) if a.headers.iter().any(|(n, v)| n == BOX_HEADER && v == REFUSED) => {
-                unreachable("the credential refused");
-                log::limited(
-                    "vault",
-                    "box key",
-                    "",
-                    "[vault] the U2 box refused this box's credential: NFSU2_VAULT_BOX_KEY is not the same on both boxes, or \
-                     the U2 box has none",
-                    1,
-                );
-                return self.unreachable(q, s).await;
-            }
-            Ok(a) if the_vaults(&a) => a,
-            Ok(_) => {
-                unreachable("an error of the way there");
-                return self.unreachable(q, s).await;
-            }
+            Ok(a) => match whose(&a) {
+                Ok(()) => a,
+                Err(why) => {
+                    unreachable(why);
+                    // a setting of the boxes' or of the way there: said at once (once a minute at most); a tunnel's 5xx
+                    // only in the 5-minute line
+                    if why == "the credential refused" {
+                        log::limited(
+                            "vault",
+                            "box key",
+                            "",
+                            "[vault] the U2 box refused this box's credential: NFSU2_VAULT_BOX_KEY is not the same on both \
+                             boxes, or the U2 box has none",
+                            1,
+                        );
+                    } else if a.status < 500 {
+                        let l = format!(
+                            "[vault] a forward got a {} that is not the U2 box's vault's: NFSU2_VAULT_FORWARD's address, \
+                             Access, the U2 box's vault being off, or the U2 box busy",
+                            a.status
+                        );
+                        log::limited("vault", "not the vault's", "", &l, 1);
+                    }
+                    return self.unreachable(q, s).await;
+                }
+            },
             Err(why) => {
                 unreachable(why);
                 return self.unreachable(q, s).await;
@@ -546,8 +566,12 @@ mod tests {
         // a request of another site's page, with the credential's header but not the credential: refused
         let r = b.request("GET", "/vault", &[BEARER, ("Origin", "https://elsewhere.example"), ("x-vault-box", "not the key")], b"").await;
         assert_eq!(r.status, 403);
-        // with the credential, the page's check is the forwarder's: an address it names is needed
-        assert_eq!(b.request("GET", "/vault", &[BEARER, ("x-vault-box", KEY)], b"").await.status, 400);
+        // with the credential, the page's check is the forwarder's: an address it names is needed (the vault's answer,
+        // which says so); a page's own request has no such mark
+        let r = b.request("GET", "/vault", &[BEARER, ("x-vault-box", KEY)], b"").await;
+        assert_eq!((r.status, r.header("x-vault-box")), (400, Some(TAKEN)));
+        let r = b.request("GET", "/vault", &[BEARER], b"").await;
+        assert_eq!((r.status, r.header("x-vault-box")), (404, None));
     }
 
     // The boxes' credentials not the same, or none on the U2 box: every forward is refused there (no player shares
@@ -649,6 +673,50 @@ mod tests {
         assert!(line.contains("1 failed (1 an error of the way there)"), "{line}");
     }
 
+    // Answers of the way there, not the vault's, are the unreachable 503 too, never the page's "no such keyphrase" or
+    // another of the vault's: a forward to a wrong path (the U2 box's 404 and 405), to a U2 box without keyphrase saves,
+    // and an edge's, Access's or a busy U2 box's 401, 403, 302, 429 and 404
+    #[tokio::test]
+    async fn answers_not_the_vaults_are_a_503() {
+        let b = u2().await;
+        let m = mw(&format!("http://{}/vaults", b.addr), |_| {}).await;
+        assert_eq!(m.request("GET", "/mw/vault", &[BEARER], b"").await.status, 503);
+        assert_eq!(m.request("PUT", "/mw/vault", &[BEARER, ("If-None-Match", "*")], b"box").await.status, 503);
+        let line = m.app.vault_forward.as_ref().unwrap().line().unwrap();
+        assert!(line.contains("0 forwarded") && line.contains("2 failed (2 an answer not the vault's)"), "{line}");
+        let none = Kit::start_set(&["--vault-gb", "0"], |_| {}, |a| a.vault_box_key = Some(KEY.into())).await;
+        let m = mw(&format!("http://{}/vault", none.addr), |_| {}).await;
+        assert_eq!(m.request("GET", "/mw/vault", &[BEARER], b"").await.status, 503);
+        assert_eq!(m.request("DELETE", "/mw/vault", &[BEARER], b"").await.status, 503);
+        // the edge's answers
+        let edge = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = edge.local_addr().unwrap();
+        let answers: [&[u8]; 5] = [
+            b"HTTP/1.1 401 Unauthorized\r\ncontent-length: 0\r\n\r\n",
+            b"HTTP/1.1 403 Forbidden\r\ncontent-type: text/html\r\ncontent-length: 4\r\n\r\nnope",
+            b"HTTP/1.1 302 Found\r\nlocation: https://x.example/cdn-cgi/access/login\r\ncontent-length: 0\r\n\r\n",
+            b"HTTP/1.1 429 Too Many Requests\r\nretry-after: 1\r\ncontent-length: 0\r\n\r\n",
+            b"HTTP/1.1 404 Not Found\r\ncontent-length: 10\r\n\r\nNot found\n",
+        ];
+        tokio::spawn(async move {
+            for a in answers.iter().cycle() {
+                let Ok((mut s, _)) = edge.accept().await else { break };
+                let mut b = [0u8; 4096];
+                let _ = s.read(&mut b).await;
+                let _ = s.write_all(a).await;
+            }
+        });
+        let m = mw(&format!("http://{addr}/vault"), |_| {}).await;
+        for (i, method) in ["GET", "PUT", "GET", "DELETE", "GET"].iter().enumerate() {
+            let body: &[u8] = if *method == "PUT" { b"box" } else { b"" };
+            let r = m.request(method, "/mw/vault", &[BEARER, ("If-None-Match", "*")], body).await;
+            assert_eq!((r.status, r.header("retry-after"), r.header("location")), (503, None, None), "answer {i}");
+            assert!(String::from_utf8_lossy(&r.body).contains("VAULT-UNREACHABLE"));
+        }
+        let line = m.app.vault_forward.as_ref().unwrap().line().unwrap();
+        assert!(line.contains("5 failed (5 an answer not the vault's)"), "{line}");
+    }
+
     // What goes on: the token, the conditions, the body, the player's address, the credential and the Access service
     // token on every forward; no other header of the browser's (its own CF-Access-* never); and neither key in the
     // page's answer
@@ -683,7 +751,7 @@ mod tests {
                 let _ = s
                     .write_all(
                         b"HTTP/1.1 201 Created\r\netag: \"0000000000000001\"\r\nx-vault-saved: 5\r\nset-cookie: x=1\r\n\
-                          content-type: text/plain; charset=utf-8\r\ncontent-length: 6\r\n\r\nSaved\n",
+                          x-vault-box: taken\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: 6\r\n\r\nSaved\n",
                     )
                     .await;
             }
@@ -703,7 +771,7 @@ mod tests {
             (r.status, r.header("etag"), r.header("x-vault-saved"), r.body.as_slice()),
             (201, Some("\"0000000000000001\""), Some("5"), &b"Saved\n"[..])
         );
-        assert_eq!(r.header("set-cookie"), None, "only the headers that matter come back");
+        assert_eq!((r.header("set-cookie"), r.header("x-vault-box")), (None, None), "only the headers that matter come back");
         let all = format!("{:?}", seen(&r));
         assert!(!all.contains("access-secret") && !all.contains(KEY));
         let sent = rx.recv().await.unwrap();
@@ -747,7 +815,7 @@ mod tests {
     async fn every_length_panics_nothing() {
         const WHOLE: &[u8] =
             b"HTTP/1.1 200 OK\r\netag: \"0000000000000001\"\r\nx-vault-saved: 5\r\ncontent-type: application/octet-stream\r\n\
-                               transfer-encoding: chunked\r\n\r\n4\r\nbox!\r\n3\r\nyes\r\n0\r\n\r\n";
+                               x-vault-box: taken\r\ntransfer-encoding: chunked\r\n\r\n4\r\nbox!\r\n3\r\nyes\r\n0\r\n\r\n";
         let up = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = up.local_addr().unwrap();
         let cut = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
