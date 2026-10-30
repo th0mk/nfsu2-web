@@ -81,6 +81,40 @@ export function checkIsolation(): Check {
 }
 
 /**
+ * The smallest module that uses WebAssembly's exception references as the game's module does (clang's
+ * -mexception-handling with -wasm-use-legacy-eh=false: try_table and the exnref type): one function, a block that
+ * gives an exnref, a try_table in it that catches anything with its exnref (catch_all_ref), then drops it.  An
+ * engine from before them (Chrome before 137, Firefox before 131; TVs' older Chromium) fails the game's module the
+ * same way every time, so the page asks this first and says so, instead of loading the module again and again
+ * (MODULE-LOAD).
+ */
+export const EXNREF_PROBE: Uint8Array<ArrayBuffer> = new Uint8Array([
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,               // \0asm, version 1
+  0x01, 0x04, 0x01, 0x60, 0x00, 0x00,                           // types: () -> ()
+  0x03, 0x02, 0x01, 0x00,                                       // functions: one, of type 0
+  0x0a, 0x0f, 0x01, 0x0d, 0x00,                                 // code: one body of 13 bytes, no locals
+  0x02, 0x69,                                                   //   block (result exnref)
+  0x1f, 0x40, 0x01, 0x03, 0x00,                                 //     try_table (catch_all_ref 0)
+  0x0b,                                                         //     end
+  0x00,                                                         //     unreachable
+  0x0b,                                                         //   end
+  0x1a,                                                         //   drop
+  0x0b,                                                         // end
+]);
+
+/**
+ * The game module's check while this browser's WebAssembly cannot run the module (EXNREF_PROBE), or null when it
+ * can.  English pending the user's approval.
+ */
+export function checkEngine(validate: (b: Uint8Array<ArrayBuffer>) => boolean = b => WebAssembly.validate(b)): Check | null {
+  let ok = false;
+  try { ok = validate(EXNREF_PROBE); } catch { /* no WebAssembly at all: the same answer */ }
+  if (ok) return null;
+  return check('module', N('Game module'), 'fail', N('This browser is too old to run the game (its WebAssembly has no exception references). Update {browser}.'),
+    'MODULE-OLD-ENGINE', { browser: browserName() });
+}
+
+/**
  * The graphics, in words a player follows: what is wrong and what to do about it, with the
  * browser's own setting or address to type where there is one.  Chrome's own list of causes
  * (developer.chrome.com/docs/web-platform/webgpu/troubleshooting-tips) and where each browser

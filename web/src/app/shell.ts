@@ -19,7 +19,7 @@
 // While any of them is given, the start page says whether it is in effect.
 
 import registryDefaults from '../../../app/registry-defaults.txt';
-import { browserName, check, checkBrowser, checkGpu, checkIsolation, checkStorage, fmtBytes, type Check } from './checks';
+import { browserName, check, checkBrowser, checkEngine, checkGpu, checkIsolation, checkStorage, fmtBytes, type Check } from './checks';
 import { codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
 import { loadGame, serverRev, type Loaded } from './loader';
 import { claimInstance } from './instance';
@@ -1456,11 +1456,14 @@ function gameHeld(): string {
 // --------------------------------------------------------- game module --
 // A failed download (Wi-Fi drop, the server restarting, the module not built
 // yet) is its own check, tried again with back-off (2, 4, 8 ... 30 s), at the
-// next answer from the server, or with Retry.
+// next answer from the server, or with Retry.  A browser whose WebAssembly is too old for the module (checks.ts
+// checkEngine) would fail it the same way each time: it gets that check once, and no download.
 let moduleLoading = false, moduleFails = 0, moduleTimer: ReturnType<typeof setTimeout> | undefined;
 async function loadModule() {
   clearTimeout(moduleTimer);
   if (moduleLoading || loaded) return;
+  const old = checkEngine();
+  if (old) { setCheck(old); return; }
   moduleLoading = true;
   setCheck(moduleFails ? check('module', N('Game module'), 'pending', N('Loading again (attempt {n}).'), undefined, { n: moduleFails + 1 })
     : check('module', N('Game module'), 'pending', N('Loading.')));
