@@ -93,6 +93,8 @@ const RACES_OF = {
     gen: 'tools/gen_lan_race_mw.py', results: /^\[autotest\] f=\d+ waitfng PostRace_Results\.fng satisfied/m,
     racing: /^\[autotest\] f=\d+ waitmem \[0x00925e90\]==6 satisfied/m, waits: true, peerUdp: 1000,
     hostName: '--host-name',          // the joiners' option for the host's name (theirs to find in the list)
+    // the alias field takes 7 characters (a 4-player run of 2026-10-30: "JOINWEB3" stayed "JOINWEB")
+    names: ['HOSTWEB', 'JOINWEB', 'JOINWB3', 'JOINWB4', 'JOINWB5', 'JOINWB6'],
     ended: 'app: the game exited (code 0) after the quit request', server: ['--base-path', 'localhost=/'],
     // the trace's p95 and samples are judged, its jumps only shown: the game's own blend moves a remote car 2.3-3.1 m
     // in one frame now and then (6 within 150 m in a sprint of 2026-10-30, at 35-62 m/s, p95 1.06 m): TRACKER M8-15
@@ -141,7 +143,7 @@ fs.mkdirSync(OUT, { recursive: true });
 // lan_race.sh's scripts
 const MODES = LAN.modes;
 if (!MODES[MODE]) { console.error(`--mode ${Object.keys(MODES).join('|')}`); process.exit(2); }
-const NAMES = ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWEB6'];
+const NAMES = LAN.names ?? ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWEB6'];
 const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, LAN.gen), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
 const scripts = [gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])];
