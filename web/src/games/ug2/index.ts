@@ -11,6 +11,7 @@ export { TEMPLATE as SETTINGS_TEMPLATE, APP_DEFAULTS } from '../../app/settings'
 export { LANGUAGES } from '../../app/i18n';
 export { PREFIX as VAULT_PREFIX } from '../../app/vault';
 export { STORAGE } from './storage';
+export { MOVIE_SIZE } from './movies';
 export { LAUNCHED, KEYPHRASE_WORD } from './launch';
 export { DERIVE_INFO as VAULT_DERIVE_INFO, SEAL_AAD as VAULT_AAD } from './keyphrase';
 

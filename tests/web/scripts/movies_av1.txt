@@ -1,7 +1,7 @@
 # The boot movies played through on the WebGPU renderer (/test/play.html, env=NOMOVIES=0): two frames in a row
 # from each, to hold an AV1 run against a VP6 one (env=NFSU2_MOVIE_CODEC=vp6) frame by frame (tools/movies_av1.py,
-# runtime/movie.c), then the title.  A frame is the movie's at about the same time in both runs; the two in a
-# row cover a movie frame that changed between them.
+# runtime/movie.c, runtime/movie_av1.c), then the title.  A frame is the movie's at about the same time in both
+# runs; the two in a row cover a movie frame that changed between them.
 1     waitfng LS_EAlogo.fng 3000
 +90   dump ea_1
 +1    dump ea_2

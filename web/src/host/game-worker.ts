@@ -246,7 +246,7 @@ function hostImports(): Record<string, (...a: any[]) => any> {
     // ms this thread has spent blocked in host waits (I/O, sleeps) so far
     blocked_ms: () => blockedMs,
     stack_frames: () => stackFrames(),
-    // the movies' AV1 pictures, decoded by the I/O worker (movie.ts, runtime/movie.c)
+    // the movies' AV1 pictures, decoded by the I/O worker (movie.ts, runtime/movie_av1.c)
     movie_open: (w: number, h: number) => io(Op.MovieOpen, w, h),
     movie_decode: (m: number, p: number, n: number, y: number, u: number, v: number, ys: number, uvs: number) =>
       io(Op.MovieDecode, m, p, n, y, u, v, ys, uvs),

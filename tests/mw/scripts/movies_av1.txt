@@ -1,0 +1,36 @@
+# Most Wanted: the boot movies and a Blacklist intro, played to their ends from a first start, for the AV1 copies
+# (TRACKER M7-10: MOVIES/AV1/<name>.vp6 in the server's game folder, tools/movies_av1.py; runtime/mw/movie_mw.c hooks
+# the player, runtime/movie_av1.c hands each frame to the page's VideoDecoder) and for the VP6 files (a browser
+# without AV1, NFSU2_MOVIE_CODEC=vp6, or a folder without the copies: the game's own decoder).  No input until the
+# title: the EA logo, the PSA and the attract movie play to their ends; then the main menu, and blacklist_15 played
+# as the rap sheet plays it (the "movie" aid, runtime/mw/debug_mw.c) to its end.  On the play page each movie is
+# dumped twice, 3 frames apart (a capture of the screen; the hostcheck page dumps nothing).  Every step waits for
+# the game (L-021); frame counts are only time on a screen that is up.  With NFSU2_MOVIE_LOG=1 a VP6 play logs its
+# planes' layout, so tests/mw/checks/movies_av1.sh (AV1: one "[movie] AV1 1024x512" line a play, every frame with a
+# picture, no VP6 line) and movies_vp6.sh (--name movies_vp6: VP6 lines, no AV1 line) can tell how each played:
+#   node web/tools/run-suite.mjs --game mw --script movies_av1.txt --marker 'movies_av1: blacklist_15 end' \
+#     --env NOMOVIES=0 --env NFSU2_MOVIE_LOG=1 --env NFSU2_QUIT_FRAMES=60000 --timeout-scale 4
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt; another language: NFSU2_LANGUAGE,
+# whose movies are the English ones, game_mw.c file_alt)
+0     waitfng LS_EAlogo.fng 3600
++45   dump av1_ealogo
++3    dump av1_ealogo
++0    waitfng LS_PSA.fng 3600
++300  dump av1_psa
++3    dump av1_psa
++0    waitfng MW_LS_AttractFMV.fng 3600
++900  dump av1_attract
++3    dump av1_attract
++0    waitfng MW_LS_Splash.fng 20000
++0    log movies_av1: title
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    movie blacklist_15
++0    movieup
++0    log movies_av1: blacklist_15 start
++300  dump av1_blacklist_15
++3    dump av1_blacklist_15
++0    movieend 20000
++0    log movies_av1: blacklist_15 end
++0    close

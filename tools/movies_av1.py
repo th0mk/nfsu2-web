@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The movies in AV1: MOVIES/AV1/<name>.vp6 (and LANGPACKS/<language>/MOVIES/AV1/<name>.vp6) next to the game's
 VP6 movies, for the browsers that decode AV1 (WebCodecs).  The page plays those instead of the VP6 ones
-(web/src/host/movie.ts, runtime/movie.c); every other browser, and the Mac, keeps the VP6 files.
+(web/src/host/movie.ts, runtime/movie_av1.c); every other browser, and the Mac, keeps the VP6 files.
 
     tools/movies_av1.py <game folder> <out folder> [--crf 26] [--cpu-used 4] [--jobs 6] [--threads 4]
         [--only Scene01] [--only ^LANGPACKS/] [--force]

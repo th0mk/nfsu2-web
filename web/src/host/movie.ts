@@ -1,5 +1,5 @@
 // The movies' pictures in AV1 (tools/movies_av1.py): the game's own movie player reads an AV1 movie as it reads a
-// VP6 one, and runtime/movie.c hands each AV1 frame to the I/O worker (Op.MovieDecode), which decodes it here with
+// VP6 one, and runtime/movie_av1.c hands each AV1 frame to the I/O worker (Op.MovieDecode), which decodes it here with
 // a WebCodecs VideoDecoder and writes the picture into the game's memory, in the planes its VP6 decoder would have
 // filled.  The game thread waits for that (one frame: under 1 ms at the median, ~10 at worst, in Chrome and
 // Firefox with the software decoder); the I/O worker goes on serving the other threads' reads meanwhile.
@@ -7,8 +7,10 @@
 // Where a browser decodes AV1, the page plays MOVIES/AV1/<name>.vp6 in place of MOVIES/<name>.vp6 (io-worker.ts
 // dataFile, datacache.ts av1Path); elsewhere the VP6 movies play as they always have.  NFSU2_MOVIE_CODEC = vp6 (a
 // settings.ini line, or &env= on the test pages) keeps the VP6 ones in any browser.
+import { MOVIE_SIZE } from '@game/movies';
 
-/** profile 0, level 3.0 (768x512 at 30 fps, the game's movies), 8 bits */
+/** profile 0, level 3.0 (up to 665,856 pixels at 30 fps: Underground 2's 768x512 movies, Most Wanted's 1024x512), 8
+ *  bits */
 export const AV1_CODEC = 'av01.0.04M.08';
 /** the picture of one frame, at most this long (then the frame before stays on screen) */
 const WAIT_MS = 250;
@@ -17,13 +19,14 @@ export type MovieCodec = 'av1' | 'vp6';
 
 /** Which movies this browser plays: AV1 where its VideoDecoder takes AV1 (Chrome and Firefox with their software
  *  decoder, the same in a worker as here; Safari where the Mac or iPhone decodes AV1 in hardware: it says yes to the
- *  software preference too), else VP6 (Safari on the others). */
-export async function movieCodec(env: Record<string, string> = {}): Promise<MovieCodec> {
+ *  software preference too), else VP6 (Safari on the others).  It asks about the game's movie size (size: the
+ *  game's profile, src/games/<id>/movies.ts). */
+export async function movieCodec(env: Record<string, string> = {}, size: { w: number; h: number } = MOVIE_SIZE): Promise<MovieCodec> {
   const forced = env.NFSU2_MOVIE_CODEC?.trim().toLowerCase();
   if (forced === 'vp6' || forced === 'av1') return forced;
   try {
     if (typeof VideoDecoder === 'undefined') return 'vp6';
-    return (await VideoDecoder.isConfigSupported(config(768, 512))).supported ? 'av1' : 'vp6';
+    return (await VideoDecoder.isConfigSupported(config(size.w, size.h))).supported ? 'av1' : 'vp6';
   } catch { return 'vp6'; }
 }
 
@@ -46,7 +49,7 @@ interface Movie {
 }
 const movies = new Map<number, Movie>();
 let nextId = 1;
-/** runtime/movie.c HANDLE: 'MV' in the top half, so that a page without these imports (its stub's errno) is no handle */
+/** runtime/movie_av1.c HANDLE: 'MV' in the top half, so that a page without these imports (its stub's errno) is no handle */
 const TAG = 0x4d560000;
 
 function start(m: Movie) {

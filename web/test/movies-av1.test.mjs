@@ -1,4 +1,4 @@
-// The movies in AV1 (tools/movies_av1.py, web/src/host/movie.ts, runtime/movie.c):
+// The movies in AV1 (tools/movies_av1.py, web/src/host/movie.ts, runtime/movie_av1.c):
 //   node --test web/test/movies-av1.test.mjs
 // - which file the page opens for a movie: MOVIES/<name>.vp6 -> MOVIES/AV1/<name>.vp6 (a language pack's too), and
 //   the movies a game counts (offline: "every movie kept"), with and without AV1, a pack without AV1 copies, the
@@ -8,6 +8,9 @@
 // - with NFSU2_TEST_DATA (the game folder) and an ffmpeg with libaom: the tool on THX_logo.vp6, its chunks as the
 //   game's player reads them (the same ids in the same order, the sound's byte for byte, each video payload tagged,
 //   a key frame at every MV0K)
+// - Most Wanted (its page: the profile behind '@game' is src/games/mw, as build.mjs --game mw makes it): its movies'
+//   AV1 copies, in any language the folder's English ones, the probe at its movie size (1024x512, Underground 2's
+//   768x512), and with NFSMW_TEST_DATA (its game folder) the tool on ealogo_english_ntsc.vp6 (MVhd's 'VP60' kept)
 // The modules are bundled from web/src with esbuild, as web/test/crews.test.mjs does.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +26,9 @@ const entry = `export * from './web/src/host/datacache.ts'; export * as M from '
 const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false, platform: 'neutral' })).outputFiles[0].text;
 const D = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 const { M } = D;
+const jsMw = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false, platform: 'neutral',
+  alias: { '@game': path.join(ROOT, 'web/src/games/mw') } })).outputFiles[0].text;
+const DM = await import('data:text/javascript;base64,' + Buffer.from(jsMw).toString('base64'));
 
 test('a movie\'s AV1 copy', () => {
   assert.equal(D.av1Path('MOVIES/Scene01.vp6'), 'MOVIES/AV1/Scene01.vp6');
@@ -82,16 +88,41 @@ test('RGB pictures back to their YUV', () => {
   assert.equal(out[Y0 + ys - 1], 0, 'nothing written into the border');
 });
 
-const DATA = process.env.NFSU2_TEST_DATA;
+test('Most Wanted: its movies\' AV1 copies, in any language the folder\'s, and the probe at its movie size', async () => {
+  assert.equal(DM.av1Path('MOVIES/ealogo_english_ntsc.vp6'), 'MOVIES/AV1/ealogo_english_ntsc.vp6');
+  assert.equal(DM.av1Path('MOVIES/AV1/ealogo_english_ntsc.vp6'), null);
+  const f = (p) => ({ path: p, size: 10, mtime: 1 });
+  const files = ['MOVIES/ealogo_english_ntsc.vp6', 'MOVIES/AV1/ealogo_english_ntsc.vp6', 'MOVIES/psa_english_ntsc.vp6',
+    'MOVIES/AV1/psa_english_ntsc.vp6', 'MOVIES/blacklist_01_english_ntsc.vp6', 'GLOBAL/GLOBALA.BUN'].map(f);
+  const ps = (l) => l.map(x => x.path).sort();
+  for (const language of ['english', 'french', 'polish'])
+    assert.deepEqual(ps(DM.languageMovies(files, language, true)), ['MOVIES/AV1/ealogo_english_ntsc.vp6', 'MOVIES/AV1/psa_english_ntsc.vp6',
+      'MOVIES/blacklist_01_english_ntsc.vp6'], `${language}: the folder's movies (the runtime plays the English ones in any language)`);
+  // the probe: each game asks the browser's decoder about its own movies' size
+  const asked = [];
+  globalThis.VideoDecoder = { isConfigSupported: async (c) => { asked.push(c); return { supported: c.codedWidth <= 1024 }; } };
+  try {
+    assert.equal(await DM.M.movieCodec({}), 'av1');
+    assert.equal(await M.movieCodec({}), 'av1');
+    assert.equal(await DM.M.movieCodec({}, { w: 1280, h: 720 }), 'vp6', 'a size the decoder refuses: VP6');
+    assert.equal(await DM.M.movieCodec({ NFSU2_MOVIE_CODEC: 'vp6' }), 'vp6', 'the settings.ini line first');
+  } finally { delete globalThis.VideoDecoder; }
+  assert.deepEqual(asked.map(c => `${c.codec} ${c.codedWidth}x${c.codedHeight}`),
+    ['av01.0.04M.08 1024x512', 'av01.0.04M.08 768x512', 'av01.0.04M.08 1280x720'], 'Most Wanted 1024x512, Underground 2 768x512');
+});
+
+const DATA = process.env.NFSU2_TEST_DATA, MWDATA = process.env.NFSMW_TEST_DATA;
 const ffmpeg = spawnSync('ffmpeg', ['-hide_banner', '-encoders'], { encoding: 'utf8' });
 const python = process.platform === 'win32' ? 'python' : 'python3';
-test('the tool, on THX_logo.vp6', { skip: !DATA ? 'NFSU2_TEST_DATA (the game folder) not set' : !/libaom-av1/.test(ffmpeg.stdout ?? '') ? 'no ffmpeg with libaom' : false }, () => {
+const noTool = (data, what) => !data ? `${what} not set` : !/libaom-av1/.test(ffmpeg.stdout ?? '') ? 'no ffmpeg with libaom' : false;
+/** the tool on one movie of a game folder: its chunks as the game's player reads them */
+function toolCase(data, name) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'av1-'));
   try {
-    const run = execFileSync(python, [path.join(ROOT, 'tools/movies_av1.py'), DATA, out, '--only', 'MOVIES/THX_logo', '--cpu-used', '8', '--jobs', '2'], { encoding: 'utf8' });
-    assert.match(run, /"file": "MOVIES\/THX_logo\.vp6"/);
+    const run = execFileSync(python, [path.join(ROOT, 'tools/movies_av1.py'), data, out, '--only', `MOVIES/${name}`, '--cpu-used', '8', '--jobs', '2'], { encoding: 'utf8' });
+    assert.ok(run.includes(`"file": "MOVIES/${name}.vp6"`), run);
     const chunks = (b) => { const l = []; for (let o = 0; o + 8 <= b.length;) { const s = b.readUInt32LE(o + 4); l.push({ id: b.toString('latin1', o, o + 4), o, s }); o += s; } return l; };
-    const vp6 = fs.readFileSync(path.join(DATA, 'MOVIES/THX_logo.vp6')), av1 = fs.readFileSync(path.join(out, 'MOVIES/AV1/THX_logo.vp6'));
+    const vp6 = fs.readFileSync(path.join(data, `MOVIES/${name}.vp6`)), av1 = fs.readFileSync(path.join(out, `MOVIES/AV1/${name}.vp6`));
     const a = chunks(vp6), b = chunks(av1);
     assert.deepEqual(b.map(c => c.id), a.map(c => c.id), 'the same chunks in the same order');
     assert.equal(b.reduce((n, c) => n + c.s, 0), av1.length, 'the chunks fill the file');
@@ -105,5 +136,12 @@ test('the tool, on THX_logo.vp6', { skip: !DATA ? 'NFSU2_TEST_DATA (the game fol
     assert.ok(vp6.subarray(8, 0x14).equals(av1.subarray(8, 0x14)) && vp6.subarray(0x18, 0x20).equals(av1.subarray(0x18, 0x20)), 'the header as it was');
     assert.ok(av1.readUInt32LE(0x14) >= vp6.readUInt32LE(0x14), 'largest frame no smaller');
     assert.ok(av1.length < vp6.length, `${av1.length} bytes, VP6 ${vp6.length}`);
+    return { vp6, av1 };
   } finally { fs.rmSync(out, { recursive: true, force: true }); }
+}
+test('the tool, on THX_logo.vp6', { skip: noTool(DATA, 'NFSU2_TEST_DATA (the game folder)') }, () => { toolCase(DATA, 'THX_logo'); });
+test('the tool, on Most Wanted\'s ealogo_english_ntsc.vp6', { skip: noTool(MWDATA, 'NFSMW_TEST_DATA (Most Wanted\'s game folder)') }, () => {
+  const { av1 } = toolCase(MWDATA, 'ealogo_english_ntsc');
+  assert.equal(av1.toString('latin1', 8, 12), '06PV', 'MVhd +8: the codec FourCC VP60, kept');
+  assert.deepEqual([av1.readUInt16LE(12), av1.readUInt16LE(14)], [1024, 512]);
 });

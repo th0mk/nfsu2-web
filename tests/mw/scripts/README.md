@@ -23,9 +23,14 @@ and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the line, s
 `profiles_make.txt`'s saves).
 
 The movies: `intro_idle.txt` and `intro_title.txt` (the boot movies and the title, for web/tools/intro-test.mjs
---game mw), `movies.txt` (all 32 movies of the game folder played to their end and skipped),
+--game mw), `movies.txt` (all 32 movies of the game folder played to their end and skipped; with `--name
+movies_all_av1`, from a game folder with the AV1 copies, its check also wants every play through the AV1 hook),
+`movies_av1.txt` (the boot movies and blacklist_15 to their ends, dumped on the play page; its check wants each play
+through the AV1 hook, `--name movies_vp6` the VP6 decoder's: a browser without AV1, `NFSU2_MOVIE_CODEC=vp6`, or a folder
+without the copies; with `NFSU2_LANGUAGE` another language, whose movies are the English ones),
 `media_refshots.txt` (the play page's pictures of the movie screens and the new alias's name entry) and
 `credits.txt` (Options > Credits rolled to their end).
+
 
 The mouse: `mouse_menu.txt` (TRACKER M3-08: the main menu's wheel takes the highlight to Options, clicks on the
 selection frame open its sub menu and the options screen, twice, the second time with the windowed flag set; run it

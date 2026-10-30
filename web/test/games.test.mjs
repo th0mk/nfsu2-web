@@ -24,8 +24,8 @@ test('every game\'s profile has the same fields and its own id', async () => {
     platform: 'neutral', loader: { '.txt': 'text', '.png': 'dataurl' } })).outputFiles[0].text;
   const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
   const fields = Object.keys(P.ug2).sort();
-  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE',
-    'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
+  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'MOVIE_SIZE', 'PROFILES_DIR', 'REGISTRY_DEFAULTS',
+    'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
   for (const g of GAMES) {
     assert.deepEqual(Object.keys(P[g]).sort(), fields, g);
     assert.equal(P[g].GAME, g);
@@ -35,6 +35,8 @@ test('every game\'s profile has the same fields and its own id', async () => {
     assert.equal(P[g].LANGUAGES[0], 'english', g);
   }
   assert.equal(P.ug2.SITE_NAME, 'Underground 2 Revived');
+  // the movies' picture size the page asks the browser's AV1 decoder about (host/movie.ts movieCodec)
+  assert.deepEqual([P.ug2.MOVIE_SIZE, P.mw.MOVIE_SIZE], [{ w: 768, h: 512 }, { w: 1024, h: 512 }]);
   // the sites' names, the top bar's tabs (PLAN D-31)
   assert.equal(P.mw.SITE_NAME, 'Most Wanted Revived');
   // Underground 2's launch switch is off until the launch release; until then its keyphrases show its own word, and

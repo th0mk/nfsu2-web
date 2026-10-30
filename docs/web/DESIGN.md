@@ -230,8 +230,10 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
   chunk kept in place (the sound byte for byte) and each video frame's payload swapped for `AV01`, a key flag and one
   AV1 temporal unit, a key frame at every `MV0K` (the player jumps to the next one when it falls 16 frames behind),
   pictures stored bottom-up as the game's VP6 decoder leaves them. The game's own movie player still reads the file,
-  keeps the time, plays the sound, skips and ends it; `runtime/movie.c` takes over the VP6 decoder's three calls
-  (decode `0x702e47`, picture `0x70288e`, free `0x702e5e`) for tagged frames: each goes to the I/O worker
+  keeps the time, plays the sound, skips and ends it; `runtime/movie_av1.c` takes over the VP6 decoder's three calls
+  for tagged frames, hooked by each game's own file (Underground 2's `runtime/movie.c`: decode `0x702e47`, picture
+  `0x70288e`, free `0x702e5e`; Most Wanted's `runtime/mw/movie_mw.c`: `0x7fc55d`, `0x7fbf9e`, `0x7fc574`, the same
+  RealCore code at other addresses): each goes to the I/O worker
   (`Op.MovieDecode`), whose `VideoDecoder` (`optimizeForLatency`: otherwise Chrome and Firefox hold 2–3 frames back)
   writes the picture straight into a block of the VP6 decoder's layout in the game's memory (Y with a 48-pixel
   border, then U and V), and the player gets that block. Chrome gives I420 (copied in place); Firefox gives BGRX,
@@ -242,7 +244,7 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
   `[movie] AV1 768x512: N frames, 0 without a picture, decode … ms a frame (max …), 0 catch-ups`.
   `NFSU2_MOVIE_CODEC = vp6` (settings.ini, `&env=`) plays the VP6 files anyway; the page's session line says which.
   At crf 26 (cpu-used 4) every movie keeps a VMAF of 95 or more against its VP6 pictures, and the pictures the game
-  gets are within 42 to 55 dB PSNR of its own VP6 decoder's (`NFSU2_MOVIE_DUMP`, `runtime/movie.c`): the game
+  gets are within 42 to 55 dB PSNR of its own VP6 decoder's (`NFSU2_MOVIE_DUMP`, `runtime/movie_av1.c`): the game
   folder's 965 MB of movies become 179 MB, a dubbed language's 216 MB 153 MB.
 - **Clock:** `clock_gettime(MONOTONIC)` is `performance.timeOrigin + performance.now()`, which is one clock across
   workers.

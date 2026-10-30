@@ -40,6 +40,8 @@ export interface GameProfile {
    *  bytes (null: those bytes themselves, Underground 2's), and the additional data a box is sealed with */
   readonly VAULT_DERIVE_INFO: string | null;
   readonly VAULT_AAD: string;
+  /** the movies' picture size (src/games/<id>/movies.ts), which the page asks the browser's AV1 decoder about */
+  readonly MOVIE_SIZE: { readonly w: number; readonly h: number };
 }
 
 /** A game's names in the storage the browser keeps per origin (Cache Storage, OPFS, local and session storage, Web

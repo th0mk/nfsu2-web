@@ -57,6 +57,10 @@ gamepad.h
 horn.c
 horn.h
 
+# the movies in AV1 (each game's player hooked in its own file)
+movie_av1.c
+movie_av1.h
+
 # test scripts and reports
 autotest.c
 

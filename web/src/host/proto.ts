@@ -31,7 +31,7 @@ export const enum Op {
   FdFilestatGet, FdFilestatSetSize, FdReaddir, FdPrestatGet, FdPrestatDirName, FdAdvise, FdAllocate,
   PathOpen, PathFilestatGet, PathCreateDirectory, PathRemoveDirectory, PathUnlinkFile, PathRename,
   PathFilestatSetTimes, FdFilestatSetTimes, FdRenumber,
-  // the movies' AV1 pictures (movie.ts, runtime/movie.c): not WASI
+  // the movies' AV1 pictures (movie.ts, runtime/movie_av1.c): not WASI
   MovieOpen, MovieDecode, MovieClose,
 }
 
