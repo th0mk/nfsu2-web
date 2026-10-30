@@ -27,6 +27,10 @@ The movies: `intro_idle.txt` and `intro_title.txt` (the boot movies and the titl
 `media_refshots.txt` (the play page's pictures of the movie screens and the new alias's name entry) and
 `credits.txt` (Options > Credits rolled to their end).
 
+The mouse: `mouse_menu.txt` (TRACKER M3-08: the main menu's wheel takes the highlight to Options, clicks on the
+selection frame open its sub menu and the options screen, twice, the second time with the windowed flag set; run it
+with `NFSRES=800x600`, `1280x720` and `1920x1080`).
+
 The frame rate: `menu_hold.txt` (the main menu's camera swing-in traced, then the menu held for 60 s, a `[status]`
 line over it and the clocks in peeks; its check wants the swing over in 6 s of wall time and RealTimeFrames at 60 a
 second at the page's frame-rate setting `NFSU2_FPS`, runtime/mw/framerate_mw.c; `NFSU2_HFR_LOG=1` adds a `[mwpace]`

@@ -1,0 +1,85 @@
+# Most Wanted: the main menu picks Options by the mouse alone (TRACKER M3-08, M3-32), the same walk twice: as the
+# game runs, then with its windowed flag [0x982BF0] set.  MW's menus take the mouse through the icon scroller every
+# main-menu screen is built on (0x587D30, the MSG_MOUSE case at 0x587F7C; GAME.md 13.1 'Mouse'): the wheel over the
+# icon strip (object 0xB39A7599, 340x70 units at (119,154) from the screen's centre) sends the scroller LEFT (wheel
+# up) or RIGHT (wheel down), one item a notch (0x592F10), and a left click on the selection frame (0xB04669E3, 64x64
+# at (136,157)) presses the highlighted item (BUTTON_PRESSED 0x0C407210, 0x587FBF) as Enter does.  No hover: the
+# highlight moves only by the wheel.  The cursor is in front-end units, 640x480 over the whole window at any size
+# (0x6C9B60: x * 640 / client width, y * 480 / client height, less 24 when the windowed flag is set), so the same
+# window fractions pick the same item on any back buffer: run it with NFSRES=800x600, 1280x720 and 1920x1080 (the
+# device's size, runtime/com.c res_pick; the 'com: device resolution' line).  'nsmouse scroll N' turns the wheel N
+# notches up (DOM deltaY -N), so -1 is a notch down.  The windowed flag is only ever written by 0x6DE150, which no
+# code calls (speed.exe v1.3), so it stays 0; it is set here by a poke to see the 24 units it takes off the cursor's y
+# (the frame is 64 units tall, so a click at its centre still lands).  Every step waits for its screen or item
+# (L-021); the cursor's place is checked where a click depends on it:
+#   node web/tools/run-suite.mjs --game mw --script mouse_menu.txt --marker 'mouse_menu: Options twice' \
+#     --env NFSRES=800x600 --env NFSU2_QUIT_FRAMES=9000
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    log mouse_menu: main menu, on Career
++0    expect i:0x00982bf0 == 0                           # not windowed
++0    nsmouse move 0.686 0.821                           # over the icon strip
++0    waitexpr i:0x00987f58 >= 380 120                   # the game has it there (the first cursor, B-004, is above)
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e388b 120                  # Challenge Series
++0    nsmouse scroll 1
++0    waitfng MainMenu.fng@4b4e388a 120                  # Career again
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e388b 120
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e388c 120
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e388d 120
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e388e 120
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e388f 120
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@4b4e3890 120
++0    nsmouse scroll -1
++0    waitfng MainMenu.fng@b51549b8 120                  # Options, its 8th
++0    log mouse_menu: Options highlighted by the wheel
++0    nsmouse move 0.7125 0.827                          # the selection frame
++0    waitexpr i:0x00987f54 >= 450 120                   # the game has it (the strip's y was near already)
++0    expect i:0x00987f54 <= 460
++0    expect i:0x00987f58 >= 390
++0    expect i:0x00987f58 <= 400
++0    nsmouse down L
++6    nsmouse up L
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # the Options sub menu, on its first item
++0    log mouse_menu: Options sub menu by a click
++0    nsmouse move 0.6 0.827                             # off the frame and back (a new move)
++0    waitexpr i:0x00987f54 <= 390 120
++0    nsmouse move 0.7125 0.827
++0    waitexpr i:0x00987f54 >= 450 120
++0    nsmouse down L
++6    nsmouse up L
++0    waitfng Options.fng@b2980ba8 600                   # the options screen, on Audio
++0    log mouse_menu: Options by the mouse
++0    tap ESCAPE
++0    waitfng MainMenu_Sub.fng@4b4e388a 600
++0    tap ESCAPE
++0    waitfng MainMenu.fng@b51549b8 600                  # the main menu, on Options again
++0    poke 0x00982bf0 1                                  # windowed
++0    nsmouse move 0.6 0.827
++0    waitexpr i:0x00987f54 <= 390 120
++0    nsmouse move 0.7125 0.827
++0    waitexpr i:0x00987f54 >= 450 120
++0    expect i:0x00987f58 >= 366                         # 24 units higher
++0    expect i:0x00987f58 <= 376
++0    log mouse_menu: windowed, the cursor 24 units up
++0    nsmouse down L
++6    nsmouse up L
++0    waitfng MainMenu_Sub.fng@4b4e388a 600
++0    nsmouse move 0.6 0.827
++0    waitexpr i:0x00987f54 <= 390 120
++0    nsmouse move 0.7125 0.827
++0    waitexpr i:0x00987f54 >= 450 120
++0    nsmouse down L
++6    nsmouse up L
++0    waitfng Options.fng@b2980ba8 600
++0    poke 0x00982bf0 0
++0    log mouse_menu: Options twice
++0    close
