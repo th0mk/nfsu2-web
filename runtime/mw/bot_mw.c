@@ -294,6 +294,7 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define RACE_START_MAX 6000             /* frames from Accept to the race going active */
 #define PURSUIT_NATURAL_S 60.0          /* game seconds of free driving for a pursuit to start by itself */
 #define SKIP_MAX      3
+#define BOSS_TRIES    12                /* the rival's challenge engaged at most this often (each lost one is a try) */
 #define RIVAL_NEXT_WAIT 1800            /* frames the bot waits in free roam for the rival's next race to come by itself */
 #define POST_WAIT     2400              /* frames from a race's end to its result screen, at most (after it the bot goes on) */
 #define AP_STAND      4                 /* career_mw.c's autopilot: the AI lets the car go now, and takes the next race at its GO */
@@ -527,7 +528,7 @@ static void decide(CPU *c){
     int done = 0;
     for (int i = 0; i < nb; i++) done += (b[i].flags & 2u) != 0;
     if (done && done < nb && autotest_frame() - B.f0 < RIVAL_NEXT_WAIT) return;   /* its next race may come by itself */
-    if (nb > 0 && b[0].params && B.boss_tries < SKIP_MAX){
+    if (nb > 0 && b[0].params && B.boss_tries < BOSS_TRIES){   /* a lost challenge is raced again, as a lost race */
         B.boss_tries++; B.race = -1;
         fprintf(stderr, "[mwbot] f=%ld t=%.1f the rival's challenge (hash %08x, try %d, races won %d of %d): to its "
                 "start %.2f %.2f %.2f\n", autotest_frame(), mw_game_time(), b[0].hash, B.boss_tries, done, nb, b[0].pos[0],
@@ -642,9 +643,11 @@ static void pursuit_frame(CPU *c){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
             if (m > 0.5f){ d[0] /= m; d[2] /= m; } else { d[0] = 1.0f; d[2] = 0.0f; }
-            B.rejoins++; B.trail_n = 0;
+            /* the trail is kept: a search still on REJOIN_S later (the cops gone elsewhere) takes the car back again */
+            B.rejoins++;
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit rejoined %d: chase %.0f s, the search %.0f s on; back to %.0f %.0f %.0f\n",
                     f, t, B.rejoins, len, t - B.search_t, a[0], a[1], a[2]);
+            B.search_t = t;
             mw_aid_teleport(c, a, d);
         }
         if (t >= B.next_log){
