@@ -31,7 +31,21 @@
 #ifndef NAMES_H
 #define NAMES_H
 
-#include <string.h>
+/* the string calls it needs, written out: the free-roam core includes this,
+ * and its freestanding builds (the Windows plugin's) have no <string.h> and
+ * link the memory functions alone (tools/roam_x86check.sh) */
+static inline int name_eq(const char *a, const char *b){
+    while (*a && *a == *b){ a++; b++; }
+    return *a == *b;
+}
+static inline int name_has(const char *s, const char *w){
+    for (; *s; s++){ int k = 0; while (w[k] && s[k] == w[k]) k++; if (!w[k]) return 1; }
+    return !*w;
+}
+static inline int name_in(char c, const char *set){
+    for (; *set; set++) if (*set == c) return 1;
+    return 0;
+}
 
 /* ch as a letter (above), else 0 */
 static inline char name_letter(char ch){
@@ -91,7 +105,7 @@ static inline int name_blocked(const char *name){
     char s[256], t[256], prev[256] = "", w[64];  /* the name's letters; the part it is in; the part before */
     int n = 0, k = 0, low = 0;
     const char *p = name ? name : "";
-    if (strstr(p, "1488")) return 1;
+    if (name_has(p, "1488")) return 1;
     for (int i = 0; ; i++){
         char ch = p[i];
         int r = 0;
@@ -100,8 +114,8 @@ static inline int name_blocked(const char *name){
         char c = num || !ch ? 0 : name_letter(ch);
         if ((!c || (low && ch >= 'A' && ch <= 'Z')) && k){
             t[k] = 0; k = 0;
-            if (name_whole(t, whole) && !(!strcmp(prev, "van") && name_whole(t, dyke))) return 1;
-            memcpy(prev, t, strlen(t) + 1);
+            if (name_whole(t, whole) && !(name_eq(prev, "van") && name_whole(t, dyke))) return 1;
+            for (int j = 0; (prev[j] = t[j]) != 0; j++) {}
         }
         if (c){ if (n < 255) s[n++] = c; if (k < 255) t[k++] = c; }
         if (!c) low = 0;
@@ -112,9 +126,9 @@ static inline int name_blocked(const char *name){
     s[n] = 0;
     for (int j = 0; anywhere[j]; j++){
         name_word(anywhere[j], w);
-        int pid = !strncmp(w, "pid", 3);
+        int pid = w[0] == 'p' && w[1] == 'i' && w[2] == 'd';
         for (int i = 0; i < n; i++)
-            if (name_at(s, i, w) >= 0 && !(pid && i && strchr("aeiouy", s[i - 1]))) return 1;
+            if (name_at(s, i, w) >= 0 && !(pid && i && name_in(s[i - 1], "aeiouy"))) return 1;
     }
     return name_whole(s, whole);
 }

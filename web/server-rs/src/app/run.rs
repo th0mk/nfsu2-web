@@ -170,7 +170,9 @@ pub async fn run(o: Options, cores: usize) {
     // (its lines: the cap on the players' links going down while the server is busy and back up, at most one every 5 s)
     let m = marker.clone();
     let roam_log = Arc::new(move |line: &str| log::line(m.tag(line).as_deref().unwrap_or(line)));
-    let roam = o.roam_hub.then(|| RoamHub::spawn_with(RoamOptions::default(), roam_log, claims.clone()));
+    // (the players of this server's game only: PLAN D-18)
+    let roam_o = RoamOptions { game: o.game.roam_game, ..RoamOptions::default() };
+    let roam = o.roam_hub.then(|| RoamHub::spawn_with(roam_o, roam_log, claims.clone()));
     // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
     let vault = (o.vault_gb > 0.0).then(|| {
         let dir = paths::join(&o.state, "vault");

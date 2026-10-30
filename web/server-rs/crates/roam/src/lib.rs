@@ -137,6 +137,9 @@ pub const CREWS: usize = wire::CREWS;
 /// 0.5 s).  A value that is not a positive number keeps its default.
 #[derive(Clone, Debug)]
 pub struct RoamOptions {
+    /// the game whose players it takes (roam_core.h RC_GAME_*: 0 Underground 2, 1 Most Wanted): a HELLO of another
+    /// game is refused, and one without a game is Underground 2's (PLAN D-18)
+    pub game: u8,
     pub degree: usize,
     pub tick_ms: u64,
     pub stale_ms: f64,
@@ -173,6 +176,7 @@ pub struct RoamOptions {
 impl Default for RoamOptions {
     fn default() -> Self {
         RoamOptions {
+            game: 0,
             degree: 32,
             tick_ms: 500,
             stale_ms: 60_000.0,
@@ -203,7 +207,7 @@ impl Default for RoamOptions {
 /// crew flag), in its order
 #[derive(Clone, Debug, PartialEq)]
 pub enum RoamMsg {
-    Hello { sender: u32, core: u16, status: u8, room: u32, name: String, crews: Vec<u32> },
+    Hello { sender: u32, core: u16, status: u8, room: u32, name: String, crews: Vec<u32>, game: u8 },
     Snap { sender: u32, status: u8, p: [f64; 3] },
     Bye { sender: u32 },
     Other { kind: u8, sender: u32 },

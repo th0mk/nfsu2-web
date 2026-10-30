@@ -2,6 +2,16 @@
  * No OS headers, no libm. */
 #include "roam_core.h"
 #include "names.h"
+
+/* the C library's memory functions and strlen: the only library calls the
+ * core makes (tools/roam_x86check.sh), declared here and not through
+ * <string.h>, which a freestanding build (the Windows plugin's, i686) may
+ * not have */
+void  *memcpy(void *d, const void *s, size_t n);
+void  *memset(void *d, int c, size_t n);
+void  *memmove(void *d, const void *s, size_t n);
+int    memcmp(const void *a, const void *b, size_t n);
+size_t strlen(const char *s);
 /* No <string.h>: the compiler's builtins (inline, or the freestanding
  * memcpy/memset/memmove/memcmp every C platform provides) */
 #define memcpy  __builtin_memcpy
@@ -391,11 +401,13 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
-        if (m->u.hello.n_crews){
+        /* the game after the crews: their count goes first, 0 with none */
+        if (m->u.hello.n_crews || (m->h.flags & RC_HF_GAME)){
             if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
         }
+        if (m->h.flags & RC_HF_GAME) rc_put8(&w, m->u.hello.game);
         break; }
     case RC_MSG_PEERS:
         if (m->u.peers.n > RC_MAX_PEERS) return -1;
@@ -522,8 +534,13 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             for (int i = 0; i < m->u.hello.n_crews; i++) m->u.hello.crews[i] = rc_get32(&r);
             if (r.err) return RC_E_SHORT;
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
+            if (m->h.flags & RC_HF_GAME){
+                m->u.hello.game = (uint8_t)rc_get8(&r);
+                if (r.err) return RC_E_SHORT;
+            }
             r.n = r.len;                                              /* (a newer core's additions) */
         }
+        else if (m->h.flags & RC_HF_GAME) return RC_E_FIELD;          /* the flag without the crews' count and the game */
         break; }
     case RC_MSG_PEERS:
         m->u.peers.n = (uint8_t)rc_get8(&r);
@@ -1195,6 +1212,7 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     if (s->conf.duels) m->h.flags |= RC_HF_DUELS;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
+    if (s->conf.game){ m->h.flags |= RC_HF_GAME; m->u.hello.game = s->conf.game; }
     if (!to) m->h.flags |= RC_HF_ALL;
     m->u.hello.core_ver = RC_CORE_VER; m->u.hello.platform = s->conf.platform; m->u.hello.status = s->status;
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;
@@ -1329,6 +1347,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         /* with a hub, only the players it lists for us (they arrive with
          * its next list, within a second) */
         if (hub_mode(s, now)){ s->rx_unlisted++; return; }
+        if (m.u.hello.game != s->conf.game){ s->rx_game++; return; }
         if (m.u.hello.room != s->conf.room){
             s->rx_room++;
             if (!s->noted_room || now - s->note_room_us >= T_MISMATCH_NOTE){
@@ -1364,6 +1383,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
     p->rx++; p->last_rx_us = now; p->lost = 0;
     switch (m.h.type){
     case RC_MSG_HELLO: {
+        if (m.u.hello.game != s->conf.game){ s->rx_game++; if (p->state == RC_PS_EST) drop_peer(s, i, "other game"); return; }
         if (m.u.hello.room != s->conf.room){ s->rx_room++; if (p->state == RC_PS_EST) drop_peer(s, i, "other room"); return; }
         int first = !p->name[0];
         memcpy(p->name, m.u.hello.name, sizeof p->name);

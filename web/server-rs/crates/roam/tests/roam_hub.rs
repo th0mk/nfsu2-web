@@ -97,7 +97,7 @@ fn the_wire_what_roam_core_sends_the_hub_reads_and_its_peers_lists_decode_in_roa
         .expect("RC_CORE_VER");
     assert_eq!(
         decode_roam(&h),
-        Some(RoamMsg::Hello { sender: 0x1234ABCD, core, status: 2, room: fnv1a("blue"), name: "Ann K.".into(), crews: vec![] })
+        Some(RoamMsg::Hello { sender: 0x1234ABCD, core, status: 2, room: fnv1a("blue"), name: "Ann K.".into(), crews: vec![], game: 0 })
     );
     assert_eq!(
         hello_with(0x1234ABCD, &HelloOpts { room: fnv1a("blue"), name: b"Ann K.", seen: &[0x11, 0x22], core, ..Default::default() }),

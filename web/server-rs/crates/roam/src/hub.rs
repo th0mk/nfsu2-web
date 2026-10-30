@@ -274,6 +274,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
     let n = |v: usize, d: usize| if v > 0 { v } else { d };
     let f = |v: f64, d: f64| if v.is_finite() && v > 0.0 { v } else { d };
     RoamOptions {
+        game: o.game,
         degree: n(o.degree, d.degree),
         tick_ms: if o.tick_ms > 0 { o.tick_ms } else { d.tick_ms },
         stale_ms: f(o.stale_ms, d.stale_ms),
@@ -305,6 +306,8 @@ struct Stats {
     frames: u64,
     bad: u64,
     refused: u64,
+    /// HELLOs of another game (wire::HF_GAME), refused
+    foreign: u64,
     lists: u64,
     ticks: u64,
     tick_ms_max: f64,
@@ -686,6 +689,23 @@ impl Hub {
         };
         let k = key(from, sport);
         let found = self.by_key.get(&k).copied();
+        // a player of another game (a page of the other game's site that reached this server): never one of ours, and
+        // one that was ours is gone
+        if let Msg::Hello { game, .. } = m {
+            if game != self.o.game {
+                self.st.foreign += 1;
+                if self.st.foreign == 1 {
+                    (self.log)(&format!(
+                        "[roam] refused a player of another game (game {game}, this hub's {}); counted as foreign",
+                        self.o.game
+                    ));
+                }
+                if found.is_some() {
+                    self.drop_key(k);
+                }
+                return;
+            }
+        }
         if let Msg::Bye = m {
             if found.is_some() {
                 self.drop_key(k);
@@ -749,7 +769,7 @@ impl Hub {
         // (a HELLO: its name against the claims)
         let mut check = false;
         match m {
-            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews } => {
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, .. } => {
                 // another start of the game on the same endpoint (where its car was, and its clock's epochs, start again)
                 if p.id != sender {
                     p.links.clear();
@@ -1316,6 +1336,7 @@ impl Hub {
             "frames": st.frames,
             "bad": st.bad,
             "refused": st.refused,
+            "foreign": st.foreign,
             "lists": st.lists,
             "ticks": st.ticks,
             "tickMsMax": num(st.tick_ms_max),

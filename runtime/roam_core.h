@@ -203,6 +203,15 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
 /* header flags (HELLO, core 8 and up): this player reads the crew marks of
  * the hub's PEERS (RC_HF_CREW above); a hub sends them to no other */
 #define RC_HF_HUBCREW    0x0400
+/* header flags (HELLO): the sender's game comes after its crews (the crew
+ * count byte, 0 with none, and the crews, RC_HF_CREW above, which a HELLO
+ * with this flag always has): one byte, RC_GAME_*.  A HELLO without it is
+ * Underground 2's, as every HELLO before the flag: Underground 2's builds
+ * send none, and an older core reads the crews and skips what follows.  A
+ * hub (web/server-rs/crates/roam) takes the players of its own game only;
+ * a peer of another game is dropped like one of another room */
+#define RC_HF_GAME       0x0800
+enum { RC_GAME_UG2 = 0, RC_GAME_MW = 1 };
 /* decoder results */
 enum { RC_OK = 0, RC_E_SHORT = -1, RC_E_MAGIC = -2, RC_E_VERSION = -3, RC_E_LENGTH = -4,
        RC_E_CRC = -5, RC_E_TYPE = -6, RC_E_FIELD = -7, RC_E_TRAIL = -8, RC_E_RANGE = -9 };
@@ -317,7 +326,8 @@ typedef struct {
     union {
         struct { uint16_t core_ver; uint8_t platform, status; uint16_t listen_port, cfg_rev;
                  uint32_t room; char name[RC_NAME_MAX + 1]; uint8_t n_seen; uint32_t seen[RC_MAX_PEERS];
-                 uint8_t n_crews; uint32_t crews[RC_CREW_MAX]; } hello;   /* crews: with RC_HF_CREW only */
+                 uint8_t n_crews; uint32_t crews[RC_CREW_MAX];   /* crews: with RC_HF_CREW only */
+                 uint8_t game; } hello;                          /* RC_GAME_*: RC_HF_GAME's, else RC_GAME_UG2 */
         struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_MAX_PEERS];
                  uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_MAX_PEERS]; } peers;   /* the crew marks: with RC_HF_CREW only */
         struct { uint8_t status, epoch; uint16_t cfg_rev; uint8_t n, clock; rc_state s[RC_SNAP_STATES]; } snap;
@@ -468,6 +478,8 @@ typedef struct {
     int      duels;                /* we take outrun challenges (HELLO says so: RC_HF_DUELS) */
     int      lobbies;              /* we take race lobbies (HELLO says so: RC_HF_LOBBY) */
     int      say;                  /* we take quick chat (HELLO says so: RC_HF_SAY) */
+    uint8_t  game;                 /* our game (RC_GAME_*): Underground 2's (0) sends none, another says it
+                                    * in its HELLO (RC_HF_GAME); a peer of another game is dropped */
 } rc_config;
 
 enum { RC_PS_FREE = 0, RC_PS_CANDIDATE = 1, RC_PS_HEARD = 2, RC_PS_EST = 3 };
@@ -522,6 +534,7 @@ typedef struct {
     /* statistics */
     uint32_t  tx, tx_bytes, rx, rx_bad, rx_policy, rx_ratelimit, rx_unknown_full, rx_version;
     uint32_t  rx_room;             /* HELLOs of another room */
+    uint32_t  rx_game;             /* HELLOs of another game (RC_HF_GAME) */
     uint32_t  rx_dup_id;           /* a known player's id from a second address: ignored */
     uint32_t  rx_stray;            /* another id from a known address, not a HELLO: ignored */
     int64_t   note_version_us, note_room_us;  int noted_version, noted_room;   /* mismatch notes, every 30 s */

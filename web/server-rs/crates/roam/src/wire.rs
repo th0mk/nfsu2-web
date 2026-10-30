@@ -40,6 +40,10 @@ pub(crate) const CREWS: usize = 4;
 /// HELLO's flag: this player reads the crew marks of the hub's PEERS (roam_core.h RC_HF_HUBCREW, core 8): HF_CREW on a
 /// PEERS says the list ends in them (`write_peers`).  A core before it counts the longer list as bad, so it gets none.
 pub(crate) const HF_HUBCREW: u16 = 0x0400;
+/// HELLO's flag: the player's game follows its crews (roam_core.h RC_HF_GAME): HF_CREW's count byte (0 with none) and
+/// crews, then one byte, the game (RC_GAME_*: 1 Most Wanted).  A HELLO without it is Underground 2's (0), as every
+/// HELLO before the flag; one with it but no game after its crews is no HELLO
+pub(crate) const HF_GAME: u16 = 0x0800;
 /// the most ids a HELLO names (roam_core.h RC_MAX_PEERS: its decoder takes no more)
 const SEEN_MAX: usize = 32;
 /// a LOBBY's ops (roam_core.h RC_LOBBY_*) the hub keeps: the host's advert and its end, and a player's ask to join
@@ -79,6 +83,8 @@ pub(crate) enum Msg<'a> {
         /// its crews as it sent them (HF_CREW), 0 after them: none for a HELLO without the flag, or with the flag
         /// and nothing after its ids
         crews: [u32; CREWS],
+        /// its game (HF_GAME), 0 (Underground 2) without the flag
+        game: u8,
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
     /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); t_us: its time on
@@ -310,6 +316,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             let flags = u16_le(d, 14);
             let mut crews = [0u32; CREWS];
+            let mut game = 0u8;
             // the crews after the ids it hears (n_seen, then n_seen ids), only with the flag: without it the bytes
             // after the name's are not read, as before the flag (a page of before sends what it likes there)
             if flags & HF_CREW != 0 {
@@ -329,9 +336,22 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
                     if crews[..n].contains(&0) {
                         return None;
                     }
+                    // the game after the crews (what a newer core adds after it is skipped)
+                    if flags & HF_GAME != 0 {
+                        let g = at + 1 + 4 * n;
+                        if g >= end {
+                            return None;
+                        }
+                        game = d[g];
+                    }
+                } else if flags & HF_GAME != 0 {
+                    return None;
                 }
+            } else if flags & HF_GAME != 0 {
+                return None;
             }
-            Msg::Hello { sender, core, status, room, name, lobbies: flags & HF_LOBBY != 0, marks: flags & HF_HUBCREW != 0, crews }
+            let (lobbies, marks) = (flags & HF_LOBBY != 0, flags & HF_HUBCREW != 0);
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, game }
         }
         MSG_SNAP => {
             if end < 22 + 52 {
@@ -382,13 +402,14 @@ pub fn decode_roam(d: &[u8]) -> Option<RoamMsg> {
     let (kind, sender, m) = decode(d)?;
     Some(match m {
         // the name is printable ASCII (checked): latin1 is the bytes as they are
-        Msg::Hello { sender, core, status, room, name, crews, .. } => RoamMsg::Hello {
+        Msg::Hello { sender, core, status, room, name, crews, game, .. } => RoamMsg::Hello {
             sender,
             core,
             status,
             room,
             name: name.iter().map(|&c| c as char).collect(),
             crews: crews.iter().copied().take_while(|&c| c != 0).collect(),
+            game,
         },
         Msg::Snap { sender, status, p, .. } => RoamMsg::Snap { sender, status, p },
         Msg::Bye => RoamMsg::Bye { sender },

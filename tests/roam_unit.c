@@ -439,6 +439,7 @@ static int g_lat_us = 1000, g_jit_us = 0, g_dup_pct = 0;
 static int g_ver_from = -1;                 /* this node's datagrams go out as protocol version 2 */
 static int g_twoaddr_from = -1;             /* this node's HELLOs also arrive from 127.0.0.2 */
 static int g_nox_from = -1;                 /* this node's HELLOs go out without RC_HF_STATEX (an older core) */
+static int g_hello_game[8], g_hello_nogame[8];   /* HELLOs each node sent with RC_HF_GAME, and without it */
 static int g_nocrew_from = -1;              /* this node's HELLOs go out without RC_HF_CREW (an older core) */
 static int g_crew_to_old;                   /* HELLOs with crews sent to that node */
 static int g_crew_p2p;                      /* HELLOs with crews sent from one node to another (with a hub: none) */
@@ -475,6 +476,7 @@ static void net_send(void *u, uint32_t ip, uint16_t port, const uint8_t *buf, in
     if (to < 0 || g_drop[from][to]) return;
     if (to == g_nocrew_from && len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_to_old++; }
     if (len > 15 && buf[5] == RC_MSG_HELLO){ rc_msg d; if (rc_decode(buf, len, &d) == RC_OK && d.u.hello.n_crews) g_crew_p2p++; }
+    if (len > 15 && buf[5] == RC_MSG_HELLO && from >= 0 && from < 8){ if (buf[15] & (RC_HF_GAME >> 8)) g_hello_game[from]++; else g_hello_nogame[from]++; }
     if (g_loss_pct && (int)(rnd() % 100u) < g_loss_pct) return;
     for (int copy = 0; copy < 2; copy++){
         if (copy && (int)(rnd() % 100u) >= g_dup_pct) break;
@@ -1325,6 +1327,55 @@ static void t_statex(void){
     CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng, "the older peer's pose has none");
 }
 
+/* ---- 4g. the game (RC_HF_GAME): a byte after the crews; none is Underground 2's; another game's peer is dropped ---- */
+static void t_game(void){
+    uint8_t b[RC_MAX_DGRAM], lb[RC_MAX_DGRAM]; rc_msg m, d; memset(&m, 0, sizeof m);
+    uint32_t A = rc_room_hash("Blue Room"), c;
+    m.h.type = RC_MSG_HELLO; m.h.sender = 7; m.h.flags = RC_HF_CREW | RC_HF_HUBCREW; strcpy(m.u.hello.name, "Thom");
+    m.u.hello.n_seen = 1; m.u.hello.seen[0] = 0x11111111u;
+    int base = rc_encode(&m, b, sizeof b);
+    CHECK(base > 0 && rc_decode(b, base, &d) == RC_OK && d.u.hello.game == RC_GAME_UG2, "a HELLO without the flag is Underground 2's");
+    /* with the flag: the crews' count (0), then the game */
+    m.h.flags |= RC_HF_GAME; m.u.hello.game = RC_GAME_MW;
+    int n = rc_encode(&m, b, sizeof b);
+    CHECK(n == base + 2 && b[n - 4 - 2] == 0 && b[n - 4 - 1] == RC_GAME_MW, "the game after a crew count of 0 (%d bytes, %d before)", n, base);
+    CHECK(rc_decode(b, n, &d) == RC_OK && d.u.hello.game == RC_GAME_MW && d.u.hello.n_crews == 0 && d.u.hello.seen[0] == 0x11111111u, "the game round trip");
+    m.u.hello.n_crews = 1; m.u.hello.crews[0] = A; n = rc_encode(&m, b, sizeof b);
+    CHECK(n == base + 2 + 4 && rc_decode(b, n, &d) == RC_OK && d.u.hello.game == RC_GAME_MW && d.u.hello.n_crews == 1 && d.u.hello.crews[0] == A,
+          "the game after the crews (%d bytes)", n);
+    /* an older core: it reads the crews and skips the game */
+    memcpy(lb, b, (size_t)n); lb[15] &= (uint8_t)~(RC_HF_GAME >> 8); c = rc_crc32(lb, (uint32_t)n - 4); for (int k = 0; k < 4; k++) lb[n - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(lb, n, &d) == RC_OK && d.u.hello.game == 0 && d.u.hello.n_crews == 1, "a reader without the flag skips the game");
+    /* what a newer core adds after the game is skipped */
+    memcpy(lb, b, (size_t)n - 4); lb[n - 4] = 0xAA; int ln = n + 1; lb[6] = (uint8_t)ln; lb[7] = (uint8_t)(ln >> 8);
+    c = rc_crc32(lb, (uint32_t)ln - 4); for (int k = 0; k < 4; k++) lb[ln - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(lb, ln, &d) == RC_OK && d.u.hello.game == RC_GAME_MW, "bytes after the game skipped");
+    /* the flag without the game, or without the crews' count: bad */
+    m.u.hello.n_crews = 0; n = rc_encode(&m, b, sizeof b);
+    memcpy(lb, b, (size_t)n - 5); ln = n - 1; lb[6] = (uint8_t)ln; lb[7] = (uint8_t)(ln >> 8);
+    c = rc_crc32(lb, (uint32_t)ln - 4); for (int k = 0; k < 4; k++) lb[ln - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(lb, ln, &d) == RC_E_SHORT, "the flag and a crew count, no game: bad");
+    memcpy(lb, b, (size_t)n - 6); ln = n - 2; lb[6] = (uint8_t)ln; lb[7] = (uint8_t)(ln >> 8);
+    c = rc_crc32(lb, (uint32_t)ln - 4); for (int k = 0; k < 4; k++) lb[ln - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(lb, ln, &d) == RC_E_FIELD, "the flag and nothing after the ids: bad");
+    m.h.flags = RC_HF_GAME; CHECK(rc_encode(&m, b, sizeof b) < 0, "the flag without the crews' flag is not sent");
+
+    /* sessions: Most Wanted's nodes see each other, and neither sees Underground 2's */
+    mesh(3, 8); g_now = 0; memset(g_hello_game, 0, sizeof g_hello_game); memset(g_hello_nogame, 0, sizeof g_hello_nogame);
+    g_n[0].conf.game = RC_GAME_MW; g_n[1].conf.game = RC_GAME_MW;
+    for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) if (i != j) rc_add_peer(&g_n[i], node_ip(j), node_port(j), 1, 0);
+    drive(3, 5000000);
+    CHECK(est(0) == 1 && est(1) == 1 && est(2) == 0 && peer_of(0, 0x501) >= 0 && g_n[0].peer[peer_of(0, 0x501)].state == RC_PS_EST,
+          "two of one game together, the other game's alone (%d %d %d)", est(0), est(1), est(2));
+    CHECK(g_n[0].rx_game > 0 && g_n[2].rx_game > 0, "another game's HELLOs counted (%u, %u)", g_n[0].rx_game, g_n[2].rx_game);
+    /* Underground 2's HELLOs stay as they were: no game flag (and so no game byte) */
+    CHECK(g_hello_game[0] > 0 && g_hello_game[1] > 0 && g_hello_game[2] == 0 && g_hello_nogame[2] > 0 && g_hello_nogame[0] == 0,
+          "Most Wanted's HELLOs say their game, Underground 2's say none (%d %d %d)", g_hello_game[0], g_hello_game[1], g_hello_game[2]);
+    g_n[1].conf.game = RC_GAME_UG2;
+    drive(3, g_now + 3000000);
+    CHECK(est(0) == 0 && est(1) == 1 && est(2) == 1, "a peer that turns out to be of another game is dropped (%d %d %d)", est(0), est(1), est(2));
+}
+
 /* ---- 4f. crews: the HELLO's tail to the hub, and without a hub to a peer that reads them; the hub's marks ---- */
 static void t_crews(void){
     uint8_t b[RC_MAX_DGRAM]; rc_msg m, d; memset(&m, 0, sizeof m);
@@ -1539,7 +1590,7 @@ static void t_lobby(void){
     l.to = 0; l.lobby = 0xAB;
     CHECK(rc_send_lobby(&g_n[0], &l) == 1 && g_hub_lobby[0] == 1 && g_hub_lobby_last[0].race == 0x1234 && g_hub_lobby_last[0].x == 100,
           "the advert reaches the hub (%d)", g_hub_lobby[0]);
-    CHECK(rc_ask_map(&g_n[0], g_now) == 1, "the map is asked for");
+    CHECK(rc_ask_map(&g_n[0], g_now, RC_MAP_MAX) == 1, "the map is asked for");
     static const uint8_t le[3 * RC_LOBBIES_ENTRY] = { 10, 0, 20, 0, 0x34, 0x12, 0, 0, 2, 6, RC_LS_OPEN,
                                                       1, 0, 1, 0, 0, 0, 0, 0, 1, 4, 0,              /* no race: skipped */
                                                       0xf6, 0xff, 5, 0, 1, 0, 0, 0, 4, 4, RC_LS_STARTING };
@@ -1603,6 +1654,7 @@ int main(int argc, char **argv){
     t_say();
     t_statex();
     t_crews();
+    t_game();
     t_room();
     t_snapstates();
     t_bigmesh();
