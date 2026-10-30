@@ -11,9 +11,11 @@
 +0    loop 7                                             # Career .. Options, one item a step
 +40   tap RIGHT
 +0    endloop
-+40   tapuntil RETURN MainMenu_Sub.fng 90 600            # Options: its items, on Audio
-+200  tap RIGHT                                          # Video (the list takes input once its intro is over)
-+60   tapuntil RETURN OptionsPCDisplay.fng 90 600
++40   tapuntil RETURN MainMenu_Sub.fng 90 600            # Options: its items
++0    waitfng MainMenu_Sub.fng@4b4e388a 600              # on Audio, taking input
++0    tapuntil RIGHT MainMenu_Sub.fng@4b4e388b 60 600    # Video
++0    tapuntil RETURN OptionsPCDisplay.fng|OptionsPCDisplay.fng 90 600   # the top package that takes input: a song's
+                                                         # EA_TRAX.fng pop-up, which takes none, can be above it
 +110  tap DOWN                                           # Resolution
 +40   dump video_res
 +3    dump video_res

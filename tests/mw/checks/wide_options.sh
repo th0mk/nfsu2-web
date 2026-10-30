@@ -7,7 +7,7 @@ LOG="$1"
 fail(){ echo "$1"; exit 1; }
 grep -qE '^([0-9.]+ )?module: rev [0-9a-f]+\+?, game mw, .* stamp game mw;' "$LOG" || fail "no module line naming its revision and lift stamp"
 grep -q 'TIMEOUT' "$LOG" && fail "a wait ran out: $(grep -m1 'TIMEOUT' "$LOG")"
-grep -qE 'tapuntil OptionsPCDisplay\.fng satisfied' "$LOG" || fail "the Video options never came up"
+grep -qE 'tapuntil OptionsPCDisplay\.fng(\|OptionsPCDisplay\.fng)? satisfied' "$LOG" || fail "the Video options never came up"
 grep -q 'LOG wide_options: done' "$LOG" || fail "the script did not end"
 n=$(grep -E 'ws: mw hooks ' "$LOG" | tail -1 | sed -nE 's/.* labels=([0-9]+) .*/\1/p')
 [ -n "$n" ] && [ "$n" -gt 0 ] || fail "the resolution labels were never ours (labels=${n:-none})"
