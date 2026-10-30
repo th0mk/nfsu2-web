@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use unicode_general_category::{GeneralCategory, get_general_category};
 use unicode_normalization::UnicodeNormalization;
 
+
 /// a display name: printable, no bidi or zero-width tricks (control and format characters removed), at most 32
 /// characters, none that reads as a slur (nfsu2-names, the rules of web/src/app/names.mjs): "player" then
 pub fn clean_name(s: &str) -> String {

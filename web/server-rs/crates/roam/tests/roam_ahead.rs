@@ -164,13 +164,7 @@ fn the_grid_links_as_every_pair_with_the_cars_moving() {
                 *v = [(r.unit() - 0.5) * 120.0, (r.unit() - 0.5) * 120.0, 0.0];
             }
             // some in a shop, some paused (their speeds move nothing, their view points none)
-            let status = if i % 7 == 0 {
-                4
-            } else if i % 11 == 0 {
-                5
-            } else {
-                2
-            };
+            let status = if i % 7 == 0 { 4 } else if i % 11 == 0 { 5 } else { 2 };
             let d = snap_moving(100 + i as u32, *p, *v, r.unit() * 6.0, status);
             every.from(W(i as u32), &d);
             grid.from(W(i as u32), &d);

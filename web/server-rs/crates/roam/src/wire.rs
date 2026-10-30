@@ -411,7 +411,14 @@ pub(crate) fn peers_crew_len(n: usize, k: usize) -> usize {
 /// receiver's crews, at most CREWS, none 0) the list ends in its crew marks (HF_CREW on it): `mine`, then a byte per
 /// entry, `marks[i]` bit c: entry i is in crew `mine[c]` too.  So a player learns which of its peers are in its crews
 /// without anyone's crews but its own going out.
-pub(crate) fn write_peers(b: &mut [u8], sender: u32, seq: u16, list: impl ExactSizeIterator<Item = PeerEntry>, mine: &[u32], marks: &[u8]) {
+pub(crate) fn write_peers(
+    b: &mut [u8],
+    sender: u32,
+    seq: u16,
+    list: impl ExactSizeIterator<Item = PeerEntry>,
+    mine: &[u32],
+    marks: &[u8],
+) {
     let len = b.len();
     let n = list.len();
     b[..4].copy_from_slice(b"N2FR");

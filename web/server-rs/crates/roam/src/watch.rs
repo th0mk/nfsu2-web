@@ -352,7 +352,8 @@ pub(crate) fn line(vip: u32, name: &str, seen: &Seen, near: &Near, jumps: u32, l
     };
     let mut s = format!("[cheat] {} \"{name}\": {what}", vip_str(vip));
     if !near.players.is_empty() {
-        let names: Vec<String> = near.players.iter().map(|(d, n, v)| format!("\"{n}\" {} ({})", vip_str(*v), metres(*d))).collect();
+        let names: Vec<String> =
+            near.players.iter().map(|(d, n, v)| format!("\"{n}\" {} ({})", vip_str(*v), metres(*d))).collect();
         let more = near.all - near.players.len();
         let more = if more > 0 { format!(" and {more} more") } else { String::new() };
         s += &format!("; next to {}{more}", names.join(", "));
@@ -396,13 +397,7 @@ fn place(p: &[f64; 3]) -> String {
 
 fn span(ms: f64) -> String {
     let s = ms / 1000.0;
-    if s < 90.0 {
-        format!("{s:.0} s")
-    } else if s < 5400.0 {
-        format!("{:.0} min", s / 60.0)
-    } else {
-        format!("{:.1} h", s / 3600.0)
-    }
+    if s < 90.0 { format!("{s:.0} s") } else if s < 5400.0 { format!("{:.0} min", s / 60.0) } else { format!("{:.1} h", s / 3600.0) }
 }
 
 #[cfg(test)]
@@ -576,7 +571,8 @@ mod tests {
     fn a_fast_clock_is_told() {
         let mut d = Drive::new();
         d.snap(x(0.0));
-        let clocks: Vec<(usize, Seen)> = (1..=290).filter_map(|i| d.at(500.0, 1500.0, x(i as f64 * 50.0))[1].map(|c| (i, c))).collect();
+        let clocks: Vec<(usize, Seen)> =
+            (1..=290).filter_map(|i| d.at(500.0, 1500.0, x(i as f64 * 50.0))[1].map(|c| (i, c))).collect();
         assert_eq!(clocks.iter().map(|c| c.0).collect::<Vec<_>>(), [120, 180, 240], "{clocks:?}");
         assert!(clocks.iter().all(|(_, c)| matches!(c, Seen::Clock { rate, .. } if (rate - 3.0).abs() < 0.2)), "{clocks:?}");
         assert!(matches!(clocks[0].1, Seen::Clock { ms: 60_000.0, .. }), "the two counts of 30 s: {:?}", clocks[0]);

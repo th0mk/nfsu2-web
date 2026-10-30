@@ -473,8 +473,7 @@ pub(crate) mod tests {
         for x in [None, Some(0), Some(9), Some(11), Some(16), Some(23), Some(28)] {
             let (mut enc, mut dec) = (Fpred::default(), Fpred::default());
             for k in 0..5 {
-                let b =
-                    body(0xABCD_0001, 10 + k as u16, 1_000_000 + 50_000 * k as u32, [1695.123, -884.5, 24.25], [12.5, -3.25, 0.01], k, x);
+                let b = body(0xABCD_0001, 10 + k as u16, 1_000_000 + 50_000 * k as u32, [1695.123, -884.5, 24.25], [12.5, -3.25, 0.01], k, x);
                 through(&mut enc, &mut dec, 0x0102, &b);
             }
         }
@@ -506,10 +505,7 @@ pub(crate) mod tests {
             t = t.wrapping_add(50_000 + if k % 7 == 0 { 16_667 } else { 0 });
             let a = k as f64 * 0.05;
             let (p, v) = if k < 300 {
-                (
-                    [(1000.0 + 40.0 * a.cos()) as f32, (-500.0 + 40.0 * a.sin()) as f32, 24.0],
-                    [(-40.0 * a.sin()) as f32, (40.0 * a.cos()) as f32, 0.0],
-                )
+                ([(1000.0 + 40.0 * a.cos()) as f32, (-500.0 + 40.0 * a.sin()) as f32, 24.0], [(-40.0 * a.sin()) as f32, (40.0 * a.cos()) as f32, 0.0])
             } else {
                 ([1040.0, -500.0, 24.0], [0.0, 0.0, 0.0])
             };
@@ -588,8 +584,7 @@ pub(crate) mod tests {
         let (mut enc, mut dec) = (Fpred::default(), Fpred::default());
         for round in 0..3u32 {
             for s in 0..(REFS_MAX as u16 + 40) {
-                let b =
-                    body(s as u32, round as u16, 1_000_000 * round + s as u32, [s as f32, 2.0, 3.0], [1.0, 0.0, 0.0], s as i32, Some(11));
+                let b = body(s as u32, round as u16, 1_000_000 * round + s as u32, [s as f32, 2.0, 3.0], [1.0, 0.0, 0.0], s as i32, Some(11));
                 through(&mut enc, &mut dec, s, &b);
             }
             assert!(enc.last.len() <= REFS_MAX && enc.last.len() == dec.last.len());

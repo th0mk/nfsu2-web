@@ -151,9 +151,7 @@ impl LanSwitch {
         let ticket = new_token();
         *conn.wait.lock() = Wait { id, hello, texts: Some(Bucket::new_at(self.o.text_rate, now)), last_in: now };
         let of = m.line.waiters.len() + 1;
-        m.line
-            .waiters
-            .insert(id, Waiter { conn: Some((conn.clone(), ctx.clone())), ticket: token_hash(&ticket), until: 0, told: of, came: now });
+        m.line.waiters.insert(id, Waiter { conn: Some((conn.clone(), ctx.clone())), ticket: token_hash(&ticket), until: 0, told: of, came: now });
         if m.line.since.is_none() {
             m.line.since = Some(now);
             m.line.longest = 0.0;

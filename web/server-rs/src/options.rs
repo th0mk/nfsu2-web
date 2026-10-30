@@ -723,7 +723,10 @@ mod tests {
         // the program found in any case; UG2's folder is not Most Wanted's, nor the other way round
         std::fs::rename(s.p("mw/speed.exe"), s.p("mw/SPEED.EXE")).unwrap();
         assert!(mw(&["--game", "mw"], &[]).is_ok());
-        assert_eq!(mw(&[], &[]).err().unwrap(), format!("usage: nfsu2-server --data \"<folder with SPEED2.EXE>\"  (got: {})", s.p("mw")));
+        assert_eq!(
+            mw(&[], &[]).err().unwrap(),
+            format!("usage: nfsu2-server --data \"<folder with SPEED2.EXE>\"  (got: {})", s.p("mw"))
+        );
         assert_eq!(
             s.err(&["--game", "mw"], &[]),
             format!("usage: nfsu2-server --game mw --data \"<folder with speed.exe>\"  (got: {})", s.p("game"))

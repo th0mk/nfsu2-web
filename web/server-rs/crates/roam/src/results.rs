@@ -165,10 +165,7 @@ impl Results {
         if !race.reports.iter().any(|(id, _)| *id == reporter) && race.reports.len() < LOBBY_PLAYERS {
             race.reports.push((reporter, r));
             for x in &r.rows[..r.n] {
-                if x.id != 0
-                    && !race.names.contains_key(&x.id)
-                    && let Some(w) = who(x.id)
-                {
+                if x.id != 0 && !race.names.contains_key(&x.id) && let Some(w) = who(x.id) {
                     race.names.insert(x.id, w);
                 }
             }
