@@ -672,6 +672,38 @@ async fn a_module_of_another_game_or_a_dev_build_is_not_served() {
     }
 }
 
+// A json this server refuses (another game's, a dev build's without --dev) is never sent, not even as it is when
+// there is no module beside it to name; its own is, as ever (S3-02)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_json_without_its_module() {
+    let mw = Kit::start(&["--game", "mw"], |root| {
+        std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw")).unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html>").unwrap();
+        module(root, "out/web/mw/nfsmw.wasm");
+    })
+    .await;
+    let ug2 = Kit::start(&[], |root| module(root, "out/web/nfsu2.wasm")).await;
+    for (kit, base, at, ours, other) in [
+        (&mw, "/mw", "out/web/mw/nfsmw", &br#"{"rev":"abc","game":"mw"}"#[..], &br#"{"rev":"abc","game":"ug2"}"#[..]),
+        (&ug2, "", "out/web/nfsu2", br#"{"rev":"abc"}"#, br#"{"rev":"abc","game":"mw"}"#),
+    ] {
+        std::fs::remove_file(kit.path(&format!("repo/{at}.wasm"))).unwrap();
+        let json = kit.path(&format!("repo/{at}.json"));
+        let oracle = [&ours[..ours.len() - 1], b",\"oracle\":1}"].concat();
+        for (body, text) in [(other, "The game module is another game's\n"), (&oracle[..], "The game module is a dev build\n")] {
+            std::fs::write(&json, body).unwrap();
+            let a = kit.request_to("localhost", "GET", &format!("{base}/game.json"), &[], b"").await;
+            assert_eq!((a.status, String::from_utf8_lossy(&a.body).as_ref()), (503, text), "{base} {}", String::from_utf8_lossy(body));
+            assert_eq!(a.header("cache-control").map(|c| c.contains("no-store")), Some(true));
+        }
+        std::fs::write(&json, ours).unwrap();
+        let a = kit.request_to("localhost", "GET", &format!("{base}/game.json"), &[], b"").await;
+        assert_eq!((a.status, &a.body[..]), (200, ours), "{base}: its own, as it is");
+        assert_eq!(kit.request_to("localhost", "GET", &format!("{base}/game.wasm"), &[], b"").await.status, 404);
+    }
+}
+
 /// an answer's whole length once its head is in (its Content-Length; none: no body)
 fn answer_len(b: &[u8]) -> Option<usize> {
     let end = b.windows(4).position(|w| w == b"\r\n\r\n")?;

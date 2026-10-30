@@ -138,28 +138,28 @@ impl App {
         self.send_file(q, s, &paths::dirname(&self.o.wasm), Some(self.o.wasm.clone()), opts).await
     }
 
-    /// /game.json: what was built, and which module this server sends now (module: its hash, for /game.wasm?v=)
+    /// /game.json: what was built, and which module this server sends now (module: its hash, for /game.wasm?v=).
+    /// A json this server refuses (`module_refused`) is never sent, not even as it is (without a module to name).
     pub async fn send_game_json(&self, q: &Request, s: &mut Response) -> Res {
         let dir = paths::dirname(&self.o.game_json);
         let f = self.locate(&dir, Some(self.o.game_json.clone())).await;
-        let c = match &f {
+        // (judged before the module is looked at: there may be none)
+        let json = match &f {
+            Some(f) => App::module_json(tokio::fs::read(&f.real).await.ok()),
+            None => None,
+        };
+        if let Some(r) = json.as_ref().and_then(|m| self.refusal_of(m)) {
+            return self.plain(q, s, 503, r.body, &[], Cache::Store, true).await;
+        }
+        let c = match &json {
             Some(_) => self.compressed_wasm().await,
             None => None,
         };
-        let mut info = None;
-        if let (Some(c), Some(f)) = (&c, &f)
-            && let Ok(b) = tokio::fs::read(&f.real).await
-            && let Ok(Value::Object(m)) = serde_json::from_str::<Value>(&String::from_utf8_lossy(&b))
-        {
-            info = Some((m, c.hash.clone()));
-        }
-        let Some((mut m, hash)) = info else {
+        // (the json as it is: no module to name, or no JSON object)
+        let (Some(mut m), Some(c)) = (json, c) else {
             return self.send_file(q, s, &dir, None, files::FileOpts { found: f, ..Default::default() }).await;
         };
-        if let Some(r) = self.refusal_of(&m) {
-            return self.plain(q, s, 503, r.body, &[], Cache::Store, true).await;
-        }
-        m.insert("module".into(), Value::String(hash));
+        m.insert("module".into(), Value::String(c.hash.clone()));
         let body = nfsu2_util::json::stringify(&js_numbers(Value::Object(m)));
         let mut h = self.headers(q, Cache::Store, true);
         h.set("content-type", type_of(".json").unwrap_or("application/json"));
@@ -175,8 +175,12 @@ impl App {
 impl App {
     /// The module json beside the module, read now (None: there is none, or it is no JSON object).
     pub fn module_json_now(path: &str) -> Option<serde_json::Map<String, Value>> {
-        let b = std::fs::read(path).ok()?;
-        match serde_json::from_str::<Value>(&String::from_utf8_lossy(&b)) {
+        App::module_json(std::fs::read(path).ok())
+    }
+
+    /// a module json's bytes (None: none) as a JSON object (None: it is no JSON object)
+    fn module_json(bytes: Option<Vec<u8>>) -> Option<serde_json::Map<String, Value>> {
+        match serde_json::from_str::<Value>(&String::from_utf8_lossy(&bytes?)) {
             Ok(Value::Object(m)) => Some(m),
             _ => None,
         }
@@ -186,11 +190,7 @@ impl App {
     /// dev build without --dev): /game.json and /game.wasm then answer 503, and the console says why, once a minute
     /// at most.  A module without a json is served as ever.
     pub async fn module_refused(&self) -> Option<crate::game::Refusal> {
-        let b = tokio::fs::read(&self.o.game_json).await.ok()?;
-        match serde_json::from_str::<Value>(&String::from_utf8_lossy(&b)) {
-            Ok(Value::Object(m)) => self.refusal_of(&m),
-            _ => None,
-        }
+        self.refusal_of(&App::module_json(tokio::fs::read(&self.o.game_json).await.ok())?)
     }
 
     fn refusal_of(&self, m: &serde_json::Map<String, Value>) -> Option<crate::game::Refusal> {
