@@ -227,6 +227,9 @@ function remoteOf(r: Response): Remote | null {
 }
 
 function failure(r: Response): VaultError {
+  // a server that forwards /vault to another's (Most Wanted's) did not reach it: its 503 says so, the vault's own
+  // ("busy for now") does not (server-rs vault_forward.rs)
+  if (r.headers.get('x-vault-unreachable')) return new VaultError(N('the server does not answer'), 'VAULT-UNREACHABLE');
   return new VaultError(r.status === 429 ? N('the server asks this address to wait a minute (too many requests)')
     : r.status === 507 ? N('the server has no room for more saves now')
     : r.status === 503 ? N('the server takes no more new cloud saves for now: try again in an hour')

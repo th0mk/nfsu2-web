@@ -145,7 +145,7 @@ function server() {
     const token = (h.authorization ?? '').replace(/^Bearer /, '');
     if (s.off) return new Response('Not found', { status: 404 });            // --vault-gb 0
     if (!token) return new Response('A keyphrase\'s token is needed', { status: 401 });
-    if (s.refuse) return new Response('no', { status: s.refuse });
+    if (s.refuse) return new Response('no', { status: s.refuse, headers: s.refuseHeaders ?? {} });
     const k = kept.get(token), method = init.method ?? 'GET';
     if (method === 'GET') {
       const v = url.endsWith('?earlier') ? k?.earlier : k?.cur;
@@ -400,6 +400,17 @@ test('deleted elsewhere, and the server\'s refusals', async () => {
   await assert.rejects(a.sync.push());
   assert.equal(a.sync.state.msg, 'the server has no room for more saves now');
   assert.equal(a.sync.state.code, 'VAULT-HTTP-507');
+  // the vault's own 503 (busy for now), and Most Wanted's server's when the vault it forwards to did not answer
+  srv.refuse = 503;
+  srv.refuseHeaders = { 'retry-after': '3600' };
+  await assert.rejects(a.sync.push());
+  assert.deepEqual([a.sync.state.msg, a.sync.state.code], ['the server takes no more new cloud saves for now: try again in an hour', 'VAULT-HTTP-503']);
+  srv.refuseHeaders = { 'x-vault-unreachable': '1' };
+  await assert.rejects(a.sync.push());
+  assert.deepEqual([a.sync.state.msg, a.sync.state.code], ['the server does not answer', 'VAULT-UNREACHABLE']);
+  await assert.rejects(a.sync.pull());
+  assert.equal(a.sync.state.code, 'VAULT-UNREACHABLE');
+  srv.refuseHeaders = undefined;
   srv.refuse = 0;
   await a.sync.push();
   assert.equal(a.sync.state.s, 'synced');

@@ -10,12 +10,12 @@
 //! the Access service token (`CF-Access-Client-Id`, `CF-Access-Client-Secret`).  No other header of the browser's goes
 //! on (its own `CF-Access-*` never).  What comes back goes to the page only when the vault gave it (every answer it
 //! gives a forward it took says so: `x-vault-box: taken`), with the headers that matter (the ETag, `x-vault-*`,
-//! Retry-After): its 2xx, 304 and 4xx, its 503 (busy, with Retry-After) and 507 (full).  Anything else is a 503 with the
-//! code VAULT-UNREACHABLE, which the page shows as a sync failure while it keeps its local saves: no connection in 5 s,
-//! no answer in 20 s, an answer that does not read, the credential refused, and an answer of the way there, which the
-//! page would take for the vault's (a wrong address's or a vault-less box's 404 for "no such keyphrase", a 405, 421,
-//! an edge's or Access's 401, 403 or 302, the U2 box's own 429 for this box, a tunnel's 5xx).  No retry here: the page
-//! asks again.
+//! Retry-After): its 2xx, 304 and 4xx, its 503 (busy, with Retry-After) and 507 (full).  Anything else is a 503 with
+//! `x-vault-unreachable: 1`, which the page shows as a sync failure, VAULT-UNREACHABLE (not the vault's "busy" 503),
+//! while it keeps its local saves: no connection in 5 s, no answer in 20 s, an answer that does not read, the
+//! credential refused, and an answer of the way there, which the page would take for the vault's (a wrong address's or
+//! a vault-less box's 404 for "no such keyphrase", a 405, 421, an edge's or Access's 401, 403 or 302, the U2 box's own
+//! 429 for this box, a tunnel's 5xx).  No retry here: the page asks again.
 //!
 //! Before anything goes on, this server's own checks: its own pages only (as vault.rs), the four methods, a body only
 //! with a PUT and none over the vault's 256 KB.  At most 32 forwards at once; no state written (no folder, no cache of
@@ -52,6 +52,8 @@ pub const CLIENT_HEADER: &str = "x-vault-client";
 pub const REFUSED: &str = "refused";
 /// in BOX_HEADER, on every answer the U2 box's vault gives a forward it took: what the page may get
 pub const TAKEN: &str = "taken";
+/// on this server's 503 when the vault did not answer (web/src/app/vault.ts reads it: VAULT-UNREACHABLE)
+pub const UNREACHABLE_HEADER: &str = "x-vault-unreachable";
 /// the shortest box-to-box credential taken
 pub const MIN_KEY: usize = 32;
 /// the vault's headers a page reads, passed back as they came
@@ -417,9 +419,11 @@ impl App {
         finish(s).await
     }
 
-    /// the U2 box's vault did not answer: the page shows its sync failure, and keeps its local saves
+    /// the U2 box's vault did not answer: the page shows its sync failure, and keeps its local saves.  It reads
+    /// UNREACHABLE_HEADER, not the status alone: the vault's own 503 is "busy for now, try again in an hour"
     async fn unreachable(&self, q: &Request, s: &mut Response) -> Res {
-        self.plain(q, s, 503, "The saves' server is not reachable now (VAULT-UNREACHABLE)", &[], Cache::Store, true).await
+        let h = [(UNREACHABLE_HEADER, "1")];
+        self.plain(q, s, 503, "The saves' server is not reachable now (VAULT-UNREACHABLE)", &h, Cache::Store, true).await
     }
 }
 
@@ -585,8 +589,7 @@ mod tests {
             for (i, ip) in ["198.51.100.7"; 31].iter().chain(&["198.51.100.8", "198.51.100.9"]).enumerate() {
                 let t = format!("Bearer {i:0>43}");
                 let r = m.request("GET", "/mw/vault", &[("Authorization", &t), ("X-Forwarded-For", ip)], b"").await;
-                assert_eq!(r.status, 503, "{i} {ip}");
-                assert!(String::from_utf8_lossy(&r.body).contains("VAULT-UNREACHABLE"));
+                assert_eq!((r.status, r.header(UNREACHABLE_HEADER)), (503, Some("1")), "{i} {ip}");
                 assert_eq!(r.header("x-vault-box"), None, "the U2 box's word stays between the boxes");
             }
             assert_eq!(m.request("PUT", "/mw/vault", &[BEARER, ("If-None-Match", "*")], b"box").await.status, 503);
@@ -639,6 +642,7 @@ mod tests {
         assert_eq!(r.status, 503);
         assert!(String::from_utf8_lossy(&r.body).contains("VAULT-UNREACHABLE"));
         assert_eq!(r.header("retry-after"), None, "not the vault's 'busy for now'");
+        assert_eq!(r.header(UNREACHABLE_HEADER), Some("1"), "what the page reads");
         assert!(t0.elapsed() < Duration::from_secs(2));
         // a server that never answers
         let stall = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -711,7 +715,7 @@ mod tests {
             let body: &[u8] = if *method == "PUT" { b"box" } else { b"" };
             let r = m.request(method, "/mw/vault", &[BEARER, ("If-None-Match", "*")], body).await;
             assert_eq!((r.status, r.header("retry-after"), r.header("location")), (503, None, None), "answer {i}");
-            assert!(String::from_utf8_lossy(&r.body).contains("VAULT-UNREACHABLE"));
+            assert_eq!(r.header(UNREACHABLE_HEADER), Some("1"));
         }
         let line = m.app.vault_forward.as_ref().unwrap().line().unwrap();
         assert!(line.contains("5 failed (5 an answer not the vault's)"), "{line}");
