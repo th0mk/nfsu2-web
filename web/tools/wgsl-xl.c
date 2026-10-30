@@ -172,10 +172,10 @@ static void write_vectors(const char *dir, int id, const VSProg *p, const int dc
  * same function for textureSample).  With 8 stages the magic is 'PSV2', each
  * pixel has 41 inputs (uv4..uv7 after the fog), the shader check takes
  * each binding's kind from the module (ps_ref_run adds ps_2_0's declared cubes
- * to cubemask itself), and the texture is ftex8: sums, products and floor as
- * psref's (sm3_tex below, without the level of detail), where ftex's sin and
- * cos may be 2^-11 off on a GPU, which Most Wanted's shaders amplify past the
- * tolerance (ps_22's reflection: 1 % from that error alone). */
+ * to cubemask itself), and the texture is ftex8: sums, products and floor
+ * (psref's bump, as sm3_tex below), where ftex's sin and cos may be 2^-11 off
+ * on a GPU, which Most Wanted's shaders amplify past the tolerance (with sin,
+ * ps_22's cube twin ps_278 is 1.03e-3 off against the 1e-3 tolerance). */
 static void ftex(int k, const float *c, int n, float o[4]){
     float x = c[0], y = c[1], f = (float)k;
     if (n == 3){ x = c[0] + c[2] * 0.3f; y = c[1] - c[2] * 0.2f; }
@@ -185,13 +185,17 @@ static void ftex(int k, const float *c, int n, float o[4]){
     o[3] = 0.5f + 0.4f * cosf(x * y * 5.3f + 0.2f * f);
 }
 static float bump(float t){ float u = t - floorf(t); return 4.f * u * (1.f - u); }
+/* bump is even about every multiple of 0.5 (bump(a - t) = bump(a + t)), so
+ * an offset that is one hides the sign of what it is added to (a translator
+ * that negates a cube direction would pass): each channel's offset,
+ * c + d * stage, stays at least 0.13 away from one at all eight stages */
 static void ftex8(int k, const float *c, int n, float o[4]){
     float x = c[0], y = c[1], f = (float)k;
     if (n == 3){ x = c[0] + c[2] * 0.3f; y = c[1] - c[2] * 0.2f; }
-    o[0] = 0.1f + 0.8f * bump(x * 3.1f + f * 0.37f);
-    o[1] = 0.1f + 0.8f * bump(y * 2.3f + f * 0.5f);
-    o[2] = 0.1f + 0.8f * bump((x + y) * 1.7f + f * 0.13f);
-    o[3] = 0.1f + 0.8f * bump(x * y * 5.3f + 0.2f * f);
+    o[0] = 0.1f + 0.8f * bump(x * 3.1f + (0.15f + 0.53f * f));
+    o[1] = 0.1f + 0.8f * bump(y * 2.3f + (0.35f + 0.47f * f));
+    o[2] = 0.1f + 0.8f * bump((x + y) * 1.7f + (0.13f + 0.53f * f));
+    o[3] = 0.1f + 0.8f * bump(x * y * 5.3f + (0.37f + 0.47f * f));
 }
 static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned cubemask){
     enum { NP = 256 };
