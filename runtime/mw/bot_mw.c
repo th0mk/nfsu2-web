@@ -7,18 +7,23 @@
  *
  *   bot gates       log the current bin's gates and its races (below)
  *   bot run N       play until the career's bin is N (or lower), then stop (`bot off` stops it at once);
- *                   bot run N races stops once the bin's races are won (a point to save at)
+ *                   bot run N races stops once the bin's races are won (a point to save at), bot run N races K once
+ *                   K of them are, bot run N ready once the rival's requirements are met (before his challenge)
  *   bot race I      engage race I of the bin's list and race it, then stop (a probe)
  *   bot pursuit     one pursuit in free roam, then stop (a probe)
  *   bot save        save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
  *   bot wait [N]    (career_mw.c) wait up to N frames for the bot to stop
  *
- * Its order in a bin (decide): the bin's races not won yet, the one tried least first, until the races the rival asks
- * are won; then pursuits until the milestones and the bounty are there; then the rival's challenge, engaged at its
- * first race's start (InGameRivalChallenge.fng, whose Enter accepts it).  Cops on the car in free roam (a pursuit
- * that began in a race goes on after it) are a pursuit first, whatever it was doing.  In a pursuit the AI drives
- * (pursuit_frame: what was tried besides, and dropped).  A bust adds a strike to the car, and with the career's one
- * car three busts end the career (GameOver.fng): the bot stops there, and on any career menu it does not know.
+ * Its order in a bin (decide): performance packages from a customization shop with the cash the career has (once a
+ * bin, and again when the cash has grown: shop_frame); the bin's races not won yet, the one tried least first (a lost
+ * race is raced again in its turn), until the races the rival asks are won; then pursuits until the milestones and
+ * the bounty are there; then the rival's challenge, engaged at its first race's start (InGameRivalChallenge.fng,
+ * whose Enter accepts it).  Cops on the car in free roam (a pursuit that began in a race goes on after it) are a
+ * pursuit first, whatever it was doing.  In a pursuit the AI drives, and a long chase or a boxed-in car is broken off
+ * by setting the car far away (pursuit_frame: what was tried besides, and dropped).  A bust adds a strike to the car,
+ * and with the career's one car three busts end the career (GameOver.fng): the bot stops there, and on any career
+ * menu it does not know.  The beaten rival's markers are taken as they come (two cards, face down); what they gave
+ * is logged from the cash and the cars before and after.
  *
  * The career's state, from speed.exe v1.3's code:
  *   the user profile [[0x91CF90]+0x10]: +0xB0 (byte) the current Blacklist bin (16 the prologue, 15 Sonny's),
@@ -67,6 +72,7 @@ double mw_game_time(void);
 
 #define G_PROFILES       0x0091cf90u     /* [+0x10] the user profile */
 #define PROF_BIN         0xb0u
+#define PROF_CASH        0xb4u           /* CareerSettings (+0xA8) +0xC: the cash the safehouse menu shows */
 #define PROF_CARDB       0x414u
 #define G_RACEDB         0x0091e004u
 #define G_RACESTATUS     0x0091e000u
@@ -109,8 +115,16 @@ static uint32_t call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *
 static uint32_t call1(CPU *c, uint32_t fn, uint32_t self, uint32_t a){ return mw_aid_call(c, fn, self, 1, &a); }
 
 /* ---- the career's state ---- */
-struct gates { int bin; uint32_t binobj; int won, won_req, ms, ms_req, bounty, bounty_req; };
+struct gates { int bin; uint32_t binobj; int won, won_req, ms, ms_req, bounty, bounty_req, cash, cars; };
 static uint32_t profile(void){ return rd(rd(G_PROFILES) + 0x10u); }
+/* the career's cars: FEPlayerCarDB's records (200 of 0x14 bytes, +0 the handle, -1 unused) with a career record (byte
+ * +0x11 not 0xFF; GAME 13.8), as Car Select in the safehouse counts them ('1 / 2') */
+static int career_cars(uint32_t prof){
+    int n = 0;
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu) n++;
+    return n;
+}
 static int read_gates(CPU *c, struct gates *g){
     memset(g, 0, sizeof *g);
     uint32_t prof = profile(), db = rd(G_RACEDB);
@@ -118,6 +132,8 @@ static int read_gates(CPU *c, struct gates *g){
     g->bin = MR8(prof + PROF_BIN);
     g->binobj = call1(c, FN_DB_BIN, db, (uint32_t)g->bin);
     g->bounty = (int)call(c, FN_BOUNTY, prof + PROF_CARDB, 0, 0);
+    g->cash = (int)rd(prof + PROF_CASH);
+    g->cars = career_cars(prof);
     if (!g->binobj) return 1;
     g->won = (int)(call(c, FN_BIN_WON, g->binobj, 0, 0) & 0xffffu);
     g->ms = (int)(call(c, FN_BIN_MS, g->binobj, 0, 0) & 0xffffu);
@@ -237,8 +253,28 @@ static int read_races(CPU *c, uint32_t binobj, struct race *r, int max, int boss
     return n;
 }
 static void log_gates(const struct gates *g, const char *why){
-    fprintf(stderr, "[mwbot] f=%ld t=%.1f gates (%s): bin %d races won %d/%d milestones %d/%d bounty %d/%d\n",
-            autotest_frame(), mw_game_time(), why, g->bin, g->won, g->won_req, g->ms, g->ms_req, g->bounty, g->bounty_req);
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f gates (%s): bin %d races won %d/%d milestones %d/%d bounty %d/%d cash %d cars %d\n",
+            autotest_frame(), mw_game_time(), why, g->bin, g->won, g->won_req, g->ms, g->ms_req, g->bounty, g->bounty_req,
+            g->cash, g->cars);
+}
+/* the career's cars by name: a record's vehicle key (+8) is h32 of the car's pvehicle name, one of the 38 racers (GAME
+ * 18); the current car is CareerSettings' first dword (profile +0xA8), a record's handle */
+static const char *car_name(uint32_t key){
+    static const char *const k[] = { "911turbo", "997s", "a3", "a4", "bmwm3gtr", "bmwm3gtre46", "camaro", "carreragt",
+        "caymans", "clio", "clk500", "cobaltss", "corvette", "corvettec6r", "cts", "db9", "eclipsegt", "elise", "fordgt",
+        "gallardo", "gti", "gto", "imprezawrx", "is300", "lancerevo8", "monaro", "murcielago", "mustanggt", "punto", "rx7",
+        "rx8", "sl500", "sl65", "slr", "speedtest", "supra", "tt", "viper", 0 };
+    for (int i = 0; k[i]; i++) if (h32(k[i]) == key) return k[i];
+    return "?";
+}
+static void log_cars(void){
+    uint32_t prof = profile(), cur = rd(prof + 0xa8u);
+    char b[300]; int o = 0;
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u && o < 260; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu)
+            o += snprintf(b + o, sizeof b - (size_t)o, " %s (handle %#x, career record %u%s)", car_name(rd(r + 8u)), MR32(r),
+                          MR8(r + 0x11u), MR32(r) == cur ? ", current" : "");
+    fprintf(stderr, "[mwbot]   the career's cars:%s\n", o ? b : " none");
 }
 static void log_races(const struct race *r, int n){
     for (int i = 0; i < n; i++)
@@ -248,8 +284,8 @@ static void log_races(const struct race *r, int n){
 }
 
 /* ---- the bot ---- */
-enum { B_OFF, B_ROAM, B_GOTO, B_ENGAGE, B_RACE, B_PURSUIT, B_SAVE, B_DONE };
-static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", "pursuit", "save", "done" };
+enum { B_OFF, B_ROAM, B_GOTO, B_ENGAGE, B_RACE, B_PURSUIT, B_SAVE, B_SHOP, B_DONE };
+static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", "pursuit", "save", "shop", "done" };
 #define SETTLE_S      1.5               /* game seconds in free roam before the bot decides */
 #define ENGAGE_TRIES  5                 /* Enters at a race's start before it is skipped for now */
 #define ENGAGE_EVERY  90                /* frames between them */
@@ -270,10 +306,17 @@ static struct {
     float tpos[3], tdir[3];             /* the start B_GOTO took the car to */
     uint32_t focus0, pursuit;
     int bounty0, forced;
-    int stop_races;                     /* bot run N races: stop once the races are won (a checkpoint to save) */
+    int stop_races;                     /* bot run N races [K]: stop once the races are won (a checkpoint to save) */
+    int stop_wins;                      /* K: stop once K of the bin's races are won */
+    int stop_ready;                     /* bot run N ready: stop once the rival's requirements are met */
     int after;                          /* B_PURSUIT: the state to go back to (0: B_ROAM, or the probe's end) */
-    double next_log;
+    double next_log, escape_t;          /* escape_t: the game time of the pursuit's last escape */
+    int escapes;                        /* and how many it had */
     float plen;                         /* the pursuit's length as it last showed it (s) */
+    long run_f0;                        /* the frame the run began */
+    /* B_SHOP (shop_frame, the shop's screens in mw_bot_present) */
+    int shop_bin, shop_cash, shop_tries, sh_started, sh_cat, sh_cat_done, sh_pk_new, sh_target, sh_entered, sh_paid;
+    long sh_total0, sh_spent, sh_cash0;
     struct gates g;
 } B;
 static void set_state(int st, const char *why){
@@ -324,15 +367,100 @@ static void go_to(CPU *c, const struct race *r){
     B.warps = 1;
     set_state(B_GOTO, 0);
 }
+
+/* ---- the customization shop: performance packages bought with the career's cash ----
+ * The shop is customshop_2 (GLOBAL/gameplay.bin menu_gate_customshop/zone_customshop_2, sim (-2563.89, 157.62,
+ * 1509.35)), engaged as career_shop.txt does it: the car set inside its zone, Enter, CUSTOMIZATION_SHOP.BIN and
+ * CustomizeMain.fng.  Performance (0xBAEF8282, its second item 0x4B4E388B) opens CustomizeCategory.fng's seven
+ * packages, items 0x4B4E388A on: engine, transmission, suspension, nitrous, tires, brakes, turbo.  Each opens
+ * CustomizePerformance.fng, the package's levels (3 or 4, 'k / N' in the strings of label 0x18, RIGHT to the next)
+ * with the highlighted level's cost (0x7D5ABBC0 'cost'), the funds (0x073B79E0), the cart's total (0x4C8EB254) and
+ * the trade-in of the part on the car (0x8CDCB8ED).  Seen at bin 13 (cash 47,950, stock parts): engine 5,500,
+ * 14,200, 29,800, 98,000; transmission 4,800 to 75,200; suspension 3,600, 7,600, 10,000; nitrous 4,900 to 18,000;
+ * tires 1,400 to 11,800; brakes 3,100 to 26,800; turbo 5,400, 25,000, 76,000.  Enter on a level that is locked
+ * (later rivals unlock them) or beyond the funds does nothing: the total stays.  So the bot goes to the dearest level
+ * the money left (less SHOP_RESERVE) reaches, Enter, and reads the total: risen, the level is in the cart and the
+ * package is done (Escape); else the next lower level, down to the first.  A level is tried only when it costs more
+ * than twice the trade-in of the part on the car (no step down).  After the seventh package Escape opens
+ * ShoppingCart.fng when the cart holds something: Enter checks out, Dialog.fng's Yes pays, CustomizeMain.fng comes
+ * back; Escape there leaves the shop for free roam.  The bot shops when a bin begins (its first decision) and again
+ * when the cash has grown by SHOP_AGAIN since. */
+#define SHOP_RESERVE  8000              /* cash kept back (a bust's fines, an impounded car's release) */
+#define SHOP_MIN      1400              /* the cheapest level seen */
+#define SHOP_AGAIN    15000
+#define SHOP_CATS     7
+#define SHOP_TRIES    5
+static const char *const shop_cat_name[SHOP_CATS] = { "engine", "transmission", "suspension", "nitrous", "tires", "brakes", "turbo" };
+static const float shop_pos[3] = { -2563.89f, 157.62f, 1509.35f }, shop_dir[3] = { 1.0f, 0.0f, 0.0f };
+static int shop_wanted(const struct gates *g){
+    if (B.once || g->cash < SHOP_RESERVE + SHOP_MIN) return 0;
+    return B.shop_bin != g->bin || g->cash >= B.shop_cash + SHOP_AGAIN;
+}
+static void go_shop(CPU *c, const struct gates *g){
+    B.sh_started = B.sh_cat = B.sh_cat_done = B.sh_pk_new = B.sh_entered = B.sh_paid = 0; B.sh_target = 0;
+    B.sh_spent = 0; B.sh_cash0 = g->cash;
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f the shop: cash %d, to customshop_2\n", autotest_frame(), mw_game_time(), g->cash);
+    mw_aid_autopilot(c, AP_STAND);
+    memcpy(B.tpos, shop_pos, sizeof B.tpos); memcpy(B.tdir, shop_dir, sizeof B.tdir);
+    mw_aid_teleport(c, shop_pos, shop_dir);
+    set_state(B_SHOP, "performance packages");
+}
+static void shop_frame(CPU *c){
+    long f = autotest_frame();
+    if (!B.sh_started){                 /* at the gate: Enter until the shop's menu comes (mw_bot_present takes it) */
+        if (pursuit_on(c, B_ROAM)) return;
+        if (mw_fe_input_top(0) || !settled(c) || f - B.last_tap < ENGAGE_EVERY) return;
+        if (B.tries >= SHOP_TRIES){
+            B.shop_bin = B.g.bin; B.shop_cash = B.g.cash;   /* not again in this bin (or until SHOP_AGAIN more) */
+            set_state(B_ROAM, "the shop did not open"); return;
+        }
+        autotest_tap(DIK_RETURN, 6); B.last_tap = f; B.tries++;
+        return;
+    }
+    if (!settled(c)) return;            /* left the shop: free roam again */
+    struct gates g; read_gates(c, &g);
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f shop over: spent %ld, cash %ld -> %d\n", f, mw_game_time(), B.sh_spent, B.sh_cash0,
+            g.cash);
+    B.shop_cash = g.cash;
+    set_state(B_ROAM, "shop over");
+}
+/* a number in what a screen shows (mw_fe_shows): the value of the first string after the one that begins with KEY
+ * ("'cost" ... ":9588bd38'5,500"), commas skipped; -1 when not there */
+static long shows_num(const char *s, const char *key){
+    const char *k = strstr(s, key);
+    if (!k) return -1;
+    const char *q = strchr(k + strlen(key), ':');
+    q = q ? strchr(q, '\'') : 0;
+    if (!q) q = strchr(k + strlen(key), '^');
+    if (!q) return -1;
+    long v = 0; int any = 0;
+    for (q++; *q && *q != ' '; q++){ if (*q >= '0' && *q <= '9'){ v = v * 10 + (*q - '0'); any = 1; } else if (*q != ',') break; }
+    return any ? v : -1;
+}
+/* the i-th string of label LABEL ("00000018") as a number, -1 when not there */
+static long shows_nth(const char *s, const char *label, int i){
+    char k[16]; snprintf(k, sizeof k, ":%s", label);
+    for (const char *p = s; (p = strstr(p, k)); p += strlen(k))
+        if (i-- == 0){ const char *q = p + strlen(k) + 1; return *q >= '0' && *q <= '9' ? strtol(q, 0, 10) : -1; }
+    return -1;
+}
+int mw_fe_shows(char *out, int cap);                         /* fe_mw.c */
+
 static void decide(CPU *c){
     struct gates g; struct race r[MAX_RACES];
     if (!read_gates(c, &g)){ set_state(B_DONE, "no career"); return; }
-    if (memcmp(&g, &B.g, sizeof g)) log_gates(&g, "now");
+    if (memcmp(&g, &B.g, sizeof g)){ log_gates(&g, "now"); if (g.cars != B.g.cars) log_cars(); }
     B.g = g;
     if (B.target && g.bin <= B.target){
-        fprintf(stderr, "[mwbot] f=%ld t=%.1f reached bin %d\n", autotest_frame(), mw_game_time(), g.bin);
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f reached bin %d (%ld frames after bot run)\n", autotest_frame(), mw_game_time(),
+                g.bin, autotest_frame() - B.run_f0);
         set_state(B_DONE, "the target bin"); return;
     }
+    if (B.stop_wins && g.won >= B.stop_wins){ set_state(B_DONE, "the races asked for are won (bot run N races K)"); return; }
+    if (B.stop_ready && g.won >= g.won_req && g.ms >= g.ms_req && g.bounty >= g.bounty_req){
+        set_state(B_DONE, "the rival's requirements are met (bot run N ready)"); return;
+    }
+    if (shop_wanted(&g)){ go_shop(c, &g); return; }
     int n = read_races(c, g.binobj, r, MAX_RACES, 0), pick = -1;
     if (g.won < g.won_req)              /* the race not won yet that was tried the least (a lost race waits its turn) */
         for (int i = 0; i < n; i++)
@@ -363,6 +491,35 @@ static void decide(CPU *c){
     set_state(B_DONE, "the rival's requirements are met; the challenge did not engage");
 }
 
+/* a bin's top heat (gameplay.bin's MaxHeatLevel, GAME 13.7: 15-13 2, 12-9 3, 8-5 4, 4-1 5; the prologue's 1) */
+static int bin_max_heat(int bin){ return bin >= 16 ? 1 : bin >= 13 ? 2 : bin >= 9 ? 3 : bin >= 5 ? 4 : 5; }
+/* a chase broken off (pursuit_frame): the car to the place of the bin's race farthest from it */
+#define ESCAPE_LEN    300.0f            /* the chase's length (s) at which it is broken off */
+#define ESCAPE_BUST   1.0f              /* or the bust timer (s; 5 = busted) */
+#define ESCAPE_GAP_S  20.0              /* game seconds between two escapes of one pursuit (10 when boxed in) */
+#define ESCAPE_MAX    6                 /* escapes in one pursuit */
+#define ESCAPE_FAR_M  800.0f
+static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
+    struct gates g; struct race r[MAX_RACES];
+    float p[3] = { 0 }, kmh = 0;
+    B.escape_t = mw_game_time(); B.escapes++;
+    if (!read_gates(c, &g) || !mw_aid_where(c, p, &kmh)) return;
+    int n = read_races(c, g.binobj, r, MAX_RACES, 0), best = -1;
+    float bd = 0;
+    for (int i = 0; i < n; i++){
+        float d = hypotf(r[i].pos[0] - p[0], r[i].pos[2] - p[2]);
+        if (r[i].params && d > bd){ bd = d; best = i; }
+    }
+    if (best < 0 || bd < ESCAPE_FAR_M){
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: no race place %.0f m away (farthest %.0f m)\n",
+                autotest_frame(), mw_game_time(), B.escapes, ESCAPE_FAR_M, bd);
+        return;
+    }
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: chase %.0f s, bust timer %.1f, perp bounty %u, at %.0f %.0f %.0f "
+            "%.0f km/h: to race %d's place, %.0f m away\n", autotest_frame(), mw_game_time(), B.escapes, len, bust, pbounty,
+            p[0], p[1], p[2], kmh, best, bd);
+    mw_aid_teleport(c, r[best].pos, r[best].dir);
+}
 static void pursuit_frame(CPU *c){
     uint32_t perp = 0, po = mw_aid_pursuit(c, &perp);
     double t = mw_game_time();
@@ -373,15 +530,19 @@ static void pursuit_frame(CPU *c){
             mw_aid_autopilot(c, 1); B.tries = 1; B.bounty0 = B.g.bounty;
         }
         if (po){
-            B.raced = 1; B.pursuit = po; B.next_log = t;
+            B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9;
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
                     B.forced ? " (forced)" : " (by itself)", rdf(perp + PERP_HEAT), rdf(po + 0x9cu), rdf(po + 0xa0u),
                     rd(po + PURSUIT_COPS));
         } else if (B.tries == 1 && t - B.t0 >= PURSUIT_NATURAL_S && free_roam(c)){
-            call1(c, FN_FORCE_PURSUIT, 0, 1u);
+            /* at the bin's top heat (the pursuit holds it in the bin's range anyway): forced at heat 1 the pursuits of
+             * bin 14 mostly ended within 12 s for 100 bounty, while the one at heat 1.96 ran 176 s for 7,700 (bot run
+             * of 2026-10-30) */
+            uint32_t heat = (uint32_t)bin_max_heat(B.g.bin);
+            call1(c, FN_FORCE_PURSUIT, 0, heat);
             B.forced = 1; B.tries = 2;
-            fprintf(stderr, "[mwbot] f=%ld t=%.1f no pursuit after %.0f s of driving: Game.ForcePursuitStart(1)\n", f, t,
-                    t - B.t0);
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f no pursuit after %.0f s of driving: Game.ForcePursuitStart(%u)\n", f, t,
+                    t - B.t0, heat);
         }
         return;
     }
@@ -396,7 +557,19 @@ static void pursuit_frame(CPU *c){
          * alone two pursuits of about ten ended busted in Sonny's bin, three of four in the next, each within 6 s of a
          * wedge reset; a reset at once when the car was down to walking speed with a cop at it (bust timer 1.0) was
          * followed by the bust too (the timer at 4.9 a second later, twice): a reset in a pursuit is a bust, so there is
-         * none (career_mw.c's wedge watch leaves a pursuit alone). */
+         * none (career_mw.c's wedge watch leaves a pursuit alone).
+         * What the AI cannot do is lose the cops: at the top heat of bin 13 a chase ran 550 s with five cops on the car
+         * at up to 236 km/h, 28,925 bounty on it, and ended busted (bot run of 2026-10-30), and a bust keeps none of
+         * the chase's bounty or milestones.  So a chase that has run ESCAPE_LEN, or whose bust timer is ESCAPE_BUST on
+         * (the car boxed in), is broken off the way the bot reaches a race: the car set at the place of one of the
+         * bin's races at least ESCAPE_FAR_M away (the farthest), the AI driving on from there.  The cops lose it, their
+         * search runs its cooldown and the game ends the pursuit as evaded, banking the bounty and the milestones
+         * itself. */
+        float bust = rdf(po + PURSUIT_BUST_T), len = rdf(po + PURSUIT_TIME);
+        uint32_t pst = rd(po + PURSUIT_STATE);
+        if (pst == 0 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
+            (bust >= ESCAPE_BUST || len >= ESCAPE_LEN) && !mw_fe_input_top(0))
+            pursuit_escape(c, len, bust, rd(perp + 0x20u));
         if (t >= B.next_log){
             B.next_log = t + 15.0;
             float kmh = 0, p[3] = { 0 }; mw_aid_where(c, p, &kmh);
@@ -409,8 +582,8 @@ static void pursuit_frame(CPU *c){
     }
     if (!settled(c)) return;            /* the pursuit's end: its screens first */
     struct gates g; read_gates(c, &g);
-    fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit over (%.0f s long, %.0f s of game time in all): bounty %d -> %d, "
-            "milestones %d -> %d\n", f, t, B.plen, t - B.t0, B.bounty0, g.bounty, B.g.ms, g.ms);
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit over (%.0f s long, %.0f s of game time in all, %d escapes): bounty %d -> %d, "
+            "milestones %d -> %d\n", f, t, B.plen, t - B.t0, B.escapes, B.bounty0, g.bounty, B.g.ms, g.ms);
     mw_aid_autopilot(c, AP_STAND);
     B.raced = 0; B.pursuit = 0; B.forced = 0;
     if (B.once && !B.after){ set_state(B_DONE, "the probe's pursuit is over"); return; }
@@ -476,7 +649,8 @@ void mw_bot_frame(CPU *c){
         }
         break;
     case B_PURSUIT: pursuit_frame(c); break;
-    case B_SAVE:                        /* from free roam: the pause menu (the screens do the rest, mw_bot_present) */
+    case B_SHOP: shop_frame(c); break;
+    case B_SAVE:                       /* from free roam: the pause menu (the screens do the rest, mw_bot_present) */
         if (pursuit_on(c, B_SAVE)) break;
         if (settled(c) && f - B.last_tap >= 90){ autotest_tap(DIK_ESCAPE, 6); B.last_tap = f; }
         break;
@@ -497,7 +671,15 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_ITEM2    0x4b4e388bu
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
-static struct { char name[64]; uint32_t focus, save_last; long since, last; int taps, marker_enter, save_same; } S;
+static struct { char name[64]; uint32_t focus, save_last; long since, last; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars; } S;
+/* the screens whose strings the bot logs once they settle (the rewards and results it does not read otherwise) */
+static int shows_logged(const char *nm){
+    static const char *const k[] = { "SafehouseMarkers.fng", "SafeHouseRivalChallenge.fng", "PostRace_Results.fng",
+        "PostRace_MilestoneRewards.fng", "PostRace_Pursuit.fng", "InGameRivalChallenge.fng", "Infractions.fng",
+        "Car_Select.fng", "GameOver.fng", "SafeHouseRivalBio.fng", "ShoppingCart.fng", 0 };
+    for (int i = 0; k[i]; i++) if (!strcasecmp(nm, k[i])) return 1;
+    return 0;
+}
 void mw_bot_present(void){
     if (B.st == B_OFF || B.st == B_DONE) return;
     uint32_t focus = 0;
@@ -505,11 +687,29 @@ void mw_bot_present(void){
     long f = autotest_frame();
     if (!nm){ S.name[0] = 0; return; }
     if (strcmp(nm, S.name) || focus != S.focus){
-        if (strcmp(nm, S.name)){ S.taps = 0; S.since = f; }
+        if (strcmp(nm, S.name)){
+            /* the markers' cards show no names (pictures): what they gave is told by the career's cash and cars
+             * before the screen and after it (a pink slip is a car more; a part, an impound box or a get out of jail
+             * card changes neither) */
+            uint32_t prof = profile();
+            if (!strcasecmp(nm, "SafehouseMarkers.fng")){
+                if (!S.mk_open){ S.mk_open = 1; S.mk_cash = (int)rd(prof + PROF_CASH); S.mk_cars = career_cars(prof); }
+            } else if (S.mk_open){
+                S.mk_open = 0;
+                fprintf(stderr, "[mwbot] f=%ld markers taken: cash %d -> %d, cars %d -> %d\n", f, S.mk_cash,
+                        (int)rd(prof + PROF_CASH), S.mk_cars, career_cars(prof));
+            }
+            S.taps = 0; S.since = f; S.shown = 0;
+        }
         fprintf(stderr, "[mwbot] f=%ld screen %s @%08x (%s)\n", f, nm, focus, st_name[B.st]);
         snprintf(S.name, sizeof S.name, "%s", nm); S.focus = focus;
     }
     if (f - S.last < 45 || f - S.since < 30) return;
+    if (!S.shown && shows_logged(nm)){
+        char sh[1600]; mw_fe_shows(sh, sizeof sh);
+        fprintf(stderr, "[mwbot] f=%ld %s shows%s\n", f, nm, sh);
+        S.shown = 1;
+    }
     unsigned key = DIK_RETURN; const char *what = "Enter";
     int save = B.st == B_SAVE;
     if (!strcasecmp(nm, "GameOver.fng") || !strcasecmp(nm, "MC_List.fng") ||
@@ -548,8 +748,56 @@ void mw_bot_present(void){
          * card and takes it, and the highlight stays on that card, so the next is RIGHT, then Enter (bot run of
          * 2026-10-30: Enter again on the taken card did nothing, ten times) */
         if (S.marker_enter){ key = DIK_RIGHT; what = "RIGHT to another marker"; S.marker_enter = 0; }
-        else { what = "Enter: take the highlighted marker"; S.marker_enter = 1; }
+        else { what = "Enter: take the highlighted marker"; S.marker_enter = 1; S.shown = 0; }   /* the card turned: logged */
     }
+    else if (B.st == B_SHOP && !strcasecmp(nm, "CustomizeMain.fng")){
+        if (!B.sh_started){                 /* in: once per bin (or SHOP_AGAIN more cash), whatever comes of it */
+            B.sh_started = 1; B.sh_cat = 0; B.sh_cat_done = 0; B.shop_bin = B.g.bin; B.shop_cash = B.g.cash;
+        }
+        if (B.sh_cat >= SHOP_CATS || B.sh_paid){ key = DIK_ESCAPE; what = "Escape: leave the shop"; }
+        else if (focus != F_ITEM2){ key = focus < F_ITEM2 ? DIK_RIGHT : DIK_LEFT; what = "to Performance"; }
+        else what = "Enter on Performance";
+    }
+    else if (B.st == B_SHOP && !strcasecmp(nm, "CustomizeCategory.fng")){
+        if (B.sh_cat_done){ B.sh_cat++; B.sh_cat_done = 0; }
+        uint32_t want = F_ITEM1 + (uint32_t)B.sh_cat;
+        if (B.sh_cat >= SHOP_CATS){ key = DIK_ESCAPE; what = "Escape: the packages are done (to the cart if it holds any)"; }
+        else if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = "to the next package"; }
+        else { what = "Enter on the package"; B.sh_pk_new = 1; }
+    }
+    else if (B.st == B_SHOP && !strcasecmp(nm, "CustomizePerformance.fng")){
+        char sh[2048]; mw_fe_shows(sh, sizeof sh);
+        long cost = shows_num(sh, "'cost"), funds = shows_num(sh, "'funds:"), total = shows_num(sh, "'total:"),
+             trade = shows_num(sh, "'Trade_in:"), nlev = shows_nth(sh, "00000018", 0), idx = shows_nth(sh, "00000018", 2);
+        const char *cat = B.sh_cat < SHOP_CATS ? shop_cat_name[B.sh_cat] : "?";
+        if (B.sh_pk_new){
+            B.sh_pk_new = 0; B.sh_target = (int)nlev; B.sh_entered = 0; B.sh_total0 = total;
+            fprintf(stderr, "[mwbot] f=%ld shop: %s, %ld levels, funds %ld, cart %ld, trade-in %ld\n", f, cat, nlev, funds,
+                    total, trade);
+        }
+        if (B.sh_entered){              /* the Enter's answer: the cart's total risen, or not (locked) */
+            B.sh_entered = 0;
+            if (total > B.sh_total0){
+                B.sh_spent += total - B.sh_total0;
+                fprintf(stderr, "[mwbot] f=%ld shop: %s level %ld/%ld in the cart (%ld; cart %ld)\n", f, cat, idx, nlev,
+                        total - B.sh_total0, total);
+                B.sh_cat_done = 1;
+            } else {
+                fprintf(stderr, "[mwbot] f=%ld shop: %s level %ld/%ld (%ld): not taken (locked)\n", f, cat, idx, nlev, cost);
+                B.sh_target = (int)idx - 1;
+            }
+        }
+        if (B.sh_cat_done){ key = DIK_ESCAPE; what = "Escape: the package is done"; }
+        else if (B.sh_target < 1 || idx < 1 || nlev < 1){
+            B.sh_cat_done = 1; key = DIK_ESCAPE; what = "Escape: no level of this package bought";
+        }
+        else if (idx != B.sh_target){ key = idx < B.sh_target ? DIK_RIGHT : DIK_LEFT; what = "to a level"; }
+        else if (cost > 0 && funds >= 0 && cost <= funds - total - SHOP_RESERVE && cost > 2 * trade){
+            B.sh_entered = 1; B.sh_total0 = total; what = "Enter: the level into the cart";
+        }
+        else { B.sh_target--; return; }   /* beyond the money left, or not above the part on the car: the next lower */
+    }
+    else if (B.st == B_SHOP && !strcasecmp(nm, "ShoppingCart.fng")){ what = "Enter: check out"; B.sh_paid = 1; }
     else if (!strcasecmp(nm, "MainMenu_Sub.fng") && mw_fe_match("MainMenu_Sub.fng:e596c4a3")){
         /* Save is the menu's last item (the 0x532220 set-up adds it last), and the menu grows with the career (Rap
          * Sheet; five items after the second rival), so the bot goes RIGHT until the highlight stops moving, twice in
@@ -605,6 +853,7 @@ void mw_bot_cmd(CPU *c, const char *args){
         struct gates g; struct race r[MAX_RACES];
         if (!read_gates(c, &g)){ fprintf(stderr, "[mwbot] f=%ld gates: no career\n", f); return; }
         log_gates(&g, "asked");
+        log_cars();
         log_races(r, read_races(c, g.binobj, r, MAX_RACES, 0));
         fprintf(stderr, "[mwbot]   the rival's races:\n");
         log_races(r, read_races(c, g.binobj, r, MAX_RACES, 1));
@@ -613,10 +862,14 @@ void mw_bot_cmd(CPU *c, const char *args){
     if (!strcasecmp(a1, "off")){ mw_aid_autopilot(c, 0); set_state(B_OFF, "bot off"); return; }
     memset(&B, 0, sizeof B);
     if (!strcasecmp(a1, "run")){
-        char a3[16] = {0};
-        sscanf(args, "%*s %*d %15s", a3);
-        B.target = n; B.stop_races = !strcasecmp(a3, "races");
-        mw_aid_autopilot(c, 2); set_state(B_ROAM, B.stop_races ? "bot run, until the races are won" : "bot run");
+        char a3[16] = {0}; int k = 0;
+        sscanf(args, "%*s %*d %15s %d", a3, &k);
+        B.target = n; B.stop_races = !strcasecmp(a3, "races"); B.stop_wins = B.stop_races ? k : 0;
+        B.stop_ready = !strcasecmp(a3, "ready");
+        B.run_f0 = f;
+        mw_aid_autopilot(c, 2);
+        set_state(B_ROAM, B.stop_wins ? "bot run, until K races are won" : B.stop_races ? "bot run, until the races are won"
+                        : B.stop_ready ? "bot run, until the rival's requirements are met" : "bot run");
         return;
     }
     if (!strcasecmp(a1, "save")){ S.save_same = 0; S.save_last = 0; set_state(B_SAVE, "bot save"); return; }

@@ -308,3 +308,18 @@ uint32_t mw_fe_object(const char *package, uint32_t hash){
     }
     return 0;
 }
+
+/* what the top package that takes input draws (its strings, as NFSU2_FNG_LOG=3 logs them: " :LABEL'TEXT", ^ for the
+ * highlighted one), for the career bot's lines (bot_mw.c: the marker cards turned, the shop's packages, the car lot's
+ * cars); the string's length, 0 when no package takes input */
+int mw_fe_shows(char *out, int cap){
+    uint32_t e = engine(), top = 0; int k = 0;
+    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < LIST_MAX; p = rd(p + PKG_NEXT), k++)
+        if (rd(p + PKG_INPUT) & 0xffu) top = p;
+    if (cap < 80){ if (cap > 0) out[0] = 0; return 0; }
+    out[0] = 0;
+    if (!top) return 0;
+    struct shows s = { out, 0, cap, 0 };
+    drawn(top, str_shows, &s);
+    return s.o;
+}

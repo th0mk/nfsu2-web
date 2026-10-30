@@ -59,22 +59,32 @@ save: the car lot's 32 cars shown in turn; the car tables' check at the profile'
 
 The career bot (runtime/mw/bot_mw.c, TRACKER M4-15; test-only): `bot run N` plays the career from where the save
 left it until the Blacklist bin is N, through the game's own paths only: it reads the bin's gates the way the
-Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), engages the bin's races at
-their own start (the engage trigger stands at the race's start grid), lets the game's AI race them from their GO (a
-car the AI wedges is put back on the road by the game's RESET, `carreset`), earns milestones and bounty in pursuits
-(the AI drives about until the cops start one; Game.ForcePursuitStart(1) after 60 s of game time without one), then
-engages the rival's challenge at its first race's start (InGameRivalChallenge.fng: Enter accepts), takes two of the
-beaten rival's markers (SafehouseMarkers.fng), and answers the screens on the way (results, text messages, a bust's
-fine, the safehouse menu); it stops at GameOver.fng (the only car impounded after its third bust) and at a career
-menu it did not ask for;
+Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), buys performance packages at a
+customization shop with the career's cash (the dearest level of each package the shop takes, once a bin and again
+when the cash has grown), engages the bin's races at their own engage trigger, lets the game's AI race them from
+their GO (a lost race is raced again in its turn; a car the AI wedges is put back on the road by the game's RESET,
+`carreset`), earns milestones and bounty in pursuits (the AI drives about until the cops start one;
+Game.ForcePursuitStart at the bin's top heat after 60 s of game time without one), then engages the rival's
+challenge at its first race's start (InGameRivalChallenge.fng: Enter accepts), takes two of the beaten rival's
+markers (SafehouseMarkers.fng; the cards it turned are logged), and answers the screens on the way (results, text
+messages, a bust's fine, the safehouse menu); it stops at GameOver.fng (the only car impounded after its third bust)
+and at a career menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
 race I` and `bot pursuit` do one race or one pursuit, `bot wait [N]` waits for the bot to stop.  `career_bot.txt`
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
 `bot_probe.txt` runs two single steps, `BOT_A` then `BOT_B` (for example `run 15`, then `race 0` or `pursuit`);
-`bot_segment.txt` runs one (`BOT_A`, for example `run 13 races`: the bin's races, then stop) and saves at the
-safehouse, a seed for the next segment.  A car the AI wedges is reset the game's way, but not in a pursuit: a reset
-with cops on the car ends in the bust.
+`bot_segment.txt` runs one (`BOT_A`, for example `run 13 races`: the bin's races, then stop; `run 14 races 2`: two
+of them; `run 13 ready`: until the rival's requirements are met) and saves at the safehouse, a seed for the next
+segment.  A car the AI wedges is reset the game's way, but not in a pursuit: a reset with cops on the car ends in the
+bust.
 Run them with `NFSU2_SUITE_LIVE=1` to follow the log while they run.
+
+The Blacklist's regression scripts (TRACKER M4-13; bugs other ports reported, FEATURES F-004), each seeded with one of
+the career bot's seeds: `career_bl15.txt` (Sonny beaten from bin15_ready: his stats screen, the markers, the next
+rival's bio in order, none stuck, and the counter at 14; codepdbh #84), `career_bl15_race3.txt` (the third race of
+bin 15 from bin15_two, two races won: engaged, 15 % in, won; #112) and `career_bl14.txt` (the rival's race of bin 14
+from bin14_ready: 15 % in, won, the bin at 13; #162).  `career_unlocks.txt` (a probe, with NFSU2_FNG_LOG=3) shows a
+career save's Quick Race track lists (M4-44).
 
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
 Game.ForcePursuitStart, the game's AI driving, waited on to its end, which the game decides: evaded or busted) and
