@@ -254,6 +254,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "Le profil {name} de {file} ne peut pas être restauré : {why}.",
   "{file} has no profile the game can load: {list}.": "{file} ne contient aucun profil que le jeu peut charger : {list}.",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file} ne contient que des jaquettes DVD ou des couvertures de magazine : elles vont avec leur profil, dans un zip du dossier NFS Underground 2.",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file} contient des sauvegardes de {game}, pas de ce jeu : restaurez-le sur la page de ce jeu-là.",
   "{file} has no save files.": "{file} ne contient aucun fichier de sauvegarde.",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": {
     "one": "Ajoute le profil de {file} à ce navigateur. Les autres profils d'ici, les options du jeu et settings.ini restent tels quels.",

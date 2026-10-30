@@ -218,6 +218,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "{file} içindeki {name} profili geri yüklenemiyor: {why}.",
   "{file} has no profile the game can load: {list}.": "{file} içinde oyunun yükleyebileceği bir profil yok: {list}.",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file} yalnızca DVD ya da dergi kapakları içeriyor: bunlar profilleriyle birlikte, NFS Underground 2 klasörünün zip'i içinde gelir.",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file}, bu oyunun değil {game} oyununun kayıtlarını içeriyor: onu o oyunun sayfasında geri yükle.",
   "{file} has no save files.": "{file} içinde kayıt dosyası yok.",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": {
     "one": "{file} içindeki profili bu tarayıcıya ekler. Buradaki diğer profiller, oyunun seçenekleri ve settings.ini olduğu gibi kalır.",

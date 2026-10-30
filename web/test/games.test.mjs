@@ -8,6 +8,8 @@
 //    file without a shared one, stops the build; a game's body edits (src/games/<id>/body.json) are made in its
 //    index.html, as i18n-keys.mjs reads it, and one that does not fit stops the build.
 // 3. Most Wanted's body edits fit today's index.html: its name, its keys, no Underground 2 panel.
+// 4. Each game's marks in a backup (src/games/save-marks.ts: its profiles' folder, how its settings.ini starts, its
+//    registry.txt's first-start value) are its own files' and no other game's.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -150,4 +152,25 @@ test('Most Wanted\'s page body: its name and keys, no Underground 2 panel (src/g
   assert.doesNotMatch(body, /Underground 2|Hydraulics|Drift mode|Quick chat|outrun|Photo mode|Garage &gt; Save|id="about"|id="changes"/);
   assert.match(body, /<section class="panel" id="online" aria-labelledby="online-title" hidden>/);
   assert.match(body, /<kbd>G<\/kbd><\/dt><dd data-i18n>Speedbreaker<\/dd>/);
+});
+
+test('each game\'s marks in a backup (src/games/save-marks.ts) are its own files\' and no other game\'s', async () => {
+  const entry = `export { SAVE_MARKS } from './src/games/save-marks.ts';\n` +
+    GAMES.map(g => `export * as ${g} from './src/games/${g}/index.ts';`).join('\n');
+  const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: WEB, loader: 'ts' }, bundle: true, format: 'esm', write: false,
+    platform: 'neutral', loader: { '.txt': 'text', '.png': 'dataurl' } })).outputFiles[0].text;
+  const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+  assert.deepEqual(P.SAVE_MARKS.map(m => m.game).sort(), [...GAMES].sort(), 'every game has its marks');
+  for (const m of P.SAVE_MARKS) {
+    const g = P[m.game];
+    assert.ok(m.title.trim(), m.game);
+    assert.equal(m.profilesDir, g.PROFILES_DIR, m.game);
+    assert.ok(g.SETTINGS_TEMPLATE.startsWith(m.settings), `${m.game}: its settings.ini starts with ${m.settings}`);
+    assert.match(g.REGISTRY_DEFAULTS, m.registry, `${m.game}: its registry.txt seed`);
+    for (const o of P.SAVE_MARKS.filter(x => x !== m)) {
+      assert.notEqual(o.profilesDir.toLowerCase(), m.profilesDir.toLowerCase(), `${m.game} and ${o.game}`);
+      assert.ok(!g.SETTINGS_TEMPLATE.startsWith(o.settings), `${m.game}'s settings.ini is not ${o.game}'s`);
+      assert.doesNotMatch(g.REGISTRY_DEFAULTS, o.registry, `${m.game}'s registry.txt is not ${o.game}'s`);
+    }
+  }
 });

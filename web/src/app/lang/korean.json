@@ -218,6 +218,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "{file}의 {name} 프로필을 복원할 수 없어요: {why}.",
   "{file} has no profile the game can load: {list}.": "{file} 파일에 게임이 불러올 수 있는 프로필이 없어요: {list}.",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file} 파일에는 DVD나 잡지 커버만 있어요. 커버는 NFS Underground 2 폴더를 압축한 zip에서 해당 프로필과 함께 복원돼요.",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file} 파일은 이 게임이 아니라 {game}의 저장 파일이에요. 그 게임의 페이지에서 복원하세요.",
   "{file} has no save files.": "{file} 파일에 저장 파일이 없어요.",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": "{file}의 프로필을 이 브라우저에 추가해요. 여기 있는 다른 프로필, 게임 옵션, settings.ini는 그대로 유지돼요.",
   "{name} (with its {n} cover shoots)": "{name}(커버 촬영 {n}개 포함)",

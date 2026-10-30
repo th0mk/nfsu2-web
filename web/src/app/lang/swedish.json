@@ -245,6 +245,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "Profilen {name} i {file} kan inte återställas: {why}.",
   "{file} has no profile the game can load: {list}.": "{file} har ingen profil som spelet kan ladda: {list}.",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file} innehåller bara DVD- eller tidningsomslag: de följer med sin profil, i en zip-fil av mappen NFS Underground 2.",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file} innehåller sparfiler från {game}, inte från det här spelet: återställ den på det spelets sida.",
   "{file} has no save files.": "{file} har inga sparfiler.",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": {
     "one": "Lägger till profilen i {file} i den här webbläsaren. De andra profilerna här, spelets alternativ och settings.ini förblir som de är.",

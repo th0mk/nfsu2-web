@@ -6,6 +6,7 @@
 //   "NFS Underground 2/<the name inside>/", its cover shoots beside it, other files are left out
 // - a zip with registry.txt or settings.ini at its top is a backup of the page's and
 //   replaces everything, as before; a cover shoot is no profile in its list
+// - Most Wanted's saves (a backup of its page, its PC folder) are refused by any of their marks
 // - a profile the game would not load (version, a name its field does not make) is
 //   left out with why, its cover shoots too; one a save editor changed (checksums
 //   that no longer hold) comes in sealed again, as the game would have saved it, and
@@ -174,6 +175,26 @@ test('a backup of the page\'s restores in place, without a profile the game woul
   assert.deepEqual([P.profileName(e), e[9000]], [{ name: 'EDIT', edited: false }, edited[9000]], 'sealed again, the edit kept');
   const inside = await readBackup(z({ 'registry.txt': 'x', [at('NAMEA')]: profile('NAMEB') }));
   assert.deepEqual([inside.profiles, inside.refused], [[], [{ name: 'NAMEA', why: 'the name inside is "NAMEB"' }]]);
+});
+
+test('Most Wanted\'s saves are refused (src/games/save-marks.ts): nothing of them comes in', async () => {
+  const mw = (() => { const u = Buffer.alloc(63596); u.write('20CM', 0, 'latin1'); return new Uint8Array(u); })();
+  const REG = 'd FirstTime=1\nd VERSION=1\n', INI = '# NFS Most Wanted settings, read at every launch.\nfps = 60\n';
+  const MW = 'NFS Most Wanted/ALPHA/ALPHA';
+  for (const [what, files, kind] of [
+    ['a backup of its page', { 'registry.txt': REG, 'settings.ini': INI, [MW]: mw }, 'backup'],
+    ['one with no profile', { 'registry.txt': REG, 'settings.ini': INI }, 'backup'],
+    ['its settings.ini alone', { 'settings.ini': INI }, 'backup'],
+    ['its registry.txt alone', { 'registry.txt': REG }, 'backup'],
+    ['the PC game\'s folder', { [`Documents/${MW}`]: mw }, 'profiles'],
+  ]) {
+    const r = await readBackup(z(files));
+    assert.deepEqual([r.other, r.kind, paths(r), r.profiles], ['Need for Speed Most Wanted', kind, [], []], what);
+  }
+  // this game's marks win: its backup with a stray Most Wanted folder restores as before
+  const own = await readBackup(z({ 'registry.txt': 'd NotFirstTime=1\n', 'settings.ini': '# NFSU2 settings, read at every launch.\n',
+    [at('frik')]: profile('frik'), [MW]: mw }));
+  assert.deepEqual([own.other, own.kind, own.profiles], [undefined, 'backup', ['frik']]);
 });
 
 /** the save folder in memory, as savefs.ts filesOf gives it */

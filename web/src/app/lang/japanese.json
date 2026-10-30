@@ -218,6 +218,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "{file}のプロフィール{name}は復元できません: {why}。",
   "{file} has no profile the game can load: {list}.": "{file}には、ゲームが読み込めるプロフィールがありません: {list}。",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file}にはDVDや雑誌のカバーしか含まれていません。カバーは、NFS Underground 2フォルダーのzipから、そのプロフィールと一緒に復元されます。",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file}はこのゲームではなく{game}のセーブデータです。そのゲームのページで復元してください。",
   "{file} has no save files.": "{file}にはセーブファイルがありません。",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": "{file}のプロフィールをこのブラウザに追加します。ここにあるほかのプロフィール、ゲームのオプション、settings.iniはそのままです。",
   "{name} (with its {n} cover shoots)": "{name}（カバー撮影{n}件を含む）",

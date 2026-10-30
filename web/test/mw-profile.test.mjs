@@ -6,7 +6,8 @@
 //   the new name and passes the checks; a name the game's field does not make, a wrong size or Underground 2's
 //   profile is refused
 // - the Saves section with Most Wanted's module (saves-ui.ts readBackup, addProfiles): a PC folder's aliases found
-//   wherever the zip has them, an edited one sealed again with a warning, a backup of the page's restored in place
+//   wherever the zip has them, an edited one sealed again with a warning, a backup of the page's restored in place,
+//   Underground 2's saves (a backup of its page, its PC folder) refused by any of their marks (src/games/save-marks.ts)
 // - real saves, when there are any (the game's own, never in the repository: $NFSMW_SAVES, else out/career/seeds, each
 //   folder a save tree with "NFS Most Wanted/<ALIAS>/<ALIAS>"): every one passes the checks under its folder's name,
 //   sealing one again gives it byte for byte, a renamed copy passes too, and an edit is found and sealed again
@@ -167,6 +168,36 @@ test('restore: a backup of the page\'s comes back in place, without an alias the
   assert.deepEqual(r.profiles, ['ALPHA']);
   assert.deepEqual(r.refused.map(x => x.name), ['BAD']);
   assert.deepEqual(paths(r), sorted(['registry.txt', 'settings.ini', at('ALPHA'), 'nfsmw000.tga']));
+});
+
+test('restore: Underground 2\'s saves are refused, by any of its marks; Most Wanted\'s own with a stray folder are not', async () => {
+  const ug2 = (() => { const u = Buffer.alloc(54966); u.write('20CM', 0, 'latin1'); return new Uint8Array(u); })();
+  const REG = 'd NotFirstTime=1\nd VERSION=1\n', INI = '# NFSU2 settings, read at every launch.\nmovies = off\n';
+  const U2 = 'NFS Underground 2/ALPHA/ALPHA';
+  for (const [what, files, kind] of [
+    ['a backup of its page', { 'registry.txt': REG, 'settings.ini': INI, [U2]: ug2 }, 'backup'],
+    ['one with no profile', { 'registry.txt': REG, 'settings.ini': INI }, 'backup'],
+    ['its settings.ini alone', { 'settings.ini': INI }, 'backup'],
+    ['its registry.txt alone (no type letter too)', { 'registry.txt': 'NotFirstTime=1\n' }, 'backup'],
+    ['zipped from a folder', { 'saves/registry.txt': REG, 'saves/settings.ini': INI, [`saves/${U2}`]: ug2 }, 'backup'],
+    ['its profiles beside a settings.ini with no mark',{ 'settings.ini': 'fps = 60\n', [U2]: ug2 }, 'backup'],
+    ['the PC game\'s folder', { [U2]: ug2 }, 'profiles'],
+    ['the PC game\'s folder, deeper', { [`Documents/${U2}`]: ug2, 'Documents/x.txt': 'hi' }, 'profiles'],
+  ]) {
+    const r = await readBackup(z(files));
+    assert.deepEqual([r.other, r.kind, paths(r), r.profiles], ['Need for Speed Underground 2', kind, [], []], what);
+  }
+  // Most Wanted's marks win: a backup of its page with a stray Underground 2 folder or line restores as before
+  const own = await readBackup(z({ 'registry.txt': 'd FirstTime=1\nd NotFirstTime=1\n', 'settings.ini': '# NFS Most Wanted settings, read at every launch.\n',
+    [at('ALPHA')]: alias('ALPHA'), [U2]: ug2 }));
+  assert.deepEqual([own.other, own.kind, own.profiles], [undefined, 'backup', ['ALPHA']]);
+  for (const ini of ['# NFS Most Wanted settings, read at every launch.\n', 'fps = 60\n']) {
+    const r = await readBackup(z({ 'settings.ini': ini, 'registry.txt': 'd FirstTime=1\n' }));
+    assert.deepEqual([r.other, r.kind, paths(r)], [undefined, 'backup', ['registry.txt', 'settings.ini']], ini);
+  }
+  // no marks at all: a zip of profiles found by what they hold, as before (Underground 2's, refused by its size)
+  const bare = await readBackup(z({ 'x/ug2/ug2': ug2 }));
+  assert.deepEqual([bare.other, bare.kind, bare.refused.map(x => x.name)], [undefined, 'profiles', ['ug2']]);
 });
 
 // ---------------------------------------------------------------- real saves --

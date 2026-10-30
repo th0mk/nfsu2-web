@@ -2,7 +2,8 @@
 // be renamed: profile.ts renameProfile), a backup of the whole save
 // overlay as a zip (profiles, registry.txt, settings.ini, screenshots) and
 // restoring one, or adding the PC game's profiles beside the ones here
-// (readBackup tells them apart), and the F12 screenshots (shots.ts); a keyphrase's saves come in as a
+// (readBackup tells them apart, and refuses another game's: src/games/save-marks.ts), and the F12 screenshots
+// (shots.ts); a keyphrase's saves come in as a
 // backup does (readVault, restoreVault: vault-ui.ts).  And the section at the bottom of the page, the game data on
 // this PC: how much of it, all of it downloaded ahead (predownload.ts), or
 // deleted.  The game data is never part of a backup and never written back:
@@ -11,6 +12,7 @@
 import { cacheBytes, clearCache, clearSaveDir, filesOf, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
 import { AUTOSAVE_SEEN, coverOf, isProfileFile, modCars, NAME_MAX, profileName, renameProfile, sealed } from '@game/profile';
 import { FILE_PREFIX } from '@game/run';
+import { SAVE_MARKS } from '../games/save-marks';
 import type { RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
@@ -88,7 +90,8 @@ export async function exportSaves(saveDir: string): Promise<{ zip: Uint8Array; f
 
 export interface Restore {
   /**
-   * 'backup': a backup of this page's (registry.txt or settings.ini at its top), which replaces everything here;
+   * 'backup': a backup of this page's (registry.txt or settings.ini at its top, and no other game's: other), which
+   * replaces everything here;
    * 'profiles': profiles alone, as the PC game keeps them (its NFS Underground 2 folder zipped in any shape, or one
    * profile's file), added beside the ones here (addProfiles)
    */
@@ -103,6 +106,9 @@ export interface Restore {
   modded: string[];
   /** profiles a save editor changed (profile.ts profileName's edited): sealed again, restored with a warning */
   edited: string[];
+  /** another game's saves (a backup of its page, its PC folder): that game's name, and nothing of them comes in here
+   *  (entries and profiles are empty) */
+  other?: string;
 }
 
 type FileIn = { path: string; data: Uint8Array; mtime?: number };
@@ -126,7 +132,24 @@ export async function readBackup(buf: Uint8Array, fileName = 'the file'): Promis
     return (other += size) <= MAX_OTHER || ((other -= size), false);
   }, refused);
   const files = all.map(e => ({ path: local(e.name)!, data: e.data, mtime: e.mtime }));
-  return files.some(e => e.path === 'registry.txt' || e.path === 'settings.ini') ? backupIn(files, refused) : profilesIn(files, refused);
+  const kind = files.some(e => e.path === 'registry.txt' || e.path === 'settings.ini') ? 'backup' : 'profiles';
+  // another game's marks and none of this one's: its saves stay out, whatever the zip's kind
+  const games = gamesIn(names, files), foreign = SAVE_MARKS.find(m => m.profilesDir !== PROFILES_DIR && games.has(m.game));
+  if (foreign && !SAVE_MARKS.some(m => m.profilesDir === PROFILES_DIR && games.has(m.game)))
+    return { kind, entries: [], profiles: [], skipped: refused, refused: [], modded: [], edited: [], other: foreign.title };
+  return kind === 'backup' ? backupIn(files, refused) : profilesIn(files, refused);
+}
+
+/**
+ * The games whose saves a zip holds, by their marks (src/games/save-marks.ts): a folder of the game's profiles anywhere
+ * in it (names: the entries' paths as zipped), or at its top (files) a settings.ini or registry.txt as that game
+ * writes them.
+ */
+function gamesIn(names: string[], files: FileIn[]): Set<string> {
+  const dirs = new Set(names.flatMap(n => n.split('/').slice(0, -1).map(lower)));
+  const text = (p: string, max?: number) => { const e = files.find(f => f.path === p); return e ? new TextDecoder().decode(e.data.subarray(0, max)) : ''; };
+  const ini = text('settings.ini', 256), reg = text('registry.txt');
+  return new Set(SAVE_MARKS.filter(m => dirs.has(lower(m.profilesDir)) || ini.startsWith(m.settings) || m.registry.test(reg)).map(m => m.game));
 }
 
 /** A backup of this page's: every entry, but a profile the game would not load and its cover shoots. */
@@ -486,6 +509,11 @@ export class SavesPanel {
       const name = file.name;
       this.msg(() => err instanceof ZipError ? t('{file} cannot be restored: {why}.', { file: name, why: err.message === 'not a zip file' ? t('it is neither a backup (a zip) nor a profile of the game\'s') : err.message })
         : t('{file} cannot be read: {error}', { file: name, error: String(err) }));
+      return;
+    }
+    if (r.other) {
+      const name = file.name, game = r.other;
+      this.msg(() => t('{file} holds saves of {game}, not of this game: restore it on that game\'s page.', { file: name, game }));
       return;
     }
     const refused = r.refused.map(x => `${x.name}: ${x.why}`).join('; ');

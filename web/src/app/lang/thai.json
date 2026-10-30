@@ -218,6 +218,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "กู้คืนโปรไฟล์ {name} ใน {file} ไม่ได้: {why}",
   "{file} has no profile the game can load: {list}.": "{file} ไม่มีโปรไฟล์ที่เกมโหลดได้: {list}",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file} มีแค่ปก DVD หรือปกนิตยสาร: ปกต้องมาพร้อมโปรไฟล์ของมัน ในไฟล์ zip ของโฟลเดอร์ NFS Underground 2",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file} เป็นเซฟของ {game} ไม่ใช่ของเกมนี้: ให้กู้คืนในหน้าของเกมนั้น",
   "{file} has no save files.": "{file} ไม่มีไฟล์เซฟ",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": "เพิ่มโปรไฟล์ใน {file} ลงในเบราว์เซอร์นี้ โปรไฟล์อื่นที่นี่ ตัวเลือกของเกม และ settings.ini จะยังเหมือนเดิม",
   "{name} (with its {n} cover shoots)": "{name} (พร้อมภาพถ่ายปก {n} ชุด)",

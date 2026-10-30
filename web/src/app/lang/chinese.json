@@ -218,6 +218,7 @@
   "The profile {name} in {file} cannot be restored: {why}.": "無法還原 {file} 中的玩家檔案 {name}：{why}。",
   "{file} has no profile the game can load: {list}.": "{file} 中沒有遊戲能載入的玩家檔案：{list}。",
   "{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.": "{file} 只含有 DVD 或雜誌封面：封面必須和所屬的玩家檔案一起，放在 NFS Underground 2 資料夾的 zip 檔中。",
+  "{file} holds saves of {game}, not of this game: restore it on that game's page.": "{file} 是 {game} 的存檔，不是這款遊戲的：請在該遊戲的頁面上還原。",
   "{file} has no save files.": "{file} 中沒有存檔檔案。",
   "Adds the profiles in {file} to this browser. The other profiles here, the game's options and settings.ini stay as they are.": "將 {file} 中的玩家檔案加入此瀏覽器。此處的其他玩家檔案、遊戲選項與 settings.ini 都維持不變。",
   "{name} (with its {n} cover shoots)": "{name}（含 {n} 個封面拍攝）",
