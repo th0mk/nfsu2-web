@@ -150,9 +150,10 @@ export function dxt1ToAstc(src: Uint8Array, off: number, pitch: number, bw: numb
 
 // DXT3 and DXT5 (BC2, BC3): a DXT1-like colour block (always four colours) after 8 bytes of alpha, 16 explicit 4-bit
 // values or two endpoints and 3-bit codes.  Unpacked to BGRA8 they take 4x their size; as ASTC 4x4, 1x.  Block by block:
-//   one alpha over the whole block (85 % of the blocks in both games, 60 % opaque): one plane, exact.  Opaque, the
-//     block dxt1ToAstc writes for its colours; otherwise endpoint mode 12 (RGBA direct) at 8 bits, alpha the same at
-//     both ends.  The colour is what the DXT1 rewriting gives (the thirds at 21 and 43 of 64).
+//   one alpha over the whole block (85 % of the blocks in both games, 60 % opaque): one plane, the alpha exact.
+//     Opaque, the block dxt1ToAstc writes for its colours; otherwise endpoint mode 12 (RGBA direct) at 8 bits, alpha
+//     the same at both ends.  The colour is what the DXT1 rewriting gives, not exact: the thirds at 21 and 43 of 64,
+//     at most 2 of 255 off.
 //   alphas that vary: two planes of 2-bit weights (block mode 0x442), endpoint mode 12, alpha the second plane.  The
 //     64 weight bits leave 45 for the 8 endpoint values: range 48 (a trit and 4 bits each), so the colours are no
 //     longer exact (at most 7 of 255 off, 0.7 on average in the games' textures) and the alpha has 4 levels a block

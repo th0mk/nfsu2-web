@@ -342,8 +342,9 @@ The game thread keeps `com.c` (D3D9 state, shader translation) and records throu
   level gets two-plane blocks (alpha exact, the colour under a transparent texel the darker endpoint, not black).
   `?astc=0` on the test page unpacks DXT1 too (and DXT3 and DXT5).
 - DXT3 and DXT5 go up as ASTC 4x4 there too (`dxtAlphaToAstc`, both games), block for block. A block of one alpha
-  (85 % of the blocks of both games' DXT3 and DXT5 textures, 60 % opaque) is one plane and exact: opaque, the very
-  block DXT1's colours get; otherwise endpoint mode 12 at 8 bits, the alpha the same at both ends. A block whose alpha
+  (85 % of the blocks of both games' DXT3 and DXT5 textures, 60 % opaque) is one plane, its alpha exact and its colour
+  what DXT1's rewriting gives (the thirds at 21 and 43 of 64: at most 2 of 255 off): opaque, the very block DXT1's
+  colours get; otherwise endpoint mode 12 at 8 bits, the alpha the same at both ends. A block whose alpha
   varies gets two planes of 2-bit weights (block mode 0x442, endpoint mode 12, alpha the second plane): the 45
   endpoint bits left give range 48, so its colours are a few steps off (at most 7 of 255) and its alpha has 4 levels
   in the block where DXT5 has 8 and DXT3 16 (at most 43 off; 0.5 on average over all the texels of those textures,
