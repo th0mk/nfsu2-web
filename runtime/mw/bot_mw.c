@@ -81,7 +81,9 @@ double mw_game_time(void);
 #define FN_FORCE_PURSUIT 0x0060aac0u     /* Game.ForcePursuitStart(min heat) */
 #define PERP_HEAT        0x1cu
 #define PURSUIT_COPS     0x20u
-#define PURSUIT_TIME     0xb4u
+#define PURSUIT_TIME     0xb4u           /* the chase's length (s): it stops while the cops search */
+#define PURSUIT_BUST_T   0xdcu           /* the bust timer (s; 5 = busted) */
+#define PURSUIT_STATE    0x218u          /* 0 the chase, 2 the cops' search (the cooldown, +0xFC filling to 1), 3 busted */
 #define DIK_ESCAPE 0x01u
 #define DIK_RETURN 0x1cu
 #define DIK_LEFT   0xcbu
@@ -161,6 +163,9 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define RACE_START_MAX 6000             /* frames from Accept to the race going active */
 #define PURSUIT_NATURAL_S 60.0          /* game seconds of free driving for a pursuit to start by itself */
 #define SKIP_MAX      3
+#define PURSUIT_LONG  150.0f            /* chase seconds the bot waits for the cops to find the car again */
+#define BUST_RESET_S  1.5f              /* the bust timer (s) at which a boxed-in car is reset */
+#define RIVAL_NEXT_WAIT 1800            /* frames the bot waits in free roam for the rival's next race to come by itself */
 #define POST_WAIT     2400              /* frames from a race's end to its result screen, at most (after it the bot goes on) */
 #define AP_STAND      4                 /* career_mw.c's autopilot: the AI lets the car go now, and takes the next race at its GO */
 #define GOTO_NEAR_M   20.0f             /* the car at a start: this near it (X, Z) */
@@ -177,6 +182,8 @@ static struct {
     int after;                          /* B_PURSUIT: the state to go back to (0: B_ROAM, or the probe's end) */
     double next_log;
     float plen;                         /* the pursuit's length as it last showed it (s) */
+    int standing;                       /* the car waits for the cops (the AI let it go) */
+    double last_reset;                  /* the last boxed-in reset (game time) */
     struct gates g;
 } B;
 static void set_state(int st, const char *why){
@@ -252,10 +259,14 @@ static void decide(CPU *c){
     struct race b[8];
     int nb = read_races(c, g.binobj, b, 8, 1);
     if (!B.boss_logged){ B.boss_logged = 1; log_races(r, n); fprintf(stderr, "[mwbot]   the rival's races:\n"); log_races(b, nb); }
+    int done = 0;
+    for (int i = 0; i < nb; i++) done += (b[i].flags & 2u) != 0;
+    if (done && done < nb && autotest_frame() - B.f0 < RIVAL_NEXT_WAIT) return;   /* its next race may come by itself */
     if (nb > 0 && b[0].params && B.boss_tries < SKIP_MAX){
         B.boss_tries++; B.race = -1;
-        fprintf(stderr, "[mwbot] f=%ld t=%.1f the rival's challenge (hash %08x, try %d): to its start %.2f %.2f %.2f\n",
-                autotest_frame(), mw_game_time(), b[0].hash, B.boss_tries, b[0].pos[0], b[0].pos[1], b[0].pos[2]);
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f the rival's challenge (hash %08x, try %d, races won %d of %d): to its "
+                "start %.2f %.2f %.2f\n", autotest_frame(), mw_game_time(), b[0].hash, B.boss_tries, done, nb, b[0].pos[0],
+                b[0].pos[1], b[0].pos[2]);
         go_to(c, &b[0]); return;
     }
     set_state(B_DONE, "the rival's requirements are met; the challenge did not engage");
@@ -285,12 +296,33 @@ static void pursuit_frame(CPU *c){
     }
     if (po){
         B.plen = rdf(po + PURSUIT_TIME);
+        /* a longer chase: when the cops lose the car (the pursuit's search, state 2, its cooldown filling) before the
+         * chase has lasted PURSUIT_LONG s, the AI lets the car stand where the cops lost it, so that they find it
+         * again (a longer chase is more bounty, and milestones ask for one); the AI drives again as soon as the chase
+         * is back on or a cop is close enough to start the bust timer */
+        /* boxed in by the cops: the bust timer runs while the car is slow with a cop at it (5 s = busted), and the AI
+         * does not get out of a box (pursuit runs of 2026-10-30: wedged at 2 km/h, busted 8 s on); the game's RESET
+         * (career_mw.c, as the wedge watch uses it) puts the car on the road nearby, once every few seconds */
+        float bust = rdf(po + PURSUIT_BUST_T), kmh = 0, at[3];
+        if (bust >= BUST_RESET_S && !B.standing && t - B.last_reset >= 3.0 && mw_aid_where(c, at, &kmh) && kmh < 20.0f){
+            int ok = mw_reset_car(c);
+            B.last_reset = t;
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: boxed in (bust timer %.1f s at %.0f km/h): reset %s\n", f, t,
+                    B.plen, bust, kmh, ok > 0 ? "done" : "found no place");
+        }
+        int search = rd(po + PURSUIT_STATE) == 2u && B.plen < PURSUIT_LONG && bust <= 0.0f;
+        if (search != B.standing){
+            B.standing = search;
+            mw_aid_autopilot(c, search ? AP_STAND : 1);
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: %s\n", f, t, B.plen, search
+                    ? "the cops lost the car (search): it waits for them" : "the chase is on again: the AI drives");
+        }
         if (t >= B.next_log){
             B.next_log = t + 15.0;
             float kmh = 0, p[3] = { 0 }; mw_aid_where(c, p, &kmh);
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: heat %.2f cops %u bust %.1f perp bounty %u at %.0f %.0f "
                     "%.0f %.0f km/h\n", f, t, rdf(po + PURSUIT_TIME), rdf(perp + PERP_HEAT), rd(po + PURSUIT_COPS),
-                    rdf(po + 0xdcu), rd(perp + 0x20u), p[0], p[1], p[2], kmh);
+                    rdf(po + PURSUIT_BUST_T), rd(perp + 0x20u), p[0], p[1], p[2], kmh);
         }
         return;
     }
@@ -299,7 +331,7 @@ static void pursuit_frame(CPU *c){
     fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit over (%.0f s long, %.0f s of game time in all): bounty %d -> %d, "
             "milestones %d -> %d\n", f, t, B.plen, t - B.t0, B.bounty0, g.bounty, B.g.ms, g.ms);
     mw_aid_autopilot(c, AP_STAND);
-    B.raced = 0; B.pursuit = 0; B.forced = 0;
+    B.raced = 0; B.pursuit = 0; B.forced = 0; B.standing = 0;
     if (B.once && !B.after){ set_state(B_DONE, "the probe's pursuit is over"); return; }
     int back = B.after ? B.after : B_ROAM;
     B.after = 0;
@@ -312,6 +344,7 @@ void mw_bot_frame(CPU *c){
     switch (B.st){
     case B_ROAM:
         if (pursuit_on(c, B_ROAM)) break;
+        if (game_flow() == g_game.flow_race && racing(c)){ set_state(B_RACE, "a race began (the rival's next)"); break; }
         if (settled(c)) decide(c);
         break;
     case B_GOTO: {                      /* at the start: Enter until the engage dialog comes */
@@ -395,6 +428,14 @@ void mw_bot_present(void){
     if (f - S.last < 45 || f - S.since < 30) return;
     unsigned key = DIK_RETURN; const char *what = "Enter";
     int save = B.st == B_SAVE;
+    if (!strcasecmp(nm, "InGameRivalChallenge.fng") && B.st == B_GOTO){
+        /* the rival's challenge at its start: Enter accepts it (its handler 0x551790 on the accept message, 0x406415E3,
+         * when the challenge may start: +0x2D), and the game takes the car to the race; Escape (0x911AB364) declines */
+        autotest_tap(DIK_RETURN, 6); S.last = f; S.taps++;
+        fprintf(stderr, "[mwbot] f=%ld %s @%08x: Enter, the rival's challenge accepted\n", f, nm, focus);
+        set_state(B_ENGAGE, "the rival's challenge accepted");
+        return;
+    }
     if (!strcasecmp(nm, "EngageEventDialog.fng")){
         if (B.st == B_GOTO){            /* the bot's: Accept is to the left of the default Decline */
             if (!B.focus0_set){ B.focus0 = focus; B.focus0_set = 1; }
