@@ -22,7 +22,15 @@
 //!   asks each second without naming one and gets the whole list in MAP datagrams (at most nine of 230), nearest
 //!   first, each place and heading (512 from a page before 2048).
 //!
-//! The links, in each room: the pairs of players with a position younger than `stale_ms` (60 s: one in a shop or a
+//! Layers: each room's players sit in layers of at most `layer_max` (1000) browsers, and the hub treats a room's
+//! layer as a room of its own: only players of one layer are linked, on each other's world map and in each other's
+//! race lobby lists (a player's snapshots go to its links only, so it sees nobody of another layer).  A player is
+//! seated at its first HELLO and keeps its layer while it is here (or until a HELLO names another room): another
+//! endpoint of its browser sits with it; else it goes to the layer with room where the most of its crew-mates are,
+//! else to the first layer with room, so layer 0 fills first and a seat left there is taken before a new layer opens.
+//! The console's `info` counts each room's layers' browsers (`layers`, for a room with more than one).
+//!
+//! The links, in each room's layer: the pairs of players with a position younger than `stale_ms` (60 s: one in a shop or a
 //! race keeps its links for a while), nearest first, each player at most its degree of them.  "Nearest" looks ahead,
 //! for the cars a player will see: a pair counts at the nearest of
 //! - its distance once both cars went on `soon_ms` (1 s) at the speeds their last SNAPs gave (from where those SNAPs
@@ -173,6 +181,9 @@ pub struct RoamOptions {
     pub map_max: usize,
     pub map_gap_ms: f64,
     pub map_fresh_ms: f64,
+    /// the most browsers of a layer: a room's players are seated in layers of at most this many as they come, and
+    /// only players of one layer see each other (links, world map, race lobbies)
+    pub layer_max: usize,
 }
 
 impl Default for RoamOptions {
@@ -200,6 +211,7 @@ impl Default for RoamOptions {
             map_max: 2048,
             map_gap_ms: 250.0,
             map_fresh_ms: 5_000.0,
+            layer_max: 1000,
         }
     }
 }

@@ -44,7 +44,8 @@ fn bench_with(
     crews: &dyn Fn(u32) -> Vec<u32>,
     blocks: &dyn Fn(u32) -> Vec<String>,
 ) {
-    let mut k = Kit::new(RoamOptions { max_players: 4096, ..RoamOptions::default() });
+    // (each room one layer: the links of a room of them all)
+    let mut k = Kit::new(RoamOptions { max_players: 4096, layer_max: 4096, ..RoamOptions::default() });
     let mut r = Lcg(7);
     let mut pos: Vec<[f64; 3]> =
         (0..players).map(|_| [r.unit() * area - area / 2.0, r.unit() * area - area / 2.0, r.unit() * 20.0]).collect();

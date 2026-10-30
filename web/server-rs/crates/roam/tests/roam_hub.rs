@@ -464,7 +464,8 @@ fn in_free_roam_by_room() {
 // (each walked every player's links: 2000 players' 64,000)
 #[test]
 fn a_player_that_comes_and_goes_costs_the_hub_little() {
-    let mut k = Kit::new(RoamOptions::default());
+    // (2000 players in one layer: a tick of them all)
+    let mut k = Kit::new(RoamOptions { layer_max: 4096, ..RoamOptions::default() });
     let v = |i: u32| 0x0A4D_0100 + i;
     let crowd = |k: &mut Kit| {
         for i in 0..2000u32 {
