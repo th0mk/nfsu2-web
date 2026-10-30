@@ -70,7 +70,11 @@
  *     poke ADDR VAL            write dword VAL to ADDR (debug only)
  *     pokestr EXPR TEXT        write TEXT and its NUL at EXPR (trace's syntax,
  *                              so [0x91cf90]+0x134 follows a pointer; test only:
- *                              a name the game's own text entry refuses)
+ *                              a name the game's own text entry refuses).  EXPR
+ *                              is one word; TEXT runs to the line's end or its
+ *                              # comment, less the spaces at its end: no # in
+ *                              it, ${VAR} expanded as on every line, at most
+ *                              199 characters
  *     wzero [now]              world-time origin for absolute Nwms lines: the
  *                              start of the current race (GameFlow 6) when
  *                              racing, else (or with "now") the current time
@@ -412,10 +416,17 @@ static void load_script(const char *path){
             e.n = a2[0] ? atol(a2) : 1; if (e.n < 1 || e.n > 64) e.n = 1; }
         else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = (uint32_t)strtoul(a1, 0, 0);
             e.val = (uint32_t)strtoul(a2, 0, 0); }
-        else if (!strcasecmp(cmd, "pokestr")){ e.cmd = C_POKESTR; e.xtext = strdup(a1);
+        else if (!strcasecmp(cmd, "pokestr")){ e.cmd = C_POKESTR;
             const char *sp = rest; while (*sp && !isspace((unsigned char)*sp)) sp++;
+            size_t xn = (size_t)(sp - rest);
             while (isspace((unsigned char)*sp)) sp++;
-            snprintf(e.text, sizeof e.text, "%s", sp); }
+            size_t tn = strlen(sp);
+            while (tn && isspace((unsigned char)sp[tn - 1])) tn--;     /* the spaces before a # comment */
+            if (!xn || xn >= sizeof a1 || tn >= sizeof e.text){
+                fprintf(stderr, "[autotest] script line %d: pokestr EXPR TEXT: %s\n", ln, !xn ? "no address"
+                        : xn >= sizeof a1 ? "the address over 63 characters" : "the text over 199 characters");
+                continue; }
+            e.xtext = strdup(a1); memcpy(e.text, sp, tn); e.text[tn] = 0; }
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
         else if (!strcasecmp(cmd, "breakfng")){ e.cmd = C_BREAKFNG; snprintf(e.text, sizeof e.text, "%s", a1); }
