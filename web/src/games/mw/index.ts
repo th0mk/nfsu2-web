@@ -8,5 +8,7 @@ export const GAME = 'mw';
 export const SITE_NAME = 'Most Wanted';
 // Underground 2's, for now
 export { PROFILES_DIR, REGISTRY_DEFAULTS, SETTINGS_TEMPLATE, APP_DEFAULTS, LANGUAGES, VAULT_PREFIX } from '../ug2';
+// its own
+export { STORAGE } from './storage';
 
 export type Checked = Profile<typeof self>;

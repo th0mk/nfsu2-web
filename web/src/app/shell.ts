@@ -711,13 +711,12 @@ function setReach(ok: boolean) {
   if (ok) void checkNewer();
 }
 /** Offline mode (sw.ts) keeps the page, its scripts, the module and the list of game files in this browser.  Asked
- *  for once the module has loaded, so a first visit downloads the module once (the copy is the HTTP cache's). */
+ *  for once the module has loaded, so a first visit downloads the module once (the copy is the HTTP cache's).  Its
+ *  scope is the page's base: where both games share an address, each game's worker answers only for its own pages,
+ *  and a page never registers one for the root. */
 function keepForOffline() {
   if (!('serviceWorker' in navigator) || !isSecureContext) return;
-  // sw.ts keeps the root's addresses ('/', '/main.js', ...): under another base it would keep the root's page, and
-  // a page there must never register a worker for the root.  None, until the service worker takes the base.
-  if (BASE !== '/') { log.add(`[app] offline mode is not available under ${BASE} yet`); return; }
-  navigator.serviceWorker.register(at('sw.js')).catch(e => log.add(`[app] offline mode is not available here: ${e}`));
+  navigator.serviceWorker.register(at('sw.js'), { scope: BASE }).catch(e => log.add(`[app] offline mode is not available here: ${e}`));
 }
 /** where the server is, without its name or address */
 function serverKind(): string {
@@ -1590,7 +1589,8 @@ async function reload() {
  *  again once the module has loaded, and its install takes new copies from the server. */
 async function reloadFromServer() {
   await saves.settled();
-  try { await (await navigator.serviceWorker?.getRegistration())?.unregister(); } catch { /* none, or not here */ }
+  // this page's own worker, the one at its base (never another game's, at another base of the address)
+  try { await (await navigator.serviceWorker?.getRegistration(BASE))?.unregister(); } catch { /* none, or not here */ }
   location.reload();
 }
 /** Offline mode's copies answer first for a while after the server did not (sw.ts); it answers now, so the start

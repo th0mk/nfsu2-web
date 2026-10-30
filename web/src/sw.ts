@@ -24,18 +24,30 @@
 // at a time: offline, a start gets the module its /game.json names, or none.
 // The page registers this once the module has loaded (shell.ts), so the first
 // visit downloads the module once, and the copy comes from the HTTP cache.
+//
+// Every address here is under the page's base (src/base.ts), where this file
+// is: '/' where a server serves one game at its root, '/u2/' or '/mw/' where
+// both games share one address.  The worker's scope is that base, its copies
+// are the game's own (STORAGE: each game's Cache Storage name, and the start of
+// its older ones, which it deletes), and a request outside the base is never
+// answered here: it goes to the network as if there were no worker.
+
+import { STORAGE } from '@game/storage';
 
 declare const self: ServiceWorkerGlobalScope;
 export {};
 
-const CACHE = 'nfsu2-offline-2';
-const PAGE = '/', MODULE = '/game.wasm';
+/** the page's base path: this file's folder ('/', '/u2/', '/mw/') */
+const BASE = new URL('./', self.location.href).pathname;
+const CACHE = STORAGE.OFFLINE_CACHE;
+const PAGE = BASE, MODULE = BASE + 'game.wasm', GAME_JSON = BASE + 'game.json';
 /** what a start needs, and the module; the page loads the first five itself before Play */
-const KEPT = ['/', '/main.js', '/main.css', '/game.json', '/data-manifest',
-  '/host/game-worker.js', '/host/io-worker.js', '/host/predownload-worker.js', '/gpu/png-worker.js', '/audio/worklet.js'];
+const KEPT = ['', 'main.js', 'main.css', 'game.json', 'data-manifest',
+  'host/game-worker.js', 'host/io-worker.js', 'host/predownload-worker.js', 'gpu/png-worker.js', 'audio/worklet.js'].map(p => BASE + p);
 const LATER = KEPT.slice(4);
 /** the start page's language files (i18n.ts): one is kept once the page fetched it, and kept up to date with the rest */
-const LANG = /^\/lang\/[a-z]+\.json$/;
+const LANG = /^lang\/[a-z]+\.json$/;
+const isLang = (path: string) => path.startsWith(BASE) && LANG.test(path.slice(BASE.length));
 const NAV_WAIT_MS = 4000, OFFLINE_MS = 30_000;
 let offlineUntil = 0;
 
@@ -44,9 +56,9 @@ function keyOf(r: Request): string | null {
   if (r.method !== 'GET' || r.headers.has('range')) return null;
   const u = new URL(r.url);
   if (u.origin !== self.location.origin) return null;
-  if (r.mode === 'navigate') return u.pathname === '/' || u.pathname === '/index.html' ? PAGE : null;
+  if (r.mode === 'navigate') return u.pathname === PAGE || u.pathname === BASE + 'index.html' ? PAGE : null;
   if (u.pathname === MODULE) return /^\?v=[\w-]+$/.test(u.search) ? MODULE + u.search : null;
-  return !u.search && (KEPT.includes(u.pathname) || LANG.test(u.pathname)) ? u.pathname : null;
+  return !u.search && (KEPT.includes(u.pathname) || isLang(u.pathname)) ? u.pathname : null;
 }
 
 /** keep a 200 answer, unless the copy has its ETag already; a module replaces the one kept before */
@@ -61,7 +73,7 @@ async function keep(cache: Cache, key: string, res: Response, kept?: Response) {
 
 /** the module the kept /game.json names (from the HTTP cache once the page has loaded it) */
 async function keepModule(cache: Cache) {
-  const info = await (await cache.match('/game.json', { ignoreVary: true }))?.json() as { module?: string } | undefined;
+  const info = await (await cache.match(GAME_JSON, { ignoreVary: true }))?.json() as { module?: string } | undefined;
   if (!info?.module) return;
   const key = `${MODULE}?v=${encodeURIComponent(info.module)}`;
   const kept = await cache.match(key, { ignoreVary: true });
@@ -92,7 +104,7 @@ async function answer(e: FetchEvent, key: string): Promise<Response> {
     }
     e.waitUntil((async () => {
       await keep(cache, key, res.clone(), kept);
-      if (key === PAGE) await refresh(cache, [...LATER, ...(await cache.keys()).map(r => new URL(r.url).pathname).filter(p => LANG.test(p))]);
+      if (key === PAGE) await refresh(cache, [...LATER, ...(await cache.keys()).map(r => new URL(r.url).pathname).filter(isLang)]);
     })().catch(() => {}));
     return res;
   } catch (err) {
@@ -112,7 +124,7 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k.startsWith('nfsu2-offline-') && k !== CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if (k.startsWith(STORAGE.OFFLINE_PREFIX) && k !== CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });

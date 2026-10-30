@@ -10,5 +10,6 @@ export { default as REGISTRY_DEFAULTS } from '../../../../app/registry-defaults.
 export { TEMPLATE as SETTINGS_TEMPLATE, APP_DEFAULTS } from '../../app/settings';
 export { LANGUAGES } from '../../app/i18n';
 export { PREFIX as VAULT_PREFIX } from '../../app/vault';
+export { STORAGE } from './storage';
 
 export type Checked = Profile<typeof self>;

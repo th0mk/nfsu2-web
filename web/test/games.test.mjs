@@ -24,7 +24,7 @@ test('every game\'s profile has the same fields and its own id', async () => {
     platform: 'neutral', loader: { '.txt': 'text', '.png': 'dataurl' } })).outputFiles[0].text;
   const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
   const fields = Object.keys(P.ug2).sort();
-  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'LANGUAGES', 'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE', 'SITE_NAME', 'VAULT_PREFIX']);
+  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'LANGUAGES', 'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_PREFIX']);
   for (const g of GAMES) {
     assert.deepEqual(Object.keys(P[g]).sort(), fields, g);
     assert.equal(P[g].GAME, g);
@@ -34,6 +34,18 @@ test('every game\'s profile has the same fields and its own id', async () => {
   assert.equal(P.ug2.SITE_NAME, 'Underground 2 Revived');
   // the site's name is not chosen yet
   assert.equal(P.mw.SITE_NAME, 'Most Wanted');
+  // the browser's storage: Underground 2's names as they always were, Most Wanted's its own; one game's offline copies
+  // are never another's older ones (sw.ts deletes the names that start with its prefix)
+  assert.deepEqual(P.ug2.STORAGE, { OFFLINE_CACHE: 'nfsu2-offline-2', OFFLINE_PREFIX: 'nfsu2-offline-' });
+  for (const g of GAMES) {
+    const s = P[g].STORAGE;
+    assert.deepEqual(Object.keys(s).sort(), Object.keys(P.ug2.STORAGE).sort(), g);
+    assert.ok(s.OFFLINE_CACHE.startsWith(s.OFFLINE_PREFIX), g);
+    for (const o of GAMES.filter(x => x !== g)) {
+      const t = P[o].STORAGE;
+      assert.ok(!t.OFFLINE_CACHE.startsWith(s.OFFLINE_PREFIX) && !s.OFFLINE_PREFIX.startsWith(t.OFFLINE_PREFIX), `${g} and ${o}`);
+    }
+  }
 });
 
 test('build.mjs --game: the profile behind @game, the game\'s own folders and texts', t => {
@@ -47,15 +59,18 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   const build = (...args) => spawnSync(process.execPath, [path.join(root, 'build.mjs'), ...args], { cwd: os.tmpdir(), encoding: 'utf8', env: { ...process.env, NOMINIFY: '' } });
   w('index.html', '<!doctype html><title>made up</title>');
   w('src/static/manifest.json', '{}');
-  w('src/main.ts', 'import { GAME } from \'@game\';\nconsole.log(`the page of ${GAME}`);\n');
+  w('src/main.ts', 'import { GAME } from \'@game\';\nimport { NAME } from \'@game/names\';\nconsole.log(`the page of ${GAME}, ${NAME}`);\n');
   w('src/games/ug2/index.ts', 'export const GAME = \'ug2\';\n');
+  w('src/games/ug2/names.ts', 'export const NAME = \'name-of-ug2\';\n');
   w('src/games/one/index.ts', 'export const GAME = \'one\';\n');
+  w('src/games/one/names.ts', 'export const NAME = \'name-of-one\';\n');
   w('src/app/lang/french.json', { A: 'a partagé', B: 'b partagé' });
   w('src/games/one/lang/french.json', { B: 'b à la une', C: 'c à la une' });
 
   let r = build();
   assert.equal(r.status, 0, r.stderr);
   assert.match(read('dist/main.js'), /\bug2\b/);
+  assert.match(read('dist/main.js'), /name-of-ug2/, '@game/<file>: a file of the game\'s folder');
   assert.doesNotMatch(read('dist/main.js'), /\bone\b/);
   assert.equal(read('dist/lang/french.json'), JSON.stringify({ A: 'a partagé', B: 'b partagé' }));
   assert.equal(read('dist/index.html'), '<!doctype html><title>made up</title>');
@@ -65,6 +80,8 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   r = build('--game', 'one');
   assert.equal(r.status, 0, r.stderr);
   assert.match(read('dist-one/main.js'), /\bone\b/);
+  assert.match(read('dist-one/main.js'), /name-of-one/);
+  assert.doesNotMatch(read('dist-one/main.js'), /ug2/);
   assert.equal(read('dist-one/lang/french.json'), JSON.stringify({ A: 'a partagé', B: 'b à la une', C: 'c à la une' }));
   assert.ok(fs.existsSync(path.join(root, 'dist-one/manifest.json')));
   assert.ok(fs.existsSync(path.join(root, 'dist-one-dev/test/dev.json')));

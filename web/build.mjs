@@ -3,8 +3,9 @@
 //   web/dist-dev  the test pages (test/*) and every source map: what the server serves only with --dev
 //                 (it never looks in this folder without it, so no spelling of a path reaches them)
 // One build; the outputs are sorted into the two folders as they are written.
-// --game <id>: the page for that game (src/games/<id>/index.ts behind the import path '@game', src/games/profile.ts),
-// into web/dist-<id> and web/dist-<id>-dev; ug2, the default, keeps web/dist and web/dist-dev.
+// --game <id>: the page for that game (src/games/<id>/index.ts behind the import path '@game', a file of that folder
+// behind '@game/<file>': src/games/profile.ts), into web/dist-<id> and web/dist-<id>-dev; ug2, the default, keeps
+// web/dist and web/dist-dev.
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,7 +43,7 @@ const opts = {
   },
   outdir: DIST, bundle: true, format: 'esm', target: ['chrome140', 'firefox145'], sourcemap: true, minify: !watch && !process.env.NOMINIFY,
   logLevel: 'info', write: false, absWorkingDir: process.cwd(),
-  alias: { '@game': `./src/games/${GAME}/index.ts` },
+  alias: { '@game': `./src/games/${GAME}` },
   // registry-defaults.txt and similar seeds go into the page as strings, the stylesheet's pictures as data: URLs
   loader: { '.txt': 'text', '.png': 'dataurl' },
 };
