@@ -119,6 +119,9 @@ Attrib::StringToLowerCaseKey (0x4549BF) by poke, in the front end; with `NFSU2_T
 
 Graphics, on the play page (test/play.html, with the WebGPU renderer; the pictures stay out of the repository):
 `race_shots.txt` (a Custom Race circuit dumped at GO, after 300 and after 900 frames, the shadow options logged),
+`race_moments.txt` (the same race dumped at set race-timer moments: GO, 0.03, 0.18, 0.30, 1 and 3 s with the
+player's car still on the start line, then 8 and 12 s with the AI driving; checked by ../checks/race_moments.sh;
+`&dumptex=1,2` adds the shadow map's colour and depth),
 `race_perf.txt` (the same race driven 1800 frames between `log race_loaded` and `log drive_end`, no dumps: the page's
 `&bench&gputime` window logs the frames, encode and GPU milliseconds) and `options_advanced.txt` (the Video options and
 their Advanced page row by row: Shadow Detail, FSAA and Texture Filtering as offered, their maxima logged); each from

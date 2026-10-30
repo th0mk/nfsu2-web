@@ -1,0 +1,52 @@
+# Most Wanted: race pictures at set race-timer moments, so runs with other settings or builds show the same moment
+# (races are not lockstep: a frame count after GO lands at another race time in each run).  The Custom Race circuit
+# of race_shots.txt (City Perimeter, the first car, automatic gears); after GO each dump waits until the game's
+# timer (the float at 0x9142DC, GAME.md 14) is its moment past its value at GO (@go), at least a frame after the
+# dump before (two dumps asked in one frame keep only the second): GO's own frame, 0.03 s and 0.18 s on the start
+# line (the shadow on the player's car at GO, TRACKER M5-13), 0.30 s, 1 s and 3 s (the player's car still parked:
+# nothing presses the throttle; the HUD's leaderboard flips between gaps and names), then the game's AI drives
+# (autopilot) to 8 s and 12 s.  A frame to dump waits for the page (gpu_web.c), so each dump is the frame it names.
+# The play page (test/play.html) with the renderer, e.g. &script=/tests/scripts/race_moments.txt
+# &reg=/tests/seed/registry_max.txt&artifacts=/artifacts/x_&dumpscale=1 (&dumptex=1,2: the shadow map's colour and
+# depth too).  Check: ../checks/race_moments.sh.  The pictures are the game's: they stay out of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen (a slow renderer's dialog may miss one tap)
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_moments: GO
++0    mark go f:0x009142dc                               # the clock at GO
++0    dump t0000
++0    peek 0x00901830                                    # g_ShadowDetail
++1    waitexpr f:0x009142dc >= @go+0.03 600
++0    dump t0003
++1    waitexpr f:0x009142dc >= @go+0.18 600
++0    dump t0018
++1    waitexpr f:0x009142dc >= @go+0.30 600
++0    dump t0030
++1    waitexpr f:0x009142dc >= @go+1.0 600
++0    dump t0100
++1    waitexpr f:0x009142dc >= @go+3.0 600
++0    dump t0300
++0    autopilot on
++1    waitexpr f:0x009142dc >= @go+8.0 900
++0    dump t0800
++1    waitexpr f:0x009142dc >= @go+12.0 900
++0    dump t1200
++60   log race_moments: done                         # the last dumps reach the server first
++0    close
