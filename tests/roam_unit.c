@@ -1331,7 +1331,7 @@ static void t_statex(void){
 static void t_game(void){
     uint8_t b[RC_MAX_DGRAM], lb[RC_MAX_DGRAM]; rc_msg m, d; memset(&m, 0, sizeof m);
     uint32_t A = rc_room_hash("Blue Room"), c;
-    m.h.type = RC_MSG_HELLO; m.h.sender = 7; m.h.flags = RC_HF_CREW | RC_HF_HUBCREW; strcpy(m.u.hello.name, "Thom");
+    m.h.type = RC_MSG_HELLO; m.h.sender = 7; m.h.flags = RC_HF_CREW | RC_HF_HUBCREW; strcpy(m.u.hello.name, "Ayla");
     m.u.hello.n_seen = 1; m.u.hello.seen[0] = 0x11111111u;
     int base = rc_encode(&m, b, sizeof b);
     CHECK(base > 0 && rc_decode(b, base, &d) == RC_OK && d.u.hello.game == RC_GAME_UG2, "a HELLO without the flag is Underground 2's");
