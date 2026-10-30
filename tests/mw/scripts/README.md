@@ -101,7 +101,9 @@ Most Wanted ranks, the cash, the impound markers and each career car's record wi
 (the world map's icons, those of type T one by one; `icons go T K DX DY DZ` moves the car to one), `pools [watch]`
 (the game's memory pools and frame arena, with their peaks); `pursuit watch` also logs the counts the game keeps by
 name (helicopters, roadblocks and spike strips dodged, cops damaged and destroyed), roadblocks put up and pursuit
-breakers come down (hooks), and how often the purecall guard's call ran.
+breakers come down (hooks), and how often the purecall guard's call ran; `NFSMW_BOT_PLOG=S` makes the bot log the car's
+place every S game seconds in a pursuit (15 by default).  `pursuit_breaker.txt` drives the car at the one pursuit
+breaker the AI has brought down so far (TRACKER M4-17; not working yet: its header says what was seen).
 
 The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
 switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).

@@ -666,7 +666,9 @@ static void pursuit_frame(CPU *c){
             mw_aid_teleport(c, a, d);
         }
         if (t >= B.next_log){
-            B.next_log = t + 15.0;
+            static double every = -1.0;     /* NFSMW_BOT_PLOG=S: a line every S game seconds (the car's track), else 15 */
+            if (every < 0.0){ const char *e = getenv("NFSMW_BOT_PLOG"); every = e && atof(e) > 0.0 ? atof(e) : 15.0; }
+            B.next_log = t + every;
             float kmh = 0, p[3] = { 0 }; mw_aid_where(c, p, &kmh);
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: state %u heat %.2f cops %u bust %.1f perp bounty %u at %.0f "
                     "%.0f %.0f %.0f km/h\n", f, t, rdf(po + PURSUIT_TIME), rd(po + PURSUIT_STATE), rdf(perp + PERP_HEAT),

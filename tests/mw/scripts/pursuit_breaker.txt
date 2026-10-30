@@ -1,14 +1,19 @@
 # Most Wanted: a pursuit breaker brought down by script (TRACKER M4-17).  From a career save past the prologue (a
-# safehouse save), the career bot takes the car to free roam and lets the game's AI drive until a pursuit is on
-# (`bot pursuit`: Game.ForcePursuitStart(1) after 60 s without one); then the bot lets go, the car is put about 50 m
-# before the breaker the AI brought down in a bot chase of 2026-10-30 (MBreakerStopCops at -4016.9 177.9 1535.2, the
-# car coming from the north-east: `teleport`, the way Game.WarpPlayerToTrigger moves it), facing it, and the gas is
-# held until the game posts MBreakerStopCops (`pursuit wait breaker`, runtime/mw/pursuit_mw.c's hook) or 900 frames
-# pass.  Then the AI drives the pursuit to the end the game decides, and the rap sheet is logged (a busted pursuit's
-# counts do not reach it: only an evaded one's).
+# safehouse save): Resume Free Roam from the safehouse menu ("leave the Safe House?": Yes, left of the default No),
+# free roam, a pursuit started with the game's own Game.ForcePursuitStart(1) (0x60AAC0) with no AI on the car (the
+# AI's control taken and given back left the keys without effect for a while, TRACKER M4-47); the car is put about
+# 25 m before the breaker the AI brought down in a bot chase of 2026-10-30 (MBreakerStopCops at -4016.9 177.9 1535.2,
+# the car coming from the north-east: `teleport`, the way Game.WarpPlayerToTrigger moves it, twice: the first warp
+# far from the safehouse fell through the road, 37 m, as the world there was not loaded yet), facing it, and the gas
+# is held until the game posts MBreakerStopCops (`pursuit wait breaker`, runtime/mw/pursuit_mw.c's hook) or 900 frames
+# pass, `where` before and after.  Then the AI drives the pursuit to the end the game decides, and the rap sheet is
+# logged (a busted pursuit's counts do not reach it: only an evaded one's).  Not working yet (runs of 2026-10-30): the
+# car drove through the breaker's place on the AI's line (where before and after) with no MBreakerStopCops; the
+# message may come only when the breaker's debris catches a cop (the AI's breaker stopped one of its two cops, radius
+# 5 m), or the breaker's trigger is not on that line.  The breakers' places are not in GManager's icon list.
 #   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script pursuit_breaker.txt \
 #     --marker 'pursuit_breaker: over' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
-#     --env "PB_AT=-3984.9 178 1573.7 -0.64 0 -0.77" --timeout-scale 30
+#     --env "PB_AT=-4020.7 178 1554.8 0.19 0 -0.98" --timeout-scale 30
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
@@ -17,16 +22,25 @@
 +0    tap RETURN                                         # Career
 +0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
 +0    tap RETURN
-+0    waitfng MainMenu_Sub.fng:e596c4a3 900              # the safehouse menu
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 900     # the safehouse menu, on Resume Free Roam
 +0    rapsheet
 +0    pursuit watch
-+30   bot pursuit
-+0    pursuit wait on 30000
-+0    bot off                                            # the bot and the AI let go
-+0    teleport ${PB_AT}
++30   tap RETURN
++0    waitfng Dialog.fng@b8a7c6cd 600                    # "leave the Safe House?", on No
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300                    # on Yes
++30   tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # the race status in career mode: free roam
++0    teleport ${PB_AT}                                  # there first: the world around it streams in
++600  where                                              # (a wait in frames: no streamer state is read yet)
++0    teleport ${PB_AT}                                  # again, on the road now (the first warp fell through it)
++0    call 0x0060aac0 1                                  # Game.ForcePursuitStart(1)
++0    pursuit wait on 600
 +0    log pursuit_breaker: at the breaker
 +0    down UP
 +0    pursuit wait breaker 900
++0    where
 +0    up UP
 +0    log pursuit_breaker: breaker
 +0    autopilot on
