@@ -150,7 +150,9 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
  * mw_aid_hook, pursuit_mw.c's (roadblocks, pursuit breakers) to mw_pursuit_hook; any other hit is a debugging one, an
  * address a lift was given
  * with gen.sh's HOOKS=... (a function's first instruction, say).  NFSMW_HOOKLOG=1 logs the first 20 hits of each address, with the return address and
- * the first three stack arguments at a function's entry: "[hook] f=N 0xADDR from RET args A1 A2 A3 ecx X". */
+ * the first three stack arguments at a function's entry: "[hook] f=N 0xADDR from RET args A1 A2 A3 ecx X".
+ * NFSMW_HOOKLOG=N (more than 1) logs the first N hits of each instead, and NFSMW_HOOKLOG_FROM=F counts only the
+ * hits from guest frame F on (a screen's code that also runs at the boot, say). */
 int mw_fix_hook(CPU *c, uint32_t va);          /* fixes_mw.c: the crash fixes' instruction hooks */
 int mw_aid_hook(CPU *c, uint32_t va);          /* career_mw.c: the pursuit's end for `pursuit watch` */
 int mw_pursuit_hook(CPU *c, uint32_t va);      /* pursuit_mw.c: roadblocks and pursuit breakers, counted */
@@ -159,14 +161,19 @@ int mw_debug_hook(CPU *c, uint32_t va){
     if (mw_aid_hook(c, va)) return 1;
     if (mw_pursuit_hook(c, va)) return 1;
     static int on = -1;
-    if (on < 0){ const char *e = getenv("NFSMW_HOOKLOG"); on = e && atoi(e); }
-    if (!on) return 0;
+    static long from;
+    if (on < 0){
+        const char *e = getenv("NFSMW_HOOKLOG"), *f = getenv("NFSMW_HOOKLOG_FROM");
+        on = e ? atoi(e) : 0; if (on == 1) on = 20; if (on < 0) on = 0;
+        from = f ? atol(f) : 0;
+    }
+    if (!on || autotest_frame() < from) return 0;
     static struct { uint32_t va; int n; } seen[512];
     static int ns;
     int i = 0;
     while (i < ns && seen[i].va != va) i++;
     if (i == ns){ if (ns == 512) return 0; seen[ns].va = va; seen[ns].n = 0; ns++; }
-    if (seen[i].n++ >= 20) return 0;
+    if (seen[i].n++ >= on) return 0;
     fprintf(stderr, "[hook] f=%ld 0x%08x from 0x%08x args %08x %08x %08x ecx %08x\n", autotest_frame(), va,
             MR32(c->esp), MR32(c->esp + 4u), MR32(c->esp + 8u), MR32(c->esp + 12u), c->ecx);
     return 1;
