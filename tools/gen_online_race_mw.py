@@ -77,7 +77,10 @@ def main():
     w = L.append
 
     def stop():
-        w('+300  close')
+        # (after the results: the game reports the race, rank, later than its results screen comes: a first finisher
+        # that closed 1200 frames after its results, before the other finished, sent no report, and a result needs
+        # two (runs of 2026-10-30; that the report waits for the race's end is inferred))
+        w('+%d close' % (3600 if a.until == 'results' else 300))
         sys.stdout.write('\n'.join(L) + '\n')
         sys.exit(0)
 
