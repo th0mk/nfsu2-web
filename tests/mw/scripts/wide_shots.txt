@@ -27,7 +27,7 @@
 +0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
 +0    tap RETURN
 +0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
-+0    dump carselect
++240  dump carselect                                     # the car comes in through its smoke after the list
 +3    dump carselect
 +0    tap RETURN
 +0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto

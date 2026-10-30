@@ -36,9 +36,9 @@
  *           FEngHud::SetWideScreenMode 0x5696C0 and the minimap's
  *           AdjustForWidescreen) is used: the four reads of the console's
  *           widescreen flag [[0x91CF90]+0x10]+0x34 (HUD 0x5696CB and
- *           0x57CB82, the EA Trax pop-up 0x58D883, the wrong-way sign
- *           0x56885A) see it set; the flag itself is never written (it is
- *           saved with the profile).
+ *           0x57CB82, the EA Trax pop-up 0x58D883 in a race, the wrong-way
+ *           sign 0x56885A) see it set; the flag itself is never written (it
+ *           is saved with the profile).
  *   movie   the movie quad (0x59A029..0x59A038): -0.5..0.5 goes through the
  *           front end's scale, so it is the 4:3 middle (fit) already; fill
  *           and stretch widen it to the screen.
@@ -109,15 +109,22 @@ static void hud_apply(void){
     g_wide_hud = g_hud == HUD_WIDE && hk < 0.76f;
 }
 
+/* com.c res_pick, on the game's thread (its CreateDevice and every Reset): the screen's shape.  After a change the
+ * front end's objects are laid out again: FEng keeps an object's placement until one of its setters flags it, so a
+ * menu up during the change kept the old centre (wide_resize.txt). */
+int mw_fe_flag_all(uint32_t bit);       /* fe_mw.c */
 void ws_set_mapping(float k){
     mws_init();
     if (!(k > 0.05f && k < 20.f)) k = 1.f;
     int changed = k != g_k;
     g_k = k;
     hud_apply();
-    if (changed)
-        fprintf(stderr, "ws: game/device aspect %.4f, HUD %.4f: centre (%.1f, %.1f), %s HUD\n", (double)k,
-                (double)g_hk, (double)g_cx, (double)g_cy, g_wide_hud ? "the game's widescreen" : "the 4:3");
+    if (changed){
+        int n = mw_fe_flag_all(0x400000u);
+        fprintf(stderr, "ws: game/device aspect %.4f, HUD %.4f: centre (%.1f, %.1f), %s HUD; %d front-end objects to lay "
+                "out again\n", (double)k, (double)g_hk, (double)g_cx, (double)g_cy,
+                g_wide_hud ? "the game's widescreen" : "the 4:3", n);
+    }
 }
 /* the renderer changes nothing: the game draws for the screen's shape itself */
 float ws_persp_x(void){ return 1.f; }
@@ -208,7 +215,13 @@ int mw_ws_hook(CPU *c, uint32_t va){
      * update), mov al,[eax+34] (EA Trax), cmp [eax+34],cl (the wrong-way sign); each followed by its put-back */
     case HOOK_SITE(0x005696cb): g_hits[5]++; flag_show(c->ecx + 0x34u); return 1;
     case HOOK_SITE(0x0057cb82): g_hits[5]++; flag_show(c->ebp + 0x34u); return 1;
-    case HOOK_SITE(0x0058d883): g_hits[5]++; flag_show(c->eax + 0x34u); return 1;
+    /* EA Trax: the pop-up's WIDESCREEN_MODEHUD in a race; in the front end, whose packages stay the 4:3 ones in the
+     * middle, it keeps NORMAL_MODE, as they do (a 16:9 run that sent it WIDESCREEN_MODE there had EA_TRAX.fng as the
+     * top package for 860 frames at the options, which the options scripts never met before) */
+    case HOOK_SITE(0x0058d883):
+        g_hits[5]++;
+        if (MR32(0x00925e90u) == 6u) flag_show(c->eax + 0x34u);
+        return 1;
     case HOOK_SITE(0x0056885a): g_hits[5]++; flag_show(c->eax + 0x34u); return 1;
     case HOOK_SITE(0x005696ce): case HOOK_SITE(0x0057cb85): case HOOK_SITE(0x0058d886): case HOOK_SITE(0x0056885d):
         flag_back();

@@ -76,6 +76,7 @@
 #define G_CFENG    0x0091cadcu      /* cFEng* */
 #define ENG_HEAD   0xe0u            /* FEngine: the active packages' head */
 #define ENG_TAIL   0xe4u            /* and tail: the package on top */
+#define ENG_IDLE   0xf0u            /* the idle packages' head */
 #define PKG_NEXT   0x04u
 #define PKG_NAME   0x0cu
 #define PKG_HASH   0x10u
@@ -184,6 +185,29 @@ static int walk_drawn(uint32_t first, int depth, ObjFn fn, void *ctx, int *budge
     return 0;
 }
 static int drawn(uint32_t pkg, ObjFn fn, void *ctx){ int budget = 4096; return walk_drawn(pkg + PKG_OBJS, 0, fn, ctx, &budget); }
+
+/* Every object of every package, active or idle (FEngine +0xE0 and +0xF0), drawn or not, at any depth of its groups,
+ * gets bit in its flags (+0x1C); how many did.  0x400000 is the one FEng's setters raise when they change an object
+ * (the resolution label's at 0x51B7AB): the object is laid out again when it is next drawn (widescreen_mw.c, after
+ * the screen's shape changed). */
+static int flag_all(uint32_t first, int depth, uint32_t bit, int *budget){
+    int n = 0;
+    for (uint32_t o = rd(first); o && --*budget > 0; o = rd(o + OBJ_NEXT)){
+        if (!mem_is_committed(o + OBJ_FLAGS + 3u)) break;
+        MR32(o + OBJ_FLAGS) |= bit; n++;
+        if (depth < 8 && rd(o + OBJ_TYPE) == 5u) n += flag_all(o + GRP_OBJS, depth + 1, bit, budget);
+    }
+    return n;
+}
+int mw_fe_flag_all(uint32_t bit){
+    uint32_t e = engine(); int n = 0, budget = 65536;
+    for (uint32_t head = ENG_HEAD; e && head <= ENG_IDLE; head += ENG_IDLE - ENG_HEAD){
+        int k = 0;
+        for (uint32_t p = rd(e + head); p && k < 4 * LIST_MAX; p = rd(p + PKG_NEXT), k++)
+            n += flag_all(p + PKG_OBJS, 0, bit, &budget);
+    }
+    return n;
+}
 
 /* a string's text in ASCII ('?' for the rest), at most cap - 1 characters */
 static void str_text(uint32_t obj, char *out, int cap){
