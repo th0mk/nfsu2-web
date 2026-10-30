@@ -9,6 +9,15 @@
  *   bot run N       play until the career's bin is N (or lower), then stop (`bot off` stops it at once)
  *   bot race I      engage race I of the bin's list and race it, then stop (a probe)
  *   bot pursuit     one pursuit in free roam, then stop (a probe)
+ *   bot save        save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
+ *   bot wait [N]    (career_mw.c) wait up to N frames for the bot to stop
+ *
+ * Its order in a bin (decide): the bin's races not won yet, the one tried least first, until the races the rival asks
+ * are won; then pursuits until the milestones and the bounty are there; then the rival's challenge, engaged at its
+ * first race's start (InGameRivalChallenge.fng, whose Enter accepts it).  Cops on the car in free roam (a pursuit
+ * that began in a race goes on after it) are a pursuit first, whatever it was doing.  In a pursuit the AI drives
+ * (pursuit_frame: what was tried besides, and dropped).  A bust adds a strike to the car, and with the career's one
+ * car three busts end the career (GameOver.fng): the bot stops there, and on any career menu it does not know.
  *
  * The career's state, from speed.exe v1.3's code:
  *   the user profile [[0x91CF90]+0x10]: +0xB0 (byte) the current Blacklist bin (16 the prologue, 15 Sonny's),
@@ -29,10 +38,12 @@
  *     EngageEventDialog.fng (Decline highlighted, Accept by LEFT), and Accept loads the race.
  *
  * The screens the bot answers (each Present, mw_bot_present): the winner's InGamePhotoMaster.fng, the loser's
- * PostRace_Results.fng, PostRace_MilestoneRewards.fng after a pursuit and the loading screen's "Press Enter" with
- * Enter; a text message (SMS_Message.fng) and the mailbox under it with Escape (Enter does not close them);
- * EngageEventDialog.fng with LEFT then Enter when the bot engaged it (else Enter: Decline); any other screen that
- * takes input is logged and answered with Enter after a pause, a few times, then left (the log says so). */
+ * PostRace_Results.fng, PostRace_MilestoneRewards.fng and PostRace_Pursuit.fng after a pursuit and the loading
+ * screen's "Press Enter" with Enter; a text message (SMS_Message.fng) and the mailbox under it with Escape (Enter does
+ * not close them); EngageEventDialog.fng with LEFT then Enter when the bot engaged it (else Enter: Decline); the
+ * safehouse menu, the pause menu and their dialogs as the state wants (below); any other screen that takes input
+ * (after a bust: Infractions.fng, Car_Select.fng) is logged and answered with Enter after a pause, a few times, then
+ * left (the log says so). */
 #include "cpu.h"
 #include "game.h"
 #include <math.h>
@@ -163,8 +174,6 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define RACE_START_MAX 6000             /* frames from Accept to the race going active */
 #define PURSUIT_NATURAL_S 60.0          /* game seconds of free driving for a pursuit to start by itself */
 #define SKIP_MAX      3
-#define PURSUIT_LONG  150.0f            /* chase seconds the bot waits for the cops to find the car again */
-#define BUST_RESET_S  1.5f              /* the bust timer (s) at which a boxed-in car is reset */
 #define RIVAL_NEXT_WAIT 1800            /* frames the bot waits in free roam for the rival's next race to come by itself */
 #define POST_WAIT     2400              /* frames from a race's end to its result screen, at most (after it the bot goes on) */
 #define AP_STAND      4                 /* career_mw.c's autopilot: the AI lets the car go now, and takes the next race at its GO */
@@ -182,8 +191,6 @@ static struct {
     int after;                          /* B_PURSUIT: the state to go back to (0: B_ROAM, or the probe's end) */
     double next_log;
     float plen;                         /* the pursuit's length as it last showed it (s) */
-    int standing;                       /* the car waits for the cops (the AI let it go) */
-    double last_reset;                  /* the last boxed-in reset (game time) */
     struct gates g;
 } B;
 static void set_state(int st, const char *why){
@@ -296,32 +303,19 @@ static void pursuit_frame(CPU *c){
     }
     if (po){
         B.plen = rdf(po + PURSUIT_TIME);
-        /* a longer chase: when the cops lose the car (the pursuit's search, state 2, its cooldown filling) before the
-         * chase has lasted PURSUIT_LONG s, the AI lets the car stand where the cops lost it, so that they find it
-         * again (a longer chase is more bounty, and milestones ask for one); the AI drives again as soon as the chase
-         * is back on or a cop is close enough to start the bust timer */
-        /* boxed in by the cops: the bust timer runs while the car is slow with a cop at it (5 s = busted), and the AI
-         * does not get out of a box (pursuit runs of 2026-10-30: wedged at 2 km/h, busted 8 s on); the game's RESET
-         * (career_mw.c, as the wedge watch uses it) puts the car on the road nearby, once every few seconds */
-        float bust = rdf(po + PURSUIT_BUST_T), kmh = 0, at[3];
-        if (bust >= BUST_RESET_S && !B.standing && t - B.last_reset >= 3.0 && mw_aid_where(c, at, &kmh) && kmh < 20.0f){
-            int ok = mw_reset_car(c);
-            B.last_reset = t;
-            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: boxed in (bust timer %.1f s at %.0f km/h): reset %s\n", f, t,
-                    B.plen, bust, kmh, ok > 0 ? "done" : "found no place");
-        }
-        int search = rd(po + PURSUIT_STATE) == 2u && B.plen < PURSUIT_LONG && bust <= 0.0f;
-        if (search != B.standing){
-            B.standing = search;
-            mw_aid_autopilot(c, search ? AP_STAND : 1);
-            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: %s\n", f, t, B.plen, search
-                    ? "the cops lost the car (search): it waits for them" : "the chase is on again: the AI drives");
-        }
+        /* The AI drives the whole pursuit.  What was tried to make chases longer or to save a boxed-in car from the bust,
+         * and dropped (bot runs of 2026-10-30): letting the car stand when the cops lost it (state +0x218 == 2, the
+         * cops' search) did not bring them back, the cooldown ran out, and cops that did come busted the standing car;
+         * the game's RESET when the bust timer (+0xDC) passed 1.5 s at walking speed put the car on the road beside
+         * the same cops, the timer ran on (8.6 four seconds later) and the next reset found no place; every pursuit of
+         * that run ended busted, three busts impounded the only car, and the career ended (GameOver.fng).  With the AI
+         * alone two pursuits of about ten ended busted. */
         if (t >= B.next_log){
             B.next_log = t + 15.0;
             float kmh = 0, p[3] = { 0 }; mw_aid_where(c, p, &kmh);
-            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: heat %.2f cops %u bust %.1f perp bounty %u at %.0f %.0f "
-                    "%.0f %.0f km/h\n", f, t, rdf(po + PURSUIT_TIME), rdf(perp + PERP_HEAT), rd(po + PURSUIT_COPS),
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %.0f s: state %u heat %.2f cops %u bust %.1f perp bounty %u at %.0f "
+                    "%.0f %.0f %.0f km/h\n", f, t, rdf(po + PURSUIT_TIME), rd(po + PURSUIT_STATE), rdf(perp + PERP_HEAT),
+                    rd(po + PURSUIT_COPS),
                     rdf(po + PURSUIT_BUST_T), rd(perp + 0x20u), p[0], p[1], p[2], kmh);
         }
         return;
@@ -331,7 +325,7 @@ static void pursuit_frame(CPU *c){
     fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit over (%.0f s long, %.0f s of game time in all): bounty %d -> %d, "
             "milestones %d -> %d\n", f, t, B.plen, t - B.t0, B.bounty0, g.bounty, B.g.ms, g.ms);
     mw_aid_autopilot(c, AP_STAND);
-    B.raced = 0; B.pursuit = 0; B.forced = 0; B.standing = 0;
+    B.raced = 0; B.pursuit = 0; B.forced = 0;
     if (B.once && !B.after){ set_state(B_DONE, "the probe's pursuit is over"); return; }
     int back = B.after ? B.after : B_ROAM;
     B.after = 0;
@@ -413,7 +407,7 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_ITEM2    0x4b4e388bu
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
-static struct { char name[64]; uint32_t focus; long since, last; int taps; } S;
+static struct { char name[64]; uint32_t focus; long since, last; int taps, marker_enter; } S;
 void mw_bot_present(void){
     if (B.st == B_OFF || B.st == B_DONE) return;
     uint32_t focus = 0;
@@ -428,6 +422,15 @@ void mw_bot_present(void){
     if (f - S.last < 45 || f - S.since < 30) return;
     unsigned key = DIK_RETURN; const char *what = "Enter";
     int save = B.st == B_SAVE;
+    if (!strcasecmp(nm, "GameOver.fng") || !strcasecmp(nm, "MC_List.fng") ||
+        (!strcasecmp(nm, "MainMenu_Sub.fng") && !mw_fe_match("MainMenu_Sub.fng:e596c4a3"))){
+        /* the career is over (the only car impounded after its third bust), or a career menu the bot did not ask for:
+         * no key from the bot there (an Enter could start a new career or load another alias) */
+        fprintf(stderr, "[mwbot] f=%ld %s @%08x: the bot stops (%s)\n", f, nm, focus,
+                !strcasecmp(nm, "GameOver.fng") ? "game over: the career car was impounded" : "a career menu");
+        set_state(B_DONE, !strcasecmp(nm, "GameOver.fng") ? "game over" : "a career menu came");
+        return;
+    }
     if (!strcasecmp(nm, "InGameRivalChallenge.fng") && B.st == B_GOTO){
         /* the rival's challenge at its start: Enter accepts it (its handler 0x551790 on the accept message, 0x406415E3,
          * when the challenge may start: +0x2D), and the game takes the car to the race; Escape (0x911AB364) declines */
@@ -450,6 +453,13 @@ void mw_bot_present(void){
         } else what = "Enter on Decline (not the bot's)";
     }
     else if (!strcasecmp(nm, "SMS_Message.fng") || !strcasecmp(nm, "SMS_MailBoxes.fng")){ key = DIK_ESCAPE; what = "Escape"; }
+    else if (!strcasecmp(nm, "SafehouseMarkers.fng")){
+        /* the beaten rival's markers ("You can now select 2 markers", the cards face down): Enter turns the highlighted
+         * card and takes it, and the highlight stays on that card, so the next is RIGHT, then Enter (bot run of
+         * 2026-10-30: Enter again on the taken card did nothing, ten times) */
+        if (S.marker_enter){ key = DIK_RIGHT; what = "RIGHT to another marker"; S.marker_enter = 0; }
+        else { what = "Enter: take the highlighted marker"; S.marker_enter = 1; }
+    }
     else if (!strcasecmp(nm, "MainMenu_Sub.fng") && mw_fe_match("MainMenu_Sub.fng:e596c4a3")){
         uint32_t want = !save ? F_ITEM1 : mw_fe_match("MainMenu_Sub.fng:ac22f27e") ? F_ITEM1 + 4u : F_ITEM1 + 3u;
         if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = save ? "to Save" : "to Resume Free Roam"; }
