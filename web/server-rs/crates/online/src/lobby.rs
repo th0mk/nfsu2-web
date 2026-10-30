@@ -69,7 +69,7 @@ use sha2::{Digest, Sha256};
 use crate::aries::{FieldMap, Fields, FrameReader, MAX_FRAME, V, encode_fields, encode_frame, is_secret};
 use crate::core::Core;
 use crate::jsx::{self, clean_text, day, lower, valid_name};
-use crate::stats::{Race, RacePlayer, RaceReport, ReportPlayer, decode_result, race_points};
+use crate::stats::{Race, RacePlayer, RaceReport, ReportPlayer, race_points};
 use crate::timers::{Action, TimerId};
 use crate::title::{Cfg, Title};
 use crate::vhost::{ConnId, Svc};
