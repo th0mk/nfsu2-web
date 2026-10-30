@@ -1,0 +1,31 @@
+# Most Wanted: the career bot on the impound path (TRACKER M4-48; runtime/mw/bot_mw.c `bot bust`) from a save made at
+# a safehouse.  `bot bust ${BUST_N} ${BUST_PAY}` forces pursuits with the car standing (the AI does not drive it), so
+# the cops bust it, until BUST_N busts.  Each bust puts a strike on the car at the infractions sheet (Infractions.fng);
+# the strike that reaches the car's most (3) impounds it.  The bot then spends an Out of Jail marker instead when it
+# holds one (BUST_PAY=pay: never), and after an impound takes another car that can be driven in Car_Select.fng (Enter
+# on the impounded one opened a Dialog and brought the list back, for good: runs c13d, c13t).  With no car left the
+# career is over (GameOver.fng) and the bot stops there.  The rap sheet (strikes, markers, the cars' records) is logged
+# before and after.
+#   bin13_start (two career cars, three Out of Jail markers), BUST_N=3: the third bust spends a marker;
+#   with BUST_PAY=pay: the third bust impounds the car and the bot takes the second one;
+#   a save with one car and no marker: the third bust is game over, and the bot stops without looping.
+#   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script bot_impound.txt \
+#     --marker 'bot_impound: stopped' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 --env BUST_N=3 \
+#     [--env BUST_PAY=pay] --env BOT_WAIT=60000 --timeout-scale 10
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    log bot_impound: resumed
++30   bot gates
++0    rapsheet
++0    bot bust ${BUST_N} ${BUST_PAY}
++0    bot wait ${BOT_WAIT}
++0    rapsheet
++0    bot gates
++0    log bot_impound: stopped
++60   close

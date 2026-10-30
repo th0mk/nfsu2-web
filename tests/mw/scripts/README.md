@@ -90,11 +90,16 @@ start one; Game.ForcePursuitStart at the bin's top heat after 60 s of game time 
 is rejoined where it was, and one that ran 300 s or boxed the car in is broken off by setting the car far away, so
 the game ends it as evaded), then engages the rival's challenge at its first race's start
 (InGameRivalChallenge.fng: Enter accepts; a lost one again), takes two of the beaten rival's markers
-(SafehouseMarkers.fng; what they gave is logged from the cash and cars), and answers the screens on the way
-(results, text messages, a bust's fine, the safehouse menu); it stops at GameOver.fng (the only car impounded after
-its third bust) and at a career menu it did not ask for;
+(SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type), and answers the
+screens on the way (results, text messages, the safehouse menu).  After a bust it pays the fine with cash
+(Infractions.fng), but when the strike would impound the car it spends an Out of Jail marker if it holds one; after an
+impound it takes a car that can be driven in Car_Select.fng (M4-48).  It stops at GameOver.fng (no car left that can be
+driven) and at a career menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
-race I` and `bot pursuit` do one race or one pursuit, `bot wait [N]` waits for the bot to stop.  `career_bot.txt`
+race I` and `bot pursuit` do one race or one pursuit, `bot bust N [pay]` lets the cops bust the standing car N times
+(`pay`: no marker spent), `bot wait [N]` waits for the bot to stop.  `bot_impound.txt` runs `bot bust ${BUST_N}
+${BUST_PAY}` from a safehouse save (bin13_start: the third bust spends a marker, or with `pay` impounds the first car
+and the bot takes the second; bin15_start with `pay`: game over, the bot stops there).  `career_bot.txt`
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
 `bot_probe.txt` runs two single steps, `BOT_A` then `BOT_B` (for example `run 15`, then `race 0` or `pursuit`);
 `bot_segment.txt` runs one (`BOT_A`, for example `run 13 races`: the bin's races, then stop; `run 14 races 2`: two

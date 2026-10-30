@@ -15,7 +15,10 @@
  *   bot chase S     pursuits one after another (the AI driving, a new one forced 5 s after the last one's end) until
  *                   they have lasted S game seconds in all, then stop (a long pursuit at the heat the career allows:
  *                   the heat stays on the car between pursuits; game over stops it, as everywhere)
- *   bot save       save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
+ *   bot bust N [pay] pursuits with the car standing (the AI does not drive: the cops bust it) until N busts, then stop:
+ *                   a probe of the impound path (the strikes, an Out of Jail marker at the sheet, Car_Select.fng after
+ *                   an impound, game over); pay: the fines paid at every sheet, no marker spent
+ *   bot save      save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
  *   bot wait [N]    (career_mw.c) wait up to N frames for the bot to stop
  *
  * Its order in a bin (decide): performance packages from a customization shop with the cash the career has (once a
@@ -25,8 +28,9 @@
  * whose Enter accepts it).  Cops on the car in free roam (a pursuit that began in a race goes on after it) are a
  * pursuit first, whatever it was doing.  In a pursuit the AI drives, and a long chase or a boxed-in car is broken off
  * by setting the car far away (pursuit_frame: what was tried besides, and dropped).  A bust adds a strike to the car,
- * and with the career's one car three busts end the career (GameOver.fng): the bot stops there, and on any career
- * menu it does not know.  The beaten rival's markers are taken as they come (two cards, face down); what they gave
+ * and the strike that reaches the car's most impounds it: the bot spends an Out of Jail marker instead when it holds
+ * one, and after an impound takes another car that can be driven in Car_Select.fng; with no car left (and no Impound
+ * Release marker) the career is over (GameOver.fng): the bot stops there, and on any career menu it does not know.  The beaten rival's markers are taken as they come (two cards, face down); what they gave
  * is logged from the cash and the cars before and after.
  *
  * The career's state, from speed.exe v1.3's code:
@@ -52,8 +56,9 @@
  * screen's "Press Enter" with Enter; a text message (SMS_Message.fng) and the mailbox under it with Escape (Enter does
  * not close them); EngageEventDialog.fng with LEFT then Enter when the bot engaged it (else Enter: Decline); the
  * safehouse menu, the pause menu and their dialogs as the state wants (below); the infractions sheet after a bust
- * (Infractions.fng) with Enter, which pays the fines and takes the strike; any other screen that takes input (after a
- * bust: Car_Select.fng) is logged and answered with Enter after a pause, a few times, then left (the log says so). */
+ * (Infractions.fng) with Enter, which pays the fines and takes the strike (or the Out of Jail marker, above); the car
+ * list after it (Car_Select.fng) with a car that can be driven; any other screen that takes input is logged and
+ * answered with Enter after a pause, a few times, then left (the log says so). */
 #include "cpu.h"
 #include "game.h"
 #include <math.h>
@@ -132,6 +137,41 @@ static int career_cars(uint32_t prof){
     for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)
         if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu) n++;
     return n;
+}
+/* a car's career record (FEPlayerCarDB +0x8728, 0x38 bytes each, the car record's byte +0x11 its index; GAME 13.7):
+ * +2 the most strikes the car takes, +3 its strikes, +4 0 when it can be driven (2 once impounded: 0x5811A0 counts
+ * the cars with it 0); 0 when the car has none */
+#define CARDB_CAREER     0x8728u
+#define CAREER_SIZE      0x38u
+static uint32_t career_rec(uint32_t prof, uint32_t handle){
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) == handle && MR8(r + 0x11u) <= 0x19u){
+            uint32_t cr = prof + PROF_CARDB + CARDB_CAREER + CAREER_SIZE * MR8(r + 0x11u);
+            return mem_is_committed(cr + CAREER_SIZE - 1u) ? cr : 0u;
+        }
+    return 0;
+}
+static int car_free(uint32_t prof, uint32_t handle){ uint32_t cr = career_rec(prof, handle); return cr && !MR8(cr + 4u); }
+/* the markers (0x91D928, 63 of {type, param, state}): 0x576F10 (thiscall (type, param)) counts those held; 0x11 is
+ * out_of_jail_free (pursuit_mw.c says more) */
+#define G_MARKERS        0x0091d928u
+#define FN_MARKERS       0x00576f10u
+#define MK_OUT_OF_JAIL   0x11u
+/* the markers held, counted by type (the entries 12 bytes each: +0 type, +4 param, +8 state, 1 = held, as 0x576F10
+ * reads them), into cnt[32]; the number of entries held */
+#define MK_TYPES 32
+static int markers_held(int cnt[MK_TYPES]){
+    int n = 0;
+    memset(cnt, 0, MK_TYPES * sizeof cnt[0]);
+    for (uint32_t i = 0, e = G_MARKERS; i < 63u; i++, e += 12u)
+        if (rd(e + 8u) == 1u){ uint32_t t = rd(e); cnt[t < MK_TYPES ? t : 0]++; n++; }
+    return n;
+}
+static const char *marker_name(int t){
+    switch (t){
+    case 0x11: return "out_of_jail_free"; case 0x12: return "pink_slip"; case 0x13: return "cash_bonus";
+    case 0x14: return "add_impound_box"; case 0x15: return "release_car_from_impound"; default: return "type";
+    }
 }
 static int read_gates(CPU *c, struct gates *g){
     memset(g, 0, sizeof *g);
@@ -337,6 +377,11 @@ static struct {
     int pursuits, busts, evades;
     long end_f;                         /* the frame the pursuit object went (0: on, or none yet) */
     int end_kind, sheet_seen;           /* how it ended (mw_aid_last_end), the infractions sheet seen since */
+    /* the impound (M4-48): Out of Jail markers held (read in mw_bot_frame, used on the infractions sheet), those
+     * spent, the sheet's moves toward the marker's button; Car_Select.fng after a bust: the place Enter was given at */
+    int oojail, jail_spent, jail_moves, cs_k, cs_dlg, cs_retry, impounds;
+    long mk_f;
+    int stand, bust_n, pay_only;        /* bot bust N [pay]: the car stands in the pursuits until N busts */
     struct gates g;
 } B;
 static void set_state(int st, const char *why){
@@ -351,19 +396,29 @@ static void set_state(int st, const char *why){
  * (its third item) takes it before free roam: Car_Select.fng lists the cars in the order of their career records
  * ('k / N', strings of label 0x18; it opens on the first), RIGHT to the next, and Enter makes the highlighted car the
  * current one and goes back to the safehouse menu (probe of 2026-10-30: Enter on '2 / 3' made handle 0x52 current). */
-static void pick_car(void){
-    uint32_t prof = profile(), cur = rd(prof + 0xa8u), best_h = 0;
-    int best = -1, n = 0, recs[32];
+/* The car taken is one that can be driven (its career record's +4 is 0): Enter on an impounded one opens a Dialog
+ * and leaves Car_Select.fng as it was (M4-48: the bot went round that loop for good, runs c13d and c13t). */
+static int choose_car(uint32_t prefer, uint32_t *handle, int *pos, int *n_out){
+    uint32_t prof = profile(), best_h = 0;
+    int best = -1, n = 0, recs[32], pref = 0;
     for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u && n < 32; i++, r += 0x14u)
         if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu){
             int rec = MR8(r + 0x11u);
             recs[n++] = rec;
-            if (rec > best){ best = rec; best_h = MR32(r); }
+            if (pref || !car_free(prof, MR32(r))) continue;
+            if (prefer && MR32(r) == prefer){ best = rec; best_h = prefer; pref = 1; }   /* PREFER, when it can be driven */
+            else if (rec > best){ best = rec; best_h = MR32(r); }
         }
+    int p = 1;
+    for (int i = 0; i < n; i++) p += recs[i] < best;
+    *handle = best_h; *pos = p; *n_out = n;
+    return best;
+}
+static void pick_car(void){
+    uint32_t cur = rd(profile() + 0xa8u), best_h = 0;
+    int pos = 0, n = 0, best = choose_car(0, &best_h, &pos, &n);
     B.want_car = 0; B.car_entered = 0;
     if (!best_h || best_h == cur) return;
-    int pos = 1;
-    for (int i = 0; i < n; i++) pos += recs[i] < best;
     B.want_car = best_h; B.want_pos = pos;
     fprintf(stderr, "[mwbot] f=%ld the car to race: handle %#x (career record %d), Car Select's %d / %d\n", autotest_frame(),
             best_h, best, pos, n);
@@ -630,7 +685,7 @@ static void pursuit_frame(CPU *c){
     if (t < B.t0) B.t0 = t;             /* the world was loaded again (a bust): its clock starts again */
     if (!B.raced){                       /* no pursuit yet: the AI drives about until the cops start one */
         if (B.tries == 0 && game_flow() == g_game.flow_race && !mw_fe_input_top(0)){
-            mw_aid_autopilot(c, 1); B.tries = 1; B.bounty0 = B.g.bounty;
+            mw_aid_autopilot(c, B.stand ? AP_STAND : 1); B.tries = 1; B.bounty0 = B.g.bounty;   /* bot bust: it stands */
         }
         if (po){
             B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9;
@@ -639,7 +694,8 @@ static void pursuit_frame(CPU *c){
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
                     B.forced ? " (forced)" : " (by itself)", rdf(perp + PERP_HEAT), rdf(po + 0x9cu), rdf(po + 0xa0u),
                     rd(po + PURSUIT_COPS));
-        } else if (B.tries == 1 && t - B.t0 >= (B.chase_s > 0.0 ? CHASE_NATURAL_S : PURSUIT_NATURAL_S) && free_roam(c)){
+        } else if (B.tries == 1 && t - B.t0 >= (B.chase_s > 0.0 || B.stand ? CHASE_NATURAL_S : PURSUIT_NATURAL_S) &&
+                   free_roam(c)){
             /* at the bin's top heat (the pursuit holds it in the bin's range anyway): forced at heat 1 the pursuits of
              * bin 14 mostly ended within 12 s for 100 bounty, while the one at heat 1.96 ran 176 s for 7,700 (bot run
              * of 2026-10-30) */
@@ -679,7 +735,7 @@ static void pursuit_frame(CPU *c){
          * the bust timer at 2.8 was busted when only state 0 was broken off. */
         float bust = rdf(po + PURSUIT_BUST_T), len = rdf(po + PURSUIT_TIME);
         uint32_t pst = rd(po + PURSUIT_STATE);
-        if (pst < 2 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
+        if (!B.stand && pst < 2 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
             (bust >= ESCAPE_BUST || len >= ESCAPE_LEN) && !mw_fe_input_top(0)){
             pursuit_escape(c, len, bust, rd(perp + 0x20u));
             B.trail_n = 0;                  /* no way back to where the car was boxed in */
@@ -696,8 +752,8 @@ static void pursuit_frame(CPU *c){
         }
         if (pst == 2 && B.last_pst != 2) B.search_t = t;
         B.last_pst = (int)pst;
-        if (search_mode() == 2) pursuit_hide(c, pst, t);
-        if (search_mode() == 0 && pst == 2 && len < ESCAPE_LEN && B.rejoins < REJOIN_MAX && t - B.search_t >= REJOIN_S &&
+        if (!B.stand && search_mode() == 2) pursuit_hide(c, pst, t);
+        if (!B.stand && search_mode() == 0 && pst == 2 && len < ESCAPE_LEN && B.rejoins < REJOIN_MAX && t - B.search_t >= REJOIN_S &&
             B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
@@ -742,6 +798,15 @@ static void pursuit_frame(CPU *c){
     mw_aid_icons(c, 12);                /* the world map's icons by type, the pursuit breakers' one by one */
     mw_aid_autopilot(c, AP_STAND);
     B.raced = 0; B.pursuit = 0; B.forced = 0;
+    if (B.bust_n){                      /* bot bust: the next pursuit, until the busts asked for */
+        uint32_t cur = rd(profile() + 0xa8u), cr = career_rec(profile(), cur);
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f bust: %d of %d busts; the current car %#x: strikes %d of %d, %s; Out of Jail "
+                "markers %d (spent %d), impounds %d\n", f, t, B.busts, B.bust_n, cur, cr ? MR8(cr + 3u) : -1,
+                cr ? MR8(cr + 2u) : -1, cr && !MR8(cr + 4u) ? "drivable" : "impounded", B.oojail, B.jail_spent, B.impounds);
+        if (B.busts >= B.bust_n){ set_state(B_DONE, "the busts asked for"); return; }
+        B.g = g; B.tries = 0; B.t0 = t;
+        return;
+    }
     if (B.chase_s > 0.0){               /* bot chase: the next pursuit, until they have lasted chase_s in all */
         fprintf(stderr, "[mwbot] f=%ld t=%.1f chase: %.0f s of %.0f s in pursuits\n", f, t, B.chase_acc, B.chase_s);
         if (B.chase_acc >= B.chase_s){ set_state(B_DONE, "the chase's time is reached"); return; }
@@ -757,6 +822,11 @@ static void pursuit_frame(CPU *c){
 void mw_bot_frame(CPU *c){
     if (B.st == B_OFF || B.st == B_DONE) return;
     long f = autotest_frame();
+    if (f - B.mk_f >= 60 || f < B.mk_f){      /* the Out of Jail markers, for the infractions sheet (mw_bot_present) */
+        uint32_t a[2] = { MK_OUT_OF_JAIL, 0 };
+        B.mk_f = f;
+        B.oojail = (int)call(c, FN_MARKERS, G_MARKERS, 2, a);
+    }
     switch (B.st){
     case B_ROAM:
         if (pursuit_on(c, B_ROAM)) break;
@@ -833,13 +903,13 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_ITEM2    0x4b4e388bu
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
-static struct { char name[64]; uint32_t focus, save_last; long since, last; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars; } S;
+static struct { char name[64]; uint32_t focus, save_last; long since, last, jail_since, cs_since; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars, mk_held[MK_TYPES]; } S;
 /* the screens whose strings the bot logs once they settle (the rewards and results it does not read otherwise) */
 static int shows_logged(const char *nm){
     static const char *const k[] = { "SafehouseMarkers.fng", "SafeHouseRivalChallenge.fng", "PostRace_Results.fng",
         "PostRace_MilestoneRewards.fng", "PostRace_Pursuit.fng", "InGameRivalChallenge.fng", "Infractions.fng",
         "Car_Select.fng", "GameOver.fng", "SafeHouseRivalBio.fng", "ShoppingCart.fng", "InGameDialog.fng",
-        "SafeHouseRegionUnlock.fng", 0 };
+        "SafeHouseRegionUnlock.fng", "Dialog.fng", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(nm, k[i])) return 1;
     return 0;
 }
@@ -856,13 +926,24 @@ void mw_bot_present(void){
              * card changes neither) */
             uint32_t prof = profile();
             if (!strcasecmp(nm, "SafehouseMarkers.fng")){
-                if (!S.mk_open){ S.mk_open = 1; S.mk_cash = (int)rd(prof + PROF_CASH); S.mk_cars = career_cars(prof); }
+                if (!S.mk_open){
+                    S.mk_open = 1; S.mk_cash = (int)rd(prof + PROF_CASH); S.mk_cars = career_cars(prof);
+                    markers_held(S.mk_held);
+                }
             } else if (S.mk_open){
+                /* and the markers held before and after, by type (the parts' markers are the types below 0x11) */
+                int now[MK_TYPES], o = 0; char b[300];
+                markers_held(now);
+                for (int t = 0; t < MK_TYPES && o < 260; t++)
+                    if (now[t] != S.mk_held[t])
+                        o += snprintf(b + o, sizeof b - (size_t)o, " %s %#x %d -> %d", marker_name(t), t, S.mk_held[t], now[t]);
                 S.mk_open = 0;
-                fprintf(stderr, "[mwbot] f=%ld markers taken: cash %d -> %d, cars %d -> %d\n", f, S.mk_cash,
-                        (int)rd(prof + PROF_CASH), S.mk_cars, career_cars(prof));
+                fprintf(stderr, "[mwbot] f=%ld markers taken: cash %d -> %d, cars %d -> %d; markers held:%s\n", f, S.mk_cash,
+                        (int)rd(prof + PROF_CASH), S.mk_cars, career_cars(prof), o ? b : " no change");
             }
             S.taps = 0; S.since = f; S.shown = 0;
+            if (strcasecmp(nm, "Car_Select.fng") && strcasecmp(nm, "Dialog.fng")){ B.cs_k = 0; B.cs_retry = 0; B.cs_dlg = 0; }
+            else if (!strcasecmp(nm, "Dialog.fng") && B.cs_k) B.cs_dlg = 1;   /* a Dialog after the Enter on the list */
         }
         fprintf(stderr, "[mwbot] f=%ld screen %s @%08x (%s)\n", f, nm, focus, st_name[B.st]);
         snprintf(S.name, sizeof S.name, "%s", nm); S.focus = focus;
@@ -910,8 +991,37 @@ void mw_bot_present(void){
         /* after a bust: the default button (0xB8A7C6CD) pays the fines from the cash and puts a strike on the car
          * (the screen's handler 0x5A162E: strikes +3 of the career record up by one, its evades +6 to 0, the heat
          * +0xC to 1.0; the car impounded once the strikes reach +2); the other (0xB8A7C6CC) spends an Out of Jail
-         * marker instead (type 0x11, 0x576C90), no strike.  The bot pays. */
-        B.sheet_seen = 1; what = "Enter: pay the fines (a strike on the car)";
+         * marker instead (type 0x11, 0x576C90), no strike.  The bot pays, unless this strike would impound the car
+         * (strikes + 1 >= the most it takes) and a marker is held: then it spends the marker (M4-48).  The marker's
+         * button is beside the default one: the bot steps LEFT, then RIGHT, until it is highlighted (a few tries,
+         * then it pays). */
+        uint32_t cr = career_rec(profile(), rd(profile() + 0xa8u));
+        int strikes = cr ? MR8(cr + 3u) : 0, most = cr ? MR8(cr + 2u) : 0;
+        B.sheet_seen = 1;
+        if (S.jail_since != S.since){       /* the sheet came (again) */
+            S.jail_since = S.since; B.jail_moves = 0;
+            fprintf(stderr, "[mwbot] f=%ld the infractions sheet: the current car's strikes %d of %d, Out of Jail markers %d\n",
+                    f, strikes, most, B.oojail);
+        }
+        int marker = cr && most > 0 && strikes + 1 >= most && B.oojail > 0 && !B.pay_only;
+        if (marker && B.jail_moves < 6){
+            if (focus == F_YES_DLG){
+                autotest_tap(DIK_RETURN, 6); S.last = f; S.taps++;
+                B.jail_spent++; B.jail_moves = 99;   /* once: the sheet's next answer (if it stays) is the default */
+                fprintf(stderr, "[mwbot] f=%ld %s @%08x: Enter: an Out of Jail marker spent (strikes %d of %d, markers %d)\n",
+                        f, nm, focus, strikes, most, B.oojail);
+                return;
+            }
+            /* Pay_with_Marker is LEFT of Pay_with_Cash (V c4-imp-a) */
+            key = B.jail_moves++ & 1 ? DIK_RIGHT : DIK_LEFT; what = "to the Out of Jail marker (the strike would impound the car)";
+        }
+        else if (focus == F_YES_DLG && B.jail_moves < 6){
+            /* the sheet opened on Pay_with_Marker (bin 15's first bust, with the tutorial's Dialog 'When you get busted,
+             * you'll need to...': V c4-imp-c, where Enter there spent a marker): the bot keeps its markers for the
+             * strike that would impound the car, and goes to Pay_with_Cash */
+            key = B.jail_moves++ & 1 ? DIK_LEFT : DIK_RIGHT; what = "to Pay with Cash (the marker kept)";
+        }
+        else what = "Enter: pay the fines (a strike on the car)";
     }
     else if (!strcasecmp(nm, "SafehouseMarkers.fng")){
         /* the beaten rival's markers ("You can now select 2 markers", the cards face down): Enter turns the highlighted
@@ -969,12 +1079,38 @@ void mw_bot_present(void){
         else { B.sh_target--; return; }   /* beyond the money left, or not above the part on the car: the next lower */
     }
     else if (B.st == B_SHOP && !strcasecmp(nm, "ShoppingCart.fng")){ what = "Enter: check out"; B.sh_paid = 1; }
-    else if (!strcasecmp(nm, "Car_Select.fng") && B.want_car && !B.car_entered){
+    else if (!strcasecmp(nm, "Car_Select.fng")){
+        /* The career's cars ('k / N' in the strings of label 0x18, the list in career-record order): from the safehouse
+         * menu for pick_car's car, and after a bust (the sheet, then this).  After a bust the car taken is the current
+         * one while it can be driven, else choose_car's (M4-48: after the third strike impounded the car, Enter on it
+         * opened a Dialog and brought this screen back, for good, runs c13d and c13t).  An Enter that brings the screen
+         * back all the same (a Dialog between: that car was not taken) moves the pick one place RIGHT. */
         char sh[1600]; mw_fe_shows(sh, sizeof sh);
         long k = shows_nth(sh, "00000018", 2);
-        if (k < 1){ if (f - S.since < 150) return; B.want_car = 0; key = DIK_ESCAPE; what = "Escape: the list's place not read"; }
+        if (S.cs_since != S.since){         /* the screen came (again) */
+            S.cs_since = S.since;
+            if (B.cs_k && !B.cs_dlg) B.cs_k = 0;   /* back without a Dialog (the list drawn again): the same pick */
+            B.cs_dlg = 0;
+            if (B.cs_k){
+                B.cs_retry++;
+                fprintf(stderr, "[mwbot] f=%ld Car_Select.fng again after Enter on %d (try %d): that car was not taken\n", f,
+                        B.cs_k, B.cs_retry);
+            }
+            if (!B.want_car || B.car_entered || B.cs_k){
+                uint32_t prof = profile(), cur = rd(prof + 0xa8u), h = 0;
+                int pos = 0, n = 0, rec = choose_car(cur, &h, &pos, &n), free_now = car_free(prof, cur);
+                if (B.cs_k && n > 0) pos = (B.cs_k > 0 ? B.cs_k : B.cs_retry) % n + 1;   /* the next place */
+                if (!free_now && !B.cs_k) B.impounds++;
+                B.want_car = h ? h : cur; B.want_pos = pos; B.car_entered = 0;
+                fprintf(stderr, "[mwbot] f=%ld Car_Select.fng: the current car %#x %s; to %d / %d (handle %#x, career record %d)\n",
+                        f, cur, free_now ? "can be driven" : "is impounded", pos, n, h, rec);
+            }
+            B.cs_k = 0;
+        }
+        if (B.cs_retry > 8){ set_state(B_DONE, "Car_Select: no car was taken"); return; }
+        if (k < 1){ if (f - S.since < 150) return; B.car_entered = 1; B.cs_k = -1; what = "Enter: the list's place not read"; }
         else if (k != B.want_pos){ key = k < B.want_pos ? DIK_RIGHT : DIK_LEFT; what = "to the car picked"; }
-        else { B.car_entered = 1; what = "Enter: the car picked"; }
+        else { B.car_entered = 1; B.cs_k = (int)k; what = "Enter: the car picked"; }
     }
     else if (!strcasecmp(nm, "MainMenu_Sub.fng") && mw_fe_match("MainMenu_Sub.fng:e596c4a3")){
         /* Save is the menu's last item (the 0x532220 set-up adds it last), and the menu grows with the career (Rap
@@ -1065,6 +1201,14 @@ void mw_bot_cmd(CPU *c, const char *args){
     }
     if (!strcasecmp(a1, "save")){ S.save_same = 0; S.save_last = 0; set_state(B_SAVE, "bot save"); return; }
     if (!strcasecmp(a1, "pursuit")){ B.once = 1; read_gates(c, &B.g); set_state(B_PURSUIT, "bot pursuit"); return; }
+    if (!strcasecmp(a1, "bust")){       /* a probe of the impound path (M4-48): the strikes, the markers, Car_Select */
+        char a3[16] = {0};
+        sscanf(args, "%*s %*d %15s", a3);
+        B.once = 1; B.stand = 1; B.bust_n = n > 0 ? n : 1; B.pay_only = !strcasecmp(a3, "pay"); read_gates(c, &B.g);
+        fprintf(stderr, "[mwbot] f=%ld bot bust: pursuits with the car standing until %d busts%s\n", f, B.bust_n,
+                B.pay_only ? " (the fines paid, no Out of Jail marker)" : "");
+        set_state(B_PURSUIT, "bot bust"); return;
+    }
     if (!strcasecmp(a1, "chase")){
         B.once = 1; B.chase_s = n > 0 ? n : 1800; read_gates(c, &B.g);
         fprintf(stderr, "[mwbot] f=%ld bot chase: pursuits for %.0f game seconds\n", f, B.chase_s);
@@ -1081,5 +1225,5 @@ void mw_bot_cmd(CPU *c, const char *args){
         go_to(c, &r[n]);
         return;
     }
-    fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | chase S | save | off\n");
+    fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | chase S | bust N [pay] | save | off\n");
 }
