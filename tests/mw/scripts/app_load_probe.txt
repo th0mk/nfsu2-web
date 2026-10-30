@@ -1,0 +1,13 @@
+# Most Wanted on the player's page (web/tools/app-test.mjs --game mw: its restore, pcsave and rename steps): the one
+# alias in the save folder loads at the start ("Load complete.", no list: GAME.md 10.8), then the main menu and the
+# game's own quit (close: WM_CLOSE).  The step has the page list the folder's one alias before Play.
+# (*) a RETURN tapped at once is dropped while the first one still holds the key (race_win.txt): Continue is
+# pressed until the main menu comes.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # "Load complete.", its Continue highlighted
++0    log app_load_probe: loaded
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue (*)
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log app_load_probe: main menu
++0    close

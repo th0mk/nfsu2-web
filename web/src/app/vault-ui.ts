@@ -16,6 +16,7 @@
 // issue 33: a player who took the cloud's lost 7 hours).
 
 import { STORAGE } from '@game/storage';
+import { FILE_PREFIX } from '@game/run';
 import { listFiles, readBytes, readText, removeSaveDir, writeFile } from './savefs';
 import { backupItems, readVault, restoreVault } from './saves-ui';
 import { downloadBlob } from './logs';
@@ -386,7 +387,7 @@ export class VaultPanel {
     p.textContent = name ? t('This passphrase also holds your claim on {name}.', { name }) : '';
   }
   /** the linked keyphrase as a file */
-  download() { if (this.sync?.link) downloadBlob(`${shownPhrase(this.sync.link.phrase)}\n`, 'nfsu2-passphrase.txt', 'text/plain'); }
+  download() { if (this.sync?.link) downloadBlob(`${shownPhrase(this.sync.link.phrase)}\n`, `${FILE_PREFIX}-passphrase.txt`, 'text/plain'); }
 
   // ---- the buttons ----
 

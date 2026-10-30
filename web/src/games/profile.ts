@@ -7,9 +7,14 @@
 // web/src/games/<id>/lang/<language>.json, over the shared web/src/app/lang/<language>.json (build.mjs merges them,
 // web/tools/i18n-keys.mjs checks them).
 //
-// The values still sit where the page reads them (savefs.ts, settings.ts, ...): ug2/index.ts re-exports them, and no
-// part of the page imports '@game' yet.  What else differs per game (the exe path, the save format, the controls, the
-// storage names, index.html's head ...) moves in here with the work that gives Most Wanted its own.
+// The page reads what differs through '@game/<file>', each a file of the game's folder that takes no more than it
+// needs: '@game/storage' (the browser's storage names), '@game/launch' and '@game/keyphrase' (cloud saves),
+// '@game/run' (the program, the profiles' folder, the movies' size, the log's and the backup's names: no imports),
+// '@game/registry' (registry.txt's seed) and '@game/profile' (the game's save files: SaveFormat below).  Other values
+// still sit where the page reads them (settings.ts, i18n.ts, ...), and ug2/index.ts re-exports them; what else differs
+// per game (the settings, the controls ...) moves in here with the work that gives Most Wanted its own.
+
+import type { RenameFiles, SaveFiles } from '../app/profile';
 
 /** What a game's profile exports. */
 export interface GameProfile {
@@ -17,8 +22,14 @@ export interface GameProfile {
   readonly GAME: string;
   /** the site's name */
   readonly SITE_NAME: string;
+  /** the program the page starts, in the game's folder as the server serves it (/data) */
+  readonly EXE: string;
   /** the folder the game keeps its profiles in, at the top of the save folder */
   readonly PROFILES_DIR: string;
+  /** the start of the line each game's session opens the log with (logs.ts keeps the newest one's lines) */
+  readonly LOG_MARK: string;
+  /** the start of the files the page gives the player: the log, a backup, the keyphrase, an F12 photo (run.ts) */
+  readonly FILE_PREFIX: string;
   /** registry.txt as a first launch writes it */
   readonly REGISTRY_DEFAULTS: string;
   /** settings.ini as a first launch writes it */
@@ -98,3 +109,35 @@ export interface LocalKeys {
 
 /** T, which tsc checks is a whole profile: each profile's `export type Checked = Profile<typeof self>` */
 export type Profile<T extends GameProfile> = T;
+
+/** A game's save files as far as the page reads or changes them ('@game/profile': Underground 2's src/app/profile.ts,
+ *  Most Wanted's src/games/mw/profile.ts): the profiles are "<PROFILES_DIR>/<NAME>/<NAME>", each the game's own
+ *  "20CM" container.  What saves-ui.ts, savefs.ts, vault.ts and shell.ts use of it. */
+export interface SaveFormat {
+  readonly PROFILES_DIR: string;
+  /** the longest name the game's own name field makes, and whether a name is one it makes */
+  readonly NAME_MAX: number;
+  isProfileName(s: string): boolean;
+  /** a file that starts as the game's save files do ("20CM"): a profile, or one of another version or game */
+  isProfileFile(file: Uint8Array): boolean;
+  /** the name inside a profile from elsewhere, or why the page does not take it (in the page's language); edited: its
+   *  checks do not hold, as a save editor leaves them, and it comes in as sealed() makes it */
+  profileName(file: Uint8Array): { name: string; edited: boolean } | { bad: string };
+  /** a profile's bank; null: not a profile of this game and version */
+  profileMoney(file: Uint8Array): number | null;
+  /** how many of a profile's cars are of a type the game does not have (a mod's) */
+  modCars(file: Uint8Array): number;
+  /** a copy of a profile profileName took as edited, its checks made again */
+  sealed(file: Uint8Array): Uint8Array;
+  /** a folder beside a profile's that belongs to it (Underground 2's DVD and magazine covers), or null */
+  coverOf(folder: string): { profile: string; cover: string } | null;
+  /** a profile renamed as if the game had made it under the new name, or why not (nothing written then) */
+  renameProfile(fs: RenameFiles, profilesDir: string, from: string, to: string): Promise<{ files: number } | { refused: string }>;
+  /** before a Play: the game's Save option at Autosave, once per profile (settings.ini autosave) */
+  turnOnAutosave(fs: SaveFiles, profilesDir: string): Promise<{ turnedOn: string[]; notes: string[] }>;
+  /** the save folder's file of the profiles turnOnAutosave has looked at */
+  readonly AUTOSAVE_SEEN: string;
+}
+
+/** T, which tsc checks is a whole SaveFormat: each '@game/profile''s `export type Checked = Saves<typeof self>` */
+export type Saves<T extends SaveFormat> = T;

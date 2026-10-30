@@ -75,17 +75,34 @@ fs.mkdirSync(DIST, { recursive: true });
 // app's manifest and icons, for installing it on a phone's home screen or as a desktop app).  A game with a head of
 // its own (src/games/<id>/head.html: its title, description, social and search tags, favicon, the links to its
 // manifest, icon and stylesheet, its JSON-LD) has it in place of index.html's, from <title> up to main.js's script;
-// one with files of its own (src/games/<id>/static: its manifest and icons) has those in place of src/static's.
+// one with files of its own (src/games/<id>/static: its manifest and icons) has those in place of src/static's.  A
+// game whose page body differs (src/games/<id>/body.json: the site's name, the keys it has, the parts of the page
+// that are another game's) has its edits made in it: each one's "at" text, which index.html must have once, and
+// with "until" the text up to the end of that text's first occurrence after it, in place of "put" (web/tools/
+// i18n-keys.mjs reads the page's texts after the same edits).
 const HEAD = path.join('src/games', GAME, 'head.html'), OWN_STATIC = path.join('src/games', GAME, 'static');
-if (!fs.existsSync(HEAD)) fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
+const BODY = path.join('src/games', GAME, 'body.json');
+if (!fs.existsSync(HEAD) && !fs.existsSync(BODY)) fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
 else {
-  const html = fs.readFileSync('index.html', 'utf8'), MAIN = '<script type="module" src="main.js"></script>';
-  const a = html.indexOf('<title>'), b = html.indexOf(MAIN);
-  if (a < 0 || b < a || html.indexOf('<title>', a + 1) >= 0 || html.indexOf(MAIN, b + 1) >= 0) {
-    console.error(`build.mjs: index.html has no one <title> before one ${MAIN} for ${HEAD} to take the place of`);
-    process.exit(2);
+  let html = fs.readFileSync('index.html', 'utf8');
+  const MAIN = '<script type="module" src="main.js"></script>';
+  if (fs.existsSync(HEAD)) {
+    const a = html.indexOf('<title>'), b = html.indexOf(MAIN);
+    if (a < 0 || b < a || html.indexOf('<title>', a + 1) >= 0 || html.indexOf(MAIN, b + 1) >= 0) {
+      console.error(`build.mjs: index.html has no one <title> before one ${MAIN} for ${HEAD} to take the place of`);
+      process.exit(2);
+    }
+    html = html.slice(0, a) + fs.readFileSync(HEAD, 'utf8') + html.slice(b);
   }
-  fs.writeFileSync(path.join(DIST, 'index.html'), html.slice(0, a) + fs.readFileSync(HEAD, 'utf8') + html.slice(b));
+  if (fs.existsSync(BODY)) for (const e of JSON.parse(fs.readFileSync(BODY, 'utf8'))) {
+    const a = html.indexOf(e.at), u = e.until === undefined ? a + e.at.length : html.indexOf(e.until, a + e.at.length);
+    if (a < 0 || html.indexOf(e.at, a + 1) >= 0 || u < 0) {
+      console.error(`build.mjs: ${BODY}: index.html has ${a < 0 ? 'no' : u < 0 ? `no "${e.until}" after` : 'more than one'} "${e.at.trim().slice(0, 80)}"`);
+      process.exit(2);
+    }
+    html = html.slice(0, a) + e.put + html.slice(e.until === undefined ? u : u + e.until.length);
+  }
+  fs.writeFileSync(path.join(DIST, 'index.html'), html);
 }
 const STATIC = fs.existsSync(OWN_STATIC) ? OWN_STATIC : 'src/static';
 for (const f of fs.readdirSync(STATIC)) fs.copyFileSync(path.join(STATIC, f), path.join(DIST, f));

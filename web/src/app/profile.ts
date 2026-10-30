@@ -1,4 +1,5 @@
-// A profile the game saved ("NFS Underground 2/<NAME>/<NAME>", 54,966 bytes)
+// A profile Underground 2 saved ("NFS Underground 2/<NAME>/<NAME>", 54,966 bytes; the page takes it through
+// '@game/profile', src/games/ug2/profile.ts, and Most Wanted's from src/games/mw/profile.ts)
 // as far as the page reads or changes it: the file's checksums and the game's
 // own Save option (Options, Gameplay, Save: Autosave, Prompt or Off), its
 // name (renameProfile), and, for one from the PC game, its checks, the cars
@@ -34,26 +35,15 @@
 // renameProfile take the save folder's file functions.
 
 import { fill, N, t, type Vars } from './i18n';
+import { checksum, isMemcardFile } from './memcard';
 
 export const PROFILE_SIZE = 54966;
 const PAYLOAD = 54930, VERSION = 0x10D;
 const B = 36;                                        // the payload's start in the file
 const AUTOSAVE = B + 50987, PROMPT = B + 50988, NAME = B + 53761, MONEY = 0xA16A;
 
-const T = new Uint32Array(256);                      // MSB-first CRC table, polynomial 0x04C11DB7
-for (let i = 0; i < 256; i++) {
-  let r = i << 24;
-  for (let k = 0; k < 8; k++) r = r & 0x80000000 ? (r << 1) ^ 0x04C11DB7 : r << 1;
-  T[i] = r >>> 0;
-}
-
-/** The game's checksum of a block (SPEC §3.4): 0 below 4 bytes. */
-export function checksum(d: Uint8Array): number {
-  if (d.length < 4) return 0;
-  let r = ~((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]) >>> 0;
-  for (let i = 4; i < d.length; i++) r = (((r << 8) | d[i]) ^ T[r >>> 24]) >>> 0;
-  return ~r >>> 0;
-}
+/** The game's checksum of a block (SPEC §3.4, memcard.ts): 0 below 4 bytes. */
+export { checksum };
 
 export type SaveMode = 'autosave' | 'prompt' | 'off';
 
@@ -122,7 +112,7 @@ function folderName(file: Uint8Array): string {
 }
 
 /** A file that starts as the game's save files do ("20CM"): a profile, or one of another version. */
-export const isProfileFile = (file: Uint8Array) => file.length >= 4 && file[0] === 0x32 && file[1] === 0x30 && file[2] === 0x43 && file[3] === 0x4D;
+export const isProfileFile = isMemcardFile;
 
 /** A profile's bank; null: not a profile of this version. */
 export const profileMoney = (file: Uint8Array): number | null => file.length === PROFILE_SIZE && isProfileFile(file) ? u32(file, MONEY) : null;

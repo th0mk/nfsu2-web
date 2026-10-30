@@ -9,10 +9,11 @@
 // which the game never opens.
 
 import { BLOCK, CACHE_DIR } from '../host/datacache';
-import { coverOf } from './profile';
+import { coverOf, PROFILES_DIR } from '@game/profile';
 
-export const PROFILES_DIR = 'NFS Underground 2';   // what the game creates under the save root
-/** an F12 screenshot: an image file at the top of the save folder (nfsu2000.tga ...) */
+/** what the game creates under the save root ('NFS Underground 2', 'NFS Most Wanted': src/games/<id>/run.ts) */
+export { PROFILES_DIR };
+/** an F12 screenshot: an image file at the top of the save folder (nfsu2000.tga, nfsmw000.tga ...) */
 export const isScreenshot = (path: string) => !path.includes('/') && /\.(tga|bmp|png|jpe?g)$/i.test(path);
 
 async function root(): Promise<FileSystemDirectoryHandle> { return navigator.storage.getDirectory(); }
@@ -119,8 +120,8 @@ export async function removeSaveDir(saveDir: string): Promise<void> {
 export interface Profile { name: string; size: number; mtime: number; files: number }
 
 /**
- * Profiles the game saved: "NFS Underground 2/<NAME>/<NAME>" (54,966 bytes
- * each).  A folder without its file is skipped:
+ * Profiles the game saved: "<PROFILES_DIR>/<NAME>/<NAME>" (Underground 2's
+ * 54,966 bytes each, Most Wanted's 63,596).  A folder without its file is skipped:
  * the game would not list it either.  So are the cover shoots' saves beside
  * them ("<NAME> DVD 1", profile.ts coverOf): they belong to their profile.
  */

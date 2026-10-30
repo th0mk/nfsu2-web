@@ -4,8 +4,8 @@
 // The page built from this checkout's sources into a temporary folder (build.mjs builds the folder it is in) for
 // each game, then:
 // 1. Underground 2's index.html and app files are web/index.html and web/src/static byte for byte.
-// 2. Most Wanted's index.html is Underground 2's with its own head from <title> to main.js's script: the body the same,
-//    and in the head no value of Underground 2's (its name, texts, keywords, favicon) but those both pages share (the
+// 2. Most Wanted's index.html is Underground 2's with its own head from <title> to main.js's script: the body the same
+//    but for its own edits (src/games/mw/body.json, as web/tools/i18n-keys.mjs pageHtml makes them), and in the head no value of Underground 2's (its name, texts, keywords, favicon) but those both pages share (the
 //    AdSense account, PLAN F-216; the charset, viewport, colours, robots, the links' file names).
 // 3. Most Wanted's head has its title, description, Open Graph and Twitter tags, canonical and og:url
 //    https://nfsrevived.xyz/mw/, a favicon, the manifest and icon links, and JSON-LD that parses.
@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { pageHtml } from '../tools/i18n-keys.mjs';
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'head-'));
@@ -63,7 +64,8 @@ test('Underground 2\'s page: index.html and its app files as they are', () => {
 test('Most Wanted\'s head: its own, no value of Underground 2\'s; the rest of the page the same', () => {
   const [ua, uh, ub] = split(read('ug2', 'index.html').toString()), [ma, mh, mb] = split(read('mw', 'index.html').toString());
   assert.equal(ma, ua, 'before <title>');
-  assert.equal(mb, ub, 'from main.js on');
+  assert.equal(mb, split(pageHtml('mw', root))[2], 'from main.js on: its body edits made');
+  assert.notEqual(mb, ub, 'the body has edits of its own');
   assert.doesNotMatch(mh, /underground|nfsu2|ug2|\bu2\b/i);
   const theirs = values(uh).filter(([, v]) => !SHARED.has(v));
   assert.ok(theirs.length >= 12, `${theirs.length} values of Underground 2's head`);

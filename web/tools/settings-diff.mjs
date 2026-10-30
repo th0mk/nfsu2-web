@@ -2,16 +2,22 @@
 // (its key table, validation and file reader, cut out of bundle.m unchanged
 // and compiled for this Mac) against web/src/app/settings.ts, on the same
 // inputs.  Prints every disagreement; exit 1 if there is one.
-//   node web/tools/settings-diff.mjs
+//   node web/tools/settings-diff.mjs [--game ug2|mw]
+// --game: the page of that game (its template, src/games/<id>/template.ts, behind '@game'; Underground 2's without
+// it): the key table and its validation are both games' (bundle.m's), the template's defaults are checked against
+// bundle.m's, and every key the template lists has a reader in that game's build: its runtime (runtime/core.list, the
+// game's own files: Underground 2's in runtime/, another game's runtime/<id>/, and runtime/web) or the page.
 // Builds into out/web/settings-diff/ (the C harness and the bundled module).
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+import { gameOf } from './rig-game.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(ROOT, 'out/web/settings-diff');
+const GAME = gameOf(process.argv.slice(2));
 fs.mkdirSync(OUT, { recursive: true });
 
 // ---- the C side: bundle.m lines from the K_* enum to the end of app_load_settings
@@ -62,8 +68,8 @@ execFileSync('clang', ['-O1', '-w', '-I', path.join(ROOT, 'runtime'), '-o', path
 
 // ---- the TypeScript side
 await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/settings.ts')], bundle: true, format: 'esm', platform: 'node',
-  outfile: path.join(OUT, 'settings.mjs'), logLevel: 'silent' });
-const S = await import(path.join(OUT, 'settings.mjs') + `?t=${Date.now()}`);
+  outfile: path.join(OUT, `settings-${GAME}.mjs`), logLevel: 'silent', alias: { '@game': path.join(ROOT, 'web/src/games', GAME) } });
+const S = await import(path.join(OUT, `settings-${GAME}.mjs`) + `?t=${Date.now()}`);
 
 // ---- cases: every key of the C table with a spread of values
 const values = ['on', 'off', 'yes', 'No', 'TRUE', 'false', '1', '0', 'enabled', 'Disabled', 'maybe', '', 'auto', 'Auto', 'native',
@@ -152,13 +158,37 @@ checks.push(['settingsPut(null) restores the template line', S.settingsPut(put1,
 checks.push(['settingsPut appends an unknown key', /\nNFSU2_FOV = renderer\n$/.test(S.settingsPut(S.TEMPLATE, 'NFSU2_FOV', 'renderer'))]);
 const old = S.TEMPLATE.split(/\n\n# ---- Sound/)[0] + '\nmovies = off\n';      // an "older" file: no sound/controller/roam paragraphs
 const up = S.settingsUpgrade(old);
-checks.push(['settingsUpgrade appends the missing paragraphs once', !!up && up.added.includes('audio_latency') && up.added.includes('roam') &&
-  /^movies = off$/m.test(up.text) && S.settingsUpgrade(up.text) === null]);
+checks.push(['settingsUpgrade appends the missing paragraphs once', !!up && up.added.includes('audio_latency') && up.added.includes('gamepad') &&
+  (!S.DEFAULTS.has('roam') || up.added.includes('roam')) && /^movies = off$/m.test(up.text) && S.settingsUpgrade(up.text) === null]);
 checks.push(['settingsUpgrade leaves a file that is not ours alone', S.settingsUpgrade('movies = off\n') === null]);
 const env = S.resolveEnv('movies = off\nNFSU2_SAVEDIR = /elsewhere\nHOME = /x\ndiscord = on\n', { NOMOVIES: '0' }, { HOME: '/save', NFSU2_SAVEDIR: '/save' });
 checks.push(['environment > settings.ini > default; mounts fixed; Mac-only keys ignored', env.env.NOMOVIES === '0' && env.source.NOMOVIES === 'environment' &&
   env.env.NFSU2_SAVEDIR === '/save' && env.env.HOME === '/save' && !('NFSU2_DISCORD' in env.env && env.source.NFSU2_DISCORD === 'settings.ini') &&
   env.env.SNDSYNC === '0' && env.source.SNDSYNC === 'default']);
+
+// ---- the game's readers: every key its template lists (the browser's, scope 'web') is read by its build: its
+// runtime (runtime/core.list's files, the game's own: Underground 2's RT_UG2 in web/build.sh, another game's
+// runtime/<id>/*.c, every runtime/web/*.c and runtime/*.h) or the page (web/src but settings.ts, settings-ui.ts and the
+// games' folders), by the variable's name as a string, or as a field of the page's environment
+const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+const cIn = d => fs.readdirSync(path.join(ROOT, d)).filter(f => /\.[ch]$/.test(f)).map(f => `${d}/${f}`);
+const core = read('runtime/core.list').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(l => l.endsWith('.c')).map(f => `runtime/${f}`);
+const ug2Files = (/^RT_UG2="([^"]*)"/m.exec(read('web/build.sh'))?.[1] ?? '').split(/\s+/).filter(Boolean).map(f => `runtime/${f}.c`);
+const runtimeFiles = [...core, ...(GAME === 'ug2' ? ug2Files : cIn(`runtime/${GAME}`)), ...cIn('runtime/web'), ...cIn('runtime').filter(f => f.endsWith('.h'))];
+const tsIn = d => fs.readdirSync(path.join(ROOT, d), { withFileTypes: true }).flatMap(e => e.isDirectory()
+  ? (['test', 'games'].includes(e.name) ? [] : tsIn(`${d}/${e.name}`)) : e.name.endsWith('.ts') && !/^settings(-ui)?\.ts$/.test(e.name) ? [`${d}/${e.name}`] : []);
+const sources = new Map([...runtimeFiles, ...tsIn('web/src')].filter(f => fs.existsSync(path.join(ROOT, f))).map(f => [f, read(f)]));
+const readers = env => [...sources].filter(([, s]) => s.includes(`"${env}"`) || s.includes(`'${env}'`) || s.includes(`.${env}`)).map(([f]) => f);
+const unread = [];
+for (const k of [...S.DEFAULTS.keys()]) {
+  const d = S.keyDef(k);
+  if (d.scope !== 'web') continue;
+  const r = readers(d.env);
+  if (!r.length) unread.push(`${k} (${d.env})`);
+  else if (process.argv.includes('--readers')) console.log(`  ${k} (${d.env}): ${r.map(f => path.basename(f)).join(', ')}`);
+}
+for (const k of unread) console.log(`NO READER ${k}: in neither ${GAME === 'ug2' ? 'Underground 2' : GAME}'s runtime nor the page`);
+checks.push([`every key of the ${GAME} template has a reader in its build (${S.DEFAULTS.size} keys, ${runtimeFiles.length} runtime files)`, !unread.length]);
 for (const [name, ok] of checks) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}`);
 const bad = diffs + fileDiffs + checks.filter(c => !c[1]).length;
 console.log(bad ? `${bad} problem(s)` : 'settings.ts agrees with bundle.m');

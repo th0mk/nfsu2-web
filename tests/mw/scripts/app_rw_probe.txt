@@ -1,0 +1,60 @@
+# Most Wanted on the player's page (web/tools/app-test.mjs --game mw, its play step; TRACKER M6-08): a first start
+# makes the alias ROTEST by keyboard and saves it (as kb_alias.txt), then a Custom Race to GO (as race_win.txt:
+# Quick Race, Custom Race, Sprint, Seaside & Power Station, no traffic, 1 opponent, the first car, automatic gears),
+# 600 frames of the game's AI driving the player's car, and the game's own quit (close: WM_CLOSE) in the race.
+# The page writes registry.txt from the game's seed (src/games/mw/registry.ts) before the start, and it keeps the
+# alias the game saved as "NFS Most Wanted/ROTEST/ROTEST" in its save folder.
+# (*) a dialog that has just come up may not take a key yet (a RETURN the page's run sent 5 frames after the second
+# autosave note was dropped), so these keys go again every 60 or 90 frames until the next screen is up: none of these
+# screens has a RETURN of its own to take a second one before then.
+# (an oracle build needs the D3DX seed of tests/mw/scripts/boot_menu.txt: app-test puts the DLL in the page's save
+# folder and NFSMW_D3DX in its address)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes (*)
++0    tapuntil RETURN MC_Main.fng:b380362f 60 600
++0    tapuntil RETURN MC_Main.fng:4f876b6f 60 600        # Enter name: NAME
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype ROTEST
++0    waitfng MC_Main.fng'ROTEST 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ROTEST?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    log app_rw_probe: ROTEST saved
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue (*)
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log app_rw_probe: main menu
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@4b4e388b 40 600   # Sprint
++0    tap RETURN
++0    waitfng Track_Select.fng:c2d85652:4d36c3b8 600     # "sprint track select", on Seaside & Power Station
++0    tap RETURN
++0    waitfng Track_Options.fng:b80bfc8a@b2980ba8 600    # "sprint options", on Traffic Level
++0    tapuntil LEFT Track_Options.fng:8cdc3937@b2980ba8 40 300   # None
++0    tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980ba9'1 40 300  # 1
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log app_rw_probe: GO
++0    autopilot on
++600  log app_rw_probe: driven 600 frames
++0    racestatus
++0    close

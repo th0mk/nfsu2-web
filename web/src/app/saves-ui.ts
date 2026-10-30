@@ -9,7 +9,9 @@
 // it stays on the server.
 
 import { cacheBytes, clearCache, clearSaveDir, filesOf, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
-import { AUTOSAVE_SEEN, coverOf, isProfileFile, modCars, NAME_MAX, profileName, renameProfile, sealed, type RenameFiles } from './profile';
+import { AUTOSAVE_SEEN, coverOf, isProfileFile, modCars, NAME_MAX, profileName, renameProfile, sealed } from '@game/profile';
+import { FILE_PREFIX } from '@game/run';
+import type { RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
 import { fmtBytes } from './checks';
@@ -81,7 +83,7 @@ export async function exportSaves(saveDir: string): Promise<{ zip: Uint8Array; f
     if (isScreenshot(f.path)) shotBytes += data.length;
     entries.push({ name: f.path, data, mtime: f.mtime });
   }
-  return { zip: zip(entries), files: entries.length, name: `nfsu2-saves-${stamp()}.zip`, shotBytes };
+  return { zip: zip(entries), files: entries.length, name: `${FILE_PREFIX}-saves-${stamp()}.zip`, shotBytes };
 }
 
 export interface Restore {

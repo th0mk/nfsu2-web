@@ -13,6 +13,7 @@ import {
 import { StatusReader } from './status';
 import { DATA_PATH, MANIFEST_PATH } from '../host/datacache';
 import { abs } from '../base';
+import { EXE } from '@game/run';
 import type { GameInfo } from './loader';
 import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRemoved } from '../net';
@@ -86,7 +87,7 @@ export class GameSession {
     s.proc = await startProcess({
       module: o.module,
       initialPages: o.info.pages || undefined,
-      cfg: { args: ['nfsu2', '/data/SPEED2.EXE'], env: o.env, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir: o.saveDir },
+      cfg: { args: ['nfsu2', EXE], env: o.env, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir: o.saveDir },
       onLog: (line, fd, t) => o.log(`${tid(t, fd)} ${line}`),
       onSaved: o.onSaved,
       onNote: o.log,

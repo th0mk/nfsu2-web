@@ -5,7 +5,9 @@
 // 2. build.mjs on a made-up page, run from another folder: without --game the import path '@game' is ug2's profile
 //    and the page goes to dist and dist-dev; with --game <id> it is that game's, into dist-<id> and dist-<id>-dev,
 //    with the game's own texts over the shared ones in /lang/<language>.json; an unknown game, or a game's language
-//    file without a shared one, stops the build.
+//    file without a shared one, stops the build; a game's body edits (src/games/<id>/body.json) are made in its
+//    index.html, as i18n-keys.mjs reads it, and one that does not fit stops the build.
+// 3. Most Wanted's body edits fit today's index.html: its name, its keys, no Underground 2 panel.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -14,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
-import { GAMES } from '../tools/i18n-keys.mjs';
+import { catalog, GAMES, pageHtml } from '../tools/i18n-keys.mjs';
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -24,8 +26,8 @@ test('every game\'s profile has the same fields and its own id', async () => {
     platform: 'neutral', loader: { '.txt': 'text', '.png': 'dataurl' } })).outputFiles[0].text;
   const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
   const fields = Object.keys(P.ug2).sort();
-  assert.deepEqual(fields, ['APP_DEFAULTS', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'MOVIE_SIZE', 'PROFILES_DIR', 'REGISTRY_DEFAULTS',
-    'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
+  assert.deepEqual(fields, ['APP_DEFAULTS', 'EXE', 'FILE_PREFIX', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'LOG_MARK', 'MOVIE_SIZE',
+    'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
   for (const g of GAMES) {
     assert.deepEqual(Object.keys(P[g]).sort(), fields, g);
     assert.equal(P[g].GAME, g);
@@ -39,6 +41,18 @@ test('every game\'s profile has the same fields and its own id', async () => {
   assert.deepEqual([P.ug2.MOVIE_SIZE, P.mw.MOVIE_SIZE], [{ w: 768, h: 512 }, { w: 1024, h: 512 }]);
   // the sites' names, the top bar's tabs (PLAN D-31)
   assert.equal(P.mw.SITE_NAME, 'Most Wanted Revived');
+  // what a run takes from its game (src/games/<id>/run.ts): Underground 2's as they always were (the log's mark and the
+  // files' names too: logs.test.mjs, app-test.mjs), Most Wanted's its own; the registry seeds start the game without
+  // its hardware detection (FirstTime = 1 for Most Wanted, NotFirstTime for Underground 2)
+  assert.deepEqual([P.ug2.EXE, P.ug2.PROFILES_DIR, P.ug2.LOG_MARK, P.ug2.FILE_PREFIX],
+    ['/data/SPEED2.EXE', 'NFS Underground 2', '=== NFSU2 web', 'nfsu2']);
+  assert.deepEqual([P.mw.EXE, P.mw.PROFILES_DIR, P.mw.LOG_MARK, P.mw.FILE_PREFIX],
+    ['/data/speed.exe', 'NFS Most Wanted', '=== NFSMW web', 'nfsmw']);
+  assert.match(P.ug2.REGISTRY_DEFAULTS, /^d NotFirstTime=1$/m);
+  assert.match(P.mw.REGISTRY_DEFAULTS, /^d FirstTime=1$/m);
+  assert.doesNotMatch(P.mw.REGISTRY_DEFAULTS, /NotFirstTime/);
+  for (const g of GAMES) for (const f of ['LOG_MARK', 'FILE_PREFIX'])
+    for (const o of GAMES.filter(x => x !== g)) assert.ok(!P[g][f].startsWith(P[o][f]), `${g} ${f} and ${o}'s`);
   // Underground 2's launch switch is off until the launch release; until then its keyphrases show its own word, and
   // every keyphrase derives from VAULT_PREFIX's (vault.test.mjs turns the switch on)
   assert.equal(P.ug2.LAUNCHED, false);
@@ -102,6 +116,24 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   assert.ok(!fs.existsSync(path.join(root, 'dist-one/main.js.map')));
   assert.match(read('dist/main.js'), /\bug2\b/, 'the ug2 page stays as it was');
 
+  // a game's body edits (src/games/<id>/body.json): a text in place of one, a cut from one text to the end of another;
+  // i18n-keys.mjs reads the same page; one that does not fit index.html stops the build
+  w('index.html', '<!doctype html><title>made up</title><h1>Game One</h1><p data-i18n>Kept</p><p data-i18n>Cut A</p><p data-i18n>Cut B</p>');
+  w('src/games/one/body.json', [{ at: '<h1>Game One</h1>', put: '<h1>Game Two</h1>' }, { at: '<p data-i18n>Cut A', until: 'Cut B</p>', put: '' }]);
+  r = build('--game', 'one');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(read('dist-one/index.html'), '<!doctype html><title>made up</title><h1>Game Two</h1><p data-i18n>Kept</p>');
+  assert.equal(pageHtml('one', root), read('dist-one/index.html'));
+  assert.deepEqual([...catalog('one', root).keys.keys()].filter(k => /^(Kept|Cut)/.test(k)), ['Kept']);
+  r = build();
+  assert.equal(read('dist/index.html'), read('index.html'), 'no edits for a game without them');
+  w('src/games/one/body.json', [{ at: '<h1>Game Three</h1>', put: '' }]);
+  r = build('--game', 'one');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /body\.json: index\.html has no "<h1>Game Three<\/h1>"/);
+  assert.throws(() => pageHtml('one', root), /does not fit/);
+  fs.rmSync(path.join(root, 'src/games/one/body.json'));
+
   r = build('--game', 'two');
   assert.equal(r.status, 2);
   assert.match(r.stderr, /no game "two"/);
@@ -109,4 +141,13 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   r = build('--game', 'one');
   assert.equal(r.status, 2);
   assert.match(r.stderr, /src\/games\/one\/lang\/english\.json has no shared src\/app\/lang\/english\.json/);
+});
+
+test('Most Wanted\'s page body: its name and keys, no Underground 2 panel (src/games/mw/body.json)', () => {
+  assert.equal(pageHtml('ug2'), fs.readFileSync(path.join(WEB, 'index.html'), 'utf8'), 'Underground 2\'s page is index.html');
+  const mw = pageHtml('mw'), body = mw.slice(mw.indexOf('<body'));
+  assert.match(body, /<h1>Most Wanted Revived<\/h1>/);
+  assert.doesNotMatch(body, /Underground 2|Hydraulics|Drift mode|Quick chat|outrun|Photo mode|Garage &gt; Save|id="about"|id="changes"/);
+  assert.match(body, /<section class="panel" id="online" aria-labelledby="online-title" hidden>/);
+  assert.match(body, /<kbd>G<\/kbd><\/dt><dd data-i18n>Speedbreaker<\/dd>/);
 });

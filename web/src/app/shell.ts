@@ -19,7 +19,7 @@
 // While any of them is given, the start page says whether it is in effect.
 
 import { STORAGE } from '@game/storage';
-import registryDefaults from '../../../app/registry-defaults.txt';
+import { REGISTRY_DEFAULTS as registryDefaults } from '@game/registry';
 import { browserName, check, checkBrowser, checkEngine, checkGpu, checkIsolation, checkStorage, fmtBytes, type Check } from './checks';
 import { codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
 import { loadGame, serverRev, type Loaded } from './loader';
@@ -39,9 +39,10 @@ import { DriftPanel } from './drift';
 import { PhotoMode } from './photo';
 import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRemoved } from '../net';
-import { blockList, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
+import { blockList, checkSetting, DEFAULTS, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
 import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, writeFile } from './savefs';
-import { turnOnAutosave } from './profile';
+import { turnOnAutosave } from '@game/profile';
+import { FILE_PREFIX, LOG_MARK } from '@game/run';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, queueText, roomHash, roomText, serverAnswers, watchPlayers, type PlayerCounts } from './players';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
@@ -299,12 +300,13 @@ let untrack: (() => void) | null = null;
  * While the server's free roam is busy (its newest /players says roamBusy: fewer links a player) it is not asked
  * and nothing is written, so a later Play asks once free roam has room again.  While the server is full it is asked,
  * and says that with it on the game waits in line for a place (and plays alone until then).  True: it was asked.
- * ASK_ROAM false: never asked, and free roam stays off until the player turns it on under Online.
+ * ASK_ROAM false: never asked, and free roam stays off until the player turns it on under Online.  A game whose
+ * template has no free roam (src/games/<id>/template.ts: Most Wanted's) never asks.
  */
 const ASK_ROAM = true;
 async function askRoam(): Promise<boolean> {
   const r = resolved();
-  if (!ASK_ROAM || r.source.NFSU2_ROAM || TEST_PARAMS.some(k => q.has(k)) || offline || /^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '')) return false;
+  if (!ASK_ROAM || !DEFAULTS.has('roam') || r.source.NFSU2_ROAM || TEST_PARAMS.some(k => q.has(k)) || offline || /^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '')) return false;
   if (players?.last()?.roamBusy === true) { log.add('[app] free roam with others: not asked, the server\'s free roam is busy (asked at a later Play)'); return false; }
   const name = (r.source.NFSU2_ROAM_NAME === 'settings.ini' ? r.env.NFSU2_ROAM_NAME : '') || (await newestProfile())?.name || '';
   const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
@@ -574,7 +576,7 @@ async function startGame() {
   // the log is for sharing when asking for help: it names neither the server (a private server's address) nor
   // more of this browser than its major version and system (the audit's PRIV-5).  These session lines stay when
   // a long game fills the log (logs.ts keep).
-  log.keep(`=== NFSU2 web, ${new Date().toISOString()}, game ${loaded!.info.rev}, server ${serverKind()} ===`);
+  log.keep(`${LOG_MARK}, ${new Date().toISOString()}, game ${loaded!.info.rev}, server ${serverKind()} ===`);
   log.keep(`[app] save folder: OPFS ${SAVE} (/save); canvas ${size.w}x${size.h} device pixels, display ${displayHz} Hz; ${browserBrief(navigator.userAgent, navigator.maxTouchPoints, phoneScreen(navigator.maxTouchPoints))}; ${checks.get('gpu')?.label ?? 'WebGPU'}; movies in ${r.env.NFSU2_MOVIE_CODEC === 'av1' ? 'AV1' : 'VP6'}`);
   log.keep(`[app] device: ${deviceBrief({ screenW: screen.width, screenH: screen.height, dpr: devicePixelRatio, cores: navigator.hardwareConcurrency,
     memoryGB: (navigator as { deviceMemory?: number }).deviceMemory, touchPoints: navigator.maxTouchPoints, homeScreen: fromHomeScreen(), displayHz })}`);
@@ -1442,7 +1444,7 @@ async function downloadLog() {
   // as it may leave the browser (privacy.ts): no names, no addresses; a copy from a page before that scrubbed nothing
   const kept = lastGame ? (lastGame.scrubbed ? lastGame.log : privacy.scrub(lastGame.log)) : '';
   const prev = lastGame ? `=== the last game's log, as the page kept it while it ran ===\n${kept}=== this page's log ===\n` : '';
-  downloadBlob(`${SCRUB_NOTE}\n${prev}${privacy.scrub(log.text())}`, `nfsu2-${stamp()}.log`, 'text/plain');
+  downloadBlob(`${SCRUB_NOTE}\n${prev}${privacy.scrub(log.text())}`, `${FILE_PREFIX}-${stamp()}.log`, 'text/plain');
 }
 /** what the running game holds now, for each copy of its log (lastgame.ts): what fills a phone's memory as it plays */
 function gameHeld(): string {

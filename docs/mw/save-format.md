@@ -54,6 +54,7 @@ Offsets below are in the file (block B starts at 0x24).
 | 0x34 | 16 | MD5 of 0x44..0x4033 (0x3FF0 bytes) | **V** |
 | 0x44 | 0x3FF0 | the first part of the game's data, starting with the four bytes `Game` | **V** |
 | 0x4034 | 0xB828 | the rest of the game's data | **V** |
+| 0x4039 | 4 | the cash: 0 in a new alias, 3,000 in the first safehouse's save (its cash in the game's menu), then growing with the career | **V** values, **I** meaning |
 | 0x5A31 | ≤ 0x24 | the alias's name, ASCII, NUL-padded (zero up to 0x5A54 in all nine) | **V** |
 | 0xF85C | 16 | MD5 of 0x34..0xF85B: from the first MD5 up to this one (block B's bytes 0x10 to its last 16) | **V S** |
 
@@ -89,8 +90,9 @@ After a change to block B's game data, in this order (each later field covers th
 3. the CRC of block B at 0x14;
 4. the header's CRC at 0x18 (0x00..0x17).
 
-Block A, the sizes and the magic stay. **I** (the order follows from what each field covers; a re-sealed save was not
-loaded by the game yet).
+Block A, the sizes and the magic stay. **V**: sealing each of the game's own saves again this way gives it back byte
+for byte (13 saves), and a save of the first safehouse with its cash changed and its name changed (0x5A31, NUL-padded),
+sealed again so, loaded in the game, which showed the changed cash in the safehouse menu (2026-10-30).
 
 ## 6. Size and the vault
 

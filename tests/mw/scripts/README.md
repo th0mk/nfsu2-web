@@ -22,6 +22,10 @@ race), `race_loop.txt` (25 Quick Races in a row, each ended by `racewin`, with t
 and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the line, saved; seeded with
 `profiles_make.txt`'s saves).
 
+The player's page (web/tools/app-test.mjs --game mw, not run-suite): `app_rw_probe.txt` (a first start makes and
+saves the alias ROTEST, then a Custom Race to GO and 600 frames of it, quit in the race) and `app_load_probe.txt` (the
+one alias of the save folder loads at the start, then the main menu: after a restore, an import or a rename).
+
 The movies: `intro_idle.txt` and `intro_title.txt` (the boot movies and the title, for web/tools/intro-test.mjs
 --game mw), `movies.txt` (all 32 movies of the game folder played to their end and skipped; with `--name
 movies_all_av1`, from a game folder with the AV1 copies, its check also wants every play through the AV1 hook),

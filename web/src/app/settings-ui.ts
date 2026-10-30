@@ -17,6 +17,7 @@ import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
+import { HELP } from '@game/rows';
 
 type Control =
   /** inv: on when the key is off (Ghost mode is roam_collide = off) */
@@ -106,10 +107,17 @@ const COMPANION: Record<string, string> = { roam_crew: 'roam_crew_colours', quic
 const COMPANIONS = new Set(Object.values(COMPANION));
 /** the rows that do nothing while free roam with others is off (each says so then) */
 const ROAM_ROWS = ['roam_room', 'roam_crew'];
+/** The game's own rows: those whose key its template lists (src/games/<id>/template.ts: Most Wanted's lists what its
+ *  runtime reads), with the game's help text where it words one its own way (src/games/<id>/rows.ts); a group with none
+ *  is not shown, nor is the Online section without its group (Most Wanted's). */
+const GAME_GROUPS: Group[] = GROUPS.map(g => ({ ...g, items: g.items.filter(i => DEFAULTS.has(i.key)).map(i => HELP[i.key] ? { ...i, help: HELP[i.key] } : i) }))
+  .filter(g => g.items.length);
 /** Every key the panel shows (the check in app-test.mjs compares this with the template). */
 export const PANEL_KEYS = [...GROUPS.flatMap(g => g.items.map(i => i.key)), ...COMPANIONS];
-const ITEMS = new Map(GROUPS.flatMap(g => g.items.map(i => [i.key, i] as const)));
-const GROUP_OF = new Map(GROUPS.flatMap(g => g.items.map(i => [i.key, g] as const)));
+const ITEMS = new Map(GAME_GROUPS.flatMap(g => g.items.map(i => [i.key, i] as const)));
+/** the shown rows' second keys (COMPANION): another's lines are listed with the other settings in the file */
+const GAME_COMPANIONS = new Set(GAME_GROUPS.flatMap(g => g.items.flatMap(i => COMPANION[i.key] ? [COMPANION[i.key]] : [])));
+const GROUP_OF = new Map(GAME_GROUPS.flatMap(g => g.items.map(i => [i.key, g] as const)));
 
 const boolOn = (v: string) => v === 'on';
 const READ_ONLY = N('Read only here: another tab of this browser runs the game and owns its saves and settings. Change them there; this tab takes over when that one closes.');
@@ -463,8 +471,10 @@ export class SettingsPanel {
     const note = this.online.querySelector<HTMLElement>('#online-note')!;
     note.textContent = ro ? t(READ_ONLY) : ''; note.hidden = !ro;
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.set')?.dataset.key;
-    this.root.querySelector('#settings-body')!.replaceChildren(...GROUPS.filter(g => !g.own).map(g => this.group(g)), ...this.others());
-    this.online.querySelector('#online-body')!.replaceChildren(...GROUPS.filter(g => g.own).map(g => this.group(g)));
+    this.root.querySelector('#settings-body')!.replaceChildren(...GAME_GROUPS.filter(g => !g.own).map(g => this.group(g)), ...this.others());
+    const own = GAME_GROUPS.filter(g => g.own);
+    this.online.hidden = !own.length;
+    this.online.querySelector('#online-body')!.replaceChildren(...own.map(g => this.group(g)));
     this.syncRaw();
     const row = focusKey ? this.find<HTMLElement>(`.set[data-key="${focusKey}"]`) : null;
     if (row) this.focusRow(row);
@@ -523,7 +533,7 @@ export class SettingsPanel {
   /** The lines with keys outside the table, and those of table keys the panel has no row for (roam_rate and the
    *  other tuning knobs, the Mac app's): listed, so nothing in the file acts unseen (the audit's PAGE-2). */
   private others(): HTMLElement[] {
-    const unshown = Object.entries(this.fileOnly.file).filter(([k, f]) => !ITEMS.has(k) && !COMPANIONS.has(k) && f.raw !== '')
+    const unshown = Object.entries(this.fileOnly.file).filter(([k, f]) => !ITEMS.has(k) && !GAME_COMPANIONS.has(k) && f.raw !== '')
       .map(([key, f]) => ({ phys: f.phys, key, env: key, value: f.raw, refused: f.refused, why: f.why }));
     const other = [...this.fileOnly.other, ...unshown].sort((a, b) => a.phys - b.phys);
     if (!other.length) return [];

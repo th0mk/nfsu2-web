@@ -10,6 +10,7 @@
 
 import { exists, removePath, saveRoot, writeFile, type Entry } from './savefs';
 import { downloadBlob, stamp } from './logs';
+import { FILE_PREFIX } from '@game/run';
 import { fmtBytes } from './checks';
 import { dateLocale, t } from './i18n';
 
@@ -27,9 +28,10 @@ const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg
 const ext = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 const key = (s: Entry) => `${s.path}|${s.size}|${s.mtime}`;
 
-/** Write an F12 screenshot at the top of the save folder as nfsu2-<date>_<time>.png; returns its name. */
+/** Write an F12 screenshot at the top of the save folder as nfsu2-<date>_<time>.png (nfsmw- in Most Wanted: run.ts
+ *  FILE_PREFIX); returns its name. */
 export async function saveScreenshot(saveDir: string, png: Blob, d = new Date()): Promise<string> {
-  const base = `nfsu2-${stamp(d)}`;
+  const base = `${FILE_PREFIX}-${stamp(d)}`;
   let name = `${base}.png`;
   for (let n = 2; await exists(saveDir, name); n++) name = `${base}-${n}.png`;
   await writeFile(saveDir, name, png);

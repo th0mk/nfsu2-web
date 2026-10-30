@@ -151,8 +151,21 @@ export function catalog(game = 'ug2', root = WEB) {
     for (const k of r.keys) add(k.key, rel, k);
     bad.push(...r.bad.map(b => `${rel}: ${b}`));
   }
-  for (const k of htmlKeys(fs.readFileSync(path.join(root, 'index.html'), 'utf8'))) add(k.key, k.where, k);
+  for (const k of htmlKeys(pageHtml(game, root))) add(k.key, k.where, k);
   return { keys: all, bad };
+}
+
+/** index.html as a game's page has it: with the edits of its src/games/<id>/body.json made, as web/build.mjs makes
+ *  them (each "at" once in the page, "until" the end of the cut after it); throws where one does not fit */
+export function pageHtml(game = 'ug2', root = WEB) {
+  let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const body = path.join(root, 'src/games', game, 'body.json');
+  if (fs.existsSync(body)) for (const e of JSON.parse(fs.readFileSync(body, 'utf8'))) {
+    const a = html.indexOf(e.at), u = e.until === undefined ? a + e.at.length : html.indexOf(e.until, a + e.at.length);
+    if (a < 0 || html.indexOf(e.at, a + 1) >= 0 || u < 0) throw new Error(`games/${game}/body.json: "${e.at.trim().slice(0, 80)}" does not fit index.html`);
+    html = html.slice(0, a) + e.put + html.slice(e.until === undefined ? u : u + e.until.length);
+  }
+  return html;
 }
 
 /** the {name}s of a text */

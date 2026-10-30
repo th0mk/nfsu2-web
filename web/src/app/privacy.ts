@@ -15,6 +15,7 @@
 // only where it stands as a name, between the words that frame names in these lines (PRE, POST); any other name
 // wherever it stands, so a line nobody thought of does not give it away.
 import { STORAGE } from '@game/storage';
+import { PROFILES_DIR } from '@game/run';
 import { crewList } from './crews';
 
 export type NameKind = 'you' | 'profile' | 'crew' | 'room' | 'player';
@@ -29,8 +30,12 @@ const THREAD = /^\[\d+!\] /;
 /** the lines another player's name can be printed in: the rest are the log's own words */
 const PLAYER_TAGS = /^\[(roam|notice|chat|horn|carsfx|mprace|online|lobby|racenet|net|guest)\]/;
 const WORD = '[\\p{L}\\p{N}_]';
+/** the save folder's folder of profiles ('NFS Underground 2', 'NFS Most Wanted'), as a pattern */
+const DIR = PROFILES_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** a file the game writes into a profile's folder: the folder's name */
+const PROFILE_WRITE = new RegExp(String.raw`\/save\/${DIR}\/([^/"]+)\/`);
 /** what stands before and after a name in the lines that print one */
-const PRE = String.raw`(?:^|f=\d+ |JOIN: |LEAVE: |with |behind |for |as |profile |name |\[notice\] |\[chat\] |\[carsfx\] |\[horn\] |\[roam\] {1,3}|autosave: |quick chat: |lobby [0-9a-f]{8}: |slot \d+:? |loading |car [0-9a-f]{4}(?: \(ours\))?, |NAME=|ROOM=|CREW=|"|'|NFS Underground 2/(?:[^/"\n]+/)?)`;
+const PRE = String.raw`(?:^|f=\d+ |JOIN: |LEAVE: |with |behind |for |as |profile |name |\[notice\] |\[chat\] |\[carsfx\] |\[horn\] |\[roam\] {1,3}|autosave: |quick chat: |lobby [0-9a-f]{8}: |slot \d+:? |loading |car [0-9a-f]{4}(?: \(ours\))?, |NAME=|ROOM=|CREW=|"|'|${DIR}/(?:[^/"\n]+/)?)`;
 const POST = String.raw`(?:'s |'s$|'| joined| left| quit| said| lost the connection| is | turned free roam off| called off| challenges|: | \(|, |"|/|$)`;
 const IPV4 = /(?<![\w./:-])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\w/]|\.\d)/g;
 
@@ -109,7 +114,7 @@ export class Privacy {
       return false;
     }
     if (l.startsWith('[net] ') && (m = /(?:on the virtual LAN as |this browser is |hub switch, address )(10\.77\.\d{1,3}\.\d{1,3})/.exec(l))) { this.ours.add(m[1]); return true; }
-    if (l.startsWith('[write] ') && (m = /\/save\/NFS Underground 2\/([^/"]+)\//.exec(l))) return got(m[1], 'profile');
+    if (l.startsWith('[write] ') && (m = PROFILE_WRITE.exec(l))) return got(m[1], 'profile');
     // the Online server (server.dll, lifted): each player's login
     if (l.startsWith('[guest] ') && (m = /^\[guest\] \d+ (?:auth NAME '(.+?)' UID |\S+ auth '(.+?)' \$)/.exec(l))) return got(m[1] ?? m[2], 'player');
     return false;

@@ -10,6 +10,8 @@
 //    a count: a game error printed every frame (the force-feedback errors of
 //    2026-10-21, tens of thousands of lines) no longer pushes out the history.
 
+import { LOG_MARK } from '@game/run';
+
 /** the longest group of lines folded (the force-feedback errors were two lines, each after an empty one) */
 const FOLD_MAX = 4;
 /** a group seen this many times in a row is folded */
@@ -143,7 +145,7 @@ export class LogRing {
     return out.reverse();
   }
   /** A short copy of the log, about `budget` bytes, for keeping where a page that is stopped cannot lose it
-   *  (lastgame.ts): the opening lines (an eighth of it), the newest game's session lines from its "=== NFSU2 web" line
+   *  (lastgame.ts): the opening lines (an eighth of it), the newest game's session lines from its LOG_MARK line
    *  on (a quarter), and the newest lines; where lines are left out it says so.  The whole text when that fits. */
   snapshot(budget = 160 << 10): string {
     if (this.size + 64 <= budget) return this.text();
@@ -154,7 +156,7 @@ export class LogRing {
     for (; h < kept.length && kept[h].at <= first && used + kept[h].s.length + 1 <= budget >> 3; h++) { out.push(kept[h].s); used += kept[h].s.length + 1; }
     // the newest game's session: from its first line, as far as a quarter of the budget goes
     let s = kept.length;
-    for (let i = kept.length - 1; i >= h; i--) if (kept[i].s.startsWith('=== NFSU2 web')) { s = i; break; }
+    for (let i = kept.length - 1; i >= h; i--) if (kept[i].s.startsWith(LOG_MARK)) { s = i; break; }
     let e = s;
     for (let b = 0; e < kept.length && b + kept[e].s.length + 1 <= budget >> 2; e++) b += kept[e].s.length + 1;
     const sess = kept.slice(s, e).map(k => k.s);

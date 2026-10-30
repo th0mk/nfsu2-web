@@ -34,7 +34,7 @@
 
 import { WORDS } from './vault-words';
 import { unzip, zip } from './zip';
-import { coverOf, profileMoney, profileName } from './profile';
+import { coverOf, profileMoney, profileName } from '@game/profile';
 import { isScreenshot, PROFILES_DIR } from './savefs';
 import { withoutDevice } from './settings';
 import { fill, N, type Vars } from './i18n';
