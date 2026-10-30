@@ -1,7 +1,7 @@
 // The game the page is built for (web/src/games/profile.ts, web/build.mjs --game):
 //   node --test web/test/games.test.mjs
 // 1. Each game's profile (web/src/games/<id>/index.ts) exports the same fields, its GAME is its folder's name, and
-//    Most Wanted's site name is still the neutral stand-in.  (tsc checks the fields' types: npm run check.)
+//    Most Wanted's site name is PLAN D-31's.  (tsc checks the fields' types: npm run check.)
 // 2. build.mjs on a made-up page, run from another folder: without --game the import path '@game' is ug2's profile
 //    and the page goes to dist and dist-dev; with --game <id> it is that game's, into dist-<id> and dist-<id>-dev,
 //    with the game's own texts over the shared ones in /lang/<language>.json; an unknown game, or a game's language
@@ -35,8 +35,8 @@ test('every game\'s profile has the same fields and its own id', async () => {
     assert.equal(P[g].LANGUAGES[0], 'english', g);
   }
   assert.equal(P.ug2.SITE_NAME, 'Underground 2 Revived');
-  // the site's name is not chosen yet
-  assert.equal(P.mw.SITE_NAME, 'Most Wanted');
+  // the sites' names, the top bar's tabs (PLAN D-31)
+  assert.equal(P.mw.SITE_NAME, 'Most Wanted Revived');
   // Underground 2's launch switch is off until the launch release; until then its keyphrases show its own word, and
   // every keyphrase derives from VAULT_PREFIX's (vault.test.mjs turns the switch on)
   assert.equal(P.ug2.LAUNCHED, false);

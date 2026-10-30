@@ -72,9 +72,23 @@ for (const f of fs.existsSync(DIST) ? fs.readdirSync(DIST, { recursive: true }) 
 fs.mkdirSync(path.join(DEV, 'test'), { recursive: true });
 fs.mkdirSync(DIST, { recursive: true });
 // the start page (its script and stylesheet are main.js / main.css), and its files as they are (src/static: the
-// app's manifest and icons, for installing it on a phone's home screen or as a desktop app)
-fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
-for (const f of fs.readdirSync('src/static')) fs.copyFileSync(path.join('src/static', f), path.join(DIST, f));
+// app's manifest and icons, for installing it on a phone's home screen or as a desktop app).  A game with a head of
+// its own (src/games/<id>/head.html: its title, description, social and search tags, favicon, the links to its
+// manifest, icon and stylesheet, its JSON-LD) has it in place of index.html's, from <title> up to main.js's script;
+// one with files of its own (src/games/<id>/static: its manifest and icons) has those in place of src/static's.
+const HEAD = path.join('src/games', GAME, 'head.html'), OWN_STATIC = path.join('src/games', GAME, 'static');
+if (!fs.existsSync(HEAD)) fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
+else {
+  const html = fs.readFileSync('index.html', 'utf8'), MAIN = '<script type="module" src="main.js"></script>';
+  const a = html.indexOf('<title>'), b = html.indexOf(MAIN);
+  if (a < 0 || b < a || html.indexOf('<title>', a + 1) >= 0 || html.indexOf(MAIN, b + 1) >= 0) {
+    console.error(`build.mjs: index.html has no one <title> before one ${MAIN} for ${HEAD} to take the place of`);
+    process.exit(2);
+  }
+  fs.writeFileSync(path.join(DIST, 'index.html'), html.slice(0, a) + fs.readFileSync(HEAD, 'utf8') + html.slice(b));
+}
+const STATIC = fs.existsSync(OWN_STATIC) ? OWN_STATIC : 'src/static';
+for (const f of fs.readdirSync(STATIC)) fs.copyFileSync(path.join(STATIC, f), path.join(DIST, f));
 // the start page's languages (LANG and OWN_LANG, i18n.ts): /lang/<language>.json, fetched once a player picks one
 fs.rmSync(path.join(DIST, 'lang'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'lang'));
