@@ -420,8 +420,9 @@ static void validate_decl(CPU *c, Fx *f, uint32_t code){
     dcall(c, d, D_RELEASE, 0, 0);
 }
 
-/* the states of the sampler blocks a shader binds, by stage (D3DX goes up the stages, not the constant table) */
-static void sampler_states(CPU *c, Fx *f, const fxm_prog *pr, int vs, int all, uint64_t stamp){
+/* the states of the sampler blocks a shader binds, by stage (D3DX goes up the stages, not the constant table);
+ * a vertex shader's stages already count from D3DVERTEXTEXTURESAMPLER0 (fx-model 3.4, fxmodel.c) */
+static void sampler_states(CPU *c, Fx *f, const fxm_prog *pr, int all, uint64_t stamp){
     uint32_t n = pr->nconsts < pr->nread ? pr->nconsts : pr->nread, done = 0;
     for (;;){                                    /* the sampler constant with the lowest stage not yet taken */
         const fxm_const *best = 0;
@@ -435,7 +436,7 @@ static void sampler_states(CPU *c, Fx *f, const fxm_prog *pr, int vs, int all, u
             const fxm_node *nd = fxm_node_get(f->m, best->leaves[j].id);
             const fx2_block *b = nd ? nd->block : 0;
             for (uint32_t i = 0; b && i < b->nstates; i++)
-                apply_state(c, f, &b->states[i], best->stage + j + (vs ? VTEX0 : 0u), all, stamp);
+                apply_state(c, f, &b->states[i], best->stage + j, all, stamp);
         }
         done = best->stage + (best->used ? best->used : 1u);
     }
@@ -498,7 +499,7 @@ static void shader_consts(CPU *c, Fx *f, const fxm_prog *pr, int vs, int all, ui
     }
     if (only) return;
     upload(c, f, R, vs, lo, hi);
-    sampler_states(c, f, pr, vs, all, stamp);
+    sampler_states(c, f, pr, all, stamp);
 }
 
 static void apply_state(CPU *c, Fx *f, const fx2_state *s, uint32_t unit, int all, uint64_t stamp){
@@ -517,7 +518,7 @@ static void apply_state(CPU *c, Fx *f, const fx2_state *s, uint32_t unit, int al
             grow(c, f, &f->save[t->index], in->cls == FX2_SC_VSHADER, 1, f->need[pi].n);
     }
     if (shader && f->mode == M_RECORD){         /* the textures of the shader's samplers are recorded all the same */
-        if (src.src == FXM_S_SHADER && src.prog) sampler_states(c, f, src.prog, in->cls == FX2_SC_VSHADER, all, stamp);
+        if (src.src == FXM_S_SHADER && src.prog) sampler_states(c, f, src.prog, all, stamp);
         return;
     }
     uint32_t v[32]; uint32_t n = 0;
@@ -673,7 +674,7 @@ static void commit(CPU *c, Fx *f, uint32_t pass){
                         const fx2_block *b = nd ? nd->block : 0;
                         for (uint32_t i = 0; b && i < b->nstates; i++)
                             if (state_reads(f, &b->states[i], top))
-                                apply_state(c, f, &b->states[i], q->stage + j + (vs ? VTEX0 : 0u), 1, stamp);
+                                apply_state(c, f, &b->states[i], q->stage + j, 1, stamp);
                     }
                 }
                 continue;
