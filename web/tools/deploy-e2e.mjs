@@ -275,7 +275,10 @@ async function run(mode) {
     await page.evaluate(() => window.__nfsu2.session?.terminate?.());
     await page.waitForTimeout(1000);
     const cspv = await page.evaluate(() => window.__cspv);
-    const policy = consoleLines.filter(l => /Content Security Policy|Refused to|Permissions-Policy|Permissions Policy|Unrecognized feature|Cross-Origin|COEP|blocked/i.test(l));
+    // Chrome's "Unrecognized feature" lines are left out: the Permissions-Policy header names features (bluetooth) for
+    // the browsers that know them, and a browser that does not says so without a policy being broken
+    const policy = consoleLines.filter(l => /Content Security Policy|Refused to|Permissions-Policy|Permissions Policy|Cross-Origin|COEP|blocked/i.test(l) &&
+      !/Unrecognized feature/i.test(l));
     report(`${mode}: no CSP violation, no policy warning, no page error`, cspv.length === 0 && policy.length === 0 && !consoleLines.some(l => l.startsWith('PAGEERROR')),
       { violations: cspv, policyLines: policy.slice(0, 5), pageErrors: consoleLines.filter(l => l.startsWith('PAGEERROR')).slice(0, 3) });
   } catch (e) {
