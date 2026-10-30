@@ -1,0 +1,36 @@
+# Most Wanted: the safehouse's Rap Sheet walked through (TRACKER M4-44: what it shows; it has no reward cards: its
+# six screens are below, all reached at bin 8, c5-rap-4), a probe.  Seeded with a career safehouse save (the bot's seeds, past bin 15: the Rap Sheet is the safehouse
+# menu's fourth item, 0x4B4E388D, Save the fifth); Resume Career opens the safehouse menu.  `rapsheet` logs the
+# values the screens read (runtime/mw/pursuit_mw.c).  RapSheetLogin.fng comes first, then RapSheetMain.fng: Rankings,
+# Top Evaded Pursuits, Cost to State, Infractions, Vehicle Database and Summary, the highlight on Summary (0xCDA0A66B),
+# DOWN to the one above (0xCDA0A66C Vehicle Database ... 0xCDA0A670 Rankings, then round).  Each is entered (Enter,
+# a pause, Escape, DOWN), so its screen (RapSheetRS.fng, RapSheetVD.fng, RapSheetUS.fng, RapSheetCTS.fng,
+# RapSheetTEP.fng, RapSheetRankings.fng) shows what it holds; RapSheetMain.fng takes input about 110 frames after it
+# comes back, so each Enter and DOWN waits for that.  Run with NFSU2_FNG_LOG=3: the screens' strings are logged.
+#   NFSU2_SAVE_SEED=<a career seed> node web/tools/run-suite.mjs --game mw --script career_rapsheet.txt \
+#     --marker 'career_rapsheet: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_FNG_LOG=3 --timeout-scale 3
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e596c4a3 900              # the safehouse menu
++30   log career_rapsheet: safehouse
++0    rapsheet
++0    tapuntil RIGHT MainMenu_Sub.fng:e596c4a3@4b4e388d 40 600   # the fourth item, the Rap Sheet
++30   tap RETURN
++0    waitfng RapSheetLogin.fng|RapSheetMain.fng 900
++120  log career_rapsheet: login
++0    tapuntil RETURN RapSheetMain.fng 120 1800
++60   log career_rapsheet: main
++0    loop 7
++150  tap RETURN
++180  tapuntil ESCAPE RapSheetMain.fng 90 900
++150  tap DOWN
++60   log career_rapsheet: next item
++0    endloop
++60   log career_rapsheet: done
++30   close
