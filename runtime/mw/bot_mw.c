@@ -497,7 +497,7 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_ITEM2    0x4b4e388bu
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
-static struct { char name[64]; uint32_t focus; long since, last; int taps, marker_enter; } S;
+static struct { char name[64]; uint32_t focus, save_last; long since, last; int taps, marker_enter, save_same; } S;
 void mw_bot_present(void){
     if (B.st == B_OFF || B.st == B_DONE) return;
     uint32_t focus = 0;
@@ -551,9 +551,19 @@ void mw_bot_present(void){
         else { what = "Enter: take the highlighted marker"; S.marker_enter = 1; }
     }
     else if (!strcasecmp(nm, "MainMenu_Sub.fng") && mw_fe_match("MainMenu_Sub.fng:e596c4a3")){
-        uint32_t want = !save ? F_ITEM1 : mw_fe_match("MainMenu_Sub.fng:ac22f27e") ? F_ITEM1 + 4u : F_ITEM1 + 3u;
-        if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = save ? "to Save" : "to Resume Free Roam"; }
-        else what = save ? "Enter on Save" : "Enter on Resume Free Roam";
+        /* Save is the menu's last item (the 0x532220 set-up adds it last), and the menu grows with the career (Rap
+         * Sheet; five items after the second rival), so the bot goes RIGHT until the highlight stops moving, twice in
+         * a row (a tap the menu drops as it comes up is not the end), and takes that item.  (Telling it by the labels
+         * drawn failed: the menu draws only some items at a time, and the bot went back and forth between two items
+         * for 20,000 frames, bot run of 2026-10-30.) */
+        if (!save){
+            if (focus != F_ITEM1){ key = DIK_LEFT; what = "to Resume Free Roam"; } else what = "Enter on Resume Free Roam";
+        } else {
+            S.save_same = focus == S.save_last ? S.save_same + 1 : 0;
+            S.save_last = focus;
+            if (S.save_same >= 2) what = "Enter on the last item, Save";
+            else { key = DIK_RIGHT; what = "to Save, the last item"; }
+        }
     }
     else if (!strcasecmp(nm, "Dialog.fng") || !strcasecmp(nm, "InGameDialog.fng")){
         if (focus == F_NO_DLG){ key = DIK_LEFT; what = "LEFT to Yes / OK"; } else what = "Enter on Yes / OK";
@@ -609,7 +619,7 @@ void mw_bot_cmd(CPU *c, const char *args){
         mw_aid_autopilot(c, 2); set_state(B_ROAM, B.stop_races ? "bot run, until the races are won" : "bot run");
         return;
     }
-    if (!strcasecmp(a1, "save")){ set_state(B_SAVE, "bot save"); return; }
+    if (!strcasecmp(a1, "save")){ S.save_same = 0; S.save_last = 0; set_state(B_SAVE, "bot save"); return; }
     if (!strcasecmp(a1, "pursuit")){ B.once = 1; read_gates(c, &B.g); set_state(B_PURSUIT, "bot pursuit"); return; }
     if (!strcasecmp(a1, "race")){
         struct gates g; struct race r[MAX_RACES];
