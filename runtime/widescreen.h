@@ -1,5 +1,7 @@
 /* Native-resolution presentation: per-view Hor+ FOV, cutscene borders, FMV
- * framing and the edge-anchored HUD.  See widescreen.c. */
+ * framing and the edge-anchored HUD.  See widescreen.c (Underground 2) and
+ * runtime/mw/widescreen_mw.c (Most Wanted); the native row's size is
+ * wsopts.c's. */
 #ifndef WIDESCREEN_H
 #define WIDESCREEN_H
 #include <stdint.h>
@@ -19,9 +21,12 @@ float ws_persp_x(void);
 float ws_persp_y(void);
 float ws_ui_x(void);
 float ws_ui_y(void);
-/* NFSU2_RENDER: size of the "native" display row relative to the window's
- * backing pixels (1 = 1:1). */
+/* NFSU2_RENDER (wsopts.c, every game's): size of the "native" display row
+ * relative to the window's backing pixels (1 = 1:1), and the mode it names
+ * (WS_RENDER_*, *scale the scale's factor). */
+enum { WS_RENDER_BACKING, WS_RENDER_PANEL, WS_RENDER_SCALE };
 double ws_render_factor(void);
+int    ws_render_mode(double *scale);
 /* NFSMAXPIX: upper bound for every native-size device (pixels; 0 or a value
  * up to 100,000 = no bound).  The one default for com.c (display mode rows)
  * and metal.m (fullscreen, placeholder window, non-row modes): 9 MP keeps a

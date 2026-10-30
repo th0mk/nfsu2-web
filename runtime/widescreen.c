@@ -30,10 +30,8 @@
  *   NFSU2_MOVIE=fit|fill|stretch  FMV framing (default fit = pillarbox)
  *   NFSU2_CUTSCENE_BORDERS=full|off  letterbox bars across the whole width
  *                                    (default) or none
- *   NFSU2_RENDER=backing|panel|scale:<f>  device size of the "native" display
- *                                 row: the window's backing pixels (default),
- *                                 the physical panel's pixel density, or the
- *                                 backing size times f                     */
+ * The "native" display row's device size (NFSU2_RENDER, NFSMAXPIX) is every
+ * game's: wsopts.c.                                                          */
 #include "widescreen.h"
 #include <math.h>
 #include <stdio.h>
@@ -44,13 +42,10 @@ enum { FOV_GAME, FOV_RENDERER };
 enum { HUD_43, HUD_WIDE };
 enum { MOV_FIT, MOV_FILL, MOV_STRETCH };
 enum { BRD_FULL, BRD_OFF };
-enum { RENDER_BACKING, RENDER_PANEL, RENDER_SCALE };
 
 static int   g_init;
 static int   g_fov = FOV_GAME, g_hud = HUD_WIDE, g_movie = MOV_FIT, g_brd = BRD_FULL;
 static int   g_hudfix = 1;
-static int   g_render = RENDER_BACKING;
-static double g_render_f = 1.0;
 static float g_k = 1.f;                 /* game aspect / device aspect */
 static unsigned long g_hits[16];
 /* FE re-render after a mapping change (see the 0x52c711 hook): until this
@@ -73,44 +68,15 @@ static void ws_init(void){
         g_brd = (opt_is(e, "off") || *e == '0') ? BRD_OFF : BRD_FULL;
     /* HUDFIX=0: legacy, HUD stretched to the full width (diagnostic). */
     if ((e = getenv("HUDFIX")) && *e == '0') g_hudfix = 0;
-    if ((e = getenv("NFSU2_RENDER")) && *e){
-        if (opt_is(e, "panel")) g_render = RENDER_PANEL;
-        else if (!strncasecmp(e, "scale:", 6) || (*e >= '0' && *e <= '9') || *e == '.'){
-            double f = atof(strchr(e, ':') ? strchr(e, ':') + 1 : e);
-            if (f >= 0.25 && f <= 2.0){ g_render = RENDER_SCALE; g_render_f = f; }
-            else fprintf(stderr, "ws: NFSU2_RENDER=%s ignored (scale 0.25..2)\n", e);
-        }
-    }
+    double rf = 1.0;
+    int render = ws_render_mode(&rf);                   /* NFSU2_RENDER, wsopts.c */
     fprintf(stderr, "ws: fov=%s hud=%s movie=%s cutscene borders=%s render=%s",
             g_fov == FOV_GAME ? "game" : "renderer", g_hud == HUD_WIDE ? "wide" : "4:3",
             g_movie == MOV_FIT ? "fit" : g_movie == MOV_FILL ? "fill" : "stretch",
             g_brd == BRD_FULL ? "full" : "off",
-            g_render == RENDER_PANEL ? "panel" : g_render == RENDER_SCALE ? "scale" : "backing");
-    if (g_render == RENDER_SCALE) fprintf(stderr, ":%.3g", g_render_f);
+            render == WS_RENDER_PANEL ? "panel" : render == WS_RENDER_SCALE ? "scale" : "backing");
+    if (render == WS_RENDER_SCALE) fprintf(stderr, ":%.3g", rf);
     fprintf(stderr, "\n");
-}
-
-/* Device size of the "native" display row relative to the window's backing
- * pixels (com.c modes_refresh).  panel: the physical panel's density, which
- * in a scaled display mode is lower than the backing store's (3024 panel
- * pixels for 3600 backing pixels on this Mac); never above the backing
- * store, the window server would only scale it down again. */
-double ws_render_factor(void){
-    ws_init();
-    double f = 1.0;
-    if (g_render == RENDER_PANEL){
-        double bs = 0.0, pp = 0.0;
-        void metal_screen_metrics(double *, double *);
-        metal_screen_metrics(&bs, &pp);
-        if (bs > 0.0 && pp > 0.0) f = pp / bs;
-        if (f > 1.0) f = 1.0;
-    } else if (g_render == RENDER_SCALE) f = g_render_f;
-    return f;
-}
-
-double ws_max_pixels(void){
-    const char *e = getenv("NFSMAXPIX");
-    return (e && *e) ? atof(e) : WS_MAX_PIXELS_DEFAULT;
 }
 
 void ws_set_mapping(float k){

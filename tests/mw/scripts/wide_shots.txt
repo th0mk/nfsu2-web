@@ -1,0 +1,49 @@
+# Most Wanted: the widescreen pictures (TRACKER M7-01..M7-06): the attract movie, the title, the main menu, then a
+# Custom Race circuit (race_shots.txt's path) at GO, with the AI driving, in the bumper view (the rear-view mirror)
+# and back in the chase view.  Run it on the play page at each canvas shape (w, h): 4:3, 16:9, 21:9, 32:9 and
+# portrait; with movies on (the attract movie is the boot's).  Every frame is dumped twice, 3 frames apart (a renderer
+# that falls behind drops a flagged frame).  The pictures are the game's: they stay out of the repo.
+0     waitfng MW_LS_AttractFMV.fng 3600
++600  dump movie
++3    dump movie
++0    tapuntil RETURN MW_LS_Splash.fng 90 3000
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
++0    dump title
++3    dump title
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++720  dump mainmenu                                     # the camera's swing in
++3    dump mainmenu
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    dump carselect
++3    dump carselect
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log wide_shots: GO
++0    dump race_go
++3    dump race_go
++0    autopilot on
++300  dump race_chase
++3    dump race_chase
++0    loop 3                                             # chase far, chase near, hood, bumper: the bumper view
++0    tap C
++30   endloop
++60   dump race_bumper
++3    dump race_bumper
++0    log wide_shots: done
++0    close

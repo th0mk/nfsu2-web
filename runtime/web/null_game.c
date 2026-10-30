@@ -28,14 +28,12 @@ WEAK const GameOps g_game = {
     .module_path = "C:\\GAME\\GAME.EXE",
 };
 
-/* ---- widescreen.c: the game's aspect is the device's */
+/* ---- widescreen.c: the game's aspect is the device's (the native row's size is core: wsopts.c) */
 WEAK void   ws_set_mapping(float k){ (void)k; }
 WEAK float  ws_persp_x(void){ return 1.f; }
 WEAK float  ws_persp_y(void){ return 1.f; }
 WEAK float  ws_ui_x(void){ return 1.f; }
 WEAK float  ws_ui_y(void){ return 1.f; }
-WEAK double ws_render_factor(void){ return 1.0; }
-WEAK double ws_max_pixels(void){ return WS_MAX_PIXELS_DEFAULT; }
 WEAK int    ws_fill_target(void){ return 0; }
 WEAK int    ws_take_border_quad(void){ return 0; }
 WEAK void   ws_report(void){ }

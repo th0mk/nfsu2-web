@@ -8,7 +8,8 @@
 # its own files, and core reaches them through runtime/game.h.
 #
 # Not core yet, because they still hold UG2 overrides or hooks next to their
-# generic code: framerate.c (the pacer), widescreen.c (the ws_* mapping API).
+# generic code: framerate.c (the pacer), widescreen.c (UG2's ws_* mapping; the native
+# row's size moved to wsopts.c).
 # Not core: carsfx.c (reads UG2's engine and nitrous sound
 # banks) and every UG2 feature file.
 
@@ -39,6 +40,7 @@ winsock.h
 
 # D3D9, DirectInput, DirectSound
 com.c
+wsopts.c
 d3d9_tables.h
 dxrec.h
 comrec.c

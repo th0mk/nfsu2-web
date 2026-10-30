@@ -1,0 +1,10 @@
+# Most Wanted: the movie framing alone (TRACKER M7-05): the boot's attract movie dumped twice, 3 frames apart, then
+# the game is closed.  Run it on the play page with NFSU2_MOVIE=fit, fill or stretch (the page's movie_framing) at a
+# canvas shape other than 4:3; wide_shots.txt dumps the same movie with the default (fit).  The picture's rectangle
+# against the expected one: fit the 4:3 frame whole in the middle, fill the screen covered (cropped), stretch the
+# screen covered (widened).  The pictures stay out of the repo.
+0     waitfng MW_LS_AttractFMV.fng 3600
++600  dump movie
++3    dump movie
++0    log wide_movie: done
++0    close

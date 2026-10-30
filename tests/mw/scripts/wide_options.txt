@@ -1,0 +1,27 @@
+# Most Wanted: the Video options' resolution rows relabelled (TRACKER M7-04): the main menu's Options (its 8th item
+# from Career), Video (OptionsPCDisplay.fng, the Options list's 2nd item), DOWN to Resolution, then RIGHT through the
+# six rows, each dumped as it shows (runtime/mw/widescreen_mw.c names them as runtime/com.c maps them: 720p, 1080p,
+# 1440p, the screen's own size, 4K or the screen's size again, 1600x1200), and Escape leaves without applying one.
+# The game's lookups of the six labels are counted in the exit report ("ws: mw hooks ... labels=N").  It needs the
+# renderer for the pictures: the play page, as options_advanced.txt; with movies off (NOMOVIES=1).  The pictures stay
+# out of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    loop 7                                             # Career .. Options, one item a step
++40   tap RIGHT
++0    endloop
++40   tapuntil RETURN MainMenu_Sub.fng 90 600            # Options: its items, on Audio
++200  tap RIGHT                                          # Video (the list takes input once its intro is over)
++60   tapuntil RETURN OptionsPCDisplay.fng 90 600
++110  tap DOWN                                           # Resolution
++40   dump video_res
++3    dump video_res
++0    loop 6                                             # the six rows, one a step (the arrows wrap around)
++0    tap RIGHT
++40   dump video_row
++3    dump video_row
++0    endloop
++0    tapuntil ESCAPE MainMenu_Sub.fng 90 600            # back, nothing applied
++0    log wide_options: done
++0    close

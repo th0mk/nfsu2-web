@@ -1,0 +1,39 @@
+# Most Wanted: the screen changing shape under the game (TRACKER M7-03: the front end and the HUD redrawn after an
+# aspect change; M7-04: the device follows the canvas through a Reset).  The main menu, then a Custom Race circuit
+# (race_shots.txt's path) at GO with the AI driving; at each "resize" log line the page's canvas is to be given
+# another shape by the runner (the play page and a driver that watches the log; the canvas's new size makes the
+# page ask the game for a Reset, runtime/com.c res_pick picks the new device size), and the picture is dumped
+# before and after.  For example 1280x720 first, 960x720 at "resize 1" (16:9 to 4:3 in the menu) and 2520x1080 at
+# "resize 2" (4:3 to 21:9 in the race).  With movies off (NOMOVIES=1).  The pictures stay out of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++720  dump menu_before
++0    log wide_resize: resize 1
++600  dump menu_after
++3    dump menu_after
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600
++0    tapuntil RETURN Loading.fng 30 600
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO
++0    autopilot on
++120  dump race_before
++0    log wide_resize: resize 2
++600  dump race_after
++3    dump race_after
++0    log wide_resize: done
++0    close

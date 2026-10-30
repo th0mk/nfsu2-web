@@ -227,8 +227,9 @@ static int mw_movie_alt(const char *path, int i, char *out, unsigned cap){
  *   on_qpc, qpc_caller  MW has no QPC wait loop: its frame limiter sleeps in the Sim timer's step (0x642E60),
  *                       which framerate_mw.c replaces with the host's slot pacer
  *   lan_*               MW's LAN server glue is not studied (M8)
- *   res_labels          the options show the table's own labels ("800x600"); the rows' real device sizes
- *                       are com.c's res_pick, as for UG2
+ *   res_labels          the options look their six labels up by hash, not in slots com.c could write:
+ *                       widescreen_mw.c answers those lookups with com.c's row names (com_res_label); the
+ *                       rows' real device sizes are com.c's res_pick, as for UG2
  *   on_sound_unlock     UG2 debugging only
  *   pad_rescan          no search after the start (above): the pad stays one device, whichever
  *                       controller drives it (a wheel after a pad included)

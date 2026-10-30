@@ -637,6 +637,7 @@ static void label_put(int row, const char *txt){
     if (!(c0 >= '0' && c0 <= '9')) return;
     memset(g_mem + a, 0, cap); memcpy(g_mem + a, txt, n);
 }
+int com_res_label(int row, char *buf, unsigned cap);
 static int g_cur_row = -1;             /* the game's active row (-1 = unknown) */
 static int g_row4_on = 1;              /* is the 4K row selectable (see modes_refresh) */
 static int modemap_on(void){ return !ENVC("NOWIDE"); }
@@ -655,7 +656,7 @@ static void modes_refresh(void){
         unsigned hh = hts[i], ww = (unsigned)((double)hh * vw / vh + 0.5) & ~1u;
         g_modes[i][0] = ww; g_modes[i][1] = hh;
     }
-    /* NFSU2_RENDER (widescreen.c): backing pixels, panel pixels or a scale.
+    /* NFSU2_RENDER (wsopts.c): backing pixels, panel pixels or a scale.
      * NFSMAXPIX bounds the size at a scale of 1 and below; a scale above 1 is
      * chosen to go beyond it and multiplies the bounded size (bounded after
      * the scale, 150% and 200% both came out at ~104% on a 4K screen), up to
@@ -683,12 +684,19 @@ static void modes_refresh(void){
     g_row4_on = 2160u <= h;
     if (!g_row4_on){ g_modes[4][0] = w; g_modes[4][1] = h; }
     if (!modemap_on()) return;
-    static const char *fixed[6] = {"720p","1080p","1440p",0,"4K","1600x1200"};
     char nb[16];
-    for (int i = 0; i < 6; i++){
-        if (fixed[i] && (i != 4 || g_row4_on)) label_put(i, fixed[i]);
-        else { snprintf(nb, sizeof nb, "%ux%u", w, h); label_put(i, nb); }
-    }
+    for (int i = 0; i < 6; i++){ com_res_label(i, nb, sizeof nb); label_put(i, nb); }
+}
+/* The name of the settings menu's resolution row (0..5) as the rows are mapped now, into buf: what
+ * modes_refresh writes into a game's own label slots (game.h res_labels), and what a game that looks its
+ * labels up elsewhere names its rows with (Most Wanted: runtime/mw/widescreen_mw.c).  0 with NOWIDE=1. */
+int com_res_label(int row, char *buf, unsigned cap){
+    static const char *fixed[6] = {"720p","1080p","1440p",0,"4K","1600x1200"};
+    if (row < 0 || row > 5 || !cap || !modemap_on()) return 0;
+    if (!g_modes[ROW_NATIVE][0]) modes_refresh();
+    if (fixed[row] && (row != 4 || g_row4_on)) snprintf(buf, cap, "%s", fixed[row]);
+    else snprintf(buf, cap, "%ux%u", g_modes[ROW_NATIVE][0], g_modes[ROW_NATIVE][1]);
+    return 1;
 }
 static const uint32_t *mode_label(unsigned i){
     if (!modemap_on()) return g_tbl[i];

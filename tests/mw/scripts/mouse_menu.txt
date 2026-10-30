@@ -6,8 +6,10 @@
 # at (136,157)) presses the highlighted item (BUTTON_PRESSED 0x0C407210, 0x587FBF) as Enter does.  No hover: the
 # highlight moves only by the wheel.  The cursor is in front-end units, 640x480 over the whole window at any size
 # (0x6C9B60: x * 640 / client width, y * 480 / client height, less 24 when the windowed flag is set), so the same
-# window fractions pick the same item on any back buffer: run it with NFSRES=800x600, 1280x720 and 1920x1080 (the
-# device's size, runtime/com.c res_pick; the 'com: device resolution' line).  'nsmouse scroll N' turns the wheel N
+# window fractions pick the same item on any 4:3 back buffer: run it with NFSRES=800x600 and 1024x768 (the device's
+# size, runtime/com.c res_pick; the 'com: device resolution' line).  On a wider screen the front end stays 4:3 in the
+# middle and the cursor's units span the whole width (runtime/mw/widescreen_mw.c): mouse_menu_219.txt is this walk
+# at 21:9.  'nsmouse scroll N' turns the wheel N
 # notches up (DOM deltaY -N), so -1 is a notch down.  The windowed flag is only ever written by 0x6DE150, which no
 # code calls (speed.exe v1.3), so it stays 0; it is set here by a poke to see the 24 units it takes off the cursor's y
 # (the frame is 64 units tall, so a click at its centre still lands).  Every step waits for its screen or item
