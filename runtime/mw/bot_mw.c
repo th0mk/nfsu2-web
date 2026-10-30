@@ -583,6 +583,46 @@ static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
             p[0], p[1], p[2], kmh, best, bd);
     mw_aid_teleport(c, r[best].pos, r[best].dir);
 }
+/* NFSMW_BOT_SEARCH, what the bot does in the cops' search (state 2): unset or "rejoin", back to the chase (below);
+ * "stay", nothing (the AI drives on and the game's own cooldown runs); "hide", the car set in the nearest hiding spot
+ * that is on (the world map's icons of type 12, pursuit_mw.c) a second into the search, standing there until the chase
+ * comes back (then the AI drives again) or the game ends the pursuit (TRACKER M4-16: hiding spots and the cooldown;
+ * `pursuit watch` logs the meter and its parts). */
+int mw_aid_icon_near(int type, const float at[3], float out[3], float *dist);   /* pursuit_mw.c */
+#define HIDE_AFTER_S  1.0               /* game seconds of the search before the car is hidden */
+#define HIDE_MAX      4                 /* times in one pursuit */
+static struct { int hides, hidden; } H;
+static int search_mode(void){             /* 0 rejoin, 1 stay, 2 hide */
+    static int m = -1;
+    if (m < 0){ const char *e = getenv("NFSMW_BOT_SEARCH"); m = e && !strcasecmp(e, "hide") ? 2 : e && !strcasecmp(e, "stay") ? 1 : 0; }
+    return m;
+}
+static void pursuit_hide(CPU *c, uint32_t pst, double t){
+    if (pst < 2 && H.hidden){           /* the cops found the car: the AI drives again */
+        int was = H.hidden;
+        H.hidden = 0;
+        if (was == 2) return;           /* (it was not hidden: no spot) */
+        mw_aid_autopilot(c, 1);
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit hide %d: the chase is back, the AI drives\n", autotest_frame(), t, H.hides);
+        return;
+    }
+    if (pst != 2 || H.hidden || H.hides >= HIDE_MAX || t - B.search_t < HIDE_AFTER_S || mw_fe_input_top(0)) return;
+    float p[3], s[3], kmh = 0, d = 0, dir[3] = { 1.0f, 0.0f, 0.0f };
+    if (!mw_aid_where(c, p, &kmh)) return;
+    int k = mw_aid_icon_near(12, p, s, &d);
+    H.hides++;
+    if (k < 0){                         /* none in GManager's list now: once a search, with the list's counts */
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit hide %d: no hiding spot on\n", autotest_frame(), t, H.hides);
+        mw_aid_icons(c, -1);
+        H.hidden = 2;                   /* not again until the chase is back */
+        return;
+    }
+    H.hidden = 1;
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit hide %d: the search %.1f s on; to hiding spot (icon %d) at %.0f %.0f %.0f, "
+            "%.0f m away\n", autotest_frame(), t, H.hides, t - B.search_t, k, s[0], s[1], s[2], d);
+    mw_aid_teleport(c, s, dir);
+    mw_aid_autopilot(c, AP_STAND);
+}
 static void pursuit_frame(CPU *c){
     uint32_t perp = 0, po = mw_aid_pursuit(c, &perp);
     double t = mw_game_time();
@@ -595,6 +635,7 @@ static void pursuit_frame(CPU *c){
         if (po){
             B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9;
             B.trail_n = 0; B.rejoins = 0; B.last_pst = 0; B.trail_t = -1e9; B.search_t = t;
+            H.hides = 0; H.hidden = 0;
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
                     B.forced ? " (forced)" : " (by itself)", rdf(perp + PERP_HEAT), rdf(po + 0x9cu), rdf(po + 0xa0u),
                     rd(po + PURSUIT_COPS));
@@ -603,6 +644,8 @@ static void pursuit_frame(CPU *c){
              * bin 14 mostly ended within 12 s for 100 bounty, while the one at heat 1.96 ran 176 s for 7,700 (bot run
              * of 2026-10-30) */
             uint32_t heat = (uint32_t)bin_max_heat(B.g.bin);
+            const char *fh = getenv("NFSMW_BOT_FHEAT");   /* another heat (1: the game's escalation raises it) */
+            if (fh && atoi(fh) > 0) heat = (uint32_t)atoi(fh);
             call1(c, FN_FORCE_PURSUIT, 0, heat);
             B.forced = 1; B.tries = 2;
             fprintf(stderr, "[mwbot] f=%ld t=%.1f no pursuit after %.0f s of driving: Game.ForcePursuitStart(%u)\n", f, t,
@@ -653,8 +696,9 @@ static void pursuit_frame(CPU *c){
         }
         if (pst == 2 && B.last_pst != 2) B.search_t = t;
         B.last_pst = (int)pst;
-        if (pst == 2 && len < ESCAPE_LEN && B.rejoins < REJOIN_MAX && t - B.search_t >= REJOIN_S && B.trail_n > REJOIN_BACK &&
-            !mw_fe_input_top(0)){
+        if (search_mode() == 2) pursuit_hide(c, pst, t);
+        if (search_mode() == 0 && pst == 2 && len < ESCAPE_LEN && B.rejoins < REJOIN_MAX && t - B.search_t >= REJOIN_S &&
+            B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
             if (m > 0.5f){ d[0] /= m; d[2] /= m; } else { d[0] = 1.0f; d[2] = 0.0f; }
