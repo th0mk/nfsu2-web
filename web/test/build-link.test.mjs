@@ -211,6 +211,14 @@ test('corelink.sh refuses a build older than the lift, the runtime sources or we
   assert.equal(r.code, 2, r.out); assert.match(r.out, /no build in out\/web \(run web\/build\.sh\)/);
 });
 
+test('link.sh, the native build, compiles every core file of runtime/core.list', () => {
+  const core = read(ROOT, 'runtime/core.list').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(l => l.endsWith('.c'));
+  const csrc = read(ROOT, 'link.sh').match(/^CSRC="([^"]*)"$/m);
+  assert.ok(csrc, 'link.sh has no CSRC="..." line');
+  const names = new Set(csrc[1].split(/\s+/));
+  assert.deepEqual(core.filter(f => !names.has(f.replace(/\.c$/, ''))), []);
+});
+
 test('main_all.sh links lift.objs\' objects, never an older lift\'s, and needs the list', () => {
   const t = corelinkTree();
   w(t, 'web/tools/main_all.sh', read(ROOT, 'web/tools/main_all.sh'), 0o755);
