@@ -63,7 +63,10 @@ Blacklist screen reads them (races won, milestones, bounty, and what the rival a
 their own start (the engage trigger stands at the race's start grid), lets the game's AI race them from their GO (a
 car the AI wedges is put back on the road by the game's RESET, `carreset`), earns milestones and bounty in pursuits
 (the AI drives about until the cops start one; Game.ForcePursuitStart(1) after 60 s of game time without one), then
-engages the rival's challenge, and answers the screens on the way (results, text messages, the safehouse menu);
+engages the rival's challenge at its first race's start (InGameRivalChallenge.fng: Enter accepts), takes two of the
+beaten rival's markers (SafehouseMarkers.fng), and answers the screens on the way (results, text messages, a bust's
+fine, the safehouse menu); it stops at GameOver.fng (the only car impounded after its third bust) and at a career
+menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
 race I` and `bot pursuit` do one race or one pursuit, `bot wait [N]` waits for the bot to stop.  `career_bot.txt`
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);

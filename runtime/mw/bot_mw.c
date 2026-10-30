@@ -80,6 +80,8 @@ double mw_game_time(void);
 #define FN_BIN_RACE      0x00601060u
 #define FN_BIN_BOSSES    0x005dcf60u     /* the rival's races: their count (field 0xD5A174AA) */
 #define FN_BIN_BOSS      0x00601020u     /* and race i's hash */
+#define F_BIN_RACE_LIST  0xa7ef40efu     /* race_bin_NN's races (the collections' keys) */
+#define F_BIN_BOSS_LIST  0xd5a174aau     /* and the rival's */
 #define FN_BIN_WON       0x005dd1d0u
 #define FN_BIN_WON_REQ   0x005dd1a0u
 #define FN_BIN_MS        0x005dd1c0u
@@ -132,8 +134,82 @@ static uint32_t score_flags(uint32_t hash){
     }
     return 0;
 }
-struct race { uint32_t hash, params, flags; float pos[3], dir[3]; };
+/* Attrib::StringHash32 (Jenkins' lookup2, initial value 0xABCDEF00; the game's 0x454830): a collection's key from
+ * its full name, h32("default") == 0xEEC2271A (tools/mw/census.py's h32) */
+#define MIX(a, b, c) do { \
+    a -= b; a -= c; a ^= c >> 13;  b -= c; b -= a; b ^= a << 8;  c -= a; c -= b; c ^= b >> 13; \
+    a -= b; a -= c; a ^= c >> 12;  b -= c; b -= a; b ^= a << 16; c -= a; c -= b; c ^= b >> 5; \
+    a -= b; a -= c; a ^= c >> 3;   b -= c; b -= a; b ^= a << 10; c -= a; c -= b; c ^= b >> 15; } while (0)
+static uint32_t h32(const char *s){
+    const uint8_t *k = (const uint8_t *)s; uint32_t n = (uint32_t)strlen(s), len = n, a = 0x9e3779b9u, b = a, c = 0xabcdef00u;
+    while (len >= 12){
+        a += k[0] | (uint32_t)k[1] << 8 | (uint32_t)k[2] << 16 | (uint32_t)k[3] << 24;
+        b += k[4] | (uint32_t)k[5] << 8 | (uint32_t)k[6] << 16 | (uint32_t)k[7] << 24;
+        c += k[8] | (uint32_t)k[9] << 8 | (uint32_t)k[10] << 16 | (uint32_t)k[11] << 24;
+        MIX(a, b, c); k += 12; len -= 12;
+    }
+    c += n;
+    switch (len){
+    case 11: c += (uint32_t)k[10] << 24; /* fall through */
+    case 10: c += (uint32_t)k[9] << 16;  /* fall through */
+    case 9:  c += (uint32_t)k[8] << 8;   /* fall through */
+    case 8:  b += (uint32_t)k[7] << 24;  /* fall through */
+    case 7:  b += (uint32_t)k[6] << 16;  /* fall through */
+    case 6:  b += (uint32_t)k[5] << 8;   /* fall through */
+    case 5:  b += k[4];                  /* fall through */
+    case 4:  a += (uint32_t)k[3] << 24;  /* fall through */
+    case 3:  a += (uint32_t)k[2] << 16;  /* fall through */
+    case 2:  a += (uint32_t)k[1] << 8;   /* fall through */
+    case 1:  a += k[0];
+    }
+    MIX(a, b, c);
+    return c;
+}
+#undef MIX
+
+/* A race's engage trigger: race_bin_NN/engage lists the bin's engage triggers (field 0x58DC14C0), each a collection
+ * (engagetrigger_<kind>_<event>) whose field 0x277566F3 is the race's collection key and 0x9F743A0E its place.  The
+ * trigger is near the race's start grid, but not always at it (race_bin_14's 14_1_1 circuit: about 150 m apart, and
+ * Enter at the start grid opened nothing).  Read with the game's Attrib calls on gameplay instances made on the guest
+ * stack (0x5E2580 makes one for a key, 0x454810 a field's value pointer, 0x5DCCA0 a position as simulation space,
+ * 0x45A430 lets it go).  1 = found, its place in pos. */
+#define FN_ATTRIB_INST   0x005e2580u
+#define FN_ATTRIB_FIELD  0x00454810u
+#define FN_ATTRIB_POS    0x005dcca0u
+#define FN_ATTRIB_FREE   0x0045a430u
+#define F_ENGAGE_LIST    0x58dc14c0u
+#define F_TRIGGER_RACE   0x277566f3u
+static int engage_trigger(CPU *c, int bin, uint32_t race_key, float pos[3]){
+    char name[40]; snprintf(name, sizeof name, "race_bin_%02d/engage", bin);
+    uint32_t k3[3] = { h32(name), 0, 0 };
+    c->esp -= 0x80u;                    /* two instances and a vector below the game's stack, the calls below them */
+    uint32_t inst = c->esp, inst2 = inst + 0x20u, out = inst + 0x40u;
+    memset(g_mem + inst, 0, 0x80);
+    call(c, FN_ATTRIB_INST, inst, 3, k3);
+    int found = 0;
+    for (uint32_t i = 0; i < 32 && !found; i++){
+        uint32_t a2[2] = { F_ENGAGE_LIST, i }, p = call(c, FN_ATTRIB_FIELD, inst, 2, a2), tkey = rd(p);
+        if (!p || !tkey) break;
+        uint32_t t3[3] = { tkey, 0, 0 };
+        memset(g_mem + inst2, 0, 0x20);
+        call(c, FN_ATTRIB_INST, inst2, 3, t3);
+        uint32_t b2[2] = { F_TRIGGER_RACE, 0 }, q = call(c, FN_ATTRIB_FIELD, inst2, 2, b2);
+        if (q && rd(q) == race_key){
+            uint32_t s2[2] = { inst2, out };
+            call(c, FN_ATTRIB_POS, 0, 2, s2);
+            memcpy(pos, g_mem + out, 12);
+            found = 1;
+        }
+        call(c, FN_ATTRIB_FREE, inst2, 0, 0);
+    }
+    call(c, FN_ATTRIB_FREE, inst, 0, 0);
+    c->esp += 0x80u;
+    return found;
+}
+
+struct race { uint32_t hash, key, params, flags; int trig; float pos[3], dir[3]; };
 static int read_races(CPU *c, uint32_t binobj, struct race *r, int max, int boss){
+    uint32_t prof = profile(); int bin = prof ? MR8(prof + PROF_BIN) : 0;
     uint32_t db = rd(G_RACEDB);
     int n = binobj ? (int)call(c, boss ? FN_BIN_BOSSES : FN_BIN_RACES, binobj, 0, 0) : 0;
     if (n > max) n = max;
@@ -151,6 +227,11 @@ static int read_races(CPU *c, uint32_t binobj, struct race *r, int max, int boss
         call1(c, FN_START_DIR, x->params, at + 12u);
         memcpy(x->pos, g_mem + at, 12); memcpy(x->dir, g_mem + at + 12u, 12);
         c->esp += 0x20u;
+        /* the race's collection key (the list's element, as 0x601060 reads it), and its engage trigger's place */
+        uint32_t a2[2] = { boss ? F_BIN_BOSS_LIST : F_BIN_RACE_LIST, (uint32_t)i }, p = call(c, FN_ATTRIB_FIELD, binobj, 2, a2);
+        x->key = rd(p);
+        float tp[3];
+        if (x->key && engage_trigger(c, bin, x->key, tp)){ memcpy(x->pos, tp, sizeof tp); x->trig = 1; }
     }
     return n;
 }
@@ -160,9 +241,9 @@ static void log_gates(const struct gates *g, const char *why){
 }
 static void log_races(const struct race *r, int n){
     for (int i = 0; i < n; i++)
-        fprintf(stderr, "[mwbot]   race %d hash %08x flags %x at %.2f %.2f %.2f facing %.3f %.3f %.3f%s\n", i, r[i].hash,
-                r[i].flags, r[i].pos[0], r[i].pos[1], r[i].pos[2], r[i].dir[0], r[i].dir[1], r[i].dir[2],
-                r[i].flags & 2u ? " (completed)" : "");
+        fprintf(stderr, "[mwbot]   race %d hash %08x key %08x flags %x %s %.2f %.2f %.2f facing %.3f %.3f %.3f%s\n", i,
+                r[i].hash, r[i].key, r[i].flags, r[i].trig ? "trigger at" : "start grid at", r[i].pos[0], r[i].pos[1],
+                r[i].pos[2], r[i].dir[0], r[i].dir[1], r[i].dir[2], r[i].flags & 2u ? " (completed)" : "");
 }
 
 /* ---- the bot ---- */
