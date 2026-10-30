@@ -45,12 +45,13 @@
 // name, http://127.0.0.1:<port>: the proxy sends it to a second Underground 2 server at the root, with its own state
 // folder and vault, as today's box serves nfsu2.xyz in the side-by-side days (PLAN U-27 (b)).  Plain HTTP: both names
 // are secure contexts, and the hand-over's loopback rule is http://127.0.0.1 (M13-29).  Underground 2's folder is
-// --data (NFSU2_DATA), Most Wanted's --data-mw (NFSMW_DATA); the servers on <http-port>, +1 and +2.  Checks: COOP and
+// --data (NFSU2_DATA), Most Wanted's --data-mw (NFSMW_DATA); the servers on <http-port>, +1 and +2, each with
+// --behind-proxy --host <its name>, as the boxes run them (the Dockerfile's CMD).  Checks: COOP and
 // COEP on every path of both addresses; /u2/lan and /mw/lan reach their own server only; one vault on the new address,
 // the Underground 2 server's (/u2/vault directly, /mw/vault only through the forwarding), none in Most Wanted's state
 // folder, the old address's its own; /mw/vault 503 from the Most Wanted server once the Underground 2 server is
 // stopped; the old address's CSP and the new one's hand-over CORS by the loopback rule; in Chrome, each page's worker
-// at its own base (/u2/, /mw/), none at /.
+// at its own base (/u2/, /mw/), none at /; each server's client address the one the proxy forwards (X-Forwarded-For).
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
@@ -377,12 +378,16 @@ async function runOneOrigin() {
   const servers = {};
   let sim = null, browser = null;
   try {
-    servers.u2 = await startServer(['--http-port', String(PU), '--base-path', 'localhost=/u2'],
+    // (each behind the proxy as the boxes run it, the Dockerfile's CMD: --behind-proxy and the name it answers)
+    const behind = name => ['--behind-proxy', '--host', name];
+    servers.u2 = await startServer(['--http-port', String(PU), ...behind('localhost'), '--base-path', 'localhost=/u2'],
       { label: 'one-origin-u2', data: dataUg2, state: path.join(dir, 'state-u2'), env: { NFSU2_VAULT_BOX_KEY: boxKey } });
-    servers.mw = await startServer(['--game', 'mw', '--http-port', String(PM), '--wasm', path.join(MODULE_MW, 'nfsmw.wasm'), ...(ORACLE_MW ? ['--dev'] : [])],
+    servers.mw = await startServer(['--game', 'mw', '--http-port', String(PM), ...behind('localhost'), '--wasm', path.join(MODULE_MW, 'nfsmw.wasm'),
+      ...(ORACLE_MW ? ['--dev'] : [])],
       { label: 'one-origin-mw', data: DATA_MW, state: path.join(dir, 'state-mw'),
         env: { NFSU2_VAULT_FORWARD: `http://127.0.0.1:${PU}/vault`, NFSU2_VAULT_BOX_KEY: boxKey } });
-    servers.old = await startServer(['--http-port', String(PO)], { label: 'one-origin-old', data: dataUg2, state: path.join(dir, 'state-old') });
+    servers.old = await startServer(['--http-port', String(PO), ...behind('127.0.0.1')],
+      { label: 'one-origin-old', data: dataUg2, state: path.join(dir, 'state-old') });
     if (ORACLE_MW) report('one-origin: Most Wanted\'s module is a dev build with the D3DX oracle: its server runs with --dev', true, 'PLAN D-09');
     // the edge: one name's paths on two servers, the other name on a third
     sim = startRouteSim({ port: P1, fakeClientIp: '198.51.100.7',
@@ -486,6 +491,21 @@ async function runOneOrigin() {
     const mwAfter = filesUnder(path.join(dir, 'state-mw'));
     report('one-origin: Most Wanted\'s state folder holds no vault files', !mwAfter.some(f => /vault/i.test(f)) && !fs.existsSync(path.join(dir, 'state-mw', 'vault')),
       { files: mwAfter.filter(f => !f.startsWith('log/')) });
+    // 7. the client's address each server sees (its access log): the one the proxy forwards (X-Forwarded-For), never
+    // the proxy's own; the Most Wanted server's /vault forwarding reaches the Underground 2 server directly, not
+    // through the proxy, and is left out
+    await new Promise(r => setTimeout(r, 300));
+    const seen = {};
+    for (const name of ['u2', 'mw', 'old']) {
+      const by = {};
+      for (const l of fs.readFileSync(path.join(OUT, `server-one-origin-${name}.log`), 'utf8').split('\n')) {
+        const m = /\[http\] (\S+) \S+ (\S+) /.exec(l);
+        if (m && !(name === 'u2' && m[2].startsWith('/vault'))) by[m[1]] = (by[m[1]] ?? 0) + 1;
+      }
+      seen[name] = by;
+    }
+    report('one-origin: each server sees the address the proxy forwards (X-Forwarded-For), not the proxy\'s',
+      Object.values(seen).every(by => Object.keys(by).length === 1 && by['198.51.100.7'] > 0), seen);
     report('one-origin: the proxy\'s requests by server', true, { u2: sim.stats.byPort[PU] ?? 0, mw: sim.stats.byPort[PM] ?? 0, old: sim.stats.byPort[PO] ?? 0 });
   } catch (e) {
     report('one-origin: run', false, String(e?.stack ?? e).slice(0, 600));
