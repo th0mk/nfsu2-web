@@ -13,6 +13,7 @@
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเว็บเซิร์ฟเวอร์ NFSU2 ไม่ใช่จากเซิร์ฟเวอร์อื่น",
   "Shared 4 GB WebAssembly memory is not available: {error}": "ใช้หน่วยความจำ WebAssembly แบบแชร์ขนาด 4 GB ไม่ได้: {error}",
   "This browser is too old for the game (no Atomics.waitAsync). Update {browser}.": "เบราว์เซอร์นี้เก่าเกินไปสำหรับเกม (ไม่มี Atomics.waitAsync) ให้อัปเดต {browser}",
+  "This browser is too old to run the game. Update {browser}.": "เบราว์เซอร์นี้เก่าเกินไปที่จะรันเกม ให้อัปเดต {browser}",
   "HTTPS or localhost, cross-origin isolated, threads and 4 GB memory available.": "ใช้ HTTPS หรือ localhost แยกส่วนแบบ cross-origin และมีเธรดกับหน่วยความจำ 4 GB พร้อมใช้งาน",
   "Graphics (WebGPU)": "กราฟิก (WebGPU)",
   "Off because this address is not secure (see above).": "ปิดอยู่ เพราะที่อยู่นี้ไม่ปลอดภัย (ดูด้านบน)",

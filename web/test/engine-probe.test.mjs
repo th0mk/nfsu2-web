@@ -57,7 +57,7 @@ test('checkEngine: null with exnref; the module check with its code without', ()
     assert.equal(c.state, 'fail');
     assert.equal(c.code, 'MODULE-OLD-ENGINE');
     assert.equal(c.tl, 'Game module');
-    assert.match(c.detail, /too old to run the game .*Update the browser\.$/);
+    assert.match(c.detail, /too old to run the game\. Update the browser\.$/);
   }
   // the probe goes to validate as it is
   let seen;

@@ -110,7 +110,7 @@ export function checkEngine(validate: (b: Uint8Array<ArrayBuffer>) => boolean = 
   let ok = false;
   try { ok = validate(EXNREF_PROBE); } catch { /* no WebAssembly at all: the same answer */ }
   if (ok) return null;
-  return check('module', N('Game module'), 'fail', N('This browser is too old to run the game (its WebAssembly has no exception references). Update {browser}.'),
+  return check('module', N('Game module'), 'fail', N('This browser is too old to run the game. Update {browser}.'),
     'MODULE-OLD-ENGINE', { browser: browserName() });
 }
 

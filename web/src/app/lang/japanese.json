@@ -13,6 +13,7 @@
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。別のサーバーではなく、NFSU2 Webサーバーから開いてください。",
   "Shared 4 GB WebAssembly memory is not available: {error}": "4 GBの共有WebAssemblyメモリを利用できません: {error}",
   "This browser is too old for the game (no Atomics.waitAsync). Update {browser}.": "このブラウザはゲームを動かすには古すぎます（Atomics.waitAsyncがありません）。{browser}を更新してください。",
+  "This browser is too old to run the game. Update {browser}.": "このブラウザはゲームを動かすには古すぎます。{browser}を更新してください。",
   "HTTPS or localhost, cross-origin isolated, threads and 4 GB memory available.": "HTTPSまたはlocalhost、クロスオリジン分離済みで、スレッドと4 GBのメモリを利用できます。",
   "Graphics (WebGPU)": "グラフィック（WebGPU）",
   "Off because this address is not secure (see above).": "このアドレスは安全ではないため、オフになっています（上記を参照）。",
