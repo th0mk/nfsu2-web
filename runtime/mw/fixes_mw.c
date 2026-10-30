@@ -9,7 +9,9 @@
  *                             when, and only when, its target is _purecall: the vehicle is passed over (as with
  *                             the community's guard at the same site, a roadblock may then lack a car).  An
  *                             instruction hook (HOOK_SITE below) points edx at a stand-in table whose +0x80 is
- *                             one of the game's own empty methods (0x410550, `ret`, in 61 of its vtables).
+ *                             one of the game's own empty methods (0x410550, `ret`, in 61 of its vtables), and
+ *                             a second (0x43E014) keeps that vehicle out of the roadblock's cars (below).  Should
+ *                             the game reach _purecall anyway, a hook at its entry logs the caller.
  *   NFSU2_TEST_COPLIST_NULL=1 the cop and roadblock unload, 0x57D0F0: it calls method +0xC of every entry of
  *                             the list at [0x92FD8C] (count [0x92FD94]) and an empty (null) entry is called
  *                             through (0x57D105 `mov edx,[ecx]`): on Windows an access violation, here a call
@@ -53,11 +55,44 @@ static int hit_log(int *n){ return (*n)++ < 20; }
  * Repro check: how often the guarded call ran, pursuit_mw.c's [mwpursuit] line) */
 static unsigned long purecall_site_runs;
 unsigned long mw_fix_purecall_calls(void){ return purecall_site_runs; }
+/* The vehicle passed over at 0x43E005 is then added to the new roadblock's cars (0x43E00B..0x43E014: a push_back,
+ * 0x43C4E0, of ebp into the vector at esp+0x48), whose later calls on it end in _purecall all the same (run a6 of
+ * 2026-10-30: R6025 in the frame of the guard's line, in a roadblock storm at heat 3).  So its add goes to a stand-in
+ * vector instead (one slot, emptied before each use): the roadblock goes up without that car. */
+#define PURECALL_ADD_SITE HOOK_SITE(0x0043e014)
+static uint32_t passed_over;            /* the vehicle the guard just passed over (0: none) */
+static int purecall_add_hook(CPU *c){
+    static uint32_t vec;
+    if (!passed_over || c->ebp != passed_over){ passed_over = 0; return 1; }
+    passed_over = 0;
+    if (!vec){
+        vec = com_scratch(0x20u);       /* {?, begin, end, capacity end} and the one slot at +0x10 */
+        if (!vec) return 1;
+        MR32(vec + 4u) = vec + 0x10u; MR32(vec + 0xcu) = vec + 0x14u;
+    }
+    MR32(vec + 8u) = vec + 0x10u;       /* empty */
+    c->ecx = vec;
+    return 1;
+}
+/* _purecall itself (the CRT's, 0x7C5200): the game is about to stop with R6025; say who called it */
+#define CRT_PURECALL_SITE HOOK_SITE(0x007c5200)
+static void purecall_caller(CPU *c){
+    char b[160]; int o = 0;
+    for (uint32_t k = 1; k <= 24 && o < (int)sizeof b - 12; k++){   /* return addresses in the game's code above it */
+        uint32_t v = MR32(c->esp + 4u * k);
+        if (v >= 0x00401000u && v < 0x007d0000u) o += snprintf(b + o, sizeof b - (size_t)o, " 0x%08x", v);
+    }
+    fprintf(stderr, "[fix] f=%ld _purecall (R6025) called from 0x%08x, ecx 0x%08x; above it:%s\n", autotest_frame(),
+            MR32(c->esp), c->ecx, o ? b : " none");
+}
 int mw_fix_hook(CPU *c, uint32_t va){
+    if (va == PURECALL_ADD_SITE) return purecall_add_hook(c);
+    if (va == CRT_PURECALL_SITE){ purecall_caller(c); return 1; }
     if (va != PURECALL_SITE) return 0;
     static int off = -1, hits;
     static uint32_t stand_in;
     purecall_site_runs++;
+    passed_over = 0;
     if (MR32(c->edx + 0x80u) != CRT_PURECALL) return 1;
     if (test_switch("NFSU2_TEST_PURECALL", &off)){
         if (hit_log(&hits))
@@ -72,8 +107,9 @@ int mw_fix_hook(CPU *c, uint32_t va){
     }
     if (hit_log(&hits))
         fprintf(stderr, "[fix] f=%ld pursuit purecall: vehicle 0x%08x (vtable 0x%08x) at 0x43E005 would call "
-                "_purecall (R6025); passed over\n", autotest_frame(), c->ecx, c->edx);
+                "_purecall (R6025); passed over, and kept out of the roadblock's cars\n", autotest_frame(), c->ecx, c->edx);
     c->edx = stand_in;
+    passed_over = c->ecx;               /* ecx = ebp, the vehicle: its add at 0x43E014 goes to the stand-in vector */
     return 1;
 }
 
