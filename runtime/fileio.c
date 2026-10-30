@@ -818,7 +818,12 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         else { if(len) mem_commit(buf,len);
                ssize_t got;
                uint64_t _rd0 = now_ns_io();
-               /* READLOG: where in the file each read starts (at=), for read patterns such as a speech bank's */
+               /* READLOG: each read is logged with where in the file it starts (at=) and the guest thread (tid=,
+                * the TEB's id, as GetCurrentThreadId gives it), for read patterns such as a speech bank's.
+                * The variable is read once, at the first ReadFile: set at all (even to 0) it is on, and setting
+                * it later does nothing.  at= is the OVERLAPPED offset or the handle's position before the read;
+                * on a plain descriptor (not GF_CACHE) in the browser, where the read runs with the guest lock
+                * released, another thread reading the same handle meanwhile can make it stale. */
                static int readlog = -1;
                if (readlog < 0) readlog = getenv("READLOG") != 0;
                long long rd_at = -1;
