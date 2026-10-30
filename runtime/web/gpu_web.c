@@ -685,8 +685,9 @@ static unsigned psc_put(Buf *B){
     return B->psc_last;
 }
 #define PSCUBE 256
-/* draws that bound a cube at stage 0 to a pixel shader whose s0 is declared 2D (com.c says which: ps_2_0, ps_2_x
- * and ps_3_0 declare it) or that has no cube twin; D3D9 leaves such a draw undefined.  A ps_2_x or ps_3_0 has no
+/* draws that bound a cube at stage 0 to a pixel shader that reads s0 declared 2D (com.c says which: ps_2_0, ps_2_x
+ * and ps_3_0 declare it; one that never reads s0 is not flagged) or that has no cube twin; D3D9 leaves the first
+ * kind undefined.  A ps_2_x or ps_3_0 has no
  * twin then (shader_dump.c's index says why) and the page draws it with the fixed-function cube module; a ps_2_0
  * keeps its twin, which reads s0 as a cube.  Logged at each shader's first, so a run's log shows whether the game
  * ever does it (M3-06) */

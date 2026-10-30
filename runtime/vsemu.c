@@ -290,6 +290,16 @@ VSProg *vs_compile(const uint32_t *tok, size_t max_dw){
 void vs_free(VSProg *p){ if (p){ free(p->ins); free(p->raw); free(p); } }
 unsigned vs_version(const VSProg *p){ return p ? p->version : 0; }
 int vs_sampler_type(const VSProg *p, int s){ return p && s >= 0 && s < 16 ? p->smptype[s] : 0; }
+unsigned vs_samplers_read(const VSProg *p){
+    unsigned m = 0;
+    for (unsigned q = 0; p && q < p->n; q++){
+        const VSIns *y = &p->ins[q];
+        if ((y->op == O_TEX || y->op == O_TEXLDD || y->op == O_TEXLDL) && y->nsrc >= 2 &&
+            RT(y->src[1]) == R_SAMPLER && RN(y->src[1]) < 16)
+            m |= 1u << RN(y->src[1]);
+    }
+    return m;
+}
 unsigned vs_ninstr(const VSProg *p){ return p ? p->n : 0; }
 unsigned vs_unknown(const VSProg *p){ return p ? p->unknown : 0; }
 
