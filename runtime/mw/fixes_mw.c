@@ -25,11 +25,16 @@
  *                             key; the fix keeps it from depending on that, and says when it happens.)
  *   NFSU2_TEST_NAME_FORMAT=1  a player name with a % in it, taken as a printf format by the game room (0x573140
  *                             from three sites; sub_00573140 below): hashed as text instead (TRACKER M8-19, L-184).
+ *   NFSU2_TEST_PFLOCK=1       the interactive music's lock (B-008, B-009; sub_00834e6d below): a main-thread try
+ *                             that finds Pathfinder's lock held waits for it instead of failing at once; 1 keeps
+ *                             the game's try, 2 and 3 make the music slot's start find it held (the crash at once).
  * Each fix logs its first 20 hits ("[fix] f=N ..."). */
 #include "cpu.h"
 #include "game.h"
+#include "memmap.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 long autotest_frame(void);
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
@@ -196,4 +201,77 @@ void sub_00573140(CPU *c){
                 autotest_frame(), name, ret - 5u);
     POP32(c->eip);                      /* the game's `ret` (cdecl: the caller pops the format) */
     c->eax = h;
+}
+
+/* B-008, B-009: Pathfinder's lock.  The interactive music library (EA Pathfinder, its globals about 0x9C2954..0x9C29C0)
+ * guards its state with a semaphore object at [0x9C29B0], taken through EA's Semaphore::Wait (0x834E6D, thiscall
+ * (const ThreadTime *absolute timeout)) with the timeout 0 at every entry point (0x829410 for 23 of them, 8 more
+ * inline): a try.  When another thread holds it the call returns at once with -18 and does nothing.  The sound
+ * thread's service (0x82E7E0 -> 0x82E710) takes it the same way and skips a turn when it cannot, but the game's music
+ * code on the main thread does not look: the music manager's slot start 0x4BF6A0 makes the slot's stream object with
+ * 0x82D0B0 and then marks the slot playing (0x4B6600 sets +4 whether or not an object came), so a held lock at that
+ * moment leaves the slot playing with no stream object, and two later calls go through the empty pointer: the slot's
+ * volume (0x4F0660 -> 0x82D560, `call [edi+0x30]` at 0x82D605; B-008) and the world's teardown (0x4B65B0: the
+ * object from 0x8298D0, `call [edx+0x90]` at 0x4B65E3; B-009).  On Windows a thread is preempted inside that short
+ * locked stretch only rarely.  Here guest threads take turns under one big lock and every Win32 call hands it on
+ * (guest_fair_yield), WaitForSingleObject and ReleaseSemaphore too, so a thread that has just taken Pathfinder's
+ * semaphore often lets the other run before it gets on, and the other's try fails (about 1 in 30 of the sound
+ * thread's, and some of the main thread's, in runs of 2026-10-30).  So a try on the main thread that finds the lock
+ * held waits for it, up to PF_WAIT_MS of real time, and only then gives the game its "busy"; the sound thread keeps
+ * the game's try.  NFSU2_TEST_PFLOCK=1 keeps the game's try on the main thread too; NFSU2_TEST_PFLOCK=2 makes the
+ * slot start's try (0x82D0B0's) find the lock held every time, which brings B-008 in the front end's music; =3 does
+ * that from the second slot start on (the first world's music). */
+#define PF_LOCK_OBJ   0x009c29b0u       /* the Semaphore object: +0 its handle, +4 its count */
+#define FN_TICKS      0x008352b3u       /* GetTickCount, the clock EA's Semaphore::Wait measures an absolute time on */
+#define PF_WAIT_MS    500u
+#define PF_SLOT_OBJECT 0x0082d0b9u      /* 0x829410's return in 0x82D0B0 (the stream object): NFSU2_TEST_PFLOCK=2 */
+static unsigned long pf_waits, pf_gaveup;
+void sub_00834e6d_orig(CPU *c);
+void sub_00834e6d(CPU *c){
+    static _Thread_local int inner;
+    static int off = -1, hits;
+    uint32_t sem = c->ecx, pt = MR32(c->esp + 4u);
+    if (inner || c->fs_base != MM_TEB_MAIN || !sem || sem != MR32(PF_LOCK_OBJ) || !pt || MR32(pt) != 0u){
+        sub_00834e6d_orig(c);
+        return;
+    }
+    uint32_t from = MR32(c->esp);
+    static int force = -1, starts;
+    if (force < 0){ const char *e = getenv("NFSU2_TEST_PFLOCK"); force = e && (*e == '2' || *e == '3') ? *e - '0' : 0; }
+    if (force && MR32(c->ebp + 4u) == PF_SLOT_OBJECT && (force == 2 || ++starts >= 2)){   /* held, as when the sound thread has it */
+        static int nf;
+        if (nf++ < 20)
+            fprintf(stderr, "[fix] f=%ld TEST: the slot start's stream object (0x82D0B0) finds Pathfinder's lock held\n",
+                    autotest_frame());
+        POP32(c->eip);
+        c->esp += 4u;                   /* ret 4 */
+        c->eax = 0xfffffffeu;           /* -2: the semaphore's wait timed out */
+        return;
+    }
+    sub_00834e6d_orig(c);               /* the game's try */
+    if ((int32_t)c->eax != -2 || test_switch("NFSU2_TEST_PFLOCK", &off)){
+        if ((int32_t)c->eax == -2 && hit_log(&hits))
+            fprintf(stderr, "[fix] f=%ld TEST: Pathfinder's lock is held: the main thread's try (0x834E6D from 0x%08x, "
+                    "above 0x%08x) fails (the game's way)\n", autotest_frame(), from, MR32(c->ebp + 4u));
+        return;
+    }
+    struct timespec a, b;
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    uint32_t keep_ecx = c->ecx;
+    MR32(pt) = call_guest(c, FN_TICKS, 0, 0) + PF_WAIT_MS;     /* the caller's timeout, an absolute time */
+    c->ecx = sem;
+    inner = 1;
+    uint32_t r = call_guest(c, 0x00834e6du, 1, &pt);           /* EA's Wait again, now a wait */
+    inner = 0;
+    c->ecx = keep_ecx;
+    MR32(pt) = 0u;
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    pf_waits++;
+    if ((int32_t)r == -2) pf_gaveup++;
+    if (hit_log(&hits) || ((int32_t)r == -2 && pf_gaveup <= 50u))
+        fprintf(stderr, "[fix] f=%ld Pathfinder's lock was held: the main thread's try (0x834E6D from 0x%08x, above "
+                "0x%08x) waited %.1f ms: %s (%lu waits, %lu still held)\n", autotest_frame(), from, MR32(c->ebp + 4u),
+                (double)(b.tv_sec - a.tv_sec) * 1e3 + (double)(b.tv_nsec - a.tv_nsec) / 1e6,
+                (int32_t)r == -2 ? "still held, busy as the game's" : "taken", pf_waits, pf_gaveup);
+    c->eax = r;
 }
