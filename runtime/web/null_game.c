@@ -50,6 +50,9 @@ WEAK double   hfr_sim_ms(void){ return 0; }
 WEAK uint64_t hfr_vclock_floor_us(void){ return 4000u; }
 WEAK void     hfr_set_display_hz(int hz){ (void)hz; }
 WEAK void     hfr_report(void){ }
+WEAK void     hfr_after_present(void){ }
+WEAK void     hfr_note_input_read(int pad){ (void)pad; }
+WEAK double   hfr_frame_input_ms(void){ return 0; }
 
 /* ---- d3dx_hle.c: no D3DX of the exe's own, no effect statistics */
 int      g_efx_stat WEAK;
