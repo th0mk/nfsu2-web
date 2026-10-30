@@ -40,9 +40,10 @@
  * (web/server-rs/crates/online).  NFSU2_ONLINE (default on in the browser, off on the
  * Mac, whose hub has no such host; 0/off turns it off): in vlan mode the game's
  * lobby host string (game.h; UG2: "*pcnfs05.ea.com" at 0x7FBDBC) loses its
- * '*' in guest memory (the '*' asks DirtySock for SSL 2.0 on port 20921,
- * which the server does not speak: without it the lobby link is plain TCP to
- * 20920), and gethostbyname of that name answers 10.77.0.1.  Every other name stays
+ * '*' in guest memory (the '*' asks DirtySock for SSL 2.0 on the port after
+ * the game's, UG2's 20921, which the server does not speak: without it the
+ * lobby link is plain TCP to the game's port, UG2's 20920, Most Wanted's
+ * 30920), and gethostbyname of that name answers 10.77.0.1.  Every other name stays
  * unresolved.  Off: the name is not found and the game shows its own "cannot
  * connect" message.
  * In a test or debug run "lan" is refused and becomes "loopback": that is
@@ -326,7 +327,7 @@ static void online_patch(void){
         g_online = 0; return;
     }
     memcpy(g_mem + va, plain, n);
-    ws_log("online: on (NFSU2_ONLINE): the lobby link is plain TCP to %s:20920, which is the server's own host 10.77.0.1",
+    ws_log("online: on (NFSU2_ONLINE): the lobby link is plain TCP to %s, which is the server's own host 10.77.0.1",
            host);
 }
 static void ws_config(void){

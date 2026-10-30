@@ -230,8 +230,6 @@ static int mw_movie_alt(const char *path, int i, char *out, unsigned cap){
  *   res_labels          the options show the table's own labels ("800x600"); the rows' real device sizes
  *                       are com.c's res_pick, as for UG2
  *   on_sound_unlock     UG2 debugging only
- *   online_host_va, online_host   M9: the lobby is "*pcnfs06.ea.com" at 0x8F42C8 on port 30920
- *                       (Q-14), which the server's Online stand-in does not serve; Online stays off
  *   pad_rescan          no search after the start (above): the pad stays one device, whichever
  *                       controller drives it (a wheel after a pad included)
  *   pad_trigger_axes, pad_jolt, pad_hold_screen, pad_fe_keys   UG2's pad features: MW's driving
@@ -286,4 +284,7 @@ const GameOps g_game = {
                                                  * sites (fixes_mw.c) and a debugging lift's HOOKS=... reach it */
     .pad_late = &mw_pad_late,                   /* a late pad: the input manager's callback, then the input set-up */
     .pad_buttons = "X A B Y LB RB LT RT BACK START LS RS",  /* a DualShock's order, which its layout expects */
+    .online_host_va = 0x008f42c8u,              /* the lobby host's getter 0x56E440 (port 30920 at 0x8F42E8), also
+                                                 * pushed at 0x78ACC0: the server's Online stand-in (title.rs MW) */
+    .online_host = "pcnfs06.ea.com",
 };

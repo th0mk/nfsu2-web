@@ -75,6 +75,11 @@ use crate::title::{Cfg, Title};
 use crate::vhost::{ConnId, Svc};
 use crate::{PORT_BUDDY, PORT_LOBBY};
 
+mod usersets;
+pub use usersets::{SetId, UserSet};
+#[cfg(test)]
+pub use usersets::{from_letters as usersets_from_letters, letters as usersets_letters};
+
 pub type SessId = u64;
 pub type GameId = u64;
 
@@ -257,6 +262,8 @@ pub struct Session {
     pub lkey: Option<String>,
     pub room: Option<u32>,
     pub game: Option<GameId>,
+    /// its user set (a title's `user_sets`: usersets.rs)
+    pub set: Option<SetId>,
     pub auxi: String,
     pub browsing: bool,
     t0: f64,
@@ -442,6 +449,9 @@ pub struct Lobby {
     pub gone_vips: HashMap<u32, f64>,
     pub next_user: u64,
     pub next_game: u64,
+    /// id -> user set (a title's `user_sets`: usersets.rs), in the order they were made
+    pub sets: BTreeMap<SetId, UserSet>,
+    pub next_set: u64,
     pub stats: LobbyStats,
     last_sst: Option<[f64; 3]>,
     /// lower-case persona -> its last lines (said_lines of the last said_ms), the oldest first; a persona's lines
@@ -469,6 +479,8 @@ impl Lobby {
             gone_vips: HashMap::new(),
             next_user: 1,
             next_game: 1,
+            sets: BTreeMap::new(),
+            next_set: 1,
             stats: LobbyStats::default(),
             last_sst: None,
             said: HashMap::new(),
@@ -920,6 +932,7 @@ impl Core {
                 lkey: None,
                 room: None,
                 game: None,
+                set: None,
                 auxi: String::new(),
                 browsing: false,
                 t0: t,
@@ -1002,24 +1015,29 @@ impl Core {
             }
             "sele" => {
                 let stats = 5000.0f64.min(jsx::to_int32(f.num("STATS", 0.0)) as f64);
-                return self.lsend(
-                    s,
-                    "sele",
-                    &fields![
-                        ("GAMES", 1),
-                        ("MYGAME", 1),
-                        ("ROOMS", 1),
-                        ("USERS", 1),
-                        ("USERSETS", 0),
-                        ("MESGS", 1),
-                        ("ASYNC", 1),
-                        ("RANKS", 0),
-                        ("STATS", stats),
-                        ("MORE", 1),
-                        ("SLOTS", 36)
-                    ],
-                    "",
-                );
+                let mut rf = fields![
+                    ("GAMES", 1),
+                    ("MYGAME", 1),
+                    ("ROOMS", 1),
+                    ("USERS", 1),
+                    ("USERSETS", u32::from(self.title.user_sets)),
+                    ("MESGS", 1),
+                    ("ASYNC", 1),
+                    ("RANKS", 0),
+                    ("STATS", stats),
+                    ("MORE", 1),
+                    ("SLOTS", 36)
+                ];
+                // the sets the game looks at, said back as asked (server.dll)
+                if self.title.user_sets {
+                    for i in 0..4 {
+                        let k = format!("USERSET{i}");
+                        if let Some(v) = f.get(&k) {
+                            rf.extend(fields![(k, clean_text(v, 32))]);
+                        }
+                    }
+                }
+                return self.lsend(s, "sele", &rf, "");
             }
             // keep-alive answers (last_in is enough)
             "~png" | "@alv" | "@cnt" => return,
@@ -1057,6 +1075,7 @@ impl Core {
             "rank" => self.rank(s, f),
             "snap" => self.snap(s, f),
             "rept" => self.complaint(s, f),
+            "ucre" | "usea" | "ujoi" | "ulea" | "udel" | "uadm" if self.title.user_sets => self.set_message(s, kind, f),
             _ => self.lsend(s, kind, &[], "badc"),
         }
     }
@@ -1306,7 +1325,7 @@ impl Core {
             ("HW", 0),
             ("RP", 0),
             ("MA", ""),
-            ("US", ""),
+            ("US", x.set.and_then(|id| self.lobby.sets.get(&id)).map_or("", |x| x.name.as_str())),
             ("C", "")
         ]
     }
@@ -1511,6 +1530,7 @@ impl Core {
                 }
             }
         }
+        self.set_member_changed(s);
     }
 
     /// a persona's online career (online now, or known from its races)
@@ -1928,7 +1948,8 @@ impl Core {
         }
         let text = clean_text(f.str("TEXT"), self.lobby.l.chat_len as usize);
         let attr = jsx::slice16(f.str("ATTR"), 8).to_string();
-        self.lsend(s, "mesg", &if attr.is_empty() { vec![] } else { fields![("ATTR", attr.clone())] }, "");
+        let sets = self.title.user_sets;
+        self.lsend(s, "mesg", &if attr.is_empty() || sets { vec![] } else { fields![("ATTR", attr.clone())] }, "");
         if text.is_empty() && attr.is_empty() {
             return;
         }
@@ -1960,8 +1981,21 @@ impl Core {
                 said.pop_front();
             }
         }
+        // Underground 2's: F the kind, A the sender's ATTR; Most Wanted's (a title with user sets): F the ATTR's letters
+        // with U (as server.dll answered a game room's chat, ATTR EGS: F EGSU; the creator's countdown, ATTR EGT, it
+        // gave as EGT), then U (the sender's) empty
+        let sets_flags = sets.then(|| {
+            let mut l: String = attr.chars().filter(|c| c.is_ascii_uppercase() || matches!(c, '@' | '0'..='3' | '-')).collect();
+            if !l.contains('T') && !l.contains('U') {
+                l.push('U');
+            }
+            l
+        });
         let with_attr = |mut v: Fields| {
-            if !attr.is_empty() {
+            if let Some(fl) = &sets_flags {
+                v[0] = (std::borrow::Cow::from("F"), V::from(fl.clone()));
+                v.insert(2, (std::borrow::Cow::from("U"), V::from("")));
+            } else if !attr.is_empty() {
                 v.extend(fields![("A", attr.clone())]);
             }
             v
@@ -2111,6 +2145,11 @@ impl Core {
         }
     }
 
+    /// players in one game at most: the lobby's limit, or the game's own when that is lower (the title's)
+    fn game_size(&self) -> f64 {
+        self.lobby.l.game_size.min(self.title.game_size)
+    }
+
     fn game_create(&mut self, s: SessId, f: &FieldMap) {
         // a game the player never left (a crash, a back key)
         if self.lobby.s(s).game.is_some() {
@@ -2145,8 +2184,8 @@ impl Core {
         let sys_flags = jsx::to_uint32(f.num("SYSFLAGS", 0.0)) & !fl.active;
         let pass = f.str("PASS");
         let password = (!pass.is_empty()).then(|| RoomPassword::new(pass));
-        let l = self.lobby.l;
-        let size = |k: &str, def: f64| l.game_size.min(2f64.max(jsx::to_int32(f.num(k, def)) as f64));
+        let most = self.game_size();
+        let size = |k: &str, def: f64| most.min(2f64.max(jsx::to_int32(f.num(k, def)) as f64));
         let id = self.lobby.next_game;
         self.lobby.next_game += 1;
         let x = self.lobby.s(s);
@@ -2303,8 +2342,14 @@ impl Core {
     fn update(&mut self, g: GameId) {
         let rec = encode_frame("+mgm", "", &self.game_fields(g, vec![])).expect("the lobby's own fields");
         let players: Vec<Option<SessId>> = self.lobby.game(g).map_or(vec![], |x| x.players.iter().map(|p| p.s).collect());
+        for p in players.iter().flatten() {
+            self.lsend_frame(*p, &rec);
+        }
+        // their user sets' members see them in the game (usersets.rs)
         for p in players.into_iter().flatten() {
-            self.lsend_frame(p, &rec);
+            if self.lobby.sess.get(&p).is_some_and(|x| !x.gone) {
+                self.set_member_changed(p);
+            }
         }
         self.announce(g, false);
     }
@@ -2337,7 +2382,7 @@ impl Core {
             }
         }
         let persona = self.lobby.s(s).persona.clone().unwrap_or_default();
-        let (l, countdown) = (self.lobby.l, self.title.flags.countdown);
+        let (countdown, most) = (self.title.flags.countdown, self.game_size());
         let x = &self.lobby.games[&g];
         if persona == x.host_name && x.started == 0.0 {
             // the creator may change the game's settings
@@ -2350,7 +2395,7 @@ impl Core {
                 }
             }
             if f.has("MAXSIZE") {
-                let v = l.game_size.min((x.players.len() as f64).max(2.0).max(jsx::to_int32(f.num("MAXSIZE", f64::NAN)) as f64));
+                let v = most.min((x.players.len() as f64).max(2.0).max(jsx::to_int32(f.num("MAXSIZE", f64::NAN)) as f64));
                 if x.max_size != v {
                     x.max_size = v;
                     changed = true;
@@ -2522,6 +2567,7 @@ impl Core {
         if x.game.is_some() {
             self.game_leave(s, None);
         }
+        self.set_leave(s);
         self.lobby.sm(s).gone = true;
         self.lobby.remove_live(s);
         self.lobby.graveyard.push(s);

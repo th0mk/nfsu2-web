@@ -113,6 +113,8 @@ pub struct Opts {
     pub t0: Option<f64>,
     /// the claimed names (nfsu2-claims)
     pub claims: Option<Arc<nfsu2_claims::Claims>>,
+    /// the game's Online mode (None: NFS Underground 2's, title.rs UG2)
+    pub title: Option<&'static crate::title::Title>,
 }
 
 impl World {
@@ -121,16 +123,19 @@ impl World {
         let tt = Rc::new(Cell::new(0.0));
         let lines = Rc::new(RefCell::new(Vec::new()));
         let (t2, tt2, l2) = (t.clone(), tt.clone(), lines.clone());
-        let mut core = Core::new(CoreOptions {
-            state_dir: o.state_dir,
-            log: Rc::new(move |s: &str, k: Option<&str>| l2.borrow_mut().push((s.to_string(), k.map(str::to_string)))),
-            tap: None,
-            claims: o.claims,
-            clocks: Rc::new(Clocks { now: Box::new(move || t2.get()), timer: Box::new(move || tt2.get()) }),
-            limits: o.limits,
-            buddy_limits: o.buddy,
-            vhost: VhostLimits::default(),
-        });
+        let mut core = Core::new_for(
+            o.title.unwrap_or(&crate::title::UG2),
+            CoreOptions {
+                state_dir: o.state_dir,
+                log: Rc::new(move |s: &str, k: Option<&str>| l2.borrow_mut().push((s.to_string(), k.map(str::to_string)))),
+                tap: None,
+                claims: o.claims,
+                clocks: Rc::new(Clocks { now: Box::new(move || t2.get()), timer: Box::new(move || tt2.get()) }),
+                limits: o.limits,
+                buddy_limits: o.buddy,
+                vhost: VhostLimits::default(),
+            },
+        );
         let outbox: Outbox = Arc::default();
         let slow: Arc<Mutex<HashSet<u32>>> = Arc::default();
         let sent: Sent = Arc::default();

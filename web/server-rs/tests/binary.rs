@@ -401,7 +401,7 @@ fn printed(args: &[&str]) -> (String, String, Option<i32>) {
 }
 
 // --game mw on a made-up Most Wanted folder (its program in lower case, beside a mod loader, a widescreen fix's
-// scripts and the SAVE folder it writes profiles into): the start-up lines, no Online mode (the game has none yet),
+// scripts and the SAVE folder it writes profiles into): the start-up lines, its Online mode on,
 // of the folder only the game's own entries listed and served; --print-entries for both games, with no folder; a
 // folder of the other game refused
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -434,7 +434,11 @@ async fn the_binary_for_most_wanted() {
     let startup = &lines[first..];
     assert_eq!(startup[1], format!("  game data : {} (6 entries of the game's own)", data.to_string_lossy()), "{startup:?}");
     assert_eq!(startup[2], format!("  game.wasm : {}", wasm.to_string_lossy()));
-    assert!(startup.contains(&"  online    : off (this server has no Online mode for NFS Most Wanted yet)".to_string()), "{startup:?}");
+    let online = format!(
+        "  online    : the game's Online mode at 10.77.0.1 on the switch (any name logs in; race results per persona in {})",
+        state.join("online").to_string_lossy()
+    );
+    assert!(startup.contains(&online), "{startup:?}");
     assert!(startup.iter().any(|l| l.starts_with("  free roam : the hub at 10.77.0.253 on the switch")));
     // the operator's command names the game (ctl's own default is UG2's state folder)
     let sock = state.join("control.sock").to_string_lossy().to_string();

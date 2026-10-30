@@ -5,7 +5,7 @@
 //! never from a guess: a game whose values are not all known has no title yet.
 
 use crate::http::{NEWS, Page};
-use crate::stats::{RaceReport, Records, Table, decode_result, stat_v38};
+use crate::stats::{RaceReport, Records, Table, decode_result, decode_result_mw, stat_v38, stat_v44};
 
 /// a value of the server config (the "news" reply, code new7)
 #[derive(Clone, Copy, Debug)]
@@ -65,6 +65,12 @@ pub struct Title {
     pub(crate) stat: fn(&Table, &Records) -> String,
     /// the Rankings screens' six boards in their order, as race types
     pub(crate) slot_types: [u32; 6],
+    /// players in one game at most (gcre MAXSIZE, a later gset's too, and gjoi): the lobby's own limit when that is
+    /// lower (lobby.rs Limits::game_size)
+    pub(crate) game_size: f64,
+    /// the game's rooms are user sets (ucre, usea, ujoi, ulea, udel, uadm: lobby/usersets.rs), and its chat's +msg
+    /// carries the sender's ATTR letters in F
+    pub(crate) user_sets: bool,
     /// what a ranked race's results screen counts down from until its table comes, in ms
     pub(crate) results_wait_ms: f64,
     /// EA Messenger: TITL and EXTR in a persona's presence
@@ -139,6 +145,9 @@ pub const UG2: Title = Title {
     stat: stat_v38,
     // Circuit, Sprint, Drift, Drag, Street X, URL (SPEED2.EXE 0x58ce30, 0x582530) as race types: drag 2, drift 3
     slot_types: [0, 1, 3, 2, 4, 5],
+    // (the race coordinator's racer entries, raised by the runtime: runtime/netrace.c; the lobby's own limit is the same)
+    game_size: 6.0,
+    user_sets: false,
     // ("Waiting 60 seconds for results", then "Waiting for final server results"; SPEED2.EXE 0x4e9210): a guess at how
     // long the others take to finish and report, no limit (the table comes once the result stands)
     results_wait_ms: 60_000.0,
@@ -147,5 +156,55 @@ pub const UG2: Title = Title {
     news: &NEWS,
 };
 
+/// NFS Most Wanted (speed.exe v1.3), read from its own lobby client statically (GAME.md 12.1, 12.4, 12.6; Q-17,
+/// Q-18): what is not known from it yet is UG2's value or none, marked so.
+pub const MW: Title = Title {
+    vhost_name: "NFSMW Online",
+    // ("*pcnfs06.ea.com"'s port, speed.exe 0x8F42E8)
+    port_redirector: 30920,
+    // a lounge and one per race type that has stat blocks (UNVERIFIED: no capture of EA's room list)
+    rooms: &["Lounge", "Circuit", "Sprint", "Drag"],
+    room_h: "NFSMW",
+    room_f: "CK",
+    serv: "NFSMW",
+    // the keys speed.exe reads (0x8410D0 keeps the reply, 0x840C60 reads a key: GAME.md 12.6): the buddy server
+    // (here: this same host).  No NEWS_URL, TOSA_URL or TOSAC_URL yet: their pages' text waits for M9-15
+    config: &[("BUDDY_SERVER", Cfg::Text("10.77.0.1")), ("BUDDY_PORT", Cfg::BuddyPort)],
+    flags: Flags {
+        // UNVERIFIED: UG2's (server.dll's bits; MW's are not read yet)
+        ready: 1 << 27,
+        password: 1 << 16,
+        active: 1 << 19,
+        // gcre SYSFLAGS 0x40000 when ranked (0x79B0E0)
+        ranked: 1 << 18,
+        countdown: 1 << 12,
+        private: 1 << 8,
+    },
+    // UNVERIFIED: no filter read yet; nothing asked for
+    filter_default: [0, 0, 0, 0],
+    // the report's type byte (0x741780): circuit 0, sprint 1, drag 2 (anything else 0xFF: no stats); stat blocks and
+    // ranking pages in the same order
+    race_types: &["circuit", "sprint", "drag"],
+    report_types: &["circuit", "sprint", "drag"],
+    min_race_s: &[20.0, 20.0, 5.0],
+    // version 3, 51 bytes a player (stats.rs)
+    decode_report: decode_result_mw,
+    // 44 numbers (stats.rs)
+    stat: stat_v44,
+    // UNVERIFIED (M9-12): Most Wanted's boards are CHAN = 5 + 6 board + 3 own row + type (0x78B8C0)
+    slot_types: [0, 1, 2, 0, 1, 2],
+    // the game's own maximum, 4 in LAN and Online (0x89F6FC, Q-18; U-09 (a): kept): past 4 the game writes three
+    // 4-sized arrays without a bound (GAME.md 12.4)
+    game_size: 4.0,
+    // its Quick Race searches and joins user sets (server.dll's answers in a LAN race, traced 2026-10-30)
+    user_sets: true,
+    results_wait_ms: 60_000.0,
+    // (the PGET parser 0x846640 takes TITL and EXTR; the values are inferred)
+    messenger_titl: "Need for Speed Most Wanted [PC]",
+    messenger_extr: "NFS-2006",
+    news: &NEWS,
+};
+
 // stats.json keeps six race types, and each report type has its shortest race
 const _: () = assert!(UG2.race_types.len() <= 6 && UG2.min_race_s.len() == UG2.report_types.len());
+const _: () = assert!(MW.race_types.len() <= 6 && MW.min_race_s.len() == MW.report_types.len());

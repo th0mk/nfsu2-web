@@ -37,8 +37,14 @@
 //                    that instance runs without NOFOCUS, so the game hears the page go to the background.
 //                    Fails unless the game was told (app: deactivated) and still made frames there (its [status]
 //                    lines, the fps in summary.json), as the game does in a network race.
-//        [--game ug2|mw]   the game (ug2 unless given): its generated flow, modes and screens; Most Wanted has
-//                    none yet (and the server no Online mode for it)
+//        [--game ug2|mw]   the game (ug2 unless given): its generated flow, modes and screens (Most Wanted:
+//                    tools/gen_online_race_mw.py; its own server serves the game at the root of localhost,
+//                    --base-path localhost=/, where the test pages load /game.wasm; the game folder from --data, which
+//                    must hold speed.exe; the scripts end by WM_CLOSE; --canary and --ea-login: not for Most Wanted
+//                    yet, its EA Login screens are not scripted)
+//        [--seed <save tree>]  every instance starts from that save (web/tools/save-seed.mjs, as run-suite's
+//                    NFSU2_SAVE_SEED): a Most Wanted module with the D3DX oracle needs d3dx9_26.dll there and
+//                    --env NFSMW_D3DX=/save/d3dx9_26.dll (tests/mw/scripts/boot_menu.txt)
 //        [--help]    this text and the game's modes
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, --dev, the
@@ -55,9 +61,10 @@ import { chromeExe, pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { serverCommand } from './server-cmd.mjs';
+import { seedSave } from './save-seed.mjs';
 import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -71,9 +78,19 @@ const ONLINE_OF = {
     flow: onlineScript, modes: { circuit: 0, sprint: 1, drag: 2, drift: 3, streetx: 4 },
     main: /screen UI_OLMA[Ii][Nn]\.fng/, room: 'screen PC_OL_GameRoom.fng',
     results: /screen UI_PostRaceResults\.fng|screen UI_PostRace_TournResults\.fng/,
+    quit: 'quit at guest frame',
+  },
+  // the Quick Race list's kinds in its order (tools/gen_online_race_mw.py --kind: taps DOWN): the first raced as a
+  // circuit (its report's type 0, 3 laps: a run of 2026-10-30), the other two as the LAN notes name them (sprint, Lap
+  // KO; not raced Online yet); the scripts end by WM_CLOSE (run-suite's Most Wanted scenarios)
+  mw: {
+    gen: 'tools/gen_online_race_mw.py', modes: { circuit: 0, sprint: 1, ko: 2 },
+    raceMs: { circuit: 180000, sprint: 90000, ko: 180000 },
+    main: /screen OL_MAIN\.fng/, room: 'screen OL_GameRoom.fng', results: /screen PostRace_Results\.fng/,
+    quit: 'app: the game exited (code 0) after the quit request', server: ['--game', 'mw', '--base-path', 'localhost=/'],
   },
 };
-const NONE = 'none yet: the server has no Online mode for Most Wanted (M9-07), nor this tool its screens (M9-17)';
+const NONE = 'none';
 const GAME = gameOf(argv), G = GAMES[GAME], OL = ONLINE_OF[GAME];
 if (argv.includes('--help')) usage(import.meta.url, GAME, 'Modes (--mode)', Object.keys(OL?.modes ?? {}), NONE);
 if (!OL) nothingFor(GAME, NONE);
@@ -81,11 +98,22 @@ const HTTP_PORT = +opt('http-port', 8673);
 const OWN = !argv.includes('--base');
 const BASE = opt('base', `http://localhost:${HTTP_PORT}`);
 if (!OWN) await requireGame(BASE, GAME);
-const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2'));
+// the game folder: Underground 2's default; another game's has none (a NFSU2_DATA in the shell is usually
+// Underground 2's), so its folder must be given and must hold its program
+const DATA = opt('data', process.env.NFSU2_DATA || (GAME === 'ug2' ? path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2') : ''));
+if (OWN && GAME !== 'ug2') {
+  const exe = path.basename(G.exe).toLowerCase();
+  let has = false;
+  try { has = fs.readdirSync(DATA || '.').some(f => f.toLowerCase() === exe); } catch {}
+  if (!DATA || !has) {
+    console.error(`--data <${G.name}'s game folder> (or NFSU2_DATA): ${DATA ? `${DATA} has no ${path.basename(G.exe)}` : 'none given'}`);
+    process.exit(2);
+  }
+}
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/online-pair')));
 const FILES = opts('script');
 const PLAYERS = Math.min(6, Math.max(1, +opt('players', FILES.length || 2)));
-const MODE = opt('mode', 'circuit'), RACES = +opt('races', 1);
+const MODE = opt('mode', GAME === 'ug2' ? 'circuit' : Object.keys(OL.modes)[0]), RACES = +opt('races', 1);
 const TMO = +opt('timeout', 900 * RACES) * 1000;
 const STAGGER = +opt('stagger', 3) * 1000;
 const PAGE = opt('page', 'hostcheck'), SIZE = opt('size', '960x540').split('x').map(Number), PLAY_ONLY = +opt('play-only', 0);
@@ -95,18 +123,27 @@ const MODES = OL.modes;
 const RANKED = argv.includes('--ranked');
 const HORN = argv.includes('--horn');
 const EA_LOGIN = argv.includes('--ea-login') || argv.includes('--canary');
+if (EA_LOGIN && GAME !== 'ug2') nothingFor(GAME, '--ea-login and --canary: its EA Login screens are not scripted yet');
+const SEED = opt('seed', '');               // a save tree each instance starts from
+if (!(MODE in OL.modes)) { console.error(`--mode ${Object.keys(OL.modes).join('|')}`); process.exit(2); }
 // --quit-mid N:MS: instance N quits its game MS after its race started (the others race on)
 const QUIT_MID = opt('quit-mid', '') ? opt('quit-mid', '').split(':').map(Number) : [0, 0];
 const RACEWIN = opt('racewin', '') ? opt('racewin', '').split(':').map(Number) : [0, 0];
 // --hide N[:FROM[:TO]]: instance N's tab in the background from its script's "log FROM" to "log TO"
-const HIDE = opt('hide', '') ? (([n, from, to]) => ({ n: +n, from: from || (+n === 1 ? 'race-start' : 'ready'), to: to || 'results' }))(opt('hide', '').split(':')) : null;
+// (Most Wanted's scripts: every instance logs race-start)
+const HIDE = opt('hide', '') ? (([n, from, to]) => ({ n: +n, from: from || (+n === 1 || GAME !== 'ug2' ? 'race-start' : 'ready'), to: to || 'results' }))(opt('hide', '').split(':')) : null;
 fs.mkdirSync(OUT, { recursive: true });
 
 const NAMES = ['OLHOST', 'OLJOIN', 'OLJOIN3', 'OLJOIN4', 'OLJOIN5', 'OLJOIN6'];
+const PY = fs.existsSync(path.join(REPO, '.venv/bin/python')) ? path.join(REPO, '.venv/bin/python') : 'python3';
+// another game's flow: its generator (role, the alias, the mode's kind, the race's time; --host-arg, --join-arg)
+const genFlow = (role, name) => execFileSync(PY, [path.join(REPO, OL.gen), role, '--name', name, '--kind', String(MODES[MODE]),
+  '--race-ms', String(OL.raceMs[MODE]), ...opts(`${role}-arg`)], { encoding: 'utf8' });
 const scripts = [];
 for (let i = 0; i < PLAYERS; i++) {
   const f = FILES[i] ?? FILES[FILES.length - 1];
-  scripts.push(f ? fs.readFileSync(path.resolve(REPO, f), 'utf8') : OL.flow(i === 0 ? 'host' : 'join', NAMES[i], i + 1));
+  const role = i === 0 ? 'host' : 'join';
+  scripts.push(f ? fs.readFileSync(path.resolve(REPO, f), 'utf8') : OL.flow ? OL.flow(role, NAMES[i], i + 1) : genFlow(role, NAMES[i]));
   fs.writeFileSync(path.join(OUT, `i${i + 1}.txt`), scripts[i]);
 }
 
@@ -319,16 +356,18 @@ function url(i) {
   for (const kv of opts(`env-i${i + 1}`)) env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1);
   const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
     reg: G.reg, save: `ol-${stamp}-i${i + 1}`, net: NAMES[i], script: scriptPath(i) });
+  if (!G.reg) q.delete('reg');      // a game without a registry seed starts from its own first start (run-suite)
+  const fresh = SEED ? '' : '&fresh';
   if (PAGE === 'app') {
     // the player's page: no wasm/pages/arg/net (the app's own), the switch name from roam_name, free roam off
-    const a = new URLSearchParams({ reg: q.get('reg'), save: q.get('save'), script: q.get('script') });
+    const a = new URLSearchParams({ ...(G.reg ? { reg: G.reg } : {}), save: q.get('save'), script: q.get('script') });
     for (const [k, v] of Object.entries({ ...env, NFSU2_ROAM: '0' })) if (k !== 'NFSU2_SAVEDIR') a.append('env', `${k}=${v}`);
-    return `${BASE}/?${a}&fresh`;
+    return `${BASE}/?${a}${fresh}`;
   }
   const page = PAGE === 'play' && (!PLAY_ONLY || PLAY_ONLY === i + 1) ? 'play' : 'hostcheck';
   if (page === 'play') { q.set('w', String(SIZE[0])); q.set('h', String(SIZE[1])); q.set('artifacts', `/artifacts/i${i + 1}-`); q.set('dumpscale', '1'); }
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
-  return `${BASE}/test/${page}.html?${q}&fresh`;
+  return `${BASE}/test/${page}.html?${q}${fresh}`;
 }
 
 // our own server (stopped by its child handle only)
@@ -336,7 +375,8 @@ let server = null;
 const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'), { flags: 'a' });
 async function startServer() {
   const c = spawn(...serverCommand(['--data', DATA, '--http-port', String(HTTP_PORT), '--port', '0',
-    '--dev', '--artifacts', OUT, '--online-trace', path.join(OUT, 'trace.txt'), '--state', path.join(OUT, 'state'), ...opts('server-arg')]), { stdio: ['ignore', 'pipe', 'pipe'] });
+    '--dev', '--artifacts', OUT, '--online-trace', path.join(OUT, 'trace.txt'), '--state', path.join(OUT, 'state'), ...(OL.server ?? []),
+    ...opts('server-arg')]), { stdio: ['ignore', 'pipe', 'pipe'] });
   c.stdout.pipe(serverLog, { end: false }); c.stderr.pipe(serverLog, { end: false });
   await new Promise((res, rej) => {
     let out = '';
@@ -420,6 +460,7 @@ async function start(i) {
   });
   page.on('pageerror', e => { w('PAGEERROR ' + e); lines.push(`PAGEERROR ${e}`); });
   page.on('crash', () => lines.push('CRASH (renderer process)'));
+  if (SEED) w(`[online-pair] save seed: ${await seedSave(page, BASE, `ol-${stamp}-i${i + 1}`, SEED)} files from ${SEED}`);
   const u = url(i);
   w(`URL ${u.replace(/NFSU2_OL_PASS%3D[^&]*/, 'NFSU2_OL_PASS%3D<redacted>')}`);
   await page.goto(u);
@@ -466,7 +507,7 @@ for (const x of inst) {
   const why = [];
   if (res[x.i] !== 'done') why.push(`${n}:timeout`);
   if (x.exitCode() !== 0) why.push(`${n}:exit=${x.exitCode()}`);
-  if (!log.includes('quit at guest frame')) why.push(`${n}:no-quit`);
+  if (!log.includes(OL.quit)) why.push(`${n}:no-quit`);
   if (flow) {
     if (!has(OL.main)) why.push(`${n}:no-online-main`);
     if (!log.includes(OL.room)) why.push(`${n}:no-game-room`);
@@ -490,7 +531,7 @@ for (const x of inst) {
   }
   const L = log.split('\n'), grab = (re) => L.filter(l => re.test(l));
   summary.result[x.name] = {
-    exit: x.exitCode(), quit: grab(/quit at guest frame/).pop() ?? null,
+    exit: x.exitCode(), quit: L.filter(l => l.includes(OL.quit)).pop() ?? null,
     screens: [...new Set(grab(/^\[fng\] screen /).map(l => l.replace(/^\[fng\] screen /, '').split(' ')[0]))],
     online: grab(/^\[net\] (online|virtual LAN: tcp connect 10\.77\.0\.1)/).slice(0, 8),
     lanstats: grab(/^\[net\] virtual LAN (stats|at exit)/).slice(-1),

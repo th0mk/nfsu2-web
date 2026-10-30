@@ -23,7 +23,9 @@ use parking_lot::Mutex;
 
 use crate::aries::{FrameReader, redact_body};
 
-pub const TRACE_PORTS: [u16; 6] = [9900, 10901, 20920, 20921, 20922, 13505];
+/// (LAN: server.dll and its redirector; Online: UG2's redirector, its SSL port and the lobby, Most Wanted's redirector
+/// and its SSL port, EA Messenger)
+pub const TRACE_PORTS: [u16; 8] = [9900, 10901, 20920, 20921, 20922, 30920, 30921, 13505];
 const MAX_STREAMS: usize = 256;
 
 /// the trace's decoding and its lines, on any writer (the file, on [`LobbyTrace`]'s thread; a test's own)

@@ -216,9 +216,9 @@ pub const MW: GameProfile = GameProfile {
     state: "out/web/mw/server",
     tests: "tests/mw",
     build: "GAME=mw web/build.sh",
-    // TODO(M9-07): Most Wanted's Online title (rooms, config keys, race and report types, report and STAT formats,
-    // flags, filter defaults, Messenger TITL/EXTR, redirector port 30920), each from speed.exe's own parsers
-    online: None,
+    // (nfsu2-online title.rs MW: redirector port 30920, its config keys, race and report types, report and STAT
+    // formats, Messenger TITL/EXTR, 4 players a game)
+    online: Some(&nfsu2_online::title::MW),
     // under /mw on every name, this machine's too: never at a root
     base: "/mw",
     bases: &[],
@@ -393,7 +393,7 @@ mod tests {
         assert!(MW.is_exe("SPEED.EXE") && UG2.is_exe("speed2.exe") && !MW.is_exe("speed2.exe"));
         assert_eq!(GameProfile::by_id("MW").map(|g| g.id), Some("mw"));
         assert!(GameProfile::by_id("ug3").is_none());
-        assert!(UG2.online.is_some() && MW.online.is_none());
+        assert!(UG2.online.is_some() && MW.online.is_some());
     }
 
     // The module a server serves: its own game's (Underground 2's builds of before the game id have none), never

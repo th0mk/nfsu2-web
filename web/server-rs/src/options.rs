@@ -698,7 +698,7 @@ mod tests {
         assert_eq!(s.parse(&[], &[("NFSU2_BASE_PATH", "")]).unwrap().bases, crate::game::Bases::of_game(&crate::game::UG2));
     }
 
-    // --game mw: Most Wanted's program (lower case, found in any case), its defaults, no Online mode yet
+    // --game mw: Most Wanted's program (lower case, found in any case), its defaults, its Online mode
     #[test]
     fn most_wanted() {
         let s = Setup::new();
@@ -716,7 +716,7 @@ mod tests {
         assert_eq!(o.dev_dist, s.p("repo/web/dist-mw-dev"));
         assert_eq!((o.wasm, o.game_json), (s.p("repo/out/web/mw/nfsmw.wasm"), s.p("repo/out/web/mw/nfsmw.json")));
         assert_eq!(o.tests, s.p("repo/tests/mw"));
-        assert!(!o.online && o.roam_hub);
+        assert!(o.online && o.roam_hub);
         // under /mw on every name
         assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz"), o.bases.all(|_| true)), ("/mw", "/mw", vec!["/mw".to_string()]));
         // from the environment too, in any case
@@ -737,11 +737,10 @@ mod tests {
         );
         std::fs::rename(s.p("game/SPEED2.EXE"), s.p("game/Speed2.exe")).unwrap();
         assert!(s.parse(&[], &[]).is_ok(), "UG2's program in another case");
-        // no Online mode to turn on; no game of another name
-        let no_online = "--online: this server has no Online mode for NFS Most Wanted yet";
-        assert_eq!(mw(&["--game", "mw", "--online", "on"], &[]).err().unwrap(), no_online);
-        assert_eq!(mw(&["--game", "mw"], &[("NFSU2_ONLINE", "on")]).err().unwrap(), no_online);
-        assert!(mw(&["--game", "mw", "--online", "off"], &[]).is_ok());
+        // its Online mode on unless turned off; no game of another name
+        assert!(mw(&["--game", "mw", "--online", "on"], &[]).unwrap().online);
+        assert!(mw(&["--game", "mw"], &[("NFSU2_ONLINE", "on")]).unwrap().online);
+        assert!(!mw(&["--game", "mw", "--online", "off"], &[]).unwrap().online);
         assert_eq!(s.err(&["--game", "nfs6"], &[]), "--game: ug2 or mw");
         assert_eq!(s.err(&["--game"], &[]), "--game needs a value");
     }

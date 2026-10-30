@@ -795,6 +795,75 @@ pub fn decode_result(b64: &str) -> Option<RaceReport> {
     Some(RaceReport { kind: b[2], reporter: b[3], track: u16::from_be_bytes([b[4], b[5]]), dir: b[6], laps: b[7], players })
 }
 
+/// The 44 numbers of NFS Most Wanted's STAT field (hex, each followed by a comma), as speed.exe's parser (0x7939E0)
+/// and its accessors read them (statically, GAME.md 12.6; no capture yet, M9-18): [1] client disconnects, [2] host
+/// disconnects (0x791CC0); then per race type (circuit, sprint, drag: the report's numbers) a block of 12 at 8 + 12t:
+/// [0] points, [1] ranked wins, [2] ranked losses, [3] unranked wins, [4] unranked losses (wins B1+B3, losses B2+B4,
+/// 0x791B00; which of each pair is ranked is UNVERIFIED), [5] top speed (mm/s, 0x78E6D0); the rest 0 (B6 a time in
+/// ms, B8 a total in lbs, B11 a count: not known what of).  Most Wanted keeps no records of its own but top speed.
+pub fn stat_v44(table: &Table, rec: &Records) -> String {
+    let mut dc = 0.0;
+    for c in table.iter().flatten() {
+        dc += c.dc;
+    }
+    let mut v = vec![0.0; 44];
+    v[1] = dc;
+    for (t, c) in table.iter().take(3).enumerate() {
+        let c = c.unwrap_or_default();
+        let b = 8 + 12 * t;
+        v[b..b + 5].copy_from_slice(&[c.points, c.rw, c.rl, c.uw, c.ul]);
+        v[b + 5] = jsx::round(rec.top * 1000.0);
+    }
+    let mut s = String::with_capacity(v.len() * 3);
+    for x in v {
+        s.push_str(&format!("{:x},", jsx::to_uint32(x)));
+    }
+    s
+}
+
+/// NFS Most Wanted's race report (rank RESU, base64), version 3 as speed.exe writes it (builder 0x741780; GAME.md 12.6,
+/// statically, no capture yet: M9-18): [0] version 3, [1] players (at most 4), [2] race type (circuit 0, sprint 1,
+/// drag 2, anything else 0xFF), [3] the reporter's index, [4..5] track (2000: the one open world), [6] direction, [7]
+/// laps; then per player 51 bytes: [0] index, [1] place, [2] 0x01 finished / 0x0c dropped or quit, [3] 0, [4..7] laps,
+/// [8..11] the race time (s), [12..15] best lap, [16..19] average speed, [20..23] top speed (m/s), [24..27] 0-60 mph,
+/// [28..31] quarter mile (s), [32..47] not known, [48] a state, [49..50] a 16-bit mask (big-endian) of the racer's
+/// counters that are not 0, each such counter's 16 bits after the record.  Floats are big-endian IEEE.
+pub fn decode_result_mw(b64: &str) -> Option<RaceReport> {
+    let b = node_base64(b64);
+    if b.len() < 8 || b[0] != 3 {
+        return None;
+    }
+    let n = b[1] as usize;
+    if !(1..=4).contains(&n) {
+        return None;
+    }
+    let f32_at = |o: usize| f32::from_be_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as f64;
+    let finite = |x: f64| if x.is_finite() { x } else { 0.0 };
+    let mut players = Vec::with_capacity(n);
+    let mut o = 8;
+    for _ in 0..n {
+        if o + 51 > b.len() {
+            return None;
+        }
+        let extra = 2 * (u16::from_be_bytes([b[o + 49], b[o + 50]]).count_ones() as usize);
+        players.push(ReportPlayer {
+            index: b[o],
+            place: b[o + 1],
+            car: b[o + 3],
+            time: finite(f32_at(o + 8)),
+            score: 0,
+            dropped: (b[o + 2] & 0x08) != 0,
+            top: finite(f32_at(o + 20)),
+            avg: finite(f32_at(o + 16)),
+            jump: 0.0,
+            slide: 0.0,
+            drift_best: 0,
+        });
+        o += 51 + extra;
+    }
+    Some(RaceReport { kind: b[2], reporter: b[3], track: u16::from_be_bytes([b[4], b[5]]), dir: b[6], laps: b[7], players })
+}
+
 /// base64 as Node's `Buffer.from(s, 'base64')` reads it (a report the Node server took is taken): both alphabets,
 /// other characters skipped, the first "=" ends it, the bits of an unfinished last byte dropped
 pub fn node_base64(s: &str) -> Vec<u8> {
