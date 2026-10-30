@@ -548,7 +548,7 @@ static void apply_state(CPU *c, Fx *f, const fx2_state *s, uint32_t unit, int al
     case FX2_SC_LIGHT:
         if (s->index < 8){
             if (in->d3d == 13){ DEV(c, f, D_LIGHTENABLE, 2, s->index, v[0]); break; }
-            static const uint8_t off[13] = { 0, 1, 5, 9, 13, 16, 19, 22, 23, 24, 25, 26, 27 };   /* D3DLIGHT9 dwords */
+            static const uint8_t off[13] = { 0, 1, 5, 9, 13, 16, 19, 20, 21, 22, 23, 24, 25 };   /* D3DLIGHT9 dwords */
             static const uint8_t cnt[13] = { 1, 4, 4, 4, 3, 3, 1, 1, 1, 1, 1, 1, 1 };
             if (in->d3d < 13 && off[in->d3d] < 26)
                 for (uint32_t i = 0; i < cnt[in->d3d] && i < n && off[in->d3d] + i < 26; i++) f->light[s->index][off[in->d3d] + i] = v[i];
