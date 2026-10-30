@@ -31,6 +31,9 @@ without the copies; with `NFSU2_LANGUAGE` another language, whose movies are the
 `media_refshots.txt` (the play page's pictures of the movie screens and the new alias's name entry) and
 `credits.txt` (Options > Credits rolled to their end).
 
+The languages: `lang_menu.txt` (TRACKER M7-13: the title and the main menu in the language `NFSU2_LANGUAGE` names,
+dumped on the play page; with `FILELIST=1` its check wants the registry's Language, one of the game's ten, and that
+language's `LANGUAGES\<NAME>.BIN` read, no other's).
 
 The mouse: `mouse_menu.txt` (TRACKER M3-08: the main menu's wheel takes the highlight to Options, clicks on the
 selection frame open its sub menu and the options screen, twice, the second time with the windowed flag set; run it

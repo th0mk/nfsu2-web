@@ -1,0 +1,21 @@
+# Most Wanted in one of its ten text languages (TRACKER M7-13): the page's language (settings.ini "language",
+# NFSU2_LANGUAGE) is the registry's "Language" (runtime/mw/registry_mw.c: English US, French, German, Italian,
+# Spanish, Dutch, Swedish, Danish, Polish or Finnish; any other plays in English US), and the game reads its text
+# from that language's LANGUAGES\<NAME>.BIN.  From a first start with the boot movies off: the title ("CLICK to
+# continue" at full), past the new alias's question to the main menu, each dumped on the play page (the game's own
+# text in that language; the hostcheck page dumps nothing).  Every step waits for the game (L-021).  FILELIST=1 logs
+# the files opened, so tests/mw/checks/lang_menu.sh can tell the registry's language, the text file the game opened
+# for it (and no other language's) and the main menu:
+#   node web/tools/run-suite.mjs --game mw --script lang_menu.txt --marker 'lang_menu: main menu' \
+#     --env NFSU2_LANGUAGE=german --env FILELIST=1 --env NFSU2_QUIT_FRAMES=7200
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitfng MW_LS_Splash.fng 3600
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
++0    dump title
++0    log lang_menu: title
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++60   dump menu
++30   log lang_menu: main menu         # the dump written before the close
++0    close
