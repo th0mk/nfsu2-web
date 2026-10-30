@@ -93,12 +93,22 @@ const RUN = RUNS[GAME], CENSUS = RUN.census;
 const ABI_LIMITS = /REJECTED: (MRT|vertex texture fetch|a vs_3_0 without a POSITION0 output|a ps_3_0 input the module ABI has no place for|a vs_3_0 output the module ABI has no place for|a loop count the application sets|a b# the application sets)/;
 const SM3_FLOOR = { unit: { ps3diff: 71, vs3diff: 4 }, mw: { ps3diff: 19, vs3diff: 1, psdiff: 92, diff: 29, psDepth: 65 } };
 const problems = [];               // reasons the run fails besides the browser check
+// A stage-0 cube twin (ps <id + 256>) is for a cube bound at stage 0 to a shader that does not say what it samples
+// there (ps_1_x take the type from the binding).  ps_2_x and ps_3_0 declare each sampler's type, and D3D9 needs a
+// texture of that type bound (a cube on a dcl_2d sampler is an undefined draw), so one whose s0 is 2D has no twin
+// (the translator's reason, in index.txt by shader_dump.c); the page logs "[gpu] ps N: a cube texture at stage 0 and
+// no cube twin" should a game draw one so (none in Most Wanted's race and menus, M3-06).
+const TWIN_NOT_NEEDED = /^ps \d+ obj=\d+ REJECTED: the stage-0 cube twin of a shader whose s0 is 2D$/;
 // REJECTED translations (but those allow matches) and, for a game dump, the census
 function checkDump(dir, census, allow = null) {
   for (const f of ['index.txt', 'pairs.txt']) {
     const p = path.join(dir, f);
     if (!fs.existsSync(p)) continue;
-    const rej = fs.readFileSync(p, 'utf8').split('\n').filter(l => /REJECTED/.test(l) && !(allow && allow.test(l)));
+    const lines = fs.readFileSync(p, 'utf8').split('\n');
+    const twins = f === 'index.txt' ? lines.filter(l => TWIN_NOT_NEEDED.test(l)).length : 0;
+    if (twins) console.log(`${f}: ${twins} cube twins not made, none needed: ps_2_x/ps_3_0 whose s0 is declared 2D ` +
+      '(D3D9 needs a 2D texture there)');
+    const rej = lines.filter(l => /REJECTED/.test(l) && !TWIN_NOT_NEEDED.test(l) && !(allow && allow.test(l)));
     for (const l of rej.slice(0, 5)) problems.push(`${f}: ${l}`);
     if (rej.length > 5) problems.push(`${f}: ${rej.length - 5} more REJECTED lines`);
   }

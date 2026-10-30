@@ -92,11 +92,16 @@ void wgsl_dump_vs(int gid, int vsobj, uint32_t decl, const int dcl[16][2], const
     }
 }
 
-void wgsl_dump_ps(int id, int psobj, const char *wgsl, int len){
+void wgsl_dump_ps(int id, int psobj, const char *wgsl, int len){ wgsl_dump_ps_why(id, psobj, wgsl, len, NULL); }
+void wgsl_dump_ps_why(int id, int psobj, const char *wgsl, int len, const char *why){
     if (!wgsl_dump_on()) return;
     char name[64];
     if (len > 0){ snprintf(name, sizeof name, "ps_%d.wgsl", id); put(name, wgsl, (size_t)len); }
-    if (g_ix){ fprintf(g_ix, "ps %d obj=%d %s\n", id, psobj, len > 0 ? "ok" : "REJECTED"); fflush(g_ix); }
+    if (g_ix){
+        int r = len <= 0 && why && *why;
+        fprintf(g_ix, "ps %d obj=%d %s%s%s\n", id, psobj, len > 0 ? "ok" : "REJECTED", r ? ": " : "", r ? why : "");
+        fflush(g_ix);
+    }
 }
 
 void wgsl_dump_decl(uint32_t obj, const void *elems, size_t bytes){

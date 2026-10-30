@@ -4353,7 +4353,9 @@ static int com_call_body(CPU *c, uint32_t magic){
 #ifdef __wasm__
                     if (id < PSCUBE){
                         int cl = ps_to_wgsl_ex(pp3, id + PSCUBE, msl, sizeof msl, 1u);
-                        if (wgsl_dump_on()) wgsl_dump_ps(id + PSCUBE, id, msl, cl);
+                        /* ps_2_x and ps_3_0 (SM3-class) say why they have none: the translator's reason */
+                        if (wgsl_dump_on())
+                            wgsl_dump_ps_why(id + PSCUBE, id, msl, cl, vs_version(pp3) > 0x0200u ? wgsl_refusal() : NULL);
                         if (cl > 0) metal_register_ps(id + PSCUBE, msl);
                     }
 #else

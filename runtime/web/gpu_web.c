@@ -685,8 +685,23 @@ static unsigned psc_put(Buf *B){
     return B->psc_last;
 }
 #define PSCUBE 256
+/* draws that bound a cube at stage 0 to a pixel shader without a cube twin: a ps_2_x or ps_3_0 whose s0 is
+ * declared 2D (shader_dump.c's index says why it has none); D3D9 leaves such a draw undefined, the page draws it
+ * with the fixed-function cube module.  Logged at each shader's first, so a run's log shows whether the game
+ * ever does it (M3-06) */
+static unsigned g_cube_no_twin;
 static int ps_of(unsigned tex){
-    return (g_cur_ps > 0 && g_cur_ps < PSCUBE && metal_tex_is_cube(tex)) ? g_cur_ps + PSCUBE : g_cur_ps;
+    if (!(g_cur_ps > 0 && g_cur_ps < PSCUBE && metal_tex_is_cube(tex))) return g_cur_ps;
+    if (g_ps_ok[g_cur_ps] && !g_ps_ok[g_cur_ps + PSCUBE]){
+        static uint8_t told[PSCUBE];
+        if (!told[g_cur_ps]){
+            told[g_cur_ps] = 1;
+            fprintf(stderr, "[gpu] ps %d: a cube texture at stage 0 and no cube twin (its s0 is 2D; such draws so far %u)\n",
+                    g_cur_ps, g_cube_no_twin + 1);
+        }
+        g_cube_no_twin++;
+    }
+    return g_cur_ps + PSCUBE;
 }
 /* module id ps (the stage-0 cube twin bit included) with the stages in dm sampling a depth texture:
  * registered by com.c at its first use; ps itself when it cannot be (logged once a shader) */

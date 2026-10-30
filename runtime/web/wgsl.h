@@ -51,6 +51,8 @@ int  wgsl_dump_on(void);
 void wgsl_dump_obj(const char *kind, int idx, const void *tok, size_t bytes, const VSProg *p);
 void wgsl_dump_vs(int gid, int vsobj, uint32_t decl, const int dcl[16][2], const char *wgsl, int len);
 void wgsl_dump_ps(int id, int psobj, const char *wgsl, int len);
+/* the same with the translator's reason for a refusal (len <= 0), written after REJECTED */
+void wgsl_dump_ps_why(int id, int psobj, const char *wgsl, int len, const char *why);
 /* CreateVertexDeclaration: the D3DVERTEXELEMENT9 array, keyed by the COM
  * object address that SetVertexDeclaration (and the vs index line) uses. */
 void wgsl_dump_decl(uint32_t obj, const void *elems, size_t bytes);
