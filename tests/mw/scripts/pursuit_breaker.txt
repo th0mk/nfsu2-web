@@ -10,7 +10,8 @@
 # logged (a busted pursuit's counts do not reach it: only an evaded one's).  Not working yet (runs of 2026-10-30): the
 # car drove through the breaker's place on the AI's line (where before and after) with no MBreakerStopCops; the
 # message may come only when the breaker's debris catches a cop (the AI's breaker stopped one of its two cops, radius
-# 5 m), or the breaker's trigger is not on that line.  The breakers' places are not in GManager's icon list.
+# 5 m), or the breaker's trigger is not on that line.  The breakers are GManager's icons of type 12 (PURSUIT_BREAKER_%d,
+# 37 in a chase; `icons 12` lists their places); the messages' places are within 8 m of one (runs of 2026-10-30).
 #   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script pursuit_breaker.txt \
 #     --marker 'pursuit_breaker: over' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
 #     --env "PB_AT=-4020.7 178 1554.8 0.19 0 -0.98" --timeout-scale 30

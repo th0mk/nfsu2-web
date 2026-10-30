@@ -56,7 +56,7 @@
  *                    breaker wait above MPH [N] for the car's speed, breaker wait charge X [N] for a charge of X or more,
  *                    breaker wait rise X [N] for the charge X above where it is (or full)
  *   rapsheet         log the rap sheet, the impound strikes and markers (pursuit_mw.c, which says what it reads)
- *   icons [T]        log the world map's icons, those of type T one by one (13 pursuit breakers, 12 hiding spots);
+ *   icons [T]        log the world map's icons, those of type T one by one (12 pursuit breakers, 11 hiding spots);
  *                    icons go T K DX DY DZ moves the car to icon K of type T (as teleport does), facing DX DY DZ
  *   pools [watch]    log the game's memory pools and the frame arena, with their peaks since `pools watch`
  *

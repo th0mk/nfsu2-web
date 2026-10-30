@@ -6,7 +6,7 @@
  *                    pursuit of each, each one's Most Wanted rank, the cash, the impound markers, the cars that are
  *                    not impounded and each career car's record (its impound strikes)
  *   icons [T]        log the world map's icons (GManager's list): the count of each type, and each icon of type T
- *                    (13 pursuit breakers, 12 hiding spots) with its place
+ *                    (12 pursuit breakers, 11 hiding spots, 8 safehouses) with its place
  *   pools [watch]    log the game's memory pools (each bMemoryPool: its size, what is allocated, the number of
  *                    allocations) and the frame arena (two buffers of 0x64000: the game's own peak of a frame's
  *                    use and of its overflow), with the peaks since `pools watch` (sampled once a frame anchor);
@@ -21,12 +21,15 @@
  *     cops_damaged (0x40AF98), cops_destroyed (the pursuit's +0xA8, 0x43EA3A), pursuit_length (0x443CE7), and at an
  *     evade pursuits_in_a_row and pursuit_evasion_time (0x4110BD, 0x4110D8).
  *     Its icons: +0x2C0 their count, +0x2C4 an array of pointers; an icon: +0 (u16) its type (the world map's table
- *     0x8F3AC0, 20 bytes a type: 12 hiding spot HIDING_SPOT_%d, 13 pursuit breaker PURSUIT_BREAKER_%d), +2 flags
+ *     0x8F3AC0, 20 bytes a type {type, map flag, name, two hashes}: 1-6 the race kinds, 7 the rival, 8 SAFEHOUSE,
+ *     9 CAR_LOT, 10 SHOP, 11 HIDING_SPOT_%d, 12 PURSUIT_BREAKER_%d, 13 SPEED_TRAP_CAM_%d), +2 flags
  *     (bit 0 on, bit 1 shown: the map's list, 0x5E4940, takes those with both), its place at +0x10..+0x18 (the world's
  *     axes: simulation space's (-y, z, x), as 0x5E4850 turns a place around); +0x2BC the count 0x5E4850 walks.
  *   A pursuit breaker coming down is the event EBreakerStopCops (its name 0x8A68D4; its handler about 0x620E10): it
  *     posts MBreakerStopCops (the cops in a radius stop) and calls GManager 0x5E4850(place, 20 m), which clears the
- *     on bit of every hiding spot within 20 m.  The world map asks GManager for type 13 (0x5487F1) as for 12.
+ *     on bit (0x5E48CB) of the pursuit breaker's own icon (type 12) within 20 m.  GManager's list is the mode's: in a
+ *     chase the 37 pursuit breakers, in the cops' search 34 hiding spots and 3 safehouses, in free roam the events,
+ *     safehouses, car lots, shops and speed trap cameras (runs of 2026-10-30).
  *   The rap sheet, in the user profile [[0x91CF90]+0x10] at +0x90E0 (the ranking's object): ten values, 0x5999F0
  *     (thiscall on profile+0x9C24, (i)): 0 pursuit length, 1 cops involved, 2 cops damaged, 3 cops destroyed
  *     (immobilized), 4 spike strips dodged, 5 roadblocks dodged, 6 helicopters, 7 cost to state from profile+0x9C24

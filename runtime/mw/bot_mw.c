@@ -585,7 +585,7 @@ static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
 }
 /* NFSMW_BOT_SEARCH, what the bot does in the cops' search (state 2): unset or "rejoin", back to the chase (below);
  * "stay", nothing (the AI drives on and the game's own cooldown runs); "hide", the car set in the nearest hiding spot
- * that is on (the world map's icons of type 12, pursuit_mw.c) a second into the search, standing there until the chase
+ * that is on (the world map's icons of type 11, pursuit_mw.c) a second into the search, standing there until the chase
  * comes back (then the AI drives again) or the game ends the pursuit (TRACKER M4-16: hiding spots and the cooldown;
  * `pursuit watch` logs the meter and its parts). */
 int mw_aid_icon_near(int type, const float at[3], float out[3], float *dist);   /* pursuit_mw.c */
@@ -609,7 +609,7 @@ static void pursuit_hide(CPU *c, uint32_t pst, double t){
     if (pst != 2 || H.hidden || H.hides >= HIDE_MAX || t - B.search_t < HIDE_AFTER_S || mw_fe_input_top(0)) return;
     float p[3], s[3], kmh = 0, d = 0, dir[3] = { 1.0f, 0.0f, 0.0f };
     if (!mw_aid_where(c, p, &kmh)) return;
-    int k = mw_aid_icon_near(12, p, s, &d);
+    int k = mw_aid_icon_near(11, p, s, &d);
     H.hides++;
     if (k < 0){                         /* none in GManager's list now: once a search, with the list's counts */
         fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit hide %d: no hiding spot on\n", autotest_frame(), t, H.hides);
@@ -739,7 +739,7 @@ static void pursuit_frame(CPU *c){
             B.escapes, B.rejoins, end == 1 ? "busted" : end == 2 ? "evaded" : "ended (no bust or evade seen)", B.bounty0,
             g.bounty, B.g.ms, g.ms, B.pursuits, B.busts, B.evades);
     mw_aid_rapsheet(c, end == 1 ? "after a bust" : end == 2 ? "after an evade" : "after a pursuit");
-    mw_aid_icons(c, 13);                /* the world map's icons by type, the pursuit breakers' one by one */
+    mw_aid_icons(c, 12);                /* the world map's icons by type, the pursuit breakers' one by one */
     mw_aid_autopilot(c, AP_STAND);
     B.raced = 0; B.pursuit = 0; B.forced = 0;
     if (B.chase_s > 0.0){               /* bot chase: the next pursuit, until they have lasted chase_s in all */

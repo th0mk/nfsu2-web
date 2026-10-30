@@ -10,7 +10,7 @@
 # `pursuit watch` logs the pursuit's state whenever it changes: heat (by tenths), cops, the counts the game keeps by
 # name (helicopters, roadblocks and spike strips dodged, cops damaged and destroyed), and the roadblock spawner's and
 # the pursuit breakers' hooks; `pools watch` follows the memory pools' peaks.  The world map's icons (pursuit breakers
-# 13, hiding spots 12) are logged once a pursuit is on.  At the end the bot saves at the safehouse (--save-out keeps
+# 12, hiding spots 11; in a chase GManager's list holds the breakers) are logged once a pursuit is on.  At the end the bot saves at the safehouse (--save-out keeps
 # the tree: pursuit_load.txt loads it and logs the rap sheet again, M4-18).
 #   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script pursuit_rap.txt \
 #     --marker 'pursuit_rap: saved' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 --env PR_BOT=pursuit \
@@ -30,8 +30,8 @@
 +0    pursuit watch
 +30   bot ${PR_BOT}
 +0    pursuit wait on 30000
-+0    icons 13
 +0    icons 12
++0    icons 11
 +0    where
 +0    bot wait ${PR_WAIT}
 +0    rapsheet
