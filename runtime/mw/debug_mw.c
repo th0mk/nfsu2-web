@@ -148,7 +148,7 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
 /* The game's instruction hooks (game.h hook): the frame anchor is core's (frame_site); the crash fixes' sites
  * (fixes_mw.c HOOK_SITE) go to mw_fix_hook first, the test aids' (career_mw.c HOOK_SITE: the pursuit's end) to
  * mw_aid_hook, pursuit_mw.c's (roadblocks, pursuit breakers) to mw_pursuit_hook, widescreen_mw.c's (the screen's
- * shape) to mw_ws_hook first; any other hit is a debugging one, an
+ * shape) to mw_ws_hook, sound_mw.c's (tunnels) to mw_sound_hook first; any other hit is a debugging one, an
  * address a lift was given
  * with gen.sh's HOOKS=... (a function's first instruction, say).  NFSMW_HOOKLOG=1 logs the first 20 hits of each address, with the return address and
  * the first three stack arguments at a function's entry: "[hook] f=N 0xADDR from RET args A1 A2 A3 ecx X".
@@ -158,11 +158,13 @@ int mw_fix_hook(CPU *c, uint32_t va);          /* fixes_mw.c: the crash fixes' i
 int mw_aid_hook(CPU *c, uint32_t va);          /* career_mw.c: the pursuit's end for `pursuit watch` */
 int mw_pursuit_hook(CPU *c, uint32_t va);      /* pursuit_mw.c: roadblocks and pursuit breakers, counted */
 int mw_ws_hook(CPU *c, uint32_t va);           /* widescreen_mw.c: the screen's shape (FOV, HUD, mirror, movie) */
+int mw_sound_hook(CPU *c, uint32_t va);        /* sound_mw.c: a car into and out of a tunnel (NFSMW_TUNNEL_LOG) */
 int mw_debug_hook(CPU *c, uint32_t va){
     if (mw_ws_hook(c, va)) return 1;
     if (mw_fix_hook(c, va)) return 1;
     if (mw_aid_hook(c, va)) return 1;
     if (mw_pursuit_hook(c, va)) return 1;
+    if (mw_sound_hook(c, va)) return 1;
     static int on = -1;
     static long from;
     if (on < 0){

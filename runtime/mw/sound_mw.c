@@ -23,6 +23,8 @@
 #include "cpu.h"
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MW_SND_STILL  0x009c229cu      /* the service's polls with a still write cursor */
 #define MW_SND_LIMIT  100u             /* ... at which it rebuilds DirectSound (0x82097A) */
@@ -42,4 +44,35 @@ void mw_sound_position(void){
         fprintf(stderr, "[mw-sound] DirectSound STALL: %u polls without a cursor move, the game rebuilds DirectSound "
                 "under its engine (0x8201AE; %u so far)\n", n, ++g_rebuilds);
     g_at_limit = n >= MW_SND_LIMIT;
+}
+
+/* Tunnels (TRACKER M4-27, test aid).  A car's sound object (this = esi) looks up the world's sound zones at the
+ * car's place every update (0x4B5620(place, type), the place [[this+0x14]+0x34]+0x40): a zone of type 3, 4, 5
+ * (tunnels), 7 or 10 (with +0x1A == 1) puts the car "inside" (the byte this+0x28 set at 0x4C5D4B, the type kept at
+ * this+0x38), any other place out again (cleared at 0x4C5CC7).  On each change, unless [[this+0x14]+0x34]+0x228 is
+ * set, the game posts its "TunnelUpdate" message and switches the reverb (0x4B57E0) to a preset of the table at
+ * 0x8EFCC0: type 3 Simple_Tunnel (5), 4 and 5 Simple_Tunnel_Sml (6), 7 and 10 Garage (3); out again the area's own
+ * ([0x8EFC90 + 4 * this+0x74]).  With NFSMW_TUNNEL_LOG=1 each change is logged:
+ *   "[mw-sound] f=N tunnel in: zone type T at X Y Z (car sound object O)" and "... tunnel out ...". */
+#define HOOK_SITE(va) (va##u)
+#define SITE_TUNNEL_IN   HOOK_SITE(0x004c5d4b)   /* mov byte [esi+0x28], 1 */
+#define SITE_TUNNEL_OUT  HOOK_SITE(0x004c5cc7)   /* mov byte [esi+0x28], 0 */
+long autotest_frame(void);
+int mw_sound_hook(CPU *c, uint32_t va){
+    if (va != SITE_TUNNEL_IN && va != SITE_TUNNEL_OUT) return 0;
+    static int on = -1;
+    if (on < 0){ const char *e = getenv("NFSMW_TUNNEL_LOG"); on = e && *e && *e != '0'; }
+    if (!on) return 1;
+    uint32_t o = c->esi, s = mem_is_committed(o + 0x14u) ? MR32(o + 0x14u) : 0u;
+    uint32_t car = s && mem_is_committed(s + 0x34u) ? MR32(s + 0x34u) : 0u;
+    float p[3] = { 0, 0, 0 };
+    uint32_t quiet = 0;
+    if (car && mem_is_committed(car + 0x22Bu)){
+        for (int i = 0; i < 3; i++){ uint32_t u = MR32(car + 0x40u + 4u * (uint32_t)i); memcpy(&p[i], &u, 4); }
+        quiet = MR32(car + 0x228u);
+    }
+    fprintf(stderr, "[mw-sound] f=%ld tunnel %s: zone type %u at %.1f %.1f %.1f (car sound object %08x%s)\n",
+            autotest_frame(), va == SITE_TUNNEL_IN ? "in" : "out",
+            mem_is_committed(o + 0x3Bu) ? MR32(o + 0x38u) : 0u, p[0], p[1], p[2], o, quiet ? ", no reverb change" : "");
+    return 1;
 }

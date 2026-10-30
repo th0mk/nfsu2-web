@@ -2,10 +2,11 @@
 # unpause left the music silent after a shop until a restart).  Seeded with a safehouse save (a career seed: Resume
 # Career opens the safehouse menu), this run resumes free roam and visits the customization shop 50 times, as
 # career_shop.txt enters it (the car set inside menu_gate_customshop's zone, Enter engages it): each pass waits in the
-# shop's first menu, leaves by Escape for free roam (GameFlow 6 again) and drives on for 20 s.  The music is the
+# shop's first menu, leaves by Escape for free roam (GameFlow 6 again) and stays there 20 s.  The music is the
 # game's reads of SOUND/PFDATA/MW_Music.mus (READLOG=1 lists them, "[read] ... MW_Music.mus"; a playing song or
-# segment reads 32 or 64 KB about every second): tests/mw/checks/shop_music.sh wants some between each pass's
-# "[status] shop_out_N" and "[status] music_N", and in the shop.
+# segment reads 32 or 64 KB about every second; back in free roam the first comes about 0.6 s after the return):
+# tests/mw/checks/shop_music.sh wants some between each pass's "[status] shop_out_N" and "[status] music_N" and
+# counts those in the shop.
 #   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script shop_music.txt \
 #     --marker 'shop_music: done' --env READLOG=1 --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
 #     --timeout-scale 20

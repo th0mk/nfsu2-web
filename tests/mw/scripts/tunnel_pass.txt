@@ -1,0 +1,55 @@
+# Most Wanted: 20 drives through a tunnel (TRACKER M4-27: another port froze with the tunnel reverb).  Seeded with a
+# safehouse save (a career seed), this run resumes free roam and puts the car before the tunnel that runs east from
+# world (3272, 1069, 71) to (3391, 1081, 72) (a type-3 sound zone, the Simple_Tunnel reverb; found by a bot chase with
+# NFSMW_TUNNEL_LOG=1), facing along it, and holds the gas for 12 s, 20 times (a car that traffic or a wall stopped in
+# the tunnel leaves it at the next pass's warp, the last one at the warp after the loop; the cops may start a
+# pursuit, whose rewards screen at its end holds the car until Enter: each pass closes it first).
+# runtime/mw/sound_mw.c logs the game's own tunnel state with NFSMW_TUNNEL_LOG=1 ("[mw-sound] ... tunnel in: zone
+# type 3 ...", "... tunnel out ..."; the player's car is the one whose lines say nothing of "no reverb change"): at
+# each change the game switches the reverb preset.  `teleport` takes the simulation space `where` logs, (-y, z, x)
+# of the world's (x, y, z); the first warp is made twice, as the world there streams in after it
+# (tests/mw/scripts/pursuit_breaker.txt).
+# tests/mw/checks/tunnel_pass.sh wants the car into the tunnel in every pass and out of it after every entry, no
+# sound stall, and the game's own exit (a freeze runs into the time limit):
+#   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script tunnel_pass.txt \
+#     --marker 'tunnel_pass: done' --env NFSMW_TUNNEL_LOG=1 --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
+#     --timeout-scale 10
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600
++0    tap RETURN                                         # Resume Career
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000    # the safehouse menu
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN                                         # Yes
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # the race status in career mode: free roam
++0    log tunnel_pass: free roam
++0    teleport -1066.5 72.5 3230 -0.065 0 0.998          # 40 m before the tunnel, facing east along it
++600  teleport -1066.5 72.5 3230 -0.065 0 0.998          # again, on the road now
++0    loop 20
++0    loop 3                                             # a pursuit the drives started has ended: its rewards
++0    breakfng -PostRace_MilestoneRewards.fng            # screen holds the car until Enter
++30   tap RETURN
++30   endloop
++60   teleport -1066.5 72.5 3230 -0.065 0 0.998
++60   down UP                                            # gas
++720  up UP
++0    where
++0    status pass
++0    endloop
++60   teleport -1066.5 72.5 3230 -0.065 0 0.998          # out of the tunnel, if the last pass ended in it
++120  log tunnel_pass: done
++60   close
