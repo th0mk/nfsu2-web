@@ -22,6 +22,8 @@
 //                  the bots' limit, and they would measure themselves)
 //   --blip 150:0.4 at 150 s, 40 % of the players on the switch lose their link at once (a Cloudflare Tunnel connection
 //                  going) and come straight back with their address and token, as the page does
+//   --game mw      Most Wanted's server (--game mw: its routes under /mw, no Online mode yet, so --online is 0 unless
+//                  given) and Most Wanted's players (the bots' HELLO names the game); --data then Most Wanted's folder
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,18 +45,23 @@ const FORM = flag('plain') ? [] : flag('compact') ? ['--compact'] : ['--delta'];
 const OLD = flag('old');
 // --blip 150:0.4: at 150 s into the run, 40 % of the players on the switch lose their link and come back as the page does
 const BLIP = opt('blip', '') ? opt('blip').split(':').map(Number) : null;
-const DATA = opt('data', process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/work/gamedata-ro'));
+// the game (ug2 unless --game mw): its server's routes are under its base, and its bots say which game they play
+const GAME = opt('game', 'ug2').toLowerCase();
+if (GAME !== 'ug2' && GAME !== 'mw') { console.error(`--game ${GAME}: ug2 or mw`); process.exit(2); }
+const GBASE = GAME === 'mw' ? '/mw' : '';
+if (GAME === 'mw' && !argv.includes('--online')) N.online = 0;
+const DATA = opt('data', GAME === 'mw' ? process.env.NFSMW_DATA : process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/work/gamedata-ro'));
 const OUT = path.resolve(opt('out', path.join(REPO, 'out/web/mix-load')));
 fs.mkdirSync(OUT, { recursive: true });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const BASE = `http://127.0.0.1:${PORT}`;
+const BASE = `http://127.0.0.1:${PORT}${GBASE}`;
 
 // ---- the server ----
 const state = fs.mkdtempSync(path.join(os.tmpdir(), 'nfsu2-mix-'));
 const env = { ...process.env, NFSU2_REPO: REPO, ...(opt('threads', '') ? { NFSU2_THREADS: opt('threads') } : {}) };
 // UG2's server: a NFSU2_GAME left in the shell is not passed on (as web/tools/server-cmd.mjs does)
 delete env.NFSU2_GAME;
-const server = spawn(SERVER, ['--data', DATA, '--http-port', String(PORT), '--max-peers', String(MAX), '--dev', '--state', state],
+const server = spawn(SERVER, [...(GAME === 'ug2' ? [] : ['--game', GAME]), '--data', DATA, '--http-port', String(PORT), '--max-peers', String(MAX), '--dev', '--state', state],
   { env, stdio: ['ignore', 'pipe', 'pipe'] });
 const serverLog = [];
 const logFile = fs.createWriteStream(path.join(OUT, 'server.log'));
@@ -64,7 +71,7 @@ await new Promise((res, rej) => {
   const check = setInterval(() => { if (serverLog.some(l => l.includes('  access    :'))) { clearInterval(check); clearTimeout(t); res(); } }, 100);
   server.on('exit', c => rej(new Error(`the server exited ${c}`)));
 });
-console.log(`mix-load: ${path.relative(REPO, SERVER)} on ${PORT}, ${MAX} places; roam ${N.roam}, idle ${N.idle}, online ${N.online}, line ${N.line} ` +
+console.log(`mix-load: ${path.relative(REPO, SERVER)}${GAME === 'ug2' ? '' : ` --game ${GAME}`} on ${PORT}, ${MAX} places; roam ${N.roam}, idle ${N.idle}, online ${N.online}, line ${N.line} ` +
   `(${N.roam + N.idle + N.online + N.line} pages); ${FORM.join(' ') || 'plain bundles'}${OLD ? ', a server of before (no line)' : ''}; ${SECONDS} s`);
 
 const get = p => new Promise(res => {
@@ -85,7 +92,7 @@ function bots(tag, n, first, extra, seconds) {
   if (n <= 0) return null;
   const args = ['--base', BASE, '--n', String(n), '--first', String(first), '--seconds', String(Math.round(seconds)), '--spread', SPREAD,
     '--threads', opt('gen-threads', '3'), '--stagger-ms', '2', '--tag', tag, '--out', path.join(OUT, `${tag}.json`),
-    ...(OLD ? [] : ['--queue']), '--check-every', opt('check-every', '1'), ...extra,
+    ...(OLD ? [] : ['--queue']), '--check-every', opt('check-every', '1'), ...(GAME === 'ug2' ? [] : ['--game', GAME]), ...extra,
     // the blip at one moment of the run for every group (each counts from its own start)
     ...(BLIP ? ['--blip', `${(BLIP[0] - (Date.now() - t0) / 1000).toFixed(1)}:${BLIP[1]}`] : [])];
   const p = spawn(ROAMLOAD, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -155,7 +162,7 @@ let onlineJson = null;
 try { onlineJson = JSON.parse(onlineOut.slice(onlineOut.lastIndexOf('\n{'))); } catch { try { onlineJson = JSON.parse(fs.readFileSync(path.join(OUT, 'online/load.json'), 'utf8')); } catch {} }
 const problems = serverLog.filter(l => /panic|error|ERROR|overload|cut |\bbusy\b/i.test(l) && !/^\s+(access|dev|online|saves|free roam)/.test(l));
 const report = {
-  server: path.relative(REPO, SERVER), maxPeers: MAX, form: FORM.join(' ') || 'plain', old: OLD, seconds: SECONDS, pages: N,
+  server: path.relative(REPO, SERVER), game: GAME, maxPeers: MAX, form: FORM.join(' ') || 'plain', old: OLD, seconds: SECONDS, pages: N,
   serverCores: { mean: +avg(steady.map(s => s.cores))?.toFixed(2), max: +max(steady.map(s => s.cores))?.toFixed(2) },
   serverRssMB: { max: +max(samples.map(s => s.rssMB))?.toFixed(0) },
   players: { mean: Math.round(avg(steady.map(s => s.players?.players ?? 0))), max: max(samples.map(s => s.players?.players ?? 0)),

@@ -23,7 +23,10 @@
 //!
 //!   nfsu2-roamload --base http://127.0.0.1:8691 [--n 2000] [--seconds 60] [--rate 20] [--spread 2000] [--room 7]
 //!        [--stagger-ms 5] [--first 0] [--threads 4] [--out file.json] [--mode roam|idle] [--compact] [--delta] [--fpred]
-//!        [--queue] [--churn 120] [--leave-drop 0.5] [--drop-wait 0.1] [--tag roam]
+//!        [--queue] [--churn 120] [--leave-drop 0.5] [--drop-wait 0.1] [--tag roam] [--game ug2|mw]
+//!   --game mw     the bots are Most Wanted's players (their HELLO names the game, roam_core.h RC_HF_GAME: a hub of the
+//!                 other game refuses them); its server's routes are under /mw, so --base says so too
+//!                 (http://127.0.0.1:8691/mw)
 //!   --rate        snapshots a second to each friend (the game: 20; Settings allow 60)
 //!   --spread      the players' area, a square this many metres a side (each drives a circle of 40 m in it); every
 //!                 roam generator against one server needs the same (the receivers check the senders' states)
@@ -66,6 +69,9 @@ const MSG_PEERS: u8 = 2;
 const MSG_SNAP: u8 = 3;
 const HF_ALL: u16 = 0x0020;
 const HF_STATEX: u16 = 0x0040;
+/// the HELLO's crews (none here) and, after them, its game (roam_core.h RC_HF_CREW, RC_HF_GAME)
+const HF_CREW: u16 = 0x0200;
+const HF_GAME: u16 = 0x0800;
 const CORE_VER: u16 = 4;
 /// roam_core.h RC_ST_ROAM, RC_ST_EVENT
 const ST_ROAM: u8 = 2;
@@ -109,6 +115,8 @@ struct Args {
     blip_at: f64,
     blip_share: f64,
     check_every: u64,
+    /// roam_core.h RC_GAME_*: 0 Underground 2 (a HELLO as ever), 1 Most Wanted
+    game: u8,
 }
 
 fn args() -> Args {
@@ -146,6 +154,11 @@ fn args() -> Args {
         blip_at: opt("--blip", "0:0").split(':').next().unwrap_or("0").parse().expect("--blip"),
         blip_share: opt("--blip", "0:0").split(':').nth(1).unwrap_or("0").parse().expect("--blip"),
         check_every: opt("--check-every", "1").parse().expect("--check-every"),
+        game: match opt("--game", "ug2").to_lowercase().as_str() {
+            "ug2" => 0,
+            "mw" => 1,
+            g => panic!("--game {g}: ug2 or mw"),
+        },
     }
 }
 
@@ -292,9 +305,9 @@ fn finish(mut w: Vec<u8>) -> Vec<u8> {
     w.extend_from_slice(&crc.to_le_bytes());
     w
 }
-fn hello(id: u32, seq: u16, name: &str, room: u32, status: u8) -> Vec<u8> {
+fn hello(id: u32, seq: u16, name: &str, room: u32, status: u8, game: u8) -> Vec<u8> {
     let mut w = Vec::with_capacity(64);
-    hdr(&mut w, MSG_HELLO, id, seq, HF_ALL | HF_STATEX);
+    hdr(&mut w, MSG_HELLO, id, seq, HF_ALL | HF_STATEX | if game != 0 { HF_CREW | HF_GAME } else { 0 });
     w.extend_from_slice(&CORE_VER.to_le_bytes());
     w.push(0); // platform
     w.push(status);
@@ -304,6 +317,11 @@ fn hello(id: u32, seq: u16, name: &str, room: u32, status: u8) -> Vec<u8> {
     w.push(name.len() as u8);
     w.extend_from_slice(name.as_bytes());
     w.push(0); // ids seen
+    // (another game than Underground 2: no crews, then the game)
+    if game != 0 {
+        w.push(0);
+        w.push(game);
+    }
     finish(w)
 }
 
@@ -850,7 +868,7 @@ async fn play(
         iv.set_missed_tick_behavior(MissedTickBehavior::Delay);
     }
     // the first HELLO at once: the hub starts a player with it
-    let first = frame(HUB, &hello(bot.id, 0, &bot.name, bot.room, status));
+    let first = frame(HUB, &hello(bot.id, 0, &bot.name, bot.room, status, a.game));
     let mut b = vec![KIND_BUNDLE, 0, 0, 0];
     entry(&mut b, &[], &first);
     sh.bytes_out.add(b.len() as u64);
@@ -953,11 +971,11 @@ async fn play(
             }
             _ = hello_iv.tick() => {
                 let seq = bot.next_seq();
-                let hub = frame(HUB, &hello(bot.id, seq, &bot.name, bot.room, status));
+                let hub = frame(HUB, &hello(bot.id, seq, &bot.name, bot.room, status, a.game));
                 let mut b = vec![KIND_BUNDLE, 0, 0, 0];
                 entry(&mut b, &[], &hub);
                 if roam && !bot.friends.is_empty() {
-                    let f = frame(0, &hello(bot.id, seq, &bot.name, bot.room, status));
+                    let f = frame(0, &hello(bot.id, seq, &bot.name, bot.room, status, a.game));
                     entry(&mut b, &bot.friends, &f);
                     sh.deliveries.add(bot.friends.len() as u64);
                 }

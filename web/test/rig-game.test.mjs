@@ -26,7 +26,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 9791), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 9792);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
-const FOR_MW = new Set(['run-suite', 'intro-test', 'lan-pair', 'shader-check']);   // the tools that have something for Most Wanted (3. checks what)
+const FOR_MW = new Set(['run-suite', 'intro-test', 'lan-pair', 'shader-check', 'deploy-e2e']);   // the tools that have something for Most Wanted (3. checks what)
 // a server nobody runs, should a tool get past its --help or its check (none may): no own server, nothing reached
 const NOWHERE = { 'lan-pair': ['--base', 'http://127.0.0.1:9'], 'online-pair': ['--base', 'http://127.0.0.1:9'],
   'roam-pair': ['--base', 'http://127.0.0.1:9'], 'run-suite': ['--base', 'http://127.0.0.1:9'], 'app-test': ['--base', 'http://127.0.0.1:9'],
