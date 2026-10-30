@@ -349,7 +349,9 @@ The game thread keeps `com.c` (D3D9 state, shader translation) and records throu
   endpoint bits left give range 48, so its colours are a few steps off (at most 7 of 255) and its alpha has 4 levels
   in the block where DXT5 has 8 and DXT3 16 (at most 43 off; 0.5 on average over all the texels of those textures,
   the soft edges of foliage the worst). The endpoints are the best of the nearest range-48 values and their
-  neighbours by squared error. Textures in a Most Wanted race 411 → 196 MB (155 with BC), an Underground 2 Quick Race
+  neighbours by squared error, except that a block holding alpha 0 or 255 keeps it as its alpha's end: transparent and
+  opaque texels stay exactly so (by squared error alone, 5 or 250 for up to one in ten of them, which can leave a
+  faint square around a blended soft edge). Textures in a Most Wanted race 411 → 196 MB (155 with BC), an Underground 2 Quick Race
   114 → 95 MB (61 with BC; what stays unpacked there is DXT1 with transparent texels). The cost is at upload: about 25 ms per MB of DXT3 and
   DXT5 on a desktop CPU against 7 for unpacking (two-plane blocks are most of it), so loading screens on a phone take
   longer. `astc_alpha = off` in settings.ini (`NFSU2_ASTC_ALPHA=0`; `?astca=0` on the test page) unpacks them as

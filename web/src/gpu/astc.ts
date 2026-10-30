@@ -159,7 +159,8 @@ export function dxt1ToAstc(src: Uint8Array, off: number, pitch: number, bw: numb
 //     longer exact (at most 7 of 255 off, 0.7 on average in the games' textures) and the alpha has 4 levels a block
 //     where DXT5 has 8 and DXT3 16 (at most 43 off; 0.5 on average over all the texels of those textures).
 // The endpoints are picked as the measurement of this choice did: for each channel the nearest of the 48 values to
-// the block's ends and their neighbours, the pair with the smallest squared error.
+// the block's ends and their neighbours, the pair with the smallest squared error; but alpha 0 and 255 in a block stay
+// its alpha's ends, so transparent and opaque texels stay so.
 
 /** range 48's values as the decoder unquantizes them (the spec's colour unquantization: a trit D and 4 bits dcba ->
  *  T = D * 22 + dcb000dcb, xor a's replication, then (A & 0x80) | T >> 2), in rising order (U48), each one's encoding
@@ -236,14 +237,17 @@ function fitColour(ch: number, e0: number, e1: number) {
 }
 
 /** the alpha plane: endpoints from the block's lowest and highest alpha (each up or down one of the 48), each texel the
- *  nearest of the four values between them, the pair with the smallest squared error; into lohi[6], lohi[7] and aw */
+ *  nearest of the four values between them, the pair with the smallest squared error; into lohi[6], lohi[7] and aw.
+ *  A block holding alpha 0 keeps 0 as its low end, one holding 255 keeps 255 as its high end (both are among the 48,
+ *  and an end comes back exactly): the smallest error would often take 5 or 250 instead, and a texel that should be
+ *  transparent or opaque then is not quite (which can leave a faint square around a blended soft edge) */
 function fitAlpha(mn: number, mx: number, nd: number) {
   const k0 = N48[mn], k1 = N48[mx];
   let best = Infinity, bl = k0, bh = k1;
-  for (let dl = -1; dl <= 1; dl++) {
+  for (let dl = mn === 0 ? 0 : -1; dl <= (mn === 0 ? 0 : 1); dl++) {
     const lo = k0 + dl;
     if (lo < 0 || lo > 47) continue;
-    for (let dh = -1; dh <= 1; dh++) {
+    for (let dh = mx === 255 ? 0 : -1; dh <= (mx === 255 ? 0 : 1); dh++) {
       const hi = k1 + dh;
       if (hi < 0 || hi > 47) continue;
       const pr = (lo * 48 + hi) * 256;

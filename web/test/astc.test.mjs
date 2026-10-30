@@ -180,11 +180,12 @@ const dxt5Alpha = (a0, a1, codes) => {
   for (let i = 0; i < 8; i++) { lo |= codes[i] << 3 * i; hi |= codes[i + 8] << 3 * i; }
   return new Uint8Array([a0, a1, lo & 255, (lo >> 8) & 255, lo >> 16, hi & 255, (hi >> 8) & 255, hi >> 16]);
 };
-/** the rewritten blocks against the unpacked ones: largest and summed differences, colour per channel */
+/** the rewritten blocks against the unpacked ones: largest and summed differences, colour per channel; edges: texels
+ *  of alpha 0 or 255 that come back as another */
 function compare35(dxt5, src, bw, bh) {
   const dual = { blocks: 0 }, a = dxtAlphaToAstc(dxt5, src, 0, bw * 16, bw, bh, undefined, dual);
   const W = bw * 4, u = unpackDxt(dxt5 ? DXT5 : DXT3, src, 0, bw * 16, W, bh * 4);
-  const r = { alphaMax: 0, alphaSum: 0, colourMax: 0, colourSum: 0, constColourMax: 0, texels: 0, dual: dual.blocks, errors: [] };
+  const r = { alphaMax: 0, alphaSum: 0, colourMax: 0, colourSum: 0, constColourMax: 0, texels: 0, edges: 0, dual: dual.blocks, errors: [] };
   for (let b = 0; b < bw * bh; b++) {
     const got = decodeAstc4x4(a.subarray(b * 16, b * 16 + 16));
     if (typeof got === 'string') { r.errors.push(`block ${b}: ${got}`); continue; }
@@ -194,6 +195,7 @@ function compare35(dxt5, src, bw, bh) {
       const p = at(t), want = [u[p + 2], u[p + 1], u[p]];
       const da = Math.abs(to8(got[t][3]) - u[p + 3]);
       r.alphaMax = Math.max(r.alphaMax, da); r.alphaSum += da; r.texels++;
+      if (da && (u[p + 3] === 0 || u[p + 3] === 255)) r.edges++;
       for (let c = 0; c < 3; c++) {
         const d = Math.abs(to8(got[t][c]) - want[c]);
         r.colourMax = Math.max(r.colourMax, d); r.colourSum += d;
@@ -235,14 +237,14 @@ test('DXT3 and DXT5 colour blocks always have four colours (c0 <= c1 too)', () =
 });
 
 test('varying alpha: two planes, alpha the second; four levels for the eight of DXT5', () => {
-  // DXT5 eight levels, 255 at code 0 down to 0 at code 1: four levels between ends at most a step of the 48 off (the
-  // smallest squared error may move one), each texel at most 255/6 and that step from its own
+  // DXT5 eight levels, 255 at code 0 down to 0 at code 1: four levels, the ends 255 and 0 exactly (a block holding
+  // them keeps them), each texel at most 255/6 and a step of the 48 from its own
   const codes = [0, 2, 3, 4, 5, 6, 7, 1, 0, 2, 3, 4, 5, 6, 7, 1];
   const r = compare35(true, block16(dxt5Alpha(255, 0, codes), 0xF800, 0x001F, 0xE4E4E4E4), 1, 1);
   assert.deepEqual(r.errors, []);
   assert.equal(r.dual, 1);
   const got = decodeAstc4x4(r.out);
-  assert.ok(to8(got[0][3]) >= 249 && to8(got[7][3]) <= 6, `ends ${to8(got[0][3])} ${to8(got[7][3])}`);
+  assert.ok(to8(got[0][3]) === 255 && to8(got[7][3]) === 0, `ends ${to8(got[0][3])} ${to8(got[7][3])}`);
   assert.ok(r.alphaMax <= 48, `alpha max ${r.alphaMax}`);
   assert.equal(new Set(got.map(px => px[3])).size, 4);
   // the block mode: a 4x4 grid of 2-bit weights in two planes, endpoint mode 12, the selector 3 (alpha)
@@ -269,6 +271,23 @@ test('random DXT3 and DXT5 blocks of every kind, within the limits', () => {
     // at range-48 endpoints
     assert.ok(r.constColourMax <= 2 && r.colourMax <= 8 && r.alphaMax <= 48, JSON.stringify({ ...r, out: undefined }));
     assert.ok(r.dual > 0 && r.dual < bw * bh);
+    // transparent and opaque texels stay so
+    assert.equal(r.edges, 0, `${dxt5 ? 'DXT5' : 'DXT3'}: texels of alpha 0 or 255 off`);
+  }
+});
+
+test('varying alpha: a soft edge keeps its transparent and its opaque texels', () => {
+  // blocks where the smallest squared error alone took 5 or 250 for an end (the range-48 values next to 0 and 255)
+  const edge = [0, 0, 51, 0, 0, 85, 85, 0, 0, 17, 0, 0, 102, 0, 17, 102];
+  const solid = [255, 204, 255, 255, 255, 221, 204, 255, 153, 238, 255, 204, 170, 204, 255, 255];
+  const both = [0, 0, 0, 0, 0, 34, 68, 102, 136, 170, 204, 238, 255, 255, 255, 255];
+  for (const a16 of [edge, solid, both]) {
+    const r = compare35(false, block16(dxt3Alpha(a16), 0x7BEF, 0x39E7, 0x1B1B1B1B), 1, 1);
+    assert.deepEqual(r.errors, []);
+    assert.equal(r.dual, 1);
+    const got = decodeAstc4x4(r.out).map(px => to8(px[3]));
+    a16.forEach((v, t) => { if (v === 0 || v === 255) assert.equal(got[t], v, `texel ${t}: ${a16.join(' ')} -> ${got.join(' ')}`); });
+    assert.ok(r.alphaMax <= 48, `alpha max ${r.alphaMax}`);
   }
 });
 
@@ -292,18 +311,18 @@ const DUMPS = process.env.ASTC_DUMPS;
 test('texture dumps (ASTC_DUMPS)', { skip: !DUMPS && 'ASTC_DUMPS not set' }, t => {
   for (const f of fs.readdirSync(DUMPS).filter(n => n.endsWith('.dump')).sort()) {
     const d = fs.readFileSync(path.join(DUMPS, f)), W = d.readUInt16LE(0), H = d.readUInt16LE(2), dxt5 = d.readUInt16LE(4) === 5, mips = d.readUInt16LE(6);
-    const sum = { alphaMax: 0, alphaSum: 0, colourMax: 0, colourSum: 0, constColourMax: 0, texels: 0, dual: 0, blocks: 0 };
+    const sum = { alphaMax: 0, alphaSum: 0, colourMax: 0, colourSum: 0, constColourMax: 0, texels: 0, edges: 0, dual: 0, blocks: 0 };
     for (let l = 0, off = 8; l < mips; l++) {
       const bw = (Math.max(1, W >> l) + 3) >> 2, bh = (Math.max(1, H >> l) + 3) >> 2;
       const r = compare35(dxt5, d.subarray(off, off + bw * bh * 16), bw, bh);
       assert.deepEqual(r.errors, [], f);
       for (const k of ['alphaMax', 'colourMax', 'constColourMax']) sum[k] = Math.max(sum[k], r[k]);
-      for (const k of ['alphaSum', 'colourSum', 'texels', 'dual']) sum[k] += r[k];
+      for (const k of ['alphaSum', 'colourSum', 'texels', 'edges', 'dual']) sum[k] += r[k];
       sum.blocks += bw * bh; off += bw * bh * 16;
     }
     t.diagnostic(`${f} ${dxt5 ? 'DXT5' : 'DXT3'} ${W}x${H} ${mips} levels: ${sum.dual}/${sum.blocks} blocks two planes; ` +
       `alpha max ${sum.alphaMax} mean ${(sum.alphaSum / sum.texels).toFixed(2)}; colour max ${sum.colourMax} ` +
       `mean ${(sum.colourSum / sum.texels / 3).toFixed(2)}, in blocks of one alpha max ${sum.constColourMax}`);
-    assert.ok(sum.alphaMax <= 48 && sum.colourMax <= 8 && sum.constColourMax <= 2, f);
+    assert.ok(sum.alphaMax <= 48 && sum.colourMax <= 8 && sum.constColourMax <= 2 && sum.edges === 0, f);
   }
 });
