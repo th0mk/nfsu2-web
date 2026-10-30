@@ -20,7 +20,8 @@
 //! Before anything goes on, this server's own checks: its own pages only (as vault.rs), the four methods, a body only
 //! with a PUT and none over the vault's 256 KB.  At most 32 forwards at once; no state written (no folder, no cache of
 //! boxes or tokens).  The keys come from the environment of the box, as Turnstile's (never on the command line, in the
-//! repository or the image, never in a log line): NFSU2_VAULT_FORWARD (the U2 box's vault, https://<name>/vault),
+//! repository or the image, never in a log line): NFSU2_VAULT_FORWARD (the U2 box's vault, https://<name>/vault; the
+//! server will not start with an http:// one but to this machine, where the keys would cross a network unencrypted),
 //! NFSU2_VAULT_BOX_KEY (the credential, the same on both boxes, at least 32 characters) and, behind Access,
 //! NFSU2_CF_ACCESS_CLIENT_ID and NFSU2_CF_ACCESS_CLIENT_SECRET.  Each is replaced by restarting with another.
 //! A `[vault]` line every 5 minutes counts what was forwarded, refused here (by reason) and failed (by reason).
@@ -101,7 +102,8 @@ impl VaultForward {
         VaultForward::new(&url, key, access).map(Some)
     }
 
-    /// to `url` (http:// only for the tests' own servers), with the credential `key` and the Access service token
+    /// to `url` (https://; http:// only to this machine, for the tests' own servers), with the credential `key` and the
+    /// Access service token
     pub fn new(url: &str, key: String, access: Option<(String, String)>) -> Result<VaultForward, String> {
         if key.len() < MIN_KEY || !key.bytes().all(|c| c.is_ascii_graphic()) {
             return Err(format!("NFSU2_VAULT_BOX_KEY: at least {MIN_KEY} characters, printable, no spaces"));
@@ -122,6 +124,13 @@ impl VaultForward {
         };
         if host.is_empty() || !clean(hostport) || !clean(&path) || path.contains('?') || path.contains('#') {
             return Err(format!("NFSU2_VAULT_FORWARD: no address: {url}"));
+        }
+        // the credential and the Access secret go with every forward: in clear text only to this machine (the tests'
+        // own servers), never over a network
+        let host = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(host);
+        let this_machine = host.eq_ignore_ascii_case("localhost") || host.parse::<std::net::IpAddr>().is_ok_and(|a| a.is_loopback());
+        if !tls && !this_machine {
+            return Err(format!("NFSU2_VAULT_FORWARD: https:// (http:// only to this machine; the keys would go in clear text): {url}"));
         }
         let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -806,6 +815,16 @@ mod tests {
         assert!(VaultForward::new("ftp://x.example/vault", KEY.into(), None).is_err());
         assert!(VaultForward::new("https://x.example/vault?a", KEY.into(), None).is_err());
         assert!(VaultForward::new("https://x.example/vault", KEY.into(), Some(("a b".into(), "c".into()))).is_err());
+        // http:// only to this machine: the keys never cross a network in clear text
+        for over_a_network in ["http://x.example/vault", "http://10.0.0.2:8080/vault", "http://[fe80::1]/vault", "http://0.0.0.0/vault"] {
+            let e = VaultForward::new(over_a_network, KEY.into(), None).err().unwrap();
+            assert!(e.contains("https://") && !e.contains(KEY), "{over_a_network}: {e}");
+        }
+        for here in ["http://127.0.0.1:9/vault", "http://127.1.2.3/vault", "http://localhost:9/vault", "http://[::1]:9/vault"] {
+            let f = VaultForward::new(here, KEY.into(), None).unwrap();
+            assert!(!f.tls && f.target().starts_with("http://"), "{here}");
+        }
+        assert_eq!(VaultForward::new("http://[::1]:9/vault", KEY.into(), None).unwrap().host, "::1");
         let f = VaultForward::new("https://x.example/vault", KEY.into(), Some(("id".into(), "secret".into()))).unwrap();
         assert_eq!((f.host.as_str(), f.port, f.path.as_str()), ("x.example", 443, "/vault"));
         assert!(!f.target().contains("secret") && !f.target().contains(KEY));
