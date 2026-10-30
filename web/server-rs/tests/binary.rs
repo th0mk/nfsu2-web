@@ -580,7 +580,11 @@ async fn most_wanted_with_an_empty_env() {
         } else {
             assert_eq!(saves, "  saves     : no keyphrase saves (none forwarded: NFSU2_VAULT_FORWARD)");
         }
-        assert!(startup.contains(&"  online    : off (this server has no Online mode for NFS Most Wanted yet)".to_string()));
+        let online = format!(
+            "  online    : the game's Online mode at 10.77.0.1 on the switch (any name logs in; race results per persona in {})",
+            state.join("online").to_string_lossy()
+        );
+        assert!(startup.contains(&online), "{startup:?}");
         assert!(startup.iter().any(|l| l.starts_with("  log       : these lines also in ")), "{startup:?}");
         assert!(!startup.iter().any(|l| l.contains("[names]") || l.contains("covers")), "{startup:?}");
         assert!(!lines.iter().any(|l| l.contains(&"k".repeat(40))), "the credential in no line");
