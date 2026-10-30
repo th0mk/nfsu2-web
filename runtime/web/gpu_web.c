@@ -300,9 +300,10 @@ static unsigned tex_new(unsigned w, unsigned h, unsigned levels, unsigned f, uns
     g_tex_created++;
     GwCmd *c = rq_begin(GW_TEX_CREATE, 0);
     if (c){ c->a[0] = id; c->a[1] = w; c->a[2] = h; c->a[3] = levels; c->a[4] = f;
-            c->a[5] = (rt ? GW_TF_RT : 0) | (cube ? GW_TF_CUBE : 0); rq_commit(c); }
+            c->a[5] = (rt ? GW_TF_RT : 0) | ((rt & 2u) && !cube ? GW_TF_MS : 0) | (cube ? GW_TF_CUBE : 0); rq_commit(c); }
     return id;
 }
+/* is_rt: 1 a render target, 3 one drawn at 4 samples (GW_TF_MS: com.c, GameOps gpu_msaa) */
 unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned levels, unsigned f, unsigned is_rt){
     return tex_new(w, h, levels, f, is_rt, 0);
 }
@@ -435,6 +436,12 @@ void metal_z_forget(unsigned zid){
     gw_init();
     GwCmd *c = rq_begin(GW_Z_FORGET, 0);
     if (c){ c->a[0] = zid; rq_commit(c); }
+}
+/* the back buffer's samples (1 or 4) from the next frame on (com.c bb_multisample, GameOps gpu_msaa) */
+void metal_set_bb_samples(unsigned n){
+    gw_init();
+    GwCmd *c = rq_begin(GW_BB_SAMPLES, 0);
+    if (c){ c->a[0] = n == 4u ? 4u : 1u; rq_commit(c); }
 }
 
 /* ---- the persistent vertex/index mirror pool ----------------------------

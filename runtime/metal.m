@@ -3594,6 +3594,8 @@ void metal_set_stage_tex(unsigned t1, unsigned t2, unsigned t3){
 /* stages 4-7 (com.c, a game with 8 stages): the Mac renderer has 4 */
 void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]){ (void)t; (void)k; }
 void metal_set_depth_bias(unsigned b){ (void)b; }
+/* the back buffer's samples (com.c, GameOps gpu_msaa): the Mac renderer draws it with one */
+void metal_set_bb_samples(unsigned n){ (void)n; }
 unsigned metal_create_texture_depth(unsigned w, unsigned h, unsigned f){ (void)w; (void)h; (void)f; return 0; }
 int metal_tex_is_depth(unsigned id){ (void)id; return 0; }
 /* The guest's active pixel shader and its constants. */

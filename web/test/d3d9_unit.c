@@ -135,8 +135,9 @@ unsigned metal_level_rows(unsigned h, unsigned level, unsigned f){
 static unsigned g_uploads = 0;                     /* texture levels handed to the renderer (UnlockRect) */
 void metal_upload_texture(unsigned id, unsigned level, const void *d, unsigned pitch, unsigned w, unsigned h, unsigned f){
     (void)id; (void)level; (void)d; (void)pitch; (void)w; (void)h; (void)f; g_uploads++; }
+static unsigned g_last_rt = 0;                     /* the last texture's render-target word (3: drawn at 4 samples) */
 unsigned metal_create_texture_ex(unsigned w, unsigned h, unsigned l, unsigned f, unsigned rt){
-    unsigned b; (void)w; (void)h; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
+    unsigned b; (void)w; (void)h; (void)l; g_last_rt = rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
 unsigned metal_create_texture_cube(unsigned e, unsigned l, unsigned f, unsigned rt){
     unsigned b; (void)e; (void)l; (void)rt; return g_fail_tex || !stub_blk(f, &b) ? 0u : ++g_texid; }
 /* depth textures (8 stages, Most Wanted): D16, D24X8, D24S8 */
@@ -147,6 +148,8 @@ unsigned metal_create_texture_depth(unsigned w, unsigned h, unsigned f){
     unsigned id = ++g_texid; if (id < sizeof g_dtex) g_dtex[id] = 1; return id; }
 int metal_tex_is_depth(unsigned id){ return id < sizeof g_dtex ? g_dtex[id] : 0; }
 void metal_set_depth_bias(unsigned b){ (void)b; }
+static unsigned g_bb_samples = 0;                  /* the back buffer's samples the renderer was last told (0: never) */
+void metal_set_bb_samples(unsigned n){ g_bb_samples = n; }
 static unsigned g_freed = 0;
 void metal_free_texture(unsigned id){ (void)id; g_freed++; }
 void metal_mirror_forget(uint32_t o){ (void)o; }
@@ -445,15 +448,64 @@ static void t_state(void){
     }
     else    check(n == 6u && !bad && past == D3DERR_INVALIDCALL, "modes-ug2", "%u modes, %u failed, past the end 0x%08x", n, bad, past);
 
-    /* multisampling: MW is told what the renderer draws (none), UG2 keeps D3D_OK */
+    /* multisampling: MW is told what the renderer draws (game.h gpu_msaa: a 4-sample back buffer as NONMASKABLE with
+     * 2 quality levels or 4_SAMPLES, on A8R8G8B8, X8R8G8B8 and the depth formats), UG2 keeps D3D_OK */
     MR32(OUT) = 0xCDCDCDCDu;
     uint32_t ms = call(g_d3d, "CheckDeviceMultiSampleType", 6, 0u, 1u, 21u, 0u, 1u, OUT);
     uint32_t q = MR32(OUT);
     MR32(OUT) = 0xCDCDCDCDu;
     uint32_t m0 = call(g_d3d, "CheckDeviceMultiSampleType", 6, 0u, 1u, 21u, 0u, 0u, OUT);
-    if (MW) check(ms == D3DERR_NOTAVAILABLE && q == 0u && m0 == 0u && MR32(OUT) == 1u, "multisample",
-                  "NONMASKABLE 0x%08x quality %u, NONE 0x%08x quality %u", ms, q, m0, MR32(OUT));
+    uint32_t q0 = MR32(OUT);
+    if (MW){
+        MR32(OUT) = 0xCDCDCDCDu;
+        uint32_t m4 = call(g_d3d, "CheckDeviceMultiSampleType", 6, 0u, 1u, 75u, 0u, 4u, OUT), q4 = MR32(OUT);
+        MR32(OUT) = 0xCDCDCDCDu;
+        uint32_t m2 = call(g_d3d, "CheckDeviceMultiSampleType", 6, 0u, 1u, 21u, 0u, 2u, OUT), q2 = MR32(OUT);
+        uint32_t m8 = call(g_d3d, "CheckDeviceMultiSampleType", 6, 0u, 1u, 21u, 0u, 8u, OUT);
+        uint32_t mf = call(g_d3d, "CheckDeviceMultiSampleType", 6, 0u, 1u, 23u, 0u, 1u, OUT);   /* R5G6B5 */
+        check(ms == 0u && q == 2u && m0 == 0u && q0 == 1u && m4 == 0u && q4 == 1u && m2 == D3DERR_NOTAVAILABLE && q2 == 0u
+              && m8 == D3DERR_NOTAVAILABLE && mf == D3DERR_NOTAVAILABLE, "multisample",
+              "NONMASKABLE 0x%08x quality %u, NONE 0x%08x quality %u, 4_SAMPLES on D24S8 0x%08x quality %u, 2_SAMPLES 0x%08x "
+              "quality %u, 8_SAMPLES 0x%08x, NONMASKABLE on R5G6B5 0x%08x", ms, q, m0, q0, m4, q4, m2, q2, m8, mf);
+    }
     else    check(ms == 0u && q == 0xCDCDCDCDu, "multisample-ug2", "0x%08x quality 0x%08x (UG2's answer)", ms, q);
+    {   /* the device as Most Wanted makes it with FSAA on (0x6BFBA6: NONMASKABLE, quality g_FSAALevel): the renderer
+         * draws the back buffer at 4 samples and GetDesc names the type; a type not offered and a Reset without one
+         * go back to 1 (UG2: the renderer is never told, GetDesc says NONE) */
+        g_bb_samples = 0;
+        present_params(1280, 720, 1); MR32(PP + 16) = 1u; MR32(PP + 20) = 1u;
+        uint32_t rr = call(g_dev, "Reset", 1, PP);
+        unsigned s4 = g_bb_samples;
+        MR32(OUT) = 0; call(g_dev, "GetBackBuffer", 4, 0u, 0u, 0u, OUT);
+        memset(g_mem + DESC, 0xAB, 64);
+        call(MR32(OUT), "GetDesc", 1, DESC); release(MR32(OUT));
+        uint32_t dty = MR32(DESC + 16), dq = MR32(DESC + 20);
+        present_params(1280, 720, 1); MR32(PP + 16) = 8u;
+        call(g_dev, "Reset", 1, PP);
+        unsigned s8 = g_bb_samples;
+        present_params(1280, 720, 1);
+        call(g_dev, "Reset", 1, PP);
+        unsigned s1 = g_bb_samples;
+        MR32(OUT) = 0; call(g_dev, "GetBackBuffer", 4, 0u, 0u, 0u, OUT);
+        memset(g_mem + DESC, 0xAB, 64);
+        call(MR32(OUT), "GetDesc", 1, DESC); release(MR32(OUT));
+        if (MW) check(rr == 0 && s4 == 4u && dty == 1u && dq == 1u && s8 == 1u && s1 == 1u && MR32(DESC + 16) == 0u, "msaa-backbuffer",
+                      "Reset 0x%08x: %u samples, GetDesc type %u quality %u; type 8: %u samples; none: %u samples, type %u",
+                      rr, s4, dty, dq, s8, s1, MR32(DESC + 16));
+        else    check(rr == 0 && s4 == 0u && s1 == 0u && dty == 0u && dq == 0u, "msaa-backbuffer-ug2",
+                      "Reset 0x%08x, samples told %u/%u, GetDesc type %u quality %u (UG2: none)", rr, s4, s1, dty, dq);
+        /* a render target asked for with multisampling (Most Wanted makes an 800x600 one with FSAA on): drawn at 4
+         * samples when the type is offered (the renderer's word 3), else with 1 (1); UG2: always 1 */
+        unsigned rts[3]; static const uint32_t rty[3][2] = { { 1u, 1u }, { 2u, 0u }, { 0u, 0u } };
+        for (int k = 0; k < 3; k++){
+            MR32(OUT) = 0; g_last_rt = 0;
+            call(g_dev, "CreateRenderTarget", 8, 64u, 32u, 21u, rty[k][0], rty[k][1], 0u, OUT, 0u);
+            rts[k] = g_last_rt; if (MR32(OUT)) release(MR32(OUT));
+        }
+        if (MW) check(rts[0] == 3u && rts[1] == 1u && rts[2] == 1u, "msaa-rendertarget",
+                      "NONMASKABLE quality 1: %u, 2_SAMPLES: %u, none: %u", rts[0], rts[1], rts[2]);
+        else    check(rts[0] == 1u && rts[1] == 1u && rts[2] == 1u, "msaa-rendertarget-ug2", "%u %u %u (UG2: 1)", rts[0], rts[1], rts[2]);
+    }
 
     /* CheckDeviceFormat: MW is told what the creators make, a texture format CreateTexture makes and the depth
      * textures of 8 stages (D16, D24X8, D24S8; its shadow-map probes: D24S8 at 0x6C1725 made, 'DF16' at 0x6C175D,

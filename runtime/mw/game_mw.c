@@ -202,9 +202,10 @@ const GameOps g_game = {
     .active_heap_va = 0x009c531cu,              /* answer (3 = the small-block heap) */
     .win32_misc = mw_imports,                   /* win32_misc.c: memory, locale, keyboard, voice devices; msvcrt_mw.c */
     .d3d_modes = mw_modes,                      /* the 4:3 modes first (GAME.md 5.7) */
-    .d3d9_strict = 1,                           /* D3D9's answers: level sizes, failed creators, no multisampling */
+    .d3d9_strict = 1,                           /* D3D9's answers: level sizes, failed creators, what the renderer offers */
     .gpu_stages = 8,                            /* t4..t7 and s4..s7 at SM2 already, depth textures (GAME.md 5.9) */
     .d3d_sm3 = 1,                               /* vs/ps 3.0: the ps_2_x and SM3 techniques (GAME.md 5.3) */
+    .gpu_msaa = 1,                              /* the FSAA option: a 4-sample back buffer (GAME.md 5.6) */
     .d3d_host_backing = 1,                      /* textures' and buffers' copies outside the guest's 512 MB:
                                                  * a race's world (~170 MB of them) and the game's own heap
                                                  * (~200 MB) no longer share it */

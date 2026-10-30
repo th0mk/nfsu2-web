@@ -1125,6 +1125,26 @@ static void rs_apply(void){
 static uint64_t g_rt_set=0, g_rt_screen=0;
 static uint64_t g_rt_tex=0;
 static uint32_t g_bb_w = 1280, g_bb_h = 720;   /* back buffer size */
+/* the back buffer's and its implicit Z's D3DMULTISAMPLE_TYPE and quality, as the device was created or last
+ * Reset with them (GameOps gpu_msaa; 0 = none, always for UG2) */
+static uint32_t g_bb_ms = 0, g_bb_msq = 0;
+/* a D3DMULTISAMPLE_TYPE and quality CheckDeviceMultiSampleType offers with gpu_msaa (NONMASKABLE with a quality
+ * below 2, 4_SAMPLES with 0): drawn at 4 samples */
+static int ms_offered(uint32_t ty, uint32_t q){ return g_game.gpu_msaa && ((ty == 1u && q < 2u) || (ty == 4u && q == 0u)); }
+/* the present parameters' MultiSampleType and MultiSampleQuality (pp + 16, + 20): with gpu_msaa a type
+ * offered gives the back buffer and its Z 4 samples (the page's GW_BB_SAMPLES); anything else none, as before */
+static void bb_multisample(uint32_t pp){
+    uint32_t ty = 0, q = 0;
+    if (g_game.gpu_msaa && pp && mem_is_committed(pp + 23u)){ ty = MR32(pp + 16u); q = MR32(pp + 20u); }
+    if (!ms_offered(ty, q)){
+        if (ty) fprintf(stderr, "com: multisample type %u quality %u not offered: the back buffer has 1 sample\n", ty, q);
+        ty = q = 0;
+    }
+    if (ty != g_bb_ms || q != g_bb_msq)
+        fprintf(stderr, "com: back buffer multisampling %s (type %u, quality %u)\n", ty ? "4 samples" : "off", ty, q);
+    g_bb_ms = ty; g_bb_msq = q;
+    if (g_game.gpu_msaa && metal_available()){ void metal_set_bb_samples(unsigned); metal_set_bb_samples(ty ? 4u : 1u); }
+}
 /* Cube textures share the IDirect3DTexture9 vtable.  v12na: the cube
  * flag lives in the object header (CF_CUBE).  The old address bitmap was
  * only valid while COM memory was never reused, and that table had to be
@@ -1257,7 +1277,7 @@ static uint32_t res_desc(uint32_t iface, uint32_t self, uint32_t level, uint32_t
         MR32(p + 24) = vd ? vd : 1u;
         return 0;
     }
-    uint32_t tex = 0, w, h, fmt, usage, pool;
+    uint32_t tex = 0, w, h, fmt, usage, pool, ms = 0;
     if (iface == IF_TEX){ tex = self; }
     else if (iface == IF_SURF && (CH_FLAGS(self) & CF_CHILD) && com_valid(CH_PARENT(self))){
         tex = CH_PARENT(self); level = MR32(self + 48u); }
@@ -1272,14 +1292,15 @@ static uint32_t res_desc(uint32_t iface, uint32_t self, uint32_t level, uint32_t
         uint32_t kind = MR32(self + 40u);
         usage = kind == 1u ? 1u : kind == 4u ? 2u : MR32(self + SURF_USAGE);   /* back buffer, implicit Z */
         pool = (kind == 1u || kind == 4u) ? 0u : MR32(self + SURF_POOL);
+        ms = kind == 1u || kind == 4u;                                          /* multisampled with the device */
     }
     mem_commit(p, 32);
     MR32(p)      = fmt ? fmt : 22u;                 /* D3DSURFACE_DESC: Format */
     MR32(p + 4)  = 1u;                              /* Type: D3DRTYPE_SURFACE */
     MR32(p + 8)  = usage;
     MR32(p + 12) = pool;
-    MR32(p + 16) = 0;                               /* MultiSampleType: NONE */
-    MR32(p + 20) = 0;                               /* MultiSampleQuality */
+    MR32(p + 16) = ms ? g_bb_ms : 0u;               /* MultiSampleType (NONE but for gpu_msaa's back buffer) */
+    MR32(p + 20) = ms ? g_bb_msq : 0u;              /* MultiSampleQuality */
     MR32(p + 24) = w ? w : 1u;
     MR32(p + 28) = h ? h : 1u;
     return 0;
@@ -3009,6 +3030,7 @@ int com_call(CPU *c, uint32_t magic){
                                             metal_resize(w4,h4); }
                 }
             }
+            bb_multisample(ppp);
             /* RESSCAN=1: find the game's OWN resolution table in guest memory.
              * The table is not stored plainly in the EXE but built at run
              * time; patching it is the only clean way to carry 1080p into
@@ -3053,13 +3075,20 @@ int com_call(CPU *c, uint32_t magic){
                     g_dev, g_bb_w, g_bb_h);
             r = g_dev ? 0u : 0x8007000Eu; }
         else if (MID(CheckDeviceMultiSampleType) && g_game.d3d9_strict){
-            /* (this, Adapter, DeviceType, SurfaceFormat, Windowed, MultiSampleType, pQualityLevels).  The
-             * renderer draws without multisampling: D3DMULTISAMPLE_NONE with its one quality level, every
-             * other type D3DERR_NOTAVAILABLE with none.  Most Wanted asks for NONMASKABLE (0x6C16CD) and
-             * offers quality levels - 1 as its FSAA maximum [0x901890]. */
-            uint32_t q = A(c,6), none = A(c,5) == 0u;
-            if (q){ mem_commit(q,4); MR32(q) = none ? 1u : 0u; }
-            r = none ? 0u : 0x8876086Au; }
+            /* (this, Adapter, DeviceType, SurfaceFormat, Windowed, MultiSampleType, pQualityLevels).
+             * D3DMULTISAMPLE_NONE: its one quality level.  With GameOps gpu_msaa the back buffer and its Z can
+             * have 4 samples (WebGPU's one multisample count): on A8R8G8B8, X8R8G8B8 and the depth formats,
+             * NONMASKABLE with 2 quality levels (both drawn at 4 samples) and 4_SAMPLES with its one.  Every
+             * other type D3DERR_NOTAVAILABLE with none.  Most Wanted asks for NONMASKABLE on A8R8G8B8
+             * (0x6C16CD), offers quality levels - 1 as its FSAA maximum [0x901890] (a slider of one step), and
+             * creates the device with NONMASKABLE and quality g_FSAALevel (0x6BFBA6). */
+            uint32_t q = A(c,6), ty = A(c,5), f = A(c,3), lv = ty == 0u ? 1u : 0u;
+            if (g_game.gpu_msaa && (f == 21u || f == 22u || fmt_is_depth(f))){
+                if (ty == 1u) lv = 2u;
+                else if (ty == 4u) lv = 1u;
+            }
+            if (q){ mem_commit(q,4); MR32(q) = lv; }
+            r = lv ? 0u : 0x8876086Au; }
         else if (MID(CheckDeviceFormat) && g_game.d3d9_strict){
             /* (this, Adapter, DeviceType, AdapterFormat, Usage, RType, CheckFormat): what the creators
              * make, so a game that asks first never gets a creator's failure.  A texture, cube or volume
@@ -3890,6 +3919,7 @@ int com_call(CPU *c, uint32_t magic){
                     if (metal_available()){ void metal_resize(unsigned,unsigned);
                                             metal_resize(w3,h3); } }
             }
+            bb_multisample(pp3);
             g_resets++;
             /* The game must have released every render target before Reset
              * (D3D9 rule); release them on the Metal side too, otherwise every
@@ -4101,10 +4131,16 @@ int com_call(CPU *c, uint32_t magic){
             if (sf){
                 MR32(sf+4)=w2; MR32(sf+8)=h2; MR32(sf+20)=f2; MR32(sf+40)=3;
                 MR32(sf+SURF_USAGE)=1u;                 /* D3DUSAGE_RENDERTARGET, D3DPOOL_DEFAULT */
-                if (metal_available()) MR32(sf+28)=metal_create_texture_ex(w2,h2,1,f2,1);
+                /* (this,W,H,Format,MultiSample,MSQuality,...): with gpu_msaa a type offered is drawn at 4 samples
+                 * (GW_TF_MS: a 4-sample twin resolved into the texture, which StretchRect reads) */
+                uint32_t ms2 = ms_offered(A(c,4), A(c,5)) && (f2 == 21u || f2 == 22u);
+                if (metal_available()) MR32(sf+28)=metal_create_texture_ex(w2,h2,1,f2,ms2 ? 3u : 1u);
                 /* the renderer could not make it (game.h d3d9_strict) */
                 if (metal_available() && !MR32(sf+28) && g_game.d3d9_strict){ com_release(sf); sf = 0; r = 0x8876086Cu; }
             }
+            if (g_game.gpu_msaa && A(c,4) && !ms_offered(A(c,4), A(c,5))){ static int said;
+                if (!said++) fprintf(stderr, "com: CreateRenderTarget %ux%u multisample type %u quality %u not offered: "
+                                     "drawn with 1 sample\n", w2, h2, A(c,4), A(c,5)); }
             if(pp) MR32(pp)=sf; }
         else if (MID(CreateDepthStencilSurface)){
             uint32_t pp=A(c,7); uint32_t sf=com_new(IF_SURF,64);

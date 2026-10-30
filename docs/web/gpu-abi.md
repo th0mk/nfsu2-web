@@ -426,3 +426,38 @@ e005ab5); there is no mixed window in either direction.
 | `GW_Z_TEX` | depth texture as a draw's Z | never reached (zid < 64) | M5-13 |
 | `GW_PS_DEPTH_SHIFT` bits of `GwDraw.ps` | stages sampled with a depth compare | 0 | M5-13 |
 | float render-target formats | not added (§11.1) | | |
+
+## 12. Most Wanted: multisampling (`GW_BB_SAMPLES`, `GW_TF_MS`, within version 6)
+
+Most Wanted's FSAA option (GAME.md 5.6) asks `CheckDeviceMultiSampleType(A8R8G8B8, NONMASKABLE)` and offers its
+quality levels - 1 as the option's maximum; with FSAA on it creates or Resets the device with `MultiSampleType`
+NONMASKABLE and `MultiSampleQuality` = the level (0x6BFBA6), draws the race's scene into the back buffer (a traced race
+frame: the world in two screen passes, then `StretchRect` from the screen into the post passes' texture) and makes an
+800x600 render target with the same multisampling (`CreateRenderTarget`). A game with GameOps `gpu_msaa` (MW only; UG2 0) is offered what WebGPU
+has, 4 samples (the only count above 1 it guarantees):
+
+- `CheckDeviceMultiSampleType` on A8R8G8B8, X8R8G8B8 and the depth formats: NONMASKABLE with 2 quality levels (both
+  drawn at 4 samples), `D3DMULTISAMPLE_4_SAMPLES` with 1; NONE with 1; every other type `D3DERR_NOTAVAILABLE`.
+- `CreateDevice` and `Reset` with an offered type (NONMASKABLE with a quality below 2, or 4_SAMPLES) queue
+  `GW_BB_SAMPLES` 4, any other 1 (a type not offered is logged and drawn with one sample: no failed Reset).
+  `GetDesc` of the back buffer and of the implicit Z names the type and quality. `CreateRenderTarget` with an offered
+  type on A8R8G8B8 or X8R8G8B8 makes its texture with `GW_TF_MS`; any other type is made and drawn with one sample
+  (logged once). A depth surface needs no flag: a 4-sample pass uses a 4-sample twin of whatever Z it names.
+- The page: from the record on, every pass on the screen, and every pass on a `GW_TF_MS` texture, draws into the
+  target's 4-sample twin (a colour texture of its size and format) with a 4-sample twin of its Z surface at the
+  pass's size (one per surface and size; a Z clear clears both kinds), and resolves into the target (the back
+  buffer, the canvas texture of a direct frame, or the texture) at the pass's end, so a `StretchRect` from it, the
+  composite and a dump read the resolved picture. A blit or copy into such a target leaves its twin behind; the
+  next pass on it that loads first draws the target's picture into the twin (`msRefreshes`). Pipelines of 4-sample passes are their
+  own set (their warm-up entries carry 2^35 in the state word; a page from before reads it as a 1-sample entry).
+  A depth texture as the screen's Z (never seen) gets the scratch Z, as for a size mismatch.
+- Render-target textures (`CreateTexture` with D3DUSAGE_RENDERTARGET) stay single-sampled, as in D3D9; so do cube
+  faces.
+
+Deploy: no layout change. A page without them logs `unknown resource op 9`, skips the flag and draws at one sample;
+a module without `gpu_msaa` sends neither. The stats line carries `msPasses` and `msRefreshes` once a frame had 4 samples.
+
+| Field | Meaning | UG2 | First used by (MW tracker) |
+|---|---|---|---|
+| `GW_BB_SAMPLES` a[0] | the back buffer's samples, 1 or 4, from the next frame on | never sent | M5-21 |
+| `GW_TF_MS` (8) in `GW_TEX_CREATE` a[5] | with `GW_TF_RT`: a render target drawn at 4 samples | never set | M5-21 |

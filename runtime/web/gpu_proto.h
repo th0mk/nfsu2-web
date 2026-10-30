@@ -181,11 +181,16 @@ enum {
     GW_SHADER_VS   = 6,   /* a: id, text bytes; payload WGSL (NUL-terminated) */
     GW_SHADER_PS   = 7,   /* a: id, text bytes, binding kinds (GW_BK_*); payload WGSL (NUL-terminated) */
     GW_Z_FORGET    = 8,   /* a: zid */
+    GW_BB_SAMPLES  = 9,   /* a: the back buffer's samples from the next frame on, 1 or 4 (GameOps gpu_msaa only;
+                           * gpu-abi.md section 12; added within version 6: a page without it skips the record) */
 };
 #define GW_TF_RT    1u
 #define GW_TF_CUBE  2u
 #define GW_TF_DEPTH 4u    /* a depth texture (D3DUSAGE_DEPTHSTENCIL: D3DFMT_D16, D24X8 or D24S8): a draw's Z through
                            * GW_Z_TEX, sampled with a depth compare; no uploads, no read back */
+#define GW_TF_MS    8u    /* with GW_TF_RT: a render target drawn at 4 samples, resolved into the texture at the end of
+                           * every pass (CreateRenderTarget with multisampling, GameOps gpu_msaa; gpu-abi.md section 12;
+                           * added within version 6: a page without it draws the target with 1) */
 /* GW_SHADER_PS a[2]: how the module declares the texture of each stage k,
  * 2 bits at 2k; 0 everywhere = every stage 2D (a +256 module's stage 0 is a
  * cube either way) */

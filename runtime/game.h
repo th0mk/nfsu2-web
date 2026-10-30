@@ -181,6 +181,12 @@ typedef struct GameOps {
                                      * the fields that go with them (VS20Caps and PS20Caps with 32 temporaries, the
                                      * 3.0 instruction slots); 0 = UG2's 2.0 caps.  D3D_SM in the environment
                                      * overrides either (com.c fill_caps) */
+    int gpu_msaa;                   /* 1: multisampling (with d3d9_strict): CheckDeviceMultiSampleType offers
+                                     * NONMASKABLE (2 quality levels) and 4_SAMPLES on the colour and depth formats;
+                                     * a device created or Reset with one of them draws its back buffer at 4
+                                     * samples, as does a CreateRenderTarget surface asked for with one, each
+                                     * resolved at the end of every pass (docs/web/gpu-abi.md section 12);
+                                     * 0 = UG2's: no multisampling, as always */
     int d3d_host_backing;           /* 1: a texture level's and a vertex or index buffer's copy lives in the
                                      * runtime's memory, outside the guest's window, and the guest sees it in
                                      * a window only between Lock and Unlock, as D3D9 keeps a managed

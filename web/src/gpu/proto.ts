@@ -75,10 +75,10 @@ export const enum V { tick = 0, seq = 1, tsF64 = 1, periodF64 = 2, hz = 6, visib
 
 // resource queue
 export const CMD_HDR = 32;
-export const enum Op { Pad = 0, TexCreate = 1, TexUpload = 2, TexFree = 3, PoolGrow = 4, PoolWrite = 5, ShaderVs = 6, ShaderPs = 7, ZForget = 8 }
+export const enum Op { Pad = 0, TexCreate = 1, TexUpload = 2, TexFree = 3, PoolGrow = 4, PoolWrite = 5, ShaderVs = 6, ShaderPs = 7, ZForget = 8, BbSamples = 9 }
 // TF_DEPTH: a depth texture (D3DFMT_D16, D24X8, D24S8): depth32float, a draw's Z through Z_TEX, sampled with a
 // depth compare; never uploaded or read back
-export const TF_RT = 1, TF_CUBE = 2, TF_DEPTH = 4;
+export const TF_RT = 1, TF_CUBE = 2, TF_DEPTH = 4, TF_MS = 8;
 // ShaderPs records: a[2] is the module's binding kinds, 2 bits per stage k at bit 2k (gpu_proto.h GW_BK_*)
 export const BK_2D = 0, BK_CUBE = 1, BK_DEPTH = 2;
 
