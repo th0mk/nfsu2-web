@@ -38,12 +38,22 @@ function fnv(s, h = 2166136261) {
 }
 
 // ---- reading: frames of lines ----
+// Objects are renumbered per kind in the order the file first names them: two runs that made their buffers,
+// textures or state blocks in another order (a streaming load's timing), or recordings of a window of Presents,
+// name the same objects alike when they use them in the same order.
 function read(file) {
   const text = fs.readFileSync(file, 'utf8');
   const frames = [];
+  const seen = new Map(), next = new Map();
+  const renum = l => l.indexOf('#') < 0 ? l : l.replace(/\b([a-z]+)#(\d+)\b/g, (m, k, n) => {
+    const key = `${k}#${n}`;
+    if (!seen.has(key)) { const c = (next.get(k) ?? 0) + 1; next.set(k, c); seen.set(key, `${k}#${c}`); }
+    return seen.get(key);
+  });
   let cur = { no: 0, lines: [] };
-  for (const line of text.split('\n')) {
+  for (let line of text.split('\n')) {
     if (!line || line.startsWith('dxrec ')) continue;
+    line = renum(line);
     if (line.startsWith('F ')) { frames.push(cur); cur = { no: +line.slice(2), lines: [] }; continue; }
     cur.lines.push(line);
   }
@@ -52,7 +62,7 @@ function read(file) {
     f.calls = f.lines.filter(l => !isMark(l));
     // the draws without their vertex data: a frame whose geometry moved (a loading bar's) still pairs, and its
     // draws then differ
-    f.key = f.calls.filter(isKey).map(l => l.replace(/ #[0-9a-f]{8}\/\d+/g, '')).join('\n');
+    f.key = f.calls.filter(isKey).map(l => l.replace(/ #[0-9a-f]{8}\/\d+/g, '').replace(/\b[a-z]+#\d+\b/g, 'obj')).join('\n');
   }
   return frames;
 }
