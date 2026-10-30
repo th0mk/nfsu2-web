@@ -53,7 +53,6 @@ const MW_UNSET = {
   on_qpc: 'MW\'s frame wait loop, M4', qpc_caller: 'as on_qpc',
   lan_obj: 'MW\'s LAN glue, M8', lan_start: 'M8', lan_stop: 'M8', lan_running: 'M8',
   res_labels: 'M3-03', on_sound_unlock: 'UG2 debugging only',
-  online_host_va: 'M9: no MW lobby on the server yet', online_host: 'M9',
   pad_rescan: 'MW enumerates its devices once: a late pad comes through pad_late',
   pad_trigger_axes: 'MW\'s driving layout, M6-37', pad_jolt: 'MW\'s rumble, M6-37',
   pad_hold_screen: 'MW\'s controls screen, M6-37', pad_fe_keys: 'MW\'s menus take the pad\'s buttons themselves',

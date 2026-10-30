@@ -103,6 +103,10 @@ void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
 void mw_frame(CPU *c){ (void)c; }
 void mw_bot_present(void){}                 /* the career bot (bot_mw.c, test only) */
 int  mw_debug_hook(CPU *c, uint32_t va){ (void)c; (void)va; return 0; }
+/* the effect HLE (d3dxfx_mw.c) the table names: not linked here */
+int  d3dxfx_install(int oracle_linked){ (void)oracle_linked; return 0; }
+uint32_t d3dxfx_call(CPU *c, int pool, unsigned method, const uint32_t *args, int nargs){ (void)c; (void)pool; (void)method; (void)args; (void)nargs; return 0; }
+void d3dxfx_free(CPU *c, int pool, uint32_t obj){ (void)c; (void)pool; (void)obj; }
 const ModInfo g_srv_modinfo; const ImpEnt g_srv_imp[1]; const uint32_t g_srv_imp_count;
 const uint32_t g_srv_fn_addr[1]; const mod_fn g_srv_fn_ptr[1]; const uint32_t g_srv_fn_count;
 #ifdef REGPATH_UG2
