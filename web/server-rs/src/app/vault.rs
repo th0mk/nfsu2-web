@@ -104,11 +104,23 @@ impl App {
         let Some(v) = &self.vault else { return self.not_found(q, s).await };
         // a request another box of ours forwards (vault_forward.rs: Most Wanted's server, for its own pages, which it
         // checked): its credential stands for the page's own check, and only with it does the player's address it
-        // names count for the limits (without it both headers are a browser's, and nothing reads them)
-        let forwarded = self
-            .vault_box_key
-            .as_deref()
-            .is_some_and(|k| q.headers.get(super::vault_forward::BOX_HEADER).is_some_and(|c| same(c.as_bytes(), k.as_bytes())));
+        // names count for the limits.  One with a credential that is not this box's (or when this box has none) is
+        // refused, and both boxes say so: taken as a browser's, every player of that box would share its one address's
+        // budget, and nothing would tell (a page never sends the header; without it x-vault-client is nothing)
+        let forwarded = match (q.headers.get(super::vault_forward::BOX_HEADER), self.vault_box_key.as_deref()) {
+            (None, _) => false,
+            (Some(c), Some(k)) if same(c.as_bytes(), k.as_bytes()) => true,
+            (Some(_), k) => {
+                let why = if k.is_some() {
+                    "its credential is not this box's NFSU2_VAULT_BOX_KEY (it must be the same on both boxes)"
+                } else {
+                    "this box has no NFSU2_VAULT_BOX_KEY"
+                };
+                log::limited("vault", "box key", "", &format!("[vault] refused a forward of another box: {why}"), 1);
+                let refused = [(super::vault_forward::BOX_HEADER, super::vault_forward::REFUSED)];
+                return self.plain(q, s, 403, "Forbidden", &refused, Cache::Store, true).await;
+            }
+        };
         // only this server's own pages: a page of another site must not reach a player's saves through their browser
         let site_ok = q.headers.get("sec-fetch-site").is_none_or(|f| f == "same-origin");
         if !forwarded && (!self.own_page(q) || !site_ok) {
