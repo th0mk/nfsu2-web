@@ -214,7 +214,7 @@ behind, the switch dropped their snapshots; the server stayed at 1.5 cores): 400
 | nfsu2-lan | the switch |
 | nfsu2-roam | the free-roam hub |
 | nfsu2-online | the game's Online mode |
-| nfsu2-vault | keyphrase saves (`/vault`): each player's saves as the page sealed them, one file per keyphrase, the copy of an earlier day, the caps, the sweep of the unused |
+| nfsu2-vault | keyphrase saves (`/vault`): each player's saves as the page sealed them, one file per keyphrase, the copy of an earlier day, the caps, the sweep of the unused, the launch copy's mark; and the hand-over store (`covers`, `/covers` under a base): covers kept once for the move to the shared address, 30 days at most |
 | nfsu2-claims | claimed names (`/names`): which keyphrase may play under a name, for 180 days after it last played; one name a keyphrase, a change a week; read by the Online lobby, EA Messenger and the free-roam hub |
 | nfsu2-server (src/) | the routes, the rules, the wiring, the start-up |
 | nfsu2-roamload | thousands of simulated players: driving or idle, in line, leaving and coming back (as web/tools/roam-crowd.mjs, lighter) |

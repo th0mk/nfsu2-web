@@ -80,6 +80,9 @@ pub struct Options {
     pub hosts: Vec<String>,
     /// where the routes are on each name: the game's bases, --base-path's on top
     pub bases: Bases,
+    /// the game's launch switch (game.rs `Handover::launched`): a code value, never an option; the crate's own tests
+    /// turn it on in the options they make
+    pub launched: bool,
     /// a test aid of the LAN-play tests (delay, loss, reordering on the switch; nfsu2-lan implements it)
     pub lan_impair: String,
     /// the game's Online mode (nfsu2-online): on unless --online off (or the game has none yet)
@@ -462,6 +465,7 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         max_peers: max_peers as usize,
         hosts,
         bases,
+        launched: game.handover.is_some_and(|h| h.launched),
         lan_impair: lan_impair.unwrap_or_default(),
         online: online == "on",
         roam_hub: roam_hub == "on",

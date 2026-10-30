@@ -447,7 +447,14 @@ async fn the_binary_for_most_wanted() {
     assert_eq!(ps, ["GLOBAL", "GLOBAL/a.bin", "SOUND", "SOUND/PFDATA", "SOUND/PFDATA/m.mus", "speed.exe"]);
     assert_eq!(m["blocks"]["url"], "/mw/data-blocks/v2/");
     assert_eq!(srv.get("/mw/data/speed.exe").await.1, "MZ");
-    for p in ["/mw/data/SAVE/profile", "/mw/data/scripts/fix.ini", "/mw/data/dinput8.dll", "/mw/data/foobar", "/mw/data/SPEED2.EXE"] {
+    for p in [
+        "/mw/data/SAVE/profile",
+        "/mw/data/scripts/fix.ini",
+        "/mw/data/dinput8.dll",
+        "/mw/data/foobar",
+        "/mw/data/SPEED2.EXE",
+        "/mw/covers",
+    ] {
         assert_eq!(status_of(port, p).await, 404, "{p}");
     }
     for p in ["/data/speed.exe", "/data-manifest", "/players", "/game.json", "/robots.txt", "/"] {

@@ -475,3 +475,164 @@ async fn random_frames_to_the_hosts_panic_nothing_and_the_server_goes_on() {
         assert!(serde_json::from_str::<serde_json::Value>(s).is_ok(), "{f}: {s}");
     }
 }
+
+/// one raw HTTP request to the server (written whole, then the write side shut: a body shorter than its
+/// Content-Length ends there); its status, or None when the server closed without one (or took longer than 5 s)
+async fn raw_request(port: u16, req: &[u8]) -> Option<u16> {
+    let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.ok()?;
+    let _ = s.write_all(req).await;
+    let _ = s.shutdown().await;
+    let mut b = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(5), s.read_to_end(&mut b)).await;
+    let line = String::from_utf8_lossy(&b[..b.len().min(16)]).into_owned();
+    line.strip_prefix("HTTP/1.1 ").and_then(|l| l.get(..3)).and_then(|c| c.parse().ok())
+}
+
+// The hand-over store's routes (/u2/covers, where localhost's routes are under /u2, as on the shared address): random
+// requests through the whole binary, of every method, with origins (the old address's stand-in, look-alikes, garbage),
+// preflight headers, tokens and conditions of every length, and bodies of every length from 0 to 1100 bytes (and
+// Content-Lengths that lie), from many client addresses.  Nothing panics; every request gets an answer or a close;
+// the server goes on (a preflight, a write and a read after it), its counts file is readable, and SIGTERM ends it with
+// exit code 0.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn random_requests_to_the_hand_over_store_panic_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tmp.path().join("game");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("SPEED2.EXE"), "MZ").unwrap();
+    let state = tmp.path().join("state");
+    let port = free_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_nfsu2-server"))
+        .env("NFSU2_THREADS", "2")
+        .env_remove("NFSU2_GAME")
+        .arg("--data")
+        .arg(&data)
+        .args(["--http-port", &port.to_string(), "--online", "off", "--roam-hub", "off", "--base-path", "localhost=/u2", "--state"])
+        .arg(&state)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let out = Arc::new(Mutex::new(Vec::<String>::new()));
+    for s in [Box::new(child.stdout.take().unwrap()) as Box<dyn std::io::Read + Send>, Box::new(child.stderr.take().unwrap())] {
+        let out = out.clone();
+        std::thread::spawn(move || {
+            for l in BufReader::new(s).lines().map_while(Result::ok) {
+                out.lock().unwrap().push(l);
+            }
+        });
+    }
+    assert!(
+        wait_for(30_000, || out.lock().unwrap().iter().any(|l| l.starts_with("  access    :"))).await,
+        "the server did not start: {:?}",
+        out.lock().unwrap()
+    );
+    assert!(
+        out.lock().unwrap().iter().any(|l| l.starts_with("  covers    : the hand-over store (/covers under /u2)")),
+        "{:?}",
+        out.lock().unwrap()
+    );
+    let seed: u64 = std::env::var("NFSU2_FUZZ_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(0x5EED_2026);
+    let r = Rng(std::cell::Cell::new(seed | 1));
+    let origins =
+        ["http://127.0.0.1:9780", "http://127.0.0.1", "https://nfsu2.xyz", "http://127.0.0.1:0", "http://127.0.0.1:99999", "null", "", "*"];
+    // a token as the page makes one (43 characters of base64url), mostly; else of another length or alphabet
+    let token = |r: &Rng| -> String {
+        const URL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        if r.chance(70) {
+            return (0..43).map(|_| *r.pick(URL) as char).collect();
+        }
+        let n = *r.pick(&[43u64, 0, 1, 42, 44, 200]) as usize;
+        (0..n).map(|_| *r.pick(&[b'A', b'z', b'0', b'-', b'_', b'+', b'/', b'=', b' ', 0xC3])).map(|c| c as char).collect()
+    };
+    let (mut answered, mut closed) = (0, 0);
+    for len in 0..=1100usize {
+        // half of them as the old address's page writes (they reach the store, with a body of each length; a tenth
+        // of those under a token used before), the rest anything
+        let page = r.chance(50);
+        let method = if page { "PUT" } else { *r.pick(&["PUT", "PUT", "PUT", "OPTIONS", "GET", "HEAD", "DELETE", "POST", "PATCH"]) };
+        let path = if page {
+            "/u2/covers"
+        } else {
+            *r.pick(&["/u2/covers", "/u2/covers", "/u2/covers?x=1", "/covers", "/u2/covers/", "/u2/Covers", "/u2/covers%00"])
+        };
+        let host = if page { "localhost" } else { *r.pick(&["localhost", "localhost:9781", "127.0.0.1", "LOCALHOST."]) };
+        let mut req = format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\n");
+        req.push_str(&format!("X-Forwarded-For: 10.{}.{}.{}\r\n", r.below(4), r.below(250), 1 + r.below(250)));
+        if page || r.chance(85) {
+            let o = if page {
+                origins[0].to_string()
+            } else if r.chance(15) {
+                value(&r, &["127.0.0.1"])
+            } else {
+                r.pick(&origins).to_string()
+            };
+            req.push_str(&format!("Origin: {}\r\n", o.replace(['\r', '\n'], "")));
+        }
+        if page || r.chance(80) {
+            let t = if page && r.chance(10) {
+                "S".repeat(43)
+            } else if page {
+                format!("{:0>43}", r.next())
+            } else {
+                token(&r)
+            };
+            req.push_str(&format!("Authorization: Bearer {}\r\n", t.replace(['\r', '\n'], "")));
+        }
+        if page || r.chance(70) {
+            req.push_str(&format!("If-None-Match: {}\r\n", if page { "*" } else { *r.pick(&["*", " * ", "\"x\"", "", "**"]) }));
+        }
+        if r.chance(30) {
+            req.push_str(&format!("Access-Control-Request-Method: {}\r\n", r.pick(&["PUT", "GET", "put", "", "DELETE"])));
+            let h = r.pick(&["authorization, if-none-match", "authorization,content-type,if-none-match", "x-other", "", ",,,", "cookie"]);
+            req.push_str(&format!("Access-Control-Request-Headers: {h}\r\n"));
+        }
+        if r.chance(20) {
+            req.push_str(&format!("Sec-Fetch-Site: {}\r\n", r.pick(&["same-origin", "cross-site", "same-site", "none"])));
+        }
+        let body = r.bytes(len);
+        let declared = if r.chance(10) { len + 1 + r.below(100_000_000) as usize } else { len };
+        if len > 0 || r.chance(50) {
+            req.push_str(&format!("Content-Length: {declared}\r\n"));
+        }
+        req.push_str("Connection: close\r\n\r\n");
+        let mut all = req.into_bytes();
+        all.extend_from_slice(&body);
+        match raw_request(port, &all).await {
+            Some(_) => answered += 1,
+            None => closed += 1,
+        }
+    }
+    println!("{answered} answered, {closed} closed without an answer");
+    assert!(answered > 900, "{answered} answered, {closed} closed");
+    // the server goes on: a preflight, a write and its read
+    let pre = b"OPTIONS /u2/covers HTTP/1.1\r\nHost: localhost\r\nOrigin: http://127.0.0.1:9780\r\nAccess-Control-Request-Method: PUT\r\nConnection: close\r\n\r\n";
+    assert_eq!(raw_request(port, pre).await, Some(204));
+    let t = "Late".repeat(11)[..43].to_string();
+    let put = format!(
+        "PUT /u2/covers HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 192.0.2.99\r\nOrigin: http://127.0.0.1:9780\r\nAuthorization: Bearer {t}\r\nIf-None-Match: *\r\nContent-Length: 4\r\nConnection: close\r\n\r\nlate"
+    );
+    assert_eq!(raw_request(port, put.as_bytes()).await, Some(201));
+    let get = format!("GET /u2/covers HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {t}\r\nConnection: close\r\n\r\n");
+    assert_eq!(raw_request(port, get.as_bytes()).await, Some(200));
+    let _ = Command::new("kill").args(["-TERM", &child.id().to_string()]).status();
+    let t0 = Instant::now();
+    let exit = loop {
+        if let Some(st) = child.try_wait().unwrap() {
+            break st.code();
+        }
+        if t0.elapsed() > Duration::from_secs(10) {
+            let _ = child.kill();
+            break None;
+        }
+        sleep(20).await;
+    };
+    let lines = out.lock().unwrap().clone();
+    let bad: Vec<&String> = lines.iter().filter(|l| l.contains("panicked")).collect();
+    assert!(bad.is_empty(), "a panic: {bad:#?}");
+    assert_eq!(exit, Some(0), "SIGTERM: exit code 0");
+    let counts = std::fs::read_to_string(state.join("covers/counts")).unwrap();
+    let n: Vec<u64> = counts.split_whitespace().map(|w| w.parse().unwrap()).collect();
+    println!("the store's counts (stored, imported, expired, refused): {counts}");
+    assert!(n.len() == 4 && n[0] > 20 && n[3] > 0, "the writes reached the store, and its refusals: {counts}");
+}

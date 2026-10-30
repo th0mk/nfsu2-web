@@ -338,3 +338,34 @@ fn many_writers_one_keyphrase_take_turns() {
     });
     assert_eq!(wins, 1);
 }
+
+// The launch copy: the time in <dir>/launch-copy marks the keyphrases saved by then (they came with the copy) until
+// their first save here; no file, no mark; a file that holds no time stops the vault's start (the operator's mistake
+// shows at once)
+#[test]
+fn the_launch_copy_marks_what_came_with_it_until_its_first_save() {
+    let (dir, v) = vault(|_| {});
+    assert_eq!(v.launch_copy(), None);
+    let (a, b) = (id_of(b"came with the copy"), id_of(b"saved here first"));
+    let ma = saved(v.put(&a, Cond::New, b"a", T0).unwrap());
+    assert!(!v.is_launch_copy(&ma), "no launch copy here");
+    drop(v);
+    let opts = |d: &tempfile::TempDir| VaultOptions::sized(d.path().join("vault"), 1.0);
+    fs::write(dir.path().join("vault").join(LAUNCH_COPY), format!("{}\n", T0 + HOUR)).unwrap();
+    let v = Vault::open(opts(&dir)).expect("the vault");
+    assert_eq!(v.launch_copy(), Some(T0 + HOUR));
+    let ma = v.meta(&a, T0 + 2 * HOUR).unwrap().unwrap();
+    assert!(v.is_launch_copy(&ma));
+    let mb = saved(v.put(&b, Cond::New, b"b", T0 + 2 * HOUR).unwrap());
+    assert!(!v.is_launch_copy(&mb), "made after the copy");
+    let ma = saved(v.put(&a, Cond::Rev(ma.cur.rev), b"a2", T0 + 3 * HOUR).unwrap());
+    assert!(!v.is_launch_copy(&ma), "its first save here ends it");
+    // the sweep counts the keyphrases, never the file
+    assert_eq!(v.sweep(T0 + 3 * HOUR).unwrap().keyphrases, 2);
+    drop(v);
+    for bad in ["", "soon", "-5", "0", "1.5"] {
+        fs::write(dir.path().join("vault").join(LAUNCH_COPY), bad).unwrap();
+        let e = Vault::open(opts(&dir)).err().unwrap_or_else(|| panic!("{bad:?} taken"));
+        assert_eq!(e.to_string(), "launch-copy: not a time (ms since 1970)", "{bad:?}");
+    }
+}

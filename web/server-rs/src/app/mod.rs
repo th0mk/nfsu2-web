@@ -12,6 +12,7 @@
 
 mod blocks;
 pub mod control;
+pub mod covers;
 mod etag;
 mod files;
 mod kept;
@@ -246,6 +247,8 @@ pub struct App {
     pub roam: Option<Arc<nfsu2_roam::RoamHub>>,
     /// keyphrase saves (/vault), none with --vault-gb 0
     pub vault: Option<vault::VaultRoute>,
+    /// the hand-over store (/covers under a base: covers.rs), none where no name has one
+    pub covers: Option<covers::CoversRoute>,
     /// claimed names (/names), none without keyphrase saves
     pub names: Option<names::NamesRoute>,
     /// the operator's bans (the control socket: control.rs), checked at /lan
@@ -273,6 +276,7 @@ impl App {
         online: Option<Arc<OnlineHost>>,
         roam: Option<Arc<nfsu2_roam::RoamHub>>,
         vault: Option<Arc<nfsu2_vault::Vault>>,
+        covers: Option<Arc<nfsu2_vault::covers::CoverStore>>,
         names: Option<names::NamesRoute>,
         bans: Arc<nfsu2_bans::Bans>,
         pool_threads: usize,
@@ -365,6 +369,7 @@ impl App {
             online,
             roam,
             vault: vault.map(vault::VaultRoute::new),
+            covers: covers.map(covers::CoversRoute::new),
             names,
             bans,
             lan_sndbuf,
@@ -384,7 +389,17 @@ impl App {
     /// `headers(q, {}, cache, noindex)`: the security headers, then the cache headers; the caller sets the rest
     pub fn headers(&self, q: &Request, cache: Cache, noindex: bool) -> Hdrs {
         let i = (self.hsts_for(q) as usize) * 6 + (noindex as usize) * 3 + cache_index(cache);
-        Hdrs(self.base[i].clone())
+        let mut h = Hdrs(self.base[i].clone());
+        // once the game is launched at its new address, its old address's pages may connect there for the hand-over
+        // (game.rs Handover): their responses' connect-src names it; every other name's stay as they are
+        if self.o.launched
+            && let Some(to) = self.o.game.handover.and_then(|m| m.connect_to(q.headers.get("host").unwrap_or("")))
+        {
+            for (_, v) in h.0.iter_mut().filter(|(k, _)| k == "content-security-policy") {
+                *v = v.replacen("connect-src 'self';", &format!("connect-src 'self' {to};"), 1);
+            }
+        }
+        h
     }
 
     /// a short text answer: the code, the text (a newline after it), headers besides the usual ones, the cache rule,
@@ -588,6 +603,10 @@ impl App {
         }
         if under && p == "/names" {
             return self.names(q, s, &u).await;
+        }
+        // the hand-over store: under a base only (the address both games share; covers.rs)
+        if under && !base.is_empty() && p == "/covers" && self.covers.is_some() {
+            return self.covers(q, s).await;
         }
         if q.method != "GET" && q.method != "HEAD" {
             return self

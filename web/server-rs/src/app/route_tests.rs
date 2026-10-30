@@ -537,6 +537,58 @@ async fn a_manifest_body_only_for_the_bases_of_its_names() {
     assert!(Arc::ptr_eq(&now, &kit.app.current_manifest().unwrap()));
 }
 
+// The launch switch (game.rs Handover): off, as in every build until the launch release, every answer's
+// Content-Security-Policy is the one of before on every name.  On, the old address's answers (Host nfsu2.xyz) let its
+// pages connect to the new address and those of its loopback stand-in (127.0.0.1) to localhost's /u2/, while the
+// new address's, localhost's and Most Wanted's (which has no old address) stay as they are, byte for byte
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_launch_switch_lets_only_the_old_addresss_pages_connect_to_the_new_one() {
+    let csp = nfsu2_headers::CSP;
+    let ug2 = |root: &std::path::Path| {
+        module(root, "out/web/nfsu2.wasm");
+        std::fs::write(root.join("repo/web/dist/main.js"), b"// the page").unwrap();
+    };
+    let args = ["--host", "nfsu2.xyz,nfsrevived.xyz"];
+    let paths = |host: &str| -> [&'static str; 5] {
+        if host == "nfsrevived.xyz" {
+            ["/u2/", "/u2/main.js", "/u2/game.json", "/u2/vault", "/u2/none"]
+        } else {
+            ["/", "/main.js", "/game.json", "/vault", "/none"]
+        }
+    };
+    let csp_of = |a: &super::testkit::Answer| a.header("content-security-policy").map(str::to_string);
+    let off = Kit::start(&args, ug2).await;
+    for host in ["nfsu2.xyz", "nfsrevived.xyz", "localhost", "127.0.0.1:8080"] {
+        for p in paths(host) {
+            let a = off.request_to(host, "GET", p, &[], b"").await;
+            assert_eq!(csp_of(&a).as_deref(), Some(csp), "{host} {p}: {}", a.status);
+        }
+    }
+    let on = Kit::start_launched(&args, ug2).await;
+    for (host, want) in [
+        ("nfsu2.xyz", csp.replace("connect-src 'self';", "connect-src 'self' https://nfsrevived.xyz/u2/;")),
+        ("127.0.0.1:8080", csp.replace("connect-src 'self';", "connect-src 'self' http://localhost:*/u2/;")),
+        ("nfsrevived.xyz", csp.to_string()),
+        ("localhost", csp.to_string()),
+    ] {
+        for p in paths(host) {
+            let a = on.request_to(host, "GET", p, &[], b"").await;
+            assert_eq!(csp_of(&a).as_deref(), Some(want.as_str()), "{host} {p}: {}", a.status);
+        }
+    }
+    let mw = Kit::start_launched(&["--game", "mw", "--host", "nfsu2.xyz"], |root| {
+        std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw")).unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html>").unwrap();
+        module(root, "out/web/mw/nfsmw.wasm");
+    })
+    .await;
+    for host in ["nfsu2.xyz", "127.0.0.1"] {
+        let a = mw.request_to(host, "GET", "/mw/", &[], b"").await;
+        assert_eq!((a.status, csp_of(&a).as_deref()), (200, Some(csp)), "{host}");
+    }
+}
+
 // Most Wanted: under /mw on every name, this machine's too; no root files of its own (UG2's server answers the shared
 // site's root)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

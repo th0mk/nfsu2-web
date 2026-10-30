@@ -5,8 +5,9 @@
 //! encrypted save folder: the server neither reads nor checks it.
 //!
 //! - `GET /vault`: the current version, its rev as the ETag (`If-None-Match` it: 304), `x-vault-saved` when it was
-//!   saved and `x-vault-earlier` when the copy of an earlier day was (none: no such header); 404 when there is no such
-//!   keyphrase.  `GET /vault?earlier`: that copy, with its own ETag and `x-vault-saved` (404: none).  Without a token:
+//!   saved and `x-vault-earlier` when the copy of an earlier day was (none: no such header), and `x-vault-launch-copy:
+//!   1` when the keyphrase came with the vault's launch copy and was not saved here since (nfsu2-vault, "The launch
+//!   copy"; also on a 304 and a 412); 404 when there is no such keyphrase.  `GET /vault?earlier`: that copy, with its own ETag and `x-vault-saved` (404: none).  Without a token:
 //!   401, which is how a page tells a server with keyphrase saves (one without answers 404).
 //! - `PUT /vault` with `If-None-Match: *` (a new keyphrase) or `If-Match: "<rev>"` (the version the page has): 201 or
 //!   200 with the new ETag and `x-vault-saved`; 412 when that does not hold, with the current ETag and
@@ -128,24 +129,27 @@ impl App {
                         && nfsu2_headers::etag_matches(inm.as_deref(), &etag(m.cur.rev))
                     {
                         let mut h = self.headers(q, Cache::Store, true);
-                        vault_headers(&mut h, m.cur.rev, m.cur.saved, m.prev.map(|p| p.saved));
+                        vault_headers(&mut h, m.cur.rev, m.cur.saved, m.prev.map(|p| p.saved), v.store.is_launch_copy(&m));
                         s.head(304, h.0);
                         return finish(s).await;
                     }
                 }
                 let got = self.vault_io(v, move || store.get(&id, want, now)).await?;
-                let found = got.and_then(|(m, body)| match want {
-                    Want::Current => Some((m.cur, m.prev.map(|p| p.saved), body)),
-                    Want::Earlier => m.prev.map(|p| (p, None, body)),
+                let found = got.and_then(|(m, body)| {
+                    let copy = v.store.is_launch_copy(&m);
+                    match want {
+                        Want::Current => Some((m.cur, m.prev.map(|p| p.saved), copy, body)),
+                        Want::Earlier => m.prev.map(|p| (p, None, copy, body)),
+                    }
                 });
-                let Some((ver, earlier, body)) = found else {
+                let Some((ver, earlier, copy, body)) = found else {
                     v.misses.take(&key, &site);
                     return self.not_found(q, s).await;
                 };
                 let mut h = self.headers(q, Cache::Store, true);
                 h.set("content-type", "application/octet-stream");
                 h.set("content-length", body.len().to_string());
-                vault_headers(&mut h, ver.rev, ver.saved, earlier);
+                vault_headers(&mut h, ver.rev, ver.saved, earlier, copy);
                 s.head(200, h.0);
                 if method != "HEAD" {
                     send(s, &body).await?;
@@ -180,12 +184,12 @@ impl App {
                 let mut h = self.headers(q, Cache::Store, true);
                 let (code, text) = match put {
                     Put::Saved { meta, created } => {
-                        vault_headers(&mut h, meta.cur.rev, meta.cur.saved, meta.prev.map(|p| p.saved));
+                        vault_headers(&mut h, meta.cur.rev, meta.cur.saved, meta.prev.map(|p| p.saved), false);
                         if created { (201, "Saved") } else { (200, "Saved") }
                     }
                     Put::Conflict(m) => {
                         if let Some(m) = m {
-                            vault_headers(&mut h, m.cur.rev, m.cur.saved, m.prev.map(|p| p.saved));
+                            vault_headers(&mut h, m.cur.rev, m.cur.saved, m.prev.map(|p| p.saved), v.store.is_launch_copy(&m));
                         }
                         (412, "Changed elsewhere")
                     }
@@ -273,11 +277,14 @@ impl App {
 }
 
 /// a version's ETag and time, and when the copy of an earlier day was saved
-fn vault_headers(h: &mut Hdrs, rev: u64, saved: i64, earlier: Option<i64>) {
+fn vault_headers(h: &mut Hdrs, rev: u64, saved: i64, earlier: Option<i64>, launch_copy: bool) {
     h.set("etag", etag(rev));
     h.set("x-vault-saved", saved.to_string());
     if let Some(e) = earlier {
         h.set("x-vault-earlier", e.to_string());
+    }
+    if launch_copy {
+        h.set("x-vault-launch-copy", "1");
     }
 }
 
@@ -335,6 +342,34 @@ mod tests {
         assert_eq!(kit.request("DELETE", "/vault", &[BEARER], b"").await.status, 404);
         assert_eq!(kit.request("GET", "/vault", &[BEARER], b"").await.status, 404);
         assert_eq!(kit.app.vault.as_ref().unwrap().store.usage().0, 0);
+    }
+
+    // A keyphrase that came with the vault's launch copy says so (x-vault-launch-copy: 1) on a read, a 304 and a 412,
+    // until its first save here; one made here never does
+    #[tokio::test]
+    async fn a_launch_copy_reads_as_one_until_its_first_save() {
+        let now = nfsu2_util::now_ms();
+        let kit = Kit::start(&[], |root| {
+            let dir = root.join("state/vault");
+            let v = Vault::open(nfsu2_vault::VaultOptions::sized(dir.clone(), 1.0)).unwrap();
+            assert!(matches!(v.put(&id_of(TOKEN.as_bytes()), Cond::New, b"copied", now - 2000).unwrap(), Put::Saved { .. }));
+            std::fs::write(dir.join(nfsu2_vault::LAUNCH_COPY), (now - 1000).to_string()).unwrap();
+        })
+        .await;
+        let g = kit.request("GET", "/vault", &[BEARER], b"").await;
+        assert_eq!((g.status, g.body.as_slice(), g.header("x-vault-launch-copy")), (200, &b"copied"[..], Some("1")));
+        let tag = g.header("etag").unwrap().to_string();
+        let h = kit.request("GET", "/vault", &[BEARER, ("If-None-Match", &tag)], b"").await;
+        assert_eq!((h.status, h.header("x-vault-launch-copy")), (304, Some("1")));
+        let c = kit.request("PUT", "/vault", &[BEARER, ("If-None-Match", "*")], b"other").await;
+        assert_eq!((c.status, c.header("x-vault-launch-copy")), (412, Some("1")));
+        let u = kit.request("PUT", "/vault", &[BEARER, ("If-Match", &tag)], b"moved here").await;
+        assert_eq!((u.status, u.header("x-vault-launch-copy")), (200, None));
+        let g = kit.request("GET", "/vault", &[BEARER], b"").await;
+        assert_eq!((g.body.as_slice(), g.header("x-vault-launch-copy")), (&b"moved here"[..], None));
+        let other = bearer(&"B".repeat(43));
+        assert_eq!(kit.request("PUT", "/vault", &[("Authorization", &other), ("If-None-Match", "*")], b"new").await.status, 201);
+        assert_eq!(kit.request("GET", "/vault", &[("Authorization", &other)], b"").await.header("x-vault-launch-copy"), None);
     }
 
     #[tokio::test]

@@ -56,6 +56,14 @@
 //! sweep may be missed by its count: the next one sets it right; a file that goes while the sweep looks at it (a
 //! save's rename, a delete) is passed over.
 //!
+//! # The launch copy
+//!
+//! A vault may start as a copy of another server's (Underground 2's at its new address starts as a copy of the one at
+//! its old address, made just before the launch).  Whoever makes the copy writes the time it was made into
+//! `<dir>/launch-copy` (ms since 1970, decimal).  A keyphrase whose current version was saved by then came with the
+//! copy and was not written since: [`Vault::is_launch_copy`] says so, and its first save here ends it (the save's time
+//! is later).  No file: no keyphrase is one.
+//!
 //! Every call blocks (file I/O): the server makes them on its blocking threads.  Calls for one keyphrase take turns
 //! (a lock per id, of 256 stripes); the others run side by side.
 
@@ -68,6 +76,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use parking_lot::{Mutex, MutexGuard};
 use sha2::{Digest, Sha256};
 
+pub mod covers;
+
 pub const MAGIC: &[u8; 4] = b"NFV1";
 pub const HEAD: usize = 64;
 /// a flag: the keyphrase is kept without end (the sweep leaves it however long it goes unused)
@@ -79,6 +89,8 @@ pub const BLOCK: u64 = 4096;
 const STALE_TMP_MS: i64 = 3_600_000;
 /// the days the saves take at the least to fill the room for new keyphrases (`sized`)
 pub const FILL_DAYS: u64 = 30;
+/// the file in the vault's folder that says when the vault was copied from another server's (the module's doc)
+pub const LAUNCH_COPY: &str = "launch-copy";
 
 pub struct VaultOptions {
     /// the folder (made 0700)
@@ -219,6 +231,8 @@ pub struct Vault {
     seq: AtomicU64,
     /// the bytes the saves may add now (`per_day`'s bucket) and when it was last filled up (ms)
     room: Mutex<(f64, i64)>,
+    /// when the vault was copied from another server's ([`LAUNCH_COPY`]), if it was
+    launch_copy: Option<i64>,
 }
 
 fn u32_at(b: &[u8], i: usize) -> u32 {
@@ -279,6 +293,20 @@ fn system_time(ms: i64) -> SystemTime {
     UNIX_EPOCH + Duration::from_millis(ms.max(0) as u64)
 }
 
+/// the disk under `dir` has `min_free` bytes and `min_files` files free (what an unprivileged writer may take); true
+/// when statvfs cannot tell, or the filesystem counts no files
+fn disk_free(dir: &Path, min_free: u64, min_files: u64) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(path) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else { return true };
+    // SAFETY: statvfs writes the struct it is given, and only that; the path is NUL-terminated
+    let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(path.as_ptr(), &mut s) } != 0 {
+        return true;
+    }
+    let free = s.f_bavail as u64 * s.f_frsize as u64;
+    free >= min_free && (s.f_files == 0 || s.f_favail as u64 >= min_files)
+}
+
 fn mkdir(p: &Path) -> io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     fs::DirBuilder::new().recursive(true).mode(0o700).create(p)
@@ -288,7 +316,16 @@ impl Vault {
     /// The vault in `o.dir` (made 0700 when missing).  Nothing is counted yet: [`Vault::sweep`] does that.
     pub fn open(o: VaultOptions) -> io::Result<Vault> {
         mkdir(&o.dir)?;
+        let launch_copy = match fs::read_to_string(o.dir.join(LAUNCH_COPY)) {
+            Ok(t) => match t.trim().parse::<i64>() {
+                Ok(ms) if ms > 0 => Some(ms),
+                _ => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("{LAUNCH_COPY}: not a time (ms since 1970)"))),
+            },
+            Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e),
+        };
         Ok(Vault {
+            launch_copy,
             locks: (0..256).map(|_| Mutex::new(())).collect(),
             bytes: AtomicI64::new(0),
             count: AtomicI64::new(0),
@@ -318,15 +355,17 @@ impl Vault {
     /// the disk under the folder has `min_free` bytes and `min_free_files` files free (what an unprivileged writer
     /// may take); true when statvfs cannot tell, or the filesystem counts no files
     fn disk_ok(&self) -> bool {
-        use std::os::unix::ffi::OsStrExt;
-        let Ok(path) = std::ffi::CString::new(self.o.dir.as_os_str().as_bytes()) else { return true };
-        // SAFETY: statvfs writes the struct it is given, and only that; the path is NUL-terminated
-        let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
-        if unsafe { libc::statvfs(path.as_ptr(), &mut s) } != 0 {
-            return true;
-        }
-        let free = s.f_bavail as u64 * s.f_frsize as u64;
-        free >= self.o.min_free && (s.f_files == 0 || s.f_favail as u64 >= self.o.min_free_files)
+        disk_free(&self.o.dir, self.o.min_free, self.o.min_free_files)
+    }
+
+    /// when the vault was copied from another server's (the module's doc, "The launch copy"), if it was
+    pub fn launch_copy(&self) -> Option<i64> {
+        self.launch_copy
+    }
+
+    /// the keyphrase came with the launch copy and was not saved here since
+    pub fn is_launch_copy(&self, m: &Meta) -> bool {
+        self.launch_copy.is_some_and(|t| m.cur.saved <= t)
     }
 
     pub fn options(&self) -> &VaultOptions {

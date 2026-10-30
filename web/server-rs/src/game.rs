@@ -35,6 +35,66 @@ pub struct GameProfile {
     /// /robots.txt, naming every game's base there (crawlers read it at the root only)
     // TODO(M13-13): the root page, '/', which opens the game this browser played last
     pub root_files: bool,
+    /// the move of its players from the address it had before both games shared one (Underground 2 only; None: no
+    /// such address)
+    pub handover: Option<&'static Handover>,
+}
+
+/// Underground 2's move from its old address (nfsu2.xyz) to the one it shares with Most Wanted (nfsrevived.xyz/u2/):
+/// the old address's pages hand their players' saves over to the new one, across origins, through the few routes of
+/// the new address's server that answer the old origin (CORS: `handover.rs`), and the old address's responses let
+/// its pages connect there once the game is launched at the new one.  The page's profile holds the same values.
+///
+/// On this machine the two addresses are two loopback names, by layout and not by an option: 127.0.0.1 stands for the
+/// old address (its pages' Origin `http://127.0.0.1:<port>`), localhost for the new one.
+pub struct Handover {
+    /// the old address's origin: the one Origin the hand-over routes answer
+    pub old_origin: &'static str,
+    /// the new address: what the old address's pages may connect to once launched
+    pub new_address: &'static str,
+    /// the launch switch: off until the release that opens the new address (then the old address's responses let
+    /// its pages connect to the new one); the same value as the page profile's
+    pub launched: bool,
+}
+
+/// The loopback stand-ins of the two addresses (`Handover`): the old one's name and the new one's.
+pub const LOOPBACK_OLD: &str = "127.0.0.1";
+pub const LOOPBACK_NEW: &str = "localhost";
+
+/// Underground 2's move: from https://nfsu2.xyz to https://nfsrevived.xyz/u2/, not launched yet
+pub const UG2_HANDOVER: Handover = Handover { old_origin: "https://nfsu2.xyz", new_address: "https://nfsrevived.xyz/u2/", launched: false };
+
+impl Handover {
+    /// the old address's name (its origin's host)
+    pub fn old_host(&self) -> &'static str {
+        self.old_origin.strip_prefix("https://").unwrap_or(self.old_origin)
+    }
+
+    /// The Origin the hand-over routes answer on a request whose Host is `host`: the old origin, or on the new
+    /// address's loopback stand-in (localhost) the old one's (`http://127.0.0.1` with any port).  `origin` is a
+    /// request's Origin header as sent: an exact match only (scheme, host, port; never a look-alike).
+    pub fn allows(&self, host: &str, origin: &str) -> bool {
+        if nfsu2_headers::host_name(host) == LOOPBACK_NEW {
+            return origin == "http://127.0.0.1"
+                || origin.strip_prefix("http://127.0.0.1:").is_some_and(|p| {
+                    (1..=5).contains(&p.len()) && !p.starts_with('0') && p.bytes().all(|c| c.is_ascii_digit()) && p.parse::<u16>().is_ok()
+                });
+        }
+        origin == self.old_origin
+    }
+
+    /// what the responses for Host `host` add to connect-src once launched: the new address for the old one's name,
+    /// the new loopback stand-in's /u2/ for the old one's; None for every other name
+    pub fn connect_to(&self, host: &str) -> Option<&'static str> {
+        let h = nfsu2_headers::host_name(host);
+        if h == self.old_host() {
+            Some(self.new_address)
+        } else if h == LOOPBACK_OLD {
+            Some("http://localhost:*/u2/")
+        } else {
+            None
+        }
+    }
 }
 
 /// NFS Underground 2
@@ -74,6 +134,7 @@ pub const UG2: GameProfile = GameProfile {
     base: "",
     bases: &[("nfsrevived.xyz", "/u2")],
     root_files: true,
+    handover: Some(&UG2_HANDOVER),
 };
 
 /// NFS Most Wanted (2005, PC, v1.3): what is known so far.
@@ -115,6 +176,8 @@ pub const MW: GameProfile = GameProfile {
     base: "/mw",
     bases: &[],
     root_files: false,
+    // Most Wanted had no address before the shared one
+    handover: None,
 };
 
 /// the games --game names
@@ -294,6 +357,62 @@ mod tests {
         assert_eq!(base_path(""), None);
         assert_eq!(base_path(&format!("/{}", "a".repeat(32))).map(|p| p.len()), Some(33));
         assert_eq!(base_path(&format!("/{}", "a".repeat(33))), None);
+    }
+
+    // Underground 2's move: the one Origin its hand-over routes answer (exactly the old origin; on the new address's
+    // loopback stand-in exactly the old one's, any port), what the old address's responses connect to once launched,
+    // and not launched yet; Most Wanted has none
+    #[test]
+    fn the_handover_from_the_old_address() {
+        let m = UG2.handover.expect("UG2's move");
+        assert!(!m.launched, "not before the launch release");
+        assert!(MW.handover.is_none());
+        assert_eq!(m.old_host(), "nfsu2.xyz");
+        for host in ["nfsrevived.xyz", "NFSrevived.xyz:443", "nfsu2.xyz", "127.0.0.1:9780", "x"] {
+            assert!(m.allows(host, "https://nfsu2.xyz"), "{host}");
+            for o in [
+                "http://nfsu2.xyz",
+                "https://nfsu2.xyz/",
+                "https://nfsu2.xyz:443",
+                "https://NFSU2.xyz",
+                "https://nfsu2.xyz.evil.example",
+                "https://evil-nfsu2.xyz",
+                "https://www.nfsu2.xyz",
+                "null",
+                "",
+                "*",
+                "http://127.0.0.1:9780",
+                "https://nfsrevived.xyz",
+            ] {
+                assert!(!m.allows(host, o), "{host} {o}");
+            }
+        }
+        for host in ["localhost", "localhost:9781", "LOCALHOST."] {
+            for o in ["http://127.0.0.1:9780", "http://127.0.0.1:1", "http://127.0.0.1:65535", "http://127.0.0.1"] {
+                assert!(m.allows(host, o), "{host} {o}");
+            }
+            for o in [
+                "https://nfsu2.xyz",
+                "https://127.0.0.1:9780",
+                "http://127.0.0.1:",
+                "http://127.0.0.1:0",
+                "http://127.0.0.1:080",
+                "http://127.0.0.1:65536",
+                "http://127.0.0.1:9780/",
+                "http://127.0.0.1:9780.evil",
+                "http://127.0.0.10:9780",
+                "http://localhost:9780",
+                "null",
+            ] {
+                assert!(!m.allows(host, o), "{host} {o}");
+            }
+        }
+        assert_eq!(m.connect_to("nfsu2.xyz"), Some("https://nfsrevived.xyz/u2/"));
+        assert_eq!(m.connect_to("NFSU2.XYZ.:443"), Some("https://nfsrevived.xyz/u2/"));
+        assert_eq!(m.connect_to("127.0.0.1:9780"), Some("http://localhost:*/u2/"));
+        for host in ["nfsrevived.xyz", "localhost", "www.nfsu2.xyz", "::1", "", "x"] {
+            assert_eq!(m.connect_to(host), None, "{host}");
+        }
     }
 
     // The image's health check (Dockerfile) asks for game.json at each game's base on this machine's names: one image
