@@ -18,7 +18,9 @@
  *   bot bust N [pay] pursuits with the car standing (the AI does not drive: the cops bust it) until N busts, then stop:
  *                   a probe of the impound path (the strikes, an Out of Jail marker at the sheet, Car_Select.fng after
  *                   an impound, game over); pay: the fines paid at every sheet, no marker spent
- *   bot save      save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
+ *   bot car         take the career's next car that can be driven at the safehouse (Jump to Safe House, Car Select,
+ *                   Resume Free Roam), then stop: a probe of what decide does after two lost rival challenges
+ *   bot save     save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
  *   bot wait [N]    (career_mw.c) wait up to N frames for the bot to stop
  *
  * Its order in a bin (decide): performance packages from a customization shop with the cash the career has (once a
@@ -963,7 +965,7 @@ void mw_bot_frame(CPU *c){
     case B_SHOP: shop_frame(c); break;
     case B_CAR:                        /* another car: Jump to Safe House, Car Select, Resume Free Roam (mw_bot_present) */
         if (pursuit_on(c, B_CAR)) break;
-        if (B.car_swapped){ if (settled(c)) set_state(B_ROAM, "the car changed"); break; }
+        if (B.car_swapped){ if (settled(c)) set_state(B.once ? B_DONE : B_ROAM, "the car changed"); break; }
         if (f - B.f0 > CAR_SWAP_MAX){ B.want_car = 0; set_state(B_ROAM, "the car was not changed"); break; }
         if (settled(c) && f - B.last_tap >= 90){ autotest_tap(DIK_ESCAPE, 6); B.last_tap = f; }
         break;
@@ -1299,6 +1301,14 @@ void mw_bot_cmd(CPU *c, const char *args){
     }
     if (!strcasecmp(a1, "save")){ S.save_same = 0; S.save_last = 0; set_state(B_SAVE, "bot save"); return; }
     if (!strcasecmp(a1, "pursuit")){ B.once = 1; read_gates(c, &B.g); set_state(B_PURSUIT, "bot pursuit"); return; }
+    if (!strcasecmp(a1, "car")){        /* a probe of B_CAR: the career's next car taken at the safehouse, then stop */
+        uint32_t h = next_car(); int pos = 0, nn = 0; uint32_t hh = 0;
+        if (!h){ fprintf(stderr, "[mwbot] f=%ld bot car: no other car that can be driven\n", f); return; }
+        choose_car(h, &hh, &pos, &nn);
+        B.once = 1; B.want_car = h; B.want_pos = pos; read_gates(c, &B.g);
+        fprintf(stderr, "[mwbot] f=%ld bot car: car %#x (Car Select's %d / %d) at the safehouse\n", f, h, pos, nn);
+        set_state(B_CAR, "bot car"); return;
+    }
     if (!strcasecmp(a1, "bust")){       /* a probe of the impound path (M4-48): the strikes, the markers, Car_Select */
         char a3[16] = {0};
         sscanf(args, "%*s %*d %15s", a3);
@@ -1323,5 +1333,5 @@ void mw_bot_cmd(CPU *c, const char *args){
         go_to(c, &r[n], r, k, 0);
         return;
     }
-    fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | chase S | bust N [pay] | save | off\n");
+    fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | chase S | bust N [pay] | car | save | off\n");
 }
