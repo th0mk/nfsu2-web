@@ -22,5 +22,5 @@ grep -q 'reached bin 14' "$LOG" || fail "the bot did not reach bin 14: $(grep -m
 grep -q 'LOG career_bl15: Blacklist 14' "$LOG" || fail "no 'career_bl15: Blacklist 14' marker"
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
-cards=$(grep -E 'SafehouseMarkers.fng shows' "$LOG" | tail -1 | grep -oE "'[A-Za-z_]*(Pink|Slip|Cash|Impound|Jail|Release|Part|Upgrade|Marker)[A-Za-z_,0-9]*" | sort -u | tr '\n' ' ')
-echo "Blacklist 14 reached; the rival's race won, stats, markers, bio in order; cards: ${cards:-not read}"
+gave=$(grep -m1 -oE 'markers taken: .*' "$LOG"); said=$(grep -E 'SafehouseMarkers.fng shows' "$LOG" | grep -oE "You_just_[A-Za-z_,0-9]*" | sort -u | tr '\n' ' ')
+echo "Blacklist 14 reached; the rival's race won, stats, markers, bio in order; ${gave:-markers: not logged} ${said}"

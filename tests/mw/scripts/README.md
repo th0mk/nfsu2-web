@@ -59,16 +59,19 @@ save: the car lot's 32 cars shown in turn; the car tables' check at the profile'
 
 The career bot (runtime/mw/bot_mw.c, TRACKER M4-15; test-only): `bot run N` plays the career from where the save
 left it until the Blacklist bin is N, through the game's own paths only: it reads the bin's gates the way the
-Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), buys performance packages at a
-customization shop with the career's cash (the dearest level of each package the shop takes, once a bin and again
-when the cash has grown), engages the bin's races at their own engage trigger, lets the game's AI race them from
-their GO (a lost race is raced again in its turn; a car the AI wedges is put back on the road by the game's RESET,
-`carreset`), earns milestones and bounty in pursuits (the AI drives about until the cops start one;
-Game.ForcePursuitStart at the bin's top heat after 60 s of game time without one), then engages the rival's
-challenge at its first race's start (InGameRivalChallenge.fng: Enter accepts), takes two of the beaten rival's
-markers (SafehouseMarkers.fng; the cards it turned are logged), and answers the screens on the way (results, text
-messages, a bust's fine, the safehouse menu); it stops at GameOver.fng (the only car impounded after its third bust)
-and at a career menu it did not ask for;
+Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), takes the latest car won (a
+rival's pink slip) in the safehouse's Car Select (`bot run N keep` keeps the current one), buys performance packages
+at a customization shop with the career's cash (the dearest level of each package above the car's that the shop
+takes, once a bin and again when the cash has grown), engages the bin's races at their own engage trigger, lets the
+game's AI race them from their GO (a lost race is raced again in its turn; a car the AI wedges is put back on the
+road by the game's RESET, `carreset`), earns milestones and bounty in pursuits (the AI drives about until the cops
+start one; Game.ForcePursuitStart at the bin's top heat after 60 s of game time without one; a chase lost too early
+is rejoined where it was, and one that ran 300 s or boxed the car in is broken off by setting the car far away, so
+the game ends it as evaded), then engages the rival's challenge at its first race's start
+(InGameRivalChallenge.fng: Enter accepts; a lost one again), takes two of the beaten rival's markers
+(SafehouseMarkers.fng; what they gave is logged from the cash and cars), and answers the screens on the way
+(results, text messages, a bust's fine, the safehouse menu); it stops at GameOver.fng (the only car impounded after
+its third bust) and at a career menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
 race I` and `bot pursuit` do one race or one pursuit, `bot wait [N]` waits for the bot to stop.  `career_bot.txt`
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
