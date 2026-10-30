@@ -125,6 +125,7 @@ WEAK void metal_mirror_forget(uint32_t key){ (void)key; }
 WEAK const uint8_t *metal_pool_cpu(void){ return NULL; }
 WEAK void metal_raw_overflow(unsigned *rv, unsigned *kb){ if (rv) *rv = 0; if (kb) *kb = 0; }
 WEAK void metal_register_ps(int id, const char *src){ (void)id; (void)src; }
+WEAK void metal_ps_s0_2d(int id){ (void)id; }
 WEAK void metal_register_vs(int id, const char *src){ (void)id; (void)src; }
 WEAK int  metal_vs_ready(int id){ (void)id; return 1; }
 WEAK void metal_blit(unsigned s, unsigned d){ (void)s; (void)d; }

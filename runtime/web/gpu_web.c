@@ -685,21 +685,26 @@ static unsigned psc_put(Buf *B){
     return B->psc_last;
 }
 #define PSCUBE 256
-/* draws that bound a cube at stage 0 to a pixel shader without a cube twin: a ps_2_x or ps_3_0 whose s0 is
- * declared 2D (shader_dump.c's index says why it has none); D3D9 leaves such a draw undefined, the page draws it
- * with the fixed-function cube module.  Logged at each shader's first, so a run's log shows whether the game
+/* draws that bound a cube at stage 0 to a pixel shader whose s0 is declared 2D (com.c says which: ps_2_0, ps_2_x
+ * and ps_3_0 declare it) or that has no cube twin; D3D9 leaves such a draw undefined.  A ps_2_x or ps_3_0 has no
+ * twin then (shader_dump.c's index says why) and the page draws it with the fixed-function cube module; a ps_2_0
+ * keeps its twin, which reads s0 as a cube.  Logged at each shader's first, so a run's log shows whether the game
  * ever does it (M3-06) */
-static unsigned g_cube_no_twin;
+static unsigned g_cube_s0_2d;
+static uint8_t g_ps_s0_2d[PSCUBE];
+void metal_ps_s0_2d(int id){ if (id > 0 && id < PSCUBE) g_ps_s0_2d[id] = 1; }
 static int ps_of(unsigned tex){
     if (!(g_cur_ps > 0 && g_cur_ps < PSCUBE && metal_tex_is_cube(tex))) return g_cur_ps;
-    if (g_ps_ok[g_cur_ps] && !g_ps_ok[g_cur_ps + PSCUBE]){
+    int twin = g_ps_ok[g_cur_ps + PSCUBE];
+    if (g_ps_ok[g_cur_ps] && (g_ps_s0_2d[g_cur_ps] || !twin)){
         static uint8_t told[PSCUBE];
         if (!told[g_cur_ps]){
             told[g_cur_ps] = 1;
-            fprintf(stderr, "[gpu] ps %d: a cube texture at stage 0 and no cube twin (its s0 is 2D; such draws so far %u)\n",
-                    g_cur_ps, g_cube_no_twin + 1);
+            fprintf(stderr, "[gpu] ps %d: a cube texture at stage 0%s, %s (such draws so far %u)\n", g_cur_ps,
+                    g_ps_s0_2d[g_cur_ps] ? " where s0 is declared 2D" : "", twin ? "drawn with its cube twin" : "no cube twin",
+                    g_cube_s0_2d + 1);
         }
-        g_cube_no_twin++;
+        g_cube_s0_2d++;
     }
     return g_cur_ps + PSCUBE;
 }

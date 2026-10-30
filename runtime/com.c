@@ -4357,6 +4357,10 @@ static int com_call_body(CPU *c, uint32_t magic){
                         if (wgsl_dump_on())
                             wgsl_dump_ps_why(id + PSCUBE, id, msl, cl, vs_version(pp3) > 0x0200u ? wgsl_refusal() : NULL);
                         if (cl > 0) metal_register_ps(id + PSCUBE, msl);
+                        /* ps_2_0, ps_2_x and ps_3_0 declare s0's type: one declared 2D, the page logs a cube bound
+                         * there (D3D9 leaves that draw undefined), the ps_2_0 that keep a twin included */
+                        void metal_ps_s0_2d(int);
+                        if (vs_version(pp3) >= 0x0200u && vs_sampler_type(pp3, 0) == 2) metal_ps_s0_2d(id);
                     }
 #else
                     if (id < PSCUBE &&

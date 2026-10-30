@@ -99,10 +99,11 @@ const ABI_LIMITS = /REJECTED: (MRT|vertex texture fetch|a vs_3_0 without a POSIT
 const SM3_FLOOR = { unit: { ps3diff: 71, vs3diff: 4 }, mw: { ps3diff: 19, vs3diff: 1, psdiff: 92, diff: 29, psDepth: 65 } };
 const problems = [];               // reasons the run fails besides the browser check
 // A stage-0 cube twin (ps <id + 256>) is for a cube bound at stage 0 to a shader that does not say what it samples
-// there (ps_1_x take the type from the binding).  ps_2_x and ps_3_0 declare each sampler's type, and D3D9 needs a
-// texture of that type bound (a cube on a dcl_2d sampler is an undefined draw), so one whose s0 is 2D has no twin
-// (the translator's reason, in index.txt by shader_dump.c); the page logs "[gpu] ps N: a cube texture at stage 0 and
-// no cube twin" should a game draw one so (none in Most Wanted's race and menus, M3-06).
+// there (ps_1_x take the type from the binding).  ps_2_0, ps_2_x and ps_3_0 declare each sampler's type, and D3D9
+// needs a texture of that type bound (a cube on a dcl_2d sampler is an undefined draw).  A ps_2_x or ps_3_0 whose s0
+// is 2D has no twin (the SM3-class translator's reason, in index.txt by shader_dump.c); a ps_2_0 one keeps its twin,
+// which reads s0 as a cube (vsemu_wgsl.inc).  The page logs "[gpu] ps N: a cube texture at stage 0 where s0 is
+// declared 2D" should a game draw any of the three so (none in Most Wanted's race and menus, M3-06).
 const TWIN_NOT_NEEDED = /^ps \d+ obj=\d+ REJECTED: the stage-0 cube twin of a shader whose s0 is 2D$/;
 // REJECTED translations (but those allow matches) and, for a game dump, the census
 function checkDump(dir, census, allow = null) {

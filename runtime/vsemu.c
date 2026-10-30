@@ -289,6 +289,7 @@ VSProg *vs_compile(const uint32_t *tok, size_t max_dw){
 
 void vs_free(VSProg *p){ if (p){ free(p->ins); free(p->raw); free(p); } }
 unsigned vs_version(const VSProg *p){ return p ? p->version : 0; }
+int vs_sampler_type(const VSProg *p, int s){ return p && s >= 0 && s < 16 ? p->smptype[s] : 0; }
 unsigned vs_ninstr(const VSProg *p){ return p ? p->n : 0; }
 unsigned vs_unknown(const VSProg *p){ return p ? p->unknown : 0; }
 

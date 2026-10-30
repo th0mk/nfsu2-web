@@ -57,6 +57,8 @@ int  vs_light_creg(const VSProg *p, float ramp[2]);
 
 /* diagnostics: instruction count, version */
 unsigned vs_version(const VSProg *p);
+/* s#'s declared texture type (dcl_2d/dcl_cube/dcl_volume): 2, 3, 4; 0 when not declared (ps_1_x declare none) */
+int      vs_sampler_type(const VSProg *p, int s);
 unsigned vs_ninstr(const VSProg *p);
 /* Count of untranslatable instructions (0 = the shader ran fully) */
 unsigned vs_unknown(const VSProg *p);
