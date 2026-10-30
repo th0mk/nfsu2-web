@@ -218,6 +218,17 @@ fn ftex2(k: u32, c: vec2f) -> vec4f {
 }
 fn ftex3(k: u32, c: vec3f) -> vec4f { return ftex2(k, vec2f(c.x + c.z * 0.3, c.y - c.z * 0.2)); }
 `;
+// 'PSV2' (8 stages): sums, products and floor, as FTEX3's below without the level of detail (wgsl-xl.c ftex8): a
+// GPU's sin may be 2^-11 off, which Most Wanted's shaders amplify past the tolerance
+const FTEX8 = `
+fn fbump(t: f32) -> f32 { let u = t - floor(t); return 4.0 * u * (1.0 - u); }
+fn ftex2(k: u32, c: vec2f) -> vec4f {
+  let f = f32(k);
+  return vec4f(0.1 + 0.8 * fbump(c.x * 3.1 + f * 0.37), 0.1 + 0.8 * fbump(c.y * 2.3 + f * 0.5),
+               0.1 + 0.8 * fbump((c.x + c.y) * 1.7 + f * 0.13), 0.1 + 0.8 * fbump(c.x * c.y * 5.3 + 0.2 * f));
+}
+fn ftex3(k: u32, c: vec3f) -> vec4f { return ftex2(k, vec2f(c.x + c.z * 0.3, c.y - c.z * 0.2)); }
+`;
 async function psDiff(device: GPUDevice, name: string, code: string, vec: ArrayBuffer, res: DiffResult, failures: string[]) {
   const u = new Uint32Array(vec, 0, 4);
   // 'PSV2' (an 8-stage module): 41 inputs per pixel, uv4..uv7 after the fog, and each binding's kind as the module
@@ -236,7 +247,7 @@ async function psDiff(device: GPUDevice, name: string, code: string, vec: ArrayB
     .replace(/textureSample\(tex(\d), smp\d, /g, (_m, k) => isCube(+k) ? `ftex3(${k}u, ` : `ftex2(${k}u, `);
   const uv8 = v2 ? Array.from({ length: 4 }, (_, k) =>
     `\n  i.uv${4 + k} = vec4f(PIN[b + ${25 + 4 * k}u], PIN[b + ${26 + 4 * k}u], PIN[b + ${27 + 4 * k}u], PIN[b + ${28 + 4 * k}u]);`).join('') : '';
-  const cs = body + FTEX + `
+  const cs = body + (v2 ? FTEX8 : FTEX) + `
 var<private> KILL: u32;
 @group(0) @binding(4) var<storage, read> PIN: array<f32>;
 @group(0) @binding(5) var<storage, read_write> POUT: array<f32>;

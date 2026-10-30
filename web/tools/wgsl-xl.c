@@ -22,6 +22,10 @@
  * stages every module of every mode gets them ('VSV2', 'PSV2'); with 4 only
  * --pairs writes them, as before.
  *
+ * --pairs translates for the stage count of the dump's own modules (ps_0.wgsl
+ * says ", 8 stages" for Most Wanted's), so its modules and vectors match the
+ * game's; --stages may only repeat it.
+ *
  * --pairs takes an in-game dump (NFSU2_SHADER_DUMP) and translates every
  * distinct vertex shader object against every distinct vertex declaration the
  * game created that supplies all of the shader's inputs, mapped exactly as
@@ -166,9 +170,12 @@ static void write_vectors(const char *dir, int id, const VSProg *p, const int dc
  * (rgba after alpha test and fog, killed 0/1).  Textures are an analytic
  * function of the coordinate (ftex below; the shader check substitutes the
  * same function for textureSample).  With 8 stages the magic is 'PSV2', each
- * pixel has 41 inputs (uv4..uv7 after the fog), and the shader check takes
+ * pixel has 41 inputs (uv4..uv7 after the fog), the shader check takes
  * each binding's kind from the module (ps_ref_run adds ps_2_0's declared cubes
- * to cubemask itself). */
+ * to cubemask itself), and the texture is ftex8: sums, products and floor as
+ * psref's (sm3_tex below, without the level of detail), where ftex's sin and
+ * cos may be 2^-11 off on a GPU, which Most Wanted's shaders amplify past the
+ * tolerance (ps_22's reflection: 1 % from that error alone). */
 static void ftex(int k, const float *c, int n, float o[4]){
     float x = c[0], y = c[1], f = (float)k;
     if (n == 3){ x = c[0] + c[2] * 0.3f; y = c[1] - c[2] * 0.2f; }
@@ -176,6 +183,15 @@ static void ftex(int k, const float *c, int n, float o[4]){
     o[1] = 0.5f + 0.4f * cosf(y * 2.3f + f * 0.5f);
     o[2] = 0.5f + 0.4f * sinf((x + y) * 1.7f + f);
     o[3] = 0.5f + 0.4f * cosf(x * y * 5.3f + 0.2f * f);
+}
+static float bump(float t){ float u = t - floorf(t); return 4.f * u * (1.f - u); }
+static void ftex8(int k, const float *c, int n, float o[4]){
+    float x = c[0], y = c[1], f = (float)k;
+    if (n == 3){ x = c[0] + c[2] * 0.3f; y = c[1] - c[2] * 0.2f; }
+    o[0] = 0.1f + 0.8f * bump(x * 3.1f + f * 0.37f);
+    o[1] = 0.1f + 0.8f * bump(y * 2.3f + f * 0.5f);
+    o[2] = 0.1f + 0.8f * bump((x + y) * 1.7f + f * 0.13f);
+    o[3] = 0.1f + 0.8f * bump(x * y * 5.3f + 0.2f * f);
 }
 static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned cubemask){
     enum { NP = 256 };
@@ -219,7 +235,7 @@ static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned c
     int ok = 1;
     for (int i = 0; i < NP; i++){
         float o[5] = { 0, 0, 0, 0, 0 }; int killed = 0;
-        if (!ps_ref_run(p, &P, &in[i], ftex, cubemask, o, &killed)) ok = 0;   /* refused (ps_2_x, ps_3_0): zeros */
+        if (!ps_ref_run(p, &P, &in[i], s8 ? ftex8 : ftex, cubemask, o, &killed)) ok = 0;   /* refused (ps_2_x, ps_3_0): zeros */
         o[4] = (float)killed;
         fwrite(o, 4, 5, f);
     }
@@ -235,8 +251,8 @@ static int write_ps_vectors(const char *dir, int id, const VSProg *p, unsigned c
  * shadow shader's depth comparison), and a bump that is continuous where its
  * floor jumps.  lod: textureSampleLevel's level; else from the gradients
  * (implicit: the coordinate's fine derivatives; texldd: its own), log2 of 256
- * times their largest x or y component (-16 for none), plus texldb's bias. */
-static float bump(float t){ float u = t - floorf(t); return 4.f * u * (1.f - u); }
+ * times their largest x or y component (-16 for none), plus texldb's bias
+ * (bump: above, with ftex8). */
 static int sm3_tex(void *user, const PsrefSample *s, float o[4]){
     (void)user;
     float x = s->c[0], y = s->c[1], f = (float)s->stage, lod;
@@ -545,7 +561,27 @@ static int game_vectors(const char *dump, const char *dir){
     return n;
 }
 
-static int pairs(const char *dump, const char *dir){
+/* the texture stages the game translated its dump for: its built-in fragment module's first line ends in
+ * ", 8 stages" with 8 (gpu-abi.md 11.2), else 4; -1 without one */
+static int dump_stages(const char *dump){
+    char p[1024]; snprintf(p, sizeof p, "%s/ps_0.wgsl", dump);
+    FILE *f = fopen(p, "r");
+    if (!f) return -1;
+    char line[512] = "";
+    if (!fgets(line, sizeof line, f)) line[0] = 0;
+    fclose(f);
+    return strstr(line, ", 8 stages") ? 8 : 4;
+}
+
+static int pairs(const char *dump, const char *dir, int stages_given){
+    /* the modules and vectors written here go with the game's own (pipelines pair them, ps_<id>.pvec feeds the
+     * game's ps_<id>.wgsl): translated for the dump's stage count, which --stages may only repeat */
+    int ds = dump_stages(dump);
+    if (ds > 0 && stages_given && (unsigned)ds != wgsl_get_stages()){
+        fprintf(stderr, "--pairs: the dump was translated for %d stages, not %u\n", ds, wgsl_get_stages());
+        return 2;
+    }
+    if (ds > 0) wgsl_set_stages((unsigned)ds);
     DIR *d = opendir(dump);
     if (!d){ perror(dump); return 1; }
     enum { MAXO = 512 };
@@ -738,13 +774,15 @@ static int fx(const char *dir, int nf, char **files){
 }
 
 int main(int argc, char **argv){
+    int stages_given = 0;
     if (argc >= 3 && !strcmp(argv[1], "--stages")){
         unsigned s = (unsigned)atoi(argv[2]);
         if (s != 4 && s != 8){ fprintf(stderr, "--stages: 4 or 8\n"); return 2; }
         wgsl_set_stages(s);
+        stages_given = 1;
         argc -= 2; argv += 2;
     }
-    if (argc == 4 && !strcmp(argv[1], "--pairs")) return pairs(argv[2], argv[3]);
+    if (argc == 4 && !strcmp(argv[1], "--pairs")) return pairs(argv[2], argv[3], stages_given);
     if (argc >= 4 && !strcmp(argv[1], "--fx")) return fx(argv[2], argc - 3, argv + 3);
     if (argc < 3){
         fprintf(stderr, "usage: %s [--stages 8] <outdir> shader.bin... | --pairs <dumpdir> <outdir> | --fx <outdir> effect.fxo...\n", argv[0]);
