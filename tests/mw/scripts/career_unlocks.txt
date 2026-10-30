@@ -1,7 +1,8 @@
 # Most Wanted: what a career save has unlocked for Quick Race (TRACKER M4-44: tracks unlocked by career progress),
 # a probe.  Seeded with a career save (the bot's seeds); the profile's load, then Quick Race, Custom Race and each
-# kind's track list (Circuit, Sprint), every track shown in turn by RIGHT, then the car list.  Run with
-# NFSU2_FNG_LOG=3: the lists' strings say which tracks are offered (an Accept button) and which are locked;
+# kind's track list (Circuit, Sprint), every track shown in turn by RIGHT, then the car list of a circuit the career
+# offers, every car shown in turn by RIGHT (64 steps: round the list once at least).  Run with NFSU2_FNG_LOG=3: the
+# lists' strings say which tracks are offered (an Accept button) and which are locked, and which cars;
 # tests/mw/checks/career_unlocks.sh counts them.
 #   NFSU2_SAVE_SEED=<a career seed> node web/tools/run-suite.mjs --game mw --script career_unlocks.txt \
 #     --marker 'career_unlocks: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_FNG_LOG=3 --timeout-scale 3
@@ -28,6 +29,19 @@
 +0    waitfng Track_Select.fng:c2d85652 600
 +60   log career_unlocks: sprints
 +0    loop 47
++40   tap RIGHT
++0    endloop
++60   tapuntil ESCAPE MainMenu_Sub.fng:1f203817 90 900
++0    tapuntil LEFT MainMenu_Sub.fng:1f203817@4b4e388a 40 600    # Circuit again
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85 600
++0    tapuntil RIGHT Track_Select.fng:3de80a85:2b65a216 40 3000  # a track this career offers (its Accept drawn)
++30   tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the circuit's options, as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++60   log career_unlocks: cars
++0    loop 64
 +40   tap RIGHT
 +0    endloop
 +60   log career_unlocks: done
