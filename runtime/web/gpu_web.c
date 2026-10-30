@@ -1027,9 +1027,14 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
         }
         /* a frame is pending: replace it (mailbox, or the page is not encoding for 60 ms) or wait */
         /* (the page clears its encode claim before it can detach: both run on its main thread) */
-        int replace = !enc && (mailbox || ald(&g_ctl->attached) != GW_ATTACHED || (late && now_ms() - t0 >= 60.0));
+        /* A frame to dump (the autotest's dump) waits for an attached page, up to 10 s: replaced, its dump moved to a
+         * later frame under the first one's name, or was lost to a newer dump, so a page that fell behind (the first
+         * race frames compile pipelines) dumped other moments than the script named, or none */
+        int attached = ald(&g_ctl->attached) == GW_ATTACHED;
+        GwFrame *old = &g_ctl->frame[ready - 1];
+        int hold = old->dump && attached && now_ms() - t0 < 10000.0;
+        int replace = !enc && !hold && (mailbox || !attached || (late && now_ms() - t0 >= 60.0));
         if (replace){
-            GwFrame *old = &g_ctl->frame[ready - 1];
             if (__atomic_compare_exchange_n(&g_ctl->state, &s, (s & ~3) | mine, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)){
                 if (old->dump && !F->dump){   /* a requested dump moves to the frame that replaces it */
                     F->dump = 1; F->dump_frame = old->dump_frame; memcpy(F->dump_label, old->dump_label, sizeof F->dump_label); }
@@ -1040,7 +1045,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
         }
         if (!unlocked){ guest_wait_begin(); unlocked = 1; }
         ring_bell();
-        double left = 60.0 - (now_ms() - t0);
+        double left = hold ? 50.0 : 60.0 - (now_ms() - t0);
         if (wait32(&g_ctl->state, s, left > 1.0 ? left : 1.0) == 2 || now_ms() - t0 >= 60.0) late = 1;
     }
     if (unlocked) guest_wait_end();
