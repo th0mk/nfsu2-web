@@ -117,13 +117,22 @@ Most Wanted ranks, the cash, the impound markers and each career car's record wi
 (the world map's icons, those of type T one by one; `icons go T K DX DY DZ` moves the car to one), `pools [watch]`
 (the game's memory pools and frame arena, with their peaks); `pursuit watch` also logs the counts the game keeps by
 name (helicopters, roadblocks and spike strips dodged, cops damaged and destroyed), roadblocks put up and pursuit
-breakers come down (hooks), and how often the purecall guard's call ran; `NFSMW_BOT_PLOG=S` makes the bot log the car's
-place every S game seconds in a pursuit (15 by default).  `pursuit_breaker.txt` drives the car at the one pursuit
+breakers come down (hooks, with the car's place at each breaker), how often the purecall guard's call ran and, in the
+cops' search, its meter and parts (the search's seconds, the bonus, its length); each cop car the cop manager asks for
+by name, and at each pursuit's end the cars asked for by name and (under `pools watch`) the pools with their peaks.
+`NFSMW_BOT_PLOG=S` makes the bot log the car's place every S game seconds in a pursuit (15 by default);
+`NFSMW_BOT_SEARCH=stay` leaves the cops' search alone (the game's own cooldown) and `NFSMW_BOT_SEARCH=hide` sets the car
+in the nearest hiding spot at its start, standing (default: back to the chase); `NFSMW_BOT_FHEAT=N` forces pursuits at
+heat N instead of the bin's top heat (1: the game's escalation raises it).  `pursuit_breaker.txt` drives the car at the one pursuit
 breaker the AI has brought down so far (TRACKER M4-17; not working yet: its header says what was seen).
 
 The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
 switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).
-`breaker_ai.txt` holds G after the AI has driven and let go (TRACKER M4-47), with what the game's CanUse says.
+`breaker_ai.txt` holds G from 10 frames after the AI has driven and let go (TRACKER M4-47: a press in the first frame
+or two after Game.ClearAIControl is lost, and a key held from then on makes no new press), with what the game's CanUse
+says; `breaker_ai_taps.txt` taps G twelve times from `BA_FIRST` frames after the AI let go (`BA_AI=off`: the control
+without the AI), and `breaker watch` logs each GAMEBREAKER action the player's InputPlayer reads and its action queue's
+state.
 
 Crash fixes (runtime/mw/fixes_mw.c): `fixes_poke.txt` reaches the null guards of the cop unload (0x57D105) and of
 Attrib::StringToLowerCaseKey (0x4549BF) by poke, in the front end; with `NFSU2_TEST_COPLIST_NULL=1` and

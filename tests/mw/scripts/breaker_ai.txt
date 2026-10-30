@@ -1,11 +1,15 @@
-# Most Wanted: why Speedbreaker presses do nothing after the AI has driven (TRACKER M4-47 (a)).  A Custom Race circuit
-# as speedbreaker.txt picks it; from GO the game's AI drives (`autopilot on`, Game.ForceAIControl) for 600 frames and
-# lets go (`autopilot off`, Game.ClearAIControl); the gas is held and G (GAMEBREAKER) is held down until the game
-# switches the Speedbreaker on, for up to 900 frames.  `breaker watch` logs, besides the charge, every change of what
-# the game's CanUse (0x6EDC90) tests: "can" its answer, "blocks" the bits that say no (1 [0x988E04], 2 [0x9885C8],
-# 4 under 30 mph, 8/16/32 the car interface's methods +0xBC/+0x20/+0x5C; runtime/mw/career_mw.c breaker_blocks).
+# Most Wanted: the Speedbreaker after the AI has driven (TRACKER M4-19, M4-47 (a)).  A Custom Race circuit as
+# speedbreaker.txt picks it; from GO the game's AI drives (`autopilot on`, Game.ForceAIControl) for 600 frames and lets
+# go (`autopilot off`, Game.ClearAIControl); the gas is held and, 10 frames on, G (GAMEBREAKER) is held down until the
+# game switches the Speedbreaker on, for up to 900 frames.  A press in the first frame or two after ClearAIControl never
+# becomes a GAMEBREAKER action (breaker_ai_taps.txt: 4 of 4 runs with the AI, 0 of 3 without it; from 5 frames on every
+# press does), and a key held from then on makes no new press: G held from the frame after the AI let go left the
+# Speedbreaker off for 900 frames (TRACKER M4-47 (a), runs of 2026-10-30).  `breaker watch` logs, besides the charge,
+# every change of what the game's CanUse (0x6EDC90) tests: "can" its answer, "blocks" the bits that say no (1
+# [0x988E04], 2 [0x9885C8], 4 under 30 mph, 8/16/32 the car interface's methods +0xBC/+0x20/+0x5C;
+# runtime/mw/career_mw.c breaker_blocks), and the GAMEBREAKER actions the player's InputPlayer reads.
 #   NFSU2_SAVE_SEED=<a folder holding d3dx9_26.dll> node web/tools/run-suite.mjs --game mw --script breaker_ai.txt \
-#     --marker 'breaker_ai: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_QUIT_FRAMES=200
+#     --marker 'breaker_ai: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_QUIT_FRAMES=20000
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000
 +0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
@@ -32,7 +36,7 @@
 +600  autopilot off
 +0    log breaker_ai: the AI let go
 +0    down UP
-+0    down G
++10   down G                                       # past the first frames after ClearAIControl
 +0    breaker wait on 900
 +0    up G
 +0    log breaker_ai: on

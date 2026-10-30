@@ -433,7 +433,9 @@ static void log_pursuit(CPU *c, int only_changes){
 static int last_end;                    /* 1 busted, 2 evaded (the player's), 0 none since the last read */
 int mw_aid_last_end(void){ int e = last_end; last_end = 0; return e; }
 int mw_aid_pw_on(void){ return pw_on; }
+static int breaker_hook(CPU *c, uint32_t va);
 int mw_aid_hook(CPU *c, uint32_t va){
+    if (breaker_hook(c, va)) return 1;
     if (va != SITE_BUSTED && va != SITE_BUSTED_AI && va != SITE_EVADED) return 0;
     if (va == SITE_EVADED) last_end = 2; else if (va == SITE_BUSTED) last_end = 1;
     if (!pw_on) return 1;
@@ -481,8 +483,60 @@ static int breaker_blocks(CPU *c, uint32_t pl, int *can){
     *can = (int)(gcall(c, FN_BREAKER_CANUSE, pl - 0x4cu, 0, 0) & 0xffu);
     return b;
 }
+/* The press's way in (TRACKER M4-19, M4-47 (a)): the player's InputPlayer (its FetchInput 0x6A8870, vtable slot
+ * 0x8AC668, `this` kept by the hook at its entry) reads the action queue at +0x10 (a ring: +0 the count, +8 the head,
+ * +0xC the capacity, the actions from +0x10, 12 bytes each; IsEmpty 0x633D80, GetAction 0x633DC0, Pop 0x633D90) once a
+ * frame, unless +0x2B8 is set (then its method +0xC) or the object at +8 answers yes to its method +0x74 (then it
+ * hands the car's controls on and returns, 0x6A88BA: the queue is not read).  Each action goes through the filter at
+ * this - 0x74 (method +0x30) and a switch on its id - 1 (tables 0x6A8E58, 0x6A8E20); GAMEACTION_GAMEBREAKER (8, the
+ * name table 0x8F6728) is the case at 0x6A8A5D, which runs the toggle (the player's interface 0x8B0BD0 method +0x50,
+ * 0x6EDD10, from 0x6A8A90) only when two flags of the frame are set: [esp+0x12], no AI on the car (the object at
+ * +0xC, the human AI interface 0x403770: its +0xC IsAI is false), and [esp+0x13], 0x410D40(0x919650)'s +0xC is 1
+ * (or it is null) and the byte [0x911054] is 0.  The hooks count the reads, the AI path, the case and the toggle's
+ * call; `breaker watch` logs them with the gates whenever one changes, and each GAMEBREAKER case. */
+#define HOOK_FETCH       HOOK_SITE(0x006a8870)   /* InputPlayer's FetchInput, the entry */
+#define HOOK_FETCH_AI    HOOK_SITE(0x006a88ba)   /* ... the car's AI path: the queue is not read */
+#define HOOK_GB_CASE     HOOK_SITE(0x006a8a5d)   /* ... the GAMEBREAKER case */
+#define HOOK_GB_TOGGLE   HOOK_SITE(0x006a8a75)   /* ... its two flags set: the toggle follows */
+static uint32_t in_player;              /* the last FetchInput's this */
+static unsigned long n_fetch, n_fetch_ai, n_gb_case, n_gb_toggle;
+static int breaker_hook(CPU *c, uint32_t va){
+    if (va == HOOK_FETCH){ in_player = c->ecx; n_fetch++; return 1; }
+    if (va == HOOK_FETCH_AI){ n_fetch_ai++; return 1; }
+    if (va == HOOK_GB_CASE || va == HOOK_GB_TOGGLE){
+        if (va == HOOK_GB_CASE) n_gb_case++; else n_gb_toggle++;
+        if (bw_on)
+            fprintf(stderr, "[mwbreaker] f=%ld GAMEBREAKER action: %s (id %u; no AI %u, mode %u, 0x14 %u; queue %u)\n",
+                    autotest_frame(), va == HOOK_GB_CASE ? "the case" : "the toggle is called",
+                    rd(rd(c->esp + 0x1cu)), MR8(c->esp + 0x12u), MR8(c->esp + 0x13u), MR8(c->esp + 0x14u),
+                    rd(c->esi + 0x10u));
+        return 1;
+    }
+    return 0;
+}
+static uint32_t bi_last[14];
+static void log_breaker_input(CPU *c, int only_changes){
+    uint32_t ip = in_player;
+    if (!ip) return;
+    uint32_t a8 = rd(ip + 8u), hai = rd(ip + 0xcu), m = gcall(c, 0x00410d40u, 0x00919650u, 0, 0);
+    uint32_t q = ip + 0x10u;            /* the queue (in the list [0x920E4C], count [0x920E54]): +0x268 its port, +0x274
+                                         * its action map, +0x270 the device binding; 0x633D10 makes it active when +0x26C
+                                         * > 0, the port >= 0, the byte +0x280 is set and it has a binding, and keeps in
+                                         * +0x288 the time ([0x925B14]) it became active (0 while not) */
+    uint32_t v[14] = { rd(q), MR8(ip + 0x2b8u), a8 ? gcall(c, rd(rd(a8) + 0x74u), a8, 0, 0) & 0xffu : 9u,
+                       hai ? gcall(c, rd(rd(hai) + 0xcu), hai, 0, 0) & 0xffu : 9u, m ? rd(m + 0xcu) : 0xffffffffu,
+                       MR8(0x00911054u), (uint32_t)n_gb_case, (uint32_t)n_gb_toggle, rd(q + 0x268u), rd(q + 0x274u),
+                       rd(q + 0x270u), rd(q + 0x26cu), MR8(q + 0x280u), rd(q + 0x288u) };
+    if (only_changes && !memcmp(v, bi_last, sizeof v)) return;
+    memcpy(bi_last, v, sizeof v);
+    fprintf(stderr, "[mwbreaker] f=%ld input: queue %u (port %d, map %08x, binding %08x, +0x26c %d, +0x280 %u, active since %u, "
+            "now %u), blocked %u, ai path %u (+8 %08x), IsAI %u (+0xC %08x), mode %d, [0x911054] %u; reads %lu, on the AI "
+            "path %lu; GAMEBREAKER cases %lu, toggles %lu\n", autotest_frame(), v[0], (int)v[8], v[9], v[10], (int)v[11], v[12],
+            v[13], rd(0x00925b14u), v[1], v[2], a8, v[3], hai, (int)v[4], v[5], n_fetch, n_fetch_ai, n_gb_case, n_gb_toggle);
+}
 static void log_breaker(CPU *c, int only_changes){
     uint32_t pl = player_iface();
+    log_breaker_input(c, only_changes);
     int on = pl ? MR8(pl + PL_BREAKER_ON) : -1, can = 0;
     float ch = pl ? rdf(pl + PL_BREAKER) : 0.0f;
     int tenth = (int)floorf(ch * 10.0f + 1e-4f), blk = pl ? breaker_blocks(c, pl, &can) : 0;

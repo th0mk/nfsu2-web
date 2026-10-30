@@ -1,0 +1,63 @@
+# Most Wanted: which GAMEBREAKER presses reach the game after the AI has driven (TRACKER M4-19, M4-47 (a)).  As
+# breaker_ai.txt (a Custom Race circuit, the game's AI driving from GO for 600 frames, then Game.ClearAIControl), but G
+# is tapped (6 frames down) twelve times, the first BA_FIRST frames after the AI lets go (0: in the frame the gas goes
+# down) and then every 60 frames, the gas held.  BA_AI=on lets the AI drive; BA_AI=off is the control (the car stands,
+# and ClearAIControl changes nothing).  `breaker watch` logs each GAMEBREAKER action the player's InputPlayer reads
+# (its FetchInput 0x6A8870, the case 0x6A8A5D, runtime/mw/career_mw.c) and its action queue's port, action map and
+# device binding whenever they change.
+#   NFSU2_SAVE_SEED=<a folder holding d3dx9_26.dll> node web/tools/run-suite.mjs --game mw --script breaker_ai_taps.txt \
+#     --marker 'breaker_ai_taps: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_QUIT_FRAMES=20000 \
+#     --env BA_AI=on --env BA_FIRST=1
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log breaker_ai_taps: GO
++0    breaker watch
++0    autopilot ${BA_AI}
++600  autopilot off
++0    log breaker_ai_taps: the AI let go
++0    down UP
++${BA_FIRST}    tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   tap G 6
++0    breaker
++60   up UP
++0    log breaker_ai_taps: done
++0    close
