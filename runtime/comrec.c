@@ -32,12 +32,21 @@ typedef struct { uint32_t p, iface, serial; } ObjEnt;
 static ObjEnt *g_obj;
 static uint32_t g_serial[64];
 static uint32_t oslot(uint32_t p){ return (p >> 4) * 2654435761u >> (32 - OBJ_BITS); }
+static void decl_note(uint32_t obj, uint32_t hash);
 void comrec_new(uint32_t obj, uint32_t iface){
     if (!g_obj) return;
     uint32_t i = oslot(obj), mask = (1u << OBJ_BITS) - 1u;
     for (uint32_t k = 0; k <= mask; k++, i = (i + 1u) & mask)
         if (!g_obj[i].p || g_obj[i].p == obj){
             g_obj[i].p = obj; g_obj[i].iface = iface; g_obj[i].serial = ++g_serial[iface & 63u]; return; }
+}
+/* a vertex declaration is named by its elements, as a shader is by its code: two runs that make the same
+ * declarations in another order (or more of them) still name them alike */
+static void decl_note(uint32_t obj, uint32_t hash){
+    if (!g_obj) return;
+    uint32_t i = oslot(obj), mask = (1u << OBJ_BITS) - 1u;
+    for (uint32_t k = 0; k <= mask && g_obj[i].p; k++, i = (i + 1u) & mask)
+        if (g_obj[i].p == obj){ g_obj[i].serial = hash; g_obj[i].iface |= 0x80000000u; return; }
 }
 static const ObjEnt *ofind(uint32_t p){
     if (!g_obj || !p) return 0;
@@ -66,12 +75,13 @@ void comrec_obj(uint32_t v, char *buf, int n){
     if (com_shader_code(v, &p, &sz)){ snprintf(buf, (size_t)n, "sh:%08x", p && sz ? fnv(2166136261u, p, sz) : 0u); return; }
     if (!strcmp(s, "dev")){ snprintf(buf, (size_t)n, "dev"); return; }
     const ObjEnt *e = ofind(v);
-    if (e && e->iface == (uint32_t)i) snprintf(buf, (size_t)n, "%s#%u", s, e->serial);
+    if (e && e->iface == ((uint32_t)i | 0x80000000u)) snprintf(buf, (size_t)n, "%s:%08x", s, e->serial);
+    else if (e && e->iface == (uint32_t)i) snprintf(buf, (size_t)n, "%s#%u", s, e->serial);
     else snprintf(buf, (size_t)n, "%s?", s);
 }
 
 /* ---- the line being written ---- */
-typedef struct { char b[4096]; int n; uint32_t a[12]; int nargs, kind; unsigned m; uint32_t outs; } Line;
+typedef struct { char b[4096]; int n; uint32_t a[12]; int nargs, kind; unsigned m; uint32_t outs, decl; } Line;
 static _Thread_local Line t_line[4];
 static _Thread_local int t_depth;
 static void put(Line *L, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
@@ -129,7 +139,9 @@ static void dev_args(Line *L, unsigned m, const uint32_t *a, int nargs){
         put_hash(L, a[7], (a[2] + a[3]) * a[8]); put(L, " %x", a[8]); return; }
     case 86: {                                                                /* CreateVertexDeclaration */
         uint32_t n = 0; while (n < 64u && readable(a[1] + 8u * n, 8) && MR16(a[1] + 8u * n) != 0xFFu) n++;
-        put_dw(L, a[1], 2u * (n + 1u)); L->outs = 1u << 2; return; }
+        put_dw(L, a[1], 2u * (n + 1u)); L->outs = 1u << 2;
+        L->decl = readable(a[1], 8u * (n + 1u)) ? fnv(2166136261u, a[1], 8u * (n + 1u)) : 0u;
+        return; }
     case 91: case 106: {                                                      /* Create{Vertex,Pixel}Shader */
         uint32_t n = 0; while (n < 65536u && readable(a[1] + 4u * n, 4)){ n++; if (MR32(a[1] + 4u * (n - 1u)) == 0xFFFFu) break; }
         put_hash(L, a[1], 4u * n); L->outs = 1u << 2; return; }
@@ -184,10 +196,13 @@ void comrec_post(CPU *c, int tok){
     if (tok < 0) return;
     t_depth = tok;
     Line *L = &t_line[tok];
-    for (int i = 1; i < L->nargs; i++)
+    for (int i = 1; i < L->nargs; i++)          /* an output that is an object (data outputs are not compared) */
         if (L->outs & (1u << i)){
-            uint32_t p = L->a[i];
-            if (p && readable(p, 4)){ put(L, " ->"); put_obj(L, MR32(p)); }
+            uint32_t p = L->a[i], o = p && readable(p, 4) ? MR32(p) : 0u;
+            if (o && com_obj_iface(o)){
+                if (L->kind == CR_DEV && L->m == 86u) decl_note(o, L->decl);
+                put(L, " ->"); put_obj(L, o);
+            }
         }
     if (c->eax) put(L, " =%x", c->eax);
     emit(L->b, L->n);
