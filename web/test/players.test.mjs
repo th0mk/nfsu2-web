@@ -7,6 +7,8 @@
 // online crate's tests (web/server-rs/crates/online/src/tests/lobby.rs), the free-roam one (driving there, or paused)
 // in the roam crate's (web/server-rs/crates/roam/tests/roam_hub.rs).
 // Ports: NFSU2_TEST_PLAYERS_PORT1 (8530), NFSU2_TEST_PLAYERS_PORT2 (8630).
+// NFSU2_TEST_GAME=mw: the same against Most Wanted's server (--game mw, a made-up game folder: game-fixture.mjs),
+// under /mw, with no Online mode (online null).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,11 +20,14 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import * as esbuild from 'esbuild';
 import { serverCommand } from '../tools/server-cmd.mjs';
+import { G } from './game-fixture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DATA = process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2');
+const DATA = G.data, B = G.base;
+// (the Online count: none for a game whose server has no Online mode yet)
+const ON = G.online ? 0 : null;
 const P1 = +(process.env.NFSU2_TEST_PLAYERS_PORT1 || 8530), P2 = +(process.env.NFSU2_TEST_PLAYERS_PORT2 || 8630);
-const SKIP = !fs.existsSync(path.join(DATA, 'SPEED2.EXE')) && 'no game folder (NFSU2_DATA)';
+const SKIP = !fs.existsSync(path.join(DATA, G.exe)) && 'no game folder (NFSU2_DATA)';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 /** what a wait gives, or a failure after ms (a message that never comes fails the test, and the server still stops) */
 const within = (ms, what, p) => {
@@ -32,7 +37,7 @@ const within = (ms, what, p) => {
 
 async function server(port, extra = []) {
   const st = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'nfsu2-players-test-'));
-  const srv = spawn(...serverCommand(['--data', DATA, '--http-port', String(port), '--state', st, ...extra]),
+  const srv = spawn(...serverCommand(['--data', DATA, ...G.args, '--http-port', String(port), '--state', st, ...extra]),
     { stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((res, rej) => {
     let out = '';
@@ -42,13 +47,13 @@ async function server(port, extra = []) {
   });
   return {
     get: (p, host = `localhost:${port}`) => new Promise((res, rej) => {
-      http.get({ host: '127.0.0.1', port, path: p, headers: { host } }, r => {
+      http.get({ host: '127.0.0.1', port, path: B + p, headers: { host } }, r => {
         let body = ''; r.on('data', d => { body += d; }); r.on('end', () => res({ status: r.statusCode, headers: r.headers, body }));
       }).on('error', rej);
     }),
     // a browser's game on the switch: its welcome, then its hello
     player: name => within(5000, `welcome for ${name}`, new Promise(res => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/lan`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}${B}/lan`);
       ws.on('message', (d, bin) => { if (!bin && JSON.parse(String(d)).t === 'welcome') { ws.send(JSON.stringify({ t: 'hello', name })); res(ws); } });
     })),
     stop: async () => {
@@ -68,23 +73,23 @@ test('/players: three counts, full, the line and roamBusy, nothing else, never c
     assert.match(r.headers['cache-control'], /no-store/);
     assert.equal(r.headers['cdn-cache-control'], 'no-store');
     assert.ok(r.headers['x-content-type-options'], 'the security headers of every response');
-    assert.deepEqual(JSON.parse(r.body), { players: 0, online: 0, roam: 0, full: false, queue: 0, roamBusy: false });
+    assert.deepEqual(JSON.parse(r.body), { players: 0, online: ON, roam: 0, full: false, queue: 0, roamBusy: false });
     assert.deepEqual(Object.keys(JSON.parse(r.body)), ['players', 'online', 'roam', 'full', 'queue', 'roamBusy'], 'nothing else in the body');
     // a page in a room asks how many are in free roam there (the hub's count: web/server-rs/crates/roam/tests/roam_hub.rs)
-    assert.deepEqual(JSON.parse((await s.get('/players?room=370129458')).body), { players: 0, online: 0, roam: 0, full: false, queue: 0, roamBusy: false, room: 0 });
-    assert.deepEqual(JSON.parse((await s.get('/players?room=0')).body), { players: 0, online: 0, roam: 0, full: false, queue: 0, roamBusy: false }, 'room 0 is none');
+    assert.deepEqual(JSON.parse((await s.get('/players?room=370129458')).body), { players: 0, online: ON, roam: 0, full: false, queue: 0, roamBusy: false, room: 0 });
+    assert.deepEqual(JSON.parse((await s.get('/players?room=0')).body), { players: 0, online: ON, roam: 0, full: false, queue: 0, roamBusy: false }, 'room 0 is none');
     // two games on the switch, one leaves
     const a = await s.player('Alice'), b = await s.player('Bob');
     await sleep(100);
-    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 2, online: 0, roam: 0, full: false, queue: 0, roamBusy: false });
+    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 2, online: ON, roam: 0, full: false, queue: 0, roamBusy: false });
     b.close(); await sleep(300);
     r = await s.get('/players');
-    assert.equal(r.body, '{"players":1,"online":0,"roam":0,"full":false,"queue":0,"roamBusy":false}', 'counts only: no names, addresses or times');
+    assert.equal(r.body, `{"players":1,"online":${JSON.stringify(ON)},"roam":0,"full":false,"queue":0,"roamBusy":false}`, 'counts only: no names, addresses or times');
     a.close();
     // another site's name (DNS rebinding) gets what every route gives it
     assert.equal((await s.get('/players', 'evil.example')).status, 421);
     // HEAD: the headers, no body
-    const head = await new Promise(res => http.request({ host: '127.0.0.1', port: P1, path: '/players', method: 'HEAD', headers: { host: `localhost:${P1}` } },
+    const head = await new Promise(res => http.request({ host: '127.0.0.1', port: P1, path: `${B}/players`, method: 'HEAD', headers: { host: `localhost:${P1}` } },
       x => { let n = 0; x.on('data', d => { n += d.length; }); x.on('end', () => res({ status: x.statusCode, n })); }).end());
     assert.deepEqual(head, { status: 200, n: 0 });
   } finally { await s.stop(); }
@@ -102,11 +107,11 @@ test('/players with --max-peers 1: full while one plays, the next game of before
   try {
     const a = await s.player('Alice');
     await sleep(100);
-    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 1, online: 0, roam: 0, full: true, queue: 0, roamBusy: false });
-    const b = new WebSocket(`ws://127.0.0.1:${P1}/lan`);
+    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 1, online: ON, roam: 0, full: true, queue: 0, roamBusy: false });
+    const b = new WebSocket(`ws://127.0.0.1:${P1}${B}/lan`);
     assert.deepEqual(await within(5000, 'close', new Promise(r => b.on('close', (k, why) => r([k, String(why)])))), [1013, 'LAN full']);
     // a page that can wait (?queue): its place in line, and the welcome once Alice is gone
-    const c = new WebSocket(`ws://127.0.0.1:${P1}/lan?queue`), got = [];
+    const c = new WebSocket(`ws://127.0.0.1:${P1}${B}/lan?queue`), got = [];
     let gone = null;
     c.on('close', (k, why) => { gone = `closed ${k} ${why}`; });
     const next = t => within(5000, `"${t}"`, new Promise((res, rej) => {
@@ -116,15 +121,15 @@ test('/players with --max-peers 1: full while one plays, the next game of before
     c.on('message', (d, bin) => { if (!bin) got.push(JSON.parse(String(d))); });
     const q = await next('queue');
     assert.deepEqual([q.pos, q.of, typeof q.ticket], [1, 1, 'string']);
-    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 1, online: 0, roam: 0, full: true, queue: 1, roamBusy: false });
+    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 1, online: ON, roam: 0, full: true, queue: 1, roamBusy: false });
     // Alice leaves as the page lets go of its place (web/src/net: 1000 "closed").  A link that just drops (no code)
     // keeps its place for a minute, for the page to come back to (the switch's reserve_ms): no place for the line
     a.close(1000, 'closed');
     await next('welcome');
     await sleep(100);
-    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 1, online: 0, roam: 0, full: true, queue: 0, roamBusy: false });
+    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 1, online: ON, roam: 0, full: true, queue: 0, roamBusy: false });
     c.close(1000, 'closed'); await sleep(300);
-    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 0, online: 0, roam: 0, full: false, queue: 0, roamBusy: false });
+    assert.deepEqual(JSON.parse((await s.get('/players')).body), { players: 0, online: ON, roam: 0, full: false, queue: 0, roamBusy: false });
   } finally { await s.stop(); }
 });
 

@@ -28,6 +28,10 @@
 // beside them NFSU2_TEST_PORT3 to 6 (8535 to 8538); temporary files in
 // $TMPDIR.  Needs the game folder (NFSU2_DATA) and a built web/dist and
 // out/web/nfsu2.wasm; skipped without them.
+// NFSU2_TEST_GAME=mw: the same against Most Wanted's server (--game mw) with a made-up game folder and module
+// (game-fixture.mjs) and its built page (web/dist-mw: node build.mjs --game mw): every route under /mw (the requests'
+// paths go there; the crawl also asks the root's and the bare /mw), its program speed.exe, its test scripts tests/mw;
+// it has no robots.txt or other root file of its own and no --base-path case (UG2's).
 import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -42,6 +46,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { makeTestCerts, startCfSim } from './cf-sim.mjs';
 import { serverCommand } from '../tools/server-cmd.mjs';
+import { G } from './game-fixture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '../..');
@@ -51,17 +56,18 @@ const READY = process.env.NFSU2_TEST_READY || '  access    :';
 // a server from a bundle (web/deploy/pack.sh, NFSU2_REPO its folder) has no test pages, test scripts or source maps
 // even with --dev
 const SERVED = process.env.NFSU2_REPO;
-const AIDS = fs.existsSync(path.join(SERVED, 'web/dist-dev/test')) && fs.existsSync(path.join(SERVED, 'tests'));
-const DATA = process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2');
+const DIST = G.id === 'ug2' ? 'web/dist' : `web/dist-${G.id}`, TESTS = G.id === 'ug2' ? 'tests' : `tests/${G.id}`;
+const AIDS = fs.existsSync(path.join(SERVED, `${DIST}-dev/test`)) && fs.existsSync(path.join(SERVED, TESTS));
+const DATA = G.data;
+// the game's routes' base on this machine ('' for Underground 2, '/mw' for Most Wanted), its program, a test script
+const B = G.base, EXE = G.exe, SCRIPT = G.id === 'ug2' ? 'quickrace.txt' : 'boot_menu.txt';
 const P1 = +(process.env.NFSU2_TEST_PORT1 || 8527), P2 = +(process.env.NFSU2_TEST_PORT2 || 8627);
 // the keep-alive test's, the renewed certificate's, and the Cloudflare simulation's two (the proxy, the server)
 const P3 = +(process.env.NFSU2_TEST_PORT3 || 8535), P4 = +(process.env.NFSU2_TEST_PORT4 || 8536);
 const P5 = +(process.env.NFSU2_TEST_PORT5 || 8537), P6 = +(process.env.NFSU2_TEST_PORT6 || 8538);
 const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'nfsu2-deploy-test-'));
 const CERTS = makeTestCerts(path.join(TMP, 'certs'));
-const WASM = path.join(REPO, 'out/web/nfsu2.wasm');
-const SKIP = !fs.existsSync(path.join(DATA, 'SPEED2.EXE')) ? 'no game folder (NFSU2_DATA)'
-  : !fs.existsSync(WASM) ? 'no out/web/nfsu2.wasm (web/build.sh)' : !fs.existsSync(path.join(REPO, 'web/dist/main.js')) ? 'no web/dist (node build.mjs)' : false;
+const SKIP = G.skip || (!fs.existsSync(path.join(REPO, DIST, 'main.js')) && `no ${DIST} (node build.mjs${G.id === 'ug2' ? '' : ` --game ${G.id}`})`);
 // this machine's LAN address: a peer the server does not trust
 const LAN_IP = Object.values(os.networkInterfaces()).flat().find(a => a && a.family === 'IPv4' && !a.internal)?.address ?? null;
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
@@ -95,7 +101,8 @@ const REQUIRED = {
   'cache-control': v => /\bprivate\b/.test(v) && /\bno-(store|cache)\b/.test(v), 'cdn-cache-control': v => v === 'no-store',
   'cloudflare-cdn-cache-control': v => v === 'no-store',
 };
-const INDEXABLE = new Set(['index', 'index.html', 'HEAD /', 'robots']);
+// (Most Wanted's server has no robots.txt of its own: Underground 2's answers the shared site's root)
+const INDEXABLE = new Set(['index', 'index.html', 'HEAD /', ...(G.id === 'ug2' ? ['robots'] : [])]);
 const FORBIDDEN = ['server', 'x-powered-by', 'last-modified'];
 function headerProblems(r, { viaProxy = false, indexable = false } = {}) {
   const bad = [];
@@ -134,14 +141,16 @@ function parse(buf, timedOut) {
   }
   return { status: +statusLine.split(' ')[1], statusLine, headers, head, body, timedOut };
 }
-const req = (method, p, { host = 'localhost', headers = {}, body = '', version = '1.1' } = {}) =>
+// (a path from the root goes under the game's base: B; rootReq sends it as it is)
+const rootReq = (method, p, { host = 'localhost', headers = {}, body = '', version = '1.1' } = {}) =>
   `${method} ${p} HTTP/${version}\r\n${host === null ? '' : `Host: ${host}\r\n`}Connection: close\r\n${Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join('')}\r\n${body}`;
+const req = (method, p, o) => rootReq(method, p.startsWith('/') ? B + p : p, o);
 const upgrade = (p, extra = {}) => req('GET', p, { headers: { Upgrade: 'websocket', Connection: 'Upgrade', 'Sec-WebSocket-Version': '13',
   'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'), ...extra } }).replace('Connection: close\r\n', '');
 
 // ---- a server under test ----
 async function startServer(args, { expectExit = false, env = {}, state = fs.mkdtempSync(path.join(TMP, 'state-')) } = {}) {
-  const c = spawn(...serverCommand([...(args.includes('--data') ? [] : ['--data', DATA]), '--state', state, ...args]), { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  const c = spawn(...serverCommand([...(args.includes('--data') ? [] : ['--data', DATA]), ...G.args, '--state', state, ...args]), { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let out = '';
   c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { out += d; });
   const exited = new Promise(r => c.on('exit', code => r(code)));
@@ -175,14 +184,18 @@ const closeOf = (ws, ms = 0) => new Promise(r => {
 // ---- the crawl ----
 // base: the routes' base path ('/u2': each path under it, as the server serves a name that has one, PLAN D-38), with
 // the paths around it besides: the origin's root files, the bare base, and the root's own routes
+// (Most Wanted's: its own base, B, everywhere)
 function crawlRequests(base = '') {
   const r = [];
   const add = (name, data, o = {}) => r.push({ name, data, ...o });
+  const bare = base || B;
   crawlPaths(add, (method, p, o) => req(method, p.startsWith('/') ? base + p : p, o), (p, extra) => upgrade(base + p, extra));
-  if (base) {
-    add('root robots', req('GET', '/robots.txt')); add('bare base', req('GET', base)); add('bare base query', req('GET', `${base}?a=1`));
-    add('root index', req('GET', '/')); add('root path', req('GET', '/game.json')); add('root manifest', req('GET', '/data-manifest'));
-    add('root lan', upgrade('/lan'));
+  if (bare) {
+    const up = (p, extra = {}) => rootReq('GET', p, { headers: { Upgrade: 'websocket', Connection: 'Upgrade', 'Sec-WebSocket-Version': '13',
+      'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'), ...extra } }).replace('Connection: close\r\n', '');
+    add('root robots', rootReq('GET', '/robots.txt')); add('bare base', rootReq('GET', bare)); add('bare base query', rootReq('GET', `${bare}?a=1`));
+    add('root index', rootReq('GET', '/')); add('root path', rootReq('GET', '/game.json')); add('root manifest', rootReq('GET', '/data-manifest'));
+    add('root lan', up('/lan'));
   }
   return r;
 }
@@ -193,18 +206,18 @@ function crawlPaths(add, req, upgrade) {
   add('io-worker', req('GET', '/host/io-worker.js')); add('game-worker', req('GET', '/host/game-worker.js'));
   add('worklet', req('GET', '/audio/worklet.js'));
   add('main.js.map', req('GET', '/main.js.map')); add('test page', req('GET', '/test/hostcheck.html'));
-  add('test script', req('GET', '/tests/scripts/quickrace.txt'));
+  add('test script', req('GET', `/tests/scripts/${SCRIPT}`));
   add('game.json', req('GET', '/game.json'));
   add('game.wasm br', req('GET', '/game.wasm', { headers: { 'Accept-Encoding': 'gzip, br' } }), { binary: true, br: true });
   add('game.wasm range', req('GET', '/game.wasm', { headers: { Range: 'bytes=0-65535' } }), { binary: true });
   add('HEAD game.wasm', req('HEAD', '/game.wasm'));
   add('manifest gz', req('GET', '/data-manifest', { headers: { 'Accept-Encoding': 'gzip' } }), { gz: true });
   add('manifest', req('GET', '/data-manifest')); add('manifest refresh', req('GET', '/data-manifest?refresh'));
-  add('data range', req('GET', '/data/SPEED2.EXE', { headers: { Range: 'bytes=0-4095' } }), { binary: true });
-  add('data blocks', req('GET', '/data-blocks/SPEED2.EXE?b=0&n=2', { headers: { 'Accept-Encoding': 'gzip, br' } }), { binary: true, br: true, gz: true });
-  add('data blocks bad', req('GET', '/data-blocks/SPEED2.EXE?b=0&n=99'));
-  add('data blocks past', req('GET', '/data-blocks/SPEED2.EXE?b=999999&n=1'));
-  add('data 416', req('GET', '/data/SPEED2.EXE', { headers: { Range: 'bytes=999999999999-' } }));
+  add('data range', req('GET', `/data/${EXE}`, { headers: { Range: 'bytes=0-4095' } }), { binary: true });
+  add('data blocks', req('GET', `/data-blocks/${EXE}?b=0&n=2`, { headers: { 'Accept-Encoding': 'gzip, br' } }), { binary: true, br: true, gz: true });
+  add('data blocks bad', req('GET', `/data-blocks/${EXE}?b=0&n=99`));
+  add('data blocks past', req('GET', `/data-blocks/${EXE}?b=999999&n=1`));
+  add('data 416', req('GET', `/data/${EXE}`, { headers: { Range: 'bytes=999999999999-' } }));
   add('data missing', req('GET', '/data/no/such/file.bin')); add('data dir', req('GET', '/data/')); add('data dir2', req('GET', '/data/FRONTEND'));
   // gone: what the page used to be told about the server, and the built-in certificate authority
   add('server-info', req('GET', '/server-info')); add('robots', req('GET', '/robots.txt'));
@@ -239,7 +252,7 @@ async function crawl(label, target, { viaProxy = false, base = '', indexable = I
     results.push({ ...r, res });
     if (r.name === 'data range') etag = res.headers.etag;
   }
-  if (etag) results.push({ name: 'data 304', res: await rawRequest({ ...target, data: req('GET', `${base}/data/SPEED2.EXE`, { headers: { 'If-None-Match': etag } }) }) });
+  if (etag) results.push({ name: 'data 304', res: await rawRequest({ ...target, data: req('GET', `${base}/data/${EXE}`, { headers: { 'If-None-Match': etag } }) }) });
   const problems = [];
   for (const { name, res, binary, br, gz } of results) {
     if (!res.status) { problems.push(`${label} ${name}: no HTTP answer (${JSON.stringify(res.head.slice(0, 80))})`); continue; }
@@ -280,7 +293,19 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
   // soft checks: every problem of every mode is listed at the end
   const expect = (ok, msg) => { if (!ok) all.push(msg); };
   const is = (label, statuses, name, code) => expect(statuses[name] === code, `${label} ${name}: ${statuses[name]}, not ${code}`);
-  const gone = (label, statuses) => { for (const n of ['server-info', 'setup', 'ca.crt']) is(label, statuses, n, 404); is(label, statuses, 'robots', 200); };
+  const gone = (label, statuses) => { for (const n of ['server-info', 'setup', 'ca.crt']) is(label, statuses, n, 404); is(label, statuses, 'robots', G.id === 'ug2' ? 200 : 404); };
+  // Most Wanted's under /mw on every name: the bare /mw goes there, nothing outside it answers, the manifest names
+  // its blocks there (PLAN D-38)
+  const underBase = (label, h) => {
+    if (!B) return;
+    for (const n of ['root robots', 'root index', 'root path', 'root manifest', 'root lan']) is(label, h.statuses, n, 404);
+    is(label, h.statuses, 'bare base', 308);
+    const res = n => h.results.find(r => r.name === n).res;
+    expect(res('bare base').headers.location === `${B}/`, `${label}: ${B} goes to ${res('bare base').headers.location}`);
+    expect(res('bare base query').headers.location === `${B}/?a=1`, `${label}: ${B}?a=1 goes to ${res('bare base query').headers.location}`);
+    expect(JSON.parse(res('manifest').body).blocks.url === `${B}/data-blocks/v2/`, `${label}: the manifest names its blocks under ${B}`);
+    for (const n of ['index', 'main.js', 'game.json', 'manifest']) is(label, h.statuses, n, 200);
+  };
   // 1. no TLS (the default: this machine only, http://localhost), no --dev
   {
     const s = await startServer(['--http-port', String(P2)]);
@@ -289,9 +314,10 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
       all.push(...http.problems);
       summary['no-tls'] = http.statuses;
       gone('http', http.statuses);
+      underBase('http', http);
       is('http', http.statuses, 'main.js.map', 404); is('http', http.statuses, 'test page', 404); is('http', http.statuses, 'test script', 404);
       is('http', http.statuses, 'PUT artifact', 405);
-      const w = await wsCrawl('no-tls', `ws://localhost:${P2}/lan`, { headers: { Origin: `http://localhost:${P2}` } });
+      const w = await wsCrawl('no-tls', `ws://localhost:${P2}${B}/lan`, { headers: { Origin: `http://localhost:${P2}` } });
       all.push(...w.problems);
     } finally { await s.stop(); }
   }
@@ -318,8 +344,9 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
       all.push(...https.problems);
       summary['tls-cert'] = https.statuses;
       gone('https', https.statuses);
+      underBase('https', https);
       is('https', https.statuses, 'main.js.map', 404); is('https', https.statuses, 'test page', 404); is('https', https.statuses, 'test script', 404);
-      const w = await wsCrawl('tls-cert', `wss://localhost:${P1}/lan`, { ca: CERTS.caPem, headers: { Origin: `https://localhost:${P1}` } });
+      const w = await wsCrawl('tls-cert', `wss://localhost:${P1}${B}/lan`, { ca: CERTS.caPem, headers: { Origin: `https://localhost:${P1}` } });
       all.push(...w.problems);
       expect(w.oversizeClose.code === 1009, `a message over 64 KB closes the connection with 1009, not ${w.oversizeClose.code}`);
       summary.wsClose = w.oversizeClose;
@@ -336,11 +363,11 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
       all.push(...viaProxy.problems, ...direct.problems);
       summary['cf-proxy'] = viaProxy.statuses;
       gone('viaProxy', viaProxy.statuses);
-      const w = await wsCrawl('cf-proxy', `wss://localhost:${P1}/lan`, { ca: CERTS.caPem, headers: { Origin: `https://localhost:${P1}` } });
+      const w = await wsCrawl('cf-proxy', `wss://localhost:${P1}${B}/lan`, { ca: CERTS.caPem, headers: { Origin: `https://localhost:${P1}` } });
       all.push(...w.problems);
       // players: one at most here; the second gets the fixed reason
-      const a = await wsOpen(`ws://127.0.0.1:${P2}/lan`);
-      const b = await wsOpen(`ws://127.0.0.1:${P2}/lan`);
+      const a = await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`);
+      const b = await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`);
       const cb = await closeOf(b.ws, 3000);
       expect(cb.code === 1013 && cb.reason === 'LAN full', `a full switch closes with ${cb.code} ${cb.reason}`);
       a.ws.close();
@@ -348,8 +375,9 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
   }
   // 5. under a base (PLAN D-38): this machine's name standing in for the site UG2 shares with Most Wanted, as
   // --base-path puts it under /u2: every answer with the same headers and nothing about the machine; the page's index
-  // the one indexable answer under /u2 and robots.txt at the root alone, naming both games' bases
-  {
+  // the one indexable answer under /u2 and robots.txt at the root alone, naming both games' bases (Underground 2's
+  // alone: Most Wanted's is under its base in every mode above)
+  if (G.id === 'ug2') {
     const s = await startServer(['--http-port', String(P2), '--base-path', 'localhost=/u2']);
     try {
       const http = await crawl('base /u2', { port: P2 }, { base: '/u2', indexable: new Set(['index', 'index.html', 'HEAD /', 'root robots']) });
@@ -379,7 +407,7 @@ inTurn('path traversal and file safety', { skip: SKIP, timeout: 60_000 }, async 
   const data = fs.mkdtempSync(path.join(TMP, 'data-'));
   const outside = fs.mkdtempSync(path.join(TMP, 'outside-'));
   fs.writeFileSync(path.join(outside, 'secret.txt'), 'SECRET-OUTSIDE');
-  fs.writeFileSync(path.join(data, 'SPEED2.EXE'), 'MZ fake');
+  fs.writeFileSync(path.join(data, EXE), 'MZ fake');
   fs.mkdirSync(path.join(data, 'GLOBAL'));
   fs.writeFileSync(path.join(data, 'GLOBAL', 'Game.txt'), 'inside');
   fs.writeFileSync(path.join(data, '.hidden'), 'SECRET-DOT');
@@ -424,7 +452,7 @@ inTurn('path traversal and file safety', { skip: SKIP, timeout: 60_000 }, async 
     assert.equal(html.headers['content-type'], 'application/octet-stream', 'a file in the game folder is never served as a page');
     // the manifest lists neither the links, the dot files nor what is not the game's
     const m = JSON.parse((await get('/data-manifest')).body);
-    assert.deepEqual(m.files.map(f => f.p).sort(), ['GLOBAL', 'GLOBAL/Game.txt', 'GLOBAL/page.html', 'SPEED2.EXE']);
+    assert.deepEqual(m.files.map(f => f.p).sort(), ['GLOBAL', 'GLOBAL/Game.txt', 'GLOBAL/page.html', EXE].sort());
     assert.ok(!('root' in m), 'no folder name');
     console.log(`traversal: ${attacks.length} attempts, statuses ${JSON.stringify(Object.entries(seen).reduce((o, [, v]) => ({ ...o, [v]: (o[v] ?? 0) + 1 }), {}))}`);
   } finally { await s.stop(); }
@@ -441,7 +469,8 @@ inTurn('limits: methods, bodies, header size, slow headers, /lan per address', {
     assert.equal(await st(req('GET', '/', { headers: { Expect: 'teapot' } })), 417);
     assert.equal(await st(req('GET', '/' + 'a'.repeat(20 << 10))), 431, 'a URL longer than the header limit');
     // slow headers (slow-loris): one header line every 2 s; the server hangs up within its 15 s header limit (+5 s check)
-    const t0 = Date.now();
+    // (by the monotonic clock: WSL's wall clock jumps by seconds now and then)
+    const t0 = performance.now();
     const sock = net.connect(P2, '127.0.0.1');
     let answer = '';
     sock.on('data', d => { answer += d; });
@@ -449,18 +478,18 @@ inTurn('limits: methods, bodies, header size, slow headers, /lan per address', {
     sock.write('GET / HTTP/1.1\r\nHost: localhost\r\n');
     const drip = setInterval(() => { try { sock.write(`X-Drip-${Date.now()}: 1\r\n`); } catch { /* closed */ } }, 2000);
     await closed; clearInterval(drip);
-    const tSlow = (Date.now() - t0) / 1000;
+    const tSlow = (performance.now() - t0) / 1000;
     assert.ok(tSlow <= 22, `slow headers cut after ${tSlow.toFixed(1)} s`);
     assert.match(answer, /^HTTP\/1\.1 408/);
     console.log(`slow headers: connection closed after ${tSlow.toFixed(1)} s with ${answer.split('\r\n')[0]}`);
     // /lan: 8 connections from one address, the 9th refused
     const socks = [];
-    for (let i = 0; i < 8; i++) { const o = await wsOpen(`ws://127.0.0.1:${P2}/lan`); assert.equal(o.status, 101); socks.push(o.ws); }
-    const ninth = await wsOpen(`ws://127.0.0.1:${P2}/lan`);
+    for (let i = 0; i < 8; i++) { const o = await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`); assert.equal(o.status, 101); socks.push(o.ws); }
+    const ninth = await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`);
     assert.equal(ninth.status, 429, 'the 9th connection from one address');
     for (const w of socks) w.close();
     await sleep(300);
-    assert.equal((await wsOpen(`ws://127.0.0.1:${P2}/lan`)).status, 101, 'free again once they closed');
+    assert.equal((await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`)).status, 101, 'free again once they closed');
     // the console (a VPS's journal) names players by virtual address, never by their real one
     const lanLines = s.out().split('\n').filter(l => l.startsWith('[lan]'));
     assert.ok(lanLines.some(l => / 10\.77\.[0-7]\.\d+ joined/.test(l)) && lanLines.some(l => l.includes('refused')), lanLines.join('\n'));
@@ -525,7 +554,7 @@ inTurn('a ping flood from a client that never reads: cut, the server\'s memory s
     assert.ok(r1 - r0 < 64, `memory flat (+${(r1 - r0).toFixed(0)} MB)`);
     sock.destroy();
     // the switch still works for others
-    const ok = await wsOpen(`ws://127.0.0.1:${P2}/lan`);
+    const ok = await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`);
     assert.equal(ok.status, 101); ok.ws.close();
   } finally { await s.stop(); }
 });
@@ -541,7 +570,7 @@ inTurn('requests queued on one connection (pipelined) and never read: cut, no me
     sock.on('error', () => {});
     sock.pause();
     let closed = false; sock.on('close', () => { closed = true; });
-    sock.write(req('GET', '/data/SPEED2.EXE').replace('Connection: close\r\n', '').repeat(5000));
+    sock.write(req('GET', `/data/${EXE}`).replace('Connection: close\r\n', '').repeat(5000));
     await sleep(3000);
     const r1 = rssMb(s.c.pid), f1 = openFiles(s.c.pid);
     sock.destroy();
@@ -686,9 +715,9 @@ beside('with --trusted-proxies cloudflare, the long keep-alive is for the proxie
 
 inTurn('--dev gating and start-up refusals', { skip: SKIP, timeout: 60_000 }, async () => {
   const STUB = fs.mkdtempSync(path.join(TMP, 'stub-'));
-  fs.writeFileSync(path.join(STUB, 'SPEED2.EXE'), 'MZ'); fs.mkdirSync(path.join(STUB, 'GLOBAL'));
+  fs.writeFileSync(path.join(STUB, EXE), 'MZ'); fs.mkdirSync(path.join(STUB, 'GLOBAL'));
   fs.copyFileSync(CERTS.key, path.join(STUB, 'GLOBAL', 'k.pem'));
-  fs.writeFileSync(path.join(STUB, 'GLOBAL', 'SPEED2.EXE'), 'MZ');            // GLOBAL as a game folder of its own (inside --state)
+  fs.writeFileSync(path.join(STUB, 'GLOBAL', EXE), 'MZ');            // GLOBAL as a game folder of its own (inside --state)
   const refusals = [
     [['--http-port', String(P2), '--artifacts', path.join(TMP, 'a')], /needs --dev/],
     [['--port', String(P1), '--tls-cert', CERTS.cert], /go together/],
@@ -707,7 +736,7 @@ inTurn('--dev gating and start-up refusals', { skip: SKIP, timeout: 60_000 }, as
     [['--behind-proxy', '--http-port', String(P2), '--host', 'not a name'], /not a host name/],
     // the audit's F5 / DEP-6: keys never inside what the server serves
     [['--http-port', String(P2), '--data', STUB], /--state .* is inside --data/, { state: path.join(STUB, 'GLOBAL', 'state') }],
-    [['--http-port', String(P2), '--data', STUB], /--state .* is inside --dist/, { state: path.join(REPO, 'web/dist/state') }],
+    [['--http-port', String(P2), '--data', STUB], /--state .* is inside --dist/, { state: path.join(REPO, DIST, 'state') }],
     [['--http-port', String(P2), '--data', STUB, '--tls-cert', CERTS.cert, '--tls-key', path.join(STUB, 'GLOBAL', 'k.pem')], /--tls-key .* is inside --data/],
     [['--http-port', String(P2), '--data', path.join(STUB, 'GLOBAL')], /is inside --state/, { state: STUB }],
   ];
@@ -722,13 +751,13 @@ inTurn('--dev gating and start-up refusals', { skip: SKIP, timeout: 60_000 }, as
   // NFSU2_DEV in the environment does not turn on the test aids
   const s = await startServer(['--http-port', String(P2)], { env: { NFSU2_DEV: '1' } });
   try {
-    for (const p of ['/test/hostcheck.html', '/tests/scripts/quickrace.txt', '/main.js.map', '/host/io-worker.js.map',
-      '/TEST/hostcheck.html', '/Test/hostcheck.html', '/main.js.MAP', '/Tests/scripts/quickrace.txt', '/test%2fhostcheck.html',
+    for (const p of ['/test/hostcheck.html', `/tests/scripts/${SCRIPT}`, '/main.js.map', '/host/io-worker.js.map',
+      '/TEST/hostcheck.html', '/Test/hostcheck.html', '/main.js.MAP', `/Tests/scripts/${SCRIPT}`, '/test%2fhostcheck.html',
       // the phase-2 deploy review's bypasses: an encoded slash that a later normalisation merged, and a
       // character the Mac's disk folds to "s" (U+017F); then their relatives
-      '/%2ftest/play.html', '/%2Ftest/play.js', '/te%C5%BFt/play.html', '/%2ftests/scripts/quickrace.txt', '/%2fmain.js.map',
+      '/%2ftest/play.html', '/%2Ftest/play.js', '/te%C5%BFt/play.html', `/%2ftests/scripts/${SCRIPT}`, '/%2fmain.js.map',
       '//test/play.html', '/x/..%2ftest/play.html', '/%5ctest/play.html', '/TE%C5%BFT/hostcheck.html', '/te%E1%BA%9Bt/play.html',
-      '/%EF%BD%94est/play.html', '/main.js.%EF%BD%8Dap', '/te%C5%BFts/scripts/quickrace.txt', '/./test/play.html', '/test/./play.html',
+      '/%EF%BD%94est/play.html', '/main.js.%EF%BD%8Dap', `/te%C5%BFts/scripts/${SCRIPT}`, '/./test/play.html', '/test/./play.html',
       '/test%2f..%2ftest/play.html', '/%2e/test/play.html']) {
       const r = await rawRequest({ port: P2, data: req('GET', p) });
       assert.ok(r.status === 404 || r.status === 400, `${p}: ${r.status}`);
@@ -785,16 +814,16 @@ inTurn('trusted proxies: client address headers believed only from a trusted pee
     assert.equal(await probe(s, lan, { 'X-Forwarded-For': '203.0.113.9', 'CF-Connecting-IP': '203.0.113.9', 'X-Real-IP': '203.0.113.9' }), LAN_IP);
     // an untrusted peer cannot claim another host for the /lan Origin check
     const evil = { Origin: 'https://evil.example', 'X-Forwarded-Host': 'evil.example' };
-    assert.equal((await wsOpen(`wss://${LAN_IP}:${P1}/lan`, { ca, headers: evil })).status, 403);
+    assert.equal((await wsOpen(`wss://${LAN_IP}:${P1}${B}/lan`, { ca, headers: evil })).status, 403);
     // from a trusted proxy, X-Forwarded-Host counts, for one of this server's own names only (the audit's F7)
-    assert.equal((await wsOpen(`ws://127.0.0.1:${P2}/lan`, { headers: evil })).status, 403, 'not for another site\'s name');
-    const fromLocal = await wsOpen(`ws://127.0.0.1:${P2}/lan`, { headers: { Origin: 'https://localhost:9999', 'X-Forwarded-Host': 'localhost:9999' } });
+    assert.equal((await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`, { headers: evil })).status, 403, 'not for another site\'s name');
+    const fromLocal = await wsOpen(`ws://127.0.0.1:${P2}${B}/lan`, { headers: { Origin: 'https://localhost:9999', 'X-Forwarded-Host': 'localhost:9999' } });
     assert.equal(fromLocal.status, 101, 'X-Forwarded-Host from a trusted proxy counts');
     fromLocal.ws.close();
     // nor dodge the per-address limit with a different CF-Connecting-IP each time
     const socks = [];
-    for (let i = 0; i < 8; i++) { const o = await wsOpen(`wss://${LAN_IP}:${P1}/lan`, { ca, headers: { 'CF-Connecting-IP': `203.0.113.${i + 1}`, 'X-Forwarded-For': `203.0.113.${i + 1}` } }); assert.equal(o.status, 101); socks.push(o.ws); }
-    const ninth = await wsOpen(`wss://${LAN_IP}:${P1}/lan`, { ca, headers: { 'CF-Connecting-IP': '203.0.113.99' } });
+    for (let i = 0; i < 8; i++) { const o = await wsOpen(`wss://${LAN_IP}:${P1}${B}/lan`, { ca, headers: { 'CF-Connecting-IP': `203.0.113.${i + 1}`, 'X-Forwarded-For': `203.0.113.${i + 1}` } }); assert.equal(o.status, 101); socks.push(o.ws); }
+    const ninth = await wsOpen(`wss://${LAN_IP}:${P1}${B}/lan`, { ca, headers: { 'CF-Connecting-IP': '203.0.113.99' } });
     assert.equal(ninth.status, 429, 'spoofed CF-Connecting-IP from an untrusted peer ignored');
     for (const w of socks) w.close();
     // X-Forwarded-Proto from an untrusted peer: nothing (HSTS is about TLS this server sees, or a trusted proxy's word)
@@ -847,15 +876,15 @@ beside('Cloudflare simulation: client address, cache headers, ranges, brotli, th
     assert.equal(page.headers['cdn-cache-control'], 'no-store'); assert.equal(page.headers['cloudflare-cdn-cache-control'], 'no-store');
     assert.match(page.headers['cache-control'], /private, no-store, no-transform/);
     await sleep(100);
-    assert.match(s.out(), /\[http\] 198\.51\.100\.7 GET \/ 200/, 'the client address from CF-Connecting-IP (the edge replaced the one the client sent)');
+    assert.ok(s.out().includes(`[http] 198.51.100.7 GET ${B}/ 200`), 'the client address from CF-Connecting-IP (the edge replaced the one the client sent)');
     assert.ok(!s.out().includes('1.2.3.4'));
     // a byte range of a game file through the proxy
-    const file = fs.readFileSync(path.join(DATA, 'SPEED2.EXE'));
-    const rg = await rawRequest({ ...edge, data: req('GET', '/data/SPEED2.EXE', { host: 'nfsu2.test', headers: { Range: 'bytes=100-199' } }) });
+    const file = fs.readFileSync(path.join(DATA, EXE));
+    const rg = await rawRequest({ ...edge, data: req('GET', `/data/${EXE}`, { host: 'nfsu2.test', headers: { Range: 'bytes=100-199' } }) });
     assert.equal(rg.status, 206); assert.equal(rg.headers['content-range'], `bytes 100-199/${file.length}`);
     assert.ok(rg.body.equals(file.subarray(100, 200)));
     // a run of compressed blocks through the proxy, as the edge asks for it (gzip, br): the exact bytes
-    const run = await rawRequest({ ...edge, data: req('GET', '/data-blocks/SPEED2.EXE?b=1&n=2', { host: 'nfsu2.test', headers: { 'Accept-Encoding': 'gzip, br' } }) });
+    const run = await rawRequest({ ...edge, data: req('GET', `/data-blocks/${EXE}?b=1&n=2`, { host: 'nfsu2.test', headers: { 'Accept-Encoding': 'gzip, br' } }) });
     assert.equal(run.status, 200); assert.equal(run.headers['content-encoding'], 'br');
     assert.match(run.headers['cache-control'], /private, no-store, no-transform/);
     assert.ok(zlib.brotliDecompressSync(run.body).equals(file.subarray(1 << 20, 3 << 20)));
@@ -864,11 +893,11 @@ beside('Cloudflare simulation: client address, cache headers, ranges, brotli, th
     assert.equal(mod.status, 200); assert.equal(mod.headers['content-encoding'], 'br');
     assert.match(mod.headers['cache-control'], /private, no-cache, no-transform/);
     const sha = b => crypto.createHash('sha256').update(b).digest('hex');
-    assert.equal(sha(zlib.brotliDecompressSync(mod.body)), sha(fs.readFileSync(WASM)));
+    assert.equal(sha(zlib.brotliDecompressSync(mod.body)), sha(fs.readFileSync(G.wasm)));
     const again = await rawRequest({ ...edge, data: req('GET', '/game.wasm', { host: 'nfsu2.test', headers: { 'Accept-Encoding': 'br', 'If-None-Match': `W/${mod.headers.etag}` } }) });
     assert.equal(again.status, 304, 'a weak If-None-Match (as a proxy may make it) still matches');
     // two players on the switch through the proxy; quiet for 70 s, past the proxy's 40 s idle cut
-    const url = `wss://localhost:${P5}/lan`, opts = { ca: CERTS.caPem, headers: { Origin: `https://localhost:${P5}` } };
+    const url = `wss://localhost:${P5}${B}/lan`, opts = { ca: CERTS.caPem, headers: { Origin: `https://localhost:${P5}` } };
     const a = await wsOpen(url, opts), b = await wsOpen(url, opts);
     assert.equal(a.status, 101); assert.equal(b.status, 101);
     let pings = 0; a.ws.on('ping', () => pings++);
@@ -882,15 +911,17 @@ beside('Cloudflare simulation: client address, cache headers, ranges, brotli, th
     // and it still works: B -> A
     const welcomeA = JSON.parse(a.msgs.find(m => m.includes('welcome')));
     const f = Buffer.alloc(20); f[0] = 1; f.writeUInt32BE(welcomeA.vip >>> 0, 8); f.write('hey!', 16);
-    const got = new Promise(r => a.ws.once('message', (d, bin) => bin && r(d)));
+    // (the first binary message: a text one, such as a peers list, may come first)
+    const got = new Promise(r => { const on = (d, bin) => { if (bin) { a.ws.off('message', on); r(d); } }; a.ws.on('message', on); });
     b.ws.send(f);
     assert.equal(Buffer.from(await got).subarray(16).toString(), 'hey!');
     for (const m of [...a.msgs, ...b.msgs]) assert.deepEqual(leaks(m), [], m);
     assert.ok(![...a.msgs, ...b.msgs].some(m => m.includes('198.51.100.7') || m.includes('127.0.0.1')), 'no real address on the switch');
     const peers = JSON.parse(a.msgs.filter(m => m.includes('"peers"')).pop()).peers;
-    // the players; the server's own online host (server: true) is on the list for the game, not as a player
+    // the players; the server's own online host (server: true) is on the list for the game, not as a player (none
+    // for a game whose server has no Online mode yet)
     assert.deepEqual(peers.filter(p => !p.server).map(p => p.name).sort(), ['Alice', 'Bob']);
-    assert.deepEqual(peers.filter(p => p.server).map(p => p.vip), [0x0a4d0001]);
+    assert.deepEqual(peers.filter(p => p.server).map(p => p.vip), G.online ? [0x0a4d0001] : []);
     a.ws.close(); b.ws.close();
     console.log(`cf-sim: ${sim.stats.requests} requests, ${sim.stats.upgrades} upgrades, ${pings} pings in 70 s, idle cuts ${sim.stats.wsIdleCuts}`);
   } finally { await sim.close(); await s.stop(); }

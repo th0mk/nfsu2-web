@@ -9,6 +9,8 @@
 // small as it gets.  One block to a client that takes br goes as the server keeps it once it does (compressed at
 // brotli's best: the manifest names these at /data-blocks/v2/), and until then a shared cache keeps it a while only.
 // Port: NFSU2_TEST_BLOCKS_PORT (8532).
+// NFSU2_TEST_GAME=mw: the same against Most Wanted's server (--game mw): its program speed.exe, its music inside SOUND,
+// every route under /mw (game-fixture.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -19,6 +21,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { serverCommand } from '../tools/server-cmd.mjs';
+import { G } from './game-fixture.mjs';
 
 const PORT = +(process.env.NFSU2_TEST_BLOCKS_PORT || 8532);
 const M = 1 << 20;
@@ -32,10 +35,12 @@ const bytes = (size, seed, packs) => {
   return b;
 };
 const DATA = path.join(TMP, 'game');
-const FILES = { 'SPEED2.EXE': bytes(3 * M + 17, 'exe', false), 'TRACKS/L4RA.BUN': bytes(8 * M + 5, 'track', true),
+// the game's program, and its music (at the top in Underground 2's PFDATA, inside SOUND in Most Wanted's)
+const EXE = G.exe, MUS = G.id === 'ug2' ? 'PFDATA/MIX.MUS' : 'SOUND/PFDATA/MIX.MUS', B = G.base;
+const FILES = { [EXE]: bytes(3 * M + 17, 'exe', false), 'TRACKS/L4RA.BUN': bytes(8 * M + 5, 'track', true),
   'MOVIES/INTRO.VP6': bytes(2 * M, 'movie', false),
   // a first block that does not compress before two that do (as the game's music): judged per run
-  'PFDATA/MIX.MUS': Buffer.concat([bytes(M, 'mix0', false), bytes(2 * M, 'mix1', true)]) };
+  [MUS]: Buffer.concat([bytes(M, 'mix0', false), bytes(2 * M, 'mix1', true)]) };
 for (const [p, b] of Object.entries(FILES)) { fs.mkdirSync(path.dirname(path.join(DATA, p)), { recursive: true }); fs.writeFileSync(path.join(DATA, p), b); }
 fs.writeFileSync(path.join(DATA, 'NOTES.TXT'), 'not the game');
 fs.writeFileSync(path.join(TMP, 'game.wasm'), Buffer.alloc(8));
@@ -43,7 +48,7 @@ fs.writeFileSync(path.join(TMP, 'game.wasm'), Buffer.alloc(8));
 /** the server; `compress`: the threads that keep blocks at brotli's best (none: the answers compressed as they are sent) */
 async function server({ compress = 0 } = {}) {
   const st = path.join(TMP, `state${compress}`);
-  const srv = spawn(...serverCommand(['--data', DATA, '--http-port', String(PORT), '--state', st, '--wasm', path.join(TMP, 'game.wasm')]),
+  const srv = spawn(...serverCommand(['--data', DATA, ...(G.id === 'ug2' ? [] : ['--game', G.id]), '--http-port', String(PORT), '--state', st, '--wasm', path.join(TMP, 'game.wasm')]),
     { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NFSU2_COMPRESS_THREADS: String(compress) } });
   await new Promise((res, rej) => {
     let out = '';
@@ -56,7 +61,7 @@ async function server({ compress = 0 } = {}) {
 /** an answer, its body as it came over the wire, and that body decoded */
 function get(p, { ae = 'gzip, deflate, br, zstd', method = 'GET' } = {}) {
   return new Promise((res, rej) => {
-    const q = http.request({ host: '127.0.0.1', port: PORT, path: p, method, headers: { host: `localhost:${PORT}`, 'accept-encoding': ae } }, r => {
+    const q = http.request({ host: '127.0.0.1', port: PORT, path: B + p, method, headers: { host: `localhost:${PORT}`, 'accept-encoding': ae } }, r => {
       const c = []; r.on('data', d => c.push(d));
       r.on('end', () => {
         const wire = Buffer.concat(c), enc = r.headers['content-encoding'];
@@ -80,7 +85,7 @@ test('/data-blocks/: named by the manifest, exact in every encoding, as they are
   const s = await server();
   try {
     const man = JSON.parse((await get('/data-manifest', { ae: 'identity' })).body);
-    assert.deepEqual(man.blocks, { url: '/data-blocks/v2/', size: M, max: 8 });
+    assert.deepEqual(man.blocks, { url: `${B}/data-blocks/v2/`, size: M, max: 8 });
 
     // a run that compresses: every encoding the client may take, the exact bytes, smaller on the wire
     const encs = [...(zlib.zstdDecompressSync ? ['zstd'] : []), 'br', 'gzip'];
@@ -97,8 +102,8 @@ test('/data-blocks/: named by the manifest, exact in every encoding, as they are
     }
     // the last, short block; one block; a file that does not compress (random bytes, the movies' video)
     assert.ok((await get('/data-blocks/TRACKS/L4RA.BUN?b=8&n=1')).body.equals(slice('TRACKS/L4RA.BUN', 8, 1)));
-    for (const [f, b, n, enc] of [['SPEED2.EXE', 0, 4, undefined], ['MOVIES/INTRO.VP6', 1, 1, undefined], ['PFDATA/MIX.MUS', 0, 3, undefined],
-      ['PFDATA/MIX.MUS', 1, 2, encs[0]]]) {
+    for (const [f, b, n, enc] of [[EXE, 0, 4, undefined], ['MOVIES/INTRO.VP6', 1, 1, undefined], [MUS, 0, 3, undefined],
+      [MUS, 1, 2, encs[0]]]) {
       const r = await get(`/data-blocks/${f}?b=${b}&n=${n}`);
       assert.equal(r.headers['content-encoding'], enc, `${f} from block ${b}`);
       assert.ok(r.body.equals(slice(f, b, n)), f);
@@ -109,13 +114,13 @@ test('/data-blocks/: named by the manifest, exact in every encoding, as they are
 
     // refused: out of bounds, past the end, not a game file, not inside the folder
     const status = async p => (await get(p)).status;
-    for (const p of ['SPEED2.EXE', 'SPEED2.EXE?b=0', 'SPEED2.EXE?b=0&n=0', 'SPEED2.EXE?b=0&n=9', 'SPEED2.EXE?b=-1&n=1', 'SPEED2.EXE?b=1e3&n=1',
-      'SPEED2.EXE?b=12345678&n=1', 'SPEED2.EXE?b=0&n=01x']) assert.equal(await status(`/data-blocks/${p}`), 400, p);
-    assert.equal(await status('/data-blocks/SPEED2.EXE?b=4&n=1'), 416);       // 3 MiB + 17: blocks 0..3
+    for (const q of ['', '?b=0', '?b=0&n=0', '?b=0&n=9', '?b=-1&n=1', '?b=1e3&n=1', '?b=12345678&n=1', '?b=0&n=01x'])
+      assert.equal(await status(`/data-blocks/${EXE}${q}`), 400, q);
+    assert.equal(await status(`/data-blocks/${EXE}?b=4&n=1`), 416);       // 3 MiB + 17: blocks 0..3
     assert.equal(await status('/data-blocks/NOTES.TXT?b=0&n=1'), 404);
     assert.equal(await status('/data-blocks/TRACKS?b=0&n=1'), 404);
     assert.equal(await status('/data-blocks/TRACKS/.hidden?b=0&n=1'), 404);
-    // (TRACKS/../SPEED2.EXE is SPEED2.EXE: the URL is resolved before anything is looked up, as for /data/)
+    // (TRACKS/../<the program> is the program: the URL is resolved before anything is looked up, as for /data/)
     assert.equal(await status('/data-blocks/..%2fstate/etag.key?b=0&n=1'), 400);
   } finally { await s.stop(); }
 });
@@ -127,7 +132,7 @@ test('/data-blocks/: a shared cache may keep a run for good: this version of the
     const run = (f, b, n, mt = m[f], ae, sz = FILES[f].length) =>
       get(`/data-blocks/${f}?b=${b}&n=${n}${mt === null ? '' : `&m=${mt}`}${sz === null ? '' : `&s=${sz}`}`, ae ? { ae } : undefined);
     // compressed, or a run that does not compress: kept, and still exact
-    for (const [f, b, n, ae] of [['TRACKS/L4RA.BUN', 1, 8], ['TRACKS/L4RA.BUN', 0, 1, 'gzip, br'], ['SPEED2.EXE', 0, 4], ['PFDATA/MIX.MUS', 0, 1],
+    for (const [f, b, n, ae] of [['TRACKS/L4RA.BUN', 1, 8], ['TRACKS/L4RA.BUN', 0, 1, 'gzip, br'], [EXE, 0, 4], [MUS, 0, 1],
       ['MOVIES/INTRO.VP6', 0, 2]]) {
       const r = await run(f, b, n, m[f], ae);
       assert.equal(r.status, 200, f);
@@ -157,7 +162,7 @@ test("/data-blocks/v2/: one block at brotli's best once the server keeps it, for
     if (first.headers['content-encoding'] !== 'br' || first.headers['content-length'] === undefined) assert.equal(edge(first), 'while');
     // every block that compresses (not L4RA's last: 5 bytes), kept: br, its length, kept for good, exact, smaller than
     // gzip's
-    const wanted = [...Array(8).keys()].map(b => ['TRACKS/L4RA.BUN', b]).concat([['PFDATA/MIX.MUS', 1], ['PFDATA/MIX.MUS', 2]]);
+    const wanted = [...Array(8).keys()].map(b => ['TRACKS/L4RA.BUN', b]).concat([[MUS, 1], [MUS, 2]]);
     for (const [f, b] of wanted) {
       let r;
       for (let i = 0; i < 400; i++) {
@@ -174,7 +179,7 @@ test("/data-blocks/v2/: one block at brotli's best once the server keeps it, for
       assert.equal(edge(gz), 'keep', 'a client without br: compressed as it is sent, as before');
     }
     // noise as it is, for good once the server has found it does not compress; the old addresses the same
-    for (const [f, b] of [['MOVIES/INTRO.VP6', 1], ['PFDATA/MIX.MUS', 0], ['SPEED2.EXE', 2]]) {
+    for (const [f, b] of [['MOVIES/INTRO.VP6', 1], [MUS, 0], [EXE, 2]]) {
       let r;
       for (let i = 0; i < 400; i++) {
         r = await block(f, b);
@@ -198,7 +203,7 @@ test('/data-blocks/: a client holding all its compressors gets the rest as they 
     // 8 compressed runs that are not read: each holds its compressor (about 2 MB compressed, more than the
     // socket takes), the 9th and 10th come as they are
     const open = () => new Promise((res, rej) => {
-      const q = http.request({ host: '127.0.0.1', port: PORT, path: '/data-blocks/TRACKS/L4RA.BUN?b=0&n=8', headers: { host: `localhost:${PORT}`, 'accept-encoding': 'zstd, br, gzip' } }, r => {
+      const q = http.request({ host: '127.0.0.1', port: PORT, path: `${B}/data-blocks/TRACKS/L4RA.BUN?b=0&n=8`, headers: { host: `localhost:${PORT}`, 'accept-encoding': 'zstd, br, gzip' } }, r => {
         r.pause(); held.push(r); res(r.headers['content-encoding'] ?? 'none');
       });
       q.on('error', rej); q.end();
@@ -226,7 +231,7 @@ test('/data-blocks/: past the 128 compressors of all clients, the next client ge
   try {
     // a client is an X-Forwarded-For address (this machine is a trusted proxy); its compressed runs are not read
     const open = c => new Promise((res, rej) => {
-      const q = http.request({ host: '127.0.0.1', port: PORT, path: '/data-blocks/TRACKS/L4RA.BUN?b=0&n=8',
+      const q = http.request({ host: '127.0.0.1', port: PORT, path: `${B}/data-blocks/TRACKS/L4RA.BUN?b=0&n=8`,
         headers: { host: `localhost:${PORT}`, 'accept-encoding': 'zstd, br, gzip', 'x-forwarded-for': `192.0.2.${c}` } }, r => {
         r.pause(); held.push(r); res(r.headers['content-encoding'] ?? 'none');
       });

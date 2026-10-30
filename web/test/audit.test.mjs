@@ -18,6 +18,10 @@
 // run at once.  Needs the game folder (NFSU2_DATA) and a built out/web/nfsu2.wasm; skipped without them.
 // NFSU2_SERVER_BIN=<binary>: another server (a negative control: a server without the audit's fixes fails these
 // tests).  Options that are new here go by environment (NFSU2_HOST), which an older one ignores.
+// NFSU2_TEST_GAME=mw: the same against Most Wanted's server (--game mw) with a made-up game folder (game-fixture.mjs),
+// every route under /mw; PRIV-1 then names Most Wanted's own (scripts, Support, Uninstall, 00000000.256).  Its server
+// keeps no keyphrase saves (its /vault goes on to the U2 box's, vault_forward.rs), so the F3 test that holds saves is
+// Underground 2's alone (the budget is the same code for both games).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -27,24 +31,21 @@ import tls from 'node:tls';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import { serverCommand } from '../tools/server-cmd.mjs';
+import { G } from './game-fixture.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HERE, '../..');
-const DATA = process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2');
+const DATA = G.data, B = G.base;
 const P1 = +(process.env.NFSU2_TEST_AUDIT_PORT1 || 8529), P2 = +(process.env.NFSU2_TEST_AUDIT_PORT2 || 8629);
 const TMP = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'nfsu2-audit-test-'));
 test.after(() => fs.rmSync(TMP, { recursive: true, force: true }));
-const SKIP = !fs.existsSync(path.join(DATA, 'SPEED2.EXE')) ? 'no game folder (NFSU2_DATA)'
-  : !fs.existsSync(path.join(REPO, 'out/web/nfsu2.wasm')) ? 'no out/web/nfsu2.wasm (web/build.sh)' : false;
+const SKIP = G.skip;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ssl = (...a) => execFileSync('openssl', a, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 const HOST = 'nfsu2.test';
 
 async function startServer(args, { env = {}, state = fs.mkdtempSync(path.join(TMP, 'state-')), expectExit = false } = {}) {
-  const c = spawn(...serverCommand(['--data', DATA, '--state', state, ...args]), { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  const c = spawn(...serverCommand(['--data', DATA, ...G.args, '--state', state, ...args]), { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let out = '';
   c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { out += d; });
   const exited = new Promise(r => c.on('exit', code => r(code)));
@@ -63,7 +64,7 @@ function request(port, { method = 'GET', p = '/', host = `localhost:${port}`, he
     const sock = useTls ? tls.connect({ host: '127.0.0.1', port, servername, rejectUnauthorized: false }) : net.connect(port, '127.0.0.1');
     const chunks = [];
     const t = setTimeout(() => { sock.destroy(); res({ status: 0, timedOut: true }); }, timeout);
-    sock.on(useTls ? 'secureConnect' : 'connect', () => sock.write(`${method} ${p} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n` +
+    sock.on(useTls ? 'secureConnect' : 'connect', () => sock.write(`${method} ${p.startsWith('/') ? B + p : p} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n` +
       Object.entries(headers).map(([k, v]) => `${k}: ${v}\r\n`).join('') + '\r\n'));
     sock.on('data', d => { chunks.push(d); if (/^HTTP\/1\.1 101 /.test(String(chunks[0])) && Buffer.concat(chunks).includes('\r\n\r\n')) sock.destroy(); });
     sock.on('error', e => { clearTimeout(t); chunks.length ? done() : res({ status: 0, error: e.code ?? e.message }); });
@@ -76,7 +77,7 @@ function request(port, { method = 'GET', p = '/', host = `localhost:${port}`, he
 }
 // a /lan client behind the proxy, as the client at address xff
 function lanClient(port, xff, { q = '', hello = null, name = 'player' } = {}) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/lan${q}`, { headers: { Host: HOST, 'X-Forwarded-For': xff } });
+  const ws = new WebSocket(`ws://127.0.0.1:${port}${B}/lan${q}`, { headers: { Host: HOST, 'X-Forwarded-For': xff } });
   const c = { ws, ctl: [], frames: [], status: 0 };
   c.opened = new Promise(res => {
     ws.on('open', () => { if (hello) ws.send(JSON.stringify(hello)); res(true); });
@@ -137,7 +138,7 @@ test('F7 / PRIV-4: a page that rebinds its own name to this machine gets 421 eve
   try {
     const evil = `rebind.attacker.example:${P2}`;
     const got = {};
-    for (const p of ['/', '/players', '/data-manifest', '/data/SPEED2.EXE', '/game.json'])
+    for (const p of ['/', '/players', '/data-manifest', `/data/${G.exe}`, '/game.json'])
       got[p] = (await request(P2, { p, host: evil })).status;
     const up = { Upgrade: 'websocket', Connection: 'Upgrade', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64') };
     got['/lan'] = (await request(P2, { p: '/lan', host: evil, headers: { ...up, Origin: `http://${evil}` } })).status;
@@ -179,24 +180,31 @@ test('F4: with --tls-cert, a handshake without the server\'s name or with anothe
   } finally { await s.stop(); }
 });
 
-test('PRIV-1: of the game folder only the game is listed and served (installer log, SAVE, mod scripts never)', { skip: SKIP, timeout: 60_000 }, async () => {
+test(`PRIV-1: of the game folder only the game is listed and served (${G.private.join(', ')} never)`, { skip: SKIP, timeout: 60_000 }, async () => {
   const s = await startServer(['--http-port', String(P2)]);
   try {
     const m = JSON.parse((await request(P2, { p: '/data-manifest' })).body);
     const top = [...new Set(m.files.map(f => f.p.split('/')[0]))].sort();
     console.log(`manifest: ${m.files.length} entries; top level: ${top.join(' ')}`);
-    const allowed = new Set(['speed2.exe', 'server.dll', 'server.cfg', 'cars', 'credits', 'frontend', 'global', 'langpacks', 'languages', 'memcard', 'movies', 'nis',
-      'pfdata', 'sound', 'speech', 'subtitles', 'texpacks', 'tracks']);
+    const allowed = new Set(G.id === 'ug2' ? ['speed2.exe', 'server.dll', 'server.cfg', 'cars', 'credits', 'frontend', 'global', 'langpacks', 'languages', 'memcard', 'movies', 'nis',
+      'pfdata', 'sound', 'speech', 'subtitles', 'texpacks', 'tracks']
+      : ['speed.exe', 'server.dll', 'server.cfg', 'cars', 'credits', 'frontend', 'global', 'languages', 'memcard', 'movies', 'nis', 'sound', 'subtitles', 'tracks']);
     assert.deepEqual(top.filter(t => !allowed.has(t.toLowerCase())), [], 'nothing but the game\'s own entries');
-    for (const p of ['unins000.dat', 'unins000.exe', 'SAVE', 'scripts/NFSUnderground2.WidescreenFix.ini', 'dinput8.dll', 'SDATA.Backup/sdat.viv', '_How To Play!!.txt'])
-      if (fs.existsSync(path.join(DATA, p))) assert.equal((await request(P2, { p: '/data/' + p.split('/').map(encodeURIComponent).join('/') })).status, 404, p);
-    assert.equal((await request(P2, { p: '/data/SPEED2.EXE', headers: { Range: 'bytes=0-1' } })).status, 206);
+    const never = G.id === 'ug2' ? ['unins000.dat', 'unins000.exe', 'SAVE', 'scripts/NFSUnderground2.WidescreenFix.ini', 'dinput8.dll', 'SDATA.Backup/sdat.viv', '_How To Play!!.txt']
+      : ['SAVE', 'SAVE/NFS Most Wanted/profile', 'scripts', 'scripts/mod.ini', 'Support', 'Support/dxdiag.log', 'Uninstall', 'Uninstall/uninstall.log', '00000000.256', 'dinput8.dll'];
+    if (G.id === 'mw') for (const p of G.private) assert.ok(fs.existsSync(path.join(DATA, p)), `the made-up folder has ${p}`);
+    for (const p of never)
+      if (fs.existsSync(path.join(DATA, p))) {
+        assert.equal((await request(P2, { p: '/data/' + p.split('/').map(encodeURIComponent).join('/') })).status, 404, p);
+        assert.ok(!m.files.some(f => f.p.toLowerCase() === p.toLowerCase() || f.p.toLowerCase().startsWith(p.toLowerCase() + '/')), `${p} listed`);
+      }
+    assert.equal((await request(P2, { p: `/data/${G.exe}`, headers: { Range: 'bytes=0-1' } })).status, 206);
     assert.equal((await request(P2, { p: '/data/GLOBAL/GLOBALB.LZC', headers: { Range: 'bytes=0-1' } })).status, fs.existsSync(path.join(DATA, 'GLOBAL/GLOBALB.LZC')) ? 206 : 404);
   } finally { await s.stop(); }
 });
 
 // the upstream side of a proxy: one connection per request, each for the client at xff(i), never read
-const BIG = '/data/MOVIES/DragTut.vp6';
+const BIG = B + G.big;
 // (answers: 200 held, 429 refused, closed: the connection closed with no answer (a refusal that raced the
 // close, past the port's maxConnections, or past the 128 a Mac queues for the server to accept), other: no answer
 // in 20 s)
@@ -235,7 +243,7 @@ async function holdSaves(port, n, xff, socks) {
     let text = '';
     const t = setTimeout(() => res(() => text), 20000);
     so.on('error', () => {});
-    so.once('connect', () => so.write(`PUT /vault HTTP/1.1\r\nHost: ${HOST}\r\nX-Forwarded-For: ${xff(i)}\r\n` +
+    so.once('connect', () => so.write(`PUT ${B}/vault HTTP/1.1\r\nHost: ${HOST}\r\nX-Forwarded-For: ${xff(i)}\r\n` +
       `Authorization: Bearer ${'A'.repeat(43)}\r\nIf-Match: "${'0'.repeat(15)}1"\r\nContent-Length: 1024\r\nExpect: 100-continue\r\n\r\n`));
     so.on('data', d => { text += d; clearTimeout(t); res(() => text); });
     so.once('close', () => { clearTimeout(t); res(() => text); });
@@ -253,7 +261,7 @@ async function holdSaves(port, n, xff, socks) {
   return answers;
 }
 const xffOther = (port, ip) => request(port, { p: '/players', host: HOST, headers: { 'X-Forwarded-For': ip } });
-test('F3: one client behind a proxy holds at most 64 requests at once, one IPv6 /48 at most 128; the last quarter is for newcomers', { skip: SKIP, timeout: 180_000 }, async () => {
+test('F3: one client behind a proxy holds at most 64 requests at once, one IPv6 /48 at most 128; the last quarter is for newcomers', { skip: SKIP || (G.id === 'mw' && 'Most Wanted\'s server keeps no saves to hold (its /vault is the U2 box\'s): the same budget code as Underground 2\'s'), timeout: 180_000 }, async () => {
   const s = await startServer(['--behind-proxy', '--http-port', String(P2)], { env: { NFSU2_HOST: HOST } });
   await sleep(1500);                                   // the module's compression at start
   let socks = [];
@@ -351,9 +359,9 @@ test('DEP-4: refused /lan upgrades from one client cost the console a few lines,
   const s = await startServer(['--http-port', String(P2)]);
   const held = [];
   try {
-    for (let i = 0; i < 8; i++) { const ws = new WebSocket(`ws://127.0.0.1:${P2}/lan`); held.push(ws); await new Promise(r => ws.once('open', r)); }
+    for (let i = 0; i < 8; i++) { const ws = new WebSocket(`ws://127.0.0.1:${P2}${B}/lan`); held.push(ws); await new Promise(r => ws.once('open', r)); }
     const before = s.out().split('\n').length;
-    const up = `GET /lan HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${crypto.randomBytes(16).toString('base64')}\r\n\r\n`;
+    const up = `GET ${B}/lan HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${crypto.randomBytes(16).toString('base64')}\r\n\r\n`;
     let refused = 0;
     for (let i = 0; i < 2000; i += 50) {
       await Promise.all(Array.from({ length: 50 }, () => new Promise(res => {
@@ -378,7 +386,7 @@ test('DEP-8: the state folder the server makes is its own (0700), the files in i
   const state = path.join(TMP, 'fresh-state');
   const s = await startServer(['--http-port', String(P2)], { state, env: {} });
   try {
-    const ws = new WebSocket(`ws://127.0.0.1:${P2}/lan`);
+    const ws = new WebSocket(`ws://127.0.0.1:${P2}${B}/lan`);
     await new Promise(r => ws.once('message', r));
     await sleep(800);                                  // the switch stores its addresses shortly after a change
     const mode = f => (fs.statSync(path.join(state, f)).mode & 0o777).toString(8);
