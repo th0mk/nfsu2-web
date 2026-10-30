@@ -38,6 +38,10 @@
  *                    for 146.5 asked, ~0 ~5 ~0 did not lift it), the
  *                    way Game.WarpPlayerToTrigger moves it (its ISimable's interface 0x4040E0, method +0x68)
  *   where            log the local player's position, heading and speed
+ *   carreset         the player's RESET: the car put back on the road the game's way (IResetable::ResetVehicle(true),
+ *                    as the RESET action does it; the wedge watch below uses it), its place logged before and after
+ *   bot ...          the career bot (bot_mw.c): bot gates, bot run N, bot race I, bot pursuit, bot save, bot off;
+ *                    bot wait [N] waits up to N frames (default 900000) for the bot to stop
  *   racestatus       log the race: its racers' progress and finish flags, its own flags, and which racer the
  *                    local player is ("player 1": Game.GetRacerIndex, slot #0)
  *   frames           log the Presents and the main loop's passes so far (M4-01: one pass a Present)
@@ -105,6 +109,8 @@ uint64_t debug_frame_passes(void);
 #define FN_POSTRACE      0x00611f20u
 #define FN_SET_WON       0x00604080u     /* RaceStatus.SetHasBeenWon(bool) (thiscall, ecx = GRaceStatus): Lua method, the script calls it when the player wins */
 #define FN_QUERY         0x005d59f0u
+#define FN_IS_ROAMING    0x0056dc00u     /* 1 while GRaceStatus' activity (+0x1968) is free roam's ("1.8.1"): the pause
+                                          * menu's test (0x52B5C9) between the free-roam and the race menu */
 #define IID_WARP         0x004040e0u     /* the interface WarpPlayerToTrigger moves the car with */
 #define WARP_METHOD      0x68u
 #define SIM_POSITION     0x60u
@@ -165,9 +171,10 @@ static void log_status(CPU *c){
         o += snprintf(b + o, sizeof b - (size_t)o, " #%d %.1f%%%s %.2fs", i, rdf(ri + RI_PCT),
                       MR8(ri + RI_FINISHED) ? " finished" : "", rdf(ri + RI_TIME));
     }
-    fprintf(stderr, "[mwrace] f=%ld racestatus flow %u racers %d active %u won %u player %d:%s; mode %u\n",
+    int roam = (int)(gcall(c, FN_IS_ROAMING, 0, 0, 0) & 0xffu);
+    fprintf(stderr, "[mwrace] f=%ld racestatus flow %u racers %d active %u won %u player %d:%s; mode %u roaming %d\n",
             autotest_frame(), game_flow(), n, MR8(rs + RS_ACTIVE), MR8(rs + RS_WON), me, o ? b : " none",
-            rd(rs + RS_MODE));
+            rd(rs + RS_MODE), roam);
 }
 
 /* racewin's calls: the local player finished where it is (Game.NotifyRaceFinished), then, when every human is done,
@@ -239,41 +246,94 @@ static void watch_race(CPU *c){
     fprintf(stderr, "[mwrace] f=%ld autopilot: %s\n", f, what);
 }
 
-/* ---- a car the autopilot wedged: logged ----
+/* ---- a car the autopilot wedged: put back on the road by the game's own reset ----
  * The game's AI that drives the player's car (ForceAIControl) can wedge it against a wall and keep pushing, a few
  * metres forward and back: in LAN sprints of 2026-10-30 the joiner's car stayed within 30 m of one spot for nine
  * minutes (run a1), the host's after its Speedbreaker test (sb), and in a Lap KO race the host's (ko); the race then
- * never reaches the results.  The game resets the AI racers it drives itself, not the player's car.  R (the RESET
- * binding, GAME 13.1), tapped with the AI let go (ClearAIControl), did not move the car in two runs, so nothing is
- * done to the car: while the autopilot drives and the race runs (GRaceStatus active, GO, the local racer not
- * finished), a car that moved less than STUCK_M metres in STUCK_FRAMES frames is logged, once a wedge, so a run that
- * misses its results says why. */
-#define STUCK_FRAMES 600
-#define STUCK_M 25.0f
+ * never reaches the results.  The AI's own way out (AIActionGetUnstuck, its reversing) does not free it there.
+ * The game's reset is the ResetCar behaviour every car has (factory 0x6B0630, constructor 0x6A41E0): its interface
+ * IResetable, id 0x620250 of the car's ISimable object (vtable 0x8ABA10: +4 HasResetPosition, +8 ResetVehicle(bool
+ * manual) 0x6B08C0, +0xC SetResetPosition, +0x10 ClearResetPosition).  ResetVehicle(true) first tries the reset to
+ * the road network (0x6B06D0(2): the nearest road point, WRoadNetwork 0x9AA540's 0x727480, the car set there along
+ * the road by 0x6A45F0), else the last good place the behaviour kept (a ring of 4 at +0x68, filled while the car is
+ * upright on the ground); its own update (0x6B07C0) does the same for a car upside down or off the world.  The
+ * player's RESET action does exactly this (the input handler at 0x6A8B88: ResetVehicle(true), then 0x47CC50, which
+ * clears the input controllers' held state), and so does the aid: while the autopilot drives (in a race: GRaceStatus
+ * active, GO, the local racer not finished; in free roam: `autopilot on`), a car that moved less than STUCK_M
+ * metres in STUCK_S seconds of game time (the simulation's steps x its step, [0x9203B0] +0x28 x +0x20, so a slow or
+ * paused frame rate changes nothing) is reset that way and the watch starts again from where it is put.  (R, the
+ * RESET binding, tapped with the AI let go did not move the car in the LAN runs: the key is not bound to that action
+ * by the PC game's defaults, inferred, not checked.) */
+#define STUCK_S 8.0
+#define STUCK_M 12.0f
+#define IID_RESET        0x00620250u     /* IResetable, the ResetCar behaviour's interface */
+#define RESET_VEHICLE    0x08u           /* IResetable::ResetVehicle(bool manual) 0x6B08C0 */
+#define FN_INPUT_CLEAR   0x0047cc50u     /* the input handler's call after a reset: the controllers' held state cleared */
+#define G_SIM            0x009203b0u     /* the simulation: +0x20 its step (float, s), +0x28 the steps it ran */
 static int ai_on;                       /* autopilot on: the AI drives the local player's car */
-static struct { long since; float p[3]; int said; } U;
+static struct { double since; float p[3]; int resets, futile; uint32_t sim; } U;
+double mw_game_time(void){
+    uint32_t sim = rd(G_SIM);
+    return sim ? (double)rd(sim + 0x28u) * (double)rdf(sim + 0x20u) : 0.0;
+}
+/* the player's RESET: 1 the car was put back, 0 the game found no place, -1 no car */
+int mw_reset_car(CPU *c){
+    uint32_t s = player_simable(c), obj = s ? rd(s + 4u) : 0u, id = IID_RESET;
+    uint32_t r = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u;
+    if (!r || !rd(r)) return -1;
+    uint32_t manual = 1;
+    int ok = (int)(gcall(c, rd(rd(r) + RESET_VEHICLE), r, 1, &manual) & 0xffu) != 0;
+    gcall(c, FN_INPUT_CLEAR, 0, 0, 0);
+    return ok;
+}
 static void wedge_watch(CPU *c){
     long f = autotest_frame();
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c), a = s;
-    if (!rs || !s || game_flow() != g_game.flow_race || !MR8(rs + RS_ACTIVE) || !MR8(rs + RS_GO)){ U.since = 0; return; }
-    int idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a);
-    if (idx >= 1 && idx <= 16 && MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_FINISHED)){ U.since = 0; return; }
+    if (!rs || !s || game_flow() != g_game.flow_race){ U.since = 0; return; }
+    if (ai_on && s != U.sim){           /* another car (a world loaded again: a bust, a jump): the AI takes it too */
+        uint32_t zero = 0;
+        gcall(c, FN_FORCE_AI, 0, 1, &zero);
+        if (U.sim) fprintf(stderr, "[mwrace] f=%ld autopilot on again: another car (the world was loaded again)\n", f);
+        U.sim = s; U.since = 0;
+    }
+    int racing = MR8(rs + RS_ACTIVE) && MR8(rs + RS_GO);
+    if (!racing && !ai_on){ U.since = 0; return; }            /* a race before its GO, or its end, with `autopilot go` */
+    if (racing){
+        int idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a);
+        if (idx >= 1 && idx <= 16 && MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_FINISHED)){ U.since = 0; return; }
+    }
     uint32_t p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
     if (!p || !mem_is_committed(p + 11u)) return;
     float q[3] = { rdf(p), rdf(p + 4u), rdf(p + 8u) };
     float d = sqrtf((q[0] - U.p[0]) * (q[0] - U.p[0]) + (q[1] - U.p[1]) * (q[1] - U.p[1]) + (q[2] - U.p[2]) * (q[2] - U.p[2]));
-    if (!U.since || d >= STUCK_M){ U.since = f; memcpy(U.p, q, sizeof q); U.said = 0; return; }
-    if (f - U.since < STUCK_FRAMES || U.said) return;
-    U.said = 1;
-    fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %ld frames (at %.1f %.1f %.1f): wedged\n", f, d,
-            f - U.since, q[0], q[1], q[2]);
-    log_status(c);
+    double t = mw_game_time();
+    if (U.since <= 0.0 || d >= STUCK_M || t < U.since){
+        if (d >= STUCK_M) U.futile = 0;
+        U.since = t > 0.0 ? t : 1e-9; memcpy(U.p, q, sizeof q); return;
+    }
+    if (t - U.since < STUCK_S * (U.futile >= 3 ? 4 : 1)) return;   /* resets that put it back where it was: less often */
+    int ok = mw_reset_car(c);
+    U.resets++;
+    uint32_t p2 = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
+    float n[3] = { rdf(p2), rdf(p2 + 4u), rdf(p2 + 8u) };
+    float moved = sqrtf((n[0] - q[0]) * (n[0] - q[0]) + (n[2] - q[2]) * (n[2] - q[2]));
+    U.futile = moved < 1.0f ? U.futile + 1 : 0;
+    if (U.futile <= 3)
+        fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time (at %.1f %.1f %.1f): wedged; "
+                "reset %s, now at %.1f %.1f %.1f (reset %d)%s\n", f, d, t - U.since, q[0], q[1], q[2],
+                ok > 0 ? "done" : ok == 0 ? "found no place" : "no car", n[0], n[1], n[2], U.resets,
+                U.futile == 3 ? "; the resets put it back where it was: from now on every 32 s, not logged" : "");
+    if (racing) log_status(c);
+    U.since = t; memcpy(U.p, n, sizeof n);
 }
 
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
 enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_AI_GO, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT,
-       Q_BREAKER, Q_BWATCH, Q_BWAIT };
+       Q_BREAKER, Q_BWATCH, Q_BWAIT, Q_BOT, Q_BOTWAIT, Q_RESET };
+void mw_bot_cmd(CPU *c, const char *args);     /* bot_mw.c: the career bot's commands, run at the anchor */
+void mw_bot_frame(CPU *c);                     /* bot_mw.c: its work, each pass of the main loop */
+int mw_bot_idle(void);                         /* bot_mw.c: 1 once the bot has stopped (done, or off) */
 
 /* The player's pursuit state (offsets read in runs, their meaning where a run showed it or the code says it):
  *   IPerpetrator, interface 0x4037E0 of the player's ISimable object (vtable 0x892988): +0x1C the heat, a float
@@ -390,7 +450,7 @@ static int breaker_met(CPU *c, int want, float x, float from){
     return want == 1 ? on : want == 0 ? !on : want == 2 ? ch >= 1.0f : want == 3 ? ch <= 0.0f
          : want == 4 ? player_mph(c) > x : want == 5 ? ch >= x : ch >= fminf(from + x, 1.0f) - 1e-4f;
 }
-static struct { int op, done, rel; float v[6]; long since; } Q;
+static struct { int op, done, rel; float v[6]; long since; char text[96]; } Q;
 
 /* NFSMW_HFR_TRACE=1 (test only, M7-21; tests/mw/scripts/hfr_race.txt, tools/mw/hfr_ab.py): from GO (the player's
  * race timer running) an [hfrtr] line every 0.25 s of simulation time (steps x step, so runs at different
@@ -500,9 +560,60 @@ static void car_trace(CPU *c){
     fputc('\n', g_ctrace);
 }
 
+/* ---- what the career bot (bot_mw.c) shares ---- */
+uint32_t mw_aid_call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *args){ return gcall(c, fn, self, n, args); }
+uint32_t mw_aid_simable(CPU *c){ return player_simable(c); }
+uint32_t mw_aid_pursuit(CPU *c, uint32_t *perp){ return pursuit_obj(c, perp); }
+/* the local player's car: its position (simulation space) and speed; 0 = no car */
+int mw_aid_where(CPU *c, float pos[3], float *kmh){
+    uint32_t s = player_simable(c);
+    uint32_t p = s ? gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0) : 0u;
+    if (!p || !mem_is_committed(p + 11u)) return 0;
+    for (int k = 0; k < 3; k++) pos[k] = rdf(p + 4u * (uint32_t)k);
+    if (kmh){
+        uint32_t v = gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0);
+        *kmh = v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) * 3.6f : 0.0f;
+    }
+    return 1;
+}
+/* the car moved to pos facing dir the way Game.WarpPlayerToTrigger moves it (interface 0x4040E0, +0x68); 0 = no car */
+int mw_aid_teleport(CPU *c, const float pos[3], const float dir[3]){
+    uint32_t s = player_simable(c);
+    uint32_t obj = s ? rd(s + 4u) : 0u, id = IID_WARP;
+    uint32_t w = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u;
+    if (!w) return 0;
+    c->esp -= 0x20u;                    /* the two vectors below the game's stack, the call below them */
+    uint32_t at = c->esp;
+    memcpy(g_mem + at, pos, 12); memcpy(g_mem + at + 12u, dir, 12);
+    uint32_t args[2] = { at, at + 12u };
+    gcall(c, rd(rd(w) + WARP_METHOD), w, 2, args);
+    c->esp += 0x20u;
+    U.since = 0;                        /* the wedge watch starts again from here */
+    return 1;
+}
+/* the autopilot: 0 off (Game.ClearAIControl, and no more races taken at their GO), 1 on (Game.ForceAIControl now),
+ * 2 go (the AI takes each race at its GO), 3 races (as 2, with a lost race raced again: watch_race), 4 the AI lets the
+ * car go now (Game.ClearAIControl) and a race already taken at its GO stays so (the career bot between races) */
+void mw_aid_autopilot(CPU *c, int mode){
+    long f = autotest_frame();
+    uint32_t zero = 0;
+    if (mode <= 1 || mode == 4){
+        gcall(c, mode == 1 ? FN_FORCE_AI : FN_CLEAR_AI, 0, 1, &zero);
+        if (!mode) auto_ai = 0;
+        ai_on = mode == 1; U.since = 0; U.futile = 0;
+        U.sim = ai_on ? player_simable(c) : 0u;
+        fprintf(stderr, "[mwrace] f=%ld autopilot %s\n", f, mode == 1 ? "on" : mode == 4 && auto_ai ? "off until the next GO" : "off");
+        return;
+    }
+    memset(&W, 0, sizeof W);            /* a race at its GO now is taken at the next anchor */
+    auto_ai = mode == 2 ? 2 : 1;
+    fprintf(stderr, "[mwrace] f=%ld autopilot %s: the AI takes each race at its GO\n", f, auto_ai == 2 ? "go" : "races");
+}
+
 void mw_frame(CPU *c){
     if (auto_ai) watch_race(c);
     if (auto_ai || ai_on) wedge_watch(c);
+    mw_bot_frame(c);
     hfr_trace(c);
     car_trace(c);
     if (pw_on) log_pursuit(c, 1);
@@ -512,35 +623,30 @@ void mw_frame(CPU *c){
     switch (Q.op){
     case Q_RACEWIN: race_win(c); break;
     case Q_STATUS: log_status(c); break;
-    case Q_AI_ON: case Q_AI_OFF: {
-        uint32_t zero = 0;
-        gcall(c, Q.op == Q_AI_ON ? FN_FORCE_AI : FN_CLEAR_AI, 0, 1, &zero);
-        if (Q.op == Q_AI_OFF) auto_ai = 0;
-        ai_on = Q.op == Q_AI_ON; U.since = 0;
-        fprintf(stderr, "[mwrace] f=%ld autopilot %s\n", f, Q.op == Q_AI_ON ? "on" : "off");
+    case Q_AI_ON: mw_aid_autopilot(c, 1); break;
+    case Q_AI_OFF: mw_aid_autopilot(c, 0); break;
+    case Q_AI_RACES: mw_aid_autopilot(c, 3); break;
+    case Q_AI_GO: mw_aid_autopilot(c, 2); break;
+    case Q_BOT: mw_bot_cmd(c, Q.text); break;
+    case Q_RESET: {                     /* the player's RESET, as the wedge watch does it */
+        log_where(c);
+        int ok = mw_reset_car(c);
+        fprintf(stderr, "[mwrace] f=%ld carreset: %s\n", f, ok > 0 ? "done" : ok == 0 ? "the game found no place" : "no car");
+        log_where(c);
         break; }
-    case Q_AI_RACES: case Q_AI_GO:
-        memset(&W, 0, sizeof W);        /* a race at its GO now is taken at the next anchor */
-        auto_ai = Q.op == Q_AI_GO ? 2 : 1;
-        fprintf(stderr, "[mwrace] f=%ld autopilot %s: the AI takes each race at its GO\n", f,
-                auto_ai == 2 ? "go" : "races");
-        break;
+    case Q_BOTWAIT: {                   /* done once the bot has stopped, or after v[1] frames */
+        int idle = mw_bot_idle();
+        if (!idle && f - Q.since < (long)Q.v[1]) return;
+        fprintf(stderr, "[mwbot] f=%ld bot wait: %s after %ld frames\n", f, idle ? "the bot stopped" : "TIMEOUT", f - Q.since);
+        break; }
     case Q_TELEPORT: {
         uint32_t s = player_simable(c);
-        uint32_t obj = s ? rd(s + 4u) : 0u, id = IID_WARP;
-        uint32_t w = obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u;
-        if (!w){ fprintf(stderr, "[mwrace] f=%ld teleport: no player car\n", f); break; }
         float pos[3] = { Q.v[0], Q.v[1], Q.v[2] }, dir[3] = { Q.v[3], Q.v[4], Q.v[5] };
-        if (Q.rel){                     /* ~N: N from where the car is */
+        if (s && Q.rel){                /* ~N: N from where the car is */
             uint32_t p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
             for (int k = 0; k < 3; k++) if (Q.rel & (1 << k)) pos[k] += rdf(p + 4u * (uint32_t)k);
         }
-        c->esp -= 0x20u;              /* the two vectors below the game's stack, the call below them */
-        uint32_t at = c->esp;
-        memcpy(g_mem + at, pos, 12); memcpy(g_mem + at + 12u, dir, 12);
-        uint32_t args[2] = { at, at + 12u };
-        gcall(c, rd(rd(w) + WARP_METHOD), w, 2, args);
-        c->esp += 0x20u;
+        if (!mw_aid_teleport(c, pos, dir)){ fprintf(stderr, "[mwrace] f=%ld teleport: no player car\n", f); break; }
         fprintf(stderr, "[mwrace] f=%ld teleport to %.2f %.2f %.2f facing %.2f %.2f %.2f\n", f,
                 pos[0], pos[1], pos[2], dir[0], dir[1], dir[2]);
         log_where(c);
@@ -571,7 +677,7 @@ void mw_frame(CPU *c){
 
 int mw_aid_is_cmd(const char *cmd){
     static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", "pursuit",
-                                     "breaker", 0 };
+                                     "breaker", "bot", "carreset", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -591,7 +697,7 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (Q.op != Q_NONE){                /* this line's work was queued: done once the anchor ran it */
         if (Q.done){ Q.op = Q_NONE; Q.done = 0; *wait_start = -1; return 1; }
         if (*wait_start < 0) *wait_start = f;
-        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT || Q.op == Q_BWAIT ? (long)Q.v[1] : 0L)) return 0;
+        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT || Q.op == Q_BWAIT || Q.op == Q_BOTWAIT ? (long)Q.v[1] : 0L)) return 0;
         fprintf(stderr, "[mwrace] f=%ld %s TIMEOUT after %ld frames: the main loop's frame anchor never ran it\n",
                 f, cmd, f - *wait_start);
         memset(&Q, 0, sizeof Q); *wait_start = -1;
@@ -601,6 +707,7 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (!strcasecmp(cmd, "racewin")) Q.op = Q_RACEWIN;
     else if (!strcasecmp(cmd, "where")) Q.op = Q_WHERE;
     else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
+    else if (!strcasecmp(cmd, "carreset")) Q.op = Q_RESET;
     else if (!strcasecmp(cmd, "pursuit")){
         long n = 6000; char a2[32] = {0};
         sscanf(p, "%31s %31s %ld", a1, a2, &n);
@@ -622,6 +729,11 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
                : !strcasecmp(a2, "above") ? 4.0f : !strcasecmp(a2, "charge") ? 5.0f : !strcasecmp(a2, "rise") ? 6.0f : 1.0f;
         Q.v[1] = (float)n; Q.v[2] = x; Q.since = f;
         { uint32_t pl = player_iface(); Q.v[3] = pl ? rdf(pl + PL_BREAKER) : 0.0f; }   /* rise: from here */
+    }
+    else if (!strcasecmp(cmd, "bot")){
+        long n = 900000;
+        if (sscanf(p, "%31s %ld", a1, &n) >= 1 && !strcasecmp(a1, "wait")){ Q.op = Q_BOTWAIT; Q.v[1] = (float)n; Q.since = f; }
+        else { Q.op = Q_BOT; snprintf(Q.text, sizeof Q.text, "%s", p); }
     }
     else if (!strcasecmp(cmd, "autopilot")){
         sscanf(p, "%31s", a1);

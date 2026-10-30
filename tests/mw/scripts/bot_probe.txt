@@ -1,0 +1,18 @@
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    log bot_probe: resumed
++30   bot ${BOT_A}
++0    bot wait 3000
++0    bot gates
++0    carreset
++0    bot ${BOT_B}
++0    bot wait ${BOT_WAIT}
++0    bot gates
++0    log bot_probe: done
++60   close

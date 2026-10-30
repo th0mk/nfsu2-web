@@ -1,0 +1,31 @@
+# Most Wanted: the career bot (TRACKER M4-15; runtime/mw/bot_mw.c) from a save made at a safehouse, to the bin
+# ${BOT_BIN}, then a save at the safehouse.  Resume Career on a safehouse save opens the safehouse menu (MainMenu_Sub.fng
+# titled 'safe house' 0xE596C4A3); Resume Free Roam asks "Are you sure you want to leave the Safe House?" (Dialog.fng:
+# No 0xB8A7C6CD, Yes 0xB8A7C6CC to its left) and loads free roam behind Loading_Tips.fng, whose "Press Enter to
+# continue" may come or not.  Then `bot run ${BOT_BIN}` plays: it reads the bin's gates as the Blacklist screen reads
+# them, engages the bin's races at their start and lets the game's AI race them, earns bounty and milestones in
+# pursuits, and answers the screens on the way; `bot wait` waits for it to stop (it logs why: the bin reached, or what
+# it could not do).  The save at the end goes the safehouse's way (Jump to Safe House in the pause menu, then Save:
+# career_safehouse.txt), so the run's save tree (--save-out) is the next seed.
+#   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script career_bot.txt \
+#     --marker 'career_bot: saved' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 --env BOT_BIN=14 \
+#     --save-out DIR --timeout-scale 30
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    log career_bot: resumed
++30   bot run ${BOT_BIN}                                 # from the safehouse menu or free roam
++0    bot wait ${BOT_WAIT}
++0    bot gates
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == ${BOT_BIN}
++0    log career_bot: reached the bin
++0    bot save
++0    bot wait 20000
++0    waitfng MainMenu_Sub.fng:e596c4a3 900              # the safehouse menu
++0    log career_bot: saved
++60   close

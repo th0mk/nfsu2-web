@@ -123,6 +123,16 @@ int mw_fe_active(const char *name){
     return 0;
 }
 
+/* the package nearest the top of the active list that takes input (FEPackage +0x28), its highlighted object's name
+ * hash in *focus; 0 when none does (free roam: HUD_SingleRace.fng and the overlays never take input) */
+const char *mw_fe_input_top(uint32_t *focus){
+    uint32_t e = engine(), top = 0; int k = 0;
+    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < 32; p = rd(p + PKG_NEXT), k++)
+        if (rd(p + PKG_INPUT) & 0xffu) top = p;
+    if (focus){ uint32_t f = top ? rd(top + PKG_FOCUS) : 0u; *focus = f ? rd(f + OBJ_HASH) : 0u; }
+    return top ? pkg_name(top) : 0;
+}
+
 /* every Present: the packages new in the active list, head to tail */
 void autotest_note_screen(const char *nm);
 long autotest_frame(void);          /* autotest.c: the test frame number, the [fng] lines' f= */

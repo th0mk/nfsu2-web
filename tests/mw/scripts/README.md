@@ -57,6 +57,19 @@ safehouse save: a customization shop, every category entered and left, a spoiler
 `career_shop_load.txt` (the spoiler still on the car after a restart) and `career_carlot.txt` (from the safehouse
 save: the car lot's 32 cars shown in turn; the car tables' check at the profile's load, runtime/mw/cars_mw.c).
 
+The career bot (runtime/mw/bot_mw.c, TRACKER M4-15; test-only): `bot run N` plays the career from where the save
+left it until the Blacklist bin is N, through the game's own paths only: it reads the bin's gates the way the
+Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), engages the bin's races at
+their own start (the engage trigger stands at the race's start grid), lets the game's AI race them from their GO (a
+car the AI wedges is put back on the road by the game's RESET, `carreset`), earns milestones and bounty in pursuits
+(the AI drives about until the cops start one; Game.ForcePursuitStart(1) after 60 s of game time without one), then
+engages the rival's challenge, and answers the screens on the way (results, text messages, the safehouse menu);
+`bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
+race I` and `bot pursuit` do one race or one pursuit, `bot wait [N]` waits for the bot to stop.  `career_bot.txt`
+runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
+`bot_probe.txt` runs two single steps, `BOT_A` then `BOT_B` (for example `run 15`, then `race 0` or `pursuit`).
+Run them with `NFSU2_SUITE_LIVE=1` to follow the log while they run.
+
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
 Game.ForcePursuitStart, the game's AI driving, waited on to its end, which the game decides: evaded or busted) and
 `pursuit_heat.txt` (the same save: Game.ForcePursuitStart(2) raises the heat to 2, and the pursuit holds it in its
