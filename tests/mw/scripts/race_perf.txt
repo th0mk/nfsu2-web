@@ -1,0 +1,44 @@
+# Most Wanted: a race's renderer cost (TRACKER M5-21, M5-14): the Custom Race circuit of race_shots.txt (City Perimeter,
+# the first car, automatic gears), the shadow, filtering and FSAA options logged at the front end and on the track
+# (g_ShadowDetail [0x901830], g_FSAALevel [0x901808], its maximum [0x901890], g_TextureFiltering [0x901818]), then
+# the game's AI drives (autopilot) for 1800 frames with no dumps between "log race_loaded" (at GO) and "log
+# drive_end": the play page's bench window (test/play.html &bench&gputime) logs the frames, the encode and GPU
+# milliseconds per frame and the draws and passes between them as "[bench] renderer {...}", and the game's [status]
+# lines its fps.  The options come from the registry the run starts from (tests/mw/seed/: registry_first.txt as a
+# first start writes them, registry_max.txt with every video option at its highest), e.g.
+#   test/play.html?arg=/data/speed.exe&script=/tests/scripts/race_perf.txt&reg=/tests/seed/registry_max.txt&bench&gputime
+#     &w=1280&h=720&env=NOMOVIES=1&env=GPUVS=1&env=NFSU2_STATUS_EVERY=600 ...
+# from a server started with --dev --game mw, in an oracle build (tests/mw/scripts/boot_menu.txt says how the page gets
+# d3dx9_26.dll).
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x00901830                 # g_ShadowDetail
++0    peek 0x00901808                 # g_FSAALevel
++0    peek 0x00901890                 # its maximum
++0    peek 0x00901818                 # g_TextureFiltering
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen (a slow renderer's dialog may miss one tap)
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    peek 0x00901830
++0    peek 0x00901808
++0    peek 0x00901818
++0    log race_loaded
++0    autopilot on
++1800 log drive_end
++0    log race_perf: done
++0    close

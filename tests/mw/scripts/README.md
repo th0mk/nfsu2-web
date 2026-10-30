@@ -68,3 +68,10 @@ switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugge
 Crash fixes (runtime/mw/fixes_mw.c): `fixes_poke.txt` reaches the null guards of the cop unload (0x57D105) and of
 Attrib::StringToLowerCaseKey (0x4549BF) by poke, in the front end; with `NFSU2_TEST_COPLIST_NULL=1` and
 `NFSU2_TEST_ATTRIB_NULLKEY=1` it runs the game's code instead.
+
+Graphics, on the play page (test/play.html, with the WebGPU renderer; the pictures stay out of the repository):
+`race_shots.txt` (a Custom Race circuit dumped at GO, after 300 and after 900 frames, the shadow options logged),
+`race_perf.txt` (the same race driven 1800 frames between `log race_loaded` and `log drive_end`, no dumps: the page's
+`&bench&gputime` window logs the frames, encode and GPU milliseconds) and `options_advanced.txt` (the Video options and
+their Advanced page row by row: Shadow Detail, FSAA and Texture Filtering as offered, their maxima logged); each from
+the registry it is given, `../seed/registry_max.txt` for every video option at its highest.

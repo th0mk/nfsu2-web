@@ -1,0 +1,39 @@
+# Most Wanted: the Video options' Advanced page (TRACKER M3-19, M5-21): Shadow Detail, FSAA and Texture Filtering
+# as the game offers them.  The maxima are logged first (FSAA [0x901890] = CheckDeviceMultiSampleType's quality
+# levels - 1, Texture Filtering [0x9018A0], Shadow Detail [0x9018B8]; GAME.md 5.6) with the values (g_FSAALevel
+# [0x901808], g_TextureFiltering [0x901818], g_ShadowDetail [0x901830]), then the main menu's Options (its 8th item
+# from Career), Video (OptionsPCDisplay.fng, the Options list's 2nd item), its first page dumped, "2" for the Advanced
+# page, which is dumped as it comes up and after each DOWN through its rows (each dump twice, 3 frames apart: a
+# renderer that falls behind drops a flagged frame).  Frame counts are only settling time on a screen that is up.
+# It needs the renderer: the play page (test/play.html), as fe_refshots.txt, e.g.
+#   test/play.html?arg=/data/speed.exe&script=/tests/scripts/options_advanced.txt&artifacts=/artifacts/adv_
+#     &dumpscale=1&w=1280&h=720&env=NOMOVIES=1&env=GPUVS=1&env=NFSU2_FNG_LOG=1 ...
+# (&reg=/tests/seed/registry_max.txt for every option at its highest).  The pictures are the game's: they stay out
+# of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x00901890                 # the FSAA maximum
++0    peek 0x009018a0                 # the Texture Filtering maximum
++0    peek 0x009018b8                 # the Shadow Detail maximum
++0    peek 0x00901808                 # g_FSAALevel
++0    peek 0x00901818                 # g_TextureFiltering
++0    peek 0x00901830                 # g_ShadowDetail
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    loop 7                                             # Career .. Options, one item a step
++40   tap RIGHT
++0    endloop
++40   tapuntil RETURN MainMenu_Sub.fng 90 600            # Options: its items, on Audio
++200  tap RIGHT                                          # Video (the list takes input once its intro is over)
++60   tapuntil RETURN OptionsPCDisplay.fng 90 600
++110  dump video
++3    dump video
++0    tap 2                                              # Advanced
++110  dump advanced
++3    dump advanced
++0    loop 12                                            # its rows, one a step
++0    tap DOWN
++40   dump advanced_row
++3    dump advanced_row
++0    endloop
++0    log options_advanced: done
++0    close

@@ -9,6 +9,10 @@ outside the repository.
   settings its detection chose. With `FirstTime` set the start loads the stored settings (LOAD_SETTINGS) instead of
   detecting them, so a run from it starts with these values on any machine; its log shows
   `[reg] ...\FirstTime = 1 (REG_DWORD, stored)` and each `g_*` value `stored`.
+- `registry_max.txt`: every video option at the highest the Video options offer on this renderer (a first start
+  stores lower ones): Shadow Detail 2, FSAA 1 (the maximum, CheckDeviceMultiSampleType's 2 quality levels - 1),
+  Texture Filtering 2 (anisotropic), rain, the highest world and reflection detail; for the play page's graphics
+  scripts (`race_shots.txt`, `race_perf.txt`, `options_advanced.txt`).
 
 A career save tree (NFSU2_SAVE_SEED) holds the registry the game wrote next to the saves (`.nfsmw_registry`), so a
 run seeded with one needs no registry seed. The career seeds, made by these scripts and kept outside the repository:
