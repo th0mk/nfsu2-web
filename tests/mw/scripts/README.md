@@ -70,7 +70,10 @@ menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
 race I` and `bot pursuit` do one race or one pursuit, `bot wait [N]` waits for the bot to stop.  `career_bot.txt`
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
-`bot_probe.txt` runs two single steps, `BOT_A` then `BOT_B` (for example `run 15`, then `race 0` or `pursuit`).
+`bot_probe.txt` runs two single steps, `BOT_A` then `BOT_B` (for example `run 15`, then `race 0` or `pursuit`);
+`bot_segment.txt` runs one (`BOT_A`, for example `run 13 races`: the bin's races, then stop) and saves at the
+safehouse, a seed for the next segment.  A car the AI wedges is reset the game's way, but not in a pursuit: a reset
+with cops on the car ends in the bust.
 Run them with `NFSU2_SUITE_LIVE=1` to follow the log while they run.
 
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own

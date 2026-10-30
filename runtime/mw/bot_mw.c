@@ -458,8 +458,11 @@ void mw_bot_frame(CPU *c){
         break; }
     case B_RACE:                        /* the race's end: its result screen (the winner's or the loser's), then free roam */
         if (!B.fin_f && !racing(c)) B.fin_f = f;
-        if (!B.fin_f || !settled(c)) break;
+        if (!B.fin_f) break;
         if (!B.post_seen && f - B.fin_f < POST_WAIT) break;
+        /* free roam again, or cops on the car (a pursuit that began in the race goes on after it: the AI must drive at
+         * once, a car left standing was busted a minute on, bot run of 2026-10-30) */
+        if (!settled(c) && !(game_flow() == g_game.flow_race && !mw_fe_input_top(0) && mw_aid_pursuit(c, 0))) break;
         {
             struct gates g; struct race r[MAX_RACES];
             read_gates(c, &g);
