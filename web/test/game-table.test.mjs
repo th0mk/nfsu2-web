@@ -120,7 +120,11 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.equal(t.get('flow'), 'mw_flow');
   assert.deepEqual([t.get('flow_fe'), t.get('flow_race')], ['3', '6']);
   assert.equal(t.get('top_screen'), 'mw_top_screen');
-  assert.equal(t.get('on_test_frame'), 'mw_fe_frame');
+  // every Present: fe_mw.c's screen notes, then the career bot's answers to the screens (bot_mw.c, test only)
+  assert.equal(t.get('on_test_frame'), 'mw_test_frame');
+  assert.match(read('runtime/mw/game_mw.c'), /static void mw_test_frame\(void\)\{ mw_fe_frame\(\); mw_bot_present\(\); \}/);
+  assert.match(read('runtime/mw/bot_mw.c'), /\nvoid mw_bot_present\(void\)\{\n    if \(B\.st == B_OFF \|\| B\.st == B_DONE\) return;/,
+    'the bot acts on no screen until a script starts it');
   assert.equal(t.get('fe_object'), 'mw_fe_object');
   assert.equal(t.get('fe_match'), 'mw_fe_match', 'the scripts\' dialog and highlight waits');
   assert.match(read('runtime/mw/fe_mw.c'), /\nint mw_fe_match\(const char \*name\)\{/);
