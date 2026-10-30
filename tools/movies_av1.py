@@ -3,16 +3,18 @@
 VP6 movies, for the browsers that decode AV1 (WebCodecs).  The page plays those instead of the VP6 ones
 (web/src/host/movie.ts, runtime/movie_av1.c); every other browser, and the Mac, keeps the VP6 files.
 
-    tools/movies_av1.py <game folder> <out folder> [--crf 26] [--cpu-used 4] [--jobs 6] [--threads 4]
+    tools/movies_av1.py <game folder> <out folder> [--game ug2|mw] [--crf N] [--cpu-used 4] [--jobs 6] [--threads 4]
         [--only Scene01] [--only ^LANGPACKS/] [--force]
     tools/movies_av1.py --check <game folder> <out folder> [--ffmpeg <one with libvmaf>] [--only ...]
         VMAF (or PSNR) of each AV1 movie's pictures against its VP6 one's, frame for frame
 
 <out folder> gets the AV1 files at their place in the game folder (MOVIES/AV1/..., LANGPACKS/x/MOVIES/AV1/...):
 copy its MOVIES and LANGPACKS over the game folder's and the server's manifest lists them.  A movie whose AV1 file
-is already there and newer than its VP6 file is left alone, so a second run only makes what is new.  At crf 26
-every movie keeps a VMAF of 95 or more against its VP6 pictures (the game folder's 95.8 to 99.6, the language
-packs' dubbed ones, 512x512 at 25 fps, 95.4 to 99.7).
+is already there and newer than its VP6 file is left alone, so a second run only makes what is new.  The crf is
+set per game (--game, found from the game folder when left out: speed.exe is Most Wanted, SPEED2.EXE Underground 2;
+--crf overrides it): Underground 2 26, Most Wanted 34.  At crf 26 every Underground 2 movie keeps a VMAF of 95 or
+more against its VP6 pictures (the game folder's 95.8 to 99.6, the language packs' dubbed ones, 512x512 at 25 fps,
+95.4 to 99.7); Most Wanted's smaller picture and grainier film footage give the size a better trade at crf 34.
 
 The AV1 file is the VP6 file with each video frame swapped: EA's chunks stay as they were, in the same order
 (MVhd; MV0K for a key frame, MV0F for the others; the sound's SCHl/SCCl/SCDl/SCEl chunks byte for byte), so
@@ -47,7 +49,14 @@ import time
 MAGIC = b'AV01'
 VIDEO = (b'MV0K', b'MV0F')
 MIN_SIZE = 64 << 10     # blank.vp6 (2 KB, a black frame) stays VP6
+CRF = {'ug2': 26, 'mw': 34}     # the constant quality of each game's AV1 movies
 _locks, _locks_lock = {}, threading.Lock()
+
+
+def detect_game(game):
+    """'mw' for a folder with speed.exe (Most Wanted), else 'ug2' (SPEED2.EXE)"""
+    names = {n.lower() for n in os.listdir(game)}
+    return 'mw' if 'speed.exe' in names and 'speed2.exe' not in names else 'ug2'
 
 
 def lock(key):
@@ -265,7 +274,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument('game')
     p.add_argument('out')
-    p.add_argument('--crf', type=int, default=26)
+    p.add_argument('--game', dest='which', choices=sorted(CRF), help='sets the default crf (default: found from the game folder)')
+    p.add_argument('--crf', type=int, help='the constant quality (default: %s)' % ', '.join(f'{g} {c}' for g, c in CRF.items()))
     p.add_argument('--cpu-used', type=int, default=4)
     p.add_argument('--jobs', type=int, default=6, help='stretches encoded at once (--check: movies at once)')
     p.add_argument('--threads', type=int, default=4, help="libaom's threads for each")
@@ -274,6 +284,9 @@ def main():
     p.add_argument('--check', action='store_true', help='measure the AV1 files instead of making them')
     p.add_argument('--ffmpeg', default='ffmpeg', help='the ffmpeg for --check (one with libvmaf)')
     a = p.parse_args()
+    a.which = a.which or detect_game(a.game)
+    if a.crf is None:
+        a.crf = CRF[a.which]
     if not shutil.which(a.ffmpeg if a.check else 'ffmpeg'):
         sys.exit('ffmpeg is missing (apt install ffmpeg)')
     pick = lambda m, s: m.lower().startswith(s[1:].lower()) if s.startswith('^') else s.lower() in m.lower()

@@ -243,7 +243,8 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
   an M4 Mac, less than the lifted VP6 decoder took; one that brings no picture within 250 ms keeps the last one on screen. One log line a movie:
   `[movie] AV1 768x512: N frames, 0 without a picture, decode … ms a frame (max …), 0 catch-ups`.
   `NFSU2_MOVIE_CODEC = vp6` (settings.ini, `&env=`) plays the VP6 files anyway; the page's session line says which.
-  At crf 26 (cpu-used 4) every movie keeps a VMAF of 95 or more against its VP6 pictures, and the pictures the game
+  The crf is per game (`tools/movies_av1.py --game`, found from the game folder; `--crf` overrides): Underground 2 26,
+  Most Wanted 34 (cpu-used 4 for both). At crf 26 every Underground 2 movie keeps a VMAF of 95 or more against its VP6 pictures, and the pictures the game
   gets are within 42 to 55 dB PSNR of its own VP6 decoder's (`NFSU2_MOVIE_DUMP`, `runtime/movie_av1.c`): the game
   folder's 965 MB of movies become 179 MB, a dubbed language's 216 MB 153 MB.
 - **Clock:** `clock_gettime(MONOTONIC)` is `performance.timeOrigin + performance.now()`, which is one clock across

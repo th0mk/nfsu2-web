@@ -487,7 +487,8 @@ place (`runtime/movie.c`). Safari on older Macs and iPhones, and any browser wit
 movies, so the game folder keeps them too.
 
 1. `sudo apt install ffmpeg` (the encoder is its libaom), then from the repository:
-   `tools/movies_av1.py "<your game folder>" <out>`. The AV1 files land in `<out>`, at their places in the game
+   `tools/movies_av1.py "<your game folder>" <out>` (crf 26 for Underground 2, 34 for Most Wanted: the tool finds the
+   game from the folder, `--game` or `--crf` set it). The AV1 files land in `<out>`, at their places in the game
    folder: the game folder's 965 MB of movies become 179 MB, each dubbed language's 216 MB 153 MB. It took about
    50 minutes on 12 cores; a second run makes only what is new, and the dubbed languages share their pictures, so
    those are encoded once.
