@@ -3,14 +3,14 @@
 //   renderer  web/src/gpu    WebGPU, draws into the shell's canvas
 //   audio     web/src/audio  AudioWorklet, plays into the context made in the Play click
 //   input     web/src/input  keyboard, mouse, Gamepad API, focus and visibility
-//   net       web/src/net    the server's virtual LAN, only with free roam on
+//   net       web/src/net    the server's virtual LAN, only with free roam on (its link in a worker: net/remote.ts)
 // Each module's own handle has detach(); the adapters pass the options the
 // shell owns and pick the counters the detailed overlay shows.
 import { attachRenderer as gpuAttach } from '../gpu/index';
 export { OtherBuild } from '../gpu/index';
 import { attachAudio as audioAttach } from '../audio/index';
 import { attachInput as inputAttach } from '../input/index';
-import { attachNet as netAttach } from '../net/index';
+import { attachNet as netAttach } from '../net/remote';
 import type { AttachAudio, AttachInput, AttachNet, AttachRenderer } from './contract';
 
 export type {

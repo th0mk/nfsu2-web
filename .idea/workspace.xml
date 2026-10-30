@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b4083eb9-d884-4a50-abba-497f85dfd3a2" name="Changes" comment="changed concept of ghost mode. If player decide to be &quot;solid&quot; he only sees other players who are solid otherwise if its ghost , see only players in ghost mode.">
+      <change beforePath="$PROJECT_DIR$/docs/web/DESIGN.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/web/DESIGN.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/build.mjs" beforeDir="false" afterPath="$PROJECT_DIR$/web/build.mjs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/src/app/subsystems.ts" beforeDir="false" afterPath="$PROJECT_DIR$/web/src/app/subsystems.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/src/host/abi.ts" beforeDir="false" afterPath="$PROJECT_DIR$/web/src/host/abi.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/src/net/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/web/src/net/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/src/sw.ts" beforeDir="false" afterPath="$PROJECT_DIR$/web/src/sw.ts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "NikolaiStoilkov"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/NikolaiStoilkov/nfsu2-web.git",
+    "accountId": "b1acb574-95e6-40b8-bab2-d27e9ffc763d"
+  }
+}]]></component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.033594258068271" />
+      <entry key="MS500" value="2.0916852527082845" />
+      <entry key="S2" value="5.416127315604749" />
+      <entry key="S5" value="10.460997490274186" />
+      <entry key="S10" value="17.95914959033492" />
+      <entry key="S30" value="35.47826469960064" />
+      <entry key="S60" value="45.004025558069976" />
+      <entry key="M2" value="51.53026728183906" />
+      <entry key="M5" value="58.512221163756564" />
+      <entry key="M10" value="63.78487533157333" />
+      <entry key="M15" value="66.42695738676791" />
+      <entry key="M30" value="69.75793257284408" />
+      <entry key="H1" value="71.74860538694614" />
+      <entry key="H2" value="72.83938987260112" />
+      <entry key="H4" value="73.41065815386838" />
+      <entry key="D1" value="73.9004941631725" />
+      <entry key="W1" value="73.9857531203276" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="0.0" />
+      <entry key="M30" value="0.0" />
+      <entry key="H1" value="0.0" />
+      <entry key="H2" value="0.0" />
+      <entry key="H4" value="0.0" />
+      <entry key="D1" value="0.0" />
+      <entry key="W1" value="0.0" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.9982160543686506" />
+      <entry key="MS500" value="2.077145780768383" />
+      <entry key="S2" value="5.406773706654479" />
+      <entry key="S5" value="10.453799205999236" />
+      <entry key="S10" value="17.952948447126428" />
+      <entry key="S30" value="35.47413719303019" />
+      <entry key="S60" value="45.001392998975454" />
+      <entry key="M2" value="51.52875380427536" />
+      <entry key="M5" value="58.51152836770584" />
+      <entry key="M10" value="63.78449516164044" />
+      <entry key="M15" value="66.42669261248342" />
+      <entry key="M30" value="69.75779303784434" />
+      <entry key="H1" value="71.74853348280156" />
+      <entry key="H2" value="72.83935333510723" />
+      <entry key="H4" value="73.41063973182168" />
+      <entry key="D1" value="73.90049107092366" />
+      <entry key="W1" value="73.98575267803302" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 6,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3LJODvUI4wgrz4Uw2vU1RsjOXeM" />
+  <component name="ProjectViewState">
+    <option name="autoscrollFromSource" value="true" />
+    <option name="autoscrollToSource" value="true" />
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "main",
+    "javascript.preferred.runtime.type.id": "node",
+    "last_opened_file_path": "/Users/nikolay/www/nfsu2-web",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "ts.external.directory.path": "/Users/nikolay/www/nfsu2-web/web/node_modules/@typescript/typescript-darwin-arm64/lib"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-4abd2a77f808-JavaScript-WS-262.10968.77" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b4083eb9-d884-4a50-abba-497f85dfd3a2" name="Changes" comment="" />
+      <created>1793168587742</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1793168587742</updated>
+      <workItem from="1793168589594" duration="1626000" />
+    </task>
+    <task id="LOCAL-00001" summary="changed concept of ghost mode. If player decide to be &quot;solid&quot; he only sees other players who are solid otherwise if its ghost , see only players in ghost mode.">
+      <option name="closed" value="true" />
+      <created>1793169407346</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1793169407346</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="changed concept of ghost mode. If player decide to be &quot;solid&quot; he only sees other players who are solid otherwise if its ghost , see only players in ghost mode." />
+    <option name="LAST_COMMIT_MESSAGE" value="changed concept of ghost mode. If player decide to be &quot;solid&quot; he only sees other players who are solid otherwise if its ghost , see only players in ghost mode." />
+  </component>
+</project>

@@ -42,8 +42,16 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
  WebGPU renderer (TS) ◀─ frame packets / resource   (wasi-threads; the GIL serialises guest code)
    queue in wasm memory, Atomics.waitAsync          I/O worker: WASI files (/data over HTTP + OPFS
  rAF: vsync clock ─────────────────────────────▶     cache, /save in OPFS, /dev)
- AudioWorklet ◀── PCM ring (audio pump pthread)     LAN socket to the server's switch (net track)
+ AudioWorklet ◀── PCM ring (audio pump pthread)     net worker: the LAN socket to the server's switch
 ```
+
+- **The net link's own thread:** the WebSocket to the switch and the loops between it and the net mailboxes run in
+  the net worker (`web/src/net/worker.ts`; the page's stand-in for it, `web/src/net/remote.ts`), not on the main
+  thread, which encodes every frame and unpacks textures: a car state there waited behind whatever it was doing.
+  Measured in Chrome with two links on a local switch, 20 datagrams a second, the main thread busy 40 ms of every
+  50 (2026-10-30): on the main thread a datagram reached the other's RX ring in 35 ms (p50; 37 ms at most), in the
+  worker in 0.3 ms (1.2 at most); with the main thread idle both took about 1 ms. Where the worker cannot start,
+  the link runs on the main thread as before (`[net] ... the link runs on the page's main thread` in the log).
 
 - **Toolchain:** wasi-sdk 34 (clang 23.1), `wasm32-wasip1-threads`.
   - Flags: `-O3 -mtail-call -msimd128 -mbulk-memory -mnontrapping-fptoint -mexception-handling` (setjmp/longjmp via
