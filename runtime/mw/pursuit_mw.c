@@ -9,7 +9,8 @@
  *                    (13 pursuit breakers, 12 hiding spots) with its place
  *   pools [watch]    log the game's memory pools (each bMemoryPool: its size, what is allocated, the number of
  *                    allocations) and the frame arena (two buffers of 0x64000: the game's own peak of a frame's
- *                    use and of its overflow), with the peaks since `pools watch` (sampled once a frame anchor)
+ *                    use and of its overflow), with the peaks since `pools watch` (sampled once a frame anchor);
+ *                    under `pursuit watch` they are logged again at each pursuit's end (mw_pursuit_end)
  * and `pursuit watch` (career_mw.c) appends the pursuit's counts the game keeps by name (below) and the hooks' counts.
  *
  * The game's records, from speed.exe v1.3's code:
@@ -54,9 +55,22 @@
  *   0x43DD30  the roadblock spawner's entry (its callers 0x43E7D1, 0x43EC35; the purecall guard 0x43E005 is in it)
  *   0x439E60  MBreakerStopCops' handler (the cop manager): a pursuit breaker came down; the message holds its place
  *             (+0x10..+0x18), its radius (+0x1C) and a time (+0x20).  (EPursuitBreaker, 0x641670, is the
- *             Speedbreaker's slow motion, not a pursuit breaker: 0x6E9AE9 and the player's destructor make it.) */
+ *             Speedbreaker's slow motion, not a pursuit breaker: 0x6E9AE9 and the player's destructor make it.)
+ *   0x41ECD0  the cop manager's cop car by name (thiscall (const char *name)): it hashes the name (0x5CC240) and
+ *             takes a car of its pool whose IVehicle method +0x4C (the vehicle's name) hashes the same, else makes
+ *             one.  Its callers pick the name: the pursuit's (0x4266E9: "copheli" for the helicopter's kind
+ *             [0x92C4F4]; 0x426726: the heat's table through 0x419AE0, else "copmidsize"), the roadblock's
+ *             (0x43EBCB) and others (0x41F1CD, 0x41F588, 0x42E729, 0x431495).  Counted by name for each pursuit and
+ *             logged at its end with the pools (mw_pursuit_end).
+ * The cops' search (the cooldown, the pursuit's state +0x218 == 2; its update about 0x4447F8..0x444A00, esi the
+ * pursuit's base + 8, the pursuit object at esi + 0x40): +0xFC the meter, (+0x124 + +0x128) / +0x104, evaded at 1
+ * (state 4); +0x128 the search's time (dt each frame, 0x4440E5), +0x124 a bonus that grows by dt x a rate (the
+ * attribute 0x7FCEE250 of the instance at the update's [esp+0x10], else [0x890604]) only while the object at
+ * +0x74 answers yes to its method +0x2C or +0x30 (0x444824..0x44488D), +0x104 the search's length (s; from the
+ * heat's table, 0x443D5E). */
 #include "cpu.h"
 #include "game.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,10 +118,28 @@ static const struct { uint32_t name; const char *tag; } gm_names[] = {
 #define SITE_ROADBLOCK_TRY HOOK_SITE(0x0043dd30) /* the roadblock spawner: a try (about every other frame in a pursuit) */
 #define SITE_ROADBLOCK   HOOK_SITE(0x0043df43)   /* ... past its road checks: a roadblock is put up (its cars by heat) */
 #define SITE_BREAKER     HOOK_SITE(0x00439e60)   /* MBreakerStopCops' handler */
+#define SITE_COPCAR      HOOK_SITE(0x0041ecd0)   /* the cop manager's cop car by name */
 static unsigned long n_roadblock_try, n_roadblock, n_breaker;
 unsigned long mw_pursuit_breakers(void){ return n_breaker; }     /* career_mw.c: `pursuit wait breaker` */
+/* the cop cars asked for by name since the last pursuit's end (the names are the game's own strings) */
+#define N_COPNAMES 16
+static struct { char name[24]; unsigned long n, all; } copcar[N_COPNAMES];
+static unsigned long n_copcar_lines;
+static void copcar_count(uint32_t s, uint32_t from){
+    char nm[24] = "?";
+    for (int k = 0; s && k < 23 && rd8(s + (uint32_t)k); k++){ nm[k] = (char)rd8(s + (uint32_t)k); nm[k + 1] = 0; }
+    int i = 0;
+    while (i < N_COPNAMES && copcar[i].name[0] && strcmp(copcar[i].name, nm)) i++;
+    if (i < N_COPNAMES){
+        if (!copcar[i].name[0]) memcpy(copcar[i].name, nm, sizeof nm);
+        copcar[i].n++; copcar[i].all++;
+    }
+    if (mw_aid_pw_on() && n_copcar_lines++ < 400)
+        fprintf(stderr, "[mwpursuit] f=%ld cop car asked: %s (from 0x%08x)\n", autotest_frame(), nm, from);
+}
 int mw_pursuit_hook(CPU *c, uint32_t va){
     if (va == SITE_ROADBLOCK_TRY){ n_roadblock_try++; return 1; }
+    if (va == SITE_COPCAR){ copcar_count(MR32(c->esp + 4u), MR32(c->esp)); return 1; }
     if (va == SITE_ROADBLOCK){
         n_roadblock++;
         if (mw_aid_pw_on())
@@ -128,7 +160,12 @@ int mw_pursuit_hook(CPU *c, uint32_t va){
 }
 
 /* the pursuit's counts for career_mw.c's [mwpursuit] line: sig[] for its change test (8 values), the text in out */
-#define PURSUIT_STATE 0x218u
+#define PURSUIT_STATE      0x218u
+#define PURSUIT_METER      0xfcu        /* the cops' search (state 2): the meter, 0..1 */
+#define PURSUIT_SEARCH_LEN 0x104u       /* ... its length (s) */
+#define PURSUIT_BONUS      0x124u       /* ... the bonus seconds */
+#define PURSUIT_SEARCH_T   0x128u       /* ... its seconds so far */
+#define PURSUIT_HIDE       0x74u        /* the object whose +0x2C / +0x30 let the bonus grow */
 void mw_pursuit_extras(CPU *c, uint32_t po, uint32_t sig[8], char *out, size_t n){
     size_t o = 0;
     out[0] = 0;
@@ -143,8 +180,31 @@ void mw_pursuit_extras(CPU *c, uint32_t po, uint32_t sig[8], char *out, size_t n
                          : snprintf(out + o, n - o, " %s -", gm_names[i].tag));
     }
     sig[7] = (uint32_t)(n_roadblock * 1000u + n_breaker);
-    if (o < n) snprintf(out + o, n - o, " roadblocks %lu breakers %lu guard %lu", n_roadblock, n_breaker,
-                        mw_fix_purecall_calls());
+    if (o < n) o += (size_t)snprintf(out + o, n - o, " roadblocks %lu breakers %lu guard %lu", n_roadblock, n_breaker,
+                                     mw_fix_purecall_calls());
+    if (po && rd(po + PURSUIT_STATE) == 2u && o < n){  /* the cops' search: the meter by tenths, its parts */
+        float m = rdf(po + PURSUIT_METER);
+        sig[0] |= (uint32_t)(int)(m * 10.0f) << 8;
+        sig[0] |= (rd(po + PURSUIT_HIDE) ? 1u : 0u) << 16;
+        snprintf(out + o, n - o, " search %.2f (%.1f s + bonus %.1f s of %.0f s) +0x74 %08x", m,
+                 rdf(po + PURSUIT_SEARCH_T), rdf(po + PURSUIT_BONUS), rdf(po + PURSUIT_SEARCH_LEN), rd(po + PURSUIT_HIDE));
+    }
+}
+
+/* the end of a pursuit (career_mw.c's hooks at the evade and the player's bust): the cop cars it asked for by name and,
+ * under `pools watch`, the pools with their peaks so far, so a run stopped later still has them */
+static int pools_on;
+void mw_aid_pools(CPU *c, int watch);
+void mw_pursuit_end(CPU *c, const char *how){
+    char b[512]; int o = 0;
+    b[0] = 0;
+    for (int i = 0; i < N_COPNAMES && copcar[i].name[0]; i++){
+        if (copcar[i].n) o += snprintf(b + o, sizeof b - (size_t)o, " %s %lu", copcar[i].name, copcar[i].n);
+        copcar[i].n = 0;
+    }
+    fprintf(stderr, "[mwpursuit] f=%ld end (%s): cop cars asked by name:%s; roadblocks %lu, breakers %lu, guard %lu\n",
+            autotest_frame(), how, o ? b : " none", n_roadblock, n_breaker, mw_fix_purecall_calls());
+    if (pools_on) mw_aid_pools(c, 0);
 }
 
 /* ---- the rap sheet ---- */
@@ -237,14 +297,38 @@ int mw_aid_icon_place(int type, int k, float pos[3]){
     return 0;
 }
 
+/* the icon of type T that is on (flags bit 0) nearest a place in simulation space: its place there (sim (-y, z, x) of
+ * the world's axes, as career_mw.c's icon go turns it), its index and distance (X, Z); -1 = none */
+int mw_aid_icon_near(int type, const float at[3], float out[3], float *dist){
+    uint32_t gm = rd(G_GMANAGER), n = rd(gm + GM_ICONS_N), a = rd(gm + GM_ICONS);
+    int best = -1;
+    float bd = 0;
+    for (uint32_t i = 0; a && i < n && i < 4096u; i++){
+        uint32_t ic = rd(a + 4u * i);
+        if (!ic || (int)(rd(ic) & 0xffffu) != type || !(rd8(ic + 2u) & 1u)) continue;
+        float s[3] = { -rdf(ic + 0x14u), rdf(ic + 0x18u), rdf(ic + 0x10u) };
+        float dx = s[0] - at[0], dz = s[2] - at[2], d = dx * dx + dz * dz;
+        if (best < 0 || d < bd){ best = (int)i; bd = d; memcpy(out, s, sizeof s); }
+    }
+    if (dist) *dist = best < 0 ? 0.0f : sqrtf(bd);
+    return best;
+}
+
 /* ---- the memory pools ---- */
 #define POOL_PTRS   0x0090df10u
 #define N_POOLS     16
 static struct { uint32_t used, allocs, size; int seen; } peak[N_POOLS];
 static uint32_t arena_peak_seen;
-static int pools_on;
+int mw_aid_where(CPU *c, float pos[3], float *kmh);           /* career_mw.c */
 void mw_pursuit_frame(CPU *c){
-    (void)c;
+    static unsigned long breakers_seen;
+    if (n_breaker != breakers_seen && mw_aid_pw_on()){   /* where the car was when a pursuit breaker came down */
+        float p[3] = { 0 }, kmh = 0;
+        breakers_seen = n_breaker;
+        if (mw_aid_where(c, p, &kmh))
+            fprintf(stderr, "[mwpursuit] f=%ld breaker %lu: the car at %.1f %.1f %.1f, %.0f km/h\n", autotest_frame(),
+                    n_breaker, p[0], p[1], p[2], kmh);
+    }
     if (!pools_on) return;
     for (int i = 0; i < N_POOLS; i++){
         uint32_t p = rd(POOL_PTRS + 4u * (uint32_t)i);

@@ -409,10 +409,11 @@ static uint32_t pursuit_obj(CPU *c, uint32_t *perp){
 /* pursuit_mw.c: the pursuit's state and the counts the game keeps by name, appended to the line (x: 8 values for the
  * change test; the heat by tenths, so the escalation shows) */
 void mw_pursuit_extras(CPU *c, uint32_t po, uint32_t sig[8], char *out, size_t n);
+void mw_pursuit_end(CPU *c, const char *how);  /* pursuit_mw.c: the cop cars asked for and the pools, at the end */
 static void log_pursuit(CPU *c, int only_changes){
     uint32_t p = 0, po = pursuit_obj(c, &p);
     float bt = po ? rdf(po + PURSUIT_BUST_T) : 0.0f;
-    char x[256];
+    char x[384];
     uint32_t v[16] = { (uint32_t)(int)(rdf(p + PERP_HEAT) * 10.0f), rd(p + 0x20u), rd(p + 0x24u), po, game_flow(),
                       po ? (uint32_t)(bt > 0.0f ? bt : 0.0f) : 0u, po ? MR8(po + PURSUIT_BUSTED) : 0u,
                       po ? rd(po + PURSUIT_COPS) : 0u };
@@ -442,6 +443,7 @@ int mw_aid_hook(CPU *c, uint32_t va){
     else                                /* the pursuit's update: esi its base + 8, so the pursuit object is esi + 0x40 */
         fprintf(stderr, "[mwpursuit] f=%ld busted: pursuit %08x%s\n", autotest_frame(), c->esi + 0x40u,
                 va == SITE_BUSTED ? " (MPerpBusted for the player, 0x444695)" : " (an AI racer, 0x444711)");
+    if (va != SITE_BUSTED_AI) mw_pursuit_end(c, va == SITE_EVADED ? "evaded" : "busted");
     return 1;
 }
 
