@@ -5,7 +5,7 @@
 //! by any of it (no user sets: badc, as before).
 
 use super::world::{C, Opts, World};
-use crate::lobby::{usersets_from_letters as from_letters, usersets_letters as letters};
+use crate::lobby::{Limits, usersets_from_letters as from_letters, usersets_letters as letters};
 use crate::stats::{Counts, Records, Table, decode_result_mw, stat_v44};
 use crate::title::MW;
 use crate::{PORT_LOBBY, PORT_REDIRECTOR};
@@ -221,6 +221,43 @@ fn user_sets_names_and_leaving() {
     assert_eq!(w.c(cs[0]).l("udel").code, "");
     assert!(w.core.lobby.sets.is_empty());
     assert_eq!(w.c(cs[1]).l("+who").g("US"), "");
+}
+
+// a refused ucre leaves the creator where it was (no name; a name in use, its own set's too; the browser's limit); a
+// made one takes it out of its set, and the set that ends with that does not count against the limit
+#[test]
+fn user_sets_refused_create() {
+    let limits = Limits { open_per_vip: 1.0, ..Limits::default() };
+    let mut w = World::new(Opts { title: Some(&MW), limits, ..Opts::default() });
+    let (a, b) = (w.client("10.77.0.2"), w.client("10.77.0.3"));
+    let (razor, rog, bull) = (w.login(a, "Razor"), w.login(a, "Rog"), w.login(b, "Bull"));
+    w.send(bull, "ucre", fields![("NAME", "1.Bull"), ("SIZE", 4)]);
+    let id = w.c(bull).l("ucre").g("IDENT").to_string();
+    w.send(rog, "ujoi", fields![("NAME", "1.Bull")]);
+    for (name, code) in [("", "inam"), ("1.Bull", "dupl"), ("1.BULL", "dupl")] {
+        w.advance(2000.0);
+        w.send(bull, "ucre", fields![("NAME", name), ("SIZE", 4)]);
+        assert_eq!(w.c(bull).l("ucre").code, code, "{name:?}");
+    }
+    assert_eq!(w.c(rog).l("+who").g("US"), "1.Bull", "the member is still in it");
+    let ids: Vec<String> = w.core.lobby.sets.keys().map(|k| k.to_string()).collect();
+    assert_eq!(ids, [id], "the set as it was");
+    // the browser's one set: another session of it is refused and stays where it was
+    w.send(razor, "ucre", fields![("NAME", "2.Razor"), ("SIZE", 4)]);
+    assert_eq!(w.c(razor).l("ucre").code, "");
+    w.advance(2000.0);
+    w.send(rog, "ucre", fields![("NAME", "3.Rog"), ("SIZE", 4)]);
+    assert_eq!(w.c(rog).l("ucre").code, "full");
+    assert_eq!(w.c(rog).l("+who").g("US"), "1.Bull");
+    assert_eq!(w.core.lobby.sets.len(), 2);
+    // its creator's next set: the old one ends with that, so it does not count
+    w.advance(2000.0);
+    w.send(razor, "ucre", fields![("NAME", "4.Razor"), ("SIZE", 4)]);
+    assert_eq!(w.c(razor).l("ucre").code, "");
+    assert!(w.logged("the room \"2.Razor\" ended"));
+    let mut names: Vec<String> = w.core.lobby.sets.values().map(|x| x.name.clone()).collect();
+    names.sort();
+    assert_eq!(names, ["1.Bull", "4.Razor"]);
 }
 
 // the game room's chat: F the ATTR's letters with U (EGS: EGSU), the countdown's as it is (EGT), U empty; the reply

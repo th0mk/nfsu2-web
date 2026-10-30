@@ -16,7 +16,9 @@
 //!
 //! A set's record: I T SF CF O S N D P C (server.dll's "I=%d T=%d SF=%f CF=%f O=%s S=%d N=%s D=%s P=%s C=%d"; %f a set
 //! of flag letters, `letters`); a member's (+usm): I N F G X S.
-//! A session is in one set at most; the set goes with its owner, or its last member.  The limits are the games':
+//! A session is in one set at most; the set goes with its owner, or its last member.  ucre takes the creator out of
+//! its set only once the new one is made: a refused one (full, inam, dupl: a name in use, its own set's too) leaves it
+//! where it was.  The limits are the games':
 //! a set's size at most the title's game size, sets of one browser and client as its open games, created at the
 //! create rate.
 
@@ -69,10 +71,11 @@ impl Lobby {
         let n = lower(name);
         self.sets.values().find(|x| lower(&x.name) == n).map(|x| x.id)
     }
-    /// the sets made from one browser and from one client
-    fn sets_of(&self, vip: u32, group: &Arc<str>) -> (f64, f64) {
-        let v = self.sets.values().filter(|x| x.vip == vip).count();
-        let g = self.sets.values().filter(|x| x.group == *group).count();
+    /// the sets made from one browser and from one client (`but`: not counting that one)
+    fn sets_of(&self, vip: u32, group: &Arc<str>, but: Option<SetId>) -> (f64, f64) {
+        let sets = || self.sets.values().filter(|x| Some(x.id) != but);
+        let v = sets().filter(|x| x.vip == vip).count();
+        let g = sets().filter(|x| x.group == *group).count();
         (v as f64, g as f64)
     }
 }
@@ -158,12 +161,14 @@ impl Core {
         if self.lobby.sets.len() as f64 >= self.lobby.l.games || !self.lobby.sm(s).creates.take(now, 1.0) {
             return self.lsend(s, "ucre", &[], "full");
         }
-        let (vip, group) = {
+        let (vip, group, old) = {
             let x = self.lobby.s(s);
-            (x.vip, x.group.clone())
+            (x.vip, x.group.clone(), x.set)
         };
-        self.set_leave(s);
-        let (mv, mg) = self.lobby.sets_of(vip, &group);
+        // the creator leaves its set only for the new one: a refused create leaves it where it was.  The set its
+        // leaving will end (its own, or one it is the last of) does not count against the new one
+        let ends = old.filter(|id| self.lobby.sets.get(id).is_some_and(|x| x.owner == s || x.members == [s]));
+        let (mv, mg) = self.lobby.sets_of(vip, &group, ends);
         if mv >= self.lobby.l.open_per_vip || mg >= self.lobby.l.open_per_group {
             return self.lsend(s, "ucre", &[], "full");
         }
@@ -171,9 +176,11 @@ impl Core {
         if name.is_empty() {
             return self.lsend(s, "ucre", &[], "inam");
         }
+        // a name in use, the creator's own set's too
         if self.lobby.set_by_name(&name).is_some() {
             return self.lsend(s, "ucre", &[], "dupl");
         }
+        self.set_leave(s);
         let most = self.game_size();
         let id = self.lobby.next_set;
         self.lobby.next_set += 1;
