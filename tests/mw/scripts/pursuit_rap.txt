@@ -2,9 +2,11 @@
 # safehouse (TRACKER M4-16, M4-17, M4-18, M4-28, M4-35).  The seeds are safehouse saves: Resume Career opens the
 # safehouse menu, where the profile is loaded and `rapsheet` (runtime/mw/pursuit_mw.c) logs the rap sheet, the impound
 # strikes and markers.  Then the career bot (runtime/mw/bot_mw.c) takes the car to free roam and runs ${PR_BOT}:
-# `pursuit` (one pursuit: the AI drives about until cops start one, after 60 s Game.ForcePursuitStart(1)) or
-# `chase S` (pursuits one after another for S game seconds).  The AI drives every pursuit; the game decides busted or
-# evaded (the bot's "pursuit over" lines, from the game's own sites), and the bot logs the rap sheet after each.
+# `pursuit` (one pursuit: the AI drives about until cops start one, after 60 s Game.ForcePursuitStart at the bin's
+# top heat) or `chase S` (pursuits one after another for S game seconds, each forced after 5 s).  The AI drives every
+# pursuit (the bot breaks off a long or boxed-in chase and rejoins one lost too early, as in the career run); the game
+# decides busted or evaded (the bot's "pursuit over" lines, from the game's own sites), and the bot logs the rap sheet
+# after each.
 # `pursuit watch` logs the pursuit's state whenever it changes: heat (by tenths), cops, the counts the game keeps by
 # name (helicopters, roadblocks and spike strips dodged, cops damaged and destroyed), and the roadblock spawner's and
 # the pursuit breakers' hooks; `pools watch` follows the memory pools' peaks.  The world map's icons (pursuit breakers
