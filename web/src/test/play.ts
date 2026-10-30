@@ -15,6 +15,8 @@
 //   gputime     measure GPU time per frame with timestamp queries (in the stats)
 //   bc=0        unpack the DXT textures on the CPU, as on a GPU without texture-compression-bc
 //   astc=0      with bc=0 (or no BC): unpack DXT1 too, rather than rewrite it as ASTC where the GPU has that
+//   astca=0     with bc=0 (or no BC): unpack DXT3 and DXT5, rather than rewrite them as ASTC (as env=NFSU2_ASTC_ALPHA=0,
+//               settings.ini astc_alpha = off)
 //   cssscale=0  at a render scale below 1, composite the picture over the canvas instead of CSS stretching the canvas
 //   direct=0|1  draw the frame straight into the canvas texture when the sizes match (default: not in Firefox)
 //   poke=0|1    while a frame waits for the GPU, poll it with empty submits (default: in Firefox)
@@ -84,7 +86,8 @@ try {
     trace: trace === 'dumps' ? 'dumps' : trace ? trace.split(',').map(Number) : undefined, logShaders: q.has('shaders'),
     dumpTex: q.get('dumptex') ? q.get('dumptex')!.split(',').map(Number) : undefined,
     watchTex: q.get('watchtex') ? q.get('watchtex')!.split(',').map(Number) : undefined, gpuTiming: q.has('gputime'),
-    direct: q.has('direct') ? q.get('direct') !== '0' : undefined, cssScale: q.get('cssscale') !== '0', noBC: q.get('bc') === '0', noASTC: q.get('astc') === '0', poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
+    direct: q.has('direct') ? q.get('direct') !== '0' : undefined, cssScale: q.get('cssscale') !== '0', noBC: q.get('bc') === '0', noASTC: q.get('astc') === '0',
+    noASTCAlpha: q.get('astca') === '0' || env.NFSU2_ASTC_ALPHA === '0', poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
     gpuBurn: +(q.get('gpuburn') ?? 0), maxInFlight: q.get('inflight') ? +q.get('inflight')! : undefined,
     summaryMs: q.get('summary') ? +q.get('summary')! * 1000 : undefined });
 } catch (x) { log(`renderer: ${x}`); }

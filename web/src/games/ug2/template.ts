@@ -135,6 +135,16 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # the memory).  [NFSU2_UI_TEXTURES]
 #ui_textures = original
 
+# Graphics without BC texture compression (most phones and tablets): the
+# textures with soft transparency (leaves, fences, glass, smoke) go up
+# compressed as ASTC, in a quarter of the memory unpacking them takes,
+# for a little more work on loading screens.  Their transparency then
+# has 4 steps in each 4x4 block of texels where the game's own has 8 or
+# 16, so soft edges can look slightly coarser.  off = unpack them as
+# before: exact, with four times the memory.  Graphics with BC
+# (computers) are not affected.  [NFSU2_ASTC_ALPHA]
+#astc_alpha = on
+
 # ---- Frame rate ----------------------------------------------------------
 
 # auto = follow the display's refresh rate (60, 120 or 240; 144/165 Hz give

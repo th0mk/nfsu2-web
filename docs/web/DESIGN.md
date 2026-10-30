@@ -272,7 +272,7 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
   every 10 s while it grows, when the page is hidden or shown, and at the end. A page that finds a game that did not get
   to its end (or one stopped for a reason, GPU-LOST say, before a reload) says so on the start page and puts that log
   first in Download log, with a line on how it ended (the page on screen or hidden at its last copy) and what the game
-  held at that copy: the textures' MB (and those unpacked from DXT or DXT1 as ASTC) and, in free roam, the friends' cars in the game
+  held at that copy: the textures' MB (and those unpacked from DXT or DXT as ASTC) and, in free roam, the friends' cars in the game
   and the friends connected (the status table's `roam_cars` and `roam_friends`, `runtime/web/status_web.c`). Safari
   gives the page no memory figure, and the first kept iPhone kill came between two renderer lines. A game the player
   left by reloading or closing the page (`pagehide`) is offered as well (a frozen game, reloaded), with a quiet line and
@@ -340,7 +340,20 @@ The game thread keeps `com.c` (D3D9 state, shader translation) and records throu
   (1.2 against 1.7 ms for 1024x1024). A DXT1 texture with transparent texels (a three-colour block's fourth code) in
   the first level that goes up is unpacked as before: one plane cannot give transparent black. One met only in a later
   level gets two-plane blocks (alpha exact, the colour under a transparent texel the darker endpoint, not black).
-  DXT3 and DXT5 stay unpacked. `?astc=0` on the test page unpacks DXT1 too.
+  `?astc=0` on the test page unpacks DXT1 too (and DXT3 and DXT5).
+- DXT3 and DXT5 go up as ASTC 4x4 there too (`dxtAlphaToAstc`, both games), block for block. A block of one alpha
+  (85 % of the blocks of both games' DXT3 and DXT5 textures, 60 % opaque) is one plane and exact: opaque, the very
+  block DXT1's colours get; otherwise endpoint mode 12 at 8 bits, the alpha the same at both ends. A block whose alpha
+  varies gets two planes of 2-bit weights (block mode 0x442, endpoint mode 12, alpha the second plane): the 45
+  endpoint bits left give range 48, so its colours are a few steps off (at most 7 of 255) and its alpha has 4 levels
+  in the block where DXT5 has 8 and DXT3 16 (at most 43 off; 0.5 on average over all the texels of those textures,
+  the soft edges of foliage the worst). The endpoints are the best of the nearest range-48 values and their
+  neighbours by squared error. Textures in a Most Wanted race 411 → 196 MB (155 with BC), an Underground 2 Quick Race
+  114 → 95 MB (61 with BC; what stays unpacked there is DXT1 with transparent texels). The cost is at upload: about 25 ms per MB of DXT3 and
+  DXT5 on a desktop CPU against 7 for unpacking (two-plane blocks are most of it), so loading screens on a phone take
+  longer. `astc_alpha = off` in settings.ini (`NFSU2_ASTC_ALPHA=0`; `?astca=0` on the test page) unpacks them as
+  before. `web/test/astc-decode.mjs` is a reference decoder written from the spec for the tests; on SwiftShader
+  (`web/tools/astc-check.mjs`) the GPU's texels are its values rounded or cut to 8 bits, every one.
 - C and TS layouts come from one source: a C header with `_Static_assert` offsets, plus a generated or hand-mirrored
   `proto.ts` checked by a test.
 

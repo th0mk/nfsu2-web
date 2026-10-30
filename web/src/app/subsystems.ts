@@ -19,7 +19,9 @@ export type {
 } from './contract';
 
 export const attachRenderer: AttachRenderer = async (proc, canvas, o) => {
-  const r = await gpuAttach(proc, canvas, { log: o.log, artifacts: o.artifacts, dumpScale: o.dumpScale, onLost: o.onLost, onMarks: o.onMarks });
+  const r = await gpuAttach(proc, canvas, { log: o.log, artifacts: o.artifacts, dumpScale: o.dumpScale, onLost: o.onLost, onMarks: o.onMarks,
+    // settings.ini astc_alpha = off: without BC, DXT3 and DXT5 unpacked as before rather than as ASTC
+    noASTCAlpha: o.env?.NFSU2_ASTC_ALPHA === '0' });
   return {
     detach: () => r.detach(),
     imageRect: () => r.imageRect(),

@@ -25,7 +25,7 @@ import { D, F, Kind, Op } from './proto';
 import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE, group1Entries, stageKind, texBinding, smpBinding } from './shader-abi';
 import { unpackDxt } from './dxt';
-import { dxt1HasPunch, dxt1ToAstc } from './astc';
+import { dxt1HasPunch, dxt1ToAstc, dxtAlphaToAstc } from './astc';
 
 export interface EncodeStats {
   draws: number; passes: number; skipped: number; encodeMs: number;
@@ -39,7 +39,7 @@ interface Tex {
   rtViews: GPUTextureView[];       // render target views: [0] = level 0 (2d) or faces 0..5 (cube)
   expandA8: boolean; bc: boolean;
   unpack: boolean;                 // DXT on a GPU without texture-compression-bc: BGRA8, unpacked on upload
-  astc: boolean;                   // DXT1 on a GPU with ASTC but not BC: ASTC 4x4, rewritten on upload (astc.ts)
+  astc: boolean;                   // DXT on a GPU with ASTC but not BC: ASTC 4x4, rewritten on upload (astc.ts)
   filled: boolean;                 // a level has gone up (an ASTC texture's choice is made at its first upload)
   bytes: number;                   // its size on the GPU, every level and face
   face0?: GPUTextureView;          // a cube's face 0, level 0 as a 2D view (StretchRect from it), made at its first use
@@ -161,9 +161,12 @@ export class Encoder {
   /** 8 stages, frames the page drew: draws whose group 1 binds a depth texture (not the stand-in), passes whose Z
    *  is a depth texture (the C side's counts include the frames the page dropped) */
   depthTexDraws = 0; depthZPasses = 0;
-  /** the game's textures on the GPU, bytes: all of them, those unpacked from DXT and those DXT1 as ASTC (no
+  /** the game's textures on the GPU, bytes: all of them, those unpacked from DXT and those as ASTC (no
    *  texture-compression-bc) */
   texBytes = 0; unpackBytes = 0; astcBytes = 0;
+  /** without BC, DXT3 and DXT5 as ASTC too (astc.ts dxtAlphaToAstc) where the device has texture-compression-astc;
+   *  false: unpacked to BGRA8 (settings.ini astc_alpha = off) */
+  astcAlpha = true;
   /** blocks with a transparent texel that went into a texture already ASTC: two planes (astc.ts) */
   private astcHoles = { blocks: 0 };
   /** WebGPU calls made by encodeFrame, by kind (totals; what the GPU process decodes and records) */
@@ -291,7 +294,7 @@ export class Encoder {
       case P.Fmt.A8: return this.feat.swizzle ? { f: 'r8unorm', bc: false, a8: false } : { f: 'bgra8unorm', bc: false, a8: true };
       case P.Fmt.P8: return { f: 'r8unorm', bc: false, a8: false };         // samples (L,0,0,1), as on the Mac
       case P.Fmt.DXT1: case P.Fmt.DXT3: case P.Fmt.DXT5:
-        if (!this.feat.bc && fmt === P.Fmt.DXT1 && this.feat.astc) return { f: 'astc-4x4-unorm', bc: false, a8: false, astc: true };
+        if (!this.feat.bc && this.feat.astc && (fmt === P.Fmt.DXT1 || this.astcAlpha)) return { f: 'astc-4x4-unorm', bc: false, a8: false, astc: true };
         if (!this.feat.bc) return { f: 'bgra8unorm', bc: false, a8: false, unpack: true };
         return { f: fmt === P.Fmt.DXT1 ? 'bc1-rgba-unorm' : fmt === P.Fmt.DXT3 ? 'bc2-rgba-unorm' : 'bc3-rgba-unorm', bc: true, a8: false };
     }
@@ -368,6 +371,16 @@ export class Encoder {
     let t = this.tex[id];
     if (t && this.traceDumps) this.uploads.set(t.serial, (this.uploads.get(t.serial) ?? 0) + 1);
     if (!t || level >= t.levels || t.depth) return;
+    if (t.astc && t.fmt !== P.Fmt.DXT1) {
+      // DXT3, DXT5: block for block, one plane where the alpha is one value, two where it varies
+      const bw = (lw + 3) >> 2, bh = (lh + 3) >> 2;
+      if (this.unpackBuf.length < bw * bh * 16) this.unpackBuf = new Uint8Array(bw * bh * 16);
+      const dst: GPUTexelCopyTextureInfo = { texture: t.tex, mipLevel: level, origin: { x: 0, y: 0, z: t.cube ? Math.min(face, 5) : 0 } };
+      this.queue.writeTexture(dst, dxtAlphaToAstc(t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh, this.unpackBuf),
+        { bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4, 1]);
+      t.filled = true;
+      return;
+    }
     if (t.astc) {
       const bw = (lw + 3) >> 2, bh = (lh + 3) >> 2;
       if (!t.filled && dxt1HasPunch(this.u8, data, pitch, bw, bh)) {

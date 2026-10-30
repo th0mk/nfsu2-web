@@ -182,7 +182,7 @@ export async function checkGpu(lostBefore = false): Promise<Check & { adapter?: 
   if (ffg) info = ffg.name;
   const named = info ? N('Graphics: {info}') : label;
   // no BC (PowerVR, Mali): the renderer unpacks the textures (web/src/gpu/dxt.ts), so it plays.  With ASTC (iPhones,
-  // iPads, most phones) the most of them go up as ASTC instead (astc.ts): ~50 MB more, not 200, nothing to say
+  // iPads, most phones) they go up as ASTC instead (astc.ts): ~40 MB more, not 200, nothing to say
   if (!ad.features.has('texture-compression-bc') && !ad.features.has('texture-compression-astc')) {
     return { ...check('gpu', named, 'warn', N('This device\'s graphics cannot read the game\'s packed textures, so the page unpacks them while the game loads. The game plays as it should, but it needs about 200 MB more memory, and loading screens may pause for a moment.'), 'GPU-NO-BC', { info }), adapter: info };
   }

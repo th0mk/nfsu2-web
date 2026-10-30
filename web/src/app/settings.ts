@@ -166,6 +166,9 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
+  // graphics without BC: the textures with an alpha channel (DXT3, DXT5) as ASTC (web/src/gpu/astc.ts), or unpacked.
+  // Not in bundle.m's table: the Mac's GPUs all have BC
+  { key: 'astc_alpha', env: 'NFSU2_ASTC_ALPHA', kind: 'bool', scope: 'web', device: true },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */

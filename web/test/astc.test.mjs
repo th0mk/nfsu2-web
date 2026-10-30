@@ -1,20 +1,25 @@
-// DXT1 rewritten as ASTC 4x4 (web/src/gpu/astc.ts), without a GPU:
+// DXT rewritten as ASTC 4x4 (web/src/gpu/astc.ts), without a GPU:
 //   node --test web/test/astc.test.mjs
-// A decoder of the few ASTC blocks astc.ts writes (from the Khronos spec: block modes 0x042, 0x051, 0x451, endpoint
-// modes 8 and 12) reads them back, and every texel is compared with the CPU's unpacking (dxt.ts) within what the
-// rewriting allows.  The GPU check (web/tools/astc-check.mjs, Chrome and WebKit) gave the same figures on an Apple
+// A decoder of the few ASTC blocks dxt1ToAstc writes (from the Khronos spec: block modes 0x042, 0x051, 0x451,
+// endpoint modes 8 and 12) reads them back, and every texel is compared with the CPU's unpacking (dxt.ts) within what
+// the rewriting allows.  The GPU check (web/tools/astc-check.mjs, Chrome and WebKit) gave the same figures on an Apple
 // GPU: four colours at most 2 of 255 off, three colours 1, two-plane blocks 1 and their alpha exact.
+// DXT3 and DXT5 (dxtAlphaToAstc) are read back by the general reference decoder (astc-decode.mjs), which agrees with
+// SwiftShader's ASTC decoder (astc-check.mjs).  ASTC_DUMPS=<dir> also runs them over texture dumps there (<name>.dump:
+// width, height, 3 or 5, levels as 16-bit numbers, then the levels' blocks; game content, never in the repository).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+import { decodeAstc4x4, to8 } from './astc-decode.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const entry = `export { unpackDxt } from './web/src/gpu/dxt.ts'; export { dxt1ToAstc, dxt1HasPunch } from './web/src/gpu/astc.ts';`;
+const entry = `export { unpackDxt } from './web/src/gpu/dxt.ts'; export { dxt1ToAstc, dxt1HasPunch, dxtAlphaToAstc } from './web/src/gpu/astc.ts';`;
 const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false, platform: 'neutral' })).outputFiles[0].text;
-const { unpackDxt, dxt1ToAstc, dxt1HasPunch } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
-const DXT1 = 0x31545844;
+const { unpackDxt, dxt1ToAstc, dxt1HasPunch, dxtAlphaToAstc } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const DXT1 = 0x31545844, DXT3 = 0x33545844, DXT5 = 0x35545844;
 
 /** one ASTC block (16 bytes) as 16 RGBA texels, or a string saying what it is not */
 function decode(b) {
@@ -154,4 +159,151 @@ test('the layout: blocks in rows of a wider pitch, an offset, into a buffer kept
     assert.deepEqual(Array.from(out.subarray(i * 16, i * 16 + 16)), Array.from(one));
   }
   assert.notEqual(dxt1ToAstc(src, 5, 30, 3, 2, new Uint8Array(16)).buffer.byteLength, 16);
+});
+
+test('the reference decoder reads the DXT1 blocks as this file\'s decoder does', () => {
+  let seed = 3;
+  const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 8;
+  for (let i = 0; i < 3000; i++) {
+    const c0 = rnd() & 0xFFFF, c1 = i % 3 === 0 ? c0 : rnd() & 0xFFFF, idx = (rnd() << 8 ^ rnd()) >>> 0;
+    const a = dxt1ToAstc(block(c0, c1, idx), 0, 8, 1, 1);
+    assert.deepEqual(decodeAstc4x4(a).map(px => px.map(to8)), decode(a), `block ${i}`);
+  }
+});
+
+// a DXT3 or DXT5 block: 8 bytes of alpha, then a DXT1 colour block
+const block16 = (alpha8, c0, c1, idx) => { const b = new Uint8Array(16); b.set(alpha8, 0); b.set(block(c0, c1, idx), 8); return b; };
+const dxt3Alpha = a16 => Uint8Array.from({ length: 8 }, (_, i) => (a16[2 * i] / 17) | (a16[2 * i + 1] / 17) << 4);
+/** DXT5 alpha: endpoints and 16 3-bit codes */
+const dxt5Alpha = (a0, a1, codes) => {
+  let lo = 0, hi = 0;
+  for (let i = 0; i < 8; i++) { lo |= codes[i] << 3 * i; hi |= codes[i + 8] << 3 * i; }
+  return new Uint8Array([a0, a1, lo & 255, (lo >> 8) & 255, lo >> 16, hi & 255, (hi >> 8) & 255, hi >> 16]);
+};
+/** the rewritten blocks against the unpacked ones: largest and summed differences, colour per channel */
+function compare35(dxt5, src, bw, bh) {
+  const dual = { blocks: 0 }, a = dxtAlphaToAstc(dxt5, src, 0, bw * 16, bw, bh, undefined, dual);
+  const W = bw * 4, u = unpackDxt(dxt5 ? DXT5 : DXT3, src, 0, bw * 16, W, bh * 4);
+  const r = { alphaMax: 0, alphaSum: 0, colourMax: 0, colourSum: 0, constColourMax: 0, texels: 0, dual: dual.blocks, errors: [] };
+  for (let b = 0; b < bw * bh; b++) {
+    const got = decodeAstc4x4(a.subarray(b * 16, b * 16 + 16));
+    if (typeof got === 'string') { r.errors.push(`block ${b}: ${got}`); continue; }
+    const at = t => ((Math.floor(b / bw) * 4 + (t >> 2)) * W + (b % bw) * 4 + (t & 3)) * 4;
+    const alphas = Array.from({ length: 16 }, (_, t) => u[at(t) + 3]), one = alphas.every(x => x === alphas[0]);
+    for (let t = 0; t < 16; t++) {
+      const p = at(t), want = [u[p + 2], u[p + 1], u[p]];
+      const da = Math.abs(to8(got[t][3]) - u[p + 3]);
+      r.alphaMax = Math.max(r.alphaMax, da); r.alphaSum += da; r.texels++;
+      for (let c = 0; c < 3; c++) {
+        const d = Math.abs(to8(got[t][c]) - want[c]);
+        r.colourMax = Math.max(r.colourMax, d); r.colourSum += d;
+        if (one) r.constColourMax = Math.max(r.constColourMax, d);
+      }
+    }
+  }
+  return { ...r, alphaMean: r.alphaSum / r.texels, colourMean: r.colourSum / r.texels / 3, out: a };
+}
+
+test('DXT3 and DXT5 of one alpha: one plane, alpha exact; opaque, the very block DXT1 gets', () => {
+  for (const [c0, c1, idx] of [[0xF800, 0x001F, 0xE4], [0xFFFF, 0x0000, 0x1B], [0x1234, 0xFEDC, 0x9C63]]) {
+    // opaque: byte for byte dxt1ToAstc's four-colour block (c0 > c1 there)
+    const hi = Math.max(c0, c1), lo = Math.min(c0, c1);
+    const one = dxt1ToAstc(block(hi, lo, idx), 0, 8, 1, 1);
+    const opaque = [[false, new Uint8Array(8).fill(0xFF)], [true, dxt5Alpha(255, 255, new Array(16).fill(0))], [true, dxt5Alpha(0, 0, new Array(16).fill(7))]];
+    for (const [dxt5, alpha] of opaque) {
+      const a = dxtAlphaToAstc(dxt5, block16(alpha, hi, lo, idx), 0, 16, 1, 1);
+      assert.deepEqual(Array.from(a), Array.from(one), `${dxt5 ? 'DXT5' : 'DXT3'} ${hi.toString(16)} ${lo.toString(16)}`);
+    }
+    // another alpha: the same colours, the alpha exact (endpoint mode 12 at 8 bits)
+    const ref = compare35(false, block16(new Uint8Array(8).fill(0xFF), c0, c1, idx), 1, 1);
+    for (const v of [0, 17, 128, 254]) {
+      const src = block16(v % 17 ? dxt5Alpha(v, v, new Array(16).fill(1)) : dxt3Alpha(new Array(16).fill(v)), c0, c1, idx);
+      const r = compare35(v % 17 !== 0, src, 1, 1);
+      assert.deepEqual(r.errors, []);
+      assert.equal(r.dual, 0);
+      assert.equal(r.alphaMax, 0, `alpha ${v}`);
+      assert.deepEqual(decodeAstc4x4(r.out).map(px => px.slice(0, 3)), decodeAstc4x4(ref.out).map(px => px.slice(0, 3)));
+    }
+  }
+});
+
+test('DXT3 and DXT5 colour blocks always have four colours (c0 <= c1 too)', () => {
+  // c0 < c1, code 3: a colour (a third of the way from c1), not DXT1's transparent black
+  const r = compare35(false, block16(new Uint8Array(8).fill(0xFF), 0x001F, 0xF800, 0xFFFFFFFF), 1, 1);
+  assert.ok(r.constColourMax <= 2);
+  assert.deepEqual(decodeAstc4x4(r.out)[0].map(to8), [171, 0, 84, 255]);         // BC2: 170 0 85
+});
+
+test('varying alpha: two planes, alpha the second; four levels for the eight of DXT5', () => {
+  // DXT5 eight levels, 255 at code 0 down to 0 at code 1: four levels between ends at most a step of the 48 off (the
+  // smallest squared error may move one), each texel at most 255/6 and that step from its own
+  const codes = [0, 2, 3, 4, 5, 6, 7, 1, 0, 2, 3, 4, 5, 6, 7, 1];
+  const r = compare35(true, block16(dxt5Alpha(255, 0, codes), 0xF800, 0x001F, 0xE4E4E4E4), 1, 1);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.dual, 1);
+  const got = decodeAstc4x4(r.out);
+  assert.ok(to8(got[0][3]) >= 249 && to8(got[7][3]) <= 6, `ends ${to8(got[0][3])} ${to8(got[7][3])}`);
+  assert.ok(r.alphaMax <= 48, `alpha max ${r.alphaMax}`);
+  assert.equal(new Set(got.map(px => px[3])).size, 4);
+  // the block mode: a 4x4 grid of 2-bit weights in two planes, endpoint mode 12, the selector 3 (alpha)
+  const bits = (pos, n) => { let v = 0; for (let i = 0; i < n; i++) v |= ((r.out[(pos + i) >> 3] >> ((pos + i) & 7)) & 1) << i; return v; };
+  assert.equal(bits(0, 11), 0x442); assert.equal(bits(13, 4), 12); assert.equal(bits(62, 2), 3);
+});
+
+test('random DXT3 and DXT5 blocks of every kind, within the limits', () => {
+  let seed = 11;
+  const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 8;
+  const ext = [0, 0xFFFF, 0xF800, 0x07E0, 0x001F];
+  for (const dxt5 of [false, true]) {
+    const bw = 64, bh = 32, src = new Uint8Array(bw * bh * 16);
+    for (let b = 0; b < bw * bh; b++) {
+      for (let i = 0; i < 16; i++) src[b * 16 + i] = rnd() & 255;
+      if (b % 3 === 0) {
+        if (dxt5) { src[b * 16 + 1] = src[b * 16]; src.fill(0, b * 16 + 2, b * 16 + 8); } else src.fill(0x11 * (rnd() % 16), b * 16, b * 16 + 8);
+      }
+      if (b % 7 === 0) src.set(block(ext[rnd() % 5], ext[rnd() % 5], rnd()), b * 16 + 8);
+    }
+    const r = compare35(dxt5, src, bw, bh);
+    assert.deepEqual(r.errors, []);
+    // one alpha: the colour as DXT1's rewriting gives it (2), the alpha exact; else the 4 alpha levels and the colours
+    // at range-48 endpoints
+    assert.ok(r.constColourMax <= 2 && r.colourMax <= 8 && r.alphaMax <= 48, JSON.stringify({ ...r, out: undefined }));
+    assert.ok(r.dual > 0 && r.dual < bw * bh);
+  }
+});
+
+test('DXT3 and DXT5: blocks in rows of a wider pitch, an offset, into a buffer kept', () => {
+  const src = new Uint8Array(3 + 2 * 60);
+  for (let i = 0; i < 6; i++) {
+    const alpha = dxt3Alpha(Array.from({ length: 16 }, (_, t) => ((t + i) % 16) * 17));
+    src.set(block16(alpha, 0xF800 - i, 0x001F + i, 0x1B * i), 3 + Math.floor(i / 3) * 60 + (i % 3) * 16);
+  }
+  const buf = new Uint8Array(200), out = dxtAlphaToAstc(false, src, 3, 60, 3, 2, buf);
+  assert.equal(out.buffer, buf.buffer);
+  assert.equal(out.length, 96);
+  for (let i = 0; i < 6; i++) {
+    const o = 3 + Math.floor(i / 3) * 60 + (i % 3) * 16, one = dxtAlphaToAstc(false, src.slice(o, o + 16), 0, 16, 1, 1);
+    assert.deepEqual(Array.from(out.subarray(i * 16, i * 16 + 16)), Array.from(one));
+  }
+});
+
+// texture dumps of the games (ASTC_DUMPS=<dir>): every level of each, the alpha and colour against the unpacking
+const DUMPS = process.env.ASTC_DUMPS;
+test('texture dumps (ASTC_DUMPS)', { skip: !DUMPS && 'ASTC_DUMPS not set' }, t => {
+  for (const f of fs.readdirSync(DUMPS).filter(n => n.endsWith('.dump')).sort()) {
+    const d = fs.readFileSync(path.join(DUMPS, f)), W = d.readUInt16LE(0), H = d.readUInt16LE(2), dxt5 = d.readUInt16LE(4) === 5, mips = d.readUInt16LE(6);
+    const sum = { alphaMax: 0, alphaSum: 0, colourMax: 0, colourSum: 0, constColourMax: 0, texels: 0, dual: 0, blocks: 0 };
+    for (let l = 0, off = 8; l < mips; l++) {
+      const bw = (Math.max(1, W >> l) + 3) >> 2, bh = (Math.max(1, H >> l) + 3) >> 2;
+      const r = compare35(dxt5, d.subarray(off, off + bw * bh * 16), bw, bh);
+      assert.deepEqual(r.errors, [], f);
+      for (const k of ['alphaMax', 'colourMax', 'constColourMax']) sum[k] = Math.max(sum[k], r[k]);
+      for (const k of ['alphaSum', 'colourSum', 'texels', 'dual']) sum[k] += r[k];
+      sum.blocks += bw * bh; off += bw * bh * 16;
+    }
+    t.diagnostic(`${f} ${dxt5 ? 'DXT5' : 'DXT3'} ${W}x${H} ${mips} levels: ${sum.dual}/${sum.blocks} blocks two planes; ` +
+      `alpha max ${sum.alphaMax} mean ${(sum.alphaSum / sum.texels).toFixed(2)}; colour max ${sum.colourMax} ` +
+      `mean ${(sum.colourSum / sum.texels / 3).toFixed(2)}, in blocks of one alpha max ${sum.constColourMax}`);
+    assert.ok(sum.alphaMax <= 48 && sum.colourMax <= 8 && sum.constColourMax <= 2, f);
+  }
 });
