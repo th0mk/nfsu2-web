@@ -5,6 +5,7 @@
 // a game that never got to its end and offers that copy with Download log (shell.ts).  Each copy also notes what the
 // game held then (its textures, friends' cars): Safari gives the page no memory figure, and the renderer's line comes
 // only once a minute.  The copy is kept as it would leave the browser (privacy.ts scrub): no names, no addresses.
+import { STORAGE } from '@game/storage';
 import type { LogRing } from './logs';
 
 export interface LastGame {
@@ -22,7 +23,7 @@ export interface LastGame {
   held?: string;
 }
 
-const KEY = 'nfsu2.lastgame.';
+const KEY = STORAGE.LOCAL.LAST_GAME;
 const EVERY_MS = 10_000;
 /** the copy's size: localStorage holds a few MB for the whole page */
 const BUDGET = 160 << 10;

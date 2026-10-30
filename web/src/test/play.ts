@@ -28,6 +28,7 @@
 //               lines, printed as one "[bench] renderer {json}" line, and the race load
 //               time (the loading screen to the race)
 // When the game exits the title becomes DONE (web/tools/run-page.mjs waits for it).
+import { testSaveDir } from '../app/save-dir';
 import { startProcess } from '../host/process';
 import { attachRenderer, type Renderer } from '../gpu/index';
 import { attachNet } from '../net/index';
@@ -44,7 +45,7 @@ document.body.append(canvas);
 const t0 = performance.now();
 const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? at('game.wasm')));
 log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
-const saveDir = q.get('save') ?? 'save-play';
+const saveDir = testSaveDir(q.get('save'), 'play');
 if (q.has('fresh')) {
   const root = await navigator.storage.getDirectory();
   for await (const [name] of (root as any).entries()) if (name === saveDir) await root.removeEntry(name, { recursive: true });

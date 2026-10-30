@@ -26,6 +26,7 @@
 // them up (WheelLearn: flip the switch for nitrous, the handbrake, a respawn), and with nothing the player can press,
 // a stick or a switch moved half way takes the game's controller back from another one (gamepad.ts).
 
+import { SHARED_STORAGE } from '../games/shared-storage';
 import { PAD_A, PAD_B, PAD_BACK, PAD_DDOWN, PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_HOME, PAD_LB, PAD_LS, PAD_RB, PAD_RS,
   PAD_START, PAD_X, PAD_Y } from './proto';
 
@@ -361,7 +362,7 @@ export function describeMap(m: WheelMap, hat: number): string {
 }
 
 // ---- the player's set-up, kept in this browser per model ------------------------------------------------------
-const KEY = 'nfsu2.wheel.', SHIFTER_KEY = 'nfsu2.shifter.';
+const KEY = SHARED_STORAGE.WHEEL, SHIFTER_KEY = SHARED_STORAGE.SHIFTER;
 /** a model's part of the keys: its USB ids, or its name where the browser gives none */
 const modelKey = (id: string) => { const u = usbIds(id); return u ? `${u.vendor}:${u.product}` : id.slice(0, 80); };
 /** the key a wheel's set-up is kept under */

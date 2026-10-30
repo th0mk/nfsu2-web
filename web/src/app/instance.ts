@@ -3,8 +3,6 @@
 // it.  A Web Lock held for the life of the tab says who owns the saves; a
 // second tab waits for it and takes over when the first one closes.
 
-const LOCK = 'nfsu2-saves';
-
 export interface Instance {
   /** true once this tab holds the lock */
   readonly owner: boolean;
@@ -12,7 +10,8 @@ export interface Instance {
   whenOwner: Promise<void>;
 }
 
-export function claimInstance(name = LOCK): Instance {
+/** name: the lock of the save folder (src/games/<id>/storage.ts SAVES_LOCK and the folder's name) */
+export function claimInstance(name: string): Instance {
   let owner = false;
   let gotIt!: () => void;
   const whenOwner = new Promise<void>(r => (gotIt = r));

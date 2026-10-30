@@ -35,9 +35,11 @@ export function deviceDefaults(): Record<string, string> {
   return touchFirst() ? { roam_max_cars: '24' } : {};
 }
 
+import { STORAGE } from '@game/storage';
+
 /** the render check's verdict on this phone: in this browser only, like the other device defaults (settings.ini,
  *  and with it the cloud saves, never has it) */
-const RENDER_KEY = 'nfsu2.device.render';
+const RENDER_KEY = STORAGE.LOCAL.RENDER_CHECK;
 export function rememberedRender(): string | null {
   try { return localStorage.getItem(RENDER_KEY); } catch { return null; }
 }

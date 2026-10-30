@@ -2,6 +2,7 @@
 // (runtime/radio.c, through RadioLink); this decodes the next one of the place the song is for (0 menus, 1 driving) and hands the sound over.
 // Each track has a mode (Menu, Race, All, Off) and each place its own queue, which goes on from where it stopped last time, or plays at random
 // when the player asks for Shuffle.  Nothing here runs until the radio is used.
+import { STORAGE } from '@game/storage';
 import type { Lines, Place, RadioLink } from './app/radio-link';
 import { keptFolder, keepFolder, reopenFolder, sortedTracks, subfolderOf, type Folder, type Picked } from './radio-folder';
 import { plaqueTags, tagsOf } from './radio-tags';
@@ -9,8 +10,8 @@ import { plaqueTags, tagsOf } from './radio-tags';
 export type Mode = 'menu' | 'racing' | 'all' | 'off';
 export const MODES: readonly Mode[] = ['menu', 'racing', 'all', 'off'];
 export type PickFolder = () => Promise<Picked | null>;
-const MODES_KEY = 'nfsu2.radio.modes', ON_KEY = 'nfsu2.radio.on';   // {path in the folder: mode} without the All ones; '1': left on
-const NEXT_KEY = 'nfsu2.radio.next', SHUFFLE_KEY = 'nfsu2.radio.shuffle';   // [path of the next track of the menus, of driving]; '1': at random
+const MODES_KEY = STORAGE.LOCAL.RADIO_MODES, ON_KEY = STORAGE.LOCAL.RADIO_ON;   // {path in the folder: mode} without the All ones; '1': left on
+const NEXT_KEY = STORAGE.LOCAL.RADIO_NEXT, SHUFFLE_KEY = STORAGE.LOCAL.RADIO_SHUFFLE;   // [path of the next track of the menus, of driving]; '1': at random
 export const radioWasOn = () => { try { return localStorage.getItem(ON_KEY) === '1'; } catch { return false; } };
 const keepRadioOn = (on: boolean) => { try { localStorage.setItem(ON_KEY, on ? '1' : '0'); } catch { /* a private window keeps nothing */ } };
 const readShuffle = () => { try { return localStorage.getItem(SHUFFLE_KEY) === '1'; } catch { return false; } };

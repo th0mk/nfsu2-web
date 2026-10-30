@@ -85,13 +85,15 @@ function pickFromInput(): Promise<Picked | null> {
   });
 }
 
-/** One request to the folder store (IndexedDB "nfsu2.radio"); any failure, or a store that is not there: undefined.  The connection is closed after it. */
+import { STORAGE } from '@game/storage';
+
+/** One request to the folder store (IndexedDB STORAGE.RADIO_DB); any failure, or a store that is not there: undefined.  The connection is closed after it. */
 function inStore<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T | undefined> {
   return new Promise(resolve => {
     let db: IDBDatabase | undefined;
     const done = (v?: T) => { try { db?.close(); } catch { /* already closed */ } resolve(v); };
     try {
-      const open = indexedDB.open('nfsu2.radio', 1);
+      const open = indexedDB.open(STORAGE.RADIO_DB, 1);
       open.onupgradeneeded = () => open.result.createObjectStore('folder');
       open.onerror = open.onblocked = () => done();
       open.onsuccess = () => {

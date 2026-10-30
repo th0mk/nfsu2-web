@@ -7,9 +7,11 @@
 // player, and the server keeps only a keyed hash of it, in a ban.  Without storage (a private window, storage
 // blocked) each load has a new one.
 
-const KEY = 'nfsu2.net.page-id';
+import { STORAGE } from '@game/storage';
+
+const KEY = STORAGE.LOCAL.PAGE_ID;
 /** the file at the top of the origin private file system (shell.ts keeps the save folder off its name) */
-export const PAGE_ID_FILE = 'nfsu2.page-id';
+export const PAGE_ID_FILE = STORAGE.PAGE_ID_FILE;
 
 /** what the hello names: the id, and the one the other store held when it was another (net/index.ts id, was) */
 export interface PageIds { id: string; was: string[] }

@@ -43,13 +43,55 @@ export interface GameProfile {
 }
 
 /** A game's names in the storage the browser keeps per origin (Cache Storage, OPFS, local and session storage, Web
- *  Locks).  Where both games are served from one origin (/u2/ and /mw/), their pages share that storage, so each
- *  game's names are its own: Underground 2 keeps the names it always had, Most Wanted has others. */
+ *  Locks, broadcast channels, IndexedDB).  Where both games are served from one origin (/u2/ and /mw/), their pages
+ *  share that storage, so each game's names are its own: Underground 2 keeps the names it always had, Most Wanted has
+ *  others (PLAN D-36).  The few names both games share are src/games/shared-storage.ts's, listed there once.  No part
+ *  of the page names a place in that storage but through these (web/test/storage-names.test.mjs).  A name that ends in
+ *  ':' or '.' is the start of a family: the rest is a save folder's name, a player's name or a wheel's ids. */
 export interface StorageNames {
   /** offline mode's copies (sw.ts): the Cache Storage it keeps them in, and the start of the names its older
    *  versions used, which it deletes once it runs (never another game's: the games' starts differ) */
   readonly OFFLINE_CACHE: string;
   readonly OFFLINE_PREFIX: string;
+  /** the origin private file system's top: the player's save folder (a development server's ?save=<name> picks
+   *  another), the game data's cache (host/datacache.ts), and the file the page's LAN id is kept in (page-id.ts) */
+  readonly SAVE_DIR: string;
+  readonly CACHE_DIR: string;
+  readonly PAGE_ID_FILE: string;
+  /** the Web Lock that says which tab owns a save folder's saves (instance.ts), with the folder's name after it */
+  readonly SAVES_LOCK: string;
+  /** the broadcast channel invite links go to another tab of the same save folder on (shell.ts), the folder after it */
+  readonly INVITE_CHANNEL: string;
+  /** the IndexedDB database the radio's folder is kept in (radio-folder.ts) */
+  readonly RADIO_DB: string;
+  /** localStorage, each key's use beside it in the game's storage.ts */
+  readonly LOCAL: LocalKeys;
+  /** sessionStorage: the version a reload was for (shell.ts afterUpdate), the other build a reload was tried for */
+  readonly SESSION: { readonly UPDATE: string; readonly OTHER_BUILD: string };
+}
+
+/** A game's own localStorage keys (StorageNames.LOCAL) */
+export interface LocalKeys {
+  readonly GPU_PIPELINES: string;
+  readonly LOG_SALT: string;
+  readonly RENDER_CHECK: string;
+  readonly LAST_GAME: string;
+  readonly PAGE_ID: string;
+  readonly PLAYED_MS: string;
+  readonly SENT_MS: string;
+  readonly RADIO_MODES: string;
+  readonly RADIO_ON: string;
+  readonly RADIO_NEXT: string;
+  readonly RADIO_SHUFFLE: string;
+  readonly TOUCH_STEERING: string;
+  readonly TOUCH_LEVEL: string;
+  readonly TOUCH_SIZE: string;
+  readonly MENU_SIZE: string;
+  readonly KEYPHRASE_LINK: string;
+  readonly CLOUD_OFFER: string;
+  readonly NAME_ASKED: string;
+  readonly NAME_CLAIMED: string;
+  readonly CLAIM_TRIED: string;
 }
 
 /** T, which tsc checks is a whole profile: each profile's `export type Checked = Profile<typeof self>` */

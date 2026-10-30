@@ -47,7 +47,8 @@ test('every game\'s profile has the same fields and its own id', async () => {
   assert.ok(P.mw.VAULT_DERIVE_INFO && P.mw.VAULT_AAD !== P.ug2.VAULT_AAD);
   // the browser's storage: Underground 2's names as they always were, Most Wanted's its own; one game's offline copies
   // are never another's older ones (sw.ts deletes the names that start with its prefix)
-  assert.deepEqual(P.ug2.STORAGE, { OFFLINE_CACHE: 'nfsu2-offline-2', OFFLINE_PREFIX: 'nfsu2-offline-' });
+  // (every other name: storage-names.test.mjs)
+  assert.deepEqual([P.ug2.STORAGE.OFFLINE_CACHE, P.ug2.STORAGE.OFFLINE_PREFIX], ['nfsu2-offline-2', 'nfsu2-offline-']);
   for (const g of GAMES) {
     const s = P[g].STORAGE;
     assert.deepEqual(Object.keys(s).sort(), Object.keys(P.ug2.STORAGE).sort(), g);

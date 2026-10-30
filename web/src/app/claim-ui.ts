@@ -9,6 +9,7 @@
 //   a keyphrase is claimed as the game starts: Cloudflare's check shows only when it wants a click.
 // The texts and their look follow the page's own rows and dialogs (one line, coloured by its state).
 
+import { STORAGE } from '@game/storage';
 import { dateLocale, t } from './i18n';
 import { digitsFor, GRACE_DAYS, HOLD_DAYS, NameClaims, onlineName, readsAsSlur, turnstile, type Claimed, type Mine, type NameInfo } from './claim';
 
@@ -242,14 +243,14 @@ export async function settleName(d: PlayNameDeps, typed: string, saveDir: string
     case 'old':
       return name;
     case 'default': {
-      const k = `nfsu2-name-asked:${saveDir}`;
+      const k = `${STORAGE.LOCAL.NAME_ASKED}${saveDir}`;
       if (asked(k)) return alt;
       ask(k);
       return await pick(d, t('Pick your name'),
         [para(t('Other players see your name over your car and in the Online menu. {name} is the game\'s default and many players have it, so pick one of your own.', { name }))], alt, quiet) ?? alt;
     }
     case 'taken': {
-      const k = `nfsu2-name-claimed:${name.toLowerCase()}`;
+      const k = `${STORAGE.LOCAL.NAME_CLAIMED}${name.toLowerCase()}`;
       if (asked(k)) return alt;
       ask(k);
       return await pick(d, t('{name} is claimed', { name }),
@@ -271,7 +272,7 @@ const RETRY_MS = 7 * 86_400_000;
 
 /** a free name claimed at Play, Cloudflare's check quiet unless it wants a click */
 export async function claimQuietly(d: PlayNameDeps, name: string, info: NameInfo, quiet: (name: string, site: string) => Promise<string | null>): Promise<Mine | null> {
-  const k = `nfsu2-claim-tried:${name.toLowerCase()}`;
+  const k = `${STORAGE.LOCAL.CLAIM_TRIED}${name.toLowerCase()}`;
   try { if (Date.now() - Number(localStorage.getItem(k) ?? 0) < RETRY_MS) return null; } catch { /* storage off: tried */ }
   const later = () => { try { localStorage.setItem(k, String(Date.now())); } catch { /* storage off */ } };
   const captcha = info.captcha ? await quiet(name, info.captcha) : null;

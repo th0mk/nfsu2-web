@@ -4,10 +4,11 @@
 // hours on, each game asks the game for the message (IEV_SMS) until its status "sms" says the inbox has it: the game
 // waits for career free roam, the only place with a phone, and a profile that has it already counts.  Without
 // storage (a private window) each load counts from 0.
+import { STORAGE } from '@game/storage';
 import type { GameSession } from './game';
 
 export const SMS_AFTER_MS = 2 * 3600_000;
-const PLAYED = 'nfsu2.play.ms', SENT = 'nfsu2.play.sms';
+const PLAYED = STORAGE.LOCAL.PLAYED_MS, SENT = STORAGE.LOCAL.SENT_MS;
 const MSG = 1;                          /* sms.c: "Enjoying the game?" */
 const IDLE_MS = 5 * 60_000, TICK_MS = 5000;
 

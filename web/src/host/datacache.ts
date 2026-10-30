@@ -5,8 +5,10 @@
 // server is a new name), next to a ".have" map of one byte per 1 MiB block.
 // A block's data is written before its byte in the map.
 
+import { STORAGE } from '@game/storage';
+
 export const BLOCK = 1 << 20;
-export const CACHE_DIR = 'cache';
+export const CACHE_DIR = STORAGE.CACHE_DIR;
 /** where the server has the manifest and the install folder, under the page's base (web/server-rs/src/app/manifest.rs):
  *  the page gives the workers both absolute (base.ts abs) */
 export const MANIFEST_PATH = 'data-manifest', DATA_PATH = 'data/';

@@ -13,6 +13,7 @@
 // This module touches the DOM only when called with it, and imports only base.ts (where the files are: '/' under
 // node), so the pure modules (settings.ts) can use it under node.
 
+import { SHARED_STORAGE } from '../games/shared-storage';
 import { at } from '../base';
 
 /** the game's languages (runtime/language.c), settings.ini language's values; english is the default */
@@ -156,7 +157,7 @@ export async function setLanguage(l: string, log?: (s: string) => void): Promise
 }
 
 /** the language this browser showed last (the page asks for its file at once, before settings.ini is read) */
-const STORE = 'nfsu2-page-language';
+const STORE = SHARED_STORAGE.PAGE_LANGUAGE;
 export function lastLanguage(): Language {
   try { const v = localStorage.getItem(STORE) ?? ''; return isLanguage(v) ? v : 'english'; } catch { return 'english'; }
 }

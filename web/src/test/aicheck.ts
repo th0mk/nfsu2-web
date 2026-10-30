@@ -8,6 +8,7 @@
 //   &stats=MS         log the page-side audio and input counters every MS ms
 //   &quitafter=S      ask the game to quit (WM_CLOSE) S s after start
 // The title becomes DONE when the process exits; window.__nfsu2 has the handles.
+import { testSaveDir } from '../app/save-dir';
 import { startProcess } from '../host/process';
 import { attachAudio, type AudioHandle } from '../audio/index';
 import { attachInput, type InputHandle } from '../input/index';
@@ -19,7 +20,7 @@ const log = (s: string) => console.log(s);
 const t0 = performance.now();
 const mod = await WebAssembly.compileStreaming(fetch(q.get('wasm') ?? at('game.wasm')));
 log(`compiled in ${(performance.now() - t0).toFixed(0)} ms`);
-const saveDir = q.get('save') ?? 'save-test';
+const saveDir = testSaveDir(q.get('save'), 'test');
 if (q.has('fresh')) {
   const root = await navigator.storage.getDirectory();
   for await (const [name] of (root as unknown as { entries(): AsyncIterable<[string, unknown]> }).entries())

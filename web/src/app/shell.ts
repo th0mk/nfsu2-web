@@ -18,6 +18,7 @@
 //   rendercheck=W,D  the render check's warm-up and verdict, in seconds of driving (rendercheck.ts)
 // While any of them is given, the start page says whether it is in effect.
 
+import { STORAGE } from '@game/storage';
 import registryDefaults from '../../../app/registry-defaults.txt';
 import { browserName, check, checkBrowser, checkEngine, checkGpu, checkIsolation, checkStorage, fmtBytes, type Check } from './checks';
 import { codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
@@ -59,7 +60,8 @@ import { groupsOf, phrasesOf } from './phrases';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { PlayTime, SMS_AFTER_MS } from './playtime';
-import { keepPageId, PAGE_ID_FILE, pageId } from './page-id';
+import { keepPageId, pageId } from './page-id';
+import { saveDirName } from './save-dir';
 import { NameClaims, onlineName } from './claim';
 import { claimQuietly, NameRow, quietCheck, settleName, type PlayNameDeps } from './claim-ui';
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
@@ -76,16 +78,15 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySe
 const TEST_PARAMS = ['env', 'save', 'fresh', 'reg', 'script', 'artifacts', 'dumpscale', 'away', 'rendercheck', 'playtime'];
 const addr = new URLSearchParams(location.search);
 let q = new URLSearchParams();
-let SAVE = 'save';
+let SAVE: string = STORAGE.SAVE_DIR;
 let ENVIRONMENT: Record<string, string> = {};
 /** the test aids the page address gives (taken on a development server only); their names, for the start page */
 function takeParams(dev: boolean): string[] {
   const given = TEST_PARAMS.filter(k => addr.has(k));
   if (!given.length || !dev) return given;
   q = addr;
-  // never the game data's own OPFS folder, nor the page id's file (savefs keeps names to one segment)
-  const save = (q.get('save') || 'save').replace(/[^A-Za-z0-9._-]/g, '_');
-  SAVE = save === 'cache' || save === PAGE_ID_FILE || /^\.+$/.test(save) ? 'save-test' : save;
+  // never a game's game data or page id, nor the other game's saves (save-dir.ts; savefs keeps names to one segment)
+  SAVE = saveDirName(q.get('save') || STORAGE.SAVE_DIR, STORAGE.SAVE_DIR) ?? `${STORAGE.SAVE_DIR}-test`;
   ENVIRONMENT = Object.fromEntries(q.getAll('env').filter(e => e.includes('='))
     .map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])
     // the mounts and the save overlay's own files stay the page's (settings.ts HOST_FIXED, PATH_VARS)
@@ -737,7 +738,7 @@ function stopFatal(what: string, code?: string) {
  *  copies (sw.ts) and the module from the server, or from a server swapping its module.  The game is stopped and the
  *  page loaded again from the server: once a tab and module, while the server answers; else as any renderer that
  *  did not start. */
-const OTHER_KEY = 'nfsu2-other-build';
+const OTHER_KEY = STORAGE.SESSION.OTHER_BUILD;
 let reloadAtExit = false;
 function otherBuild(why: string) {
   const s = session, rev = loaded!.info.rev;
@@ -1158,7 +1159,7 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
 // opened a new tab while the game runs in another) asks that one to over INVITE_CHANNEL and says what it did; when it
 // does not answer (a page of before), this tab joins once it owns the saves.
 type Joined = 'live' | 'next' | 'full' | 'none';
-const INVITE_CHANNEL = `nfsu2-invite:${SAVE}`;
+const INVITE_CHANNEL = `${STORAGE.INVITE_CHANNEL}${SAVE}`;
 /** the room, free roam and the crews as a settings.ini has them */
 interface InviteNow { room: string; roam: boolean; crews: Crew[] }
 function inviteNow(text: string | null): InviteNow {
@@ -1514,7 +1515,7 @@ async function loadModule() {
 // sessionStorage names the version a reload was for: a reload that still came
 // back without it offers it, and is not repeated by itself.  A test page (the
 // address's test settings) only offers it: its tool drives it.
-const NEWER_EVERY_MS = 5 * 60_000, UPDATE_KEY = 'nfsu2-update';
+const NEWER_EVERY_MS = 5 * 60_000, UPDATE_KEY = STORAGE.SESSION.UPDATE;
 let newer: string | null = null;
 /** the version a reload of this tab was for and did not bring */
 let tried: string | null = null;
@@ -1632,7 +1633,7 @@ export async function boot() {
   const given = takeParams(dev);
   // this browser's id, put back in a store that lost it before anything reads it (page-id.ts)
   void keepPageId();
-  instance = claimInstance(`nfsu2-saves:${SAVE}`);
+  instance = claimInstance(`${STORAGE.SAVES_LOCK}${SAVE}`);
   // the last game of this save folder that did not get to its end (Safari stopped the page, say): its log is offered
   keeper = new LastGameKeeper(SAVE, log, logLine, text => privacy.scrub(text));
   lastGame = lastGameToOffer(SAVE);
@@ -1786,7 +1787,7 @@ export async function boot() {
 
   showOverrides(given, dev);
   if (given.length) log.add(dev ? `[app] test settings from the page address: ${given.join(', ')}` : `[app] the page address's test settings (${given.join(', ')}) are ignored: not a development server`);
-  if (q.has('fresh') && SAVE !== 'save') { await removeSaveDir(SAVE); forgetLink(SAVE); log.add(`[app] fresh save folder ${SAVE}`); }
+  if (q.has('fresh') && SAVE !== STORAGE.SAVE_DIR) { await removeSaveDir(SAVE); forgetLink(SAVE); log.add(`[app] fresh save folder ${SAVE}`); }
   // the settings and saves show at once (read only until this tab owns the saves), and again once it does
   void settings.refresh();
   void saves.refresh();

@@ -15,6 +15,7 @@
 // back), the saves here are kept in this browser for 30 days (replacedDir), and Put back brings them back (2026-10-27,
 // issue 33: a player who took the cloud's lost 7 hours).
 
+import { STORAGE } from '@game/storage';
 import { listFiles, readBytes, readText, removeSaveDir, writeFile } from './savefs';
 import { backupItems, readVault, restoreVault } from './saves-ui';
 import { downloadBlob } from './logs';
@@ -44,9 +45,9 @@ export interface VaultPanelDeps {
 const READY_WAIT_MS = 5000;
 
 /** where a save folder's link is kept (localStorage) */
-const linkKey = (saveDir: string) => `nfsu2-keyphrase:${saveDir}`;
+const linkKey = (saveDir: string) => `${STORAGE.LOCAL.KEYPHRASE_LINK}${saveDir}`;
 /** where its games are counted until Play offers cloud saves, 'asked' after (localStorage) */
-const offerKey = (saveDir: string) => `nfsu2-cloud-offer:${saveDir}`;
+const offerKey = (saveDir: string) => `${STORAGE.LOCAL.CLOUD_OFFER}${saveDir}`;
 /** the games played in a save folder before its next Play offers cloud saves */
 const OFFER_AFTER = 4;
 

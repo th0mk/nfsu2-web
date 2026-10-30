@@ -14,6 +14,7 @@
 // by an earlier page).  A name that is also a word of the log's own (a player called "driver", or "500") is replaced
 // only where it stands as a name, between the words that frame names in these lines (PRE, POST); any other name
 // wherever it stands, so a line nobody thought of does not give it away.
+import { STORAGE } from '@game/storage';
 import { crewList } from './crews';
 
 export type NameKind = 'you' | 'profile' | 'crew' | 'room' | 'player';
@@ -21,7 +22,7 @@ export type NameKind = 'you' | 'profile' | 'crew' | 'room' | 'player';
 const RANK: Record<NameKind, number> = { you: 0, profile: 1, crew: 2, room: 3, player: 4 };
 /** what the game prints for nobody in particular, and NAME, which hundreds of players keep as their name */
 const NOBODY = new Set(['Player', 'A player', 'a player', 'a friend', 'you', '?', 'NAME']);
-const SALT_KEY = 'nfsu2.logsalt';
+const SALT_KEY = STORAGE.LOCAL.LOG_SALT;
 
 /** "[4!] " before a game thread's line */
 const THREAD = /^\[\d+!\] /;

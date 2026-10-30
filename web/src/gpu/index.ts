@@ -12,6 +12,7 @@
 //     the DVD and magazine covers' pictures, which it waits for in LockRect).
 // Triggers: Atomics.waitAsync on the game's doorbell, every rAF, and every
 // finished GPU frame.  The main thread never blocks.
+import { STORAGE } from '@game/storage';
 import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
 import * as P from './proto';
@@ -238,7 +239,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   for (const id of opts.watchTex ?? []) enc.watchTex.add(id);
   if (opts.trace === 'dumps') enc.traceDumps = true; else for (const f of opts.trace ?? []) enc.traceSeq.add(f);
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
-  const WARM_KEY = 'nfsu2.gpu.pipelines.v1';
+  const WARM_KEY = STORAGE.LOCAL.GPU_PIPELINES;
   try { const j = localStorage.getItem(WARM_KEY); if (j) enc.loadWarm(JSON.parse(j)); } catch { /* storage off: no warm-up */ }
   const vw = vreg.ptr >> 2, vf = vreg.ptr >> 3;
 

@@ -37,6 +37,7 @@
 // otherwise once the game draws ("frames"); both once a finger has touched the game (at once on a touch screen), and
 // they hide when a keyboard or a controller is used, until the next touch.  The game reads its input once a frame,
 // so a key a tap presses stays down HOLD_MS at least.
+import { STORAGE } from '@game/storage';
 import { PAD_A, PAD_LB, PAD_RB, PAD_X } from '../input/proto';
 import type { GameSession } from './game';
 import { touchFirst } from './device';
@@ -46,12 +47,12 @@ export type Steering = 'buttons' | 'stick' | 'tilt';
 export const STEERING: readonly Steering[] = ['buttons', 'stick', 'tilt'];
 const NAMES: Record<Steering, string> = { buttons: N('buttons'), stick: N('thumb stick'), tilt: N('tilt') };
 const LIST_NAMES: Record<Steering, string> = { buttons: N('Buttons'), stick: N('Thumb stick'), tilt: N('Tilt') };
-const STORE = 'nfsu2-touch-steering';
+const STORE = STORAGE.LOCAL.TOUCH_STEERING;
 const HOLD_MS = 150;
 /** a control with a hold (Camera): down this long, it presses the hold's keys instead of its own */
 const LONG_MS = 250;
 
-const STEER_EVENT = 'nfsu2-touch-steering';
+const STEER_EVENT = STORE;
 let steeringNow: Steering = (() => {
   try { const s = localStorage.getItem(STORE) as Steering; return STEERING.includes(s) ? s : 'buttons'; } catch { return 'buttons'; }
 })();
@@ -79,7 +80,7 @@ const STICK_PX = 64, TILT_DEG = 30;
 /** the level horizon: the most it turns the view (degrees), how long it takes to come and go (ms) */
 const LEVEL_MAX_DEG = 60, LEVEL_FADE_MS = 400;
 
-const LEVEL_STORE = 'nfsu2-touch-level', LEVEL_EVENT = 'nfsu2-touch-level';
+const LEVEL_STORE = STORAGE.LOCAL.TOUCH_LEVEL, LEVEL_EVENT = LEVEL_STORE;
 let levelOn = (() => { try { return localStorage.getItem(LEVEL_STORE) !== 'off'; } catch { return true; } })();
 /** the level horizon's switch (the Controls sheet): on unless turned off in this browser */
 export function levelHorizon(): boolean { return levelOn; }
@@ -151,7 +152,7 @@ function autoTouchSize(): number {
   return Math.max(0.8, Math.floor(Math.min(want, fit) * 20 + 1e-9) / 20);
 }
 /** the touch controls' size (style.css --ts) */
-export const touchSize = sizeSetting('nfsu2-touch-size', ['auto', 0.8, 0.9, 1, 1.1, 1.25, 1.5], autoTouchSize);
+export const touchSize = sizeSetting(STORAGE.LOCAL.TOUCH_SIZE, ['auto', 0.8, 0.9, 1, 1.1, 1.25, 1.5], autoTouchSize);
 
 /** the game's menus' help bar buttons and scroller arrows, their height in the menus' 640 x 480 units: the bar's
  *  frames, 24 (the arrows are 26) */
@@ -167,7 +168,7 @@ function autoMenuSize(): number {
   return Math.min(2, Math.max(1, Math.floor(MENU_BUTTON_PX / (MENU_BUTTON_UNITS * unit) * 4 + 1e-9) / 4));
 }
 /** the game's menus' small buttons: the help bar's and the scrollers' arrows (runtime/menusize.c) */
-export const menuSize = sizeSetting('nfsu2-menu-size', ['auto', 1, 1.25, 1.5, 1.75, 2], autoMenuSize);
+export const menuSize = sizeSetting(STORAGE.LOCAL.MENU_SIZE, ['auto', 1, 1.25, 1.5, 1.75, 2], autoMenuSize);
 
 /** label: what a screen reader says (English, translated where drawn); text: the words on it, if any; keys: the keys
  *  it holds (two controls may hold the same one: it is down while either is) */
