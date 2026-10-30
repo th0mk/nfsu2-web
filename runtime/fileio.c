@@ -818,6 +818,13 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         else { if(len) mem_commit(buf,len);
                ssize_t got;
                uint64_t _rd0 = now_ns_io();
+               /* READLOG: where in the file each read starts (at=), for read patterns such as a speech bank's */
+               static int readlog = -1;
+               if (readlog < 0) readlog = getenv("READLOG") != 0;
+               long long rd_at = -1;
+               if (readlog)
+                   rd_at = ov && mem_is_committed(ov+19) ? (long long)((uint64_t)MR32(ov+8) | ((uint64_t)MR32(ov+12) << 32))
+                         : f->gf ? (long long)f->pos : f->empty ? 0 : (long long)lseek(f->fd, 0, SEEK_CUR);
                if (ov && mem_is_committed(ov+19)){
                    uint64_t off = (uint64_t)MR32(ov+8) | ((uint64_t)MR32(ov+12) << 32);
                    { int fd = f->fd; READ_UNLOCKED(got = pread(fd, g_mem+buf, len, (off_t)off)); }
@@ -857,12 +864,13 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
                      && (mmin ? ((long)len >= mmin) : (!msz || (long)len == msz)))
                      memset(g_mem+buf, 0, (size_t)got); }
                if(pnr) MR32(pnr)=(uint32_t)got;
-               if (getenv("READLOG")){
+               if (readlog){
                    const char *bn = strrchr(f->path,'/'); bn = bn?bn+1:f->path;
                    double audio_time(void);
-                   fprintf(stderr,"  [read] t=%8.3f %-28s wanted=%-9u got=%-9ld time=%.2f ms\n",
+                   fprintf(stderr,"  [read] t=%8.3f %-28s wanted=%-9u got=%-9ld time=%.2f ms at=%lld tid=%u\n",
                            audio_time(), bn, len, (long)got,
-                           (double)(now_ns_io() - _rd0)/1e6);
+                           (double)(now_ns_io() - _rd0)/1e6, rd_at,
+                           c->fs_base && mem_is_committed(c->fs_base+0x24u) ? MR32(c->fs_base+0x24u) : 0u);
                }
                if (got > 0) snprintf(g_last_read, sizeof g_last_read, "%s", f->path);
                g_file_read++; g_bytes_read += (uint64_t)got; r=1; }

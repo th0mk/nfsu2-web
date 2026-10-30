@@ -131,6 +131,10 @@ in the nearest hiding spot at its start, standing (default: back to the chase); 
 heat N instead of the bin's top heat (1: the game's escalation raises it).  `pursuit_breaker.txt` drives the car at the one pursuit
 breaker the AI has brought down so far (TRACKER M4-17; not working yet: its header says what was seen).
 
+Sound: `menu_audio.txt` (the front end's sound set-up and the mixer's pace at the main menu) and `shop_music.txt`
+(from a career save past the prologue: free roam, the customization shop entered and left 50 times; with READLOG=1
+the check wants the game to read the music, MW_Music.mus, again after every visit; TRACKER M4-26).
+
 The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
 switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).
 `breaker_ai.txt` holds G from 10 frames after the AI has driven and let go (TRACKER M4-47: a press in the first frame

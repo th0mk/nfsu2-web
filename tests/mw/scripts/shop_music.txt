@@ -1,0 +1,47 @@
+# Most Wanted: the music after shop visits (TRACKER M4-26; Underground 2's tests/scripts/shop_music.txt, where a lost
+# unpause left the music silent after a shop until a restart).  Seeded with a safehouse save (a career seed: Resume
+# Career opens the safehouse menu), this run resumes free roam and visits the customization shop 50 times, as
+# career_shop.txt enters it (the car set inside menu_gate_customshop's zone, Enter engages it): each pass waits in the
+# shop's first menu, leaves by Escape for free roam (GameFlow 6 again) and drives on for 20 s.  The music is the
+# game's reads of SOUND/PFDATA/MW_Music.mus (READLOG=1 lists them, "[read] ... MW_Music.mus"; a playing song or
+# segment reads 32 or 64 KB about every second): tests/mw/checks/shop_music.sh wants some between each pass's
+# "[status] shop_out_N" and "[status] music_N", and in the shop.
+#   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script shop_music.txt \
+#     --marker 'shop_music: done' --env READLOG=1 --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
+#     --timeout-scale 20
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600
++0    tap RETURN                                         # Resume Career
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000    # the safehouse menu
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN                                         # Yes
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 3000                          # the world (GameFlow 6)
++0    log shop_music: free roam
++600  status roam
++0    loop 50
++0    teleport -2563.89 157.62 1509.35 1 0 0             # inside the shop's gate
++60   tap RETURN                                         # engage
++0    waitfng CustomizeMain.fng:055dce1a@4b4e388a 1500
++600  status shop_in
++30   tapuntil ESCAPE CustomizeMain.fng@4b4e388a 90 900
++30   tap ESCAPE                                         # leave the shop
++0    waitmem 0x00925e90 6 3000
++0    status shop_out
++1200 status music
++0    endloop
++0    log shop_music: done
++60   close
