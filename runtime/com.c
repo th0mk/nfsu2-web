@@ -6,6 +6,7 @@
 #include "cpu.h"
 #include "game.h"
 #include "d3d9_tables.h"
+#include "comrec.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -469,10 +470,12 @@ static const Iface g_if[] = {
     {"IDirectSound",             M_DS,         NEL(M_DS)},
     {"IDirectSoundBuffer",       M_DSBUF,      NEL(M_DSBUF)},
     {"IDirectInputEffect",       M_DIEFF,      NEL(M_DIEFF)},
+    {"ID3DXEffect",              M_D3DXFX,     NEL(M_D3DXFX)},
+    {"ID3DXEffectPool",          M_D3DXPOOL,   NEL(M_D3DXPOOL)},
 };
 enum { IF_D3D9=1, IF_DEV, IF_TEX, IF_VB, IF_IB, IF_SURF, IF_SIMPLE,
        IF_VSHADER, IF_VDECL, IF_STATEBLOCK, IF_SWAPCHAIN, IF_QUERY,
-       IF_DI8, IF_DIDEV, IF_DS, IF_DSBUF, IF_DIEFF };
+       IF_DI8, IF_DIDEV, IF_DS, IF_DSBUF, IF_DIEFF, IF_D3DXFX, IF_D3DXPOOL };
 
 static uint64_t g_com_new_n[NEL(g_if)];   /* per interface: objects created */
 static uint64_t g_com_del_n[NEL(g_if)];   /* ... and destroyed (last Release) */
@@ -526,11 +529,17 @@ static uint32_t com_new(uint32_t iface, uint32_t extra){
      * if com_alloc does not return fresh memory, garbage is read. */
     for (uint32_t q = 0; q < 4u + extra; q += 4u) MR32(obj + q) = 0u;
     MR32(obj) = vt;
+    if (__builtin_expect(g_comrec_on, 0)) comrec_new(obj, iface);
     return obj;
 }
 
 /* dinput_pad.c CreateEffect: a new IDirectInputEffect (16 bytes of its own) */
 uint32_t com_new_dieffect(void){ return com_new(IF_DIEFF, 16u); }
+
+/* The game's D3DX effects (game.h d3dx_call; Most Wanted: runtime/mw/d3dxfx_mw.c): a new ID3DXEffect (pool 0)
+ * or ID3DXEffectPool (pool 1) with extra bytes of its own after the vtable pointer, one reference held.  Its
+ * methods past IUnknown go to g_game.d3dx_call; its last Release to g_game.d3dx_free. */
+uint32_t com_new_d3dx(int pool, uint32_t extra){ return com_new(pool ? IF_D3DXPOOL : IF_D3DXFX, extra); }
 
 #define PSCUBE 256   /* must MATCH metal.m: cube ps variant */
 uint64_t g_com_calls=0, g_com_unimpl=0;
@@ -1402,6 +1411,9 @@ static void com_destroy(uint32_t o){
         ds_share(MR32(o + 8u), -1);
         break; }
     case IF_DIEFF: dipad_effect_free(o); break;
+    case IF_D3DXFX: case IF_D3DXPOOL:   /* the game's own state of it first (game.h d3dx_free) */
+        if (g_game.d3dx_free) g_game.d3dx_free(g_com_cpu, iface == IF_D3DXPOOL, o);
+        break;
     default: return;                    /* devices, input, sound: never freed */
     }
     com_drop(o);
@@ -2814,7 +2826,31 @@ static void fxtr_dev(CPU *c, int iface, int mid, int nargs, const char *nm){
     fprintf(stderr, "\n");
 }
 
+/* NFSU2_DXREC (comrec.c): the device's calls, the state blocks' and the swap chain's, each written after it
+ * ran; a state block's Apply is written, the calls it replays are not */
+static int com_call_body(CPU *c, uint32_t magic);
 int com_call(CPU *c, uint32_t magic){
+    if (__builtin_expect(g_comrec_on, 0) && !g_sb_replay){
+        uint32_t iface=(magic>>16)&0x1FFFu, m=magic&0xFFFFu;
+        int kind = iface==IF_DEV ? CR_DEV : iface==IF_STATEBLOCK ? CR_SB : iface==IF_SWAPCHAIN ? CR_SWAP : CR_NONE;
+        if (kind != CR_NONE && m < g_if[iface].n){
+            int tok = comrec_pre(c, kind, m, g_if[iface].m[m].name, g_if[iface].m[m].nargs);
+            int r = com_call_body(c, magic);
+            comrec_post(c, tok);
+            return r;
+        }
+    }
+    return com_call_body(c, magic);
+}
+/* comrec.c's view of the objects */
+int com_obj_iface(uint32_t o){ return com_valid(o) ? (int)(CH_IFACE(o) & 0xFFFFu) : 0; }
+const char *com_iface_name(int iface){ return iface > 0 && iface < (int)NEL(g_if) ? g_if[iface].name : "?"; }
+int com_shader_code(uint32_t o, uint32_t *p, uint32_t *n){
+    if (!com_valid(o) || (CH_IFACE(o) & 0xFFFFu) != IF_VSHADER) return 0;
+    *p = MR32(o + 4u); *n = MR32(o + 8u);      /* CreateVertexShader/CreatePixelShader: the copy and its size */
+    return 1;
+}
+static int com_call_body(CPU *c, uint32_t magic){
     uint32_t iface=(magic>>16)&0x1FFFu, m=magic&0xFFFFu;
     g_com_calls++;
     g_com_cpu = c;
@@ -2921,6 +2957,13 @@ int com_call(CPU *c, uint32_t magic){
             }
         }
         r = com_release(A(c,0)); }
+    /* --- ID3DXEffect, ID3DXEffectPool: the game's (game.h d3dx_call) --- */
+    else if (iface==IF_D3DXFX || iface==IF_D3DXPOOL){
+        uint32_t av[8] = {0};
+        for (int i = 0; i < nargs && i < 8; i++) av[i] = A(c,i);
+        if (g_game.d3dx_call) r = g_game.d3dx_call(c, iface==IF_D3DXPOOL, m, av, nargs);
+        else { r = 0x80004001u; impl = 0; }                 /* E_NOTIMPL */
+    }
     /* --- IDirect3D9 --- */
     else if (iface==IF_D3D9){
         if      (MID(GetAdapterCount))     r=1;

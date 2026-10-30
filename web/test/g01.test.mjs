@@ -24,6 +24,8 @@ test('games/mw/hle-reviewed.txt: the imports MW leaves unimplemented, none revie
   const native = [...fs.readFileSync(path.join(REPO, 'runtime/mw/d3dxmath_mw.c'), 'utf8').matchAll(/\{ "(D3DX\w+)",\s+0x/g)].map(m => m[1]);
   assert.equal(native.length, 11, 'the eleven native D3DX math functions');
   for (const n of native) assert.ok(!rows.some(r => r[1] === `d3dx9_26.dll!${n}`), `${n} is answered natively, not listed`);
+  // and so are the two effect imports (runtime/mw/d3dxfx_mw.c, TRACKER M5-05): no d3dx9_26.dll import is listed
+  assert.ok(!rows.some(r => r[1].startsWith('d3dx9_26.dll!')), 'every d3dx9_26.dll import is answered natively');
   for (const r of rows) {
     assert.ok(r.length === 4 || r.length >= 5 && r[3] === 'yes', `<module> <dll>!<name> <IAT> <yes|no> [<run>]: ${r.join(' ')}`);
     assert.match(r[0], /^(speed\.exe|server\.dll)$/);
@@ -32,7 +34,7 @@ test('games/mw/hle-reviewed.txt: the imports MW leaves unimplemented, none revie
   const list = readReviewed('mw');
   assert.equal(list.size, new Set(rows.map(r => r[1].replace(/^[^!]+/, d => d.toLowerCase()))).size, 'each import once (one entry for an import both modules have)');
   assert.ok([...list.values()].every(e => !e.yes), 'no MW run has reviewed one yet');
-  for (const k of ['kernel32.dll!DebugBreak', 'd3dx9_26.dll!D3DXCreateEffectFromResourceA', 'tapi32.dll!lineOpen', 'shell32.dll!ShellExecuteA'])
+  for (const k of ['kernel32.dll!DebugBreak', 'tapi32.dll!lineOpen', 'shell32.dll!ShellExecuteA'])
     assert.ok(list.has(k), `${k} is listed`);
   // winsock.c answers the overlapped ones (TRACKER M8-06, M8-07)
   for (const n of ['WSACreateEvent', 'WSASetEvent', 'WSAResetEvent', 'WSACloseEvent', 'WSAWaitForMultipleEvents', 'WSARecv', 'WSARecvFrom',

@@ -9,7 +9,8 @@
 # The list: speed.exe v1.3's and server.dll's imports that no layer answers (runtime/win32.c, win32_ext.c,
 # win32_misc.c, fileio.c, winsock.c, heap.c, com.c, keyboard.c; the D3DX math: runtime/mw/d3dxmath_mw.c), from MW's
 # lift (gen/mw/all and gen/mw/server, impargs.c), 2026-10-28.  No MW run has reached any of them yet: all "no".
-# Addresses and names only.  d3dx9_26.dll's two effect imports are the D3DX oracle's in a dev oracle build.
+# Addresses and names only.  d3dx9_26.dll's two effect imports are runtime/mw/d3dxfx_mw.c's since TRACKER M5-05 (the
+# D3DX oracle's in a dev oracle build unless NFSMW_D3DX_FX=hle): no longer here.
 # winsock.c answers the eight overlapped WS2_32 imports of both modules (WSACreateEvent, WSASetEvent,
 # WSAResetEvent, WSACloseEvent, WSAWaitForMultipleEvents, WSARecv, WSARecvFrom, WSAGetOverlappedResult) since
 # TRACKER M8-06 and M8-07: no longer here.
@@ -48,5 +49,3 @@ speed.exe  TAPI32.dll!lineClose                  0x0089030c no
 speed.exe  TAPI32.dll!lineNegotiateAPIVersion    0x00890310 no
 speed.exe  TAPI32.dll!lineOpen                   0x00890314 no
 speed.exe  USER32.dll!PostThreadMessageA         0x00890378 no
-speed.exe  d3dx9_26.dll!D3DXCreateEffectFromResourceA 0x008904c0 no
-speed.exe  d3dx9_26.dll!D3DXCreateEffectPool     0x008904c4 no

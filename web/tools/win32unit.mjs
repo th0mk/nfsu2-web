@@ -124,7 +124,7 @@ export function buildD3d9Unit(out, mw) {
   const game = mw ? ['-DD3D9_UNIT_MW', '-DNFSU2_GAME_MW', ...gi] : [], table = mw ? ['runtime/mw/game_mw.c'] : [];
   execFileSync(CC, [...PLAIN, '-c', '-o', te, THREAD_EXIT], opt);
   try {
-    execFileSync(CC, [...FLAGS, ...game, '-o', out, 'web/test/d3d9_unit.c', 'runtime/com.c', ...table, te, ...LINK,
+    execFileSync(CC, [...FLAGS, ...game, '-o', out, 'web/test/d3d9_unit.c', 'runtime/com.c', 'runtime/comrec.c', ...table, te, ...LINK,
       '-Wl,--unresolved-symbols=ignore-all'], opt);
   } finally { fs.rmSync(te, { force: true }); }
   return out;

@@ -617,6 +617,7 @@ int win32_call(CPU *c, uint32_t idx){
     else if (!strcmp(n,"ExitProcess")){ g_exit_code=(int)ARG(c,0);
         fprintf(stderr,"\n*** guest ExitProcess(%u) - exiting\n",ARG(c,0));
         { extern void discord_shutdown(void); discord_shutdown(); }   /* the game quit: clear the Discord presence */
+        { extern void comrec_close(void) __attribute__((weak)); if (comrec_close) comrec_close(); }   /* NFSU2_DXREC's file, whole */
         if(g_exit_armed) longjmp(g_exit_jmp,1); return -1; }
     else if (!strcmp(n,"LoadLibraryA")||!strcmp(n,"LoadLibraryW")){
         /* A lifted module (server.dll) is really loaded (module.c); every

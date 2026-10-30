@@ -38,6 +38,8 @@ const UG2_UNSET = {
   gpu_stages: 'UG2 keeps its 4 texture stages and no depth textures (0), as it always has',
   d3d_sm3: 'UG2 keeps its 2.0 shader model caps (0), as it always has',
   gpu_msaa: 'UG2 has no multisampled back buffer (0): its multisampling answers and its passes stay as they were',
+  d3dx_call: 'UG2\'s D3DX is in its exe (lifted, runtime/d3dx_hle.c): no ID3DXEffect object of com.c\'s is ever made',
+  d3dx_free: 'as d3dx_call',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
@@ -150,11 +152,16 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   // the oracle is a system DLL (NFSMW_D3DX names it), with msvcrt's variable bound; UG2's server.dll has neither
   assert.match(src, /MODLINK_TABLES\(d3dx_\)[^}]*\.file_env = "NFSMW_D3DX", \.bind = msvcrt_bind \}/);
   assert.doesNotMatch(read('runtime/game_ug2.c'), /file_env|\.bind\b/, 'UG2\'s server.dll entry sets neither');
-  // its install: the D3DX math imports answered natively (d3dxmath_mw.c), told whether the oracle is linked; an
-  // oracle build also reads NFSMW_FXCENSUS, the effect census (fxcensus_mw.c), which no other build has
+  // its install: the D3DX math imports answered natively (d3dxmath_mw.c) and the two effect imports (d3dxfx_mw.c,
+  // the oracle's in an oracle build unless NFSMW_D3DX_FX=hle), each told whether the oracle is linked; an oracle
+  // build also reads NFSMW_FXCENSUS, the effect census (fxcensus_mw.c), which no other build has
   assert.equal(t.get('install'), 'mw_install');
-  assert.match(src, /static void mw_install\(void\)\{\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+fxcensus_init\(\);\s+#else\s+d3dxmath_install\(0\);\s+#endif\s+\}/);
+  assert.match(src, /static void mw_install\(void\)\{\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+d3dxfx_install\(1\);\s+fxcensus_init\(\);\s+#else\s+d3dxmath_install\(0\);\s+d3dxfx_install\(0\);\s+#endif\s+\}/);
   assert.match(read('runtime/mw/d3dxmath_mw.c'), /\nint d3dxmath_install\(int oracle_linked\)\{/);
+  assert.match(read('runtime/mw/d3dxfx_mw.c'), /\nint d3dxfx_install\(int oracle_linked\)\{/);
+  // the effects' objects (com.c com_new_d3dx) answer through d3dx_call and d3dx_free
+  assert.equal(t.get('d3dx_call'), 'd3dxfx_call');
+  assert.equal(t.get('d3dx_free'), 'd3dxfx_free');
   assert.match(read('runtime/mw/fxcensus_mw.c'), /\nvoid fxcensus_init\(void\)\{/);
 });
 

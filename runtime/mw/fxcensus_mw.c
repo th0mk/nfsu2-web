@@ -41,10 +41,12 @@
  * oracle build; D3D_SM=30 (com.c) reports vs_3_0/ps_3_0 in the caps. */
 #if NFSU2_D3DX_ORACLE
 #include "cpu.h"
+#include "comrec.h"
+#include "d3dxfx_mw.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-int g_fxcensus;                                   /* NFSMW_FXCENSUS=1 (dispatch.c reads it) */
+int g_fxcensus;                                   /* NFSMW_FXCENSUS=1 (dispatch.c reads it); bit 1: fxmark_call */
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);   /* com.c */
 uint32_t com_scratch(uint32_t n);                 /* com.c: guest memory that stays */
 
@@ -102,12 +104,38 @@ static int effect_id(uint32_t fx){
 /* NFSMW_FXCENSUS=n: also as `speed.exe /n` (the guest's command line is only its name): the NVIDIA gate
  * [0x8FAD9C] cleared before the entry point, so every technique the other filters pass is validated */
 #define GATE_NV 0x008fad9cu
+/* NFSU2_DXREC (runtime/comrec.c): the game's calls into the oracle's effects as context lines between the
+ * device calls they make, in d3dxfx_mw.c's form (fxmark), so a recording of the oracle and one of the HLE
+ * line up.  The methods are told apart by the oracle's ID3DXEffect vtable, d3dx9_26's run of 78 code
+ * pointers at 0x413EA0 (docs/mw/fx-model.md 1.1) as mapped at 0xD80000; the creators by their exports,
+ * which the IAT slots hold (GAME.md 5.9; their thunks' `jmp [slot]` reaches here through dispatch_tail). */
+#define FX_VT 0x00d93ea0u
 void fxcensus_init(void){
     const char *e = getenv("NFSMW_FXCENSUS");
     g_fxcensus = e && *e && *e != '0';
     if (g_fxcensus && *e == 'n') MR8(GATE_NV) = 0;
     if (g_fxcensus) fprintf(stderr, "[fxcensus] on: the game's calls into the D3DX oracle's effects are logged%s\n",
                             *e == 'n' ? ", the NVIDIA gate cleared (as /n)" : "");
+    if (g_comrec_on) g_fxcensus |= 2;            /* the device-call recorder's effect lines (fxmark_call) */
+}
+
+static void fxmark_call(CPU *c, uint32_t addr, void (*f)(CPU *)){
+    uint32_t esp = c->esp, ret = MR32(esp), a[4];
+    for (int i = 0; i < 4; i++) a[i] = MR32(esp + 4u + 4u * (uint32_t)i);
+    if (ret < EXE_LO || ret >= EXE_HI){ f(c); return; }        /* the oracle's own calls */
+    if (addr == MR32(0x008904c0u)){              /* D3DXCreateEffectFromResourceA(device, module, name, ...) */
+        fxmark(-1, "D3DXCreateEffectFromResourceA", gstr(a[2]), 0); f(c); return; }
+    if (addr == MR32(0x008904c4u)){ fxmark(-1, "D3DXCreateEffectPool", 0, 0); f(c); return; }
+    int slot = -1;
+    if (a[0] && mem_is_committed(a[0]) && MR32(a[0]) == FX_VT)
+        for (int i = 0; i < 78; i++) if (MR32(FX_VT + 4u * (uint32_t)i) == addr){ slot = i; break; }
+    if (slot <= 2){ f(c); return; }                             /* IUnknown: the HLE's are com.c's own */
+    int id = effect_id(a[0]);
+    char arg[16] = "";
+    if (slot == 63) snprintf(arg, sizeof arg, "%x", a[2]);      /* Begin: its flags */
+    else if (slot == 64) snprintf(arg, sizeof arg, "%u", a[1]); /* BeginPass: the pass */
+    fxmark(id, fxmark_name(slot), arg[0] ? arg : 0, 0);
+    f(c);
 }
 
 /* the scan met technique `idx` (handle h) of effect `fx`: its name and each pass's shaders */
@@ -145,6 +173,7 @@ static void say_tech(CPU *c, uint32_t id, uint32_t fx, uint32_t idx, uint32_t h)
 }
 
 void fxcensus_call(CPU *c, uint32_t addr, void (*f)(CPU *)){
+    if (!(g_fxcensus & 1)){ fxmark_call(c, addr, f); return; }      /* only the recorder's lines */
     uint32_t esp = c->esp, ret = MR32(esp), a1 = MR32(esp + 4u), a2 = MR32(esp + 8u);
     uint32_t wrap = c->esi, idx = c->ebp;
     f(c);

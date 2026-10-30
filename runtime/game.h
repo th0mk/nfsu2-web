@@ -240,6 +240,14 @@ typedef struct GameOps {
                                      * ones its exe and server.dll import (CompareStringA/W, SetStdHandle,
                                      * SetEnvironmentVariableA) stay unimplemented, as they always were */
 
+    /* ---- D3DX effects the game answers itself (com.c's ID3DXEffect and ID3DXEffectPool objects) ---- */
+    uint32_t (*d3dx_call)(CPU *c, int pool, unsigned method, const uint32_t *args, int nargs);
+                                    /* a method past IUnknown of an object com_new_d3dx made: an
+                                     * ID3DXEffect's (pool 0) or an ID3DXEffectPool's (pool 1), slot method
+                                     * of d3d9_tables.h's M_D3DXFX, args[0] the object; its result (Most
+                                     * Wanted: runtime/mw/d3dxfx_mw.c); 0 = none (UG2's D3DX is in its exe) */
+    void (*d3dx_free)(CPU *c, int pool, uint32_t obj);  /* such an object's last Release, before it goes */
+
     /* ---- what the boot and the stall watchdog check (L-051, L-073) ---- */
     const InitTable *init_tables;   /* the C runtime's initializer tables, in the order they run: their
                                      * functions are counted as they run and one [init] line says how many

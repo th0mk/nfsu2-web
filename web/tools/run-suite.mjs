@@ -181,10 +181,12 @@ fs.mkdirSync(OUT, { recursive: true });
 const extraEnv = Object.fromEntries(opt.env.map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)]));
 // Most Wanted's module with the D3DX oracle ("oracle":1 in /game.json, web/build.sh) loads d3dx9_26.dll before the
 // game's entry point, from the page's save folder: without a seed holding it and NFSMW_D3DX naming it the start
-// stops at its first effect import (an unimplemented D3DXCreateEffectPool), so the runs would fail for that alone
+// stops at its first effect import (an unimplemented D3DXCreateEffectPool), so the runs would fail for that alone;
+// with NFSMW_D3DX_FX=hle the effects are runtime/mw/d3dxfx_mw.c's and the DLL is never loaded
 const ORACLE_SEED = 'this module has the D3DX oracle, which loads d3dx9_26.dll from the save folder: ' +
-  'NFSU2_SAVE_SEED=<a folder holding it> and --env NFSMW_D3DX=/save/d3dx9_26.dll (tests/mw/scripts/boot_menu.txt)';
-if (GAME === 'mw' && !(SEED && extraEnv.NFSMW_D3DX) && await isOracle(opt.base))
+  'NFSU2_SAVE_SEED=<a folder holding it> and --env NFSMW_D3DX=/save/d3dx9_26.dll (tests/mw/scripts/boot_menu.txt), ' +
+  'or --env NFSMW_D3DX_FX=hle for the effect HLE';
+if (GAME === 'mw' && !(SEED && extraEnv.NFSMW_D3DX) && extraEnv.NFSMW_D3DX_FX !== 'hle' && await isOracle(opt.base))
   for (const s of scen) s.blocked ??= ORACLE_SEED;
 
 // the imports a run of this game has reviewed (G-01: an [hle] UNIMPLEMENTED line off the list fails a run)

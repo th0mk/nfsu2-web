@@ -19,6 +19,7 @@
 #include "memmap.h"
 #include "module.h"
 #include "d3dxmath_mw.h"
+#include "d3dxfx_mw.h"
 #include <strings.h>
 
 void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen/mw/all/gameinfo.h, through cpu.h) */
@@ -98,9 +99,11 @@ static const InitTable mw_init_tables[] = {
 static void mw_install(void){
 #if NFSU2_D3DX_ORACLE
     d3dxmath_install(1);
+    d3dxfx_install(1);
     fxcensus_init();
 #else
     d3dxmath_install(0);
+    d3dxfx_install(0);
 #endif
 }
 
@@ -205,6 +208,8 @@ const GameOps g_game = {
     .crtheap_va = 0x009c5318u,                  /* _heap_init 0x7CD4B0: HeapCreate's handle, then __heap_select's */
     .active_heap_va = 0x009c531cu,              /* answer (3 = the small-block heap) */
     .win32_misc = mw_imports,                   /* win32_misc.c: memory, locale, keyboard, voice devices; msvcrt_mw.c */
+    .d3dx_call = d3dxfx_call,                   /* d3dxfx_mw.c: the effects and the pool, native */
+    .d3dx_free = d3dxfx_free,
     .d3d_modes = mw_modes,                      /* the 4:3 modes first (GAME.md 5.7) */
     .d3d9_strict = 1,                           /* D3D9's answers: level sizes, failed creators, what the renderer offers */
     .gpu_stages = 8,                            /* t4..t7 and s4..s7 at SM2 already, depth textures (GAME.md 5.9) */

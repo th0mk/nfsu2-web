@@ -41,6 +41,8 @@ winsock.h
 com.c
 d3d9_tables.h
 dxrec.h
+comrec.c
+comrec.h
 gfx.h
 vsemu.c
 vsemu.h

@@ -239,6 +239,11 @@ void dispatch_tail(CPU *c){
     else if (addr < 0xE0000000u){
         guest_fn f = patch_at(addr);
         if (!f) f = module_fn_at(addr);
+#if NFSU2_D3DX_ORACLE
+        /* NFSMW_FXCENSUS and the device-call recorder: the game's jumps into the oracle too (its
+         * import thunks, runtime/mw/fxcensus_mw.c) */
+        if (f && __builtin_expect(g_fxcensus, 0)){ g_stat_indirect_ok++; fxcensus_call(c, addr, f); return; }
+#endif
         if (f){ g_stat_indirect_ok++;
 #ifdef __wasm__
             __attribute__((musttail))

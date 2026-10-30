@@ -93,6 +93,32 @@ static const Method M_QUERY[] = {
  {"QueryInterface",3},{"AddRef",1},{"Release",1},{"GetDevice",2},{"GetType",1},
  {"GetDataSize",1},{"Issue",2},{"GetData",4},
 };
+/* --- D3DX 9 (d3dx9_26 = D3DX_SDK_VERSION 26): ID3DXEffect and ID3DXEffectPool, answered by the game
+ * (game.h d3dx_call: Most Wanted's runtime/mw/d3dxfx_mw.c).  The order is the SDK's d3dx9effect.h:
+ * ID3DXBaseEffect 0..56, then ID3DXEffect's own, with DeleteParameterBlock and without SetRawValue
+ * (docs/mw/fx-model.md 1.1). --- */
+static const Method M_D3DXFX[] = {
+ {"QueryInterface",3},{"AddRef",1},{"Release",1},{"GetDesc",2},{"GetParameterDesc",3},
+ {"GetTechniqueDesc",3},{"GetPassDesc",3},{"GetFunctionDesc",3},{"GetParameter",3},
+ {"GetParameterByName",3},{"GetParameterBySemantic",3},{"GetParameterElement",3},{"GetTechnique",2},
+ {"GetTechniqueByName",2},{"GetPass",3},{"GetPassByName",3},{"GetFunction",2},{"GetFunctionByName",2},
+ {"GetAnnotation",3},{"GetAnnotationByName",3},{"SetValue",4},{"GetValue",4},{"SetBool",3},{"GetBool",3},
+ {"SetBoolArray",4},{"GetBoolArray",4},{"SetInt",3},{"GetInt",3},{"SetIntArray",4},{"GetIntArray",4},
+ {"SetFloat",3},{"GetFloat",3},{"SetFloatArray",4},{"GetFloatArray",4},{"SetVector",3},{"GetVector",3},
+ {"SetVectorArray",4},{"GetVectorArray",4},{"SetMatrix",3},{"GetMatrix",3},{"SetMatrixArray",4},
+ {"GetMatrixArray",4},{"SetMatrixPointerArray",4},{"GetMatrixPointerArray",4},{"SetMatrixTranspose",3},
+ {"GetMatrixTranspose",3},{"SetMatrixTransposeArray",4},{"GetMatrixTransposeArray",4},
+ {"SetMatrixTransposePointerArray",4},{"GetMatrixTransposePointerArray",4},{"SetString",3},{"GetString",3},
+ {"SetTexture",3},{"GetTexture",3},{"GetPixelShader",3},{"GetVertexShader",3},{"SetArrayRange",4},
+ {"GetPool",2},{"SetTechnique",2},{"GetCurrentTechnique",1},{"ValidateTechnique",2},
+ {"FindNextValidTechnique",3},{"IsParameterUsed",3},{"Begin",3},{"BeginPass",2},{"CommitChanges",1},
+ {"EndPass",1},{"End",1},{"GetDevice",2},{"OnLostDevice",1},{"OnResetDevice",1},{"SetStateManager",2},
+ {"GetStateManager",2},{"BeginParameterBlock",1},{"EndParameterBlock",1},{"ApplyParameterBlock",2},
+ {"DeleteParameterBlock",2},{"CloneEffect",3},
+};
+static const Method M_D3DXPOOL[] = {
+ {"QueryInterface",3},{"AddRef",1},{"Release",1},
+};
 /* wide empty vtable for simple/unknown objects (prevents unresolvable calls) */
 static const Method M_SIMPLE[] = {
  {"QueryInterface",3},{"AddRef",1},{"Release",1},{"GetDevice",2},

@@ -1,0 +1,36 @@
+# Most Wanted: a quick race for the D3DX effect HLE (TRACKER M5-05/M5-06, M5-08): race_frames.txt's Custom Race circuit
+# (City Perimeter, the car the list starts on, automatic gears), driven by the game's AI for 1,500 frames after GO,
+# then WM_CLOSE.  Short enough to run with the HLE (runtime/mw/d3dxfx_mw.c) and with the D3DX oracle under the
+# device-call recorder (NFSU2_DXREC, docs/web/dxrec.md) and to compare them (web/tools/dxrec-diff.mjs); in lockstep
+# (NFSU2_HFR_LOCKSTEP=1 VCLOCK=fixed) two runs of one build give the noise floor.  tests/mw/checks/fx_race.sh wants
+# GO, the 1,500 frames with the race still on, and the game's own exit:
+#   node web/tools/run-suite.mjs --game mw --script fx_race.txt --marker 'fx_race: 1500 frames' #     --env NFSU2_QUIT_FRAMES=9000 --timeout-scale 2
+# A build without the oracle (D3DX_ORACLE=0) needs no seed; an oracle build needs boot_menu.txt's D3DX seed (with
+# --env NFSMW_D3DX_FX=hle it runs the HLE all the same, the DLL then not loaded).
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log fx_race: GO
++0    autopilot on
++0    frames
++1500 frames
++0    log fx_race: 1500 frames
++0    racestatus
++0    close
