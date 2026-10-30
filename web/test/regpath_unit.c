@@ -125,7 +125,7 @@ void photo_input(int cmd, int a, int b){ (void)cmd; (void)a; (void)b; }
 void ug2_pad_rescan(int on){ (void)on; } unsigned ug2_pad_trigger_axes(uint32_t dev){ (void)dev; return 3u; }
 float ug2_pad_jolt(void){ return 0.f; }
 int career_fe_active(const char *name){ (void)name; return 0; } int hfr_rate_now(void){ return 0; }
-int roam_exploring(void){ return 0; } int roam_game_cars(void){ return 0; } int roam_game_friends(void){ return 0; }
+int roam_exploring(void){ return 0; } int roam_game_cars(void){ return 0; } int roam_game_friends(void){ return 0; } int roam_game_engage(void){ return 0; } int roam_game_near(void){ return 0; }
 uint64_t ws_now_us(void){ return 0; }
 void sub_0074b730_orig(CPU *c){ (void)c; }
 #endif

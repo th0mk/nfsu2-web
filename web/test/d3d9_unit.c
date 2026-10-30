@@ -90,6 +90,7 @@ void mprot_rearm(void){ }
 void mprot_arm(uint32_t a){ (void)a; }
 void watch_arm(uint32_t a){ (void)a; }
 void perflog_guest_frame(void){ }
+void hfr_after_present(void){ }
 void texrep_frame(void){ }
 void texrep_created(unsigned id, unsigned w, unsigned h, unsigned l, unsigned f, unsigned u, unsigned p){ (void)id; (void)w; (void)h; (void)l; (void)f; (void)u; (void)p; }
 void texrep_uploaded(unsigned id, unsigned l, const uint8_t *d, unsigned p, unsigned r){ (void)id; (void)l; (void)d; (void)p; (void)r; }
