@@ -89,9 +89,13 @@ road by the game's RESET, `carreset`), earns milestones and bounty in pursuits (
 start one; Game.ForcePursuitStart at the bin's top heat after 60 s of game time without one; a chase lost too early
 is rejoined where it was, and one that ran 300 s or boxed the car in is broken off by setting the car far away, so
 the game ends it as evaded), then engages the rival's challenge at its first race's start
-(InGameRivalChallenge.fng: Enter accepts; a lost one again), takes two of the beaten rival's markers
-(SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type), and answers the
-screens on the way (results, text messages, the safehouse menu).  After a bust it pays the fine with cash
+(InGameRivalChallenge.fng: Enter accepts; a lost one again, after the shop when the cash reaches a package, and after
+two lost in one car in the career's next car, taken at the safehouse), takes two of the beaten rival's markers
+(SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type;
+`NFSMW_BOT_MARKERS=X,Y` takes the cards X and Y by their objects, 0xCDA0A66B to 0xCDA0A670 from the left, instead of
+the first two), and answers the screens on the way (results, text messages, the safehouse menu).  A car at a race's
+start already (a lost lap knockout ends there) is set at another race's place first: from inside the engage trigger
+the Enters opened nothing.  After a bust it pays the fine with cash
 (Infractions.fng), but when the strike would impound the car it spends an Out of Jail marker if it holds one; after an
 impound it takes a car that can be driven in Car_Select.fng (M4-48).  It stops at GameOver.fng (no car left that can be
 driven) and at a career menu it did not ask for;

@@ -25,7 +25,8 @@
  * bin, and again when the cash has grown: shop_frame); the bin's races not won yet, the one tried least first (a lost
  * race is raced again in its turn), until the races the rival asks are won; then pursuits until the milestones and
  * the bounty are there; then the rival's challenge, engaged at its first race's start (InGameRivalChallenge.fng,
- * whose Enter accepts it).  Cops on the car in free roam (a pursuit that began in a race goes on after it) are a
+ * whose Enter accepts it); a lost challenge is tried again, after the shop when the cash reaches a package, and after
+ * two lost in one car in the career's next car (B_CAR: Jump to Safe House, Car Select).  Cops on the car in free roam (a pursuit that began in a race goes on after it) are a
  * pursuit first, whatever it was doing.  In a pursuit the AI drives, and a long chase or a boxed-in car is broken off
  * by setting the car far away (pursuit_frame: what was tried besides, and dropped).  A bust adds a strike to the car,
  * and the strike that reaches the car's most impounds it: the bot spends an Out of Jail marker instead when it holds
@@ -80,6 +81,7 @@ int mw_reset_car(CPU *c);
 int mw_aid_last_end(void);                    /* career_mw.c: 1 busted, 2 evaded since the last read */
 void mw_aid_rapsheet(CPU *c, const char *why); /* pursuit_mw.c */
 void mw_aid_icons(CPU *c, int type);
+void mw_aid_pools(CPU *c, int watch);         /* pursuit_mw.c */
 double mw_game_time(void);
 
 #define G_PROFILES       0x0091cf90u     /* [+0x10] the user profile */
@@ -167,7 +169,11 @@ static int markers_held(int cnt[MK_TYPES]){
         if (rd(e + 8u) == 1u){ uint32_t t = rd(e); cnt[t < MK_TYPES ? t : 0]++; n++; }
     return n;
 }
+/* the types' names (speed.exe's table at 0x8F5480: {"backroom", name, type} for the parts, 1..0x10) */
 static const char *marker_name(int t){
+    static const char *const parts[17] = { "type", "brakes", "engine", "nos", "induction", "chassis", "tires", "transmission",
+        "bodykit", "hood", "spoiler", "rims", "roofscoop", "hud", "vinyls", "decals", "paint" };
+    if (t >= 1 && t <= 0x10) return parts[t];
     switch (t){
     case 0x11: return "out_of_jail_free"; case 0x12: return "pink_slip"; case 0x13: return "cash_bonus";
     case 0x14: return "add_impound_box"; case 0x15: return "release_car_from_impound"; default: return "type";
@@ -332,8 +338,8 @@ static void log_races(const struct race *r, int n){
 }
 
 /* ---- the bot ---- */
-enum { B_OFF, B_ROAM, B_GOTO, B_ENGAGE, B_RACE, B_PURSUIT, B_SAVE, B_SHOP, B_DONE };
-static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", "pursuit", "save", "shop", "done" };
+enum { B_OFF, B_ROAM, B_GOTO, B_ENGAGE, B_RACE, B_PURSUIT, B_SAVE, B_SHOP, B_CAR, B_DONE };
+static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", "pursuit", "save", "shop", "car", "done" };
 #define SETTLE_S      1.5               /* game seconds in free roam before the bot decides */
 #define ENGAGE_TRIES  5                 /* Enters at a race's start before it is skipped for now */
 #define ENGAGE_EVERY  90                /* frames between them */
@@ -343,6 +349,8 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define BUST_FLOW_MAX     3600          /* frames from a bust's end of the pursuit to its infractions sheet, at most */
 #define SKIP_MAX      3
 #define BOSS_TRIES    12                /* the rival's challenge engaged at most this often (each lost one is a try) */
+#define CAR_SWAP_AFTER 2                /* lost challenges in one car before the next try is in another (decide) */
+#define CAR_SWAP_MAX  9000              /* frames for that change (B_CAR), at most */
 #define RIVAL_NEXT_WAIT 1800            /* frames the bot waits in free roam for the rival's next race to come by itself */
 #define POST_WAIT     2400              /* frames from a race's end to its result screen, at most (after it the bot goes on) */
 #define AP_STAND      4                 /* career_mw.c's autopilot: the AI lets the car go now, and takes the next race at its GO */
@@ -355,6 +363,7 @@ static struct {
     int post_seen;                      /* and its result screen came */
     int race, tries, raced, go_set, focus0_set, skips[MAX_RACES], tried[MAX_RACES], boss_tries, boss_logged, warps;
     float tpos[3], tdir[3];             /* the start B_GOTO took the car to */
+    int via, boss_engage_fail;          /* go_to: the car at another race's place first; a rival's engage opened nothing */
     uint32_t focus0, pursuit;
     int bounty0, forced;
     int stop_races;                     /* bot run N races [K]: stop once the races are won (a checkpoint to save) */
@@ -369,6 +378,9 @@ static struct {
     float plen;                         /* the pursuit's length as it last showed it (s) */
     long run_f0;                        /* the frame the run began */
     /* B_SHOP (shop_frame, the shop's screens in mw_bot_present) */
+    int shop_boss, boss_ended;          /* the rival's challenges ended in free roam (lost: a won one ends the bin), and
+                                           that count at the last shop */
+    int swap_at, car_swapped;           /* boss_ended at the last change of car (B_CAR), and that change done */
     int shop_bin, shop_cash, shop_tries, sh_started, sh_cat, sh_cat_done, sh_pk_new, sh_target, sh_entered, sh_paid, sh_inst;
     uint32_t want_car;                  /* the car to race (pick_car), 0 = the current one */
     int want_pos, car_entered;          /* its place in Car Select's list ('k / N'), and Enter given there */
@@ -414,6 +426,20 @@ static int choose_car(uint32_t prefer, uint32_t *handle, int *pos, int *n_out){
     *handle = best_h; *pos = p; *n_out = n;
     return best;
 }
+/* the career's next car that can be driven after the current one, by career record from the highest down and round
+ * again; 0 when there is no other */
+static uint32_t next_car(void){
+    uint32_t prof = profile(), cur = rd(prof + 0xa8u), h[32]; int rec[32], n = 0, cur_rec = -1;
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u && n < 32; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu){
+            if (MR32(r) == cur) cur_rec = MR8(r + 0x11u);
+            if (MR32(r) != cur && car_free(prof, MR32(r))){ h[n] = MR32(r); rec[n] = MR8(r + 0x11u); n++; }
+        }
+    int best = -1;                      /* the highest record below the current one, else the highest of all */
+    for (int i = 0; i < n; i++) if (rec[i] < cur_rec && (best < 0 || rec[i] > rec[best])) best = i;
+    if (best < 0) for (int i = 0; i < n; i++) if (best < 0 || rec[i] > rec[best]) best = i;
+    return best >= 0 ? h[best] : 0u;
+}
 static void pick_car(void){
     uint32_t cur = rd(profile() + 0xa8u), best_h = 0;
     int pos = 0, n = 0, best = choose_car(0, &best_h, &pos, &n);
@@ -458,10 +484,33 @@ static int settled(CPU *c){
 }
 
 /* to a race's start: the car set there (the warp of Game.WarpPlayerToTrigger), standing; B_GOTO checks it got there */
-static void go_to(CPU *c, const struct race *r){
+/* A car already at the start (a lap knockout or circuit lost ends at its start line, inside the engage trigger) got
+ * no engage dialog from three warps of five Enters each after the loss, and the run ended there (c4-bl15r3-2: 15_3_1
+ * lost, then 'no engage dialog' three times; the first engage of the same run, from far away, opened it at once).
+ * Inferred: the trigger engages a car that comes into it, and a warp from inside it to inside it is not one.  So when
+ * the car is within VIA_NEAR_M of the start, or a try at this race opened nothing, it is set first at the place of
+ * another of the bin's races (a road place) and settles there, then at the start. */
+#define VIA_NEAR_M    150.0f
+static void go_to(CPU *c, const struct race *r, const struct race *all, int n, int failed){
+    float p[3], kmh = 0;
     mw_aid_autopilot(c, AP_STAND);             /* the car stands still at the start */
     memcpy(B.tpos, r->pos, sizeof B.tpos); memcpy(B.tdir, r->dir, sizeof B.tdir);
-    mw_aid_teleport(c, r->pos, r->dir);
+    B.via = 0;
+    float d0 = mw_aid_where(c, p, &kmh) ? hypotf(p[0] - r->pos[0], p[2] - r->pos[2]) : 1e9f;
+    if (d0 < VIA_NEAR_M || failed){
+        int best = -1; float bd = 0;
+        for (int i = 0; i < n; i++){
+            float d = hypotf(all[i].pos[0] - r->pos[0], all[i].pos[2] - r->pos[2]);
+            if (all[i].params && d > VIA_NEAR_M && d > bd){ bd = d; best = i; }
+        }
+        if (best >= 0){
+            B.via = 1;
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f the car is %.0f m from the start%s: first to race %d's place, %.0f m from it\n",
+                    autotest_frame(), mw_game_time(), d0, failed ? " (a try there opened nothing)" : "", best, bd);
+            mw_aid_teleport(c, all[best].pos, all[best].dir);
+        }
+    }
+    if (!B.via) mw_aid_teleport(c, r->pos, r->dir);
     B.warps = 1;
     set_state(B_GOTO, 0);
 }
@@ -506,11 +555,16 @@ static int installed_level(int cat){
             return (int)rd(prof + PROF_CARDB + 0xfa0u + MR8(r + 0x10u) * 0x198u + 0x118u + 4u * (uint32_t)shop_type[cat]);
     return -1;
 }
+/* and again after a lost rival's challenge (the two races are one challenge; bin 11's was lost three times in a row
+ * by a few seconds, c4-b11a), when the money left reaches a level */
+static int swap_due(void){ return !B.once && B.boss_ended >= CAR_SWAP_AFTER && B.boss_ended - B.swap_at >= CAR_SWAP_AFTER; }
 static int shop_wanted(const struct gates *g){
     if (B.once || g->cash < SHOP_RESERVE + SHOP_MIN) return 0;
-    return B.shop_bin != g->bin || g->cash >= B.shop_cash + SHOP_AGAIN;
+    /* (not for a car about to be changed: decide's swap first, then the shop for the car taken) */
+    return B.shop_bin != g->bin || g->cash >= B.shop_cash + SHOP_AGAIN || (B.boss_ended > B.shop_boss && !swap_due());
 }
 static void go_shop(CPU *c, const struct gates *g){
+    B.shop_boss = B.boss_ended;
     B.sh_started = B.sh_cat = B.sh_cat_done = B.sh_pk_new = B.sh_entered = B.sh_paid = 0; B.sh_target = 0;
     B.sh_spent = 0; B.sh_cash0 = g->cash;
     fprintf(stderr, "[mwbot] f=%ld t=%.1f the shop: cash %d, to customshop_2\n", autotest_frame(), mw_game_time(), g->cash);
@@ -583,7 +637,7 @@ static void decide(CPU *c){
         B.race = pick; B.tried[pick]++;
         fprintf(stderr, "[mwbot] f=%ld t=%.1f race %d (hash %08x, try %d): to its start %.2f %.2f %.2f\n", autotest_frame(),
                 mw_game_time(), pick, r[pick].hash, B.tried[pick], r[pick].pos[0], r[pick].pos[1], r[pick].pos[2]);
-        go_to(c, &r[pick]); return;
+        go_to(c, &r[pick], r, n, B.skips[pick] > 0); return;
     }
     if (g.won < g.won_req){ log_races(r, n); set_state(B_DONE, "races to win, none left to engage"); return; }
     if (B.stop_races){ set_state(B_DONE, "the races the rival asks are won (bot run N races)"); return; }
@@ -595,12 +649,29 @@ static void decide(CPU *c){
     int done = 0;
     for (int i = 0; i < nb; i++) done += (b[i].flags & 2u) != 0;
     if (done && done < nb && autotest_frame() - B.f0 < RIVAL_NEXT_WAIT) return;   /* its next race may come by itself */
+    /* Two challenges lost in one car: the next try in another car (the career's next car that can be driven, by
+     * career record, highest first, round), taken at the safehouse's Car Select (B_CAR).  Bin 11's rival beat the
+     * bot's RX8 four times in a row (c4-b11a), each time in the second race, twice wedged at the same place. */
+    if (swap_due()){
+        uint32_t h = next_car();
+        B.swap_at = B.boss_ended;
+        if (h){
+            int pos = 0, nn = 0; uint32_t hh = 0;
+            choose_car(h, &hh, &pos, &nn);
+            B.want_car = h; B.want_pos = pos; B.car_entered = 0; B.car_swapped = 0;
+            B.shop_boss = B.boss_ended - 1;     /* then the shop, for the car taken */
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f %d of the rival's challenges lost: the next one in car %#x (Car Select's %d / %d), "
+                    "taken at the safehouse\n", autotest_frame(), mw_game_time(), B.boss_ended, h, pos, nn);
+            set_state(B_CAR, "another car for the rival");
+            return;
+        }
+    }
     if (nb > 0 && b[0].params && B.boss_tries < BOSS_TRIES){   /* a lost challenge is raced again, as a lost race */
         B.boss_tries++; B.race = -1;
         fprintf(stderr, "[mwbot] f=%ld t=%.1f the rival's challenge (hash %08x, try %d, races won %d of %d): to its "
                 "start %.2f %.2f %.2f\n", autotest_frame(), mw_game_time(), b[0].hash, B.boss_tries, done, nb, b[0].pos[0],
                 b[0].pos[1], b[0].pos[2]);
-        go_to(c, &b[0]); return;
+        go_to(c, &b[0], r, n, B.boss_engage_fail); return;
     }
     set_state(B_DONE, "the rival's requirements are met; the challenge did not engage");
 }
@@ -796,6 +867,7 @@ static void pursuit_frame(CPU *c){
             g.bounty, B.g.ms, g.ms, B.pursuits, B.busts, B.evades);
     mw_aid_rapsheet(c, end == 1 ? "after a bust" : end == 2 ? "after an evade" : "after a pursuit");
     mw_aid_icons(c, 12);                /* the world map's icons by type, the pursuit breakers' one by one */
+    mw_aid_pools(c, 1);                 /* the memory pools, peaks since the first pursuit's end (M4-48, M4-35) */
     mw_aid_autopilot(c, AP_STAND);
     B.raced = 0; B.pursuit = 0; B.forced = 0;
     if (B.bust_n){                      /* bot bust: the next pursuit, until the busts asked for */
@@ -836,6 +908,12 @@ void mw_bot_frame(CPU *c){
     case B_GOTO: {                      /* at the start: Enter until the engage dialog comes */
         if (pursuit_on(c, B_ROAM)) break;
         if (mw_fe_input_top(0)) break;  /* a screen (the dialog itself: B_ENGAGE takes it in mw_bot_present) */
+        if (B.via){                     /* settled at the other place (go_to): now to the start */
+            if (!settled(c)) break;
+            B.via = 0; B.free_since = 0;
+            mw_aid_teleport(c, B.tpos, B.tdir);
+            break;
+        }
         if (!settled(c) || f - B.last_tap < ENGAGE_EVERY) break;
         float p[3], kmh = 0;            /* not there (the warp undone, or a menu's reload put it back): again */
         if (mw_aid_where(c, p, &kmh) && hypotf(p[0] - B.tpos[0], p[2] - B.tpos[2]) > GOTO_NEAR_M){
@@ -846,7 +924,7 @@ void mw_bot_frame(CPU *c){
             break;
         }
         if (B.tries >= ENGAGE_TRIES){
-            if (B.race >= 0) B.skips[B.race]++;
+            if (B.race >= 0) B.skips[B.race]++; else B.boss_engage_fail = 1;
             fprintf(stderr, "[mwbot] f=%ld race %d: no engage dialog after %d Enters (skip %d)\n", f, B.race, B.tries,
                     B.race >= 0 ? B.skips[B.race] : B.boss_tries);
             set_state(B_ROAM, "not engaged");
@@ -876,12 +954,19 @@ void mw_bot_frame(CPU *c){
                     mw_game_time(), B.race, B.race < 0 ? "(the rival's)" : B.race < n && (r[B.race].flags & 2u) ? "completed" : "not completed", B.g.won,
                     g.won, B.g.bounty, g.bounty);
             mw_aid_autopilot(c, AP_STAND);
+            if (B.race < 0) B.boss_ended++;
             if (B.once){ set_state(B_DONE, "the probe's race is over"); break; }
             set_state(B_ROAM, "race over");
         }
         break;
     case B_PURSUIT: pursuit_frame(c); break;
     case B_SHOP: shop_frame(c); break;
+    case B_CAR:                        /* another car: Jump to Safe House, Car Select, Resume Free Roam (mw_bot_present) */
+        if (pursuit_on(c, B_CAR)) break;
+        if (B.car_swapped){ if (settled(c)) set_state(B_ROAM, "the car changed"); break; }
+        if (f - B.f0 > CAR_SWAP_MAX){ B.want_car = 0; set_state(B_ROAM, "the car was not changed"); break; }
+        if (settled(c) && f - B.last_tap >= 90){ autotest_tap(DIK_ESCAPE, 6); B.last_tap = f; }
+        break;
     case B_SAVE:                       /* from free roam: the pause menu (the screens do the rest, mw_bot_present) */
         if (pursuit_on(c, B_SAVE)) break;
         if (settled(c) && f - B.last_tap >= 90){ autotest_tap(DIK_ESCAPE, 6); B.last_tap = f; }
@@ -903,7 +988,7 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_ITEM2    0x4b4e388bu
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
-static struct { char name[64]; uint32_t focus, save_last; long since, last, jail_since, cs_since; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars, mk_held[MK_TYPES]; } S;
+static struct { char name[64]; uint32_t focus, save_last; long since, last, jail_since, cs_since; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars, mk_taken, mk_moves, mk_held[MK_TYPES]; } S;
 /* the screens whose strings the bot logs once they settle (the rewards and results it does not read otherwise) */
 static int shows_logged(const char *nm){
     static const char *const k[] = { "SafehouseMarkers.fng", "SafeHouseRivalChallenge.fng", "PostRace_Results.fng",
@@ -928,6 +1013,7 @@ void mw_bot_present(void){
             if (!strcasecmp(nm, "SafehouseMarkers.fng")){
                 if (!S.mk_open){
                     S.mk_open = 1; S.mk_cash = (int)rd(prof + PROF_CASH); S.mk_cars = career_cars(prof);
+                    S.mk_taken = 0; S.mk_moves = 0;
                     markers_held(S.mk_held);
                 }
             } else if (S.mk_open){
@@ -1027,8 +1113,18 @@ void mw_bot_present(void){
         /* the beaten rival's markers ("You can now select 2 markers", the cards face down): Enter turns the highlighted
          * card and takes it, and the highlight stays on that card, so the next is RIGHT, then Enter (bot run of
          * 2026-10-30: Enter again on the taken card did nothing, ten times) */
-        if (S.marker_enter){ key = DIK_RIGHT; what = "RIGHT to another marker"; S.marker_enter = 0; }
-        else { what = "Enter: take the highlighted marker"; S.marker_enter = 1; S.shown = 0; }   /* the card turned: logged */
+        /* NFSMW_BOT_MARKERS=X,Y (test-only): the two cards to take, by their objects (hex): the highlight opens on
+         * 0xCDA0A66B and RIGHT steps to 0xCDA0A66C, 0xCDA0A66D (V c4-bl14-1), so other cards than the first two can
+         * be taken, the way a player picks them (M4-14: each marker kind once) */
+        static uint32_t mk_want[2]; static int mk_parsed;
+        if (!mk_parsed){ const char *e = getenv("NFSMW_BOT_MARKERS"); mk_parsed = 1; if (e) sscanf(e, "%x,%x", &mk_want[0], &mk_want[1]); }
+        uint32_t tgt = S.mk_taken < 2 ? mk_want[S.mk_taken] : 0u;
+        if (tgt && focus != tgt && S.mk_moves < 12){
+            key = focus < tgt ? DIK_RIGHT : DIK_LEFT; S.mk_moves++; what = "to the marker asked for (NFSMW_BOT_MARKERS)";
+        }
+        else if (tgt){ what = "Enter: take the marker asked for"; S.mk_taken++; S.mk_moves = 0; S.marker_enter = 1; S.shown = 0; }
+        else if (S.marker_enter){ key = DIK_RIGHT; what = "RIGHT to another marker"; S.marker_enter = 0; }
+        else { what = "Enter: take the highlighted marker"; S.marker_enter = 1; S.mk_taken++; S.shown = 0; }   /* the card turned: logged */
     }
     else if (B.st == B_SHOP && !strcasecmp(nm, "CustomizeMain.fng")){
         if (!B.sh_started){                 /* in: once per bin (or SHOP_AGAIN more cash), whatever comes of it */
@@ -1127,6 +1223,7 @@ void mw_bot_present(void){
                 fprintf(stderr, "[mwbot] f=%ld the current car: handle %#x%s\n", f, cur,
                         cur == B.want_car ? " (the car picked)" : ", not the car picked: left as it is");
                 B.want_car = 0;
+                if (B.st == B_CAR) B.car_swapped = 1;
             }
             if (focus != F_ITEM1){ key = DIK_LEFT; what = "to Resume Free Roam"; } else what = "Enter on Resume Free Roam";
         } else {
@@ -1149,9 +1246,10 @@ void mw_bot_present(void){
         if (focus == F_YES_DLG){ key = DIK_LEFT; what = "LEFT to Yes"; } else what = "Enter on Yes";
     }
     else if (!strcasecmp(nm, "Pause_Main.fng")){
-        uint32_t want = save ? F_ITEM2 : F_ITEM1;   /* Jump to Safe House, or Resume Free Roam */
-        if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = save ? "to Jump to Safe House" : "to Resume"; }
-        else what = save ? "Enter on Jump to Safe House" : "Enter on Resume";
+        int jump = save || (B.st == B_CAR && !B.car_swapped);   /* to save, or to change the car (B_CAR) */
+        uint32_t want = jump ? F_ITEM2 : F_ITEM1;   /* Jump to Safe House, or Resume Free Roam */
+        if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = jump ? "to Jump to Safe House" : "to Resume"; }
+        else what = jump ? "Enter on Jump to Safe House" : "Enter on Resume";
     }
     else if (!strcasecmp(nm, "InGamePhotoMaster.fng") || !strcasecmp(nm, "PostRace_Results.fng")) B.post_seen = 1;
     else if (!strcasecmp(nm, "PostRace_MilestoneRewards.fng") || !strcasecmp(nm, "PostRace_Pursuit.fng") ||
@@ -1222,7 +1320,7 @@ void mw_bot_cmd(CPU *c, const char *args){
         B.once = 1; B.race = n;
         mw_aid_autopilot(c, 2);
         fprintf(stderr, "[mwbot] f=%ld bot race %d: to its start\n", f, n);
-        go_to(c, &r[n]);
+        go_to(c, &r[n], r, k, 0);
         return;
     }
     fprintf(stderr, "[mwbot] bot gates | run N | race I | pursuit | chase S | bust N [pay] | save | off\n");

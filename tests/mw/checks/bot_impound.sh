@@ -2,7 +2,8 @@
 # Suite check for "bot_impound" (tests/mw/scripts/bot_impound.txt, TRACKER M4-48): busts with the car standing, from a
 # safehouse save: the module is named; no wait ran out; the bot never went round Car_Select.fng more than twice; it
 # stopped either at the busts asked for with the current car one that can be driven (an Out of Jail marker spent, or
-# another car taken after an impound) or at game over (GameOver.fng: no car left); the game left by WM_CLOSE.  Prints
+# another car taken after an impound) or at game over (GameOver.fng: no car left); the memory pools were logged at each
+# pursuit's end (M4-35); the game left by WM_CLOSE.  Prints
 # the busts, the markers spent, the impounds, the cars taken and how it ended.
 LOG="$1"
 fail(){ echo "$1"; exit 1; }
@@ -15,6 +16,8 @@ grep -qF -- '-> done: Car_Select: no car was taken' "$LOG" && fail "no car was t
 spent=$(grep -c 'an Out of Jail marker spent' "$LOG"); imp=$(grep -c 'Car_Select.fng: the current car .* is impounded' "$LOG")
 took=$(grep -oE 'the current car: handle 0x[0-9a-f]+ \(the car picked\)' "$LOG" | wc -l)
 busts=$(grep -c 'screen BUSTED_OVERLAY.fng' "$LOG")
+pur=$(grep -c '\[mwbot\] .* pursuit over (' "$LOG"); pools=$(grep -c '\[mwpool\] .* frame arena' "$LOG")
+[ "$pools" -ge "$pur" ] || fail "the pools were logged $pools times for $pur pursuits' ends"
 last=$(grep -E '\[mwbot\] .* bust: [0-9]+ of [0-9]+ busts' "$LOG" | tail -1 | sed 's/.*bust: //')
 if grep -qF -- '-> done: game over' "$LOG"; then
   grep -q 'screen GameOver.fng' "$LOG" || fail "game over without GameOver.fng"
@@ -27,4 +30,6 @@ else
   end="the busts asked for, then: $last"
 fi
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
-echo "busted $busts; Out of Jail markers spent $spent; impounds $imp; cars taken in Car_Select $took (came back $again); $end"
+main=$(grep -E '\[mwpool\] .* "Main Pool"' "$LOG" | tail -1 | grep -oE 'peak [0-9]+ KB')
+echo "busted $busts; Out of Jail markers spent $spent; impounds $imp; cars taken in Car_Select $took (came back $again);" \
+  "pools logged at $pools of $pur pursuits' ends (Main Pool ${main:-?}); $end"

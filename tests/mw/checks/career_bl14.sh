@@ -23,4 +23,5 @@ grep -q 'LOG career_bl14: Blacklist 13' "$LOG" || fail "no 'career_bl14: Blackli
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
 at=$(grep -A3 'waitexpr satisfied after [0-9]* frames: f:\[0x0091e000\]+0x30' "$LOG" | grep -m1 -oE 'racestatus .*' | grep -oE '#0 [0-9.]+%')
-echo "Blacklist 13 reached; the rival's first race past 15 % (${at:-?}), won; stats, markers, bio in order"
+gave=$(grep -m1 -oE 'markers taken: .*' "$LOG")
+echo "Blacklist 13 reached; the rival's first race past 15 % (${at:-?}), won; stats, markers, bio in order; ${gave:-markers: not logged}"

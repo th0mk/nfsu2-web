@@ -266,7 +266,7 @@ static void watch_race(CPU *c){
  * player's RESET action does exactly this (the input handler at 0x6A8B88: ResetVehicle(true), then 0x47CC50, which
  * clears the input controllers' held state), and so does the aid: while the autopilot drives (in a race: GRaceStatus
  * active, GO, the local racer not finished; in free roam: `autopilot on`), a car that moved less than STUCK_M
- * metres in STUCK_S seconds of game time (the simulation's steps x its step, [0x9203B0] +0x28 x +0x20, so a slow or
+ * metres in STUCK_S seconds (STUCK_S_RACE in a race) of game time (the simulation's steps x its step, [0x9203B0] +0x28 x +0x20, so a slow or
  * paused frame rate changes nothing) is reset that way and the watch starts again from where it is put.  (R, the
  * RESET binding, tapped with the AI let go did not move the car in the LAN runs: the key is not bound to that action
  * by the PC game's defaults, inferred, not checked.)  No reset in a pursuit: the bust timer ran from 1.0 to 4.9 in the
@@ -279,6 +279,8 @@ static void watch_race(CPU *c){
  * racer index) from the wedge and CLEAR_M from every other racer, facing the way it drove there.  After either, the AI is given the car again
  * (Game.ForceAIControl), as at the GO. */
 #define STUCK_S 8.0
+#define STUCK_S_RACE 5.0                /* in a race: bin 11's rival races were lost a few seconds behind after wedges
+                                           (c4-b11a: 87.5 % to the rival's 91.0 %, 77.9 % to 86.4 %), 8 s each */
 #define STUCK_M 12.0f
 #define MOVED_V 5.0f                    /* m/s: the car has left the line */
 #define CLEAR_M 6.0f
@@ -381,7 +383,8 @@ static void wedge_watch(CPU *c){
         if (d >= STUCK_M) U.futile = 0;
         U.since = t > 0.0 ? t : 1e-9; memcpy(U.p, q, sizeof q); return;
     }
-    if (t - U.since < STUCK_S * (U.futile >= 3 ? 4 : 1)) return;   /* resets that put it back where it was: less often */
+    if (t - U.since < (racing ? STUCK_S_RACE : STUCK_S) * (U.futile >= 3 ? 4 : 1)) return;   /* resets that put it back
+                                                                                               where it was: less often */
     if (pursuit_obj(c, 0)){             /* a reset with cops on the car ends in the bust (below): none */
         fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time in a pursuit: no reset\n", f, d,
                 t - U.since);
