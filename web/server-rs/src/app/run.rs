@@ -21,6 +21,7 @@ use nfsu2_vault::{Sweep, Vault, VaultOptions};
 
 use super::{App, etag, limits};
 use crate::die;
+use crate::game::ModuleJson;
 use crate::options::{Options, Tls};
 use crate::paths;
 
@@ -497,8 +498,9 @@ pub async fn run(o: Options, cores: usize) {
             if !Path::new(&o.wasm).exists() {
                 format!("{}  (missing: run {})", o.wasm, o.game.build)
             } else {
-                // a module of another game, or a dev build without --dev: not served (game.rs module_refusal)
-                match App::module_json_now(&o.game_json).and_then(|m| o.game.module_refusal(&m, o.dev)) {
+                // a module of another game, a dev build without --dev, or one without a json that is a JSON object
+                // (Underground 2's aside): not served (game.rs module_refusal)
+                match o.game.module_refusal(&ModuleJson::read(std::fs::read(&o.game_json)), o.dev) {
                     Some(r) => format!("{}  (not served: {})", o.wasm, r.why),
                     None => o.wasm.clone(),
                 }

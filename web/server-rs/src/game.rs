@@ -56,6 +56,32 @@ pub struct Refusal {
     pub why: String,
 }
 
+/// The json beside a module (web/build.sh writes it), as a server finds it
+pub enum ModuleJson {
+    /// there is none
+    Missing,
+    /// there is one, but it is no JSON object (or it could not be read)
+    NoObject,
+    Object(serde_json::Map<String, serde_json::Value>),
+}
+
+impl ModuleJson {
+    /// The json from a read of its file (std::fs::read, tokio::fs::read), as the page reads it: a UTF-8 byte-order
+    /// mark at the start is skipped (fetch's text() and json() skip it), bytes that are no UTF-8 are U+FFFD.
+    pub fn read(r: std::io::Result<Vec<u8>>) -> ModuleJson {
+        let b = match r {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return ModuleJson::Missing,
+            Err(_) => return ModuleJson::NoObject,
+        };
+        let b = b.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&b);
+        match serde_json::from_str(&String::from_utf8_lossy(b)) {
+            Ok(serde_json::Value::Object(m)) => ModuleJson::Object(m),
+            _ => ModuleJson::NoObject,
+        }
+    }
+}
+
 /// Underground 2's move from its old address (nfsu2.xyz) to the one it shares with Most Wanted (nfsrevived.xyz/u2/):
 /// the old address's pages hand their players' saves over to the new one, across origins, through the few routes of
 /// the new address's server that answer the old origin (CORS: `handover.rs`), and the old address's responses let
@@ -305,8 +331,23 @@ impl GameProfile {
     /// Why this game's server does not serve the module whose json (web/build.sh writes it beside the module) is
     /// `json`: another game's module (its "game"; Underground 2's builds of before it had one have none, and are
     /// Underground 2's), or, without --dev (`dev`), a dev build with the D3DX oracle ("oracle":1, which no public
-    /// server serves: PLAN D-09, R-22).  None: it is served.
-    pub fn module_refusal(&self, json: &serde_json::Map<String, serde_json::Value>, dev: bool) -> Option<Refusal> {
+    /// server serves: PLAN D-09, R-22).  None: it is served.  Without a json that is a JSON object, only Underground
+    /// 2's server serves a module, as ever (its builds of before the json; a json the page cannot read either boots
+    /// nothing): every other game's build writes one that names its game, so a module without one is not its own.
+    pub fn module_refusal(&self, json: &ModuleJson, dev: bool) -> Option<Refusal> {
+        let json = match json {
+            ModuleJson::Object(m) => m,
+            _ if self.id == UG2.id => return None,
+            ModuleJson::Missing => {
+                return Some(Refusal { body: "The game module has no json", why: format!("no json beside it: {} writes one", self.build) });
+            }
+            ModuleJson::NoObject => {
+                return Some(Refusal {
+                    body: "The game module's json is no JSON object",
+                    why: format!("its json is no JSON object: {} writes one", self.build),
+                });
+            }
+        };
         let game = json.get("game");
         let ours = match game {
             None => self.id == UG2.id,
@@ -360,7 +401,7 @@ mod tests {
     #[test]
     fn the_modules_each_game_serves() {
         let j = |s: &str| match serde_json::from_str::<serde_json::Value>(s).unwrap() {
-            serde_json::Value::Object(m) => m,
+            serde_json::Value::Object(m) => ModuleJson::Object(m),
             _ => panic!(),
         };
         for dev in [false, true] {
@@ -390,8 +431,54 @@ mod tests {
             assert!(g.module_refusal(&j(&format!(r#"{{"game":"{}","oracle":0}}"#, g.id)), false).is_none());
         }
         // (short enough for an error answer: the deploy test's crawl allows 64 bytes)
-        assert!(["The game module is another game's", "The game module is a dev build"].iter().all(|b| b.len() < 63));
+        let bodies = [
+            "The game module is another game's",
+            "The game module is a dev build",
+            "The game module has no json",
+            "The game module's json is no JSON object",
+        ];
+        assert!(bodies.iter().all(|b| b.len() < 63));
         const { assert!(MW.keeps_log && !UG2.keeps_log) };
+    }
+
+    // Without a json that is a JSON object: Underground 2's server serves its module as ever, Most Wanted's never
+    // (its build always writes one, naming its game); the json read as the page reads it, a byte-order mark skipped
+    #[test]
+    fn a_module_without_a_json_object() {
+        use std::io::{Error, ErrorKind};
+        let read = |b: &[u8]| ModuleJson::read(Ok(b.to_vec()));
+        for dev in [false, true] {
+            for (json, missing) in [
+                (ModuleJson::read(Err(Error::from(ErrorKind::NotFound))), true),
+                (ModuleJson::read(Err(Error::from(ErrorKind::PermissionDenied))), false),
+                (ModuleJson::read(Err(Error::from(ErrorKind::IsADirectory))), false),
+                (read(b""), false),
+                (read(b"not json"), false),
+                (read(br#"["game","mw"]"#), false),
+                (read(br#""{\"game\":\"mw\"}""#), false),
+                (read(b"\xef\xbb\xbf\xef\xbb\xbf{\"game\":\"mw\"}"), false),
+                (read(b"\xfe\xff\0{\0}"), false),
+            ] {
+                assert_eq!(matches!(json, ModuleJson::Missing), missing);
+                assert!(missing || matches!(json, ModuleJson::NoObject));
+                assert!(UG2.module_refusal(&json, dev).is_none(), "Underground 2's, as ever");
+                let r = MW.module_refusal(&json, dev).expect("Most Wanted's never");
+                let (body, why) = if missing {
+                    ("The game module has no json", "no json beside it: GAME=mw web/build.sh writes one")
+                } else {
+                    ("The game module's json is no JSON object", "its json is no JSON object: GAME=mw web/build.sh writes one")
+                };
+                assert_eq!((r.body, r.why.as_str()), (body, why));
+            }
+            // one byte-order mark: the json the page reads; bytes that are no UTF-8: U+FFFD, as the page reads them
+            let bom = |s: &str| [&b"\xef\xbb\xbf"[..], s.as_bytes()].concat();
+            assert!(MW.module_refusal(&read(&bom(r#"{"game":"mw"}"#)), dev).is_none());
+            assert_eq!(MW.module_refusal(&read(&bom(r#"{"game":"ug2"}"#)), dev).map(|r| r.body), Some("The game module is another game's"));
+            assert_eq!(UG2.module_refusal(&read(&bom(r#"{"game":"mw"}"#)), dev).map(|r| r.body), Some("The game module is another game's"));
+            assert!(UG2.module_refusal(&read(&bom(r#" {"rev":"x"} "#)), dev).is_none());
+            let r = MW.module_refusal(&read(b"{\"game\":\"m\xffw\"}"), dev).expect("not mw");
+            assert!(r.why.contains("game \"m?w\""), "{}", r.why);
+        }
     }
 
     // UG2 at the root but on the shared site, Most Wanted under /mw everywhere; --base-path on top

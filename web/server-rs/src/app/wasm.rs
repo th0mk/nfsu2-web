@@ -21,6 +21,7 @@ use nfsu2_util::{js, log};
 
 use super::url::Url;
 use super::{App, Res, etag, files, finish, has_word, send, type_of};
+use crate::game::{ModuleJson, Refusal};
 use crate::paths;
 
 /// the compressed module of one build
@@ -143,20 +144,20 @@ impl App {
     pub async fn send_game_json(&self, q: &Request, s: &mut Response) -> Res {
         let dir = paths::dirname(&self.o.game_json);
         let f = self.locate(&dir, Some(self.o.game_json.clone())).await;
-        // (judged before the module is looked at: there may be none)
+        // (none: 404, whatever the game)
         let json = match &f {
-            Some(f) => App::module_json(tokio::fs::read(&f.real).await.ok()),
-            None => None,
+            Some(f) => ModuleJson::read(tokio::fs::read(&f.real).await),
+            None => ModuleJson::Missing,
         };
-        if let Some(r) = json.as_ref().and_then(|m| self.refusal_of(m)) {
+        if let Some(r) = f.as_ref().and_then(|_| self.refusal_of(&json)) {
             return self.plain(q, s, 503, r.body, &[], Cache::Store, true).await;
         }
         let c = match &json {
-            Some(_) => self.compressed_wasm().await,
-            None => None,
+            ModuleJson::Object(_) => self.compressed_wasm().await,
+            _ => None,
         };
-        // (the json as it is: no module to name, or no JSON object)
-        let (Some(mut m), Some(c)) = (json, c) else {
+        // (the json as it is: no module to name, or Underground 2's that the page cannot read either)
+        let (ModuleJson::Object(mut m), Some(c)) = (json, c) else {
             return self.send_file(q, s, &dir, None, files::FileOpts { found: f, ..Default::default() }).await;
         };
         m.insert("module".into(), Value::String(c.hash.clone()));
@@ -173,30 +174,18 @@ impl App {
 }
 
 impl App {
-    /// The module json beside the module, read now (None: there is none, or it is no JSON object).
-    pub fn module_json_now(path: &str) -> Option<serde_json::Map<String, Value>> {
-        App::module_json(std::fs::read(path).ok())
+    /// Whether the module on disk now is one this server refuses (game.rs `module_refusal`: another game's, a dev
+    /// build without --dev, or one without a json that is a JSON object, which only Underground 2's server serves):
+    /// /game.json and /game.wasm then answer 503 (/game.json 404 when there is no json), and the console says why,
+    /// once a minute at most.
+    pub async fn module_refused(&self) -> Option<Refusal> {
+        self.refusal_of(&ModuleJson::read(tokio::fs::read(&self.o.game_json).await))
     }
 
-    /// a module json's bytes (None: none) as a JSON object (None: it is no JSON object)
-    fn module_json(bytes: Option<Vec<u8>>) -> Option<serde_json::Map<String, Value>> {
-        match serde_json::from_str::<Value>(&String::from_utf8_lossy(&bytes?)) {
-            Ok(Value::Object(m)) => Some(m),
-            _ => None,
-        }
-    }
-
-    /// Whether the module on disk now is one this server refuses (game.rs `module_refusal`: another game's, or a
-    /// dev build without --dev): /game.json and /game.wasm then answer 503, and the console says why, once a minute
-    /// at most.  A module without a json is served as ever.
-    pub async fn module_refused(&self) -> Option<crate::game::Refusal> {
-        self.refusal_of(&App::module_json(tokio::fs::read(&self.o.game_json).await.ok())?)
-    }
-
-    fn refusal_of(&self, m: &serde_json::Map<String, Value>) -> Option<crate::game::Refusal> {
+    fn refusal_of(&self, json: &ModuleJson) -> Option<Refusal> {
         // (the last line said and when: another reason at once, the same one again after a minute)
         static SAID: Mutex<(String, i64)> = parking_lot::const_mutex((String::new(), 0));
-        let r = self.o.game.module_refusal(m, self.o.dev)?;
+        let r = self.o.game.module_refusal(json, self.o.dev)?;
         let line = format!("[module] not served: {} ({})", r.why, self.o.game_json);
         let now = nfsu2_util::now_ms();
         let mut said = SAID.lock();

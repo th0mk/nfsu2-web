@@ -424,6 +424,8 @@ async fn the_binary_for_most_wanted() {
     }
     let wasm = tmp.path().join("nfsmw.wasm");
     std::fs::write(&wasm, vec![7u8; 4096]).unwrap();
+    // (its json, as GAME=mw web/build.sh writes one beside every module: without it the module is not served)
+    std::fs::write(wasm.with_extension("json"), r#"{"rev":"abc","game":"mw"}"#).unwrap();
     let (port, state) = (free_port(), tmp.path().join("state"));
     let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--game", "mw"]), port);
     srv.ready().await;
@@ -490,6 +492,27 @@ async fn the_binary_for_most_wanted() {
     assert!(both.starts_with(&first_run), "the first run's lines kept");
     assert!(both[first_run.len()..].contains("(not served: its json names game \"ug2\""), "{both}");
     assert!(both[first_run.len()..].contains("[module] not served: its json names game \"ug2\""), "{both}");
+    // a module without its json, or with one that is no JSON object (a byte-order mark before another game's is
+    // still another game's): not served either, and the start-up says so (S3-01)
+    for (json, why) in [
+        (None, "no json beside it: GAME=mw web/build.sh writes one"),
+        (Some(&b"{\"rev\":"[..]), "its json is no JSON object: GAME=mw web/build.sh writes one"),
+        (
+            Some(&b"\xef\xbb\xbf{\"rev\":\"abc\",\"game\":\"ug2\"}"[..]),
+            "its json names game \"ug2\", not \"mw\": GAME=mw web/build.sh builds this game's",
+        ),
+    ] {
+        match json {
+            Some(b) => std::fs::write(wasm.with_extension("json"), b).unwrap(),
+            None => std::fs::remove_file(wasm.with_extension("json")).unwrap(),
+        }
+        let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--game", "mw"]), port);
+        srv.ready().await;
+        let line = format!("  game.wasm : {}  (not served: {why})", wasm.to_string_lossy());
+        assert!(srv.lines().contains(&line), "{:?}", srv.lines());
+        assert_eq!(status_of(port, "/mw/game.wasm").await, 503, "{why}");
+        assert_eq!(srv.stop().await, Some(0));
+    }
 
     // the entries each game's folder is served by, one a line, with no folder
     let ug2 = "speed2.exe server.dll server.cfg cars credits frontend global langpacks languages memcard movies nis pfdata sound speech \

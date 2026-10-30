@@ -704,6 +704,90 @@ async fn a_json_without_its_module() {
     }
 }
 
+// Without a json that is a JSON object beside it, Most Wanted's server serves no module (its build always writes
+// one, naming its game); Underground 2's serves its own as ever (its builds of before the json, and a json the page
+// cannot read either boots nothing).  A json is read as the page reads it: a byte-order mark skipped (S3-01)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_module_without_its_json_object() {
+    const BOM: &[u8] = b"\xef\xbb\xbf";
+    let bom = |j: &[u8]| [BOM, j].concat();
+    // (each answer of /game.json, /game.wasm and /game.wasm?v=x: status and body, and whether it may be kept)
+    async fn three(kit: &Kit, base: &str) -> Vec<(u16, String, bool)> {
+        let mut all = Vec::new();
+        for p in ["game.json", "game.wasm", "game.wasm?v=x"] {
+            let a = kit.request_to("localhost", "GET", &format!("{base}/{p}"), &[], b"").await;
+            let stored = a.header("cache-control").is_some_and(|c| !c.contains("no-store"));
+            all.push((a.status, String::from_utf8_lossy(&a.body).into_owned(), stored));
+        }
+        all
+    }
+    let refused = |text: &str| vec![(503, format!("{text}\n"), false); 3];
+    let kit = Kit::start(&["--game", "mw"], |root| {
+        std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw")).unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html>").unwrap();
+        module(root, "out/web/mw/nfsmw.wasm");
+    })
+    .await;
+    let (wasm, json) = (kit.path("repo/out/web/mw/nfsmw.wasm"), kit.path("repo/out/web/mw/nfsmw.json"));
+    let raw = std::fs::read(&wasm).unwrap();
+    let ours = br#"{"rev":"abc","game":"mw"}"#;
+    // no json: no module (/game.json has nothing to send)
+    std::fs::remove_file(&json).unwrap();
+    let got = three(&kit, "/mw").await;
+    assert_eq!(got[0].0, 404);
+    assert_eq!(got[1..], refused("The game module has no json")[1..]);
+    // a json that is no JSON object, or another game's with a byte-order mark: refused
+    for (body, text) in [
+        (b"not json".to_vec(), "The game module's json is no JSON object"),
+        (br#"["mw"]"#.to_vec(), "The game module's json is no JSON object"),
+        (bom(br#"{"rev":"x","game":"ug2"}"#), "The game module is another game's"),
+        (bom(br#"{"rev":"x"}"#), "The game module is another game's"),
+    ] {
+        std::fs::write(&json, &body).unwrap();
+        assert_eq!(three(&kit, "/mw").await, refused(text), "{}", String::from_utf8_lossy(&body));
+    }
+    // its own with a byte-order mark: as the page reads it, naming the module
+    std::fs::write(&json, bom(ours)).unwrap();
+    let got = three(&kit, "/mw").await;
+    let j: serde_json::Value = serde_json::from_str(&got[0].1).unwrap();
+    assert_eq!((got[0].0, j["game"].as_str(), j["module"].is_string()), (200, Some("mw"), true));
+    assert_eq!((got[1].0, got[2].0), (200, 409));
+    // no module beside the json: another game's with a byte-order mark, or one that is no JSON object, never sent
+    std::fs::remove_file(&wasm).unwrap();
+    for (body, text) in [
+        (bom(br#"{"rev":"x","game":"ug2"}"#), "The game module is another game's"),
+        (b"{\"rev\":".to_vec(), "The game module's json is no JSON object"),
+    ] {
+        std::fs::write(&json, &body).unwrap();
+        assert_eq!(three(&kit, "/mw").await, refused(text), "{}", String::from_utf8_lossy(&body));
+    }
+    std::fs::write(&json, ours).unwrap();
+    let got = three(&kit, "/mw").await;
+    assert_eq!((got[0].0, got[0].1.as_bytes(), got[1].0), (200, &ours[..], 404));
+    // the module back
+    std::fs::write(&wasm, &raw).unwrap();
+    assert_eq!(three(&kit, "/mw").await.iter().map(|a| a.0).collect::<Vec<_>>(), [200, 200, 409]);
+
+    // Underground 2's server: a module without a json, or with one the page cannot read either, as ever; Most
+    // Wanted's json with a byte-order mark refused, with a module or without
+    let kit = Kit::start(&[], |root| module(root, "out/web/nfsu2.wasm")).await;
+    let (wasm, json) = (kit.path("repo/out/web/nfsu2.wasm"), kit.path("repo/out/web/nfsu2.json"));
+    std::fs::remove_file(&json).unwrap();
+    assert_eq!(three(&kit, "").await.iter().map(|a| a.0).collect::<Vec<_>>(), [404, 200, 409]);
+    std::fs::write(&json, b"not json").unwrap();
+    let got = three(&kit, "").await;
+    assert_eq!((got[0].0, got[0].1.as_str(), got[1].0, got[2].0), (200, "not json", 200, 409));
+    std::fs::write(&json, bom(br#"{"rev":"abc"}"#)).unwrap();
+    let got = three(&kit, "").await;
+    let j: serde_json::Value = serde_json::from_str(&got[0].1).unwrap();
+    assert_eq!((got[0].0, j["rev"].as_str(), j["module"].is_string()), (200, Some("abc"), true));
+    std::fs::write(&json, bom(br#"{"rev":"abc","game":"mw"}"#)).unwrap();
+    assert_eq!(three(&kit, "").await, refused("The game module is another game's"));
+    std::fs::remove_file(&wasm).unwrap();
+    assert_eq!(three(&kit, "").await, refused("The game module is another game's"));
+}
+
 /// an answer's whole length once its head is in (its Content-Length; none: no body)
 fn answer_len(b: &[u8]) -> Option<usize> {
     let end = b.windows(4).position(|w| w == b"\r\n\r\n")?;
