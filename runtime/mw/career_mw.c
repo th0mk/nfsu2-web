@@ -226,12 +226,13 @@ int mw_fe_match(const char *name);       /* fe_mw.c: the top package taking inpu
 void autotest_tap(unsigned dik, long frames);
 static int auto_ai;
 static struct { uint32_t rs, sim; int active, go, fin, won; long lost; } W;
+static FILE *g_ctrace;                   /* NFSU2_CAR_TRACE (car_trace below): it logs the race's edges while racing */
 static void watch_race(CPU *c){
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c);
     int active = rs ? MR8(rs + RS_ACTIVE) : 0, go = rs ? MR8(rs + RS_GO) != 0 : 0;
     int fin = rs && rd(rs + RS_NRACERS) ? MR8(rs + RS_RACERS + RI_FINISHED) : 0, won = rs ? MR8(rs + RS_WON) : 0;
     long f = autotest_frame();
-    if (active != W.active || go != W.go || fin != W.fin || won != W.won)
+    if ((active != W.active || go != W.go || fin != W.fin || won != W.won) && !(g_ctrace && game_flow() == 6u))
         fprintf(stderr, "[mwrace] f=%ld race: active %d go %d #0 finished %d won %d (flow %u)\n", f, active, go, fin,
                 won, game_flow());
     if (active && go && s && (!(W.active && W.go) || s != W.sim || rs != W.rs)){
@@ -270,15 +271,28 @@ static void watch_race(CPU *c){
  * RESET binding, tapped with the AI let go did not move the car in the LAN runs: the key is not bound to that action
  * by the PC game's defaults, inferred, not checked.)  No reset in a pursuit: the bust timer ran from 1.0 to 4.9 in the
  * second after one (bot pursuit probes of 2026-10-30, twice), and three wedge resets in pursuits were each followed by
- * the bust within 6 s. */
+ * the bust within 6 s.
+ * In a race the watch starts once the car has first moved (MOVED_V) after the GO: the start is no wedge.  The road
+ * reset puts cars wedged together at the same road point, on top of each other, where they stay: when the reset
+ * leaves the car within CLEAR_M of another racer, or where it was, it is moved back along its own way instead, to the
+ * newest point of TRAIL kept while it drove (one a second of game time) at least BACK_M (and BACK_STEP more per
+ * racer index) from the wedge and CLEAR_M from every other racer, facing the way it drove there.  After either, the AI is given the car again
+ * (Game.ForceAIControl), as at the GO. */
 #define STUCK_S 8.0
 #define STUCK_M 12.0f
+#define MOVED_V 5.0f                    /* m/s: the car has left the line */
+#define CLEAR_M 6.0f
+#define BACK_M  25.0f                   /* and BACK_STEP more per racer index: two cars wedged together go apart */
+#define BACK_STEP 20.0f
+#define TRAIL_N 32
 #define IID_RESET        0x00620250u     /* IResetable, the ResetCar behaviour's interface */
 #define RESET_VEHICLE    0x08u           /* IResetable::ResetVehicle(bool manual) 0x6B08C0 */
 #define FN_INPUT_CLEAR   0x0047cc50u     /* the input handler's call after a reset: the controllers' held state cleared */
 #define G_SIM            0x009203b0u     /* the simulation: +0x20 its step (float, s), +0x28 the steps it ran */
 static int ai_on;                       /* autopilot on: the AI drives the local player's car */
-static struct { double since; float p[3]; int resets, futile; uint32_t sim; } U;
+static struct { double since; float p[3]; int resets, futile, moved; uint32_t sim; } U;
+static struct { float p[3]; double t; } TRAIL[TRAIL_N];
+static int trail_n, trail_head;           /* points kept, the next one's slot */
 double mw_game_time(void){
     uint32_t sim = rd(G_SIM);
     return sim ? (double)rd(sim + 0x28u) * (double)rdf(sim + 0x20u) : 0.0;
@@ -294,6 +308,39 @@ int mw_reset_car(CPU *c){
     return ok;
 }
 static uint32_t pursuit_obj(CPU *c, uint32_t *perp);  /* below: the player's pursuit, 0 = none */
+int mw_aid_teleport(CPU *c, const float pos[3], const float dir[3]);
+#define G_RACERS_W 0x0090d664u          /* the racers' simables (car_trace's G_SIMLIST): +0 the array, +8 the count */
+/* the distance (ground plane) from pos to the nearest racer other than the local car s; 1e9 = none */
+static float nearest_racer(CPU *c, uint32_t s, const float pos[3]){
+    uint32_t sb = rd(G_RACERS_W), sn = rd(G_RACERS_W + 8u); if (sn > 16) sn = 16;
+    float best = 1e9f;
+    for (uint32_t i = 0; sb && i < sn; i++){
+        uint32_t o = rd(sb + 4u * i);
+        if (!o || o == s) continue;
+        uint32_t p = gcall(c, rd(rd(o) + SIM_POSITION), o, 0, 0);
+        if (!p || !mem_is_committed(p + 11u)) continue;
+        float dx = rdf(p) - pos[0], dz = rdf(p + 8u) - pos[2], d = sqrtf(dx * dx + dz * dz);
+        if (d < best) best = d;
+    }
+    return best;
+}
+/* back along the car's own way: the newest trail point back_m from the wedge at q and CLEAR_M from the other racers,
+ * facing the way the car drove from it; 0 = none */
+static int trail_back(CPU *c, uint32_t s, const float q[3], float back_m, float to[3]){
+    for (int k = 1; k < trail_n; k++){
+        int i = (trail_head - 1 - k + 2 * TRAIL_N) % TRAIL_N, j = (i + 1) % TRAIL_N;
+        const float *a = TRAIL[i].p, *b = TRAIL[j].p;
+        float dx = a[0] - q[0], dz = a[2] - q[2];
+        if (sqrtf(dx * dx + dz * dz) < back_m || nearest_racer(c, s, a) < CLEAR_M) continue;
+        float dir[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, l = sqrtf(dir[0] * dir[0] + dir[2] * dir[2]);
+        if (l < 1.0f) continue;
+        dir[0] /= l; dir[2] /= l;
+        if (!mw_aid_teleport(c, a, dir)) return 0;
+        memcpy(to, a, 12);
+        return 1;
+    }
+    return 0;
+}
 static void wedge_watch(CPU *c){
     long f = autotest_frame();
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c), a = s;
@@ -305,16 +352,31 @@ static void wedge_watch(CPU *c){
         U.sim = s; U.since = 0;
     }
     int racing = MR8(rs + RS_ACTIVE) && MR8(rs + RS_GO);
+    if (!racing){ U.moved = 0; trail_n = 0; }
     if (!racing && !ai_on){ U.since = 0; return; }            /* a race before its GO, or its end, with `autopilot go` */
+    int idx = 1;
     if (racing){
-        int idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a);
+        idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a);
         if (idx >= 1 && idx <= 16 && MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_FINISHED)){ U.since = 0; return; }
+        if (idx < 1 || idx > 16) idx = 1;
     }
     uint32_t p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
     if (!p || !mem_is_committed(p + 11u)) return;
     float q[3] = { rdf(p), rdf(p + 4u), rdf(p + 8u) };
     float d = sqrtf((q[0] - U.p[0]) * (q[0] - U.p[0]) + (q[1] - U.p[1]) * (q[1] - U.p[1]) + (q[2] - U.p[2]) * (q[2] - U.p[2]));
     double t = mw_game_time();
+    uint32_t v = gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0);
+    float speed = v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) : 0.0f;
+    if (speed > MOVED_V){
+        if (!U.moved && racing) fprintf(stderr, "[mwrace] f=%ld autopilot: the car left the line\n", f);
+        U.moved = 1;
+        double last = trail_n ? TRAIL[(trail_head + TRAIL_N - 1) % TRAIL_N].t : 0.0;
+        if (!trail_n || t - last >= 1.0 || t < last){
+            memcpy(TRAIL[trail_head].p, q, sizeof q); TRAIL[trail_head].t = t;
+            trail_head = (trail_head + 1) % TRAIL_N; if (trail_n < TRAIL_N) trail_n++;
+        }
+    }
+    if (racing && !U.moved){ U.since = 0; return; }          /* at the line: the start is no wedge */
     if (U.since <= 0.0 || d >= STUCK_M || t < U.since){
         if (d >= STUCK_M) U.futile = 0;
         U.since = t > 0.0 ? t : 1e-9; memcpy(U.p, q, sizeof q); return;
@@ -330,12 +392,22 @@ static void wedge_watch(CPU *c){
     U.resets++;
     uint32_t p2 = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
     float n[3] = { rdf(p2), rdf(p2 + 4u), rdf(p2 + 8u) };
-    float moved = sqrtf((n[0] - q[0]) * (n[0] - q[0]) + (n[2] - q[2]) * (n[2] - q[2]));
+    float moved = sqrtf((n[0] - q[0]) * (n[0] - q[0]) + (n[2] - q[2]) * (n[2] - q[2])), other = nearest_racer(c, s, n);
+    char back[96] = "";
+    if (moved < 1.0f || other < CLEAR_M){       /* where it was, or on another racer: back along its own way */
+        float to[3];
+        if (trail_back(c, s, q, BACK_M + BACK_STEP * (float)(idx - 1), to)){
+            snprintf(back, sizeof back, "; %s: back along its way to %.1f %.1f %.1f", moved < 1.0f ? "where it was"
+                     : "on another racer", to[0], to[1], to[2]);
+            memcpy(n, to, sizeof n); moved = BACK_M;
+        } else snprintf(back, sizeof back, "; %s, no way back kept", moved < 1.0f ? "where it was" : "on another racer");
+    }
+    if (racing || ai_on){ uint32_t zero = 0; gcall(c, FN_FORCE_AI, 0, 1, &zero); }   /* the AI drives on, as at the GO */
     U.futile = moved < 1.0f ? U.futile + 1 : 0;
     if (U.futile <= 3)
         fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time (at %.1f %.1f %.1f): wedged; "
-                "reset %s, now at %.1f %.1f %.1f (reset %d)%s\n", f, d, t - U.since, q[0], q[1], q[2],
-                ok > 0 ? "done" : ok == 0 ? "found no place" : "no car", n[0], n[1], n[2], U.resets,
+                "reset %s, now at %.1f %.1f %.1f (reset %d)%s%s\n", f, d, t - U.since, q[0], q[1], q[2],
+                ok > 0 ? "done" : ok == 0 ? "found no place" : "no car", n[0], n[1], n[2], U.resets, back,
                 U.futile == 3 ? "; the resets put it back where it was: from now on every 32 s, not logged" : "");
     if (racing) log_status(c);
     U.since = t; memcpy(U.p, n, sizeof n);
@@ -608,15 +680,16 @@ static void hfr_trace(CPU *c){
 }
 
 /* NFSU2_CAR_TRACE=<file> (test only; lan-pair sets it, tools/lan_trace.py reads it): UG2's CSV (debug_ug2.c car_trace)
- * for Most Wanted, one row per pass of the main loop while racing (GameFlow 6): wall-clock time (CLOCK_REALTIME),
- * frame, hud (1 while the race runs: GRaceStatus active and the first racer's timer going), cap (the sim step P,
+ * for Most Wanted, one row per pass of the main loop while racing (GameFlow 6): wall-clock time (autotest_wall_us:
+ * the system's, the same for every instance on the machine, pages in a browser too), frame, hud (1 while the race runs: GRaceStatus active and the first racer's timer going), cap (the sim step P,
  * [0x9203B0]+0x20), worldtimer (the sim's steps x P in 1/4000 s: the game time simulated), realtimer (RealTimer
  * [0x925B14], 1/4000 s), then per simable of the list at 0x90D664 (the racers: in a LAN race the players' cars)
  * whether it is the local player's, its position (ISimable +0x60; Y is the height) and its speed in m/s (vehicle
  * +0x2C).  With it, a [mwrace] racestatus line every RS_EVERY frames while racing and one at every change of the
- * race's flags (active, GO, the local racer finished, won), so a log shows where each race stood. */
+ * race's flags (active, GO, slot #0 or the local racer finished, won), so a log shows where each race stood.  While
+ * it runs, that line is the race's edge line (watch_race leaves it out then: one line per edge). */
 #define RS_EVERY 600
-static FILE *g_ctrace;
+long long autotest_wall_us(void);        /* autotest.c: the traces' wall clock */
 static void car_trace(CPU *c){
     static int init; static long last_rs = -1; static uint32_t last_flags = 0xffffffffu, last_list;
     if (!init){
@@ -634,13 +707,14 @@ static void car_trace(CPU *c){
     if (game_flow() != 6u){ last_rs = -1; last_flags = 0xffffffffu; return; }
     uint32_t rs = rd(G_RACESTATUS), sim = rd(0x009203b0u), me = player_simable(c);
     int active = rs ? MR8(rs + RS_ACTIVE) : 0, go = rs ? MR8(rs + RS_GO) != 0 : 0, won = rs ? MR8(rs + RS_WON) : 0;
-    int idx = -1, fin = 0;
+    int idx = -1, fin = 0, fin0 = rs && rd(rs + RS_NRACERS) ? MR8(rs + RS_RACERS + RI_FINISHED) : 0;
     if (rs && me){ uint32_t a = me; idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a); }
     if (rs && idx >= 1 && idx <= 16) fin = MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_FINISHED);
-    uint32_t flags = (uint32_t)active | (uint32_t)go << 1 | (uint32_t)fin << 2 | (uint32_t)won << 3;
+    uint32_t flags = (uint32_t)active | (uint32_t)go << 1 | (uint32_t)fin << 2 | (uint32_t)won << 3 | (uint32_t)fin0 << 4;
     if (flags != last_flags || last_rs < 0 || f - last_rs >= RS_EVERY){
-        if (flags != last_flags)
-            fprintf(stderr, "[mwrace] f=%ld race: active %d go %d player finished %d won %d\n", f, active, go, fin, won);
+        if (flags != last_flags)        /* watch_race's line, with the local racer's finish */
+            fprintf(stderr, "[mwrace] f=%ld race: active %d go %d #0 finished %d won %d (flow 6); player finished %d\n",
+                    f, active, go, fin0, won, fin);
         log_status(c);
         last_flags = flags; last_rs = f;
     }
@@ -651,9 +725,9 @@ static void car_trace(CPU *c){
         for (uint32_t i = 0; sb && i < sn; i++) fprintf(stderr, " 0x%08x", rd(sb + 4u * i));
         fputc('\n', stderr);
     }
-    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    long long t = autotest_wall_us();
     double P = sim ? (double)rdf(sim + 0x20u) : 0.0;
-    fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%lld,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), f,
+    fprintf(g_ctrace, "%lld.%06lld,%ld,%d,%.7f,%lld,%u,%u", t / 1000000ll, t % 1000000ll, f,
             active && go, P, sim ? (long long)llround((double)rd(sim + 0x28u) * P * 4000.0) : 0LL, rd(0x00925b14u),
             sb ? sn : 0u);
     for (uint32_t i = 0; sb && i < sn; i++){

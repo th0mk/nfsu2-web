@@ -68,6 +68,9 @@
  *     trigger LT|RT V          trigger position, 0..1
  *     tappaduntil BUTTON NAME [every] [tmo]  like tapuntil, with a pad button
  *     poke ADDR VAL            write dword VAL to ADDR (debug only)
+ *     pokestr EXPR TEXT        write TEXT and its NUL at EXPR (trace's syntax,
+ *                              so [0x91cf90]+0x134 follows a pointer; test only:
+ *                              a name the game's own text entry refuses)
  *     wzero [now]              world-time origin for absolute Nwms lines: the
  *                              start of the current race (GameFlow 6) when
  *                              racing, else (or with "now") the current time
@@ -249,7 +252,7 @@ enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_
        C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL,
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
-       C_COVRESET, C_COVDUMP, C_TRACE, C_UNTRACE, C_EXPECT, C_WAITEXPR, C_MARK, C_EDGE, C_ROAM,
+       C_COVRESET, C_COVDUMP, C_TRACE, C_UNTRACE, C_EXPECT, C_WAITEXPR, C_MARK, C_EDGE, C_ROAM, C_POKESTR,
        C_SRVCYCLE, C_CLICK, C_PHOTO, C_BREAKFNG };
 /* roam.c: free-roam multiplayer research probes ("roam <sub> ...") */
 int roam_cmd(CPU *c, const char *line, long *wait_start);
@@ -409,6 +412,10 @@ static void load_script(const char *path){
             e.n = a2[0] ? atol(a2) : 1; if (e.n < 1 || e.n > 64) e.n = 1; }
         else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = (uint32_t)strtoul(a1, 0, 0);
             e.val = (uint32_t)strtoul(a2, 0, 0); }
+        else if (!strcasecmp(cmd, "pokestr")){ e.cmd = C_POKESTR; e.xtext = strdup(a1);
+            const char *sp = rest; while (*sp && !isspace((unsigned char)*sp)) sp++;
+            while (isspace((unsigned char)*sp)) sp++;
+            snprintf(e.text, sizeof e.text, "%s", sp); }
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
         else if (!strcasecmp(cmd, "breakfng")){ e.cmd = C_BREAKFNG; snprintf(e.text, sizeof e.text, "%s", a1); }
@@ -909,6 +916,14 @@ static int fire(CPU *c, Ev *e, double tms){
         if (mem_is_committed(e->addr + 3)){ MR32(e->addr) = e->val;
             fprintf(stderr, "[autotest] f=%ld poke [0x%08x] <- 0x%08x\n", g_frame, e->addr, e->val); }
         break;
+    case C_POKESTR: {
+        const char *x = e->xtext ? e->xtext : ""; int ok = 1;
+        uint32_t a = tr_eval(&x, &ok), n = (uint32_t)strlen(e->text);
+        if (ok && a && mem_is_committed(a) && mem_is_committed(a + n)){
+            memcpy(g_mem + a, e->text, n + 1u);
+            fprintf(stderr, "[autotest] f=%ld pokestr %s = 0x%08x <- \"%s\"\n", g_frame, e->xtext, a, e->text);
+        } else fprintf(stderr, "[autotest] f=%ld pokestr %s: no such address\n", g_frame, e->xtext ? e->xtext : "");
+        break; }
     case C_WAITMEM: {
         if (g_wait_start < 0) g_wait_start = g_frame;
         uint32_t v = mem_is_committed(e->addr + 3) ? MR32(e->addr) : 0xDEADBEEFu;
@@ -1059,6 +1074,22 @@ void autotest_on_present(CPU *c){
     if (g_quit_frames && g_frame >= g_quit_frames) do_quit("NFSU2_QUIT_FRAMES");
 }
 long autotest_frame(void){ return g_frame; }
+/* the car traces' time (NFSU2_CAR_TRACE: debug_ug2.c, mw/career_mw.c; tools/lan_trace.py lines up the instances' rows
+ * by it), microseconds since 1970: the system's wall clock, the same for every instance on the machine.  On the Mac
+ * that is CLOCK_REALTIME; in the browser the page's (Date.now(), host_abi.h wall_ms): the runtime's CLOCK_REALTIME is
+ * the page's clock from when it was made, so two pages made on either side of a step of the system clock (WSL steps
+ * it: about 2.1 s in a LAN run of 2026-10-30, 100 m of false error) disagreed by the step */
+#ifdef __wasm__
+#include "web/host_abi.h"
+#endif
+long long autotest_wall_us(void){
+#ifdef __wasm__
+    return (long long)(nfsu2_wall_ms() * 1000.0);
+#else
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    return (long long)ts.tv_sec * 1000000ll + ts.tv_nsec / 1000;
+#endif
+}
 /* career.c (test-only career bot) and roam.c (test-only): key taps through
  * the same path as "tap" (the current screen: autotest_screen() above) */
 void autotest_tap(unsigned dik, long frames){

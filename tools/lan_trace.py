@@ -5,12 +5,15 @@
   tools/lan_trace.py a.csv b.csv [...]
 
 Each instance writes NFSU2_CAR_TRACE (runtime/autotest.c): per frame the
-wall-clock time (CLOCK_REALTIME, the same clock for every instance on this
-Mac; in the browser a worker's time origin plus its monotonic clock, so
-instances started on either side of a correction of the system clock -- WSL
-makes them -- are that far apart: a WorldTimer offset of a second or more
-in the last lines, and ~50 m errors for every pair with that instance, while
-the game's own [racenet] "their race clock ... off ours" says tens of ms),
+wall-clock time (autotest_wall_us: the system's, the same clock for every
+instance on the machine; in the browser the page's Date.now(), not the
+runtime's CLOCK_REALTIME, which is the page's clock from when it was made, so
+pages made on either side of a step of the system clock -- WSL makes them --
+were that far apart: a WorldTimer offset of a second or more in the last
+lines, and ~50 m errors for every pair with that instance, while the game's
+own [racenet] "their race clock ... off ours" said tens of ms; a step in a
+race steps every trace alike: forward, a gap the comparison skips; back, the
+rows until the clock is past the last one again are left out and counted),
 the frame cap, WorldTimer and every race car with a flag for the local
 player's car.  Frames whose top package is not the race HUD (pre-race
 screen, results) are left out when the trace says so.  For every pair (owner A, viewer B) this tool finds A's car in
@@ -88,9 +91,12 @@ def results_frame(path):
         pass
     return None
 
+BACKS = {}                                    # trace -> [rows left out, largest step back (s)]
+
 def load(path):
     rows = []
     stop = results_frame(path)
+    last = None
     with open(path) as f:
         for r in csv.DictReader(f):
             try:
@@ -99,6 +105,11 @@ def load(path):
                 continue
             if stop is not None and int(r['frame']) >= stop:
                 break                         # the race is over (results screen)
+            if last is not None and t < last:
+                b = BACKS.setdefault(path, [0, 0.0])   # the system clock stepped back: wait until it is past
+                b[0] += 1; b[1] = max(b[1], last - t)
+                continue
+            last = t
             cars = []
             for i in range(n):
                 try:
@@ -147,6 +158,9 @@ def main(argv):
         print('need two or more traces'); return 2
     data = {os.path.basename(os.path.dirname(f)) or f: load(f) for f in files}
     tracks = {k: own_track(v) for k, v in data.items()}
+    for f, (n, b) in BACKS.items():
+        print(f'{os.path.basename(os.path.dirname(f)) or f}: the wall clock went back up to {b * 1000:.0f} ms (a step of the '
+              f'system clock): {n} rows left out')
     print('instance  rows  racing span (s)  fps   cap (fps)  own car samples')
     for k, rows in data.items():
         if not rows: print(f'{k:8s}  no rows'); continue

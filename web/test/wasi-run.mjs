@@ -17,6 +17,6 @@ for (const v of [process.env.WASI_DIR, process.env.WASI_DIR2]) {
 const wasi = new WASI({ version: 'preview1', args: [file, ...args], env: {}, preopens, returnOnExit: true });
 const inst = await WebAssembly.instantiate(mod, {
   env: { memory }, wasi_snapshot_preview1: wasi.wasiImport, wasi: { 'thread-spawn': () => -1 },
-  nfsu2: { register: () => 0, now_ms: () => performance.timeOrigin + performance.now(), blocked_ms: () => 0 },
+  nfsu2: { register: () => 0, now_ms: () => performance.timeOrigin + performance.now(), blocked_ms: () => 0, wall_ms: () => Date.now() },
 });
 process.exitCode = wasi.start(inst);

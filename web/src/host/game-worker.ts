@@ -61,6 +61,7 @@ function io(op: Op, ...args: (number | bigint)[]): number {
 // performance.now() 0, read once, not on each of the guest's ~1,000 timer reads a frame.
 let T0MS = performance.timeOrigin;
 let T0US = Math.round(T0MS * 1e3);
+let wallOff = NaN;            // Date.now() minus the page's clock, kept until the system clock steps (wall_ms)
 const monoNs = () => BigInt(Math.round(performance.now() * 1e3)) * 1000n + BigInt(T0US) * 1000n;
 // clock_time_get is the guest's most frequent host import (QueryPerformanceCounter, timeGetTime: ~100 calls
 // in a race frame).  It writes the same values as BigInt µs × 1000 would, but from integer microseconds held in doubles
@@ -243,6 +244,13 @@ function hostImports(): Record<string, (...a: any[]) => any> {
     register: (kind: number, ptr: number, size: number) => { (self as unknown as Worker).postMessage({ t: 'register', kind, ptr, size }); return 0; },
     // milliseconds since the page's time origin (same clock in every worker)
     now_ms: () => T0MS + performance.now(),
+    // the system's wall clock as every page on this machine reads it (the car traces, compared between pages):
+    // Date.now(), which steps with the system clock, smoothed below its millisecond by the page's clock until it steps
+    wall_ms: () => {
+      const m = T0MS + performance.now(), d = Date.now();
+      if (!(Math.abs(d - (m + wallOff)) < 2)) wallOff = d - m;
+      return m + wallOff;
+    },
     // ms this thread has spent blocked in host waits (I/O, sleeps) so far
     blocked_ms: () => blockedMs,
     stack_frames: () => stackFrames(),

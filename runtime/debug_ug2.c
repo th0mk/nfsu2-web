@@ -309,7 +309,8 @@ void ug2_debug_sound_unlock(void){
 /* ---- test runs (on_test_frame, autotest.c) -------------------------------- */
 /* NFSU2_CAR_TRACE=<file>: every car of the race World per frame.
  * One CSV row per Present while racing (GameFlow 6): wall-clock time
- * (CLOCK_REALTIME, shared by every instance on this Mac), frame, whether
+ * (autotest_wall_us: the system's, shared by every instance on the machine,
+ * also by pages in a browser), frame, whether
  * a race HUD (HUD_*.fng) is the top package (not the results), the frame cap
  * [0x865558], WorldTimer/RealTimer (1/4000 s), then per car of
  * the World's list ([0x890080]: +0x10 count, +0x1C car pointers) whether it
@@ -319,6 +320,7 @@ void ug2_debug_sound_unlock(void){
 static FILE *g_ctrace;
 static int g_fng_dump;                   /* NFSU2_FNG_LOG=2: the front end's objects at frames 400 and 1500 */
 uint32_t autopilot_vehicle(void);        /* career.c: player 1's vehicle, 0 = none */
+long long autotest_wall_us(void);        /* autotest.c: the traces' wall clock */
 static void car_trace(long frame){
     static uint32_t last_w = 0;
     if (!mem_is_committed(0x8654a7u) || MR32(0x8654a4u) != 6u) return;
@@ -332,9 +334,9 @@ static void car_trace(long frame){
         for (uint32_t i = 0; i < n; i++) fprintf(stderr, " 0x%08x", MR32(w + 0x1c + 4 * i));
         fputc('\n', stderr);
     }
-    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    long long t = autotest_wall_us();
     const char *top = autotest_top_fng();
-    fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%u,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), frame,
+    fprintf(g_ctrace, "%lld.%06lld,%ld,%d,%.7f,%u,%u,%u", t / 1000000ll, t % 1000000ll, frame,
             top && !strncasecmp(top, "HUD_", 4), (double)MRF32(0x00865558u), MR32(0x0086518cu),
             MR32(0x008651acu), n);
     for (uint32_t i = 0; i < n; i++){

@@ -24,7 +24,9 @@
  *                             (This port reads guest address 0 as zeros, so here the game's code gives the same
  *                             key; the fix keeps it from depending on that, and says when it happens.)
  *   NFSU2_TEST_NAME_FORMAT=1  a player name with a % in it, taken as a printf format by the game room (0x573140
- *                             from three sites; sub_00573140 below): hashed as text instead (TRACKER M8-19, L-184).
+ *                             from three sites; sub_00573140 below): hashed as text instead (TRACKER M8-19, L-184);
+ *                             and the local LAN name as the format of a front-end text (0x515D70 from 0x520C10;
+ *                             sub_00515d70 below): printed through "%s" instead.
  *   NFSU2_TEST_PFLOCK=1       the interactive music's lock (B-008, B-009; sub_00834e6d below): a main-thread try
  *                             that finds Pathfinder's lock held waits for it instead of failing at once; 1 keeps
  *                             the game's try, 2 and 3 make the music slot's start find it held (the crash at once).
@@ -273,5 +275,42 @@ void sub_00834e6d(CPU *c){
                 "0x%08x) waited %.1f ms: %s (%lu waits, %lu still held)\n", autotest_frame(), from, MR32(c->ebp + 4u),
                 (double)(b.tv_sec - a.tv_sec) * 1e3 + (double)(b.tv_nsec - a.tv_nsec) / 1e6,
                 (int32_t)r == -2 ? "still held, busy as the game's" : "taken", pf_waits, pf_gaveup);
+    c->eax = r;
+}
+
+/* M8-19 (L-184), the fourth site: 0x515D70 (cdecl (FE string, format, ...), the front end's printf into a text
+ * object) is called at 0x520C10 with the player's own LAN name (0x56E320: [0x91CF90]+0x134, what was typed on
+ * UI_PC_LAN.fng) as the format and no arguments.  A name with a % in it is printed through "%s" instead, the text it
+ * is; NFSU2_TEST_NAME_FORMAT=1 brings back the game's way. */
+#define FEPRINTF        0x00515d70u
+#define FEPRINTF_NAME   0x00520c15u     /* the return address of the call at 0x520C10 */
+void sub_00515d70_orig(CPU *c);
+void sub_00515d70(CPU *c){
+    if (MR32(c->esp) != FEPRINTF_NAME){ sub_00515d70_orig(c); return; }
+    uint32_t obj = MR32(c->esp + 4u), fmt = MR32(c->esp + 8u);
+    int pct = 0;
+    char name[64]; int n = 0;
+    for (int k = 0; fmt && k < 256 && mem_is_committed(fmt + (uint32_t)k) && g_mem[fmt + (uint32_t)k]; k++){
+        char ch = (char)g_mem[fmt + (uint32_t)k];
+        pct |= ch == '%';
+        if (n < 63) name[n++] = ch;
+    }
+    name[n] = 0;
+    static int off = -1, hits;
+    static uint32_t as_text;            /* "%s" in the guest's memory */
+    if (!pct || test_switch("NFSU2_TEST_NAME_FORMAT", &off) || (!as_text && !(as_text = com_scratch(4u)))){
+        if (pct && hit_log(&hits))
+            fprintf(stderr, "[fix] f=%ld TEST: the LAN name \"%s\" is a front-end printf format at 0x00520c10 (the game's "
+                    "way)\n", autotest_frame(), name);
+        sub_00515d70_orig(c);
+        return;
+    }
+    MR8(as_text) = '%'; MR8(as_text + 1u) = 's'; MR8(as_text + 2u) = 0;
+    uint32_t args[3] = { obj, as_text, fmt };
+    uint32_t r = call_guest(c, FEPRINTF, 3, args);
+    if (hit_log(&hits))
+        fprintf(stderr, "[fix] f=%ld the LAN name \"%s\" holds a %%: printed as text at 0x00520c10, not as a format\n",
+                autotest_frame(), name);
+    POP32(c->eip);                      /* the game's `ret` (cdecl: the caller pops its two arguments) */
     c->eax = r;
 }

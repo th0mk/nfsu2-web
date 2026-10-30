@@ -42,12 +42,18 @@ the results screen (--results SCREEN).
 
 Options:
   --name NAME          the alias and LAN name (host: the server's name too)
+  --lan-name NAME      the LAN name only, typed on UI_PC_LAN.fng (default: --name);
+                       a name with a % in it tests the game room's name formats
+                       (TRACKER M8-19: runtime/mw/fixes_mw.c)
   --host-name NAME     join: the host's --name, its server's name in the list
                        (default HOSTWEB)
   --car N              unused yet (the room's car is the alias's first)
   --kind N             the Quick Race kind: N taps DOWN (host and joiners)
   --searches N         join: searches for the host's game before giving up
                        (default 30)
+  --lobby LINES        script lines (';'-separated) at the LAN main menu, before
+                       Quick Race (e.g. pokestr of a name the text entry refuses:
+                       the game room's name formats, TRACKER M8-19)
   --room-wait MS       with --room: time in the game room before those steps
                        (default 20000)
   --room LINES         script lines in the game room (none by default)
@@ -120,10 +126,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('role', choices=['host', 'join'])
     ap.add_argument('--name', default=None)
+    ap.add_argument('--lan-name', default=None)
     ap.add_argument('--host-name', default='HOSTWEB')
     ap.add_argument('--car', type=int, default=0)
     ap.add_argument('--kind', type=int, default=0)
     ap.add_argument('--searches', type=int, default=30)
+    ap.add_argument('--lobby', default='')
     ap.add_argument('--room-wait', type=int, default=20000)
     ap.add_argument('--room', default='')
     ap.add_argument('--race-ms', type=int, default=120000)
@@ -151,9 +159,11 @@ def main():
         w("+0    waitfng UI_PC_LAN_ServerSelect.fng'%s 7200    # the host's server is listed" % a.host_name)
         w('+0    log lan: join')
         w('+30   tap RETURN')
-    lan_name(w, name)
+    lan_name(w, a.lan_name or name)
     w('+0    waitfng OL_MAIN.fng@4b4e388a 3600                  # connected: the LAN main menu, on Quick Race')
     w('+0    log lan: lobby')
+    for ln in [x.strip() for x in a.lobby.split(';') if x.strip()]:
+        w(ln)
     if host:
         quick_race(w, a.kind)
         w("+0    waitfng OL_Dialog_Stacked_Buttons.fng'No_suitable@b8a7c6cc 3600   # No suitable matches (Accept)")

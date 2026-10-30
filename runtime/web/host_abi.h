@@ -22,4 +22,8 @@ double nfsu2_now_ms(void);
 /* ms the calling thread has spent blocked in the host (file I/O, sleeps) */
 __attribute__((import_module("nfsu2"), import_name("blocked_ms")))
 double nfsu2_blocked_ms(void);
+/* the system's wall clock (Date.now(), smoothed below the millisecond), ms since 1970: what every page on the
+ * machine reads alike, also after a step of the system clock (now_ms is the page's own, from when it was made) */
+__attribute__((import_module("nfsu2"), import_name("wall_ms")))
+double nfsu2_wall_ms(void);
 #endif
