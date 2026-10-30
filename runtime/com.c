@@ -776,6 +776,8 @@ enum {
     MID_SetPixelShaderConstantF,
     MID_SetVertexShaderConstantI,
     MID_SetVertexShaderConstantB,
+    MID_SetPixelShaderConstantI,
+    MID_SetPixelShaderConstantB,
     MID_SetTransform,
     MID_SetMaterial,
     MID_SetLight,
@@ -912,6 +914,8 @@ static const char *const g_midname[MID__count] = {
     "SetPixelShaderConstantF",
     "SetVertexShaderConstantI",
     "SetVertexShaderConstantB",
+    "SetPixelShaderConstantI",
+    "SetPixelShaderConstantB",
     "SetTransform",
     "SetMaterial",
     "SetLight",
@@ -1050,6 +1054,7 @@ static int sb_recordable(int mid){
         || MID(SetVertexDeclaration) || MID(SetFVF)
         || MID(SetVertexShaderConstantF) || MID(SetPixelShaderConstantF)
         || MID(SetVertexShaderConstantI) || MID(SetVertexShaderConstantB)
+        || MID(SetPixelShaderConstantI)  || MID(SetPixelShaderConstantB)
         || MID(SetTransform)         || MID(SetMaterial)
         || MID(SetLight)             || MID(LightEnable)
         || MID(SetStreamSource)      || MID(SetIndices)

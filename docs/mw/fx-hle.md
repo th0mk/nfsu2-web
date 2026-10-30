@@ -67,7 +67,10 @@ block for block, in the menus.
 - **BeginPass**: every state of the pass in file order. A shader state grows the saved state to the shader's needs
   first (§3), then sets the shader, then uploads the program's float registers from its lowest to its highest in
   one call (its registers as last uploaded: the parameters' values in the CTAB layout, fx-model 3.3; a register
-  no constant fills stays 0), then the states of the sampler blocks its sampler constants bind, by stage. A light's
+  no constant fills stays 0), then its int registers and then its bool registers (one dword each), each set from
+  register 0 to its highest in one call (X 0x5068CE: `SetVertexShaderConstantI` or the pixel one, then `...B`, both
+  with start 0; the count is the HLE's highest register plus one, not read from the DLL; MW's CTABs have no int or
+  bool constant), then the states of the sampler blocks its sampler constants bind, by stage. A light's
   members are set as one `SetLight` after the pass's last state of that light, the material as one `SetMaterial`
   after the pass's last material state. **O** for the menus' passes.
 - **CommitChanges**: outside a pass nothing. In one: the parameters written since BeginPass, in the order they were

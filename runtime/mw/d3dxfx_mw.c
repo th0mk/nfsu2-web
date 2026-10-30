@@ -61,9 +61,9 @@ enum { SB_RELEASE = 2, SB_CAPTURE = 4, SB_APPLY = 5 };         /* IDirect3DState
 
 /* ---- the objects ---- */
 typedef struct { fxm_pool *p; uint32_t obj; int effects; } Pool;
-typedef struct {                 /* a shader program's registers as D3DX last uploaded them */
-    uint32_t n;                  /* registers */
-    uint32_t *r;                 /* 4 dwords each */
+typedef struct {                 /* a shader program's registers as D3DX last uploaded them, by CTAB register set */
+    uint32_t n[3];               /* registers: bool, int, float */
+    uint32_t *r[3];              /* a bool 1 dword each, an int or a float 4 */
 } Regs;
 /* D3DX's modes ([effect+0x58]): Begin recording the technique's main state block, ValidateTechnique's passes, a
  * technique begun */
@@ -442,26 +442,36 @@ static void sampler_states(CPU *c, Fx *f, const fxm_prog *pr, int all, uint64_t 
     }
 }
 
-/* one shader program's constants from its register copy: in a pass, the program's float registers from its
- * lowest to its highest in one call; in CommitChanges (only: that parameter) that parameter's; then its
- * samplers' states (fx-model 3.4) */
+/* one shader program's constants from its register copies: in a pass, the program's float registers from its
+ * lowest to its highest in one call, then its int and its bool registers each from register 0 to its highest;
+ * in CommitChanges (only: that parameter) that parameter's registers; then its samplers' states (fx-model 3.4).
+ * A constant's register set is the CTAB's: 0 bool (one dword a register: element r of the leaf, by the
+ * constant's rows or columns), 1 int, 2 float (four dwords a register).  MW's CTABs have only float and
+ * sampler constants. */
 static void prog_regs(Fx *f, Regs *R, const fxm_const *q){
+    uint32_t s = q->c.set, w = s == 0 ? 1u : 4u;
+    if (s > 2) return;
     for (uint32_t l = 0; l < q->nleaves; l++){
         const fxm_leaf *L = &q->leaves[l];
         if (!L->count) continue;
         const uint32_t *d = fxm_data(f->m, L->id);
         const fxm_node *nd = fxm_node_get(f->m, L->id);
         if (!d || !nd) continue;
-        if (L->reg + L->count > R->n){
+        if (L->reg + L->count > R->n[s]){
             uint32_t nn = L->reg + L->count;
-            uint32_t *r = realloc(R->r, 16u * nn);
+            uint32_t *r = realloc(R->r[s], 4u * w * nn);
             if (!r) continue;
-            memset(r + 4u * R->n, 0, 16u * (nn - R->n));
-            R->r = r; R->n = nn;
+            memset(r + w * R->n[s], 0, 4u * w * (nn - R->n[s]));
+            R->r[s] = r; R->n[s] = nn;
         }
         uint32_t rows = nd->rows ? nd->rows : 1u, cols = nd->cols ? nd->cols : 1u;
         for (uint32_t r = 0; r < L->count; r++){
-            uint32_t *g = R->r + 4u * (L->reg + r);
+            uint32_t *g = R->r[s] + w * (L->reg + r);
+            if (s == 0){                         /* rows x cols registers an element (fxmodel.c's per) */
+                uint32_t e = L->layout == FXM_L_COLUMNS ? (r % rows) * cols + r / rows : r;
+                if (e < rows * cols && e < nd->bytes / 4u) g[0] = to_set(q->to, q->from, d[e]);
+                continue;
+            }
             switch (L->layout){
             case FXM_L_SCALAR:  g[0] = to_set(q->to, q->from, d[r]); break;
             case FXM_L_VECTOR:  for (uint32_t i = 0; i < cols && i < 4u; i++) g[i] = to_set(q->to, q->from, d[i]); break;
@@ -472,33 +482,40 @@ static void prog_regs(Fx *f, Regs *R, const fxm_const *q){
         }
     }
 }
-static void upload(CPU *c, Fx *f, Regs *R, int vs, uint32_t lo, uint32_t hi){
-    if (hi > R->n) hi = R->n;
+/* registers lo..hi - 1 of register set s as one Set{Vertex,Pixel}ShaderConstant{B,I,F} */
+static void upload(CPU *c, Fx *f, Regs *R, uint32_t s, int vs, uint32_t lo, uint32_t hi){
+    static const int k_call[3][2] = { { D_SETPSCB, D_SETVSCB }, { D_SETPSCI, D_SETVSCI }, { D_SETPSCF, D_SETVSCF } };
+    uint32_t w = s == 0 ? 1u : 4u;
+    if (hi > R->n[s]) hi = R->n[s];
     if (lo >= hi) return;
     if (hi - lo > 255u) hi = lo + 255u;
-    memcpy(GMEM_ + f->scratch, R->r + 4u * lo, 16u * (hi - lo));
-    DEV(c, f, vs ? D_SETVSCF : D_SETPSCF, 3, lo, f->scratch, hi - lo);
+    memcpy(GMEM_ + f->scratch, R->r[s] + w * lo, 4u * w * (hi - lo));
+    DEV(c, f, k_call[s][vs ? 1 : 0], 3, lo, f->scratch, hi - lo);
 }
 static void shader_consts(CPU *c, Fx *f, const fxm_prog *pr, int vs, int all, uint64_t stamp, uint32_t only){
     uint32_t pi = prog_index(f, pr);
     if (pi == 0xFFFFFFFFu) return;
     Regs *R = &f->regs[pi];
-    uint32_t lo = 0xFFFFFFFFu, hi = 0;
+    uint32_t lo[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu }, hi[3] = { 0, 0, 0 };
     for (uint32_t k = 0; k < pr->nconsts && k < pr->nread; k++){
         const fxm_const *q = &pr->consts[k];
-        if (q->why || q->layout == FXM_L_SAMPLER || !q->id) continue;
+        uint32_t s = q->c.set;
+        if (q->why || q->layout == FXM_L_SAMPLER || !q->id || s > 2) continue;
         if (only ? q->id != only : (!all && fxm_version(f->m, q->id) <= stamp)) continue;
         prog_regs(f, R, q);
         for (uint32_t l = 0; l < q->nleaves; l++){
             const fxm_leaf *L = &q->leaves[l];
             if (!L->count) continue;
-            if (L->reg < lo) lo = L->reg;
-            if (L->reg + L->count > hi) hi = L->reg + L->count;
+            if (L->reg < lo[s]) lo[s] = L->reg;
+            if (L->reg + L->count > hi[s]) hi[s] = L->reg + L->count;
         }
-        if (only){ upload(c, f, R, vs, lo, hi); lo = 0xFFFFFFFFu; hi = 0; }
+        if (only){ upload(c, f, R, s, vs, lo[s], hi[s]); lo[s] = 0xFFFFFFFFu; hi[s] = 0; }
     }
     if (only) return;
-    upload(c, f, R, vs, lo, hi);
+    /* d3dx9_26's shader state (0x5068CE): float, then int, then bool; the int and bool calls start at 0 */
+    upload(c, f, R, 2, vs, lo[2], hi[2]);
+    upload(c, f, R, 1, vs, 0, hi[1]);
+    upload(c, f, R, 0, vs, 0, hi[0]);
     sampler_states(c, f, pr, all, stamp);
 }
 
@@ -712,7 +729,7 @@ static void fx_destroy(CPU *c, Fx *f){
     if (f->m) fxm_effect_free(f->m, drop_ref, c);
     if (f->pres) fxp_effect_free(f->pres);
     fx2_free(&f->fx);
-    for (uint32_t i = 0; f->regs && i < f->nprogs; i++) free(f->regs[i].r);
+    for (uint32_t i = 0; f->regs && i < f->nprogs; i++) for (int s = 0; s < 3; s++) free(f->regs[i].r[s]);
     free(f->regs); free(f->res_shader); free(f->save); free(f->need); free(f->stamp); free(f->dirty); free(f->dflag);
     if (f->pool){ f->pool->effects--; if (f->pool_obj) com_obj_release(c, f->pool_obj); }
     if (f->dev) dcall(c, f->dev, D_RELEASE, 0, 0);

@@ -119,7 +119,8 @@ function distance(a, b, cap) {
 // ---- the device state as com.c keeps it (runtime/com.c sb_recordable, Capture) ----
 const RECORDABLE = new Set(['SetRenderState', 'SetTextureStageState', 'SetSamplerState', 'SetTexture',
   'SetVertexShader', 'SetPixelShader', 'SetVertexDeclaration', 'SetFVF', 'SetVertexShaderConstantF',
-  'SetPixelShaderConstantF', 'SetVertexShaderConstantI', 'SetVertexShaderConstantB', 'SetTransform', 'SetMaterial',
+  'SetPixelShaderConstantF', 'SetVertexShaderConstantI', 'SetVertexShaderConstantB', 'SetPixelShaderConstantI',
+  'SetPixelShaderConstantB', 'SetTransform', 'SetMaterial',
   'SetLight', 'LightEnable', 'SetStreamSource', 'SetIndices', 'SetViewport', 'SetScissorRect', 'SetNPatchMode',
   'SetClipPlane']);
 const SETTERS = new Set([...RECORDABLE, 'SetRenderTarget', 'SetDepthStencilSurface']);
