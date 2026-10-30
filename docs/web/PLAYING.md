@@ -78,8 +78,12 @@ While you drive:
   straight ahead.
 - **Gears:** with a manual gearbox (the race's Transmission choice, and always in a drag race), gear down and gear up
   above the steering.
-- **Small buttons** along the top: pause, camera, look back, reset; in free roam also the map, messages, horn and
-  quick chat. In free roam **Start** (an event, or an outrun) shows above the steering.
+- **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages and
+  **Drift** (drift mode, lit while it is on), and the horn and quick chat while another player's car is within a
+  horn's reach. In free roam **Start** shows above the steering where it does something: at an event's or a shop's
+  marker, at an outrun offer, or at a race spot or lobby of other players.
+- **HUD:** a phone starts with the game's 4:3 HUD layout (Settings, Display, HUD layout), which keeps the minimap and
+  the speedometer between the thumbs instead of under the steering and Brake.
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and
   **Menu button size** for the game's own small menu buttons (Back, Continue and the others at the bottom of every
   menu, and the arrows of the main menu's and Quick Race's choices). Both are **Auto** by default: the touch controls
@@ -99,7 +103,7 @@ While you drive:
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph |
 | N | Horn (free roam and races with other players) |
-| X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below) |
+| X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button |
 | 1 to 4, then 1 to 4 | Quick chat in free roam with other players: a group, then a phrase (see section 6) |
 | M, Tab | Map, messages |
 | Esc or P | Pause; Esc also goes back in menus |
@@ -113,23 +117,26 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 
 - **Change the keys:** in the game, Options, Controls, and a controller's buttons there too. The horn stays on N (the
   game has no horn of its own).
-- **Drift mode (X):** in free roam, the car handles as in the game's drift races (its drift tuning and the drift
-  assist), the camera is the drift races' (C still goes through all of them), and drifts score as there: the drift
-  races' panel (Best, the multiplier with the points its next level needs, Total) shows under Bank, and DRIFT counts
-  a drift's points up while you drift, as in the races: lime when it banks, red when a wall loses it. Free roam's
+- **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
+  with your car's Drift tuning from Performance Tuning / Dyno in the crib; the other modes' tuning is back when drift
+  mode is off), but your nitrous stays (the drift races have none; X neither empties nor fills it). The camera is the
+  drift races' (C still goes through all of them), and drifts score as there: the drift races' panel (Best, the
+  multiplier with the points its next level needs, Total) shows under Bank, and DRIFT counts a drift's points up
+  while you drift, as in the races: lime when it banks, red when a wall loses it. Free roam's
   music plays on (the drift races have none). Just for fun: the points never go into the bank or the career. X again
   turns it off and gives your camera back. It is off in races and outruns and comes back in free roam after them.
 - **Photo mode (F12, or Photo Mode in the pause menu):** while you drive (a race, free roam, an outrun) the world
   stands still, the HUD goes and the camera comes loose from the car. Orbit (the first) turns around a point at your
-  car, which you can move up to 10 m from it; Free flies up to 20 m from the car. Drag with the mouse (or the arrow
-  keys) to turn, W A S D to move, Q and E for down and up, the wheel to come closer or go farther, Z and X to zoom,
-  C and V to tilt, Shift to go faster, Tab for orbit or free, R to start over, H to hide the panel. F12, Enter or
-  Space takes the photo, Esc leaves. On a controller: the right stick turns, the left stick moves, LB and RB are down
-  and up, the triggers closer and farther, the D-pad zooms and tilts, Y is orbit or free, X starts over, A takes the
-  photo, B leaves, View hides the panel. On a touch screen: drag to turn, two fingers to move, pinch for closer or
-  farther, the panel's buttons for the rest. The sound effects pause, the music plays on. In free roam with other
-  players your world stands still for you only: they see you as paused and drive through you. Not in races over the
-  network (Online, LAN, free roam's races with other players). Nothing keeps the camera out of walls.
+  car, which you can move up to 25 m from it, from up to 30 m away; Free flies up to 50 m from the car. Drag with the
+  mouse (or the arrow keys) to turn, W A S D to move, Q and E for down and up, the wheel to come closer or go farther,
+  Z and X to zoom, C and V to tilt, Shift to go faster, Tab for orbit or free, R to start over, N for the names over
+  other players' cars (free roam only; off at first), H to hide the panel. F12, Enter or Space takes the photo, Esc
+  leaves. On a controller: the right stick turns, the left stick moves, LB and RB are down and up, the triggers closer
+  and farther, the D-pad zooms and tilts, Y is orbit or free, X starts over, a click of the right stick is the names,
+  A takes the photo, B leaves, View hides the panel. On a touch screen: drag to turn, two fingers to move, pinch for
+  closer or farther, the panel's buttons for the rest. The sound effects pause, the music plays on. In free roam with
+  other players your world stands still for you only: they see you as paused and drive through you. Not in races over
+  the network (Online, LAN, free roam's races with other players). Nothing keeps the camera out of walls.
 - **Mouse:** works in the menus; in the garage, drag with the middle button (the wheel) held to turn the car, as in
   the PC game. On the ECU and Turbo tuning graphs the wheel moves the dot of the column under the pointer, as in the
   PC game, and so does a drag up or down on that column. **Touch:** a tap is a click there; drag two fingers to turn
@@ -160,6 +167,13 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   it holds the handbrake. The paddles still shift. Controls, Controller, Shifter can turn it round (pull to shift
   up), make every gear the handbrake, or turn it off; that is kept in this browser per wheel model. The Driving Force
   GT's own shifter shifts up when pulled back, down when pushed.
+- **RC radio:** a drone or model transmitter running EdgeTX or OpenTX (a RadioMaster, FrSky or Jumper, for example),
+  plugged in by USB in its joystick mode, drives as a wheel: the right stick across steers (full stick is full
+  lock), the throttle stick is the gas and the right stick pulled back brakes and reverses. That assumes mode 2 and
+  the usual channel order (AETR); Controls, Controller, Set up the radio takes any other: push the stick that steers
+  right, the gas stick up, the brake stick back, then flip a switch (or hold a button) for nitrous, the handbrake and
+  a respawn, or skip each. Its switches do nothing until then. The keyboard does the rest (menus, camera, pause).
+  With a controller connected too, a stick or switch on the radio moved half way takes the game back from it.
 - **The page menu on a controller:** Home, or both sticks pressed in, opens it (where the browser passes Home on; on
   Windows the Game Bar may take it). The D-pad or left stick moves in it, A picks, B closes it; meanwhile the game
   gets no controller input. A stick pressed in alone reaches the game a moment later (0.12 s), so the shortcut never
@@ -181,8 +195,8 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
 | Group | Settings |
 |---|---|
 | Online | its own section under Saves: how many play on this server now, free roam with others, your name (in free roam and online), crews (with their colours), your horn, room, ghost mode, quick chat and your phrases; more: the game's Online mode (on by default), players' cars shown (16 to 32; phones start at 16, tablets at 24) |
-| Game | language, movies, subtitles, autosave; more: startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout, movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Game | language, movies, subtitles, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
+| Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -200,6 +214,12 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
   [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), with who says each line, where the server has its
   [language pack](VPS.md#languages) (without it English has none: the game's own English lines stop at their first
   apostrophe).
+- **Show hidden races:** off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10 and 10
+  in the later stages) that are not on the map or the radar: in the original game one shows only when you drive near it,
+  and once all the others are won the map looks empty. On, as MaxHwoy's
+  [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583) has them, they are on the map and the radar like the others
+  (the GPS takes you there), and the map offers up to 8 races of each kind at once instead of 1 to 4, so they take no
+  others off it. Turned off again, a career is as it was: the races open stay open.
 - **Menus and HUD:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
   HUD](https://nfsmods.xyz/mod/4319) where the server has its [texture pack](VPS.md#texture-packs): the menus, the
   race HUD, the fonts and the car and brand logos redrawn at four times their size, sharp on a large screen. The
@@ -353,8 +373,12 @@ Good to know:
   nearest to them (fewer while it is busy, 8 at the least), and your game shows up to 32 of their cars at once: phones
   start at 16 and tablets at 24 (Settings, Online, more: Players' cars shown: 16, 20, 24, 28 or 32). Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
-  as the game's own opponents do; the world map shows where they were when you opened it. A player in a race, a shop
-  or the menus is not in your free roam: no car, no arrow, no marker until they are back. A player farther than 300 m
+  as the game's own opponents do. The world map also marks the other players in free roam, the nearest 2048 past those
+  32, and while it is open every marker moves to where its player is, once a second. Its legend (the list on the
+  map's left) has two rows of ours after the game's: **Players** and **Players' races**. Pick one with Up or Down and
+  Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers (a crew-mate's
+  stays) or the players' race lobbies (yours stays) until you tick it again, and the game remembers it. A player in a
+  race, a shop or the menus is not in your free roam: no car, no arrow, no marker until they are back. A player farther than 300 m
   sends you their car 5 times a second instead of 20 (past 1 km, twice), which saves traffic and doesn't show at that
   distance. When many players arrive at once, their cars load one after another, about one a second, so the last of 32
   can take half a minute to appear.
@@ -436,6 +460,14 @@ Good to know:
   1,000 feet (300 m) ahead of the other wins, and the bank pays or charges as in an outrun against a tuner. Leaving it
   (back to the menus, quitting, losing the connection) loses it. The other players' cars stay, and they see the two
   drive. Players on the Windows plugin are not offered outruns.
+- **The game's own tuners** come out to challenge you in free roam with other players around, as they do offline, so
+  their outruns and what winning them opens up (the unique parts) are there online too. The other players' cars stay
+  while you race a tuner; they see your car, not the tuner, which is in your game only. Both are offered: a tuner
+  within 30 m of you (the game's own reach for its challenge) comes first, and no outrun with another player is
+  offered or taken until it is farther off; while another player's outrun is offered, the tuners keep driving but
+  none challenges you. Within 20 m of a shop's or the garage's door, or of an event, Enter is for the door: no tuner
+  challenges you there, and a challenge already on the screen goes when you get there. No tuner comes during an outrun with another player (from the challenge on) or while you are
+  in or by a race lobby. On the Windows plugin the tuners stay away while other players are about.
 - **Races with other players:** a race of your career can be raced with the players around you, as the game's own LAN
   race on its track, in your career car. That takes a car of your own: in a new career's prologue (the 350Z you
   start in) you cannot join or open a lobby, and the panel says so; from your first car on you can.
@@ -452,7 +484,8 @@ Good to know:
   - **Multiplayer opens a lobby** at the start: the panel shows it, its race, career stage, track and laps and its six
     places (drag 4, 3 on the three-lane track) with the players in them, the host first and yours marked. The players
     near see "Thom's circuit (1/6)" over the start (from about 250 m); everyone in free roam sees its race's icon on
-    the world map (M), and the nearest four lobbies their words beside it ("Circuit 1/6"). They join at the start:
+    the world map (M), and the nearest four lobbies their words beside it ("Circuit 1/6") where these cover no other
+    icon (the legend's Players' races row hides them). They join at the start:
     within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then **Join**).
     Up to 6 players; at a full one the panel says so, and Enter starts another. Drive more than 40 m from the start to
     leave a lobby; the host leaving calls it off, and a lobby nobody joins closes after 5 minutes. A host who seems

@@ -234,6 +234,18 @@ typedef struct { uint32_t magic; float mult, white, knee; } GwTone;
 #define GW_K_TONE      1552u
 #define GW_TONE_BYTES  16u
 
+/* Input age (framerate.c): every frame's VS constant arena holds this block
+ * at GW_K_LAT: when the game read the input this frame simulates with, and
+ * when it handed the frame off, in ms of the shared clock
+ * (performance.timeOrigin + performance.now()).  The page logs how old that
+ * input is when the frame is submitted, done on the GPU and next shown.
+ * magic: GW_LAT_MAGIC (where a module without the block has zeros).  The page
+ * binds none of it. */
+#define GW_LAT_MAGIC   0x4E54414Cu        /* "LATN" */
+typedef struct { uint32_t magic, pad; double input_ms, handoff_ms; } GwLat;
+#define GW_K_LAT       1568u
+#define GW_LAT_BYTES   24u
+
 /* The page binds the VS constant arena (K) in windows of GW_KWIN_ROWS rows of
  * 16 bytes: 64 KB, the default maxUniformBufferBindingSize.  A draw's block
  * (16-byte header + c[0..255]) starts at row firstInstance of its window, so
@@ -269,4 +281,6 @@ _Static_assert(GW_K_MARKS >= GW_K_HL + GW_HL_BYTES, "GwMarks after GwHL");
 _Static_assert(sizeof(GwTone) == GW_TONE_BYTES && GW_K_TONE >= GW_K_MARKS + GW_MARKS_BYTES, "GwTone after GwMarks");
 _Static_assert(sizeof(GwDraw) < 256, "GW_LAYOUT keeps sizeof(GwDraw) in 8 bits");
 _Static_assert(GW_PS_DEPTH_SHIFT + GW_STAGES_MAX <= 31, "GwDraw.ps depth bits");
+_Static_assert(sizeof(GwLat) == GW_LAT_BYTES && offsetof(GwLat, input_ms) == 8 && GW_K_LAT % 8 == 0
+               && GW_K_LAT >= GW_K_TONE + GW_TONE_BYTES, "GwLat after GwTone");
 #endif

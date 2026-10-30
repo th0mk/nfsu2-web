@@ -42,6 +42,8 @@ export interface RendererOptions {
   cssScale?: boolean;
   /** most frames the GPU may have queued (default 2) */
   maxInFlight?: number;
+  /** ms between the log's summary lines (default 60000) */
+  summaryMs?: number;
   /** false: always draw into the back buffer and composite it (the path before direct
    *  canvas drawing; default in Firefox, which shows half-drawn frames otherwise; A/B and diagnostics) */
   direct?: boolean;
@@ -388,14 +390,32 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // unseen, how long the GPU took to finish a frame (submit to onSubmittedWorkDone: GPU-bound as it nears the frame
   // time, a hot phone as it climbs), frames that waited for the GPU, and the textures' memory on the GPU (a phone's
   // graphics process runs out of memory first).
-  const SUMMARY_MS = 60_000;
+  const SUMMARY_MS = +(opts.summaryMs ?? 60_000);
   let winDone: number[] = [], winWaits0 = 0;
   const MB = (b: number) => (b / 1048576).toFixed(0);
+  const pct = (a: number[], p: number) => a.length ? a[Math.min(a.length - 1, Math.floor(p * a.length))].toFixed(1) : '-';
+  // Input age (runtime/framerate.c, GwLat in the frame's constants): how old the input a frame simulates with is when
+  // the game hands the frame off, when the page submits it, when the GPU has done it, and at the first rAF after that
+  // (the rendering update that puts it on the screen, which the compositor shows a refresh or two later).  The
+  // player's press waits up to a frame more for the game's next read.
+  const T0 = performance.timeOrigin;
+  const age = { hand: [] as number[], sub: [] as number[], done: [] as number[], raf: [] as number[] };
+  let ageDone: number[] = [];       // input times of frames the GPU has done since the last rAF
+  const ageLine = () => {
+    const n = age.sub.length;
+    if (!n) return;
+    for (const a of Object.values(age)) a.sort((x, y) => x - y);
+    const pq = (a: number[]) => `${pct(a, 0.5)} / ${pct(a, 0.9)}`;
+    log(`[gpu] input age p50 / p90: handed off ${pq(age.hand)}, submitted ${pq(age.sub)}, GPU done ${pq(age.done)}, ` +
+        `next rAF ${pq(age.raf)} ms (${n} frames)`);
+    for (const a of Object.values(age)) a.length = 0;
+  };
   const summary = (now: number) => {
-    const d = winDone.sort((a, b) => a - b), q = (p: number) => d.length ? d[Math.min(d.length - 1, Math.floor(p * d.length))].toFixed(1) : '-';
+    const d = winDone.sort((a, b) => a - b), q = (p: number) => pct(d, p);
     log(`[gpu] ${((now - winUnshownT) / 1000).toFixed(0)} s to t=${((now - attachedAt) / 1000).toFixed(0)} s: ${winUnshownFrames} frames, rAF ${rafHz.toFixed(1)} Hz, ` +
         `${winUnshown} drawn over unseen, GPU done p50 ${q(0.5)} / p90 ${q(0.9)} / max ${d.length ? d[d.length - 1].toFixed(0) : '-'} ms, ` +
         `${slotWaits - winWaits0} waited for the GPU, textures ${MB(enc.texBytes)} MB${texSplit(enc.unpackBytes, enc.astcBytes)}${errors ? `, ${errors} WebGPU errors so far` : ''}`);
+    ageLine();
     winUnshown = 0; winUnshownFrames = 0; winUnshownT = now; winDone = []; winWaits0 = slotWaits;
   };
   // A render scale below 1 (a phone's 75 %): the game draws a picture smaller than the view, and the composite drew it
@@ -511,11 +531,19 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     }
     inFlight++;
     const tSub = performance.now();
+    // the frame's input age (a module with GwLat; ages over 2 s are a stall, a load, a hidden tab: left out)
+    const la = U[fw + F.k] + P.K_LAT;
+    let tIn = 0;
+    if (U[la >>> 2] === P.LAT_MAGIC && age.sub.length < 16384) {
+      const lt = new Float64Array(mem.buffer, la + 8, 2);
+      if (lt[0] > 0 && T0 + tSub - lt[0] < 2000) { tIn = lt[0]; age.hand.push(lt[1] - tIn); age.sub.push(T0 + tSub - tIn); }
+    }
     device.queue.onSubmittedWorkDone().then(() => {
       inFlight--;
-      const dms = performance.now() - tSub;
+      const now = performance.now(), dms = now - tSub;
       if (done.length < 4096) done.push(dms);
       if (winDone.length < 16384) winDone.push(dms);
+      if (tIn) { age.done.push(T0 + now - tIn); ageDone.push(tIn); }
       pump();
     });
     const ms = performance.now() - t0;
@@ -612,6 +640,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     }
     sinceRaf = 0;
     lastT = t;
+    if (ageDone.length) { const now = T0 + performance.now(); for (const ti of ageDone) age.raf.push(now - ti); ageDone = []; }
     if (iv.length >= 30) {
       // the median over spans of 4 frames, not of single intervals: Safari on an iPhone or iPad gives rAF times in
       // whole milliseconds, so at 60 Hz an interval is 16 or 17 ms and their median at times said 62.5 Hz ("display

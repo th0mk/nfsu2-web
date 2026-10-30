@@ -47,6 +47,8 @@ typedef struct StatusOut {
                          * so the page asks for it no more */
     int roam_cars;      /* friends' cars the game holds in free roam */
     int roam_friends;   /* friends connected in free roam */
+    int engage;         /* 1 while Engage does something in free roam (the touch controls' Start) */
+    int roam_near;      /* friends' cars within a horn's reach (the touch controls' Horn, Quick chat) */
 } StatusOut;
 
 /* A resolution row's label in the game's settings menu: the text's address

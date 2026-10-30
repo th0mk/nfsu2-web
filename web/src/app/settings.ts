@@ -162,6 +162,9 @@ export const KEYS: readonly KeyDef[] = [
   // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
   // table: the Mac's free roam has no hub
   { key: 'roam_block', env: 'NFSU2_ROAM_BLOCK', kind: 'names', ic: true, scope: 'web' },
+  // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
+  // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
+  { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -225,6 +228,14 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # game's Options, Gameplay, Save and that choice stays.  off = profiles keep
 # what the game has.  [NFSU2_AUTOSAVE]
 #autosave = on
+
+# The career's 33 hidden races on the world map and the radar like the
+# others, as MaxHwoy's Show Hidden Races Mod (nfsmods.xyz/mod/1583) has
+# them, and the map offers up to 8 races of each kind at once (the original
+# 1 to 4), so the ones once hidden take no others off it.  off = the
+# original game: a hidden race shows only when you drive near it.
+# [NFSU2_SHOW_HIDDEN_RACES]
+#show_hidden_races = off
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"

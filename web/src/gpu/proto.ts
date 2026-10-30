@@ -14,6 +14,10 @@ export const K_MARKS = 1024, MARKS_BYTES = 528, MARKS_MAX = 32, MARKS_MAGIC = 0x
 // GwTone: Exposure and White Level (runtime/tonemenu.c) at this byte offset of every frame's VS constant arena (not
 // bound): magic, then mult, white and knee (floats); the composite's TONE pass
 export const K_TONE = 1552, TONE_BYTES = 16, TONE_MAGIC = 0x454E4F54;
+// GwLat: input age (runtime/framerate.c) at this byte offset of every frame's VS constant arena (not bound): magic, a
+// word, then (float64) when the game read the input the frame simulates with and when it handed the frame off, in ms
+// of performance.timeOrigin + performance.now()
+export const K_LAT = 1568, LAT_BYTES = 24, LAT_MAGIC = 0x4E54414C;
 // the VS constant arena is bound in windows of this many 16-byte rows (GW_KWIN_ROWS)
 export const KWIN_ROWS = 4096;
 

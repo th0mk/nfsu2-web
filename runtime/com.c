@@ -3702,6 +3702,8 @@ int com_call(CPU *c, uint32_t magic){
             { extern int g_perflog; void perflog_guest_frame(void);
               if (g_perflog) perflog_guest_frame(); }
             { void mprot_rearm(void); mprot_rearm(); }
+            /* the wait for the next frame's slot, before the game reads its input (framerate.c) */
+            { void hfr_after_present(void); hfr_after_present(); }
             if (g_present_no == 100){
                 if (ENVC("HASHSCAN")){
                     static const uint32_t want[] = {0x3EE7363Fu, 0x04191C37u};

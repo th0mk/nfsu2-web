@@ -4,6 +4,8 @@
 # three in the opponent cars, two in cars of our own; they leave at
 # different times, a minute later the manager is let go.  Logged every 15 s:
 # status, the manager's state and cars, the World's AI range.
+# (The Windows plugin's way, LEND_OPP: in the port friends' cars stay out of
+# the manager's reach and the tuners keep coming: roam_mp_em_ai_a.txt.)
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN

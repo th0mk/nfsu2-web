@@ -1,0 +1,80 @@
+# Free-roam outrun between players with the game's tuners about.  Al plays
+# a career past the prologue (roam-pair --seed <a stage 2-4 save> --fresh
+# Bo); Bo (roam_mp_outrun_tuner_b.txt, a new career's prologue: no tuners)
+# keeps behind Al's car until challenged.  With a tuner of Al's out farther
+# than 30 m the outrun with Bo is offered and its icon stays up ("HUD outrun
+# icon UP", challengers "paused"); kept 15 m behind the tuner for 10 s, "in
+# reach: no outrun between players" and never "challenge offered"; once the
+# tuner is 30 m off it is offered again, and Al's challenge is raced to its
+# end: "outrun with Bo: over".
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 3000
++0    roam mp outrun
++0    autopilot on                    # off the save's spot (a race spot holds the tuners off)
++0    roam mp waitoutrun tuner 20000
++0    autopilot off
++0    roam mp outrun
++300  roam mp outrun
++0    roam mp waitoutrun prompt 3000
++0    roam mp outrun
++120  roam mp outrun
++600  roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp follow tuner 15 0
++30   roam mp outrun
++0    roam mp waitoutrun prompt 6000
++0    roam mp outrun
++120  roam mp outrun
++0    tap RETURN
++10   roam mp outrun
++0    roam mp waitoutrun race 900
++0    roam mp outrun
++0    autopilot on
++600  roam mp outrun
++0    roam mp waitoutrun idle 8000
++0    roam mp outrun
++0    autopilot off
++300  roam mp outrun
++600  roam mp outrun
++10   quit

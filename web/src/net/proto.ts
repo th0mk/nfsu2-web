@@ -62,6 +62,8 @@ export const W_MAGIC = 0, W_VERSION = 1, W_HDR_BYTES = 2, W_SLOT_BYTES = 3;
 export const W_TX_SLOTS = 4, W_RX_SLOTS = 5, W_TX_OFF = 6, W_RX_OFF = 7;
 export const W_MODE = 8, W_PORT = 9, W_TX_HEAD = 10, W_TX_BELL = 11;          // C -> page
 export const W_RX_TAIL = 12, W_C_ALIVE = 13, W_WANT = 14;
+export const W_CAPS = 15;                     // what the module takes from the page while it runs (NET_CAP_*; 0 in a module of before)
+export const NET_CAP_ROOM = 1;                // W_ROOM_GEN and W_ROOM_NAME
 export const W_PAGE_STATE = 16, W_VIP = 17, W_NETMASK = 18, W_GENERATION = 19;   // page -> C
 export const W_TX_TAIL = 20, W_RX_HEAD = 21, W_RX_BELL = 22, W_RX_FULL_DROP = 23;
 export const W_TX_OFFLINE_DROP = 24, W_RX_OVERSIZE = 25, W_SWITCH_PEERS = 26;
@@ -74,6 +76,11 @@ export const W_PEER_BITS = 36;                // NET_PEER_BITS / 32 words: bit h
 // W_CREWS_RGB their colours (0x00rrggbb; 0: the place's default); the crews, then the colours, then the count
 export const W_CREWS_GEN = 100, W_CREWS = 101, W_CREWS_RGB = 105;
 export const CREW_WORDS = 4;
+// free roam's room as the page changed it (page -> C, an invite link; only with NET_CAP_ROOM): W_ROOM_GEN counts the
+// changes (0: none, the game keeps NFSU2_ROAM_ROOM), W_ROOM_NAME its 16 words, the name's UTF-8 little-endian and
+// ending in a 0 byte (at most ROOM_BYTES; none: no room); the name, then the count
+export const W_ROOM_GEN = 109, W_ROOM_NAME = 110;
+export const ROOM_WORDS = 16, ROOM_BYTES = 63;
 // header doubles: f64 index = byte offset / 8
 export const D_SWITCH_RTT_MS = 14, D_TX_WAIT_MS_SUM = 15, D_TX_WAIT_MS_MAX = 16;
 

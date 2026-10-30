@@ -109,6 +109,16 @@ __attribute__((export_name("crowd_tick"))) void crowd_tick(double now_us, float 
  * car, only its timers run (crowd_wait) */
 __attribute__((export_name("crowd_status"))) void crowd_status(int st){ rc_set_status(&S, (uint8_t)st); }
 __attribute__((export_name("crowd_wait"))) void crowd_wait(double now_us){ rc_tick(&S, (int64_t)now_us); }
+/* this player hosts a race lobby (roam-crowd --lobbies): its advert to the
+ * hub, as a host's game sends one every second (roam_game.c mp_*); a host
+ * takes LOBBY messages, so its HELLOs say so from now on */
+__attribute__((export_name("crowd_lobby"))) int crowd_lobby(uint32_t lobby, uint32_t race, int x, int y, int n, int max){
+    rc_lobby l; memset(&l, 0, sizeof l);
+    S.conf.lobbies = 1;
+    l.op = RC_LOBBY_ADVERT; l.state = RC_LS_OPEN; l.max = (uint8_t)max; l.to = 0; l.lobby = lobby; l.race = race;
+    l.x = (int16_t)x; l.y = (int16_t)y; l.n = (uint8_t)n; l.ids[0] = S.conf.self_id;
+    return rc_send_lobby(&S, &l);
+}
 /* players established now */
 __attribute__((export_name("crowd_peers"))) int crowd_peers(void){ return rc_established(&S); }
 __attribute__((export_name("crowd_stop"))) void crowd_stop(void){ rc_shutdown(&S, 0); }

@@ -5,6 +5,8 @@
 # every friend gets a car; after the friends leave and a minute passes the
 # manager is let go and the tuners come back, next to our own parked cars.
 # Logged every 10 s: the manager's state and cars, status, the AI range.
+# (The Windows plugin's way, LEND_OPP: in the port friends' cars stay out of
+# the manager's reach and the tuners keep coming: roam_mp_em_ai_a.txt.)
 0     roam fe2roam 14000
 +0    roam smsauto on
 +600  roam call 0x5fae20 ecx=*0x8900ac          # autopilot on

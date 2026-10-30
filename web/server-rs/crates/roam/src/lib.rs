@@ -13,9 +13,10 @@
 //!   `degree` (32: roam_core's group of 33 with itself), or 7 for a player whose HELLO says core version 1 (its group
 //!   was 8, and it drops a longer list); an empty one says the hub is there.  To a player in a crew whose HELLO says
 //!   it reads them (core 8), the list ends in crew marks: its own crews, then which of them each listed player is in.
-//! - player -> hub -> player: when its world map opens, a MAPREQ; the hub answers with MAP datagrams (at most three
-//!   of 230): the other players of its room in free roam, past its links, nearest first, map_max (512) of them at
-//!   most, each its place (x, y in whole metres) and heading (a byte), which the game marks on the map.
+//! - player -> hub -> player: when its world map opens, and each second while it is open, a MAPREQ; the hub answers
+//!   with MAP datagrams (at most nine of 230): the other players of its room in free roam, past its links, nearest
+//!   first, map_max (2048) of them at most, or as many as the MAPREQ asks for (512 from a page before 2048), each its
+//!   place (x, y in whole metres) and heading (a byte), which the game marks on the map.
 //!
 //! The links, in each room: the pairs of players with a position younger than `stale_ms` (60 s: one in a shop or a
 //! race keeps its links for a while), nearest first, each player at most its degree of them.  "Nearest" looks ahead,
@@ -191,7 +192,7 @@ impl Default for RoamOptions {
             look_ms: 4_000.0,
             away_m: 100.0,
             view_m: 150.0,
-            map_max: 512,
+            map_max: 2048,
             map_gap_ms: 1_000.0,
             map_fresh_ms: 5_000.0,
         }

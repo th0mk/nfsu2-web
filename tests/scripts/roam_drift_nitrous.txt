@@ -1,0 +1,43 @@
+# Drift mode keeps the car's nitrous (runtime/drift.c car_tuned).  X makes the car again as a drift event's, which has
+# none (the shot's length [[car +0x20] +0x2A0] is 0), and making it again fills or empties the nitrous (car +0x454 the
+# shot, +0x45C what is left, in 1/4000 s).  Some nitrous, X, nitrous in drift mode, a pause and back, X again: what is
+# left only goes down, with the nitrous used.
+#   NFSU2_SAVE_SEED=<a career past the prologue> node web/tools/run-suite.mjs --script roam_drift_nitrous.txt --marker drift_nitrous_end
+# (a new career's prologue locks the controls for a while).  Good: every expect passes.  On the module before, drift
+# mode has a shot of 0 and X off a full one.
+0     bot on
++0    waitroam 6000
++0    bot off
++60   mark shot i:[[0x8900ac]+4]+0x454
++0    mark len i:[[[0x8900ac]+4]+0x20]+0x2a0
++0    expect @shot > 0
++0    down UP
++120  down ALT
++60   up ALT
++0    up UP
++60   mark left1 i:[[0x8900ac]+4]+0x45c
++0    expect @left1 < @shot
++0    tap X
++30   expect i:0x890104 == 1
++0    expect i:[[0x8900ac]+4]+0x454 == @shot
++0    expect i:[[0x8900ac]+4]+0x45c == @left1
++0    expect i:[[[0x8900ac]+4]+0x20]+0x2a0 == @len
++0    down UP
++60   down ALT
++60   up ALT
++0    up UP
++60   mark left2 i:[[0x8900ac]+4]+0x45c
++0    expect @left2 < @left1
++0    tap ESCAPE
++60   expect i:0x890104 == 0
++0    expect i:[[0x8900ac]+4]+0x45c == @left2
++0    tap ESCAPE
++60   expect i:0x890104 == 1
++0    expect i:[[0x8900ac]+4]+0x45c == @left2
++0    tap X
++30   expect i:0x890104 == 0
++0    expect i:[[0x8900ac]+4]+0x454 == @shot
++0    expect i:[[0x8900ac]+4]+0x45c == @left2
++0    expect i:[[[0x8900ac]+4]+0x20]+0x2a0 == @len
++0    log drift_nitrous_end
++10   quit

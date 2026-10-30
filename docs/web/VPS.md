@@ -583,33 +583,44 @@ power had in the race) and its time. For evening out the cars:
 `docker compose logs -t server --since 24h | grep '\[race\]'`.
 
 Cheats are `[cheat]` lines, each with the player's virtual address and nickname, as [kick and ban](#kick-and-ban)
-take them. The lines are for you to read: nobody is kicked or banned by them.
+take them. The lines are for you to read: nobody is kicked or banned by them. A line about a race (Online mode's, or
+a race lobby's in free roam) ends with a handle, `(ban c17)`, that `ban` takes for a week after the line, long after
+the player left: `./nfsu2 ban c17 2w Cheating in races`. Free roam's lines get none.
 
 - **In races**: every racer's game reports the race's results too (each racer's time, how far it came, the way it
-  drove), and once all of them came, or 90 s after the first, the server judges the race: its winner is the one most
-  reports had first, at the slowest time any report gave it, and the race's length is what the other racers drove. A
-  line (`won the race of lobby …`) when the winner averaged 350 km/h or more over it, which no car does (a free-roam
-  sprint's average: 107 km/h), or finished in under 40 % of another finisher's time; a cheat that ends the race at
-  once says how little of the way it drove ("having driven 0.6 % of the way"). One player's report cannot make a
-  winner or a time, and the line says how many of the race's reports saw it. In Online mode each report is looked at
-  as it comes (`won the online race …`): a time under the shortest its race type takes (the result is not taken
-  either), 350 km/h or more on average, the way a finisher drove under half another racer's, or a race won in under
-  40 % of the next finisher's time; the line says whose game saw it. A drift race is won by points and is left out.
+  drove), only from a player who asked to join the race's lobby, naming only its players, one report a race. Once
+  all of them came, or 90 s after the first, the server judges the race: its winner is the one most reports had
+  first, at the slowest time any report gave it, and the race's length is what another finisher's own game says it
+  drove. A line (`won the race of lobby …`) when the winner averaged 350 km/h or more over it, which no car does (a
+  free-roam sprint's average: 107 km/h); won in under half the race's quickest clean win the server saw since it
+  started (two reports, another finisher), which a teleport to the finish with nobody else over the line does; or
+  came under half the way by every report, as a cheat that ends the race at once does ("having driven 0.6 % of the
+  way"). One player's report cannot make a winner or a time, and the line says how many of the race's reports saw it.
+  In Online mode each racer is judged by its own game's figures (`won the online race …`, "by its own game"): a time
+  under the shortest its race type takes (the result is not taken either), 350 km/h or more on average, or a way
+  under half another racer's own (both by their own games: "each by its own game"); and a race won in under 40 % of
+  the next finisher's time, by the result. An Online line names the track and laps and the racer's own top speed;
+  the other racers' times are on that race's `[online]` lines (`grep -F '"<race name>"'`). A drift race is won by
+  points and is left out.
 - **In free roam**: a teleport (the car went 300 m or more farther than any car drives, in one jump or in short hops),
   a car over 450 km/h for 2 s, or a game whose clock runs 1.3 times as fast as the server's or more for a minute (a
   speed hack); a teleport's or a fast car's line names the players within 40 m of where it came to, and a race lobby
   that starts there. A player gets 5 of these lines, then one every 2 minutes; the rest are counted, and summed up
   every 10 minutes and when it leaves free roam.
 - **None**: the game's own jumps (Respawn, the World Map's jump to an event or a shop, the garage, shops and races),
-  a bad connection (delays, stalls, a backlog that comes at once), a car that flies (an edited save) unless it does
-  one of those, an honest winner over racers who stood still. The World Map's jump stays in free roam, so a
-  teleport that lands within 25 m of an event's start or a shop's door is taken for one, whoever made it.
+  a bad connection (delays, stalls, a backlog that comes at once or catches up slowly), a car that flies (an edited
+  save) unless it does one of those, an honest winner over racers who stood still or were still on the way, what one
+  player's game shows of another's car (a racer who left the race is put far away: 462 km in a 4-minute sprint), a
+  race report the server could not read as the race's (a racer named twice, other players: `race report not taken:
+  players named twice`). The World Map's jump stays in free roam, so a teleport that lands within 25 m of an event's
+  start or 45 m of a shop's door is taken for one, whoever made it.
 
 The races won by cheating: `docker compose logs -t server --since 24h | grep '\[cheat\]' | grep 'race'`; and the
 cheats that bother others in free roam: `... | grep -e 'next to' -e 'race lobby'`.
 
 - **No player's real IP address** is written, and the page sends the server nothing about the player but the
-  nickname, a random id the browser keeps for [bans](#kick-and-ban), and after a multiplayer race its car and place.
+  nickname, a random id the browser keeps for [bans](#kick-and-ban), a token of its keyphrase when it has one
+  (claimed names and bans: the server keeps only hashes of it), and after a multiplayer race its car and place.
 - **`--access-log`** adds a line per request with the client's IP address and the URL. It is off by default, for
   debugging only: add it to the server's `command` in `compose.yml` (`["--behind-proxy", "--access-log"]`), and
   the log then holds your friends' addresses for as long as Docker keeps it.
@@ -635,6 +646,7 @@ cd /srv/nfsu2
 ./nfsu2 kick Bob Stop ramming people     # off now, with that message; reloading the page brings them back
 ./nfsu2 ban Bob 3d Ramming, 3 days       # off, and turned away for 3 days: 30m, 12h, 3d, 2w, or perm for good
 ./nfsu2 ban 10.77.4.17 perm              # a player by address, when two have the same name
+./nfsu2 ban c17 2w Cheating in races     # the player a [cheat] line of a race names, "(ban c17)", for a week after it
 ./nfsu2 bans                             # the bans: number, name, until when, the message
 ./nfsu2 unban Bob                        # or unban '#4'
 ```
@@ -647,23 +659,31 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
   and language), and that they can keep playing on their own. Nothing connects them again until they reload (a
   kick) or the ban ends. A page loaded before this version does not know the message: it shows the server as gone
   for a while and keeps trying.
-- **What a ban names**: there are no accounts, so a ban names the player two ways, the random id their browser
-  keeps for the site and their address (an IPv4 address or an IPv6 /56). A page with either is turned away. The
-  address only for a week after it was last the player's: addresses change hands (a phone network gives many people
-  one address in turn), so a ban for good would one day hit strangers. The browser's id comes from the page, and
-  when it shows up at a new address (a VPN, the phone), that address is banned too. A ban also takes off whoever is on
-  the switch from that address at the moment (a household): `ban` lists who it removed. A player who clears the
-  site's data and changes networks comes back; no ban can stop that without accounts.
+- **What a ban names**: there are no accounts, so a ban names the player three ways: the random id their browser
+  keeps for the site (in two places, so clearing one does not lose it), the keyphrase they play with (the one that
+  keeps their cloud saves and their name, the same on every device), and their address (an IPv4 address or an IPv6
+  /56). A page with any is turned away. If the player is on twice (a phone and a PC with one keyphrase), the ban
+  names both. The id and the keyphrase for as long as the ban lasts; the address only for a week after it was last
+  the player's: addresses change hands (a phone network gives many people one address in turn), so a ban for good
+  would one day hit strangers. When the banned id or keyphrase shows up at a new address (a VPN, the phone), that
+  address is banned too; when the keyphrase shows up in a new browser, or a new keyphrase in the banned browser, that
+  one is banned for 30 days after it was last seen with them. What is taken in that way brings in nothing further: a
+  friend's computer the player typed the keyphrase into is turned away for a month at most, never the friend's own
+  keyphrase or network. A ban also takes off whoever is on the switch from its addresses at the moment (a
+  household): `ban` lists who it removed. A player who clears the site's data, leaves their keyphrase (and their
+  saves and name) behind and changes networks comes back; no ban can stop that without accounts.
 - **Who left**: `ban` takes a player who left in the last hour too (`who` lists them), so you can ban someone who
-  is gone already. `kick` needs them on.
+  is gone already, and the player of a `[cheat]` line about a race by its handle (`ban c17`) for a week after the
+  line. `kick` needs them on.
 - **Banning again** replaces the earlier ban of the same player: `ban Bob perm` after `ban Bob 1d` leaves one ban,
   for good.
 - **Blocks**: players block others by name (Settings, Online, More online settings, Blocked players): the free-roam
   hub links neither way, nor with the host of a race lobby the other is in. The log has a line each time such a page
   connects (again after a dropped connection), `[roam] 10.77.4.17 blocks "Bob", "carl"` (`who 10.77.4.17` names the
   blocker): a name many block is one to look at (`grep blocks` in the log).
-- **What is kept**: `bans.json` in the state volume, with keyed hashes of the addresses and ids only (the key,
-  `bans.key`, beside it): no address or id can be read back from them. The log has a `[ban]` line for each kick, ban
+- **What is kept**: `bans.json` in the state volume, with keyed hashes of the addresses, ids and keyphrases only
+  (the key, `bans.key`, beside it): none can be read back from them. The handles of `[cheat]` lines are kept there
+  the same way, for a week. The log has a `[ban]` line for each kick, ban
   and lift, and when a banned player is turned away (2 a minute per client at most).
 - **How it works**: the commands go to `control.sock` in the state volume, which only the server's own user and
   root can open; nothing on the network reaches it. Without Docker: `sudo /opt/nfsu2-web/nfsu2-server ctl --state

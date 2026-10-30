@@ -34,6 +34,9 @@
  *   rh_no_profile(name)     1 when a profile name is the game's "No Profile"
  *                           (language.c's language_no_profile: in the game's
  *                           language)
+ *   rh_drift_tuning(out)    1 with the 41 bytes of the dyno setup the player's
+ *                           ride had before drift mode put its Drift setup in
+ *                           (drift.c's drift_kept_tuning), 0 when it has its own
  *   ROAM_HOST_SCRIPT        defined when the input-script commands exist
  *   RH_FE_NODES             the most objects FEng draws of one package (its
  *                           level sorter's nodes)
@@ -54,10 +57,11 @@ long autotest_frame(void);
 uint32_t win32_heap_live(void);          /* win32.c: bytes in live heap blocks */
 void ws_hud_marker(float *x, float *y);  /* widescreen.c */
 int language_no_profile(const char *name);   /* language.c */
+int drift_kept_tuning(uint8_t *out);     /* drift.c */
 
 #define ROAM_HOST_SCRIPT 1
 #define ROAM_HOOK_RET    0x00581475u     /* the return address guest calls see */
-#define RH_FE_NODES      1024            /* objects FEng draws of one package: overrides.c's level sorter (the game: 512) */
+#define RH_FE_NODES      4096            /* objects FEng draws of one package: overrides.c's level sorter (the game: 512) */
 #define GPTR(a)         (g_mem + (uint32_t)(a))
 #define rh_committed(a)  mem_is_committed(a)
 #define rlog(...)        fprintf(stderr, __VA_ARGS__)
@@ -75,6 +79,7 @@ int language_no_profile(const char *name);   /* language.c */
 #define rh_carsfx_car(who, name, p, v, st) carsfx_car((who), (name), (p), (v), (st))
 #define rh_carsfx_end()  carsfx_end()
 #define rh_no_profile(n) language_no_profile(n)
+#define rh_drift_tuning(out) drift_kept_tuning(out)
 typedef FILE rh_file;
 #ifdef __wasm__
 /* The pose log (a test aid) in the browser: every stdio flush is a

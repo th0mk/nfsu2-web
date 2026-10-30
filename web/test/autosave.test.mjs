@@ -202,6 +202,24 @@ test('a change of case only is a rename; a longer name inside is cleared', async
   assert.ok(g.subarray(36 + 53762, 36 + 53761 + 32).every(b => b === 0), 'NUL-padded');
 });
 
+test('a profile the game named with stale heap bytes gets a name again', async () => {
+  // a failed cover shoot's save before runtime/overrides.c sub_004e8b70: 32 bytes of heap addresses, no NUL; the game's
+  // folder takes 31 of them, read as UTF-8 by the I/O worker (U+FFFD for the bytes that are not)
+  const stale = Buffer.from('a09c1d25f846232520d8252528d82525c4501e2530d82525cc501e25a89c1d25', 'hex');
+  const dir = new TextDecoder().decode(stale.subarray(0, 31));
+  assert.ok(dir.includes(String.fromCharCode(0xfffd)) && !dir.endsWith('%'));
+  const f = profile('X', 1, 1, { inside: stale.toString('latin1') });
+  assert.deepEqual(mode(f, dir), { mode: 'autosave' });
+  assert.match(mode(f, new TextDecoder().decode(stale)).bad ?? '', /name inside/, 'all 32 bytes: not the game\'s folder');
+  const fs = folder({ [at(dir)]: f, [at('OTHER')]: profile('OTHER') });
+  assert.deepEqual(await P.renameProfile(fs, DIR, dir, 'NAME2'), { files: 1 });
+  assert.deepEqual([...fs.m.keys()].sort(), [at('NAME2'), at('OTHER')]);
+  const g = fs.m.get(at('NAME2'));
+  assert.equal(name(g), 'NAME2');
+  assert.ok(g.subarray(36 + 53766, 36 + 53761 + 32).every(b => b === 0), 'NUL-padded');
+  assert.deepEqual(mode(g, 'NAME2'), { mode: 'autosave' });
+});
+
 test('a refused rename writes nothing', async () => {
   const corrupt = Buffer.from(profile('BROKEN')); corrupt[500] ^= 0xff;
   const files = { [at('THOM')]: profile('THOM'), [at('AUTO')]: profile('AUTO'), [at('BROKEN')]: corrupt, [`${DIR}/NEW DVD 2/NEW DVD 2`]: cover() };

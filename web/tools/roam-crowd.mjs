@@ -5,7 +5,7 @@
 //   node web/tools/roam-crowd.mjs [--base http://localhost:8655] [--n 62] [--seconds 120] [--room <name>] [--crew <name>]
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
-//        [--race 1-3:60:120] [--bundle] [--first 0] [--loop-ms 10] [--hold 50]
+//        [--race 1-3:60:120] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
 //        [--game ug2|mw] (the game's cars and start point; Most Wanted has none yet) [--help] (this text and those)
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
@@ -28,6 +28,9 @@
 //          first, wherever they are, and those see them in the crew's colour.
 // --race   players first to last (Bot01 is 1) are in a race from one second to the other after the start: they
 //          announce it (RC_ST_EVENT) and send no car meanwhile, as a game in a race does.
+// --lobbies every n-th player hosts a race lobby where it is at its first tick, one of these career races in turn (their
+//          names: the hub keeps the race's name hash), with 1 to 5 players, its advert to the hub once a second: the world
+//          map's lobby icons and labels (tests/scripts/roam_map_filter.txt).
 // --track  a pose log (NFSU2_ROAM_POSELOG): the first player's L rows, a real drive; every simulated player
 //          follows it from its own point along it, so they spread over the route.  Without one: circles of 20 to
 //          120 m around the new career's start (1695, -884, 24), or --spread m apart (6 circles, the first at --spread).
@@ -68,6 +71,7 @@ const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
 const ALL_CARS = R.cars;
 const CARS = opt('cars', '') === 'all' ? ALL_CARS : opt('cars', '') ? opt('cars', '').split(',') : [CAR];
+const LOBBIES = (opt('lobbies', '').match(/^(\d+):(.+)$/) ?? []).slice(1);
 const HUB = 0x0A4D00FD, PORT = 47210;
 
 // the core for wasm: no C library (wasip1 for its headers: names.h's <string.h>), bulk memory for the copies
@@ -78,7 +82,8 @@ execFileSync(path.join(WASI, 'bin/clang'), ['--target=wasm32-wasip1', '-O2', '-f
   '-Iruntime', '-Wl,--no-entry', '-Wl,--export-dynamic', '-o', WASM, 'tests/roam_crowd.c', 'runtime/roam_core.c'], { cwd: REPO, stdio: 'inherit' });
 const mod = await WebAssembly.compile(fs.readFileSync(WASM));
 
-// a room's hash as roam_core.c rc_room_hash makes it (capitals and spaces do not count)
+// a room's hash as roam_core.c rc_room_hash makes it of an ASCII name (capitals and spaces do not count; the core also
+// folds capitals past A to Z and Unicode's blanks, which a crowd's names here never have)
 const roomHash = s => {
   let h = 0x811C9DC5, kept = 0;
   for (let c of Buffer.from(s, 'utf8')) {
@@ -220,6 +225,12 @@ class Bot {
     if (racing || !snap) { this.x.crowd_wait(nowUs()); this.flush(); return; }
     const { p, v } = track(t, this.i);
     this.x.crowd_tick(nowUs(), p[0], p[1], p[2], v[0], v[1], v[2], Math.atan2(v[1], v[0]));
+    if (LOBBIES.length && this.i % +LOBBIES[0] === 0 && t - (this.advT ?? -9) >= 1) {
+      const races = LOBBIES[1].split(',');
+      this.advT = t;
+      this.lob ??= { id: (this.id ^ 0x5a5a) >>> 0, race: bhash(races[(this.i / +LOBBIES[0] | 0) % races.length]), x: Math.round(p[0]), y: Math.round(p[1]), n: 1 + this.i % 5 };
+      this.x.crowd_lobby(this.lob.id, this.lob.race, this.lob.x, this.lob.y, this.lob.n, 6);
+    }
     this.flush();
   }
   stop() { if (this.ready) { this.x.crowd_stop(); this.flush(true); } setTimeout(() => this.ws.close(), 200); }

@@ -1,0 +1,35 @@
+# Free-roam multiplayer: the game's own outrun challengers with friends
+# about (the port: friends' cars are outside the car index, which the
+# challengers' manager reads).  A stage-4 career (--seed
+# work/seed/career/s4_outrun), with roam_mp_em_ai_b.txt staying near (and
+# --crowd 6 for more friends' cars).  The tuners come out with the friends'
+# cars shown, the outrun against one is raced on the game's autopilot to
+# its end (won or lost), and the friends' cars stay through it ("mp status:
+# free roam" during the race).  Not in the log: "outrun challengers off"
+# but for a race lobby.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 3000
++0    roam mp status
++0    roam peek *0x890118+0xc40 1
++0    peekx 0x861e74
++0    autopilot on
++600  outrun 0 6000
++0    waitexpr i:0x89e7b0 == 7 600
++0    roam peek *0x890118+0xc40 1
++0    peekx *0x890118+0x24
++0    roam mp status
++600  roam mp status
++0    dump em_ai_race
++600  roam mp status
++0    waitexpr i:0x89e7b0 == 0 7200
++0    autopilot off
++0    peekx 0x861e74
++60   roam mp status
++600  roam peek *0x890118+0xc40 1
++0    roam mp status
++600  roam mp status
++10   quit

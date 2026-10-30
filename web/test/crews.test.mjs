@@ -31,7 +31,7 @@ test('the crews a value names', () => {
   assert.deepEqual(C.crewList('a, b, c, d, e, f'), ['a', 'b', 'c', 'd'], 'the first 4');
   assert.deepEqual(C.crewList('a, A, b, c, d, e'), ['a', 'b', 'c', 'd'], 'a repeat does not take a place');
   assert.deepEqual(C.crewList('Blue\t \tRoom'), ['Blue Room'], 'blanks inside as one space (the hash skips them)');
-  assert.deepEqual(C.crewList('Zoë, zoË'), ['Zoë', 'zoË'], 'only A to Z made small');
+  assert.deepEqual(C.crewList('Zoë, zoË, КОМАНДА, команда'), ['Zoë', 'КОМАНДА'], 'capitals past A to Z small too (players.ts roomFold)');
   assert.equal(C.crewsValue(['Blue Room', 'Night Owls']), 'Blue Room, Night Owls');
   assert.deepEqual(C.crewList(C.crewsValue(['Blue Room', 'Night Owls', 'x'])), ['Blue Room', 'Night Owls', 'x']);
   assert.deepEqual(C.CREW_PALETTE, ['3cd2ff', 'ff50c8', 'a078ff', 'ff4646', '4f7dff', 'fff03c', '3cf0f0', 'ff9ad5'], 'Thom\'s 8, the defaults first');
@@ -134,7 +134,7 @@ test('what the box lets join', () => {
   assert.equal(C.checkCrew('ü'.repeat(24), list).ok, true, 'characters, not bytes');
   assert.deepEqual(C.checkCrew('blueroom', list), { ok: false, why: 'Already in your crews: {name}.', name: 'Blue Room' }, 'a repeat by hash');
   assert.deepEqual(C.checkCrew('NIGHT OWLS', list), { ok: false, why: 'Already in your crews: {name}.', name: 'Night Owls' });
-  assert.equal(C.checkCrew('Zoë', ['zoË']).ok, true, 'only A to Z made small');
+  assert.deepEqual(C.checkCrew('Zoë', ['zoË']), { ok: false, why: 'Already in your crews: {name}.', name: 'zoË' }, 'capitals past A to Z small too');
   assert.equal(C.checkCrew('Fifth', ['a', 'b', 'c', 'd']).why, 'Up to 4 crews: leave one to join another.');
   assert.equal(C.checkCrew('', ['a', 'b', 'c', 'd']).why, 'Up to 4 crews: leave one to join another.', 'said with nothing typed too');
   // a name that reads as a slur (names.mjs, as a player's name) is no crew; the words round them still are

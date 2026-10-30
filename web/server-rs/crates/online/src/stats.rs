@@ -328,7 +328,7 @@ impl Stats {
 
     /// A player's own entry in its race report (lobby.rs: one taken report per player, the player finished): each
     /// figure that beats the persona's record becomes it.  A figure no car makes (`RECORD_MAX`: a top speed over
-    /// 540 km/h ...) is not taken; quickest drag is a drag race's time (`check_result` checked it).
+    /// 540 km/h ...) is not taken; quickest drag is a drag race's time (`check_times` checked it).
     pub fn add_records(&mut self, name: &str, kind: u32, p: &ReportPlayer) {
         let fits = |x: f64, max: f64| x.is_finite() && x > 0.0 && x <= max;
         let x = [p.top, p.drift_best as f64, p.slide, p.jump];
@@ -720,8 +720,9 @@ pub fn stat_v38(table: &Table, rec: &Records) -> String {
 ///   0.75 m off the ground, SPEED2.EXE 0x56f0b1, kept by 0x56d500), [40..43] longest powerslide (m: style 34's
 ///   longest run of the car's distance, 0x56f5fb), [44..47] the drift score (an integer: the racer's points after its
 ///   last lap, what the game's own results show for drift; 0x5fec5d), [48..51] the biggest single drift's points (an
-///   integer, the drift style's best), [53] a bit mask, each set bit adding 2 bytes after the record (one byte
-///   here: UNVERIFIED)
+///   integer, the drift style's best), [52] the racer's kind, [53..54] a 16-bit mask (big-endian, 0x5fecc3): bit k
+///   set when the racer's counter k (a word at +0x24c + 2k) is not 0, each such counter's 16 bits after the record
+///   in k's order (reading [53] alone put every later record of a live race's report out of line, 2026-10-29)
 /// (from the builder, 0x5fe8d0, and the reports of real races here; the fields not used are UNVERIFIED).  A player's
 /// figures are measured by the reporter's game: its own are what it raced, the others' what it saw of them.
 #[derive(Clone, Debug)]
@@ -771,7 +772,7 @@ pub fn decode_result(b64: &str) -> Option<RaceReport> {
         if o + 55 > b.len() {
             return None;
         }
-        let extra = 2 * (b[o + 53].count_ones() as usize);
+        let extra = 2 * (u16::from_be_bytes([b[o + 53], b[o + 54]]).count_ones() as usize);
         // dropped out: the flag byte 0x0c instead of 0x01 and -1.0 at 32 (a four-player race here), or -1.0 at 44
         // (the research)
         let time = f32_at(o + 8);
@@ -994,6 +995,15 @@ pub(crate) mod tests {
         dropped[8 + 48..8 + 52].copy_from_slice(&70_000i32.to_be_bytes());
         let p = &decode_result(&b64(&dropped)).unwrap().players[0];
         assert_eq!((p.jump, p.slide, p.drift_best), (1.5, 20.25, 70_000));
+        // the mask's 16 bits (0x5fecc3): the first record's counters 1 (in [54]) and 10 (in [53]), 2 bytes each, after
+        // it; the second record follows them
+        let mut counted = dropped[..63].to_vec();
+        counted[8 + 53..8 + 55].copy_from_slice(&0x0402u16.to_be_bytes());
+        counted.extend_from_slice(&[0, 7, 0, 3]);
+        counted.extend_from_slice(&dropped[63..]);
+        let r = decode_result(&b64(&counted)).unwrap();
+        let p: Vec<(u8, u8, bool)> = r.players.iter().map(|p| (p.index, p.place, p.dropped)).collect();
+        assert_eq!(p, [(0, 1, false), (1, 2, true)]);
     }
 
     // records: a player's own figures, the best kept (a figure no car makes is not), quickest drag from drag races

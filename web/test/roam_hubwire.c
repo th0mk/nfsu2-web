@@ -111,7 +111,7 @@ int main(int argc, char **argv){
         m.h.type = RC_MSG_PEERS; m.h.sender = 0xB0Bu;                 /* the hub answers: an empty list */
         n = rc_encode(&m, b, sizeof b);
         rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000);
-        if (!rc_ask_map(&S, t += 1000)){ printf("not asked\n"); return 0; }
+        if (!rc_ask_map(&S, t += 1000, RC_MAP_MAX)){ printf("not asked\n"); return 0; }
         for (int i = 2; i < argc; i++){ unhex(argv[i], b, &n); rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000); }
         if (c.lobbies){
             printf("lobbies %u %d", S.lobbies_gen, S.lobbies_n);

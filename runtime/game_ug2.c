@@ -257,6 +257,15 @@ static int drive_state(void){
 int hfr_rate_now(void);
 int sms_delivered(void); void sms_request(int id);
 int roam_game_cars(void); int roam_game_friends(void);
+/* "engage": the player's car on an event's or a shop's marker (player
+ * +0x9AC, what Engage would enter), the game's own outrun offer (the career's
+ * outrun state 2, set with the HUD's outrun icon by 0x500D20 and tested by
+ * 0x500D80), or one of ours (roam_game_engage: a friend's outrun, a
+ * multiplayer-only race spot, a lobby to join or to start); "roam_near":
+ * friends' cars within a horn's reach (roam_game_near) */
+#define PL_MARKER    0x9acu
+#define G_OUTRUN_ST  0x00860a58u      /* Career4230 (0x85EF70) +0x1AE8 */
+int roam_game_engage(void); int roam_game_near(void);
 static void ug2_status(StatusOut *s){
     s->drive = drive_state();
     s->rate = hfr_rate_now();
@@ -267,6 +276,12 @@ static void ug2_status(StatusOut *s){
     s->roam_cars = roam_game_cars();
     if (n++ % 30 == 0) friends = roam_game_friends();
     s->roam_friends = friends;
+    int roam = (s->drive & 3) == 2;
+    uint32_t p = roam && mem_is_committed(G_PLAYER0 + 3u) ? MR32(G_PLAYER0) : 0u;
+    int marker = p && mem_is_committed(p + PL_MARKER + 3u) && MR32(p + PL_MARKER);
+    int outrun = roam && mem_is_committed(G_OUTRUN_ST + 3u) && MR32(G_OUTRUN_ST) == 2u;
+    s->engage = roam && (marker || outrun || roam_game_engage());
+    s->roam_near = roam ? roam_game_near() : 0;
 }
 
 /* ---- the game's text entry, for the page (runtime/web/input_web.c) -------- */

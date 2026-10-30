@@ -18,7 +18,7 @@ const MAX_MISSES = 3;
 
 export const VERDICT = {
   type: 'object', additionalProperties: false,
-  required: ['action', 'category', 'language', 'reply', 'summary', 'notes', 'escalate', 'duplicate_of', 'confidence', 'tags'],
+  required: ['action', 'category', 'language', 'reply', 'summary', 'notes', 'escalate', 'handoff', 'duplicate_of', 'confidence', 'tags'],
   properties: {
     action: { type: 'string', enum: ['none', 'ask', 'answer'] },
     category: { type: 'string', enum: ['crash', 'graphics', 'performance', 'controls', 'online', 'saves', 'audio', 'phone', 'suggestion', 'question', 'other'] },
@@ -27,6 +27,7 @@ export const VERDICT = {
     summary: { type: 'string' },
     notes: { type: 'string', description: 'for the developer; posted in the staff channel when escalate is true' },
     escalate: { type: 'boolean', description: 'the developer should look at this' },
+    handoff: { type: 'boolean', description: 'a person should take the thread from here; the bot stays out of it after this reply' },
     duplicate_of: { type: 'string' },
     confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
     tags: { type: 'array', items: { type: 'string' }, description: 'names from "Tags you may add" in the thread\'s header; [] for none' },
@@ -194,6 +195,15 @@ export function vet(v, { minConfidence = 'medium' } = {}) {
     if (block.split('\n').length > 8) return { post: null, why: 'a long code block' };
   }
   return { post: reply, why: v.action };
+}
+
+/** how much of `reply` the `earlier` text says already: the share of its word pairs found there, 0..1 */
+export function overlap(reply, earlier) {
+  const pairs = s => { const w = s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []; return new Set(w.slice(1).map((x, i) => `${w[i]} ${x}`)); };
+  const a = pairs(reply), b = pairs(earlier);
+  let n = 0;
+  for (const p of a) if (b.has(p)) n++;
+  return a.size ? n / a.size : 0;
 }
 
 /** a reply as Discord messages of at most `max` characters: its blank-line parts (never split inside a code block),

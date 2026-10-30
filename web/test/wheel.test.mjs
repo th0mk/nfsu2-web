@@ -411,3 +411,124 @@ test('a controller first seen with its left stick pushed (Chrome shows one then)
     p.dispose();
   });
 });
+
+// An RC radio (EdgeTX's USB joystick) under Chrome on Windows: CH1 to CH8 on axes 0 to 7 (AETR: the sticks centred,
+// the throttle down; CH5 to CH8 switches), channels past the eighth as buttons
+const T8L = 'EdgeTX RadioMaster T8L Joystick (Vendor: 1209 Product: 4f54)';
+const RADIO_REST = [0, 0, -1, 0, -1, -1, 0, 1];
+const radioAt = (over) => { const a = RADIO_REST.slice(); for (const [i, v] of Object.entries(over)) a[+i] = v; return a; };
+
+test('RC radios by EdgeTX\'s ids or their firmware\'s and makers\' names, and nothing else', () => {
+  for (const id of [T8L, '1209-4f54-EdgeTX RadioMaster T8L Joystick', 'FrSky Taranis Joystick (Vendor: 0483 Product: 5710)',
+    'OpenTX Jumper T16 Joystick (Vendor: 0483 Product: 5710)', 'RadioMaster Pocket Joystick'])
+    assert.equal(W.wheelOf(id)?.layout, 'radio', id);
+  // STMicro's demo ids without a radio's name, another pid.codes device, wheels and pads: as before
+  assert.equal(W.wheelOf('STM32 Joystick (Vendor: 0483 Product: 5710)'), null);
+  assert.equal(W.wheelOf('Some Game Controller (Vendor: 1209 Product: 4f55)'), null);
+  assert.equal(W.wheelOf('Wheel Base (Vendor: 1209 Product: ffb0)').layout, 'generic');
+  assert.equal(W.wheelOf(G29).layout, 'ps');
+  assert.equal(W.wheelOf('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)'), null);
+  assert.deepEqual(G.familyOf(T8L), { family: P.PADF_GENERIC, name: 'EdgeTX RadioMaster T8L Joystick' });
+});
+
+test('a radio\'s layout: the aileron steers, the throttle is the gas, the elevator pulled back the brake', () => {
+  const m = W.guessMap(W.wheelOf(T8L), RADIO_REST, 24);
+  assert.deepEqual([m.steer, m.centre, m.lock, m.gas, m.brake], [0, 0, 1, { axis: 2, rest: -1, full: 1 }, { axis: 1, rest: 0, full: -1 }]);
+  assert.ok(m.buttons.every(b => b === -1));
+  assert.deepEqual([m.switches, m.gears, m.placed], [[], undefined, undefined]);
+  const at = (over) => { const r = W.readWheel(radioAt(over), [], m, -1); return { ...r, axes: r.axes.map(v => v || 0) }; };
+  assert.deepEqual(at({}).axes, [0, 0, 0, 0, 0, 0]);                   // at rest: nothing, whatever the switches
+  assert.equal(at({}).buttons, 0);
+  assert.deepEqual(at({ 0: 0.5 }).axes, [0.5, 0, 0, 0, 0, 0]);        // half right
+  assert.deepEqual(at({ 2: 0 }).axes, [0, 0, 0, 0, 0, 0.5]);          // half throttle
+  assert.deepEqual(at({ 2: 1, 1: -1 }).axes, [0, 0, 0, 0, 1, 1]);     // full throttle, the right stick pulled back
+  assert.deepEqual(at({ 1: 1, 3: -1 }).axes, [0, 0, 0, 0, 0, 0]);     // pushed forward, the rudder: nothing
+  assert.match(W.describeMap(m, -1), /^steering axis 0 .* gas axis 2 \(-1\.00 to 1\.00\), brake axis 1 \(0\.00 to -1\.00\), switches none, guessed$/);
+  // TAER: the throttle first; a radio sending a stick's up as -1 (its throttle rests at +1): pulled back is +1
+  const taer = W.guessMap(W.wheelOf(T8L), [-1, 0, 0, 0, 1, 1, 1, 1], 24);
+  assert.deepEqual([taer.steer, taer.gas.axis, taer.brake.axis], [1, 0, 2]);
+  const up = W.guessMap(W.wheelOf(T8L), [0, 0, 1, 0, -1, -1, -1, -1], 24);
+  assert.deepEqual([up.gas, up.brake], [{ axis: 2, rest: 1, full: -1 }, { axis: 1, rest: 0, full: 1 }]);
+  // the throttle not at an end, or not read yet: AETR, a stick's up +1
+  const pick = (m) => [m.steer, m.gas.axis, m.gas.rest, m.brake.axis, m.brake.full];
+  for (const axes of [[0, 0, 0, 0, -1, -1, 0, 0], Array(8).fill(0)])
+    assert.deepEqual(pick(W.guessMap(W.wheelOf(T8L), axes, 24)), [0, 2, -1, 1, -1]);
+});
+
+test('a radio\'s set-up: the sticks, then a switch for nitrous, the handbrake and a respawn, or skipped', () => {
+  const base = W.guessMap(W.wheelOf(T8L), RADIO_REST, 24);
+  const L = new W.WheelLearn(base, true);
+  let t = 0, pressed = [];
+  const hold = (over, l = L) => { const a = radioAt(over); for (let e = 0; e <= 800; e += 16) l.feed(a, t += 16, pressed); };
+  hold({});
+  hold({ 0: 0.98 });                                                    // the right stick right
+  hold({ 2: 1 });                                                       // the throttle up
+  assert.equal(L.step, 'brake');
+  hold({ 2: 1, 1: -1 });                                                // the elevator back, the throttle still up
+  assert.equal(L.step, 'nitrous');
+  hold({});                                                             // nothing flipped
+  assert.deepEqual([L.step, L.progress], ['nitrous', 0]);
+  hold({ 3: 0.4 });                                                     // the rudder a little: no switch
+  assert.equal(L.step, 'nitrous');
+  hold({ 7: -1 });                                                      // CH8's switch from up to down
+  assert.equal(L.step, 'handbrake');
+  hold({ 7: -1 });                                                      // that switch still there: taken
+  assert.equal(L.step, 'handbrake');
+  hold({ 7: 0 });                                                       // the same switch's middle: free
+  assert.equal(L.step, 'respawn');
+  pressed = Object.assign(Array(24).fill(false), { 1: true });          // CH10, a button
+  hold({ 7: 0 });
+  assert.equal(L.step, 'done');
+  const m = L.map();
+  assert.deepEqual(m.switches, [{ pad: P.PAD_A, axis: 7, on: -1 }, { pad: P.PAD_X, axis: 7, on: 0 }, { pad: P.PAD_BACK, button: 1 }]);
+  assert.deepEqual([m.steer, +m.lock.toFixed(2), m.gas, m.brake], [0, 0.98, { axis: 2, rest: -1, full: 1 }, { axis: 1, rest: 0, full: -1 }]);
+  const read = (over, b = []) => W.readWheel(radioAt(over), b, m, -1).buttons;
+  assert.equal(read({}), 0);
+  assert.equal(read({ 7: -0.98 }), bit(P.PAD_A));
+  assert.equal(read({ 7: 0.02 }), bit(P.PAD_X));
+  assert.equal(read({}, Object.assign(Array(24).fill(false), { 1: true })), bit(P.PAD_BACK));
+  assert.match(W.describeMap(m, -1), /switches nitrous axis 7 at -1\.00, handbrake axis 7 at 0\.00, respawn button 1, set up by the player$/);
+  // skipped: none
+  const S = new W.WheelLearn(base, true);
+  t = 0; pressed = [];
+  for (const over of [{}, { 0: 1 }, { 2: 1 }, { 1: -1 }]) hold(over, S);
+  assert.equal(S.step, 'nitrous');
+  assert.deepEqual([S.skip(), S.skip(), S.skip(), S.step, S.skip(), S.map().switches], [true, true, true, 'done', false, []]);
+  // a wheel's set-up has no switch steps, and a wheel's map no switches, kept or not
+  const wb = W.guessMap(W.wheelOf(G29), G29_REST, 25), wl = new W.WheelLearn(wb);
+  assert.equal(wl.skip(), false);
+  assert.equal('switches' in wb, false);
+  assert.deepEqual(W.withSetUp(base, m).switches, m.switches);
+  assert.equal('switches' in W.withSetUp(wb, m), false);
+});
+
+test('a radio drives as a wheel, and a stick or a switch moved half way takes it back from a controller', async () => {
+  const G2 = await load('web/src/input/gamepad.ts', '\n// a page for a radio');
+  await withPads(async (pads) => {
+    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const radio = fakePad(T8L, 0, '', RADIO_REST, 24);
+    pads.push(radio);
+    const p = new G2.PadPoller(h, new Uint8Array(buf), 0, () => {}, s => logs.push(s));
+    const ax = (a) => +f[P.IM_PAD_AXIS + a].toFixed(2);
+    p.poll();
+    assert.deepEqual([h[P.IM_PAD_WHEEL], ax(P.PAD_AXIS_LX), ax(P.PAD_AXIS_RT), ax(P.PAD_AXIS_LT), h[P.IM_PAD_BUTTONS]], [1, 0, 0, 0, 0]);
+    assert.match(logs.at(-1), /T8L Joystick .*: an RC radio, steering axis 0 .* switches none, guessed$/);
+    radio.axes[0] = -0.5; radio.axes[2] = 1; p.poll();
+    assert.deepEqual([ax(P.PAD_AXIS_LX), ax(P.PAD_AXIS_RT)], [-0.5, 1]);
+    const ds = fakePad('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)', 1, 'standard', [0, 0, 0, 0], 17);
+    pads.push(ds); p.poll();
+    pressOn(ds, 0); p.poll(); pressOn(ds, 0, false); p.poll();     // Cross: the controller drives
+    assert.equal(G2.drivingPad(), ds);
+    radio.axes[0] = -0.1; radio.axes[2] = 0.6; p.poll();           // less than half way from where it was: no
+    assert.equal(G2.drivingPad(), ds);
+    radio.axes[2] = -1; p.poll();                                   // the throttle pulled down: the radio again
+    assert.deepEqual([G2.drivingPad(), h[P.IM_PAD_WHEEL], ax(P.PAD_AXIS_LX)], [radio, 1, -0.1]);
+    radio.axes[0] = 0.4; p.poll(); radio.axes[0] = 0.8; p.poll();  // driving: the stick moves on as it likes
+    assert.equal(G2.drivingPad(), radio);
+    pressOn(ds, 1); p.poll();
+    assert.equal(G2.drivingPad(), ds);
+    radio.axes[7] = -1; p.poll();                                   // a switch flipped
+    assert.equal(G2.drivingPad(), radio);
+    p.dispose();
+  });
+});

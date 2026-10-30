@@ -1,0 +1,14 @@
+# The other side of roam_drift_look_a.txt: in free roam, A's car loads as this game makes them ("slot N: loading
+# Ann's"), for about 70 s from when it is shown.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 6000
++0    roam mp status
++0    loop 10
++400  roam mp status
++0    endloop
++0    log drift_look_b_end
++10   quit

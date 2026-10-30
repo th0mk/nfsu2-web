@@ -83,7 +83,7 @@ for (const c of cases) {
   }
   const v = res.verdict, { post, why } = vet(v, { minConfidence: env.BOT_MIN_CONFIDENCE || 'medium' });
   spent += res.cost ?? 0;
-  const key = `${post ? v.action : 'nothing'}${v?.escalate ? ' + staff' : ''}`;
+  const key = `${post ? v.action : 'nothing'}${v?.escalate ? ' + staff' : ''}${v?.handoff ? ' + handoff' : ''}`;
   tally[key] = (tally[key] ?? 0) + 1;
   console.log(`${c.id}: ${key} (${why}), $${(res.cost ?? 0).toFixed(3)}, total $${spent.toFixed(2)}`);
   report.push(`## ${c.id} ${c.title}`, '',

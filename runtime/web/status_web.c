@@ -82,6 +82,18 @@ static void roam_state(int cars, int friends){
     double v[2] = { (double)cars, (double)friends };
     if (v[0] != last[0] || v[1] != last[1]){ last[0] = v[0]; last[1] = v[1]; host_status_set_n(slot, v, 2); }
 }
+/* "engage", "roam_near": for the touch controls' free-roam buttons
+ * (web/src/app/touch.ts), from the game's StatusOut (game_ug2.c): "engage" is
+ * 1 while Engage does something in free roam, so Start shows only then;
+ * "roam_near", friends' cars within a horn's reach, so Horn and Quick chat
+ * show only then. */
+static void touch_state(int engage, int near_){
+    static int slot[2] = { -2, -2 };
+    static double last[2] = { -1, -1 };
+    if (slot[0] == -2){ slot[0] = host_status_slot("engage"); slot[1] = host_status_slot("roam_near"); }
+    double v[2] = { (double)engage, (double)near_ };
+    if (v[0] != last[0] || v[1] != last[1]){ last[0] = v[0]; last[1] = v[1]; host_status_set_n(slot, v, 2); }
+}
 void status_web_frame(void){
     static int slot = -2, last = -1, rslot = -2, rlast = -1, pslot = -2, plast = -1, sslot = -2, slast = -1;
     if (slot == -2){ slot = host_status_slot("drive"); rslot = host_status_slot("rate"); pslot = host_status_slot("pause"); sslot = host_status_slot("sms"); }
@@ -92,6 +104,7 @@ void status_web_frame(void){
     if (s.pause != plast && pslot >= 0){ plast = s.pause; host_status_set(pslot, s.pause); }
     if (s.sms != slast && sslot >= 0){ slast = s.sms; host_status_set(sslot, s.sms); }
     roam_state(s.roam_cars, s.roam_friends);
+    touch_state(s.engage, s.roam_near);
 }
 
 /* main_web.c, before the guest starts */

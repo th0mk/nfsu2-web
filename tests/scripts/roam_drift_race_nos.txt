@@ -1,0 +1,35 @@
+# Drift races keep their own rules (no nitrous) with drift mode on before them: runtime/drift.c keeps the car's nitrous
+# for free roam's drift mode only.  From free roam in drift mode, with nitrous used, straight into the next career
+# drift race (its race card turns drift handling off in free roam), then nitrous in the race.  The race's car has no
+# nitrous, as the drift races have it: the shot and its length ([[car +0x20] +0x2A0]) 0, and ALT gives none.
+#   NFSU2_SAVE_SEED=<a stage 3 career> node web/tools/run-suite.mjs --script roam_drift_race_nos.txt --marker drift_race_nos_end
+# Good: every expect passes, as on the module before.
+0     bot on
++0    waitroam 6000
++0    bot off
++60   expect i:[[0x8900ac]+4]+0x454 > 0
++0    tap X
++30   expect i:0x890104 == 1
++0    down UP
++60   down ALT
++60   up ALT
++0    up UP
++60   careergo next:drift
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitexpr b:0x89e7d9 == 1 6000
++600  waitexpr i:0x8654a4 == 6 12000
++300  expect b:0x89e7d9 == 1
++0    expect i:0x890104 == 0
++0    expect i:[[0x8900ac]+4]+0x454 == 0
++0    expect i:[[0x8900ac]+4]+0x45c == 0
++0    expect i:[[[0x8900ac]+4]+0x20]+0x2a0 == 0
++0    down UP
++120  down ALT
++60   up ALT
++0    up UP
++0    expect i:[[0x8900ac]+4]+0x454 == 0
++0    expect i:[[0x8900ac]+4]+0x45c == 0
++0    log drift_race_nos_end
++10   quit

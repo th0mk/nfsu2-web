@@ -7,10 +7,11 @@
  * nothing in the game sets (drag has [0x890108], Street X [0x89010C]): a
  * developers' switch, read as the byte is in the helper 0x401910 and about a
  * hundred inlined copies.  Set, the car's physics take their drift-event
- * branches every step (the drift assist 0x5AC260, the car's drift tuning,
- * parameter set 3, the steering's drift curve: docs/port/drift-fidelity.md
- * in the native repo, 2.2), the camera key has a fifth view, the drift
- * camera (PlayerSettings::ScrollDriveCam 0x502540), and the race
+ * branches every step (the drift assist 0x5AC260, the steering's drift
+ * curve: docs/port/drift-fidelity.md in the native repo, 2.2), the car's
+ * physics are made as a drift event's when they are made again (below), the
+ * camera key has a fifth view, the drift camera
+ * (PlayerSettings::ScrollDriveCam 0x502540), and the race
  * coordinator's tick of each racer runs the drift tick (0x6016A0 ->
  * 0x5F7A00), whose first call makes the racer's DriftCar.  Free roam's
  * coordinator has one racer, the player, with a DriftScore and a style
@@ -57,6 +58,39 @@
  * which only runs while the switch is off; while it is on they came up all
  * the same, with the objects' own text ("HANGY TIMEY!", "+ 25"), and stayed,
  * so they are kept hidden then.
+ *
+ * The car's physics (its ride's block from +0x10) are made from the ride's
+ * parts and dyno setup (+0x398) when the car is, by 0x5B4FC0 (through
+ * 0x639CE0): with the switch or a drift event's byte set, from the car
+ * type's drift parameters (set 3; a drag's 2, Street X's 10).  A race's
+ * setup puts the dyno setup of its kind in the ride first: the career car's
+ * record (+0x360) keeps 5 of 0x29 bytes (0 circuit and sprint, 1 drag, 2
+ * drift, 3 and 4 the others), and the record's 0x516AC0 copies one (career
+ * races 0x525ED0 with the kind's: a drift event's 2, 0x53F830; free roam's
+ * 0x53FEB0 always 0).  Free roam's car is made with neither, and nothing
+ * makes it again: drift mode had none of a drift event's physics.  So when
+ * the switch comes on, the ride takes the record's Drift setup (if it has
+ * other values) and the car is made again (the car's own 0x5F6C20, as the
+ * dyno's tuning screens have it done: 0x50FDD0); when it goes off, the setup
+ * the ride had and the car made again once more.  Measured (a stage 3
+ * career, ride +0x10 .. +0x580): X made no value differ before; now 3 with
+ * the Drift setup left as it came and 90 with one of its own, each as a
+ * drift event (S3_DRIFT_9) has it, the 4 left a race's own; X off gave every
+ * value back.  Friends' games are sent the ride's own setup meanwhile
+ * (drift_kept_tuning, roam_game.c's car look): another look would have the
+ * car loaded again in each.
+ *
+ * The nitrous stays as it was: a drift event has none (set 3's 0x5A7750 sets
+ * the shot's length, the physics' [car +0x20] +0x2A0 in seconds, to 0), and
+ * 0x5F6C20 fills the car's nitrous (+0x40, 0x591CD0) again from that length
+ * whenever the shot it has (+0x414 in 1/4000 s, times 0.00025f) does not
+ * compare equal to it, which it hardly ever does (0.00025f is a little under
+ * 1/4000).
+ * Made again for X, the car had no nitrous in drift mode, and a full shot
+ * back after it (X twice, a pause: free nitrous).  Players asked for it in
+ * drift mode, where it went with the drifts ("Bring back nitro in drift
+ * mode"), so the shot's length goes back after the car is made again for X,
+ * and the nitrous's state (+0x414 .. +0x420) after each time.
  *
  * The camera: on, the drift camera (view 4) as the camera key reaches it
  * (Player 0x5F2FA0: PlayerSettings view, [0x83AA64 + 0x28 n] +0x10, then
@@ -119,7 +153,10 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_STYLES       0x00864624u   /* the style table: 0x30 each, +7 the modes' mask */
 #define G_STYLEPOOL    0x00864628u
+#define G_CAREER_CAR   0x00863480u   /* the career car's handle (CAREER_SLOT_n) */
+#define G_FECARS       0x0083ad90u   /* player 1's front-end cars (garage.c's CARS0): the career car's record */
 #define FN_POOL_ALLOC  0x00440e50u   /* cdecl (pool) */
+#define FN_CAR_TUNED   0x005f6c20u   /* thiscall car (1): its physics again, from its ride's tuning and parts */
 #define FN_STYLE_INIT  0x0056d650u   /* thiscall style */
 #define FN_CAMERA_KEY  0x005f2fa0u   /* thiscall Player (step): the next camera view */
 #define FN_FE_HIDE     0x0050ca00u   /* cdecl (FE object, 0: none) */
@@ -138,6 +175,14 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define ST_TOTAL       0x2cu         /* points banked (float) */
 #define PL_HUD         0x9a4u
 #define VIEW_DRIFT     4u
+#define CAR_RIDE       0x10u         /* car: its ride (RideInfo) */
+#define CAR_PHYS       0x20u         /* car: its physics' values (+0x2A0 the nitrous shot's length, s) */
+#define PH_NOS_LEN     0x2a0u
+#define CAR_NOS_STATE  0x454u        /* car: its nitrous's state (+0x40 +0x414: the shot, +0x418, left, on since), 4 dwords */
+#define RIDE_TUNING    0x398u        /* ride: the dyno setup it drives with */
+#define REC_SETUPS     0x360u        /* a car record: its 5 dyno setups, SETUP_SZ bytes each */
+#define SETUP_SZ       0x29u
+#define SETUP_DRIFT    2u            /* 0 circuit and sprint, 1 drag, 2 drift, 3 and 4 the others */
 
 static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
@@ -167,6 +212,8 @@ static struct {
     double total, best;
     uint32_t keys, kseq; int kinit;
     int slot[8]; double val[8]; int slots;
+    uint32_t tuned; int swapped;      /* the car whose physics are the switch's; the Drift setup in its ride */
+    uint8_t kept[SETUP_SZ];           /* ... and the setup the ride had */
 } D;
 
 /* X presses since the last frame, from the keyboard's events (a tap between frames counts) */
@@ -280,6 +327,58 @@ static void camera_off(CPU *c, int live){
     } else MR32(va) = back;
 }
 
+uint32_t garage_find(uint32_t db, uint32_t h);   /* garage.c: a front-end car record by handle (slots 6-10 too) */
+
+/* The car made again (0x5F6C20) with its nitrous as it was: the shot's length (a drift event's is 0) and what is left
+ * of it (see the top) */
+static void car_tuned(CPU *c, uint32_t car){
+    uint32_t ph = rd32(car + CAR_PHYS), nos[4], one = 1;
+    int keep = ok(ph, PH_NOS_LEN + 3u) && ok(car + CAR_NOS_STATE, 15u);
+    float len = keep ? MRF32(ph + PH_NOS_LEN) : 0.f;
+    for (uint32_t i = 0; keep && i < 4u; i++) nos[i] = MR32(car + CAR_NOS_STATE + 4u * i);
+    gcall(c, FN_CAR_TUNED, car, 1, &one);
+    if (!keep || rd32(car + CAR_PHYS) != ph) return;
+    MRF32(ph + PH_NOS_LEN) = len;
+    for (uint32_t i = 0; i < 4u; i++) MR32(car + CAR_NOS_STATE + 4u * i) = nos[i];
+}
+
+/* The car's physics made again with the switch on: a drift event's handling (parameter set 3) and the car's Drift
+ * setup from the dyno in its ride (see the top) */
+static void physics_in(CPU *c){
+    uint32_t car = rd32(rd32(G_PLAYER1) + 4u), ride = car ? rd32(car + CAR_RIDE) : 0,
+             rec = MR32(G_GAMEMODE) == 1u ? garage_find(G_FECARS, rd32(G_CAREER_CAR)) : 0;
+    if (!ok(ride, RIDE_TUNING + SETUP_SZ)) return;
+    uint32_t setup = ok(rec, REC_SETUPS + 5u * SETUP_SZ) ? rec + REC_SETUPS + SETUP_DRIFT * SETUP_SZ : 0;
+    int differ = 0;
+    for (uint32_t i = 0; setup && i < SETUP_SZ; i++) differ += MR8(setup + i) != MR8(ride + RIDE_TUNING + i);
+    if (differ){
+        for (uint32_t i = 0; i < SETUP_SZ; i++){ D.kept[i] = MR8(ride + RIDE_TUNING + i); MR8(ride + RIDE_TUNING + i) = MR8(setup + i); }
+        D.swapped = 1;
+    }
+    D.tuned = car;
+    car_tuned(c, car);
+    fprintf(stderr, "[drift] f=%ld the car's physics for a drift event%s (%d of %u values from the dyno's Drift setup), its nitrous kept\n",
+            autotest_frame(), !setup ? ", no Drift setup of its own" : "", differ, SETUP_SZ);
+}
+/* ... and as they were, while the car is still the one (out of the world: the next car is made new) */
+static void physics_out(CPU *c){
+    uint32_t car = D.tuned, ride = car ? rd32(car + CAR_RIDE) : 0;
+    int same = car && rd32(rd32(G_PLAYER1) + 4u) == car && ok(ride, RIDE_TUNING + SETUP_SZ);
+    if (same && D.swapped) for (uint32_t i = 0; i < SETUP_SZ; i++) MR8(ride + RIDE_TUNING + i) = D.kept[i];
+    D.tuned = 0; D.swapped = 0;
+    if (!car) return;
+    if (!same || rd32(G_FLOW) != 6u){ fprintf(stderr, "[drift] f=%ld the car is gone: no physics to give back\n", autotest_frame()); return; }
+    car_tuned(c, car);
+    fprintf(stderr, "[drift] f=%ld the car's own physics back\n", autotest_frame());
+}
+/* the dyno setup friends' games show the car with (roam_game.c): the ride's own while the Drift setup is in, so X is
+ * no new look (a car loaded again in every friend's game) */
+int drift_kept_tuning(uint8_t *out){
+    if (!D.swapped) return 0;
+    memcpy(out, D.kept, SETUP_SZ);
+    return 1;
+}
+
 /* the status, every frame it changes (a drift's points: every frame of it), all in one consistent section */
 static void publish(void){
     static const char *const k[8] = { "drift", "drift_key", "drift_x", "drift_gain", "drift_total", "drift_best", "drift_st", "drift_pend" };
@@ -315,6 +414,8 @@ void drift_frame(CPU *c){
         MR32(G_FORCEDRIFT) = (uint32_t)on;
         fprintf(stderr, "[drift] f=%ld drift handling %s%s\n", autotest_frame(), on ? "on" : "off",
                 on ? "" : !D.want ? "" : !world ? " (not in free roam)" : !top ? " (a screen over the HUD)" : " (paused)");
+        if (on) physics_in(c);
+        else physics_out(c);
     }
     if (on){
         uint32_t rc = racer();

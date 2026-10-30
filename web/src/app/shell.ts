@@ -42,8 +42,9 @@ import { blockList, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgr
 import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, writeFile } from './savefs';
 import { turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
-import { askCrews, queueText, roomHash, serverAnswers, watchPlayers, type PlayerCounts } from './players';
-import { crewList, crewsOf, crewsValue, rgbsValue, rgbWords, type Crew } from './crews';
+import { askCrews, queueText, roomHash, roomText, serverAnswers, watchPlayers, type PlayerCounts } from './players';
+import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
+import { checkInvite, inviteLink, readInvite, sameName, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
 import { SavesPanel } from './saves-ui';
 import { saveScreenshot } from './shots';
@@ -58,7 +59,7 @@ import { groupsOf, phrasesOf } from './phrases';
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { PlayTime, SMS_AFTER_MS } from './playtime';
-import { pageId } from './page-id';
+import { keepPageId, PAGE_ID_FILE, pageId } from './page-id';
 import { NameClaims, onlineName } from './claim';
 import { claimQuietly, NameRow, quietCheck, settleName, type PlayNameDeps } from './claim-ui';
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
@@ -82,9 +83,9 @@ function takeParams(dev: boolean): string[] {
   const given = TEST_PARAMS.filter(k => addr.has(k));
   if (!given.length || !dev) return given;
   q = addr;
-  // never the game data's own OPFS folder (savefs keeps names to one segment)
+  // never the game data's own OPFS folder, nor the page id's file (savefs keeps names to one segment)
   const save = (q.get('save') || 'save').replace(/[^A-Za-z0-9._-]/g, '_');
-  SAVE = save === 'cache' || /^\.+$/.test(save) ? 'save-test' : save;
+  SAVE = save === 'cache' || save === PAGE_ID_FILE || /^\.+$/.test(save) ? 'save-test' : save;
   ENVIRONMENT = Object.fromEntries(q.getAll('env').filter(e => e.includes('='))
     .map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])
     // the mounts and the save overlay's own files stay the page's (settings.ts HOST_FIXED, PATH_VARS)
@@ -112,6 +113,7 @@ let session: GameSession | null = null;
 let hudWide = true;                      // the running game's HUD is edge-anchored (hud = wide), not 4:3
 let solidCars: boolean | null = null;    // the running game's free roam has solid cars (null: no free roam)
 let roamCrews: Crew[] | null = null;     // the running game's crews: as it started, then as the menu changed them (null: no free roam)
+let roamRoom: string | null = null;      // the running game's room: as it started, then as an invite link changed it ('': none; null: no free roam)
 let crewDraft = '';                      // the crew name being typed in the menu
 let popCounts = new Map<number, number>();   // how many are in free roam in each of those crews, by hash (askPopCounts)
 let popAsk = 0;                          // the popup's questions so far: only the newest one's answer shows
@@ -547,6 +549,8 @@ async function startGame() {
   };
   const r = resolved(host);
   if (playAs) r.env.NFSU2_ROAM_NAME = playAs;
+  // the room and crews in Unicode's composed form, as the page hashes them (players.ts roomText): one "é" whichever way
+  for (const k of ['NFSU2_ROAM_ROOM', 'NFSU2_ROAM_CREW'] as const) if (r.env[k]) r.env[k] = roomText(r.env[k]);
   // the names this game goes by, for the log as it leaves the browser (privacy.ts)
   privacy.name(r.env.NFSU2_ROAM_NAME, 'you');
   for (const c of crewList(r.env.NFSU2_ROAM_CREW ?? '')) privacy.name(c, 'crew');
@@ -622,6 +626,7 @@ async function startGame() {
   hudWide = !/^(43|4:3)$/i.test(r.env.NFSU2_HUD?.trim() ?? '');
   solidCars = net && r.env.NFSU2_ROAM === '1' ? r.env.NFSU2_ROAM_COLLIDE !== '0' : null;
   roamCrews = net && r.env.NFSU2_ROAM === '1' ? crewsOf(r.env.NFSU2_ROAM_CREW ?? '', r.env.NFSU2_ROAM_CREW_RGB ?? '') : null;
+  roamRoom = net && r.env.NFSU2_ROAM === '1' ? r.env.NFSU2_ROAM_ROOM ?? '' : null;
   crewDraft = ''; popCounts = new Map();
   fatal = null;
   quitAt = null;
@@ -631,10 +636,11 @@ async function startGame() {
     // session's subsystems keep them (some, like a closed AudioContext, a little
     // longer than the game), and a closure from this function would keep its
     // scope, and with it this game, reachable
+    const ids = net ? await keepPageId() : null;
     session = await GameSession.start({
       module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks,
       netBack, netQueue, onSaved,
-      netId: net ? pageId() : undefined, netClaim: net ? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved,
+      netId: ids?.id, netWas: ids?.was, netClaim: net ? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved,
       netBlock: net && r.env.NFSU2_ROAM === '1' ? blockList(r.env.NFSU2_ROAM_BLOCK ?? '') : undefined,
       artifacts: q.get('artifacts') ?? undefined, dumpScale: q.get('dumpscale') ? +q.get('dumpscale')! : undefined,
       toggleFullscreen, padPage: PAD_PAGE, log: logLine, onFatal: stopFatal, onOtherBuild: otherBuild,
@@ -1125,7 +1131,9 @@ function drawPopCrews(focus?: (root: HTMLElement) => Element | null | undefined)
   const box = $('#crews-pop-box'), had = box.contains(document.activeElement);
   box.replaceChildren();
   crewControl({ list: roamCrews ?? [], id: 'crews-pop-input', labelId: 'crews-pop-title', placeholder: N('Crew name'), counts: popCounts, draft: crewDraft,
-    onDraft: v => { crewDraft = v; }, change: (list, f) => void menuCrews(list, f) }, box).setAttribute('aria-labelledby', 'crews-pop-title');
+    onDraft: v => { crewDraft = v; }, change: (list, f) => void menuCrews(list, f),
+    // with the room the game is in (crew-mates meet within one room); what the copy did goes in the popup's note
+    link: name => inviteLink(location.origin, { crew: name, room: roamRoom ?? '' }) }, box).setAttribute('aria-labelledby', 'crews-pop-title');
   if (had && focus) ((focus(box) ?? box.querySelector('input:enabled')) as HTMLElement | null)?.focus({ focusVisible: true } as FocusOptions);
 }
 /** a Leave, Join or colour in the popup: the game takes the crews and their colours at once (its HELLO again to the
@@ -1143,6 +1151,151 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
   catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
   log.add(`[app] crews: ${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
 }
+
+// --------------------------------------------------------- invite links --
+// A link's room or crew (invite.ts), offered to the player and joined only on Join.  The tab that owns the saves joins
+// it: in settings.ini for the next Play, and with a game in free roam in that game at once (a crew as the menu's
+// Crews joins one, a room where the module takes one: net NET_CAP_ROOM).  A tab that does not own them (the link
+// opened a new tab while the game runs in another) asks that one to over INVITE_CHANNEL and says what it did; when it
+// does not answer (a page of before), this tab joins once it owns the saves.
+type Joined = 'live' | 'next' | 'full' | 'none';
+const INVITE_CHANNEL = `nfsu2-invite:${SAVE}`;
+/** the room, free roam and the crews as a settings.ini has them */
+interface InviteNow { room: string; roam: boolean; crews: Crew[] }
+function inviteNow(text: string | null): InviteNow {
+  const e = resolveEnv(text, {}, {}, DEVICE).env;
+  return { room: e.NFSU2_ROAM_ROOM ?? '', roam: e.NFSU2_ROAM === '1', crews: crewsOf(e.NFSU2_ROAM_CREW ?? '', e.NFSU2_ROAM_CREW_RGB ?? '') };
+}
+/** what inv changes there: the room, a crew it is not in yet (full: with 4 already), free roam off to on; and game:
+ *  the running game's free roam is not in them yet (a Room changed on the page during the game: the file has it) */
+function inviteDiff(inv: Invite, now: InviteNow) {
+  const crew = !!inv.crew && !now.crews.some(c => sameName(c.name, inv.crew!));
+  const game = !!session && roamCrews !== null && ((inv.room !== undefined && !sameName(inv.room, roamRoom ?? ''))
+    || (!!inv.crew && !roamCrews.some(c => sameName(c.name, inv.crew!))));
+  return { room: inv.room !== undefined && !sameName(inv.room, now.room), crew, roam: !now.roam, full: crew && now.crews.length >= CREW_MAX, game };
+}
+/** inv changes nothing: the file and the running game have it all */
+const inviteNone = (d: ReturnType<typeof inviteDiff>) => !d.room && !d.crew && !d.roam && !d.game;
+/** a line for the player: over the game while one runs, else on the page */
+const tell = (msg: string) => session ? toast(msg, 6000) : pageToast(msg);
+const JOINED_NOW = N('Your game switches to it now.'), JOINED_NEXT = N('Applies the next time you press Play.');
+const CREWS_FULL = N('You are in 4 crews already: leave one under Online, Crews, then open the link again.');
+function joinedText(how: Joined): string {
+  if (how === 'full') return t(CREWS_FULL);
+  return how === 'none' ? t('Joined.') : `${t('Joined.')} ${t(how === 'live' ? JOINED_NOW : JOINED_NEXT)}`;
+}
+/** whether the running game takes inv at once: it runs free roam (whatever the file says now), and a room only where
+ *  the module takes one */
+function inviteLive(inv: Invite): boolean {
+  if (!session || roamCrews === null) return false;
+  return inv.room === undefined || sameName(inv.room, roamRoom ?? '') || !!session.net?.canRoom?.();
+}
+
+/** Join inv here (this tab owns the saves): settings.ini, then the running game where it can. */
+async function applyInvite(inv: Invite): Promise<Joined> {
+  const was = await readText(SAVE, 'settings.ini').catch(() => null) ?? settingsText ?? TEMPLATE;
+  const now = inviteNow(was), d = inviteDiff(inv, now);
+  if (d.full) return 'full';
+  if (inviteNone(d)) return 'none';
+  let text = was, crews = now.crews;
+  if (d.roam) text = putKey(text, 'roam', 'on').text;
+  if (d.room) text = putKey(text, 'roam_room', inv.room || null).text;
+  if (d.crew) {
+    crews = [...crews, { name: inv.crew!, rgb: freeColour(crews) }];
+    text = putKey(text, 'roam_crew', crewsValue(crews.map(c => c.name))).text;
+    text = putKey(text, 'roam_crew_colours', rgbsValue(crews)).text;
+  }
+  if (text !== was) {
+    await writeFile(SAVE, 'settings.ini', text);
+    settingsText = text; void settings.refresh(); players?.now(); vault?.changed();
+  }
+  // (the names, for the log as it leaves the browser: privacy.ts)
+  privacy.name(inv.room, 'room'); if (inv.crew) privacy.name(inv.crew, 'crew');
+  const live = inviteLive(inv);
+  if (live && session?.net && roamCrews && inv.crew && !roamCrews.some(c => sameName(c.name, inv.crew!)) && roamCrews.length < CREW_MAX) {
+    roamCrews = [...roamCrews, { name: inv.crew, rgb: freeColour(roamCrews) }];
+    session.net.crews?.(roamCrews.map(c => roomHash(c.name)), rgbWords(roamCrews));
+  }
+  if (live && inv.room !== undefined && !sameName(inv.room, roamRoom ?? '') && session?.net?.room?.(roomText(inv.room))) roamRoom = inv.room;
+  log.add(`[app] invite link: joined${d.room ? ` room "${inv.room}"` : ''}${d.crew ? ` crew "${inv.crew}"` : ''}${d.roam ? ', free roam on' : ''}` +
+    ` (${live ? 'the game takes it now' : 'from the next Play'})`);
+  return live ? 'live' : 'next';
+}
+
+/** Join inv in the tab that owns the saves; null: no answer within 3 s (no such tab, or a page of before). */
+function relayInvite(inv: Invite): Promise<Joined | null> {
+  return new Promise(res => {
+    const ch = new BroadcastChannel(INVITE_CHANNEL), id = crypto.randomUUID();
+    const done = (v: Joined | null) => { clearTimeout(timer); ch.close(); res(v); };
+    const timer = setTimeout(() => done(null), 3000);
+    ch.onmessage = e => { if (e.data?.t === 'joined' && e.data.id === id) done(e.data.how as Joined); };
+    ch.postMessage({ t: 'join', id, inv });
+  });
+}
+/** The owner's side of relayInvite: a join another tab of this browser asked for (its player said Join there). */
+function hearInvites() {
+  const ch = new BroadcastChannel(INVITE_CHANNEL);
+  ch.onmessage = async e => {
+    const m = e.data;
+    if (m?.t !== 'join' || typeof m.id !== 'string' || !instance.owner) return;
+    const inv: Invite = {};
+    if (typeof m.inv?.room === 'string') inv.room = m.inv.room;
+    if (typeof m.inv?.crew === 'string') inv.crew = m.inv.crew;
+    if ((!inv.room && !inv.crew) || !checkInvite(inv).ok) return;
+    const how = await applyInvite(inv);
+    ch.postMessage({ t: 'joined', id: m.id, how });
+    tell(joinedText(how));
+  };
+}
+
+/** An invite link opened (the page's address, or a new one pasted while it is open): the question, then the join. */
+async function offerInvite(inv: Invite) {
+  // once this tab knows whether it owns the saves, has read them, and shows no other question
+  await Promise.race([instance.whenOwner, new Promise(r => setTimeout(r, 500))]);
+  if (instance.owner && settingsText === null) await loadSettings().catch(() => null);
+  while (document.querySelector('dialog[open]')) await new Promise(r => setTimeout(r, 500));
+  const ok = checkInvite(inv);
+  if (!ok.ok) {
+    log.add(`[app] invite link refused: ${ok.why}`);
+    tell(t('This invite link cannot be used: {why}.', { why: tvars(ok.why, ok.v).replace(/[.。]$/, '') }));
+    return;
+  }
+  const owner = instance.owner;
+  const now = inviteNow(owner ? settingsText : await readText(SAVE, 'settings.ini').catch(() => null)), d = inviteDiff(inv, now);
+  const v = { room: inv.room ?? '', crew: inv.crew ?? '', old: now.room };
+  // (as the player's own settings spell it)
+  if (inviteNone(d)) {
+    tell(inv.crew ? t('You are in crew "{crew}" already.', { crew: now.crews.find(c => sameName(c.name, inv.crew!))?.name ?? inv.crew })
+      : t('You are in room "{room}" already.', { room: now.room || inv.room! }));
+    return;
+  }
+  const title = !inv.crew ? t('Join room "{room}"?', v) : inv.room ? t('Join crew "{crew}" in room "{room}"?', v) : t('Join crew "{crew}"?', v);
+  const body = document.createElement('div');
+  const p = (text: string, cls = '') => { body.append(Object.assign(document.createElement('p'), { textContent: text, className: cls })); };
+  if (d.full) { p(t(CREWS_FULL)); await choiceBox(title, body, t('OK'), ''); return; }
+  if (inv.room) p(t('Free roam then shows only the players in room "{room}".', v) + (d.room && now.room ? ' ' + t('You leave room "{old}".', v) : ''));
+  else if (d.room) p(t('You leave room "{old}", so free roam shows everyone again.', v));
+  if (inv.crew) p(t('Crew-mates see each other in free roam however far apart, with names and map arrows in the crew\'s colour.'));
+  if (d.roam) p(t('This turns on Free roam with others: everyone on this server sees your name, and whether you\'re driving or in the menus.'));
+  p(!owner ? t('The game is open in another tab of this browser: it joins there.') : t(inviteLive(inv) ? JOINED_NOW : JOINED_NEXT), 'hint');
+  if (session) $('#stage').classList.add('cursor');
+  const yes = await confirmBox(title, body, t('Join'), false, '', t('Not now'));
+  if (session && !$<HTMLDialogElement>('#menu').open) { $('#stage').classList.remove('cursor'); $('#stage').querySelector('canvas')?.focus(); }
+  if (!yes) { log.add('[app] invite link: not now'); return; }
+  if (instance.owner) { tell(joinedText(await applyInvite(inv))); return; }
+  const how = await relayInvite(inv);
+  if (how) { tell(how === 'full' || how === 'none' ? joinedText(how) : `${t('Joined in the other tab.')} ${t(how === 'live' ? JOINED_NOW : JOINED_NEXT)}`); return; }
+  tell(t('The other tab did not answer. Close it: this tab joins when it takes over.'));
+  void instance.whenOwner.then(async () => { await loadSettings().catch(() => null); tell(joinedText(await applyInvite(inv))); });
+}
+/** the invite in the page's address, if any, taken out of it (a reload does not ask again), and offered */
+function takeInvite() {
+  const inv = readInvite(location.hash);
+  if (!inv) return;
+  history.replaceState(history.state, '', location.pathname + location.search);
+  void offerInvite(inv);
+}
+
 function showRadio(m: HTMLElement) {
   const button = m.querySelector<HTMLButtonElement>('[data-act="radio"]')!, on = radio?.on ?? false;
   m.querySelector<HTMLElement>('.menu-radio')!.hidden = !radioPort() || !canPickMusic();    // a game without the radio's words (an older build) has no Radio row
@@ -1474,6 +1627,8 @@ export async function boot() {
   const asked = TEST_PARAMS.some(k => addr.has(k));
   const dev = asked && await devServer();
   const given = takeParams(dev);
+  // this browser's id, put back in a store that lost it before anything reads it (page-id.ts)
+  void keepPageId();
   instance = claimInstance(`nfsu2-saves:${SAVE}`);
   // the last game of this save folder that did not get to its end (Safari stopped the page, say): its log is offered
   keeper = new LastGameKeeper(SAVE, log, logLine, text => privacy.scrub(text));
@@ -1634,6 +1789,10 @@ export async function boot() {
   void saves.refresh();
   void vault.start();
   void instance.whenOwner.then(async () => { await loadSettings(); evaluate(); void settings.refresh(); void saves.refresh(); vault.ownerNow(); syncPicker(); });
+  // invite links: the one this page was opened with, one pasted into its address later, one another tab took for it
+  hearInvites();
+  takeInvite();
+  window.addEventListener('hashchange', takeInvite);
   void checkGpu(lastGame?.ended?.why === 'GPU-LOST').then(c => { setCheck(c); if (c.code === 'GPU-ADAPTER-AFTER-LOST') recheckGpu(); });
   // Firefox's answer to its storage prompt comes later: the check again then
   void checkStorage().then(({ answer, ...c }) => { setCheck(c); void answer?.then(setCheck); });

@@ -40,6 +40,8 @@
 void guest_wait_begin(void);     /* win32_ext.c: release the guest lock around a host wait */
 void guest_wait_end(void);
 int  hfr_mailbox(void);          /* framerate.c */
+int  hfr_display_live(void);
+double hfr_frame_input_ms(void);
 void hfr_note_vsync(double ts, double dur);
 
 /* ---- shared-memory waits (wasm atomics on the shared linear memory) ---- */
@@ -68,9 +70,10 @@ static int      g_detached;      /* the page never attached: dropped back to nul
 #define KZERO  256u                         /* K arena bytes [0, 256): an all-zero block for TVert draws (base 0) */
 #define KFIRST 2048u                        /* [GW_K_HL, + GW_HL_BYTES): the frame's headlights; [GW_K_MARKS, + GW_MARKS_BYTES):
                                                quick chat's places; [GW_K_TONE, + GW_TONE_BYTES): Exposure and
-                                               White Level; the draws' blocks from here */
+                                               White Level; [GW_K_LAT, + GW_LAT_BYTES): input age; the draws'
+                                               blocks from here */
 _Static_assert(GW_K_HL >= KZERO && GW_K_HL + GW_HL_BYTES <= KFIRST && GW_K_MARKS + GW_MARKS_BYTES <= KFIRST
-               && GW_K_TONE + GW_TONE_BYTES <= KFIRST, "K arena");
+               && GW_K_TONE + GW_TONE_BYTES <= KFIRST && GW_K_LAT + GW_LAT_BYTES <= KFIRST, "K arena");
 
 typedef struct {
     GwDraw  *d;  unsigned dn;
@@ -970,6 +973,8 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     F->draws = (uint32_t)(uintptr_t)B->d; F->tv = (uint32_t)(uintptr_t)B->v; F->raw = (uint32_t)(uintptr_t)B->rv;
     F->k = (uint32_t)(uintptr_t)B->kb; F->psc = (uint32_t)(uintptr_t)B->psc;
     memcpy(B->kb + GW_K_TONE, &g_tone, sizeof g_tone);
+    { GwLat *L = (GwLat *)(B->kb + GW_K_LAT);
+      L->magic = GW_LAT_MAGIC; L->input_ms = hfr_frame_input_ms(); L->handoff_ms = now_ms(); }
     F->rq_end = (uint32_t)g_ctl->rq_head;
     unsigned vw, vh; view_wh(&vw, &vh);
     F->bb_w = g_bb_w ? g_bb_w : vw; F->bb_h = g_bb_h ? g_bb_h : vh;
@@ -1022,13 +1027,39 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     ((GwMarks *)(N->kb + GW_K_MARKS))->n = 0;     /* nor quick chat's places until roam_game.c does */
     g_frame_clear = g_clear_argb;
 }
+/* After a handoff: wait until the page has taken the frame (it takes one
+ * only while fewer than its limit are on the GPU), so the next frame starts,
+ * and reads its input, only once the page can take that one too.  Without it
+ * a GPU-bound page had the GPU's frames, a frame ready and one recorded
+ * between a press and the screen: with ~16 ms of GPU work a frame at 60 Hz,
+ * input ~78 ms old at the next rAF, now ~61, at the same frame rate.  Not in
+ * mailbox mode (frames replaced, nothing queues) nor while the page draws
+ * nothing (a hidden tab), at most 100 ms.  NFSU2_WAIT_TAKEN=0: no wait (A/B). */
+static void wait_taken(void){
+    static int on = -1;
+    if (on < 0){ const char *e = getenv("NFSU2_WAIT_TAKEN"); on = !(e && *e == '0'); }
+    if (!on || hfr_mailbox() || !hfr_display_live()) return;
+    int32_t mine = (g_cur ^ 1) + 1;
+    double t0 = now_ms();
+    int unlocked = 0;
+    for (;;){
+        int32_t s = ald(&g_ctl->state);
+        if (GW_ST_READY(s) != mine || ald(&g_ctl->attached) != GW_ATTACHED) break;
+        double left = 100.0 - (now_ms() - t0);
+        if (left <= 0) break;
+        if (!unlocked){ guest_wait_begin(); unlocked = 1; }
+        wait32(&g_ctl->state, s, left > 1.0 ? left : 1.0);
+    }
+    if (unlocked) guest_wait_end();
+    g_wait_present_ms += now_ms() - t0;
+}
 void metal_present(void){
     gw_init();
     g_presents++;
     if (g_on) gw_attached();          /* the first present waits for the page; a detach ends recording */
     if (!g_on){ g_gframe++; tex_free_due(0); g_handed = 0; return; }
     /* a readback handed the frame over already: only what was drawn since */
-    if (!g_handed || g_b[g_cur].dn) handoff(0, 0, 0, 0, 0);
+    if (!g_handed || g_b[g_cur].dn){ handoff(0, 0, 0, 0, 0); wait_taken(); }
     g_handed = 0;
     g_gframe++;
     tex_free_due(0);

@@ -130,13 +130,33 @@ test('/players with --max-peers 1: full while one plays, the next game of before
 
 test('the page\'s line', async () => {
   const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/players.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral' });
-  const { playersText, queueText, roomHash } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
-  // the room's hash as roam_core.c makes it (tests/roam_unit.c checks the same value): capitals and spaces do not count
+  const { playersText, queueText, roomHash, roomFold } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+  // the room's hash as roam_core.c makes it (tests/roam_unit.c checks the same names): capitals, blanks and invisible
+  // characters do not count
   assert.equal(roomHash('blueroom'), 0x160fba32);
   assert.equal(roomHash(' Blue Room\t'), 0x160fba32);
   assert.equal(roomHash(''), 0);
   assert.equal(roomHash('   '), 0);
-  assert.notEqual(roomHash('Zoë'), roomHash('zoË'), 'only A to Z made small');
+  assert.equal(roomHash(' ​　'), 0, 'Unicode\'s blanks and the zero-width space are blanks');
+  const fnv = s => { let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)) h = Math.imul(h ^ b, 0x01000193) >>> 0; return h || 1; };
+  for (const same of [['blueroom', 'Blue Room', 'Blue​Room﻿', 'ＢＬＵＥ　Ｒｏｏｍ'], ['комната', 'КОМНАТА', 'Комната', 'ком ната'],
+    ['zoë', 'ZOË', 'Zoë', 'z o ë'], ['istanbul', 'İSTANBUL', 'ıstanbul', 'Istanbul'], ['ομαδασ', 'ΟΜΑΔΑΣ', 'ομαδας', 'ΟΜΑ­ΔΑΣ'], ['łóź', 'ŁÓŹ', 'Łóź', 'łóź']]) {
+    for (const n of same) assert.equal(roomHash(n), roomHash(same[0]), `${n} is ${same[0]}`);
+    assert.equal(roomHash(same[0]), fnv(same[0]), `${same[0]}: small and without blanks already, its bytes' FNV-1a`);
+  }
+  assert.notEqual(roomHash('Zoe'), roomHash('Zoë'));
+  assert.notEqual(roomHash('straße'), roomHash('strasse'));
+  assert.equal(roomHash('Ό'), roomHash('ό'));
+  assert.equal(roomHash('Café'), roomHash('café'), 'an accent typed after its letter: the same name (NFC)');
+  // every character from U+0001 to U+2FFFF (but the surrogates) alone, as the game hashes it (without the page's NFC):
+  // the same sum as tests/roam_unit.c's ROOM_FOLD_SUM, so the two tables agree on every one
+  let sum = 0;
+  for (let c = 1; c < 0x30000; c++) {
+    if (c >= 0xd800 && c <= 0xdfff) continue;
+    const f = roomFold(c), h = f ? fnv(String.fromCodePoint(f)) : 0;
+    sum = (Math.imul(sum, 31) + h) >>> 0;
+  }
+  assert.equal(sum.toString(16), '198373d3');
   assert.equal(playersText({ players: 3, online: 1, roam: 2, room: 0 }, ' Blue '),
     'On this server now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": nobody in free roam there.');
   assert.equal(playersText({ players: 3, online: 1, roam: 2, room: 2 }, 'Blue'),

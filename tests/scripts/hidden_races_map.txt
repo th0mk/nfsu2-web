@@ -1,0 +1,17 @@
+# The career's hidden races on the world map (runtime/hiddenraces.c): a career in stage 2 or later (ItsukiT's is
+# stage 3: 8 hidden races), free roam, the open events by name, the world map whole and its City Core.  Run it with
+# the setting off and on and compare the shots: on, the hidden races (S3_H_*) have their icons like the others, and
+# the log says "[career] show hidden races: 33 of 224 races out of hiding, 30 of the 6 stages' caps raised to 8".
+#   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page app --a Hid:hidden_races_map.txt
+#        --seed <ItsukiT's save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+#        [--env NFSU2_SHOW_HIDDEN_RACES=1]
+0     bot on
++0    waitroam 6000
++0    bot off
++600  roam mp events
++0    tapuntil M UI_InGame_WorldMap.fng 90 1500
++600  log SHOT map
++30   tap RBRACKET                    # City Core
++120  log SHOT core
++60   log HIDDEN DONE
++10   quit

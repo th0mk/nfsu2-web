@@ -1,0 +1,27 @@
+# A cover shoot whose save fails keeps the profile's name.  The shoot's save
+# writes the cover ("<NAME> DVD 1", a new 1 MB file); when that fails (a
+# browser whose storage is full), the memory card screen goes on to the
+# profile's save through its state 2, which does not copy the profile's name
+# into the screen's own (+0x6C, runtime/overrides.c sub_004e8b70).  The Save
+# question showed what the heap block held there, and Yes renamed the profile
+# to it (Discord, 2026-10-27).  From a career save with a DVD shoot open in
+# its stage, with a plain file "NFS Underground 2/<NAME> DVD 1" beside the
+# profile's folder so the cover's folder cannot be made (the bot answers
+# every question Yes):
+#   node web/tools/roam-pair.mjs --solo --page play --out <dir> --seed <save tree>
+#     --a Ann:career_cover_name.txt --env NFSU2_ROAM=0 --env NFSU2_CAREER_BOT_SHOWFIRST=1
+#     --env NFSU2_CAREER_BOT_VISUAL=10
+# Good (2026-10-29, a stage-2 profile, STAGE_2_DVD_1): "CANNOT OPEN" for the
+# cover's file, then "[write] ... <NAME>/<NAME>" (the profile saved under its
+# own name), and both peeks are the name.  NFSU2_TEST_MC_STALE=1 (the game's
+# way, 0xEF bytes in the field) writes a folder of 31 U+FFFDs instead and the
+# second peek is 0xefefefef.  Without the file in the way the cover is saved
+# and the profile is not, either way.
+0     bot on
++0    waitfng UI_ShowCase_Preview.fng 20000
++0    waitfng MC_Main.fng 4000         # the shoot's save
++60   peek 0x0083a9e0 8                # the profile's name
++0    waitfng HUD_SingleRace.fng 4000
++120  peek 0x0083a9e0 8
++0    bot off
++30   quit

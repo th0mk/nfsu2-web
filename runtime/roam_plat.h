@@ -79,6 +79,11 @@ void     roam_plat_say_marks(const uint32_t *ids, const float *xys, int n);
  * number that changes with each change (0: not changed, NFSU2_ROAM_CREW and
  * NFSU2_ROAM_CREW_RGB hold) */
 uint32_t roam_plat_crews(uint32_t crews[RC_CREW_MAX], uint32_t rgb[RC_CREW_MAX]);
+/* the room as the player changed it while the game runs (an invite link on the
+ * page, web): its name into name (UTF-8 ending in a 0 byte; "" for no room),
+ * and a number that changes with each change (0: not changed, NFSU2_ROAM_ROOM
+ * holds) */
+uint32_t roam_plat_room(char name[64]);
 const char *roam_ip_str(uint32_t ip, char *buf);   /* buf >= 16 */
 
 #endif

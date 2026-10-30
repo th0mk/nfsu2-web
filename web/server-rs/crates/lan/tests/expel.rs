@@ -1,6 +1,7 @@
 //! Kicks and bans (the crate doc's Kicks and bans): a player the operator removes hears why and goes, its address
-//! free at once; a banned client is turned away by its address before it gets a place, or by its page's id at its
-//! hello (on the switch, coming back with its token, or waiting in line); `who` has the players and the ones who left.
+//! free at once; a banned client is turned away by its address before it gets a place, or by its page's ids or its
+//! keyphrase at its hello (on the switch, coming back with its token, or waiting in line); `who` has the players and
+//! the ones who left.
 
 mod harness;
 
@@ -17,7 +18,7 @@ fn page(id: &'static str) -> Opts {
 async fn a_kicked_player_hears_why_and_its_address_is_free_at_once() {
     let _s = serial().await;
     let sw = start(opts()).await;
-    let mut a = Client::with(sw.port, "Alice", "?ident=A", page("pa")).await;
+    let mut a = Client::with(sw.port, "Alice", "?ident=A", Opts { claim: Some("ka"), ..page("pa") }).await;
     a.welcome().await;
     let mut b = Client::with(sw.port, "Bob", "?ident=B", page("pb")).await;
     b.welcome().await;
@@ -25,6 +26,8 @@ async fn a_kicked_player_hears_why_and_its_address_is_free_at_once() {
     let who = sw.lan.who().await;
     let alice = who.iter().find(|w| w.name == "Alice").expect("Alice on the switch");
     assert_eq!((alice.vip, alice.ident.as_deref(), alice.browser.as_deref(), alice.left), (a.vip, Some("A"), Some("pa"), None));
+    assert_eq!(alice.owner.as_deref(), Some("owner-ka"));
+    assert_eq!(who.iter().find(|w| w.name == "Bob").map(|w| w.owner.clone()), Some(None));
 
     let msg = Bytes::from(json!({ "t": "kick", "msg": "Stop ramming" }).to_string());
     assert!(sw.lan.expel(a.vip, msg.clone(), CLOSE_KICKED));
@@ -39,6 +42,11 @@ async fn a_kicked_player_hears_why_and_its_address_is_free_at_once() {
     assert_eq!(who.iter().filter(|w| w.left.is_none()).map(|w| w.name.as_str()).collect::<Vec<_>>(), vec!["Bob"]);
     let gone = who.iter().find(|w| w.left.is_some()).expect("Alice among the ones who left");
     assert_eq!((gone.name.as_str(), gone.ident.as_deref(), gone.browser.as_deref()), ("Alice", Some("A"), Some("pa")));
+    // who had an address, without waiting on the hosts: the one on it now, then the ones who left it
+    let at = |vip| sw.lan.who_at(vip).iter().map(|w| (w.name.clone(), w.left.is_some(), w.owner.clone())).collect::<Vec<_>>();
+    assert_eq!(at(a.vip), vec![("Alice".to_string(), true, Some("owner-ka".into()))]);
+    assert_eq!(at(b.vip), vec![("Bob".to_string(), false, None)]);
+    assert!(at(0x0A4D_1717).is_empty());
     sw.close().await;
 }
 
@@ -90,5 +98,32 @@ async fn a_banned_page_is_turned_away_at_its_hello() {
     wait_for(2000, || sw.lan.waiting() == 0).await;
     assert_eq!(sw.lan.waiting(), 0, "its place in line is not kept for its ticket");
     assert_eq!(sw.peers().len(), 2);
+    sw.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_hello_is_turned_away_by_an_id_its_page_found_besides_its_own_or_by_its_keyphrase() {
+    let _s = serial().await;
+    let sw = start(opts()).await;
+    // an id the page found in its other store: the server is asked with all of them (no empty or repeated one)
+    let mut c = Client::with(sw.port, "Dave", "?gate=bad", Opts { was: Some(&["new", "", "bad"]), ..page("new") }).await;
+    c.welcome().await;
+    assert_eq!(c.closed().await, (CLOSE_BANNED, "banned".into()));
+    let told = c.got().ctl.iter().find(|m| m["t"] == "ban").cloned().expect("the ban's message");
+    assert_eq!((told["msg"].clone(), told["ids"].clone()), (json!("bad"), json!(["new", "bad"])));
+    // the keyphrase in another browser, and in a page without an id
+    for o in [Opts { claim: Some("dk"), ..page("other") }, Opts { claim: Some("dk"), ..Opts::default() }] {
+        let mut c = Client::with(sw.port, "Dave", "?gate=owner-dk", o).await;
+        c.welcome().await;
+        assert_eq!(c.closed().await, (CLOSE_BANNED, "banned".into()));
+        assert_eq!(c.got().ctl.iter().find(|m| m["t"] == "ban").map(|m| m["msg"].clone()), Some(json!("owner-dk")));
+    }
+    // the first WAS_MAX of "was" only, and none without an id
+    let mut e = Client::with(sw.port, "Eve", "?gate=bad", Opts { was: Some(&["1", "2", "3", "4", "bad"]), ..page("e") }).await;
+    e.welcome().await;
+    let mut f = Client::with(sw.port, "Fay", "?gate=bad", Opts { was: Some(&["bad"]), ..Opts::default() }).await;
+    f.welcome().await;
+    sleep(150).await;
+    assert!(e.is_open() && f.is_open() && sw.has(e.vip) && sw.has(f.vip));
     sw.close().await;
 }

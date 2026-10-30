@@ -8,19 +8,22 @@
 //!   few seconds, both count; two of the Respawn button's jumps do not, however soon after each other.  A cheat
 //!   that writes the car's place (a memory editor, the browser's developer tools) is one.  The game's own jumps are
 //!   not: the Respawn button puts the car back on the road near it (well under JUMP_M); the World Map's jump moves the
-//!   car within free roam, with no loading screen, onto an event's trigger or 15 m beside a shop's, and a jump that
-//!   lands within MAP_JUMP_M of one (jumps.rs) is left be (nfsu2.xyz, 2026-10-28: some 95 players' lines in an hour,
-//!   all of them such jumps, before it was); a shop's or the garage's menus and a race go through a loading screen, a
+//!   car within free roam, with no loading screen, onto an event's trigger or beside a shop's (15 m beside most, 39 m
+//!   beside one), and a jump that lands within EVENT_JUMP_M of the one or SHOP_JUMP_M of the other (jumps.rs) is left
+//!   be (nfsu2.xyz, 2026-10-28: some 95 players' lines in an hour, all of them such jumps, before it was; 10-29, two
+//!   lines of that one shop's); a shop's or the garage's menus and a race go through a loading screen, a
 //!   status other than free roam (2, or 5 paused there), which starts the watch afresh.  Nothing else does: a long
 //!   silence lets the car go as far as DRIVE_MPS takes it in that time, and no farther.
 //! - too fast: DRIVE_MPS or more between SNAPs for FAST_MS (2 s) on end.
 //! - a fast clock: the player's clock went CLOCK_RATE (1.3) times as fast as the server's, over two counts of CLOCK_MS
 //!   (30 s) on end.  A speed hack that makes the browser's time run faster makes the whole game faster, its car too.
-//!   Each count starts from the SNAP of its first PICK_MS (5 s) that the network held back least: a SNAP that came
-//!   late counts its delay as time the player's clock gained, and the least late of ten is not that late (the game's
-//!   own clock keeps within 1 s of the browser's, and a new clock epoch starts the count again).  A bad connection
-//!   that held every SNAP back 9 s or more for a while and then caught up still makes one count look fast; a speed
-//!   hack makes every count fast.
+//!   A count measures how far the player's clock got ahead of the server's past where its least late SNAP before
+//!   the count had it (a SNAP's lateness: when it came by the server's clock, less its own time): a connection that
+//!   held SNAPs back and then caught up gains back no more than their lateness (nfsu2.xyz, 2026-10-29: a player whose
+//!   connection dropped every few minutes had a minute of a clock 1.4 times as fast, before it was), and a speed hack
+//!   goes on past it.  The game's own clock keeps within 1 s of the browser's, and a new clock epoch starts the counts
+//!   again, from its first SNAP: a connection that held that one back 9 s or more makes the first count look fast,
+//!   and the next not.
 //!
 //! Bad connections are the players' lot, and no line comes of one.  The time between two SNAPs is the server's (when
 //! they came), or the player's (their own times, in one clock epoch) where that is longer: a network that held SNAPs
@@ -48,16 +51,15 @@ pub(crate) const DRIVE_MPS: f64 = 125.0;
 /// what a car went past DRIVE_MPS goes down by LEAK_MPS a second too (m/s)
 pub(crate) const JUMP_M: f64 = 300.0;
 const LEAK_MPS: f64 = 50.0;
-/// a teleport that lands this near an event's or a shop's trigger is the World Map's jump (m): it lands on an event's,
-/// and 15 m beside a shop's (20 m off an event's once, of some 170 on nfsu2.xyz)
-const MAP_JUMP_M: f64 = 25.0;
+/// a teleport that lands this near an event's trigger, or a shop's, is the World Map's jump (m): it lands on an
+/// event's (20 m off once, of some 170 on nfsu2.xyz), 15 m beside most shops', 39 m beside one's
+const EVENT_JUMP_M: f64 = 25.0;
+const SHOP_JUMP_M: f64 = 45.0;
 /// a run over DRIVE_MPS this long (ms) is told
 const FAST_MS: f64 = 2000.0;
-/// the player's clock this many times as fast as the server's, over CLOCK_MS at least (ms), is told; the count
-/// starts at the SNAP of its first PICK_MS (ms) that came soonest after its own time
+/// the player's clock this many times as fast as the server's, over CLOCK_MS at least (ms), is told
 const CLOCK_RATE: f64 = 1.3;
 const CLOCK_MS: f64 = 30_000.0;
-const PICK_MS: f64 = 5_000.0;
 /// the other players this near where the car came to (m) are next to it
 pub(crate) const NEAR_M: f64 = 40.0;
 /// the lines a player gets at once, and how long one takes to come back (ms)
@@ -99,9 +101,12 @@ pub(crate) struct Watch {
     run_ms: f64,
     run_m: f64,
     run_told: bool,
-    /// the clock's count: since when (the hub's clock), and the SNAP it counts from (the same clock epoch since)
+    /// the clock's counts: the player's own time since its epoch's first SNAP (ms); since when this count goes (the
+    /// hub's clock), and the least lateness (`clock`) of its SNAPs so far, and of all before it
+    own_ms: f64,
     count_at: f64,
-    since: Option<Fix>,
+    count_low: f64,
+    low: f64,
     /// the last count's rate and time (ms) when it was fast, and whether it was told
     clock_prev: Option<(f64, f64, bool)>,
     /// since it came: teleports (and of them next to another player), runs told, the time in them (ms) and their
@@ -133,8 +138,10 @@ impl Watch {
             run_ms: 0.0,
             run_m: 0.0,
             run_told: false,
+            own_ms: 0.0,
             count_at: 0.0,
-            since: None,
+            count_low: 0.0,
+            low: 0.0,
             clock_prev: None,
             jumps: 0,
             near: 0,
@@ -154,7 +161,6 @@ impl Watch {
     /// out of free roam (a status other than 2 and 5): the next SNAP starts afresh
     pub(crate) fn reset(&mut self) {
         self.last = None;
-        self.since = None;
         self.clock_prev = None;
         self.over = 0.0;
         self.end_run();
@@ -172,7 +178,7 @@ impl Watch {
         let fix = Fix { p, at: now, t_us, clock };
         let Some(last) = self.last else {
             self.last = Some(fix);
-            self.count_from(fix);
+            self.count_from(now);
             return [None, None];
         };
         // (epochs count on, mod 256, and a time on within one: both a 32-bit difference's sign)
@@ -183,9 +189,10 @@ impl Watch {
         }
         self.last = Some(fix);
         let recv = now - last.at;
-        if !same {
-            self.count_from(fix);
-            self.clock_prev = None;
+        if same {
+            self.own_ms += own;
+        } else {
+            self.count_from(now);
         }
         // (1 ms at least: two SNAPs at once with one time still move a car no farther than DRIVE_MPS takes it)
         let ms = recv.max(if same { own } else { 0.0 }).max(1.0);
@@ -228,34 +235,33 @@ impl Watch {
             self.end_run();
             None
         };
-        [way, self.clock(fix)]
+        [way, if same { self.clock(now) } else { None }]
     }
 
-    /// the clock's count starts again: from this SNAP, or one of the next PICK_MS that came sooner after its time
-    fn count_from(&mut self, fix: Fix) {
-        self.count_at = fix.at;
-        self.since = Some(fix);
+    /// the clock's counts start again, from the first SNAP of a clock epoch (at `now`)
+    fn count_from(&mut self, now: f64) {
+        self.own_ms = 0.0;
+        self.count_at = now;
+        self.count_low = now;
+        self.low = now;
+        self.clock_prev = None;
     }
 
-    /// The clock's count, at a SNAP of the same epoch as the last: once CLOCK_MS went by since the SNAP it counts from,
-    /// a new count; and the second fast count on end (and each one after it), how fast the player's clock went
-    fn clock(&mut self, fix: Fix) -> Option<Seen> {
-        let s = self.since?;
-        // its own time since that SNAP's (ms; it wraps in 71 min)
-        let own = fix.t_us.wrapping_sub(s.t_us) as f64 / 1000.0;
-        let over = fix.at - s.at;
-        if fix.at - self.count_at < PICK_MS {
-            // (came sooner after its own time than that one: counts from here)
-            if over < own {
-                self.since = Some(fix);
-            }
-            return None;
-        }
+    /// The clock's count, at a SNAP (at `now`) of the same epoch as the last.  A SNAP's lateness is when it came less
+    /// its own time since the epoch's first (both ms): a held-back SNAP's is more, and each SNAP of a clock that runs
+    /// fast less than the one before.  Once CLOCK_MS went by in a count, how far its least lateness went under the one
+    /// of all before it, for the time of the count, is how much faster the player's clock went; and the second fast
+    /// count on end (and each one after it), how fast
+    fn clock(&mut self, now: f64) -> Option<Seen> {
+        let late = now - self.own_ms;
+        self.count_low = self.count_low.min(late);
+        let over = now - self.count_at;
         if over < CLOCK_MS {
             return None;
         }
-        self.count_from(fix);
-        let rate = own / over;
+        let rate = 1.0 + (self.low - self.count_low).max(0.0) / over;
+        self.low = self.low.min(self.count_low);
+        (self.count_at, self.count_low) = (now, late);
         let prev = std::mem::replace(&mut self.clock_prev, (rate >= CLOCK_RATE).then_some((rate, over, false)));
         let (was, was_ms, told) = prev.filter(|_| rate >= CLOCK_RATE)?;
         // (the first count of the run too, the first time)
@@ -346,8 +352,7 @@ pub(crate) fn line(vip: u32, name: &str, seen: &Seen, near: &Near, jumps: u32, l
     };
     let mut s = format!("[cheat] {} \"{name}\": {what}", vip_str(vip));
     if !near.players.is_empty() {
-        let names: Vec<String> =
-            near.players.iter().map(|(d, n, v)| format!("\"{n}\" {} ({})", vip_str(*v), metres(*d))).collect();
+        let names: Vec<String> = near.players.iter().map(|(d, n, v)| format!("\"{n}\" {} ({})", vip_str(*v), metres(*d))).collect();
         let more = near.all - near.players.len();
         let more = if more > 0 { format!(" and {more} more") } else { String::new() };
         s += &format!("; next to {}{more}", names.join(", "));
@@ -368,7 +373,8 @@ pub(crate) fn distance(a: &[f64; 3], b: &[f64; 3]) -> f64 {
 
 /// a car there came by the World Map's jump: near an event's or a shop's trigger (jumps.rs)
 fn map_jump(p: &[f64; 3]) -> bool {
-    jumps::TRIGGERS.iter().any(|&(x, y)| (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) < MAP_JUMP_M * MAP_JUMP_M)
+    let near = |&(x, y): &(f64, f64), m: f64| (p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) < m * m;
+    jumps::EVENTS.iter().any(|t| near(t, EVENT_JUMP_M)) || jumps::SHOPS.iter().any(|t| near(t, SHOP_JUMP_M))
 }
 
 fn plural(n: u32) -> &'static str {
@@ -390,7 +396,13 @@ fn place(p: &[f64; 3]) -> String {
 
 fn span(ms: f64) -> String {
     let s = ms / 1000.0;
-    if s < 90.0 { format!("{s:.0} s") } else if s < 5400.0 { format!("{:.0} min", s / 60.0) } else { format!("{:.1} h", s / 3600.0) }
+    if s < 90.0 {
+        format!("{s:.0} s")
+    } else if s < 5400.0 {
+        format!("{:.0} min", s / 60.0)
+    } else {
+        format!("{:.1} h", s / 3600.0)
+    }
 }
 
 #[cfg(test)]
@@ -471,8 +483,8 @@ mod tests {
         assert_eq!(from, x(580.0), "then the third and fourth");
     }
 
-    // the World Map's jump, 1-2 km onto an event's trigger or 15 m beside a shop's (two of nfsu2.xyz's, 2026-10-28), is
-    // no teleport; 100 m off the trigger it is
+    // the World Map's jump, 1-2 km onto an event's trigger or beside a shop's (three of nfsu2.xyz's, 2026-10-28 and
+    // 10-29), is no teleport; 100 m off the trigger it is
     #[test]
     fn the_world_maps_jump_is_no_teleport() {
         let jump = |from: [f64; 3], to: [f64; 3]| {
@@ -483,6 +495,7 @@ mod tests {
         };
         assert_eq!(jump([-1261.0, 782.0, 48.0], [226.0, -478.0, 18.0]), (false, 0), "onto an event's trigger");
         assert_eq!(jump([-408.0, 22.0, 14.0], [352.0, -749.0, 14.0]), (false, 0), "beside the Performance Shop's");
+        assert_eq!(jump([-71.0, -1584.0, 14.0], [-316.0, -458.0, 20.0]), (false, 0), "39 m beside a shop's (2026-10-29)");
         assert_eq!(jump([-1261.0, 782.0, 48.0], [326.0, -478.0, 18.0]), (true, 1), "100 m off the event's");
     }
 
@@ -558,14 +571,13 @@ mod tests {
         assert_eq!(s, "[cheat] 10.77.3.41 \"Bob\", 6 s in free roam (left): 1 run over 450 km/h for 5 s (at most 600 km/h)");
     }
 
-    // a clock 3 times as fast: a count every 35 s (from the last SNAP of its first 5 s), told from the second on
+    // a clock 3 times as fast: a count every 30 s, told from the second on
     #[test]
     fn a_fast_clock_is_told() {
         let mut d = Drive::new();
         d.snap(x(0.0));
-        let clocks: Vec<(usize, Seen)> =
-            (1..=290).filter_map(|i| d.at(500.0, 1500.0, x(i as f64 * 50.0))[1].map(|c| (i, c))).collect();
-        assert_eq!(clocks.iter().map(|c| c.0).collect::<Vec<_>>(), [138, 207, 276], "{clocks:?}");
+        let clocks: Vec<(usize, Seen)> = (1..=290).filter_map(|i| d.at(500.0, 1500.0, x(i as f64 * 50.0))[1].map(|c| (i, c))).collect();
+        assert_eq!(clocks.iter().map(|c| c.0).collect::<Vec<_>>(), [120, 180, 240], "{clocks:?}");
         assert!(clocks.iter().all(|(_, c)| matches!(c, Seen::Clock { rate, .. } if (rate - 3.0).abs() < 0.2)), "{clocks:?}");
         assert!(matches!(clocks[0].1, Seen::Clock { ms: 60_000.0, .. }), "the two counts of 30 s: {:?}", clocks[0]);
     }
@@ -622,6 +634,30 @@ mod tests {
         let clocks: Vec<Seen> = (26..300).filter_map(|i| d.snap(x(i as f64 * 50.0))[1]).collect();
         assert_eq!(clocks, []);
         assert_eq!(d.w.jumps, 0);
+    }
+
+    // a slow upload, 5 min into free roam, that held the SNAPs back more and more for 2 min of the player's own time
+    // (a minute behind at the end), then caught up in one (its clock twice as fast, by the server's): no line; a
+    // speed hack of 1.4 after it is one (nfsu2.xyz, 2026-10-29: a player whose connection dropped every few minutes)
+    #[test]
+    fn a_backlog_that_drains_is_no_fast_clock() {
+        let mut d = Drive::new();
+        d.snap(x(0.0));
+        let mut at = 0.0;
+        let mut go = |d: &mut Drive, n: usize, ms: f64, own: f64| {
+            let mut seen = Vec::new();
+            for _ in 0..n {
+                at += 50.0;
+                seen.extend(d.at(ms, own, x(at)).into_iter().flatten());
+            }
+            seen
+        };
+        assert_eq!(go(&mut d, 600, 500.0, 500.0), []);
+        assert_eq!(go(&mut d, 240, 750.0, 500.0), [], "falling behind");
+        assert_eq!(go(&mut d, 240, 250.0, 500.0), [], "catching up");
+        assert_eq!(go(&mut d, 600, 500.0, 500.0), []);
+        let hack = go(&mut d, 240, 500.0, 700.0);
+        assert!(matches!(hack[..], [Seen::Clock { rate, ms: 60_000.0 }, ..] if (rate - 1.4).abs() < 0.01), "{hack:?}");
     }
 
     // five lines at once, then one every 2 min; what is not told is summed up after 10 min

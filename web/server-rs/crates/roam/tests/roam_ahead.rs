@@ -164,7 +164,13 @@ fn the_grid_links_as_every_pair_with_the_cars_moving() {
                 *v = [(r.unit() - 0.5) * 120.0, (r.unit() - 0.5) * 120.0, 0.0];
             }
             // some in a shop, some paused (their speeds move nothing, their view points none)
-            let status = if i % 7 == 0 { 4 } else if i % 11 == 0 { 5 } else { 2 };
+            let status = if i % 7 == 0 {
+                4
+            } else if i % 11 == 0 {
+                5
+            } else {
+                2
+            };
             let d = snap_moving(100 + i as u32, *p, *v, r.unit() * 6.0, status);
             every.from(W(i as u32), &d);
             grid.from(W(i as u32), &d);
@@ -192,7 +198,7 @@ fn maps(k: &Kit) -> Vec<(u32, Map)> {
 }
 
 // the world map: the players of the room in free roam, past the one asking and its links, nearest first, in parts of
-// 230, 512 at most; not those in a race, another room or gone quiet; one answer a second
+// 230, 512 at most to a page that asks for no more; not those in a race, another room or gone quiet; one answer a second
 #[test]
 fn the_world_map_lists_the_others_nearest_first() {
     let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
@@ -237,6 +243,32 @@ fn the_world_map_lists_the_others_nearest_first() {
     k.clear();
     k.from(W(0), &mapreq(100, 12));
     assert_eq!(maps(&k).into_iter().map(|(_, x)| (x.3, x.4.len())).collect::<Vec<_>>(), [(0, 0)], "only its link 1 is fresh");
+}
+
+// a page that says how many it takes: 2048 at most, in nine parts (the core takes them in any order), fewer when it
+// asks for fewer
+#[test]
+fn the_world_map_takes_2048_from_a_page_that_asks() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..2200 {
+        join(&mut k, i);
+        k.from(W(i), &snap(100 + i, [i as f64 * 5.0, 0.0, 0.0]));
+    }
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_max(100, 1, 4000));
+    let m = maps(&k);
+    let parts: Vec<(u8, u8, usize)> = m.iter().map(|(_, x)| (x.1, x.2, x.4.len())).collect();
+    assert_eq!(parts.len(), 9);
+    assert!(parts.iter().enumerate().all(|(j, p)| p.0 as usize == j && p.1 == 9), "{parts:?}");
+    assert_eq!(parts.iter().map(|p| p.2).sum::<usize>(), 2048);
+    assert!(m.iter().all(|(_, x)| x.3 == 2198), "2200 less itself and its link");
+    let all: Vec<i16> = m.into_iter().flat_map(|(_, x)| x.4).map(|e| e.0).collect();
+    assert!(all.windows(2).all(|w| w[0] < w[1]) && all[0] <= 10 && all[2047] <= 2050 * 5, "nearest first");
+    k.clear();
+    k.step(1100.0);
+    k.from(W(0), &mapreq_max(100, 2, 300));
+    assert_eq!(maps(&k).into_iter().map(|(_, x)| (x.1, x.2, x.4.len())).collect::<Vec<_>>(), [(0, 2, 230), (1, 2, 70)]);
 }
 
 // one answer a second for a browser, whatever its endpoints: a BYE and a HELLO, or another port, make a new player,
@@ -320,13 +352,28 @@ fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
     let got = run(&["map".to_string(), frames[1].clone(), frames[0].clone()]);
     let mut lines = got.lines();
     let ask = lines.next().unwrap_or("");
-    assert_eq!(ask.strip_prefix("ask ").map(|h| h.len()), Some(2 * (16 + 2 + 4)), "{got}");
-    // its MAPREQ, as the hub reads it: req 1
+    assert_eq!(ask.strip_prefix("ask ").map(|h| h.len()), Some(2 * (16 + 4 + 4)), "{got}");
+    // its MAPREQ, as the hub reads it: req 1, 2048 at most
     let a: Vec<u8> = (0..ask.len() / 2 - 2).map(|i| u8::from_str_radix(&ask[4 + 2 * i..6 + 2 * i], 16).unwrap()).collect();
-    assert_eq!((a[5], u16::from_le_bytes([a[16], a[17]])), (10, 1));
+    assert_eq!((a[5], u16::from_le_bytes([a[16], a[17]]), u16::from_le_bytes([a[18], a[19]])), (10, 1, 2048));
     let want: Vec<String> = (2..301).map(|i| format!("{},7,192", -3 * i)).collect();
     assert_eq!(lines.next().unwrap_or(""), format!("map 1 299 299 {}", want.join(" ")));
     // one part only: nothing yet
     let got = run(&["map".to_string(), frames[0].clone()]);
     assert!(got.ends_with("map 0 0 0"), "{got}");
+    // 2048 of 2200 in nine parts, the last first
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..2200 {
+        join(&mut k, i);
+        k.from(W(i), &snap_moving(100 + i, [i as f64 * 5.0, -2.0, 0.0], [0.0; 3], 0.0, 2));
+    }
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_max(100, 1, 2048));
+    let want: Vec<String> = maps(&k).into_iter().flat_map(|(_, x)| x.4).map(|e| format!("{},{},{}", e.0, e.1, e.2)).collect();
+    let mut frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
+    assert_eq!((frames.len(), want.len()), (9, 2048));
+    frames.reverse();
+    let got = run(&[vec!["map".to_string()], frames].concat());
+    assert_eq!(got.lines().nth(1).unwrap_or(""), format!("map 1 2198 2048 {}", want.join(" ")));
 }

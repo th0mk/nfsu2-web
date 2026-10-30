@@ -82,7 +82,7 @@ and it says something only when it is worth it:
 Otherwise it says nothing. It reads every channel it can see, but posts only in forum threads, those replies in the
 general channels, and the staff channel. It
 stays out of a thread once staff wrote in it (the server owner, `BOT_STAFF`, anyone who can manage threads), and replies
-at most twice in a thread on its own. Someone answering it gets a look past that, up to `BOT_MAX_TALK` replies (6):
+at most twice in a thread on its own. Someone answering it gets a look past that, up to `BOT_MAX_TALK` replies (4):
 after it asked for something, the poster's next post, which always gets a reply (a fix, or what their log shows and
 that the developer has it), so nobody who did what it asked hears nothing; and the poster writing right after its
 message, with Discord's reply or without ("that didn't work", "where is that setting?"). A bare thanks or okay gets no
@@ -94,7 +94,12 @@ the bot in a thread to have it look anyway. A bump, the poster writing again aft
 before, unless staff answer it first; bumps while the bot was away get theirs at start. A log (a `.log` or `.txt`
 file) posted in a thread by anyone but staff always gets a look, also past the two replies and where staff wrote. Anyone
 who replies to the bot's message (with the ping or without) or mentions it gets a look too, and an answer when there is
-something to say, until the bot has replied `BOT_MAX_TALK` times (6) in the thread.
+something to say, until the bot has replied `BOT_MAX_TALK` times (4) in the thread. The same log file posted again
+(same name and size) gets no look, and a reply that mostly says again what the bot said in the thread (half its word
+pairs) is dropped. When the poster disputes the bot, is upset with it, or the talk goes in circles, the look steps
+back (`handoff` in its verdict): at most one line that the developer will read the thread, a "Needs a person"
+report or update in the staff channel, and no more looks in that thread unless staff mention the bot (a fix notice
+still goes out; new logs still reach the report).
 
 Every model call goes on a meter (`spend.mjs`, `state/spend.json`): looks, sorting, tags, translations, release checks,
 against `BOT_BUDGET` dollars a month (200, UTC months). Only the looks wait for money: each day they may spend what is
@@ -250,7 +255,7 @@ Run it with `BOT_DRY_RUN=1` for a day. Every reply it would have posted goes to 
 | `BOT_MIN_CONFIDENCE` | `medium` | answers below this confidence are not posted (questions are) |
 | `BOT_WAIT_S` | `120` | quiet time after the poster's last message before the look (at most 10 minutes after the first) |
 | `BOT_MAX_REPLIES` | `2` | replies per thread on the bot's own (logs, bumps and staff's mentions get a look past it) |
-| `BOT_MAX_TALK` | `6` | replies per thread in all, answering people who reply to the bot or mention it |
+| `BOT_MAX_TALK` | `4` | replies per thread in all, answering people who reply to the bot or mention it |
 | `BOT_BUDGET` | `200` | dollars a month for every model call; looks past the day's share wait for the next day |
 | `BOT_ARCHIVE` | on | `0`: don't keep messages (the model then can't search other channels) |
 | `BOT_STATE` | `state` (`/state` in Docker) | where the clone, the archive, the thread list, the verdicts and the translations go |

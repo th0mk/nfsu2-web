@@ -1,0 +1,60 @@
+# Drift mode's physics (runtime/drift.c): X makes the car again as a drift event's, with the career car's Drift setup
+# from Performance Tuning / Dyno in its ride, and X again as it was.  From a career save with an open drift race (stage
+# 3): setup 2 (drift) of each career slot (FE cars 0x83AD90 +0x5954 + n * 0x7F8, +0x360 + 2 * 0x29) gets 16 values of
+# 0x50; then free roam, X, X again, and the next drift race.  Checked: the ride's setup (+0x398) and two of its physics
+# values, +0x200 (from the car type's drift parameters, set 3) and +0x1B4 (from the setup).
+#   NFSU2_SAVE_SEED=<a stage 3 career> node web/tools/run-suite.mjs --script roam_drift_setup.txt --marker drift_setup_end
+# Good: every expect passes (in drift mode the Drift setup and both values as the drift race has them, after X the
+# ride's own again) and "[drift] ... the car's physics for a drift event (16 of 41 values from the dyno's Drift setup)".
+0     bot on
++0    waitroam 6000
++0    bot off
++60   poke 0x840a96 0x50505050
++0    poke 0x840a9a 0x50505050
++0    poke 0x840a9e 0x50505050
++0    poke 0x840aa2 0x50505050
++0    poke 0x84128e 0x50505050
++0    poke 0x841292 0x50505050
++0    poke 0x841296 0x50505050
++0    poke 0x84129a 0x50505050
++0    poke 0x841a86 0x50505050
++0    poke 0x841a8a 0x50505050
++0    poke 0x841a8e 0x50505050
++0    poke 0x841a92 0x50505050
++0    poke 0x84227e 0x50505050
++0    poke 0x842282 0x50505050
++0    poke 0x842286 0x50505050
++0    poke 0x84228a 0x50505050
++0    poke 0x842a76 0x50505050
++0    poke 0x842a7a 0x50505050
++0    poke 0x842a7e 0x50505050
++0    poke 0x842a82 0x50505050
++0    mark set0 i:[[[0x8900ac]+4]+0x10]+0x398
++0    mark grip0 i:[[[0x8900ac]+4]+0x10]+0x200
++0    mark tune0 i:[[[0x8900ac]+4]+0x10]+0x1b4
++0    tap X
++30   expect i:0x890104 == 1
++0    expect i:[[[0x8900ac]+4]+0x10]+0x398 == 1347440720
++0    expect i:[[[0x8900ac]+4]+0x10]+0x200 != @grip0
++0    expect i:[[[0x8900ac]+4]+0x10]+0x1b4 != @tune0
++0    mark grip1 i:[[[0x8900ac]+4]+0x10]+0x200
++0    mark tune1 i:[[[0x8900ac]+4]+0x10]+0x1b4
++0    down UP
++240  up UP
++0    tap X
++30   expect i:0x890104 == 0
++0    expect i:[[[0x8900ac]+4]+0x10]+0x398 == @set0
++0    expect i:[[[0x8900ac]+4]+0x10]+0x200 == @grip0
++0    expect i:[[[0x8900ac]+4]+0x10]+0x1b4 == @tune0
++60   careergo next:drift
++120  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN
++0    waitexpr b:0x89e7d9 == 1 6000
++600  waitexpr i:0x8654a4 == 6 12000
++300  expect b:0x89e7d9 == 1
++0    expect i:[[[0x8900ac]+4]+0x10]+0x398 == 1347440720
++0    expect i:[[[0x8900ac]+4]+0x10]+0x200 == @grip1
++0    expect i:[[[0x8900ac]+4]+0x10]+0x1b4 == @tune1
++0    log drift_setup_end
++10   quit

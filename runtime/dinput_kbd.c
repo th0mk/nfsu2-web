@@ -46,6 +46,7 @@ uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
 uint32_t com_scratch(uint32_t n);
 uint32_t com_devinst(int keyboard);                         /* com.c */
 const char *dik_name(unsigned dik);                         /* dikeys.c */
+void hfr_note_input_read(int pad);                          /* framerate.c: input age */
 int  win32_reg_get_str(const char *name, char *out, unsigned cap);   /* win32_ext.c */
 void win32_reg_set_str(const char *name, const char *v);
 void win32_reg_del(const char *name);
@@ -346,6 +347,7 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
     (void)nargs;
     if (!strcmp(nm, "GetDeviceData")){
         uint32_t cb = a[1], rg = a[2], pn = a[3], fl = a[4];
+        hfr_note_input_read(0);
         if (!d->acquired) return DIERR_NOTACQUIRED;
         if (!pn || !mem_is_committed(pn + 3) || (rg && (cb < 16u || cb > 64u))) return DIERR_INVALIDPARAM;
         if (d->fmt == FMT_NONE){ MR32(pn) = 0; return DIERR_INVALIDPARAM; }
@@ -382,6 +384,7 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
     }
     if (!strcmp(nm, "GetDeviceState")){
         uint32_t cb = a[1], p = a[2];
+        hfr_note_input_read(0);
         if (!d->acquired) return DIERR_NOTACQUIRED;
         if (!p || !cb || cb > 4096u) return DIERR_INVALIDPARAM;
         uint8_t st[256]; kbd_state(st, 256);

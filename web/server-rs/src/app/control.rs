@@ -6,23 +6,26 @@
 //!                                 ones who left in the last hour; with a name, only those whose name has it
 //!   kick <player> [message]       the player's page shows the message, and the game goes on without the others
 //!                                 (a reload brings it back)
-//!   ban <player> <for> [message]  the same, and it is turned away until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
+//!   ban <player> <for> [message]  the same, and it is turned away until the ban ends: <for> is 30m, 12h, 3d, 2w or perm;
+//!                                 <player> may be a `[cheat]` line's handle (c17) too
 //!   unban <name | #ban>           the bans of that name, or with that number, lifted
 //!   bans                          the bans: number, name, until when, the message
 //!
 //! A player is a virtual address (10.77.x.y, as `who` and the log show it) or a name (any case).  A name that two
-//! players on the switch have (and not one player in two tabs) needs the address.  `ban` takes one who left in the
-//! last hour too (the switch keeps them: nfsu2-lan's Kicks and bans).  A ban removes every connection it names: the
-//! player's, and whoever else is on the switch from its address (they would be turned away at their next connect).
-//! What a ban names, and for how long, is nfsu2-bans'.
+//! players on the switch have (and not one player in two tabs, or on two devices with one keyphrase) needs the
+//! address.  `ban` takes one who left in the last hour too (the switch keeps them: nfsu2-lan's Kicks and bans), and
+//! the handle a `[cheat]` line of a race ends with, "(ban c17)", for a week after its last line ([`Marker`]): before
+//! a name, so a player called c17 needs its address.  A ban names every connection of the player (its tabs, its
+//! keyphrase on its other devices) and removes them, and whoever else is on the switch from its addresses (they would
+//! be turned away at their next connect).  What a ban names, and for how long, is nfsu2-bans'.
 
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use bytes::Bytes;
-use nfsu2_bans::{Target, kick_message, parse_for, span, when};
-use nfsu2_lan::{CLOSE_BANNED, CLOSE_KICKED, Who, vip_num};
+use nfsu2_bans::{Bans, Keys, kick_message, parse_for, span, when};
+use nfsu2_lan::{CLOSE_BANNED, CLOSE_KICKED, LanSwitch, Who, vip_num};
 use nfsu2_util::{log, now_ms, vip_str};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -44,7 +47,7 @@ pub const USAGE: &str = "commands:
   unban <name | #ban>           lift the bans of that name, or that number
   bans                          the bans
   unclaim <name>                the name's claim goes: anyone may take it again
-<player>: an address (10.77.x.y) or a name, as who shows them";
+<player>: an address (10.77.x.y) or a name, as who shows them; for ban also a [cheat] line's handle (c17), for a week";
 
 /// The socket's file as this server made it, for its stop (`remove`)
 pub struct Socket {
@@ -113,8 +116,11 @@ async fn serve(app: Arc<App>, s: UnixStream) {
     let _ = w.shutdown().await;
 }
 
-/// the same player in two connections: the same page id, or (a page without one) the same address
+/// the same player in two connections: the same keyphrase, the same page id, or (a page without one) the same address
 fn same_player(a: &Who, b: &Who) -> bool {
+    if a.owner.is_some() && a.owner == b.owner {
+        return true;
+    }
     match (&a.browser, &b.browser) {
         (Some(x), Some(y)) => x == y,
         _ => a.ident.is_some() && a.ident == b.ident,
@@ -144,6 +150,92 @@ fn listed(ws: &[&Who]) -> String {
 /// the message's part of a log line
 fn quoted(msg: &str) -> String {
     if msg.is_empty() { String::new() } else { format!(": \"{msg}\"") }
+}
+
+/// a connection's keys for the bans (nfsu2-bans `Keys`)
+fn keys_of(bans: &Bans, w: &Who) -> Keys {
+    bans.keys(w.ident.as_deref(), w.browser.as_deref(), w.owner.as_deref())
+}
+
+/// what a new ban names the player by, for the operator: "its page, its keyphrase and its address"
+fn named_by(k: &Keys) -> String {
+    if k.pages.is_empty() && k.owners.is_empty() {
+        return "its address only (a page from before page ids)".into();
+    }
+    let its = |n: usize, one: &str, many: &str| match n {
+        0 => None,
+        1 => Some(format!("its {one}")),
+        n => Some(format!("its {n} {many}")),
+    };
+    let parts: Vec<String> =
+        [its(k.pages.len(), "page", "pages"), its(k.owners.len(), "keyphrase", "keyphrases"), its(k.addrs.len(), "address", "addresses")]
+            .into_iter()
+            .flatten()
+            .collect();
+    match parts.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+        None => String::new(),
+    }
+}
+
+/// The handles of the `[cheat]` lines of races (nfsu2-online's, and nfsu2-roam's race results), which `ban` takes
+/// for a week (nfsu2-bans marks): the hosts' console lines go through `tag`.  Free roam's lines get none: cheating
+/// there is let be.  The switch is given once it is made, after the hosts.
+#[derive(Clone)]
+pub struct Marker {
+    bans: Arc<Bans>,
+    lan: Arc<OnceLock<Arc<LanSwitch>>>,
+}
+
+impl Marker {
+    pub fn new(bans: Arc<Bans>) -> Marker {
+        Marker { bans, lan: Default::default() }
+    }
+
+    pub fn set_switch(&self, lan: Arc<LanSwitch>) {
+        let _ = self.lan.set(lan);
+    }
+
+    /// `line` with the handle of the player it names after it, " (ban c17)", when it is a `[cheat]` line of a race and
+    /// the switch knows who had its address (the player on it, or one who left it in the last hour); else None
+    pub fn tag(&self, line: &str) -> Option<String> {
+        let (vip, name) = race_cheat(line)?;
+        let at = self.lan.get()?.who_at(vip);
+        let k = keys_of(&self.bans, pick_marked(&at, name)?);
+        if k.is_empty() {
+            return None;
+        }
+        match self.bans.mark(name, k, now_ms()) {
+            Ok(h) => Some(format!("{line} (ban {h})")),
+            Err(e) => {
+                log::error(&format!("bans.json: {e}"));
+                None
+            }
+        }
+    }
+}
+
+/// the address and name a `[cheat]` line of a race begins with: `[cheat] 10.77.3.41 "Bob": won the online race "..."`
+/// or `finished 2 in the online race "..."` (nfsu2-online lobby.rs), `[cheat] 10.77.3.41 "Bob": won the race of lobby
+/// ...` (nfsu2-roam results.rs); None for any other line
+fn race_cheat(line: &str) -> Option<(u32, &str)> {
+    let (vip, rest) = line.strip_prefix("[cheat] ")?.split_once(" \"")?;
+    let (name, what) = rest.split_once("\": ")?;
+    let race = what.contains(" the online race \"") || what.starts_with("won the race of lobby ");
+    let vip = vip_num(vip);
+    (race && vip != 0).then_some((vip, name))
+}
+
+/// of the ones who had an address (`LanSwitch::who_at`: the one on it now first), the one a line names: by its name
+/// in its Online form (an Online persona is the page's name made so), else the only player there was
+fn pick_marked<'a>(at: &'a [Who], name: &str) -> Option<&'a Who> {
+    let online = |n: &str| nfsu2_claims::clean(n).map(|c| c.to_lowercase());
+    let want = online(name);
+    at.iter().find(|w| want.is_some() && online(&w.name) == want).or_else(|| {
+        let first = at.first()?;
+        at.iter().all(|w| same_player(w, first)).then_some(first)
+    })
 }
 
 impl App {
@@ -189,34 +281,49 @@ impl App {
             "ban" if !word(1).is_empty() && !word(2).is_empty() => {
                 let until = parse_for(word(2))?.map(|ms| now + ms);
                 let all = self.lan.who().await;
-                let w = self.pick(&all, word(1))?[0];
-                if w.ident.is_none() && w.browser.is_none() {
-                    return Err(format!("{} \"{}\": nothing to ban it by (no address, no page id)", vip_str(w.vip), w.name));
-                }
+                // a `[cheat]` line's handle (Marker), else the player's connections (`pick`: its tabs, its keyphrase on
+                // its other devices), all of them named by the ban for as long as it lasts
+                let (name, keys, left, handle) = match self.bans.marked(word(1), now) {
+                    Some(m) => (m.name.clone(), m.keys.clone(), None, Some(m.handle())),
+                    None => {
+                        let ws = self.pick(&all, word(1))?;
+                        let mut k = Keys::default();
+                        for w in &ws {
+                            k.extend(keys_of(&self.bans, w));
+                        }
+                        let w = ws[0];
+                        if k.is_empty() {
+                            return Err(format!("{} \"{}\": nothing to ban it by (no address, no page id)", vip_str(w.vip), w.name));
+                        }
+                        (w.name.clone(), k, w.left, None)
+                    }
+                };
                 let msg = nfsu2_bans::clean_msg(&rest(3));
-                let target = Target { name: &w.name, addr: w.ident.as_deref(), page: w.browser.as_deref() };
-                let (ban, replaced) = self.bans.add(target, &msg, until, now).map_err(|e| format!("bans.json: {e}"))?;
-                // every connection it names goes now: the player's (each of its tabs), and whoever shares its address
+                let (ban, replaced) = self.bans.add(&name, &keys, &msg, until, now).map_err(|e| format!("bans.json: {e}"))?;
+                // every connection it names goes now: the player's, and whoever shares one of its addresses
                 let m = Bytes::from(ban.message());
                 let removed: Vec<&Who> = all
                     .iter()
-                    .filter(|x| x.left.is_none() && self.bans.covers(&ban, x.ident.as_deref(), x.browser.as_deref(), now))
+                    .filter(|x| x.left.is_none() && self.bans.covers(&ban, &keys_of(&self.bans, x), now))
                     .filter(|x| self.lan.expel(x.vip, m.clone(), CLOSE_BANNED))
                     .collect();
                 let how_long = match until {
                     Some(u) => format!("for {} (until {})", span(u - now), when(u)),
                     None => "for good".to_string(),
                 };
-                let by = if w.browser.is_some() { "its page and its address" } else { "its address only (a page from before page ids)" };
-                log::line(&format!("[ban] #{} \"{}\" {how_long}{}; removed: {}", ban.id, w.name, quoted(&msg), listed(&removed)));
-                let mut t = vec![format!("ban #{}: \"{}\" {how_long}, by {by}", ban.id, w.name)];
+                let who = match &handle {
+                    Some(h) => format!("\"{name}\" ({h})"),
+                    None => format!("\"{name}\""),
+                };
+                log::line(&format!("[ban] #{} {who} {how_long}{}; removed: {}", ban.id, quoted(&msg), listed(&removed)));
+                let mut t = vec![format!("ban #{}: {who} {how_long}, by {}", ban.id, named_by(&keys))];
                 if !replaced.is_empty() {
                     t.push(format!("it takes the place of {}", replaced.iter().map(|n| format!("#{n}")).collect::<Vec<_>>().join(", ")));
                 }
-                t.push(if removed.is_empty() {
-                    format!("not on the switch now (left {} ago)", span(now - w.left.unwrap_or(now)))
-                } else {
-                    format!("removed {}", listed(&removed))
+                t.push(match (removed.is_empty(), left) {
+                    (false, _) => format!("removed {}", listed(&removed)),
+                    (true, Some(l)) => format!("not on the switch now (left {} ago)", span(now - l)),
+                    (true, None) => "not on the switch now".into(),
                 });
                 Ok(t.join("\n"))
             }
@@ -244,12 +351,21 @@ impl App {
                             Some(u) => format!("until {} ({} more)", when(u), span(u - now)),
                             None => "for good".into(),
                         };
-                        let by = format!(
-                            "{}{} address{}",
-                            if b.pages.is_empty() { "" } else { "its page, " },
-                            b.addrs.len(),
-                            if b.addrs.len() == 1 { "" } else { "es" }
-                        );
+                        // "4 pages (2 found later), 1 keyphrase, 6 addresses"
+                        let n = |n: usize, later: usize, one: &str, many: &str| {
+                            let found = if later == 0 { String::new() } else { format!(" ({later} found later)") };
+                            format!("{n} {}{found}", if n == 1 { one } else { many })
+                        };
+                        let (pages, owners) = (b.pages.len() + b.later_pages.len(), b.owners.len() + b.later_owners.len());
+                        let by = [
+                            (pages > 0).then(|| n(pages, b.later_pages.len(), "page", "pages")),
+                            (owners > 0).then(|| n(owners, b.later_owners.len(), "keyphrase", "keyphrases")),
+                            Some(n(b.addrs.len(), 0, "address", "addresses")),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(", ");
                         format!("{:<5}{name}{} {until}{}; by {by}", format!("#{}", b.id), " ".repeat(pad), quoted(&b.msg))
                     })
                     .collect::<Vec<_>>()
@@ -300,4 +416,70 @@ impl App {
 pub fn read_answer(s: &str) -> Option<(bool, String)> {
     let v: Value = serde_json::from_str(s).ok()?;
     Some((v["ok"].as_bool()?, v["text"].as_str()?.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn who(vip: u32, name: &str, page: &str, left: Option<i64>) -> Who {
+        let a: Arc<str> = Arc::from(format!("addr-{vip}"));
+        Who { vip, name: name.into(), ident: Some(a), browser: Some(page.into()), owner: None, since: 0, left, doing: "" }
+    }
+
+    // the [cheat] lines of races, as nfsu2-online and nfsu2-roam write them (their tests), get a handle; free roam's,
+    // and lines without an address, none
+    #[test]
+    fn the_lines_of_races_are_the_ones_marked() {
+        let vip = vip_num("10.77.1.3");
+        for (line, name) in [
+            (
+                "[cheat] 10.77.1.3 \"Warp\": won the online race \"far\" (sprint) in 0:21.00, under 40 % of the next finisher's 1:00.00 (\"Eve\")",
+                "Warp",
+            ),
+            (
+                "[cheat] 10.77.1.3 \"W p\": finished 2 in the online race \"x\" (circuit) in 1:00.00, 400 km/h on average, which no car does: by its own game",
+                "W p",
+            ),
+            ("[cheat] 10.77.1.3 \"Bob\": won the race of lobby 0000abcd (race 00001234: sprint, 1 lap) in 0:10.0", "Bob"),
+        ] {
+            assert_eq!(race_cheat(line), Some((vip, name)), "{line}");
+        }
+        for line in [
+            "[cheat] 10.77.0.11 \"Bob\": teleport 1: 1.0 km in 0.5 s, 918 m more than a car drives",
+            "[cheat] 10.77.3.41 \"Bob\", 6 s in free roam (left): 1 run over 450 km/h for 5 s (at most 600 km/h)",
+            "[cheat] 0.0.0.0 \"Bob\": won the online race \"far\" (sprint) in 0:21.00",
+            "[cheat] player 0000abcd: won the race of lobby 0000abcd (race 00001234: sprint, 1 lap) in 0:10.0",
+            "[online] \"far\": Warp won the online race \"far\"",
+        ] {
+            assert_eq!(race_cheat(line), None, "{line}");
+        }
+    }
+
+    #[test]
+    fn a_line_marks_the_player_of_that_name_or_the_only_one_there_was() {
+        // on the address now, and the ones who left it (the last first)
+        let at = [who(5, "Eve", "e", None), who(5, "Bob Jr", "b", Some(1)), who(5, "Bob Jr", "b2", Some(0))];
+        assert_eq!(pick_marked(&at, "bob_jr").and_then(|w| w.browser.as_deref()), Some("b"), "the Online form of the name");
+        assert_eq!(pick_marked(&at, "Eve").map(|w| w.name.as_str()), Some("Eve"));
+        assert!(pick_marked(&at, "Kim").is_none(), "two players had it: not this one");
+        // one player only (one page): whatever name the line has
+        let one = [who(5, "Kim", "k", None), who(5, "Kim", "k", Some(0))];
+        assert_eq!(pick_marked(&one, "Kim0042").map(|w| w.name.as_str()), Some("Kim"));
+        assert!(pick_marked(&[], "Kim").is_none());
+    }
+
+    #[test]
+    fn what_a_ban_names_for_the_operator() {
+        let k = |a: usize, p: usize, o: usize| Keys {
+            addrs: (0..a).map(|i| format!("a{i}")).collect(),
+            pages: (0..p).map(|i| format!("p{i}")).collect(),
+            owners: (0..o).map(|i| format!("o{i}")).collect(),
+        };
+        assert_eq!(named_by(&k(1, 1, 0)), "its page and its address");
+        assert_eq!(named_by(&k(1, 1, 1)), "its page, its keyphrase and its address");
+        assert_eq!(named_by(&k(2, 2, 1)), "its 2 pages, its keyphrase and its 2 addresses");
+        assert_eq!(named_by(&k(0, 1, 0)), "its page");
+        assert_eq!(named_by(&k(1, 0, 0)), "its address only (a page from before page ids)");
+    }
 }

@@ -231,9 +231,7 @@ fn run(scene: &Scene, way: &Way) {
             let mut used = g.values().filter(|p| p.slot.is_some()).count();
             let mut cands: Vec<(f64, usize)> = g
                 .iter()
-                .filter(|(q, p)| {
-                    p.slot.is_none() && cars[**q].status == 2 && t >= p.first + HANDSHAKE && (!way.give_way || p.listed == ll)
-                })
+                .filter(|(q, p)| p.slot.is_none() && cars[**q].status == 2 && t >= p.first + HANDSHAKE && (!way.give_way || p.listed == ll))
                 .map(|(&q, _)| (way.rank.of(&a, &cars[q]), q))
                 .collect();
             cands.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));

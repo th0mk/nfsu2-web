@@ -21,7 +21,7 @@ const LOG = `[app] settings.ini:12: roam_name -> NFSU2_ROAM_NAME=Moonlit Rider
 [app] save folder: OPFS save (/save); canvas 1280x800 device pixels, display 60 Hz; Mozilla/5.0 (Macintosh) Chrome/155.0.0.0 Safari/537.36
 [net] on the virtual LAN as 10.77.5.98
 [3!] [net] mode vlan: hub switch, address 10.77.5.98, host name VLAN-1378, adapter 02:4e:56:4c:05:62
-[4!] [roam] free-roam multiplayer ON: id 32d05e60, port 47210, 0 configured peer(s), room "hideout", up to 8 players, 5 remote cars, 20 Hz, ghost cars
+[4!] [roam] free-roam multiplayer ON: id 32d05e60, port 47210, 0 configured peer(s), room "hideout" (1a2b3c4d), up to 8 players, 5 remote cars, 20 Hz, ghost cars
 [4!] [roam] crew 1: "Night Shift" (1234abcd), colour ff0000
 [4!] [roam] JOIN: Zeta Q joined (peer 3)
 [4!] [roam] f=120 slot 2: loading Zeta Q's CIVIC (12 parts, skin 3, handle 0x1a2b)

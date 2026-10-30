@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Archive } from './archive.mjs';
 import { matchFeatures, matchFixes } from './fixes.mjs';
 import { General } from './general.mjs';
-import { blocks, investigate, newClient, picture, vet } from './investigate.mjs';
+import { blocks, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
 import { Spend, metered } from './spend.mjs';
 import { Tags } from './tags.mjs';
@@ -33,7 +33,7 @@ const CFG = {
   dryRun: env.BOT_DRY_RUN === '1',
   waitS: Number(env.BOT_WAIT_S || 120),
   maxReplies: Number(env.BOT_MAX_REPLIES || 2),
-  maxTalk: Number(env.BOT_MAX_TALK || 6),        // replies per thread in all, answering people who reply to the bot
+  maxTalk: Number(env.BOT_MAX_TALK || 4),        // replies per thread in all, answering people who reply to the bot
   budget: Number(env.BOT_BUDGET || 200),         // $ a month (UTC) for every model call; the looks wait when it runs short
   minConfidence: env.BOT_MIN_CONFIDENCE || 'medium',
   archive: env.BOT_ARCHIVE !== '0',
@@ -67,6 +67,7 @@ const SUGGESTIONS = /suggest/i;                  // the suggestion forums, by na
 const SUGGESTION_INDEX = 500;                    // a release reads the newest 500 archived threads of each of them
 const SUGGESTION_DAYS = 365;                     // suggestions are kept in threads.json this long, other threads 30 days
 const BUMP_QUIET_MS = 12 * 3600_000;             // the poster writing after this long a silence is a bump: they wait
+const REPEAT = 0.5;                              // a reply whose word pairs the bot's earlier messages hold this much of
 
 fs.mkdirSync(CFG.state, { recursive: true });
 const STATE_FILE = path.join(CFG.state, 'threads.json');
@@ -188,6 +189,8 @@ async function look(threadId, why, extra) {
   if (fix && st.fixed) return say(`skipped: already told that ${why === 'implemented' ? 'it was added' : 'a fix went live'}`);
   if (fix && extra?.part && st.partly) return say('skipped: already told it about a step toward it');
   if (why === 'implemented' && Tags.decided(thread)) return say('skipped: the suggestion is Complete or Denied already');
+  // the bot stepped back for a person: only staff bring it back (a fix notice still goes out)
+  if (st.handoff && !byStaff && !fix) return say('skipped: the bot left the thread to staff');
   if (talk && st.replies >= CFG.maxTalk) return say(`skipped: ${st.replies} replies already, the most for answering replies`);
   if (!anyway && st.status === 'staff') return say('skipped: staff are in the thread');
   if (!anyway && st.replies >= CFG.maxReplies) return say(`skipped: ${st.replies} replies already`);
@@ -207,6 +210,7 @@ async function look(threadId, why, extra) {
   }
   const bump = bumped && openBump(msgs.filter(m => !m.system), thread.ownerId);
   if (bumped && (!bump || st.bump === bump.id)) return say('skipped: the bump was answered already');
+  if (logged && sameLog(msgs, thread)) return say('skipped: the same log was posted before');
 
   const workDir = path.join(CFG.state, 'work', threadId), staffDir = `${workDir}-staff`;
   for (const d of [workDir, staffDir]) { fs.rmSync(d, { recursive: true, force: true }); fs.mkdirSync(d, { recursive: true }); }
@@ -233,7 +237,13 @@ async function look(threadId, why, extra) {
   const v = res.verdict;
   // a poster who brought what the bot asked for, or who bumped, always hears back
   let { post, why: outcome } = fix && v?.action !== 'answer' ? { post: null, why: v?.action ?? 'no verdict' }
-    : vet(v, { minConfidence: fix ? 'high' : byStaff || bumped || why === 'follow-up' ? 'low' : CFG.minConfidence });
+    : vet(v, { minConfidence: fix ? 'high' : byStaff || bumped || why === 'follow-up' || v?.handoff ? 'low' : CFG.minConfidence });
+  // a reply that says again what the bot said in the thread before: the rules ask for none, this catches the near copies
+  const said = msgs.filter(m => m.author.id === client.user.id).map(m => m.content).join('\n');
+  const repeat = post && !byStaff && !fix && said ? overlap(post, said) : 0;
+  if (repeat >= REPEAT) { post = null; outcome = `a repeat of an earlier reply (${repeat.toFixed(2)})`; }
+  // stepping back is one line that a person will read the thread, never another round of the argument
+  if (post && v.handoff && !byStaff && post.length > 300) { post = null; outcome = 'a handoff with a long reply'; }
   if (byStaff && !post) {                        // staff asked: always a reply, at least what the look found
     const text = v ? `${v.summary}` : 'I could not finish a look at this thread just now; the developer has the details.';
     post = vet({ ...(v ?? {}), action: 'answer', confidence: 'high', reply: text }, {}).post;
@@ -290,6 +300,11 @@ async function look(threadId, why, extra) {
   }
   if (post) st.replies++;
   if (bump) st.bump = bump.id;
+  if (v?.handoff && !byStaff) {                  // a person should take it: the staff hear, the bot stays out
+    st.handoff = new Date().toISOString();
+    v.escalate = true;
+    say('the bot leaves the thread to staff');
+  }
   if (v) Object.assign(st, { summary: v.summary, category: v.category });
   if (!((bumped || logged || talk) && st.status === 'staff')) {   // a thread staff wrote in stays theirs
     st.status = !v ? 'failed' : post ? (v.action === 'ask' ? 'asked' : 'answered') : st.status === 'asked' ? 'asked-none' : 'none';
@@ -580,19 +595,28 @@ async function tellStaff(thread, st, v, post, dirs, posted) {
   if (!v.escalate && !reported && !(post && !posted)) return;
   const staff = await client.channels.fetch(CFG.staffChannel);
   if (!staff?.isTextBased() && staff?.type !== ChannelType.GuildForum) throw new Error(`${CFG.staffChannel} is not a channel the bot can post in`);
-  const did = !post ? 'did not reply' : v.action === 'ask' ? 'asked the poster for more' : 'answered the poster';
+  const did = v.handoff ? 'stepped back: a person should take it' : !post ? 'did not reply'
+    : v.action === 'ask' ? 'asked the poster for more' : 'answered the poster';
   const dry = post && !posted ? `Dry run, not posted. The reply:\n${quote(post.slice(0, 600))}` : '';
   const files = staffFiles(dirs);
   const where = `"${st.title}" in #${st.forum}${v.category ? ` (${v.category})` : ''}`;
 
   if (reported && !st.staffMsg) {                 // the same problem again: an update in its report
     Object.assign(st, { staffMsg: reported.staffMsg, staffThread: reported.staffThread, reportOf: rootId });
-    const text = part([`Also reported: ${where}`, `Thread: ${link}`, v.notes.trim()], files), head = `**Also reported** in ${link}`;
+    const text = part([`Also reported: ${where}`, `Thread: ${link}`, v.notes.trim()], files);
+    const head = `**${v.handoff ? 'Needs a person' : 'Also reported'}** in ${link}`;
     await reportUpdate(staff, rootId, {
       line: `Also reported in ${link}; the bot ${did}`, part: text, files, thread: thread.id, again: thread.id,
       content: [head, fence(text, 2000 - head.length - dry.length - 2), dry].filter(Boolean).join('\n'),
     });
     console.log(`[staff] ${thread.id} added to the report on ${rootId}`);
+    return;
+  }
+  if (v.handoff && st.staffMsg) {                // a reported thread that needs a person now: an update in its report
+    const text = part([`Needs a person: ${where}`, `Thread: ${link}`, v.notes.trim()], []), head = `**Needs a person** in ${link}`;
+    await reportUpdate(staff, st.reportOf ?? thread.id, { line: `Needs a person in ${link}; the bot ${did}`, part: text,
+      content: [head, fence(text, 2000 - head.length - dry.length - 2), dry].filter(Boolean).join('\n') });
+    console.log(`[staff] ${thread.id}: needs a person, in its report`);
     return;
   }
   if (!v.escalate || st.staffMsg) {              // nothing new for the developer; in a dry run, the reply for review
@@ -677,6 +701,15 @@ const WHY = {
   'bump': 'the poster wrote again after the thread was quiet for half a day or more: they are waiting for an answer (see "When the poster bumps")',
   'log': 'someone posted a log (or another text file) in the thread (see "When a log is posted")',
 };
+
+/** the newest log in these messages (oldest first), not from staff, was posted before: every log file in it, by name and
+ *  size, is in an earlier message (the same file sent again) */
+function sameLog(msgs, thread) {
+  const i = msgs.findLastIndex(m => hasLog(m) && !isStaff(m.member, thread));
+  if (i < 0) return false;
+  const key = a => `${a.name} ${a.size}`, before = new Set(msgs.slice(0, i).flatMap(m => [...m.attachments.values()].map(key)));
+  return [...msgs[i].attachments.values()].filter(a => LOG_FILE.test(a.name)).every(a => before.has(key(a)));
+}
 
 /** the poster's newest bump in these messages (oldest first) that neither staff nor the bot answered since, or null.
  *  A bump: the poster writes after nobody wrote for BUMP_QUIET_MS ("any ideas?", or new details after a long wait) */

@@ -107,7 +107,8 @@ function urlFor(fps, spec) {
   let [wasm, extra] = spec.split('+'), base = o.base;
   if (/^https?:/.test(wasm)) { const u = new URL(wasm); base = u.origin; wasm = u.pathname; }
   q.set('wasm', wasm);
-  for (const [k, v] of new URLSearchParams(extra ?? '')) q.set(k, v); q.append('arg', G.exe); q.set('w', String(W)); q.set('h', String(H));
+  for (const [k, v] of new URLSearchParams(extra ?? '')) if (k === 'env') q.append(k, v); else q.set(k, v);
+  q.append('arg', G.exe); q.set('w', String(W)); q.set('h', String(H));
   q.set('gputime', ''); q.set('bench', '');
   q.set('save', `perf-bench-${process.pid}-${saveN++}`); q.set('fresh', '');
   q.set('reg', G.reg); q.set('script', o.script);

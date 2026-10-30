@@ -7,7 +7,8 @@
 // seqlock; the guest reads it when the game polls its device.  Of the
 // controllers with the standard mapping and the steering wheels (wheel.ts:
 // the wheel, its pedals and buttons made the pad's, and the game offered a
-// driving device), the one the player last pressed a button on drives the
+// driving device; an RC radio drives as one), the one the player last
+// pressed a button on drives the
 // pad, so a controller next to a wheel takes over with a press and the wheel
 // takes it back with one of its own.  Before any press, and when that one
 // goes away, the first connected of them drives (one that connects later
@@ -229,8 +230,9 @@ export class PadPoller {
   private buzzAt = 0;
   // the controller driving the pad as it showed up (a wheel's layout comes from it)
   private seen: Seen | null = null;
-  // each controller's buttons as last polled, and the one a button was last pressed on (choose)
-  private down = new Map<number, { id: string; on: boolean[] }>();
+  // each controller's buttons as last polled (a radio's axes too, where they last were its use), and the one a button
+  // was last pressed on (choose)
+  private down = new Map<number, { id: string; on: boolean[]; at?: number[] }>();
   private chosen: { index: number; id: string } | null = null;
   private polled = false;
   /** performance.now() of a real controller's last button press (0: none yet) */
@@ -314,16 +316,24 @@ export class PadPoller {
 
   /** A button pressed on a controller that may drive the pad makes it the one that does (chosen).  One that shows up
    *  with a button held was pressed (Chrome shows a controller on a press), but not one there at the first poll (a
-   *  wheel's shifter left in a gear). */
+   *  wheel's shifter left in a gear).  A radio has few buttons or none: a stick or a switch of its moved half way
+   *  from where it was while it last drove (or showed up) counts as a press. */
   private choose(pads: readonly (Gamepad | null)[]) {
-    const down = new Map<number, { id: string; on: boolean[] }>();
+    const down = new Map<number, { id: string; on: boolean[]; at?: number[] }>();
     for (const g of pads) {
       if (!g?.connected) continue;
       const on = g.buttons.map(b => !!b && (b.pressed || b.value > 0.5));
       const was = this.down.get(g.index);
       const before = was?.id === g.id ? was.on : this.polled ? [] : on;
+      let at: number[] | undefined;
+      if (wheelOf(g.id)?.layout === 'radio') {
+        const now = Array.from(g.axes, v => typeof v === 'number' && isFinite(v) ? v : 0), prev = was?.id === g.id ? was.at : undefined;
+        const moved = !!prev && now.some((v, i) => Math.abs(v - (prev[i] ?? v)) >= 0.5);
+        if (moved) this.chosen = { index: g.index, id: g.id };
+        at = !prev || moved || (driver?.index === g.index && driver.id === g.id) ? now : prev;
+      }
       if (mayDrive(g) && on.some((v, i) => v && !before[i])) this.chosen = { index: g.index, id: g.id };
-      down.set(g.index, { id: g.id, on });
+      down.set(g.index, at ? { id: g.id, on, at } : { id: g.id, on });
     }
     this.down = down;
     this.polled = true;
@@ -365,7 +375,8 @@ export class PadPoller {
         const guess = guessMap(k.wheel, k.axes0, g.buttons.length), kept = loadMap(g.id);
         k.map = kept ? withSetUp(guess, kept) : guess;
         k.mode = loadShifter(g.id);
-        this.log(`[pad] ${g.id}: a steering wheel, ${describeMap(k.map, k.hat)}${k.map.gears ? `; the shifter: ${k.mode}` : ''}`);
+        this.log(`[pad] ${g.id}: ${k.wheel.layout === 'radio' ? 'an RC radio' : 'a steering wheel'}, ${describeMap(k.map, k.hat)}` +
+          `${k.map.gears ? `; the shifter: ${k.mode}` : ''}`);
       }
       return mapWheel(g, k.map, k.hat, k);
     }

@@ -69,7 +69,7 @@ use sha2::{Digest, Sha256};
 use crate::aries::{FieldMap, Fields, FrameReader, MAX_FRAME, V, encode_fields, encode_frame, is_secret};
 use crate::core::Core;
 use crate::jsx::{self, clean_text, day, lower, valid_name};
-use crate::stats::{Race, RacePlayer, RaceReport, race_points};
+use crate::stats::{Race, RacePlayer, RaceReport, ReportPlayer, decode_result, race_points};
 use crate::timers::{Action, TimerId};
 use crate::title::{Cfg, Title};
 use crate::vhost::{ConnId, Svc};
@@ -297,6 +297,20 @@ pub struct Player {
     pub back: bool,
     pub reported: bool,
     pub results: Option<SessId>,
+    /// what its own game measured of it in the race (its own entry in its first report of the right shape)
+    pub own: Option<Own>,
+}
+
+/// A racer's own figures (`race_cheats`): finished, its place, time (s), average and top speed (m/s), and whether a
+/// `[cheat]` line told of it
+#[derive(Clone, Copy, Debug)]
+pub struct Own {
+    pub finished: bool,
+    pub place: u8,
+    pub time: f64,
+    pub avg: f64,
+    pub top: f64,
+    pub told: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -669,56 +683,84 @@ fn fit(fields: Fields, max: usize, drop: &[&str]) -> Fields {
     f
 }
 
-/// The `[cheat]` lines of one report (`reporter`'s game's view of the race), one a finisher that did what no racer
-/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), RACE_MPS or
-/// more on average, or the way it drove (its average times its time) under DROVE_SHARE of another racer's, finished or
-/// not (a cheat that ends its race at once: a test's racewin won a sprint in 4.77 s having driven 65 m, the other racer
-/// 1021 m by the race's end 30 s later; an honest finisher drives the whole way, and nobody twice as much before the
-/// race ends).  A drift race (the title's report type "drift") is won by points and is left out.
+/// The `[cheat]` lines of a race so far, at the report of game player `me` (`mine`: its own entry in it), by what
+/// each racer's own game measured of it (`Own`): what a game shows of the other cars is what came over the network,
+/// and of a racer who left the race, a car put far away (nfsu2.xyz, 2026-10-29: one game had another racer drive
+/// 462 km in a 4-minute sprint; 18 lines of a morning came of such figures, each about a racer other than the
+/// reporter, none of them a cheat).  One line a racer a race, for a finisher whose own game says it did what no racer
+/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), RACE_MPS or more on
+/// average, or a way (its average times its time) under DROVE_SHARE of another racer's own, finished or not (a cheat
+/// that ends its race at once: a test's racewin won a sprint in 4.77 s having driven 65 m, the other racer 1021 m by
+/// the race's end 30 s later; an honest finisher drives the whole way, and nobody twice as much before the race
+/// ends).  The way is looked at again at every report: the other racer's may come after the finisher's.  A drift race
+/// is won by points and is left out.  The line names the race's track and laps and the racer's top speed: the other
+/// finishers' times are on the race's `[online]` lines (often none yet: one who won in 30 s had the others give up).
 fn race_cheats(
     game: &str,
     r: &RaceReport,
     report_types: &[&str],
     min_race_s: &[f64],
-    names: &[String],
-    players: &[Player],
-    reporter: &str,
+    me: usize,
+    mine: Option<&ReportPlayer>,
+    players: &mut [Player],
 ) -> Vec<String> {
-    let type_name = report_types.get(r.kind as usize).copied();
+    let kind = r.kind;
+    let type_name = report_types.get(kind as usize).copied();
     if type_name == Some("drift") {
         return Vec::new();
     }
+    if let Some(p) = mine
+        && players[me].own.is_none()
+    {
+        let speed = |v: f64| if v < 1000.0 { v.max(0.0) } else { 0.0 };
+        let time = if p.time < 100_000.0 { p.time.max(0.0) } else { 0.0 };
+        let finished = !p.dropped && p.place >= 1 && time > 0.0;
+        players[me].own = Some(Own { finished, place: p.place, time, avg: speed(p.avg), top: speed(p.top), told: false });
+    }
     let ty = type_name.unwrap_or("race");
-    let name_of = |p: &crate::stats::ReportPlayer| names.get(p.index as usize).map(|n| n.as_str()).unwrap_or("?");
+    let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
     let mut lines = Vec::new();
-    for p in r.players.iter().filter(|p| !p.dropped && p.place >= 1 && p.time > 0.0) {
-        let drove = p.avg * p.time;
+    for i in 0..players.len() {
+        let Some(o) = players[i].own.filter(|o| o.finished && !o.told) else { continue };
+        let drove = o.avg * o.time;
         let mut why = Vec::new();
-        if let Some(&min) = min_race_s.get(r.kind as usize)
-            && p.time < min
+        if let Some(&min) = min_race_s.get(kind as usize)
+            && o.time < min
         {
             why.push(format!("under the {} s a {ty} race takes at least", js::number_to_string(min)));
         }
-        if p.avg >= RACE_MPS {
-            why.push(format!("{:.0} km/h on average, which no car does", p.avg * 3.6));
+        if o.avg >= RACE_MPS {
+            why.push(format!("{:.0} km/h on average, which no car does", o.avg * 3.6));
         }
-        let most = r.players.iter().filter(|o| o.index != p.index).map(|o| (o.avg * o.time, name_of(o))).max_by(|a, b| a.0.total_cmp(&b.0));
-        if let Some((d, other)) = most
+        let most = players
+            .iter()
+            .enumerate()
+            .filter_map(|(j, x)| Some((x.own.filter(|_| j != i)?, &x.name)))
+            .map(|(x, name)| (x.avg * x.time, name))
+            .max_by(|a, b| a.0.total_cmp(&b.0));
+        let each = if let Some((d, other)) = most
             && drove < DROVE_SHARE * d
         {
             why.push(format!("having driven {drove:.0} m, under half the {d:.0} m \"{other}\" drove"));
-        }
+            "each "
+        } else {
+            ""
+        };
         if why.is_empty() {
             continue;
         }
-        let me = name_of(p);
-        let vip = players.iter().find(|x| lower(&x.name) == lower(me)).map_or(0, |x| x.vip);
-        let place = if p.place == 1 { "won".to_string() } else { format!("finished {} in", p.place) };
+        let p = &mut players[i];
+        p.own = Some(Own { told: true, ..o });
+        let place = if o.place == 1 { "won".to_string() } else { format!("finished {} in", o.place) };
         lines.push(format!(
-            "[cheat] {} \"{me}\": {place} the online race \"{game}\" ({ty}) in {}, {}: as {reporter}'s game saw it",
-            vip_str(vip),
-            fmt_time(p.time),
-            why.join(", ")
+            "[cheat] {} \"{}\": {place} the online race \"{game}\" ({ty}, track {}{laps}) in {}, {}: {each}by its own game; \
+             its top speed {:.0} km/h",
+            vip_str(p.vip),
+            p.name,
+            r.track,
+            fmt_time(o.time),
+            why.join(", "),
+            o.top * 3.6
         ));
     }
     lines
@@ -1552,25 +1594,29 @@ impl Core {
             names.push(f.get(&format!("NAME{i}")).unwrap_or("null").to_string());
             i += 1;
         }
-        let why = self.check_result(g, r.as_ref(), &names);
+        let mut why = self.check_report(g, r.as_ref(), &names);
         let spers = tpl(&self.lobby.s(s).persona).to_string();
         let gname = self.lobby.game(g).expect("held").name.clone();
-        // what this player's game saw of the others (and of itself) that no racer does, whether its report is taken
-        // or not (a time too short for the race is not)
+        // what the racers' own games measured that no racer does, whether this report is taken or not (a time too
+        // short for the race is not); a report of the wrong shape says nothing of anyone (one read out of line named
+        // one racer twice, with times of 0.2 s, 2026-10-29)
         if let Some(r) = &r
-            && r.players.len() == names.len()
+            && why.is_empty()
         {
-            for line in race_cheats(
+            let mine = r.players.iter().find(|p| lower(&names[p.index as usize]) == persona);
+            let lines = race_cheats(
                 &gname,
                 r,
                 self.title.report_types,
                 self.title.min_race_s,
-                &names,
-                &self.lobby.game(g).expect("held").players,
-                &spers,
-            ) {
+                me,
+                mine,
+                &mut self.lobby.game_mut(g).expect("held").players,
+            );
+            for line in lines {
                 self.llog(&line, s);
             }
+            why = self.check_times(g, r);
         }
         if !why.is_empty() {
             self.llog(&format!("[online] \"{gname}\": {spers}'s race report not taken: {why}"), s);
@@ -1579,7 +1625,7 @@ impl Core {
             return self.end_if_back(g);
         }
         let r = r.expect("checked");
-        // the reporter's own entry in its report (check_result: each index names one of the game's players)
+        // the reporter's own entry in its report (check_report: each index names one of the game's players)
         let own = r.players.iter().find(|p| !p.dropped && lower(&names[p.index as usize]) == persona);
         let finished = own.is_some();
         // its records: what its own game measured of it (stats.rs add_records), whether the result stands or not
@@ -1711,8 +1757,9 @@ impl Core {
         encode_frame("$rfn", "", &f).expect("the lobby's own fields")
     }
 
-    /// why a decoded race report cannot be the result of game g ('' = it can)
-    fn check_result(&self, g: GameId, r: Option<&crate::stats::RaceReport>, names: &[String]) -> String {
+    /// why a decoded race report is not one of game g's ('' = it is: the game's players, each named once, places
+    /// 1..n, a race type)
+    fn check_report(&self, g: GameId, r: Option<&crate::stats::RaceReport>, names: &[String]) -> String {
         let Some(r) = r else { return "the report does not parse".into() };
         let g = self.lobby.game(g).expect("held");
         if r.players.len() != g.players.len() || names.len() != g.players.len() {
@@ -1734,6 +1781,12 @@ impl Core {
         if r.kind as usize >= self.title.report_types.len() {
             return format!("race type {}", r.kind);
         }
+        String::new()
+    }
+
+    /// why a race report of the right shape (check_report) cannot be the result of game g by its times ('' = it can)
+    fn check_times(&self, g: GameId, r: &crate::stats::RaceReport) -> String {
+        let g = self.lobby.game(g).expect("held");
         let age = (self.now() - g.started) / 1000.0;
         let min = self.title.min_race_s[r.kind as usize];
         if age < min {
@@ -2146,6 +2199,7 @@ impl Core {
             back: false,
             reported: false,
             results: None,
+            own: None,
         }
     }
 

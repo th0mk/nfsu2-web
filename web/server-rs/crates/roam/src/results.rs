@@ -1,7 +1,9 @@
 //! The races' results as the players' games showed them (RACERES, roam_core.h rc_raceres), for a race won by
-//! cheating: a teleport to the finish, a speed hack.  Every racer's game sends its results once back in free roam,
-//! each row by the racer's player id: finished or not, its time, how far it came (laps), the way it drove (m).  The
-//! hub keeps a race's reports until every racer's came, or RESULTS_WAIT_MS after the first, then judges it once.
+//! cheating: a teleport to the finish, a speed hack, a race the game ended at once.  Every racer's game sends its
+//! results once back in free roam, each row by the racer's player id: finished or not, its time, how far it came
+//! (laps), the way it drove (m).  The hub takes a report only from a player of the race's lobby, naming its players
+//! (hub.rs `Joined`), one a lobby; it keeps a race's reports until every racer's came, or RESULTS_WAIT_MS after the
+//! first, then judges it once.
 //!
 //! - the winner: the one who came first in more than half of the reports (one report cannot name a winner the others
 //!   do not), at the slowest time any report gave it (one report's time cannot make it quicker).  A report's first is
@@ -9,13 +11,17 @@
 //!   ended with the race, GAME_END_S or more after it: the game finished it without the way driven, as a cheat that
 //!   ends its race at once does (a test's racewin, 2026-10-28: first in 4.76 s after 0.6 % of the way, the other
 //!   racer 30 s later at 17 %)
-//! - the race's length: what the others drove in it, each by its own game (its own row: the way it drove, for as far
-//!   as it came: a racer still on the way when the race ended, 30 s after the first finished, counts for the whole
-//!   way at its own pace), the shortest of them; never the winner's own report
+//! - the race's length: what another finisher drove in it, by its own game (its own row), the shortest of them; never
+//!   the winner's own report.  A racer still on the way when the race ended (30 s after the first finished) says
+//!   nothing of it: scaled up from how far they came, two such racers made a sprint 8.8 km, and its honest winner
+//!   (82.7 s, the second quickest of 176 wins of that sprint that morning) 381 km/h on average (nfsu2.xyz, 2026-10-29)
 //! - a `[cheat]` line when the winner averaged RACE_MPS (350 km/h) or more over that length, which no car of the game
-//!   does (the fastest tuned cars make 350 at the most, a race's average far less: a 2-lap circuit's was 112 km/h),
-//!   or when it finished in under FAR_AHEAD (40 %) of another finisher's time.  Only finishers count for that: a racer
-//!   who stood still or went away from the keyboard finished nothing, and its pace says nothing of the winner's.
+//!   does (the fastest tuned cars make 350 at the most, a race's average far less: a 2-lap circuit's was 112 km/h);
+//!   when it came under DROVE_MIN of the way by every report (the game ended its race); or when it won in under
+//!   QUICK_SHARE of the race's quickest clean win the hub saw (`Results::best`: by two reports at least, with another
+//!   finisher, no line), which a teleport to the finish with nobody else over the line does.  A next finisher far
+//!   behind says nothing: the race ends 30 s after the first finished, so only a report the game did not make can show
+//!   one.
 //!
 //! A drift race is won by points and is left out.  The lines are for the operator (`nfsu2-server ctl kick|ban`), and
 //! say how many of the race's reports saw it.
@@ -27,14 +33,17 @@ use crate::wire::{LOBBY_PLAYERS, RS_FINISHED, RS_OURS, RaceRes, ResRow};
 /// a race's reports are judged once every racer's came, or this long after the first (ms): every game sends its
 /// report back in free roam, the host's 4 s after the others' (mprace.c)
 pub(crate) const RESULTS_WAIT_MS: f64 = 90_000.0;
-/// the races kept at once (a player's reports are one a race, none sooner than 20 s after its last: hub.rs)
+/// the races kept at once (a player's reports are one a lobby, none sooner than 20 s after its last: hub.rs)
 const RACES_KEPT: usize = 4096;
 /// no car of the game averages this over a race (m/s: 350 km/h)
-pub(crate) const RACE_MPS: f64 = 350.0 / 3.6;
-/// a winner in under this share of another finisher's time
-pub(crate) const FAR_AHEAD: f64 = 0.4;
-/// a racer who came less than this share of the way says nothing of the race's length
-const LENGTH_MIN_DONE: f64 = 0.1;
+const RACE_MPS: f64 = 350.0 / 3.6;
+/// a winner who came less than this share of the way by every report finished without driving it
+const DROVE_MIN: f64 = 0.5;
+/// a winner in under this share of the race's quickest clean win; the clean wins kept (a race and its laps each), and
+/// the reports that had a clean win's winner first, at least
+const QUICK_SHARE: f64 = 0.5;
+const BEST_KEPT: usize = 4096;
+const BEST_SEEN: usize = 2;
 /// roam_core.h's race mode of a drift race
 const MODE_DRIFT: u8 = 3;
 /// a race ends 30 s after its first finished (mprace.c): the others' rows are that much later, this much at least (s)
@@ -50,7 +59,7 @@ struct Race {
     names: HashMap<u32, String>,
 }
 
-/// What a race's reports showed of its winner, when it is a cheat's
+/// What a race's reports showed of its winner
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Verdict {
     pub lobby: u32,
@@ -60,13 +69,15 @@ pub(crate) struct Verdict {
     /// the winner's player id and time (s)
     pub winner: u32,
     pub time: f64,
-    /// the race's length by the others' games (m), and the winner's average over it (m/s)
+    /// the race's length by another finisher's game (m), and the winner's average over it (m/s)
     pub length: Option<f64>,
     pub avg: Option<f64>,
     /// the next finisher (its id and time), if any
     pub next: Option<(u32, f64)>,
     /// the share of the way the winner drove, the most any report gave it, when that is under DROVE_SHORT
     pub drove: Option<f64>,
+    /// the race's quickest clean win (s), when the winner took under QUICK_SHARE of it
+    pub quickest: Option<f64>,
     /// the reports that had it first, and all of them
     pub seen: usize,
     pub reports: usize,
@@ -74,10 +85,11 @@ pub(crate) struct Verdict {
     pub names: HashMap<u32, String>,
 }
 
-/// The races' reports, until each is judged
+/// The races' reports, until each is judged; the quickest clean win of each race (its name hash and laps) so far
 #[derive(Default)]
 pub(crate) struct Results {
     races: HashMap<u32, Race>,
+    best: HashMap<(u32, u8), f64>,
 }
 
 /// a race's mode as a word (roam_core.h rc_racerep)
@@ -103,23 +115,22 @@ pub(crate) fn line(v: &Verdict, who: &dyn Fn(u32) -> String) -> String {
         if v.laps == 1 { "" } else { "s" },
         clock(v.time)
     );
-    match (v.length, v.avg) {
-        (Some(l), Some(a)) => s += &format!(
-            ", {:.0} km/h on average over the race's {:.1} km (as the others drove it){}",
+    if let (Some(l), Some(a)) = (v.length, v.avg) {
+        s += &format!(
+            ", {:.0} km/h on average over the race's {:.1} km (as another finisher drove it){}",
             a * 3.6,
             l / 1000.0,
             if a >= RACE_MPS { ", which no car does" } else { "" }
-        ),
-        _ => s += " (no other racer's game measured the race's length)",
+        );
+    }
+    if let Some(q) = v.quickest {
+        s += &format!(", under {:.0} % of the race's quickest clean win ({})", QUICK_SHARE * 100.0, clock(q));
     }
     if let Some(d) = v.drove {
         s += &format!(", having driven {:.1} % of the way", d * 100.0);
     }
     match v.next {
-        Some((id, t)) => {
-            let under = if v.time < FAR_AHEAD * t { format!("under {:.0} % of ", FAR_AHEAD * 100.0) } else { String::new() };
-            s += &format!("; {under}the next finisher's {}, {}", clock(t), who(id));
-        }
+        Some((id, t)) => s += &format!("; the next finisher's {}, {}", clock(t), who(id)),
         None => s += "; nobody else finished (the race ends 30 s after the first)",
     }
     s + &format!(": as {} of {} players' games saw it", v.seen, v.reports)
@@ -154,7 +165,10 @@ impl Results {
         if !race.reports.iter().any(|(id, _)| *id == reporter) && race.reports.len() < LOBBY_PLAYERS {
             race.reports.push((reporter, r));
             for x in &r.rows[..r.n] {
-                if x.id != 0 && !race.names.contains_key(&x.id) && let Some(w) = who(x.id) {
+                if x.id != 0
+                    && !race.names.contains_key(&x.id)
+                    && let Some(w) = who(x.id)
+                {
                     race.names.insert(x.id, w);
                 }
             }
@@ -162,7 +176,8 @@ impl Results {
         true
     }
 
-    /// the races due (every racer's report came, or RESULTS_WAIT_MS went by), judged and forgotten: the cheats' verdicts
+    /// the races due (every racer's report came, or RESULTS_WAIT_MS went by), judged and forgotten: the cheats'
+    /// verdicts.  A clean win by two reports or more, with another finisher, may be its race's quickest.
     pub(crate) fn due(&mut self, now: f64) -> Vec<Verdict> {
         let due: Vec<u32> = self
             .races
@@ -173,17 +188,27 @@ impl Results {
             })
             .map(|(&l, _)| l)
             .collect();
-        due.into_iter()
-            .filter_map(|l| {
-                let race = self.races.remove(&l)?;
-                judge(&race.reports).map(|v| Verdict { names: race.names, ..v })
-            })
-            .collect()
+        let mut cheats = Vec::new();
+        for l in due {
+            let Some(race) = self.races.remove(&l) else { continue };
+            let Some((v, cheat)) = judge(&race.reports, &self.best) else { continue };
+            if cheat {
+                cheats.push(Verdict { names: race.names, ..v });
+                continue;
+            }
+            let k = (v.race, v.laps);
+            if v.seen >= BEST_SEEN && v.next.is_some() && (self.best.len() < BEST_KEPT || self.best.contains_key(&k)) {
+                let b = self.best.entry(k).or_insert(v.time);
+                *b = b.min(v.time);
+            }
+        }
+        cheats
     }
 }
 
-/// One race's reports judged: its winner's verdict, when it is a cheat's
-fn judge(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
+/// One race's reports judged (`best`: the races' quickest clean wins): its winner's verdict, and whether it is a
+/// cheat's
+fn judge(reports: &[(u32, RaceRes)], best: &HashMap<(u32, u8), f64>) -> Option<(Verdict, bool)> {
     let first = reports.first()?.1;
     if first.mode == MODE_DRIFT {
         return None;
@@ -198,14 +223,13 @@ fn judge(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
         .iter()
         .flat_map(|(_, r)| r.rows[..r.n].iter().filter(|x| x.id == w).map(|x| (x.done / whole_way(r)).min(1.0)))
         .fold(0.0, f64::max);
-    // the race's length: each other racer's own way for as far as it came, the shortest
+    // the race's length: each other finisher's own way, the shortest
     let length = reports
         .iter()
         .filter(|(by, _)| *by != w)
         .filter_map(|(by, r)| {
-            let far = whole_way(r);
             let own = r.rows[..r.n].iter().find(|x| x.flags & RS_OURS != 0 && x.id == *by)?;
-            (own.done >= LENGTH_MIN_DONE * far && own.dist > 0.0).then(|| own.dist * far / own.done.min(far))
+            (own.flags & RS_FINISHED != 0 && own.dist > 0.0).then_some(own.dist)
         })
         .reduce(f64::min);
     let avg = length.map(|l| l / time);
@@ -214,9 +238,9 @@ fn judge(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
         .iter()
         .flat_map(|(_, r)| r.rows[..r.n].iter().filter(|x| x.id != w && x.flags & RS_FINISHED != 0 && x.time > 0.0).map(|x| (x.id, x.time)))
         .min_by(|a, b| a.1.total_cmp(&b.1));
-    let fast = avg.is_some_and(|a| a >= RACE_MPS);
-    let ahead = next.is_some_and(|(_, t)| time < FAR_AHEAD * t);
-    (fast || ahead).then_some(Verdict {
+    let quickest = best.get(&(first.race, first.laps)).copied().filter(|&b| time < QUICK_SHARE * b);
+    let cheat = avg.is_some_and(|a| a >= RACE_MPS) || drove < DROVE_MIN || quickest.is_some();
+    let v = Verdict {
         lobby: first.lobby,
         race: first.race,
         mode: first.mode,
@@ -227,19 +251,21 @@ fn judge(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
         avg,
         next,
         drove: (drove < DROVE_SHORT).then_some(drove),
+        quickest,
         seen,
         reports: reports.len(),
         names: HashMap::new(),
-    })
+    };
+    Some((v, cheat))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// a report of lobby 0xA1 (a 2-lap sprint) by `by`: rows (id, finished, time, laps, m)
-    fn rep(rows: &[(u32, bool, f64, f64, f64)], by: u32) -> RaceRes {
-        let mut r = RaceRes { lobby: 0xA1, race: 0x0BAD_F00D, mode: 1, laps: 2, n: rows.len(), rows: [ResRow::default(); LOBBY_PLAYERS] };
+    /// a report of lobby `lobby` (a 2-lap sprint) by `by`: rows (id, finished, time, laps, m)
+    fn rep_of(lobby: u32, rows: &[(u32, bool, f64, f64, f64)], by: u32) -> RaceRes {
+        let mut r = RaceRes { lobby, race: 0x0BAD_F00D, mode: 1, laps: 2, n: rows.len(), rows: [ResRow::default(); LOBBY_PLAYERS] };
         for (k, &(id, fin, time, done, dist)) in rows.iter().enumerate() {
             let flags = if fin { RS_FINISHED } else { 0 } | if id == by { RS_OURS } else { 0 };
             r.rows[k] = ResRow { id, flags, time, done, dist };
@@ -247,8 +273,12 @@ mod tests {
         r
     }
 
-    fn judged(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
-        let mut x = Results::default();
+    fn rep(rows: &[(u32, bool, f64, f64, f64)], by: u32) -> RaceRes {
+        rep_of(0xA1, rows, by)
+    }
+
+    /// the cheats of the races of these reports, each judged once all its reports came
+    fn judged_in(x: &mut Results, reports: &[(u32, RaceRes)]) -> Option<Verdict> {
         for (by, r) in reports {
             x.add(0.0, *by, *r, &|_| None);
         }
@@ -257,16 +287,42 @@ mod tests {
         v.pop()
     }
 
-    // a teleport to the finish: Bob (2) in 21 s, Ann (1) 28 % of the 5.8 km on when the race ended; Bob's own report
-    // says the same
+    fn judged(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
+        judged_in(&mut Results::default(), reports)
+    }
+
+    // a teleport to the finish: Bob (2) in 21 s, Ann (1) 1:30 later; by her own game the sprint is 5.8 km
     #[test]
     fn a_win_no_car_makes_is_a_cheat() {
-        let rows = [(2, true, 21.0, 2.0, 400.0), (1, false, 51.0, 0.56, 1624.0)];
+        let rows = [(2, true, 21.0, 2.0, 400.0), (1, true, 50.0, 2.0, 5800.0)];
         let v = judged(&[(1, rep(&rows, 1)), (2, rep(&rows, 2))]).expect("a verdict");
-        assert_eq!((v.winner, v.time, v.seen, v.reports, v.next), (2, 21.0, 2, 2, None));
-        assert!((v.length.unwrap() - 5800.0).abs() < 1.0, "{v:?}");
+        assert_eq!((v.winner, v.time, v.seen, v.reports, v.next, v.length), (2, 21.0, 2, 2, Some((1, 50.0)), Some(5800.0)));
         assert!(v.avg.unwrap() * 3.6 > 990.0, "{v:?}");
         assert_eq!(v.drove, None, "it came the whole way");
+    }
+
+    // a teleport to the finish with nobody else over the line: nothing to measure it by, until the race was won
+    // cleanly (two reports, another finisher) in 3:00; then a win in 0:21 is under half of that
+    #[test]
+    fn a_win_far_under_the_races_quickest_is_a_cheat() {
+        let mut x = Results::default();
+        let tele = |lobby| {
+            let rows = [(2, true, 21.0, 2.0, 400.0), (1, false, 51.0, 0.56, 1624.0)];
+            [(1, rep_of(lobby, &rows, 1)), (2, rep_of(lobby, &rows, 2))]
+        };
+        assert_eq!(judged_in(&mut x, &tele(0xA1)), None, "no clean win yet");
+        let clean = [(3, true, 180.0, 2.0, 5800.0), (4, true, 185.0, 2.0, 5810.0)];
+        assert_eq!(judged_in(&mut x, &[(3, rep_of(0xA2, &clean, 3)), (4, rep_of(0xA2, &clean, 4))]), None);
+        let v = judged_in(&mut x, &tele(0xA3)).expect("a verdict");
+        assert_eq!((v.winner, v.quickest, v.length, v.next), (2, Some(180.0), None, None));
+        let l = line(&v, &|id| format!("p{id}"));
+        assert!(l.contains("in 0:21.0, under 50 % of the race's quickest clean win (3:00.0); nobody else finished"), "{l}");
+        // (a win alone, or by one report, is no clean win: it says nothing of the race)
+        let mut y = Results::default();
+        let alone = [(3, true, 180.0, 2.0, 5800.0), (4, false, 210.0, 1.5, 4300.0)];
+        judged_in(&mut y, &[(3, rep_of(0xA2, &alone, 3)), (4, rep_of(0xA2, &alone, 4))]);
+        judged_in(&mut y, &[(3, rep_of(0xA4, &clean, 3))]);
+        assert_eq!(judged_in(&mut y, &tele(0xA3)), None);
     }
 
     // the game ended Bob's race at once (a test's racewin, its real rows): first in 4.76 s after 0.6 % of the way, Ann
@@ -278,11 +334,10 @@ mod tests {
         r.0.laps = 1;
         r.1.laps = 1;
         let v = judged(&[(1, r.0), (2, r.1)]).expect("a verdict");
-        assert_eq!((v.winner, v.time, v.next), (2, 4.76, None));
-        assert!((v.length.unwrap() - 5363.0).abs() < 1.0 && v.avg.unwrap() > 1000.0, "{v:?}");
+        assert_eq!((v.winner, v.time, v.next, v.length), (2, 4.76, None, None));
         assert!((v.drove.unwrap() - 0.006).abs() < 1e-9, "{v:?}");
         let l = line(&v, &|id| format!("p{id}"));
-        assert!(l.contains("having driven 0.6 % of the way") && l.contains("nobody else finished"), "{l}");
+        assert!(l.contains("in 0:04.8, having driven 0.6 % of the way; nobody else finished"), "{l}");
     }
 
     // an honest race (a real one's numbers: 186.82 s and 187.67 s, 5.8 km), an honest winner over a racer who stood
@@ -301,12 +356,25 @@ mod tests {
         assert_eq!(judged(&[(1, rep(&lost, 1)), (2, rep(&lost, 2)), (3, rep(&lost, 3))]), None);
     }
 
-    // a speed hack 3 times as fast: under 40 % of the next finisher's time (a car at 350 km/h, no faster)
+    // nfsu2.xyz, 2026-10-29: QUAD69 won a sprint in 82.7 s (quick, and honest), the two others still on the way 30 s
+    // later, driven far further than how far they came says (8.8 km for the race, scaled up): none
     #[test]
-    fn far_ahead_of_a_finisher_is_a_cheat() {
-        let rows = [(2, true, 60.0, 2.0, 5800.0), (1, true, 170.0, 2.0, 5810.0)];
-        let v = judged(&[(1, rep(&rows, 1)), (2, rep(&rows, 2))]).expect("a verdict");
-        assert_eq!((v.winner, v.next), (2, Some((1, 170.0))));
+    fn racers_still_on_the_way_say_nothing_of_the_length() {
+        let rows = [(2, true, 82.71, 1.0, 4600.0), (1, false, 112.71, 0.8, 7000.0), (3, false, 112.71, 0.75, 6600.0)];
+        let mut r = [(1, rep(&rows, 1)), (2, rep(&rows, 2)), (3, rep(&rows, 3))];
+        for x in &mut r {
+            x.1.laps = 1;
+        }
+        assert_eq!(judged(&r), None);
+    }
+
+    // a next finisher far behind is no line: Mallory (3) says she finished 1000 s after Bob (2), whose own game and
+    // Ann's say she did not finish
+    #[test]
+    fn a_next_finisher_far_behind_says_nothing() {
+        let honest = [(2, true, 180.0, 2.0, 5800.0), (3, false, 210.0, 0.3, 900.0)];
+        let fake = [(2, true, 180.0, 2.0, 5800.0), (3, true, 1000.0, 2.0, 5800.0)];
+        assert_eq!(judged(&[(2, rep(&honest, 2)), (3, rep(&fake, 3))]), None);
     }
 
     // one report alone cannot name a winner (Mallory, 3: says Ann won in 10 s) nor make one's time quicker
@@ -323,7 +391,7 @@ mod tests {
     // a drift race is left out; a race is judged once every racer's report came, else 90 s after the first
     #[test]
     fn drifts_are_left_out_and_races_wait() {
-        let rows = [(2, true, 21.0, 2.0, 400.0), (1, false, 51.0, 0.56, 1624.0)];
+        let rows = [(2, false, 4.76, 0.006, 38.0), (1, false, 34.76, 0.168, 901.0)];
         let mut d = rep(&rows, 1);
         d.mode = MODE_DRIFT;
         assert_eq!(judged(&[(1, d)]), None);

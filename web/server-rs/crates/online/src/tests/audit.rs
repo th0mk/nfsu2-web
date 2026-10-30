@@ -464,6 +464,7 @@ fn resu_avg(kind: u8, players: &[(u8, u8, f32, f32, bool)]) -> String {
         b[o + 2] = if *out { 0x0b } else { 1 };
         b[o + 8..o + 12].copy_from_slice(&time.to_be_bytes());
         b[o + 16..o + 20].copy_from_slice(&avg.to_be_bytes());
+        b[o + 20..o + 24].copy_from_slice(&(avg * 1.25).to_be_bytes());
         if *out {
             b[o + 32..o + 36].copy_from_slice(&(-1.0f32).to_be_bytes());
         }
@@ -472,9 +473,9 @@ fn resu_avg(kind: u8, players: &[(u8, u8, f32, f32, bool)]) -> String {
     base64::engine::general_purpose::STANDARD.encode(b)
 }
 
-// what each player's game saw that no racer does is a [cheat] line, the report taken or not: a race the game ended at
-// once (a test's racewin, its real report: 4.77 s, 65 m driven, the other racer 1021 m by the race's end), a teleport
-// to the finish at 25 s (212 m/s on average); an honest sprint (a test's real one) is none
+// what a racer's own game measured that no racer does is a [cheat] line, the report taken or not: a race the game
+// ended at once (a test's racewin, its real report: 4.77 s, 65 m driven, the other racer 1021 m by the race's end), a
+// teleport to the finish at 25 s (212 m/s on average); an honest sprint (a test's real one) is none
 #[test]
 fn a_race_no_racer_drives_is_a_cheat_line() {
     let mut w = world();
@@ -491,16 +492,53 @@ fn a_race_no_racer_drives_is_a_cheat_line() {
     race_of(&mut w, "honest", "Fast1", "Slow1", &[(0, 1, 56.49, 29.83, false), (1, 2, 58.15, 29.64, false)]);
     assert_eq!(cheats(&w), Vec::<String>::new());
     race_of(&mut w, "warp", "Honest", "Warp", &[(1, 1, 4.77, 13.58, false), (0, 2, 34.76, 29.36, true)]);
-    let l = cheats(&w);
     assert_eq!(
-        l[0],
-        "[cheat] 10.77.4.4 \"Warp\": won the online race \"warp\" (sprint) in 0:04.77, under the 20 s a sprint race takes at \
-         least, having driven 65 m, under half the 1021 m \"Honest\" drove: as Honest's game saw it"
+        cheats(&w),
+        ["[cheat] 10.77.4.4 \"Warp\": won the online race \"warp\" (sprint, track 4102, 1 lap) in 0:04.77, under the 20 s a \
+          sprint race takes at least, having driven 65 m, under half the 1021 m \"Honest\" drove: each by its own game; \
+          its top speed 61 km/h"]
     );
-    assert!(l.len() == 2 && l[1].ends_with(": as Warp's game saw it"), "{l:?}");
     race_of(&mut w, "tele", "Honest2", "Tele", &[(1, 1, 25.0, 212.0, false), (0, 2, 55.0, 29.0, true)]);
     let l = cheats(&w);
-    assert!(l.len() == 4 && l[2].contains("\"Tele\": won the online race \"tele\" (sprint) in 0:25.00, 763 km/h on average"), "{l:?}");
+    assert_eq!(
+        l[1..],
+        ["[cheat] 10.77.4.4 \"Tele\": won the online race \"tele\" (sprint, track 4102, 1 lap) in 0:25.00, 763 km/h on \
+          average, which no car does: by its own game; its top speed 954 km/h"]
+    );
+}
+
+// what a game shows of another racer is no [cheat] line (nfsu2.xyz, 2026-10-29: Ozz's game had Nef win a 4-minute
+// sprint at 7457 km/h, and a racer who left at 91 km): only each racer's own game's figures count
+#[test]
+fn what_a_game_shows_of_the_others_is_no_cheat_line() {
+    let mut w = world();
+    let (ga, gb, gc) = (client(&mut w, "10.77.6.1"), client(&mut w, "10.77.6.2"), client(&mut w, "10.77.6.3"));
+    let (x, y, z) = (login(&mut w, ga, "Ozz"), login(&mut w, gb, "Nef"), login(&mut w, gc, "Left"));
+    let auth = race(&mut w, "seen", &[x, y, z], vec![]).unwrap();
+    w.advance(240_000.0);
+    let send = |w: &mut World, c, rows: &[(u8, u8, f32, f32, bool)]| {
+        let f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, rows)), ("NAME0", "Ozz"), ("NAME1", "Nef"), ("NAME2", "Left")];
+        w.send(c, "rank", f);
+    };
+    send(&mut w, x, &[(1, 1, 223.37, 2071.4, false), (0, 2, 225.18, 36.98, false), (2, 3, 57.34, 1600.0, true)]);
+    send(&mut w, y, &[(1, 1, 223.37, 37.5, false), (0, 2, 225.18, 37.1, false), (2, 3, 57.34, 30.0, true)]);
+    send(&mut w, z, &[(1, 1, 223.37, 37.5, false), (0, 2, 225.18, 37.1, false), (2, 3, 57.34, 30.0, true)]);
+    assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "{}", w.text().join("\n"));
+}
+
+// a report of the wrong shape is no [cheat] line: one that names a racer twice, with times of 0.25 s and 0.23 s (a
+// live race's report read out of line, 2026-10-29), is not taken and says nothing of that racer
+#[test]
+fn a_report_naming_a_racer_twice_is_no_cheat_line() {
+    let mut w = world();
+    let (ga, gb) = (client(&mut w, "10.77.5.1"), client(&mut w, "10.77.5.2"));
+    let (x, y) = (login(&mut w, ga, "Host"), login(&mut w, gb, "Other"));
+    let auth = race(&mut w, "twice", &[x, y], vec![]).unwrap();
+    w.advance(61_000.0);
+    let resu = resu_avg(1, &[(0, 2, 0.25, 30.0, false), (0, 2, 0.23, 30.0, false)]);
+    w.send(y, "rank", fields![("AUTH", auth.as_str()), ("RESU", resu), ("NAME0", "Host"), ("NAME1", "Other")]);
+    assert!(w.logged("\"twice\": Other's race report not taken: players named twice"), "{}", w.text().join("\n"));
+    assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "{}", w.text().join("\n"));
 }
 
 // results: race types by the game's numbers (drag 2, drift 3); its seventh (6) is a result that counts nowhere

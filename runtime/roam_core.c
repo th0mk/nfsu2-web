@@ -72,16 +72,71 @@ uint32_t rc_fnv1a(const char *s){
     for (; *s; s++){ h ^= (uint8_t)*s; h *= 0x01000193u; }
     return h ? h : 1u;
 }
-/* the Room setting's hash: rc_fnv1a of the name without its spaces and with its capitals small ("Blue Room" is
- * "blueroom"), so friends who type it a little differently still meet; 0 (no room) for a name of spaces only.  The
- * start page asks the server for a room's players by this hash (web/src/app/players.ts roomHash). */
+/* one character of a Room's or a crew's name as its hash takes it (players.ts roomFold is the same): 0 for a blank
+ * or an invisible one (Unicode's spaces, the zero-width ones, the soft hyphen, the byte order mark); capitals small
+ * in the scripts the game's languages write with them (Latin with Latin-1, Extended-A and Romanian's commas, Greek,
+ * Cyrillic), Turkish dotted and dotless i as i, final sigma as sigma, and the full-width forms of ASCII as ASCII.
+ * Any other character is itself. */
+static uint32_t room_fold(uint32_t c){
+    if (c == ' ' || (c >= '\t' && c <= '\r') || c == 0xA0 || c == 0xAD || c == 0x1680 || (c >= 0x2000 && c <= 0x200D) ||
+        c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x2060 || c == 0x3000 || c == 0xFEFF) return 0;
+    if (c >= 0xFF01 && c <= 0xFF5E) c -= 0xFEE0;                      /* full width: '!' to '~' */
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    if (c < 0xC0) return c;
+    if (c <= 0xDE) return c == 0xD7 ? c : c + 32;                     /* (x, the multiplication sign) */
+    if (c >= 0x100 && c <= 0x17F){
+        if (c == 0x130 || c == 0x131) return 'i';
+        if (c == 0x178) return 0xFF;
+        if (c <= 0x137 || (c >= 0x14A && c <= 0x177)) return c | 1;   /* capital even, small odd */
+        if ((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) return c & 1 ? c + 1 : c;   /* capital odd */
+        return c;
+    }
+    if (c >= 0x218 && c <= 0x21F) return c | 1;
+    if (c >= 0x391 && c <= 0x3AB) return c == 0x3A2 ? c : c + 32;
+    if (c == 0x386) return 0x3AC;
+    if (c >= 0x388 && c <= 0x38A) return c + 37;
+    if (c == 0x38C) return 0x3CC;
+    if (c == 0x38E || c == 0x38F) return c + 63;
+    if (c == 0x3C2) return 0x3C3;
+    if (c >= 0x400 && c <= 0x40F) return c + 80;
+    if (c >= 0x410 && c <= 0x42F) return c + 32;
+    if ((c >= 0x460 && c <= 0x481) || (c >= 0x48A && c <= 0x4BF) || (c >= 0x4D0 && c <= 0x52F)) return c | 1;
+    if (c == 0x4C0) return 0x4CF;
+    if (c >= 0x4C1 && c <= 0x4CE) return c & 1 ? c + 1 : c;
+    return c;
+}
+/* the UTF-8 character at s into *c, and its length; 0 for a byte that starts none (no overlong forms, no surrogates,
+ * nothing past U+10FFFF).  The string's NUL ends a character as any byte but 0x80 to 0xBF does: nothing past it is
+ * read. */
+static int utf8_char(const uint8_t *s, uint32_t *c){
+    uint32_t b = s[0];
+    if (b < 0x80){ *c = b; return 1; }
+    int len = b >= 0xC2 && b <= 0xDF ? 2 : b >= 0xE0 && b <= 0xEF ? 3 : b >= 0xF0 && b <= 0xF4 ? 4 : 0;
+    if (!len) return 0;
+    uint32_t v = b & (0x7Fu >> len);
+    for (int i = 1; i < len; i++){ if ((s[i] & 0xC0) != 0x80) return 0; v = v << 6 | (s[i] & 0x3Fu); }
+    if ((len == 3 && (v < 0x800 || (v >= 0xD800 && v <= 0xDFFF))) || (len == 4 && (v < 0x10000 || v > 0x10FFFF))) return 0;
+    *c = v; return len;
+}
+/* the Room setting's hash: rc_fnv1a of the name's UTF-8 with each character as room_fold has it (its blanks and
+ * invisible ones left out, its capitals small: "Blue Room" is "blueroom", "КОМНАТА" is "комната"), so friends who
+ * type it a little differently still meet; 0 (no room) for a name of blanks only.  A byte that starts no UTF-8
+ * character counts as it is.  The start page asks the server for a room's players by this hash (web/src/app/players.ts
+ * roomHash), and a crew is the hash of its name too. */
 uint32_t rc_room_hash(const char *s){
     uint32_t h = 0x811C9DC5u; int n = 0;
-    for (; s && *s; s++){
-        uint8_t b = (uint8_t)*s;
-        if (b == ' ' || (b >= '\t' && b <= '\r')) continue;
-        if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
-        h ^= b; h *= 0x01000193u; n++;
+    const uint8_t *p = (const uint8_t *)s;
+    while (p && *p){
+        uint32_t c; int len = utf8_char(p, &c);
+        uint8_t u[4]; int k = 0;
+        if (!len){ len = 1; u[k++] = p[0]; }                          /* (not UTF-8: the byte itself) */
+        else if (!(c = room_fold(c))){ p += len; continue; }
+        else if (c < 0x80) u[k++] = (uint8_t)c;
+        else if (c < 0x800){ u[k++] = (uint8_t)(0xC0 | c >> 6); u[k++] = (uint8_t)(0x80 | (c & 0x3F)); }
+        else if (c < 0x10000){ u[k++] = (uint8_t)(0xE0 | c >> 12); u[k++] = (uint8_t)(0x80 | (c >> 6 & 0x3F)); u[k++] = (uint8_t)(0x80 | (c & 0x3F)); }
+        else { u[k++] = (uint8_t)(0xF0 | c >> 18); u[k++] = (uint8_t)(0x80 | (c >> 12 & 0x3F)); u[k++] = (uint8_t)(0x80 | (c >> 6 & 0x3F)); u[k++] = (uint8_t)(0x80 | (c & 0x3F)); }
+        for (int i = 0; i < k; i++){ h ^= u[i]; h *= 0x01000193u; }
+        p += len; n++;
     }
     return !n ? 0 : h ? h : 1u;
 }
@@ -380,7 +435,7 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return -1;
         rc_put8(&w, m->u.duel.op); rc_put8(&w, m->u.duel.arg); rc_put32(&w, m->u.duel.to); rc_put32(&w, m->u.duel.duel);
         break;
-    case RC_MSG_MAPREQ: rc_put16(&w, m->u.mapreq.req); break;
+    case RC_MSG_MAPREQ: rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); break;
     case RC_MSG_MAP:
         if (m->u.map.nparts < 1 || m->u.map.nparts > RC_MAP_PARTS || m->u.map.part >= m->u.map.nparts || m->u.map.n > RC_MAP_PER) return -1;
         rc_put16(&w, m->u.map.req); rc_put8(&w, m->u.map.part); rc_put8(&w, m->u.map.nparts);
@@ -526,7 +581,10 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         if (r.err) return RC_E_SHORT;
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return RC_E_FIELD;
         break;
-    case RC_MSG_MAPREQ: m->u.mapreq.req = (uint16_t)rc_get16(&r); break;
+    case RC_MSG_MAPREQ:
+        m->u.mapreq.req = (uint16_t)rc_get16(&r);
+        m->u.mapreq.max = !r.err && r.len - r.n >= 2 ? (uint16_t)rc_get16(&r) : RC_MAP_MAX_V1;   /* (a core before 2048: req only) */
+        break;
     case RC_MSG_MAP:
         m->u.map.req = (uint16_t)rc_get16(&r); m->u.map.part = (uint8_t)rc_get8(&r); m->u.map.nparts = (uint8_t)rc_get8(&r);
         m->u.map.total = (uint16_t)rc_get16(&r); m->u.map.n = (uint8_t)rc_get8(&r);
@@ -987,10 +1045,11 @@ static void lobbies_from_hub(rc_session *s, const rc_msg *m){
     }
     s->lobbies_n = n; s->lobbies_gen++;
 }
-int rc_ask_map(rc_session *s, int64_t now){
+int rc_ask_map(rc_session *s, int64_t now, int max){
     if (s->closed || !s->conf.hub_ip || !s->hub_heard_us || !hub_mode(s, now)) return 0;
     rc_msg m; hdr(s, &m, RC_MSG_MAPREQ);
     m.u.mapreq.req = ++s->map_req;
+    m.u.mapreq.max = (uint16_t)(max < 0 ? 0 : max > RC_MAP_MAX ? RC_MAP_MAX : max);
     s->map_mask = 0; s->map_nparts = 0; s->map_asked_us = now;
     tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m);
     return 1;
@@ -1003,7 +1062,7 @@ static void map_part(rc_session *s, const rc_msg *m){
     s->map_nparts = m->u.map.nparts; s->map_asm_total = m->u.map.total;
     memcpy(s->map_asm + (size_t)m->u.map.part * RC_MAP_PER * RC_MAP_ENTRY, m->u.map.data, (size_t)m->u.map.n * RC_MAP_ENTRY);
     s->map_part_n[m->u.map.part] = m->u.map.n;
-    s->map_mask |= (uint8_t)(1u << m->u.map.part);
+    s->map_mask |= (uint16_t)(1u << m->u.map.part);
     if (s->map_mask != (1u << s->map_nparts) - 1u) return;
     int n = 0;
     for (int j = 0; j < s->map_nparts; j++)
@@ -1035,6 +1094,26 @@ void rc_set_crews(rc_session *s, const uint32_t *crews, int n){
      * for our crew-mates); without a hub, a peer colours us by them */
     s->hub_hello_tx = INT64_MIN / 4;
     if (!s->conf.hub_ip) for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state != RC_PS_FREE) s->peer[i].last_hello_tx = INT64_MIN / 4;
+}
+static void drop_peer(rc_session *s, int i, const char *why);
+int rc_set_room(rc_session *s, uint32_t room){
+    if (room == s->conf.room) return 0;
+    s->conf.room = room;
+    /* the old room's players go (a listed peer stays a candidate: its HELLO is of the other room now, so it does not
+     * come back), and so do the world map's markers and race lobbies of it until the next question */
+    int n = 0;
+    for (int i = 0; i < RC_TABLE; i++){
+        if (s->peer[i].state == RC_PS_FREE) continue;
+        n += s->peer[i].state == RC_PS_EST;
+        drop_peer(s, i, "the room changed");
+    }
+    s->map_n = 0; s->map_total = 0; s->map_gen++;
+    s->lobbies_n = 0; s->lobbies_gen++;
+    s->noted_room = 0;
+    /* HELLOs due at the next tick: the hub links us in the new room by it; without a hub, the peers hear it */
+    s->hub_hello_tx = INT64_MIN / 4;
+    for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state != RC_PS_FREE) s->peer[i].last_hello_tx = INT64_MIN / 4;
+    return n;
 }
 int rc_peer_crew(const rc_session *s, int i){
     if (i < 0 || i >= RC_TABLE) return -1;

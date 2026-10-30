@@ -5,7 +5,8 @@
  * game while it is on and sends what they do here as IEV_PHOTO events), and
  * so does the pause menu's Photo Mode.  Two cameras: orbit (the first) turns
  * about a point at the car, which moves up to ORBIT_PAN_M from it; free flies
- * up to FREE_M from the car.  Both zoom (the field of view) and tilt.
+ * up to FREE_M from the car.  Both zoom (the field of view) and tilt.  In free
+ * roam with friends their names over their cars can show (off at first).
  *
  * Only in the world while the player drives (a race, free roam, an outrun:
  * the race status racing, the HUD the top package, the player's own drive
@@ -36,7 +37,13 @@
  *    sub_005c7ec0).  Player 0x5FA820 (0) gives the player's own camera back.
  *  - The front end draws the HUD, the names over friends' cars and any
  *    screen in 0x5378C0 (from the frame's render 0x5CBF40): skipped while
- *    photo mode is on.
+ *    photo mode is on.  With the names on it runs, every object of the
+ *    packages on (the package manager's lists at +0xE4 and +0xF4, records
+ *    chained through +4 with the name at +0xC; FEPackage +0x4C the first
+ *    object, each +4 the next; a group, type +0x18 5, has its own at +0x64)
+ *    but the names hidden for it (+0x1C bit 1 and 0x400000, as FEngHide
+ *    0x50CA00 sets them), and those hidden ones shown after (as FEngShow
+ *    0x50CA50: bit 1 off, 0x400000 on).
  *  - The sound manager ([0x82B884]) plays at the volumes its 0x469050
  *    (thiscall: volumes*) points it to, the Audio options' (0x83AA28: +0
  *    master, +4 speech, +8 menu music, +0xC game music, +0x10 effects,
@@ -60,7 +67,8 @@
  *    game runs again.
  *
  * The page (status_web.c) reads:
- *   photo       bits: 1 photo mode can open now, 2 it is on, 4 the free camera
+ *   photo       bits: 1 photo mode can open now, 2 it is on, 4 the free camera,
+ *               8 the names on, 16 friends' names can show here
  *   photo_fov   the field of view, degrees     photo_roll  the tilt, degrees
  *   photo_n     how many times it opened */
 #include "cpu.h"
@@ -76,6 +84,8 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 long autotest_frame(void);
 const char *language_name(void);
+int roam_game_names_here(void);                          /* roam_game.c: the names over friends' cars */
+int roam_game_names(CPU *c, uint32_t *obj, int max);
 uint32_t language_add_text(const char *name, const char *text);
 
 /* status_web.c in the browser; the Mac has no page */
@@ -106,6 +116,14 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define ITEM_BYTES     0x48u
 #define ICON_PHOTO     0x69cd72d1u   /* INGAME_ICON_VOIP_ON, unused: texrep_web.c draws a still camera there */
 #define FN_NEW         0x00575620u   /* cdecl (size): operator new */
+#define FN_FE_PACKAGE  0x0052cef0u   /* cdecl (package name) -> FEPackage* */
+#define PK_FIRST       0x4cu         /* an FEPackage's first object */
+#define OB_NEXT        4u            /* an FE object's next, */
+#define OB_TYPE        0x18u         /*   its type (5 a group), */
+#define OB_FLAGS       0x1cu         /*   its flags (bit 1 hidden, 0x400000 changed: the renderer looks again), */
+#define OB_CHILD       0x64u         /*   a group's first */
+#define NAMES_MAX      64
+#define HIDDEN_MAX     4096
 #define FN_VOLUMES     0x00469050u
 #define G_SOUND        0x0082b884u
 #define G_VOLUMES      0x0083aa28u
@@ -125,11 +143,11 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define MOVER_DEBUG    2u
 
 #define CENTRE_Z       0.5f          /* the point the orbit starts at: above the car's position, m */
-#define ORBIT_PAN_M    10.f          /* how far that point moves from it, sideways */
-#define ORBIT_UP_M     6.f           /* and up */
+#define ORBIT_PAN_M    25.f          /* how far that point moves from it, sideways */
+#define ORBIT_UP_M     15.f          /* and up */
 #define DIST_MIN       1.2f
-#define DIST_MAX       12.f          /* (nothing keeps the camera out of walls: further, a street's houses are in the way) */
-#define FREE_M         20.f          /* the free camera from the car's centre */
+#define DIST_MAX       30.f          /* (nothing keeps the camera out of walls: in a street the houses can be in the way) */
+#define FREE_M         50.f          /* the free camera from the car's centre */
 #define EYE_MIN_Z      -0.3f         /* the eye above the car's position, at least */
 #define MOVE_MPS       5.f
 #define TURN_DPS       100.f
@@ -142,14 +160,14 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 
 /* ---- what the page sends (the input thread) ----------------------------------- */
 enum { PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG = 5, PH_PAN = 6, PH_DOLLY = 7,
-       PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11 };
+       PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11, PH_NAMES = 12 };
 /* PH_HOLD's bits: keys and buttons held */
 enum { HB_FWD = 1, HB_BACK = 2, HB_LEFT = 4, HB_RIGHT = 8, HB_UP = 16, HB_DOWN = 32, HB_TL = 64, HB_TR = 128,
        HB_TU = 256, HB_TD = 512, HB_ZIN = 4096, HB_ZOUT = 8192, HB_RL = 16384, HB_RR = 32768, HB_FAST = 65536 };
 #define NONE_SET INT32_MIN
 static struct {
-    atomic_int page, open, hold, move, lift, turn, dx, dy, px, py, dolly, fov, roll, mode, reset;
-} I = { .fov = NONE_SET, .roll = NONE_SET, .mode = -1 };
+    atomic_int page, open, hold, move, lift, turn, dx, dy, px, py, dolly, fov, roll, mode, reset, names;
+} I = { .fov = NONE_SET, .roll = NONE_SET, .mode = -1, .names = -1 };
 
 /* the page's events (runtime/web/input_web.c, IEV_PHOTO) and the test script's */
 void photo_input(int cmd, int a, int b){
@@ -166,12 +184,13 @@ void photo_input(int cmd, int a, int b){
     case PH_ROLL:  atomic_store(&I.roll, a); break;
     case PH_MODE:  atomic_store(&I.mode, a); break;                               /* 0 orbit, 1 free, 2 the other */
     case PH_RESET: atomic_store(&I.reset, 1); break;
+    case PH_NAMES: atomic_store(&I.names, a); break;                              /* 0 off, 1 on, 2 the other */
     default: break;
     }
 }
 
 static struct {
-    int on, free, patched, slots, slot[4];
+    int on, free, names, drawn, patched, slots, slot[4];
     long n, pause_at;
     double t, val[4];
     uint32_t freeze_was, label, quiet, after;    /* after: the Replay item Photo Mode goes in behind */
@@ -299,7 +318,7 @@ static void enter(CPU *c){
     memcpy(P.se, ce, sizeof P.se); memcpy(P.sl, p, sizeof P.sl);
     clear_input();
     hush(c);
-    P.on = 1; P.n++;
+    P.on = 1; P.n++; P.drawn = 0;
     fprintf(stderr, "[photo] f=%ld on: the world stands, the orbit at %.1f m, field of view %.1f\n", autotest_frame(), P.dist, P.fov);
 }
 static void leave(CPU *c, const char *why){
@@ -410,7 +429,8 @@ static void label(void){
 static void publish(int can){
     static const char *const k[4] = { "photo", "photo_fov", "photo_roll", "photo_n" };
     if (!P.slots){ P.slots = 1; for (int i = 0; i < 4; i++){ P.slot[i] = host_status_slot(k[i]); P.val[i] = -1; } }
-    double v[4] = { (double)((can && !P.on ? 1 : 0) | (P.on ? 2 : 0) | (P.on && P.free ? 4 : 0)),
+    double v[4] = { (double)((can && !P.on ? 1 : 0) | (P.on ? 2 : 0) | (P.on && P.free ? 4 : 0) | (P.names ? 8 : 0) |
+                             (P.on && roam_game_names_here() ? 16 : 0)),
                     floor(P.fov * 10.f + 0.5f) / 10.0, floor(P.roll * 10.f + 0.5f) / 10.0, (double)P.n };
     if (!memcmp(v, P.val, sizeof v)) return;
     memcpy(P.val, v, sizeof v);
@@ -434,6 +454,11 @@ void photo_frame(CPU *c){
         if (!P.on) fprintf(stderr, "[photo] f=%ld the pause menu's Photo Mode: not opened (%s)\n", autotest_frame(), why ? why : "?");
         P.pause_at = 0;
     }
+    int nm = atomic_exchange(&I.names, -1);
+    if (nm >= 0 && (nm == 2 ? 1 : nm) != P.names){
+        P.names = !P.names;
+        fprintf(stderr, "[photo] f=%ld names %s\n", autotest_frame(), P.names ? "on" : "off");
+    }
     uint32_t pl = player();
     if (P.on){ steer(car_of(pl), dt); place(pl); }
     publish(!why && atomic_load(&I.page));
@@ -447,11 +472,53 @@ int photo_view(uint16_t *fov, float *roll){
     return 1;
 }
 
-/* The front end's frame (cdecl, no arguments): not while photo mode is on. */
+/* the objects in the list at first hidden but those in keep and the groups that hold one (a group's own, which the
+ * renderer draws by their own flags, with it, as FEngHide does); hid: the ones it hid */
+static uint32_t hid[HIDDEN_MAX];
+static int nhid;
+static int holds(uint32_t o, const uint32_t *keep, int nk, int depth){
+    for (int i = 0; i < nk; i++) if (o == keep[i]) return 1;
+    if (depth >= 8 || MR32(o + OB_TYPE) != 5u) return 0;
+    int n = 0;
+    for (uint32_t it = rd32(o + OB_CHILD); it && ok(it, OB_CHILD + 4u) && n < 4096; it = rd32(it + OB_NEXT), n++)
+        if (holds(it, keep, nk, depth + 1)) return 1;
+    return 0;
+}
+static void hide_but(uint32_t first, const uint32_t *keep, int nk, int depth){
+    int n = 0;
+    for (uint32_t o = rd32(first); o && ok(o, OB_CHILD + 4u) && n < 4096; o = rd32(o + OB_NEXT), n++){
+        int group = MR32(o + OB_TYPE) == 5u && depth < 8;
+        if (holds(o, keep, nk, depth)){
+            if (group) hide_but(o + OB_CHILD, keep, nk, depth + 1);
+            continue;
+        }
+        if (!(MR32(o + OB_FLAGS) & 1u) && nhid < HIDDEN_MAX){ MR32(o + OB_FLAGS) |= 0x400001u; hid[nhid++] = o; }
+        if (group) hide_but(o + OB_CHILD, keep, 0, depth + 1);
+    }
+}
+
+/* The front end's frame (cdecl, no arguments): not while photo mode is on, but for the names over friends' cars
+ * when they are on. */
 void sub_005378c0_orig(CPU *c);
 void sub_005378c0(CPU *c){
     if (!P.on){ sub_005378c0_orig(c); return; }
-    POP32(c->eip);
+    uint32_t keep[NAMES_MAX], fe = rd32(G_FENG), mg = fe ? rd32(fe + 8u) : 0;
+    int nk = P.names && ok(mg, 0xf7) ? roam_game_names(c, keep, NAMES_MAX) : 0;
+    if (!nk){ POP32(c->eip); return; }
+    nhid = 0;
+    char seen[160] = ""; int np = 0;
+    for (uint32_t head = 0xe4u; head <= 0xf4u; head += 0x10u)
+        for (uint32_t r = rd32(mg + head); r && ok(r, 0x10) && np < 64; r = rd32(r + 4u), np++){
+            uint32_t name = rd32(r + 0xcu), pk = name ? gcall(c, FN_FE_PACKAGE, 0, 1, &name) : 0;
+            if (!ok(pk, PK_FIRST + 4u)) continue;
+            hide_but(pk + PK_FIRST, keep, nk, 0);
+            if (P.drawn) continue;
+            char b[40]; cstr(name, b, sizeof b);
+            snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? ", " : "", b);
+        }
+    if (!P.drawn){ P.drawn = 1; fprintf(stderr, "[photo] f=%ld names: %d, the rest of %s hidden (%d)\n", autotest_frame(), nk, seen, nhid); }
+    sub_005378c0_orig(c);
+    for (int i = 0; i < nhid; i++) MR32(hid[i] + OB_FLAGS) = (MR32(hid[i] + OB_FLAGS) & ~1u) | 0x400000u;
 }
 
 /* The pause menu's Replay (thiscall: icon, label, 0; ret 0xC), as the game makes it; Photo Mode goes in after it
@@ -495,8 +562,9 @@ static void act(CPU *c){
     if (MR32(G_RACEKIND) == 0u) sub_004c2510(c); else sub_004c24c0(c);
 }
 
-/* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, reset, hold MASK, move X Y [UP [CLOSER]],
- * turn X Y (-1..1), drag DX DY, pan DX DY (view heights), dolly N (wheel notches), fov DEG, roll DEG */
+/* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, reset, names [0|1], hold MASK,
+ * move X Y [UP [CLOSER]], turn X Y (-1..1), drag DX DY, pan DX DY (view heights), dolly N (wheel notches), fov DEG,
+ * roll DEG */
 int photo_script(const char *s){
     char w[16] = {0}; float a = 0, b = 0, z = 0, k = 0;
     int n = sscanf(s, "%15s %f %f %f %f", w, &a, &b, &z, &k);
@@ -508,6 +576,7 @@ int photo_script(const char *s){
     else if (!strcasecmp(w, "orbit")) photo_input(PH_MODE, 0, 0);
     else if (!strcasecmp(w, "free")) photo_input(PH_MODE, 1, 0);
     else if (!strcasecmp(w, "reset")) photo_input(PH_RESET, 0, 0);
+    else if (!strcasecmp(w, "names")) photo_input(PH_NAMES, n > 1 ? (int)a : 2, 0);
     else if (!strcasecmp(w, "hold")) photo_input(PH_HOLD, (int)a, 0);
     else if (!strcasecmp(w, "move")) photo_input(PH_MOVE, PACK(a, b), PACK(n > 3 ? z : 0, n > 4 ? k : 0));
     else if (!strcasecmp(w, "turn")) photo_input(PH_TURN, PACK(a, b), 0);

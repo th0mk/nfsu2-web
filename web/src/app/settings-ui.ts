@@ -13,6 +13,7 @@ import { readText, writeFile } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { roomHash } from './players';
+import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
@@ -25,7 +26,8 @@ type Control =
    *  value chosen (the promise ends when it has played), stop ends that early */
   | { t: 'select'; opts: [value: string, label: string][]; preview?: { play(value: string): Promise<void>; stop(): void } }
   | { t: 'num'; min?: number; max?: number; step?: number; unit?: string }
-  | { t: 'text'; placeholder?: string }
+  /** invite: the Room's box, with a button in it that copies an invite link to the room typed (invite.ts) */
+  | { t: 'text'; placeholder?: string; invite?: boolean }
   /** the crews (crews.ts): a line per crew with Leave, and a box with Join for one more */
   | { t: 'crews'; placeholder: string }
   /** quick chat's sixteen (phrases.ts): under "Choose phrases", four columns of a name and four phrases, each a
@@ -55,7 +57,7 @@ const GROUPS: Group[] = [
     { key: 'horn', label: N('Your horn'), help: N('N or the controller\'s left stick click, in free roam and in races with other players.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
-    { key: 'roam_room', label: N('Room'), help: N('Leave empty to drive with everyone. With a name, free roam shows only the players who set the same name. Not private: everyone on this server still sees your name.'), c: { t: 'text', placeholder: N('everyone') } },
+    { key: 'roam_room', label: N('Room'), help: N('Leave empty to drive with everyone. With a name, free roam shows only the players who set the same name. Not private: everyone on this server still sees your name.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names over cars, separated by commas: you and they never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('You drive through the other players\' cars, and they through yours. Off: you collide with them, and a car that appears on yours lets you through until you are apart.'), c: { t: 'switch', inv: true } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Say one of your sixteen phrases to the players near you in free roam: 1 to 4, then 1 to 4 (on a controller, the right stick twice; on a touch screen, the chat button). Theirs show over their cars.'), c: { t: 'switch' } },
@@ -68,6 +70,7 @@ const GROUPS: Group[] = [
     { key: 'movies', label: N('Movies'), help: N('Intro, story and FMV movies.'), c: { t: 'switch' } },
     { key: 'subtitles', label: N('Subtitles'), help: N('The movies\' lines as text. English\'s are VileStuff\'s English Subtitles Fixed, with who says each line.'), link: { text: N('English Subtitles Fixed'), href: 'https://nfsmods.xyz/mod/5286' }, c: { t: 'switch' } },
     { key: 'autosave', label: N('Autosave'), help: N('Sets each profile\'s Save option in the game to Autosave once, so races, purchases and changes are saved without asking. Prompt or Off chosen afterwards in the game\'s Options, Gameplay stays.'), c: { t: 'switch' } },
+    { key: 'show_hidden_races', label: N('Show hidden races'), help: N('MaxHwoy\'s Show Hidden Races Mod: the career\'s 33 hidden races on the map and the radar like the others, and up to 8 races of each kind on the map at once (the original game has 1 to 4). Off: as in the original game, a hidden race shows only when you drive near it.'), link: { text: N('Show Hidden Races Mod'), href: 'https://nfsmods.xyz/mod/1583' }, c: { t: 'switch' }, more: true },
     { key: 'intro', label: N('Startup movies'), help: N('The EA and THX logos, the PSA and the intro. Skippable: Enter, Esc, Space, a left click, or A, B or Start ends each one. Original: as in the game, where only the intro ends early.'), c: { t: 'seg', opts: [['skippable', N('Skippable')], ['original', N('Original')], ['off', N('Off')]] }, more: true },
     { key: 'sound', label: N('Sound'), help: N('All sound output.'), c: { t: 'switch' }, more: true },
     { key: 'background', label: N('When the tab is in the background'), help: N('Pause freezes the game and its sound, as alt-tab does on Windows. In LAN and Online play it keeps running, without sound.'), c: { t: 'seg', opts: [['pause', N('Pause')], ['run', N('Keep running')]] }, more: true },
@@ -101,6 +104,8 @@ const GROUPS: Group[] = [
  *  settings in this file"): the Crews row's colours */
 const COMPANION: Record<string, string> = { roam_crew: 'roam_crew_colours', quick_chat_phrases: 'quick_chat_groups' };
 const COMPANIONS = new Set(Object.values(COMPANION));
+/** the rows that do nothing while free roam with others is off (each says so then) */
+const ROAM_ROWS = ['roam_room', 'roam_crew'];
 /** Every key the panel shows (the check in app-test.mjs compares this with the template). */
 export const PANEL_KEYS = [...GROUPS.flatMap(g => g.items.map(i => i.key)), ...COMPANIONS];
 const ITEMS = new Map(GROUPS.flatMap(g => g.items.map(i => [i.key, i] as const)));
@@ -120,6 +125,19 @@ function iconButton(cls: string, name: string, path: string): HTMLButtonElement 
   return b;
 }
 const PLUS = 'M12 5v14M5 12h14', CROSS = 'M6 6l12 12M18 6L6 18', PERSON = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7';
+const LINK = 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1';
+
+/** An invite link onto the clipboard; what to tell the player (in the page's language), the link in it either way:
+ *  copied, or to copy by hand where the browser refused (an older WebView, a page without the focus). */
+export async function copyLink(link: string): Promise<string> {
+  try { await navigator.clipboard.writeText(link); return t('Invite link copied: {link}', { link }); } catch { /* the old way, then */ }
+  const ta = document.createElement('textarea'); ta.value = link; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.append(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { /* none */ }
+  ta.remove();
+  return ok ? t('Invite link copied: {link}', { link }) : t('Copy this invite link: {link}', { link });
+}
 
 /** What a crews control shows and does: the Crews row's, and the page menu's while a game is in free roam */
 export interface CrewControl {
@@ -135,13 +153,18 @@ export interface CrewControl {
   /** the crews after a Leave, a Join or a colour picked; focus(root): where the keyboard goes once they are drawn
    *  again in root */
   change(list: Crew[], focus: (root: HTMLElement) => Element | null | undefined): void;
+  /** a crew's invite link (invite.ts: with the room the player is in), for its chip's link button; said: where what
+   *  the copy did is told (none: the note under the box) */
+  link(name: string): string;
+  said?(msg: string): void;
 }
 
 /**
  * A crews control into ctl: one line of pills that wraps, a chip per crew in the player's order (its colour in the
  * game, a button that opens the palette under the line; its name, how many are in free roam in it when the server
- * says, and Leave), then a value box with Join in it (or Enter).  Join waits for a name that can join (crews.ts checkCrew), and the note
- * under the box says why one cannot; with 4 crews the box waits for one to be left.  A Leave keeps the others'
+ * says, a button that copies an invite link to it, and Leave), then a value box with Join in it (or Enter).  Join
+ * waits for a name that can join (crews.ts checkCrew), and the note under the box says why one cannot (and what a
+ * link's copy did, without o.said); with 4 crews the box waits for one to be left.  A Leave keeps the others'
  * colours; a Join takes the first colour no crew has.  A line under the chips names a crew counted with more than
  * CREW_BIG players (showCrewCounts).  Returns the box's field.
  */
@@ -159,10 +182,16 @@ export function crewControl(o: CrewControl, ctl: HTMLElement): HTMLInputElement 
     const nm = document.createElement('span'); nm.className = 'crew-name'; nm.textContent = c.name;
     const n = document.createElement('span'); n.className = 'crew-count';
     text.append(nm, n);
+    const share = iconButton('crew-link', t('Copy an invite link to crew {name}', { name: c.name }), LINK);
+    share.onclick = async () => {
+      const said = await copyLink(o.link(c.name));
+      if (o.said) { o.said(said); return; }
+      note.textContent = said; note.classList.remove('warn');
+    };
     const leave = iconButton('crew-leave', t('Leave crew {name}', { name: c.name }), CROSS);
     // the keyboard goes on to the next crew's Leave (the last one's: the one before), or to the box
     leave.onclick = () => o.change(list.filter((_, k) => k !== i), root => root.querySelectorAll('.crew-leave')[Math.min(i, list.length - 2)]);
-    li.append(dot, text, leave);
+    li.append(dot, text, share, leave);
     ul.append(li);
   });
   const line = document.createElement('div'); line.className = 'crew-line';
@@ -415,6 +444,8 @@ export class SettingsPanel {
     this.resolve(next);
     this.deps.onSaved?.(next);
     if (removed) this.render(); else { this.rerow(key); this.syncRaw(); }
+    // (the Room and Crews rows say whether free roam is on)
+    if (key === 'roam' && !removed) for (const k of ROAM_ROWS) this.rerow(k);
     this.root.dataset.saved = String(++this.saves);
     const it = ITEMS.get(key), cur = this.current(key);
     this.deps.say?.(() => {
@@ -622,7 +653,9 @@ export class SettingsPanel {
     } else if (c.t === 'crews') {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,
-        draft: this.crewDraft, onDraft: v => { this.crewDraft = v; }, change: (list, focus) => void this.setCrews(list, focus) }, ctl);
+        draft: this.crewDraft, onDraft: v => { this.crewDraft = v; }, change: (list, focus) => void this.setCrews(list, focus),
+        // with the room this file sets: crew-mates meet within one room
+        link: name => inviteLink(location.origin, { crew: name, room: this.current('roam_room') }), said: msg => this.deps.say?.(msg) }, ctl);
     } else if (c.t === 'phrases') {
       row.classList.add('set-list');
       described = this.phraseControl(ctl, id, phrasesOf(cur), groupsOf(this.current('quick_chat_groups')),
@@ -637,6 +670,16 @@ export class SettingsPanel {
         let v = inp.value.trim();
         // Your name in the form the Online menu and free roam both use (claim.ts)
         if (it.key === 'roam_name' && v) v = onlineName(v) ?? v;
+        // a Room as an invite link takes one (invite.ts): tidied, and refused where settings.ini would cut it short
+        if (c.t === 'text' && c.invite && v) {
+          const r = checkRoom(v);
+          if (!r.ok && r.why) {
+            const msg = t('Not saved: {key} = {why}.', { key: it.key, why: tvars(r.why, r.v ?? {}) });
+            this.state(row, msg, 'bad'); this.describe(inp, row); this.deps.say?.(msg);
+            return;
+          }
+          v = r.ok ? r.name : '';
+        }
         if (v === this.current(it.key) && (v !== '' || !this.resolved.file[it.key]?.raw)) return;   // unchanged (a late change event)
         if (v === '') { void this.put(it.key, null); return; }
         const chk = checkSetting(it.key, v);
@@ -647,7 +690,21 @@ export class SettingsPanel {
         }
         void this.put(it.key, v);
       };
-      ctl.append(inp);
+      if (c.t === 'text' && c.invite) {
+        // the value box with the link button in it, as the cloud saves' passphrase box has its own (index.html .keybox):
+        // the link is to the name in the box (also before it is saved), shown while it holds one
+        const box = document.createElement('div'); box.className = 'keybox linkbox';
+        const share = iconButton('room-link', t('Copy an invite link to this room'), LINK);
+        const showLink = () => { share.hidden = !inp.value.trim(); };
+        inp.addEventListener('input', showLink); showLink();
+        share.onclick = async () => {
+          const r = checkRoom(inp.value);
+          if (!r.ok) { if (r.why) this.deps.say?.(t('Not saved: {key} = {why}.', { key: it.key, why: tvars(r.why, r.v ?? {}) })); return; }
+          this.deps.say?.(await copyLink(inviteLink(location.origin, { room: r.name })));
+        };
+        box.append(inp, share);
+        ctl.append(box);
+      } else ctl.append(inp);
       if (c.t === 'num' && c.unit) { const u = document.createElement('span'); u.className = 'unit'; u.textContent = c.unit; ctl.append(u); }
       described = inp;
     }
@@ -668,8 +725,13 @@ export class SettingsPanel {
     if (by && keyDef(by.key)?.key !== it.key) this.state(row, t('settings.ini line {line} sets {env} = {value} by its own name: that is what applies.', { line: by.phys, env: def.env, value: this.fileOnly.env[def.env] }), 'env');
     const envName = def.env;
     if (envName in this.deps.environment) this.state(row, t('The page address sets {env}={value}, which wins over this setting.', { env: envName, value: this.deps.environment[envName] }), 'env');
+    // a room or crews with free roam off do nothing: new players often never turned it on (the first Play does not ask
+    // while the server's free roam is busy), and saw nobody in the room their friends named
+    if (ROAM_ROWS.includes(it.key) && cur && this.current('roam') !== 'on')
+      this.state(row, t('Free roam with others is off, so this does nothing yet: turn it on above.'), 'env');
     this.describe(described, row);
-    if (this.ro()) for (const el of row.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')) el.disabled = true;
+    // (a link copies what is there: read only or not)
+    if (this.ro()) for (const el of row.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button:not(.room-link):not(.crew-link), input, select')) el.disabled = true;
     return row;
   }
 

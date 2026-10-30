@@ -439,6 +439,23 @@ int hfr_display_live(void){
     return tv && (int64_t)(mono_ns() - tv) < 250000000ll;
 }
 
+/* ---- input age -----------------------------------------------------------
+ * When the game last read each input device (dinput_kbd.c: the keyboard, at
+ * the start of a frame's update, after FrameTimeUpdate; dinput_pad.c: the
+ * pads, in 0x5d2850 after the previous frame's Present).  A frame simulates
+ * with the older of the two reads it was given; gpu_web.c hands that time to
+ * the page with the frame (GwLat), which logs how old the input is when the
+ * frame is submitted, done on the GPU and next shown.  A device not read in
+ * the last 100 ms (no pad) does not count. */
+static uint64_t g_in_read[2];
+void hfr_note_input_read(int pad){ g_in_read[!!pad] = mono_ns(); }
+double hfr_frame_input_ms(void){
+    uint64_t now = mono_ns(), t = 0;
+    for (int i = 0; i < 2; i++)
+        if (g_in_read[i] && now - g_in_read[i] < 100000000ull && (!t || g_in_read[i] < t)) t = g_in_read[i];
+    return t / 1e6;
+}
+
 /* ---- the pacer ----------------------------------------------------------
  * Slots of the content period (MW kit SlotPacer semantics): a frame that is
  * early sleeps to the start of the slot after its predecessor's and takes
@@ -457,20 +474,62 @@ static int64_t snap(int64_t t, int64_t origin, int64_t g){   /* nearest grid poi
     int64_t m = d >= 0 ? (d + g / 2) / g : -((-d + g / 2) / g);
     return origin + m * g;
 }
-static int pace(int rate, uint64_t *slept, uint64_t *missed){
-    int64_t now = (int64_t)mono_ns();
-    *slept = 0; *missed = 0;
+/* the slot grid for a content rate: period P, grid step g, origin; 1 when locked to the vsync clock */
+static int grid(int rate, int64_t *P, int64_t *g, int64_t *origin){
     double nominal = 1e9 / rate;
-    int64_t P = (int64_t)llround(nominal), g = P, origin = 0;
+    *P = (int64_t)llround(nominal); *g = *P; *origin = 0;
     uint64_t pv = atomic_load(&g_vs_period), tv = atomic_load(&g_vs_ts);
-    g_lock_n++;
     if (pv && tv){
         double k = floor(nominal / (double)pv + 0.5);
         if (k >= 1 && fabs(k * (double)pv - nominal) < 0.01 * nominal){
-            P = (int64_t)llround(k * (double)pv); g = (int64_t)pv; origin = (int64_t)tv + g / 2;
-            g_lock_ok++;
+            *P = (int64_t)llround(k * (double)pv); *g = (int64_t)pv; *origin = (int64_t)tv + *g / 2;
+            return 1;
         }
     }
+    return 0;
+}
+/* ---- the wait after Present ----------------------------------------------
+ * The game reads the pads right after Present, in the same call (0x5d2850:
+ * Present, then 0x5cfa10 polls them), and the next frame steers with what it
+ * read; the keyboard it reads at the start of that frame's update, after
+ * FrameTimeUpdate.  On Windows the wait for the display was inside Present,
+ * before the pads' read.  Here the pacer waited in FrameTimeUpdate, after
+ * it: a pad's input (the touch controls' too) was as old as that wait, up to
+ * a whole period older than a key's (13 ms at 60 fps, 29 ms at 30).  So a
+ * main-loop Present waits for the next slot itself, and FrameTimeUpdate
+ * finds the slot begun.  NFSU2_PACE_AT=frame: the wait in FrameTimeUpdate,
+ * as before (A/B). */
+static int     g_pace_rate = 0;     /* the rate FrameTimeUpdate paced the frame at (0: not paced) */
+static int64_t g_pre_target = 0;    /* the slot the wait after Present waited for */
+static uint64_t g_pre_slept = 0;    /* and how long it slept, ns */
+static int pace_at_present(void){
+    static int on = -1;
+    if (on < 0){ const char *e = getenv("NFSU2_PACE_AT"); on = !(e && !strcasecmp(e, "frame")); }
+    return on;
+}
+void hfr_after_present(void){
+    int rate = g_pace_rate;
+    g_pace_rate = 0;                 /* once a frame: a loading screen's Presents never wait */
+    if (rate <= 0 || !pace_at_present() || !g_last_slot) return;
+    int64_t P, g, origin;
+    grid(rate, &P, &g, &origin);
+    int64_t now = (int64_t)mono_ns();
+    if (now - g_last_slot > 4 * 1000000000ll) return;
+    int64_t target = snap(g_last_slot + P, origin, g);
+    if (target <= g_last_slot) target += g;
+    if (now >= target) return;
+    guest_sleep_frame_ns(target - now);
+    g_pre_target = target; g_pre_slept = (uint64_t)(target - now);
+}
+
+static int pace(int rate, uint64_t *slept, uint64_t *missed){
+    int64_t now = (int64_t)mono_ns();
+    *slept = 0; *missed = 0;
+    int64_t P, g, origin;
+    g_lock_n++;
+    if (grid(rate, &P, &g, &origin)) g_lock_ok++;
+    int64_t pre = g_pre_target;
+    g_pre_target = 0; g_pre_slept = 0;
     if (!g_last_slot || now - g_last_slot > 4 * 1000000000ll){     /* first frame, or after a load */
         int64_t s0 = snap(now, origin, g); if (s0 > now) s0 -= g;
         g_last_slot = s0;
@@ -478,9 +537,9 @@ static int pace(int rate, uint64_t *slept, uint64_t *missed){
     }
     int64_t target = snap(g_last_slot + P, origin, g);
     if (target <= g_last_slot) target += g;
-    if (now < target){
-        guest_sleep_frame_ns((int64_t)(target - now));
-        *slept = (uint64_t)(target - now);
+    if (now < target || (pre == target && now - target < P)){
+        /* early: sleep to the slot (or the wait after Present did) and take it */
+        if (now < target){ guest_sleep_frame_ns((int64_t)(target - now)); *slept = (uint64_t)(target - now); }
         int n = (int)((double)(target - g_last_slot) / (double)P + 0.5);
         g_last_slot = target;
         return n < 1 ? 1 : n;
@@ -769,7 +828,8 @@ void sub_0057ead0(CPU *c){
     }
     fixes_follow_rate();
     uint64_t t_in = mono_ns();
-    if (g_f.t) g_f.work = t_in - g_f.t;
+    uint64_t pre_slept = g_pre_slept;          /* the wait after Present: sleep, not work */
+    if (g_f.t) g_f.work = t_in - g_f.t - pre_slept;
 
     int rate = g_mode == M_UNCAPPED ? 0 : content_rate();
     atomic_store(&g_rate_now, rate);
@@ -786,6 +846,8 @@ void sub_0057ead0(CPU *c){
                      e = getenv("NFSU2_HFR_LOCKSTEP_WALL"); lsw = e ? atoi(e) : 0;
                      if (ls) fprintf(stderr, "[hfr] LOCKSTEP test pacing (wall %d fps)\n", lsw > 0 ? lsw : rate); }
         slots = pace(ls && lsw > 0 ? lsw : rate, &slept, &missed);
+        slept += pre_slept;
+        g_pace_rate = ls && lsw > 0 ? lsw : rate;
         if (ls){ slots = 1; missed = 0; }
         frame_s = (double)slots / rate;
     } else frame_s = g_f.t ? (t_in - g_f.t) / 1e9 : 1.0 / 120;

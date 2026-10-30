@@ -120,7 +120,8 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
         let code: u16 = arg("code").parse().unwrap_or(4001);
         let m = json!({ "t": if code == 4001 { "kick" } else { "ban" }, "msg": arg("msg") });
         let done = lan.expel(arg("vip").parse().unwrap_or(0), Bytes::from(m.to_string()), code);
-        let answer = format!("HTTP/1.1 {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", if done { "200 OK" } else { "404 Not Found" });
+        let answer =
+            format!("HTTP/1.1 {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", if done { "200 OK" } else { "404 Not Found" });
         let _ = s.write_all(answer.as_bytes()).await;
         return;
     }
@@ -147,8 +148,8 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
             "queue" => queue = true,
             "g" if group.is_none() => group = Some(v.to_string()),
             "s" if site.is_none() => site = Some(v.to_string()),
-            // the server's bans: its id for the client's address, a client it turns away at once, a page id it turns
-            // away at the hello (with {"t":"ban","msg":<id>})
+            // the server's bans: its id for the client's address, a client it turns away at once, a page id or a
+            // keyphrase's owner it turns away at the hello (with {"t":"ban","msg":<what matched>,"ids":[...]})
             "ident" => ident = Some(v.to_string()),
             "refuse" => refuse = Some(Bytes::from(json!({ "t": "ban", "msg": v }).to_string())),
             "gate" => gate = Some(v.to_string()),
@@ -156,11 +157,17 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
         }
     }
     let on_hello: Option<nfsu2_lan::OnHello> = gate.map(|g| {
-        Box::new(move |id: &str| (id == g).then(|| Bytes::from(json!({ "t": "ban", "msg": id }).to_string()))) as nfsu2_lan::OnHello
+        Box::new(move |h: &nfsu2_lan::Hello| {
+            let hit = h.ids.iter().copied().chain(h.owner).find(|x| *x == g)?;
+            Some(Bytes::from(json!({ "t": "ban", "msg": hit, "ids": h.ids }).to_string()))
+        }) as nfsu2_lan::OnHello
     });
+    // a keyphrase's owner: "owner-" and its token (the server's is a hash: nfsu2-claims)
+    let on_claim: nfsu2_lan::OnClaim = Box::new(|c| Some(format!("owner-{c}").into()));
     let pre = Bytes::copy_from_slice(&buf[end..]);
     let (r, w) = s.into_split();
-    lan.attach(r, w, pre, AttachOpts { resume, queue, group, site, ident, refuse, on_hello, ..AttachOpts::default() });
+    let on_claim = Some(on_claim);
+    lan.attach(r, w, pre, AttachOpts { resume, queue, group, site, ident, refuse, on_hello, on_claim, ..AttachOpts::default() });
 }
 
 /// what the page tests read of the switch (sw.lan.peers, info(), reserved)
@@ -319,8 +326,10 @@ pub struct Opts {
     pub bundle: bool,
     /// and compact bundles (kind 33): its frames come as they are in `frames`, `unpack_compact` takes them apart
     pub compact: bool,
-    /// its page's id (the hello's "id")
+    /// its page's id (the hello's "id"), the ones its page found besides it ("was"), its keyphrase's token ("claim")
     pub id: Option<&'static str>,
+    pub was: Option<&'static [&'static str]>,
+    pub claim: Option<&'static str>,
     /// the players its page blocks (the hello's "block")
     pub block: Option<&'static [&'static str]>,
 }
@@ -377,6 +386,12 @@ impl Client {
         }
         if let Some(id) = o.id {
             extra.insert("id".into(), id.into());
+        }
+        if let Some(w) = o.was {
+            extra.insert("was".into(), w.into());
+        }
+        if let Some(c) = o.claim {
+            extra.insert("claim".into(), c.into());
         }
         if let Some(b) = o.block {
             extra.insert("block".into(), b.into());

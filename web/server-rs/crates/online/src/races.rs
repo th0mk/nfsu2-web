@@ -127,6 +127,7 @@ impl Core {
                         back: p.back,
                         reported: p.reported,
                         results: None,
+                        own: None,
                     }
                 })
                 .collect();

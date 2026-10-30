@@ -119,6 +119,7 @@ static int mailbox_once(void){
     m->magic = NET_MAGIC; m->version = NET_VERSION; m->hdr_bytes = NET_HDR_BYTES; m->slot_bytes = NET_SLOT_BYTES;
     m->tx_slots = NET_TX_SLOTS; m->rx_slots = NET_RX_SLOTS;
     m->tx_off = NET_HDR_BYTES; m->rx_off = NET_HDR_BYTES + NET_TX_SLOTS * NET_SLOT_BYTES;
+    m->caps = NET_CAP_ROOM;
     MB = m;
     nfsu2_register(HOST_KIND_NET, m, NET_MAILBOX_BYTES);
     return 0;
@@ -313,6 +314,21 @@ uint32_t roam_plat_crews(uint32_t crews[RC_CREW_MAX], uint32_t rgb[RC_CREW_MAX])
         if (!g) return 0;
         for (int i = 0; i < RC_CREW_MAX; i++){ crews[i] = i < 4 ? ld(&MB->crews[i]) : 0; rgb[i] = i < 4 ? ld(&MB->crews_rgb[i]) & 0xffffffu : 0; }
         if (ld(&MB->crews_gen) == g) return g;
+    }
+    return 0;
+}
+/* the room as the page changed it (net_proto.h room_name): read again while the page writes it (the name first, then
+ * the number) */
+uint32_t roam_plat_room(char name[64]){
+    for (int tries = 0; MB && tries < 4; tries++){
+        uint32_t g = ld(&MB->room_gen);
+        if (!g) return 0;
+        for (int i = 0; i < 16; i++){
+            uint32_t w = ld(&MB->room_name[i]);
+            for (int k = 0; k < 4; k++) name[4 * i + k] = (char)(w >> 8 * k);
+        }
+        name[63] = 0;
+        if (ld(&MB->room_gen) == g) return g;
     }
     return 0;
 }

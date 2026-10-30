@@ -27,7 +27,10 @@
 //                    `log CREW join <name>` / `log CREW leave <name>` / `log CREW colour <k> <name>` (the palette's
 //                    k-th colour, from 0) do that in the menu's Crews popup (F9, Crews) and go back (Done, Back to
 //                    the game), `log CREW shot <name>` saves the page with the popup open
-//                    (tests/scripts/roam_crew_menu.txt)
+//                    (tests/scripts/roam_crew_menu.txt); `log INVITE <fragment>` opens that invite link in the page
+//                    as a link pasted into its address does (the fragment without its #, which starts a comment in a
+//                    script: room=Blue%20Room), saves the question as <out>/<instance>-invite-<k>.png (k from 1) and
+//                    presses Join; `log INVITE-NO <fragment>` presses Not now (tests/scripts/roam_invite.txt)
 //        [--page play [--size 960x540] [--play-only Bob]]   the renderer's test page (test/play.html, WebGPU)
 //                    instead: frame dumps go to the server's /artifacts/ as <name>-*.png (a server of our own
 //                    gets --artifacts <out>); --play-only: only that instance renders, the others run hostcheck
@@ -188,7 +191,8 @@ if (CROWD) {
     { cwd: REPO, stdio: ['ignore', log, log] });
 }
 
-const browser = await chromium.launch({ ...pickBrowser(), headless: !argv.includes('--headed') });
+// CHROME_ARGS: more of the browser's options, separated by spaces (inside WSL: the Vulkan ones of online-pair's note)
+const browser = await chromium.launch({ ...pickBrowser(), headless: !argv.includes('--headed'), args: process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [] });
 const t0 = Date.now();
 const inst = [];
 async function start(i, name, script, own) {
@@ -196,6 +200,7 @@ async function start(i, name, script, own) {
     ...(TOUCH ? { hasTouch: true } : {}), ...(DOWNLOAD_LOG ? { acceptDownloads: true } : {}) });
   const page = await ctx.newPage();
   const log = fs.createWriteStream(path.join(OUT, `${name}.log`));
+  let invites = 0;                                      // (the page's invite links so far: log INVITE)
   const w = (s) => log.write(`${((Date.now() - t0) / 1000).toFixed(3)} ${s}\n`);
   page.on('console', m => {
     w(m.text());
@@ -235,6 +240,19 @@ async function start(i, name, script, own) {
         .then(() => page.waitForTimeout(200)).then(() => page.click(`${pop} [data-act="crews-done"]`))
         .then(() => page.click('#menu [data-act="resume"]'))
         .then(() => w(`[crew] ${op} ${k ?? ''} ${arg}`), e => w(`[crew] ${op} ${arg} failed: ${e}`));
+    }
+    // an invite link opened in the page, at a script's `log INVITE <fragment>`: the question box, its picture and
+    // what it says, then Join (or Not now)
+    const ik = APP && /LOG INVITE(-NO)? (\S+)/.exec(m.text());
+    if (ik) {
+      const [, no, frag] = ik, shot = path.join(OUT, `${name}-invite-${++invites}.png`);
+      void page.evaluate(f => { location.hash = '#' + f; }, frag)
+        .then(() => page.waitForSelector('#confirm[open]', { timeout: 10000 }))
+        .then(() => page.waitForTimeout(300)).then(() => page.screenshot({ path: shot }))
+        .then(() => page.evaluate(() => `${document.getElementById('confirm-title').textContent} | ${document.getElementById('confirm-body').innerText.replace(/\s*\n+\s*/g, ' / ')}`))
+        .then(said => { w(`[invite] ${frag}: ${said}`); return page.click(no ? '#confirm-cancel' : '#confirm-ok'); })
+        .then(() => page.waitForTimeout(500)).then(() => page.evaluate(() => [document.getElementById('toast').textContent, document.getElementById('page-toast').textContent].filter(Boolean).join(' | ')))
+        .then(told => w(`[invite] ${no ? 'not now' : 'joined'}: ${told}`), e => w(`[invite] ${frag} failed: ${e}`));
     }
   });
   page.on('pageerror', e => w('PAGEERROR ' + e));

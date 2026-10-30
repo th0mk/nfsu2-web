@@ -44,7 +44,7 @@
 //!   Never routed from a client (it could name any source), as a bundle in a bundle never is.
 //!
 //! Text frames are JSON control messages: {"t":"hello","name":...,"deltas":1,"lan":0|1,"bundle":1,"compact":1}
-//! (and "id", "claim", "block": below),
+//! (and "id", "was", "claim", "block": below),
 //! {"t":"lan","on":0|1} and {"t":"ping","id":n} from a client; {"t":"welcome","vip":...,"vipStr":...,"mask":...,
 //! "token":...,"bundle":1}, {"t":"peers",...}, {"t":"delta",...} and {"t":"pong","id":n} from the switch.
 //!
@@ -130,11 +130,13 @@
 //! the connection with [`CLOSE_KICKED`] or [`CLOSE_BANNED`]; the page shows the message and stays off the switch for
 //! the rest of that game.  Its address is free at once (no reservation: its token is of no use to it now).  A banned
 //! client is turned away the same way before it gets a place: by its address when it connects
-//! (`AttachOpts::refuse`, the server checks), or by the id its page keeps in its storage, which the hello names
-//! ("id", at most 64 characters: `AttachOpts::on_hello` asks the server).  The switch keeps who was on it for the
-//! operator's `who` ([`LanSwitch::who`]): each player's address and name, the opaque id the server gave its client
-//! address (`AttachOpts::ident`, a keyed hash) and its page's id, and the same of the players who left in the last
-//! `GONE_MS`, so that one who just left can still be banned.  None of it is ever sent to a peer.
+//! (`AttachOpts::refuse`, the server checks), or at its hello (`AttachOpts::on_hello` asks the server, with a
+//! [`Hello`]): by the id its page keeps in its storage ("id", at most 64 characters), the ones the page found in its
+//! other stores besides it ("was", at most [`WAS_MAX`] of them), or the keyphrase it plays with ("claim": below, as
+//! its owner).  The switch keeps who was on it for the operator's `who` ([`LanSwitch::who`]): each player's address
+//! and name, the opaque id the server gave its client address (`AttachOpts::ident`, a keyed hash), its page's id and
+//! its keyphrase's owner, and the same of the players who left in the last `GONE_MS`, so that one who just left can
+//! still be banned.  None of it is ever sent to a peer.
 //!
 //! ## Claimed names
 //!
@@ -255,6 +257,8 @@ pub const BROADCAST: u32 = 0xFFFF_FFFF;
 /// the close codes of a kick and a ban (the crate doc's Kicks and bans): the page stays off the switch after them
 pub const CLOSE_KICKED: u16 = 4001;
 pub const CLOSE_BANNED: u16 = 4003;
+/// the most ids a hello's "was" names (the page keeps its id in two stores: one other is all it sends)
+pub const WAS_MAX: usize = 4;
 /// the players who left in this long are kept for `who` (ms), this many at most
 const GONE_MS: i64 = 60 * 60_000;
 const GONE_MAX: usize = 2000;
@@ -484,8 +488,15 @@ impl LanOptions {
 pub type OnJoin = Box<dyn Fn(u32, bool, usize) + Send + Sync>;
 /// `AttachOpts::on_leave`: (vip, name, players on the switch now)
 pub type OnLeave = Box<dyn Fn(u32, &str, usize) + Send + Sync>;
-/// `AttachOpts::on_hello`: the id the hello names -> the control message that turns the client away, or None
-pub type OnHello = Box<dyn Fn(&str) -> Option<Bytes> + Send + Sync>;
+/// `AttachOpts::on_hello`: what the hello names its client by -> the control message that turns it away, or None
+pub type OnHello = Box<dyn Fn(&Hello) -> Option<Bytes> + Send + Sync>;
+
+/// What a hello names its client by, for the operator's bans (the crate doc's Kicks and bans): its page's id first,
+/// then the ones the page found besides it ("was"); the owner of the keyphrase it plays with (`AttachOpts::on_claim`)
+pub struct Hello<'a> {
+    pub ids: Vec<&'a str>,
+    pub owner: Option<&'a str>,
+}
 /// `AttachOpts::on_claim`: the hello's "claim" (a keyphrase's token) -> the owner the hosts are told of, or None
 pub type OnClaim = Box<dyn Fn(&str) -> Option<Arc<str>> + Send + Sync>;
 
@@ -509,7 +520,7 @@ pub struct AttachOpts {
     pub ident: Option<String>,
     /// a banned client: this control message, then the close with `CLOSE_BANNED`; it never gets a place
     pub refuse: Option<Bytes>,
-    /// the hello's id (its page's own): a message back turns the client away as `refuse` does
+    /// the hello's ids (its page's own) and keyphrase: a message back turns the client away as `refuse` does
     pub on_hello: Option<OnHello>,
     /// the hello's "claim" (the token of the keyphrase its page plays with): the owner its frames name to the hosts
     /// (`FrameCtx::owner`); never kept or shown otherwise
@@ -729,6 +740,7 @@ impl Peer {
             name: self.name().to_string(),
             ident: self.ident.clone(),
             browser: self.conn.browser.get().cloned(),
+            owner: self.conn.owner.get().cloned(),
             since: self.since,
             left,
             doing,
@@ -1158,6 +1170,18 @@ impl LanSwitch {
         v
     }
 
+    /// Who had the address `vip`, as `who` has them (without what they do): the player on it now, then the ones who
+    /// left it in the last `GONE_MS`, the last first.  For the server's marks of `[cheat]` lines, which a host's thread
+    /// writes: it does not wait on the hosts, as `who` does.
+    pub fn who_at(&self, vip: u32) -> Vec<Who> {
+        let guard = slot(vip).map(|i| self.table[i].load());
+        let mut v: Vec<Who> = guard.as_ref().and_then(|g| g.as_ref()).map(|p| p.who("", None)).into_iter().collect();
+        let now = nfsu2_util::now_ms();
+        let g = self.gone.lock();
+        v.extend(g.iter().rev().filter(|w| w.vip == vip && w.left.is_some_and(|t| now - t <= GONE_MS)).cloned());
+        v
+    }
+
     /// The operator removes the player at `vip` (the crate doc's Kicks and bans): its page gets `msg` (a control
     /// message), then the close with `code` (`CLOSE_KICKED` or `CLOSE_BANNED`).  False: nobody is there.
     pub fn expel(&self, vip: u32, msg: Bytes, code: u16) -> bool {
@@ -1176,8 +1200,9 @@ impl LanSwitch {
         conn.close(conn::close_payload(code, reason));
     }
 
-    /// a hello (the first control message of a connection) whose id the server turns away: the connection goes, and
-    /// true.  The id is kept for `who` either way, and the owner its claim names for the hosts.
+    /// a hello (the first control message of a connection) whose ids or keyphrase the server turns away: the
+    /// connection goes, and true.  The id and the owner its claim names are kept either way (for `who`, and the owner
+    /// for the hosts).
     pub(crate) fn hello_refused(&self, conn: &Arc<Conn>, ctx: &AttachCtx, b: &Bytes) -> bool {
         if b.len() > self.o.max_text || !conn.open() {
             return false;
@@ -1194,11 +1219,23 @@ impl LanSwitch {
         {
             let _ = conn.owner.set(owner);
         }
-        let Some(id) = m.get("id").and_then(serde_json::Value::as_str).filter(|i| !i.is_empty() && i.len() <= 64) else {
+        let id_ok = |i: &&str| !i.is_empty() && i.len() <= 64;
+        let id = m.get("id").and_then(serde_json::Value::as_str).filter(id_ok);
+        let mut ids: Vec<&str> = id.into_iter().collect();
+        if let Some(id) = id {
+            let _ = conn.browser.set(id.into());
+            let was = m.get("was").and_then(serde_json::Value::as_array).map(|a| &a[..a.len().min(WAS_MAX)]).unwrap_or(&[]);
+            for w in was.iter().filter_map(serde_json::Value::as_str).filter(id_ok) {
+                if !ids.contains(&w) {
+                    ids.push(w);
+                }
+            }
+        }
+        let owner = conn.owner.get().map(|o| &**o);
+        if ids.is_empty() && owner.is_none() {
             return false;
-        };
-        let _ = conn.browser.set(id.into());
-        match ctx.on_hello.as_ref().and_then(|f| f(id)) {
+        }
+        match ctx.on_hello.as_ref().and_then(|f| f(&Hello { ids, owner })) {
             Some(msg) => {
                 self.expel_conn(conn, msg, CLOSE_BANNED);
                 true
@@ -1451,9 +1488,11 @@ pub struct PeerView {
 pub struct Who {
     pub vip: u32,
     pub name: String,
-    /// its client's id for bans (`AttachOpts::ident`) and its page's (the hello's "id"), when it had them
+    /// its client's id for bans (`AttachOpts::ident`), its page's (the hello's "id") and its keyphrase's owner (the
+    /// hello's "claim", `AttachOpts::on_claim`), when it had them
     pub ident: Option<Arc<str>>,
     pub browser: Option<Arc<str>>,
+    pub owner: Option<Arc<str>>,
     /// when it took its place, and when it left (ms since 1970; None: on the switch now)
     pub since: i64,
     pub left: Option<i64>,

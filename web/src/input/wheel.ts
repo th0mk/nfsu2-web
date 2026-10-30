@@ -15,6 +15,16 @@
 // Driving Force Shifter, the G25's and G27's) shows its gears as buttons; the game's gearbox only shifts up and down,
 // so a move of the lever into a gear is one shift up or down, or the lever holds the handbrake (Shifter), as the
 // player picks in the same sheet.
+//
+// An RC radio (a drone's transmitter running EdgeTX or OpenTX, in its USB joystick mode) drives as a wheel too: its
+// channels are axes, CH1 to CH8 placed by usage (X, Y, Z, Rx, Ry, Rz, Slider, Dial: axes 0 to 7 in every browser but
+// Linux's, where the eight come one after another all the same), in the order its mixer sends them, AETR unless the
+// player changed it: aileron (the right stick across), elevator (the right stick up and down in mode 2, the left in
+// mode 1), throttle (the stick without a spring, down when the radio is switched on), rudder, then the switches, each
+// an axis at -1, 0 or +1.  Channels past the eighth are buttons.  So the right stick steers, the throttle stick is
+// the gas and the elevator pulled back the brake (radioMap); none of its switches does anything until the player sets
+// them up (WheelLearn: flip the switch for nitrous, the handbrake, a respawn), and with nothing the player can press,
+// a stick or a switch moved half way takes the game's controller back from another one (gamepad.ts).
 
 import { PAD_A, PAD_B, PAD_BACK, PAD_DDOWN, PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_HOME, PAD_LB, PAD_LS, PAD_RB, PAD_RS,
   PAD_START, PAD_X, PAD_Y } from './proto';
@@ -33,7 +43,13 @@ export interface WheelMap {
   dpad?: [number, number];       // a hat switch read as two axes, x and y (Linux), where known
   placed?: Placement;            // from the model's descriptor, its axes placed so; absent: guessed
   learned?: boolean;             // set up by the player (WheelLearn), not guessed
+  switches?: Switch[];           // a radio's switches the player set up
 }
+/** a radio's switch as one of the pad's buttons (pad: a PAD_* number): on while its axis sits near on (a channel
+ *  at the switch's position), or while its button is pressed (a channel past the eighth) */
+export interface Switch { pad: number; axis?: number; on?: number; button?: number }
+/** how near its position (on) a switch's axis reads while it is there */
+const SWITCH_NEAR = 0.3;
 
 /** a HID axis by its usage on the Generic Desktop page ('hat': the hat switch, the D-pad) */
 export type Usage = 'x' | 'y' | 'z' | 'rx' | 'ry' | 'rz' | 'slider' | 'hat';
@@ -84,7 +100,7 @@ const DFGT: ModelAxes = { axes: ['hat', 'x', 'y', 'z'], listed: true, steer: 'x'
  *  axes where its descriptor is known, and where its buttons are known to differ from its layout's, they (buttons:
  *  as WheelMap's); gears: its shifter's buttons, 1st to 6th gear and reverse, where known */
 export interface WheelInfo {
-  vendor: string; product: string; layout: 'ps' | 'xbox' | 'generic'; degrees: number; axes?: ModelAxes;
+  vendor: string; product: string; layout: 'ps' | 'xbox' | 'generic' | 'radio'; degrees: number; axes?: ModelAxes;
   buttons?: readonly number[]; gears?: readonly number[];
 }
 
@@ -140,6 +156,10 @@ const WHEEL_IDS = new Set(['044f:b65d', '044f:b65e', '044f:b664', '044f:b669', '
   '044f:b677', '044f:b67f', '044f:b691', '044f:b692', '044f:b696', '045e:02a2', '0483:0522', '0483:a355', '0079:1864',
   '11ff:0511', '1209:ffb0', '3416:0301', '3416:0302']);
 const WHEEL_VENDORS = new Set(['0eb7', '16d0', '2433', '346e']);
+// RC radios: EdgeTX's joystick (pid.codes 1209:4f54), or one that names its firmware or maker ("EdgeTX RadioMaster
+// TX16S Joystick", OpenTX's "FrSky Taranis Joystick" on STMicro's demo ids, which other devices use too)
+const RADIO_IDS = new Set(['1209:4f54']);
+const RADIO_NAME = /\b(edgetx|opentx|frsky|radiomaster|taranis)\b/i;
 
 /** the USB vendor and product from Gamepad.id: Chrome writes "Name (... Vendor: 046d Product: c24f)", Firefox
  *  "046d-c24f-Name" */
@@ -156,6 +176,7 @@ export function wheelOf(id: string): WheelInfo | null {
   const u = usbIds(id), key = u ? `${u.vendor}:${u.product}` : '';
   const k = KNOWN[key];
   w = k ? { vendor: u!.vendor, product: u!.product, ...k }
+    : RADIO_IDS.has(key) || RADIO_NAME.test(id) ? { vendor: u?.vendor ?? '', product: u?.product ?? '', layout: 'radio', degrees: 0 }
     : (u && (WHEEL_IDS.has(key) || WHEEL_VENDORS.has(u.vendor))) || /\bwheel\b|driving force|steering/i.test(id)
     ? { vendor: u?.vendor ?? '', product: u?.product ?? '', layout: 'generic', degrees: 0 } : null;
   if (seenIds.size < 64) seenIds.set(id, w);
@@ -177,6 +198,7 @@ const hatRest = (v: number) => Math.abs(v) > 1.05;
  * axis after the wheel, gas up, brake down.  The buttons and the shifter's are the model's.
  */
 export function guessMap(info: WheelInfo, axes0: readonly number[], nbuttons: number): WheelMap {
+  if (info.layout === 'radio') return radioMap(axes0, nbuttons);
   const table = info.buttons ?? (info.layout === 'ps' ? PS_BUTTONS : info.layout === 'xbox' ? XBOX_BUTTONS : GENERIC_BUTTONS);
   const gears = shifterOf(info, nbuttons);
   const base = {
@@ -209,6 +231,21 @@ export function guessMap(info: WheelInfo, axes0: readonly number[], nbuttons: nu
   return { ...base, steer, gas, brake };
 }
 
+/**
+ * A radio's layout nobody set up: its first four channels are the sticks, the throttle the one of them resting at an
+ * end when the radio showed up (pulled down; CH3, axis 2, in the usual AETR order where none or more than one does),
+ * the other three aileron, elevator and rudder in that order.  The aileron steers, all of it full lock; the throttle
+ * from that end to the other is the gas; the elevator pulled back the brake: the way the throttle rests, as both are
+ * a stick's up and down and a radio sends every stick's up the same way.  No buttons and no switches.
+ */
+export function radioMap(axes0: readonly number[], nbuttons: number): WheelMap {
+  const sticks = [0, 1, 2, 3], ends = sticks.filter(i => Math.abs(axes0[i] ?? 0) >= 0.9 && Math.abs(axes0[i]) <= 1.05);
+  const thr = ends.length === 1 ? ends[0] : 2, down = ends.length === 1 ? Math.sign(axes0[thr]) : -1;
+  const [ail, ele] = sticks.filter(i => i !== thr);
+  return { steer: ail, centre: 0, lock: 1, gas: { axis: thr, rest: down, full: -down }, brake: { axis: ele, rest: 0, full: down },
+    buttons: Array.from({ length: nbuttons }, () => -1), switches: [] };
+}
+
 /** a hat switch read as one axis (Chrome, Firefox on Windows and macOS) as PAD_D* bits: positions 0 (up) to 7
  *  (up-left) at 2/7 apart from -1; anything else (let go, or 0 before the first report) is none */
 export function hatDirs(v: number): number {
@@ -239,9 +276,17 @@ export function readWheel(axes: readonly number[], pressed: readonly boolean[], 
   for (let i = 0; i < pressed.length && i < m.buttons.length; i++) if (pressed[i] && m.buttons[i] >= 0) buttons |= 1 << m.buttons[i];
   if (hat >= 0 && hat !== m.steer) buttons |= hatDirs(axes[hat]);
   if (m.dpad) buttons |= dpadDirs(axes[m.dpad[0]], axes[m.dpad[1]]);
+  if (m.switches) for (const s of m.switches) if (switchOn(s, axes, pressed)) buttons |= 1 << s.pad;
   const w = axes[m.steer];
   const lx = typeof w === 'number' && isFinite(w) && m.lock ? clamp((w - m.centre) / m.lock, -1, 1) : 0;
   return { buttons, axes: [lx, 0, 0, 0, pedalValue(m.brake, axes), pedalValue(m.gas, axes)] };
+}
+
+/** whether a radio's switch is at its position (or its button pressed) */
+function switchOn(s: Switch, axes: readonly number[], pressed: readonly boolean[]): boolean {
+  if (s.button !== undefined) return !!pressed[s.button];
+  const v = axes[s.axis ?? -1];
+  return typeof v === 'number' && isFinite(v) && Math.abs(v - (s.on ?? 0)) < SWITCH_NEAR;
 }
 
 /** the axis carrying a hat switch read as one: one that reads outside -1..1 (let go), or -1 */
@@ -304,6 +349,11 @@ export class Shifter {
 export function describeMap(m: WheelMap, hat: number): string {
   const p = (x: Pedal | null) => x ? `axis ${x.axis} (${x.rest.toFixed(2)} to ${x.full.toFixed(2)})` : 'none';
   const gears = m.gears ? m.gears.map(i => i >= 0 ? i : '-').join(' ') : '';
+  if (m.switches) {
+    const s = m.switches.map(x => `${SWITCH_PADS[x.pad] ?? x.pad} ${x.button !== undefined ? `button ${x.button}` : `axis ${x.axis} at ${x.on?.toFixed(2)}`}`);
+    return `steering axis ${m.steer} (centre ${m.centre.toFixed(2)}, full lock ${m.lock >= 0 ? '+' : ''}${m.lock.toFixed(2)}), ` +
+      `gas ${p(m.gas)}, brake ${p(m.brake)}, switches ${s.length ? s.join(', ') : 'none'}, ${m.learned ? 'set up by the player' : 'guessed'}`;
+  }
   return `wheel axis ${m.steer} (centre ${m.centre.toFixed(2)}, full lock ${m.lock >= 0 ? '+' : ''}${m.lock.toFixed(2)}), ` +
     `gas ${p(m.gas)}, brake ${p(m.brake)}, D-pad ${m.dpad ? `axes ${m.dpad.join(' and ')}` : hat >= 0 ? `axis ${hat}` : 'none seen'}, ` +
     `shifter ${gears ? `buttons ${gears}` : 'none known'}, ` +
@@ -322,7 +372,7 @@ export function wheelKey(id: string): string {
  *  shifter stay the model's, so a set-up kept from before a change to those gets it */
 export function withSetUp(guess: WheelMap, kept: WheelMap): WheelMap {
   return { ...guess, steer: kept.steer, centre: kept.centre, lock: kept.lock, gas: kept.gas, brake: kept.brake,
-    dpad: kept.dpad ?? guess.dpad, placed: undefined, learned: true };
+    dpad: kept.dpad ?? guess.dpad, ...(guess.switches ? { switches: kept.switches ?? [] } : {}), placed: undefined, learned: true };
 }
 /** the picks of this page (storage may be off) */
 const shifterPicks = new Map<string, ShifterMode>();
@@ -342,6 +392,9 @@ export function loadMap(id: string): WheelMap | null {
   try {
     const m = JSON.parse(localStorage.getItem(wheelKey(id)) ?? 'null') as WheelMap | null;
     const ok = (p: Pedal | null) => p === null || (Number.isInteger(p.axis) && isFinite(p.rest) && isFinite(p.full));
+    const sw = (s: Switch) => !!s && SWITCH_PADS[s.pad] !== undefined &&
+      (s.button !== undefined ? Number.isInteger(s.button) : Number.isInteger(s.axis) && typeof s.on === 'number' && isFinite(s.on));
+    if (m && m.switches !== undefined && !(Array.isArray(m.switches) && m.switches.every(sw))) return null;
     return m && Number.isInteger(m.steer) && isFinite(m.centre) && isFinite(m.lock) && m.lock !== 0 && ok(m.gas) && ok(m.brake) &&
       Array.isArray(m.buttons) ? m : null;
   } catch { return null; }
@@ -355,7 +408,16 @@ export function saveMap(id: string, m: WheelMap | null) {
 export const WHEEL_MAP_EVENT = 'nfsu2-wheel-map';
 
 // ---- teaching the page the wheel's axes -------------------------------------------------------------------------
-export type LearnStep = 'rest' | 'steer' | 'gas' | 'brake' | 'done';
+export type LearnStep = 'rest' | 'steer' | 'gas' | 'brake' | SwitchStep | 'done';
+/** a radio's steps after the brake, each a switch for one of the pad's buttons (runtime/dinput_pad.c g_prof_wheel:
+ *  A nitrous, X the handbrake, View a respawn) */
+export type SwitchStep = 'nitrous' | 'handbrake' | 'respawn';
+const SWITCH_STEPS: Record<SwitchStep, { pad: number; next: LearnStep }> = {
+  nitrous: { pad: PAD_A, next: 'handbrake' }, handbrake: { pad: PAD_X, next: 'respawn' }, respawn: { pad: PAD_BACK, next: 'done' },
+};
+/** the switches' buttons by name, for the log */
+const SWITCH_PADS: Record<number, SwitchStep> = { [PAD_A]: 'nitrous', [PAD_X]: 'handbrake', [PAD_BACK]: 'respawn' };
+const isSwitchStep = (s: LearnStep): s is SwitchStep => s in SWITCH_STEPS;
 /** how long (ms) a control has to be held still where it is for its step to take it */
 const HOLD_MS = 700;
 
@@ -364,7 +426,10 @@ const HOLD_MS = 700;
  * turn the wheel right to where full lock should be (steer: the axis that moved most, its centre and the lock, held
  * there HOLD_MS), press the gas pedal down (gas: the axis that moved most but the wheel's), the brake (brake: the
  * same, or the gas's axis the other way: combined pedals).  Each step takes a control once it has moved far enough
- * and held still; then map() is the wheel's set-up, with base's buttons.
+ * and held still; then map() is the wheel's set-up, with base's buttons.  A radio's (radio: its sticks for the
+ * wheel and the pedals) goes on with a switch for each of SwitchStep, which skip() passes: a button pressed that was
+ * not at rest, or else the axis furthest from its rest but the sticks', at the position it is flipped to (another
+ * position of a switch already taken can be another's).
  */
 export class WheelLearn {
   step: LearnStep = 'rest';
@@ -372,26 +437,32 @@ export class WheelLearn {
   progress = 0;
   private rest: number[] = [];
   private last: number[] = [];
+  private restPressed: boolean[] = [];
+  private lastPressed: boolean[] = [];
   private still = 0;
   private steer = -1;
   private centre = 0;
   private lock = 0;
   private gas: Pedal | null = null;
   private brake: Pedal | null = null;
+  private switches: Switch[] = [];
 
-  constructor(private base: WheelMap) {}
+  constructor(private base: WheelMap, private radio = false) {}
 
-  /** the axes now, at time now (ms); true when the step changed */
-  feed(axes: readonly number[], now: number): boolean {
-    const moved = this.last.length !== axes.length || axes.some((v, i) => Math.abs(v - this.last[i]) > 0.01);
+  /** the axes now, at time now (ms), and a radio's buttons; true when the step changed */
+  feed(axes: readonly number[], now: number, pressed: readonly boolean[] = []): boolean {
+    if (!this.radio) pressed = [];
+    const moved = this.last.length !== axes.length || axes.some((v, i) => Math.abs(v - this.last[i]) > 0.01) ||
+      pressed.length !== this.lastPressed.length || pressed.some((v, i) => v !== this.lastPressed[i]);
     if (moved) this.still = now;
     this.last = axes.slice();
+    this.lastPressed = pressed.slice();
     const held = Math.min(1, (now - this.still) / HOLD_MS);
     const before = this.step;
     switch (this.step) {
       case 'rest':
         this.progress = held;
-        if (held >= 1) { this.rest = axes.slice(); this.step = 'steer'; }
+        if (held >= 1) { this.rest = axes.slice(); this.restPressed = pressed.slice(); this.step = 'steer'; }
         break;
       case 'steer': {
         const i = this.most(axes, [], 0.08);
@@ -410,12 +481,36 @@ export class WheelLearn {
         // the gas's axis only the other way from its rest (combined pedals)
         const i = this.most(axes, [this.steer], 0.3, j => j !== g.axis || Math.sign(axes[j] - g.rest) === -Math.sign(g.full - g.rest));
         this.progress = i < 0 ? 0 : held;
-        if (i >= 0 && held >= 1) { this.brake = { axis: i, rest: this.rest[i], full: axes[i] }; this.step = 'done'; }
+        if (i >= 0 && held >= 1) { this.brake = { axis: i, rest: this.rest[i], full: axes[i] }; this.step = this.radio ? 'nitrous' : 'done'; }
         break;
       }
+      default:
+        if (isSwitchStep(this.step)) {
+          const s = this.flipped(axes, pressed);
+          this.progress = s ? held : 0;
+          if (s && held >= 1) { this.switches.push({ pad: SWITCH_STEPS[this.step].pad, ...s }); this.step = SWITCH_STEPS[this.step].next; }
+        }
     }
     if (this.step !== before) { this.progress = 0; this.still = now; }
     return this.step !== before;
+  }
+
+  /** a radio's switch step passed with no switch for it; true when it was one */
+  skip(): boolean {
+    if (!isSwitchStep(this.step)) return false;
+    this.step = SWITCH_STEPS[this.step].next;
+    this.progress = 0;
+    this.last = [];                     // the next feed starts the next step's hold
+    return true;
+  }
+
+  /** the switch flipped (or button pressed) for a switch step, or null */
+  private flipped(axes: readonly number[], pressed: readonly boolean[]): Omit<Switch, 'pad'> | null {
+    const button = pressed.findIndex((v, i) => v && !this.restPressed[i] && !this.switches.some(s => s.button === i));
+    if (button >= 0) return { button };
+    const sticks = [this.steer, this.gas?.axis ?? -1, this.brake?.axis ?? -1];
+    const i = this.most(axes, sticks, 0.5, j => !this.switches.some(s => s.axis === j && Math.abs((s.on ?? 0) - axes[j]) < 2 * SWITCH_NEAR));
+    return i >= 0 ? { axis: i, on: axes[i] } : null;
   }
 
   /** the axis furthest from its rest (at least min, a hat switch's never), not one of skip, or -1 */
@@ -434,6 +529,6 @@ export class WheelLearn {
   map(): WheelMap | null {
     if (this.step !== 'done') return null;
     return { ...this.base, steer: this.steer, centre: this.centre, lock: this.lock, gas: this.gas, brake: this.brake,
-      placed: undefined, learned: true };
+      ...(this.radio ? { switches: this.switches } : {}), placed: undefined, learned: true };
   }
 }

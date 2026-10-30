@@ -80,8 +80,7 @@ interface Why { t: string; v?: Vars }
 function checkProfile(file: Uint8Array, name: string): Why | null {
   const bad = checkFile(file);
   if (bad) return bad;
-  const inside = nameInside(file);
-  if (lowerAscii(inside) !== lowerAscii(name)) return { t: N('the name inside is "{name}"'), v: { name: inside } };
+  if (lowerAscii(folderName(file)) !== lowerAscii(name)) return { t: N('the name inside is "{name}"'), v: { name: nameInside(file) } };
   return null;
 }
 
@@ -106,6 +105,20 @@ function nameInside(file: Uint8Array): string {
   let inside = '';
   for (let i = NAME; i < NAME + 32 && file[i]; i++) inside += String.fromCharCode(file[i]);
   return inside;
+}
+
+/**
+ * The name of the folder the game saves a profile in: the name inside, at
+ * most 31 bytes of it (0x6FCAB8 copies no more), as the I/O worker reads a
+ * path (UTF-8, U+FFFD for bytes that are not).  For a name the game's field
+ * makes, the name inside itself.  A cover shoot whose save failed could name
+ * a profile with stale heap bytes (runtime/overrides.c sub_004e8b70); Rename
+ * gives such a profile a name of letters and digits again.
+ */
+function folderName(file: Uint8Array): string {
+  let n = 0;
+  while (n < 31 && file[NAME + n]) n++;
+  return new TextDecoder().decode(file.subarray(NAME, NAME + n));
 }
 
 /** A file that starts as the game's save files do ("20CM"): a profile, or one of another version. */

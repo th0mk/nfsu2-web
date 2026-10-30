@@ -55,6 +55,10 @@ pub(crate) const LOBBY_PLAYERS: usize = 6;
 /// a MAP entry: x, y (i16 LE, m), heading (u8, 256 a turn); at most MAP_PER of them a datagram (roam_core.h)
 pub(crate) const MAP_ENTRY: usize = 5;
 pub(crate) const MAP_PER: usize = 230;
+/// MAP datagrams an answer at most (roam_core.h RC_MAP_PARTS), and the most entries a MAPREQ without its most takes
+/// (RC_MAP_MAX_V1: a core before 2048 drops an answer of more than three)
+pub(crate) const MAP_PARTS: usize = 9;
+pub(crate) const MAP_MAX_V1: u16 = 512;
 pub(crate) const HDR: usize = 16;
 pub(crate) const CRC: usize = 4;
 
@@ -88,9 +92,10 @@ pub(crate) enum Msg<'a> {
         t_us: u32,
         clock: u8,
     },
-    /// the world map's question (roam_core.h RC_MSG_MAPREQ): req is echoed in the answer
+    /// the world map's question (roam_core.h RC_MSG_MAPREQ): req is echoed in the answer, max entries at most
     MapReq {
         req: u16,
+        max: u16,
     },
     /// a race lobby (roam_core.h RC_MSG_LOBBY), checked as roam_core.c's lobby_ok: what the hub keeps of one sent to
     /// it (to 0)
@@ -343,7 +348,8 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50), t_us: u32_le(d, 22), clock: d[21] }
         }
-        MSG_MAPREQ if end == HDR + 2 => Msg::MapReq { req: u16_le(d, 16) },
+        MSG_MAPREQ if end == HDR + 2 => Msg::MapReq { req: u16_le(d, 16), max: MAP_MAX_V1 },
+        MSG_MAPREQ if end == HDR + 4 => Msg::MapReq { req: u16_le(d, 16), max: u16_le(d, 18) },
         MSG_LOBBY => {
             // op arg state max, to, lobby, race, x y, t, n, a reserved byte, then n ids (roam_core.c rc_encode)
             if end < HDR + 24 {
@@ -405,14 +411,7 @@ pub(crate) fn peers_crew_len(n: usize, k: usize) -> usize {
 /// receiver's crews, at most CREWS, none 0) the list ends in its crew marks (HF_CREW on it): `mine`, then a byte per
 /// entry, `marks[i]` bit c: entry i is in crew `mine[c]` too.  So a player learns which of its peers are in its crews
 /// without anyone's crews but its own going out.
-pub(crate) fn write_peers(
-    b: &mut [u8],
-    sender: u32,
-    seq: u16,
-    list: impl ExactSizeIterator<Item = PeerEntry>,
-    mine: &[u32],
-    marks: &[u8],
-) {
+pub(crate) fn write_peers(b: &mut [u8], sender: u32, seq: u16, list: impl ExactSizeIterator<Item = PeerEntry>, mine: &[u32], marks: &[u8]) {
     let len = b.len();
     let n = list.len();
     b[..4].copy_from_slice(b"N2FR");

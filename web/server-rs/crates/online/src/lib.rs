@@ -129,8 +129,7 @@ impl OnlineHost {
     /// starts its thread (and reads the state folder's files), for the game's Online mode that `title` holds
     pub fn spawn_for(title: &'static Title, o: OnlineOptions) -> Arc<OnlineHost> {
         let (tx, rx) = mpsc::channel();
-        let thread =
-            std::thread::Builder::new().name("online".into()).spawn(move || run(title, o, rx)).expect("the online host's thread");
+        let thread = std::thread::Builder::new().name("online".into()).spawn(move || run(title, o, rx)).expect("the online host's thread");
         Arc::new(OnlineHost { title, tx, thread: Mutex::new(Some(thread)) })
     }
     /// the switch's way to its browsers
@@ -141,16 +140,19 @@ impl OnlineHost {
 
 fn run(title: &'static Title, o: OnlineOptions, rx: mpsc::Receiver<Event>) {
     let log = o.log.clone();
-    let mut core = core::Core::new_for(title, core::CoreOptions {
-        state_dir: o.state_dir,
-        log: Rc::new(move |line: &str, key: Option<&str>| log(line, key)),
-        tap: o.tap,
-        claims: o.claims,
-        clocks: Rc::new(Clocks { now: Box::new(|| now_ms() as f64), timer: Box::new(mono_ms) }),
-        limits: Default::default(),
-        buddy_limits: Default::default(),
-        vhost: Default::default(),
-    });
+    let mut core = core::Core::new_for(
+        title,
+        core::CoreOptions {
+            state_dir: o.state_dir,
+            log: Rc::new(move |line: &str, key: Option<&str>| log(line, key)),
+            tap: o.tap,
+            claims: o.claims,
+            clocks: Rc::new(Clocks { now: Box::new(|| now_ms() as f64), timer: Box::new(mono_ms) }),
+            limits: Default::default(),
+            buddy_limits: Default::default(),
+            vhost: Default::default(),
+        },
+    );
     loop {
         let ev = match core.next_due() {
             Some(t) => {

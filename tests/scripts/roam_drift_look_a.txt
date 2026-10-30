@@ -1,0 +1,30 @@
+# Drift mode's Drift setup is no new look (runtime/drift.c drift_kept_tuning, roam_game.c's car look): A, from a
+# career save in stage 2 or later, turns drift mode on with a Drift setup of its own (setup 2 of each career slot:
+# its first 4 values 0x50), the ride takes it (+0x398, player 1's ride 0x890170), and off again; then, the control,
+# the ride's setup changes by itself.  B (roam_drift_look_b.txt) counts A's car loads.
+#   node web/tools/roam-pair.mjs --seed <save tree> --a Ann:roam_drift_look_a.txt --b Bob:roam_drift_look_b.txt
+# Good: A's expects pass; Bob's log has one "slot N: loading Ann's" before A's "PROBE control" and one after it.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 6000
++60   poke 0x840a96 0x50505050
++0    poke 0x84128e 0x50505050
++0    poke 0x841a86 0x50505050
++0    poke 0x84227e 0x50505050
++0    poke 0x842a76 0x50505050
++0    mark set0 i:0x890508
++0    log PROBE drift mode on
++0    tap X
++30   expect i:0x890104 == 1
++0    expect i:0x890508 == 1347440720
++900  log PROBE drift mode off
++0    tap X
++30   expect i:0x890104 == 0
++0    expect i:0x890508 == @set0
++900  log PROBE control: the ride's setup changed by itself
++0    poke 0x890508 0x41414141
++900  log drift_look_end
++1200 quit

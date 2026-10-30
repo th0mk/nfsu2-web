@@ -767,6 +767,41 @@ void sub_00559c90(CPU *c){
     sub_00559c90_orig(c);
 }
 
+/* --- sub_004e8b70: the memory card screen's profile name, never initialised ---
+ * The memory card screen (MC_Main.fng: constructor 0x4F3320, 0x9C bytes from
+ * operator new, then this base constructor, thiscall, ret 4) keeps a
+ * profile's name at +0x6C, 32 bytes.  The Save question shows it ("Are you
+ * sure you want to save the profile named %s?", 0x4A3C10), and the save
+ * makes it the profile's name (states 6 and 7 of 0x4E8D30: 0x4E8ED4 and
+ * 0x4E8F17 copy it into 0x83A9E0 with 0x502F40) before the file is written
+ * under it.  Most ways into the save copy the profile's name there first
+ * (0x4F3462, 0x4F35FC, 0x4FD694); those through state 2 do not (0x4FD658:
+ * message 0xDC12AF2E, which 0x4C6457 sends when a memory card operation
+ * fails; 0x4FBA5F), and the field holds what the heap block held before.
+ * The PC game's heap mostly gives the screen the block the last one left,
+ * name and all; ours does not.  A cover shoot (DVD or magazine) whose save
+ * failed, its new 1 MB file not written in a browser whose storage was full,
+ * went on to the profile's save that way: the question showed the heap's
+ * bytes as the name (eight heap addresses, 2026-10-27 report; 32 0xEF bytes,
+ * a later one) and Yes renamed the profile to them and saved it in a folder
+ * of that name (tests/scripts/career_cover_name.txt).  The field now starts
+ * as the profile's name (zeros with none loaded), as the old block held it;
+ * the ways that put another name there still do.  NFSU2_TEST_MC_STALE=1
+ * (test aid): the game's way, the field holding 0xEF bytes. */
+#define MC_NAME         0x6cu         /* the screen's profile name, 32 bytes */
+#define PROFILE_NAME    0x0083a9e0u   /* the profile's name, 32 bytes; +0x20 a byte, 1: a profile is loaded */
+void sub_004e8b70_orig(CPU *c);
+void sub_004e8b70(CPU *c){
+    static int stale = -1;
+    if (stale < 0){ const char *e = getenv("NFSU2_TEST_MC_STALE"); stale = e && *e == '1'; }
+    uint32_t self = c->ecx;
+    sub_004e8b70_orig(c);
+    if (!self || !mem_is_committed(self + MC_NAME) || !mem_is_committed(self + MC_NAME + 31u)) return;
+    int named = MR8(PROFILE_NAME + 0x20u) != 0;
+    for (uint32_t i = 0; i < 32u; i++)
+        MR8(self + MC_NAME + i) = stale ? 0xefu : named ? MR8(PROFILE_NAME + i) : 0u;
+}
+
 /* --- sub_0050b410: FEng's level sorter, more than 512 objects a package ---
  * The FE renderer draws a package (the package loop sub_00536520) by
  * gathering its objects into a list of 1024 (renderer +0x114), sorting it,
@@ -777,10 +812,12 @@ void sub_00559c90(CPU *c){
  * own packages fit in that; free roam's world map does not (a marker for
  * each player in free roam besides the map's own 235 objects, roam_game.c),
  * and lost its shop and event icons to the markers.  Every
- * package gets 1024 nodes instead, as many as its list holds (roam_host.h
- * RH_FE_NODES); the packages are drawn one after another, and
- * sub_0050b430 lets go of the nodes after each. */
-#define FE_NODES 1024u
+ * package gets FE_LIST_BIG nodes instead, as many as its list holds
+ * (roam_host.h RH_FE_NODES; the list below); the packages are drawn one
+ * after another, and sub_0050b430 lets go of the nodes after each. */
+#define FE_LIST      1024u                /* the renderer's own list: +0x110 the count, +0x114 entries (object, depth key) */
+#define FE_LIST_BIG  4096u                /* ...and ours past it */
+#define FE_NODES     FE_LIST_BIG
 void sub_0050b410_orig(CPU *c);
 void sub_0050b410(CPU *c){
     uint32_t gheap_alloc(int heap, uint32_t n, int zero);
@@ -788,6 +825,68 @@ void sub_0050b410(CPU *c){
     sub_0050b410_orig(c);
     if (!nodes) nodes = gheap_alloc(1, FE_NODES * 8u, 1);
     if (nodes){ MR32(0x00838494u) = nodes; MR32(0x0083848cu) = FE_NODES; }
+}
+
+/* --- sub_0051a970, sub_005114f0, sub_0050c2c0: the renderer's list of a package's objects, past 1024 ---
+ * The package loop (sub_00536520) gathers the objects to draw into the
+ * renderer's list (sub_0051a970, thiscall renderer (object, ...), ret 0xC:
+ * an object whose colour has any alpha at +0x114 + 8 * count, no bound),
+ * sorts it by depth (sub_005114f0, thiscall renderer + 0x110: a radix sort,
+ * four passes of a byte of the key at +4, low byte first, into the 0x2000
+ * bytes after the list and back) and draws it (sub_0050c2c0, thiscall
+ * (list, count), ret 8, the last first).  The list holds 1024; the fields
+ * past its sort's half (+0x4114 on) are the renderer's own, so more would
+ * garble it.  The world map's markers for everyone in free roam take more
+ * (roam_game.c), so past 1024 the objects go to a list of ours: each one is
+ * made in the list's last place, as the game makes it, and moved to ours;
+ * the sort takes both lists into ours, as the game's sort would, and the
+ * draw is handed ours.  Past FE_LIST_BIG an object is not drawn. */
+static struct { uint32_t r, e, n; } g_fel;            /* the renderer, our list (FE_LIST_BIG entries), the count sorted for its draw */
+static uint32_t g_fel_k[2][FE_LIST_BIG * 2];
+void sub_0051a970_orig(CPU *c);
+void sub_0051a970(CPU *c){
+    uint32_t gheap_alloc(int heap, uint32_t n, int zero);
+    uint32_t r = c->ecx, n = MR32(r + 0x110u);
+    if (n < FE_LIST){ sub_0051a970_orig(c); return; }
+    if (!g_fel.e) g_fel.e = gheap_alloc(1, FE_LIST_BIG * 8u, 1);
+    uint32_t last = r + 0x114u + (FE_LIST - 1u) * 8u, o = MR32(last), k = MR32(last + 4u);
+    MR32(r + 0x110u) = FE_LIST - 1u;
+    sub_0051a970_orig(c);
+    if (MR32(r + 0x110u) == FE_LIST && g_fel.e && n < FE_LIST_BIG){
+        MR32(g_fel.e + n * 8u) = MR32(last); MR32(g_fel.e + n * 8u + 4u) = MR32(last + 4u);
+        n++; g_fel.r = r;
+    }
+    MR32(last) = o; MR32(last + 4u) = k; MR32(r + 0x110u) = n;
+}
+void sub_005114f0_orig(CPU *c);
+void sub_005114f0(CPU *c){
+    uint32_t l = c->ecx, n = MR32(l);
+    g_fel.n = 0;
+    if (n <= FE_LIST || !g_fel.e || l != g_fel.r + 0x110u){ sub_005114f0_orig(c); return; }
+    uint32_t *a = g_fel_k[0], *b = g_fel_k[1];
+    for (uint32_t i = 0; i < n; i++){
+        uint32_t s = i < FE_LIST ? l + 4u + i * 8u : g_fel.e + i * 8u;
+        a[2 * i] = MR32(s); a[2 * i + 1] = MR32(s + 4u);
+    }
+    for (int sh = 0; sh < 32; sh += 8){                  /* (stable, as the game's) */
+        uint32_t at[257] = {0};
+        for (uint32_t i = 0; i < n; i++) at[(a[2 * i + 1] >> sh & 0xffu) + 1]++;
+        for (int j = 0; j < 256; j++) at[j + 1] += at[j];
+        for (uint32_t i = 0; i < n; i++){
+            uint32_t j = at[a[2 * i + 1] >> sh & 0xffu]++;
+            b[2 * j] = a[2 * i]; b[2 * j + 1] = a[2 * i + 1];
+        }
+        uint32_t *t = a; a = b; b = t;
+    }
+    for (uint32_t i = 0; i < n; i++){ MR32(g_fel.e + i * 8u) = a[2 * i]; MR32(g_fel.e + i * 8u + 4u) = a[2 * i + 1]; }
+    g_fel.n = n;
+    POP32(c->eip);
+}
+void sub_0050c2c0_orig(CPU *c);
+void sub_0050c2c0(CPU *c){
+    if (g_fel.n && MR32(c->esp + 4u) == g_fel.r + 0x114u && MR32(c->esp + 8u) == g_fel.n) MR32(c->esp + 4u) = g_fel.e;
+    g_fel.n = 0;
+    sub_0050c2c0_orig(c);
 }
 
 /* --- sub_004df9c0: a screen's list of the player's cars, a stock car of no type ---
@@ -963,11 +1062,13 @@ void sub_0061c600(CPU *c){
  * that is not in): 20 s and more in a player's log of 2026-10-28 (every
  * block from the device's cache, 22 frames a second, twenty friends' cars
  * coming and going, 6-7 s each).  The sections go first now, 4 ahead of the
- * 5 of every other read.  Not shown to be the whole story: on a fast PC the
- * sections waited about as long either way (tests/scripts/
- * roam_crowd_stream.txt); the "[stream]" lines below tell, in a slow PC's
- * log, how long they wait.  NFSU2_TEST_STREAM_FIFO=1 (test aid): the game's
- * way. */
+ * 5 of every other read.  That was not the story: on a fast PC the sections
+ * waited about as long either way (tests/scripts/roam_crowd_stream.txt).
+ * The streamer starts no section at all while the car loader is busy, and
+ * the friends' cars wait for it now (roam_game.c, load_may_start); the
+ * "[stream]" lines below tell how long sections waited and how long the
+ * loader held the streamer up.  NFSU2_TEST_STREAM_FIFO=1 (test aid): the
+ * game's way. */
 #define STREAM_READ_PRIORITY 4u
 void sub_00579810_orig(CPU *c);
 void sub_00579810(CPU *c){
@@ -981,20 +1082,46 @@ void sub_00579810(CPU *c){
  * queue to their read's end, how many reads the queue held, and the world's
  * Loading screens.  A line a minute while sections are read
  * ("[stream] 60 s: ..."), and one at the end of each Loading screen (its
- * frames too: a game in the background runs almost none). */
-#define READS_QUEUE      0x00865220u   /* reads waiting (list head): +0x5C callback, +0x6C id */
+ * frames too: a game in the background runs almost none).  Also how long
+ * the car loader held the streamer up: the streamer's step (0x5E6A70, its
+ * phase +0x168 not 0) does nothing at all while the loader is busy, and a
+ * Loading screen 20 s long says what the game waits for. */
+#define READS_QUEUE      0x00865220u   /* reads waiting (list head): +0xC file name, +0x58 priority, +0x5C callback, +0x6C id */
 #define READS_STARTED    0x00865550u   /* reads under way (list head), the oldest first */
 #define GAME_FLOW        0x008900d8u   /* -> the game's state machine: +0 state (1 loading), +8 its mode (2 in the world) */
+#define TRACK_STREAMER   0x0088eb00u   /* +0x168 its phase: 0 nothing to do, 1-6 room made and sections read */
 static double ms_now(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
+static void reads_note(void){
+    for (int l = 0; l < 2; l++){
+        uint32_t head = l ? READS_STARTED : READS_QUEUE, r = MR32(head);
+        int k = 0;
+        for (; r != head && r && k < 512; k++, r = MR32(r)){
+            if (k >= 8) continue;
+            char nm[61];
+            int i = 0;
+            for (; i < 60 && MR8(r + 0xcu + (uint32_t)i); i++) nm[i] = (char)MR8(r + 0xcu + (uint32_t)i);
+            nm[i] = 0;
+            fprintf(stderr, "[stream]   %s: %s (priority %u, callback 0x%x)\n", l ? "under way" : "waiting", nm, MR32(r + 0x58u), MR32(r + 0x5cu));
+        }
+        fprintf(stderr, "[stream]   %d read(s) %s\n", k, l ? "under way" : "waiting");
+    }
+}
 void reads_frame(CPU *c){
     (void)c;
     /* the streamer's reads (callbacks 0x5DF110, a section, and 0x5E4F10, several) by id: seen this frame or done */
     static struct { uint32_t id; double t0; int seen; } sec[32];
-    static int nsec, qmax, n, ld_n, ld_q, ld_sec;
+    static int nsec, qmax, n, ld_n, ld_q, ld_sec, ld_said, hd_n;
     static long ld_f0;
-    static double t_min, wsum, wmax, ld_t0, ld_s, ld_w;
-    double now = ms_now();
+    static double t_min, wsum, wmax, ld_t0, ld_s, ld_w, ld_h, last, hd_t0, hd_s, hd_max, busy_t0;
+    double now = ms_now(), dt = last ? now - last : 0;
+    last = now;
     if (!t_min) t_min = now;
+    int held = MR32(TRACK_STREAMER + 0x168u) && MR32(CARLOADER_BUSY);
+    if (held && !hd_t0){ hd_t0 = now; hd_n++; }
+    if (held) hd_s += dt;
+    if (!held && hd_t0){ if (now - hd_t0 > hd_max) hd_max = now - hd_t0; hd_t0 = 0; }
+    if (!MR32(CARLOADER_BUSY)) busy_t0 = 0;
+    else if (!busy_t0) busy_t0 = now;
     for (int i = 0; i < nsec; i++) sec[i].seen = 0;
     int q = 0;
     for (int l = 0; l < 2; l++){
@@ -1020,19 +1147,29 @@ void reads_frame(CPU *c){
     }
     uint32_t fl = MR32(GAME_FLOW);
     int loading = fl && MR32(fl) == 1u && MR32(fl + 8u) == 2u;
-    if (loading && !ld_t0){ ld_t0 = now; ld_f0 = autotest_frame(); ld_sec = 0; ld_q = q; ld_w = 0; }
+    if (loading && !ld_t0){ ld_t0 = now; ld_f0 = autotest_frame(); ld_sec = 0; ld_q = q; ld_w = 0; ld_h = 0; ld_said = 0; }
+    if (loading && held) ld_h += dt;
+    if (loading && !ld_said && now - ld_t0 >= 20e3){
+        ld_said = 1;
+        fprintf(stderr, "[stream] f=%ld the world has waited 20 s on its Loading screen: the streamer's phase %u, %d section read(s) meanwhile; "
+                "the car loader busy for %.0f s\n", autotest_frame(), MR32(TRACK_STREAMER + 0x168u), ld_sec,
+                busy_t0 ? (now - busy_t0) / 1e3 : 0.0);
+        reads_note();
+    }
     if (!loading && ld_t0){
         double s = (now - ld_t0) / 1e3;
         ld_n++; ld_s += s; ld_t0 = 0;
         fprintf(stderr, "[stream] f=%ld the world waited %.1f s (%ld frames) on its Loading screen: %d section read(s) meanwhile, "
-                "the longest wait %.0f ms, the game's queue up to %d reads\n", autotest_frame(), s, autotest_frame() - ld_f0, ld_sec, ld_w, ld_q);
+                "the longest wait %.0f ms, the game's queue up to %d reads; the car loader held the streamer up %.1f s of it\n",
+                autotest_frame(), s, autotest_frame() - ld_f0, ld_sec, ld_w, ld_q, ld_h / 1e3);
     }
     if (now - t_min >= 60e3){
-        if (n || ld_n)
+        if (n || ld_n || hd_n)
             fprintf(stderr, "[stream] %.0f s: %d section read(s), each waited %.0f ms on average, the longest %.0f ms; "
-                    "the game's queue up to %d reads; %d Loading screen(s), %.1f s\n",
-                    (now - t_min) / 1e3, n, n ? wsum / n : 0.0, wmax, qmax, ld_n, ld_s);
-        t_min = now; n = 0; wsum = wmax = 0; qmax = 0; ld_n = 0; ld_s = 0;
+                    "the game's queue up to %d reads; %d Loading screen(s), %.1f s; the car loader held the streamer up %d time(s), "
+                    "%.1f s in all, the longest %.0f ms\n",
+                    (now - t_min) / 1e3, n, n ? wsum / n : 0.0, wmax, qmax, ld_n, ld_s, hd_n, hd_s / 1e3, hd_max);
+        t_min = now; n = 0; wsum = wmax = 0; qmax = 0; ld_n = 0; ld_s = 0; hd_n = 0; hd_s = 0; hd_max = 0;
     }
 }
 

@@ -1,0 +1,82 @@
+# Free-roam multiplayer: the friend of roam_mp_em_ai_a.txt (the same
+# stage-4 save), who stays behind Al's car (mp follow) while Al's game
+# runs an outrun against one of its own challengers: Al's car stays shown
+# here through it (no "mp follow Al: no car shown there").
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 3000
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++300  roam mp follow Al 40
++0    roam mp status
++10   quit

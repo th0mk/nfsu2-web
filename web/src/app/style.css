@@ -211,6 +211,7 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .wheel-learn .bar { margin: 8px 0 4px; }
 .wheel-learn .bar-fill { transition: none; }
 .wheel-learn .text-btn { padding: 0; }
+.wheel-learn [data-wheel="skip"] { margin-right: 24px; }
 
 /* ------------------------------------- changes from the original, about */
 .prose { display: grid; gap: 12px; font-size: 14px; line-height: 20px; }
@@ -262,6 +263,11 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
   background: var(--field); color: var(--lime); font: italic 700 16px/24px var(--font);
 }
 .set input::placeholder { color: var(--edge); font-weight: 400; }
+/* the Room's value box (settings-ui.ts): its invite link button in it at the right, as the passphrase's eye is in its
+ * .keybox; the box is the frame, the field inside it has none */
+.set .linkbox { flex: none; }
+.set .linkbox input[type="text"] { height: 100%; border: 0; background: none; outline: none; box-shadow: none; }
+.set .linkbox:has(.room-link:not([hidden])) input[type="text"] { padding-right: 4px; }
 /* a choice of many: the same value box, with a chevron */
 .set select {
   appearance: none; width: 240px; height: 40px; padding: 0 36px 0 12px; border: 2px solid var(--edge); border-radius: 8px;
@@ -519,17 +525,19 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .tc.pill { height: calc(40px * var(--ts)); padding: 0 calc(20px * var(--ts)); border-radius: calc(20px * var(--ts)); }
 .tc[data-ctl="pause"] { left: calc(var(--l) + 56px * var(--ts)); }
 .tc[data-ctl="camera"] { left: calc(var(--l) + 112px * var(--ts)); }
-.tc[data-ctl="look"] { left: calc(var(--l) + 168px * var(--ts)); }
-.tc[data-ctl="reset"] { left: calc(var(--l) + 224px * var(--ts)); }
-.tc[data-ctl="map"] { left: calc(var(--l) + 280px * var(--ts)); }
-.tc[data-ctl="msgs"] { left: calc(var(--l) + 336px * var(--ts)); }
+.tc[data-ctl="reset"] { left: calc(var(--l) + 168px * var(--ts)); }
+.tc[data-ctl="map"] { left: calc(var(--l) + 224px * var(--ts)); }
+.tc[data-ctl="msgs"] { left: calc(var(--l) + 280px * var(--ts)); }
+.tc[data-ctl="drift"] { left: calc(var(--l) + 336px * var(--ts)); font-size: calc(var(--fs, 12px) * var(--ts)); line-height: calc(14px * var(--ts)); }
 .tc[data-ctl="horn"] { left: calc(var(--l) + 392px * var(--ts)); }
 .tc[data-ctl="chat"] { left: calc(var(--l) + 448px * var(--ts)); }
+/* drift mode on: its button lime, with a ring */
+.tc.lit { color: var(--lime); box-shadow: inset 0 0 0 calc(2px * var(--ts)) var(--lime); }
 .tc[data-ctl="mode"] { right: var(--r); }
 .tc[data-ctl="center"] { right: calc(var(--r) + 56px * var(--ts)); }
 .tc[data-ctl="start"] { left: var(--l); bottom: calc(var(--b) + 128px * var(--ts)); }
-.tc[data-ctl="left"] { left: var(--l); width: calc(80px * var(--ts)); height: calc(80px * var(--ts)); }
-.tc[data-ctl="right"] { left: calc(var(--l) + 88px * var(--ts)); width: calc(80px * var(--ts)); height: calc(80px * var(--ts)); }
+.tc[data-ctl="left"] { left: var(--l); width: calc(80px * var(--ts)); height: calc(104px * var(--ts)); }
+.tc[data-ctl="right"] { left: calc(var(--l) + 88px * var(--ts)); width: calc(80px * var(--ts)); height: calc(104px * var(--ts)); }
 .tc[data-ctl="gas"] { right: var(--r); width: calc(84px * var(--ts)); height: calc(148px * var(--ts)); }
 .tc[data-ctl="brake"] { right: calc(var(--r) + 92px * var(--ts)); width: calc(84px * var(--ts)); height: calc(104px * var(--ts)); }
 .tc[data-ctl="nitro"] { right: calc(var(--r) + 12px * var(--ts)); bottom: calc(var(--b) + 160px * var(--ts)); width: calc(60px * var(--ts)); height: calc(60px * var(--ts)); }
@@ -538,10 +546,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   font-size: calc(12px * var(--ts)); line-height: calc(14px * var(--ts));
 }
 /* a manual gearbox: gear down and up above the left thumb's controls (the arrows, the stick's corner, or tilt's
- * Brake and handbrake), and free roam's Start above them */
-.touch { --gb: calc(88px * var(--ts)); }
+ * Brake and handbrake: the arrows as tall as that Brake), and free roam's Start above them */
+.touch { --gb: calc(112px * var(--ts)); }
 .touch[data-steering="stick"] { --gb: calc(132px * var(--ts)); }
-.touch[data-steering="tilt"] { --gb: calc(112px * var(--ts)); }
 .tc.gear { bottom: calc(var(--b) + var(--gb)); width: calc(80px * var(--ts)); height: calc(56px * var(--ts)); border-radius: calc(16px * var(--ts)); }
 .tc.gear svg { width: calc(32px * var(--ts)); height: calc(32px * var(--ts)); stroke-width: 2.5; }
 .tc[data-ctl="down"] { left: var(--l); }
@@ -555,7 +562,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .touch:not([data-steering="buttons"]) :is([data-ctl="left"], [data-ctl="right"]),
 .touch:not([data-steering="stick"]) .stick,
 .touch:not([data-steering="tilt"]) [data-ctl="center"],
-.touch:not([data-roam]) .roam { display: none; }
+.touch:not([data-roam]) .roam,
+.touch[data-no-engage] [data-ctl="start"],
+.touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]) { display: none; }
 /* the menus': the arrows as a D-pad bottom left, Back over OK bottom right, in the bars beside the game's 4:3 menus
  * (--bar wide): the keys as big as the bar leaves room for, 44 to 52 px.  A faint rim: the bars are black behind the
  * movies and the profile screens */
@@ -607,8 +616,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   html[data-touch] .touch { --k: calc(56px * var(--ts)); --w: calc(136px * var(--ts)); }
   html[data-touch] .tc[data-ctl="map"] { left: var(--l); top: calc(var(--t) + 56px * var(--ts)); }
   html[data-touch] .tc[data-ctl="msgs"] { left: calc(var(--l) + 56px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="horn"] { left: calc(var(--l) + 112px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="chat"] { left: calc(var(--l) + 168px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="drift"] { left: calc(var(--l) + 112px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="horn"] { left: calc(var(--l) + 168px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="chat"] { left: calc(var(--l) + 224px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
   html[data-touch] .stick { top: calc(var(--pic-h) + 12px + 52px * var(--ts)); height: auto; width: 50%; }
   /* below the picture, on black: a light backing, and room for bigger pedals and steering */
   html[data-touch] :is(.tc, .stage-menu) { background: rgba(255, 255, 255, 0.1); }
@@ -761,6 +771,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .ph-mode button.on { background: var(--lime-fill); color: var(--lime); }
 .ph-slider { display: flex; flex-direction: column; gap: 2px; color: var(--muted); }
 .ph-slider input { width: 100%; margin: 0; accent-color: var(--lime); }
+.ph-check { display: flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; }
+.ph-check input { margin: 0; accent-color: var(--lime); }
 .ph-buttons { display: flex; flex-direction: column; gap: 8px; }
 .ph-buttons button {
   padding: 6px 16px; border: 1px solid var(--edge); border-radius: 6px; background: var(--field);

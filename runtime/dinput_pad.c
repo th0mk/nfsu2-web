@@ -75,6 +75,7 @@
 
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
 uint32_t com_scratch(uint32_t n);
+void hfr_note_input_read(int pad);  /* framerate.c: input age */
 
 #define DI_OK                 0x00000000u
 #define DI_NOEFFECT           0x00000001u
@@ -870,6 +871,7 @@ uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
     (void)nargs;
     if (!strcmp(nm, "GetDeviceState")){
         uint32_t cb = a[1], p = a[2];
+        hfr_note_input_read(1);
         /* Unplugged (hotplug mode), or the other kind: answer two polls with
          * the pad at rest before DIERR_INPUTLOST.  UG2 drops the device's
          * channel with its last values, which then stay applied (steering,

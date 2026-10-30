@@ -1,0 +1,58 @@
+# Free roam, the world map's filter (roam_game.c wmf_*): the legend's rows "Players" and "Players' races" after the
+# game's own, crossed with Enter (the other players' markers, then the race lobbies' icons and labels, off the map),
+# the map closed and opened again (still crossed: the game's registry, MapPlayers / MapRaces), ticked again.  A career
+# with lobbies near: a server with roam-crowd.mjs --n 150 --spread 120 --cars all --lobbies 7:S2_SPRINT_3,S2_URL_2,
+# S2_CIRCUIT_5,S3_SPON_DRAG_6,S3_SPON_STREET_1 and a stage-3 save (12 kinds of places: our rows are 13 and 14, 12
+# Downs from the first; another career needs another count):
+#   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page app --a Ita:roam_map_filter.txt
+#        --seed <ItsukiT's save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --fetch registry.txt
+# mp map: "legend 14 rows ... Players crossed ... N players' markers, M lobbies', N of them off the map".  The
+# layout of a full legend (our rows in the place of Your Car / Opponent Car, Up from the first row reaches them):
+# NFSU2_ROAM_TEST_LEGEND_TOP=1.  The shots show the lobby labels beside their icons, clear of the other icons.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp waitpeers 20 6000
++600  tapuntil M UI_InGame_WorldMap.fng 90 1500
++600  roam mp map
++0    log SHOT open
++30   tap RBRACKET                    # City Core
++120  log SHOT core
++30   tap LBRACKET
++60   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++20   tap DOWN
++60   roam mp map
++0    log SHOT players_picked
++30   tap RETURN
++90   roam mp map
++0    log SHOT players_off
++30   tap DOWN
++30   tap RETURN
++90   roam mp map
++0    log SHOT both_off
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++600  tap M                           # (tapuntil would match the map seen before)
++120  tap M
++120  tap M
++120  tap M
++600  roam mp map
++0    log SHOT reopened
++30   tap UP
++20   tap UP
++20   tap RETURN
++20   tap DOWN
++20   tap RETURN
++90   roam mp map
++0    log SHOT both_on
++60   log FILTER DONE
++10   quit

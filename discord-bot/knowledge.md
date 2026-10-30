@@ -83,8 +83,10 @@ Checked against the guide or the code, and confirmed by players in threads:
 - Stuck behind a barrier or off the map: R respawns.
 - Career, no races left on the map (and nothing on the radar): the races left are the original game's hidden races.
   They never show on the map or the radar, only on the street: their marker appears when you drive near. Drive
-  around the city, the newer areas too. Someone who still finds none can attach the saves (Saves, Download backup):
-  escalate it, the developer can tell where they are. (The developer answered this on 2026-10-26.)
+  around the city, the newer areas too. Since dec0e11 there is a setting for it: Settings, Game, More game settings,
+  Show hidden races (off by default, MaxHwoy's Show Hidden Races Mod) puts them on the map and the radar like the
+  others, from the next Play. Someone who still finds none can attach the saves (Saves, Download backup): escalate
+  it, the developer can tell where they are. (The developer answered this on 2026-10-26.)
 - Firefox: when a problem shows only in Firefox (its log has Firefox errors, or Chrome works), Chrome is the browser
   most tested.
 - A phone that stutters or shakes at 60 fps but runs smoothly at 30: its GPU no longer finishes a frame in 16.7 ms,
@@ -114,9 +116,11 @@ context lists every problem the developer has a report on, with its first thread
   (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
   log shows the game drawing with no WebGPU errors. No fix.
-- Free roam: the world's loading screen, or roads missing, while driving and while many players' cars load, most
-  in Firefox and with the game data on a slow disk. Car loads got faster on 27 October, and on 28 October (20cf653)
-  the city's sections load first and the rest of the city is read ahead while driving; a log from after that helps.
+- Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
+  minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
+  loads a player's car, and with players coming and going their cars load one after another, so the city waited for
+  all of them. Fixed on 29 October: players' cars now wait while the city loads. Until that version is live, Players'
+  cars shown at 16 (More online settings) shortens the wait; a screen that never ends needs a reload of the page.
 - Back to free roam after a race with other players: endless loading. Two causes are fixed: the crash on the way back
   (`INVALID FREE` and a `TRAP` after the lobby screen, 39f2ca8, 26 October) and the trip stopping after the crib's
   save went to the main menu (db3f8b5, 27 October). A report on a version with both is new: escalate it with the log.
@@ -149,11 +153,13 @@ fixes of the original game's crashes and glitches. Changing its core gameplay me
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy.
 
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say
-  where (Power Units in Options, Gameplay; drift mode with X; wheels; quick chat, with phrases to pick in Settings,
+  where (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and
+  the car's own Drift tuning from Performance Tuning / Dyno; wheels; quick chat, with phrases to pick in Settings,
   Online; ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus and HUD; photo mode with F12 or the pause
   menu's Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each
   stage, and Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for
-  the eyes, in the game's Options, Display and the pause menu's, since 2619bf7; the guide lists them all). A feature
+  the eyes, in the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in Settings,
+  Game, more: Show hidden races, since dec0e11; the guide lists them all). A feature
   named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.

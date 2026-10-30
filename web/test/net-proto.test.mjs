@@ -18,7 +18,7 @@ const val = (e) => Function(...Object.keys(num), `return (${e.replace(/(\d+|0x[0
 for (const m of H.matchAll(/^#define\s+(NET_\w+)\s+(.+?)\s*(?:\/\*.*)?$/gm)) num[m[1]] = val(m[2]) >>> 0;
 
 test('constants', () => {
-  assert.equal(Object.keys(num).length, 38, 'header parsed');
+  assert.equal(Object.keys(num).length, 39, 'header parsed');
   for (const [k, v] of Object.entries(num)) {
     if (!(k in P)) continue;
     assert.equal(P[k] >>> 0, v, k);
@@ -27,7 +27,7 @@ test('constants', () => {
     'NET_RX_SLOTS', 'NET_MAILBOX_BYTES', 'NET_KIND_UDP', 'NET_KIND_UDP_LOOP', 'NET_BROADCAST', 'NET_MODE_CLOSED', 'NET_MODE_VLAN',
     'NET_MODE_LOOP', 'NET_PAGE_NONE', 'NET_PAGE_CONNECTING', 'NET_PAGE_ONLINE', 'NET_PAGE_OFFLINE', 'NET_KIND_LAN_UDP',
     'NET_KIND_LAN_TCP', 'NET_KIND_LAN_ICMP', 'NET_KIND_NOTICE', 'NET_KIND_LOBBY', 'NET_KIND_SAY', 'NET_LAN_HDR', 'NET_LAN_TCP_SYN', 'NET_LAN_TCP_RST', 'NET_LAN_TCP_GONE', 'NET_MODE_LAN', 'NET_ROAM_HUB',
-    'NET_PAGE_IDLE', 'NET_PEER_BITS'])
+    'NET_PAGE_IDLE', 'NET_PEER_BITS', 'NET_CAP_ROOM'])
     assert.ok(k in P && k in num, `${k} on both sides`);
 });
 
@@ -52,8 +52,12 @@ test('offsets', () => {
     tx_bell: P.W_TX_BELL, rx_tail: P.W_RX_TAIL, c_alive: P.W_C_ALIVE, want: P.W_WANT, page_state: P.W_PAGE_STATE, vip: P.W_VIP, netmask: P.W_NETMASK,
     generation: P.W_GENERATION, tx_tail: P.W_TX_TAIL, rx_head: P.W_RX_HEAD, rx_bell: P.W_RX_BELL, rx_full_drop: P.W_RX_FULL_DROP,
     tx_offline_drop: P.W_TX_OFFLINE_DROP, rx_oversize: P.W_RX_OVERSIZE, switch_peers: P.W_SWITCH_PEERS, solid: P.W_SOLID, tx_wait_n: P.W_TX_WAIT_N,
-    say: P.W_SAY, peer_bits: P.W_PEER_BITS, crews_gen: P.W_CREWS_GEN, crews: P.W_CREWS, crews_rgb: P.W_CREWS_RGB };
+    say: P.W_SAY, peer_bits: P.W_PEER_BITS, crews_gen: P.W_CREWS_GEN, crews: P.W_CREWS, crews_rgb: P.W_CREWS_RGB, caps: P.W_CAPS,
+    room_gen: P.W_ROOM_GEN, room_name: P.W_ROOM_NAME };
   for (const [f, w] of Object.entries(words)) assert.equal(off[f], w * 4, f);
+  assert.equal(/uint32_t\s+room_gen,\s*room_name\[(\d+)\]/.exec(body)?.[1], String(P.ROOM_WORDS), 'the room\'s name: as many words');
+  assert.equal(P.ROOM_BYTES + 1, P.ROOM_WORDS * 4, 'the longest name and its 0 byte fill the words');
+  assert.equal(+/#define NET_CAP_ROOM\s+(\d+)u/.exec(H)?.[1], P.NET_CAP_ROOM, 'NET_CAP_ROOM');
   const crewArrays = /uint32_t\s+crews_gen,\s*crews\[(\d+)\],\s*crews_rgb\[(\d+)\]/.exec(body);
   assert.deepEqual(crewArrays?.slice(1), [String(P.CREW_WORDS), String(P.CREW_WORDS)], 'crews and their colours: as many words');
   const dbl = { switch_rtt_ms: P.D_SWITCH_RTT_MS, tx_wait_ms_sum: P.D_TX_WAIT_MS_SUM, tx_wait_ms_max: P.D_TX_WAIT_MS_MAX };

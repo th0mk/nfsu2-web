@@ -40,8 +40,9 @@ export interface SessionOptions {
   netBack?(): void;
   /** the server is full: the game's place in line for one (null: not in line) */
   netQueue?(q: NetQueue | null): void;
-  /** this browser's own id on the server's LAN (page-id.ts) */
+  /** this browser's own id on the server's LAN, and the one its other store held when that was another (page-id.ts) */
   netId?: string;
+  netWas?: string[];
   /** the token of the keyphrase this page plays with (claim.ts: whose claimed names it may play under) */
   netClaim?: string;
   /** free roam: the names of the players this one blocks (settings.ini roam_block) */
@@ -134,7 +135,7 @@ export class GameSession {
     })).then(i => { s.input = i; });
     if (o.netName !== null)
       void attach('network', () => attachNet(s.proc, {
-        ...common, name: o.netName!, id: o.netId, claim: o.netClaim, block: o.netBlock, notice: o.notice, lobby: o.lobby, say: o.say, back: o.netBack, queue: o.netQueue, removed: o.netRemoved,
+        ...common, name: o.netName!, id: o.netId, was: o.netWas, claim: o.netClaim, block: o.netBlock, notice: o.notice, lobby: o.lobby, say: o.say, back: o.netBack, queue: o.netQueue, removed: o.netRemoved,
       })).then(n => { s.net = n; });
     return s;
   }

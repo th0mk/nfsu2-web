@@ -5,13 +5,14 @@
 // While it is on, the page keeps the keyboard, the mouse, the touch screen and the controller from the game and sends
 // what they do as photo events (input/index.ts photo(): the keys and buttons held as bits, the sticks, drags, the
 // wheel and pinches, the sliders' values), hides its other things on the game, and shows a panel: orbit or free, zoom,
-// tilt, reset, the picture, leave, and what the keys do.  It reads the game's status (runtime/web/status_web.c) every
-// frame: photo (1 it can open, 2 it is on, 4 the free camera), photo_fov, photo_roll.
+// tilt, friends' names (in free roam with them), reset, the picture, leave, and what the keys do.  It reads the game's
+// status (runtime/web/status_web.c) every frame: photo (1 it can open, 2 it is on, 4 the free camera, 8 the names on,
+// 16 friends' names can show), photo_fov, photo_roll.
 import type { GameSession } from './game';
 import type { PadSnapshot } from '../input/gamepad';
 import {
   PAD_A, PAD_AXIS_LT, PAD_AXIS_LX, PAD_AXIS_LY, PAD_AXIS_RT, PAD_AXIS_RX, PAD_AXIS_RY, PAD_B, PAD_BACK, PAD_DDOWN,
-  PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_LB, PAD_LS, PAD_RB, PAD_START, PAD_X, PAD_Y,
+  PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_LB, PAD_LS, PAD_RB, PAD_RS, PAD_START, PAD_X, PAD_Y,
 } from '../input/proto';
 import { N, t } from './i18n';
 import { pageDialog } from './padnav';
@@ -19,7 +20,7 @@ import { padSeen, touchFirst } from './device';
 
 // runtime/photo.c: the events (PH_*) and the bits of PH_HOLD (HB_*)
 const PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG = 5, PH_PAN = 6, PH_DOLLY = 7,
-  PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11;
+  PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11, PH_NAMES = 12;
 const HB_FWD = 1, HB_BACK = 2, HB_LEFT = 4, HB_RIGHT = 8, HB_UP = 16, HB_DOWN = 32, HB_TL = 64, HB_TR = 128,
   HB_TU = 256, HB_TD = 512, HB_ZIN = 4096, HB_ZOUT = 8192, HB_RL = 16384, HB_RR = 32768, HB_FAST = 65536;
 const FOV_MIN = 15, FOV_MAX = 110, ROLL_MAX = 45;
@@ -46,12 +47,14 @@ export class PhotoMode {
   private flash: HTMLElement;
   private zoom: HTMLInputElement;
   private tilt: HTMLInputElement;
+  private names: HTMLInputElement;
   private hints: HTMLElement;
   private session: GameSession | null = null;
   private raf = 0;
   private hello = false;
   private can = false;
   private free = false;
+  private namesHere = false;             // friends' names can show (free roam with them)
   /** whether photo mode is on (the game's status) */
   on = false;
   private bare = false;                  // the panel hidden (H, the controller's View)
@@ -75,11 +78,13 @@ export class PhotoMode {
       '<button type="button" data-mode="1"></button></span></div>' +
       '<label class="ph-slider"><span class="ph-zoom-l"></span><input type="range" class="ph-zoom" min="0" max="1000" step="1"></label>' +
       '<label class="ph-slider"><span class="ph-tilt-l"></span><input type="range" class="ph-tilt" min="-450" max="450" step="5"></label>' +
+      '<label class="ph-check" hidden><input type="checkbox" class="ph-names"><span class="ph-names-l"></span></label>' +
       '<div class="ph-buttons"><button type="button" data-act="reset"></button>' +
       '<button type="button" class="ph-shoot" data-act="shoot"></button><button type="button" data-act="leave"></button></div>' +
       '<div class="ph-hints"></div>';
     this.zoom = p.querySelector('.ph-zoom')!;
     this.tilt = p.querySelector('.ph-tilt')!;
+    this.names = p.querySelector('.ph-names')!;
     this.hints = p.querySelector('.ph-hints')!;
     p.addEventListener('click', e => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -100,6 +105,7 @@ export class PhotoMode {
       s.addEventListener('change', () => { this.sliding = null; this.canvas()?.focus({ preventScroll: true }); });
     }
     this.tilt.addEventListener('dblclick', () => { this.tilt.value = '0'; this.send(PH_ROLL, 0); });
+    this.names.addEventListener('change', () => { this.send(PH_NAMES, this.names.checked ? 1 : 0); this.canvas()?.focus({ preventScroll: true }); });
     const f = this.flash = document.createElement('div');
     f.className = 'photo-flash'; f.hidden = true;          // (hidden by a timer: with reduced motion no animation ends)
     stage.append(p, f);
@@ -143,6 +149,7 @@ export class PhotoMode {
     if (pressed & (1 << PAD_B | 1 << PAD_START)) this.leave();
     if (pressed & 1 << PAD_Y) this.send(PH_MODE, 2);
     if (pressed & 1 << PAD_X) this.send(PH_RESET);
+    if (pressed & 1 << PAD_RS && this.namesHere) this.send(PH_NAMES, 2);
     if (pressed & 1 << PAD_BACK) this.setBare(!this.bare);
     this.padBits = (on(PAD_DUP) ? HB_ZIN : 0) | (on(PAD_DDOWN) ? HB_ZOUT : 0) | (on(PAD_DLEFT) ? HB_RL : 0) |
       (on(PAD_DRIGHT) ? HB_RR : 0) | (on(PAD_LS) ? HB_FAST : 0);
@@ -196,6 +203,8 @@ export class PhotoMode {
     if (pageDialog()) this.letGo();                 // the controller goes to the dialog, a key's up to it too
     this.free = (bits & 4) !== 0;
     for (const b of this.root.querySelectorAll<HTMLButtonElement>('[data-mode]')) b.classList.toggle('on', (b.dataset.mode === '1') === this.free);
+    if (((bits & 16) !== 0) !== this.namesHere) { this.namesHere = !this.namesHere; this.fill(); }
+    this.names.checked = (bits & 8) !== 0;
     const fov = st.get('photo_fov') ?? 70, roll = st.get('photo_roll') ?? 0;
     if (this.sliding !== this.zoom) this.zoom.value = String(Math.round((FOV_MAX - fov) / (FOV_MAX - FOV_MIN) * 1000));
     if (this.sliding !== this.tilt) this.tilt.value = String(Math.round(roll * 10));
@@ -233,18 +242,21 @@ export class PhotoMode {
     q('[data-mode="1"]').textContent = t('Free');
     q('.ph-zoom-l').textContent = t('Zoom');
     q('.ph-tilt-l').textContent = t('Tilt');
+    q('.ph-names-l').textContent = t('Names');
+    (q('.ph-check') as HTMLElement).hidden = !this.namesHere;
     q('[data-act="reset"]').textContent = t('Reset');
     q('[data-act="shoot"]').textContent = t('Take photo');
     q('[data-act="leave"]').textContent = t('Leave');
+    const names = (k: string): Hint[] => (this.namesHere ? [[k, N('Names')]] : []);
     const list: Hint[] = touchFirst() && !padSeen()
       ? [[t('Drag'), N('Turn')], [t('Two fingers'), N('Move')], [t('Pinch'), N('Closer, farther')]]
       : padSeen()
         ? [['R', N('Turn')], ['L', N('Move')], ['LB RB', N('Down, up')], ['LT RT', N('Closer, farther')],
-           ['↑ ↓', N('Zoom')], ['← →', N('Tilt')], ['Y', N('Orbit or free')], ['X', N('Reset')], ['A', N('Take photo')],
-           ['B', N('Leave')]]
+           ['↑ ↓', N('Zoom')], ['← →', N('Tilt')], ['Y', N('Orbit or free')], ['X', N('Reset')], ...names('RS'),
+           ['A', N('Take photo')], ['B', N('Leave')]]
         : [[t('Drag'), N('Turn')], ['W A S D', N('Move')], ['Q E', N('Down, up')], [t('Wheel'), N('Closer, farther')],
-           ['Z X', N('Zoom')], ['C V', N('Tilt')], ['Tab', N('Orbit or free')], ['R', N('Reset')], ['H', N('Hide the panel')],
-           ['F12', N('Take photo')], ['Esc', N('Leave')]];
+           ['Z X', N('Zoom')], ['C V', N('Tilt')], ['Tab', N('Orbit or free')], ['R', N('Reset')], ...names('N'),
+           ['H', N('Hide the panel')], ['F12', N('Take photo')], ['Esc', N('Leave')]];
     this.hints.replaceChildren(...list.map(([k, what]) => {
       const row = document.createElement('span'), kbd = document.createElement('kbd');
       kbd.textContent = k;
@@ -267,6 +279,7 @@ export class PhotoMode {
     else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter') void this.shoot();
     else if (e.code === 'Tab') this.send(PH_MODE, 2);
     else if (e.code === 'KeyR') this.send(PH_RESET);
+    else if (e.code === 'KeyN' && this.namesHere) this.send(PH_NAMES, 2);
     else if (e.code === 'KeyH') this.setBare(!this.bare);
   }
 

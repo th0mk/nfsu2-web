@@ -146,11 +146,31 @@ fn raceres(sender: u32, lobby: u32, rows: &[(u32, u8, f32, f32, f32)]) -> Vec<u8
     dgram(16, sender, &p)
 }
 
+/// a LOBBY datagram of `sender`'s to the hub: `op` (1 advert, 2 an ask to join) of lobby `lobby`, race 0x7C80E775,
+/// with the host (100) in it
+fn lobby(sender: u32, op: u8, lobby: u32) -> Vec<u8> {
+    let mut p = vec![0u8; 28];
+    p[0] = op;
+    p[3] = 4;
+    p[8..12].copy_from_slice(&lobby.to_le_bytes());
+    p[12..16].copy_from_slice(&0x7C80_E775u32.to_le_bytes());
+    p[22] = 1;
+    p[24..28].copy_from_slice(&100u32.to_le_bytes());
+    dgram(12, sender, &p)
+}
+
+/// Ann's (100) lobby `l`, and Bob's (101) ask to join it
+fn lobby_of_two(k: &mut Kit, l: u32) {
+    k.from(V(0), &lobby(100, 1, l));
+    k.from(V(1), &lobby(101, 2, l));
+}
+
 // a race the game ended at once for Bob (a test's racewin, its real rows): his win is a [cheat] line once both reports
 // came, naming him by his address though he left first
 #[test]
 fn a_race_won_by_cheating_names_its_winner() {
     let mut k = two();
+    lobby_of_two(&mut k, 0xA1);
     // (rows: Bob 101 first, Ann 100; flags 2: the reporter's own)
     k.from(V(1), &raceres(101, 0xA1, &[(101, 2, 4.75, 0.006, 38.0), (100, 0, 34.75, 0.168, 901.0)]));
     k.from(V(1), &bye(101));
@@ -159,13 +179,10 @@ fn a_race_won_by_cheating_names_its_winner() {
     assert_eq!(cheats(&k), Vec::<String>::new(), "one of two reports");
     k.from(V(0), &raceres(100, 0xA1, &[(101, 0, 4.75, 0.006, 38.0), (100, 2, 34.75, 0.168, 901.0)]));
     k.hub.tick();
-    let l = cheats(&k);
-    assert!(
-        l.len() == 1
-            && l[0].starts_with("[cheat] 10.77.0.11 \"Bob\": won the race of lobby 000000a1 (race 7c80e775: sprint, 1 lap) in 0:04.8, ")
-            && l[0].contains("which no car does, having driven 0.6 % of the way")
-            && l[0].ends_with(": as 2 of 2 players' games saw it"),
-        "{l:?}"
+    assert_eq!(
+        cheats(&k),
+        ["[cheat] 10.77.0.11 \"Bob\": won the race of lobby 000000a1 (race 7c80e775: sprint, 1 lap) in 0:04.8, having \
+          driven 0.6 % of the way; nobody else finished (the race ends 30 s after the first): as 2 of 2 players' games saw it"]
     );
 }
 
@@ -173,6 +190,7 @@ fn a_race_won_by_cheating_names_its_winner() {
 #[test]
 fn an_honest_race_is_none() {
     let mut k = two();
+    lobby_of_two(&mut k, 0xA2);
     // (flags 1 finished, 2 the reporter's own)
     let own = |me: u32, id: u32| 1 | if me == id { 2 } else { 0 };
     let rows = |me: u32| [(101, own(me, 101), 176.49, 1.0, 5265.0), (100, own(me, 100), 178.15, 1.0, 5281.0)];
@@ -180,4 +198,51 @@ fn an_honest_race_is_none() {
     k.from(V(0), &raceres(100, 0xA2, &rows(100)));
     k.hub.tick();
     assert_eq!(cheats(&k), Vec::<String>::new());
+}
+
+// results name nobody who was not in the race: Bob's of a lobby the hub never saw, or of Ann's lobby before he asked to
+// join it (Ann won in 4.75 s at 0.6 % of the way, they say), count for nothing; in it, a row naming Cat (who never
+// joined) is nobody; and one results message of his a lobby, none within 20 s of his last
+#[test]
+fn results_name_only_the_lobbys_players() {
+    let mut k = two();
+    // (91 s on, every race judged; the three back on the hub)
+    let later = |k: &mut Kit| {
+        k.step(91_000.0);
+        k.hub.tick();
+        for (i, name) in [(0, &b"Ann"[..]), (1, b"Bob"), (2, b"Cat")] {
+            hello(k, i, name, 2);
+        }
+    };
+    later(&mut k);
+    // (won in 4.75 s at 0.6 % of the way, by every report)
+    let framed = |me: u32, who: u32| [(who, 0, 4.75, 0.006, 38.0), (me, 2, 34.75, 0.168, 901.0)];
+    k.from(V(1), &raceres(101, 0xB1, &framed(101, 100)));
+    later(&mut k);
+    k.from(V(0), &lobby(100, 1, 0xB2));
+    k.from(V(1), &raceres(101, 0xB2, &framed(101, 100)));
+    later(&mut k);
+    assert_eq!(cheats(&k), Vec::<String>::new(), "no lobby, or not in it");
+    lobby_of_two(&mut k, 0xB3);
+    k.from(V(1), &raceres(101, 0xB3, &framed(101, 102)));
+    k.from(V(0), &raceres(100, 0xB3, &framed(100, 102)));
+    later(&mut k);
+    assert_eq!(cheats(&k), Vec::<String>::new(), "Cat is nobody");
+    // Bob's real race's results, then fakes of the same and of another lobby of Ann's he is in
+    lobby_of_two(&mut k, 0xB4);
+    lobby_of_two(&mut k, 0xB5);
+    let own = |me: u32, id: u32| 1 | if me == id { 2 } else { 0 };
+    let honest = |me: u32| [(100, own(me, 100), 180.0, 1.0, 5200.0), (101, own(me, 101), 185.0, 1.0, 5300.0)];
+    let fake = [(100, 1, 4.0, 1.0, 5200.0), (101, 3, 185.0, 1.0, 5300.0)];
+    k.from(V(1), &raceres(101, 0xB4, &honest(101)));
+    k.from(V(1), &raceres(101, 0xB5, &fake));
+    k.from(V(0), &raceres(100, 0xB4, &honest(100)));
+    later(&mut k);
+    assert_eq!(cheats(&k), Vec::<String>::new(), "one results message a lobby, 20 s apart");
+    // (and the same fake 21 s on is taken: a line)
+    lobby_of_two(&mut k, 0xB6);
+    k.from(V(1), &raceres(101, 0xB6, &fake));
+    later(&mut k);
+    let l = cheats(&k);
+    assert!(l.len() == 1 && l[0].starts_with("[cheat] 10.77.0.10 \"Ann\": won the race of lobby 000000b6"), "{l:?}");
 }

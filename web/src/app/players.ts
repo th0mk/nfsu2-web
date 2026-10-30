@@ -18,14 +18,54 @@ import { at } from '../base';
 
 const EVERY_MS = 15_000;
 
-/** The Room setting's hash, as roam_core.c rc_room_hash makes it (FNV-1a of the name's UTF-8 without its spaces and
- *  with its capitals A to Z small; 0: no room), for /players?room= */
+/** One character of a Room's or a crew's name as its hash takes it, as roam_core.c room_fold does (the two must agree
+ *  on every character: web/test/players.test.mjs and tests/roam_unit.c check the same sum): 0 for a blank or an
+ *  invisible one, capitals small in Latin, Greek and Cyrillic, Turkish i as i, final sigma as sigma, full-width ASCII
+ *  as ASCII; any other character is itself. */
+export function roomFold(c: number): number {
+  if (c === 0x20 || (c >= 0x09 && c <= 0x0d) || c === 0xa0 || c === 0xad || c === 0x1680 || (c >= 0x2000 && c <= 0x200d) ||
+      c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x2060 || c === 0x3000 || c === 0xfeff) return 0;
+  if (c >= 0xff01 && c <= 0xff5e) c -= 0xfee0;
+  if (c >= 0x41 && c <= 0x5a) return c + 32;
+  if (c < 0xc0) return c;
+  if (c <= 0xde) return c === 0xd7 ? c : c + 32;
+  if (c >= 0x100 && c <= 0x17f) {
+    if (c === 0x130 || c === 0x131) return 0x69;
+    if (c === 0x178) return 0xff;
+    if (c <= 0x137 || (c >= 0x14a && c <= 0x177)) return c | 1;
+    if ((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17e)) return c & 1 ? c + 1 : c;
+    return c;
+  }
+  if (c >= 0x218 && c <= 0x21f) return c | 1;
+  if (c >= 0x391 && c <= 0x3ab) return c === 0x3a2 ? c : c + 32;
+  if (c === 0x386) return 0x3ac;
+  if (c >= 0x388 && c <= 0x38a) return c + 37;
+  if (c === 0x38c) return 0x3cc;
+  if (c === 0x38e || c === 0x38f) return c + 63;
+  if (c === 0x3c2) return 0x3c3;
+  if (c >= 0x400 && c <= 0x40f) return c + 80;
+  if (c >= 0x410 && c <= 0x42f) return c + 32;
+  if ((c >= 0x460 && c <= 0x481) || (c >= 0x48a && c <= 0x4bf) || (c >= 0x4d0 && c <= 0x52f)) return c | 1;
+  if (c === 0x4c0) return 0x4cf;
+  if (c >= 0x4c1 && c <= 0x4ce) return c & 1 ? c + 1 : c;
+  return c;
+}
+
+/** A Room's or a crew's name as the game is given it: in Unicode's composed form (NFC), so an "é" typed as e and an
+ *  accent is the "é" of a keyboard */
+export const roomText = (name: string) => name.normalize('NFC');
+
+const utf8 = new TextEncoder();
+/** The Room setting's hash, as roam_core.c rc_room_hash makes it of roomText(name) (FNV-1a of its UTF-8 with each
+ *  character as roomFold has it: "Blue Room" is "blueroom"; 0: no room), for /players?room= (a crew is the hash of its
+ *  name too) */
 export function roomHash(name: string): number {
   let h = 0x811c9dc5, kept = 0;
-  for (let b of new TextEncoder().encode(name)) {
-    if (b === 0x20 || (b >= 0x09 && b <= 0x0d)) continue;
-    if (b >= 0x41 && b <= 0x5a) b += 0x20;
-    h = Math.imul(h ^ b, 0x01000193) >>> 0; kept++;
+  for (const ch of roomText(name)) {
+    const c = roomFold(ch.codePointAt(0)!);
+    if (!c) continue;
+    for (const b of utf8.encode(String.fromCodePoint(c))) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+    kept++;
   }
   return !kept ? 0 : h || 1;
 }

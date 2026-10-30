@@ -58,6 +58,8 @@ uint64_t    roam_win_ns(void);
 /* the game's "No Profile" in English only (the port also knows the other
  * languages' names from the game's text, language.c) */
 #define rh_no_profile(name) (!strcasecmp((name), "No Profile"))
+/* no drift mode here (drift.c): the ride's dyno setup is always its own */
+#define rh_drift_tuning(out) ((void)(out), 0)
 
 /* the pose log (test aid, PoseLog in the .ini) */
 typedef struct rh_file rh_file;

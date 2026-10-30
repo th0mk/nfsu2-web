@@ -66,8 +66,10 @@ export interface NetOptions extends CommonOptions {
   back?: () => void;
   /** the server is full: this page's place in line for one (null: not in line) */
   queue?: (q: NetQueue | null) => void;
-  /** this browser's own id (page-id.ts): the operator's bans name a page by it */
+  /** this browser's own id (page-id.ts): the operator's bans name a page by it; and the one its other store held when
+   *  that was another */
   id?: string;
+  was?: string[];
   /** the token of the keyphrase this page plays with (claim.ts): whose claimed names it may play under */
   claim?: string;
   /** free roam: the names of the players this one blocks: the server's hub links none of them with it */
@@ -155,6 +157,10 @@ export interface NetSubsystem extends Subsystem {
   /** free roam's crews, changed while the game runs (the page menu): their hashes, in the player's order, and their
    *  colours (0x00rrggbb) */
   crews?(hashes: readonly number[], rgbs: readonly number[]): void;
+  /** free roam's room, changed while the game runs (an invite link): true when this game takes it now */
+  room?(name: string): boolean;
+  /** whether this game takes a room changed while it runs (a module of before does not) */
+  canRoom?(): boolean;
 }
 
 export type AttachRenderer = (proc: GameProcess, canvas: HTMLCanvasElement, opts: RendererOptions) => RendererSubsystem | Promise<RendererSubsystem>;

@@ -861,6 +861,11 @@ fn ctl(state: &Path, words: &[&str]) -> (i32, String) {
 /// a page from `xff` (its address, as a proxy on this machine names it) that says hello with page id `id`: what it
 /// got by the time the switch closed it (or 2 s), and how
 async fn turned_away(host: &str, port: u16, xff: &str, id: &str) -> (Vec<Value>, Option<(u16, String)>) {
+    turned_away_hello(host, port, xff, serde_json::json!({ "t": "hello", "name": "Ann", "id": id })).await
+}
+
+/// the same, with this hello
+async fn turned_away_hello(host: &str, port: u16, xff: &str, hello: Value) -> (Vec<Value>, Option<(u16, String)>) {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
     let s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
@@ -868,8 +873,7 @@ async fn turned_away(host: &str, port: u16, xff: &str, id: &str) -> (Vec<Value>,
     q.headers_mut().insert("x-forwarded-for", xff.parse().unwrap());
     let (ws, _) = tokio_tungstenite::client_async(q, s).await.expect("the handshake");
     let (mut sink, mut stream) = ws.split();
-    let hello = serde_json::json!({ "t": "hello", "name": "Ann", "id": id }).to_string();
-    let _ = sink.send(Message::text(hello)).await;
+    let _ = sink.send(Message::text(hello.to_string())).await;
     let (mut ctl, mut closed) = (Vec::new(), None);
     let _ = tokio::time::timeout(Duration::from_secs(2), async {
         while let Some(Ok(m)) = stream.next().await {
@@ -890,21 +894,35 @@ fn kinds(ctl: &[Value]) -> Vec<String> {
 }
 
 // The operator's commands (app/control.rs) on the running binary: who, a kick (the player is told, and may come
-// back), a ban (told; turned away by its address, and by its page id at another address, which then is banned too;
-// the other player is left be), bans, unban; the state folder keeps no address and no page id
+// back), a ban (told, with its keyphrase on its other device; turned away by its address, by its page id at another
+// address, which then is banned too, by its keyphrase in a new browser, which then is taken in, and by an earlier
+// page id its page found; what was taken in brings in nothing more; the other player is left be), bans, unban, a ban
+// by a [cheat] line's handle; the state folder keeps no address, no page id and no keyphrase
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn kicks_and_bans_through_the_control_socket() {
     let tmp = tempfile::tempdir().unwrap();
     let (data, wasm) = game_folder(tmp.path());
     let (port, state) = (free_port(), tmp.path().join("state"));
+    // a [cheat] line's mark from before this start (the server's Marker makes them from the hosts' lines)
+    std::fs::create_dir_all(&state).unwrap();
+    let marks = nfsu2_bans::Bans::open(&state).unwrap();
+    assert_eq!(marks.mark("Racer", marks.keys(None, Some("page-racer"), None), nfsu2_util::now_ms()).unwrap(), "c1");
+    drop(marks);
     let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--online", "off", "--roam-hub", "off"]), port);
     srv.ready().await;
     let host = format!("localhost:{port}");
     let sock = state.join("control.sock").to_string_lossy().to_string();
-    assert!(srv.lines().contains(&format!("  bans      : 0; nfsu2-server ctl who, kick, ban, unban, bans (through {sock})")), "{:?}", srv.lines());
+    assert!(
+        srv.lines().contains(&format!("  bans      : 0; nfsu2-server ctl who, kick, ban, unban, bans (through {sock})")),
+        "{:?}",
+        srv.lines()
+    );
     let hello = |name: &str, id: &str| serde_json::json!({ "t": "hello", "name": name, "id": id }).to_string();
+    // Ann's keyphrase's token (the page sends it as "claim": 43 characters)
+    let ann_key = format!("{:-<43}", "ann-keyphrase");
+    let ann_hello = |id: &str| serde_json::json!({ "t": "hello", "name": "Ann", "id": id, "claim": ann_key });
     let ann = Browser::open_from(&host, port, "", None, None, Some("192.0.2.1")).await;
-    ann.text(&hello("Ann", "page-ann"));
+    ann.text(&ann_hello("page-ann").to_string());
     let bob = Browser::open_from(&host, port, "", None, None, Some("192.0.2.2")).await;
     bob.text(&hello("Bob", "page-bob"));
     let (ann_vip, bob_vip) = (nfsu2_util::vip_str(ann.vip), nfsu2_util::vip_str(bob.vip));
@@ -924,17 +942,23 @@ async fn kicks_and_bans_through_the_control_socket() {
     assert_eq!(ann.until_ms(3000, |g| g.closed.clone()).await, (4001, "kicked".into()));
     assert_eq!(ann.got().ctl.iter().find(|m| m["t"] == "kick").map(|m| m["msg"].clone()), Some(Value::from("Stop ramming")));
     let ann = Browser::open_from(&host, port, "", None, None, Some("192.0.2.1")).await;
-    ann.text(&hello("Ann", "page-ann"));
+    ann.text(&ann_hello("page-ann").to_string());
     sleep(200).await;
     assert!(ann.is_open(), "a kick is no ban");
+    // and on her phone, with the same keyphrase: one player called Ann
+    let phone = Browser::open_from(&host, port, "", None, None, Some("192.0.2.5")).await;
+    phone.text(&ann_hello("page-ann-phone").to_string());
+    sleep(200).await;
 
     // a ban: the same, and turned away
-    let ann_vip = nfsu2_util::vip_str(ann.vip);
-    let ban = ctl(&state, &["ban", &ann_vip, "3d", "Ramming,", "3", "days"]);
+    let (ann_vip, phone_vip) = (nfsu2_util::vip_str(ann.vip), nfsu2_util::vip_str(phone.vip));
+    let ban = ctl(&state, &["ban", "Ann", "3d", "Ramming,", "3", "days"]);
     assert_eq!(ban.0, 0, "{}", ban.1);
     assert!(ban.1.starts_with("ban #1: \"Ann\" for 3 d (until "), "{}", ban.1);
-    assert!(ban.1.ends_with(&format!("by its page and its address\nremoved {ann_vip} \"Ann\"")), "{}", ban.1);
+    assert!(ban.1.contains("by its 2 pages, its keyphrase and its 2 addresses\nremoved "), "{}", ban.1);
+    assert!(ban.1.contains(&format!("{ann_vip} \"Ann\"")) && ban.1.contains(&format!("{phone_vip} \"Ann\"")), "{}", ban.1);
     assert_eq!(ann.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
+    assert_eq!(phone.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
     let told = ann.got().ctl.iter().find(|m| m["t"] == "ban").cloned().expect("the ban's message");
     assert_eq!(told["msg"], "Ramming, 3 days");
     let until = told["until"].as_i64().unwrap() - nfsu2_util::now_ms();
@@ -947,6 +971,33 @@ async fn kicks_and_bans_through_the_control_socket() {
     assert_eq!((kinds(&got).last().cloned(), closed), (Some("ban".to_string()), Some((4003, "banned".to_string()))));
     let (got, _) = turned_away(&host, port, "192.0.2.9", "page-new").await;
     assert_eq!(kinds(&got), vec!["ban".to_string()], "the address the banned page came from");
+    // the phone's page, which the ban was made with too
+    let (got, _) = turned_away(&host, port, "192.0.2.10", "page-ann-phone").await;
+    assert_eq!(kinds(&got).last().cloned(), Some("ban".to_string()), "the phone's page");
+    // by its keyphrase in a new browser at another address: that page is taken in (for a month), and that address
+    let fresh = |id: &str, was: &[&str], key: bool| {
+        let mut h = serde_json::json!({ "t": "hello", "name": "Anna", "id": id, "was": was });
+        if key {
+            h["claim"] = ann_key.clone().into();
+        }
+        h
+    };
+    let banned = Some((4003, "banned".to_string()));
+    for (xff, hello, why) in [
+        ("192.0.2.20", fresh("page-fresh", &[], true), "its keyphrase in a new browser"),
+        ("192.0.2.30", fresh("page-fresh", &[], false), "that browser, without the keyphrase"),
+        ("192.0.2.40", fresh("page-cleared", &["page-ann"], false), "an earlier page id its page found"),
+        ("192.0.2.50", fresh("page-cleared", &[], false), "the page id that came with it"),
+    ] {
+        let (got, closed) = turned_away_hello(&host, port, xff, hello).await;
+        assert_eq!((kinds(&got).last().cloned(), &closed), (Some("ban".to_string()), &banned), "{why}");
+    }
+    // what was taken in brings in nothing more (a browser she used is maybe someone else's): not its addresses then,
+    // nor another player
+    for (xff, hello) in [("192.0.2.30", fresh("page-dan", &[], false)), ("192.0.2.60", fresh("page-cara", &["page-other"], false))] {
+        let (got, closed) = turned_away_hello(&host, port, xff, hello).await;
+        assert!(!kinds(&got).contains(&"ban".to_string()) && closed.is_none(), "{xff}: {got:?} {closed:?}");
+    }
     sleep(100).await;
     assert!(bob.is_open(), "Bob is left be");
     assert!(ctl(&state, &["who", "bob"]).1.starts_with("1 on the switch called *bob*\n"));
@@ -954,9 +1005,12 @@ async fn kicks_and_bans_through_the_control_socket() {
     let bans = ctl(&state, &["bans"]);
     assert_eq!(bans.0, 0);
     assert!(bans.1.starts_with("#1   \"Ann\""), "{}", bans.1);
-    assert!(bans.1.ends_with(": \"Ramming, 3 days\"; by its page, 2 addresses"), "{}", bans.1);
+    // pages: hers and her phone's, then the fresh one and the cleared one; addresses: .1 .5 .9 .10 .20 .40
+    assert!(bans.1.ends_with(": \"Ramming, 3 days\"; by 4 pages (2 found later), 1 keyphrase, 6 addresses"), "{}", bans.1);
     let file = std::fs::read_to_string(state.join("bans.json")).unwrap();
-    assert!(!file.contains("192.0.2") && !file.contains("page-ann"), "{file}");
+    for secret in ["192.0.2", "page-", "ann-keyphrase"] {
+        assert!(!file.contains(secret), "{secret}: {file}");
+    }
 
     // what cannot be done
     assert_eq!(ctl(&state, &["kick", "Nobody"]), (1, "nobody called \"Nobody\" on the switch or in the last hour (who lists them)".into()));
@@ -974,13 +1028,26 @@ async fn kicks_and_bans_through_the_control_socket() {
     assert_eq!(ctl(&state, &["bans"]), (0, "no bans".into()));
     assert_eq!(bob_vip, nfsu2_util::vip_str(bob.vip));
 
+    // by a [cheat] line's handle: the player it marked, on the switch now under another name
+    let racer = Browser::open_from(&host, port, "", None, None, Some("192.0.2.77")).await;
+    racer.text(&hello("Speedy", "page-racer"));
+    sleep(200).await;
+    let racer_vip = nfsu2_util::vip_str(racer.vip);
+    let ban = ctl(&state, &["ban", "c1", "1d", "Cheating"]);
+    assert!(ban.1.starts_with("ban #2: \"Racer\" (c1) for 1 d (until "), "{}", ban.1);
+    assert!(ban.1.ends_with(&format!("by its page\nremoved {racer_vip} \"Speedy\"")), "{}", ban.1);
+    assert_eq!(racer.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
+    assert!(bob.is_open());
+    assert_eq!(ctl(&state, &["ban", "c9", "1d"]), (1, "nobody called \"c9\" on the switch or in the last hour (who lists them)".into()));
+
     assert_eq!(srv.stop().await, Some(0));
     let lines = srv.lines();
     assert!(lines.iter().any(|l| l.starts_with("[ban] kicked 10.77.") && l.ends_with("\"Ann\": \"Stop ramming\"")), "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("[ban] #1 \"Ann\" for 3 d (until ")), "{lines:?}");
     assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its address)"), "{lines:?}");
-    assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its page)"), "{lines:?}");
+    assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its page or keyphrase)"), "{lines:?}");
     assert!(lines.iter().any(|l| l == "[ban] lifted #1 \"Ann\""), "{lines:?}");
+    assert!(lines.iter().any(|l| l.starts_with("[ban] #2 \"Racer\" (c1) for 1 d (until ")), "{lines:?}");
     assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
 }
 

@@ -144,14 +144,23 @@ pub async fn run(o: Options, cores: usize) {
     // the console, as its joins and refusals do (the Online audit's ONL-8)
     // claimed names (nfsu2-claims): with keyphrase saves only (a name is claimed by a keyphrase)
     let claims = (o.vault_gb > 0.0).then(|| Arc::new(nfsu2_claims::Claims::open(Path::new(&o.state), nfsu2_util::now_ms())));
+    // the operator's bans, and the control socket that makes them (control.rs); the hosts' [cheat] lines of races get
+    // a handle that `ban` takes for a week (control.rs Marker)
+    let bans = Arc::new(nfsu2_bans::Bans::open(Path::new(&o.state)).unwrap_or_else(|e| die(&format!("{}/bans.json: {e}", o.state))));
+    let marker = super::control::Marker::new(bans.clone());
     let online = o.game.online.filter(|_| o.online).map(|title| {
+        let m = marker.clone();
         OnlineHost::spawn_for(
             title,
             OnlineOptions {
                 state_dir: Some(PathBuf::from(paths::join(&o.state, "online"))),
-                log: Arc::new(|line: &str, key: Option<&str>| match key {
-                    None => log::line(line),
-                    Some(k) => log::limited("online", "Online lines", k, line, 30),
+                log: Arc::new(move |line: &str, key: Option<&str>| {
+                    let tagged = m.tag(line);
+                    let line = tagged.as_deref().unwrap_or(line);
+                    match key {
+                        None => log::line(line),
+                        Some(k) => log::limited("online", "Online lines", k, line, 30),
+                    }
                 }),
                 tap: tap.clone(),
                 claims: claims.clone(),
@@ -159,7 +168,9 @@ pub async fn run(o: Options, cores: usize) {
         )
     });
     // (its lines: the cap on the players' links going down while the server is busy and back up, at most one every 5 s)
-    let roam = o.roam_hub.then(|| RoamHub::spawn_with(RoamOptions::default(), Arc::new(|line: &str| log::line(line)), claims.clone()));
+    let m = marker.clone();
+    let roam_log = Arc::new(move |line: &str| log::line(m.tag(line).as_deref().unwrap_or(line)));
+    let roam = o.roam_hub.then(|| RoamHub::spawn_with(RoamOptions::default(), roam_log, claims.clone()));
     // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
     let vault = (o.vault_gb > 0.0).then(|| {
         let dir = paths::join(&o.state, "vault");
@@ -195,9 +206,8 @@ pub async fn run(o: Options, cores: usize) {
     if let Some(h) = &roam {
         h.attach_switch(lan.switch_send());
     }
+    marker.set_switch(lan.clone());
 
-    // the operator's bans, and the control socket that makes them (control.rs)
-    let bans = Arc::new(nfsu2_bans::Bans::open(Path::new(&o.state)).unwrap_or_else(|e| die(&format!("{}/bans.json: {e}", o.state))));
     // Cloudflare's check for a claim (turnstile.rs: off without its two keys)
     let turnstile = super::turnstile::Turnstile::from_env();
     if let Some(c) = &claims {

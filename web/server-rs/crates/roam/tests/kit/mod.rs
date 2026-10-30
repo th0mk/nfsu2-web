@@ -27,7 +27,8 @@ pub fn fnv1a(s: &str) -> u32 {
     if h == 0 { 1 } else { h }
 }
 
-/// roam_core.c's rc_room_hash, a Room's or a crew's (the page's players.ts roomHash is the same): FNV-1a of the name's
+/// roam_core.c's rc_room_hash of an ASCII name, a Room's or a crew's (the page's players.ts roomHash is the same; both also fold
+/// capitals past A to Z and Unicode's blanks, which these tests' names never have): FNV-1a of the name's
 /// UTF-8 without its blanks (space, \t to \r), A to Z made small; 0 for a name of blanks only, never 0 for another
 /// (`fnv1a` is the same for a name of small letters without blanks)
 pub fn room_hash(s: &str) -> u32 {
@@ -150,9 +151,14 @@ pub fn snap_moving(sender: u32, pos: [f64; 3], v: [f64; 3], heading: f64, status
     d
 }
 
-/// the world map's question (MAPREQ)
+/// the world map's question (MAPREQ), as a page before 2048 asks it (512 at most)
 pub fn mapreq(sender: u32, req: u16) -> Vec<u8> {
     dgram(10, sender, &req.to_le_bytes())
+}
+
+/// the world map's question (MAPREQ) for max players at most
+pub fn mapreq_max(sender: u32, req: u16, max: u16) -> Vec<u8> {
+    dgram(10, sender, &[req.to_le_bytes(), max.to_le_bytes()].concat())
 }
 
 /// a MAP datagram: (req, part, nparts, total, [(x, y, heading)])

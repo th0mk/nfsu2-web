@@ -76,7 +76,7 @@ export class Privacy {
       if ((m = /^\[roam\] (?:JOIN: (.+) joined|LEAVE: (.+?) left: )/.exec(l))) return got(m[1] ?? m[2], 'player');
       if (!l.startsWith('[roam] f=')) {
         if ((m = /^\[roam\] crew \d+: "(.*)" \(/.exec(l))) return got(m[1], 'crew');
-        if ((m = /^\[roam\] free-roam multiplayer ON: .*?, room "(.*?)", up to/.exec(l))) return got(m[1], 'room');
+        if ((m = /^\[roam\] free-roam multiplayer ON: .*?, room "(.*?)"(?: \([0-9a-f]{8}\))?, up to/.exec(l))) return got(m[1], 'room');
         return false;
       }
       if (l.includes(' race lobby ') && (m = /^\[roam\] f=\d+ race lobby [0-9a-f]{8}: (.+?)(?: (?:joined|left|quit), \d+ of \d+| is gone from it)/.exec(l))) return got(m[1], 'player');
