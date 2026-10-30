@@ -23,12 +23,14 @@
  *   bot save     save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
  *   bot wait [N]    (career_mw.c) wait up to N frames for the bot to stop
  *
- * Its order in a bin (decide): performance packages from a customization shop with the cash the career has (once a
- * bin, and again when the cash has grown: shop_frame); the bin's races not won yet, the one tried least first (a lost
+ * The car it races is the career's best (car_rank: the Car Lot's tier, then the package levels on it, then the
+ * latest won), taken in the safehouse's Car Select.  Its order in a bin (decide): performance packages for that car
+ * from a customization shop with the cash the career has (once a bin, and again when the cash has grown: shop_frame;
+ * the packages that make the car faster first); the bin's races not won yet, the one tried least first (a lost
  * race is raced again in its turn), until the races the rival asks are won; then pursuits until the milestones and
  * the bounty are there; then the rival's challenge, engaged at its first race's start (InGameRivalChallenge.fng,
  * whose Enter accepts it); a lost challenge is tried again, after the shop when the cash reaches a package, and after
- * two lost in one car in the career's next car (B_CAR: Jump to Safe House, Car Select).  Cops on the car in free roam (a pursuit that began in a race goes on after it) are a
+ * two lost in one car in the other of the two best cars (B_CAR: Jump to Safe House, Car Select).  Cops on the car in free roam (a pursuit that began in a race goes on after it) are a
  * pursuit first, whatever it was doing.  In a pursuit the AI drives, and a long chase or a boxed-in car is broken off
  * by setting the car far away (pursuit_frame: what was tried besides, and dropped).  A bust adds a strike to the car,
  * and the strike that reaches the car's most impounds it: the bot spends an Out of Jail marker instead when it holds
@@ -156,6 +158,19 @@ static uint32_t career_rec(uint32_t prof, uint32_t handle){
     return 0;
 }
 static int car_free(uint32_t prof, uint32_t handle){ uint32_t cr = career_rec(prof, handle); return cr && !MR8(cr + 4u); }
+/* the performance packages installed on a car: its customization record (FEPlayerCarDB +0xFA0, 0x198 bytes each, the
+ * car record's byte +0x10 its index) holds the levels as seven dwords at +0x118 (installed_level below); their sum,
+ * -1 when the car has no such record */
+static int car_levels(uint32_t prof, uint32_t handle){
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) == handle && MR8(r + 0x10u) < 0x4bu){
+            uint32_t cz = prof + PROF_CARDB + 0xfa0u + MR8(r + 0x10u) * 0x198u + 0x118u;
+            int s = 0;
+            for (uint32_t k = 0; k < 7u; k++){ int v = (int)rd(cz + 4u * k); s += v > 0 && v < 8 ? v : 0; }
+            return s;
+        }
+    return -1;
+}
 /* the markers (0x91D928, 63 of {type, param, state}): 0x576F10 (thiscall (type, param)) counts those held; 0x11 is
  * out_of_jail_free (pursuit_mw.c says more) */
 #define G_MARKERS        0x0091d928u
@@ -323,6 +338,25 @@ static const char *car_name(uint32_t key){
     for (int i = 0; k[i]; i++) if (h32(k[i]) == key) return k[i];
     return "?";
 }
+/* a car's tier, 1 the fastest: the Car Lot's three tiers as the game's design has them (a guide for the bot's choice of
+ * car, not read from the game's data); a car not listed counts as tier 3 */
+static int car_tier(uint32_t key){
+    static const char *const t1[] = { "carreragt", "slr", "murcielago", "fordgt", "911turbo", "corvettec6r", "gallardo",
+        "sl65", "db9", "bmwm3gtr", 0 };
+    static const char *const t2[] = { "997s", "corvette", "viper", "clk500", "sl500", "caymans", "elise", "a4", "cts", "tt", 0 };
+    const char *n = car_name(key);
+    for (int i = 0; t1[i]; i++) if (!strcmp(n, t1[i])) return 1;
+    for (int i = 0; t2[i]; i++) if (!strcmp(n, t2[i])) return 2;
+    return 3;
+}
+/* how good a career car is for the bot: its tier first (worth more than all the package levels a car can hold), then
+ * the package levels on it, then the later career record (the latest car won).  Up to bin 9 the bot raced the latest
+ * car won; at bin 8 that is the Lancer Evolution, below the Cayman S won a bin earlier (bin8_start's cars: two IS300s,
+ * Supra, RX-8, Cayman S, Lancer). */
+static int car_rank(uint32_t prof, uint32_t r){
+    int lv = car_levels(prof, MR32(r));
+    return (4 - car_tier(rd(r + 8u))) * 1000 + (lv > 0 ? lv : 0) * 10 + MR8(r + 0x11u) % 10;
+}
 static void log_cars(void){
     uint32_t prof = profile(), cur = rd(prof + 0xa8u);
     char b[300]; int o = 0;
@@ -397,6 +431,10 @@ static struct {
      * spent, the sheet's moves toward the marker's button; Car_Select.fng after a bust: the place Enter was given at */
     int oojail, jail_spent, jail_moves, cs_k, cs_dlg, cs_retry, impounds;
     long mk_f;
+    /* Car Select's list: the car each place holds, as seen (cs_pos_for), for cs_map_n cars; the place Enter was given
+     * at, and the tries at the car picked */
+    uint32_t cs_map[33];
+    int cs_map_n, cs_ek, cs_tries;
     int stand, bust_n, pay_only;        /* bot bust N [pay]: the car stands in the pursuits until N busts */
     struct gates g;
 } B;
@@ -406,52 +444,78 @@ static void set_state(int st, const char *why){
     B.st = st; B.t0 = mw_game_time(); B.f0 = autotest_frame(); B.tries = 0; B.free_since = 0; B.go_set = 0;
     B.fin_f = 0; B.post_seen = 0;
 }
-/* The car the bot races: the career's car of the highest career record, the latest one won (a beaten rival's pink
- * slip: bin 13's Supra after two IS300s; the rival's car came with packages of its own, Taz's IS300 with engine,
- * transmission, nitrous and brakes at level 1).  When it is not the current car, the safehouse menu's Car Select
- * (its third item) takes it before free roam: Car_Select.fng lists the cars in the order of their career records
- * ('k / N', strings of label 0x18; it opens on the first), RIGHT to the next, and Enter makes the highlighted car the
- * current one and goes back to the safehouse menu (probe of 2026-10-30: Enter on '2 / 3' made handle 0x52 current). */
+/* The car the bot races: the career's best by car_rank (a beaten rival's pink slip comes with packages of its own:
+ * Taz's IS300 with engine, transmission, nitrous and brakes at level 1).  When it is not the current car, the
+ * safehouse menu's Car Select (its third item) takes it before free roam: Car_Select.fng lists the cars ('k / N',
+ * strings of label 0x18; it opens on the current car), mostly in the order of their career records but not always
+ * (cs_pos_for), RIGHT to the next, and Enter makes the highlighted car the current one and goes back to the safehouse
+ * menu (probe of 2026-10-30: Enter on '2 / 3' made handle 0x52 current). */
 /* The car taken is one that can be driven (its career record's +4 is 0): Enter on an impounded one opens a Dialog
  * and leaves Car_Select.fng as it was (M4-48: the bot went round that loop for good, runs c13d and c13t). */
+/* the car of the best car_rank that can be driven (PREFER instead, when it can be driven), with its career record
+ * (returned), its handle and its place in Car Select's list ('k / N': the list is in career-record order) */
 static int choose_car(uint32_t prefer, uint32_t *handle, int *pos, int *n_out){
     uint32_t prof = profile(), best_h = 0;
-    int best = -1, n = 0, recs[32], pref = 0;
+    int best = -1, best_rank = -1, n = 0, recs[32], pref = 0;
     for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u && n < 32; i++, r += 0x14u)
         if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu){
-            int rec = MR8(r + 0x11u);
+            int rec = MR8(r + 0x11u), rank = car_rank(prof, r);
             recs[n++] = rec;
             if (pref || !car_free(prof, MR32(r))) continue;
             if (prefer && MR32(r) == prefer){ best = rec; best_h = prefer; pref = 1; }   /* PREFER, when it can be driven */
-            else if (rec > best){ best = rec; best_h = MR32(r); }
+            else if (rank > best_rank){ best = rec; best_rank = rank; best_h = MR32(r); }
         }
     int p = 1;
     for (int i = 0; i < n; i++) p += recs[i] < best;
     *handle = best_h; *pos = p; *n_out = n;
     return best;
 }
-/* the career's next car that can be driven after the current one, by career record from the highest down and round
- * again; 0 when there is no other */
+/* the car for the next rival challenge after CAR_SWAP_AFTER lost in one car: from the best car (choose_car's) the
+ * second best, from any other car the best again, so the two best take turns (the shop buys only for the best,
+ * shop_wanted); 0 when there is no other that can be driven */
 static uint32_t next_car(void){
-    uint32_t prof = profile(), cur = rd(prof + 0xa8u), h[32]; int rec[32], n = 0, cur_rec = -1;
-    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u && n < 32; i++, r += 0x14u)
-        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu){
-            if (MR32(r) == cur) cur_rec = MR8(r + 0x11u);
-            if (MR32(r) != cur && car_free(prof, MR32(r))){ h[n] = MR32(r); rec[n] = MR8(r + 0x11u); n++; }
-        }
-    int best = -1;                      /* the highest record below the current one, else the highest of all */
-    for (int i = 0; i < n; i++) if (rec[i] < cur_rec && (best < 0 || rec[i] > rec[best])) best = i;
-    if (best < 0) for (int i = 0; i < n; i++) if (best < 0 || rec[i] > rec[best]) best = i;
-    return best >= 0 ? h[best] : 0u;
+    uint32_t prof = profile(), cur = rd(prof + 0xa8u), best_h = 0, h2 = 0;
+    int pos = 0, n = 0, r2 = -1;
+    choose_car(0, &best_h, &pos, &n);
+    if (best_h && best_h != cur) return best_h;
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu && MR32(r) != cur &&
+            car_free(prof, MR32(r)) && car_rank(prof, r) > r2){ r2 = car_rank(prof, r); h2 = MR32(r); }
+    return h2;
 }
 static void pick_car(void){
-    uint32_t cur = rd(profile() + 0xa8u), best_h = 0;
+    uint32_t prof = profile(), cur = rd(prof + 0xa8u), best_h = 0;
     int pos = 0, n = 0, best = choose_car(0, &best_h, &pos, &n);
     B.want_car = 0; B.car_entered = 0;
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)   /* the ranks, for the log */
+        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu)
+            fprintf(stderr, "[mwbot]   car %s (handle %#x, career record %u): tier %d, package levels %d, rank %d%s%s\n",
+                    car_name(rd(r + 8u)), MR32(r), MR8(r + 0x11u), car_tier(rd(r + 8u)), car_levels(prof, MR32(r)),
+                    car_rank(prof, r), car_free(prof, MR32(r)) ? "" : ", impounded", MR32(r) == cur ? ", current" : "");
     if (!best_h || best_h == cur) return;
     B.want_car = best_h; B.want_pos = pos;
     fprintf(stderr, "[mwbot] f=%ld the car to race: handle %#x (career record %d), Car Select's %d / %d\n", autotest_frame(),
             best_h, best, pos, n);
+}
+/* the car the bot races best (choose_car's), for the shop: 0 none */
+static uint32_t best_car(void){ uint32_t h = 0; int pos = 0, n = 0; choose_car(0, &h, &pos, &n); return h; }
+/* Car Select's place for car WANT among N: the place seen holding it, else GUESS (choose_car's, the career-record
+ * order) when no other car was seen there, else the free place nearest to it.  The list is not always in career-record
+ * order: at bin 8 (six cars, the current one the RX-8 at '4 / 6') RIGHT to '5 / 6' and Enter took the Lancer, career
+ * record 5, not the Cayman S, record 4 (c5-s8r).  What a place holds is seen twice: the list opens on the current car,
+ * and the car an Enter took is the current one after it. */
+static void cs_map_check(int n){ if (n != B.cs_map_n){ memset(B.cs_map, 0, sizeof B.cs_map); B.cs_map_n = n; } }
+static int cs_pos_for(uint32_t want, int guess, int n){
+    cs_map_check(n);
+    for (int p = 1; p <= n && p < 33; p++) if (B.cs_map[p] == want) return p;
+    if (guess >= 1 && guess <= n && guess < 33 && !B.cs_map[guess]) return guess;
+    for (int d = 1; d < n; d++){
+        int p = guess + d;
+        if (p >= 1 && p <= n && p < 33 && !B.cs_map[p]) return p;
+        p = guess - d;
+        if (p >= 1 && p <= n && p < 33 && !B.cs_map[p]) return p;
+    }
+    return guess;
 }
 /* a race runs for the local player: GRaceStatus actively racing and its racer not finished.  After a won career race
  * the flag stays set in the free roam that follows (seen: active 1, the racer finished and the race won, through
@@ -542,6 +606,11 @@ static void go_to(CPU *c, const struct race *r, const struct race *all, int n, i
 #define SHOP_CATS     7
 #define SHOP_TRIES    5
 static const char *const shop_cat_name[SHOP_CATS] = { "engine", "transmission", "suspension", "nitrous", "tires", "brakes", "turbo" };
+/* the order the bot goes through them (the screen's item = 0x4B4E388A + the package): what makes the car faster first
+ * (engine, turbo, transmission, nitrous, tires), the cash left for the rest; the screen's order spent the cash of bin
+ * 10's shop on engine, transmission, suspension and nitrous (c4-b10r) before turbo came */
+static const int shop_order[SHOP_CATS] = { 0, 6, 1, 3, 4, 2, 5 };
+static int shop_cat(void){ return B.sh_cat >= 0 && B.sh_cat < SHOP_CATS ? shop_order[B.sh_cat] : -1; }
 static const float shop_pos[3] = { -2563.89f, 157.62f, 1509.35f }, shop_dir[3] = { 1.0f, 0.0f, 0.0f };
 /* the level of a package on the current car: its customization record (FEPlayerCarDB +0xFA0, 0x198 bytes each, the
  * car record's byte +0x10 its index) holds the installed levels as seven dwords at +0x118 (all 1 after the seven
@@ -564,6 +633,10 @@ static int installed_level(int cat){
 static int swap_due(void){ return !B.once && B.boss_ended >= CAR_SWAP_AFTER && B.boss_ended - B.swap_at >= CAR_SWAP_AFTER; }
 static int shop_wanted(const struct gates *g){
     if (B.once || g->cash < SHOP_RESERVE + SHOP_MIN) return 0;
+    /* only for the best car (choose_car's): the packages bought for a car the bot left after two lost challenges were
+     * lost to it (bins 10 and 9: 46,500 and 29,800 spent on cars raced in one challenge, c4-b10r, c4-b9r) */
+    uint32_t cur = rd(profile() + 0xa8u), best = best_car();
+    if (best && cur != best) return 0;
     /* (not for a car about to be changed: decide's swap first, then the shop for the car taken) */
     return B.shop_bin != g->bin || g->cash >= B.shop_cash + SHOP_AGAIN || (B.boss_ended > B.shop_boss && !swap_due());
 }
@@ -1009,7 +1082,7 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_ITEM2    0x4b4e388bu
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
-static struct { char name[64]; uint32_t focus, save_last; long since, last, jail_since, cs_since; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars, mk_taken, mk_moves, mk_held[MK_TYPES]; } S;
+static struct { char name[64]; uint32_t focus, save_last; long since, last, jail_since, cs_since; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars, mk_taken, mk_moves, mk_held[MK_TYPES], cs_open; } S;
 /* the screens whose strings the bot logs once they settle (the rewards and results it does not read otherwise) */
 static int shows_logged(const char *nm){
     static const char *const k[] = { "SafehouseMarkers.fng", "SafeHouseRivalChallenge.fng", "PostRace_Results.fng",
@@ -1157,7 +1230,7 @@ void mw_bot_present(void){
     }
     else if (B.st == B_SHOP && !strcasecmp(nm, "CustomizeCategory.fng")){
         if (B.sh_cat_done){ B.sh_cat++; B.sh_cat_done = 0; }
-        uint32_t want = F_ITEM1 + (uint32_t)B.sh_cat;
+        uint32_t want = F_ITEM1 + (uint32_t)shop_cat();
         if (B.sh_cat >= SHOP_CATS){ key = DIK_ESCAPE; what = "Escape: the packages are done (to the cart if it holds any)"; }
         else if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = "to the next package"; }
         else { what = "Enter on the package"; B.sh_pk_new = 1; }
@@ -1166,10 +1239,10 @@ void mw_bot_present(void){
         char sh[2048]; mw_fe_shows(sh, sizeof sh);
         long cost = shows_num(sh, "'cost"), funds = shows_num(sh, "'funds:"), total = shows_num(sh, "'total:"),
              trade = shows_num(sh, "'Trade_in:"), nlev = shows_nth(sh, "00000018", 0), idx = shows_nth(sh, "00000018", 2);
-        const char *cat = B.sh_cat < SHOP_CATS ? shop_cat_name[B.sh_cat] : "?";
+        const char *cat = shop_cat() >= 0 ? shop_cat_name[shop_cat()] : "?";
         if (B.sh_pk_new){
             B.sh_pk_new = 0; B.sh_target = (int)nlev; B.sh_entered = 0; B.sh_total0 = total;
-            B.sh_inst = installed_level(B.sh_cat);
+            B.sh_inst = installed_level(shop_cat());
             fprintf(stderr, "[mwbot] f=%ld shop: %s, %ld levels, level %d on the car, funds %ld, cart %ld, trade-in %ld\n", f,
                     cat, nlev, B.sh_inst, funds, total, trade);
         }
@@ -1193,7 +1266,11 @@ void mw_bot_present(void){
         else if (cost > 0 && funds >= 0 && cost <= funds - total - SHOP_RESERVE && cost > 2 * trade){
             B.sh_entered = 1; B.sh_total0 = total; what = "Enter: the level into the cart";
         }
-        else { B.sh_target--; return; }   /* beyond the money left, or not above the part on the car: the next lower */
+        else {                          /* beyond the money left, or not above the part on the car: the next lower */
+            fprintf(stderr, "[mwbot] f=%ld shop: %s level %ld/%ld costs %ld, the money left %ld (%ld kept back): the next lower\n",
+                    f, cat, idx, nlev, cost, funds - total - SHOP_RESERVE, (long)SHOP_RESERVE);
+            B.sh_target--; return;
+        }
     }
     else if (B.st == B_SHOP && !strcasecmp(nm, "ShoppingCart.fng")){ what = "Enter: check out"; B.sh_paid = 1; }
     else if (!strcasecmp(nm, "Car_Select.fng")){
@@ -1205,7 +1282,7 @@ void mw_bot_present(void){
         char sh[1600]; mw_fe_shows(sh, sizeof sh);
         long k = shows_nth(sh, "00000018", 2);
         if (S.cs_since != S.since){         /* the screen came (again) */
-            S.cs_since = S.since;
+            S.cs_since = S.since; S.cs_open = 0;
             if (B.cs_k && !B.cs_dlg) B.cs_k = 0;   /* back without a Dialog (the list drawn again): the same pick */
             B.cs_dlg = 0;
             if (B.cs_k){
@@ -1225,9 +1302,23 @@ void mw_bot_present(void){
             B.cs_k = 0;
         }
         if (B.cs_retry > 8){ set_state(B_DONE, "Car_Select: no car was taken"); return; }
+        if (k >= 1 && !S.cs_open){          /* the list opens on the current car: what that place holds is seen */
+            uint32_t prof = profile(), cur = rd(prof + 0xa8u);
+            int n = career_cars(prof);
+            S.cs_open = 1;
+            cs_map_check(n);
+            if (k < 33) B.cs_map[k] = cur;
+            if (B.want_car){
+                int p = cs_pos_for(B.want_car, B.want_pos, n);
+                if (p != B.want_pos)
+                    fprintf(stderr, "[mwbot] f=%ld Car_Select.fng opens on %ld / %d (the current car %#x): car %#x is at %d, not %d\n",
+                            f, k, n, cur, B.want_car, p, B.want_pos);
+                B.want_pos = p;
+            }
+        }
         if (k < 1){ if (f - S.since < 150) return; B.car_entered = 1; B.cs_k = -1; what = "Enter: the list's place not read"; }
         else if (k != B.want_pos){ key = k < B.want_pos ? DIK_RIGHT : DIK_LEFT; what = "to the car picked"; }
-        else { B.car_entered = 1; B.cs_k = (int)k; what = "Enter: the car picked"; }
+        else { B.car_entered = 1; B.cs_k = (int)k; B.cs_ek = (int)k; what = "Enter: the car picked"; }
     }
     else if (!strcasecmp(nm, "MainMenu_Sub.fng") && mw_fe_match("MainMenu_Sub.fng:e596c4a3")){
         /* Save is the menu's last item (the 0x532220 set-up adds it last), and the menu grows with the career (Rap
@@ -1241,12 +1332,26 @@ void mw_bot_present(void){
         } else if (!save){
             if (B.want_car && B.car_entered){
                 uint32_t cur = rd(profile() + 0xa8u);
-                fprintf(stderr, "[mwbot] f=%ld the current car: handle %#x%s\n", f, cur,
-                        cur == B.want_car ? " (the car picked)" : ", not the car picked: left as it is");
-                B.want_car = 0;
-                if (B.st == B_CAR) B.car_swapped = 1;
+                int n = career_cars(profile());
+                if (cur != B.want_car && B.cs_ek >= 1 && B.cs_ek < 33 && B.cs_tries < 6){
+                    /* Enter took another car: that place holds it; Car Select again, at the place now thought */
+                    cs_map_check(n);
+                    B.cs_map[B.cs_ek] = cur; B.cs_tries++; B.car_entered = 0;
+                    B.want_pos = cs_pos_for(B.want_car, B.want_pos, n);
+                    fprintf(stderr, "[mwbot] f=%ld the current car: handle %#x, not the car picked (%#x): Car Select's %d / %d "
+                            "holds it; again, to %d (try %d)\n", f, cur, B.want_car, B.cs_ek, n, B.want_pos, B.cs_tries);
+                } else {
+                    fprintf(stderr, "[mwbot] f=%ld the current car: handle %#x%s\n", f, cur,
+                            cur == B.want_car ? " (the car picked)" : ", not the car picked: left as it is");
+                    B.want_car = 0; B.cs_tries = 0;
+                    if (B.st == B_CAR) B.car_swapped = 1;
+                }
             }
-            if (focus != F_ITEM1){ key = DIK_LEFT; what = "to Resume Free Roam"; } else what = "Enter on Resume Free Roam";
+            if (B.want_car && !B.car_entered){
+                if (focus != F_ITEM1 + 2u){ key = focus < F_ITEM1 + 2u ? DIK_RIGHT : DIK_LEFT; what = "to Car Select (again)"; }
+                else what = "Enter on Car Select (again)";
+            }
+            else if (focus != F_ITEM1){ key = DIK_LEFT; what = "to Resume Free Roam"; } else what = "Enter on Resume Free Roam";
         } else {
             S.save_same = focus == S.save_last ? S.save_same + 1 : 0;
             S.save_last = focus;

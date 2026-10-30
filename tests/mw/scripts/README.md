@@ -87,17 +87,19 @@ save: the car lot's 32 cars shown in turn; the car tables' check at the profile'
 
 The career bot (runtime/mw/bot_mw.c, TRACKER M4-15; test-only): `bot run N` plays the career from where the save
 left it until the Blacklist bin is N, through the game's own paths only: it reads the bin's gates the way the
-Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), takes the latest car won (a
-rival's pink slip) in the safehouse's Car Select (`bot run N keep` keeps the current one), buys performance packages
-at a customization shop with the career's cash (the dearest level of each package above the car's that the shop
-takes, once a bin and again when the cash has grown), engages the bin's races at their own engage trigger, lets the
+Blacklist screen reads them (races won, milestones, bounty, and what the rival asks), takes the career's best car
+(the Car Lot's tier, then the package levels on it, then the latest won) in the safehouse's Car Select (`bot run N
+keep` keeps the current one; the list is not always in career-record order, so a place an Enter showed holding
+another car is remembered and the pick tried again), buys performance packages for that car at a customization shop
+with the career's cash (engine, turbo, transmission, nitrous and tires first; the dearest level of each package above
+the car's that the shop takes, once a bin and again when the cash has grown), engages the bin's races at their own engage trigger, lets the
 game's AI race them from their GO (a lost race is raced again in its turn; a car the AI wedges is put back on the
 road by the game's RESET, `carreset`), earns milestones and bounty in pursuits (the AI drives about until the cops
 start one; Game.ForcePursuitStart at the bin's top heat after 60 s of game time without one; a chase lost too early
 is rejoined where it was, and one that ran 300 s or boxed the car in is broken off by setting the car far away, so
 the game ends it as evaded), then engages the rival's challenge at its first race's start
 (InGameRivalChallenge.fng: Enter accepts; a lost one again, after the shop when the cash reaches a package, and after
-two lost in one car in the career's next car, taken at the safehouse), takes two of the beaten rival's markers
+two lost in one car in the other of the two best cars, taken at the safehouse), takes two of the beaten rival's markers
 (SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type;
 `NFSMW_BOT_MARKERS=X,Y` takes the cards X and Y by their objects, 0xCDA0A66B to 0xCDA0A670 from the left, instead of
 the first two), and answers the screens on the way (results, text messages, the safehouse menu).  A car at a race's
@@ -108,7 +110,7 @@ impound it takes a car that can be driven in Car_Select.fng (M4-48).  It stops a
 driven) and at a career menu it did not ask for;
 `bot save` saves at the safehouse (Jump to Safe House, Save), `bot gates` logs the gates and the bin's races, `bot
 race I` and `bot pursuit` do one race or one pursuit, `bot bust N [pay]` lets the cops bust the standing car N times
-(`pay`: no marker spent), `bot car` takes the career's next car at the safehouse (as after two lost rival challenges;
+(`pay`: no marker spent), `bot car` takes the other of the two best cars at the safehouse (as after two lost rival challenges;
 bot_probe.txt with `BOT_A=car BOT_B=car` from bin11_start does it from the safehouse menu, then from free roam),
 `bot wait [N]` waits for the bot to stop.  `bot_impound.txt` runs `bot bust ${BUST_N}
 ${BUST_PAY}` from a safehouse save (bin13_start: the third bust spends a marker, or with `pay` impounds the first car
@@ -116,7 +118,7 @@ and the bot takes the second; bin15_start with `pay`: game over, the bot stops t
 runs it from a safehouse save to the bin `BOT_BIN` and saves there (its save tree is the next seed);
 `bot_probe.txt` runs two single steps, `BOT_A` then `BOT_B` (for example `run 15`, then `race 0` or `pursuit`);
 `bot_segment.txt` runs one (`BOT_A`, for example `run 13 races`: the bin's races, then stop; `run 14 races 2`: two
-of them; `run 13 ready`: until the rival's requirements are met) and saves at the safehouse, a seed for the next
+of them; `run 12 ready` from bin 13: until the rival's requirements are met) and saves at the safehouse, a seed for the next
 segment.  A car the AI wedges is reset the game's way, but not in a pursuit: a reset with cops on the car ends in the
 bust.
 Run them with `NFSU2_SUITE_LIVE=1` to follow the log while they run.
@@ -126,7 +128,8 @@ the career bot's seeds: `career_bl15.txt` (Sonny beaten from bin15_ready: his st
 rival's bio in order, none stuck, and the counter at 14; codepdbh #84), `career_bl15_race3.txt` (the third race of
 bin 15 from bin15_two, two races won: engaged, 15 % in, won; #112) and `career_bl14.txt` (the rival's race of bin 14
 from bin14_ready: 15 % in, won, the bin at 13; #162).  `career_unlocks.txt` (a probe, with NFSU2_FNG_LOG=3) shows a
-career save's Quick Race track lists (M4-44).
+career save's Quick Race track lists and its car list (M4-44), `career_rapsheet.txt` (the same) its Rap Sheet's
+screens one after another.
 
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
 Game.ForcePursuitStart, the game's AI driving, waited on to its end, which the game decides: evaded or busted) and
