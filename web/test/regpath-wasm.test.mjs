@@ -172,11 +172,24 @@ test('Most Wanted\'s folder scans: NTFS order whatever the host\'s, a deleted al
     'the save overlay holds the folders left');
 });
 
+test('Most Wanted\'s movies in another language or region: the English one in its place, in the MOVIES folder alone', { skip }, () => {
+  const w = wasm('mw'), dir = folder('mw-movies', 'speed.exe');
+  fs.mkdirSync(path.join(dir, 'game/MOVIES'));
+  fs.writeFileSync(path.join(dir, 'game/MOVIES/ealogo_english_ntsc.vp6'), 'n');
+  fs.writeFileSync(path.join(dir, 'game/MOVIES/psa_english_pal.vp6'), 'p');
+  const m = run(w, 'movies', dir);
+  assert.ok(m.passed >= 17, `movies: every check ran (${m.passed})`);
+  assert.match(m.err, /^ {2}\[file\] "MOVIES\\ealogo_FRENCH_pal\.vp6" is not there: "MOVIES\\ealogo_english_ntsc\.vp6" in its place$/m);
+  assert.match(m.err, /^ {2}\[file\] "MOVIES\\psa_ENGLISH_ntsc\.vp6" is not there: "MOVIES\\psa_ENGLISH_pal\.vp6" in its place$/m,
+    'the same language in the other region first');
+  assert.doesNotMatch(m.err, /"(MOVIES\\nosuch|GLOBAL\\ealogo|ealogo)_FRENCH_pal\.vp6" is not there/, 'no stand-in for a movie no language has, nor outside MOVIES');
+});
+
 test('UG2\'s registry and paths: the flat registry, every path into the game folder, ~/.nfsu2_registry, as always', { skip }, () => {
   const w = wasm('ug2'), dir = folder('ug2', 'SPEED2.EXE');
   const u = run(w, 'ug2', dir);
   assert.ok(u.passed >= 500, `ug2: every check ran (${u.passed})`);
-  assert.doesNotMatch(u.err, /^\[reg\]|names no file of/m, 'none of Most Wanted\'s lines');
+  assert.doesNotMatch(u.err, /^\[reg\]|names no file of|is not there: /m, 'none of Most Wanted\'s lines');
   for (const l of ['T CreateFileA("D:\\bin.dat", 0x80000000, 3) -> a handle, error 0', 'T CreateFileA("..\\bin.dat", 0x80000000, 3) -> a handle, error 0',
     'T GetModuleHandleA("speed.exe") -> 0x00000000, error 126', 'T GetModuleFileNameA -> 21 "C:\\\\NFSU2\\\\SPEED2.EXE"',
     'T query "VERSION" -> 0, type 1 "1.2.0.0", cb 8', 'T RegOpenKeyExA(0x80000001, "No\\Such\\Key", 0x20019) -> 0, hkey set'])

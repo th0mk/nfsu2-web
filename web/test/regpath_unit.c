@@ -513,6 +513,33 @@ static void test_ro(void){
     CHECK(call_imp("MoveFileA", gs("bin.dat"), gs("moved.dat")) == 0, "MoveFileA in the game folder: refused");
     OPENS("bin.dat");
 }
+/* a movie in a language or region the folder has none for (Q-06; game_mw.c file_alt): the folder holds
+ * MOVIES/ealogo_english_ntsc.vp6 ("n") and MOVIES/psa_english_pal.vp6 ("p") */
+static uint8_t first_byte(const char *path){
+    uint32_t h = create(path, GENERIC_READ, 3u);
+    if (h == INVALID) return 0;
+    MR8(BUF + 0x40) = 0;
+    call_imp("ReadFile", h, BUF + 0x40, 1u, BUF + 0x48, 0u);
+    call_imp("CloseHandle", h);
+    return MR8(BUF + 0x40);
+}
+static void test_movies(void){
+    static const char *const ealogo[] = { "MOVIES\\ealogo_FRENCH_pal.vp6", "C:\\NFSMW/MOVIES\\ealogo_FRENCH_pal.vp6",
+        "MOVIES\\ealogo_ENGLISH_pal.vp6", "MOVIES\\ealogo_POLISH_pal.vp6", "MOVIES\\ealogo_ENGLISH_ntsc.vp6",
+        "movies/ealogo_german_PAL.VP6", ".\\MOVIES\\ealogo_FINNISH_pal.vp6", 0 };
+    for (int i = 0; ealogo[i]; i++)
+        CHECK(first_byte(ealogo[i]) == 'n', "%s: ealogo_english_ntsc.vp6 in its place", ealogo[i]);
+    CHECK(first_byte("MOVIES\\psa_ENGLISH_ntsc.vp6") == 'p', "English US with only _pal files: psa_english_pal.vp6");
+    CHECK(first_byte("MOVIES\\psa_FRENCH_pal.vp6") == 'p', "French: psa_english_pal.vp6");
+    CHECK(attrs("MOVIES\\ealogo_GERMAN_pal.vp6") == 0x80u, "GetFileAttributesA of a movie in German: the English one's");
+    REFUSED("MOVIES\\nosuch_FRENCH_pal.vp6", 2u);
+    REFUSED("GLOBAL\\ealogo_FRENCH_pal.vp6", 2u);                     /* only the MOVIES folder's */
+    REFUSED("ealogo_FRENCH_pal.vp6", 2u);
+    REFUSED("MOVIES\\ealogo_FRENCH_pal.mpg", 2u);
+    REFUSED("MOVIES\\ealogo_FRENCH.vp6", 2u);
+    REFUSED("MOVIES\\FRENCH_pal.vp6", 2u);
+    CHECK(attrs("MOVIES\\nosuch_GERMAN_pal.vp6") == INVALID, "GetFileAttributesA of a movie no language has: none");
+}
 /* a whole folder scan: FindFirstFileA, FindNextFileA to the end, FindClose; the names, or -1 for no handle */
 static int scan(const char *spec, char got[][64], int max){
     uint32_t fd = BUF + 0x800; int n = 0;
@@ -696,7 +723,8 @@ int main(int argc, char **argv){
     else if (!strcmp(mode, "paths")) test_paths();
     else if (!strcmp(mode, "ro")) test_ro();
     else if (!strcmp(mode, "scan")) test_scan();
-    else { printf("usage: regpath_mw.wasm boot1|boot2|keys|home|paths|ro|scan\n"); return 2; }
+    else if (!strcmp(mode, "movies")) test_movies();
+    else { printf("usage: regpath_mw.wasm boot1|boot2|keys|home|paths|ro|scan|movies\n"); return 2; }
 #else
     if (!strcmp(mode, "ug2")) test_ug2();
     else if (!strcmp(mode, "ug2home")) test_ug2home();

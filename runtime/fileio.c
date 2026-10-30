@@ -325,6 +325,20 @@ static int resolve(const char *win, char *out, size_t outsz){
     if (lpack_resolve(win, out, outsz)) return 1;
     return resolve_in(g_root, win, out, outsz);
 }
+/* Read, a file the folder does not have: the first of the game's stand-ins for it (game.h file_alt) that is
+ * there.  Each one taken is logged (the first 64). */
+static int resolve_alt(const char *win, char *out, size_t outsz){
+    if (!g_game.file_alt) return 0;
+    char alt[1024], r[1024];
+    for (int q = 0; g_game.file_alt(win, q, alt, sizeof alt); q++)
+        if (resolve(alt, r, sizeof r)){
+            static int said;
+            if (said < 64){ said++; fprintf(stderr, "  [file] \"%s\" is not there: \"%s\" in its place\n", win, alt); }
+            snprintf(out, outsz, "%s", r);
+            return 1;
+        }
+    return 0;
+}
 /* Write: ALWAYS the write root if there is one. */
 static int resolve_w(const char *win, char *out, size_t outsz){
     return resolve_in(g_wroot[0] ? g_wroot : g_root, win, out, outsz);
@@ -686,7 +700,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
             snprintf(op, sizeof op, "CreateFileA(%s, 0x%08x)", disp < 6 ? dn[disp] : "?", access);
             wblock = !write_allowed(op, GS(pn), real);
             if (!wblock && !(flags & O_TRUNC)) copy_up(GS(pn), real);
-        } else ok = resolve(GS(pn), real, sizeof real);
+        } else ok = resolve(GS(pn), real, sizeof real) || resolve_alt(GS(pn), real, sizeof real);
         if ((flags & O_CREAT) && !wblock) mkparents(real);
         /* Language suffix fallback: this version has the "_fr.vp6" suffix
          * built into the movie path, but the folder holds "_en" files.  If
@@ -932,7 +946,8 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         f->used=0; r=1;
     }
     else if (!strcmp(n,"GetFileAttributesA")){
-        char real[1024]; resolve(GS(A(c,0)), real, sizeof real);
+        char real[1024];
+        if (!resolve(GS(A(c,0)), real, sizeof real)) resolve_alt(GS(A(c,0)), real, sizeof real);
         struct stat st;
         if(stat(real,&st)!=0){ r=0xFFFFFFFFu; set_err(c, errno_to_win(errno)); }
         else r = S_ISDIR(st.st_mode) ? 0x10u : 0x80u;   /* DIRECTORY / NORMAL */

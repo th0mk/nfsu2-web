@@ -20,6 +20,8 @@
 #include "module.h"
 #include "d3dxmath_mw.h"
 #include "d3dxfx_mw.h"
+#include <stdio.h>
+#include <string.h>
 #include <strings.h>
 
 void GAMEINFO_ENTRY_FN(CPU *c);                /* the entry point, 0x7C4040 (gen/mw/all/gameinfo.h, through cpu.h) */
@@ -169,9 +171,52 @@ static const PadLate mw_pad_late = {
     .cb = 0x007f1a6bu, .setup = 0x0063f850u, .setup_this = 0x00920de8u, .setup_vtbl = 0x008a7b9cu,
 };
 
+/* A movie's file name (Q-06): the front end's movie object 0x559680 builds 'MOVIES\<name>_<LANGUAGE>_<region>.vp6'
+ * with 0x516130 (the language's name from the table 0x8F40F8; '_pal' or '_ntsc' by the region 0x64A110, _ntsc for
+ * English US alone), tried in the game folder, then on the disc drive, and once more with ENGLISH and the same
+ * region when that is not there either.  This install, as the PC releases, has only <name>_english_ntsc.vp6, so in
+ * any other language no movie played.  file_alt (fileio.c) looks for these in its place, in order: the same language
+ * in the other region (a copy with _pal or _ntsc files alone, L-100), English in the same region, English in the
+ * other.  The page's AV1 swap (web/src/host/io-worker.ts) keys on the file opened, so it takes that one's AV1 copy.
+ * Any other file than a MOVIES folder's <name>_<language>_<pal|ntsc>.vp6: none. */
+static int mw_movie_alt(const char *path, int i, char *out, unsigned cap){
+    const char *base = path;
+    for (const char *p = path; *p; p++) if (*p == '\\' || *p == '/') base = p + 1;
+    if (base == path) return 0;
+    const char *d0 = base - 1;                  /* in a folder named MOVIES */
+    while (d0 > path && d0[-1] != '\\' && d0[-1] != '/') d0--;
+    if (base - 1 - d0 != 6 || strncasecmp(d0, "MOVIES", 6)) return 0;
+    size_t n = strlen(base);
+    if (n < 5 || strcasecmp(base + n - 4, ".vp6")) return 0;
+    size_t stem = n - 4, cut;
+    int ntsc;
+    if (stem > 5 && !strncasecmp(base + stem - 5, "_ntsc", 5)){ ntsc = 1; cut = stem - 5; }
+    else if (stem > 4 && !strncasecmp(base + stem - 4, "_pal", 4)){ ntsc = 0; cut = stem - 4; }
+    else return 0;
+    size_t u = cut;                             /* the language: after the last '_' before the region */
+    while (u > 0 && base[u - 1] != '_') u--;
+    if (u < 2 || u == cut || cut - u > 31) return 0;
+    char lang[32];
+    snprintf(lang, sizeof lang, "%.*s", (int)(cut - u), base + u);
+    const char *reg = ntsc ? "ntsc" : "pal", *other = ntsc ? "pal" : "ntsc";
+    const char *const alt[3][2] = { { lang, other }, { "english", reg }, { "english", other } };
+    for (int j = 0, k = 0; j < 3; j++){
+        /* none that is the name asked, or one before it */
+        int dup = !strcasecmp(alt[j][0], lang) && alt[j][1] == reg;
+        for (int e = 0; e < j && !dup; e++) dup = !strcasecmp(alt[e][0], alt[j][0]) && alt[e][1] == alt[j][1];
+        if (dup) continue;
+        if (k++ == i){
+            int w = snprintf(out, cap, "%.*s%.*s_%s_%s%s", (int)(base - path), path, (int)(u - 1), base,
+                             alt[j][0], alt[j][1], base + stem);
+            return w > 0 && (unsigned)w < cap;
+        }
+    }
+    return 0;
+}
+
 /* Left 0, and why:
  *   reg_defaults        the registry answers per key (reg_keys), not by value name alone
- *   lang_suffixes       Q-06 (the movies' language suffix)
+ *   lang_suffixes       UG2's "_xx" suffixes; MW's movie names (Q-06) take file_alt
  *   on_present, status  the page's overlay (M6)
  *   sms_request, photo_input   UG2 features, not ported
  *   racer, text_entry   test traces (M4), the page's phone text field (M6-21: the alias name field takes
@@ -200,6 +245,8 @@ const GameOps g_game = {
     .reg_file = ".nfsmw_registry",              /* never UG2's ~/.nfsu2_registry */
     .sandbox = 1,                               /* fileio.c: nothing outside C:\NFSMW, the game folder read-only */
     .find_sorted = 1,                           /* fileio.c: folder scans in NTFS order (the alias lists) */
+    .file_alt = mw_movie_alt,                   /* a movie in a language or region the folder has none for
+                                                 * plays the English one (Q-06, above) */
     .entry = GAMEINFO_ENTRY_FN,
     .entry_va = GAMEINFO_ENTRY,
     .modules = mw_modules,

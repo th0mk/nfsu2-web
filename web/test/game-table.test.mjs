@@ -40,11 +40,12 @@ const UG2_UNSET = {
   gpu_msaa: 'UG2 has no multisampled back buffer (0): its multisampling answers and its passes stay as they were',
   d3dx_call: 'UG2\'s D3DX is in its exe (lifted, runtime/d3dx_hle.c): no ID3DXEffect object of com.c\'s is ever made',
   d3dx_free: 'as d3dx_call',
+  file_alt: 'UG2\'s movies in another language take lang_suffixes, as they always have',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
   reg_defaults: 'its registry answers per key (reg_keys, registry_mw.c)',
-  lang_suffixes: 'Q-06, the movies\' language suffix',
+  lang_suffixes: 'UG2\'s "_xx" suffixes: MW\'s movie names (Q-06) take file_alt',
   on_present: 'the page\'s overlay, M6', status: 'the page\'s overlay, M6',
   sms_request: 'a UG2 feature', photo_input: 'a UG2 feature',
   racer: 'test traces, M4', text_entry: 'M3-11',

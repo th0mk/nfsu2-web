@@ -103,6 +103,11 @@ typedef struct GameOps {
                                      * in the host's order, as it always has */
     const char *const *lang_suffixes; /* a missing file "<name>_xx.<ext>" is looked for with each of
                                      * these in place of "_xx", in order (fileio.c); ends with 0 */
+    int (*file_alt)(const char *path, int i, char *out, unsigned cap);
+                                    /* a file the game reads (CreateFileA, GetFileAttributesA) that the folder
+                                     * does not have, by the path it asked: the i-th path to look for in its place
+                                     * (i = 0, 1, ...), written into out (cap bytes), 1; 0 once there is none left
+                                     * (fileio.c takes the first that is there); 0 = none */
     void (*entry)(CPU *c);          /* the exe's entry point, lifted: the lift's GAMEINFO_ENTRY_FN (cpu.h) */
     uint32_t entry_va;              /* its address, GAMEINFO_ENTRY */
     const struct ModLink *modules;  /* the DLLs lifted next to the exe (module.h, module.c): their
