@@ -375,6 +375,8 @@ static struct {
     double next_log, escape_t;          /* escape_t: the game time of the pursuit's last escape */
     int escapes;                        /* and how many it had */
     float trail[16][3];                 /* pursuit_frame's trail (TRAIL_N) */
+    float esc_pos[3], esc_dir[3];       /* the last escape's place, checked once the car is there (esc_check: tries) */
+    int esc_check;
     int trail_n, rejoins, last_pst;
     double trail_t, search_t;
     float plen;                         /* the pursuit's length as it last showed it (s) */
@@ -710,6 +712,15 @@ static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
             "%.0f km/h: to race %d's place, %.0f m away\n", autotest_frame(), mw_game_time(), B.escapes, len, bust, pbounty,
             p[0], p[1], p[2], kmh, best, bd);
     mw_aid_teleport(c, r[best].pos, r[best].dir);
+    memcpy(B.esc_pos, r[best].pos, sizeof B.esc_pos); memcpy(B.esc_dir, r[best].dir, sizeof B.esc_dir); B.esc_check = 1;
+}
+/* A warp can leave the car under the road: escape 4 of c4-s9r set it at a race's place (height 28) and it stood at
+ * -47 until the pursuit's end, the game's reset finding no place there (as GAME 13.7 has it for a warp right after a
+ * load: a second warp stays on the road).  So FELL_M below the place asked, the car is set there again. */
+#define FELL_M        10.0f
+static int fell_below(CPU *c, const float want[3]){
+    float p[3], kmh = 0;
+    return mw_aid_where(c, p, &kmh) && hypotf(p[0] - want[0], p[2] - want[2]) < 30.0f && p[1] < want[1] - FELL_M;
 }
 /* NFSMW_BOT_SEARCH, what the bot does in the cops' search (state 2): unset or "rejoin", back to the chase (below);
  * "stay", nothing (the AI drives on and the game's own cooldown runs); "hide", the car set in the nearest hiding spot
@@ -808,6 +819,13 @@ static void pursuit_frame(CPU *c){
          * the bust timer at 2.8 was busted when only state 0 was broken off. */
         float bust = rdf(po + PURSUIT_BUST_T), len = rdf(po + PURSUIT_TIME);
         uint32_t pst = rd(po + PURSUIT_STATE);
+        if (B.esc_check && t - B.escape_t >= 1.5 && !mw_fe_input_top(0)){   /* the escape's warp: on the road? */
+            if (fell_below(c, B.esc_pos) && B.esc_check < 3){
+                fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: the car is under the road, set there again\n", f, t,
+                        B.escapes);
+                mw_aid_teleport(c, B.esc_pos, B.esc_dir); B.escape_t = t; B.esc_check++;
+            } else B.esc_check = 0;
+        }
         if (!B.stand && pst < 2 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
             (bust >= ESCAPE_BUST || len >= ESCAPE_LEN) && !mw_fe_input_top(0)){
             pursuit_escape(c, len, bust, rd(perp + 0x20u));
@@ -917,8 +935,9 @@ void mw_bot_frame(CPU *c){
             break;
         }
         if (!settled(c) || f - B.last_tap < ENGAGE_EVERY) break;
-        float p[3], kmh = 0;            /* not there (the warp undone, or a menu's reload put it back): again */
-        if (mw_aid_where(c, p, &kmh) && hypotf(p[0] - B.tpos[0], p[2] - B.tpos[2]) > GOTO_NEAR_M){
+        float p[3], kmh = 0;            /* not there (the warp undone, or a menu's reload put it back, or under the
+                                           road): again */
+        if (mw_aid_where(c, p, &kmh) && (hypotf(p[0] - B.tpos[0], p[2] - B.tpos[2]) > GOTO_NEAR_M || fell_below(c, B.tpos))){
             if (B.warps >= 3){ if (B.race >= 0) B.skips[B.race]++; set_state(B_ROAM, "the car does not stay at the start"); break; }
             fprintf(stderr, "[mwbot] f=%ld the car is at %.1f %.1f %.1f, %.0f m from the start: warped again\n", f, p[0], p[1],
                     p[2], hypotf(p[0] - B.tpos[0], p[2] - B.tpos[2]));
