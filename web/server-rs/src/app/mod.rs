@@ -28,6 +28,7 @@ mod testkit;
 mod turnstile;
 mod url;
 mod vault;
+mod vault_forward;
 mod wasm;
 
 use std::collections::HashMap;
@@ -247,6 +248,10 @@ pub struct App {
     pub roam: Option<Arc<nfsu2_roam::RoamHub>>,
     /// keyphrase saves (/vault), none with --vault-gb 0
     pub vault: Option<vault::VaultRoute>,
+    /// a game without keyphrase saves of its own (Most Wanted's): /vault forwarded to the U2 box's (vault_forward.rs)
+    pub vault_forward: Option<vault_forward::VaultForward>,
+    /// the box-to-box credential this server's vault takes from such a forward (NFSU2_VAULT_BOX_KEY), if any
+    pub vault_box_key: Option<String>,
     /// the hand-over store (/covers under a base: covers.rs), none where no name has one
     pub covers: Option<covers::CoversRoute>,
     /// claimed names (/names), none without keyphrase saves
@@ -369,6 +374,8 @@ impl App {
             online,
             roam,
             vault: vault.map(vault::VaultRoute::new),
+            vault_forward: None,
+            vault_box_key: None,
             covers: covers.map(covers::CoversRoute::new),
             names,
             bans,

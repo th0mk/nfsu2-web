@@ -143,7 +143,8 @@ pub async fn run(o: Options, cores: usize) {
     // the lines a client causes in Online mode (logins, games, races, friends) count against that client's share of
     // the console, as its joins and refusals do (the Online audit's ONL-8)
     // claimed names (nfsu2-claims): with keyphrase saves only (a name is claimed by a keyphrase)
-    let claims = (o.vault_gb > 0.0).then(|| Arc::new(nfsu2_claims::Claims::open(Path::new(&o.state), nfsu2_util::now_ms())));
+    let claims =
+        (o.vault_gb > 0.0 && o.game.own_vault).then(|| Arc::new(nfsu2_claims::Claims::open(Path::new(&o.state), nfsu2_util::now_ms())));
     // the operator's bans, and the control socket that makes them (control.rs); the hosts' [cheat] lines of races get
     // a handle that `ban` takes for a week (control.rs Marker)
     let bans = Arc::new(nfsu2_bans::Bans::open(Path::new(&o.state)).unwrap_or_else(|e| die(&format!("{}/bans.json: {e}", o.state))));
@@ -173,8 +174,9 @@ pub async fn run(o: Options, cores: usize) {
     // (the players of this server's game only: PLAN D-18)
     let roam_o = RoamOptions { game: o.game.roam_game, ..RoamOptions::default() };
     let roam = o.roam_hub.then(|| RoamHub::spawn_with(roam_o, roam_log, claims.clone()));
-    // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
-    let vault = (o.vault_gb > 0.0).then(|| {
+    // keyphrase saves: a folder in the state folder (none with --vault-gb 0, and none for a game whose saves are the U2
+    // box's: its pages' /vault goes on there, vault_forward.rs)
+    let vault = (o.vault_gb > 0.0 && o.game.own_vault).then(|| {
         let dir = paths::join(&o.state, "vault");
         Arc::new(Vault::open(VaultOptions::sized(PathBuf::from(&dir), o.vault_gb)).unwrap_or_else(|e| die(&format!("{dir}: {e}"))))
     });
@@ -222,7 +224,7 @@ pub async fn run(o: Options, cores: usize) {
         ));
     }
     let names = claims.clone().map(|c| super::names::NamesRoute::new(c, turnstile));
-    let app = Arc::new(App::new(
+    let mut app = App::new(
         o,
         real_state,
         etag_key,
@@ -237,7 +239,18 @@ pub async fn run(o: Options, cores: usize) {
         lan_sndbuf,
         // the threads that keep the game data's blocks at brotli's best (kept.rs; 0: none)
         env_num("NFSU2_COMPRESS_THREADS", COMPRESS_THREADS) as usize,
-    ));
+    );
+    // the box-to-box keyphrase saves (vault_forward.rs): a game without its own forwards to the U2 box's; the U2 box's
+    // takes the forwards that carry the credential.  The keys from the environment (never a log line)
+    if app.o.game.own_vault {
+        app.vault_box_key = std::env::var("NFSU2_VAULT_BOX_KEY").ok().map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
+        if app.vault_box_key.as_ref().is_some_and(|k| k.len() < super::vault_forward::MIN_KEY) {
+            die(&format!("NFSU2_VAULT_BOX_KEY: at least {} characters", super::vault_forward::MIN_KEY));
+        }
+    } else {
+        app.vault_forward = super::vault_forward::VaultForward::from_env().unwrap_or_else(|e| die(&e));
+    }
+    let app = Arc::new(app);
     let o = &app.o;
     let control = super::control::listen(app.clone());
 
@@ -325,6 +338,9 @@ pub async fn run(o: Options, cores: usize) {
                 let sent = app.sent.take();
                 if !sent.is_empty() {
                     log::line(&format!("[blocks] in the last 5 minutes: {sent}"));
+                }
+                if let Some(l) = app.vault_forward.as_ref().and_then(|f| f.line()) {
+                    log::line(&l);
                 }
             }
         });
@@ -555,7 +571,11 @@ pub async fn run(o: Options, cores: usize) {
                     size(vo.per_day)
                 )
             }
-            None => "no keyphrase saves (--vault-gb 0)".into(),
+            None => match &app.vault_forward {
+                Some(f) => format!("keyphrase saves forwarded to {}", f.target()),
+                None if !app.o.game.own_vault => "no keyphrase saves (none forwarded: NFSU2_VAULT_FORWARD)".into(),
+                None => "no keyphrase saves (--vault-gb 0)".into(),
+            },
         }
     ));
     if let Some(c) = &app.covers {

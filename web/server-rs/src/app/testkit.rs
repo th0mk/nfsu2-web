@@ -54,17 +54,22 @@ impl Kit {
 
     /// `start`, with the engine's limits given (max_connections: the port's count)
     pub async fn start_with(args: &[&str], limits: Limits, files: impl FnOnce(&std::path::Path)) -> Kit {
-        Kit::start_full(args, limits, 0, false, files).await
+        Kit::start_full(args, limits, 0, false, files, |_| {}).await
+    }
+
+    /// `start`, and `set(app)` before it serves (what the environment gives a server: vault_forward.rs's keys)
+    pub async fn start_set(args: &[&str], files: impl FnOnce(&std::path::Path), set: impl FnOnce(&mut App)) -> Kit {
+        Kit::start_full(args, Limits::default(), 0, false, files, set).await
     }
 
     /// `start`, with threads that keep the game data's blocks at brotli's best (kept.rs; none in the others)
     pub async fn start_keeping(threads: usize, files: impl FnOnce(&std::path::Path)) -> Kit {
-        Kit::start_full(&[], Limits::default(), threads, false, files).await
+        Kit::start_full(&[], Limits::default(), threads, false, files, |_| {}).await
     }
 
     /// `start` with the game's launch switch on (options.rs `launched`: a code value, which only a test turns on)
     pub async fn start_launched(args: &[&str], files: impl FnOnce(&std::path::Path)) -> Kit {
-        Kit::start_full(args, Limits::default(), 0, true, files).await
+        Kit::start_full(args, Limits::default(), 0, true, files, |_| {}).await
     }
 
     async fn start_full(
@@ -73,6 +78,7 @@ impl Kit {
         compress_threads: usize,
         launched: bool,
         files: impl FnOnce(&std::path::Path),
+        set: impl FnOnce(&mut App),
     ) -> Kit {
         let dir = tempfile::tempdir().expect("a temporary folder");
         let root = std::fs::canonicalize(dir.path()).expect("its real path");
@@ -93,14 +99,16 @@ impl Kit {
         let real_state = std::fs::canonicalize(&o.state).expect("the state folder").to_string_lossy().into_owned();
         let key = etag::load_key(&o.state).expect("the ETag key");
         let lan = LanSwitch::new(LanOptions { max_peers: o.max_peers, ..LanOptions::default() }, "", None, None, None, None);
-        let vault = (o.vault_gb > 0.0).then(|| {
+        let vault = (o.vault_gb > 0.0 && o.game.own_vault).then(|| {
             let opts = nfsu2_vault::VaultOptions::sized(std::path::PathBuf::from(&o.state).join("vault"), o.vault_gb);
             Arc::new(nfsu2_vault::Vault::open(opts).expect("the vault"))
         });
         let bans = Arc::new(nfsu2_bans::Bans::open(std::path::Path::new(&o.state)).expect("the bans"));
         let names = vault.as_ref().map(|_| super::names::NamesRoute::new(Arc::new(nfsu2_claims::Claims::in_memory()), None));
         let covers = super::covers::open(&o).expect("the hand-over store");
-        let app = Arc::new(App::new(o, real_state, key, lan, None, None, vault, covers, names, bans, 2, 0, compress_threads));
+        let mut app = App::new(o, real_state, key, lan, None, None, vault, covers, names, bans, 2, 0, compress_threads);
+        set(&mut app);
+        let app = Arc::new(app);
         app.refresh_manifest().await.expect("the manifest");
         let (listener, _) = nfsu2_http::bind("127.0.0.1", 0, None).await.expect("a port");
         let addr = listener.local_addr().expect("its address");

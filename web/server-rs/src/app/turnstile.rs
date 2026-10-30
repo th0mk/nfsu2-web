@@ -117,7 +117,7 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(mut s: S, req: &[u8]) -> Re
 }
 
 /// a chunked body's bytes
-fn dechunk(mut b: &[u8]) -> Result<Vec<u8>, String> {
+pub(super) fn dechunk(mut b: &[u8]) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     loop {
         let eol = b.windows(2).position(|w| w == b"\r\n").ok_or("a broken chunk")?;

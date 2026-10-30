@@ -26,4 +26,10 @@ services:
     environment:
       # the image's default is Underground 2's module (nfsu2.wasm)
       NFSU2_WASM: /module/nfsmw.wasm
+      # its keyphrase saves are the U2 box's (web/server-rs/src/app/vault_forward.rs): where its pages' /vault goes on
+      # (https://<the U2 box's tunnel name for it>/vault), with NFSU2_VAULT_BOX_KEY (compose.yml) and the Access
+      # application's service token; none: no keyphrase saves
+      NFSU2_VAULT_FORWARD: ${NFSU2_VAULT_FORWARD:-}
+      NFSU2_CF_ACCESS_CLIENT_ID: ${NFSU2_CF_ACCESS_CLIENT_ID:-}
+      NFSU2_CF_ACCESS_CLIENT_SECRET: ${NFSU2_CF_ACCESS_CLIENT_SECRET:-}
     cgroup_parent: ${NFSU2_SLICE:-nfsmw.slice}

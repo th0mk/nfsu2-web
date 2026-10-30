@@ -89,14 +89,29 @@ fn if_match(v: &str) -> Option<u64> {
     (h.len() == 16).then(|| u64::from_str_radix(h, 16).ok()).flatten()
 }
 
+/// a and b the same bytes, compared in a time that does not tell how much of them is (the box-to-box credential)
+fn same(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+}
+
 impl App {
     /// /vault (keyphrase saves): see this module's doc
     pub(super) async fn vault(&self, q: &mut Request, s: &mut Response, u: &url::Url) -> Res {
         const CLOSE: &[(&str, &str)] = &[("connection", "close")];
+        if let Some(f) = &self.vault_forward {
+            return self.vault_forward(f, q, s, u).await;
+        }
         let Some(v) = &self.vault else { return self.not_found(q, s).await };
+        // a request another box of ours forwards (vault_forward.rs: Most Wanted's server, for its own pages, which it
+        // checked): its credential stands for the page's own check, and only with it does the player's address it
+        // names count for the limits (without it both headers are a browser's, and nothing reads them)
+        let forwarded = self
+            .vault_box_key
+            .as_deref()
+            .is_some_and(|k| q.headers.get(super::vault_forward::BOX_HEADER).is_some_and(|c| same(c.as_bytes(), k.as_bytes())));
         // only this server's own pages: a page of another site must not reach a player's saves through their browser
         let site_ok = q.headers.get("sec-fetch-site").is_none_or(|f| f == "same-origin");
-        if !self.own_page(q) || !site_ok {
+        if !forwarded && (!self.own_page(q) || !site_ok) {
             return self.plain(q, s, 403, "Forbidden", &[], Cache::Store, true).await;
         }
         let method = q.method.clone();
@@ -111,7 +126,16 @@ impl App {
         let Some(id) = token(q).map(|t| id_of(t.as_bytes())) else {
             return self.plain(q, s, 401, "A keyphrase's token is needed", &[], Cache::Store, true).await;
         };
-        let (_, key, site) = self.client(q);
+        let (key, site) = if forwarded {
+            let ip = nfsu2_headers::bare_ip(q.headers.get(super::vault_forward::CLIENT_HEADER).unwrap_or(""));
+            if ip.is_empty() {
+                return self.plain(q, s, 400, "Bad request", &[], Cache::Store, true).await;
+            }
+            (nfsu2_headers::address_key(&ip), nfsu2_headers::site_key(&ip))
+        } else {
+            let (_, key, site) = self.client(q);
+            (key, site)
+        };
         let now = nfsu2_util::now_ms();
         let store = v.store.clone();
         match method.as_str() {

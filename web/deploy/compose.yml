@@ -46,6 +46,9 @@ services:
       # Cloudflare Turnstile's keys for claiming a name (docs/web/VPS.md, "Claimed names"; none: no check)
       NFSU2_TURNSTILE_SITE: ${NFSU2_TURNSTILE_SITE:-}
       NFSU2_TURNSTILE_SECRET: ${NFSU2_TURNSTILE_SECRET:-}
+      # the credential the two boxes share for keyphrase saves (web/server-rs/src/app/vault_forward.rs): the U2 box's
+      # vault takes Most Wanted's server's forwards that carry it; at least 32 characters; none: no forwards taken
+      NFSU2_VAULT_BOX_KEY: ${NFSU2_VAULT_BOX_KEY:-}
     volumes:
       - ${NFSU2_DATA:-./game}:/game:ro
       - ${NFSU2_MODULE:-./module}:/module:ro

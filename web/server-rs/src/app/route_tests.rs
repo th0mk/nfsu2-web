@@ -608,7 +608,8 @@ async fn most_wanted_under_mw_everywhere() {
         for p in ["/mw/game.json", "/mw/game.wasm", "/mw/players", "/mw/data/speed.exe", "/mw/data-manifest"] {
             assert_eq!(get(p).await.status, 200, "{host} {p}");
         }
-        assert_eq!(get("/mw/vault").await.status, 401, "{host}");
+        // no keyphrase saves of its own (they are the U2 box's), and none forwarded without NFSU2_VAULT_FORWARD
+        assert_eq!(get("/mw/vault").await.status, 404, "{host}");
         assert_eq!(get("/mw").await.header("location"), Some("/mw/"), "{host}");
         for p in
             ["/", "/robots.txt", "/mw/robots.txt", "/game.json", "/players", "/data-manifest", "/data/speed.exe", "/u2/", "/MW/", "/mwx"]

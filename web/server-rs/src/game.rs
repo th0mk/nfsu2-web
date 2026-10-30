@@ -40,6 +40,9 @@ pub struct GameProfile {
     pub handover: Option<&'static Handover>,
     /// its id in free roam's HELLO (roam_core.h RC_GAME_*): the hub takes this game's players only (PLAN D-18)
     pub roam_game: u8,
+    /// it keeps the keyphrase saves (/vault: the U2 box's, for both games); false: its server keeps none and forwards
+    /// its pages' /vault to the U2 box's (PLAN D-37, U-26; app/vault_forward.rs)
+    pub own_vault: bool,
 }
 
 /// Underground 2's move from its old address (nfsu2.xyz) to the one it shares with Most Wanted (nfsrevived.xyz/u2/):
@@ -138,6 +141,7 @@ pub const UG2: GameProfile = GameProfile {
     root_files: true,
     handover: Some(&UG2_HANDOVER),
     roam_game: 0,
+    own_vault: true,
 };
 
 /// NFS Most Wanted (2005, PC, v1.3): what is known so far.
@@ -182,6 +186,7 @@ pub const MW: GameProfile = GameProfile {
     // Most Wanted had no address before the shared one
     handover: None,
     roam_game: 1,
+    own_vault: false,
 };
 
 /// the games --game names
