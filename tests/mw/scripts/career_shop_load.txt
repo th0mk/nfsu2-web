@@ -1,0 +1,47 @@
+# Most Wanted: the part bought in career_shop.txt is still on the car after a restart (TRACKER M4-12; L-025).
+# Seeded with the save tree career_shop.txt leaves (saved in the safehouse after the purchase).  Resume Career opens
+# the safehouse menu with Cash 2,000 (3,000 less the Reaper spoiler's 1,000); free roam, the same shop as
+# career_shop.txt, Parts, spoilers: Spoilers.fng opens on the part the car has, the Reaper (0x4B4E388B) and not
+# the stock one (0x4B4E388A, where it opens on a car without a bought spoiler: career_shop.txt).
+#   NFSU2_SAVE_SEED=<career_shop's tree> node web/tools/run-suite.mjs --game mw --script career_shop_load.txt \
+#     --marker 'career_shop_load: left the shop' --env NFSMW_D3DX=/save/d3dx9_26.dll
+# tests/mw/checks/career_shop_load.sh wants the cash, the spoilers screen on the Reaper, and the shop left.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600
++0    tap RETURN                                         # Resume Career
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000    # the safehouse menu
++0    waitfng MainMenu_Sub.fng'2,000 60                  # Cash: 2,000
++0    log career_shop_load: safehouse menu, Cash 2,000
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 3000
++120  teleport -2563.89 157.62 1509.35 1 0 0             # inside the shop's gate (career_shop.txt)
++60   tap RETURN
++0    waitfng CustomizeMain.fng:055dce1a@4b4e388a 1500
++30   tap RETURN                                         # Parts
++0    waitfng CustomizeCategory.fng@4b4e388a 600
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388b 300
++30   tap RETURN                                         # spoilers
++0    waitfng Spoilers.fng@4b4e388b|Spoilers.fng@4b4e388a 900
++0    waitfng Spoilers.fng@4b4e388b 30                   # on the Reaper, the car's
++0    log career_shop_load: the spoiler
++30   tapuntil ESCAPE CustomizeMain.fng@4b4e388a 90 900
++30   tap ESCAPE
++0    waitmem 0x00925e90 6 3000
++0    log career_shop_load: left the shop
++60   close

@@ -1,0 +1,167 @@
+# Most Wanted: the career's first safehouse and its menus, the free-roam pause menus and the world map, by keyboard
+# (TRACKER M4-10; L-025).  Seeded with the save tree career_start.txt leaves (the free roam after the prologue).
+# Resume Career puts the car in free roam with the career at the prologue's bin, 16 (CareerSettings' byte
+# [[0x91CF90]+0x10]+0xB0, the bin the Blacklist screens show; 15 is Sonny's, the first rival's).  Before the
+# Blacklist the pause menu (Pause_Main.fng, its items moved by RIGHT and LEFT) has three items: Resume Free Roam
+# 0x01BD185C, Quit to Career Main Menu 0x690E9B7C, Options 0x2B5A03A8 (0x52B817: bin above 15); Options opens the
+# options menu within Pause_Main.fng (title 'OPTIONS MENU' 0x1D7BB6C9, its first item Audio 0xE76CD783).
+# The career's next event is race_bin_16/drive_to_safe_house (GLOBAL/gameplay.bin, a drive_to_target event): a box
+# trigger ('gpstarget') at the first safehouse, world (1768.36, 2497.47, 147.75), in the simulation space that
+# `where` logs (-2497.47, 147.75, 1768.36) (sim X = -world Y, Y = world Z, Z = world X: the car lot's gate,
+# world (981.63, 2147.32), is where the free roam begins).  The car is set at the safehouse gate's respawn point
+# (menu_gate_safehouse/zone_safehouse_1/respawn) and driven into the box with the gas (a car that passed 9 m to its
+# side at 70 km/h did not trigger it).  The game then loads the safehouse (Loading_Tips.fng, CAREER_SAFEHOUSE.BIN,
+# FEDatabase +0x12C 0x20001) with "Press Enter to continue", and Enter opens the Blacklist intro: Sonny's bio
+# (SafeHouseRivalBio.fng, 'blacklist' 0xCACE5999) with the bin now 15, then the Blacklist
+# (SafeHouseReputationOverview.fng): Race Events 0x84E4A54C (SafeHouseRaceSheet.fng), Milestone Events 0x216F1B81
+# (SafeHouseMilestones.fng), Bounty 0xE451941E (SafeHouseBounty.fng), Bio 0x2D159737 (SafeHouseRivalBio.fng), each
+# opened and left.  Escape leaves it for the safehouse menu (MainMenu_Sub.fng titled 'safe house' 0xE596C4A3, the
+# 0x532220 menu): Resume Free Roam 0x01BD185C, Blacklist 0x80B9FF9B, Car Select 0x00D5F627, Save 0x001C8ACE (no
+# Rap Sheet yet); each used once.  Save asks twice (MC_Main.fng, No 0xB8A7C6CC first, Yes 0xB8A7C6CD to its left:
+# "Are you sure you want to save the alias", then "Do you want to overwrite"), then "Save complete.".  Resume Free
+# Roam asks "Are you sure you want to leave the Safe House?" (Dialog.fng: No 0xB8A7C6CD, Yes 0xB8A7C6CC to its
+# left) and loads free roam behind Loading_Tips.fng (its "Press Enter to continue" came after this run's first visit and not after a
+# save's: the script takes either).  At bin 15 the pause menu has Resume
+# Free Roam, Jump to Safe House 0x3C14C420, Performance Tuning 0x6A3672A2, Options: Jump to Safe House and
+# Performance Tuning ask in InGameDialog.fng (Cancel 0xB8A7C6CD first, OK 0xB8A7C6CC to its left; Performance
+# Tuning only tells "You must upgrade your vehicle with tunable parts" and OK closes it).  M opens the world map
+# (WorldMapMain.fng) and Escape closes it.  Last, Jump to Safe House with OK: the safehouse menu again.  The run
+# leaves the save tree for career_safehouse_load.txt (--save-out).
+#   NFSU2_SAVE_SEED=<career_start's tree> node web/tools/run-suite.mjs --game mw --script career_safehouse.txt \
+#     --marker 'career_safehouse: jumped' --env NFSMW_D3DX=/save/d3dx9_26.dll --save-out DIR --timeout-scale 2
+# tests/mw/checks/career_safehouse.sh wants every step in order and the bins 16, then 15.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++0    waitexpr i:[0x0091e000]+0x1964 == 2 3000           # career mode
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 16            # the prologue's bin
++0    log career_safehouse: free roam at bin 16
++0    where
++120  tapuntil ESCAPE Pause_Main.fng:01bd185c@4b4e388a 60 900
++30   tap RIGHT
++0    waitfng Pause_Main.fng:690e9b7c@4b4e388b 300       # Quit to Career Main Menu
++30   tap RIGHT
++0    waitfng Pause_Main.fng:2b5a03a8@4b4e388c 300       # Options, the last
++30   tap RETURN
++0    waitfng Pause_Main.fng:1d7bb6c9 600                # the options menu
++0    log career_safehouse: pause options (bin 16)
++30   tapuntil ESCAPE Pause_Main.fng:2b5a03a8@4b4e388c 90 900
++30   tapuntil LEFT Pause_Main.fng:01bd185c@4b4e388a 40 400
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng -Pause_Main.fng 300
++0    log career_safehouse: pause menu (bin 16) done
++60   teleport -2508.82 147.3 1762.76 11.35 0 5.6       # the safehouse gate's respawn point, facing the box
++30   down UP
++0    waitfng Loading_Tips.fng 900                       # the trigger: the safehouse loads
++0    up UP
++0    log career_safehouse: drove to the safehouse
++0    waitfng Loading_Tips.fng:d0258c0d 2400             # "Press Enter to continue"
++30   tap RETURN
++0    waitfng SafeHouseRivalBio.fng:cace5999 2400        # Sonny's bio
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 15            # the Blacklist's first bin
++0    log career_safehouse: Blacklist intro
++60   tap RETURN
++0    waitfng SafeHouseReputationOverview.fng:84e4a54c@4b4e388a 900
++30   tap RETURN                                         # Race Events
++0    waitfng SafeHouseRaceSheet.fng@09c9a0f9 600
++60   tapuntil ESCAPE SafeHouseReputationOverview.fng@4b4e388a 90 900
++30   tap RIGHT
++0    waitfng SafeHouseReputationOverview.fng:216f1b81@4b4e388b 300
++30   tap RETURN                                         # Milestone Events
++0    waitfng SafeHouseMilestones.fng@09c9a0f9 600
++60   tapuntil ESCAPE SafeHouseReputationOverview.fng@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng SafeHouseReputationOverview.fng:e451941e@4b4e388c 300
++30   tap RETURN                                         # Bounty
++0    waitfng SafeHouseBounty.fng@09c9a0f9 600
++60   tapuntil ESCAPE SafeHouseReputationOverview.fng@4b4e388c 90 900
++30   tap RIGHT
++0    waitfng SafeHouseReputationOverview.fng:2d159737@4b4e388d 300
++30   tap RETURN                                         # Bio
++0    waitfng SafeHouseRivalBio.fng:cace5999 600
++60   tapuntil ESCAPE SafeHouseReputationOverview.fng@4b4e388d 90 900
++0    log career_safehouse: Blacklist screens
++30   tap ESCAPE
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 900     # the safehouse menu, on Resume Free Roam
++0    log career_safehouse: safehouse menu
++30   tap RIGHT
++0    waitfng MainMenu_Sub.fng:80b9ff9b@4b4e388b 300     # Blacklist
++30   tap RETURN
++0    waitfng SafeHouseReputationOverview.fng@4b4e388a 900
++60   tapuntil ESCAPE MainMenu_Sub.fng:e596c4a3@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng MainMenu_Sub.fng:00d5f627@4b4e388c 300     # Car Select
++30   tap RETURN
++0    waitfng Car_Select.fng:ee053562 900                # 'Career' cars
++60   tapuntil ESCAPE MainMenu_Sub.fng:e596c4a3@4b4e388c 90 900
++30   tap RIGHT
++0    waitfng MainMenu_Sub.fng:001c8ace@4b4e388d 300     # Save
++30   tap RETURN
++0    waitfng MC_Main.fng:39b3ccba@b8a7c6cc 600          # "Are you sure you want to save the alias", on No
++30   tap LEFT
++0    waitfng MC_Main.fng@b8a7c6cd 300
++30   tap RETURN
++0    waitfng MC_Main.fng@b8a7c6cc 900                   # "Do you want to overwrite", on No
++30   tap LEFT
++0    waitfng MC_Main.fng@b8a7c6cd 300
++30   tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 1800
++0    log career_safehouse: saved
++30   tapuntil RETURN MainMenu_Sub.fng:e596c4a3@4b4e388d 90 900
++30   tapuntil LEFT MainMenu_Sub.fng:01bd185c@4b4e388a 40 400
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600                    # leave the Safe House?  on No
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 3000
++0    log career_safehouse: free roam at bin 15
++0    where
++120  tapuntil ESCAPE Pause_Main.fng:01bd185c@4b4e388a 60 900
++30   tap RIGHT
++0    waitfng Pause_Main.fng:3c14c420@4b4e388b 300       # Jump to Safe House
++30   tap RETURN
++0    waitfng InGameDialog.fng@b8a7c6cd 600              # on Cancel
++30   tapuntil ESCAPE Pause_Main.fng:3c14c420@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng Pause_Main.fng:6a3672a2@4b4e388c 300       # Performance Tuning
++30   tap RETURN
++0    waitfng InGameDialog.fng@b8a7c6cc 600              # "You must upgrade your vehicle with tunable parts", OK
++30   tapuntil RETURN Pause_Main.fng:6a3672a2@4b4e388c 90 900
++30   tap RIGHT
++0    waitfng Pause_Main.fng:2b5a03a8@4b4e388d 300       # Options
++30   tap RETURN
++0    waitfng Pause_Main.fng:1d7bb6c9 600
++30   tapuntil ESCAPE Pause_Main.fng:2b5a03a8@4b4e388d 90 900
++30   tapuntil LEFT Pause_Main.fng:01bd185c@4b4e388a 40 400
++30   tap RETURN
++0    waitfng -Pause_Main.fng 300
++0    log career_safehouse: pause menu (bin 15) done
++60   tap M                                              # the world map
++0    waitfng WorldMapMain.fng@b2980ba8 600
++0    log career_safehouse: world map
++60   tap ESCAPE
++0    waitfng -WorldMapMain.fng 300
++60   tapuntil ESCAPE Pause_Main.fng:01bd185c@4b4e388a 60 900
++30   tap RIGHT
++0    waitfng Pause_Main.fng:3c14c420@4b4e388b 300
++30   tap RETURN                                         # Jump to Safe House
++0    waitfng InGameDialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng InGameDialog.fng@b8a7c6cc 300
++30   tap RETURN                                         # OK
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000
++0    log career_safehouse: jumped
++60   close

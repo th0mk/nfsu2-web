@@ -1,0 +1,225 @@
+# Most Wanted: a customization shop, every category of it entered and left, and a part bought and paid for, by keyboard
+# (TRACKER M4-12; L-043).  Seeded with the save tree career_safehouse.txt leaves (the safehouse at Sonny's bin 15,
+# Cash 3,000).  Resume Career opens the safehouse menu; Resume Free Roam (Yes) loads free roam at the safehouse.
+# The shop is menu_gate_customshop/zone_customshop_2 (GLOBAL/gameplay.bin), world (1509.35, 2563.89, 157.62), in
+# the simulation space `where` logs (-2563.89, 157.62, 1509.35); the car is set inside its zone and Enter engages
+# it, as at every menu gate: CUSTOMIZATION_SHOP.BIN and CustomizeMain.fng (Parts 0x055DCE1A, Performance
+# 0xBAEF8282, Visual 0xBFA7D7C4, moved by RIGHT).  Each opens CustomizeCategory.fng, whose items open:
+#   Parts: body kits (CustomizeParts.fng), spoilers (Spoilers.fng), rims (CustomizeGenericTop.fng, the brands),
+#     hoods and roof scoops (CustomizeParts.fng);
+#   Performance: seven packages (CustomizePerformance.fng each: engine, transmission, ...);
+#   Visual (the 0x7BC210 list): Paint 0x301 (Paint.fng), Vinyls 0x302 (CustomizeGenericTop.fng), Rim Paint 0x303
+#     (stock rims: "You must install aftermarket rims" in Dialog.fng), Decals 0x304, Window Tint 0x305, Numbers
+#     0x306, Custom Gauges 0x307.
+# At bin 15 most parts are locked until Sonny is beaten (his bin's unlocks: GAME 18.1; Paint.fng's accept on a
+# locked colour only plays the error, item flags low nibble 2 at 0x7B7194), so the part bought is the first
+# spoiler after the stock one, the Reaper, 1,000: Enter puts it in the cart (total 1,000), Escape from the
+# category with a full cart opens ShoppingCart.fng ('Spoilers: Reaper', funds remaining 2,000), Enter there asks "Do you
+# wish to purchase and apply these" (Dialog.fng, No first, Yes to its left), and Yes pays and goes back to
+# CustomizeMain.fng.
+# Leaving the shop (Escape on CustomizeMain.fng) loads free roam.  The run leaves its save tree
+# (--save-out) for career_shop_load.txt: free roam, Jump to Safe House (Cash 2,000), Save.
+#   NFSU2_SAVE_SEED=<career_safehouse's tree> node web/tools/run-suite.mjs --game mw --script career_shop.txt \
+#     --marker 'career_shop: saved' --env NFSMW_D3DX=/save/d3dx9_26.dll --save-out DIR --timeout-scale 2
+# tests/mw/checks/career_shop.sh wants every screen in order, the cart, the checkout and the shop left.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600
++0    tap RETURN                                         # Resume Career
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000    # the safehouse menu
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 3000
++0    log career_shop: free roam
++120  teleport -2563.89 157.62 1509.35 1 0 0             # inside the shop's gate
++60   where
++0    tap RETURN                                         # engage
++0    waitfng CustomizeMain.fng:055dce1a@4b4e388a 1500
++0    log career_shop: the shop
++30   tap RETURN
++0    waitfng CustomizeCategory.fng@4b4e388a 600
++0    log career_shop: parts
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status parts_0
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388a 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388b 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status parts_1
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388c 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status parts_2
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388c 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388d 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status parts_3
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388d 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388e 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status parts_4
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388e 90 900
++30   tapuntil ESCAPE CustomizeMain.fng@4b4e388a 90 900
++30   tap RIGHT
++0    waitfng CustomizeMain.fng:baef8282@4b4e388b 300
++30   tap RETURN
++0    waitfng CustomizeCategory.fng@4b4e388a 600
++0    log career_shop: performance
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_0
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388a 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388b 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_1
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388c 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_2
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388c 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388d 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_3
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388d 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388e 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_4
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388e 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388f 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_5
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388f 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e3890 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status performance_6
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e3890 90 900
++30   tapuntil ESCAPE CustomizeMain.fng@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng CustomizeMain.fng:bfa7d7c4@4b4e388c 300
++30   tap RETURN
++0    waitfng CustomizeCategory.fng@4b4e388a 600
++0    log career_shop: visual
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_0
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388a 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388b 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_1
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388b 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388c 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_2
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388c 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388d 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_3
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388d 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388e 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_4
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388e 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388f 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_5
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e388f 90 900
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e3890 300
++30   tap RETURN
++0    waitfng -CustomizeCategory.fng|Dialog.fng 600
++90   status visual_6
++0    tapuntil ESCAPE CustomizeCategory.fng@4b4e3890 90 900
++30   tapuntil ESCAPE CustomizeMain.fng@4b4e388c 90 900
++0    log career_shop: every category
++30   tapuntil LEFT CustomizeMain.fng:055dce1a@4b4e388a 40 400
++30   tap RETURN                                         # Parts
++0    waitfng CustomizeCategory.fng@4b4e388a 600
++30   tap RIGHT
++0    waitfng CustomizeCategory.fng@4b4e388b 300
++30   tap RETURN                                         # spoilers
++0    waitfng Spoilers.fng@4b4e388a 900                  # on the stock one
++30   tap RIGHT
++0    waitfng Spoilers.fng@4b4e388b 300
++30   tap RETURN                                         # into the cart
++60   log career_shop: in the cart
++30   tapuntil ESCAPE CustomizeCategory.fng@4b4e388b 90 900
++30   tap ESCAPE
++0    waitfng ShoppingCart.fng@a3bcbd06 600
++0    log career_shop: the cart
++60   tap RETURN                                         # check out
++0    waitfng Dialog.fng@b8a7c6cd 600                    # "Do you wish to purchase and apply these ...", on No
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN                                         # Yes
++0    waitfng CustomizeMain.fng:055dce1a@4b4e388a 900    # paid: back to the shop's first menu
++0    log career_shop: bought
++30   tapuntil ESCAPE CustomizeMain.fng@4b4e388a 90 900
++30   tap ESCAPE                                         # leave the shop
++0    waitmem 0x00925e90 6 3000
++0    log career_shop: left the shop
++120  tapuntil ESCAPE Pause_Main.fng:01bd185c@4b4e388a 60 900
++30   tap RIGHT
++0    waitfng Pause_Main.fng:3c14c420@4b4e388b 300
++30   tap RETURN                                         # Jump to Safe House
++0    waitfng InGameDialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng InGameDialog.fng@b8a7c6cc 300
++30   tap RETURN
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000
++0    waitfng MainMenu_Sub.fng'2,000 60                  # Cash: 2,000
++30   tapuntil RIGHT MainMenu_Sub.fng:001c8ace@4b4e388d 40 400
++30   tap RETURN                                         # Save
++0    waitfng MC_Main.fng:39b3ccba@b8a7c6cc 600
++30   tap LEFT
++0    waitfng MC_Main.fng@b8a7c6cd 300
++30   tap RETURN
++0    waitfng MC_Main.fng@b8a7c6cc 900
++30   tap LEFT
++0    waitfng MC_Main.fng@b8a7c6cd 300
++30   tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 1800
++0    log career_shop: saved
++60   close

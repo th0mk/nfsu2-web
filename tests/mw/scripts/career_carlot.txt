@@ -1,0 +1,59 @@
+# Most Wanted: the car lot, every car on it shown, a car too dear refused, and the car tables checked at the load
+# (TRACKER M4-11; F-017, F-119, L-064).  Seeded with the save tree career_safehouse.txt leaves (Cash 3,000).
+# The profile's load checks the player's car tables (runtime/mw/cars_mw.c: a "[cars] profile loaded" line; with
+# NFSU2_TEST_CARS_BAD=1 two records get handles past their tables first and the line counts 2 repaired).  Resume
+# Career opens the safehouse menu; free roam; the car lot is menu_gate_carlot/zone_carlot_1 (GLOBAL/gameplay.bin),
+# world (981.63, 2147.32, 152.29), in the simulation space `where` logs (-2147.32, 152.29, 981.63), where the
+# career's free roam began; the car is set inside its zone and Enter engages it: CAR_LOT.BIN and Car_Select.fng
+# ('Stock' 0xD9D6B954), its cars stepped by RIGHT with their number shown as "N / 32" (string 0x18, NFSU2_FNG_LOG=3)
+# and a cost each (26,000 to 35,000 for the first ones; Funds 3,000).  RIGHT 32 times shows every car once and
+# comes back to the first.  Enter on a car the funds do not reach ... (the game's answer is logged), Escape
+# leaves the lot for free roam.
+#   NFSU2_SAVE_SEED=<career_safehouse's tree> node web/tools/run-suite.mjs --game mw --script career_carlot.txt \
+#     --marker 'career_carlot: left the lot' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_FNG_LOG=3 --timeout-scale 2
+# tests/mw/checks/career_carlot.sh wants the [cars] line, the 32 cars shown in turn, the lot left.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600
++0    tap RETURN                                         # Resume Career
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000    # the safehouse menu
++30   tap RIGHT
++0    waitfng MainMenu_Sub.fng:80b9ff9b@4b4e388b 300
++30   tap RIGHT
++0    waitfng MainMenu_Sub.fng:00d5f627@4b4e388c 300     # Car Select: the player's car, its records read
++30   tap RETURN
++0    waitfng Car_Select.fng:ee053562 900
++60   tapuntil ESCAPE MainMenu_Sub.fng:e596c4a3@4b4e388c 90 900
++30   tapuntil LEFT MainMenu_Sub.fng:01bd185c@4b4e388a 40 400
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 3000
++0    log career_carlot: free roam
++120  teleport -2147.32 152.29 981.63 0 0 1              # inside the car lot's gate
++60   tap RETURN                                         # engage
++0    waitfng Car_Select.fng:d9d6b954 1500
++0    log career_carlot: the car lot
++60   loop 32
++45   tap RIGHT
++0    endloop
++60   log career_carlot: every car shown
++0    tap RETURN                                         # buy the first car
++300  log career_carlot: buy answered
++0    tapuntil ESCAPE Car_Select.fng:d9d6b954 90 600
++30   tap ESCAPE                                         # leave the lot
++0    waitmem 0x00925e90 6 3000
++0    log career_carlot: left the lot
++60   close

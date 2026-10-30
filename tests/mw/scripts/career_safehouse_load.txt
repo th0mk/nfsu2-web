@@ -1,0 +1,41 @@
+# Most Wanted: the career saved in the safehouse loads back into the safehouse after a restart (TRACKER M4-10; L-025).
+# Seeded with the save tree career_safehouse.txt leaves (--save-out; NFSU2_SAVE_SEED), saved from the safehouse
+# menu after the Blacklist intro.  Resume Career loads the safehouse itself (CAREER_SAFEHOUSE.BIN, no world, no
+# Loading_Tips.fng): the safehouse menu (MainMenu_Sub.fng 'safe house' 0xE596C4A3) on Resume Free Roam, the
+# career still at Sonny's bin 15, the cash the save holds (3,000: the prologue's 30,000 less the first car's
+# 27,000) shown as the menu's 'Cash:'.  Resume Free Roam (Yes; no "Press Enter to continue" here) puts the car at the
+# safehouse gate's respawn point.
+#   NFSU2_SAVE_SEED=<career_safehouse's tree> node web/tools/run-suite.mjs --game mw --script career_safehouse_load.txt \
+#     --marker 'career_safehouse_load: free roam' --env NFSMW_D3DX=/save/d3dx9_26.dll --env FILELIST=1
+# tests/mw/checks/career_safehouse_load.sh wants the safehouse menu straight after Resume Career, bin 15, the cash,
+# then the free roam at the respawn point.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    log career_safehouse_load: Resume Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e596c4a3@4b4e388a 3000    # the safehouse menu
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 15
++0    expect i:0x00925e90 == 3                           # the front end: no world loaded
++0    waitfng MainMenu_Sub.fng'3,000 60                  # Cash: 3,000
++0    log career_safehouse_load: safehouse menu
++30   tap RETURN                                         # Resume Free Roam
++0    waitfng Dialog.fng@b8a7c6cd 600
++30   tap LEFT
++0    waitfng Dialog.fng@b8a7c6cc 300
++30   tap RETURN
++0    waitfng Loading_Tips.fng 600
++0    waitfng Loading_Tips.fng:d0258c0d|-Loading_Tips.fng 2400   # "Press Enter to continue", or gone already
++0    loop 1
++0    breakfng -Loading_Tips.fng
++30   tap RETURN
++0    endloop
++0    waitmem 0x00925e90 6 3000
++0    waitexpr i:[0x0091e000]+0x1964 == 2 600
++0    log career_safehouse_load: free roam
++0    where
++60   close

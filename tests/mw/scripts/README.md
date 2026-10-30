@@ -48,8 +48,14 @@ Enter.
 
 The career (career saves made by these runs stay outside the repository, ../seed/README.md): `career_new.txt` (a
 new alias loads to a career menu with Start Career; seeded with `profiles_make.txt`'s saves), `career_start.txt`
-(a new alias's career from Start Career through the prologue to the first free drive, saved) and
-`career_resume.txt` (that save loaded after a restart, back into free roam; seeded with `career_start.txt`'s save).
+(a new alias's career from Start Career through the prologue to the first free drive, saved),
+`career_resume.txt` (that save loaded after a restart, back into free roam; seeded with `career_start.txt`'s save),
+`career_safehouse.txt` (from that save: the drive into the first safehouse, the Blacklist intro and screens, every
+safehouse menu item, a save, the free-roam pause menus before and after the Blacklist, the world map, Jump to Safe
+House; saved), `career_safehouse_load.txt` (that save loaded back into the safehouse), `career_shop.txt` (from the
+safehouse save: a customization shop, every category entered and left, a spoiler bought; saved),
+`career_shop_load.txt` (the spoiler still on the car after a restart) and `career_carlot.txt` (from the safehouse
+save: the car lot's 32 cars shown in turn; the car tables' check at the profile's load, runtime/mw/cars_mw.c).
 
 Pursuits: `pursuit_start.txt` (from `career_start.txt`'s save: free roam, a pursuit started with the game's own
 Game.ForcePursuitStart, the game's AI driving, waited on to its end, which the game decides: evaded or busted) and
