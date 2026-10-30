@@ -225,14 +225,16 @@ async function isOracle(base) {
   try { return !!(await (await fetch(new URL('game.json', base.replace(/\/*$/, '/')))).json())?.oracle; } catch { return false; }
 }
 
+// a server that serves the game under a path (Most Wanted: /mw) wants it in front of the page's own URLs
+const PFX = new URL(opt.base).pathname.replace(/[/]+$/, '');
 function urlFor(s) {
   const env = { ...SUITE_ENV, ...Object.fromEntries(s.extra.split(/\s+/).filter(Boolean).map(e => e.split('='))), ...extraEnv };
   const q = new URLSearchParams();
-  q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', G.exe);
+  q.set('wasm', PFX + '/game.wasm'); q.set('pages', '16384'); q.append('arg', G.exe);
   for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
   q.set('save', saveName(s)); if (!s.seed) q.set('fresh', '');     // a seeded save dir is prepared by seedSave
-  if (opt.reg || G.reg) q.set('reg', opt.reg || G.reg);
-  q.set('script', s.script.startsWith('/') ? s.script : `/tests/scripts/${s.script}`);
+  if (opt.reg || G.reg) q.set('reg', PFX + (opt.reg || G.reg));
+  q.set('script', s.script.startsWith('/') ? s.script : `${PFX}/tests/scripts/${s.script}`);
   if (s.net) q.set('net', s.net);
   if (s.pool) q.set('pool', String(s.pool));
   return `${opt.base}/test/hostcheck.html?${q}`;
