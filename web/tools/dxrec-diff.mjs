@@ -2,7 +2,7 @@
 // Compare two device-call recordings (NFSU2_DXREC, runtime/comrec.c; docs/web/dxrec.md) of one scripted run:
 // the D3DX oracle's and the HLE's, or two runs of one build (the noise floor, L-082).
 //
-//   node web/tools/dxrec-diff.mjs A.txt B.txt [--show N] [--quiet]
+//   node web/tools/dxrec-diff.mjs A.txt B.txt [--show N] [--renumber] [--quiet]
 //
 // The frames ("F <n>" lines) are paired first, by what the game drew in them: each frame's key is its Draw*, Clear
 // and Present lines, and Myers' diff over the two key sequences pairs the frames whose draws are the same (a run
@@ -20,15 +20,16 @@
 import fs from 'node:fs';
 
 const args = process.argv.slice(2);
-const opt = { show: 6, quiet: false };
+const opt = { show: 6, quiet: false, renumber: false };
 const files = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--show') opt.show = +args[++i];
   else if (a === '--quiet') opt.quiet = true;
+  else if (a === '--renumber') opt.renumber = true;
   else files.push(a);
 }
-if (files.length !== 2) { console.error('usage: dxrec-diff.mjs A.txt B.txt [--show N] [--quiet]'); process.exit(2); }
+if (files.length !== 2) { console.error('usage: dxrec-diff.mjs A.txt B.txt [--show N] [--renumber] [--quiet]'); process.exit(2); }
 
 const isMark = s => /^E(-|\d)/.test(s);          // "E<id> ..." and "E- ..." are context lines
 const isKey = s => s.startsWith('Draw') || s.startsWith('Clear ') || s.startsWith('Present ');
@@ -38,14 +39,14 @@ function fnv(s, h = 2166136261) {
 }
 
 // ---- reading: frames of lines ----
-// Objects are renumbered per kind in the order the file first names them: two runs that made their buffers,
-// textures or state blocks in another order (a streaming load's timing), or recordings of a window of Presents,
-// name the same objects alike when they use them in the same order.
+// --renumber: objects renumbered per kind in the order the file first names them, for recordings of a window of
+// Presents (NFSU2_DXREC=<file>,<from>,<to>), whose objects were made before it.  Whole runs keep the recorder's
+// creation numbers: a load's timing moves where an object is made, rarely the order objects are made in.
 function read(file) {
   const text = fs.readFileSync(file, 'utf8');
   const frames = [];
   const seen = new Map(), next = new Map();
-  const renum = l => l.indexOf('#') < 0 ? l : l.replace(/\b([a-z]+)#(\d+)\b/g, (m, k, n) => {
+  const renum = l => !opt.renumber || l.indexOf('#') < 0 ? l : l.replace(/\b([a-z]+)#(\d+)\b/g, (m, k, n) => {
     const key = `${k}#${n}`;
     if (!seen.has(key)) { const c = (next.get(k) ?? 0) + 1; next.set(k, c); seen.set(key, `${k}#${c}`); }
     return seen.get(key);
