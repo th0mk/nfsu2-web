@@ -6,7 +6,8 @@
  * (L-022): every count it waits for is the game's.
  *
  *   bot gates       log the current bin's gates and its races (below)
- *   bot run N       play until the career's bin is N (or lower), then stop (`bot off` stops it at once)
+ *   bot run N       play until the career's bin is N (or lower), then stop (`bot off` stops it at once);
+ *                   bot run N races stops once the bin's races are won (a point to save at)
  *   bot race I      engage race I of the bin's list and race it, then stop (a probe)
  *   bot pursuit     one pursuit in free roam, then stop (a probe)
  *   bot save        save at the safehouse: the pause menu's Jump to Safe House, then the safehouse menu's Save
@@ -269,6 +270,7 @@ static struct {
     float tpos[3], tdir[3];             /* the start B_GOTO took the car to */
     uint32_t focus0, pursuit;
     int bounty0, forced;
+    int stop_races;                     /* bot run N races: stop once the races are won (a checkpoint to save) */
     int after;                          /* B_PURSUIT: the state to go back to (0: B_ROAM, or the probe's end) */
     double next_log;
     float plen;                         /* the pursuit's length as it last showed it (s) */
@@ -342,6 +344,7 @@ static void decide(CPU *c){
         go_to(c, &r[pick]); return;
     }
     if (g.won < g.won_req){ log_races(r, n); set_state(B_DONE, "races to win, none left to engage"); return; }
+    if (B.stop_races){ set_state(B_DONE, "the races the rival asks are won (bot run N races)"); return; }
     if (g.ms < g.ms_req || g.bounty < g.bounty_req){ set_state(B_PURSUIT, "milestones or bounty to earn"); return; }
     /* the rival's challenge: its first race is engaged at its start like the others */
     struct race b[8];
@@ -390,7 +393,10 @@ static void pursuit_frame(CPU *c){
          * the game's RESET when the bust timer (+0xDC) passed 1.5 s at walking speed put the car on the road beside
          * the same cops, the timer ran on (8.6 four seconds later) and the next reset found no place; every pursuit of
          * that run ended busted, three busts impounded the only car, and the career ended (GameOver.fng).  With the AI
-         * alone two pursuits of about ten ended busted. */
+         * alone two pursuits of about ten ended busted in Sonny's bin, three of four in the next, each within 6 s of a
+         * wedge reset; a reset at once when the car was down to walking speed with a cop at it (bust timer 1.0) was
+         * followed by the bust too (the timer at 4.9 a second later, twice): a reset in a pursuit is a bust, so there is
+         * none (career_mw.c's wedge watch leaves a pursuit alone). */
         if (t >= B.next_log){
             B.next_log = t + 15.0;
             float kmh = 0, p[3] = { 0 }; mw_aid_where(c, p, &kmh);
@@ -593,7 +599,13 @@ void mw_bot_cmd(CPU *c, const char *args){
     }
     if (!strcasecmp(a1, "off")){ mw_aid_autopilot(c, 0); set_state(B_OFF, "bot off"); return; }
     memset(&B, 0, sizeof B);
-    if (!strcasecmp(a1, "run")){ B.target = n; mw_aid_autopilot(c, 2); set_state(B_ROAM, "bot run"); return; }
+    if (!strcasecmp(a1, "run")){
+        char a3[16] = {0};
+        sscanf(args, "%*s %*d %15s", a3);
+        B.target = n; B.stop_races = !strcasecmp(a3, "races");
+        mw_aid_autopilot(c, 2); set_state(B_ROAM, B.stop_races ? "bot run, until the races are won" : "bot run");
+        return;
+    }
     if (!strcasecmp(a1, "save")){ set_state(B_SAVE, "bot save"); return; }
     if (!strcasecmp(a1, "pursuit")){ B.once = 1; read_gates(c, &B.g); set_state(B_PURSUIT, "bot pursuit"); return; }
     if (!strcasecmp(a1, "race")){

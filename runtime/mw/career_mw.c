@@ -263,7 +263,9 @@ static void watch_race(CPU *c){
  * metres in STUCK_S seconds of game time (the simulation's steps x its step, [0x9203B0] +0x28 x +0x20, so a slow or
  * paused frame rate changes nothing) is reset that way and the watch starts again from where it is put.  (R, the
  * RESET binding, tapped with the AI let go did not move the car in the LAN runs: the key is not bound to that action
- * by the PC game's defaults, inferred, not checked.) */
+ * by the PC game's defaults, inferred, not checked.)  No reset in a pursuit: the bust timer ran from 1.0 to 4.9 in the
+ * second after one (bot pursuit probes of 2026-10-30, twice), and three wedge resets in pursuits were each followed by
+ * the bust within 6 s. */
 #define STUCK_S 8.0
 #define STUCK_M 12.0f
 #define IID_RESET        0x00620250u     /* IResetable, the ResetCar behaviour's interface */
@@ -286,6 +288,7 @@ int mw_reset_car(CPU *c){
     gcall(c, FN_INPUT_CLEAR, 0, 0, 0);
     return ok;
 }
+static uint32_t pursuit_obj(CPU *c, uint32_t *perp);  /* below: the player's pursuit, 0 = none */
 static void wedge_watch(CPU *c){
     long f = autotest_frame();
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c), a = s;
@@ -312,6 +315,12 @@ static void wedge_watch(CPU *c){
         U.since = t > 0.0 ? t : 1e-9; memcpy(U.p, q, sizeof q); return;
     }
     if (t - U.since < STUCK_S * (U.futile >= 3 ? 4 : 1)) return;   /* resets that put it back where it was: less often */
+    if (pursuit_obj(c, 0)){             /* a reset with cops on the car ends in the bust (below): none */
+        fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time in a pursuit: no reset\n", f, d,
+                t - U.since);
+        U.since = t; memcpy(U.p, q, sizeof q);
+        return;
+    }
     int ok = mw_reset_car(c);
     U.resets++;
     uint32_t p2 = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
