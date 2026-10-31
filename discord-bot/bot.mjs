@@ -7,7 +7,7 @@
 // threads whose problem one of its commits fixes get a look ('fix live'), and a careful "may be fixed, reload" when the
 // look is sure; suggestions one of its commits carries out, also old ones, get 'implemented': "added, reload", Complete.
 //   node --env-file=.env bot.mjs        (settings: README.md)
-import { ChannelType, Client, Events, GatewayIntentBits, Partials, PermissionFlagsBits } from 'discord.js';
+import { ChannelType, Client, Events, GatewayIntentBits, Partials, PermissionFlagsBits, Routes } from 'discord.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +66,7 @@ const FEATURE_MAX = 5;                           // a release is checked against
 const SUGGESTIONS = /suggest/i;                  // the suggestion forums, by name
 const SUGGESTION_INDEX = 500;                    // a release reads the newest 500 archived threads of each of them
 const SUGGESTION_DAYS = 365;                     // suggestions are kept in threads.json this long, other threads 30 days
+const VOTES_MS = 3 * 3600_000;                   // how often the suggestions' votes (reactions, messages, people) are counted
 const BUMP_QUIET_MS = 12 * 3600_000;             // the poster writing after this long a silence is a bump: they wait
 const REPEAT = 0.5;                              // a reply whose word pairs the bot's earlier messages hold this much of
 
@@ -77,7 +78,8 @@ const LIVE_FILE = path.join(CFG.state, 'live.json');      // the live version th
  *  summary, category, snippet (its first post, for threads the bot only indexed), closed (archived, locked or deleted:
  *  not one to point people to); for a problem reported to the staff:
  *  staffMsg, staffThread (the report and its thread), report (on the first one: what its post shows, REPORT below),
- *  reportOf (on the later ones: the first thread's id) } */
+ *  reportOf (on the later ones: the first thread's id); for a suggestion: votes ({ emoji: count } on its first post),
+ *  messages and members (Discord's counts for the thread; members stop at 50), counted (when) } */
 let threads = {};
 try { threads = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { /* first start */ }
 function save() {
@@ -865,10 +867,11 @@ async function checkRelease() {
 }
 
 /** the suggestion forums' threads, the archived ones too (the newest SUGGESTION_INDEX of each), into `threads` with
- *  their first posts and whether they are decided (Complete, Denied, locked): what a release may carry out */
-async function indexSuggestions() {
+ *  their first posts and whether they are decided (Complete, Denied, locked): what a release may carry out.  With
+ *  `votes`, every one's votes too (countVotes) */
+async function indexSuggestions(votes = false) {
   const forums = client.channels.cache.filter(ch => isForum(ch) && SUGGESTIONS.test(ch.name) && (!CFG.forums.length || CFG.forums.includes(ch.id)));
-  let fresh = 0;
+  let fresh = 0, counted = 0;
   for (const forum of forums.values()) {
     const found = [...(await forum.threads.fetchActive()).threads.values()];
     for (let before, more = true; more && found.length < SUGGESTION_INDEX;) {
@@ -881,13 +884,29 @@ async function indexSuggestions() {
       if (!threads[t.id]) fresh++;
       const st = threads[t.id] ??= { title: t.name, forum: forum.name, guild: forum.guildId, created: t.createdAt.toISOString(), status: 'seen', replies: 0 };
       Object.assign(st, { title: t.name, decided: t.locked || Tags.decided(t) });
+      if (votes) { counted += await countVotes(t, st); continue; }   // the first post comes with them
       if (st.snippet || st.summary) continue;
       const m = await t.fetchStarterMessage().catch(() => null);   // one at a time: discord.js waits out the rate limits
       if (m) st.snippet = m.content.replace(/\s+/g, ' ').slice(0, 200);
     }
   }
   save();
-  if (fresh) console.log(`[release] ${fresh} suggestion thread(s) read for the first time`);
+  if (fresh) console.log(`[${votes ? 'votes' : 'release'}] ${fresh} suggestion thread(s) read for the first time`);
+  if (votes) console.log(`[votes] ${counted} suggestion(s) counted`);
+}
+
+/** a suggestion's votes, for the developer (not the model): the reactions on its first post, and Discord's count of
+ *  its thread's messages and people.  The first post straight from the API: discord.js's cached copy keeps reactions
+ *  that are gone (the bot has no reactions intent, and a post without reactions comes without the field).  1 if read */
+async function countVotes(t, st) {
+  const m = await client.rest.get(Routes.channelMessage(t.id, t.id)).catch(() => null);   // a forum post's id is its first post's
+  st.messages = t.messageCount ?? st.messages;
+  st.members = t.memberCount ?? st.members;
+  if (!m) return 0;                                // the first post was deleted
+  st.votes = Object.fromEntries((m.reactions ?? []).map(r => [r.emoji.name ?? r.emoji.id, r.count]));
+  if (!st.snippet && !st.summary) st.snippet = (m.content ?? '').replace(/\s+/g, ' ').slice(0, 200);
+  st.counted = new Date().toISOString();
+  return 1;
 }
 
 async function download(url) {
@@ -974,8 +993,11 @@ client.on(Events.ClientReady, c => {
   c.application.commands.set([TRANSLATE]).catch(e => console.error(`[translate] the command: ${e.message}`));
   let checking = null;                           // one check at a time: the first one reads every suggestion
   const release = () => checking ??= checkRelease().catch(e => console.error(`[release] ${e.message}`)).finally(() => { checking = null; });
-  indexForums().catch(e => console.error(`[bot] forum index: ${e.message}`)).finally(release);
+  let counting = null;                           // the suggestions' votes, one count at a time
+  const votes = () => counting ??= indexSuggestions(true).catch(e => console.error(`[votes] ${e.message}`)).finally(() => { counting = null; });
+  indexForums().catch(e => console.error(`[bot] forum index: ${e.message}`)).finally(() => { release(); votes(); });
   setInterval(release, RELEASE_CHECK_MS);
+  setInterval(votes, VOTES_MS);
   setInterval(() => general.tick().catch(e => console.error(`[general] ${e.message}`)), 60_000);
   // posts that came in shortly before a restart still get their look
   for (const [id, t] of Object.entries(threads)) if (t.status === 'new' && Date.now() - Date.parse(t.created) < STARTUP_MS) schedule(id, 'new post');

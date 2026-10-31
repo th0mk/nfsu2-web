@@ -1,5 +1,5 @@
 //! The switch's own tests, the second half (tests/lan.rs has the first): the audit's F2 (what one client can make the
-//! switch send, and whom it can get cut), the store, the 6000 addresses, LAN play's broadcasts, a page that lets go,
+//! switch send, and whom it can get cut), the store, the 7000 addresses, LAN play's broadcasts, a page that lets go,
 //! the breakdown, bundles, a player behind on its path (lag.rs).
 
 mod harness;
@@ -463,14 +463,14 @@ async fn with_a_store_an_address_nobody_came_back_for_is_gone_for_the_hosts() {
     sw.close().await;
 }
 
-// addresses: 6000 on 10.77.0.0/19, handed out round twenty-four of its /24s; never .0, .1 or .252 and up; full past them
+// addresses: 7000 on 10.77.0.0/19, handed out round twenty-eight of its /24s; never .0, .1 or .252 and up; full past them
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn addresses_6000_round_the_twenty_four_24s_full_past_them() {
+async fn addresses_7000_round_the_twenty_eight_24s_full_past_them() {
     let _s = serial().await;
-    let lan = LanSwitch::new(LanOptions { max_peers: 6000, ..LanOptions::default() }, "", None, None, None, None);
+    let lan = LanSwitch::new(LanOptions { max_peers: 7000, ..LanOptions::default() }, "", None, None, None, None);
     let mut got = Vec::new();
     let now = nfsu2_util::now_ms();
-    for i in 0..6000 {
+    for i in 0..7000 {
         let v = lan.allocate();
         assert!(v != 0, "address {i}");
         got.push(v);
@@ -480,9 +480,9 @@ async fn addresses_6000_round_the_twenty_four_24s_full_past_them() {
     let mut want: Vec<String> = (0..16).map(|b| format!("10.77.{b}.2")).collect();
     want.extend(["10.77.16.2".to_string(), "10.77.17.2".to_string()]);
     assert_eq!(first, want);
-    assert_eq!(ip_str(got[24]), "10.77.0.3");
-    assert_eq!(ip_str(got[5999]), "10.77.23.251");
-    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 6000, "all distinct");
+    assert_eq!(ip_str(got[28]), "10.77.0.3");
+    assert_eq!(ip_str(got[6999]), "10.77.27.251");
+    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 7000, "all distinct");
     let mut sorted = got.clone();
     sorted.sort();
     let mut all = all_vips();
@@ -598,10 +598,11 @@ async fn breakdown_online_lan_screens_free_roam_older_page_leaving_or_starting()
     }
     in_online.lock().unwrap().insert(all[0].vip);
     in_roam.lock().unwrap().extend([all[2].vip, all[3].vip, all[0].vip]);
-    assert_eq!(
-        sw.lan.breakdown().await,
-        Breakdown { players: 6, online: 1, lan: 1, roam: 2, older: 1, other: 1, bundles: 0, ..Breakdown::default() }
-    );
+    // (what the pages were sent by kind left out: nothing yet, a count for each kind)
+    let mut b = sw.lan.breakdown().await;
+    assert!(b.mix.iter().all(|&n| n == 0));
+    b.mix.clear();
+    assert_eq!(b, Breakdown { players: 6, online: 1, lan: 1, roam: 2, older: 1, other: 1, bundles: 0, ..Breakdown::default() });
     // (the Online host is on the peer list, as { vip, name, server: true }; the hub is on none)
     let list = all[1].got().ctl.iter().rev().find(|m| m["t"] == "peers").cloned().unwrap();
     let last = list["peers"].as_array().unwrap().last().unwrap().clone();
@@ -692,8 +693,9 @@ async fn bundles_each_entry_reaches_its_destinations_as_a_frame_of_its_own() {
 async fn bundles_lan_play_datagrams_do_not_wait_for_the_clock() {
     let _s = serial().await;
     // a fixed tick of 400 ms: 8 datagrams 50 ms apart that wait for it wait 350 ms or more, one of them at least (no
-    // probes: a ping wakes the writer, which takes the datagrams queued along)
-    let sw = start(LanOptions { bundle_ms: 400, bundle_max_ms: 400, probe_ms: 0, ..opts() }).await;
+    // probes: a ping wakes the writer, which takes the datagrams queued along; no jitter: a tick of 240 ms made the
+    // longest wait under 300 ms in about a quarter of the runs)
+    let sw = start(LanOptions { bundle_ms: 400, bundle_max_ms: 400, bundle_jitter: 0.0, probe_ms: 0, ..opts() }).await;
     let mut a = Client::connect(sw.port, "A").await;
     let mut b = Client::with(sw.port, "B", "", bundles()).await;
     a.welcome().await;
@@ -1108,4 +1110,73 @@ async fn the_peer_list_goes_only_to_pages_with_lan_play_open() {
 
 fn deltas_only() -> Opts {
     Opts { deltas: true, ..Opts::default() }
+}
+
+// a player in free roam who is not driving (its own HELLO says a race): what its friends send it waits for the slow
+// clock, and of their car states it gets a share; a driver gets the same as ever, and a HELLO that says it drives again
+// ends it (away.rs)
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_player_not_driving_gets_fewer_messages_and_a_driver_the_same_as_ever() {
+    let _s = serial().await;
+    let sw = start(unlimited()).await;
+    let mut racer = Client::with(sw.port, "Racer", "", bundles()).await;
+    racer.welcome().await;
+    let mut driver = Client::with(sw.port, "Driver", "", bundles()).await;
+    driver.welcome().await;
+    let mut s = Client::connect(sw.port, "Sender").await;
+    s.welcome().await;
+    // a HELLO of status st (after its 16-byte header: the core's version, the platform, the status), its CRC made again
+    let hello = |st: u8| {
+        let mut d = roam_datagram(1, 24);
+        d[19] = st;
+        let n = d.len() - 4;
+        let crc = crc32fast::hash(&d[..n]);
+        d[n..].copy_from_slice(&crc.to_le_bytes());
+        d
+    };
+    let (ping, snap) = (roam_datagram(6, 8), roam_datagram(3, 40));
+    // 2 s of a ping every 20 ms to each and 8 car states each tick: messages, and car states, each got
+    let burst = || async {
+        let (r0, d0) = (racer.frames(), driver.frames());
+        let (rs0, ds0) = (racer.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count(), driver.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count());
+        for _ in 0..100 {
+            for to in [racer.vip, driver.vip] {
+                s.udp(to, 47210, 47210, &ping, 1, 0);
+                for _ in 0..8 {
+                    s.udp(to, 47210, 47210, &snap, 1, 0);
+                }
+            }
+            sleep(20).await;
+        }
+        sleep(800).await;
+        let snaps = |c: &Client| c.dgrams().iter().filter(|g| g.buf.get(21) == Some(&3)).count();
+        (racer.frames() - r0, driver.frames() - d0, snaps(&racer) - rs0, snaps(&driver) - ds0)
+    };
+
+    racer.udp(s.vip, 47210, 47210, &hello(3), 1, 0);
+    until_breakdown(&sw, 3, "away", |b| b.away == 1).await;
+    let (rm, dm, rs, ds) = burst().await;
+    println!("in a race: racer {rm} messages, {rs} car states; driver {dm} messages, {ds} car states");
+    assert!(rm <= 10, "the racer's on the slow clock: {rm} messages in 2.8 s");
+    assert!(dm >= 25, "the driver's on the bundle clock: {dm} messages in 2 s");
+    assert!(rs > 0 && rs < 120, "a share of the 800 car states: {rs}");
+    assert_eq!(ds, 800, "every car state to the driver");
+
+    // LAN play's datagrams go at once, also to it
+    let n = racer.frames();
+    racer.udp(s.vip, 47210, 47210, &hello(3), 1, 0);
+    s.udp(racer.vip, 5000, 5000, b"race", 3, 0);
+    racer.until_ms(300, |g| (g.frames.len() > n).then_some(())).await;
+
+    // driving again: as the driver
+    racer.udp(s.vip, 47210, 47210, &hello(2), 1, 0);
+    until_breakdown(&sw, 3, "driving", |b| b.away == 0).await;
+    let (rm, dm, rs, ds) = burst().await;
+    println!("driving: racer {rm} messages, {rs} car states; driver {dm} messages, {ds} car states");
+    assert!(rm >= 25 && dm >= 25, "{rm} and {dm} messages");
+    assert_eq!((rs, ds), (800, 800));
+    racer.close().await;
+    driver.close().await;
+    s.close().await;
+    sw.close().await;
 }

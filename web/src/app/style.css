@@ -61,13 +61,17 @@ html[data-touch] .key-only, html:not([data-touch]) .touch-only { display: none; 
   max-width: 1184px; margin: 0 auto; padding: 24px 32px 48px;
   display: grid; grid-template-columns: 384px minmax(0, 1fr); gap: 24px; align-items: start;
 }
-.top { grid-column: 1 / -1; background: var(--frame); border-radius: 12px; padding: 16px 24px 24px; }
-/* the title, the note and the language list with the Discord button on one line; a note longer than the room
-   (other languages) takes two balanced lines there, on 24 px lines on the grid beside the 40 px title and buttons */
-.top-row { display: flex; align-items: center; gap: 4px 16px; }
-.top-row h1, .top-end { flex: none; }
-.top-row .hint { margin-left: auto; line-height: 24px; text-wrap: balance; }
-.top-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+/* the header: the title with the note under it, the language list and the buttons on the right, the loading bar a
+   line along its bottom edge */
+.top { grid-column: 1 / -1; position: relative; overflow: hidden; background: var(--frame); border-radius: 12px; padding: 24px; }
+.top-row { display: flex; align-items: center; gap: 16px 24px; }
+.brand { flex: 1 1 auto; min-width: 0; }
+.brand h1 { font-size: 28px; line-height: 32px; }
+.brand .hint { margin-top: 4px; text-wrap: balance; }
+.top-end { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.donate svg { fill: var(--bad); }
+.top > .bar { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; height: 4px; border-radius: 0; background: none; }
+.top > .bar .bar-fill { border-radius: 0 2px 2px 0; }
 .side, .content { display: grid; gap: 24px; min-width: 0; }
 .panel { background: var(--panel); border-radius: 12px; padding: 24px; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -106,7 +110,7 @@ body[data-phase="error"] .status { color: var(--bad); }
 button, .file-btn { cursor: pointer; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 40px; padding: 0 16px; border: 2px solid var(--edge); border-radius: 12px;
+  height: 40px; padding: 0 16px; border: 2px solid var(--edge); border-radius: 8px;
   background: #080808; color: var(--text); font-size: 16px; line-height: 24px; white-space: nowrap; text-decoration: none;
 }
 /* a row's button wider than the row (a long name in another language on a phone) takes two lines, not the screen's
@@ -124,7 +128,7 @@ button, .file-btn { cursor: pointer; }
 
 .play {
   display: inline-flex; align-items: center; gap: 16px;
-  height: 48px; padding: 0 16px 0 24px; border-radius: 12px; font-size: 20px; line-height: 28px;
+  height: 48px; padding: 0 16px 0 24px; border-radius: 8px; font-size: 20px; line-height: 28px;
 }
 .play:hover:not(:disabled) { background: #4c5440; }
 .play:disabled { border-color: #4a4a4a; background: var(--field); color: var(--edge); box-shadow: none; cursor: not-allowed; }
@@ -152,7 +156,7 @@ kbd {
   fill: none; stroke: var(--muted); stroke-width: 1.6;
 }
 .lang-pick select {
-  appearance: none; height: 40px; padding: 0 36px 0 40px; border: 2px solid var(--edge); border-radius: 12px;
+  appearance: none; height: 40px; padding: 0 36px 0 40px; border: 2px solid var(--edge); border-radius: 8px;
   background: linear-gradient(45deg, transparent 50%, var(--text) 50%) calc(100% - 20px) 50% / 6px 6px no-repeat,
     linear-gradient(135deg, var(--text) 50%, transparent 50%) calc(100% - 14px) 50% / 6px 6px no-repeat, #080808;
   color: var(--text); font: italic 700 16px/24px var(--font); cursor: pointer;
@@ -262,11 +266,12 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
   width: 128px; height: 40px; padding: 0 12px; border: 2px solid var(--edge); border-radius: 8px;
   background: var(--field); color: var(--lime); font: italic 700 16px/24px var(--font);
 }
+.set input[type="number"], .set input[type="text"] { width: 240px; }
 .set input::placeholder { color: var(--edge); font-weight: 400; }
 /* the Room's value box (settings-ui.ts): its invite link button in it at the right, as the passphrase's eye is in its
  * .keybox; the box is the frame, the field inside it has none */
-.set .linkbox { flex: none; }
-.set .linkbox input[type="text"] { height: 100%; border: 0; background: none; outline: none; box-shadow: none; }
+.set .linkbox { flex: none; width: 240px; }
+.set .linkbox input[type="text"] { flex: 1; min-width: 0; width: auto; height: 100%; border: 0; background: none; outline: none; box-shadow: none; }
 .set .linkbox:has(.room-link:not([hidden])) input[type="text"] { padding-right: 4px; }
 /* a choice of many: the same value box, with a chevron */
 .set select {
@@ -314,7 +319,7 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
   flex: none; min-width: 24px; padding: 0 6px; text-align: center; border: 1px solid var(--edge); border-radius: 4px;
   background: var(--field); font: 700 13px/22px var(--font); color: var(--text);
 }
-.set .phrase-col select { width: 100%; min-width: 0; height: 36px; font-size: 14px; line-height: 20px; text-overflow: ellipsis; }
+.set .phrase-col select { width: 100%; min-width: 0; height: 40px; font-size: 14px; line-height: 20px; text-overflow: ellipsis; }
 .set .phrase-head select { color: var(--text); font-style: normal; text-transform: uppercase; letter-spacing: 0.02em; }
 .phrases > .text-btn { padding: 0; }
 .crew-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -322,7 +327,7 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .crews { display: contents; list-style: none; }
 .crew {
   display: flex; align-items: center; gap: 4px; height: 40px; max-width: 100%; padding: 4px;
-  border-radius: 20px; background: var(--field);
+  border-radius: 8px; background: var(--field);
 }
 /* the crew's colour, a button that opens its palette: a dot in a ring, the ring lime under the pointer or while open */
 .crew-dot { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
@@ -333,11 +338,10 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .crew-count { flex: none; display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 14px; line-height: 20px; }
 .crew-count svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .crew-count:empty { display: none; }
-.crew .icon-btn { border-radius: 50%; }
 /* the palette under the chips: 8 round swatches (a ring around the colour), the crew's own ringed in white */
 .crew-colours {
   display: flex; flex-wrap: wrap; gap: 4px 6px; align-self: flex-start; max-width: 100%; padding: 4px;
-  border-radius: 20px; background: var(--field);
+  border-radius: 8px; background: var(--field);
 }
 .swatch {
   width: 32px; height: 32px; padding: 3px; border: 2px solid transparent; border-radius: 50%;
@@ -349,11 +353,11 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .crew-add {
   display: flex; align-items: center; flex: 0 1 240px; max-width: 100%; height: 40px; padding-right: 2px;
-  border: 2px solid var(--edge); border-radius: 20px; background: var(--field);
+  border: 2px solid var(--edge); border-radius: 8px; background: var(--field);
 }
 .crew-add:focus-within { border-color: var(--lime); box-shadow: 0 0 12px var(--lime-glow); }
 .set .crew-add input[type="text"], .dlg .crew-add input[type="text"] {
-  flex: 1; min-width: 0; width: auto; height: 100%; padding: 0 8px 0 16px; border: 0; background: none; outline: none; box-shadow: none;
+  flex: 1; min-width: 0; width: auto; height: 100%; padding: 0 8px 0 12px; border: 0; background: none; outline: none; box-shadow: none;
 }
 .crew-add:has(input:disabled) { opacity: 0.5; }
 .crew-add input:disabled { cursor: not-allowed; }
@@ -940,17 +944,10 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg p.set-note { margin: 0; }
 
 /* ---------------------------------------------------------------- narrow */
-/* the title and the buttons stay on the first line, the note goes under the title */
-@media (max-width: 1119px) {
-  .top-row { flex-wrap: wrap; justify-content: space-between; }
-  .top-row .hint { order: 1; flex-basis: 100%; margin-left: 0; }
-}
-/* no room for the buttons beside the title (the longest name is Português (Brasil)): the title (it may wrap), the
-   note, then the buttons (Discord under the list where they do not fit side by side) */
+/* no room for the buttons beside the title (the longest name is Português (Brasil)): the buttons under the note */
 @media (max-width: 819px) {
-  .top-row h1, .top-end { flex: 0 1 auto; }
-  .top-row .hint { order: 0; }
-  .top-end { margin-top: 4px; }
+  .top-row { flex-wrap: wrap; }
+  .brand { flex-basis: 100%; }
 }
 @media (max-width: 959px) {
   .app { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 48px; gap: 16px; }
@@ -960,6 +957,11 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 }
 @media (max-width: 559px) {
   .top, .panel { padding: 16px; }
+  .brand h1 { font-size: 24px; }
+  /* the language list across the header, Discord and Donate under it at half its width each */
+  .top-end { flex: 1 1 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .top-end .lang-pick { grid-column: 1 / -1; }
+  .lang-pick select { width: 100%; }
   /* a button's words wrap where they are wider than the screen (another language's); one line stays 40 px tall */
   .btn { height: auto; min-height: 40px; padding: 4px 16px; white-space: normal; text-align: center; }
   /* the channel's name still in one piece, unless the whole link is wider than the line (Polish) */
@@ -968,6 +970,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   .set-control { justify-content: flex-start; margin-top: 8px; flex-wrap: wrap; }
   .set-control > .seg { display: flex; flex: 1; flex-wrap: wrap; }   /* choices that do not fit on one line take two */
   .set-control > .text-btn { order: 1; }            /* Reset after the control here, where the control is aligned left */
+  /* a value box fills the row, beside what stays at its own width (Listen) */
+  .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
+  .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
   .opt { flex: 1; justify-content: center; padding: 0 8px; }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }

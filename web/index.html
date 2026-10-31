@@ -44,11 +44,14 @@
 <main class="app" id="app">
   <header class="top">
     <div class="top-row">
-      <h1>Underground 2 Revived</h1>
-      <p class="hint" data-i18n>Fan project. Not affiliated with or endorsed by Electronic Arts.</p>
+      <div class="brand">
+        <h1>Underground 2 Revived</h1>
+        <p class="hint" data-i18n>Fan project. Not affiliated with or endorsed by Electronic Arts.</p>
+      </div>
       <div class="top-end">
         <label class="lang-pick"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3C9.5 5.6 8.2 8.6 8.2 12s1.3 6.4 3.8 9"/></svg><select id="lang-pick" data-i18n-attr="aria-label" aria-label="Language"></select></label>
         <a class="btn" href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg>Discord</a>
+        <button type="button" class="btn donate" id="donate-btn" aria-haspopup="dialog"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-8.5-5.2-8.5-11A4.75 4.75 0 0 1 12 6.6a4.75 4.75 0 0 1 8.5 2.9c0 5.8-8.5 11-8.5 11z"/></svg><span data-i18n>Donate</span></button>
       </div>
     </div>
     <div class="bar" id="progress" role="progressbar" data-i18n-attr="aria-label" aria-label="Game loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
@@ -101,7 +104,7 @@
           </div>
           <div class="set touch-only" data-menu-size>
             <label class="set-label" data-i18n>Menu button size</label>
-            <p class="set-help" data-i18n>How big the game's small menu buttons are: Back, Continue and the others at the bottom, and the arrows. Auto sizes them for a finger.</p>
+            <p class="set-help" data-i18n>How big the game's small menu buttons are: Back, Continue and the others at the bottom, and the arrows. Auto sizes the arrows for a finger and leaves the buttons at the bottom at the game's size: OK and Back on the touch controls do the same.</p>
             <div class="set-control"><select></select></div>
           </div>
           <dl class="keys key-only">
@@ -155,7 +158,16 @@
       <h3 data-i18n>Credits</h3>
       <div class="prose">
         <p data-i18n-html>The source code is on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. This port is based on <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a> by Talha Müderrisoğlu, the original x86 → C static recompiler for NFSU2, which in turn follows the method of <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>.</p>
-        <p data-i18n-html>The language packs are built from KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a> (with Lee-Ryo's Thai support), from TraduMix's and MixMods' Brazilian Portuguese translation (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro), from PLProjekt's Polish translation (Daniel Graszka, MaDeR, Marcin Piech, Nati, Mateusz Wilkowski, alter), from VileStuff's <a href="https://nfsmods.xyz/mod/5286" target="_blank" rel="noopener noreferrer">English Subtitles Fixed</a> and from muntazam's <a href="https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch" target="_blank" rel="noopener noreferrer">Turkish translation</a>. The texture pack is built from LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>.</p>
+        <p data-i18n-html>The texture pack is built from LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>.</p>
+      </div>
+      <h3 data-i18n>Translations</h3>
+      <div class="prose">
+        <p data-i18n-html>The dubbed voices and movies, and the Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
+        <p data-i18n>Portuguese (Brazil): TraduMix's and MixMods' translation (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro).</p>
+        <p data-i18n>Polish: PLProjekt's translation (Daniel Graszka, MaDeR, Marcin Piech, Nati, Mateusz Wilkowski, alter).</p>
+        <p data-i18n-html>Turkish: muntazam's <a href="https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch" target="_blank" rel="noopener noreferrer">translation</a>.</p>
+        <p data-i18n-html>Hungarian: GameHunter's <a href="http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html" target="_blank" rel="noopener noreferrer">translation</a> (L_zooltan).</p>
+        <p data-i18n-html>English subtitles: VileStuff's <a href="https://nfsmods.xyz/mod/5286" target="_blank" rel="noopener noreferrer">English Subtitles Fixed</a>.</p>
       </div>
     </section>
   </div>
@@ -333,6 +345,17 @@
     <button type="button" class="btn" data-act="download" data-i18n>Download</button>
     <button type="button" class="btn danger" data-act="delete" data-i18n>Delete</button>
   </div>
+</dialog>
+
+<dialog class="dlg" id="donate" aria-labelledby="donate-title">
+  <form method="dialog">
+    <h2 id="donate-title" data-i18n>Support the project</h2>
+    <p data-i18n>If you enjoy the project and want to help with the costs of hosting and development, you can buy me a coffee on Ko-fi. It comes with no perks, apart from a role on the Discord server.</p>
+    <div class="row end">
+      <button class="btn" value="close" data-i18n>Not now</button>
+      <a class="btn selected" id="donate-go" href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer" data-i18n>Donate on Ko-fi</a>
+    </div>
+  </form>
 </dialog>
 
 <dialog class="dlg confirm" id="claim-check" aria-labelledby="claim-check-title">

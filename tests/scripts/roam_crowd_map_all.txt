@@ -1,7 +1,7 @@
 # Free roam, the world map with more players than cars: one player in the new
 # career's prologue free roam among web/tools/roam-crowd.mjs's players (more
 # than the 32 the hub links it to, e.g. --crowd 120 --spread 40).  The world
-# map (M) marks the friends' cars shown and, from the hub's answer (MAP), the
+# map (M) marks the friends' cars shown and, from the hub's answer (MAPD), the
 # other players in free roam: mp map counts "other players' (from the hub)".
 #   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page play --a Ann:roam_crowd_map_all.txt
 #        --env NFSU2_ROAM_WEBTEST=vlan --env ROAM_PROFILE=Ann --env ROAM_CROWD_CARS=32
@@ -13,7 +13,7 @@
 # a package and FEng's 512 nodes of the game: mp map's "FEng drew N objects of
 # one package at most" stays under its nodes, and the dumps show the Car Lot's
 # icon west of the crowd (it was gone at 512).  While the map is open its
-# markers move each second: the second mp map's markers are not where the
+# markers move (WM_STEP_US): the second mp map's markers are not where the
 # first's were.
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT

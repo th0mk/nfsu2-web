@@ -1,8 +1,9 @@
 # compose.yml with a Cloudflare Tunnel in front instead of Caddy (docs/web/VPS.md, "Cloudflare"): cloudflared
 # connects out to Cloudflare, so the VPS needs no open port for the game at all.  cloudflared and the server
-# share one network namespace (a Docker network, not the VPS's): cloudflared reaches the server on
-# 127.0.0.1:8080, nothing else can, and the client's address comes from Cloudflare's CF-Connecting-IP.  In
-# Cloudflare's dashboard the tunnel's public hostname is NFSU2_HOST and its service http://127.0.0.1:8080.
+# share one network namespace (a Docker network, not the VPS's): cloudflared reaches the server there, nothing
+# else can, and the client's address comes from Cloudflare's CF-Connecting-IP.  In Cloudflare's dashboard the
+# tunnel's public hostname is NFSU2_HOST and its service http://127.0.0.1:8080 (the dashboard refuses the
+# server's socket, unix:@nfsu2-http, that a tunnel with a config file of its own could take).
 #
 # In .env, besides NFSU2_HOST, NFSU2_DATA and NFSU2_MODULE (compose.yml):
 #   TUNNEL_TOKEN=<the tunnel's token>
@@ -27,7 +28,7 @@ services:
   # four copies of the tunnel, 4 connections to Cloudflare each: a connection to a far or lossy Cloudflare site
   # slows every player on it (nfsu2.xyz, 2026-10-22: two of one copy's four went to Amsterdam, lost ~100 times
   # the packets of the Helsinki ones, and ~600 of 2,950 players got the others' cars seconds late), and one that
-  # drops (every few hours) drops its players; with 16, each is about a sixteenth of them (at 6000 players ~375 a
+  # drops (every few hours) drops its players; with 16, each is about a sixteenth of them (at 7000 players ~440 a
   # connection; the Helsinki ones carried ~740 each that day without trouble).  Restart only the copy that has a bad
   # one (docker restart nfsu2-web-cloudflared-N; docker compose restart restarts them all).
   cloudflared:
@@ -40,8 +41,14 @@ services:
     cgroup_parent: ${NFSU2_SLICE:-nfsu2.slice}
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env, the tunnel's token}
+      # four threads of Go each, 16 for the four copies: with one for each of the slice's cores, Go's scheduler
+      # woke idle threads that found nothing to do for a fifth of a copy's CPU (nfsu2.xyz, 2026-10-30, a copy's
+      # profile at 5,800 players: findRunnable 18 %, futex 8 %)
+      GOMAXPROCS: "4"
     logging: { driver: local }
   server:
     network_mode: service:net
     environment:
       NFSU2_REAL_IP_HEADER: cf-connecting-ip
+      # HTTP on a Unix socket too, a name in the namespace (no file): a tunnel's service unix:@nfsu2-http
+      NFSU2_HTTP_SOCKET: "@nfsu2-http"

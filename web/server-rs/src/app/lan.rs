@@ -139,8 +139,12 @@ impl App {
             );
             bytes::Bytes::from(b.message())
         });
-        let (bans, a, k0) = (self.bans.clone(), ident.clone(), key_.clone());
+        let (bans, a, k0, days) = (self.bans.clone(), ident.clone(), key_.clone(), self.days.clone());
         let on_hello: nfsu2_lan::OnHello = Box::new(move |h| {
+            // a game on the switch: it played today (days.rs), by its page's own id
+            if let Some(id) = h.ids.first() {
+                days.seen(id, super::days::Seen::Play, nfsu2_util::now_ms());
+            }
             let seen = nfsu2_bans::Seen { pages: &h.ids, owner: h.owner, addr: a.as_deref() };
             let b = bans.by_hello(&seen, nfsu2_util::now_ms())?;
             let line = format!("[ban] turned away a client of ban #{} \"{}\" (its page or keyphrase)", b.id, b.name);

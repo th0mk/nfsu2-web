@@ -980,6 +980,45 @@ fn ctl(state: &Path, words: &[&str]) -> (i32, String) {
     (out.status.code().unwrap_or(-1), text)
 }
 
+// A page that goes by "player" on the switch while its game shows another name over its car (an edited page): the
+// console says so with its address, `who` finds it by either name and shows both, and `ban` takes it by the game's
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn who_finds_a_player_by_the_name_over_its_car() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let (port, state) = (free_port(), tmp.path().join("state"));
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--online", "off"]), port);
+    srv.ready().await;
+    let host = format!("localhost:{port}");
+    let a = Browser::open_from(&host, port, "", None, None, Some("192.0.2.1")).await;
+    let b = Browser::open_from(&host, port, "", None, None, Some("192.0.2.2")).await;
+    a.text(&serde_json::json!({ "t": "hello", "name": "player", "id": "page-a" }).to_string());
+    b.hello("Bob");
+    a.binary(to_hub(&roam_hello_named(501, b"Mallory")));
+    b.binary(to_hub(&roam_hello_named(502, b"bob")));
+    let a_vip = nfsu2_util::vip_str(a.vip);
+    let t0 = Instant::now();
+    let mut who = ctl(&state, &["who", "llor"]);
+    while !who.1.starts_with("1 on the switch") && t0.elapsed() < Duration::from_secs(3) {
+        sleep(50).await;
+        who = ctl(&state, &["who", "llor"]);
+    }
+    assert_eq!(who.0, 0, "{}", who.1);
+    let head = format!("1 on the switch called *llor*\n{a_vip:<13}\"player\"                 free roam, ");
+    assert!(who.1.starts_with(&head) && who.1.ends_with(" min; its game shows \"Mallory\""), "{}", who.1);
+    let all = ctl(&state, &["who"]).1;
+    assert!(all.contains("\"Bob\"") && !all.contains("its game shows \"bob\""), "Bob's page and game have one name: {all}");
+    let line = format!("[roam] {a_vip} \"player\": its game shows \"Mallory\" over its car");
+    assert!(srv.lines().iter().any(|l| l.ends_with(&line)), "{:?}", srv.lines());
+    let ban = ctl(&state, &["ban", "mallory", "perm"]);
+    assert_eq!(ban.0, 0, "{}", ban.1);
+    assert!(ban.1.starts_with("ban #1: \"Mallory\" for good, by its page and its address\n"), "{}", ban.1);
+    assert!(ban.1.ends_with(&format!("removed {a_vip} \"player\"")), "{}", ban.1);
+    assert_eq!(a.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
+    assert!(b.is_open(), "Bob plays on");
+    assert_eq!(srv.stop().await, Some(0));
+}
+
 /// a page from `xff` (its address, as a proxy on this machine names it) that says hello with page id `id`: what it
 /// got by the time the switch closed it (or 2 s), and how
 async fn turned_away(host: &str, port: u16, xff: &str, id: &str) -> (Vec<Value>, Option<(u16, String)>) {

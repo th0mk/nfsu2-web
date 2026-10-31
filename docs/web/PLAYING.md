@@ -87,8 +87,9 @@ While you drive:
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and
   **Menu button size** for the game's own small menu buttons (Back, Continue and the others at the bottom of every
   menu, and the arrows of the main menu's and Quick Race's choices). Both are **Auto** by default: the touch controls
-  at 100% on a phone and up to 125% on a tablet, as far as they fit; the menu buttons big enough for a finger, up to
-  200%.
+  at 100% on a phone and up to 125% on a tablet, as far as they fit; the arrows big enough for a finger, up to 200%,
+  and the buttons at the bottom at the game's size (the touch controls' OK and Back do Continue and Back, and bigger
+  they cover the menus' own things, such as the paint list). A size picked by hand makes those bigger too.
 - A keyboard or a controller sends them away until you touch the game again. Android phones buzz on crashes.
 
 ## 3. Controls
@@ -200,13 +201,15 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
 | Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
-  Thai, Portuguese (Brazil), Polish or Turkish, for the menus and all the game's text. Where the server has the
-  [language packs](VPS.md#languages), French, German, Italian, Spanish, Japanese and Russian also play with their
-  dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish and
-  Turkish with their text at all. Without the packs those four play in English, and the other languages with English
-  voices and movies. Your browser fetches only your language's files: the dubbed voices are about 50 MB (Russian 94
-  MB), and the dubbed movies are smaller than the English ones they replace. The start page follows the same choice
-  (the list at its top sets it too): its text, settings and messages in that language, English until you pick another.
+  Thai, Portuguese (Brazil), Polish, Turkish or Hungarian, for the menus and all the game's text. Where the server
+  has the [language packs](VPS.md#languages), French, German, Italian, Spanish, Japanese and Russian also play with
+  their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
+  Turkish and Hungarian with their text at all. Without the packs those five play in English, and the other
+  languages with English voices and movies. Your browser fetches only your language's files: the dubbed voices are
+  about 50 MB (Russian 94 MB), and the dubbed movies are smaller than the English ones they replace. Hungarian's
+  text writes ő and ű as õ and û, as its translation does: the game's fonts have no ő or ű. The start page follows the
+  same choice (the list at its top sets it too): its text, settings and messages in that language, English until you
+  pick another.
   Its problems and errors carry a short code (`GPU-ADAPTER-WIN`), the same in every language, to quote when you ask
   for help; the log stays English.
 - **Subtitles:** on by default: the movies' lines as text (the PSA, the tutorials and the story) in every language
@@ -363,7 +366,7 @@ or use a Room to keep to a group.
 
 Good to know:
 
-- **How many:** up to 6000 players on a server set up as VPS.md describes (2000 with the older Node server), 128 on
+- **How many:** up to 6500 players on a server set up as VPS.md describes (2000 with the older Node server), 128 on
   one started by hand (its owner can change that). Only free roam and the LAN and Online screens take a place;
   single-player takes none. When it is full, you wait in line for a place, first come first served: the top of the
   screen shows your place and, once a few went in, about how long it takes. You play alone meanwhile and join the
@@ -374,7 +377,7 @@ Good to know:
   start at 16 and tablets at 24 (Settings, Online, more: Players' cars shown: 16, 20, 24, 28 or 32). Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
   as the game's own opponents do. The world map also marks the other players in free roam, the nearest 2048 past those
-  32, and while it is open every marker moves to where its player is, once a second. Its legend (the list on the
+  32, and while it is open every marker moves smoothly with its player. Its legend (the list on the
   map's left) has two rows of ours after the game's: **Players** and **Players' races**. Pick one with Up or Down and
   Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers (a crew-mate's
   stays) or the players' race lobbies (yours stays) until you tick it again, and the game remembers it. A player in a

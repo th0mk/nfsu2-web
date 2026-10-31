@@ -25,7 +25,7 @@ pub mod rand;
 
 pub use bucket::{Bucket, Budget, Rate};
 pub use clock::{mono_ms, now_ms};
-pub use counter::Counter;
+pub use counter::{Counter, Counters};
 pub use host::{Charge, FrameCtx, Host, SendResult, SwitchSend, Tap};
 
 /// "10.77.0.1" for 0x0A4D0001

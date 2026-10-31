@@ -89,8 +89,8 @@ pub(crate) struct OutQueue {
     /// datagrams waiting for the bundle clock (their bytes as bundle entries)
     dgram: AtomicUsize,
     wake: Notify,
-    /// on the bundle clock's list for its next tick
-    armed: AtomicBool,
+    /// on the bundle clock's list for its next tick, and on the slow clock's (`Clock::lane`)
+    armed: [AtomicBool; 2],
 }
 
 impl OutQueue {
@@ -160,7 +160,7 @@ impl Conn {
                 buffered: AtomicUsize::new(0),
                 dgram: AtomicUsize::new(0),
                 wake: Notify::new(),
-                armed: AtomicBool::new(false),
+                armed: [AtomicBool::new(false), AtomicBool::new(false)],
             },
             close: Mutex::new(CloseState::default()),
             peer: Mutex::new(None),
@@ -232,7 +232,8 @@ impl Conn {
         };
         match clock {
             Some(c) if total <= BUNDLE_OUT => {
-                if !self.out.armed.load(Relaxed) && !self.out.armed.swap(true, AcqRel) {
+                let armed = &self.out.armed[c.lane];
+                if !armed.load(Relaxed) && !armed.swap(true, AcqRel) {
                     c.arm(self);
                 }
             }
@@ -572,7 +573,7 @@ fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_
         let data = compact::waited(data, if *queued != 0 { now.wrapping_sub(*queued) } else { 0 }, &mut moved);
         let at = body.len();
         compact::entry_fp(body, data, *src, *dst, own, refs.as_deref_mut(), fp.as_deref_mut());
-        stats.entry_out(data, &body[at..]);
+        stats.entry_out(data, *dst, &body[at..]);
         // a bundle takes datagrams while it stays within BUNDLE_OUT (the one that would not fit begins the next; it
         // was written as the next one, in order, so the page reads the same entries the writer made)
         if n > 0 && body.len() > BUNDLE_OUT {
@@ -619,13 +620,16 @@ pub(crate) struct Clock {
     shards: Box<[Shard]>,
     period_us: AtomicU64,
     jitter: f64,
+    /// which of a connection's two flags says it is on this clock's list: 0 the bundle clock, 1 the slow one (away.rs).
+    /// Either's tick wakes the writer, which takes all that waits.
+    lane: usize,
 }
 
 impl Clock {
-    pub(crate) fn new(period: Duration, jitter: f64) -> Self {
+    pub(crate) fn new(period: Duration, jitter: f64, lane: usize) -> Self {
         let shards = (0..SHARDS).map(|_| Shard(Mutex::new(Vec::new()))).collect();
         let jitter = if jitter.is_finite() { jitter.clamp(0.0, 0.9) } else { 0.0 };
-        Clock { shards, period_us: AtomicU64::new(period.as_micros() as u64), jitter }
+        Clock { shards, period_us: AtomicU64::new(period.as_micros() as u64), jitter, lane: lane.min(1) }
     }
 
     /// the next tick's length: the period, give or take `jitter` of it (`rng` a shard's own xorshift state)
@@ -658,7 +662,7 @@ impl Clock {
     fn tick(&self, shard: usize, spare: &mut Vec<Arc<Conn>>) {
         std::mem::swap(&mut *self.shards[shard].0.lock(), spare);
         for c in spare.drain(..) {
-            c.out.armed.store(false, Release);
+            c.out.armed[self.lane].store(false, Release);
             c.out.wake.notify_one();
         }
     }
@@ -698,15 +702,15 @@ mod tests {
 
     #[test]
     fn a_tick_wanders_within_its_jitter_and_keeps_its_mean() {
-        let c = Clock::new(Duration::from_millis(50), 0.4);
+        let c = Clock::new(Duration::from_millis(50), 0.4, 0);
         let mut rng = 0x1234_5678_9ABC_DEF1u64;
         let ticks: Vec<Duration> = (0..10_000).map(|_| c.next_period(&mut rng)).collect();
         assert!(ticks.iter().all(|t| (Duration::from_millis(30)..=Duration::from_millis(70)).contains(t)));
         let mean = ticks.iter().sum::<Duration>() / ticks.len() as u32;
         assert!((Duration::from_micros(49_500)..=Duration::from_micros(50_500)).contains(&mean), "{mean:?}");
         assert!(ticks.iter().any(|t| *t < Duration::from_millis(32)) && ticks.iter().any(|t| *t > Duration::from_millis(68)));
-        assert_eq!(Clock::new(Duration::from_millis(50), 0.0).next_period(&mut rng), Duration::from_millis(50));
-        assert_eq!(Clock::new(Duration::from_millis(50), f64::NAN).next_period(&mut rng), Duration::from_millis(50));
+        assert_eq!(Clock::new(Duration::from_millis(50), 0.0, 0).next_period(&mut rng), Duration::from_millis(50));
+        assert_eq!(Clock::new(Duration::from_millis(50), f64::NAN, 0).next_period(&mut rng), Duration::from_millis(50));
     }
 
     #[test]

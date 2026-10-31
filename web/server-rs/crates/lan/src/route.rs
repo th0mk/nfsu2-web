@@ -11,6 +11,7 @@ use std::sync::atomic::{
 use bytes::{BufMut, Bytes, BytesMut};
 use nfsu2_util::{FrameCtx, mono_ms};
 
+use crate::away;
 use crate::compact;
 use crate::conn::{Conn, Out};
 use crate::lag::{self, SHARE_FULL};
@@ -96,6 +97,10 @@ impl LanSwitch {
         let reached = list.as_ref().map_or(0, |l| l.len().saturating_sub(usize::from(on_list)));
         let costs = dsts.clone().map(|d| if d == BROADCAST { reached.max(1) } else { 1 });
         let (paid, all_paid) = self.charge(peer, mono_ms(), n as f64, costs);
+        // free roam: whether the sender drives, from its own HELLO or SNAP (away.rs)
+        if let Some(st) = away::status(data) {
+            peer.away.store(away::away(st), Relaxed);
+        }
         if paid > 0 {
             self.stats.frames.add(paid as u64);
             self.stats.bytes.add((n * paid) as u64);
@@ -240,11 +245,15 @@ impl LanSwitch {
         if data[0] == KIND_STREAM {
             return self.send_stream(from, p, data, dst);
         }
-        // a player behind on its path gets only its share of free roam's snapshots (lag.rs)
+        // a player behind on its path gets only its share of free roam's snapshots (lag.rs), one not driving its own
+        // (away.rs)
         if data[0] == KIND_UDP {
             let share = p.share.load(Relaxed);
             if share < SHARE_FULL && lag::is_snap(data) && !lag::pick(share) {
                 self.stats.thinned.inc();
+                return false;
+            }
+            if p.away.load(Relaxed) && self.slow.is_some() && lag::is_snap(data) && !lag::pick(away::SHARE) {
                 return false;
             }
         }
@@ -268,7 +277,15 @@ impl LanSwitch {
             self.stats.dropped.inc();
             return false;
         }
-        let clock = if (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]) { None } else { self.clock.as_deref() };
+        let clock = if (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]) {
+            None
+        } else if p.away.load(Relaxed) && data[1] == compact::ROAM_OK && Some(src) != self.roam_vip && self.slow.is_some() {
+            // free roam from another player to one who is not driving: the slow clock's tick, or sooner with whatever
+            // else goes to it (away.rs)
+            self.slow.as_deref()
+        } else {
+            self.clock.as_deref()
+        };
         p.conn.push_dgram(data.clone(), src, dst, clock);
         true
     }
@@ -495,8 +512,8 @@ pub(crate) mod tests {
     /// under a millisecond).
     #[tokio::test]
     async fn a_broadcast_refused_walks_no_peer() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 6000, ..LanOptions::default() }, "", None, None, None, None);
-        let peers: Vec<_> = (0..6000).map(|i| peer(&sw, &format!("g{i}"))).collect();
+        let sw = LanSwitch::new(LanOptions { max_peers: 7000, ..LanOptions::default() }, "", None, None, None, None);
+        let peers: Vec<_> = (0..7000).map(|i| peer(&sw, &format!("g{i}"))).collect();
         let p = &peers[0].2;
         for b in [&mut *p.buckets.lock(), &mut *p.group.buckets.lock()] {
             b.frames.v = 0.0;
@@ -508,7 +525,7 @@ pub(crate) mod tests {
             assert!(!sw.route(p, &f, std::iter::repeat_n(BROADCAST, 255)));
         }
         let ms = t.elapsed().as_secs_f64() * 1000.0;
-        assert!(ms < 500.0, "2000 refused messages of 255 broadcasts at 6000 players took {ms:.0} ms");
+        assert!(ms < 500.0, "2000 refused messages of 255 broadcasts at 7000 players took {ms:.0} ms");
         assert!(peers.iter().all(|(c, ..)| c.out.q.lock().len() <= 1), "nothing sent (a welcome at most)");
         sw.stop();
     }

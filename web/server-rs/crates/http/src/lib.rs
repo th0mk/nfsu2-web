@@ -72,7 +72,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, UnixListener, UnixStream};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
@@ -325,23 +325,22 @@ impl Hold {
     }
 }
 
-/// A connection, plain or TLS.
+/// A connection, plain or TLS, or plain on a Unix socket (`serve_unix`).
 pub enum Stream {
     Plain(TcpStream),
     Tls(Box<tokio_rustls::server::TlsStream<TcpStream>>),
+    Unix(UnixStream),
 }
 
 impl Stream {
-    /// the TCP socket underneath
-    pub fn tcp(&self) -> &TcpStream {
-        match self {
-            Stream::Plain(s) => s,
-            Stream::Tls(s) => s.get_ref().0,
-        }
-    }
-    /// SO_SNDBUF (the kernel's send buffer for this connection; Linux grows it to megabytes by itself)
+    /// SO_SNDBUF (the kernel's send buffer for this connection; Linux grows it to megabytes by itself.  On a Unix
+    /// socket it holds what waits in the reader's queue: there is no receive buffer of the reader's own)
     pub fn set_send_buffer(&self, bytes: usize) -> io::Result<()> {
-        socket2::SockRef::from(self.tcp()).set_send_buffer_size(bytes)
+        match self {
+            Stream::Plain(s) => socket2::SockRef::from(s).set_send_buffer_size(bytes),
+            Stream::Tls(s) => socket2::SockRef::from(s.get_ref().0).set_send_buffer_size(bytes),
+            Stream::Unix(s) => socket2::SockRef::from(s).set_send_buffer_size(bytes),
+        }
     }
     /// a read half and a write half that tasks on different threads can own (plain TCP: lock-free)
     pub fn split(self) -> (ReadHalf, WriteHalf) {
@@ -354,6 +353,10 @@ impl Stream {
                 let (r, w) = tokio::io::split(*s);
                 (ReadHalf::Tls(r), WriteHalf::Tls(w))
             }
+            Stream::Unix(s) => {
+                let (r, w) = s.into_split();
+                (ReadHalf::Unix(r), WriteHalf::Unix(w))
+            }
         }
     }
 }
@@ -361,10 +364,12 @@ impl Stream {
 pub enum ReadHalf {
     Plain(tokio::net::tcp::OwnedReadHalf),
     Tls(tokio::io::ReadHalf<tokio_rustls::server::TlsStream<TcpStream>>),
+    Unix(tokio::net::unix::OwnedReadHalf),
 }
 pub enum WriteHalf {
     Plain(tokio::net::tcp::OwnedWriteHalf),
     Tls(tokio::io::WriteHalf<tokio_rustls::server::TlsStream<TcpStream>>),
+    Unix(tokio::net::unix::OwnedWriteHalf),
 }
 
 impl AsyncRead for ReadHalf {
@@ -372,6 +377,7 @@ impl AsyncRead for ReadHalf {
         match self.get_mut() {
             ReadHalf::Plain(r) => Pin::new(r).poll_read(cx, buf),
             ReadHalf::Tls(r) => Pin::new(r).poll_read(cx, buf),
+            ReadHalf::Unix(r) => Pin::new(r).poll_read(cx, buf),
         }
     }
 }
@@ -380,30 +386,35 @@ impl AsyncWrite for WriteHalf {
         match self.get_mut() {
             WriteHalf::Plain(w) => Pin::new(w).poll_write(cx, buf),
             WriteHalf::Tls(w) => Pin::new(w).poll_write(cx, buf),
+            WriteHalf::Unix(w) => Pin::new(w).poll_write(cx, buf),
         }
     }
     fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[io::IoSlice<'_>]) -> Poll<io::Result<usize>> {
         match self.get_mut() {
             WriteHalf::Plain(w) => Pin::new(w).poll_write_vectored(cx, bufs),
             WriteHalf::Tls(w) => Pin::new(w).poll_write_vectored(cx, bufs),
+            WriteHalf::Unix(w) => Pin::new(w).poll_write_vectored(cx, bufs),
         }
     }
     fn is_write_vectored(&self) -> bool {
         match self {
             WriteHalf::Plain(w) => w.is_write_vectored(),
             WriteHalf::Tls(w) => w.is_write_vectored(),
+            WriteHalf::Unix(w) => w.is_write_vectored(),
         }
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             WriteHalf::Plain(w) => Pin::new(w).poll_flush(cx),
             WriteHalf::Tls(w) => Pin::new(w).poll_flush(cx),
+            WriteHalf::Unix(w) => Pin::new(w).poll_flush(cx),
         }
     }
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             WriteHalf::Plain(w) => Pin::new(w).poll_shutdown(cx),
             WriteHalf::Tls(w) => Pin::new(w).poll_shutdown(cx),
+            WriteHalf::Unix(w) => Pin::new(w).poll_shutdown(cx),
         }
     }
 }
@@ -413,6 +424,7 @@ impl AsyncRead for Stream {
         match self.get_mut() {
             Stream::Plain(s) => Pin::new(s).poll_read(cx, buf),
             Stream::Tls(s) => Pin::new(s.as_mut()).poll_read(cx, buf),
+            Stream::Unix(s) => Pin::new(s).poll_read(cx, buf),
         }
     }
 }
@@ -421,18 +433,21 @@ impl AsyncWrite for Stream {
         match self.get_mut() {
             Stream::Plain(s) => Pin::new(s).poll_write(cx, buf),
             Stream::Tls(s) => Pin::new(s.as_mut()).poll_write(cx, buf),
+            Stream::Unix(s) => Pin::new(s).poll_write(cx, buf),
         }
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             Stream::Plain(s) => Pin::new(s).poll_flush(cx),
             Stream::Tls(s) => Pin::new(s.as_mut()).poll_flush(cx),
+            Stream::Unix(s) => Pin::new(s).poll_flush(cx),
         }
     }
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             Stream::Plain(s) => Pin::new(s).poll_shutdown(cx),
             Stream::Tls(s) => Pin::new(s.as_mut()).poll_shutdown(cx),
+            Stream::Unix(s) => Pin::new(s).poll_shutdown(cx),
         }
     }
 }
@@ -511,7 +526,33 @@ pub fn serve<S: Service>(
     limits: Arc<Limits>,
     service: Arc<S>,
 ) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(accept_loop(listener, tls, limits, service))
+    tokio::spawn(accept_loop(Listener::Tcp(listener), tls, limits, service))
+}
+
+/// The same for a Unix socket, plain HTTP: a proxy on this machine reaches the server there without TCP (cloudflared's
+/// `unix:` origin), and each of its connections counts as one from `peer` (the address the proxy would have on TCP,
+/// 127.0.0.1, so it is the trusted proxy it is there).
+pub fn serve_unix<S: Service>(listener: UnixListener, peer: SocketAddr, limits: Arc<Limits>, service: Arc<S>) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(accept_loop(Listener::Unix(listener, peer), None, limits, service))
+}
+
+enum Listener {
+    Tcp(TcpListener),
+    Unix(UnixListener, SocketAddr),
+}
+
+enum Accepted {
+    Tcp(TcpStream),
+    Unix(UnixStream),
+}
+
+impl Listener {
+    async fn accept(&self) -> io::Result<(Accepted, SocketAddr)> {
+        match self {
+            Listener::Tcp(l) => l.accept().await.map(|(s, peer)| (Accepted::Tcp(s), peer)),
+            Listener::Unix(l, peer) => l.accept().await.map(|(s, _)| (Accepted::Unix(s), *peer)),
+        }
+    }
 }
 
 /// a connection on the listener's count (Node's server._connections) while it lives
@@ -522,12 +563,12 @@ impl Drop for Open {
     }
 }
 
-async fn accept_loop<S: Service>(listener: TcpListener, tls: Option<Arc<tls::TlsState>>, limits: Arc<Limits>, service: Arc<S>) {
+async fn accept_loop<S: Service>(listener: Listener, tls: Option<Arc<tls::TlsState>>, limits: Arc<Limits>, service: Arc<S>) {
     // Node checks the header and request times of a server's connections on one interval from its start
     let epoch = Instant::now();
     let open = Arc::new(AtomicUsize::new(0));
     loop {
-        let (tcp, peer) = match listener.accept().await {
+        let (sock, peer) = match listener.accept().await {
             Ok(c) => c,
             Err(e) => {
                 // out of file descriptors (or memory): wait a little, the connections that end give them back
@@ -539,7 +580,7 @@ async fn accept_loop<S: Service>(listener: TcpListener, tls: Option<Arc<tls::Tls
         };
         // Node's maxConnections: more are closed at once, before anything else sees them
         if open.load(Relaxed) >= limits.max_connections {
-            drop(tcp);
+            drop(sock);
             continue;
         }
         open.fetch_add(1, Relaxed);
@@ -548,18 +589,20 @@ async fn accept_loop<S: Service>(listener: TcpListener, tls: Option<Arc<tls::Tls
         // in it costs this connection only, not the loop and with it the port.)
         let Ok(Some(admitted)) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| service.admit(&peer))) else { continue };
         // Node's http server: noDelay
-        let _ = tcp.set_nodelay(true);
+        if let Accepted::Tcp(tcp) = &sock {
+            let _ = tcp.set_nodelay(true);
+        }
         let (tls, limits, service) = (tls.clone(), limits.clone(), service.clone());
         // (given back when the connection's task ends, or, for an upgrade, when whoever took the stream lets it go)
         let hold = Hold(vec![admitted, Box::new(count)]);
         tokio::spawn(async move {
-            connection(tcp, peer, tls, limits, &*service, epoch, hold).await;
+            connection(sock, peer, tls, limits, &*service, epoch, hold).await;
         });
     }
 }
 
 async fn connection<S: Service>(
-    tcp: TcpStream,
+    sock: Accepted,
     peer: SocketAddr,
     tls: Option<Arc<tls::TlsState>>,
     limits: Arc<Limits>,
@@ -568,8 +611,8 @@ async fn connection<S: Service>(
     hold: Hold,
 ) {
     let encrypted = tls.is_some();
-    let stream = match tls {
-        Some(tls) => {
+    let stream = match (sock, tls) {
+        (Accepted::Tcp(tcp), Some(tls)) => {
             // (on the heap for the handshake only: its state, a rustls connection being made, would otherwise be part
             // of the connection's future for as long as the connection lives)
             let accept = Box::pin(tls.handshake(tcp, service.client_certificate(&peer)));
@@ -586,7 +629,9 @@ async fn connection<S: Service>(
                 _ => return,
             }
         }
-        None => Stream::Plain(tcp),
+        (Accepted::Tcp(tcp), None) => Stream::Plain(tcp),
+        // (never TLS: serve_unix gives none)
+        (Accepted::Unix(s), _) => Stream::Unix(s),
     };
     let info = ConnInfo { peer_addr: peer, peer: remote_address(&peer), encrypted };
     let keep_alive = service.keep_alive(&peer);
@@ -638,7 +683,7 @@ mod tests {
         let l = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let c = TcpStream::connect(l.local_addr().expect("addr")).await.expect("connect");
         let (s, peer) = l.accept().await.expect("accept");
-        let f = connection(s, peer, None, Arc::new(Limits::default()), &Nil, Instant::now(), Hold::none());
+        let f = connection(Accepted::Tcp(s), peer, None, Arc::new(Limits::default()), &Nil, Instant::now(), Hold::none());
         let size = std::mem::size_of_val(&f);
         assert!(size < 4096, "{size} bytes");
         drop((f, c));

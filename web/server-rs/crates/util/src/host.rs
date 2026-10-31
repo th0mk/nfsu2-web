@@ -15,7 +15,7 @@
 //! asks [`Charge::overspent`]: the sender spent more than its budgets, and the host closes the stream the frame came
 //! on (nfsu2-online's `overrun`).  The free-roam hub's frames are charged to nobody (`cause: None`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 
@@ -149,6 +149,16 @@ pub trait Host: Send + Sync + 'static {
     /// the names browser `vip`'s page blocks (its hello's "block"): the free-roam hub links none of those players with
     /// it, either way; the others take no notice
     fn blocks(&self, _vip: u32, _names: Vec<String>) {}
+    /// browser `vip`'s page goes by `name` on the switch (its hello's): the free-roam hub says so on the console when
+    /// that browser's game shows another name over its car; the others take no notice
+    fn page_name(&self, _vip: u32, _name: &str) {}
+    /// the names browsers' games show other players that are not their pages' on the switch (`page_name`), by
+    /// browser, for the operator's `who`: the free-roam hub's; the others have none
+    fn other_names(&self) -> oneshot::Receiver<HashMap<u32, Vec<String>>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(HashMap::new());
+        rx
+    }
     /// the server stops: save what is kept, end the timers
     fn stop(&self);
 }

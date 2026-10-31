@@ -4,8 +4,8 @@ The game's server, in Rust: it serves the page, the game module and the game's o
 (the virtual LAN switch, the free-roam hub and the game's Online mode).  Its options are in `src/options.rs`, and the
 crates' docs say why each rule is what it is, with the audits they name.  The state folder keeps `etag.key`,
 `lan-addresses.json`, `online/stats.json`, `online/buddies.json`, `online/races.json` (the races going on, from a stop
-to the next start), `vault/`, the claimed names (`names.json`: nfsu2-claims) and the operator's bans (`bans.json`,
-`bans.key`: nfsu2-bans), and has the control
+to the next start), `days.json` and `days.csv` (how many came each day: src/app/days.rs), `vault/`, the claimed
+names (`names.json`: nfsu2-claims) and the operator's bans (`bans.json`, `bans.key`: nfsu2-bans), and has the control
 socket, `control.sock`, which `nfsu2-server ctl` talks to (who is on, kick, ban: src/app/control.rs, docs/web/VPS.md
 "Kick and ban").
 
@@ -127,6 +127,22 @@ for any crowd: at most 20 bundles a second to a page, as many as each friend sen
 cars 100 ms behind the soonest their snapshots came).  LAN play's datagrams (Online and LAN races) never wait for the tick: the game draws the other
 racers from each update as it comes, and a wait of up to 25 ms at random made them wobble.  And the worker count: 2.9 cores on 4 workers, 3.8 on 8, 4.3 on 12, the same latency up to 8.
 
+A player in free roam who is not driving (a race, a shop, the menus, loading: its own HELLOs and SNAPs say so) draws no
+other car, yet kept its 32 links' pings, pongs, HELLOs and car states coming: 70 % of a driving player's messages, and
+on nfsu2.xyz (2026-10-30, 5,800 players) about 2,900 of the 5,060 in free roam were such players.  What its friends
+send it waits for a slow clock (half a second, nfsu2-lan `away.rs`), it gets one in 16 of their car states, and its page
+holds its own as long (web/src/net `TX_HOLD_AWAY_MS`); the hub's messages and LAN play's go as for anyone, and its
+first HELLO or SNAP that says it drives again ends it.  40 real-core bots, 20 of them in a race for 30 s: a racer's
+messages 21.3 in / 11.6 out a second before, 5.8 / 2.0 after; the drivers' as before (21 / 19), car states between
+drivers too.
+
+`--http-socket @nfsu2-http` (NFSU2_HTTP_SOCKET; compose.tunnel.yml sets it) serves HTTP on a Unix socket as well, for
+cloudflared's origin `unix:@nfsu2-http`: a name in the network namespace the two share (Linux; else a file's path),
+each connection as from 127.0.0.1.  It spares each message TCP's work on 127.0.0.1 at both ends (a sixth of that hop's
+kernel time with bots in Linux, more where conntrack and AppArmor see every packet, as on nfsu2.xyz).  Cloudflare's
+dashboard does not take that origin (its Service URL field wants a scheme and `//`, 2026-10-30): only a tunnel run
+from a config file of its own does.
+
 4000 players (2026-10-21, the server on CPUs 0-11, nfsu2-roamload on 12-23, 3999 bots and the probe, spread over
 3 km; other sessions' loads on the machine the same day put 2000 players on 6 workers at the busy cap's edge, 5.0
 cores and 81 % busy, on main as on this):
@@ -241,10 +257,10 @@ players.
 
 ## Where it differs from the Node server
 
-- 6000 players (`--max-peers` 1 to 6000; the image's `NFSU2_MAX_PEERS=6000`), Node's 2000: the switch's network is
-  10.77.0.0/19 (the welcome's mask 255.255.224.0; addresses round twenty-four of its /24s, 10.77.0-23.x), the free-roam
-  hub takes 6144 players, Online mode 3000 lobby sessions, 900 games and 12000 streams.  The game module's peer bits
-  (mailbox v4) cover a /21: for a player on 10.77.8-23.x the game asks that host itself (`runtime/web/net_lan.c`): a LAN race's
+- 7000 players (`--max-peers` 1 to 7000; the image's `NFSU2_MAX_PEERS=6500`), Node's 2000: the switch's network is
+  10.77.0.0/19 (the welcome's mask 255.255.224.0; addresses round twenty-eight of its /24s, 10.77.0-27.x), the free-roam
+  hub takes 7168 players, Online mode 3500 lobby sessions, 1050 games and 14000 streams.  The game module's peer bits
+  (mailbox v4) cover a /21: for a player on 10.77.8-27.x the game asks that host itself (`runtime/web/net_lan.c`): a LAN race's
   connect to one who has just left sends its SYN and ends after the same 3 s with WSAETIMEDOUT instead of
   WSAEHOSTUNREACH.  Nothing else differs: the page and the module need no change (`crates/lan/tests/page.mjs`).
 - A full switch keeps a line (nfsu2-lan `queue.rs`) for the pages that say they can wait (/lan?queue): Node closed

@@ -25,6 +25,10 @@
 +0    photo move 0 1
 +30   photo move 0 0
 +10   dump photo_free
++0    photo other                                  # Tab (a pad's Y): the orbit again
++10   photo other                                  # and the free camera
++10   photo other
++10   photo free
 +0    photo off
 +30   expect i:0x890084 == 0
 +0    expect i:[[0x8900ac]+0x238]+0xc == 1         # the drive camera back

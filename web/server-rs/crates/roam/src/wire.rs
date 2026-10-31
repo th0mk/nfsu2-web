@@ -14,6 +14,8 @@ pub(crate) const MSG_SNAP: u8 = 3;
 pub(crate) const MSG_BYE: u8 = 8;
 pub(crate) const MSG_MAPREQ: u8 = 10;
 pub(crate) const MSG_MAP: u8 = 11;
+/// the world map's answer to a MAPREQ that names the answer it holds (roam_core.h RC_MSG_MAPD): what changed since
+pub(crate) const MSG_MAPD: u8 = 17;
 pub(crate) const MSG_LOBBY: u8 = 12;
 pub(crate) const MSG_LOBBIES: u8 = 13;
 /// a player's report of a multiplayer race (roam_core.h RC_MSG_RACEREP): only to the hub, which logs it
@@ -63,6 +65,13 @@ pub(crate) const MAP_PER: usize = 230;
 /// (RC_MAP_MAX_V1: a core before 2048 drops an answer of more than three)
 pub(crate) const MAP_PARTS: usize = 9;
 pub(crate) const MAP_MAX_V1: u16 = 512;
+/// a MAPD entry (roam_core.h RC_MAPD_*): a player's key (u16 LE: the hub's slot, MAPD_GONE set when it went), then,
+/// unless gone, x, y (i16 LE, m), heading (u8, 256 a turn), its velocity's x and y (i8, m/s); at most MAPD_BYTES of
+/// entries a datagram, MAPD_PARTS datagrams an answer (2048 placed in all)
+pub(crate) const MAPD_GONE: u16 = 0x8000;
+pub(crate) const MAPD_PLACE: usize = 9;
+pub(crate) const MAPD_BYTES: usize = 1152;
+pub(crate) const MAPD_PARTS: usize = 16;
 pub(crate) const HDR: usize = 16;
 pub(crate) const CRC: usize = 4;
 
@@ -98,10 +107,12 @@ pub(crate) enum Msg<'a> {
         t_us: u32,
         clock: u8,
     },
-    /// the world map's question (roam_core.h RC_MSG_MAPREQ): req is echoed in the answer, max entries at most
+    /// the world map's question (roam_core.h RC_MSG_MAPREQ): req is echoed in the answer, max entries at most; base
+    /// (a core since MAPD) the answer it holds, 0 none: it takes MAPD
     MapReq {
         req: u16,
         max: u16,
+        base: Option<u16>,
     },
     /// a race lobby (roam_core.h RC_MSG_LOBBY), checked as roam_core.c's lobby_ok: what the hub keeps of one sent to
     /// it (to 0)
@@ -368,8 +379,9 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50), t_us: u32_le(d, 22), clock: d[21] }
         }
-        MSG_MAPREQ if end == HDR + 2 => Msg::MapReq { req: u16_le(d, 16), max: MAP_MAX_V1 },
-        MSG_MAPREQ if end == HDR + 4 => Msg::MapReq { req: u16_le(d, 16), max: u16_le(d, 18) },
+        MSG_MAPREQ if end == HDR + 2 => Msg::MapReq { req: u16_le(d, 16), max: MAP_MAX_V1, base: None },
+        MSG_MAPREQ if end == HDR + 4 => Msg::MapReq { req: u16_le(d, 16), max: u16_le(d, 18), base: None },
+        MSG_MAPREQ if end == HDR + 6 => Msg::MapReq { req: u16_le(d, 16), max: u16_le(d, 18), base: Some(u16_le(d, 20)) },
         MSG_LOBBY => {
             // op arg state max, to, lobby, race, x y, t, n, a reserved byte, then n ids (roam_core.c rc_encode)
             if end < HDR + 24 {
@@ -517,6 +529,35 @@ pub(crate) fn write_lobbies(b: &mut [u8], sender: u32, seq: u16, req: u16, list:
 /// the length of a MAP datagram of n entries
 pub(crate) fn map_len(n: usize) -> usize {
     HDR + 7 + MAP_ENTRY * n + CRC
+}
+
+/// the length of a MAPD datagram of `bytes` bytes of entries
+pub(crate) fn mapd_len(bytes: usize) -> usize {
+    HDR + 9 + bytes + CRC
+}
+
+/// One MAPD datagram, part `part` of `nparts` of the answer to question `req` (roam_core.h RC_MSG_MAPD) into `b`
+/// (exactly `mapd_len(e.len())` bytes long): what changed since the answer `base` (0: from nothing), `total` players
+/// past the asker and its peers, n entries in `e`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn write_mapd(b: &mut [u8], sender: u32, seq: u16, req: u16, base: u16, part: u8, nparts: u8, total: u16, n: u8, e: &[u8]) {
+    let len = b.len();
+    b[..4].copy_from_slice(b"N2FR");
+    b[4] = 1;
+    b[5] = MSG_MAPD;
+    b[6..8].copy_from_slice(&(len as u16).to_le_bytes());
+    b[8..12].copy_from_slice(&sender.to_le_bytes());
+    b[12..14].copy_from_slice(&seq.to_le_bytes());
+    b[14..16].copy_from_slice(&[0, 0]);
+    b[16..18].copy_from_slice(&req.to_le_bytes());
+    b[18..20].copy_from_slice(&base.to_le_bytes());
+    b[20] = part;
+    b[21] = nparts;
+    b[22..24].copy_from_slice(&total.to_le_bytes());
+    b[24] = n;
+    b[25..25 + e.len()].copy_from_slice(e);
+    let crc = crc32fast::hash(&b[..len - CRC]);
+    b[len - CRC..].copy_from_slice(&crc.to_le_bytes());
 }
 
 /// One MAP datagram, part `part` of `nparts` of the answer to question `req` (roam_core.h RC_MSG_MAP) into `b`

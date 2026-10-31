@@ -447,7 +447,12 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return -1;
         rc_put8(&w, m->u.duel.op); rc_put8(&w, m->u.duel.arg); rc_put32(&w, m->u.duel.to); rc_put32(&w, m->u.duel.duel);
         break;
-    case RC_MSG_MAPREQ: rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); break;
+    case RC_MSG_MAPREQ: rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); rc_put16(&w, m->u.mapreq.base); break;
+    case RC_MSG_MAPD:
+        if (m->u.mapd.nparts < 1 || m->u.mapd.nparts > RC_MAPD_PARTS || m->u.mapd.part >= m->u.mapd.nparts || m->u.mapd.len > RC_MAPD_BYTES) return -1;
+        rc_put16(&w, m->u.mapd.req); rc_put16(&w, m->u.mapd.base); rc_put8(&w, m->u.mapd.part); rc_put8(&w, m->u.mapd.nparts);
+        rc_put16(&w, m->u.mapd.total); rc_put8(&w, m->u.mapd.n); rc_putb(&w, m->u.mapd.data, m->u.mapd.len);
+        break;
     case RC_MSG_MAP:
         if (m->u.map.nparts < 1 || m->u.map.nparts > RC_MAP_PARTS || m->u.map.part >= m->u.map.nparts || m->u.map.n > RC_MAP_PER) return -1;
         rc_put16(&w, m->u.map.req); rc_put8(&w, m->u.map.part); rc_put8(&w, m->u.map.nparts);
@@ -601,7 +606,24 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
     case RC_MSG_MAPREQ:
         m->u.mapreq.req = (uint16_t)rc_get16(&r);
         m->u.mapreq.max = !r.err && r.len - r.n >= 2 ? (uint16_t)rc_get16(&r) : RC_MAP_MAX_V1;   /* (a core before 2048: req only) */
+        m->u.mapreq.base = !r.err && r.len - r.n >= 2 ? (uint16_t)rc_get16(&r) : 0;               /* (...before MAPD: no base) */
         break;
+    case RC_MSG_MAPD: {
+        m->u.mapd.req = (uint16_t)rc_get16(&r); m->u.mapd.base = (uint16_t)rc_get16(&r);
+        m->u.mapd.part = (uint8_t)rc_get8(&r); m->u.mapd.nparts = (uint8_t)rc_get8(&r);
+        m->u.mapd.total = (uint16_t)rc_get16(&r); m->u.mapd.n = (uint8_t)rc_get8(&r);
+        if (r.err) return RC_E_SHORT;
+        if (m->u.mapd.nparts < 1 || m->u.mapd.nparts > RC_MAPD_PARTS || m->u.mapd.part >= m->u.mapd.nparts) return RC_E_FIELD;
+        uint32_t len = 0;
+        for (int k = 0; k < m->u.mapd.n; k++){
+            if (!r_have(&r, len + 2)) return RC_E_SHORT;
+            len += (r.p[r.n + len] | r.p[r.n + len + 1] << 8) & RC_MAPD_GONE ? 2 : RC_MAPD_PLACE;
+        }
+        if (len > RC_MAPD_BYTES) return RC_E_FIELD;
+        if (!r_have(&r, len)) return RC_E_SHORT;
+        m->u.mapd.data = r.p + r.n; m->u.mapd.len = (uint16_t)len; r.n += len;
+        break;
+    }
     case RC_MSG_MAP:
         m->u.map.req = (uint16_t)rc_get16(&r); m->u.map.part = (uint8_t)rc_get8(&r); m->u.map.nparts = (uint8_t)rc_get8(&r);
         m->u.map.total = (uint16_t)rc_get16(&r); m->u.map.n = (uint8_t)rc_get8(&r);
@@ -1067,29 +1089,44 @@ int rc_ask_map(rc_session *s, int64_t now, int max){
     rc_msg m; hdr(s, &m, RC_MSG_MAPREQ);
     m.u.mapreq.req = ++s->map_req;
     m.u.mapreq.max = (uint16_t)(max < 0 ? 0 : max > RC_MAP_MAX ? RC_MAP_MAX : max);
+    m.u.mapreq.base = s->map_held;
     s->map_mask = 0; s->map_nparts = 0; s->map_asked_us = now;
     tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m);
     return 1;
 }
 /* a part of the hub's answer to our last question: a complete answer
- * replaces the last one */
-static void map_part(rc_session *s, const rc_msg *m){
-    if (m->u.map.req != s->map_req || !s->map_asked_us) return;
-    if (s->map_mask && (m->u.map.nparts != s->map_nparts || m->u.map.total != s->map_asm_total)) s->map_mask = 0;   /* not the same answer */
-    s->map_nparts = m->u.map.nparts; s->map_asm_total = m->u.map.total;
-    memcpy(s->map_asm + (size_t)m->u.map.part * RC_MAP_PER * RC_MAP_ENTRY, m->u.map.data, (size_t)m->u.map.n * RC_MAP_ENTRY);
-    s->map_part_n[m->u.map.part] = m->u.map.n;
-    s->map_mask |= (uint16_t)(1u << m->u.map.part);
+ * changes the players we hold (from none for its base 0; one of an answer
+ * we do not hold changes nothing, and the next question names ours) */
+static void map_part(rc_session *s, const rc_msg *m, int64_t now){
+    if (m->u.mapd.req != s->map_req || !s->map_asked_us) return;
+    if (s->map_mask && (m->u.mapd.nparts != s->map_nparts || m->u.mapd.total != s->map_asm_total || m->u.mapd.base != s->map_asm_base))
+        s->map_mask = 0;                                    /* not the same answer */
+    s->map_nparts = m->u.mapd.nparts; s->map_asm_total = m->u.mapd.total; s->map_asm_base = m->u.mapd.base;
+    memcpy(s->map_asm + (size_t)m->u.mapd.part * RC_MAPD_BYTES, m->u.mapd.data, m->u.mapd.len);
+    s->map_part_n[m->u.mapd.part] = m->u.mapd.n; s->map_part_len[m->u.mapd.part] = m->u.mapd.len;
+    s->map_mask |= (uint16_t)(1u << m->u.mapd.part);
     if (s->map_mask != (1u << s->map_nparts) - 1u) return;
-    int n = 0;
-    for (int j = 0; j < s->map_nparts; j++)
-        for (int k = 0; k < s->map_part_n[j]; k++){
-            const uint8_t *e = s->map_asm + ((size_t)j * RC_MAP_PER + (size_t)k) * RC_MAP_ENTRY;
-            s->map_e[n].x = (int16_t)(e[0] | e[1] << 8); s->map_e[n].y = (int16_t)(e[2] | e[3] << 8); s->map_e[n].heading = e[4];
-            n++;
-        }
-    s->map_n = n; s->map_total = s->map_asm_total; s->map_gen++;
     s->map_mask = 0; s->map_asked_us = 0;                    /* answered: a repeat of a part changes nothing */
+    if (s->map_asm_base && s->map_asm_base != s->map_held) return;
+    int n = 0, i = 0, held = s->map_asm_base ? s->map_n : 0;
+    for (int j = 0; j < s->map_nparts; j++){
+        const uint8_t *e = s->map_asm + (size_t)j * RC_MAPD_BYTES;
+        for (int k = 0; k < s->map_part_n[j]; k++){
+            uint16_t key = (uint16_t)(e[0] | e[1] << 8), id = key & (uint16_t)~RC_MAPD_GONE;
+            while (i < held && s->map_e[i].id < id){ if (n < RC_MAP_MAX) s->map_tmp[n++] = s->map_e[i]; i++; }
+            if (i < held && s->map_e[i].id == id) i++;      /* (placed again, or gone) */
+            if (key & RC_MAPD_GONE){ e += 2; continue; }
+            if (n < RC_MAP_MAX){
+                rc_mapent *t = &s->map_tmp[n++];
+                t->id = id; t->x = (int16_t)(e[2] | e[3] << 8); t->y = (int16_t)(e[4] | e[5] << 8);
+                t->heading = e[6]; t->vx = (int8_t)e[7]; t->vy = (int8_t)e[8]; t->at_us = now;
+            }
+            e += RC_MAPD_PLACE;
+        }
+    }
+    for (; i < held && n < RC_MAP_MAX; i++) s->map_tmp[n++] = s->map_e[i];
+    memcpy(s->map_e, s->map_tmp, (size_t)n * sizeof *s->map_e);
+    s->map_n = n; s->map_total = s->map_asm_total; s->map_held = s->map_req; s->map_gen++;
 }
 int rc_established(const rc_session *s){ int n = 0; for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state == RC_PS_EST) n++; return n; }
 /* an established peer counts for the group (max_players) unless the hub
@@ -1124,7 +1161,7 @@ int rc_set_room(rc_session *s, uint32_t room){
         n += s->peer[i].state == RC_PS_EST;
         drop_peer(s, i, "the room changed");
     }
-    s->map_n = 0; s->map_total = 0; s->map_gen++;
+    s->map_n = 0; s->map_total = 0; s->map_held = 0; s->map_gen++;
     s->lobbies_n = 0; s->lobbies_gen++;
     s->noted_room = 0;
     /* HELLOs due at the next tick: the hub links us in the new room by it; without a hub, the peers hear it */
@@ -1316,7 +1353,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         /* the hub's list of the players near us: each one is a candidate
          * (the hub lists us on theirs at the same time), and stays while it
          * is listed (rc_tick drops the others) */
-        if (m.h.type == RC_MSG_MAP){ map_part(s, &m); return; }
+        if (m.h.type == RC_MSG_MAPD){ map_part(s, &m, now); return; }
         if (m.h.type == RC_MSG_LOBBIES){ lobbies_from_hub(s, &m); return; }
         if (m.h.type != RC_MSG_PEERS) return;
         s->hub_heard_us = now; s->hub_lists++;

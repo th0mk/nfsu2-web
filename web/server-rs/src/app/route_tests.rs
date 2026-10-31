@@ -788,6 +788,30 @@ async fn a_module_without_its_json_object() {
     assert_eq!(three(&kit, "").await, refused("The game module is another game's"));
 }
 
+// /seen: the page's load and its Play counted for the day (days.rs), each browser once; anything else answered the
+// same and not counted
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seen_counts_each_browser_once() {
+    let kit = Kit::start(&[], |_| {}).await;
+    let (a, b) = ("AAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBB");
+    for path in [
+        format!("/seen?at=page&id={a}"),
+        format!("/seen?at=page&id={a}"),
+        format!("/seen?at=play&id={a}"),
+        format!("/seen?at=page&id={b}"),
+        format!("/seen?at=roam&id={b}"),
+        "/seen?at=play&id=not%20an%20id".to_string(),
+        "/seen?at=play".to_string(),
+    ] {
+        let r = kit.get(&path, &[]).await;
+        assert_eq!(r.status, 204, "{path}");
+        assert!(r.body.is_empty());
+    }
+    let r = kit.request("HEAD", &format!("/seen?at=play&id={b}"), &[], b"").await;
+    assert_eq!(r.status, 204);
+    assert_eq!(kit.app.days.today(nfsu2_util::now_ms()).1, [2, 1, 0, 0]);
+}
+
 /// an answer's whole length once its head is in (its Content-Length; none: no body)
 fn answer_len(b: &[u8]) -> Option<usize> {
     let end = b.windows(4).position(|w| w == b"\r\n\r\n")?;

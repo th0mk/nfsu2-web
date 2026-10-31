@@ -108,8 +108,9 @@ export interface InputHandle {
   touchPad(t: TouchPad | null): void;
   /** the touch controls' level horizon: the phone's tilt the game's 3D view turns against, radians, + = clockwise */
   viewRoll(rad: number): void;
-  /** the menus' help bar buttons' size, 1 = the game's own (touch.ts: the Menu button size) */
-  menuScale(s: number): void;
+  /** the menus' small buttons' size, 1 = the game's own (touch.ts: the Menu button size): the scroller arrows', and
+   *  with bar the help bar's too (else it keeps the game's own) */
+  menuScale(s: number, bar: boolean): void;
   /** performance.now() of a real controller's last button press (0: none) */
   padPressed(): number;
   /** the game's text entry while it is up, else null */
@@ -149,7 +150,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
   let pads: PadPoller | null = null, synth: SynthDriver | null = null;
   let raf = 0, timer = 0, detached = false;
   const f32 = new Float32Array(1), f32Bits = new Int32Array(f32.buffer);   // a float's bits for a mailbox word
-  let menu = 0;                     // the menus' size asked for (0: none), written once the mailbox is there
+  let menu = 0;                     // the menus' size asked for (0: none; negative: the arrows' alone), written once the mailbox is there
   const putMenu = () => { if (h && !detached && menu) { f32[0] = menu; Atomics.store(h, IM_MENU_SCALE, f32Bits[0]); } };
   // the mailbox was not ours (another writer, another layout): requests cannot reach the game
   let refused = false;
@@ -445,7 +446,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     },
     touchPad(t) { pads?.setTouch(t); },
     viewRoll(rad) { if (h && !detached) { f32[0] = rad; Atomics.store(h, IM_VIEW_ROLL, f32Bits[0]); } },
-    menuScale(s) { menu = s; putMenu(); },
+    menuScale(s, bar) { menu = bar ? s : -s; putMenu(); },
     padPressed() { return pads?.lastPress ?? 0; },
     textEntry() {
       if (!h || !u8) return null;

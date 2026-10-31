@@ -3,10 +3,12 @@
 // cloud sync takes it), sent in the switch's hello (net/index.ts).  The operator's bans name a page by it besides its
 // address and its passphrase (web/server-rs/crates/bans), so that a banned player is not back by changing networks.
 // Each load puts the id back in a store that lost it (keepPageId: one of them cleared alone), and when the two held
-// different ids the hello names the other one too ("was"), so that a ban of either holds.  It says nothing about the
-// player, and the server keeps only a keyed hash of it, in a ban.  Without storage (a private window, storage
-// blocked) each load has a new one.
+// different ids the hello names the other one too ("was"), so that a ban of either holds.  The server counts the
+// browsers that come each day by it too (seen(): web/server-rs src/app/days.rs).  It says nothing about the player,
+// and the server keeps only a keyed hash of it, in a ban, and in the day's counts with a key of that day.  Without
+// storage (a private window, storage blocked) each load has a new one.
 
+import { at as base } from '../base';
 import { STORAGE } from '@game/storage';
 
 const KEY = STORAGE.LOCAL.PAGE_ID;
@@ -48,6 +50,14 @@ export function keepPageId(): Promise<PageIds> {
     }
     return { id, was: local && local !== id ? [local] : [] };
   })();
+}
+
+/** This browser came today, for the server's daily counts (web/server-rs src/app/days.rs): at a load ('page') and at
+ *  Play ('play').  Nothing comes back, and a server that does not answer changes nothing. */
+export function seen(at: 'page' | 'play'): void {
+  void keepPageId()
+    .then(({ id }) => fetch(base(`seen?at=${at}&id=${encodeURIComponent(id)}`), { cache: 'no-store', keepalive: true }))
+    .catch(() => {});
 }
 
 async function readFile(): Promise<string | null> {

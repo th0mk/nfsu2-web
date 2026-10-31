@@ -1,10 +1,10 @@
-// Every message the bot sees, in every channel it can read, one JSON line each in <state>/archive/<day>.jsonl, kept 7
-// days.  The bot only answers in forum threads, but the model can search the rest: the same problem reported in chat,
-// or an answer someone already gave.
+// Every message the bot sees, in every channel it can read, one JSON line each in <state>/archive/<day>.jsonl, kept 30
+// days.  The bot only answers in forum threads, but the model can search the rest (its last 7 days): the same problem
+// reported in chat, or an answer someone already gave.  The rest is for the developer's own reading.
 import fs from 'node:fs';
 import path from 'node:path';
 
-const KEEP_DAYS = 7;
+const KEEP_DAYS = 30;                       // deletions are never seen: a deleted message stays this long
 
 export class Archive {
   constructor(dir) {

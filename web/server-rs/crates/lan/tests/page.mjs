@@ -477,6 +477,27 @@ const cases = {
       await b.until(() => b.dgrams().length >= nb + 4);
       const held = performance.now() - t0;
       assert.ok(held >= 25, `without a car state it waits until 50 ms after the last send (${held.toFixed(0)} ms)`);
+      // a game not driving (its HELLO says a race): its own wait until 500 ms after the last send (TX_HOLD_AWAY_MS; the
+      // switch holds what its friends send it as long, nfsu2-lan away.rs), and a HELLO that says it drives again goes
+      // at once, with what waited
+      const helloSt = st => {
+        const d = roamDatagram(1, 40);
+        d[19] = st; d.writeUInt32LE(zlib.crc32(d.subarray(0, d.length - 4)), d.length - 4);
+        return d;
+      };
+      txPush(memory, roam, { dst: b.vip, data: helloSt(3) }); txBell(roam);
+      await b.until(() => b.dgrams().length >= nb + 5);
+      let t1 = performance.now();
+      txPush(memory, roam, { dst: b.vip, data: ping }); txBell(roam);
+      await b.until(() => b.dgrams().length >= nb + 6);
+      const away = performance.now() - t1;
+      assert.ok(away >= 300, `not driving, it waits until 500 ms after the last send (${away.toFixed(0)} ms)`);
+      await sleep(30);
+      t1 = performance.now();
+      txPush(memory, roam, { dst: b.vip, data: ping }); txPush(memory, roam, { dst: b.vip, data: helloSt(2) }); txBell(roam);
+      await b.until(() => b.dgrams().length >= nb + 8);
+      const back = performance.now() - t1;
+      assert.ok(back < 200, `driving again: at once (${back.toFixed(0)} ms)`);
       await b.close(); await c.close();
     } finally { link.close(); }
   },

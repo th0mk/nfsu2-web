@@ -133,6 +133,7 @@ export class VaultPanel {
   /** `start` has found whether this server keeps cloud saves (and set up the sync, with the link kept here) */
   private ready: Promise<void>;
   private readyNow: () => void = () => {};
+  private starting = false;               // start() asking the server
   /** the phrase linked when the section last showed (undefined: not shown yet): `onLink` when it changes */
   private shownLink: string | null | undefined = undefined;
 
@@ -200,9 +201,13 @@ export class VaultPanel {
     this.sync = s;
   }
 
-  /** Shows the section when this server keeps keyphrase saves. */
+  /** Shows the section when this server keeps keyphrase saves (asked again when the server answers again, after it
+   *  did not as the page started: once shown, nothing more). */
   async start() {
-    if (!await vaultAvailable().finally(() => setTimeout(() => this.readyNow(), 0))) return;
+    if (this.sync || this.starting) return;
+    this.starting = true;
+    const on = await vaultAvailable().finally(() => { this.starting = false; setTimeout(() => this.readyNow(), 0); });
+    if (!on || this.sync) return;
     this.makeSync();
     this.readyNow();
     this.root.hidden = false;

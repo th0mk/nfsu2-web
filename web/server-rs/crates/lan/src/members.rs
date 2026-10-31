@@ -195,6 +195,7 @@ impl LanSwitch {
             last_in: now_ms().into(),
             probe: parking_lot::Mutex::new(crate::lag::Probe::new(now)),
             share: crate::lag::SHARE_FULL.into(),
+            away: false.into(),
             listed: false.into(),
             ident: ctx.ident.clone(),
             since: now_ms(),
@@ -202,7 +203,7 @@ impl LanSwitch {
         if let Some(h) = &hello {
             peer.ctl.lock().texts.take_at(now, 1.0);
             greet(&peer, h, self.o.fpred);
-            self.hand_blocks(vip, h);
+            self.hand_hub(&peer, h);
         }
         m.peers.insert(vip, peer.clone());
         // (a replaced holder's place on it goes with it)
@@ -538,7 +539,7 @@ impl LanSwitch {
         }
         let was = peer.name().to_string();
         greet(peer, msg, self.o.fpred);
-        self.hand_blocks(peer.vip, msg);
+        self.hand_hub(peer, msg);
         self.lan_changed(&mut m, peer);
         let list = self.list_for(&m, peer);
         self.send(peer, Out::Text(list));
@@ -547,14 +548,15 @@ impl LanSwitch {
         }
     }
 
-    /// A hello's "block" to the free-roam hub, with the page's address: every connection's hello, a new one's
-    /// (`hello`), a resumed one's or one let in from the line (`seat`), as the hub forgets a page's blocks when its
-    /// connection goes (`Host::peer_gone`, posted before a resume can take the address).
-    fn hand_blocks(&self, vip: u32, hello: &Map<String, Value>) {
+    /// A hello's name (as the peer took it) and "block" to the free-roam hub, with the page's address: every
+    /// connection's hello, a new one's (`hello`), a resumed one's or one let in from the line (`seat`), as the hub
+    /// forgets a page's when its connection goes (`Host::peer_gone`, posted before a resume can take the address).
+    fn hand_hub(&self, peer: &Peer, hello: &Map<String, Value>) {
         if let Some(h) = &self.roam {
+            h.page_name(peer.vip, peer.name());
             let names = block_names(hello);
             if !names.is_empty() {
-                h.blocks(vip, names);
+                h.blocks(peer.vip, names);
             }
         }
     }
@@ -727,7 +729,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_welcome_is_queued_before_anyone_can_send_to_the_newcomer() {
         const N: usize = 300;
-        let sw = LanSwitch::new(LanOptions { max_peers: 6000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 7000, ..LanOptions::default() }, "", None, None, None, None);
         // a sender on another core: it looks at each address the switch hands out next, as soon as it is taken
         let watcher = {
             let sw = sw.clone();
@@ -759,7 +761,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn what_full_costs() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 6000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 7000, ..LanOptions::default() }, "", None, None, None, None);
         let peers: Vec<_> = (0..1000).map(|i| crate::route::tests::peer(&sw, &format!("g{i}"))).collect();
         let t = std::time::Instant::now();
         let mut n = 0;

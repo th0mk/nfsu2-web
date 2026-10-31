@@ -1,0 +1,37 @@
+# A language's screens, to look at its text and fonts: the PSA with its
+# subtitles (SUBTITLES/PSA: lines at 2, 7, 13 and 18 s), the title, the
+# profile prompt, the main menu, a Quick Race's menus (Circuit, its first
+# track), the loading screen, the race HUD and the pause menu (a page
+# without focus pauses the race itself).  Needs the language's pack
+# (LANGPACKS/<language>) in the server's game folder.
+# The waits leave room for a slow GPU (WSL's software Vulkan draws ~18 fps).
+#   node web/tools/run-page.mjs "<base>/test/play.html?wasm=/game.wasm&arg=/data/SPEED2.EXE&w=1280&h=720&fresh&reg=/tests/web/seed/registry_perf4_native.txt&script=/tests/web/scripts/language_screens.txt&env=NOMOVIES=0&env=NFSU2_LANGUAGE=hungarian&artifacts=/artifacts/lang_&dumpscale=1" 400000
+1        waitfng LS_PSAMovie.fng 6000
++240     dump psa_1
++300     dump psa_2
++360     dump psa_3
++300     dump psa_4
++0       waitfng UG_LS_Splash.fng 4000
++60      dump title
++240     tap RETURN 20          # title
++400     dump profile_prompt
++0       tap RETURN 20          # "create new profile?" -> No
++0       waitfng GarageMain.fng 3000
++120     dump main_menu
++0       tap RETURN 20          # Quick Race
++8000ms  dump race_kind
++0       tap RETURN 20          # Circuit
++8000ms  dump track
++0       tap RETURN 20          # its first track
++8000ms  dump race_options
++0       tap RETURN 20          # continue
++8000ms  dump car_select
++0       tap RETURN 20
++8000ms  tap RETURN 20
++8000ms  tap RETURN 20
++1500ms  dump loading
++0       waitmem 0x8654a4 6 100000000
++20000ms dump hud
++0       tap ESCAPE 20
++4000ms  dump pause
++500ms   quit

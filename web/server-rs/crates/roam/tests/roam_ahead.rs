@@ -1,5 +1,5 @@
 //! What the hub does that the Node server's hub never did: links that look ahead at the cars' speeds, and the world
-//! map's answer (MAPREQ / MAP).
+//! map's answer (MAPREQ / MAP, MAPD).
 
 mod kit;
 
@@ -299,6 +299,180 @@ fn the_world_map_answers_a_browser_once_a_second_whatever_its_endpoints() {
     assert_eq!(maps(&k).len(), 1);
 }
 
+/// the MAPD datagrams the hub sent since the last clear
+fn mapds(k: &Kit) -> Vec<(u32, Mapd)> {
+    k.sent.lock().iter().filter_map(|(vip, f)| mapd_of(f).map(|m| (*vip, m))).collect()
+}
+
+/// the entries of one MAPD answer, its parts in order (each checked to be of it): (req, base, total, entries)
+fn mapd_answer(k: &Kit) -> (u16, u16, u16, Vec<MapdEntry>) {
+    let m = mapds(k);
+    assert!(!m.is_empty(), "an answer");
+    let (req, base, n, total) = (m[0].1.0, m[0].1.1, m[0].1.3, m[0].1.4);
+    assert!(m.iter().enumerate().all(|(j, (_, x))| (x.0, x.1, x.2 as usize, x.3, x.4) == (req, base, j, n, total)), "one answer's parts");
+    (req, base, total, m.into_iter().flat_map(|(_, x)| x.5).collect())
+}
+
+// a page since MAPD gets what changed since the answer it holds: everyone at first (by slot, with their velocities),
+// then only the players come, gone, or off where the page moved them on at their velocities; from nothing again when
+// the hub has no such answer; one answer a quarter second
+#[test]
+fn the_world_map_sends_what_changed() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..8 {
+        join(&mut k, i);
+    }
+    // 0 asks; 1 its link; 2, 3 stand; 4 drives east at 20 m/s, 5 north at 10; 6 drives east, then turns; 7 is to go
+    let at = |i: u32, t: f64| -> ([f64; 3], [f64; 3]) {
+        match i {
+            4 => ([400.0 + 20.0 * t, 0.0, 0.0], [20.0, 0.0, 0.0]),
+            5 => ([500.0, 10.0 * t, 0.0], [0.0, 10.0, 0.0]),
+            6 if t > 0.0 => ([600.0 + 20.0 * t, 15.0, 0.0], [20.0, 0.0, 0.0]),
+            6 => ([600.0, 0.0, 0.0], [20.0, 0.0, 0.0]),
+            _ => ([i as f64 * 100.0, 0.0, 0.0], [0.0; 3]),
+        }
+    };
+    let snaps = |k: &mut Kit, t: f64| {
+        for i in 0..8 {
+            let (p, v) = at(i, t);
+            k.from(W(i), &snap_moving(100 + i, p, v, 0.0, 2));
+        }
+    };
+    snaps(&mut k, 0.0);
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_base(100, 1, 2048, 0));
+    let first = mapd_answer(&k);
+    assert_eq!(
+        first,
+        (
+            1,
+            0,
+            6,
+            vec![
+                (2, Some((200, 0, 0, 0, 0))),
+                (3, Some((300, 0, 0, 0, 0))),
+                (4, Some((400, 0, 0, 20, 0))),
+                (5, Some((500, 0, 0, 0, 10))),
+                (6, Some((600, 0, 0, 20, 0))),
+                (7, Some((700, 0, 0, 0, 0)))
+            ]
+        ),
+        "everyone past itself and its link, by slot"
+    );
+    // a quarter second on: 4 and 5 where the page has them, 6 turned off 15 m, 7 gone, 8 come
+    k.step(250.0);
+    k.from(W(7), &bye(107));
+    join(&mut k, 8);
+    snaps(&mut k, 0.25);
+    k.from(W(8), &snap(108, [-50.0, 0.0, 0.0]));
+    k.hub.tick();
+    k.clear();
+    k.step(100.0);
+    k.from(W(0), &mapreq_base(100, 2, 2048, 1));
+    // (6 where it is at the question, 100 ms after its SNAP)
+    assert_eq!(mapd_answer(&k), (2, 1, 6, vec![(6, Some((607, 15, 0, 20, 0))), (7, None), (8, Some((-50, 0, 0, 0, 0)))]));
+    // within the quarter second: nothing
+    k.clear();
+    k.step(100.0);
+    k.from(W(0), &mapreq_base(100, 3, 2048, 2));
+    assert!(mapds(&k).is_empty(), "one answer a quarter second");
+    // the page did not take answer 2: it asks from 1 again and gets the same
+    k.clear();
+    k.step(200.0);
+    k.from(W(0), &mapreq_base(100, 4, 2048, 1));
+    let again = mapd_answer(&k);
+    assert_eq!((again.1, again.3.iter().map(|e| e.0).collect::<Vec<_>>()), (1, vec![6, 7, 8]));
+    // an answer the hub does not have: from nothing
+    k.clear();
+    k.step(300.0);
+    k.from(W(0), &mapreq_base(100, 5, 2048, 77));
+    let full = mapd_answer(&k);
+    assert_eq!((full.0, full.1, full.3.len()), (5, 0, 6));
+    // from that one on: what changed since it
+    k.clear();
+    k.step(300.0);
+    k.from(W(0), &mapreq_base(100, 6, 2048, 5));
+    assert_eq!(mapd_answer(&k).1, 5);
+    // a page that asks for fewer gets the nearest, and the others go
+    k.clear();
+    k.step(300.0);
+    k.from(W(0), &mapreq_base(100, 7, 2, 6));
+    let few = mapd_answer(&k);
+    assert_eq!((few.1, few.2), (6, 6));
+    assert_eq!(few.3.iter().filter(|e| e.1.is_some()).count(), 0, "{few:?}");
+    assert_eq!(few.3.iter().filter(|e| e.1.is_none()).map(|e| e.0).collect::<Vec<_>>(), [3, 4, 5, 6], "the nearest, 8 and 2, stay");
+}
+
+// a car going straight is placed once: its SNAPs come twice a second, the questions four times, each SNAP's
+// position as old as it is when asked (moved on at its velocity, it is where the page has the marker); one turning
+// is placed again
+#[test]
+fn the_world_map_places_a_car_going_straight_once() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..4 {
+        join(&mut k, i);
+    }
+    k.from(W(0), &snap(100, [0.0, 0.0, 0.0]));
+    k.from(W(1), &snap(101, [5.0, 0.0, 0.0]));
+    let (mut placed, mut base) = (Vec::new(), 0u16);
+    for step in 0..40u32 {
+        let t = step as f64 * 0.125;
+        // 2 straight east at 40 m/s, 3 north at 30 m/s until 2 s, then east; a SNAP each half second, 3's a quarter after 2's
+        if step % 4 == 1 {
+            k.from(W(2), &snap_moving(102, [100.0 + 40.0 * t, 0.0, 0.0], [40.0, 0.0, 0.0], 0.0, 2));
+        }
+        if step % 4 == 3 {
+            let (p, v) = if t < 2.0 { ([0.0, 100.0 + 30.0 * t, 0.0], [0.0, 30.0, 0.0]) } else { ([30.0 * (t - 2.0), 160.0, 0.0], [30.0, 0.0, 0.0]) };
+            k.from(W(3), &snap_moving(103, p, v, 0.0, 2));
+        }
+        if step % 2 == 0 {
+            k.hub.tick();
+            k.clear();
+            k.from(W(0), &mapreq_base(100, step as u16 + 1, 2048, base));
+            let a = mapd_answer(&k);
+            base = a.0;
+            placed.extend(a.3.into_iter().filter(|e| e.0 >= 2).map(|e| (step, e.0)));
+        }
+        k.step(125.0);
+    }
+    assert_eq!(placed.iter().filter(|p| p.1 == 2).count(), 1, "{placed:?}");
+    let turned: Vec<u32> = placed.iter().filter(|p| p.1 == 3).map(|p| p.0).collect();
+    assert!(turned.len() == 2 && turned[0] <= 4 && (16..=22).contains(&turned[1]), "{placed:?}");
+}
+
+// MAPD from nothing for 2048 of 2200: 16 full datagrams; a page before MAPD still gets MAP once a second
+#[test]
+fn the_world_map_sends_2048_in_16_mapd_datagrams() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..2200 {
+        join(&mut k, i);
+        k.from(W(i), &snap(100 + i, [i as f64 * 5.0, 0.0, 0.0]));
+    }
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_base(100, 1, 2048, 0));
+    let m = mapds(&k);
+    assert_eq!(m.len(), 16);
+    assert!(m.iter().all(|(_, x)| x.5.len() == 128));
+    let (_, _, total, all) = mapd_answer(&k);
+    assert_eq!((total, all.len()), (2198, 2048));
+    let keys: Vec<u16> = all.iter().map(|e| e.0).collect();
+    assert!(keys.windows(2).all(|w| w[0] < w[1]) && keys[0] <= 2 && keys[2047] <= 2050, "the nearest, by slot");
+    // a quarter second on, nobody moved: one empty datagram
+    k.clear();
+    k.step(300.0);
+    k.from(W(0), &mapreq_base(100, 2, 2048, 1));
+    assert_eq!(mapds(&k).into_iter().map(|(_, x)| (x.0, x.1, x.2, x.3, x.5.len())).collect::<Vec<_>>(), [(2, 1, 0, 1, 0)]);
+    k.clear();
+    k.from(W(1), &mapreq(101, 1));
+    assert_eq!(maps(&k).len(), 3, "MAP to a page before MAPD");
+    k.clear();
+    k.step(300.0);
+    k.from(W(1), &mapreq(101, 2));
+    assert!(maps(&k).is_empty(), "...once a second");
+}
+
 // roam_core asks as the hub reads it, and takes the hub's answer in parts, in any order
 #[test]
 fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
@@ -332,42 +506,50 @@ fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
         String::from_utf8_lossy(&o.stdout).trim().to_string()
     };
     let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-    // the hub's answer to 300 players (two parts): the session asks with req 1
+    let unhex = |h: &str| -> Vec<u8> { (0..h.len() / 2).map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap()).collect() };
+    // the hub's answer to 300 players (three parts), the last first: the session asks with req 1, from nothing
     let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
     for i in 0..301 {
         join(&mut k, i);
-        k.from(W(i), &snap_moving(100 + i, [i as f64 * -3.0, 7.0, 0.0], [0.0; 3], -std::f64::consts::FRAC_PI_2, 2));
+        k.from(W(i), &snap_moving(100 + i, [i as f64 * -3.0, 7.0, 0.0], [0.0, -(i as f64 % 9.0), 0.0], -std::f64::consts::FRAC_PI_2, 2));
     }
     k.hub.tick();
     k.clear();
-    k.from(W(0), &mapreq(100, 1));
-    let frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
-    assert_eq!(frames.len(), 2);
-    let got = run(&["map".to_string(), frames[1].clone(), frames[0].clone()]);
+    k.from(W(0), &mapreq_base(100, 1, 2048, 0));
+    let mut first: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
+    assert_eq!(first.len(), 3);
+    first.reverse();
+    let got = run(&[vec!["map".to_string()], first.clone()].concat());
     let mut lines = got.lines();
     let ask = lines.next().unwrap_or("");
-    assert_eq!(ask.strip_prefix("ask ").map(|h| h.len()), Some(2 * (16 + 4 + 4)), "{got}");
-    // its MAPREQ, as the hub reads it: req 1, 2048 at most
-    let a: Vec<u8> = (0..ask.len() / 2 - 2).map(|i| u8::from_str_radix(&ask[4 + 2 * i..6 + 2 * i], 16).unwrap()).collect();
-    assert_eq!((a[5], u16::from_le_bytes([a[16], a[17]]), u16::from_le_bytes([a[18], a[19]])), (10, 1, 2048));
-    let want: Vec<String> = (2..301).map(|i| format!("{},7,192", -3 * i)).collect();
+    assert_eq!(ask.strip_prefix("ask ").map(|h| h.len()), Some(2 * (16 + 6 + 4)), "{got}");
+    // its MAPREQ, as the hub reads it: req 1, 2048 at most, from nothing
+    let a = unhex(&ask[4..]);
+    assert_eq!(
+        (a[5], u16::from_le_bytes([a[16], a[17]]), u16::from_le_bytes([a[18], a[19]]), u16::from_le_bytes([a[20], a[21]])),
+        (10, 1, 2048, 0)
+    );
+    let entry = |i: u32, x: f64, vy: i32| format!("{i}:{},7,192,0,{vy}", x as i32);
+    let want: Vec<String> = (2..301).map(|i| entry(i, -3.0 * i as f64, -((i % 9) as i32))).collect();
     assert_eq!(lines.next().unwrap_or(""), format!("map 1 299 299 {}", want.join(" ")));
     // one part only: nothing yet
-    let got = run(&["map".to_string(), frames[0].clone()]);
+    let got = run(&["map".to_string(), first[0].clone()]);
     assert!(got.ends_with("map 0 0 0"), "{got}");
-    // 2048 of 2200 in nine parts, the last first
-    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
-    for i in 0..2200 {
-        join(&mut k, i);
-        k.from(W(i), &snap_moving(100 + i, [i as f64 * 5.0, -2.0, 0.0], [0.0; 3], 0.0, 2));
-    }
+    // it asks again from answer 1 (req 2): 5 went, 6 moved off; the rest where it moved them on
+    k.step(300.0);
+    k.from(W(5), &bye(105));
+    k.from(W(6), &snap_moving(106, [-18.0, 40.0, 0.0], [0.0; 3], -std::f64::consts::FRAC_PI_2, 2));
     k.hub.tick();
     k.clear();
-    k.from(W(0), &mapreq_max(100, 1, 2048));
-    let want: Vec<String> = maps(&k).into_iter().flat_map(|(_, x)| x.4).map(|e| format!("{},{},{}", e.0, e.1, e.2)).collect();
-    let mut frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
-    assert_eq!((frames.len(), want.len()), (9, 2048));
-    frames.reverse();
-    let got = run(&[vec!["map".to_string()], frames].concat());
-    assert_eq!(got.lines().nth(1).unwrap_or(""), format!("map 1 2198 2048 {}", want.join(" ")));
+    k.from(W(0), &mapreq_base(100, 2, 2048, 1));
+    let second: Vec<String> = k.sent.lock().iter().filter(|(_, f)| f[16 + 5] == 17).map(|(_, f)| hex(&f[16..])).collect();
+    assert_eq!(second.len(), 1);
+    assert_eq!(mapd_answer(&k), (2, 1, 298, vec![(5, None), (6, Some((-18, 40, 192, 0, 0)))]));
+    let got = run(&[vec!["map".to_string()], first, vec!["ask".to_string()], second].concat());
+    let mut lines = got.lines();
+    let ask2 = unhex(&lines.nth(1).unwrap_or("").strip_prefix("ask ").unwrap_or("")[..]);
+    assert_eq!((u16::from_le_bytes([ask2[16], ask2[17]]), u16::from_le_bytes([ask2[20], ask2[21]])), (2, 1), "it asks from answer 1");
+    let want: Vec<String> =
+        (2..301).filter(|&i| i != 5).map(|i| if i == 6 { "6:-18,40,192,0,0".to_string() } else { entry(i, -3.0 * i as f64, -((i % 9) as i32)) }).collect();
+    assert_eq!(lines.next().unwrap_or(""), format!("map 2 298 298 {}", want.join(" ")));
 }

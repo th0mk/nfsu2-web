@@ -63,8 +63,9 @@ enum {
     IM_PAD_WHEEL = 37,    /* page: 1 when the controller driving the pad is a steering wheel (under IM_PAD_SEQ) */
     IM_VIEW_ROLL = 38,    /* page: float bits, the phone's tilt the 3D view turns against (radians, + = the phone turned
                              clockwise; 0 = the game's view), the touch controls' level horizon */
-    IM_MENU_SCALE = 39,   /* page: float bits, the menus' help bar buttons' size (1 = the game's own; 0 = not set),
-                             the Controls sheet's Menu button size (runtime/menusize.c) */
+    IM_MENU_SCALE = 39,   /* page: float bits, the menus' help bar buttons' and scroller arrows' size (1 = the game's
+                             own; 0 = not set; negative: the arrows' alone, the bar at the game's own), the Controls
+                             sheet's Menu button size (runtime/menusize.c) */
     IM_TEXT = 40,        /* wasm: 40..63, its text (cp1252, NUL-padded, the first INPUT_TEXT_BYTES) */
     IM_HDR_WORDS = 64
 };

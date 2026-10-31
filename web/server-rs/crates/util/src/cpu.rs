@@ -4,6 +4,7 @@
 //! [`Busy`], the process's CPU time over a number of cores, is for a hub with no runtime (the tests).  [`QuotaBusy`]:
 //! the share of a CPU quota the server shares with others (the game's containers in nfsu2.slice) they used together.
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -103,6 +104,8 @@ pub struct QuotaBusy {
     /// each group's folder, its path in the cgroup tree, and its usage_usec at the last sample
     groups: Vec<(PathBuf, String, u64)>,
     at: Instant,
+    /// `sample_over`'s samples, oldest first: each one's seconds and the fullest quota's share in them
+    recent: VecDeque<(f64, f64)>,
 }
 
 /// What the group with the fullest quota used between two samples.
@@ -142,7 +145,7 @@ impl QuotaBusy {
             let Some(up) = p.parent() else { break };
             p = up;
         }
-        (!groups.is_empty()).then(|| QuotaBusy { groups, at: Instant::now() })
+        (!groups.is_empty()).then(|| QuotaBusy { groups, at: Instant::now(), recent: VecDeque::new() })
     }
 
     /// the groups with a quota now, and its cores
@@ -178,6 +181,30 @@ impl QuotaBusy {
     /// 0 to 1 since the last call: the fullest quota's share (0 while no group has one)
     pub fn sample(&mut self) -> f64 {
         self.sample_use().map_or(0.0, |u| u.share())
+    }
+
+    /// 0 to 1: the fullest quota's share over about the last `window`, from a sample at each call.  A share of half a
+    /// second is no measure of a slice that is nearly full: nfsu2.xyz's slice used 73 % of its 14 cores over minutes
+    /// while its half-second shares went from 62 to 88 % (2026-10-30), and free roam's busy cap, which read those, cut
+    /// every player's links to 9-19 of 32 at each high one.
+    pub fn sample_over(&mut self, window: Duration) -> f64 {
+        self.sample_over_at(Instant::now(), window)
+    }
+
+    fn sample_over_at(&mut self, now: Instant, window: Duration) -> f64 {
+        let wall = now.duration_since(self.at).as_secs_f64();
+        let share = self.sample_use_at(now).map_or(0.0, |u| u.share());
+        if wall > 0.0 {
+            self.recent.push_back((wall, share));
+        }
+        let mut total: f64 = self.recent.iter().map(|r| r.0).sum();
+        while self.recent.len() > 1 && total - self.recent[0].0 >= window.as_secs_f64() {
+            total -= self.recent.pop_front().map_or(0.0, |r| r.0);
+        }
+        if total <= 0.0 {
+            return 0.0;
+        }
+        self.recent.iter().map(|&(t, s)| t * s).sum::<f64>() / total
     }
 }
 
@@ -295,6 +322,42 @@ mod tests {
         // cgroup v1, or no tree: none
         assert!(QuotaBusy::of(&root, "12:cpu,cpuacct:/x\n").is_none());
         assert!(QuotaBusy::of(&root.join("none"), "0::/\n").is_none());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    // the share over the last window: half-second shares of 62 and 88 % in turn are 75 % over it, a full one counts for
+    // as long as it lasts, and the samples older than the window go
+    #[test]
+    fn quota_busy_over_a_window_is_the_share_of_its_samples_together() {
+        let root = std::env::temp_dir().join(format!("nfsu2-cgroup-window-{}", std::process::id()));
+        let slice = root.join("nfsu2.slice");
+        std::fs::create_dir_all(&slice).unwrap();
+        std::fs::write(slice.join("cpu.max"), "1400000 100000\n").unwrap();
+        let used = |usec: u64| std::fs::write(slice.join("cpu.stat"), format!("usage_usec {usec}\n")).unwrap();
+        used(0);
+        let mut q = QuotaBusy::of(&root, "0::/nfsu2.slice\n").expect("its group");
+        let (t0, w, half) = (q.at, Duration::from_secs(10), Duration::from_millis(500));
+        let (mut usec, mut t, mut highest) = (0u64, t0, 0.0f64);
+        for i in 0..40 {
+            // 14 cores for half a second: 7 s of CPU at 100 %; 62 % and 88 % of it in turn
+            usec += if i % 2 == 0 { 4_340_000 } else { 6_160_000 };
+            used(usec);
+            t += half;
+            let b = q.sample_over_at(t, w);
+            if i >= 1 {
+                highest = highest.max(b);
+            }
+        }
+        assert!((highest - 0.75).abs() < 0.02, "every half-second share at most 88 %, the window's {highest}");
+        assert!(q.recent.len() <= 21, "{} samples kept for 10 s", q.recent.len());
+        // a full slice for 5 s: half of the window
+        for _ in 0..10 {
+            usec += 7_000_000;
+            used(usec);
+            t += half;
+        }
+        let b = q.sample_over_at(t, w);
+        assert!((b - 0.75 * 0.5 - 1.0 * 0.5).abs() < 0.03, "half the window full: {b}");
         std::fs::remove_dir_all(&root).unwrap();
     }
 

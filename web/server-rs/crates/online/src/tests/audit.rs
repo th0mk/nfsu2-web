@@ -503,7 +503,16 @@ fn a_race_no_racer_drives_is_a_cheat_line() {
     assert_eq!(
         l[1..],
         ["[cheat] 10.77.4.4 \"Tele\": won the online race \"tele\" (sprint, track 4102, 1 lap) in 0:25.00, 763 km/h on \
-          average, which no car does: by its own game; its top speed 954 km/h"]
+          average, which no car does, an edited car (no car of the game makes 420 km/h): by its own game; its top speed \
+          954 km/h"]
+    );
+    // an edited car is a line whether it finished or not (its top speed: 96 m/s on average, 432 km/h at the most)
+    race_of(&mut w, "planes", "Honest3", "Plane", &[(0, 1, 56.49, 29.83, false), (1, 0, 10.0, 96.0, true)]);
+    let l = cheats(&w);
+    assert_eq!(
+        l[2..],
+        ["[cheat] 10.77.4.6 \"Plane\": raced in the online race \"planes\" (sprint, track 4102, 1 lap), an edited car (no \
+          car of the game makes 420 km/h): by its own game; its top speed 432 km/h"]
     );
 }
 
@@ -539,6 +548,53 @@ fn a_report_naming_a_racer_twice_is_no_cheat_line() {
     w.send(y, "rank", fields![("AUTH", auth.as_str()), ("RESU", resu), ("NAME0", "Host"), ("NAME1", "Other")]);
     assert!(w.logged("\"twice\": Other's race report not taken: players named twice"), "{}", w.text().join("\n"));
     assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "{}", w.text().join("\n"));
+}
+
+// a report that leaves out a player of the game is taken: the others' games leave out one who joined as the race
+// started and never raced (nfsu2.xyz, 2026-10-30: 460 reports of 221 races not taken, none of them looked at)
+#[test]
+fn a_report_without_a_player_who_never_raced_is_taken() {
+    let mut w = world();
+    let (ga, gb, gc) = (client(&mut w, "10.77.8.1"), client(&mut w, "10.77.8.2"), client(&mut w, "10.77.8.3"));
+    let (x, y, z) = (login(&mut w, ga, "Ran1"), login(&mut w, gb, "Ran2"), login(&mut w, gc, "Late"));
+    let auth = race(&mut w, "late", &[x, y, z], vec![]).unwrap();
+    w.advance(120_000.0);
+    for c in [x, y] {
+        report(&mut w, c, &auth, &["Ran1", "Ran2"], &[(0, 1, 100.5), (1, 2, 102.25)], 1);
+    }
+    assert!(w.text().iter().any(|l| l.ends_with("\"late\" (sprint, unranked): 1 Ran1 1:40.50, 2 Ran2 1:42.25")), "{}", w.text().join("\n"));
+    // (one that names a racer not of the game is not)
+    report(&mut w, z, &auth, &["Ran1", "Nobody"], &[(0, 1, 100.5), (1, 2, 102.25)], 1);
+    assert!(w.logged("\"late\": Late's race report not taken: not the game's players"), "{}", w.text().join("\n"));
+}
+
+// a win far quicker than the track's best winners (a car no tuning makes, a speed hack): once the track had 10 clean
+// wins, one under 70 % of the third quickest other winner's time is a [cheat] line
+#[test]
+fn a_win_far_under_the_tracks_third_quickest_is_a_cheat_line() {
+    let mut w = world();
+    let race_of = |w: &mut World, k: usize, a: &str, t: f32| {
+        let (ga, gb) = (client(w, &format!("10.77.9.{}", 2 * k + 1)), client(w, &format!("10.77.9.{}", 2 * k + 2)));
+        let b = format!("Other{k}");
+        let (x, y) = (login(w, ga, a), login(w, gb, &b));
+        let auth = race(w, &format!("q{k}"), &[x, y], vec![]).unwrap();
+        w.advance(120_000.0);
+        for c in [x, y] {
+            report(w, c, &auth, &[a, &b], &[(0, 1, t), (1, 2, t + 5.0)], 1);
+        }
+    };
+    for k in 0..10 {
+        race_of(&mut w, k, &format!("Fair{k}"), 100.0 + k as f32);
+    }
+    race_of(&mut w, 10, "Fast", 72.0);
+    assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "72 s: over 70 % of 102 s\n{}", w.text().join("\n"));
+    race_of(&mut w, 11, "Rocket", 60.0);
+    let l: Vec<String> = w.text().into_iter().filter(|l| l.starts_with("[cheat]")).collect();
+    assert_eq!(
+        l,
+        ["[cheat] 10.77.9.23 \"Rocket\": won the online race \"q11\" (sprint, track 4014, 2 laps) in 1:00.00, under 70 % of the \
+          third quickest other winner's time of the track's 11 clean wins (1:41.00): as the result stands"]
+    );
 }
 
 // results: race types by the game's numbers (drag 2, drift 3); its seventh (6) is a result that counts nowhere

@@ -193,7 +193,7 @@ minute of a change. A keyphrase deleted from the cloud frees its name.
 
 ## Sizing
 
-For up to 6000 players at once (the image's limit; the Node server's was 2000, [From the Node
+For up to 6500 players at once (the image's limit, of the server's 7000; the Node server's was 2000, [From the Node
 server](#from-the-node-server)): 8 vCPU for 2000 and 16 for 4000 to 6000 (4000 in free roam took the Rust server 6-8 cores of a Ryzen 9 5900X,
 and a Cloudflare Tunnel's cloudflared pays for each message again, `web/server-rs/README.md`), 8 GB of memory (the
 compose file's limit), 40 GB of disk and a 1 Gbit/s port with a few TB of traffic a month.
@@ -243,24 +243,24 @@ compose file's limit), 40 GB of disk and a 1 Gbit/s port with a few TB of traffi
 
 The compose files put every container of theirs (the server, Caddy, or cloudflared and its namespace) into the systemd
 slice `nfsu2.slice` (`cgroup_parent`, `NFSU2_SLICE` to name another), and `web/deploy/nfsu2.slice` gives that slice at
-most 14 of a 16-vCPU VPS (`CPUQuota=1400%`; for another size, its vCPUs less what the rest needs, times 100), so the
-rest of the VPS keeps at least 2 cores whatever the players do. The server and cloudflared share the 14 as their load
-goes. The server sees what the whole slice uses (`cgroup: host` in `compose.yml`: the VPS's cgroup tree, read only),
+most 15 of a 16-vCPU VPS (`CPUQuota=1500%`; for another size, its vCPUs less what the rest needs, times 100), so the
+rest of the VPS keeps at least 1 core whatever the players do (it used about half of one at 5,857 players). The
+server and cloudflared share the 15 as their load goes. The server sees what the whole slice uses (`cgroup: host` in `compose.yml`: the VPS's cgroup tree, read only),
 and over 85 % of the quota the free-roam hub's busy cap gives players fewer friends, as it does when the server's own
 workers are busy: fewer car states to send costs cloudflared less too (bytes, not messages: each player still gets a
 bundle every 50 ms). At the limit they are slowed down, never the rest. The server's console says the quota it found
-at the start (`CPU quota : 14 cores for /nfsu2.slice`; "none seen" in a container without `cgroup: host`), and every
+at the start (`CPU quota : 15 cores for /nfsu2.slice`; "none seen" in a container without `cgroup: host`), and every
 5 minutes what the slice used (`[players] CPU in the last 5 minutes: the server 1.09 cores, its switch's workers 13 %
 busy; /nfsu2.slice 4.51 of its 14 cores (32 %)`).
 
     cp web/deploy/nfsu2.slice /etc/systemd/system/ && systemctl daemon-reload
     docker compose up -d --force-recreate
     systemctl status nfsu2.slice                               # the containers in it
-    systemctl show nfsu2.slice -p CPUQuotaPerSecUSec           # 14s
+    systemctl show nfsu2.slice -p CPUQuotaPerSecUSec           # 15s
 
 A new quota for a slice that runs already needs no recreate: after the `cp` and `daemon-reload`,
-`systemctl set-property --runtime nfsu2.slice CPUQuota=1400%` sets it at once (`cat
-/sys/fs/cgroup/nfsu2.slice/cpu.max`: `1400000 100000`), and the file keeps it after a reboot.
+`systemctl set-property --runtime nfsu2.slice CPUQuota=1500%` sets it at once (`cat
+/sys/fs/cgroup/nfsu2.slice/cpu.max`: `1500000 100000`), and the file keeps it after a reboot.
 
 It needs Docker's systemd cgroup driver (`docker info`: `Cgroup Driver: systemd`, the default with cgroup v2).
 Without the file the containers still start, in a slice systemd makes for them with no limit; with the cgroupfs
@@ -338,11 +338,12 @@ NFSU2_IMAGE=ghcr.io/th0mk/nfsu2-web-rs:sha-<commit>
   commit, then `docker compose up -d`. The state volume serves either.
 - `UV_THREADPOOL_SIZE` means nothing to the Rust server; `NFSU2_THREADS` sets its worker threads (by default half
   the cores, 2 to 8). Its console has the Node server's lines.
-- **6000 players** where the Node server took 2000 (`--max-peers` 1 to 6000, the image's `NFSU2_MAX_PEERS=6000`): the
-  virtual network is 10.77.0.0/19 (addresses in 10.77.0-23.x), and the game module's peer bits cover a /21, so for a player on 10.77.8-23.x the
+- **7000 players** where the Node server took 2000 (`--max-peers` 1 to 7000, the image's `NFSU2_MAX_PEERS=6500`: at 5,857 players the game's
+  CPU quota was 82 % full, nfsu2.xyz 2026-10-30): the
+  virtual network is 10.77.0.0/19 (addresses in 10.77.0-27.x), and the game module's peer bits cover a /21, so for a player on 10.77.8-27.x the
   game asks that host itself (a LAN race's connect to one who has just gone ends after the same 3 s as "timed out"
   instead of "unreachable"; nothing else differs, and pages and modules of before need no change). Online mode takes
-  3000 lobby sessions and 900 games (Node: 1000 and 300), the free-roam hub 6144 players. 6000 players need 65536
+  3500 lobby sessions and 1050 games (Node: 1000 and 300), the free-roam hub 7168 players. 7000 players need 65536
   open files (`ulimits: { nofile: 65536 }` in `compose.yml`), and past about 3000 in free roam more workers than 8
   (`NFSU2_THREADS=12` in `.env`; `compose.yml` passes it on) keep them at 32 friends each instead of the busy cap's 8.
 
@@ -384,8 +385,9 @@ players the evening before.
 Every player picks the game's language in Settings. The North American game folder has the text of thirteen,
 but English voices and movies only, and short early versions of the Chinese, Japanese and Thai text. The rest comes
 from KyoriAsh's "Multi 13 languages" mod ([nfsmods.xyz/mod/5749](https://nfsmods.xyz/mod/5749)), for Brazilian
-Portuguese TraduMix's and MixMods' translation, for Polish PLProjekt's, for Turkish muntazam's and for the English
-subtitles VileStuff's "English Subtitles Fixed" ([nfsmods.xyz/mod/5286](https://nfsmods.xyz/mod/5286)), as language
+Portuguese TraduMix's and MixMods' translation, for Polish PLProjekt's, for Turkish muntazam's, for Hungarian
+GameHunter's and for the English subtitles VileStuff's "English Subtitles Fixed"
+([nfsmods.xyz/mod/5286](https://nfsmods.xyz/mod/5286)), as language
 packs: a `LANGPACKS` folder in
 the game folder, one folder per language, whose files a game in that language reads in place of the game folder's
 (`runtime/language.c`). The game folder itself stays as it is.
@@ -408,22 +410,27 @@ the game folder, one folder per language, whose files a game in that language re
    a fifth empty folder. It holds a Windows installer, `nfsu2tr11.exe` (Inno Setup): unpack it there with
    [innoextract](https://constexpr.org/innoextract/) (`innoextract nfsu2tr11.exe`, into `app/`), never run. The
    Extra Options mod it asks for is not needed either.
-6. `tools/langpacks.py "<your game folder>" --multi13 "<the mod's folder>" --ptbr "<the translation's folder>"
-   --pl "<the Polish folder>" --subs "<the subtitles' folder>" --tr "<the Turkish folder>"` builds `LANGPACKS`
-   (1.6 GB) and prints what each language got: the dubbed voices and movies of French, German, Italian, Spanish,
-   Japanese and Russian, the full Chinese, Japanese and Thai text with their fonts, Russian, Portuguese, Polish and
-   Turkish in English's place (Polish and Turkish with their fonts), the Danish, Dutch and Swedish EA logos, and
-   English's text with the movies' lines whole (0.3 MB). Korean needs nothing. Any source can be left out: the
-   others' packs stay as they are.
-7. Copy it like the rest, from inside the game folder:
+6. Download the Hungarian translation (GameHunter's v1.1 by L_zooltan, `nfs_underground2.exe`, from
+   [gamehunter.hu](http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html) or
+   [magyaritasok.hu](https://magyaritasok.hu/games/need-for-speed-underground-2), the GameHunter TEAM one) into a
+   sixth empty folder. It is a Windows installer (Astrum InstallWizard, as the Polish ones); the tool reads its files
+   and never runs it.
+7. `tools/langpacks.py "<your game folder>" --multi13 "<the mod's folder>" --ptbr "<the translation's folder>"
+   --pl "<the Polish folder>" --subs "<the subtitles' folder>" --tr "<the Turkish folder>" --hu "<the Hungarian
+   folder>"` builds `LANGPACKS` (1.6 GB) and prints what each language got: the dubbed voices and movies of French,
+   German, Italian, Spanish, Japanese and Russian, the full Chinese, Japanese and Thai text with their fonts, Russian,
+   Portuguese, Polish, Turkish and Hungarian in English's place (Polish and Turkish with their fonts), the Danish,
+   Dutch and Swedish EA logos, and English's text with the movies' lines whole (0.3 MB). Korean needs nothing. Any
+   source can be left out: the others' packs stay as they are.
+8. Copy it like the rest, from inside the game folder:
    `rsync -rlt LANGPACKS root@<vps>:/srv/nfsu2/game/`, then the same `chmod`.
 
 A player's browser fetches only their own language's pack: "Preload the game data" adds about 50 MB of dubbed
 voices (Russian 94 MB), and the dubbed movies (206 MB in all) stream in place of the English ones (725 MB). Without
-`LANGPACKS` every language but Russian, Portuguese, Polish and Turkish still plays its text, with English voices and
-movies; those four play in English. All but French, German, Italian and Spanish (whose texts leave the lines their dubs
-speak empty) show the movies' subtitles (Settings, Game, Subtitles, on by default), English only with its pack: the
-game folder's English lines stop at their first apostrophe ("But if you"). The North American game shows none.
+`LANGPACKS` every language but Russian, Portuguese, Polish, Turkish and Hungarian still plays its text, with English
+voices and movies; those five play in English. All but French, German, Italian and Spanish (whose texts leave the lines
+their dubs speak empty) show the movies' subtitles (Settings, Game, Subtitles, on by default), English only with its
+pack: the game folder's English lines stop at their first apostrophe ("But if you"). The North American game shows none.
 
 ## Texture packs
 
@@ -513,8 +520,8 @@ plays the VP6 movies anyway.
     restarts);
   - closes, without an answer, a connection that asks for another name (the bare address, a scanner's made-up
     name), on 80 and on 443; a TLS handshake without your name fails, so the certificate is not shown;
-  - opens at most 47900 connections to the server (one per request in progress; with 6000 players the Rust server
-    takes 48000, 8 per player; the Node image, at most 2000 players, takes 16000);
+  - opens at most 55900 connections to the server (one per request in progress; with 7000 players the Rust server
+    takes 56000, 8 per player; the Node image, at most 2000 players, takes 16000);
   - has its admin API off: nothing reconfigures it while it runs, and a changed `.env` takes `docker compose up -d`.
 - **NFSU2_HOST is one name.** For a second name, or a wildcard, edit the Caddyfile in `compose.yml` and the
   server's `NFSU2_HOST` (a comma list; `*.example.com` for one label under it). A wildcard certificate needs Let's
@@ -593,15 +600,26 @@ the player left: `./nfsu2 ban c17 2w Cheating in races`. Free roam's lines get n
   first, at the slowest time any report gave it, and the race's length is what another finisher's own game says it
   drove. A line (`won the race of lobby …`) when the winner averaged 350 km/h or more over it, which no car does (a
   free-roam sprint's average: 107 km/h); won in under half the race's quickest clean win the server saw since it
-  started (two reports, another finisher), which a teleport to the finish with nobody else over the line does; or
-  came under half the way by every report, as a cheat that ends the race at once does ("having driven 0.6 % of the
-  way"). One player's report cannot make a winner or a time, and the line says how many of the race's reports saw it.
+  started (two reports, another finisher), which a teleport to the finish with nobody else over the line does; won,
+  once the race had 10 clean wins, in under 70 % of the third quickest other winner's time (a car made faster than
+  any tuning makes it: the honest wins of a day came at 78 % of it or more); or came under half the way by two
+  reports or more, as a cheat that ends the race at once does ("having driven 0.6 % of the way"). One player's report
+  cannot make a winner or a time, and the line says how many of the race's reports saw it. A car no tuning makes (an
+  edited save's: 600 kW, 420 km/h or a rating of 1000 or more; the game's best cars make 450 kW, 380 km/h and 800) is
+  a line of its own, `raced in the race of lobby … in an edited car`, whether it won or not.
   In Online mode each racer is judged by its own game's figures (`won the online race …`, "by its own game"): a time
   under the shortest its race type takes (the result is not taken either), 350 km/h or more on average, or a way
-  under half another racer's own (both by their own games: "each by its own game"); and a race won in under 40 % of
-  the next finisher's time, by the result. An Online line names the track and laps and the racer's own top speed;
+  under half another racer's own (both by their own games: "each by its own game"), or a top speed of 420 km/h or
+  more, finished or not ("an edited car": of 39,000 players' top speed records 5 went over it); a race won in under
+  40 % of the next finisher's time, by the result; and, once the track (race type, track, direction, laps) had 10
+  clean wins since the start, one won in under 70 % of the third quickest other winner's time there. A report that
+  leaves out a player of the race (one who joined as it started and never raced) is taken and looked at, as any
+  other. An Online line names the track and laps and the racer's own top speed;
   the other racers' times are on that race's `[online]` lines (`grep -F '"<race name>"'`). A drift race is won by
   points and is left out.
+- **Speed hacks in races**: a game whose clock runs fast does not get past a race's start, in a free-roam lobby
+  (1.25 and 1.5 times as fast in a test) or in Online mode (1.5): every racer stays on the pre-race screen. The race's
+  finish times are the same in every game, so they could not show one either.
 - **In free roam**: a teleport (the car went 300 m or more farther than any car drives, in one jump or in short hops),
   a car over 450 km/h for 2 s, or a game whose clock runs 1.3 times as fast as the server's or more for a minute (a
   speed hack); a teleport's or a fast car's line names the players within 40 m of where it came to, and a race lobby
@@ -612,7 +630,7 @@ the player left: `./nfsu2 ban c17 2w Cheating in races`. Free roam's lines get n
   save) unless it does one of those, an honest winner over racers who stood still or were still on the way, what one
   player's game shows of another's car (a racer who left the race is put far away: 462 km in a 4-minute sprint), a
   race report the server could not read as the race's (a racer named twice, other players: `race report not taken:
-  players named twice`). The World Map's jump stays in free roam, so a teleport that lands within 25 m of an event's
+  players named twice`), a race whose other racers quit, by the one report that came. The World Map's jump stays in free roam, so a teleport that lands within 25 m of an event's
   start or 45 m of a shop's door is taken for one, whoever made it.
 
 The races won by cheating: `docker compose logs -t server --since 24h | grep '\[cheat\]' | grep 'race'`; and the
@@ -632,6 +650,26 @@ cheats that bother others in free roam: `... | grep -e 'next to' -e 'race lobby'
 
 The console names paths and addresses: it is yours.
 
+## Players a day
+
+The server counts how many come each day (UTC), each browser once: the ones that opened the page, played (pressed
+Play, or used free roam, LAN or Online), drove in free roam, and were in Online mode. On the VPS:
+
+```sh
+cd /srv/nfsu2
+./nfsu2 days         # the last 30 days, then today so far
+./nfsu2 days 90      # the last 90
+```
+
+The log has a `[days]` line every 5 minutes with today's counts so far, and one when a day ends. The days that ended
+are kept in the state folder's `days.csv` (`docker compose cp server:/state/days.csv .` copies it out), the day so
+far in `days.json`, so a restart counts on.
+
+A browser is the random id its page keeps (the one bans use); the server keeps only a hash of it with a key that is
+new each day, and forgets the day's hashes when it ends. The same person on two devices counts twice, a private window
+once a load. Players with a page from before this server only count once they play with others. Cloudflare's own
+"Unique visitors" (Analytics, Traffic) counts addresses instead: many players share one on mobile networks.
+
 ## Kick and ban
 
 You can take a player out of playing with others (free roam, Online mode and LAN races) for now, for a while or for
@@ -642,7 +680,7 @@ in the server's container: copy it next to `compose.yml` once (`scp web/deploy/n
 ```sh
 cd /srv/nfsu2
 ./nfsu2 who                              # who is on: address, name, what they do, for how long; and who left in the last hour
-./nfsu2 who bob                          # only names with "bob" in them
+./nfsu2 who bob                          # only names with "bob" in them (theirs, or the one over their car)
 ./nfsu2 kick Bob Stop ramming people     # off now, with that message; reloading the page brings them back
 ./nfsu2 ban Bob 3d Ramming, 3 days       # off, and turned away for 3 days: 30m, 12h, 3d, 2w, or perm for good
 ./nfsu2 ban 10.77.4.17 perm              # a player by address, when two have the same name
@@ -675,6 +713,11 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
 - **Who left**: `ban` takes a player who left in the last hour too (`who` lists them), so you can ban someone who
   is gone already, and the player of a `[cheat]` line about a race by its handle (`ban c17`) for a week after the
   line. `kick` needs them on.
+- **Two names**: `who` lists the name a player's page sent when it joined. The name over their car in free roam (and
+  in quick chat) is their game's. The two are the same unless the page was edited. Then `who` shows both
+  (`"player" free roam, 5 min; its game shows "…"`), `who`, `kick` and `ban` find the player by either, and a ban by
+  the name over the car is listed under that name. The log has a line when it happens, `[roam] 10.77.4.17 "player":
+  its game shows "…" over its car`: `grep` it for one who left, and ban the address within the hour.
 - **Banning again** replaces the earlier ban of the same player: `ban Bob perm` after `ban Bob 1d` leaves one ban,
   for good.
 - **Blocks**: players block others by name (Settings, Online, More online settings, Blocked players): the free-roam
@@ -779,7 +822,10 @@ the origin-pull certificate with a stand-in CA ([What was tested](#what-was-test
 `compose.tunnel.yml` puts `cloudflared` where Caddy was.
 
 1. In Cloudflare's dashboard (Zero Trust, Networks, Tunnels), create a tunnel with the Docker connector and copy
-   its token. Give it a public hostname: your name, service `http://127.0.0.1:8080`.
+   its token. Give it a public hostname: your name, service `http://127.0.0.1:8080`. (The server listens on the
+   socket `@nfsu2-http` in the namespace below too, without TCP's work for each message, but the dashboard's Service
+   URL field refuses `unix:@nfsu2-http`, nfsu2.xyz 2026-10-30: only a tunnel run from a config file of its own
+   takes it.)
 2. Copy `web/deploy/compose.tunnel.yml` next to `compose.yml`, and add to `.env`:
 
    ```sh
@@ -795,14 +841,16 @@ the origin-pull certificate with a stand-in CA ([What was tested](#what-was-test
 What follows from this setup:
 
 - **cloudflared and the server share one network namespace**, on a Docker network, held by a small `pause`
-  container (`net`), so either can restart on its own. cloudflared reaches the server on 127.0.0.1:8080; nothing
-  else can.
+  container (`net`), so either can restart on its own. cloudflared reaches the server on its socket `@nfsu2-http`
+  (or 127.0.0.1:8080); nothing else can.
 - **The client's address** comes from Cloudflare's `CF-Connecting-IP`, and only from `cloudflared`. It opens a
   connection to the server for each request in progress and has no limit of its own per client: the server's own
   limits per client address hold.
 - **Settings:** 7 and 9 of the proxy's list above apply too (8 is step 4 here). Authenticated Origin Pulls is not
   needed: the server is reached through cloudflared alone.
-- **Four copies of cloudflared** (`nfsu2-web-cloudflared-1` to `-4`), each with 4 connections to Cloudflare.
+- **Four copies of cloudflared** (`nfsu2-web-cloudflared-1` to `-4`), each with 4 connections to Cloudflare and
+  4 threads of Go (`GOMAXPROCS`: with one for each of the slice's cores, a copy's profile on nfsu2.xyz, 2026-10-30,
+  showed a fifth of its CPU in Go waking idle threads that found nothing to do).
   Each player's connection goes over one of them. A connection that went to a far or lossy Cloudflare site slows
   every player on it: on nfsu2.xyz (2026-10-22, 2,950 players) two connections had gone to Amsterdam, and about 600
   players got the other cars seconds late while the server was idle. A copy's sites are in its log:
@@ -824,55 +872,102 @@ reaches the server on 127.0.0.1, crashes of either side, a reboot.
 
 No Caddy and no `cloudflared`: Cloudflare's proxy connects to the server itself, which does TLS with a Cloudflare
 Origin CA certificate (TLS choice B with C, [Without Docker](#tls-pick-one)). An Origin Rule sends
-`https://<your name>` to a high port (28443 here), so the VPS needs nothing on 80 or 443. On nfsu2.xyz the tunnel
-took about 3/4 of the CPU (1.72 of 2.25 cores per 1000 players, 2026-10-24); without it the port (0.114 Mbit/s a
-player) is the limit, about 7,000-8,000 players on 1 Gbit/s.
+`https://<your name>` to a high port (28443 here), so the VPS needs nothing on 80 or 443. On nfsu2.xyz cloudflared
+took 7.5 of the slice's 11.6 cores at 5,985 players (2026-10-30); without it the 1 Gbit/s port (0.13 Mbit/s a
+player) is the limit, about 7,000-7,500 players.
 
-1. **Cloudflare, before anything on the VPS:**
-   - SSL/TLS, Origin Server, **Create Certificate**: your name and `*.<your name>`, 15 years. Save the certificate
-     as `/srv/nfsu2/tls/origin.pem` and the key as `origin.key`, then `chown -R 1000:1000 /srv/nfsu2/tls && chmod
-     700 /srv/nfsu2/tls && chmod 600 /srv/nfsu2/tls/origin.key` (the container runs as uid 1000).
-   - SSL/TLS, Origin Server, **Authenticated Origin Pulls** on.
-   - SSL/TLS, Overview: **Full (strict)**. SSL/TLS, Edge Certificates: **Always Use HTTPS** on (http:// never reaches
-     the VPS: the Origin Rule sends every request for the name to the TLS port).
-   - Rules, Origin Rules: hostname equals your name, **Destination Port** 28443. Deploy it at step 4 (with the
-     tunnel still in front it is not needed).
-   - The proxy's settings 7-9 above apply as they are (the Cache Rule stays).
-2. **Firewall:** the port from Cloudflare's addresses only (`ufw status` first; with ufw off, `ufw allow 22/tcp`
-   before `ufw enable`):
+The proxy's settings 7-9 above apply as they are. Steps 1-5 change nothing for the players (the tunnel stays in
+front) and try every part with a second name, `origin-test.<your name>`, and a second server of its own; step 6
+switches.
+
+1. **The certificate** (SSL/TLS, Origin Server, Origin Certificates tab, **Create Certificate**): "Generate private
+   key and CSR with Cloudflare", key type **ECC** (cheaper handshakes than RSA: every player's connection is one), the
+   hostnames as they are (your name and `*.<your name>`, which covers the test name), 15 years, **Create**, key format
+   PEM. The key is shown once: on the VPS, `mkdir -p /srv/nfsu2/tls`, paste the certificate into
+   `/srv/nfsu2/tls/origin.pem` and the key into `origin.key`, then `chown -R 1000:1000 /srv/nfsu2/tls && chmod 700
+   /srv/nfsu2/tls && chmod 600 /srv/nfsu2/tls/*` (the container runs as uid 1000).
+2. **Cloudflare, for the test name:**
+   - SSL/TLS, Origin Server, **Authenticated Origin Pulls** tab, section **Global**: **On**. Cloudflare's own
+     certificate, shared by every Cloudflare account, the one the server trusts (built in, valid until 2029-11-01);
+     the Zone-level section is for a certificate of your own, which the server does not take. It changes nothing
+     for the tunnel or an origin that asks for no certificate.
+   - DNS, Records, **Add record**: `A`, name `origin-test`, the VPS's IPv4, proxied (orange).
+   - The encryption mode: SSL/TLS, Overview. If it says Full (strict), nothing to do; otherwise (Automatic, or
+     another mode other names need) a **Configuration Rule** (Rules, Overview, **Create rule**, Configuration Rule):
+     Hostname equals `origin-test.<your name>`, **SSL**: Strict, **Deploy**.
+   - **Origin Rule** (Rules, Overview, **Create rule**, Origin Rule): Hostname equals `origin-test.<your name>`,
+     **Destination Port**: rewrite to `28443`, **Deploy**.
+3. **Firewall:** 28443 for Cloudflare's addresses only, in an nftables table of its own (nothing else on the VPS
+   changes; with ufw on, also `ufw allow 28443/tcp`, and in Hetzner's Robot firewall, if one is on, a rule for TCP
+   28443):
 
    ```sh
-   for r in $(curl -s https://www.cloudflare.com/ips-v4) $(curl -s https://www.cloudflare.com/ips-v6); do
-     ufw allow proto tcp from "$r" to any port 28443 comment cloudflare
-   done
+   cp web/deploy/cloudflare-only.sh /srv/nfsu2/ && cp web/deploy/nfsu2-cloudflare-only.service /etc/systemd/system/
+   systemctl daemon-reload && systemctl enable --now nfsu2-cloudflare-only   # again at boot
+   nft list table inet nfsu2_cloudflare
    ```
 
-3. **Compose:** copy `web/deploy/compose.origin.yml` next to `compose.yml`; in `.env`
-   `COMPOSE_FILE=compose.yml:compose.origin.yml` (and `NFSU2_TLS_DIR=/srv/nfsu2/tls`). Keep `TUNNEL_TOKEN`: it is the
-   way back.
-4. **The switch** (everyone reconnects once, as at a release): `docker compose up -d --remove-orphans` (removes
-   `cloudflared` and `net`), then in Cloudflare's DNS delete the tunnel's record for your name (CNAME to
-   `<id>.cfargotunnel.com`) and add a proxied (orange) `A` record to the VPS's IPv4, and deploy the Origin Rule. In
-   Zero Trust, delete the tunnel's public hostname (the tunnel itself can stay). Leave out `AAAA` unless the firewall
-   step covered IPv6 and you want it.
-5. **Check:** the log says `HTTPS : port 28443` and `cloudflare: its addresses must show its origin-pull
-   certificate`; the page loads; `curl -kv --max-time 5 https://<vps>:28443/` from outside Cloudflare gets no
-   answer (the firewall); players' `[roam]` rtt as before or lower.
+4. **A test server** on the VPS's network, with the running image, the game data and module read only, and a state
+   of its own (its players are its own; `--access-log` names each request's client address):
 
-**Back to the tunnel:** `COMPOSE_FILE=compose.yml:compose.tunnel.yml`, `docker compose up -d --remove-orphans`,
-turn the Origin Rule off, delete the `A` record and add the tunnel's public hostname again (that makes its CNAME).
+   ```sh
+   cd /srv/nfsu2
+   env1() { grep -s "^$1=" .env | tail -1 | cut -d= -f2-; }
+   d=$(env1 NFSU2_DATA); data=$(realpath -m "${d:-./game}")
+   m=$(env1 NFSU2_MODULE); mod=$(realpath -m "${m:-./module}")
+   echo "game data $data, module $mod, image $(env1 NFSU2_IMAGE)"
+   docker run -d --name nfsu2-origintest --network host --read-only --cap-drop ALL \
+     --security-opt no-new-privileges --memory 3g --memory-swap 3g --ulimit nofile=65536 --no-healthcheck \
+     -e NFSU2_HOST=origin-test.<your name> -e NFSU2_HTTP_PORT=0 -e NFSU2_MAX_PEERS=16 -e NFSU2_COMPRESS_THREADS=0 \
+     -e NFSU2_REAL_IP_HEADER=cf-connecting-ip \
+     -v "$data":/game:ro -v "$mod":/module:ro -v /srv/nfsu2/tls:/tls:ro -v nfsu2-origintest-state:/state \
+     "$(env1 NFSU2_IMAGE)" \
+     --port 28443 --tls-cert /tls/origin.pem --tls-key /tls/origin.key --trusted-proxies cloudflare --access-log
+   docker logs nfsu2-origintest 2>&1 | grep -E 'HTTPS|cloudflare'
+   ```
+
+   (The game data and module as `.env` names them, `./game` and `./module` where it names none.)
+5. **Try it:** open `https://origin-test.<your name>`, Play, drive in free roam (alone: it is the test server's
+   world). `docker logs nfsu2-origintest 2>&1 | grep '\[http\]' | tail` names your own address, not Cloudflare's.
+   From any machine, `curl -sk --max-time 5 --resolve origin-test.<your name>:28443:<vps> https://origin-test.<your
+   name>:28443/` gets no answer (the firewall). What a step left out shows: 525 "SSL handshake failed"
+   (Authenticated Origin Pulls off, or the certificate files), 526 (the encryption mode above Full (strict) with
+   another certificate), 521 or 522 (the Origin Rule, the firewall, or the test server not running). Then
+   `docker rm -f nfsu2-origintest && docker volume rm nfsu2-origintest-state`.
+6. **The switch** (at a quiet hour: from the first command until the DNS record, a minute or two, nobody can play;
+   then every page reconnects by itself):
+   - On the VPS: copy `web/deploy/compose.origin.yml` next to `compose.yml`; in `.env`
+     `COMPOSE_FILE=compose.yml:compose.origin.yml` and `NFSU2_TLS_DIR=/srv/nfsu2/tls` (keep `TUNNEL_TOKEN`: it is
+     the way back). Then `docker compose config -q && docker compose up -d --remove-orphans` (`--remove-orphans`
+     stops and removes `cloudflared` and `net`). The log says `HTTPS : port 28443` and `cloudflare: its addresses
+     must show its origin-pull certificate`.
+   - The Origin Rule and the Configuration Rule (if you made one): Hostname is in `<your name>` and the test name.
+   - DNS: delete the tunnel's record for your name (a `CNAME` to `<tunnel id>.cfargotunnel.com`), add an `A` record
+     for it (`@`) to the VPS's IPv4, proxied. Leave out `AAAA`. Leave the tunnel and its published application in
+     Zero Trust as they are: they are the way back, and a DNS record and a tunnel are independent.
+7. **Check:** the page loads, players come back (`./nfsu2 who`), and `measure.sh` says the front is Cloudflare's
+   proxy.
+
+**Back to the tunnel:** in `.env` `COMPOSE_FILE=compose.yml:compose.tunnel.yml`, `docker compose up -d
+--remove-orphans` (brings `net` and `cloudflared` back), then in DNS delete the `A` record and add the `CNAME` again
+(your name to `<tunnel id>.cfargotunnel.com`, proxied), and take your name out of the Origin Rule. The firewall can
+stay (`cloudflare-only.sh --off` and `systemctl disable nfsu2-cloudflare-only` to remove it).
 
 What the handshake lets through: an address outside Cloudflare's ranges never gets past the firewall; one inside
 must show the origin-pull certificate, and every handshake must ask for a name in the certificate (none, or another
-name: no certificate, no answer). Authenticated Origin Pulls' Cloudflare certificate is the same for every
-Cloudflare account, so it proves Cloudflare's proxy, not your zone: another account's proxy would also need to send
-your name as its SNI, which only Enterprise plans can set, and Cloudflare sets `CF-Connecting-IP` there itself.
-A certificate of your own (zone-level Authenticated Origin Pulls) would close that too, but the server trusts
-Cloudflare's CA only (built in).
+name: no certificate, no answer). Authenticated Origin Pulls' Global certificate is the same for every Cloudflare
+account, so it proves Cloudflare's proxy, not your zone: another account's proxy would also need to send your name
+as its SNI, which only Enterprise plans can set, and Cloudflare sets `CF-Connecting-IP` there itself. A certificate
+of your own (Zone-level Authenticated Origin Pulls) would close that too, but the server trusts Cloudflare's CA only
+(built in).
 
-Checked on a Mac (2026-10-24, the arguments of `compose.origin.yml`, a self-signed certificate): the health
-check's 127.0.0.1 port and HTTPS for the name answer, the bare address and another name get no handshake. Through a
-real Cloudflare: **UNVERIFIED**.
+Checked (2026-10-30): the server's built-in Cloudflare ranges and origin-pull CA are Cloudflare's published ones
+(22 ranges; CA fingerprint 9A:1A:...:A2:B9); on a Mac, the arguments of `compose.origin.yml` with an ECC key in
+Cloudflare's format (PKCS#8): your name and a name under the wildcard answer, a WebSocket upgrades with the Host
+Cloudflare sends (no port), the bare address, another name and two labels under the wildcard get no handshake, and
+the local port answers the health check; `cloudflare-only.sh` in Debian 12 (nftables 1.0.6): the port closed to
+another address, another port open, a second run replacing the first, `--off` opening it. Through a real Cloudflare:
+steps 1-5 are that check.
 
 ## A proxy you already have
 
@@ -942,8 +1037,8 @@ paths to the VPS, so pick a VPS location between you.
 - **Keepalive:** the switch pings every connection every 25 s. Proxies and Cloudflare then never cut a quiet player,
   and the switch finds players whose connection died.
 - **Limits:**
-  - 6000 players on the switch with the Rust image (`NFSU2_MAX_PEERS=6000`; the server's own default is 128, and
-    6000 is the most addresses it hands out on its virtual network, 10.77.0.0/19: 250 in each of 10.77.0-23.x), 2000 with
+  - 6500 players on the switch with the Rust image (`NFSU2_MAX_PEERS=6500`; the server's own default is 128, and
+    7000 is the most addresses it hands out on its virtual network, 10.77.0.0/19: 250 in each of 10.77.0-27.x), 2000 with
     the Node image (its network is 10.77.0.0/21);
   - when every place is taken a game waits in line for one, first come first served (nfsu2-lan `queue.rs`): the
     line's first takes the next place that frees up, and while anyone waits a newcomer waits too. The game shows

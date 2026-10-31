@@ -107,7 +107,7 @@ int fileio_resolve_save(const char *win, char *out, size_t outsz);
 #define FN_REC_WRITE    0x00516620u   /* thiscall record (out, &left) -> out after it: a career car as the profile has it */
 #define FN_PARTS_READ   0x00504040u   /* thiscall record +0x434 (in, &left) -> in after them */
 #define FN_SET_CAR      0x00500bd0u   /* thiscall Career (handle): the car it drives */
-#define FN_DIALOG       0x00558790u   /* cdecl (package, "", 0xF770, 0x61C, yes, no, no, 0, text, %s, %s): two buttons */
+#define FN_DIALOG       0x00558750u   /* cdecl (package, "", 0xF770, 0x61C, yes, no, no, 0, format, ...): two buttons */
 #define FN_SHOW         0x00537c00u   /* cdecl (package, group, script name, 1) */
 #define FN_SELECT_MAKE  0x004ee210u   /* thiscall UI_CareerCarSelect: its list and the car shown, again */
 #define FN_HELPBAR_SET  0x0054e6e0u   /* thiscall help bar (buttons, package) */
@@ -134,6 +134,8 @@ int fileio_resolve_save(const char *win, char *out, size_t outsz);
 #define GARAGE_OLD      "GARAGE.OLD"
 #define GARAGE_MAGIC    0x4147324eu   /* "N2GA" */
 #define TRADE_PCT       80u
+
+uint32_t language_text(uint32_t hash);       /* language.c: a text of the game's, in its language */
 
 static uint32_t g_blk;            /* guest memory: our records (XN a player), a new one, scratch */
 #define X_AT(p)         (g_blk + (p) * XN * REC_SZ)
@@ -663,8 +665,18 @@ static int trade_ask(CPU *c, uint32_t scr){
     uint32_t h = MR32(it + IT_HANDLE), r = garage_find(CARS0, h);
     if (!r || slot_of(CARS0, r) < 0 || !MR8(r + R_OWNED)) return 0;
     g_trade = h;
-    uint32_t a[11] = { MR32(scr + SC_PACKAGE), 0x00783fe5u, 0xf770u, 0x61cu, MSG_TRADE_YES, MSG_NO, MSG_NO, 0, TXT_TRADE_ASK, 0, 0 };
-    gcall(c, FN_DIALOG, 0, 11, a);
+    /* the dialog's text is a printf format, and the question's "80% of its cost" is no format: "%s" with it; the
+     * text it made is printed as a format once more on the screen, so with its % doubled ("80% of" was "800f") */
+    uint32_t q = language_text(TXT_TRADE_ASK), t = SCRATCH + 4u, n = 0;
+    if (!q) return 0;
+    MR8(SCRATCH) = '%'; MR8(SCRATCH + 1u) = 's'; MR8(SCRATCH + 2u) = 0;
+    for (uint32_t i = 0; MR8(q + i) && n + 3u < 0x400u; i++){
+        if (MR8(q + i) == '%') MR8(t + n++) = '%';
+        MR8(t + n++) = MR8(q + i);
+    }
+    MR8(t + n) = 0;
+    uint32_t a[10] = { MR32(scr + SC_PACKAGE), 0x00783fe5u, 0xf770u, 0x61cu, MSG_TRADE_YES, MSG_NO, MSG_NO, 0, SCRATCH, t };
+    gcall(c, FN_DIALOG, 0, 10, a);
     return 1;
 }
 static void trade(CPU *c, uint32_t scr){

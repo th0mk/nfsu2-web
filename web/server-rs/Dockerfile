@@ -71,7 +71,7 @@ ENV NFSU2_REPO=/app \
     NFSU2_DATA=/game \
     NFSU2_WASM=/module/nfsu2.wasm \
     NFSU2_STATE=/state \
-    NFSU2_MAX_PEERS=6000
+    NFSU2_MAX_PEERS=6500
 # (a uid without a name: this stage runs nothing, so building it for arm64 needs no emulation)
 USER 1000:1000
 VOLUME /state

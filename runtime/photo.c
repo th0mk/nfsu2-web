@@ -348,7 +348,7 @@ static void steer(uint32_t car, float dt){
         P.free = 0; memcpy(P.off, P.off0, sizeof P.off);
         P.yaw = P.yaw0; P.pitch = P.pitch0; P.dist = P.dist0; P.fov = P.fov0; P.roll = 0;
     }
-    if (md >= 0 && (md == 2 ? 1 : md) != P.free){
+    if (md >= 0 && (md == 2 ? !P.free : md) != P.free){
         dir(P.yaw, P.pitch, d);
         if (!P.free){                                   /* free from where the orbit looks from */
             for (int i = 0; i < 3; i++) P.eye[i] = P.se[i] - cc[i];
@@ -361,6 +361,7 @@ static void steer(uint32_t car, float dt){
             P.dist = l;
         }
         P.free = !P.free;
+        fprintf(stderr, "[photo] f=%ld the %s camera\n", autotest_frame(), P.free ? "free" : "orbit");
     }
     /* turning: the keys and the stick at TURN_DPS, a drag across the view's height about 140 degrees */
     P.yaw += ty * TURN_DPS * DEG * fast * dt - ddx * 2.4f;
@@ -416,7 +417,7 @@ static void label(void){
         { "french", "Mode photo" }, { "german", "Fotomodus" }, { "italian", "Modalit\xe0 foto" },
         { "spanish", "Modo foto" }, { "dutch", "Fotomodus" }, { "swedish", "Fotol\xe4ge" },
         { "danish", "Fototilstand" }, { "portuguese", "Modo Foto" }, { "polish", "Tryb foto" },
-        { "turkish", "Foto Modu" },
+        { "turkish", "Foto Modu" }, { "hungarian", "Fot\xf3 m\xf3" "d" },
     };
     const char *l = language_name(), *s = "Photo Mode";
     if (l == P.lang) return;
@@ -455,7 +456,7 @@ void photo_frame(CPU *c){
         P.pause_at = 0;
     }
     int nm = atomic_exchange(&I.names, -1);
-    if (nm >= 0 && (nm == 2 ? 1 : nm) != P.names){
+    if (nm >= 0 && (nm == 2 ? !P.names : nm) != P.names){
         P.names = !P.names;
         fprintf(stderr, "[photo] f=%ld names %s\n", autotest_frame(), P.names ? "on" : "off");
     }
@@ -562,7 +563,7 @@ static void act(CPU *c){
     if (MR32(G_RACEKIND) == 0u) sub_004c2510(c); else sub_004c24c0(c);
 }
 
-/* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, reset, names [0|1], hold MASK,
+/* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, other (Tab), reset, names [0|1], hold MASK,
  * move X Y [UP [CLOSER]], turn X Y (-1..1), drag DX DY, pan DX DY (view heights), dolly N (wheel notches), fov DEG,
  * roll DEG */
 int photo_script(const char *s){
@@ -575,6 +576,7 @@ int photo_script(const char *s){
     else if (!strcasecmp(w, "off")) photo_input(PH_OPEN, 0, 0);
     else if (!strcasecmp(w, "orbit")) photo_input(PH_MODE, 0, 0);
     else if (!strcasecmp(w, "free")) photo_input(PH_MODE, 1, 0);
+    else if (!strcasecmp(w, "other")) photo_input(PH_MODE, 2, 0);
     else if (!strcasecmp(w, "reset")) photo_input(PH_RESET, 0, 0);
     else if (!strcasecmp(w, "names")) photo_input(PH_NAMES, n > 1 ? (int)a : 2, 0);
     else if (!strcasecmp(w, "hold")) photo_input(PH_HOLD, (int)a, 0);

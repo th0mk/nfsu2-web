@@ -4,9 +4,9 @@
 //!
 //! # The protocol
 //!
-//! Every browser that joins gets an address on 10.77.0.0/19 (`MASK`): 250 in each of 10.77.0-23.x (`NETS`, host
-//! bytes 2-251, so none ends in .0 or .255 and 10.77.0.1 and .253 stay the server's own), `ADDRS` (6000) in all,
-//! handed out in turn across the twenty-four (`vip_at`: 10.77.0.2, 10.77.1.2, ..., 10.77.23.2, 10.77.0.3, ...), so two
+//! Every browser that joins gets an address on 10.77.0.0/19 (`MASK`): 250 in each of 10.77.0-27.x (`NETS`, host
+//! bytes 2-251, so none ends in .0 or .255 and 10.77.0.1 and .253 stay the server's own), `ADDRS` (7000) in all,
+//! handed out in turn across the twenty-eight (`vip_at`: 10.77.0.2, 10.77.1.2, ..., 10.77.27.2, 10.77.0.3, ...), so two
 //! players are rarely in the same /24 and anything that still takes the network for a /24 (or for the /20 it was
 //! before) shows at once, not only past 250 (or 4000) players.  Binary frames carry the game's network traffic; the
 //! switch only routes them and never looks inside:
@@ -28,7 +28,7 @@
 //!   UDP, TCP segments and ICMP with ports at [12..15] and an 8-byte LAN header (op, ttl, connection id) before the
 //!   data.  Their broadcasts go only to the browsers that have LAN play open (the game's LAN or Online screens:
 //!   "lan":1 in the hello, then {"t":"lan","on":0|1}; a page of before says nothing and gets them all): the others
-//!   drop them anyway, and on a full switch each one would reach 6000 browsers.
+//!   drop them anyway, and on a full switch each one would reach 7000 browsers.
 //! - 32 (`KIND_BUNDLE`): a bundle: several frames in one message, [1..3] reserved, then entries of [0] u8 n,
 //!   [1] reserved, [2..3] u16 frame length, n x u32 destination vip, the frame: to each of the n (the frame's own
 //!   destination is ignored), or with n = 0 to its own.  The switch takes them from anyone (the welcome says
@@ -60,7 +60,7 @@
 //! A page whose LAN play is shut ("lan":0: free roam alone) gets a list of the server's own hosts only, and no changes,
 //! until it opens LAN play ({"t":"lan","on":1}: the whole list then, and the changes after it; shut again, no more
 //! changes).  Only LAN play needs the other players' addresses (members.rs `list_for`), and on a full switch the whole
-//! list is about 210 KB and every change went to 6000 pages, four times a second.
+//! list is about 245 KB and every change went to 7000 pages, four times a second.
 //!
 //! ## Addresses and tokens
 //!
@@ -134,9 +134,10 @@
 //! [`Hello`]): by the id its page keeps in its storage ("id", at most 64 characters), the ones the page found in its
 //! other stores besides it ("was", at most [`WAS_MAX`] of them), or the keyphrase it plays with ("claim": below, as
 //! its owner).  The switch keeps who was on it for the operator's `who` ([`LanSwitch::who`]): each player's address
-//! and name, the opaque id the server gave its client address (`AttachOpts::ident`, a keyed hash), its page's id and
-//! its keyphrase's owner, and the same of the players who left in the last `GONE_MS`, so that one who just left can
-//! still be banned.  None of it is ever sent to a peer.
+//! and name (with the other names its game shows in free roam: `Host::other_names`), the opaque id the server gave
+//! its client address (`AttachOpts::ident`, a keyed hash), its page's id and its keyphrase's owner, and the same of
+//! the players who left in the last `GONE_MS`, so that one who just left can still be banned.  None of it is ever
+//! sent to a peer.
 //!
 //! ## Claimed names
 //!
@@ -165,7 +166,7 @@
 //!   own buckets (behind its own lock, uncontended but for the Online host's charges), its client's and site's
 //!   (behind theirs: shared only by that client's connections), then the receivers.  No lock is shared by all.
 //! - Who is on the switch changes under one lock (`members`: admit, leave, reservations, the peer-list changes,
-//!   the store); routing never takes it.  A frame finds its receiver in a fixed table of the 6000 addresses (an
+//!   the store); routing never takes it.  A frame finds its receiver in a fixed table of the 7000 addresses (an
 //!   `ArcSwapOption<Peer>` per address: one atomic load), a broadcast walks a copy-on-write list of every peer (LAN
 //!   play's, of every peer with LAN play open).  What a broadcast costs its sender is its list's length, known
 //!   without a look at the peers, and they are walked only for a broadcast paid for (the second security audit,
@@ -217,12 +218,14 @@
 //! `terminate()` ends it at once (1006).  A protocol error (nfsu2-ws `ReadError::Protocol`) sends that close
 //! frame (its code only, as ws did) and ends the connection.  Nothing the client sends after a close counts.
 
+mod away;
 mod compact;
 mod conn;
 pub mod fpred;
 mod impair;
 mod lag;
 mod members;
+pub mod mix;
 mod queue;
 mod reader;
 mod route;
@@ -237,7 +240,7 @@ use std::time::Duration;
 
 use arc_swap::{ArcSwap, ArcSwapOption};
 use bytes::Bytes;
-use nfsu2_util::{Bucket, Charge, Counter, Host, SendResult, SwitchSend, Tap};
+use nfsu2_util::{Bucket, Charge, Counter, Counters, Host, SendResult, SwitchSend, Tap};
 use parking_lot::Mutex;
 use serde_json::{Map, Value};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -249,9 +252,9 @@ pub use text::{clean_name, vip_num};
 
 /// 10.77.0.0/19's mask, which the welcome tells the page
 pub const MASK: &str = "255.255.224.0";
-/// the /24s of it that addresses are handed out in: 10.77.0-23.x
-pub const NETS: usize = 24;
-/// addresses the switch hands out: host bytes 2-251 in each of the twenty-four /24s
+/// the /24s of it that addresses are handed out in: 10.77.0-27.x
+pub const NETS: usize = 28;
+/// addresses the switch hands out: host bytes 2-251 in each of the twenty-eight /24s
 pub const ADDRS: usize = NETS * 250;
 pub const BROADCAST: u32 = 0xFFFF_FFFF;
 /// the close codes of a kick and a ban (the crate doc's Kicks and bans): the page stays off the switch after them
@@ -377,6 +380,9 @@ pub struct LanOptions {
     pub bundle_budget: u64,
     /// each tick is the tick give or take this share of it, at random (conn.rs `Clock` says why)
     pub bundle_jitter: f64,
+    /// the slow clock's tick: what friends send a player in free roam who is not driving (a race, a shop, the menus)
+    /// waits this long at most (away.rs; 0: as for anyone)
+    pub away_ms: u64,
     /// friends' car states by their fields to a page whose hello asks for them (fpred.rs); false: as byte deltas still
     pub fpred: bool,
     /// SO_SNDBUF for /lan connections (NFSU2_LAN_SNDBUF; 0: the kernel's own, which Linux grows to megabytes)
@@ -424,6 +430,7 @@ impl Default for LanOptions {
             bundle_max_ms: 50,
             bundle_budget: 125_000,
             bundle_jitter: 0.4,
+            away_ms: 500,
             fpred: true,
             send_buffer_os: 0,
             max_payload: 64 << 10,
@@ -542,6 +549,8 @@ pub struct Breakdown {
     pub behind: usize,
     /// getting only a share of free roam's snapshots now (lag.rs)
     pub thinning: usize,
+    /// in free roam and not driving now: a race, a shop, the menus, loading (away.rs)
+    pub away: usize,
     /// the snapshots left out so far (the switch's `thinned`, since it started)
     pub thinned: u64,
     /// what compact bundles carried to pages so far: car states' bytes and entries, how many of those went by their
@@ -551,6 +560,8 @@ pub struct Breakdown {
     pub fpred_entries: u64,
     pub other_bytes: u64,
     pub other_entries: u64,
+    /// what the pages were sent so far by kind (mix.rs): the bytes of each, then the entries or messages of each
+    pub mix: Vec<u64>,
     /// not on the switch: the pages waiting in line for a place (those away keeping theirs too), and of those that went
     /// in since the line last began, the longest wait (s)
     pub waiting: usize,
@@ -611,11 +622,16 @@ pub(crate) struct Stats {
     fpred_entries: Counter,
     other_bytes: Counter,
     other_entries: Counter,
+    /// the same and the hosts' messages by kind (mix.rs): bytes, then entries or messages
+    mix: Counters<{ 2 * mix::KINDS }>,
 }
 
 impl Stats {
     /// an entry of a compact bundle that went to a page: `data` the datagram, `e` its entry
-    pub(crate) fn entry_out(&self, data: &[u8], e: &[u8]) {
+    pub(crate) fn entry_out(&self, data: &[u8], dst: u32, e: &[u8]) {
+        let k = mix::of_entry(data, dst);
+        self.mix.add(k, e.len() as u64);
+        self.mix.add(mix::KINDS + k, 1);
         if data.len() > 16 + 5 && data[1] == compact::ROAM_OK && data[16 + 5] == 3 {
             self.snap_bytes.add(e.len() as u64);
             self.snap_entries.inc();
@@ -709,6 +725,8 @@ pub(crate) struct Peer {
     probe: Mutex<lag::Probe>,
     /// of free roam's snapshots sent to it, the share it gets (lag.rs: SHARE_FULL while its path keeps up)
     share: AtomicU32,
+    /// in free roam and not driving, as its own last HELLO or SNAP said (away.rs)
+    away: AtomicBool,
     /// it follows the whole peer list (its LAN play is not shut: members.rs `list_for`); set under the `members` lock
     listed: AtomicBool,
     /// its client's id for the operator's bans (`AttachOpts::ident`), and when it took its place (ms since 1970)
@@ -744,6 +762,7 @@ impl Peer {
             since: self.since,
             left,
             doing,
+            game: Vec::new(),
         }
     }
 }
@@ -811,7 +830,7 @@ pub struct LanSwitch {
     online_backlog: Arc<nfsu2_util::host::Backlog>,
     tap: Option<Tap>,
     store: Option<Arc<store::Store>>,
-    /// the peer at each of the 6000 addresses (`slot()`), for unicast without a lock
+    /// the peer at each of the 7000 addresses (`slot()`), for unicast without a lock
     table: Box<[ArcSwapOption<Peer>]>,
     /// every peer, in the order of `Members::peers` (broadcasts, the timers, info)
     all: ArcSwap<Vec<Arc<Peer>>>,
@@ -825,8 +844,10 @@ pub struct LanSwitch {
     anon: AtomicU64,
     conn_ids: AtomicU64,
     stats: Arc<Stats>,
-    /// the bundle clock (none at bundle_ms 0)
+    /// the bundle clock (none at bundle_ms 0), and the slow one for players who are not driving (away.rs; none at
+    /// away_ms 0)
     clock: Option<Arc<conn::Clock>>,
+    slow: Option<Arc<conn::Clock>>,
     /// the players who left in the last `GONE_MS`, oldest first (`who`)
     gone: Mutex<std::collections::VecDeque<Who>>,
     stopped: CancellationToken,
@@ -873,7 +894,9 @@ impl LanSwitch {
                 m.reserved.insert(v, members::Reservation { hash, until, group: None, site: None });
             }
         }
-        let clock = (o.bundle_ms > 0).then(|| Arc::new(conn::Clock::new(Duration::from_millis(o.bundle_ms), o.bundle_jitter)));
+        let clock = (o.bundle_ms > 0).then(|| Arc::new(conn::Clock::new(Duration::from_millis(o.bundle_ms), o.bundle_jitter, 0)));
+        let slow = (o.bundle_ms > 0 && o.away_ms > o.bundle_ms)
+            .then(|| Arc::new(conn::Clock::new(Duration::from_millis(o.away_ms), o.bundle_jitter, 1)));
         let sw = Arc::new_cyclic(|me| LanSwitch {
             impair: impair::Impair::parse(impair),
             online_vip: online.as_ref().map(|h| h.vip()),
@@ -895,6 +918,7 @@ impl LanSwitch {
             conn_ids: AtomicU64::new(0),
             stats: Arc::new(Stats::default()),
             clock,
+            slow,
             gone: Mutex::new(Default::default()),
             stopped: CancellationToken::new(),
             me: me.clone(),
@@ -951,6 +975,9 @@ impl LanSwitch {
                     sw.probe();
                 }
             });
+        }
+        if let Some(slow) = &self.slow {
+            conn::Clock::start(Arc::downgrade(slow));
         }
         if let Some(clock) = &self.clock {
             conn::Clock::start(Arc::downgrade(clock));
@@ -1052,9 +1079,13 @@ impl LanSwitch {
         if let Some(c) = cause {
             c.spend(1, data.len());
         }
+        let k = mix::of_host(&data, self.roam_vip, self.online_vip);
+        let n = data.len() as u64;
         if !self.send(p, Out::Raw(data)) {
             return SendResult::Full;
         }
+        self.stats.mix.add(k, n);
+        self.stats.mix.add(mix::KINDS + k, 1);
         p.frames_out.fetch_add(1, Relaxed);
         SendResult::Sent
     }
@@ -1104,6 +1135,11 @@ impl LanSwitch {
         let mut n = Breakdown { players: all.len(), ..Breakdown::default() };
         for p in all.iter() {
             let lan = p.lan();
+            // its flag stays as its last free-roam datagram left it: one gone from free roam's menus to Online mode
+            // or the LAN screens is "not driving" still, and counts there no more
+            if p.away.load(Relaxed) && !online.contains(&p.vip) && lan != Some(true) {
+                n.away += 1;
+            }
             if online.contains(&p.vip) {
                 n.online += 1;
             } else if lan == Some(true) {
@@ -1129,6 +1165,7 @@ impl LanSwitch {
         let s = &self.stats;
         (n.snap_bytes, n.snap_entries, n.fpred_entries) = (s.snap_bytes.get(), s.snap_entries.get(), s.fpred_entries.get());
         (n.other_bytes, n.other_entries) = (s.other_bytes.get(), s.other_entries.get());
+        n.mix = s.mix.get().to_vec();
         (n.waiting, n.waited) = self.line_view();
         n
     }
@@ -1140,8 +1177,8 @@ impl LanSwitch {
             Some(h) => h.vips().await.unwrap_or_default(),
             None => Default::default(),
         };
-        let roam = match &self.roam {
-            Some(h) => h.vips().await.unwrap_or_default(),
+        let (roam, mut game) = match &self.roam {
+            Some(h) => (h.vips().await.unwrap_or_default(), h.other_names().await.unwrap_or_default()),
             None => Default::default(),
         };
         let mut v: Vec<Who> = self
@@ -1158,7 +1195,7 @@ impl LanSwitch {
                 } else {
                     ""
                 };
-                p.who(doing, None)
+                Who { game: game.remove(&p.vip).unwrap_or_default(), ..p.who(doing, None) }
             })
             .collect();
         let mut g = self.gone.lock();
@@ -1292,6 +1329,10 @@ impl LanSwitch {
             m.insert(k.into(), c.get().into());
         }
         m.insert("reserved".into(), reserved.into());
+        let v = s.mix.get();
+        let kinds: Map<String, Value> =
+            (0..mix::KINDS).filter(|&i| v[mix::KINDS + i] > 0).map(|i| (mix::name(i), serde_json::json!([v[i], v[mix::KINDS + i]]))).collect();
+        m.insert("mix".into(), Value::Object(kinds));
         m.insert("waiting".into(), waiting.into());
         m.insert("evicted".into(), s.evicted.get().into());
         let mut cuts = Map::new();
@@ -1499,6 +1540,9 @@ pub struct Who {
     /// what it does now: "Online" (in the game's Online mode), "LAN screens" (the LAN or Online screens open),
     /// "free roam", or "" (the menus, starting or leaving; and the ones who left)
     pub doing: &'static str,
+    /// the names its game shows over its car in free roam that are not `name` (`Host::other_names`): a page and its
+    /// game name the player alike, unless one of them was changed.  Empty for the ones who left.
+    pub game: Vec<String>,
 }
 
 /// A reservation as the tests see it.
@@ -1511,7 +1555,7 @@ pub struct ReservedView {
     pub site: Option<String>,
 }
 
-/// the i-th address in the order they are handed out (round the twenty-four /24s: the crate doc says why)
+/// the i-th address in the order they are handed out (round the twenty-eight /24s: the crate doc says why)
 pub fn vip_at(i: usize) -> u32 {
     BASE | ((i % NETS) << 8) as u32 | ((i / NETS) as u32 + 2)
 }
@@ -1544,12 +1588,12 @@ mod tests {
             BASE | 1,
             BASE | 252,
             BASE | 255,
-            BASE | 0x1800 | 2,
+            BASE | 0x1C00 | 2,
             BASE | 0x1F00 | 2,
             BASE | 0x2000 | 2,
             0,
             BROADCAST,
-            BASE | 0x1700 | 0xFD,
+            BASE | 0x1B00 | 0xFD,
         ] {
             assert_eq!(slot(v), None, "{v:x}");
         }

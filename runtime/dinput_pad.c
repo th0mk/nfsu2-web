@@ -1023,3 +1023,29 @@ uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
     if (pad_log() && nlog < 16){ nlog++; fprintf(stderr, "[pad] %s: %s\n", nm, unsup ? "not supported" : "nothing to do"); }
     return unsup ? DIERR_UNSUPPORTED : DI_OK;
 }
+
+/* ---- the keyboard's steering next to a wheel ----------------------------------
+ * 0x5c1000 (cdecl: port) tells whether the port's device is a driving device;
+ * the driver's update (0x41dfc0, the call returning to 0x41dfea) then steers
+ * with 0x4061c0, the steering straight to the car's angle, instead of
+ * 0x416bb0, which turns the wheels towards it at a rate and a lock that fall
+ * with the speed.  The game asks the port, not where the steering came from,
+ * and the keyboard's steering is the same event as the wheel's (0x407750: a
+ * key gives 0x00 or 0xFF), so with a wheel connected, resting or not, a key
+ * steered to full lock in the first frame at any speed (a player's report:
+ * "the car can now steer to full lock at speed").  So for the driver's update
+ * the wheel is a driving device only while it is turned from the centre;
+ * resting, the keyboard (or nothing) steers as without a wheel.  ZF as the
+ * game's own answer leaves it: the caller tests it.
+ * tests/scripts/kb_steer_wheel.txt. */
+#define WHEEL_STEERS 0.02f               /* |LX| from which the wheel is turned */
+void sub_005c1000_orig(CPU *c);
+void sub_005c1000(CPU *c){
+    uint32_t ret = MR32(c->esp);
+    sub_005c1000_orig(c);
+    if (ret != 0x0041dfeau || !(c->eax & 0xffu)) return;
+    PadState s; gamepad_read(&s);
+    if (s.connected && s.wheel && fabsf(s.axis[PAD_AXIS_LX]) >= WHEEL_STEERS) return;
+    c->eax &= ~0xffu;
+    c->zf = 1;
+}

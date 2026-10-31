@@ -377,6 +377,26 @@ fn race_reports_are_logged_once_a_race() {
     assert_eq!(k.info("raceReports"), 3.0);
 }
 
+// a car no tuning makes (an edited save's: nfsu2.xyz, 2026-10-30, a 350Z of 2351 kW rated 5000) is a [cheat] line
+// besides its [race] line, which `nfsu2-server ctl ban` takes by its handle; a car of the game's best is none
+#[test]
+fn an_edited_car_in_a_race_is_a_cheat_line() {
+    let mut k = Kit::new(RoamOptions::default());
+    k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Ed", ..Default::default() }));
+    k.from(W(0), &racerep(100, 0xA1, 1, 3, 0, 804.0, b"COROLLA", 64));
+    assert_eq!(k.lines.lock().len(), 1, "{:?}", k.lines.lock());
+    k.lines.lock().clear();
+    k.step(25000.0);
+    k.from(W(0), &racerep(100, 0xA2, 1, 3, 0, 5000.0, b"350Z", 64));
+    let lines = k.lines.lock().clone();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(lines[0].starts_with("[race] lobby 000000a2"), "{lines:?}");
+    let want = "\"Ed\": raced in the race of lobby 000000a2 (race 0badf00d: drag, 1 lap) in an edited car, 1st of 3: 350Z \
+                (type 0), 128 kW, 1055 kg, 256 km/h, rated 5000; no car of the game makes 600 kW, 420 km/h or a rating of 1000";
+    assert!(lines[1].starts_with("[cheat] ") && lines[1].ends_with(want), "{lines:?}");
+    assert_eq!(k.info("cheatLines"), 1.0);
+}
+
 // the wire: roam_core's report is the hub's line
 #[test]
 fn race_reports_on_the_wire_roam_core_and_the_hub_agree() {

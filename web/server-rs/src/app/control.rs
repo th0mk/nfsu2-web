@@ -2,16 +2,20 @@
 //! `nfsu2-server ctl` talks to (src/ctl.rs).  Nothing on the network reaches it.  One request a connection: a line
 //! of JSON, the command's words; the answer, {"ok":true|false,"text":...}; then the connection ends.
 //!
-//!   who [name]                    the players on the switch (address, name, what they do, for how long), then the
-//!                                 ones who left in the last hour; with a name, only those whose name has it
+//!   who [name]                    the players on the switch (address, name, what they do, for how long, and the name
+//!                                 over their car when it is another), then the ones who left in the last hour; with
+//!                                 a name, only those with a name that has it
 //!   kick <player> [message]       the player's page shows the message, and the game goes on without the others
 //!                                 (a reload brings it back)
 //!   ban <player> <for> [message]  the same, and it is turned away until the ban ends: <for> is 30m, 12h, 3d, 2w or perm;
 //!                                 <player> may be a `[cheat]` line's handle (c17) too
 //!   unban <name | #ban>           the bans of that name, or with that number, lifted
 //!   bans                          the bans: number, name, until when, the message
+//!   days [n]                      how many came each day (UTC; days.rs), the last n days (30), then today so far
 //!
-//! A player is a virtual address (10.77.x.y, as `who` and the log show it) or a name (any case).  A name that two
+//! A player is a virtual address (10.77.x.y, as `who` and the log show it) or a name (any case): its page's on the
+//! switch, or the one its game shows over its car in free roam when that is another (`Who::game`: an edited page
+//! may name itself one way and its game another; free roam's console line says so too, nfsu2-roam).  A name that two
 //! players on the switch have (and not one player in two tabs, or on two devices with one keyphrase) needs the
 //! address.  `ban` takes one who left in the last hour too (the switch keeps them: nfsu2-lan's Kicks and bans), and
 //! the handle a `[cheat]` line of a race ends with, "(ban c17)", for a week after its last line ([`Marker`]): before
@@ -41,12 +45,14 @@ const MAX_LINE: u64 = 16 << 10;
 const WITHIN: Duration = Duration::from_secs(10);
 
 pub const USAGE: &str = "commands:
-  who [name]                    the players on the switch, and who left in the last hour
+  who [name]                    the players on the switch, and who left in the last hour; a name finds the
+                                one over their car too
   kick <player> [message]       off playing with others, with that message (a reload brings them back)
   ban <player> <for> [message]  off until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
   unban <name | #ban>           lift the bans of that name, or that number
   bans                          the bans
   unclaim <name>                the name's claim goes: anyone may take it again
+  days [n]                      how many came each day (UTC), the last n days (30) and today so far
 <player>: an address (10.77.x.y) or a name, as who shows them; for ban also a [cheat] line's handle (c17), for a week";
 
 /// The socket's file as this server made it, for its stop (`remove`)
@@ -128,10 +134,17 @@ fn same_player(a: &Who, b: &Who) -> bool {
 }
 
 fn names(w: &Who, sel: &str, vip: u32) -> bool {
-    if vip != 0 { w.vip == vip } else { w.name.to_lowercase() == sel.to_lowercase() }
+    let sel = sel.to_lowercase();
+    if vip != 0 { w.vip == vip } else { w.name.to_lowercase() == sel || w.game.iter().any(|g| g.to_lowercase() == sel) }
 }
 
-/// `who`'s line for one: address, name, what it does and for how long (or when it left)
+/// whether one of its names has `has` (in lower case) in it
+fn has_name(w: &Who, has: &str) -> bool {
+    w.name.to_lowercase().contains(has) || w.game.iter().any(|g| g.to_lowercase().contains(has))
+}
+
+/// `who`'s line for one: address, name, what it does and for how long (or when it left), and the other names its
+/// game shows
 fn line(w: &Who, now: i64) -> String {
     let name = format!("\"{}\"", w.name);
     let pad = 24usize.saturating_sub(name.chars().count());
@@ -139,7 +152,12 @@ fn line(w: &Who, now: i64) -> String {
         Some(t) => format!("left {} ago", span(now - t)),
         None => format!("{}, {}", if w.doing.is_empty() { "menus or loading" } else { w.doing }, span(now - w.since)),
     };
-    format!("{:<13}{name}{} {what}", vip_str(w.vip), " ".repeat(pad))
+    let game = if w.game.is_empty() {
+        String::new()
+    } else {
+        format!("; its game shows {}", w.game.iter().map(|g| format!("\"{g}\"")).collect::<Vec<_>>().join(", "))
+    };
+    format!("{:<13}{name}{} {what}{game}", vip_str(w.vip), " ".repeat(pad))
 }
 
 /// "10.77.3.41 \"Bob\", 10.77.5.2 \"Eve\""
@@ -218,11 +236,11 @@ impl Marker {
 
 /// the address and name a `[cheat]` line of a race begins with: `[cheat] 10.77.3.41 "Bob": won the online race "..."`
 /// or `finished 2 in the online race "..."` (nfsu2-online lobby.rs), `[cheat] 10.77.3.41 "Bob": won the race of lobby
-/// ...` (nfsu2-roam results.rs); None for any other line
+/// ...` (nfsu2-roam results.rs) or `raced in the race of lobby ...` (an edited car, hub.rs); None for any other line
 fn race_cheat(line: &str) -> Option<(u32, &str)> {
     let (vip, rest) = line.strip_prefix("[cheat] ")?.split_once(" \"")?;
     let (name, what) = rest.split_once("\": ")?;
-    let race = what.contains(" the online race \"") || what.starts_with("won the race of lobby ");
+    let race = what.contains(" the online race \"") || what.contains(" the race of lobby ");
     let vip = vip_num(vip);
     (race && vip != 0).then_some((vip, name))
 }
@@ -248,7 +266,7 @@ impl App {
             "who" => {
                 let all = self.lan.who().await;
                 let has = rest(1).to_lowercase();
-                let pick: Vec<&Who> = all.iter().filter(|w| w.name.to_lowercase().contains(&has)).collect();
+                let pick: Vec<&Who> = all.iter().filter(|w| has_name(w, &has)).collect();
                 let (here, gone): (Vec<&Who>, Vec<&Who>) = pick.iter().partition(|w| w.left.is_none());
                 let called = if has.is_empty() { String::new() } else { format!(" called *{has}*") };
                 let mut t = vec![format!("{} on the switch{called}", here.len())];
@@ -295,7 +313,10 @@ impl App {
                         if k.is_empty() {
                             return Err(format!("{} \"{}\": nothing to ban it by (no address, no page id)", vip_str(w.vip), w.name));
                         }
-                        (w.name.clone(), k, w.left, None)
+                        // named as the operator named it: by the name over its car, when that is how
+                        let sel = word(1).to_lowercase();
+                        let name = w.game.iter().find(|g| g.to_lowercase() == sel).unwrap_or(&w.name);
+                        (name.clone(), k, w.left, None)
                     }
                 };
                 let msg = nfsu2_bans::clean_msg(&rest(3));
@@ -336,6 +357,14 @@ impl App {
                 let t = gone.iter().map(|b| format!("#{} \"{}\"", b.id, b.name)).collect::<Vec<_>>().join(", ");
                 log::line(&format!("[ban] lifted {t}"));
                 Ok(format!("lifted {t}"))
+            }
+            "days" => {
+                let n = if word(1).is_empty() { 30 } else { word(1).parse().map_err(|_| format!("days {}: a number of days", word(1)))? };
+                let (day, c) = self.days.today(now);
+                let mut t = vec![super::days::CSV_HEAD.to_string()];
+                t.extend(self.days.history(n));
+                t.push(format!("{day},{},{},{},{} (today so far)", c[0], c[1], c[2], c[3]));
+                Ok(t.join("\n"))
             }
             "bans" => {
                 let list = self.bans.list(now);
@@ -424,7 +453,7 @@ mod tests {
 
     fn who(vip: u32, name: &str, page: &str, left: Option<i64>) -> Who {
         let a: Arc<str> = Arc::from(format!("addr-{vip}"));
-        Who { vip, name: name.into(), ident: Some(a), browser: Some(page.into()), owner: None, since: 0, left, doing: "" }
+        Who { vip, name: name.into(), ident: Some(a), browser: Some(page.into()), owner: None, since: 0, left, doing: "", game: vec![] }
     }
 
     // the [cheat] lines of races, as nfsu2-online and nfsu2-roam write them (their tests), get a handle; free roam's,
@@ -442,6 +471,11 @@ mod tests {
                 "W p",
             ),
             ("[cheat] 10.77.1.3 \"Bob\": won the race of lobby 0000abcd (race 00001234: sprint, 1 lap) in 0:10.0", "Bob"),
+            (
+                "[cheat] 10.77.1.3 \"Ed\": raced in the race of lobby 0000abcd (race 00001234: drag, 1 lap) in an edited car, \
+                 1st of 3: 350Z",
+                "Ed",
+            ),
         ] {
             assert_eq!(race_cheat(line), Some((vip, name)), "{line}");
         }
@@ -467,6 +501,24 @@ mod tests {
         let one = [who(5, "Kim", "k", None), who(5, "Kim", "k", Some(0))];
         assert_eq!(pick_marked(&one, "Kim0042").map(|w| w.name.as_str()), Some("Kim"));
         assert!(pick_marked(&[], "Kim").is_none());
+    }
+
+    // a game that shows another name over its car than its page's (an edited page): who, kick and ban find it by
+    // either, any case, and who's line shows both
+    #[test]
+    fn a_player_goes_by_its_pages_name_and_its_games() {
+        let w = Who { game: vec!["Mallory".into()], ..who(vip_num("10.77.3.41"), "player", "p", None) };
+        for sel in ["player", "PLAYER", "mallory", "Mallory"] {
+            assert!(names(&w, sel, 0), "{sel}");
+        }
+        assert!(!names(&w, "mall", 0), "a whole name");
+        assert!(has_name(&w, "llor") && has_name(&w, "play") && !has_name(&w, "bob"));
+        assert_eq!(
+            line(&Who { doing: "free roam", ..w.clone() }, 180_000),
+            "10.77.3.41   \"player\"                 free roam, 3 min; its game shows \"Mallory\""
+        );
+        let plain = who(vip_num("10.77.3.42"), "Bob", "b", None);
+        assert_eq!(line(&plain, 0), "10.77.3.42   \"Bob\"                    menus or loading, 0 min");
     }
 
     #[test]

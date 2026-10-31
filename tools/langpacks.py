@@ -2,11 +2,12 @@
 """The language packs: LANGPACKS/<language> in the game folder, from the
 "Multi 13 languages" mod for NFSU2 (KyoriAsh, nfsmods.xyz/mod/5749), from
 TraduMix's and MixMods' Brazilian Portuguese translation, from PLProjekt's
-Polish one, from VileStuff's English subtitles and from muntazam's Turkish
-translation.
+Polish one, from VileStuff's English subtitles, from muntazam's Turkish
+translation and from GameHunter's Hungarian one.
 
     tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>]
                        [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]
+                       [--hu <installer>]
 
 Each source builds its own languages' packs; the others are left as they are.
 
@@ -75,6 +76,13 @@ its fonts' textures (LanguageTextures.bin, and one in GLOBALA.BUN) draw those
 as the Turkish ones; also its memory-card texts and credits.  The port shows
 the movies' subtitles itself (runtime/language.c), so the Extra Options mod
 the translation asks for is not needed.
+
+<installer> (--hu) is GameHunter's Hungarian translation (v1.1, 2005, by
+L_zooltan; nfs_underground2.exe from gamehunter.hu or magyaritasok.hu), or the
+folder it is in.  It is read, never run: an Astrum InstallWizard package, as
+the Polish one.  Hungarian takes English's place as Portuguese does: its text,
+which spells ő and ű as õ and û (the game's fonts have no ő or ű, and
+Hungarian texts of the time wrote them so), its memory-card texts and credits.
 Rerunning it copies only what changed.  Prints what each pack holds.
 """
 import argparse, filecmp, gzip, os, re, shutil, struct, sys
@@ -131,6 +139,13 @@ TR = [
     ('memcard/LOCALE_ENGLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
     ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
     ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
+]
+# Hungarian: (file in the installer, the game's file it stands in for)
+HU = [
+    ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
+    ('memcard/LOCALE_ENGLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
+    ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
+    ('CREDITS/UK_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
 ]
 
 
@@ -246,7 +261,8 @@ def ptbr(src, game):
 
 def astrum_files(path):
     """{path in the game folder, lower-cased: data} of an Astrum InstallWizard 2
-    installer.  It ends with the package's header offset and the magic; the
+    installer.  It ends with the package's header offset, a block of n bytes, n
+    (0xffffffff for none, in the older Hungarian one) and the magic; the
     header (big-endian words) gives where the files start, and they end where
     it begins.  Each file: a 0x40-byte record whose word 0x2c is its name's
     length, the name ("<InstallDir>\\...", each byte's bit i stored as bit i^6),
@@ -255,6 +271,7 @@ def astrum_files(path):
     with open(path, 'rb') as f: d = f.read()
     if d[-8:] != struct.pack('<II', 0x0b1c2d3e, 0x12345678): sys.exit(f'{path}: not an Astrum InstallWizard installer')
     n = struct.unpack('<I', d[-12:-8])[0]
+    if n == 0xffffffff: n = 0
     head = struct.unpack('<I', d[-16 - n:-12 - n])[0]
     hdr = struct.unpack('>59I', d[head:head + 236])
     pos = hdr[48]
@@ -293,6 +310,18 @@ def tr(src, game):
         sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
     for s, rel in TR: p.add_file(find(root, s), rel)
     done(p, 'turkish')
+
+
+def hu(src, game):
+    exe = src if os.path.isfile(src) else next(
+        (os.path.join(src, n) for n in sorted(os.listdir(src)) if n.lower() == 'nfs_underground2.exe'), None)
+    if not exe: sys.exit(f'{src}: no nfs_underground2.exe, not the translation')
+    files = astrum_files(exe)
+    missing = [s for s, _ in HU if s.lower() not in files]
+    if missing: sys.exit(f'{exe}: not the translation, missing:\n  ' + '\n  '.join(missing))
+    p = Pack(game, 'hungarian')
+    for s, rel in HU: p.add_data(files[s.lower()], rel)
+    done(p, 'hungarian')
 
 
 STRINGS = 0x39000           # a language file's text: its chunk's id
@@ -365,21 +394,23 @@ def subs(src, game):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]')
+    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>] [--hu <installer>]')
     ap.add_argument('game')
     ap.add_argument('--multi13', metavar='MOD', help='the Multi 13 languages mod, every archive extracted')
     ap.add_argument('--ptbr', metavar='FOLDER', help='the Brazilian Portuguese translation, extracted')
     ap.add_argument('--pl', metavar='INSTALLER', help='the Polish translation\'s installer (or its folder), never run')
     ap.add_argument('--subs', metavar='FOLDER', help='the English Subtitles Fixed mod, extracted')
     ap.add_argument('--tr', metavar='FOLDER', help='the Turkish translation, its installer extracted (innoextract), never run')
+    ap.add_argument('--hu', metavar='INSTALLER', help='the Hungarian translation\'s installer (or its folder), never run')
     a = ap.parse_args()
-    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr): sys.exit(__doc__)
+    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr or a.hu): sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
     if a.multi13: multi13(a.multi13, a.game)
     if a.ptbr: ptbr(a.ptbr, a.game)
     if a.pl: pl(a.pl, a.game)
     if a.subs: subs(a.subs, a.game)
     if a.tr: tr(a.tr, a.game)
+    if a.hu: hu(a.hu, a.game)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,19 @@
+# web/deploy/cloudflare-only.sh at boot: the server's TLS port for Cloudflare's addresses only (compose.origin.yml).
+#   cp web/deploy/cloudflare-only.sh /srv/nfsu2/ && cp web/deploy/nfsu2-cloudflare-only.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now nfsu2-cloudflare-only
+# It tries again every 30 s until it has Cloudflare's list (the network may come up after it).
+[Unit]
+Description=NFS Underground 2 in the browser: the server's TLS port for Cloudflare's addresses only
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /srv/nfsu2/cloudflare-only.sh 28443
+ExecStop=/bin/bash /srv/nfsu2/cloudflare-only.sh --off
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

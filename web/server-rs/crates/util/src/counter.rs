@@ -59,3 +59,31 @@ impl std::fmt::Debug for Counter {
         write!(f, "{}", self.get())
     }
 }
+
+/// N counters as one: each shard holds all of them (a `Counter` each would be N cache lines a shard)
+pub struct Counters<const N: usize> {
+    shards: Box<[CachePadded<[AtomicU64; N]>]>,
+}
+
+impl<const N: usize> Default for Counters<N> {
+    fn default() -> Self {
+        Counters { shards: (0..SHARDS).map(|_| CachePadded::new(std::array::from_fn(|_| AtomicU64::new(0)))).collect() }
+    }
+}
+
+impl<const N: usize> Counters<N> {
+    #[inline]
+    pub fn add(&self, i: usize, n: u64) {
+        self.shards[shard()][i].fetch_add(n, Ordering::Relaxed);
+    }
+    /// each one's sum
+    pub fn get(&self) -> [u64; N] {
+        let mut v = [0; N];
+        for s in self.shards.iter() {
+            for (v, c) in v.iter_mut().zip(s.iter()) {
+                *v += c.load(Ordering::Relaxed);
+            }
+        }
+        v
+    }
+}

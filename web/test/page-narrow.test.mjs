@@ -90,7 +90,7 @@ function measure() {
     if (!b.width && !b.height) return;
     if ((b.right > vw + 0.5 || b.left < -0.5) && !clipped(el, null, vw)) past.push(`${what} ${b.left.toFixed(1)}..${b.right.toFixed(1)}`);
     const panel = el.closest('.panel, .top');
-    if (!panel || panel === el) return;
+    if (!panel || panel === el || el.closest('.top > .bar')) return;   // the loading bar: a line along the header's edge
     const ps = getComputedStyle(panel), pb = panel.getBoundingClientRect();
     const left = pb.left + parseFloat(ps.paddingLeft) + parseFloat(ps.borderLeftWidth);
     const right = pb.right - parseFloat(ps.paddingRight) - parseFloat(ps.borderRightWidth);

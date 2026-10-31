@@ -356,10 +356,10 @@ static void t_roundtrip(void){
 
 /* ---- 3. hostile datagrams ----------------------------------------------------------------- */
 static void t_fuzz(long iters){
-    uint8_t b[1600], base[16][RC_MAX_DGRAM]; int bn[16];
+    uint8_t b[1600], base[17][RC_MAX_DGRAM]; int bn[17];
     rc_msg m;
     /* one valid datagram of each type, to mutate */
-    for (int t = 1; t <= 16; t++){
+    for (int t = 1; t <= 17; t++){
         memset(&m, 0, sizeof m); m.h.type = (uint8_t)t; m.h.sender = 9;
         if (t == RC_MSG_HELLO){ strcpy(m.u.hello.name, "abc"); m.u.hello.n_seen = 2; }
         if (t == RC_MSG_PEERS){ m.u.peers.n = 2; m.u.peers.e[0].ip = 0x7f000001u; m.u.peers.e[0].port = 1; m.u.peers.e[0].id = 1; m.u.peers.e[1] = m.u.peers.e[0]; }
@@ -367,6 +367,8 @@ static void t_fuzz(long iters){
         static uint8_t d[1000]; if (t == RC_MSG_CFG){ m.u.cfg.nfrag = 1; m.u.cfg.total = 100; m.u.cfg.dlen = 100; m.u.cfg.data = d; }
         if (t == RC_MSG_DUEL){ m.u.duel.op = RC_DUEL_OFFER; m.u.duel.to = 1; m.u.duel.duel = 5; }
         if (t == RC_MSG_MAP){ m.u.map.nparts = 1; }
+        static const uint8_t me[RC_MAPD_PLACE + 2] = { 3, 0, 10, 0, 20, 0, 64, 5, 0xfb, 4, 0x80 };
+        if (t == RC_MSG_MAPD){ m.u.mapd.nparts = 1; m.u.mapd.n = 2; m.u.mapd.len = sizeof me; m.u.mapd.data = me; }
         if (t == RC_MSG_LOBBY){ m.u.lobby.op = RC_LOBBY_JOIN; m.u.lobby.to = 1; m.u.lobby.lobby = 5; m.u.lobby.race = 6; m.u.lobby.max = 4;
                                 m.u.lobby.n = 2; m.u.lobby.ids[0] = 9; m.u.lobby.ids[1] = 10; }
         static uint8_t le[RC_LOBBIES_ENTRY] = { 1, 0, 2, 0, 1, 2, 3, 4, 2, 6, 0 };
@@ -389,7 +391,7 @@ static void t_fuzz(long iters){
         int kind = (int)(rnd() % 4);
         if (kind == 0){ len = (int)(rnd() % 1300); for (int i = 0; i < len; i++) b[i] = (uint8_t)rnd(); }
         else {
-            int t = (int)(rnd() % 16); len = bn[t]; memcpy(b, base[t], (size_t)len);
+            int t = (int)(rnd() % 17); len = bn[t]; memcpy(b, base[t], (size_t)len);
             int nm = 1 + (int)(rnd() % 6);
             for (int k = 0; k < nm; k++) b[rnd() % (uint32_t)len] = (uint8_t)rnd();
             if (kind == 2) len = (int)(rnd() % (uint32_t)(len + 1));

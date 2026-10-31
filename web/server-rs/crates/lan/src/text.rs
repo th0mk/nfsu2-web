@@ -60,7 +60,7 @@ fn nfc_as_node(s: &str) -> String {
     out
 }
 
-/// an address the switch hands out ("10.77.x.y" in 10.77.0-23.x of 10.77.0.0/19, host byte 2-251), else 0
+/// an address the switch hands out ("10.77.x.y" in 10.77.0-27.x of 10.77.0.0/19, host byte 2-251), else 0
 pub fn vip_num(s: &str) -> u32 {
     // /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/, each part at most 255
     let mut v: u32 = 0;
@@ -273,12 +273,12 @@ mod tests {
         assert_eq!(vip_num("10.77.7.251"), 0x0A4D_07FB);
         assert_eq!(vip_num("10.77.15.251"), 0x0A4D_0FFB);
         assert_eq!(vip_num("10.77.19.251"), 0x0A4D_13FB);
-        assert_eq!(vip_num("10.77.23.251"), 0x0A4D_17FB);
+        assert_eq!(vip_num("10.77.27.251"), 0x0A4D_1BFB);
         for s in [
             "10.77.0.1",
             "10.77.0.252",
             "10.77.0.255",
-            "10.77.24.2",
+            "10.77.28.2",
             "10.77.31.2",
             "10.77.32.2",
             "192.168.1.20",

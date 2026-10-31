@@ -42,7 +42,8 @@ static void apply(void){ gw_tone(exp2f((float)g_exp / 100.f), (float)g_white / 1
 
 /* the labels in the game's language, as hornmenu.c's (Latin-1 where the
  * language's own texts have those letters: German's ß, Swedish's å, Spanish's
- * ó, the Portuguese pack's ç, ã, í); English for the others */
+ * ó, the Portuguese pack's ç, ã, í, the Hungarian pack's í, ó, é); English
+ * for the others */
 static const char *label_of(int white){
     static const struct { const char *lang, *exposure, *white; } T[] = {
         { "french", "Exposition", "Niveau de blanc" }, { "german", "Belichtung", "Wei\xdfpegel" },
@@ -50,6 +51,7 @@ static const char *label_of(int white){
         { "dutch", "Belichting", "Witniveau" }, { "swedish", "Exponering", "Vitniv\xe5" },
         { "danish", "Eksponering", "Hvidniveau" }, { "portuguese", "Exposi\xe7\xe3o", "N\xedvel de Branco" },
         { "polish", "Ekspozycja", "Poziom bieli" }, { "turkish", "Pozlama", "Beyaz Seviyesi" },
+        { "hungarian", "Expoz\xed" "ci\xf3", "Feh\xe9rszint" },
     };
     const char *l = language_name();
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) if (!strcmp(l, T[i].lang)) return white ? T[i].white : T[i].exposure;

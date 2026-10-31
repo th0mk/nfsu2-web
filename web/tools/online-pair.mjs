@@ -16,6 +16,8 @@
 //        [--quit-mid N:MS]   instance N's game quits MS after its race started (the others race on)
 //        [--racewin N:MS]   instance N's game ends its race MS after it started, the way not driven (racewin: as a
 //                    cheat that finishes the race at once does; the server's [cheat] lines see it)
+//        [--speedhack N:K]  instance N's game threads see performance.now and Date.now run K times as fast (each
+//                    game-worker.js as it loads), as a speed hack in the browser makes them (roam-pair's --speedhack)
 //        [--wait-room MS] [--join-wait MS]   host: time in the room before Start Race (default 70000); joiners:
 //                    time in the lobby before Refresh and Join Game (default 40000)
 //        [--ea-login]  through the game's EA Login screens (no player name: the instances' fresh saves have no
@@ -129,6 +131,7 @@ if (!(MODE in OL.modes)) { console.error(`--mode ${Object.keys(OL.modes).join('|
 // --quit-mid N:MS: instance N quits its game MS after its race started (the others race on)
 const QUIT_MID = opt('quit-mid', '') ? opt('quit-mid', '').split(':').map(Number) : [0, 0];
 const RACEWIN = opt('racewin', '') ? opt('racewin', '').split(':').map(Number) : [0, 0];
+const SPEEDHACK = opt('speedhack', '') ? opt('speedhack', '').split(':').map(Number) : [0, 1];
 // --hide N[:FROM[:TO]]: instance N's tab in the background from its script's "log FROM" to "log TO"
 // (Most Wanted's scripts: every instance logs race-start)
 const HIDE = opt('hide', '') ? (([n, from, to]) => ({ n: +n, from: from || (+n === 1 || GAME !== 'ug2' ? 'race-start' : 'ready'), to: to || 'results' }))(opt('hide', '').split(':')) : null;
@@ -423,6 +426,12 @@ async function start(i) {
   const hide = HIDE?.n === i + 1 ? HIDE : null;
   const ctx = hide ? browser.contexts()[0] : await browser.newContext();
   const page = await ctx.newPage();
+  // a speed hack: the game threads' clocks K times as fast from their start (roam-pair.mjs)
+  if (SPEEDHACK[0] === i + 1) await page.context().route(r => r.pathname.endsWith('/host/game-worker.js'), async (route) => {
+    const res = await route.fetch(), k = SPEEDHACK[1];
+    const hook = `{ const p = performance, real = p.now.bind(p), rd = Date.now, d0 = rd(); p.now = () => real() * ${k}; Date.now = () => d0 + (rd() - d0) * ${k}; }\n`;
+    await route.fulfill({ response: res, body: hook + await res.text() });
+  });
   await page.route(`**${scriptPath(i)}`, r => r.fulfill({ status: 200, contentType: 'text/plain; charset=utf-8', body: scripts[i] }));
   const plog = fs.createWriteStream(path.join(dir, 'page.log'));
   const lines = [];

@@ -2,7 +2,7 @@
 //! the manifest and the module, the timers, the signals, and the start-up lines (the tests wait for "  access    :"
 //! and read others).
 
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +11,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::{Instant, interval_at};
 
 use nfsu2_http::tls::TlsState;
-use nfsu2_http::{Limits, bind, serve};
+use nfsu2_http::{Limits, bind, serve, serve_unix};
 use nfsu2_lan::{LanOptions, LanSwitch};
 use nfsu2_online::{LobbyTrace, OnlineHost, OnlineOptions};
 use nfsu2_roam::{RoamHub, RoamOptions};
@@ -27,6 +27,8 @@ use crate::paths;
 
 /// what the players on the switch do, every 5 minutes while any are on (counts only)
 const BREAKDOWN_EVERY: Duration = Duration::from_secs(5 * 60);
+/// who is in free roam or Online, for the day's counts (days.rs): often enough to see a short visit
+const DAYS_SWEEP_EVERY: Duration = Duration::from_secs(30);
 /// SO_SNDBUF of a /lan connection (NFSU2_LAN_SNDBUF; 0: the kernel's own), which Linux doubles: what a player's path
 /// does not take waits in the switch's own queue then, where its rules see it (roam_queue), not in the kernel's,
 /// which Linux grows to 4 MB (nfsu2.xyz, 2026-10-22: up to 4 MB waiting there for one player, seconds of free roam)
@@ -106,6 +108,27 @@ fn state_folder(o: &Options) -> String {
     }
 }
 
+/// --http-socket's listener: "@name" in the network namespace's abstract space (Linux), else a file, made anew (a
+/// socket's file stays after its process ends) and open to every user: the proxy may run as a user of its own
+/// (cloudflared's image: 65532), and anything on this machine reaches the HTTP port too.  For each message a page and
+/// the switch exchange, a Unix socket spares both ends TCP's work on 127.0.0.1 (nfsu2.xyz, 2026-10-30, 5,800 players:
+/// the kernel's network work was about 60 % of the CPU, much of it this hop's)
+fn bind_unix(at: &str) -> std::io::Result<tokio::net::UnixListener> {
+    #[cfg(target_os = "linux")]
+    if let Some(name) = at.strip_prefix('@') {
+        use std::os::linux::net::SocketAddrExt;
+        let l = std::os::unix::net::UnixListener::bind_addr(&std::os::unix::net::SocketAddr::from_abstract_name(name)?)?;
+        l.set_nonblocking(true)?;
+        return tokio::net::UnixListener::from_std(l);
+    }
+    if std::fs::symlink_metadata(at).is_ok_and(|m| m.file_type().is_socket()) {
+        std::fs::remove_file(at)?;
+    }
+    let l = tokio::net::UnixListener::bind(at)?;
+    std::fs::set_permissions(at, std::fs::Permissions::from_mode(0o666))?;
+    Ok(l)
+}
+
 /// the certificate file's time, for the check once a minute (0 when it cannot be read, as fs.watchFile has it)
 async fn cert_mtime(p: &str) -> f64 {
     tokio::fs::metadata(p).await.map(|m| etag::mtime_ms(&m)).unwrap_or(0.0)
@@ -156,6 +179,8 @@ pub async fn run(o: Options, cores: usize) {
     // the operator's bans, and the control socket that makes them (control.rs); the hosts' [cheat] lines of races get
     // a handle that `ban` takes for a week (control.rs Marker)
     let bans = Arc::new(nfsu2_bans::Bans::open(Path::new(&o.state)).unwrap_or_else(|e| die(&format!("{}/bans.json: {e}", o.state))));
+    // how many come each day (days.rs): the day so far, from before a restart
+    let days = Arc::new(super::days::Days::open(&o.state, nfsu2_util::now_ms()));
     let marker = super::control::Marker::new(bans.clone());
     let online = o.game.online.filter(|_| o.online).map(|title| {
         let m = marker.clone();
@@ -243,6 +268,7 @@ pub async fn run(o: Options, cores: usize) {
         covers.clone(),
         names,
         bans,
+        days.clone(),
         (cores / 2).max(2),
         lan_sndbuf,
         // the threads that keep the game data's blocks at brotli's best (kept.rs; 0: none)
@@ -288,13 +314,15 @@ pub async fn run(o: Options, cores: usize) {
                 // how many are behind on their connection (its queues past the server: the kernel's, cloudflared's,
                 // the tunnel's) and get fewer of the other cars' updates meanwhile (nfsu2-lan lag.rs)
                 log::line(&format!(
-                    "[players] {} on the switch: {} in Online mode, {} on the LAN or Online screens, {} in free roam, {} on an older page \
-                     (until its tab closes), {} leaving or starting; {} of all of them bundling (a page loaded since the server has \
-                     bundles); {} more than a second behind on their connection, {} getting fewer car updates ({} left out since the last count)",
+                    "[players] {} on the switch: {} in Online mode, {} on the LAN or Online screens, {} in free roam ({} of them not driving: \
+                     a race, a shop, the menus), {} on an older page (until its tab closes), {} leaving or starting; {} of all of them bundling \
+                     (a page loaded since the server has bundles); {} more than a second behind on their connection, {} getting fewer car \
+                     updates ({} left out since the last count)",
                     b.players,
                     b.online,
                     b.lan,
                     b.roam,
+                    b.away,
                     b.older,
                     b.other,
                     b.bundles,
@@ -324,6 +352,10 @@ pub async fn run(o: Options, cores: usize) {
                         ob as f64 / 1e6
                     ));
                 }
+                // the same and the hosts' messages by kind (nfsu2-lan mix.rs): where the bytes to the pages went
+                if let Some(l) = nfsu2_lan::mix::line(&b.mix, &was.mix, BREAKDOWN_EVERY.as_secs_f64()) {
+                    log::line(&format!("[players] to the pages by kind since the last count: {l}"));
+                }
                 let slice = slice.map_or(String::new(), |q| {
                     format!("; {} {:.2} of its {} cores ({:.0} %)", q.group, q.used, q.cores, q.share() * 100.0)
                 });
@@ -349,6 +381,43 @@ pub async fn run(o: Options, cores: usize) {
                 }
                 if let Some(l) = app.vault_forward.as_ref().and_then(|f| f.line()) {
                     log::line(&l);
+                }
+            }
+        });
+    }
+    // the day's counts (days.rs): who is in free roam or Online now, every SWEEP_EVERY; the day so far written and on
+    // the console when it changed
+    {
+        let (lan, days) = (lan.clone(), days.clone());
+        tokio::spawn(async move {
+            let mut every = interval_at(Instant::now() + DAYS_SWEEP_EVERY, DAYS_SWEEP_EVERY);
+            let mut shown = [0; 4];
+            let mut ticks = 0u64;
+            loop {
+                every.tick().await;
+                let now = nfsu2_util::now_ms();
+                for w in lan.who().await.iter().filter(|w| w.left.is_none()) {
+                    let what = match w.doing {
+                        "Online" => super::days::Seen::Online,
+                        "free roam" => super::days::Seen::Roam,
+                        _ => continue,
+                    };
+                    if let Some(id) = &w.browser {
+                        days.seen(id, what, now);
+                    }
+                }
+                ticks += 1;
+                if ticks % (BREAKDOWN_EVERY.as_secs() / DAYS_SWEEP_EVERY.as_secs()) != 0 {
+                    continue;
+                }
+                let (_, c) = days.today(now);
+                if c != shown {
+                    shown = c;
+                    log::line(&format!("[days] today so far (UTC): {}", super::days::counts_text(c)));
+                }
+                let d = days.clone();
+                if let Ok(Err(e)) = tokio::task::spawn_blocking(move || d.save()).await {
+                    log::error(&format!("days.json: {e}"));
                 }
             }
         });
@@ -436,6 +505,11 @@ pub async fn run(o: Options, cores: usize) {
         let (listener, _) = bind("127.0.0.1", o.http_port, None).await.unwrap_or_else(|m| die(&format!("cannot listen: {m}")));
         servers.push(serve(listener, None, limits.clone(), app.clone()));
     }
+    if !o.http_socket.is_empty() {
+        let listener = bind_unix(&o.http_socket).unwrap_or_else(|e| die(&format!("cannot listen on {}: {e}", o.http_socket)));
+        // as from 127.0.0.1: the proxy on this machine it is for is trusted there, and reports the player's address
+        servers.push(serve_unix(listener, ([127, 0, 0, 1], 0).into(), limits.clone(), app.clone()));
+    }
     if let Err(e) = app.refresh_manifest().await {
         die(&format!("the game folder {}: {e}", o.data));
     }
@@ -447,11 +521,11 @@ pub async fn run(o: Options, cores: usize) {
         });
     }
 
-    // SIGTERM, SIGINT: the switch saves its addresses, the hosts stop, the claimed names are written, the control
+    // SIGTERM, SIGINT: the switch saves its addresses, the hosts stop, the claimed names and the day so far are written, the control
     // socket's file goes, then the process ends
     let control_up = control.is_some();
     {
-        let (lan, trace, claims) = (lan.clone(), trace.clone(), claims.clone());
+        let (lan, trace, claims, days) = (lan.clone(), trace.clone(), claims.clone(), days.clone());
         let mut term = signal(SignalKind::terminate()).unwrap_or_else(|e| die(&format!("SIGTERM: {e}")));
         let mut int = signal(SignalKind::interrupt()).unwrap_or_else(|e| die(&format!("SIGINT: {e}")));
         tokio::spawn(async move {
@@ -468,6 +542,9 @@ pub async fn run(o: Options, cores: usize) {
                     && let Err(e) = c.save(nfsu2_util::now_ms())
                 {
                     log::error(&format!("names.json: {e}"));
+                }
+                if let Err(e) = days.save() {
+                    log::error(&format!("days.json: {e}"));
                 }
                 if let Some(c) = &control {
                     c.remove();
@@ -512,6 +589,12 @@ pub async fn run(o: Options, cores: usize) {
             if o.tls == Tls::Proxy { "  (the proxy forwards here)" } else { "" }
         ),
     ];
+    if !o.http_socket.is_empty() {
+        lines.push(format!(
+            "  socket    : HTTP on {} too, as from 127.0.0.1 (cloudflared's origin unix:{}: no TCP on this machine)",
+            o.http_socket, o.http_socket
+        ));
+    }
     match o.tls {
         Tls::None => lines
             .push("  other PCs : none: they need HTTPS, from --tls-cert/--tls-key or a proxy or tunnel in front (docs/web/VPS.md)".into()),

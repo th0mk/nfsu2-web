@@ -148,7 +148,7 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Limits {
-            sessions: 3000.0,
+            sessions: 3500.0,
             per_vip: 3.0,
             per_group: 8.0,
             per_site: 32.0,
@@ -166,7 +166,7 @@ impl Default for Limits {
             act_rate: 1.0,
             announce_ms: 1000.0,
             personas: 4.0,
-            games: 900.0,
+            games: 1050.0,
             open_per_vip: 2.0,
             open_per_group: 4.0,
             started_per_vip: 2.0,
@@ -217,10 +217,24 @@ const FILTER_SET: &str = "filt";
 /// the finish, a speed hack.  Real races are far closer (a car twice as slow is lapped in a circuit race long before
 /// it finishes); a drift race (the title's report type "drift") is won by points, and is left out.
 const FAR_AHEAD: f64 = 0.4;
+/// A race's winner in under this share of the third quickest other winner's time of its track (race type, track,
+/// direction and laps), once the track had QUICK_WINS clean wins (two finishers or more, no line), is a `[cheat]` line
+/// (`quick_win`): a car made faster than any tuning makes one, a speed hack, wins far quicker than the best honest
+/// racers do (the free-roam lobbies' races of 2026-10-30 on nfsu2.xyz: one player's sprint in 0.58 of it; of 4,727
+/// other wins the quickest 0.78).  The tracks kept (`Lobby::wins`), and the quickest winners each.
+const THIRD_SHARE: f64 = 0.7;
+const QUICK_WINS: u32 = 10;
+const TRACKS_KEPT: usize = 4096;
+const TOP_KEPT: usize = 4;
 /// no car of the game averages this over a race (m/s: 350 km/h; the fastest tuned cars make 350 at the most)
 const RACE_MPS: f64 = 350.0 / 3.6;
 /// a finisher who drove less than this share of what another racer drove (`race_cheats`)
 const DROVE_SHARE: f64 = 0.5;
+/// a top speed no car of the game makes, however tuned (m/s: 420 km/h), an edited save's (`race_cheats`): of the
+/// 38,967 personas with a top speed record on nfsu2.xyz on 2026-10-30, half had under 218 km/h, the fastest tuned
+/// cars 377, 12 over 380 and 5 over 420 (one the racer of a circuit won at 383 km/h on average); a free-roam lobby
+/// race's edited 350Z made 444
+const CAR_MPS: f64 = 420.0 / 3.6;
 
 /// A token bucket: `rate` a second, at most `burst`, full at the start (on the lobby's clock)
 #[derive(Clone, Copy, Debug)]
@@ -457,6 +471,32 @@ pub struct Lobby {
     /// lower-case persona -> its last lines (said_lines of the last said_ms), the oldest first; a persona's lines
     /// stay after it left
     pub said: HashMap<String, VecDeque<Said>>,
+    /// the clean wins of each track (race type, track, direction, laps) since the start (`quick_win`)
+    pub wins: HashMap<(u8, u16, u8, u8), Wins>,
+}
+
+/// A track's clean wins: how many, and the quickest winners (each once by lower-case name, its best, quickest first)
+#[derive(Clone, Debug, Default)]
+pub struct Wins {
+    pub wins: u32,
+    pub top: Vec<(String, f64)>,
+}
+
+impl Wins {
+    fn add(&mut self, who: String, time: f64) {
+        self.wins += 1;
+        match self.top.iter_mut().find(|(w, _)| *w == who) {
+            Some(x) => x.1 = x.1.min(time),
+            None => self.top.push((who, time)),
+        }
+        self.top.sort_by(|a, b| a.1.total_cmp(&b.1));
+        self.top.truncate(TOP_KEPT);
+    }
+
+    /// the third quickest winner's time but `who`'s, once there were QUICK_WINS
+    fn third(&self, who: &str) -> Option<f64> {
+        (self.wins >= QUICK_WINS).then(|| self.top.iter().filter(|(w, _)| w != who).nth(2).map(|x| x.1)).flatten()
+    }
 }
 
 impl Lobby {
@@ -484,6 +524,7 @@ impl Lobby {
             stats: LobbyStats::default(),
             last_sst: None,
             said: HashMap::new(),
+            wins: HashMap::new(),
         }
     }
 
@@ -733,15 +774,19 @@ fn race_cheats(
     let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
     let mut lines = Vec::new();
     for i in 0..players.len() {
-        let Some(o) = players[i].own.filter(|o| o.finished && !o.told) else { continue };
+        let Some(o) = players[i].own.filter(|o| !o.told) else { continue };
         let drove = o.avg * o.time;
         let mut why = Vec::new();
+        if !o.finished && o.top < CAR_MPS {
+            continue;
+        }
         if let Some(&min) = min_race_s.get(kind as usize)
+            && o.finished
             && o.time < min
         {
             why.push(format!("under the {} s a {ty} race takes at least", js::number_to_string(min)));
         }
-        if o.avg >= RACE_MPS {
+        if o.finished && o.avg >= RACE_MPS {
             why.push(format!("{:.0} km/h on average, which no car does", o.avg * 3.6));
         }
         let most = players
@@ -751,6 +796,7 @@ fn race_cheats(
             .map(|(x, name)| (x.avg * x.time, name))
             .max_by(|a, b| a.0.total_cmp(&b.0));
         let each = if let Some((d, other)) = most
+            && o.finished
             && drove < DROVE_SHARE * d
         {
             why.push(format!("having driven {drove:.0} m, under half the {d:.0} m \"{other}\" drove"));
@@ -758,19 +804,26 @@ fn race_cheats(
         } else {
             ""
         };
+        if o.top >= CAR_MPS {
+            why.push(format!("an edited car (no car of the game makes {:.0} km/h)", CAR_MPS * 3.6));
+        }
         if why.is_empty() {
             continue;
         }
         let p = &mut players[i];
         p.own = Some(Own { told: true, ..o });
-        let place = if o.place == 1 { "won".to_string() } else { format!("finished {} in", o.place) };
+        let place = match (o.finished, o.place) {
+            (false, _) => "raced in".to_string(),
+            (true, 1) => "won".to_string(),
+            (true, n) => format!("finished {n} in"),
+        };
+        let time = if o.finished { format!(" in {}", fmt_time(o.time)) } else { String::new() };
         lines.push(format!(
-            "[cheat] {} \"{}\": {place} the online race \"{game}\" ({ty}, track {}{laps}) in {}, {}: {each}by its own game; \
+            "[cheat] {} \"{}\": {place} the online race \"{game}\" ({ty}, track {}{laps}){time}, {}: {each}by its own game; \
              its top speed {:.0} km/h",
             vip_str(p.vip),
             p.name,
             r.track,
-            fmt_time(o.time),
             why.join(", "),
             o.top * 3.6
         ));
@@ -803,6 +856,48 @@ fn far_ahead(game: &str, kind: u8, report_types: &[&str], order: &[RacePlayer], 
         fmt_time(b.time),
         b.name
     ))
+}
+
+/// The `[cheat]` line of a race whose result stands, when its winner took under THIRD_SHARE of the third quickest
+/// other winner's time of its track; else None, and a clean win (two finishers or more, its winner told of by no line,
+/// `told`) counts in the track's
+fn quick_win(
+    wins: &mut HashMap<(u8, u16, u8, u8), Wins>,
+    game: &str,
+    r: &RaceReport,
+    report_types: &[&str],
+    order: &[RacePlayer],
+    players: &[Player],
+    told: bool,
+) -> Option<String> {
+    let type_name = report_types.get(r.kind as usize).copied();
+    if type_name == Some("drift") {
+        return None;
+    }
+    let w = order.iter().find(|p| p.place == 1 && p.time > 0.0)?;
+    let key = (r.kind, r.track, r.dir, r.laps);
+    let who = lower(&w.name);
+    if let Some(t) = wins.get(&key).and_then(|x| Some((x.third(&who)?, x.wins))).filter(|&(t, _)| w.time < THIRD_SHARE * t) {
+        let vip = players.iter().find(|p| lower(&p.name) == who).map_or(0, |p| p.vip);
+        let ty = type_name.unwrap_or("race");
+        let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
+        return Some(format!(
+            "[cheat] {} \"{}\": won the online race \"{game}\" ({ty}, track {}{laps}) in {}, under {:.0} % of the third \
+             quickest other winner's time of the track's {} clean wins ({}): as the result stands",
+            vip_str(vip),
+            w.name,
+            r.track,
+            fmt_time(w.time),
+            THIRD_SHARE * 100.0,
+            t.1,
+            fmt_time(t.0)
+        ));
+    }
+    let finished = order.iter().filter(|p| p.place != 0 && p.time > 0.0).count();
+    if finished >= 2 && !told && (wins.len() < TRACKS_KEPT || wins.contains_key(&key)) {
+        wins.entry(key).or_default().add(who, w.time);
+    }
+    None
 }
 
 /// a race time in a console line: "3:06.82"
@@ -1709,14 +1804,25 @@ impl Core {
                 self.llog(&format!("[online] \"{gname}\": {spers}'s report differs ({line}); the result stands"), s);
             }
         } else if gm.reports.iter().any(|(v, k)| *k == key && *v != svip) {
-            let ranked = gm.ranked && gm.players.len() >= 3;
+            let ranked = gm.ranked && order.len() >= 3;
             let was_ranked = gm.ranked;
             let table = gm.ranked.then(|| self.table_frame(g, &r, &names, ranked && (r.kind as usize) < self.title.race_types.len()));
             let far = far_ahead(&gname, r.kind, self.title.report_types, &order, &self.lobby.game(g).expect("held").players);
+            let report_types = self.title.report_types;
+            let lobby = &mut self.lobby;
+            let players = &lobby.games.get(&g).or_else(|| lobby.dead.get(&g)).expect("held").players;
+            let told = far.is_some()
+                || order.iter().find(|p| p.place == 1).is_some_and(|w| {
+                    players.iter().any(|p| lower(&p.name) == lower(&w.name) && p.own.is_some_and(|o| o.told))
+                });
+            let quick = quick_win(&mut lobby.wins, &gname, &r, report_types, &order, players, told);
             let gm = self.lobby.game_mut(g).expect("held");
             gm.result = Some(key);
             gm.table = table;
             if let Some(line) = far {
+                self.llog(&line, s);
+            }
+            if let Some(line) = quick {
                 self.llog(&line, s);
             }
             self.stats.add_race(&Race { kind: r.kind as u32, ranked, track: r.track as i64, players: order });
@@ -1796,15 +1902,17 @@ impl Core {
     }
 
     /// why a decoded race report is not one of game g's ('' = it is: the game's players, each named once, places
-    /// 1..n, a race type)
+    /// 1..n, a race type).  A report may leave out players of the game: the others' games leave out one who joined as
+    /// the race started and never raced, or left it early (nfsu2.xyz, 2026-10-30: 460 reports of 221 races were not
+    /// taken for it, and no `[cheat]` line looked at them)
     fn check_report(&self, g: GameId, r: Option<&crate::stats::RaceReport>, names: &[String]) -> String {
         let Some(r) = r else { return "the report does not parse".into() };
         let g = self.lobby.game(g).expect("held");
-        if r.players.len() != g.players.len() || names.len() != g.players.len() {
+        if r.players.len() != names.len() || names.len() > g.players.len() {
             return "not the game's number of players".into();
         }
         let mut want: HashSet<String> = g.players.iter().map(|p| lower(&p.name)).collect();
-        if !names.iter().all(|n| want.remove(&lower(n))) || !want.is_empty() {
+        if !names.iter().all(|n| want.remove(&lower(n))) {
             return "not the game's players".into();
         }
         let idx: HashSet<u8> = r.players.iter().map(|p| p.index).collect();

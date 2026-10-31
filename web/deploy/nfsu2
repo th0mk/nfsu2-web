@@ -1,7 +1,8 @@
 #!/bin/sh
 # The operator's commands to the game server of the Docker setup in this folder (docs/web/VPS.md, "Kick and ban"):
 # copy it next to compose.yml (/srv/nfsu2), chmod +x, then
-#   ./nfsu2 who [name]                     the players on the switch, and who left in the last hour
+#   ./nfsu2 who [name]                     the players on the switch, and who left in the last hour (a name: theirs,
+#                                          or the one over their car)
 #   ./nfsu2 kick <player> [message]        off playing with others, with that message (a reload brings them back)
 #   ./nfsu2 ban <player> <for> [message]   off until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
 #   ./nfsu2 unban <name | #ban>            lift a ban

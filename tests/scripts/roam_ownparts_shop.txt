@@ -1,0 +1,29 @@
+# The player's own car's shop parts (brakes, exhaust tips, rims, spoiler, ...) through visits to the Performance
+# Shop in free roam among friends, as roam_ownparts.txt does them with the crib (players' reports: brakes and exhaust
+# tips gone after any shop, back after a reload).  "mp solids" after each visit: each part's model and its solid.
+#   roam-pair --seed <a career save with shop parts> --a Ann:roam_ownparts_shop.txt --b Bob:roam_ownparts_shop.txt
+#        --crowd 32 --crowd-args "--cars all" --env ROAM_CROWD_CARS=32 --env VISITS=3
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++60   roam mp solids
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++300  roam mp solids
++0    loop ${VISITS}
++0    log VISIT the Performance Shop
++0    roam shopgo CC_PERF_SHOP
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the shop
++0    waitfe GarageMain.fng 3000
++600  tap ESCAPE
++200  tap LEFT
++30   tap RETURN                      # back to Explore Mode: Yes
++0    waitroam 4000
++60   roam mp solids
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++600  roam mp solids
++0    endloop
++0    roam mp status
++10   quit

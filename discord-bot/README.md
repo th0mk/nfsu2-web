@@ -36,6 +36,9 @@ and it says something only when it is worth it:
   two sentences on what it adds, once a thread, and the thread stays open. Old suggestions count
   too: at each release the bot reads the suggestion forums' threads, archived ones included (the newest 500 of each),
   and keeps them a year. Suggestions tagged Complete or Denied, or locked, are left out.
+  At start and every 3 hours it also counts each suggestion's votes, for the developer: the reactions on its first
+  post and Discord's count of the thread's messages and people (`votes`, `messages`, `members` in `state/threads.json`;
+  the model doesn't see them).
 
 - **in the general channels** (text channels named `general…`), sparingly: someone who reports a problem of their own
   there, and whom nobody helps within 4 minutes, gets one short reply in their language. When the problem is
@@ -133,9 +136,10 @@ bot's first log line says what the month and the day spent so far.
   (a release of only the page or the server keeps the module's `nfsu2.json`). Each new live version goes into
   `state/releases.json` with its time (the file's, which `release.sh` writes as the release goes out), and every
   commit the model reads shows when it went live.
-- `archive.mjs`: every message of every channel the bot sees, kept 7 days in `state/archive/`. At start the bot reads
-  the forums' threads with posts in the last 48 hours, nothing older: it lists them (titles and first posts) in
-  `state/threads.json`, and looks at the ones opened in that time that it never looked at, so a restart misses no post.
+- `archive.mjs`: every message of every channel the bot sees, kept 30 days in `state/archive/` (the model searches the
+  last 7). At start the bot reads the forums' threads with posts in the last 48 hours, nothing older: it lists them
+  (titles and first posts) in `state/threads.json`, and looks at the ones opened in that time that it never looked
+  at, so a restart misses no post.
 - `general.mjs`: the general channels: the replies that point to the forums or give a page code's fix, the spike
   alerts and the daily note.
 - `translate.mjs`: the Translate command. The bot registers it at start; the `bot` scope of the invite covers it.

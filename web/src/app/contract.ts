@@ -128,8 +128,9 @@ export interface InputSubsystem extends Subsystem {
   touchPad?(t: TouchPad | null): void;
   /** the touch controls' level horizon: the phone's tilt the game's 3D view turns against, radians, + = clockwise */
   viewRoll?(rad: number): void;
-  /** the menus' help bar buttons' size, 1 = the game's own (touch.ts: the Menu button size) */
-  menuScale?(s: number): void;
+  /** the menus' small buttons' size, 1 = the game's own (touch.ts: the Menu button size): the scroller arrows', and
+   *  with bar the help bar's too (else it keeps the game's own) */
+  menuScale?(s: number, bar: boolean): void;
   /** performance.now() of a real controller's last button press (0: none) */
   padPressed?(): number;
   /** the game's text entry while it is up (a new profile's name, the LAN name), else null */

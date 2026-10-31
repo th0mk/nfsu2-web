@@ -13,10 +13,14 @@
 //!   `degree` (32: roam_core's group of 33 with itself), or 7 for a player whose HELLO says core version 1 (its group
 //!   was 8, and it drops a longer list); an empty one says the hub is there.  To a player in a crew whose HELLO says
 //!   it reads them (core 8), the list ends in crew marks: its own crews, then which of them each listed player is in.
-//! - player -> hub -> player: when its world map opens, and each second while it is open, a MAPREQ; the hub answers
-//!   with MAP datagrams (at most nine of 230): the other players of its room in free roam, past its links, nearest
-//!   first, map_max (2048) of them at most, or as many as the MAPREQ asks for (512 from a page before 2048), each its
-//!   place (x, y in whole metres) and heading (a byte), which the game marks on the map.
+//! - player -> hub -> player: when its world map opens, and a quarter second after each answer while it is open, a
+//!   MAPREQ naming the answer it holds; the hub answers with MAPD datagrams (at most 16): the other players of its
+//!   room in free roam, past its links, map_max (2048) of them at most (the nearest), or as many as the MAPREQ asks
+//!   for, by the hub's slot of each, as what changed since that answer: each player come, or moved off where the
+//!   page has it, placed (x, y in whole metres, heading a byte, velocity in m/s: the page moves its marker on at
+//!   it), each one gone gone.  A player standing costs nothing, a car going straight little.  A page before MAPD
+//!   asks each second without naming one and gets the whole list in MAP datagrams (at most nine of 230), nearest
+//!   first, each place and heading (512 from a page before 2048).
 //!
 //! The links, in each room: the pairs of players with a position younger than `stale_ms` (60 s: one in a shop or a
 //! race keeps its links for a while), nearest first, each player at most its degree of them.  "Nearest" looks ahead,
@@ -63,8 +67,9 @@
 //! way (fewer for far ones), so a crowd costs its players times their links, all through the switch; a switch that
 //! cannot keep up delays every snapshot, and the cars stutter for everyone (nfsu2.xyz at 855 players, 2026-10-20:
 //! 180-600 ms for a /players answer on Node's one thread).  While the server worked more than `busy_high` of the last
-//! tick the cap on the links goes down by a quarter, at most every `cap_down_ms`, to `min_degree` at the least; once
-//! it has room again (under `busy_low`) the cap goes back up by 2 every `cap_up_ms`.  The nearest links stay.  While
+//! tick (of its CPU quota: of the last `QUOTA_WINDOW`) the cap on the links goes down by a quarter, at most every
+//! `cap_down_ms`, to `min_degree` at the least; once it has room again (under `busy_low`) the cap goes back up by 2
+//! every `cap_up_ms`.  The nearest links stay.  While
 //! the cap is under `ask_cap` (24) free roam counts as busy (the server's /players roamBusy): the start page does not
 //! ask its question (Free roam with others?) at a Play then, so fewer new players join a crowd that already gets fewer
 //! cars; it asks at a later Play once the cap is back.  /players also says how many drive in free roam, or are paused
@@ -100,8 +105,9 @@
 //!   the runtime's workers, which run the switch, spent working (nfsu2_util::cpu::WorkersBusy): Node read its one
 //!   thread's event-loop use.  (The process's CPU time over every core, which it was, never passed `busy_high` once
 //!   the workers were half the cores: all of them busy was 50 %.)  Or, where it is higher, the share of a CPU quota
-//!   the server shares used (nfsu2_util::cpu::QuotaBusy): the game's containers share nfsu2.slice's, and cloudflared
-//!   pays for every snapshot too, so a slice near its limit gets fewer links before its players get them late.
+//!   the server shares used (nfsu2_util::cpu::QuotaBusy), over the last `QUOTA_WINDOW` (a half second's share of a
+//!   slice at 73 % went up to 88 %): the game's containers share nfsu2.slice's, and cloudflared pays for every
+//!   snapshot too, so a slice near its limit gets fewer links before its players get them late.
 
 mod hub;
 mod jumps;
@@ -169,8 +175,9 @@ pub struct RoamOptions {
     /// a player's view point, this far ahead of where its car points (m): a car in front counts from there too, so it
     /// is linked from farther away than one beside or behind
     pub view_m: f64,
-    /// the world map (MAPREQ): at most this many players a answer, one answer a browser every map_gap_ms at most, of
-    /// the players in free roam (or paused there) with a position younger than map_fresh_ms
+    /// the world map (MAPREQ): at most this many players a answer, one answer a browser every map_gap_ms at most (a
+    /// second for a page before MAPD), of the players in free roam (or paused there) with a position younger than
+    /// map_fresh_ms
     pub map_max: usize,
     pub map_gap_ms: f64,
     pub map_fresh_ms: f64,
@@ -187,7 +194,7 @@ impl Default for RoamOptions {
             keep: 0.5,
             hold_ms: 5_000.0,
             max_per_vip: 2,
-            max_players: 6144,
+            max_players: 7168,
             exact_room: 256,
             min_degree: 8,
             busy_high: 0.85,
@@ -200,7 +207,7 @@ impl Default for RoamOptions {
             away_m: 100.0,
             view_m: 150.0,
             map_max: 2048,
-            map_gap_ms: 1_000.0,
+            map_gap_ms: 250.0,
             map_fresh_ms: 5_000.0,
         }
     }
@@ -239,6 +246,8 @@ enum Cmd {
     Info(oneshot::Sender<serde_json::Value>),
     Vips(oneshot::Sender<HashSet<u32>>),
     Blocks(u32, Vec<String>),
+    PageName(u32, String),
+    OtherNames(oneshot::Sender<HashMap<u32, Vec<String>>>),
     Stop,
 }
 
@@ -249,6 +258,10 @@ enum Cmd {
 /// the switch's own calls).  A frame waiting is a slice of the 16 KiB block its connection's reader read it into,
 /// and keeps that block: 128 MiB at most (65,536 of them were 1 GiB).
 const MAX_PENDING: usize = 1 << 13;
+
+/// how far back the busy cap reads the CPU quota (`QuotaBusy::sample_over`): long enough that one busy half second
+/// cuts no one's links, short enough for a slice that fills up for good (the cap goes down at most every 5 s anyway)
+const QUOTA_WINDOW: Duration = Duration::from_secs(10);
 
 /// The hub on a thread of its own.
 pub struct RoamHub {
@@ -278,7 +291,7 @@ impl RoamHub {
             Ok(rt) => {
                 let mut b = WorkersBusy::new(&rt);
                 let mut q = QuotaBusy::find();
-                Box::new(move || b.sample().max(q.as_mut().map_or(0.0, QuotaBusy::sample)))
+                Box::new(move || b.sample().max(q.as_mut().map_or(0.0, |q| q.sample_over(QUOTA_WINDOW))))
             }
             Err(_) => {
                 let mut b = Busy::new(std::thread::available_parallelism().map_or(1, |n| n.get()));
@@ -397,6 +410,10 @@ fn run(
                 let _ = tx.send(hub.vips());
             }),
             Cmd::Blocks(vip, names) => guard(|| hub.blocks(vip, names)),
+            Cmd::PageName(vip, name) => guard(|| hub.page_name(vip, name)),
+            Cmd::OtherNames(tx) => guard(|| {
+                let _ = tx.send(hub.other_names());
+            }),
             Cmd::Stop => {
                 // no more ticks, so no more lists: the switch's send goes too (it holds the switch, which holds
                 // this hub)
@@ -443,6 +460,14 @@ impl Host for RoamHub {
     }
     fn blocks(&self, vip: u32, names: Vec<String>) {
         let _ = self.tx.send(Cmd::Blocks(vip, names));
+    }
+    fn page_name(&self, vip: u32, name: &str) {
+        let _ = self.tx.send(Cmd::PageName(vip, name.to_string()));
+    }
+    fn other_names(&self) -> oneshot::Receiver<HashMap<u32, Vec<String>>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Cmd::OtherNames(tx));
+        rx
     }
     fn stop(&self) {
         let _ = self.tx.send(Cmd::Stop);

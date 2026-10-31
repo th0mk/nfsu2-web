@@ -106,7 +106,8 @@ impl Kit {
         let bans = Arc::new(nfsu2_bans::Bans::open(std::path::Path::new(&o.state)).expect("the bans"));
         let names = vault.as_ref().map(|_| super::names::NamesRoute::new(Arc::new(nfsu2_claims::Claims::in_memory()), None));
         let covers = super::covers::open(&o).expect("the hand-over store");
-        let mut app = App::new(o, real_state, key, lan, None, None, vault, covers, names, bans, 2, 0, compress_threads);
+        let days = Arc::new(super::days::Days::open(&o.state, nfsu2_util::now_ms()));
+        let mut app = App::new(o, real_state, key, lan, None, None, vault, covers, names, bans, days, 2, 0, compress_threads);
         set(&mut app);
         let app = Arc::new(app);
         app.refresh_manifest().await.expect("the manifest");

@@ -181,8 +181,26 @@ class AutoBucket {
  *  come (runtime/web/roam_web.c), so a page sent a message for nearly every pass, about 37 a second against the
  *  switch's 20 (web/tools/roam-crowd.mjs --loop-ms 10, 2026-10-24); the car states themselves never wait */
 const TX_HOLD_MS = 50;
-/** runtime/roam_core.h: a datagram's type (header byte 5): the car state, a ping and its answer */
-const RC_MSG_SNAP = 3, RC_MSG_PING = 6, RC_MSG_PONG = 7;
+/** The same while the game is in free roam but not driving (a race, a shop, the menus, loading: runtime/roam_core.h
+ *  RC_ST_*, from its own HELLO or SNAP): it draws no other car then and no one draws its, yet its friends' pings, pongs
+ *  and HELLOs kept a message going nearly every 50 ms each way (2026-10-30: about half of nfsu2.xyz's players in free
+ *  roam, 70 % of a driving player's messages).  The server holds what its friends send it as long (nfsu2-lan away.rs);
+ *  a HELLO or SNAP that says it drives again goes at once. */
+const TX_HOLD_AWAY_MS = 500;
+/** runtime/roam_core.h: a datagram's type (header byte 5): HELLO, the car state, a ping and its answer */
+const RC_MSG_HELLO = 1, RC_MSG_SNAP = 3, RC_MSG_PING = 6, RC_MSG_PONG = 7;
+
+/** Whether a free-roam datagram of the game's own says it is not driving (a HELLO's or a SNAP's status, RC_ST_*: 0 the
+ *  menus, 1 loading, 3 a race, 4 a shop; not 2 in free roam or 5 paused there); undefined for any other datagram.  d:
+ *  where the datagram starts in dv */
+function roamAway(dv: DataView, d: number, len: number): boolean | undefined {
+  const type = dv.getUint8(d + 5);
+  // after its 16-byte header: a HELLO's core version and platform, then its status; a SNAP's status first
+  const at = type === RC_MSG_HELLO ? 19 : type === RC_MSG_SNAP ? 16 : -1;
+  if (at < 0 || len <= at + 4 || dv.getUint32(d, false) !== 0x4e324652) return undefined;
+  const st = dv.getUint8(d + at);
+  return st === 0 || st === 1 || st === 3 || st === 4;
+}
 
 /** A ping's send time (t0) or a pong's (t2) moved on by the time it waited here since the core made it (its slot's
  *  S_T_MS, the same clock): the round trip a friend's solid car is drawn ahead by (roam_game.c render_delay) is the
@@ -260,6 +278,8 @@ class Endpoint {
   waiting: ArrayBuffer[] = [];
   /** when its TX ring last went to the switch (performance.now()) */
   sent = 0;
+  /** free roam: its game is not driving, as its last HELLO or SNAP said (a race, a shop, the menus, loading) */
+  away = false;
   constructor(readonly kind: 'roam' | 'lan', readonly ver: number, buf: SharedArrayBuffer, ptr: number, size: number) {
     // shared memory is never detached: views made now stay valid after the
     // memory grows (the mailbox lies inside the current buffer)
@@ -706,19 +726,22 @@ class Link implements NetLink {
     }
   }
   /** how long free roam's TX ring may wait still (ms; 0: send it now): while it holds only free roam's own datagrams,
-   *  until the next car state to a friend comes or TX_HOLD_MS after the last send (to a switch that takes bundles) */
+   *  until the next car state to a friend comes or TX_HOLD_MS after the last send (to a switch that takes bundles), or
+   *  TX_HOLD_AWAY_MS while the game is not driving (half the ring at most) */
   private txHold(ep: Endpoint): number {
     if (ep.kind !== 'roam' || !this.bundles || this.state !== 'online') return 0;
     const i32 = ep.i32, dv = ep.dv, txOff = i32[P.W_TX_OFF], head = Atomics.load(i32, P.W_TX_HEAD);
     let tail = Atomics.load(i32, P.W_TX_TAIL);
-    const left = ep.sent + TX_HOLD_MS - performance.now();
-    if (tail === head || left <= 0) return 0;
+    if (tail === head || ((head - tail) | 0) >= P.NET_TX_SLOTS / 2) return 0;
     for (; tail !== head; tail = (tail + 1) | 0) {
-      const s = txOff + ((tail >>> 0) % P.NET_TX_SLOTS) * P.NET_SLOT_BYTES;
-      if (dv.getUint32(s + P.S_KIND, true) !== P.NET_KIND_UDP || dv.getUint32(s + P.S_LEN, true) < 6) return 0;
+      const s = txOff + ((tail >>> 0) % P.NET_TX_SLOTS) * P.NET_SLOT_BYTES, len = dv.getUint32(s + P.S_LEN, true);
+      if (dv.getUint32(s + P.S_KIND, true) !== P.NET_KIND_UDP || len < 6) return 0;
+      // a car state to a friend, or the word that the game drives again: now
+      if (ep.away && roamAway(dv, s + P.S_DATA, len) === false) return 0;
       if (dv.getUint8(s + P.S_DATA + 5) === RC_MSG_SNAP && dv.getUint32(s + P.S_DST_IP, true) !== P.NET_ROAM_HUB) return 0;
     }
-    return Math.ceil(left);
+    const left = ep.sent + (ep.away ? TX_HOLD_AWAY_MS : TX_HOLD_MS) - performance.now();
+    return left > 0 ? Math.ceil(left) : 0;
   }
   private drainTx(ep: Endpoint) {
     const i32 = ep.i32, dv = ep.dv;
@@ -752,7 +775,10 @@ class Link implements NetLink {
         fv.setUint16(P.F_SPORT, dv.getUint16(s + P.S_SRC_PORT, true));
         fv.setUint16(P.F_DPORT, dv.getUint16(s + P.S_DST_PORT, true));
         f.set(ep.u8.subarray(s + P.S_DATA, s + P.S_DATA + len), P.F_DATA);   // a copy: a socket cannot send shared memory
-        if (ep.kind === 'roam' && f[P.F_KIND] === P.NET_KIND_UDP) sentNow(f, len, t - dv.getFloat64(s + P.S_T_MS, true));
+        if (ep.kind === 'roam' && f[P.F_KIND] === P.NET_KIND_UDP) {
+          sentNow(f, len, t - dv.getFloat64(s + P.S_T_MS, true));
+          ep.away = roamAway(dv, s + P.S_DATA, len) ?? ep.away;
+        }
         if (bundle) bundle.add(f, dst >>> 0); else ws!.send(f);
         this.st.framesOut++; this.st.bytesOut += len;
         if (ep.kind === 'lan') this.st.lanOut++;

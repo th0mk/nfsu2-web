@@ -30,7 +30,9 @@
 //   size      all of them (and the menu's button) bigger or smaller, from the Controls sheet's touch tab, kept in this
 //             browser: auto (autoTouchSize, for the screen) unless 80 to 150 % is picked; style.css --ts on the stage.
 //             The game's menus' small buttons likewise (menuSize: the help bar's and the scrollers' arrows, auto
-//             big enough for a finger), sent to the game (input menuScale, runtime/menusize.c).
+//             big enough for a finger), sent to the game (input menuScale, runtime/menusize.c).  Auto leaves the
+//             help bar at the game's size: its Continue and Back are the menu controls' OK and Back, and bigger it
+//             covers the menus' own things near it (the paint list, a part's name).
 // The controller part is a virtual one the input module merges with a real one (gamepad.ts withTouch).
 // The driving controls show while the game says the player drives ("drive" in its status block,
 // runtime/web/status_web.c: 1 in a race, 2 in free roam, + 4 with a manual gearbox, + 8 in a cutscene), the menu's
@@ -287,6 +289,8 @@ export class TouchControls {
   /** the controls' size now (touchSize), the menus' small buttons' (menuSize) */
   private scale = 0;
   private menuScale = 0;
+  /** the help bar has the menus' size too (picked by hand), not only the arrows (auto) */
+  private menuBar = false;
   /** the game's input the menus' size went to (it comes some frames after the start) */
   private menuTo: unknown = null;
 
@@ -388,7 +392,7 @@ export class TouchControls {
   /** for tests and logs: what the controls do now (shown: the driving ones, menu: the menu's) */
   state() {
     return { shown: this.mode === 'drive', menu: this.mode === 'menu', drive: this.drive, steering: this.steering, lx: this.lx,
-      buttons: this.padButtons, keys: [...this.keys.keys()], roll: this.sentRoll, menuScale: this.menuScale, menuSent: !!this.menuTo,
+      buttons: this.padButtons, keys: [...this.keys.keys()], roll: this.sentRoll, menuScale: this.menuScale, menuBar: this.menuBar, menuSent: !!this.menuTo,
       engage: this.engage, near: this.near, drift: this.drift };
   }
 
@@ -695,13 +699,15 @@ export class TouchControls {
     this.stage.style.setProperty('--ts', String(s));
     if (was) this.deps.log(`[app] touch controls: size ${Math.round(s * 100)} %${touchSize.get() === 'auto' ? ' (auto)' : ''}`);
   }
-  /** the menus' small buttons at the size picked, or auto's, for the game (runtime/menusize.c) */
+  /** the menus' small buttons at the size picked, or auto's, for the game (runtime/menusize.c): auto's the arrows
+   *  alone, the help bar at the game's size */
   private applyMenuSize(force = false) {
-    const s = menuSize.scale();
-    if (s === this.menuScale && !force) return;
+    const s = menuSize.scale(), bar = menuSize.get() !== 'auto';
+    const changed = s !== this.menuScale || bar !== this.menuBar;
+    if (!changed && !force) return;
     const was = this.menuScale;
-    this.menuScale = s;
-    this.session?.input?.menuScale?.(s);
-    if (was && s !== was) this.deps.log(`[app] menu buttons: size ${Math.round(s * 100)} %${menuSize.get() === 'auto' ? ' (auto)' : ''}`);
+    this.menuScale = s; this.menuBar = bar;
+    this.session?.input?.menuScale?.(s, bar);
+    if (was && changed) this.deps.log(`[app] menu buttons: size ${Math.round(s * 100)} %${bar ? '' : ' (auto: the arrows, not the help bar)'}`);
   }
 }

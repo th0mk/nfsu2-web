@@ -175,7 +175,7 @@ export const tags = s => [...s.matchAll(/<(\/?)(\d+)>/g)].map(m => m[0]);
 
 /** CLDR's plural forms (Intl.PluralRules) of each language the files are for */
 const LOCALE = { french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch: 'nl', swedish: 'sv', danish: 'da', korean: 'ko',
-  chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr' };
+  chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr', hungarian: 'hu' };
 export const LANGUAGE_FILES = Object.keys(LOCALE);
 export const langFile = (l, root = WEB) => path.join(root, 'src/app/lang', `${l}.json`);
 /** a game's own texts in a language, over the shared file's */

@@ -43,7 +43,8 @@ export const IM_TEXT_KIND = 35;     // wasm: which characters it takes besides l
 export const IM_TEXT_LEN = 36;      // wasm: the characters in it now
 export const IM_PAD_WHEEL = 37;     // page: 1 when the controller driving the pad is a steering wheel (under IM_PAD_SEQ)
 export const IM_VIEW_ROLL = 38;     // page: float bits, the phone's tilt the 3D view turns against (radians, + = clockwise)
-export const IM_MENU_SCALE = 39;    // page: float bits, the menus' help bar buttons' size (1 = the game's own; 0 = not set)
+export const IM_MENU_SCALE = 39;    // page: float bits, the menus' help bar buttons' and arrows' size (1 = the game's own;
+                                    // 0 = not set; negative: the arrows' alone, the bar at the game's own)
 export const IM_TEXT = 40;          // wasm: 40..63, its text (cp1252, NUL-padded)
 export const IM_HDR_WORDS = 64;
 

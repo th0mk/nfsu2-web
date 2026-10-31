@@ -516,7 +516,7 @@ impl Claims {
 }
 
 /// the folder (0700 when it is made), a temporary file (0600), then the rename over `file`
-fn write_atomic(file: &Path, body: &[u8]) -> Result<(), String> {
+pub fn write_atomic(file: &Path, body: &[u8]) -> Result<(), String> {
     let dir = file.parent().ok_or("no folder")?;
     let mut b = std::fs::DirBuilder::new();
     b.recursive(true);

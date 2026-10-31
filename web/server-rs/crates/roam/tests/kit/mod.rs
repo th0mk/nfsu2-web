@@ -178,6 +178,39 @@ pub fn map_of(f: &[u8]) -> Option<Map> {
     Some((u16::from_le_bytes([d[16], d[17]]), d[18], d[19], u16::from_le_bytes([d[20], d[21]]), e.collect()))
 }
 
+/// the world map's question of a page since MAPD: for max players at most, what changed since its answer base
+pub fn mapreq_base(sender: u32, req: u16, max: u16, base: u16) -> Vec<u8> {
+    dgram(10, sender, &[req.to_le_bytes(), max.to_le_bytes(), base.to_le_bytes()].concat())
+}
+
+/// a MAPD entry: the player's key, and where it is placed (x, y, heading, vx, vy), or None: gone
+pub type MapdEntry = (u16, Option<(i16, i16, u8, i8, i8)>);
+/// a MAPD datagram: (req, base, part, nparts, total, entries)
+pub type Mapd = (u16, u16, u8, u8, u16, Vec<MapdEntry>);
+
+/// the MAPD datagram in a frame of the hub's
+pub fn mapd_of(f: &[u8]) -> Option<Mapd> {
+    let d = &f[16..];
+    if d[5] != 17 {
+        return None;
+    }
+    let (mut o, mut e) = (25, Vec::new());
+    for _ in 0..d[24] {
+        let key = u16::from_le_bytes([d[o], d[o + 1]]);
+        if key & 0x8000 != 0 {
+            e.push((key & 0x7fff, None));
+            o += 2;
+        } else {
+            let i = |k: usize| i16::from_le_bytes([d[o + k], d[o + k + 1]]);
+            e.push((key, Some((i(2), i(4), d[o + 6], d[o + 7] as i8, d[o + 8] as i8))));
+            o += 9;
+        }
+    }
+    assert_eq!(o + 4, d.len(), "MAPD entries fill the datagram");
+    let u = |k: usize| u16::from_le_bytes([d[k], d[k + 1]]);
+    Some((u(16), u(18), d[20], d[21], u(22), e))
+}
+
 pub fn bye(sender: u32) -> Vec<u8> {
     dgram(8, sender, &[0])
 }

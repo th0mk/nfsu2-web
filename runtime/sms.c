@@ -128,6 +128,14 @@ static const Text HELLO[] = {
       "bulursun.^^Sunucu ve geli\u015ftirme masraflar\u0131na yard\u0131m etmek istersen ko-fi.com/nfsu2xyz adresinden bana bir "
       "kahve \u0131smarlayabilirsin. Hi\u00e7 zorunlu de\u011fil ve Discord'daki bir rol d\u0131\u015f\u0131nda hi\u00e7bir ayr\u0131cal\u0131k "
       "getirmiyor, ama oyunu herkes i\u00e7in geli\u015ftirmeye devam etmeme yard\u0131mc\u0131 oluyor." },
+    { "hungarian", "Tetszik a j\u00e1t\u00e9k?",
+      "Rem\u00e9lem, j\u00f3l fut n\u00e1lad. Ha van visszajelz\u00e9sed vagy \u00f6tleted, csatlakozz a Discordunkhoz, "
+      "a linket a kezd\u0151lapon tal\u00e1lod. Ha tetszik a j\u00e1t\u00e9k, oszd meg a bar\u00e1taiddal! Az F9 "
+      "men\u00fcben csapatot is alap\u00edthatsz, \u00edgy Felfedez\u0151 m\u00f3dban k\u00f6nnyebben megtal\u00e1lod a "
+      "csapatt\u00e1rsaidat.^^Ha seg\u00edten\u00e9l a szerver \u00e9s a fejleszt\u00e9s k\u00f6lts\u00e9geiben, "
+      "megh\u00edvhatsz egy k\u00e1v\u00e9ra a ko-fi.com/nfsu2xyz oldalon. Egy\u00e1ltal\u00e1n nem k\u00f6telez\u0151, "
+      "\u00e9s a Discordon kapott szerepen k\u00edv\u00fcl semmilyen el\u0151nnyel nem j\u00e1r, de seg\u00edt abban, "
+      "hogy mindenkinek tov\u00e1bb fejleszthessem a j\u00e1t\u00e9kot." },
 };
 #define MSG_N 1                     /* the messages, by id 1.. */
 static const struct { const char *name; const Text *t; unsigned n; } MSGS[MSG_N] = {

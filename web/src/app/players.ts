@@ -106,10 +106,17 @@ export function queueText(q: { pos: number; of: number; eta?: number }): string 
   return wait ? t('The server is full. In line for a place: {pos} of {of} ({wait}).', v) : t('The server is full. In line for a place: {pos} of {of}.', v);
 }
 
-/** Whether the server answers (any answer but a 5xx from a proxy in front of it), within ms. */
-export async function serverAnswers(ms: number): Promise<boolean> {
-  try { return (await fetch(at('players'), { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(ms) })).status < 500; }
-  catch { return false; }
+/** How the server answered: 'ok' (any answer but a 5xx); 'down': a 5xx, from the proxy in front of a server that is
+ *  stopped or restarting; 'unreachable': no answer at all (the way there is blocked, or it took too long);
+ *  'no-network': no answer, and the browser says this device has no network. */
+export type Reach = 'ok' | 'down' | 'unreachable' | 'no-network';
+const reachOf = (status: number): Reach => status < 500 ? 'ok' : 'down';
+const missed = (): Reach => navigator.onLine === false ? 'no-network' : 'unreachable';
+
+/** Whether the server answers (Reach), within ms. */
+export async function serverAnswers(ms: number): Promise<Reach> {
+  try { return reachOf((await fetch(at('players'), { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(ms) })).status); }
+  catch { return missed(); }
 }
 
 /** How many are in free roam in each crew asked for (their hashes, in the order asked), by hash; none from an older
@@ -134,32 +141,33 @@ export async function askCrews(hashes: readonly number[], ms: number): Promise<M
 }
 
 /** show(line, crews) at once and every 15 s while idle() and the page is visible (crews: crewCounts); reached(whether
- *  the server answered); room(): the Room setting while free roam is on ('' for none); crews(): the Crews setting's
+ *  the server answered: Reach); room(): the Room setting while free roam is on ('' for none); crews(): the Crews setting's
  *  hashes ([] for none, at most 4); last(): the newest answer (null before the first, or from a server without
  *  the route); fresh(ms): asked now, whatever the page does (Play: whether the server is full), within ms, then the
  *  newest answer.  An answer that comes after a later question's is not shown: it was asked with the settings of
  *  before (the page's first question goes before settings.ini is read, the next one at once after it). */
-export function watchPlayers(show: (line: Msg, crews: Map<number, number>) => void, idle: () => boolean, reached?: (ok: boolean) => void,
+export function watchPlayers(show: (line: Msg, crews: Map<number, number>) => void, idle: () => boolean, reached?: (r: Reach) => void,
                              room: () => string = () => '', crews: () => number[] = () => []) {
   let gone = false, last: PlayerCounts | null = null, asked = 0;
-  const get = async (ms: number) => {
+  // quiet: a miss is not passed on (fresh: Play's short question, whose timeout says nothing about the server)
+  const get = async (ms: number, quiet = false) => {
     if (gone) return;
     const n = ++asked;
     try {
       const name = room(), hash = roomHash(name), mine = crews().slice(0, 4);
       const q = [hash ? `room=${hash}` : '', mine.length ? `crews=${mine.join(',')}` : ''].filter(Boolean).join('&');
       const r = await fetch(at(q ? `players?${q}` : 'players'), { cache: 'no-store', signal: AbortSignal.timeout(ms) });
-      reached?.(r.status < 500);
+      if (!quiet || r.status < 500) reached?.(reachOf(r.status));
       if (r.status === 404) { gone = true; last = null; show(() => '', new Map()); return; }
       if (!r.ok) return;
       const c = await r.json() as PlayerCounts, inRoom = hash ? name : '';
       if (n !== asked) return;
       last = c; show(() => playersText(c, inRoom), crewCounts(c, mine));
-    } catch { reached?.(false); }
+    } catch { if (!quiet) reached?.(missed()); }
   };
   const ask = async () => { if (document.visibilityState === 'visible' && idle()) await get(5000); };
   window.setInterval(() => void ask(), EVERY_MS);
   document.addEventListener('visibilitychange', () => void ask());
   void ask();
-  return { now: () => void ask(), last: () => last, fresh: async (ms: number) => { await get(ms); return last; } };
+  return { now: () => void ask(), last: () => last, fresh: async (ms: number) => { await get(ms, true); return last; } };
 }

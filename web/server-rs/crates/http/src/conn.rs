@@ -824,6 +824,7 @@ pub(crate) fn reunite(r: ReadHalf, w: WriteHalf) -> Option<Stream> {
     match (r, w) {
         (ReadHalf::Plain(r), WriteHalf::Plain(w)) => r.reunite(w).ok().map(Stream::Plain),
         (ReadHalf::Tls(r), WriteHalf::Tls(w)) => Some(Stream::Tls(Box::new(r.unsplit(w)))),
+        (ReadHalf::Unix(r), WriteHalf::Unix(w)) => r.reunite(w).ok().map(Stream::Unix),
         _ => None,
     }
 }

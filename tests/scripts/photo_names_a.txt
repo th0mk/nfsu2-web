@@ -1,7 +1,8 @@
 # Photo mode's names over friends' cars on the player's page, instance A (with photo_names_b.txt): roam-pair --page
 # app saves the page at each "log SHOT <name>".  New career -> prologue free roam; B drives some 20 m ahead, A opens
-# photo mode (F12) and shoots it without the names, with them (N), turned and farther (the names follow the camera),
-# without them again, and the drive camera after (the HUD and the names as before).
+# photo mode (F12) and shoots it without the names, with them (N: B's and A's own), turned and farther (the names
+# follow the camera), free and orbit again (Tab), without them again, and the drive camera after (the HUD and the
+# names as before).
 #   roam-pair --page app --a Ann:photo_names_a.txt --b Bob:photo_names_b.txt --env NFSU2_ROAM_ROOM=<r>
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
@@ -31,10 +32,12 @@
 +0    photo drag 0.25 0.05
 +0    photo dolly -12
 +90   log SHOT photo_names_far
-+0    photo free
-+0    photo move 0 -1 1
++0    log KEY Tab                     # the free camera
++60   photo move 0 -1 1
 +240  photo move 0 0
 +30   log SHOT photo_names_free
++0    log KEY Tab                     # the orbit again
++60   log SHOT photo_names_orbit
 +0    log KEY KeyN
 +60   log SHOT photo_off
 +0    log KEY Escape

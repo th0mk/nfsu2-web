@@ -4,8 +4,9 @@
  *   roam_hubwire hello|snap|bye   one datagram, as roam_core encodes it, in hex
  *   roam_hubwire peers <hex>      a PEERS datagram decoded: "ok <n> a.b.c.d:port:id ..." or "err <code>"
  *   roam_hubwire map <hex>...     a session that hears the hub (10.77.0.253:47210) asks for the world map
- *                                 ("ask <hex>": its MAPREQ) and takes these datagrams from the hub; then
- *                                 "map <gen> <total> <n> x,y,h ..." (what it holds)
+ *                                 ("ask <hex>": its MAPREQ) and takes these datagrams from the hub (each "ask"
+ *                                 among them: it asks again, a second on); then "map <gen> <total> <n>
+ *                                 id:x,y,h,vx,vy ..." (what it holds)
  *   roam_hubwire lobby            a race lobby's advert to the hub (to 0), as roam_core encodes it, in hex
  *   roam_hubwire lobbies <hex>... a session that takes race lobbies asks for the world map as above and takes
  *                                 these datagrams; then "lobbies <gen> <n> x,y,race,n,max,state ..."
@@ -112,7 +113,10 @@ int main(int argc, char **argv){
         n = rc_encode(&m, b, sizeof b);
         rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000);
         if (!rc_ask_map(&S, t += 1000, RC_MAP_MAX)){ printf("not asked\n"); return 0; }
-        for (int i = 2; i < argc; i++){ unhex(argv[i], b, &n); rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000); }
+        for (int i = 2; i < argc; i++){
+            if (!strcmp(argv[i], "ask")){ if (!rc_ask_map(&S, t += 1000000, RC_MAP_MAX)){ printf("not asked\n"); return 0; } continue; }
+            unhex(argv[i], b, &n); rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000);
+        }
         if (c.lobbies){
             printf("lobbies %u %d", S.lobbies_gen, S.lobbies_n);
             for (int i = 0; i < S.lobbies_n; i++) printf(" %d,%d,%u,%u,%u,%u", S.lobbies_e[i].x, S.lobbies_e[i].y, S.lobbies_e[i].race,
@@ -121,7 +125,8 @@ int main(int argc, char **argv){
             return 0;
         }
         printf("map %u %u %d", S.map_gen, S.map_total, S.map_n);
-        for (int i = 0; i < S.map_n; i++) printf(" %d,%d,%u", S.map_e[i].x, S.map_e[i].y, S.map_e[i].heading);
+        for (int i = 0; i < S.map_n; i++)
+            printf(" %u:%d,%d,%u,%d,%d", S.map_e[i].id, S.map_e[i].x, S.map_e[i].y, S.map_e[i].heading, S.map_e[i].vx, S.map_e[i].vy);
         printf("\n");
         return 0;
     }

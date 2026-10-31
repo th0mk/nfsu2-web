@@ -30,7 +30,10 @@
  * The scale: the page's (web/src/app/touch.ts menuSize: the Controls sheet's
  * Menu button size, auto big enough for a finger), input mailbox word
  * IM_MENU_SCALE, read through input_menu_scale(); NFSU2_MENU_SCALE=<f>
- * overrides it.  1 = the game's own size.  Only where menusize_install ran
+ * overrides it.  1 = the game's own size.  The bar and the arrows each have
+ * their own: auto sizes the arrows alone, as the bar's Continue and Back are
+ * the touch controls' OK and Back, and a bigger bar covers the menus' own
+ * things near it (the paint list, a part's name).  Only where menusize_install ran
  * (the web build), as the bar's mouse needs the handler.
  * NFSU2_MENU_DUMP=<package names> prints those packages' objects once.
  * Original: no scaling. */
@@ -62,13 +65,13 @@
 #define MAX_OBJS  64       /* a package's top-level objects looked at */
 #define KEPT_MAX  512
 
-__attribute__((weak)) float input_menu_scale(void){ return 1.f; }
+__attribute__((weak)) float input_menu_scale(int bar){ (void)bar; return 1.f; }
 void sub_0055dfa0(CPU *c);
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
 
 static int g_installed;
 static uint32_t g_bar;                          /* the help bar's package, once drawn */
-static float g_last = 1.f;
+static float g_last[2] = { 1.f, 1.f };          /* the scales logged last: the arrows', the bar's */
 
 static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 static const char *pkg_name(uint32_t pkg){
@@ -102,7 +105,8 @@ static void dump(uint32_t pkg, const char *nm){
 }
 
 /* ---- the scale --------------------------------------------------------- */
-static float scale_now(void){
+/* bar: the help bar's, else the arrows' */
+static float scale_now(int bar){
     static int init; static float env = 0.f;
     if (!init){
         init = 1;
@@ -110,7 +114,7 @@ static float scale_now(void){
         if (e && *e) env = (float)atof(e);
         if (env) fprintf(stderr, "[menusize] NFSU2_MENU_SCALE=%.2f\n", (double)env);
     }
-    float s = env ? env : input_menu_scale();
+    float s = env ? env : input_menu_scale(bar);
     if (!(s >= 1.f)) s = 1.f;                   /* also NaN */
     return s > MAX_SCALE ? MAX_SCALE : s;
 }
@@ -184,14 +188,14 @@ static void apply_arrows(uint32_t pkg, float s){
 }
 
 static void apply(uint32_t pkg, int bar){
-    float s = scale_now();
+    float s = scale_now(bar);
     if (s == 1.f && !g_nkept) return;              /* the game's own size, and nothing written */
     long metal_frames(void);
     g_now = metal_frames();
     if (bar) apply_bar(pkg, s); else apply_arrows(pkg, s);
-    if (s != g_last){
-        fprintf(stderr, "[menusize] help bar and scroller arrows at %.0f %%\n", (double)(s * 100.f));
-        g_last = s;
+    if (s != g_last[bar]){
+        fprintf(stderr, "[menusize] %s at %.0f %%\n", bar ? "help bar" : "scroller arrows", (double)(s * 100.f));
+        g_last[bar] = s;
     }
 }
 
@@ -223,7 +227,7 @@ static void bar_msg(CPU *c){
     uint32_t m = ok(c->ecx, 0x70u) ? MR32(c->ecx + HB_MASK) : 0u;
     if (m != mask){ mask = m; changed = f; }
     uint8_t l = MR8(MOUSE_WENT_DOWN), r = MR8(MOUSE_WENT_DOWN + 3u);
-    if (f - changed > 1 || g_last == 1.f || !(l | r)){ sub_0055dfa0(c); return; }
+    if (f - changed > 1 || g_last[1] == 1.f || !(l | r)){ sub_0055dfa0(c); return; }
     MR8(MOUSE_WENT_DOWN) = 0; MR8(MOUSE_WENT_DOWN + 3u) = 0;
     sub_0055dfa0(c);
     MR8(MOUSE_WENT_DOWN) = l; MR8(MOUSE_WENT_DOWN + 3u) = r;

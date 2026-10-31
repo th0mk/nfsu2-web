@@ -1058,11 +1058,14 @@ float input_view_roll(void){
     if (roll > 1.5f) roll = 1.5f; else if (roll < -1.5f) roll = -1.5f;
     return roll;
 }
-/* the menus' help bar buttons' size (web/src/app/touch.ts: the Controls
- * sheet's Menu button size; runtime/menusize.c), 1 = the game's own */
-float input_menu_scale(void){
+/* the menus' small buttons' size (web/src/app/touch.ts: the Controls
+ * sheet's Menu button size; runtime/menusize.c), 1 = the game's own: bar,
+ * the help bar's, else the scroller arrows'.  A negative word is the arrows'
+ * alone, the bar at the game's own (auto on a touch screen) */
+float input_menu_scale(int bar){
     uint32_t v = atomic_load_explicit(&MH(IM_MENU_SCALE), memory_order_relaxed);
     float s; memcpy(&s, &v, 4);
+    if (s < 0.f){ if (bar) return 1.f; s = -s; }
     return isfinite(s) && s >= 1.f ? s : 1.f;
 }
 /* on: 0 unplugged, 1 a pad, 2 a steering wheel */

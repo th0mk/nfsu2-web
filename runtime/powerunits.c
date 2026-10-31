@@ -95,7 +95,8 @@ static int bhp(void){ return g_hp >= 0 ? g_hp : MR8(A_KMH) != 1; }
 /* the name in the game's language, after its own Speedometer Units and
  * power ("Unit\xe9s compteur", "Puissance", ...; in Latin-1, as the language
  * files are; Polish with the letters its pack's fonts draw as Polish ones,
- * as hornmenu.c; Turkish's "G\xfc\xe7 Birimi" after its "H\xedz Birimi");
+ * as hornmenu.c; Turkish's "G\xfc\xe7 Birimi" after its "H\xedz Birimi";
+ * Hungarian's after its "M\xe9rt\xe9kegys\xe9g" and "Teljes\xedtm\xe9ny");
  * English for the others, whose fonts have their own
  * encodings but draw ASCII as it is */
 static const char *label(void){
@@ -103,7 +104,7 @@ static const char *label(void){
         { "french", "Unit\xe9s puissance" }, { "german", "Leistungseinheit" }, { "italian", "Unit\xe0 potenza" },
         { "spanish", "Unidades de potencia" }, { "dutch", "Eenheden vermogen" }, { "swedish", "Enhet f\xf6r effekt" },
         { "danish", "Ydelsesenhed" }, { "portuguese", "Unidades de Pot\xeancia" }, { "polish", "Jednostki mocy" },
-        { "turkish", "G\xfc\xe7 Birimi" },
+        { "turkish", "G\xfc\xe7 Birimi" }, { "hungarian", "Teljes\xedtm\xe9nyegys\xe9g" },
     };
     const char *l = language_name();
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) if (!strcmp(l, T[i].lang)) return T[i].text;
