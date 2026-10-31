@@ -91,6 +91,9 @@ long autotest_frame(void);
 uint32_t mw_aid_call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *args);   /* career_mw.c */
 int mw_aid_pw_on(void);
 unsigned long mw_fix_purecall_calls(void);                    /* fixes_mw.c: the guard site's runs */
+unsigned long mw_fix_plancars(void);                          /* ... cars taken off a plan as they were freed (M4-53) */
+unsigned long mw_fix_plancars_dead(void);                     /* ... walks of a plan that met a freed car */
+unsigned long mw_fix_purecall_acts(int add);                  /* ... the guard's passes (0) and kept-out adds (1) */
 
 static uint32_t rd(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
 static uint8_t rd8(uint32_t a){ return a && mem_is_committed(a) ? MR8(a) : 0u; }
@@ -241,7 +244,9 @@ void mw_pursuit_end(CPU *c, const char *how){
         copcar[i].n = 0;
     }
     fprintf(stderr, "[mwpursuit] f=%ld end (%s): cop cars asked by name:%s; roadblocks %lu (made %lu), breakers %lu, "
-            "guard %lu\n", autotest_frame(), how, o ? b : " none", n_roadblock, n_roadblock_made, n_breaker, mw_fix_purecall_calls());
+            "guard %lu (passed over %lu, adds kept out %lu), plan cars taken off %lu, freed plan cars met %lu\n",
+            autotest_frame(), how, o ? b : " none", n_roadblock, n_roadblock_made, n_breaker, mw_fix_purecall_calls(),
+            mw_fix_purecall_acts(0), mw_fix_purecall_acts(1), mw_fix_plancars(), mw_fix_plancars_dead());
     if (pools_on) mw_aid_pools(c, 0);
 }
 

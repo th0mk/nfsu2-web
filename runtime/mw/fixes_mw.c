@@ -1,4 +1,4 @@
-/* Most Wanted's own crash bugs, fixed defensively (TRACKER M4-28, M4-29; L-063, D-24).  Each fix logs a line when
+/* Most Wanted's own crash bugs, fixed defensively (TRACKER M4-28, M4-29, M4-53; L-063, D-24).  Each fix logs a line when
  * it acts and has an NFSU2_TEST_* switch that brings back the game's code, so a run can show the crash it removes:
  *
  *   NFSU2_TEST_PURECALL=1     the pursuit purecall (R6025).  The roadblock spawner (the function around 0x43E005,
@@ -11,7 +11,10 @@
  *                             instruction hook (HOOK_SITE below) points edx at a stand-in table whose +0x80 is
  *                             one of the game's own empty methods (0x410550, `ret`, in 61 of its vtables), and
  *                             a second (0x43E014) keeps that vehicle out of the roadblock's cars (below).  Should
- *                             the game reach _purecall anyway, a hook at its entry logs the caller.
+ *                             the game reach _purecall anyway, a hook at its entry logs the caller.  The list is
+ *                             a pending roadblock plan's cars, and the torn-down vehicle one freed while the plan
+ *                             still lists it: NFSU2_TEST_PLANCARS below takes such cars off as they are freed, so
+ *                             this guard is the second line.
  *   NFSU2_TEST_COPLIST_NULL=1 the cop and roadblock unload, 0x57D0F0: it calls method +0xC of every entry of
  *                             the list at [0x92FD8C] (count [0x92FD94]) and an empty (null) entry is called
  *                             through (0x57D105 `mov edx,[ecx]`): on Windows an access violation, here a call
@@ -32,6 +35,11 @@
  *                             the game's try (and logs each that fails), 2 and 3 make the music slot's start find
  *                             it held (the crash at once), 4 and 5 its stream open or the music's pause / go-on
  *                             once (NFSU2_TEST_PFLOCK_AT: at which call; the music lost, M4-26).
+ *   NFSU2_TEST_PLANCARS=1     a cop car freed while a pursuit's plan (a roadblock, a head-on ram) still lists it
+ *                             (M4-53, M4-28; sub_0042e570 below): the plan's next walk calls into freed memory.
+ *                             The fix takes the car off the plans as the cop manager lets it go; 1 leaves it
+ *                             there; 2 also makes the freed block hold something else when a walk first meets it
+ *                             (the trap of run c5-s7b).  Each walk that meets such a car is logged either way.
  * Each fix logs its first 20 hits ("[fix] f=N ..."). */
 #include "cpu.h"
 #include "game.h"
@@ -62,8 +70,10 @@ static int hit_log(int *n){ return (*n)++ < 20; }
 
 /* M4-28: the hook at 0x43E005 (game.h hook, through debug_mw.c); its runs are counted for the test aids (the
  * Repro check: how often the guarded call ran, pursuit_mw.c's [mwpursuit] line) */
-static unsigned long purecall_site_runs;
+static unsigned long purecall_site_runs, purecall_passed, purecall_kept_out;
 unsigned long mw_fix_purecall_calls(void){ return purecall_site_runs; }
+/* the guard's acts: vehicles passed over at 0x43E005 (0) and their adds at 0x43E014 sent to the stand-in (1) */
+unsigned long mw_fix_purecall_acts(int add){ return add ? purecall_kept_out : purecall_passed; }
 /* The vehicle passed over at 0x43E005 is then added to the new roadblock's cars (0x43E00B..0x43E014: a push_back,
  * 0x43C4E0, of ebp into the vector at esp+0x48), whose later calls on it end in _purecall all the same (run a6 of
  * 2026-10-30: R6025 in the frame of the guard's line, in a roadblock storm at heat 3).  So its add goes to a stand-in
@@ -81,6 +91,7 @@ static int purecall_add_hook(CPU *c){
     }
     MR32(vec + 8u) = vec + 0x10u;       /* empty */
     c->ecx = vec;
+    purecall_kept_out++;
     return 1;
 }
 /* _purecall itself (the CRT's, 0x7C5200): the game is about to stop with R6025; say who called it */
@@ -94,6 +105,7 @@ static void purecall_caller(CPU *c){
     fprintf(stderr, "[fix] f=%ld _purecall (R6025) called from 0x%08x, ecx 0x%08x; above it:%s\n", autotest_frame(),
             MR32(c->esp), c->ecx, o ? b : " none");
 }
+static void plan_car_check(uint32_t car, uint32_t plan, const char *where);
 int mw_fix_hook(CPU *c, uint32_t va){
     if (va == PURECALL_ADD_SITE) return purecall_add_hook(c);
     if (va == CRT_PURECALL_SITE){ purecall_caller(c); return 1; }
@@ -102,6 +114,7 @@ int mw_fix_hook(CPU *c, uint32_t va){
     static uint32_t stand_in;
     purecall_site_runs++;
     passed_over = 0;
+    plan_car_check(c->ecx, 0, "a roadblock try's call 0x43E005");
     if (MR32(c->edx + 0x80u) != CRT_PURECALL) return 1;
     if (test_switch("NFSU2_TEST_PURECALL", &off)){
         if (hit_log(&hits))
@@ -119,7 +132,155 @@ int mw_fix_hook(CPU *c, uint32_t va){
                 "_purecall (R6025); passed over, and kept out of the roadblock's cars\n", autotest_frame(), c->ecx, c->edx);
     c->edx = stand_in;
     passed_over = c->ecx;               /* ecx = ebp, the vehicle: its add at 0x43E014 goes to the stand-in vector */
+    purecall_passed++;
     return 1;
+}
+
+/* M4-53 (B-013), M4-28: a cop car freed while a pursuit's plan still lists it.  AIPursuit (its base built by
+ * 0x442D00; base+8 is `this` of its update 0x443BA0, base+0x48 its IPursuit, which the list at 0x92FD28 holds: begin
+ * [0x92FD2C], count [0x92FD34]) has one plan at base+0x1DC: +0 the kind's record ([[plan]]: 1 and 2 support, 3 a
+ * head-on ram, 4 a roadblock), +0x74 a timer, +0x78 the state (0 none, 1 pending, 2 made) and the plan's cars, a
+ * vector of IVehicles at +8 (+0xC its begin, +0x14 its count).  The cars are the cop manager's: 0x41F130 fills a plan
+ * with cars from 0x41ECD0 (a free car of its pool, else a new one; "copsuv" or "copsuvl", each given the kind's goal),
+ * and a roadblock's cars need not be in the pursuit at all.  Only the plan's end clears the vector (0x42B410: from the
+ * update when the timer runs out, 0x443ED5; from the pursuit's OnDetached 0x42B550 when its count of cops holding a
+ * goal, base+0x1D4, reaches 0; from 0x42BA42 and 0x4438C0), and nothing takes a car off it when the car is freed: the
+ * cop manager, attached to each of its cars (its IAttachable at its base+0x38, vtable 0x891940; the base is
+ * [0x92C67C]-0x54), only takes a freed car off its own list (OnDetached 0x42E570: the vector at base+0xC4, begin +0xC8,
+ * count +0xD0), and the pursuit's OnDetached lowers its count but leaves the car on the plan.  The plan's next walk
+ * then calls into freed memory: its end queries each car's object (0x5D59F0 on [car+4]: the trap of run c5-s7b when
+ * the memory held something else) unless the plan is a roadblock already made, and a pending roadblock's try (0x43DD30
+ * from 0x43E7D1) calls each car's +0x80 (the R6025 of M4-28 when the car's interfaces are torn down; the guard at
+ * 0x43E005 above).  So as the cop manager lets a car go, it is taken off every pursuit's plan too, before the game's
+ * own OnDetached runs; a car that only leaves the pursuit and lives on stays on the plan, as in the game.
+ * The let-go is the car's teardown: the cop manager's OnDetached runs under the car's Attachments destructor
+ * (0x6FC560, from PVehicle's deleting destructor 0x689570: the destructor 0x687E40, then the 0x1AC bytes back to the
+ * pool, whose next car of that size often gets the same address).  NFSU2_TEST_PLANCARS=1 keeps the game's way (2: see
+ * plancars_level).  Either way each walk of a plan's cars that meets a car the cop manager no longer holds is logged
+ * (the plan's end, the roadblock try's 0x43E005): with the fix there are none. */
+#define PURSUITS         0x0092fd2cu    /* the IPursuit list: its begin; the count at 0x92FD34 */
+#define PURSUITS_N       0x0092fd34u
+#define PURSUIT_IFACE    0x48u          /* IPursuit, from the pursuit's base */
+#define PURSUIT_VT8      0x008928e4u    /* the vtable at base+8 */
+#define PURSUIT_PLAN     0x1dcu         /* the plan, from the base */
+#define PURSUIT_HELD     0x1d4u         /* the count of cops holding a goal */
+#define PLAN_STATE       0x78u
+#define PLAN_CARS        0x0cu          /* the plan's cars: the vector's begin; its count at +0x14 */
+#define PLAN_CARS_N      0x14u
+#define PLAN_MAX         64u            /* more cars than this: not a plan (left to the game) */
+#define COPMGR           0x0092c67cu    /* the cop manager's interface (vtable 0x891900): its base + 0x54 */
+#define COPMGR_IFACE     0x54u
+#define COPMGR_ATT       0x38u          /* its IAttachable, from the base */
+#define COPMGR_CARS      0xc8u          /* its cars (IVehicles): the vector's begin; the count at +0xD0 */
+#define COPMGR_CARS_N    0xd0u
+#define FN_QUERY         0x005d59f0u    /* an object's interface by its id (thiscall on the object, (id)) */
+#define IID_IVEHICLE     0x004040e0u    /* the id of IVehicle */
+static uint32_t rd32(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
+static int on_list(uint32_t b, uint32_t n, uint32_t max, uint32_t v){
+    for (uint32_t i = 0; b && i < n && i < max; i++) if (rd32(b + 4u * i) == v) return 1;
+    return 0;
+}
+static uint32_t copmgr_base(void){ uint32_t i = rd32(COPMGR); return i ? i - COPMGR_IFACE : 0u; }
+/* return addresses in the game's code on the stack above the caller's (the first `max`) */
+static void game_returns(CPU *c, char *b, size_t n, int max){
+    int o = 0, k = 0;
+    b[0] = 0;
+    for (uint32_t i = 1; i <= 48 && k < max && o < (int)n - 12; i++){
+        uint32_t v = rd32(c->esp + 4u * i);
+        if (v >= 0x00401000u && v < 0x007d0000u){ o += snprintf(b + o, n - (size_t)o, " 0x%08x", v); k++; }
+    }
+}
+/* 1: the cop manager holds the car (it is not freed); also 1 when there is no cop manager to ask */
+static int copmgr_holds(uint32_t car){
+    uint32_t m = copmgr_base();
+    return !m || on_list(rd32(m + COPMGR_CARS), rd32(m + COPMGR_CARS_N), 4096u, car);
+}
+#define N_GONE 32
+static struct { uint32_t car; long f; int reused; } gone[N_GONE];   /* the cars the cop manager let go last */
+static unsigned n_gone;
+static unsigned long plancars_taken, plancars_dead;
+unsigned long mw_fix_plancars(void){ return plancars_taken; }
+unsigned long mw_fix_plancars_dead(void){ return plancars_dead; }
+#define VT_IVEHICLE      0x008aa828u    /* a cop car's IVehicle vtable */
+#define FOREIGN_ADDR     0x7fff0000u    /* past the guest's memory (a float's bits, say) */
+/* NFSU2_TEST_PLANCARS=2: as 1, and the first walk that meets a freed car finds its block holding something else (the
+ * pool hands a freed car's 0x1AC bytes to the next allocation of that size): its object pointer [car+4] is set to an
+ * address past the guest's memory, once per car, so the walk's own read of it shows what a reused block gives */
+static int plancars_level(void){
+    static int lv = -1;
+    if (lv < 0){ const char *e = getenv("NFSU2_TEST_PLANCARS"); lv = e && *e >= '1' && *e <= '2' ? *e - '0' : 0; }
+    return lv;
+}
+/* a walk of a plan's cars meets `car`: one the cop manager no longer holds is logged */
+static void plan_car_check(uint32_t car, uint32_t plan, const char *where){
+    static int lines;
+    if (!car || copmgr_holds(car)) return;
+    plancars_dead++;
+    long f = -1;
+    int g = -1;
+    for (unsigned i = 0; i < n_gone && i < N_GONE; i++) if (gone[i].car == car){ f = gone[i].f; g = (int)i; }
+    if (plancars_level() == 2 && g >= 0 && !gone[g].reused && rd32(car) == VT_IVEHICLE){
+        gone[g].reused = 1;
+        fprintf(stderr, "[fix] f=%ld TEST: freed car %08x (let go at f=%ld) is met by %s: its block now holds something "
+                "else ([car+4] %08x -> %08x)\n", autotest_frame(), car, f, where, rd32(car + 4u), FOREIGN_ADDR);
+        MR32(car + 4u) = FOREIGN_ADDR;
+    }
+    if (lines++ < 40)
+        fprintf(stderr, "[fix] f=%ld %s meets car %08x of a plan (kind %u, state %u), which the cop manager let go at f=%ld: "
+                "vtable %08x, object %08x\n", autotest_frame(), where, car, plan ? rd32(rd32(plan)) : 0u,
+                plan ? rd32(plan + PLAN_STATE) : 0u, f, rd32(car), rd32(car + 4u));
+}
+/* the cop manager's OnDetached (its IAttachable +0x14), thiscall (the other's IAttachable): a car of its own lets go */
+void sub_0042e570_orig(CPU *c);
+void sub_0042e570(CPU *c){
+    static int hits;
+    uint32_t att = c->ecx, other = MR32(c->esp + 4u), car = 0;
+    uint32_t pb = rd32(PURSUITS), pn = rd32(PURSUITS_N);
+    if (att == copmgr_base() + COPMGR_ATT && other && rd32(other + 4u) && pb && pn && pn <= PLAN_MAX){
+        uint32_t iid = IID_IVEHICLE;    /* what the game's OnDetached asks first (0x42E57D) */
+        c->ecx = rd32(other + 4u);
+        car = call_guest(c, FN_QUERY, 1, &iid);
+        c->ecx = att;
+    }
+    if (car){
+        gone[n_gone % N_GONE].car = car; gone[n_gone % N_GONE].f = autotest_frame(); gone[n_gone % N_GONE].reused = 0;
+        n_gone++;
+        int keep = plancars_level() > 0;
+        for (uint32_t k = 0; k < pn; k++){
+            uint32_t base = rd32(pb + 4u * k) - PURSUIT_IFACE, plan = base + PURSUIT_PLAN;
+            uint32_t b = rd32(plan + PLAN_CARS), n = rd32(plan + PLAN_CARS_N);
+            if (rd32(base + 8u) != PURSUIT_VT8 || !b || !n || n > PLAN_MAX || !on_list(b, n, PLAN_MAX, car)) continue;
+            uint32_t w = 0;
+            if (!keep){
+                for (uint32_t i = 0; i < n; i++){
+                    uint32_t v = MR32(b + 4u * i);
+                    if (v != car) MR32(b + 4u * w++) = v;
+                }
+                MR32(plan + PLAN_CARS_N) = w;
+                plancars_taken++;
+            }
+            if (hit_log(&hits)){
+                char st[200];
+                game_returns(c, st, sizeof st, 8);
+                fprintf(stderr, "[fix] f=%ld %scop manager lets car %08x (vtable %08x) go while pursuit %08x's plan lists it "
+                        "(kind %u, state %u, %u cars, %u cops holding a goal): %s; from 0x%08x%s\n", autotest_frame(),
+                        keep ? "TEST: " : "", car, rd32(car), base, rd32(rd32(plan)), rd32(plan + PLAN_STATE), n,
+                        rd32(base + PURSUIT_HELD), keep ? "it stays on the plan (the game's way)" :
+                        "taken off the plan's cars (M4-53)", MR32(c->esp), st);
+            }
+        }
+    }
+    sub_0042e570_orig(c);
+}
+/* the plan's end, 0x42B410 (thiscall on the plan): its walk of the cars (0x42B460..0x42B4D8, not for a roadblock
+ * already made) */
+void sub_0042b410_orig(CPU *c);
+void sub_0042b410(CPU *c){
+    uint32_t plan = c->ecx, b = rd32(plan + PLAN_CARS), n = rd32(plan + PLAN_CARS_N), kind = rd32(plan);
+    int walks = !(rd32(plan + PLAN_STATE) == 2u && kind && rd32(kind) == 4u);
+    if (walks && b && n <= PLAN_MAX && rd32(plan - PURSUIT_PLAN + 8u) == PURSUIT_VT8)
+        for (uint32_t i = 0; i < n; i++) plan_car_check(rd32(b + 4u * i), plan, "the plan's end 0x42B410");
+    sub_0042b410_orig(c);
 }
 
 /* M4-29: the cop and roadblock unload, 0x57D0F0 */
