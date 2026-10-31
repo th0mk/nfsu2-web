@@ -17,9 +17,13 @@
 // one new alias, one saved at its creation (On) and one declined there ("The autosave feature has been disabled.")
 // and saved from the Alias Manager (Off), differ in it and in their checks only, apart from a table at 0x48C1 the game
 // fills once the main menu is up (tests/mw/scripts/autosave_on.txt, autosave_off.txt); every career seed has it 1.
-//   Not known yet, so not done: the car records (no mod-car check; M6-27 validates the career's tables at load), and
-// which version of the game wrote a file (the spec's saves are v1.3's; any 63,596-byte container of this shape is
-// taken).
+//   Not checked, as the spec does not have them: the car records (no mod-car check), the career's tables (car lists,
+// Blacklist, rap sheet, unlocks) and which version of the game wrote a file (the spec's saves are v1.3's; any
+// 63,596-byte container of this shape is taken).  So a file whose tables a save editor overwrote is taken: with its
+// checks stale it is edited (profileName) and comes in sealed, with the warning that a value the game would not make
+// may crash it or break the career.  Unlike Underground 2, this game refuses a file whose CRCs do not match (the
+// spec's section 2), so the seal is what lets such a file load, and nothing bounds the tables at load yet (TRACKER
+// M6-27).
 //   Pure (no DOM, no OPFS) so it can be checked under node; renameProfile takes the save folder's file functions.
 import type * as self from './profile';
 import type { Saves } from '../profile';

@@ -104,6 +104,33 @@ test('profileName, profileMoney: a save made from the spec, and why one is refus
   assert.equal(P.modCars(alias('ALPHA')), 0);
 });
 
+test('no table is checked: an overwritten one is taken as edited and sealed; nothing a file holds throws', () => {
+  // the tables' layout is not in the spec: a table, the first MD5's range, everything after the Autosave byte
+  for (const [from, to] of [[0x48C1, 0x51C6], [0x44, 0x4034], [0x5B56, 0xF85C]]) {
+    const f = Buffer.from(alias('ALPHA', { money: 3000 })); f.fill(0xFF, from, to);
+    assert.deepEqual(P.profileName(f), { name: 'ALPHA', edited: true }, `0x${from.toString(16)}: the save-editor warning`);
+    assert.deepEqual(P.profileName(P.sealed(f)), { name: 'ALPHA', edited: false });
+  }
+  const rich = Buffer.from(alias('ALPHA')); rich.writeUInt32LE(0xFFFFFFFF, MONEY);
+  assert.equal(P.profileMoney(rich), 0xFFFFFFFF, 'the bank as it is');
+  // whatever the bytes, sizes and alignment: an answer, never a throw (sealed: on what profileName takes, as its callers)
+  const shaped = i => { const f = Buffer.from(crypto.randomBytes(SIZE)); f.set(alias('ALPHA').subarray(0, 0x24));
+    f.write(i & 1 ? 'ALPHA\0' : 'a_b\0', NAME, 'latin1'); return f; };
+  const files = [...[0, 1, 3, 4, 27, 28, 0x24, SIZE - 1, SIZE + 1, 200000].map(n => crypto.randomBytes(n)),
+    ...[4, 100, SIZE].map(n => { const f = Buffer.from(crypto.randomBytes(n)); f.write('20CM', 0, 'latin1'); return f; }),
+    ...Array.from({ length: 40 }, (_, i) => shaped(i))];
+  const odd = new Uint8Array(SIZE + 1); odd.set(alias('ALPHA'), 1);
+  let taken = 0;
+  for (const f of [...files.map(b => new Uint8Array(b.buffer, b.byteOffset, b.length)), odd.subarray(1)]) {
+    assert.doesNotThrow(() => {
+      const r = P.profileName(f); P.profileMoney(f); P.readAutosave(f, 'ALPHA'); P.modCars(f); P.isProfileFile(f);
+      if ('name' in r) { P.sealed(f); taken++; }
+    }, `${f.length} bytes`);
+  }
+  assert.equal(taken, 21, 'the shaped files named ALPHA, and the odd view');
+  assert.deepEqual(P.profileName(odd.subarray(1)), { name: 'ALPHA', edited: false }, 'a view at an odd offset');
+});
+
 test('sealed: an edited save\'s checks made again, its bytes kept; a sealed one comes out as it was', () => {
   const good = alias('ALPHA', { money: 3000 });
   assert.deepEqual(hex(P.sealed(good)), hex(good));
