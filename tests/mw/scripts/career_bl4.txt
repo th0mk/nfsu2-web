@@ -1,0 +1,32 @@
+# Most Wanted: Blacklist #4's race and markers, a regression script (TRACKER M4-14; FEATURES F-005: PCGW reports a
+# crash after beating Blacklist 4, at the marker selection, with some unofficial mods: here with the game's own data).
+# Seeded with a safehouse save at bin 4 whose rival's requirements are met (the career bot's bin4_ready seed, made
+# through the game's own paths).  The career bot (runtime/mw/bot_mw.c) engages the rival's challenge at its first
+# race's start (InGameRivalChallenge.fng, Enter accepts) and the game's AI races it from its GO; the rival's screens
+# follow: his stats, the markers (SafehouseMarkers.fng: two cards taken, NFSMW_BOT_MARKERS picks which), the next
+# rival's bio, and free roam with the bin at 3.  `racestatus` while the first race runs (15 % into it) logs the
+# racers' progress.
+#   NFSU2_SAVE_SEED=<bin4_ready> node web/tools/run-suite.mjs --game mw --script career_bl4.txt \
+#     --marker 'career_bl4: Blacklist 3' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 --timeout-scale 10
+# tests/mw/checks/career_bl4.sh wants the challenge's race past 15 %, the race over, the screens after it, the
+# markers taken and the bin at 3.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    log career_bl4: resumed
++30   bot gates
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 4
++0    bot run 3                                          # the safehouse menu, free roam, the rival's challenge
++0    waitexpr f:[0x0091e000]+0x30 >= 15 30000           # the first race: the player (racer slot #0) 15 % into it
++0    racestatus
++0    log career_bl4: past the first corner
++0    bot wait 120000                                    # a lost race of the challenge is raced again
++0    bot gates
++0    expect b:[[0x0091cf90]+0x10]+0xb0 == 3
++0    log career_bl4: Blacklist 3
++60   close

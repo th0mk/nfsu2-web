@@ -133,8 +133,10 @@ start one; Game.ForcePursuitStart at the bin's top heat after 60 s of game time 
 is rejoined where it was (then where the cops search), and one that ran 300 s (in a bin with a pursuit_length
 milestone the largest goal it can draw and 30 s: 630 s at bin 8) or boxed the car in is broken off by setting the car
 far away, not where the pursuit's last two escapes went nor where a warp trapped or threw the car, and once it has run
-that long the car stands in the nearest hiding spot in the cops' search, so the game ends it as evaded; a car off the
-world is set back at a race's place), then engages the rival's challenge at its first race's start
+that long the car stands in the nearest hiding spot in the cops' search, so the game ends it as evaded; in a bin
+with a pursuit_evasion_time milestone, "escape within" a chase length, its first pursuit for milestones and every
+other one after it is a quick one: the chase broken off at 5 s and the car hidden at once, until one raised the
+milestones; a car off the world is set back at a race's place), then engages the rival's challenge at its first race's start
 (InGameRivalChallenge.fng: Enter accepts; a lost one again, after the shop when the cash reaches a package, and after
 two lost in one car in the other of the two best cars, taken at the safehouse), takes two of the beaten rival's markers
 (SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type;
@@ -163,8 +165,10 @@ Run them with `NFSU2_SUITE_LIVE=1` to follow the log while they run.
 The Blacklist's regression scripts (TRACKER M4-13; bugs other ports reported, FEATURES F-004), each seeded with one of
 the career bot's seeds: `career_bl15.txt` (Sonny beaten from bin15_ready: his stats screen, the markers, the next
 rival's bio in order, none stuck, and the counter at 14; codepdbh #84), `career_bl15_race3.txt` (the third race of
-bin 15 from bin15_two, two races won: engaged, 15 % in, won; #112) and `career_bl14.txt` (the rival's race of bin 14
-from bin14_ready: 15 % in, won, the bin at 13; #162).  `career_unlocks.txt` (a probe, with NFSU2_FNG_LOG=3) shows a
+bin 15 from bin15_two, two races won: engaged, 15 % in, won; #112), `career_bl14.txt` (the rival's race of bin 14
+from bin14_ready: 15 % in, won, the bin at 13; #162) and `career_bl4.txt` (Blacklist 4 beaten from bin4_ready: the
+race 15 % in, won, his stats, the markers taken, the next bio, the bin at 3; M4-14, F-005: a crash at that marker
+selection reported with mods).  `career_unlocks.txt` (a probe, with NFSU2_FNG_LOG=3) shows a
 career save's Quick Race track lists and its car list (M4-44), `career_rapsheet.txt` (the same) its Rap Sheet's
 screens one after another.
 
