@@ -263,7 +263,9 @@ export class Encoder {
   }
 
   // ------------------------------------------------------------ resource queue
-  /** Apply queued resource commands from the tail up to `limit`; returns the new tail. */
+  /** Apply queued resource commands from the tail up to `limit`; returns the new tail, short of `limit` while the ASTC
+   *  workers hold the most they may (astc-pool.ts OUT_MAX: the rest waits in the queue, and the pool's hand-back
+   *  pumps again). */
   drain(limit: number): number {
     const t0 = performance.now();
     const c = this.ctlW, u32 = this.u32;
@@ -271,6 +273,7 @@ export class Encoder {
     let tail = u32[c + P.C.rqTail];
     let n = 0;
     while (((limit - tail) | 0) > 0) {
+      if (this.astcPool?.full) { this.astcPool.holds++; break; }
       const p = base + (tail & (cap - 1)), w = p >> 2;
       const op = u32[w], len = u32[w + 1];
       if (len < 16 || len > cap) { this.log(`[gpu] corrupt resource queue record op=${op} len=${len} at ${tail}`); tail = limit; break; }
@@ -306,8 +309,9 @@ export class Encoder {
   }
 
   /** n workers (astc-worker.ts at url) for the ASTC rewrite of DXT3 and DXT5; back: called after levels have gone to
-   *  their textures (a frame held for them can go) */
-  startAstcWorkers(n: number, url: string, back: () => void): void {
+   *  their textures (a frame held for them can go, the resource queue go on); outMax: bytes out at most (diagnostics;
+   *  astc-pool.ts OUT_MAX) */
+  startAstcWorkers(n: number, url: string, back: () => void, outMax?: number): void {
     if (n <= 0 || this.astcPool || this.feat.bc || !this.feat.astc || !this.astcAlpha) return;
     this.astcPool = new AstcPool(n, url, (r, blocks, off, bw, bh) => {
       r.t.pend = (r.t.pend ?? 1) - 1;
@@ -316,6 +320,7 @@ export class Encoder {
       this.queue.writeTexture({ texture: r.t.tex, mipLevel: r.level, origin: { x: 0, y: 0, z: r.face } }, blocks,
         { offset: off, bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4, 1]);
     }, back, this.log);
+    if (outMax !== undefined) this.astcPool.outMax = outMax;
   }
   /** frame b samples (or blits from) a texture with a level still out with the ASTC workers: it waits for them */
   framePending(b: number): boolean {
@@ -332,11 +337,13 @@ export class Encoder {
     }
     return false;
   }
-  /** page-thread ms on the resource queue; the workers' share of the ASTC rewrite (levels, MB, ms) */
+  /** page-thread ms on the resource queue; the workers' share of the ASTC rewrite (levels, MB, ms), the most MB out at
+   *  once and the drains stopped for it */
   get uploadMs(): number { return this.drainMs + (this.astcPool?.applyMs ?? 0); }
-  get astcWork(): { levels: number; mb: number; ms: number; verified?: number; differ?: number } | null {
+  get astcWork(): { levels: number; mb: number; ms: number; peakMb: number; holds: number; verified?: number; differ?: number } | null {
     const a = this.astcPool;
     return a ? { levels: a.levels, mb: +(a.bytes / 1048576).toFixed(1), ms: Math.round(a.workerMs),
+      peakMb: +(a.outPeak / 1048576).toFixed(1), holds: a.holds,
       ...(a.verify ? { verified: a.verify.levels, differ: a.verify.differ } : {}) } : null;
   }
   /** diagnostics: every level back from the ASTC workers compared with the page thread's rewrite of it */

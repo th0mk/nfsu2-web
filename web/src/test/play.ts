@@ -20,6 +20,7 @@
 //   astca=0     with bc=0 (or no BC): unpack DXT3 and DXT5, rather than rewrite them as ASTC (as env=NFSU2_ASTC_ALPHA=0,
 //               settings.ini astc_alpha = off)
 //   astcw       workers for that ASTC rewrite (RendererOptions.astcWorkers); 0: on the page thread
+//   astcout     MB out with those workers at most (RendererOptions.astcOutMb; default 16); 0: no limit
 //   astcsum     sum the hashes of those ASTC levels (stats astcSum; with bench in the race load's line)
 //   astcverify  compare each level back from the ASTC workers with the page thread's rewrite (stats astcWorkers)
 //   cssscale=0  at a render scale below 1, composite the picture over the canvas instead of CSS stretching the canvas
@@ -94,9 +95,10 @@ const p = await startProcess({
     if (bench && /tapuntil (PC_)?Loading\.fng satisfied/.test(s)) { loadT0 = performance.now(); up0 = r?.stats().uploadMs ?? 0; }
     if (bench && s.includes(' LOG race_loaded') && loadT0) {
       const up = r ? r.stats().uploadMs : 0;
-      const sum = r?.stats().astcSum;
+      const sum = r?.stats().astcSum, aw = r?.stats().astcWorkers;
       log(`[bench] race load ${(performance.now() - loadT0).toFixed(0)} ms, page thread on uploads ${up - up0} ms` +
-        (sum ? `, ASTC levels ${sum.n} sum ${sum.sum.toString(16)}` : ''));
+        (sum ? `, ASTC levels ${sum.n} sum ${sum.sum.toString(16)}` : '') +
+        (aw ? `, at most ${aw.peakMb} MB out with the workers, the queue waited ${aw.holds} times` : ''));
       up0 = up;
     }
     if (bench && r && s.includes(' LOG race_loaded')) r.window(true);
@@ -116,7 +118,7 @@ try {
     watchTex: q.get('watchtex') ? q.get('watchtex')!.split(',').map(Number) : undefined, gpuTiming: q.has('gputime'),
     direct: q.has('direct') ? q.get('direct') !== '0' : undefined, cssScale: q.get('cssscale') !== '0', noBC: q.get('bc') === '0', noASTC: q.get('astc') === '0',
     noASTCAlpha: q.get('astca') === '0' || env.NFSU2_ASTC_ALPHA === '0',
-    astcWorkers: q.get('astcw') ? +q.get('astcw')! : undefined, astcSum: q.has('astcsum'), astcVerify: q.has('astcverify'), poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
+    astcWorkers: q.get('astcw') ? +q.get('astcw')! : undefined, astcOutMb: q.get('astcout') ? +q.get('astcout')! : undefined, astcSum: q.has('astcsum'), astcVerify: q.has('astcverify'), poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
     gpuBurn: +(q.get('gpuburn') ?? 0), maxInFlight: q.get('inflight') ? +q.get('inflight')! : undefined,
     summaryMs: q.get('summary') ? +q.get('summary')! * 1000 : undefined });
 } catch (x) { log(`renderer: ${x}`); }

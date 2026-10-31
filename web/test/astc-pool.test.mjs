@@ -46,23 +46,23 @@ const settle = () => new Promise(r => setTimeout(r, 1));
 const stub = (props = {}) => new Proxy(props, {
   get: (t, k) => k in t ? t[k] : (typeof k === 'symbol' || k === 'then') ? undefined : () => stub() });
 
-/** a DXT5 block (a 4x4 level) of bytes from seed v, and its ASTC block as the page thread makes it */
-function block(v) {
+/** n bytes of DXT5 blocks from seed v (16: a 4x4 level), and a 4x4 level's ASTC block as the page thread makes it */
+function block(v, n = 16) {
   let s = v * 7919 + 1;
-  const b = new Uint8Array(16);
-  for (let i = 0; i < 16; i++) b[i] = (s = (Math.imul(s, 1103515245) + 12345) >>> 0) >>> 24;
+  const b = new Uint8Array(n);
+  for (let i = 0; i < n; i++) b[i] = (s = (Math.imul(s, 1103515245) + 12345) >>> 0) >>> 24;
   return b;
 }
 const astc = v => Array.from(dxtAlphaToAstc(true, block(v), 0, 16, 1, 1));
 
-const DXT5 = 0x35545844, CTL = 1024, RING = 65536, CAP = 1 << 20;
-const Op = { TexCreate: 1, TexUpload: 2, TexFree: 3 };
+const DXT5 = 0x35545844, CTL = 1024, RING = 65536, CAP = 4 << 20;
+const Op = { TexCreate: 1, TexUpload: 2 };
 
 /** an encoder on a GPU with ASTC and no BC, with n stand-in workers; uploads go into its resource queue, drain
  *  applies them, writes are the textures' writeTexture calls (texture label, level, the block) in order */
 async function session(n = 2) {
   workers = [];
-  const mem = new WebAssembly.Memory({ initial: 32, maximum: 32, shared: true });
+  const mem = new WebAssembly.Memory({ initial: 80, maximum: 80, shared: true });   // 5 MB: the queue's 4 at 64 KB
   const u32 = new Uint32Array(mem.buffer), u8 = new Uint8Array(mem.buffer);
   u32[(CTL >> 2) + P.C.rqPtr] = RING; u32[(CTL >> 2) + P.C.rqCap] = CAP;
   const writes = [], log = [];
@@ -87,9 +87,10 @@ async function session(n = 2) {
   const s = {
     enc, writes, log, backs: 0,
     pool: () => enc.astcPool,
-    create: id => put(Op.TexCreate, [id, 4, 4, 1, DXT5, 0]),
-    upload: (id, v) => put(Op.TexUpload, [id, 0, 4, 4, 16, 1], block(v)),
-    free: id => put(Op.TexFree, [id]),
+    /** texture id, size x size, one level */
+    create: (id, size = 4) => put(Op.TexCreate, [id, size, size, 1, DXT5, 0]),
+    /** its level 0 (of that size) from seed v */
+    upload: (id, v, size = 4) => { const bw = size >> 2; put(Op.TexUpload, [id, 0, size, size, bw * 16, bw], block(v, bw * bw * 16)); },
     /** apply the queue; true: all of it */
     drain: () => enc.drain(head) === head,
     /** the blocks written to texture id, in order */
@@ -186,4 +187,34 @@ test('a frame waits only for its own textures: every batch handed on pumps again
   assert.equal(s.backs, 2);
   s.frame([1, 2]);
   assert.equal(s.enc.framePending(0), false);
+});
+
+test('at most outMax bytes out: the queue waits, and goes on in order as batches come back', async () => {
+  const s = await session(2);
+  s.pool().outMax = 32;                          // two 4x4 levels
+  s.create(1);
+  for (let v = 1; v <= 5; v++) s.upload(1, v);
+  assert.equal(s.drain(), false, 'stopped short');
+  assert.equal(workers[0].inbox.length + workers[1].inbox.length, 1, 'one batch out');
+  assert.equal(s.drain(), false, 'still full');
+  const answerAll = () => { for (const w of workers) while (w.inbox.length) w.answer(); };
+  for (let rounds = 0; !s.drain(); rounds++) { assert.ok(rounds < 5); answerAll(); }
+  answerAll();
+  assert.deepEqual(s.of(1), [1, 2, 3, 4, 5].map(astc));
+  assert.equal(s.pool().full, false);
+  assert.ok(s.enc.astcWork.holds >= 3, `${s.enc.astcWork.holds}`);
+});
+
+test('spare buffers: batch-sized ones only, at most 6; a big level\'s own buffer is let go', async () => {
+  const s = await session(1);
+  const BATCH = 512 << 10;
+  s.create(1, 768); s.create(2);
+  s.upload(1, 7, 768); s.drain();                // 192 x 192 blocks: 576 KB, a buffer of its own
+  workers[0].answer();
+  assert.equal(s.of(1).length, 1);
+  assert.deepEqual(s.pool().spare.map(b => b.byteLength), [], 'not kept');
+  for (let v = 1; v <= 8; v++) { s.upload(2, v); s.drain(); }   // 8 batches out at once
+  while (workers[0].inbox.length) workers[0].answer();
+  assert.deepEqual(s.of(2), [1, 2, 3, 4, 5, 6, 7, 8].map(astc));
+  assert.deepEqual(s.pool().spare.map(b => b.byteLength), Array(6).fill(BATCH));
 });

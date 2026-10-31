@@ -61,6 +61,9 @@ export interface RendererOptions {
   /** workers that rewrite DXT3 and DXT5 as ASTC off the page thread (astc-worker.ts; default 1 for every 4 logical
    *  cores, at most 3); 0: on the page thread, as before them (A/B and diagnostics) */
   astcWorkers?: number;
+  /** A/B and diagnostics: the MB of levels out with those workers at most, past which the resource queue waits
+   *  (default astc-pool.ts OUT_MAX, 16; 0: no limit, as before it) */
+  astcOutMb?: number;
   /** diagnostics: sum the hashes of the DXT3 and DXT5 levels rewritten as ASTC (stats astcSum: levels, sum) */
   astcSum?: boolean;
   /** diagnostics: compare every level back from the ASTC workers with the page thread's rewrite of it (stats
@@ -111,8 +114,9 @@ export interface RendererStats {
    *  texture-compression-bc) */
   texBytes: number; unpackBytes: number; astcBytes: number;
   /** the page thread's milliseconds on the resource queue (uploads, unpacking, the ASTC rewrite when it is done
-   *  there), and with ASTC workers the levels, MB and worker milliseconds of the DXT3 and DXT5 rewrite */
-  uploadMs: number; astcWorkers?: { levels: number; mb: number; ms: number; verified?: number; differ?: number };
+   *  there), and with ASTC workers the levels, MB and worker milliseconds of the DXT3 and DXT5 rewrite, the most MB
+   *  out with them at once, and the times the resource queue waited for them (RendererOptions.astcOutMb) */
+  uploadMs: number; astcWorkers?: { levels: number; mb: number; ms: number; peakMb: number; holds: number; verified?: number; differ?: number };
   /** RendererOptions.astcSum: the DXT3 and DXT5 levels rewritten as ASTC so far and the sum of their hashes */
   astcSum?: { n: number; sum: number };
 }
@@ -365,11 +369,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
         const s = Atomics.load(I, cw + C.state), r = s & 3, e = (s >> 2) & 3;
         // a pending frame: its resources first, nothing recorded after it
         const limit = r && !e ? U[cw + C.frame + (r - 1) * (P.FRAME_BYTES >> 2) + F.rqEnd] : head;
-        try { enc.drain(limit); } catch (x) { failed('resource upload', x); break; }
+        let tail: number;
+        try { tail = enc.drain(limit); } catch (x) { failed('resource upload', x); break; }
         waiting(!!r && !e && inFlight >= maxInFlight);
-        // a frame that samples a texture with a level still out with the ASTC workers waits for it (their hand-back
-        // pumps again)
-        if (!r || e || inFlight >= maxInFlight || enc.framePending(r - 1)) break;
+        // a frame waits for the rest of its uploads (the drain stops while the ASTC workers hold their most) and for
+        // a texture it samples with a level still out with them (their hand-back pumps again)
+        if (!r || e || inFlight >= maxInFlight || ((limit - tail) | 0) > 0 || enc.framePending(r - 1)) break;
         if (Atomics.compareExchange(I, cw + C.state, s, s | (r << 2)) !== s) continue;
         try { encodeAndSubmit(r - 1); failRun = 0; } catch (x) { failed('encode', x); }
         Atomics.store(I, cw + C.state, 0); Atomics.notify(I, cw + C.state);
@@ -702,7 +707,9 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
 
   // the ASTC rewrite of DXT3 and DXT5 (no BC, a GPU with ASTC) in workers: one for every 4 logical cores, at most 3
   const nAstc = opts.astcWorkers ?? Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) >> 2));
-  enc.startAstcWorkers(nAstc, abs('gpu/astc-worker.js'), () => { if (alive) pump(); });
+  const outMb = opts.astcOutMb;
+  enc.startAstcWorkers(nAstc, abs('gpu/astc-worker.js'), () => { if (alive) pump(); },
+    outMb === undefined ? undefined : outMb > 0 ? outMb * 1048576 : Infinity);
   if (opts.astcVerify) enc.astcVerify();
   if (enc.astcWork) log(`[gpu] ${nAstc} ASTC worker(s) rewrite DXT3 and DXT5 off the page thread`);
 

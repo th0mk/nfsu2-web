@@ -4,7 +4,8 @@
 // millisecond a MB, against 25 for the rewrite).  A frame that samples a texture with a level still out waits for it
 // (index.ts pump: Encoder.framePending), so no frame draws a level that has not gone up yet, as before; the others
 // (a loading screen's, while the track's textures load) go on.  Every batch handed on pumps again, so a frame held
-// goes as soon as its own levels are up, not when the last batch out is.
+// goes as soon as its own levels are up, not when the last batch out is.  At most OUT_MAX bytes are out at once:
+// past them the resource queue waits (Encoder.drain), so a long load does not hold its whole backlog here.
 // The blocks are the ones the page thread made: the same function, each level apart.
 // A level whose rewrite throws in a worker comes back as it went and is rewritten here, and from then on the page
 // thread rewrites every level (in its turn, behind those still out); a worker that dies takes the bytes of the
@@ -25,6 +26,12 @@ interface Slot { w: Worker; ready: boolean; dead: boolean; out: number }
 
 /** a batch is sent when it holds this much (a big level goes alone): several at once spread over the workers */
 const BATCH = 512 << 10;
+/** the bytes of the levels out at most (sent, or in the batch being filled; a level bigger than that goes alone): past
+ *  them the encoder takes nothing more from the resource queue until batches come back (Encoder.drain), so the game's
+ *  ring holds the rest and the game waits when that is full, as it did while the page thread rewrote them */
+export const OUT_MAX = 16 << 20;
+/** batch buffers kept for the next batches (BATCH bytes each: a big level's own buffer goes once it is applied) */
+const SPARE = 6;
 
 export class AstcPool<R> {
   private slots: Slot[] = [];
@@ -34,9 +41,12 @@ export class AstcPool<R> {
   private next = 0;
   private gone = false;
   private failedHere = false;
+  private outBytes = 0;
+  /** OUT_MAX (diagnostics: another, Infinity for none) */
+  outMax = OUT_MAX;
   /** levels and bytes rewritten in the workers, their time there (ms, summed over the workers), and the page thread's
-   *  time handing them to their textures */
-  levels = 0; bytes = 0; workerMs = 0; applyMs = 0;
+   *  time handing them to their textures; the most bytes out at once, and the drains stopped at outMax */
+  levels = 0; bytes = 0; workerMs = 0; applyMs = 0; outPeak = 0; holds = 0;
   /** diagnostics (verify): each level rewritten here too from a copy of what was sent, and compared byte for byte
    *  with the worker's: levels compared, levels that differ */
   verify: { levels: number; differ: number } | null = null;
@@ -59,17 +69,18 @@ export class AstcPool<R> {
   get takes(): boolean { return this.busy || (!this.gone && this.slots.some(s => s.ready && !s.dead)); }
   /** batches out, or a level not sent yet: the next frame waits */
   get busy(): boolean { return this.sent.length > 0 || !!this.cur; }
+  /** the levels out have reached outMax: the resource queue waits (Encoder.drain) */
+  get full(): boolean { return this.outBytes >= this.outMax; }
 
   /** one level (bw x bh DXT3 or DXT5 blocks at off in src, rows pitch bytes apart), copied into the batch */
   add(ref: R, dxt5: boolean, src: Uint8Array, off: number, pitch: number, bw: number, bh: number): void {
     const n = bw * bh * 16, row = bw * 16;
     if (this.cur && this.cur.used + n > this.cur.buf.byteLength) this.flush();
     if (!this.cur) {
-      const cap = Math.max(BATCH, n);
-      const k = this.spare.findIndex(b => b.byteLength >= cap);
-      const buf = k >= 0 ? this.spare.splice(k, 1)[0] : new ArrayBuffer(cap);
+      const buf = n <= BATCH && this.spare.length ? this.spare.pop()! : new ArrayBuffer(Math.max(BATCH, n));
       this.cur = { id: this.next++, buf, used: 0, items: [], refs: [], worker: -1 };
     }
+    this.outBytes += n; if (this.outBytes > this.outPeak) this.outPeak = this.outBytes;
     const b = this.cur, dst = new Uint8Array(b.buf, b.used, n);
     if (pitch === row) dst.set(src.subarray(off, off + n));
     else for (let y = 0; y < bh; y++) dst.set(src.subarray(off + y * pitch, off + y * pitch + row), y * row);
@@ -145,6 +156,7 @@ export class AstcPool<R> {
     const t0 = performance.now();
     while (this.sent.length && this.sent[0].back) {
       const b = this.sent.shift()!, u8 = b.back!.byteLength ? new Uint8Array(b.back!) : null;
+      this.outBytes -= b.used;
       for (let i = 0, k = 0; k < b.refs.length; i += 4, k++) {
         const off = b.items[i], bw = b.items[i + 1], bh = b.items[i + 2];
         let ok = !!u8;
@@ -160,7 +172,7 @@ export class AstcPool<R> {
         }
         this.done(b.refs[k], ok ? u8 : null, off, bw, bh);
       }
-      if (b.back!.byteLength && this.spare.length < 6) this.spare.push(b.back!);
+      if (b.back!.byteLength === BATCH && this.spare.length < SPARE) this.spare.push(b.back!);
     }
     this.applyMs += performance.now() - t0;
     this.back();
@@ -182,6 +194,6 @@ export class AstcPool<R> {
   terminate(): void {
     this.gone = true;
     for (const s of this.slots) s.w.terminate();
-    this.sent = []; this.cur = null; this.spare = [];
+    this.sent = []; this.cur = null; this.spare = []; this.outBytes = 0;
   }
 }
