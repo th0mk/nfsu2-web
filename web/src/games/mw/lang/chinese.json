@@ -14,5 +14,6 @@
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "將每個化名在遊戲中的 Autosave 開啟一次，比賽與賽事都會直接儲存而不詢問。之後若在遊戲的 Options > Gameplay 中改為 Off，則會維持你的選擇。",
   "Replaces the profiles {names} in this browser, their careers too": "取代此瀏覽器中的玩家檔案 {names}，連同其生涯進度",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "此頁面未啟用跨來源隔離（沒有 SharedArrayBuffer）。請從 Most Wanted Revived 伺服器開啟，而不是其他伺服器。",
-  "Change camera, look back": "切換視角、向後看"
+  "Change camera, look back": "切換視角、向後看",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "此通關密語保存了你的 Underground 2 雲端存檔，但還沒有 Most Wanted 的存檔。也要將此處的存檔以此通關密語傳送上去嗎？每款遊戲各自保存自己的存檔。"
 }

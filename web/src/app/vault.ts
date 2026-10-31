@@ -31,7 +31,11 @@
 //   some (its storage cleared, an empty backup restored) never sends by itself either, a version with no profile
 //   never replaces the profiles here by itself, and neither does a version older than the one here (the server went
 //   back: a backup restored, a write lost).  A keyphrase the server does not have (any more) stays linked: the next
-//   sync looks again, and the player may send the saves here under it again.
+//   sync looks again, and the player may send the saves here under it again;
+// - the other game: one keyphrase keeps each game's saves in a box of its own, in the one vault (Most Wanted's server
+//   forwards its page's /vault there).  A keyphrase typed in here that keeps none of this game's saves may keep the
+//   other game's (otherHas: a HEAD with that game's token, @game/other); then the page offers to send the saves here
+//   under it too (sendUnder), as this game's first version.
 
 import { WORDS } from './vault-words';
 import { unzip, zip } from './zip';
@@ -42,6 +46,7 @@ import { fill, N, type Vars } from './i18n';
 import { at } from '../base';
 import { KEYPHRASE_WORD } from '@game/launch';
 import { DERIVE_INFO, SEAL_AAD } from '@game/keyphrase';
+import { OTHER_DERIVE_INFO } from '@game/other';
 
 /** the keyphrase's first word as the derivation takes it, whatever word it is shown with (SHOWN) */
 export const PREFIX = 'nfsu2-xyz';
@@ -100,13 +105,14 @@ const hex = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0'
 
 /** The key that seals a keyphrase's saves and the token the server keeps them under: the 64 PBKDF2 bytes of the
  *  keyphrase, the same for both games; a game with DERIVE_INFO (@game/keyphrase: Most Wanted) takes 64 bytes of its
- *  own from them through HKDF-SHA-256, so its key and token are neither Underground 2's nor tell anything of them. */
-export async function keysOf(phrase: string): Promise<Keys> {
+ *  own from them through HKDF-SHA-256, so its key and token are neither Underground 2's nor tell anything of them.
+ *  info: another game's (@game/other), for its token. */
+export async function keysOf(phrase: string, info: string | null = DERIVE_INFO): Promise<Keys> {
   const base = await crypto.subtle.importKey('raw', enc.encode(phrase), 'PBKDF2', false, ['deriveBits']);
   let bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(SALT), iterations: KDF_ROUNDS }, base, 512));
-  if (DERIVE_INFO !== null) {
+  if (info !== null) {
     const ikm = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveBits']);
-    bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode(DERIVE_INFO) }, ikm, 512));
+    bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode(info) }, ikm, 512));
   }
   const key = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']);
   return { key, token: base64url(bits.subarray(32)) };
@@ -271,6 +277,14 @@ export class VaultApi {
     const remote = remoteOf(r);
     if (!remote) throw incomplete();
     return { saved: remote };
+  }
+
+  /** Whether the server keeps a version for the token (a HEAD: nothing comes but the answer). */
+  async has(): Promise<boolean> {
+    const r = await this.req('HEAD');
+    if (r.status === 404) return false;
+    if (!r.ok) throw failure(r);
+    return true;
   }
 
   /** The keyphrase and its versions gone from the server: false when there was none. */
@@ -509,6 +523,23 @@ export class VaultSync {
       const k = await this.keysFor(phrase), r = await this.api(k).get(null, earlier);
       if (!r || 'same' in r) return null;
       return { zip: await unpack(await unseal(k.key, r.box)), remote: r.remote };
+    });
+  }
+
+  /** Whether a keyphrase keeps the other game's cloud saves (its box, under that game's token, through this page's
+   *  own /vault: the one vault keeps both games'); false when the server does not say so (a failure: as none). */
+  async otherHas(phrase: string): Promise<boolean> {
+    try { return await new VaultApi((await keysOf(phrase, OTHER_DERIVE_INFO)).token, this.d.fetch).has(); }
+    catch (e) { this.d.log?.(`[app] keyphrase: the other game's saves not asked for (${failureText(e)})`); return false; }
+  }
+
+  /** The saves here sent under a keyphrase that keeps none of this game's (the other game's only: vault-ui.ts 'Use this
+   *  passphrase here too?'), as its first version: this browser follows it.  Another browser's sent under it first:
+   *  the same files are linked, others are a conflict (send). */
+  sendUnder(phrase: string): Promise<void> {
+    return this.run(N('Syncing'), async () => {
+      const k = await this.keysFor(phrase), files = await this.d.files(), hash = await contentHash(files);
+      await this.send({ phrase, rev: '', hash: '', saved: 0, earlier: null, profiles: 0, v: LINK_V }, k, files, hash, null);
     });
   }
 

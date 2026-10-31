@@ -17,5 +17,6 @@
     "other": "Bu tarayıcıdaki {names} profillerinin ve kariyerlerinin yerine geçer"
   },
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Sayfa cross-origin yalıtımlı değil (SharedArrayBuffer yok). Sayfayı başka bir sunucudan değil, Most Wanted Revived sunucusundan aç.",
-  "Change camera, look back": "Kamerayı değiştir, arkaya bak"
+  "Change camera, look back": "Kamerayı değiştir, arkaya bak",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Bu parola ifadesi Underground 2 bulut kayıtlarını tutuyor ama henüz Most Wanted kaydı yok. Buradaki kayıtlar da bu ifadeyle gönderilsin mi? Her oyun kendi kayıtlarını tutar."
 }

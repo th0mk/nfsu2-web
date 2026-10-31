@@ -1158,5 +1158,8 @@
   "Send friend request": "送出好友邀請",
   "That's your own name": "這是你自己的名稱",
   "Not a player's name": "這不是玩家名稱",
-  "Not sent: try again in a moment": "未送出：請稍後再試"
+  "Not sent: try again in a moment": "未送出：請稍後再試",
+  "Request sent": "已送出邀請",
+  "Use this passphrase here too?": "也要在這裡使用此通關密語嗎？",
+  "Sent. This browser syncs from now on.": "已傳送。此瀏覽器從現在起會同步。"
 }

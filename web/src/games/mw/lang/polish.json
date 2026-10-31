@@ -19,5 +19,6 @@
     "other": "Zastępuje profile {names} w tej przeglądarce, razem z ich karierami"
   },
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Strona nie ma izolacji między źródłami (brak SharedArrayBuffer). Otwórz ją z serwera Most Wanted Revived, a nie z innego serwera.",
-  "Change camera, look back": "Zmiana kamery, spójrz w tył"
+  "Change camera, look back": "Zmiana kamery, spójrz w tył",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Ta fraza dostępu przechowuje twoje zapisy w chmurze z Underground 2, ale jeszcze żadnych z Most Wanted. Wysłać pod nią również tutejsze zapisy? Każda gra ma własne zapisy."
 }

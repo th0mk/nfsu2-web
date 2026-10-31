@@ -1254,5 +1254,8 @@
   "Send friend request": "Envoyer une demande d'ami",
   "That's your own name": "C'est votre propre nom",
   "Not a player's name": "Ce n'est pas un nom de joueur",
-  "Not sent: try again in a moment": "Non envoyé : réessayez dans un instant"
+  "Not sent: try again in a moment": "Non envoyé : réessayez dans un instant",
+  "Request sent": "Demande envoyée",
+  "Use this passphrase here too?": "Utiliser aussi cette phrase secrète ici ?",
+  "Sent. This browser syncs from now on.": "Envoyé. Ce navigateur se synchronise désormais."
 }

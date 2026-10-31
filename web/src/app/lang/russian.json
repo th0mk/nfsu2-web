@@ -1278,5 +1278,8 @@
   "Send friend request": "Отправить запрос в друзья",
   "That's your own name": "Это ваше собственное имя",
   "Not a player's name": "Это не имя игрока",
-  "Not sent: try again in a moment": "Не отправлено: попробуйте ещё раз чуть позже"
+  "Not sent: try again in a moment": "Не отправлено: попробуйте ещё раз чуть позже",
+  "Request sent": "Запрос отправлен",
+  "Use this passphrase here too?": "Использовать эту парольную фразу и здесь?",
+  "Sent. This browser syncs from now on.": "Отправлено. Теперь этот браузер синхронизируется."
 }

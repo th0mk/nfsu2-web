@@ -24,5 +24,6 @@
   "Quick chat (with other players): group, then phrase": "Snabbchatt (med andra spelare): grupp, sedan fras",
   "Photo mode; F12 again takes the photo": "Fotoläge; F12 igen tar fotot",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från NFSU2-webbservern.",
-  "Message a friend (in free roam)": "Skriv till en vän (i läget Utforska)"
+  "Message a friend (in free roam)": "Skriv till en vän (i läget Utforska)",
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Den här lösenfrasen har dina sparfiler från Most Wanted i molnet, men ännu inga från Underground 2. Skicka sparfilerna här under den också? Varje spel behåller sina egna sparfiler."
 }

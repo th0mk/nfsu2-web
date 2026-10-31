@@ -17,5 +17,6 @@
     "other": "Erstatter profilerne {names} i denne browser, også deres karrierer"
   },
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Siden er ikke cross-origin-isoleret (ingen SharedArrayBuffer). Åbn den fra Most Wanted Revived-serveren, ikke fra en anden server.",
-  "Change camera, look back": "Skift kameravinkel, se bagud"
+  "Change camera, look back": "Skift kameravinkel, se bagud",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Denne adgangssætning har dine gemte spil fra Underground 2 i skyen, men endnu ingen fra Most Wanted. Send også de gemte spil her under den? Hvert spil beholder sine egne gemte spil."
 }

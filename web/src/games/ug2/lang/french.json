@@ -24,5 +24,6 @@
   "Quick chat (with other players): group, then phrase": "Chat rapide (avec d'autres joueurs) : groupe, puis phrase",
   "Photo mode; F12 again takes the photo": "Mode photo ; F12 à nouveau prend la photo",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La page n'a pas l'isolation cross-origin (pas de SharedArrayBuffer). Ouvrez-la depuis le serveur web NFSU2.",
-  "Message a friend (in free roam)": "Écrire à un ami (en mode Exploration)"
+  "Message a friend (in free roam)": "Écrire à un ami (en mode Exploration)",
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Cette phrase secrète garde vos sauvegardes cloud de Most Wanted, mais encore aucune d'Underground 2. Envoyer aussi les sauvegardes d'ici sous cette phrase ? Chaque jeu garde ses propres sauvegardes."
 }

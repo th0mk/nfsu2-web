@@ -55,8 +55,12 @@
 // Underground 2's page as it is (no bar while its launch switch is off) with its worker at /, Most Wanted's with the
 // bar (Underground 2's tab to https://nfsu2.xyz/) and its worker at /mw/; then in a fresh browser the phrase typed into
 // each game's page restores that game's saves (--backup-u2: a real "Download a backup" zip of Underground 2's;
-// --saves-mw: a folder of Most Wanted's profiles, a career seed's; made-up bytes without them); /mw/vault 503 from
-// the Most Wanted server once the Underground 2 server is stopped.  The redirects' addresses are checked as answers,
+// --saves-mw: a folder of Most Wanted's profiles, a career seed's; made-up bytes without them); the passphrase link
+// both ways: a phrase made on one game's page and typed into the other's asks 'Use this passphrase here too?' and,
+// answered Send, puts that game's saves under it, the first game's box untouched (Underground 2's page asks only with
+// its launch switch on: first as it is, which says there are no cloud saves, then on a page built from this checkout
+// with the switch on, its server started again on it); /mw/vault 503 from the Most Wanted server once the
+// Underground 2 server is stopped.  The redirects' addresses are checked as answers,
 // never followed: nothing here reaches a real site.
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
@@ -388,6 +392,59 @@ async function zipTs() {
   return import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'));
 }
 const sha256 = b => crypto.createHash('sha256').update(b).digest('hex');
+/** Underground 2's page built from this checkout with its launch switch on (src/games/ug2/launch.ts LAUNCHED): a
+ *  copy of web/ in dir (beside it the repository's app/, whose registry seed the page takes), its dist folder */
+function launchedUg2Page(dir) {
+  const web = path.join(dir, 'web');
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(web, { recursive: true });
+  fs.copyFileSync(path.join(REPO, 'CHANGELOG.md'), path.join(dir, 'CHANGELOG.md'));
+  fs.symlinkSync(path.join(REPO, 'app'), path.join(dir, 'app'));
+  for (const f of ['build.mjs', 'index.html']) fs.copyFileSync(path.join(REPO, 'web', f), path.join(web, f));
+  fs.cpSync(path.join(REPO, 'web/src'), path.join(web, 'src'), { recursive: true });
+  fs.symlinkSync(path.join(REPO, 'web/node_modules'), path.join(web, 'node_modules'));
+  const launch = path.join(web, 'src/games/ug2/launch.ts'), was = fs.readFileSync(launch, 'utf8');
+  const on = was.replace('export const LAUNCHED = false;', 'export const LAUNCHED = true;');
+  if (on === was) throw new Error('src/games/ug2/launch.ts: no "export const LAUNCHED = false;" to turn on');
+  fs.writeFileSync(launch, on);
+  execFileSync(process.execPath, [path.join(web, 'build.mjs')], { cwd: os.tmpdir(), stdio: 'ignore' });
+  return path.join(web, 'dist');
+}
+/** A phrase made on a game's page (Enable cloud saving) in a browser of its own: the phrase as the page shows it */
+async function phraseMadeOn(browser, url) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  try {
+    const b = await ctx.newPage();
+    await b.goto(url);
+    await b.waitForSelector('#vault:not([hidden])', { timeout: 120000 });
+    await b.waitForTimeout(500);
+    await b.click('#vault-make');
+    await b.waitForFunction(() => { const i = document.querySelector('#vault-input'); return i.readOnly && i.value.length > 20; }, null, { timeout: 60000 });
+    return await b.inputValue('#vault-input');
+  } finally { await ctx.close(); }
+}
+/** A phrase typed into a game's page in a fresh browser, Load clicked, and its question (if any) answered Send:
+ *  { asked: the question's title and text, or null; msg: the line under the buttons after it; linked } */
+async function phraseTypedInto(browser, url, phrase, { answer = true } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  try {
+    const b = await ctx.newPage();
+    await b.goto(url);
+    await b.waitForSelector('#vault:not([hidden])', { timeout: 120000 });
+    await b.waitForTimeout(500);
+    await b.fill('#vault-input', phrase);
+    await b.click('#vault-load');
+    const asked = await b.waitForSelector('#confirm[open]', { timeout: 20000 }).then(() => true, () => false);
+    let q = null;
+    if (asked) {
+      q = { title: await b.textContent('#confirm-title'), text: (await b.textContent('#confirm-body'))?.trim(), button: await b.textContent('#confirm-ok') };
+      await b.click(answer ? '#confirm-ok' : '#confirm-cancel');
+      if (answer) await b.waitForFunction(() => document.querySelector('#vault-input').readOnly, null, { timeout: 60000 }).catch(() => {});
+    }
+    await b.waitForTimeout(500);
+    return { asked: q, msg: (await b.textContent('#vault-msg'))?.trim() ?? '', linked: await b.evaluate(() => document.querySelector('#vault-input').readOnly) };
+  } finally { await ctx.close(); }
+}
 /** a page's file of its save folder (OPFS `save`): its SHA-256, or null */
 const opfsHash = (page, save, rel) => page.evaluate(async ([save, rel]) => {
   try {
@@ -605,6 +662,52 @@ async function runTwoDomain() {
     await fresh.close();
     report('two-domain: one keyphrase restores both games\' saves in a fresh browser (Underground 2 at nfsu2, Most Wanted at nfsrevived/mw)',
       restored.ug2.same && restored.mw.same, restored);
+    // 5b. the passphrase link (TRACKER M13-10): a phrase made on one game's page, typed into the other's.  The boxes
+    // as the server has them, by each game's token through either name (HEAD: the ETag, or 404)
+    const boxes = async ph => {
+      const out = {};
+      for (const g of ['ug2', 'mw']) {
+        const r = await ask(P1, { method: 'HEAD', p: '/vault', host: U2, ...page(u2Origin, (await V[g].keysOf(V.ug2.readPhrase(ph).phrase)).token) });
+        out[g] = r.status === 200 ? r.headers.etag : r.status;
+      }
+      return out;
+    };
+    const question = (here, other) => ({ title: 'Use this passphrase here too?',
+      text: `This passphrase keeps your ${other} cloud saves but none of ${here}'s yet. Send the saves here under it too? Each game keeps its own saves.`, button: 'Send' });
+    const sent = 'Sent. This browser syncs from now on.';
+    // made on Underground 2's page, linked on Most Wanted's
+    const pU = await phraseMadeOn(browser, `${u2Origin}/`);
+    const b0 = await boxes(pU);
+    const toMw = await phraseTypedInto(browser, `${siteOrigin}/mw/`, pU);
+    const b1 = await boxes(pU);
+    report('two-domain: a phrase made on Underground 2\'s page, typed into Most Wanted\'s: \'Use this passphrase here too?\', Send puts Most Wanted\'s saves under it',
+      typeof b0.ug2 === 'string' && b0.mw === 404 && JSON.stringify(toMw.asked) === JSON.stringify(question('Most Wanted', 'Underground 2')) &&
+      toMw.msg === sent && toMw.linked && typeof b1.mw === 'string' && b1.ug2 === b0.ug2,
+      { phrase: pU.split('-')[0], before: b0, after: b1, page: toMw });
+    // made on Most Wanted's page: Underground 2's page as it is (its launch switch off) does not ask
+    const pM = await phraseMadeOn(browser, `${siteOrigin}/mw/`);
+    const c0 = await boxes(pM);
+    const offU2 = await phraseTypedInto(browser, `${u2Origin}/`, pM);
+    report('two-domain: Underground 2\'s page with its launch switch off: a phrase of Most Wanted\'s only has no cloud saves there (no question)',
+      typeof c0.mw === 'string' && c0.ug2 === 404 && offU2.asked === null && !offU2.linked &&
+      offU2.msg.startsWith('No cloud saves for this passphrase.') && JSON.stringify(await boxes(pM)) === JSON.stringify(c0),
+      { phrase: pM.split('-')[0], boxes: c0, page: offU2 });
+    // then on Underground 2's page with the switch on (built from this checkout; its server started again on it)
+    const launched = launchedUg2Page(path.join(dir, 'ug2-launched'));
+    await servers.u2.stop();
+    servers.u2 = await startServer(['--http-port', String(PU), ...behind('nfsu2.localhost'), '--dist', launched],
+      { label: 'two-domain-u2-launched', data: dataUg2, state: path.join(dir, 'state-u2'), env: { NFSU2_VAULT_BOX_KEY: boxKey } });
+    const toU2 = await phraseTypedInto(browser, `${u2Origin}/`, pM);
+    const c1 = await boxes(pM);
+    report('two-domain: a phrase made on Most Wanted\'s page, typed into Underground 2\'s (launch switch on): \'Use this passphrase here too?\', Send puts Underground 2\'s saves under it',
+      JSON.stringify(toU2.asked) === JSON.stringify(question('Underground 2', 'Most Wanted')) && toU2.msg === sent && toU2.linked &&
+      typeof c1.ug2 === 'string' && c1.mw === c0.mw,
+      { before: c0, after: c1, page: toU2 });
+    // a phrase of neither: no question, no box
+    const none = V.ug2.newPhrase();
+    const neither = await phraseTypedInto(browser, `${u2Origin}/`, none);
+    report('two-domain: a phrase of neither game: no question, no cloud saves, no box made',
+      neither.asked === null && neither.msg.startsWith('No cloud saves for this passphrase.') && JSON.stringify(await boxes(none)) === '{"ug2":404,"mw":404}', neither);
     // 6. the Underground 2 server stopped: /mw/vault 503 from the Most Wanted server (its "unreachable", at once)
     await servers.u2.stop();
     const t1 = Date.now();

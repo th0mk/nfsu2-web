@@ -13,6 +13,8 @@
 //   browser keeping its own over a sync, also when a version sent before brings another's; links that counted them
 // - the LAN server's file (gamefile.bin: the races this browser hosted) never sent, each browser keeping its own; links
 //   that counted it (versions 1 to 3); a version past the cap names its largest files in the log
+// - the other game: a keyphrase that keeps only the other game's saves is found (a HEAD with that game's token), and
+//   the saves here go under it as this game's first version, the other game's box untouched
 // The real server and two real browsers: web/tools/vault-pair.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -147,6 +149,7 @@ function server() {
     if (!token) return new Response('A keyphrase\'s token is needed', { status: 401 });
     if (s.refuse) return new Response('no', { status: s.refuse, headers: s.refuseHeaders ?? {} });
     const k = kept.get(token), method = init.method ?? 'GET';
+    if (method === 'HEAD') return new Response(null, { status: k ? 200 : 404, headers: k ? head(k.cur, k.earlier) : {} });
     if (method === 'GET') {
       const v = url.endsWith('?earlier') ? k?.earlier : k?.cur;
       if (!v) return new Response('Not found', { status: 404 });
@@ -911,4 +914,73 @@ test('one keyphrase, each game\'s own key, token and box; each game\'s vault und
     assert.equal(await B.vaultAvailable(async u => { asked.push(u); return new Response('', { status: 401 }); }), true);
     assert.deepEqual(asked, [want]);
   }
+});
+
+// The other game's saves under one keyphrase (vault-ui.ts 'Use this passphrase here too?'): each game's page finds the
+// other game's box with that game's token, through its own /vault (one vault keeps both), and sends its own saves under
+// the keyphrase as its first version; the other game's box stays as it was, each opens with its own game's key only.
+// Nothing found, or a server that does not answer, is none.  A box of this game's made meanwhile: the same files are
+// linked, others a conflict.
+test('a keyphrase of the other game\'s: found by its token, the saves here sent under it too', async () => {
+  const build = async game => {
+    const code = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/vault.ts')], bundle: true, format: 'esm', write: false, platform: 'neutral',
+      alias: { '@game': path.join(ROOT, 'web/src/games', game) } })).outputFiles[0].text;
+    return import('data:text/javascript;base64,' + Buffer.from(code + `\n// ${game} other`).toString('base64'));
+  };
+  const G = { ug2: await build('ug2'), mw: await build('mw') };
+  const page = (Vg, srv, files = {}) => {
+    const b = { files: new Map(Object.entries(files).map(([p, s]) => [p, enc.encode(s)])), link: null, logs: [] };
+    b.sync = new Vg.VaultSync({ files: async () => Vg.kept([...b.files].map(([path, data]) => ({ path, data }))),
+      restore: async () => { throw new Error('nothing is restored here'); },
+      load: () => b.link && JSON.parse(b.link), save: l => { b.link = l && JSON.stringify(l); }, fetch: srv.fetch, log: s => b.logs.push(s) });
+    return b;
+  };
+  for (const [made, here] of [['ug2', 'mw'], ['mw', 'ug2']]) {
+    const srv = server(), other = page(G[made], srv, { 'settings.ini': `# ${made}\n` });
+    const phrase = await other.sync.create();
+    const [[theirToken, theirs]] = srv.kept, theirRev = theirs.cur.rev;
+    assert.equal(theirToken, (await G[made].keysOf(phrase)).token);
+    const b = page(G[here], srv, { 'settings.ini': `# ${here}\n` });
+    assert.equal(await b.sync.peek(phrase), null, `${here}: none of its own`);
+    assert.equal(await b.sync.otherHas(phrase), true, `${here}: the other game's`);
+    assert.equal(await b.sync.otherHas('nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agent'), false);
+    await b.sync.sendUnder(phrase);
+    assert.equal(b.sync.state.s, 'synced');
+    assert.equal(JSON.parse(b.link).phrase, phrase);
+    const mine = (await G[here].keysOf(phrase)).token;
+    assert.notEqual(mine, theirToken);
+    assert.equal(srv.kept.size, 2);
+    assert.equal(srv.kept.get(theirToken).cur.rev, theirRev, 'the other game\'s box untouched');
+    // each box opens with its own game's key only, and holds its own game's saves
+    const [kHere, kMade] = [await G[here].keysOf(phrase), await G[made].keysOf(phrase)];
+    const box = srv.kept.get(mine).cur.body;
+    const z = await unzip(await G[here].unpack(await G[here].unseal(kHere.key, box)));
+    assert.equal(dec.decode(z.find(e => e.name === 'settings.ini').data), `# ${here}\n`);
+    await assert.rejects(G[made].unseal(kMade.key, box), /do not open with this passphrase/);
+    // the link follows: a change here goes to this game's box, the other game's stays
+    const r0 = srv.kept.get(mine).cur.rev;
+    b.files.set('settings.ini', enc.encode(`# ${here} 2\n`));
+    await b.sync.push();
+    assert.notEqual(srv.kept.get(mine).cur.rev, r0);
+    assert.equal(srv.kept.get(theirToken).cur.rev, theirRev);
+    // now it keeps this game's saves too: another browser of this game loads them as ever
+    assert.ok(await page(G[here], srv).sync.peek(phrase));
+  }
+  // a server that does not answer, or refuses: as none (said in the log)
+  const srv = server(), u = page(G.ug2, srv, { 'settings.ini': '#\n' });
+  const phrase = await u.sync.create();
+  const m = page(G.mw, srv, { 'settings.ini': '# mw\n' });
+  srv.refuse = 429;
+  assert.equal(await m.sync.otherHas(phrase), false);
+  assert.match(m.logs.at(-1), /the other game's saves not asked for/);
+  srv.refuse = 0;
+  // a box of this game's made meanwhile (another browser was first): the same files linked; other files a conflict
+  const first = page(G.mw, srv, { 'settings.ini': '# mw\n' });
+  await first.sync.sendUnder(phrase);
+  await m.sync.sendUnder(phrase);
+  assert.equal(m.sync.state.s, 'synced');
+  const n = page(G.mw, srv, { 'settings.ini': '# another\n' });
+  await n.sync.sendUnder(phrase);
+  assert.equal(n.sync.state.s, 'conflict');
+  assert.equal(JSON.parse(n.link).phrase, phrase);
 });

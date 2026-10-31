@@ -19,6 +19,8 @@
 
 import { STORAGE } from '@game/storage';
 import { FILE_PREFIX } from '@game/run';
+import { OTHER_GAME_LINK } from '@game/other';
+import { OTHER_GAME_SAVES } from '@game/texts';
 import { listFiles, listProfiles, readBytes, readText, removeSaveDir, writeFile } from './savefs';
 import { backupItems, readVault, restoreVault } from './saves-ui';
 import { downloadBlob } from './logs';
@@ -511,7 +513,7 @@ export class VaultPanel {
     if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return; }
     let got: Awaited<ReturnType<VaultSync['peek']>>;
     try { got = await s.peek(p.phrase); } catch { return; }
-    if (!got) { this.msg(() => t('No cloud saves for this passphrase. Check it for typos.'), true); return; }
+    if (!got) { await this.useForOther(p.phrase); return; }
     if (await this.replace(got, t('Load cloud saves?'),
       t('They replace the profiles and settings.ini here with the ones saved {when}. Screenshots and this device\'s graphics, sound and controller settings stay.', { when: when(got.remote.saved) }), t('Load'))) {
       await s.adopt(p.phrase, got.remote).catch(() => {});
@@ -519,6 +521,25 @@ export class VaultPanel {
       this.d.log('[app] keyphrase: loaded its saves, this browser syncs with it');
       if (s.link) this.keep(s.link.phrase);
     }
+  }
+
+  /** A passphrase typed in that keeps none of this game's saves: when it keeps the other game's, the saves here go
+   *  under it too, once the player says so (OTHER_GAME_LINK: Underground 2's page with its launch switch); else it
+   *  has no cloud saves at all. */
+  private async useForOther(phrase: string) {
+    const s = this.sync;
+    if (!s) return;
+    if (!OTHER_GAME_LINK || !await s.otherHas(phrase)) { this.msg(() => t('No cloud saves for this passphrase. Check it for typos.'), true); return; }
+    this.d.log('[app] keyphrase: it keeps the other game\'s saves only: asked to send these under it too');
+    if (!await this.d.confirm(t('Use this passphrase here too?'), t(OTHER_GAME_SAVES), t('Send'))) { this.msg(''); return; }
+    if (this.linked()) return;              // linked meanwhile (another tab of this browser)
+    if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return; }
+    try { await s.sendUnder(phrase); } catch { return; /* the state says why */ }
+    const l = s.link as Link | null;
+    if (!l) return;
+    this.d.log(`[app] keyphrase: the saves here sent under the other game's passphrase too (${s.state.s})`);
+    if (s.state.s === 'synced') this.msg(() => t('Sent. This browser syncs from now on.'));
+    this.keep(l.phrase);
   }
 
   /** what a version brings, asked; then it replaces the saves here.  False: nothing changed.  danger: its button red

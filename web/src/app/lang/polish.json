@@ -1278,5 +1278,8 @@
   "Send friend request": "Wyślij zaproszenie do znajomych",
   "That's your own name": "To twoja własna nazwa",
   "Not a player's name": "To nie jest nazwa gracza",
-  "Not sent: try again in a moment": "Nie wysłano: spróbuj ponownie za chwilę"
+  "Not sent: try again in a moment": "Nie wysłano: spróbuj ponownie za chwilę",
+  "Request sent": "Zaproszenie wysłane",
+  "Use this passphrase here too?": "Użyć tej frazy dostępu również tutaj?",
+  "Sent. This browser syncs from now on.": "Wysłano. Od teraz ta przeglądarka się synchronizuje."
 }

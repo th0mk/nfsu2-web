@@ -1249,5 +1249,8 @@
   "Other": "Muut",
   "Profiles": "Profiilit",
   "Game data on this device": "Pelin data tällä laitteella",
-  "Join a friend's room: free roam shows its players from now on.": "Liity kaverin huoneeseen: vapaa ajelu näyttää tästä lähtien sen pelaajat."
+  "Join a friend's room: free roam shows its players from now on.": "Liity kaverin huoneeseen: vapaa ajelu näyttää tästä lähtien sen pelaajat.",
+  "Use this passphrase here too?": "Käytetäänkö tätä avainlausetta myös täällä?",
+  "Sent. This browser syncs from now on.": "Lähetetty. Tämä selain synkronoi tästä lähtien.",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Tällä avainlauseella on Underground 2:n pilvitallennuksesi, mutta ei vielä yhtään Most Wantedin tallennusta. Lähetetäänkö täällä olevat tallennukset myös sen alle? Kummallakin pelillä on omat tallennuksensa."
 }

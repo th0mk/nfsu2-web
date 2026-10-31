@@ -14,5 +14,6 @@
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "Egyszer minden álnév Autosave beállítását bekapcsolja a játékban, így a versenyek és az események kérdés nélkül mentődnek. Ha utána a játék Options, Gameplay menüjében az Off lehetőséget választod, az úgy marad.",
   "Replaces the profiles {names} in this browser, their careers too": "Lecseréli ebben a böngészőben: {names}, a karrierrel együtt",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). A Most Wanted Revived szerveréről nyisd meg, ne másik szerverről.",
-  "Change camera, look back": "Kameraváltás, hátranézés"
+  "Change camera, look back": "Kameraváltás, hátranézés",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Ez a jelmondat őrzi az Underground 2 felhőmentéseidet, de Most Wanted-mentés még nincs rajta. Elküldöd ezzel a jelmondattal az itteni mentéseket is? Minden játék a saját mentéseit őrzi."
 }

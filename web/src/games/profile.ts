@@ -8,7 +8,8 @@
 // web/tools/i18n-keys.mjs checks them).
 //
 // The page reads what differs through '@game/<file>', each a file of the game's folder that takes no more than it
-// needs: '@game/storage' (the browser's storage names), '@game/launch' and '@game/keyphrase' (cloud saves),
+// needs: '@game/storage' (the browser's storage names), '@game/launch', '@game/keyphrase' and '@game/other' (cloud
+// saves; the last the other game's derivation, for 'Use this passphrase here too?'), '@game/texts' (words that differ),
 // '@game/run' (the program, the profiles' folder, the movies' size, the log's and the backup's names: no imports),
 // '@game/registry' (registry.txt's seed) and '@game/profile' (the game's save files: SaveFormat below).  Other values
 // still sit where the page reads them (settings.ts, i18n.ts, ...), and ug2/index.ts re-exports them; what else differs

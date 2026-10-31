@@ -14,5 +14,6 @@
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "各エイリアスのゲーム内の Autosave を一度だけオンにし、レースやイベントが確認なしで保存されるようにします。その後ゲームの Options > Gameplay で Off を選んだ場合は、それが維持されます。",
   "Replaces the profiles {names} in this browser, their careers too": "このブラウザのプロフィール{names}を、キャリアも含めて置き換えます",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。別のサーバーではなく、Most Wanted Revivedのサーバーから開いてください。",
-  "Change camera, look back": "カメラ切り替え、後方確認"
+  "Change camera, look back": "カメラ切り替え、後方確認",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "このパスフレーズにはUnderground 2のクラウドセーブがありますが、Most Wantedのセーブデータはまだありません。ここにあるセーブデータもこのパスフレーズで送りますか？セーブデータはゲームごとに別々に保存されます。"
 }

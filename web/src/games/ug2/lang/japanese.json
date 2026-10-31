@@ -24,5 +24,6 @@
   "Quick chat (with other players): group, then phrase": "クイックチャット（他のプレイヤーといるとき）: グループ、次にフレーズ",
   "Photo mode; F12 again takes the photo": "フォトモード。もう一度 F12 で撮影",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。NFSU2 Webサーバーから開いてください。",
-  "Message a friend (in free roam)": "フレンドにメッセージ（フリーロームで）"
+  "Message a friend (in free roam)": "フレンドにメッセージ（フリーロームで）",
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "このパスフレーズにはMost Wantedのクラウドセーブがありますが、Underground 2のセーブデータはまだありません。ここにあるセーブデータもこのパスフレーズで送りますか？セーブデータはゲームごとに別々に保存されます。"
 }

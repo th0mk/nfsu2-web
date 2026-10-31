@@ -14,5 +14,6 @@
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "เปิด Autosave ในเกมของแต่ละนามแฝงหนึ่งครั้ง เพื่อให้การแข่งและอีเวนต์ถูกบันทึกโดยไม่ต้องถาม หากภายหลังเลือก Off ใน Options > Gameplay ของเกม ค่านั้นจะยังคงอยู่",
   "Replaces the profiles {names} in this browser, their careers too": "แทนที่โปรไฟล์ {names} ในเบราว์เซอร์นี้ รวมถึงโหมดอาชีพด้วย",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเซิร์ฟเวอร์ Most Wanted Revived ไม่ใช่จากเซิร์ฟเวอร์อื่น",
-  "Change camera, look back": "เปลี่ยนมุมกล้อง มองหลัง"
+  "Change camera, look back": "เปลี่ยนมุมกล้อง มองหลัง",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "วลีรหัสนี้มีเซฟบนคลาวด์ของ Underground 2 แต่ยังไม่มีเซฟของ Most Wanted ต้องการส่งเซฟที่นี่ภายใต้วลีรหัสนี้ด้วยหรือไม่ แต่ละเกมเก็บเซฟของตัวเองแยกกัน"
 }

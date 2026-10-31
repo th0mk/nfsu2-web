@@ -24,5 +24,6 @@
   "Quick chat (with other players): group, then phrase": "Hurtigchat (med andre spillere): gruppe, derefter sætning",
   "Photo mode; F12 again takes the photo": "Fototilstand; F12 igen tager billedet",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Siden er ikke cross-origin-isoleret (ingen SharedArrayBuffer). Åbn den fra NFSU2-webserveren.",
-  "Message a friend (in free roam)": "Send en besked til en ven (i udforsknings-mode)"
+  "Message a friend (in free roam)": "Send en besked til en ven (i udforsknings-mode)",
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Denne adgangssætning har dine gemte spil fra Most Wanted i skyen, men endnu ingen fra Underground 2. Send også de gemte spil her under den? Hvert spil beholder sine egne gemte spil."
 }

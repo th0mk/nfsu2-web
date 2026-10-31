@@ -18,5 +18,6 @@
     "other": "Substitui os perfis {names} neste navegador, inclusive as carreiras deles"
   },
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "A página não tem isolamento de origem cruzada (sem SharedArrayBuffer). Abra-a pelo servidor do Most Wanted Revived, não por outro servidor.",
-  "Change camera, look back": "Mudar câmera, olhar para trás"
+  "Change camera, look back": "Mudar câmera, olhar para trás",
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Esta frase secreta guarda seus jogos salvos na nuvem do Underground 2, mas ainda nenhum do Most Wanted. Enviar os jogos salvos daqui com ela também? Cada jogo mantém seus próprios jogos salvos."
 }

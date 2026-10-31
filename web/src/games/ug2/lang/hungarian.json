@@ -24,5 +24,6 @@
   "Shift up": "Felváltás",
   "Shift down": "Visszaváltás",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). Az NFSU2 webszerveréről nyisd meg.",
-  "Message a friend (in free roam)": "Üzenet egy barátnak (Felfedező módban)"
+  "Message a friend (in free roam)": "Üzenet egy barátnak (Felfedező módban)",
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Ez a jelmondat őrzi a Most Wanted felhőmentéseidet, de Underground 2-mentés még nincs rajta. Elküldöd ezzel a jelmondattal az itteni mentéseket is? Minden játék a saját mentéseit őrzi."
 }
