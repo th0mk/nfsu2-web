@@ -249,7 +249,6 @@ export class Encoder {
     return m;
   }
 
-  /** (re)create the typed views when the wasm memory grew */
   // occlusion queries (gpu-abi.md section 13): the frame's query set, the resolve buffer, a ring of read buffers (one
   // per frame whose results are still on their way), and the frame waiting for its submit (afterSubmit maps it)
   private occSet: GPUQuerySet | null = null;
@@ -296,6 +295,7 @@ export class Encoder {
     this.occStats.frames++;
   }
 
+  /** (re)create the typed views when the wasm memory grew */
   views(): void {
     const b = this.memory.buffer as unknown as SharedArrayBuffer;
     if (b === this.sab) return;
