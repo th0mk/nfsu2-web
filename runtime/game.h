@@ -136,8 +136,9 @@ typedef struct GameOps {
                                      * (IEV_SMS, input_web.c, on the input thread), id 1.. */
     void (*photo_input)(int cmd, int a, int b); /* the page drives photo mode (IEV_PHOTO, input_web.c,
                                      * on the input thread): what (PH_*) and its two values */
-    int cursor_away;                /* 1: until the page's pointer first moves over the game, GetCursorPos
-                                     * answers a point a whole client area above and left of it (input_web.c
+    int cursor_away;                /* 1: until the page's pointer first moves over the game (or turns the
+                                     * wheel there: input_proto.h IKF_WHEEL_AT), GetCursorPos answers a
+                                     * point a whole client area above and left of it (input_web.c
                                      * metal_get_cursor), as a game sees a cursor that has not entered its
                                      * window: a menu opened with the mouse untouched has nothing under the
                                      * cursor (MW's front end moves the highlight to an object a still cursor

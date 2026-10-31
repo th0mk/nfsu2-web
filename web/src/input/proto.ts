@@ -71,6 +71,7 @@ export const IKF_SHIFT = 8;
 export const IKF_DEAD = 16;
 export const IKF_SYNTH = 32;
 export const IKF_TOUCH = 64;        // IEV_MOUSE_MOVE: a finger landed there (a tap's start)
+export const IKF_WHEEL_AT = 128;    // IEV_MOUSE_MOVE: where a wheel turn found the pointer (input_proto.h)
 
 export const IREASON_NONE = 0;
 export const IREASON_WINDOW = 1;

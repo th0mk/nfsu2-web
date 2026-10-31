@@ -11,7 +11,8 @@
 //        macOS browsers send no keyup for keys released while Cmd is held.
 // Mouse: positions relative to the shown image (the C side maps them into
 //        the game's client area and HUD), buttons with pointer capture, the
-//        wheel in WHEEL_DELTA units.  The OS cursor is hidden over the game.
+//        wheel in WHEEL_DELTA units with the place it turned at (IKF_WHEEL_AT).
+//        The OS cursor is hidden over the game.
 // Touch: one finger is the mouse, so a tap is a left click (the game's menus
 //        take clicks); two are a middle-button drag (the garage turns the
 //        car); other fingers are left alone.  Where the first finger lands
@@ -38,7 +39,8 @@ import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
   IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
-  IEV_PHOTO, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH, IM_ATTACHED,
+  IEV_PHOTO, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH,
+  IKF_WHEEL_AT, IM_ATTACHED,
   IM_EV_DROP, IM_EV_R, IM_EV_W, IM_EVENTS, IM_GAME_INACTIVE, IM_HDR_WORDS, IM_KEYS_HELD, IM_MAGIC, IM_MOUSE_X,
   IM_MOUSE_Y, IM_NAMES_GEN, IM_OFF_EV, IM_OFF_NAMES, IM_OFF_SYN, IM_QUIT_REQ, IM_SYN_R, IM_SYN_W, IM_TEXT,
   IM_TEXT_KIND, IM_TEXT_LEN, IM_TEXT_MAX, IM_TEXT_SEQ, IM_MENU_SCALE, IM_VERSION, IM_VIEW_ROLL, INPUT_EV_N, INPUT_MAGIC, INPUT_NAME_LEN,
@@ -326,7 +328,11 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     wheelAcc += -lines * 120;                              // + = away from the user, as WM_MOUSEWHEEL
     const dz = Math.trunc(wheelAcc);
     wheelAcc -= dz;
-    if (dz) push(IEV_WHEEL, 0, 0, flagsOf(e), [], dz);
+    if (!dz) return;
+    // where it turned: the pointer may be over the game without having moved (the page opened under it);
+    // a game whose cursor is away until the pointer arrives takes this place (input_proto.h IKF_WHEEL_AT)
+    push(IEV_MOUSE_MOVE, 0, 0, flagsOf(e) | IKF_WHEEL_AT, [], ...pos(e));
+    push(IEV_WHEEL, 0, 0, flagsOf(e), [], dz);
   }
   const onContextMenu = (e: Event) => e.preventDefault();
 

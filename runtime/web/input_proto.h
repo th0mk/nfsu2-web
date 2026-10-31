@@ -95,6 +95,9 @@ enum {                    /* event flags */
     IKF_DEAD = 16,        /* a dead key: ch[0] = its spacing character */
     IKF_SYNTH = 32,       /* a synthetic DOM event (autotest), for the log */
     IKF_TOUCH = 64,       /* IEV_MOUSE_MOVE: a finger landed there (a tap's start) */
+    IKF_WHEEL_AT = 128,   /* IEV_MOUSE_MOVE: where a wheel turn (the IEV_WHEEL after it) found the pointer, which may
+                             not have moved there: a game whose cursor is away (game.h cursor_away) takes it, for
+                             others it is no move */
 };
 enum {                    /* why the page sent a focus change or a release */
     IREASON_NONE = 0, IREASON_WINDOW = 1, IREASON_VISIBILITY = 2, IREASON_FULLSCREEN = 3,

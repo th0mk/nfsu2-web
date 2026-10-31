@@ -204,6 +204,31 @@ test('input: detach removes every listener and refuses later quits', async () =>
   assert.equal(i.requestQuit(), false);
 });
 
+/** the event ring's records but the focus changes: type, flags, a, b */
+const ring = (proc, ptr, h) => {
+  const dv = new DataView(proc.memory.buffer), out = [];
+  for (let i = 0; i < Atomics.load(h, IP.IM_EV_W); i++) {
+    const o = ptr + IP.IM_OFF_EV + i * 16;
+    out.push({ type: dv.getUint8(o), flags: dv.getUint8(o + 3), a: dv.getInt32(o + 8, true), b: dv.getInt32(o + 12, true) });
+  }
+  return out.filter(e => e.type !== IP.IEV_FOCUS);
+};
+const mouseEv = (type, x, y, more = {}) => ({ type, clientX: x, clientY: y, isTrusted: true, altKey: false, ctrlKey: false,
+  shiftKey: false, preventDefault() {}, ...more });
+
+test('input: a wheel turn sends the place it turned at first (IKF_WHEEL_AT): the pointer may be there without a move', async () => {
+  const proc = fakeProc(), ptr = 8192, h = mailbox(proc, ptr), el = element();
+  const i = attachInput(proc, el, { log: () => {}, gamepads: false });
+  proc.register(3, ptr, 65536);
+  await tick();
+  el.dispatchEvent(mouseEv('wheel', 25, 75, { deltaY: -100, deltaMode: 0 }));   // a notch up, a quarter across, 3/4 down
+  assert.deepEqual(ring(proc, ptr, h), [
+    { type: IP.IEV_MOUSE_MOVE, flags: IP.IKF_WHEEL_AT, a: 16384, b: 49152 },
+    { type: IP.IEV_WHEEL, flags: 0, a: 120, b: 0 },
+  ]);
+  i.detach();
+});
+
 // ---- renderer ---------------------------------------------------------------------
 function fakeGpu() {
   const rec = { devices: [], unconfigured: 0 };

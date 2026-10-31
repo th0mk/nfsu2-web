@@ -241,6 +241,7 @@ static void key_up(const InEv *e){
 
 /* ---- mouse (metal.m) ------------------------------------------------------- */
 static _Atomic int g_mouse_x = 640, g_mouse_y = 360;   /* the pointer now (the WM_ messages, the page) */
+static _Atomic int g_mouse_away = 1;          /* the pointer has given no position yet (game.h cursor_away) */
 static _Atomic int g_mouse_dz = 0;
 static _Atomic unsigned g_mouse_btn = 0;
 static uint64_t mono_us(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000u + (uint64_t)t.tv_nsec / 1000u; }
@@ -388,12 +389,18 @@ static void mouse_release_all(void){
  * relative motion DirectInput reports is the same move in game pixels */
 static double g_last_nx = -1, g_last_ny = -1, g_frac_dx, g_frac_dy;
 static void mouse_move(const InEv *e){
+    int away = g_game.cursor_away && atomic_load(&g_mouse_away);
+    /* a wheel turn's place (IKF_WHEEL_AT): the pointer is over the game, perhaps without a move (the page
+     * opened under it); a cursor that is away goes there, with no motion, as Windows' cursor resting over
+     * the window is where the wheel turns; otherwise the cursor stays where the moves put it */
+    int at_wheel = (e->flags & IKF_WHEEL_AT) != 0;
+    if (at_wheel && !away) return;
     unsigned lw, lh; game_px(&lw, &lh);
     double ax = atomic_load(&g_ui_asp) / 10000.0, ay = atomic_load(&g_ui_asp_y) / 10000.0;
     double nx = ((double)e->a / 65536.0 - (1.0 - ax) * 0.5) / ax;
     double ny = ((double)e->b / 65536.0 - (1.0 - ay) * 0.5) / ay;
     int dx = 0, dy = 0;
-    if (g_last_nx >= -0.5){
+    if (g_last_nx >= -0.5 && !at_wheel){
         g_frac_dx += (nx - g_last_nx) * lw; g_frac_dy += (ny - g_last_ny) * lh;
         dx = (int)g_frac_dx; dy = (int)g_frac_dy;
         g_frac_dx -= dx; g_frac_dy -= dy;
@@ -410,6 +417,7 @@ static void mouse_move(const InEv *e){
         }
     }
     mouse_step((MouseStep){ .kind = MS_MOVE, .x = (int)x, .y = (int)y, .dx = dx, .dy = dy });
+    atomic_store(&g_mouse_away, 0);
     atomic_store(&g_mouse_x, (int)x); atomic_store(&g_mouse_y, (int)y);
     atomic_store(&MH(IM_MOUSE_X), (uint32_t)(int)x); atomic_store(&MH(IM_MOUSE_Y), (uint32_t)(int)y);
     kbd_post_mousemove(mouse_mk(e->flags), mouse_lp());
@@ -906,7 +914,11 @@ static void cs_handle(const SynReq *q){
         cs_wheel += (double)q->a * 120.0;
         int dz = (int)trunc(cs_wheel);
         cs_wheel -= dz;
-        if (dz) cs_push(IEV_WHEEL, 0, 0, cs_flags(), 0, 0, dz, 0);
+        if (dz){
+            cs_push(IEV_MOUSE_MOVE, 0, 0, cs_flags() | IKF_WHEEL_AT, 0, 0,     /* where the wheel turned */
+                    (int32_t)lround(cs_mx * 65536.0), (int32_t)lround(cs_my * 65536.0));
+            cs_push(IEV_WHEEL, 0, 0, cs_flags(), 0, 0, dz, 0);
+        }
         return; }
     default: return;
     }
