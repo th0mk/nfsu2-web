@@ -13,7 +13,10 @@
  *    body's place, orientation, velocities and speed, turned from the simulation's frame into the world's (below);
  *    its look (the vehicle's name and attribute key) goes as a car record when it changes;
  *  - each friend in free roam within NEAR_M whose state and record came gets a car of our own (up to
- *    NFSU2_ROAM_MAX_CARS, 6: the pools, M10-05), the nearest first, one a frame: a PVehicle made the way the game
+ *    NFSU2_ROAM_MAX_CARS, 6: the pools, M10-05) when the record's vehicle key is one of the career's player cars
+ *    (PLAYER_CARS; the name shown is the table's, not the record's): a record of any other vehicle, the police's
+ *    cars and helicopter, traffic, a boss's, gets none, with one line, and takes a car already shown away; the
+ *    nearest first, one a frame: a PVehicle made the way the game
  *    makes its cop and traffic cars (PVehicle::Construct 0x689820 through the "PVehicle" factory, a VehicleParams
  *    of driver class DRIVER_NONE (4): AIVehicleEmpty for a brain, no input of its own, no IPerpetrator, so the
  *    police, the pursuit, the roadblocks and the traffic have no AI of it to look at; GAME.md has the list, M10-04),
@@ -161,6 +164,17 @@ int mw_roam_hook(CPU *c, uint32_t va){
 #define FAR_M            450.f           /* and taken away past this, after FAR_US */
 #define FAR_US           5000000
 
+/* The career's player cars by their pvehicle names (GAME.md 18; runtime/mw/bot_mw.c car_name without its "speedtest",
+ * web/tools/roam-crowd.mjs's Most Wanted list): the only vehicles a friend's car record may name.  Their keys are the
+ * game's own (FN_ATTRIB_KEY), worked out once in free roam. */
+static const char *const PLAYER_CARS[] = { "911turbo", "997s", "a3", "a4", "bmwm3gtr", "bmwm3gtre46", "camaro", "carreragt",
+    "caymans", "clio", "clk500", "cobaltss", "corvette", "corvettec6r", "cts", "db9", "eclipsegt", "elise", "fordgt",
+    "gallardo", "gti", "gto", "imprezawrx", "is300", "lancerevo8", "monaro", "murcielago", "mustanggt", "punto", "rx7",
+    "rx8", "sl500", "sl65", "slr", "supra", "tt", "viper" };
+#define N_PLAYER_CARS    ((int)(sizeof PLAYER_CARS / sizeof PLAYER_CARS[0]))
+static uint32_t g_pc_key[N_PLAYER_CARS];
+static int g_pc_ready;
+
 static uint32_t rd(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
 static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 static float rdf(uint32_t a){ uint32_t v = rd(a); float f; memcpy(&f, &v, 4); return f; }
@@ -236,6 +250,8 @@ static struct {
     uint32_t retry_id[RC_TABLE];
     int retry_step[RC_TABLE];    /* the check that refused that friend's car last (logged when it changes) */
     unsigned fail_at[8];         /* refusals by Construct's check */
+    unsigned refused;            /* friends' car records naming no player car */
+    uint32_t bad_id[RC_TABLE], bad_gen[RC_TABLE];   /* the record of that friend's logged last as naming none (its generation) */
     uint32_t local_id;
 } R;
 static rc_session g_s;
@@ -319,6 +335,25 @@ static int local_car(CPU *c, uint32_t sim, char *name, uint32_t *key){
     uint32_t arg = s;
     *key = call_guest(c, FN_ATTRIB_KEY, 1, &arg);
     return 1;
+}
+
+/* Attrib's key of a pvehicle name (the game's own, FN_ATTRIB_KEY), the name copied into our guest memory; 0 for a name
+ * longer than 31 */
+static uint32_t attrib_key(CPU *c, const char *name){
+    uint32_t s = R.scratch ? R.scratch : (R.scratch = com_scratch(0x200u)), n = (uint32_t)strlen(name);
+    if (n > 0x1fu) return 0;
+    memset(g_mem + s + 0x1c0u, 0, 0x20u); memcpy(g_mem + s + 0x1c0u, name, n);
+    uint32_t a = s + 0x1c0u;
+    return call_guest(c, FN_ATTRIB_KEY, 1, &a);
+}
+static void player_car_keys(CPU *c){
+    for (int i = 0; i < N_PLAYER_CARS; i++) g_pc_key[i] = attrib_key(c, PLAYER_CARS[i]);
+    g_pc_ready = 1;
+}
+/* the player car of a vehicle key (its index in PLAYER_CARS), -1 for any other vehicle */
+static int player_car(uint32_t key){
+    for (int i = 0; key && g_pc_ready && i < N_PLAYER_CARS; i++) if (g_pc_key[i] == key) return i;
+    return -1;
 }
 
 /* ---- our cars ---- */
@@ -473,7 +508,8 @@ static int64_t clock_step(int in_roam, int64_t host){
 
 /* friends' cars: one each for the friends in free roam, the nearest first while there are more than cars */
 typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, have_pose; rc_pose pose; float dist;
-                 uint32_t key, cfg_gen; char car[RC_CFG_TYPE_NAME + 1]; } View;
+                 uint32_t key, cfg_gen; char car[RC_CFG_TYPE_NAME + 1];
+                 int bad; uint32_t bad_key; } View;   /* bad: its record names no player car (bad_key; car: the name it gave) */
 static View g_v[RC_TABLE];
 static int g_nv;
 
@@ -515,6 +551,7 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
         for (int k = 0; k < MAX_CARS; k++) if (g_car[k].st) car_kill(c, &g_car[k], "not in free roam");
         return;
     }
+    if (!g_pc_ready) player_car_keys(c);
     /* what the session has */
     g_nv = 0;
     roam_plat_lock();
@@ -529,8 +566,10 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
         if (p->cfg_len){
             static rc_carcfg cc;
             if (rc_carcfg_decode(p->cfg, p->cfg_len, &cc) == RC_OK){
-                v->key = cc.type_hash; v->cfg_gen = p->cfg_gen;
-                snprintf(v->car, sizeof v->car, "%s", cc.type_name);
+                int pc = player_car(cc.type_hash);
+                v->cfg_gen = p->cfg_gen;
+                if (pc >= 0){ v->key = cc.type_hash; snprintf(v->car, sizeof v->car, "%s", PLAYER_CARS[pc]); }
+                else { v->bad = 1; v->bad_key = cc.type_hash; snprintf(v->car, sizeof v->car, "%s", cc.type_name); }
             }
         }
         int mine = -1;
@@ -543,6 +582,14 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
         v->dist = v->have_pose ? sqrtf(dx * dx + dy * dy) : 1e9f;
     }
     roam_plat_unlock();
+    /* a record naming no player car: said once a record */
+    for (int i = 0; i < g_nv; i++){
+        View *v = &g_v[i];
+        if (!v->bad || (R.bad_id[v->idx] == v->id && R.bad_gen[v->idx] == v->cfg_gen)) continue;
+        R.bad_id[v->idx] = v->id; R.bad_gen[v->idx] = v->cfg_gen; R.refused++;
+        fprintf(stderr, "[roam] f=%ld %s's car record names a vehicle that is no player car (\"%s\", key %08x): no car for it\n",
+                autotest_frame(), v->name, v->car, v->bad_key);
+    }
     /* the cars we have: posed, or away */
     for (int k = 0; k < MAX_CARS; k++){
         Car *car = &g_car[k];
@@ -550,6 +597,7 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
         View *v = 0;
         for (int i = 0; i < g_nv; i++) if (g_v[i].idx == car->peer && g_v[i].id == car->peer_id) v = &g_v[i];
         if (!v){ car_kill(c, car, "left"); continue; }
+        if (v->bad){ car_kill(c, car, "no player car in its record"); continue; }
         if (v->key && v->key != car->key){ car_kill(c, car, "another car"); continue; }
         if (!v->visible || !v->have_pose){
             if (host - car->seen_us > GONE_US) car_kill(c, car, "not seen for 10 s");
@@ -704,11 +752,9 @@ static void spawn(CPU *c, const char *nm){
     uint32_t sim = player_sim(c), rb = sim ? vcall(c, sim, SIM_RB, 0, 0) : 0u, d = rb ? rb_data(rb) : 0u;
     if (!d){ fprintf(stderr, "[roam] f=%ld spawn: no car\n", f); return; }
     char name[RC_CFG_TYPE_NAME + 1]; uint32_t key = 0;
-    if (nm && *nm){
+    if (nm && *nm){                     /* any vehicle (the probe's ROAM_SPAWN: a cop's car too), not only PLAYER_CARS */
         snprintf(name, sizeof name, "%s", nm);
-        uint32_t s = R.scratch ? R.scratch : (R.scratch = com_scratch(0x200u));
-        memset(g_mem + s + 0x1c0u, 0, 0x20u); memcpy(g_mem + s + 0x1c0u, name, strlen(name));
-        uint32_t a = s + 0x1c0u; key = call_guest(c, FN_ATTRIB_KEY, 1, &a);
+        key = attrib_key(c, name);
     } else if (!local_car(c, sim, name, &key)){ fprintf(stderr, "[roam] f=%ld spawn: no vehicle name\n", f); return; }
     rc_state ls;
     if (!local_state(c, &ls, 0)) return;
@@ -842,9 +888,10 @@ void roam_game_report(void){
     if (!R.on || !R.net) return;
     roam_plat_stats ps; roam_plat_get_stats(&ps);
     fprintf(stderr, "\n  [roam] free-roam multiplayer (Most Wanted): joins %u, leaves %u, cars made %u, the game made none %u (by check:"
-            " attributes %u, preset %u, shape %u, 0x669080 %u, 0x687710 %u, room %u, other %u), taken away %u, lost with the world %u\n",
+            " attributes %u, preset %u, shape %u, 0x669080 %u, 0x687710 %u, room %u, other %u), taken away %u, lost with the world %u, "
+            "records of no player car %u\n",
             R.joins, R.leaves, R.creates, R.create_fail, R.fail_at[1], R.fail_at[2], R.fail_at[3], R.fail_at[4], R.fail_at[5], R.fail_at[6],
-            R.fail_at[0] + R.fail_at[7], R.kills, R.lost);
+            R.fail_at[0] + R.fail_at[7], R.kills, R.lost, R.refused);
     fprintf(stderr, "  [roam] datagrams sent %llu (%llu bytes), received %llu (%llu bytes), blocked %llu, send errors %llu\n",
             (unsigned long long)ps.sent, (unsigned long long)ps.sent_bytes, (unsigned long long)ps.recv, (unsigned long long)ps.recv_bytes,
             (unsigned long long)ps.blocked, (unsigned long long)ps.send_err);

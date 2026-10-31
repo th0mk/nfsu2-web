@@ -22,7 +22,8 @@
 // --cars   the players' cars in turn (car type names, CarTypeInfo +0), or all: the game's 31 player cars, PEUGOT to
 //          IMPREZAWRX; without it every player drives --car.  Most Wanted: the pvehicle names of its 37 player cars
 //          (911turbo to viper), each car's record keyed by Attrib::StringHash32 of the name, as runtime/mw/roam_mw.c
-//          sends it.
+//          sends it; a page makes no car of any other vehicle (copmidsize, copheli, a traffic car: roam_mw.c
+//          PLAYER_CARS), so --cars is300,copheli shows half the crowd and logs the others' records refused.
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
 //          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
