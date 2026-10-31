@@ -527,10 +527,13 @@ export class VaultSync {
   }
 
   /** Whether a keyphrase keeps the other game's cloud saves (its box, under that game's token, through this page's
-   *  own /vault: the one vault keeps both games'); false when the server does not say so (a failure: as none). */
-  async otherHas(phrase: string): Promise<boolean> {
-    try { return await new VaultApi((await keysOf(phrase, OTHER_DERIVE_INFO)).token, this.d.fetch).has(); }
-    catch (e) { this.d.log?.(`[app] keyphrase: the other game's saves not asked for (${failureText(e)})`); return false; }
+   *  own /vault: the one vault keeps both games').  A server that does not say (a refusal, no answer) is no "none":
+   *  it rejects, the failure's words in the state, as peek's does. */
+  otherHas(phrase: string): Promise<boolean> {
+    return this.run(N('Loading'), async () => {
+      try { return await new VaultApi((await keysOf(phrase, OTHER_DERIVE_INFO)).token, this.d.fetch).has(); }
+      catch (e) { this.d.log?.(`[app] keyphrase: the other game's saves not asked for (${failureText(e)})`); throw e; }
+    });
   }
 
   /** The saves here sent under a keyphrase that keeps none of this game's (the other game's only: vault-ui.ts 'Use this

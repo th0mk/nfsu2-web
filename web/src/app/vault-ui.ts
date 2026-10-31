@@ -525,11 +525,13 @@ export class VaultPanel {
 
   /** A passphrase typed in that keeps none of this game's saves: when it keeps the other game's, the saves here go
    *  under it too, once the player says so (OTHER_GAME_LINK: Underground 2's page with its launch switch); else it
-   *  has no cloud saves at all. */
+   *  has no cloud saves at all.  A server that does not say: the state says why, as for peek, no "typos". */
   private async useForOther(phrase: string) {
     const s = this.sync;
     if (!s) return;
-    if (!OTHER_GAME_LINK || !await s.otherHas(phrase)) { this.msg(() => t('No cloud saves for this passphrase. Check it for typos.'), true); return; }
+    let theirs = false;
+    try { theirs = OTHER_GAME_LINK && await s.otherHas(phrase); } catch { return; /* the state says why */ }
+    if (!theirs) { this.msg(() => t('No cloud saves for this passphrase. Check it for typos.'), true); return; }
     this.d.log('[app] keyphrase: it keeps the other game\'s saves only: asked to send these under it too');
     if (!await this.d.confirm(t('Use this passphrase here too?'), t(OTHER_GAME_SAVES), t('Send'))) { this.msg(''); return; }
     if (this.linked()) return;              // linked meanwhile (another tab of this browser)

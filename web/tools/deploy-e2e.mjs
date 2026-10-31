@@ -60,7 +60,8 @@
 // both ways: a phrase made on one game's page and typed into the other's asks 'Use this passphrase here too?' and,
 // answered Send, puts that game's saves under it, the first game's box untouched (Underground 2's page asks only with
 // its launch switch on: first as it is, which says there are no cloud saves, then on a page built from this checkout
-// with the switch on, its server started again on it); /mw/vault 503 from the Most Wanted server once the
+// with the switch on, its server started again on it); the look for the other game's box refused (a 429 to its HEAD):
+// the failure on Most Wanted's page, not "no cloud saves"; /mw/vault 503 from the Most Wanted server once the
 // Underground 2 server is stopped.  The redirects' addresses are checked as answers,
 // never followed: nothing here reaches a real site.
 import { chromium } from 'playwright';
@@ -425,10 +426,13 @@ async function phraseMadeOn(browser, url) {
   } finally { await ctx.close(); }
 }
 /** A phrase typed into a game's page in a fresh browser, Load clicked, and its question (if any) answered Send:
- *  { asked: the question's title and text, or null; msg: the line under the buttons after it; linked } */
-async function phraseTypedInto(browser, url, phrase, { answer = true } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+ *  { asked: the question's title and text, or null; msg: the line under the buttons after it; status: the line under
+ *  that; linked }.  refuseHead: the page's HEADs of /vault answered with that status instead (its worker kept out, so
+ *  that the browser's routes see its requests) */
+async function phraseTypedInto(browser, url, phrase, { answer = true, refuseHead = 0 } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...(refuseHead ? { serviceWorkers: 'block' } : {}) });
   try {
+    if (refuseHead) await ctx.route('**/vault', r => r.request().method() === 'HEAD' ? r.fulfill({ status: refuseHead, body: '' }) : r.continue());
     const b = await ctx.newPage();
     await b.goto(url);
     await b.waitForSelector('#vault:not([hidden])', { timeout: 120000 });
@@ -443,7 +447,8 @@ async function phraseTypedInto(browser, url, phrase, { answer = true } = {}) {
       if (answer) await b.waitForFunction(() => document.querySelector('#vault-input').readOnly, null, { timeout: 60000 }).catch(() => {});
     }
     await b.waitForTimeout(500);
-    return { asked: q, msg: (await b.textContent('#vault-msg'))?.trim() ?? '', linked: await b.evaluate(() => document.querySelector('#vault-input').readOnly) };
+    return { asked: q, msg: (await b.textContent('#vault-msg'))?.trim() ?? '', status: (await b.textContent('#vault-status'))?.trim() ?? '',
+      linked: await b.evaluate(() => document.querySelector('#vault-input').readOnly) };
   } finally { await ctx.close(); }
 }
 /** a page's file of its save folder (OPFS `save`): its SHA-256, or null */
@@ -724,6 +729,11 @@ async function runTwoDomain() {
     const neither = await phraseTypedInto(browser, `${u2Origin}/`, none);
     report('two-domain: a phrase of neither game: no question, no cloud saves, no box made',
       neither.asked === null && neither.msg.startsWith('No cloud saves for this passphrase.') && JSON.stringify(await boxes(none)) === '{"ug2":404,"mw":404}', neither);
+    // the look for the other game's box refused (a 429 to its HEAD): the failure, not "no cloud saves", and no box
+    const refused = await phraseTypedInto(browser, `${siteOrigin}/mw/`, none, { refuseHead: 429 });
+    report('two-domain: Most Wanted\'s page, the look for the other game\'s saves refused: says so (no "check it for typos"), no question, no box',
+      refused.asked === null && !refused.linked && !refused.msg.startsWith('No cloud saves') && refused.status.includes('wait a minute') &&
+      JSON.stringify(await boxes(none)) === '{"ug2":404,"mw":404}', refused);
     // 6. the Underground 2 server stopped: /mw/vault 503 from the Most Wanted server (its "unreachable", at once)
     await servers.u2.stop();
     const t1 = Date.now();

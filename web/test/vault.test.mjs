@@ -919,8 +919,8 @@ test('one keyphrase, each game\'s own key, token and box; each game\'s vault und
 // The other game's saves under one keyphrase (vault-ui.ts 'Use this passphrase here too?'): each game's page finds the
 // other game's box with that game's token, through its own /vault (one vault keeps both), and sends its own saves under
 // the keyphrase as its first version; the other game's box stays as it was, each opens with its own game's key only.
-// Nothing found, or a server that does not answer, is none.  A box of this game's made meanwhile: the same files are
-// linked, others a conflict.
+// Nothing found is none; a server that refuses or does not answer says so (the state's failure, as peek's), nothing is
+// sent.  A box of this game's made meanwhile: the same files are linked, others a conflict.
 test('a keyphrase of the other game\'s: found by its token, the saves here sent under it too', async () => {
   const build = async game => {
     const code = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/vault.ts')], bundle: true, format: 'esm', write: false, platform: 'neutral',
@@ -966,14 +966,24 @@ test('a keyphrase of the other game\'s: found by its token, the saves here sent 
     // now it keeps this game's saves too: another browser of this game loads them as ever
     assert.ok(await page(G[here], srv).sync.peek(phrase));
   }
-  // a server that does not answer, or refuses: as none (said in the log)
+  // a server that refuses or does not answer: no "none" but its failure in the state (and the log); nothing sent
   const srv = server(), u = page(G.ug2, srv, { 'settings.ini': '#\n' });
   const phrase = await u.sync.create();
-  const m = page(G.mw, srv, { 'settings.ini': '# mw\n' });
+  let down = false;
+  const m = page(G.mw, { fetch: (u, i) => down ? Promise.reject(new TypeError('Failed to fetch')) : srv.fetch(u, i) }, { 'settings.ini': '# mw\n' });
   srv.refuse = 429;
-  assert.equal(await m.sync.otherHas(phrase), false);
+  await assert.rejects(m.sync.otherHas(phrase));
+  assert.deepEqual([m.sync.state.s, m.sync.state.code], ['error', 'VAULT-HTTP-429']);
   assert.match(m.logs.at(-1), /the other game's saves not asked for/);
   srv.refuse = 0;
+  down = true;
+  await assert.rejects(m.sync.otherHas(phrase));
+  assert.deepEqual([m.sync.state.s, m.sync.state.code], ['error', 'VAULT-NO-ANSWER']);
+  down = false;
+  assert.equal(srv.kept.size, 1);
+  assert.equal(m.link, null);
+  assert.equal(await m.sync.otherHas(phrase), true);
+  assert.equal(m.sync.state.s, 'off');
   // a box of this game's made meanwhile (another browser was first): the same files linked; other files a conflict
   const first = page(G.mw, srv, { 'settings.ini': '# mw\n' });
   await first.sync.sendUnder(phrase);
