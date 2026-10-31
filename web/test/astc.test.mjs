@@ -306,7 +306,7 @@ test('DXT3 and DXT5: blocks in rows of a wider pitch, an offset, into a buffer k
   }
 });
 
-test('DXT3 and DXT5 rewritten in place, as the ASTC workers do (astc-worker.ts): the same bytes', () => {
+test('DXT3 and DXT5 rewritten in place, as the ASTC pool does on the page thread (astc-pool.ts): the same bytes', () => {
   let seed = 5;
   const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 8;
   // a batch: levels one after another, each at its offset, blocks of one alpha and of varying alpha mixed

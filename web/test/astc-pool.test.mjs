@@ -25,17 +25,21 @@ globalThis.Worker = class {
   constructor() { this.inbox = []; workers.push(this); setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0); }
   postMessage(m) { this.inbox.push(m); }
   terminate() { this.inbox = []; }
-  /** its oldest batch back, each level rewritten; error: the batch does not come back, the worker says why */
-  answer({ error } = {}) {
+  /** its oldest batch back, each level rewritten (those in bad left as they came, as a rewrite that threw); error:
+   *  the batch does not come back, the worker says why */
+  answer({ error, bad } = {}) {
     const m = this.inbox.shift();
     if (error) { this.onmessage({ data: { id: m.id, error } }); return; }
     const u8 = new Uint8Array(m.buf);
     for (let i = 0; i + 3 < m.items.length; i += 4) {
+      if (bad?.includes(i >> 2)) continue;
       const off = m.items[i], bw = m.items[i + 1], bh = m.items[i + 2];
       u8.set(dxtAlphaToAstc(m.items[i + 3] !== 0, u8, off, bw * 16, bw, bh), off);
     }
-    this.onmessage({ data: { id: m.id, buf: m.buf, ms: 1 } });
+    this.onmessage({ data: { id: m.id, buf: m.buf, ms: 1, ...(bad ? { bad, why: 'RangeError: test' } : {}) } });
   }
+  /** it dies (onerror) with what it holds */
+  crash(why) { this.inbox = []; this.onerror({ message: why }); }
 };
 const settle = () => new Promise(r => setTimeout(r, 1));
 
@@ -126,4 +130,34 @@ test('a worker fails while another holds a level: the level uploaded again goes 
   s.upload(1, 3); s.drain();
   assert.deepEqual(s.of(1), [astc(1), astc(2), astc(3)]);
   assert.equal(workers[1].inbox.length, 0, 'not sent to the worker left');
+});
+
+test('levels whose rewrite threw in a worker are rewritten on the page thread, in their turn', async () => {
+  const s = await session(2);
+  s.create(1); s.create(2); s.create(3);
+  s.upload(1, 1); s.upload(2, 2); s.drain();     // worker 0: one batch of two levels
+  s.upload(3, 3); s.drain();                     // worker 1
+  workers[1].answer();                           // back first: it waits for the batch before it
+  assert.equal(s.of(1).length + s.of(2).length + s.of(3).length, 0);
+  workers[0].answer({ bad: [0] });               // texture 1's level threw in the worker
+  assert.deepEqual([s.of(1), s.of(2), s.of(3)], [[astc(1)], [astc(2)], [astc(3)]]);
+  assert.deepEqual(s.writes.map(w => w.tex).filter(t => /^t\d/.test(t)), ['t1', 't2', 't3'], 'in the order uploaded');
+  assert.ok(s.log.some(l => /RangeError: test: 1 level\(s\) rewritten on the page thread/.test(l)), s.log.join('\n'));
+  // the page thread from now on
+  s.upload(1, 4); s.drain();
+  assert.deepEqual(s.of(1), [astc(1), astc(4)]);
+  assert.equal(workers[0].inbox.length + workers[1].inbox.length, 0);
+});
+
+test('a worker that dies with a batch: its levels are lost and said, nothing waits for them, later uploads go up', async () => {
+  const s = await session(2);
+  s.create(1); s.create(2);
+  s.upload(1, 1); s.drain();                     // worker 0
+  s.upload(2, 2); s.drain();                     // worker 1
+  workers[0].crash('gone');
+  assert.ok(s.log.some(l => /ASTC worker: gone: 1 level\(s\) lost/.test(l)), s.log.join('\n'));
+  s.upload(1, 3); s.drain();                     // behind worker 1's batch
+  workers[1].answer();
+  assert.deepEqual([s.of(1), s.of(2)], [[astc(3)], [astc(2)]]);
+  assert.equal(s.pool().busy, false);
 });

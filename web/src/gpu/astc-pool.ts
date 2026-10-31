@@ -5,16 +5,21 @@
 // (index.ts pump: Encoder.framePending), so no frame draws a level that has not gone up yet, as before; the others
 // (a loading screen's, while the track's textures load) go on.
 // The blocks are the ones the page thread made: the same function, each level apart.
+// A level whose rewrite throws in a worker comes back as it went and is rewritten here, and from then on the page
+// thread rewrites every level (in its turn, behind those still out); a worker that dies takes the bytes of the
+// batches it held with it, and those levels are lost (said).
 
 import type { FromAstc, ToAstc } from './astc-worker';
 import { dxtAlphaToAstc } from './astc';
 
 /** a level back from a worker, to its texture (the encoder's texture, level and face); blocks null: the level is lost
- *  (a worker failed) */
+ *  (its worker died with it, or its rewrite threw on the page thread too) */
 export type AstcDone<R> = (ref: R, blocks: Uint8Array | null, off: number, bw: number, bh: number) => void;
 
 interface Batch<R> { id: number; buf: ArrayBuffer; used: number; items: number[]; refs: R[]; back?: ArrayBuffer; worker: number;
-  src?: Uint8Array }
+  /** levels the page thread rewrites when the batch's turn comes (apply): all of them (no worker took it), or those
+   *  whose rewrite threw in the worker (they come back as they went) */
+  here?: true | Set<number>; src?: Uint8Array }
 interface Slot { w: Worker; ready: boolean; dead: boolean; out: number }
 
 /** a batch is sent when it holds this much (a big level goes alone): several at once spread over the workers */
@@ -27,6 +32,7 @@ export class AstcPool<R> {
   private spare: ArrayBuffer[] = [];
   private next = 0;
   private gone = false;
+  private failedHere = false;
   /** levels and bytes rewritten in the workers, their time there (ms, summed over the workers), and the page thread's
    *  time handing them to their textures */
   levels = 0; bytes = 0; workerMs = 0; applyMs = 0;
@@ -81,14 +87,9 @@ export class AstcPool<R> {
       if (s.ready && !s.dead && (best < 0 || s.out < this.slots[best].out)) best = i;
     }
     if (best < 0) {
-      // no worker left, or one failed: rewritten here, as the encoder does without them, and handed on in its turn
-      // (after the batches still out)
-      const u8 = new Uint8Array(b.buf);
-      for (let i = 0; i < b.items.length; i += 4) {
-        const off = b.items[i], bw = b.items[i + 1], bh = b.items[i + 2];
-        dxtAlphaToAstc(b.items[i + 3] !== 0, u8, off, bw * 16, bw, bh, u8.subarray(off, off + bw * bh * 16));
-      }
-      b.back = b.buf; this.sent.push(b); this.apply();
+      // no worker left, or one failed: rewritten here, as the encoder does without them, in its turn (after the
+      // batches still out: apply)
+      b.here = true; b.back = b.buf; this.sent.push(b); this.apply();
       return;
     }
     b.worker = best; this.slots[best].out++;
@@ -104,18 +105,30 @@ export class AstcPool<R> {
     const b = this.sent.find(x => x.id === m.id);
     if (!b) return;
     if ('error' in m) this.lost(b, m.error);
-    else { b.back = m.buf; this.workerMs += m.ms; }
+    else {
+      b.back = m.buf; this.workerMs += m.ms;
+      if (m.bad?.length) { b.here = new Set(m.bad); this.quit(`${m.why}: ${m.bad.length} level(s) rewritten on the page thread`); }
+    }
     this.apply();
   }
 
-  /** a batch that will not come back: its levels stay as they are (a bug: said once) and the workers are left alone;
-   *  levels are rewritten on the page thread from now on, through here while others are still out (takes) */
-  private lost(b: Batch<R>, why: string): void {
-    if (!this.gone) this.log(`[gpu] ASTC worker: ${why}: ${b.refs.length} level(s) lost, DXT3 and DXT5 rewritten on the page thread from now on`);
+  /** a worker went wrong: the workers are left alone and levels are rewritten on the page thread from now on (said
+   *  once), through here while others are still out (takes) */
+  private quit(why: string): void {
+    if (!this.gone) this.log(`[gpu] ASTC worker: ${why}; DXT3 and DXT5 rewritten on the page thread from now on`);
     this.gone = true;
+  }
+
+  /** a batch that will not come back: its bytes went with it (the worker died, or could not send it back), so its
+   *  levels stay as they are on the GPU (said) */
+  private lost(b: Batch<R>, why: string): void {
+    if (this.gone) this.log(`[gpu] ASTC worker: ${why}: ${b.refs.length} level(s) lost`);
+    else this.quit(`${why}: ${b.refs.length} level(s) lost`);
     b.back = new ArrayBuffer(0);
   }
 
+  /** a worker's onerror: before it started (it could not be loaded) it has nothing out; after, its own code catches
+   *  every error (astc-worker.ts), so only the browser ends it, and what it held is lost */
   private fail(s: Slot, why: string): void {
     s.dead = true;
     const i = this.slots.indexOf(s);
@@ -131,19 +144,36 @@ export class AstcPool<R> {
       const b = this.sent.shift()!, u8 = b.back!.byteLength ? new Uint8Array(b.back!) : null;
       for (let i = 0, k = 0; k < b.refs.length; i += 4, k++) {
         const off = b.items[i], bw = b.items[i + 1], bh = b.items[i + 2];
-        if (u8 && this.verify && b.src) {
-          const want = dxtAlphaToAstc(b.items[i + 3] !== 0, b.src, off, bw * 16, bw, bh);
-          let same = true;
-          for (let j = 0; j < want.length && same; j++) same = want[j] === u8[off + j];
-          this.verify.levels++; if (!same) this.verify.differ++;
+        let ok = !!u8;
+        if (u8 && (b.here === true || b.here?.has(k))) ok = this.rewrite(u8, b.items, i);
+        else if (u8) {
+          if (this.verify && b.src) {
+            const want = dxtAlphaToAstc(b.items[i + 3] !== 0, b.src, off, bw * 16, bw, bh);
+            let same = true;
+            for (let j = 0; j < want.length && same; j++) same = want[j] === u8[off + j];
+            this.verify.levels++; if (!same) this.verify.differ++;
+          }
+          this.levels++; this.bytes += bw * bh * 16;
         }
-        this.done(b.refs[k], u8, off, bw, bh);
-        if (u8) { this.levels++; this.bytes += bw * bh * 16; }
+        this.done(b.refs[k], ok ? u8 : null, off, bw, bh);
       }
       if (b.back!.byteLength && this.spare.length < 6) this.spare.push(b.back!);
     }
     this.applyMs += performance.now() - t0;
     if (!this.busy) this.idle();
+  }
+
+  /** a level rewritten on the page thread, in place in its batch (its item at i); false: that threw too (said once),
+   *  and the level stays as it is on the GPU */
+  private rewrite(u8: Uint8Array, items: number[], i: number): boolean {
+    const off = items[i], bw = items[i + 1], bh = items[i + 2];
+    try {
+      dxtAlphaToAstc(items[i + 3] !== 0, u8, off, bw * 16, bw, bh, u8.subarray(off, off + bw * bh * 16));
+      return true;
+    } catch (x) {
+      if (!this.failedHere) { this.failedHere = true; this.log(`[gpu] ASTC rewrite of a ${bw * 4}x${bh * 4} level failed: ${String(x)}`); }
+      return false;
+    }
   }
 
   terminate(): void {
