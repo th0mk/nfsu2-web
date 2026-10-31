@@ -430,8 +430,9 @@ export class Encoder {
       // DXT3, DXT5: block for block, one plane where the alpha is one value, two where it varies
       const bw = (lw + 3) >> 2, bh = (lh + 3) >> 2;
       t.filled = true;
-      if (this.astcPool?.usable) {
-        // copied out for a worker (astc-pool.ts); it goes up before a frame that samples the texture is drawn
+      if (this.astcPool?.takes) {
+        // copied out for a worker (astc-pool.ts), or queued behind levels still out; it goes up in its turn, before a
+        // frame that samples the texture is drawn
         this.astcPool.add({ t, id, level, face: t.cube ? Math.min(face, 5) : 0 }, t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh);
         t.pend = (t.pend ?? 0) + 1;
         return;

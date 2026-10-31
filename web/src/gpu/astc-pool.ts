@@ -45,8 +45,10 @@ export class AstcPool<R> {
     }
   }
 
-  /** a worker has started: levels go to the workers from now on (before that the encoder rewrites them itself) */
-  get usable(): boolean { return !this.gone && this.slots.some(s => s.ready && !s.dead); }
+  /** the encoder hands its levels here: a worker has started (before that it rewrites them itself), or levels are
+   *  still out, whatever became of the workers since: a later upload of a level must go up after the one out, so it
+   *  queues behind it (with no worker left it is rewritten here, in its turn: flush) */
+  get takes(): boolean { return this.busy || (!this.gone && this.slots.some(s => s.ready && !s.dead)); }
   /** batches out, or a level not sent yet: the next frame waits */
   get busy(): boolean { return this.sent.length > 0 || !!this.cur; }
 
@@ -74,12 +76,13 @@ export class AstcPool<R> {
     if (!b) return;
     this.cur = null;
     let best = -1;
-    for (let i = 0; i < this.slots.length; i++) {
+    if (!this.gone) for (let i = 0; i < this.slots.length; i++) {
       const s = this.slots[i];
       if (s.ready && !s.dead && (best < 0 || s.out < this.slots[best].out)) best = i;
     }
     if (best < 0) {
-      // no worker left: rewritten here, as the encoder does without them
+      // no worker left, or one failed: rewritten here, as the encoder does without them, and handed on in its turn
+      // (after the batches still out)
       const u8 = new Uint8Array(b.buf);
       for (let i = 0; i < b.items.length; i += 4) {
         const off = b.items[i], bw = b.items[i + 1], bh = b.items[i + 2];
@@ -105,8 +108,8 @@ export class AstcPool<R> {
     this.apply();
   }
 
-  /** a batch that will not come back: its levels stay as they are (a bug: said once) and the workers are left alone,
-   *  the encoder rewrites on the page thread again */
+  /** a batch that will not come back: its levels stay as they are (a bug: said once) and the workers are left alone;
+   *  levels are rewritten on the page thread from now on, through here while others are still out (takes) */
   private lost(b: Batch<R>, why: string): void {
     if (!this.gone) this.log(`[gpu] ASTC worker: ${why}: ${b.refs.length} level(s) lost, DXT3 and DXT5 rewritten on the page thread from now on`);
     this.gone = true;
