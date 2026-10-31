@@ -34,6 +34,8 @@
 //             nothing more until lifted.  Driving, the first loss of three in this page says so (Nitro gives gas too:
 //             a thumb slid up to it from Gas needs no third finger).  A finger whose lift never came at all is let go
 //             when a new touch begins with no finger down.
+//   focus     a focus loss lets go of every key the game holds: a finger held through it presses its keys again when
+//             the focus is back (controller bits come back by themselves); hiding the page lets go of every finger.
 //   size      all of them (and the menu's button) bigger or smaller, from the Controls sheet's touch tab, kept in this
 //             browser: auto (autoTouchSize, for the screen) unless 80 to 150 % is picked; style.css --ts on the stage.
 //             The game's menus' small buttons likewise (menuSize: the help bar's and the scrollers' arrows, auto
@@ -446,6 +448,12 @@ export class TouchControls {
       if (this.mode === 'drive' && e.target instanceof HTMLCanvasElement) e.stopPropagation();
     }, { capture: true });
     addEventListener('keydown', e => { if (e.isTrusted && this.session) { this.away = true; this.update(); } }, { capture: true });
+    // a focus loss lets go of every key the game holds (runtime/web/input_web.c release_all) and a finger held through
+    // it sends nothing more, so the keys the controls hold go down again once the focus is back (after the input's own
+    // focus handler), as a controller's bits do (gamepad.ts adds the touch's to every poll); a hidden page's fingers
+    // are let go instead, since their lifts may not come while it is hidden
+    addEventListener('focus', () => setTimeout(() => this.pressAgain(), 0));
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.dropFingers('as the page was hidden', true); });
   }
 
   /** the controls' words in the page's language (again when it changes) */
@@ -607,14 +615,21 @@ export class TouchControls {
     }
     this.cancelled.n++;
   }
-  /** every finger the controls hold let go: a new touch began with none down, so their lifts never came */
-  private dropFingers() {
+  /** every finger the controls hold let go (why: for the log): a new touch began with none down, so their lifts never
+   *  came; or the page was hidden (above; now: their keys up at once, no tap a hold's control makes as it lifts) */
+  private dropFingers(why = 'that never lifted (the phone took them)', now = false) {
     const n = this.byFinger.size + (this.stickFinger !== -1 ? 1 : 0);
     if (!n) return;
-    for (const [finger, c] of this.byFinger) this.release(c, finger);
+    for (const [finger, c] of this.byFinger) if (now) { c.fingers.clear(); this.up(c, true); } else this.release(c, finger);
     this.byFinger.clear();
     if (this.stickFinger !== -1) { this.stickUp(); this.sendPad(); }
-    this.deps.log(`[app] touch controls: ${n} finger(s) let go that never lifted (the phone took them)`);
+    this.deps.log(`[app] touch controls: ${n} finger(s) let go ${why}`);
+  }
+  /** the keys the controls hold down again in the game, which a focus loss let go (above) */
+  private pressAgain() {
+    if (!this.keys.size || document.hidden || !this.session?.input?.key) return;
+    for (const code of this.keys.keys()) this.session.input.key(code, true);
+    this.deps.log(`[app] touch controls: ${[...this.keys.keys()].join(', ')} down again after a focus loss`);
   }
 
   private press(c: Ctl, finger: number) {

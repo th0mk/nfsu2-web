@@ -107,7 +107,9 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 //             looked at; the game loads it; at the Play after that it is left as it is
 //   touch     on a touch screen, a race (tests/mw/scripts/app_touch_probe.txt): the driving controls come with the game's
 //             "drive" word (runtime/mw/status_mw.c), Most Wanted's set (Look back and Speedbreaker, none of free roam's
-//             but Start); a finger on Gas holds the up arrow and the car moves; Look back holds L; the game's own quit
+//             but Start); a finger on Gas holds the up arrow and the car moves; held through two focus losses, the game
+//             lets the up arrow go at each (the controls press it again when the focus is back); Look back holds L; the
+//             game's own quit
 // An oracle build ("oracle":1 in /game.json) loads d3dx9_26.dll from the save folder: each step puts it there from
 // $NFSMW_D3DX_DLL (the file on this machine; never in the repository) and the address names it (NFSMW_D3DX).  The game
 // runs with the null renderer (NFSU2_RENDERER=null) unless --draw is given: the steps check the page and the game, and a
@@ -504,6 +506,17 @@ async function mwSteps() {
     // the script's word comes after its wait for the car's speed, also after a wait that ran out: that one must not have
     const moved = await p6.waitForFunction(() => /app_touch_probe: moved/.test(window.__nfsu2.log.text()), null, { timeout: 120000, polling: 250 })
       .then(async () => !/breaker wait above: TIMEOUT/.test(await logText()), () => false);
+    // a focus loss lets go of every key the game holds (runtime/web/input_web.c release_all logs how many); with the
+    // focus back the finger still on Gas holds the up arrow again, so the second loss finds it held too
+    const releases = async () => ((await logText()).match(/\[key\] window inactive: 1 held key\(s\) released/g) ?? []).length;
+    for (let i = 1; i <= 2; i++) {
+      await p6.evaluate(() => dispatchEvent(new Event('blur')));
+      await p6.waitForFunction(n => (window.__nfsu2.log.text().match(/\[key\] window inactive: 1 held key\(s\) released/g) ?? []).length >= n,
+        i, { timeout: 10000, polling: 100 }).catch(() => {});
+      await p6.evaluate(() => dispatchEvent(new Event('focus')));
+      await p6.waitForTimeout(500);
+    }
+    const refocus = { released: await releases(), keys: (await T()).keys, shown: (await T()).shown };
     await finger('.touch [data-ctl="gas"]', 'pointerup', 11);
     await finger('.touch [data-ctl="look"]', 'pointerdown', 12);
     await p6.waitForTimeout(300);
@@ -517,9 +530,9 @@ async function mwSteps() {
     const mine = ['pause', 'camera', 'reset', 'look', 'breaker', 'mode', 'gas', 'brake', 'nitro', 'hb'];
     const ug2Only = ['map', 'msgs', 'drift', 'horn', 'chat'];
     report('touch', drove && shown && mine.every(c => visible.includes(c)) && set.includes('start') && !visible.includes('start') &&
-      !set.some(c => ug2Only.includes(c)) && gasKeys.includes('ArrowUp') && moved && lookKeys.includes('KeyL') && !after.includes('KeyL') &&
-      exit?.code === 0 && quitPath(tail),
-      { drove, shown, set, visible, gasKeys, moved, lookKeys, after, exit, drive: (tail.match(/\[drive\][^\n]*-> [1-9][^\n]*/g) ?? []).slice(0, 3) });
+      !set.some(c => ug2Only.includes(c)) && gasKeys.includes('ArrowUp') && moved && refocus.released === 2 && refocus.keys.includes('ArrowUp') &&
+      lookKeys.includes('KeyL') && !after.includes('KeyL') && exit?.code === 0 && quitPath(tail),
+      { drove, shown, set, visible, gasKeys, moved, refocus, lookKeys, after, exit, drive: (tail.match(/\[drive\][^\n]*-> [1-9][^\n]*/g) ?? []).slice(0, 3) });
     await p6.close();
     await tctx.close();
   }
