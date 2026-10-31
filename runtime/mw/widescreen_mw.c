@@ -55,12 +55,13 @@
  *           looked up by 0x57E920) show com.c's row names.
  *   title   on a 16:9 or wider screen the game's own widescreen title
  *           (WS_MW_LS_Splash.fng; at 21:9 and wider its 16:9 art between bars
- *           at the sides), as WidescreenFix gives it: IsWidescreen 0x4FB000
- *           (`xor al,al; ret`) answers 1 to its two title callers, the splash
- *           name 0x5705E0 (0x5705E5) and the splash's construction (0x5A307E:
- *           the CURRENT_GEN_WIDESCREEN message is sent), the splash name is
+ *           at the sides), as WidescreenFix gives it: the splash name is
  *           copied over the 4:3 one at 0x8A0114 (the flow tables at
- *           0x8F3C68..0x8F4678 name that one), the object 0x534CC377 is shown
+ *           0x8F3C68..0x8F4678 name that one, so the wide package is the one
+ *           brought up), IsWidescreen 0x4FB000 (`xor al,al; ret`) answers 1 to
+ *           the splash's construction (0x5A307E: the CURRENT_GEN_WIDESCREEN
+ *           message is sent; WidescreenFix's other title caller, the splash
+ *           name 0x5705E0, has no caller in v1.3), the object 0x534CC377 is shown
  *           rather than hidden at 0x5A30B1 (0x514CC0 for 0x514C70) and the
  *           prompt's hash is 0xC4DF3FF2 for 0xC6CC55A4 at 0x5A3141.  A 4:3,
  *           16:10 or upright screen keeps the 4:3 title (TRACKER M7-42).
@@ -97,7 +98,7 @@ static int   g_wide_hud;                /* the game's widescreen HUD packages in
 static int   g_band_draw;               /* 0x6D1260 is drawing a quad that keeps to the HUD's band */
 static int   g_wide_splash_opt, g_wide1610, g_bandlog;   /* NFSMW_WIDE_SPLASH, NFSMW_WIDE_HUD_1610, NFSMW_BANDLOG */
 static int   g_wide_splash;             /* the widescreen title's name is over the 4:3 one now */
-static unsigned long g_hits[13];
+static unsigned long g_hits[12];
 
 static int opt_is(const char *v, const char *s){ return v && !strcasecmp(v, s); }
 static void mws_init(void){
@@ -144,8 +145,7 @@ static void hud_apply(void){
      * the 16:9 HUD there too, its sides past the screen's) */
     g_wide_hud = g_hud == HUD_WIDE && hk < (g_wide1610 ? 0.84f : 0.76f);
     /* 16:9 and wider (unless NFSMW_WIDE_SPLASH=0): the widescreen title's name over the 4:3 one (both 20 bytes with
-     * their padding), so every reference (the flow tables at 0x8F3C68..0x8F4678, as 0x5705E0's answer) names
-     * WS_MW_LS_Splash.fng */
+     * their padding), so every reference (the flow tables at 0x8F3C68..0x8F4678) names WS_MW_LS_Splash.fng */
     int ws = g_wide_splash_opt && hk < 0.76f;
     if (ws != g_wide_splash && mem_is_committed(0x008a0114u) && mem_is_committed(0x008a0127u)){
         static const char wide[20] = "WS_MW_LS_Splash.fng", narrow[20] = "MW_LS_Splash.fng";
@@ -307,14 +307,14 @@ int mw_ws_hook(CPU *c, uint32_t va){
     case HOOK_SITE(0x006d1904):
         g_band_draw = 0;
         return 1;
-    /* The wide title (16:9 and wider), WidescreenFix's way: IsWidescreen 0x4FB000's answer (al) is 1 for the splash
-     * name 0x5705E0 (tested at 0x5705E5: WS_MW_LS_Splash.fng) and the title's construction (0x5A3060.., tested at
-     * 0x5A3080), so the package gets CURRENT_GEN_WIDESCREEN; the object 0x534CC377 is shown where it was hidden (its
-     * pointer, the argument of 0x514C70 at [esp], given to the show 0x514CC0 instead); and 0x525220 gets 0xC4DF3FF2
-     * ("CLICK to continue") for 0xC6CC55A4 */
-    case HOOK_SITE(0x005705e5):
+    /* The wide title (16:9 and wider), WidescreenFix's way: IsWidescreen 0x4FB000's answer (al) is 1 for the title's
+     * construction (called at 0x5A3079, tested at 0x5A3080), so the package gets CURRENT_GEN_WIDESCREEN; the object
+     * 0x534CC377 is shown where it was hidden (its pointer, the argument of 0x514C70 at [esp], given to the show
+     * 0x514CC0 instead); and 0x525220 gets 0xC4DF3FF2 ("CLICK to continue") for 0xC6CC55A4.  The package's name is
+     * hud_apply's copy over 0x8A0114 (WidescreenFix's edit of the splash name 0x5705E0 is not needed: nothing in v1.3
+     * calls it) */
     case HOOK_SITE(0x005a307e):
-        if (g_wide_splash){ c->eax = (c->eax & ~0xffu) | 1u; g_hits[va == 0x005705e5u ? 12 : 11]++; }
+        if (g_wide_splash){ c->eax = (c->eax & ~0xffu) | 1u; g_hits[11]++; }
         return 1;
     case HOOK_SITE(0x005a30b1):
         if (g_wide_splash){
@@ -360,7 +360,7 @@ void sub_0057e920(CPU *c){
 void ws_report(void){
     if (!g_init) return;
     fprintf(stderr, "ws: mw hooks fov=%lu/%lu origin=%lu mirror=%lu shadow=%lu wideflag=%lu movie=%lu labels=%lu"
-            " band=%lu/%lu/%lu title=%lu/%lu (k=%.4f, HUD %.4f, %s HUD)\n", g_hits[0], g_hits[1], g_hits[2], g_hits[3],
-            g_hits[4], g_hits[5], g_hits[6], g_hits[7], g_hits[8], g_hits[9], g_hits[10], g_hits[11], g_hits[12],
+            " band=%lu/%lu/%lu title=%lu (k=%.4f, HUD %.4f, %s HUD)\n", g_hits[0], g_hits[1], g_hits[2], g_hits[3],
+            g_hits[4], g_hits[5], g_hits[6], g_hits[7], g_hits[8], g_hits[9], g_hits[10], g_hits[11],
             (double)g_k, (double)g_hk, g_wide_hud ? "wide" : "4:3");
 }

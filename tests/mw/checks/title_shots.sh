@@ -17,12 +17,12 @@ grep -qF '[watchdog] no Present' "$LOG" && fail "a stall: $(grep -m1 -F '[watchd
 grep -qF 'app: the game exited (code 0) after the quit request' "$LOG" || fail "the game did not exit after WM_CLOSE"
 grep -qE 'quit at guest frame|forcing the exit' "$LOG" && fail "the run was ended for the game, not by it"
 # which title: the HUD's factor (4:3 / the screen's aspect) when the title came, and the wide title's construction
-# answered (widescreen_mw.c's report, title=construction/name); the wide one belongs to a 16:9 or wider screen
-# (no aspect line: the screen is the game's own 4:3, factor 1)
+# answered (widescreen_mw.c's report, title=N: the wide title's constructions); the wide one belongs to a 16:9 or
+# wider screen (no aspect line: the screen is the game's own 4:3, factor 1)
 hk=$(awk 'BEGIN { h = "1.0000" } /ws: game\/device aspect [0-9.]+, HUD /{ h = $0; sub(/.*, HUD /, "", h); sub(/:.*/, "", h) }
           /waitfng MW_LS_Splash.fng\|WS_MW_LS_Splash.fng satisfied/{ print h; exit }' "$LOG")
 [ -n "$hk" ] || fail "the title's wait never ended"
-built=$(grep -E 'ws: mw hooks ' "$LOG" | tail -1 | sed -nE 's/.* title=([0-9]+)\/[0-9]+ .*/\1/p')
+built=$(grep -E 'ws: mw hooks ' "$LOG" | tail -1 | sed -nE 's/.* title=([0-9]+)[/ ].*/\1/p')
 [ -n "$built" ] || fail "no widescreen report with the title's count"
 want=4:3; grep -q 'the wide title from 16:9' "$LOG" && awk -v h="$hk" 'BEGIN { exit !(h < 0.76) }' && want=wide
 got=4:3; [ "$built" -ge 1 ] && got=wide
