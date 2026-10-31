@@ -1,15 +1,18 @@
-# Most Wanted, free roam with friends: the pools probe (TRACKER M10-05).  One page (web/tools/roam-pair.mjs --game mw
-# --solo) with roam-crowd's simulated players on the same server, driving a real drive's route near the safehouse
-# (--track: the start of the pair's A.pose.csv, so the cars stand on the road): the career saved in free roam (--seed
-# <seeds>/freeroam) loads into free roam, waits for ROAM_WANT friends' cars (NFSU2_ROAM_MAX_CARS caps them, 6 unless
-# given; only friends within 300 m get one; the game's car loader refuses a seventh, logged with the check that refused
-# it), then logs the pools the cars use ([roampool]: rigid bodies of the game's 64, the vehicles, the car loader's and
-# the main memory pools) every 600 frames for 3,000 frames.  Then `roam mp drop` takes the friends' cars away and the
+# Most Wanted, free roam with friends: the pools probe (TRACKER M10-05, M10-29).  One page (web/tools/roam-pair.mjs
+# --game mw --solo) with roam-crowd's simulated players on the same server, driving a real drive's route near the
+# safehouse (--track: the start of the pair's A.pose.csv, so the cars stand on the road): the career saved in free roam
+# (--seed <seeds>/freeroam) loads into free roam, waits for ROAM_WANT friends' cars (NFSU2_ROAM_MAX_CARS caps them, 16
+# unless given, and sizes the car loader's pool for them; only friends within 300 m get one; a car the game would not
+# make is logged with the check that refused it), then logs the pools the cars use ([roampool]: rigid bodies of the
+# game's 64, the vehicles, the car loader's budget and the car loader's and main memory pools) every 600 frames for
+# 3,000 frames.  Then `roam mp drop` takes the friends' cars away and the
 # script waits for ROAM_WANT cars again, made anew from the next frame as any friend's (a car taken away and made
 # again), and logs the pools once more.  A crowd of cars that are not player cars (--cars is300,copheli) shows only
 # the player cars: the others' records are refused, one line each.
 #   node web/tools/roam-pair.mjs --game mw --solo --a Alice:roam_crowd_probe.txt --seed <seeds>/freeroam --data <MW> \
-#     --crowd 32 --crowd-args "--game mw --cars all --track <A.pose.csv>" --env ROAM_WANT=32 --env NFSU2_ROAM_MAX_CARS=32
+#     --crowd 16 --crowd-args "--game mw --cars all --track <A.pose.csv>" --env ROAM_WANT=16
+# (the world holds 20 vehicles, friends' cars, traffic and the police together, so more than 19 friends' cars can never
+# be made: ROAM_WANT above what the traffic leaves times out)
 0     waitmem 0x00925e90 3 3600                          # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # the seed's alias loaded

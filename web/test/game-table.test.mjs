@@ -162,9 +162,10 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   assert.doesNotMatch(read('runtime/game_ug2.c'), /file_env|\.bind\b/, 'UG2\'s server.dll entry sets neither');
   // its install: the D3DX math imports answered natively (d3dxmath_mw.c) and the two effect imports (d3dxfx_mw.c,
   // the oracle's in an oracle build unless NFSMW_D3DX_FX=hle), each told whether the oracle is linked; an oracle
-  // build also reads NFSMW_FXCENSUS, the effect census (fxcensus_mw.c), which no other build has
+  // build also reads NFSMW_FXCENSUS, the effect census (fxcensus_mw.c), which no other build has; first of all, with
+  // free roam's multiplayer on, the car loader's pool grows for friends' cars before the boot sizes it (roam_mw.c)
   assert.equal(t.get('install'), 'mw_install');
-  assert.match(src, /static void mw_install\(void\)\{\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+d3dxfx_install\(1\);\s+fxcensus_init\(\);\s+#else\s+d3dxmath_install\(0\);\s+d3dxfx_install\(0\);\s+#endif\s+\}/);
+  assert.match(src, /static void mw_install\(void\)\{\s+roam_mw_install\(\);\s+#if NFSU2_D3DX_ORACLE\s+d3dxmath_install\(1\);\s+d3dxfx_install\(1\);\s+fxcensus_init\(\);\s+#else\s+d3dxmath_install\(0\);\s+d3dxfx_install\(0\);\s+#endif\s+\}/);
   assert.match(read('runtime/mw/d3dxmath_mw.c'), /\nint d3dxmath_install\(int oracle_linked\)\{/);
   assert.match(read('runtime/mw/d3dxfx_mw.c'), /\nint d3dxfx_install\(int oracle_linked\)\{/);
   // the effects' objects (com.c com_new_d3dx) answer through d3dx_call and d3dx_free

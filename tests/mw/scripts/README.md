@@ -204,5 +204,12 @@ AI (`autopilot on`), B waiting for A's car to have moved 50 m (`roam mp waitpeer
 mp status`); roam-pair compares where B shows A's car with where A was (tools/roam_compare.py).
 `roam_crowd_probe.txt` is the pools probe (M10-05): one page with web/tools/roam-crowd.mjs --game mw's simulated players
 (give the crowd `--track` a pose log of a real drive, such as the start of the pair's A.pose.csv, so the cars stand on
-the road), `[roampool]` lines every 600 frames; the game's car loader takes six friends' cars beside the player's.  Then
+the road), `[roampool]` lines every 600 frames; the car loader's pool grows by a racing car's reserve for each friend's
+car (NFSU2_ROAM_MAX_CARS, 16 unless given; M10-29), and friends' cars share the world's 20 vehicles with traffic and
+the police (the budget's count, a hard limit of the game's vehicle lists).  Then
 `roam mp drop` takes the friends' cars away and they are made again (a friend's car taken away and made anew).
+`roam_mp_spawn_a.txt` and `roam_mp_spawn_b.txt` are a roam-pair --game mw pair for the spawn rule (M10-15): both
+careers load onto the one safehouse spot, so each page makes the other's car where its own car stands; that car comes
+as a ghost (it collides with no car) and neither car is shoved ("the player's car moved ... since ...'s car came"),
+then A drives off with the game's AI and each friend's car goes solid once clear of every other car.  The pair with
+`--env NFSU2_ROAM_GHOST=0` is the control (solid from the start: the shove).

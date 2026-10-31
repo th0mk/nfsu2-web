@@ -13,7 +13,9 @@
  *    body's place, orientation, velocities and speed, turned from the simulation's frame into the world's (below);
  *    its look (the vehicle's name and attribute key) goes as a car record when it changes;
  *  - each friend in free roam within NEAR_M whose state and record came gets a car of our own (up to
- *    NFSU2_ROAM_MAX_CARS, 6: the pools, M10-05) when the record's vehicle key is one of the career's player cars
+ *    NFSU2_ROAM_MAX_CARS, 16: the car loader's pool grown for them at the boot, roam_mw_install; within the world's
+ *    20 vehicles, shared with traffic and the police, VEH_MAX; M10-05, M10-29) when the record's vehicle key is one
+ *    of the career's player cars
  *    (PLAYER_CARS; the name shown is the table's, not the record's): a record of any other vehicle, the police's
  *    cars and helicopter, traffic, a boss's, gets none, with one line, and takes a car already shown away; the
  *    nearest first, one a frame: a PVehicle made the way the game
@@ -24,9 +26,12 @@
  *    SetOrientation by matrix, SetLinearVelocity, SetAngularVelocity), its steering, gas and brake into its
  *    IInput's controls, which its own suspension and lights read (the wheels are not yet seen on a screen); the
  *    physics still runs between two poses (solid cars: the game's own collisions), and a pose a frame holds it;
+ *    a new car is a ghost, colliding with no car, until it is clear of every other (ghost_frame, M10-15);
  *  - a car whose friend left, went into an event, stopped sending, went past FAR_M or out of the hub's list goes
  *    again (ISimable::Kill), and so do all of them when the player leaves free roam; a car the game took away
- *    itself (a world reload) is noticed by the rigid bodies' list and forgotten.  A car the game makes none of is
+ *    itself (a world reload) or gave to a car of its own is noticed (car_ours: its ISimable listed, its rigid body
+ *    the one we bound, driver class 4) and forgotten, never posed again; the budget's evictions leave ours alone
+ *    (H_BUDGET_EVICT).  A car the game makes none of is
  *    asked for again every RETRY_US, with one line saying which of Construct's checks refused it (mw_roam_hook).
  *
  * The frames.  The simulation's (where `where` and `teleport` work, UMath) is left-handed with Y up; the world's
@@ -46,6 +51,8 @@
  *   roam mp waitmoved N M [TMO]     wait until N friends' cars have each moved M metres since they appeared
  *   roam mp drop                    friends' cars away now (ISimable::Kill, as for a friend gone far), to be made
  *                                   again from the next frame as any new friend's (a car taken away and made again)
+ *   roam mp nanpoke                 NaN into the first friend's car's four wheels and its suspension (susp_guard puts
+ *                                   them back the next frame; M10-07)
  *   roam probe                      the player's car: rigid body, matrix, controls, driver class; the pools
  *   roam spawn [NAME]               a car of our own of that vehicle (the player's without one) 12 m ahead, posed
  *                                   there every frame as a friend's would be (no network: the pools probe, M10-05)
@@ -53,7 +60,8 @@
  *   roam pools                      the counts the friends' cars use up (rigid bodies, vehicles, those of driver
  *                                   class 4 as ours are, the car loader's memory pool): one [roampool] line
  * NFSU2_ROAM_POSELOG=<file> writes UG2's pose log (L rows the player's car, R rows friends' cars as shown, world
- * frame) for tools/roam_compare.py; NFSU2_ROAM_MAX_CARS caps the cars (6, DEF_CARS). */
+ * frame) for tools/roam_compare.py; NFSU2_ROAM_MAX_CARS caps the cars (16, DEF_CARS) and sizes the car loader's pool
+ * (NFSU2_ROAM_CARPOOL_KB sets it instead); NFSU2_ROAM_GHOST=0 makes friends' cars solid from the start. */
 #include "cpu.h"
 #include "game.h"
 #include "roam_core.h"
@@ -119,6 +127,23 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define CTL_STEER        0x04u
 #define CTL_GAS          0x14u
 #define CTL_BRAKE        0x18u
+/* ISuspension (Chassis' interface, 0x404040: registered at SuspensionSimple + 0x4C by the Chassis constructor, 0x6B1A70).
+ * A car of driver class 4 gets SuspensionSimple (0x13C bytes, factory 0x6B6B50, constructor 0x6B2630), whose
+ * ISuspension vtable is 0x8ABC30: its accessors (0x6AC1A0 to 0x6AC430) take a wheel's object from ISuspension + 0xE0
+ * + 4 i (SuspensionSimple + 0x12C, four of them: the wheel count method answers 4) and read its fields between +0x3C
+ * and +0x11C (vectors at +0x3C, +0x4C, +0x6C, +0x8C, +0x9C; floats such as +0x48, +0x78, the load the "on the
+ * ground" test reads, +0xC4, +0xD0, +0xD4, +0xE8, +0xEC, +0x100, +0x108, +0x118); the suspension's own floats are
+ * SuspensionSimple + 0xFC to + 0x128 (ISuspension + 0xB0 to + 0xDC) */
+#define IID_ROOM         0x004039c0u     /* the interface the rigid bodies' room check (0x6ED260) asks for: a vehicle whose
+                                          * +0x34 answers 1 may be killed to make room (M10-30 R6; not identified) */
+#define IID_ISUSPENSION  0x00404040u
+#define SUSP_SIMPLE_VT   0x008abc30u
+#define SUSP_WHEELS      0xe0u
+#define WHEEL_F0         0x3cu
+#define WHEEL_F1         0x120u
+#define SUSP_F0          0xb0u
+#define SUSP_F1          0xe0u
+#define GUARD_N          ((WHEEL_F1 - WHEEL_F0) / 4u)   /* 57 fields a wheel, 12 of the suspension */
 
 /* PVehicle::Construct's checks, in order (0x689820): each hook is the instruction after a check's call, where its answer
  * is in eax or on the stack.  While roam_mw.c makes a car (g_cons.on) the last one reached, with its answer, says
@@ -129,16 +154,45 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define H_CONS_SHAPE     HOOK_SITE(0x00689a0e)   /* its entry in the 0x8003B900 chunks' list (0x92C5B8, 0x681340): eax, +4 >= 1 */
 #define H_CONS_PARTS     HOOK_SITE(0x00689a5f)   /* 0x669080's flag, [esp+0x8c] & 1 */
 #define H_CONS_SIM       HOOK_SITE(0x00689b0c)   /* the car loader's budget, 0x687710 (al): the memory a new model takes (the table
-                                          * 0x904448: Racing 6,397 KB, read by 0x739F80) against [0x9B2C64] less what the
-                                          * PVehicles' models hold (0x683C80), and a count of 20 ([0x92CD24]); past them
-                                          * it would evict vehicles (none of ours: no cache), else 0.  Six new racing
-                                          * models fit beside the player's in crowd runs */
+                                          * 0x904448: Racing 6,397 KB, read by 0x739F80) against [0x9B2C64] (CarLoader +0x64,
+                                          * the pool's size) less what the PVehicles reserve (0x683C80: [PVehicle +0x190]
+                                          * each, a model of the type table's class 1 or 2 once), and a count of 20
+                                          * ([0x92CD24]); past them it would evict vehicles (none of ours: no cache),
+                                          * else 0.  The stock pool took six friends' cars beside the player's */
 #define H_CONS_ROOM      HOOK_SITE(0x00689b76)   /* the rigid bodies' room (0x6ED260, al) */
 #define H_CONS_MADE      HOOK_SITE(0x00689bf4)   /* the PVehicle made (eax) */
-static struct { int on, step; uint32_t val, val2; } g_cons;
+/* The budget's count (0x687710): its cmp eax, 0x14, eax the vehicles there ([0x92CD24], every PVehicle: the player's,
+ * traffic, the police, ours) plus the new ones ([esp+0x28]); [esp+0x10] is then the memory over the budget (bytes, 0
+ * for none).  More than 20 and the budget evicts what the asker's cache lets it (traffic's and the police's own cars),
+ * else it refuses.  Read here only, for the line that says why a friend's car was not made: the 20 is the world's
+ * room for vehicles, friends' cars included (VEH_MAX). */
+#define H_BUDGET_COUNT   HOOK_SITE(0x00687817)
+/* Over the budget, it lists every PVehicle as a candidate to go (records of 0x18 bytes at [esp+0x30], their count at
+ * [esp+0x38]: +0 the PVehicle, +0x10 1 = it may go), asks the asking manager's cache about each (its vtable +8, into
+ * +0x10), then every other cache in the list at 0x92FDA4, any of which keeps a car by answering 0, and evicts from
+ * what is left.  No cache keeps a car of ours (we made it with none), so traffic's manager, short of room at the 20,
+ * took friends' cars (c16c: two became traffic).  Here, between the two passes, ours are kept (+0x10 = 0). */
+#define H_BUDGET_EVICT   HOOK_SITE(0x00687978)
+static struct { int on, step; uint32_t val, val2, mem_over, count; } g_cons;
+static int ours_pvehicle(uint32_t pv);
+static unsigned g_evict_kept;
 static const char *const cons_step[] = { "the start", "the attributes", "the preset's customization", "the shape (0x8003B900 list)",
                                          "0x669080", "the car loader's budget (0x687710)", "the rigid bodies' room", "the PVehicle's construction" };
 int mw_roam_hook(CPU *c, uint32_t va){
+    if (va == H_BUDGET_COUNT){
+        if (g_cons.on){ g_cons.mem_over = MR32(c->esp + 0x10u); g_cons.count = c->eax; }
+        return 1;
+    }
+    if (va == H_BUDGET_EVICT){
+        uint32_t recs = MR32(c->esp + 0x30u), n = MR32(c->esp + 0x38u);
+        for (uint32_t i = 0; recs && i < n && i < 64u; i++){
+            uint32_t r = recs + 0x18u * i;
+            if (mem_is_committed(r) && mem_is_committed(r + 0x17u) && MR32(r + 0x10u) && ours_pvehicle(MR32(r))){
+                MR32(r + 0x10u) = 0; g_evict_kept++;
+            }
+        }
+        return 1;
+    }
     int st = va == H_CONS_ATTRIB ? 1 : va == H_CONS_CUSTOM ? 2 : va == H_CONS_SHAPE ? 3 : va == H_CONS_PARTS ? 4 : va == H_CONS_SIM ? 5
            : va == H_CONS_ROOM ? 6 : va == H_CONS_MADE ? 7 : 0;
     if (!st) return 0;
@@ -153,11 +207,22 @@ int mw_roam_hook(CPU *c, uint32_t va){
     return 1;
 }
 
-#define MAX_CARS         32
-#define DEF_CARS         6               /* the game's car loader takes six friends' cars beside the player's (its budget,
-                                          * H_CONS_SIM: 6,397 KB reserved a racing car of the pool's 50,000 KB; crowd runs
-                                          * of 16 and 32 friends, distinct models or all one, made 6): the first friend
-                                          * count (TRACKER M10-05) until the pool grows */
+/* The world holds at most VEH_MAX vehicles, every PVehicle counted: the player's, traffic, the police (the helicopter
+ * too) and friends' cars.  The car loader's budget refuses a 21st (its count, H_BUDGET_COUNT), and that count guards
+ * fixed structures: every PVehicle is in UTL::FixedVector lists of 20 (ten of 0x60 bytes from 0x92CD18: +0 the vtable
+ * 0x8918D8, +4 the array, +8 its room, +0xC the count, +0x10 the 20 entries, made by 0x680CC0; the vtable's allocator
+ * 0x424520 answers those 20 entries and its growth 0x424500 answers 20, so a 21st entry is written over the next
+ * list's head), and with those lists moved to room for 64 the game still trapped with 22 to 24 vehicles (M10-29:
+ * a cop made at 0x426380, in 0x67B520 under PVehicle's constructor; a lookup 0x5D51F0 in the sorted map at 0x92FEB0
+ * from 0x7817B0 in the sim's update).  So friends' cars share the 20 with the game's own: they are made while the count
+ * has room, traffic thins out as they come (its cop manager's share, 0x4262C0, is 20 less the vehicles there), and a
+ * friend's car the budget refuses is asked for again every RETRY_US. */
+#define VEH_MAX          20
+#define MAX_CARS         (VEH_MAX - 1)
+#define DEF_CARS         16              /* friends' cars at most (NFSU2_ROAM_MAX_CARS, D-60): the stock car loader took six
+                                          * beside the player's (its budget, H_CONS_SIM: 6,397 KB reserved a racing car of
+                                          * the pool's 50,000 KB; M10-05), so the pool grows by each friend's car's reserve
+                                          * (roam_mw_install, M10-29); more than 19 can never be made (VEH_MAX) */
 #define VISIBLE_US       2000000         /* a friend's snapshots older than this: not shown */
 #define GONE_US          10000000        /* its car goes when not shown this long */
 #define RETRY_US         2000000         /* a car the game would not make: asked again after this */
@@ -232,6 +297,15 @@ typedef struct {
     long     ctl_changed;        /* frames the game had changed them since (its own input clears them: then they do not hold) */
     long     frames;             /* frames posed */
     uint32_t cfg_gen;
+    int      ghost;              /* passes through every car (sub_0069ab60) until clear of the others (ghost_frame) */
+    int64_t  clear_us;           /* since when it is clear of every other car (0: it is not) */
+    float    gap;                /* while a ghost: the smallest gap between its bounding sphere and another car's (m) */
+    float    pl0[3];             /* where the player's car was when this car came (world), for the shove line */
+    long     pl_f;               /* that frame (0: logged) */
+    uint32_t susp;               /* its ISuspension when it is SuspensionSimple's (0 otherwise) */
+    float    snap[5][GUARD_N];   /* the four wheels' and the suspension's fields as last seen finite (susp_guard) */
+    uint64_t snap_ok[5];
+    unsigned nan_fixed, nan_said;
 } Car;
 
 static struct {
@@ -255,13 +329,24 @@ static struct {
     unsigned refused;            /* friends' car records naming no player car */
     uint32_t bad_id[RC_TABLE], bad_gen[RC_TABLE];   /* the record of that friend's logged last as naming none (its generation) */
     uint32_t local_id;
+    uint32_t pool_kb, pool_kb_game;                  /* the car loader's pool, grown (roam_mw_install) and the game's */
+    int ghost_on;                                    /* friends' cars come as ghosts (NFSU2_ROAM_GHOST, 1) */
+    unsigned nan_fixed;                              /* wheel and suspension fields put back (susp_guard) */
+    unsigned taken;                                  /* cars of ours the game made its own (car_ours) */
+    unsigned ghosts, solid, reghost, ghost_skips;    /* cars made ghosts, made solid again, ghosts again after a jump;
+                                                      * car pairs whose collision a ghost skipped */
 } R;
 static rc_session g_s;
 static Car g_car[MAX_CARS];
 static Car g_test[8];            /* roam spawn's cars */
 static int g_ntest;
 static char g_name[RC_NAME_MAX + 1];
-
+/* a PVehicle (its ISimable less 0x2C) of a car of ours */
+static int ours_pvehicle(uint32_t pv){
+    for (int k = 0; pv && k < MAX_CARS; k++) if (g_car[k].st && g_car[k].sim == pv + 0x2cu) return 1;
+    for (int k = 0; pv && k < g_ntest; k++) if (g_test[k].st && g_test[k].sim == pv + 0x2cu) return 1;
+    return 0;
+}
 static const char *opt(const char *k){ return getenv(k); }
 static int env_int(const char *k, int def, int lo, int hi){
     const char *v = opt(k);
@@ -269,6 +354,47 @@ static int env_int(const char *k, int def, int lo, int hi){
     int x = atoi(v);
     return x < lo ? lo : x > hi ? hi : x;
 }
+
+/* ---- the car loader's pool, grown for friends' cars (TRACKER M10-29, PLAN D-60) ----
+ * The car loader's memory is one pool ("Cars", bMemoryPool [0x904A00]) of CarLoaderPoolSizes[0] KB (0x8F7EF0, 50,000):
+ * the boot (InitializeEverything, 0x664A24) makes the main pool 0x7EF4000 bytes plus that and gives the car loader
+ * that much of it (CarLoader 0x9B2C00, 0x75C550: +0x60 the memory, +0x64 its size); each world load (0x666EC1) sets
+ * the same size again, which 0x75C550 leaves alone when it is unchanged (only another size frees and remakes the
+ * pool, and only when no ride is loaded: no shrink under live rides).  The budget a new car is checked against
+ * (H_CONS_SIM, 0x739F60) is +0x64.  So with free roam's multiplayer on, before the boot reads it, the size grows by
+ * one racing car's reserve (the table 0x904448, Player and Racing rows +0x10: 6,397 KB) for each friend's car
+ * (NFSU2_ROAM_MAX_CARS), and the game's own cars keep the budget they had; the main pool grows by as much.  The
+ * pool is that size from the boot on, in races and the front end too, and is never given back (Underground 2's lesson:
+ * an extra block given back while rides still lay in it broke the next load).  NFSU2_ROAM_CARPOOL_KB=<KB> sets
+ * the size instead (not below the game's).  On the guest thread, after win32_init, before the entry point. */
+#define G_CARPOOL_KB     0x008f7ef0u     /* CarLoaderPoolSizes[0] (KB) */
+#define G_CARLOADER      0x009b2c00u     /* CarLoader: +0x64 its pool's size (bytes) */
+#define G_RESERVE        0x00904448u     /* the reserve per model: rows of 0x18 bytes, +0x10 KB (Player, Racing, Cop, ...) */
+#define RESERVE_KB_GAME  6397u
+#define G_NVEHICLES      0x0092cd24u     /* every PVehicle: the count (the vector at 0x92CD18) */
+void roam_mw_install(void){
+    if (!env_int("NFSU2_ROAM", 0, 0, 1)) return;
+    int cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
+    uint32_t kb = MR32(G_CARPOOL_KB), res = 0;
+    for (uint32_t r = 0; r < 2u; r++){ uint32_t v = MR32(G_RESERVE + 0x18u * r + 0x10u); if (v > res) res = v; }
+    if (res < 1000u || res > 20000u) res = RESERVE_KB_GAME;
+    if (kb < 1000u || kb > 1000000u){
+        fprintf(stderr, "[roam] the car loader's pool reads %u KB, not the game's: left as it is\n", kb);
+        return;
+    }
+    uint32_t want = kb + (uint32_t)cars * res;
+    int ov = env_int("NFSU2_ROAM_CARPOOL_KB", 0, 0, 1000000);
+    if (ov) want = (uint32_t)ov < kb ? kb : (uint32_t)ov;
+    MR32(G_CARPOOL_KB) = want;
+    R.pool_kb = want; R.pool_kb_game = kb;
+    fprintf(stderr, "[roam] the car loader's pool %u -> %u KB (%d friends' cars, %u KB each%s)\n", kb, want, cars, res,
+            ov ? ", NFSU2_ROAM_CARPOOL_KB" : "");
+}
+
+/* the vehicles' lists (VEH_MAX), read for the pools line: the most entries in one, of its room */
+#define G_VLISTS         0x0092cd18u
+#define VLIST_N          10u
+#define VLIST_SZ         0x60u
 
 /* ---- the game's objects, read ---- */
 static uint32_t player_sim(CPU *c){
@@ -288,6 +414,12 @@ static int roaming(CPU *c){
 static int vehicle_listed(uint32_t rb){
     uint32_t b = rd(G_VEHLIST), n = rd(G_VEHLIST + 8u);
     for (uint32_t i = 0; rb && b && i < n && i < 256u; i++) if (rd(b + 4u * i) == rb) return 1;
+    return 0;
+}
+/* an ISimable of the game's vehicle list (G_SIMLIST) */
+static int sim_listed(uint32_t sim){
+    uint32_t b = rd(G_SIMLIST), n = rd(G_SIMLIST + 8u);
+    for (uint32_t i = 0; sim && b && i < n && i < 256u; i++) if (rd(b + 4u * i) == sim) return 1;
     return 0;
 }
 /* the rigid body's data block, 0 when it is not there */
@@ -381,7 +513,10 @@ static uint32_t make_car(CPU *c, uint32_t key, const float *pos, const float *fw
 }
 /* why the game made none: the last of Construct's checks it reached and its answer */
 static const char *cons_why(char *b, int n){
-    snprintf(b, (size_t)n, "at %s (0x%x%s)", cons_step[g_cons.step], g_cons.val, g_cons.step == 3 ? (g_cons.val ? ", count low" : ", none") : "");
+    if (g_cons.step == 5)               /* the budget: by memory, by count or both (H_BUDGET_COUNT saw them) */
+        snprintf(b, (size_t)n, "at %s (0x%x: %u KB over the memory budget of %u KB, %u vehicles with the new one)", cons_step[5],
+                 g_cons.val, g_cons.mem_over >> 10, rd(G_CARLOADER + 0x64u) >> 10, g_cons.count);
+    else snprintf(b, (size_t)n, "at %s (0x%x%s)", cons_step[g_cons.step], g_cons.val, g_cons.step == 3 ? (g_cons.val ? ", count low" : ", none") : "");
     return b;
 }
 static int car_bind(CPU *c, Car *k, uint32_t sim){
@@ -389,10 +524,67 @@ static int car_bind(CPU *c, Car *k, uint32_t sim){
     k->rb = vcall(c, sim, SIM_RB, 0, 0);
     k->in = query(c, sim, IID_IINPUT);
     k->veh = query(c, sim, IID_IVEHICLE);
+    k->susp = query(c, sim, IID_ISUSPENSION);
+    if (rd(k->susp) != SUSP_SIMPLE_VT) k->susp = 0;
     return k->rb && rb_data(k->rb) && k->veh;
 }
+/* A friend's car's wheels and suspension kept finite (M10-07; Underground 2's NaN suspension, LESSONS 18): every frame,
+ * before its pose, a field of the four wheels or the suspension that is not finite gets back the value it had when last
+ * seen finite (a field never seen finite is left alone: a -1 or a flag word).  Answers how many were put back. */
+static int susp_guard(Car *k){
+    if (!k->susp || rd(k->susp) != SUSP_SIMPLE_VT) return 0;
+    int fixed = 0;
+    for (uint32_t b = 0; b < 5u; b++){
+        uint32_t base = b < 4u ? rd(k->susp + SUSP_WHEELS + 4u * b) : k->susp, f0 = b < 4u ? WHEEL_F0 : SUSP_F0, f1 = b < 4u ? WHEEL_F1 : SUSP_F1;
+        if (!ok(base + f0, f1 - f0)) continue;
+        for (uint32_t o = f0, i = 0; o < f1; o += 4u, i++){
+            float v = rdf(base + o);
+            if (isfinite(v)){ k->snap[b][i] = v; k->snap_ok[b] |= 1ull << i; }
+            else if (k->snap_ok[b] >> i & 1u){ wrf(base + o, k->snap[b][i]); fixed++; }
+        }
+    }
+    return fixed;
+}
+/* the wheels whose fields (those ever seen finite) are all finite now; -1 without SuspensionSimple's */
+static int wheels_finite(const Car *k){
+    if (!k->susp || rd(k->susp) != SUSP_SIMPLE_VT) return -1;
+    int n = 0;
+    for (uint32_t b = 0; b < 4u; b++){
+        uint32_t w = rd(k->susp + SUSP_WHEELS + 4u * b), good = ok(w + WHEEL_F0, WHEEL_F1 - WHEEL_F0);
+        for (uint32_t o = WHEEL_F0, i = 0; good && o < WHEEL_F1; o += 4u, i++)
+            if ((k->snap_ok[b] >> i & 1u) && !isfinite(rdf(w + o))) good = 0;
+        n += good != 0;
+    }
+    return n;
+}
+/* the test aid's poke (roam mp nanpoke): NaN into a wheel's fields of each wheel and into the suspension's; how many */
+static int susp_poke(Car *k){
+    if (!k->susp || rd(k->susp) != SUSP_SIMPLE_VT) return 0;
+    static const uint32_t wf[] = { 0x3cu, 0x4cu, 0x50u, 0x54u, 0x48u, 0x78u, 0xd0u, 0xd4u, 0x100u, 0x108u, 0x118u };
+    float nan = NAN; int n = 0;
+    for (uint32_t b = 0; b < 4u; b++){
+        uint32_t w = rd(k->susp + SUSP_WHEELS + 4u * b);
+        if (!ok(w + WHEEL_F0, WHEEL_F1 - WHEEL_F0)) continue;
+        for (unsigned j = 0; j < sizeof wf / sizeof wf[0]; j++){ wrf(w + wf[j], nan); n++; }
+    }
+    if (ok(k->susp + SUSP_F0, SUSP_F1 - SUSP_F0)){ wrf(k->susp + SUSP_F0, nan); wrf(k->susp + SUSP_F0 + 4u, nan); n += 2; }
+    return n;
+}
+/* Still our car: the vehicle its ISimable names is in the game's list, its rigid body is the one we bound and it is
+ * of driver class 4, as only ours are.  A car the game took away and whose memory it gave at once to a car of its own
+ * (freed blocks are handed out again latest first, GAME 12.10) keeps our rigid-body pointer listed: a crowd of 16
+ * friends at the world's 20 vehicles (c16c, M10-29/M10-30 R4) had two friends' cars become traffic (driver class 1),
+ * still posed as the friends' cars for 3,000 frames.  The ISimable is checked in the list before it is called. */
+static int car_ours(CPU *c, const Car *k, unsigned *cls){
+    if (cls) *cls = 0;
+    if (!k->sim || !vehicle_listed(k->rb) || !sim_listed(k->sim)) return 0;
+    if (vcall(c, k->sim, SIM_RB, 0, 0) != k->rb) return 0;
+    uint32_t veh = query(c, k->sim, IID_IVEHICLE), dc = veh ? vcall(c, veh, VEH_CLASS, 0, 0) : 0xffffffffu;
+    if (cls) *cls = dc;
+    return veh == k->veh && dc == DRIVER_NONE;
+}
 static void car_kill(CPU *c, Car *k, const char *why){
-    if (k->sim && vehicle_listed(k->rb)){ vcall(c, k->sim, SIM_KILL, 0, 0); R.kills++; }
+    if (car_ours(c, k, 0)){ vcall(c, k->sim, SIM_KILL, 0, 0); R.kills++; }
     fprintf(stderr, "[roam] f=%ld %s's car (%s) away: %s, %ld frames shown, moved %.1f m\n", autotest_frame(), k->name, k->car,
             why, k->frames, (double)k->moved);
     memset(k, 0, sizeof *k);
@@ -435,6 +627,68 @@ static void car_pose(CPU *c, Car *k, const float *pw, const float *qw, const flo
     k->frames++;
 }
 
+/* ---- ghosts (M10-15's spawn rule) ----
+ * Both pages start on the safehouse's one spot, so a friend's car was made right where the player's car stood and
+ * shoved it 0.6 to 0.9 m (pair runs, wave 15).  So a friend's car comes as a ghost: it collides with no car until its
+ * bounding sphere is clear of every other vehicle's (the rigid bodies' list G_VEHLIST: the player's, traffic, the
+ * police, other friends') by GHOST_GAP_M for GHOST_HOLD_US; then it is solid.  It is a ghost again when its friend's
+ * car jumped more than GHOST_JUMP_M in a frame (a Jump to Safehouse, a reset).  The game's pair test (0x699940) asks
+ * both cars' collision rule (RBVehicle's, main vtable +0x48: 0x69AB60; RBRemote's 0x69B740) once their spheres
+ * (RBVehicle +0x118) meet, a->rule(b) && b->rule(a), and collides only when both answer 1: the rule answers 0 when
+ * either is a ghost of ours (sub_0069ab60).  It is symmetric, as the friend's page makes the player's car the same
+ * way.  NFSU2_ROAM_GHOST=0 (test aid): friends' cars solid from the start. */
+#define GHOST_GAP_M      1.0f
+#define GHOST_HOLD_US    300000
+#define GHOST_JUMP_M     20.f
+#define RB_RADIUS        0xd0u           /* IRigidBody + 0xD0 = RBVehicle + 0x118: the bounding sphere's radius (0x6998DB) */
+void sub_0069ab60_orig(CPU *c);
+static int g_nghost;
+static int is_ghost(uint32_t rbv){
+    for (int k = 0; k < MAX_CARS; k++) if (g_car[k].st && g_car[k].ghost && g_car[k].rb == rbv + 0x48u) return 1;
+    return 0;
+}
+/* RBVehicle's collision rule: thiscall (the other RBVehicle), al = 1 collide */
+void sub_0069ab60(CPU *c){
+    if (g_nghost && (is_ghost(c->ecx) || is_ghost(rd(c->esp + 4u)))){
+        R.ghost_skips++;
+        POP32(c->eip); c->esp += 4u; c->eax &= ~0xffu;        /* ret 4, al = 0 */
+        return;
+    }
+    sub_0069ab60_orig(c);
+}
+static float body_radius(uint32_t rb){ float r = rdf(rb + RB_RADIUS); return isfinite(r) && r > 0.3f && r < 20.f ? r : 3.f; }
+static void ghost_frame(int64_t host){
+    int n = 0;
+    uint32_t vb = rd(G_VEHLIST), vn = rd(G_VEHLIST + 8u);
+    for (int k = 0; k < MAX_CARS; k++){
+        Car *car = &g_car[k];
+        if (!car->st || !car->ghost) continue;
+        uint32_t d = rb_data(car->rb);
+        if (!d){ n++; continue; }
+        float ra = body_radius(car->rb), gap = 1e9f;
+        for (uint32_t i = 0; vb && i < vn && i < 256u; i++){
+            uint32_t o = rd(vb + 4u * i), od = o && o != car->rb ? rb_data(o) : 0u;
+            if (!od) continue;
+            float e2 = 0;
+            for (uint32_t j = 0; j < 3u; j++){ float e = rdf(d + RBD_POS + 4u * j) - rdf(od + RBD_POS + 4u * j); e2 += e * e; }
+            float g = sqrtf(e2) - ra - body_radius(o);
+            if (isfinite(g) && g < gap) gap = g;
+        }
+        car->gap = gap;
+        if (gap > GHOST_GAP_M){
+            if (!car->clear_us) car->clear_us = host;
+            else if (host - car->clear_us >= GHOST_HOLD_US){
+                car->ghost = 0; R.solid++;
+                fprintf(stderr, "[roam] f=%ld %s's car is clear of every other car (%.1f m): solid after %ld frames\n", autotest_frame(),
+                        car->name, gap > 1e8f ? -1.0 : (double)gap, car->frames);
+                continue;
+            }
+        } else car->clear_us = 0;
+        n++;
+    }
+    g_nghost = n;
+}
+
 /* ---- the session ---- */
 static void init_once(void){
     R.inited = 1;
@@ -442,6 +696,7 @@ static void init_once(void){
     if (!R.on) return;
     R.test = roam_plat_test_mode();
     R.max_cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
+    R.ghost_on = env_int("NFSU2_ROAM_GHOST", 1, 0, 1);
     int port = env_int("NFSU2_ROAM_PORT", RC_DEFAULT_PORT, 1024, 65535);
     int maxp = env_int("NFSU2_ROAM_MAX_PLAYERS", RC_MAX_PLAYERS, 2, RC_MAX_PLAYERS);
     const char *nm = opt("NFSU2_ROAM_NAME");
@@ -473,7 +728,8 @@ static void init_once(void){
     }
     R.frame0 = autotest_frame();
     fprintf(stderr, "[roam] free-roam multiplayer ON (Most Wanted): id %08x, port %d, %d configured peer(s), room \"%s\", up to %d "
-            "players, %d friends' cars, %d Hz%s\n", cf.self_id, port, np, rm ? rm : "", maxp, R.max_cars, cf.rate_hz,
+            "players, %d friends' cars (the car loader's pool %u KB, the game's %u), %s, %d Hz%s\n", cf.self_id, port, np, rm ? rm : "",
+            maxp, R.max_cars, R.pool_kb, R.pool_kb_game, R.ghost_on ? "ghosts until clear" : "solid from the start", cf.rate_hz,
             R.test ? ", test harness (loopback only)" : "");
 }
 
@@ -542,12 +798,19 @@ static float g_lp[3];
 static int g_lp_ok;
 
 static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
-    /* cars the game took away (a world reload): forgotten */
-    for (int k = 0; k < MAX_CARS; k++)
-        if (g_car[k].st && !vehicle_listed(g_car[k].rb)){
+    /* cars the game took away (a world reload) or gave to a car of its own: forgotten, never posed again (car_ours) */
+    for (int k = 0; k < MAX_CARS; k++){
+        unsigned cls = 0;
+        if (!g_car[k].st || car_ours(c, &g_car[k], &cls)) continue;
+        if (!vehicle_listed(g_car[k].rb))
             fprintf(stderr, "[roam] f=%ld %s's car is gone from the game's vehicles: forgotten\n", autotest_frame(), g_car[k].name);
-            R.lost++; memset(&g_car[k], 0, sizeof g_car[k]);
+        else {
+            fprintf(stderr, "[roam] f=%ld %s's car is the game's now (its ISimable %s, driver class %u): forgotten, not posed\n",
+                    autotest_frame(), g_car[k].name, sim_listed(g_car[k].sim) ? "listed" : "gone", cls);
+            R.taken++;
         }
+        R.lost++; memset(&g_car[k], 0, sizeof g_car[k]);
+    }
     for (int k = 0; k < g_ntest; k++) if (g_test[k].st && !vehicle_listed(g_test[k].rb)) memset(&g_test[k], 0, sizeof g_test[k]);
     if (!in_roam){
         for (int k = 0; k < MAX_CARS; k++) if (g_car[k].st) car_kill(c, &g_car[k], "not in free roam");
@@ -596,6 +859,12 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
     for (int k = 0; k < MAX_CARS; k++){
         Car *car = &g_car[k];
         if (!car->st) continue;
+        int fixed = susp_guard(car);
+        if (fixed){
+            car->nan_fixed += (unsigned)fixed; R.nan_fixed += (unsigned)fixed;
+            if (car->nan_said++ < 5)
+                fprintf(stderr, "[roam] f=%ld %s's car: %d wheel and suspension fields not finite: put back\n", autotest_frame(), car->name, fixed);
+        }
         View *v = 0;
         for (int i = 0; i < g_nv; i++) if (g_v[i].idx == car->peer && g_v[i].id == car->peer_id) v = &g_v[i];
         if (!v){ car_kill(c, car, "left"); continue; }
@@ -610,7 +879,21 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
             else if (host - car->far_us > FAR_US){ car_kill(c, car, "far away"); continue; }
         } else car->far_us = 0;
         car->seen_us = host;
+        if (R.ghost_on && !car->ghost && car->frames){       /* its friend's car jumped (a Jump to Safehouse, a reset): a ghost again */
+            float ps[3], e2 = 0; w2s(v->pose.p, ps);
+            for (int i = 0; i < 3; i++){ float e = ps[i] - car->last[i]; e2 += e * e; }
+            if (e2 > GHOST_JUMP_M * GHOST_JUMP_M){
+                car->ghost = 1; car->clear_us = 0; R.reghost++;
+                fprintf(stderr, "[roam] f=%ld %s's car jumped %.1f m: a ghost until clear\n", autotest_frame(), car->name, (double)sqrtf(e2));
+            }
+        }
         car_pose(c, car, v->pose.p, v->pose.q, v->pose.v, v->pose.w, v->pose.steer, v->pose.throttle, v->pose.brake);
+        if (car->pl_f && autotest_frame() - car->pl_f >= 120 && g_lp_ok){    /* how far the player's car went since this car came */
+            float dx = g_lp[0] - car->pl0[0], dy = g_lp[1] - car->pl0[1], dz = g_lp[2] - car->pl0[2];
+            fprintf(stderr, "[roam] f=%ld the player's car moved %.2f m in the %ld frames since %s's car came%s\n", autotest_frame(),
+                    (double)sqrtf(dx * dx + dy * dy + dz * dz), autotest_frame() - car->pl_f, car->name, car->ghost ? " (still a ghost)" : "");
+            car->pl_f = 0;
+        }
         float dx = v->pose.p[0] - car->p0[0], dy = v->pose.p[1] - car->p0[1], dz = v->pose.p[2] - car->p0[2];
         float d = sqrtf(dx * dx + dy * dy + dz * dz);
         if (d > car->moved) car->moved = d;
@@ -663,11 +946,15 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
     car->cfg_gen = best->cfg_gen;
     snprintf(car->name, sizeof car->name, "%s", best->name); snprintf(car->car, sizeof car->car, "%s", best->car);
     memcpy(car->p0, best->pose.p, sizeof car->p0);
+    car->ghost = R.ghost_on;
+    if (car->ghost){ R.ghosts++; g_nghost++; }
+    memcpy(car->pl0, g_lp, sizeof car->pl0); car->pl_f = autotest_frame();
     R.creates++;
     car_pose(c, car, best->pose.p, best->pose.q, best->pose.v, best->pose.w, best->pose.steer, best->pose.throttle, best->pose.brake);
-    fprintf(stderr, "[roam] f=%ld %s's car: %s (key %08x), ISimable 0x%08x, driver class %u, active %u, %.1f m away; rigid bodies %u of %u, "
-            "vehicles %u\n", autotest_frame(), car->name, car->car, car->key, sim, vcall(c, car->veh, VEH_CLASS, 0, 0) ,
-            vcall(c, car->veh, VEH_ACTIVE, 0, 0) & 0xffu, (double)best->dist, rd(G_RB_COUNT), RB_MAX, rd(G_VEHLIST + 8u));
+    fprintf(stderr, "[roam] f=%ld %s's car: %s (key %08x), ISimable 0x%08x, driver class %u, active %u, %.1f m away%s; rigid bodies %u of %u, "
+            "vehicles %u (PVehicles %u), the car loader's budget %u KB\n", autotest_frame(), car->name, car->car, car->key, sim,
+            vcall(c, car->veh, VEH_CLASS, 0, 0), vcall(c, car->veh, VEH_ACTIVE, 0, 0) & 0xffu, (double)best->dist,
+            car->ghost ? ", a ghost" : "", rd(G_RB_COUNT), RB_MAX, rd(G_VEHLIST + 8u), rd(G_NVEHICLES), rd(G_CARLOADER + 0x64u) >> 10);
 }
 
 /* ---- the test cars of `roam spawn`: posed where they were made, every frame ---- */
@@ -682,7 +969,7 @@ static void test_frame(CPU *c){
 }
 
 /* ---- the queued script work (guest calls at the anchor) ---- */
-enum { Q_NONE, Q_PROBE, Q_SPAWN, Q_UNSPAWN, Q_POOLS, Q_STATUS, Q_DROP };
+enum { Q_NONE, Q_PROBE, Q_SPAWN, Q_UNSPAWN, Q_POOLS, Q_STATUS, Q_DROP, Q_NANPOKE };
 static struct { int op; char arg[64]; } Q;
 
 /* the game's vehicles of driver class DRIVER_NONE, as ours are (the list at G_SIMLIST holds their ISimables): a car we
@@ -700,10 +987,14 @@ static void pools_line(CPU *c, const char *why){
     int ours = 0;
     for (int k = 0; k < MAX_CARS; k++) ours += g_car[k].st != 0;
     for (int k = 0; k < g_ntest; k++) ours += g_test[k].st != 0;
-    char b[512]; int o = 0;
+    char b[768]; int o = 0;
     o += snprintf(b + o, sizeof b - (size_t)o, "[roampool] f=%ld %s: our cars %d, rigid bodies %u of %u, rigid-body list %u, vehicles %u"
-                  " (driver class 4: %u)", autotest_frame(), why, ours, rd(G_RB_COUNT), RB_MAX, rd(G_VEHLIST + 8u), rd(G_SIMLIST + 8u),
-                  class4_vehicles(c));
+                  " (driver class 4: %u), PVehicles %u, the car loader's budget %u KB", autotest_frame(), why, ours, rd(G_RB_COUNT), RB_MAX,
+                  rd(G_VEHLIST + 8u), rd(G_SIMLIST + 8u), class4_vehicles(c), rd(G_NVEHICLES), rd(G_CARLOADER + 0x64u) >> 10);
+    uint32_t most = 0, mi = 0;
+    for (uint32_t i = 0; i < VLIST_N; i++){ uint32_t n = rd(G_VLISTS + i * VLIST_SZ + 0xcu); if (n > most){ most = n; mi = i; } }
+    o += snprintf(b + o, sizeof b - (size_t)o, ", the vehicles' lists: at most %u in one (list %u, room %u)", most, mi,
+                  rd(G_VLISTS + mi * VLIST_SZ + 8u));
     for (uint32_t i = 0; i < 16u && o < (int)sizeof b - 64; i++){
         uint32_t pp = rd(G_POOLS + 4u * i), nm = pp ? rd(pp) : 0u;
         if (!pp || !ok(nm, 4)) continue;
@@ -713,6 +1004,13 @@ static void pools_line(CPU *c, const char *why){
             o += snprintf(b + o, sizeof b - (size_t)o, ", %s %u of %u KB in %u", n, rd(pp + 0x30u) >> 10, rd(pp + 0x2cu) >> 10, rd(pp + 0x24u));
     }
     fprintf(stderr, "%s\n", b);
+}
+/* the room check's interface (IID_ROOM) of a vehicle: where it is (from its IRigidBody, RBVehicle + 0x48) and its +0x34 */
+static void room_line(CPU *c, uint32_t sim, uint32_t rb, const char *who){
+    uint32_t r = sim ? query(c, sim, IID_ROOM) : 0u;
+    if (!r){ fprintf(stderr, "[roam] %s interface 0x%x: none\n", who, IID_ROOM); return; }
+    fprintf(stderr, "[roam] %s interface 0x%x: 0x%08x (vtable 0x%08x, IRigidBody %+d), +0x34 answers %u\n", who, IID_ROOM, r, rd(r),
+            (int)(r - rb), vcall(c, r, 0x34u, 0, 0) & 0xffu);
 }
 static void probe(CPU *c){
     long f = autotest_frame();
@@ -745,6 +1043,8 @@ static void probe(CPU *c){
         o += snprintf(b + o, sizeof b - (size_t)o, " %08x", v);
     }
     fprintf(stderr, "[roam]   the vehicles' IRigidBody pointers:%s\n", b);
+    room_line(c, sim, rb, "  the player's car's");
+    for (int k = 0; k < g_ntest; k++) if (g_test[k].st) room_line(c, g_test[k].sim, g_test[k].rb, "  a test car's");
     uint32_t rs = rd(G_RACESTATUS);
     fprintf(stderr, "[roam]   flow %u, IsRoaming %u, race status activity 0x%08x, racing %u\n", game_flow(),
             gcall(c, FN_IS_ROAMING, 0, 0, 0) & 0xffu, rs ? rd(rs + 0x1968u) : 0u, rs ? MR8(rs + 0x198au) : 0u);
@@ -817,11 +1117,13 @@ static void status(CPU *c){
         int hc = ok(ctl, 0x24);
         fprintf(stderr, "[roam]   car %d: %s's %s, %ld frames posed, at %.1f %.1f %.1f (world), moved %.1f m, speed %.1f m/s, driver class %u, "
                 "listed %d, its controls steering %.2f gas %.2f brake %.2f (changed by the game in %ld frames), the game moved it at "
-                "most %.3f m between two poses\n",
+                "most %.3f m between two poses, %s (gap %.1f m), wheels finite %d of 4 (%u fields put back)\n",
                 k, car->name, car->car, car->frames, (double)pw[0], (double)pw[1], (double)pw[2], (double)car->moved,
                 (double)gcall_f(c, rd(rd(car->rb) + RB_GETSPEED), car->rb), vcall(c, car->veh, VEH_CLASS, 0, 0), vehicle_listed(car->rb),
                 hc ? (double)rdf(ctl + CTL_STEER) : 0.0, hc ? (double)rdf(ctl + CTL_GAS) : 0.0, hc ? (double)rdf(ctl + CTL_BRAKE) : 0.0,
-                car->ctl_changed, (double)car->drift);
+                car->ctl_changed, (double)car->drift, car->ghost ? "a ghost" : "solid", car->gap > 1e8f ? -1.0 : (double)car->gap,
+                wheels_finite(car), car->nan_fixed);
+        room_line(c, car->sim, car->rb, "    its");
     }
     pools_line(c, "status");
 }
@@ -840,6 +1142,14 @@ static void queued(CPU *c, int in_roam){
     case Q_DROP:
         for (int k = 0; k < MAX_CARS; k++) if (g_car[k].st) car_kill(c, &g_car[k], "dropped (roam mp drop)");
         break;
+    case Q_NANPOKE:{
+        int k = 0;
+        while (k < MAX_CARS && !(g_car[k].st && g_car[k].susp)) k++;
+        if (k == MAX_CARS){ fprintf(stderr, "[roam] f=%ld nanpoke: no friend's car with SuspensionSimple's wheels\n", autotest_frame()); break; }
+        int n = susp_poke(&g_car[k]);
+        fprintf(stderr, "[roam] f=%ld nanpoke: %d fields of %s's car (its four wheels' and its suspension's) made NaN; wheels finite %d of 4\n",
+                autotest_frame(), n, g_car[k].name, wheels_finite(&g_car[k]));
+        break; }
     default: break;
     }
     Q.op = Q_NONE;
@@ -883,6 +1193,7 @@ void roam_mw_frame(CPU *c){
                 (double)ls.p[0], (double)ls.p[1], (double)ls.p[2]);
     }
     cars_frame(c, in_roam, host, frame_dt);
+    ghost_frame(host);
     queued(c, in_roam);
 }
 
@@ -908,6 +1219,10 @@ void roam_game_report(void){
             "records of no player car %u\n",
             R.joins, R.leaves, R.creates, R.create_fail, R.fail_at[1], R.fail_at[2], R.fail_at[3], R.fail_at[4], R.fail_at[5], R.fail_at[6],
             R.fail_at[0] + R.fail_at[7], R.kills, R.lost, R.refused);
+    fprintf(stderr, "  [roam] ghosts: %u cars came as ghosts, %u went solid, %u ghosts again after a jump, %u car pairs' collisions skipped; "
+            "the car loader's pool %u KB (the game's %u); wheel and suspension fields put back %u; cars of ours kept from the budget's "
+            "evictions %u, made the game's own %u\n",
+            R.ghosts, R.solid, R.reghost, R.ghost_skips, R.pool_kb, R.pool_kb_game, R.nan_fixed, g_evict_kept, R.taken);
     fprintf(stderr, "  [roam] datagrams sent %llu (%llu bytes), received %llu (%llu bytes), blocked %llu, send errors %llu\n",
             (unsigned long long)ps.sent, (unsigned long long)ps.sent_bytes, (unsigned long long)ps.recv, (unsigned long long)ps.recv_bytes,
             (unsigned long long)ps.blocked, (unsigned long long)ps.send_err);
@@ -929,6 +1244,7 @@ int roam_cmd(CPU *c, const char *line, long *wait_start){
         if (!R.on){ fprintf(stderr, "[roam] f=%ld mp %s: multiplayer is off (NFSU2_ROAM=1)\n", f, w); return 1; }
         if (!strcasecmp(w, "status")){ if (Q.op) return 0; Q.op = Q_STATUS; return 1; }
         if (!strcasecmp(w, "drop")){ if (Q.op) return 0; Q.op = Q_DROP; return 1; }
+        if (!strcasecmp(w, "nanpoke")){ if (Q.op) return 0; Q.op = Q_NANPOKE; return 1; }
         if (!strcasecmp(w, "waitpeers") || !strcasecmp(w, "waitcars") || !strcasecmp(w, "waitmoved")){
             int want = atoi(a1);
             float metres = !strcasecmp(w, "waitmoved") ? (float)atof(a2) : 0.f;

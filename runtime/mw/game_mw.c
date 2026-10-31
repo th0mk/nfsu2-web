@@ -44,6 +44,7 @@ void roam_mw_frame(CPU *c);                     /* roam_mw.c: free roam with fri
 void mw_ws_frame(CPU *c);                       /* widescreen_mw.c: a title built for the screen's old shape made again */
 void mw_status_frame(CPU *c);                   /* status_mw.c: the chase, sampled for the page's state */
 void mw_status(StatusOut *s);                   /* status_mw.c: the page's state, at every Present */
+void roam_mw_install(void);                     /* roam_mw.c: the car loader's pool grown for friends' cars */
 /* once a pass of the main loop, between the update and the render: the test aids, friends' cars, the title, then the
  * page's state's sample (status_mw.c) */
 static void mw_on_frame(CPU *c){ mw_frame(c); roam_mw_frame(c); mw_ws_frame(c); mw_status_frame(c); }
@@ -105,8 +106,10 @@ static const InitTable mw_init_tables[] = {
 
 /* After win32_init, before the entry point (main_web.c): the D3DX math imports answered natively
  * (d3dxmath_mw.c, PLAN D-10), before module_load_imports binds what is left of d3dx9_26.dll's to the
- * oracle in an oracle build, which also reads NFSMW_FXCENSUS (fxcensus_mw.c) */
+ * oracle in an oracle build, which also reads NFSMW_FXCENSUS (fxcensus_mw.c); with free roam's multiplayer on,
+ * the car loader's pool grown before the boot sizes it (roam_mw.c) */
 static void mw_install(void){
+    roam_mw_install();
 #if NFSU2_D3DX_ORACLE
     d3dxmath_install(1);
     d3dxfx_install(1);

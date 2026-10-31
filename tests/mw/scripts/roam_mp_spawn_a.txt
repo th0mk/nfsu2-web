@@ -1,0 +1,26 @@
+# Most Wanted, free roam with friends: the spawn rule (TRACKER M10-15), instance A of web/tools/roam-pair.mjs --game mw
+# (--a Alice:roam_mp_spawn_a.txt --b Bob:roam_mp_spawn_b.txt).  Both careers saved in free roam load onto the one
+# safehouse spot, so each page makes the other's car where its own stands: the friend's car comes as a ghost (no
+# collision with any car) and goes solid once clear of every other car.  A stands until B's car is shown and 300
+# frames more (both cars on the one spot: each a ghost, neither shoved: "the player's car moved ... since ...'s car
+# came"), then drives off with the game's AI (autopilot) for 1,500 frames, so that B's car on this screen and A's on
+# B's are clear and solid, stops and closes.  NFSU2_ROAM_GHOST=0 on both is the control: solid cars that shove.
+0     waitmem 0x00925e90 3 3600                          # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # the seed's alias loaded
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6): free roam
++300  log roam_mp_spawn: free roam
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++300  roam mp status
++0    autopilot on
++1500 roam mp status
++0    autopilot off
++300  roam mp status
++2    log roam_mp_spawn: done
++0    close
