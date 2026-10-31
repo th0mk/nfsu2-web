@@ -86,6 +86,7 @@ int mw_aid_last_end(void);                    /* career_mw.c: 1 busted, 2 evaded
 void mw_aid_rapsheet(CPU *c, const char *why); /* pursuit_mw.c */
 void mw_aid_icons(CPU *c, int type);
 void mw_aid_pools(CPU *c, int watch);         /* pursuit_mw.c */
+void mw_aid_copcars(const char *why);         /* pursuit_mw.c: the cop cars asked for by name */
 double mw_game_time(void);
 
 #define G_PROFILES       0x0091cf90u     /* [+0x10] the user profile */
@@ -440,6 +441,12 @@ static struct {
     uint32_t cs_map[33];
     int cs_map_n, cs_ek, cs_tries;
     int stand, bust_n, pay_only;        /* bot bust N [pay]: the car stands in the pursuits until N busts */
+    int as_on, as_bin, as_won, as_ms, as_ready, as_resume, as_n;   /* NFSMW_BOT_AUTOSAVE: saves on the way (decide) */
+    int quick, quick_tries, quick_ok, quick_bin, bin_pursuits;   /* a quick pursuit for the escape-within milestone
+                                           (decide, pursuit_frame): on now, tried, met; the bin they count in */
+    int unsticks;                       /* unstick: the standing car set on a road before a forced pursuit, this time */
+    int rejoin_stand;                   /* pursuit_frame: the car stands where a rejoin set it (since rejoin_t) */
+    double rejoin_t;
     struct gates g;
 } B;
 static void set_state(int st, const char *why){
@@ -695,11 +702,43 @@ static long shows_nth(const char *s, const char *label, int i){
 }
 int mw_fe_shows(char *out, int cap);                         /* fe_mw.c */
 
+static void milestones_log(CPU *c, int bin);
+static float evasion_goal(CPU *c, int bin);
+static int ms_evasion(int bin, int *others);
+static void save_begin(void);
+/* NFSMW_BOT_AUTOSAVE=1 (bot run): a save at the safehouse whenever the bin has moved on since the last one (two more
+ * races won, a milestone more, the rival's requirements met, a new bin), then on from the safehouse menu.  A run the
+ * game ends (a trap: c6-b5r, heat 4, after 3,500 s) then leaves a save tree near where it stopped (--save-out is
+ * written after a trap too), not the seed it began with. */
+static int autosave_due(const struct gates *g){
+    if (!B.as_on || !B.target) return 0;
+    int ready = g->won >= g->won_req && g->ms >= g->ms_req && g->bounty >= g->bounty_req;
+    if (B.as_bin != g->bin){                /* the run's first decide, or a new bin (saved at once: the bin is the gate) */
+        int first = B.as_bin == 0;
+        B.as_bin = g->bin; B.as_won = g->won; B.as_ms = g->ms; B.as_ready = ready;
+        return !first;
+    }
+    if (g->won >= B.as_won + 2 || g->ms > B.as_ms || (ready && !B.as_ready)){
+        B.as_won = g->won; B.as_ms = g->ms; B.as_ready = ready;
+        return 1;
+    }
+    return 0;
+}
+#define QUICK_LEN     5.0f              /* a quick pursuit: the chase broken off at this length (s) */
+#define QUICK_MAX     10                /* quick pursuits in one bin, at most */
 static void decide(CPU *c){
     struct gates g; struct race r[MAX_RACES];
     if (!read_gates(c, &g)){ set_state(B_DONE, "no career"); return; }
     if (memcmp(&g, &B.g, sizeof g)){ log_gates(&g, "now"); if (g.cars != B.g.cars) log_cars(); }
+    if (g.bin != B.g.bin) milestones_log(c, g.bin);
     B.g = g;
+    if (autosave_due(&g) && !(B.target && g.bin <= B.target) && !(B.stop_ready && g.won >= g.won_req && g.ms >= g.ms_req &&
+                                                                   g.bounty >= g.bounty_req)){
+        B.as_n++; B.as_resume = 1;
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f autosave %d: bin %d races won %d milestones %d\n", autotest_frame(), mw_game_time(),
+                B.as_n, g.bin, g.won, g.ms);
+        save_begin(); set_state(B_SAVE, "autosave (NFSMW_BOT_AUTOSAVE)"); return;
+    }
     if (B.target && g.bin <= B.target){
         fprintf(stderr, "[mwbot] f=%ld t=%.1f reached bin %d (%ld frames after bot run)\n", autotest_frame(), mw_game_time(),
                 g.bin, autotest_frame() - B.run_f0);
@@ -722,7 +761,19 @@ static void decide(CPU *c){
     }
     if (g.won < g.won_req){ log_races(r, n); set_state(B_DONE, "races to win, none left to engage"); return; }
     if (B.stop_races){ set_state(B_DONE, "the races the rival asks are won (bot run N races)"); return; }
-    if (g.ms < g.ms_req || g.bounty < g.bounty_req){ set_state(B_PURSUIT, "milestones or bounty to earn"); return; }
+    if (g.ms < g.ms_req || g.bounty < g.bounty_req){
+        /* a bin with a pursuit_evasion_time milestone: its first pursuit and every other one after it is a quick one
+         * (pursuit_frame: the chase broken off at QUICK_LEN, the car hidden at once), until one of them raised the
+         * milestones, QUICK_MAX of them */
+        if (B.quick_bin != g.bin){ B.quick_bin = g.bin; B.quick_tries = 0; B.quick_ok = 0; B.bin_pursuits = 0; }
+        int others = 0, ev = ms_evasion(g.bin, &others);
+        B.quick = g.ms < g.ms_req && ev && ev != 4 && B.quick_tries < QUICK_MAX &&
+                  (B.bin_pursuits % 2 == 0 || (!others && g.bounty >= g.bounty_req)) && evasion_goal(c, g.bin) > 0.0f;
+        B.quick_tries += B.quick;
+        B.bin_pursuits++;
+        set_state(B_PURSUIT, B.quick ? "milestones to earn: a quick pursuit (escape within)" : "milestones or bounty to earn");
+        return;
+    }
     /* the rival's challenge: its first race is engaged at its start like the others */
     struct race b[8];
     int nb = read_races(c, g.binobj, b, 8, 1);
@@ -775,6 +826,7 @@ int mw_aid_icon_place(int type, int k, float pos[3]);   /* pursuit_mw.c: icon k 
 #define REJOIN_S      4.0               /* game seconds of the cops' search before the car goes back */
 #define REJOIN_BACK   3                 /* to where it was this many seconds before the search */
 #define REJOIN_MAX    8                 /* times in one pursuit */
+#define REJOIN_STAND_S 10.0             /* game seconds the car stands where a rejoin set it, at most */
 /* The chase's length at which it is broken off, by bin: ESCAPE_LEN, or longer when the bin has a pursuit_length
  * milestone (gameplay.bin milestones/bin_NN/challenge_N_pursuit_length): its goal is drawn between two values, fields
  * 0x8445AF47 and 0x3B9BBFC2 (bin 8: 360 and 600 s, bin 6: 420 and 660; bins 12 and 10 480 and 540 at most, bins 3 to 1
@@ -805,6 +857,89 @@ static float escape_len(CPU *c, int bin){
             hi > 0.0f ? "a pursuit_length milestone" : "no pursuit_length milestone", (double)cached);
     if (hi > 0.0f) fprintf(stderr, "[mwbot]   (its goal at most %.0f s)\n", (double)hi);
     return cached;
+}
+/* The bin's pursuit_evasion_time milestone ("Escape within", the chase's length at the evade: PostRace_Pursuit.fng's
+ * Escape_Within showed 9:04.78 for a chase of 545 s, c5-s5c): its first goal (0x8445AF47; the goals go down by 30 s to
+ * 0x3B9BBFC2: bins 5, 3 and 1 120 to 60 s, bin 7 180 to 90).  0 when the bin has none.  The chases of escape_len
+ * (600 s from heat 4 on) never meet it: in c5-s5a and c5-s5b bin 5 stood at 3 and 1 of its 4 milestones after 8 and
+ * 7 pursuits, the others (bounty, cost to state, spike strips) met by the long ones. */
+static float evasion_goal(CPU *c, int bin){
+    static int cached_bin = -1; static float cached;
+    if (bin == cached_bin) return cached;
+    char name[80]; snprintf(name, sizeof name, "milestones/bin_%02d/challenge_%d_pursuit_evasion_time", bin, bin);
+    uint32_t k3[3] = { h32(name), 0, 0 };
+    c->esp -= 0x40u;
+    uint32_t inst = c->esp;
+    memset(g_mem + inst, 0, 0x40);
+    call(c, FN_ATTRIB_INST, inst, 3, k3);
+    uint32_t a2[2] = { 0x8445af47u, 0 }, p = call(c, FN_ATTRIB_FIELD, inst, 2, a2);
+    uint32_t a3[2] = { F_MS_GOAL_HI, 0 }, q = call(c, FN_ATTRIB_FIELD, inst, 2, a3);
+    float lo = p ? rdf(p) : 0.0f, hi = q ? rdf(q) : 0.0f;
+    call(c, FN_ATTRIB_FREE, inst, 0, 0);
+    c->esp += 0x40u;
+    cached_bin = bin;
+    cached = lo > 0.0f && lo < 3600.0f ? lo : 0.0f;
+    fprintf(stderr, "[mwbot] f=%ld bin %d: %s", autotest_frame(), bin, cached > 0.0f ? "a pursuit_evasion_time milestone" :
+            "no pursuit_evasion_time milestone");
+    if (cached > 0.0f) fprintf(stderr, " (escape within %.0f to %.0f s): every other pursuit for milestones is a quick one\n",
+                               (double)lo, (double)hi);
+    else fprintf(stderr, "\n");
+    return cached;
+}
+/* The bin's milestones: gameplay.bin milestones/bin_NN/challenge_N_<kind> has the goals (0x8445AF47 the first, the
+ * one the game sets, 0x3B9BBFC2 the last, a step between), and the game keeps a record of 0x14 bytes for each (found
+ * by its collection key in a block GManager [0x91E00C] points at; V c6-b5r): +0 the key, +4 flags (byte 0 the state:
+ * 1 a later bin's, 2 open, 4 met; byte 1: 1 for "at least", 0 for "at most" (pursuit_evasion_time); byte 2 the bin),
+ * +8 the goal (float), +0xC the best value so far (float), +0x10 the kind's key.  Found once a bin (ms_tab). */
+#define F_MS_GOAL_LO     0x8445af47u
+static const char *const ms_kinds[] = { "cops_damaged", "pursuit_evasion_time", "pursuit_length", "total_infractions",
+    "cost_to_state", "cops_destroyed", "roadblocks_dodged", "tire_spikes_dodged", "cops_hit", "infractions" };
+#define MS_KINDS (int)(sizeof ms_kinds / sizeof ms_kinds[0])
+#define MS_EVASION 1
+static struct { int bin, n; struct { int kind; uint32_t key, rec; } m[MS_KINDS]; } ms_tab = { -1, 0, {{0, 0, 0}} };
+static uint32_t ms_find(uint32_t key, int bin){
+    uint32_t gm = rd(0x0091e00cu);
+    for (uint32_t go = 0; gm && go < 0x400u; go += 4u){
+        uint32_t blk = rd(gm + go);
+        if (blk < 0x00400000u || !mem_is_committed(blk)) continue;
+        for (uint32_t bo = 0; bo < 0x8000u && mem_is_committed(blk + bo + 0x13u); bo += 4u)
+            if (MR32(blk + bo) == key && (int)((MR32(blk + bo + 4u) >> 16) & 0xffu) == bin && MR32(blk + bo + 0x10u))
+                return blk + bo;
+    }
+    return 0;
+}
+static void ms_load(int bin){
+    if (ms_tab.bin == bin) return;
+    ms_tab.bin = bin; ms_tab.n = 0;
+    for (int i = 0; i < MS_KINDS; i++){
+        char name[80]; snprintf(name, sizeof name, "milestones/bin_%02d/challenge_%d_%s", bin, bin, ms_kinds[i]);
+        uint32_t key = h32(name), rec = ms_find(key, bin);
+        if (rec){ ms_tab.m[ms_tab.n].kind = i; ms_tab.m[ms_tab.n].key = key; ms_tab.m[ms_tab.n].rec = rec; ms_tab.n++; }
+    }
+}
+static int ms_state(int j){ return (int)(rd(ms_tab.m[j].rec + 4u) & 0xffu); }
+/* the bin's evasion milestone: 0 none, else its state (4 met); *others: the bin's other milestones not met */
+static int ms_evasion(int bin, int *others){
+    ms_load(bin);
+    int ev = 0, left = 0;
+    for (int j = 0; j < ms_tab.n; j++){
+        if (ms_tab.m[j].kind == MS_EVASION) ev = ms_state(j);
+        else left += ms_state(j) != 4;
+    }
+    if (others) *others = left;
+    return ev;
+}
+static void milestones_log(CPU *c, int bin){
+    (void)c;
+    ms_load(bin);
+    char b[900]; int o = 0;
+    for (int j = 0; j < ms_tab.n && o < 840; j++){
+        uint32_t r = ms_tab.m[j].rec, fl = rd(r + 4u);
+        o += snprintf(b + o, sizeof b - (size_t)o, " %s %s %.0f, best %.0f, %s;", ms_kinds[ms_tab.m[j].kind],
+                      (fl >> 8) & 0xffu ? ">=" : "<=", (double)rdf(r + 8u), (double)rdf(r + 12u),
+                      (fl & 0xffu) == 4 ? "met" : (fl & 0xffu) == 2 ? "open" : "state?");
+    }
+    fprintf(stderr, "[mwbot] f=%ld bin %d: %d milestones:%s\n", autotest_frame(), bin, ms_tab.n, ms_tab.n ? b : " none found");
 }
 static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
     struct gates g; struct race r[MAX_RACES];
@@ -903,6 +1038,35 @@ static int thrown_up(CPU *c, const float want[3]){
     return mw_aid_where(c, p, &kmh) && hypotf(p[0] - want[0], p[2] - want[2]) < 400.0f && p[1] > want[1] + THROWN_M;
 }
 static int road_place(const float p[3], float kmh){ return p[1] > TRAIL_Y_MIN && p[1] < TRAIL_Y_MAX && kmh < 400.0f; }
+/* A pursuit is forced only on a car the AI drives: one standing (the AI parks the player's car in a hiding spot in the
+ * cops' search and does not drive out after the evade: at sim -957 122 1847 in c5-s5c and c6-b5s) gets a forced
+ * pursuit whose one cop never sees it, a 12 s chase and a search to the evade (twice in a row in c6-b5s, 8 rejoins
+ * each to no cop).  So a car under UNSTICK_KMH when the pursuit is due is set at the place of the bin's race farthest
+ * from it, and the pursuit forced UNSTICK_S later (a few times, then forced as it stands).  1: not yet. */
+#define UNSTICK_KMH   30.0f
+#define UNSTICK_S     8.0
+#define UNSTICK_MAX   3
+static int unstick(CPU *c, double t){
+    float p[3] = { 0 }, kmh = 0;
+    if (!mw_aid_where(c, p, &kmh) || kmh >= UNSTICK_KMH || B.unsticks >= UNSTICK_MAX) return 0;
+    struct gates g; struct race r[MAX_RACES];
+    if (!read_gates(c, &g)) return 0;
+    int n = read_races(c, g.binobj, r, MAX_RACES, 0), best = -1;
+    float bd = 0;
+    for (int i = 0; i < n; i++){
+        float d = hypotf(r[i].pos[0] - p[0], r[i].pos[2] - p[2]);
+        if (r[i].params && !((B.fell_mask >> i) & 1u) && d > bd){ bd = d; best = i; }
+    }
+    if (best < 0) return 0;
+    B.unsticks++;
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f the car stands (%.0f km/h at %.0f %.0f %.0f) when the pursuit is due: to race %d's place, "
+            "%.0f m away, the pursuit %.0f s on (%d)\n", autotest_frame(), t, kmh, p[0], p[1], p[2], best, bd, UNSTICK_S, B.unsticks);
+    mw_aid_teleport(c, r[best].pos, r[best].dir);
+    mw_aid_autopilot(c, 1);
+    B.t0 = t - (PURSUIT_NATURAL_S > UNSTICK_S ? PURSUIT_NATURAL_S - UNSTICK_S : 0.0);
+    if (B.chase_s > 0.0) B.t0 = t - (CHASE_NATURAL_S > UNSTICK_S ? CHASE_NATURAL_S - UNSTICK_S : 0.0) ;
+    return 1;
+}
 static void pursuit_frame(CPU *c){
     uint32_t perp = 0, po = mw_aid_pursuit(c, &perp);
     double t = mw_game_time();
@@ -913,7 +1077,7 @@ static void pursuit_frame(CPU *c){
             mw_aid_autopilot(c, B.stand ? AP_STAND : 1); B.tries = 1; B.bounty0 = B.g.bounty;   /* bot bust: it stands */
         }
         if (po){
-            B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9;
+            B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9; B.unsticks = 0; B.rejoin_stand = 0;
             B.esc_recent[0] = B.esc_recent[1] = 0; B.hides = 0; B.hidden = 0;
             B.trail_n = 0; B.rejoins = 0; B.last_pst = 0; B.trail_t = -1e9; B.search_t = t;
             H.hides = 0; H.hidden = 0;
@@ -921,7 +1085,7 @@ static void pursuit_frame(CPU *c){
                     B.forced ? " (forced)" : " (by itself)", rdf(perp + PERP_HEAT), rdf(po + 0x9cu), rdf(po + 0xa0u),
                     rd(po + PURSUIT_COPS));
         } else if (B.tries == 1 && t - B.t0 >= (B.chase_s > 0.0 || B.stand ? CHASE_NATURAL_S : PURSUIT_NATURAL_S) &&
-                   free_roam(c)){
+                   free_roam(c) && !(B.stand ? 0 : unstick(c, t))){
             /* at the bin's top heat (the pursuit holds it in the bin's range anyway): forced at heat 1 the pursuits of
              * bin 14 mostly ended within 12 s for 100 bounty, while the one at heat 1.96 ran 176 s for 7,700 (bot run
              * of 2026-10-30) */
@@ -970,8 +1134,9 @@ static void pursuit_frame(CPU *c){
                 mw_aid_teleport(c, B.esc_pos, B.esc_dir); B.escape_t = t; B.esc_check++;
             } else B.esc_check = 0;
         }
+        float elen = B.quick ? QUICK_LEN : escape_len(c, B.g.bin);   /* a quick pursuit: broken off at once */
         if (!B.stand && pst < 2 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
-            (bust >= ESCAPE_BUST || len >= escape_len(c, B.g.bin)) && !mw_fe_input_top(0)){
+            (bust >= ESCAPE_BUST || len >= elen) && !mw_fe_input_top(0)){
             pursuit_escape(c, len, bust, rd(perp + 0x20u));
             B.trail_n = 0;                  /* no way back to where the car was boxed in */
         }
@@ -994,9 +1159,10 @@ static void pursuit_frame(CPU *c){
          * hiding spot and stands there (the AI let go) until the game ends the pursuit as evaded, or the chase comes
          * back (then the AI drives again).  At bin 8 a chase ran 804 s through 23 escapes to race places, each found
          * by the cops again within 20 s (c5-s8x).  The hiding spots are GManager's icons of type 11 (HIDING_SPOT_%d,
-         * 34 of them, listed only in the cops' search; pursuit_mw.c), in the world's axes.  Only with NFSMW_BOT_SEARCH
-         * unset (rejoin): "stay" leaves the search alone and "hide" hides at once (pursuit_hide). */
-        if (!B.stand && search_mode() == 0 && pst == 2 && !B.hidden && B.hides < ESC_HIDE_MAX && len >= escape_len(c, B.g.bin) &&
+         * 34 of them, listed only in the cops' search; pursuit_mw.c), in the world's axes; a quick pursuit's (a bin's
+         * open "escape within" milestone) at once.  Only with NFSMW_BOT_SEARCH unset (rejoin): "stay" leaves the
+         * search alone and "hide" hides at once (pursuit_hide). */
+        if (!B.stand && search_mode() == 0 && pst == 2 && !B.hidden && B.hides < ESC_HIDE_MAX && (len >= elen || B.quick) &&
             t - B.search_t >= 1.0 && !mw_fe_input_top(0)){
             float here[3], kmh = 0, w[3], best[3] = { 0 }, bd = 1e30f;
             if (mw_aid_where(c, here, &kmh))
@@ -1019,7 +1185,7 @@ static void pursuit_frame(CPU *c){
             mw_aid_autopilot(c, 1);
             B.hidden = 0;
         }
-        if (!B.stand && search_mode() == 0 && pst == 2 && len < escape_len(c, B.g.bin) && B.rejoins < REJOIN_MAX &&
+        if (!B.stand && search_mode() == 0 && !B.quick && !B.rejoin_stand && pst == 2 && len < elen && B.rejoins < REJOIN_MAX &&
             t - B.search_t >= REJOIN_S && B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
@@ -1038,6 +1204,17 @@ static void pursuit_frame(CPU *c){
                     f, t, B.rejoins, len, t - B.search_t, to[0], to[1], to[2], use_search ? " (the cops' search position)" : "");
             B.search_t = t;
             mw_aid_teleport(c, to, d);
+            /* and stands there, the AI let go, until the cops see it (the chase again) or REJOIN_STAND_S pass: driven
+             * by the AI from there, the car went straight to a hiding spot (the game's AI hides the player's car in
+             * the cops' search: it parked at sim -957 122 1847 pursuit after pursuit in c6-b5s, every rejoin wasted) */
+            mw_aid_autopilot(c, AP_STAND);
+            B.rejoin_stand = 1; B.rejoin_t = t;
+        }
+        if (B.rejoin_stand && (pst < 2 || t - B.rejoin_t >= REJOIN_STAND_S || bust >= ESCAPE_BUST)){
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit: %s after %.0f s standing where the rejoin set it; the AI drives\n", f, t,
+                    pst < 2 ? "the cops see the car" : bust >= ESCAPE_BUST ? "a cop at the car" : "no cop came", t - B.rejoin_t);
+            mw_aid_autopilot(c, 1);
+            B.rejoin_stand = 0;
         }
         if (t >= B.next_log){
             static double every = -1.0;     /* NFSMW_BOT_PLOG=S: a line every S game seconds (the car's track), else 15 */
@@ -1068,11 +1245,20 @@ static void pursuit_frame(CPU *c){
             "%s; bounty %d -> %d, milestones %d -> %d; pursuits %d, busted %d, evaded %d\n", f, t, B.plen, t - B.t0,
             B.escapes, B.rejoins, end == 1 ? "busted" : end == 2 ? "evaded" : "ended (no bust or evade seen)", B.bounty0,
             g.bounty, B.g.ms, g.ms, B.pursuits, B.busts, B.evades);
+    milestones_log(c, g.bin);
+    if (B.quick){
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f quick pursuit %d of the bin (escape within %.0f s): chase %.0f s, %s; milestones %d -> "
+                "%d%s\n", f, t, B.quick_tries, (double)evasion_goal(c, g.bin), B.plen, end == 1 ? "busted" : end == 2 ? "evaded" :
+                "ended", B.g.ms, g.ms, g.ms > B.g.ms && end == 2 ? ": the escape-within milestone taken as met" : "");
+        if (g.ms > B.g.ms && end == 2) B.quick_ok = 1;
+        B.quick = 0;
+    }
     mw_aid_rapsheet(c, end == 1 ? "after a bust" : end == 2 ? "after an evade" : "after a pursuit");
     mw_aid_icons(c, 12);                /* the world map's icons by type, the pursuit breakers' one by one */
     mw_aid_pools(c, 1);                 /* the memory pools, peaks since the first pursuit's end (M4-48, M4-35) */
+    mw_aid_copcars(end == 1 ? "busted" : end == 2 ? "evaded" : "ended");   /* the heat's cop units (M4-16) */
     mw_aid_autopilot(c, AP_STAND);
-    B.raced = 0; B.pursuit = 0; B.forced = 0;
+    B.raced = 0; B.pursuit = 0; B.forced = 0; B.rejoin_stand = 0;
     if (B.bust_n){                      /* bot bust: the next pursuit, until the busts asked for */
         uint32_t cur = rd(profile() + 0xa8u), cr = career_rec(profile(), cur);
         fprintf(stderr, "[mwbot] f=%ld t=%.1f bust: %d of %d busts; the current car %#x: strikes %d of %d, %s; Out of Jail "
@@ -1231,6 +1417,7 @@ int mw_fe_match(const char *name);                            /* fe_mw.c */
 #define F_NO_DLG   0xb8a7c6cdu          /* Dialog.fng's No, InGameDialog.fng's Cancel, MC_Main.fng's Yes */
 #define F_YES_DLG  0xb8a7c6ccu          /* Dialog.fng's Yes, InGameDialog.fng's OK, MC_Main.fng's No */
 static struct { char name[64]; uint32_t focus, save_last; long since, last, jail_since, cs_since; int taps, marker_enter, save_same, shown, mk_open, mk_cash, mk_cars, mk_taken, mk_moves, mk_held[MK_TYPES], cs_open; } S;
+static void save_begin(void){ S.save_same = 0; S.save_last = 0; }
 /* the screens whose strings the bot logs once they settle (the rewards and results it does not read otherwise) */
 static int shows_logged(const char *nm){
     static const char *const k[] = { "SafehouseMarkers.fng", "SafeHouseRivalChallenge.fng", "PostRace_Results.fng",
@@ -1514,7 +1701,8 @@ void mw_bot_present(void){
         if (mw_fe_match("MC_Main.fng'Save_complete.")){
             autotest_tap(DIK_RETURN, 6); S.last = f;
             fprintf(stderr, "[mwbot] f=%ld %s: Save complete, Enter\n", f, nm);
-            if (save) set_state(B_DONE, "saved");
+            if (save && B.as_resume){ B.as_resume = 0; set_state(B_ROAM, "saved; on from the safehouse (autosave)"); }
+            else if (save) set_state(B_DONE, "saved");
             return;
         }
         if (focus == F_YES_DLG){ key = DIK_LEFT; what = "LEFT to Yes"; } else what = "Enter on Yes";
@@ -1549,6 +1737,7 @@ void mw_bot_cmd(CPU *c, const char *args){
         if (!read_gates(c, &g)){ fprintf(stderr, "[mwbot] f=%ld gates: no career\n", f); return; }
         log_gates(&g, "asked");
         log_cars();
+        milestones_log(c, g.bin);
         { char b[200]; int o = 0;
           for (int i = 0; i < SHOP_CATS; i++) o += snprintf(b + o, sizeof b - (size_t)o, " %s %d", shop_cat_name[i], installed_level(i));
           fprintf(stderr, "[mwbot]   the current car's performance levels:%s\n", b); }
@@ -1564,6 +1753,7 @@ void mw_bot_cmd(CPU *c, const char *args){
         sscanf(args, "%*s %*d %15s %d", a3, &k);
         B.target = n; B.stop_races = !strcasecmp(a3, "races"); B.stop_wins = B.stop_races ? k : 0;
         B.stop_ready = !strcasecmp(a3, "ready");
+        { const char *e = getenv("NFSMW_BOT_AUTOSAVE"); B.as_on = e && atoi(e) > 0; }
         B.run_f0 = f;
         if (strcasecmp(a3, "keep")) pick_car();         /* bot run N keep: race the current car */
         mw_aid_autopilot(c, 2);

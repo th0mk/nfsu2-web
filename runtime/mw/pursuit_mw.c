@@ -72,7 +72,8 @@
  *             one.  Its callers pick the name: the pursuit's (0x4266E9: "copheli" for the helicopter's kind
  *             [0x92C4F4]; 0x426726: the heat's table through 0x419AE0, else "copmidsize"), the roadblock's
  *             (0x43EBCB) and others (0x41F1CD, 0x41F588, 0x42E729, 0x431495).  Counted by name for each pursuit and
- *             logged at its end with the pools (mw_pursuit_end).
+ *             logged at its end with the pools (mw_pursuit_end), and for the career bot's pursuits at each one's end
+ *             (mw_aid_copcars: the cop units of each heat, TRACKER M4-16).
  * The cops' search (the cooldown, the pursuit's state +0x218 == 2; its update about 0x4447F8..0x444A00, esi the
  * pursuit's base + 8, the pursuit object at esi + 0x40): +0xFC the meter, (+0x124 + +0x128) / +0x104, evaded at 1
  * (state 4); +0x128 the search's time (dt each frame, 0x4440E5), +0x124 a bonus that grows by dt x a rate (the
@@ -143,7 +144,7 @@ static unsigned long n_rbt_lines;
 unsigned long mw_pursuit_breakers(void){ return n_breaker; }     /* career_mw.c: `pursuit wait breaker` */
 /* the cop cars asked for by name since the last pursuit's end (the names are the game's own strings) */
 #define N_COPNAMES 16
-static struct { char name[24]; unsigned long n, all; } copcar[N_COPNAMES];
+static struct { char name[24]; unsigned long n, all, bn; } copcar[N_COPNAMES];   /* bn: since the bot's last mw_aid_copcars */
 static unsigned long n_copcar_lines;
 static void copcar_count(uint32_t s, uint32_t from){
     char nm[24] = "?";
@@ -152,10 +153,22 @@ static void copcar_count(uint32_t s, uint32_t from){
     while (i < N_COPNAMES && copcar[i].name[0] && strcmp(copcar[i].name, nm)) i++;
     if (i < N_COPNAMES){
         if (!copcar[i].name[0]) memcpy(copcar[i].name, nm, sizeof nm);
-        copcar[i].n++; copcar[i].all++;
+        copcar[i].n++; copcar[i].all++; copcar[i].bn++;
     }
     if (mw_aid_pw_on() && n_copcar_lines++ < 400)
         fprintf(stderr, "[mwpursuit] f=%ld cop car asked: %s (from 0x%08x)\n", autotest_frame(), nm, from);
+}
+/* the bot's pursuit end: the cop cars asked for since the bot's last one, by name (and in all so far), and the
+ * roadblocks put up (counted apart from mw_pursuit_end's, which the game's own ends reset) */
+void mw_aid_copcars(const char *why){
+    char b[600]; int o = 0;
+    b[0] = 0;
+    for (int i = 0; i < N_COPNAMES && copcar[i].name[0] && o < 560; i++){
+        o += snprintf(b + o, sizeof b - (size_t)o, " %s %lu (%lu)", copcar[i].name, copcar[i].bn, copcar[i].all);
+        copcar[i].bn = 0;
+    }
+    fprintf(stderr, "[mwpursuit] f=%ld cop cars asked by name (%s), this pursuit (all):%s; roadblocks put up %lu, "
+            "breakers %lu\n", autotest_frame(), why, o ? b : " none", n_roadblock, n_breaker);
 }
 int mw_pursuit_hook(CPU *c, uint32_t va){
     if (va == SITE_ROADBLOCK_TRY){
