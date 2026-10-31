@@ -218,9 +218,9 @@ typedef struct GameOps {
                                      * speed test that sleeps between two clock reads sees its sleep; 0 = UG2's
                                      * clock, which stands at the cap there apart from its creep */
     int tick_monotonic;             /* 1: the exe's GetTickCount never answers less than it answered any thread
-                                     * before (win32.c), as Windows' never goes back: the virtual clock can step
-                                     * back between threads (a read that straddles the frame's step, the creep
-                                     * folded in after a load), and DirtySock's CommUDP takes a datagram's
+                                     * before (win32.c), as Windows' never goes back: the virtual clock can
+                                     * answer threads out of order (a read handed out after another thread's
+                                     * later one), and DirtySock's CommUDP takes a datagram's
                                      * receive tick (the socket thread's) later than its own tick (another read)
                                      * as 2^32 ms of silence and drops the race link (TRACKER M8-28); 0 = UG2's,
                                      * whose network tick is on real time (game_ug2.c) */

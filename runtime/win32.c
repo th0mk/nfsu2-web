@@ -75,6 +75,9 @@ static _Atomic uint64_t g_vclock_base  = 0;   /* virtual time at frame start */
 static _Atomic uint64_t g_vclock_creep = 0;   /* busy-wait compensation     */
 static _Atomic uint64_t g_real_base    = 0;   /* real time of that frame    */
 static _Atomic uint32_t g_vclock_polls = 0;
+/* odd while vclock_tick moves the three above (its one writer, the thread that presents); host_us reads them again
+ * when it changed meanwhile, so no read mixes two frames */
+static _Atomic uint32_t g_vclock_seq   = 0;
 
 #ifdef __wasm__
 #include "web/host_abi.h"
@@ -112,7 +115,6 @@ void vclock_report(void){
             (double)(v1 - v0)/1e6, (double)(r1 - r0)/1e6);
 }
 void vclock_tick(void){
-    uint64_t cr = atomic_exchange(&g_vclock_creep, 0ull);
     uint64_t now = real_us();
     /* Per-frame advance.
      *   VCLOCK=fixed : exactly 16.667 ms per frame (old behaviour).  When the
@@ -140,8 +142,14 @@ void vclock_tick(void){
             if (step < fl) step = fl; }
           if (step > 50000ull) step = 50000ull;   /* huge dt -> catch-up loop */
       }
-      atomic_fetch_add(&g_vclock_base, step + cr); }
-    atomic_store(&g_real_base, now);
+      /* The creep folded in, the base moved on and the frame's real time, as one change to host_us: a read between
+       * them took the new base with the old real time (one step ahead, up to 50 ms) or lost the creep (behind, by
+       * seconds after a long load), and the next read went back. */
+      atomic_fetch_add(&g_vclock_seq, 1u);
+      uint64_t cr = atomic_exchange(&g_vclock_creep, 0ull);
+      atomic_fetch_add(&g_vclock_base, step + cr);
+      atomic_store(&g_real_base, now);
+      atomic_fetch_add(&g_vclock_seq, 1u); }
     atomic_store(&g_vclock_polls, 0);
     { uint64_t v = atomic_load(&g_vclock_base);
       if (!atomic_load(&g_rt_start)){ atomic_store(&g_rt_start, real_us());
@@ -185,6 +193,9 @@ void vclock_sleep_end(uint64_t t0){
 }
 uint64_t host_us(void){
     { uint64_t fz = atomic_load(&g_vclock_freeze); if (__builtin_expect(fz != 0, 0)) return fz; }
+    uint32_t seq;
+again:
+    while ((seq = atomic_load(&g_vclock_seq)) & 1u) {}     /* vclock_tick is between its writes */
     uint64_t base = atomic_load(&g_vclock_base);
     uint64_t rb   = atomic_load(&g_real_base);
     uint64_t now  = real_us();
@@ -223,13 +234,16 @@ uint64_t host_us(void){
              * frame's extra game time small. */
             atomic_fetch_add(&g_vclock_creep, 1ull);
     }
-    return base + d + atomic_load(&g_vclock_creep);
+    uint64_t cr = atomic_load(&g_vclock_creep);
+    if (atomic_load(&g_vclock_seq) != seq) goto again;     /* a frame's step came in between: read it whole */
+    return base + d + cr;
 }
 uint32_t host_ms(void){ return (uint32_t)(host_us() / 1000ull) + 1000u; }
 /* the exe's GetTickCount: host_ms, and with GameOps tick_monotonic never less than the latest value any thread
- * was given (compared modulo 2^32, as the counter wraps): the virtual clock above can step back between threads
- * (a read whose base and real_base straddle vclock_tick, or one between its creep's reset and the base's add,
- * which after a long load is seconds), and Most Wanted's CommUDP takes a datagram's receive tick, read on
+ * was given (compared modulo 2^32, as the counter wraps): host_ms can still answer threads out of order (a read
+ * handed out after another thread's later one, mostly 1 ms behind: thousands in a race; VCLOCK=fixed, or a
+ * VCLOCK_MAXD over 50 ms, whose frame step can be less than the frame ran; before host_us read a frame's step
+ * whole, a read that straddled vclock_tick too), and Most Wanted's CommUDP takes a datagram's receive tick, read on
  * DirtySock's socket thread, minus its own later read as unsigned: one step back there is 2^32 ms of silence,
  * past its 120 s timeout (0x8509C6), and it drops the race link with a DISC (TRACKER M8-28).  A read behind the
  * latest answer gets the latest; the first ones, and every 1000th, are logged.  NFSU2_TEST_TICK_BACK=1 answers
