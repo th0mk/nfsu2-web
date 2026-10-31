@@ -94,7 +94,12 @@ reference (its ADPCM takes 309 kbit/s in stereo):
     -V 3  190 kbit/s, -0.27 to -0.46, -0.37
     -V 4  179 kbit/s, -0.36 to -0.54, -0.46
 -V 0 is the default, the one as close to the original as Underground 2's pack
-(-0.07): 534 MB -> 405 MB (76 %), 7 minutes on 12 cores.
+(-0.07): 534 MB -> 405 MB (76 %), 7 minutes on 12 cores.  The whole pack,
+decoded by the runtime's decoder (tools/mw/el3_test.c), every stream to the
+sample count of its original, against the original, per track (476 runs of
+consecutive stereo streams of 20 s or more, and the 14 four-channel streams'
+first 40 s, each of their pairs): -0.06 on average, -0.16 at worst, none
+under -0.2.
 """
 import argparse, array, os, shutil, struct, subprocess, sys
 from multiprocessing import Pool
