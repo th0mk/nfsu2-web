@@ -43,6 +43,16 @@
  *   NFSU2_TEST_RESET_LEAK=1   the game's own leak at every device restore (TRACKER M7-40, B-012; reset_leak below):
  *                             two managed objects are made again over their old pointers, a texture and an index
  *                             buffer a Reset; the fix releases each old one first.
+ *   NFSU2_TEST_PURSUIT_GROUP=1 a torn-down cop left in a pursuit's group of cops.  The pursuit holds a group at its
+ *                             base + 0x1DC (made by 0x433080: vehicles at +0xC, their count at +0x14, a countdown at
+ *                             +0x74); 0x42B410 walks it when the countdown runs out (from the pursuit's update
+ *                             0x443BA0) or the group is let go (0x4330F0), and asks each vehicle's object ([v+4]) for
+ *                             an interface (0x42B465: `push 0x4038E0`, then 0x5D59F0, which reads the object's
+ *                             interface table at [obj+4]..[obj+8]).  A cop torn down in the pursuit stays in the
+ *                             group, its object gone: an out-of-bounds read in 0x5D59F0 (heat 4 and 5: c5-s7b, c6-b5r
+ *                             from the update, c6-b3y from 0x4330F0).  The fix hands 0x5D59F0 an object with an empty
+ *                             table when the vehicle's is not one (not in memory, or a table that is not a table):
+ *                             the query answers none, and the walk passes that vehicle over (0x42B473).
  * Each fix logs its first 20 hits ("[fix] f=N ..."). */
 #include "cpu.h"
 #include "game.h"
@@ -146,7 +156,39 @@ static int reset_leak(CPU *c, uint32_t va){
                 old, slot, left);
     return 1;
 }
+/* the pursuit's group of cops (NFSU2_TEST_PURSUIT_GROUP above): at 0x42B465 ecx is the vehicle's object, about to be
+ * asked for an interface; an object whose interface table is not one gets a stand-in with an empty table */
+#define GROUP_QUERY_SITE HOOK_SITE(0x0042b465)
+static int iface_table_ok(uint32_t obj){
+    if (obj < 0x10000u || !mem_is_committed(obj) || !mem_is_committed(obj + 0xbu)) return 0;
+    uint32_t b = MR32(obj + 4u), e = MR32(obj + 8u);
+    if (e < b || e - b > 0x800u || ((e - b) & 7u)) return 0;
+    return b == e || (b >= 0x10000u && mem_is_committed(b) && mem_is_committed(e - 1u));
+}
+static int group_query_hook(CPU *c){
+    static int off = -1, hits;
+    static uint32_t stand_in;
+    if (iface_table_ok(c->ecx)) return 1;
+    if (test_switch("NFSU2_TEST_PURSUIT_GROUP", &off)){
+        if (hit_log(&hits))
+            fprintf(stderr, "[fix] f=%ld TEST: pursuit group: vehicle 0x%08x's object 0x%08x has no interface table (0x42B465); "
+                    "the game's way\n", autotest_frame(), c->edi, c->ecx);
+        return 1;
+    }
+    if (!stand_in){
+        stand_in = com_scratch(0x10u);  /* {?, begin, end}: begin == end, an empty table */
+        if (!stand_in) return 1;
+        MR32(stand_in + 4u) = stand_in + 0xcu; MR32(stand_in + 8u) = stand_in + 0xcu;
+    }
+    if (hit_log(&hits))
+        fprintf(stderr, "[fix] f=%ld pursuit group: vehicle 0x%08x's object 0x%08x has no interface table (a torn-down cop, "
+                "0x42B465); passed over\n", autotest_frame(), c->edi, c->ecx);
+    c->ecx = stand_in;
+    return 1;
+}
+
 int mw_fix_hook(CPU *c, uint32_t va){
+    if (va == GROUP_QUERY_SITE) return group_query_hook(c);
     if (va == ENVCUBE_SITE || va == QUADIB_SITE) return reset_leak(c, va);
     if (va == PURECALL_ADD_SITE) return purecall_add_hook(c);
     if (va == CRT_PURECALL_SITE){ purecall_caller(c); return 1; }
