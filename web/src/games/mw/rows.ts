@@ -6,7 +6,7 @@ import { N } from '../../app/i18n';
 
 /** a row's help text where the game words it its own way, by settings.ini key */
 export const HELP: Readonly<Record<string, string>> = {
-  language: N('The game\'s menus and text in English, French, German, Italian, Spanish, Dutch, Swedish, Danish or Polish (in the other languages the game stays in English), and this page.'),
+  language: N('The game\'s menus and text in English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Finnish or Polish (in the other languages the game stays in English), and this page.'),
   intro: N('The EA logo, the PSA and the attract movie. Skippable: Enter, Esc, Space, a left click, or A, B or Start ends each one. Original: as in the game, where the EA logo plays to its end.'),
   fps: N('Auto follows the display (120 on a 120 Hz screen, 240 on a 240 Hz one). 30 is steadier where 60 stutters, and easier on the battery.'),
   background: N('Pause freezes the game and its sound, as alt-tab does on Windows.'),

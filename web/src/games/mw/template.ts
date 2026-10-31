@@ -36,9 +36,10 @@ export const TEMPLATE = `# NFS Most Wanted settings, read at every launch.
 #intro = skippable
 
 # The game's language: english, french, german, italian, spanish, dutch,
-# swedish, danish or polish have the game's text in them; with korean,
-# chinese, japanese, russian, thai, portuguese or turkish the game stays in
-# English and only this page changes.  The voices are English.
+# swedish, danish, finnish or polish have the game's text in them; with
+# korean, chinese, japanese, russian, thai, portuguese, turkish or hungarian
+# the game stays in English and only this page changes.  The voices are
+# English.
 # [NFSU2_LANGUAGE]
 #language = english
 
