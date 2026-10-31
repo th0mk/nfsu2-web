@@ -15,6 +15,7 @@ import { touchFirst } from './device';
 import { t } from './i18n';
 import { pageDialog } from './padnav';
 import { onlineName } from './claim';
+import { at } from '../base';
 
 /** two names of one player: the same Online form, in any case (the name over a car, a claimed name) */
 function sameName(a: string, b: string): boolean {
@@ -35,7 +36,7 @@ export class FriendsApi {
   private async ask(init?: RequestInit): Promise<FriendLists | null> {
     const tk = await this.token().catch(() => null);
     if (!tk) return null;
-    const r = await fetch('/friends', { ...init, headers: { ...init?.headers, authorization: `Bearer ${tk}` }, cache: 'no-store' });
+    const r = await fetch(at('friends'), { ...init, headers: { ...init?.headers, authorization: `Bearer ${tk}` }, cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     const names = (v: unknown) => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];

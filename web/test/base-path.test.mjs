@@ -60,15 +60,15 @@ test('blockRuns: the same server, under the manifest\'s folder, resolved against
   // a server under a base: its own path, or one relative to the manifest
   assert.deepEqual(runs('/u2/data-blocks/v2/', U2), { url: 'https://both.example/u2/data-blocks/v2/', max: 8 });
   assert.deepEqual(runs('data-blocks/v2/', U2), { url: 'https://both.example/u2/data-blocks/v2/', max: 8 });
-  // outside the base (the root's, the other game's), another origin, a query the file's path would follow: none,
-  // so byte ranges of data/ under the base
+  // outside the base (the root's, the other game's), another origin, a query the file's path would follow: refused
+  // (since main dropped the byte ranges of data/, blockRuns throws: the page has no game data then)
   for (const u of ['/data-blocks/v2/', '/mw/data-blocks/v2/', '../data-blocks/v2/', '/u2x/data-blocks/', 'https://evil.example/u2/data-blocks/v2/',
     '//evil.example/u2/', 'http://both.example/u2/data-blocks/v2/', '/u2/data-blocks/v2/?x=1', '/u2/data-blocks/v2/#x', 'http://[', 7])
-    assert.equal(runs(u, U2), null, String(u));
+    assert.throws(() => runs(u, U2), /names no blocks/, String(u));
   // not this cache's block size, no runs at all
-  assert.equal(B.blockRuns({ files: [], blocks: { url: '/u2/data-blocks/v2/', size: 65536, max: 8 } }, U2), null);
-  assert.equal(B.blockRuns({ files: [], blocks: { url: '/u2/data-blocks/v2/', size: B.BLOCK, max: 0 } }, U2), null);
-  assert.equal(B.blockRuns({ files: [] }, U2), null);
+  assert.throws(() => B.blockRuns({ files: [], blocks: { url: '/u2/data-blocks/v2/', size: 65536, max: 8 } }, U2), /names no blocks/);
+  assert.throws(() => B.blockRuns({ files: [], blocks: { url: '/u2/data-blocks/v2/', size: B.BLOCK, max: 0 } }, U2), /names no blocks/);
+  assert.throws(() => B.blockRuns({ files: [] }, U2), /names no blocks/);
   // the manifest's own address must be absolute: a worker resolves nothing against its own
   assert.throws(() => runs('data-blocks/v2/', '/u2/data-manifest'));
 });
@@ -190,8 +190,11 @@ function audit(dist, dev) {
 }
 
 test('the built page names no address at the server\'s root: scripts, stylesheets, pages, manifest.json (each game)', { timeout: 120_000 }, t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-path-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // web/ in a copy of the repository: the page's changelog is the repository's CHANGELOG.md, beside web/
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'base-path-')), root = path.join(top, 'web');
+  t.after(() => fs.rmSync(top, { recursive: true, force: true }));
+  fs.mkdirSync(root);
+  fs.copyFileSync(path.join(WEB, '..', 'CHANGELOG.md'), path.join(top, 'CHANGELOG.md'));
   // build.mjs builds the folder it is in: this page's sources, linked
   fs.copyFileSync(path.join(WEB, 'build.mjs'), path.join(root, 'build.mjs'));
   fs.copyFileSync(path.join(WEB, 'index.html'), path.join(root, 'index.html'));
@@ -229,8 +232,11 @@ test('the built page names no address at the server\'s root: scripts, stylesheet
 // baseOf knows the page's main.js by its name alone: a main.js in a folder would take that folder for the base, so
 // build.mjs refuses one, and any bundle neither at the base nor one folder below it (before it builds anything)
 test('build.mjs refuses a bundle base.ts would not place', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-path-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // web/ in a copy of the repository: the page's changelog is the repository's CHANGELOG.md, beside web/
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'base-path-')), root = path.join(top, 'web');
+  t.after(() => fs.rmSync(top, { recursive: true, force: true }));
+  fs.mkdirSync(root);
+  fs.copyFileSync(path.join(WEB, '..', 'CHANGELOG.md'), path.join(top, 'CHANGELOG.md'));
   for (const d of ['src', 'node_modules']) fs.symlinkSync(path.join(WEB, d), path.join(root, d));
   const build = fs.readFileSync(path.join(WEB, 'build.mjs'), 'utf8');
   const main = "'main': 'src/main.ts',";

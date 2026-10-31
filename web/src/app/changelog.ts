@@ -1,8 +1,9 @@
 // The header's Changelog: a popup with the releases of CHANGELOG.md, newest first, as web/build.mjs writes them to
-// /changelog.json.  Fetched the first time it opens, again after a failure.  The changes stay in English (lang="en");
+// changelog.json under the page's base.  Fetched the first time it opens, again after a failure.  The changes stay in English (lang="en");
 // the popup's own words and the releases' dates follow the page's language.
 
 import { dateLocale, onLanguage, t } from './i18n';
+import { at } from '../base';
 
 /** one release: its date (yyyy-mm-dd), the last commit it brings, and its changes as [area, text] ('' area: none) */
 type Release = { date: string; commit: string; changes: [string, string][] };
@@ -27,7 +28,7 @@ export function changelog(button: HTMLElement, dialog: HTMLDialogElement, body: 
     }));
   };
   const load = async () => {
-    const r = await fetch('/changelog.json', { cache: 'no-cache' });
+    const r = await fetch(at('changelog.json'), { cache: 'no-cache' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     releases = await r.json() as Release[];
     draw();

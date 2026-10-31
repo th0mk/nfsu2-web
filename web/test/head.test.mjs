@@ -24,8 +24,11 @@ import { fileURLToPath } from 'node:url';
 import { pageHtml } from '../tools/i18n-keys.mjs';
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'head-'));
-test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+// web/ in a copy of the repository: the page's changelog is the repository's CHANGELOG.md, beside web/
+const top = fs.mkdtempSync(path.join(os.tmpdir(), 'head-')), root = path.join(top, 'web');
+test.after(() => fs.rmSync(top, { recursive: true, force: true }));
+fs.mkdirSync(root);
+fs.copyFileSync(path.join(WEB, '..', 'CHANGELOG.md'), path.join(top, 'CHANGELOG.md'));
 fs.copyFileSync(path.join(WEB, 'build.mjs'), path.join(root, 'build.mjs'));
 fs.copyFileSync(path.join(WEB, 'index.html'), path.join(root, 'index.html'));
 for (const d of ['src', 'node_modules']) fs.symlinkSync(path.join(WEB, d), path.join(root, d));
