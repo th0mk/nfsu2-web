@@ -268,6 +268,9 @@ const GameOps g_game = {
                                                  * a race's world (~170 MB of them) and the game's own heap
                                                  * (~200 MB) no longer share it */
     .vclock_sleep_real = 1,                     /* the boot's CPU speed test (0x6CAF90) sees its Sleep(50) */
+    .tick_monotonic = 1,                        /* GetTickCount never steps back between threads: DirtySock's
+                                                 * CommUDP drops the race link on a datagram stamped after its own
+                                                 * tick (TRACKER M8-28; win32.c exe_tick_ms) */
     .flow = mw_flow,                            /* fe_mw.c: GameFlowManager's state [0x925E90] */
     .flow_fe = 3,
     .flow_race = 6,

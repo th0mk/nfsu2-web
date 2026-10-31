@@ -226,6 +226,42 @@ uint64_t host_us(void){
     return base + d + atomic_load(&g_vclock_creep);
 }
 uint32_t host_ms(void){ return (uint32_t)(host_us() / 1000ull) + 1000u; }
+/* the exe's GetTickCount: host_ms, and with GameOps tick_monotonic never less than the latest value any thread
+ * was given (compared modulo 2^32, as the counter wraps): the virtual clock above can step back between threads
+ * (a read whose base and real_base straddle vclock_tick, or one between its creep's reset and the base's add,
+ * which after a long load is seconds), and Most Wanted's CommUDP takes a datagram's receive tick, read on
+ * DirtySock's socket thread, minus its own later read as unsigned: one step back there is 2^32 ms of silence,
+ * past its 120 s timeout (0x8509C6), and it drops the race link with a DISC (TRACKER M8-28).  A read behind the
+ * latest answer gets the latest; the first ones, and every 1000th, are logged.  NFSU2_TEST_TICK_BACK=1 answers
+ * host_ms as before (the test switch, L-063). */
+static uint32_t exe_tick_ms(void){
+    uint32_t v = host_ms();
+    static _Atomic int mode = -1;               /* 0 as host_ms, 1 never back */
+    int m = atomic_load(&mode);
+    if (m < 0){
+        const char *e = getenv("NFSU2_TEST_TICK_BACK");
+        m = g_game.tick_monotonic && !(e && *e == '1');
+        if (g_game.tick_monotonic)
+            fprintf(stderr, "[clock] the game's GetTickCount %s\n", m ? "never steps back between threads"
+                    : "answers the virtual clock as it is (test switch NFSU2_TEST_TICK_BACK=1)");
+        atomic_store(&mode, m);
+    }
+    if (!m) return v;
+    static _Atomic uint32_t last, backs;
+    uint32_t l = atomic_load(&last);
+    for (;;){
+        if (l && (int32_t)(v - l) <= 0){
+            if (v != l){
+                uint32_t n = atomic_fetch_add(&backs, 1u) + 1u;
+                if (n <= 5u || n % 1000u == 0u)
+                    fprintf(stderr, "[clock] GetTickCount: a read %u ms behind the latest answer gets that answer (%u so far)\n",
+                            l - v, n);
+            }
+            return l;
+        }
+        if (atomic_compare_exchange_weak(&last, &l, v)) return v;
+    }
+}
 uint64_t host_qpc(void){ return host_us(); }
 
 uint32_t win32_block_size(uint32_t u){ return gheap_usize(u); }
@@ -594,7 +630,7 @@ int win32_call(CPU *c, uint32_t idx){
     else if (!strcmp(n,"GetCurrentProcess"))     r = 0xffffffffu;
     else if (!strcmp(n,"GetLastError"))          r = win32_get_last_error(c);
     else if (!strcmp(n,"SetLastError")){         win32_set_last_error(c, ARG(c,0)); r = 0; }
-    else if (!strcmp(n,"GetTickCount")) r = host_ms();
+    else if (!strcmp(n,"GetTickCount")) r = exe_tick_ms();
     else if (!strcmp(n,"QueryPerformanceFrequency")){ uint32_t p=ARG(c,0); if(p){MR32(p)=1000000;MR32(p+4)=0;} r=1; }
     else if (!strcmp(n,"SetUnhandledExceptionFilter")) r = 0;
     else if (!strcmp(n,"UnhandledExceptionFilter"))    r = 0;

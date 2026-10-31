@@ -30,6 +30,7 @@ const UG2_UNSET = {
   d3d9_strict: 'UG2\'s runtime keeps its own D3D9 answers (descriptors, GetType, multisampling, failed creators, Reset sizes)',
   d3d_host_backing: 'UG2\'s Lock buffers stay in the guest\'s memory for the resource\'s life, as they always have',
   vclock_sleep_real: 'UG2\'s virtual clock stands at the in-frame cap apart from its creep, as it always has',
+  tick_monotonic: 'UG2\'s exe GetTickCount answers the virtual clock as it always has (its network tick is on real time)',
   fe_object: 'UG2\'s scripts wait on its screens and memory: $O names no object there',
   on_sound_position: 'Most Wanted\'s sound thread watch; UG2\'s GetCurrentPosition answers as it always did',
   sound_wall_catchup: 'the wall clock\'s old rule: a backlog over 100 ms dropped, the cursors a slice at a time',
