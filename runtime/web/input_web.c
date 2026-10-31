@@ -271,12 +271,13 @@ typedef struct { int kind, x, y, dx, dy; unsigned btn; uint64_t us; } MouseStep;
 static MouseStep g_ms[MOUSE_STEPS];
 static int g_ms_head, g_ms_n;
 static int g_view_x = 640, g_view_y = 360, g_view_dx, g_view_dy;   /* what the game has taken */
+static int g_view_placed;                     /* the game has taken a position the pointer gave (game.h cursor_away) */
 static unsigned g_view_btn;
 static long g_view_frame = -1;
 static pthread_mutex_t g_ms_mx = PTHREAD_MUTEX_INITIALIZER;
 static void step_take(void){                  /* g_ms_mx held */
     const MouseStep *s = &g_ms[g_ms_head];
-    if (s->kind != MS_BTN){ g_view_x = s->x; g_view_y = s->y; g_view_dx += s->dx; g_view_dy += s->dy; }
+    if (s->kind != MS_BTN){ g_view_x = s->x; g_view_y = s->y; g_view_dx += s->dx; g_view_dy += s->dy; g_view_placed = 1; }
     else g_view_btn = s->btn;
     g_ms_head = (g_ms_head + 1) % MOUSE_STEPS; g_ms_n--;
 }
@@ -340,8 +341,14 @@ void metal_get_cursor(int *x, int *y){
           if (x) *x = ax; if (y) *y = ay; return; } }
     mouse_take();
     pthread_mutex_lock(&g_ms_mx);
-    if (x) *x = g_view_x;
-    if (y) *y = g_view_y;
+    int vx = g_view_x, vy = g_view_y;
+    if (g_game.cursor_away && !g_view_placed){
+        /* the pointer has not been over the game yet: a whole client area above and left of it */
+        unsigned lw = 1280, lh = 720; metal_game_size(&lw, &lh);
+        vx = -(int)lw; vy = -(int)lh;
+    }
+    if (x) *x = vx;
+    if (y) *y = vy;
     pthread_mutex_unlock(&g_ms_mx);
 }
 static uint32_t mouse_mk(int flags){

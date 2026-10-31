@@ -41,6 +41,7 @@ const UG2_UNSET = {
   d3dx_call: 'UG2\'s D3DX is in its exe (lifted, runtime/d3dx_hle.c): no ID3DXEffect object of com.c\'s is ever made',
   d3dx_free: 'as d3dx_call',
   file_alt: 'UG2\'s movies in another language take lang_suffixes, as they always have',
+  cursor_away: 'UG2\'s cursor starts at the page\'s first position (640,360), as it always has',
 };
 // the fields Most Wanted leaves 0 (its table's comment says the same), and why
 const MW_UNSET = {
