@@ -50,11 +50,16 @@ char *strstr(const char *h, const char *n){
 
 static rc_session S;
 static uint8_t IO[4096];                     /* a datagram, or the name, car type and parts */
+static uint8_t GAME;                         /* the players' game (RC_GAME_*): Underground 2 unless crowd_game says */
 static void io_send(void *u, uint32_t ip, uint16_t port, const uint8_t *b, int n){ (void)u; js_send(ip, port, b, n); }
 static void io_event(void *u, int ev, int peer, const char *t){ (void)u; (void)peer; js_event(ev, t, (int)strlen(t)); }
 
 /* the buffer the script writes a name or a received datagram into */
 __attribute__((export_name("crowd_io"))) uint8_t *crowd_io(void){ return IO; }
+
+/* the game the players play (RC_GAME_*), before crowd_init: another game than Underground 2 says so in its HELLO, and
+ * a hub of another game refuses it */
+__attribute__((export_name("crowd_game"))) void crowd_game(uint32_t game){ GAME = (uint8_t)game; }
 
 /* name (in IO, 0-terminated), id, room hash, a crew's hash (0: none), the hub's address, our port, the car type's
  * name hash, states per SNAP */
@@ -64,6 +69,7 @@ __attribute__((export_name("crowd_init"))) void crowd_init(uint32_t id, uint32_t
     cf.self_id = id; cf.port = (uint16_t)port; cf.room = room; cf.platform = RC_PLAT_TOOL;
     if (crew){ cf.crews[0] = crew; cf.n_crews = 1; }
     cf.max_players = RC_MAX_PLAYERS; cf.rate_hz = 20; cf.snap_states = (int)states; cf.hub_ip = hub_ip; cf.hub_port = (uint16_t)port;
+    cf.game = GAME;
     rc_name_clean(cf.name, (const char *)IO, RC_NAME_MAX);
     rc_io io = { 0, io_send, 0, io_event };
     rc_session_init(&S, &cf, &io);

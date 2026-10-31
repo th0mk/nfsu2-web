@@ -1,0 +1,28 @@
+# Most Wanted, free roam with friends: the pools probe (TRACKER M10-05).  One page (web/tools/roam-pair.mjs --game mw
+# --solo) with roam-crowd's simulated players on the same server, driving a real drive's route (--track: the pair's
+# A.pose.csv; on roam-crowd's circles at one height the farther cars stand where the world is not, and the game makes
+# none of them): the career saved in free roam (--seed <seeds>/freeroam) loads into free roam, waits for ROAM_WANT
+# friends' cars (NFSU2_ROAM_MAX_CARS caps them, 16 unless given; only friends within 300 m get one), then logs the
+# pools the cars use ([roampool]: rigid bodies of the game's 64, the vehicles, the car loader's and the main memory
+# pools) every 600 frames for 3,000 frames.
+#   node web/tools/roam-pair.mjs --game mw --solo --a Alice:roam_crowd_probe.txt --seed <seeds>/freeroam --data <MW> \
+#     --crowd 32 --crowd-args "--game mw --cars all --track <A.pose.csv>" --env ROAM_WANT=32 --env NFSU2_ROAM_MAX_CARS=32
+0     waitmem 0x00925e90 3 3600                          # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # the seed's alias loaded
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6): free roam
++300  log roam_crowd_probe: free roam
++0    roam pools
++0    roam mp waitcars ${ROAM_WANT} 6000
++0    roam mp status
++0    loop 5
++600  roam pools
++0    endloop
++0    roam mp status
++0    log roam_crowd_probe: done
++0    close

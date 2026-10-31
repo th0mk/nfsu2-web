@@ -160,6 +160,7 @@ int mw_pursuit_hook(CPU *c, uint32_t va);      /* pursuit_mw.c: roadblocks and p
 int mw_ws_hook(CPU *c, uint32_t va);           /* widescreen_mw.c: the screen's shape (FOV, HUD, mirror, movie) */
 int mw_sound_hook(CPU *c, uint32_t va);        /* sound_mw.c: a car into and out of a tunnel (NFSMW_TUNNEL_LOG) */
 int mw_online_hook(CPU *c, uint32_t va);       /* online_mw.c: why ConnApi drops a peer of a LAN or Online race */
+int mw_roam_hook(CPU *c, uint32_t va);         /* roam_mw.c: why PVehicle::Construct made none of a friend's car */
 int mw_debug_hook(CPU *c, uint32_t va){
     if (mw_ws_hook(c, va)) return 1;
     if (mw_fix_hook(c, va)) return 1;
@@ -167,6 +168,7 @@ int mw_debug_hook(CPU *c, uint32_t va){
     if (mw_pursuit_hook(c, va)) return 1;
     if (mw_sound_hook(c, va)) return 1;
     if (mw_online_hook(c, va)) return 1;
+    if (mw_roam_hook(c, va)) return 1;
     static int on = -1;
     static long from;
     if (on < 0){

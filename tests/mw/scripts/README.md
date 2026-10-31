@@ -176,3 +176,15 @@ player's car still on the start line, then 8 and 12 s with the AI driving; check
 `&bench&gputime` window logs the frames, encode and GPU milliseconds) and `options_advanced.txt` (the Video options and
 their Advanced page row by row: Shadow Detail, FSAA and Texture Filtering as offered, their maxima logged); each from
 the registry it is given, `../seed/registry_max.txt` for every video option at its highest.
+
+Free roam with friends (TRACKER M10-04 to M10-07, M10-25; runtime/mw/roam_mw.c, NFSU2_ROAM=1): each starts from the
+career saved in free roam (the freeroam career seed, ../seed/README.md) and resumes it into free roam.
+`roam_probe.txt` (run-suite, one page, no network: `roam probe` logs the player's car's rigid body, matrix rows and
+controls, standing and with LEFT and UP held; `roam spawn [NAME]` makes cars of our own ahead of it the way friends'
+cars are made, posed every frame; `roam pools` logs what they use up; `ROAM_SPAWN` names the second car's vehicle).
+`roam_mp_drive.txt` and `roam_mp_watch.txt` are web/tools/roam-pair.mjs --game mw's pair: A's car driven by the game's
+AI (`autopilot on`), B waiting for A's car to have moved 50 m (`roam mp waitpeers`, `waitcars`, `waitmoved N M`, `roam
+mp status`); roam-pair compares where B shows A's car with where A was (tools/roam_compare.py).
+`roam_crowd_probe.txt` is the pools probe (M10-05): one page with web/tools/roam-crowd.mjs --game mw's simulated players
+(give the crowd `--track` a pose log of a real drive, such as the pair's A.pose.csv: on circles at one height the
+farther cars stand where the world is not, and the game makes none of them), `[roampool]` lines every 600 frames.

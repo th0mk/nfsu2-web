@@ -40,6 +40,9 @@ uint32_t mw_thread_start(uint32_t entry, uint32_t arg);
 void fxcensus_init(void);                      /* fxcensus_mw.c: NFSMW_FXCENSUS=1, the effect census (oracle builds) */
 void mw_sound_position(void);                  /* sound_mw.c */
 void mw_frame(CPU *c);                         /* career_mw.c: the test aids' work, once a pass of the main loop */
+void roam_mw_frame(CPU *c);                     /* roam_mw.c: free roam with friends (NFSU2_ROAM=1) */
+/* once a pass of the main loop, between the update and the render: the test aids, then friends' cars */
+static void mw_on_frame(CPU *c){ mw_frame(c); roam_mw_frame(c); }
 int mw_debug_hook(CPU *c, uint32_t va);        /* debug_mw.c: NFSMW_HOOKLOG, a debugging lift's extra hooks */
 float mw_ui_band(void);                         /* widescreen_mw.c: the HUD's band for a quad of 0x6D1260 */
 
@@ -287,7 +290,8 @@ const GameOps g_game = {
     .thread_start = mw_thread_start,            /* past _threadstartex and the game's trampoline */
     .on_sound_position = mw_sound_position,     /* sound_mw.c: the sound thread's stall count, watched */
     .sound_wall_catchup = 1,                    /* its cursors keep real time with no output (GAME.md 7.2) */
-    .on_frame = mw_frame,                       /* career_mw.c: the queued test aids, between update and render */
+    .on_frame = mw_on_frame,                    /* career_mw.c's queued test aids, roam_mw.c's friends' cars: between
+                                                 * update and render */
     .frame_site = MW_FRAME_SITE,                /* MainLoop's 0x663EC6, above */
     .hook = mw_debug_hook,                      /* debug_mw.c: the frame anchor is core's; the crash fixes'
                                                  * sites (fixes_mw.c) and a debugging lift's HOOKS=... reach it */

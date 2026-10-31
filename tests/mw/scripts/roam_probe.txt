@@ -1,0 +1,41 @@
+# Most Wanted, free roam with friends (TRACKER M10-04, M10-05, M10-06): one instance, no network.  The career saved in
+# free roam (the freeroam seed) loads into free roam as career_resume.txt does; then `roam probe` logs the player's car
+# (its rigid body, matrix rows, controls, driver class, the game's vehicles) standing and again while the car steers
+# left on the gas, and `roam spawn` makes cars of our own ahead of it the way friends' cars are made (driver class
+# DRIVER_NONE), posed there every frame, with the pools logged after each ([roampool]).  ROAM_SPAWN names the second
+# car's vehicle (a pvehicle name; the player's own without it).
+#   NFSU2_SAVE_SEED=<seeds>/freeroam node web/tools/run-suite.mjs --game mw --script roam_probe.txt \
+#     --marker 'roam_probe: done' --env NFSU2_QUIT_FRAMES=20000 [--env ROAM_SPAWN=copmidsize]
+# (the check, tests/mw/checks/roam_probe.sh, wants the probe's lines and each spawn's car made and listed)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++300  log roam_probe: free roam
++0    roam probe
++0    roam pools
++0    down UP
++0    down LEFT
++40   roam probe
++20   roam probe
++0    up LEFT
++0    up UP
++60   roam spawn
++60   roam probe
++0    roam spawn ${ROAM_SPAWN}
++120  roam probe
++0    roam spawn
++0    roam spawn
++0    roam spawn
++120  roam pools
++600  roam pools
++0    roam probe
++0    roam unspawn
++60   roam pools
++0    log roam_probe: done
++0    close

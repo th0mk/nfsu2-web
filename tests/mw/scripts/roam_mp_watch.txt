@@ -1,0 +1,22 @@
+# Most Wanted, free roam with friends (TRACKER M10-06, M10-07, M10-25): instance B, who watches, of
+# web/tools/roam-pair.mjs --game mw (roam_mp_drive.txt is A, the driver).  The career saved in free roam loads into free
+# roam as career_resume.txt does; then B stands while A's car comes into this world and drives off: B waits for A,
+# for A's car, for it to have gone 50 m from where it came, and watches ROAM_WATCH_FRAMES frames more.
+0     waitmem 0x00925e90 3 3600                          # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # the seed's alias loaded
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6): free roam
++300  log roam_mp: free roam
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++0    roam mp status
++0    roam mp waitmoved 1 50 6000
++0    roam mp status
++${ROAM_WATCH_FRAMES} roam mp status
++0    log roam_mp: done
++0    close

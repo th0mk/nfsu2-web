@@ -6,7 +6,7 @@
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
 //        [--race 1-3:60:120] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
-//        [--game ug2|mw] (the game's cars and start point; Most Wanted has none yet) [--help] (this text and those)
+//        [--game ug2|mw] (the game's cars, start point and car keys) [--help] (this text and those)
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -20,7 +20,9 @@
 // --first  the first player's number (from 0), for several of these at once on one server: their names and client
 //          addresses stay apart.
 // --cars   the players' cars in turn (car type names, CarTypeInfo +0), or all: the game's 31 player cars, PEUGOT to
-//          IMPREZAWRX; without it every player drives --car.
+//          IMPREZAWRX; without it every player drives --car.  Most Wanted: the pvehicle names of its 37 player cars
+//          (911turbo to viper), each car's record keyed by Attrib::StringHash32 of the name, as runtime/mw/roam_mw.c
+//          sends it.
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
 //          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
@@ -33,7 +35,9 @@
 //          map's lobby icons and labels (tests/scripts/roam_map_filter.txt).
 // --track  a pose log (NFSU2_ROAM_POSELOG): the first player's L rows, a real drive; every simulated player
 //          follows it from its own point along it, so they spread over the route.  Without one: circles of 20 to
-//          120 m around the new career's start (1695, -884, 24), or --spread m apart (6 circles, the first at --spread).
+//          120 m around the new career's start (1695, -884, 24; Most Wanted: the safehouse's door, where its career's
+//          free roam begins, 981.9, 2148.45, 153.03 in the world's frame), or --spread m apart (6 circles, the first at
+//          --spread).
 // Each player is its own client address for the server's per-address limits (X-Forwarded-For, which the
 // server takes from this machine, its trusted proxy).  Every 10 s one line: players on the switch, their peers
 // (min, mean, max: the hub gives each at most 32), datagrams a second in and out, joins and "out of range"
@@ -55,10 +59,18 @@ const ROAM_OF = {
     cars: ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR', 'ESCALADE', 'TIBURON',
       'SENTRA', 'CELICA', 'IS300', 'SUPRA', 'GOLF', 'A3', 'RSX', 'ECLIPSE', 'TT', 'RX8', '350Z', 'G35', '3000GT', 'GTO', 'MUSTANGGT', 'SKYLINE',
       'LANCEREVO8', 'RX7', 'IMPREZAWRX'],
-    car: '350Z', start: [1695, -884, 24.1],
+    car: '350Z', start: [1695, -884, 24.1], game: 0, key: s => bhash(s),
+  },
+  // the pvehicle names of the career's cars (runtime/mw/bot_mw.c car_name, without its "speedtest"); the start is where
+  // the freeroam seed's car stands (the simulation's -2148.45, 153.03, 981.90 as the world's x, y, z)
+  mw: {
+    cars: ['911turbo', '997s', 'a3', 'a4', 'bmwm3gtr', 'bmwm3gtre46', 'camaro', 'carreragt', 'caymans', 'clio', 'clk500', 'cobaltss',
+      'corvette', 'corvettec6r', 'cts', 'db9', 'eclipsegt', 'elise', 'fordgt', 'gallardo', 'gti', 'gto', 'imprezawrx', 'is300', 'lancerevo8',
+      'monaro', 'murcielago', 'mustanggt', 'punto', 'rx7', 'rx8', 'sl500', 'sl65', 'slr', 'supra', 'tt', 'viper'],
+    car: 'is300', start: [981.9, 2148.45, 153.03], game: 1, key: s => h32(s),
   },
 };
-const NONE = 'none yet: no free-roam cars or start point for Most Wanted (M10-25)';
+const NONE = 'none';
 const GAME = gameOf(argv), R = ROAM_OF[GAME];
 if (argv.includes('--help')) usage(import.meta.url, GAME, 'Cars and start', R ? [`--cars all: ${R.cars.join(' ')}`,
   `--car default: ${R.car}`, `start (circles without --track): ${R.start.join(', ')}`] : [], NONE);
@@ -94,6 +106,25 @@ const roomHash = s => {
   return !kept ? 0 : h || 1;
 };
 const bhash = s => { let h = 0xFFFFFFFF; for (const c of Buffer.from(s, 'latin1')) h = (Math.imul(h, 33) + c) >>> 0; return h; };   // the game's bStringHash
+// Most Wanted's Attrib::StringHash32 (Jenkins' lookup2 from 0xABCDEF00; runtime/mw/bot_mw.c h32): a pvehicle's key
+function h32(str) {
+  const k = Buffer.from(str, 'latin1'), n = k.length;
+  let a = 0x9e3779b9, b = 0x9e3779b9, c = 0xabcdef00, i = 0, len = n;
+  const mix = () => {
+    a = (a - b - c) ^ (c >>> 13); b = (b - c - a) ^ (a << 8); c = (c - a - b) ^ (b >>> 13);
+    a = (a - b - c) ^ (c >>> 12); b = (b - c - a) ^ (a << 16); c = (c - a - b) ^ (b >>> 5);
+    a = (a - b - c) ^ (c >>> 3); b = (b - c - a) ^ (a << 10); c = (c - a - b) ^ (b >>> 15);
+    a >>>= 0; b >>>= 0; c >>>= 0;
+  };
+  const w = j => k[j] | k[j + 1] << 8 | k[j + 2] << 16 | k[j + 3] << 24;
+  for (; len >= 12; i += 12, len -= 12) { a = (a + w(i)) >>> 0; b = (b + w(i + 4)) >>> 0; c = (c + w(i + 8)) >>> 0; mix(); }
+  c = (c + n) >>> 0;
+  const t = [0, 0, 0];                       // the tail: a takes bytes 0-3, b 4-7, c 8-10 (from bit 8)
+  for (let j = 0; j < len; j++) { if (j < 4) t[0] += k[i + j] * 2 ** (8 * j); else if (j < 8) t[1] += k[i + j] * 2 ** (8 * (j - 4)); else t[2] += k[i + j] * 2 ** (8 * (j - 7)); }
+  a = (a + t[0]) >>> 0; b = (b + t[1]) >>> 0; c = (c + t[2]) >>> 0;
+  mix();
+  return c >>> 0;
+}
 const nowUs = () => (performance.timeOrigin + performance.now()) * 1000;
 
 // the track: (t s) -> { p, v }
@@ -176,7 +207,8 @@ class Bot {
           ws.send(JSON.stringify({ t: 'hello', name: this.name, deltas: 1, ...(BUNDLE ? { bundle: 1 } : {}) }));
           const io = this.x.crowd_io(), m8 = this.mem();
           const b = Buffer.from(`${this.name}\0${this.car}\0${PARTS}\0`, 'latin1'); m8.set(b, io);
-          this.x.crowd_init(this.id, roomHash(ROOM), roomHash(CREW), HUB, PORT, bhash(this.car), STATES, nowUs());
+          if (R.game) this.x.crowd_game(R.game);
+          this.x.crowd_init(this.id, roomHash(ROOM), roomHash(CREW), HUB, PORT, R.key(this.car), STATES, nowUs());
           this.ready = true;
         }
         return;

@@ -56,8 +56,11 @@
 //                    --seed's careers: tests/scripts/mprace_nocar_b.txt)
 //        [--seed-for Bob:<save tree>]  that page starts from its own save instead (two careers' cars in one
 //                    race: mprace_lobby_a.txt + mprace_card_b.txt at a race open in its career)
-//        [--game ug2|mw]   the game (ug2 unless given): its pair of scripts for --a and --b; Most Wanted has none
-//                    yet
+//        [--game ug2|mw]   the game (ug2 unless given): its pair of scripts for --a and --b, and its own server
+//                    (Most Wanted: --game mw, served at / for localhost: --base-path localhost=/).  Most Wanted's pair
+//                    (tests/mw/scripts/roam_mp_drive.txt, roam_mp_watch.txt) resumes a career saved in free roam:
+//                    give it --seed <the career seeds>/freeroam and --data <the Most Wanted folder>; a --base server
+//                    of Most Wanted's must serve it at / as well
 //        [--help]    this text and the game's pair
 //
 // Without --base it starts its own server (web/tools/server-cmd.mjs, --dev on the given
@@ -92,8 +95,11 @@ const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
 const opts = (k) => argv.flatMap((a, i) => (a === '--' + k && i + 1 < argv.length ? [argv[i + 1]] : []));
 // each game's pair (name:script of tests/scripts/): the driver (--a) and the one who watches it (--b)
-const PAIRS = { ug2: { a: 'Alice:roam_mp_drive.txt', b: 'Bob:roam_mp_watch.txt' } };
-const NONE = 'none yet: no free-roam scripts for Most Wanted (M10-25)';
+const PAIRS = { ug2: { a: 'Alice:roam_mp_drive.txt', b: 'Bob:roam_mp_watch.txt' },
+  mw: { a: 'Alice:roam_mp_drive.txt', b: 'Bob:roam_mp_watch.txt' } };
+// each game's own server options: Most Wanted's server serves it under /mw, and at / for the pages of localhost
+const SERVER_OF = { ug2: [], mw: ['--game', 'mw', '--base-path', 'localhost=/'] };
+const NONE = 'none';
 const GAME = gameOf(argv), G = GAMES[GAME], PAIR = PAIRS[GAME];
 if (argv.includes('--help')) usage(import.meta.url, GAME, 'The pair', PAIR ? [`--a ${PAIR.a} (drives)`, `--b ${PAIR.b} (watches)`] : [], NONE);
 if (!PAIR) nothingFor(GAME, NONE);
@@ -148,6 +154,7 @@ function url(i, name, script, own) {
     ? new URLSearchParams({ reg: G.reg, script: `/tests/scripts/${script}`, save: `roam-${name}` })
     : new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
       reg: G.reg, script: `/tests/scripts/${script}`, save: `roam-${name}`, net: name });
+  if (!G.reg) q.delete('reg');                // a game whose runs start from its own first registry (Most Wanted)
   const play = PLAY && (!PLAY_ONLY || PLAY_ONLY === name);
   if (play) { q.set('w', String(SIZE[0])); q.set('h', String(SIZE[1])); q.set('artifacts', `/artifacts/${name}-`); q.set('dumpscale', '1'); }
   for (const [k, v] of Object.entries(env)) if (!(APP && (k === 'NFSU2_SAVEDIR'))) q.append('env', `${k}=${v}`);
@@ -163,11 +170,11 @@ async function startServer() {
   const certs = HTTPS ? makeTestCerts(path.join(OUT, 'certs')) : null;
   const c = spawn(...serverCommand(['--data', DATA,
     ...(certs ? ['--port', String(HTTPS_PORT), '--tls-cert', certs.cert, '--tls-key', certs.key] : []),
-    '--http-port', String(HTTP_PORT), '--dev', ...(PLAY ? ['--artifacts', OUT] : [])]), { stdio: ['ignore', 'pipe', 'pipe'] });
+    '--http-port', String(HTTP_PORT), '--dev', ...(PLAY ? ['--artifacts', OUT] : []), ...SERVER_OF[GAME]]), { stdio: ['ignore', 'pipe', 'pipe'] });
   c.stdout.pipe(serverLog, { end: false }); c.stderr.pipe(serverLog, { end: false });
   await new Promise((res, rej) => {
     let out = '';
-    const t = setTimeout(() => rej(new Error('server did not start')), 20000);
+    const t = setTimeout(() => rej(new Error('server did not start')), GAME === 'ug2' ? 20000 : 60000);
     c.stdout.on('data', d => { out += d; if (out.includes('  access    :')) { clearTimeout(t); res(); } });
     c.on('exit', code => { clearTimeout(t); rej(new Error(`server exited (${code})`)); });
   });
@@ -381,7 +388,7 @@ for (const x of inst) {
     vlan: grab(/virtual LAN (up|down|UDP)|\[net\]/).slice(0, 12),
     joins: grab(/\[roam\] JOIN|\[roam\] LEAVE/),
     waits: grab(/mp wait(peers|cars)/),
-    slots: grab(/slot \d.*(ready|for )/).slice(0, 8),
+    slots: grab(/slot \d.*(ready|for )|\[roam\] f=\d+ \S+'s car[: ]/).slice(0, 8),
     friends: grab(/\(\w+, [\w ]+, rtt [\d.]+ ms\)/).slice(-4),
     stats: grab(/virtual LAN (stats|closed)|datagrams sent|stats: \d friend/).slice(-6),
     blocked: grab(/BLOCKED/).length,
