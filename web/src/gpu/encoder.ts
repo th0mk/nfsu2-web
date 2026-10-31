@@ -22,7 +22,7 @@
 // drew them on the screen).
 import * as P from './proto';
 import { D, F, Kind, Op } from './proto';
-import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
+import { COPY, FF_FS, OCC_FS, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE, group1Entries, stageKind, texBinding, smpBinding } from './shader-abi';
 import { unpackDxt } from './dxt';
 import { dxt1HasPunch, dxt1ToAstc, dxtAlphaToAstc } from './astc';
@@ -69,6 +69,9 @@ const BLEND: GPUBlendFactor[] = ['one', 'zero', 'one', 'src', 'one-minus-src', '
   'one-minus-dst-alpha', 'dst', 'one-minus-dst', 'src-alpha-saturated', 'src-alpha', 'one-minus-src-alpha', 'constant', 'one-minus-constant'];
 const BLENDOP: GPUBlendOperation[] = ['add', 'add', 'subtract', 'reverse-subtract', 'min', 'max'];
 const CMP: GPUCompareFunction[] = ['always', 'never', 'less', 'equal', 'less-equal', 'greater', 'not-equal', 'greater-equal', 'always'];
+// an occlusion query's draw's two counters (passing samples, covered samples) in the counters buffer: a storage
+// dynamic offset apart (minStorageBufferOffsetAlignment's default)
+const OCC_STRIDE = 256;
 const ADDR: GPUAddressMode[] = ['repeat', 'repeat', 'mirror-repeat', 'clamp-to-edge', 'clamp-to-edge', 'mirror-repeat'];
 
 export class Encoder {
@@ -218,6 +221,8 @@ export class Encoder {
     this.pBuf = buf('pspar', 1 << 20, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
     this.pool = buf('pool', 1 << 16, GPUBufferUsage.STORAGE | GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC);
     this.white = this.makeWhite(false); this.whiteCube = this.makeWhite(true);
+    // occlusion queries (gpu-abi.md section 13): the module set their results table before it registered the block
+    this.occOn = this.u32[this.ctlW + P.C.occPtr] !== 0;
     // the module's stage count, written before it registered the block (gpu_web.c gw_init)
     if (this.u32[this.ctlW + P.C.stages] === P.STAGES_MAX) {
       this.stages = 8;
@@ -249,48 +254,95 @@ export class Encoder {
     return m;
   }
 
-  // occlusion queries (gpu-abi.md section 13): the frame's query set, the resolve buffer, a ring of read buffers (one
-  // per frame whose results are still on their way), and the frame waiting for its submit (afterSubmit maps it)
-  private occSet: GPUQuerySet | null = null;
-  private occCap = 0;
-  private occResolve: GPUBuffer | null = null;
+  // Occlusion queries (gpu-abi.md section 13).  WebGPU's occlusion queries promise only zero or not zero (Dawn
+  // writes 0 or 1 on D3D12 and Metal), and the game wants the count, so the page counts itself: each draw of a
+  // query's issue is drawn once more, first, in a pass of its own (its target attached, nothing written, no depth
+  // attachment), with its Z bound as a texture and a pixel stage (wgsl.ts OCC_FS) that adds the samples passing the
+  // draw's depth test, and the samples it covers, to the draw's two counters in a storage buffer (OCC_STRIDE apart:
+  // a dynamic offset each).  The counters go to a ring of read buffers after the frame's last pass, mapped after
+  // the submit.  occOn: the game makes such queries (GwCtl.occ_ptr set; gpu_web.c gw_init): its Z surfaces are made
+  // with TEXTURE_BINDING.
+  private occOn = false;
+  private occRes: { mod: GPUShaderModule[]; bgl: GPUBindGroupLayout[]; pl: GPUPipelineLayout[]; cnt: GPUBuffer;
+    stand: GPUTextureView[]; bgs: WeakMap<GPUTextureView, GPUBindGroup>; pipes: Map<string, GPURenderPipeline | null> } | null = null;
   private occRead: GPUBuffer[] = [];
   private occBusy: boolean[] = [];
+  private occDyn = new Uint32Array(1);
   private occPending: { slot: number; n: number; issue: Uint32Array; div: Uint8Array; all: Set<number> } | null = null;
-  /** occlusion results written for the game (totals: issues, samples) */
-  occStats = { issues: 0, frames: 0, skipped: 0 };
-  /** a read buffer free for this frame's occN queries (and a query set that holds them), or -1: every one still maps */
-  private occBegin(n: number): number {
+  /** occlusion results written for the game: issues, frames, frames not measured (every read buffer still mapping),
+   *  issues whose draws covered a sample (onScreen) and issues with pixels passing the depth test (visible) */
+  occStats = { issues: 0, frames: 0, skipped: 0, onScreen: 0, visible: 0 };
+  /** the counting pass's modules, layouts, counters and stand-in Z (1 and 4 samples), made at the first use */
+  private occR() {
+    if (this.occRes) return this.occRes;
+    const d = this.device, mod: GPUShaderModule[] = [], bgl: GPUBindGroupLayout[] = [], pl: GPUPipelineLayout[] = [], stand: GPUTextureView[] = [];
+    for (const ms of [false, true]) {
+      mod.push(this.module(`occlusion${ms ? ' x4' : ''}`, OCC_FS(ms)));
+      const l = d.createBindGroupLayout({ label: `occlusion${ms ? ' x4' : ''}`, entries: [
+        { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth', viewDimension: '2d', multisampled: ms } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'storage', hasDynamicOffset: true, minBindingSize: 8 } }] });
+      bgl.push(l);
+      pl.push(d.createPipelineLayout({ label: `occlusion${ms ? ' x4' : ''}`, bindGroupLayouts: [this.bgl0, l] }));
+      stand.push(d.createTexture({ label: `occlusion stand-in z${ms ? ' x4' : ''}`, size: [1, 1], format: 'depth32float', sampleCount: ms ? 4 : 1,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT }).createView());
+    }
+    const cnt = d.createBuffer({ label: 'occlusion counters', size: P.OCC_MAX * OCC_STRIDE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+    return this.occRes = { mod, bgl, pl, cnt, stand, bgs: new WeakMap(), pipes: new Map() };
+  }
+  /** a read buffer free for this frame's counters, or -1: every one still maps (the frame is not measured) */
+  private occBegin(): number {
     const OCC_RING = 4;
     let slot = -1;
     for (let k = 0; k < OCC_RING; k++) if (!this.occBusy[k]) { slot = k; break; }
     if (slot < 0) { this.occStats.skipped++; return -1; }
-    if (n > this.occCap) {
-      const cap = Math.min(4096, Math.max(16, 1 << Math.ceil(Math.log2(n))));
-      if (this.occSet) this.destroyLater.push(this.occSet);
-      if (this.occResolve) this.destroyLater.push(this.occResolve);
-      for (const b of this.occRead) if (b) this.destroyLater.push(b);
-      this.occRead = []; this.occBusy = [];
-      this.occSet = this.device.createQuerySet({ label: 'occlusion', type: 'occlusion', count: cap });
-      this.occResolve = this.device.createBuffer({ label: 'occlusion-resolve', size: cap * 8,
-        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
-      this.occCap = cap; slot = 0;
-    }
-    if (!this.occRead[slot]) this.occRead[slot] = this.device.createBuffer({ label: `occlusion-read${slot}`, size: this.occCap * 8,
+    if (!this.occRead[slot]) this.occRead[slot] = this.device.createBuffer({ label: `occlusion read ${slot}`, size: P.OCC_MAX * OCC_STRIDE,
       usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     return slot;
   }
-  /** the game's results table: each issue's count (samples over the pass's sample count), then the issue */
-  private occWrite(sums: Map<number, number>): void {
+  /** the counting pipeline of a draw's vertex module vs, depth test cmp (CMP's index, 0 = always), cull and samples;
+   *  null: no module, or the pipeline failed */
+  private occPipe(vs: number, cmp: number, cull: number, ms: boolean): GPURenderPipeline | null {
+    const r = this.occR(), key = `${vs}:${cmp}:${cull}:${ms ? 4 : 1}`;
+    let p = r.pipes.get(key);
+    if (p !== undefined) return p;
+    const vq = this.vsMods.get(vs), vmod = vq ?? (vs === 0 ? this.tvertMod : undefined);
+    if (!vmod) { r.pipes.set(key, null); return null; }
+    this.device.pushErrorScope('validation');
+    p = this.device.createRenderPipeline({ label: `occlusion ${key}`, layout: r.pl[ms ? 1 : 0],
+      vertex: { module: vmod, entryPoint: vq ? undefined : 'vs_tvert' },
+      fragment: { module: r.mod[ms ? 1 : 0], entryPoint: 'fs_count', targets: [{ format: 'bgra8unorm', writeMask: 0 }], constants: { CMP: cmp } },
+      primitive: { topology: 'triangle-list', frontFace: 'cw', cullMode: cull === 1 ? 'none' : cull === 2 ? 'front' : 'back' },
+      ...(ms ? { multisample: { count: 4 } } : {}) });
+    this.device.popErrorScope().then(e => { if (e) { this.log(`[gpu] occlusion pipeline ${key}: ${e.message}`); r.pipes.set(key, null); } });
+    r.pipes.set(key, p);
+    return p;
+  }
+  /** the counting pass's group 1: the Z (null: the stand-in, for a draw without a depth test) and the counters */
+  private occBg(z: GPUTextureView | null, ms: boolean): GPUBindGroup {
+    const r = this.occR(), v = z ?? r.stand[ms ? 1 : 0];
+    let g = r.bgs.get(v);
+    if (!g) r.bgs.set(v, g = this.device.createBindGroup({ layout: r.bgl[ms ? 1 : 0], entries: [
+      { binding: 0, resource: v }, { binding: 1, resource: { buffer: r.cnt, size: 8 } }] }));
+    return g;
+  }
+  private occSaid = 0;
+  /** the game's results table: each issue's count (its draws' passing samples over their passes' sample counts),
+   *  then the issue; cov: the samples its draws covered */
+  private occWrite(sums: Map<number, number>, cov: Map<number, number>): void {
     this.views();
     const at = this.u32[this.ctlW + P.C.occPtr] >>> 2;
     if (!at) return;
     for (const [issue, n] of sums) {
-      const slot = issue & 0xFF;
+      const slot = issue & 0xFF, c = cov.get(issue) ?? 0;
       if (!slot || slot >= P.OCC_SLOTS) continue;
       this.u32[at + 2 * slot + 1] = n >>> 0;
       Atomics.store(this.i32, at + 2 * slot, issue | 0);
       this.occStats.issues++;
+      if (c) this.occStats.onScreen++;
+      if (n) this.occStats.visible++;
+      if (c && !(this.occSaid & 1)) { this.occSaid |= 1; this.log(`[gpu] occlusion: the first issue on screen, ${c} samples covered, ${n} pixels pass its depth test`); }
+      if (n && !(this.occSaid & 2)) { this.occSaid |= 2; this.log(`[gpu] occlusion: the first issue with pixels passing its depth test, ${n} (${c} samples covered)`); }
     }
     this.occStats.frames++;
   }
@@ -622,7 +674,7 @@ export class Encoder {
     let z = this.msZ.get(k), fresh = false;
     if (!z) {
       const tex = this.device.createTexture({ label: `z${zid} x4 ${w}x${h}`, size: [w, h], format: 'depth32float', sampleCount: 4,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT });
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | (this.occOn ? GPUTextureUsage.TEXTURE_BINDING : 0) });
       this.msZ.set(k, z = { tex, view: tex.createView() }); fresh = true;
     }
     return { view: z.view, fresh };
@@ -973,15 +1025,17 @@ export class Encoder {
     let draws = 0, passes = 0, skipped = 0;
     const endPass = () => { if (pass) { pass.end(); pass = null; } };
     // occlusion queries (gpu-abi.md section 13): the frame's list of their draws (none: nothing more to do); each
-    // drawn draw of one gets a query of the frame's set (every pass then carries the set), resolved after the last
-    // pass and read back after the submit
-    const occN = Math.min(u32[fw + F.occn], P.OCC_MAX), occW = u32[fw + F.occ] >> 2;
+    // drawn draw of one is counted (occR) into its own counters, cleared here, copied out after the last pass and
+    // read back after the submit
+    const occN = this.occOn ? Math.min(u32[fw + F.occn], P.OCC_MAX) : 0, occW = u32[fw + F.occ] >> 2;
     let occQ = 0, occK = 0, occAt = occN ? u32[occW] : -1;
     const occAll = occN ? new Set<number>() : null;
     for (let k = 0; k < occN; k++) occAll!.add(u32[occW + 2 * k + 1]);
-    const occSlot = occN ? this.occBegin(occN) : -1;
-    const occSet = occSlot >= 0 ? this.occSet! : undefined;
+    const occSlot = occN ? this.occBegin() : -1;
     const occIssue = occSlot >= 0 ? new Uint32Array(occN) : null, occDiv = occSlot >= 0 ? new Uint8Array(occN) : null;
+    if (occSlot >= 0) enc.clearBuffer(this.occR().cnt, 0, occN * OCC_STRIDE);
+    // the open pass's colour attachment (a 4-sample pass: its twin) and its Z as a texture (null: no depth test)
+    let passColor: GPUTextureView | null = null, passZBind: GPUTextureView | null = null;
 
     const openPass = (target: number, zid: number): GPURenderPassEncoder | null => {
       let view: GPUTextureView, w: number, h: number, key: number;
@@ -1017,7 +1071,7 @@ export class Encoder {
         const c = clearArgb;
         const ts = this.firstPassTs; this.firstPassTs = undefined;
         const p = enc.beginRenderPass({
-          timestampWrites: ts, occlusionQuerySet: occSet,
+          timestampWrites: ts,
           colorAttachments: [{ view: twin.view, resolveTarget: view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
             clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }],
           depthStencilAttachment: zv
@@ -1025,6 +1079,7 @@ export class Encoder {
             : { view: this.depthView(0, w, h, true), depthLoadOp: 'clear', depthClearValue: 1, depthStoreOp: 'discard' },
         });
         twin.stale = false;
+        passColor = twin.view; passZBind = zv ?? null;
         if (key === -1) screenTouched = true; else touched.add(key);
         passes++; this.calls.pass++; this.msPasses++;
         if (tr) tr.push(`  pass ${passes}: ${target ? `tex ${target & 0xFFFF}` : 'SCREEN'} x4 ${w}x${h} color ${first ? `clear ${c.toString(16)}` : 'load'}, z ${zv ? `zid ${zid} ${zclear ? `clear ${zval}` : 'load'}` : `none (zid ${zid})`}`);
@@ -1043,7 +1098,8 @@ export class Encoder {
         if (!z || z.width !== w || z.height !== h) {
           if (!z || zid === 1) {
             if (z) this.destroyLater.push(z);
-            z = this.zTex[zid] = dev.createTexture({ label: `z${zid} ${w}x${h}`, size: [w, h], format: 'depth32float', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+            z = this.zTex[zid] = dev.createTexture({ label: `z${zid} ${w}x${h}`, size: [w, h], format: 'depth32float',
+              usage: GPUTextureUsage.RENDER_ATTACHMENT | (this.occOn ? GPUTextureUsage.TEXTURE_BINDING : 0) });
             this.zView[zid] = z.createView(); zclear = true;
           } else { z = undefined; this.zMismatch++; }
         }
@@ -1053,13 +1109,14 @@ export class Encoder {
       const c = clearArgb;
       const ts = this.firstPassTs; this.firstPassTs = undefined;
       const p = enc.beginRenderPass({
-        timestampWrites: ts, occlusionQuerySet: occSet,
+        timestampWrites: ts,
         colorAttachments: [{ view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
           clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }],
         depthStencilAttachment: zv
           ? { view: zv, depthLoadOp: zclear ? 'clear' : 'load', depthClearValue: zval, depthStoreOp: 'store' }
           : { view: this.depthView(0, w, h), depthLoadOp: 'clear', depthClearValue: 1, depthStoreOp: 'discard' },
       });
+      passColor = view; passZBind = zv ?? null;
       if (key === -1) screenTouched = true; else touched.add(key);
       passes++; this.calls.pass++;
       if (tr) tr.push(`  pass ${passes}: ${target ? `tex ${target & 0xFFFF}${(target >>> 16) ? ` face ${(target >>> 16) - 1}` : ''}` : 'SCREEN'} ${w}x${h} color ${first ? `clear ${c.toString(16)}` : 'load'}, z ${zv ? `zid ${zid} ${zclear ? `clear ${zval}` : 'load'}` : `none (zid ${zid})`}`);
@@ -1120,7 +1177,7 @@ export class Encoder {
       if (kind === Kind.Clear) continue;
       const count = u32[w + D.count];
       if (!pass || !count) { if (tr) tr.push(`  #${i} draw skipped: ${pass ? 'no vertices' : 'no pass (target missing)'}`); skipped++; continue; }
-      const p: GPURenderPassEncoder = pass;
+      let p: GPURenderPassEncoder = pass;
 
       // pipeline
       const psid = i32[w + D.ps], vsid = i32[w + D.vsid];
@@ -1142,6 +1199,46 @@ export class Encoder {
       if (pipe === undefined) pipe = this.pipeline(key, blend, psEff, vsid, cull, dm, nd, zb, passMs);
       lastKey = key; lastMs = passMs; lastPipe = pipe;
       if (!pipe) { skipped++; if (tr) tr.push(`  #${i} draw skipped: no pipeline (ps ${psEff} vs ${vsid})`); continue; }
+      // an occlusion query's draw (gpu-abi.md section 13): counted first, in a pass of its own between two of its
+      // target's (occR), then drawn as any draw
+      if (occDraw && occIssue && occQ < occN) {
+        endPass();
+        const cmp = (dm & 1) ? (dm >> 2) & 7 : 0, cp = this.occPipe(vsid, cmp, cull, passMs);
+        if (cp && passColor) {
+          const op = enc.beginRenderPass({ label: 'occlusion', colorAttachments: [{ view: passColor, loadOp: 'load', storeOp: 'store' }] });
+          op.setPipeline(cp);
+          const isz0 = u32[w + D.ixIsz], koff0 = vsid > 0 ? u32[w + D.koff] : -1, k0 = koff0 >= 0 ? koff0 & ~255 : 0;
+          const kb0 = koff0 >= 0 ? (koff0 - k0) >> 4 : 0;
+          dyn[0] = k0; dyn[1] = 0;
+          op.setBindGroup(0, this.group0(isz0 ? Src.Pool : vsid > 0 ? Src.Raw : Src.TVert), dyn, 0, 2);
+          this.occDyn[0] = occQ * OCC_STRIDE;
+          op.setBindGroup(1, this.occBg(cmp ? passZBind : null, passMs), this.occDyn);
+          const clip0 = passW === bbW && passH === bbH ? u32[w + D.clip] : 0;
+          if (clip0) { const y0 = Math.min(clip0 & 0xFFFF, passH), y1 = Math.min(clip0 >>> 16, passH); op.setScissorRect(0, y0, passW, Math.max(0, y1 - y0)); }
+          if (isz0) { op.setIndexBuffer(this.pool!, isz0 === 4 ? 'uint32' : 'uint16'); op.drawIndexed(count, 1, u32[w + D.ixIb] / isz0, i32[w + D.ixBase], kb0); }
+          else if (vsid > 0) op.draw(count, 1, 0, kb0);
+          else op.draw(count, 1, u32[w + D.first], 0);
+          op.end();
+          passes++; this.calls.pass++;
+          if (tr) {
+            // a raw draw's first vertices (position at offset 0) through c0..c3 as m4x4 would: where it lands
+            let at = '';
+            if (vsid > 0 && !isz0 && koff0 >= 0) {
+              const kw = (u32[fw + F.k] + koff0) >> 2, stride = u32[kw], vb = u32[fw + F.raw] + u32[w + D.rawoff];
+              for (let v = 0; v < Math.min(count, 6) && stride && !(vb & 3) && !(stride & 3); v++) {
+                const q = (vb + v * stride) >> 2, x = f32[q], y = f32[q + 1], z = f32[q + 2];
+                const c = (r: number) => f32[kw + 4 + 4 * r] * x + f32[kw + 5 + 4 * r] * y + f32[kw + 6 + 4 * r] * z + f32[kw + 7 + 4 * r];
+                at += ` (${c(0).toFixed(3)},${c(1).toFixed(3)},${c(2).toFixed(3)},${c(3).toFixed(3)})`;
+              }
+            }
+            tr.push(`  occlusion pass: #${i} counter ${occQ}, depth test ${CMP[cmp]}${cmp && !passZBind ? ' (no Z to bind)' : ''}${passMs ? ' x4' : ''} ${passW}x${passH}${at ? `, clip m4x4 c0${at}` : ''}`);
+          }
+          occIssue[occQ] = occDraw; occDiv![occQ] = passMs ? 4 : 1; occQ++;
+        } else if (tr) tr.push(`  occlusion pass: #${i} not counted (no pipeline for vs ${vsid})`);
+        pass = openPass(curT, curZ);
+        if (!pass) { skipped++; continue; }
+        p = pass;
+      }
       if (pipe !== cPipe) { p.setPipeline(pipe); cPipe = pipe; this.calls.pipe++; }
       // the 2D UI on a screen narrower than 4:3 stays in its 4:3 band (gpu_proto.h GwDraw.clip), on the
       // back buffer or a target of its size
@@ -1206,24 +1303,18 @@ export class Encoder {
       const bcol = u32[w + D.bcol];
       if (bcol !== cBcol) { p.setBlendConstant({ r: ((bcol >>> 16) & 255) / 255, g: ((bcol >>> 8) & 255) / 255, b: (bcol & 255) / 255, a: (bcol >>> 24) / 255 }); cBcol = bcol; this.calls.blend++; }
 
-      const occ = occIssue ? occDraw : 0;
-      if (occ) p.beginOcclusionQuery(occQ);
       if (isz) {
         const fmt: GPUIndexFormat = isz === 4 ? 'uint32' : 'uint16';
         if (fmt !== cIx) { p.setIndexBuffer(this.pool!, fmt); cIx = fmt; this.calls.ix++; }
         p.drawIndexed(count, 1, u32[w + D.ixIb] / isz, i32[w + D.ixBase], kb);
       } else if (vsid > 0) p.draw(count, 1, 0, kb);
       else p.draw(count, 1, u32[w + D.first], 0);
-      if (occ) { p.endOcclusionQuery(); occIssue![occQ] = occ; occDiv![occQ] = passMs ? 4 : 1; occQ++; }
       draws++; this.calls.draw++;
-      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}${occDraw ? ` occlusion ${occDraw.toString(16)}${occ ? '' : ' (not measured)'}` : ''}`);
+      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}${occDraw ? ` occlusion ${occDraw.toString(16)}${occIssue ? '' : ' (not measured)'}` : ''}`);
     }
     endPass();
     if (occSlot >= 0) {
-      if (occQ) {
-        enc.resolveQuerySet(this.occSet!, 0, occQ, this.occResolve!, 0);
-        enc.copyBufferToBuffer(this.occResolve!, 0, this.occRead[occSlot], 0, occQ * 8);
-      }
+      if (occQ) enc.copyBufferToBuffer(this.occR().cnt, 0, this.occRead[occSlot], 0, occQ * OCC_STRIDE);
       this.occPending = { slot: occSlot, n: occQ, issue: occIssue!, div: occDiv!, all: occAll! };
     }
     if (tr) {
@@ -1382,23 +1473,25 @@ export class Encoder {
   afterSubmit(): void {
     for (const r of this.destroyLater) r.destroy();
     this.destroyLater.length = 0;
-    // this frame's occlusion queries: their counts once the GPU is done (an issue none of whose draws was drawn: 0)
+    // this frame's occlusion queries: their counts once the GPU is done (an issue none of whose draws was counted: 0)
     const o = this.occPending;
     if (o) {
       this.occPending = null;
-      const sums = new Map<number, number>();
+      const sums = new Map<number, number>(), cov = new Map<number, number>();
       for (const issue of o.all) sums.set(issue, 0);
-      if (!o.n) { this.occWrite(sums); return; }
-      const buf = this.occRead[o.slot], busy = this.occBusy;   // (a bigger set later replaces both: this frame's stay)
+      if (!o.n) { this.occWrite(sums, cov); return; }
+      const buf = this.occRead[o.slot], busy = this.occBusy, len = o.n * OCC_STRIDE;
       busy[o.slot] = true;
-      buf.mapAsync(GPUMapMode.READ, 0, o.n * 8).then(() => {
-        const t = new BigUint64Array(buf.getMappedRange(0, o.n * 8));
+      buf.mapAsync(GPUMapMode.READ, 0, len).then(() => {
+        const t = new Uint32Array(buf.getMappedRange(0, len));
         for (let q = 0; q < o.n; q++) {
-          const i = o.issue[q];
-          sums.set(i, (sums.get(i) ?? 0) + Math.round(Number(t[q]) / o.div[q]));
+          const i = o.issue[q], w = q * (OCC_STRIDE >> 2);
+          // the passing samples over the pass's samples: pixels
+          sums.set(i, (sums.get(i) ?? 0) + Math.round(t[w] / o.div[q]));
+          cov.set(i, (cov.get(i) ?? 0) + t[w + 1]);
         }
         buf.unmap(); busy[o.slot] = false;
-        this.occWrite(sums);
+        this.occWrite(sums, cov);
       }).catch(() => { busy[o.slot] = false; });
     }
   }

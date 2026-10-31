@@ -201,6 +201,12 @@ typedef struct GameOps {
                                      * samples, as does a CreateRenderTarget surface asked for with one, each
                                      * resolved at the end of every pass (docs/web/gpu-abi.md section 12);
                                      * 0 = UG2's: no multisampling, as always */
+    int gpu_occlusion;              /* 1: occlusion queries are measured (com.c query_issue, docs/web/gpu-abi.md
+                                     * section 13): the draws of a query's issue go to the renderer, which counts
+                                     * their samples that pass the depth test, and GetData answers the query's newest
+                                     * result, S_FALSE until there is one; the page's Z surfaces can then be bound as
+                                     * textures.  0 = UG2's: GetData answers S_OK with 0 at once, nothing measured
+                                     * (it makes no queries) */
     int d3d_host_backing;           /* 1: a texture level's and a vertex or index buffer's copy lives in the
                                      * runtime's memory, outside the guest's window, and the guest sees it in
                                      * a window only between Lock and Unlock, as D3D9 keeps a managed

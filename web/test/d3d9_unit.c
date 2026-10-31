@@ -730,7 +730,15 @@ static uint32_t q_make(void){ MR32(OUT) = 0; return call(g_dev, "CreateQuery", 2
 static uint32_t q_issue(uint32_t q){ call(q, "Issue", 1, 2u); uint32_t occ = g_occ_now; call(q, "Issue", 1, 1u); return occ; }
 static uint32_t q_get(uint32_t q, uint32_t *n){ MR32(OUT) = 0xDEADu; uint32_t r = call(q, "GetData", 3, OUT, 4u, 0u); *n = MR32(OUT); return r; }
 static void t_occlusion(void){
-    uint32_t n, q = q_make(), r = q ? q_get(q, &n) : 99u;
+    uint32_t n, q = q_make(), r;
+    if (!MW){                                  /* GameOps gpu_occlusion 0: S_OK with 0 at once, nothing measured */
+        uint32_t occ = q ? q_issue(q) : 1u;
+        r = q ? q_get(q, &n) : 99u;
+        check(q && !occ && r == 0 && n == 0, "occ-ug2", "query 0x%08x: the draws told 0x%x, GetData 0x%x with %u (not S_OK, 0)", q, occ, r, n);
+        if (q) release(q);
+        return;
+    }
+    r = q ? q_get(q, &n) : 99u;
     check(q && r == 1u, "occ-none-yet", "query 0x%08x: GetData before any issue gave 0x%x, not S_FALSE", q, r);
     if (!q) return;
     uint32_t occ = q_issue(q), slot = occ & 0xFFu, seq = occ >> 8;

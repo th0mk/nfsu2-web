@@ -2864,7 +2864,8 @@ static void fxtr_dev(CPU *c, int iface, int mid, int nargs, const char *nm){
  * issue it reads, so it reads the same query's issue of 4 frames earlier (D3D9's own S_FALSE until the issue
  * completes gave the PCGW "sun flare missing" on fast machines, a count of 0).  A count for the back buffer is in the
  * game's pixels (the resolution it believes it has), as the quad's size is.  No renderer (headless runs): S_FALSE
- * always, the count the game's 0.  Underground 2 makes no queries.  NFSU2_OCCLUSION=off turns this off (occ_on).
+ * always, the count the game's 0.  GameOps gpu_occlusion (Underground 2, which makes no queries: 0) and
+ * NFSU2_OCCLUSION=off turn this off (occ_on).
  * Query object: +4 type, +8 slot (1..OCC_SLOTS-1), +12 the first issue's number, +16 the last issue drew into the
  * back buffer, +20 nonzero once GetData took a result of the query's own issues. */
 void metal_set_occlusion(uint32_t occ);
@@ -2873,10 +2874,14 @@ int  metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count);
 static uint64_t g_occ_used;                      /* slots 1..63 in use */
 static uint32_t g_occ_seq;                       /* the issues' numbers, 24 bits, never 0 */
 static uint32_t g_occ_open;                      /* the query whose Issue(BEGIN) is open, 0 = none */
-/* NFSU2_OCCLUSION=off: the queries as before (GetData S_OK with 0 at once, nothing measured): the A/B switch */
+/* GameOps gpu_occlusion (UG2: 0), and NFSU2_OCCLUSION=off, the A/B switch: the queries as before (GetData S_OK with
+ * 0 at once, nothing measured) */
 static int occ_on(void){
     static int on = -1;
-    if (on < 0){ const char *e = getenv("NFSU2_OCCLUSION"); on = !(e && (!strcmp(e, "0") || !strcmp(e, "off"))); }
+    if (on < 0){
+        const char *e = getenv("NFSU2_OCCLUSION");
+        on = g_game.gpu_occlusion && !(e && (!strcmp(e, "0") || !strcmp(e, "off")));
+    }
     return on;
 }
 static uint32_t occ_slot_new(void){

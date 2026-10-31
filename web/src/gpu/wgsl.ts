@@ -91,3 +91,41 @@ export const TONE = COPY + /* wgsl */`
   let b = s + (tone.y - s) * (m * t) / (1.0 + (m - 1.0) * t);
   return vec4f(select(y, b, y > vec3f(s)), 1.0);
 }`;
+
+// An occlusion query's draw counted (encoder.ts occR, gpu-abi.md section 13): the draw's own vertex stage, then this
+// pixel stage in a pass without a depth attachment, the draw's Z bound as a texture (ms: 4 samples).  Each sample the
+// triangle covers adds 1 to the draw's second counter, and each one whose depth passes the draw's test (CMP, as
+// encoder.ts's table: 0 always, 1 never, 2 less, 3 equal, 4 less-equal, 5 greater, 6 not-equal, 7 greater-equal)
+// adds 1 to its first.  The fragment's depth at the pixel's centre stands for each sample's.  Its alpha test and
+// its pixel shader's discards are not applied; nothing is written to the target.
+export const OCC_FS = (ms: boolean) => /* wgsl */`
+override CMP: u32 = 0u;
+@group(1) @binding(0) var z: ${ms ? 'texture_depth_multisampled_2d' : 'texture_depth_2d'};
+struct Count { passed: atomic<u32>, covered: atomic<u32> }
+@group(1) @binding(1) var<storage, read_write> cnt: Count;
+fn depth_test(f: f32, d: f32) -> bool {
+  switch CMP {
+    case 1u: { return false; }
+    case 2u: { return f < d; }
+    case 3u: { return f == d; }
+    case 4u: { return f <= d; }
+    case 5u: { return f > d; }
+    case 6u: { return f != d; }
+    case 7u: { return f >= d; }
+    default: { return true; }
+  }
+}
+@fragment fn fs_count(@builtin(position) p: vec4f, @builtin(sample_mask) m: u32) -> @location(0) vec4f {
+  let at = vec2i(p.xy);
+  var c = 0u;
+  var n = 0u;
+  for (var s = 0u; s < ${ms ? 4 : 1}u; s++) {
+    if (((m >> s) & 1u) != 0u) {
+      c += 1u;
+      if (CMP == 0u || depth_test(p.z, textureLoad(z, at, ${ms ? 'i32(s)' : '0'}))) { n += 1u; }
+    }
+  }
+  if (c != 0u) { atomicAdd(&cnt.covered, c); }
+  if (n != 0u) { atomicAdd(&cnt.passed, n); }
+  return vec4f(0.0);
+}`;

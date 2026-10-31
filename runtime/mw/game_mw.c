@@ -272,6 +272,7 @@ const GameOps g_game = {
     .gpu_stages = 8,                            /* t4..t7 and s4..s7 at SM2 already, depth textures (GAME.md 5.9) */
     .d3d_sm3 = 1,                               /* vs/ps 3.0: the ps_2_x and SM3 techniques (GAME.md 5.3) */
     .gpu_msaa = 1,                              /* the FSAA option: a 4-sample back buffer (GAME.md 5.6) */
+    .gpu_occlusion = 1,                         /* the sun flare's occlusion queries (GAME.md 5.5) */
     .ui_band = mw_ui_band,                      /* the front end's and HUD's quads (made in clip space, 0x6D1260)
                                                  * keep to the 4:3 band on an upright screen (widescreen_mw.c) */
     .d3d_host_backing = 1,                      /* textures' and buffers' copies outside the guest's 512 MB:

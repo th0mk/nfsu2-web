@@ -470,16 +470,29 @@ its count at 0), turns the count over its 32x32 test quad into the flare's brigh
 issues the next query around the quad (z 0.999, colour writes off). Before version 7 `GetData` answered S_OK with 0
 at once: the flare never showed.
 
+- GameOps `gpu_occlusion` (Most Wanted 1; Underground 2, which makes no queries, 0) turns it on: com.c measures
+  queries and gpu_web.c sets `GwCtl.occ_ptr`, which tells the page to make its Z surfaces with TEXTURE_BINDING. Off,
+  `GetData` answers S_OK with 0 at once and the Z surfaces are as before.
 - com.c (`query_issue`, `query_getdata`): a query of type 9 gets a slot (1-63). `Issue(BEGIN)` numbers the issue
   (24 bits, never 0) and every draw until `Issue(END)` goes on the frame's list, `GwFrame.occ`: `occn` entries of
   { record index, `slot | number << 8` } in draw order, at most `GW_OCC_MAX` (64) a frame. `GetData`
   answers the newest result the page wrote for that query, S_OK, and S_FALSE until there is one (a result of a slot's
   earlier query is older than the query's first issue and not taken). A count for the back buffer is scaled to the
   resolution the game believes it has. No renderer: S_FALSE always. `NFSU2_OCCLUSION=off` is the old answer.
-- The page (encoder.ts): a frame with such draws gives every render pass the frame's occlusion query set; each draw
-  of an issue that is drawn gets its own query (a 4-sample pass's count divided by 4), resolved after the last pass
-  and read back after the submit (a ring of 4 read buffers; a frame that finds all 4 still mapping is not measured).
-  It then writes, per issue, the sum of its draws' counts (0 when none was drawn) into the game's table at
+- The page (encoder.ts `occR`) counts the samples itself. WebGPU's occlusion queries promise only zero or not zero
+  ("any non-zero result value for the query indicates that at least one sample passed"), and Chrome's Dawn writes
+  binary results on D3D12 and Metal (`D3D12_QUERY_TYPE_BINARY_OCCLUSION`, `MTLVisibilityResultModeBoolean`): a fully
+  visible 32x32 quad would read 1, and 0 in a 4-sample pass, so the flare would stay missing on Windows and Macs.
+  Instead each draw of an issue that is drawn is drawn once more, just before itself, in a pass of its own: its
+  target attached with nothing written, no depth attachment, the pass's Z bound as a texture (1 or 4 samples), its
+  own vertex stage and a pixel stage (wgsl.ts `OCC_FS`) that adds each covered sample whose depth passes the draw's
+  depth test to the draw's counter in a storage buffer, and each covered sample to a second (the stats' `onScreen`).
+  The fragment's depth at the pixel centre stands for each sample's; the draw's depth bias, alpha test and its pixel
+  shader's discards are not applied (the flare's quad has none). The counters (256 bytes apart, a dynamic offset
+  each) are copied after the last pass and read back after the submit (a ring of 4 read buffers; a frame that finds
+  all 4 still mapping is not measured). The pass splits its target's pass in two: a 4-sample one resolves once more.
+  It then writes, per issue, the sum of its draws' counts in pixels (a 4-sample pass's samples over 4; 0 when none
+  was drawn) into the game's table at
   `GwCtl.occ_ptr`: 64 entries of { issue, count }, the count first and then the issue (an atomic store), which the
   game reads first. A frame whose `occn` is 0 (every Underground 2 frame) costs the page one test, and the module's
   `rec_draw` one test a draw, for an open query.
@@ -493,4 +506,4 @@ work together only from one commit.
 | Field | Meaning | UG2 | First used by (MW tracker) |
 |---|---|---|---|
 | `GwFrame.occ`, `occn` | the frame's occlusion queries' draws: { record index, slot \| issue << 8 } x occn | occn 0 (no queries) | M5-15 |
-| `GwCtl.occ_ptr` | the game's results table, 64 x { issue, count } | set, never written | M5-15 |
+| `GwCtl.occ_ptr` | the game's results table, 64 x { issue, count }; 0: no queries measured | 0 (GameOps `gpu_occlusion` 0) | M5-15 |

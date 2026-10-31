@@ -102,9 +102,10 @@ export interface RendererStats {
   /** a multisampled back buffer (gpu-abi.md section 12), once it had one: passes drawn at 4 samples, and the screen
    *  drawn into the 4-sample texture again after a blit or copy into it */
   msPasses?: number; msRefreshes?: number;
-  /** occlusion queries (gpu-abi.md section 13), once a frame had one: results written for the game (issues, frames)
-   *  and frames not measured (every read buffer still mapping) */
-  occlusion?: { issues: number; frames: number; skipped: number };
+  /** occlusion queries (gpu-abi.md section 13), once a frame had one: results written for the game (issues, frames),
+   *  frames not measured (every read buffer still mapping), issues whose draws covered a sample (onScreen) and issues
+   *  with pixels passing the depth test (visible) */
+  occlusion?: { issues: number; frames: number; skipped: number; onScreen: number; visible: number };
   /** frames drawn straight into the canvas texture (no composite), and frames that kept the
    *  back buffer because they copied from the screen before drawing to it */
   direct: number; screenReadFirst: number;

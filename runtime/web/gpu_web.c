@@ -151,7 +151,8 @@ static void gw_init(void){
      * the first translation (com.c's shaders come after CreateDevice, whose
      * metal_available() runs this) and before the page reads the block */
     if (g_game.gpu_stages == 8){ g_ctl->stages = GW_STAGES_MAX; wgsl_set_stages(8); g_stages8 = 1; }
-    g_ctl->occ_ptr = (uint32_t)(uintptr_t)g_occ_res;    /* the occlusion results (gpu-abi.md section 13) */
+    /* the occlusion results (gpu-abi.md section 13); 0 (UG2): the page measures none, its Z surfaces as before */
+    if (g_game.gpu_occlusion) g_ctl->occ_ptr = (uint32_t)(uintptr_t)g_occ_res;
     const char *r = getenv("NFSU2_RENDERER");
     int want = r && !strcmp(r, "webgpu");
     if (want){
