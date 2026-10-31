@@ -94,6 +94,15 @@ async function session(n = 2) {
     drain: () => enc.drain(head) === head,
     /** the blocks written to texture id, in order */
     of: id => writes.filter(w => w.tex === `t${id}`).map(w => w.blocks),
+    /** frame 0: a draw for each texture id, sampling it on stage 0 */
+    frame: ids => {
+      const fw = (CTL >> 2) + P.C.frame, at = 16384;
+      u32[fw + P.F.dn] = ids.length; u32[fw + P.F.draws] = at;
+      ids.forEach((id, i) => {
+        const w = (at >> 2) + i * P.DRAW_WORDS;
+        u32.fill(0, w, w + P.DRAW_WORDS); u32[w + P.D.kind] = P.Kind.Draw; u32[w + P.D.tex] = id;
+      });
+    },
   };
   enc.startAstcWorkers(n, 'astc-worker.js', () => s.backs++);
   await settle();
@@ -160,4 +169,21 @@ test('a worker that dies with a batch: its levels are lost and said, nothing wai
   workers[1].answer();
   assert.deepEqual([s.of(1), s.of(2)], [[astc(3)], [astc(2)]]);
   assert.equal(s.pool().busy, false);
+});
+
+test('a frame waits only for its own textures: every batch handed on pumps again', async () => {
+  const s = await session(2);
+  s.create(1); s.create(2);
+  s.upload(1, 1); s.drain();                     // worker 0
+  s.upload(2, 2); s.drain();                     // worker 1
+  s.frame([1]);                                  // a frame that samples texture 1
+  assert.equal(s.enc.framePending(0), true, 'its level is out');
+  workers[0].answer();                           // texture 1's level is up, texture 2's still out
+  assert.equal(s.enc.framePending(0), false);
+  assert.equal(s.pool().busy, true);
+  assert.equal(s.backs, 1, 'pumped again with a batch still out');
+  workers[1].answer();
+  assert.equal(s.backs, 2);
+  s.frame([1, 2]);
+  assert.equal(s.enc.framePending(0), false);
 });

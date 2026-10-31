@@ -305,9 +305,9 @@ export class Encoder {
     return tail;
   }
 
-  /** n workers (astc-worker.ts at url) for the ASTC rewrite of DXT3 and DXT5; idle: called when the last level out is
-   *  on its texture (the frame held for it can go) */
-  startAstcWorkers(n: number, url: string, idle: () => void): void {
+  /** n workers (astc-worker.ts at url) for the ASTC rewrite of DXT3 and DXT5; back: called after levels have gone to
+   *  their textures (a frame held for them can go) */
+  startAstcWorkers(n: number, url: string, back: () => void): void {
     if (n <= 0 || this.astcPool || this.feat.bc || !this.feat.astc || !this.astcAlpha) return;
     this.astcPool = new AstcPool(n, url, (r, blocks, off, bw, bh) => {
       r.t.pend = (r.t.pend ?? 1) - 1;
@@ -315,7 +315,7 @@ export class Encoder {
       if (!blocks || this.tex[r.id] !== r.t) return;          // lost, or freed or made again while its level was out
       this.queue.writeTexture({ texture: r.t.tex, mipLevel: r.level, origin: { x: 0, y: 0, z: r.face } }, blocks,
         { offset: off, bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4, 1]);
-    }, idle, this.log);
+    }, back, this.log);
   }
   /** frame b samples (or blits from) a texture with a level still out with the ASTC workers: it waits for them */
   framePending(b: number): boolean {

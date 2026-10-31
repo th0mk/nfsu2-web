@@ -3,7 +3,8 @@
 // the order they were queued, each to its texture's writeTexture.  The page thread only copies (a fraction of a
 // millisecond a MB, against 25 for the rewrite).  A frame that samples a texture with a level still out waits for it
 // (index.ts pump: Encoder.framePending), so no frame draws a level that has not gone up yet, as before; the others
-// (a loading screen's, while the track's textures load) go on.
+// (a loading screen's, while the track's textures load) go on.  Every batch handed on pumps again, so a frame held
+// goes as soon as its own levels are up, not when the last batch out is.
 // The blocks are the ones the page thread made: the same function, each level apart.
 // A level whose rewrite throws in a worker comes back as it went and is rewritten here, and from then on the page
 // thread rewrites every level (in its turn, behind those still out); a worker that dies takes the bytes of the
@@ -40,7 +41,8 @@ export class AstcPool<R> {
    *  with the worker's: levels compared, levels that differ */
   verify: { levels: number; differ: number } | null = null;
 
-  constructor(n: number, url: string, private done: AstcDone<R>, private idle: () => void, private log: (s: string) => void) {
+  /** back: called after batches have gone to their textures (a frame held for one of them may go now) */
+  constructor(n: number, url: string, private done: AstcDone<R>, private back: () => void, private log: (s: string) => void) {
     for (let i = 0; i < n; i++) {
       let w: Worker;
       try { w = new Worker(url, { type: 'module', name: `astc-${i}` }); } catch (x) { this.log(`[gpu] ASTC worker ${i}: ${String(x)}`); continue; }
@@ -137,8 +139,9 @@ export class AstcPool<R> {
     this.apply();
   }
 
-  /** the batches back at the front, in order, to their textures */
+  /** the batches back at the front, in order, to their textures; then back() */
   private apply(): void {
+    if (!this.sent[0]?.back) return;
     const t0 = performance.now();
     while (this.sent.length && this.sent[0].back) {
       const b = this.sent.shift()!, u8 = b.back!.byteLength ? new Uint8Array(b.back!) : null;
@@ -160,7 +163,7 @@ export class AstcPool<R> {
       if (b.back!.byteLength && this.spare.length < 6) this.spare.push(b.back!);
     }
     this.applyMs += performance.now() - t0;
-    if (!this.busy) this.idle();
+    this.back();
   }
 
   /** a level rewritten on the page thread, in place in its batch (its item at i); false: that threw too (said once),
