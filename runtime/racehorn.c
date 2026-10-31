@@ -9,7 +9,10 @@
  *   - to whom: the games the race link exchanged datagrams with in the last
  *     PEER_MS (vlan_race_peers): every joiner for the creator, the creator
  *     for a joiner.  The creator passes each joiner's horn on to the other
- *     joiners, marked relayed (never passed on again).
+ *     joiners, marked relayed (never passed on again), at most RELAY_PER_S
+ *     of each joiner's a second (vlan_race_relay).  A horn from an address
+ *     that is not one of the race's peers is not heard and not passed on;
+ *     so a joiner, whose one peer is the creator, passes nothing on.
  *   - what: "N2HN", version 1, flags (1 the horn sounds, 2 relayed, bits
  *     2-5 which horn: horn.h's kinds, which a build before them leaves at 0,
  *     the dual one, and ignores), a sequence number, and the name the
@@ -46,6 +49,8 @@
 #define HORN_PORT    3659u         /* next to the race link's 3658; the game binds neither else */
 #define PEER_MS      5000u
 #define SEND_MS      100u
+#define RELAY_PER_S  30u           /* a joiner's horn messages passed on a second: a horn sends one every SEND_MS,
+                                    * and a player tapping it up to about 3 a tap (on, off, off) */
 #define STALE_MS     300u
 #define NAME_N       16
 #define MSG_N        (8 + NAME_N)
@@ -55,6 +60,7 @@
 __attribute__((weak)) int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n){ (void)port; (void)ip_h; (void)p; (void)n; return -1; }
 __attribute__((weak)) int vlan_rt_recv(uint16_t port, uint32_t *ip_h, void *p, int cap){ (void)port; (void)ip_h; (void)p; (void)cap; return -1; }
 __attribute__((weak)) int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms){ (void)ip_h; (void)max; (void)within_ms; return 0; }
+__attribute__((weak)) int vlan_race_relay(uint32_t ip_h, uint32_t within_ms, uint32_t per_s){ (void)ip_h; (void)within_ms; (void)per_s; return -1; }
 
 static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
@@ -109,7 +115,9 @@ static void got(CPU *c, uint8_t *m, int n, uint32_t from, uint32_t now){
     for (; k < NAME_N - 1 && m[8 + k] >= 0x20 && m[8 + k] <= 0x7e; k++) name[k] = (char)m[8 + k];
     name[k] = 0;
     if (!name[0]) return;
-    if (!(m[5] & 2)){ m[5] |= 2; send_all(m, from); }   /* the creator passes it on */
+    int pass = !(m[5] & 2), r = vlan_race_relay(from, PEER_MS, pass ? RELAY_PER_S : 0u);
+    if (r < 0) return;                                  /* not one of the race's games */
+    if (pass && r){ m[5] |= 2; send_all(m, from); }     /* the creator passes it on */
     int j = 0;
     while (j < NHORNS && strcmp(g_h[j].name, name)) j++;
     if (j == NHORNS){

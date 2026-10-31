@@ -16,7 +16,8 @@
  * Netbios, identity; a port-unreachable notice reaching the socket that sent
  * (several binders of one port), control frames (FIN) after a send that
  * filled the TX ring, the answers the backend gives by itself (port
- * unreachable, echo reply, RST) limited per sender and in all, and the page
+ * unreachable, echo reply, RST) limited per sender and in all, the horns'
+ * relay (race peers only, a budget per peer and second), and the page
  * closing its link at exit (the log line, checked by the .mjs).  Also SHA-256 (runtime/web/sha256.c) against FIPS
  * 180-4 vectors.  Output: one line per check, then "lan_unit: N passed, M failed".
  * `lan_unit pin <file>` only hashes a game DLL as the browser's loader does (runtime/module.c's pin), and the same
@@ -34,6 +35,7 @@
 int winsock_call(CPU *c, const char *dll, const char *n, uint32_t *out);
 net_mailbox *vlan_test_mailbox(void);
 int vlan_test_pump(void);
+int vlan_race_relay(uint32_t ip_h, uint32_t within_ms, uint32_t per_s);
 void nfsu2_sha256(const void *data, size_t n, uint8_t out[32]);
 void mem_commit(uint32_t, uint32_t);
 
@@ -242,6 +244,18 @@ int main(int argc, char **argv){
     r = WS("select", 5, 0u, setof(0, 2, u1, u3), 0u, 0u, tv0());
     check("select: a datagram makes it readable", r == 1 && setn(0) == 1, "r=%d", (int)r);
     WS("recv", 4, u3, GA(g_buf2), 100u, 0u);
+    {   /* the horns' relay (vlan_race_relay): 10.77.0.3 is a race peer now (UDP 3658 both ways), 10.77.0.9 is not */
+        int ones = 0, zeros = 0;
+        for (int i = 0; i < 40; i++){ int v = vlan_race_relay(PEER, 5000u, 30u); ones += v == 1; zeros += v == 0; }
+        check("relay: 30 of a race peer's 40 messages in a second are passed on", ones == 30 && zeros == 10, "%d passed on, %d not", ones, zeros);
+        check("relay: per_s 0 only checks (a race peer)", vlan_race_relay(PEER, 5000u, 0u) == 0, 0);
+        check("relay: an address that is not a race peer gets -1", vlan_race_relay(0x0A4D0009u, 5000u, 30u) == -1 &&
+              vlan_race_relay(0x0A4D0009u, 5000u, 0u) == -1, 0);
+        struct timespec ts = { 1, 20000000 };
+        nanosleep(&ts, 0);
+        check("relay: the next second has its own budget", vlan_race_relay(PEER, 5000u, 30u) == 1, 0);
+        check("relay: a peer not heard within within_ms gets -1", vlan_race_relay(PEER, 500u, 30u) == -1, 0);
+    }
     WS("closesocket", 1, u2);
     r = WS("bind", 3, (u2 = WS("socket", 3, 2u, 2u, 0u)), sa(g_sa, 0, 9999), 16u);
     check("closesocket frees nothing of the first binder (still in use)", r == 0xFFFFFFFFu && err() == WSAEADDRINUSE, "err %u", err());

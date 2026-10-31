@@ -452,10 +452,12 @@ static void sent_note(VSock *v, uint32_t ip, uint16_t port){
  * received, at), and how their datagrams came (racenet.h: waits, and the
  * runs of datagrams that came at once, as a link that held them hands them
  * over; received only, rx_at: our own sends to a peer filled the waits of
- * its link) (g_mu held) */
+ * its link); and the second in which what a peer sent was last passed on to
+ * the others, how often in it, and how often past the budget in all
+ * (vlan_race_relay) (g_mu held) */
 #define RACE_PORT  3658
 #define RACE_PEERS 16
-static struct { uint32_t ip_h; uint64_t at, rx_at; RaceLink s; int gap_run; } g_race[RACE_PEERS];
+static struct { uint32_t ip_h; uint64_t at, rx_at, relay_at; RaceLink s; int gap_run; uint32_t relay_n, relay_over; } g_race[RACE_PEERS];
 static void race_note(uint32_t ip_h, int rx){
     int k = -1;
     for (int j = 0; j < RACE_PEERS && k < 0; j++) if (g_race[j].at && g_race[j].ip_h == ip_h) k = j;
@@ -1373,6 +1375,32 @@ int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms){
         if (g_race[j].at && now - g_race[j].at <= (uint64_t)within_ms * 1000u && g_race[j].ip_h != g_vip) ip_h[n++] = g_race[j].ip_h;
     pthread_mutex_unlock(&g_mu);
     return n;
+}
+/* a message from ip_h on the runtime's race port (the horns: racehorn.c, runtime/mw/racehorn_mw.c), which the
+ * creator passes on to the race's other peers: -1 when ip_h is not one of the race's peers within within_ms (as
+ * vlan_race_peers), so the message is not the race's; else with per_s 0 just 0, and with per_s 1 while fewer than
+ * per_s of ip_h's messages were passed on in this second (this one counted) and 0 past that.  Each peer's own
+ * budget: a game that sends more than its share (one horn is 10 a second) cannot make the creator send 15 copies
+ * of each to everyone, and the others' horns still go on.  The first refusals of each peer, and every 1000th, are
+ * logged. */
+int vlan_race_relay(uint32_t ip_h, uint32_t within_ms, uint32_t per_s){
+    pthread_mutex_lock(&g_mu);
+    uint64_t now = now_us();
+    int r = -1;
+    uint32_t over = 0;
+    for (int j = 0; j < RACE_PEERS && r < 0; j++){
+        if (!g_race[j].at || g_race[j].ip_h != ip_h || ip_h == g_vip || now - g_race[j].at > (uint64_t)within_ms * 1000u) continue;
+        r = 0;
+        if (!per_s) break;
+        if (!g_race[j].relay_at || now - g_race[j].relay_at >= 1000000u){ g_race[j].relay_at = now; g_race[j].relay_n = 0; }
+        if (g_race[j].relay_n < per_s){ g_race[j].relay_n++; r = 1; }
+        else over = ++g_race[j].relay_over;
+    }
+    pthread_mutex_unlock(&g_mu);
+    if (over && (over <= 3u || over % 1000u == 0u))
+        ws_log("virtual LAN: race peer %u.%u.%u.%u sent more than %u a second to pass on: the rest of this second is "
+               "not passed on (%u so far)", ip_h >> 24, ip_h >> 16 & 255u, ip_h >> 8 & 255u, ip_h & 255u, per_s, over);
+    return r;
 }
 /* how the race peers' datagrams came since the last reset (racenet.h) */
 int vlan_race_links(RaceLink *o, int max, int reset){
