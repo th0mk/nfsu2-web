@@ -93,8 +93,9 @@ reference (its ADPCM takes 309 kbit/s in stereo):
     -V 2  208 kbit/s, -0.16 to -0.27, -0.22
     -V 3  190 kbit/s, -0.27 to -0.46, -0.37
     -V 4  179 kbit/s, -0.36 to -0.54, -0.46
--V 0 is the default, the one as close to the original as Underground 2's pack
-(-0.07): 534 MB -> 405 MB (76 %), 7 minutes on 12 cores.  The whole pack,
+-V 2 is the default (about 328 MB from 534, the size/quality choice made for the
+pack); -V 0 is the one as close to the original as Underground 2's pack (-0.07):
+534 MB -> 405 MB (76 %), 7 minutes on 12 cores.  The whole pack at -V 0,
 decoded by the runtime's decoder (tools/mw/el3_test.c), every stream to the
 sample count of its original, against the original, per track (476 runs of
 consecutive stereo streams of 20 s or more, and the 14 four-channel streams'
@@ -557,7 +558,7 @@ def main():
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
     ap.add_argument('--game', dest='which', choices=('ug2', 'mw'), default='ug2',
                     help="mw: Most Wanted's SOUND/PFDATA/MW_Music.mus and .mpf, for the runtime's decoder")
-    ap.add_argument('--quality', default='0', help="mw: LAME's VBR quality, -V (default 0: the docstring's PEAQ)")
+    ap.add_argument('--quality', default='2', help="mw: LAME's VBR quality, -V (default 2: the docstring's PEAQ)")
     a = ap.parse_args()
     if sys.byteorder != 'little':
         raise SystemExit('a little-endian machine only (the samples go to LAME as they are in memory)')
