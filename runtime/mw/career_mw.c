@@ -277,7 +277,17 @@ static void watch_race(CPU *c){
  * leaves the car within CLEAR_M of another racer, or where it was, it is moved back along its own way instead, to the
  * newest point of TRAIL kept while it drove (one a second of game time) at least BACK_M (and BACK_STEP more per
  * racer index) from the wedge and CLEAR_M from every other racer, facing the way it drove there.  After either, the AI is given the car again
- * (Game.ForceAIControl), as at the GO. */
+ * (Game.ForceAIControl), as at the GO.
+ * At a lap's end the AI can stop the car for good: in a LAN race of 2026-10-31 (run d1, the kind the list calls
+ * Sprint, 3 laps) both cars braked from 47 m/s to a stop 24-35 m from the grid at each lap's end, 17 times in all,
+ * and resets there or back along the way brought them to the same stop (the AI's goal is not moved on to the next
+ * lap, inferred: the stops are where the AI stops at a goal it reached, no wall).  So a wedge within LAP_M of where
+ * the race began, once the car has done some of the race (RI_PCT over LAP_PCT), goes on along the way the car took
+ * from the line at the start instead (START: a point every START_STEP metres, up to START_N), to the first point
+ * LAP_ON metres (and BACK_STEP more per racer index) from the grid, facing the way it drove there.  And a car
+ * wedged at the same place SAME_N times in a row (run c4: both cars at 8-11 % of a race, 55 resets each in eight
+ * minutes, each reset 2-5 m from the wedge) goes on AHEAD_M past it along the way it came (the TRAIL), put on the road
+ * there by the game's reset. */
 #define STUCK_S 8.0
 #define STUCK_S_RACE 5.0                /* in a race: bin 11's rival races were lost a few seconds behind after wedges
                                            (c4-b11a: 87.5 % to the rival's 91.0 %, 77.9 % to 86.4 %), 8 s each */
@@ -287,14 +297,24 @@ static void watch_race(CPU *c){
 #define BACK_M  25.0f                   /* and BACK_STEP more per racer index: two cars wedged together go apart */
 #define BACK_STEP 20.0f
 #define TRAIL_N 32
-#define IID_RESET        0x00620250u     /* IResetable, the ResetCar behaviour's interface */
+#define LAP_M      60.0f                /* a wedge this near the grid, past LAP_PCT of the race: a lap's end */
+#define LAP_PCT    5.0f
+#define LAP_ON     80.0f                /* metres from the grid along the start's way (and BACK_STEP per racer index) */
+#define START_N    24
+#define START_STEP 10.0f
+#define SAME_M     15.0f                /* a wedge this near the last one: the same place */
+#define SAME_N     3                    /* the SAME_N-th wedge there in a row: on ahead along the way it came */
+#define AHEAD_M    40.0f                /* metres ahead (and BACK_STEP per racer index), then the road's reset */
+#define IID_RESET       0x00620250u     /* IResetable, the ResetCar behaviour's interface */
 #define RESET_VEHICLE    0x08u           /* IResetable::ResetVehicle(bool manual) 0x6B08C0 */
 #define FN_INPUT_CLEAR   0x0047cc50u     /* the input handler's call after a reset: the controllers' held state cleared */
 #define G_SIM            0x009203b0u     /* the simulation: +0x20 its step (float, s), +0x28 the steps it ran */
 static int ai_on;                       /* autopilot on: the AI drives the local player's car */
-static struct { double since; float p[3]; int resets, futile, moved, racing; uint32_t sim; } U;
+static struct { double since; float p[3], w[3]; int resets, futile, moved, racing, same; uint32_t sim; } U;
 static struct { float p[3]; double t; } TRAIL[TRAIL_N];
 static int trail_n, trail_head;           /* points kept, the next one's slot */
+static float START[START_N][3];           /* the way the car took from the grid at the GO */
+static int start_n;
 double mw_game_time(void){
     uint32_t sim = rd(G_SIM);
     return sim ? (double)rd(sim + 0x28u) * (double)rdf(sim + 0x20u) : 0.0;
@@ -343,6 +363,48 @@ static int trail_back(CPU *c, uint32_t s, const float q[3], float back_m, float 
     }
     return 0;
 }
+/* a wedge at q within LAP_M of the grid, past LAP_PCT of the race: the car to the first point of START LAP_ON (and
+ * BACK_STEP per racer index) from the grid and CLEAR_M from the other racers, facing the way it drove from it, and the
+ * AI given it again (U.p: where it went); 0 = not a lap's end, or no such point */
+static int lap_end(CPU *c, uint32_t s, const float q[3], int idx, uint32_t rs){
+    float gx = q[0] - START[0][0], gz = q[2] - START[0][2];
+    float pct = rdf(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_PCT), on = LAP_ON + BACK_STEP * (float)(idx - 1);
+    if (sqrtf(gx * gx + gz * gz) >= LAP_M || !(pct > LAP_PCT)) return 0;
+    for (int k = 1; k + 1 < start_n; k++){
+        const float *a = START[k], *b = START[k + 1];
+        float ax = a[0] - START[0][0], az = a[2] - START[0][2];
+        if (sqrtf(ax * ax + az * az) < on || nearest_racer(c, s, a) < CLEAR_M) continue;
+        float dir[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, l = sqrtf(dir[0] * dir[0] + dir[2] * dir[2]);
+        if (l < 1.0f) continue;
+        dir[0] /= l; dir[2] /= l;
+        if (!mw_aid_teleport(c, a, dir)) return 0;
+        uint32_t zero = 0;
+        gcall(c, FN_FORCE_AI, 0, 1, &zero);
+        memcpy(U.p, a, sizeof U.p);
+        return 1;
+    }
+    return 0;
+}
+/* a car wedged at the same place SAME_N times: on ahead of q by ahead_m along the way it came there (the newest TRAIL
+ * point at least 20 m back gives the way), set down there and put on the road by the game's reset, the AI given it
+ * again (U.p: where it went); 0 = no way kept */
+static int go_ahead(CPU *c, uint32_t s, const float q[3], float ahead_m){
+    for (int k = 0; k < trail_n; k++){
+        const float *a = TRAIL[(trail_head - 1 - k + 2 * TRAIL_N) % TRAIL_N].p;
+        float dir[3] = { q[0] - a[0], 0.0f, q[2] - a[2] }, l = sqrtf(dir[0] * dir[0] + dir[2] * dir[2]);
+        if (l < 20.0f) continue;
+        dir[0] /= l; dir[2] /= l;
+        float to[3] = { q[0] + dir[0] * ahead_m, q[1], q[2] + dir[2] * ahead_m };
+        if (!mw_aid_teleport(c, to, dir)) return 0;
+        mw_reset_car(c);
+        uint32_t zero = 0, p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
+        gcall(c, FN_FORCE_AI, 0, 1, &zero);
+        if (p && mem_is_committed(p + 11u)){ U.p[0] = rdf(p); U.p[1] = rdf(p + 4u); U.p[2] = rdf(p + 8u); }
+        else memcpy(U.p, to, sizeof U.p);
+        return 1;
+    }
+    return 0;
+}
 static void wedge_watch(CPU *c){
     long f = autotest_frame();
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c), a = s;
@@ -354,7 +416,7 @@ static void wedge_watch(CPU *c){
         U.sim = s; U.since = 0;
     }
     int racing = MR8(rs + RS_ACTIVE) && MR8(rs + RS_GO);
-    if (racing != U.racing){ U.racing = racing; U.moved = 0; trail_n = 0; }   /* a race's GO or end: a new start */
+    if (racing != U.racing){ U.racing = racing; U.moved = 0; trail_n = 0; start_n = 0; U.same = 0; }   /* a race's GO or end: a new start */
     if (!racing && !ai_on){ U.since = 0; return; }            /* a race before its GO, or its end, with `autopilot go` */
     int idx = 1;
     if (racing){
@@ -369,6 +431,11 @@ static void wedge_watch(CPU *c){
     double t = mw_game_time();
     uint32_t v = gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0);
     float speed = v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) : 0.0f;
+    if (racing && !U.moved && !start_n){ memcpy(START[0], q, sizeof q); start_n = 1; }   /* the grid */
+    if (racing && start_n > 0 && start_n < START_N){
+        float dx = q[0] - START[start_n - 1][0], dz = q[2] - START[start_n - 1][2];
+        if (sqrtf(dx * dx + dz * dz) >= START_STEP){ memcpy(START[start_n], q, sizeof q); start_n++; }
+    }
     if (speed > MOVED_V){
         if (!U.moved && racing) fprintf(stderr, "[mwrace] f=%ld autopilot: the car left the line\n", f);
         U.moved = 1;
@@ -389,6 +456,29 @@ static void wedge_watch(CPU *c){
         fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time in a pursuit: no reset\n", f, d,
                 t - U.since);
         U.since = t; memcpy(U.p, q, sizeof q);
+        return;
+    }
+    {   /* the same place as the last wedge? */
+        float wx = q[0] - U.w[0], wz = q[2] - U.w[2];
+        U.same = U.resets && sqrtf(wx * wx + wz * wz) < SAME_M ? U.same + 1 : 1;
+        memcpy(U.w, q, sizeof q);
+    }
+    if (racing && start_n > 1 && lap_end(c, s, q, idx, rs)){   /* a lap's end (above): on along the start's way */
+        U.resets++; U.futile = 0; U.same = 0;
+        fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time (at %.1f %.1f %.1f): "
+                "stopped at a lap's end; on along the start's way to %.1f %.1f %.1f (reset %d)\n", f, d, t - U.since,
+                q[0], q[1], q[2], U.p[0], U.p[1], U.p[2], U.resets);
+        log_status(c);
+        U.since = t;
+        return;
+    }
+    if (racing && U.same >= SAME_N && go_ahead(c, s, q, AHEAD_M + BACK_STEP * (float)(idx - 1))){
+        U.resets++; U.futile = 0; U.same = 0;
+        fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time (at %.1f %.1f %.1f): "
+                "wedged at the same place %d times; on ahead along the way it came to %.1f %.1f %.1f (reset %d)\n", f, d,
+                t - U.since, q[0], q[1], q[2], SAME_N, U.p[0], U.p[1], U.p[2], U.resets);
+        log_status(c);
+        U.since = t;
         return;
     }
     int ok = mw_reset_car(c);
