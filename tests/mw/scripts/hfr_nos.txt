@@ -1,0 +1,44 @@
+# Most Wanted at other frame rates, the NOS trail (TRACKER M7-32; runtime/mw/hfr_mw.c): hfr_race.txt's Custom Race
+# circuit; from GO the gas is held (Up) for 5 s of game time, then the nitrous (X) for 4 s with it, then the game's AI
+# drives for 60 s.  NFSMW_HFR_TRAIL=1 logs each car's trail while it is drawn ("[hfrtrail]": the span of the
+# ring's samples, as the game wrote it and as drawn, in m and in s of travel), =2 also the trail's gate per car.
+#   node web/tools/run-suite.mjs --game mw --script hfr_nos.txt --marker 'hfr_nos: done' --env NFSU2_FPS=120 \
+#     --env NFSMW_WORLD_HFR=1 --env NFSMW_HFR_TRAIL=2 --timeout-scale 8
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", on Traffic Level
++0    tap RIGHT                                          # Moderate
++20   tap RIGHT                                          # Maximum
++20   waitfng Track_Options.fng:a6ed015d 300
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 24000                         # racing (GameFlow 6)
++0    expect x:0x00925e90 == 6                           # a wait that timed out goes on: this fails the run
++0    waitexpr b:[0x0091e000]+0x16c != 0 12000           # GO: the player's race timer runs (frames: 240 fps too)
++0    expect b:[0x0091e000]+0x16c != 0                   # no GO: T0 below would not be GO, the run fails
++0    log hfr_nos: GO
++0    mark T0 f:[0x009203b0]+0x18
++0    down UP
++0    waitexpr f:[0x009203b0]+0x18 >= @T0+5              # the Sim timer's time, s (+0x18)
++0    down X                                             # the nitrous
++0    waitexpr f:[0x009203b0]+0x18 >= @T0+9
++0    up X
++0    log hfr_nos: nitrous off
++0    up UP
++0    autopilot on
++0    waitexpr f:[0x009203b0]+0x18 >= @T0+69
++0    log hfr_nos: done
++0    quit

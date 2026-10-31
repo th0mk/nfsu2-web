@@ -82,6 +82,11 @@
  *                              world's steps (frames that do not step show the one before)
  *   NFSU2_HFR_LOG = 1          one [mwpace] line a second: frames, slots, missed, the steps 0x642DB0 ran a
  *                              frame (its [+0x28] count), frames cut to the cap, sleep, work
+ *   NFSU2_HFR_FT = 1           test only (M7-32): in a world, one [mwft] line every 100 paced frames, frame by
+ *                              frame: iv the time from its start (the pacer's return) to the next frame's, wk its
+ *                              work (from the pacer's return to the next frame's pacer: the game's frame and the
+ *                              present's wait), both in 0.01 ms, sl the slots the next frame stood for, st the
+ *                              steps 0x642DB0 ran in it (tools/mw/hfr_frames.py reads them)
  */
 #include "cpu.h"
 #include "game.h"
@@ -132,7 +137,7 @@ int  metal_display_hz(void);            /* gpu_web.c: the page's measured refres
 #define M_UNCAPPED (-2)
 #define M_AUTO     (-3)
 
-static int g_mode = M_AUTO, g_lockstep = 0, g_lock_wall = 0, g_log = 0, g_race_hfr = 0, g_world_hfr = 0;
+static int g_mode = M_AUTO, g_lockstep = 0, g_lock_wall = 0, g_log = 0, g_race_hfr = 0, g_world_hfr = 0, g_ft_on = 0;
 static double g_sim_hz = 0;
 static _Atomic int g_rate_now = 0;
 
@@ -167,6 +172,7 @@ static void resolve_once(void){
     e = getenv("NFSU2_HFR_LOG"); g_log = e ? atoi(e) : 0;
     e = getenv("NFSMW_RACE_HFR"); g_race_hfr = e && *e == '1';
     e = getenv("NFSMW_WORLD_HFR"); g_world_hfr = e && *e == '1';
+    e = getenv("NFSU2_HFR_FT"); g_ft_on = e && *e == '1';
 }
 static void resolve(void){ static pthread_once_t once = PTHREAD_ONCE_INIT; pthread_once(&once, resolve_once); }
 static int mode_rate(void){
@@ -294,6 +300,35 @@ static void stat_close(uint64_t now){
     g_sec_t0 = now;
 }
 
+/* NFSU2_HFR_FT=1 (above): a world's frames, 100 to a line.  A frame's record is closed at the next frame's pacer,
+ * when its steps (0x642E60 below) and its interval are known; leaving the world drops the part line. */
+#define FT_N 100
+static struct { uint64_t t_start; int n; uint32_t steps; uint64_t seq;
+                uint16_t iv[FT_N], wk[FT_N]; uint8_t sl[FT_N], st[FT_N]; } g_ft;
+static uint16_t ft_cs(uint64_t ns){ uint64_t v = (ns + 5000u) / 10000u; return v > 65535u ? 65535u : (uint16_t)v; }
+static void ft_frame(uint64_t start, uint64_t work, int slots, int rate){
+    if (MR32(A_FLOW) != FLOW_RACING){ g_ft.t_start = 0; g_ft.n = 0; g_ft.steps = 0; return; }
+    if (g_ft.t_start){
+        int i = g_ft.n++;
+        g_ft.iv[i] = ft_cs(start - g_ft.t_start); g_ft.wk[i] = ft_cs(work);
+        g_ft.sl[i] = (uint8_t)(slots < 9 ? slots : 9); g_ft.st[i] = (uint8_t)(g_ft.steps < 9u ? g_ft.steps : 9u);
+        if (g_ft.n == FT_N){
+            char b[FT_N * 14 + 96]; int o = snprintf(b, sizeof b, "[mwft] n=%llu rate=%d iv=", (unsigned long long)g_ft.seq, rate);
+            for (int k = 0; k < FT_N; k++) o += snprintf(b + o, sizeof b - (size_t)o, k ? ",%u" : "%u", g_ft.iv[k]);
+            o += snprintf(b + o, sizeof b - (size_t)o, " wk=");
+            for (int k = 0; k < FT_N; k++) o += snprintf(b + o, sizeof b - (size_t)o, k ? ",%u" : "%u", g_ft.wk[k]);
+            o += snprintf(b + o, sizeof b - (size_t)o, " sl=");
+            for (int k = 0; k < FT_N; k++) b[o++] = (char)('0' + g_ft.sl[k]);
+            o += snprintf(b + o, sizeof b - (size_t)o, " st=");
+            for (int k = 0; k < FT_N; k++) b[o++] = (char)('0' + g_ft.st[k]);
+            b[o] = 0;
+            fprintf(stderr, "%s\n", b);
+            g_ft.seq += FT_N; g_ft.n = 0;
+        }
+    }
+    g_ft.t_start = start; g_ft.steps = 0;
+}
+
 /* the most slots a frame stands for: the game's cap on a frame's time (0x6612D3), in whole slots */
 static int cap_slots(int rate){
     double unit = MR32(A_CAP_60) ? (double)MRF32(A_SIXTIETH) : (double)MRF32(A_FIFTIETH);
@@ -349,6 +384,7 @@ void sub_00661280(CPU *c){
         if (g_t_open) g_sec.work_ns += t_in - g_t_open;
     }
     uint64_t now = mono_ns();
+    if (g_ft_on && rate > 0) ft_frame(now, g_t_open ? t_in - g_t_open : 0, g_frame_slots, rate);
     stat_close(now);
     g_t_open = now;
     sub_00661280_orig(c);
@@ -385,6 +421,7 @@ void sub_00642e60(CPU *c){
     if (owed >= 0) MRF32(sim + SIM_CARRY) = 0.f;     /* no rest of its own: the slots keep it */
     uint32_t ran = MR32(sim + SIM_RUNS) - runs0;     /* what 0x642DB0 ran, after its own limits */
     g_sec.steps[ran < 4u ? ran : 4u]++;
+    g_ft.steps += ran;
     if (owed > (long)ran) g_sec.short_run++;
 }
 

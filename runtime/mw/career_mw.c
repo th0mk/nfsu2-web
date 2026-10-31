@@ -741,7 +741,8 @@ static struct { int op, done, rel; float v[6]; long since; char text[96]; } Q;
  * rates line up): the racers' share of the race (GRacerInfo +0x18), position and speed of the first four
  * simables of the list at 0x90D664 (the racers, the player first), and the speed of every vehicle of the
  * list at 0x92D0DC (racers first, then traffic).  Both lists are {vtable, base, capacity, count} with the
- * entries at base (seen in a race: simables 4 of 20, vehicles 4 of 160 before the traffic came). */
+ * entries at base (seen in a race: simables 4 of 20, vehicles 4 of 160 before the traffic came); "sb=" the
+ * player's Speedbreaker (on, charge: `breaker` below). */
 #define G_SIMLIST 0x0090d664u
 #define G_VEHLIST 0x0092d0dcu
 static void hfr_trace(CPU *c){
@@ -767,6 +768,8 @@ static void hfr_trace(CPU *c){
         o += snprintf(b + o, sizeof b - (size_t)o, " r%d=%.3f", i, rdf(rs + RS_RACERS + (uint32_t)i * RACER_SIZE + RI_PCT));
     uint32_t sb = rd(G_SIMLIST), sn = rd(G_SIMLIST + 8u), vb = rd(G_VEHLIST), vn = rd(G_VEHLIST + 8u);
     o += snprintf(b + o, sizeof b - (size_t)o, " ns=%u nv=%u", sn, vn);
+    uint32_t pi = player_iface();                               /* the player's Speedbreaker: on, charge */
+    if (pi) o += snprintf(b + o, sizeof b - (size_t)o, " sb=%u,%.4f", MR8(pi + PL_BREAKER_ON), rdf(pi + PL_BREAKER));
     for (uint32_t i = 0; sb && i < sn && i < 4; i++){          /* the racers: position, speed */
         uint32_t s = rd(sb + 4u * i);
         uint32_t p = s ? gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0) : 0;

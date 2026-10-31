@@ -66,7 +66,11 @@ line over it and the clocks in peeks; its check wants the swing over in 6 s of w
 second at the page's frame-rate setting `NFSU2_FPS`, runtime/mw/framerate_mw.c; `NFSU2_HFR_LOG=1` adds a `[mwpace]`
 line a second with the slots and the steps the simulation ran). `hfr_race.txt` is the lockstep A/B of a race at
 two rates (a circuit with Maximum traffic, the AI driving, 90 s of game time; `NFSMW_HFR_TRACE=1` traces it every 0.25
-s of game time, `tools/mw/hfr_ab.py` compares runs; runtime/mw/hfr_mw.c has the fixes it checks).
+s of game time, `tools/mw/hfr_ab.py` compares runs; runtime/mw/hfr_mw.c has the fixes it checks). For races above
+60 (TRACKER M7-32): `hfr_laps.txt` (the same race to its own end: lap and race times), `hfr_pursuit.txt` (a free-roam
+pursuit, its end and length), `hfr_breaker.txt` (`speedbreaker.txt`'s steps with waits long enough for 240 fps; the
+trace carries the charge) and `hfr_nos.txt` (the nitrous held, `NFSMW_HFR_TRAIL` logs the trails); `NFSU2_HFR_FT=1`
+logs every frame's time in a world, which `tools/mw/hfr_frames.py` sums up.
 
 The race kinds (TRACKER M4-05, M4-06): `race_kind.txt` (a Custom Race circuit, sprint, lap knockout or speedtrap on
 one track, picked on the screens by the kind's menu item and the track's name label, `MWK_RUNS` times, each ended by

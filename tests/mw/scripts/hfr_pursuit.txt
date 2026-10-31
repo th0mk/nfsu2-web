@@ -1,0 +1,28 @@
+# Most Wanted at other frame rates, a pursuit (TRACKER M7-32): pursuit_start.txt's pursuit (the freeroam career
+# seed resumed into free roam, Game.ForcePursuitStart(1), the game's AI driving) with waits long enough for 240
+# fps: `pursuit watch` logs every change of the pursuit's state ([mwpursuit] lines: the heat, the pursuit's own
+# time in s of game time, its cops and bust timer) and how the game ended it (evaded or busted).  A world steps at
+# 60 unless NFSMW_WORLD_HFR=1 steps it at the page's rate:
+#   NFSU2_SAVE_SEED=DIR/freeroam node web/tools/run-suite.mjs --game mw --script hfr_pursuit.txt \
+#     --marker 'hfr_pursuit: ended' --env NFSU2_FPS=120 --env NFSMW_WORLD_HFR=1 --env NFSU2_HFR_FT=1 --timeout-scale 8
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # ALPHA loaded: "Load complete.", on Continue
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 24000                         # the world (GameFlow 6)
++0    waitexpr i:[0x0091e000]+0x1964 == 2 12000          # the race status in career mode: free roam
++0    expect i:[0x0091e000]+0x1964 == 2
++0    pursuit watch
++0    where
++0    call 0x0060aac0 1                                  # Game.ForcePursuitStart(1)
++0    pursuit wait on 2400
++0    log hfr_pursuit: started
++0    autopilot on
++0    pursuit wait off 200000
++0    log hfr_pursuit: ended
++0    where
++0    quit
