@@ -418,7 +418,7 @@ static void mouse_move(const InEv *e){
     double x = nx * lw, y = ny * lh;
     if (x < 0.0) x = 0.0; else if (x > lw - 1.0) x = lw - 1.0;
     if (y < 0.0) y = 0.0; else if (y > lh - 1.0) y = lh - 1.0;
-    if (e->flags & IKF_TOUCH){
+    if ((e->flags & IKF_TOUCH) && !away){        /* an away cursor is never within two units: no hop */
         double ux = lw / 640.0, uy = lh / 480.0;
         if (fabs(x - atomic_load(&g_mouse_x)) < 2.0 * ux && fabs(y - atomic_load(&g_mouse_y)) < 2.0 * uy){
             int h = (int)ceil(2.0 * ux), hx = (int)x + h <= (int)lw - 1 ? (int)x + h : (int)x - h;
