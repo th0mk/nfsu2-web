@@ -47,6 +47,7 @@
 
 #define EL3_DELAY   1105                /* decoded samples before output sample 0 */
 #define EL3_SCALE   32768.0f            /* minimp3's floats are -1..1, SND's the 16-bit scale */
+#define EL3_QMAX    (1u << 22)          /* sample frames a pair's queue holds at most (95 s at 44.1 kHz) */
 
 /* ------------------------------------------------------------------------------------------------- the decoder ---
  * A pair: one MP3 stream (one or two channels) of an EALayer3 stream, decoded a block at a time into a queue each of
@@ -128,17 +129,19 @@ static int el3_frame(const El3Gr *g0, const El3Gr *g1, uint8_t *f, int cap){
     return size;
 }
 
-static int el3_qroom(El3Pair *s, unsigned more){
+/* room in the queue for more sample frames (64-bit: a count near 2^32 must not wrap), at most EL3_QMAX in all */
+static int el3_qroom(El3Pair *s, uint64_t more){
     unsigned lo = s->readers == 2u ? s->rd[1] : s->readers == 3u && s->rd[1] < s->rd[0] ? s->rd[1] : s->rd[0];
     if (lo){                                                   /* drop what both channels have read */
         memmove(s->q, s->q + (size_t)lo * 2u, (size_t)(s->qlen - lo) * 2u * sizeof(float));
         s->qlen -= lo;
         for (int k = 0; k < 2; k++) s->rd[k] = s->rd[k] >= lo ? s->rd[k] - lo : 0;
     }
-    if (s->qlen + more <= s->qcap) return 1;
+    uint64_t need = s->qlen + more;
+    if (need <= s->qcap) return 1;
+    if (need > EL3_QMAX) return 0;                             /* a channel that stopped reading: give up */
     unsigned cap = s->qcap ? s->qcap : 4096u;
-    while (cap < s->qlen + more) cap *= 2u;
-    if (cap > (1u << 22)) return 0;                            /* a channel that stopped reading: give up */
+    while (cap < need) cap *= 2u;                              /* to EL3_QMAX at most: no overflow */
     float *q = realloc(s->q, (size_t)cap * 2u * sizeof(float));
     if (!q) return 0;
     s->q = q; s->qcap = cap;
@@ -149,7 +152,9 @@ static int el3_qroom(El3Pair *s, unsigned more){
  * first block (the decoder starts afresh).  Returns 0, or why it failed. */
 static const char *el3_block(El3Pair *s, const uint8_t *p, uint32_t lim, uint32_t count, int first){
     if (first || !s->started){ memset(&s->dec, 0, sizeof s->dec); s->pos = -EL3_DELAY; s->started = 1; }
-    if (!el3_qroom(s, count + 1152u)) return "no room for the decoded samples";
+    /* SND's count is the block's 31 bits, sign-extended (0x81E092): a corrupt one can be anything up to 2^32 - 1 */
+    if (count > EL3_QMAX) return "a sample count larger than any block's";
+    if (!el3_qroom(s, (uint64_t)count + 1152u)) return "no room for the decoded samples";
     uint32_t at = 0, got = 0;
     float pcm[1152 * 2];
     uint8_t frame[1500];
