@@ -10,7 +10,6 @@
   "Tested on Chrome {min} or newer: update it (Help, About Google Chrome) if something doesn't work.": "Проверяется в Chrome {min} или новее: если что-то не работает, обновите его (Справка, О браузере Google Chrome).",
   "Secure, isolated page": "Защищённая изолированная страница",
   "This address is not secure, so {browser} blocks what the game needs. Use the https:// address.": "Этот адрес не защищён, поэтому {browser} блокирует то, что нужно игре. Используйте адрес с https://.",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Страница не изолирована от других источников (нет SharedArrayBuffer). Откройте её с веб-сервера NFSU2.",
   "Shared 4 GB WebAssembly memory is not available: {error}": "Общая память WebAssembly на 4 GB недоступна: {error}",
   "This browser is too old for the game (no Atomics.waitAsync). Update {browser}.": "Этот браузер слишком старый для игры (нет Atomics.waitAsync). Обновите {browser}.",
   "This browser is too old to run the game. Update {browser}.": "Этот браузер слишком старый для запуска игры. Обновите {browser}.",
@@ -1210,7 +1209,6 @@
   "Support the project": "Поддержать проект",
   "To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.": "Чтобы помочь с расходами на хостинг и разработку, можно угостить меня кофе на Ko-fi. Никаких бонусов, кроме роли в Discord.",
   "Donate on Ko-fi": "Поддержать на Ko-fi",
-  "Change camera, look back": "Смена камеры, задний вид",
   "Your browser may also offer to save it with your passwords: choose Save.": "Браузер может также предложить сохранить её вместе с вашими паролями: выберите «Сохранить».",
   "{n} hours played": {
     "one": "{n} час игры",

@@ -21,7 +21,7 @@
   "press in: horn": "누르면 경적",
   "Shift up": "기어 올림",
   "Shift down": "기어 내림",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). 다른 서버가 아닌 NFSU2 웹 서버에서 여세요.",
   "Quick chat (with other players): group, then phrase": "빠른 채팅(다른 플레이어와 있을 때): 그룹, 그다음 문구",
-  "Photo mode; F12 again takes the photo": "사진 모드, F12를 다시 누르면 사진 촬영"
+  "Photo mode; F12 again takes the photo": "사진 모드, F12를 다시 누르면 사진 촬영",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). NFSU2 웹 서버에서 여세요."
 }

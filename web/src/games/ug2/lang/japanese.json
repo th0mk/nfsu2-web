@@ -21,7 +21,7 @@
   "press in: horn": "押すとホーン",
   "Shift up": "シフトアップ",
   "Shift down": "シフトダウン",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。別のサーバーではなく、NFSU2 Webサーバーから開いてください。",
   "Quick chat (with other players): group, then phrase": "クイックチャット（他のプレイヤーといるとき）: グループ、次にフレーズ",
-  "Photo mode; F12 again takes the photo": "フォトモード。もう一度 F12 で撮影"
+  "Photo mode; F12 again takes the photo": "フォトモード。もう一度 F12 で撮影",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。NFSU2 Webサーバーから開いてください。"
 }

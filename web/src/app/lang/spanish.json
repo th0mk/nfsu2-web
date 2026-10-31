@@ -10,7 +10,6 @@
   "Tested on Chrome {min} or newer: update it (Help, About Google Chrome) if something doesn't work.": "Probado en Chrome {min} o posterior: actualízalo (Ayuda > Información de Google Chrome) si algo no funciona.",
   "Secure, isolated page": "Página segura y aislada",
   "This address is not secure, so {browser} blocks what the game needs. Use the https:// address.": "Esta dirección no es segura, así que {browser} bloquea lo que el juego necesita. Usa la dirección https://.",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La página no tiene aislamiento de origen cruzado (no hay SharedArrayBuffer). Ábrela desde el servidor web de NFSU2.",
   "Shared 4 GB WebAssembly memory is not available: {error}": "La memoria compartida de WebAssembly de 4 GB no está disponible: {error}",
   "This browser is too old for the game (no Atomics.waitAsync). Update {browser}.": "Este navegador es demasiado antiguo para el juego (no tiene Atomics.waitAsync). Actualiza {browser}.",
   "This browser is too old to run the game. Update {browser}.": "Este navegador es demasiado antiguo para ejecutar el juego. Actualiza {browser}.",
@@ -1187,7 +1186,6 @@
   "Support the project": "Apoya el proyecto",
   "To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.": "Para ayudar con los gastos de alojamiento y desarrollo, puedes invitarme a un café en Ko-fi. Sin ventajas, salvo un rol en Discord.",
   "Donate on Ko-fi": "Donar en Ko-fi",
-  "Change camera, look back": "Cambiar cámara, mirar atrás",
   "Your browser may also offer to save it with your passwords: choose Save.": "Puede que tu navegador también te ofrezca guardarla con tus contraseñas: elige Guardar.",
   "{n} hours played": {
     "one": "{n} hora jugada",

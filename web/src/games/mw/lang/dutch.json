@@ -16,5 +16,6 @@
     "one": "Vervangt het profiel {names} in deze browser, ook de carrière",
     "other": "Vervangt de profielen {names} in deze browser, ook hun carrières"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "De pagina is niet cross-origin-geïsoleerd (geen SharedArrayBuffer). Open de pagina via de Most Wanted Revived-server, niet via een andere server."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "De pagina is niet cross-origin-geïsoleerd (geen SharedArrayBuffer). Open de pagina via de Most Wanted Revived-server, niet via een andere server.",
+  "Change camera, look back": "Andere camera, terugkijken"
 }

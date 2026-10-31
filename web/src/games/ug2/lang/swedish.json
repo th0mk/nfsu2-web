@@ -21,7 +21,7 @@
   "press in: horn": "tryck in: tuta",
   "Shift up": "Växla upp",
   "Shift down": "Växla ned",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från NFSU2-webbservern, inte från en annan server.",
   "Quick chat (with other players): group, then phrase": "Snabbchatt (med andra spelare): grupp, sedan fras",
-  "Photo mode; F12 again takes the photo": "Fotoläge; F12 igen tar fotot"
+  "Photo mode; F12 again takes the photo": "Fotoläge; F12 igen tar fotot",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från NFSU2-webbservern."
 }

@@ -13,5 +13,6 @@
   "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "{names}의 자동 저장을 켰어요. 게임이 알아서 저장해요(Options > Gameplay > Autosave). {hint}",
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "각 별명의 게임 내 Autosave를 한 번 켜서, 레이스와 이벤트가 묻지 않고 저장되게 해요. 이후 게임의 Options > Gameplay에서 Off를 고르면 그대로 유지돼요.",
   "Replaces the profiles {names} in this browser, their careers too": "이 브라우저의 {names} 프로필을 커리어까지 포함해 대체해요",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). 다른 서버가 아닌 Most Wanted Revived 서버에서 여세요."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). 다른 서버가 아닌 Most Wanted Revived 서버에서 여세요.",
+  "Change camera, look back": "카메라 변경, 후방 보기"
 }

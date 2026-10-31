@@ -21,7 +21,7 @@
   "press in: horn": "klik: claxon",
   "Shift up": "Opschakelen",
   "Shift down": "Afschakelen",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "De pagina is niet cross-origin-geïsoleerd (geen SharedArrayBuffer). Open de pagina via de NFSU2-webserver, niet via een andere server.",
   "Quick chat (with other players): group, then phrase": "Snelchat (met andere spelers): groep, dan zin",
-  "Photo mode; F12 again takes the photo": "Fotomodus; nog eens F12 maakt de foto"
+  "Photo mode; F12 again takes the photo": "Fotomodus; nog eens F12 maakt de foto",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "De pagina is niet cross-origin-geïsoleerd (geen SharedArrayBuffer). Open de pagina via de NFSU2-webserver."
 }

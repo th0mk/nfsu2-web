@@ -16,5 +16,6 @@
     "one": "Ersätter profilen {names} i den här webbläsaren, även dess karriär",
     "other": "Ersätter profilerna {names} i den här webbläsaren, även deras karriärer"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från Most Wanted Revived-servern, inte från en annan server."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från Most Wanted Revived-servern, inte från en annan server.",
+  "Change camera, look back": "Byt kamera, titta bakåt"
 }

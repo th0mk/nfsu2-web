@@ -13,5 +13,6 @@
   "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "เปิดบันทึกอัตโนมัติให้ {names} แล้ว: เกมจะบันทึกเอง (Options > Gameplay > Autosave) {hint}",
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "เปิด Autosave ในเกมของแต่ละนามแฝงหนึ่งครั้ง เพื่อให้การแข่งและอีเวนต์ถูกบันทึกโดยไม่ต้องถาม หากภายหลังเลือก Off ใน Options > Gameplay ของเกม ค่านั้นจะยังคงอยู่",
   "Replaces the profiles {names} in this browser, their careers too": "แทนที่โปรไฟล์ {names} ในเบราว์เซอร์นี้ รวมถึงโหมดอาชีพด้วย",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเซิร์ฟเวอร์ Most Wanted Revived ไม่ใช่จากเซิร์ฟเวอร์อื่น"
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเซิร์ฟเวอร์ Most Wanted Revived ไม่ใช่จากเซิร์ฟเวอร์อื่น",
+  "Change camera, look back": "เปลี่ยนมุมกล้อง มองหลัง"
 }

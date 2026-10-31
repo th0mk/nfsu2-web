@@ -21,7 +21,7 @@
   "press in: horn": "нажать: гудок",
   "Shift up": "Передача +",
   "Shift down": "Передача −",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "Страница не изолирована от других источников (нет SharedArrayBuffer). Откройте её с веб-сервера NFSU2, а не с другого сервера.",
   "Quick chat (with other players): group, then phrase": "Быстрый чат (с другими игроками): группа, затем фраза",
-  "Photo mode; F12 again takes the photo": "Фоторежим; ещё раз F12 — снимок"
+  "Photo mode; F12 again takes the photo": "Фоторежим; ещё раз F12 — снимок",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Страница не изолирована от других источников (нет SharedArrayBuffer). Откройте её с веб-сервера NFSU2."
 }

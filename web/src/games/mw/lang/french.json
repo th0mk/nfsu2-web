@@ -17,5 +17,6 @@
     "many": "Remplace les profils {names} de ce navigateur, ainsi que leurs carrières",
     "other": "Remplace les profils {names} de ce navigateur, ainsi que leurs carrières"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "La page n'a pas l'isolation cross-origin (pas de SharedArrayBuffer). Ouvrez-la depuis le serveur Most Wanted Revived, pas depuis un autre serveur."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "La page n'a pas l'isolation cross-origin (pas de SharedArrayBuffer). Ouvrez-la depuis le serveur Most Wanted Revived, pas depuis un autre serveur.",
+  "Change camera, look back": "Changer caméra, vue arrière"
 }

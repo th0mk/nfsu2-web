@@ -10,7 +10,6 @@
   "Tested on Chrome {min} or newer: update it (Help, About Google Chrome) if something doesn't work.": "Testat i Chrome {min} eller nyare: uppdatera den (Hjälp, Om Google Chrome) om något inte fungerar.",
   "Secure, isolated page": "Säker, isolerad sida",
   "This address is not secure, so {browser} blocks what the game needs. Use the https:// address.": "Den här adressen är inte säker, så {browser} blockerar det som spelet behöver. Använd https://-adressen.",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från NFSU2-webbservern.",
   "Shared 4 GB WebAssembly memory is not available: {error}": "Delat WebAssembly-minne på 4 GB är inte tillgängligt: {error}",
   "This browser is too old for the game (no Atomics.waitAsync). Update {browser}.": "Den här webbläsaren är för gammal för spelet (ingen Atomics.waitAsync). Uppdatera {browser}.",
   "This browser is too old to run the game. Update {browser}.": "Den här webbläsaren är för gammal för att köra spelet. Uppdatera {browser}.",
@@ -1164,7 +1163,6 @@
   "Support the project": "Stöd projektet",
   "To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.": "För att hjälpa till med kostnaderna för drift och utveckling kan du bjuda mig på en kaffe via Ko-fi. Inga förmåner, förutom en roll på Discord.",
   "Donate on Ko-fi": "Donera via Ko-fi",
-  "Change camera, look back": "Byt kamera, titta bakåt",
   "Your browser may also offer to save it with your passwords: choose Save.": "Din webbläsare kan också erbjuda att spara den bland dina lösenord: välj Spara.",
   "{n} hours played": {
     "one": "{n} timme spelad",

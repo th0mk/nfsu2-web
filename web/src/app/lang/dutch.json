@@ -10,7 +10,6 @@
   "Tested on Chrome {min} or newer: update it (Help, About Google Chrome) if something doesn't work.": "Getest op Chrome {min} of nieuwer: werk hem bij (Help, Over Google Chrome) als iets niet werkt.",
   "Secure, isolated page": "Veilige, geïsoleerde pagina",
   "This address is not secure, so {browser} blocks what the game needs. Use the https:// address.": "Dit adres is niet beveiligd, dus blokkeert {browser} wat het spel nodig heeft. Gebruik het https://-adres.",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "De pagina is niet cross-origin-geïsoleerd (geen SharedArrayBuffer). Open de pagina via de NFSU2-webserver.",
   "Shared 4 GB WebAssembly memory is not available: {error}": "Gedeeld WebAssembly-geheugen van 4 GB is niet beschikbaar: {error}",
   "This browser is too old for the game (no Atomics.waitAsync). Update {browser}.": "Deze browser is te oud voor het spel (geen Atomics.waitAsync). Werk {browser} bij.",
   "This browser is too old to run the game. Update {browser}.": "Deze browser is te oud om het spel te draaien. Werk {browser} bij.",
@@ -1164,7 +1163,6 @@
   "Support the project": "Steun het project",
   "To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.": "Om te helpen met de kosten van hosting en ontwikkeling kun je via Ko-fi een koffie voor me kopen. Geen voordelen, behalve een Discord-rol.",
   "Donate on Ko-fi": "Doneren via Ko-fi",
-  "Change camera, look back": "Andere camera, terugkijken",
   "Your browser may also offer to save it with your passwords: choose Save.": "Je browser biedt misschien ook aan om hem bij je wachtwoorden op te slaan: kies daar Opslaan.",
   "{n} hours played": {
     "one": "{n} uur gespeeld",

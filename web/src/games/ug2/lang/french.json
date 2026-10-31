@@ -21,7 +21,7 @@
   "press in: horn": "clic : klaxon",
   "Shift up": "Rapport sup.",
   "Shift down": "Rapport inf.",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "La page n'a pas l'isolation cross-origin (pas de SharedArrayBuffer). Ouvrez-la depuis le serveur web NFSU2, pas depuis un autre serveur.",
   "Quick chat (with other players): group, then phrase": "Chat rapide (avec d'autres joueurs) : groupe, puis phrase",
-  "Photo mode; F12 again takes the photo": "Mode photo ; F12 à nouveau prend la photo"
+  "Photo mode; F12 again takes the photo": "Mode photo ; F12 à nouveau prend la photo",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La page n'a pas l'isolation cross-origin (pas de SharedArrayBuffer). Ouvrez-la depuis le serveur web NFSU2."
 }

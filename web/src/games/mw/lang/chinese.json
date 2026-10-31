@@ -13,5 +13,6 @@
   "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "{names} 的自動儲存現已開啟：遊戲會自動存檔（Options > Gameplay > Autosave）。{hint}",
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "將每個化名在遊戲中的 Autosave 開啟一次，比賽與賽事都會直接儲存而不詢問。之後若在遊戲的 Options > Gameplay 中改為 Off，則會維持你的選擇。",
   "Replaces the profiles {names} in this browser, their careers too": "取代此瀏覽器中的玩家檔案 {names}，連同其生涯進度",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "此頁面未啟用跨來源隔離（沒有 SharedArrayBuffer）。請從 Most Wanted Revived 伺服器開啟，而不是其他伺服器。"
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "此頁面未啟用跨來源隔離（沒有 SharedArrayBuffer）。請從 Most Wanted Revived 伺服器開啟，而不是其他伺服器。",
+  "Change camera, look back": "切換視角、向後看"
 }

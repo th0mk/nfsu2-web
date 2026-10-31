@@ -23,5 +23,5 @@
   "press in: horn": "benyomva: duda",
   "Shift up": "Felváltás",
   "Shift down": "Visszaváltás",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). Az NFSU2 webszerveréről nyisd meg, ne másik szerverről."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). Az NFSU2 webszerveréről nyisd meg."
 }

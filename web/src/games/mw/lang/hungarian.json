@@ -13,5 +13,6 @@
   "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "Az Automatikus mentés mostantól be van kapcsolva ({names}): a játék magától ment (Options, Gameplay, Autosave). {hint}",
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "Egyszer minden álnév Autosave beállítását bekapcsolja a játékban, így a versenyek és az események kérdés nélkül mentődnek. Ha utána a játék Options, Gameplay menüjében az Off lehetőséget választod, az úgy marad.",
   "Replaces the profiles {names} in this browser, their careers too": "Lecseréli ebben a böngészőben: {names}, a karrierrel együtt",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). A Most Wanted Revived szerveréről nyisd meg, ne másik szerverről."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). A Most Wanted Revived szerveréről nyisd meg, ne másik szerverről.",
+  "Change camera, look back": "Kameraváltás, hátranézés"
 }

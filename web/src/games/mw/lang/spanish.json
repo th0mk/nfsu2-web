@@ -17,5 +17,6 @@
     "many": "Sustituye los perfiles {names} de este navegador, también sus modos carrera",
     "other": "Sustituye los perfiles {names} de este navegador, también sus modos carrera"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "La página no tiene aislamiento de origen cruzado (no hay SharedArrayBuffer). Ábrela desde el servidor de Most Wanted Revived, no desde otro servidor."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "La página no tiene aislamiento de origen cruzado (no hay SharedArrayBuffer). Ábrela desde el servidor de Most Wanted Revived, no desde otro servidor.",
+  "Change camera, look back": "Cambiar cámara, mirar atrás"
 }

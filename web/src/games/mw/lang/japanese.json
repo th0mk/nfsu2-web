@@ -13,5 +13,6 @@
   "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "{names}のオートセーブをオンにしました。ゲームが自動でセーブします（Options > Gameplay > Autosave）。{hint}",
   "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "各エイリアスのゲーム内の Autosave を一度だけオンにし、レースやイベントが確認なしで保存されるようにします。その後ゲームの Options > Gameplay で Off を選んだ場合は、それが維持されます。",
   "Replaces the profiles {names} in this browser, their careers too": "このブラウザのプロフィール{names}を、キャリアも含めて置き換えます",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。別のサーバーではなく、Most Wanted Revivedのサーバーから開いてください。"
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。別のサーバーではなく、Most Wanted Revivedのサーバーから開いてください。",
+  "Change camera, look back": "カメラ切り替え、後方確認"
 }

@@ -16,5 +16,6 @@
     "one": "Bu tarayıcıdaki {names} profilinin ve kariyerinin yerine geçer",
     "other": "Bu tarayıcıdaki {names} profillerinin ve kariyerlerinin yerine geçer"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Sayfa cross-origin yalıtımlı değil (SharedArrayBuffer yok). Sayfayı başka bir sunucudan değil, Most Wanted Revived sunucusundan aç."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Sayfa cross-origin yalıtımlı değil (SharedArrayBuffer yok). Sayfayı başka bir sunucudan değil, Most Wanted Revived sunucusundan aç.",
+  "Change camera, look back": "Kamerayı değiştir, arkaya bak"
 }

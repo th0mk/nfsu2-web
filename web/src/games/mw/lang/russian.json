@@ -18,5 +18,6 @@
     "many": "Заменяет профили {names} в этом браузере вместе с их карьерами",
     "other": "Заменяет профили {names} в этом браузере вместе с их карьерами"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Страница не изолирована от других источников (нет SharedArrayBuffer). Откройте её с сервера Most Wanted Revived, а не с другого сервера."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Страница не изолирована от других источников (нет SharedArrayBuffer). Откройте её с сервера Most Wanted Revived, а не с другого сервера.",
+  "Change camera, look back": "Смена камеры, задний вид"
 }

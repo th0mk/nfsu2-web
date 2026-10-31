@@ -21,7 +21,7 @@
   "press in: horn": "pulsar: bocina",
   "Shift up": "Subir marcha",
   "Shift down": "Bajar marcha",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "La página no tiene aislamiento de origen cruzado (no hay SharedArrayBuffer). Ábrela desde el servidor web de NFSU2, no desde otro servidor.",
   "Quick chat (with other players): group, then phrase": "Chat rápido (con otros jugadores): grupo, luego frase",
-  "Photo mode; F12 again takes the photo": "Modo foto; F12 otra vez hace la foto"
+  "Photo mode; F12 again takes the photo": "Modo foto; F12 otra vez hace la foto",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La página no tiene aislamiento de origen cruzado (no hay SharedArrayBuffer). Ábrela desde el servidor web de NFSU2."
 }

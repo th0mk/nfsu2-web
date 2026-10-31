@@ -18,5 +18,6 @@
     "many": "Zastępuje profile {names} w tej przeglądarce, razem z ich karierami",
     "other": "Zastępuje profile {names} w tej przeglądarce, razem z ich karierami"
   },
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Strona nie ma izolacji między źródłami (brak SharedArrayBuffer). Otwórz ją z serwera Most Wanted Revived, a nie z innego serwera."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "Strona nie ma izolacji między źródłami (brak SharedArrayBuffer). Otwórz ją z serwera Most Wanted Revived, a nie z innego serwera.",
+  "Change camera, look back": "Zmiana kamery, spójrz w tył"
 }
