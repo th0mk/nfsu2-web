@@ -10,8 +10,9 @@ aids of runtime/mw/career_mw.c, test-only too, which run at the game's per-frame
 the player is finished where it is, with three of the calls the race's script makes at the line), `autopilot on|off`
 (the game's AI drives the player's car), `autopilot races` (the same at every race's GO from then on, for races that
 follow each other with no menu between, with each race's start and end logged; a lost race is raced again as a player
-would: Enter on its results, then Resume Career), `teleport X Y Z DX DY DZ`, `where`, `racestatus`, `frames`, `pursuit
-[watch]` / `pursuit wait on|off [N]` (the player's pursuit state: heat, the pursuit's heat range, the pursuit object,
+would: Enter on its results, then Resume Career), `teleport X Y Z DX DY DZ`, `where [KMH [FRAMES]]` (with KMH: once
+the player's car goes that fast, or after FRAMES, default 3600), `racestatus`, `frames`, `pursuit [watch]` /
+`pursuit wait on|off [N]` (the player's pursuit state: heat, the pursuit's heat range, the pursuit object,
 its length, its cops and bust timer; while watching, the game's own end of the pursuit, evaded or busted; the waits are
 on the game's state) and `breaker [watch]` / `breaker wait on|off|full|empty [N]`, `breaker wait above MPH [N]`,
 `breaker wait charge X [N]`, `breaker wait rise X [N]` (the player's Speedbreaker: on or off, its charge, the car's
@@ -191,6 +192,10 @@ Graphics, on the play page (test/play.html, with the WebGPU renderer; the pictur
 `race_moments.txt` (the same race dumped at set race-timer moments: GO, 0.03, 0.18, 0.30, 1 and 3 s with the
 player's car still on the start line, then 8 and 12 s with the AI driving; checked by ../checks/race_moments.sh;
 `&dumptex=1,2` adds the shadow map's colour and depth),
+`fx_census.txt` (run-suite, no renderer: the same race with the device-call recorder writing three windows of 3
+Presents, at GO, after 300 frames and at 120 km/h or more; `web/tools/fx-census.mjs` counts each effect's draws,
+the render targets, StretchRect copies, occlusion queries and readbacks; `--vs` puts two recordings side by side, an
+effect on and off by the `../seed/registry_fx_*0.txt` seeds; checked by ../checks/fx_census.sh),
 `race_perf.txt` (the same race driven 1800 frames between `log race_loaded` and `log drive_end`, no dumps: the page's
 `&bench&gputime` window logs the frames, encode and GPU milliseconds) and `options_advanced.txt` (the Video options and
 their Advanced page row by row: Shadow Detail, FSAA and Texture Filtering as offered, their maxima logged); each from

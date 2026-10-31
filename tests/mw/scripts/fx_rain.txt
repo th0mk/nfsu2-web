@@ -1,0 +1,49 @@
+# Most Wanted: fx_census.txt in the rain (TRACKER M5-19): the game's script call SetChanceOfRain (registered at
+# 0x61EFF9, handler 0x6054A0) stores its chance, clamped to 0..1, at [0x9B0A48], which the rain's chance at a place
+# (0x7539D0) returns instead of the world's own when it is above 0 (0, as a race's load leaves it: the world's own;
+# below 0: none); the script pokes 1.0 there at GO, as SetChanceOfRain(1) would, so the race goes on in rain (with
+# g_RainEnable 1 in the registry it is given; registry_fx_rain0.txt for the other half of the pair).  Same windows
+# and run line as fx_census.txt, with --script fx_rain.txt --marker 'fx_census: done'; checked by ../checks/fx_rain.sh.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x009017b8                 # g_CarEnvironmentMapEnable
++0    peek 0x009017d4                 # g_RoadReflectionEnable
++0    peek 0x009017dc                 # g_MotionBlurEnable
++0    peek 0x009017ec                 # g_ParticleSystemEnable
++0    peek 0x009017fc                 # g_OverBrightEnable
++0    peek 0x00901810                 # g_RainEnable
++0    peek 0x00901828                 # g_VisualTreatment
++0    peek 0x00901830                 # g_ShadowDetail
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log fx_census: GO
++0    peek 0x009b0a48                                    # SetChanceOfRain's chance: the race's load leaves 0
++0    poke 0x009b0a48 0x3f800000                         # 1.0: rain from here on
++0    where
++0    dxrec 3
++0    autopilot on
++300  where
++0    log fx_census: window 300
++0    dxrec 3
++0    where 120 3000                                     # the third window at speed: 120 km/h or more (motion blur)
++0    log fx_census: window fast
++0    dxrec 3
++6    log fx_census: done
++0    racestatus
++0    close

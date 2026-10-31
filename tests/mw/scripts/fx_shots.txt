@@ -1,0 +1,55 @@
+# Most Wanted: race pictures for an effect on and off (TRACKER M5-15..M5-19, M6-62): fx_census.txt's race
+# (race_shots.txt's Custom Race circuit: City Perimeter, the first car, automatic gears) on the play page
+# (test/play.html, the WebGPU renderer), dumped at GO, once the game's AI (autopilot) has the player's car at 80 km/h
+# or more, and 300 frames later; each dump twice, 3 frames apart (a renderer that falls behind drops a flagged
+# frame).  The video options come
+# from the registry the page is given (tests/mw/seed/: registry_max.txt, registry_phone.txt with the phone graphics,
+# registry_phone_vt0.txt with the visual treatment off as well, the registry_fx_*0.txt seeds), e.g.
+#   test/play.html?arg=/data/speed.exe&script=<base>/tests/scripts/fx_shots.txt&reg=<base>/tests/seed/registry_phone.txt
+#     &artifacts=<base>/artifacts/phone_&dumpscale=1&w=1560&h=720&env=NOMOVIES=1&env=GPUVS=1&env=NFSMW_D3DX_FX=hle
+# from a server started with --dev --game mw --artifacts <dir> (<base> is /mw).  At speed it also asks for the game's
+# own screenshot (TRACKER M5-20: [0x982BBC] 1, which 0x6C08D0 turns into a request; 0x6C05E0 makes a lockable render
+# target of the back buffer's size, StretchRects the back buffer into it, locks it read-only and writes
+# screenshotNNN.tga): with NFSU2_RBLOG=1 the log says how many bytes read back are not 0.  The pictures are the
+# game's: they stay out of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x009017b8                 # g_CarEnvironmentMapEnable
++0    peek 0x009017d4                 # g_RoadReflectionEnable
++0    peek 0x009017dc                 # g_MotionBlurEnable
++0    peek 0x009017fc                 # g_OverBrightEnable
++0    peek 0x00901828                 # g_VisualTreatment
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen (a slow renderer's dialog may miss one tap)
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log fx_shots: GO
++0    dump fx_go
++3    dump fx_go
++0    peek 0x0093e030                                    # the sun flare's brightness (a float: 0x6D0350's smoothed visibility)
++0    autopilot on
++0    where 80 3000                                      # at speed
++0    dump fx_fast
++3    dump fx_fast
++0    peek 0x0093e030
++0    poke 0x00982bbc 1                                  # the game's own screenshot (0x6C08D0 -> 0x6C05E0: a readback)
++300  where
++0    dump fx_later
++3    dump fx_later
++0    peek 0x0093e030
++0    log fx_shots: done
++0    close

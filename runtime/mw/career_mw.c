@@ -941,7 +941,17 @@ void mw_frame(CPU *c){
                 pos[0], pos[1], pos[2], dir[0], dir[1], dir[2]);
         log_where(c);
         break; }
-    case Q_WHERE: log_where(c); break;
+    case Q_WHERE: {                     /* "where KMH FRAMES": once the player's car goes KMH or more, or FRAMES on */
+        if (Q.v[0] > 0.0f){
+            uint32_t s = player_simable(c), v = s ? gcall(c, rd(rd(s) + SIM_VEHICLE), s, 0, 0) : 0u;
+            float kmh = v ? gcall_f(c, rd(rd(v) + VEH_SPEED), v) * 3.6f : 0.0f;
+            if (kmh < Q.v[0] && f - Q.since < (long)Q.v[1]) return;
+            if (kmh < Q.v[0])
+                fprintf(stderr, "[mwrace] f=%ld where: TIMEOUT, under %.0f km/h after %ld frames\n", f, Q.v[0],
+                        f - Q.since);
+        }
+        log_where(c);
+        break; }
     case Q_RAP: mw_aid_rapsheet(c, "asked"); break;
     case Q_ICONS: mw_aid_icons(c, (int)Q.v[0]); break;
     case Q_ICONGO: {                    /* the car to icon v[1] of type v[0], at its place, facing v[2..4] */
@@ -1004,7 +1014,8 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     if (Q.op != Q_NONE){                /* this line's work was queued: done once the anchor ran it */
         if (Q.done){ Q.op = Q_NONE; Q.done = 0; *wait_start = -1; return 1; }
         if (*wait_start < 0) *wait_start = f;
-        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT || Q.op == Q_BWAIT || Q.op == Q_BOTWAIT ? (long)Q.v[1] : 0L)) return 0;
+        if (f - *wait_start < AID_WAIT + (Q.op == Q_PWAIT || Q.op == Q_BWAIT || Q.op == Q_BOTWAIT || Q.op == Q_WHERE
+                                          ? (long)Q.v[1] : 0L)) return 0;
         fprintf(stderr, "[mwrace] f=%ld %s TIMEOUT after %ld frames: the main loop's frame anchor never ran it\n",
                 f, cmd, f - *wait_start);
         memset(&Q, 0, sizeof Q); *wait_start = -1;
@@ -1012,7 +1023,13 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     }
     memset(&Q, 0, sizeof Q);
     if (!strcasecmp(cmd, "racewin")) Q.op = Q_RACEWIN;
-    else if (!strcasecmp(cmd, "where")) Q.op = Q_WHERE;
+    else if (!strcasecmp(cmd, "where")){
+        float kmh = 0; long n = 0;
+        Q.op = Q_WHERE;
+        if (sscanf(p, "%f %ld", &kmh, &n) >= 1 && kmh > 0){
+            Q.v[0] = kmh; Q.v[1] = (float)(n > 0 ? n : 3600); Q.since = f;
+        }
+    }
     else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
     else if (!strcasecmp(cmd, "carreset")) Q.op = Q_RESET;
     else if (!strcasecmp(cmd, "rapsheet")) Q.op = Q_RAP;

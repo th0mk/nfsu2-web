@@ -11,7 +11,7 @@
 struct CPU;
 extern int g_comrec_on;
 
-enum { CR_NONE, CR_DEV, CR_SB, CR_SWAP };          /* what com.c hands the recorder */
+enum { CR_NONE, CR_DEV, CR_SB, CR_SWAP, CR_Q };    /* what com.c hands the recorder (CR_Q: IDirect3DQuery9) */
 
 /* com.c: a new COM object of interface iface (com.c's index) */
 void comrec_new(uint32_t obj, uint32_t iface);
@@ -23,6 +23,9 @@ void comrec_post(struct CPU *c, int tok);
 /* a context line of the game's, written as it is (no newline needed); not a device call */
 void comrec_marker(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void comrec_close(void);                         /* the file, whole (ExitProcess, the host's exit) */
+/* the input script's "dxrec N" (autotest.c): write the next N Presents from now on, whatever window
+ * NFSU2_DXREC named (NFSU2_DXREC=<file>,999999999 writes nothing until the script says) */
+void comrec_window(uint32_t n);
 /* a guest object as the recorder names it ("tex#3", "vs:1a2b3c4d", "dev"), or the hex value */
 void comrec_obj(uint32_t v, char *buf, int n);
 

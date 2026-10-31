@@ -1190,7 +1190,7 @@ uint32_t d3dxfx_call(CPU *c, int pool, unsigned method, const uint32_t *args, in
     if (g_comrec_on){
         char arg[16] = "";
         if (method == 63) snprintf(arg, sizeof arg, "%x", args[2]);
-        else if (method == 64) snprintf(arg, sizeof arg, "%u", args[1]);
+        else if (method == 64 || method == 12) snprintf(arg, sizeof arg, "%u", args[1]);   /* BeginPass, GetTechnique */
         fxmark(f->id, fxmark_name((int)method), arg[0] ? arg : 0, 0);
     }
     uint32_t r = fx_method(c, f, method, args);

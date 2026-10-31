@@ -1,0 +1,54 @@
+# Most Wanted: what the game draws for its effects in a race (TRACKER M5-15..M5-20): race_shots.txt's Custom Race
+# circuit (City Perimeter, the first car, automatic gears), the video options logged at the front end, then the
+# device-call recorder (NFSU2_DXREC, docs/web/dxrec.md) writes three windows of 3 Presents each: at GO, after 300
+# frames of the game's AI driving (autopilot) and once the player's car goes 120 km/h or more (the AI leaves the line
+# after a few seconds), each with the player's speed ("where").  The options
+# come from the registry the run starts from (tests/mw/seed/: registry_max.txt, or one of the fx_*.txt seeds that
+# turn one effect off), so a pair of runs shows one effect on and off.  web/tools/fx-census.mjs counts what each
+# window holds: draws per effect and technique, render targets, StretchRect copies, occlusion queries and readbacks.
+#   node web/tools/run-suite.mjs --game mw --script fx_census.txt --marker 'fx_census: done' \
+#     --reg /tests/seed/registry_max.txt --env NFSU2_DXREC=/save/dxrec.txt,999999999 --save-out <dir>
+#   node web/tools/fx-census.mjs <dir>/fx_census/dxrec.txt
+# NFSU2_DXREC's window 999999999 writes nothing until the script's first "dxrec".  An oracle build needs
+# boot_menu.txt's D3DX seed (NFSU2_SAVE_SEED and --env NFSMW_D3DX=/save/d3dx9_26.dll), or --env NFSMW_D3DX_FX=hle.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    peek 0x009017b8                 # g_CarEnvironmentMapEnable
++0    peek 0x009017d4                 # g_RoadReflectionEnable
++0    peek 0x009017dc                 # g_MotionBlurEnable
++0    peek 0x009017ec                 # g_ParticleSystemEnable
++0    peek 0x009017fc                 # g_OverBrightEnable
++0    peek 0x00901810                 # g_RainEnable
++0    peek 0x00901828                 # g_VisualTreatment
++0    peek 0x00901830                 # g_ShadowDetail
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log fx_census: GO
++0    where
++0    dxrec 3
++0    autopilot on
++300  where
++0    log fx_census: window 300
++0    dxrec 3
++0    where 120 3000                                     # the third window at speed: 120 km/h or more (motion blur)
++0    log fx_census: window fast
++0    dxrec 3
++6    log fx_census: done
++0    racestatus
++0    close

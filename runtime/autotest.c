@@ -33,6 +33,9 @@
  *     tap KEY [frames]         down, release after frames (default 6)
  *     type TEXT                WM_CHAR + DI taps for each character
  *     dump [label]             write the next rendered frame to PNG
+ *     dxrec N                  the device-call recorder (NFSU2_DXREC, comrec.c) writes the
+ *                              next N Presents from here on (NFSU2_DXREC=<file>,999999999:
+ *                              nothing before)
  *     waitmem ADDR VAL [tmo]   wait until dword [ADDR]==VAL (tmo frames,
  *                              default unlimited); logs the result
  *     log TEXT                 marker line in the log
@@ -264,7 +267,7 @@ enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
        C_COVRESET, C_COVDUMP, C_TRACE, C_UNTRACE, C_EXPECT, C_WAITEXPR, C_MARK, C_EDGE, C_ROAM, C_POKESTR,
-       C_SRVCYCLE, C_CLICK, C_PHOTO, C_BREAKFNG };
+       C_SRVCYCLE, C_CLICK, C_PHOTO, C_BREAKFNG, C_DXREC };
 /* roam.c: free-roam multiplayer research probes ("roam <sub> ...") */
 int roam_cmd(CPU *c, const char *line, long *wait_start);
 #define PAD_PLUG 0xFFFFu           /* C_PAD: "pad connect|disconnect" */
@@ -379,6 +382,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "tap"))  { e.cmd = C_TAP; e.n = a2[0] ? atol(a2) : 6; }
         else if (!strcasecmp(cmd, "type")) { e.cmd = C_TYPE; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "dump")) { e.cmd = C_DUMP; snprintf(e.text, sizeof e.text, "%s", a1); }
+        else if (!strcasecmp(cmd, "dxrec")) { e.cmd = C_DXREC; e.n = a1[0] ? atol(a1) : 1; }
         else if (!strcasecmp(cmd, "log"))  { e.cmd = C_LOG;  snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "quit")) e.cmd = C_QUIT;
         else if (!strcasecmp(cmd, "close")) e.cmd = C_CLOSE;
@@ -738,6 +742,10 @@ static int fire(CPU *c, Ev *e, double tms){
         g_wzero = (!e->n && rs >= 0) ? rs : hfr_sim_ms();
         fprintf(stderr, "[autotest] f=%ld t=%.0fms world-time origin at w=%.3fms (now w=%.3fms)\n",
                 g_frame, tms, g_wzero, hfr_sim_ms());
+        break; }
+    case C_DXREC: {        /* "dxrec N": the recorder's next N Presents (comrec.c) */
+        void comrec_window(uint32_t n);
+        comrec_window(e->n > 0 ? (uint32_t)e->n : 1u);
         break; }
     case C_PHOTO: {        /* "photo ...": photo mode as the page drives it (photo.c photo_script) */
         int photo_script(const char *s);

@@ -133,7 +133,7 @@ static void fxmark_call(CPU *c, uint32_t addr, void (*f)(CPU *)){
     int id = effect_id(a[0]);
     char arg[16] = "";
     if (slot == 63) snprintf(arg, sizeof arg, "%x", a[2]);      /* Begin: its flags */
-    else if (slot == 64) snprintf(arg, sizeof arg, "%u", a[1]); /* BeginPass: the pass */
+    else if (slot == 64 || slot == 12) snprintf(arg, sizeof arg, "%u", a[1]);   /* BeginPass, GetTechnique */
     fxmark(id, fxmark_name(slot), arg[0] ? arg : 0, 0);
     f(c);
 }

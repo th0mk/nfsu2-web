@@ -8,6 +8,9 @@ noise floor, L-082). `web/tools/dxrec-diff.mjs` compares two files.
 
 - `NFSU2_DXREC=<file>` records every Present; `NFSU2_DXREC=<file>,<from>` from Present `<from>` on;
   `NFSU2_DXREC=<file>,<from>,<to>` up to Present `<to>`, where the file is closed.
+- `NFSU2_DXREC=<file>,999999999` writes nothing until the input script asks: its `dxrec N` writes the next N Presents
+  from the frame it runs in (the first is the rest of that Present), and several such windows go to one file
+  (`tests/mw/scripts/fx_census.txt`; `web/tools/fx-census.mjs` counts what each window draws).
 - In the browser the file goes to the page's save folder: `--env NFSU2_DXREC=/save/dxrec.txt` with run-suite's
   `--save-out <dir>` brings it out (`<dir>/<scenario>/dxrec.txt`).
 - Off, the cost is one test per COM call (`com_call`, `com_new`).
@@ -21,7 +24,8 @@ noise floor, L-082). `web/tools/dxrec-diff.mjs` compares two files.
 | `F <n>` | Present `n`'s calls follow (`n` = Presents so far; `F 0` before the first) |
 | `<Method> <args>[ -> <out>][ =<hr>]` | one device call, written after it ran |
 | `Capture sb#3`, `Apply sb#3`, `Release sb#3` | a state block's calls (`IDirect3DStateBlock9`) |
-| `E<id> <method>[ <arg>]` | a context line of the game's: Most Wanted's effect methods (`runtime/mw/d3dxfx_mw.c` for the HLE, `fxcensus_mw.c` for the oracle), `<id>` the game's effect row, `-` for none |
+| `Issue q#2 2`, `GetData q#2 out 4 0 -> 0` | a query's calls (`IDirect3DQuery9`): Issue's flags; GetData's size and flags, then the count it wrote (an S_OK answer of 4 bytes or more) or `=1` (S_FALSE) |
+| `E<id> <method>[ <arg>]` | a context line of the game's: Most Wanted's effect methods (`runtime/mw/d3dxfx_mw.c` for the HLE, `fxcensus_mw.c` for the oracle), `<id>` the game's effect row, `-` for none; the argument is Begin's flags, BeginPass's pass and GetTechnique's index |
 
 What differs between two equal runs is never written as it is:
 

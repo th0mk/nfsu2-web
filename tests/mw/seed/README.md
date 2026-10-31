@@ -14,6 +14,13 @@ outside the repository.
   Texture Filtering 2 (anisotropic), rain, the highest world and reflection detail; for the play page's graphics
   scripts (`race_shots.txt`, `race_perf.txt`, `options_advanced.txt`).
 - `registry_max_fsaa0.txt`: `registry_max.txt` with FSAA 0, the other half of an FSAA off/on pair (`race_moments.txt`).
+- `registry_fx_envmap0.txt`, `registry_fx_roadrefl0.txt`, `registry_fx_blur0.txt`, `registry_fx_overbright0.txt`,
+  `registry_fx_particles0.txt`, `registry_fx_rain0.txt`, `registry_fx_vt0.txt`: `registry_max.txt` with one effect
+  off (the car's environment map, the road reflection, motion blur, overbright, particles, rain, the visual
+  treatment), the other half of an effect's on/off pair (`fx_census.txt`, `fx_rain.txt`, `fx_shots.txt`).
+- `registry_phone.txt`: `registry_max.txt` with a phone's graphics (web/src/games/mw/registry.ts PHONE_GRAPHICS: the
+  environment map, road reflection, motion blur and overbright off); `registry_phone_vt0.txt` with the visual
+  treatment off as well.
 
 A career save tree (NFSU2_SAVE_SEED) holds the registry the game wrote next to the saves (`.nfsmw_registry`), so a
 run seeded with one needs no registry seed. The career seeds, made by these scripts and kept outside the repository:

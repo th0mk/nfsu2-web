@@ -24,6 +24,7 @@
 int g_comrec_on;
 static FILE *g_f;
 static uint32_t g_frame, g_from, g_to = 0xFFFFFFFFu;
+static int g_windows;                             /* the script opens windows (comrec_window): the file stays open */
 static atomic_flag g_lock = ATOMIC_FLAG_INIT;
 
 /* ---- objects: creation numbers by pointer (com_new calls comrec_new) ---- */
@@ -182,6 +183,11 @@ int comrec_pre(CPU *c, int kind, unsigned m, const char *name, int nargs){
     put(L, "%s", name);
     if (kind == CR_DEV) dev_args(L, m, L->a, L->nargs);
     else if (kind == CR_SB) put_obj(L, L->a[0]);
+    else if (kind == CR_Q){                     /* the query, then Issue's flags or GetData's size and flags */
+        put_obj(L, L->a[0]);
+        if (m == 7u && L->nargs >= 4) put(L, " out %x %x", L->a[2], L->a[3]);
+        else for (int i = 1; i < L->nargs; i++) put(L, " %x", L->a[i]);
+    }
     else for (int i = 1; i < L->nargs; i++) put_obj(L, L->a[i]);
     return t_depth++;
 }
@@ -204,6 +210,8 @@ void comrec_post(CPU *c, int tok){
                 put(L, " ->"); put_obj(L, o);
             }
         }
+    if (L->kind == CR_Q && L->m == 7u && !c->eax && L->a[2] >= 4u && readable(L->a[1], 4))
+        put(L, " -> %u", MR32(L->a[1]));          /* GetData's answer: an occlusion query's visible pixels */
     if (c->eax) put(L, " =%x", c->eax);
     emit(L->b, L->n);
     int present = (L->kind == CR_DEV && L->m == 17u) || (L->kind == CR_SWAP && L->m == 3u);
@@ -212,7 +220,7 @@ void comrec_post(CPU *c, int tok){
         g_frame++;
         if (g_f && g_frame >= g_from && g_frame <= g_to) fprintf(g_f, "F %u\n", g_frame);
         if (g_f) fflush(g_f);
-        if (g_f && g_frame > g_to){ fclose(g_f); g_f = 0; g_comrec_on = 0; }
+        if (g_f && g_frame > g_to && !g_windows){ fclose(g_f); g_f = 0; g_comrec_on = 0; }
         atomic_flag_clear_explicit(&g_lock, memory_order_release);
     }
 }
@@ -225,6 +233,16 @@ void comrec_marker(const char *fmt, ...){
     if (n < 0) return;
     if (n >= (int)sizeof b) n = (int)sizeof b - 1;
     emit(b, n);
+}
+
+void comrec_window(uint32_t n){
+    if (!g_f || !n) return;
+    while (atomic_flag_test_and_set_explicit(&g_lock, memory_order_acquire)) ;
+    g_from = g_frame; g_to = g_frame + n - 1u;   /* the Present now under way, then n - 1 more */
+    g_windows = 1;
+    fprintf(g_f, "F %u\n", g_frame);
+    atomic_flag_clear_explicit(&g_lock, memory_order_release);
+    fprintf(stderr, "[dxrec] Presents %u..%u\n", g_from, g_to);
 }
 
 /* the file, whole: at the guest's ExitProcess (win32.c) and at the host's exit */
