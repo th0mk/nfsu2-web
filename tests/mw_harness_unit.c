@@ -81,6 +81,7 @@ void GAMEINFO_ENTRY_FN(CPU *c){ (void)c; }
 /* the race aids (career_mw.c) and the debugging hook (debug_mw.c) the table names: not linked here */
 void mw_frame(CPU *c){ (void)c; }
 void roam_mw_frame(CPU *c){ (void)c; }
+void mw_ws_frame(CPU *c){ (void)c; }
 float mw_ui_band(void){ return 1.f; }
 void mw_bot_present(void){}                 /* the career bot (bot_mw.c, test only) */
 int  mw_debug_hook(CPU *c, uint32_t va){ (void)c; (void)va; return 0; }

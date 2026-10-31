@@ -140,8 +140,8 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   // the per-frame anchor (Q-24): core runs on_frame at frame_site, a hook site of MW's own file the lift collects
   // (tools/genstamp.sh hooks: HOOK_SITE in runtime/mw/*.c); its other hooks are a debugging lift's (debug_mw.c)
   assert.equal(t.get('on_frame'), 'mw_on_frame');
-  assert.match(read('runtime/mw/game_mw.c'), /static void mw_on_frame\(CPU \*c\)\{ mw_frame\(c\); roam_mw_frame\(c\); \}/,
-    'the test aids, then free roam\'s friends\' cars (roam_mw.c)');
+  assert.match(read('runtime/mw/game_mw.c'), /static void mw_on_frame\(CPU \*c\)\{ mw_frame\(c\); roam_mw_frame\(c\); mw_ws_frame\(c\); \}/,
+    'the test aids, free roam\'s friends\' cars (roam_mw.c), then a title built for the old shape (widescreen_mw.c)');
   assert.equal(t.get('frame_site'), 'MW_FRAME_SITE');
   assert.match(read('runtime/mw/game_mw.c'), /#define MW_FRAME_SITE HOOK_SITE\(0x00663ec6\)/);
   assert.match(read('runtime/mw/career_mw.c'), /\nvoid mw_frame\(CPU \*c\)\{/);

@@ -64,7 +64,10 @@
  *           name 0x5705E0, has no caller in v1.3), the object 0x534CC377 is shown
  *           rather than hidden at 0x5A30B1 (0x514CC0 for 0x514C70) and the
  *           prompt's hash is 0xC4DF3FF2 for 0xC6CC55A4 at 0x5A3141.  A 4:3,
- *           16:10 or upright screen keeps the 4:3 title (TRACKER M7-42).
+ *           16:10 or upright screen keeps the 4:3 title (TRACKER M7-42).  A
+ *           title up while the screen crosses 16:9 is made again for the new
+ *           shape (mw_ws_frame), as the game switches the title and the
+ *           attract movie.
  *
  * Options (read once, the page's settings): NFSU2_HUD=wide|43 (hud),
  * NFSU2_MOVIE=fit|fill|stretch (movie_framing).  NOWIDE=1 (com.c) keeps the
@@ -98,7 +101,8 @@ static int   g_wide_hud;                /* the game's widescreen HUD packages in
 static int   g_band_draw;               /* 0x6D1260 is drawing a quad that keeps to the HUD's band */
 static int   g_wide_splash_opt, g_wide1610, g_bandlog;   /* NFSMW_WIDE_SPLASH, NFSMW_WIDE_HUD_1610, NFSMW_BANDLOG */
 static int   g_wide_splash;             /* the widescreen title's name is over the 4:3 one now */
-static unsigned long g_hits[12];
+static int   g_title_built = -1;        /* the last title built was the wide one (1), the 4:3 one (0), none yet (-1) */
+static unsigned long g_hits[13];
 
 static int opt_is(const char *v, const char *s){ return v && !strcasecmp(v, s); }
 static void mws_init(void){
@@ -170,6 +174,25 @@ void ws_set_mapping(float k){
                 "out again\n", (double)k, (double)g_hk, (double)g_cx, (double)g_cy,
                 g_wide_hud ? "the game's widescreen" : "the 4:3", n);
     }
+}
+/* game_mw.c on_frame, once a pass of the main loop (between the update and the render): a title built for the
+ * other shape (the screen crossed 16:9 while it was up) is made again under the name hud_apply has put at 0x8A0114,
+ * the way the game switches the title and the attract movie (0x57DBB0: cFEng [0x91CADC] ->0x525940(name, 0, 0xFF,
+ * 0), which queues the switch in FEngine).  Only in the front end, while the title takes input and FEngine has no
+ * package change queued (fe_mw.c mw_fe_settled): not while it comes in or goes, nor over a change the game asked for
+ * (Enter on the title) */
+uint32_t mw_flow(void); int mw_fe_settled(const char *name);    /* fe_mw.c */
+void mw_ws_frame(CPU *c){
+    if (g_title_built < 0 || g_title_built == g_wide_splash || mw_flow() != 3u) return;
+    if (!mw_fe_settled("MW_LS_Splash.fng") && !mw_fe_settled("WS_MW_LS_Splash.fng")) return;
+    uint32_t keep = c->ecx, a[4] = { 0x008a0114u, 0u, 0xffu, 0u };
+    c->ecx = MR32(0x0091cadcu);
+    call_guest(c, 0x00525940u, 4, a);
+    c->ecx = keep;
+    g_hits[12]++;
+    fprintf(stderr, "ws: f=%ld the title made again for the screen's shape: %.19s (it was built %s)\n", autotest_frame(),
+            (const char *)(g_mem + 0x008a0114u), g_title_built ? "wide" : "4:3");
+    g_title_built = g_wide_splash;
 }
 /* game.h ui_band (com.c, every draw with no position matrix into the screen): 0x6D1260's quad, on a screen narrower
  * than 4:3, keeps to the 4:3 HUD's band, 1/hk of the screen's height */
@@ -312,8 +335,9 @@ int mw_ws_hook(CPU *c, uint32_t va){
      * 0x534CC377 is shown where it was hidden (its pointer, the argument of 0x514C70 at [esp], given to the show
      * 0x514CC0 instead); and 0x525220 gets 0xC4DF3FF2 ("CLICK to continue") for 0xC6CC55A4.  The package's name is
      * hud_apply's copy over 0x8A0114 (WidescreenFix's edit of the splash name 0x5705E0 is not needed: nothing in v1.3
-     * calls it) */
+     * calls it).  Which of the two titles was built last is kept for mw_ws_frame */
     case HOOK_SITE(0x005a307e):
+        g_title_built = g_wide_splash;
         if (g_wide_splash){ c->eax = (c->eax & ~0xffu) | 1u; g_hits[11]++; }
         return 1;
     case HOOK_SITE(0x005a30b1):
@@ -360,7 +384,7 @@ void sub_0057e920(CPU *c){
 void ws_report(void){
     if (!g_init) return;
     fprintf(stderr, "ws: mw hooks fov=%lu/%lu origin=%lu mirror=%lu shadow=%lu wideflag=%lu movie=%lu labels=%lu"
-            " band=%lu/%lu/%lu title=%lu (k=%.4f, HUD %.4f, %s HUD)\n", g_hits[0], g_hits[1], g_hits[2], g_hits[3],
-            g_hits[4], g_hits[5], g_hits[6], g_hits[7], g_hits[8], g_hits[9], g_hits[10], g_hits[11],
+            " band=%lu/%lu/%lu title=%lu/%lu (k=%.4f, HUD %.4f, %s HUD)\n", g_hits[0], g_hits[1], g_hits[2], g_hits[3],
+            g_hits[4], g_hits[5], g_hits[6], g_hits[7], g_hits[8], g_hits[9], g_hits[10], g_hits[11], g_hits[12],
             (double)g_k, (double)g_hk, g_wide_hud ? "wide" : "4:3");
 }

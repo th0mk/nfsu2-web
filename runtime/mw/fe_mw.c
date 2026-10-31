@@ -77,6 +77,8 @@
 #define ENG_HEAD   0xe0u            /* FEngine: the active packages' head */
 #define ENG_TAIL   0xe4u            /* and tail: the package on top */
 #define ENG_IDLE   0xf0u            /* the idle packages' head */
+#define ENG_QUEUE  0x4128u          /* the head of its queued package changes (0x5B7880 adds one, the update's
+                                     * 0x5C4F80 takes them; 0x5B0C10 looks for a push or switch there), 0: none */
 #define PKG_NEXT   0x04u
 #define PKG_NAME   0x0cu
 #define PKG_HASH   0x10u
@@ -120,6 +122,18 @@ int mw_fe_active(const char *name){
     for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < 32; p = rd(p + PKG_NEXT), k++){
         const char *nm = pkg_name(p);
         if (nm && !strcasecmp(nm, name)) return 1;
+    }
+    return 0;
+}
+
+/* 1 while a package of this name is in the active list and takes input (FEPackage +0x28: neither coming in nor
+ * going) and FEngine has no package change queued (widescreen_mw.c's title made again for a new shape) */
+int mw_fe_settled(const char *name){
+    uint32_t e = engine(); int k = 0;
+    if (!e || rd(e + ENG_QUEUE)) return 0;
+    for (uint32_t p = rd(e + ENG_HEAD); p && k < 32; p = rd(p + PKG_NEXT), k++){
+        const char *nm = pkg_name(p);
+        if (nm && !strcasecmp(nm, name)) return (rd(p + PKG_INPUT) & 0xffu) != 0;
     }
     return 0;
 }

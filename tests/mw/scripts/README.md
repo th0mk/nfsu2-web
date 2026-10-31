@@ -54,7 +54,9 @@ play page; run it at each canvas shape (`w`, `h`: 4:3, 16:9, 21:9, 32:9 and upri
 the title alone (movies off): at 16:9 and wider the game's widescreen one (WS_MW_LS_Splash.fng), at 4:3, 16:10 and
 upright, or with `NFSMW_WIDE_SPLASH=0`, the 4:3 one.  The scripts that wait for the title name both packages
 (`MW_LS_Splash.fng|WS_MW_LS_Splash.fng`) and its prompt in both
-(`$O(MW_LS_Splash.fng:0xC6CC55A4,WS_MW_LS_Splash.fng:0xC4DF3FF2)`).
+(`$O(MW_LS_Splash.fng:0xC6CC55A4,WS_MW_LS_Splash.fng:0xC4DF3FF2)`).  `title_resize.txt` changes the canvas under
+the title (16:9, 4:3, 16:9 again: `&w=1280&h=720&resizeon=960x720,1280x720`) and wants the title made again for
+each new shape at once, not at its next round through the attract movie.
 `wide_resize.txt` and `wide_resize50.txt` change the canvas under the game at each "resize" line (the play page's
 `&resizeon=<w>x<h>,...`): twice, or 50 times through five shapes with a `[status]` line after each, whose check wants
 the texture ids, kernel objects, file handles and threads at the end as after the first round.

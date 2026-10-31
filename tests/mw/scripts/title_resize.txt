@@ -1,0 +1,17 @@
+# Most Wanted: the title while the screen changes shape under it (TRACKER M7-42: the widescreen title on a 16:9 or
+# wider screen, the 4:3 one on another; runtime/mw/widescreen_mw.c makes a title built for the other shape again at
+# once).  On the play page from 16:9: at "resize 1" the canvas is made 4:3 and the 4:3 title is to replace the wide
+# one, at "resize 2" it is 16:9 again and the wide one is to come back, each long before the title's own round
+# through the attract movie: &w=1280&h=720&resizeon=960x720,1280x720.  With movies off (NOMOVIES=1) and
+# NFSU2_FNG_LOG=1 (the [fng] screen lines).  The last picture is taken twice, 3 frames apart, as the close can come
+# before the first is written.  The pictures are the game's: they stay out of the repo.
+0     waitfng MW_LS_Splash.fng|WS_MW_LS_Splash.fng 3600
++100  log title_resize: resize 1
++0    waitfng MW_LS_Splash.fng 300
++120  dump title_43
++0    log title_resize: resize 2
++0    waitfng WS_MW_LS_Splash.fng 300
++120  dump title_169
++3    dump title_169
++0    log title_resize: done
++0    close
