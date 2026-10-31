@@ -1,0 +1,29 @@
+# Most Wanted: the music in its three modes in one run, for a music pack (tools/musicpack.py --game mw).  Boots to the
+# main menu as roam_probe.txt does and stays there ${MENU_MS} ms (the front end's music), resumes the career into free
+# roam and stays there ${ROAM_MS} ms (EA Trax on the radio), then starts a pursuit as pursuit_start.txt does and
+# stays in it until it ends or ${PURSUIT_MS} ms are over (the pursuit's music).  A recording of the mixer's output
+# (SNDDUMP, 44,100 Hz s16le stereo) and NFSMW_EALAYER3_LOG=1 (the streams the decoder plays) tell what played.
+#   NFSU2_SAVE_SEED=<seeds>/freeroam node web/tools/run-suite.mjs --game mw --script music_modes.txt \
+#     --marker 'music_modes: done' --env SNDDUMP=/save/music.raw --env NFSMW_EALAYER3_LOG=1 \
+#     --env MENU_MS=30000 --env ROAM_MS=60000 --env PURSUIT_MS=60000 --save-out <dir>
+0     waitmem 0x00925e90 3 3600
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++${MENU_MS}ms log music_modes: front end done
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000
++0    waitexpr i:[0x0091e000]+0x1964 == 2 3000
++0    log music_modes: free roam
++${ROAM_MS}ms log music_modes: free roam done
++0    pursuit watch
++0    call 0x0060aac0 1
++0    pursuit wait on 600
++0    log music_modes: pursuit started
++0    autopilot on
++${PURSUIT_MS}ms log music_modes: pursuit done
++0    log music_modes: done
++0    close

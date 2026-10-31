@@ -160,6 +160,9 @@ Sound: `menu_audio.txt` (the front end's sound set-up and the mixer's pace at th
 the check wants the game to read the music, MW_Music.mus, again after every visit; TRACKER M4-26) and
 `tunnel_pass.txt` (from a career save past the prologue: 20 drives through a tunnel, the game's own tunnel state and
 reverb switch logged with NFSMW_TUNNEL_LOG=1 by runtime/mw/sound_mw.c; TRACKER M4-27).
+`music_modes.txt` (from the freeroam seed: the main menu for MENU_MS, free roam for ROAM_MS, a forced pursuit for
+PURSUIT_MS; with the EALayer3 music pack in the data folder and NFSMW_EALAYER3_LOG=1 the check wants decoder voices in each
+mode; SNDDUMP=/save/music.raw records the mixer for a gap count).
 
 The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
 switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).
