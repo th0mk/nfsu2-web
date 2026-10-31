@@ -580,11 +580,18 @@ static void *input_main(void *unused){
 
 /* ---- the game's text entry, for the page ------------------------------------------ */
 /* A phone has no keys: while the game's text entry is up (a new profile's
- * name, the LAN name), the page shows a field of its own that brings up the
- * phone's keyboard, starts it with the game's text and sends what is typed
- * as IEV_TEXT (web/src/app/textentry.ts).  The entry is the game's to read
- * (game.h text_entry; UG2's object at 0x83A7B0, game_ug2.c).  Published at
- * every Present (autotest.c) when it changed, under IM_TEXT_SEQ. */
+ * name, the LAN name; Most Wanted's alias name), the page shows a field of
+ * its own that brings up the phone's keyboard, starts it with the game's
+ * text and sends what is typed as IEV_TEXT (web/src/app/textentry.ts).  The
+ * entry is the game's to read (game.h text_entry; UG2's object at 0x83A7B0,
+ * game_ug2.c; MW's at 0x91D4B0, mw/game_mw.c).  Published at every Present
+ * (autotest.c) when it changed, under IM_TEXT_SEQ.
+ *   With NFSU2_KEY_LOG set (tests only: tests/mw/checks/text_alias.sh and
+ * app-test's phonetext read it), each change is logged with the text as the
+ * field gets it, in every game with a text entry: Underground 2's profile
+ * and LAN names too.  The same variable already logs each typed character
+ * (post's WM_CHAR lines); this line adds the text the entry starts with.
+ * Without the variable no text is logged. */
 void input_web_frame(void){
     static uint32_t l_max, l_kind, l_len;
     static uint8_t l_txt[INPUT_TEXT_BYTES];
@@ -593,7 +600,7 @@ void input_web_frame(void){
     uint32_t max = g_game.text_entry ? g_game.text_entry(&kind, &len, txt, sizeof txt) : 0u;
     if (max == l_max && kind == l_kind && len == l_len && !memcmp(txt, l_txt, sizeof txt)) return;
     if (!max != !l_max) fprintf(stderr, "[input] the game's text entry %s\n", max ? "is up" : "is down");
-    if (max && kbd_log())                       /* NFSU2_KEY_LOG (tests): what the page's phone field gets */
+    if (max && kbd_log())                       /* NFSU2_KEY_LOG (tests), every game: what the phone field gets */
         fprintf(stderr, "[input] text entry: kind %u, at most %u, \"%.*s\"\n", (unsigned)kind, (unsigned)max,
                 (int)(len < sizeof txt ? len : sizeof txt), (const char *)txt);
     l_max = max; l_kind = kind; l_len = len; memcpy(l_txt, txt, sizeof txt);
