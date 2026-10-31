@@ -24,9 +24,11 @@
  *           maps to clip space itself (0x6D12C0: x * [0x8AF9A4] - 1, y *
  *           [0x8AF9A0] - 1): the scale shrinks to keep 640x480 4:3 in the
  *           middle, and the screen centre the packages are placed around
- *           (320 at 0x894B40, read by 33 sites, and the (320, 240) origin the
- *           seven HUD and front-end renders push) moves to the middle of the
- *           wider space; narrower than 4:3 the same is done in y.  The
+ *           (320 at 0x894B40 and 240 at 0x894B38, read in pairs by 33 sites:
+ *           the mouse's hit tests, FEng's cursor feed; and the (320, 240)
+ *           origin the seven HUD and front-end renders push) moves to the
+ *           middle of the wider space; narrower than 4:3 the same is done in
+ *           y.  The
  *           rear-view mirror's quad (190..450 x 19..89, 0x6E70BC..0x6E70F8)
  *           moves with it; the screen's size in HUD units (640 at 0x8AE8F8,
  *           480 at 0x8AF2C0: the mouse 0x6C9C45, the world-to-HUD markers
@@ -133,6 +135,8 @@ static void hud_apply(void){
     MRF32(0x008af9a4u) = sx;            /* the front end's x scale (1/320) */
     MRF32(0x008af9a0u) = sy;            /* its y scale (1/240) */
     MRF32(0x00894b40u) = g_cx;          /* the screen's centre x (320) */
+    MRF32(0x00894b38u) = g_cy;          /* and y (240): each of its 33 readers pairs with one of x's, so the mouse's
+                                         * hit tests subtract the centre the cursor's units have (upright: 480*hk) */
     MRF32(0x008ae8f8u) = 2.f * g_cx;    /* the screen's width in HUD units (640) */
     MRF32(0x008af2c0u) = 2.f * g_cy;    /* its height (480) */
     MRF32(0x008afa08u) = (hk < 1.f ? hk : 1.f) / 640.f;    /* the arrest blur's x step (1/640) */

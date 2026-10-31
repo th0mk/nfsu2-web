@@ -42,8 +42,9 @@ language's `LANGUAGES\<NAME>.BIN` read, no other's).
 The mouse: `mouse_menu.txt` (TRACKER M3-08: the main menu's wheel takes the highlight to Options, clicks on the
 selection frame open its sub menu and the options screen, twice, the second time with the windowed flag set; run it
 with `NFSRES=800x600` and `1024x768`), `mouse_menu_169.txt` (the same walk at 16:9, `NFSRES=1280x720` and
-`1920x1080`) and `mouse_menu_219.txt` (at 21:9, `NFSRES=2520x1080`, TRACKER M7-03: the front end stays 4:3 in the
-middle of a wider screen, so its objects sit at other window fractions).  Until the page's pointer first moves, Most
+`1920x1080`), `mouse_menu_916.txt` (upright, `NFSRES=720x1280`, TRACKER M7-41: the front end in a 4:3 band across the
+middle, the cursor's units 480 * hk down) and `mouse_menu_219.txt` (at 21:9, `NFSRES=2520x1080`, TRACKER M7-03: the
+front end stays 4:3 in the middle of a wider screen, so its objects sit at other window fractions).  Until the page's pointer first moves, Most
 Wanted sees the cursor outside its window (game.h cursor_away): its front end highlights the object a still cursor
 rests on.
 
