@@ -61,7 +61,8 @@
  *                                   class 4 as ours are, the car loader's memory pool): one [roampool] line
  * NFSU2_ROAM_POSELOG=<file> writes UG2's pose log (L rows the player's car, R rows friends' cars as shown, world
  * frame) for tools/roam_compare.py; NFSU2_ROAM_MAX_CARS caps the cars (16, DEF_CARS) and sizes the car loader's pool
- * (NFSU2_ROAM_CARPOOL_KB sets it instead); NFSU2_ROAM_GHOST=0 makes friends' cars solid from the start. */
+ * (NFSMW_ROAM_CARPOOL_KB sets it instead; Underground 2's NFSU2_ROAM_CARPOOL_KB is not read); NFSU2_ROAM_GHOST=0
+ * makes friends' cars solid from the start. */
 #include "cpu.h"
 #include "game.h"
 #include "roam_core.h"
@@ -365,8 +366,12 @@ static int env_int(const char *k, int def, int lo, int hi){
  * one racing car's reserve (the table 0x904448, Player and Racing rows +0x10: 6,397 KB) for each friend's car
  * (NFSU2_ROAM_MAX_CARS), and the game's own cars keep the budget they had; the main pool grows by as much.  The
  * pool is that size from the boot on, in races and the front end too, and is never given back (Underground 2's lesson:
- * an extra block given back while rides still lay in it broke the next load).  NFSU2_ROAM_CARPOOL_KB=<KB> sets
- * the size instead (not below the game's).  On the guest thread, after win32_init, before the entry point. */
+ * an extra block given back while rides still lay in it broke the next load).  NFSMW_ROAM_CARPOOL_KB=<KB> sets
+ * the size instead (a test aid), kept between the game's own and the room for the most friends' cars there can be
+ * (MAX_CARS), so the main pool stays well inside the guest's 512 MB heap.  Underground 2's NFSU2_ROAM_CARPOOL_KB
+ * (settings.ini's roam_carpool_kb, 0..128000) is its free roam's whole pool, which here, where sixteen friends' cars
+ * want 152,352 KB, could only shrink the room: Most Wanted does not read it and says so.  On the guest thread, after
+ * win32_init, before the entry point. */
 #define G_CARPOOL_KB     0x008f7ef0u     /* CarLoaderPoolSizes[0] (KB) */
 #define G_CARLOADER      0x009b2c00u     /* CarLoader: +0x64 its pool's size (bytes) */
 #define G_RESERVE        0x00904448u     /* the reserve per model: rows of 0x18 bytes, +0x10 KB (Player, Racing, Cop, ...) */
@@ -382,13 +387,23 @@ void roam_mw_install(void){
         fprintf(stderr, "[roam] the car loader's pool reads %u KB, not the game's: left as it is\n", kb);
         return;
     }
-    uint32_t want = kb + (uint32_t)cars * res;
-    int ov = env_int("NFSU2_ROAM_CARPOOL_KB", 0, 0, 1000000);
-    if (ov) want = (uint32_t)ov < kb ? kb : (uint32_t)ov;
+    uint32_t want = kb + (uint32_t)cars * res, most = kb + (uint32_t)MAX_CARS * res;
+    const char *ug2 = opt("NFSU2_ROAM_CARPOOL_KB");
+    if (ug2 && *ug2)
+        fprintf(stderr, "[roam] NFSU2_ROAM_CARPOOL_KB=%s is Underground 2's free-roam pool: not read here "
+                "(NFSMW_ROAM_CARPOOL_KB sets this one)\n", ug2);
+    int ov = env_int("NFSMW_ROAM_CARPOOL_KB", 0, 0, 1000000);
+    if (ov){
+        uint32_t o = (uint32_t)ov < kb ? kb : (uint32_t)ov > most ? most : (uint32_t)ov;
+        if (o != (uint32_t)ov)
+            fprintf(stderr, "[roam] NFSMW_ROAM_CARPOOL_KB=%s is outside %u..%u KB (the game's own .. room for %d friends' cars): "
+                    "%u KB\n", opt("NFSMW_ROAM_CARPOOL_KB"), kb, most, MAX_CARS, o);
+        want = o;
+    }
     MR32(G_CARPOOL_KB) = want;
     R.pool_kb = want; R.pool_kb_game = kb;
     fprintf(stderr, "[roam] the car loader's pool %u -> %u KB (%d friends' cars, %u KB each%s)\n", kb, want, cars, res,
-            ov ? ", NFSU2_ROAM_CARPOOL_KB" : "");
+            ov ? ", NFSMW_ROAM_CARPOOL_KB" : "");
 }
 
 /* the vehicles' lists (VEH_MAX), read for the pools line: the most entries in one, of its room */

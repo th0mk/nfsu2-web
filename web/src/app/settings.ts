@@ -130,6 +130,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_rate', env: 'NFSU2_ROAM_RATE', kind: 'int', vals: '10..30', ic: true, scope: 'web' },
   { key: 'roam_delay', env: 'NFSU2_ROAM_DELAY', kind: 'int', vals: '0..1000', ic: true, scope: 'web' },
   { key: 'roam_extrap', env: 'NFSU2_ROAM_EXTRAP', kind: 'int', vals: '0..1000', ic: true, scope: 'web' },
+  // Underground 2's free-roam car pool; Most Wanted does not read it (runtime/mw/roam_mw.c: NFSMW_ROAM_CARPOOL_KB)
   { key: 'roam_carpool_kb', env: 'NFSU2_ROAM_CARPOOL_KB', kind: 'int', vals: '0..128000', ic: true, scope: 'web' },
   // LAN play
   { key: 'network', env: 'NFSU2_NET', kind: 'enum', vals: 'lan|on|off', scope: 'web' },
