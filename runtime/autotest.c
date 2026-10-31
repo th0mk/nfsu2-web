@@ -67,7 +67,11 @@
  *     axis LX|LY|RX|RY V       stick position, -1..1 (+X right, +Y down)
  *     trigger LT|RT V          trigger position, 0..1
  *     tappaduntil BUTTON NAME [every] [tmo]  like tapuntil, with a pad button
- *     poke ADDR VAL            write dword VAL to ADDR (debug only)
+ *     poke ADDR VAL            write dword VAL to ADDR (debug only); ADDR is a
+ *                              number or an expression as pokestr's EXPR,
+ *                              read when the line runs.  A poke where no
+ *                              memory is (or at 0) logs "no such address"
+ *                              and writes nothing
  *     pokestr EXPR TEXT        write TEXT and its NUL at EXPR (trace's syntax,
  *                              so [0x91cf90]+0x134 follows a pointer; test only:
  *                              a name the game's own text entry refuses).  EXPR
@@ -929,7 +933,8 @@ static int fire(CPU *c, Ev *e, double tms){
         if (e->xtext){ const char *x = e->xtext; a = tr_eval(&x, &ok); }
         if (ok && a && mem_is_committed(a) && mem_is_committed(a + 3)){ MR32(a) = e->val;
             fprintf(stderr, "[autotest] f=%ld poke [0x%08x] <- 0x%08x\n", g_frame, a, e->val); }
-        else fprintf(stderr, "[autotest] f=%ld poke %s (0x%08x): no such address\n", g_frame, e->xtext ? e->xtext : "", a);
+        else if (e->xtext) fprintf(stderr, "[autotest] f=%ld poke %s (0x%08x): no such address\n", g_frame, e->xtext, a);
+        else fprintf(stderr, "[autotest] f=%ld poke 0x%08x: no such address\n", g_frame, a);
         break; }
     case C_POKESTR: {
         const char *x = e->xtext ? e->xtext : ""; int ok = 1;
