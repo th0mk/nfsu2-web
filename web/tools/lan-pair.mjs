@@ -33,7 +33,8 @@
 //        [--horn]    in the race each instance holds N (its horn: runtime/racehorn.c, Most Wanted's
 //                    runtime/mw/racehorn_mw.c) for a second, one after the other: instance n 10 + 4 (n - 1) s after
 //                    its race began (the scripts' --after; an --after of --host-arg/--join-arg replaces it); each
-//                    must log its own horn ("[horn] my horn") and hear every other's ("[horn] <name>'s horn")
+//                    must log its own horn sounding ("[horn] my horn (<kind>)", not the start's "[horn] my horn:
+//                    <kind>") and hear every other's ("[horn] <name>'s horn")
 //        --mode drift|streetx: drift and Street X games (the mode carousel's 4th and 5th entries, as the
 //                    "mode" dumps of the runs show: Circuit, Sprint, Drag, Drift, Street X)
 //        [--game ug2|mw]   the game (ug2 unless given): its script generator, modes and results screen (Most
@@ -345,7 +346,9 @@ for (const x of inst) {
   if (has(/^\[net\] BLOCKED/m)) why.push(`${n}:net-blocked`);
   if (has(/^PAGEERROR|^CRASH/m)) why.push(`${n}:page-error`);
   if (RACES > 1 && !has(new RegExp(`LOG results_r${RACES}$`, 'm'))) why.push(`${n}:no-results-r${RACES}`);
-  if (HORN && !log.includes('[horn] my horn')) why.push(`${n}:no-horn`);
+  // '[horn] my horn (<kind>)' is the key's horn sounding (horn.c horn_sound); '[horn] my horn: <kind>' only says
+  // which horn is the player's, and the race's start prints it whether or not N was pressed
+  if (HORN && !log.includes('[horn] my horn (')) why.push(`${n}:no-horn`);
   if (HORN) for (const y of inst) if (y !== x && !y.dropped && !log.includes(`[horn] ${y.name}'s horn`)) why.push(`${n}:no-horn-of-${y.name}`);
   const L = log.split('\n'), grab = (re) => L.filter(l => re.test(l));
   summary.result[x.name] = {
