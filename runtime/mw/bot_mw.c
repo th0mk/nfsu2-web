@@ -1093,12 +1093,15 @@ static void pursuit_frame(CPU *c){
  * c5-s8w escape (thrown_up) the car fell for good, 150 km down at 1,080 km/h through four more pursuits that the
  * cops could only lose, their bounty banked by the game.  So in the world, out of a race, a car outside road heights
  * is set at the place of the bin's race nearest it (in a race the game's RESET, as the wedge watch does it). */
-#define OFFWORLD_Y_MIN  -100.0f
-#define OFFWORLD_Y_MAX  700.0f
+#define OFFWORLD_Y_MIN  -500.0f         /* not -100: between a rival's challenge accepted and its race the car stood at
+                                           -101 at 309 km/h and was set at a race place (c5-b6a; the race came all the
+                                           same) */
+#define OFFWORLD_Y_MAX  1500.0f
 static void off_world(CPU *c){
     static double last;
     float p[3], kmh = 0;
     double t = mw_game_time();
+    if (B.st == B_ENGAGE || (B.st == B_RACE && !racing(c))) return;   /* a race's load and set-up, or its end: the game's */
     if (game_flow() != g_game.flow_race || mw_fe_input_top(0) || !mw_aid_where(c, p, &kmh)) return;
     if (p[1] > OFFWORLD_Y_MIN && p[1] < OFFWORLD_Y_MAX) return;
     if (t >= last && t - last < 3.0) return;
