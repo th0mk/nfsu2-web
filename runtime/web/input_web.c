@@ -593,6 +593,9 @@ void input_web_frame(void){
     uint32_t max = g_game.text_entry ? g_game.text_entry(&kind, &len, txt, sizeof txt) : 0u;
     if (max == l_max && kind == l_kind && len == l_len && !memcmp(txt, l_txt, sizeof txt)) return;
     if (!max != !l_max) fprintf(stderr, "[input] the game's text entry %s\n", max ? "is up" : "is down");
+    if (max && kbd_log())                       /* NFSU2_KEY_LOG (tests): what the page's phone field gets */
+        fprintf(stderr, "[input] text entry: kind %u, at most %u, \"%.*s\"\n", (unsigned)kind, (unsigned)max,
+                (int)(len < sizeof txt ? len : sizeof txt), (const char *)txt);
     l_max = max; l_kind = kind; l_len = len; memcpy(l_txt, txt, sizeof txt);
     uint32_t s = atomic_load(&MH(IM_TEXT_SEQ));
     atomic_store(&MH(IM_TEXT_SEQ), s + 1u);

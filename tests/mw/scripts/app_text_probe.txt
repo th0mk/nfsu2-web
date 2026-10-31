@@ -1,0 +1,17 @@
+# Most Wanted on the player's page with a phone's keyboard (web/tools/app-test.mjs --game mw, its phonetext step;
+# TRACKER M6-21): a first start as kb_alias.txt to "Enter name: NAME"; there the page's field for a phone's keyboard
+# (web/src/app/textentry.ts) types PHONE1 into the game's field as characters and accepts it with its Enter, so the
+# script only waits for the game to take the name and ask to save it (No), then the game's own quit.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 3000         # the page typed PHONE1 and accepted it
++0    log app_text_probe: asked to save PHONE1             # (the name typed: the [input] text entry lines, NFSU2_KEY_LOG)
++60   close

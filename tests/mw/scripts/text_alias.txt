@@ -1,0 +1,28 @@
+# Most Wanted: the alias name's text entry as the page's field for a phone's keyboard sees it (TRACKER M6-21; game.h
+# text_entry, runtime/mw/game_mw.c mw_text_entry: the object at 0x91D4B0; runtime/web/input_web.c publishes it to the
+# page, web/src/app/textentry.ts).  A first start as kb_alias.txt to "Enter name: NAME": the entry comes up with the
+# game's NAME in it, kind 6 (letters and digits alone, 0x56C820) and at most 7 characters; four Backspaces empty it, ROTEST typed fills
+# it, and it goes down once Accept takes the name.  NFSU2_KEY_LOG=1 makes input_web.c log each change of what it
+# publishes.  tests/mw/checks/text_alias.sh reads the lines.
+#   node web/tools/run-suite.mjs --game mw --script text_alias.txt --marker 'text_alias: accepted' #     --env NFSU2_KEY_LOG=1 --env NFSU2_QUIT_FRAMES=6000
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype ROTEST
++0    waitfng MC_Main.fng'ROTEST 600
++0    log text_alias: typed ROTEST
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ROTEST?  (No)
++30   log text_alias: accepted
++0    close

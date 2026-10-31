@@ -53,7 +53,7 @@ const MW_UNSET = {
   lang_suffixes: 'UG2\'s "_xx" suffixes: MW\'s movie names (Q-06) take file_alt',
   on_present: 'the page\'s overlay, M6',
   sms_request: 'a UG2 feature', photo_input: 'a UG2 feature',
-  racer: 'test traces, M4', text_entry: 'M3-11',
+  racer: 'test traces, M4',
   crt_lo: 'the C runtime\'s code range is not measured', crt_hi: 'as crt_lo',
   on_qpc: 'MW\'s frame wait loop, M4', qpc_caller: 'as on_qpc',
   lan_obj: 'MW\'s LAN glue, M8', lan_start: 'M8', lan_stop: 'M8', lan_running: 'M8',

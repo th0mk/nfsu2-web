@@ -13,3 +13,7 @@ export const FILE_PREFIX = 'nfsmw';
 /** game files the I/O worker reads whole ahead, at its lowest priority, once the track's stream file is on this device
  *  (host/io-worker.ts): the cop speech, 184 MB, so that no pursuit waits for a part of it (PLAN D-53, TRACKER M4-52) */
 export const READ_AHEAD: readonly string[] = ['SOUND/SPEECH/copspeech.big'];
+/** the punctuation the game's text entry of kinds 0 and 3 takes besides letters and digits (0x8F53F0: Underground 2's
+ *  with the inverted question and exclamation marks; the page's field for a phone's keyboard keeps only what the game
+ *  takes, src/app/textentry.ts) */
+export const TEXT_PUNCT = ' .,_@-`=[]\\;\'/<>?:"{}|+()*&%#!~¿¡';

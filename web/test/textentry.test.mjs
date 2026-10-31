@@ -9,8 +9,14 @@ import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/textentry.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
-const { takes, fit, edits } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+// a game's page: its '@game' (web/tsconfig.json maps it to Underground 2's, as tsc does)
+const load = async game => {
+  const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/textentry.ts')], bundle: true, format: 'esm', write: false,
+    alias: { '@game': path.join(ROOT, `web/src/games/${game}`) } })).outputFiles[0].text;
+  return import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+};
+const { takes, fit, edits } = await load('ug2');
+const mw = await load('mw');
 
 // the game's side: 0x551270 on each WM_CHAR (8 deletes the last character, anything else is added)
 const apply = (text, chars) => chars.reduce((t, c) => c === 8 ? t.slice(0, -1) : t + String.fromCharCode(c), text);
@@ -25,6 +31,13 @@ test('the kinds with more characters', () => {
   assert.ok(takes(4, '@') && takes(4, '.') && takes(4, '_') && !takes(4, ' '));
   assert.ok(takes(5, ' ') && takes(5, ',') && !takes(5, '_'));
   assert.ok(takes(0, 'é') && takes(3, '~') && takes(0, ' ') && !takes(0, '€') && !takes(2, 'é'));
+});
+
+test("Most Wanted's kinds 0 and 3 also take the inverted question and exclamation marks (0x8F53F0)", () => {
+  assert.ok(mw.takes(0, '¿') && mw.takes(3, '¡') && !mw.takes(1, '¿'));
+  assert.ok(!takes(0, '¿') && !takes(3, '¡'));
+  assert.equal(mw.fit('Zoë_99', 1, 7), 'Zo99');
+  assert.ok(mw.takes(4, '@') && mw.takes(5, ' ') && !mw.takes(4, ' ') && mw.takes(0, 'é') && !mw.takes(0, '€'));
 });
 
 test('the game ends up with the field\'s text', () => {

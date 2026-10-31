@@ -13,3 +13,6 @@ export const LOG_MARK = '=== NFSU2 web';
 export const FILE_PREFIX = 'nfsu2';
 /** game files the I/O worker reads whole ahead after the track (host/io-worker.ts): none */
 export const READ_AHEAD: readonly string[] = [];
+/** the punctuation the game's text entry of kinds 0 and 3 takes besides letters and digits (0x7FA3D0; the page's
+ *  field for a phone's keyboard keeps only what the game takes, src/app/textentry.ts) */
+export const TEXT_PUNCT = ' .,_@-`=[]\\;\'/<>?:"{}|+()*&%#!~';

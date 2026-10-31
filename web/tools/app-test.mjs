@@ -111,6 +111,11 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 //             but Start); a finger on Gas holds the up arrow and the car moves; held through two focus losses, the game
 //             lets the up arrow go at each (the controls press it again when the focus is back); Look back holds L; the
 //             game's own quit
+//   phonetext on a touch screen, a first start's alias name (tests/mw/scripts/app_text_probe.txt; TRACKER M6-21): the
+//             page's field for a phone's keyboard comes with the game's text entry (runtime/mw/game_mw.c mw_text_entry)
+//             holding the game's NAME; PHONE1 typed into it reaches the game's field as characters alone
+//             (WM_CHAR), and its Enter (the keyboard's Done) accepts the name: the game asks to save the alias PHONE1;
+//             the field goes with the entry; the game's own quit
 // An oracle build ("oracle":1 in /game.json) loads d3dx9_26.dll from the save folder: each step puts it there from
 // $NFSMW_D3DX_DLL (the file on this machine; never in the repository) and the address names it (NFSMW_D3DX).  The game
 // runs with the null renderer (NFSU2_RENDERER=null) unless --draw is given: the steps check the page and the game, and a
@@ -119,7 +124,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 const STEPS_OF = {
   ug2: ['start', 'settings', 'play', 'saves', 'restore', 'pcsave', 'quit', 'stalllog', 'instance', 'readonly', 'retry', 'update',
     'autoupdate', 'enterlink', 'late', 'quitstages', 'slowgpu', 'gpulost', 'crash', 'leak', 'cache', 'roamask', 'cloudask', 'full', 'page', 'mobile'],
-  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave', 'touch'],
+  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave', 'touch', 'phonetext'],
 };
 const NONE = 'none yet';
 const GAME = gameOf(process.argv.slice(2));
@@ -133,7 +138,7 @@ await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/app-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `apptest-${Date.now().toString(36)}`;
-const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`, SAVE5 = `${RUN}-e`;
+const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`, SAVE5 = `${RUN}-e`, SAVE6 = `${RUN}-f`;
 // the test suite's environment (DESIGN.md section 5); movies stay on/off through settings.ini
 const ENV = ['SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_TIMEOUT=400'].map(e => `env=${encodeURIComponent(e)}`).join('&');
 fs.mkdirSync(OUT, { recursive: true });
@@ -539,6 +544,44 @@ async function mwSteps() {
       { drove, shown, set, visible, gasKeys, moved, refocus, lookKeys, after, exit, drive: (tail.match(/\[drive\][^\n]*-> [1-9][^\n]*/g) ?? []).slice(0, 3) });
     await p6.close();
     await tctx.close();
+  }
+  // ------------------------------------------------------ phonetext --
+  if (want('phonetext')) {
+    const xctx = await browser.newContext({ viewport: { width: 915, height: 412 }, hasTouch: true, isMobile: true });
+    const p7 = watch(await xctx.newPage(), 'G');
+    await open(p7, `save=${SAVE6}&fresh&${env}&env=NFSU2_KEY_LOG=1&${script('app_text_probe.txt')}`);
+    await seedDll(p7, SAVE6);
+    const run = await playUntilExit(p7, 'phonetext', 400000);
+    const F = () => p7.evaluate(() => window.__nfsu2.textField());
+    const logText = () => p7.evaluate(() => window.__nfsu2.log.text());
+    // the game's entry up: a finger on the game (a touch screen shows the field at once, this one is told so)
+    const up = await p7.waitForFunction(() => /the game's text entry is up/.test(window.__nfsu2.log.text()), null, { timeout: 300000, polling: 250 })
+      .then(() => true, () => false);
+    await p7.evaluate(() => {
+      const c = document.querySelector('#stage canvas'); if (!c) return;
+      const r = c.getBoundingClientRect();
+      for (const ty of ['pointerdown', 'pointerup']) c.dispatchEvent(new PointerEvent(ty, { pointerId: 5, pointerType: 'touch', isPrimary: true,
+        bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 }));
+    });
+    const shown = await p7.waitForFunction(() => window.__nfsu2.textField().shown, null, { timeout: 10000, polling: 100 }).then(() => true, () => false);
+    const first = await F();
+    await shot(p7, 'mw-phonetext.png');
+    // what a phone's keyboard does to the field: its value, then an input event; Done is the Enter key on it
+    await p7.evaluate(() => { const f = document.querySelector('.type input'); f.value = 'PHONE1'; f.dispatchEvent(new Event('input', { bubbles: true })); });
+    const typed = await p7.waitForFunction(() => /text entry: kind \d+, at most \d+, "PHONE1"/.test(window.__nfsu2.log.text()), null, { timeout: 20000, polling: 100 })
+      .then(() => true, () => false);
+    await p7.evaluate(() => document.querySelector('.type input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+    const asked = await p7.waitForFunction(() => /app_text_probe: asked to save PHONE1/.test(window.__nfsu2.log.text()), null, { timeout: 60000, polling: 250 })
+      .then(() => true, () => false);
+    const gone = await p7.waitForFunction(() => !window.__nfsu2.textField().shown, null, { timeout: 10000, polling: 100 }).then(() => true, () => false);
+    const exit = await run.wait();
+    const tail = await logText();
+    fs.writeFileSync(path.join(OUT, 'mw-phonetext.log'), tail);
+    // (first.focused is evidence only: headless Chrome leaves the focus elsewhere, and a phone may want a tap on the field)
+    report('phonetext', up && shown && first.field === 'NAME' && typed && asked && gone && exit?.code === 0 && quitPath(tail),
+      { up, shown, first, typed, asked, gone, exit, entry: (tail.match(/\[input\] text entry:[^\n]*/g) ?? []).slice(-3) });
+    await p7.close();
+    await xctx.close();
   }
 }
 

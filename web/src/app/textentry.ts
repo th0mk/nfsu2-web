@@ -12,11 +12,9 @@ import type { TextEntry } from '../input/index';
 import { cp1252 } from '../input/keymap';
 import { touchFirst } from './device';
 import { t } from './i18n';
+import { TEXT_PUNCT as PUNCT } from '@game/run';
 
-/** the punctuation the game's kinds 0 and 3 take besides letters and digits (0x7FA3D0) */
-const PUNCT = ' .,_@-`=[]\\;\'/<>?:"{}|+()*&%#!~';
-
-/** whether the game's text entry of this kind takes the character (0x4FF310) */
+/** whether the game's text entry of this kind takes the character (UG2's 0x4FF310, Most Wanted's 0x56C820) */
 export function takes(kind: number, ch: string): boolean {
   const c = ch.length === 1 ? cp1252(ch.charCodeAt(0)) : -1;
   if (c < 0x20 || c === 0x7F) return false;

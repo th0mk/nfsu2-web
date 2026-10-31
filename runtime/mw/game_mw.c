@@ -182,6 +182,30 @@ static const PadLate mw_pad_late = {
     .cb = 0x007f1a6bu, .setup = 0x0063f850u, .setup_this = 0x00920de8u, .setup_vtbl = 0x008a7b9cu,
 };
 
+/* The front end's text entry (the alias name, M6-21), for the page's field for a phone's keyboard (game.h text_entry,
+ * runtime/web/input_web.c, web/src/app/textentry.ts): the object at 0x91D4B0, which the window procedure hands every
+ * WM_CHAR (0x6DB8B1 -> 0x5A95F0 -> 0x5A8700).  While +0x410 (a byte) and +0x414 are set, 0x5A3790 takes the
+ * character: Enter ends the entry (0x599100), Escape cancels it (0x5991B0), Backspace takes the last one off, and any
+ * other the filter 0x56C820 takes goes on while the length +0x300 is below the most +0x40C.  The text is UTF-16 at
+ * +0x100 (room for 256), the kind at +0x404 (0x56C820: letters and digits; kind 4 also @._; kind 5 also space,@.;
+ * kinds 0 and 3 also 0xC0..0xFF and the punctuation of 0x8F53F0, UG2's with the inverted question and exclamation
+ * marks, web/src/games/mw/run.ts TEXT_PUNCT).  The page gets it as bytes: a character past 0xFF (none the filter
+ * takes) as '?'. */
+#define MW_TXT 0x0091d4b0u
+static uint32_t mw_text_entry(uint32_t *kind, uint32_t *len, uint8_t *text, uint32_t cap){
+    if (!mem_is_committed(MW_TXT + 0x417u) || !(MR8(MW_TXT + 0x410u) && MR32(MW_TXT + 0x414u))) return 0;
+    uint32_t max = MR32(MW_TXT + 0x40cu), n = MR32(MW_TXT + 0x300u);
+    if (max > 256u) max = 256u;
+    if (n > max) n = max;
+    *kind = MR32(MW_TXT + 0x404u);
+    *len = n;
+    for (uint32_t i = 0; i < n && i < cap; i++){
+        uint16_t w = MR16(MW_TXT + 0x100u + 2u * i);
+        text[i] = w < 0x100u ? (uint8_t)w : (uint8_t)'?';
+    }
+    return max;
+}
+
 /* A movie's file name (Q-06): the front end's movie object 0x559680 builds 'MOVIES\<name>_<LANGUAGE>_<region>.vp6'
  * with 0x516130 (the language's name from the table 0x8F40F8; '_pal' or '_ntsc' by the region 0x64A110, _ntsc for
  * English US alone), tried in the game folder, then on the disc drive, and once more with ENGLISH and the same
@@ -230,8 +254,7 @@ static int mw_movie_alt(const char *path, int i, char *out, unsigned cap){
  *   lang_suffixes       UG2's "_xx" suffixes; MW's movie names (Q-06) take file_alt
  *   on_present, status  the page's overlay (M6)
  *   sms_request, photo_input   UG2 features, not ported
- *   racer, text_entry   test traces (M4), the page's phone text field (M6-21: the alias name field takes
- *                       WM_CHAR through the window procedure 0x6DB6C0, tests/mw/scripts/kb_alias.txt)
+ *   racer               test traces (M4)
  *   crt_lo, crt_hi      HEAPSTAT's call sites: the C runtime's code range is not measured (its heap's
  *                       HeapAlloc/HeapReAlloc/HeapFree calls are at 0x7D10EF-0x7D5E6C; GAME.md 2.11 has an
  *                       estimate only); with 0 it names the runtime's own caller
@@ -293,6 +316,7 @@ const GameOps g_game = {
                                                  * FEng highlights the object a still cursor rests on (GAME.md 13.1) */
     .fe_object = mw_fe_object,                  /* the scripts' $O: an active package's object by name hash */
     .status = mw_status,                        /* status_mw.c: drive, pause and rate for the page */
+    .text_entry = mw_text_entry,                /* the alias name's entry, for the page's phone keyboard field */
     .init_tables = mw_init_tables,
     .ninit_tables = (int)(sizeof mw_init_tables / sizeof mw_init_tables[0]),
     .init_check = 0x009aa9d0u + 0x84cu,         /* the bitset pointer of 0x9AA9D0's constructor */
