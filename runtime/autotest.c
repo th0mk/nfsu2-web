@@ -414,7 +414,8 @@ static void load_script(const char *path){
             if (!strncasecmp(a1, "@in", 3)){ e.val = 1; e.addr = (uint32_t)strtoul(a1 + 3, 0, 0); }
             else e.addr = (uint32_t)strtoul(a1, 0, 0);
             e.n = a2[0] ? atol(a2) : 1; if (e.n < 1 || e.n > 64) e.n = 1; }
-        else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = (uint32_t)strtoul(a1, 0, 0);
+        else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; char *ae; e.addr = (uint32_t)strtoul(a1, &ae, 0);
+            if (*ae) e.xtext = strdup(a1);     /* an address expression ([0x91cf90]+0x168), read when it runs */
             e.val = (uint32_t)strtoul(a2, 0, 0); }
         else if (!strcasecmp(cmd, "pokestr")){ e.cmd = C_POKESTR;
             const char *sp = rest; while (*sp && !isspace((unsigned char)*sp)) sp++;
@@ -923,10 +924,13 @@ static int fire(CPU *c, Ev *e, double tms){
             fprintf(stderr, "[autotest] f=%ld peek [0x%08x] = 0x%08x (%u, %g)\n", g_frame, a, v, v, (double)fv);
         }
         break;
-    case C_POKE:
-        if (mem_is_committed(e->addr + 3)){ MR32(e->addr) = e->val;
-            fprintf(stderr, "[autotest] f=%ld poke [0x%08x] <- 0x%08x\n", g_frame, e->addr, e->val); }
-        break;
+    case C_POKE: {
+        uint32_t a = e->addr; int ok = 1;
+        if (e->xtext){ const char *x = e->xtext; a = tr_eval(&x, &ok); }
+        if (ok && a && mem_is_committed(a) && mem_is_committed(a + 3)){ MR32(a) = e->val;
+            fprintf(stderr, "[autotest] f=%ld poke [0x%08x] <- 0x%08x\n", g_frame, a, e->val); }
+        else fprintf(stderr, "[autotest] f=%ld poke %s (0x%08x): no such address\n", g_frame, e->xtext ? e->xtext : "", a);
+        break; }
     case C_POKESTR: {
         const char *x = e->xtext ? e->xtext : ""; int ok = 1;
         uint32_t a = tr_eval(&x, &ok), n = (uint32_t)strlen(e->text);

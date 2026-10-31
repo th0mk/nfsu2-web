@@ -10,6 +10,9 @@
 //        [--http-port 8643] [--base http://localhost:8623] [--timeout <s>] [--stagger <s>]
 //        [--env K=V ...] [--host-env K=V ...] [--join-env K=V ...] [--headed] [--bounce <s>]
 //        [--host-arg X ...] [--join-arg X ...]   more tools/gen_lan_race.py options, e.g. --join-arg --confirm-join
+//        [--host-instance N]   instance N (1-based, default 1) hosts; instance 1 still starts first, so with N > 1 a
+//                    joiner's server list is up before the host's server is (the other listing direction, TRACKER
+//                    M8-08); the host keeps the host's name (HOSTWEB), --host-env and host.txt
 //                    (a slow link: the joiner answers the game's "connection quality below average" question)
 //        [--impair delay=MS,jitter=MS,loss=PCT,reorder=PCT,hold=PCT,holdms=MS,seed=N]   (own server only: the
 //                    switch's --lan-impair, vlanhub.py's impairments on LAN play's frames; hold: a link held for
@@ -146,10 +149,16 @@ if (!MODES[MODE]) { console.error(`--mode ${Object.keys(MODES).join('|')}`); pro
 const NAMES = LAN.names ?? ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINWEB5', 'JOINWEB6'];
 const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, LAN.gen), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
-const scripts = [gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])];
-for (let i = 1; i < PLAYERS; i++) scripts.push(gen('join', NAMES[i], i, [...(LAN.hostName ? [LAN.hostName, NAMES[0]] : []), ...MODES[MODE].j, ...opts('join-arg')]));
-fs.writeFileSync(path.join(OUT, 'host.txt'), scripts[0]);
-fs.writeFileSync(path.join(OUT, 'join.txt'), scripts[1]);
+// the instances' roles: ROLE[i] 0 hosts, k > 0 is the k-th joiner (its name and car); --host-instance swaps 0 and N-1
+const HOSTI = Math.min(PLAYERS, Math.max(1, +opt('host-instance', 1))) - 1;
+const ROLE = [...Array(PLAYERS).keys()];
+[ROLE[0], ROLE[HOSTI]] = [ROLE[HOSTI], ROLE[0]];
+const NAMEOF = ROLE.map(k => NAMES[k]);
+const scripts = ROLE.map(k => k === 0 ? gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])
+  : gen('join', NAMES[k], k, [...(LAN.hostName ? [LAN.hostName, NAMES[0]] : []), ...MODES[MODE].j, ...opts('join-arg')]));
+fs.writeFileSync(path.join(OUT, 'host.txt'), scripts[HOSTI]);
+fs.writeFileSync(path.join(OUT, 'join.txt'), scripts[ROLE.indexOf(1)]);
+if (HOSTI) console.log(`lan-pair: instance ${HOSTI + 1} hosts (--host-instance)`);
 
 // the suite's environment (web/tools/run-suite.mjs, tests/net/vlan_run.sh)
 const COMMON = {
@@ -165,15 +174,15 @@ const stamp = Date.now().toString(36);
 const scriptPath = i => `/tests/lan-pair/${stamp}-i${i + 1}.txt`;
 function url(i) {
   const env = { ...COMMON };
-  for (const kv of opts(i === 0 ? 'host-env' : 'join-env')) env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1);
+  for (const kv of opts(i === HOSTI ? 'host-env' : 'join-env')) env[kv.slice(0, kv.indexOf('='))] = kv.slice(kv.indexOf('=') + 1);
   const q = new URLSearchParams({ wasm: '/game.wasm', pages: '16384', arg: G.exe,
-    reg: G.reg, save: `lan-${stamp}-i${i + 1}`, net: NAMES[i],
+    reg: G.reg, save: `lan-${stamp}-i${i + 1}`, net: NAMEOF[i],
     script: scriptPath(i) });
   if (!G.reg) q.delete('reg');      // a game without a registry seed starts from its own first start (run-suite)
   if (PAGE === 'app') {
     // the player's page: no wasm/pages/arg/net (the app's own), the switch name from roam_name, free roam off
     const a = new URLSearchParams({ ...(G.reg ? { reg: G.reg } : {}), save: q.get('save'), script: q.get('script') });
-    for (const [k, v] of Object.entries({ ...env, NFSU2_ROAM: '0', NFSU2_ROAM_NAME: NAMES[i] })) if (k !== 'NFSU2_SAVEDIR') a.append('env', `${k}=${v}`);
+    for (const [k, v] of Object.entries({ ...env, NFSU2_ROAM: '0', NFSU2_ROAM_NAME: NAMEOF[i] })) if (k !== 'NFSU2_SAVEDIR') a.append('env', `${k}=${v}`);
     return `${BASE}/?${a}${SEED ? '' : '&fresh'}`;
   }
   const page = PAGE === 'play' && (!PLAY_ONLY || PLAY_ONLY === i + 1) ? 'play' : 'hostcheck';
@@ -227,7 +236,7 @@ async function start(i) {
     const g = /^\[\d+!?\] ([^]*)$/.exec(t);
     if (g) lines.push(g[1]); else { const e = /^EXIT (-?\d+)$/.exec(t); if (e) exit = +e[1]; lines.push(t); }
     if (DROP && DROP[0] === i + 1 && !r.dropAt && /network race begins/.test(t)) {
-      r.dropAt = setTimeout(() => { r.dropped = (Date.now() - t0) / 1000; console.log(`lan-pair: ${NAMES[i]} closes its page at ${r.dropped.toFixed(1)} s (--drop)`);
+      r.dropAt = setTimeout(() => { r.dropped = (Date.now() - t0) / 1000; console.log(`lan-pair: ${NAMEOF[i]} closes its page at ${r.dropped.toFixed(1)} s (--drop)`);
         void ctx.close().catch(() => {}); }, DROP[1] * 1000);
     }
     if (PAGE === 'app') { const x = /guest exited with code (-?\d+)|\[app\] the game exited with code (-?\d+)/.exec(t); if (x) exit = +(x[1] ?? x[2]); }
@@ -246,7 +255,7 @@ async function start(i) {
   const timer = setInterval(async () => {
     try { const s = await page.evaluate(() => { const n = globalThis.nfsu2Net; return n ? { ...n.stats(), peers: n.peers } : null; }); if (s) w(`NETSTAT ${JSON.stringify(s)}`); } catch {}
   }, 10000);
-  Object.assign(r, { i, name: NAMES[i], dir, page, ctx, plog, lines, timer, exitCode: () => exit, done: null });
+  Object.assign(r, { i, name: NAMEOF[i], dir, page, ctx, plog, lines, timer, exitCode: () => exit, done: null });
   r.done = page.waitForFunction(() => document.title === 'DONE' || window.__nfsu2?.phase === 'exited', null, { timeout: TMO, polling: 1000 })
     .then(() => 'done', () => 'timeout');
   inst.push(r);

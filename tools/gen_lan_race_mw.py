@@ -49,6 +49,10 @@ Options:
                        (default HOSTWEB)
   --car N              unused yet (the room's car is the alias's first)
   --kind N             the Quick Race kind: N taps DOWN (host and joiners)
+  --race-type T        after the kind's Enter (its handler 0x7AA8B0 writes the online race type
+                       [[0x91CF90]+0x168] and +0x18) both are poked to T, and again on the host's
+                       "No suitable matches" before Accept: the race types the stock LAN list does
+                       not offer (4-8, TRACKER M8-13's repro try; 0x741780 maps all but 0-2 to 0xFF)
   --searches N         join: searches for the host's game before giving up
                        (default 30)
   --lobby LINES        script lines (';'-separated) at the LAN main menu, before
@@ -62,6 +66,10 @@ Options:
   --results SCREEN     the results screen (waitfng name, default
                        PostRace_Results.fng)
   --results-tmo N      frames to wait for it (default 30000)
+  --linger N           frames on the results before the page closes (default 2400): a player
+                       who leaves first takes the race link with them, and a player still racing
+                       then gets 'Connection to other players has been lost' and no results
+                       (run d1 of 2026-10-31: the joiner closed 300 frames after its results)
   --races N            races in a row (only 1 yet)
   --after LINES        extra script lines (';'-separated) after the race start
 """
@@ -113,13 +121,25 @@ def lan_name(w, name):
     w('+%-4d tap RETURN' % (4 * len(name) + 30))
 
 
-def quick_race(w, kind):
+def race_type(w, t):
+    """the online race type [[0x91CF90]+0x168] (and +0x18, which the kind's handler writes with it) set to T"""
+    if t is None:
+        return
+    w('+0    poke [0x91cf90]+0x168 %d                          # the race type (--race-type)' % t)
+    w('+0    poke [0x91cf90]+0x18 %d' % t)
+    w('+0    log lan: race type %d' % t)
+
+
+def quick_race(w, kind, rtype=None):
     """OL_MAIN.fng, on Quick Race: its race kind, Enter searches (OL_Find_Session.fng)"""
     w('+30   tap RETURN')
     w('+0    waitfng OL_Quickrace_Main.fng@4b4e388a 900')
     for _ in range(kind):
         w('+30   tap DOWN')
     w('+30   tap RETURN                                         # search (OL_Find_Session.fng)')
+    if rtype is not None:
+        w('+1    log lan: kind entered')
+        race_type(w, rtype)
 
 
 def main():
@@ -130,6 +150,7 @@ def main():
     ap.add_argument('--host-name', default='HOSTWEB')
     ap.add_argument('--car', type=int, default=0)
     ap.add_argument('--kind', type=int, default=0)
+    ap.add_argument('--race-type', type=int, default=None)
     ap.add_argument('--searches', type=int, default=30)
     ap.add_argument('--lobby', default='')
     ap.add_argument('--room-wait', type=int, default=20000)
@@ -137,6 +158,7 @@ def main():
     ap.add_argument('--race-ms', type=int, default=120000)
     ap.add_argument('--results', default='PostRace_Results.fng')
     ap.add_argument('--results-tmo', type=int, default=30000)
+    ap.add_argument('--linger', type=int, default=2400)
     ap.add_argument('--races', type=int, default=1)
     ap.add_argument('--after', default='')
     a = ap.parse_args()
@@ -165,13 +187,14 @@ def main():
     for ln in [x.strip() for x in a.lobby.split(';') if x.strip()]:
         w(ln)
     if host:
-        quick_race(w, a.kind)
+        quick_race(w, a.kind, a.race_type)
         w("+0    waitfng OL_Dialog_Stacked_Buttons.fng'No_suitable@b8a7c6cc 3600   # No suitable matches (Accept)")
+        race_type(w, a.race_type)
         w('+30   tap RETURN                                         # Accept: create the game')
     else:
         w("+0    loop %d                                            # until a search finds the host's game" % a.searches)
         w('+0    log lan: search')
-        quick_race(w, a.kind)
+        quick_race(w, a.kind, a.race_type)
         w("+0    waitfng OL_GameRoom.fng|OL_Dialog_Stacked_Buttons.fng'No_suitable 3600")
         w('+0    breakfng OL_GameRoom.fng                           # joined')
         w('+0    log lan: no game yet')
@@ -194,7 +217,7 @@ def main():
     w('+%dms log lan: race time' % a.race_ms)
     w('+0    waitfng %s %d' % (a.results, a.results_tmo))
     w('+0    log lan: results')
-    w('+300  close')
+    w('+%-4d close' % max(1, a.linger))
     sys.stdout.write('\n'.join(L) + '\n')
 
 
