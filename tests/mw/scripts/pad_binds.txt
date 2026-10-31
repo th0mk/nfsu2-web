@@ -1,0 +1,29 @@
+# Most Wanted: the game's input bindings with a controller plugged in from the first frame (TRACKER M6-16, M6-37):
+# the table 0x91F418 (76 entries of 0x34 bytes: a name pointer, then four bindings (type, device, code), the two at
+# +4 and +0x10 the keyboard's, +0x1C and +0x28 the joystick's; GAME.md 13.1) peeked at the main menu, after the
+# game's input set-up (0x63F850 -> 0x63CD80) bound the pad.  web/tools/mw-binds.py turns the peeks into a table
+# (the names read from speed.exe).
+#   node web/tools/run-suite.mjs --game mw --script pad_binds.txt --marker 'pad_binds: done' --env NFSU2_QUIT_FRAMES=4000
+0     pad connect
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++30   log pad_binds: table
++0    peek 0x0091f418 64
++0    peek 0x0091f518 64
++0    peek 0x0091f618 64
++0    peek 0x0091f718 64
++0    peek 0x0091f818 64
++0    peek 0x0091f918 64
++0    peek 0x0091fa18 64
++0    peek 0x0091fb18 64
++0    peek 0x0091fc18 64
++0    peek 0x0091fd18 64
++0    peek 0x0091fe18 64
++0    peek 0x0091ff18 64
++0    peek 0x00920018 64
++0    peek 0x00920118 64
++0    peek 0x00920218 64
++0    peek 0x00920318 28
++0    log pad_binds: done
++0    close
