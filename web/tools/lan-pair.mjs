@@ -152,7 +152,11 @@ const NAMES = LAN.names ?? ['HOSTWEB', 'JOINWEB', 'JOINWEB3', 'JOINWEB4', 'JOINW
 const gen = (role, name, car, extra) => execFileSync(PY, [path.join(REPO, LAN.gen), role, '--name', name, '--car', String(car),
   '--races', String(RACES), ...extra], { encoding: 'utf8' });
 // the instances' roles: ROLE[i] 0 hosts, k > 0 is the k-th joiner (its name and car); --host-instance swaps 0 and N-1
-const HOSTI = Math.min(PLAYERS, Math.max(1, +opt('host-instance', 1))) - 1;
+const HOSTI = +opt('host-instance', 1) - 1;
+if (!Number.isInteger(HOSTI) || HOSTI < 0 || HOSTI >= PLAYERS) {
+  console.error(`--host-instance 1..${PLAYERS} (the instance that hosts), not ${opt('host-instance')}`);
+  process.exit(2);
+}
 const ROLE = [...Array(PLAYERS).keys()];
 [ROLE[0], ROLE[HOSTI]] = [ROLE[HOSTI], ROLE[0]];
 const NAMEOF = ROLE.map(k => NAMES[k]);
