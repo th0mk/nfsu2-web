@@ -458,6 +458,8 @@ static struct {
     int unsticks;                       /* unstick: the standing car set on a road before a forced pursuit, this time */
     int rejoin_stand;                   /* pursuit_frame: the car stands where a rejoin set it (since rejoin_t) */
     int quitting;                       /* B_RACE: the race given up (wedged at one place), Quit to Free Roam asked */
+    int ram_on, ram_n;                  /* pursuit_frame: the car standing for the cops to ram (since ram_t) */
+    double ram_t;
     int lot_bin, lot_in, lot_done, lot_target, lot_seen, lot_entered, lot_cars0;   /* B_LOT (lot_frame) */
     long lot_cost[33];
     unsigned char lot_bad[33];
@@ -782,6 +784,11 @@ int mw_fe_shows(char *out, int cap);                         /* fe_mw.c */
 static void milestones_log(CPU *c, int bin);
 static float evasion_goal(CPU *c, int bin);
 static int ms_evasion(int bin, int *others);
+static int ms_records(int bin);
+static int ms_open(int bin, int kind);
+#define RAM_EVERY     12.0              /* pursuit_frame: the stand for the cops_damaged milestone, every this many s */
+#define RAM_S         3.0               /* ... this long */
+#define RAM_BUST      0.8f              /* ... or until the bust timer is at this */
 static void save_begin(void);
 /* NFSMW_BOT_AUTOSAVE=1 (bot run): a save at the safehouse whenever the bin has moved on since the last one (two more
  * races won, a milestone more, the rival's requirements met, a new bin), then on from the safehouse menu.  A run the
@@ -806,6 +813,16 @@ static int autosave_due(const struct gates *g){
 static void decide(CPU *c){
     struct gates g; struct race r[MAX_RACES];
     if (!read_gates(c, &g)){ set_state(B_DONE, "no career"); return; }
+    /* the milestones the bin asks, at most the records the game has for it: bin 4 asks 5 and has 4 records (the game's
+     * milestone array, 58 records, c6-b3w), so 5 can never be met; the rival is tried once all of them are */
+    { int nrec = ms_records(g.bin);
+      if (nrec > 0 && g.ms_req > nrec){
+          static int logged_bin = -1;
+          if (logged_bin != g.bin){ logged_bin = g.bin;
+              fprintf(stderr, "[mwbot] f=%ld bin %d asks %d milestones and has %d records: %d taken as all of them\n", autotest_frame(),
+                      g.bin, g.ms_req, nrec, nrec); }
+          g.ms_req = nrec;
+      } }
     if (memcmp(&g, &B.g, sizeof g)){ log_gates(&g, "now"); if (g.cars != B.g.cars) log_cars(); }
     if (g.bin != B.g.bin) milestones_log(c, g.bin);
     B.g = g;
@@ -999,6 +1016,12 @@ static void ms_load(int bin){
     }
 }
 static int ms_state(int j){ return (int)(rd(ms_tab.m[j].rec + 4u) & 0xffu); }
+static int ms_records(int bin){ ms_load(bin); return ms_tab.n; }
+static int ms_open(int bin, int kind){  /* the bin has a milestone of kind (ms_kinds) that is not met yet */
+    ms_load(bin);
+    for (int j = 0; j < ms_tab.n; j++) if (ms_tab.m[j].kind == kind && ms_state(j) != 4) return 1;
+    return 0;
+}
 /* the bin's evasion milestone: 0 none, else its state (4 met); *others: the bin's other milestones not met */
 static int ms_evasion(int bin, int *others){
     ms_load(bin);
@@ -1021,6 +1044,24 @@ static void milestones_log(CPU *c, int bin){
                       (fl & 0xffu) == 4 ? "met" : (fl & 0xffu) == 2 ? "open" : "state?");
     }
     fprintf(stderr, "[mwbot] f=%ld bin %d: %d milestones:%s\n", autotest_frame(), bin, ms_tab.n, ms_tab.n ? b : " none found");
+    /* the other records of this bin in the game's array (0x14 bytes each, walked from a known one while the kind's key
+     * at +0x10 is set): bin 4 asks 5 milestones and gameplay.bin has 4 kinds for it (c6-b3t) */
+    if (ms_tab.n){
+        uint32_t r0 = ms_tab.m[0].rec, lo = r0, hi = r0;
+        while (lo >= 0x14u && mem_is_committed(lo - 0x14u) && rd(lo - 0x14u + 0x10u) && ((rd(lo - 0x14u + 4u) >> 16) & 0xffu) <= 0x20u &&
+               r0 - lo < 0x14u * 400u) lo -= 0x14u;
+        while (mem_is_committed(hi + 0x27u) && rd(hi + 0x14u + 0x10u) && ((rd(hi + 0x14u + 4u) >> 16) & 0xffu) <= 0x20u &&
+               hi - r0 < 0x14u * 400u) hi += 0x14u;
+        int seen = 0, nb = 0; o = 0;
+        for (uint32_t r = lo; r <= hi; r += 0x14u){
+            seen++;
+            if ((int)((rd(r + 4u) >> 16) & 0xffu) != bin) continue;
+            nb++;
+            if (o < 840) o += snprintf(b + o, sizeof b - (size_t)o, " [%08x %08x goal %.0f best %.0f kind %08x]", rd(r), rd(r + 4u),
+                                       (double)rdf(r + 8u), (double)rdf(r + 12u), rd(r + 16u));
+        }
+        fprintf(stderr, "[mwbot]   the game's milestone records: %d in all, %d of bin %d:%s\n", seen, nb, bin, o ? b : "");
+    }
 }
 static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
     struct gates g; struct race r[MAX_RACES];
@@ -1159,6 +1200,7 @@ static void pursuit_frame(CPU *c){
         }
         if (po){
             B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9; B.unsticks = 0; B.rejoin_stand = 0;
+            B.ram_on = 0; B.ram_t = t;
             B.esc_recent[0] = B.esc_recent[1] = 0; B.hides = 0; B.hidden = 0;
             B.trail_n = 0; B.rejoins = 0; B.last_pst = 0; B.trail_t = -1e9; B.search_t = t;
             H.hides = 0; H.hidden = 0;
@@ -1293,6 +1335,20 @@ static void pursuit_frame(CPU *c){
              * the cops' search: it parked at sim -957 122 1847 pursuit after pursuit in c6-b5s, every rejoin wasted) */
             mw_aid_autopilot(c, AP_STAND);
             B.rejoin_stand = 1; B.rejoin_t = t;
+        }
+        /* A bin whose cops_damaged milestone is open (bin 4: 28 in one pursuit; the AI, which steers clear of the cops,
+         * damaged 11 at most in a 600 s chase at heat 5, c6-ch5): in the chase, with cops about, the car stands for
+         * RAM_S every RAM_EVERY seconds and lets them ram it (the escape takes it away when the bust timer runs) */
+        if (B.ram_on && (pst >= 2 || t - B.ram_t >= RAM_S || bust >= RAM_BUST)){
+            mw_aid_autopilot(c, 1);
+            B.ram_on = 0; B.ram_t = t;
+        } else if (!B.ram_on && !B.stand && !B.quick && !B.hidden && !B.rejoin_stand && pst < 2 && rd(po + PURSUIT_COPS) >= 2 &&
+                   bust < 0.3f && t - B.ram_t >= RAM_EVERY && t - B.escape_t >= 5.0 && ms_open(B.g.bin, 0) && !mw_fe_input_top(0)){
+            if (!B.ram_n++)
+                fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit: the cops_damaged milestone is open: the car stands %.0f s in every %.0f "
+                        "with cops about\n", f, t, RAM_S, RAM_EVERY);
+            mw_aid_autopilot(c, AP_STAND);
+            B.ram_on = 1; B.ram_t = t;
         }
         if (B.rejoin_stand && (pst < 2 || t - B.rejoin_t >= REJOIN_STAND_S || bust >= ESCAPE_BUST)){
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit: %s after %.0f s standing where the rejoin set it; the AI drives\n", f, t,
