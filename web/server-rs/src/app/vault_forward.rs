@@ -58,7 +58,7 @@ pub const UNREACHABLE_HEADER: &str = "x-vault-unreachable";
 /// the shortest box-to-box credential taken
 pub const MIN_KEY: usize = 32;
 /// the vault's headers a page reads, passed back as they came
-const PASSED: [&str; 6] = ["etag", "x-vault-saved", "x-vault-earlier", "x-vault-launch-copy", "retry-after", "content-type"];
+const PASSED: [&str; 5] = ["etag", "x-vault-saved", "x-vault-earlier", "retry-after", "content-type"];
 
 /// The U2 box's vault, as this server reaches it.
 pub struct VaultForward {
@@ -470,16 +470,7 @@ mod tests {
     }
     /// what a page sees of an answer: the status, the headers that matter, the body
     fn seen(a: &Answer) -> (u16, Vec<Option<String>>, Vec<u8>) {
-        let hs = [
-            "etag",
-            "x-vault-saved",
-            "x-vault-earlier",
-            "x-vault-launch-copy",
-            "retry-after",
-            "content-type",
-            "content-length",
-            "cache-control",
-        ];
+        let hs = ["etag", "x-vault-saved", "x-vault-earlier", "retry-after", "content-type", "content-length", "cache-control"];
         (a.status, hs.iter().map(|h| a.header(h).map(str::to_string)).collect(), a.body.clone())
     }
     /// every file and folder under the state folder

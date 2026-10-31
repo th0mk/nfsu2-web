@@ -26,8 +26,8 @@
 // visit downloads the module once, and the copy comes from the HTTP cache.
 //
 // Every address here is under the page's base (src/base.ts), where this file
-// is: '/' where a server serves one game at its root, '/u2/' or '/mw/' where
-// both games share one address.  The worker's scope is that base, its copies
+// is: '/' where a server serves its game at the root, '/mw/' under a base
+// (Most Wanted's).  The worker's scope is that base, its copies
 // are the game's own (STORAGE: each game's Cache Storage name, and the start of
 // its older ones, which it deletes), and a request outside the base is never
 // answered here: it goes to the network as if there were no worker.
@@ -37,7 +37,7 @@ import { STORAGE } from '@game/storage';
 declare const self: ServiceWorkerGlobalScope;
 export {};
 
-/** the page's base path: this file's folder ('/', '/u2/', '/mw/') */
+/** the page's base path: this file's folder ('/', '/mw/') */
 const BASE = new URL('./', self.location.href).pathname;
 const CACHE = STORAGE.OFFLINE_CACHE;
 const PAGE = BASE, MODULE = BASE + 'game.wasm', GAME_JSON = BASE + 'game.json';

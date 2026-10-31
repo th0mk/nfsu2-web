@@ -463,7 +463,7 @@ async fn the_binary_for_most_wanted() {
     assert!(startup.contains(&bans), "{startup:?}");
     // its routes under /mw, on every name (PLAN D-38)
     let paths = "  paths     : under /mw/ for localhost (/mw redirects there; any other path 404 but / (the site's page) and /robots.txt, \
-                 which names each game's)";
+                 which names its routes)";
     assert!(startup.contains(&paths.to_string()), "{startup:?}");
     let (_, m) = srv.get("/mw/data-manifest").await;
     let m: Value = serde_json::from_str(&m).unwrap();
@@ -471,14 +471,7 @@ async fn the_binary_for_most_wanted() {
     assert_eq!(ps, ["GLOBAL", "GLOBAL/a.bin", "SOUND", "SOUND/PFDATA", "SOUND/PFDATA/m.mus", "speed.exe"]);
     assert_eq!(m["blocks"]["url"], "/mw/data-blocks/v2/");
     assert_eq!(srv.get("/mw/data/speed.exe").await.1, "MZ");
-    for p in [
-        "/mw/data/SAVE/profile",
-        "/mw/data/scripts/fix.ini",
-        "/mw/data/dinput8.dll",
-        "/mw/data/foobar",
-        "/mw/data/SPEED2.EXE",
-        "/mw/covers",
-    ] {
+    for p in ["/mw/data/SAVE/profile", "/mw/data/scripts/fix.ini", "/mw/data/dinput8.dll", "/mw/data/foobar", "/mw/data/SPEED2.EXE"] {
         assert_eq!(status_of(port, p).await, 404, "{p}");
     }
     for p in ["/data/speed.exe", "/data-manifest", "/players", "/game.json", "/u2/"] {
@@ -608,13 +601,13 @@ async fn most_wanted_with_an_empty_env() {
         );
         assert!(startup.contains(&online), "{startup:?}");
         assert!(startup.iter().any(|l| l.starts_with("  log       : these lines also in ")), "{startup:?}");
-        assert!(!startup.iter().any(|l| l.contains("[names]") || l.contains("covers")), "{startup:?}");
+        assert!(!startup.iter().any(|l| l.contains("[names]")), "{startup:?}");
         assert!(!lines.iter().any(|l| l.contains(&"k".repeat(40))), "the credential in no line");
         assert_eq!(status_of(port, "/mw/game.json").await, 200);
         assert_eq!(srv.stop().await, Some(0));
         let names: Vec<String> =
             std::fs::read_dir(&state).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-        assert!(!names.iter().any(|n| n.contains("vault") || n == "names.json" || n == "covers"), "{names:?}");
+        assert!(!names.iter().any(|n| n.contains("vault") || n == "names.json"), "{names:?}");
     }
 }
 

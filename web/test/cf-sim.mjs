@@ -92,9 +92,10 @@ export function startCfSim({ port, target, certs, fakeClientIp = null, wsIdleMs 
 }
 
 // A plain-HTTP proxy on this machine that sends each request to the server `route(name, path)` names (a port on
-// 127.0.0.1; null: 502), by the Host's name and the path, as an edge does for one host name whose paths are on two
-// boxes (PLAN D-38: / and /u2/ to Underground 2's server, /mw/ to Most Wanted's), WebSockets included.  Per request,
-// not per connection: a browser sends both games' requests over one.  The client's address goes on in
+// 127.0.0.1; null: 502), by the Host's name and the path, as an edge does for host names on two boxes
+// (web/tools/deploy-e2e.mjs two-domain: nfsu2.localhost to Underground 2's server, nfsrevived.localhost to Most
+// Wanted's), WebSockets included.  Per request, not per connection: a browser may send several names' requests over
+// one.  The client's address goes on in
 // X-Forwarded-For (fakeClientIp, else the peer's); nothing else is added.
 export function startRouteSim({ port, route, fakeClientIp = null, host = '127.0.0.1' }) {
   const stats = { requests: 0, upgrades: 0, byPort: {} };

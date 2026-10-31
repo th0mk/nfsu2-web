@@ -71,10 +71,10 @@ fn paths_line(o: &Options, names: &[String]) -> Option<String> {
     if by.iter().all(|(b, _)| b.is_empty()) {
         return None;
     }
-    let rest = match (o.game.landing.is_some(), o.game.root_files) {
-        (true, _) => "any other path 404 but / (the site's page) and /robots.txt, which names each game's",
-        (false, true) => "any other path 404 but /robots.txt, which names each game's",
-        (false, false) => "any other path 404",
+    let rest = if o.game.landing.is_some() {
+        "any other path 404 but / (the site's page) and /robots.txt, which names its routes"
+    } else {
+        "any other path 404 but /robots.txt, which names its routes"
     };
     let parts: Vec<String> = by
         .iter()
@@ -226,8 +226,6 @@ pub async fn run(o: Options, cores: usize) {
         let dir = paths::join(&o.state, "vault");
         Arc::new(Vault::open(VaultOptions::sized(PathBuf::from(&dir), o.vault_gb)).unwrap_or_else(|e| die(&format!("{dir}: {e}"))))
     });
-    // the hand-over store: a folder in the state folder, where a name has its routes under a base (covers.rs)
-    let covers = super::covers::open(&o).unwrap_or_else(|e| die(&format!("{}: {e}", paths::join(&o.state, "covers"))));
     let lan_sndbuf = env_num("NFSU2_LAN_SNDBUF", LAN_SNDBUF) as usize;
     // the bundle clock's tick, 50 ms (nfsu2-lan); NFSU2_BUNDLE_MS another (0: none), for measurements
     let d = LanOptions::default();
@@ -280,7 +278,6 @@ pub async fn run(o: Options, cores: usize) {
         online,
         roam.clone(),
         vault.clone(),
-        covers.clone(),
         names,
         bans,
         days.clone(),
@@ -465,9 +462,6 @@ pub async fn run(o: Options, cores: usize) {
                 app.lan_opens.prune();
                 if let Some(v) = &app.vault {
                     v.prune();
-                }
-                if let Some(c) = &app.covers {
-                    c.prune();
                 }
                 if let Some(f) = &app.friends {
                     f.prune();
@@ -723,17 +717,6 @@ pub async fn run(o: Options, cores: usize) {
             },
         }
     ));
-    if let Some(c) = &app.covers {
-        let co = c.store.options();
-        lines.push(format!(
-            "  covers    : the hand-over store (/covers under {}) in {}, {} an entry, up to {} in all; one nobody takes \
-             goes after 30 days",
-            o.bases.all(|_| true).into_iter().filter(|b| !b.is_empty()).collect::<Vec<_>>().join(", "),
-            co.dir.display(),
-            size(co.max_entry as u64),
-            size(co.max_bytes)
-        ));
-    }
     lines.push(format!(
         "  blocks    : {}",
         app.kept.as_ref().map_or_else(|| "compressed as they are sent (NFSU2_COMPRESS_THREADS=0)".into(), |k| k.summary())
@@ -802,46 +785,5 @@ pub async fn run(o: Options, cores: usize) {
         });
     }
 
-    // the hand-over store: counted and swept now, then every hour (entries nobody took go after 30 days); its line
-    // every 5 minutes (what it holds, and what it did since it was first opened: kept across restarts)
-    if let Some(c) = covers {
-        let sweeper = c.clone();
-        tokio::spawn(async move {
-            loop {
-                let st = sweeper.clone();
-                match tokio::task::spawn_blocking(move || st.sweep(nfsu2_util::now_ms())).await {
-                    Ok(Ok(s)) if s.expired > 0 || s.temps > 0 => {
-                        log::line(&format!("[move] {} covers entries nobody took went after 30 days", s.expired))
-                    }
-                    Ok(Ok(_)) => {}
-                    Ok(Err(e)) => log::error(&format!("[move] the sweep of the hand-over store stopped: {e}")),
-                    Err(e) => log::error(&format!("[move] the sweep of the hand-over store stopped: {e}")),
-                }
-                tokio::time::sleep(Duration::from_secs(3600)).await;
-            }
-        });
-        tokio::spawn(async move {
-            let mut every = interval_at(Instant::now() + Duration::from_secs(300), Duration::from_secs(300));
-            loop {
-                every.tick().await;
-                log::line(&move_line(&c));
-            }
-        });
-    }
-
     std::future::pending::<()>().await;
-}
-
-/// the hand-over store's line: what it holds, and what it did since it was first opened
-pub fn move_line(c: &nfsu2_vault::covers::CoverStore) -> String {
-    let (n, bytes) = c.usage();
-    let k = c.counts();
-    format!(
-        "[move] covers: {n} entries, {} held; {} stored, {} imported, {} expired, {} refused",
-        size(bytes),
-        k.stored,
-        k.imported,
-        k.expired,
-        k.refused
-    )
 }

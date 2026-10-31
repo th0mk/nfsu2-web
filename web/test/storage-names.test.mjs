@@ -1,5 +1,5 @@
 // The names each game's page uses in the storage the browser keeps per origin (PLAN D-36, web/src/games/profile.ts
-// StorageNames), which both games share once they are served from one origin (/u2/ and /mw/):
+// StorageNames), each game's its own, so that one origin could hold both games' pages (a test server's) apart:
 //   node --test web/test/storage-names.test.mjs
 // 1. The table: Underground 2's names as they always were; Most Wanted's its own (OPFS mw-save and mw-cache, keys that
 //    start nfsmw. or nfsmw-); no name of one game is the other's, starts one of the other's families (a name that ends
@@ -69,7 +69,7 @@ test('Most Wanted\'s names are its own (D-36), the shared ones listed once', () 
   const shared = names(SHARED_STORAGE).filter(([k]) => !k.startsWith('OPFS_TOP'));
   for (const [k, a] of names(T.ug2)) for (const [l, b] of [...names(T.mw), ...shared]) assert.ok(!clash(a, b), `ug2 ${k} ${a} and ${l} ${b}`);
   for (const [k, a] of names(T.mw)) for (const [l, b] of shared) assert.ok(!clash(a, b), `mw ${k} ${a} and ${l} ${b}`);
-  assert.deepEqual(shared.map(([, n]) => n), ['nfsrevived.keyphrase', 'nfsrevived.lastgame', 'nfsu2.wheel.', 'nfsu2.shifter.', 'nfsu2-page-language']);
+  assert.deepEqual(shared.map(([, n]) => n), ['nfsu2.wheel.', 'nfsu2.shifter.', 'nfsu2-page-language']);
   // the top of the private file system: every game's folders and page-id file, no more
   assert.deepEqual([...SHARED_STORAGE.OPFS_TOP].sort(), GAMES.flatMap(g => [T[g].SAVE_DIR, T[g].CACHE_DIR, T[g].PAGE_ID_FILE]).sort());
 });

@@ -1,10 +1,7 @@
-// The names in the browser's storage that both games' pages share on the one origin (PLAN D-36), listed here once:
-// every other name is a game's own (src/games/<id>/storage.ts, profile.ts StorageNames).  No imports.
+// The names in the browser's storage that both games' pages use alike (PLAN D-36), listed here once: every other name
+// is a game's own (src/games/<id>/storage.ts, profile.ts StorageNames).  The two games' sites are two origins, each
+// with its own storage, so these are shared only where one origin serves both pages (a test server's).  No imports.
 export const SHARED_STORAGE = {
-  /** the cloud-save keyphrase, one per browser for both games (D-37), written under one shared Web Lock */
-  KEYPHRASE: 'nfsrevived.keyphrase',
-  /** the game the root page offers first: 'u2' or 'mw', written by each game's page when it loads (D-05) */
-  LAST_GAME: 'nfsrevived.lastgame',
   /** a wheel's set-up and its shifter's, the wheel's USB ids after it (input/wheel.ts): the same wheel in both
    *  games (assumed, D-36) */
   WHEEL: 'nfsu2.wheel.',

@@ -1,5 +1,6 @@
-// Underground 2's launch switch (web/src/games/profile.ts): off until the release that opens its new address, the one
-// it shares with Most Wanted.  No imports: the page's leaf modules (vault.ts) take these alone.
+// Underground 2's launch switch (web/src/games/profile.ts): off until the release that opens Most Wanted's site
+// (https://nfsrevived.com/mw/), so that https://nfsu2.xyz stays as it is until then.  No imports: the page's leaf
+// modules (vault.ts) take these alone.
 
 /** on in the launch release, never before */
 export const LAUNCHED = false;

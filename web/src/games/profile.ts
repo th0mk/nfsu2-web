@@ -45,8 +45,9 @@ export interface GameProfile {
   readonly VAULT_PREFIX: string;
   /** the game's names in the browser's storage (src/games/<id>/storage.ts) */
   readonly STORAGE: StorageNames;
-  /** the launch switch (src/games/<id>/launch.ts): Underground 2's, off until the release that opens its new
-   *  address */
+  /** the launch switch (src/games/<id>/launch.ts): Underground 2's, off until the release that opens Most Wanted's
+   *  site (then its keyphrases are shown with the word both games share and its page offers 'Use this passphrase here
+   *  too?'); Most Wanted's has none */
   readonly LAUNCHED: boolean;
   /** the word a keyphrase is shown with (the derivation always takes VAULT_PREFIX's) */
   readonly KEYPHRASE_WORD: string;
@@ -59,9 +60,8 @@ export interface GameProfile {
 }
 
 /** A game's names in the storage the browser keeps per origin (Cache Storage, OPFS, local and session storage, Web
- *  Locks, broadcast channels, IndexedDB).  Where both games are served from one origin (/u2/ and /mw/), their pages
- *  share that storage, so each game's names are its own: Underground 2 keeps the names it always had, Most Wanted has
- *  others (PLAN D-36).  The few names both games share are src/games/shared-storage.ts's, listed there once.  No part
+ *  Locks, broadcast channels, IndexedDB).  Each game's names are its own, so that one origin could hold both games'
+ *  pages (a test server's) apart: Underground 2 keeps the names it always had, Most Wanted has others (PLAN D-36).  The few names both games share are src/games/shared-storage.ts's, listed there once.  No part
  *  of the page names a place in that storage but through these (web/test/storage-names.test.mjs).  A name that ends in
  *  ':' or '.' is the start of a family: the rest is a save folder's name, a player's name or a wheel's ids. */
 export interface StorageNames {

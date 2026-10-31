@@ -14,9 +14,8 @@
 //! Options with a value can also come from the environment as NFSU2_<OPTION> (NFSU2_DATA, NFSU2_PORT,
 //! NFSU2_TLS_CERT, ...); switches only from the command line.  --game (game.rs) sets the game's defaults: the program
 //! the folder must hold, what of it is served, the page, the module, the state folder, the test scripts, the Online
-//! mode, where its routes are on each name (its base path: Most Wanted's /mw, UG2's the root but on the site it
-//! shares with Most Wanted).  --base-path gives a name another (a layout, as --host is: "localhost=/u2" stands in for
-//! the shared site on this machine; "*" is every name it does not give).
+//! mode, where its routes are (its base path: Most Wanted's /mw on every name, UG2's the root).  --base-path gives a
+//! name another (a layout for tests, as --host is: "localhost=/u2"; "*" is every name it does not give).
 
 use nfsu2_headers::ProxyTrust;
 
@@ -84,11 +83,8 @@ pub struct Options {
     pub max_peers: usize,
     /// the public names (a domain), comma-separated; '*.' covers one label
     pub hosts: Vec<String>,
-    /// where the routes are on each name: the game's bases, --base-path's on top
+    /// where the routes are on each name: the game's base, --base-path's on top
     pub bases: Bases,
-    /// the game's launch switch (game.rs `Handover::launched`): a code value, never an option; the crate's own tests
-    /// turn it on in the options they make
-    pub launched: bool,
     /// the game's redirects to the other game's site (game.rs `SiteRedirect`): on with --site-redirects on (the
     /// boxes': https://nfsu2.xyz/mw to https://nfsrevived.com/mw/, https://nfsrevived.com/u2 to https://nfsu2.xyz/),
     /// off unless given, so that this machine's and the tests' setups answer those paths as they did
@@ -484,7 +480,6 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         max_peers: max_peers as usize,
         hosts,
         bases,
-        launched: game.handover.is_some_and(|h| h.launched),
         site_redirects: site_redirects == "on",
         lan_impair: lan_impair.unwrap_or_default(),
         online: online == "on",
@@ -709,13 +704,13 @@ mod tests {
         assert_eq!(o.tls_cert, s.p("c.pem"));
         assert_eq!(o.real_ip, "cf-connecting-ip");
         assert_eq!(s.parse(&[], &[]).unwrap().game.id, "ug2");
-        // the routes: at the root but on the shared site; --base-path (or NFSU2_BASE_PATH) on top
+        // the routes: at the root on every name; --base-path (or NFSU2_BASE_PATH) on top
         let o = s.parse(&[], &[]).unwrap();
-        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsu2.xyz"), o.bases.of("nfsrevived.xyz")), ("", "", "/u2"));
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsu2.xyz"), o.bases.of("nfsrevived.com")), ("", "", ""));
         let o = s.parse(&["--base-path", "localhost=/u2"], &[("NFSU2_BASE_PATH", "*=/x")]).unwrap();
-        assert_eq!((o.bases.of("localhost:1"), o.bases.of("127.0.0.1"), o.bases.of("nfsrevived.xyz")), ("/u2", "", "/u2"));
+        assert_eq!((o.bases.of("localhost:1"), o.bases.of("127.0.0.1"), o.bases.of("nfsu2.xyz")), ("/u2", "", ""));
         let o = s.parse(&[], &[("NFSU2_BASE_PATH", "*=/x")]).unwrap();
-        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz")), ("/x", "/u2"));
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsu2.xyz")), ("/x", "/x"));
         assert_eq!(s.parse(&[], &[("NFSU2_BASE_PATH", "")]).unwrap().bases, crate::game::Bases::of_game(&crate::game::UG2));
     }
 
@@ -739,7 +734,7 @@ mod tests {
         assert_eq!(o.tests, s.p("repo/tests/mw"));
         assert!(o.online && o.roam_hub);
         // under /mw on every name
-        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.xyz"), o.bases.all(|_| true)), ("/mw", "/mw", vec!["/mw".to_string()]));
+        assert_eq!((o.bases.of("localhost"), o.bases.of("nfsrevived.com"), o.bases.all(|_| true)), ("/mw", "/mw", vec!["/mw".to_string()]));
         // from the environment too, in any case
         assert_eq!(mw(&[], &[("NFSU2_GAME", "MW")]).unwrap().game.id, "mw");
         // its state folder, apart from UG2's

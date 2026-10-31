@@ -12,7 +12,6 @@
 
 mod blocks;
 pub mod control;
-pub mod covers;
 pub mod days;
 mod etag;
 mod files;
@@ -160,15 +159,13 @@ pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallo
 /// what ROBOTS_TXT keeps search engines out of, under each base
 const DISALLOW: [&str; 10] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/seen", "/lan", "/vault", "/names", "/friends"];
 
-/// /robots.txt for an origin with the games under these bases ("" the root: ROBOTS_TXT)
-pub fn robots_txt(bases: &[String]) -> String {
+/// /robots.txt for an origin with the game under this base ("" the root: ROBOTS_TXT)
+pub fn robots_txt(base: &str) -> String {
     let mut s = String::from("User-agent: *\nAllow: /");
-    for b in bases {
-        for d in DISALLOW {
-            s.push_str("\nDisallow: ");
-            s.push_str(b);
-            s.push_str(d);
-        }
+    for d in DISALLOW {
+        s.push_str("\nDisallow: ");
+        s.push_str(base);
+        s.push_str(d);
     }
     s
 }
@@ -254,8 +251,6 @@ pub struct App {
     pub vault_forward: Option<vault_forward::VaultForward>,
     /// the box-to-box credential this server's vault takes from such a forward (NFSU2_VAULT_BOX_KEY), if any
     pub vault_box_key: Option<String>,
-    /// the hand-over store (/covers under a base: covers.rs), none where no name has one
-    pub covers: Option<covers::CoversRoute>,
     /// claimed names (/names), none without keyphrase saves
     pub names: Option<names::NamesRoute>,
     /// free roam's friends (/friends and the pages' friend messages), none without the Online host, the hub or names
@@ -287,7 +282,6 @@ impl App {
         online: Option<Arc<OnlineHost>>,
         roam: Option<Arc<nfsu2_roam::RoamHub>>,
         vault: Option<Arc<nfsu2_vault::Vault>>,
-        covers: Option<Arc<nfsu2_vault::covers::CoverStore>>,
         names: Option<names::NamesRoute>,
         bans: Arc<nfsu2_bans::Bans>,
         days: Arc<days::Days>,
@@ -387,7 +381,6 @@ impl App {
             vault: vault.map(vault::VaultRoute::new),
             vault_forward: None,
             vault_box_key: None,
-            covers: covers.map(covers::CoversRoute::new),
             names,
             friends,
             bans,
@@ -409,17 +402,7 @@ impl App {
     /// `headers(q, {}, cache, noindex)`: the security headers, then the cache headers; the caller sets the rest
     pub fn headers(&self, q: &Request, cache: Cache, noindex: bool) -> Hdrs {
         let i = (self.hsts_for(q) as usize) * 6 + (noindex as usize) * 3 + cache_index(cache);
-        let mut h = Hdrs(self.base[i].clone());
-        // once the game is launched at its new address, its old address's pages may connect there for the hand-over
-        // (game.rs Handover): their responses' connect-src names it; every other name's stay as they are
-        if self.o.launched
-            && let Some(to) = self.o.game.handover.and_then(|m| m.connect_to(q.headers.get("host").unwrap_or("")))
-        {
-            for (_, v) in h.0.iter_mut().filter(|(k, _)| k == "content-security-policy") {
-                *v = v.replacen("connect-src 'self';", &format!("connect-src 'self' {to};"), 1);
-            }
-        }
-        h
+        Hdrs(self.base[i].clone())
     }
 
     /// a short text answer: the code, the text (a newline after it), headers besides the usual ones, the cache rule,
@@ -467,19 +450,6 @@ impl App {
     /// routes are /u2/, /u2/game.json, /u2/lan, ...)
     fn base_of(&self, q: &Request, u: &url::Url) -> &str {
         self.o.bases.of(host_of(q, u))
-    }
-
-    /// /robots.txt at the root of a name where this game's routes are under a base (the origin it shares with the
-    /// other game, whose routes it names too: crawlers read only the root's)
-    fn shared_robots(&self, host: &str) -> String {
-        let mut bases = vec![self.o.bases.of(host).to_string()];
-        for g in crate::game::GAMES.into_iter().filter(|g| g.id != self.o.game.id) {
-            let b = crate::game::Bases::of_game(g).of(host).to_string();
-            if !b.is_empty() && !bases.contains(&b) {
-                bases.push(b);
-            }
-        }
-        robots_txt(&bases)
     }
 
     /// the request's Host (and an absolute-form URL's host) is one of this server's names
@@ -629,10 +599,6 @@ impl App {
         if under && p == "/friends" {
             return self.friends_route(q, s, &u).await;
         }
-        // the hand-over store: under a base only (the address both games share; covers.rs)
-        if under && !base.is_empty() && p == "/covers" && self.covers.is_some() {
-            return self.covers(q, s).await;
-        }
         if q.method != "GET" && q.method != "HEAD" {
             return self
                 .plain(q, s, 405, "Method not allowed", &[("allow", "GET, HEAD"), ("connection", "close")], Cache::Store, true)
@@ -669,10 +635,10 @@ impl App {
                 };
                 return self.plain(q, s, 308, "Permanent redirect", &[("location", to.as_str())], Cache::Store, true).await;
             }
-            // that origin's root files, which belong to no game's base (UG2's server answers them: game.rs)
-            if self.o.game.root_files && p == "/robots.txt" {
-                let text = self.shared_robots(host_of(q, &u));
-                return self.plain(q, s, 200, &text, &[], Cache::Revalidate, false).await;
+            // that origin's robots.txt, which belongs to no base: it names this game's routes under its base (crawlers
+            // read it at the root only; Most Wanted's server at https://nfsrevived.com/robots.txt)
+            if p == "/robots.txt" {
+                return self.plain(q, s, 200, &robots_txt(base), &[], Cache::Revalidate, false).await;
             }
             return self.not_found(q, s).await;
         }
@@ -1002,15 +968,15 @@ mod tests {
         assert!(!is_loopback4("127.0.0") && !is_loopback4("128.0.0.1") && !is_loopback4("127.0.0.x"));
     }
 
-    // robots.txt at a root of one game's (as ever), and of the shared site's two bases
+    // robots.txt at the root of a game's site (as ever), and at the root of one whose game is under a base
     #[test]
     fn robots_for_each_site() {
-        assert_eq!(robots_txt(&[String::new()]), ROBOTS_TXT);
-        let two = robots_txt(&["/u2".into(), "/mw".into()]);
-        assert_eq!(two.lines().count(), 2 + 2 * DISALLOW.len());
+        assert_eq!(robots_txt(""), ROBOTS_TXT);
+        let mw = robots_txt("/mw");
+        assert_eq!(mw.lines().count(), 2 + DISALLOW.len());
         assert!(
-            two.starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n")
-                && two.ends_with("\nDisallow: /mw/vault\nDisallow: /mw/names\nDisallow: /mw/friends")
+            mw.starts_with("User-agent: *\nAllow: /\nDisallow: /mw/data/\n")
+                && mw.ends_with("\nDisallow: /mw/vault\nDisallow: /mw/names\nDisallow: /mw/friends")
         );
     }
 

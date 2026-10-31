@@ -1,5 +1,5 @@
-// Most Wanted's (web/src/games/profile.ts): it has no address of its own from before the shared one, so nothing waits
-// for a launch here.  No imports: the page's leaf modules (vault.ts) take these alone.
+// Most Wanted's (web/src/games/profile.ts): its site is new, so nothing waits for a launch here.  No imports: the
+// page's leaf modules (vault.ts) take these alone.
 
 /** no switch of its own */
 export const LAUNCHED = false;

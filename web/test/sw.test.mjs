@@ -1,7 +1,7 @@
 // Offline mode's service worker (web/src/sw.ts) with a fake cache and network (no Chrome): one start uses one set of
 // files.  A player's start on 2026-10-25 had the page's script from a copy (yesterday's) and /game.json, so the module,
 // from the server (today's): its renderer refused the game's graphics ("GPU control block mismatch").
-// Under a base (/u2/, /mw/: both games on one address) the worker keeps that base's files only, and leaves every
+// Under a base (/mw/, or /u2/ as a test layout) the worker keeps that base's files only, and leaves every
 // request outside it to the network; each game's worker keeps and cleans up its own Cache Storage only.
 //   node --test web/test/sw.test.mjs
 // The service worker in a real Chrome, with a server that goes and comes back: web/tools/offline-test.mjs.

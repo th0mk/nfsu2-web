@@ -868,10 +868,11 @@ test('the word a keyphrase is shown with: Underground 2\'s until its launch, the
 // One keyphrase, each game's own key and token (src/games/<id>/keyphrase.ts): Underground 2's the keyphrase's PBKDF2
 // bytes as they always were, Most Wanted's 64 bytes of HKDF-SHA-256 over them with its own info, and its own sealing
 // (AAD): the pinned phrase's tokens, as node:crypto derives them; neither game's box opens with the other's key.  And
-// each game's page asks for the vault under its own base (MW /mw/vault: its server forwards it to the one vault).
+// each game's page asks for the vault under its own base (UG2 /vault at its site's root; MW /mw/vault: its server
+// forwards it to the one vault on UG2's box).
 test('one keyphrase, each game\'s own key, token and box; each game\'s vault under its base', async () => {
   const pinned = 'nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agent';
-  // the base of the page, as base.ts gives it under /u2/ or /mw/ (a stand-in for import.meta.url's)
+  // the base of the page, as base.ts gives it at the root or under /mw/ (a stand-in for import.meta.url's)
   const underBase = base => ({
     name: 'base',
     setup(b) {
@@ -884,7 +885,7 @@ test('one keyphrase, each game\'s own key, token and box; each game\'s vault und
       alias: { '@game': path.join(ROOT, 'web/src/games', game) }, plugins: [underBase(base)] })).outputFiles[0].text;
     return import('data:text/javascript;base64,' + Buffer.from(code + `\n// ${game} ${base}`).toString('base64'));
   };
-  const [U, M] = [await build('ug2', '/u2/'), await build('mw', '/mw/')];
+  const [U, M] = [await build('ug2', '/'), await build('mw', '/mw/')];
   const bits = crypto.pbkdf2Sync(pinned, 'nfsu2-xyz keyphrase saves v1', 100000, 64, 'sha256');
   const mwBits = Buffer.from(crypto.hkdfSync('sha256', bits, Buffer.alloc(0), 'nfsmw keyphrase saves v1: key and token', 64));
   const [ku, km] = [await U.keysOf(pinned), await M.keysOf(pinned)];
@@ -905,7 +906,7 @@ test('one keyphrase, each game\'s own key, token and box; each game\'s vault und
   d.setAuthTag(bm.subarray(bm.length - 16));
   assert.equal(Buffer.concat([d.update(bm.subarray(13, bm.length - 16)), d.final()]).toString(), 'the saves');
   // the vault under each page's base
-  for (const [B, want] of [[U, '/u2/vault'], [M, '/mw/vault']]) {
+  for (const [B, want] of [[U, '/vault'], [M, '/mw/vault']]) {
     const asked = [];
     assert.equal(await B.vaultAvailable(async u => { asked.push(u); return new Response('', { status: 401 }); }), true);
     assert.deepEqual(asked, [want]);

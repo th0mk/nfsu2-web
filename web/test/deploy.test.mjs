@@ -373,10 +373,9 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
       a.ws.close();
     } finally { await sim.close(); await s.stop(); }
   }
-  // 5. under a base (PLAN D-38): this machine's name standing in for the site UG2 shares with Most Wanted, as
-  // --base-path puts it under /u2: every answer with the same headers and nothing about the machine; the page's index
-  // the one indexable answer under /u2 and robots.txt at the root alone, naming both games' bases (Underground 2's
-  // alone: Most Wanted's is under its base in every mode above)
+  // 5. under a base (PLAN D-38): this machine's name, as --base-path puts it under /u2: every answer with the same
+  // headers and nothing about the machine; the page's index the one indexable answer under /u2 and robots.txt at the
+  // root alone, naming /u2's routes (Underground 2's alone: Most Wanted's is under its base in every mode above)
   if (G.id === 'ug2') {
     const s = await startServer(['--http-port', String(P2), '--base-path', 'localhost=/u2']);
     try {
@@ -392,8 +391,8 @@ inTurn('crawl: every route and error path, each TLS mode: nothing about this mac
       expect(body('bare base query').headers.location === '/u2/?a=1', `base: /u2?a=1 goes to ${body('bare base query').headers.location}`);
       expect(JSON.parse(body('manifest').body).blocks.url === '/u2/data-blocks/v2/', 'base: the manifest names its blocks under /u2');
       const robots = body('root robots').body.toString();
-      expect(/^Disallow: \/u2\/data\/$/m.test(robots) && /^Disallow: \/mw\/vault$/m.test(robots) && !/^Disallow: \/data\/$/m.test(robots),
-        `base: the root's robots.txt names both games' bases: ${JSON.stringify(robots)}`);
+      expect(/^Disallow: \/u2\/data\/$/m.test(robots) && /^Disallow: \/u2\/vault$/m.test(robots) && !/^Disallow: \/data\/$/m.test(robots) && !/\/mw\//.test(robots),
+        `base: the root's robots.txt names /u2's routes: ${JSON.stringify(robots)}`);
       const w = await wsCrawl('base /u2', `ws://localhost:${P2}/u2/lan`, { headers: { Origin: `http://localhost:${P2}` } });
       all.push(...w.problems);
     } finally { await s.stop(); }
