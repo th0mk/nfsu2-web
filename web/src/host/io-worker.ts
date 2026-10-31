@@ -17,6 +17,7 @@ import {
 } from './proto';
 import { BLOCK, CACHE_DIR, av1Path, blockRuns, cacheKey, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
+import { READ_AHEAD } from '@game/run';
 
 interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
 
@@ -303,14 +304,35 @@ async function getBlock(n: DNode, bi: number, pri: number): Promise<Uint8Array> 
 // (above), the nearest ones to the game's latest read first, until this PC has all of it (40 MB on the network for
 // the city's), and its sections then read from here.  Only while this PC keeps the game data: the memory alone has no
 // room for a whole track.  NFSU2_TRACK_AHEAD=0 turns it off.
+// Then, once a track's stream file is all here, the files the game's profile names (READ_AHEAD: Most Wanted's cop
+// speech, read in pursuits; PLAN D-53) come in the same way, whole, from their start: a track the game reads again
+// meanwhile goes first, and the file after it.  NFSU2_WHOLE_AHEAD=0 turns that part off.
 const isTrackStream = (n: DNode) => /^TRACKS\/STREAM[^/]*\.BUN$/i.test(n.path);
-let ahead: { n: DNode; near: number; t0: number; got: number } | null = null, aheadLoops = 0;
+let ahead: { n: DNode; near: number; t0: number; got: number; whole?: boolean } | null = null, aheadLoops = 0;
 const aheadDone = new Set<DNode>();
+let wholeQueue: DNode[] | null = null;
 function readAhead(n: DNode, bi: number) {
   if (cfg.env?.NFSU2_TRACK_AHEAD === '0' || !cacheDir || !keeping || aheadDone.has(n)) return;
   if (ahead?.n === n) ahead.near = bi;
-  else ahead = { n, near: bi, t0: performance.now(), got: 0 };
-  while (aheadLoops < FILL_FETCHES) { aheadLoops++; void aheadLoop(); }
+  else {
+    if (ahead?.whole) wholeQueue?.unshift(ahead.n);
+    ahead = { n, near: bi, t0: performance.now(), got: 0 };
+  }
+  aheadLoopsStart();
+}
+function aheadLoopsStart() { while (aheadLoops < FILL_FETCHES) { aheadLoops++; void aheadLoop(); } }
+/** after a track's stream file: the next file to read whole, if any (the first time, the profile's list) */
+function wholeNext() {
+  if (!wholeQueue) {
+    wholeQueue = cfg.env?.NFSU2_WHOLE_AHEAD === '0' ? [] :
+      READ_AHEAD.map(p => dataLookup(p)).filter((n): n is DNode => !!n && !n.dir && !aheadDone.has(n));
+  }
+  if (ahead || !keeping) return;
+  const n = wholeQueue.shift();
+  if (!n) return;
+  ahead = { n, near: 0, t0: performance.now(), got: 0, whole: true };
+  note(`[data] ${n.path}: reading it ahead, ${Math.ceil(n.size / BLOCK)} blocks, after the track`);
+  aheadLoopsStart();
 }
 async function aheadLoop() {
   let a = ahead;
@@ -328,6 +350,8 @@ async function aheadLoop() {
         if (ahead === a) {
           ahead = null; aheadDone.add(a.n);
           if (a.got) note(`[data] ${a.n.path}: all of it on this device now, ${a.got} blocks read ahead in ${((performance.now() - a.t0) / 1000).toFixed(0)} s`);
+          wholeNext();
+          if (ahead) continue;
         }
         return;
       }

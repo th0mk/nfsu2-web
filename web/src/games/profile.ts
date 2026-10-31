@@ -30,6 +30,9 @@ export interface GameProfile {
   readonly LOG_MARK: string;
   /** the start of the files the page gives the player: the log, a backup, the keyphrase, an F12 photo (run.ts) */
   readonly FILE_PREFIX: string;
+  /** game files the I/O worker reads whole ahead, at its lowest priority, once the track's stream file is on this
+   *  device (host/io-worker.ts; Most Wanted's cop speech) */
+  readonly READ_AHEAD: readonly string[];
   /** registry.txt as a first launch writes it */
   readonly REGISTRY_DEFAULTS: string;
   /** settings.ini as a first launch writes it */

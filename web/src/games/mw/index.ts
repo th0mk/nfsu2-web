@@ -9,7 +9,7 @@ export const GAME = 'mw';
 /** the site's name, the top bar's tab text (PLAN D-31) */
 export const SITE_NAME = 'Most Wanted Revived';
 // its own
-export { EXE, PROFILES_DIR, LOG_MARK, FILE_PREFIX } from './run';
+export { EXE, PROFILES_DIR, LOG_MARK, FILE_PREFIX, READ_AHEAD } from './run';
 export { REGISTRY_DEFAULTS } from './registry';
 export { TEMPLATE as SETTINGS_TEMPLATE } from './template';
 export { STORAGE } from './storage';

@@ -29,7 +29,7 @@ test('every game\'s profile has the same fields and its own id', async () => {
   const P = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
   const fields = Object.keys(P.ug2).sort();
   assert.deepEqual(fields, ['APP_DEFAULTS', 'EXE', 'FILE_PREFIX', 'GAME', 'KEYPHRASE_WORD', 'LANGUAGES', 'LAUNCHED', 'LOG_MARK', 'MOVIE_SIZE',
-    'PROFILES_DIR', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
+    'PROFILES_DIR', 'READ_AHEAD', 'REGISTRY_DEFAULTS', 'SETTINGS_TEMPLATE', 'SITE_NAME', 'STORAGE', 'VAULT_AAD', 'VAULT_DERIVE_INFO', 'VAULT_PREFIX']);
   for (const g of GAMES) {
     assert.deepEqual(Object.keys(P[g]).sort(), fields, g);
     assert.equal(P[g].GAME, g);
@@ -50,6 +50,8 @@ test('every game\'s profile has the same fields and its own id', async () => {
     ['/data/SPEED2.EXE', 'NFS Underground 2', '=== NFSU2 web', 'nfsu2']);
   assert.deepEqual([P.mw.EXE, P.mw.PROFILES_DIR, P.mw.LOG_MARK, P.mw.FILE_PREFIX],
     ['/data/speed.exe', 'NFS Most Wanted', '=== NFSMW web', 'nfsmw']);
+  // the files the I/O worker reads whole after the track (host/io-worker.ts): Most Wanted's cop speech (PLAN D-53)
+  assert.deepEqual([P.ug2.READ_AHEAD, P.mw.READ_AHEAD], [[], ['SOUND/SPEECH/copspeech.big']]);
   assert.match(P.ug2.REGISTRY_DEFAULTS, /^d NotFirstTime=1$/m);
   assert.match(P.mw.REGISTRY_DEFAULTS, /^d FirstTime=1$/m);
   assert.doesNotMatch(P.mw.REGISTRY_DEFAULTS, /NotFirstTime/);

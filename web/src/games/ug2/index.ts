@@ -5,7 +5,7 @@ import type { Profile } from '../profile';
 export const GAME = 'ug2';
 /** index.html and manifest.json still carry it as text */
 export const SITE_NAME = 'Underground 2 Revived';
-export { EXE, PROFILES_DIR, LOG_MARK, FILE_PREFIX } from './run';
+export { EXE, PROFILES_DIR, LOG_MARK, FILE_PREFIX, READ_AHEAD } from './run';
 export { REGISTRY_DEFAULTS } from './registry';
 export { TEMPLATE as SETTINGS_TEMPLATE } from './template';
 export { APP_DEFAULTS } from '../../app/settings';

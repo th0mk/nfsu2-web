@@ -10,3 +10,6 @@ export const LOG_MARK = '=== NFSMW web';
 /** the start of the files the page gives the player: the log (<it>-<time>.log), a backup (<it>-saves-<time>.zip), the
  *  keyphrase (<it>-passphrase.txt), an F12 photo in the save folder (<it>-<time>.png) */
 export const FILE_PREFIX = 'nfsmw';
+/** game files the I/O worker reads whole ahead, at its lowest priority, once the track's stream file is on this device
+ *  (host/io-worker.ts): the cop speech, 184 MB, so that no pursuit waits for a part of it (PLAN D-53, TRACKER M4-52) */
+export const READ_AHEAD: readonly string[] = ['SOUND/SPEECH/copspeech.big'];

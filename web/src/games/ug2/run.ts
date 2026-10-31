@@ -11,3 +11,5 @@ export const LOG_MARK = '=== NFSU2 web';
 /** the start of the files the page gives the player: the log (<it>-<time>.log), a backup (<it>-saves-<time>.zip), the
  *  keyphrase (<it>-passphrase.txt), an F12 photo in the save folder (<it>-<time>.png) */
 export const FILE_PREFIX = 'nfsu2';
+/** game files the I/O worker reads whole ahead after the track (host/io-worker.ts): none */
+export const READ_AHEAD: readonly string[] = [];
