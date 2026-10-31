@@ -39,6 +39,13 @@
  *           0x57CB82, the EA Trax pop-up 0x58D883, the wrong-way sign
  *           0x56885A) see it set; the flag itself is never written (it is
  *           saved with the profile).
+ *   band    narrower than 4:3 the front end's and the HUD's draws (0x6D1260
+ *           makes a quad's corners in clip space from HUD units, then draws
+ *           it) are kept to the band the 4:3 HUD has across the middle
+ *           (game.h ui_band, com.c, gpu_web.c's scissor), so what the game
+ *           parks outside 640x480 stays hidden as on a 4:3 screen; a quad
+ *           over the screen's whole height (the movie at fill or stretch, an
+ *           overlay the size of the screen) is left whole.
  *   movie   the movie quad (0x59A029..0x59A038): -0.5..0.5 goes through the
  *           front end's scale, so it is the 4:3 middle (fit) already; fill
  *           and stretch widen it to the screen.
@@ -48,7 +55,15 @@
  * Options (read once, the page's settings): NFSU2_HUD=wide|43 (hud),
  * NFSU2_MOVIE=fit|fill|stretch (movie_framing).  NOWIDE=1 (com.c) keeps the
  * game's own table and labels.  The native row's size (render, max_pixels)
- * is wsopts.c's, as for every game. */
+ * is wsopts.c's, as for every game.  Two variants waiting for a choice
+ * (TRACKER M7-39), off unless asked for: NFSMW_WIDE_SPLASH=1, the game's own
+ * widescreen title (WS_MW_LS_Splash.fng) on a 16:9 or wider screen, as
+ * WidescreenFix gives it (its splash name over the 4:3 one at 0x8A0114, the
+ * CURRENT_GEN_WIDESCREEN message 0x5A3080 sends only when 0x4FB000 says so,
+ * the object 0x534CC377 shown rather than hidden at 0x5A30B1, the hash
+ * 0xC4DF3FF2 for 0xC6CC55A4 at 0x5A3141); NFSMW_WIDE_HUD_1610=1, the game's
+ * widescreen HUD from 16:10 rather than from 16:9.  NFSMW_BANDLOG=1 logs the
+ * first 300 kinds of quad 0x6D1260 draws (HUD extents, texture, colour). */
 #include "cpu.h"
 #include "widescreen.h"
 #include <math.h>
@@ -58,6 +73,7 @@
 #include <strings.h>
 
 long autotest_frame(void);
+uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);   /* com.c */
 int  com_res_label(int row, char *buf, unsigned cap);  /* com.c: the resolution row's name, 0 = the game's own */
 
 enum { HUD_43, HUD_WIDE };
@@ -69,6 +85,9 @@ static float g_k = 1.f;                 /* game aspect / device aspect (com.c re
 static float g_hk = 1.f;                /* 4:3 / device aspect: the HUD's own factor */
 static float g_cx = 320.f, g_cy = 240.f;    /* the screen's centre in HUD units */
 static int   g_wide_hud;                /* the game's widescreen HUD packages in use */
+static int   g_band_draw;               /* 0x6D1260 is drawing a quad that keeps to the HUD's band */
+static int   g_wide_splash_opt, g_wide1610, g_bandlog;   /* NFSMW_WIDE_SPLASH, NFSMW_WIDE_HUD_1610, NFSMW_BANDLOG */
+static int   g_wide_splash;             /* the widescreen title's name is over the 4:3 one now */
 static unsigned long g_hits[12];
 
 static int opt_is(const char *v, const char *s){ return v && !strcasecmp(v, s); }
@@ -79,8 +98,12 @@ static void mws_init(void){
     if ((e = getenv("NFSU2_HUD")) && *e) g_hud = (opt_is(e, "43") || opt_is(e, "4:3")) ? HUD_43 : HUD_WIDE;
     if ((e = getenv("NFSU2_MOVIE")) && *e)
         g_movie = opt_is(e, "fill") ? MOV_FILL : opt_is(e, "stretch") ? MOV_STRETCH : MOV_FIT;
-    fprintf(stderr, "ws: mw hud=%s movie=%s\n", g_hud == HUD_WIDE ? "wide" : "4:3",
-            g_movie == MOV_FIT ? "fit" : g_movie == MOV_FILL ? "fill" : "stretch");
+    g_wide_splash_opt = (e = getenv("NFSMW_WIDE_SPLASH")) && *e == '1';
+    g_wide1610 = (e = getenv("NFSMW_WIDE_HUD_1610")) && *e == '1';
+    g_bandlog = (e = getenv("NFSMW_BANDLOG")) && *e == '1';
+    fprintf(stderr, "ws: mw hud=%s movie=%s%s%s\n", g_hud == HUD_WIDE ? "wide" : "4:3",
+            g_movie == MOV_FIT ? "fit" : g_movie == MOV_FILL ? "fill" : "stretch",
+            g_wide_splash_opt ? ", the wide title from 16:9" : "", g_wide1610 ? ", the wide HUD from 16:10" : "");
 }
 
 /* The game's mode now (its table, RESOLUTION_INDEX [0x90181C]): its aspect, 4:3 but for 1280x1024 */
@@ -105,8 +128,17 @@ static void hud_apply(void){
     MRF32(0x008ae8f8u) = 2.f * g_cx;    /* the screen's width in HUD units (640) */
     MRF32(0x008af2c0u) = 2.f * g_cy;    /* its height (480) */
     MRF32(0x008afa08u) = (hk < 1.f ? hk : 1.f) / 640.f;    /* the arrest blur's x step (1/640) */
-    /* the game's 16:9 HUD packages need 16:9's room; 16:10 keeps the 4:3 HUD in the middle */
-    g_wide_hud = g_hud == HUD_WIDE && hk < 0.76f;
+    /* the game's 16:9 HUD packages need 16:9's room; 16:10 keeps the 4:3 HUD in the middle (NFSMW_WIDE_HUD_1610=1:
+     * the 16:9 HUD there too, its sides past the screen's) */
+    g_wide_hud = g_hud == HUD_WIDE && hk < (g_wide1610 ? 0.84f : 0.76f);
+    /* NFSMW_WIDE_SPLASH=1: the widescreen title's name over the 4:3 one (both 20 bytes with their padding), so every
+     * reference (0x5705E0's answer, the flow tables at 0x8F3C68..0x8F4678) names WS_MW_LS_Splash.fng */
+    int ws = g_wide_splash_opt && hk < 0.76f;
+    if (ws != g_wide_splash && mem_is_committed(0x008a0114u) && mem_is_committed(0x008a0127u)){
+        static const char wide[20] = "WS_MW_LS_Splash.fng", narrow[20] = "MW_LS_Splash.fng";
+        for (uint32_t i = 0; i < 20u; i++) MR8(0x008a0114u + i) = (uint8_t)(ws ? wide : narrow)[i];
+        g_wide_splash = ws;
+    }
 }
 
 /* com.c res_pick, on the game's thread (its CreateDevice and every Reset): the screen's shape.  After a change the
@@ -125,6 +157,13 @@ void ws_set_mapping(float k){
                 "out again\n", (double)k, (double)g_hk, (double)g_cx, (double)g_cy,
                 g_wide_hud ? "the game's widescreen" : "the 4:3", n);
     }
+}
+/* game.h ui_band (com.c, every draw with no position matrix into the screen): 0x6D1260's quad, on a screen narrower
+ * than 4:3, keeps to the 4:3 HUD's band, 1/hk of the screen's height */
+float mw_ui_band(void){
+    if (!(g_band_draw && g_hk > 1.f)) return 1.f;
+    g_hits[10]++;
+    return 1.f / g_hk;
 }
 /* the renderer changes nothing: the game draws for the screen's shape itself */
 float ws_persp_x(void){ return 1.f; }
@@ -220,6 +259,58 @@ int mw_ws_hook(CPU *c, uint32_t va){
     case HOOK_SITE(0x005696ce): case HOOK_SITE(0x0057cb85): case HOOK_SITE(0x0058d886): case HOOK_SITE(0x0056885d):
         flag_back();
         return 1;
+    /* 0x6D1260 (cdecl: the quad, its texture, ...), where every path meets before the four corners go to clip
+     * space (x * [0x8AF9A4] - 1, from 0x6D12C0): the quad in HUD units, x and y at +0, +4, +0x10, +0x14, +0x20,
+     * +0x24, +0x30, +0x34; its DrawPrimitiveUP (0x6D18CE) comes before 0x6D1904, where both paths meet again */
+    case HOOK_SITE(0x006d12b6): {
+        g_band_draw = 0;
+        if (!(g_hk > 1.f) || !mem_is_committed(c->esi) || !mem_is_committed(c->esi + 0x37u)) return 1;
+        float y0 = 1e30f, y1 = -1e30f;
+        for (uint32_t o = 4u; o <= 0x34u; o += 0x10u){ float y = MRF32(c->esi + o); y0 = fminf(y0, y); y1 = fmaxf(y1, y); }
+        /* the band in HUD units: 480 around the centre; a quad over the screen's whole height (0 to 2 * centre) is
+         * the screen's (the movie at fill or stretch) */
+        int whole = y0 <= 1.f && y1 >= 2.f * g_cy - 1.f;
+        g_band_draw = !whole;
+        g_hits[whole ? 9 : 8]++;
+        if (g_bandlog){
+            /* each kind of quad once: its extents in HUD units (to 4), its texture's name hash, its first colour */
+            static uint32_t seen[300]; static int nseen;
+            float x0 = 1e30f, x1 = -1e30f;
+            for (uint32_t o = 0u; o <= 0x30u; o += 0x10u){ float x = MRF32(c->esi + o); x0 = fminf(x0, x); x1 = fmaxf(x1, x); }
+            uint32_t tex = c->ecx && mem_is_committed(c->ecx + 0x27u) ? MR32(c->ecx + 0x24u) : 0u;
+            uint32_t col = mem_is_committed(c->esi + 0x83u) ? MR32(c->esi + 0x80u) : 0u;
+            uint32_t key = tex ^ (uint32_t)lroundf(x0 / 4.f) * 0x9e3779b1u ^ (uint32_t)lroundf(x1 / 4.f) * 0x85ebca77u
+                         ^ (uint32_t)lroundf(y0 / 4.f) * 0xc2b2ae3du ^ (uint32_t)lroundf(y1 / 4.f) * 0x27d4eb2fu;
+            int i = 0;
+            while (i < nseen && seen[i] != key) i++;
+            if (i == nseen && nseen < 300){
+                seen[nseen++] = key;
+                fprintf(stderr, "[band] f=%ld x %.1f..%.1f y %.1f..%.1f (band %.1f..%.1f) tex %08x col %08x %s\n",
+                        autotest_frame(), (double)x0, (double)x1, (double)y0, (double)y1, (double)(g_cy - 240.f),
+                        (double)(g_cy + 240.f), tex, col, whole ? "whole" : "clipped");
+            }
+        }
+        return 1; }
+    case HOOK_SITE(0x006d1904):
+        g_band_draw = 0;
+        return 1;
+    /* NFSMW_WIDE_SPLASH=1, on the title's construction (0x5A3060..), WidescreenFix's three edits: 0x4FB000's answer
+     * (al, tested at 0x5A3080) is 1, so the package gets CURRENT_GEN_WIDESCREEN; the object 0x534CC377 is shown
+     * where it was hidden (its pointer, the argument of 0x514C70 at [esp], given to the show 0x514CC0 instead); and
+     * 0x525220 gets 0xC4DF3FF2 ("CLICK to continue") for 0xC6CC55A4 */
+    case HOOK_SITE(0x005a307e):
+        if (g_wide_splash) c->eax = (c->eax & ~0xffu) | 1u;
+        return 1;
+    case HOOK_SITE(0x005a30b1):
+        if (g_wide_splash){
+            uint32_t obj = MR32(c->esp);
+            MR32(c->esp) = 0u;                  /* 0x514C70 leaves a null object alone */
+            if (obj) call_guest(c, 0x00514cc0u, 1, &obj);
+        }
+        return 1;
+    case HOOK_SITE(0x005a3146):
+        if (g_wide_splash && MR32(c->esp) == 0xc6cc55a4u) MR32(c->esp) = 0xc4df3ff2u;
+        return 1;
     /* the movie quad: its four extents are the last four pushes before `mov ecx, ebx; call 0x591460` */
     case HOOK_SITE(0x0059a03d):
         g_hits[6]++;
@@ -254,6 +345,7 @@ void sub_0057e920(CPU *c){
 void ws_report(void){
     if (!g_init) return;
     fprintf(stderr, "ws: mw hooks fov=%lu/%lu origin=%lu mirror=%lu shadow=%lu wideflag=%lu movie=%lu labels=%lu"
-            " (k=%.4f, HUD %.4f, %s HUD)\n", g_hits[0], g_hits[1], g_hits[2], g_hits[3], g_hits[4], g_hits[5],
-            g_hits[6], g_hits[7], (double)g_k, (double)g_hk, g_wide_hud ? "wide" : "4:3");
+            " band=%lu/%lu/%lu (k=%.4f, HUD %.4f, %s HUD)\n", g_hits[0], g_hits[1], g_hits[2], g_hits[3], g_hits[4],
+            g_hits[5], g_hits[6], g_hits[7], g_hits[8], g_hits[9], g_hits[10], (double)g_k, (double)g_hk,
+            g_wide_hud ? "wide" : "4:3");
 }

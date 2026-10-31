@@ -207,6 +207,12 @@ typedef struct GameOps {
                                      * resource's copy (com.c host backing); dynamic resources, and one locked
                                      * again every few frames, keep their copy in the guest's memory; 0 =
                                      * UG2's: every Lock buffer in the guest's memory for the resource's life */
+    float (*ui_band)(void);         /* every draw into the screen (com.c draw_up): the share of the screen's height
+                                     * it is kept to, a band across the middle (gpu_web.c metal_set_ui_clip), as the
+                                     * 4:3 HUD's on a screen narrower than 4:3; 1 = the whole screen.  For a game
+                                     * that makes its HUD's vertices in clip space itself, which com.c cannot tell
+                                     * from its other draws: Most Wanted's front end and HUD (widescreen_mw.c); 0 =
+                                     * UG2's: none (its HUD draws have a matrix, and aspect_apply bands them) */
     int vclock_sleep_real;          /* 1: a Sleep of the game's main thread moves the virtual clock by at least
                                      * its real length, also in a frame past the in-frame cap (win32.c), so a
                                      * speed test that sleeps between two clock reads sees its sleep; 0 = UG2's

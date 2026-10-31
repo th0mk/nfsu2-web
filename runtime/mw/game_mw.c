@@ -41,6 +41,7 @@ void fxcensus_init(void);                      /* fxcensus_mw.c: NFSMW_FXCENSUS=
 void mw_sound_position(void);                  /* sound_mw.c */
 void mw_frame(CPU *c);                         /* career_mw.c: the test aids' work, once a pass of the main loop */
 int mw_debug_hook(CPU *c, uint32_t va);        /* debug_mw.c: NFSMW_HOOKLOG, a debugging lift's extra hooks */
+float mw_ui_band(void);                         /* widescreen_mw.c: the HUD's band for a quad of 0x6D1260 */
 
 /* An instruction the lift hooks (gen.sh collects every HOOK_SITE of the C files in runtime/mw into HOOKS):
  * guest_hook (debug.c) runs before it. */
@@ -261,6 +262,8 @@ const GameOps g_game = {
     .gpu_stages = 8,                            /* t4..t7 and s4..s7 at SM2 already, depth textures (GAME.md 5.9) */
     .d3d_sm3 = 1,                               /* vs/ps 3.0: the ps_2_x and SM3 techniques (GAME.md 5.3) */
     .gpu_msaa = 1,                              /* the FSAA option: a 4-sample back buffer (GAME.md 5.6) */
+    .ui_band = mw_ui_band,                      /* the front end's and HUD's quads (made in clip space, 0x6D1260)
+                                                 * keep to the 4:3 band on an upright screen (widescreen_mw.c) */
     .d3d_host_backing = 1,                      /* textures' and buffers' copies outside the guest's 512 MB:
                                                  * a race's world (~170 MB of them) and the game's own heap
                                                  * (~200 MB) no longer share it */

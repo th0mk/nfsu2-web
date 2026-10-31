@@ -1895,6 +1895,17 @@ static void ws_log_draw(const char *kind, const VSConst *vsk, int cx, int cw){
 }
 /* this draw's 2D UI band (aspect_apply), 1 = none */
 static float g_ui_clip = 1.f;
+/* the target is the screen, or a render target of its size (the HUD's band is the screen's) */
+static int target_is_screen(void){
+    if (!g_cur_rt) return 1;
+    static unsigned rt_seen = 0; static int rt_screen = 0;
+    if (g_cur_rt != rt_seen){
+        unsigned w = 0, h = 0; void metal_tex_size(unsigned, unsigned *, unsigned *);
+        metal_tex_size(g_cur_rt, &w, &h);
+        rt_seen = g_cur_rt; rt_screen = (w == g_bb_w && h == g_bb_h);
+    }
+    return rt_screen;
+}
 static const VSConst *aspect_apply(const VSConst *vsk, const VSProg *prog){
     if (g_aspfix == 1.f || !prog) return vsk;
     unsigned vs = g_cur_vs;
@@ -1926,15 +1937,7 @@ static const VSConst *aspect_apply(const VSConst *vsk, const VSProg *prog){
          * narrowing it left the target's corners unmasked (stale content
          * beside the mirror). */
         sx = ws_ui_x(); sy = ws_ui_y();
-        if (g_cur_rt){
-            static unsigned rt_seen = 0; static int rt_screen = 0;
-            if (g_cur_rt != rt_seen){
-                unsigned w = 0, h = 0; void metal_tex_size(unsigned, unsigned *, unsigned *);
-                metal_tex_size(g_cur_rt, &w, &h);
-                rt_seen = g_cur_rt; rt_screen = (w == g_bb_w && h == g_bb_h);
-            }
-            if (!rt_screen) sx = sy = 1.f;
-        }
+        if (!target_is_screen()) sx = sy = 1.f;
         /* A quad the game draws over the whole target (the rain tint) is in
          * HUD units too, but must cover the whole screen (widescreen.c). */
         if (ws_fill_target()) sx = sy = 1.f;
@@ -2198,6 +2201,13 @@ static int draw_up(uint32_t pt, uint32_t nv, uint32_t vp, uint32_t stride){
     vsk = fixmat_apply(vsk);
     g_ui_clip = 1.f;
     vsk = aspect_apply(vsk, prog);
+    /* a game that makes its HUD's vertices in clip space itself (Most Wanted's front end and HUD, with or without a
+     * vertex shader): it says which draws keep to its HUD's band (game.h ui_band), as aspect_apply's matrix path
+     * does for UG2's */
+    if (g_game.ui_band && target_is_screen()){
+        float s = g_game.ui_band();
+        if (s > 0.f && s < 1.f) g_ui_clip = s;
+    }
 #ifdef __wasm__
     { void metal_set_ui_clip(float); metal_set_ui_clip(g_ui_clip); }
 #endif
