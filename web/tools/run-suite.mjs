@@ -16,6 +16,8 @@
 //     --save-out DIR    each scenario's save directory afterwards, as DIR/<scenario>/ (a seed for the next run)
 //     --reg PATH        the registry every scenario starts from, as the server serves it (/tests/seed/X.txt),
 //                       instead of the game's own (Underground 2's registry_perf4_native.txt, Most Wanted's none)
+//     --hidden FROM:TO  the page says it is hidden from FROM s to TO s into each run (document.hidden, a
+//                       visibilitychange each way; FROM 0: from its start), as a tab in the background would
 //     --list            print the scenario table and exit
 //     --game ID         ug2 (default) or mw: that game's scenario table, test scripts and checks (tests/ or
 //                       tests/mw/: the server, started with --game mw, serves tests/mw/ at /tests/)
@@ -140,7 +142,7 @@ const SUITE_ENV = {
 
 // ---- arguments ----
 const argv = process.argv.slice(2);
-const opt = { base: 'http://localhost:8611', run: '', jobs: 1, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', reg: '', list: false, help: false };
+const opt = { base: 'http://localhost:8611', run: '', jobs: 1, env: [], scale: 1, script: '', marker: '', name: '', net: '', saveOut: '', reg: '', hidden: '', list: false, help: false };
 const names = [];
 const GAME = gameOf(argv), G = GAMES[GAME], [TABLE, OPT] = SCENARIOS[GAME];
 const OF = GAME === 'ug2' ? '' : ` (${G.name})`;   // in the run's lines and summary: Underground 2's stay as they were
@@ -150,7 +152,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--env') opt.env.push(v()); else if (a === '--timeout-scale') opt.scale = +v();
   else if (a === '--script') opt.script = v(); else if (a === '--marker') opt.marker = v(); else if (a === '--name') opt.name = v();
   else if (a === '--net') opt.net = v(); else if (a === '--save-out') opt.saveOut = v();
-  else if (a === '--reg') opt.reg = v();
+  else if (a === '--reg') opt.reg = v(); else if (a === '--hidden') opt.hidden = v();
   else if (a === '--game') v();                    // gameOf() above
   else if (a === '--help') opt.help = true;
   else if (a === '--list') opt.list = true; else names.push(a);
@@ -329,10 +331,31 @@ async function runOne(browser, s) {
   page.on('crash', () => add('CRASH (renderer process)'));
   const limit = s.alarm * opt.scale * 1000;
   if (s.seed) lines.push(`[suite] save seed: ${await seedSave(page, opt.base, saveName(s), SEED)} files from ${SEED}`);
+  const timers = [];
+  if (opt.hidden) {
+    const [from, to] = opt.hidden.split(':').map(Number), t1 = Date.now();
+    // (each runs in the page: Playwright sends the function's text)
+    const hide = h => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => h ? 'hidden' : 'visible' });
+    };
+    const turn = h => {
+      add(`[suite] the page ${h ? 'hidden' : 'seen again'} ${((Date.now() - t1) / 1000).toFixed(0)} s into the run (--hidden)`);
+      void page.evaluate(h => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => h ? 'hidden' : 'visible' });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, h).catch(() => {});
+    };
+    if (!from) { await page.addInitScript(hide, true); add('[suite] the page hidden from its start (--hidden)'); }
+    else timers.push(setTimeout(() => turn(true), from * 1000));
+    if (to > from) timers.push(setTimeout(() => turn(false), to * 1000));
+  }
   await page.goto(urlFor(s));
   let timedOut = false;
   try { await page.waitForFunction(() => document.title === 'DONE', null, { timeout: limit, polling: 1000 }); }
   catch { timedOut = true; lines.push(`TIME LIMIT REACHED: the web suite runner stopped the run after ${(limit / 1000).toFixed(0)} s`); }
+  for (const t of timers) clearTimeout(t);
   if (opt.saveOut) lines.push(`[suite] save out: ${await saveOut(page, saveName(s), path.join(opt.saveOut, s.name))}`);
   const wall = (Date.now() - t0) / 1000;
   await ctx.close().catch(() => {});

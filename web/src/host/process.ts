@@ -79,10 +79,14 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
 
   const io = new Worker(abs('host/io-worker.js'), { type: 'module', name: 'io' });
   workers.push(io);
+  // whether the page is seen: the I/O worker's reading ahead waits while it is hidden (io-worker.ts)
+  const doc = typeof document === 'undefined' ? null : document;
+  const onVisibility = () => io.postMessage({ t: 'hidden', hidden: doc!.hidden });
+  doc?.addEventListener('visibilitychange', onVisibility);
   await new Promise<void>((res, rej) => {
     io.onmessage = (e) => { if (e.data.t === 'io-ready') res(); else if (e.data.t === 'io-error') rej(new Error(e.data.msg)); };
-    io.postMessage({ memory, ctl: ctlBuf, rpc, cfg });
-  });
+    io.postMessage({ memory, ctl: ctlBuf, rpc, cfg, hidden: !!doc?.hidden });
+  }).catch(e => { doc?.removeEventListener('visibilitychange', onVisibility); throw e; });
   io.onmessage = (e) => { if (e.data.t === 'saved') o.onSaved?.(e.data.path); else if (e.data.t === 'log') o.onNote?.(e.data.s); };
 
   for (let s = 0; s < pool; s++) ctl[CTL_POOL + 4 * s] = POOL_NONE;   // each worker makes its slot idle when ready
@@ -120,6 +124,10 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
       if (r) return Promise.resolve(r);
       return new Promise(res => { const l = regWaiters.get(kind) ?? []; l.push(res); regWaiters.set(kind, l); });
     },
-    terminate() { for (const w of workers) w.terminate(); if (!Atomics.load(ctl, CTL_EXIT)) resolveExit(-1); },
+    terminate() {
+      doc?.removeEventListener('visibilitychange', onVisibility);
+      for (const w of workers) w.terminate();
+      if (!Atomics.load(ctl, CTL_EXIT)) resolveExit(-1);
+    },
   };
 }

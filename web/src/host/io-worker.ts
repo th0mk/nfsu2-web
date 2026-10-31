@@ -19,7 +19,9 @@ import { BLOCK, CACHE_DIR, av1Path, blockRuns, cacheKey, dataUrl, openCacheFile,
 import { movieClose, movieDecode, movieOpen } from './movie';
 import { READ_AHEAD } from '@game/run';
 
-interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
+interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig; hidden?: boolean }
+/** from the page (process.ts), as its visibility changes */
+interface Hidden { t: 'hidden'; hidden: boolean }
 
 const FT_DIR = 3, FT_FILE = 4;
 const td = new TextDecoder(), te = new TextEncoder();
@@ -307,8 +309,17 @@ async function getBlock(n: DNode, bi: number, pri: number): Promise<Uint8Array> 
 // Then, once a track's stream file is all here, the files the game's profile names (READ_AHEAD: Most Wanted's cop
 // speech, read in pursuits; PLAN D-53) come in the same way, whole, from their start: a track the game reads again
 // meanwhile goes first, and the file after it.  NFSU2_WHOLE_AHEAD=0 turns that part off.
+// All of it waits while the page is hidden (process.ts tells this worker): a tab left in the background fetches only
+// what the game reads, and the reading ahead goes on where it was once the page is seen again.
 const isTrackStream = (n: DNode) => /^TRACKS\/STREAM[^/]*\.BUN$/i.test(n.path);
 let ahead: { n: DNode; near: number; t0: number; got: number; whole?: boolean } | null = null, aheadLoops = 0;
+let pageHidden = false;
+function setHidden(h: boolean) {
+  if (h === pageHidden) return;
+  pageHidden = h;
+  if (ahead) note(`[data] ${ahead.n.path}: the reading ahead ${h ? 'waits while the page is hidden' : 'goes on, the page is seen again'}`);
+  if (!h && ahead) aheadLoopsStart();
+}
 const aheadDone = new Set<DNode>();
 let wholeQueue: DNode[] | null = null;
 function readAhead(n: DNode, bi: number) {
@@ -320,7 +331,12 @@ function readAhead(n: DNode, bi: number) {
   }
   aheadLoopsStart();
 }
-function aheadLoopsStart() { while (aheadLoops < FILL_FETCHES) { aheadLoops++; void aheadLoop(); } }
+// Only when aheadLoop has work: one that returns at once (before its first await) gives its count back at once, and
+// this loop would never end (with the page hidden that froze this worker, and every read of the game with it).
+function aheadLoopsStart() {
+  if (!ahead || !keeping || pageHidden) return;
+  while (aheadLoops < FILL_FETCHES) { aheadLoops++; void aheadLoop(); }
+}
 /** after a track's stream file: the next file to read whole, if any (the first time, the profile's list) */
 function wholeNext() {
   if (!wholeQueue) {
@@ -337,7 +353,7 @@ function wholeNext() {
 async function aheadLoop() {
   let a = ahead;
   try {
-    while ((a = ahead) && keeping) {
+    while ((a = ahead) && keeping && !pageHidden) {
       const cf = await cacheFile(a.n);
       if (!cf) { aheadDone.add(a.n); if (ahead === a) ahead = null; return; }
       let bi = -1, missing = 0;
@@ -643,8 +659,10 @@ async function serve() {
   }
 }
 
-onmessage = async (e: MessageEvent<Init>) => {
+onmessage = async (e: MessageEvent<Init | Hidden>) => {
+  if ('t' in e.data) { if (e.data.t === 'hidden') setHidden(e.data.hidden); return; }
   ({ memory, cfg } = e.data);
+  pageHidden = !!e.data.hidden;
   ctl = new Int32Array(e.data.ctl); rpcI32 = new Int32Array(e.data.rpc); rpcI64 = new BigInt64Array(e.data.rpc);
   try {
     const opfs = await navigator.storage.getDirectory();
