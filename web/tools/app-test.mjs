@@ -102,6 +102,9 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 //             (its cash) comes in after a warning, sealed again (only its checks differ from the edited file), and the
 //             game loads it
 //   rename    Rename ROTEST to RENAMED in Saves: the folder, the file and the name inside; the game loads RENAMED
+//   autosave  ROTEST with its Autosave turned off (the byte 0x5B55, sealed again by the page's import) is set on at the
+//             next Play (settings.ini autosave): the page's note and word, the byte, the checks, the file of the aliases
+//             looked at; the game loads it; at the Play after that it is left as it is
 // An oracle build ("oracle":1 in /game.json) loads d3dx9_26.dll from the save folder: each step puts it there from
 // $NFSMW_D3DX_DLL (the file on this machine; never in the repository) and the address names it (NFSMW_D3DX).  The game
 // runs with the null renderer (NFSU2_RENDERER=null) unless --draw is given: the steps check the page and the game, and a
@@ -110,7 +113,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 const STEPS_OF = {
   ug2: ['start', 'settings', 'play', 'saves', 'restore', 'pcsave', 'quit', 'stalllog', 'instance', 'readonly', 'retry', 'update',
     'autoupdate', 'enterlink', 'late', 'quitstages', 'slowgpu', 'gpulost', 'crash', 'leak', 'cache', 'roamask', 'cloudask', 'full', 'page', 'mobile'],
-  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename'],
+  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave'],
 };
 const NONE = 'none yet';
 const GAME = gameOf(process.argv.slice(2));
@@ -124,7 +127,7 @@ await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/app-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `apptest-${Date.now().toString(36)}`;
-const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`;
+const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`;
 // the test suite's environment (DESIGN.md section 5); movies stay on/off through settings.ini
 const ENV = ['SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_TIMEOUT=400'].map(e => `env=${encodeURIComponent(e)}`).join('&');
 fs.mkdirSync(OUT, { recursive: true });
@@ -263,20 +266,23 @@ async function mwSteps() {
   /** a start of the game that loads the one alias in dir (with one alias the start loads it, no list: GAME.md 10.8):
    *  the aliases the page lists there, the exit, whether it loaded ("Load complete.", then the main menu).  (The page
    *  takes no FILELIST from its address: settings.ts PATH_VARS.) */
-  async function loads(p, dir, label) {
-    await open(p, `save=${dir}&${env}&${script('app_load_probe.txt')}`);
+  async function loads(p, dir, label, more = '') {
+    await open(p, `save=${dir}&${env}${more}&${script('app_load_probe.txt')}`);
     await p.waitForSelector('#profiles li', { timeout: 15000 });
     const aliases = await p.locator('#profiles .name').allTextContents();
     await seedDll(p, dir);
     const run = await playUntilExit(p, label, 300000);
+    // the page's word after Play (shell.ts toast), while it shows
+    const toast = await p.waitForFunction(() => { const e = document.querySelector('#toast'); return !e.hidden && e.textContent; }, null, { timeout: 20000, polling: 100 })
+      .then(h => h.jsonValue(), () => null);
     const exit = await run.wait();
     const tail = await logOf(p);
     fs.writeFileSync(path.join(OUT, `mw-${label}.log`), tail);
-    return { aliases, exit, loaded: /app_load_probe: loaded/.test(tail) && /app_load_probe: main menu/.test(tail) && quitPath(tail) };
+    return { aliases, exit, toast, loaded: /app_load_probe: loaded/.test(tail) && /app_load_probe: main menu/.test(tail) && quitPath(tail) };
   }
 
   // ---------------------------------------------------------- start --
-  if (want('start') || want('play') || want('saves') || want('restore') || want('pcsave') || want('rename')) {
+  if (want('start') || want('play') || want('saves') || want('restore') || want('pcsave') || want('rename') || want('autosave')) {
     await open(page, `save=${SAVE}&fresh&${env}`);
     await settingsReady(page);
     const p = await phase(page);
@@ -292,17 +298,17 @@ async function mwSteps() {
     }));
     await page.waitForTimeout(400);
     await shot(page, 'mw-start.png');
-    const ug2Rows = ['roam', 'horn', 'online', 'subtitles', 'autosave', 'show_hidden_races', 'hud', 'ui_textures'];
+    const ug2Rows = ['roam', 'horn', 'online', 'subtitles', 'show_hidden_races', 'hud', 'ui_textures'];
     report('start', p === 'ready' && !checks.some(c => c.endsWith(':fail')) && problems.every(t => /tested/.test(t)) &&
       look.title === 'Most Wanted Revived' && look.name === 'Most Wanted Revived' && !!tmpl?.text?.startsWith('# NFS Most Wanted settings') &&
       ['controls', 'saves', 'settings', 'game-data', 'changes', 'about'].every(s => look.sections.includes(s)) && !look.sections.includes('online') &&
-      look.rows.includes('fps') && look.rows.includes('language') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
+      look.rows.includes('fps') && look.rows.includes('language') && look.rows.includes('autosave') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
       look.langs[0] === 'english' && look.langs.includes('finnish'),
       { phase: p, checks, problems, ...look, templateBytes: tmpl?.size });
   }
 
   // ----------------------------------------------------------- play --
-  if (want('play') || want('saves') || want('restore') || want('pcsave') || want('rename')) {
+  if (want('play') || want('saves') || want('restore') || want('pcsave') || want('rename') || want('autosave')) {
     await open(page, `save=${SAVE}&${env}&${script('app_rw_probe.txt')}`);
     await seedDll(page, SAVE);
     const run = await playUntilExit(page, 'rw', 700000);         // NFSU2_TIMEOUT ends the game at 600 s
@@ -335,7 +341,7 @@ async function mwSteps() {
   }
 
   // ---------------------------------------------------------- saves --
-  if (want('saves') || want('restore') || want('pcsave')) {
+  if (want('saves') || want('restore') || want('pcsave') || want('autosave')) {
     await page.waitForSelector('#profiles .name', { timeout: 15000 });
     const listed = await page.locator('#profiles .name').allTextContents();
     await page.locator('#saves').screenshot({ path: path.join(OUT, 'mw-saves.png') });
@@ -426,6 +432,40 @@ async function mwSteps() {
       l.exit?.code === 0 && l.loaded && l.aliases.join() === 'RENAMED',
       { listed, renamedBytes: renamed?.length ?? null, oldGone: old === null, nameInside: inside, ...l });
     await p4.close();
+  }
+
+  // ------------------------------------------------------- autosave --
+  if (want('autosave') && backupPath) {
+    const AUTOSAVE = 0x5B55;            // src/games/mw/profile.ts: 1 On, 0 Off
+    const alias = zipEntry(backupPath, `${MW_DIR}/ROTEST/ROTEST`);
+    const offFile = path.join(OUT, 'ROTEST-autosave-off');
+    const off = Buffer.from(alias); off[AUTOSAVE] = 0; fs.writeFileSync(offFile, off);
+    const p5 = watch(await ctx.newPage(), 'E');
+    await open(p5, `save=${SAVE4}&fresh&${env}`);
+    await p5.waitForFunction(() => !document.querySelector('#import').disabled, null, { timeout: 15000 });
+    await p5.setInputFiles('#import', offFile);
+    await p5.waitForSelector('#confirm[open]');
+    await p5.click('#confirm-ok');
+    await p5.waitForFunction(() => /Added ROTEST/.test(document.querySelector('#saves-msg').textContent), null, { timeout: 15000 });
+    const before = await opfsBytes(p5, SAVE4, `${MW_DIR}/ROTEST/ROTEST`);
+    // an input script leaves the aliases as they are unless the address asks for autosave (shell.ts)
+    const more = `&env=${encodeURIComponent('NFSU2_AUTOSAVE=1')}`;
+    const l = await loads(p5, SAVE4, 'autosave', more);
+    const log1 = fs.readFileSync(path.join(OUT, 'mw-autosave.log'), 'utf8');
+    const after = await opfsBytes(p5, SAVE4, `${MW_DIR}/ROTEST/ROTEST`);
+    const seen = await readOpfs(p5, SAVE4, 'autosave-profiles.txt');
+    const changed = before && after ? differing(before, after) : [-1];
+    const checks = i => (i >= 16 && i < 28) || (i >= 0x34 && i < 0x44) || i >= 0xF85C;
+    const l2 = await loads(p5, SAVE4, 'autosave2', more);
+    const log2 = fs.readFileSync(path.join(OUT, 'mw-autosave2.log'), 'utf8');
+    const note = t => (t.match(/\[app\] autosave: [^\n]*/) ?? [null])[0];
+    report('autosave', before?.[AUTOSAVE] === 0 && after?.[AUTOSAVE] === 1 && changed.includes(AUTOSAVE) && changed.every(i => i === AUTOSAVE || checks(i)) &&
+      /\[app\] autosave: ROTEST: Autosave set from Off to On/.test(log1) && /Autosave is now on for ROTEST: .*\(Options, Gameplay, Autosave\)/.test(l.toast ?? '') &&
+      /^ROTEST$/m.test(seen?.text ?? '') && l.exit?.code === 0 && l.loaded && l2.exit?.code === 0 && l2.loaded && !/\[app\] autosave: ROTEST/.test(log2),
+      { byteBefore: before?.[AUTOSAVE] ?? null, byteAfter: after?.[AUTOSAVE] ?? null, changed: changed.filter(i => !checks(i)), toast: l.toast,
+        note: note(log1), seen: seen?.text?.split('\n').filter(x => x && !x.startsWith('#')), loaded: l.loaded, exit: l.exit,
+        again: { loaded: l2.loaded, exit: l2.exit, note: note(log2) } });
+    await p5.close();
   }
 }
 

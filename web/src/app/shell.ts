@@ -41,7 +41,7 @@ import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRemoved } from '../net';
 import { blockList, checkSetting, DEFAULTS, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
 import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, writeFile } from './savefs';
-import { turnOnAutosave } from '@game/profile';
+import { AUTOSAVE_ON, turnOnAutosave } from '@game/profile';
 import { FILE_PREFIX, LOG_MARK } from '@game/run';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, queueText, roomHash, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
@@ -722,7 +722,7 @@ async function startGame() {
   const key = cap(menuKey());
   const hint = offlineNote + (fsNote || (full ? (touchFirst() ? t('{key} opens the menu.', { key }) : t('{key} opens the menu. Hold Esc to leave full screen.', { key }))
     : t('{key} opens the menu: full screen, controls, quit.', { key })));
-  if (autosaved.length) toast(t('Autosave is now on for {names} (Options, Gameplay, Save). {hint}', { names: listOf(autosaved), hint }), 9000);
+  if (autosaved.length) toast(t(AUTOSAVE_ON, { names: listOf(autosaved), hint }), 9000);
   else toast(hint, 6000);
   void st.exited.then(code => { clearInterval(waitStatus); onExit(st, code); });
   // Chrome may keep the sound off until a click or a key press (its autoplay

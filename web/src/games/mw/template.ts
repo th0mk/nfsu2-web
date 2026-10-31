@@ -43,6 +43,14 @@ export const TEMPLATE = `# NFS Most Wanted settings, read at every launch.
 # [NFSU2_LANGUAGE]
 #language = english
 
+# Autosave: before Play, every alias with the game's Autosave off (the game's
+# "Do you want to save the alias?" opens on No, and No turns it off) is set
+# to Autosave once, so the game saves by itself after races and events.  An
+# alias gets it at the first Play after it was saved; turn it off in the
+# game's Options, Gameplay and that choice stays.  off = aliases keep what
+# the game has.  [NFSU2_AUTOSAVE]
+#autosave = on
+
 # Sound output.  [NOSOUND, inverted]
 #sound = on
 

@@ -990,6 +990,8 @@
   "Download": "Lataa",
   "Support the project": "Tue projektia",
   "Donate on Ko-fi": "Lahjoita Ko-fissa",
+  "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "Automaattitallennus on nyt päällä: {names}. Peli tallentaa itsestään (Asetukset, Pelattavuus, Automaattitallennus). {hint}",
+  "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "Kytkee kunkin aliaksen automaattitallennuksen pelissä päälle kerran, joten kisat ja tapahtumat tallennetaan kysymättä. Myöhemmin pelin kohdassa Asetukset, Pelattavuus valittu Pois pysyy.",
   "You were away, so you left multiplayer and freed your place on the server. Press any key or button to rejoin.": "Olit poissa, joten poistuit moninpelistä ja paikkasi palvelimella vapautui. Paina mitä tahansa näppäintä tai painiketta liittyäksesi takaisin.",
   "Still there? You leave multiplayer in {n} s. Press any key or button to stay.": "Vielä paikalla? Poistut moninpelistä {n} sekunnin kuluttua. Paina mitä tahansa näppäintä tai painiketta jäädäksesi.",
   "Couldn't load the changelog.": "Muutoslokia ei voitu ladata.",

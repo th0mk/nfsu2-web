@@ -1,6 +1,6 @@
 // Most Wanted's settings rows (src/app/settings-ui.ts): the help texts it words its own way, where the panel's say what
 // Underground 2's files do (its language table, boot movies, frame rate in Online and LAN races and cutscenes, and its
-// own rumble).  The rows themselves are the keys its template lists (template.ts).  What each says: the language,
+// own rumble, the Save option it calls Autosave).  The rows themselves are the keys its template lists (template.ts).  What each says: the language,
 // runtime/mw/registry_mw.c; the startup movies, runtime/mw/intro_mw.c; the frame rate, runtime/mw/framerate_mw.c.
 import { N } from '../../app/i18n';
 
@@ -11,4 +11,5 @@ export const HELP: Readonly<Record<string, string>> = {
   fps: N('Auto follows the display (120 on a 120 Hz screen, 240 on a 240 Hz one). 30 is steadier where 60 stutters, and easier on the battery.'),
   background: N('Pause freezes the game and its sound, as alt-tab does on Windows.'),
   rumble: N('The game\'s own force feedback, on controllers that have rumble.'),
+  autosave: N('Turns each alias\'s Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game\'s Options, Gameplay stays.'),
 };

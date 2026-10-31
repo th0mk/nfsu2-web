@@ -1,0 +1,40 @@
+# Most Wanted: the Autosave option's place in the alias save, the run with it Off (TRACKER M6-56; the one with it On,
+# and how the two compare: autosave_on.txt).  From a first start: ALPHA made, No to "Do you want to save the alias
+# ALPHA?" ("The autosave feature has been disabled.", OK: nothing written), then the main menu's Alias Manager (its
+# 7th item, 0x4B4E3890; MC_ProfileManager.fng: Create, Load, Save, Delete, on Create 0x4B4E388A), Save (0x4B4E388C):
+# "Are you sure you want to save the alias named ALPHA?" (No highlighted): Yes, "Save complete.".
+#   node web/tools/run-suite.mjs --game mw --script autosave_off.txt --marker 'autosave_off: ALPHA saved' \
+#     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=6000 --save-out DIR
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tapuntil RETURN MC_Main.fng:4f876b6f 30 300         # (a RETURN this soon after the note can be dropped, L-229)
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype ALPHA
++0    waitfng MC_Main.fng'ALPHA 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ALPHA?  (No)
++0    tap RETURN                                         # No
++0    waitfng MC_Main.fng'autosave_feature_has_been_disabled 600
++0    tapuntil RETURN MainMenu.fng@4b4e388a 30 900       # OK, then the main menu, on Career
++0    log autosave_off: declined
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388c 30 300   # Save
++0    tap RETURN
++0    waitfng MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cc 600   # save the alias named ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cd 30 300   # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng 600
++0    log autosave_off: ALPHA saved
++0    close

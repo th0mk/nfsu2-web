@@ -105,7 +105,7 @@ export class Privacy {
     if (l.startsWith('[online] ') && (m = /^\[online\] Online menu as (.+) \([^)]*\): /.exec(l))) return got(m[1], 'you');
     if (l.startsWith('[app] ')) {
       if ((m = /^\[app\] the game saved profile (.+) \(\d+ this game\)$/.exec(l))) return got(m[1], 'profile');
-      if ((m = /^\[app\] autosave: (.+?)(?:: Save | left as it is|: \d+ bytes|: the name inside)/.exec(l))) return got(m[1], 'profile');
+      if ((m = /^\[app\] autosave: (.+?)(?:: Save |: Autosave | left as it is|: \d+ bytes|: the name inside)/.exec(l))) return got(m[1], 'profile');
       if ((m = /^\[app\] settings\.ini:\d+: roam_(name|room|crew) -> NFSU2_ROAM_\w+=(.*)$/.exec(l))) {
         if (m[1] === 'crew') for (const c of crewList(m[2])) this.name(c, 'crew');
         else this.name(m[2], m[1] === 'name' ? 'you' : 'room');

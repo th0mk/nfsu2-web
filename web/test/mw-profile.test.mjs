@@ -200,6 +200,37 @@ test('restore: Underground 2\'s saves are refused, by any of its marks; Most Wan
   assert.deepEqual([bare.other, bare.kind, bare.refused.map(x => x.name)], [undefined, 'profiles', ['ug2']]);
 });
 
+test('turnOnAutosave: an alias with Autosave off is set on once, sealed again; one on, or refused, is left', async () => {
+  const off = Buffer.from(alias('ALPHA')); off[0x5B55] = 0; const offS = seal(off);
+  const on = Buffer.from(alias('BRAVO')); on[0x5B55] = 1; const onS = seal(on);
+  const odd = Buffer.from(alias('CHARLIE')); odd[0x5B55] = 7; const oddS = seal(odd);
+  const f = memFs({ [at('ALPHA')]: offS, [at('BRAVO')]: onS, [at('CHARLIE')]: oddS, [at('DELTA')]: alias('ECHO') });
+  assert.deepEqual(P.readAutosave(offS, 'ALPHA'), { on: false });
+  assert.deepEqual(P.readAutosave(onS, 'BRAVO'), { on: true });
+  const r1 = await P.turnOnAutosave(f, DIR);
+  assert.deepEqual(r1.turnedOn, ['ALPHA']);
+  assert.equal(r1.notes.length, 4, r1.notes.join('; '));
+  assert.ok(r1.notes.some(n => n === 'ALPHA: Autosave set from Off to On (Options, Gameplay, Autosave in the game)'));
+  assert.ok(r1.notes.some(n => /^CHARLIE left as it is: unexpected Autosave byte 7$/.test(n)), r1.notes.join('; '));
+  assert.ok(r1.notes.some(n => /^DELTA left as it is: the name inside is "ECHO"$/.test(n)), r1.notes.join('; '));
+  const a = f.m.get(at('ALPHA'));
+  assert.equal(a[0x5B55], 1);
+  assert.deepEqual(P.profileName(a), { name: 'ALPHA', edited: false }, 'sealed again: the game takes it');
+  const diff = [...a].map((x, i) => x !== offS[i] ? i : -1).filter(i => i >= 0 && !(i >= 0x10 && i < 0x1C) && !(i >= 0x34 && i < 0x44) && !(i >= 0xF85C));
+  assert.deepEqual(diff, [0x5B55], 'only the byte and the checks change');
+  assert.equal(f.m.get(at('BRAVO')), onS, 'on already: not written');
+  const seen = () => new TextDecoder().decode(f.m.get(P.AUTOSAVE_SEEN)).split('\n').filter(l => l && !l.startsWith('#'));
+  assert.deepEqual(seen().sort(), ['ALPHA', 'BRAVO']);
+  // the player turns it off again in the game: it stays off
+  const again = Buffer.from(a); again[0x5B55] = 0; f.m.set(at('ALPHA'), seal(again));
+  assert.deepEqual((await P.turnOnAutosave(f, DIR)).turnedOn, []);
+  assert.equal(f.m.get(at('ALPHA'))[0x5B55], 0);
+  // a name taken off the list is looked at again
+  f.m.set(P.AUTOSAVE_SEEN, enc.encode('BRAVO\n'));
+  assert.deepEqual((await P.turnOnAutosave(f, DIR)).turnedOn, ['ALPHA']);
+  assert.match(P.AUTOSAVE_ON, /\(Options, Gameplay, Autosave\)/);
+});
+
 // ---------------------------------------------------------------- real saves --
 
 const SAVES = process.env.NFSMW_SAVES || path.join(ROOT, 'out/career/seeds');
@@ -229,6 +260,7 @@ test(`real saves: the game's own pass every check, and seal again to themselves 
     assert.deepEqual(P.profileName(f.m.get(at('RENAMED'))), { name: 'RENAMED', edited: false }, id);
     assert.deepEqual(await P.renameProfile(f, DIR, 'RENAMED', s.name), { files: 1 }, id);
     assert.equal(hex(f.m.get(at(s.name))), hex(s.data), `${id}: renamed back, it is the game's own file again`);
+    assert.deepEqual(P.readAutosave(s.data, s.name), { on: true }, `${id}: a saved alias is on Autosave (GAME.md 10.4)`);
   }
   const money = Object.fromEntries(real.map(s => [`${s.tree}/${s.name}`, P.profileMoney(s.data)]));
   if ('bin15_start/ALPHA' in money) assert.equal(money['bin15_start/ALPHA'], 3000, 'the first safehouse\'s Cash 3,000');

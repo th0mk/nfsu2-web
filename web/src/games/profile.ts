@@ -143,6 +143,9 @@ export interface SaveFormat {
   turnOnAutosave(fs: SaveFiles, profilesDir: string): Promise<{ turnedOn: string[]; notes: string[] }>;
   /** the save folder's file of the profiles turnOnAutosave has looked at */
   readonly AUTOSAVE_SEEN: string;
+  /** what the page says when turnOnAutosave set profiles ({names}) to Autosave, before its own hint ({hint}): where
+   *  the game's option is (English; translated where shown) */
+  readonly AUTOSAVE_ON: string;
 }
 
 /** T, which tsc checks is a whole SaveFormat: each '@game/profile''s `export type Checked = Saves<typeof self>` */

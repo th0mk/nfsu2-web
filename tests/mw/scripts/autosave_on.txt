@@ -1,0 +1,30 @@
+# Most Wanted: where the alias save keeps the Autosave option (TRACKER M6-56).  Two runs from a first start make the
+# alias ALPHA, each with the game's own saves: this one answers Yes to "Do you want to save the alias ALPHA?" (the
+# save has Autosave On, GAME.md 10.4); autosave_off.txt answers No ("The autosave feature has been disabled.") and
+# then saves ALPHA from the Alias Manager, Autosave Off.  The two files, compared, differ in their checks (the
+# container's CRCs, the two MD5s) and in the option's bytes (web/tools/mw-autosave-diff.py).
+#   node web/tools/run-suite.mjs --game mw --script autosave_on.txt --marker 'autosave_on: ALPHA saved' \
+#     --env FILELIST=1 --env NFSU2_QUIT_FRAMES=6000 --save-out DIR
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tapuntil RETURN MC_Main.fng:4f876b6f 30 300         # (a RETURN this soon after the note can be dropped, L-229)
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype ALPHA
++0    waitfng MC_Main.fng'ALPHA 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log autosave_on: ALPHA saved
++0    close

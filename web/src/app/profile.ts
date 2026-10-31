@@ -200,6 +200,8 @@ export function withName(file: Uint8Array, name: string): Uint8Array {
 
 /** The save folder's file of the profiles turnOnAutosave has looked at: each one gets Autosave once. */
 export const AUTOSAVE_SEEN = 'autosave-profiles.txt';
+/** the page's word on the profiles set ({names}), before its hint ({hint}) */
+export const AUTOSAVE_ON = N('Autosave is now on for {names} (Options, Gameplay, Save). {hint}');
 const SEEN_HEAD = `# Profiles the page has looked at for settings.ini's "autosave": each one is set
 # to Autosave once (if it was on Prompt, the game's default), then left as the
 # game's Options, Gameplay, Save set it.  Delete a name to have it set again.

@@ -13,15 +13,18 @@
 // a new alias's, and grows with the career in the later saves (the nine career seeds, 2026-10-30); taken as the bank.
 //   The name field (2026-10-30, a typed "aB3_-.!x y0123..." came out as the folder aB3xy01): letters in either case and
 // digits, at most 7; the rest is dropped.  So the rules are Underground 2's, and its texts say them.
-//   Not known yet, so not done: where the Save option (Options, Gameplay, Autosave) is in the file (GAME.md 10.4: a new
-// saved alias is on Autosave already, and one the player declined to save is not written at all, so the page has
-// nothing to turn on), the car records (no mod-car check; M6-27 validates the career's tables at load), and which
-// version of the game wrote a file (the spec's saves are v1.3's; any 63,596-byte container of this shape is taken).
+//   The Autosave option (Options, Gameplay, Autosave) is the byte 0x5B55: 1 On, 0 Off.  Two saves the game wrote of
+// one new alias, one saved at its creation (On) and one declined there ("The autosave feature has been disabled.")
+// and saved from the Alias Manager (Off), differ in it and in their checks only, apart from a table at 0x48C1 the game
+// fills once the main menu is up (tests/mw/scripts/autosave_on.txt, autosave_off.txt); every career seed has it 1.
+//   Not known yet, so not done: the car records (no mod-car check; M6-27 validates the career's tables at load), and
+// which version of the game wrote a file (the spec's saves are v1.3's; any 63,596-byte container of this shape is
+// taken).
 //   Pure (no DOM, no OPFS) so it can be checked under node; renameProfile takes the save folder's file functions.
 import type * as self from './profile';
 import type { Saves } from '../profile';
 import type { RenameFiles, SaveFiles } from '../../app/profile';
-import { N, t, type Vars } from '../../app/i18n';
+import { fill, N, t, type Vars } from '../../app/i18n';
 import { checksum, isMemcardFile } from '../../app/memcard';
 import { md5 } from '../../app/md5';
 
@@ -32,7 +35,7 @@ export const PROFILE_SIZE = 0xF86C;                  // 63,596
 const SIZE_A = 8, SIZE_B = 0xF848, VERSION = 0x10D;
 const B = 0x24;                                      // block B's start in the file
 const MD5_HEAD = 0x34, HEAD_FROM = 0x44, HEAD_TO = 0x4034, MD5_TAIL = 0xF85C;
-const MONEY = 0x4039, NAME = 0x5A31, NAME_BYTES = 0x24;
+const MONEY = 0x4039, NAME = 0x5A31, NAME_BYTES = 0x24, AUTOSAVE = 0x5B55;
 
 const u32 = (f: Uint8Array, at: number) => new DataView(f.buffer, f.byteOffset, f.byteLength).getUint32(at, true);
 const lowerAscii = (s: string) => s.replace(/[A-Z]/g, c => String.fromCharCode(c.charCodeAt(0) + 32));
@@ -123,13 +126,60 @@ export function withName(file: Uint8Array, name: string): Uint8Array {
 
 // ------------------------------------------------------------ autosave --
 
-/** Underground 2's list of the profiles it set to Autosave; Most Wanted's page keeps none. */
+/** The save folder's file of the aliases turnOnAutosave has looked at: each one gets Autosave once. */
 export const AUTOSAVE_SEEN = 'autosave-profiles.txt';
+/** the page's word on the aliases set ({names}), before its hint ({hint}) */
+export const AUTOSAVE_ON = N('Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}');
+const SEEN_HEAD = `# Aliases the page has looked at for settings.ini's "autosave": each one is set
+# to Autosave On once (if it was Off), then left as the game's Options,
+# Gameplay, Autosave set it.  Delete a name to have it set again.
+`;
 
-/** Nothing to do: a new alias the player saves is on Autosave already (GAME.md 10.4), and the option's place in the
- *  file is not known, so the page leaves every alias as the game's Options set it. */
-export async function turnOnAutosave(_fs: SaveFiles, _profilesDir: string): Promise<{ turnedOn: string[]; notes: string[] }> {
-  return { turnedOn: [], notes: [] };
+/** An alias's Autosave option (Options, Gameplay, Autosave), or why the page does not read it (English: the log's). */
+export function readAutosave(file: Uint8Array, name: string): { on: boolean } | { bad: string } {
+  const bad = checkProfile(file, name);
+  if (bad) return { bad: fill(bad.t, bad.v) };
+  if (file[AUTOSAVE] > 1) return { bad: `unexpected Autosave byte ${file[AUTOSAVE]}` };
+  return { on: file[AUTOSAVE] === 1 };
+}
+
+/** A copy of an alias save with Autosave On, sealed again. */
+export function withAutosave(file: Uint8Array): Uint8Array {
+  const f = file.slice();
+  f[AUTOSAVE] = 1;
+  return seal(f);
+}
+
+/**
+ * Before a Play (no game runs in this tab): every alias not looked at yet that has Autosave Off is set to On, as
+ * Underground 2's page sets a profile on Prompt (src/app/profile.ts): the game's question "Do you want to save the
+ * alias?" opens on No, and No turns Autosave off (GAME.md 10.4), so an alias saved later from the Alias Manager loses
+ * every race until the player finds the option.  Aliases on Autosave, and those set, are remembered (AUTOSAVE_SEEN),
+ * so a choice made in the game later stays; a file the checks refuse is left alone and looked at again next time.
+ * Names of aliases that are gone are dropped.  turnedOn: the aliases set now; notes: one line each for the log.
+ */
+export async function turnOnAutosave(fs: SaveFiles, profilesDir: string): Promise<{ turnedOn: string[]; notes: string[] }> {
+  const seenText = await fs.readText(AUTOSAVE_SEEN) ?? '';
+  const seen = new Set(seenText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')));
+  const turnedOn: string[] = [], notes: string[] = [], now: string[] = [];
+  for (const { path } of await fs.listFiles()) {
+    const p = path.split('/');
+    if (p.length !== 3 || p[0] !== profilesDir || lowerAscii(p[2]) !== lowerAscii(p[1])) continue;
+    const name = p[1];
+    if (seen.has(name)) { now.push(name); continue; }
+    const file = await fs.readBytes(path);
+    const r = readAutosave(file, name);
+    if ('bad' in r) { notes.push(`${name} left as it is: ${r.bad}`); continue; }
+    if (!r.on) {
+      await fs.writeFile(path, withAutosave(file));
+      turnedOn.push(name);
+      notes.push(`${name}: Autosave set from Off to On (Options, Gameplay, Autosave in the game)`);
+    } else notes.push(`${name}: Autosave is On already, left as it is`);
+    now.push(name);
+  }
+  const text = SEEN_HEAD + now.map(n => n + '\n').join('');
+  if (text !== seenText && (now.length || seenText)) await fs.writeFile(AUTOSAVE_SEEN, text);
+  return { turnedOn, notes };
 }
 
 // -------------------------------------------------------------- rename --
