@@ -96,9 +96,11 @@ the car's that the shop takes, once a bin and again when the cash has grown), en
 game's AI race them from their GO (a lost race is raced again in its turn; a car the AI wedges is put back on the
 road by the game's RESET, `carreset`), earns milestones and bounty in pursuits (the AI drives about until the cops
 start one; Game.ForcePursuitStart at the bin's top heat after 60 s of game time without one; a chase lost too early
-is rejoined where it was, and one that ran 300 s (in a bin with a pursuit_length milestone the largest goal it can
-draw and 30 s: 630 s at bin 8) or boxed the car in is broken off by setting the car far away, not where the pursuit's
-last two escapes went, so the game ends it as evaded), then engages the rival's challenge at its first race's start
+is rejoined where it was (then where the cops search), and one that ran 300 s (in a bin with a pursuit_length
+milestone the largest goal it can draw and 30 s: 630 s at bin 8) or boxed the car in is broken off by setting the car
+far away, not where the pursuit's last two escapes went nor where a warp trapped or threw the car, and once it has run
+that long the car stands in the nearest hiding spot in the cops' search, so the game ends it as evaded; a car off the
+world is set back at a race's place), then engages the rival's challenge at its first race's start
 (InGameRivalChallenge.fng: Enter accepts; a lost one again, after the shop when the cash reaches a package, and after
 two lost in one car in the other of the two best cars, taken at the safehouse), takes two of the beaten rival's markers
 (SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type;
