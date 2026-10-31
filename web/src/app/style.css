@@ -72,6 +72,35 @@ html[data-touch] .key-only, html:not([data-touch]) .touch-only { display: none; 
 .donate svg { fill: var(--bad); }
 .top > .bar { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; height: 4px; border-radius: 0; background: none; }
 .top > .bar .bar-fill { border-radius: 0 2px 2px 0; }
+/* the top bar above the page (src/games/site.mjs, TRACKER M6-53, design M6-52 option A): the two games as tabs in
+   the Controls tabs' look, the current one lime with the 3 px underline on the strip's bottom edge; the language
+   picker and Discord on the right, 8 apart; the strip's content on the page's columns (.app's width and padding) */
+.site-bar { background: var(--frame); }
+.site-bar-in {
+  max-width: 1184px; margin: 0 auto; padding: 0 32px;
+  display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px;
+}
+.site-tabs { display: flex; align-self: stretch; gap: 8px; }
+.site-tab {
+  display: flex; align-items: center; height: 56px; padding: 0 8px;
+  color: var(--muted); font: italic 700 16px/24px var(--font); text-decoration: none; white-space: nowrap;
+}
+.site-tab[href]:hover { color: var(--text); }
+.site-tab[aria-current="page"] { color: var(--lime); box-shadow: inset 0 -3px var(--lime); }
+.site-tab:focus-visible { outline-offset: -2px; }
+.site-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; padding: 8px 0; }
+@media (max-width: 959px) {
+  .site-bar-in { padding: 0 16px; }
+}
+/* narrower than one row needs: the tabs across the strip in two halves on a divider, the picker and Discord on the
+   line under them, still at the right; a name that wraps takes two lines */
+@media (max-width: 799px) {
+  .site-tabs { flex: 1 1 100%; box-shadow: inset 0 -1px var(--line); }
+  .site-tab {
+    flex: 1 1 0; justify-content: center; height: auto; min-height: 56px; padding: 8px;
+    text-align: center; white-space: normal;
+  }
+}
 .side, .content { display: grid; gap: 24px; min-width: 0; }
 .panel { background: var(--panel); border-radius: 12px; padding: 24px; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

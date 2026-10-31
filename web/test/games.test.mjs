@@ -94,6 +94,7 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   const build = (...args) => spawnSync(process.execPath, [path.join(root, 'build.mjs'), ...args], { cwd: os.tmpdir(), encoding: 'utf8', env: { ...process.env, NOMINIFY: '' } });
   w('index.html', '<!doctype html><title>made up</title>');
   w('src/static/manifest.json', '{}');
+  w('src/games/site.mjs', fs.readFileSync(path.join(WEB, 'src/games/site.mjs'), 'utf8'));
   w('src/main.ts', 'import { GAME } from \'@game\';\nimport { NAME } from \'@game/names\';\nconsole.log(`the page of ${GAME}, ${NAME}`);\n');
   w('src/games/ug2/index.ts', 'export const GAME = \'ug2\';\n');
   w('src/games/ug2/names.ts', 'export const NAME = \'name-of-ug2\';\n');
@@ -164,7 +165,7 @@ test('Most Wanted\'s page body: its name, keys and panels, no Underground 2 text
   assert.doesNotMatch(body, /Underground 2(?! Revived)|Hydraulics|Drift mode|Quick chat|outrun|Photo mode|Garage &gt; Save/);
   // its own changes, about and credits (TRACKER M6-11; the changes at the top of About since main folded its Changes
   // panel in), none of Underground 2's paragraphs
-  assert.match(body, /<section class="panel" id="about"[^]*?version 1\.3[^]*?makers of Underground 2 Revived[^]*?ko-fi\.com[^]*?legal@nfsrevived\.xyz[^]*?same static recompiler/);
+  assert.match(body, /<section class="panel" id="about"[^]*?version 1\.3[^]*?makers of Underground 2 Revived[^]*?ko-fi\.com[^]*?legal@nfsrevived\.com[^]*?same static recompiler/);
   assert.doesNotMatch(body, /Drive with friends|My brother|legal@nfsu2\.xyz|language packs|240 fps|WidescreenFix/);
   assert.match(body, /<section class="panel" id="online" aria-labelledby="online-title" hidden>/);
   assert.match(body, /<kbd>G<\/kbd><\/dt><dd data-i18n>Speedbreaker<\/dd>/);

@@ -167,6 +167,13 @@ let misses = 0, answered = false;
 /** the profile the running (or last) game saved last, when, and how often it saved one */
 let saved: { name: string; at: number; count: number } | null = null;
 
+/** the top bar (src/games/site.mjs: above #app, on the pages that have it) as #app is while a game runs: behind it,
+ *  out of the focus order and screen readers */
+function siteBarInert(on: boolean) {
+  const bar = document.getElementById('site-bar');
+  if (bar) bar.inert = on;
+}
+
 // ------------------------------------------------------------- progress --
 function setProgress(f: number) {
   const v = Math.max(0, Math.min(1, f));
@@ -555,6 +562,7 @@ async function startGame() {
   const stage = $('#stage');
   stage.hidden = false;
   $('#app').inert = true;             // the start page is behind the game: out of the focus order and screen readers
+  siteBarInert(true);
   const canvas = stageCanvas();
   untrack = trackCanvasSize(canvas);
   awake = keepScreenOn(logLine);
@@ -912,6 +920,7 @@ function endStage() {
   $('#stage').hidden = true;
   $('#stage').querySelector('canvas')?.remove();
   $('#app').inert = false;
+  siteBarInert(false);
 }
 
 function onExit(s: GameSession, code: number) {

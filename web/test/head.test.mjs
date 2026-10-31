@@ -8,11 +8,11 @@
 //    but for its own edits (src/games/mw/body.json, as web/tools/i18n-keys.mjs pageHtml makes them), and in the head no value of Underground 2's (its name, texts, keywords, favicon) but those both pages share (the
 //    AdSense account, PLAN F-216; the charset, viewport, colours, robots, the links' file names).
 // 3. Most Wanted's head has its title, description, Open Graph and Twitter tags, canonical and og:url
-//    https://nfsrevived.xyz/mw/, a favicon, the manifest and icon links, and JSON-LD that parses.
+//    https://nfsrevived.com/mw/, a favicon, the manifest and icon links, and JSON-LD that parses.
 // 4. Its manifest: its name, start_url and scope './', no id (each base's id is its start_url: D-38), icons that are its
 //    own PNGs of the sizes it says.
 // 5. In Chrome (web/tools/browser.mjs), the page served under /mw/: the manifest's computed id is the base, as it is
-//    https://nfsrevived.xyz/mw/ there.  Skipped without Chrome or Playwright's Chromium.
+//    https://nfsrevived.com/mw/ there.  Skipped without Chrome or Playwright's Chromium.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -73,7 +73,7 @@ test('Most Wanted\'s head: its own, no value of Underground 2\'s; the rest of th
   const mine = Object.fromEntries(values(mh));
   assert.equal(mine.title, 'Most Wanted Revived');
   for (const k of ['application-name', 'og:site_name', 'og:title', 'twitter:title', 'ld.name']) assert.equal(mine[k], 'Most Wanted Revived', k);
-  for (const k of ['link canonical', 'og:url', 'ld.url']) assert.equal(mine[k], 'https://nfsrevived.xyz/mw/', k);
+  for (const k of ['link canonical', 'og:url', 'ld.url']) assert.equal(mine[k], 'https://nfsrevived.com/mw/', k);
   for (const k of ['description', 'og:description', 'twitter:description', 'ld.description']) assert.match(mine[k], /^.*Need for Speed: Most Wanted \(2005\)/, k);
   for (const k of ['description', 'og:description', 'twitter:description']) assert.match(mine[k], /Fan project, not affiliated with Electronic Arts\.$/, k);
   assert.equal(mine['google-adsense-account'], 'ca-pub-5817610257612647');

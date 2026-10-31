@@ -23,7 +23,7 @@
     "put": "<p data-i18n>A fan project from the makers of Underground 2 Revived: Most Wanted as it was on the PC, in the browser, with nothing to install.</p>" },
   { "why": "",
     "at": "<p data-i18n-html>Rights holders: <a href=\"mailto:legal@nfsu2.xyz\">", "until": "</p>",
-    "put": "<p data-i18n-html>Rights holders can email <a href=\"mailto:legal@nfsrevived.xyz\">legal@nfsrevived.xyz</a>. Support emails won't be answered: for help, ask on <a href=\"https://discord.gg/25zXmQ2Ua9\" target=\"_blank\" rel=\"noopener noreferrer\">our Discord</a>.</p>" },
+    "put": "<p data-i18n-html>Rights holders can email <a href=\"mailto:legal@nfsrevived.com\">legal@nfsrevived.com</a>. Support emails won't be answered: for help, ask on <a href=\"https://discord.gg/25zXmQ2Ua9\" target=\"_blank\" rel=\"noopener noreferrer\">our Discord</a>.</p>" },
   { "why": "Credits (M6-11): the recompiler; no language packs or texture pack of Underground 2's",
     "at": "<p data-i18n-html>Source code on <a href=\"https://github.com/th0mk/nfsu2-web\"", "until": "</p>",
     "put": "<p data-i18n-html>The source code is on <a href=\"https://github.com/th0mk/nfsu2-web\" target=\"_blank\" rel=\"noopener noreferrer\">GitHub</a>. This port uses the same static recompiler as Underground 2 Revived, which is based on <a href=\"https://github.com/TalhaMudo/NFSU2Recomp\" target=\"_blank\" rel=\"noopener noreferrer\">NFSU2Recomp</a> by Talha Müderrisoğlu, following the method of <a href=\"https://github.com/N64Recomp/N64Recomp\" target=\"_blank\" rel=\"noopener noreferrer\">N64: Recompiled</a> and <a href=\"https://github.com/hedge-dev/XenonRecomp\" target=\"_blank\" rel=\"noopener noreferrer\">XenonRecomp</a>.</p>" },

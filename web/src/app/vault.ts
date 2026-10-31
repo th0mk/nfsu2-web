@@ -13,8 +13,9 @@
 // - what is sent (kept()): the save folder but the F12 screenshots, the DVD and magazine covers, the game's graphics
 //   options (registry.txt), the LAN server's file (gamefile.bin), a test's input script and the device's own lines of
 //   settings.ini, as a stored zip (zip.ts), deflated, then sealed: a version byte (1), a 12-byte IV, the AES-256-GCM
-//   ciphertext and its tag.  A player's folder is 6-14 KB so; the server takes 256 KB.  A cover is a picture of 1 MB
-//   that packs into about 500 KB (2026-10-25: since the covers are read back from the GPU, no longer all zeros), so the
+//   ciphertext and its tag.  A player's folder is 6-14 KB so (a Most Wanted profile 9-11 KB); the server takes
+//   256 KB.  A cover is a picture of 1 MB that packs into about 500 KB (2026-10-25: since the covers are read back
+//   from the GPU, no longer all zeros), so the
 //   covers stay in the browser that took them: taking another browser's version keeps the ones of its profiles here.
 //   The graphics options and settings.ini's resolution scale, frame rate, controller and the like (settings.ts
 //   KeyDef.device) are the device's, not the player's: a phone's would slow a PC down and a PC's a phone, so each

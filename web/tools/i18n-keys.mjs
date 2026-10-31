@@ -16,6 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hasBar, withSiteBar } from '../src/games/site.mjs';
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -160,7 +161,8 @@ export function catalog(game = 'ug2', root = WEB) {
 }
 
 /** index.html as a game's page has it: with the edits of its src/games/<id>/body.json made, as web/build.mjs makes
- *  them (each "at" once in the page, "until" the end of the cut after it); throws where one does not fit */
+ *  them (each "at" once in the page, "until" the end of the cut after it), and the top bar where it has one
+ *  (src/games/site.mjs); throws where one does not fit */
 export function pageHtml(game = 'ug2', root = WEB) {
   let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const body = path.join(root, 'src/games', game, 'body.json');
@@ -169,6 +171,8 @@ export function pageHtml(game = 'ug2', root = WEB) {
     if (a < 0 || html.indexOf(e.at, a + 1) >= 0 || u < 0) throw new Error(`games/${game}/body.json: "${e.at.trim().slice(0, 80)}" does not fit index.html`);
     html = html.slice(0, a) + e.put + html.slice(e.until === undefined ? u : u + e.until.length);
   }
+  const launch = path.join(root, 'src/games', game, 'launch.ts');
+  if (hasBar(game, fs.existsSync(launch) ? fs.readFileSync(launch, 'utf8') : null)) html = withSiteBar(html, game);
   return html;
 }
 

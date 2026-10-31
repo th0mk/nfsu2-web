@@ -10,6 +10,7 @@ import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hasBar, withSiteBar } from './src/games/site.mjs';
 // the paths below are web/'s, also when this runs from elsewhere (node web/build.mjs)
 process.chdir(path.dirname(fileURLToPath(import.meta.url)));
 const watch = process.argv.includes('--watch');
@@ -83,10 +84,13 @@ fs.mkdirSync(DIST, { recursive: true });
 // game whose page body differs (src/games/<id>/body.json: the site's name, the keys it has, the parts of the page
 // that are another game's) has its edits made in it: each one's "at" text, which index.html must have once, and
 // with "until" the text up to the end of that text's first occurrence after it, in place of "put" (web/tools/
-// i18n-keys.mjs reads the page's texts after the same edits).
+// i18n-keys.mjs reads the page's texts after the same edits).  Then the top bar (src/games/site.mjs: both games'
+// tabs, the language picker and Discord), on Most Wanted's page always and on Underground 2's once its launch switch
+// is on (src/games/ug2/launch.ts): until then its index.html is web/index.html's bytes.
 const HEAD = path.join('src/games', GAME, 'head.html'), OWN_STATIC = path.join('src/games', GAME, 'static');
-const BODY = path.join('src/games', GAME, 'body.json');
-if (!fs.existsSync(HEAD) && !fs.existsSync(BODY)) fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
+const BODY = path.join('src/games', GAME, 'body.json'), LAUNCH = path.join('src/games', GAME, 'launch.ts');
+const BAR = hasBar(GAME, fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : null);
+if (!fs.existsSync(HEAD) && !fs.existsSync(BODY) && !BAR) fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
 else {
   let html = fs.readFileSync('index.html', 'utf8');
   const MAIN = '<script type="module" src="main.js"></script>';
@@ -106,7 +110,17 @@ else {
     }
     html = html.slice(0, a) + e.put + html.slice(e.until === undefined ? u : u + e.until.length);
   }
+  if (BAR) html = withSiteBar(html, GAME);
   fs.writeFileSync(path.join(DIST, 'index.html'), html);
+}
+// the site's page (https://nfsrevived.com/, src/site: both games, their links), in Most Wanted's page folder, whose
+// server answers it at the root (web/server-rs src/game.rs landing), with each game's icon beside it
+fs.rmSync(path.join(DIST, 'site'), { recursive: true, force: true });
+if (GAME === 'mw') {
+  fs.mkdirSync(path.join(DIST, 'site'));
+  for (const f of fs.readdirSync('src/site')) fs.copyFileSync(path.join('src/site', f), path.join(DIST, 'site', f));
+  fs.copyFileSync('src/static/icon-192.png', path.join(DIST, 'site', 'u2.png'));
+  fs.copyFileSync('src/games/mw/static/icon-192.png', path.join(DIST, 'site', 'mw.png'));
 }
 const STATIC = fs.existsSync(OWN_STATIC) ? OWN_STATIC : 'src/static';
 for (const f of fs.readdirSync(STATIC)) fs.copyFileSync(path.join(STATIC, f), path.join(DIST, f));

@@ -1,0 +1,68 @@
+/* The site's page (https://nfsrevived.com/): both games, in the start pages' look.  Only the start pages' own tokens
+   and parts (web/src/app/style.css: the header card, the panels, Play, the buttons), copied here: this page loads
+   neither game's stylesheet. */
+:root {
+  --bg: #0d0d0d;
+  --frame: #171717;
+  --panel: #262626;
+  --edge: #8a8a8a;
+  --text: #ffffff;
+  --muted: #c4c4c4;
+  --lime: #c8f088;
+  --lime-fill: #404038;
+  --lime-glow: rgba(200, 240, 136, 0.45);
+  --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  min-height: 100vh;
+  background: radial-gradient(1200px 480px at 50% -160px, #2a2a2a, transparent 70%) no-repeat, var(--bg);
+  color: var(--text);
+  font: 400 16px/24px var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, p { margin: 0; }
+h1, h2, .btn, .play { font-style: italic; font-weight: 700; }
+a { color: var(--lime); text-underline-offset: 4px; }
+.hint { color: var(--muted); font-size: 14px; line-height: 20px; }
+
+/* the header card and two panels, the start page's columns: 1184 wide at most, 24 apart */
+.site {
+  max-width: 1184px; margin: 0 auto; padding: 24px 32px 48px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: stretch;
+}
+.top {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px;
+  background: var(--frame); border-radius: 12px; padding: 24px;
+}
+.brand { flex: 1 1 auto; min-width: 0; }
+.brand h1 { font-size: 28px; line-height: 32px; }
+.brand .hint { margin-top: 4px; text-wrap: balance; }
+.panel { background: var(--panel); border-radius: 12px; padding: 24px; min-width: 0; }
+.game { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.game img { border-radius: 12px; }
+h2 { font-size: 20px; line-height: 28px; color: var(--lime); }
+.game p { flex: 1 1 auto; color: var(--muted); }
+.foot { grid-column: 1 / -1; text-align: center; }
+
+.btn, .play {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border: 2px solid var(--edge); border-radius: 8px;
+  background: #080808; color: var(--text); font-size: 16px; line-height: 24px; white-space: nowrap; text-decoration: none;
+}
+.btn:hover { border-color: var(--lime); }
+/* Play as on the start page's hero: across its panel */
+.play {
+  align-self: stretch; height: 48px; padding: 0 16px; font-size: 20px; line-height: 28px;
+  border-color: var(--lime); background: var(--lime-fill); color: var(--lime); box-shadow: 0 0 12px var(--lime-glow);
+}
+.play:hover { background: #4c5440; }
+
+@media (max-width: 959px) {
+  .site { padding: 16px 16px 32px; gap: 16px; }
+}
+@media (max-width: 639px) {
+  .site { grid-template-columns: minmax(0, 1fr); }
+}
