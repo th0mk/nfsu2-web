@@ -813,16 +813,6 @@ static int autosave_due(const struct gates *g){
 static void decide(CPU *c){
     struct gates g; struct race r[MAX_RACES];
     if (!read_gates(c, &g)){ set_state(B_DONE, "no career"); return; }
-    /* the milestones the bin asks, at most the records the game has for it: bin 4 asks 5 and has 4 records (the game's
-     * milestone array, 58 records, c6-b3w), so 5 can never be met; the rival is tried once all of them are */
-    { int nrec = ms_records(g.bin);
-      if (nrec > 0 && g.ms_req > nrec){
-          static int logged_bin = -1;
-          if (logged_bin != g.bin){ logged_bin = g.bin;
-              fprintf(stderr, "[mwbot] f=%ld bin %d asks %d milestones and has %d records: %d taken as all of them\n", autotest_frame(),
-                      g.bin, g.ms_req, nrec, nrec); }
-          g.ms_req = nrec;
-      } }
     if (memcmp(&g, &B.g, sizeof g)){ log_gates(&g, "now"); if (g.cars != B.g.cars) log_cars(); }
     if (g.bin != B.g.bin) milestones_log(c, g.bin);
     B.g = g;
@@ -1061,6 +1051,16 @@ static void milestones_log(CPU *c, int bin){
                                        (double)rdf(r + 8u), (double)rdf(r + 12u), rd(r + 16u));
         }
         fprintf(stderr, "[mwbot]   the game's milestone records: %d in all, %d of bin %d:%s\n", seen, nb, bin, o ? b : "");
+        /* and every record as bin:state (1 a later bin's, 2 open, 4 met; others as they are): an earlier bin's record
+         * left open counts in the bin it is met in (bin 4 asks 5, its own 4 met did not open the rival, c6-bl4a) */
+        o = 0;
+        for (uint32_t r = lo; r <= hi && o < 860; r += 0x14u){
+            uint32_t fl = rd(r + 4u);
+            o += snprintf(b + o, sizeof b - (size_t)o, " %u:%u", (fl >> 16) & 0xffu, fl & 0xffu);
+            if ((fl & 0xffu) == 2u && (int)((fl >> 16) & 0xffu) != bin && o < 840)
+                o += snprintf(b + o, sizeof b - (size_t)o, "(%08x goal %.0f kind %08x)", rd(r), (double)rdf(r + 8u), rd(r + 16u));
+        }
+        fprintf(stderr, "[mwbot]   the records by bin:state:%s\n", b);
     }
 }
 static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){

@@ -136,12 +136,20 @@ far away, not where the pursuit's last two escapes went nor where a warp trapped
 that long the car stands in the nearest hiding spot in the cops' search, so the game ends it as evaded; in a bin
 with a pursuit_evasion_time milestone, "escape within" a chase length, its first pursuit for milestones and every
 other one after it is a quick one: the chase broken off at 5 s and the car hidden at once, until one raised the
-milestones; a car off the world is set back at a race's place), then engages the rival's challenge at its first race's start
+milestones; while a bin's cops_damaged milestone is open the car stands 3 s in every 12 s of a chase for the cops to
+ram it; from heat 4 on a chase lost early is let go after three rejoins and the next forced 15 s on; a car off the
+world is set back at a race's place), then engages the rival's challenge at its first race's start
 (InGameRivalChallenge.fng: Enter accepts; a lost one again, after the shop when the cash reaches a package, and after
 two lost in one car in the other of the two best cars, taken at the safehouse), takes two of the beaten rival's markers
 (SafehouseMarkers.fng; what they gave is logged from the cash, the cars and the markers held by type;
 `NFSMW_BOT_MARKERS=X,Y` takes the cards X and Y by their objects, 0xCDA0A66B to 0xCDA0A670 from the left, instead of
-the first two), and answers the screens on the way (results, text messages, the safehouse menu).  A car at a race's
+the first two), and answers the screens on the way (results, text messages, the safehouse menu).  Once a bin, with
+the cash for a car of 150,000 (NFSMW_BOT_LOT_MIN) and none of the fastest tier, it buys the dearest car the car lot
+sells it (each car's cost read once; a car locked until a later rival is refused and the next tried), and races it
+(NFSMW_BOT_PREFER=<name> ranks a car so in a later run); from bin 4 on, until then, the shop keeps 280,000 back.  A
+race where the wedge watch resets the car 15 times at one place is given up (the pause menu's Quit to Free Roam) and
+not raced again.  `NFSMW_BOT_AUTOSAVE=1` saves at the safehouse whenever the bin moves on (two races won, a milestone,
+the rival's requirements met), so a run the game ends leaves a save near its end in --save-out.  A car at a race's
 start already (a lost lap knockout ends there) is set at another race's place first: from inside the engage trigger
 the Enters opened nothing.  After a bust it pays the fine with cash
 (Infractions.fng), but when the strike would impound the car it spends an Out of Jail marker if it holds one; after an
