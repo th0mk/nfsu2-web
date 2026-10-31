@@ -29,7 +29,9 @@
  *                             sub_00515d70 below): printed through "%s" instead.
  *   NFSU2_TEST_PFLOCK=1       the interactive music's lock (B-008, B-009; sub_00834e6d below): a main-thread try
  *                             that finds Pathfinder's lock held waits for it instead of failing at once; 1 keeps
- *                             the game's try, 2 and 3 make the music slot's start find it held (the crash at once).
+ *                             the game's try (and logs each that fails), 2 and 3 make the music slot's start find
+ *                             it held (the crash at once), 4 and 5 its stream open or the music's pause / go-on
+ *                             once (NFSU2_TEST_PFLOCK_AT: at which call; the music lost, M4-26).
  * Each fix logs its first 20 hits ("[fix] f=N ..."). */
 #include "cpu.h"
 #include "game.h"
@@ -222,11 +224,15 @@ void sub_00573140(CPU *c){
  * held waits for it, up to PF_WAIT_MS of real time, and only then gives the game its "busy"; the sound thread keeps
  * the game's try.  NFSU2_TEST_PFLOCK=1 keeps the game's try on the main thread too; NFSU2_TEST_PFLOCK=2 makes the
  * slot start's try (0x82D0B0's) find the lock held every time, which brings B-008 in the front end's music; =3 does
- * that from the second slot start on (the first world's music). */
+ * that from the second slot start on (the first world's music).  =4 makes the slot start's stream open (0x82D460)
+ * find it held once, at its NFSU2_TEST_PFLOCK_AT-th call (3 when not set), and =5 the music object's pause or go-on
+ * (0x829140): TRACKER M4-26's music lost after a shop visit. */
 #define PF_LOCK_OBJ   0x009c29b0u       /* the Semaphore object: +0 its handle, +4 its count */
 #define FN_TICKS      0x008352b3u       /* GetTickCount, the clock EA's Semaphore::Wait measures an absolute time on */
 #define PF_WAIT_MS    500u
 #define PF_SLOT_OBJECT 0x0082d0b9u      /* 0x829410's return in 0x82D0B0 (the stream object): NFSU2_TEST_PFLOCK=2 */
+#define PF_SLOT_OPEN  0x0082d468u       /* ... in 0x82D460 (the slot start's stream open): NFSU2_TEST_PFLOCK=4 */
+#define PF_PAUSE      0x0082914bu       /* ... in 0x829140 (pause or go on, the music object's states): =5 */
 static unsigned long pf_waits, pf_gaveup;
 void sub_00834e6d_orig(CPU *c);
 void sub_00834e6d(CPU *c){
@@ -238,13 +244,20 @@ void sub_00834e6d(CPU *c){
         return;
     }
     uint32_t from = MR32(c->esp);
-    static int force = -1, starts;
-    if (force < 0){ const char *e = getenv("NFSU2_TEST_PFLOCK"); force = e && (*e == '2' || *e == '3') ? *e - '0' : 0; }
-    if (force && MR32(c->ebp + 4u) == PF_SLOT_OBJECT && (force == 2 || ++starts >= 2)){   /* held, as when the sound thread has it */
+    static int force = -1, starts, at, calls;
+    if (force < 0){
+        const char *e = getenv("NFSU2_TEST_PFLOCK"), *n = getenv("NFSU2_TEST_PFLOCK_AT");
+        force = e && *e >= '2' && *e <= '5' ? *e - '0' : 0;
+        at = n && atoi(n) > 0 ? atoi(n) : 3;
+    }
+    uint32_t above = MR32(c->ebp + 4u);
+    if ((force == 2 || force == 3) && above == PF_SLOT_OBJECT && (force == 2 || ++starts >= 2)
+        || force == 4 && above == PF_SLOT_OPEN && ++calls == at
+        || force == 5 && above == PF_PAUSE && ++calls == at){   /* held, as when the sound thread has it */
         static int nf;
         if (nf++ < 20)
-            fprintf(stderr, "[fix] f=%ld TEST: the slot start's stream object (0x82D0B0) finds Pathfinder's lock held\n",
-                    autotest_frame());
+            fprintf(stderr, "[fix] f=%ld TEST: the main thread's try (above 0x%08x, from the game's 0x%08x) finds Pathfinder's "
+                    "lock held\n", autotest_frame(), above, MR32(MR32(c->ebp) + 4u));
         POP32(c->eip);
         c->esp += 4u;                   /* ret 4 */
         c->eax = 0xfffffffeu;           /* -2: the semaphore's wait timed out */
@@ -252,9 +265,13 @@ void sub_00834e6d(CPU *c){
     }
     sub_00834e6d_orig(c);               /* the game's try */
     if ((int32_t)c->eax != -2 || test_switch("NFSU2_TEST_PFLOCK", &off)){
-        if ((int32_t)c->eax == -2 && hit_log(&hits))
+        /* the test logs each failed try (up to 400) with the game's call into Pathfinder: through 0x829410 (its
+         * return 0x829439) that is one frame further up */
+        static int nfail;
+        if ((int32_t)c->eax == -2 && nfail++ < 400)
             fprintf(stderr, "[fix] f=%ld TEST: Pathfinder's lock is held: the main thread's try (0x834E6D from 0x%08x, "
-                    "above 0x%08x) fails (the game's way)\n", autotest_frame(), from, MR32(c->ebp + 4u));
+                    "above 0x%08x, from the game's 0x%08x) fails (the game's way)\n", autotest_frame(), from,
+                    MR32(c->ebp + 4u), from == 0x00829439u ? MR32(MR32(c->ebp) + 4u) : MR32(c->ebp + 4u));
         return;
     }
     struct timespec a, b;
