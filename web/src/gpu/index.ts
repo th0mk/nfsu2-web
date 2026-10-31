@@ -102,6 +102,9 @@ export interface RendererStats {
   /** a multisampled back buffer (gpu-abi.md section 12), once it had one: passes drawn at 4 samples, and the screen
    *  drawn into the 4-sample texture again after a blit or copy into it */
   msPasses?: number; msRefreshes?: number;
+  /** occlusion queries (gpu-abi.md section 13), once a frame had one: results written for the game (issues, frames)
+   *  and frames not measured (every read buffer still mapping) */
+  occlusion?: { issues: number; frames: number; skipped: number };
   /** frames drawn straight into the canvas texture (no composite), and frames that kept the
    *  back buffer because they copied from the screen before drawing to it */
   direct: number; screenReadFirst: number;
@@ -764,6 +767,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       dumps: u32()[cw + C.dumpsDone], missingTarget: enc.missingTarget, conflicts: enc.conflicts, zMismatch: enc.zMismatch, noVs: enc.noVs,
       ...(u32()[cw + C.stages] === P.STAGES_MAX ? { depthTexDraws: enc.depthTexDraws, depthZPasses: enc.depthZPasses } : {}),
       ...(enc.msPasses ? { msPasses: enc.msPasses, msRefreshes: enc.msRefreshes } : {}),
+      ...(enc.occStats.frames || enc.occStats.skipped ? { occlusion: { ...enc.occStats } } : {}),
       direct: directFrames, screenReadFirst: enc.screenReadFirst, slotWaits, slotWaitMsMax, pokes, unshown,
       texBytes: enc.texBytes, unpackBytes: enc.unpackBytes, astcBytes: enc.astcBytes, uploadMs: Math.round(enc.uploadMs),
       ...(enc.astcWork ? { astcWorkers: enc.astcWork } : {}), ...(enc.astcSum ? { astcSum: { ...enc.astcSum } } : {}) }),

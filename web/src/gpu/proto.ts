@@ -4,7 +4,7 @@
 // the renderer refuses a control block whose layout word differs.
 
 export const GW_MAGIC = 0x55504757;
-export const GW_VERSION = 6;
+export const GW_VERSION = 7;
 export const GW_NBUF = 2;
 // GwHL: the other cars' headlights at this byte offset of every frame's VS constant arena (group 0 binding 3)
 export const K_HL = 256, HL_BYTES = 656, HL_MAX = 8;
@@ -21,16 +21,17 @@ export const K_LAT = 1568, LAT_BYTES = 24, LAT_MAGIC = 0x4E54414C;
 // the VS constant arena is bound in windows of this many 16-byte rows (GW_KWIN_ROWS)
 export const KWIN_ROWS = 4096;
 
-// GwDraw: 188 bytes, all 32-bit fields (word index = byte offset / 4).  A blit's first and count: its source
+// GwDraw: 192 bytes, all 32-bit fields (word index = byte offset / 4).  A blit's first and count: its source
 // rectangle, left | top << 16 and right | bottom << 16 (count 0 = the whole source).  tex4..tex7 and smpHi (the
-// sampler keys of stages 4-7) are read only when C.stages is 8
-export const DRAW_BYTES = 188, DRAW_WORDS = 47;
+// sampler keys of stages 4-7) are read only when C.stages is 8.  occ: an occlusion query's draw, slot | issue << 8
+// (0 = none; gpu-abi.md section 13)
+export const DRAW_BYTES = 192, DRAW_WORDS = 48;
 export const enum D {
   first = 0, count = 1, tex = 2, target = 3, kind = 4, blend = 5, aref = 6, depth = 7,
   tex1 = 8, tex2 = 9, tex3 = 10, ps = 11, psci = 12, vsid = 13, rawoff = 14, koff = 15,
   proj = 16, smp = 20, blitSrc = 24, bcol = 25, cull = 26, fogv = 27, clrArgb = 31, clrFlags = 32,
   clrZ = 33, ksz = 34, ixIsz = 35, ixIb = 36, ixBase = 37, clip = 38,
-  tex4 = 39, tex5 = 40, tex6 = 41, tex7 = 42, smpHi = 43,
+  tex4 = 39, tex5 = 40, tex6 = 41, tex7 = 42, smpHi = 43, occ = 47,
 }
 // D.depth bits 8+ from Z_TEX on: a depth texture's id + Z_TEX, that texture as the draw's Z (below it: the Z surfaces)
 export const Z_TEX = 64;
@@ -54,17 +55,20 @@ export const enum F {
 }
 
 // GwCtl (word indices)
-export const CTL_BYTES = 100 + 2 * FRAME_BYTES;
+export const CTL_BYTES = 104 + 2 * FRAME_BYTES;
 export const enum C {
   magic = 0, version = 1, layout = 2, size = 3, state = 4, bell = 5, attached = 6, rqHead = 7, rqTail = 8,
   rqPtr = 9, rqCap = 10, framesDone = 11, viewW = 12, viewH = 13, dpr1000 = 14, features = 15,
   stDraws = 16, stPasses = 17, stEncUs = 18, stErrors = 19, dumpsDone = 20, stPipelines = 21, rbWant = 22, rbDone = 23,
-  stages = 24, frame = 25,
+  stages = 24, occPtr = 25, frame = 26,
 }
 // a texture read back: the page claims the request in rbWant (CAS rbId -> rbId | RB_FLAG; the game cancels one it
 // stopped waiting for with a CAS to 0) before it writes rbDst, then stores rbDone = rbId (written) or
 // rbId | RB_FLAG (could not read it) and notifies
 export const RB_FLAG = 0x80000000;
+// C.occPtr: the game's occlusion results, OCC_SLOTS entries of { issue, count } (entry 0 unused): the page stores an
+// issue's count, then the issue (slot | number << 8), which the game reads first (gpu-abi.md section 13)
+export const OCC_SLOTS = 64;
 export const FEAT_BC = 1, FEAT_SWIZZLE = 2;
 // GwCtl.attached: 0 before a renderer attached, then ATTACHED, and DETACHED for good once it let go
 // (or once the game stopped waiting for one: its CAS 0 -> DETACHED after 30 s)

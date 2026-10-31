@@ -120,6 +120,20 @@ static unsigned g_bb_w = 0, g_bb_h = 0;      /* device size (metal_resize) */
 static long     g_dump_req = -1;
 static char     g_dump_label[64];
 
+/* occlusion queries (com.c query_issue, gpu-abi.md section 13): the draws of an open Issue(BEGIN) carry
+ * g_cur_occ (slot | issue << 8); the page writes each issue's count into g_occ_res[2 * slot + 1], then the issue
+ * into g_occ_res[2 * slot] */
+static uint32_t g_cur_occ;
+static uint32_t g_occ_res[2 * 64] __attribute__((aligned(16)));
+void metal_set_occlusion(uint32_t occ){ g_cur_occ = occ; }
+int metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count){
+    if (!slot || slot >= 64u) return 0;
+    uint32_t occ = __atomic_load_n(&g_occ_res[2u * slot], __ATOMIC_ACQUIRE);
+    if (!occ) return 0;
+    *seq = occ >> 8; *count = __atomic_load_n(&g_occ_res[2u * slot + 1u], __ATOMIC_RELAXED);
+    return 1;
+}
+
 /* ---- init / attach ----------------------------------------------------- */
 static void shader_put(int op, int id, const char *src, unsigned kinds);
 static void *zalloc(size_t n){ void *p = aligned_alloc(64, (n + 63) & ~(size_t)63); if (p) memset(p, 0, n); return p; }
@@ -135,6 +149,7 @@ static void gw_init(void){
      * the first translation (com.c's shaders come after CreateDevice, whose
      * metal_available() runs this) and before the page reads the block */
     if (g_game.gpu_stages == 8){ g_ctl->stages = GW_STAGES_MAX; wgsl_set_stages(8); g_stages8 = 1; }
+    g_ctl->occ_ptr = (uint32_t)(uintptr_t)g_occ_res;    /* the occlusion results (gpu-abi.md section 13) */
     const char *r = getenv("NFSU2_RENDERER");
     int want = r && !strcmp(r, "webgpu");
     if (want){
@@ -740,6 +755,7 @@ static GwDraw *rec_draw(Buf *B, unsigned tex){
     D->bcol = g_cur_bcol; D->cull = g_cur_cull;
     memcpy(D->fogv, g_cur_fog, sizeof D->fogv);
     D->clip = g_cur_clip;
+    D->occ = g_cur_occ;
     if (g_stages8){
         D->tex4 = g_cur_texhi[0]; D->tex5 = g_cur_texhi[1]; D->tex6 = g_cur_texhi[2]; D->tex7 = g_cur_texhi[3];
         memcpy(D->smphi, g_cur_smphi, sizeof D->smphi);

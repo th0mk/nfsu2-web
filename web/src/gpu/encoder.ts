@@ -250,6 +250,52 @@ export class Encoder {
   }
 
   /** (re)create the typed views when the wasm memory grew */
+  // occlusion queries (gpu-abi.md section 13): the frame's query set, the resolve buffer, a ring of read buffers (one
+  // per frame whose results are still on their way), and the frame waiting for its submit (afterSubmit maps it)
+  private occSet: GPUQuerySet | null = null;
+  private occCap = 0;
+  private occResolve: GPUBuffer | null = null;
+  private occRead: GPUBuffer[] = [];
+  private occBusy: boolean[] = [];
+  private occPending: { slot: number; n: number; issue: Uint32Array; div: Uint8Array; all: Set<number> } | null = null;
+  /** occlusion results written for the game (totals: issues, samples) */
+  occStats = { issues: 0, frames: 0, skipped: 0 };
+  /** a read buffer free for this frame's occN queries (and a query set that holds them), or -1: every one still maps */
+  private occBegin(n: number): number {
+    const OCC_RING = 4;
+    let slot = -1;
+    for (let k = 0; k < OCC_RING; k++) if (!this.occBusy[k]) { slot = k; break; }
+    if (slot < 0) { this.occStats.skipped++; return -1; }
+    if (n > this.occCap) {
+      const cap = Math.min(4096, Math.max(16, 1 << Math.ceil(Math.log2(n))));
+      if (this.occSet) this.destroyLater.push(this.occSet);
+      if (this.occResolve) this.destroyLater.push(this.occResolve);
+      for (const b of this.occRead) if (b) this.destroyLater.push(b);
+      this.occRead = []; this.occBusy = [];
+      this.occSet = this.device.createQuerySet({ label: 'occlusion', type: 'occlusion', count: cap });
+      this.occResolve = this.device.createBuffer({ label: 'occlusion-resolve', size: cap * 8,
+        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
+      this.occCap = cap; slot = 0;
+    }
+    if (!this.occRead[slot]) this.occRead[slot] = this.device.createBuffer({ label: `occlusion-read${slot}`, size: this.occCap * 8,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    return slot;
+  }
+  /** the game's results table: each issue's count (samples over the pass's sample count), then the issue */
+  private occWrite(sums: Map<number, number>): void {
+    this.views();
+    const at = this.u32[this.ctlW + P.C.occPtr] >>> 2;
+    if (!at) return;
+    for (const [issue, n] of sums) {
+      const slot = issue & 0xFF;
+      if (!slot || slot >= P.OCC_SLOTS) continue;
+      this.u32[at + 2 * slot + 1] = n >>> 0;
+      Atomics.store(this.i32, at + 2 * slot, issue | 0);
+      this.occStats.issues++;
+    }
+    this.occStats.frames++;
+  }
+
   views(): void {
     const b = this.memory.buffer as unknown as SharedArrayBuffer;
     if (b === this.sab) return;
@@ -926,6 +972,17 @@ export class Encoder {
     b1[0] = -1;
     let draws = 0, passes = 0, skipped = 0;
     const endPass = () => { if (pass) { pass.end(); pass = null; } };
+    // occlusion queries (gpu-abi.md section 13): the issues in this frame; each drawn draw of one gets a query of the
+    // frame's set (every pass then carries the set), resolved after the last pass and read back after the submit
+    let occN = 0, occQ = 0;
+    const occAll = new Set<number>();
+    for (let i = 0; i < dn; i++) {
+      const o = u32[drawsW + i * P.DRAW_WORDS + D.occ];
+      if (o) { occN++; occAll.add(o); }
+    }
+    const occSlot = occN ? this.occBegin(occN) : -1;
+    const occSet = occSlot >= 0 ? this.occSet! : undefined;
+    const occIssue = occSlot >= 0 ? new Uint32Array(occN) : null, occDiv = occSlot >= 0 ? new Uint8Array(occN) : null;
 
     const openPass = (target: number, zid: number): GPURenderPassEncoder | null => {
       let view: GPUTextureView, w: number, h: number, key: number;
@@ -961,7 +1018,7 @@ export class Encoder {
         const c = clearArgb;
         const ts = this.firstPassTs; this.firstPassTs = undefined;
         const p = enc.beginRenderPass({
-          timestampWrites: ts,
+          timestampWrites: ts, occlusionQuerySet: occSet,
           colorAttachments: [{ view: twin.view, resolveTarget: view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
             clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }],
           depthStencilAttachment: zv
@@ -997,7 +1054,7 @@ export class Encoder {
       const c = clearArgb;
       const ts = this.firstPassTs; this.firstPassTs = undefined;
       const p = enc.beginRenderPass({
-        timestampWrites: ts,
+        timestampWrites: ts, occlusionQuerySet: occSet,
         colorAttachments: [{ view, loadOp: first ? 'clear' : 'load', storeOp: 'store',
           clearValue: { r: ((c >>> 16) & 255) / 255, g: ((c >>> 8) & 255) / 255, b: (c & 255) / 255, a: 1 } }],
         depthStencilAttachment: zv
@@ -1147,16 +1204,26 @@ export class Encoder {
       const bcol = u32[w + D.bcol];
       if (bcol !== cBcol) { p.setBlendConstant({ r: ((bcol >>> 16) & 255) / 255, g: ((bcol >>> 8) & 255) / 255, b: (bcol & 255) / 255, a: (bcol >>> 24) / 255 }); cBcol = bcol; this.calls.blend++; }
 
+      const occ = occIssue ? u32[w + D.occ] : 0;
+      if (occ) p.beginOcclusionQuery(occQ);
       if (isz) {
         const fmt: GPUIndexFormat = isz === 4 ? 'uint32' : 'uint16';
         if (fmt !== cIx) { p.setIndexBuffer(this.pool!, fmt); cIx = fmt; this.calls.ix++; }
         p.drawIndexed(count, 1, u32[w + D.ixIb] / isz, i32[w + D.ixBase], kb);
       } else if (vsid > 0) p.draw(count, 1, 0, kb);
       else p.draw(count, 1, u32[w + D.first], 0);
+      if (occ) { p.endOcclusionQuery(); occIssue![occQ] = occ; occDiv![occQ] = passMs ? 4 : 1; occQ++; }
       draws++; this.calls.draw++;
-      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}`);
+      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}${u32[w + D.occ] ? ` occlusion ${u32[w + D.occ].toString(16)}${occ ? '' : ' (not measured)'}` : ''}`);
     }
     endPass();
+    if (occSlot >= 0) {
+      if (occQ) {
+        enc.resolveQuerySet(this.occSet!, 0, occQ, this.occResolve!, 0);
+        enc.copyBufferToBuffer(this.occResolve!, 0, this.occRead[occSlot], 0, occQ * 8);
+      }
+      this.occPending = { slot: occSlot, n: occQ, issue: occIssue!, div: occDiv!, all: occAll };
+    }
     if (tr) {
       // the first vertices of every TVert draw: clip position, oD0, oT0
       const tv = u32[fw + F.tv] >> 2;
@@ -1313,5 +1380,24 @@ export class Encoder {
   afterSubmit(): void {
     for (const r of this.destroyLater) r.destroy();
     this.destroyLater.length = 0;
+    // this frame's occlusion queries: their counts once the GPU is done (an issue none of whose draws was drawn: 0)
+    const o = this.occPending;
+    if (o) {
+      this.occPending = null;
+      const sums = new Map<number, number>();
+      for (const issue of o.all) sums.set(issue, 0);
+      if (!o.n) { this.occWrite(sums); return; }
+      const buf = this.occRead[o.slot], busy = this.occBusy;   // (a bigger set later replaces both: this frame's stay)
+      busy[o.slot] = true;
+      buf.mapAsync(GPUMapMode.READ, 0, o.n * 8).then(() => {
+        const t = new BigUint64Array(buf.getMappedRange(0, o.n * 8));
+        for (let q = 0; q < o.n; q++) {
+          const i = o.issue[q];
+          sums.set(i, (sums.get(i) ?? 0) + Math.round(Number(t[q]) / o.div[q]));
+        }
+        buf.unmap(); busy[o.slot] = false;
+        this.occWrite(sums);
+      }).catch(() => { busy[o.slot] = false; });
+    }
   }
 }

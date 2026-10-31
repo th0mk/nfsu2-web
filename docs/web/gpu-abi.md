@@ -461,3 +461,34 @@ a module without `gpu_msaa` sends neither. The stats line carries `msPasses` and
 |---|---|---|---|
 | `GW_BB_SAMPLES` a[0] | the back buffer's samples, 1 or 4, from the next frame on | never sent | M5-21 |
 | `GW_TF_MS` (8) in `GW_TEX_CREATE` a[5] | with `GW_TF_RT`: a render target drawn at 4 samples | never set | M5-21 |
+
+## 13. Occlusion queries (`GwDraw.occ`, `GwCtl.occ_ptr`, GW_VERSION 7)
+
+Most Wanted's sun flare (GAME.md 5.5; 0x6D0350, the object at 0x93E018) keeps a ring of 4 occlusion queries: each
+frame it reads the one it issued the frame before (`GetData` with no flush, the result ignored, so an S_FALSE leaves
+its count at 0), turns the count over its 32x32 test quad into the flare's brightness, smoothed over frames, and
+issues the next query around the quad (z 0.999, colour writes off). Before version 7 `GetData` answered S_OK with 0
+at once: the flare never showed.
+
+- com.c (`query_issue`, `query_getdata`): a query of type 9 gets a slot (1-63). `Issue(BEGIN)` numbers the issue
+  (24 bits, never 0) and every draw until `Issue(END)` carries `slot | number << 8` in `GwDraw.occ`. `GetData`
+  answers the newest result the page wrote for that query, S_OK, and S_FALSE until there is one (a result of a slot's
+  earlier query is older than the query's first issue and not taken). A count for the back buffer is scaled to the
+  resolution the game believes it has. No renderer: S_FALSE always. `NFSU2_OCCLUSION=off` is the old answer.
+- The page (encoder.ts): a frame with such draws gives every render pass the frame's occlusion query set; each draw
+  of an issue that is drawn gets its own query (a 4-sample pass's count divided by 4), resolved after the last pass
+  and read back after the submit (a ring of 4 read buffers; a frame that finds all 4 still mapping is not measured).
+  It then writes, per issue, the sum of its draws' counts (0 when none was drawn) into the game's table at
+  `GwCtl.occ_ptr`: 64 entries of { issue, count }, the count first and then the issue (an atomic store), which the
+  game reads first.
+- The answers come frames late (a submit, the GPU, a map), after the game asked for the issue it reads: it reads that
+  query's issue of 4 frames before (about 70 ms at 60 fps), which its own smoothing hides. D3D9's rule (S_FALSE until
+  the issue completes) is what made the flare go missing on fast machines (PCGW).
+
+Deploy: version 7 changes the layout word (GwDraw 188 → 192 bytes, GwCtl 412 → 416); as in 11.5, a page and a module
+work together only from one commit.
+
+| Field | Meaning | UG2 | First used by (MW tracker) |
+|---|---|---|---|
+| `GwDraw.occ` | an occlusion query's draw: slot \| issue << 8; 0 = none | 0 (no queries) | M5-15 |
+| `GwCtl.occ_ptr` | the game's results table, 64 x { issue, count } | set, never written | M5-15 |

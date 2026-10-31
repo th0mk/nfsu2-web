@@ -164,6 +164,10 @@ void metal_begin_frame(void){ }
 void metal_set_zsurf(unsigned z){ (void)z; }
 void metal_z_forget(unsigned z){ (void)z; }
 void metal_set_render_target(unsigned t){ (void)t; }
+void metal_set_occlusion(uint32_t occ){ (void)occ; }
+int metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count){
+    (void)slot; (void)seq; (void)count; return 0;
+}
 void metal_set_cull(unsigned c){ (void)c; }
 void metal_set_depth(unsigned a){ (void)a; }
 void metal_set_blend(unsigned k, float a){ (void)k; (void)a; }

@@ -20,10 +20,11 @@
 #include <stddef.h>
 
 #define GW_MAGIC   0x55504757u          /* "WGPU" */
-#define GW_VERSION 6u                   /* 2: the headlights block in the K arena (GwHL); 3: K blocks 16-byte aligned, bound in windows;
+#define GW_VERSION 7u                   /* 2: the headlights block in the K arena (GwHL); 3: K blocks 16-byte aligned, bound in windows;
                                            4: GwDraw.clip; 5: GW_BLIT's source rectangle, a texture read back (GwFrame.rb_*);
                                            6: SM3 and depth textures (gpu-abi.md section 11): GwCtl.stages, GwDraw.tex4-7 and
-                                           smphi, GW_Z_TEX, GW_PS_DEPTH_SHIFT, GW_TF_DEPTH, the PS kinds word (GW_BK_*) */
+                                           smphi, GW_Z_TEX, GW_PS_DEPTH_SHIFT, GW_TF_DEPTH, the PS kinds word (GW_BK_*);
+                                           7: occlusion queries (gpu-abi.md section 13): GwDraw.occ, GwCtl.occ_ptr */
 #define GW_NBUF    2                    /* record buffers: one being written, one handed off */
 
 /* GwDraw.kind */
@@ -65,6 +66,8 @@ typedef struct {
                            * (its 4:3 band), the draw kept between them; 0 = the whole target (com.c) */
     uint32_t tex4, tex5, tex6, tex7;  /* stage 4-7 texture ids (0 = white); read only with GwCtl.stages 8 */
     uint32_t smphi[4];    /* packed sampler keys of stages 4-7 (as smp); read only with GwCtl.stages 8 */
+    uint32_t occ;         /* an occlusion query's draw (gpu-abi.md section 13): slot (1-63) | the issue's number << 8;
+                           * the page counts its samples that pass into GwCtl.occ_ptr's table; 0 = none */
 } GwDraw;
 
 /* GwDraw.depth bits 8+ from this value on: a depth texture's id + GW_Z_TEX,
@@ -151,6 +154,10 @@ typedef struct {
      * stages of every draw and module (tex0-7, smp0-7, VOut uv0-uv7), 4 or
      * GW_STAGES_MAX; 0 = 4 (gpu-abi.md section 11) */
     uint32_t stages;
+    /* game, set before it registers the block: the occlusion results (gpu-abi.md section 13), 64 entries of
+     * { issue, count }: the page stores the count of an issue's draws (GwDraw.occ), then the issue (slot | number
+     * << 8), which the game reads first; entry 0 unused */
+    uint32_t occ_ptr;
     GwFrame  frame[GW_NBUF];
 } GwCtl;
 
@@ -260,7 +267,7 @@ typedef struct { uint32_t magic, pad; double input_ms, handoff_ms; } GwLat;
 /* Layout word: changes whenever a struct above changes shape. */
 #define GW_LAYOUT ((uint32_t)(sizeof(GwDraw) | sizeof(GwFrame) << 8 | (sizeof(GwCtl) & 0xFFF) << 16) ^ (GW_VERSION << 28))
 
-_Static_assert(sizeof(GwDraw) == 188, "GwDraw");
+_Static_assert(sizeof(GwDraw) == 192, "GwDraw");
 _Static_assert(offsetof(GwDraw, kind) == 16 && offsetof(GwDraw, aref) == 24 && offsetof(GwDraw, depth) == 28, "GwDraw a");
 _Static_assert(offsetof(GwDraw, ps) == 44 && offsetof(GwDraw, psci) == 48 && offsetof(GwDraw, vsid) == 52, "GwDraw b");
 _Static_assert(offsetof(GwDraw, rawoff) == 56 && offsetof(GwDraw, koff) == 60 && offsetof(GwDraw, proj) == 64, "GwDraw c");
@@ -269,15 +276,16 @@ _Static_assert(offsetof(GwDraw, cull) == 104 && offsetof(GwDraw, fogv) == 108 &&
 _Static_assert(offsetof(GwDraw, clr_flags) == 128 && offsetof(GwDraw, clr_z) == 132 && offsetof(GwDraw, ksz) == 136, "GwDraw f");
 _Static_assert(offsetof(GwDraw, ix_isz) == 140 && offsetof(GwDraw, ix_ib) == 144 && offsetof(GwDraw, ix_base) == 148, "GwDraw g");
 _Static_assert(offsetof(GwDraw, clip) == 152 && offsetof(GwDraw, tex4) == 156 && offsetof(GwDraw, tex7) == 168, "GwDraw h");
-_Static_assert(offsetof(GwDraw, smphi) == 172, "GwDraw i");
+_Static_assert(offsetof(GwDraw, smphi) == 172 && offsetof(GwDraw, occ) == 188, "GwDraw i");
 _Static_assert(sizeof(GwFrame) == 156 && offsetof(GwFrame, rq_end) == 44 && offsetof(GwFrame, dump_label) == 72, "GwFrame");
 _Static_assert(offsetof(GwFrame, rb_id) == 136 && offsetof(GwFrame, rb_rows) == 152, "GwFrame rb");
 _Static_assert(offsetof(GwCtl, state) == 16 && offsetof(GwCtl, bell) == 20 && offsetof(GwCtl, attached) == 24, "GwCtl a");
 _Static_assert(offsetof(GwCtl, rq_head) == 28 && offsetof(GwCtl, rq_tail) == 32 && offsetof(GwCtl, rq_ptr) == 36, "GwCtl b");
 _Static_assert(offsetof(GwCtl, frames_done) == 44 && offsetof(GwCtl, view_w) == 48 && offsetof(GwCtl, features) == 60, "GwCtl c");
-_Static_assert(offsetof(GwCtl, st_draws) == 64 && offsetof(GwCtl, st_pipelines) == 84 && offsetof(GwCtl, frame) == 100, "GwCtl d");
+_Static_assert(offsetof(GwCtl, st_draws) == 64 && offsetof(GwCtl, st_pipelines) == 84 && offsetof(GwCtl, frame) == 104, "GwCtl d");
 _Static_assert(offsetof(GwCtl, rb_want) == 88 && offsetof(GwCtl, rb_done) == 92 && offsetof(GwCtl, stages) == 96, "GwCtl e");
-_Static_assert(sizeof(GwCtl) == 100 + 2 * 156, "GwCtl");
+_Static_assert(offsetof(GwCtl, occ_ptr) == 100, "GwCtl f");
+_Static_assert(sizeof(GwCtl) == 104 + 2 * 156, "GwCtl");
 _Static_assert(sizeof(GwVsync) == 32 && offsetof(GwVsync, ts_ms) == 8 && offsetof(GwVsync, hz) == 24, "GwVsync");
 _Static_assert(sizeof(GwCmd) == GW_CMD_HDR, "GwCmd");
 _Static_assert(sizeof(GwHLight) == 80 && sizeof(GwHL) == GW_HL_BYTES && offsetof(GwHL, l) == 16, "GwHL");

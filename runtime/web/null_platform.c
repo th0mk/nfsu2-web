@@ -143,6 +143,10 @@ WEAK void metal_set_ui_clip(float sy){ (void)sy; }
 WEAK void metal_set_fog(unsigned e, unsigned argb){ (void)e; (void)argb; }
 WEAK void metal_set_ps(int id, const float *c){ (void)id; (void)c; }
 WEAK void metal_set_render_target(unsigned t){ (void)t; }
+WEAK void metal_set_occlusion(uint32_t occ){ (void)occ; }
+WEAK int  metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count){
+    (void)slot; (void)seq; (void)count; return 0;
+}
 WEAK void metal_set_samplers(const unsigned k[4]){ (void)k; }
 WEAK void metal_set_stage_tex(unsigned a, unsigned b, unsigned c3){ (void)a; (void)b; (void)c3; }
 WEAK void metal_set_stage_hi(const unsigned t[4], const unsigned k[4]){ (void)t; (void)k; }

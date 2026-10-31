@@ -897,6 +897,7 @@ enum {
     MID_SetEventNotification,
     MID_GetDataSize,
     MID_GetData,
+    MID_Issue,
     MID_Apply,
     MID_Capture,
     MID_GetFunction,
@@ -1035,6 +1036,7 @@ static const char *const g_midname[MID__count] = {
     "SetEventNotification",
     "GetDataSize",
     "GetData",
+    "Issue",
     "Apply",
     "Capture",
     "GetFunction",
@@ -1198,6 +1200,7 @@ static uint32_t com_addref(uint32_t o){
     return ++CH_REF(o);
 }
 static void com_destroy(uint32_t o);
+static void query_free(uint32_t q);              /* an occlusion query's slot (below) */
 static void sb_destroy(uint32_t o);
 static uint32_t com_release(uint32_t o){
     if (!com_valid(o)){ g_com_bad++; return 0; }
@@ -1414,7 +1417,8 @@ static void com_destroy(uint32_t o){
         gbuf_free(MR32(o + 32u));
         break;
     case IF_STATEBLOCK: sb_destroy(o); break;
-    case IF_QUERY: case IF_SWAPCHAIN: break;
+    case IF_QUERY: query_free(o); break;
+    case IF_SWAPCHAIN: break;
     case IF_DSBUF: {
         /* the game silences buffers by releasing them (see Release); the
          * mixer forgets the slot first, then the PCM block can go */
@@ -2849,13 +2853,127 @@ static void fxtr_dev(CPU *c, int iface, int mid, int nargs, const char *nm){
     fprintf(stderr, "\n");
 }
 
+/* Occlusion queries (D3DQUERYTYPE_OCCLUSION 9; TRACKER M5-15, GAME.md 5.5).  Most Wanted's sun flare (0x6D0350, the
+ * object at 0x93E018) keeps a ring of 4 queries (made at 0x6C0112): each frame it reads the one it issued the frame
+ * before (GetData with no flush, its result ignored: the count stays 0 when the answer is S_FALSE), turns the count
+ * over its 32x32 test quad's pixels into the flare's brightness (smoothed over frames), then issues the next query
+ * around the quad (z 0.999, colour writes off).  The draws between Issue(BEGIN) and Issue(END) carry the query's
+ * slot and the issue's number to the renderer (metal_set_occlusion; GwDraw.occ on the web); the page counts their
+ * samples and writes the result back (metal_occlusion_result) a few frames later.  GetData answers the newest result
+ * of the query (S_OK), S_FALSE until it has one: the page's answers come frames late, after the game asked for the
+ * issue it reads, so it reads the same query's issue of 4 frames earlier (D3D9's own S_FALSE until the issue
+ * completes gave the PCGW "sun flare missing" on fast machines, a count of 0).  A count for the back buffer is in the
+ * game's pixels (the resolution it believes it has), as the quad's size is.  No renderer (headless runs): S_FALSE
+ * always, the count the game's 0.  Underground 2 makes no queries.  NFSU2_OCCLUSION=off turns this off (occ_on).
+ * Query object: +4 type, +8 slot (1..OCC_SLOTS-1), +12 the first issue's number, +16 the last issue drew into the
+ * back buffer. */
+void metal_set_occlusion(uint32_t occ);
+int  metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count);
+#define OCC_SLOTS 64u
+static uint64_t g_occ_used;                      /* slots 1..63 in use */
+static uint32_t g_occ_seq;                       /* the issues' numbers, 24 bits, never 0 */
+static uint32_t g_occ_open;                      /* the query whose Issue(BEGIN) is open, 0 = none */
+/* NFSU2_OCCLUSION=off: the queries as before (GetData S_OK with 0 at once, nothing measured): the A/B switch */
+static int occ_on(void){
+    static int on = -1;
+    if (on < 0){ const char *e = getenv("NFSU2_OCCLUSION"); on = !(e && (!strcmp(e, "0") || !strcmp(e, "off"))); }
+    return on;
+}
+static uint32_t occ_slot_new(void){
+    for (uint32_t s = 1; s < OCC_SLOTS; s++) if (!(g_occ_used >> s & 1u)){ g_occ_used |= 1ull << s; return s; }
+    return 0;                                    /* none left: its GetData answers S_FALSE */
+}
+static void query_issue(uint32_t q, uint32_t flags){
+    if (!q || MR32(q + 4u) != 9u || !occ_on()) return;
+    uint32_t slot = MR32(q + 8u);
+    if (flags & 2u){                             /* D3DISSUE_BEGIN */
+        if (!slot) return;
+        g_occ_seq = (g_occ_seq + 1u) & 0xFFFFFFu; if (!g_occ_seq) g_occ_seq = 1u;
+        if (!MR32(q + 12u)) MR32(q + 12u) = g_occ_seq;
+        MR32(q + 16u) = g_cur_rt == 0u;
+        g_occ_open = q;
+        metal_set_occlusion(slot | g_occ_seq << 8);
+    } else if ((flags & 1u) && g_occ_open == q){ /* D3DISSUE_END */
+        g_occ_open = 0;
+        metal_set_occlusion(0);
+    }
+}
+static uint32_t query_getdata(uint32_t q, uint32_t p, uint32_t size){
+    if (!q || MR32(q + 4u) != 9u || !occ_on()){        /* other kinds, or the switch off: as before */
+        if (p){ mem_commit(p, 4); MR32(p) = 0; }
+        return 0;
+    }
+    uint32_t slot = MR32(q + 8u), first = MR32(q + 12u), seq = 0, n = 0;
+    /* a result of this query's issues (a slot used before by a released query has older numbers) */
+    if (!slot || !first || !metal_occlusion_result(slot, &seq, &n) || ((seq - first) & 0x800000u))
+        return 1u;                                /* S_FALSE */
+    if (MR32(q + 16u) && g_req_w && g_req_h && g_bb_w && g_bb_h)
+        n = (uint32_t)((uint64_t)n * g_req_w * g_req_h / ((uint64_t)g_bb_w * g_bb_h));
+    static int said;
+    if (!said){
+        said = 1;
+        fprintf(stderr, "[d3d] occlusion query: the first result, %u pixels (issue %u, %u issues ago)\n",
+                n, seq, (g_occ_seq - seq) & 0xFFFFFFu);
+    }
+    if (p && size >= 4u){ mem_commit(p, 4); MR32(p) = n; }
+    return 0;
+}
+static void query_free(uint32_t q){
+    if (MR32(q + 4u) != 9u) return;
+    uint32_t slot = MR32(q + 8u);
+    if (g_occ_open == q){ g_occ_open = 0; metal_set_occlusion(0); }
+    if (slot && slot < OCC_SLOTS) g_occ_used &= ~(1ull << slot);
+}
+
 /* NFSU2_DXREC (comrec.c): the device's calls, the state blocks' and the swap chain's, each written after it
  * ran; a state block's Apply is written, the calls it replays are not */
 static int com_call_body(CPU *c, uint32_t magic);
+/* NFSU2_RBLOG=1 (test-only; TRACKER M5-20): each call site of a call that copies or reads back what the GPU drew,
+ * once: the device's StretchRect, GetRenderTargetData, GetFrontBufferData, UpdateSurface, UpdateTexture, ColorFill,
+ * and LockRect of a surface that is not a texture's level (the back buffer, a render target, a depth surface) or of
+ * a render-target texture: "[rb] <method> from 0x<return address> <the object's size, format and kind>"; and at
+ * every UnlockRect of a lockable render target (CreateRenderTarget, origin 3: what LockRect read back from the GPU,
+ * metal_read_texture), how many bytes of it are not 0 */
+static int g_rblog = -1;
+static void rb_note(CPU *c, uint32_t magic){
+    uint32_t iface = (magic >> 16) & 0x1FFFu, m = magic & 0xFFFFu, self = MR32(c->esp + 4u);
+    if (m >= g_if[iface].n) return;
+    const char *nm = g_if[iface].m[m].name;
+    if (iface == IF_SURF && !strcmp(nm, "UnlockRect") && self && mem_is_committed(self + 47u)
+        && MR32(self + 40u) == 3u){
+        uint32_t w = MR32(self + 4u), h = MR32(self + 8u), buf = MR32(self + 32u), nz = 0;
+        uint32_t len = w * h * 4u;
+        if (buf && len && len <= 64u << 20 && mem_is_committed(buf) && mem_is_committed(buf + len - 1u))
+            for (uint32_t i = 0; i < len; i++) nz += MR8(buf + i) != 0;
+        fprintf(stderr, "[rb] UnlockRect from 0x%08x: a lockable render target %ux%u, %u of %u bytes read back not 0\n",
+                MR32(c->esp), w, h, nz, len);
+        return;
+    }
+    int want = 0;
+    if (iface == IF_DEV)
+        want = !strcmp(nm, "StretchRect") || !strcmp(nm, "GetRenderTargetData") || !strcmp(nm, "GetFrontBufferData")
+            || !strcmp(nm, "UpdateSurface") || !strcmp(nm, "UpdateTexture") || !strcmp(nm, "ColorFill");
+    else if (!strcmp(nm, "LockRect") && self && mem_is_committed(self + 47u))
+        want = iface == IF_SURF ? MR32(self + 40u) != 2u : iface == IF_TEX && (MR32(self + TEX_USAGE) & 1u);
+    if (!want) return;
+    static uint32_t seen[128]; static unsigned n;
+    uint32_t ret = MR32(c->esp), key = ret ^ (uint32_t)m << 24 ^ iface << 16;
+    for (unsigned i = 0; i < n; i++) if (seen[i] == key) return;
+    if (n < 128u) seen[n++] = key;
+    uint32_t o = iface == IF_DEV ? MR32(c->esp + 8u) : self;     /* a device call: its first surface */
+    uint32_t w = o && mem_is_committed(o + 47u) ? MR32(o + 4u) : 0, h = w ? MR32(o + 8u) : 0;
+    fprintf(stderr, "[rb] %s from 0x%08x: %s %ux%u format %u origin %u\n", nm, ret, com_iface_name(com_obj_iface(o)),
+            w, h, w ? MR32(o + 20u) : 0u, w ? MR32(o + 40u) : 0u);
+}
 int com_call(CPU *c, uint32_t magic){
+    if (__builtin_expect(g_rblog != 0, 0)){
+        if (g_rblog < 0) g_rblog = ENVC("NFSU2_RBLOG") ? 1 : 0;
+        if (g_rblog) rb_note(c, magic);
+    }
     if (__builtin_expect(g_comrec_on, 0) && !g_sb_replay){
         uint32_t iface=(magic>>16)&0x1FFFu, m=magic&0xFFFFu;
-        int kind = iface==IF_DEV ? CR_DEV : iface==IF_STATEBLOCK ? CR_SB : iface==IF_SWAPCHAIN ? CR_SWAP : CR_NONE;
+        int kind = iface==IF_DEV ? CR_DEV : iface==IF_STATEBLOCK ? CR_SB : iface==IF_SWAPCHAIN ? CR_SWAP
+                 : iface==IF_QUERY ? CR_Q : CR_NONE;
         if (kind != CR_NONE && m < g_if[iface].n){
             int tok = comrec_pre(c, kind, m, g_if[iface].m[m].name, g_if[iface].m[m].nargs);
             int r = com_call_body(c, magic);
@@ -4442,7 +4560,8 @@ static int com_call_body(CPU *c, uint32_t magic){
             uint32_t pp=A(c,2);
             r=0;
             if(pp){ uint32_t o=com_new(IF_STATEBLOCK,32); if (o) MR32(o+8)=0; else r=0x8007000Eu; MR32(pp)=o; } }
-        else if (MID(CreateQuery)){ uint32_t pp=A(c,2), o=pp ? com_new(IF_QUERY,32) : 0u;
+        else if (MID(CreateQuery)){ uint32_t type=A(c,1), pp=A(c,2), o=pp ? com_new(IF_QUERY,32) : 0u;
+            if (o){ MR32(o+4)=type; if (type==9u) MR32(o+8)=occ_slot_new(); }   /* D3DQUERYTYPE_OCCLUSION */
             if(pp) MR32(pp)=o;
             r = (pp && !o) ? 0x8007000Eu : 0u; }
         else if (MID(EndStateBlock)){
@@ -5116,7 +5235,9 @@ static int com_call_body(CPU *c, uint32_t magic){
     else if (iface==IF_QUERY){
         if      (MID(GetDevice)){ uint32_t p=A(c,1); if(p) MR32(p)=g_dev; com_addref(g_dev); r=0; }   /* D3D9: a reference */
         else if (MID(GetDataSize)) r=4;
-        else if (MID(GetData)){ uint32_t p=A(c,1); if(p){mem_commit(p,4);MR32(p)=0;} r=0; }
+        else if (MID(GetData)) r=query_getdata(A(c,0), A(c,1), A(c,2));
+        else if (MID(Issue)){ query_issue(A(c,0), A(c,1)); r=0; }
+        else if (MID(GetType)) r=MR32(A(c,0)+4);
         else r=0;
     }
     else if (iface==IF_SWAPCHAIN){

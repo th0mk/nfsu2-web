@@ -3908,6 +3908,11 @@ void metal_blit(unsigned src_tex, unsigned dst_tex){
  * here the whole source is copied and the lock buffer keeps what it has. */
 void metal_blit_rect(unsigned src_tex, unsigned dst_tex, const int *r){ (void)r; metal_blit(src_tex, dst_tex); }
 int metal_read_texture(unsigned id, void *dst, unsigned pitch, unsigned rows){ (void)id; (void)dst; (void)pitch; (void)rows; return 0; }
+/* occlusion queries (com.c query_issue): not measured on the Mac, GetData answers S_FALSE */
+void metal_set_occlusion(uint32_t occ){ (void)occ; }
+int metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count){
+    (void)slot; (void)seq; (void)count; return 0;
+}
 
 void metal_clear_target_ex(unsigned argb, unsigned flags, float z);
 void metal_clear_target(unsigned argb){ metal_clear_target_ex(argb, 1u, 1.f); }
