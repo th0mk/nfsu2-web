@@ -17,21 +17,26 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct { _Atomic uint32_t last, backs; } TickMono;   /* zero-initialised: no answer yet */
+/* last: 1 << 32 | the latest answer, 0 before the first (zero-initialised).  The bit above the answer, not an
+ * answer of 0, says there is one: the counter passes 0 when it wraps, and while the latest answer was 0 a thread
+ * whose clock is behind would take it as no answer yet and set it back. */
+typedef struct { _Atomic uint64_t last; _Atomic uint32_t backs; } TickMono;
+#define TICKMONO_SET (1ull << 32)
 
 static inline uint32_t tick_mono(TickMono *t, uint32_t v, const char *what){
-    uint32_t l = atomic_load(&t->last);
+    uint64_t l = atomic_load(&t->last);
     for (;;){
-        if (l && (int32_t)(v - l) <= 0){
-            if (v != l){
+        uint32_t a = (uint32_t)l;
+        if (l && (int32_t)(v - a) <= 0){
+            if (v != a){
                 uint32_t n = atomic_fetch_add(&t->backs, 1u) + 1u;
                 if (n <= 5u || n % 1000u == 0u)
                     fprintf(stderr, "[clock] %s: a read %u ms behind the latest answer gets that answer (%u so far)\n",
-                            what, l - v, n);
+                            what, a - v, n);
             }
-            return l;
+            return a;
         }
-        if (atomic_compare_exchange_weak(&t->last, &l, v)) return v;
+        if (atomic_compare_exchange_weak(&t->last, &l, TICKMONO_SET | v)) return v;
     }
 }
 #endif
