@@ -195,7 +195,10 @@ player's car still on the start line, then 8 and 12 s with the AI driving; check
 `fx_census.txt` (run-suite, no renderer: the same race with the device-call recorder writing three windows of 3
 Presents, at GO, after 300 frames and at 120 km/h or more; `web/tools/fx-census.mjs` counts each effect's draws,
 the render targets, StretchRect copies, occlusion queries and readbacks; `--vs` puts two recordings side by side, an
-effect on and off by the `../seed/registry_fx_*0.txt` seeds; checked by ../checks/fx_census.sh),
+effect on and off by the `../seed/registry_fx_*0.txt` seeds, and `--vs --calls` the state calls made inside each
+effect pass, the HLE's against the oracle's (two runs of one mode give the noise: dxrec-diff pairs no frames of two
+such windows, whose draws differ run to run); only the GO window finds every run at one place, the later two wait
+for a frame count and a speed that runs reach at different places; checked by ../checks/fx_census.sh),
 `race_perf.txt` (the same race driven 1800 frames between `log race_loaded` and `log drive_end`, no dumps: the page's
 `&bench&gputime` window logs the frames, encode and GPU milliseconds) and `options_advanced.txt` (the Video options and
 their Advanced page row by row: Shadow Detail, FSAA and Texture Filtering as offered, their maxima logged); each from
