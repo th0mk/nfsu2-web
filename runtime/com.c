@@ -2858,7 +2858,7 @@ static void fxtr_dev(CPU *c, int iface, int mid, int nargs, const char *nm){
  * before (GetData with no flush, its result ignored: the count stays 0 when the answer is S_FALSE), turns the count
  * over its 32x32 test quad's pixels into the flare's brightness (smoothed over frames), then issues the next query
  * around the quad (z 0.999, colour writes off).  The draws between Issue(BEGIN) and Issue(END) carry the query's
- * slot and the issue's number to the renderer (metal_set_occlusion; GwDraw.occ on the web); the page counts their
+ * slot and the issue's number to the renderer (metal_set_occlusion; GwFrame.occ on the web); the page counts their
  * samples and writes the result back (metal_occlusion_result) a few frames later.  GetData answers the newest result
  * of the query (S_OK), S_FALSE until it has one: the page's answers come frames late, after the game asked for the
  * issue it reads, so it reads the same query's issue of 4 frames earlier (D3D9's own S_FALSE until the issue
@@ -2935,13 +2935,14 @@ static void query_free(uint32_t q){
 /* NFSU2_DXREC (comrec.c): the device's calls, the state blocks' and the swap chain's, each written after it
  * ran; a state block's Apply is written, the calls it replays are not */
 static int com_call_body(CPU *c, uint32_t magic);
+static int com_call_rec(CPU *c, uint32_t magic) __attribute__((noinline));
 /* NFSU2_RBLOG=1 (test-only; TRACKER M5-20): each call site of a call that copies or reads back what the GPU drew,
  * once: the device's StretchRect, GetRenderTargetData, GetFrontBufferData, UpdateSurface, UpdateTexture, ColorFill,
  * and LockRect of a surface that is not a texture's level (the back buffer, a render target, a depth surface) or of
  * a render-target texture: "[rb] <method> from 0x<return address> <the object's size, format and kind>"; and at
  * every UnlockRect of a lockable render target (CreateRenderTarget, origin 3: what LockRect read back from the GPU,
- * metal_read_texture), how many bytes of it are not 0 */
-static int g_rblog = -1;
+ * metal_read_texture), how many bytes of it are not 0.  Read at Direct3DCreate9 (no call it logs comes before) */
+static int g_rblog;
 static void rb_note(CPU *c, uint32_t magic){
     uint32_t iface = (magic >> 16) & 0x1FFFu, m = magic & 0xFFFFu, self = MR32(c->esp + 4u);
     if (m >= g_if[iface].n) return;
@@ -2973,11 +2974,13 @@ static void rb_note(CPU *c, uint32_t magic){
             w, h, w ? MR32(o + 20u) : 0u, w ? MR32(o + 40u) : 0u);
 }
 int com_call(CPU *c, uint32_t magic){
-    if (__builtin_expect(g_rblog != 0, 0)){
-        if (g_rblog < 0) g_rblog = ENVC("NFSU2_RBLOG") ? 1 : 0;
-        if (g_rblog) rb_note(c, magic);
-    }
-    if (__builtin_expect(g_comrec_on, 0) && !g_sb_replay){
+    /* off (the recorder and NFSU2_RBLOG), one test */
+    if (__builtin_expect(g_comrec_on | g_rblog, 0)) return com_call_rec(c, magic);
+    return com_call_body(c, magic);
+}
+static int com_call_rec(CPU *c, uint32_t magic){
+    if (g_rblog) rb_note(c, magic);
+    if (g_comrec_on && !g_sb_replay){
         uint32_t iface=(magic>>16)&0x1FFFu, m=magic&0xFFFFu;
         int kind = iface==IF_DEV ? CR_DEV : iface==IF_STATEBLOCK ? CR_SB : iface==IF_SWAPCHAIN ? CR_SWAP
                  : iface==IF_QUERY ? CR_Q : CR_NONE;
@@ -5356,6 +5359,7 @@ uint32_t com_directinput8create(uint32_t ppvOut){
 }
 
 uint32_t com_direct3dcreate9(void){
+    if (!g_rblog && ENVC("NFSU2_RBLOG")) g_rblog = 1;   /* (above com_call) */
     if(!g_d3d9){ g_d3d9=com_new(IF_D3D9,64); CH_FLAGS(g_d3d9) |= CF_DEVICE;
         fprintf(stderr,"com: IDirect3D9 object 0x%08x\n", g_d3d9); }
     else com_addref(g_d3d9);

@@ -972,14 +972,13 @@ export class Encoder {
     b1[0] = -1;
     let draws = 0, passes = 0, skipped = 0;
     const endPass = () => { if (pass) { pass.end(); pass = null; } };
-    // occlusion queries (gpu-abi.md section 13): the issues in this frame; each drawn draw of one gets a query of the
-    // frame's set (every pass then carries the set), resolved after the last pass and read back after the submit
-    let occN = 0, occQ = 0;
-    const occAll = new Set<number>();
-    for (let i = 0; i < dn; i++) {
-      const o = u32[drawsW + i * P.DRAW_WORDS + D.occ];
-      if (o) { occN++; occAll.add(o); }
-    }
+    // occlusion queries (gpu-abi.md section 13): the frame's list of their draws (none: nothing more to do); each
+    // drawn draw of one gets a query of the frame's set (every pass then carries the set), resolved after the last
+    // pass and read back after the submit
+    const occN = Math.min(u32[fw + F.occn], P.OCC_MAX), occW = u32[fw + F.occ] >> 2;
+    let occQ = 0, occK = 0, occAt = occN ? u32[occW] : -1;
+    const occAll = occN ? new Set<number>() : null;
+    for (let k = 0; k < occN; k++) occAll!.add(u32[occW + 2 * k + 1]);
     const occSlot = occN ? this.occBegin(occN) : -1;
     const occSet = occSlot >= 0 ? this.occSet! : undefined;
     const occIssue = occSlot >= 0 ? new Uint32Array(occN) : null, occDiv = occSlot >= 0 ? new Uint8Array(occN) : null;
@@ -1071,6 +1070,9 @@ export class Encoder {
     for (let i = 0; i < dn; i++) {
       const w = drawsW + i * P.DRAW_WORDS;
       const kind = u32[w + D.kind];
+      // an occlusion query's draw: its issue (slot | number << 8), the list's next entry
+      let occDraw = 0;
+      if (i === occAt) { occDraw = u32[occW + 2 * occK + 1]; occK++; occAt = occK < occN ? u32[occW + 2 * occK] : -1; }
       if (kind === Kind.Blit) {
         const sid = u32[w + D.blitSrc], tgt = u32[w + D.target];
         const st = sid ? this.tex[sid] : null, dt = tgt ? this.tex[tgt & 0xFFFF] : null;
@@ -1204,7 +1206,7 @@ export class Encoder {
       const bcol = u32[w + D.bcol];
       if (bcol !== cBcol) { p.setBlendConstant({ r: ((bcol >>> 16) & 255) / 255, g: ((bcol >>> 8) & 255) / 255, b: (bcol & 255) / 255, a: (bcol >>> 24) / 255 }); cBcol = bcol; this.calls.blend++; }
 
-      const occ = occIssue ? u32[w + D.occ] : 0;
+      const occ = occIssue ? occDraw : 0;
       if (occ) p.beginOcclusionQuery(occQ);
       if (isz) {
         const fmt: GPUIndexFormat = isz === 4 ? 'uint32' : 'uint16';
@@ -1214,7 +1216,7 @@ export class Encoder {
       else p.draw(count, 1, u32[w + D.first], 0);
       if (occ) { p.endOcclusionQuery(); occIssue![occQ] = occ; occDiv![occQ] = passMs ? 4 : 1; occQ++; }
       draws++; this.calls.draw++;
-      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}${u32[w + D.occ] ? ` occlusion ${u32[w + D.occ].toString(16)}${occ ? '' : ' (not measured)'}` : ''}`);
+      if (tr) tr.push(`  #${i} ${isz ? `ix${isz * 8} ib ${u32[w + D.ixIb]} base ${i32[w + D.ixBase]}` : vsid > 0 ? 'raw' : `tvert ${u32[w + D.first]}`} n ${count} vs ${vsid} ps ${psid}${psEff !== psid ? `->${psEff}` : ''} blend ${blend.toString(16)} depth ${(depth & 63).toString(16)}${realZ ? '' : '(off)'}${depth >>> P.ZBIAS_SHIFT ? ` bias ${(depth >>> P.ZBIAS_SHIFT).toString(16)}` : ''} cull ${cull} aref ${aref.toFixed(3)} bcol ${bcol.toString(16)} tex ${t0}${v0.serial === 0 && t0 ? '(white)' : ''},${t1},${t2},${t3} smp ${s0.toString(16)}${s1 || s2 || s3 ? `,${s1.toString(16)},${s2.toString(16)},${s3.toString(16)}` : ''} koff ${koff} kb ${kb} poff ${poff}${occDraw ? ` occlusion ${occDraw.toString(16)}${occ ? '' : ' (not measured)'}` : ''}`);
     }
     endPass();
     if (occSlot >= 0) {
@@ -1222,7 +1224,7 @@ export class Encoder {
         enc.resolveQuerySet(this.occSet!, 0, occQ, this.occResolve!, 0);
         enc.copyBufferToBuffer(this.occResolve!, 0, this.occRead[occSlot], 0, occQ * 8);
       }
-      this.occPending = { slot: occSlot, n: occQ, issue: occIssue!, div: occDiv!, all: occAll };
+      this.occPending = { slot: occSlot, n: occQ, issue: occIssue!, div: occDiv!, all: occAll! };
     }
     if (tr) {
       // the first vertices of every TVert draw: clip position, oD0, oT0

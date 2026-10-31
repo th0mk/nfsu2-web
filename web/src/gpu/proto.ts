@@ -21,17 +21,16 @@ export const K_LAT = 1568, LAT_BYTES = 24, LAT_MAGIC = 0x4E54414C;
 // the VS constant arena is bound in windows of this many 16-byte rows (GW_KWIN_ROWS)
 export const KWIN_ROWS = 4096;
 
-// GwDraw: 192 bytes, all 32-bit fields (word index = byte offset / 4).  A blit's first and count: its source
+// GwDraw: 188 bytes, all 32-bit fields (word index = byte offset / 4).  A blit's first and count: its source
 // rectangle, left | top << 16 and right | bottom << 16 (count 0 = the whole source).  tex4..tex7 and smpHi (the
-// sampler keys of stages 4-7) are read only when C.stages is 8.  occ: an occlusion query's draw, slot | issue << 8
-// (0 = none; gpu-abi.md section 13)
-export const DRAW_BYTES = 192, DRAW_WORDS = 48;
+// sampler keys of stages 4-7) are read only when C.stages is 8
+export const DRAW_BYTES = 188, DRAW_WORDS = 47;
 export const enum D {
   first = 0, count = 1, tex = 2, target = 3, kind = 4, blend = 5, aref = 6, depth = 7,
   tex1 = 8, tex2 = 9, tex3 = 10, ps = 11, psci = 12, vsid = 13, rawoff = 14, koff = 15,
   proj = 16, smp = 20, blitSrc = 24, bcol = 25, cull = 26, fogv = 27, clrArgb = 31, clrFlags = 32,
   clrZ = 33, ksz = 34, ixIsz = 35, ixIb = 36, ixBase = 37, clip = 38,
-  tex4 = 39, tex5 = 40, tex6 = 41, tex7 = 42, smpHi = 43, occ = 47,
+  tex4 = 39, tex5 = 40, tex6 = 41, tex7 = 42, smpHi = 43,
 }
 // D.depth bits 8+ from Z_TEX on: a depth texture's id + Z_TEX, that texture as the draw's Z (below it: the Z surfaces)
 export const Z_TEX = 64;
@@ -45,13 +44,14 @@ export const PS_DEPTH_SHIFT = 9;
 export const STAGES_MAX = 8;
 export const enum Kind { Draw = 0, Clear = 1, Blit = 2 }
 
-// GwFrame: 156 bytes.  rbId nonzero: after the frame, texture rbTex's level 0 goes to the game, rbRows rows of
-// rbPitch bytes at wasm address rbDst (see C.rbWant)
-export const FRAME_BYTES = 156;
+// GwFrame: 164 bytes.  rbId nonzero: after the frame, texture rbTex's level 0 goes to the game, rbRows rows of
+// rbPitch bytes at wasm address rbDst (see C.rbWant).  occ: the wasm address of the frame's occlusion queries' draws,
+// occn entries of { record index, slot | issue << 8 } in draw order (gpu-abi.md section 13); occn 0: none
+export const FRAME_BYTES = 164;
 export const enum F {
   seq = 0, dn = 1, vn = 2, rvn = 3, kn = 4, pscn = 5, draws = 6, tv = 7, raw = 8, k = 9, psc = 10,
   rqEnd = 11, bbW = 12, bbH = 13, clearArgb = 14, poolSize = 15, dump = 16, dumpFrame = 17, dumpLabel = 18, // byte 72, 64 chars
-  rbId = 34, rbTex = 35, rbDst = 36, rbPitch = 37, rbRows = 38,
+  rbId = 34, rbTex = 35, rbDst = 36, rbPitch = 37, rbRows = 38, occ = 39, occn = 40,
 }
 
 // GwCtl (word indices)
@@ -69,6 +69,8 @@ export const RB_FLAG = 0x80000000;
 // C.occPtr: the game's occlusion results, OCC_SLOTS entries of { issue, count } (entry 0 unused): the page stores an
 // issue's count, then the issue (slot | number << 8), which the game reads first (gpu-abi.md section 13)
 export const OCC_SLOTS = 64;
+// GwFrame.occn's most (GW_OCC_MAX)
+export const OCC_MAX = 64;
 export const FEAT_BC = 1, FEAT_SWIZZLE = 2;
 // GwCtl.attached: 0 before a renderer attached, then ATTACHED, and DETACHED for good once it let go
 // (or once the game stopped waiting for one: its CAS 0 -> DETACHED after 30 s)

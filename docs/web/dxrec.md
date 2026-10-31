@@ -13,7 +13,7 @@ noise floor, L-082). `web/tools/dxrec-diff.mjs` compares two files.
   (`tests/mw/scripts/fx_census.txt`; `web/tools/fx-census.mjs` counts what each window draws).
 - In the browser the file goes to the page's save folder: `--env NFSU2_DXREC=/save/dxrec.txt` with run-suite's
   `--save-out <dir>` brings it out (`<dir>/<scenario>/dxrec.txt`).
-- Off, the cost is one test per COM call (`com_call`, `com_new`).
+- Off, the cost is one test per COM call (`com_call`, whose test covers `NFSU2_RBLOG` too, and `com_new`).
 - The file is flushed at every Present and closed at the guest's `ExitProcess` and at the host's exit.
 
 ## The lines

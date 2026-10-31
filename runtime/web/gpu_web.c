@@ -82,6 +82,7 @@ typedef struct {
     uint8_t *kb; unsigned kn;
     float  (*psc)[PSC_N][4]; unsigned pscn, psc_last, psc_lastver;
     unsigned last_koff, last_ksz; int last_vs;
+    uint32_t occ[GW_OCC_MAX][2]; unsigned occn;   /* the occlusion queries' draws: GwFrame.occ */
 } Buf;
 static Buf g_b[GW_NBUF];
 static int g_cur = 0;
@@ -120,10 +121,11 @@ static unsigned g_bb_w = 0, g_bb_h = 0;      /* device size (metal_resize) */
 static long     g_dump_req = -1;
 static char     g_dump_label[64];
 
-/* occlusion queries (com.c query_issue, gpu-abi.md section 13): the draws of an open Issue(BEGIN) carry
- * g_cur_occ (slot | issue << 8); the page writes each issue's count into g_occ_res[2 * slot + 1], then the issue
- * into g_occ_res[2 * slot] */
+/* occlusion queries (com.c query_issue, gpu-abi.md section 13): the draws of an open Issue(BEGIN) go on the frame's
+ * list (GwFrame.occ) with g_cur_occ (slot | issue << 8); the page writes each issue's count into
+ * g_occ_res[2 * slot + 1], then the issue into g_occ_res[2 * slot] */
 static uint32_t g_cur_occ;
+static unsigned g_ov_occ;                     /* draws past GW_OCC_MAX in a frame: not measured */
 static uint32_t g_occ_res[2 * 64] __attribute__((aligned(16)));
 void metal_set_occlusion(uint32_t occ){ g_cur_occ = occ; }
 int metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count){
@@ -742,6 +744,12 @@ static int ps_depth(int ps, unsigned dm){
     }
     return (int)full;
 }
+/* a draw of an open occlusion query: the frame's list (GwFrame.occ), by its record index */
+static void occ_note(Buf *B){
+    if (B->occn < GW_OCC_MAX){ B->occ[B->occn][0] = B->dn; B->occ[B->occn][1] = g_cur_occ; B->occn++; }
+    else if (!g_ov_occ++)
+        fprintf(stderr, "[gpu] more than %d occlusion query draws in a frame: the others are not measured\n", GW_OCC_MAX);
+}
 /* the record every draw shares: state at the time of the call */
 static GwDraw *rec_draw(Buf *B, unsigned tex){
     GwDraw *D = &B->d[B->dn];
@@ -755,7 +763,7 @@ static GwDraw *rec_draw(Buf *B, unsigned tex){
     D->bcol = g_cur_bcol; D->cull = g_cur_cull;
     memcpy(D->fogv, g_cur_fog, sizeof D->fogv);
     D->clip = g_cur_clip;
-    D->occ = g_cur_occ;
+    if (__builtin_expect(g_cur_occ != 0, 0)) occ_note(B);
     if (g_stages8){
         D->tex4 = g_cur_texhi[0]; D->tex5 = g_cur_texhi[1]; D->tex6 = g_cur_texhi[2]; D->tex7 = g_cur_texhi[3];
         memcpy(D->smphi, g_cur_smphi, sizeof D->smphi);
@@ -1018,6 +1026,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     F->seq = g_gframe; F->dn = B->dn; F->vn = B->vn; F->rvn = B->rvn; F->kn = B->kn; F->pscn = B->pscn;
     F->draws = (uint32_t)(uintptr_t)B->d; F->tv = (uint32_t)(uintptr_t)B->v; F->raw = (uint32_t)(uintptr_t)B->rv;
     F->k = (uint32_t)(uintptr_t)B->kb; F->psc = (uint32_t)(uintptr_t)B->psc;
+    F->occ = (uint32_t)(uintptr_t)B->occ; F->occn = B->occn;
     memcpy(B->kb + GW_K_TONE, &g_tone, sizeof g_tone);
     { GwLat *L = (GwLat *)(B->kb + GW_K_LAT);
       L->magic = GW_LAT_MAGIC; L->input_ms = hfr_frame_input_ms(); L->handoff_ms = now_ms(); }
@@ -1082,7 +1091,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     /* the other buffer is free now (the page released it before taking ours, or it was replaced) */
     g_cur ^= 1;
     Buf *N = &g_b[g_cur];
-    N->dn = N->vn = N->rvn = N->pscn = 0; N->kn = KFIRST; N->last_ksz = 0;
+    N->dn = N->vn = N->rvn = N->pscn = N->occn = 0; N->kn = KFIRST; N->last_ksz = 0;
     ((GwHL *)(N->kb + GW_K_HL))->n = 0;           /* no other cars' headlights until headlights.c sets them */
     ((GwMarks *)(N->kb + GW_K_MARKS))->n = 0;     /* nor quick chat's places until roam_game.c does */
     g_frame_clear = g_clear_argb;
