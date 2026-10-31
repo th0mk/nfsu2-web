@@ -121,6 +121,7 @@ double mw_game_time(void);
 #define PURSUIT_COPS     0x20u
 #define PURSUIT_TIME     0xb4u           /* the chase's length (s): it stops while the cops search */
 #define PURSUIT_BUST_T   0xdcu           /* the bust timer (s; 5 = busted) */
+#define PURSUIT_SEARCH   0x118u          /* the cops' search position (simulation space; GAME 13.9, by dump) */
 #define PURSUIT_STATE    0x218u          /* 0 the chase, 2 the cops' search (the cooldown, +0xFC filling to 1), 3 busted;
                                             1 a chase too (one cop on the car for 100 s, the bust timer rising in it) */
 #define DIK_ESCAPE 0x01u
@@ -413,6 +414,7 @@ static struct {
     int esc_check;
     int esc_recent[2], esc_dest;        /* pursuit_escape: the last two places (race index + 1) and the last one */
     unsigned fell_mask;                 /* race places whose warp left the car under the road */
+    int hides, hidden;                  /* pursuit_frame: the car set in a hiding spot this pursuit, and standing there */
     int trail_n, rejoins, last_pst;
     double trail_t, search_t;
     float plen;                         /* the pursuit's length as it last showed it (s) */
@@ -761,9 +763,13 @@ static int bin_max_heat(int bin){ return bin >= 16 ? 1 : bin >= 13 ? 2 : bin >= 
 #define ESCAPE_LEN    300.0f            /* the chase's length (s) at which it is broken off */
 #define ESCAPE_BUST   1.0f              /* or the bust timer (s; 5 = busted) */
 #define ESCAPE_GAP_S  20.0              /* game seconds between two escapes of one pursuit (10 when boxed in) */
-#define ESCAPE_MAX    10                /* escapes in one pursuit (6 until bin 8, where a 550 s chase used them all, its
-                                           bust timer at 1.0 again and again, and ended busted: c5-s8t) */
+#define ESCAPE_MAX    24                /* escapes in one pursuit (6 until bin 8, where a 550 s chase used them all, its
+                                           bust timer at 1.0 again and again, and ended busted, c5-s8t; with 10 a
+                                           1074 s chase spent them before its 630 s and ended busted too, c5-s8u) */
 #define ESCAPE_FAR_M  800.0f
+#define ESC_HIDE_MAX  6                 /* hiding spots in one pursuit once the chase has run escape_len */
+#define ICON_HIDING   11                /* GManager's icon type HIDING_SPOT_%d */
+int mw_aid_icon_place(int type, int k, float pos[3]);   /* pursuit_mw.c: icon k of type T, the world's axes */
 #define TRAIL_N       16                /* the chase's trail: the car's place each second while the cops are on it */
 #define REJOIN_S      4.0               /* game seconds of the cops' search before the car goes back */
 #define REJOIN_BACK   3                 /* to where it was this many seconds before the search */
@@ -800,6 +806,15 @@ static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
     float p[3] = { 0 }, kmh = 0;
     B.escape_t = mw_game_time(); B.escapes++;
     if (!read_gates(c, &g) || !mw_aid_where(c, p, &kmh)) return;
+    /* boxed in where the last escape set it, hardly moving: that place is no way out (bin 8's race 5 place, sim
+     * (-4432, 213, 1105): the car stood there at 1 km/h, the bust timer at 1.0, after three escapes of c5-s8t and
+     * c5-s8u) */
+    if (B.esc_recent[0] && hypotf(p[0] - B.esc_pos[0], p[2] - B.esc_pos[2]) < 60.0f && kmh < 10.0f &&
+        B.esc_dest >= 0 && B.esc_dest < 32 && !((B.fell_mask >> B.esc_dest) & 1u)){
+        B.fell_mask |= 1u << B.esc_dest;
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: boxed in at race %d's place, where the last escape set "
+                "the car: not there again\n", autotest_frame(), mw_game_time(), B.escapes, B.esc_dest);
+    }
     int n = read_races(c, g.binobj, r, MAX_RACES, 0), best = -1;
     float bd = 0;
     /* not the places of this pursuit's last two escapes, nor one that left the car under the road: at bin 8 the car
@@ -871,6 +886,18 @@ static void pursuit_hide(CPU *c, uint32_t pst, double t){
     mw_aid_teleport(c, s, dir);
     mw_aid_autopilot(c, AP_STAND);
 }
+/* or thrown into the air: escape 4 of a c5-s8w pursuit set the car at bin 8's race 1 place (height 226) and 2.5 s on
+ * it was 100 m away at height 716, then fell through the world (-9,000 at 1,080 km/h), and the rejoins took it back
+ * to a trail point in the air.  A place the car is thrown from is not used again; the trail keeps only places at
+ * road heights (TRAIL_Y_*) and speeds, and a rejoin goes only there. */
+#define THROWN_M      40.0f
+#define TRAIL_Y_MIN   -30.0f
+#define TRAIL_Y_MAX   400.0f
+static int thrown_up(CPU *c, const float want[3]){
+    float p[3], kmh = 0;
+    return mw_aid_where(c, p, &kmh) && hypotf(p[0] - want[0], p[2] - want[2]) < 400.0f && p[1] > want[1] + THROWN_M;
+}
+static int road_place(const float p[3], float kmh){ return p[1] > TRAIL_Y_MIN && p[1] < TRAIL_Y_MAX && kmh < 400.0f; }
 static void pursuit_frame(CPU *c){
     uint32_t perp = 0, po = mw_aid_pursuit(c, &perp);
     double t = mw_game_time();
@@ -882,7 +909,7 @@ static void pursuit_frame(CPU *c){
         }
         if (po){
             B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9;
-            B.esc_recent[0] = B.esc_recent[1] = 0;
+            B.esc_recent[0] = B.esc_recent[1] = 0; B.hides = 0; B.hidden = 0;
             B.trail_n = 0; B.rejoins = 0; B.last_pst = 0; B.trail_t = -1e9; B.search_t = t;
             H.hides = 0; H.hidden = 0;
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
@@ -930,9 +957,10 @@ static void pursuit_frame(CPU *c){
         float bust = rdf(po + PURSUIT_BUST_T), len = rdf(po + PURSUIT_TIME);
         uint32_t pst = rd(po + PURSUIT_STATE);
         if (B.esc_check && t - B.escape_t >= 1.5 && !mw_fe_input_top(0)){   /* the escape's warp: on the road? */
-            if (fell_below(c, B.esc_pos) && B.esc_check < 3){
-                fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: the car is under the road, set there again\n", f, t,
-                        B.escapes);
+            int up = 0;
+            if ((fell_below(c, B.esc_pos) || (up = thrown_up(c, B.esc_pos))) && B.esc_check < 3){
+                fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: the car is %s, set there again\n", f, t,
+                        B.escapes, up ? "thrown into the air" : "under the road");
                 if (B.esc_dest >= 0 && B.esc_dest < 32) B.fell_mask |= 1u << B.esc_dest;   /* not there again */
                 mw_aid_teleport(c, B.esc_pos, B.esc_dir); B.escape_t = t; B.esc_check++;
             } else B.esc_check = 0;
@@ -950,22 +978,61 @@ static void pursuit_frame(CPU *c){
          * and the chase goes on, as a player who doubles back would have it. */
         if (pst < 2 && !mw_fe_input_top(0) && t - B.trail_t >= 1.0){
             float kmh = 0, p[3];
-            if (mw_aid_where(c, p, &kmh)){ memcpy(B.trail[B.trail_n % TRAIL_N], p, sizeof p); B.trail_n++; B.trail_t = t; }
+            if (mw_aid_where(c, p, &kmh) && road_place(p, kmh)){
+                memcpy(B.trail[B.trail_n % TRAIL_N], p, sizeof p); B.trail_n++; B.trail_t = t;
+            }
         }
         if (pst == 2 && B.last_pst != 2) B.search_t = t;
         B.last_pst = (int)pst;
         if (!B.stand && search_mode() == 2) pursuit_hide(c, pst, t);
+        /* Once the chase has run escape_len, the pursuit is to end: in the cops' search the car is set in the nearest
+         * hiding spot and stands there (the AI let go) until the game ends the pursuit as evaded, or the chase comes
+         * back (then the AI drives again).  At bin 8 a chase ran 804 s through 23 escapes to race places, each found
+         * by the cops again within 20 s (c5-s8x).  The hiding spots are GManager's icons of type 11 (HIDING_SPOT_%d,
+         * 34 of them, listed only in the cops' search; pursuit_mw.c), in the world's axes.  Only with NFSMW_BOT_SEARCH
+         * unset (rejoin): "stay" leaves the search alone and "hide" hides at once (pursuit_hide). */
+        if (!B.stand && search_mode() == 0 && pst == 2 && !B.hidden && B.hides < ESC_HIDE_MAX && len >= escape_len(c, B.g.bin) &&
+            t - B.search_t >= 1.0 && !mw_fe_input_top(0)){
+            float here[3], kmh = 0, w[3], best[3] = { 0 }, bd = 1e30f;
+            if (mw_aid_where(c, here, &kmh))
+                for (int k = 0; k < 64 && mw_aid_icon_place(ICON_HIDING, k, w); k++){
+                    float s[3] = { -w[1], w[2], w[0] }, d = hypotf(s[0] - here[0], s[2] - here[2]);
+                    if (d < bd){ bd = d; memcpy(best, s, sizeof best); }
+                }
+            B.hides++;
+            if (bd < 3000.0f){
+                float dir[3] = { 1.0f, 0.0f, 0.0f };
+                fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit hidden %d: chase %.0f s, the search %.0f s on; to the hiding spot at "
+                        "%.0f %.0f %.0f, %.0f m away, standing\n", f, t, B.hides, len, t - B.search_t, best[0], best[1], best[2], bd);
+                mw_aid_teleport(c, best, dir);
+                mw_aid_autopilot(c, AP_STAND);
+                B.hidden = 1;
+            } else fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit: no hiding spot within 3 km (nearest %.0f m)\n", f, t, bd);
+        }
+        if (B.hidden && pst < 2){          /* the chase came back: drive */
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit: the cops found the hidden car, the AI drives again\n", f, t);
+            mw_aid_autopilot(c, 1);
+            B.hidden = 0;
+        }
         if (!B.stand && search_mode() == 0 && pst == 2 && len < escape_len(c, B.g.bin) && B.rejoins < REJOIN_MAX &&
             t - B.search_t >= REJOIN_S && B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
             if (m > 0.5f){ d[0] /= m; d[2] /= m; } else { d[0] = 1.0f; d[2] = 0.0f; }
-            /* the trail is kept: a search still on REJOIN_S later (the cops gone elsewhere) takes the car back again */
+            /* the trail is kept: a search still on REJOIN_S later (the cops gone elsewhere) takes the car back again.
+             * From the second time on, the car goes to where the cops search (the pursuit's search position, +0x118,
+             * simulation space): at bin 8 the trail's place found no cop eight times in a row, pursuit after pursuit
+             * (12 to 16 s chases, 8 rejoins each, evaded for 5,000 bounty: c5-pr8, c5-s8v) */
+            float sp[3] = { rdf(po + PURSUIT_SEARCH), rdf(po + PURSUIT_SEARCH + 4u), rdf(po + PURSUIT_SEARCH + 8u) }, here[3], kmh = 0;
+            int use_search = B.rejoins >= 1 && mw_aid_where(c, here, &kmh) && (sp[0] != 0.0f || sp[2] != 0.0f) &&
+                             hypotf(sp[0] - here[0], sp[2] - here[2]) < 3000.0f && fabsf(sp[1] - a[1]) < 200.0f &&
+                             sp[1] > TRAIL_Y_MIN && sp[1] < TRAIL_Y_MAX;
+            const float *to = use_search ? sp : a;
             B.rejoins++;
-            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit rejoined %d: chase %.0f s, the search %.0f s on; back to %.0f %.0f %.0f\n",
-                    f, t, B.rejoins, len, t - B.search_t, a[0], a[1], a[2]);
+            fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit rejoined %d: chase %.0f s, the search %.0f s on; back to %.0f %.0f %.0f%s\n",
+                    f, t, B.rejoins, len, t - B.search_t, to[0], to[1], to[2], use_search ? " (the cops' search position)" : "");
             B.search_t = t;
-            mw_aid_teleport(c, a, d);
+            mw_aid_teleport(c, to, d);
         }
         if (t >= B.next_log){
             static double every = -1.0;     /* NFSMW_BOT_PLOG=S: a line every S game seconds (the car's track), else 15 */
@@ -1022,9 +1089,44 @@ static void pursuit_frame(CPU *c){
     set_state(back, "pursuit over");
 }
 
+/* A car off the world (below or far above any road): the game's own reset did not catch it.  After the throw of a
+ * c5-s8w escape (thrown_up) the car fell for good, 150 km down at 1,080 km/h through four more pursuits that the
+ * cops could only lose, their bounty banked by the game.  So in the world, out of a race, a car outside road heights
+ * is set at the place of the bin's race nearest it (in a race the game's RESET, as the wedge watch does it). */
+#define OFFWORLD_Y_MIN  -100.0f
+#define OFFWORLD_Y_MAX  700.0f
+static void off_world(CPU *c){
+    static double last;
+    float p[3], kmh = 0;
+    double t = mw_game_time();
+    if (game_flow() != g_game.flow_race || mw_fe_input_top(0) || !mw_aid_where(c, p, &kmh)) return;
+    if (p[1] > OFFWORLD_Y_MIN && p[1] < OFFWORLD_Y_MAX) return;
+    if (t >= last && t - last < 3.0) return;
+    last = t;
+    if (racing(c)){
+        int ok = mw_reset_car(c);
+        fprintf(stderr, "[mwbot] f=%ld t=%.1f the car is off the world (at %.0f %.0f %.0f, %.0f km/h): the game's reset %s\n",
+                autotest_frame(), t, p[0], p[1], p[2], kmh, ok > 0 ? "done" : "found no place");
+        return;
+    }
+    struct gates g; struct race r[MAX_RACES];
+    if (!read_gates(c, &g)) return;
+    int n = read_races(c, g.binobj, r, MAX_RACES, 0), best = -1;
+    float bd = 1e30f;
+    for (int i = 0; i < n; i++){
+        float d = hypotf(r[i].pos[0] - p[0], r[i].pos[2] - p[2]);
+        if (r[i].params && !((B.fell_mask >> i) & 1u) && d < bd){ bd = d; best = i; }
+    }
+    if (best < 0) return;
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f the car is off the world (at %.0f %.0f %.0f, %.0f km/h): to race %d's place, %.0f m away\n",
+            autotest_frame(), t, p[0], p[1], p[2], kmh, best, bd);
+    mw_aid_teleport(c, r[best].pos, r[best].dir);
+}
+
 void mw_bot_frame(CPU *c){
     if (B.st == B_OFF || B.st == B_DONE) return;
     long f = autotest_frame();
+    off_world(c);
     if (f - B.mk_f >= 60 || f < B.mk_f){      /* the Out of Jail markers, for the infractions sheet (mw_bot_present) */
         uint32_t a[2] = { MK_OUT_OF_JAIL, 0 };
         B.mk_f = f;
