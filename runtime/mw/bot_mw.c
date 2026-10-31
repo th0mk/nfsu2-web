@@ -761,6 +761,7 @@ static void decide(CPU *c){
 static int bin_max_heat(int bin){ return bin >= 16 ? 1 : bin >= 13 ? 2 : bin >= 9 ? 3 : bin >= 5 ? 4 : 5; }
 /* a chase broken off (pursuit_frame): the car to the place of the bin's race farthest from it */
 #define ESCAPE_LEN    300.0f            /* the chase's length (s) at which it is broken off */
+#define ESCAPE_LEN_HEAT4 600.0f         /* ... from bin 8 on (escape_len) */
 #define ESCAPE_BUST   1.0f              /* or the bust timer (s; 5 = busted) */
 #define ESCAPE_GAP_S  20.0              /* game seconds between two escapes of one pursuit (10 when boxed in) */
 #define ESCAPE_MAX    24                /* escapes in one pursuit (6 until bin 8, where a 550 s chase used them all, its
@@ -795,7 +796,11 @@ static float escape_len(CPU *c, int bin){
     call(c, FN_ATTRIB_FREE, inst, 0, 0);
     c->esp += 0x40u;
     cached_bin = bin;
-    cached = hi > 0.0f && hi < 3600.0f && hi + 30.0f > ESCAPE_LEN ? hi + 30.0f : ESCAPE_LEN;
+    /* from heat 4 on (bins 8 to 1) at least ESCAPE_LEN_HEAT4: bin 5's milestones are counted in one pursuit (cost to
+     * state 100,000 to 250,000, spike strips 6 to 12, the cops destroyed), and 300 s chases, each ended in a hiding
+     * spot, met two of four in seven pursuits (c5-s5a, c5-s5b); bin 8's 869 s chase met all four */
+    float base = bin <= 8 ? ESCAPE_LEN_HEAT4 : ESCAPE_LEN;
+    cached = hi > 0.0f && hi < 3600.0f && hi + 30.0f > base ? hi + 30.0f : base;
     fprintf(stderr, "[mwbot] f=%ld bin %d: %s, chases broken off at %.0f s\n", autotest_frame(), bin,
             hi > 0.0f ? "a pursuit_length milestone" : "no pursuit_length milestone", (double)cached);
     if (hi > 0.0f) fprintf(stderr, "[mwbot]   (its goal at most %.0f s)\n", (double)hi);
