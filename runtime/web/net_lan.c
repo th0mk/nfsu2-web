@@ -488,7 +488,9 @@ static int silence_drop(void){
 }
 /* NFSU2_VLAN_DEBUG: the race link's datagrams (its first RACE_LOG_N each way per peer, and the first after a pause of
  * RACE_LOG_GAP_US or more: a link that starts again), every port-unreachable notice and what it did (the race link's
- * setup: who sent first, before whose bind) (g_mu held) */
+ * setup: who sent first, before whose bind) (g_mu held).  NFSU2_VLAN_DEBUG=2, in either game: every one of them,
+ * with the wall clock, and in Most Wanted the game's own state of the link (dbg_all, mw_link_probe); a race of two
+ * logs some 8,500 of these lines on each side (Underground 2's circuit) to 16,500 (Most Wanted's sprint) */
 #define RACE_LOG_N 24
 #define RACE_LOG_GAP_US 500000u
 static void race_log(const char *what, uint32_t ip_n, uint16_t sport, uint16_t dport, const uint8_t *p, int n){

@@ -181,6 +181,9 @@ static _Thread_local CPU *g_curc;                    /* the calling guest thread
  * each error and caller once, at most WS_ERRLOG lines: what the game saw when a link failed */
 #define WS_ERRLOG 48
 static int ws_dbg(void){ static int v = -1; if (v < 0){ const char *e = getenv("NFSU2_VLAN_DEBUG"); v = e && *e && *e != '0'; } return v; }
+/* NFSU2_VLAN_DEBUG=2, the verbose level (web/net_lan.c: every race datagram): also the guest's stack where a bound
+ * UDP socket is closed; 1 logs as it always has */
+static int ws_dbg_all(void){ static int v = -1; if (v < 0){ const char *e = getenv("NFSU2_VLAN_DEBUG"); v = e && atoi(e) >= 2; } return v; }
 static void err_note(int e, const char *what){
     if (!ws_dbg() || e == 10035 || e == 997) return;
     static struct { int e; uint32_t at; } seen[WS_ERRLOG]; static int n;
@@ -1078,7 +1081,7 @@ static uint32_t ws_closesocket(CPU *c){
     if (g_probe.h == A(c, 0)) g_probe.h = 0;          /* deny_tick: no second try on another socket */
     if (ws_dbg() && s->type != 1){
         ws_log("closesocket: %s socket 0x%x from 0x%08x", s->type == 3 ? "raw" : "udp", A(c, 0), c->eip);
-        if (s->type == 2 && s->bound && guest_backtrace) guest_backtrace(c, 12);   /* who closed a bound one */
+        if (s->type == 2 && s->bound && ws_dbg_all() && guest_backtrace) guest_backtrace(c, 12);   /* who closed a bound one */
     }
     sclose(s, s->linger_on && !s->linger_s);
     return 0;
