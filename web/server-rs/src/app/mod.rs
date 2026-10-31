@@ -616,15 +616,33 @@ impl App {
             return self.plain(q, s, 308, "Permanent redirect", &[("location", to.as_str())], Cache::Store, true).await;
         }
         if !under {
-            // the site's page at the origin's root (Most Wanted's server: https://nfsrevived.com/, game.rs landing)
+            // the site's page at the origin's root (Most Wanted's server: https://nfsrevived.com/, game.rs landing), in the
+            // visitor's language where its folder has the page in it (game.rs landing_language), else in English
             if p == "/"
                 && let Some(file) = self.o.game.landing
             {
                 let root = self.o.dist.clone();
-                let found = self.locate(&root, files::resolve_inside(&root, &format!("/{file}"))).await;
-                return self
-                    .send_file(q, s, &root, None, files::FileOpts { found, cache: Cache::Store, noindex: false, ..Default::default() })
-                    .await;
+                let (lang, varies) = crate::game::landing_language(u.query.as_deref(), q.headers.get("accept-language"));
+                let (mut found, mut tag) = (None, "en");
+                if let Some((name, t)) = lang {
+                    let named = match file.strip_suffix(".html") {
+                        Some(stem) => format!("/{stem}.{name}.html"),
+                        None => format!("/{file}.{name}"),
+                    };
+                    found = self.locate(&root, files::resolve_inside(&root, &named)).await;
+                    if found.is_some() {
+                        tag = t;
+                    }
+                }
+                if found.is_none() {
+                    found = self.locate(&root, files::resolve_inside(&root, &format!("/{file}"))).await;
+                }
+                let mut extra = vec![("content-language", tag)];
+                if varies {
+                    extra.push(("vary", "accept-language"));
+                }
+                let opts = files::FileOpts { found, cache: Cache::Store, noindex: false, extra, ..Default::default() };
+                return self.send_file(q, s, &root, None, opts).await;
             }
             // the base without its "/": to the page at its folder, the query kept (an edge redirects other spellings
             // there first)

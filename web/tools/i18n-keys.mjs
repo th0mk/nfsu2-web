@@ -6,7 +6,9 @@
 //                                             every game
 // From the sources: the first argument of t(), T(), N() and tvars() and the last two of tn() when they are string
 // literals, and the markup index.html marks (data-i18n: its text, data-i18n-html: its text with <0>…</0> for the
-// elements in it, data-i18n-attr: the attributes named).  A game's page has the texts of the shared sources and of its
+// elements in it, data-i18n-attr: the attributes named), the top bar's (src/games/site.mjs: every game's, as shared
+// code, also before a game's page shows it) and, for the game whose build writes it (site.mjs SITE_GAME), the site's
+// page's (src/site/index.html, marked the same way).  A game's page has the texts of the shared sources and of its
 // own folder, web/src/games/<id>, and its language files are the shared web/src/app/lang/<language>.json with the
 // game's own web/src/games/<id>/lang/<language>.json over it (web/build.mjs merges them the same way).  So the shared
 // file holds the texts every game uses, and a game's file the texts only it uses (also those only its body.json puts
@@ -16,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hasBar, withSiteBar } from '../src/games/site.mjs';
+import { GAMES as SITE_GAMES, hasBar, withSiteBar, SITE_GAME } from '../src/games/site.mjs';
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -156,7 +158,15 @@ export function catalog(game = 'ug2', root = WEB) {
   }
   // a text only the game's body.json puts in the page is the game's own
   const shared = new Set(htmlKeys(fs.readFileSync(path.join(root, 'index.html'), 'utf8')).map(k => k.key));
-  for (const k of htmlKeys(pageHtml(game, root))) add(k.key, shared.has(k.key) ? k.where : `games/${game}/body.json`, k);
+  const page = pageHtml(game, root);
+  for (const k of htmlKeys(page)) add(k.key, shared.has(k.key) ? k.where : `games/${game}/body.json`, k);
+  // the top bar's, shared code: every game's (site.mjs GAMES), also while a game's page has no bar yet (Underground
+  // 2's own switch)
+  if (SITE_GAMES.some(g => g.id === game) && !page.includes('<nav class="site-bar"'))
+    for (const k of htmlKeys(withSiteBar(page, game))) if (!all.has(k.key)) add(k.key, k.where, k);
+  // the site's page, which only that game's build writes
+  const site = path.join(root, 'src/site/index.html');
+  if (game === SITE_GAME && fs.existsSync(site)) for (const k of htmlKeys(fs.readFileSync(site, 'utf8'))) add(k.key, k.where.replace(/^index\.html/, 'site/index.html'), k);
   return { keys: all, bad };
 }
 

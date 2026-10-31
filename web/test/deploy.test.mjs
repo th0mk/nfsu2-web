@@ -101,7 +101,7 @@ const REQUIRED = {
   'cache-control': v => /\bprivate\b/.test(v) && /\bno-(store|cache)\b/.test(v), 'cdn-cache-control': v => v === 'no-store',
   'cloudflare-cdn-cache-control': v => v === 'no-store',
 };
-// (Most Wanted's server has no robots.txt of its own: Underground 2's answers the shared site's root)
+// (Most Wanted's robots.txt is at its site's root, outside its base: under /mw the crawl's 'robots' is a 404)
 const INDEXABLE = new Set(['index', 'index.html', 'HEAD /', ...(G.id === 'ug2' ? ['robots'] : [])]);
 const FORBIDDEN = ['server', 'x-powered-by', 'last-modified'];
 function headerProblems(r, { viaProxy = false, indexable = false } = {}) {

@@ -222,6 +222,69 @@ pub const MW: GameProfile = GameProfile {
 /// the games --game names
 pub const GAMES: [&GameProfile; 2] = [&UG2, &MW];
 
+/// The site's page (a profile's `landing`, https://nfsrevived.com/) in each page language besides English: the name
+/// its file and ?lang= go by (build.mjs writes site/index.<name>.html beside the English site/index.html) and the BCP
+/// 47 tag it is in (Content-Language; web/src/games/site.mjs SITE_LOCALES, which web/test/site.test.mjs holds this to)
+pub const LANDING_LANGUAGES: [(&str, &str); 17] = [
+    ("french", "fr"),
+    ("german", "de"),
+    ("italian", "it"),
+    ("spanish", "es"),
+    ("dutch", "nl"),
+    ("swedish", "sv"),
+    ("danish", "da"),
+    ("finnish", "fi"),
+    ("korean", "ko"),
+    ("chinese", "zh-Hant"),
+    ("japanese", "ja"),
+    ("russian", "ru"),
+    ("thai", "th"),
+    ("portuguese", "pt-BR"),
+    ("polish", "pl"),
+    ("turkish", "tr"),
+    ("hungarian", "hu"),
+];
+
+/// Which language the site's page is answered in (it has no script to pick one): ?lang=<name> first (`english` or
+/// one of LANDING_LANGUAGES' names: the page's alternates name each), else the first language of the request's
+/// Accept-Language the page has (by q, then by place; English is one; Chinese is the page's Traditional script, so
+/// zh-Hans, zh-CN and zh-SG go on to the next choice), else English.  None: English.  The bool: the choice was
+/// Accept-Language's to make (the answer varies by it).
+pub fn landing_language(query: Option<&str>, accept: Option<&str>) -> (Option<(&'static str, &'static str)>, bool) {
+    if let Some(v) = query.into_iter().flat_map(|q| q.split('&')).find_map(|kv| kv.strip_prefix("lang=")) {
+        if v == "english" {
+            return (None, false);
+        }
+        if let Some(l) = LANDING_LANGUAGES.iter().find(|(n, _)| *n == v) {
+            return (Some(*l), false);
+        }
+    }
+    let mut want: Vec<(f32, usize, String)> = Vec::new();
+    for (i, part) in accept.unwrap_or("").split(',').take(32).enumerate() {
+        let mut it = part.split(';');
+        let tag = it.next().unwrap_or("").trim().to_ascii_lowercase();
+        let q = it.find_map(|p| p.trim().strip_prefix("q=")).map_or(1.0, |v| v.trim().parse::<f32>().unwrap_or(0.0));
+        if q > 0.0 && !tag.is_empty() {
+            want.push((q, i, tag));
+        }
+    }
+    want.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+    for (_, _, tag) in &want {
+        let mut sub = tag.split('-');
+        let primary = sub.next().unwrap_or("");
+        if primary == "en" {
+            return (None, true);
+        }
+        if primary == "zh" && sub.any(|s| matches!(s, "hans" | "cn" | "sg")) {
+            continue;
+        }
+        if let Some(l) = LANDING_LANGUAGES.iter().find(|(_, t)| t.split('-').next() == Some(primary)) {
+            return (Some(*l), true);
+        }
+    }
+    (None, true)
+}
+
 /// A base path as --base-path takes one: "/" (the root, kept as "") or "/" and a word of lower case letters, digits,
 /// "-" and "_" (one trailing "/" dropped); None for anything else
 pub fn base_path(p: &str) -> Option<String> {
@@ -519,6 +582,33 @@ mod tests {
         assert_eq!(base_path(""), None);
         assert_eq!(base_path(&format!("/{}", "a".repeat(32))).map(|p| p.len()), Some(33));
         assert_eq!(base_path(&format!("/{}", "a".repeat(33))), None);
+    }
+
+    // The site's page in the visitor's language: ?lang= first, then Accept-Language by q and place, English when
+    // neither names one the page has; Simplified Chinese is not the page's Chinese
+    #[test]
+    fn the_site_pages_language() {
+        let l = |q: Option<&str>, a: Option<&str>| {
+            let (lang, varies) = landing_language(q, a);
+            (lang.map(|(n, _)| n), varies)
+        };
+        assert_eq!(l(None, None), (None, true));
+        assert_eq!(l(Some("lang=german"), None), (Some("german"), false));
+        assert_eq!(l(Some("x=1&lang=thai"), Some("de")), (Some("thai"), false));
+        assert_eq!(l(Some("lang=english"), Some("de")), (None, false));
+        assert_eq!(l(Some("lang=klingon"), Some("de-DE,de;q=0.9")), (Some("german"), true));
+        assert_eq!(l(Some("lang=German"), None), (None, true));
+        assert_eq!(l(None, Some("de-DE,de;q=0.9,en;q=0.8")), (Some("german"), true));
+        assert_eq!(l(None, Some("en-US,en;q=0.9,de;q=0.8")), (None, true));
+        assert_eq!(l(None, Some("xx, pt-PT;q=0.5, fr;q=0.7")), (Some("french"), true));
+        assert_eq!(l(None, Some("fr;q=0, pt")), (Some("portuguese"), true));
+        assert_eq!(l(None, Some("zh-CN, zh-Hans;q=0.9, ja;q=0.5")), (Some("japanese"), true));
+        assert_eq!(l(None, Some("zh-TW,zh;q=0.9")), (Some("chinese"), true));
+        assert_eq!(l(None, Some("zh-Hant-HK")), (Some("chinese"), true));
+        assert_eq!(l(None, Some("*, nb;q=0.9")), (None, true));
+        assert_eq!(l(None, Some(";;,,q=1, FI;Q=0.5")), (Some("finnish"), true));
+        let names: Vec<&str> = LANDING_LANGUAGES.iter().map(|(n, _)| *n).collect();
+        assert!(names.iter().all(|n| n.bytes().all(|c| c.is_ascii_lowercase())) && !names.contains(&"english"));
     }
 
     // The image's health check (Dockerfile) asks for game.json at each game's base on this machine's names: one image

@@ -19,5 +19,11 @@
   },
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "La page n'a pas l'isolation cross-origin (pas de SharedArrayBuffer). Ouvrez-la depuis le serveur Most Wanted Revived, pas depuis un autre serveur.",
   "Change camera, look back": "Changer caméra, vue arrière",
-  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Cette phrase secrète garde vos sauvegardes cloud d'Underground 2, mais encore aucune de Most Wanted. Envoyer aussi les sauvegardes d'ici sous cette phrase ? Chaque jeu garde ses propres sauvegardes."
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "Cette phrase secrète garde vos sauvegardes cloud d'Underground 2, mais encore aucune de Most Wanted. Envoyer aussi les sauvegardes d'ici sous cette phrase ? Chaque jeu garde ses propres sauvegardes.",
+  "NFS Revived: Underground 2 and Most Wanted in the browser": "NFS Revived : Underground 2 et Most Wanted dans le navigateur",
+  "Play Need for Speed: Underground 2 (2004) and Need for Speed: Most Wanted (2005) in Chrome and Firefox. Fan project, not affiliated with Electronic Arts.": "Jouez à Need for Speed: Underground 2 (2004) et à Need for Speed: Most Wanted (2005) dans Chrome et Firefox. Projet de fans, non affilié à Electronic Arts.",
+  "Need for Speed: Underground 2 (2004) in the browser: the PC game's own code with WebGPU graphics, up to 120 fps widescreen, free roam with friends and Online.": "Need for Speed: Underground 2 (2004) dans le navigateur : le code même du jeu PC avec des graphismes WebGPU, jusqu'à 120 fps en écran large, le mode Exploration entre amis et le jeu en ligne.",
+  "Play Underground 2": "Jouer à Underground 2",
+  "Need for Speed: Most Wanted (2005) in the browser: the PC game's own code (version 1.3) with WebGPU graphics and Web Audio sound.": "Need for Speed: Most Wanted (2005) dans le navigateur : le code même du jeu PC (version 1.3) avec des graphismes WebGPU et le son Web Audio.",
+  "Play Most Wanted": "Jouer à Most Wanted"
 }

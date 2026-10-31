@@ -51,7 +51,8 @@
 // to https://nfsu2.xyz/ with the rest of the path, and no open redirect (only those fixed addresses); each game's /lan
 // its own server's; one keyphrase, one vault: each game's box under its own token from the one phrase, Underground 2's
 // at nfsu2/vault and Most Wanted's through nfsrevived/mw/vault, each readable through either name, none in Most
-// Wanted's state folder; in Chrome the site's page (both links, its stylesheet and pictures, no CSP refusal),
+// Wanted's state folder; the site's page in a page language by ?lang= and by Accept-Language (English for neither);
+// in Chrome the site's page (both links, its stylesheet and pictures, no CSP refusal),
 // Underground 2's page as it is (no bar while its launch switch is off) with its worker at /, Most Wanted's with the
 // bar (Underground 2's tab to https://nfsu2.xyz/) and its worker at /mw/; then in a fresh browser the phrase typed into
 // each game's page restores that game's saves (--backup-u2: a real "Download a backup" zip of Underground 2's;
@@ -532,6 +533,21 @@ async function runTwoDomain() {
       if (l && !['https://nfsu2.xyz/', 'https://nfsrevived.com/mw/'].some(a => l === a || (l.startsWith(a) && !l.slice(a.length).startsWith('/')))) bad.push(`${host}${p}: ${r.status} ${l}`);
     }
     report('two-domain: no open redirect (only https://nfsu2.xyz/... and https://nfsrevived.com/mw/)', bad.length === 0, bad.length ? bad : `${probes.length} probes`);
+    // the site's page in a page language: ?lang= first, then the browser's Accept-Language, English for neither
+    const langs = [];
+    for (const [p, al, lang, title] of [['/?lang=german', 'en', 'de', 'NFS Revived: Underground 2 und Most Wanted im Browser'],
+      ['/', 'fr-CA,fr;q=0.9,en;q=0.5', 'fr', 'NFS Revived : Underground 2 et Most Wanted dans le navigateur'],
+      ['/', 'zh-CN,ja;q=0.8', 'ja', 'NFS Revived: ブラウザで遊べるUnderground 2とMost Wanted'],
+      ['/?lang=english', 'de', 'en', 'NFS Revived: Underground 2 and Most Wanted in the browser'],
+      ['/', 'xx', 'en', 'NFS Revived: Underground 2 and Most Wanted in the browser']]) {
+      const r = await ask(P1, { p, host: SITE, headers: { 'Accept-Language': al } });
+      const body = Buffer.from(r.body, 'latin1').toString('utf8');
+      const got = { status: r.status, lang: /<html lang="([^"]+)">/.exec(body)?.[1], cl: r.headers['content-language'], vary: r.headers.vary ?? null,
+        title: /<title>([^<]*)<\/title>/.exec(body)?.[1] };
+      langs.push({ p, al, ok: got.status === 200 && got.lang === lang && got.cl === lang && got.title === title &&
+        (got.vary === 'accept-language') === !p.includes('lang='), ...got });
+    }
+    report('two-domain: the site\'s page in the visitor\'s language (?lang=, then Accept-Language; English for neither)', langs.every(l => l.ok), langs);
     // 3. each game's /lan reaches its own server only
     const count = async (host, p) => JSON.parse((await ask(P1, { p, host })).body || '{}').players;
     const before = [await count(U2, '/players'), await count(SITE, '/mw/players')];

@@ -1161,5 +1161,6 @@
   "Not sent: try again in a moment": "보내지 못했어요. 잠시 후 다시 시도해 주세요",
   "Request sent": "요청을 보냈어요",
   "Use this passphrase here too?": "이 암호 문구를 여기서도 사용할까요?",
-  "Sent. This browser syncs from now on.": "보냈어요. 이제부터 이 브라우저가 동기화돼요."
+  "Sent. This browser syncs from now on.": "보냈어요. 이제부터 이 브라우저가 동기화돼요.",
+  "Games": "게임"
 }

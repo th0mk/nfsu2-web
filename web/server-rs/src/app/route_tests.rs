@@ -545,9 +545,26 @@ async fn most_wanted_under_mw_everywhere() {
         std::fs::create_dir_all(root.join("repo/web/dist-mw/site")).unwrap();
         std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html><title>mw</title>").unwrap();
         std::fs::write(root.join("repo/web/dist-mw/site/index.html"), b"<!doctype html><title>site</title>").unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/site/index.german.html"), b"<!doctype html><title>Seite</title>").unwrap();
         module(root, "out/web/mw/nfsmw.wasm");
     })
     .await;
+    // the site's page in the visitor's language: ?lang= first, then Accept-Language; English where the folder has no
+    // page in the language asked for
+    for (query, accept, body, lang, vary) in [
+        ("/", None, &b"<!doctype html><title>site</title>"[..], "en", Some("accept-language")),
+        ("/", Some("de-DE,de;q=0.9,en;q=0.8"), &b"<!doctype html><title>Seite</title>"[..], "de", Some("accept-language")),
+        ("/", Some("ja,de;q=0.5"), &b"<!doctype html><title>site</title>"[..], "en", Some("accept-language")),
+        ("/?lang=german", Some("en"), &b"<!doctype html><title>Seite</title>"[..], "de", None),
+        ("/?lang=english", Some("de"), &b"<!doctype html><title>site</title>"[..], "en", None),
+        ("/?lang=../index", Some("de"), &b"<!doctype html><title>Seite</title>"[..], "de", Some("accept-language")),
+    ] {
+        let hs: Vec<(&str, &str)> = accept.map(|a| ("Accept-Language", a)).into_iter().collect();
+        let a = kit.request("GET", query, &hs, b"").await;
+        assert_eq!((a.status, a.body.as_slice()), (200, body), "{query} {accept:?}");
+        assert_eq!((a.header("content-language"), a.header("vary")), (Some(lang), vary), "{query} {accept:?}");
+        assert_eq!(a.header("x-robots-tag"), Some("index, follow"), "{query}");
+    }
     for host in ["localhost", "127.0.0.1:8080"] {
         let get = |path: &'static str| kit.request_to(host, "GET", path, &[], b"");
         let a = get("/mw/").await;
@@ -570,6 +587,7 @@ async fn most_wanted_under_mw_everywhere() {
         for p in [
             "/index.html",
             "/site/index.html",
+            "/index.german.html",
             "/mw/robots.txt",
             "/game.json",
             "/players",

@@ -15,5 +15,11 @@
   "Replaces the profiles {names} in this browser, their careers too": "このブラウザのプロフィール{names}を、キャリアも含めて置き換えます",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。別のサーバーではなく、Most Wanted Revivedのサーバーから開いてください。",
   "Change camera, look back": "カメラ切り替え、後方確認",
-  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "このパスフレーズにはUnderground 2のクラウドセーブがありますが、Most Wantedのセーブデータはまだありません。ここにあるセーブデータもこのパスフレーズで送りますか？セーブデータはゲームごとに別々に保存されます。"
+  "This passphrase keeps your Underground 2 cloud saves but none of Most Wanted's yet. Send the saves here under it too? Each game keeps its own saves.": "このパスフレーズにはUnderground 2のクラウドセーブがありますが、Most Wantedのセーブデータはまだありません。ここにあるセーブデータもこのパスフレーズで送りますか？セーブデータはゲームごとに別々に保存されます。",
+  "NFS Revived: Underground 2 and Most Wanted in the browser": "NFS Revived: ブラウザで遊べるUnderground 2とMost Wanted",
+  "Play Need for Speed: Underground 2 (2004) and Need for Speed: Most Wanted (2005) in Chrome and Firefox. Fan project, not affiliated with Electronic Arts.": "ChromeとFirefoxでNeed for Speed: Underground 2（2004年）とNeed for Speed: Most Wanted（2005年）をプレイ。ファンプロジェクトです。Electronic Artsとは関係ありません。",
+  "Need for Speed: Underground 2 (2004) in the browser: the PC game's own code with WebGPU graphics, up to 120 fps widescreen, free roam with friends and Online.": "Need for Speed: Underground 2（2004年）をブラウザで。PC版ゲームそのもののコードで、WebGPUグラフィック、最大120 fpsのワイド画面、フレンドとのフリーロームとオンラインに対応。",
+  "Play Underground 2": "Underground 2をプレイ",
+  "Need for Speed: Most Wanted (2005) in the browser: the PC game's own code (version 1.3) with WebGPU graphics and Web Audio sound.": "Need for Speed: Most Wanted（2005年）をブラウザで。PC版ゲームそのもののコード（バージョン1.3）で、WebGPUグラフィックとWeb Audioサウンドに対応。",
+  "Play Most Wanted": "Most Wantedをプレイ"
 }

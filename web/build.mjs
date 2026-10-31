@@ -10,7 +10,7 @@ import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hasBar, withSiteBar } from './src/games/site.mjs';
+import { hasBar, withSiteBar, SITE_GAME, sitePage } from './src/games/site.mjs';
 // the paths below are web/'s, also when this runs from elsewhere (node web/build.mjs)
 process.chdir(path.dirname(fileURLToPath(import.meta.url)));
 const watch = process.argv.includes('--watch');
@@ -113,12 +113,20 @@ else {
   if (BAR) html = withSiteBar(html, GAME);
   fs.writeFileSync(path.join(DIST, 'index.html'), html);
 }
+const texts = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
+/** a page language's texts as /lang/<language>.json has them: the shared file's, the game's own over them */
+const langTexts = f => ({ ...texts(path.join(LANG, f)), ...texts(path.join(OWN_LANG, f)) });
 // the site's page (https://nfsrevived.com/, src/site: both games, their links), in Most Wanted's page folder, whose
-// server answers it at the root (web/server-rs src/game.rs landing), with each game's icon beside it
+// server answers it at the root (web/server-rs src/game.rs landing), with each game's icon beside it: in English
+// (site/index.html) and in each of the page's languages (site/index.<language>.html: src/games/site.mjs sitePage),
+// one of which the server answers by ?lang= or the browser's languages (the page has no script)
 fs.rmSync(path.join(DIST, 'site'), { recursive: true, force: true });
-if (GAME === 'mw') {
+if (GAME === SITE_GAME) {
   fs.mkdirSync(path.join(DIST, 'site'));
-  for (const f of fs.readdirSync('src/site')) fs.copyFileSync(path.join('src/site', f), path.join(DIST, 'site', f));
+  for (const f of fs.readdirSync('src/site')) if (f !== 'index.html') fs.copyFileSync(path.join('src/site', f), path.join(DIST, 'site', f));
+  const site = fs.readFileSync('src/site/index.html', 'utf8'), langs = ['english', ...LANG_FILES.map(f => f.replace(/\.json$/, ''))];
+  for (const l of langs)
+    fs.writeFileSync(path.join(DIST, 'site', l === 'english' ? 'index.html' : `index.${l}.html`), sitePage(site, l, l === 'english' ? {} : langTexts(`${l}.json`), langs));
   fs.copyFileSync('src/static/icon-192.png', path.join(DIST, 'site', 'u2.png'));
   fs.copyFileSync('src/games/mw/static/icon-192.png', path.join(DIST, 'site', 'mw.png'));
 }
@@ -127,9 +135,7 @@ for (const f of fs.readdirSync(STATIC)) fs.copyFileSync(path.join(STATIC, f), pa
 // the start page's languages (LANG and OWN_LANG, i18n.ts): /lang/<language>.json, fetched once a player picks one
 fs.rmSync(path.join(DIST, 'lang'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'lang'));
-const texts = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
-for (const f of LANG_FILES)
-  fs.writeFileSync(path.join(DIST, 'lang', f), JSON.stringify({ ...texts(path.join(LANG, f)), ...texts(path.join(OWN_LANG, f)) }));
+for (const f of LANG_FILES) fs.writeFileSync(path.join(DIST, 'lang', f), JSON.stringify(langTexts(f)));
 // the changelog (CHANGELOG.md at the top of the repo): /changelog.json, fetched when a player opens it (changelog.ts):
 // [{ date, commit, changes: [[area, text]] }], newest first, one release a day.  A line that looks like a release or a
 // change but is neither stops the build, so a typo never reaches the page as a missing release; so does a day twice

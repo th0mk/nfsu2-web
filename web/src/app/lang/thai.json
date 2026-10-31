@@ -1161,5 +1161,6 @@
   "Not sent: try again in a moment": "ส่งไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่",
   "Request sent": "ส่งคำขอแล้ว",
   "Use this passphrase here too?": "ต้องการใช้วลีรหัสนี้ที่นี่ด้วยหรือไม่",
-  "Sent. This browser syncs from now on.": "ส่งแล้ว เบราว์เซอร์นี้จะซิงค์ตั้งแต่นี้ไป"
+  "Sent. This browser syncs from now on.": "ส่งแล้ว เบราว์เซอร์นี้จะซิงค์ตั้งแต่นี้ไป",
+  "Games": "เกม"
 }
