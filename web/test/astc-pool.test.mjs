@@ -19,10 +19,15 @@ globalThis.GPUBufferUsage ??= { MAP_READ: 1, MAP_WRITE: 2, COPY_SRC: 4, COPY_DST
   INDIRECT: 256, QUERY_RESOLVE: 512 };
 globalThis.GPUTextureUsage ??= { COPY_SRC: 1, COPY_DST: 2, TEXTURE_BINDING: 4, STORAGE_BINDING: 8, RENDER_ATTACHMENT: 16 };
 
-/** the stand-in workers of the last session, in the order made; each keeps what is posted to it until answered */
-let workers = [];
+/** the stand-in workers of the last session, in the order made; each keeps what is posted to it until answered;
+ *  the next noLoad of them cannot be loaded (onerror, as a worker script the network does not give) */
+let workers = [], noLoad = 0;
 globalThis.Worker = class {
-  constructor() { this.inbox = []; workers.push(this); setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0); }
+  constructor() {
+    this.inbox = []; workers.push(this);
+    if (noLoad > 0) { noLoad--; setTimeout(() => this.onerror?.({ message: 'NetworkError' }), 0); }
+    else setTimeout(() => this.onmessage?.({ data: { ready: true } }), 0);
+  }
   postMessage(m) { this.inbox.push(m); }
   terminate() { this.inbox = []; }
   /** its oldest batch back, each level rewritten (those in bad left as they came, as a rewrite that threw); error:
@@ -217,4 +222,16 @@ test('spare buffers: batch-sized ones only, at most 6; a big level\'s own buffer
   while (workers[0].inbox.length) workers[0].answer();
   assert.deepEqual(s.of(2), [1, 2, 3, 4, 5, 6, 7, 8].map(astc));
   assert.deepEqual(s.pool().spare.map(b => b.byteLength), Array(6).fill(BATCH));
+});
+
+test('the workers are said once one has started; one that cannot be loaded says so, and the page thread rewrites', async () => {
+  const a = await session(2);
+  assert.equal(a.log.filter(l => /\[gpu\] 2 ASTC worker\(s\) rewrite DXT3 and DXT5 off the page thread/.test(l)).length, 1, a.log.join('\n'));
+  noLoad = 2;
+  const s = await session(2);
+  assert.ok(!s.log.some(l => /off the page thread/.test(l)), s.log.join('\n'));
+  assert.ok(s.log.some(l => /ASTC worker 0 did not start: NetworkError$/.test(l)), s.log.join('\n'));
+  assert.ok(s.log.some(l => /ASTC worker 1 did not start: NetworkError; DXT3 and DXT5 rewritten on the page thread/.test(l)), s.log.join('\n'));
+  s.create(1); s.upload(1, 1); s.drain();
+  assert.deepEqual(s.of(1), [astc(1)], 'written at once');
 });

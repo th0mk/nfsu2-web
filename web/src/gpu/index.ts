@@ -706,12 +706,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   rafId = requestAnimationFrame(raf);
 
   // the ASTC rewrite of DXT3 and DXT5 (no BC, a GPU with ASTC) in workers: one for every 4 logical cores, at most 3
+  // (the pool says when the first has started; until then, or if none can, the page thread rewrites them)
   const nAstc = opts.astcWorkers ?? Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) >> 2));
   const outMb = opts.astcOutMb;
   enc.startAstcWorkers(nAstc, abs('gpu/astc-worker.js'), () => { if (alive) pump(); },
     outMb === undefined ? undefined : outMb > 0 ? outMb * 1048576 : Infinity);
   if (opts.astcVerify) enc.astcVerify();
-  if (enc.astcWork) log(`[gpu] ${nAstc} ASTC worker(s) rewrite DXT3 and DXT5 off the page thread`);
 
   // ---- doorbell: the game rings it on every handoff and queue flush ----
   (async () => {

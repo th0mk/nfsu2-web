@@ -115,9 +115,9 @@ test('install under a base: the base\'s files, then the module its game.json nam
   const w = await worker({ base: '/mw/', game: 'mw' });
   w.server = { '/mw/game.json': [200, '{"module":"m-1"}', 0], '/mw/game.wasm?v=m-1': [200, 'module', 0] };
   await w.event('install');
-  assert.deepEqual(w.fetched.slice(0, 10), ['/mw/', '/mw/main.js', '/mw/main.css', '/mw/game.json', '/mw/data-manifest', '/mw/host/game-worker.js',
-    '/mw/host/io-worker.js', '/mw/host/predownload-worker.js', '/mw/gpu/png-worker.js', '/mw/audio/worklet.js']);
-  assert.deepEqual(w.fetched.slice(10), ['/mw/game.wasm?v=m-1']);
+  assert.deepEqual(w.fetched.slice(0, 11), ['/mw/', '/mw/main.js', '/mw/main.css', '/mw/game.json', '/mw/data-manifest', '/mw/host/game-worker.js',
+    '/mw/host/io-worker.js', '/mw/host/predownload-worker.js', '/mw/gpu/png-worker.js', '/mw/gpu/astc-worker.js', '/mw/audio/worklet.js']);
+  assert.deepEqual(w.fetched.slice(11), ['/mw/game.wasm?v=m-1']);
   assert.ok(w.copies.has('/mw/game.wasm?v=m-1') && w.copies.has('/mw/game.json'));
 });
 

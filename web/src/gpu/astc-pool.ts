@@ -113,7 +113,12 @@ export class AstcPool<R> {
   }
 
   private message(s: Slot, m: FromAstc): void {
-    if ('ready' in m) { s.ready = true; return; }
+    if ('ready' in m) {
+      // said when the first one has started, not before (one that cannot be loaded, offline say, says so: fail)
+      if (!this.slots.some(x => x.ready)) this.log(`[gpu] ${this.slots.length} ASTC worker(s) rewrite DXT3 and DXT5 off the page thread`);
+      s.ready = true;
+      return;
+    }
     s.out--;
     const b = this.sent.find(x => x.id === m.id);
     if (!b) return;
@@ -143,8 +148,12 @@ export class AstcPool<R> {
   /** a worker's onerror: before it started (it could not be loaded) it has nothing out; after, its own code catches
    *  every error (astc-worker.ts), so only the browser ends it, and what it held is lost */
   private fail(s: Slot, why: string): void {
-    s.dead = true;
     const i = this.slots.indexOf(s);
+    if (!s.ready && !s.dead) {
+      const none = this.slots.every(x => x === s || (x.dead && !x.ready));
+      this.log(`[gpu] ASTC worker ${i} did not start: ${why}${none ? '; DXT3 and DXT5 rewritten on the page thread' : ''}`);
+    }
+    s.dead = true;
     for (const b of this.sent) if (b.worker === i && !b.back) this.lost(b, why);
     if (!this.slots.some(x => !x.dead)) this.gone = true;
     this.apply();
