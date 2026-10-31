@@ -2,13 +2,15 @@
 # career seed: a later one has the bigger map and a faster car), this run resumes free roam (as tunnel_pass.txt does)
 # and opens the world map (M: WorldMapMain.fng) and closes it, then lets the game's AI drive the player's car
 # (autopilot: it drives about Rockport at speed, so the world streams in ahead of it) in six legs of STREAM_N passes of
-# 600 frames, each leg from a road point the AI went through at 200-270 km/h in a run from bin5_start (teleport: the AI
-# wedges now and then where the game's reset finds no place, and a leg starts it afresh), each pass with the car's place
-# and speed (`where`) and a [status] line (the file handles the game holds open: fh, L-061), a pursuit's rewards screen
-# closed when one holds the car.  Nothing is preloaded for it: the page fetches the
-# world's stream file (STREAML2RA.BUN) block by block as the game reads it, and a read that waits on the server writes a
-# "[data] ... waiting for the server" line (io-worker.ts; it also reads the file ahead while the game reads nothing).  tests/mw/checks/roam_stream.sh wants every pass, no "[data]" line, no loading screen (a Loading
-# package) in the drive, and the distance the car went:
+# 600 frames, each leg from a road point the AI went through at 200-270 km/h in a run from bin5_start (teleport), each
+# pass with the car's place and speed (`where`) and a [status] line (the file handles the game holds open: fh, L-061),
+# a pursuit's rewards screen closed when one holds the car.  Nothing is preloaded for it: the page fetches the world's
+# stream file (STREAML2RA.BUN) block by block as the game reads it, and a read that waits on the server writes a "[data]
+# ... waiting for the server" line (io-worker.ts; it also reads the file ahead while the game reads nothing).
+# tests/mw/checks/roam_stream.sh wants every pass, no such "[data]" line, no loading screen (a Loading package) in the
+# drive, and the car moving in three passes of four.  Not passing yet: in runs from bin5_start the AI crashed at
+# 200-280 km/h near (-210, 19, 4006) or (-1041, 56, 3690) within 50-80 s and the car moved no more, after the game's
+# reset or a leg's warp either.
 #   NFSU2_SAVE_SEED=<a safehouse save tree> node web/tools/run-suite.mjs --game mw --script roam_stream.txt \
 #     --marker 'roam_stream: done' --env STREAM_N=10 --env NFSMW_D3DX=/save/d3dx9_26.dll --env NOMOVIES=1 \
 #     --env NFSU2_FNG_LOG=1 --timeout-scale 20
