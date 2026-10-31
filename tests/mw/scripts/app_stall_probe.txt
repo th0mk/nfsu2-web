@@ -1,0 +1,7 @@
+# Most Wanted on the player's page (web/tools/app-test.mjs --game mw, its stalllog step; TRACKER M6-34): the game stops
+# drawing in the front end (the guest thread blocked with the GIL held, as a game stuck in a loop) and F9 > Download
+# log meanwhile gets the stall report, before the watchdog's 15 s (runtime/watchdog.c watchdog_log_download); then the
+# game goes on and closes.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++120  stall 10
++60   close

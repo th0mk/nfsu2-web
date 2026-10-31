@@ -116,6 +116,9 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 //             holding the game's NAME; PHONE1 typed into it reaches the game's field as characters alone
 //             (WM_CHAR), and its Enter (the keyboard's Done) accepts the name: the game asks to save the alias PHONE1;
 //             the field goes with the entry; the game's own quit
+//   stalllog  F9 -> Download log while the game draws nothing (tests/mw/scripts/app_stall_probe.txt: 10 s in the front
+//             end; TRACKER M6-34): the file says how long ago the last frame was and holds the stall report (before
+//             the watchdog's own 15 s)
 // An oracle build ("oracle":1 in /game.json) loads d3dx9_26.dll from the save folder: each step puts it there from
 // $NFSMW_D3DX_DLL (the file on this machine; never in the repository) and the address names it (NFSMW_D3DX).  The game
 // runs with the null renderer (NFSU2_RENDERER=null) unless --draw is given: the steps check the page and the game, and a
@@ -124,7 +127,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 const STEPS_OF = {
   ug2: ['start', 'settings', 'play', 'saves', 'restore', 'pcsave', 'quit', 'stalllog', 'instance', 'readonly', 'retry', 'update',
     'autoupdate', 'enterlink', 'late', 'quitstages', 'slowgpu', 'gpulost', 'crash', 'leak', 'cache', 'roamask', 'cloudask', 'full', 'page', 'mobile'],
-  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave', 'touch', 'phonetext'],
+  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave', 'touch', 'phonetext', 'stalllog'],
 };
 const NONE = 'none yet';
 const GAME = gameOf(process.argv.slice(2));
@@ -138,7 +141,7 @@ await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/app-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `apptest-${Date.now().toString(36)}`;
-const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`, SAVE5 = `${RUN}-e`, SAVE6 = `${RUN}-f`;
+const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`, SAVE5 = `${RUN}-e`, SAVE6 = `${RUN}-f`, SAVE7 = `${RUN}-g`;
 // the test suite's environment (DESIGN.md section 5); movies stay on/off through settings.ini
 const ENV = ['SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_TIMEOUT=400'].map(e => `env=${encodeURIComponent(e)}`).join('&');
 fs.mkdirSync(OUT, { recursive: true });
@@ -551,7 +554,7 @@ async function mwSteps() {
   if (want('phonetext')) {
     const xctx = await browser.newContext({ viewport: { width: 915, height: 412 }, hasTouch: true, isMobile: true });
     const p7 = watch(await xctx.newPage(), 'G');
-    await open(p7, `save=${SAVE6}&fresh&${env}&env=NFSU2_KEY_LOG=1&${script('app_text_probe.txt')}`);
+    await open(p7, `save=${SAVE6}&fresh&${env}&env=NFSU2_KEY_LOG%3D1&${script('app_text_probe.txt')}`);
     await seedDll(p7, SAVE6);
     const run = await playUntilExit(p7, 'phonetext', 400000);
     const F = () => p7.evaluate(() => window.__nfsu2.textField());
@@ -584,6 +587,35 @@ async function mwSteps() {
       { up, shown, first, typed, asked, gone, exit, entry: (tail.match(/\[input\] text entry:[^\n]*/g) ?? []).slice(-3) });
     await p7.close();
     await xctx.close();
+  }
+
+  // ------------------------------------------------------- stalllog --
+  if (want('stalllog')) {
+    const sctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
+    const st = watch(await sctx.newPage(), 'H');
+    await open(st, `save=${SAVE7}&fresh&${env}&${script('app_stall_probe.txt')}`);
+    await seedDll(st, SAVE7);
+    const run = await playUntilExit(st, 'stalllog', 300000);
+    const stalled = await st.waitForFunction(() => window.__nfsu2.log.tail(300).some(l => /stall 10 s \(test-only\)/.test(l)), null, { timeout: 200000, polling: 250 })
+      .then(() => true, () => false);
+    await st.waitForTimeout(4000);
+    await st.keyboard.press('F9');
+    await st.waitForSelector('#menu[open]');
+    const dl = st.waitForEvent('download');
+    const t0 = Date.now();
+    await st.click('#menu [data-act="log"]');
+    const file = path.join(OUT, (await dl).suggestedFilename());
+    const ms = Date.now() - t0;
+    await (await dl).saveAs(file);
+    const text = fs.readFileSync(file, 'utf8');
+    await st.click('#menu [data-act="resume"]').catch(() => {});
+    const ago = +(/\[watchdog\] log downloaded: the last frame ([\d.]+) s ago/.exec(text)?.[1] ?? -1);
+    const stallReport = /\[watchdog\] no Present for [\d.]+ s/.test(text) && /\[watchdog\] end of report/.test(text) && /holds the GIL/.test(text);
+    const ready = text.includes('[watchdog] log download ready');
+    const exit = await run.wait();
+    report('stalllog', stalled && ago >= 3 && ago < 10 && stallReport && ready && ms < 2500 && exit?.code === 0,
+      { stalled, lastFrameAgo: ago, stallReport, ready, downloadMs: ms, exit });
+    await sctx.close();
   }
 }
 
