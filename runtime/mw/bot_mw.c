@@ -411,6 +411,8 @@ static struct {
     float trail[16][3];                 /* pursuit_frame's trail (TRAIL_N) */
     float esc_pos[3], esc_dir[3];       /* the last escape's place, checked once the car is there (esc_check: tries) */
     int esc_check;
+    int esc_recent[2], esc_dest;        /* pursuit_escape: the last two places (race index + 1) and the last one */
+    unsigned fell_mask;                 /* race places whose warp left the car under the road */
     int trail_n, rejoins, last_pst;
     double trail_t, search_t;
     float plen;                         /* the pursuit's length as it last showed it (s) */
@@ -759,12 +761,40 @@ static int bin_max_heat(int bin){ return bin >= 16 ? 1 : bin >= 13 ? 2 : bin >= 
 #define ESCAPE_LEN    300.0f            /* the chase's length (s) at which it is broken off */
 #define ESCAPE_BUST   1.0f              /* or the bust timer (s; 5 = busted) */
 #define ESCAPE_GAP_S  20.0              /* game seconds between two escapes of one pursuit (10 when boxed in) */
-#define ESCAPE_MAX    6                 /* escapes in one pursuit */
+#define ESCAPE_MAX    10                /* escapes in one pursuit (6 until bin 8, where a 550 s chase used them all, its
+                                           bust timer at 1.0 again and again, and ended busted: c5-s8t) */
 #define ESCAPE_FAR_M  800.0f
 #define TRAIL_N       16                /* the chase's trail: the car's place each second while the cops are on it */
 #define REJOIN_S      4.0               /* game seconds of the cops' search before the car goes back */
 #define REJOIN_BACK   3                 /* to where it was this many seconds before the search */
 #define REJOIN_MAX    8                 /* times in one pursuit */
+/* The chase's length at which it is broken off, by bin: ESCAPE_LEN, or longer when the bin has a pursuit_length
+ * milestone (gameplay.bin milestones/bin_NN/challenge_N_pursuit_length): its goal is drawn between two values, fields
+ * 0x8445AF47 and 0x3B9BBFC2 (bin 8: 360 and 600 s, bin 6: 420 and 660; bins 12 and 10 480 and 540 at most, bins 3 to 1
+ * 720 to 840), and a chase broken off at 300 s met it in none of bin 8's eight pursuits (c5-s8t: milestones 2 of 4,
+ * evaded at 293, 358 and 192 s).  So there it is the larger value and 30 s.  Read with the game's Attrib calls as
+ * engage_trigger reads a trigger; 0x3B9BBFC2 is a float. */
+#define F_MS_GOAL_HI     0x3b9bbfc2u
+static float escape_len(CPU *c, int bin){
+    static int cached_bin = -1; static float cached = ESCAPE_LEN;
+    if (bin == cached_bin) return cached;
+    char name[64]; snprintf(name, sizeof name, "milestones/bin_%02d/challenge_%d_pursuit_length", bin, bin);
+    uint32_t k3[3] = { h32(name), 0, 0 };
+    c->esp -= 0x40u;
+    uint32_t inst = c->esp;
+    memset(g_mem + inst, 0, 0x40);
+    call(c, FN_ATTRIB_INST, inst, 3, k3);
+    uint32_t a2[2] = { F_MS_GOAL_HI, 0 }, p = call(c, FN_ATTRIB_FIELD, inst, 2, a2);
+    float hi = p ? rdf(p) : 0.0f;
+    call(c, FN_ATTRIB_FREE, inst, 0, 0);
+    c->esp += 0x40u;
+    cached_bin = bin;
+    cached = hi > 0.0f && hi < 3600.0f && hi + 30.0f > ESCAPE_LEN ? hi + 30.0f : ESCAPE_LEN;
+    fprintf(stderr, "[mwbot] f=%ld bin %d: %s, chases broken off at %.0f s\n", autotest_frame(), bin,
+            hi > 0.0f ? "a pursuit_length milestone" : "no pursuit_length milestone", (double)cached);
+    if (hi > 0.0f) fprintf(stderr, "[mwbot]   (its goal at most %.0f s)\n", (double)hi);
+    return cached;
+}
 static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
     struct gates g; struct race r[MAX_RACES];
     float p[3] = { 0 }, kmh = 0;
@@ -772,10 +802,15 @@ static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
     if (!read_gates(c, &g) || !mw_aid_where(c, p, &kmh)) return;
     int n = read_races(c, g.binobj, r, MAX_RACES, 0), best = -1;
     float bd = 0;
-    for (int i = 0; i < n; i++){
-        float d = hypotf(r[i].pos[0] - p[0], r[i].pos[2] - p[2]);
-        if (r[i].params && d > bd){ bd = d; best = i; }
-    }
+    /* not the places of this pursuit's last two escapes, nor one that left the car under the road: at bin 8 the car
+     * went back and forth between two race places, boxed in at each within seconds of its arrival (bust timer 1.0
+     * at 1 km/h; four of six escapes of one c5-s8t pursuit), and one of them had left it under the road */
+    for (int pass = 0; pass < 2 && best < 0; pass++)
+        for (int i = 0; i < n; i++){
+            float d = hypotf(r[i].pos[0] - p[0], r[i].pos[2] - p[2]);
+            int avoid = i + 1 == B.esc_recent[0] || i + 1 == B.esc_recent[1] || ((B.fell_mask >> i) & 1u);
+            if (r[i].params && (pass || !avoid) && d > bd && (pass || d >= ESCAPE_FAR_M)){ bd = d; best = i; }
+        }
     if (best < 0 || bd < ESCAPE_FAR_M){
         fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: no race place %.0f m away (farthest %.0f m)\n",
                 autotest_frame(), mw_game_time(), B.escapes, ESCAPE_FAR_M, bd);
@@ -786,6 +821,7 @@ static void pursuit_escape(CPU *c, float len, float bust, uint32_t pbounty){
             p[0], p[1], p[2], kmh, best, bd);
     mw_aid_teleport(c, r[best].pos, r[best].dir);
     memcpy(B.esc_pos, r[best].pos, sizeof B.esc_pos); memcpy(B.esc_dir, r[best].dir, sizeof B.esc_dir); B.esc_check = 1;
+    B.esc_recent[1] = B.esc_recent[0]; B.esc_recent[0] = best + 1; B.esc_dest = best;
 }
 /* A warp can leave the car under the road: escape 4 of c4-s9r set it at a race's place (height 28) and it stood at
  * -47 until the pursuit's end, the game's reset finding no place there (as GAME 13.7 has it for a warp right after a
@@ -846,6 +882,7 @@ static void pursuit_frame(CPU *c){
         }
         if (po){
             B.raced = 1; B.pursuit = po; B.next_log = t; B.escapes = 0; B.escape_t = -1e9;
+            B.esc_recent[0] = B.esc_recent[1] = 0;
             B.trail_n = 0; B.rejoins = 0; B.last_pst = 0; B.trail_t = -1e9; B.search_t = t;
             H.hides = 0; H.hidden = 0;
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
@@ -883,8 +920,8 @@ static void pursuit_frame(CPU *c){
          * none (career_mw.c's wedge watch leaves a pursuit alone).
          * What the AI cannot do is lose the cops: at the top heat of bin 13 a chase ran 550 s with five cops on the car
          * at up to 236 km/h, 28,925 bounty on it, and ended busted (bot run of 2026-10-30), and a bust keeps none of
-         * the chase's bounty or milestones.  So a chase that has run ESCAPE_LEN, or whose bust timer is ESCAPE_BUST on
-         * (the car boxed in), is broken off the way the bot reaches a race: the car set at the place of one of the
+         * the chase's bounty or milestones.  So a chase that has run escape_len (ESCAPE_LEN, more in a bin with a
+         * pursuit_length milestone), or whose bust timer is ESCAPE_BUST on (the car boxed in), is broken off the way the bot reaches a race: the car set at the place of one of the
          * bin's races at least ESCAPE_FAR_M away (the farthest), the AI driving on from there.  The cops lose it, their
          * search runs its cooldown and the game ends the pursuit as evaded, banking the bounty and the milestones
          * itself (a bin-13 chase broken off once at 129 s: 39,000 bounty and its three milestones banked).  Not in the
@@ -896,17 +933,18 @@ static void pursuit_frame(CPU *c){
             if (fell_below(c, B.esc_pos) && B.esc_check < 3){
                 fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit escape %d: the car is under the road, set there again\n", f, t,
                         B.escapes);
+                if (B.esc_dest >= 0 && B.esc_dest < 32) B.fell_mask |= 1u << B.esc_dest;   /* not there again */
                 mw_aid_teleport(c, B.esc_pos, B.esc_dir); B.escape_t = t; B.esc_check++;
             } else B.esc_check = 0;
         }
         if (!B.stand && pst < 2 && B.escapes < ESCAPE_MAX && t - B.escape_t >= (bust >= ESCAPE_BUST ? 10.0 : ESCAPE_GAP_S) &&
-            (bust >= ESCAPE_BUST || len >= ESCAPE_LEN) && !mw_fe_input_top(0)){
+            (bust >= ESCAPE_BUST || len >= escape_len(c, B.g.bin)) && !mw_fe_input_top(0)){
             pursuit_escape(c, len, bust, rd(perp + 0x20u));
             B.trail_n = 0;                  /* no way back to where the car was boxed in */
         }
         /* The other way round: a chase lost too early.  Forced at the top heat of bin 12, chase after chase ran 12 s
          * (one cop, left behind at once), then 133 s of the cops' search to the evade, for 1,000 bounty each and no
-         * milestone (bot run of 2026-10-30).  So while the chase is under ESCAPE_LEN, a search that has run REJOIN_S
+         * milestone (bot run of 2026-10-30).  So while the chase is under escape_len, a search that has run REJOIN_S
          * takes the car back to where the chase was REJOIN_BACK seconds before it began (the trail below, kept while
          * the cops are on the car), heading the way it went, the AI driving on: the cops searching there see it again
          * and the chase goes on, as a player who doubles back would have it. */
@@ -917,8 +955,8 @@ static void pursuit_frame(CPU *c){
         if (pst == 2 && B.last_pst != 2) B.search_t = t;
         B.last_pst = (int)pst;
         if (!B.stand && search_mode() == 2) pursuit_hide(c, pst, t);
-        if (!B.stand && search_mode() == 0 && pst == 2 && len < ESCAPE_LEN && B.rejoins < REJOIN_MAX && t - B.search_t >= REJOIN_S &&
-            B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
+        if (!B.stand && search_mode() == 0 && pst == 2 && len < escape_len(c, B.g.bin) && B.rejoins < REJOIN_MAX &&
+            t - B.search_t >= REJOIN_S && B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
             if (m > 0.5f){ d[0] /= m; d[2] /= m; } else { d[0] = 1.0f; d[2] = 0.0f; }
