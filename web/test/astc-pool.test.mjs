@@ -145,6 +145,7 @@ test('a worker fails while another holds a level: the level uploaded again goes 
   s.upload(1, 3); s.drain();
   assert.deepEqual(s.of(1), [astc(1), astc(2), astc(3)]);
   assert.equal(workers[1].inbox.length, 0, 'not sent to the worker left');
+  assert.equal(s.enc.tex[1].pend, 0, 'nothing pending: no frame waits for it');
 });
 
 test('levels whose rewrite threw in a worker are rewritten on the page thread, in their turn', async () => {

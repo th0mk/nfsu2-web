@@ -439,9 +439,9 @@ export class Encoder {
       t.filled = true;
       if (this.astcPool?.takes) {
         // copied out for a worker (astc-pool.ts), or queued behind levels still out; it goes up in its turn, before a
-        // frame that samples the texture is drawn
-        this.astcPool.add({ t, id, level, face: t.cube ? Math.min(face, 5) : 0 }, t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh);
+        // frame that samples the texture is drawn (counted first: the pool may hand it on before add returns)
         t.pend = (t.pend ?? 0) + 1;
+        this.astcPool.add({ t, id, level, face: t.cube ? Math.min(face, 5) : 0 }, t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh);
         return;
       }
       if (this.unpackBuf.length < bw * bh * 16) this.unpackBuf = new Uint8Array(bw * bh * 16);
