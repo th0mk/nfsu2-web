@@ -10,11 +10,14 @@
 #
 #   web/tools/mw-smoke.sh --data "<NFS Most Wanted folder>" --seed <save folder with ALPHA and BRAVO> [--port 10730]
 #        [--server <nfsu2-server>] [--d3dx <d3dx9_26.dll>] [--keep]
-# --server: a release bundle's server (web/deploy/pack.sh, unpacked: its page and module beside it, NFSU2_REPO);
-# default this checkout's (out/web/server-rs/nfsu2-server with web/dist-mw and out/web/mw/nfsmw.wasm).  The server runs
-# with --dev, which run-suite's test page needs (it is not the players' page: the release's page and module are what
-# it loads).  --d3dx: a module built with the D3DX oracle needs the DLL in each run's save folder.  CHROME_ARGS: the
-# browser's switches (WSL's Chrome: the SwiftShader ones, docs/web).  Exit 0 when all three pass.
+# --server: another build of the server, such as /app/nfsu2-server copied out of the release image (docker cp);
+# default this checkout's (out/web/server-rs/nfsu2-server).  Either one serves this checkout's page, test pages and
+# module (web/dist-mw, web/dist-mw-dev, out/web/mw/nfsmw.wasm): the image builds its page from the same sources, and
+# web/deploy/release.sh --game mw uploads this module.  A bundle from web/deploy/pack.sh cannot stand in for them: it
+# holds Underground 2's page and module only, and no test pages.  The server runs with --dev, which run-suite's test
+# page needs (it is not the players' page: the release's page and module are what it loads).  --d3dx: a module built
+# with the D3DX oracle needs the DLL in each run's save folder.  CHROME_ARGS: the browser's switches (WSL's Chrome:
+# the SwiftShader ones, docs/web).  Exit 0 when all three pass.
 set -u -o pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 DATA="" SEED="" PORT=10730 SERVER="$REPO/out/web/server-rs/nfsu2-server" D3DX="" KEEP=0
@@ -26,7 +29,7 @@ while [ $# -gt 0 ]; do
     --server) SERVER="$2"; shift 2 ;;
     --d3dx) D3DX="$2"; shift 2 ;;
     --keep) KEEP=1; shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^[^#]/{/^#/p}' "$0"; exit 0 ;;
     *) echo "mw-smoke.sh: unknown option $1"; exit 2 ;;
   esac
 done
@@ -38,10 +41,8 @@ RUN="mw-smoke-$(date +%Y%m%d-%H%M%S)"
 SRV_PID=""
 cleanup() { [ -n "$SRV_PID" ] && kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null; [ "$KEEP" = 1 ] || rm -rf "$WORK"; }
 trap cleanup EXIT
-# the release's server: its page and module are the ones beside it (a bundle) or this checkout's
-REL="$(cd "$(dirname "$SERVER")" && pwd)"
-if [ "$SERVER" = "$REPO/out/web/server-rs/nfsu2-server" ]; then ROOT="$REPO"; else ROOT="$REL"; fi
-NFSU2_REPO="$ROOT" "$SERVER" --game mw --dev --data "$DATA" --http-port "$PORT" --state "$WORK/state" \
+# whichever server runs, the page, test pages and module are this checkout's (NFSU2_REPO)
+NFSU2_REPO="$REPO" "$SERVER" --game mw --dev --data "$DATA" --http-port "$PORT" --state "$WORK/state" \
   >"$WORK/server.log" 2>&1 &
 SRV_PID=$!
 for _ in $(seq 1 120); do
