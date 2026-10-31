@@ -64,6 +64,7 @@ typedef struct El3Pair {
     int refs;
     unsigned readers;                   /* bit 0, bit 1: the channels that read the queue */
     uint32_t stream;                    /* SND's stream it decodes (the second channel finds it by that) */
+    const char *failed;                 /* why the decoding stopped, at block `blocks` (the other channel stops there) */
 } El3Pair;
 
 typedef struct El3Bits { const uint8_t *p; uint32_t pos, end; } El3Bits;
@@ -280,6 +281,15 @@ static void pair_drop(uint32_t i){
     free(s->q); free(s);
     g_pairs[i - 1u] = 0;
 }
+/* The voice's channel stops for good: the rest of its stream is silent, and it lets go of its decoder at once (kept,
+ * every voice that failed held one of the PAIRS until no voice had one).  The other channel of a pair stops when it
+ * reaches the same block. */
+static void el3_stop(uint32_t st, El3Pair *s, const char *why){
+    el3_error(st, why);
+    s->failed = why;
+    pair_drop(MR32(st + ST_PAIR));
+    MR32(st + ST_PAIR) = 0; MR32(st + ST_MAGIC) = 0;
+}
 
 /* cdecl (state, n, -, float *out, -): n samples of the voice's channel */
 static void el3_decode(CPU *c){
@@ -307,10 +317,13 @@ static void el3_decode(CPU *c){
                 fprintf(stderr, "[el3] f=%ld stream %u channel %u: a header's first block (block %u, %u samples)\n",
                         autotest_frame(), stream, ch, j, MR32(st + ST_COUNT));
             if (s->blocks == j){                                   /* this channel is the first at this block */
-                uint32_t lim = 0x10000u;
-                while (lim && !mem_is_committed(p + lim - 1u)) lim >>= 1;
-                const char *why = el3_block(s, &MR8(p), lim, MR32(st + ST_COUNT), !MR32(st + ST_MORE));
-                if (why){ el3_error(st, why); MR32(st + ST_MAGIC) = 0; s = 0; break; }
+                const char *why = s->failed;                       /* ... or the other one failed at it */
+                if (!why){
+                    uint32_t lim = 0x10000u;
+                    while (lim && !mem_is_committed(p + lim - 1u)) lim >>= 1;
+                    why = el3_block(s, &MR8(p), lim, MR32(st + ST_COUNT), !MR32(st + ST_MORE));
+                }
+                if (why){ el3_stop(st, s, why); s = 0; break; }
             }
         }
         uint32_t k = MR32(st + ST_COUNT) - MR32(st + ST_USED);

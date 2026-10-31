@@ -196,6 +196,34 @@ static void t_stream(void){
     if (pairs_taken()) fail("%u decoders left after the release", pairs_taken());
 }
 
+/* voices whose stream fails to decode: both channels stop at the bad block and let go of their decoder (it was kept
+ * for good, and after PAIRS such voices no voice got one: all the music silent); then a good voice decodes */
+static void t_failed(void){
+    const unsigned f1[1] = { 1 };
+    uint32_t s0 = voice_state(0), s1 = voice_state(1);
+    for (unsigned v = 0; v < PAIRS + 6u; v++){
+        snd_stream(0, 2);
+        uint32_t b = block(0, first_count(1), 2, f1, 0);
+        MR8(b + 12u + 4u * 2u) = 0xFF;                     /* not a granule frame */
+        create(s0, 0, 0, 2, v); create(s1, 0, 1, 2, v);
+        if (!has_decoder(s0) || !has_decoder(s1)) fail("voice %u has no decoder", v);
+        unsigned long e = g_errors;
+        decode(s0, 300); decode(s1, 300);
+        if (g_errors != e + 2u || has_decoder(s0) || has_decoder(s1))
+            fail("voice %u: %lu errors, decoders left %d %d", v, g_errors - e, has_decoder(s0), has_decoder(s1));
+        release(s0); release(s1);
+        if (pairs_taken()) fail("voice %u: %u decoder(s) still taken after its release", v, pairs_taken());
+    }
+    snd_stream(0, 2);
+    block(0, first_count(1), 2, f1, 0);
+    create(s0, 0, 0, 2, 99); create(s1, 0, 1, 2, 99);
+    unsigned long e = g_errors;
+    int32_t a = decode(s0, 300), b = decode(s1, 300);
+    if (!has_decoder(s0) || a != 47 || b != 47 || g_errors != e) fail("the good voice after them: %d and %d samples", a, b);
+    release(s0); release(s1);
+    if (pairs_taken()) fail("%u decoder(s) left", pairs_taken());
+}
+
 int main(int argc, char **argv){
     if (argc != 2){ fprintf(stderr, "usage: el3_unit <test>\n"); return 2; }
     g_test = argv[1];
@@ -204,7 +232,7 @@ int main(int argc, char **argv){
     memset(g_cbits, 0xFF, GUEST >> 17);                     /* all of it committed */
     signal(SIGALRM, on_alarm);
     static const struct { const char *name; void (*f)(void); } T[] = {
-        { "count", t_count }, { "stream", t_stream },
+        { "count", t_count }, { "stream", t_stream }, { "failed", t_failed },
     };
     for (unsigned i = 0; i < sizeof T / sizeof *T; i++)
         if (!strcmp(T[i].name, g_test)){ T[i].f(); printf("PASS %s\n", g_test); return 0; }
