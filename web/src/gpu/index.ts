@@ -58,6 +58,14 @@ export interface RendererOptions {
   /** without BC, unpack DXT3 and DXT5 rather than rewrite them as ASTC where the GPU has texture-compression-astc
    *  (settings.ini astc_alpha = off): their alpha as the game has it, 4x the memory */
   noASTCAlpha?: boolean;
+  /** workers that rewrite DXT3 and DXT5 as ASTC off the page thread (astc-worker.ts; default 1 for every 4 logical
+   *  cores, at most 3); 0: on the page thread, as before them (A/B and diagnostics) */
+  astcWorkers?: number;
+  /** diagnostics: sum the hashes of the DXT3 and DXT5 levels rewritten as ASTC (stats astcSum: levels, sum) */
+  astcSum?: boolean;
+  /** diagnostics: compare every level back from the ASTC workers with the page thread's rewrite of it (stats
+   *  astcWorkers.verified, .differ) */
+  astcVerify?: boolean;
   /** while a frame waits for a slot, poll the GPU with empty submits (default: in Firefox, whose
    *  onSubmittedWorkDone otherwise waits for its 100 ms poll timer; see pokeLoop) */
   poke?: boolean;
@@ -102,6 +110,11 @@ export interface RendererStats {
   /** the game's textures on the GPU now, bytes: all of them, those unpacked from DXT, and those as ASTC (no
    *  texture-compression-bc) */
   texBytes: number; unpackBytes: number; astcBytes: number;
+  /** the page thread's milliseconds on the resource queue (uploads, unpacking, the ASTC rewrite when it is done
+   *  there), and with ASTC workers the levels, MB and worker milliseconds of the DXT3 and DXT5 rewrite */
+  uploadMs: number; astcWorkers?: { levels: number; mb: number; ms: number; verified?: number; differ?: number };
+  /** RendererOptions.astcSum: the DXT3 and DXT5 levels rewritten as ASTC so far and the sum of their hashes */
+  astcSum?: { n: number; sum: number };
 }
 
 /** Per-frame distributions since the last reset (the perf benchmark's race window). */
@@ -244,6 +257,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   try { enc = new Encoder(device, mem, reg.ptr, log); } catch (e) { giveUp(e); }
   enc.logShaders = !!opts.logShaders;
   enc.astcAlpha = !opts.noASTCAlpha;
+  if (opts.astcSum) enc.astcSum = { n: 0, sum: 0 };
   for (const id of opts.watchTex ?? []) enc.watchTex.add(id);
   if (opts.trace === 'dumps') enc.traceDumps = true; else for (const f of opts.trace ?? []) enc.traceSeq.add(f);
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
@@ -353,7 +367,9 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
         const limit = r && !e ? U[cw + C.frame + (r - 1) * (P.FRAME_BYTES >> 2) + F.rqEnd] : head;
         try { enc.drain(limit); } catch (x) { failed('resource upload', x); break; }
         waiting(!!r && !e && inFlight >= maxInFlight);
-        if (!r || e || inFlight >= maxInFlight) break;
+        // a frame that samples a texture with a level still out with the ASTC workers waits for it (their hand-back
+        // pumps again)
+        if (!r || e || inFlight >= maxInFlight || enc.framePending(r - 1)) break;
         if (Atomics.compareExchange(I, cw + C.state, s, s | (r << 2)) !== s) continue;
         try { encodeAndSubmit(r - 1); failRun = 0; } catch (x) { failed('encode', x); }
         Atomics.store(I, cw + C.state, 0); Atomics.notify(I, cw + C.state);
@@ -684,6 +700,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   };
   rafId = requestAnimationFrame(raf);
 
+  // the ASTC rewrite of DXT3 and DXT5 (no BC, a GPU with ASTC) in workers: one for every 4 logical cores, at most 3
+  const nAstc = opts.astcWorkers ?? Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 4) >> 2));
+  enc.startAstcWorkers(nAstc, abs('gpu/astc-worker.js'), () => { if (alive) pump(); });
+  if (opts.astcVerify) enc.astcVerify();
+  if (enc.astcWork) log(`[gpu] ${nAstc} ASTC worker(s) rewrite DXT3 and DXT5 off the page thread`);
+
   // ---- doorbell: the game rings it on every handoff and queue flush ----
   (async () => {
     while (alive) {
@@ -718,7 +740,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       ...(u32()[cw + C.stages] === P.STAGES_MAX ? { depthTexDraws: enc.depthTexDraws, depthZPasses: enc.depthZPasses } : {}),
       ...(enc.msPasses ? { msPasses: enc.msPasses, msRefreshes: enc.msRefreshes } : {}),
       direct: directFrames, screenReadFirst: enc.screenReadFirst, slotWaits, slotWaitMsMax, pokes, unshown,
-      texBytes: enc.texBytes, unpackBytes: enc.unpackBytes, astcBytes: enc.astcBytes }),
+      texBytes: enc.texBytes, unpackBytes: enc.unpackBytes, astcBytes: enc.astcBytes, uploadMs: Math.round(enc.uploadMs),
+      ...(enc.astcWork ? { astcWorkers: enc.astcWork } : {}), ...(enc.astcSum ? { astcSum: { ...enc.astcSum } } : {}) }),
     window: (reset = false) => {
       const pct = (a: number[]) => {
         if (!a.length) return [];
@@ -742,6 +765,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     detach: () => {
       if (!alive) return;
       alive = false; cancelAnimationFrame(rafId); clearInterval(warmTimer); ro.disconnect();
+      enc.stopAstcWorkers();
       if (enc.warmDirty) try { localStorage.setItem(WARM_KEY, JSON.stringify(enc.warmEntries().slice(-4000))); } catch { /* full or off */ }
       // the game stops recording at its next present instead of waiting for a page
       // that is gone; a waiting present or a full resource queue wakes now

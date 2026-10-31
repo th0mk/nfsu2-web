@@ -26,6 +26,7 @@ import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE, group1Entries, stageKind, texBinding, smpBinding } from './shader-abi';
 import { unpackDxt } from './dxt';
 import { dxt1HasPunch, dxt1ToAstc, dxtAlphaToAstc } from './astc';
+import { AstcPool } from './astc-pool';
 
 export interface EncodeStats {
   draws: number; passes: number; skipped: number; encodeMs: number;
@@ -41,6 +42,7 @@ interface Tex {
   unpack: boolean;                 // DXT on a GPU without texture-compression-bc: BGRA8, unpacked on upload
   astc: boolean;                   // DXT on a GPU with ASTC but not BC: ASTC 4x4, rewritten on upload (astc.ts)
   filled: boolean;                 // a level has gone up (an ASTC texture's choice is made at its first upload)
+  pend?: number;                   // its levels out with the ASTC workers (astc-pool.ts): a frame that samples it waits
   bytes: number;                   // its size on the GPU, every level and face
   face0?: GPUTextureView;          // a cube's face 0, level 0 as a 2D view (StretchRect from it), made at its first use
   depth?: boolean;                 // a depth texture (P.TF_DEPTH, depth32float): a draw's Z (P.Z_TEX) and sampled with a compare
@@ -169,6 +171,18 @@ export class Encoder {
   astcAlpha = true;
   /** blocks with a transparent texel that went into a texture already ASTC: two planes (astc.ts) */
   private astcHoles = { blocks: 0 };
+  /** the workers that rewrite DXT3 and DXT5 as ASTC off the page thread (astc-pool.ts; startAstcWorkers), and the
+   *  page thread's time on the resource queue (ms): drain, and the workers' blocks handed to their textures */
+  private astcPool: AstcPool<{ t: Tex; id: number; level: number; face: number }> | null = null;
+  private drainMs = 0;
+  /** diagnostics (play page &astcsum): the DXT3 and DXT5 levels rewritten as ASTC, and the sum of their blocks'
+   *  FNV-1a hashes (whichever thread rewrote them, in any order: the same sum is the same blocks) */
+  astcSum: { n: number; sum: number } | null = null;
+  private sumBlocks(b: Uint8Array, off: number, n: number): void {
+    let h = 0x811c9dc5;
+    for (let i = off; i < off + n; i++) h = Math.imul(h ^ b[i], 0x01000193);
+    this.astcSum!.n++; this.astcSum!.sum = (this.astcSum!.sum + (h >>> 0)) >>> 0;
+  }
   /** WebGPU calls made by encodeFrame, by kind (totals; what the GPU process decodes and records) */
   calls = { pipe: 0, bg0: 0, bg1: 0, bg1New: 0, blend: 0, ix: 0, draw: 0, pass: 0, copy: 0 };
   private seenFmt = new Set<string>();
@@ -251,6 +265,7 @@ export class Encoder {
   // ------------------------------------------------------------ resource queue
   /** Apply queued resource commands from the tail up to `limit`; returns the new tail. */
   drain(limit: number): number {
+    const t0 = performance.now();
     const c = this.ctlW, u32 = this.u32;
     const cap = u32[c + P.C.rqCap], base = u32[c + P.C.rqPtr];
     let tail = u32[c + P.C.rqTail];
@@ -285,8 +300,48 @@ export class Encoder {
       if (++n % 64 === 0) { Atomics.store(this.i32, c + P.C.rqTail, tail | 0); Atomics.notify(this.i32, c + P.C.rqTail); }
     }
     Atomics.store(this.i32, c + P.C.rqTail, tail | 0); Atomics.notify(this.i32, c + P.C.rqTail);
+    this.astcPool?.flush();
+    this.drainMs += performance.now() - t0;
     return tail;
   }
+
+  /** n workers (astc-worker.ts at url) for the ASTC rewrite of DXT3 and DXT5; idle: called when the last level out is
+   *  on its texture (the frame held for it can go) */
+  startAstcWorkers(n: number, url: string, idle: () => void): void {
+    if (n <= 0 || this.astcPool || this.feat.bc || !this.feat.astc || !this.astcAlpha) return;
+    this.astcPool = new AstcPool(n, url, (r, blocks, off, bw, bh) => {
+      r.t.pend = (r.t.pend ?? 1) - 1;
+      if (blocks && this.astcSum) this.sumBlocks(blocks, off, bw * bh * 16);
+      if (!blocks || this.tex[r.id] !== r.t) return;          // lost, or freed or made again while its level was out
+      this.queue.writeTexture({ texture: r.t.tex, mipLevel: r.level, origin: { x: 0, y: 0, z: r.face } }, blocks,
+        { offset: off, bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4, 1]);
+    }, idle, this.log);
+  }
+  /** frame b samples (or blits from) a texture with a level still out with the ASTC workers: it waits for them */
+  framePending(b: number): boolean {
+    if (!this.astcPool?.busy) return false;
+    const u32 = this.u32, fw = this.ctlW + P.C.frame + b * (P.FRAME_BYTES >> 2);
+    const dn = u32[fw + F.dn], drawsW = u32[fw + F.draws] >> 2, ns = this.stages === 8 ? 8 : 4;
+    for (let i = 0; i < dn; i++) {
+      const w = drawsW + i * P.DRAW_WORDS;
+      if (u32[w + D.kind] === Kind.Blit) { if (this.tex[u32[w + D.blitSrc]]?.pend) return true; continue; }
+      for (let k = 0; k < ns; k++) {
+        const id = k === 0 ? u32[w + D.tex] : k < 4 ? u32[w + D.tex1 + k - 1] : u32[w + D.tex4 + k - 4];
+        if (id && this.tex[id]?.pend) return true;
+      }
+    }
+    return false;
+  }
+  /** page-thread ms on the resource queue; the workers' share of the ASTC rewrite (levels, MB, ms) */
+  get uploadMs(): number { return this.drainMs + (this.astcPool?.applyMs ?? 0); }
+  get astcWork(): { levels: number; mb: number; ms: number; verified?: number; differ?: number } | null {
+    const a = this.astcPool;
+    return a ? { levels: a.levels, mb: +(a.bytes / 1048576).toFixed(1), ms: Math.round(a.workerMs),
+      ...(a.verify ? { verified: a.verify.levels, differ: a.verify.differ } : {}) } : null;
+  }
+  /** diagnostics: every level back from the ASTC workers compared with the page thread's rewrite of it */
+  astcVerify(): void { if (this.astcPool) this.astcPool.verify = { levels: 0, differ: 0 }; }
+  stopAstcWorkers(): void { this.astcPool?.terminate(); this.astcPool = null; }
 
   private gpuFormat(fmt: number): { f: GPUTextureFormat; bc: boolean; a8: boolean; unpack?: boolean; astc?: boolean } | null {
     switch (fmt) {
@@ -374,11 +429,18 @@ export class Encoder {
     if (t.astc && t.fmt !== P.Fmt.DXT1) {
       // DXT3, DXT5: block for block, one plane where the alpha is one value, two where it varies
       const bw = (lw + 3) >> 2, bh = (lh + 3) >> 2;
+      t.filled = true;
+      if (this.astcPool?.usable) {
+        // copied out for a worker (astc-pool.ts); it goes up before a frame that samples the texture is drawn
+        this.astcPool.add({ t, id, level, face: t.cube ? Math.min(face, 5) : 0 }, t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh);
+        t.pend = (t.pend ?? 0) + 1;
+        return;
+      }
       if (this.unpackBuf.length < bw * bh * 16) this.unpackBuf = new Uint8Array(bw * bh * 16);
       const dst: GPUTexelCopyTextureInfo = { texture: t.tex, mipLevel: level, origin: { x: 0, y: 0, z: t.cube ? Math.min(face, 5) : 0 } };
-      this.queue.writeTexture(dst, dxtAlphaToAstc(t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh, this.unpackBuf),
-        { bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4, 1]);
-      t.filled = true;
+      const blocks = dxtAlphaToAstc(t.fmt === P.Fmt.DXT5, this.u8, data, pitch, bw, bh, this.unpackBuf);
+      if (this.astcSum) this.sumBlocks(blocks, 0, bw * bh * 16);
+      this.queue.writeTexture(dst, blocks, { bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4, 1]);
       return;
     }
     if (t.astc) {

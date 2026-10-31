@@ -306,6 +306,25 @@ test('DXT3 and DXT5: blocks in rows of a wider pitch, an offset, into a buffer k
   }
 });
 
+test('DXT3 and DXT5 rewritten in place, as the ASTC workers do (astc-worker.ts): the same bytes', () => {
+  let seed = 5;
+  const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 8;
+  // a batch: levels one after another, each at its offset, blocks of one alpha and of varying alpha mixed
+  const levels = [[false, 8, 4], [true, 16, 16], [false, 1, 1], [true, 2, 1], [true, 64, 8]];
+  const size = levels.reduce((n, [, bw, bh]) => n + bw * bh * 16, 0), batch = new Uint8Array(size);
+  for (let i = 0; i < size; i++) batch[i] = rnd() & 255;
+  for (let b = 0; b < size / 16; b += 3) batch.fill(0xFF, b * 16, b * 16 + 8);
+  const src = batch.slice();
+  let off = 0;
+  for (const [dxt5, bw, bh] of levels) {
+    const n = bw * bh * 16, want = dxtAlphaToAstc(dxt5, src, off, bw * 16, bw, bh);
+    const got = dxtAlphaToAstc(dxt5, batch, off, bw * 16, bw, bh, batch.subarray(off, off + n));
+    assert.equal(got.buffer, batch.buffer);
+    assert.deepEqual(Array.from(got), Array.from(want), `level at ${off}`);
+    off += n;
+  }
+});
+
 // texture dumps of the games (ASTC_DUMPS=<dir>): every level of each, the alpha and colour against the unpacking
 const DUMPS = process.env.ASTC_DUMPS;
 test('texture dumps (ASTC_DUMPS)', { skip: !DUMPS && 'ASTC_DUMPS not set' }, t => {

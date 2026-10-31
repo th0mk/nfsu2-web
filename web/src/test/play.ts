@@ -17,6 +17,9 @@
 //   astc=0      with bc=0 (or no BC): unpack DXT1 too, rather than rewrite it as ASTC where the GPU has that
 //   astca=0     with bc=0 (or no BC): unpack DXT3 and DXT5, rather than rewrite them as ASTC (as env=NFSU2_ASTC_ALPHA=0,
 //               settings.ini astc_alpha = off)
+//   astcw       workers for that ASTC rewrite (RendererOptions.astcWorkers); 0: on the page thread
+//   astcsum     sum the hashes of those ASTC levels (stats astcSum; with bench in the race load's line)
+//   astcverify  compare each level back from the ASTC workers with the page thread's rewrite (stats astcWorkers)
 //   cssscale=0  at a render scale below 1, composite the picture over the canvas instead of CSS stretching the canvas
 //   direct=0|1  draw the frame straight into the canvas texture when the sizes match (default: not in Firefox)
 //   poke=0|1    while a frame waits for the GPU, poll it with empty submits (default: in Firefox)
@@ -29,7 +32,8 @@
 //   bench       the perf benchmark (web/tools/bench.mjs): renderer distributions
 //               between the script's "log race_loaded" and "log drive_end"
 //               lines, printed as one "[bench] renderer {json}" line, and the race load
-//               time (the loading screen to the race)
+//               time (the loading screen to the race) with the page thread's time on texture uploads in it
+//               (and in the drive)
 // When the game exits the title becomes DONE (web/tools/run-page.mjs waits for it).
 import { testSaveDir } from '../app/save-dir';
 import { startProcess } from '../host/process';
@@ -64,7 +68,7 @@ if (q.get('reg')) { await preload(q.get('reg')!, 'registry.txt'); env.NFSU2_REGF
 if (q.get('script')) { await preload(q.get('script')!, 'autotest-script.txt'); env.NFSU2_INPUT_SCRIPT = '/save/autotest-script.txt'; }
 for (const e of q.getAll('env')) env[e.slice(0, e.indexOf('='))] = e.slice(e.indexOf('=') + 1);
 const bench = q.has('bench');
-let loadT0 = 0;
+let loadT0 = 0, up0 = 0;
 let r: Renderer | null = null;
 const p = await startProcess({
   module: mod, pool: +(q.get('pool') ?? 24), poolStart: q.get('poolstart') ? +q.get('poolstart')! : undefined, initialPages: q.get('pages') ? +q.get('pages')! : undefined,
@@ -72,10 +76,20 @@ const p = await startProcess({
   onNote: log,
   onLog: (s, fd, tid) => {
     log(`[${tid}${fd === 2 ? '!' : ''}] ${s}`);
-    if (bench && s.includes('tapuntil PC_Loading.fng satisfied')) loadT0 = performance.now();
-    if (bench && s.includes(' LOG race_loaded') && loadT0) log(`[bench] race load ${(performance.now() - loadT0).toFixed(0)} ms`);
+    // the loading screen: Underground 2's PC_Loading.fng, Most Wanted's Loading.fng
+    if (bench && /tapuntil (PC_)?Loading\.fng satisfied/.test(s)) { loadT0 = performance.now(); up0 = r?.stats().uploadMs ?? 0; }
+    if (bench && s.includes(' LOG race_loaded') && loadT0) {
+      const up = r ? r.stats().uploadMs : 0;
+      const sum = r?.stats().astcSum;
+      log(`[bench] race load ${(performance.now() - loadT0).toFixed(0)} ms, page thread on uploads ${up - up0} ms` +
+        (sum ? `, ASTC levels ${sum.n} sum ${sum.sum.toString(16)}` : ''));
+      up0 = up;
+    }
     if (bench && r && s.includes(' LOG race_loaded')) r.window(true);
-    if (bench && r && s.includes(' LOG drive_end')) log(`[bench] renderer ${JSON.stringify(r.window(true))}`);
+    if (bench && r && s.includes(' LOG drive_end')) {
+      log(`[bench] renderer ${JSON.stringify(r.window(true))}`);
+      log(`[bench] drive: page thread on uploads ${r.stats().uploadMs - up0} ms`);
+    }
   },
 });
 const net = q.has('net') ? attachNet(p, { name: q.get('net') || 'player', log }) : null;
@@ -87,7 +101,8 @@ try {
     dumpTex: q.get('dumptex') ? q.get('dumptex')!.split(',').map(Number) : undefined,
     watchTex: q.get('watchtex') ? q.get('watchtex')!.split(',').map(Number) : undefined, gpuTiming: q.has('gputime'),
     direct: q.has('direct') ? q.get('direct') !== '0' : undefined, cssScale: q.get('cssscale') !== '0', noBC: q.get('bc') === '0', noASTC: q.get('astc') === '0',
-    noASTCAlpha: q.get('astca') === '0' || env.NFSU2_ASTC_ALPHA === '0', poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
+    noASTCAlpha: q.get('astca') === '0' || env.NFSU2_ASTC_ALPHA === '0',
+    astcWorkers: q.get('astcw') ? +q.get('astcw')! : undefined, astcSum: q.has('astcsum'), astcVerify: q.has('astcverify'), poke: q.has('poke') ? q.get('poke') !== '0' : undefined,
     gpuBurn: +(q.get('gpuburn') ?? 0), maxInFlight: q.get('inflight') ? +q.get('inflight')! : undefined,
     summaryMs: q.get('summary') ? +q.get('summary')! * 1000 : undefined });
 } catch (x) { log(`renderer: ${x}`); }
