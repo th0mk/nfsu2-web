@@ -15,6 +15,7 @@
 //! - [`rand`]: random bytes and integers from the OS (Node's `crypto.randomBytes`, `crypto.randomInt`)
 
 pub mod bucket;
+pub mod cars;
 pub mod clock;
 pub mod counter;
 pub mod cpu;

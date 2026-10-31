@@ -462,7 +462,8 @@ async fn the_binary_for_most_wanted() {
     let bans = format!("  bans      : 0; nfsu2-server ctl --game mw who, kick, ban, unban, bans (through {sock})");
     assert!(startup.contains(&bans), "{startup:?}");
     // its routes under /mw, on every name (PLAN D-38)
-    let paths = "  paths     : under /mw/ for localhost (/mw redirects there; any other path 404)";
+    let paths = "  paths     : under /mw/ for localhost (/mw redirects there; any other path 404 but / (the site's page) and /robots.txt, \
+                 which names each game's)";
     assert!(startup.contains(&paths.to_string()), "{startup:?}");
     let (_, m) = srv.get("/mw/data-manifest").await;
     let m: Value = serde_json::from_str(&m).unwrap();
@@ -480,9 +481,13 @@ async fn the_binary_for_most_wanted() {
     ] {
         assert_eq!(status_of(port, p).await, 404, "{p}");
     }
-    for p in ["/data/speed.exe", "/data-manifest", "/players", "/game.json", "/robots.txt", "/"] {
+    for p in ["/data/speed.exe", "/data-manifest", "/players", "/game.json", "/u2/"] {
         assert_eq!(status_of(port, p).await, 404, "{p}: outside /mw");
     }
+    // the site's root files: /robots.txt, and / once its page folder has the site's page (build.mjs --game mw)
+    assert_eq!(status_of(port, "/robots.txt").await, 200);
+    let site = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../dist-mw/site/index.html").exists();
+    assert_eq!(status_of(port, "/").await, if site { 200 } else { 404 });
     assert_eq!(status_of(port, "/mw").await, 308);
     // (its Online mode on: none in it yet)
     assert_eq!(srv.get("/mw/players").await.1, r#"{"players":0,"online":0,"roam":0,"full":false,"queue":0,"roamBusy":false}"#);

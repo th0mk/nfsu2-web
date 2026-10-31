@@ -592,14 +592,15 @@ async fn the_launch_switch_lets_only_the_old_addresss_pages_connect_to_the_new_o
     }
 }
 
-// Most Wanted: under /mw on every name, this machine's too; no root files of its own (UG2's server answers the shared
-// site's root)
+// Most Wanted: under /mw on every name, this machine's too; at the root only its site's page (/, the file build.mjs
+// writes into its page's folder) and /robots.txt (naming /mw's routes)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn most_wanted_under_mw_everywhere() {
     let kit = Kit::start(&["--game", "mw"], |root| {
         std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
-        std::fs::create_dir_all(root.join("repo/web/dist-mw")).unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw/site")).unwrap();
         std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html><title>mw</title>").unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/site/index.html"), b"<!doctype html><title>site</title>").unwrap();
         module(root, "out/web/mw/nfsmw.wasm");
     })
     .await;
@@ -614,9 +615,27 @@ async fn most_wanted_under_mw_everywhere() {
         // no keyphrase saves of its own (they are the U2 box's), and none forwarded without NFSU2_VAULT_FORWARD
         assert_eq!(get("/mw/vault").await.status, 404, "{host}");
         assert_eq!(get("/mw").await.header("location"), Some("/mw/"), "{host}");
-        for p in
-            ["/", "/robots.txt", "/mw/robots.txt", "/game.json", "/players", "/data-manifest", "/data/speed.exe", "/u2/", "/MW/", "/mwx"]
-        {
+        let site = get("/").await;
+        assert_eq!((site.status, site.header("x-robots-tag")), (200, Some("index, follow")), "{host}");
+        assert_eq!(site.body, b"<!doctype html><title>site</title>");
+        assert_eq!(site.header("cross-origin-embedder-policy"), Some("require-corp"), "{host}");
+        let robots = get("/robots.txt").await;
+        assert_eq!(robots.status, 200, "{host}");
+        assert!(String::from_utf8_lossy(&robots.body).starts_with("User-agent: *\nAllow: /\nDisallow: /mw/data/\n"), "{host}");
+        // the other game's paths are no route here unless --site-redirects on (each_server_sends_the_other_games_...)
+        for p in [
+            "/index.html",
+            "/site/index.html",
+            "/mw/robots.txt",
+            "/game.json",
+            "/players",
+            "/data-manifest",
+            "/data/speed.exe",
+            "/u2",
+            "/u2/",
+            "/MW/",
+            "/mwx",
+        ] {
             assert_eq!(get(p).await.status, 404, "{host} {p}");
         }
         let m: serde_json::Value = serde_json::from_slice(&get("/mw/data-manifest").await.body).unwrap();
@@ -881,4 +900,81 @@ fn bench_routes() {
         println!("{name:<22} {:>8.0} requests/s  {:>6.1} us of CPU each (server and client)", n / s, cpu / n * 1e6);
     }
     drop(kit);
+}
+
+// The other game's site (the site plan of 2026-10-31), with --site-redirects on as the boxes run: on Underground 2's
+// server /mw and under it go to https://nfsrevived.com/mw/ itself; on Most Wanted's /u2 and under it to
+// https://nfsu2.xyz/ with the rest of the path and the query.  The address is fixed: nothing of the request's Host,
+// path or query ever becomes its scheme or host (no open redirect), and an odd spelling goes to the address alone or
+// is refused as before.  Off (the default), both answer those paths as they did.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_server_sends_the_other_games_paths_to_its_site() {
+    let mw_files = |root: &std::path::Path| {
+        std::fs::write(root.join("game/speed.exe"), b"MZ most wanted").unwrap();
+        std::fs::create_dir_all(root.join("repo/web/dist-mw/site")).unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/index.html"), b"<!doctype html><title>mw</title>").unwrap();
+        std::fs::write(root.join("repo/web/dist-mw/site/index.html"), b"<!doctype html><title>site</title>").unwrap();
+        module(root, "out/web/mw/nfsmw.wasm");
+    };
+    let ug2 = Kit::start(&["--host", "nfsu2.xyz", "--site-redirects", "on"], |root| module(root, "out/web/nfsu2.wasm")).await;
+    let mw = Kit::start(&["--game", "mw", "--host", "nfsrevived.com", "--site-redirects", "on"], mw_files).await;
+    let to =
+        |a: &super::testkit::Answer| (a.status, a.header("location").map(str::to_string), a.header("cache-control").map(str::to_string));
+    let mw_page = (308, Some("https://nfsrevived.com/mw/".to_string()), Some("private, no-store, no-transform".to_string()));
+    for p in ["/mw", "/mw/", "/mw/index.html", "/mw/?lang=german", "/mw/game.json", "/mw/vault", "/mw/a/b?c=d#e", "/mw/x/%2e%2e/y"] {
+        for method in ["GET", "HEAD"] {
+            let a = ug2.request_to("nfsu2.xyz", method, p, &[], b"").await;
+            assert_eq!(to(&a), mw_page, "{method} {p}");
+            assert_eq!(a.header("cross-origin-opener-policy"), Some("same-origin"), "{p}");
+        }
+    }
+    // UG2's own paths stay as they are; /mwx and /MW are not /mw
+    for (p, status) in [("/", 200), ("/game.json", 200), ("/mwx", 404), ("/MW/", 404), ("/x/mw/", 404)] {
+        assert_eq!(ug2.request_to("nfsu2.xyz", "GET", p, &[], b"").await.status, status, "{p}");
+    }
+    // a write is no page: as before
+    assert_eq!(ug2.request_to("nfsu2.xyz", "PUT", "/mw/vault", &[], b"").await.status, 405);
+    let u2 = |l: &str| (308, Some(l.to_string()), Some("private, no-store, no-transform".to_string()));
+    for (p, want) in [
+        ("/u2", "https://nfsu2.xyz/"),
+        ("/u2/", "https://nfsu2.xyz/"),
+        ("/u2?room=ab", "https://nfsu2.xyz/?room=ab"),
+        ("/u2/?room=ab&x=1", "https://nfsu2.xyz/?room=ab&x=1"),
+        ("/u2/index.html", "https://nfsu2.xyz/index.html"),
+        ("/u2/lang/german.json", "https://nfsu2.xyz/lang/german.json"),
+        ("/u2/a%20b", "https://nfsu2.xyz/a%20b"),
+        // a spelling of /u2 other than its own: the address alone
+        ("/%752/x", "https://nfsu2.xyz/"),
+        ("/u%32/x?y", "https://nfsu2.xyz/"),
+    ] {
+        assert_eq!(to(&mw.request_to("nfsrevived.com", "GET", p, &[], b"").await), u2(want), "{p}");
+    }
+    // never another host: a Host, an absolute URL or a path that names one changes nothing, or is refused before
+    for (host, p) in [
+        ("nfsrevived.com", "/u2//evil.example/"),
+        ("nfsrevived.com", "/u2/%2f%2fevil.example"),
+        ("nfsrevived.com", "/u2/%5cevil.example"),
+        ("nfsrevived.com", "/u2/\\evil.example"),
+        ("nfsrevived.com", "/u2/@evil.example"),
+        ("nfsrevived.com", "/u2/..%2f..%2fevil"),
+        ("nfsrevived.com", "http://nfsrevived.com/u2/x"),
+        ("evil.example", "/u2/"),
+    ] {
+        let a = mw.request_to(host, "GET", p, &[], b"").await;
+        let l = a.header("location").unwrap_or("");
+        let fixed = l.strip_prefix("https://nfsu2.xyz/").is_some_and(|r| !r.starts_with('/') && !r.starts_with('\\'));
+        assert!(l.is_empty() || fixed, "{host} {p}: {l}");
+        assert!([308, 400, 421].contains(&a.status), "{host} {p}: {}", a.status);
+    }
+    assert_eq!(mw.request_to("evil.example", "GET", "/u2/", &[], b"").await.status, 421);
+    // Most Wanted's own paths stay as they are
+    for (p, status) in [("/", 200), ("/mw", 308), ("/mw/", 200), ("/robots.txt", 200), ("/u2x", 404), ("/U2/", 404)] {
+        assert_eq!(mw.request_to("nfsrevived.com", "GET", p, &[], b"").await.status, status, "{p}");
+    }
+    assert_eq!(mw.request_to("nfsrevived.com", "GET", "/mw", &[], b"").await.header("location"), Some("/mw/"));
+    // off, as this machine and the tests run them: no redirect
+    let ug2 = Kit::start(&["--host", "nfsu2.xyz"], |root| module(root, "out/web/nfsu2.wasm")).await;
+    let mw = Kit::start(&["--game", "mw", "--host", "nfsrevived.com"], mw_files).await;
+    assert_eq!(ug2.request_to("nfsu2.xyz", "GET", "/mw/", &[], b"").await.status, 404);
+    assert_eq!(mw.request_to("nfsrevived.com", "GET", "/u2/", &[], b"").await.status, 404);
 }

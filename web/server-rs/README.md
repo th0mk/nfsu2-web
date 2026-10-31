@@ -26,10 +26,12 @@ It needs Rust (https://rustup.rs) and a C compiler (zstd and mimalloc are C).  S
 ports; give each its own `--state`.  One game per server: NFS Underground 2, or with `--game mw` (`NFSU2_GAME`) NFS
 Most Wanted, with that game's defaults (`src/game.rs`: the program the folder holds, what of it is served, the page,
 the module, the state folder, where its routes are; no Online mode for it yet).  Most Wanted's routes are under `/mw/`
-on every name (`/mw/game.json`, `/mw/lan`, ...; `/mw` redirects to `/mw/`, the rest is 404); UG2's are at the root, but
-under `/u2/` on nfsrevived.xyz, the site it shares with Most Wanted, whose `/robots.txt` it answers for both games.
-`--base-path <name>=<path>` moves a name (`localhost=/u2` stands in for that site on this machine; `*` is every other
-name).  `nfsu2-server [--game mw] --print-entries` prints what of the game's folder it serves (web/deploy/pack.sh
+on every name (`/mw/game.json`, `/mw/lan`, ...; `/mw` redirects to `/mw/`), and at the root are only its site's page
+(`/`: https://nfsrevived.com/, which links both games) and `/robots.txt`; UG2's are at the root.  With
+`--site-redirects on` (the boxes': web/deploy/compose*.yml) UG2's server sends `/mw` and every path under it to
+https://nfsrevived.com/mw/ and Most Wanted's sends `/u2` and every path under it to https://nfsu2.xyz/ (fixed
+addresses, `src/game.rs` SiteRedirect).  `--base-path <name>=<path>` moves a name (a layout for tests:
+`localhost=/u2`; `*` is every other name).  `nfsu2-server [--game mw] --print-entries` prints what of the game's folder it serves (web/deploy/pack.sh
 asks).  Knobs for measurements, from the environment:
 
 | | |

@@ -229,8 +229,6 @@ const THIRD_SHARE: f64 = 0.7;
 const QUICK_WINS: u32 = 10;
 const TRACKS_KEPT: usize = 4096;
 const TOP_KEPT: usize = 4;
-/// no car of the game averages this over a race (m/s: 350 km/h; the fastest tuned cars make 350 at the most)
-const RACE_MPS: f64 = 350.0 / 3.6;
 /// a finisher who drove less than this share of what another racer drove (`race_cheats`)
 const DROVE_SHARE: f64 = 0.5;
 /// a racer still on the way when the race ended: its way counts against a finisher's when its time is at most this
@@ -238,11 +236,6 @@ const DROVE_SHARE: f64 = 0.5;
 /// others' race: nfsu2.xyz, 2026-10-31, one went on alone for 12 minutes, drove 19.6 km and made the race's 2:54
 /// winner one who drove "under half"
 const ENDED_S: f64 = 40.0;
-/// a top speed no car of the game makes, however tuned (m/s: 420 km/h), an edited save's (`race_cheats`): of the
-/// 38,967 personas with a top speed record on nfsu2.xyz on 2026-10-30, half had under 218 km/h, the fastest tuned
-/// cars 377, 12 over 380 and 5 over 420 (one the racer of a circuit won at 383 km/h on average); a free-roam lobby
-/// race's edited 350Z made 444
-const CAR_MPS: f64 = 420.0 / 3.6;
 
 /// A token bucket: `rate` a second, at most `burst`, full at the start (on the lobby's clock)
 #[derive(Clone, Copy, Debug)]
@@ -750,25 +743,26 @@ fn fit(fields: Fields, max: usize, drop: &[&str]) -> Fields {
 /// and of a racer who left the race, a car put far away (nfsu2.xyz, 2026-10-29: one game had another racer drive
 /// 462 km in a 4-minute sprint; 18 lines of a morning came of such figures, each about a racer other than the
 /// reporter, none of them a cheat).  One line a racer a race, for a finisher whose own game says it did what no racer
-/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), RACE_MPS or
-/// more on average, or a way (its average times its time) under DROVE_SHARE of another racer's own, finished or still
-/// on the way when the race ended (ENDED_S) (a cheat that ends its race at once: a test's racewin won a sprint in
-/// 4.77 s having driven 65 m, the other racer 1021 m by the race's end 30 s later; an honest finisher drives the whole
-/// way, and nobody twice as much before the race ends).  The way is looked at again at every report: the other
-/// racer's may come after the finisher's.  A drift race (the title's report type "drift") is won by points: only its
-/// top speed is looked at.  The line names the race's track and laps and the racer's top speed: the other finishers'
-/// times are on the race's `[online]` lines (often none yet: one who won in 30 s had the others give up).
+/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), the title's
+/// `race_mps` or more on average, or a way (its average times its time) under DROVE_SHARE of another racer's own,
+/// finished or still on the way when the race ended (ENDED_S) (a cheat that ends its race at once: a test's racewin
+/// won a sprint in 4.77 s having driven 65 m, the other racer 1021 m by the race's end 30 s later; an honest finisher
+/// drives the whole way, and nobody twice as much before the race ends).  The way is looked at again at every report:
+/// the other racer's may come after the finisher's.  A drift race (the title's report type "drift") is won by points:
+/// only its top speed (the title's `car_mps`) is looked at.  The line names the race's track and laps and the racer's
+/// top speed: the other finishers' times are on the race's `[online]` lines (often none yet: one who won in 30 s had
+/// the others give up).
 fn race_cheats(
     game: &str,
     r: &RaceReport,
-    report_types: &[&str],
-    min_race_s: &[f64],
+    title: &crate::title::Title,
     me: usize,
     mine: Option<&ReportPlayer>,
     players: &mut [Player],
 ) -> Vec<String> {
     let kind = r.kind;
-    let type_name = report_types.get(kind as usize).copied();
+    let (min_race_s, car_mps) = (title.min_race_s, title.car_mps);
+    let type_name = title.report_types.get(kind as usize).copied();
     let drift = type_name == Some("drift");
     if let Some(p) = mine
         && players[me].own.is_none()
@@ -786,7 +780,7 @@ fn race_cheats(
         let Some(o) = players[i].own.filter(|o| !o.told) else { continue };
         let drove = o.avg * o.time;
         let mut why = Vec::new();
-        if !o.finished && o.top < CAR_MPS {
+        if !o.finished && o.top < car_mps {
             continue;
         }
         if let Some(&min) = min_race_s.get(kind as usize)
@@ -796,7 +790,7 @@ fn race_cheats(
         {
             why.push(format!("under the {} s a {ty} race takes at least", js::number_to_string(min)));
         }
-        if !drift && o.finished && o.avg >= RACE_MPS {
+        if !drift && o.finished && o.avg >= title.race_mps {
             why.push(format!("{:.0} km/h on average, which no car does", o.avg * 3.6));
         }
         let most = players
@@ -815,8 +809,8 @@ fn race_cheats(
         } else {
             ""
         };
-        if o.top >= CAR_MPS {
-            why.push(format!("an edited car (no car of the game makes {:.0} km/h)", CAR_MPS * 3.6));
+        if o.top >= car_mps {
+            why.push(format!("an edited car (no car of the game makes {:.0} km/h)", car_mps * 3.6));
         }
         if why.is_empty() {
             continue;
@@ -1755,15 +1749,7 @@ impl Core {
             && why.is_empty()
         {
             let mine = r.players.iter().find(|p| lower(&names[p.index as usize]) == persona);
-            let lines = race_cheats(
-                &gname,
-                r,
-                self.title.report_types,
-                self.title.min_race_s,
-                me,
-                mine,
-                &mut self.lobby.game_mut(g).expect("held").players,
-            );
+            let lines = race_cheats(&gname, r, self.title, me, mine, &mut self.lobby.game_mut(g).expect("held").players);
             for line in lines {
                 self.llog(&line, s);
             }

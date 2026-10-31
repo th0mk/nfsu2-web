@@ -49,6 +49,9 @@ services:
       # the credential the two boxes share for keyphrase saves (web/server-rs/src/app/vault_forward.rs): the U2 box's
       # vault takes Most Wanted's server's forwards that carry it; at least 32 characters; none: no forwards taken
       NFSU2_VAULT_BOX_KEY: ${NFSU2_VAULT_BOX_KEY:-}
+      # the other game's site (src/game.rs SiteRedirect): on Underground 2's box /mw and under it to
+      # https://nfsrevived.com/mw/, once NFSU2_SITE_REDIRECTS=on is in .env (Most Wanted's box: on, compose.mw.yml)
+      NFSU2_SITE_REDIRECTS: ${NFSU2_SITE_REDIRECTS:-off}
     volumes:
       - ${NFSU2_DATA:-./game}:/game:ro
       - ${NFSU2_MODULE:-./module}:/module:ro

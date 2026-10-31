@@ -613,6 +613,8 @@ impl App {
         let base = self.base_of(q, &u);
         let rest = if base.is_empty() { None } else { p.strip_prefix(base).filter(|r| r.starts_with('/')).map(str::to_string) };
         let under = base.is_empty() || rest.is_some();
+        // (the path at the origin's root, as the other game's site redirects compare it)
+        let at_root = if self.o.site_redirects { Some(p.clone()) } else { None };
         let p = rest.unwrap_or(p);
         if under && q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
             return self.put_artifact(q, s, &p[11..]).await;
@@ -640,7 +642,24 @@ impl App {
         if js_to_number(q.headers.get("content-length").unwrap_or("0")) > 0.0 || present(q, "transfer-encoding") {
             return self.plain(q, s, 413, "Too large", CLOSE, Cache::Store, true).await;
         }
+        // the other game's site (--site-redirects on: game.rs SiteRedirect): a fixed address, never one the request
+        // names; not stored, so that a later change of address is not stuck in browsers
+        if let Some(full) = &at_root
+            && let Some(to) = self.o.game.redirects.iter().find_map(|r| r.location(full, &u.pathname, u.query.as_deref()))
+        {
+            return self.plain(q, s, 308, "Permanent redirect", &[("location", to.as_str())], Cache::Store, true).await;
+        }
         if !under {
+            // the site's page at the origin's root (Most Wanted's server: https://nfsrevived.com/, game.rs landing)
+            if p == "/"
+                && let Some(file) = self.o.game.landing
+            {
+                let root = self.o.dist.clone();
+                let found = self.locate(&root, files::resolve_inside(&root, &format!("/{file}"))).await;
+                return self
+                    .send_file(q, s, &root, None, files::FileOpts { found, cache: Cache::Store, noindex: false, ..Default::default() })
+                    .await;
+            }
             // the base without its "/": to the page at its folder, the query kept (an edge redirects other spellings
             // there first)
             if p == base {

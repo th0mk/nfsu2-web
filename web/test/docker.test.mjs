@@ -125,11 +125,14 @@ test('Most Wanted\'s compose: Underground 2\'s settings with its own names', { s
     assert.equal(mw.services.server.environment[k], '', k);
     assert.equal(ug2.services.server.environment[k], undefined, `UG2: no ${k}`);
   }
+  // the other game's site's redirects: off on Underground 2's box until its .env says on, on on Most Wanted's
+  assert.equal(ug2.services.server.environment.NFSU2_SITE_REDIRECTS, 'off');
+  assert.equal(mw.services.server.environment.NFSU2_SITE_REDIRECTS, 'on');
   // the same image and the same settings, but for the names
   const same = s => {
     const c = structuredClone(s);
     delete c.cgroup_parent; delete c.command;
-    for (const k of ['NFSU2_WASM', 'NFSU2_VAULT_FORWARD', 'NFSU2_CF_ACCESS_CLIENT_ID', 'NFSU2_CF_ACCESS_CLIENT_SECRET']) delete c.environment?.[k];
+    for (const k of ['NFSU2_WASM', 'NFSU2_VAULT_FORWARD', 'NFSU2_CF_ACCESS_CLIENT_ID', 'NFSU2_CF_ACCESS_CLIENT_SECRET', 'NFSU2_SITE_REDIRECTS']) delete c.environment?.[k];
     return c;
   };
   for (const name of ['server', 'net', 'cloudflared']) assert.deepEqual(same(mw.services[name]), same(ug2.services[name]), name);

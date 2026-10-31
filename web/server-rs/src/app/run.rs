@@ -71,7 +71,11 @@ fn paths_line(o: &Options, names: &[String]) -> Option<String> {
     if by.iter().all(|(b, _)| b.is_empty()) {
         return None;
     }
-    let rest = if o.game.root_files { "any other path 404 but /robots.txt, which names each game's" } else { "any other path 404" };
+    let rest = match (o.game.landing.is_some(), o.game.root_files) {
+        (true, _) => "any other path 404 but / (the site's page) and /robots.txt, which names each game's",
+        (false, true) => "any other path 404 but /robots.txt, which names each game's",
+        (false, false) => "any other path 404",
+    };
     let parts: Vec<String> = by
         .iter()
         .map(|(b, ns)| {
@@ -644,6 +648,15 @@ pub async fn run(o: Options, cores: usize) {
     lines.push(format!("  names     : {} (other Host names get 421)", names.join(", ")));
     if let Some(l) = paths_line(o, &names) {
         lines.push(l);
+    }
+    if o.site_redirects {
+        let each: Vec<String> = o
+            .game
+            .redirects
+            .iter()
+            .map(|r| format!("{} and under it to {}{}", r.from, r.to, if r.keep_rest { " (the rest of the path kept)" } else { "" }))
+            .collect();
+        lines.push(format!("  redirects : {} (--site-redirects on)", if each.is_empty() { "none".to_string() } else { each.join("; ") }));
     }
     lines.push(format!("  switch    : at most {} players", o.max_peers));
     lines.push(format!(

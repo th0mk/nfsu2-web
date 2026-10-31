@@ -7,7 +7,7 @@
 //!        [--host <name>[,<name>...]] [--state <dir>]
 //!        [--trusted-proxies cloudflare,<ip>,<cidr>,...] [--real-ip-header x-forwarded-for|cf-connecting-ip]
 //!        [--max-peers 128] [--online on|off] [--roam-hub on|off] [--vault-gb 50] [--access-log]
-//!        [--base-path <name>=<path>[,<name>=<path>...]]
+//!        [--base-path <name>=<path>[,<name>=<path>...]] [--site-redirects on|off]
 //!        [--dev [--artifacts <dir>] [--lan-impair <spec>] [--online-trace <file>]]
 //!   nfsu2-server [--game ug2|mw] --print-entries   (the game folder's entries the server serves, one a line)
 //!
@@ -23,7 +23,7 @@ use nfsu2_headers::ProxyTrust;
 use crate::game::{Bases, GameProfile};
 use crate::paths;
 
-pub const VALUE_OPTS: [&str; 22] = [
+pub const VALUE_OPTS: [&str; 23] = [
     "--data",
     "--dist",
     "--wasm",
@@ -46,6 +46,7 @@ pub const VALUE_OPTS: [&str; 22] = [
     "--vault-gb",
     "--game",
     "--base-path",
+    "--site-redirects",
 ];
 pub const FLAG_OPTS: [&str; 4] = ["--behind-proxy", "--dev", "--access-log", "--print-entries"];
 
@@ -88,6 +89,10 @@ pub struct Options {
     /// the game's launch switch (game.rs `Handover::launched`): a code value, never an option; the crate's own tests
     /// turn it on in the options they make
     pub launched: bool,
+    /// the game's redirects to the other game's site (game.rs `SiteRedirect`): on with --site-redirects on (the
+    /// boxes': https://nfsu2.xyz/mw to https://nfsrevived.com/mw/, https://nfsrevived.com/u2 to https://nfsu2.xyz/),
+    /// off unless given, so that this machine's and the tests' setups answer those paths as they did
+    pub site_redirects: bool,
     /// a test aid of the LAN-play tests (delay, loss, reordering on the switch; nfsu2-lan implements it)
     pub lan_impair: String,
     /// the game's Online mode (nfsu2-online): on unless --online off (or the game has none yet)
@@ -340,6 +345,7 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
     // (off for a game with no Online mode yet)
     let online = string(arg("--online", if game.online.is_some() { "on" } else { "off" })).to_lowercase();
     let roam_hub = string(arg("--roam-hub", "on")).to_lowercase();
+    let site_redirects = string(arg("--site-redirects", "off")).to_lowercase();
     let online_trace = resolve_if("--online-trace")?;
     // (an empty NFSU2_VAULT_GB, as compose passes one that is not set, is the default)
     let vault_gb = match arg("--vault-gb", "") {
@@ -391,6 +397,9 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
     }
     if roam_hub != "on" && roam_hub != "off" {
         return Err("--roam-hub: on or off".into());
+    }
+    if site_redirects != "on" && site_redirects != "off" {
+        return Err("--site-redirects: on or off".into());
     }
     if !online_trace.is_empty() && !dev {
         return Err("--online-trace is a test aid: it needs --dev".into());
@@ -476,6 +485,7 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
         hosts,
         bases,
         launched: game.handover.is_some_and(|h| h.launched),
+        site_redirects: site_redirects == "on",
         lan_impair: lan_impair.unwrap_or_default(),
         online: online == "on",
         roam_hub: roam_hub == "on",
@@ -581,8 +591,8 @@ mod tests {
             format!(
                 "unknown option --no-such-option\noptions: {}",
                 "--data --dist --wasm --port --http-port --http-socket --bind --state --tls-cert --tls-key --trusted-proxies --real-ip-header --max-peers \
-             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --base-path --behind-proxy --dev --access-log \
-             --print-entries"
+             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --base-path --site-redirects --behind-proxy --dev \
+             --access-log --print-entries"
             )
         );
         assert_eq!(s.err(&["--http-port"], &[]), "--http-port needs a value");
@@ -604,6 +614,7 @@ mod tests {
         assert_eq!(s.err(&[], &[("NFSU2_ARTIFACTS", "b")]), "--artifacts is a test aid: it needs --dev");
         assert_eq!(s.err(&["--lan-impair", "delay=1"], &[]), "--lan-impair is a test aid: it needs --dev");
         assert_eq!(s.err(&["--online", "maybe"], &[]), "--online: on or off");
+        assert_eq!(s.err(&["--site-redirects", "yes"], &[]), "--site-redirects: on or off");
         assert_eq!(s.err(&["--roam-hub", "no"], &[]), "--roam-hub: on or off");
         assert_eq!(s.err(&["--online-trace", "t.log"], &[]), "--online-trace is a test aid: it needs --dev");
         for v in ["0", "8001", "1.5", "x", "Infinity"] {

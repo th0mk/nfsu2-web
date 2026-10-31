@@ -33,4 +33,6 @@ services:
       NFSU2_VAULT_FORWARD: ${NFSU2_VAULT_FORWARD:-}
       NFSU2_CF_ACCESS_CLIENT_ID: ${NFSU2_CF_ACCESS_CLIENT_ID:-}
       NFSU2_CF_ACCESS_CLIENT_SECRET: ${NFSU2_CF_ACCESS_CLIENT_SECRET:-}
+      # its site's /u2 and under it to https://nfsu2.xyz/ (src/game.rs SiteRedirect)
+      NFSU2_SITE_REDIRECTS: ${NFSU2_SITE_REDIRECTS:-on}
     cgroup_parent: ${NFSU2_SLICE:-nfsmw.slice}

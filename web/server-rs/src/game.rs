@@ -33,8 +33,13 @@ pub struct GameProfile {
     pub bases: &'static [(&'static str, &'static str)],
     /// on a name where its base is not the root, it also answers that origin's root files, which belong to no base:
     /// /robots.txt, naming every game's base there (crawlers read it at the root only)
-    // TODO(M13-13): the root page, '/', which opens the game this browser played last
     pub root_files: bool,
+    /// the page at that origin's root, '/', outside its base: a file of its page's folder (Most Wanted's server
+    /// answers https://nfsrevived.com/ with the site's page, which links both games); None: no root page
+    pub landing: Option<&'static str>,
+    /// its redirects to the other game's site, at the root of every name it answers (`SiteRedirect`): answered only
+    /// with --site-redirects on (the boxes'), so that this machine's and the tests' setups are as they were
+    pub redirects: &'static [SiteRedirect],
     /// the move of its players from the address it had before both games shared one (Underground 2 only; None: no
     /// such address)
     pub handover: Option<&'static Handover>,
@@ -81,6 +86,53 @@ impl ModuleJson {
         }
     }
 }
+
+/// Where the games are (the site plan of 2026-10-31): Underground 2 at the root of its own site, Most Wanted under
+/// /mw on https://nfsrevived.com, whose root page links both
+pub const UG2_ADDRESS: &str = "https://nfsu2.xyz/";
+pub const MW_ADDRESS: &str = "https://nfsrevived.com/mw/";
+
+/// A redirect to the other game's site: `from` (a path at an origin's root, "/mw") and every path under it
+/// ("/mw/...") go to `to`, a fixed address of the other game's.  With `keep_rest` the rest of the path and the query
+/// follow it (https://nfsrevived.com/u2/x?y to https://nfsu2.xyz/x?y); without, every one of them goes to `to`
+/// itself.  Never anything of the request in the address's scheme or host: no open redirect.
+pub struct SiteRedirect {
+    pub from: &'static str,
+    pub to: &'static str,
+    pub keep_rest: bool,
+}
+
+impl SiteRedirect {
+    /// The Location for a request's path, or None when it is not this redirect's: `path` the decoded path the routes
+    /// compare (the server refuses "//", "\" and control characters before), `raw_path` and `raw_query` the
+    /// request's own (percent-encoded) spellings, which `keep_rest` carries over when they are printable ASCII
+    /// without spaces (anything else: the address alone)
+    pub fn location(&self, path: &str, raw_path: &str, raw_query: Option<&str>) -> Option<String> {
+        let rest = path.strip_prefix(self.from).filter(|r| r.is_empty() || r.starts_with('/'))?;
+        if !self.keep_rest {
+            return Some(self.to.to_string());
+        }
+        let plain = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_graphic());
+        let raw_rest = if rest.is_empty() {
+            Some("/")
+        } else {
+            raw_path.get(self.from.len()..).filter(|r| r.starts_with('/') && plain(r) && !r.contains("//"))
+        };
+        let Some(raw_rest) = raw_rest else { return Some(self.to.to_string()) };
+        let mut to = format!("{}{}", self.to.trim_end_matches('/'), raw_rest);
+        if let Some(q) = raw_query.filter(|q| plain(q)) {
+            to.push('?');
+            to.push_str(q);
+        }
+        Some(to)
+    }
+}
+
+/// Underground 2's server on https://nfsu2.xyz: /mw and under it to Most Wanted's page (its only redirect)
+pub const UG2_REDIRECTS: &[SiteRedirect] = &[SiteRedirect { from: "/mw", to: MW_ADDRESS, keep_rest: false }];
+/// Most Wanted's server on https://nfsrevived.com: /u2 and under it to Underground 2's site, the rest of the path
+/// kept (its pages' paths are the same there, at the root)
+pub const MW_REDIRECTS: &[SiteRedirect] = &[SiteRedirect { from: "/u2", to: UG2_ADDRESS, keep_rest: true }];
 
 /// Underground 2's move from its old address (nfsu2.xyz) to the one it shares with Most Wanted (nfsrevived.xyz/u2/):
 /// the old address's pages hand their players' saves over to the new one, across origins, through the few routes of
@@ -176,6 +228,8 @@ pub const UG2: GameProfile = GameProfile {
     base: "",
     bases: &[("nfsrevived.xyz", "/u2")],
     root_files: true,
+    landing: None,
+    redirects: UG2_REDIRECTS,
     handover: Some(&UG2_HANDOVER),
     roam_game: 0,
     own_vault: true,
@@ -186,7 +240,9 @@ pub const UG2: GameProfile = GameProfile {
 // Its box's capacity is Underground 2's, the same code with the same defaults: the image's 6000 places (Dockerfile
 // NFSU2_MAX_PEERS), the line's 5000 and the hub's 6144 (nfsu2-lan, nfsu2-roam), until a load test on its own box
 // says otherwise (web/tools/mix-load.mjs --game mw; TRACKER M11-12, M12-16: cloudflared's share above all).
-// TODO(M6-29): the keyphrase saves' caps from measured Most Wanted saves.
+// Its keyphrase saves go to the U2 box's vault, whose caps hold them: a Most Wanted profile (NFS Most Wanted/<NAME>/
+// <NAME>) is 63,596 bytes, 8.9 to 10.6 KB packed and sealed (the career seeds of bins 15 to 5, 2026-10-31), so the
+// vault's 256 KB box (nfsu2-vault VaultOptions::max_body, which the forwarding applies first) holds about 24 of them.
 // TODO(M10-14): free roam's hub data (Rockport's tuning).
 pub const MW: GameProfile = GameProfile {
     id: "mw",
@@ -219,11 +275,15 @@ pub const MW: GameProfile = GameProfile {
     // (nfsu2-online title.rs MW: redirector port 30920, its config keys, race and report types, report and STAT
     // formats, Messenger TITL/EXTR, 4 players a game)
     online: Some(&nfsu2_online::title::MW),
-    // under /mw on every name, this machine's too: never at a root
+    // under /mw on every name, this machine's too: never at a root; the root of its site (https://nfsrevived.com/)
+    // is the site's page, which links both games (build.mjs --game mw writes it into its page's folder), and its
+    // /robots.txt
     base: "/mw",
     bases: &[],
-    root_files: false,
-    // Most Wanted had no address before the shared one
+    root_files: true,
+    landing: Some("site/index.html"),
+    redirects: MW_REDIRECTS,
+    // Most Wanted had no address before its own
     handover: None,
     roam_game: 1,
     own_vault: false,
@@ -501,7 +561,7 @@ mod tests {
             assert_eq!(m.of(h), "/mw", "{h}");
         }
         assert_eq!(m.all(|_| false), ["/mw"]);
-        assert!(UG2.root_files && !MW.root_files);
+        assert!(UG2.root_files && MW.root_files && UG2.landing.is_none() && MW.landing == Some("site/index.html"));
         // --base-path: names as --host takes them, "*" for the rest; the last word on a name counts
         let mut b = Bases::of_game(&UG2);
         b.add(" Localhost.=/u2/ , [::1]=/u2,127.0.0.1=/x_1-2,nfsrevived.xyz=/,").unwrap();
@@ -609,5 +669,34 @@ mod tests {
             .collect();
         let want = format!("for b in {}; do", bases.join(" "));
         assert!(include_str!("../Dockerfile").contains(&want), "the HEALTHCHECK's loop is not `{want}`");
+    }
+
+    // The other game's site (the site plan of 2026-10-31): fixed addresses, the rest of the path only where the
+    // redirect keeps it and only as the request spelled it in plain ASCII; never a path that is not under `from`
+    #[test]
+    fn the_site_redirects() {
+        let mw = &MW_REDIRECTS[0];
+        let ug2 = &UG2_REDIRECTS[0];
+        let at = |r: &SiteRedirect, p: &str, q: Option<&str>| r.location(p, p, q);
+        assert_eq!(at(ug2, "/mw", None).as_deref(), Some("https://nfsrevived.com/mw/"));
+        assert_eq!(at(ug2, "/mw/a/b", Some("x=1")).as_deref(), Some("https://nfsrevived.com/mw/"));
+        assert_eq!(at(mw, "/u2", None).as_deref(), Some("https://nfsu2.xyz/"));
+        assert_eq!(at(mw, "/u2", Some("room=x")).as_deref(), Some("https://nfsu2.xyz/?room=x"));
+        assert_eq!(at(mw, "/u2/", None).as_deref(), Some("https://nfsu2.xyz/"));
+        assert_eq!(at(mw, "/u2/lang/x.json", Some("a=b&c")).as_deref(), Some("https://nfsu2.xyz/lang/x.json?a=b&c"));
+        for p in ["/", "/u", "/u2x", "/U2", "/x/u2/", "/mw"] {
+            assert_eq!(at(mw, p, None), None, "{p}");
+        }
+        assert_eq!(at(ug2, "/mwx", None), None);
+        // spelled otherwise than the decoded path (an escape in /u2 itself), or with what is no plain ASCII: the
+        // address alone; a query that is no plain ASCII is left out
+        assert_eq!(mw.location("/u2/x", "/%752/x", None).as_deref(), Some("https://nfsu2.xyz/"));
+        assert_eq!(mw.location("/u2/a b", "/u2/a b", None).as_deref(), Some("https://nfsu2.xyz/"));
+        assert_eq!(mw.location("/u2/x", "/u2/x", Some("a b")).as_deref(), Some("https://nfsu2.xyz/x"));
+        assert_eq!(mw.location("/u2/x", "/u2//x", None).as_deref(), Some("https://nfsu2.xyz/"));
+        for r in MW_REDIRECTS.iter().chain(UG2_REDIRECTS) {
+            assert!(r.to.starts_with("https://") && r.to.ends_with('/') && r.from.starts_with('/') && !r.from.ends_with('/'));
+        }
+        assert_eq!((UG2_ADDRESS, MW_ADDRESS), ("https://nfsu2.xyz/", "https://nfsrevived.com/mw/"));
     }
 }

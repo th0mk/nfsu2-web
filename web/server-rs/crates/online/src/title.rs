@@ -59,6 +59,10 @@ pub struct Title {
     /// may come from
     pub(crate) report_types: &'static [&'static str],
     pub(crate) min_race_s: &'static [f64],
+    /// a top speed no car of the game makes however tuned, an edited save's, and an average over a race that no car
+    /// makes (m/s; lobby.rs `race_cheats`)
+    pub(crate) car_mps: f64,
+    pub(crate) race_mps: f64,
     /// the game's race report (rank RESU) decoded: None for anything that does not parse
     pub(crate) decode_report: fn(&str) -> Option<RaceReport>,
     /// the game's STAT field from a persona's counts per race type and its records
@@ -144,6 +148,12 @@ pub const UG2: Title = Title {
     report_types: &["circuit", "sprint", "drag", "drift", "streetx", "url", "type 6"],
     // well under the game's own shortest (one lap of the shortest track; a quarter-mile drag)
     min_race_s: &[20.0, 20.0, 5.0, 20.0, 20.0, 20.0, 20.0],
+    // 420 km/h: of the 38,967 personas with a top speed record on nfsu2.xyz on 2026-10-30, half had under 218 km/h,
+    // the fastest tuned cars 377, 12 over 380 and 5 over 420 (one the racer of a circuit won at 383 km/h on average);
+    // a free-roam lobby race's edited 350Z made 444
+    car_mps: nfsu2_util::cars::UG2_CAR_KMH / 3.6,
+    // 350 km/h: the fastest tuned cars make 350 at the most
+    race_mps: 350.0 / 3.6,
     // version 3 (stats.rs)
     decode_report: decode_result,
     // 38 numbers (stats.rs)
@@ -193,6 +203,9 @@ pub const MW: Title = Title {
     race_types: &["circuit", "sprint", "drag"],
     report_types: &["circuit", "sprint", "drag"],
     min_race_s: &[20.0, 20.0, 5.0],
+    // Most Wanted's own: MW_CAR_KMH (nfsu2-util), and its fastest cars' average no higher than Underground 2's
+    car_mps: nfsu2_util::cars::MW_CAR_KMH / 3.6,
+    race_mps: 350.0 / 3.6,
     // version 3, 51 bytes a player (stats.rs)
     decode_report: decode_result_mw,
     // 44 numbers (stats.rs)
