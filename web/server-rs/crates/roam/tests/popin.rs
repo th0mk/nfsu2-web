@@ -135,7 +135,8 @@ fn median(v: &mut [f64]) -> f64 {
 
 fn run(scene: &Scene, way: &Way) {
     let mut r = Lcg(42);
-    let mut k = Kit::new(RoamOptions { max_players: 8192, ..way.o.clone() });
+    // (the city's 1400 players in one layer)
+    let mut k = Kit::new(RoamOptions { max_players: 8192, layer_max: 8192, ..way.o.clone() });
     let vip = |i: usize| 0x0A4D_0100 + i as u32;
     let half = scene.side / 2.0;
     let mut cars: Vec<Car> = (0..scene.n)

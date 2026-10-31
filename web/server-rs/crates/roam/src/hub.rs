@@ -268,6 +268,8 @@ struct Player {
     hub_port: u16,
     id: u32,
     room: u32,
+    /// its layer of the room (`Seats::layer_for`): only players of one room and one layer see each other
+    layer: u32,
     /// as the player last sent it (roam_core.h RC_ST_*: 2 in free roam, 5 paused there): the world map and
     /// `in_roam()` read it
     status: u8,
@@ -318,6 +320,11 @@ impl Player {
     fn key(&self) -> u64 {
         key(self.vip, self.port)
     }
+
+    /// its room and its layer of it, in one number: the players who see each other
+    fn zone(&self) -> u64 {
+        (self.room as u64) << 32 | self.layer as u64
+    }
 }
 
 /// What a browser's page blocks (its hello's "block": `Hub::blocks`): names as their Online form in lower case
@@ -354,6 +361,92 @@ impl Block {
 /// a player's endpoint, its virtual address and port, in one number
 fn key(vip: u32, port: u16) -> u64 {
     (vip as u64) << 16 | port as u64
+}
+
+/// A room's layers (`RoamOptions::layer_max`): a room's players sit in layers of at most layer_max browsers, seated as
+/// they come, and only players of one layer see each other.  Kept as counts, so that seating a player (each HELLO:
+/// its room or crews may change) costs a few lookups, not a walk over the players.
+#[derive(Default)]
+struct Seats {
+    /// the browsers of each room's layer (`Player::zone`), and of each room
+    zones: HashMap<u64, u32>,
+    rooms: HashMap<u32, u32>,
+    /// each browser's layer of a room, and its endpoints there: (virtual address, room) -> (layer, endpoints)
+    browsers: HashMap<(u32, u32), (u32, u32)>,
+    /// the endpoints of each crew in each room's layer: (crew, zone) -> endpoints
+    crews: HashMap<(u32, u64), u32>,
+}
+
+/// one less of `k`, gone at none
+fn less<K: std::hash::Hash + Eq>(m: &mut HashMap<K, u32>, k: K) {
+    let Some(n) = m.get_mut(&k) else { return };
+    *n -= 1;
+    if *n == 0 {
+        m.remove(&k);
+    }
+}
+
+impl Seats {
+    /// player p (its layer set) takes its seat
+    fn add(&mut self, p: &Player) {
+        let zone = p.zone();
+        for c in crews_of(p) {
+            *self.crews.entry((c, zone)).or_insert(0) += 1;
+        }
+        let b = self.browsers.entry((p.vip, p.room)).or_insert((p.layer, 0));
+        b.1 += 1;
+        if b.1 == 1 {
+            *self.zones.entry(zone).or_insert(0) += 1;
+            *self.rooms.entry(p.room).or_insert(0) += 1;
+        }
+    }
+
+    /// player p leaves its seat (none: nothing)
+    fn sub(&mut self, p: &Player) {
+        if p.layer == NONE {
+            return;
+        }
+        let zone = p.zone();
+        for c in crews_of(p) {
+            less(&mut self.crews, (c, zone));
+        }
+        let Some(b) = self.browsers.get_mut(&(p.vip, p.room)) else { return };
+        b.1 -= 1;
+        if b.1 == 0 {
+            self.browsers.remove(&(p.vip, p.room));
+            less(&mut self.zones, zone);
+            less(&mut self.rooms, p.room);
+        }
+    }
+
+    /// The layer of its room for player p (not seated): its browser's, when another endpoint of it sits there
+    /// already; else the layer with room where the most of its crew-mates are (so a crew plays together while it
+    /// can); else the first layer with room: layer 0 fills first, and a seat a player left is taken before a new layer
+    /// opens.  A player keeps its layer while it is here (moving it would take every car it sees off its screen).
+    fn layer_for(&self, p: &Player, max: usize) -> u32 {
+        if let Some(&(layer, _)) = self.browsers.get(&(p.vip, p.room)) {
+            return layer;
+        }
+        let zone = |l: u32| (p.room as u64) << 32 | l as u64;
+        let all = self.rooms.get(&p.room).copied().unwrap_or(0);
+        let (mut seen, mut first, mut mates) = (0, None, None::<(u32, u32)>);
+        // (layer after layer, until every browser of the room was counted and a layer with room was found)
+        for l in 0.. {
+            let n = self.zones.get(&zone(l)).copied().unwrap_or(0);
+            if (n as usize) < max {
+                first = first.or(Some(l));
+                let m: u32 = crews_of(p).map(|c| self.crews.get(&(c, zone(l))).copied().unwrap_or(0)).sum();
+                if m > 0 && mates.is_none_or(|(most, _)| m > most) {
+                    mates = Some((m, l));
+                }
+            }
+            seen += n;
+            if seen >= all && first.is_some() {
+                break;
+            }
+        }
+        mates.map(|(_, l)| l).or(first).unwrap_or(0)
+    }
 }
 
 /// a HELLO's crews as the hub keeps them: each one once (a page may name a crew twice), in its order, 0 after them
@@ -408,6 +501,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         map_max: n(o.map_max, d.map_max).min(wire::MAP_PER * wire::MAP_PARTS),
         map_gap_ms: f(o.map_gap_ms, d.map_gap_ms),
         map_fresh_ms: f(o.map_fresh_ms, d.map_fresh_ms),
+        layer_max: n(o.layer_max, d.layer_max),
     }
 }
 
@@ -444,7 +538,8 @@ struct Pair {
 /// What one tick needs, kept from tick to tick so that a tick allocates (almost) nothing.
 #[derive(Default)]
 struct Scratch {
-    room_of: HashMap<u32, usize>,
+    /// each room's layer (`Player::zone`) to its list in `rooms`
+    room_of: HashMap<u64, usize>,
     rooms: Vec<Vec<u32>>,
     /// each slot's new links
     fresh: Vec<Vec<Link>>,
@@ -579,9 +674,11 @@ pub struct Hub {
     /// MAPD: each browser's map as it holds it (`MapHeld`), and when its next race lobbies go
     maps: HashMap<u32, MapHeld>,
     lobbies_at: HashMap<u32, f64>,
-    /// MAPD: each room's players the map shows, by slot, where they are at the time with it (made at the first
+    /// MAPD: each room's layer's players the map shows, by slot, where they are at the time with it (made at the first
     /// question of a tick)
-    map_cands: HashMap<u32, (f64, Vec<MapCand>)>,
+    map_cands: HashMap<u64, (f64, Vec<MapCand>)>,
+    /// who sits in which layer of each room
+    seats: Seats,
     s: Scratch,
     /// the claimed names (nfsu2-claims): a player under another keyphrase's name plays alone; None: any name is anyone's
     claims: Option<Arc<nfsu2_claims::Claims>>,
@@ -632,6 +729,7 @@ impl Hub {
             maps: HashMap::new(),
             lobbies_at: HashMap::new(),
             map_cands: HashMap::new(),
+            seats: Seats::default(),
             s: Scratch::default(),
             claims: None,
         }
@@ -722,6 +820,7 @@ impl Hub {
             (self.log)(&line);
         }
         self.by_key.remove(&p.key());
+        self.seats.sub(&p);
         self.crewed -= (p.crews[0] != 0) as usize;
         if let Some(n) = self.per_vip.get_mut(&p.vip) {
             *n -= 1;
@@ -791,6 +890,25 @@ impl Hub {
         !self.dead_at.get(l.slot as usize).copied().unwrap_or(false)
     }
 
+    /// the player in `slot` seated in `layer` of its room (`Seats`)
+    fn seat(&mut self, slot: u32, layer: u32) {
+        let Some(Some(p)) = self.slots.get_mut(slot as usize) else { return };
+        p.layer = layer;
+        self.seats.add(p);
+    }
+
+    /// the player in `slot` out of its seat; the room and layer it had (None: it had none)
+    fn unseat(&mut self, slot: u32) -> Option<(u32, u32)> {
+        let Some(Some(p)) = self.slots.get_mut(slot as usize) else { return None };
+        if p.layer == NONE {
+            return None;
+        }
+        self.seats.sub(p);
+        let was = (p.room, p.layer);
+        p.layer = NONE;
+        Some(was)
+    }
+
     /// a frame from browser `from` to the hub's address (the switch has written the true source vip)
     pub fn frame(&mut self, from: u32, data: &[u8]) {
         self.frame_from(from, data, None);
@@ -834,6 +952,7 @@ impl Hub {
                     hub_port: dport,
                     id: sender,
                     room,
+                    layer: NONE,
                     status,
                     name: String::from_utf8_lossy(name).into_owned(),
                     canon: nfsu2_claims::canonical(&String::from_utf8_lossy(name)).unwrap_or_default(),
@@ -862,6 +981,8 @@ impl Hub {
         };
         let now = (self.now)();
         let degree = self.o.degree;
+        // a HELLO may name another room or other crews: out of its seat until it has them (a new player has none yet)
+        let reseat = matches!(m, Msg::Hello { .. }).then(|| self.unseat(slot));
         let Some(Some(p)) = self.slots.get_mut(slot as usize) else { return };
         p.seen = now;
         p.hub_port = dport;
@@ -949,6 +1070,16 @@ impl Hub {
         if let Some((was, is)) = crewed {
             self.crewed = self.crewed + is as usize - was as usize;
         }
+        // (its room and crews as this HELLO has them: the same layer in the same room, else a seat for it)
+        if let Some(was) = reseat
+            && let Some(p) = self.player(slot)
+        {
+            let layer = match was {
+                Some((room, layer)) if room == p.room => layer,
+                _ => self.seats.layer_for(p, self.o.layer_max),
+            };
+            self.seat(slot, layer);
+        }
         if check {
             self.check_claim(slot, now);
         }
@@ -1018,12 +1149,12 @@ impl Hub {
     /// and a race lobby that starts there
     fn cheat(&mut self, slot: u32, seen: Seen, now: f64) {
         let Some(p) = self.player(slot) else { return };
-        let (room, vip) = (p.room, p.vip);
+        let (zone, vip) = (p.zone(), p.vip);
         let (mut near, mut all, mut lobby) = (Vec::new(), 0, None);
         if let Seen::Jump { to, .. } | Seen::Fast { to, .. } = seen {
             // (not its own other tab: the same browser's address)
             for &q in &self.order {
-                let Some(o) = self.player(q).filter(|o| o.vip != vip && o.room == room) else { continue };
+                let Some(o) = self.player(q).filter(|o| o.vip != vip && o.zone() == zone) else { continue };
                 if let Some(at) = o.p.filter(|_| matches!(o.status, 2 | 5) && now - o.pos_at <= NEAR_FRESH_MS) {
                     let k = (now - o.pos_at) / 1000.0;
                     let there = [at[0] + o.v[0] * k, at[1] + o.v[1] * k, at[2] + o.v[2] * k];
@@ -1078,14 +1209,14 @@ impl Hub {
         if p.impostor {
             return;
         }
-        let (room, at) = (p.room, p.p.unwrap_or_default());
+        let (zone, at) = (p.zone(), p.p.unwrap_or_default());
         let mut near: Vec<(u64, (i16, i16, u8))> = Vec::new();
         for &q in &self.order {
             let Some(o) = self.player(q) else { continue };
             let Some(pos) = o.p else { continue };
             if q == slot
                 || o.impostor
-                || o.room != room
+                || o.zone() != zone
                 || now - o.pos_at > fresh
                 || !matches!(o.status, 2 | 5)
                 || p.links.iter().any(|l| l.slot == q)
@@ -1131,8 +1262,8 @@ impl Hub {
         if p.impostor || self.map_at.get(&p.vip).is_some_and(|&t| now < t) {
             return;
         }
-        let (room, at, vip, port, hub_port, lobbies) = (p.room, p.p.unwrap_or_default(), p.vip, p.port, p.hub_port, p.lobbies);
-        let (at_t, cands) = self.map_cands.remove(&room).unwrap_or_else(|| (now, self.map_room(room, now)));
+        let (zone, at, vip, port, hub_port, lobbies) = (p.zone(), p.p.unwrap_or_default(), p.vip, p.port, p.hub_port, p.lobbies);
+        let (at_t, cands) = self.map_cands.remove(&zone).unwrap_or_else(|| (now, self.map_room(zone, now)));
         let Some(p) = self.player(slot) else { return };
         let mut links: Vec<u32> = p.links.iter().map(|l| l.slot).collect();
         links.sort_unstable();
@@ -1145,7 +1276,7 @@ impl Hub {
             })
             .copied()
             .collect();
-        self.map_cands.insert(room, (at_t, cands));
+        self.map_cands.insert(zone, (at_t, cands));
         let total = list.len().min(u16::MAX as usize) as u16;
         if list.len() > max {
             list.select_nth_unstable_by_key(max, |c| order_key(distance(&at, &c.p)));
@@ -1188,12 +1319,12 @@ impl Hub {
         }
     }
 
-    /// the players of `room` a world map shows (MAPD), by slot: in free roam (or paused there), a position younger
+    /// the players of `zone` (a room's layer: `Player::zone`) a world map shows (MAPD), by slot: in free roam (or paused there), a position younger
     /// than map_fresh_ms, no impostor; each where it is now, moved on from its last SNAP at its velocity (MAP_AHEAD_MS
     /// at most).  A player sends the hub its SNAP twice a second: a position as it came would be up to half a second
     /// behind where the page has the marker, a car going straight would look off by that much, and each new SNAP
     /// would put its marker back or forward.
-    fn map_room(&self, room: u32, now: f64) -> Vec<MapCand> {
+    fn map_room(&self, zone: u64, now: f64) -> Vec<MapCand> {
         let fresh = self.o.map_fresh_ms;
         let c = |x: f64| (x + 0.5).floor().clamp(-32767.0, 32767.0) as i16;
         let v = |x: f64| x.round().clamp(-127.0, 127.0) as i8;
@@ -1203,7 +1334,8 @@ impl Hub {
             .filter_map(|&q| {
                 let o = self.player(q)?;
                 let pos = o.p?;
-                let shown = q < wire::MAPD_GONE as u32 && o.room == room && !o.impostor && now - o.pos_at <= fresh && matches!(o.status, 2 | 5);
+                let shown =
+                    q < wire::MAPD_GONE as u32 && o.zone() == zone && !o.impostor && now - o.pos_at <= fresh && matches!(o.status, 2 | 5);
                 let dt = (now - o.pos_at).clamp(0.0, MAP_AHEAD_MS) / 1000.0;
                 let (x, y) = (pos[0] + o.v[0] * dt, pos[1] + o.v[1] * dt);
                 shown.then(|| MapCand { slot: q, id: o.id, p: pos, x: c(x), y: c(y), heading: o.heading, vx: v(o.v[0]), vy: v(o.v[1]) })
@@ -1213,19 +1345,19 @@ impl Hub {
         list
     }
 
-    /// With the world map's answer, to a player that takes race lobbies: the open lobbies of its room (any player's,
+    /// With the world map's answer, to a player that takes race lobbies: the open lobbies of its room's layer (any player's,
     /// its own too, an advert younger than LOBBY_STALE_MS), nearest first, LOBBIES_MAX at most, in one datagram
     fn lobbies(&mut self, slot: u32, req: u16, now: f64) {
         let Some(p) = self.player(slot) else { return };
         if !p.lobbies || p.impostor {
             return;
         }
-        let (room, at) = (p.room, p.p.unwrap_or_default());
+        let (zone, at) = (p.zone(), p.p.unwrap_or_default());
         let mut near: Vec<(u64, (i16, i16, u32, u8, u8, u8))> = Vec::new();
         for &q in &self.order {
             let Some(o) = self.player(q) else { continue };
             let Some((l, t)) = o.lobby else { continue };
-            if o.impostor || o.room != room || now - t > LOBBY_STALE_MS {
+            if o.impostor || o.zone() != zone || now - t > LOBBY_STALE_MS {
                 continue;
             }
             if self.apart_from(slot, q, p, o) {
@@ -1382,7 +1514,7 @@ impl Hub {
         }
         self.apart.clear();
 
-        // the rooms: the players with a position younger than `stale_ms`, in the order they came
+        // the rooms, a list a layer of each: the players with a position younger than `stale_ms`, in the order they came
         let s = &mut self.s;
         s.room_of.clear();
         let mut rooms = 0;
@@ -1391,7 +1523,7 @@ impl Hub {
             if p.p.is_none() || now - p.pos_at > self.o.stale_ms || p.impostor {
                 continue;
             }
-            let r = *s.room_of.entry(p.room).or_insert_with(|| {
+            let r = *s.room_of.entry(p.zone()).or_insert_with(|| {
                 if rooms == s.rooms.len() {
                     s.rooms.push(Vec::new());
                 }
@@ -1577,6 +1709,27 @@ impl Hub {
         crews.iter().map(|&c| crew_count(&counts, c)).collect()
     }
 
+    /// the browsers of each room's layer, for the rooms with a second layer: (room, [browsers of layer 0, 1, ...])
+    /// in the order of the rooms' numbers (a layer with nobody left is 0)
+    pub fn layers(&self) -> Vec<(u32, Vec<usize>)> {
+        let mut zones: Vec<(u64, u32)> = self.seats.zones.iter().map(|(&z, &n)| (z, n)).collect();
+        zones.sort_unstable();
+        let mut out: Vec<(u32, Vec<usize>)> = Vec::new();
+        for (zone, n) in zones {
+            let (room, layer) = ((zone >> 32) as u32, zone as u32 as usize);
+            if out.last().is_none_or(|e| e.0 != room) {
+                out.push((room, Vec::new()));
+            }
+            let at = &mut out.last_mut().expect("pushed").1;
+            if at.len() <= layer {
+                at.resize(layer + 1, 0);
+            }
+            at[layer] = n as usize;
+        }
+        out.retain(|e| e.1.len() > 1);
+        out
+    }
+
     /// for the tests and the switch's `info()` (the server's console): counts only, never a position
     pub fn info(&self) -> Value {
         let (mut linked, mut links) = (0u64, 0u64);
@@ -1609,6 +1762,8 @@ impl Hub {
             "watchesKept": self.kept.len(),
             "blocking": self.blocks.len(),
             "keptApart": self.apart.len(),
+            "layerMax": self.o.layer_max,
+            "layers": self.layers().into_iter().map(|(room, n)| json!({ "room": room, "browsers": n })).collect::<Vec<_>>(),
         })
     }
 

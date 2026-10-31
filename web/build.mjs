@@ -15,6 +15,7 @@ const opts = {
     'host/io-worker': 'src/host/io-worker.ts',
     'host/predownload-worker': 'src/host/predownload-worker.ts',
     'gpu/png-worker': 'src/gpu/png-worker.ts',
+    'net/net-worker': 'src/net/worker.ts',
     'sw': 'src/sw.ts',
     'test/hostcheck': 'src/test/hostcheck.ts',
     'test/play': 'src/test/play.ts',

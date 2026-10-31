@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b4083eb9-d884-4a50-abba-497f85dfd3a2" name="Changes" comment="Optimizing sync between online players">
+      <change afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/roam_layers.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server-rs/crates/roam/src/hub.rs" beforeDir="false" afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/src/hub.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server-rs/crates/roam/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/bench.rs" beforeDir="false" afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/bench.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/popin.rs" beforeDir="false" afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/popin.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/roam_ahead.rs" beforeDir="false" afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/roam_ahead.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/roam_hub.rs" beforeDir="false" afterPath="$PROJECT_DIR$/web/server-rs/crates/roam/tests/roam_hub.rs" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;NikolaiStoilkov&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/NikolaiStoilkov/nfsu2-web.git&quot;,
+    &quot;accountId&quot;: &quot;b1acb574-95e6-40b8-bab2-d27e9ffc763d&quot;
+  }
+}</component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.0058369878074724" />
+      <entry key="MS500" value="1.7529483746041798" />
+      <entry key="S2" value="4.61193542863065" />
+      <entry key="S5" value="7.280525321914007" />
+      <entry key="S10" value="9.086510810247267" />
+      <entry key="S30" value="11.309374500433986" />
+      <entry key="S60" value="14.330344547010672" />
+      <entry key="M2" value="19.15162001271508" />
+      <entry key="M5" value="24.945930871162847" />
+      <entry key="M10" value="27.696095007548784" />
+      <entry key="M15" value="28.73068346113064" />
+      <entry key="M30" value="29.830585235477393" />
+      <entry key="H1" value="30.406330654865155" />
+      <entry key="H2" value="30.700890718637353" />
+      <entry key="H4" value="30.858143062982236" />
+      <entry key="D1" value="47.21609850668032" />
+      <entry key="W1" value="90.58236971676804" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="0.0" />
+      <entry key="M30" value="0.0" />
+      <entry key="H1" value="0.0" />
+      <entry key="H2" value="0.0" />
+      <entry key="H4" value="0.0" />
+      <entry key="D1" value="0.0" />
+      <entry key="W1" value="0.0" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="0.9715355990525767" />
+      <entry key="MS500" value="1.7399316980883341" />
+      <entry key="S2" value="4.60308324975173" />
+      <entry key="S5" value="7.274856594173743" />
+      <entry key="S10" value="9.082937892189474" />
+      <entry key="S30" value="11.307815734539517" />
+      <entry key="S60" value="14.329186996653512" />
+      <entry key="M2" value="19.150718761510618" />
+      <entry key="M5" value="24.945412749527843" />
+      <entry key="M10" value="27.69579833854544" />
+      <entry key="M15" value="28.73047623539499" />
+      <entry key="M30" value="29.830476597586955" />
+      <entry key="H1" value="30.406275020054842" />
+      <entry key="H2" value="30.70086256453868" />
+      <entry key="H4" value="30.85812889870059" />
+      <entry key="D1" value="47.21609545481379" />
+      <entry key="W1" value="90.58236902136711" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3LJODvUI4wgrz4Uw2vU1RsjOXeM" />
+  <component name="ProjectViewState">
+    <option name="autoscrollFromSource" value="true" />
+    <option name="autoscrollToSource" value="true" />
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;javascript.preferred.runtime.type.id&quot;: &quot;node&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/nikolay/www/nfsu2-web&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;/Users/nikolay/www/nfsu2-web/web/node_modules/@typescript/typescript-darwin-arm64/lib&quot;
+  }
+}</component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-4abd2a77f808-JavaScript-WS-262.10968.77" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b4083eb9-d884-4a50-abba-497f85dfd3a2" name="Changes" comment="" />
+      <created>1793168587742</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1793168587742</updated>
+      <workItem from="1793168589594" duration="2952000" />
+    </task>
+    <task id="LOCAL-00001" summary="changed concept of ghost mode. If player decide to be &quot;solid&quot; he only sees other players who are solid otherwise if its ghost , see only players in ghost mode.">
+      <option name="closed" value="true" />
+      <created>1793169407346</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1793169407346</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Optimizing sync between online players">
+      <option name="closed" value="true" />
+      <created>1793358269057</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1793358269057</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="changed concept of ghost mode. If player decide to be &quot;solid&quot; he only sees other players who are solid otherwise if its ghost , see only players in ghost mode." />
+    <MESSAGE value="Optimizing sync between online players" />
+    <option name="LAST_COMMIT_MESSAGE" value="Optimizing sync between online players" />
+  </component>
+</project>

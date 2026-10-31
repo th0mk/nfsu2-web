@@ -243,7 +243,8 @@ fn the_world_map_lists_the_others_nearest_first() {
 // asks for fewer
 #[test]
 fn the_world_map_takes_2048_from_a_page_that_asks() {
-    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    // (2200 players in one layer)
+    let mut k = Kit::new(RoamOptions { degree: 1, layer_max: 4096, ..RoamOptions::default() });
     for i in 0..2200 {
         join(&mut k, i);
         k.from(W(i), &snap(100 + i, [i as f64 * 5.0, 0.0, 0.0]));
@@ -444,7 +445,8 @@ fn the_world_map_places_a_car_going_straight_once() {
 // MAPD from nothing for 2048 of 2200: 16 full datagrams; a page before MAPD still gets MAP once a second
 #[test]
 fn the_world_map_sends_2048_in_16_mapd_datagrams() {
-    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    // (2200 players in one layer)
+    let mut k = Kit::new(RoamOptions { degree: 1, layer_max: 4096, ..RoamOptions::default() });
     for i in 0..2200 {
         join(&mut k, i);
         k.from(W(i), &snap(100 + i, [i as f64 * 5.0, 0.0, 0.0]));

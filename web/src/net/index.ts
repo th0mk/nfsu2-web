@@ -8,8 +8,9 @@
 //   C (TX rings) --> this file --> WebSocket --> switch --> other browsers
 //   C (RX rings) <-- this file <-- WebSocket <-- switch       (routed by frame kind)
 //
-// WebSockets live on the page's main thread, so this runs there.  It never
-// blocks: it sleeps on each TX ring's bell with Atomics.waitAsync (C rings it
+// The player's page runs this in the net worker (./worker.ts, started by
+// ./remote.ts), off the main thread that encodes every frame; the test pages
+// and the unit tests run it where they are.  It never blocks: it sleeps on each TX ring's bell with Atomics.waitAsync (C rings it
 // when it queued frames) and writes received frames straight into the right RX
 // ring, then rings C's network thread with Atomics.notify.  The switch assigns
 // a virtual IPv4 address; this writes it into every mailbox, keeps the
@@ -95,6 +96,8 @@ export interface NetOptions {
   /** the operator removed this player from playing with others (a kick or a ban), with its message: the page stays
    *  off the switch for the rest of this game */
   onRemoved?: (r: NetRemoved) => void;
+  /** a mailbox of the game matched this page and the link took it: free roam's ('roam') or LAN play's ('lan') */
+  onAttached?: (kind: 'roam' | 'lan') => void;
   /** milliseconds between pings to the switch (default 2000) */
   pingMs?: number;
   /** milliseconds no mailbox wants the switch before the page lets it go (default 10000) */
@@ -412,6 +415,7 @@ class Link implements NetLink {
     if (name === 'roam' && this.solid) Atomics.store(ep.i32, P.W_SOLID, this.solid);
     if (name === 'roam') { this.publishCrews(ep); this.publishRoom(ep); }
     if (name === 'lan') this.log('LAN play attached (the game opened its LAN screens)');
+    this.o.onAttached?.(name);
     this.publishPeers(ep);
     if (this.state === 'online') this.publishOnline(ep);
     else Atomics.store(ep.i32, P.W_PAGE_STATE, this.state === 'connecting' ? P.NET_PAGE_CONNECTING
