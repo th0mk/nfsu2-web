@@ -159,7 +159,9 @@ test('Most Wanted\'s slice: its own name, Underground 2\'s quota', () => {
 // --game for Most Wanted's (tests/binary.rs kicks_and_bans_on_most_wanted runs that command)
 test('each box\'s operator command: ctl in its own server, Most Wanted\'s with --game mw', () => {
   const last = f => fs.readFileSync(path.join(DEPLOY, f), 'utf8').trim().split('\n').at(-1);
-  assert.equal(last('nfsu2'), 'cd "$(dirname "$0")" && exec docker compose exec -T server /app/nfsu2-server ctl "$@"');
+  // (Underground 2's goes to its folder at its top since its logs command came in: main f06e8ca)
+  assert.equal(last('nfsu2'), 'exec docker compose exec -T server /app/nfsu2-server ctl "$@"');
+  assert.match(fs.readFileSync(path.join(DEPLOY, 'nfsu2'), 'utf8'), /^cd "\$\(dirname "\$0"\)" \|\| exit 1$/m);
   assert.equal(last('nfsmw'), 'cd "$(dirname "$0")" && exec docker compose exec -T server /app/nfsu2-server ctl --game mw "$@"');
   // and Most Wanted's console kept in its state volume (the server's <state>/log, src/game.rs keeps_log)
   assert.ok(fs.readFileSync(path.join(DEPLOY, 'nfsmw'), 'utf8').includes(

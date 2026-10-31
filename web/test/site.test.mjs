@@ -19,8 +19,11 @@ import { fileURLToPath } from 'node:url';
 import { GAMES, SITE, hasBar, withSiteBar } from '../src/games/site.mjs';
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'site-'));
-test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+// web/ in a copy of the repository: the page's changelog is the repository's CHANGELOG.md, beside web/
+const top = fs.mkdtempSync(path.join(os.tmpdir(), 'site-')), root = path.join(top, 'web');
+test.after(() => fs.rmSync(top, { recursive: true, force: true }));
+fs.mkdirSync(root);
+fs.copyFileSync(path.join(WEB, '..', 'CHANGELOG.md'), path.join(top, 'CHANGELOG.md'));
 fs.copyFileSync(path.join(WEB, 'build.mjs'), path.join(root, 'build.mjs'));
 fs.copyFileSync(path.join(WEB, 'index.html'), path.join(root, 'index.html'));
 for (const d of ['src', 'node_modules']) fs.symlinkSync(path.join(WEB, d), path.join(root, d));
@@ -72,7 +75,9 @@ test('Underground 2\'s page: as it was until its bar is on, then the bar and not
   // the bar out and its two parts back where they were: index.html byte for byte
   const b = bar(on);
   const lang = /<label class="lang-pick">[^]*?<\/label>/.exec(b)[0], discord = /<a class="btn" href="https:\/\/discord\.gg\/[^]*?<\/a>/.exec(b)[0];
-  const back = on.replace(b + '\n\n', '').replace('<div class="top-end">', `<div class="top-end">\n        ${lang}\n        ${discord}`);
+  // (main's Changelog button, between the two, stays in the top bar's end)
+  const back = on.replace(b + '\n\n', '').replace('<div class="top-end">', `<div class="top-end">\n        ${lang}`)
+    .replace(/(<button type="button" class="btn" id="changelog-btn"[^]*?<\/button>)/, `$1\n        ${discord}`);
   assert.equal(back, INDEX);
   assert.throws(() => withSiteBar(on, 'ug2'), /the bar already/);
   assert.throws(() => withSiteBar(INDEX.replace('<label class="lang-pick">', '<label>'), 'ug2'), /no language picker/);
