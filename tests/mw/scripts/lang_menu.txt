@@ -9,8 +9,8 @@
 #   node web/tools/run-suite.mjs --game mw --script lang_menu.txt --marker 'lang_menu: main menu' \
 #     --env NFSU2_LANGUAGE=german --env FILELIST=1 --env NFSU2_QUIT_FRAMES=7200
 # (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
-0     waitfng MW_LS_Splash.fng 3600
-+0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
+0     waitfng MW_LS_Splash.fng|WS_MW_LS_Splash.fng 3600    # the title (the widescreen one on a wide screen)
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4,WS_MW_LS_Splash.fng:0xC4DF3FF2)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
 +0    dump title
 +0    log lang_menu: title
 +0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)

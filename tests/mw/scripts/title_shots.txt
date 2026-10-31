@@ -1,8 +1,8 @@
-# Most Wanted: the title screen (TRACKER M7-39: the 4:3 title in the middle of a wide screen, or the game's own
-# widescreen title with NFSMW_WIDE_SPLASH=1, runtime/mw/widescreen_mw.c).  With movies off (NOMOVIES=1) the boot
-# comes to the title; 400 frames after it takes input ("CLICK to continue" faded in) it is dumped twice, 3 frames
-# apart.  Run it on the play page at each shape (w, h: 16:9, 21:9).  The pictures are the game's: they stay out of
-# the repo.
+# Most Wanted: the title screen (TRACKER M7-42: on a 16:9 or wider screen the game's own widescreen title,
+# runtime/mw/widescreen_mw.c; at 4:3, 16:10 or upright, or with NFSMW_WIDE_SPLASH=0, the 4:3 title).  With movies off
+# (NOMOVIES=1) the boot comes to the title; 400 frames after it takes input it is dumped twice, 3 frames apart.  Run
+# it on the play page at each shape (w, h: 4:3, 16:10, 16:9, 21:9, 32:9, upright).  The pictures are the game's: they
+# stay out of the repo.
 0     waitfng MW_LS_Splash.fng|WS_MW_LS_Splash.fng 3600
 +400  dump title
 +3    dump title

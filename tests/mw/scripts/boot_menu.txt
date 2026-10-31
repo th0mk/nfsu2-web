@@ -2,7 +2,8 @@
 # Every step waits for the game, never for time (L-021): GameFlowManager's state [0x925E90] and the front-end
 # packages by name, which runtime/mw/fe_mw.c reads from FEngine's active list (the top package, and each package
 # that comes up, as "[fng] f=N screen NAME").  The splash screens (LS_EAlogo.fng, LS_PSA.fng, the intro movie's
-# MW_LS_AttractFMV.fng, MW_LS_Splash.fng: "press Enter") come and go by themselves; Enter goes past the splash.
+# MW_LS_AttractFMV.fng, MW_LS_Splash.fng or on a 16:9 or wider screen WS_MW_LS_Splash.fng: "press Enter") come and
+# go by themselves; Enter goes past the splash.
 # A first start (a new save folder) then shows MC_Main.fng before MainMenu.fng, and Enter goes past it too (seen in
 # the first headless boots).  At the main menu the script sends WM_CLOSE (`close`, runtime/lifecycle.c), as the
 # window's close button does, and the game shuts itself down through ExitProcess; tests/mw/checks/boot_menu.sh

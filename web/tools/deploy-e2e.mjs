@@ -67,15 +67,16 @@ import { gameOf, usage, nothingFor } from './rig-game.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
-// each game's screens, as the front end's log names them: the title Play reaches, the main menu of --menu (and the
-// words before the name: UG2's log says which package is on top, Most Wanted's each screen that comes up,
-// runtime/mw/fe_mw.c), where its routes are, its module's name, its folder's default and its page's save folder (the
-// browser's storage, web/src/games/<id>/storage.ts SAVE_DIR: the game's /save)
+// each game's screens, as the front end's log names them: the title Play reaches (Most Wanted's on a 16:9 or wider
+// canvas is its widescreen one, wideTitle: runtime/mw/widescreen_mw.c), the main menu of --menu (and the words before
+// the name: UG2's log says which package is on top, Most Wanted's each screen that comes up, runtime/mw/fe_mw.c), where
+// its routes are, its module's name, its folder's default and its page's save folder (the browser's storage,
+// web/src/games/<id>/storage.ts SAVE_DIR: the game's /save)
 const GAMES_OF = {
   ug2: { title: 'UG_LS_Splash.fng', menu: 'GarageMain.fng', line: 'top package ', base: '', module: 'nfsu2', moduleDir: 'out/web', saves: 'save',
     data: process.env.NFSU2_DATA || path.join(os.homedir(), 'projects/nsfu2/Need for Speed - Underground 2') },
-  mw: { title: 'MW_LS_Splash.fng', menu: 'MainMenu.fng', line: 'screen ', base: '/mw', module: 'nfsmw', moduleDir: 'out/web/mw', saves: 'mw-save',
-    data: process.env.NFSMW_DATA || '' },
+  mw: { title: 'MW_LS_Splash.fng', wideTitle: 'WS_MW_LS_Splash.fng', menu: 'MainMenu.fng', line: 'screen ', base: '/mw',
+    module: 'nfsmw', moduleDir: 'out/web/mw', saves: 'mw-save', data: process.env.NFSMW_DATA || '' },
 };
 const MODE = arg('--mode', 'both');
 const GAME = gameOf(process.argv.slice(2)), SCREENS = GAMES_OF[GAME];
@@ -252,12 +253,17 @@ async function run(mode) {
     await page.click('#play');
     const tp = Date.now();
     const seen = t => page.evaluate(w => window.__nfsu2.log.tail(600).some(l => l.includes(w)), `${SCREENS.line}${t}`);
+    // either title (the 4:3 one or, on a wide canvas, Most Wanted's widescreen one) in its screen line
+    const titles = [SCREENS.title, SCREENS.wideTitle].filter(Boolean).map(t => `${SCREENS.line}${t}`);
+    const titleIn = () => page.evaluate(ws => { const t = window.__nfsu2.log.tail(600); return ws.find(w => t.some(l => l.includes(w))) ?? null; }, titles);
     // (or the game's end, which no title follows)
-    await page.waitForFunction(w => window.__nfsu2.log.tail(400).some(l => l.includes(w) || l.includes('[app] the game exited')),
-      `${SCREENS.line}${SCREENS.title}`, { timeout: 300000, polling: 200 });
+    await page.waitForFunction(ws => window.__nfsu2.log.tail(400).some(l => ws.some(w => l.includes(w)) || l.includes('[app] the game exited')),
+      titles, { timeout: 300000, polling: 200 });
     const ended = await page.evaluate(() => window.__nfsu2.log.tail(400).find(l => l.includes('[app] the game exited')) ?? null);
-    if (ended && !await seen(SCREENS.title)) throw new Error(`the game ended before its title screen: ${ended}`);
-    report(`${mode}: Play -> the game's title screen`, true, { screen: SCREENS.title, ms: Date.now() - tp });
+    const titleLine = await titleIn();
+    if (ended && !titleLine) throw new Error(`the game ended before its title screen: ${ended}`);
+    report(`${mode}: Play -> the game's title screen`, true, { screen: titleLine ? titleLine.slice(SCREENS.line.length) : SCREENS.title,
+      ms: Date.now() - tp });
     if (MENU) {
       // Enter through the title and the profile prompt to the main menu, with real key events
       const tm = Date.now();

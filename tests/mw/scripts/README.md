@@ -50,7 +50,10 @@ rests on.
 The screen's shape (TRACKER M7-01..M7-06, runtime/mw/widescreen_mw.c): `wide_shots.txt` dumps the attract movie, the
 title, the main menu, the car list and a race (at GO, the chase view, the hood view with the rear-view mirror) on the
 play page; run it at each canvas shape (`w`, `h`: 4:3, 16:9, 21:9, 32:9 and upright).  `title_shots.txt` dumps
-the title alone (movies off), the 4:3 one or with `NFSMW_WIDE_SPLASH=1` the game's widescreen one.
+the title alone (movies off): at 16:9 and wider the game's widescreen one (WS_MW_LS_Splash.fng), at 4:3, 16:10 and
+upright, or with `NFSMW_WIDE_SPLASH=0`, the 4:3 one.  The scripts that wait for the title name both packages
+(`MW_LS_Splash.fng|WS_MW_LS_Splash.fng`) and its prompt in both
+(`$O(MW_LS_Splash.fng:0xC6CC55A4,WS_MW_LS_Splash.fng:0xC4DF3FF2)`).
 `wide_resize.txt` and `wide_resize50.txt` change the canvas under the game at each "resize" line (the play page's
 `&resizeon=<w>x<h>,...`): twice, or 50 times through five shapes with a `[status]` line after each, whose check wants
 the texture ids, kernel objects, file handles and threads at the end as after the first round.

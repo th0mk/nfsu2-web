@@ -1,6 +1,7 @@
 # Most Wanted: the front end's reference screenshots (TRACKER M3-01, M3-26), from a first start: the title
-# (MW_LS_Splash.fng before and after its "CLICK to continue" fades in), the first start's "Create a new alias?"
-# (MC_Main.fng), the main menu and each of its items, the options and each of their screens, the Alias Manager and
+# (MW_LS_Splash.fng before and after its "CLICK to continue" fades in; on a 16:9 or wider screen the widescreen
+# WS_MW_LS_Splash.fng, whose text and prompt 0xC4DF3FF2 are there at once, so both pictures show it), the first
+# start's "Create a new alias?" (MC_Main.fng), the main menu and each of its items, the options and each of their screens, the Alias Manager and
 # the screen its first item opens.  Every frame is dumped twice, 3 frames apart: a renderer that falls behind drops a
 # flagged frame (the dump names carry the frame number).  The steps wait for the game, never for time (L-021):
 # every screen change for its screen by name (waitfng, tapuntil), the title's two fades for their objects in the
@@ -15,11 +16,11 @@
 # says how the page gets d3dx9_26.dll: NFSMW_D3DX=/save/d3dx9_26.dll and a seeded save folder).  The pictures are
 # the game's: they stay out of the repo (out/mw/refshots/, named by screen).
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
-+0    waitfng MW_LS_Splash.fng 3000
-+0    waitexpr i:[$O(MW_LS_Splash.fng:0x69EF31D7)+0x2c]+0xc >= 255 600     # its text has faded in
++0    waitfng MW_LS_Splash.fng|WS_MW_LS_Splash.fng 3000
++0    waitexpr i:[$O(MW_LS_Splash.fng:0x69EF31D7,WS_MW_LS_Splash.fng:0xC4DF3FF2)+0x2c]+0xc >= 255 600     # its text has faded in
 +0    dump splash
 +3    dump splash
-+0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4,WS_MW_LS_Splash.fng:0xC4DF3FF2)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
 +0    dump title
 +3    dump title
 +0    tapuntil RETURN MC_Main.fng 90 3000

@@ -21,7 +21,7 @@
 +0    waitfng MW_LS_AttractFMV.fng 3600
 +900  dump av1_attract
 +3    dump av1_attract
-+0    waitfng MW_LS_Splash.fng 20000
++0    waitfng MW_LS_Splash.fng|WS_MW_LS_Splash.fng 20000
 +0    log movies_av1: title
 +0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000

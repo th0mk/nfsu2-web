@@ -42,7 +42,8 @@ const argv = process.argv.slice(2);
 // each game's boot: the default script, the boot movie screens up to the title in order, the screens that are
 // boot movies (the driver starts at the first of them), the first boot movie's line, the title screen, and the
 // [fng] line naming the screen on top (UG2: its top package; Most Wanted: the screen that came up last, as
-// runtime/mw/fe_mw.c notes them, since its top package stays GarageMain.fng under the boot screens)
+// runtime/mw/fe_mw.c notes them, since its top package stays GarageMain.fng under the boot screens); Most Wanted's
+// title on a 16:9 or wider screen is its widescreen one (wideTitle, runtime/mw/widescreen_mw.c)
 const INTRO_OF = {
   ug2: {
     script: '/tests/web/scripts/intro_idle.txt', title: 'UG_LS_Splash.fng',
@@ -51,8 +52,8 @@ const INTRO_OF = {
     top: /^\[fng\] f=(\d+) top package (\S+)/,
   },
   mw: {
-    script: '/tests/scripts/intro_idle.txt', title: 'MW_LS_Splash.fng',
-    boot: ['MC_Bootup.fng', 'LS_EAlogo.fng', 'LS_PSA.fng', 'MW_LS_AttractFMV.fng', 'MW_LS_Splash.fng'],
+    script: '/tests/scripts/intro_idle.txt', title: 'MW_LS_Splash.fng', wideTitle: 'WS_MW_LS_Splash.fng',
+    boot: ['MC_Bootup.fng', 'LS_EAlogo.fng', 'LS_PSA.fng', 'MW_LS_AttractFMV.fng', 'MW_LS_Splash.fng', 'WS_MW_LS_Splash.fng'],
     movie: /^LS_|^MW_LS_|^MC_Bootup/, first: /^\[fng\] f=\d+ screen LS_EAlogo\.fng/,
     top: /^\[fng\] f=(\d+) screen (\S+)/,
     under: /^GarageMain\.fng$/,          // comes up with the title, beneath it: not the screen on top
@@ -84,11 +85,14 @@ const env = { NFSU2_SAVEDIR: '/save', NFSU2_READONLY_DATA: '1', NFSU2_DISCORD: '
 if (o.intro) env.NFSU2_INTRO = o.intro;
 for (const e of o.env) env[e.slice(0, e.indexOf('='))] = e.slice(e.indexOf('=') + 1);
 const q = new URLSearchParams();
-q.set('wasm', '/game.wasm'); q.set('pages', '16384'); q.append('arg', G.exe);
+// a server that serves the game under a path (Most Wanted's /mw): the module, script and registry paths under it too
+const PFX = new URL(o.base).pathname.replace(/\/+$/, '');
+const under = p => p.startsWith('/') && !p.startsWith(`${PFX}/`) ? PFX + p : p;
+q.set('wasm', `${PFX}/game.wasm`); q.set('pages', '16384'); q.append('arg', G.exe);
 for (const [k, v] of Object.entries(env)) q.append('env', `${k}=${v}`);
 q.set('save', o.save || `intro-${o.name}`); if (!o.keep && !o.seed) q.set('fresh', '');
-if (o.reg !== 'none') q.set('reg', o.reg);
-if (o.script) q.set('script', o.script);
+if (o.reg !== 'none') q.set('reg', under(o.reg));
+if (o.script) q.set('script', under(o.script));
 for (const e of o.qs) q.append(e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1));
 const url = `${o.base}/test/${o.page}.html?${q}`;
 await requireGame(o.base, GAME);
@@ -134,7 +138,7 @@ const driver = (async () => {
   while (!I.movie.test(top)) { await sleep(20); if (exit !== null) return; }
   let n = 0;
   while (driving && exit === null) {
-    if (top === o.stop) break;
+    if (top === o.stop || (I.wideTitle && o.stop === I.title && top === I.wideTitle)) break;
     n++;
     add(`[drive] press ${o.drive} #${n} (top ${top})`);
     if (o.drive.startsWith('key:')) await page.keyboard.press(o.drive.slice(4), { delay: 60 });
@@ -172,7 +176,7 @@ for (let i = 0; i < tops.length; i++) {
 }
 const firstLine = lines.find(l => I.first.test(l.t));
 const first = firstLine ? { ms: firstLine.ms, f: +/f=(\d+)/.exec(firstLine.t)[1] } : null;
-const title = tops.find(t => t.name === I.title);
+const title = tops.find(t => t.name === I.title || (I.wideTitle && t.name === I.wideTitle));
 const res = { name: o.name, url, page: o.page, intro: o.intro || '(default)', reg: o.reg, drive: o.drive, every: o.every, exit, ok,
   bootToTitle: first && title ? title.ms - first.ms : null, framesToTitle: first && title ? title.f - first.f : null,
   screens, presses: presses.length, sequence: tops.map(t => t.name),

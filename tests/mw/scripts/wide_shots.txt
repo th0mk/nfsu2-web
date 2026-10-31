@@ -6,8 +6,8 @@
 0     waitfng MW_LS_AttractFMV.fng 3600
 +600  dump movie
 +3    dump movie
-+0    tapuntil RETURN MW_LS_Splash.fng 90 3000
-+0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
++0    tapuntil RETURN MW_LS_Splash.fng|WS_MW_LS_Splash.fng 90 3000    # the title: the widescreen one at 16:9 and wider
++0    waitexpr i:[$O(MW_LS_Splash.fng:0xC6CC55A4,WS_MW_LS_Splash.fng:0xC4DF3FF2)+0x2c]+0xc >= 255 3000    # "CLICK to continue" at full
 +0    dump title
 +3    dump title
 +0    tapuntil RETURN MC_Main.fng 90 3000
