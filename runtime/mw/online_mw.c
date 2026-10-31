@@ -230,7 +230,56 @@ int mw_link_probe(char *b, int n){
  * datagram came in over 120 s before (tick - [ref+0xE8], unsigned: a datagram stamped after the tick is 2^32 ms) and
  * that sent within 2 s goes to 0x84FDA0, which sends DISC and closes it (state 5); ConnApi then drops the peer */
 #define COMMUDP_TIMEOUT   HOOK_SITE(0x008509eb)
+
+/* ---- a LAN race of a type no race has (TRACKER M8-13) ----
+ * The race of a LAN game comes from 0x512F90 (thiscall; its argument points at the online race type
+ * [[0x91CF90]+0x168]; called from 0x535970): it gathers the races of the race list [0x91E004] (count 0x5DC920, race i
+ * 0x5DC930) that pass 0x5FD160(1), 0x576A20(params) and 0x576790(7, params, 0), the params being 0x5FAB40's, and whose
+ * race type (0x5FAA20) is the one asked for (0xB: any of 0, 1 and 2), takes one at random (0x45DA30(n)), reads its
+ * params and writes its type back.  With none gathered it reads the first slot of the array it allocated and never
+ * filled, a wild pointer, and the game dies in 0x5FAB40 (run t6 of 2026-10-31: online type 6 poked on both sides, the
+ * host's game trapped 0.25 s after it created the game).  The stock LAN menu offers types 0, 1 and 2 only (GAME 12.3),
+ * but a type from anywhere else that no race has is made 0xB here, with a log line; NFSU2_TEST_RACE_TYPE_ANY=1 (test
+ * switch, L-063) leaves it as it is, and the crash with it. */
+#define RACE_PICK         HOOK_SITE(0x00512f90)
+uint32_t mw_aid_call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *args);   /* career_mw.c */
+static int races_of_type(CPU *c, uint32_t type){
+    uint32_t db = MR32(0x0091e004u);
+    if (!db || !mem_is_committed(db)) return -1;
+    uint32_t n = mw_aid_call(c, 0x005dc920u, db, 0, 0), k = 0;
+    for (uint32_t i = 0; i < n && i < 4096u; i++){
+        uint32_t r = mw_aid_call(c, 0x005dc930u, db, 1, &i), one = 1;
+        if (!r || !(mw_aid_call(c, 0x005fd160u, r, 1, &one) & 0xffu)) continue;
+        uint32_t p = mw_aid_call(c, 0x005fab40u, r, 0, 0);
+        if (!(mw_aid_call(c, 0x00576a20u, 0, 1, &p) & 0xffu)) continue;
+        uint32_t a[3] = { 7u, mw_aid_call(c, 0x005fab40u, r, 0, 0), 0u };
+        if (!(mw_aid_call(c, 0x00576790u, 0, 3, a) & 0xffu)) continue;
+        uint32_t t = mw_aid_call(c, 0x005faa20u, r, 0, 0);
+        if (type == 0xbu ? t <= 2u : t == type) k++;
+    }
+    return (int)k;
+}
+static void race_pick(CPU *c){
+    static int keep = -1;
+    if (keep < 0){ const char *e = getenv("NFSU2_TEST_RACE_TYPE_ANY"); keep = e && *e == '1'; }
+    uint32_t pt = MR32(c->esp + 4u);
+    if (!pt || !mem_is_committed(pt + 3u)) return;
+    uint32_t type = MR32(pt);
+    if (type == 0xbu || type <= 2u) return;            /* the menu's own: the game has races of these */
+    int n = races_of_type(c, type);
+    if (n != 0) return;
+    if (keep){
+        fprintf(stderr, "[lan] no race of type %u to pick: left so (test switch NFSU2_TEST_RACE_TYPE_ANY), the game reads "
+                "an empty slot\n", type);
+        return;
+    }
+    fprintf(stderr, "[lan] no race of type %u to pick: any of types 0, 1 and 2 instead (%d races)\n", type,
+            races_of_type(c, 0xbu));
+    MR32(pt) = 0xbu;
+}
+
 int mw_online_hook(CPU *c, uint32_t va){
+    if (va == RACE_PICK){ race_pick(c); return 1; }
     if (va == COMMUDP_TIMEOUT){
         uint32_t r = c->ebp, last = mem_is_committed(r + 0xecu) ? MR32(r + 0xe8u) : 0u, sent = MR32(r + 0xe4u);
         fprintf(stderr, "[net] CommUDP closes its link: no datagram for %u ms (tick %u, last datagram %u%s, last send %u; "
