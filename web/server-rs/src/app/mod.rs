@@ -1010,7 +1010,7 @@ mod tests {
         assert_eq!(two.lines().count(), 2 + 2 * DISALLOW.len());
         assert!(
             two.starts_with("User-agent: *\nAllow: /\nDisallow: /u2/data/\n")
-                && two.ends_with("\nDisallow: /mw/vault\nDisallow: /mw/names")
+                && two.ends_with("\nDisallow: /mw/vault\nDisallow: /mw/names\nDisallow: /mw/friends")
         );
     }
 
