@@ -42,8 +42,11 @@ void mw_sound_position(void);                  /* sound_mw.c */
 void mw_frame(CPU *c);                         /* career_mw.c: the test aids' work, once a pass of the main loop */
 void roam_mw_frame(CPU *c);                     /* roam_mw.c: free roam with friends (NFSU2_ROAM=1) */
 void mw_ws_frame(CPU *c);                       /* widescreen_mw.c: a title built for the screen's old shape made again */
-/* once a pass of the main loop, between the update and the render: the test aids, friends' cars, then the title */
-static void mw_on_frame(CPU *c){ mw_frame(c); roam_mw_frame(c); mw_ws_frame(c); }
+void mw_status_frame(CPU *c);                   /* status_mw.c: the chase, sampled for the page's state */
+void mw_status(StatusOut *s);                   /* status_mw.c: the page's state, at every Present */
+/* once a pass of the main loop, between the update and the render: the test aids, friends' cars, the title, then the
+ * page's state's sample (status_mw.c) */
+static void mw_on_frame(CPU *c){ mw_frame(c); roam_mw_frame(c); mw_ws_frame(c); mw_status_frame(c); }
 int mw_debug_hook(CPU *c, uint32_t va);        /* debug_mw.c: NFSMW_HOOKLOG, a debugging lift's extra hooks */
 float mw_ui_band(void);                         /* widescreen_mw.c: the HUD's band for a quad of 0x6D1260 */
 
@@ -284,6 +287,7 @@ const GameOps g_game = {
     .cursor_away = 1,                           /* no cursor over the menus while the pointer is elsewhere:
                                                  * FEng highlights the object a still cursor rests on (GAME.md 13.1) */
     .fe_object = mw_fe_object,                  /* the scripts' $O: an active package's object by name hash */
+    .status = mw_status,                        /* status_mw.c: drive, pause and rate for the page */
     .init_tables = mw_init_tables,
     .ninit_tables = (int)(sizeof mw_init_tables / sizeof mw_init_tables[0]),
     .init_check = 0x009aa9d0u + 0x84cu,         /* the bitset pointer of 0x9AA9D0's constructor */
@@ -292,7 +296,8 @@ const GameOps g_game = {
     .on_sound_position = mw_sound_position,     /* sound_mw.c: the sound thread's stall count, watched */
     .sound_wall_catchup = 1,                    /* its cursors keep real time with no output (GAME.md 7.2) */
     .on_frame = mw_on_frame,                    /* career_mw.c's queued test aids, roam_mw.c's friends' cars,
-                                                 * widescreen_mw.c's title: between update and render */
+                                                 * widescreen_mw.c's title, the page state's sample: between update
+                                                 * and render */
     .frame_site = MW_FRAME_SITE,                /* MainLoop's 0x663EC6, above */
     .hook = mw_debug_hook,                      /* debug_mw.c: the frame anchor is core's; the crash fixes'
                                                  * sites (fixes_mw.c) and a debugging lift's HOOKS=... reach it */

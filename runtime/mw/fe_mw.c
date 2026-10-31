@@ -138,6 +138,16 @@ int mw_fe_settled(const char *name){
     return 0;
 }
 
+/* the name of the first package in the active list whose name starts with prefix ("HUD_": status_mw.c), or 0 */
+const char *mw_fe_find(const char *prefix){
+    uint32_t e = engine(); int k = 0; size_t n = strlen(prefix);
+    for (uint32_t p = e ? rd(e + ENG_HEAD) : 0u; p && k < 32; p = rd(p + PKG_NEXT), k++){
+        const char *nm = pkg_name(p);
+        if (nm && !strncasecmp(nm, prefix, n)) return nm;
+    }
+    return 0;
+}
+
 /* the package nearest the top of the active list that takes input (FEPackage +0x28), its highlighted object's name
  * hash in *focus; 0 when none does (free roam: HUD_SingleRace.fng and the overlays never take input) */
 const char *mw_fe_input_top(uint32_t *focus){

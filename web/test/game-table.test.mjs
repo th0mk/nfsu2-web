@@ -49,7 +49,7 @@ const UG2_UNSET = {
 const MW_UNSET = {
   reg_defaults: 'its registry answers per key (reg_keys, registry_mw.c)',
   lang_suffixes: 'UG2\'s "_xx" suffixes: MW\'s movie names (Q-06) take file_alt',
-  on_present: 'the page\'s overlay, M6', status: 'the page\'s overlay, M6',
+  on_present: 'the page\'s overlay, M6',
   sms_request: 'a UG2 feature', photo_input: 'a UG2 feature',
   racer: 'test traces, M4', text_entry: 'M3-11',
   crt_lo: 'the C runtime\'s code range is not measured', crt_hi: 'as crt_lo',
@@ -140,8 +140,11 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   // the per-frame anchor (Q-24): core runs on_frame at frame_site, a hook site of MW's own file the lift collects
   // (tools/genstamp.sh hooks: HOOK_SITE in runtime/mw/*.c); its other hooks are a debugging lift's (debug_mw.c)
   assert.equal(t.get('on_frame'), 'mw_on_frame');
-  assert.match(read('runtime/mw/game_mw.c'), /static void mw_on_frame\(CPU \*c\)\{ mw_frame\(c\); roam_mw_frame\(c\); mw_ws_frame\(c\); \}/,
-    'the test aids, free roam\'s friends\' cars (roam_mw.c), then a title built for the old shape (widescreen_mw.c)');
+  assert.match(read('runtime/mw/game_mw.c'), /static void mw_on_frame\(CPU \*c\)\{ mw_frame\(c\); roam_mw_frame\(c\); mw_ws_frame\(c\); mw_status_frame\(c\); \}/,
+    'the test aids, free roam\'s friends\' cars (roam_mw.c), a title built for the old shape (widescreen_mw.c), then the page state\'s sample (status_mw.c)');
+  // the page's state (status_web.c at every Present): status_mw.c's drive, pause and rate
+  assert.equal(t.get('status'), 'mw_status');
+  assert.match(read('runtime/mw/status_mw.c'), /\nvoid mw_status_frame\(CPU \*c\)\{[\s\S]*\nvoid mw_status\(StatusOut \*s\)\{/);
   assert.equal(t.get('frame_site'), 'MW_FRAME_SITE');
   assert.match(read('runtime/mw/game_mw.c'), /#define MW_FRAME_SITE HOOK_SITE\(0x00663ec6\)/);
   assert.match(read('runtime/mw/career_mw.c'), /\nvoid mw_frame\(CPU \*c\)\{/);

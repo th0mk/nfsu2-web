@@ -1,0 +1,39 @@
+# Most Wanted: the page's state in a race (TRACKER M6-15; runtime/mw/status_mw.c): "drive" 1 | 8 from the HUD's
+# coming in until GO (the countdown), 1 from GO, 0 in the pause menu with "pause" 1, 1 again after it, 0 on the
+# winner's screen.  A Custom Race circuit as race_frames.txt picks it (City Perimeter, the car list's first car, automatic
+# gears); Esc in the race (tapped until the pause menu takes input), Esc again back to the race; then racewin (the
+# shortcut finish) brings the winner's screen.  tests/mw/checks/status_race.sh reads the [drive] lines.
+#   node web/tools/run-suite.mjs --game mw --script status_race.txt --marker 'status_race: results' \
+#     --env NFSU2_QUIT_FRAMES=12000
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log status_race: GO
++60   down UP
++120  up UP
++0    tapuntil ESCAPE Pause_Main.fng 60 900               # the pause menu
++60   log status_race: paused
++0    tap ESCAPE                                         # back to the race
++0    waitgone Pause_Main.fng 600
++120  log status_race: resumed
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++60   log status_race: results
++0    close
