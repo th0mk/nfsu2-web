@@ -476,7 +476,7 @@ fewer bytes (206 instead of 271 kbit/s on average).
 3. Copy both to the VPS next to the game folder, not into it: `rsync -t MusicSFx.mus MusicSFx.mpf
    root@<vps>:/srv/nfsu2/music-new/`.
 4. On the VPS, keep the originals and move the new pair in with one command, so no page sees one new file and one
-   old: `cd /srv/nfsu2 && mkdir -p music-orig && cp -a game/pfdata/MusicSFx.* music-orig/ && chmod 644
+   old: `cd /srv/nfsu2 && mkdir -p music-orig && cp -an game/pfdata/MusicSFx.* music-orig/ && chmod 644
    music-new/* && mv music-new/MusicSFx.mus music-new/MusicSFx.mpf game/pfdata/`, then open
    `https://<your site>/data-manifest?refresh`. Going back is the same `mv` from `music-orig`.
 
@@ -516,6 +516,102 @@ movies, so the game folder keeps them too.
 The order of this and a new version does not matter: a page that does not know the AV1 files never opens them, and
 one that does opens a movie's AV1 copy only where there is one. `NFSU2_MOVIE_CODEC = vp6` in a player's settings.ini
 plays the VP6 movies anyway.
+
+## Most Wanted's box
+
+The two games are two sites on two boxes. Underground 2 stays at `https://nfsu2.xyz` on its box, as everything above
+describes. Most Wanted is at `https://nfsrevived.com/mw/` on a box of its own, `<mw-vps>`, whose server also answers
+`https://nfsrevived.com/` with the site's page, which links both games (`web/src/site`, built into `web/dist-mw/site`).
+Both boxes run the same image: Most Wanted's server is `--game mw` (`web/server-rs/src/game.rs`, its `MW` profile).
+
+What its profile sets, and what it shares with Underground 2's:
+
+| | Most Wanted's box | as Underground 2's |
+|---|---|---|
+| routes | `/mw/` on every name; at the root only the site's page (`/`) and `/robots.txt` | |
+| capacity | | the image's 6000 places on the switch, the line's 5000, the hub's 6144 (until a load test on its own box) |
+| keyphrase saves | none of its own: `/mw/vault` goes on to the U2 box's vault (below) | the vault's caps (a box at most 256 KB: a Most Wanted profile packs to 9-11 KB) |
+| Online | its own title (4 players a game) | the same lobby code |
+| console | also kept in its state volume, past restarts (`./nfsmw log`) | |
+| redirects | `/u2` and every path under it to `https://nfsu2.xyz/`, the rest of the path kept | |
+
+### Setting it up
+
+As in Setup above, with these differences:
+
+1. The folder is `/srv/nfsmw`. Copy `web/deploy/compose.yml`, `compose.tunnel.yml`, `compose.mw.yml`, `nfsmw` and
+   `nfsmw.slice` there (the slice into `/etc/systemd/system/`, then `systemctl daemon-reload`).
+2. Its `.env`:
+
+   ```
+   COMPOSE_FILE=compose.yml:compose.tunnel.yml:compose.mw.yml
+   NFSU2_HOST=nfsrevived.com
+   NFSU2_DATA=/srv/nfsmw/game
+   NFSU2_MODULE=/srv/nfsmw/module
+   TUNNEL_TOKEN=<the token of Most Wanted's tunnel>
+   NFSU2_VAULT_FORWARD=https://<the U2 box's name for the vault>/vault
+   NFSU2_VAULT_BOX_KEY=<the box-to-box credential>
+   NFSU2_CF_ACCESS_CLIENT_ID=<the service token's client id>
+   NFSU2_CF_ACCESS_CLIENT_SECRET=<the service token's client secret>
+   ```
+
+   `NFSU2_SITE_REDIRECTS` is on here unless `.env` says `off` (compose.mw.yml).
+3. The game folder: your NFS Most Wanted folder (the one with `speed.exe`), readable by everyone, as in "Copying the
+   game". The server serves only the game's own entries (`nfsu2-server --game mw --print-entries`).
+4. The module: `GAME=mw D3DX_ORACLE=0 web/build.sh` writes `nfsmw.wasm` and `nfsmw.json` to `out/web/mw`; copy both
+   to `/srv/nfsmw/module`. A build with the D3DX oracle is a dev build: no server serves it without `--dev`.
+5. `docker compose up -d`, then `./nfsmw status`; `https://nfsrevived.com/` shows the site's page and
+   `https://nfsrevived.com/mw/` the game's.
+6. As on any box: SSH with keys only (see SSH), and if Cloudflare's proxy ever reaches this box directly instead of
+   through the tunnel, Authenticated Origin Pulls on (see Cloudflare).
+
+### Underground 2's box, for Most Wanted
+
+Its only changes, both in its `.env`, then `docker compose up -d server`:
+
+- `NFSU2_VAULT_BOX_KEY=<the box-to-box credential>`: its vault takes the forwards of Most Wanted's server that carry
+  it, under the player's own address (the forwarded one), so both games' saves count against the same per-address
+  limits.
+- `NFSU2_SITE_REDIRECTS=on`, the day Most Wanted opens: `https://nfsu2.xyz/mw` and every path under it go to
+  `https://nfsrevived.com/mw/`. Until then it is off (compose.yml) and the box answers as it always did.
+
+The vault's route for the forwards is a public hostname of the U2 box's tunnel, `<the U2 box's name for the vault>`, to
+the same server, behind a Cloudflare Access application that only the service token passes.
+
+### The box-to-box credential and the service token
+
+- The credential: at least 32 printable characters, the same on both boxes, made with
+  `openssl rand -base64 48 | tr -d '\n/+='`. Each box reads it at its start. To replace it, put the new one in both
+  `.env` files and restart both servers (`docker compose up -d server`), the U2 box first: between the two restarts the
+  U2 box refuses Most Wanted's forwards (403, both logs say so) and Most Wanted's players see the cloud saves' failure
+  message, their saves kept in their browsers. A quiet hour keeps that to a few players.
+- The service token: made in Cloudflare's Zero Trust dashboard (Access, Service credentials), with the duration picked
+  there. Its expiry date is in the same list: before it, make a new token, add it to the vault application's policy,
+  put its client id and secret in Most Wanted's `.env`, `docker compose up -d server`, then delete the old token.
+
+### Most Wanted's data: movies in AV1 and smaller music
+
+Both go on the box like Underground 2's (Movies in AV1, Smaller music above), from the repository on your computer:
+
+1. The AV1 movies: `tools/movies_av1.py "<your NFS Most Wanted folder>" <out>` (crf 34: the tool sees Most Wanted's
+   folder), or a folder of crf 34 copies you have. From inside the folder with them:
+   `rsync -rlt ./ root@<mw-vps>:/srv/nfsmw/game/MOVIES/AV1/`, then on the box
+   `chmod -R a+rX /srv/nfsmw/game/MOVIES/AV1`, and open `https://nfsrevived.com/mw/data-manifest?refresh`.
+2. The music, only once a module that plays it is live (Smaller music above):
+   `tools/musicpack.py --game mw "<your NFS Most Wanted folder>" <an empty folder>`, then
+   `rsync -t MW_Music.mus MW_Music.mpf root@<mw-vps>:/srv/nfsmw/music-new/`, and on the box, keeping the originals and
+   moving the new pair in with one command: `cd /srv/nfsmw && mkdir -p music-orig && cp -an
+   game/SOUND/PFDATA/MW_Music.* music-orig/ && chmod 644 music-new/* && mv music-new/MW_Music.mus
+   music-new/MW_Music.mpf game/SOUND/PFDATA/`, then `https://nfsrevived.com/mw/data-manifest?refresh`. Going back is
+   the same `mv` from `music-orig`.
+
+### Before a release
+
+`web/tools/mw-smoke.sh --data "<your NFS Most Wanted folder>" --seed <a save folder with the aliases ALPHA and BRAVO>`
+runs the release's server, page and module on your computer and plays three runs in headless Chrome: boot to the main
+menu, a quick race won and saved, a new career to its first free drive. `node web/tools/deploy-e2e.mjs --mode
+two-domain` runs both games' servers behind one local proxy with the two names, the redirects and the vault's
+forwarding.
 
 ## How it runs
 

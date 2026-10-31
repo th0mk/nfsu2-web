@@ -4,9 +4,10 @@
 // Play, and the game up to its title screen or (--menu, with the real input
 // and renderer of the integrated app) the main menu, with a screenshot.
 //
-//   node web/tools/deploy-e2e.mjs --out <dir> [--mode tls|proxy|both|docker|one-origin] [--menu] [--headed]
+//   node web/tools/deploy-e2e.mjs --out <dir> [--mode tls|proxy|both|docker|two-domain] [--menu] [--headed]
 //        [--data "<game folder>"] [--port 8527] [--http-port 8627] [--server <binary>]
-//        [--image <name>] [--module <dir>] [--d3dx <d3dx9_26.dll>] [--data-mw "<MW folder>"]
+//        [--image <name>] [--module <dir>] [--d3dx <d3dx9_26.dll>] [--data-mw "<MW folder>"] [--module-mw <dir>]
+//        [--backup-u2 <a "Download a backup" zip>] [--saves-mw <a folder with NFS Most Wanted/<NAME>/<NAME>>]
 //        [--game ug2|mw] (the game's title and menu screens) [--help] (this text and those)
 // --server: another server than web/tools/server-cmd.mjs's, such as the nfsu2-server of an unpacked bundle
 // (web/deploy/pack.sh), with the page and the module of the folder it is in (NFSU2_REPO).
@@ -38,20 +39,25 @@
 // which only a --dev server's page takes).  In docker mode the server runs Most Wanted as compose.mw.yml has it
 // (--game mw, NFSU2_WASM nfsmw.wasm), in a project of its own, without the tunnel.
 //
-// mode one-origin (TRACKER M11-24): both games under one host name, as the launch site has them: a proxy on
-// http://localhost:<port> (web/test/cf-sim.mjs startRouteSim) sends / and /u2/ to an Underground 2 server
-// (--base-path localhost=/u2) and /mw/ to a Most Wanted server, whose /mw/vault goes on to the Underground 2 server's
-// vault (NFSU2_VAULT_FORWARD, the box-to-box credential made up for the run).  The old address is the other loopback
-// name, http://127.0.0.1:<port>: the proxy sends it to a second Underground 2 server at the root, with its own state
-// folder and vault, as today's box serves nfsu2.xyz in the side-by-side days (PLAN U-27 (b)).  Plain HTTP: both names
-// are secure contexts, and the hand-over's loopback rule is http://127.0.0.1 (M13-29).  Underground 2's folder is
-// --data (NFSU2_DATA), Most Wanted's --data-mw (NFSMW_DATA); the servers on <http-port>, +1 and +2, each with
-// --behind-proxy --host <its name>, as the boxes run them (the Dockerfile's CMD).  Checks: COOP and
-// COEP on every path of both addresses; /u2/lan and /mw/lan reach their own server only; one vault on the new address,
-// the Underground 2 server's (/u2/vault directly, /mw/vault only through the forwarding), none in Most Wanted's state
-// folder, the old address's its own; /mw/vault 503 from the Most Wanted server once the Underground 2 server is
-// stopped; the old address's CSP and the new one's hand-over CORS by the loopback rule; in Chrome, each page's worker
-// at its own base (/u2/, /mw/), none at /; each server's client address the one the proxy forwards (X-Forwarded-For).
+// mode two-domain (the site plan of 2026-10-31; TRACKER M11-24's mode for it): each game on its own site, as the
+// boxes have them: a proxy on http://<port> (web/test/cf-sim.mjs startRouteSim) sends the name nfsu2.localhost (for
+// https://nfsu2.xyz) to an Underground 2 server at the root and nfsrevived.localhost (for https://nfsrevived.com) to a
+// Most Wanted server (/mw/, and the site's page at /), whose /mw/vault goes on to the Underground 2 server's vault
+// (NFSU2_VAULT_FORWARD, the box-to-box credential made up for the run).  Both servers with --site-redirects on, as the
+// boxes run them.  Plain HTTP: Chrome takes *.localhost for this machine and as secure contexts.  Underground 2's
+// folder is --data (NFSU2_DATA), Most Wanted's --data-mw (NFSMW_DATA); the servers on <http-port> and +1, each with
+// --behind-proxy --host <its name>.  Checks: COOP and COEP on every path of both names; each game where it belongs,
+// the site's page at nfsrevived's root, nfsu2/mw and under it to https://nfsrevived.com/mw/, nfsrevived/u2 and under it
+// to https://nfsu2.xyz/ with the rest of the path, and no open redirect (only those fixed addresses); each game's /lan
+// its own server's; one keyphrase, one vault: each game's box under its own token from the one phrase, Underground 2's
+// at nfsu2/vault and Most Wanted's through nfsrevived/mw/vault, each readable through either name, none in Most
+// Wanted's state folder; in Chrome the site's page (both links, its stylesheet and pictures, no CSP refusal),
+// Underground 2's page as it is (no bar while its launch switch is off) with its worker at /, Most Wanted's with the
+// bar (Underground 2's tab to https://nfsu2.xyz/) and its worker at /mw/; then in a fresh browser the phrase typed into
+// each game's page restores that game's saves (--backup-u2: a real "Download a backup" zip of Underground 2's;
+// --saves-mw: a folder of Most Wanted's profiles, a career seed's; made-up bytes without them); /mw/vault 503 from
+// the Most Wanted server once the Underground 2 server is stopped.  The redirects' addresses are checked as answers,
+// never followed: nothing here reaches a real site.
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
@@ -61,6 +67,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
 import { makeTestCerts, startCfSim, startRouteSim } from '../test/cf-sim.mjs';
 import { serverCommand } from './server-cmd.mjs';
 import { gameOf, usage, nothingFor } from './rig-game.mjs';
@@ -301,7 +308,7 @@ async function run(mode) {
   }
 }
 
-// ---- one-origin: both games under one host name (TRACKER M11-24) ----
+// ---- two-domain: each game on its own site (the site plan of 2026-10-31) ----
 
 /** an answer through the proxy: status, headers, body (a raw request: the Host as given, nothing cleaned) */
 function ask(port, { method = 'GET', p, host, headers = {}, body = null }) {
@@ -358,7 +365,7 @@ function lanOpen(port, host, p, origin) {
       // (the welcome: a text frame after the 101's head)
       else if (status === 101 && got.includes('welcome') && !so.said) {
         so.said = true;
-        so.write(wsText(JSON.stringify({ t: 'hello', name: 'one-origin' })));
+        so.write(wsText(JSON.stringify({ t: 'hello', name: 'two-domain' })));
         clearTimeout(t); res({ status, close: () => so.destroy() });
       }
     });
@@ -369,155 +376,246 @@ function lanOpen(port, host, p, origin) {
 /** every file under dir (relative names) */
 const filesUnder = dir => fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true }).map(String).filter(f => fs.statSync(path.join(dir, f)).isFile()) : [];
 
-async function runOneOrigin() {
+/** vault.ts as a game's page bundles it (its own '@game': keyphrase derivation, seal's AAD) */
+async function vaultOf(game) {
+  const r = await esbuild.build({ entryPoints: [path.join(REPO, 'web/src/app/vault.ts')], bundle: true, format: 'esm', platform: 'neutral', write: false,
+    alias: { '@game': path.join(REPO, 'web/src/games', game) }, logLevel: 'silent' });
+  return import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'));
+}
+/** zip.ts (unzip of a "Download a backup" zip) */
+async function zipTs() {
+  const r = await esbuild.build({ entryPoints: [path.join(REPO, 'web/src/app/zip.ts')], bundle: true, format: 'esm', platform: 'neutral', write: false, logLevel: 'silent' });
+  return import('data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64'));
+}
+const sha256 = b => crypto.createHash('sha256').update(b).digest('hex');
+/** a page's file of its save folder (OPFS `save`): its SHA-256, or null */
+const opfsHash = (page, save, rel) => page.evaluate(async ([save, rel]) => {
+  try {
+    let d = await (await navigator.storage.getDirectory()).getDirectoryHandle(save);
+    const parts = rel.split('/');
+    for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p);
+    const f = await (await d.getFileHandle(parts[parts.length - 1])).getFile();
+    return [...new Uint8Array(await crypto.subtle.digest('SHA-256', await f.arrayBuffer()))].map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return null; }
+}, [save, rel]);
+
+async function runTwoDomain() {
   const DATA_MW = arg('--data-mw', process.env.NFSMW_DATA || '');
   const MODULE_MW = path.resolve(arg('--module-mw', path.join(REPO, 'out/web/mw')));
   const ORACLE_MW = oracleIn(MODULE_MW, 'nfsmw');
-  if (!DATA_MW) { console.error('mode one-origin: Most Wanted\'s folder too (--data-mw, or NFSMW_DATA)'); process.exit(2); }
+  const BACKUP_U2 = arg('--backup-u2', process.env.NFSU2_BACKUP || ''), SAVES_MW = arg('--saves-mw', process.env.NFSMW_SAVES || '');
+  if (!DATA_MW) { console.error('mode two-domain: Most Wanted\'s folder too (--data-mw, or NFSMW_DATA)'); process.exit(2); }
   if (ORACLE_MW && !D3DX) { console.error(`${MODULE_MW}/nfsmw.json: a dev build with the D3DX oracle: give its DLL, --d3dx <d3dx9_26.dll>`); process.exit(2); }
   const dataUg2 = arg('--data', GAMES_OF.ug2.data);
-  const [PU, PM, PO] = [P2, P2 + 1, P2 + 2];
-  const dir = path.join(OUT, 'one-origin');
+  const [PU, PM] = [P2, P2 + 1];
+  const dir = path.join(OUT, 'two-domain');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   // the box-to-box credential, made up for this run (never written anywhere but these two servers' environment)
   const boxKey = crypto.randomBytes(32).toString('base64url');
-  const NEW = `localhost:${P1}`, OLD = `127.0.0.1:${P1}`, newOrigin = `http://${NEW}`, oldOrigin = `http://${OLD}`;
-  // (each started one is stopped at the end, whatever fails on the way)
+  const U2 = `nfsu2.localhost:${P1}`, SITE = `nfsrevived.localhost:${P1}`, u2Origin = `http://${U2}`, siteOrigin = `http://${SITE}`;
   const servers = {};
   let sim = null, browser = null;
   try {
-    // (each behind the proxy as the boxes run it, the Dockerfile's CMD: --behind-proxy and the name it answers)
-    const behind = name => ['--behind-proxy', '--host', name];
-    servers.u2 = await startServer(['--http-port', String(PU), ...behind('localhost'), '--base-path', 'localhost=/u2'],
-      { label: 'one-origin-u2', data: dataUg2, state: path.join(dir, 'state-u2'), env: { NFSU2_VAULT_BOX_KEY: boxKey } });
-    servers.mw = await startServer(['--game', 'mw', '--http-port', String(PM), ...behind('localhost'), '--wasm', path.join(MODULE_MW, 'nfsmw.wasm'),
+    // each behind the proxy as the boxes run it (the Dockerfile's CMD: --behind-proxy and the name it answers), with
+    // the site redirects on as the boxes have them (--site-redirects on)
+    const behind = name => ['--behind-proxy', '--host', name, '--site-redirects', 'on'];
+    servers.u2 = await startServer(['--http-port', String(PU), ...behind('nfsu2.localhost')],
+      { label: 'two-domain-u2', data: dataUg2, state: path.join(dir, 'state-u2'), env: { NFSU2_VAULT_BOX_KEY: boxKey } });
+    servers.mw = await startServer(['--game', 'mw', '--http-port', String(PM), ...behind('nfsrevived.localhost'), '--wasm', path.join(MODULE_MW, 'nfsmw.wasm'),
       ...(ORACLE_MW ? ['--dev'] : [])],
-      { label: 'one-origin-mw', data: DATA_MW, state: path.join(dir, 'state-mw'),
+      { label: 'two-domain-mw', data: DATA_MW, state: path.join(dir, 'state-mw'),
         env: { NFSU2_VAULT_FORWARD: `http://127.0.0.1:${PU}/vault`, NFSU2_VAULT_BOX_KEY: boxKey } });
-    servers.old = await startServer(['--http-port', String(PO), ...behind('127.0.0.1')],
-      { label: 'one-origin-old', data: dataUg2, state: path.join(dir, 'state-old') });
-    if (ORACLE_MW) report('one-origin: Most Wanted\'s module is a dev build with the D3DX oracle: its server runs with --dev', true, 'PLAN D-09');
-    // the edge: one name's paths on two servers, the other name on a third
+    if (ORACLE_MW) report('two-domain: Most Wanted\'s module is a dev build with the D3DX oracle: its server runs with --dev', true, 'PLAN D-09');
+    // the edge: each name to its own box (the two tunnels)
     sim = startRouteSim({ port: P1, fakeClientIp: '198.51.100.7',
-      route: (name, p) => name === '127.0.0.1' ? PO : name !== 'localhost' ? null : (p === '/mw' || p.startsWith('/mw/')) ? PM : PU });
+      route: name => name === 'nfsu2.localhost' ? PU : name === 'nfsrevived.localhost' ? PM : null });
     await sim.ready;
-    browser = await launch();
-    // 1. COOP and COEP on every path of both addresses, whatever the answer (404s and redirects too)
+    // 1. COOP and COEP on every path of both names, whatever the answer (redirects, the site's page and 404s too)
     const paths = {
-      [NEW]: ['/', '/robots.txt', '/u2', '/u2/', '/u2/index.html', '/u2/main.js', '/u2/game.json', '/u2/data-manifest', '/u2/players', '/u2/nothing',
-        '/u2/vault', '/mw', '/mw/', '/mw/index.html', '/mw/main.js', '/mw/game.json', '/mw/data-manifest', '/mw/players', '/mw/nothing', '/mw/vault',
-        '/game.json', '/players', '/nothing', '/MW/', '/u2x'],
-      [OLD]: ['/', '/index.html', '/main.js', '/game.json', '/data-manifest', '/players', '/robots.txt', '/nothing', '/u2/', '/mw/'],
+      [U2]: ['/', '/index.html', '/main.js', '/game.json', '/data-manifest', '/players', '/robots.txt', '/nothing', '/vault', '/mw', '/mw/', '/mw/game.json',
+        '/mw/?lang=german', '/u2/'],
+      [SITE]: ['/', '/robots.txt', '/mw', '/mw/', '/mw/index.html', '/mw/main.js', '/mw/game.json', '/mw/data-manifest', '/mw/players', '/mw/vault',
+        '/mw/site/site.css', '/u2', '/u2/', '/u2/index.html?x=1', '/game.json', '/nothing', '/MW/', '/u2x'],
     };
-    const missing = [], statuses = {};
+    const missing = [], got = {};
     for (const [host, ps] of Object.entries(paths)) {
       for (const p of ps) {
         const r = await ask(P1, { p, host });
-        statuses[`${host.split(':')[0]}${p}`] = r.status;
+        got[`${host.split(':')[0]}${p}`] = r;
         if (r.headers['cross-origin-opener-policy'] !== 'same-origin' || r.headers['cross-origin-embedder-policy'] !== 'require-corp') missing.push(`${host}${p} (${r.status})`);
       }
     }
-    report('one-origin: COOP and COEP on every path of both addresses', missing.length === 0, { missing, statuses });
-    const want = { 'localhost/': 404, 'localhost/u2': 308, 'localhost/u2/': 200, 'localhost/mw': 308, 'localhost/mw/': 200, 'localhost/u2/game.json': 200,
-      'localhost/mw/game.json': 200, 'localhost/game.json': 404, 'localhost/robots.txt': 200, '127.0.0.1/': 200, '127.0.0.1/game.json': 200, '127.0.0.1/mw/': 404 };
-    const off = Object.entries(want).filter(([k, v]) => statuses[k] !== v).map(([k, v]) => `${k}: ${statuses[k]}, not ${v}`);
-    report('one-origin: each base where it belongs (the new address\'s root page is M13-13\'s, 404 until then)', off.length === 0, off.length ? off : 'as expected');
-    // 2. each game's /lan reaches its own server only
-    const count = async p => JSON.parse((await ask(P1, { p, host: NEW })).body || '{}').players;
-    const before = [await count('/u2/players'), await count('/mw/players')];
-    const u = await lanOpen(P1, NEW, '/u2/lan', newOrigin);
+    report('two-domain: COOP and COEP on every path of both names', missing.length === 0,
+      { missing, statuses: Object.fromEntries(Object.entries(got).map(([k, r]) => [k, r.status])) });
+    // 2. each game where it belongs; the redirects to the other game's site, to fixed addresses only
+    const want = {
+      'nfsu2.localhost/': [200], 'nfsu2.localhost/game.json': [200], 'nfsu2.localhost/robots.txt': [200], 'nfsu2.localhost/u2/': [404],
+      'nfsu2.localhost/mw': [308, 'https://nfsrevived.com/mw/'], 'nfsu2.localhost/mw/': [308, 'https://nfsrevived.com/mw/'],
+      'nfsu2.localhost/mw/game.json': [308, 'https://nfsrevived.com/mw/'], 'nfsu2.localhost/mw/?lang=german': [308, 'https://nfsrevived.com/mw/'],
+      'nfsrevived.localhost/': [200], 'nfsrevived.localhost/robots.txt': [200], 'nfsrevived.localhost/mw': [308, '/mw/'], 'nfsrevived.localhost/mw/': [200],
+      'nfsrevived.localhost/mw/game.json': [200], 'nfsrevived.localhost/mw/site/site.css': [200],
+      'nfsrevived.localhost/u2': [308, 'https://nfsu2.xyz/'], 'nfsrevived.localhost/u2/': [308, 'https://nfsu2.xyz/'],
+      'nfsrevived.localhost/u2/index.html?x=1': [308, 'https://nfsu2.xyz/index.html?x=1'], 'nfsrevived.localhost/game.json': [404],
+      'nfsrevived.localhost/MW/': [404], 'nfsrevived.localhost/u2x': [404],
+    };
+    const off = Object.entries(want).filter(([k, [s, l]]) => got[k]?.status !== s || (l !== undefined && got[k]?.headers.location !== l))
+      .map(([k, [s, l]]) => `${k}: ${got[k]?.status} ${got[k]?.headers.location ?? ''}, not ${s} ${l ?? ''}`);
+    const site = got['nfsrevived.localhost/'].body, robots = got['nfsrevived.localhost/robots.txt'].body;
+    const siteOk = /href="https:\/\/nfsu2\.xyz\/"/.test(site) && /href="\/mw\/"/.test(site) && /<link rel="canonical" href="https:\/\/nfsrevived\.com\/">/.test(site);
+    report('two-domain: each game where it belongs, the site\'s page at the root, the redirects to the other game\'s site',
+      off.length === 0 && siteOk && /Disallow: \/mw\/data\//.test(robots), off.length ? off : { sitePage: siteOk, robots: robots.split('\n').slice(0, 3) });
+    // no open redirect: what names another host is refused or goes to the fixed address
+    const probes = [[SITE, '/u2//evil.example/'], [SITE, '/u2/%2f%2fevil.example'], [SITE, '/u2/%5cevil.example'], [SITE, '/u2/@evil.example'],
+      [SITE, 'http://evil.example/u2/'], [U2, '/mw//evil.example'], [U2, 'http://evil.example/mw/']];
+    const bad = [];
+    for (const [host, p] of probes) {
+      const r = await ask(P1, { p, host });
+      const l = r.headers.location ?? '';
+      if (l && !['https://nfsu2.xyz/', 'https://nfsrevived.com/mw/'].some(a => l === a || (l.startsWith(a) && !l.slice(a.length).startsWith('/')))) bad.push(`${host}${p}: ${r.status} ${l}`);
+    }
+    report('two-domain: no open redirect (only https://nfsu2.xyz/... and https://nfsrevived.com/mw/)', bad.length === 0, bad.length ? bad : `${probes.length} probes`);
+    // 3. each game's /lan reaches its own server only
+    const count = async (host, p) => JSON.parse((await ask(P1, { p, host })).body || '{}').players;
+    const before = [await count(U2, '/players'), await count(SITE, '/mw/players')];
+    const u = await lanOpen(P1, U2, '/lan', u2Origin);
     await new Promise(r => setTimeout(r, 300));
-    const afterU = [await count('/u2/players'), await count('/mw/players')];
-    const m = await lanOpen(P1, NEW, '/mw/lan', newOrigin);
+    const afterU = [await count(U2, '/players'), await count(SITE, '/mw/players')];
+    const m = await lanOpen(P1, SITE, '/mw/lan', siteOrigin);
     await new Promise(r => setTimeout(r, 300));
-    const afterM = [await count('/u2/players'), await count('/mw/players')];
-    const root = await lanOpen(P1, NEW, '/lan', newOrigin);
-    const old = await lanOpen(P1, OLD, '/lan', oldOrigin);
-    await new Promise(r => setTimeout(r, 300));
-    const oldCount = JSON.parse((await ask(P1, { p: '/players', host: OLD })).body || '{}').players;
-    u.close?.(); m.close?.(); old.close?.();
-    report('one-origin: /u2/lan and /mw/lan reach their own server only', u.status === 101 && m.status === 101 && root.status === 404 && old.status === 101 &&
-      String(before) === '0,0' && String(afterU) === '1,0' && String(afterM) === '1,1' && oldCount === 1,
-      { u2: u.status, mw: m.status, rootLan: root.status, oldLan: old.status, players: { before, afterU, afterM, old: oldCount } });
-    // 3. one vault on the new address, the Underground 2 server's: /u2/vault directly, /mw/vault only forwarded; the
-    // old address's its own; none in Most Wanted's state folder
-    const tok = () => crypto.randomBytes(32).toString('base64url');
-    const page = (host, origin) => ({ Origin: origin, 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors' });
-    const vault = (host, p, token, o = {}) => ask(P1, { p, host, ...o, headers: { ...page(host, host === NEW ? newOrigin : oldOrigin), Authorization: `Bearer ${token}`, ...(o.headers ?? {}) } });
-    const tu = tok(), tm = tok();
-    const putU = await vault(NEW, '/u2/vault', tu, { method: 'PUT', headers: { 'If-None-Match': '*' }, body: 'sealed u2 box' });
-    const putM = await vault(NEW, '/mw/vault', tm, { method: 'PUT', headers: { 'If-None-Match': '*' }, body: 'sealed mw box' });
-    const getM = await vault(NEW, '/mw/vault', tm);
-    const getMviaU = await vault(NEW, '/u2/vault', tm);
-    const getUviaM = await vault(NEW, '/mw/vault', tu);
-    const getOld = await vault(OLD, '/vault', tu);
-    const keptU = filesUnder(path.join(dir, 'state-u2', 'vault')).length, keptOld = filesUnder(path.join(dir, 'state-old', 'vault')).length;
+    const afterM = [await count(U2, '/players'), await count(SITE, '/mw/players')];
+    const root = await lanOpen(P1, SITE, '/lan', siteOrigin);
+    u.close?.(); m.close?.();
+    report('two-domain: each game\'s /lan reaches its own server only', u.status === 101 && m.status === 101 && root.status === 404 &&
+      String(before) === '0,0' && String(afterU) === '1,0' && String(afterM) === '1,1',
+      { u2: u.status, mw: m.status, siteRootLan: root.status, players: { before, afterU, afterM } });
+    // 4. one keyphrase, one vault, the Underground 2 box's: each game's box under its own token from the one phrase,
+    // Underground 2's sent to its own /vault, Most Wanted's to /mw/vault on the other name, which goes on through the
+    // forwarding; each box readable through either name (one vault); none in Most Wanted's state folder
+    const V = { ug2: await vaultOf('ug2'), mw: await vaultOf('mw') };
+    const Z = await zipTs();
+    const phrase = V.ug2.newPhrase();
+    const keys = { ug2: await V.ug2.keysOf(phrase), mw: await V.mw.keysOf(phrase) };
+    const page = (origin, token, o = {}) => ({ ...o, headers: { Origin: origin, 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors',
+      Authorization: `Bearer ${token}`, ...(o.headers ?? {}) } });
+    // the saves: a real "Download a backup" zip of Underground 2's (--backup-u2) and a folder of Most Wanted's
+    // profiles (--saves-mw: NFS Most Wanted/<NAME>/<NAME>); a made-up one of each without them
+    const saves = { ug2: [], mw: [] };
+    if (BACKUP_U2) for (const e of await Z.unzip(new Uint8Array(fs.readFileSync(BACKUP_U2)))) saves.ug2.push({ path: e.name, data: e.data, mtime: e.mtime ?? 0 });
+    else saves.ug2.push({ path: 'NFS Underground 2/TWODOM/TWODOM', data: new Uint8Array(crypto.randomBytes(4096)), mtime: 0 });
+    if (SAVES_MW) {
+      for (const n of fs.readdirSync(path.join(SAVES_MW, 'NFS Most Wanted'))) {
+        const f = path.join(SAVES_MW, 'NFS Most Wanted', n, n);
+        if (fs.existsSync(f)) saves.mw.push({ path: `NFS Most Wanted/${n}/${n}`, data: new Uint8Array(fs.readFileSync(f)), mtime: 0 });
+      }
+    } else saves.mw.push({ path: 'NFS Most Wanted/TWODOM/TWODOM', data: new Uint8Array(crypto.randomBytes(4096)), mtime: 0 });
+    // (a profile the phrase keeps: NFS <game>/<NAME>/<NAME>, not a DVD or magazine cover of the same shape)
+    const profileOf = g => V[g].kept(saves[g]).find(f => /^NFS (Underground 2|Most Wanted)\/([^/]+)\/\2$/.test(f.path) && !V[g].isCover(f.path));
+    const sealed = {};
+    for (const g of ['ug2', 'mw']) sealed[g] = await V[g].seal(keys[g].key, await V[g].pack(V[g].kept(saves[g])));
+    const putU = await ask(P1, { method: 'PUT', p: '/vault', host: U2, ...page(u2Origin, keys.ug2.token, { headers: { 'If-None-Match': '*' }, body: Buffer.from(sealed.ug2) }) });
+    const putM = await ask(P1, { method: 'PUT', p: '/mw/vault', host: SITE, ...page(siteOrigin, keys.mw.token, { headers: { 'If-None-Match': '*' }, body: Buffer.from(sealed.mw) }) });
+    const mwAtU2 = await ask(P1, { method: 'HEAD', p: '/vault', host: U2, ...page(u2Origin, keys.mw.token) });
+    const u2AtMw = await ask(P1, { method: 'HEAD', p: '/mw/vault', host: SITE, ...page(siteOrigin, keys.ug2.token) });
     const mwFiles = filesUnder(path.join(dir, 'state-mw'));
-    report('one-origin: one vault on the new address, the Underground 2 server\'s; Most Wanted\'s through the forwarding only',
-      putU.status === 201 && putM.status === 201 && getM.status === 200 && getM.body === 'sealed mw box' && getMviaU.status === 200 &&
-      getUviaM.status === 200 && getOld.status === 404 && keptU > 0 && !mwFiles.some(f => /vault/i.test(f)),
-      { putU2: putU.status, putMw: putM.status, getMw: getM.status, mwBoxAtU2: getMviaU.status, u2BoxAtMw: getUviaM.status, oldAddress: getOld.status,
-        files: { u2Vault: keptU, oldVault: keptOld }, mwState: mwFiles.filter(f => !f.startsWith('log/')) });
-    // 4. the M13-29 loopback rule: the old address's CSP (connect-src 'self' until the launch), the new address's
-    // hand-over CORS for the old one's origin only
-    const csp = (await ask(P1, { p: '/', host: OLD })).headers['content-security-policy'] ?? '';
-    const pre = o => ask(P1, { method: 'OPTIONS', p: '/u2/covers', host: NEW, headers: { Origin: o, 'Access-Control-Request-Method': 'PUT',
-      'Access-Control-Request-Headers': 'authorization, if-none-match' } });
-    const ok = await pre(oldOrigin), foreign = await pre('http://evil.example');
-    report('one-origin: the old address\'s CSP and the new address\'s hand-over CORS by the loopback rule',
-      /connect-src 'self'[;]/.test(csp) && ok.headers['access-control-allow-origin'] === oldOrigin && /origin/i.test(ok.headers.vary ?? '') &&
-      !foreign.headers['access-control-allow-origin'] && foreign.status === 403,
-      { oldCsp: (/connect-src [^;]*/.exec(csp) ?? [''])[0], preflight: [ok.status, ok.headers['access-control-allow-origin']], foreign: foreign.status });
-    // 5. each page's worker at its own base, none at the root (the pages register theirs once their module loaded)
+    report('two-domain: one keyphrase, one vault: Underground 2\'s box at nfsu2/vault, Most Wanted\'s through nfsrevived/mw/vault, each readable from the other name',
+      putU.status === 201 && putM.status === 201 && mwAtU2.status === 200 && u2AtMw.status === 200 && keys.ug2.token !== keys.mw.token &&
+      filesUnder(path.join(dir, 'state-u2', 'vault')).length > 0 && !mwFiles.some(f => /vault/i.test(f)),
+      { putU2: putU.status, putMw: putM.status, mwBoxAtNfsu2: mwAtU2.status, u2BoxAtNfsrevived: u2AtMw.status,
+        sealed: { ug2: sealed.ug2.length, mw: sealed.mw.length }, profiles: { ug2: profileOf('ug2')?.path.split('/')[1], mw: saves.mw.length } });
+    // 5. in Chrome: the site's page, each game's page with its bar (or none) and its worker; then the one phrase typed
+    // into each game's page of a fresh browser restores that game's saves
+    browser = await launch();
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const pg = await ctx.newPage();
-    const scopes = [];
-    for (const [p, q] of [['/u2/', ''], ['/mw/', ORACLE_MW ? '?env=NFSMW_D3DX=/save/d3dx9_26.dll' : '']]) {
-      await pg.goto(`${newOrigin}${p}${q}`);
+    const csp = [];
+    pg.on('console', msg => { if (/Content Security Policy|Refused to/i.test(msg.text())) csp.push(msg.text().slice(0, 200)); });
+    await pg.goto(`${siteOrigin}/`);
+    const sitePage = await pg.evaluate(() => ({ links: [...document.querySelectorAll('a.play')].map(a => a.getAttribute('href')), title: document.title,
+      styled: getComputedStyle(document.body).backgroundColor, images: [...document.images].map(i => i.naturalWidth) }));
+    report('two-domain: the site\'s page in Chrome: both games\' links, its stylesheet and pictures, no CSP refusal',
+      JSON.stringify(sitePage.links) === '["https://nfsu2.xyz/","/mw/"]' && sitePage.styled === 'rgb(13, 13, 13)' && sitePage.images.every(w => w > 0) && csp.length === 0,
+      { ...sitePage, csp });
+    // the site's page and Most Wanted's bar at a phone's width and a computer's: nothing past the window's side, the
+    // bar's tabs on the 4 px grid and as tall as a finger needs (44 px or more); a picture of each in the run's folder
+    const layout = [];
+    for (const w of [320, 390, 1280]) {
+      await pg.setViewportSize({ width: w, height: 800 });
+      for (const [name, url] of [['site', `${siteOrigin}/`], ['mw-bar', `${siteOrigin}/mw/`]]) {
+        await pg.goto(url, { waitUntil: 'domcontentloaded' });
+        await pg.waitForTimeout(300);
+        const m = await pg.evaluate(() => {
+          const tabs = [...document.querySelectorAll('#site-bar .site-tab')].map(a => a.getBoundingClientRect());
+          return { over: document.documentElement.scrollWidth - innerWidth,
+            tabs: tabs.map(r => [Math.round(r.height), Math.round(r.width)]),
+            grid: tabs.every(r => r.height % 4 === 0 && r.top % 4 === 0) };
+        });
+        await pg.screenshot({ path: path.join(dir, `${name}-${w}.png`), clip: name === 'site' ? undefined : { x: 0, y: 0, width: w, height: Math.min(800, 320) } });
+        layout.push({ page: name, width: w, ...m });
+      }
+    }
+    report('two-domain: the site\'s page and Most Wanted\'s bar at 320, 390 and 1280 px: no sideways overflow, tabs on the grid and 44 px or taller',
+      layout.every(l => l.over <= 0 && (l.page === 'site' || (l.grid && l.tabs.length === 2 && l.tabs.every(([h]) => h >= 44)))),
+      layout.map(l => `${l.page}@${l.width}: over ${l.over}${l.tabs.length ? `, tabs ${l.tabs.map(t => t.join('x')).join(' ')}${l.grid ? '' : ' (off the grid)'}` : ''}`));
+    await pg.setViewportSize({ width: 1280, height: 800 });
+    const pages = [];
+    for (const [origin, p, q] of [[u2Origin, '/', ''], [siteOrigin, '/mw/', ORACLE_MW ? '?env=NFSMW_D3DX=/save/d3dx9_26.dll' : '']]) {
+      await pg.goto(`${origin}${p}${q}`);
       await pg.waitForFunction(() => ['ready', 'error'].includes(window.__nfsu2?.phase), null, { timeout: 300000, polling: 250 });
-      const iso = await pg.evaluate(() => crossOriginIsolated);
       const t0 = Date.now();
       let regs = [];
       while (Date.now() - t0 < 60000) {
-        regs = await pg.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map(r => r.scope));
-        if (regs.some(s => s.endsWith(p))) break;
+        regs = await pg.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map(r => new URL(r.scope).pathname));
+        if (regs.includes(p)) break;
         await pg.waitForTimeout(500);
       }
-      scopes.push({ page: p, isolated: iso, phase: await pg.evaluate(() => window.__nfsu2.phase), registrations: regs });
+      pages.push(await pg.evaluate(([regs]) => ({
+        page: location.href, phase: window.__nfsu2.phase, isolated: crossOriginIsolated, workers: regs,
+        tabs: [...document.querySelectorAll('#site-bar .site-tab')].map(a => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-current')]),
+        picker: !!document.querySelector('#site-bar #lang-pick'),
+      }), [regs]));
     }
-    const all = scopes.at(-1).registrations.map(s => s.replace(newOrigin, '')).sort();
-    report('one-origin: each page\'s worker at its own base (/u2/, /mw/), none at /', JSON.stringify(all) === '["/mw/","/u2/"]' && scopes.every(s => s.isolated),
-      { scopes: all, pages: scopes.map(s => ({ page: s.page, isolated: s.isolated, phase: s.phase })) });
+    const [pu, pm] = pages;
+    report('two-domain: Underground 2\'s page as it is (no bar while its launch switch is off), its worker at /',
+      pu.isolated && pu.tabs.length === 0 && JSON.stringify(pu.workers) === '["/"]', pu);
+    report('two-domain: Most Wanted\'s page with the bar (its tab current, Underground 2\'s to https://nfsu2.xyz/), its worker at /mw/',
+      pm.isolated && JSON.stringify(pm.tabs) === JSON.stringify([['Underground 2 Revived', 'https://nfsu2.xyz/', null], ['Most Wanted Revived', null, 'page']]) &&
+      pm.picker && JSON.stringify(pm.workers) === '["/mw/"]', pm);
     await ctx.close();
-    // 6. the Underground 2 server stopped: /mw/vault 503 from the Most Wanted server (its "unreachable", at once:
-    // nothing listens), the page's local saves its own business
+    // a fresh browser: the phrase typed into each game's page loads that game's saves (each page derives its own box
+    // from the one phrase, the shared word list and format)
+    const fresh = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const restored = {};
+    for (const [g, origin, p, save] of [['ug2', u2Origin, '/', 'save'], ['mw', siteOrigin, '/mw/', 'mw-save']]) {
+      const b = await fresh.newPage();
+      await b.goto(`${origin}${p}`);
+      await b.waitForSelector('#vault:not([hidden])', { timeout: 120000 });
+      await b.waitForTimeout(500);
+      await b.fill('#vault-input', phrase);
+      await b.click('#vault-load');
+      await b.waitForSelector('#confirm[open]', { timeout: 30000 });
+      await b.click('#confirm-ok');
+      const want = profileOf(g);
+      const t0 = Date.now();
+      let have = null;
+      while (Date.now() - t0 < 30000 && have !== sha256(want.data)) { have = await opfsHash(b, save, want.path); await b.waitForTimeout(300); }
+      restored[g] = { profile: want.path.split('/')[1], same: have === sha256(want.data), msg: (await b.textContent('#vault-msg'))?.trim() ?? '' };
+      await b.close();
+    }
+    await fresh.close();
+    report('two-domain: one keyphrase restores both games\' saves in a fresh browser (Underground 2 at nfsu2, Most Wanted at nfsrevived/mw)',
+      restored.ug2.same && restored.mw.same, restored);
+    // 6. the Underground 2 server stopped: /mw/vault 503 from the Most Wanted server (its "unreachable", at once)
     await servers.u2.stop();
     const t1 = Date.now();
-    const down = await vault(NEW, '/mw/vault', tm);
-    report('one-origin: the Underground 2 server stopped: /mw/vault 503 from the Most Wanted server', down.status === 503 &&
+    const down = await ask(P1, { p: '/mw/vault', host: SITE, ...page(siteOrigin, keys.mw.token) });
+    report('two-domain: the Underground 2 server stopped: /mw/vault 503 from the Most Wanted server', down.status === 503 &&
       down.headers['x-vault-unreachable'] === '1' && Date.now() - t1 < 6000, { status: down.status, unreachable: down.headers['x-vault-unreachable'] ?? null, ms: Date.now() - t1 });
-    const mwAfter = filesUnder(path.join(dir, 'state-mw'));
-    report('one-origin: Most Wanted\'s state folder holds no vault files', !mwAfter.some(f => /vault/i.test(f)) && !fs.existsSync(path.join(dir, 'state-mw', 'vault')),
-      { files: mwAfter.filter(f => !f.startsWith('log/')) });
-    // 7. the client's address each server sees (its access log): the one the proxy forwards (X-Forwarded-For), never
-    // the proxy's own; the Most Wanted server's /vault forwarding reaches the Underground 2 server directly, not
-    // through the proxy, and is left out
-    await new Promise(r => setTimeout(r, 300));
-    const seen = {};
-    for (const name of ['u2', 'mw', 'old']) {
-      const by = {};
-      for (const l of fs.readFileSync(path.join(OUT, `server-one-origin-${name}.log`), 'utf8').split('\n')) {
-        const m = /\[http\] (\S+) \S+ (\S+) /.exec(l);
-        if (m && !(name === 'u2' && m[2].startsWith('/vault'))) by[m[1]] = (by[m[1]] ?? 0) + 1;
-      }
-      seen[name] = by;
-    }
-    report('one-origin: each server sees the address the proxy forwards (X-Forwarded-For), not the proxy\'s',
-      Object.values(seen).every(by => Object.keys(by).length === 1 && by['198.51.100.7'] > 0), seen);
-    report('one-origin: the proxy\'s requests by server', true, { u2: sim.stats.byPort[PU] ?? 0, mw: sim.stats.byPort[PM] ?? 0, old: sim.stats.byPort[PO] ?? 0 });
+    report('two-domain: Most Wanted\'s state folder holds no vault files', !filesUnder(path.join(dir, 'state-mw')).some(f => /vault/i.test(f)),
+      { files: filesUnder(path.join(dir, 'state-mw')).filter(f => !f.startsWith('log/')) });
+    report('two-domain: the proxy\'s requests by server', true, { u2: sim.stats.byPort[PU] ?? 0, mw: sim.stats.byPort[PM] ?? 0 });
   } catch (e) {
-    report('one-origin: run', false, String(e?.stack ?? e).slice(0, 600));
+    report('two-domain: run', false, String(e?.stack ?? e).slice(0, 600));
   } finally {
     await browser?.close();
     await sim?.close();
@@ -525,7 +623,7 @@ async function runOneOrigin() {
   }
 }
 
-if (MODE === 'one-origin') await runOneOrigin();
+if (MODE === 'two-domain') await runTwoDomain();
 else for (const m of MODES) await run(m);
 fs.writeFileSync(path.join(OUT, 'results.json'), JSON.stringify(results, null, 2));
 const failed = results.filter(r => !r.ok).length;
