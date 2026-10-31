@@ -2866,7 +2866,7 @@ static void fxtr_dev(CPU *c, int iface, int mid, int nargs, const char *nm){
  * game's pixels (the resolution it believes it has), as the quad's size is.  No renderer (headless runs): S_FALSE
  * always, the count the game's 0.  Underground 2 makes no queries.  NFSU2_OCCLUSION=off turns this off (occ_on).
  * Query object: +4 type, +8 slot (1..OCC_SLOTS-1), +12 the first issue's number, +16 the last issue drew into the
- * back buffer. */
+ * back buffer, +20 nonzero once GetData took a result of the query's own issues. */
 void metal_set_occlusion(uint32_t occ);
 int  metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count);
 #define OCC_SLOTS 64u
@@ -2904,9 +2904,16 @@ static uint32_t query_getdata(uint32_t q, uint32_t p, uint32_t size){
         return 0;
     }
     uint32_t slot = MR32(q + 8u), first = MR32(q + 12u), seq = 0, n = 0;
-    /* a result of this query's issues (a slot used before by a released query has older numbers) */
-    if (!slot || !first || !metal_occlusion_result(slot, &seq, &n) || ((seq - first) & 0x800000u))
+    /* a result of this query's issues: a slot used before by a released query can still hold, or get, a result of
+     * that query's last issues, numbered before this query's first.  The numbers are 24 bits and wrap, so that test
+     * holds only within 2^23 issues of the first: once a result of the query's own came, every later one is its own
+     * (the page writes the results in the order of the issues), and +20 says so */
+    if (!slot || !first || !metal_occlusion_result(slot, &seq, &n))
         return 1u;                                /* S_FALSE */
+    if (!MR32(q + 20u)){
+        if ((seq - first) & 0x800000u) return 1u; /* the earlier query's: S_FALSE */
+        MR32(q + 20u) = 1u;
+    }
     if (MR32(q + 16u) && g_req_w && g_req_h && g_bb_w && g_bb_h)
         n = (uint32_t)((uint64_t)n * g_req_w * g_req_h / ((uint64_t)g_bb_w * g_bb_h));
     static int said;

@@ -164,9 +164,13 @@ void metal_begin_frame(void){ }
 void metal_set_zsurf(unsigned z){ (void)z; }
 void metal_z_forget(unsigned z){ (void)z; }
 void metal_set_render_target(unsigned t){ (void)t; }
-void metal_set_occlusion(uint32_t occ){ (void)occ; }
+/* occlusion queries: what the draws were last told to carry, and the page's results table as t_occlusion sets it,
+ * { issue (slot | number << 8), count } per slot */
+static uint32_t g_occ_now, g_occ_res[64][2];
+void metal_set_occlusion(uint32_t occ){ g_occ_now = occ; }
 int metal_occlusion_result(unsigned slot, uint32_t *seq, uint32_t *count){
-    (void)slot; (void)seq; (void)count; return 0;
+    if (!slot || slot >= 64u || !g_occ_res[slot][0]) return 0;
+    *seq = g_occ_res[slot][0] >> 8; *count = g_occ_res[slot][1]; return 1;
 }
 void metal_set_cull(unsigned c){ (void)c; }
 void metal_set_depth(unsigned a){ (void)a; }
@@ -224,6 +228,7 @@ static const Method *tab_of(uint32_t obj, unsigned *n){
     case 4: *n = NELM(M_VBUF); return M_VBUF;
     case 5: *n = NELM(M_IBUF); return M_IBUF;
     case 6: *n = NELM(M_SURFACE); return M_SURFACE;
+    case 12: *n = NELM(M_QUERY); return M_QUERY;
     default: printf("FAIL table: interface %u\n", iface); exit(2);
     }
 }
@@ -719,6 +724,39 @@ static int is_byte(uint32_t p, uint32_t n, uint8_t v){
     for (uint32_t i = 0; i < n; i++) if (MR8(p + i) != v) return 0;
     return 1; }
 static void present(void){ call(g_dev, "Present", 4, 0u, 0u, 0u, 0u); }
+
+/* ---- M5-15: occlusion queries (com.c query_issue, query_getdata; the page's results stubbed above) ---------- */
+static uint32_t q_make(void){ MR32(OUT) = 0; return call(g_dev, "CreateQuery", 2, 9u, OUT) ? 0u : MR32(OUT); }
+static uint32_t q_issue(uint32_t q){ call(q, "Issue", 1, 2u); uint32_t occ = g_occ_now; call(q, "Issue", 1, 1u); return occ; }
+static uint32_t q_get(uint32_t q, uint32_t *n){ MR32(OUT) = 0xDEADu; uint32_t r = call(q, "GetData", 3, OUT, 4u, 0u); *n = MR32(OUT); return r; }
+static void t_occlusion(void){
+    uint32_t n, q = q_make(), r = q ? q_get(q, &n) : 99u;
+    check(q && r == 1u, "occ-none-yet", "query 0x%08x: GetData before any issue gave 0x%x, not S_FALSE", q, r);
+    if (!q) return;
+    uint32_t occ = q_issue(q), slot = occ & 0xFFu, seq = occ >> 8;
+    check(slot && slot < 64u && seq && !g_occ_now, "occ-issue", "Issue(BEGIN) gave the draws 0x%x, Issue(END) left 0x%x", occ, g_occ_now);
+    if (!slot || slot >= 64u) return;
+    r = q_get(q, &n);
+    check(r == 1u, "occ-pending", "GetData before the page's result: 0x%x, not S_FALSE", r);
+    g_occ_res[slot][0] = occ; g_occ_res[slot][1] = 300u;
+    r = q_get(q, &n);
+    check(r == 0 && n == 300u, "occ-result", "GetData of the page's result 300: 0x%x, %u", r, n);
+    /* 2^23 issues on, the 24-bit numbers past the window of the first issue: still the query's own result */
+    g_occ_res[slot][0] = slot | ((seq + 0x800001u) & 0xFFFFFFu) << 8; g_occ_res[slot][1] = 7u;
+    r = q_get(q, &n);
+    check(r == 0 && n == 7u, "occ-wrap", "a result 2^23 issues after the first: 0x%x, %u (not S_OK, 7)", r, n);
+    /* a released query's late result is not the next query's on its slot */
+    release(q);
+    uint32_t q2 = q_make(), occ2 = q2 ? q_issue(q2) : 0u;
+    g_occ_res[slot][0] = occ; g_occ_res[slot][1] = 55u;
+    r = q2 ? q_get(q2, &n) : 99u;
+    check((occ2 & 0xFFu) == slot && r == 1u, "occ-stale", "the slot's next query (issue 0x%x): the old query's result gave 0x%x, not S_FALSE", occ2, r);
+    g_occ_res[slot][0] = occ2; g_occ_res[slot][1] = 66u;
+    r = q2 ? q_get(q2, &n) : 99u;
+    check(r == 0 && n == 66u, "occ-next", "the slot's next query's own result: 0x%x, %u", r, n);
+    if (q2) release(q2);
+}
+
 static void t_hostback(void){
     const uint32_t N = 1024;
     unsigned vb0 = gk_count("vb"), tx0 = gk_count("tex");
@@ -911,6 +949,7 @@ int main(void){
         t_prim(0, 4, 1400, 32);                                /* 4,200 vertices: DrawPrimitiveUP in chunks */
     }
     t_hostback();
+    t_occlusion();
     check(!g_stack_bad, "stdcall", "%d calls left the stack wrong", g_stack_bad);
     printf("d3d9_unit (%s): %d passed, %d failed\n", MW ? "mw" : "ug2", g_pass, g_fail);
     return g_fail ? 1 : 0;
