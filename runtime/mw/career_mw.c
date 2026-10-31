@@ -302,7 +302,7 @@ static void watch_race(CPU *c){
 #define LAP_ON     80.0f                /* metres from the grid along the start's way (and BACK_STEP per racer index) */
 #define START_N    24
 #define START_STEP 10.0f
-#define SAME_M     15.0f                /* a wedge this near the last one: the same place */
+#define SAME_M     40.0f                /* a wedge this near the streak's first: the same place (run g4: wedges 35 m apart) */
 #define SAME_N     3                    /* the SAME_N-th wedge there in a row: on ahead along the way it came */
 #define AHEAD_M    40.0f                /* metres ahead (and BACK_STEP per racer index), then the road's reset */
 #define IID_RESET       0x00620250u     /* IResetable, the ResetCar behaviour's interface */
@@ -386,22 +386,27 @@ static int lap_end(CPU *c, uint32_t s, const float q[3], int idx, uint32_t rs){
     return 0;
 }
 /* a car wedged at the same place SAME_N times: on ahead of q by ahead_m along the way it came there (the newest TRAIL
- * point at least 20 m back gives the way), set down there and put on the road by the game's reset, the AI given it
- * again (U.p: where it went); 0 = no way kept */
+ * point at least 20 m back gives the way), set down there and put on the road by the game's reset (20 m and 40 m
+ * further when the reset finds no place there), the AI given it again (U.p: where it went); the trail is dropped, so
+ * that no later reset goes back into the place (run g3: back along its way, from 40 m on, was the wedge again);
+ * 0 = no way kept */
 static int go_ahead(CPU *c, uint32_t s, const float q[3], float ahead_m){
     for (int k = 0; k < trail_n; k++){
         const float *a = TRAIL[(trail_head - 1 - k + 2 * TRAIL_N) % TRAIL_N].p;
         float dir[3] = { q[0] - a[0], 0.0f, q[2] - a[2] }, l = sqrtf(dir[0] * dir[0] + dir[2] * dir[2]);
         if (l < 20.0f) continue;
         dir[0] /= l; dir[2] /= l;
-        float to[3] = { q[0] + dir[0] * ahead_m, q[1], q[2] + dir[2] * ahead_m };
-        if (!mw_aid_teleport(c, to, dir)) return 0;
-        mw_reset_car(c);
-        uint32_t zero = 0, p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
-        gcall(c, FN_FORCE_AI, 0, 1, &zero);
-        if (p && mem_is_committed(p + 11u)){ U.p[0] = rdf(p); U.p[1] = rdf(p + 4u); U.p[2] = rdf(p + 8u); }
-        else memcpy(U.p, to, sizeof U.p);
-        return 1;
+        for (int tries = 0; tries < 3; tries++){
+            float m = ahead_m + 20.0f * (float)tries, to[3] = { q[0] + dir[0] * m, q[1], q[2] + dir[2] * m };
+            if (!mw_aid_teleport(c, to, dir)) return 0;
+            if (mw_reset_car(c) == 0 && tries < 2) continue;      /* no road there: further on */
+            uint32_t zero = 0, p = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
+            gcall(c, FN_FORCE_AI, 0, 1, &zero);
+            if (p && mem_is_committed(p + 11u)){ U.p[0] = rdf(p); U.p[1] = rdf(p + 4u); U.p[2] = rdf(p + 8u); }
+            else memcpy(U.p, to, sizeof U.p);
+            trail_n = 0;
+            return 1;
+        }
     }
     return 0;
 }
@@ -458,10 +463,10 @@ static void wedge_watch(CPU *c){
         U.since = t; memcpy(U.p, q, sizeof q);
         return;
     }
-    {   /* the same place as the last wedge? */
+    {   /* the same place as the streak's first wedge? */
         float wx = q[0] - U.w[0], wz = q[2] - U.w[2];
-        U.same = U.resets && sqrtf(wx * wx + wz * wz) < SAME_M ? U.same + 1 : 1;
-        memcpy(U.w, q, sizeof q);
+        if (U.same && sqrtf(wx * wx + wz * wz) < SAME_M) U.same++;
+        else { U.same = 1; memcpy(U.w, q, sizeof q); }
     }
     if (racing && start_n > 1 && lap_end(c, s, q, idx, rs)){   /* a lap's end (above): on along the start's way */
         U.resets++; U.futile = 0; U.same = 0;

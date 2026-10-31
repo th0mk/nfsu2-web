@@ -102,11 +102,13 @@ const RACES_OF = {
     // the trace's p95 and samples are judged, its jumps only shown: the game's own blend moves a remote car 2.3-3.1 m
     // in one frame now and then (6 within 150 m in a sprint of 2026-10-30, at 35-62 m/s, p95 1.06 m): TRACKER M8-15
     traceJumps: false,
-    // the LAN list's kinds in its order (tools/gen_lan_race_mw.py --kind: taps DOWN): Sprint, Circuit, Lap KO
+    // the LAN list's kinds in its order (tools/gen_lan_race_mw.py --kind: taps DOWN): Sprint, Circuit, Lap KO; the
+    // results wait is 60000 frames: the list's Sprint is three laps of a 5-6 mile course, and with the autopilot's
+    // wedges two runs of 2026-10-31 were still at 55 % and 77 % when 30000 frames ran out (g3, g4; no link lost)
     modes: {
-      sprint: { h: ['--kind', '0', '--race-ms', '90000'], j: ['--kind', '0', '--race-ms', '90000'] },
-      circuit: { h: ['--kind', '1', '--race-ms', '180000'], j: ['--kind', '1', '--race-ms', '180000'] },
-      ko: { h: ['--kind', '2', '--race-ms', '180000'], j: ['--kind', '2', '--race-ms', '180000'] },
+      sprint: { h: ['--kind', '0', '--race-ms', '90000', '--results-tmo', '60000'], j: ['--kind', '0', '--race-ms', '90000', '--results-tmo', '60000'] },
+      circuit: { h: ['--kind', '1', '--race-ms', '180000', '--results-tmo', '60000'], j: ['--kind', '1', '--race-ms', '180000', '--results-tmo', '60000'] },
+      ko: { h: ['--kind', '2', '--race-ms', '180000', '--results-tmo', '60000'], j: ['--kind', '2', '--race-ms', '180000', '--results-tmo', '60000'] },
     },
   },
 };
