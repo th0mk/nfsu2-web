@@ -186,5 +186,5 @@ cars are made, posed every frame; `roam pools` logs what they use up; `ROAM_SPAW
 AI (`autopilot on`), B waiting for A's car to have moved 50 m (`roam mp waitpeers`, `waitcars`, `waitmoved N M`, `roam
 mp status`); roam-pair compares where B shows A's car with where A was (tools/roam_compare.py).
 `roam_crowd_probe.txt` is the pools probe (M10-05): one page with web/tools/roam-crowd.mjs --game mw's simulated players
-(give the crowd `--track` a pose log of a real drive, such as the pair's A.pose.csv: on circles at one height the
-farther cars stand where the world is not, and the game makes none of them), `[roampool]` lines every 600 frames.
+(give the crowd `--track` a pose log of a real drive, such as the start of the pair's A.pose.csv, so the cars stand on
+the road), `[roampool]` lines every 600 frames; the game's car loader takes six friends' cars beside the player's.

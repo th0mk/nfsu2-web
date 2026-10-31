@@ -13,7 +13,7 @@
  *    body's place, orientation, velocities and speed, turned from the simulation's frame into the world's (below);
  *    its look (the vehicle's name and attribute key) goes as a car record when it changes;
  *  - each friend in free roam within NEAR_M whose state and record came gets a car of our own (up to
- *    NFSU2_ROAM_MAX_CARS, 16: the pools, M10-05), the nearest first, one a frame: a PVehicle made the way the game
+ *    NFSU2_ROAM_MAX_CARS, 6: the pools, M10-05), the nearest first, one a frame: a PVehicle made the way the game
  *    makes its cop and traffic cars (PVehicle::Construct 0x689820 through the "PVehicle" factory, a VehicleParams
  *    of driver class DRIVER_NONE (4): AIVehicleEmpty for a brain, no input of its own, no IPerpetrator, so the
  *    police, the pursuit, the roadblocks and the traffic have no AI of it to look at; GAME.md has the list, M10-04),
@@ -48,7 +48,7 @@
  *   roam pools                      the counts the friends' cars use up (rigid bodies, vehicles, the car loader's
  *                                   memory pool): one [roampool] line
  * NFSU2_ROAM_POSELOG=<file> writes UG2's pose log (L rows the player's car, R rows friends' cars as shown, world
- * frame) for tools/roam_compare.py; NFSU2_ROAM_MAX_CARS caps the cars (16). */
+ * frame) for tools/roam_compare.py; NFSU2_ROAM_MAX_CARS caps the cars (6, DEF_CARS). */
 #include "cpu.h"
 #include "game.h"
 #include "roam_core.h"
@@ -123,12 +123,16 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define H_CONS_CUSTOM    HOOK_SITE(0x00689955)   /* a customization of its preset taken (al) */
 #define H_CONS_SHAPE     HOOK_SITE(0x00689a0e)   /* its entry in the 0x8003B900 chunks' list (0x92C5B8, 0x681340): eax, +4 >= 1 */
 #define H_CONS_PARTS     HOOK_SITE(0x00689a5f)   /* 0x669080's flag, [esp+0x8c] & 1 */
-#define H_CONS_SIM       HOOK_SITE(0x00689b0c)   /* 0x687710 (al) */
+#define H_CONS_SIM       HOOK_SITE(0x00689b0c)   /* the car loader's budget, 0x687710 (al): the memory a new model takes (the table
+                                          * 0x904448: Racing 6,397 KB, read by 0x739F80) against [0x9B2C64] less what the
+                                          * PVehicles' models hold (0x683C80), and a count of 20 ([0x92CD24]); past them
+                                          * it would evict vehicles (none of ours: no cache), else 0.  Six new racing
+                                          * models fit beside the player's in crowd runs */
 #define H_CONS_ROOM      HOOK_SITE(0x00689b76)   /* the rigid bodies' room (0x6ED260, al) */
 #define H_CONS_MADE      HOOK_SITE(0x00689bf4)   /* the PVehicle made (eax) */
 static struct { int on, step; uint32_t val, val2; } g_cons;
 static const char *const cons_step[] = { "the start", "the attributes", "the preset's customization", "the shape (0x8003B900 list)",
-                                         "0x669080", "0x687710 (the place)", "the rigid bodies' room", "the PVehicle's construction" };
+                                         "0x669080", "the car loader's budget (0x687710)", "the rigid bodies' room", "the PVehicle's construction" };
 int mw_roam_hook(CPU *c, uint32_t va){
     int st = va == H_CONS_ATTRIB ? 1 : va == H_CONS_CUSTOM ? 2 : va == H_CONS_SHAPE ? 3 : va == H_CONS_PARTS ? 4 : va == H_CONS_SIM ? 5
            : va == H_CONS_ROOM ? 6 : va == H_CONS_MADE ? 7 : 0;
@@ -145,12 +149,15 @@ int mw_roam_hook(CPU *c, uint32_t va){
 }
 
 #define MAX_CARS         32
-#define DEF_CARS         16
+#define DEF_CARS         6               /* the game's car loader takes six friends' cars beside the player's (its budget,
+                                          * H_CONS_SIM: 6,397 KB reserved a racing car of the pool's 50,000 KB; crowd runs
+                                          * of 16 and 32 friends, distinct models or all one, made 6): the first friend
+                                          * count (TRACKER M10-05) until the pool grows */
 #define VISIBLE_US       2000000         /* a friend's snapshots older than this: not shown */
 #define GONE_US          10000000        /* its car goes when not shown this long */
 #define RETRY_US         2000000         /* a car the game would not make: asked again after this */
-#define NEAR_M           300.f           /* a friend's car is made within this of the player's car (the world around it is
-                                          * in: Construct refuses a place it has no world for, 0x687710 in crowd runs) */
+#define NEAR_M           300.f           /* a friend's car is made within this of the player's car (no need for farther ones:
+                                          * each holds a rigid body of the 64 and its model the car loader's memory) */
 #define FAR_M            450.f           /* and taken away past this, after FAR_US */
 #define FAR_US           5000000
 
