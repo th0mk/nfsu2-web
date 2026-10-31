@@ -19,7 +19,7 @@
 // While any of them is given, the start page says whether it is in effect.
 
 import { STORAGE } from '@game/storage';
-import { REGISTRY_DEFAULTS as registryDefaults } from '@game/registry';
+import { REGISTRY_DEFAULTS as registryDefaults, PHONE_GRAPHICS as phoneGraphics } from '@game/registry';
 import { browserName, check, checkBrowser, checkEngine, checkGpu, checkIsolation, checkStorage, fmtBytes, type Check } from './checks';
 import { codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
 import { loadGame, serverRev, type Loaded } from './loader';
@@ -618,12 +618,12 @@ async function startGame() {
     log.add(`[app] registry seeded from ${q.get('reg')} (page address)`);
   } else if (!await exists(SAVE, reg)) {
     if (r.env.NFSU2_SEED_REGISTRY === '0') log.add('[app] no registry yet, the game will run its first-run check');
-    else if (isPhone()) { await writeFile(SAVE, reg, phoneSeed(registryDefaults)); log.add(`[app] first launch, registry seeded with the built-in defaults and a phone's graphics (/save/${reg})`); }
+    else if (isPhone()) { await writeFile(SAVE, reg, phoneSeed(registryDefaults, phoneGraphics)); log.add(`[app] first launch, registry seeded with the built-in defaults and a phone's graphics (/save/${reg})`); }
     else { await writeFile(SAVE, reg, registryDefaults); log.add(`[app] first launch, registry seeded with the built-in defaults (/save/${reg})`); }
   } else if (isPhone()) {
     // a phone that started before the phone graphics (phonegraphics.ts): once
     const text = await readText(SAVE, reg);        // null: not read (it is there), left as it is for the next start
-    const up = text === null ? null : phoneUpgrade(text, registryDefaults);
+    const up = text === null ? null : phoneUpgrade(text, registryDefaults, phoneGraphics);
     if (text === null) log.add(`[app] phone graphics: /save/${reg} could not be read, left as it is`);
     else if (up) {
       await writeFile(SAVE, reg, up.text);

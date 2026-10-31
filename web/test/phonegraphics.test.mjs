@@ -1,6 +1,7 @@
 // A phone's graphics (web/src/app/phonegraphics.ts): a new phone's registry is the built-in seed with six options
 // off and the mark; a phone from before gets them once while every graphics option still has the seed's value, and
-// only the mark when one was changed; a marked registry is left alone.
+// only the mark when one was changed; a marked registry is left alone.  Most Wanted's set (web/src/games/mw/registry.ts,
+// TRACKER M6-58) has only options its seed holds, so its phones get no line the game never reads.
 //   node --test web/test/phonegraphics.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,4 +65,25 @@ test('CRLF lines keep their line ends', () => {
   const crlf = SEED.replace(/\n/g, '\r\n'), out = phoneSeed(crlf);
   assert.doesNotMatch(out.replace(/\r\n/g, ''), /\n/);
   assert.equal(values(out).g_RoadReflectionEnable, 0);
+});
+
+// Most Wanted's registry module: its seed and its phone graphics
+const mw = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/games/mw/registry.ts')], bundle: true, format: 'esm',
+  write: false, loader: { '.txt': 'text' } })).outputFiles[0].text;
+const MW = await import('data:text/javascript;base64,' + Buffer.from(mw).toString('base64'));
+
+test("Most Wanted's phone graphics: options its seed holds, on there; its phones get those off and nothing else", () => {
+  const s = values(MW.REGISTRY_DEFAULTS), off = Object.keys(MW.PHONE_GRAPHICS);
+  assert.ok(off.length > 0);
+  for (const k of off) { assert.ok(s[k] > 0, k); assert.equal(MW.PHONE_GRAPHICS[k], 0, k); }
+  const out = phoneSeed(MW.REGISTRY_DEFAULTS, MW.PHONE_GRAPHICS), v = values(out);
+  assert.deepEqual(Object.keys(v).sort(), [...Object.keys(s), PHONE_MARK].sort());   // no key the game does not read
+  for (const k of Object.keys(s)) assert.equal(v[k], off.includes(k) ? 0 : s[k], k);
+  for (const k of OFF.filter(k => !(k in s))) assert.equal(v[k], undefined, k);       // Underground 2's others
+  assert.equal(phoneUpgrade(out, MW.REGISTRY_DEFAULTS, MW.PHONE_GRAPHICS), null);
+  const up = phoneUpgrade(withDwords(MW.REGISTRY_DEFAULTS, { g_RacingResolution: 3 }), MW.REGISTRY_DEFAULTS, MW.PHONE_GRAPHICS);
+  assert.equal(up.lowered, true);
+  assert.deepEqual(values(up.text), { ...s, ...MW.PHONE_GRAPHICS, g_RacingResolution: 3, [PHONE_MARK]: 1 });
+  const changed = phoneUpgrade(withDwords(MW.REGISTRY_DEFAULTS, { g_ShadowDetail: 1 }), MW.REGISTRY_DEFAULTS, MW.PHONE_GRAPHICS);
+  assert.equal(changed.lowered, false);
 });

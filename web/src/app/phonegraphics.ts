@@ -4,9 +4,10 @@
 // frame 1,639 -> 1,118, render passes 30 -> 4, GPU time -54 %, WebGPU encoding -36 %.  Rain, fog, particles, light
 // trails and world detail stay.  A phone that started before this gets them once too, if every graphics option there
 // still has the seed's value; one where any was changed keeps its own.  The game's Options, Display raise them again.
-// Cloud saves leave registry.txt out (vault.ts keeps), so a phone's never reaches a PC.
+// Cloud saves leave registry.txt out (vault.ts keeps), so a phone's never reaches a PC.  Each game has its own set,
+// of the options it reads (web/src/games/<id>/registry.ts PHONE_GRAPHICS; Underground 2's is this one).
 
-/** the game's own options (registry DWORDs) a phone starts with */
+/** Underground 2's own options (registry DWORDs) a phone starts with */
 export const PHONE_GRAPHICS: Readonly<Record<string, number>> = {
   g_CarEnvironmentMapEnable: 0, g_RoadReflectionEnable: 0, g_MotionBlurEnable: 0,
   g_DepthOfFieldEnable: 0, g_OverBrightEnable: 0, g_BleachByPassEnable: 0,
@@ -35,18 +36,19 @@ export function withDwords(text: string, values: Record<string, number>): string
   return out;
 }
 
-/** the registry a phone starts with */
-export function phoneSeed(seed: string): string {
-  return withDwords(seed, { ...PHONE_GRAPHICS, [PHONE_MARK]: 1 });
+/** the registry a phone starts with: the game's seed with its phone graphics */
+export function phoneSeed(seed: string, graphics: Readonly<Record<string, number>> = PHONE_GRAPHICS): string {
+  return withDwords(seed, { ...graphics, [PHONE_MARK]: 1 });
 }
 
 /** a phone's registry from before the phone graphics: the text to write (the phone graphics when every graphics option,
  *  the seed's g_ values but the resolution, still has the seed's value; else only the mark), or null once it has the mark */
-export function phoneUpgrade(text: string, seed: string): { text: string; lowered: boolean } | null {
+export function phoneUpgrade(text: string, seed: string, graphics: Readonly<Record<string, number>> = PHONE_GRAPHICS):
+    { text: string; lowered: boolean } | null {
   const have = dwords(text);
   if (have.has(PHONE_MARK.toLowerCase())) return null;
   const untouched = [...dwords(seed)].every(([k, v]) => !k.startsWith('g_') || k === 'g_racingresolution' || have.get(k) === v);
   return untouched
-    ? { text: withDwords(text, { ...PHONE_GRAPHICS, [PHONE_MARK]: 1 }), lowered: true }
+    ? { text: withDwords(text, { ...graphics, [PHONE_MARK]: 1 }), lowered: true }
     : { text: withDwords(text, { [PHONE_MARK]: 1 }), lowered: false };
 }
