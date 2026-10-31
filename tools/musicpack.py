@@ -56,6 +56,45 @@ size, the samples the block adds, 0, then 1 / 0x01000000 for even / odd
 blocks, the frames, zeros to a multiple of 4.  The header (SCHl) is the ADPCM
 song's with version 2 and codec 0x17 (EALayer3), as EA's EALayer3 songs have
 it; sample rate and sample count stay, so does every song's length.
+
+Most Wanted (--game mw; TRACKER M7-19, M7-37):
+
+    tools/musicpack.py --game mw <game folder> <out folder> [--quality V] [--jobs N]
+
+writes MW_Music.mus and MW_Music.mpf (SOUND/PFDATA) for the runtime's own
+EALayer3 decoder (runtime/mw/ealayer3_mw.c): Most Wanted's SND has the codec's
+slot but no decoder in it, so only a module with that decoder plays the pack.
+  - MW_Music.mpf is PathFinder version 5: its header holds its sections'
+    offsets (0x14..0x38, loader 0x829D80), the last the samples table (3,257
+    entries of offset / 0x80 and ms, every stream of the .mus, all named).
+  - MW_Music.mus: a 0x100-byte header (FA CE A5 8C, zeros), then 3,257 SCHl
+    streams with GSTR headers (version 3, no codec tag: EA-XA), EA-XA v2 at
+    36 kHz (3,243 stereo, 14 of four channels); the blocks' fields are
+    big-endian.  EA-XA v2 is v1 without the 128 and the clamp, and with frames
+    of 28 samples as they are after 0xEE and two history samples; decoded as
+    vgmstream decodes it (the same samples, checked on stereo and
+    four-channel streams).
+Each stream becomes EALayer3 in the format above, with these differences: the
+header is the stream's own with codec 0x17 added; its samples stay at 36 kHz,
+which LAME is told are 32 kHz (no MPEG rate is 36 kHz, and the decoder never
+looks at it: SND plays the stream at its header's rate); a four-channel stream
+is two stereo MP3 streams, channels 0+1 and 2+3; blocks hold up to 6 MP3
+frames (EA's ADPCM blocks hold 7,224 samples) and are no larger than the
+stream's largest original block; every channel's offset names its pair's
+frames.  Resampled instead, the songs either lose their top (32 kHz) or take
+more bytes for less (44.1 kHz).  The segments of a song are short (EA Trax
+songs are chains of 2.4 to 4.7 s segments) and each is encoded on its own:
+encoding a run of them in one piece rates no better (-0.02 to +0.04).  PEAQ
+(GstPEAQ, advanced) over 7 runs of 19-34 s of consecutive streams (front end,
+two EA Trax songs, two pursuit tracks, two others), the original's EA-XA as the
+reference (its ADPCM takes 309 kbit/s in stereo):
+    -V 0  257 kbit/s on average, -0.03 to -0.09, -0.06 on average
+    -V 1  230 kbit/s, -0.08 to -0.19, -0.13
+    -V 2  208 kbit/s, -0.16 to -0.27, -0.22
+    -V 3  190 kbit/s, -0.27 to -0.46, -0.37
+    -V 4  179 kbit/s, -0.36 to -0.54, -0.46
+-V 0 is the default, the one as close to the original as Underground 2's pack
+(-0.07): 534 MB -> 405 MB (76 %), 7 minutes on 12 cores.
 """
 import argparse, array, os, shutil, struct, subprocess, sys
 from multiprocessing import Pool
@@ -182,8 +221,9 @@ def decode_ea_xa(d, ch):
 
 # --- MP3 to EALayer3 --------------------------------------------------------
 
-def mp3_frames(mp3):
-    """LAME's MPEG-1 layer III frames: [(header fields, scfsi, side[gr][ch] (59 bits), main[gr][ch] (value, bits))]."""
+def mp3_frames(mp3, srate=0):
+    """LAME's MPEG-1 layer III frames: [(header fields, scfsi, side[gr][ch] (59 bits), main[gr][ch] (value, bits))];
+    srate: the sample-rate index they must have (0 44.1 kHz, 2 32 kHz)."""
     rates = [32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320]
     out, p = [], 0
     while p < len(mp3):
@@ -191,9 +231,9 @@ def mp3_frames(mp3):
         if h >> 21 != 0x7ff or (h >> 19) & 3 != 3 or (h >> 17) & 3 != 1 or not (h >> 16) & 1:
             raise SystemExit(f'LAME output: not an MPEG-1 layer III frame without CRC at {p}')
         br, sr, pad, mode, ext = (h >> 12) & 15, (h >> 10) & 3, (h >> 9) & 1, (h >> 6) & 3, (h >> 4) & 3
-        if sr != 0 or mode == 3 or not 1 <= br <= 14:
-            raise SystemExit('LAME output: not 44.1 kHz stereo')
-        size = 144000 * rates[br - 1] // 44100 + pad
+        if sr != srate or mode == 3 or not 1 <= br <= 14:
+            raise SystemExit(f'LAME output: not {(44100, 48000, 32000)[srate]} Hz stereo')
+        size = 144000 * rates[br - 1] // (44100, 48000, 32000)[sr] + pad
         f = int.from_bytes(mp3[p:p + size], 'big'); bits = size * 8
         get = lambda pos, n: (f >> (bits - pos - n)) & ((1 << n) - 1)
         pos = 32
@@ -309,22 +349,223 @@ def encode(job):
     return ealayer3_stream(header_tags(d[8:ch[0][2]]), decode_ea_xa(d, ch))
 
 
+
+# --- Most Wanted (--game mw) ------------------------------------------------
+
+MW_FRAMES = 6               # MP3 frames a block at most (6912 samples; EA's ADPCM blocks hold 7224)
+
+
+def mw_samples_table(m):
+    """(offset of the samples table, entry count) of MW_Music.mpf: PathFinder version 5 keeps its sections' offsets in
+    the header (0x14..0x38, read by the loader 0x829D80); the samples table is the last, up to the file's end."""
+    if m[:4] != b'xDFP' or m[4] != 5 or m[5] != 1:
+        raise SystemExit('MW_Music.mpf: not a PathFinder map, version 5 (little-endian)')
+    first, end = struct.unpack_from('<II', m, 0x34)
+    if first < 0x3c or (end - first) % 8 or end != len(m):
+        raise SystemExit('MW_Music.mpf: the samples table is not where the game would find it')
+    return first, (end - first) // 8
+
+
+def gstr_tags(h):
+    """SCHl's GSTR header: (its 4 bytes after GSTR, [(tag, bytes)]), 0xfd/0xfe/0xfc as (tag, None), up to 0xff."""
+    if h[:4] != b'GSTR':
+        raise SystemExit('MW_Music.mus: a stream header without GSTR')
+    i, out = 8, []
+    while True:
+        t = h[i]; i += 1
+        if t == 0xff:
+            return h[4:8], out
+        if t in (0xfc, 0xfd, 0xfe):
+            out.append((t, None)); continue
+        n = h[i]; out.append((t, h[i + 1:i + 1 + n])); i += 1 + n
+
+
+def gstr_bytes(word, tags):
+    b = bytearray(b'GSTR' + word)
+    for t, v in tags:
+        b.append(t)
+        if v is not None:
+            b.append(len(v)); b += v
+    b.append(0xff)
+    while (len(b) + 8) % 4:
+        b.append(0)
+    return b'SCHl' + struct.pack('<I', len(b) + 8) + bytes(b)
+
+
+def decode_ea_xa_v2(d, ch, chans, total):
+    """EA-XA v2 of one stream (each channel's data at its offset in a block, the block's fields big-endian; a frame is
+    an ADPCM frame or, after 0xEE, two history samples and 28 samples as they are), as vgmstream decodes it: a list of
+    s16 sample arrays, one per channel."""
+    pcm = [array.array('h') for _ in range(chans)]
+    hist = [(0, 0)] * chans
+    for cid, off, sz in ch:
+        if cid != b'SCDl':
+            continue
+        n = struct.unpack_from('>I', d, off + 8)[0]
+        frames = (n + 27) // 28
+        for c in range(chans):
+            p = off + 0x0c + 4 * chans + struct.unpack_from('>I', d, off + 0x0c + 4 * c)[0]
+            out, (h1, h2) = pcm[c], hist[c]
+            for _ in range(frames):
+                info = d[p]
+                if info == 0xee:
+                    h1, h2 = struct.unpack_from('>hh', d, p + 1)
+                    out.extend(struct.unpack_from('>28h', d, p + 5))
+                    p += 61
+                    continue
+                c1, c2 = EA_XA[info >> 4]
+                shift = (info & 15) + 8
+                for byte in d[p + 1:p + 15]:
+                    for nib in (byte >> 4, byte & 15):
+                        s = ((((nib << 28) - ((nib & 8) << 29)) >> shift) + c1 * h1 + c2 * h2) >> 8
+                        s = -32768 if s < -32768 else 32767 if s > 32767 else s
+                        out.append(s); h2, h1 = h1, s
+                p += 15
+            del out[len(out) - (frames * 28 - n):len(out)]
+            hist[c] = (h1, h2)
+    if any(len(x) != total for x in pcm):
+        raise SystemExit('MW_Music.mus: a stream whose blocks do not add up to its sample count')
+    return pcm
+
+
+def mw_pair_frames(left, right, quality):
+    """One stereo MP3 stream of a pair of channels (s16 arrays) as granule items: [(granule, bytes)].  LAME is told
+    32 kHz for the 36 kHz samples: the decoder never looks at the rate (SND plays the stream at its header's), and
+    resampled the songs lose either their top (32 kHz) or more bytes than they save (44.1 kHz) (the docstring)."""
+    total = len(left)
+    inter = array.array('h', bytes(4 * total))
+    inter[0::2], inter[1::2] = left, right
+    lame = list(LAME)
+    lame[lame.index('-s') + 1] = '32'
+    lame[lame.index('-V') + 1] = quality
+    frames = mp3_frames(subprocess.run(lame, input=inter.tobytes(), capture_output=True, check=True).stdout, srate=2)
+    last = (total - 1 + DELAY) // 576
+    need = last // 2 + 1
+    if len(frames) < need:
+        raise SystemExit('LAME output: fewer frames than the stream needs')
+    pcms = {}
+    for k, start, count, offset in pcm_plan(total):
+        pcms.setdefault(k, []).append(pcm_frame(inter, start, count, offset))
+    items = []
+    for i, fr in enumerate(frames[:need]):
+        for g in range(2):
+            k = 2 * i + g
+            items.append((k, granule_frame(fr, g)))
+            items += [(k, b) for b in pcms.get(k, [])]
+    return items
+
+
+def mw_encode(job):
+    """One stream (path, offset, end, LAME's -V) as its EALayer3 stream."""
+    path, off, end, quality = job
+    with open(path, 'rb') as f:
+        f.seek(off)
+        d = f.read(end - off)
+    ch = chunks(d, 0)
+    word, tags = gstr_tags(d[8:ch[0][2]])
+    chans, total = tagval(tags, 0x82, 1), tagval(tags, 0x85)
+    if tagval(tags, 0xa0, 0x0a) != 0x0a or chans not in (2, 4):
+        raise SystemExit(f'MW_Music.mus: a stream at {off:#x} in a codec or layout this does not know')
+    if total < 4 * 1152:
+        raise SystemExit('MW_Music.mus: a stream too short for this layout')
+    pcm = decode_ea_xa_v2(d, ch, chans, total)
+    pairs = [mw_pair_frames(pcm[2 * p], pcm[2 * p + 1], quality) for p in range(chans // 2)]
+    # each MP3 frame's bytes (granule 0, its PCM frames, granule 1, its PCM frames), per pair
+    nframes = max(k for k, _ in pairs[0]) // 2 + 1
+    per = [[b''] * nframes for _ in pairs]
+    for p, items in enumerate(pairs):
+        for k, b in items:
+            per[p][k // 2] += b
+    # blocks of up to MW_FRAMES frames, none larger than EA's largest block of this stream; both pairs alike; a block's
+    # channel offsets name its pair's frames (both channels of a pair the same)
+    cap = max(sz for cid, _, sz in ch if cid == b'SCDl')
+    size = lambda a, b: 0x0c + 4 * chans + sum((sum(len(x) for x in per[p][a:b]) + 3) & ~3 for p in range(len(per)))
+    blocks, f0 = [], 0
+    while f0 < nframes:
+        f1 = min(nframes, f0 + MW_FRAMES)
+        while f1 - f0 > 1 and size(f0, f1) > cap:
+            f1 -= 1
+        lo, hi = max(0, 1152 * f0 - DELAY), min(total, 1152 * f1 - DELAY)
+        datas = [b''.join(per[p][f0:f1]) for p in range(len(per))]
+        datas = [x + bytes(-len(x) % 4) for x in datas]
+        offs, at = [], 0
+        for x in datas:
+            offs += [at, at]; at += len(x)
+        payload = struct.pack('>I', hi - lo) + struct.pack(f'>{chans}I', *offs) + b''.join(datas)
+        blocks.append(b'SCDl' + struct.pack('<I', len(payload) + 8) + payload)
+        f0 = f1
+    if sum(struct.unpack_from('>I', b, 8)[0] for b in blocks) != total:
+        raise SystemExit('internal: block sample counts do not add up')
+    head = [(t, v) for t, v in tags if t != 0xa0] + [(0xa0, b'\x17')]
+    return (gstr_bytes(word, head) + b'SCCl' + struct.pack('<I', 12) + struct.pack('>I', len(blocks))
+            + b''.join(blocks) + b'SCEl' + struct.pack('<I', 8))
+
+
+def mw_main(a):
+    src, names = None, {}
+    for root, dirs, files in os.walk(a.game):
+        names = {n.lower(): n for n in files}
+        if 'mw_music.mus' in names and 'mw_music.mpf' in names:
+            src = root
+            break
+    if not src:
+        raise SystemExit('no MW_Music.mus and MW_Music.mpf (SOUND/PFDATA) in the game folder')
+    mus_path, mpf_path = (os.path.join(src, names[n]) for n in ('mw_music.mus', 'mw_music.mpf'))
+    m = bytearray(open(mpf_path, 'rb').read())
+    with open(mus_path, 'rb') as f:
+        d = f.read()
+    table, count = mw_samples_table(m)
+    entries = [struct.unpack_from('<II', m, table + 8 * i) for i in range(count)]
+    offs = sorted({o * ALIGN for o, _ in entries})
+    if offs != chunks_all(d, offs[0]):
+        raise SystemExit('MW_Music.mus: streams the map does not name')
+    end = {}
+    for o in offs:
+        ch = chunks(d, o)
+        end[o] = ch[-1][1] + ch[-1][2]
+    del d
+    print(f'{count} songs and segments in {len(offs)} streams, LAME -V {a.quality}', file=sys.stderr)
+    os.makedirs(a.out, exist_ok=True)
+    tmp = os.path.join(a.out, 'MW_Music.mus.tmp')
+    new = {}
+    with open(mus_path, 'rb') as f, open(tmp, 'wb') as out, Pool(a.jobs) as pool:
+        out.write(f.read(offs[0]))                  # the file's header (FA CE A5 8C, zeros)
+        jobs = [(mus_path, o, end[o], a.quality) for o in offs]
+        for o, e in zip(offs, pool.imap(mw_encode, jobs, chunksize=8)):
+            new[o] = out.tell() // ALIGN
+            out.write(e + bytes(-(out.tell() + len(e)) % ALIGN))
+        total = out.tell()
+    for i, (o, ms) in enumerate(entries):
+        struct.pack_into('<II', m, table + 8 * i, new[o * ALIGN], ms)
+    os.replace(tmp, os.path.join(a.out, 'MW_Music.mus'))
+    with open(os.path.join(a.out, 'MW_Music.mpf.tmp'), 'wb') as f:
+        f.write(m)
+    os.replace(os.path.join(a.out, 'MW_Music.mpf.tmp'), os.path.join(a.out, 'MW_Music.mpf'))
+    size = os.path.getsize(mus_path)
+    print(f'MW_Music.mus: {size} -> {total} bytes ({total / size:.1%})', file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('game', help='the game folder (with pfdata/ in it)')
+    ap.add_argument('game', help="the game folder (with pfdata/ in it; Most Wanted's with SOUND/PFDATA/)")
     ap.add_argument('out', help='where MusicSFx.mus and MusicSFx.mpf go')
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    ap.add_argument('--game', dest='which', choices=('ug2', 'mw'), default='ug2',
+                    help="mw: Most Wanted's SOUND/PFDATA/MW_Music.mus and .mpf, for the runtime's decoder")
+    ap.add_argument('--quality', default='0', help="mw: LAME's VBR quality, -V (default 0: the docstring's PEAQ)")
     a = ap.parse_args()
     if sys.byteorder != 'little':
         raise SystemExit('a little-endian machine only (the samples go to LAME as they are in memory)')
-    src = os.path.join(a.game, 'pfdata')
-    names = {n.lower(): n for n in os.listdir(src)}
-    mus_path, mpf_path = (os.path.join(src, names[n]) for n in ('musicsfx.mus', 'musicsfx.mpf'))
     if not shutil.which('lame'):
         raise SystemExit('needs LAME 3.100 on the PATH (apt install lame)')
     version = subprocess.run(['lame', '--version'], capture_output=True, text=True).stdout.split('\n')[0]
     if '3.100' not in version:
         print(f'warning: {version.strip()}; the bytes were made with LAME 3.100', file=sys.stderr)
+    if a.which == 'mw':
+        return mw_main(a)
+    src = os.path.join(a.game, 'pfdata')
+    names = {n.lower(): n for n in os.listdir(src)}
+    mus_path, mpf_path = (os.path.join(src, names[n]) for n in ('musicsfx.mus', 'musicsfx.mpf'))
     m = bytearray(open(mpf_path, 'rb').read())
     with open(mus_path, 'rb') as f:
         d = f.read()
@@ -368,9 +609,9 @@ def main():
     print(f'MusicSFx.mus: {len(d)} -> {len(out)} bytes ({len(out) / len(d):.1%})', file=sys.stderr)
 
 
-def chunks_all(d):
-    """Every SCHl stream's offset (they follow each other, zeros between them)."""
-    out, off = [], 0
+def chunks_all(d, off=0):
+    """Every SCHl stream's offset from off on (they follow each other, zeros between them)."""
+    out = []
     while off < len(d):
         if d[off:off + 4] != b'SCHl':
             raise SystemExit(f'MusicSFx.mus: no stream at {off:#x}')

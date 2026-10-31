@@ -477,6 +477,13 @@ has not kept and Cloudflare has not either, the music stops or turns to noise un
 game itself carries on). A quiet hour keeps that to a few players. Browsers keep the old file's blocks they already
 have (the cache names a file by its size and time) until the player deletes the game data.
 
+Most Wanted's music, `SOUND/PFDATA/MW_Music.mus` (534 MB of ADPCM), packs the same way with
+`tools/musicpack.py --game mw "<your game folder>" <an empty folder>` (about 7 minutes on 12 cores): 405 MB at the
+default `--quality 0` (LAME `-V 0`, PEAQ -0.06 on average; the tool's docstring has the other qualities). Its game has
+no EALayer3 decoder of its own: the module plays the pack with the runtime's (`runtime/mw/ealayer3_mw.c`), so the
+module with it goes live first, and the two files (`MW_Music.mus`, `MW_Music.mpf`) only after; an older module plays
+no music from them.
+
 ## Movies in AV1
 
 The game's movies are VP6 at 5 to 12 Mbit/s, the most a player downloads after the game data. Browsers that decode
