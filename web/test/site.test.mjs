@@ -2,9 +2,10 @@
 //   node --test web/test/site.test.mjs
 // The pages built from this checkout's sources into a temporary folder, then:
 // 1. The top bar (TRACKER M6-53): Most Wanted's page has it, its tab current and Underground 2's a link to
-//    https://nfsu2.xyz/; Underground 2's page has it once its launch switch is on, its tab current and Most Wanted's a
-//    link to https://nfsrevived.com/mw/, and otherwise is byte for byte as it was (the bar out, the language picker
-//    and Discord back where they were); with the switch off its index.html is web/index.html.
+//    https://nfsu2.xyz/; Underground 2's page has it once its bar's own switch is on (site.mjs GAMES, not launch.ts
+//    LAUNCHED), its tab current and Most Wanted's a link to https://nfsrevived.com/mw/, and otherwise is byte for byte
+//    as it was (the bar out, the language picker and Discord back where they were); with the switch off its
+//    index.html is web/index.html.
 // 2. The site's page (https://nfsrevived.com/, which Most Wanted's server answers at its root): both games' links,
 //    its canonical address, no inline script or style (the server's CSP allows none), every file it names beside it.
 // 3. No page names Most Wanted's old address (nfsrevived.xyz) or another address for it than https://nfsrevived.com/mw/.
@@ -31,7 +32,6 @@ for (const g of ['ug2', 'mw']) {
 const dist = g => { if (built[g] instanceof Error) throw built[g]; return built[g]; };
 const read = (g, f) => fs.readFileSync(path.join(dist(g), f), 'utf8');
 const INDEX = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
-const launchTs = g => fs.readFileSync(path.join(WEB, 'src/games', g, 'launch.ts'), 'utf8');
 /** the bar's tabs: [name, href or null, current] */
 const tabs = html => [...html.matchAll(/<a class="site-tab"( aria-current="page")?(?: href="([^"]+)")?>([^<]+)<\/a>/g)].map(m => [m[3], m[2] ?? null, !!m[1]]);
 const bar = html => { const a = html.indexOf('<nav class="site-bar"'), b = html.indexOf('</nav>', a); return a < 0 ? null : html.slice(a, b + 6); };
@@ -58,12 +58,14 @@ test('Most Wanted\'s page: the bar, its tab current, Underground 2\'s a link to 
   assert.doesNotMatch(header, /lang-pick|discord\.gg/);
 });
 
-test('Underground 2\'s page: as it was until its launch switch is on, then the bar and nothing else new', () => {
-  assert.equal(hasBar('ug2', launchTs('ug2')), /export const LAUNCHED = true;/.test(launchTs('ug2')));
-  assert.equal(hasBar('mw', null), true);
-  assert.equal(hasBar('ug2', null), false);
-  assert.throws(() => hasBar('ug2', 'export const LAUNCHED = maybe;'), /no "export const LAUNCHED/);
-  if (!hasBar('ug2', launchTs('ug2'))) assert.equal(read('ug2', 'index.html'), INDEX, 'the switch off: index.html as it is');
+test('Underground 2\'s page: as it was until its bar is on, then the bar and nothing else new', () => {
+  // the bar's own switch (GAMES' bar); the launch switch (launch.ts LAUNCHED) has no part in it (games.test.mjs builds
+  // a page with LAUNCHED on and the bar off)
+  assert.deepEqual(GAMES.map(g => typeof g.bar), ['boolean', 'boolean']);
+  assert.equal(hasBar('ug2'), GAMES[0].bar);
+  assert.equal(hasBar('mw'), true);
+  assert.equal(hasBar('nfs3'), false);
+  if (!hasBar('ug2')) assert.equal(read('ug2', 'index.html'), INDEX, 'the switch off: index.html as it is');
   // the switch on (the page build.mjs makes then)
   const on = withSiteBar(INDEX, 'ug2');
   assert.deepEqual(tabs(on), [['Underground 2 Revived', null, true], ['Most Wanted Revived', 'https://nfsrevived.com/mw/', false]]);

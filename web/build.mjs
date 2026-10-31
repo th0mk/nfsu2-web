@@ -85,11 +85,11 @@ fs.mkdirSync(DIST, { recursive: true });
 // that are another game's) has its edits made in it: each one's "at" text, which index.html must have once, and
 // with "until" the text up to the end of that text's first occurrence after it, in place of "put" (web/tools/
 // i18n-keys.mjs reads the page's texts after the same edits).  Then the top bar (src/games/site.mjs: both games'
-// tabs, the language picker and Discord), on Most Wanted's page always and on Underground 2's once its launch switch
-// is on (src/games/ug2/launch.ts): until then its index.html is web/index.html's bytes.
+// tabs, the language picker and Discord) on the pages of the games whose `bar` is on there: Most Wanted's, and
+// Underground 2's once its own switch is on (until then its index.html is web/index.html's bytes).
 const HEAD = path.join('src/games', GAME, 'head.html'), OWN_STATIC = path.join('src/games', GAME, 'static');
-const BODY = path.join('src/games', GAME, 'body.json'), LAUNCH = path.join('src/games', GAME, 'launch.ts');
-const BAR = hasBar(GAME, fs.existsSync(LAUNCH) ? fs.readFileSync(LAUNCH, 'utf8') : null);
+const BODY = path.join('src/games', GAME, 'body.json');
+const BAR = hasBar(GAME);
 if (!fs.existsSync(HEAD) && !fs.existsSync(BODY) && !BAR) fs.copyFileSync('index.html', path.join(DIST, 'index.html'));
 else {
   let html = fs.readFileSync('index.html', 'utf8');

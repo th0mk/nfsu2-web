@@ -7,11 +7,13 @@
 
 /** the site's page, which links both games */
 export const SITE = 'https://nfsrevived.com/';
-/** each game's page: its tab's name and its address; `bar` whether its page has the bar: always, or only once the
- *  game's launch switch is on (src/games/<id>/launch.ts LAUNCHED: Underground 2's page stays as it is until then) */
+/** each game's page: its tab's name, its address and `bar`, whether its page has the bar.  Underground 2's is a switch
+ *  of its own, off until the release that opens Most Wanted's site (its page stays as it is until then).  It is not
+ *  the launch switch (src/games/ug2/launch.ts LAUNCHED), which also changes the word keyphrases are shown with:
+ *  either one can go on without the other. */
 export const GAMES = [
-  { id: 'ug2', name: 'Underground 2 Revived', url: 'https://nfsu2.xyz/', bar: 'launched' },
-  { id: 'mw', name: 'Most Wanted Revived', url: 'https://nfsrevived.com/mw/', bar: 'always' },
+  { id: 'ug2', name: 'Underground 2 Revived', url: 'https://nfsu2.xyz/', bar: false },
+  { id: 'mw', name: 'Most Wanted Revived', url: 'https://nfsrevived.com/mw/', bar: true },
 ];
 
 /** the header's parts that move up into the bar (index.html has each once, in the header's .top-end) */
@@ -19,16 +21,9 @@ const LANG_PICK = /\n[ \t]*(<label class="lang-pick">[^]*?<\/label>)/;
 const DISCORD = /\n[ \t]*(<a class="btn" href="https:\/\/discord\.gg\/[^"]+"[^>]*>[^]*?<\/a>)/;
 const APP = '<main class="app" id="app">';
 
-/** whether a game's page has the bar, its launch switch's source (launch.ts) given, or null for none (a game with
- *  no switch: no bar until it says so) */
-export function hasBar(game, launchTs) {
-  const g = GAMES.find(x => x.id === game);
-  if (!g) return false;
-  if (g.bar === 'always') return true;
-  if (launchTs == null) return false;
-  const m = /^export const LAUNCHED = (true|false);$/m.exec(launchTs);
-  if (!m) throw new Error(`site.mjs: no "export const LAUNCHED = true|false;" in ${game}'s launch.ts`);
-  return m[1] === 'true';
+/** whether a game's page has the bar (its `bar` in GAMES; a game not in GAMES has none) */
+export function hasBar(game) {
+  return GAMES.find(x => x.id === game)?.bar === true;
 }
 
 /** The page (index.html after the game's own edits) with the bar above main#app, the language picker and Discord

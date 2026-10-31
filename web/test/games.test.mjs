@@ -94,7 +94,13 @@ test('build.mjs --game: the profile behind @game, the game\'s own folders and te
   const build = (...args) => spawnSync(process.execPath, [path.join(root, 'build.mjs'), ...args], { cwd: os.tmpdir(), encoding: 'utf8', env: { ...process.env, NOMINIFY: '' } });
   w('index.html', '<!doctype html><title>made up</title>');
   w('src/static/manifest.json', '{}');
-  w('src/games/site.mjs', fs.readFileSync(path.join(WEB, 'src/games/site.mjs'), 'utf8'));
+  // the top bar off on Underground 2's page (site.mjs GAMES), and its launch switch on: the switch does not put the bar
+  // up (this made-up index.html has no header for it, so the build would stop)
+  const site = fs.readFileSync(path.join(WEB, 'src/games/site.mjs'), 'utf8');
+  const siteOff = site.replace(/(\{ id: 'ug2',[^\n]*bar: )(true|false)( \})/, '$1false$3');
+  assert.match(siteOff, /\{ id: 'ug2',[^\n]*bar: false \}/);
+  w('src/games/site.mjs', siteOff);
+  w('src/games/ug2/launch.ts', 'export const LAUNCHED = true;\nexport const KEYPHRASE_WORD: string = LAUNCHED ? \'nfsrevived\' : \'nfsu2-xyz\';\n');
   w('src/main.ts', 'import { GAME } from \'@game\';\nimport { NAME } from \'@game/names\';\nconsole.log(`the page of ${GAME}, ${NAME}`);\n');
   w('src/games/ug2/index.ts', 'export const GAME = \'ug2\';\n');
   w('src/games/ug2/names.ts', 'export const NAME = \'name-of-ug2\';\n');
