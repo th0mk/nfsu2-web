@@ -1,0 +1,1365 @@
+# Most Wanted: every Challenge Series event once, won through the aid and saved (TRACKER M4-21).  Seeded with the save
+# tree profiles_make.txt leaves (ALPHA and BRAVO; NFSU2_SAVE_SEED), it loads ALPHA (as race_win.txt does), opens the
+# Challenge Series and plays its 69 events in the list's order, 1 to 69, each opened by the wins before it, then saves
+# ALPHA from the Alias Manager (as race_win.txt does).
+# The list (ChallengeSeries.fng, "N / 69": the counter's strings "N" and "69", label 0x18, and "/") is a grid four
+# events wide (RIGHT steps one, DOWN four) and opens on event 1 (the game goes back to the main menu after every event);
+# its events are the race bin 0x13's in their order (0x7AE950), which holds 70: the list leaves out the 69th, 19.8.31
+# (challenge_burgerking, a sprint that never opens), and shows the 70th, 19.9.70 (challenge_35_collectors_ edition, the
+# Black Edition's pursuit challenge, open from the start: "In this event you will be pursued by ...") as its 69th, alone
+# on the last row (the counter's "69" is also its total, so that one is found by its text); `challenges` logs each
+# event's EventID and its progress flags in GRaceDatabase's table (runtime/mw/career_mw.c: flag 4 open, flag 1 won, as
+# seen: a new alias has events 1 and 2 open, and the win of event 1 opens events 3 and 4).  An event: Enter, the launch
+# dialog ("Are you sure you want to launch this event?": its default 0xB8A7C6CD declines, its other button 0xB8A7C6CC
+# launches), automatic gears, the race (GameFlow 6) and its GO, raceinfo (the event's EventID, its type: 4 tollbooth, 8
+# pursuit; the car the challenge gives), then, 300 frames after GO, the aid's win: challengewin, the call the
+# challenge's script makes when its goal is met (Game.ChallengeComplete: the racer's goal byte), then racewin's finish
+# (NotifyRaceFinished, SetHasBeenWon, EnterPostRaceFlow).  The goal itself (a time, cops destroyed, a pursuit's length
+# ...) is not played for: the game's own post-race code then records the win and opens the next events.  The end
+# screens: after a tollbooth the winner's InGamePhotoMaster.fng, whose Enter goes back to the list; after a pursuit
+# PostRace_MilestoneRewards.fng (FadeScreen.fng stays above it, so it is not waited for by name), Enter,
+# PostRace_Pursuit.fng (the pursuit's counts), Enter, the game's autosave (InGame_MC_Main.fng "Saving ALPHA") and the
+# main menu on Challenge Series, whose Enter opens the list again.  Enter is pressed until the list is back, and the
+# check finds the end screens in the NFSU2_FNG_LOG=1 lines.  The counter waits use '~18/N' (fe_mw.c: label 0x18 and the
+# whole text N), so "6" is neither "69" nor a "6" elsewhere on the screen.
+# tests/mw/checks/challenge_all.sh wants every event launched, at GO, won by the aid, its end screen, its flag won
+# after it, the 69 won at the end and ALPHA written after them:
+#   NFSU2_SAVE_SEED=DIR/profiles_make node web/tools/run-suite.mjs --game mw --script challenge_all.txt \
+#     --marker 'challenge_all: ALPHA saved' --env NFSMW_D3DX=/save/d3dx9_26.dll --env FILELIST=1 \
+#     --env NFSU2_FNG_LOG=1 --env NFSU2_QUIT_FRAMES=2000000 --timeout-scale 80 --save-out DIR2
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_List.fng^ALPHA 600                      # the boot list, ALPHA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 600    # "Load complete.", its Continue highlighted
++0    tapuntil RETURN MainMenu.fng 90 900                # Continue (race_win.txt's note)
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log challenge_all: ALPHA loaded
++0    challenges
++0    tapuntil RIGHT MainMenu.fng@4b4e388b 40 600        # Challenge Series
++0    tap RETURN
++0    waitfng ChallengeSeries.fng:e04d3a4d 1200          # the list ("challenge series")
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/1 40 600   # event 1 ("1 / 69")
++0    log challenge_all: event 1
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 1 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 1 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/2 40 600   # event 2 ("2 / 69")
++0    log challenge_all: event 2
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 2 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 2 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/3 40 600   # event 3 ("3 / 69")
++0    log challenge_all: event 3
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 3 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 3 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/4 40 600   # event 4 ("4 / 69")
++0    log challenge_all: event 4
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 4 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 4 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/5 40 3000   # down to event 5, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/5 40 600   # event 5 ("5 / 69")
++0    log challenge_all: event 5
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 5 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 5 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/5 40 3000   # down to event 5, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/6 40 600   # event 6 ("6 / 69")
++0    log challenge_all: event 6
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 6 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 6 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/5 40 3000   # down to event 5, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/7 40 600   # event 7 ("7 / 69")
++0    log challenge_all: event 7
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 7 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 7 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/5 40 3000   # down to event 5, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/8 40 600   # event 8 ("8 / 69")
++0    log challenge_all: event 8
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 8 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 8 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/9 40 3000   # down to event 9, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/9 40 600   # event 9 ("9 / 69")
++0    log challenge_all: event 9
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 9 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 9 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/9 40 3000   # down to event 9, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/10 40 600   # event 10 ("10 / 69")
++0    log challenge_all: event 10
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 10 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 10 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/9 40 3000   # down to event 9, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/11 40 600   # event 11 ("11 / 69")
++0    log challenge_all: event 11
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 11 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 11 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/9 40 3000   # down to event 9, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/12 40 600   # event 12 ("12 / 69")
++0    log challenge_all: event 12
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 12 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 12 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/13 40 3000   # down to event 13, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/13 40 600   # event 13 ("13 / 69")
++0    log challenge_all: event 13
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 13 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 13 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/13 40 3000   # down to event 13, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/14 40 600   # event 14 ("14 / 69")
++0    log challenge_all: event 14
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 14 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 14 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/13 40 3000   # down to event 13, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/15 40 600   # event 15 ("15 / 69")
++0    log challenge_all: event 15
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 15 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 15 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/13 40 3000   # down to event 13, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/16 40 600   # event 16 ("16 / 69")
++0    log challenge_all: event 16
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 16 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 16 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/17 40 3000   # down to event 17, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/17 40 600   # event 17 ("17 / 69")
++0    log challenge_all: event 17
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 17 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 17 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/17 40 3000   # down to event 17, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/18 40 600   # event 18 ("18 / 69")
++0    log challenge_all: event 18
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 18 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 18 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/17 40 3000   # down to event 17, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/19 40 600   # event 19 ("19 / 69")
++0    log challenge_all: event 19
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 19 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 19 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/17 40 3000   # down to event 17, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/20 40 600   # event 20 ("20 / 69")
++0    log challenge_all: event 20
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 20 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 20 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/21 40 3000   # down to event 21, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/21 40 600   # event 21 ("21 / 69")
++0    log challenge_all: event 21
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 21 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 21 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/21 40 3000   # down to event 21, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/22 40 600   # event 22 ("22 / 69")
++0    log challenge_all: event 22
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 22 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 22 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/21 40 3000   # down to event 21, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/23 40 600   # event 23 ("23 / 69")
++0    log challenge_all: event 23
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 23 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 23 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/21 40 3000   # down to event 21, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/24 40 600   # event 24 ("24 / 69")
++0    log challenge_all: event 24
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 24 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 24 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/25 40 3000   # down to event 25, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/25 40 600   # event 25 ("25 / 69")
++0    log challenge_all: event 25
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 25 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 25 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/25 40 3000   # down to event 25, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/26 40 600   # event 26 ("26 / 69")
++0    log challenge_all: event 26
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 26 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 26 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/25 40 3000   # down to event 25, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/27 40 600   # event 27 ("27 / 69")
++0    log challenge_all: event 27
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 27 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 27 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/25 40 3000   # down to event 25, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/28 40 600   # event 28 ("28 / 69")
++0    log challenge_all: event 28
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 28 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 28 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/29 40 3000   # down to event 29, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/29 40 600   # event 29 ("29 / 69")
++0    log challenge_all: event 29
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 29 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 29 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/29 40 3000   # down to event 29, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/30 40 600   # event 30 ("30 / 69")
++0    log challenge_all: event 30
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 30 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 30 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/29 40 3000   # down to event 29, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/31 40 600   # event 31 ("31 / 69")
++0    log challenge_all: event 31
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 31 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 31 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/29 40 3000   # down to event 29, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/32 40 600   # event 32 ("32 / 69")
++0    log challenge_all: event 32
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 32 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 32 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/33 40 3000   # down to event 33, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/33 40 600   # event 33 ("33 / 69")
++0    log challenge_all: event 33
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 33 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 33 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/33 40 3000   # down to event 33, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/34 40 600   # event 34 ("34 / 69")
++0    log challenge_all: event 34
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 34 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 34 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/33 40 3000   # down to event 33, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/35 40 600   # event 35 ("35 / 69")
++0    log challenge_all: event 35
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 35 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 35 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/33 40 3000   # down to event 33, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/36 40 600   # event 36 ("36 / 69")
++0    log challenge_all: event 36
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 36 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 36 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/37 40 3000   # down to event 37, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/37 40 600   # event 37 ("37 / 69")
++0    log challenge_all: event 37
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 37 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 37 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/37 40 3000   # down to event 37, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/38 40 600   # event 38 ("38 / 69")
++0    log challenge_all: event 38
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 38 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 38 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/37 40 3000   # down to event 37, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/39 40 600   # event 39 ("39 / 69")
++0    log challenge_all: event 39
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 39 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 39 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/37 40 3000   # down to event 37, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/40 40 600   # event 40 ("40 / 69")
++0    log challenge_all: event 40
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 40 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 40 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/41 40 3000   # down to event 41, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/41 40 600   # event 41 ("41 / 69")
++0    log challenge_all: event 41
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 41 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 41 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/41 40 3000   # down to event 41, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/42 40 600   # event 42 ("42 / 69")
++0    log challenge_all: event 42
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 42 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 42 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/41 40 3000   # down to event 41, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/43 40 600   # event 43 ("43 / 69")
++0    log challenge_all: event 43
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 43 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 43 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/41 40 3000   # down to event 41, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/44 40 600   # event 44 ("44 / 69")
++0    log challenge_all: event 44
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 44 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 44 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/45 40 3000   # down to event 45, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/45 40 600   # event 45 ("45 / 69")
++0    log challenge_all: event 45
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 45 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 45 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/45 40 3000   # down to event 45, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/46 40 600   # event 46 ("46 / 69")
++0    log challenge_all: event 46
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 46 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 46 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/45 40 3000   # down to event 45, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/47 40 600   # event 47 ("47 / 69")
++0    log challenge_all: event 47
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 47 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 47 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/45 40 3000   # down to event 45, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/48 40 600   # event 48 ("48 / 69")
++0    log challenge_all: event 48
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 48 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 48 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/49 40 3000   # down to event 49, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/49 40 600   # event 49 ("49 / 69")
++0    log challenge_all: event 49
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 49 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 49 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/49 40 3000   # down to event 49, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/50 40 600   # event 50 ("50 / 69")
++0    log challenge_all: event 50
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 50 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 50 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/49 40 3000   # down to event 49, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/51 40 600   # event 51 ("51 / 69")
++0    log challenge_all: event 51
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 51 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 51 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/49 40 3000   # down to event 49, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/52 40 600   # event 52 ("52 / 69")
++0    log challenge_all: event 52
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 52 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 52 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/53 40 3000   # down to event 53, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/53 40 600   # event 53 ("53 / 69")
++0    log challenge_all: event 53
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 53 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 53 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/53 40 3000   # down to event 53, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/54 40 600   # event 54 ("54 / 69")
++0    log challenge_all: event 54
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 54 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 54 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/53 40 3000   # down to event 53, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/55 40 600   # event 55 ("55 / 69")
++0    log challenge_all: event 55
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 55 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 55 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/53 40 3000   # down to event 53, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/56 40 600   # event 56 ("56 / 69")
++0    log challenge_all: event 56
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 56 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 56 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/57 40 3000   # down to event 57, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/57 40 600   # event 57 ("57 / 69")
++0    log challenge_all: event 57
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 57 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 57 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/57 40 3000   # down to event 57, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/58 40 600   # event 58 ("58 / 69")
++0    log challenge_all: event 58
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 58 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 58 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/57 40 3000   # down to event 57, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/59 40 600   # event 59 ("59 / 69")
++0    log challenge_all: event 59
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 59 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 59 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/57 40 3000   # down to event 57, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/60 40 600   # event 60 ("60 / 69")
++0    log challenge_all: event 60
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 60 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 60 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/61 40 3000   # down to event 61, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/61 40 600   # event 61 ("61 / 69")
++0    log challenge_all: event 61
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 61 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 61 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/61 40 3000   # down to event 61, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/62 40 600   # event 62 ("62 / 69")
++0    log challenge_all: event 62
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 62 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 62 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/61 40 3000   # down to event 61, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/63 40 600   # event 63 ("63 / 69")
++0    log challenge_all: event 63
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 63 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 63 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/61 40 3000   # down to event 61, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/64 40 600   # event 64 ("64 / 69")
++0    log challenge_all: event 64
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 64 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 64 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/65 40 3000   # down to event 65, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/65 40 600   # event 65 ("65 / 69")
++0    log challenge_all: event 65
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 65 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 65 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/65 40 3000   # down to event 65, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/66 40 600   # event 66 ("66 / 69")
++0    log challenge_all: event 66
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 66 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 66 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/65 40 3000   # down to event 65, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/67 40 600   # event 67 ("67 / 69")
++0    log challenge_all: event 67
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 67 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 67 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d~18/65 40 3000   # down to event 65, the first of its row
++12   tapuntil RIGHT ChallengeSeries.fng:e04d3a4d~18/68 40 600   # event 68 ("68 / 69")
++0    log challenge_all: event 68
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 68 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 68 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++12   tapuntil DOWN ChallengeSeries.fng:e04d3a4d'In_this_event_you_will_be_pursued 60 3000   # event 69, the last row's only one
++0    log challenge_all: event 69
++0    tap RETURN
++0    waitfng Dialog.fng:9588bd38@b8a7c6cd 600           # "Are you sure you want to launch this event?"
++0    tapuntil LEFT Dialog.fng:9588bd38@b8a7c6cc 30 300  # its other button, Button_1: launch
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log challenge_all: event 69 GO
++0    raceinfo
++300  challengewin
++0    waitexpr b:[0x0091e000]+0x39 != 0 600              # the player's racer finished
++0    log challenge_all: event 69 results
++0    racestatus
++90   tapuntil RETURN ChallengeSeries.fng:e04d3a4d 90 3000   # the end screens, back to the list
++0    challenges
++0    tapuntil ESCAPE MainMenu.fng 90 900                # the main menu
++0    waitfng MainMenu.fng 900
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388c 40 300   # Save
++0    tap RETURN
++0    waitfng MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cc 600          # save the alias named ALPHA?  (No)
++0    tapuntil LEFT MC_Main.fng'Are_you_sure_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cc 600               # overwrite?  (No)
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_overwrite@b8a7c6cd 30 300       # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388c 600         # back on Save
++0    log challenge_all: ALPHA saved
++0    close

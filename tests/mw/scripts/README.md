@@ -16,7 +16,12 @@ the player's car goes that fast, or after FRAMES, default 3600), `racestatus`, `
 its length, its cops and bust timer; while watching, the game's own end of the pursuit, evaded or busted; the waits are
 on the game's state) and `breaker [watch]` / `breaker wait on|off|full|empty [N]`, `breaker wait above MPH [N]`,
 `breaker wait charge X [N]`, `breaker wait rise X [N]` (the player's Speedbreaker: on or off, its charge, the car's
-speed).
+speed), `raceinfo` (the race's parameters as the game reads them: laps, traffic level, difficulty, catch-up, length,
+type and EventID; its racers, the player's car and the world's vehicles by driver class), `challenges` (the Challenge
+Series' events with their open and won flags) and `challengewin` (the challenge script's own call when its goal is met,
+Game.ChallengeComplete, then racewin's finish).  Besides the waits' :LABEL, @HASH, 'TEXT and ^TEXT, MW's front end
+takes =TEXT (a drawn string that is TEXT, all of it) and ~LABEL/TEXT (one with that label and that whole text: a
+counter, ChallengeSeries.fng's ~18/6), after one of the others (runtime/mw/fe_mw.c).
 
 The races: `race_frames.txt` (a Custom Race circuit long enough for it, the anchor counted over 10,000 frames of the
 race), `race_loop.txt` (25 Quick Races in a row, each ended by `racewin`, with the kernel objects before each load)
@@ -89,6 +94,19 @@ with `profiles_make.txt`'s saves, as the Challenge Series needs a profile).  The
 once around with `NFSU2_FNG_LOG=3`) and names them from the game's English.bin.  With no profile loaded, Quick Race
 offers 19 of its 137 tracks (the list draws its Accept button); the others show "This track is locked" and take no
 Enter.
+
+Quick Race's options and soak (TRACKER M4-07, M4-08): `race_options.txt` (five Custom Races in one session that
+together take every value of every option once, Laps, Traffic Level, Opponents, Difficulty and Catch Up, and the cars
+the car list offers with no profile; `raceinfo` in each race shows what the game made of them) and `race_soak.txt`
+(G-03: `SOAK_N` random Quick Races, each loaded, raced to GO, driven `SOAK_DRIVE` frames and quit from the pause menu,
+with a [status] line and the game's memory pools before each load; its check wants the heap and texture MB flat over
+the last half).  The Black Edition (M4-22): `race_be.txt` (its three races, 21.1.1, 21.2.1 and 21.2.2, which Quick
+Race lists first with no profile, raced to their ends by the game's AI).  The Challenge Series (M4-20, M4-21):
+`challenge_run.txt` (one event, `CS_EVENT`, from a save that has it open: launched, driven `CS_DRIVE` frames by the
+AI, won through `challengewin`, saved) and `challenge_all.txt` (the list's 69 events in order, each won through
+`challengewin`, then saved); both seeded with `profiles_make.txt`'s saves or a later one.  World streaming (M4-23):
+`roam_stream.txt` (from a safehouse save: free roam, the world map, then the AI driving `STREAM_N` passes of 600
+frames; its check wants no read that waited on the server and no loading screen).
 
 The career (career saves made by these runs stay outside the repository, ../seed/README.md): `career_new.txt` (a
 new alias loads to a career menu with Start Career; seeded with `profiles_make.txt`'s saves), `career_start.txt`

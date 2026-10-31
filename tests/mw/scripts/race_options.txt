@@ -1,0 +1,246 @@
+# Most Wanted: the Quick Race options matrix (TRACKER M4-07).  Five Custom Races in one session, each set up on the
+# screens and raced to the results: four circuits on the first track, City Perimeter, and a sprint on Seaside & Power
+# Station, which together take every value of every option once: Traffic Level None, Minimum, Moderate and Maximum,
+# Opponents 1, 2 and 3, Difficulty Easy, Medium and Hard, Catch Up On and Off, a circuit's laps 5, 4, 6 and 1 (laps that
+# none of the opponents' counts in the same screen begin with, as the text waits match a string's first characters), and
+# the cars the car list offers with no profile, the 1st, 2nd and 4th of its 32 (the list opens on the car taken last, so
+# LEFT first goes back to its first: "1 / 32"; the 5th is locked, Enter does nothing there), the 2nd and 4th twice.
+# Track_Options.fng's rows (0xB2980BA8 on, DOWN to the next): a circuit's Laps (1 to 8; its name label 0x48494E83 runs
+# HIGHLIGHT on the first row), then Traffic Level, Opponents, Difficulty and Catch Up; a sprint starts at Traffic Level.
+# LEFT steps a value back with wrap-around (a DOWN waits 12 frames after the last tap: a key tapped again while the last
+# tap still holds it, 6 frames, makes no new press), so each value is waited for by its label (a count by its text) on
+# its row, whatever the screen kept from the race before.  In each race: at GO `raceinfo` logs the race's parameters as
+# the game reads them (laps, traffic level, difficulty, catch-up, length), its racers and the player's car
+# (runtime/mw/career_mw.c), then the game's AI drives 3000 frames (the traffic comes), with `raceinfo` again after 1500
+# and 3000 (the vehicles by driver class: traffic is class 1), then the shortcut finish (racewin) and the winner's
+# screen; Enter goes back to the "quick race" menu.  No profile: the D3DX seed of boot_menu.txt (a folder with
+# d3dx9_26.dll alone).  tests/mw/checks/race_options.sh wants each race's parameters to be the ones set on its screens,
+# its racers the opponents and the player, no traffic with None and some with the others, five cars, five results
+# screens:
+#   NFSU2_SAVE_SEED=<dx seed> node web/tools/run-suite.mjs --game mw --script race_options.txt \
+#     --marker 'race_options: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_FNG_LOG=3 \
+#     --env NFSU2_QUIT_FRAMES=200000 --timeout-scale 6
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    log race_options: config A circuit traffic none opponents 1 difficulty easy catchup off laps 5 car +0
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil LEFT MainMenu_Sub.fng:1f203817@4b4e388a 40 600   # Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", on Laps
++0    tapuntil LEFT Track_Options.fng@b2980ba8'5 40 1200  # Laps 5 (a circuit's first row)
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Traffic Level
++0    tapuntil LEFT Track_Options.fng:8cdc3937@b2980ba9 40 800   # Traffic Level none
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980baa'1 40 800  # 1
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300             # Difficulty
++0    tapuntil LEFT Track_Options.fng:61973e01@b2980bab 40 800   # easy
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bac 300             # Catch Up
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bac 40 800   # off
++20   log race_options: options set
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tapuntil LEFT Car_Select.fng'1 30 1200             # back to its first car (it opens on the last one taken)
++60   waitfng Car_Select.fng:d18d600a 600
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_options: config A GO
++0    raceinfo
++0    autopilot on
++1500 raceinfo
++1500 raceinfo
++0    autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_options: config A results
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388b 1200    # back in the "quick race" menu, on Custom Race
++0    log race_options: config B circuit traffic minimum opponents 2 difficulty medium catchup on laps 4 car +1
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil LEFT MainMenu_Sub.fng:1f203817@4b4e388a 40 600   # Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", on Laps
++0    tapuntil LEFT Track_Options.fng@b2980ba8'4 40 1200  # Laps 4 (a circuit's first row)
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Traffic Level
++0    tapuntil LEFT Track_Options.fng:73c615a3@b2980ba9 40 800   # Traffic Level minimum
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980baa'2 40 800  # 2
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300             # Difficulty
++0    tapuntil LEFT Track_Options.fng:3747f6d0@b2980bab 40 800   # medium
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bac 300             # Catch Up
++0    tapuntil LEFT Track_Options.fng:417b2604@b2980bac 40 800   # on
++20   log race_options: options set
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tapuntil LEFT Car_Select.fng'1 30 1200             # back to its first car (it opens on the last one taken)
++30   tap RIGHT
++60   waitfng Car_Select.fng:d18d600a 600
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_options: config B GO
++0    raceinfo
++0    autopilot on
++1500 raceinfo
++1500 raceinfo
++0    autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_options: config B results
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388b 1200    # back in the "quick race" menu, on Custom Race
++0    log race_options: config C circuit traffic moderate opponents 3 difficulty hard catchup off laps 6 car +3
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil LEFT MainMenu_Sub.fng:1f203817@4b4e388a 40 600   # Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", on Laps
++0    tapuntil LEFT Track_Options.fng@b2980ba8'6 40 1200  # Laps 6 (a circuit's first row)
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Traffic Level
++0    tapuntil LEFT Track_Options.fng:a2cca838@b2980ba9 40 800   # Traffic Level moderate
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980baa'3 40 800  # 3
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300             # Difficulty
++0    tapuntil LEFT Track_Options.fng:6198e2ee@b2980bab 40 800   # hard
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bac 300             # Catch Up
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bac 40 800   # off
++20   log race_options: options set
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tapuntil LEFT Car_Select.fng'1 30 1200             # back to its first car (it opens on the last one taken)
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++60   waitfng Car_Select.fng:d18d600a 600
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_options: config C GO
++0    raceinfo
++0    autopilot on
++1500 raceinfo
++1500 raceinfo
++0    autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_options: config C results
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388b 1200    # back in the "quick race" menu, on Custom Race
++0    log race_options: config D circuit traffic maximum opponents 2 difficulty hard catchup on laps 1 car +1
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil LEFT MainMenu_Sub.fng:1f203817@4b4e388a 40 600   # Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", on Laps
++0    tapuntil LEFT Track_Options.fng@b2980ba8'1 40 1200  # Laps 1 (a circuit's first row)
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Traffic Level
++0    tapuntil LEFT Track_Options.fng:61d1c5a5@b2980ba9 40 800   # Traffic Level maximum
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980baa'2 40 800  # 2
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300             # Difficulty
++0    tapuntil LEFT Track_Options.fng:6198e2ee@b2980bab 40 800   # hard
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bac 300             # Catch Up
++0    tapuntil LEFT Track_Options.fng:417b2604@b2980bac 40 800   # on
++20   log race_options: options set
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tapuntil LEFT Car_Select.fng'1 30 1200             # back to its first car (it opens on the last one taken)
++30   tap RIGHT
++60   waitfng Car_Select.fng:d18d600a 600
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_options: config D GO
++0    raceinfo
++0    autopilot on
++1500 raceinfo
++1500 raceinfo
++0    autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_options: config D results
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388b 1200    # back in the "quick race" menu, on Custom Race
++0    log race_options: config E sprint traffic maximum opponents 3 difficulty easy catchup off laps - car +3
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@4b4e388b 40 600  # Sprint
++0    tap RETURN
++0    waitfng Track_Select.fng:c2d85652:4d36c3b8 600     # "sprint track select", on Seaside & Power Station
++0    tap RETURN
++0    waitfng Track_Options.fng:b80bfc8a@b2980ba8 600    # "sprint options", on Traffic Level
++0    tapuntil LEFT Track_Options.fng:61d1c5a5@b2980ba8 40 800   # Traffic Level maximum
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300             # Opponents
++0    tapuntil LEFT Track_Options.fng@b2980ba9'3 40 800  # 3
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300             # Difficulty
++0    tapuntil LEFT Track_Options.fng:61973e01@b2980baa 40 800   # easy
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300             # Catch Up
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bab 40 800   # off
++20   log race_options: options set
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tapuntil LEFT Car_Select.fng'1 30 1200             # back to its first car (it opens on the last one taken)
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++60   waitfng Car_Select.fng:d18d600a 600
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_options: config E GO
++0    raceinfo
++0    autopilot on
++1500 raceinfo
++1500 raceinfo
++0    autopilot off
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log race_options: config E results
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388b 1200    # back in the "quick race" menu, on Custom Race
++0    log race_options: done
++0    close

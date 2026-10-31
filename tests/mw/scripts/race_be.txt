@@ -1,0 +1,134 @@
+# Most Wanted: the Black Edition's three races (TRACKER M4-22), each raced to its end by the game's AI.  They are
+# race_bin_collectors' events 21.1.1, 21.2.1 and 21.2.2 (GAME 18.1; a race's EventID is Attrib's hash of that name,
+# which raceinfo logs: 0x1FDF6AFD, 0x40608EE5, 0x068305F0), and Quick Race offers them first in their lists with no
+# profile: the circuit City Perimeter (9.9 miles) and the sprints Seaside & Power Station (3.8 miles) and NFS World Loop
+# (16.9 miles).  Each is set up as a Custom Race with one Easy opponent (two in the circuit, whose laps, 1, the text
+# wait for an opponents' count of 1 would take), no traffic and no catch-up (the circuit one lap), the car the car list
+# starts on and automatic gears; from GO the game's AI drives the player's car (autopilot) until the player's racer is
+# finished over the line (GRaceStatus slot #0's byte +0x21), and the race's own end screen (the winner's or
+# PostRace_Results.fng) comes; Enter goes back to the "quick race" menu.  raceinfo at GO names the event, its length and
+# the car (runtime/mw/career_mw.c); racestatus at the end the place and time.  tests/mw/checks/race_be.sh wants the three
+# events, each finished over the line with its end screen:
+#   NFSU2_SAVE_SEED=<dx seed> node web/tools/run-suite.mjs --game mw --script race_be.txt --marker 'race_be: done' \
+#     --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_QUIT_FRAMES=400000 --timeout-scale 30
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    log race_be: 21.1.1 City Perimeter
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil LEFT MainMenu_Sub.fng:1f203817@4b4e388a 40 600   # Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the options, on the first row
++0    tapuntil LEFT Track_Options.fng@b2980ba8'1 40 1200  # Laps 1
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300
++0    tapuntil LEFT Track_Options.fng:8cdc3937@b2980ba9 40 800   # Traffic Level None
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300
++0    tapuntil LEFT Track_Options.fng@b2980baa'2 40 800   # Opponents 2
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300
++0    tapuntil LEFT Track_Options.fng:61973e01@b2980bab 40 800   # Easy
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bac 300
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bac 40 800   # Catch Up Off
++20   tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++30   tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_be: 21.1.1 GO
++0    raceinfo
++0    autopilot on
++0    waitexpr b:[0x0091e000]+0x39 != 0 80000            # the player's racer finished, over the line
++0    log race_be: 21.1.1 finished
++0    racestatus
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng 1800   # the race's end screen takes input
++0    log race_be: 21.1.1 end screen
++0    autopilot off
++0    tapuntil RETURN MainMenu_Sub.fng:cdf0cc03@4b4e388b 90 1800    # back in the "quick race" menu
++0    log race_be: 21.2.1 Seaside & Power Station
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@4b4e388b 40 600  # Sprint
++0    tap RETURN
++0    waitfng Track_Select.fng:c2d85652 600              # "sprint track select"
++12   tapuntil RIGHT Track_Select.fng:c2d85652:4d36c3b8 40 2400   # Seaside & Power Station
++0    tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the options, on the first row
++0    waitfng Track_Options.fng@b2980ba8 300
++0    tapuntil LEFT Track_Options.fng:8cdc3937@b2980ba8 40 800   # Traffic Level None
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300
++0    tapuntil LEFT Track_Options.fng@b2980ba9'1 40 800   # Opponents 1
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300
++0    tapuntil LEFT Track_Options.fng:61973e01@b2980baa 40 800   # Easy
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bab 40 800   # Catch Up Off
++20   tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++30   tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_be: 21.2.1 GO
++0    raceinfo
++0    autopilot on
++0    waitexpr b:[0x0091e000]+0x39 != 0 80000            # the player's racer finished, over the line
++0    log race_be: 21.2.1 finished
++0    racestatus
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng 1800   # the race's end screen takes input
++0    log race_be: 21.2.1 end screen
++0    autopilot off
++0    tapuntil RETURN MainMenu_Sub.fng:cdf0cc03@4b4e388b 90 1800    # back in the "quick race" menu
++0    log race_be: 21.2.2 NFS World Loop
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817 600              # "custom race mode select"
++0    tapuntil RIGHT MainMenu_Sub.fng:1f203817@4b4e388b 40 600  # Sprint
++0    tap RETURN
++0    waitfng Track_Select.fng:c2d85652 600              # "sprint track select"
++12   tapuntil RIGHT Track_Select.fng:c2d85652:4d36c3b9 40 2400   # NFS World Loop
++0    tap RETURN
++0    waitfng Track_Options.fng@b2980ba8 600             # the options, on the first row
++0    waitfng Track_Options.fng@b2980ba8 300
++0    tapuntil LEFT Track_Options.fng:8cdc3937@b2980ba8 40 800   # Traffic Level None
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980ba9 300
++0    tapuntil LEFT Track_Options.fng@b2980ba9'1 40 800   # Opponents 1
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980baa 300
++0    tapuntil LEFT Track_Options.fng:61973e01@b2980baa 40 800   # Easy
++12   tap DOWN
++0    waitfng Track_Options.fng@b2980bab 300
++0    tapuntil LEFT Track_Options.fng:70dfe5c2@b2980bab 40 800   # Catch Up Off
++20   tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++30   tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_be: 21.2.2 GO
++0    raceinfo
++0    autopilot on
++0    waitexpr b:[0x0091e000]+0x39 != 0 80000            # the player's racer finished, over the line
++0    log race_be: 21.2.2 finished
++0    racestatus
++0    waitfng InGamePhotoMaster.fng:5dfb6667|PostRace_Results.fng 1800   # the race's end screen takes input
++0    log race_be: 21.2.2 end screen
++0    autopilot off
++0    tapuntil RETURN MainMenu_Sub.fng:cdf0cc03@4b4e388b 90 1800    # back in the "quick race" menu
++0    log race_be: done
++0    close

@@ -1,0 +1,50 @@
+# Most Wanted: G-03 (TRACKER M4-08): SOAK_N cycles of load, race and quit in one session, from the main menu with no
+# profile: the random Quick Race (its brief, Enter: the game picks the kind, the track and the cars, so the cycles go
+# through many of them, L-023), the race to GO, the game's AI driving SOAK_DRIVE frames, then the in-race pause menu
+# (Escape: Pause_Main.fng, whose items RIGHT steps through: Resume Race, Restart Race, Quit to Quick Race Menu, ...)
+# and its Quit to Quick Race Menu, whose dialog (InGameDialog.fng, on 0xB8A7C6CD: no) asks first; its other button,
+# 0xB8A7C6CC, one LEFT away, goes back through Loading.fng to the "quick race" menu.  Before
+# each load a [status] line (the guest heap's use and peak, texture ids, kernel objects, file handles, threads) and
+# `pools` (the game's memory pools and frame arena with their peaks, runtime/mw/pursuit_mw.c), so the soak's trend
+# can be read off the log: tests/mw/checks/race_soak.sh wants every cycle loaded, at GO and quit, and the heap, the
+# texture ids, the kernel objects and the pools flat within 5 % over the last half of the cycles (L-054).
+#   node web/tools/run-suite.mjs --game mw --script race_soak.txt --marker 'race_soak: done' --env SOAK_N=100 \
+#     --env SOAK_DRIVE=600 --env NFSU2_QUIT_FRAMES=2000000 --timeout-scale 60
+# (an oracle build also needs the D3DX seed of tests/mw/scripts/boot_menu.txt)
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    pools watch
++0    loop ${SOAK_N}
++0    waitfng MainMenu_Sub.fng:cdf0cc03 1800             # the "quick race" menu
++0    tapuntil LEFT MainMenu_Sub.fng:cdf0cc03@4b4e388a 40 600   # on its random Quick Race
++0    status soak
++0    pools
++0    objects
++0    tap RETURN
++0    waitfng Quick_Race_Brief.fng:ba458180 600          # the race's brief takes input
++0    log race_soak: load
++0    tap RETURN
++0    waitmem 0x00925e90 6 12000                         # racing (GameFlow 6)
++0    log race_soak: racing
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log race_soak: GO
++0    raceinfo
++0    autopilot on
++${SOAK_DRIVE} autopilot off
++0    tapuntil ESCAPE Pause_Main.fng 90 900              # the in-race pause menu
++20   tapuntil RIGHT Pause_Main.fng@4b4e388c 40 600      # its 3rd item, Quit to Quick Race Menu (0x4349998B)
++0    tap RETURN
++0    waitfng InGameDialog.fng@b8a7c6cd 600              # "Are you sure you want to quit to the quick race menu?"
++0    tapuntil LEFT InGameDialog.fng@b8a7c6cc 30 300     # its other button, Button_1: yes
++0    tap RETURN
++0    log race_soak: quit
++0    endloop
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 1800
++0    status soak
++0    pools
++0    objects
++0    log race_soak: done
++0    close

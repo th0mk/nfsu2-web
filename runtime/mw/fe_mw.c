@@ -249,19 +249,31 @@ static int str_is(uint32_t o, void *ctx){
     const struct want *w = ctx;
     if (rd(o + OBJ_TYPE) != 2u) return 0;
     if (w->kind == ':') return rd(o + STR_LABEL) == w->v;
+    const char *want = w->text;
+    if (w->kind == '~'){                /* LABEL/TEXT: that label, and that text all of it */
+        const char *sl = strchr(want, '/');
+        if (!sl || rd(o + STR_LABEL) != w->v) return 0;
+        want = sl + 1;
+    }
     char t[64]; str_text(o, t, sizeof t);
-    for (int i = 0; w->text[i]; i++)
-        if (!t[i] || (w->text[i] == '_' ? t[i] != ' ' && t[i] != '_' : t[i] != w->text[i])) return 0;
+    int i = 0;
+    for (; want[i]; i++)
+        if (!t[i] || (want[i] == '_' ? t[i] != ' ' && t[i] != '_' : t[i] != want[i])) return 0;
+    if (w->kind == '=' || w->kind == '~') return !t[i];
     uint32_t s = rd(o + OBJ_SCRIPT);
     return w->kind == '\'' || (s && rd(s + SCR_HASH) == SCR_HIGHLIGHT);
 }
 
-#define QUALS ":@'^"
+#define QUALS ":@'^=~"
 /* NAME is PACKAGE followed by one or more of
  *   :LABEL   one of its drawn strings shows the language label of that hash (hex): MC_Main.fng's dialogs
  *   @HASH    its highlighted object has that name hash (hex): a dialog's buttons, the menus' items
  *   'TEXT    one of its drawn strings begins with TEXT: an alias name in a list or in the name field
  *   ^TEXT    and that string runs its HIGHLIGHT script: MC_List.fng's highlighted row
+ *   =TEXT    one of its drawn strings is TEXT, all of it ("6", not "69")
+ *   ~LABEL/TEXT  one of its drawn strings has the language label LABEL (hex) and is TEXT, all of it: a counter
+ *            (ChallengeSeries.fng's event number, label 0x18, ~18/6; a "5" elsewhere on the screen does not match)
+ *            autotest.c hands a name to the game only when it holds one of :@'^, so = and ~ follow one of those
  * and the package is the top one that takes input: the keys reach that one (LEFT on a dialog of MC_Main.fng moves
  * its highlight and not the Alias Manager's under it, which takes input too; MC_List.fng sits above MC_Main.fng
  * while it is up, and MC_Main.fng keeps its last dialog's strings drawn under it).  TEXT matches a string's

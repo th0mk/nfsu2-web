@@ -59,6 +59,10 @@
  *   icons [T]        log the world map's icons, those of type T one by one (12 pursuit breakers, 11 hiding spots);
  *                    icons go T K DX DY DZ moves the car to icon K of type T (as teleport does), facing DX DY DZ
  *   pools [watch]    log the game's memory pools and the frame arena, with their peaks since `pools watch`
+ *   raceinfo         log the race's parameters as the game reads them (laps, traffic level, difficulty, catch-up,
+ *                    length, type), its racers, the player's car and the world's vehicles by driver class
+ *   challenges       log the Challenge Series' events with their unlocked and completed flags
+ *   challengewin     the script's call when a challenge's goal is met (Game.ChallengeComplete), then racewin
  *
  * The game's objects, from speed.exe v1.3's code (GAME.md 13.4; the names are its Lua bindings', registered
  * with their strings from 0x61E900 on):
@@ -600,7 +604,8 @@ static void icon_to_sim(const float w[3], float s[3]){ s[0] = -w[1]; s[1] = w[2]
 /* ---- the queue: one piece of work at a time, run at the next frame anchor ---- */
 #define AID_WAIT 600                    /* frames a queued command waits for the anchor (once a frame in MainLoop) */
 enum { Q_NONE, Q_RACEWIN, Q_AI_ON, Q_AI_OFF, Q_AI_RACES, Q_AI_GO, Q_TELEPORT, Q_WHERE, Q_STATUS, Q_PURSUIT, Q_PWATCH, Q_PWAIT,
-       Q_BREAKER, Q_BWATCH, Q_BWAIT, Q_BOT, Q_BOTWAIT, Q_RESET, Q_RAP, Q_ICONS, Q_ICONGO, Q_POOLS };
+       Q_BREAKER, Q_BWATCH, Q_BWAIT, Q_BOT, Q_BOTWAIT, Q_RESET, Q_RAP, Q_ICONS, Q_ICONGO, Q_POOLS, Q_RACEINFO, Q_CHALLENGES,
+       Q_CHALWIN };
 void mw_aid_rapsheet(CPU *c, const char *why);  /* pursuit_mw.c: the rap sheet, the world map's icons, the pools */
 void mw_aid_icons(CPU *c, int type);
 int mw_aid_icon_place(int type, int k, float pos[3]);
@@ -926,6 +931,121 @@ static void car_trace(CPU *c){
     fputc('\n', g_ctrace);
 }
 
+/* ---- raceinfo, challenges, challengewin (TRACKER M4-07, M4-20, M4-21) ----
+ * raceinfo: the race as the game set it up.  GRaceStatus +0x1968 is the race's GRaceParameters (GetNumLaps's callers
+ * read it there: 0x597702, 0x5A6F6D, 0x754E6C), whose getters (thiscall) each read one field of the race's Attrib
+ * record, the field named by its Attrib::StringHash32: 0x5FBA00 NumLaps, 0x5FABB0 TrafficLevel, 0x5FAC10 DifficultyLevel
+ * (as the game's enum: below 0x22 is 0), 0x5FC7A0 CatchUp (al), 0x5FB850 RaceLength (x87), 0x5FAA20 the race's type
+ * (field 0x0F6BCDE1, name not read), 0x5FAB40 EventID.  Then the racers (GRaceStatus +0x1958), the player's car (its
+ * IVehicle's name, +0x4C), the world's vehicles by driver class (IVehicle +0x58; roam_mw.c: 4 is DRIVER_NONE) and the
+ * count of the vehicles' rigid-body list (0x92D0DC: racers first, then traffic, as hfr_trace above logs them).
+ * challenges: the Challenge Series as its list reads it (0x7AE950: race bin 0x13 of GRaceDatabase [0x91E004] from
+ * 0x5E3980, its count 0x5DCF70, event i's EventID 0x601060) with each event's progress flags from GRaceDatabase's
+ * table (+0x3C: [db] rows of 16 bytes {EventID, flags, ...}; Game.IsRaceCompleted 0x6051B0 tests flag 2 and
+ * Game.IsRaceUnlocked 0x605170 flag 8, through 0x5DCA70, which also adds a row for an EventID it lacks: read here,
+ * never called).  Seen in runs (probe of 2026-10-31, a new alias): events 1 and 2 start with flag 4, and the win of
+ * event 1 (challengewin) set its flag 1 and flags 4 and 8 on events 3 and 4; so 4 is taken as open, 1 as won.
+ * challengewin: the script's own call when a challenge's goal is met, Game.ChallengeComplete(racer) (0x60E200: the
+ * racer's GRacerInfo +0x20 set, 0x5DC6A0), then racewin's finish. */
+#define RS_PARAMS        0x1968u
+#define FN_RP_LAPS       0x005fba00u
+#define FN_RP_TRAFFIC    0x005fabb0u
+#define FN_RP_DIFFICULTY 0x005fac10u
+#define FN_RP_CATCHUP    0x005fc7a0u
+#define FN_RP_LENGTH     0x005fb850u
+#define FN_RP_TYPE       0x005faa20u
+#define FN_RP_EVENT      0x005fab40u
+#define G_RACEDB         0x0091e004u
+#define FN_DB_BIN        0x005e3980u     /* thiscall (bin number): the race bin */
+#define FN_BIN_COUNT     0x005dcf70u     /* thiscall: its events */
+#define FN_BIN_EVENT     0x00601060u     /* thiscall (i): event i's EventID */
+#define DB_FLAGS         0x3cu
+#define CH_WON           0x1u            /* an event's flags as the Challenge Series' runs showed them (above) */
+#define CH_OPEN          0x4u
+#define BIN_CHALLENGE    0x13u
+#define FN_CHALLENGE_COMPLETE 0x0060e200u
+#define RI_CHALLENGE     0x20u           /* GRacerInfo: the challenge's goal met */
+#define VEH_NAME_M       0x4cu
+#define VEH_CLASS_M      0x58u
+static uint32_t ivehicle(CPU *c, uint32_t sim){
+    uint32_t obj = sim ? rd(sim + 4u) : 0u, id = IID_WARP;
+    return obj ? gcall(c, FN_QUERY, obj, 1, &id) : 0u;
+}
+static void guest_str(uint32_t s, char *out, size_t n){
+    size_t k = 0;
+    for (; s && k + 1 < n && mem_is_committed(s + (uint32_t)k) && MR8(s + (uint32_t)k); k++) out[k] = (char)MR8(s + (uint32_t)k);
+    out[k] = 0;
+}
+static void log_raceinfo(CPU *c){
+    long f = autotest_frame();
+    uint32_t rs = rd(G_RACESTATUS), rp = rs ? rd(rs + RS_PARAMS) : 0u;
+    if (!rp){ fprintf(stderr, "[mwrace] f=%ld raceinfo: no race parameters (GRaceStatus 0x%08x)\n", f, rs); return; }
+    int laps = (int)gcall(c, FN_RP_LAPS, rp, 0, 0), traffic = (int)gcall(c, FN_RP_TRAFFIC, rp, 0, 0);
+    int diff = (int)gcall(c, FN_RP_DIFFICULTY, rp, 0, 0), catchup = (int)(gcall(c, FN_RP_CATCHUP, rp, 0, 0) & 0xffu);
+    int type = (int)gcall(c, FN_RP_TYPE, rp, 0, 0);
+    uint32_t ev = gcall(c, FN_RP_EVENT, rp, 0, 0);
+    float len = gcall_f(c, FN_RP_LENGTH, rp);
+    char car[40] = "none";
+    uint32_t me = player_simable(c), mv = ivehicle(c, me);
+    if (mv) guest_str(gcall(c, rd(rd(mv) + VEH_NAME_M), mv, 0, 0), car, sizeof car);
+    unsigned cls[8] = {0}, other = 0;
+    uint32_t b = rd(G_SIMLIST), n = rd(G_SIMLIST + 8u);
+    for (uint32_t i = 0; b && i < n && i < 256u; i++){
+        uint32_t v = ivehicle(c, rd(b + 4u * i));
+        if (!v) continue;
+        uint32_t k = gcall(c, rd(rd(v) + VEH_CLASS_M), v, 0, 0);
+        if (k < 8u) cls[k]++; else other++;
+    }
+    fprintf(stderr, "[mwrace] f=%ld raceinfo type %d event %08x laps %d traffic %d difficulty %d catchup %d length %.0f m "
+            "racers %u car %s; vehicles %u by driver class: 0:%u 1:%u 2:%u 3:%u 4:%u 5:%u 6:%u 7:%u other %u; "
+            "rigid-body list %u\n",
+            f, type, ev, laps, traffic, diff, catchup, (double)len, rd(rs + RS_NRACERS), car, n,
+            cls[0], cls[1], cls[2], cls[3], cls[4], cls[5], cls[6], cls[7], other, rd(G_VEHLIST + 8u));
+}
+static uint32_t event_flags(uint32_t db, uint32_t ev){
+    uint32_t n = rd(db), t = rd(db + DB_FLAGS);
+    for (uint32_t k = 0; t && k < n && k < 4096u; k++){
+        uint32_t h = rd(t + 16u * k);
+        if (!h) break;
+        if (h == ev) return rd(t + 16u * k + 4u);
+    }
+    return 0;
+}
+static void log_challenges(CPU *c){
+    long f = autotest_frame();
+    uint32_t db = rd(G_RACEDB), bn = BIN_CHALLENGE;
+    uint32_t bin = db ? gcall(c, FN_DB_BIN, db, 1, &bn) : 0u;
+    if (!bin){ fprintf(stderr, "[mwchal] f=%ld challenges: no race bin 0x13\n", f); return; }
+    uint32_t n = gcall(c, FN_BIN_COUNT, bin, 0, 0);
+    char fl[160], all[2048]; int o = 0, a = 0, unl = 0, done = 0, first_locked = -1, first_open = -1;
+    for (uint32_t i = 0; i < n && i < 128u; i++){
+        uint32_t idx = i, ev = gcall(c, FN_BIN_EVENT, bin, 1, &idx), fg = event_flags(db, ev);
+        int u = (fg & CH_OPEN) != 0, d = (fg & CH_WON) != 0;
+        unl += u; done += d;
+        if (!u && first_locked < 0) first_locked = (int)i + 1;
+        if (u && !d && first_open < 0) first_open = (int)i + 1;
+        if (o < (int)sizeof fl - 2) fl[o++] = d ? 'W' : u ? 'o' : '.';
+        if (a < (int)sizeof all - 24) a += snprintf(all + a, sizeof all - (size_t)a, " %u:%08x=%x", i + 1, ev, fg);
+    }
+    fl[o] = 0; all[a] = 0;
+    fprintf(stderr, "[mwchal] f=%ld challenges: %u events, %d open, %d won; first open not won %d, first not open %d: %s\n"
+            "[mwchal]   events (bin order, EventID=flags):%s\n", f, n, unl, done, first_open, first_locked, fl, all);
+}
+static void challenge_win(CPU *c){
+    long f = autotest_frame();
+    uint32_t s = player_simable(c), rs = rd(G_RACESTATUS);
+    if (!s || !rs || game_flow() != g_game.flow_race){
+        fprintf(stderr, "[mwchal] f=%ld challengewin: not in a race (flow %u)\n", f, game_flow()); return; }
+    uint32_t a = s;
+    int idx = (int)gcall(c, FN_RACER_INDEX, 0, 1, &a);
+    if (idx < 1 || idx > 16){ fprintf(stderr, "[mwchal] f=%ld challengewin: no racer (%d)\n", f, idx); return; }
+    a = s;
+    gcall(c, FN_CHALLENGE_COMPLETE, 0, 1, &a);
+    fprintf(stderr, "[mwchal] f=%ld challengewin: Game.ChallengeComplete(racer %d): goal byte %u\n", f, idx,
+            MR8(rs + RS_RACERS + (uint32_t)(idx - 1) * RACER_SIZE + RI_CHALLENGE));
+    race_win(c);
+}
+
 /* ---- what the career bot (bot_mw.c) shares ---- */
 uint32_t mw_aid_call(CPU *c, uint32_t fn, uint32_t self, int n, const uint32_t *args){ return gcall(c, fn, self, n, args); }
 uint32_t mw_aid_simable(CPU *c){ return player_simable(c); }
@@ -1014,6 +1134,7 @@ void mw_frame(CPU *c){
             for (int k = 0; k < 3; k++) if (Q.rel & (1 << k)) pos[k] += rdf(p + 4u * (uint32_t)k);
         }
         if (!mw_aid_teleport(c, pos, dir)){ fprintf(stderr, "[mwrace] f=%ld teleport: no player car\n", f); break; }
+        trail_n = 0; U.same = 0;            /* a script's warp: the wedge watch's way back starts here, not before it */
         fprintf(stderr, "[mwrace] f=%ld teleport to %.2f %.2f %.2f facing %.2f %.2f %.2f\n", f,
                 pos[0], pos[1], pos[2], dir[0], dir[1], dir[2]);
         log_where(c);
@@ -1043,6 +1164,9 @@ void mw_frame(CPU *c){
         log_where(c);
         break; }
     case Q_POOLS: mw_aid_pools(c, (int)Q.v[0]); break;
+    case Q_RACEINFO: log_raceinfo(c); break;
+    case Q_CHALLENGES: log_challenges(c); break;
+    case Q_CHALWIN: challenge_win(c); break;
     case Q_PURSUIT: log_pursuit(c, 0); break;
     case Q_PWAIT: {                     /* done once the pursuit is there (v[0] 1) or gone (0), or a pursuit breaker came
                                          * down since the wait began (2: more than v[2] of them), or after v[1] frames */
@@ -1071,7 +1195,8 @@ void mw_frame(CPU *c){
 
 int mw_aid_is_cmd(const char *cmd){
     static const char *const k[] = { "racewin", "autopilot", "teleport", "where", "racestatus", "frames", "pursuit",
-                                     "breaker", "bot", "carreset", "rapsheet", "icons", "pools", 0 };
+                                     "breaker", "bot", "carreset", "rapsheet", "icons", "pools", "raceinfo", "challenges",
+                                     "challengewin", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -1110,6 +1235,9 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
     else if (!strcasecmp(cmd, "racestatus")) Q.op = Q_STATUS;
     else if (!strcasecmp(cmd, "carreset")) Q.op = Q_RESET;
     else if (!strcasecmp(cmd, "rapsheet")) Q.op = Q_RAP;
+    else if (!strcasecmp(cmd, "raceinfo")) Q.op = Q_RACEINFO;
+    else if (!strcasecmp(cmd, "challenges")) Q.op = Q_CHALLENGES;
+    else if (!strcasecmp(cmd, "challengewin")) Q.op = Q_CHALWIN;
     else if (!strcasecmp(cmd, "pools")){ sscanf(p, "%31s", a1); Q.op = Q_POOLS; Q.v[0] = !strcasecmp(a1, "watch"); }
     else if (!strcasecmp(cmd, "icons")){
         /* icons [T] | icons go T K DX DY DZ: the car to icon K of type T, facing DX DY DZ */
