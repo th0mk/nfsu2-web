@@ -501,7 +501,10 @@ at once: the flare never showed.
   the issue completes) is what made the flare go missing on fast machines (PCGW).
 
 Deploy: version 7 changes the layout word (GwFrame 156 → 164 bytes, GwCtl 412 → 432); as in 11.5, a page and a module
-work together only from one commit.
+work together only from one commit. That holds for Underground 2 as well: it makes no queries and draws as before,
+but its layout word changes with the version and the sizes, so a deploy of Underground 2 from this version on ships
+its page and its module from one commit too (the renderer refuses another layout's control block, "GPU control block
+mismatch", index.ts).
 
 | Field | Meaning | UG2 | First used by (MW tracker) |
 |---|---|---|---|
