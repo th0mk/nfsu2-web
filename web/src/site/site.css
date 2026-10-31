@@ -45,7 +45,6 @@ a { color: var(--lime); text-underline-offset: 4px; }
 .game img { border-radius: 12px; }
 h2 { font-size: 20px; line-height: 28px; color: var(--lime); }
 .game p { flex: 1 1 auto; color: var(--muted); }
-.foot { grid-column: 1 / -1; text-align: center; }
 
 .btn, .play {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
