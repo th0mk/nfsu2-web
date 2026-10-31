@@ -105,6 +105,9 @@ float ws_persp_x(void){ return 1.f; }
 float ws_persp_y(void){ return 1.f; }
 int ws_fill_target(void){ return 0; }
 int ws_take_border_quad(void){ return 0; }
+#if MW
+float mw_ui_band(void){ return 1.f; }              /* game_mw.c's ui_band (widescreen_mw.c): the whole screen */
+#endif
 
 /* the renderer: ids, and the draws it was handed */
 static unsigned g_texid = 0;
