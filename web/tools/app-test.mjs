@@ -307,7 +307,8 @@ async function mwSteps() {
     const ug2Rows = ['roam', 'horn', 'online', 'subtitles', 'show_hidden_races', 'hud', 'ui_textures'];
     report('start', p === 'ready' && !checks.some(c => c.endsWith(':fail')) && problems.every(t => /tested/.test(t)) &&
       look.title === 'Most Wanted Revived' && look.name === 'Most Wanted Revived' && !!tmpl?.text?.startsWith('# NFS Most Wanted settings') &&
-      ['controls', 'saves', 'settings', 'game-data', 'changes', 'about'].every(s => look.sections.includes(s)) && !look.sections.includes('online') &&
+      // (its changes from the original at the top of About, as main folded the Changes panel in)
+      ['controls', 'saves', 'settings', 'game-data', 'about'].every(s => look.sections.includes(s)) && !look.sections.includes('online') &&
       look.rows.includes('fps') && look.rows.includes('language') && look.rows.includes('autosave') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
       look.langs[0] === 'english' && look.langs.includes('finnish') &&
       // the keyboard's and the controller's rows are Most Wanted's (src/games/mw/body.json, src/games/mw/controls.ts)
