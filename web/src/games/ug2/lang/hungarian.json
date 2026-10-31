@@ -19,5 +19,9 @@
   "Turkish: <0>muntazam</0>.": "Török: <0>muntazam</0>.",
   "Hungarian: <0>GameHunter</0> (L_zooltan).": "Magyar: <0>GameHunter</0> (L_zooltan).",
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "Angol feliratok: VileStuff <0>English Subtitles Fixed</0> modja.",
-  "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Mentés játék közben: <0><1>Esc</1> vagy </0><2>Start</2> &gt; Garázs &gt; Mentés"
+  "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Mentés játék közben: <0><1>Esc</1> vagy </0><2>Start</2> &gt; Garázs &gt; Mentés",
+  "press in: horn": "benyomva: duda",
+  "Shift up": "Felváltás",
+  "Shift down": "Visszaváltás",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). Az NFSU2 webszerveréről nyisd meg, ne másik szerverről."
 }

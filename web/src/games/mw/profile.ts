@@ -24,7 +24,7 @@
 import type * as self from './profile';
 import type { Saves } from '../profile';
 import type { RenameFiles, SaveFiles } from '../../app/profile';
-import { fill, N, t, type Vars } from '../../app/i18n';
+import { fill, N, t, tn, type Vars } from '../../app/i18n';
 import { checksum, isMemcardFile } from '../../app/memcard';
 import { md5 } from '../../app/md5';
 
@@ -130,6 +130,9 @@ export function withName(file: Uint8Array, name: string): Uint8Array {
 export const AUTOSAVE_SEEN = 'autosave-profiles.txt';
 /** the page's word on the aliases set ({names}), before its hint ({hint}) */
 export const AUTOSAVE_ON = N('Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}');
+/** the restore question's line on the aliases a restore replaces (n of them, their names): no cover shoots here */
+export const replacesText = (n: number, names: string) => tn(n, 'Replaces the profile {names} in this browser, its career too',
+  'Replaces the profiles {names} in this browser, their careers too', { names });
 const SEEN_HEAD = `# Aliases the page has looked at for settings.ini's "autosave": each one is set
 # to Autosave On once (if it was Off), then left as the game's Options,
 # Gameplay, Autosave set it.  Delete a name to have it set again.

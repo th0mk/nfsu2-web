@@ -547,6 +547,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .tc[data-ctl="camera"] { left: calc(var(--l) + 112px * var(--ts)); }
 .tc[data-ctl="reset"] { left: calc(var(--l) + 168px * var(--ts)); }
 .tc[data-ctl="map"] { left: calc(var(--l) + 224px * var(--ts)); }
+/* Most Wanted's own small controls (src/games/mw/controls.ts), where Underground 2 has free roam's first two */
+.tc[data-ctl="look"] { left: calc(var(--l) + 224px * var(--ts)); }
+.tc[data-ctl="breaker"] { left: calc(var(--l) + 280px * var(--ts)); }
 .tc[data-ctl="msgs"] { left: calc(var(--l) + 280px * var(--ts)); }
 .tc[data-ctl="drift"] { left: calc(var(--l) + 336px * var(--ts)); }
 .tc[data-ctl="status"] { left: calc(var(--l) + 392px * var(--ts)); }

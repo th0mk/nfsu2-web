@@ -34,7 +34,7 @@
 // Pure (no DOM, no OPFS) so it can be checked under node; turnOnAutosave and
 // renameProfile take the save folder's file functions.
 
-import { fill, N, t, type Vars } from './i18n';
+import { fill, N, t, tn, type Vars } from './i18n';
 import { checksum, isMemcardFile } from './memcard';
 
 export const PROFILE_SIZE = 54966;
@@ -202,6 +202,9 @@ export function withName(file: Uint8Array, name: string): Uint8Array {
 export const AUTOSAVE_SEEN = 'autosave-profiles.txt';
 /** the page's word on the profiles set ({names}), before its hint ({hint}) */
 export const AUTOSAVE_ON = N('Autosave is now on for {names} (Options, Gameplay, Save). {hint}');
+/** the restore question's line on the profiles a restore replaces (n of them, their names) */
+export const replacesText = (n: number, names: string) => tn(n, 'Replaces {names} here, with its career and cover shoots',
+  'Replaces {names} here, with their careers and cover shoots', { names });
 const SEEN_HEAD = `# Profiles the page has looked at for settings.ini's "autosave": each one is set
 # to Autosave once (if it was on Prompt, the game's default), then left as the
 # game's Options, Gameplay, Save set it.  Delete a name to have it set again.

@@ -10,7 +10,7 @@
 // it stays on the server.
 
 import { cacheBytes, clearCache, clearSaveDir, filesOf, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
-import { AUTOSAVE_SEEN, coverOf, isProfileFile, modCars, NAME_MAX, profileName, renameProfile, sealed } from '@game/profile';
+import { AUTOSAVE_SEEN, coverOf, isProfileFile, modCars, NAME_MAX, profileName, renameProfile, replacesText, sealed } from '@game/profile';
 import { FILE_PREFIX } from '@game/run';
 import { SAVE_MARKS } from '../games/save-marks';
 import type { RenameFiles } from './profile';
@@ -540,8 +540,7 @@ export class SavesPanel {
         const covers = r.entries.filter(e => coverOf(e.path.split('/')[1])?.profile === n).length;
         return covers ? tn(covers, '{name} (with its cover shoot)', '{name} (with its {n} cover shoots)', { name: n }) : n;
       }).join(', ') }));
-      if (replaced.length) items.push(tn(replaced.length, 'Replaces {names} here, with its career and cover shoots',
-        'Replaces {names} here, with their careers and cover shoots', { names: list(replaced) }));
+      if (replaced.length) items.push(replacesText(replaced.length, list(replaced)));
       items.push(...restoreNotes(r));
     } else {
       p.textContent = tn(r.entries.length, 'Replaces every profile, the game\'s options and settings.ini here with the {n} file in {file}.',

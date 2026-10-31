@@ -40,6 +40,9 @@
 //             big enough for a finger), sent to the game (input menuScale, runtime/menusize.c).  Auto leaves the
 //             help bar at the game's size: its Continue and Back are the menu controls' OK and Back, and bigger it
 //             covers the menus' own things near it (the paint list, a part's name).
+// Which keys and controller bits each control presses, and which of the small ones a game has, are the game's
+// (src/games/<id>/controls.ts TOUCH, behind '@game/controls'): above, Underground 2's; Most Wanted presses its own keys
+// for all of them, has Look back (held) and Speedbreaker beside Reset, and of free roam's only Start.
 // The controller part is a virtual one the input module merges with a real one (gamepad.ts withTouch).
 // The driving controls show while the game says the player drives ("drive" in its status block,
 // runtime/web/status_web.c: 1 in a race, 2 in free roam, + 4 with a manual gearbox, + 8 in a cutscene), the menu's
@@ -47,7 +50,8 @@
 // they hide when a keyboard or a controller is used, until the next touch.  The game reads its input once a frame,
 // so a key a tap presses stays down HOLD_MS at least.
 import { STORAGE } from '@game/storage';
-import { PAD_A, PAD_DDOWN, PAD_LB, PAD_RB, PAD_X } from '../input/proto';
+import { PAD_DDOWN } from '../input/proto';
+import { TOUCH } from '@game/controls';
 import type { GameSession } from './game';
 import { touchFirst } from './device';
 import { N, percent, t } from './i18n';
@@ -242,6 +246,23 @@ interface Ctl {
   fingers: Set<number>; downAt: number; upTimer: number; holdTimer: number; held: boolean;
 }
 
+/** a control's keys and controller bits, as a game's TOUCH gives them */
+export interface Press { readonly keys?: string[]; readonly bit?: number; readonly hold?: string[] }
+/** A game's touch controls (src/games/<id>/controls.ts): what Camera, Nitro, the handbrake and the gears press; Look
+ *  back and Speedbreaker, the keys of a control of their own and Speedbreaker's name (English, the game's word; none:
+ *  the game has no such control); free roam's small
+ *  controls and Start, those the game has. */
+export interface TouchSet {
+  readonly camera: Press;
+  readonly lookBack?: string[];
+  readonly breaker?: { readonly keys: string[]; readonly label: string };
+  readonly nitro: Press;
+  readonly handbrake: Press;
+  readonly gearDown: Press;
+  readonly gearUp: Press;
+  readonly roam: readonly ('map' | 'msgs' | 'drift' | 'status' | 'horn' | 'chat' | 'start')[];
+}
+
 /** which controls show: the driving ones, the menu's, or none */
 type Mode = 'drive' | 'menu' | '';
 
@@ -254,6 +275,8 @@ const ICONS = {
   right: '<path class="fill" d="M8 5l9 7-9 7z"/>',
   pause: '<path d="M9 6v12M15 6v12"/>',
   camera: '<path d="M4 8h3l2-2h6l2 2h3v10H4z"/><circle cx="12" cy="13" r="3"/>',
+  look: '<path d="M8 5L4 9l4 4"/><path d="M4 9h9a6 6 0 0 1 0 12h-2"/>',
+  breaker: '<circle cx="12" cy="13" r="7"/><path d="M12 13V9M10 3h4M12 3v3"/>',
   reset: '<path d="M6 13a6 6 0 1 0 2-5.2"/><path d="M5 4v4h4"/>',
   map: '<path d="M4 6l5-2 6 2 5-2v14l-5 2-6-2-5 2z"/><path d="M9 4v14M15 6v14"/>',
   msgs: '<path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/>',
@@ -365,26 +388,29 @@ export class TouchControls {
       this.ctls.set(id, { id, el, label, text: typeof inner === 'string' ? undefined : inner.text, fingers: new Set(), downAt: 0, upTimer: 0,
         holdTimer: 0, held: false, ...c });
     };
+    const roam = (id: TouchSet['roam'][number]) => TOUCH.roam.includes(id);
     add('pause', N('Pause'), path(ICONS.pause), { keys: ['Escape'] }, 'small');
-    add('camera', N('Camera'), path(ICONS.camera), { keys: ['KeyC'], hold: ['KeyB'] }, 'small');
+    add('camera', N('Camera'), path(ICONS.camera), TOUCH.camera, 'small');
     add('reset', N('Reset'), path(ICONS.reset), { keys: ['KeyR'] }, 'small');
-    add('map', N('Map'), path(ICONS.map), { keys: ['KeyM'] }, 'small roam');
-    add('msgs', N('Messages'), path(ICONS.msgs), { keys: ['Tab'] }, 'small roam');
-    add('drift', N('Drift mode (in free roam)'), '<i class="drift" aria-hidden="true"></i>', { keys: ['KeyX'] }, 'small roam');
-    add('status', N('Career status'), '<i class="status" aria-hidden="true"></i>', { bit: 1 << PAD_DDOWN }, 'small roam');
-    add('horn', N('Horn'), path(ICONS.horn), { keys: ['KeyN'] }, 'small roam');
-    add('chat', N('Quick chat'), path(ICONS.chat), { act: () => this.deps.chat?.() }, 'small roam');
+    if (TOUCH.lookBack) add('look', N('Look back'), path(ICONS.look), { keys: TOUCH.lookBack }, 'small');
+    if (TOUCH.breaker) add('breaker', TOUCH.breaker.label, path(ICONS.breaker), { keys: TOUCH.breaker.keys }, 'small');
+    if (roam('map')) add('map', N('Map'), path(ICONS.map), { keys: ['KeyM'] }, 'small roam');
+    if (roam('msgs')) add('msgs', N('Messages'), path(ICONS.msgs), { keys: ['Tab'] }, 'small roam');
+    if (roam('drift')) add('drift', N('Drift mode (in free roam)'), '<i class="drift" aria-hidden="true"></i>', { keys: ['KeyX'] }, 'small roam');
+    if (roam('status')) add('status', N('Career status'), '<i class="status" aria-hidden="true"></i>', { bit: 1 << PAD_DDOWN }, 'small roam');
+    if (roam('horn')) add('horn', N('Horn'), path(ICONS.horn), { keys: ['KeyN'] }, 'small roam');
+    if (roam('chat')) add('chat', N('Quick chat'), path(ICONS.chat), { act: () => this.deps.chat?.() }, 'small roam');
     add('mode', N('Steering'), path(ICONS[this.steering]), { act: () => this.nextSteering(), long: () => this.deps.settings?.() }, 'small');
     add('center', N('Straight ahead'), path(ICONS.center), { act: () => this.recenter() }, 'small');
-    add('start', N('Start an event'), { text: N('Start') }, { keys: ['Enter'] }, 'pill roam');
+    if (roam('start')) add('start', N('Start an event'), { text: N('Start') }, { keys: ['Enter'] }, 'pill roam');
     add('left', N('Steer left'), path(ICONS.left), { keys: ['ArrowLeft'], group: 'steer' }, 'big');
     add('right', N('Steer right'), path(ICONS.right), { keys: ['ArrowRight'], group: 'steer' }, 'big');
     add('brake', N('Brake'), { text: N('Brake') }, { keys: ['ArrowDown'], group: 'pedal' }, 'big');
     add('gas', N('Gas'), { text: N('Gas') }, { keys: ['ArrowUp'], group: 'pedal' }, 'big');
-    add('nitro', N('Nitrous'), '<i class="nitro" aria-hidden="true"></i>', { keys: ['ArrowUp'], bit: 1 << PAD_LB, group: 'pedal' }, 'round');
-    add('hb', N('Handbrake'), { text: N('Hand\nbrake') }, { bit: 1 << PAD_RB }, 'round');
-    add('down', N('Gear down'), path(ICONS.down), { bit: 1 << PAD_X }, 'gear');
-    add('up', N('Gear up'), path(ICONS.up), { bit: 1 << PAD_A }, 'gear');
+    add('nitro', N('Nitrous'), '<i class="nitro" aria-hidden="true"></i>', { ...TOUCH.nitro, group: 'pedal' }, 'round');
+    add('hb', N('Handbrake'), { text: N('Hand\nbrake') }, TOUCH.handbrake, 'round');
+    add('down', N('Gear down'), path(ICONS.down), TOUCH.gearDown, 'gear');
+    add('up', N('Gear up'), path(ICONS.up), TOUCH.gearUp, 'gear');
     // the menus'
     add('m-up', N('Up'), path(ICONS.menuUp), { keys: ['ArrowUp'] }, 'menu dpad');
     add('m-left', N('Left'), path(ICONS.left), { keys: ['ArrowLeft'] }, 'menu dpad');
@@ -506,7 +532,7 @@ export class TouchControls {
     this.root.toggleAttribute('data-no-chat', this.deps.chatOn?.() === false);
     if (this.engage === 0) this.letGo('start');
     if (this.near === 0) this.letGo('horn');
-    this.ctls.get('drift')!.el.classList.toggle('lit', (this.drift & 1) !== 0);
+    this.ctls.get('drift')?.el.classList.toggle('lit', (this.drift & 1) !== 0);
     this.setMode(mode);
   }
 
@@ -649,8 +675,8 @@ export class TouchControls {
   }
   /** a control no finger can reach any more (hidden): its fingers and keys let go */
   private letGo(id: string) {
-    const c = this.ctls.get(id)!;
-    if (!c.fingers.size) return;
+    const c = this.ctls.get(id);
+    if (!c?.fingers.size) return;
     for (const f of c.fingers) this.byFinger.delete(f);
     c.fingers.clear();
     this.up(c, true);

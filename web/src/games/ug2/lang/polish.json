@@ -18,6 +18,10 @@
   "Hungarian: <0>GameHunter</0> (L_zooltan).": "Węgierski: <0>GameHunter</0> (L_zooltan).",
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "Angielskie napisy: <0>English Subtitles Fixed</0> od VileStuff.",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Zapis podczas gry: <0><1>Esc</1> lub </0><2>Start</2> &gt; Garaż &gt; Zapisz",
+  "press in: horn": "klik: klakson",
+  "Shift up": "Wyższy bieg",
+  "Shift down": "Niższy bieg",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "Strona nie ma izolacji między źródłami (brak SharedArrayBuffer). Otwórz ją z serwera WWW NFSU2, a nie z innego serwera.",
   "Quick chat (with other players): group, then phrase": "Szybki czat (z innymi graczami): grupa, potem zwrot",
   "Photo mode; F12 again takes the photo": "Tryb fotograficzny; ponownie F12 robi zdjęcie"
 }

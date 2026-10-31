@@ -1,0 +1,31 @@
+# Most Wanted on the player's page with the touch controls (web/tools/app-test.mjs --game mw, its touch step; TRACKER
+# M6-17): a first start (no alias: "Create a new alias?" answered No), a Custom Race circuit as race_frames.txt picks it
+# (the menus by keyboard), and from GO the script waits for the car to move: the page's finger on Gas (the up arrow)
+# drives it; then a while for the page's other presses, and the game's own quit.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil RETURN MainMenu.fng@4b4e388a 30 900       # No: the main menu, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # (a RETURN this soon after the dialog can be dropped, L-229)
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log app_touch_probe: GO
++0    breaker watch
++0    breaker wait above 10 6000                         # the page's finger on Gas
++0    log app_touch_probe: moved
++600  log app_touch_probe: done
++0    close

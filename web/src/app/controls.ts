@@ -3,6 +3,7 @@
 // drawing of a pad with what each button the game uses does beside it, the buttons named as Xbox or PlayStation
 // names them (the switch under it; a PlayStation controller connecting, or taking over in the game, picks those
 // names).  While a steering wheel is connected (in the game: drives), the tab is the wheel's instead (wheel-setup.ts).
+// What each button does is the game's (src/games/<id>/controls.ts PAD, behind '@game/controls').
 // The touch tab has the steering's list, the controls' position (which thumb steers, by the sides or moved in), the
 // switches for Nitro on the steering's side and the level horizon, the controls' size and the game's menu buttons'
 // (touch.ts), the same in both copies and in step with the touch controls' own steering button (held, it opens the
@@ -18,6 +19,7 @@ import { wheelSection } from './wheel-setup';
 import { askMotion, levelHorizon, menuSize, nitroSteerSide, onSteering, setSteering, steering, STEERING, steeringName, touchPosition,
   touchSize, type ListSetting, type Steering, type SwitchSetting } from './touch';
 import { language, N, onLanguage, t } from './i18n';
+import { PAD } from '@game/controls';
 
 export type Tab = 'keys' | 'pad' | 'site';
 export type Family = 'xb' | 'ps';
@@ -54,31 +56,19 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 /** a row: its middle (px), its button as Xbox and PlayStation name it (a word or a SHAPE), what it does (and a
  *  second line; English, translated where drawn), the point of the drawing its line goes to (none: its group's),
  *  and spoken names where a shape stands for a word */
-interface Row { y: number; xb: string; ps: string; does: string; sub?: string; to?: readonly [number, number]; say?: [string, string] }
-const LEFT: Row[] = [
-  { y: 36, xb: 'LT', ps: 'L2', does: N('Brake'), sub: N('and reverse'), to: [30, -5] },
-  { y: 64, xb: 'LB', ps: 'L1', does: N('Nitrous'), to: [20.6, 31.2] },
-  { y: 84, xb: 'LS', ps: 'L3', does: N('Steer'), sub: N('press in: horn'), to: [47, 54] },
-  { y: 116, xb: 'up', ps: 'up', does: N('Start event') },
-  { y: 130, xb: 'left', ps: 'left', does: N('Map') },
-  { y: 144, xb: 'right', ps: 'right', does: N('Messages') },
-];
-const RIGHT: Row[] = [
-  { y: 36, xb: 'RT', ps: 'R2', does: N('Throttle'), to: [230, -5] },
-  { y: 54, xb: 'RB', ps: 'R1', does: N('Handbrake'), to: [239.4, 31.2] },
-  { y: 76, xb: 'A', ps: 'cross', does: N('Shift up') },
-  { y: 90, xb: 'X', ps: 'square', does: N('Shift down') },
-  { y: 104, xb: 'Y', ps: 'triangle', does: N('Camera') },
-  { y: 118, xb: 'B', ps: 'circle', does: N('Look back') },
-  { y: 140, xb: 'RS', ps: 'R3', does: N('Quick chat'), to: [162, 94] },
-];
-/** over the middle: View and Menu, their lines straight down */
-const MIDDLE: (Row & { x: number })[] = [
-  { x: 150, y: 12, xb: 'view', ps: 'view', does: N('Respawn'), to: [112, 48.5], say: ['View', 'Create'] },
-  { x: 172, y: 12, xb: 'menu', ps: 'menu', does: N('Pause'), to: [148, 48.5], say: ['Menu', 'Options'] },
-];
-/** the brackets: x, from y to y, the line's start on it, and the control it goes to */
-const BRACKETS = [{ x: 90.5, y0: 110, y1: 150, from: 123, to: [85, 94] }, { x: 244.5, y0: 70, y1: 124, from: 80, to: [217, 54] }] as const;
+export interface Row { y: number; xb: string; ps: string; does: string; sub?: string; to?: readonly [number, number]; say?: [string, string] }
+/** a game's controller (src/games/<id>/controls.ts): the rows left and right of the drawing, over its middle (View
+ *  and Menu, their lines straight down), the brackets (x, from y to y, the line's start on it, and the control it goes
+ *  to), and the controls the game leaves unused (drawn without the used colour: 'rs', 'view', 'menu') */
+export interface PadLayout {
+  readonly left: readonly Row[];
+  readonly right: readonly Row[];
+  readonly middle: readonly (Row & { x: number })[];
+  readonly brackets: readonly { readonly x: number; readonly y0: number; readonly y1: number; readonly from: number; readonly to: readonly [number, number] }[];
+  readonly unused: readonly ('rs' | 'view' | 'menu')[];
+}
+const { left: LEFT, right: RIGHT, middle: MIDDLE, brackets: BRACKETS } = PAD;
+const idle = (c: 'rs' | 'view' | 'menu') => PAD.unused.includes(c);
 
 const word = (v: string) => v in SHAPE ? '' : v;
 const chipW = (r: Row) => word(r.xb).length > 1 || word(r.ps).length > 1 ? 20 : 14;
@@ -100,13 +90,13 @@ function drawing(): string {
   const n = 'vector-effect="non-scaling-stroke"';
   const ring = (cx: number, cy: number, on: boolean) =>
     `<circle cx="${cx}" cy="${cy}" r="17" ${n}${on ? ' class="on"' : ''}/><circle cx="${cx}" cy="${cy}" r="10" ${n}${on ? ' class="on"' : ''}/>`;
-  const button = (cx: number, cy: number, r: number) => used(`<circle cx="${cx}" cy="${cy}" r="${r}" ${n}/>`);
+  const button = (cx: number, cy: number, r: number, on = true) => (on ? used : (s: string) => s)(`<circle cx="${cx}" cy="${cy}" r="${r}" ${n}/>`);
   return `<g class="pad-ctl" transform="translate(${MID - 130 * SCALE} ${TOP}) scale(${SCALE})">` +
     used(`<rect x="30" y="-14" width="40" height="18" rx="7" ${n}/>`) + used(`<rect x="190" y="-14" width="40" height="18" rx="7" ${n}/>`) +
     BUMPERS.map(d => `<path class="pad-bumper on" d="${d}"/><path class="pad-bumper-in" d="${d}"/>`).join('') +
     `<path class="pad-body" d="${BODY}" ${n}/>` +
-    ring(64, 54, true) + ring(162, 94, true) + used(`<path d="${DPAD}" ${n}/>`) +
-    button(112, 54, 5.5) + button(148, 54, 5.5) + `<circle cx="130" cy="31" r="8" ${n}/>` +
+    ring(64, 54, true) + ring(162, 94, !idle('rs')) + used(`<path d="${DPAD}" ${n}/>`) +
+    button(112, 54, 5.5, !idle('view')) + button(148, 54, 5.5, !idle('menu')) + `<circle cx="130" cy="31" r="8" ${n}/>` +
     button(196, 40, 7) + button(210, 54, 7) + button(196, 68, 7) + button(182, 54, 7) +
     '</g>';
 }

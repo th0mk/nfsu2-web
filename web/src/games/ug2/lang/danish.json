@@ -18,6 +18,10 @@
   "Hungarian: <0>GameHunter</0> (L_zooltan).": "Ungarsk: <0>GameHunter</0> (L_zooltan).",
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "Engelske undertekster: <0>English Subtitles Fixed</0> af VileStuff.",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Gem, mens du spiller: <0><1>Esc</1> eller </0><2>Start</2> &gt; Garage &gt; Gem",
+  "press in: horn": "tryk ind: horn",
+  "Shift up": "Skift op",
+  "Shift down": "Skift ned",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "Siden er ikke cross-origin-isoleret (ingen SharedArrayBuffer). Åbn den fra NFSU2-webserveren, ikke fra en anden server.",
   "Quick chat (with other players): group, then phrase": "Hurtigchat (med andre spillere): gruppe, derefter sætning",
   "Photo mode; F12 again takes the photo": "Fototilstand; F12 igen tager billedet"
 }

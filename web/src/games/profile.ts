@@ -146,6 +146,8 @@ export interface SaveFormat {
   /** what the page says when turnOnAutosave set profiles ({names}) to Autosave, before its own hint ({hint}): where
    *  the game's option is (English; translated where shown) */
   readonly AUTOSAVE_ON: string;
+  /** the restore question's line on the profiles a restore replaces (n of them, their names), in the page's language */
+  replacesText(n: number, names: string): string;
 }
 
 /** T, which tsc checks is a whole SaveFormat: each '@game/profile''s `export type Checked = Saves<typeof self>` */

@@ -92,7 +92,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 // below; its scripts tests/mw/scripts/app_*_probe.txt):
 //   start     the start page renders as Most Wanted's (its title and name, its own Changes and About panels, no
 //             Underground 2 panel), every check passes or warns, the module loads, settings.ini is its template (only the
-//             rows its runtime reads), Finnish among the languages
+//             rows its runtime reads), Finnish among the languages, the controls sheet's keys and controller its own
 //   play      Play -> a first start makes the alias ROTEST and saves it, a Custom Race to GO and 600 frames of it, then the
 //             game's own quit: exit 0; registry.txt seeded with its FirstTime, the alias's 63,596 bytes in the save
 //             folder, the page saw it saved, the log's session line is its own; F9's menu while it runs; beforeunload asks
@@ -105,6 +105,9 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 //   autosave  ROTEST with its Autosave turned off (the byte 0x5B55, sealed again by the page's import) is set on at the
 //             next Play (settings.ini autosave): the page's note and word, the byte, the checks, the file of the aliases
 //             looked at; the game loads it; at the Play after that it is left as it is
+//   touch     on a touch screen, a race (tests/mw/scripts/app_touch_probe.txt): the driving controls come with the game's
+//             "drive" word (runtime/mw/status_mw.c), Most Wanted's set (Look back and Speedbreaker, none of free roam's
+//             but Start); a finger on Gas holds the up arrow and the car moves; Look back holds L; the game's own quit
 // An oracle build ("oracle":1 in /game.json) loads d3dx9_26.dll from the save folder: each step puts it there from
 // $NFSMW_D3DX_DLL (the file on this machine; never in the repository) and the address names it (NFSMW_D3DX).  The game
 // runs with the null renderer (NFSU2_RENDERER=null) unless --draw is given: the steps check the page and the game, and a
@@ -113,7 +116,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? proces
 const STEPS_OF = {
   ug2: ['start', 'settings', 'play', 'saves', 'restore', 'pcsave', 'quit', 'stalllog', 'instance', 'readonly', 'retry', 'update',
     'autoupdate', 'enterlink', 'late', 'quitstages', 'slowgpu', 'gpulost', 'crash', 'leak', 'cache', 'roamask', 'cloudask', 'full', 'page', 'mobile'],
-  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave'],
+  mw: ['start', 'play', 'saves', 'restore', 'pcsave', 'rename', 'autosave', 'touch'],
 };
 const NONE = 'none yet';
 const GAME = gameOf(process.argv.slice(2));
@@ -127,7 +130,7 @@ await requireGame(BASE, GAME);
 const OUT = path.resolve(arg('--out', 'out/web/app-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `apptest-${Date.now().toString(36)}`;
-const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`;
+const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`, SAVE4 = `${RUN}-d`, SAVE5 = `${RUN}-e`;
 // the test suite's environment (DESIGN.md section 5); movies stay on/off through settings.ini
 const ENV = ['SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_TIMEOUT=400'].map(e => `env=${encodeURIComponent(e)}`).join('&');
 fs.mkdirSync(OUT, { recursive: true });
@@ -294,6 +297,7 @@ async function mwSteps() {
       sections: [...document.querySelectorAll('section.panel')].filter(s => !s.hidden).map(s => s.id || 'play'),
       rows: [...document.querySelectorAll('#settings .set[data-key]')].map(e => e.dataset.key),
       keys: [...document.querySelectorAll('#keys dl.keys dd')].map(e => e.textContent),
+      pad: document.querySelector('#keys svg.pad')?.getAttribute('aria-label') ?? null,
       langs: [...document.querySelectorAll('#lang-pick option')].map(e => e.value),
     }));
     await page.waitForTimeout(400);
@@ -303,7 +307,10 @@ async function mwSteps() {
       look.title === 'Most Wanted Revived' && look.name === 'Most Wanted Revived' && !!tmpl?.text?.startsWith('# NFS Most Wanted settings') &&
       ['controls', 'saves', 'settings', 'game-data', 'changes', 'about'].every(s => look.sections.includes(s)) && !look.sections.includes('online') &&
       look.rows.includes('fps') && look.rows.includes('language') && look.rows.includes('autosave') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
-      look.langs[0] === 'english' && look.langs.includes('finnish'),
+      look.langs[0] === 'english' && look.langs.includes('finnish') &&
+      // the keyboard's and the controller's rows are Most Wanted's (src/games/mw/body.json, src/games/mw/controls.ts)
+      ['Change camera, look back', 'Speedbreaker', 'Start an event'].every(k => look.keys.includes(k)) &&
+      /RT: pause/.test(look.pad ?? '') && /Y: speedbreaker/.test(look.pad ?? '') && !/Quick chat|quick chat|horn|Shift up/.test(look.pad ?? ''),
       { phase: p, checks, problems, ...look, templateBytes: tmpl?.size });
   }
 
@@ -466,6 +473,55 @@ async function mwSteps() {
         note: note(log1), seen: seen?.text?.split('\n').filter(x => x && !x.startsWith('#')), loaded: l.loaded, exit: l.exit,
         again: { loaded: l2.loaded, exit: l2.exit, note: note(log2) } });
     await p5.close();
+  }
+
+  // ---------------------------------------------------------- touch --
+  if (want('touch')) {
+    const tctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, hasTouch: true });
+    const p6 = watch(await tctx.newPage(), 'F');
+    await open(p6, `save=${SAVE5}&fresh&${env}&${script('app_touch_probe.txt')}`);
+    await seedDll(p6, SAVE5);
+    const run = await playUntilExit(p6, 'touch', 700000);
+    const T = () => p6.evaluate(() => window.__nfsu2.touch());
+    // a finger's press and lift on an element, as the phone's touch gives them (touch.ts takes pointer events)
+    const finger = (sel, type, id) => p6.evaluate(([q, ty, i]) => {
+      const el = document.querySelector(q); if (!el) return false;
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent(ty, { pointerId: i, pointerType: 'touch', isPrimary: true, bubbles: true, cancelable: true,
+        clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 }));
+      return true;
+    }, [sel, type, id]);
+    // the game drives: a finger on the game brings the controls
+    const drove = await p6.waitForFunction(() => (window.__nfsu2.touch().drive & 3) > 0, null, { timeout: 500000, polling: 250 }).then(() => true, () => false);
+    await finger('#stage canvas', 'pointerdown', 3); await finger('#stage canvas', 'pointerup', 3);
+    const shown = await p6.waitForFunction(() => window.__nfsu2.touch().shown, null, { timeout: 10000, polling: 100 }).then(() => true, () => false);
+    const set = await p6.evaluate(() => [...document.querySelectorAll('.touch [data-ctl]')].map(e => e.dataset.ctl));
+    const visible = await p6.evaluate(() => [...document.querySelectorAll('.touch [data-ctl]')].filter(e => e.getClientRects().length).map(e => e.dataset.ctl));
+    await shot(p6, 'mw-touch.png');
+    const logText = () => p6.evaluate(() => window.__nfsu2.log.text());
+    await finger('.touch [data-ctl="gas"]', 'pointerdown', 11);
+    const gasKeys = (await T()).keys;
+    // the script's word comes after its wait for the car's speed, also after a wait that ran out: that one must not have
+    const moved = await p6.waitForFunction(() => /app_touch_probe: moved/.test(window.__nfsu2.log.text()), null, { timeout: 120000, polling: 250 })
+      .then(async () => !/breaker wait above: TIMEOUT/.test(await logText()), () => false);
+    await finger('.touch [data-ctl="gas"]', 'pointerup', 11);
+    await finger('.touch [data-ctl="look"]', 'pointerdown', 12);
+    await p6.waitForTimeout(300);
+    const lookKeys = (await T()).keys;
+    await finger('.touch [data-ctl="look"]', 'pointerup', 12);
+    await p6.waitForTimeout(300);
+    const after = (await T()).keys;
+    const exit = await run.wait();
+    const tail = await logText();
+    fs.writeFileSync(path.join(OUT, 'mw-touch.log'), tail);
+    const mine = ['pause', 'camera', 'reset', 'look', 'breaker', 'mode', 'gas', 'brake', 'nitro', 'hb'];
+    const ug2Only = ['map', 'msgs', 'drift', 'horn', 'chat'];
+    report('touch', drove && shown && mine.every(c => visible.includes(c)) && set.includes('start') && !visible.includes('start') &&
+      !set.some(c => ug2Only.includes(c)) && gasKeys.includes('ArrowUp') && moved && lookKeys.includes('KeyL') && !after.includes('KeyL') &&
+      exit?.code === 0 && quitPath(tail),
+      { drove, shown, set, visible, gasKeys, moved, lookKeys, after, exit, drive: (tail.match(/\[drive\][^\n]*-> [1-9][^\n]*/g) ?? []).slice(0, 3) });
+    await p6.close();
+    await tctx.close();
   }
 }
 

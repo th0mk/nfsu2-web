@@ -4,7 +4,6 @@
   "Auto follows the display (120 on a 120 Hz screen, 240 on a 240 Hz one). 30 is steadier where 60 stutters, and easier on the battery.": "อัตโนมัติ: ตามจอแสดงผล (120 บนจอ 120 Hz, 240 บนจอ 240 Hz) 30 จะนิ่งกว่าในเครื่องที่ 60 กระตุก และประหยัดแบตเตอรี่กว่า",
   "Pause freezes the game and its sound, as alt-tab does on Windows.": "หยุดชั่วคราว: หยุดเกมและเสียงไว้ เหมือนการกด Alt+Tab บน Windows",
   "The game's own force feedback, on controllers that have rumble.": "ฟอร์ซฟีดแบ็กของเกมเอง บนคอนโทรลเลอร์ที่มีระบบสั่น",
-  "Change camera": "เปลี่ยนมุมกล้อง",
   "Speedbreaker": "Speedbreaker",
   "The PC game's own code (version 1.3), recompiled to run in the browser with WebGPU graphics and Web Audio sound, with the original look at its highest settings.": "โค้ดของเกมเวอร์ชัน PC เอง (เวอร์ชัน 1.3) ที่คอมไพล์ใหม่ให้รันบนเบราว์เซอร์ด้วยกราฟิก WebGPU และเสียง Web Audio พร้อมภาพแบบต้นฉบับที่การตั้งค่าสูงสุด",
   "Play on a keyboard or a controller, with your aliases saved in this browser. Download them as a backup, restore them, or bring in the aliases from the PC game's NFS Most Wanted folder.": "เล่นได้ด้วยคีย์บอร์ดหรือคอนโทรลเลอร์ โดยเก็บโปรไฟล์ไว้ในเบราว์เซอร์นี้ ดาวน์โหลดเป็นไฟล์สำรอง กู้คืน หรือนำโปรไฟล์เข้ามาจากโฟลเดอร์ NFS Most Wanted ของเกมเวอร์ชัน PC ได้",
@@ -12,5 +11,7 @@
   "Rights holders can email <0>legal@nfsrevived.xyz</0>. Support emails won't be answered: for help, ask on <1>our Discord</1>.": "ผู้ถือลิขสิทธิ์สามารถส่งอีเมลมาที่ <0>legal@nfsrevived.xyz</0> อีเมลขอความช่วยเหลือจะไม่ได้รับการตอบกลับ หากต้องการความช่วยเหลือ ให้ถามใน<1>Discord ของเรา</1>",
   "The source code is on <0>GitHub</0>. This port uses the same static recompiler as Underground 2 Revived, which is based on <1>NFSU2Recomp</1> by Talha Müderrisoğlu, following the method of <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "ซอร์สโค้ดอยู่บน <0>GitHub</0> พอร์ตนี้ใช้ตัวรีคอมไพล์แบบสแตติกตัวเดียวกับ Underground 2 Revived ซึ่งสร้างขึ้นจาก <1>NFSU2Recomp</1> โดย Talha Müderrisoğlu และใช้วิธีเดียวกับ <2>N64: Recompiled</2> และ <3>XenonRecomp</3>",
   "Autosave is now on for {names}: the game saves by itself (Options, Gameplay, Autosave). {hint}": "เปิดบันทึกอัตโนมัติให้ {names} แล้ว: เกมจะบันทึกเอง (Options > Gameplay > Autosave) {hint}",
-  "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "เปิด Autosave ในเกมของแต่ละนามแฝงหนึ่งครั้ง เพื่อให้การแข่งและอีเวนต์ถูกบันทึกโดยไม่ต้องถาม หากภายหลังเลือก Off ใน Options > Gameplay ของเกม ค่านั้นจะยังคงอยู่"
+  "Turns each alias's Autosave in the game on once, so races and events are saved without asking. Off chosen afterwards in the game's Options, Gameplay stays.": "เปิด Autosave ในเกมของแต่ละนามแฝงหนึ่งครั้ง เพื่อให้การแข่งและอีเวนต์ถูกบันทึกโดยไม่ต้องถาม หากภายหลังเลือก Off ใน Options > Gameplay ของเกม ค่านั้นจะยังคงอยู่",
+  "Replaces the profiles {names} in this browser, their careers too": "แทนที่โปรไฟล์ {names} ในเบราว์เซอร์นี้ รวมถึงโหมดอาชีพด้วย",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the Most Wanted Revived server, not another server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเซิร์ฟเวอร์ Most Wanted Revived ไม่ใช่จากเซิร์ฟเวอร์อื่น"
 }

@@ -18,6 +18,10 @@
   "Hungarian: <0>GameHunter</0> (L_zooltan).": "ฮังการี: <0>GameHunter</0> (L_zooltan)",
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "ซับไตเติลภาษาอังกฤษ: <0>English Subtitles Fixed</0> ของ VileStuff",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "บันทึกระหว่างเล่น: <0><1>Esc</1> หรือ </0><2>Start</2> &gt; โรงรถ &gt; บันทึก",
+  "press in: horn": "กดลง: แตร",
+  "Shift up": "เกียร์ขึ้น",
+  "Shift down": "เกียร์ลง",
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server, not another server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเว็บเซิร์ฟเวอร์ NFSU2 ไม่ใช่จากเซิร์ฟเวอร์อื่น",
   "Quick chat (with other players): group, then phrase": "แชตด่วน (เมื่อเล่นกับผู้เล่นคนอื่น): กลุ่ม แล้ววลี",
   "Photo mode; F12 again takes the photo": "โหมดถ่ายภาพ กด F12 อีกครั้งเพื่อถ่ายภาพ"
 }
