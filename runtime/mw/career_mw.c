@@ -319,11 +319,15 @@ static void watch_race(CPU *c){
 #define FN_INPUT_CLEAR   0x0047cc50u     /* the input handler's call after a reset: the controllers' held state cleared */
 #define G_SIM            0x009203b0u     /* the simulation: +0x20 its step (float, s), +0x28 the steps it ran */
 static int ai_on;                       /* autopilot on: the AI drives the local player's car */
-static struct { double since; float p[3], w[3]; int resets, futile, moved, racing, same; uint32_t sim; } U;
+static struct { double since; float p[3], w[3]; int resets, futile, moved, racing, same; uint32_t sim; float spot[3]; int spot_n; } U;
 static struct { float p[3]; double t; } TRAIL[TRAIL_N];
 static int trail_n, trail_head;           /* points kept, the next one's slot */
 static float START[START_N][3];           /* the way the car took from the grid at the GO */
 static int start_n;
+/* the resets in a row at one place (within WEDGE_SPOT_M of the first): the career bot gives a race up when the AI
+ * cannot get past a place (bin 4's race 9C22D817: 323 resets at sim -2128 148 1690, c6-b3r) */
+#define WEDGE_SPOT_M 40.0f
+int mw_aid_wedge_spot(void){ return U.spot_n; }
 double mw_game_time(void){
     uint32_t sim = rd(G_SIM);
     return sim ? (double)rd(sim + 0x28u) * (double)rdf(sim + 0x20u) : 0.0;
@@ -496,7 +500,7 @@ static void lap_stop_test(CPU *c, uint32_t s, uint32_t rb, const float q[3], int
 static void wedge_watch(CPU *c){
     long f = autotest_frame();
     uint32_t rs = rd(G_RACESTATUS), s = player_simable(c), a = s;
-    if (!rs || !s || game_flow() != g_game.flow_race){ U.since = 0; return; }
+    if (!rs || !s || game_flow() != g_game.flow_race){ U.since = 0; U.spot_n = 0; return; }
     if (ai_on && s != U.sim){           /* another car (a world loaded again: a bust, a jump): the AI takes it too */
         uint32_t zero = 0;
         gcall(c, FN_FORCE_AI, 0, 1, &zero);
@@ -505,6 +509,7 @@ static void wedge_watch(CPU *c){
     }
     int racing = MR8(rs + RS_ACTIVE) && MR8(rs + RS_GO);
     if (racing != U.racing){ U.racing = racing; U.moved = 0; trail_n = 0; start_n = 0; U.same = 0; }   /* a race's GO or end: a new start */
+    if (!racing) U.spot_n = 0;
     if (!racing && !ai_on){ U.since = 0; return; }            /* a race before its GO, or its end, with `autopilot go` */
     int idx = 1;
     if (racing){
@@ -574,6 +579,8 @@ static void wedge_watch(CPU *c){
     }
     int ok = mw_reset_car(c);
     U.resets++;
+    if (U.spot_n && hypotf(q[0] - U.spot[0], q[2] - U.spot[2]) < WEDGE_SPOT_M) U.spot_n++;
+    else { memcpy(U.spot, q, sizeof q); U.spot_n = 1; }
     uint32_t p2 = gcall(c, rd(rd(s) + SIM_POSITION), s, 0, 0);
     float n[3] = { rdf(p2), rdf(p2 + 4u), rdf(p2 + 8u) };
     float moved = sqrtf((n[0] - q[0]) * (n[0] - q[0]) + (n[2] - q[2]) * (n[2] - q[2])), other = nearest_racer(c, s, n);

@@ -82,6 +82,7 @@ int mw_aid_where(CPU *c, float pos[3], float *kmh);
 int mw_aid_teleport(CPU *c, const float pos[3], const float dir[3]);
 void mw_aid_autopilot(CPU *c, int mode);
 int mw_reset_car(CPU *c);
+int mw_aid_wedge_spot(void);                   /* career_mw.c: the wedge resets in a row at one place */
 int mw_aid_last_end(void);                    /* career_mw.c: 1 busted, 2 evaded since the last read */
 void mw_aid_rapsheet(CPU *c, const char *why); /* pursuit_mw.c */
 void mw_aid_icons(CPU *c, int type);
@@ -391,6 +392,7 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define ENGAGE_EVERY  90                /* frames between them */
 #define RACE_START_MAX 6000             /* frames from Accept to the race going active */
 #define PURSUIT_NATURAL_S 60.0          /* game seconds of free driving for a pursuit to start by itself */
+#define PURSUIT_NATURAL_S4 15.0         /* ... from heat 4 on (bins 8 to 1), where a forced pursuit has cops at once */
 #define CHASE_NATURAL_S   5.0           /* ... in bot chase */
 #define BUST_FLOW_MAX     3600          /* frames from a bust's end of the pursuit to its infractions sheet, at most */
 #define SKIP_MAX      3
@@ -399,6 +401,7 @@ static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", 
 #define CAR_SWAP_MAX  9000              /* frames for that change (B_CAR), at most */
 #define RIVAL_NEXT_WAIT 1800            /* frames the bot waits in free roam for the rival's next race to come by itself */
 #define POST_WAIT     2400              /* frames from a race's end to its result screen, at most (after it the bot goes on) */
+#define WEDGE_GIVEUP  15                /* wedge resets in a row at one place before a race is given up */
 #define AP_STAND      4                 /* career_mw.c's autopilot: the AI lets the car go now, and takes the next race at its GO */
 #define GOTO_NEAR_M   20.0f             /* the car at a start: this near it (X, Z) */
 static struct {
@@ -454,6 +457,7 @@ static struct {
                                            (decide, pursuit_frame): on now, tried, met; the bin they count in */
     int unsticks;                       /* unstick: the standing car set on a road before a forced pursuit, this time */
     int rejoin_stand;                   /* pursuit_frame: the car stands where a rejoin set it (since rejoin_t) */
+    int quitting;                       /* B_RACE: the race given up (wedged at one place), Quit to Free Roam asked */
     int lot_bin, lot_in, lot_done, lot_target, lot_seen, lot_entered, lot_cars0;   /* B_LOT (lot_frame) */
     long lot_cost[33];
     unsigned char lot_bad[33];
@@ -464,7 +468,7 @@ static void set_state(int st, const char *why){
     fprintf(stderr, "[mwbot] f=%ld t=%.1f %s -> %s%s%s\n", autotest_frame(), mw_game_time(), st_name[B.st], st_name[st],
             why ? ": " : "", why ? why : "");
     B.st = st; B.t0 = mw_game_time(); B.f0 = autotest_frame(); B.tries = 0; B.free_since = 0; B.go_set = 0;
-    B.fin_f = 0; B.post_seen = 0;
+    B.fin_f = 0; B.post_seen = 0; B.quitting = 0;
 }
 /* The car the bot races: the career's best by car_rank (a beaten rival's pink slip comes with packages of its own:
  * Taz's IS300 with engine, transmission, nitrous and brakes at level 1).  When it is not the current car, the
@@ -623,6 +627,11 @@ static void go_to(CPU *c, const struct race *r, const struct race *all, int n, i
  * back; Escape there leaves the shop for free roam.  The bot shops when a bin begins (its first decision) and again
  * when the cash has grown by SHOP_AGAIN since. */
 #define SHOP_RESERVE  8000              /* cash kept back (a bust's fines, an impounded car's release) */
+#define SHOP_KEEP_LOT 280000            /* ... from bin 4 on without a car of the fastest tier: for the car lot (lot_frame;
+                                           its tier-1 cars cost 265,000 to 300,000, locked until bins 4 and 3 are beaten,
+                                           and the shop had spent 102,000 of 359,350 before, c6-b3r) */
+static int best_tier(void);
+static long shop_reserve(int bin){ return bin <= 4 && best_tier() > 1 ? SHOP_KEEP_LOT : SHOP_RESERVE; }
 #define SHOP_MIN      1400              /* the cheapest level seen */
 #define SHOP_AGAIN    15000
 #define SHOP_CATS     7
@@ -654,7 +663,7 @@ static int installed_level(int cat){
  * by a few seconds, c4-b11a), when the money left reaches a level */
 static int swap_due(void){ return !B.once && B.boss_ended >= CAR_SWAP_AFTER && B.boss_ended - B.swap_at >= CAR_SWAP_AFTER; }
 static int shop_wanted(const struct gates *g){
-    if (B.once || g->cash < SHOP_RESERVE + SHOP_MIN) return 0;
+    if (B.once || g->cash < shop_reserve(g->bin) + SHOP_MIN) return 0;
     /* only for the best car (choose_car's): the packages bought for a car the bot left after two lost challenges were
      * lost to it (bins 10 and 9: 46,500 and 29,800 spent on cars raced in one challenge, c4-b10r, c4-b9r) */
     uint32_t cur = rd(profile() + 0xa8u), best = best_car();
@@ -896,6 +905,9 @@ int mw_aid_icon_place(int type, int k, float pos[3]);   /* pursuit_mw.c: icon k 
 #define REJOIN_BACK   3                 /* to where it was this many seconds before the search */
 #define REJOIN_MAX    8                 /* times in one pursuit */
 #define REJOIN_STAND_S 10.0             /* game seconds the car stands where a rejoin set it, at most */
+#define REJOIN_GIVEUP 3                 /* from heat 4 on: rejoins before a chase lost early is let go (the car hidden, the
+                                           search over within seconds, the next pursuit forced PURSUIT_NATURAL_S4 on): the
+                                           cops' search position held no cop for six rejoins in a row at bin 4 (c6-b3r) */
 /* The chase's length at which it is broken off, by bin: ESCAPE_LEN, or longer when the bin has a pursuit_length
  * milestone (gameplay.bin milestones/bin_NN/challenge_N_pursuit_length): its goal is drawn between two values, fields
  * 0x8445AF47 and 0x3B9BBFC2 (bin 8: 360 and 600 s, bin 6: 420 and 660; bins 12 and 10 480 and 540 at most, bins 3 to 1
@@ -1153,7 +1165,8 @@ static void pursuit_frame(CPU *c){
             fprintf(stderr, "[mwbot] f=%ld t=%.1f pursuit %08x began%s: heat %.2f range %.2f-%.2f cops %u\n", f, t, po,
                     B.forced ? " (forced)" : " (by itself)", rdf(perp + PERP_HEAT), rdf(po + 0x9cu), rdf(po + 0xa0u),
                     rd(po + PURSUIT_COPS));
-        } else if (B.tries == 1 && t - B.t0 >= (B.chase_s > 0.0 || B.stand ? CHASE_NATURAL_S : PURSUIT_NATURAL_S) &&
+        } else if (B.tries == 1 && t - B.t0 >= (B.chase_s > 0.0 || B.stand ? CHASE_NATURAL_S : B.g.bin <= 8 ? PURSUIT_NATURAL_S4 :
+                                                PURSUIT_NATURAL_S) &&
                    free_roam(c) && !(B.stand ? 0 : unstick(c, t))){
             /* at the bin's top heat (the pursuit holds it in the bin's range anyway): forced at heat 1 the pursuits of
              * bin 14 mostly ended within 12 s for 100 bounty, while the one at heat 1.96 ran 176 s for 7,700 (bot run
@@ -1229,9 +1242,11 @@ static void pursuit_frame(CPU *c){
          * back (then the AI drives again).  At bin 8 a chase ran 804 s through 23 escapes to race places, each found
          * by the cops again within 20 s (c5-s8x).  The hiding spots are GManager's icons of type 11 (HIDING_SPOT_%d,
          * 34 of them, listed only in the cops' search; pursuit_mw.c), in the world's axes; a quick pursuit's (a bin's
-         * open "escape within" milestone) at once.  Only with NFSMW_BOT_SEARCH unset (rejoin): "stay" leaves the
-         * search alone and "hide" hides at once (pursuit_hide). */
-        if (!B.stand && search_mode() == 0 && pst == 2 && !B.hidden && B.hides < ESC_HIDE_MAX && (len >= elen || B.quick) &&
+         * open "escape within" milestone) at once, and a chase lost early let go after REJOIN_GIVEUP rejoins.  Only
+         * with NFSMW_BOT_SEARCH unset (rejoin): "stay" leaves the search alone and "hide" hides at once
+         * (pursuit_hide). */
+        int giveup = B.g.bin <= 8 && B.rejoins >= REJOIN_GIVEUP;
+        if (!B.stand && search_mode() == 0 && pst == 2 && !B.hidden && B.hides < ESC_HIDE_MAX && (len >= elen || B.quick || giveup) &&
             t - B.search_t >= 1.0 && !mw_fe_input_top(0)){
             float here[3], kmh = 0, w[3], best[3] = { 0 }, bd = 1e30f;
             if (mw_aid_where(c, here, &kmh))
@@ -1254,8 +1269,8 @@ static void pursuit_frame(CPU *c){
             mw_aid_autopilot(c, 1);
             B.hidden = 0;
         }
-        if (!B.stand && search_mode() == 0 && !B.quick && !B.rejoin_stand && pst == 2 && len < elen && B.rejoins < REJOIN_MAX &&
-            t - B.search_t >= REJOIN_S && B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
+        if (!B.stand && search_mode() == 0 && !B.quick && !B.rejoin_stand && !giveup && pst == 2 && len < elen &&
+            B.rejoins < REJOIN_MAX && t - B.search_t >= REJOIN_S && B.trail_n > REJOIN_BACK && !mw_fe_input_top(0)){
             const float *a = B.trail[(B.trail_n - REJOIN_BACK - 1) % TRAIL_N], *b = B.trail[(B.trail_n - REJOIN_BACK) % TRAIL_N];
             float d[3] = { b[0] - a[0], 0.0f, b[2] - a[2] }, m = hypotf(d[0], d[2]);
             if (m > 0.5f){ d[0] /= m; d[2] /= m; } else { d[0] = 1.0f; d[2] = 0.0f; }
@@ -1437,6 +1452,17 @@ void mw_bot_frame(CPU *c){
         if (f - B.f0 > RACE_START_MAX){ if (B.race >= 0) B.skips[B.race]++; set_state(B_ROAM, "the race did not start"); }
         break; }
     case B_RACE:                        /* the race's end: its result screen (the winner's or the loser's), then free roam */
+        /* the AI cannot get past a place (the game's reset puts the car back in front of it, again and again): the race
+         * is given up, the pause menu's Quit to Free Roam, and not raced again */
+        if (!B.fin_f && racing(c) && mw_aid_wedge_spot() >= WEDGE_GIVEUP){
+            if (!B.quitting){
+                B.quitting = 1;
+                if (B.race >= 0 && B.race < MAX_RACES) B.skips[B.race] = SKIP_MAX;
+                fprintf(stderr, "[mwbot] f=%ld t=%.1f race %d: %d resets at one place, given up (Quit to Free Roam; not raced "
+                        "again)\n", f, mw_game_time(), B.race, mw_aid_wedge_spot());
+            }
+            if (!mw_fe_input_top(0) && f - B.last_tap >= 90){ autotest_tap(DIK_ESCAPE, 6); B.last_tap = f; }
+        }
         if (!B.fin_f && !racing(c)) B.fin_f = f;
         if (!B.fin_f) break;
         if (!B.post_seen && f - B.fin_f < POST_WAIT) break;
@@ -1668,12 +1694,12 @@ void mw_bot_present(void){
             B.sh_cat_done = 1; key = DIK_ESCAPE; what = "Escape: no level of this package bought (none above the car's)";
         }
         else if (idx != B.sh_target){ key = idx < B.sh_target ? DIK_RIGHT : DIK_LEFT; what = "to a level"; }
-        else if (cost > 0 && funds >= 0 && cost <= funds - total - SHOP_RESERVE && cost > 2 * trade){
+        else if (cost > 0 && funds >= 0 && cost <= funds - total - shop_reserve(B.g.bin) && cost > 2 * trade){
             B.sh_entered = 1; B.sh_total0 = total; what = "Enter: the level into the cart";
         }
         else {                          /* beyond the money left, or not above the part on the car: the next lower */
             fprintf(stderr, "[mwbot] f=%ld shop: %s level %ld/%ld costs %ld, the money left %ld (%ld kept back): the next lower\n",
-                    f, cat, idx, nlev, cost, funds - total - SHOP_RESERVE, (long)SHOP_RESERVE);
+                    f, cat, idx, nlev, cost, funds - total - shop_reserve(B.g.bin), shop_reserve(B.g.bin));
             B.sh_target--; return;
         }
     }
@@ -1833,6 +1859,13 @@ void mw_bot_present(void){
             return;
         }
         if (focus == F_YES_DLG){ key = DIK_LEFT; what = "LEFT to Yes"; } else what = "Enter on Yes";
+    }
+    else if (!strcasecmp(nm, "Pause_Main.fng") && B.st == B_RACE && B.quitting){
+        /* in a race the menu reads Resume Race, Restart, Jump to Safe House, Quit to Free Roam, Performance Tuning,
+         * Options (0x4B4E388A on; the labels' hashes in English.bin, pause_probe of c6-pz1) */
+        uint32_t want = F_ITEM1 + 3u;
+        if (focus != want){ key = focus < want ? DIK_RIGHT : DIK_LEFT; what = "to Quit to Free Roam"; }
+        else what = "Enter on Quit to Free Roam (the race given up)";
     }
     else if (!strcasecmp(nm, "Pause_Main.fng")){
         int jump = save || (B.st == B_CAR && !B.car_swapped);   /* to save, or to change the car (B_CAR) */
