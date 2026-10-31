@@ -10,7 +10,16 @@
  *
  * tick_mono answers v, or the latest answer any thread was given when v is behind it (compared modulo 2^32, as the
  * counter wraps).  The first five reads behind it, and every 1000th, are logged as "[clock] <what>: ...".  Users:
- * win32.c's GetTickCount of the exe (GameOps tick_monotonic) and game_ug2.c's NetTick (DirtySock's clock). */
+ * win32.c's GetTickCount of the exe (GameOps tick_monotonic) and game_ug2.c's NetTick (DirtySock's clock).
+ *
+ * What it keeps is the order of the answers, not the length of a wait.  An answer can be ahead of the calling
+ * thread's own clock by up to the skew between the threads' clocks (plus a preemption between the clock read and
+ * the exchange below): the latest answer may come from a thread whose clock is ahead.  So a wait timed on one thread
+ * from a start read that was clamped up ends up to that much late, and one whose later read is clamped up ends up
+ * to that much early; without the clamp only a wait started on one thread and checked on another was off by the
+ * skew.  In the browser the skew is about a millisecond (half the best round trip; the virtual clock's out-of-order
+ * answers are mostly 1 ms apart), small next to DirtySock's timers of 100 ms to 120 s, which need a later tick
+ * minus an earlier one never to go negative. */
 #ifndef TICKMONO_H
 #define TICKMONO_H
 #include <stdatomic.h>
