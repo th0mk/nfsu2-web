@@ -25,7 +25,8 @@ and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the line, s
 
 Profiles and the controller: `pad_profile_make.txt` (the pad plugged in at a first start: PADA saved with the game's
 own pad layout poked back, PADB with the player's gas on Y as well), then `pad_profile_load.txt` seeded with its saves
-(runtime/mw/pad_mw.c writes the modern layout over PADA's at its load and keeps PADB's).
+(runtime/mw/pad_mw.c writes the modern layout over PADA's at its load and keeps PADB's).  `pad_dpad.txt` (from the
+freeroam seed, the pad plugged in: the D-pad's right brings up the SMS messages and its left the World Map).
 
 The player's page (web/tools/app-test.mjs --game mw, not run-suite): `app_rw_probe.txt` (a first start makes and
 saves the alias ROTEST, then a Custom Race to GO and 600 frames of it, quit in the race) and `app_load_probe.txt` (the

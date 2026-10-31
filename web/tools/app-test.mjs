@@ -323,9 +323,10 @@ async function mwSteps() {
       look.rows.includes('fps') && look.rows.includes('language') && look.rows.includes('autosave') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
       look.langs[0] === 'english' && look.langs.includes('finnish') &&
       // the keyboard's and the controller's rows are Most Wanted's (src/games/mw/body.json, src/games/mw/controls.ts: runtime/mw/
-      // pad_mw.c's modern layout, PLAN D-65)
+      // pad_mw.c's modern layout, PLAN D-65; the D-pad the game's, tests/mw/scripts/pad_dpad.txt)
       ['Change camera, look back', 'Speedbreaker', 'Start an event'].every(k => look.keys.includes(k)) &&
       /RT: throttle/.test(look.pad ?? '') && /RS: speedbreaker/.test(look.pad ?? '') && /Menu: pause/.test(look.pad ?? '') &&
+      /D-pad left: map; D-pad right: messages/.test(look.pad ?? '') &&
       /A: shift up/.test(look.pad ?? '') && !/Quick chat|quick chat|horn|RT: pause/.test(look.pad ?? ''),
       { phase: p, checks, problems, ...look, templateBytes: tmpl?.size });
   }

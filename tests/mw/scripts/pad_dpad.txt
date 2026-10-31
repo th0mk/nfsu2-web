@@ -1,0 +1,38 @@
+# Most Wanted: the controller's D-pad in free roam, the pad plugged in from the first frame (TRACKER M6-37; the rows
+# 11..13 of the binding table, HUDACTION_PAD_DOWN, _LEFT and _RIGHT, stay the game's: POV down, left and right; on
+# the keyboard B, M and Tab).  The career saved in free roam (the freeroam seed) loads into free roam as
+# career_resume.txt does; then the D-pad's right brings up the SMS messages (SMS_MailBoxes.fng) and B takes them
+# away, its down is pressed and B after it (no screen of its own came up for it here: the game's own name for the
+# action is "View Blacklist"), and its left brings up the World Map (WorldMapMain.fng), which B takes away too.
+# web/src/games/mw/controls.ts draws the left and the right on the controls sheet.
+#   NFSU2_SAVE_SEED=<seeds>/freeroam node web/tools/run-suite.mjs --game mw --script pad_dpad.txt \
+#     --marker 'pad_dpad: done' --env NFSU2_QUIT_FRAMES=12000
+# tests/mw/checks/pad_dpad.sh wants each screen up after its press and gone after its B.
+0     pad connect
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900
++0    tap RETURN                                         # Career
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6)
++300  log pad_dpad: free roam
++0    tappad DRIGHT 10
++0    waitfng SMS_MailBoxes.fng 300
++60   log pad_dpad: messages up
++0    tappad B
++0    waitfng -SMS_MailBoxes.fng 300
++120  log pad_dpad: messages gone
++0    tappad DDOWN 10
++240  log pad_dpad: down pressed
++0    tappad B
++120  log pad_dpad: B after down
++0    tappad DLEFT 10
++0    waitfng WorldMapMain.fng 300
++60   log pad_dpad: map up
++0    tappad B
++0    waitfng -WorldMapMain.fng 300
++120  log pad_dpad: done
++0    close
