@@ -1,0 +1,20 @@
+# Most Wanted: 50 changes of the screen's size under the game (TRACKER M7-04, PLAN G-08's device changes): the main
+# menu, a [status] line (texture ids live and made, kernel objects, file handles, threads: heap.c memstat_line), then
+# 50 "resize" lines 120 frames apart, each followed by a [status] line, and a picture.  On the play page with
+# &resizeon=<five sizes> each "resize" line gives the canvas the next size of the list (test/play.ts), so 50 changes
+# end on the first size again, e.g. resizeon=960x720,1680x720,404x720,1600x720,1280x720 from a 1280x720 start (4:3,
+# 21:9, upright, 20:9, 16:9).  Its check wants the device made again at each size, and the texture ids live and
+# the kernel objects at the end where they were after the first round of five.  With movies off (NOMOVIES=1).
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++300  status before
++0    loop 50
++0    log wide_resize50: resize
++120  status resized
++0    endloop
++120  dump menu_after
++3    dump menu_after
++0    log wide_resize50: done
++0    close

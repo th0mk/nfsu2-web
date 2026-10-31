@@ -12,6 +12,8 @@
 //               24 bits (red the high byte)
 //   watchtex    log every create / upload / free of these texture ids
 //   resizeat    <seconds>:<w>x<h>: resize the canvas then (tests the device reset that follows)
+//   resizeon    <w>x<h>,<w>x<h>,...: at each "LOG <...>: resize" line of the script the canvas takes the next size of
+//               the list, round again after its last (tests/mw/scripts/wide_resize.txt, wide_resize50.txt)
 //   gputime     measure GPU time per frame with timestamp queries (in the stats)
 //   bc=0        unpack the DXT textures on the CPU, as on a GPU without texture-compression-bc
 //   astc=0      with bc=0 (or no BC): unpack DXT1 too, rather than rewrite it as ASTC where the GPU has that
@@ -68,6 +70,14 @@ if (q.get('reg')) { await preload(q.get('reg')!, 'registry.txt'); env.NFSU2_REGF
 if (q.get('script')) { await preload(q.get('script')!, 'autotest-script.txt'); env.NFSU2_INPUT_SCRIPT = '/save/autotest-script.txt'; }
 for (const e of q.getAll('env')) env[e.slice(0, e.indexOf('='))] = e.slice(e.indexOf('=') + 1);
 const bench = q.has('bench');
+// resizeon: the sizes the script's "resize" lines step through (resizeCanvas, below)
+const resizeOn = (q.get('resizeon') ?? '').split(',').map(s => /^(\d+)x(\d+)$/.exec(s)).filter(m => !!m).map(m => [+m![1], +m![2]]);
+let resizeNext = 0;
+function resizeCanvas(w: number, h: number, why: string) {
+  canvas.width = w; canvas.height = h;
+  canvas.style.width = `${w / devicePixelRatio}px`; canvas.style.height = `${h / devicePixelRatio}px`;
+  log(`[play] canvas resized to ${w}x${h}${why}`);
+}
 let loadT0 = 0, up0 = 0;
 let r: Renderer | null = null;
 const p = await startProcess({
@@ -76,6 +86,10 @@ const p = await startProcess({
   onNote: log,
   onLog: (s, fd, tid) => {
     log(`[${tid}${fd === 2 ? '!' : ''}] ${s}`);
+    if (resizeOn.length && /\bLOG [^:]*: resize\b/.test(s)) {
+      const [w, h] = resizeOn[resizeNext++ % resizeOn.length];
+      resizeCanvas(w, h, ` (resize ${resizeNext})`);
+    }
     // the loading screen: Underground 2's PC_Loading.fng, Most Wanted's Loading.fng
     if (bench && /tapuntil (PC_)?Loading\.fng satisfied/.test(s)) { loadT0 = performance.now(); up0 = r?.stats().uploadMs ?? 0; }
     if (bench && s.includes(' LOG race_loaded') && loadT0) {
@@ -107,11 +121,7 @@ try {
     summaryMs: q.get('summary') ? +q.get('summary')! * 1000 : undefined });
 } catch (x) { log(`renderer: ${x}`); }
 const rz = /^(\d+(?:\.\d+)?):(\d+)x(\d+)$/.exec(q.get('resizeat') ?? '');
-if (rz) setTimeout(() => {
-  canvas.width = +rz[2]; canvas.height = +rz[3];
-  canvas.style.width = `${+rz[2] / devicePixelRatio}px`; canvas.style.height = `${+rz[3] / devicePixelRatio}px`;
-  log(`[play] canvas resized to ${rz[2]}x${rz[3]}`);
-}, +rz[1] * 1000);
+if (rz) setTimeout(() => resizeCanvas(+rz[2], +rz[3], ''), +rz[1] * 1000);
 const da = +(q.get('detachat') ?? 0);
 if (da > 0) setTimeout(async () => {
   if (!r) return;

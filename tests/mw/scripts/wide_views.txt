@@ -1,0 +1,46 @@
+# Most Wanted: each camera view of a race at the screen's shape (TRACKER M7-01: bumper, hood, near, far and look
+# back at 4:3, 16:9, 20:9 and 21:9 show the car or the hood): the Custom Race circuit of race_shots.txt at GO with
+# the AI driving, then the four views C steps through (the far chase it starts in, the near chase, the bumper, the
+# hood, whose picture has the car's bonnet at its foot), each dumped twice 3 frames apart 60 frames after its C, and
+# the look back (L held) from the far chase again.  Run it on the play page at each shape (w, h).  The pictures are
+# the game's: they stay out of the repo.
+0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # Auto, until the loading screen
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log wide_views: GO
++0    autopilot on
++240  dump view_far
++3    dump view_far
++0    tap C
++60   dump view_near
++3    dump view_near
++0    tap C
++60   dump view_bumper
++3    dump view_bumper
++0    tap C
++60   dump view_hood
++3    dump view_hood
++0    tap C                                              # back to the far chase
++60   down L
++30   dump view_lookback
++3    dump view_lookback
++0    up L
++0    log wide_views: done
++0    close

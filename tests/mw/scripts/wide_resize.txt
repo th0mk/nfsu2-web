@@ -1,10 +1,10 @@
 # Most Wanted: the screen changing shape under the game (TRACKER M7-03: the front end and the HUD redrawn after an
 # aspect change; M7-04: the device follows the canvas through a Reset).  The main menu, then a Custom Race circuit
 # (race_shots.txt's path) at GO with the AI driving; at each "resize" log line the page's canvas is to be given
-# another shape by the runner (the play page and a driver that watches the log; the canvas's new size makes the
-# page ask the game for a Reset, runtime/com.c res_pick picks the new device size), and the picture is dumped
-# before and after.  For example 1280x720 first, 960x720 at "resize 1" (16:9 to 4:3 in the menu) and 2520x1080 at
-# "resize 2" (4:3 to 21:9 in the race).  With movies off (NOMOVIES=1).  The pictures stay out of the repo.
+# another shape (the play page's &resizeon=<w>x<h>,<w>x<h>; the canvas's new size makes the page ask the game for a
+# Reset, runtime/com.c res_pick picks the new device size), and the picture is dumped before and after.  For example
+# 1280x720 first, 960x720 at "resize 1" (16:9 to 4:3 in the menu) and 2520x1080 at "resize 2" (4:3 to 21:9 in the
+# race): &w=1280&h=720&resizeon=960x720,2520x1080.  With movies off (NOMOVIES=1).  The pictures stay out of the repo.
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +0    tapuntil RETURN MainMenu.fng 90 6000
