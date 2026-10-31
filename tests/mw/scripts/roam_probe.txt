@@ -3,10 +3,12 @@
 # (its rigid body, matrix rows, controls, driver class, the game's vehicles) standing and again while the car steers
 # left on the gas, and `roam spawn` makes cars of our own ahead of it the way friends' cars are made (driver class
 # DRIVER_NONE), posed there every frame, with the pools logged after each ([roampool]).  ROAM_SPAWN names the second
-# car's vehicle (a pvehicle name; the player's own without it).
+# car's vehicle (a pvehicle name; the player's own without it).  `roam unspawn` takes them away, and two more are made
+# and taken away again; the pools after each unspawn say whether the game let the cars go.
 #   NFSU2_SAVE_SEED=<seeds>/freeroam node web/tools/run-suite.mjs --game mw --script roam_probe.txt \
 #     --marker 'roam_probe: done' --env NFSU2_QUIT_FRAMES=20000 [--env ROAM_SPAWN=copmidsize]
-# (the check, tests/mw/checks/roam_probe.sh, wants the probe's lines and each spawn's car made and listed)
+# (the check, tests/mw/checks/roam_probe.sh, wants the probe's lines, each spawn's car made and listed, and none of
+# them left in the game's vehicles after each unspawn)
 0     waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MC_Main.fng 90 3000
 +0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900
@@ -36,6 +38,12 @@
 +600  roam pools
 +0    roam probe
 +0    roam unspawn
++60   roam pools                                         # the cars gone? (logged before the next line, 10 frames on)
++10   log roam_probe: made again
++0    roam spawn
++0    roam spawn ${ROAM_SPAWN}
++120  roam probe
++0    roam unspawn
 +60   roam pools
-+0    log roam_probe: done
++10   log roam_probe: done
 +0    close

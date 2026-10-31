@@ -44,12 +44,14 @@
  *   roam mp waitpeers N [TMO]       wait for N friends established (at most TMO frames)
  *   roam mp waitcars N [TMO]        wait for N friends' cars shown
  *   roam mp waitmoved N M [TMO]     wait until N friends' cars have each moved M metres since they appeared
+ *   roam mp drop                    friends' cars away now (ISimable::Kill, as for a friend gone far), to be made
+ *                                   again from the next frame as any new friend's (a car taken away and made again)
  *   roam probe                      the player's car: rigid body, matrix, controls, driver class; the pools
  *   roam spawn [NAME]               a car of our own of that vehicle (the player's without one) 12 m ahead, posed
  *                                   there every frame as a friend's would be (no network: the pools probe, M10-05)
  *   roam unspawn                    those cars away again
- *   roam pools                      the counts the friends' cars use up (rigid bodies, vehicles, the car loader's
- *                                   memory pool): one [roampool] line
+ *   roam pools                      the counts the friends' cars use up (rigid bodies, vehicles, those of driver
+ *                                   class 4 as ours are, the car loader's memory pool): one [roampool] line
  * NFSU2_ROAM_POSELOG=<file> writes UG2's pose log (L rows the player's car, R rows friends' cars as shown, world
  * frame) for tools/roam_compare.py; NFSU2_ROAM_MAX_CARS caps the cars (6, DEF_CARS). */
 #include "cpu.h"
@@ -680,17 +682,28 @@ static void test_frame(CPU *c){
 }
 
 /* ---- the queued script work (guest calls at the anchor) ---- */
-enum { Q_NONE, Q_PROBE, Q_SPAWN, Q_UNSPAWN, Q_POOLS, Q_STATUS };
+enum { Q_NONE, Q_PROBE, Q_SPAWN, Q_UNSPAWN, Q_POOLS, Q_STATUS, Q_DROP };
 static struct { int op; char arg[64]; } Q;
 
+/* the game's vehicles of driver class DRIVER_NONE, as ours are (the list at G_SIMLIST holds their ISimables): a car we
+ * took away and the game kept would stay in it */
+static unsigned class4_vehicles(CPU *c){
+    uint32_t b = rd(G_SIMLIST), n = rd(G_SIMLIST + 8u);
+    unsigned k = 0;
+    for (uint32_t i = 0; b && i < n && i < 256u; i++){
+        uint32_t s = rd(b + 4u * i), veh = s ? query(c, s, IID_IVEHICLE) : 0u;
+        if (veh && vcall(c, veh, VEH_CLASS, 0, 0) == DRIVER_NONE) k++;
+    }
+    return k;
+}
 static void pools_line(CPU *c, const char *why){
-    (void)c;
     int ours = 0;
     for (int k = 0; k < MAX_CARS; k++) ours += g_car[k].st != 0;
     for (int k = 0; k < g_ntest; k++) ours += g_test[k].st != 0;
     char b[512]; int o = 0;
-    o += snprintf(b + o, sizeof b - (size_t)o, "[roampool] f=%ld %s: our cars %d, rigid bodies %u of %u, rigid-body list %u, vehicles %u",
-                  autotest_frame(), why, ours, rd(G_RB_COUNT), RB_MAX, rd(G_VEHLIST + 8u), rd(G_SIMLIST + 8u));
+    o += snprintf(b + o, sizeof b - (size_t)o, "[roampool] f=%ld %s: our cars %d, rigid bodies %u of %u, rigid-body list %u, vehicles %u"
+                  " (driver class 4: %u)", autotest_frame(), why, ours, rd(G_RB_COUNT), RB_MAX, rd(G_VEHLIST + 8u), rd(G_SIMLIST + 8u),
+                  class4_vehicles(c));
     for (uint32_t i = 0; i < 16u && o < (int)sizeof b - 64; i++){
         uint32_t pp = rd(G_POOLS + 4u * i), nm = pp ? rd(pp) : 0u;
         if (!pp || !ok(nm, 4)) continue;
@@ -824,6 +837,9 @@ static void queued(CPU *c, int in_roam){
         g_ntest = 0; break;
     case Q_POOLS: pools_line(c, "pools"); break;
     case Q_STATUS: if (R.on) status(c); break;
+    case Q_DROP:
+        for (int k = 0; k < MAX_CARS; k++) if (g_car[k].st) car_kill(c, &g_car[k], "dropped (roam mp drop)");
+        break;
     default: break;
     }
     Q.op = Q_NONE;
@@ -912,6 +928,7 @@ int roam_cmd(CPU *c, const char *line, long *wait_start){
         sscanf(line + used + u2, "%63s %63s %63s", a1, a2, a3);
         if (!R.on){ fprintf(stderr, "[roam] f=%ld mp %s: multiplayer is off (NFSU2_ROAM=1)\n", f, w); return 1; }
         if (!strcasecmp(w, "status")){ if (Q.op) return 0; Q.op = Q_STATUS; return 1; }
+        if (!strcasecmp(w, "drop")){ if (Q.op) return 0; Q.op = Q_DROP; return 1; }
         if (!strcasecmp(w, "waitpeers") || !strcasecmp(w, "waitcars") || !strcasecmp(w, "waitmoved")){
             int want = atoi(a1);
             float metres = !strcasecmp(w, "waitmoved") ? (float)atof(a2) : 0.f;

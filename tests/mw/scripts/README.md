@@ -181,10 +181,13 @@ Free roam with friends (TRACKER M10-04 to M10-07, M10-25; runtime/mw/roam_mw.c, 
 career saved in free roam (the freeroam career seed, ../seed/README.md) and resumes it into free roam.
 `roam_probe.txt` (run-suite, one page, no network: `roam probe` logs the player's car's rigid body, matrix rows and
 controls, standing and with LEFT and UP held; `roam spawn [NAME]` makes cars of our own ahead of it the way friends'
-cars are made, posed every frame; `roam pools` logs what they use up; `ROAM_SPAWN` names the second car's vehicle).
+cars are made, posed every frame; `roam pools` logs what they use up; `ROAM_SPAWN` names the second car's vehicle;
+`roam unspawn` takes them away, two are made and taken away again, and the check wants the game's vehicles of driver
+class 4 back to none of ours after each unspawn).
 `roam_mp_drive.txt` and `roam_mp_watch.txt` are web/tools/roam-pair.mjs --game mw's pair: A's car driven by the game's
 AI (`autopilot on`), B waiting for A's car to have moved 50 m (`roam mp waitpeers`, `waitcars`, `waitmoved N M`, `roam
 mp status`); roam-pair compares where B shows A's car with where A was (tools/roam_compare.py).
 `roam_crowd_probe.txt` is the pools probe (M10-05): one page with web/tools/roam-crowd.mjs --game mw's simulated players
 (give the crowd `--track` a pose log of a real drive, such as the start of the pair's A.pose.csv, so the cars stand on
-the road), `[roampool]` lines every 600 frames; the game's car loader takes six friends' cars beside the player's.
+the road), `[roampool]` lines every 600 frames; the game's car loader takes six friends' cars beside the player's.  Then
+`roam mp drop` takes the friends' cars away and they are made again (a friend's car taken away and made anew).
