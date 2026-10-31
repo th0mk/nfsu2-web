@@ -11,8 +11,8 @@
 //        macOS browsers send no keyup for keys released while Cmd is held.
 // Mouse: positions relative to the shown image (the C side maps them into
 //        the game's client area and HUD), buttons with pointer capture, the
-//        wheel in WHEEL_DELTA units with the place it turned at (IKF_WHEEL_AT).
-//        The OS cursor is hidden over the game.
+//        wheel in WHEEL_DELTA units with the place it turned at (IKF_WHEEL_AT),
+//        and the mouse leaving the game.  The OS cursor is hidden over the game.
 // Touch: one finger is the mouse, so a tap is a left click (the game's menus
 //        take clicks); two are a middle-button drag (the garage turns the
 //        car); other fingers are left alone.  Where the first finger lands
@@ -38,7 +38,8 @@ import { CODES, cp1252, isMeta, keyChars, keyVk } from './keymap';
 import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
-  IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_MOVE, IEV_MOUSE_UP, IEV_QUIT, IEV_SMS,
+  IEV_FOCUS, IEV_KEY_DOWN, IEV_KEY_TAP, IEV_KEY_UP, IEV_LOG, IEV_MOUSE_DOWN, IEV_MOUSE_LEAVE, IEV_MOUSE_MOVE, IEV_MOUSE_UP,
+  IEV_QUIT, IEV_SMS,
   IEV_PHOTO, IEV_RELEASE_ALL, IEV_TEXT, IEV_WHEEL, IKF_ALT, IKF_CTRL, IKF_DEAD, IKF_REPEAT, IKF_SHIFT, IKF_SYNTH, IKF_TOUCH,
   IKF_WHEEL_AT, IM_ATTACHED,
   IM_EV_DROP, IM_EV_R, IM_EV_W, IM_EVENTS, IM_GAME_INACTIVE, IM_HDR_WORDS, IM_KEYS_HELD, IM_MAGIC, IM_MOUSE_X,
@@ -267,6 +268,11 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     if (e.pointerType === 'touch') { onFingerUp(e); return; }
     syncButtons(e);                                        // a release is delivered even outside the image
     try { element.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
+  }
+  function onPointerLeave(e: PointerEvent) {
+    // the mouse left the game (a captured one: when its button goes up); a finger's lift is not one
+    if (detached || e.pointerType === 'touch') return;
+    push(IEV_MOUSE_LEAVE, 0, 0, flagsOf(e));
   }
 
   // ---- touch: one finger is the mouse, two turn the car --------------------------------
@@ -497,7 +503,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
   const listeners: [string, EventListener][] = [
     ['pointermove', onPointerMove as EventListener], ['pointerdown', onPointerDown as EventListener],
     ['pointerup', onPointerUp as EventListener], ['pointercancel', onPointerUp as EventListener],
-    ['contextmenu', onContextMenu], ['blur', onElementBlur],
+    ['pointerleave', onPointerLeave as EventListener], ['contextmenu', onContextMenu], ['blur', onElementBlur],
   ];
   for (const [t, f] of listeners) element.addEventListener(t, f);
   element.addEventListener('wheel', onWheel, { passive: false });

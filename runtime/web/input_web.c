@@ -241,7 +241,7 @@ static void key_up(const InEv *e){
 
 /* ---- mouse (metal.m) ------------------------------------------------------- */
 static _Atomic int g_mouse_x = 640, g_mouse_y = 360;   /* the pointer now (the WM_ messages, the page) */
-static _Atomic int g_mouse_away = 1;          /* the pointer has given no position yet (game.h cursor_away) */
+static _Atomic int g_mouse_away = 1;          /* no pointer position yet, or the mouse left (game.h cursor_away) */
 static _Atomic int g_mouse_dz = 0;
 static _Atomic unsigned g_mouse_btn = 0;
 static uint64_t mono_us(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000u + (uint64_t)t.tv_nsec / 1000u; }
@@ -266,7 +266,7 @@ static uint64_t mono_us(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC,
  * within two of those units of the cursor first puts it two units aside for
  * a frame of its own (MS_HOP), and the cursor comes back to the finger with
  * a move the menu sees. */
-enum { MS_MOVE, MS_BTN, MS_HOP };
+enum { MS_MOVE, MS_BTN, MS_HOP, MS_AWAY };     /* MS_AWAY: the pointer left the game (game.h cursor_away) */
 typedef struct { int kind, x, y, dx, dy; unsigned btn; uint64_t us; } MouseStep;
 #define MOUSE_STEPS 64
 static MouseStep g_ms[MOUSE_STEPS];
@@ -284,7 +284,8 @@ static long g_view_frame = -1;
 static pthread_mutex_t g_ms_mx = PTHREAD_MUTEX_INITIALIZER;
 static void step_take(void){                  /* g_ms_mx held */
     const MouseStep *s = &g_ms[g_ms_head];
-    if (s->kind != MS_BTN){ g_view_x = s->x; g_view_y = s->y; g_view_dx += s->dx; g_view_dy += s->dy; g_view_placed = 1; }
+    if (s->kind == MS_AWAY) g_view_placed = 0;
+    else if (s->kind != MS_BTN){ g_view_x = s->x; g_view_y = s->y; g_view_dx += s->dx; g_view_dy += s->dy; g_view_placed = 1; }
     else g_view_btn = s->btn;
     g_ms_head = (g_ms_head + 1) % MOUSE_STEPS; g_ms_n--;
 }
@@ -382,7 +383,15 @@ static void mouse_release_all(void){
     /* a focus loss: the game lets go at once, no click still to come is played */
     pthread_mutex_lock(&g_ms_mx);
     g_ms_n = 0; g_view_btn = 0; g_view_x = atomic_load(&g_mouse_x); g_view_y = atomic_load(&g_mouse_y);
+    g_view_placed = !atomic_load(&g_mouse_away);  /* a first move or a leave still queued counts too */
     pthread_mutex_unlock(&g_ms_mx);
+}
+/* the mouse left the game element (IEV_MOUSE_LEAVE): a game that waits for the pointer has its cursor
+ * away again, as a Windows game's cursor is outside its window, until the pointer comes back */
+static void mouse_leave(void){
+    if (!g_game.cursor_away || atomic_load(&g_mouse_away)) return;
+    atomic_store(&g_mouse_away, 1);
+    mouse_step((MouseStep){ .kind = MS_AWAY });
 }
 /* position in the shown image (1/65536 of its size) -> the game's client
  * area, narrowed to the HUD's area as metal.m's mouse_from_point does; the
@@ -509,6 +518,7 @@ static void handle(const InEv *e){
     case IEV_MOUSE_DOWN: mouse_button(e->a, 1, e->flags); break;
     case IEV_MOUSE_UP:   mouse_button(e->a, 0, e->flags); break;
     case IEV_WHEEL:      mouse_wheel(e); break;
+    case IEV_MOUSE_LEAVE: mouse_leave(); break;
     case IEV_FOCUS: {
         char why[48]; snprintf(why, sizeof why, "%s %s", reason_name(e->b), e->a ? "active" : "inactive");
         if (!e->a) release_all(why, 1);

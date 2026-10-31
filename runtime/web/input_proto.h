@@ -86,6 +86,8 @@ enum {
     IEV_LOG = 12,         /* Download log: how long ago the last frame was, a stall report if long (watchdog.c) */
     IEV_SMS = 13,         /* a = a text message of ours for the game's phone (sms.c) */
     IEV_PHOTO = 14,       /* photo mode (photo.c): dik = what (PH_*), a, b its values */
+    IEV_MOUSE_LEAVE = 15, /* the mouse (or a pen) left the game element; a finger's lift is not sent: a game whose
+                             cursor is away until the pointer arrives (game.h cursor_away) puts it away again */
 };
 enum {                    /* event flags */
     IKF_REPEAT = 1,       /* autorepeat */

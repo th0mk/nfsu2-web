@@ -271,8 +271,8 @@ const GameOps g_game = {
     .fe_match = mw_fe_match,                    /* the scripts' names within a package: dialogs, highlights */
     .top_screen = mw_top_screen,               /* the active packages' tail, [[[0x91CADC]]+0xE4] */
     .on_test_frame = mw_test_frame,             /* the screens the game brings up, for waitfng and [fng] */
-    .cursor_away = 1,                           /* no cursor over the menus until the pointer moves: FEng
-                                                 * highlights the object a still cursor rests on (GAME.md 13.1) */
+    .cursor_away = 1,                           /* no cursor over the menus while the pointer is elsewhere:
+                                                 * FEng highlights the object a still cursor rests on (GAME.md 13.1) */
     .fe_object = mw_fe_object,                  /* the scripts' $O: an active package's object by name hash */
     .init_tables = mw_init_tables,
     .ninit_tables = (int)(sizeof mw_init_tables / sizeof mw_init_tables[0]),

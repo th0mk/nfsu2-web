@@ -229,6 +229,23 @@ test('input: a wheel turn sends the place it turned at first (IKF_WHEEL_AT): the
   i.detach();
 });
 
+test('input: the mouse or a pen leaving the game is sent (IEV_MOUSE_LEAVE), a finger lifting is not', async () => {
+  const proc = fakeProc(), ptr = 8192, h = mailbox(proc, ptr), el = element();
+  const i = attachInput(proc, el, { log: () => {}, gamepads: false });
+  proc.register(3, ptr, 65536);
+  await tick();
+  el.dispatchEvent(mouseEv('pointermove', 50, 50, { pointerType: 'mouse', buttons: 0 }));
+  el.dispatchEvent(mouseEv('pointerleave', 120, 50, { pointerType: 'mouse', buttons: 0 }));
+  el.dispatchEvent(mouseEv('pointerleave', 50, 50, { pointerType: 'pen', buttons: 0 }));
+  el.dispatchEvent(mouseEv('pointerleave', 50, 50, { pointerType: 'touch', buttons: 0 }));   // after every tap's lift
+  assert.deepEqual(ring(proc, ptr, h), [
+    { type: IP.IEV_MOUSE_MOVE, flags: 0, a: 32768, b: 32768 },
+    { type: IP.IEV_MOUSE_LEAVE, flags: 0, a: 0, b: 0 },
+    { type: IP.IEV_MOUSE_LEAVE, flags: 0, a: 0, b: 0 },
+  ]);
+  i.detach();
+});
+
 // ---- renderer ---------------------------------------------------------------------
 function fakeGpu() {
   const rec = { devices: [], unconfigured: 0 };
