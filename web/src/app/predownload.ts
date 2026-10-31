@@ -5,7 +5,7 @@
 // goes on after the game ends.
 
 import type { FromPredownload, ToPredownload } from '../host/predownload-worker';
-import { DATA_PATH, MANIFEST_PATH, aheadFiles, languageMovies, manifestFiles, scanCache, type Manifest } from '../host/datacache';
+import { MANIFEST_PATH, aheadFiles, languageMovies, manifestFiles, scanCache, type Manifest } from '../host/datacache';
 import { abs, at } from '../base';
 
 export type DownloadState = 'idle' | 'running' | 'paused' | 'done' | 'error';
@@ -56,7 +56,7 @@ export class Predownload {
     this.samples = [];
     w.onmessage = (e: MessageEvent<FromPredownload>) => this.message(w, e.data);
     w.onerror = e => this.message(w, { t: 'error', msg: e.message || 'it stopped unexpectedly' });
-    w.postMessage({ t: 'start', manifestUrl: abs(MANIFEST_PATH), dataBase: abs(DATA_PATH), language: this.language(), texpack: this.texpack() } satisfies ToPredownload);
+    w.postMessage({ t: 'start', manifestUrl: abs(MANIFEST_PATH), language: this.language(), texpack: this.texpack() } satisfies ToPredownload);
     this.set({ state: 'running', have: 0, total: 0, rate: 0, error: undefined });     // counted again by the worker
     this.log('[app] predownload: started');
   }

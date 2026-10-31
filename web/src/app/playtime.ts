@@ -2,8 +2,10 @@
 // Discord, crews and Ko-fi; once.  Play counts while a game runs, the tab is in sight and the player gave some input
 // in the last few minutes (input/index.ts lastInput), over all the games in this browser (localStorage).  From two
 // hours on, each game asks the game for the message (IEV_SMS) until its status "sms" says the inbox has it: the game
-// waits for career free roam, the only place with a phone, and a profile that has it already counts.  Without
-// storage (a private window) each load counts from 0.
+// waits for career free roam, the only place with a phone, and a profile that has it already counts.  The count goes
+// on after the message: Play's cloud saves question says how long was played here (playedMs, shell.ts askCloud;
+// before 2026-10-31 it stopped at the message, near two hours).  Without storage (a private window) each load counts
+// from 0.
 import { STORAGE } from '@game/storage';
 import type { GameSession } from './game';
 
@@ -15,15 +17,19 @@ const IDLE_MS = 5 * 60_000, TICK_MS = 5000;
 const read = (key: string): string | null => { try { return localStorage.getItem(key); } catch { return null; } };
 const write = (key: string, v: string) => { try { localStorage.setItem(key, v); } catch { /* not kept */ } };
 
+/** the play counted in this browser so far, in ms (0 without storage) */
+export const playedMs = () => Math.max(0, Number(read(PLAYED)) || 0);
+
 export class PlayTime {
   private timer: ReturnType<typeof setInterval> | null = null;
-  private played = Math.max(0, Number(read(PLAYED)) || 0);
+  private played = playedMs();
   private last = performance.now();
   private asked = false;
+  /** the message is in the game's inbox: only the count goes on */
+  private sent = read(SENT) === String(MSG);
 
   /** afterMs: the play before the message (SMS_AFTER_MS; a test page's address may give less) */
   constructor(private s: GameSession, private afterMs: number, private log: (line: string) => void) {
-    if (read(SENT) === String(MSG)) return;
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -34,14 +40,15 @@ export class PlayTime {
       this.played += dt;
       write(PLAYED, String(Math.round(this.played)));
     }
+    if (this.sent) return;
     if (!this.asked && this.played >= this.afterMs && this.s.input?.sms?.(MSG)) {
       this.asked = true;
       this.log(`[app] played ${Math.round(this.played / 60_000)} min: the game's phone gets our message once the player drives in career free roam`);
     }
     if (this.asked && this.s.status?.read()?.get('sms') === MSG) {
       write(SENT, String(MSG));
+      this.sent = true;
       this.log('[app] our message is in the game\'s inbox: not asked for again');
-      this.stop();
     }
   }
 

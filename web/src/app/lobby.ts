@@ -37,7 +37,7 @@ const GAME_TEXT = [
   N('your sponsor\'s contract has no place for it'), N('it opens after more wins'), N('it takes an SUV'),
   N('Back to free roam'), N('Leaving free roam'), N('Setting up the race'), N('Looking for the host\'s race'), N('Starting the race'),
   N('Waiting for the others'), N('Loading the race'),
-  N('Multiplayer races take a car of your own: buy one in your career first'), N('You are no longer in the race'), N('The race is full'),
+  N('Multiplayer races need your own car: buy one in your career first'), N('You are no longer in the race'), N('The race is full'),
   N('The race is off: its host is gone'), N('The race is off: you are not in it'), N('The race could not start'), N('The race did not take you'),
   N('Everyone else left: the race waits for players again'), N('Multiplayer race: you quit it'), N('Multiplayer race: not finished'),
   N('You seemed away: the lobby is closed'),
@@ -183,7 +183,7 @@ export class LobbyPanel {
         kids.push(el('div', 'lobby-note', noteText(s.text ?? '')));
         break;
     }
-    if (s.v === 'join' && s.even) kids.push(el('div', 'lobby-hint', t('The cars are evened out: slower ones get more engine power, faster ones a little less')));
+    if (s.v === 'join' && s.even) kids.push(el('div', 'lobby-hint', t('Cars are balanced: slower ones get more power, faster ones a little less')));
     if (s.v === 'join' && s.fee) kids.push(el('div', 'lobby-hint', t('Quitting the race costs ${fee}', { fee: s.fee })));
     p.replaceChildren(...kids);
   }

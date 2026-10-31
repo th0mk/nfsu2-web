@@ -4,7 +4,7 @@
 # NFSU2_WATCHDOG=15: "[watchdog] no Present for 20.x s (game flow 4" during
 # the first stall and "no Present for 15.x s (game flow 6" during the second,
 # each followed by the threads' report:
-#   web: node web/tools/run-suite.mjs --script watchdog_loading.txt --marker watchdog_end
+#   web: node web/tools/run-suite.mjs --script watchdog_loading.txt --marker watchdog_end --allow freeze
 0     tapuntil RETURN MC_Background.fng 120 12000
 +120  tap LEFT
 +30   tap RETURN

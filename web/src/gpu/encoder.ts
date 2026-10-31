@@ -169,6 +169,10 @@ export class Encoder {
   /** without BC, DXT3 and DXT5 as ASTC too (astc.ts dxtAlphaToAstc) where the device has texture-compression-astc;
    *  false: unpacked to BGRA8 (settings.ini astc_alpha = off) */
   astcAlpha = true;
+  /** textures made and freed since the log's last minute line (index.ts zeroes them): friends' cars coming and
+   *  going, the world after a shop */
+  texMade = 0; texMadeBytes = 0; texFreed = 0; texFreedBytes = 0;
+  get bindGroups(): number { return this.bg1.size; }
   /** blocks with a transparent texel that went into a texture already ASTC: two planes (astc.ts) */
   private astcHoles = { blocks: 0 };
   /** the workers that rewrite DXT3 and DXT5 as ASTC off the page thread (astc-pool.ts; startAstcWorkers), and the
@@ -408,6 +412,7 @@ export class Encoder {
     }
     bytes *= cube ? 6 : 1;
     this.texBytes += bytes; if (gf.unpack) this.unpackBytes += bytes; if (gf.astc) this.astcBytes += bytes;
+    this.texMade++; this.texMadeBytes += bytes;
     this.tex[id] = { serial: this.serial++, tex, fmt, w, h, levels, cube, rt, view: tex.createView(vd), rtViews, expandA8: gf.a8, bc: gf.bc,
       unpack: !!gf.unpack, astc: !!gf.astc, filled: false, bytes };
     // a multisampled render target (gpu-abi.md section 12): its 4-sample twin, in the texture's own format
@@ -423,6 +428,7 @@ export class Encoder {
     if (!t) return;
     t.tex.destroy(); t.ms?.tex.destroy();
     this.texBytes -= t.bytes; if (t.unpack) this.unpackBytes -= t.bytes; if (t.astc) this.astcBytes -= t.bytes;
+    this.texFreed++; this.texFreedBytes += t.bytes;
     this.tex[id] = undefined;
     if (this.bg1.size > 8192) this.bg1.clear();       // keys carry serials: stale entries are never hit again
   }

@@ -178,7 +178,7 @@ fn keys_of(bans: &Bans, w: &Who) -> Keys {
 /// what a new ban names the player by, for the operator: "its page, its keyphrase and its address"
 fn named_by(k: &Keys) -> String {
     if k.pages.is_empty() && k.owners.is_empty() {
-        return "its address only (a page from before page ids)".into();
+        return "its address only (no page id: a tool, not the page)".into();
     }
     let its = |n: usize, one: &str, many: &str| match n {
         0 => None,
@@ -216,7 +216,8 @@ impl Marker {
     }
 
     /// `line` with the handle of the player it names after it, " (ban c17)", when it is a `[cheat]` line of a race and
-    /// the switch knows who had its address (the player on it, or one who left it in the last hour); else None
+    /// the switch knows who had its address (the player on it, or one who left it in the last hour); else None.  The
+    /// same player's earlier lines under other names, and its bans since, follow the handle (`tagged`).
     pub fn tag(&self, line: &str) -> Option<String> {
         let (vip, name) = race_cheat(line)?;
         let at = self.lan.get()?.who_at(vip);
@@ -225,13 +226,27 @@ impl Marker {
             return None;
         }
         match self.bans.mark(name, k, now_ms()) {
-            Ok(h) => Some(format!("{line} (ban {h})")),
+            Ok(m) => Some(tagged(line, &m)),
             Err(e) => {
                 log::error(&format!("bans.json: {e}"));
                 None
             }
         }
     }
+}
+
+/// A `[cheat]` line with its player's handle after it: `(ban c17)`; `(ban c17; before as "Bob", "Rob"; was ban #4)`
+/// when its earlier lines named it otherwise and it was banned since its first one (a ban that ended or was lifted:
+/// it is back), `ban #4 in force` when that ban is in force (it came back past it: a new browser and address)
+fn tagged(line: &str, m: &nfsu2_bans::Marked) -> String {
+    let mut t = format!("ban {}", m.handle);
+    if !m.before.is_empty() {
+        t += &format!("; before as {}", m.before.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", "));
+    }
+    for &(id, live) in &m.bans {
+        t += &if live { format!("; ban #{id} in force") } else { format!("; was ban #{id}") };
+    }
+    format!("{line} ({t})")
 }
 
 /// the address and name a `[cheat]` line of a race begins with: `[cheat] 10.77.3.41 "Bob": won the online race "..."`
@@ -336,7 +351,12 @@ impl App {
                     Some(h) => format!("\"{name}\" ({h})"),
                     None => format!("\"{name}\""),
                 };
-                log::line(&format!("[ban] #{} {who} {how_long}{}; removed: {}", ban.id, quoted(&msg), listed(&removed)));
+                let instead = if replaced.is_empty() {
+                    String::new()
+                } else {
+                    format!("; in place of {}", replaced.iter().map(|n| format!("#{n}")).collect::<Vec<_>>().join(", "))
+                };
+                log::line(&format!("[ban] #{} {who} {how_long}{}{instead}; removed: {}", ban.id, quoted(&msg), listed(&removed)));
                 let mut t = vec![format!("ban #{}: {who} {how_long}, by {}", ban.id, named_by(&keys))];
                 if !replaced.is_empty() {
                     t.push(format!("it takes the place of {}", replaced.iter().map(|n| format!("#{n}")).collect::<Vec<_>>().join(", ")));
@@ -490,6 +510,21 @@ mod tests {
         }
     }
 
+    // the handle after the line, then the player's other names of its earlier lines and its bans since
+    #[test]
+    fn a_marked_line_says_the_earlier_names_and_bans() {
+        let m = |before: &[&str], bans: &[(u64, bool)]| nfsu2_bans::Marked {
+            handle: "c70".into(),
+            before: before.iter().map(|s| s.to_string()).collect(),
+            bans: bans.to_vec(),
+        };
+        assert_eq!(tagged("[cheat] x", &m(&[], &[])), "[cheat] x (ban c70)");
+        assert_eq!(
+            tagged("[cheat] x", &m(&["ChinaJek", "SuperCharger"], &[(4, false), (9, true)])),
+            "[cheat] x (ban c70; before as \"ChinaJek\", \"SuperCharger\"; was ban #4; ban #9 in force)"
+        );
+    }
+
     #[test]
     fn a_line_marks_the_player_of_that_name_or_the_only_one_there_was() {
         // on the address now, and the ones who left it (the last first)
@@ -532,6 +567,6 @@ mod tests {
         assert_eq!(named_by(&k(1, 1, 1)), "its page, its keyphrase and its address");
         assert_eq!(named_by(&k(2, 2, 1)), "its 2 pages, its keyphrase and its 2 addresses");
         assert_eq!(named_by(&k(0, 1, 0)), "its page");
-        assert_eq!(named_by(&k(1, 0, 0)), "its address only (a page from before page ids)");
+        assert_eq!(named_by(&k(1, 0, 0)), "its address only (no page id: a tool, not the page)");
     }
 }

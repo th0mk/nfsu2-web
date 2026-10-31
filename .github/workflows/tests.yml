@@ -1,0 +1,63 @@
+# The tests, on every push to main and every pull request: the server's own (every crate's cargo tests, which also run
+# the page's network code against the switch in node, and free roam's C core against the hub with wasi-sdk) and the
+# page's fast unit tests (web/tools/unit-tests.mjs --fast, and the LAN backend's lan-wasm: the tests that need the
+# game folder or mingw show as skipped here).  They do not hold back the image (image-rs.yml) yet: first some weeks of
+# runs, to see which tests are flaky on GitHub's runners.
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+# a newer push to a pull request stops its run; on main every push is tested to the end (several sessions push there)
+concurrency:
+  group: tests-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      # node and the page's packages (ws, esbuild): the page's tests, the LAN crate's page tests, the Node comparisons.
+      # Those (crates/http cross_node, src/app/url.rs, crates/names cross_check) were checked against this Node: 24 reads
+      # a "^" in a path, a few malformed headers and some new Unicode letters otherwise
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 23.9.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: node build.mjs
+        working-directory: web
+      # wasi-sdk, in deps/ as on the Mac: the C tests built for wasm
+      - id: wasi
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: wasi-sdk-34.0-x86_64-linux
+      - if: steps.wasi.outputs.cache-hit != 'true'
+        run: mkdir -p deps && curl -sSfL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz | tar xz -C deps
+      - uses: dtolnay/rust-toolchain@stable
+      # the build is kept also when a test failed (by default only a run that passed saves it)
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: web/server-rs
+          cache-on-failure: true
+      # the release build's code without its slow link (Cargo.toml's profile.ci)
+      - name: server tests
+        run: cargo test --profile ci --locked --workspace --no-fail-fast
+        working-directory: web/server-rs
+      - name: the server for the page's tests
+        if: ${{ !cancelled() }}
+        run: cargo build --profile ci --locked -p nfsu2-server
+        working-directory: web/server-rs
+      - name: page tests
+        if: ${{ !cancelled() }}
+        run: node tools/unit-tests.mjs --fast test/lan-wasm.test.mjs
+        working-directory: web
+        env:
+          NFSU2_SERVER_BIN: ${{ github.workspace }}/web/server-rs/target/ci/nfsu2-server

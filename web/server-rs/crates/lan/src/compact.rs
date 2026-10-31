@@ -23,6 +23,16 @@
 //! the snapshot's fields, roam_core.c put_state).  Every such entry, in either form, is the last one of its source
 //! and type for the next; the page keeps the same, entry for entry, and the stream (TCP) loses and reorders
 //! nothing, so the game still gets each datagram byte for byte.
+//!
+//! To a page whose hello said "ldelta":1 besides, any other datagram to it (LAN play's UDP: the game's own races, Online's
+//! and free roam's lobby races; UDP on other ports: the race horn) goes the same way, as what changed since the last one
+//! of its kind from its source (`Refs::other`): flags 0x80 without 0x20, bits 0-2 its kind; 0x10 then says that its
+//! length (u16) follows, for one not as long as the last one; then a bitmap of its bytes from its ports on (its ports,
+//! LAN play's 8-byte header, its data: bit i % 8 of byte i / 8, a byte past the last one's end always new), and the new
+//! bytes in order.  Every entry of such a datagram to the page's own address (not 0x20, 0x08 or 0x40) of at most
+//! `OTHER_MAX` bytes from its ports on, plain or not, is the last one of its source and kind for the next, kept apart
+//! from free roam's (REFS_MAX of each: a page that asks for them keeps free roam's just as a switch of before does).
+//! Before, each went whole, every time, to each of a racer's rivals.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -41,6 +51,9 @@ const F_PORTS: u8 = 0x10;
 const F_ROAM: u8 = 0x20;
 const F_WHOLE: u8 = 0x40;
 const F_DELTA: u8 = 0x80;
+/// the longest other datagram (from its ports on) that goes as what changed and is kept as the last one (a longer one
+/// goes as it is, kept by neither end): a race's are far shorter, and a page's last ones stay within 256 of these
+pub(crate) const OTHER_MAX: usize = 1500;
 /// the sources and types whose last bodies a connection keeps at most: a new one past that, and they all go first
 /// (the page does the same, so both keep the same ones)
 pub(crate) const REFS_MAX: usize = 256;
@@ -155,6 +168,9 @@ pub(crate) fn entry_len(data: &[u8], src: u32, dst: u32, own: u32) -> usize {
 #[derive(Default)]
 pub(crate) struct Refs {
     last: HashMap<u32, Vec<u8>, BuildHasherDefault<KeyHash>>,
+    /// the same for the other datagrams (`other`), by source and kind: apart, so that a page that asks for them keeps
+    /// free roam's as a switch of before does (REFS_MAX of each)
+    others: HashMap<u32, Vec<u8>, BuildHasherDefault<KeyHash>>,
 }
 
 /// a key's hash: one multiply, folded (a map of at most `REFS_MAX` keys, made of a source and a type)
@@ -212,26 +228,80 @@ impl Refs {
                 plain(buf);
             }
             None => {
-                if self.last.len() >= REFS_MAX {
-                    self.last.clear();
-                }
-                self.last.insert(key, body.to_vec());
+                insert(&mut self.last, key, body);
                 plain(buf);
             }
         }
     }
+
+    /// The entry of another datagram from src (flags without F_ROAM, F_BCAST and F_WHOLE; `rest` its frame from its
+    /// ports on): as what changed since that source's last one of its kind when there is one and that is shorter, else
+    /// as it is; `rest` is their last now either way.
+    fn other(&mut self, buf: &mut Vec<u8>, flags: u8, src: u32, rest: &[u8], plain: impl FnOnce(&mut Vec<u8>)) {
+        let key = (src & 0xFFFF) << 8 | (flags & 7) as u32;
+        let Some(last) = self.others.get_mut(&key) else {
+            insert(&mut self.others, key, rest);
+            return plain(buf);
+        };
+        let start = buf.len();
+        let same = last.len() == rest.len();
+        buf.push(flags & 7 | F_DELTA | if same { 0 } else { F_PORTS });
+        buf.extend_from_slice(&(src as u16).to_be_bytes());
+        buf.extend_from_slice(&[0, 0]);
+        if !same {
+            buf.extend_from_slice(&(rest.len() as u16).to_be_bytes());
+        }
+        let at = buf.len();
+        buf.resize(at + rest.len().div_ceil(8), 0);
+        for (i, &b) in rest.iter().enumerate() {
+            if last.get(i) != Some(&b) {
+                buf[at + i / 8] |= 1 << (i % 8);
+                buf.push(b);
+            }
+        }
+        // shorter than the plain entry (its 5 bytes, the ports when it carries them, the rest)
+        let plain_len = ENTRY + rest.len() - if flags & F_PORTS != 0 { 0 } else { 4 };
+        if buf.len() - start < plain_len {
+            let n = (buf.len() - start - ENTRY) as u16;
+            buf[start + 3..start + 5].copy_from_slice(&n.to_be_bytes());
+        } else {
+            buf.truncate(start);
+            plain(buf);
+        }
+        last.clear();
+        last.extend_from_slice(rest);
+    }
+}
+
+/// a new source and type: past REFS_MAX of them, all go first (the page does the same)
+fn insert(map: &mut HashMap<u32, Vec<u8>, BuildHasherDefault<KeyHash>>, key: u32, body: &[u8]) {
+    if map.len() >= REFS_MAX {
+        map.clear();
+    }
+    map.insert(key, body.to_vec());
 }
 
 /// one entry; with `refs` (a page that takes deltas) a free-roam datagram to it goes as what changed when that is
 /// shorter, and is its source's last either way
 #[cfg(test)]
 pub(crate) fn entry(buf: &mut Vec<u8>, data: &[u8], src: u32, dst: u32, own: u32, refs: Option<&mut Refs>) {
-    entry_fp(buf, data, src, dst, own, refs, None)
+    entry_fp(buf, data, src, dst, own, refs, None, false)
 }
 
 /// the same; with `fp` too (a page whose hello said "fpred":1) a friend's car state to it goes by its fields
-/// (fpred.rs) when it can, and leaves `refs` alone then
-pub(crate) fn entry_fp(buf: &mut Vec<u8>, data: &[u8], src: u32, dst: u32, own: u32, refs: Option<&mut Refs>, fp: Option<&mut Fpred>) {
+/// (fpred.rs) when it can, and leaves `refs` alone then; with `others` (its hello said "ldelta":1) any other datagram to
+/// it goes as what changed too (`Refs::other`)
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn entry_fp(
+    buf: &mut Vec<u8>,
+    data: &[u8],
+    src: u32,
+    dst: u32,
+    own: u32,
+    refs: Option<&mut Refs>,
+    fp: Option<&mut Fpred>,
+    others: bool,
+) {
     let (flags, n) = plan(data, src, dst, own);
     if let Some(fp) = fp
         && flags & (F_ROAM | F_PORTS | F_BCAST | F_WHOLE) == F_ROAM
@@ -241,12 +311,15 @@ pub(crate) fn entry_fp(buf: &mut Vec<u8>, data: &[u8], src: u32, dst: u32, own: 
     {
         return;
     }
-    match refs.filter(|_| flags & (F_ROAM | F_PORTS | F_BCAST | F_WHOLE) == F_ROAM) {
-        Some(refs) => {
+    match refs {
+        Some(refs) if flags & (F_ROAM | F_PORTS | F_BCAST | F_WHOLE) == F_ROAM => {
             let d = &data[16..];
             refs.entry(buf, flags, src, d[5], &d[8..d.len() - 4], |buf| plain(buf, data, src, dst, flags, n));
         }
-        None => plain(buf, data, src, dst, flags, n),
+        Some(refs) if others && flags & (F_ROAM | F_BCAST | F_WHOLE) == 0 && data.len() - 12 <= OTHER_MAX => {
+            refs.other(buf, flags, src, &data[12..], |buf| plain(buf, data, src, dst, flags, n));
+        }
+        _ => plain(buf, data, src, dst, flags, n),
     }
 }
 
@@ -303,7 +376,18 @@ pub(crate) mod tests {
     }
 
     /// the same for a page that takes car states by their fields too: `fp` the page's last ones (fpred.rs `decode`)
-    pub(crate) fn unpack_fp(b: &[u8], own: u32, mut refs: Option<&mut HashMap<u32, Vec<u8>>>, mut fp: Option<&mut Fpred>) -> Vec<Vec<u8>> {
+    pub(crate) fn unpack_fp(b: &[u8], own: u32, refs: Option<&mut HashMap<u32, Vec<u8>>>, fp: Option<&mut Fpred>) -> Vec<Vec<u8>> {
+        unpack_all(b, own, refs, fp, None)
+    }
+
+    /// the same for a page that takes every other datagram as what changed too (its hello said "ldelta":1)
+    pub(crate) fn unpack_all(
+        b: &[u8],
+        own: u32,
+        mut refs: Option<&mut HashMap<u32, Vec<u8>>>,
+        mut fp: Option<&mut Fpred>,
+        mut others: Option<&mut HashMap<u32, Vec<u8>>>,
+    ) -> Vec<Vec<u8>> {
         assert_eq!(b[0], KIND_COMPACT);
         let mut out = Vec::new();
         let mut at = 4;
@@ -324,6 +408,37 @@ pub(crate) mod tests {
             assert!(end <= b.len());
             if flags == F_WHOLE {
                 out.push(b[p..end].to_vec());
+                at = end;
+                continue;
+            }
+            let other_key = (src & 0xFFFF) << 8 | (flags & 7) as u32;
+            if flags & (F_DELTA | F_ROAM) == F_DELTA {
+                let r = others.as_deref_mut().expect("only to a page that takes them");
+                let last = r.get(&other_key).expect("its last one").clone();
+                let len = if flags & F_PORTS != 0 {
+                    p += 2;
+                    u16::from_be_bytes([b[p - 2], b[p - 1]]) as usize
+                } else {
+                    last.len()
+                };
+                let mut next = p + len.div_ceil(8);
+                let rest: Vec<u8> = (0..len)
+                    .map(|i| {
+                        if b[p + i / 8] >> (i % 8) & 1 == 1 {
+                            next += 1;
+                            b[next - 1]
+                        } else {
+                            last[i]
+                        }
+                    })
+                    .collect();
+                assert_eq!(next, end, "the new bytes fill the entry");
+                let mut f = vec![flags & 7, 0, 0, 0];
+                f.extend_from_slice(&src.to_be_bytes());
+                f.extend_from_slice(&own.to_be_bytes());
+                f.extend_from_slice(&rest);
+                r.insert(other_key, rest);
+                out.push(f);
                 at = end;
                 continue;
             }
@@ -376,6 +491,12 @@ pub(crate) mod tests {
                 f.extend_from_slice(&d);
             } else {
                 f.extend_from_slice(&b[p..end]);
+                if let Some(r) = others.as_deref_mut().filter(|_| flags & F_BCAST == 0 && f.len() - 12 <= OTHER_MAX) {
+                    if r.len() >= REFS_MAX && !r.contains_key(&other_key) {
+                        r.clear();
+                    }
+                    r.insert(other_key, f[12..].to_vec());
+                }
             }
             out.push(f);
             at = end;
@@ -534,6 +655,90 @@ pub(crate) mod tests {
         assert!(delta_bytes * 10 < plain_bytes * 7, "{delta_bytes} bytes with deltas, {plain_bytes} without");
     }
 
+    // to a page that takes them, races' datagrams (LAN play's UDP from 5 rivals, a few bytes new each time, now and then
+    // of another length or on other ports), the race horn's UDP, LAN broadcasts, free roam's among them and sources
+    // enough to clear the last ones now and then: what changed goes, and each comes back byte for byte
+    #[test]
+    fn other_datagrams_as_what_changed_come_back_byte_for_byte() {
+        let own = BASE | 0x0305;
+        let mut seed = 0x2545_F491u32;
+        let mut rnd = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed
+        };
+        let rivals: Vec<u32> = (0..5u32).map(|i| BASE | (0x0400 + i)).collect();
+        let mut packets: Vec<Vec<u8>> = rivals.iter().map(|_| (0..120).map(|_| rnd() as u8).collect()).collect();
+        let mut frames: Vec<(Vec<u8>, u32, u32)> = Vec::new();
+        for step in 0..4000u32 {
+            let i = rnd() as usize % rivals.len();
+            let (src, p) = (rivals[i], &mut packets[i]);
+            for _ in 0..rnd() % 12 {
+                let k = rnd() as usize % p.len();
+                p[k] = rnd() as u8;
+            }
+            match step % 61 {
+                0 => p.push(rnd() as u8),
+                30 => {
+                    p.pop();
+                }
+                _ => {}
+            }
+            let mut d = vec![0, 64, 0, 0, 0, 0, 0, 0];
+            d.extend_from_slice(p);
+            let ports = if step % 89 == 0 { (6112, 6114) } else { (6112, 6113) };
+            frames.push((frame(3, src, own, ports.0, ports.1, &d), src, own));
+            match step % 17 {
+                0 => frames.push((frame(1, src, own, 3659, 3659, &[1, 2, 3, (step % 3) as u8]), src, own)),
+                4 => frames.push((frame(3, src, BROADCAST, 6112, 6112, &[0, 1, 0, 0, 0, 0, 0, 0, 9, 9]), src, BROADCAST)),
+                8 => frames.push((frame(1, src, own, ROAM_PORT, ROAM_PORT, &roam(3, &p[..60])), src, own)),
+                3 => frames.push((frame(3, src, own, 6112, 6113, &vec![(step % 7) as u8; 1600]), src, own)),
+                12 | 14 => {
+                    // a stranger: past REFS_MAX of them both ends clear their last ones
+                    let s = BASE | (0x1000 + step);
+                    frames.push((frame(3, s, own, 6112, 6113, &d), s, own));
+                }
+                _ => {}
+            }
+        }
+        let mut refs = Refs::default();
+        let (mut bundles, mut b) = (Vec::new(), vec![KIND_COMPACT, 0, 0, 0]);
+        let (mut plain_bytes, mut delta_bytes, mut as_deltas) = (0, 0, 0);
+        for (f, src, dst) in &frames {
+            let m = mark(f);
+            let at = b.len();
+            entry_fp(&mut b, &m, *src, *dst, own, Some(&mut refs), None, true);
+            if m[0] == 3 && *dst == own && rivals.contains(src) && m.len() - 12 <= OTHER_MAX {
+                plain_bytes += entry_len(&m, *src, *dst, own);
+                delta_bytes += b.len() - at;
+                as_deltas += (b[at] & (F_DELTA | F_ROAM) == F_DELTA) as usize;
+            }
+            if b.len() > 2000 {
+                bundles.push(b);
+                b = vec![KIND_COMPACT, 0, 0, 0];
+            }
+        }
+        bundles.push(b);
+        let (mut page, mut page_others) = (HashMap::new(), HashMap::new());
+        let got: Vec<Vec<u8>> = bundles.iter().flat_map(|b| unpack_all(b, own, Some(&mut page), None, Some(&mut page_others))).collect();
+        assert_eq!(got.len(), frames.len());
+        for (k, (g, (f, ..))) in got.iter().zip(&frames).enumerate() {
+            assert_eq!(g, f, "frame {k}");
+        }
+        assert!(as_deltas > 3500, "{as_deltas} as deltas");
+        assert!(delta_bytes * 10 < plain_bytes * 4, "{delta_bytes} bytes with deltas, {plain_bytes} without");
+        // without "ldelta" the same go as before
+        let mut b = vec![KIND_COMPACT, 0, 0, 0];
+        let mut refs = Refs::default();
+        for (f, src, dst) in frames.iter().take(200) {
+            let m = mark(f);
+            entry(&mut b, &m, *src, *dst, own, Some(&mut refs));
+        }
+        let got = unpack_with(&b, own, Some(&mut HashMap::new()));
+        assert!(got.iter().zip(&frames).all(|(g, (f, ..))| g == f));
+    }
+
     // a ping's t0 and a pong's t2 come to the page moved on by their wait, with a CRC that checks out; the rest of them,
     // a snapshot, and one that did not wait come as they were
     #[test]
@@ -600,7 +805,7 @@ pub(crate) mod tests {
         let mut put = |bundle: &mut Vec<u8>, f: Vec<u8>, src: u32, dst: u32, us: u32, want: &mut Vec<Vec<u8>>, rounded: bool| {
             let m = mark(&f);
             let d = waited(&m, us, &mut into).to_vec();
-            entry_fp(bundle, &d, src, dst, own, Some(&mut refs), Some(&mut fp));
+            entry_fp(bundle, &d, src, dst, own, Some(&mut refs), Some(&mut fp), false);
             let mut w = d.clone();
             w[1] = 0;
             if rounded {
@@ -689,7 +894,7 @@ pub(crate) mod tests {
                     bytes += b.len();
                     b.clear();
                 }
-                entry_fp(&mut b, f, *src, own, own, Some(&mut r), fp_on.then_some(&mut fp));
+                entry_fp(&mut b, f, *src, own, own, Some(&mut r), fp_on.then_some(&mut fp), false);
             }
             bytes += b.len();
             println!("by fields {fp_on}: {:.0} ns an entry, {:.1} bytes", t.elapsed().as_secs_f64() * 1e9 / n as f64, bytes as f64 / n as f64);
@@ -722,7 +927,7 @@ pub(crate) mod tests {
                 let m = mark(f);
                 let (r, fp) = ends.entry(dst).or_default();
                 let mut b = Vec::new();
-                entry_fp(&mut b, &m, src, dst, dst, Some(r), fp_on.then_some(fp));
+                entry_fp(&mut b, &m, src, dst, dst, Some(r), fp_on.then_some(fp), true);
                 if m.len() > 21 && m[1] == ROAM_OK && m[16 + 5] == 3 {
                     (snap, snaps) = (snap + b.len(), snaps + 1);
                     by_fields += (b[0] == fpred::F_FPRED) as usize;

@@ -74,7 +74,7 @@ export function roomHash(name: string): number {
  *  ('' for none): free roam shows only that room's players, which the line says, with how many are there. */
 export function playersText(c: PlayerCounts, room = ''): string {
   if (!Number.isInteger(c.players) || c.players < 0) return '';
-  if (c.players === 0) return t('On this server now: nobody is playing.');
+  if (c.players === 0) return t('Nobody is playing right now.');
   const known = (k: number | null | undefined): k is number => Number.isInteger(k) && k! >= 0;
   const list = [tn(c.players, '{n} player', '{n} players')];
   if (known(c.online)) list.push(t('{n} in Online mode', { n: c.online }));
@@ -84,10 +84,10 @@ export function playersText(c: PlayerCounts, room = ''): string {
     : c.room === 0 ? t('You are in room "{room}": nobody in free roam there.', { room }) : t('You are in room "{room}": {n} in free roam there.', { room, n: c.room }));
   const waiting = Number.isInteger(c.queue) && c.queue! > 0 ? c.queue! : 0;
   const full = c.full !== true ? ''
-    : ' ' + (waiting ? tn(waiting, 'The server is full and {n} is waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.',
-      'The server is full and {n} are waiting in line for a place. At Play you can wait in line, playing alone until it is your turn, or play offline.')
-      : t('The server is full: playing with others waits until a place frees up.'));
-  return t('On this server now: {list}.', { list: list.join(', ') }) + inRoom + full;
+    : ' ' + (waiting ? tn(waiting, 'The server is full, with {n} in line. At Play you can wait in line (playing alone until your turn) or play offline.',
+      'The server is full, with {n} in line. At Play you can wait in line (playing alone until your turn) or play offline.')
+      : t('The server is full: multiplayer starts when a place frees up.'));
+  return t('Playing now: {list}.', { list: list.join(', ') }) + inRoom + full;
 }
 
 /** 1st, 2nd, 3rd, 4th, ..., 11th, 12th, 13th, ..., 21st */

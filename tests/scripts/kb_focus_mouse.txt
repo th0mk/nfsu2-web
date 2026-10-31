@@ -2,8 +2,9 @@
 # state, GetCursorPos and WM_* mouse messages), then keys held in a race
 # while the app loses focus (AppKit's resign-active handler): every key the
 # game holds is released (DirectInput key-up events, WM_KEYUP), nothing
-# sticks after focus comes back, and a key released while Command is held
-# still reaches the game.
+# sticks after focus comes back (on the web a key still down comes back with
+# its next autorepeat: kb_focus_regain), and a key released while Command is
+# held still reaches the game.
 # @in+0x2d4 throttle, @in+0x2c8 steer (+ = left); [0x874c48] keyboard
 # channel action mask (active low).
 0     nstapuntil RETURN MC_Background.fng 120 4000

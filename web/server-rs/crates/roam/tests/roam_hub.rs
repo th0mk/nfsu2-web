@@ -1,11 +1,11 @@
 //! Free roam's hub: which players it links, what it reads and sends.
 //! 1. the wire: what runtime/roam_core.c sends the hub (HELLO, SNAP, BYE, encoded by the C core built for wasm,
 //!    web/test/roam_hubwire.c) is what the hub reads, and the hub's PEERS lists decode in the C core;
-//! 2. the links: nearest first, both ends of a link list each other, at most 32 per player (7 for a core of version
-//!    1), rooms apart, stale positions out, links kept at the edge, BYE and departures forgotten, the limits per
-//!    address;
-//! 3. the hub on its thread, without the switch: frames posted reach the hub, its lists go out through the switch's
-//!    send, a departure is forgotten (the hub on the switch itself is the server's tests/roam_switch.rs).
+//! 2. the links: nearest first, both ends of a link list each other, at most the degree (32) per player, rooms apart,
+//!    stale positions out, links kept at the edge, BYE and departures forgotten, the limits per address;
+//! 3. the hub on its thread, its busy measure the runtime's workers (frames posted, its lists through the switch's
+//!    send and a departure forgotten are tests/roam_thread.rs; the hub on the switch itself is the server's
+//!    tests/roam_switch.rs).
 
 mod kit;
 
@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use bytes::Bytes;
 use kit::*;
 use nfsu2_roam::{Hub, PeerEntry, ROAM_HUB_VIP, RoamHub, RoamMsg, RoamOptions, decode_roam, encode_peers};
-use nfsu2_util::{FrameCtx, Host, SendResult};
+use nfsu2_util::Host;
 use parking_lot::Mutex;
 
 fn repo() -> PathBuf {
@@ -194,15 +194,13 @@ fn the_wire_a_sessions_hello_to_the_hub_names_its_crews() {
     }
 }
 
-// the hub's crew marks as the C core takes them: a session's own HELLO (core 8: it reads the marks, HF_HUBCREW) and
-// four players near it, in its "Night Owls", in "Red", in its "Blue Room", in none; the list the hub makes for it,
+// the hub's crew marks as the C core takes them: a session's own HELLO and four players near it, in its "Night Owls", in "Red", in its "Blue Room", in none; the list the hub makes for it,
 // given to a session in those two crews, colours each player as the hub marked it (rc_peer_crew), and names no crew but
 // the session's own
 #[test]
 fn the_wire_the_hubs_crew_marks_colour_a_sessions_peers() {
     let Some(run) = hubwire("roam_hubwire_marks.wasm") else { return };
     let h = unhex(&run(&["hellocrew"]));
-    assert!(u16::from_le_bytes([h[14], h[15]]) & HF_HUBCREW != 0, "a core 8 HELLO reads the marks: {}", hex(&h));
     let (blue, owls, red) = (room_hash("Blue Room"), room_hash("Night Owls"), room_hash("Red"));
     let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
     k.from(V(0), &h);
@@ -210,7 +208,7 @@ fn the_wire_the_hubs_crew_marks_colour_a_sessions_peers() {
     let who: [Option<&[u32]>; 4] = [Some(&[owls]), Some(&[red]), Some(&[red, blue]), None];
     for (i, crews) in who.iter().enumerate() {
         let i = i as u32 + 1;
-        k.from(V(i), &hello_with(100 + i, &HelloOpts { core: 8, crews: *crews, hubcrew: true, ..Default::default() }));
+        k.from(V(i), &hello_with(100 + i, &HelloOpts { crews: *crews, ..Default::default() }));
         k.from(V(i), &snap(100 + i, [i as f64 * 10.0 + 0.25, 0.25, 0.0]));
     }
     k.hub.tick();
@@ -254,12 +252,12 @@ impl Lists {
     }
 }
 
-// links of players of core version 1 (every pair | the grid): the nearest, both ends, at most 7 a player, only in
-// free roam lately, rooms apart
+// links at a degree of 7 (every pair | the grid): the nearest, both ends, at most 7 a player, only in free roam
+// lately, rooms apart
 #[test]
-fn links_of_players_of_core_version_1_the_nearest_both_ends_at_most_7_only_in_free_roam_lately_rooms_apart() {
+fn links_the_nearest_both_ends_at_most_the_degree_only_in_free_roam_lately_rooms_apart() {
     for (how, o) in ways() {
-        let mut k = Kit::new(o);
+        let mut k = Kit::new(RoamOptions { degree: 7, ..o });
         // 20 players on a line 10 m apart, one far away, two in another room, one with no position yet
         for i in 0..20 {
             k.from(V(i), &hello(100 + i));
@@ -318,32 +316,30 @@ fn links_of_players_of_core_version_1_the_nearest_both_ends_at_most_7_only_in_fr
     }
 }
 
-// links of players of core version 2 (every pair | the grid): at most 32 a player, 7 for one of version 1 among them
+// links at the default degree (every pair | the grid): at most 32 a player
 #[test]
-fn links_of_players_of_core_version_2_at_most_32_a_player_7_for_one_of_version_1_among_them() {
+fn links_at_most_32_a_player() {
     for (how, o) in ways() {
         let mut k = Kit::new(o);
-        // 50 players on a line 10 m apart, player 15 of core version 1
+        // 50 players on a line 10 m apart
         for i in 0..50 {
-            k.from(V(i), &hello_with(100 + i, &HelloOpts { core: if i == 15 { 1 } else { 2 }, ..Default::default() }));
+            k.from(V(i), &hello(100 + i));
             k.from(V(i), &snap(100 + i, [i as f64 * 10.0, 0.0, 0.0]));
         }
         k.hub.tick();
         let l = Lists(k.lists());
-        let deg = |i: u32| if i == 15 { 7 } else { 32 };
         for i in 0..50 {
-            assert!(l.of(i).len() <= deg(i), "{how}: player {i}: at most {} ({})", deg(i), l.of(i).len());
+            assert!(l.of(i).len() <= 32, "{how}: player {i}: at most 32 ({})", l.of(i).len());
         }
         l.both_ends();
-        assert_eq!(l.of(15).len(), 7, "{how}: the version 1 player: 7, as its group of 8 holds");
         for i in 0..50 {
             for j in 0..50 {
-                if i != j && l.of(i).len() < deg(i) && l.of(j).len() < deg(j) {
+                if i != j && l.of(i).len() < 32 && l.of(j).len() < 32 {
                     assert!(l.has(i, j), "{how}: {i} and {j} both have room, so they are linked");
                 }
             }
         }
-        assert!(l.of(25).len() > 16, "{how}: more than 16 for a player of version 2 ({})", l.of(25).len());
+        assert!(l.of(25).len() > 16, "{how}: more than 16 ({})", l.of(25).len());
     }
 }
 
@@ -468,7 +464,7 @@ fn a_player_that_comes_and_goes_costs_the_hub_little() {
     let v = |i: u32| 0x0A4D_0100 + i;
     let crowd = |k: &mut Kit| {
         for i in 0..2000u32 {
-            k.from(v(i), &hello_with(1000 + i, &HelloOpts { core: 2, ..Default::default() }));
+            k.from(v(i), &hello(1000 + i));
             k.from(v(i), &snap(1000 + i, [(i % 50) as f64 * 20.0, (i / 50) as f64 * 20.0, 0.0]));
         }
     };
@@ -486,7 +482,7 @@ fn a_player_that_comes_and_goes_costs_the_hub_little() {
         if n % 7 == 3 {
             // links of the crowd's own come and go too: Ann of the crowd leaves and is back at once
             k.from(v(n % 2000), &bye(1000 + n % 2000));
-            k.from(v(n % 2000), &hello_with(1000 + n % 2000, &HelloOpts { core: 2, ..Default::default() }));
+            k.from(v(n % 2000), &hello(1000 + n % 2000));
         }
         k.hub.frame(x, &frame_ports(x, &bye(50_000 + n), port, 47210));
     }
@@ -507,15 +503,14 @@ fn a_player_that_comes_and_goes_costs_the_hub_little() {
     assert!(k.info("links") > 30_000.0);
 }
 
-// 64 players of core version 1|2 in one place: each list at most 7|32, the tick stays cheap
+// 64 players in one place, at a degree of 7 | 32: each list at most that, the tick stays cheap
 #[test]
 fn sixty_four_players_in_one_place_each_list_at_most_its_degree_the_tick_stays_cheap() {
-    for core in [1u16, 2] {
-        let mut k = Kit::new(RoamOptions::default());
-        let most = if core == 1 { 7 } else { 32 };
+    for most in [7, 32] {
+        let mut k = Kit::new(RoamOptions { degree: most, ..RoamOptions::default() });
         for i in 0..64u32 {
             let v = ip(&format!("10.77.0.{}", 2 + i));
-            k.from(v, &hello_with(400 + i, &HelloOpts { core, ..Default::default() }));
+            k.from(v, &hello(400 + i));
             k.from(v, &snap(400 + i, [(i as f64).cos() * 30.0, (i as f64).sin() * 30.0, 0.0]));
         }
         for _ in 0..20 {
@@ -525,7 +520,7 @@ fn sixty_four_players_in_one_place_each_list_at_most_its_degree_the_tick_stays_c
         let l = lists(&sent[sent.len() - 64..]);
         let n: Vec<usize> = l.values().map(|l| l.len()).collect();
         assert!(n.iter().all(|&x| x <= most) && n.iter().filter(|&&x| x == most).count() >= 60, "lists of {most} ({n:?})");
-        println!("64 players of core version {core}: {} links, tick at most {:.2} ms", k.info("links"), k.info("tickMsMax"));
+        println!("64 players at a degree of {most}: {} links, tick at most {:.2} ms", k.info("links"), k.info("tickMsMax"));
         assert!(k.info("tickMsMax") < 50.0);
     }
 }
@@ -556,7 +551,7 @@ fn a_panic_in_a_tick_leaves_a_hub_that_goes_on() {
         let v = |i: u32| 0x0A4D_0100 + i;
         for tick in 0..4 {
             for i in 0..100u32 {
-                hub.frame(v(i), &frame(v(i), &hello_with(1000 + i, &HelloOpts { core: 2, ..Default::default() })));
+                hub.frame(v(i), &frame(v(i), &hello(1000 + i)));
                 hub.frame(v(i), &frame(v(i), &snap(1000 + i, [(i % 10) as f64 * 15.0, (i / 10) as f64 * 15.0, 0.0])));
             }
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hub.tick()));
@@ -591,7 +586,7 @@ fn a_list_waiting_holds_little() {
     let mut k = Kit::new(ways()[0].1.clone());
     for i in 0..300u32 {
         let v = 0x0A4D_0100 + i;
-        k.from(v, &hello_with(1000 + i, &HelloOpts { core: 2, ..Default::default() }));
+        k.from(v, &hello(1000 + i));
         k.from(v, &snap(1000 + i, [(i % 20) as f64 * 10.0, (i / 20) as f64 * 10.0, 0.0]));
     }
     k.hub.tick();
@@ -616,7 +611,7 @@ fn a_busy_server_every_player_gets_fewer_links_and_more_again_once_it_has_room()
             k.clear();
             for i in 0..40u32 {
                 let v = ip(&format!("10.77.0.{}", 2 + i));
-                k.from(v, &hello_with(500 + i, &HelloOpts { core: 2, ..Default::default() }));
+                k.from(v, &hello(500 + i));
                 k.from(v, &snap(500 + i, [(i as f64).cos() * 30.0, (i as f64).sin() * 30.0, 0.0]));
             }
             k.hub.tick();
@@ -673,7 +668,7 @@ fn a_busy_server_every_player_gets_fewer_links_and_more_again_once_it_has_room()
 }
 
 // 600 players in a city | a district | a crowd: the grid links as every pair does: a room larger than `exact_room`,
-// the grid's links against every pair's, for the same players (some of core version 1; two rooms; a few far out):
+// the grid's links against every pair's, for the same players (two rooms; a few far out):
 // the same rules (at most the degree, both ends, no two with room left unlinked) and about the same distances
 #[test]
 fn six_hundred_players_the_grid_links_as_every_pair_does() {
@@ -686,7 +681,6 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
         struct Q {
             v: u32,
             id: u32,
-            core: u16,
             room: u32,
             p: [f64; 3],
         }
@@ -694,7 +688,6 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
             .map(|i| Q {
                 v: ip(&format!("10.77.{}.{}", i & 7, 2 + (i >> 3))),
                 id: 700 + i,
-                core: if i % 50 == 7 { 1 } else { 2 },
                 room: if i % 10 == 3 { fnv1a("red") } else { 0 },
                 p: if i % 97 == 5 {
                     [15000.0 - i as f64, -15000.0, 0.0]
@@ -710,7 +703,7 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
             for _ in 0..3 {
                 k.clear();
                 for q in &players {
-                    k.from(q.v, &hello_with(q.id, &HelloOpts { core: q.core, room: q.room, ..Default::default() }));
+                    k.from(q.v, &hello_with(q.id, &HelloOpts { room: q.room, ..Default::default() }));
                     k.from(q.v, &snap(q.id, q.p));
                 }
                 k.hub.tick();
@@ -725,9 +718,8 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
         let sum = |l: &Lists| {
             let (mut n, mut m) = (0usize, 0.0);
             for q in &players {
-                let most = if q.core == 1 { 7 } else { 32 };
                 let lq = l.of_vip(q.v);
-                assert!(lq.len() <= most, "at most {most} ({})", lq.len());
+                assert!(lq.len() <= 32, "at most 32 ({})", lq.len());
                 for e in lq {
                     assert!(l.of_vip(e.vip).iter().any(|x| x.vip == q.v), "both ends");
                     assert_eq!(at[&e.vip].room, q.room, "one room");
@@ -735,7 +727,7 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
                     m += d(q, at[&e.vip]);
                 }
             }
-            let open: Vec<&Q> = players.iter().filter(|q| l.of_vip(q.v).len() < if q.core == 1 { 7 } else { 32 }).collect();
+            let open: Vec<&Q> = players.iter().filter(|q| l.of_vip(q.v).len() < 32).collect();
             for a in &open {
                 for b in &open {
                     if a.v != b.v && a.room == b.room {
@@ -755,12 +747,9 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
     }
 }
 
-// ---- the hub on its thread (the hub's part of 'on the switch: frames to 10.77.0.253 reach the hub, its lists come
-// back, a departure is forgotten') ----
+// ---- the hub on its thread (the idle hub, frames posted and its lists: tests/roam_thread.rs) ----
 
-fn ctx() -> FrameCtx {
-    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None }
-}
+
 
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
     let t0 = Instant::now();
@@ -768,53 +757,6 @@ fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
         assert!(t0.elapsed() < Duration::from_secs(5), "{what}: not within 5 s");
         std::thread::sleep(Duration::from_millis(5));
     }
-}
-
-#[test]
-fn on_its_thread_frames_reach_the_hub_its_lists_go_out_through_the_switch_a_departure_is_forgotten() {
-    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-    let l2 = lines.clone();
-    let hub = RoamHub::spawn(RoamOptions { tick_ms: 50, ..RoamOptions::default() }, Arc::new(move |s: &str| l2.lock().push(s.into())));
-    assert_eq!(hub.vip(), ROAM_HUB_VIP);
-    assert_eq!(hub.name(), "free-roam hub");
-    assert!(!hub.listed(), "the hub is on nobody's peer list");
-    let sent = Arc::new(Mutex::new(Vec::<(u32, Bytes)>::new()));
-    let s2 = sent.clone();
-    hub.attach_switch(Arc::new(move |vip, f, cause| {
-        assert!(cause.is_none(), "the hub's lists are charged to nobody");
-        s2.lock().push((vip, f));
-        SendResult::Sent
-    }));
-    let (a, b) = (ip("10.77.0.20"), ip("10.77.0.21"));
-    let post = |vip: u32, d: Vec<u8>| hub.frame(vip, Bytes::from(frame(vip, &d)), ctx());
-    post(a, hello(501));
-    post(a, snap(501, [0.0, 0.0, 0.0]));
-    post(b, hello(502));
-    post(b, snap(502, [20.0, 0.0, 0.0]));
-    // info() answers after what was posted before it
-    let info = hub.info().blocking_recv().expect("info");
-    assert_eq!(info["players"], 2, "both reached the hub");
-    wait_for("Ann's list", || sent.lock().iter().any(|(v, f)| *v == a && f[16 + 16] == 1));
-    let got = sent.lock().iter().find(|(v, f)| *v == a && f[16 + 16] == 1).map(|(_, f)| f.clone()).expect("a list");
-    assert_eq!(got[0], 1);
-    assert_eq!(u32::from_be_bytes(got[4..8].try_into().unwrap()), ROAM_HUB_VIP, "from 10.77.0.253");
-    assert_eq!(u32::from_be_bytes(got[8..12].try_into().unwrap()), a);
-    assert_eq!(u16::from_be_bytes([got[12], got[13]]), 47210);
-    assert_eq!(u16::from_be_bytes([got[14], got[15]]), 47210);
-    assert_eq!(peers_of(&got), [PeerEntry { vip: b, port: 47210, id: 502 }]);
-    assert_eq!(hub.vips().blocking_recv().expect("vips"), HashSet::from([a, b]));
-    hub.peer_gone(b);
-    assert_eq!(hub.info().blocking_recv().expect("info")["players"], 1, "Bob left the switch: the hub forgot him");
-    let i = hub.info().blocking_recv().expect("info");
-    assert!(i["ticks"].as_u64().unwrap_or(0) >= 1 && i["busy"].as_f64().is_some_and(|b| (0.0..=100.0).contains(&b)), "{i}");
-    // stop(): no more ticks, and so no more lists; it still answers
-    hub.stop();
-    let ticks = hub.info().blocking_recv().expect("info")["ticks"].clone();
-    let n = sent.lock().len();
-    std::thread::sleep(Duration::from_millis(200));
-    assert_eq!(sent.lock().len(), n, "no lists after stop()");
-    assert_eq!(hub.info().blocking_recv().expect("info")["ticks"], ticks);
-    assert!(lines.lock().is_empty(), "an idle server keeps its cap: {:?}", lines.lock());
 }
 
 // on its thread in the server's runtime, the hub's busy measure is the runtime's workers' (they run the switch): with

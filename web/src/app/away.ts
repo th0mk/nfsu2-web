@@ -56,7 +56,7 @@ export class AwayCheck {
       net.away(true);
       this.log(`[app] away: ${hidden ? `the tab was in the background for ${span(now - this.hiddenSince!)}` : `no input for ${span(now - last)}`}, ` +
                'so the place on the server goes back');
-      this.show(t('You were away, so you stopped playing with others and freed your place on the server. Move the mouse or press a key or button to come back.'));
+      this.show(t('You were away, so you left multiplayer and freed your place on the server. Press any key or button to rejoin.'));
       return;
     }
     if (this.warnedAt === null && now - last >= L.inputMs) {
@@ -64,7 +64,7 @@ export class AwayCheck {
       this.log(`[app] away: no input for ${span(now - last)}: the place on the server goes back in ${span(L.warnMs)} unless there is some`);
     }
     if (this.warnedAt !== null)
-      this.show(t('Still there? In {n} s you stop playing with others and free your place on the server. Move the mouse or press a key or button to stay.',
+      this.show(t('Still there? You leave multiplayer in {n} s. Press any key or button to stay.',
         { n: Math.max(1, Math.ceil((L.warnMs - (now - this.warnedAt)) / 1000)) }));
   }
 

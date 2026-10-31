@@ -56,7 +56,7 @@ impl NamesRoute {
 }
 
 /// `Bearer <43 characters of base64url>`: the token (as /vault takes it)
-fn token(q: &Request) -> Option<&str> {
+pub(super) fn token(q: &Request) -> Option<&str> {
     let t = q.headers.get("authorization")?.strip_prefix("Bearer ")?;
     (t.len() == 43 && t.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')).then_some(t)
 }
@@ -210,7 +210,7 @@ impl App {
     }
 
     /// a JSON answer (never cached)
-    async fn json(&self, q: &Request, s: &mut Response, code: u16, v: &Value) -> Res {
+    pub(super) async fn json(&self, q: &Request, s: &mut Response, code: u16, v: &Value) -> Res {
         let body = nfsu2_util::json::stringify(v);
         let mut h = self.headers(q, Cache::Store, true);
         h.set("content-type", "application/json");

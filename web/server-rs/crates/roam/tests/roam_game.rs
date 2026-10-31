@@ -14,6 +14,8 @@ use nfsu2_roam::{RoamMsg, RoamOptions, decode_roam};
 
 /// the HELLO flag of a player that says its game (roam_core.h RC_HF_GAME)
 const HF_GAME: u16 = 0x0800;
+/// the flag the pages still send for the hub's crew marks (roam_core.h RC_HF_HUBCREW; every player gets them now)
+const HF_HUBCREW: u16 = 0x0400;
 const UG2: u8 = 0;
 const MW: u8 = 1;
 

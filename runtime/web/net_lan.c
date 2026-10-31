@@ -180,6 +180,27 @@ static int vfd_new(int type, void *p){
 static int vfd_ix(int fd){ return fd >= VFD_BASE && fd < VFD_BASE + NVFD && g_vf[fd - VFD_BASE].type != VF_FREE ? fd - VFD_BASE : -1; }
 static VConn *stream_of(int fd){ int i = vfd_ix(fd); return i >= 0 && g_vf[i].type == VF_STREAM ? (VConn *)g_vf[i].p : 0; }
 static VSock *vs_of(uint32_t vid){ return vid && vid < NVS && g_vs[vid].used ? &g_vs[vid] : 0; }
+/* udp_ports: which UDP ports a socket is bound to here, as a bit each (port %
+ * 31, so ports 31 apart share one), for the switch: a LAN broadcast (server.dll's
+ * advert on 9999 every 3 s, the server list's query) goes only to the browsers
+ * with a socket on its port.  The rest drop it on arrival (udp_deliver finds no
+ * socket): the Online screens bind none on 9999, and a joiner closes the server
+ * list's when it joins, but every one of them got every LAN server's adverts
+ * (nfsu2.xyz 2026-10-31: a quarter of the bytes to the pages).  A port that
+ * shares a bit only lets some through that go nowhere, as before.  The page
+ * sends it with {"t":"lan"} before anything this browser sends after the bind
+ * (txLoop: checkWant, then the TX ring), so an answer to our query finds it
+ * (g_mu held). */
+static void ports_note(void){
+    if (!MB) return;
+    uint32_t m = NET_UDP_PORTS_SET;
+    for (int i = 1; i < NVS; i++)
+        if (g_vs[i].used && g_vs[i].kind == 2 && g_vs[i].bound) m |= 1u << (g_vs[i].bport % 31u);
+    if (ld(&MB->udp_ports) == m) return;
+    st(&MB->udp_ports, m);
+    __atomic_add_fetch(&MB->tx_bell, 1, __ATOMIC_SEQ_CST);
+    __builtin_wasm_memory_atomic_notify((int *)&MB->tx_bell, 1);
+}
 
 /* ---- the mailbox: TX -------------------------------------------------------------- */
 static inline net_slot *tx_slot(uint32_t i){ return (net_slot *)((uint8_t *)MB + MB->tx_off + (i % NET_TX_SLOTS) * NET_SLOT_BYTES); }
@@ -736,6 +757,7 @@ static int mailbox_once(void){
     m->tx_slots = NET_TX_SLOTS; m->rx_slots = NET_RX_SLOTS;
     m->tx_off = NET_HDR_BYTES; m->rx_off = NET_HDR_BYTES + NET_TX_SLOTS * NET_SLOT_BYTES;
     m->mode = NET_MODE_LAN;
+    m->udp_ports = NET_UDP_PORTS_SET;                    /* no socket yet: no broadcast for us */
     MB = m;
     nfsu2_register(HOST_KIND_LAN, m, NET_MAILBOX_BYTES);
     return 0;
@@ -894,6 +916,7 @@ int vlan_bind(WsSock *s, uint32_t ip, uint16_t port){
         if (!e){
             v->bip = ip; v->bport = port; v->bound = 1; v->reuse = s->so_reuse;
             s->laddr = ip; s->lport = port;
+            if (!tcp) ports_note();
             if (dbg()) ws_log("virtual LAN: bind %s %s:%u", tcp ? "tcp" : v->kind == 3 ? "icmp" : "udp", ipn(ip, b), port);
         }
     }
@@ -1120,6 +1143,7 @@ void vlan_close(WsSock *s, int abortive){
         int i = vfd_ix(v->vfd);
         if (i >= 0 && g_vf[i].p == v){ g_vf[i].type = VF_DEAD; g_vf[i].p = 0; }
         v->used = 0;
+        ports_note();
     }
     pthread_mutex_unlock(&g_mu);
     bump();
@@ -1286,7 +1310,7 @@ int vfd_close(int fd){
             conn_free(k);
         } else if (g_vf[i].type == VF_DGRAM || g_vf[i].type == VF_LISTEN){
             VSock *v = g_vf[i].p;                                /* normally vlan_close came first */
-            if (v){ dg_free_all(v); v->used = 0; }
+            if (v){ dg_free_all(v); v->used = 0; ports_note(); }
             g_vf[i].type = VF_FREE; g_vf[i].p = 0;
         } else { g_vf[i].type = VF_FREE; g_vf[i].p = 0; }
     }
@@ -1309,6 +1333,7 @@ static VSock *rt_sock(uint16_t port){                             /* g_mu held *
     VSock *v = &g_vs[i];
     memset(v, 0, sizeof *v);
     v->used = 1; v->kind = 2; v->vfd = -1; v->rt = 1; v->bound = 1; v->bport = port;
+    ports_note();
     return v;
 }
 /* one datagram from our port to the same port at ip_h (host order) on the

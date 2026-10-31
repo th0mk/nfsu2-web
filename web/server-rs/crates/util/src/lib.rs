@@ -3,7 +3,8 @@
 //! - [`js`]: text and numbers the way JavaScript makes them (its `\s`, `trim()`, `Number#toString`), and
 //!   `printable()`: what the server prints, stores and sends is byte for byte what the Node server it replaced did
 //! - [`json`]: `JSON.stringify` of a `serde_json::Value` (JS number formatting, insertion order)
-//! - [`log`]: the console, and `log::limited` (a few lines a minute per client and topic)
+//! - [`log`]: the console, and `log::limited` (a few lines a minute per client and topic); [`logfile`]: the console
+//!   kept in the state folder too, a file a day
 //! - [`bucket`]: a token bucket (`Bucket`), what clients hold at once (`Budget`) and how often they may do something
 //!   (`Rate`)
 //! - [`counter`]: a counter many threads add to without sharing a cache line
@@ -21,6 +22,7 @@ pub mod host;
 pub mod js;
 pub mod json;
 pub mod log;
+pub mod logfile;
 pub mod rand;
 
 pub use bucket::{Bucket, Budget, Rate};

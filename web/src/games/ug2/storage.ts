@@ -28,13 +28,16 @@ export const STORAGE = {
     RADIO_ON: 'nfsu2.radio.on',
     RADIO_NEXT: 'nfsu2.radio.next',
     RADIO_SHUFFLE: 'nfsu2.radio.shuffle',
-    /** the touch controls' steering, its levelling, their size, the menus' size (touch.ts) */
+    /** the touch controls' steering, its levelling, Nitro's side, their position, their size, the menus' size (touch.ts) */
     TOUCH_STEERING: 'nfsu2-touch-steering',
     TOUCH_LEVEL: 'nfsu2-touch-level',
+    TOUCH_NITRO: 'nfsu2-touch-nitro',
+    TOUCH_POSITION: 'nfsu2-touch-position',
     TOUCH_SIZE: 'nfsu2-touch-size',
     MENU_SIZE: 'nfsu2-menu-size',
-    /** a save folder's cloud-save link, and its games counted until Play offers cloud saves (vault-ui.ts) */
+    /** a save folder's cloud-save link, the phrase the browser keeps for it, Play's offers of cloud saves (vault-ui.ts) */
     KEYPHRASE_LINK: 'nfsu2-keyphrase:',
+    KEYPHRASE_KEPT: 'nfsu2-keyphrase-kept:',
     CLOUD_OFFER: 'nfsu2-cloud-offer:',
     /** the online name: asked for a save folder, claimed, a claim tried (claim-ui.ts) */
     NAME_ASKED: 'nfsu2-name-asked:',

@@ -3,7 +3,9 @@
 // where the server keeps them (vaultAvailable).  One box holds the keyphrase in every state: the one this browser
 // syncs with (read only, with its download), or one typed in to load.  It shows the first 3 characters and dots for
 // the rest until its eye shows it all.  Only the tab that owns the saves syncs (instance.ts); the link (the keyphrase
-// and the version it has) is kept in this browser's localStorage, beside the saves it is for.
+// and the version it has) is kept in this browser's localStorage, beside the saves it is for.  Where the browser has
+// passwords for sites, it is asked to keep the keyphrase too, which outlives the site's data, and a browser with no
+// link and no profile is asked for the one it keeps, whose saves the page offers (pwkeep.ts, `passwords`).
 //
 // When it syncs: the page opens (or this tab takes the saves over), Play (newer saves from another browser come in
 // first, 4 s at most), 10 s after the game's last save of a burst, when the game ends, a few seconds after the Saves
@@ -17,12 +19,13 @@
 
 import { STORAGE } from '@game/storage';
 import { FILE_PREFIX } from '@game/run';
-import { listFiles, readBytes, readText, removeSaveDir, writeFile } from './savefs';
+import { listFiles, listProfiles, readBytes, readText, removeSaveDir, writeFile } from './savefs';
 import { backupItems, readVault, restoreVault } from './saves-ui';
 import { downloadBlob } from './logs';
 import { zip } from './zip';
 import { kept, keeps, keptBy, profilesIn, readPhrase, shownPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side } from './vault';
 import { codeOf, dateLocale, live, N, t, tn, tvars, type Msg } from './i18n';
+import { canKeep, keepPhrase, keptPhrase, markOf } from './pwkeep';
 
 export interface VaultPanelDeps {
   saveDir: string;
@@ -47,10 +50,24 @@ const READY_WAIT_MS = 5000;
 
 /** where a save folder's link is kept (localStorage) */
 const linkKey = (saveDir: string) => `${STORAGE.LOCAL.KEYPHRASE_LINK}${saveDir}`;
-/** where its games are counted until Play offers cloud saves, 'asked' after (localStorage) */
+/** how often Play offered cloud saves for it, and when last (localStorage, Offer as JSON) */
 const offerKey = (saveDir: string) => `${STORAGE.LOCAL.CLOUD_OFFER}${saveDir}`;
-/** the games played in a save folder before its next Play offers cloud saves */
-const OFFER_AFTER = 4;
+/** which phrase the browser was asked to keep in its passwords (pwkeep.ts markOf); 'asked' once the browser was asked
+ *  for one with its chooser and gave none, 'no:<mark>' when the player turned down the saves of the one it gave
+ *  (localStorage) */
+const keptKey = (saveDir: string) => `${STORAGE.LOCAL.KEYPHRASE_KEPT}${saveDir}`;
+/** Play offers cloud saves again this long after a Not now, and this often at most (2026-10-31: it was once, at the
+ *  fifth Play) */
+const OFFER_AGAIN_MS = 7 * 86400_000;
+export const OFFER_TIMES = 3;
+interface Offer { asked: number; at: number }
+/** the offers so far (before 2026-10-31 the key held a count of games, then 'asked' after the one offer) */
+function readOffer(v: string | null): Offer {
+  if (v === 'asked') return { asked: 1, at: 0 };
+  try { const o = JSON.parse(v ?? '') as Partial<Offer> | null; if (typeof o?.asked === 'number') return { asked: o.asked, at: Number(o.at) || 0 }; }
+  catch { /* a count, or nothing */ }
+  return { asked: 0, at: 0 };
+}
 
 /** where the saves a cloud version replaced are kept (OPFS, beside the save folder: a save folder's name has no '~'):
  *  saves.zip (as a keyphrase keeps them: readVault, restoreVault) and about.json (Replaced) */
@@ -61,7 +78,7 @@ interface Replaced { at: number; side: Side }
 
 /** A save folder emptied (a test page's &fresh): its link goes too, or the page would sync an empty folder. */
 export function forgetLink(saveDir: string) {
-  try { localStorage.removeItem(linkKey(saveDir)); localStorage.removeItem(offerKey(saveDir)); } catch { /* storage off */ }
+  try { for (const k of [linkKey, offerKey, keptKey]) localStorage.removeItem(k(saveDir)); } catch { /* storage off */ }
   void removeSaveDir(replacedDir(saveDir));
 }
 
@@ -86,6 +103,10 @@ function newer(here: Side, cloud: Side | null): 'here' | 'cloud' | null {
   return here.saved > cloud.saved ? 'here' : 'cloud';
 }
 
+/** a side's profiles and their money ("ALEX $123,450, BOB $500") */
+const namesOf = (s: Side | null) => !s?.profiles ? '' : !s.profiles.length ? t('no profiles')
+  : s.profiles.map(p => p.money === null ? p.name : `${p.name} $${p.money.toLocaleString(dateLocale())}`).join(', ');
+
 /** a conflict's two sides: where, its profiles, when they were saved, the newer one marked (cloud undefined: this
  *  browser's only) */
 function sidesOf(here: Side, cloud?: Side | null): HTMLElement {
@@ -94,10 +115,8 @@ function sidesOf(here: Side, cloud?: Side | null): HTMLElement {
   const row = (where: string, s: Side | null, isNewer: boolean) => {
     const li = document.createElement('li'), name = document.createElement('b'), what = document.createElement('span');
     name.textContent = where;
-    const names = !s?.profiles ? '' : !s.profiles.length ? t('no profiles')
-      : s.profiles.map(p => p.money === null ? p.name : `${p.name} $${p.money.toLocaleString(dateLocale())}`).join(', ');
     const at = s?.saved != null ? t('saved {when}', { when: when(s.saved) }) : '';
-    what.textContent = [names, at].filter(Boolean).join(' · ');
+    what.textContent = [namesOf(s), at].filter(Boolean).join(' · ');
     li.append(name, what);
     if (isNewer) li.append(Object.assign(document.createElement('em'), { textContent: t('Newer') }));
     li.classList.toggle('newer', isNewer);
@@ -105,6 +124,20 @@ function sidesOf(here: Side, cloud?: Side | null): HTMLElement {
   };
   row(t('This browser'), here, n === 'here');
   if (cloud !== undefined) row(t('Cloud'), cloud, n === 'cloud');
+  return ul;
+}
+
+/** the saves here as Play's cloud saves question shows them, in a conflict side's box: the profiles, their money, and
+ *  how long was played in this browser (playtime.ts; under a minute: not said) */
+function stakeOf(here: Side, playedMs: number): HTMLElement {
+  const ul = document.createElement('ul'), li = document.createElement('li'), name = document.createElement('b'), what = document.createElement('span');
+  ul.className = 'vault-sides';
+  name.textContent = t('This browser');
+  const h = Math.floor(playedMs / 3600_000), m = Math.floor(playedMs / 60_000);
+  const played = h ? tn(h, '{n} hour played', '{n} hours played') : m ? tn(m, '{n} minute played', '{n} minutes played') : '';
+  what.textContent = [namesOf(here), played].filter(Boolean).join(' · ');
+  li.append(name, what);
+  ul.append(li);
   return ul;
 }
 
@@ -136,6 +169,8 @@ export class VaultPanel {
   private starting = false;               // start() asking the server
   /** the phrase linked when the section last showed (undefined: not shown yet): `onLink` when it changes */
   private shownLink: string | null | undefined = undefined;
+  /** this page looked at the browser's passwords (`passwords`) */
+  private pwLooked = false;
 
   constructor(private root: HTMLElement, private d: VaultPanelDeps) {
     this.ready = new Promise<void>(r => { this.readyNow = r; });
@@ -176,6 +211,9 @@ export class VaultPanel {
   private mask() {
     const m = this.$('#vault-mask'), eye = this.$('#vault-eye');
     this.$('#vault-box').classList.toggle('masked', this.hidden);
+    // a password field while hidden, for the browser's passwords (pwkeep.ts); the mask still draws it
+    const type = this.hidden ? 'password' : 'text';
+    if (this.input.type !== type) this.input.type = type;
     m.textContent = masked(this.input.value);
     m.scrollLeft = this.input.scrollLeft;
     eye.setAttribute('aria-pressed', String(!this.hidden));
@@ -213,7 +251,7 @@ export class VaultPanel {
     this.root.hidden = false;
     await this.loadReplaced();
     this.show();
-    if (this.owned) this.check();
+    if (this.owned) { this.check(); void this.passwords(); }
   }
 
   /** This tab owns the saves now and has loaded its settings: it syncs from here on. */
@@ -224,6 +262,58 @@ export class VaultPanel {
     await this.loadReplaced();
     this.show();
     this.check();
+    void this.passwords();
+  }
+
+  /**
+   * Once a page, in the tab that owns the saves, where the browser has passwords for sites (pwkeep.ts): a linked
+   * passphrase it was never asked to keep is offered to it (links made before 2026-10-31); with none linked and no
+   * profile here (this browser's data was cleared, or it is another device of the player's), the browser is asked for
+   * the one it keeps, its own chooser allowed the first time (it shows nothing where it keeps none; once it gave none,
+   * only what it gives without a question), and that one's saves are offered, asked first.  Turned down, or without
+   * saves on the server, that phrase is not offered again in this browser.
+   */
+  private async passwords() {
+    const s = this.sync;
+    if (this.pwLooked || !s || !canKeep()) return;
+    this.pwLooked = true;
+    const k = keptKey(this.d.saveDir);
+    const mark = (v: string) => { try { localStorage.setItem(k, v); } catch { /* storage off: asked again at the next page */ } };
+    let was: string | null = null;
+    try { was = localStorage.getItem(k); } catch { /* storage off */ }
+    if (s.link) { if (was !== markOf(s.link.phrase)) this.keep(s.link.phrase); return; }
+    if ((await listProfiles(this.d.saveDir)).length) return;
+    const ask = was === null, phrase = await keptPhrase(ask), p = phrase ? readPhrase(phrase) : null;
+    if (!p || 'bad' in p) {
+      if (ask) { mark('asked'); this.d.log(`[app] keyphrase: the browser gave ${phrase ? 'no passphrase' : 'none'} when asked: only taken without a question from now on`); }
+      return;
+    }
+    if (was === `no:${markOf(p.phrase)}` || s.link || this.d.busy()) return;
+    let got: Awaited<ReturnType<VaultSync['peek']>>;
+    try { got = await s.peek(p.phrase); } catch { return; }
+    if (s.link || this.d.busy()) return;
+    if (!got) { mark(`no:${markOf(p.phrase)}`); this.d.log('[app] keyphrase: the browser keeps one, but the server has no saves for it'); return; }
+    this.d.log('[app] keyphrase: the browser keeps one, and no profile is here: its saves offered');
+    if (await this.replace(got, t('Load cloud saves?'), `${t('Your browser\'s passwords have the passphrase of your cloud saves.')} ${
+      t('They replace the profiles and settings.ini here with the ones saved {when}. Screenshots and this device\'s graphics, sound and controller settings stay.', { when: when(got.remote.saved) })}`, t('Load'),
+      false)) {                           // no profile here to lose (the page's own settings.ini at most)
+      await s.adopt(p.phrase, got.remote).catch(() => {});
+      mark(markOf(p.phrase));             // the browser has it: not asked to keep it again
+      this.msg(() => t('Loaded. This browser syncs from now on.'));
+      this.d.log('[app] keyphrase: loaded the saves of the one the browser keeps, this browser syncs with it');
+    } else {
+      mark(`no:${markOf(p.phrase)}`);
+      this.d.log('[app] keyphrase: the saves of the one the browser keeps were not loaded');
+    }
+  }
+
+  /** the browser asked to keep the phrase in its passwords (its own "Save password?"), once per phrase */
+  private keep(phrase: string) {
+    void keepPhrase(phrase).then(ok => {
+      if (!ok) return;
+      try { localStorage.setItem(keptKey(this.d.saveDir), markOf(phrase)); } catch { /* asked again at the next page */ }
+      this.d.log('[app] keyphrase: the browser was asked to keep it in its passwords');
+    });
   }
 
   /** newer saves from another browser in, then these out when they changed */
@@ -284,7 +374,7 @@ export class VaultPanel {
     if (!r) return;
     if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return; }
     const body = document.createElement('div');
-    body.append(para(t('The saves this browser had before cloud saves replaced them ({when}) come back in place of the ones here. The saves here now are kept instead, so you can switch back.', { when: when(r.at) })),
+    body.append(para(t('This browser\'s saves from before cloud saves replaced them ({when}) come back. The current ones are kept, so you can switch back.', { when: when(r.at) })),
       sidesOf(r.side));
     if (!await this.d.confirm(t('Put back the replaced saves?'), body, t('Put back'), true)) return;
     if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return; }
@@ -354,22 +444,25 @@ export class VaultPanel {
 
   // ---- offered at Play (shell.ts askCloud) ----
 
-  /** A game started here: counted until Play offers cloud saves; with a keyphrase here, they are never offered. */
-  played() {
-    try {
-      const k = offerKey(this.d.saveDir), v = localStorage.getItem(k);
-      if (v !== 'asked') localStorage.setItem(k, this.sync?.link ? 'asked' : String((Number(v) || 0) + 1));
-    } catch { /* storage off: no link is kept here either */ }
-  }
-  /** Play may offer cloud saves: this server keeps them, this tab owns the saves and has no keyphrase, OFFER_AFTER
-   *  games were played here, and they were not offered before. */
+  /** Play may offer cloud saves: this server keeps them, this tab owns the saves and has no keyphrase, and they were
+   *  offered fewer than OFFER_TIMES times, the last one OFFER_AGAIN_MS ago or more (with storage off: never, as no
+   *  link would be kept either). */
   offerable(): boolean {
     const s = this.sync;
     if (!s || s.link || s.state.s === 'working' || !this.d.owner()) return false;
-    try { const v = localStorage.getItem(offerKey(this.d.saveDir)); return v !== 'asked' && (Number(v) || 0) >= OFFER_AFTER; } catch { return false; }
+    try { const o = readOffer(localStorage.getItem(offerKey(this.d.saveDir))); return o.asked < OFFER_TIMES && Date.now() - o.at >= OFFER_AGAIN_MS; }
+    catch { return false; }
   }
-  /** Play offered them: not again in this browser. */
-  offered() { try { localStorage.setItem(offerKey(this.d.saveDir), 'asked'); } catch { /* storage off */ } }
+  /** Play offered them now: the how-manieth time (of OFFER_TIMES) */
+  offered(): number {
+    try {
+      const k = offerKey(this.d.saveDir), o = readOffer(localStorage.getItem(k));
+      localStorage.setItem(k, JSON.stringify({ asked: o.asked + 1, at: Date.now() } satisfies Offer));
+      return o.asked + 1;
+    } catch { return 1; /* storage off */ }
+  }
+  /** what the saves here hold, for Play's question (stakeOf): playedMs, the play counted in this browser */
+  async stake(playedMs: number): Promise<HTMLElement> { return stakeOf(sideOf(await this.files()), playedMs); }
   /** Cloud saves turned on from Play's question: the keyphrase made, as the player sees it, or why not (the section
    *  says it too). */
   async enable(): Promise<{ phrase: string } | { why: string }> {
@@ -405,6 +498,7 @@ export class VaultPanel {
       this.show();
       this.msg(() => t('Passphrase made. Keep it safe: it is the only way back to these saves.'));
       this.d.log('[app] keyphrase: made one, the saves went to the server');
+      if (this.sync.link) this.keep(this.sync.link.phrase);
       return true;
     } catch { return false; /* the state says why */ }
   }
@@ -419,22 +513,24 @@ export class VaultPanel {
     try { got = await s.peek(p.phrase); } catch { return; }
     if (!got) { this.msg(() => t('No cloud saves for this passphrase. Check it for typos.'), true); return; }
     if (await this.replace(got, t('Load cloud saves?'),
-      t('They replace the profiles and settings.ini here with the ones saved {when}. Screenshots stay, and so do this device\'s graphics, frame rate, sound output and controller settings.', { when: when(got.remote.saved) }), t('Load'))) {
+      t('They replace the profiles and settings.ini here with the ones saved {when}. Screenshots and this device\'s graphics, sound and controller settings stay.', { when: when(got.remote.saved) }), t('Load'))) {
       await s.adopt(p.phrase, got.remote).catch(() => {});
       this.msg(() => t('Loaded. This browser syncs from now on.'));
       this.d.log('[app] keyphrase: loaded its saves, this browser syncs with it');
+      if (s.link) this.keep(s.link.phrase);
     }
   }
 
-  /** what a version brings, asked; then it replaces the saves here.  False: nothing changed. */
-  private async replace(got: { zip: Uint8Array; remote: Remote }, title: string, text: string, ok: string): Promise<boolean> {
+  /** what a version brings, asked; then it replaces the saves here.  False: nothing changed.  danger: its button red
+   *  (undefined: when anything a keyphrase keeps is here, settings.ini too) */
+  private async replace(got: { zip: Uint8Array; remote: Remote }, title: string, text: string, ok: string, danger?: boolean): Promise<boolean> {
     let r: Awaited<ReturnType<typeof readVault>>;
     try { r = await readVault(got.zip); } catch (e) { this.msg(() => t('These saves cannot be read: {error}.', { error: e instanceof Error ? e.message : String(e) }), true, 'VAULT-UNREADABLE'); return false; }
     const body = document.createElement('div'), p = document.createElement('p'), ul = document.createElement('ul');
     p.textContent = text;
     for (const t of backupItems(r, true)) { const li = document.createElement('li'); li.textContent = t; ul.append(li); }
     body.append(p, ul);
-    if (!await this.d.confirm(title, body, ok, (await listFiles(this.d.saveDir)).some(f => keeps(f.path)))) { this.msg(''); return false; }
+    if (!await this.d.confirm(title, body, ok, danger ?? (await listFiles(this.d.saveDir)).some(f => keeps(f.path)))) { this.msg(''); return false; }
     if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return false; }
     try { await this.keepReplaced(); }
     catch (e) { this.msg(() => t('The saves here could not be kept, so nothing was replaced: {error}.', { error: e instanceof Error ? e.message : String(e) }), true, 'VAULT-KEEP-COPY'); return false; }
@@ -451,7 +547,7 @@ export class VaultPanel {
     try { await s.pull(); await s.push(); } catch { return; /* the state says why */ }
     // the server has no saves for the keyphrase: the ones here go there again, if the player says so
     if (!s.link?.gone || !await this.d.confirm(t('Send these saves to the cloud again?'),
-      t('The cloud has no saves for this passphrase now. The saves here go there under the same passphrase, and your other browsers with it sync again.'), t('Send'))) return;
+      t('The cloud has no saves for this passphrase. The saves here go there under the same passphrase, so your other browsers sync again.'), t('Send'))) return;
     try { await s.resend(); this.msg(() => t('Sent. This browser syncs again.')); this.d.log('[app] keyphrase: its saves were gone from the server, sent again'); }
     catch { /* the state says why */ }
   }
@@ -527,8 +623,8 @@ export class VaultPanel {
     if (cloudAt != null && newer(st.here, st.cloud) === 'here')
       body.append(Object.assign(para(t('This browser\'s saves are newer: the progress since {when} is replaced.', { when: when(cloudAt) })), { className: 'warn' }));
     if (st.why === 'bare') body.append(Object.assign(para(t('They have no profiles: the profiles here are deleted.')), { className: 'warn' }));
-    if (st.here.profiles?.length) body.append(para(tn(REPLACED_DAYS, 'A copy of the saves here stays in this browser for {n} day: Put back under Cloud saves brings it back.',
-      'A copy of the saves here stays in this browser for {n} days: Put back under Cloud saves brings it back.')));
+    if (st.here.profiles?.length) body.append(para(tn(REPLACED_DAYS, 'A copy of the saves here is kept for {n} day (Put back, under Cloud saves).',
+      'A copy of the saves here is kept for {n} days (Put back, under Cloud saves).')));
     if (!await this.d.confirm(t('Use the cloud\'s saves?'), body, t('Use the cloud\'s'), true)) return false;
     if (busy()) { this.msg(() => t(QUIT_FIRST), true); return false; }
     try { await this.keepReplaced(); }
@@ -582,7 +678,7 @@ export class VaultPanel {
     const status = this.$('#vault-status');
     status.textContent = !owner && l ? t('Another tab is syncing these saves.')
       : st.s === 'error' ? (l ? t('Sync failed: {error}. It tries again at the next save.', { error: failed }) : t('{Error}.', { Error: `${failed[0]?.toUpperCase() ?? ''}${failed.slice(1)}` }))
-      : st.s === 'gone' ? t('The cloud has no saves for this passphrase now: deleted in another browser, unused for 2 years, or lost on the server. Nothing is sent; Sync now looks again and can send these saves there.')
+      : st.s === 'gone' ? t('The cloud has no saves for this passphrase (deleted in another browser, unused for 2 years, or lost). Nothing was sent; Sync now checks again and can send these.')
       : conflict && l ? `${this.conflictText()} ${t('Cloud saves are paused until you pick.')}`
       : '';
     if (st.s === 'error' && st.code && (owner || !l)) status.append(codeOf(st.code));

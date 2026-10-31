@@ -14,22 +14,24 @@ export const CACHE_DIR = STORAGE.CACHE_DIR;
 export const MANIFEST_PATH = 'data-manifest', DATA_PATH = 'data/';
 
 /** the server's data-manifest: every file and folder of the install folder it serves, and where it serves runs
- *  of their blocks compressed (an older server has no "blocks": byte ranges of data/ then) */
+ *  of their blocks compressed */
 export interface Manifest {
   files: { p: string; d?: number; s?: number; m?: number }[];
-  blocks?: { url: string; size: number; max: number };
+  blocks: { url: string; size: number; max: number };
 }
-/** The manifest's compressed runs, if it has them in this cache's block size: [url, most blocks a request].  The url
- *  is resolved against the manifest's own (absolute) address, and taken only on the same server and under the
- *  manifest's folder, the page's base: the runs never come from another origin, nor from the other game's base. */
-export function blockRuns(m: Manifest, manifestUrl: string): { url: string; max: number } | null {
+/** The manifest's compressed runs in this cache's block size: [url, most blocks a request]; throws when it names
+ *  none.  The url is resolved against the manifest's own (absolute) address, and taken only on the same server and
+ *  under the manifest's folder, the page's base: the runs never come from another origin, nor from the other game's
+ *  base. */
+export function blockRuns(m: Manifest, manifestUrl: string): { url: string; max: number } {
   const b = m.blocks;
-  if (!b || typeof b.url !== 'string' || b.size !== BLOCK || !(b.max >= 1)) return null;
+  const none = () => new Error(`the list of game files names no blocks of ${BLOCK} bytes (${JSON.stringify(b ?? null)})`);
+  if (!b || typeof b.url !== 'string' || b.size !== BLOCK || !(b.max >= 1)) throw none();
   const from = new URL(manifestUrl);
   let u: URL;
-  try { u = new URL(b.url, from); } catch { return null; }
+  try { u = new URL(b.url, from); } catch { throw none(); }
   // runUrl appends the file's path and its query to it
-  if (u.origin !== from.origin || !u.pathname.startsWith(new URL('./', from).pathname) || u.search || u.hash) return null;
+  if (u.origin !== from.origin || !u.pathname.startsWith(new URL('./', from).pathname) || u.search || u.hash) throw none();
   return { url: u.href, max: b.max };
 }
 /** blocks first .. first+n-1 of a file, compressed: a 200 whose body (decoded by the browser) is exactly their bytes.  The

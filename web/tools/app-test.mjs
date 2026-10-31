@@ -61,10 +61,16 @@
 //             server says free roam is busy (/players roamBusy: nothing written, asked at the next Play); without
 //             a name no name line, Esc is Not now (roam = off), not asked again; with one, the name to change (a
 //             refused one keeps the question open), Enter in it turns free roam on with the new name
-//   cloudask  the fifth Play in a browser (four games counted), with a profile there and no cloud saves, asks to turn
-//             them on: not at a Play that asked about free roam, not without a profile, not before the fifth; Esc is
-//             Not now, not asked again; Turn on makes a keyphrase and shows it (Copy, Download keyphrase, Continue: the
-//             game starts, the browser syncs), on the 4 px grid at 1280 and 390 px; the cloud copy deleted after
+//   cloudask  a Play with a profile in the browser and no cloud saves asks to turn them on: not at a Play that asked
+//             about free roam, not without a profile; it shows the profile, its money and the hours played, and
+//             downloads the backup (the question stays); Esc is Not now, asked again a week later, three times at
+//             most (a browser asked before as 'asked' once); Turn on makes a passphrase and shows it (Copy, Download
+//             passphrase, Continue: the game starts, the browser syncs), offers it to the browser's passwords (once;
+//             a link from before at the next page), all on the 4 px grid at 1280 and 390 px.  Then (cloudkept) a
+//             browser with no link and no profile asks its passwords for the passphrase, its chooser allowed the first
+//             time: kept, its saves are offered at the page's start, Load brings them, Esc is not offered again; none
+//             kept, only asked without a question after.  The cloud copy deleted after.  The passwords are played by
+//             the page as Chrome answers (a test browser's own password manager is off: --enable-automation)
 //   full      a full server (needs one started with --max-peers 1: the step holds that place itself): the first
 //             Play's free-roam question says the server is full, and nothing more is asked after it; in line, the
 //             place over the game and the page menu's Stop waiting; in once the place frees up; a later Play asks to
@@ -1355,18 +1361,47 @@ async function ug2Steps() {
   // --------------------------------------------------------- cloudask --
   // a player's page (no test settings: the question is not asked on a test page) in a context of its own
   if (want('cloudask')) {
+    // the browser's passwords (pwkeep.ts), recorded and played as Chrome answers on a profile whose auto sign-in was
+    // never introduced (most): a silent get() gives nothing, 'optional' gives the kept phrase (its chooser, picked).
+    // A test browser runs with --enable-automation, which turns Chrome's own password manager off.  kept: null: none
+    const passwords = kept => {
+      window.__pw = []; window.__pwGets = [];
+      if (!window.PasswordCredential) window.PasswordCredential = class { constructor(o) { Object.assign(this, o, { type: 'password' }); } };
+      if (!navigator.credentials) return;
+      navigator.credentials.store = async c => { window.__pw.push({ id: c.id, password: c.password }); };
+      navigator.credentials.get = async o => {
+        window.__pwGets.push(o?.mediation ?? 'optional');
+        return o?.password && o.mediation === 'optional' && kept ? { type: 'password', id: 'Cloud saves', password: kept } : null;
+      };
+    };
+    // pwkeep.ts markOf
+    const markOf = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16); };
+    const KEPT = 'nfsu2-keyphrase-kept:save';
     const c6 = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true, permissions: ['clipboard-write'] });
+    const pwKind = await (async () => { const p = await c6.newPage(); await p.goto(`${BASE}/manifest.json`); const k = await p.evaluate(() => typeof window.PasswordCredential); await p.close(); return k; })();
+    await c6.addInitScript(passwords, null);
     const r = watch(await c6.newPage(), 'C');
     const KEY = 'nfsu2-cloud-offer:save';
     const count = () => r.evaluate(k => localStorage.getItem(k), KEY);
     const setCount = v => r.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, v]);
-    // a profile file is all the question looks for (the game is stopped before it reads one)
-    const profile = on => r.evaluate(async on => {
+    const offer = async () => JSON.parse(await count() ?? 'null');
+    // a profile as the game saves one, as far as the page reads it (vault.test.mjs profile): the question looks for one,
+    // a restore takes it (the game is stopped before it reads one)
+    const crcT = new Uint32Array(256).map((_, i) => { let r = i << 24; for (let k = 0; k < 8; k++) r = r & 0x80000000 ? (r << 1) ^ 0x04C11DB7 : r << 1; return r >>> 0; });
+    const crc = d => { let r = ~((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]) >>> 0; for (let i = 4; i < d.length; i++) r = (((r << 8) | d[i]) ^ crcT[r >>> 24]) >>> 0; return ~r >>> 0; };
+    const PROFILE = (() => {
+      const f = Buffer.alloc(54966);
+      f.write('20CM', 0, 'latin1'); f.writeUInt32LE(54966, 4); f.writeUInt32LE(8, 8); f.writeUInt32LE(54930, 12);
+      f.writeUInt32LE(0x10D, 28); f.writeUInt32LE(54930, 32); f.write('CLOUDT', 36 + 53761, 'latin1'); f.writeUInt32LE(123450, 0xA16A);
+      f.writeUInt32LE(crc(f.subarray(28, 36)), 16); f.writeUInt32LE(crc(f.subarray(36)), 20); f.writeUInt32LE(crc(f.subarray(0, 24)), 24);
+      return [...f];
+    })();
+    const profile = on => r.evaluate(async ([on, bytes]) => {
       const save = await (await navigator.storage.getDirectory()).getDirectoryHandle('save', { create: true });
       if (!on) { await save.removeEntry('NFS Underground 2', { recursive: true }).catch(() => {}); return; }
       const d = await (await save.getDirectoryHandle('NFS Underground 2', { create: true })).getDirectoryHandle('CLOUDT', { create: true });
-      const w = await (await d.getFileHandle('CLOUDT', { create: true })).createWritable(); await w.write(new Uint8Array(4096).fill(7)); await w.close();
-    }, on);
+      const w = await (await d.getFileHandle('CLOUDT', { create: true })).createWritable(); await w.write(new Uint8Array(bytes)); await w.close();
+    }, [on, PROFILE]);
     const title = () => r.evaluate(() => document.querySelector('#confirm[open]') ? document.querySelector('#confirm-title').textContent : null);
     const stop = async () => {
       await r.waitForFunction(() => !!window.__nfsu2.session, null, { timeout: 60000 });
@@ -1389,39 +1424,10 @@ async function ug2Steps() {
       await stop();
       return { asked, count: await count() };
     };
-    await r.goto(`${BASE}/`);
-    await waitPhase(r, ['ready', 'error'], 60000);
-    await r.waitForFunction(() => !document.querySelector('#vault').hidden, null, { timeout: 10000 });
-    await profile(true); await setCount('4');
-    const withRoam = await playAll();                      // the first Play asks about free roam: that one only
-    await profile(false);
-    const noProfile = await playAll();
-    await profile(true); await setCount('3');
-    const fourth = await playAll();
-    // the fifth: asked; Esc is Not now
-    await r.click('#play');
-    await r.waitForSelector('#confirm[open]', { timeout: 10000 });
-    const first = await r.evaluate(() => ({ title: document.querySelector('#confirm-title').textContent, text: document.querySelector('#confirm-body').innerText,
-      ok: document.querySelector('#confirm-ok').textContent, cancel: document.querySelector('#confirm-cancel').textContent,
-      cancelShown: !document.querySelector('#confirm-cancel').hidden, focus: document.activeElement?.id ?? null }));
-    await r.locator('#confirm').screenshot({ path: path.join(OUT, 'cloud-ask.png') });
-    await r.keyboard.press('Escape');
-    // the phase is still the last game's 'exited' until this game starts
-    await r.waitForFunction(() => window.__nfsu2.phase !== 'exited', null, { timeout: 10000 });
-    await waitPhase(r, ['playing', 'exited'], 60000);
-    const afterEsc = { count: await count(), link: await r.evaluate(() => localStorage.getItem('nfsu2-keyphrase:save')) };
-    await stop();
-    const again = await playAll();
-    // another player's fifth: Turn on
-    await setCount('4');
-    await r.click('#play');
-    await r.waitForSelector('#confirm[open]', { timeout: 10000 });
-    await r.click('#confirm-ok');
-    await r.waitForFunction(() => document.querySelector('#confirm[open]') && document.querySelector('#confirm-title').textContent === 'Your keyphrase', null, { timeout: 30000 });
-    // every edge on the 4 px grid, inside the dialog's border, and nothing wider than it, at both widths
+    // every edge on the 4 px grid, inside the dialog's border, and nothing wider than it
     const grid = () => r.evaluate(() => {
       const dlg = document.querySelector('#confirm'), d = dlg.getBoundingClientRect(), top = d.top + dlg.clientTop, off = [];
-      for (const el of document.querySelectorAll('#confirm h2, #confirm-body p, #confirm-body .row, #confirm-body button, #confirm .row.end')) {
+      for (const el of document.querySelectorAll('#confirm h2, #confirm-body p, #confirm-body ul, #confirm-body .row, #confirm-body button, #confirm .row.end')) {
         if (!el.offsetParent) continue;
         const b = el.getBoundingClientRect();
         for (const [k, v] of [['top', b.top - top], ['bottom', b.bottom - top]]) if (Math.round(v) % 4) off.push(`${el.tagName.toLowerCase()}.${el.className || el.id} ${k} ${v}`);
@@ -1429,6 +1435,57 @@ async function ug2Steps() {
       }
       return { off, width: d.width, overflow: document.documentElement.scrollWidth > innerWidth };
     });
+    const ready = async p => {
+      await waitPhase(p, ['ready', 'error'], 60000);
+      await p.waitForFunction(() => !document.querySelector('#vault').hidden, null, { timeout: 10000 });
+    };
+    await r.goto(`${BASE}/`);
+    await ready(r);
+    await r.evaluate(() => localStorage.setItem('nfsu2.play.ms', String(6.5 * 3600_000)));
+    await profile(true);
+    const withRoam = await playAll();                      // the first Play asks about free roam: that one only
+    await profile(false);
+    const noProfile = await playAll();                     // no profile: nothing
+    await profile(true);
+    // the next Play asks: what is at stake, the backup from it (the question stays), Esc is Not now
+    await r.click('#play');
+    await r.waitForSelector('#confirm[open]', { timeout: 10000 });
+    const first = await r.evaluate(() => ({ title: document.querySelector('#confirm-title').textContent, text: document.querySelector('#confirm-body').innerText,
+      stake: document.querySelector('#confirm-body .vault-sides')?.innerText ?? null,
+      ok: document.querySelector('#confirm-ok').textContent, cancel: document.querySelector('#confirm-cancel').textContent,
+      cancelShown: !document.querySelector('#confirm-cancel').hidden, focus: document.activeElement?.id ?? null }));
+    const askGrid = await grid();
+    const dl0 = r.waitForEvent('download');
+    await r.click('#confirm-body button:has-text("Download backup")');
+    const backupFile = (await dl0).suggestedFilename();
+    const backupSaid = await r.waitForFunction(() => { const h = document.querySelector('#confirm-body p.hint'); return h && !h.hidden ? h.textContent : null; }, null, { timeout: 5000 })
+      .then(h => h.jsonValue(), () => null);
+    const openAfterBackup = await title();
+    const askGridSaid = await grid();
+    await r.locator('#confirm').screenshot({ path: path.join(OUT, 'cloud-ask.png') });
+    await r.setViewportSize({ width: 390, height: 844 });
+    await r.waitForTimeout(200);
+    const askNarrow = await grid();
+    await r.locator('#confirm').screenshot({ path: path.join(OUT, 'cloud-ask-390.png') });
+    await r.setViewportSize({ width: 1280, height: 800 });
+    await r.keyboard.press('Escape');
+    // the phase is still the last game's 'exited' until this game starts
+    await r.waitForFunction(() => window.__nfsu2.phase !== 'exited', null, { timeout: 10000 });
+    await waitPhase(r, ['playing', 'exited'], 60000);
+    const afterEsc = { offer: await offer(), link: await r.evaluate(() => localStorage.getItem('nfsu2-keyphrase:save')) };
+    await stop();
+    const inWeek = await playAll();                        // within the week: not asked
+    await setCount(JSON.stringify({ asked: 1, at: Date.now() - 8 * 86400_000 }));
+    const weekOn = await playAll();                        // a week on: asked again (Esc)
+    const weekOnOffer = await offer();
+    await setCount(JSON.stringify({ asked: 3, at: 0 }));
+    const thrice = await playAll();                        // three times: not again
+    // a browser asked once before 2026-10-31 ('asked'): asked again; Turn on
+    await setCount('asked');
+    await r.click('#play');
+    await r.waitForSelector('#confirm[open]', { timeout: 10000 });
+    await r.click('#confirm-ok');
+    await r.waitForFunction(() => document.querySelector('#confirm[open]') && document.querySelector('#confirm-title').textContent === 'Your passphrase', null, { timeout: 30000 });
     const shown = await r.evaluate(() => ({ text: document.querySelector('#confirm-body').innerText, phrase: document.querySelector('#confirm-body .keyphrase')?.textContent ?? '',
       ok: document.querySelector('#confirm-ok').textContent, cancelShown: !document.querySelector('#confirm-cancel').hidden, focus: document.activeElement?.id ?? null }));
     const wide = await grid();
@@ -1441,33 +1498,115 @@ async function ug2Steps() {
     await r.click('#confirm-body button:has-text("Copy")');
     const copied = await r.waitForFunction(() => document.querySelector('#confirm-body button')?.textContent === 'Copied.', null, { timeout: 3000 }).then(() => true, () => false);
     const dl = r.waitForEvent('download');
-    await r.click('#confirm-body button:has-text("Download keyphrase")');
+    await r.click('#confirm-body button:has-text("Download passphrase")');
     const file = fs.readFileSync(await (await dl).path(), 'utf8');
     const stillOpen = await title();
     await r.click('#confirm-ok');
     await r.waitForFunction(() => window.__nfsu2.phase !== 'exited', null, { timeout: 10000 });
     await waitPhase(r, ['playing', 'exited'], 60000);
     const played = await phase(r);
-    const after = await r.evaluate(() => ({ link: JSON.parse(localStorage.getItem('nfsu2-keyphrase:save') ?? 'null'), count: localStorage.getItem('nfsu2-cloud-offer:save'),
-      when: document.querySelector('#vault-when').textContent }));
+    const after = await r.evaluate(KEPT => ({ link: JSON.parse(localStorage.getItem('nfsu2-keyphrase:save') ?? 'null'), offer: JSON.parse(localStorage.getItem('nfsu2-cloud-offer:save') ?? 'null'),
+      kept: localStorage.getItem(KEPT), stored: window.__pw, type: document.querySelector('#vault-input').type,
+      when: document.querySelector('#vault-when').textContent }), KEPT);
     await stop();
     const cloudLog = (await r.evaluate(() => window.__nfsu2.log.tail(2000))).filter(l => /cloud saves:|keyphrase:/.test(l));
+    // a link from before 2026-10-31 (never offered to the browser): offered at the next page, once
+    await r.evaluate(k => localStorage.removeItem(k), KEPT);
+    await r.reload();
+    await ready(r);
+    const oldLink = await r.waitForFunction(() => window.__pw.length ? window.__pw : null, null, { timeout: 10000 }).then(h => h.jsonValue(), () => []);
+    await r.reload();
+    await ready(r);
+    await r.waitForTimeout(3000);
+    const oldLinkAgain = await r.evaluate(() => window.__pw);
+    // the box: a password field again, its dots drawn by the mask (just made, the phrase was shown: a text field)
+    const box = await r.evaluate(() => ({ type: document.querySelector('#vault-input').type, mask: document.querySelector('#vault-mask').textContent,
+      user: document.querySelector('#vault-form input[autocomplete="username"]')?.value ?? null, auto: document.querySelector('#vault-input').autocomplete }));
+    const ASK = 'Turn on cloud saves?', phrase = shown.phrase;
+    report('cloudask', withRoam.asked.join() === 'Free roam with others?' && withRoam.count === null && noProfile.asked.length === 0 && noProfile.count === null &&
+      first.title === ASK && first.ok === 'Turn on' && first.cancel === 'Not now' && first.cancelShown && first.focus === 'confirm-ok' &&
+      /^This browser\s+CLOUDT \$123,450 · 6 hours played$/.test(first.stake ?? '') && /^nfsu2-saves-.*\.zip$/.test(backupFile) && /^Downloaded nfsu2-saves-/.test(backupSaid ?? '') &&
+      openAfterBackup === ASK && !askGrid.off.length && !askGridSaid.off.length && !askNarrow.off.length && !askNarrow.overflow &&
+      afterEsc.offer?.asked === 1 && afterEsc.link === null && inWeek.asked.length === 0 && weekOn.asked.join() === ASK && weekOnOffer?.asked === 2 &&
+      thrice.asked.length === 0 &&
+      /^nfsu2-xyz(-[a-z]+){8}$/.test(phrase) && shown.ok === 'Continue' && !shown.cancelShown && shown.focus === 'confirm-ok' &&
+      /save it with your passwords/.test(shown.text) &&
+      !wide.off.length && !narrow.off.length && !narrow.overflow && copied && file.trim() === phrase && stillOpen === 'Your passphrase' &&
+      played === 'playing' && after.link?.phrase === phrase && after.offer?.asked === 2 && /^Synced/.test(after.when) &&
+      after.stored.length === 1 && after.stored[0].id === 'Cloud saves' && after.stored[0].password === phrase && after.kept === markOf(phrase) &&
+      after.type === 'text' && box.type === 'password' && box.mask === phrase.slice(0, 3) + '•'.repeat(phrase.length - 3) && box.user === 'Cloud saves' &&
+      box.auto === 'current-password' && oldLink.length === 1 && oldLink[0].password === phrase && oldLinkAgain.length === 0 &&
+      cloudLog.some(l => /cloud saves: not now \(asked at Play, 1 of 3\)/.test(l)) && cloudLog.some(l => /cloud saves: turned on/.test(l)) &&
+      cloudLog.some(l => /asked to keep it in its passwords/.test(l)),
+      { pwKind, withRoam, noProfile, first, askGrid, askGridSaid, askNarrow, backupFile, backupSaid, openAfterBackup, afterEsc, inWeek, weekOn, weekOnOffer, thrice,
+        shown, wide, narrow, copied, file: file.trim(), stillOpen, played,
+        after: { phrase: after.link?.phrase, offer: after.offer, kept: after.kept, stored: after.stored.length, type: after.type, when: after.when }, cloudLog,
+        oldLink: oldLink.length, oldLinkAgain: oldLinkAgain.length, box });
+
+    // ------------------------------------------------- cloudkept --
+    // a browser with no link and no profile (its data cleared, or another device) whose passwords keep the phrase:
+    // asked with its chooser, its saves offered at the page's start, Load brings them; turned down, not offered again
+    // (and the browser only asked without a question).  One that keeps none: asked once with its chooser
+    const fresh = async (kept = phrase) => {
+      const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await c.addInitScript(passwords, kept);
+      const p = watch(await c.newPage(), 'K');
+      await p.goto(`${BASE}/`);
+      return { c, p };
+    };
+    const { c: c7, p: k } = await fresh();
+    const kAsk = await k.waitForFunction(() => document.querySelector('#confirm[open]') ? { title: document.querySelector('#confirm-title').textContent,
+      text: document.querySelector('#confirm-body').innerText, ok: document.querySelector('#confirm-ok').textContent, okClass: document.querySelector('#confirm-ok').className } : null,
+      null, { timeout: 30000, polling: 100 })
+      .then(h => h.jsonValue(), () => null);
+    if (kAsk) await k.locator('#confirm').screenshot({ path: path.join(OUT, 'cloud-kept.png') });
+    if (kAsk) await k.click('#confirm-ok');
+    const loaded = await k.waitForFunction(() => /^Loaded/.test(document.querySelector('#vault-msg').textContent), null, { timeout: 20000 }).then(() => true, () => false);
+    const kAfter = await k.evaluate(async KEPT => {
+      const save = await (await navigator.storage.getDirectory()).getDirectoryHandle('save');
+      const has = await (await save.getDirectoryHandle('NFS Underground 2')).getDirectoryHandle('CLOUDT').then(() => true, () => false);
+      return { link: JSON.parse(localStorage.getItem('nfsu2-keyphrase:save') ?? 'null')?.phrase ?? null, kept: localStorage.getItem(KEPT), stored: window.__pw.length, has };
+    }, KEPT).catch(e => ({ error: String(e) }));
+    const kLog = (await k.evaluate(() => window.__nfsu2.log.tail(500))).filter(l => /keyphrase:/.test(l));
+    const kGets = await k.evaluate(() => window.__pwGets);
+    await c7.close();
+    const { c: c8, p: n } = await fresh();
+    const nAsk = await n.waitForFunction(() => document.querySelector('#confirm[open]') ? document.querySelector('#confirm-title').textContent : null, null, { timeout: 30000, polling: 100 })
+      .then(h => h.jsonValue(), () => null);
+    if (nAsk) { await n.keyboard.press('Escape'); await n.waitForFunction(() => !document.querySelector('#confirm[open]'), null, { timeout: 5000 }); }
+    const nKept = await n.waitForFunction(k => localStorage.getItem(k), KEPT, { timeout: 5000 }).then(h => h.jsonValue(), () => null);
+    await n.reload();
+    await ready(n);
+    const nAgain = await n.waitForFunction(() => document.querySelector('#confirm[open]') ? document.querySelector('#confirm-title').textContent : null, null, { timeout: 5000, polling: 100 })
+      .then(h => h.jsonValue(), () => null);
+    const nLink = await n.evaluate(() => localStorage.getItem('nfsu2-keyphrase:save'));
+    const nGets = await n.evaluate(() => window.__pwGets);
+    await c8.close();
+    // keeps none: its chooser once (it shows nothing then), 'asked'; the next page only without a question
+    const { c: c9, p: z } = await fresh(null);
+    await ready(z);
+    const zKept = await z.waitForFunction(k => localStorage.getItem(k), KEPT, { timeout: 10000 }).then(h => h.jsonValue(), () => null);
+    const zGets = await z.evaluate(() => window.__pwGets);
+    await z.reload();
+    await ready(z);
+    await z.waitForFunction(() => window.__pwGets.length, null, { timeout: 10000 }).catch(() => {});
+    const zGetsAgain = await z.evaluate(() => window.__pwGets);
+    const zAsk = await z.evaluate(() => !!document.querySelector('#confirm[open]'));
+    await c9.close();
+    report('cloudkept', kAsk?.title === 'Load cloud saves?' && /^Your browser's passwords have the passphrase of your cloud saves\. They replace/.test(kAsk.text) &&
+      /CLOUDT/.test(kAsk.text) && kAsk.ok === 'Load' && kAsk.okClass === 'btn selected' && loaded && kAfter.link === phrase && kAfter.kept === markOf(phrase) && kAfter.stored === 0 && kAfter.has &&
+      kLog.some(l => /the browser keeps one/.test(l)) && kLog.some(l => /loaded the saves of the one the browser keeps/.test(l)) && kGets.join() === 'optional' &&
+      nAsk === 'Load cloud saves?' && nKept === `no:${markOf(phrase)}` && nAgain === null && nLink === null && nGets.join() === 'silent' &&
+      zKept === 'asked' && zGets.join() === 'optional' && zGetsAgain.join() === 'silent' && !zAsk,
+      { kAsk, loaded, kAfter, kLog, kGets, nAsk, nKept, nAgain, nLink, nGets, zKept, zGets, zGetsAgain, zAsk });
+
     // the cloud copy goes (the dev server's state stays clean)
     await r.click('#vault-delete');
     await r.waitForSelector('#confirm[open]', { timeout: 5000 });
     await r.click('#confirm-ok');
     const deleted = await r.waitForFunction(() => /Deleted from the cloud/.test(document.querySelector('#vault-msg').textContent), null, { timeout: 15000 }).then(() => true, () => false);
+    if (!deleted) report('cloudask', false, { deleted });
     await c6.close();
-    const ROAM = 'Free roam with others?', ASK = 'Turn on cloud saves?';
-    report('cloudask', withRoam.asked.join() === ROAM && withRoam.count === '5' && noProfile.asked.length === 0 && noProfile.count === '6' &&
-      fourth.asked.length === 0 && fourth.count === '4' && first.title === ASK && first.ok === 'Turn on' && first.cancel === 'Not now' && first.cancelShown &&
-      first.focus === 'confirm-ok' && afterEsc.count === 'asked' && afterEsc.link === null && again.asked.length === 0 &&
-      /^nfsu2-xyz(-[a-z]+){8}$/.test(shown.phrase) && shown.ok === 'Continue' && !shown.cancelShown && shown.focus === 'confirm-ok' &&
-      !wide.off.length && !narrow.off.length && !narrow.overflow && copied && file.trim() === shown.phrase && stillOpen === 'Your keyphrase' &&
-      played === 'playing' && after.link?.phrase === shown.phrase && after.count === 'asked' && /^Synced/.test(after.when) &&
-      cloudLog.some(l => /cloud saves: not now/.test(l)) && cloudLog.some(l => /cloud saves: turned on/.test(l)) && deleted,
-      { withRoam, noProfile, fourth, first, afterEsc, again, shown, wide, narrow, copied, file: file.trim(), stillOpen, played,
-        after: { phrase: after.link?.phrase, count: after.count, when: after.when }, cloudLog, deleted });
   }
 
   // ------------------------------------------------------------- full --

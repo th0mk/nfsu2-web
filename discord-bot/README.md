@@ -137,7 +137,8 @@ bot's first log line says what the month and the day spent so far.
   `state/releases.json` with its time (the file's, which `release.sh` writes as the release goes out), and every
   commit the model reads shows when it went live.
 - `archive.mjs`: every message of every channel the bot sees, kept 30 days in `state/archive/` (the model searches the
-  last 7). At start the bot reads the forums' threads with posts in the last 48 hours, nothing older: it lists them
+  last 7), with their text files (gzipped) and pictures (WebP, at the size the API shrinks them to) in
+  `state/archive/files/`, at most 3 GB: past that the oldest days' files go first. Videos and zips: names only. At start the bot reads the forums' threads with posts in the last 48 hours, nothing older: it lists them
   (titles and first posts) in `state/threads.json`, and looks at the ones opened in that time that it never looked
   at, so a restart misses no post.
 - `general.mjs`: the general channels: the replies that point to the forums or give a page code's fix, the spike

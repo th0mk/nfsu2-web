@@ -56,6 +56,8 @@ pub const FOR_MAX: i64 = 3650 * DAY;
 pub const KEYS_MAX: usize = 32;
 /// the most marks kept (the oldest go first)
 const MARKS_MAX: usize = 5000;
+/// the most names of earlier lines a mark keeps, and bans (the latest stay)
+const MARK_NAMES_MAX: usize = 8;
 /// a key seen again this soon after its time was last set is not written again
 const SLACK: i64 = 3_600_000;
 const MIN: i64 = 60_000;
@@ -191,6 +193,21 @@ pub struct Mark {
     pub name: String,
     pub at: i64,
     pub keys: Keys,
+    /// the other names its earlier lines gave it (each once, oldest first)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub before: Vec<String>,
+    /// the bans made of the player since its first line (`Bans::add`: by the handle, or by its name or address)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bans: Vec<u64>,
+}
+
+/// What a `[cheat]` line of a race says of its player (`Bans::mark`): its handle, the other names of its earlier lines
+/// (oldest first), and the bans made of it since its first line, each with whether it is in force
+#[derive(Clone, Debug, PartialEq)]
+pub struct Marked {
+    pub handle: String,
+    pub before: Vec<String>,
+    pub bans: Vec<(u64, bool)>,
 }
 
 impl Mark {
@@ -343,6 +360,13 @@ impl Bans {
         b.addrs = own.addrs.into_iter().map(|h| Held { h, until: addr }).collect();
         (b.pages, b.owners) = (own.pages, own.owners);
         f.bans.push(b.clone());
+        // the marks of the player (a ban by its handle, or of one with a mark by its name or address)
+        for m in f.marks.iter_mut().filter(|m| m.at + MARK_MS > now && k.same_player(&m.keys)) {
+            m.bans.push(b.id);
+            if m.bans.len() > MARK_NAMES_MAX {
+                m.bans.remove(0);
+            }
+        }
         self.save(&mut f, now)?;
         Ok((b, replaced))
     }
@@ -380,38 +404,50 @@ impl Bans {
         f.bans.clone()
     }
 
-    /// The handle of a `[cheat]` line's player (`k`, `name` for the operator): "c17", which `ban` takes for `MARK_MS`.
-    /// The same player again (one of the same page ids or keyphrases; without either, the same address) keeps its
-    /// handle, and its time starts again.  The file is written for a new mark, a new name or key of one, or a time
-    /// SLACK on: many lines of one player at once (a race's, a cheat's every race) write it once.
-    pub fn mark(&self, name: &str, k: Keys, now: i64) -> io::Result<String> {
+    /// The handle of a `[cheat]` line's player (`k`, `name` for the operator): "c17", which `ban` takes for `MARK_MS`;
+    /// with the other names of its earlier lines and the bans made of it since.  The same player again (one of the
+    /// same page ids or keyphrases; without either, the same address) keeps its handle, and its time starts again.
+    /// The file is written for a new mark, a new name or key of one, or a time SLACK on: many lines of one player at
+    /// once (a race's, a cheat's every race) write it once.
+    pub fn mark(&self, name: &str, k: Keys, now: i64) -> io::Result<Marked> {
         let mut f = self.file.lock();
-        let (handle, changed) = match f.marks.iter_mut().find(|m| m.at + MARK_MS > now && k.same_player(&m.keys)) {
+        let (m, changed) = match f.marks.iter_mut().find(|m| m.at + MARK_MS > now && k.same_player(&m.keys)) {
             Some(m) => {
                 let count = |k: &Keys| k.addrs.len() + k.pages.len() + k.owners.len();
                 let keys = count(&m.keys);
                 m.keys.extend(k);
                 let changed = m.name != name || now - m.at >= SLACK || count(&m.keys) != keys;
-                (m.name, m.at) = (name.to_string(), now);
-                (m.handle(), changed)
+                if m.name != name {
+                    let was = std::mem::replace(&mut m.name, name.to_string());
+                    let same = |a: &str, b: &str| a.to_lowercase() == b.to_lowercase();
+                    m.before.retain(|x| !same(x, name) && !same(x, &was));
+                    if !same(&was, name) {
+                        m.before.push(was);
+                    }
+                    if m.before.len() > MARK_NAMES_MAX {
+                        m.before.remove(0);
+                    }
+                }
+                m.at = now;
+                (m.clone(), changed)
             }
             None => {
                 f.next_mark += 1;
                 let mut keys = Keys::default();
                 keys.extend(k);
-                let m = Mark { n: f.next_mark, name: name.to_string(), at: now, keys };
-                let handle = m.handle();
-                f.marks.push(m);
+                let m = Mark { n: f.next_mark, name: name.to_string(), at: now, keys, before: vec![], bans: vec![] };
+                f.marks.push(m.clone());
                 if f.marks.len() > MARKS_MAX {
                     f.marks.remove(0);
                 }
-                (handle, true)
+                (m, true)
             }
         };
+        let bans = m.bans.iter().map(|&id| (id, f.bans.iter().any(|b| b.id == id && b.live(now)))).collect();
         if changed {
             self.save(&mut f, now)?;
         }
-        Ok(handle)
+        Ok(Marked { handle: m.handle(), before: m.before, bans })
     }
 
     /// the live mark of a handle ("c17", any case)
@@ -709,11 +745,11 @@ mod tests {
     fn a_cheat_lines_player_is_marked_for_a_week_by_one_handle() {
         let (_d, b) = bans();
         let a = b.addr("203.0.113.5");
-        assert_eq!(b.mark("Bob", who(&b, Some(&a), Some("bob-page"), Some("bob-key")), T0).unwrap(), "c1");
-        assert_eq!(b.mark("Eve", who(&b, None, Some("eve-page"), None), T0 + 1).unwrap(), "c2");
+        assert_eq!(b.mark("Bob", who(&b, Some(&a), Some("bob-page"), Some("bob-key")), T0).unwrap().handle, "c1");
+        assert_eq!(b.mark("Eve", who(&b, None, Some("eve-page"), None), T0 + 1).unwrap().handle, "c2");
         // Bob again, in another browser with his keyphrase, and at another address: the same handle, from then
         let a2 = b.addr("198.51.100.7");
-        assert_eq!(b.mark("Bobby", who(&b, Some(&a2), Some("bob-phone"), Some("bob-key")), T0 + DAY).unwrap(), "c1");
+        assert_eq!(b.mark("Bobby", who(&b, Some(&a2), Some("bob-phone"), Some("bob-key")), T0 + DAY).unwrap().handle, "c1");
         let m = b.marked("C1", T0 + DAY).expect("Bob's mark");
         assert_eq!((m.name.as_str(), m.keys.addrs.len(), m.keys.pages.len(), m.keys.owners.len()), ("Bobby", 2, 2, 1));
         assert!(b.marked("c3", T0).is_none() && b.marked("x1", T0).is_none() && b.marked("c", T0).is_none());
@@ -732,17 +768,41 @@ mod tests {
         // (Bob's next lines at once, nothing new of him: the file is not written again)
         std::fs::write(&b.path, "kept").unwrap();
         for i in 1..=50 {
-            assert_eq!(b.mark("Bobby", who(&b, Some(&a2), Some("bob-phone"), Some("bob-key")), T0 + DAY + i).unwrap(), "c1");
+            assert_eq!(b.mark("Bobby", who(&b, Some(&a2), Some("bob-phone"), Some("bob-key")), T0 + DAY + i).unwrap().handle, "c1");
         }
         assert_eq!(std::fs::read_to_string(&b.path).unwrap(), "kept");
         std::fs::write(&b.path, text).unwrap();
         let b = Bans::open(b.path.parent().unwrap()).unwrap();
         assert_eq!(b.marked("c1", T0 + DAY).map(|m| m.name), Some("Bobby".into()));
-        assert_eq!(b.mark("Kim", who(&b, None, Some("kim"), None), T0 + DAY).unwrap(), "c3");
+        assert_eq!(b.mark("Kim", who(&b, None, Some("kim"), None), T0 + DAY).unwrap().handle, "c3");
         // their time up: gone from the file
         b.list(T0 + DAY + MARK_MS);
         let file: Value = serde_json::from_str(&std::fs::read_to_string(&b.path).unwrap()).unwrap();
         assert_eq!(file["marks"].as_array().map(Vec::len), Some(0), "{file}");
+    }
+
+    // a marked player back under other names (one ban of it ended, one in force): its earlier lines' names, each
+    // once, and its bans, by the handle or by name
+    #[test]
+    fn a_mark_says_the_players_earlier_names_and_its_bans() {
+        let (_d, b) = bans();
+        let k = || who(&b, None, Some("jek-page"), None);
+        assert_eq!(b.mark("ChinaJek", k(), T0).unwrap(), Marked { handle: "c1".into(), before: vec![], bans: vec![] });
+        let keys = b.marked("c1", T0).unwrap().keys;
+        let (one, _) = b.add("ChinaJek", &keys, "", Some(T0 + DAY), T0).unwrap();
+        assert_eq!(b.mark("ChinaJek", k(), T0 + 1).unwrap().bans, [(one.id, true)]);
+        let m = b.mark("SuperCharger", k(), T0 + 2 * DAY).unwrap();
+        assert_eq!(m, Marked { handle: "c1".into(), before: vec!["ChinaJek".into()], bans: vec![(one.id, false)] });
+        assert_eq!(b.mark("Zooom", k(), T0 + 2 * DAY + 1).unwrap().before, ["ChinaJek", "SuperCharger"]);
+        assert_eq!(b.mark("chinajek", k(), T0 + 2 * DAY + 2).unwrap().before, ["SuperCharger", "Zooom"]);
+        // banned by its name (not the handle): the mark has that ban too
+        let (two, _) = b.add("chinajek", &k(), "", None, T0 + 3 * DAY).unwrap();
+        let m = b.mark("chinajek", k(), T0 + 3 * DAY).unwrap();
+        assert_eq!(m.bans, [(one.id, false), (two.id, true)]);
+        // kept over a restart
+        let b = Bans::open(b.path.parent().unwrap()).unwrap();
+        let m = b.marked("c1", T0 + 3 * DAY).unwrap();
+        assert_eq!((m.before.len(), m.bans), (2, vec![one.id, two.id]));
     }
 
     #[test]

@@ -1,0 +1,42 @@
+# Free roam's friends, instance A: new career -> prologue free roam; A parks on the lot facing north (heading
+# 0x4000: +y) and stands, while B (roam_friend_b.txt) parks facing it, the two cars nose to nose.  After 3 s of
+# front bumpers touching both games tell their pages ([bump] {"on":1}); the test page (test/hostcheck.ts) asks
+# the server, and with NFSU2_TEST_FRIEND=add asks to befriend: the server's answers are the [friend] lines, the
+# server's log has "asked ... to be friends (free roam)" and "are friends".  Claims: the server's state folder
+# holds names.json with Al and Bo claimed by the keyphrases whose tokens are 43 A and 43 B.
+#   node web/tools/roam-pair.mjs --base http://127.0.0.1:<port> \
+#        --a "Al:roam_friend_a.txt:NFSU2_TEST_CLAIM=AAA...A,NFSU2_TEST_FRIEND=add" \
+#        --b "Bo:roam_friend_b.txt:NFSU2_TEST_CLAIM=BBB...B,NFSU2_TEST_FRIEND=add,B_Y=-879.1"
+# Ghost mode: NFSU2_ROAM_COLLIDE=0 on both and B_Y=-879.6 (the noses 0.3 m into each other).  Not touching:
+# B_Y=-876 (2.8 m apart: no [bump]).
+# other.  At speed: roam_mp_hit_fast_a/b.txt.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  roam teleport 1695.3 -883.6 24.6 0x4000
++300  roam teleport 1695.3 -883.6 24.6 0x4000   # again: a car can roll off its first place
++0    log placed
++0    down SPACE                        # the handbrake: a car pushed into stays put
++600  roam mp bump
++600  roam mp bump
++600  roam mp bump
++600  roam mp bump
++600  roam mp bump
++600  log done

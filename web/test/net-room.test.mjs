@@ -1,7 +1,6 @@
 // The room an invite link changes while a game runs, in free roam's net mailbox (web/src/net/index.ts setRoom;
-// runtime/web/net_proto.h caps, room_gen, room_name[16]):
+// runtime/web/net_proto.h room_gen, room_name[16]):
 //   node --test web/test/net-room.test.mjs
-// - only into a module that says it takes it (caps NET_CAP_ROOM): a module of before keeps its words as they were
 // - the name's 16 words (UTF-8, little-endian, 0 bytes after it), then room_gen (+1 a change), each with Atomics.store
 // - set before the game registered its free-roam mailbox: written once it does
 // - a name longer than 63 bytes is cut where a character starts
@@ -34,13 +33,12 @@ function fakeProc() {
     register(kind, ptr, size) { regs.set(kind, { ptr, size }); for (const r of waiters.get(kind) ?? []) r({ ptr, size }); waiters.delete(kind); },
   };
 }
-/** the mailbox header as the runtime fills it; caps: what it says it takes (0: a module of before) */
-function mailbox(proc, caps) {
+/** the mailbox header as the runtime fills it */
+function mailbox(proc) {
   const i32 = new Int32Array(proc.memory.buffer, PTR, P.NET_MAILBOX_BYTES / 4);
   i32.fill(0);
   Object.assign(i32, { [P.W_MAGIC]: P.NET_MAGIC | 0, [P.W_VERSION]: P.NET_VERSION, [P.W_HDR_BYTES]: P.NET_HDR_BYTES, [P.W_SLOT_BYTES]: P.NET_SLOT_BYTES,
-    [P.W_TX_SLOTS]: P.NET_TX_SLOTS, [P.W_RX_SLOTS]: P.NET_RX_SLOTS, [P.W_TX_OFF]: P.NET_HDR_BYTES, [P.W_RX_OFF]: P.NET_HDR_BYTES + P.NET_TX_SLOTS * P.NET_SLOT_BYTES,
-    [P.W_CAPS]: caps });
+    [P.W_TX_SLOTS]: P.NET_TX_SLOTS, [P.W_RX_SLOTS]: P.NET_RX_SLOTS, [P.W_TX_OFF]: P.NET_HDR_BYTES, [P.W_RX_OFF]: P.NET_HDR_BYTES + P.NET_TX_SLOTS * P.NET_SLOT_BYTES });
   return i32;
 }
 /** the Atomics.store calls on the room's words of the mailbox at PTR, in order */
@@ -66,20 +64,17 @@ test('the room\'s words: the header\'s padding after the crews\' colours, within
   assert.equal(P.W_ROOM_GEN * 4, 436);
   assert.equal(P.W_ROOM_NAME, P.W_ROOM_GEN + 1);
   assert.ok((P.W_ROOM_NAME + P.ROOM_WORDS) * 4 <= P.NET_HDR_BYTES);
-  assert.equal(P.W_CAPS * 4, 60, 'caps: the word that was c_pad1');
 });
 
 test('a room set before the mailbox is there: written when it registers, the name, then the count', async () => {
   const proc = fakeProc(), logs = [], w = watchStores();
   try {
     const link = attachNet(proc, { log: s => logs.push(s) });
-    assert.equal(link.canRoom(), false, 'no mailbox: it cannot tell');
     assert.equal(link.setRoom('Blue Room'), false, 'not taken yet');
     assert.deepEqual(w.seen, []);
-    const i32 = mailbox(proc, P.NET_CAP_ROOM);
+    const i32 = mailbox(proc);
     proc.register(NET, PTR, P.NET_MAILBOX_BYTES);
     await tick(20);
-    assert.equal(link.canRoom(), true);
     assert.deepEqual(w.seen, ORDER, 'the name\'s 16 words, then the count');
     assert.equal(nameOf(i32), 'Blue Room');
     assert.equal(i32[P.W_ROOM_GEN], 1);
@@ -98,22 +93,6 @@ test('a room set before the mailbox is there: written when it registers, the nam
     assert.equal(nameOf(i32), 'я'.repeat(31), '31 two-byte letters fit in 63 bytes');
     assert.equal(i32[P.W_ROOM_NAME + P.ROOM_WORDS - 1] >>> 24, 0);
     assert.ok(logs.includes('[net] room: changed (the page)'), logs.join('\n'));
-    link.close();
-  } finally { w.stop(); }
-});
-
-test('a module of before (no NET_CAP_ROOM): nothing written, and the page knows', async () => {
-  const proc = fakeProc(), w = watchStores();
-  try {
-    const link = attachNet(proc, {});
-    link.setRoom('Blue Room');
-    const i32 = mailbox(proc, 0);
-    proc.register(NET, PTR, P.NET_MAILBOX_BYTES);
-    await tick(20);
-    assert.equal(link.canRoom(), false);
-    assert.equal(link.setRoom('Red'), false);
-    assert.deepEqual(w.seen, []);
-    assert.equal(i32[P.W_ROOM_GEN], 0);
     link.close();
   } finally { w.stop(); }
 });

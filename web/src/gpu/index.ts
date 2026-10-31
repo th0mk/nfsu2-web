@@ -448,6 +448,10 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     log(`[gpu] ${((now - winUnshownT) / 1000).toFixed(0)} s to t=${((now - attachedAt) / 1000).toFixed(0)} s: ${winUnshownFrames} frames, rAF ${rafHz.toFixed(1)} Hz, ` +
         `${winUnshown} drawn over unseen, GPU done p50 ${q(0.5)} / p90 ${q(0.9)} / max ${d.length ? d[d.length - 1].toFixed(0) : '-'} ms, ` +
         `${slotWaits - winWaits0} waited for the GPU, textures ${MB(enc.texBytes)} MB${texSplit(enc.unpackBytes, enc.astcBytes)}${errors ? `, ${errors} WebGPU errors so far` : ''}`);
+    // the textures that came and went: what a phone's GPU process has to give back (iOS kills the page when it does not)
+    log(`[gpu] textures: ${enc.texMade} made (${MB(enc.texMadeBytes)} MB), ${enc.texFreed} freed (${MB(enc.texFreedBytes)} MB); ` +
+        `${enc.bindGroups} bind groups cached`);
+    enc.texMade = enc.texMadeBytes = enc.texFreed = enc.texFreedBytes = 0;
     ageLine();
     winUnshown = 0; winUnshownFrames = 0; winUnshownT = now; winDone = []; winWaits0 = slotWaits;
   };

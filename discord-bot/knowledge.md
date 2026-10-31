@@ -71,6 +71,9 @@ Checked against the guide or the code, and confirmed by players in threads:
   closes: it only shows the cause); then, in a normal window, turn the extensions off one by one.
 - Saves gone after closing the browser: the browser deletes site data when it closes (Chrome: `chrome://settings/content/siteData`,
   allow nfsu2.xyz to save data). Lost saves do not come back; Saves, Download backup, and cloud saves keep a copy.
+- Lost the cloud saves passphrase: since the release after 04a5c3f, Chrome and Edge offer to keep it with the browser's
+  passwords (user name "Cloud saves"), which survive cleared site data. Look in the browser's password manager under
+  nfsu2.xyz; a browser with no saves offers them back as the page opens, and the Cloud saves box fills it in for Load.
 - Loading a backup or a PC profile: Saves, Restore (the guide's section 5).
 - Progress not saved (often on a phone): a new profile starts on the game's Save = Prompt, whose "save?" question
   after a race opens on No, so tapping through skips the save. Pick Yes there once, or set the game's Options,

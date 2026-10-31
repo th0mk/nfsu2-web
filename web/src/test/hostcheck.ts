@@ -35,14 +35,32 @@ if (script) {
   await w.write(txt); await w.close();
   env.NFSU2_INPUT_SCRIPT = '/save/autotest-script.txt';
 }
+const allEnv: Record<string, string> = { HOME: '/save', NFSU2_DATA: '/data', ...env, ...Object.fromEntries(q.getAll('env').map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) };
 const p = await startProcess({
   module: mod, pool: +(q.get('pool') ?? 24), initialPages: +(q.get('pages') ?? 1024),
-  cfg: { args: ['nfsu2', ...(q.getAll('arg'))], env: { HOME: '/save', NFSU2_DATA: '/data', ...env, ...Object.fromEntries(q.getAll('env').map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])) }, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir: saveDir },
+  cfg: { args: ['nfsu2', ...(q.getAll('arg'))], env: allEnv, dataBase: abs(DATA_PATH), manifestUrl: abs(MANIFEST_PATH), saveDir: saveDir },
   onLog: (s, fd, tid) => log(`[${tid}${fd === 2 ? '!' : ''}] ${s}`),
   onNote: log,
 });
-// ?net=<name>: the virtual LAN (web/src/net) under that player name; the notices the app shows over the game, logged
-const net = q.has('net') ? attachNet(p, { name: q.get('net') || 'test', log, onNotice: t => log(`[notice] ${t}`), onLobby: j => log(`[lobby] ${j}`) }) : null;
+// ?net=<name>: the virtual LAN (web/src/net) under that player name; the notices the app shows over the game, logged.
+// Free roam's friends (app/friends.ts), for tests: NFSU2_TEST_CLAIM is the keyphrase token the hello claims with,
+// front bumpers and the server's friend messages are logged ([bump], [friend]), the touched player is asked about at
+// once, and with NFSU2_TEST_FRIEND=add the page asks to befriend it (or accepts) as soon as the server says it may
+const autoAdd = allEnv.NFSU2_TEST_FRIEND === 'add';
+const net = q.has('net') ? attachNet(p, {
+  name: q.get('net') || 'test', log, claim: allEnv.NFSU2_TEST_CLAIM || undefined,
+  onNotice: t => log(`[notice] ${t}`), onLobby: j => log(`[lobby] ${j}`),
+  onBump: j => {
+    log(`[bump] ${j}`);
+    const m = JSON.parse(j);
+    if (m.on === 1) net?.friend({ op: 'can', name: m.name });
+  },
+  onFriend: m => {
+    log(`[friend] ${JSON.stringify(m)}`);
+    if (autoAdd && ((m.op === 'can' && (m.st === 'new' || m.st === 'asks')) || m.op === 'asks')) net?.friend({ op: 'add', name: m.name });
+  },
+}) : null;
+void net?.online.then(() => { net.friend({ op: 'list' }); });
 (globalThis as any).nfsu2Net = net;
 const code = await p.exited;
 if (net) log(`NET ${JSON.stringify(net.stats())}`);

@@ -120,5 +120,14 @@ debug = "line-tables-only"
 # a bug in one connection's task must not take the server down: the task unwinds, the others go on
 panic = "unwind"
 
+# The tests' build (.github/workflows/tests.yml, build.sh --test): optimised as the release build is (the timing tests
+# need it), without its link-time optimisation across crates.  Each of the ~45 test programs links the whole server,
+# and LTO made that 1.9 minutes of a cold build on the Mac; without it 0.5 (the tests themselves run as fast).
+[profile.ci]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+debug = false
+
 [profile.dev]
 opt-level = 1

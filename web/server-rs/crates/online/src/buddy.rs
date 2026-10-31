@@ -38,9 +38,17 @@
 //! Field names and the roster's bits from the game's own code (0x74C640 ROST, 0x74E2B0 RNOT, 0x74D420 the adds,
 //! 0x74D660 the deletes); how its screens show each was checked only in part.
 //!
-//! Kept in <state>/online/buddies.json, so they hold over a restart: each persona's friends and blocked (names), the
-//! friend requests it sent that wait for an answer, and the messages from friends that wait for it; but only for a
-//! claimed name (nfsu2-claims), with the keyphrase that claimed it (`owner`).  Before names could be claimed a persona
+//! Kept in <state>/online/friends/, one file a persona (`Shelf`), so they hold over a restart: each persona's friends
+//! and blocked (names), the friend requests it sent that wait for an answer and the ones that wait for its own, and
+//! the messages from friends that wait for it; but only for a claimed name (nfsu2-claims), with the keyphrase that
+//! claimed it (`owner`).  A list is read when its persona needs it (logs in to the lobby or the Messenger, is asked,
+//! befriended or sent a message, its page asks for its friends) and written when it changed, at most every
+//! `save_ms`: the store's size is the players who play, not the players who ever did (one buddies.json, written whole
+//! every 10 s from this thread, held 5000 lists at most until 2026-10-31; a file of then is moved into the shelf at
+//! the start).  `lists` keeps the lists read lately in memory (`BuddyLimits::lists` of them, the least recently seen
+//! going first, never one of a persona in the lobby or the Messenger), and the indexes (`fans`, `blockers`) are of
+//! those: every persona online has its list there, so its friends' presences and blocks reach it.  Lists of claims
+//! that ended go from the shelf once an hour (`sweep`).  Before names could be claimed a persona
 //! was whoever played under its name, so players who kept the same name (NAME, the default, most of all) saw and
 //! changed one another's lists (a player's report, 2026-10-28).  Now:
 //! - a claimed name's lists are its owner's: made, read and kept for its keyphrase only (the lobby lets nobody else
@@ -52,22 +60,26 @@
 //! Without claims (OnlineOptions::claims None) every list is kept for its name, as before.  The blocked list was the
 //! session's own until 2026-10-23 (the Online audit's ONL-6).  Invites are passed on and forgotten (to a persona
 //! online now).  Limits: 50 friends, 50 blocked, `MAX_ASKED` requests waiting from one persona, `MAX_MAIL` messages
-//! waiting for one (the oldest goes) and `ALL_MAIL` in all; `lists` lists, the least recently seen going first, new
-//! ones `list_rate` an hour per client; messages `msg_rate` a second (burst 3 x), the lists and the search
-//! `heavy_rate` a second (burst 4), over that: closed (the Online audit's ONL-1, ONL-3); chat messages 2 a second
-//! (burst 5) and 500 characters; a blocked persona's messages, invites and requests never arrive.
+//! waiting for one (the oldest goes) and `ALL_MAIL` in the lists in memory; new lists `list_rate` an hour per
+//! client; messages `msg_rate` a second (burst 3 x), the lists and the search `heavy_rate` a second (burst 4), over
+//! that: closed (the Online audit's ONL-1, ONL-3); chat messages 2 a second (burst 5) and 500 characters; a blocked
+//! persona's messages, invites and requests never arrive.
+//!
+//! Free roam's pages befriend through the same lists (`friends`, the page's keyphrase for the persona: its claimed
+//! name), so a friend made by touching front bumpers in free roam is a friend in the Messenger too.
 //!
 //! A buddy connection's state stays readable until the event that closed it is over, so the code still handling that
 //! event goes on with it (a handler whose own answer closed the connection goes on with no persona, and fails where
 //! it needs one: `null_persona`).
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use indexmap::IndexMap;
 use nfsu2_util::json;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::aries::{FieldMap, Fields, FrameReader, V, encode_frame};
 use crate::core::Core;
@@ -97,10 +109,15 @@ const MAIL_WAIT_MS: f64 = 3000.0;
 /// "0" has neither
 const ASKED_ME: &str = "R";
 const I_ASKED: &str = "S";
+/// the folder of the lists in the store's folder, and the file of before it (moved in at the start)
+const SHELF: &str = "friends";
+const OLD_FILE: &str = "buddies.json";
+/// how often the shelf is swept of the lists of claims that ended
+const SWEEP_MS: f64 = 3_600_000.0;
 
-/// EA Messenger's limits (see the module's text): `lists` friends lists kept, `list_rate` new ones an hour per
-/// client, `msg_rate` messages a second (burst 3 x), `heavy_rate` lists and searches a second (burst 4),
-/// `presence_ms` the least time between two presences of one persona
+/// EA Messenger's limits (see the module's text): `lists` friends lists kept in memory (the shelf keeps them all),
+/// `list_rate` new ones an hour per client, `msg_rate` messages a second (burst 3 x), `heavy_rate` lists and searches
+/// a second (burst 4), `presence_ms` the least time between two presences of one persona
 #[derive(Clone, Copy, Debug)]
 pub struct BuddyLimits {
     pub lists: f64,
@@ -112,8 +129,50 @@ pub struct BuddyLimits {
 
 impl Default for BuddyLimits {
     fn default() -> Self {
-        BuddyLimits { lists: 5000.0, list_rate: 20.0, msg_rate: 10.0, heavy_rate: 1.0, presence_ms: 1000.0 }
+        BuddyLimits { lists: 50_000.0, list_rate: 20.0, msg_rate: 10.0, heavy_rate: 1.0, presence_ms: 1000.0 }
     }
+}
+
+/// What a page asks of its persona's lists (`OnlineHost::friends`): its keyphrase says who it is, the keyphrase's
+/// claimed name is the persona
+#[derive(Clone, Debug)]
+pub enum FriendAsk {
+    /// the lists as they are
+    List,
+    /// a request to the persona `name` (free roam: the two cars touched front bumpers, and the switch saw the two
+    /// players linked); friends at once when `name` asked first
+    Ask(String),
+    /// the answer to name's request (true: friends; false: declined)
+    Answer(String, bool),
+    /// friends no more, and its own request to name taken back
+    Remove(String),
+    /// name blocked: friends no more, its request gone, and the next ones never arrive
+    Block(String),
+}
+
+/// one friend as the page sees it
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FriendRow {
+    pub name: String,
+    /// in the Online lobby or the Messenger now
+    pub online: bool,
+    /// its line for its friends (`FriendsList::contact`), when its list is in memory
+    pub contact: Option<String>,
+}
+
+/// What the ask did (`done`), and the persona's lists after it
+#[derive(Clone, Debug, Default)]
+pub struct FriendReply {
+    /// the persona (the keyphrase's claimed name); None: it has none, nothing was done
+    pub me: Option<String>,
+    /// "ok"; "friends" (now, or already); "asked" (the request waits); "none" (no such request or friend); "full" (a
+    /// list is full, or the client made its share of new lists); "self"; "name" (no name); "claim" (the caller, or
+    /// the one asked, has no claimed name)
+    pub done: &'static str,
+    pub friends: Vec<FriendRow>,
+    /// the requests that wait for its answer, and its own that wait for theirs
+    pub asks: Vec<String>,
+    pub sent: Vec<String>,
 }
 
 /// a message that waits for its persona: who sent it, its text, and when (ms since 1970)
@@ -125,20 +184,25 @@ pub struct Mail {
     pub t: f64,
 }
 
-/// a persona's lists: its name, the friends (lower case -> the name as given; `B` in buddies.json), the blocked (`I`),
-/// the friend requests it sent that wait for an answer (lower case -> the name as given and when; `R`), the messages
-/// that wait for it, the oldest first (`M`), and the month it was last seen
+/// a persona's lists: its name, the friends (lower case -> the name as given; `B` in its file), the blocked (`I`),
+/// the friend requests it sent that wait for an answer (lower case -> the name as given and when; `R`), the ones sent
+/// to it that wait for its answer (`Q`: the same requests, from the asker's list, so a persona that logs in finds them
+/// without a look through every list), the messages that wait for it, the oldest first (`M`), and the month it was
+/// last seen
 pub struct FriendsList {
     pub name: String,
     pub b: IndexMap<String, String>,
     pub i: IndexMap<String, String>,
     pub r: IndexMap<String, (String, f64)>,
+    pub q: IndexMap<String, (String, f64)>,
     pub m: Vec<Mail>,
     pub seen: String,
-    /// the keyphrase that claimed the name (nfsu2-claims; `owner` in buddies.json); None: a list of before claims
+    /// the keyphrase that claimed the name (nfsu2-claims; `owner` in its file); None: a list of before claims
     pub owner: Option<Arc<str>>,
     /// a list of a name nobody claimed: for its session only, never written
     pub temp: bool,
+    /// a line its friends see beside its name (`C`; none can be set yet: kept, written, and shown to friends only)
+    pub contact: Option<String>,
 }
 
 impl FriendsList {
@@ -148,16 +212,18 @@ impl FriendsList {
             b: IndexMap::new(),
             i: IndexMap::new(),
             r: IndexMap::new(),
+            q: IndexMap::new(),
             m: Vec::new(),
             seen,
             owner: None,
             temp: false,
+            contact: None,
         }
     }
 
     /// nothing in it to keep
     fn is_empty(&self) -> bool {
-        self.b.is_empty() && self.i.is_empty() && self.r.is_empty() && self.m.is_empty()
+        self.b.is_empty() && self.i.is_empty() && self.r.is_empty() && self.q.is_empty() && self.m.is_empty() && self.contact.is_none()
     }
 }
 
@@ -191,10 +257,7 @@ pub struct Buddies {
     save_ms: f64,
     /// the claimed names (the module's text); None: every list kept for its name
     claims: Option<Arc<nfsu2_claims::Claims>>,
-    /// lower-case persona -> a list of before claims whose name nobody claimed yet: kept (written) for the first
-    /// keyphrase that does, read by nobody until then
-    dormant: HashMap<String, FriendsList>,
-    /// lower-case persona -> its friends list, least recently seen first
+    /// lower-case persona -> its friends list (the ones in memory), least recently seen first
     pub lists: OrderedMap<String, FriendsList>,
     /// lower-case persona -> buddy connection
     online: OrderedMap<String, u64>,
@@ -202,23 +265,210 @@ pub struct Buddies {
     /// met it: who hears of its presence (so a presence goes to the ones that hear, not through every online persona)
     fans: HashMap<String, HashSet<String>>,
     met_by: HashMap<String, HashSet<u64>>,
-    /// lower-case persona -> the personas (lower case) whose friend requests wait for its answer (each kept in the
-    /// asker's list, `r`)
-    asked: HashMap<String, HashSet<String>>,
     /// lower-case persona -> how many lists block it (the lobby's chat looks at each hearer's list only for a line of
     /// a persona some list blocks)
     blockers: HashMap<String, u32>,
-    /// the messages waiting, on all lists
+    /// the messages waiting, on the lists in memory
     mail: usize,
-    /// when requests and messages that waited too long were last let go
+    /// when requests and messages that waited too long were last let go, and the shelf last swept
     pruned: f64,
+    swept: f64,
     /// client group -> bucket: new friends lists
     made: HashMap<Arc<str>, LBucket>,
     timer: Option<TimerId>,
-    dirty: bool,
+    /// the lists (lower case) that changed since they were last written
+    dirty: HashSet<String>,
     pub conns: HashMap<u64, Buddy>,
     graveyard: Vec<u64>,
     next: u64,
+}
+
+/// The lists on disk: <dir>/friends/<2 hex>/<32 hex>.json, by the SHA-256 of the persona in lower case (a name is no
+/// path, and 256 folders keep each one small at any number of players).  A file is one list as `FriendsList`'s text
+/// says, written to a temporary file and renamed over the old one; a list with nothing in it has no file.
+struct Shelf;
+
+impl Shelf {
+    fn file(dir: &Path, k: &str) -> (PathBuf, PathBuf) {
+        let h: String = Sha256::digest(k.as_bytes()).iter().take(16).map(|b| format!("{b:02x}")).collect();
+        let sub = dir.join(SHELF).join(&h[..2]);
+        let file = sub.join(format!("{h}.json"));
+        (sub, file)
+    }
+
+    fn read(dir: &Path, k: &str) -> Option<serde_json::Map<String, Value>> {
+        let (_, file) = Shelf::file(dir, k);
+        let bytes = std::fs::read(file).ok()?;
+        crate::jsonparse::parse(&String::from_utf8_lossy(&bytes)).ok()?.as_object().cloned()
+    }
+
+    fn write(dir: &Path, k: &str, body: &str) -> Result<(), String> {
+        let (sub, file) = Shelf::file(dir, k);
+        crate::files::write_atomic(&sub, &file, body.as_bytes())
+    }
+
+    fn remove(dir: &Path, k: &str) {
+        let _ = std::fs::remove_file(Shelf::file(dir, k).1);
+    }
+}
+
+/// one list of a file (the shelf's, or buddies.json's of before, whatever its version) read leniently: names that are
+/// no name and times that are no time left out, at most MAX_LIST friends and blocked, MAX_ASKED requests each way, the
+/// newest MAX_MAIL messages; None: no name of a persona
+fn list_of_json(o: &serde_json::Map<String, Value>) -> Option<FriendsList> {
+    let name = o.get("name")?.as_str()?;
+    if !valid_name(name) {
+        return None;
+    }
+    // (a `seen` that is not a string counts as none: see stats.rs `clean`)
+    let seen = o.get("seen").and_then(Value::as_str).filter(|s| jsx::is_month(s)).unwrap_or("1970-01");
+    let mut l = FriendsList::new(name, seen.to_string());
+    l.owner = o
+        .get("owner")
+        .and_then(Value::as_str)
+        .filter(|o| o.len() == 22 && o.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
+        .map(Arc::from);
+    read_names(o.get("B"), &mut l.b);
+    read_names(o.get("I"), &mut l.i);
+    for (key, into) in [("R", &mut l.r), ("Q", &mut l.q)] {
+        if let Some(Value::Array(a)) = o.get(key) {
+            for e in a.iter().take(MAX_ASKED) {
+                if let Some([n, t]) = e.as_array().map(Vec::as_slice)
+                    && let Some(n) = n.as_str().filter(|n| valid_name(n))
+                    && let Some(t) = when(t)
+                {
+                    into.insert(lower(n), (n.to_string(), t));
+                }
+            }
+        }
+    }
+    if let Some(Value::Array(a)) = o.get("M") {
+        // (the newest MAX_MAIL)
+        for e in a.iter().skip(a.len().saturating_sub(MAX_MAIL)) {
+            let Some(o) = e.as_object() else { continue };
+            let (Some(from), Some(t)) = (o.get("from").and_then(Value::as_str).filter(|n| valid_name(n)), o.get("t").and_then(when)) else {
+                continue;
+            };
+            let text = |k: &str, n: usize| o.get(k).and_then(Value::as_str).map_or(String::new(), |s| clean_text(s, n));
+            let kind = o.get("type").and_then(Value::as_str).map_or("C", |s| jsx::slice16(s, 4)).to_string();
+            l.m.push(Mail { from: from.to_string(), body: text("body", 500), subj: text("subj", 64), kind, t });
+        }
+    }
+    l.contact = o.get("C").and_then(Value::as_str).map(|s| clean_text(s, 64)).filter(|s| !s.is_empty());
+    Some(l)
+}
+
+/// one list's text, as the shelf keeps it (`B` always, the others when not empty)
+fn list_json(l: &FriendsList) -> String {
+    let mut s = String::from("{\"v\":4,\"name\":");
+    json::write_str(&mut s, &l.name);
+    s.push_str(",\"seen\":");
+    json::write_str(&mut s, &l.seen);
+    if let Some(o) = &l.owner {
+        s.push_str(",\"owner\":");
+        json::write_str(&mut s, o);
+    }
+    write_names(&mut s, "B", l.b.values());
+    if !l.i.is_empty() {
+        write_names(&mut s, "I", l.i.values());
+    }
+    for (key, reqs) in [("R", &l.r), ("Q", &l.q)] {
+        if reqs.is_empty() {
+            continue;
+        }
+        s.push_str(&format!(",\"{key}\":["));
+        for (i, (n, t)) in reqs.values().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            s.push('[');
+            json::write_str(&mut s, n);
+            s.push_str(&format!(",{}]", *t as i64));
+        }
+        s.push(']');
+    }
+    if !l.m.is_empty() {
+        s.push_str(",\"M\":[");
+        for (i, m) in l.m.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            s.push_str("{\"from\":");
+            json::write_str(&mut s, &m.from);
+            s.push_str(&format!(",\"t\":{},\"body\":", m.t as i64));
+            json::write_str(&mut s, &m.body);
+            s.push_str(",\"subj\":");
+            json::write_str(&mut s, &m.subj);
+            s.push_str(",\"type\":");
+            json::write_str(&mut s, &m.kind);
+            s.push('}');
+        }
+        s.push(']');
+    }
+    if let Some(c) = &l.contact {
+        s.push_str(",\"C\":");
+        json::write_str(&mut s, c);
+    }
+    s.push('}');
+    s
+}
+
+/// The shelf swept of what nobody will read again: the lists whose claim ended (their keyphrase holds the name no
+/// more), and lists of before claims of the names nobody claims (NAME, Player).  `skip` says which lists are in
+/// memory (left alone: the store decides for those).  Runs on a thread of its own (an hour apart): at hundreds of
+/// thousands of lists it reads them all.  The number of files that went.
+pub fn sweep(dir: &Path, claims: &nfsu2_claims::Claims, now: i64, skip: &HashSet<String>) -> usize {
+    let mut gone = 0;
+    let Ok(subs) = std::fs::read_dir(dir.join(SHELF)) else { return 0 };
+    for sub in subs.flatten() {
+        let Ok(files) = std::fs::read_dir(sub.path()) else { continue };
+        for f in files.flatten() {
+            let path = f.path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let Ok(bytes) = std::fs::read(&path) else { continue };
+            let Ok(o) = crate::jsonparse::parse(&String::from_utf8_lossy(&bytes)) else { continue };
+            let Some(name) = o.get("name").and_then(Value::as_str) else { continue };
+            if skip.contains(&lower(name)) {
+                continue;
+            }
+            let owner = o.get("owner").and_then(Value::as_str);
+            let dead = match owner {
+                Some(owner) => claims.holder(name, now).as_deref() != Some(owner),
+                None => nfsu2_claims::canonical(name).is_some_and(|n| nfsu2_claims::UNCLAIMABLE.contains(&n.as_str())),
+            };
+            if dead && std::fs::remove_file(&path).is_ok() {
+                gone += 1;
+            }
+        }
+    }
+    gone
+}
+
+/// every list on the shelf of `dir`, as written, by name (each file where its name says)
+#[cfg(test)]
+pub(crate) fn shelf_texts(dir: &Path) -> Vec<String> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for sub in std::fs::read_dir(dir.join(SHELF)).into_iter().flatten().flatten() {
+        for f in std::fs::read_dir(sub.path()).unwrap().flatten() {
+            let text = std::fs::read_to_string(f.path()).unwrap();
+            let name = crate::jsonparse::parse(&text).unwrap()["name"].as_str().unwrap().to_string();
+            assert_eq!(f.path(), Shelf::file(dir, &lower(&name)).1, "{name}'s file is where its name says");
+            out.push((name, text));
+        }
+    }
+    out.sort();
+    out.into_iter().map(|(_, t)| t).collect()
+}
+
+/// the same lists read and written again
+#[cfg(test)]
+pub(crate) fn shelf_reread(dir: &Path) -> Vec<String> {
+    shelf_texts(dir)
+        .iter()
+        .map(|t| list_json(&list_of_json(crate::jsonparse::parse(t).unwrap().as_object().unwrap()).unwrap()))
+        .collect()
 }
 
 /// a time the file keeps (ms since 1970, whole)
@@ -258,131 +508,81 @@ impl Buddies {
         Buddies::with_claims(dir, l, None, 0)
     }
 
-    /// the store of `dir` (none: in memory) as of `now` (ms since 1970: the claims that hold then)
+    /// the store of `dir` (none: in memory) as of `now` (ms since 1970: the claims that hold then); a buddies.json of
+    /// before in it is moved onto the shelf first
     pub fn with_claims(dir: Option<PathBuf>, l: BuddyLimits, claims: Option<Arc<nfsu2_claims::Claims>>, now: i64) -> Buddies {
         let mut b = Buddies {
             l,
             dir,
             save_ms: 10_000.0,
             claims,
-            dormant: HashMap::new(),
             lists: OrderedMap::new(),
             online: OrderedMap::new(),
             fans: HashMap::new(),
             met_by: HashMap::new(),
-            asked: HashMap::new(),
             blockers: HashMap::new(),
             mail: 0,
             pruned: f64::NEG_INFINITY,
+            swept: now as f64,
             made: HashMap::new(),
             timer: None,
-            dirty: false,
+            dirty: HashSet::new(),
             conns: HashMap::new(),
             graveyard: Vec::new(),
             next: 0,
         };
-        if b.dir.is_some() {
-            b.load(now);
+        if let Some(dir) = b.dir.clone() {
+            b.move_in(&dir, now);
         }
         b
     }
 
-    fn file(&self) -> Option<PathBuf> {
-        self.dir.as_ref().map(|d| d.join("buddies.json"))
-    }
-
-    fn load(&mut self, now: i64) {
-        let Some(file) = self.file() else { return };
-        let Ok(bytes) = std::fs::read(&file) else { return };
-        let Ok(j) = crate::jsonparse::parse(&String::from_utf8_lossy(&bytes)) else { return };
-        // (a file of version 2 or older keeps only the friends: one of before the Online audit also has the blocked
-        // lists of then, I, which are not read)
-        let v3 = j.get("v").and_then(Value::as_f64).is_some_and(|v| v >= 3.0);
-        let mut rows: Vec<(&serde_json::Map<String, Value>, String, String)> = match j.get("personas") {
-            Some(Value::Array(a)) => a
-                .iter()
-                .filter_map(|r| {
-                    let o = r.as_object()?;
-                    let name = o.get("name")?.as_str()?;
-                    if !valid_name(name) {
-                        return None;
-                    }
-                    // (a `seen` that is not a string counts as none: see stats.rs `clean`)
-                    let seen = o.get("seen").and_then(Value::as_str).filter(|s| jsx::is_month(s)).unwrap_or("1970-01");
-                    Some((o, name.to_string(), seen.to_string()))
-                })
-                .collect(),
-            _ => Vec::new(),
-        };
-        rows.sort_by(|a, b| a.2.cmp(&b.2));
-        let from = rows.len().saturating_sub(self.l.lists as usize);
-        for (r, name, seen) in rows.drain(from..) {
-            let mut l = FriendsList::new(&name, seen);
-            l.owner = r
-                .get("owner")
-                .and_then(Value::as_str)
-                .filter(|o| o.len() == 22 && o.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'))
-                .map(Arc::from);
-            read_names(r.get("B"), &mut l.b);
-            if v3 {
-                read_names(r.get("I"), &mut l.i);
-                if let Some(Value::Array(a)) = r.get("R") {
-                    for e in a.iter().take(MAX_ASKED) {
-                        if let Some([n, t]) = e.as_array().map(Vec::as_slice)
-                            && let Some(n) = n.as_str().filter(|n| valid_name(n))
-                            && let Some(t) = when(t)
-                        {
-                            l.r.insert(lower(n), (n.to_string(), t));
-                        }
-                    }
-                }
-                if let Some(Value::Array(a)) = r.get("M") {
-                    // (the newest MAX_MAIL)
-                    for e in a.iter().skip(a.len().saturating_sub(MAX_MAIL)) {
-                        let Some(o) = e.as_object() else { continue };
-                        let (Some(from), Some(t)) =
-                            (o.get("from").and_then(Value::as_str).filter(|n| valid_name(n)), o.get("t").and_then(when))
-                        else {
-                            continue;
-                        };
-                        let text = |k: &str, n: usize| o.get(k).and_then(Value::as_str).map_or(String::new(), |s| clean_text(s, n));
-                        let kind = o.get("type").and_then(Value::as_str).map_or("C", |s| jsx::slice16(s, 4)).to_string();
-                        l.m.push(Mail { from: from.to_string(), body: text("body", 500), subj: text("subj", 64), kind, t });
-                    }
-                }
-            }
-            if l.is_empty() {
-                continue;
-            }
-            let k = lower(&name);
-            if let Some(c) = &self.claims {
-                match &l.owner {
-                    // its owner's while the claim holds; gone with the claim
-                    Some(o) => {
-                        if c.holder(&name, now).as_deref() != Some(&**o) {
-                            self.dirty = true;
-                            continue;
-                        }
-                    }
-                    // a list of before claims: NAME's and Player's were everyone's and go; the others wait for their
-                    // name's first claim
-                    None => {
-                        if nfsu2_claims::canonical(&name).is_some_and(|n| nfsu2_claims::UNCLAIMABLE.contains(&n.as_str())) {
-                            self.dirty = true;
-                        } else {
-                            self.dormant.insert(k, l);
-                        }
+    /// buddies.json (one file of every list, before the shelf) onto the shelf, then renamed to buddies.json.moved: its
+    /// lists read as they were then (a name twice: the later list; the lists of claims that ended, and NAME's and
+    /// Player's of before claims, left out), each request also on the asked persona's list (`Q`)
+    fn move_in(&mut self, dir: &Path, now: i64) {
+        let old = dir.join(OLD_FILE);
+        let Ok(bytes) = std::fs::read(&old) else { return };
+        let mut rows: Vec<FriendsList> = Vec::new();
+        if let Ok(j) = crate::jsonparse::parse(&String::from_utf8_lossy(&bytes)) {
+            for o in j.get("personas").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_object) {
+                let Some(l) = list_of_json(o).filter(|l| !l.is_empty()) else { continue };
+                if let Some(c) = &self.claims {
+                    let ended = match &l.owner {
+                        Some(o) => c.holder(&l.name, now).as_deref() != Some(&**o),
+                        None => nfsu2_claims::canonical(&l.name).is_some_and(|n| nfsu2_claims::UNCLAIMABLE.contains(&n.as_str())),
+                    };
+                    if ended {
                         continue;
                     }
                 }
+                rows.push(l);
             }
-            self.lists.insert(k, l);
         }
-        // (a name twice in the file: the later list, in the earlier one's place)
-        let keys: Vec<String> = self.lists.iter().map(|(k, _)| k.clone()).collect();
-        for k in keys {
-            self.index(&k);
+        // (a name twice: the more recently seen list, in the other one's place)
+        rows.sort_by(|a, b| a.seen.cmp(&b.seen));
+        let mut lists: IndexMap<String, FriendsList> = IndexMap::new();
+        for l in rows {
+            lists.insert(lower(&l.name), l);
         }
+        let asks: Vec<(String, String, String, f64)> =
+            lists.values().flat_map(|l| l.r.iter().map(|(k, (n, t))| (k.clone(), n.clone(), l.name.clone(), *t))).collect();
+        for (k, name, from, t) in asks {
+            let l = lists.entry(k).or_insert_with(|| {
+                let mut l = FriendsList::new(&name, jsx::month_of(now as f64));
+                l.owner = self.claims.as_ref().and_then(|c| c.holder(&name, now));
+                l
+            });
+            if l.q.len() < MAX_ASKED {
+                l.q.insert(lower(&from), (from, t));
+            }
+        }
+        for (k, l) in &lists {
+            if Shelf::write(dir, k, &list_json(l)).is_err() {
+                return;
+            }
+        }
+        let _ = std::fs::rename(&old, dir.join(format!("{OLD_FILE}.moved")));
     }
 
     /// the store's indexes learn of the list of `owner` (lower case), which is in `lists`
@@ -391,51 +591,155 @@ impl Buddies {
         for k in l.b.keys() {
             self.fans.entry(k.clone()).or_default().insert(owner.to_string());
         }
-        for k in l.r.keys() {
-            self.asked.entry(k.clone()).or_default().insert(owner.to_string());
-        }
         for k in l.i.keys() {
             *self.blockers.entry(k.clone()).or_default() += 1;
         }
         self.mail += l.m.len();
     }
 
+    /// the list of `k` (lower case) changed: written at the next save
+    fn mark(&mut self, k: &str) {
+        if self.dir.is_some() {
+            self.dirty.insert(k.to_string());
+        }
+    }
+
+    /// The list of `k` (lower case) in memory, read from the shelf if it is there (true): a list whose claim ended goes
+    /// from it, and one of before claims (no owner) stays there for its name's first keyphrase (`dormant`).  Room is
+    /// made for it first: the least recently seen lists go from memory (written first when they changed), but never
+    /// one that `pinned` holds or of a persona online in the Messenger.
+    fn fetch(&mut self, k: &str, now: f64, pinned: &dyn Fn(&str) -> bool) -> bool {
+        if self.lists.contains_key(k) {
+            return true;
+        }
+        let Some(dir) = self.dir.clone() else { return false };
+        let Some(l) = Shelf::read(&dir, k).and_then(|o| list_of_json(&o)).filter(|l| lower(&l.name) == k) else { return false };
+        if let Some(c) = &self.claims {
+            match &l.owner {
+                Some(o) if c.holder(&l.name, now as i64).as_deref() != Some(&**o) => {
+                    Shelf::remove(&dir, k);
+                    return false;
+                }
+                Some(_) => {}
+                None => {
+                    if nfsu2_claims::canonical(&l.name).is_some_and(|n| nfsu2_claims::UNCLAIMABLE.contains(&n.as_str())) {
+                        Shelf::remove(&dir, k);
+                    }
+                    return false;
+                }
+            }
+        }
+        self.make_room(pinned);
+        self.lists.insert(k.to_string(), l);
+        self.index(k);
+        if self.prune_one(k, now) {
+            self.mark(k);
+        }
+        true
+    }
+
+    /// k's list of before claims (no owner) from the shelf, for its name's first keyphrase
+    fn dormant(&self, k: &str) -> Option<FriendsList> {
+        let dir = self.dir.as_ref()?;
+        Shelf::read(dir, k).and_then(|o| list_of_json(&o)).filter(|l| l.owner.is_none() && lower(&l.name) == k)
+    }
+
+    /// room for one more list in memory (see `fetch`)
+    fn make_room(&mut self, pinned: &dyn Fn(&str) -> bool) {
+        while self.lists.len() as f64 >= self.l.lists {
+            let Some(old) = self.lists.iter().map(|(k, _)| k).find(|k| !pinned(k) && !self.online.contains_key(*k)).cloned() else {
+                return;
+            };
+            if self.dirty.remove(&old) {
+                self.write_one(&old);
+            }
+            self.take_list(&old);
+        }
+    }
+
+    /// k's list onto the shelf as it is now (one with nothing in it off the shelf; a session's own never)
+    fn write_one(&self, k: &str) -> Option<String> {
+        let (dir, l) = (self.dir.as_ref()?, self.lists.get(k)?);
+        if l.temp {
+            return None;
+        }
+        if l.is_empty() {
+            Shelf::remove(dir, k);
+            return None;
+        }
+        Shelf::write(dir, k, &list_json(l)).err()
+    }
+
+    /// the lists that changed, onto the shelf: the first error, if any (the list is written again next time)
+    fn write_dirty(&mut self) -> Option<String> {
+        let mut err = None;
+        for k in std::mem::take(&mut self.dirty) {
+            if let Some(e) = self.write_one(&k) {
+                self.dirty.insert(k);
+                err.get_or_insert(e);
+            }
+        }
+        err
+    }
+
     /// a list into the store, at the most recently seen end
     fn put_list(&mut self, k: String, l: FriendsList) {
-        self.drop_list(&k);
+        self.take_list(&k);
         self.lists.insert(k.clone(), l);
         self.index(&k);
+        self.mark(&k);
     }
 
     /// the persona `old`'s list (lower case) is `name`'s now: its owner changed its name (nfsu2-claims), and the lists
-    /// that had it as a friend have the new name instead
+    /// that had it as a friend, and the requests to and from it, have the new name instead (the ones in memory: the
+    /// caller reads its friends' and askers' lists first)
     fn move_list(&mut self, old: &str, name: &str) {
         let Some(mut l) = self.take_list(old) else { return };
+        if let Some(dir) = &self.dir {
+            Shelf::remove(dir, old);
+        }
+        self.dirty.remove(old);
         let k = lower(name);
         l.name = name.to_string();
+        let (sent, got): (Vec<String>, Vec<String>) = (l.r.keys().cloned().collect(), l.q.keys().cloned().collect());
         self.put_list(k.clone(), l);
+        let rename = |m: &mut IndexMap<String, (String, f64)>| match m.shift_remove(old) {
+            Some((_, t)) => {
+                m.insert(k.clone(), (name.to_string(), t));
+                true
+            }
+            None => false,
+        };
+        let mut changed: Vec<String> = Vec::new();
+        for (who, theirs_q) in sent.iter().map(|w| (w, true)).chain(got.iter().map(|w| (w, false))) {
+            if let Some(wl) = self.lists.get_mut(who)
+                && rename(if theirs_q { &mut wl.q } else { &mut wl.r })
+            {
+                changed.push(who.clone());
+            }
+        }
         if let Some(fans) = self.fans.remove(old) {
             for f in &fans {
                 if let Some(fl) = self.lists.get_mut(f)
                     && fl.b.shift_remove(old).is_some()
                 {
                     fl.b.insert(k.clone(), name.to_string());
+                    changed.push(f.clone());
                 }
             }
             self.fans.entry(k).or_default().extend(fans);
         }
+        for f in changed {
+            self.mark(&f);
+        }
     }
 
-    /// a list out of the store (and its indexes)
+    /// a list out of memory (and the indexes): not off the shelf
     fn take_list(&mut self, owner: &str) -> Option<FriendsList> {
         let l = self.lists.get(owner)?;
-        let (b, r, i, m): (Vec<String>, Vec<String>, Vec<String>, usize) =
-            (l.b.keys().cloned().collect(), l.r.keys().cloned().collect(), l.i.keys().cloned().collect(), l.m.len());
+        let (b, i, m): (Vec<String>, Vec<String>, usize) = (l.b.keys().cloned().collect(), l.i.keys().cloned().collect(), l.m.len());
         for k in &b {
             self.unfan(k, owner);
-        }
-        for k in &r {
-            self.unindex(k, owner);
         }
         for k in &i {
             self.blocked_less(k);
@@ -449,6 +753,7 @@ impl Buddies {
         let Some(l) = self.lists.get_mut(owner) else { return false };
         l.b.insert(k.clone(), name);
         self.fans.entry(k).or_default().insert(owner.to_string());
+        self.mark(owner);
         true
     }
 
@@ -458,6 +763,28 @@ impl Buddies {
             return false;
         }
         self.unfan(k, owner);
+        self.mark(owner);
+        true
+    }
+
+    /// k (lower case, `name` as given) on owner's blocked list (false: it has no list, or k was on it)
+    fn block_add(&mut self, owner: &str, k: String, name: String) -> bool {
+        let Some(l) = self.lists.get_mut(owner) else { return false };
+        if l.i.insert(k.clone(), name).is_some() {
+            return false;
+        }
+        self.blocked_more(&k);
+        self.mark(owner);
+        true
+    }
+
+    /// k off owner's blocked list (false: it was not on it)
+    fn block_remove(&mut self, owner: &str, k: &str) -> bool {
+        if !self.lists.get_mut(owner).is_some_and(|l| l.i.shift_remove(k).is_some()) {
+            return false;
+        }
+        self.blocked_less(k);
+        self.mark(owner);
         true
     }
 
@@ -484,42 +811,58 @@ impl Buddies {
         }
     }
 
-    /// from's friend request to `to` (both lower case) while it waits: the asker's name
+    /// from's friend request to `to` (both lower case) while it waits: the asker's name (from the asked one's list
+    /// when it is in memory, else the asker's)
     fn request(&self, from: &str, to: &str, now: f64) -> Option<&str> {
-        let l = self.lists.get(from)?;
-        let (_, t) = l.r.get(to)?;
-        (now - t < ASK_DAYS * DAY_MS).then_some(l.name.as_str())
-    }
-
-    /// from's request to `to` (lower case `to`, its name as given), on from's list (which is there)
-    fn ask(&mut self, from: &str, to: String, name: String, t: f64) {
-        if let Some(l) = self.lists.get_mut(from) {
-            l.r.insert(to.clone(), (name, t));
-            self.asked.entry(to).or_default().insert(from.to_string());
-        }
-    }
-
-    /// from's request to `to` goes (false: there was none)
-    fn unask(&mut self, from: &str, to: &str) -> bool {
-        if !self.lists.get_mut(from).is_some_and(|l| l.r.shift_remove(to).is_some()) {
-            return false;
-        }
-        self.unindex(to, from);
-        true
-    }
-
-    fn unindex(&mut self, to: &str, from: &str) {
-        if let Some(s) = self.asked.get_mut(to) {
-            s.remove(from);
-            if s.is_empty() {
-                self.asked.remove(to);
+        let (name, t) = match self.lists.get(to) {
+            Some(l) => {
+                let (n, t) = l.q.get(from)?;
+                (n.as_str(), *t)
             }
+            None => {
+                let l = self.lists.get(from)?;
+                (l.name.as_str(), l.r.get(to)?.1)
+            }
+        };
+        (now - t < ASK_DAYS * DAY_MS).then_some(name)
+    }
+
+    /// from's request to `to` (lower case `to`, its name as given), on from's list (which is there) and on to's (when
+    /// it is in memory: the caller makes it for a claimed name)
+    fn ask(&mut self, from: &str, to: String, name: String, t: f64) {
+        let Some(l) = self.lists.get_mut(from) else { return };
+        l.r.insert(to.clone(), (name, t));
+        let from_name = l.name.clone();
+        self.mark(from);
+        if let Some(tl) = self.lists.get_mut(&to) {
+            tl.q.insert(from.to_string(), (from_name, t));
+            if tl.q.len() > MAX_ASKED {
+                tl.q.shift_remove_index(0);
+            }
+            self.mark(&to);
         }
     }
 
-    /// a list goes (the store is full, its claim ended, its session ended)
+    /// from's request to `to` goes, from both lists (false: there was none)
+    fn unask(&mut self, from: &str, to: &str) -> bool {
+        let sent = self.lists.get_mut(from).is_some_and(|l| l.r.shift_remove(to).is_some());
+        let got = self.lists.get_mut(to).is_some_and(|l| l.q.shift_remove(from).is_some());
+        if sent {
+            self.mark(from);
+        }
+        if got {
+            self.mark(to);
+        }
+        sent || got
+    }
+
+    /// a list goes, from memory and the shelf (its claim ended)
     fn drop_list(&mut self, owner: &str) {
         self.take_list(owner);
+        self.dirty.remove(owner);
+        if let Some(dir) = &self.dir {
+            Shelf::remove(dir, owner);
+        }
     }
 
     /// the lists of names nobody claimed whose persona is not online go (they are for its session only): true when
@@ -528,7 +871,9 @@ impl Buddies {
         let gone: Vec<String> =
             self.lists.iter().filter(|(k, l)| l.temp && !self.online.contains_key(*k)).map(|(k, _)| k.clone()).collect();
         for k in &gone {
-            self.drop_list(k);
+            // (never on the shelf: a file under its name is a list of before claims, left for its first keyphrase)
+            self.take_list(k);
+            self.dirty.remove(k);
         }
         !gone.is_empty()
     }
@@ -542,89 +887,29 @@ impl Buddies {
         }
     }
 
-    /// the requests and messages that waited too long go (false: none did)
+    /// the requests and messages that waited too long go, from the lists in memory (false: none did)
     fn prune(&mut self, now: f64) -> bool {
-        let mut gone: Vec<(String, String)> = Vec::new();
-        let mut mail = 0;
-        self.lists.for_each_mut(|owner, l| {
-            l.r.retain(|k, (_, t)| {
-                let keep = now - *t < ASK_DAYS * DAY_MS;
-                if !keep {
-                    gone.push((k.clone(), owner.clone()));
-                }
-                keep
-            });
-            let n = l.m.len();
-            l.m.retain(|m| now - m.t < MAIL_DAYS * DAY_MS);
-            mail += n - l.m.len();
-        });
-        for (to, from) in &gone {
-            self.unindex(to, from);
+        let keys: Vec<String> = self.lists.iter().map(|(k, _)| k.clone()).collect();
+        let mut any = false;
+        for k in keys {
+            if self.prune_one(&k, now) {
+                self.mark(&k);
+                any = true;
+            }
         }
-        self.mail -= mail;
-        !gone.is_empty() || mail > 0
+        any
     }
 
-    /// buddies.json's text: version 3, the lists that have anything in them (`B` always, `I`, `R` and `M` when not
-    /// empty)
-    pub fn serialize(&self) -> String {
-        let mut s = String::from(
-            "{\"v\":3,\"note\":\"NFSU2 online Messenger lists (persona names; friend requests and messages waiting for their persona)\",\"personas\":[",
-        );
-        let mut first = true;
-        let mut dormant: Vec<&FriendsList> = self.dormant.values().collect();
-        dormant.sort_by(|a, b| a.seen.cmp(&b.seen).then_with(|| a.name.cmp(&b.name)));
-        for l in dormant.into_iter().chain(self.lists.values()).filter(|l| !l.is_empty() && !l.temp) {
-            if !first {
-                s.push(',');
-            }
-            first = false;
-            s.push_str("{\"name\":");
-            json::write_str(&mut s, &l.name);
-            s.push_str(",\"seen\":");
-            json::write_str(&mut s, &l.seen);
-            if let Some(o) = &l.owner {
-                s.push_str(",\"owner\":");
-                json::write_str(&mut s, o);
-            }
-            write_names(&mut s, "B", l.b.values());
-            if !l.i.is_empty() {
-                write_names(&mut s, "I", l.i.values());
-            }
-            if !l.r.is_empty() {
-                s.push_str(",\"R\":[");
-                for (i, (n, t)) in l.r.values().enumerate() {
-                    if i > 0 {
-                        s.push(',');
-                    }
-                    s.push('[');
-                    json::write_str(&mut s, n);
-                    s.push_str(&format!(",{}]", *t as i64));
-                }
-                s.push(']');
-            }
-            if !l.m.is_empty() {
-                s.push_str(",\"M\":[");
-                for (i, m) in l.m.iter().enumerate() {
-                    if i > 0 {
-                        s.push(',');
-                    }
-                    s.push_str("{\"from\":");
-                    json::write_str(&mut s, &m.from);
-                    s.push_str(&format!(",\"t\":{},\"body\":", m.t as i64));
-                    json::write_str(&mut s, &m.body);
-                    s.push_str(",\"subj\":");
-                    json::write_str(&mut s, &m.subj);
-                    s.push_str(",\"type\":");
-                    json::write_str(&mut s, &m.kind);
-                    s.push('}');
-                }
-                s.push(']');
-            }
-            s.push('}');
-        }
-        s.push_str("]}");
-        s
+    /// the requests (both ways) and messages of k's list that waited too long go (false: none did)
+    fn prune_one(&mut self, k: &str, now: f64) -> bool {
+        let Some(l) = self.lists.get_mut(k) else { return false };
+        let (r, q, m) = (l.r.len(), l.q.len(), l.m.len());
+        l.r.retain(|_, (_, t)| now - *t < ASK_DAYS * DAY_MS);
+        l.q.retain(|_, (_, t)| now - *t < ASK_DAYS * DAY_MS);
+        l.m.retain(|m| now - m.t < MAIL_DAYS * DAY_MS);
+        let mail = m - l.m.len();
+        self.mail -= mail;
+        r != l.r.len() || q != l.q.len() || mail > 0
     }
 
     /// a persona's friends list, or None: none is made by asking
@@ -813,7 +1098,6 @@ impl Core {
     }
 
     fn touch_lists(&mut self) {
-        self.buddies.dirty = true;
         if self.buddies.dir.is_none() || self.buddies.timer.is_some() {
             return;
         }
@@ -827,21 +1111,21 @@ impl Core {
         self.buddy_save();
     }
 
+    /// the lists that changed onto the shelf (what waited too long not written: the lists in memory are pruned at
+    /// most once an hour, and each when it is read)
     pub fn buddy_save(&mut self) {
-        let Some(dir) = self.buddies.dir.clone() else { return };
-        // (what waited too long is not written)
-        let now = self.bnow();
-        if self.buddies.prune(now) {
-            self.buddies.dirty = true;
-        }
-        self.buddies.drop_temp();
-        if !self.buddies.dirty {
+        if self.buddies.dir.is_none() {
             return;
         }
-        let body = self.buddies.serialize();
-        match crate::files::write_atomic(&dir, &dir.join("buddies.json"), body.as_bytes()) {
-            Ok(()) => self.buddies.dirty = false,
-            Err(e) => (self.log)(&format!("[online] the friends lists could not be written: {e}"), None),
+        let now = self.bnow();
+        if now - self.buddies.pruned >= 3_600_000.0 {
+            self.buddies.pruned = now;
+            self.buddies.prune(now);
+        }
+        self.buddies.drop_temp();
+        if let Some(e) = self.buddies.write_dirty() {
+            (self.log)(&format!("[online] the friends lists could not be written: {e}"), None);
+            self.touch_lists();
         }
     }
 
@@ -852,11 +1136,36 @@ impl Core {
         self.buddy_save();
     }
 
+    /// once an hour (the lobby's tick): the shelf swept of the lists of claims that ended, on a thread of its own
+    pub fn buddy_tick(&mut self) {
+        let now = self.bnow();
+        let (Some(dir), Some(claims)) = (self.buddies.dir.clone(), self.buddies.claims.clone()) else { return };
+        if now - self.buddies.swept < SWEEP_MS {
+            return;
+        }
+        self.buddies.swept = now;
+        let skip: HashSet<String> = self.buddies.lists.iter().map(|(k, _)| k.clone()).collect();
+        std::thread::spawn(move || {
+            let gone = sweep(&dir, &claims, now as i64, &skip);
+            if gone > 0 {
+                nfsu2_util::log::line(&format!("[online] {gone} friends list(s) of claims that ended went from the shelf"));
+            }
+        });
+    }
+
+    /// k's list (lower case) in memory when the shelf has it (`Buddies::fetch`): room made without pushing out the
+    /// list of a persona in the lobby
+    pub(crate) fn buddy_fetch(&mut self, k: &str) -> bool {
+        let now = self.bnow();
+        let lobby = &self.lobby.by_persona;
+        self.buddies.fetch(k, now, &|x| lobby.contains_key(x))
+    }
+
     /// a persona's friends list, made if needed (on behalf of client `group`): false when that client made its share
-    /// of new lists this hour; the least recently seen list goes when there are too many
+    /// of new lists this hour; the least recently seen lists go from memory when there are too many
     fn make_list(&mut self, name: &str, group: &Arc<str>) -> bool {
         let k = lower(name);
-        if self.buddies.lists.contains_key(&k) {
+        if self.buddy_fetch(&k) {
             return true;
         }
         let now = self.bnow();
@@ -870,18 +1179,36 @@ impl Core {
         if !self.buddies.made.get_mut(group).expect("just made").take(now, 1.0) {
             return false;
         }
-        while self.buddies.lists.len() as f64 >= l.lists {
-            let Some(old) = self.buddies.lists.first_key().cloned() else { break };
-            self.buddies.drop_list(&old);
-            self.buddies.dirty = true;
-        }
+        self.new_list(name, now);
+        true
+    }
+
+    /// a new, empty list for `name` (room made for it)
+    fn new_list(&mut self, name: &str, now: f64) {
+        let lobby = &self.lobby.by_persona;
+        self.buddies.make_room(&|x| lobby.contains_key(x));
         let mut list = FriendsList::new(name, jsx::month_of(now));
         // a claimed name's list is its owner's; one nobody claimed is for its session
         if let Some(c) = &self.buddies.claims {
             list.owner = c.holder(name, now as i64);
             list.temp = list.owner.is_none();
         }
-        self.buddies.lists.insert(k, list);
+        self.buddies.lists.insert(lower(name), list);
+    }
+
+    /// the list a request to `name` waits on (`Q`), made for a claimed name (and any without claims): no list rate,
+    /// since an asker has `MAX_ASKED` requests at most (false: none, a name nobody claimed has the request on the
+    /// asker's list only)
+    fn asked_list(&mut self, name: &str) -> bool {
+        let k = lower(name);
+        if self.buddy_fetch(&k) {
+            return true;
+        }
+        let now = self.bnow();
+        if self.buddies.claims.as_ref().is_some_and(|c| c.holder(name, now as i64).is_none()) {
+            return false;
+        }
+        self.new_list(name, now);
         true
     }
 
@@ -890,8 +1217,9 @@ impl Core {
     /// ended goes, and an owner that changed its name finds its lists under the new one; a name nobody claimed has
     /// none but its session's own.
     fn lists_at_login(&mut self, persona: &str, owner: Option<Arc<str>>) {
-        let Some(c) = self.buddies.claims.clone() else { return };
         let k = lower(persona);
+        self.buddy_fetch(&k);
+        let Some(c) = self.buddies.claims.clone() else { return };
         let now = self.bnow() as i64;
         let holder = c.holder(persona, now);
         let mine = holder.is_some() && holder == owner;
@@ -905,6 +1233,7 @@ impl Core {
                 let l = self.buddies.lists.get_mut(&k).expect("there");
                 l.temp = false;
                 l.owner = owner.clone();
+                self.buddies.mark(&k);
                 self.touch_lists();
             } else if (mine && of != owner) || (!mine && !temp) {
                 // a list of a claim that ended
@@ -918,14 +1247,23 @@ impl Core {
         if !mine {
             return;
         }
-        if let Some(mut l) = self.buddies.dormant.remove(&k) {
+        if let Some(mut l) = self.buddies.dormant(&k) {
             l.owner = owner;
             l.name = persona.to_string();
+            let lobby = &self.lobby.by_persona;
+            self.buddies.make_room(&|x| lobby.contains_key(x));
             self.buddies.put_list(k, l);
             self.touch_lists();
         } else if let Some(old) = owner.as_deref().and_then(|o| c.previous(o, now))
+            && self.buddy_fetch(&old)
             && self.buddies.lists.get(&old).is_some_and(|l| l.owner == owner)
         {
+            // (its friends' lists and the ones of its requests each way, in memory to be renamed)
+            let l = &self.buddies.lists.get(&old).expect("fetched");
+            let others: Vec<String> = l.b.keys().chain(l.r.keys()).chain(l.q.keys()).cloned().collect();
+            for o in others {
+                self.buddy_fetch(&o);
+            }
             self.buddies.move_list(&old, persona);
             (self.log)(&format!("[online] \"{persona}\": EA Messenger lists moved from \"{old}\" (a name change)"), None);
             self.touch_lists();
@@ -943,6 +1281,7 @@ impl Core {
         let l = self.buddies.lists.get_mut(&k).expect("there");
         if l.seen != m {
             l.seen = m;
+            self.buddies.mark(&k);
             self.touch_lists();
         }
     }
@@ -1027,42 +1366,172 @@ impl Core {
         let x = &self.buddies.conns[&b];
         let Some(bp) = x.persona.clone() else { return Err(null_persona()) };
         let group = x.group.clone();
-        let (k, me) = (lower(who), lower(&bp));
+        self.befriend_as(&bp, &group, who, how).map(|_| ())
+    }
+
+    /// persona bp (on behalf of client `group`) and `who` become friends, each one's Messenger told when it is online
+    /// (false: one of the lists is full, or the client made its share of new lists)
+    fn befriend_as(&mut self, bp: &str, group: &Arc<str>, who: &str, how: &str) -> Result<bool, String> {
+        let (k, me) = (lower(who), lower(bp));
+        self.buddy_fetch(&k);
         if self.buddies.unask(&k, &me) | self.buddies.unask(&me, &k) {
             self.touch_lists();
         }
         let full_without = |l: Option<&FriendsList>, n: &str| l.is_some_and(|l| l.b.len() >= MAX_LIST && !l.b.contains_key(n));
-        if full_without(self.buddies.list(&bp), &k) || full_without(self.buddies.list(who), &me) {
-            return Ok(());
+        if full_without(self.buddies.list(bp), &k) || full_without(self.buddies.list(who), &me) {
+            return Ok(false);
         }
-        let mine = self.make_list(&bp, &group);
-        let them = mine && self.make_list(who, &group);
+        let mine = self.make_list(bp, group);
+        let them = mine && self.make_list(who, group);
         if !mine || !them {
-            return Ok(());
+            return Ok(false);
         }
-        // (a list the second one pushed out of the store takes its friend nowhere: `add_friend` finds no list)
-        for (l, n) in [(&me, who), (&k, bp.as_str())] {
+        // (a list the second one pushed out of memory takes its friend nowhere: `add_friend` finds no list)
+        for (l, n) in [(&me, who), (&k, bp)] {
             self.buddies.add_friend(l, lower(n), n.to_string());
         }
         self.touch_lists();
-        (self.log)(&format!("[online] \"{bp}\" and \"{who}\" are friends ({how})"), Some(&group));
-        let o = self.buddies.online.get(&k).copied();
-        self.bsend(b, "RNOT", &fields![("USER", who), ("CHNG", "A"), ("ATTR", 0)], "")?;
-        let p = self.presence_of(&k, who);
-        self.bsend(b, "PGET", &p, "")?;
+        (self.log)(&format!("[online] \"{bp}\" and \"{who}\" are friends ({how})"), Some(group));
+        let (b, o) = (self.buddies.online.get(&me).copied(), self.buddies.online.get(&k).copied());
+        if let Some(b) = b {
+            self.bsend(b, "RNOT", &fields![("USER", who), ("CHNG", "A"), ("ATTR", 0)], "")?;
+            let p = self.presence_of(&k, who);
+            self.bsend(b, "PGET", &p, "")?;
+        }
         if let Some(o) = o {
-            let bp2 = self.buddies.conns.get(&b).and_then(|x| x.persona.clone());
-            self.bsend(o, "RNOT", &fields![("USER", bp2), ("CHNG", "A"), ("ATTR", 0)], "")?;
-            let p = presence(self.title, &self.buddies.conns[&b]);
+            self.bsend(o, "RNOT", &fields![("USER", bp), ("CHNG", "A"), ("ATTR", 0)], "")?;
+            let p = self.presence_of(&me, bp);
             self.bsend(o, "PGET", &p, "")?;
         }
-        Ok(())
+        Ok(true)
+    }
+
+    /// What a page asks of its persona's lists (see `FriendAsk`): `owner` is its keyphrase, whose claimed name is the
+    /// persona; `group` its client (for the list rate and the log)
+    pub fn friends(&mut self, owner: &str, group: &Arc<str>, ask: FriendAsk) -> FriendReply {
+        let now = self.bnow();
+        let Some(me) = self.buddies.claims.as_ref().and_then(|c| c.mine(owner, now as i64)).map(|m| m.name) else {
+            return FriendReply { done: "claim", ..Default::default() };
+        };
+        let mk = lower(&me);
+        self.buddy_fetch(&mk);
+        let done = match ask {
+            FriendAsk::List => "ok",
+            FriendAsk::Ask(name) => self.page_ask(&me, group, &name),
+            FriendAsk::Answer(name, yes) => self.page_answer(&me, group, &name, yes),
+            FriendAsk::Remove(name) => {
+                let k = lower(&name);
+                self.buddy_fetch(&k);
+                let was = self.buddies.list(&me).is_some_and(|l| l.b.contains_key(&k) || l.r.contains_key(&k));
+                let _ = self.unfriend(&me, &name);
+                if was { "ok" } else { "none" }
+            }
+            FriendAsk::Block(name) if valid_name(&name) && lower(&name) != mk => {
+                let _ = self.unfriend(&me, &name);
+                if self.block(&me, group, name) { "ok" } else { "full" }
+            }
+            FriendAsk::Block(_) => "name",
+        };
+        let bs = &self.buddies;
+        let l = bs.lists.get(&mk);
+        let waits = |t: &f64| now - t < ASK_DAYS * DAY_MS;
+        let friends = l
+            .into_iter()
+            .flat_map(|l| l.b.iter())
+            .map(|(k, n)| FriendRow {
+                name: n.clone(),
+                online: bs.online.contains_key(k) || self.lobby.by_persona.contains_key(k),
+                contact: bs.lists.get(k).and_then(|f| f.contact.clone()),
+            })
+            .collect();
+        let not_friend = |k: &str| !l.is_some_and(|l| l.b.contains_key(k));
+        let asks = l
+            .into_iter()
+            .flat_map(|l| l.q.iter())
+            .filter(|(k, (_, t))| waits(t) && not_friend(k) && !bs.blocks(&mk, k))
+            .map(|(_, (n, _))| n.clone())
+            .collect();
+        let sent = l.into_iter().flat_map(|l| l.r.iter()).filter(|(k, (_, t))| waits(t) && not_friend(k)).map(|(_, (n, _))| n.clone()).collect();
+        FriendReply { me: Some(me), done, friends, asks, sent }
+    }
+
+    /// the page of persona `me` asks `name` to be friends (`FriendAsk::Ask`)
+    fn page_ask(&mut self, me: &str, group: &Arc<str>, name: &str) -> &'static str {
+        let (mk, k) = (lower(me), lower(name));
+        if !valid_name(name) {
+            return "name";
+        }
+        if k == mk {
+            return "self";
+        }
+        let now = self.bnow();
+        if self.buddies.claims.as_ref().is_some_and(|c| c.holder(name, now as i64).is_none()) {
+            return "claim";
+        }
+        self.buddy_fetch(&k);
+        let (friends, full, asked_full) = match self.buddies.list(me) {
+            Some(l) => (l.b.contains_key(&k), l.b.len() >= MAX_LIST, l.r.len() >= MAX_ASKED && !l.r.contains_key(&k)),
+            None => (false, false, false),
+        };
+        if friends {
+            return "friends";
+        }
+        // two requests that cross make friends
+        if let Some(asker) = self.buddies.request(&k, &mk, now).map(str::to_string) {
+            return match self.befriend_as(me, group, &asker, "asked back in free roam") {
+                Ok(true) => "friends",
+                _ => "full",
+            };
+        }
+        if full || asked_full || !self.make_list(me, group) {
+            return "full";
+        }
+        // asking one it blocked unblocks it; one that blocks the asker never hears of it
+        if self.buddies.block_remove(&mk, &k) {
+            self.touch_lists();
+        }
+        if self.buddies.blocks(&k, &mk) {
+            return "asked";
+        }
+        self.asked_list(name);
+        self.buddies.ask(&mk, k.clone(), name.to_string(), now.floor());
+        self.touch_lists();
+        (self.log)(&format!("[online] \"{me}\" asked \"{name}\" to be friends (free roam)"), Some(group));
+        if let Some(o) = self.buddies.online.get(&k).copied() {
+            let _ = self.bsend(o, "RNOT", &fields![("USER", me), ("CHNG", "A"), ("ATTR", ASKED_ME)], "");
+            let p = self.presence_of(&mk, me);
+            let _ = self.bsend(o, "PGET", &p, "");
+        }
+        "asked"
+    }
+
+    /// the page of persona `me` answers name's request (`FriendAsk::Answer`)
+    fn page_answer(&mut self, me: &str, group: &Arc<str>, name: &str, yes: bool) -> &'static str {
+        let (mk, k) = (lower(me), lower(name));
+        let now = self.bnow();
+        self.buddy_fetch(&k);
+        let Some(asker) = self.buddies.request(&k, &mk, now).map(str::to_string) else { return "none" };
+        if self.buddies.unask(&k, &mk) {
+            self.touch_lists();
+        }
+        if yes {
+            return match self.befriend_as(me, group, &asker, "accepted on the page") {
+                Ok(true) => "friends",
+                _ => "full",
+            };
+        }
+        (self.log)(&format!("[online] \"{me}\" declined \"{asker}\"'s friend request"), Some(group));
+        if let Some(o) = self.buddies.online.get(&k).copied() {
+            let _ = self.bsend(o, "RNOT", &fields![("USER", me), ("CHNG", "D")], "");
+        }
+        "ok"
     }
 
     /// persona `me_name` and `who` are friends no more (on neither list), and me's request to who is taken back: who
     /// told (RNOT CHNG=D) when that changed anything
     fn unfriend(&mut self, me_name: &str, who: &str) -> Result<(), String> {
         let (me, k) = (lower(me_name), lower(who));
+        self.buddy_fetch(&k);
         let changed = self.buddies.remove_friend(&me, &k) | self.buddies.remove_friend(&k, &me) | self.buddies.unask(&me, &k);
         if !changed {
             return Ok(());
@@ -1077,12 +1546,12 @@ impl Core {
     /// `who` (lower case k) on me's blocked list, its request to me gone; false: no room
     fn block(&mut self, me_name: &str, group: &Arc<str>, who: String) -> bool {
         let (me, k) = (lower(me_name), lower(&who));
+        self.buddy_fetch(&me);
         if self.buddies.list(me_name).is_some_and(|l| l.i.len() >= MAX_LIST && !l.i.contains_key(&k)) || !self.make_list(me_name, group) {
             return false;
         }
-        if self.buddies.lists.get_mut(&me).expect("made").i.insert(k.clone(), who).is_none() {
-            self.buddies.blocked_more(&k);
-        }
+        self.buddies.block_add(&me, k.clone(), who);
+        self.buddy_fetch(&k);
         self.buddies.unask(&k, &me);
         self.touch_lists();
         true
@@ -1092,9 +1561,11 @@ impl Core {
     /// block it, while there is room (the oldest of k's goes for it)
     fn keep_mail(&mut self, k: &str, from: &str, f: &FieldMap, t: f64) {
         let me = lower(from);
+        self.buddy_fetch(k);
         if self.buddies.mail >= ALL_MAIL || self.buddies.blocks(k, &me) {
             return;
         }
+        self.buddies.mark(k);
         let Some(l) = self.buddies.lists.get_mut(k).filter(|l| l.b.contains_key(&me)) else { return };
         l.m.push(Mail {
             from: from.to_string(),
@@ -1117,6 +1588,7 @@ impl Core {
         let Some(l) = self.buddies.lists.get_mut(me).filter(|l| !l.m.is_empty()) else { return Ok(()) };
         let mail = std::mem::take(&mut l.m);
         self.buddies.mail -= mail.len();
+        self.buddies.mark(me);
         self.touch_lists();
         let now = self.bnow();
         for m in mail {
@@ -1241,7 +1713,7 @@ impl Core {
                                 rows.push((n.clone(), I_ASKED));
                             }
                         }
-                        let mut askers: Vec<&String> = bs.asked.get(&me).into_iter().flatten().collect();
+                        let mut askers: Vec<&String> = l.into_iter().flat_map(|l| l.q.keys()).collect();
                         askers.sort();
                         for k in askers {
                             if let Some(n) = bs.request(k, &me, now)
@@ -1287,8 +1759,7 @@ impl Core {
                         if !self.block(&bp, &group, who) {
                             return self.bsend(b, kind, &with_id, "full");
                         }
-                    } else if self.buddies.lists.get_mut(&me).is_some_and(|l| l.i.shift_remove(&k).is_some()) {
-                        self.buddies.blocked_less(&k);
+                    } else if self.buddies.block_remove(&me, &k) {
                         self.touch_lists();
                     }
                     return self.bsend(b, kind, &with_id, "");
@@ -1325,6 +1796,7 @@ impl Core {
                     return self.bsend(b, kind, &with_id, "user");
                 }
                 let now = self.bnow();
+                self.buddy_fetch(&k);
                 let (friends, full, asked_full) = match self.buddies.list(&bp) {
                     Some(l) => (l.b.contains_key(&k), l.b.len() >= MAX_LIST, l.r.len() >= MAX_ASKED && !l.r.contains_key(&k)),
                     None => (false, false, false),
@@ -1351,6 +1823,7 @@ impl Core {
                 if self.buddies.blocks(&k, &me) {
                     return Ok(());
                 }
+                self.asked_list(&who);
                 self.buddies.ask(&me, k.clone(), who.clone(), now.floor());
                 self.touch_lists();
                 (self.log)(&format!("[online] \"{bp}\" asked \"{who}\" to be friends"), Some(&group));
@@ -1367,6 +1840,7 @@ impl Core {
                 let who = strip_at(f.str("USER")).to_string();
                 let k = lower(&who);
                 let now = self.bnow();
+                self.buddy_fetch(&k);
                 let asker = self.buddies.request(&k, &me, now).map(str::to_string);
                 self.bsend(b, kind, &with_id, "")?;
                 // (one that waited too long goes too)
@@ -1516,54 +1990,142 @@ impl Core {
 mod tests {
     use super::*;
 
-    // buddies.json read leniently and written again, with room for 3 lists
+    // buddies.json of before read leniently and moved onto the shelf, one file a list, each request on both lists
     #[test]
-    fn buddies_json_read_and_written_again() {
+    fn buddies_json_moved_onto_the_shelf() {
         let friends: Vec<String> = (0..60).map(|i| format!("\"Friend{i}\"")).collect();
         let many = format!(r#"{{"personas":[{{"name":"Many","seen":"2026-03","B":[{}]}}]}}"#, friends.join(","));
-        let fifty = format!(r#"{{"name":"Many","seen":"2026-03","B":[{}]}}"#, friends[..50].join(","));
+        let fifty = format!(r#"{{"v":4,"name":"Many","seen":"2026-03","B":[{}]}}"#, friends[..50].join(","));
         let mail: Vec<String> = (0..25).map(|i| format!(r#"{{"from":"Friend1","t":{i},"body":"m{i}","subj":"","type":"C"}}"#)).collect();
         let lots = format!(r#"{{"v":3,"personas":[{{"name":"Inbox","seen":"2026-10","B":["Friend1"],"M":[{}]}}]}}"#, mail.join(","));
-        let twenty = format!(r#"{{"name":"Inbox","seen":"2026-10","B":["Friend1"],"M":[{}]}}"#, mail[5..].join(","));
-        let cases = [
-            ("{not json", ""),
-            ("", ""),
+        let twenty = format!(r#"{{"v":4,"name":"Inbox","seen":"2026-10","B":["Friend1"],"M":[{}]}}"#, mail[5..].join(","));
+        let cases: Vec<(&str, Vec<&str>)> = vec![
+            ("{not json", vec![]),
+            ("", vec![]),
             (
                 r#"{"v":2,"note":"NFSU2 online friends lists (persona names only)","personas":[{"name":"Alpha","seen":"2026-10","B":["Bravo","Charlie"]}]}"#,
-                r#"{"name":"Alpha","seen":"2026-10","B":["Bravo","Charlie"]}"#,
+                vec![r#"{"v":4,"name":"Alpha","seen":"2026-10","B":["Bravo","Charlie"]}"#],
             ),
-            // a friend twice: the later spelling in the earlier one's place; friends that are no name; the blocked
-            // list of a file of version 2 (I) not read; an owner twice: the more recently seen list, in the other
-            // one's place
+            // a friend twice: the later spelling in the earlier one's place; friends that are no name; an owner twice:
+            // the more recently seen list, in the other one's place
             (
                 r#"{"personas":[{"name":"Alpha","seen":"2026-10","B":["Bravo","bravo","x y",5,null,"Delta"],"I":["Mallory"]},{"name":"alpha","seen":"2026-09","B":["Echo"]}]}"#,
-                r#"{"name":"Alpha","seen":"2026-10","B":["bravo","Delta"]}"#,
+                vec![r#"{"v":4,"name":"Alpha","seen":"2026-10","B":["bravo","Delta"],"I":["Mallory"]}"#],
             ),
-            // owners that are no name not read; of the others the 3 most recently seen (no month: the oldest), of
-            // those the lists with anything in them
+            // owners that are no name not read; of the others the lists with anything in them, all of them
             (
                 r#"{"personas":[{"name":"NoFriends","seen":"2026-10","B":[]},{"name":"Bad Name","B":["Alpha"]},{"name":"Old","B":["Alpha"]},{"name":"Mid","seen":"2026-05","B":["Alpha"]},{"name":"New","seen":"2026-12","B":"Alpha"},{"name":"Newer","seen":"2027-01","B":["Zed"]}]}"#,
-                r#"{"name":"Newer","seen":"2027-01","B":["Zed"]}"#,
+                vec![
+                    r#"{"v":4,"name":"Mid","seen":"2026-05","B":["Alpha"]}"#,
+                    r#"{"v":4,"name":"Newer","seen":"2027-01","B":["Zed"]}"#,
+                    r#"{"v":4,"name":"Old","seen":"1970-01","B":["Alpha"]}"#,
+                ],
             ),
             // 50 friends at most
-            (many.as_str(), fifty.as_str()),
-            // version 3: the blocked, the requests sent (ones that are no name or no time left out), the messages
-            // waiting (text cleaned, ones from no name or without a time left out); a list with only some of them
+            (many.as_str(), vec![fifty.as_str()]),
+            // version 3: the blocked, the requests sent (ones that are no name or no time left out), each also on the
+            // asked one's list (one made for Charlie), the messages waiting (text cleaned, ones from no name or
+            // without a time left out); a list with only some of them
             (
                 r#"{"v":3,"personas":[{"name":"Alpha","seen":"2026-10","B":["Bravo"],"I":["Mallory","x y"],"R":[["Charlie",1761200000000],["x y",1],["Delta"],["Echo",-5]],"M":[{"from":"Bravo","t":1761200000123.7,"body":"hi\u0007 there","subj":"","type":"C"},{"from":"x y","t":1,"body":"no"},{"from":"Bravo","body":"no time"}]},{"name":"Lonely","seen":"2026-10","B":[],"R":[["Alpha",5]]}]}"#,
-                r#"{"name":"Alpha","seen":"2026-10","B":["Bravo"],"I":["Mallory"],"R":[["Charlie",1761200000000]],"M":[{"from":"Bravo","t":1761200000123,"body":"hi there","subj":"","type":"C"}]},{"name":"Lonely","seen":"2026-10","B":[],"R":[["Alpha",5]]}"#,
+                vec![
+                    r#"{"v":4,"name":"Alpha","seen":"2026-10","B":["Bravo"],"I":["Mallory"],"R":[["Charlie",1761200000000]],"Q":[["Lonely",5]],"M":[{"from":"Bravo","t":1761200000123,"body":"hi there","subj":"","type":"C"}]}"#,
+                    r#"{"v":4,"name":"Charlie","seen":"1970-01","B":[],"Q":[["Alpha",1761200000000]]}"#,
+                    r#"{"v":4,"name":"Lonely","seen":"2026-10","B":[],"R":[["Alpha",5]]}"#,
+                ],
             ),
             // the newest 20 messages
-            (lots.as_str(), twenty.as_str()),
+            (lots.as_str(), vec![twenty.as_str()]),
         ];
         for (text, kept) in cases {
             let dir = tempfile::tempdir().unwrap();
-            std::fs::write(dir.path().join("buddies.json"), text).unwrap();
-            let b = Buddies::new(Some(dir.path().to_path_buf()), BuddyLimits { lists: 3.0, ..Default::default() });
-            let want = format!(
-                r#"{{"v":3,"note":"NFSU2 online Messenger lists (persona names; friend requests and messages waiting for their persona)","personas":[{kept}]}}"#
-            );
-            assert_eq!(b.serialize(), want, "{text}");
+            std::fs::write(dir.path().join(OLD_FILE), text).unwrap();
+            let _ = Buddies::new(Some(dir.path().to_path_buf()), BuddyLimits::default());
+            assert_eq!(shelf_texts(dir.path()), kept, "{text}");
+            assert!(!dir.path().join(OLD_FILE).exists() && dir.path().join("buddies.json.moved").exists(), "{text}");
         }
+    }
+
+    // the shelf at scale (cargo test -p nfsu2-online --lib shelf_at_scale -- --ignored --nocapture): 200,000
+    // players' lists of 5 friends each on disk, then players logging in (their lists read, one change each written)
+    // with 20,000 lists in memory; what a save costs is the lists that changed, never the shelf's size
+    #[test]
+    #[ignore]
+    fn shelf_at_scale() {
+        use std::time::Instant;
+        let dir = tempfile::tempdir().unwrap();
+        let n = 200_000;
+        let name = |i: usize| format!("P{i:06}");
+        let t = Instant::now();
+        for i in 0..n {
+            let mut l = FriendsList::new(&name(i), "2026-10".into());
+            for f in 1..=5 {
+                let x = name((i + f * 7919) % n);
+                l.b.insert(lower(&x), x);
+            }
+            Shelf::write(dir.path(), &lower(&name(i)), &list_json(&l)).unwrap();
+        }
+        let wrote = t.elapsed();
+        let mut s = Buddies::new(Some(dir.path().to_path_buf()), BuddyLimits { lists: 20_000.0, ..Default::default() });
+        let none = |_: &str| false;
+        let t = Instant::now();
+        let logins = 50_000;
+        for k in 0..logins {
+            let key = lower(&name((k * 104_729) % n));
+            assert!(s.fetch(&key, 0.0, &none));
+            s.mark(&key);
+            if k % 1000 == 999 {
+                assert!(s.write_dirty().is_none());
+            }
+        }
+        let fetched = t.elapsed();
+        eprintln!(
+            "{n} lists written in {:.1} s ({:.0} us each); {logins} logins (a list read, then written again a thousand at a time) in {:.1} s ({:.0} us each); {} lists in memory",
+            wrote.as_secs_f64(),
+            wrote.as_secs_f64() * 1e6 / n as f64,
+            fetched.as_secs_f64(),
+            fetched.as_secs_f64() * 1e6 / logins as f64,
+            s.lists.len()
+        );
+        assert!(s.lists.len() <= 20_000);
+    }
+
+    // a list read from the shelf the next time it is needed, as it was written; lists past `lists` go from memory
+    // (written first) and come back from the shelf; the sweep takes the lists of claims that ended
+    #[test]
+    fn lists_come_and_go_from_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let claims = Arc::new(nfsu2_claims::Claims::in_memory());
+        let (a, b) = (nfsu2_claims::owner_of_token(&"A".repeat(43)).unwrap(), nfsu2_claims::owner_of_token(&"B".repeat(43)).unwrap());
+        claims.claim("Alpha", &a, 0).unwrap();
+        claims.claim("Bravo", &b, 0).unwrap();
+        let l = BuddyLimits { lists: 2.0, ..Default::default() };
+        let mut s = Buddies::with_claims(Some(dir.path().to_path_buf()), l, Some(claims.clone()), 0);
+        let none = |_: &str| false;
+        for (n, o) in [("Alpha", &a), ("Bravo", &b)] {
+            let mut x = FriendsList::new(n, "2026-10".into());
+            x.owner = Some(o.clone());
+            s.put_list(lower(n), x);
+        }
+        s.add_friend("alpha", "bravo".into(), "Bravo".into());
+        s.add_friend("bravo", "alpha".into(), "Alpha".into());
+        s.ask("alpha", "charlie".into(), "Charlie".into(), 7.0);
+        assert!(s.write_dirty().is_none());
+        // a third list pushes the least recently seen out of memory
+        s.make_room(&none);
+        s.lists.insert("charlie".into(), FriendsList::new("Charlie", "2026-10".into()));
+        assert!(!s.lists.contains_key("alpha") && s.fans.get("bravo").is_none(), "Alpha's list out, and its fan entry");
+        assert!(s.fetch("alpha", 0.0, &none), "back from the shelf");
+        let x = s.list("Alpha").unwrap();
+        assert_eq!((x.b.keys().map(String::as_str).collect::<Vec<_>>(), x.r.len(), x.owner.as_deref()), (vec!["bravo"], 1, Some(&*a)));
+        // (Bravo's went for it) a list the caller pins is never pushed out: Charlie's goes for Bravo's
+        assert!(!s.lists.contains_key("bravo"));
+        assert!(s.fetch("bravo", 0.0, &|k: &str| k == "alpha"));
+        assert!(s.lists.contains_key("alpha") && !s.lists.contains_key("charlie"));
+        // a claim that ended: its list goes from the shelf when it is read, or when the shelf is swept
+        claims.release(&b);
+        let gone = sweep(dir.path(), &claims, 0, &HashSet::new());
+        assert_eq!(gone, 1);
+        assert!(Shelf::read(dir.path(), "bravo").is_none() && Shelf::read(dir.path(), "alpha").is_some());
     }
 }

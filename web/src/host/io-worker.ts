@@ -34,7 +34,7 @@ const dv = () => new DataView(memory.buffer);
 interface DNode { name: string; dir: boolean; size: number; mtime: number; kids?: Map<string, DNode>; byLower?: Map<string, DNode>; path: string; ino: number }
 let dataRoot: DNode;
 let inoNext = 16;
-let runs: { url: string; max: number } | null = null;     // the server's compressed blocks (datacache.ts blockRuns)
+let runs: { url: string; max: number };     // the server's compressed blocks (datacache.ts blockRuns)
 function mkdirNode(name: string, path: string): DNode { return { name, dir: true, size: 0, mtime: 0, kids: new Map(), byLower: new Map(), path, ino: inoNext++ }; }
 
 async function loadManifest() {
@@ -231,9 +231,9 @@ async function fetchBlock(n: DNode, bi: number, start: number, len: number, t: T
   const what = `${n.path} block ${bi}${t.ahead ? ' (read ahead)' : ''}`, t0 = performance.now();
   const slow = setTimeout(() => note(`[data] ${what}: waiting for the server for ${SLOW_MS / 1000} s`), SLOW_MS);
   try {
-    const run = runs ? runUrl(runs.url, n.path, bi, 1, n) : null, range = dataUrl(cfg.dataBase, n.path), f = faults();
+    const run = runUrl(runs.url, n.path, bi, 1, n), range = dataUrl(cfg.dataBase, n.path), f = faults();
     for (let k = 1, wait = 250, sized = 0, lost = 0; ; k++, wait = Math.min(wait * 2, 8000)) {
-      const ranged = !run || lost >= 2 && k % 2 === 1, by = run && ranged ? ' (as a byte range)' : '';
+      const ranged = lost >= 2 && k % 2 === 1, by = ranged ? ' (as a byte range)' : '';
       const r = await fetchOnce(ranged ? range : run, start, len, ranged, !ranged && f.deny > 0 && (bi + 1) % f.deny === 0);
       if (r instanceof Uint8Array) {
         const s = (performance.now() - t0) / 1000;

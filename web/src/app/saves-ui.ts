@@ -248,10 +248,10 @@ export async function restoreVault(saveDir: string, r: Restore) {
 function restoreNotes(r: Restore): string[] {
   const items: string[] = [];
   const refused = r.refused.map(x => `${x.name}: ${x.why}`).join('; ');
-  if (r.edited.length) items.push(tn(r.edited.length, '{names} was changed outside the game, by a save editor (the checksums no longer matched): a value the game would not make itself may crash it or break the career.',
-    '{names} were changed outside the game, by a save editor (the checksums no longer matched): a value the game would not make itself may crash it or break the career.', { names: listOf(r.edited) }));
-  if (r.modded.length) items.push(tn(r.modded.length, '{names} has cars a mod added, which this game does not have: the game may crash or show them wrong when it loads them.',
-    '{names} have cars a mod added, which this game does not have: the game may crash or show them wrong when it loads them.', { names: listOf(r.modded) }));
+  if (r.edited.length) items.push(tn(r.edited.length, '{names} was edited with a save editor: values the game wouldn\'t make can crash it or break the career.',
+    '{names} were edited with a save editor: values the game wouldn\'t make can crash it or break the career.', { names: listOf(r.edited) }));
+  if (r.modded.length) items.push(tn(r.modded.length, '{names} has modded cars this game lacks: it may crash or show them wrong.',
+    '{names} have modded cars this game lacks: it may crash or show them wrong.', { names: listOf(r.modded) }));
   if (refused) items.push(tn(r.refused.length, 'Left out, as the game would not load it: {list}.', 'Left out, as the game would not load them: {list}.', { list: refused }));
   const skipped = r.skipped.slice(0, 3).join(', ') + (r.skipped.length > 3 ? ' …' : '');
   if (r.skipped.length) items.push(r.kind === 'profiles' ? tn(r.skipped.length, '{n} other file is left out: {list}', '{n} other files are left out: {list}', { list: skipped })
@@ -374,7 +374,7 @@ export class SavesPanel {
     if (st.state !== this.shownState) {
       this.shownState = st.state;
       if (st.state === 'done') { this.data = { have: st.have, total: st.total }; this.dataMsg(() => t('The game data is on this PC now.')); }
-      if (st.state === 'error') { const e = st.error; this.dataMsg(() => t('Preloading stopped: {error}. What it preloaded is kept.', { error: e ?? '' }), true); }
+      if (st.state === 'error') { const e = st.error; this.dataMsg(() => t('Preloading stopped: {error}. What\'s done is kept.', { error: e ?? '' }), true); }
       if (!active) void this.refresh();                         // counted again; shown now with what is known
     }
     const info = this.dataPanel.querySelector('#cache-info')!, bar = this.dataPanel.querySelector<HTMLElement>('#data-bar')!;
@@ -389,10 +389,10 @@ export class SavesPanel {
       fetchBtn.hidden = false;
       fetchBtn.textContent = t('Stop preloading');
       fetchBtn.disabled = st.state === 'paused';
-      info.textContent = st.state === 'paused' ? (d ? t('Preloading paused while the game runs: {have} of {total}. It goes on when the game ends.', { have: fmtBytes(d.have), total: fmtBytes(d.total) })
-          : t('Preloading paused while the game runs: counting. It goes on when the game ends.'))
-        : !d ? t('Preloading the game data: counting what is here already.')
-        : t('Preloading the game data: {have} of {total} ({pct} %){speed}. Play whenever you like: preloading pauses while the game runs and goes on after it.',
+      info.textContent = st.state === 'paused' ? (d ? t('Preloading paused while you play: {have} of {total}.', { have: fmtBytes(d.have), total: fmtBytes(d.total) })
+          : t('Preloading paused while you play.'))
+        : !d ? t('Preloading: checking what\'s here already.')
+        : t('Preloading: {have} of {total} ({pct} %){speed}. You can play meanwhile: it pauses while you do.',
           { have: fmtBytes(d.have), total: fmtBytes(d.total), pct: Math.floor(f * 100), speed: st.rate ? `, ${fmtBytes(st.rate)}/s, ${eta(rest / st.rate)}` : '' });
       return;
     }
@@ -400,14 +400,14 @@ export class SavesPanel {
     fetchBtn.hidden = !!d && rest <= 0;
     if (d && rest <= 0)
       info.textContent = 'serviceWorker' in navigator
-        ? t('The game data ({size}) is kept in this browser: the game loads it from this PC, not the network. Only the movies stream from the server, as they play, and the game starts without the server too (offline, with the movies off). Deleting it only means loading it from the server again.', { size: fmtBytes(d.total) })
-        : t('The game data ({size}) is kept in this browser: the game loads it from this PC, not the network. Only the movies stream from the server, as they play. Deleting it only means loading it from the server again.', { size: fmtBytes(d.total) });
+        ? t('All game data ({size}) is on this PC; only the movies stream from the server. The game starts offline too, without movies.', { size: fmtBytes(d.total) })
+        : t('All game data ({size}) is on this PC; only the movies stream from the server.', { size: fmtBytes(d.total) });
     else if (d ? d.have : this.kept.bytes)
-      info.textContent = (d ? t('{have} of the game\'s {total} (without the movies) is kept in this browser, so the game loads that from this PC instead of the network.', { have: fmtBytes(d.have), total: fmtBytes(d.total) })
-        : t('{have} is kept in this browser, so the game loads that from this PC instead of the network.', { have: fmtBytes(this.kept.bytes) })) + ' ' +
-        t('Preload the rest too, and no loading screen waits on the network. Deleting it only means loading it from the server again.');
+      info.textContent = (d ? t('{have} of {total} is on this PC (movies not included).', { have: fmtBytes(d.have), total: fmtBytes(d.total) })
+        : t('{have} is on this PC.', { have: fmtBytes(this.kept.bytes) })) + ' ' +
+        t('Preload the rest so loading never waits on the network.');
     else
-      info.textContent = t('Nothing here yet. The game streams its data from the server as it needs it and keeps it here. Preload it now (all but the movies, compressed on the way) and no loading screen waits on the network.');
+      info.textContent = t('Nothing here yet: the game downloads data as it needs it. Preload it now so loading never waits on the network.');
   }
 
   /** The profiles, each with its Rename button, or the name being edited. */
@@ -417,7 +417,7 @@ export class SavesPanel {
     ul.replaceChildren();
     if (!this.profiles.length) {
       const li = document.createElement('li'); li.className = 'empty';
-      li.textContent = t('No profiles yet. Create one in the game: it is saved in this browser.');
+      li.textContent = t('No profiles yet. Create one in the game.');
       ul.append(li);
     }
     for (const p of this.profiles) {
@@ -486,7 +486,7 @@ export class SavesPanel {
 
   private async doDownload() {
     const dl = this.deps.download;
-    if (dl.running) { await dl.stop(); this.dataMsg(() => t('Preloading stopped. What it preloaded is kept: Preload the rest goes on from there.')); return; }
+    if (dl.running) { await dl.stop(); this.dataMsg(() => t('Preloading stopped. What\'s done is kept.')); return; }
     if (this.deps.busy()) return;
     this.dataMsg('');
     dl.start();
@@ -497,7 +497,7 @@ export class SavesPanel {
       const e = await exportSaves(this.deps.saveDir);
       downloadBlob(e.zip as BlobPart, e.name, 'application/zip');
       this.msg(() => tn(e.files, 'Downloaded {name}: {n} file, {size}.', 'Downloaded {name}: {n} files, {size}.', { name: e.name, size: fmtBytes(e.zip.length) }) + (e.shotBytes > MAX_SHOTS
-        ? ' ' + t('It holds {shots} of screenshots: a restore keeps the saves and settings and only the first {max} of screenshots.', { shots: fmtBytes(e.shotBytes), max: fmtBytes(MAX_SHOTS) }) : ''));
+        ? ' ' + t('It holds {shots} of screenshots: a restore keeps only the first {max} of them.', { shots: fmtBytes(e.shotBytes), max: fmtBytes(MAX_SHOTS) }) : ''));
     } catch (err) { this.msg(() => t('The backup failed: {error}', { error: String(err) })); }
   }
 
@@ -523,7 +523,7 @@ export class SavesPanel {
       const name = file.name;
       this.msg(() => one ? (one.name === name ? t('{file} cannot be restored: {why}.', { file: name, why: one.why }) : t('The profile {name} in {file} cannot be restored: {why}.', { name: one.name, file: name, why: one.why }))
         : refused ? t('{file} has no profile the game can load: {list}.', { file: name, list: refused })
-        : covers ? t('{file} holds DVD or magazine covers only: they come with their profile, in a zip of the NFS Underground 2 folder.', { file: name })
+        : covers ? t('{file} holds only covers: restore them with their profile, in a zip of the NFS Underground 2 folder.', { file: name })
         : t('{file} has no save files.', { file: name }));
       return;
     }
@@ -534,18 +534,18 @@ export class SavesPanel {
     const here = new Map(this.profiles.map(x => [x.name.toLowerCase(), x.name]));
     const replaced = r.profiles.map(n => here.get(n.toLowerCase())).filter((x): x is string => !!x);
     if (r.kind === 'profiles') {
-      p.textContent = tn(r.profiles.length, 'Adds the profile in {file} to this browser. The other profiles here, the game\'s options and settings.ini stay as they are.',
-        'Adds the profiles in {file} to this browser. The other profiles here, the game\'s options and settings.ini stay as they are.', { file: file.name });
+      p.textContent = tn(r.profiles.length, 'Adds the profile in {file}. Other profiles, the game\'s options and settings.ini stay as they are.',
+        'Adds the profiles in {file}. Other profiles, the game\'s options and settings.ini stay as they are.', { file: file.name });
       items.push(t('Profiles: {names}', { names: r.profiles.map(n => {
         const covers = r.entries.filter(e => coverOf(e.path.split('/')[1])?.profile === n).length;
         return covers ? tn(covers, '{name} (with its cover shoot)', '{name} (with its {n} cover shoots)', { name: n }) : n;
       }).join(', ') }));
-      if (replaced.length) items.push(tn(replaced.length, 'Replaces the profile {names} in this browser, its career and cover shoots too',
-        'Replaces the profiles {names} in this browser, their careers and cover shoots too', { names: list(replaced) }));
+      if (replaced.length) items.push(tn(replaced.length, 'Replaces {names} here, with its career and cover shoots',
+        'Replaces {names} here, with their careers and cover shoots', { names: list(replaced) }));
       items.push(...restoreNotes(r));
     } else {
-      p.textContent = tn(r.entries.length, 'Restoring replaces every profile, the game\'s options and settings.ini in this browser with the {n} file in {file}.',
-        'Restoring replaces every profile, the game\'s options and settings.ini in this browser with the {n} files in {file}.', { file: file.name });
+      p.textContent = tn(r.entries.length, 'Replaces every profile, the game\'s options and settings.ini here with the {n} file in {file}.',
+        'Replaces every profile, the game\'s options and settings.ini here with the {n} files in {file}.', { file: file.name });
       items.push(...backupItems(r));
     }
     const ul = document.createElement('ul');
@@ -576,7 +576,7 @@ export class SavesPanel {
     if (this.deps.busy()) return;
     const dl = this.deps.download;
     if (!await this.deps.confirm(t('Delete the game data on this PC?'), (dl.running ? t('This stops preloading.') + ' ' : '') +
-      t('The game will stream it from the server again the next time, which is slower once. Your saves are not touched.'), t('Delete game data'), true)) return;
+      t('The game downloads it again as needed. Your saves stay.'), t('Delete game data'), true)) return;
     await dl.stop();
     await clearCache();
     await this.refresh();

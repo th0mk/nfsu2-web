@@ -9,6 +9,8 @@
 // On Windows the binary is Linux's, so it runs in WSL: wsl.exe -e (the default distribution, or $NFSU2_WSL_DISTRO),
 // with the binary and every argument that is a Windows path as WSL sees them, and NFSU2_REPO and the NFSU2_<OPTION>
 // variables passed through WSLENV.  Killing wsl.exe stops the server in WSL too.
+// The checkout's own binary older than its sources (web/server-rs's src folders, the Cargo files) would test the
+// server of before: the tests (node --test) refuse it, the tools say so.  $NFSU2_SERVER_BIN is taken as it is.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +40,25 @@ export function wslPath(p) {
   return share ? '/' + share[1].replace(/\\/g, '/') : s;
 }
 
+/** a source of the server newer than bin, or '' (the checkout's own binary only) */
+let staleChecked = null;
+export function newerServerSource(bin = SERVER_BIN) {
+  if (staleChecked !== null) return staleChecked;
+  staleChecked = '';
+  const built = !process.env.NFSU2_SERVER_BIN && !WIN && fs.statSync(bin, { throwIfNoEntry: false })?.mtimeMs;
+  if (!built) return staleChecked;
+  const rs = path.join(REPO, 'web/server-rs');
+  const dirs = [path.join(rs, 'src'), ...fs.readdirSync(path.join(rs, 'crates')).map(c => path.join(rs, 'crates', c, 'src'))];
+  const files = [path.join(rs, 'Cargo.toml'), path.join(rs, 'Cargo.lock'), ...fs.readdirSync(path.join(rs, 'crates')).map(c => path.join(rs, 'crates', c, 'Cargo.toml'))];
+  for (const d of dirs) if (fs.existsSync(d)) for (const f of fs.readdirSync(d, { recursive: true })) files.push(path.join(d, String(f)));
+  let at = built;
+  for (const f of files) {
+    const st = fs.statSync(f, { throwIfNoEntry: false });
+    if (st?.isFile() && st.mtimeMs > at) { at = st.mtimeMs; staleChecked = path.relative(REPO, f); }
+  }
+  return staleChecked;
+}
+
 /** [command, argv] that starts the server with args */
 export function serverCommand(args, bin = SERVER_BIN) {
   const distro = process.env.NFSU2_WSL_DISTRO;
@@ -46,6 +67,12 @@ export function serverCommand(args, bin = SERVER_BIN) {
   const seen = !WIN || !bin.startsWith('/') ? bin : distro ? `\\\\wsl.localhost\\${distro}${bin.replace(/\//g, '\\')}` : '';
   if (seen && !fs.existsSync(seen)) {
     throw new Error(`no server at ${bin}: build it with web/server-rs/build.sh${WIN ? ' (in WSL)' : ''}, or set NFSU2_SERVER_BIN`);
+  }
+  const newer = bin === SERVER_BIN ? newerServerSource(bin) : '';
+  if (newer) {
+    const msg = `${path.relative(REPO, bin)} is older than ${newer}: build it again with web/server-rs/build.sh (or set NFSU2_SERVER_BIN)`;
+    if (process.env.NODE_TEST_CONTEXT) throw new Error(msg);
+    console.error(`server-cmd: warning: ${msg}`);
   }
   if (!WIN) return [bin, args];
   // WSLENV hands WSL every name it lists, an unset one as empty: drop those, then the server takes the shell's place

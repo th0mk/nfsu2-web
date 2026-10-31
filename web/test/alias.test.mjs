@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const hasWasi = fs.readdirSync(path.join(REPO, 'deps')).some(d => d.startsWith('wasi-sdk-'));
-const sh = (script, env = {}, args = []) => spawnSync('bash', [path.join(REPO, script), ...args], { cwd: REPO, encoding: 'utf8', env: { ...process.env, ...env } });
+const sh = (script, env = {}, args = []) => spawnSync('bash', [path.join(REPO, script), ...args], { cwd: REPO, encoding: 'utf8', timeout: 300_000, env: { ...process.env, ...env } });
 
 test('aliasguard: the guest access macros keep their may_alias types', { skip: !hasWasi && 'no wasi-sdk in deps/' }, () => {
   const r = sh('web/tools/aliasguard.sh');

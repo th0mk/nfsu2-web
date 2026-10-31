@@ -661,7 +661,7 @@ async fn connect(a: &Args, n: usize, resume: bool) -> Option<(Tx, Rx)> {
 }
 
 fn hello_text(name: &str, a: &Args, ticket: Option<&str>) -> String {
-    let mut h = serde_json::json!({ "t": "hello", "name": name, "deltas": 1, "lan": 0, "bundle": 1 });
+    let mut h = serde_json::json!({ "t": "hello", "name": name, "lan": 0, "bundle": 1 });
     if a.compact {
         h["compact"] = 1.into();
     }

@@ -156,12 +156,11 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
     best in its state folder (`web/server-rs/src/app/kept.rs`, threads of its own at the lowest priority that wait
     while the CPU quota is 70 % used, the blocks asked for first, then the manifest's), or as it is where that found
     it does not compress; until it is kept, as
-    above, and Cloudflare keeps that answer 10 minutes only (`EDGE_WHILE`). `v2` since: Cloudflare's copies of the
-    answers from before are at the old addresses, which still answer. The address carries the file's
+    above, and Cloudflare keeps that answer 10 minutes only (`EDGE_WHILE`). `v2` since, so that Cloudflare's copies
+    of the answers from before are never asked for again. The address carries the file's
     mtime and size (`m`, `s`), and the server lets a shared cache (Cloudflare) keep a run for good when they are the
     file's (read from the one open file it answers from), the run is compressed or does not compress, the movies too
-    (`EDGE_KEEP`). A run whose probe read fails is compressed, never kept as it is. An older server: byte ranges
-    of `/data/`. A request that fails on the way (no connection, 408, 429, 5xx) or stalls (no byte for 20 s) is
+    (`EDGE_KEEP`). A run whose probe read fails is compressed, never kept as it is. A request that fails on the way (no connection, 408, 429, 5xx) or stalls (no byte for 20 s) is
     asked again after a growing pause, for as long as it takes: a failed read would give the game 0 bytes. After two
     tries with no answer at all, every other try asks for the block as a byte range of `/data/` (another address, not
     in Cloudflare's cache, uncompressed). A block the OPFS cache has no room for (a full disk) ends the keeping for
@@ -397,9 +396,13 @@ struct VOut { @builtin(position) pos: vec4f; @location(0) col0: vec4f; @location
   - `web/tools/aliastest.sh`: guest memory type punning (`tests/web/aliastest.c`). It runs
     `web/tools/aliasguard.sh` first, a structural check that every guest access macro of `runtime/cpu.h`'s wasm
     branches keeps its `may_alias` type; `web/build.sh` runs the guard before it compiles anything.
-  - `cd web && node --test test/*.test.mjs`: the unit tests (the LAN backend `lan_unit.c`, free roam, the C ns* key
-    driver against the page's key path, `settings.ts` against `bundle.m`, the alias guard and test, the server,
-    deployment, the security and privacy audit's regressions: `audit.test.mjs`, `page-audit.test.mjs`). They build their wasm programs with wasi-sdk from `deps/`.
+  - `cd web && npm test` (`web/tools/unit-tests.mjs`, about 80 s): the unit tests (the LAN backend `lan_unit.c`, free
+    roam, the C ns* key driver against the page's key path, `settings.ts` against `bundle.m`, the alias guard and test,
+    the server, deployment, the security and privacy audit's regressions: `audit.test.mjs`, `page-audit.test.mjs`).
+    They build their wasm programs with wasi-sdk from `deps/`, and refuse a server binary older than its sources.
+    `npm run test:fast` leaves out the six slow files (about 11 s).
+  - `.github/workflows/tests.yml` runs every crate's `cargo test` and the fast unit tests on each push to main and each
+    pull request; it does not hold back the image yet.
 - `node web/tools/predownload-test.mjs` checks "Preload the game data" in Chrome against its own server and a
   made-up game folder: byte-exact cache, no movies, zstd where the bytes compress, stop and resume, retries, a refused
   file, Play pausing it, a second tab. `web/test/data-blocks.test.mjs` checks the server's `/data-blocks/` (and its kept blocks),
@@ -425,6 +428,9 @@ struct VOut { @builtin(position) pos: vec4f; @location(0) col0: vec4f; @location
   tools' console output and the test harnesses.
   - Among their other checks the suite runners fail a run on these markers: `FAULT IN GUEST`, `GUEST MEMORY FAULT`
     or `HOST SEGV` (a fault), `TIME LIMIT REACHED` (boot.c's alarm or the runner's limit), `UNRESOLVED INDIRECT` (an
-    indirect call into no lifted function), a line starting with `[trap]`.
+    indirect call into no lifted function), a line starting with `[trap]`.  `run-suite.mjs`, `input-suite.mjs` and
+    `roam-pair.mjs` take their rules from `web/tools/judge.mjs`, which also fails a script wait that ran out (the
+    script goes on after a `TIMEOUT`), a script line the runtime could not read and (not in `roam-pair`) a freeze the
+    stall watchdog reported.  `roam-pair.mjs` ends with `PASS roam-pair` or `FAIL roam-pair: <why>` and its exit code.
   - `web/test/log-english.test.mjs` checks that every runner and report still matches the markers the runtime
     prints, and that the runtime's string literals stay English.

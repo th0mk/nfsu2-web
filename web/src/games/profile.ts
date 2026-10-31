@@ -101,9 +101,12 @@ export interface LocalKeys {
   readonly RADIO_SHUFFLE: string;
   readonly TOUCH_STEERING: string;
   readonly TOUCH_LEVEL: string;
+  readonly TOUCH_NITRO: string;
+  readonly TOUCH_POSITION: string;
   readonly TOUCH_SIZE: string;
   readonly MENU_SIZE: string;
   readonly KEYPHRASE_LINK: string;
+  readonly KEYPHRASE_KEPT: string;
   readonly CLOUD_OFFER: string;
   readonly NAME_ASKED: string;
   readonly NAME_CLAIMED: string;

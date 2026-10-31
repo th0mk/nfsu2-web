@@ -22,7 +22,7 @@ const FLAGS = ['--target=wasm32-wasip1-threads', '-pthread', '-O3', '-msimd128',
   '-mtail-call', '-ffp-contract=off', '-Iruntime', '-Iruntime/web'];
 const LINK = ['-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=67108864,--max-memory=268435456', '-Wl,-z,stack-size=8388608'];   // an 8 MB stack as on the Mac: roam_unit keeps sessions on it
 const cc = (out, srcs) => execFileSync(CC, [...FLAGS, '-o', out, ...srcs, ...LINK], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-const run = (wasm, ...args) => execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), wasm, ...args], { encoding: 'utf8' });
+const run = (wasm, ...args) => execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), wasm, ...args], { encoding: 'utf8', timeout: 120_000 });
 
 test('roam_unit on wasm (core + web platform layer)', { skip: !CC && 'no wasi-sdk in deps/' }, () => {
   const w = path.join(OUT, 'roam_unit.wasm');
@@ -42,7 +42,7 @@ test('the pose log flushes only every 240 frames (roam_host.h buffer)', { skip: 
   const dir = fs.mkdtempSync(path.join(OUT, 'poselog-'));
   try {
     const out = execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w],
-      { encoding: 'utf8', env: { ...process.env, WASI_DIR: `/tmp=${dir}` } });
+      { encoding: 'utf8', env: { ...process.env, WASI_DIR: `/tmp=${dir}` }, timeout: 120_000 });
     console.log(out.trim());
     assert.match(out, /poselog_unit: passed/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }

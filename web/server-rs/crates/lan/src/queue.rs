@@ -334,6 +334,10 @@ impl LanSwitch {
             Some("lan") => {
                 if let (Some(h), Some(on)) = (w.hello.as_mut(), m.get("on")) {
                     h.insert("lan".into(), on.clone());
+                    match m.get("udp") {
+                        Some(u) => h.insert("udp".into(), u.clone()),
+                        None => h.remove("udp"),
+                    };
                 }
             }
             Some("ping") => {

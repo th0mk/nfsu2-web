@@ -56,7 +56,7 @@ test('ns* keys: the C driver (input_web.c) writes what the page would', { skip: 
   const w = path.join(OUT, 'input_unit.wasm');
   execFileSync(CC, [...FLAGS, '-o', w, 'web/test/input_unit.c', 'runtime/web/thread_exit.c', ...LINK],
     { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const out = execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const out = execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 });
   const c = new Map();
   for (const l of out.split('\n')) {
     const f = l.split(' ');

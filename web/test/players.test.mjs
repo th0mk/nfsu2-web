@@ -163,27 +163,27 @@ test('the page\'s line', async () => {
   }
   assert.equal(sum.toString(16), '198373d3');
   assert.equal(playersText({ players: 3, online: 1, roam: 2, room: 0 }, ' Blue '),
-    'On this server now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": nobody in free roam there.');
+    'Playing now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": nobody in free roam there.');
   assert.equal(playersText({ players: 3, online: 1, roam: 2, room: 2 }, 'Blue'),
-    'On this server now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": 2 in free roam there.');
+    'Playing now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": 2 in free roam there.');
   assert.equal(playersText({ players: 3, online: 1, roam: 2 }, 'Blue'),
-    'On this server now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue".', 'an older server: no count');
-  assert.equal(playersText({ players: 0, online: 0, room: 0 }, 'Blue'), 'On this server now: nobody is playing.');
-  assert.equal(playersText({ players: 0, online: 0 }), 'On this server now: nobody is playing.');
-  assert.equal(playersText({ players: 1, online: 0 }), 'On this server now: 1 player, 0 in Online mode.');
-  assert.equal(playersText({ players: 3, online: 2 }), 'On this server now: 3 players, 2 in Online mode.');
-  assert.equal(playersText({ players: 3, online: null }), 'On this server now: 3 players.');
-  assert.equal(playersText({ players: 3, online: 1, roam: 2 }), 'On this server now: 3 players, 1 in Online mode, 2 in free roam.');
-  assert.equal(playersText({ players: 3, online: null, roam: 0 }), 'On this server now: 3 players, 0 in free roam.');
-  assert.equal(playersText({ players: 3, online: 2, roam: null }), 'On this server now: 3 players, 2 in Online mode.');
-  assert.equal(playersText({ players: 3, online: 1, full: false }), 'On this server now: 3 players, 1 in Online mode.');
+    'Playing now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue".', 'an older server: no count');
+  assert.equal(playersText({ players: 0, online: 0, room: 0 }, 'Blue'), 'Nobody is playing right now.');
+  assert.equal(playersText({ players: 0, online: 0 }), 'Nobody is playing right now.');
+  assert.equal(playersText({ players: 1, online: 0 }), 'Playing now: 1 player, 0 in Online mode.');
+  assert.equal(playersText({ players: 3, online: 2 }), 'Playing now: 3 players, 2 in Online mode.');
+  assert.equal(playersText({ players: 3, online: null }), 'Playing now: 3 players.');
+  assert.equal(playersText({ players: 3, online: 1, roam: 2 }), 'Playing now: 3 players, 1 in Online mode, 2 in free roam.');
+  assert.equal(playersText({ players: 3, online: null, roam: 0 }), 'Playing now: 3 players, 0 in free roam.');
+  assert.equal(playersText({ players: 3, online: 2, roam: null }), 'Playing now: 3 players, 2 in Online mode.');
+  assert.equal(playersText({ players: 3, online: 1, full: false }), 'Playing now: 3 players, 1 in Online mode.');
   assert.equal(playersText({ players: 128, online: 9, roam: 100, full: true }),
-    'On this server now: 128 players, 9 in Online mode, 100 in free roam. The server is full: playing with others waits until a place frees up.');
+    'Playing now: 128 players, 9 in Online mode, 100 in free roam. The server is full: multiplayer starts when a place frees up.');
   assert.equal(playersText({ players: 5000, online: 300, roam: 1800, full: true, queue: 120 }),
-    'On this server now: 5000 players, 300 in Online mode, 1800 in free roam. The server is full and 120 are waiting in line for a place. ' +
-    'At Play you can wait in line, playing alone until it is your turn, or play offline.');
-  assert.match(playersText({ players: 5000, online: 300, full: true, queue: 1 }), /full and 1 is waiting in line/);
-  assert.match(playersText({ players: 5000, online: 300, full: true, queue: 0 }), /full: playing with others waits until a place frees up\.$/);
+    'Playing now: 5000 players, 300 in Online mode, 1800 in free roam. The server is full, with 120 in line. ' +
+    'At Play you can wait in line (playing alone until your turn) or play offline.');
+  assert.match(playersText({ players: 5000, online: 300, full: true, queue: 1 }), /full, with 1 in line/);
+  assert.match(playersText({ players: 5000, online: 300, full: true, queue: 0 }), /full: multiplayer starts when a place frees up\.$/);
   // the line over a game that waits for a place
   assert.equal(queueText({ pos: 1, of: 40 }), 'The server is full. In line for a place: next.');
   assert.equal(queueText({ pos: 1, of: 40, eta: 20 }), 'The server is full. In line for a place: next (less than a minute).');

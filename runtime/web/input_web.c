@@ -136,8 +136,10 @@ static unsigned lookup_key(const char *nm){
 
 /* ---- keys: keyboard_mac.m's delivery rules ------------------------------- */
 /* alttext: pressed with Option/AltGr and typed text, so its release is a
- * WM_KEYUP even while Alt is still down, as with AltGr on Windows */
-typedef struct { uint8_t down, vk, sys, alttext; } Down;
+ * WM_KEYUP even while Alt is still down, as with AltGr on Windows.
+ * lost: held when release_all() let it go, and no key up since: its next
+ * autorepeat presses it again (the key is still down) */
+typedef struct { uint8_t down, vk, sys, alttext, lost; } Down;
 static Down g_down[256];             /* by DIK: keys the game has seen go down */
 static int  g_alt_other;             /* a key was pressed while Alt was down */
 static int  g_nheld;
@@ -182,10 +184,15 @@ static const char *reason_name(int r){
 static void mouse_release_all(void);
 /* every key the game holds goes up (WM_KEYUP and DirectInput), and with
  * mouse != 0 the buttons too: a focus loss takes both, as the Mac's resign
- * handlers did; a Meta press only the keys */
-static void release_all(const char *why, int mouse){
+ * handlers did; a Meta press only the keys.  A key still down afterwards
+ * is pressed again by its next autorepeat (key_down), except an Escape
+ * held to leave fullscreen (reason IREASON_FULLSCREEN) */
+static void release_all(const char *why, int mouse, int reason){
     int n = 0;
-    for (unsigned k = 1; k < 256u; k++) if (g_down[k].down){ release(k, 0); n++; }
+    for (unsigned k = 1; k < 256u; k++) if (g_down[k].down){
+        release(k, 0); n++;
+        g_down[k].lost = !(reason == IREASON_FULLSCREEN && k == 0x01);
+    }
     kbd_release_source(KSRC_HOST);
     g_alt_other = 0; g_nheld = 0;
     if (mouse) mouse_release_all();
@@ -198,14 +205,19 @@ static int is_modifier(unsigned dik){
 static void key_down(const InEv *e){
     unsigned dik = e->dik;
     if (!dik || dik == 0xDB || dik == 0xDC) return;            /* Meta: the browser's */
-    int repeat = (e->flags & IKF_REPEAT) != 0;
-    if (repeat && !g_down[dik].down) return;    /* pressed with Meta, or released by a focus loss */
+    int repeat = (e->flags & IKF_REPEAT) != 0, again = 0;
+    if (repeat && !g_down[dik].down){
+        if (!g_down[dik].lost) return;                              /* pressed with Meta */
+        repeat = 0; again = 1;                    /* held through a focus loss: down again */
+    }
     if (!repeat && g_down[dik].down) repeat = 1;                  /* its key up was lost */
+    g_down[dik].lost = 0;
     int alt = (e->flags & IKF_ALT) != 0;
     if (kbd_log())
-        fprintf(stderr, "[key] host %s dik=0x%02x vk=0x%02x flags 0x%02x chars %d%s%s\n",
+        fprintf(stderr, "[key] host %s dik=0x%02x vk=0x%02x flags 0x%02x chars %d%s%s%s\n",
                 repeat ? "repeat " : "keyDown", dik, e->vk, e->flags, e->nch,
-                (e->flags & IKF_DEAD) ? " (dead key)" : "", (e->flags & IKF_SYNTH) ? " [synthetic]" : "");
+                (e->flags & IKF_DEAD) ? " (dead key)" : "", (e->flags & IKF_SYNTH) ? " [synthetic]" : "",
+                again ? " (held through a release)" : "");
     if (is_modifier(dik)){
         /* modifiers: as keyboard_mac.m's flags_changed */
         if (!repeat){
@@ -236,6 +248,7 @@ static void key_up(const InEv *e){
     unsigned dik = e->dik;
     if (!dik || dik > 255u) return;
     if (kbd_log() && g_down[dik].down) fprintf(stderr, "[key] host keyUp   dik=0x%02x\n", dik);
+    g_down[dik].lost = 0;
     release(dik, (e->flags & IKF_ALT) != 0);
 }
 
@@ -498,7 +511,7 @@ static void handle(const InEv *e){
     int mute = mprace_owns_input();
     if (mute != g_muted){
         g_muted = mute;
-        if (mute) release_all("a multiplayer race's trip drives the game", 1);
+        if (mute) release_all("a multiplayer race's trip drives the game", 1, IREASON_NONE);
         fprintf(stderr, "[key] the player's input %s\n", mute ? "muted: the game drives itself to the multiplayer race" : "back");
     }
     if (mute && (e->type == IEV_KEY_DOWN || e->type == IEV_KEY_TAP || e->type == IEV_TEXT || e->type == IEV_MOUSE_MOVE || e->type == IEV_MOUSE_DOWN || e->type == IEV_WHEEL)) return;
@@ -521,11 +534,11 @@ static void handle(const InEv *e){
     case IEV_MOUSE_LEAVE: mouse_leave(); break;
     case IEV_FOCUS: {
         char why[48]; snprintf(why, sizeof why, "%s %s", reason_name(e->b), e->a ? "active" : "inactive");
-        if (!e->a) release_all(why, 1);
+        if (!e->a) release_all(why, 1, e->b);
         if (e->b == IREASON_SCRIPT) fprintf(stderr, "[key] simulated %s\n", e->a ? "focus gain" : "focus loss");
         lifecycle_set_active(e->a ? 1 : 0, why);
         break; }
-    case IEV_RELEASE_ALL: release_all(reason_name(e->b), e->b != IREASON_META); break;
+    case IEV_RELEASE_ALL: release_all(reason_name(e->b), e->b != IREASON_META, e->b); break;
     case IEV_QUIT:
         g_quit_events++;
         lifecycle_request_quit(e->b == IREASON_SCRIPT ? "autotest" : "page quit request");

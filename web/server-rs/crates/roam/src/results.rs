@@ -25,12 +25,16 @@
 //!   QUICK_WINS clean wins, in under THIRD_SHARE of the third quickest other winner's (a car made faster than any
 //!   tuning makes it: nfsu2.xyz, 2026-10-30, one player won a sprint in 51.9 s and a circuit in 83.0 s, the third
 //!   quickest of 32 and 30 wins before 89.9 s and 152.1 s, and the next of the day's 548 and 423 wins 71.9 s and
-//!   122.5 s; of the day's 4,727 wins with a third quickest to go by, the quickest other one took 0.78 of it).  A
-//!   next finisher far behind says nothing: the race ends 30 s after the first finished, so only a report the game did
-//!   not make can show one.
+//!   122.5 s; of the day's 4,727 wins with a third quickest to go by, the quickest other one took 0.78 of it), unless
+//!   another finisher came close (the winner over THIRD_SHARE of its time: that time can be driven; nfsu2.xyz,
+//!   2026-10-31, Online mode: four racers within 4 s, all under 70 % of a track's third quickest winner).  A next
+//!   finisher far behind says nothing: the race ends 30 s after the first finished, so only a report the game did not
+//!   make can show one.
 //!
 //! A drift race is won by points and is left out.  The lines are for the operator (`nfsu2-server ctl kick|ban`), and
-//! say how many of the race's reports saw it.
+//! say how many of the race's reports saw it, and what the winner's own game said when it did not agree or sent no
+//! report (nfsu2.xyz, 2026-10-31: three of five games had a stock car win a 19.2 km circuit in 49 s, its own game said
+//! it did not finish).
 
 use std::collections::HashMap;
 
@@ -50,7 +54,8 @@ const DROVE_MIN: f64 = 0.5;
 const QUICK_SHARE: f64 = 0.5;
 const BEST_KEPT: usize = 4096;
 const BEST_SEEN: usize = 2;
-/// a winner in under this share of the third quickest other winner's time, once the race had QUICK_WINS clean wins;
+/// a winner in under this share of the third quickest other winner's time, once the race had QUICK_WINS clean wins
+/// and no other finisher came close (the winner over this share of its time);
 /// the quickest winners kept of each race (each once, its best: the race's own winner may be one of them)
 const THIRD_SHARE: f64 = 0.7;
 const QUICK_WINS: u32 = 10;
@@ -92,11 +97,22 @@ pub(crate) struct Verdict {
     /// the third quickest other winner's time (s) and the race's clean wins, when the winner took under THIRD_SHARE of
     /// it
     pub third: Option<(f64, u32)>,
+    /// what the winner's own game's report said of it; None when no report of it came
+    pub own: Option<OwnGame>,
     /// the reports that had it first, and all of them
     pub seen: usize,
     pub reports: usize,
     /// its racers as the hub knew them when their reports came (`Results::add`)
     pub names: HashMap<u32, String>,
+}
+
+/// What a race's winner's own game said of it: first (as `winner` reads a report) at that time, finished but not first,
+/// or neither
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum OwnGame {
+    First(f64),
+    Finished(f64),
+    Out,
 }
 
 /// The races' reports, until each is judged; the clean wins of each race (its name hash and laps) so far
@@ -194,7 +210,15 @@ pub(crate) fn line(game: u8, v: &Verdict, who: &dyn Fn(u32) -> String) -> String
         Some((id, t)) => s += &format!("; the next finisher's {}, {}", clock(t), who(id)),
         None => s += "; nobody else finished (the race ends 30 s after the first)",
     }
-    s + &format!(": as {} of {} players' games saw it", v.seen, v.reports)
+    s += &format!(": as {} of {} players' games saw it", v.seen, v.reports);
+    match v.own {
+        None => s += "; its own game sent no report",
+        Some(OwnGame::First(t)) if (t - v.time).abs() >= 0.5 => s += &format!("; its own game: first in {}", clock(t)),
+        Some(OwnGame::First(_)) => {}
+        Some(OwnGame::Finished(t)) => s += &format!("; its own game: not first, finished in {}", clock(t)),
+        Some(OwnGame::Out) => s += "; its own game: did not finish",
+    }
+    s
 }
 
 /// a report's winner: its quickest finisher, or (none finished) the game's first row when every other one ended with
@@ -295,9 +319,16 @@ fn judge(reports: &[(u32, RaceRes)], best: &HashMap<(u32, u8), Best>, names: &Ha
         .iter()
         .flat_map(|(_, r)| r.rows[..r.n].iter().filter(|x| x.id != w && x.flags & RS_FINISHED != 0 && x.time > 0.0).map(|x| (x.id, x.time)))
         .min_by(|a, b| a.1.total_cmp(&b.1));
+    // the winner's own game: its report's winner, else its row there
+    let own = reports.iter().find(|(by, _)| *by == w).map(|(_, r)| match (winner(r), r.rows[..r.n].iter().find(|x| x.id == w)) {
+        (Some(x), _) if x.id == w => OwnGame::First(x.time),
+        (_, Some(x)) if x.flags & RS_FINISHED != 0 && x.time > 0.0 => OwnGame::Finished(x.time),
+        _ => OwnGame::Out,
+    });
     let b = best.get(&(first.race, first.laps));
     let quickest = b.map(|b| b.quickest).filter(|&q| time < QUICK_SHARE * q);
-    let third = b.and_then(|b| Some((b.third(&racer(names, w))?, b.wins))).filter(|&(t, _)| time < THIRD_SHARE * t);
+    let close = next.is_some_and(|(_, t)| time >= THIRD_SHARE * t);
+    let third = b.and_then(|b| Some((b.third(&racer(names, w))?, b.wins))).filter(|&(t, _)| !close && time < THIRD_SHARE * t);
     let ended = drove < DROVE_MIN && seen >= 2;
     let cheat = avg.is_some_and(|a| a >= RACE_MPS) || ended || quickest.is_some() || third.is_some();
     let v = Verdict {
@@ -313,6 +344,7 @@ fn judge(reports: &[(u32, RaceRes)], best: &HashMap<(u32, u8), Best>, names: &Ha
         drove: (drove < DROVE_SHORT).then_some(drove),
         quickest,
         third,
+        own,
         seen,
         reports: reports.len(),
         names: HashMap::new(),
@@ -392,24 +424,48 @@ mod tests {
     #[test]
     fn a_win_far_under_the_third_quickest_winners_is_a_cheat() {
         let mut x = Results::default();
-        let race = |x: &mut Results, lobby: u32, w: u32, t: f64| {
-            let rows = [(w, true, t, 1.0, 5000.0), (99, true, t + 5.0, 1.0, 5000.0)];
+        // (the next finisher at `next`: far behind, else a time that close can be driven)
+        let race = |x: &mut Results, lobby: u32, w: u32, t: f64, next: f64| {
+            let rows = [(w, true, t, 1.0, 5000.0), (99, true, next, 1.0, 5000.0)];
             judged_in(x, &[(w, rep_of(lobby, &rows, w)), (99, rep_of(lobby, &rows, 99))])
         };
         for k in 0..9 {
-            assert_eq!(race(&mut x, 0x100 + k, 10 + k, 100.0 + k as f64), None);
+            assert_eq!(race(&mut x, 0x100 + k, 10 + k, 100.0 + k as f64, 105.0 + k as f64), None);
         }
-        assert_eq!(race(&mut x, 0x200, 30, 60.0), None, "9 clean wins: too few to go by");
+        assert_eq!(race(&mut x, 0x200, 30, 60.0, 65.0), None, "9 clean wins: too few to go by");
         // 10 wins now: the quickest winners 60, 100 and 101 s, and 69 s is under 70 % of the third
-        let v = race(&mut x, 0x201, 31, 69.0).expect("a verdict");
+        let v = race(&mut x, 0x201, 31, 69.0, 99.0).expect("a verdict");
         assert_eq!((v.third, v.quickest), (Some((101.0, 10)), None));
         let l = line(0, &v, &|id| format!("p{id}"));
         assert!(l.contains("under 70 % of the third quickest other winner's time of the race's 10 clean wins (1:41.0)"), "{l}");
-        assert_eq!(race(&mut x, 0x202, 32, 71.0), None, "71 s is over 70 % of 101 s");
-        // 30, whose 60 s came in before there were 10 wins, wins again in 62 s: the others' quickest are 71, 100 and
-        // 101 s, not its own
-        let v = race(&mut x, 0x203, 30, 62.0).expect("a verdict");
-        assert_eq!(v.third, Some((101.0, 11)));
+        assert_eq!(race(&mut x, 0x202, 32, 71.0, 99.0), None, "71 s is over 70 % of 101 s");
+        // a next finisher close behind (over 70 %): that time can be driven
+        assert_eq!(race(&mut x, 0x204, 33, 64.0, 66.0), None, "64 s with another car in 66 s");
+        // 30, whose 60 s came in before there were 10 wins, wins again in 62 s: the others' quickest are 64, 71 and
+        // 100 s, not its own
+        let v = race(&mut x, 0x203, 30, 62.0, 99.0).expect("a verdict");
+        assert_eq!(v.third, Some((100.0, 12)));
+    }
+
+    // what the winner's own game said, on the line when it does not agree (nfsu2.xyz, 2026-10-31: three of five games
+    // had a stock car win a 19.2 km circuit in 49 s, its own game said it did not finish), or sent no report
+    #[test]
+    fn the_line_says_what_the_winners_own_game_said() {
+        let seen = [(2, true, 49.0, 3.0, 3000.0), (1, true, 401.8, 3.0, 19200.0), (3, true, 431.0, 3.0, 19210.0)];
+        let own = [(2, false, 59.0, 0.4, 3000.0), (1, true, 401.8, 3.0, 19200.0), (3, true, 431.0, 3.0, 19210.0)];
+        let mut x = Results::default();
+        let v = judged_in(&mut x, &[(1, rep(&seen, 1)), (3, rep(&seen, 3)), (2, rep(&own, 2))]).expect("a verdict");
+        assert_eq!((v.winner, v.seen, v.reports, v.own), (2, 2, 3, Some(OwnGame::Out)));
+        let l = line(0, &v, &|id| format!("p{id}"));
+        assert!(l.ends_with(": as 2 of 3 players' games saw it; its own game: did not finish"), "{l}");
+        // (two reports of three: judged 90 s on)
+        for by in [1, 3] {
+            x.add(0.0, by, rep_of(0xB1, &seen, by), &|_| None);
+        }
+        let v = x.due(RESULTS_WAIT_MS).pop().expect("a verdict");
+        assert!(line(0, &v, &|id| format!("p{id}")).ends_with(": as 2 of 2 players' games saw it; its own game sent no report"), "{v:?}");
+        let v = judged_in(&mut x, &[1, 2, 3].map(|by| (by, rep_of(0xB2, &seen, by)))).expect("a verdict");
+        assert!(line(0, &v, &|id| format!("p{id}")).ends_with(": as 3 of 3 players' games saw it"), "agrees: nothing more");
     }
 
     // a race whose other racers quit, by the one report that came: no line (nfsu2.xyz, 2026-10-30, a drag whose host

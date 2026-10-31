@@ -33,7 +33,7 @@ for (const game of GAMES) {
     assert.deepEqual(bad, []);
     assert.ok(keys.size > 500, `${keys.size} texts`);
     assert.ok(keys.has('Fan project. Not affiliated with or endorsed by Electronic Arts.'), 'index.html data-i18n');
-    assert.ok(keys.has('Help get it fixed: download the log and post it in <0>#bug-reports on our Discord</0>, with what you were doing when it happened.'), 'index.html data-i18n-html');
+    assert.ok(keys.has('Post the log in <0>#bug-reports on our Discord</0>, with what you were doing.'), 'index.html data-i18n-html');
     assert.ok(keys.get('{n} laps')?.plural, 'tn()');
     for (const [k, e] of keys) for (const w of e.where) assert.ok(!w.startsWith('games/') || w.startsWith(`games/${game}/`), `${JSON.stringify(k)} from ${w}`);
   });

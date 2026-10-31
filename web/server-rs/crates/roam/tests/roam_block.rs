@@ -46,8 +46,8 @@ fn a_blocked_name_is_linked_with_nobody_who_blocks_it_either_way_until_they_leav
     k.step(1000.0);
     drive(&mut k);
     k.clear();
-    k.from(V(1), &mapreq(101, 1));
-    let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| map_of(f)).flat_map(|m| m.4).collect();
+    k.from(V(1), &mapreq_base(101, 1, 2048, 0));
+    let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| mapd_of(f)).flat_map(|m| m.5).collect();
     assert!(map.is_empty(), "no anna on Bob's map: {map:?}");
     // anna leaves the switch and comes back blocking nobody: linked again
     k.hub.peer_gone(V(0));
@@ -68,9 +68,9 @@ fn a_blocked_pair_takes_no_place_in_either_ones_links() {
             place(&mut k, i, name, x);
         }
         k.hub.blocks(V(1), vec!["ANNA".into()]);
-        k.from(V(0), &mapreq(100, 1));
-        let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| map_of(f)).flat_map(|m| m.4).collect();
-        assert!(!map.iter().any(|e| e.0 == 5), "{way}: Bob not on anna's map before a tick: {map:?}");
+        k.from(V(0), &mapreq_base(100, 1, 2048, 0));
+        let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| mapd_of(f)).flat_map(|m| m.5).collect();
+        assert!(!map.iter().any(|e| e.1.is_some_and(|p| p.0 == 5)), "{way}: Bob not on anna's map before a tick: {map:?}");
         k.clear();
         k.hub.tick();
         for (i, j) in [(0, 1), (1, 0)] {

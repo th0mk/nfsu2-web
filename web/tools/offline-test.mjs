@@ -171,7 +171,7 @@ try {
     const ms = await open();
     await page.waitForFunction(() => !window.__nfsu2.offline(), null, { timeout: 20000 }).catch(() => {});
     const st = await state();
-    report('back', st.phase === 'ready' && !st.offline && st.sub === 'Press Play or Enter to start.', { pageToReadyMs: ms, ...st });
+    report('back', st.phase === 'ready' && !st.offline && st.sub === 'Press Play to start.', { pageToReadyMs: ms, ...st });
   }
 
   // ----------------------------------------------------------- deploy --

@@ -1,0 +1,48 @@
+# Free roam's friends, instance B (with roam_friend_a.txt): parks at (B_X, B_Y) facing B_ANG (0x4000 north, as A;
+# 0xc000 south, at A), rolls forward for B_ROLL frames, pushes for B_PUSH more, then backs away for B_BACK frames.
+# `roam mp bump` says how the two cars stand each time (nose to nose or not, the gap); the [bump] lines are what the
+# game told the page, the [friend] lines the server's answers.  The cases (A stands at 1695.3 -883.6 facing north):
+#   nose to nose, solid:   B_X=1695.3 B_Y=-876.1 B_ANG=0xc000 B_ROLL=45 B_PUSH=900 B_BACK=240  (7.5 m off, rolls into
+#                          A's nose and pushes: a [bump] on, friends, then off once it backed away)
+#   nose to nose, ghost:   NFSU2_ROAM_COLLIDE=0 on both, B_Y=-879.96 B_ROLL=0 B_PUSH=0 (centres 3.64 m apart: the
+#                          noses 0.3 m into each other)
+#   apart:                 B_Y=-876.6 B_ROLL=0 B_PUSH=0 (7 m: no [bump])
+#   nose to tail:          B_Y=-891.1 B_ANG=0x4000 B_ROLL=45 B_PUSH=600 (behind A, pushing its tail: no [bump])
+#   side by side:          B_X=1697.2 B_Y=-883.6 B_ROLL=0 B_PUSH=0 (1.9 m to A's right, facing the other way: no [bump])
+#   no claimed name:       any of them without NFSU2_TEST_CLAIM on B (A hears "theirs", B "claim")
+#   node web/tools/roam-pair.mjs --base ... --a "Al:roam_friend_a.txt:NFSU2_TEST_CLAIM=<43 A>,NFSU2_TEST_FRIEND=add" \
+#        --b "Bo:roam_friend_b.txt:NFSU2_TEST_CLAIM=<43 B>,NFSU2_TEST_FRIEND=add,B_X=...,B_Y=...,B_ANG=...,B_ROLL=...,B_PUSH=...,B_BACK=..."
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++960  roam teleport ${B_X} ${B_Y} 24.6 ${B_ANG}
++300  roam teleport ${B_X} ${B_Y} 24.6 ${B_ANG}
++0    log placed
++120  roam mp bump
++120  down UP
++${B_ROLL} up UP                        # a slow roll
++200  down UP
++${B_PUSH} up UP                        # then pushing, solid, against what is in front
++0    roam mp bump
++600  roam mp bump
++0    down DOWN
++${B_BACK} up DOWN                      # backing away
++600  roam mp bump
++0    log done

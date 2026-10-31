@@ -19,7 +19,7 @@ test('memcmp/bcmp on wasm = a byte loop', { skip: !CC && 'no wasi-sdk in deps/' 
     '-mtail-call', '-o', w, 'web/test/memcmp_unit.c', 'runtime/web/memcmp.c',
     '-Wl,--import-memory,--export-memory,--shared-memory,--initial-memory=67108864,--max-memory=268435456'],
   { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const out = execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w], { encoding: 'utf8' }).trim();
+  const out = execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w], { encoding: 'utf8', timeout: 120_000 }).trim();
   console.log(out);
   assert.match(out, /^memcmp_unit: passed/);
 });

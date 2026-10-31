@@ -1,0 +1,23 @@
+# Touch controls in free roam on a phone-sized page (web/src/app/touch.ts): the career status button (the
+# controller's D-pad Down, the game's Legend) opens the game's Career Status, a menu (the menu controls show), and
+# their Back closes it; the steering button held opens the touch settings (the menu's Controls dialog at the touch
+# tab), and closing it brings the driving controls back.
+#   node web/tools/roam-pair.mjs --page app --touch --solo --size 915x412 --seed <career save tree>
+#        --a Tia:roam_touch_status.txt
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++300  log TAP canvas
++60   log SHOT touch_roam
++10   log TAP [data-ctl="status"]
++90   log SHOT touch_status
++60   log TAP [data-ctl="m-back"]
++90   log SHOT touch_status_closed
++30   log HOLD 700 [data-ctl="mode"]
++90   log SHOT touch_settings
++10   log SCROLL 200 dialog.help
++60   log SHOT touch_settings_scrolled
++30   log TAP dialog.help .dlg-head button
++150  log SHOT touch_back
++60   quit

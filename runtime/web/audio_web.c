@@ -797,9 +797,7 @@ static unsigned g_target = 1024;
 static unsigned g_target_floor = 1024;
 static unsigned g_target_start = 1024;
 static double   g_status_every = 0.0;
-/* the part of the ring in use: what the page's worklet reads (AR_PAGE_FRAMES) */
-static unsigned g_ring_n = AUDIO_RING_FRAMES_OLD;
-static unsigned target_max(void){ return g_ring_n - SLICE; }
+static unsigned target_max(void){ return AUDIO_RING_FRAMES - SLICE; }
 
 /* the worklet's rhythm (RHYTHM_*): the longest gap between two of its reads in
  * each of the last seconds, and g_rhythm_ms, their median with the current
@@ -927,7 +925,7 @@ static void *pump_main(void *unused){
         }
         uint32_t r = atomic_load(&RH(AR_R)), w = atomic_load(&RH(AR_W));
         uint32_t fill = w - r;
-        if (fill > g_ring_n) fill = g_ring_n;      /* never: one producer, one consumer */
+        if (fill > AUDIO_RING_FRAMES) fill = AUDIO_RING_FRAMES;      /* never: one producer, one consumer */
         if (r != r_seen){
             /* what the time since its last read says about the worklet, unless
              * that read was before this ring session, the ring had too little
@@ -954,14 +952,10 @@ static void *pump_main(void *unused){
         if (consumer){
             if (mode != AR_MODE_RING){
                 if (mode == AR_MODE_WALL){ g_to_ring++; wall_interp_end(); }
-                /* the page says which part of the ring its worklet reads
-                 * before it reports a running context */
-                uint32_t pf = atomic_load(&RH(AR_PAGE_FRAMES));
-                g_ring_n = pf >= AUDIO_RING_FRAMES_OLD && pf <= AUDIO_RING_FRAMES && !(pf & (pf - 1u)) ? pf : AUDIO_RING_FRAMES_OLD;
                 if (g_target > target_max()) g_target = target_max();
                 if (g_target_floor > g_target) g_target_floor = g_target;
                 fprintf(stderr, "sound: output paced by the AudioWorklet (ring %u frames, target %u = %.1f ms)\n",
-                        g_ring_n, g_target, g_target * 1000.0 / OUT_RATE);
+                        AUDIO_RING_FRAMES, g_target, g_target * 1000.0 / OUT_RATE);
                 mode = AR_MODE_RING; atomic_store(&RH(AR_MODE), AR_MODE_RING);
                 g_ring_s0 = now; under_seen = atomic_load(&RH(AR_UNDERRUNS)); t_quiet = now;
                 /* a worklet that was just connected takes a moment to run
@@ -1026,7 +1020,7 @@ static void *pump_main(void *unused){
                 wait_word(&RH(AR_R), r, s < 0.004 ? s : 0.004);
                 continue;
             }
-            float *dst = &g_ring.pcm[(w & (g_ring_n - 1u)) * OUT_CH];
+            float *dst = &g_ring.pcm[(w & (AUDIO_RING_FRAMES - 1u)) * OUT_CH];
             /* SLICE divides the ring size: a slice never wraps */
             mix_timed(dst, SLICE);
             stats_add(dst, SLICE);
@@ -1169,7 +1163,7 @@ void audio_report(void){
             "the worklet's reads up to %.0f ms apart, its bursts %.0f ms apart, a ring of %u frames\n",
             SLICE, g_target, g_target * 1000.0 / OUT_RATE, atomic_load(&RH(AR_UNDERRUNS)),
             (unsigned long long)g_target_raised, (unsigned long long)g_target_lowered, g_target_floor,
-            g_rhythm_ms, g_burst_ms, g_ring_n);
+            g_rhythm_ms, g_burst_ms, AUDIO_RING_FRAMES);
     fprintf(stderr, "  sound clock backup: %.1f s on the ring, %.1f s on the wall clock (no output), %llu times ring->wall, %llu times wall->ring\n",
             (double)g_ring_frames / OUT_RATE, g_wall_s, (unsigned long long)g_to_wall, (unsigned long long)g_to_ring);
     if (g_wall_catchup)

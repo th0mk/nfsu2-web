@@ -10,17 +10,14 @@
 //! - player -> hub: a HELLO every second (its id, room, status, name, and its crews), a SNAP twice a second (where
 //!   its car is), a BYE when it stops.
 //! - hub -> player: twice a second (`tick_ms`) a PEERS message: the players linked to it, { virtual address, port, id }, at most
-//!   `degree` (32: roam_core's group of 33 with itself), or 7 for a player whose HELLO says core version 1 (its group
-//!   was 8, and it drops a longer list); an empty one says the hub is there.  To a player in a crew whose HELLO says
-//!   it reads them (core 8), the list ends in crew marks: its own crews, then which of them each listed player is in.
+//!   `degree` (32: roam_core's group of 33 with itself); an empty one says the hub is there.  To a player in a crew the list ends in
+//!   crew marks: its own crews, then which of them each listed player is in.
 //! - player -> hub -> player: when its world map opens, and a quarter second after each answer while it is open, a
 //!   MAPREQ naming the answer it holds; the hub answers with MAPD datagrams (at most 16): the other players of its
 //!   room in free roam, past its links, map_max (2048) of them at most (the nearest), or as many as the MAPREQ asks
 //!   for, by the hub's slot of each, as what changed since that answer: each player come, or moved off where the
 //!   page has it, placed (x, y in whole metres, heading a byte, velocity in m/s: the page moves its marker on at
-//!   it), each one gone gone.  A player standing costs nothing, a car going straight little.  A page before MAPD
-//!   asks each second without naming one and gets the whole list in MAP datagrams (at most nine of 230), nearest
-//!   first, each place and heading (512 from a page before 2048).
+//!   it), each one gone gone.  A player standing costs nothing, a car going straight little.
 //!
 //! The links, in each room: the pairs of players with a position younger than `stale_ms` (60 s: one in a shop or a
 //! race keeps its links for a while), nearest first, each player at most its degree of them.  "Nearest" looks ahead,
@@ -60,8 +57,7 @@
 //! grow as the square of its players): they link by distance as everyone does.  /players counts each crew's players
 //! for the start page (`in_crews()`).  A player learns which of its peers share a crew from the hub's marks on its
 //! list, never from the peers: a crew's hash in a stranger's hands is all it takes to be linked with that player
-//! anywhere on the map, and a short crew name is quickly found from its hash (a core before 8 still sends its crews to
-//! the peers that read them, and colours a crew-mate of core 8 no more).
+//! anywhere on the map, and a short crew name is quickly found from its hash.
 //!
 //! A busy server gives every player fewer links: each link is two players' snapshots to each other, 20 a second each
 //! way (fewer for far ones), so a crowd costs its players times their links, all through the switch; a switch that
@@ -128,7 +124,7 @@ use nfsu2_util::cpu::{Busy, QuotaBusy, WorkersBusy};
 use nfsu2_util::{FrameCtx, Host, SwitchSend};
 use tokio::sync::oneshot;
 
-pub use hub::Hub;
+pub use hub::{Hub, Whereabouts};
 pub use wire::{decode_roam, encode_peers, encode_peers_crews};
 
 /// 10.77.0.253, runtime/web/net_proto.h NET_ROAM_HUB
@@ -175,9 +171,8 @@ pub struct RoamOptions {
     /// a player's view point, this far ahead of where its car points (m): a car in front counts from there too, so it
     /// is linked from farther away than one beside or behind
     pub view_m: f64,
-    /// the world map (MAPREQ): at most this many players a answer, one answer a browser every map_gap_ms at most (a
-    /// second for a page before MAPD), of the players in free roam (or paused there) with a position younger than
-    /// map_fresh_ms
+    /// the world map (MAPREQ): at most this many players a answer, one answer a browser every map_gap_ms at most, of
+    /// the players in free roam (or paused there) with a position younger than map_fresh_ms
     pub map_max: usize,
     pub map_gap_ms: f64,
     pub map_fresh_ms: f64,
@@ -194,7 +189,7 @@ impl Default for RoamOptions {
             keep: 0.5,
             hold_ms: 5_000.0,
             max_per_vip: 2,
-            max_players: 7168,
+            max_players: 8192,
             exact_room: 256,
             min_degree: 8,
             busy_high: 0.85,
@@ -248,6 +243,10 @@ enum Cmd {
     Blocks(u32, Vec<String>),
     PageName(u32, String),
     OtherNames(oneshot::Sender<HashMap<u32, Vec<String>>>),
+    Friends(u32, Arc<str>, Vec<Arc<str>>),
+    RoomName(u32, String),
+    Linked(u32, String, oneshot::Sender<Option<(u32, Option<Arc<str>>)>>),
+    Where(Vec<Arc<str>>, oneshot::Sender<Vec<Option<hub::Whereabouts>>>),
     Stop,
 }
 
@@ -343,6 +342,31 @@ impl RoamHub {
     pub fn attach_switch(&self, send: SwitchSend) {
         let _ = self.tx.send(Cmd::Attach(send));
     }
+
+    /// browser `vip`'s keyphrase `me` has these friends (their keyphrases): `Hub::friends`
+    pub fn friends(&self, vip: u32, me: Arc<str>, owners: Vec<Arc<str>>) {
+        let _ = self.tx.send(Cmd::Friends(vip, me, owners));
+    }
+
+    /// browser `vip`'s page plays in the room of this name: `Hub::room_name`
+    pub fn room_name(&self, vip: u32, name: String) {
+        let _ = self.tx.send(Cmd::RoomName(vip, name));
+    }
+
+    /// the browser and keyphrase of the player under `name` that browser `vip`'s player is linked with now:
+    /// `Hub::linked_with`
+    pub fn linked_with(&self, vip: u32, name: String) -> oneshot::Receiver<Option<(u32, Option<Arc<str>>)>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Cmd::Linked(vip, name, tx));
+        rx
+    }
+
+    /// where each of these keyphrases plays in free roam: `Hub::whereabouts`
+    pub fn whereabouts(&self, owners: Vec<Arc<str>>) -> oneshot::Receiver<Vec<Option<hub::Whereabouts>>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Cmd::Where(owners, tx));
+        rx
+    }
 }
 
 /// a panic in the hub (a bug) leaves the hub's thread running: the panic hook has printed it, the next frame or
@@ -413,6 +437,14 @@ fn run(
             Cmd::PageName(vip, name) => guard(|| hub.page_name(vip, name)),
             Cmd::OtherNames(tx) => guard(|| {
                 let _ = tx.send(hub.other_names());
+            }),
+            Cmd::Friends(vip, me, owners) => guard(|| hub.friends(vip, me, owners)),
+            Cmd::RoomName(vip, name) => guard(|| hub.room_name(vip, name)),
+            Cmd::Linked(vip, name, tx) => guard(|| {
+                let _ = tx.send(hub.linked_with(vip, &name));
+            }),
+            Cmd::Where(owners, tx) => guard(|| {
+                let _ = tx.send(hub.whereabouts(&owners));
             }),
             Cmd::Stop => {
                 // no more ticks, so no more lists: the switch's send goes too (it holds the switch, which holds

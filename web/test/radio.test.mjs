@@ -299,6 +299,6 @@ test('the runtime: the song number, the tags and the scenarios of the game\'s so
   fs.mkdirSync(out, { recursive: true });
   execFileSync(hostClang, ['-O1', '-Wall', '-Wextra', '-Werror', '-DNFSU2_RADIO_TEST', '-I', path.join(ROOT, 'runtime'), '-I', path.join(ROOT, 'tests'),
     '-o', bin, path.join(ROOT, 'tests/radio_unit.c')]);
-  const got = execFileSync(bin, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const got = execFileSync(bin, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 120_000 }).trim();
   assert.match(got, /radio_unit: 0 failed; scenarios: 0 of \d+ failed$/, got.split('\n').filter(l => !l.startsWith('ok ')).join('\n'));
 });

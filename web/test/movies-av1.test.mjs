@@ -119,7 +119,7 @@ const noTool = (data, what) => !data ? `${what} not set` : !/libaom-av1/.test(ff
 function toolCase(data, name) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'av1-'));
   try {
-    const run = execFileSync(python, [path.join(ROOT, 'tools/movies_av1.py'), data, out, '--only', `MOVIES/${name}`, '--cpu-used', '8', '--jobs', '2'], { encoding: 'utf8' });
+    const run = execFileSync(python, [path.join(ROOT, 'tools/movies_av1.py'), data, out, '--only', `MOVIES/${name}`, '--cpu-used', '8', '--jobs', '2'], { encoding: 'utf8', timeout: 600_000 });
     assert.ok(run.includes(`"file": "MOVIES/${name}.vp6"`), run);
     const chunks = (b) => { const l = []; for (let o = 0; o + 8 <= b.length;) { const s = b.readUInt32LE(o + 4); l.push({ id: b.toString('latin1', o, o + 4), o, s }); o += s; } return l; };
     const vp6 = fs.readFileSync(path.join(data, `MOVIES/${name}.vp6`)), av1 = fs.readFileSync(path.join(out, `MOVIES/AV1/${name}.vp6`));

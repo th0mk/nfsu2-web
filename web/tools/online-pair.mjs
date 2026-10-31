@@ -68,6 +68,7 @@ import { fileURLToPath } from 'node:url';
 import { serverCommand } from './server-cmd.mjs';
 import { seedSave } from './save-seed.mjs';
 import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
+import { own, stop } from './children.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -373,13 +374,14 @@ function url(i) {
   return `${BASE}/test/${page}.html?${q}${fresh}`;
 }
 
-// our own server (stopped by its child handle only)
-let server = null;
-const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'), { flags: 'a' });
+// our own server (stopped by its child handle only); its log is this run's alone (the judge counts the results in it)
+let server = null, serverDied = null;
+const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'));
 async function startServer() {
   const c = spawn(...serverCommand(['--data', DATA, '--http-port', String(HTTP_PORT), '--port', '0',
     '--dev', '--artifacts', OUT, '--online-trace', path.join(OUT, 'trace.txt'), '--state', path.join(OUT, 'state'), ...(OL.server ?? []),
     ...opts('server-arg')]), { stdio: ['ignore', 'pipe', 'pipe'] });
+  own(c);
   c.stdout.pipe(serverLog, { end: false }); c.stderr.pipe(serverLog, { end: false });
   await new Promise((res, rej) => {
     let out = '';
@@ -387,13 +389,13 @@ async function startServer() {
     c.stdout.on('data', d => { out += d; if (out.includes('this Mac') || out.includes('this host')) { clearTimeout(t); res(); } });
     c.on('exit', code => { clearTimeout(t); rej(new Error(`server exited (${code})`)); });
   });
+  c.on('exit', (code, sig) => { if (server === c) serverDied = `server-died(${code ?? sig})`; });
   return c;
 }
 async function stopServer() {
   if (!server) return;
   const c = server; server = null;
-  const gone = new Promise(r => c.once('exit', r));
-  c.kill('SIGTERM'); await gone;
+  await stop(c);
 }
 if (OWN) server = await startServer();
 
@@ -408,9 +410,9 @@ if (HIDE) {
   // is the full browser's, not the headless shell's)
   const exe = process.env.CHROME_PATH || (pickBrowser().channel ? chromeExe() : chromium.executablePath());
   if (!exe || !fs.existsSync(exe)) throw new Error(`--hide: no browser at ${exe || 'Google Chrome\'s place'} (CHROME_PATH names one)`);
-  chrome = spawn(exe, [...(argv.includes('--headed') ? [] : ['--headless=new']), '--remote-debugging-port=0', `--user-data-dir=${prof}`,
+  chrome = own(spawn(exe, [...(argv.includes('--headed') ? [] : ['--headless=new']), '--remote-debugging-port=0', `--user-data-dir=${prof}`,
     '--no-first-run', '--no-default-browser-check', '--use-mock-keychain', '--password-store=basic', ...CHROME_ARGS, 'about:blank'],
-  { stdio: ['ignore', 'ignore', 'pipe'] });
+  { stdio: ['ignore', 'ignore', 'pipe'] }));
   const ws = await new Promise((res, rej) => {
     let err = '';
     const t = setTimeout(() => rej(new Error(`Chrome did not start: ${err}`)), 20000);
@@ -504,7 +506,7 @@ for (const x of inst) {
   x.plog.end();
 }
 await browser.close();
-if (chrome) { const gone = new Promise(r => chrome.once('exit', r)); chrome.kill('SIGTERM'); await gone; }
+await stop(chrome);
 await stopServer();
 serverLog.end();
 
@@ -561,7 +563,7 @@ if (argv.includes('--canary')) {
   const trace = fs.existsSync(path.join(OUT, 'trace.txt')) ? fs.readFileSync(path.join(OUT, 'trace.txt'), 'utf8') : '';
   const passFields = [...trace.matchAll(/\bPASS\w*=(\S+)/g)].map(m => m[1]);
   const srv = fs.readFileSync(path.join(OUT, 'server.log'), 'utf8').split('\n').filter(l => /^\[(online|lan)\]/.test(l));
-  const realAddr = srv.filter(l => [...l.matchAll(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/g)].some(m => !/^10\.77\.[0-7]\./.test(m[1])) || /::|localhost/.test(l));
+  const realAddr = srv.filter(l => [...l.matchAll(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/g)].some(m => !/^10\.77\./.test(m[1])) || /::|localhost/.test(l));
   summary.canary = { files: files.length, hits: hits.map(f => path.relative(OUT, f)), passFields: passFields.length,
     passShown: passFields.filter(v => v !== '<redacted>').length, serverLines: srv.length, realAddressLines: realAddr.length };
   if (!OWN) summary.why.push('canary:needs-own-server');
@@ -572,8 +574,10 @@ if (argv.includes('--canary')) {
 }
 // the server's view: every race's result was taken (the online host logs one line per race)
 const srvLog = fs.readFileSync(path.join(OUT, 'server.log'), 'utf8');
-summary.serverResults = srvLog.split('\n').filter(l => /^\[online\] ".*" \((circuit|sprint|drift|drag|streetx|url|type \d+), (un)?ranked\): /.test(l));
+// (a drift race's line also names its track and laps: lobby.rs)
+summary.serverResults = srvLog.split('\n').filter(l => /^\[online\] ".*" \((circuit|sprint|drift|drag|streetx|url|type \d+), (un)?ranked(, track \d+, \d+ laps?)?\): /.test(l));
 if (flow && OWN && summary.serverResults.length < RACES) summary.why.push(`server:results-${summary.serverResults.length}-of-${RACES}`);
+if (serverDied) summary.why.push(serverDied);
 summary.pass = summary.why.length === 0;
 fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
 console.log(JSON.stringify(summary, null, 2));

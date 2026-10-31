@@ -23,6 +23,8 @@ pub(crate) const PLAIN: u8 = 0;
 pub(crate) const COMPACT: u8 = 1;
 pub(crate) const DELTAS: u8 = 2;
 pub(crate) const FPRED: u8 = 3;
+/// with DELTAS or FPRED: every other datagram as what changed too (its hello said "ldelta":1: compact.rs `Refs::other`)
+pub(crate) const OTHERS: u8 = 0x10;
 
 /// ws's readyState
 const OPEN: u8 = 1;
@@ -133,7 +135,7 @@ pub(crate) struct Conn {
     /// stream segments wait at the switch for this connection (a hint for its writer: pump after each write)
     pub(crate) streaming: AtomicBool,
     /// how its datagrams go (its hello said "compact":1, "delta":1 and "fpred":1: compact.rs): `PLAIN`, `COMPACT`,
-    /// `DELTAS` or `FPRED`;
+    /// `DELTAS` or `FPRED`, with `OTHERS` when it said "ldelta":1 too;
     /// compact ones leave out the address it holds.  One word, so that its writer never sees compact without the
     /// deltas its page takes (the page keeps the last bodies of every compact bundle it was sent)
     pub(crate) compact: AtomicU8,
@@ -378,11 +380,13 @@ async fn write_loop<W: AsyncWrite + Unpin>(sw: Arc<LanSwitch>, conn: Arc<Conn>, 
                 std::mem::swap(&mut *q, &mut items);
                 conn.out.dgram.store(0, Relaxed);
             }
-            let mode = conn.compact.load(Relaxed);
+            let m = conn.compact.load(Relaxed);
+            let (mode, others) = (m & !OTHERS, m & OTHERS != 0);
             let c = (mode != PLAIN).then(|| Compact {
                 own: conn.vip.load(Relaxed),
                 refs: (mode >= DELTAS).then_some(&mut refs),
                 fp: (mode == FPRED).then_some(&mut fp),
+                others: others && mode >= DELTAS,
                 body: &mut body,
             });
             let e = encode(&sw.stats, &items, &mut buf, &mut close_sent, c);
@@ -450,6 +454,8 @@ pub(crate) struct Compact<'a> {
     own: u32,
     refs: Option<&'a mut compact::Refs>,
     fp: Option<&'a mut crate::fpred::Fpred>,
+    /// every other datagram as what changed too (`OTHERS`)
+    others: bool,
     body: &'a mut Vec<u8>,
 }
 
@@ -563,7 +569,7 @@ fn bundle(stats: &Stats, items: &[Out], buf: &mut Vec<u8>) {
 /// the datagrams as compact bundles (compact.rs) of BUNDLE_OUT at most, a datagram alone in one too (its 16-byte
 /// header costs more than a bundle's 4 and an entry's 5)
 fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_>) {
-    let Compact { own, mut refs, mut fp, body } = c;
+    let Compact { own, mut refs, mut fp, others, body } = c;
     body.clear();
     body.extend_from_slice(&[compact::KIND_COMPACT, 0, 0, 0]);
     let mut n = 0;
@@ -572,8 +578,8 @@ fn bundle_compact(stats: &Stats, items: &[Out], buf: &mut Vec<u8>, c: Compact<'_
         let Out::Dgram { data, src, dst, at: queued } = it else { continue };
         let data = compact::waited(data, if *queued != 0 { now.wrapping_sub(*queued) } else { 0 }, &mut moved);
         let at = body.len();
-        compact::entry_fp(body, data, *src, *dst, own, refs.as_deref_mut(), fp.as_deref_mut());
-        stats.entry_out(data, *dst, &body[at..]);
+        compact::entry_fp(body, data, *src, *dst, own, refs.as_deref_mut(), fp.as_deref_mut(), others);
+        stats.entry_out(data, *src, *dst, &body[at..]);
         // a bundle takes datagrams while it stays within BUNDLE_OUT (the one that would not fit begins the next; it
         // was written as the next one, in order, so the page reads the same entries the writer made)
         if n > 0 && body.len() > BUNDLE_OUT {

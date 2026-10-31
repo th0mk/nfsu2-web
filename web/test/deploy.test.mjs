@@ -214,9 +214,9 @@ function crawlPaths(add, req, upgrade) {
   add('manifest gz', req('GET', '/data-manifest', { headers: { 'Accept-Encoding': 'gzip' } }), { gz: true });
   add('manifest', req('GET', '/data-manifest')); add('manifest refresh', req('GET', '/data-manifest?refresh'));
   add('data range', req('GET', `/data/${EXE}`, { headers: { Range: 'bytes=0-4095' } }), { binary: true });
-  add('data blocks', req('GET', `/data-blocks/${EXE}?b=0&n=2`, { headers: { 'Accept-Encoding': 'gzip, br' } }), { binary: true, br: true, gz: true });
-  add('data blocks bad', req('GET', `/data-blocks/${EXE}?b=0&n=99`));
-  add('data blocks past', req('GET', `/data-blocks/${EXE}?b=999999&n=1`));
+  add('data blocks', req('GET', `/data-blocks/v2/${EXE}?b=0&n=2`, { headers: { 'Accept-Encoding': 'gzip, br' } }), { binary: true, br: true, gz: true });
+  add('data blocks bad', req('GET', `/data-blocks/v2/${EXE}?b=0&n=99`));
+  add('data blocks past', req('GET', `/data-blocks/v2/${EXE}?b=999999&n=1`));
   add('data 416', req('GET', `/data/${EXE}`, { headers: { Range: 'bytes=999999999999-' } }));
   add('data missing', req('GET', '/data/no/such/file.bin')); add('data dir', req('GET', '/data/')); add('data dir2', req('GET', '/data/FRONTEND'));
   // gone: what the page used to be told about the server, and the built-in certificate authority
@@ -602,7 +602,7 @@ inTurn('requests queued on one connection (pipelined) and never read: cut, no me
   } finally { await s.stop(); }
 });
 
-inTurn('TLS handshakes that never finish: closed after the handshake timeout, one address cannot fill the port', { skip: SKIP, timeout: 180_000 }, async () => {
+inTurn('TLS handshakes that never finish: closed after the handshake timeout, one address cannot fill the port', { skip: SKIP, timeout: 180_000 }, async (tc) => {
   // the phase-2 deploy review's finding 2: the error handler wrote plain HTTP into TLS sockets whose handshake
   // timed out and never closed them; 1024 such sockets locked the HTTPS port until a restart
   const s = await startServer(['--port', String(P1), '--http-port', '0', '--tls-cert', CERTS.cert, '--tls-key', CERTS.key]);
@@ -640,7 +640,8 @@ inTurn('TLS handshakes that never finish: closed after the handshake timeout, on
     for (const so of socks.splice(0)) so.destroy();
     // 2. from this machine's LAN address (not a trusted peer): at most 64 at once; the others are closed at
     //    once, and other addresses get in meanwhile
-    if (!LAN_IP) { console.log('no LAN address: the per-address check is skipped'); return; }
+    // (a part left out shows as a skipped test, not a passed one)
+    if (!LAN_IP) { tc.skip('no LAN address: the per-address check did not run'); return; }
     let cut = 0;
     for (let i = 0; i < 100; i++) {
       try {
@@ -671,9 +672,9 @@ inTurn('no certificate: this machine only (HTTP on 127.0.0.1), no HTTPS port, an
   } finally { await s.stop(); }
 });
 
-inTurn('IPv6: a certificate listens on both (::), --bind as given', { skip: SKIP, timeout: 60_000 }, async () => {
+inTurn('IPv6: a certificate listens on both (::), --bind as given', { skip: SKIP, timeout: 60_000 }, async (tc) => {
   const has6 = Object.values(os.networkInterfaces()).flat().some(a => a && a.family === 'IPv6' && a.internal);
-  if (!has6) { console.log('no IPv6 loopback: skipped'); return; }
+  if (!has6) { tc.skip('no IPv6 loopback'); return; }
   const st = async (host, port = P1) => {
     try { return (await rawRequest({ port, useTls: true, host, servername: 'nfsu2.test', data: req('GET', '/players'), timeout: 5000 })).status; }
     catch (e) { return e.code; }
@@ -786,7 +787,7 @@ inTurn('--dev gating and start-up refusals', { skip: SKIP, timeout: 60_000 }, as
   } finally { await d.stop(); }
 });
 
-inTurn('trusted proxies: client address headers believed only from a trusted peer', { skip: SKIP, timeout: 90_000 }, async () => {
+inTurn('trusted proxies: client address headers believed only from a trusted peer', { skip: SKIP, timeout: 90_000 }, async (tc) => {
   const logged = (s, marker) => { const l = s.out().split('\n').find(x => x.includes(marker)); return l ? l.split(' ')[1] : null; };
   let n = 0;
   const probe = async (s, target, headers) => {
@@ -808,7 +809,7 @@ inTurn('trusted proxies: client address headers believed only from a trusted pee
     assert.equal(await probe(s, local, { 'X-Forwarded-For': '203.0.113.9, 127.0.0.1' }), '203.0.113.9', 'trusted hops skipped');
     assert.equal(await probe(s, local, { 'X-Forwarded-For': 'garbage' }), '127.0.0.1');
     assert.equal(await probe(s, local, { 'CF-Connecting-IP': '203.0.113.50' }), '127.0.0.1', 'CF-Connecting-IP only when asked for');
-    if (!LAN_IP) { console.log('no LAN address: the untrusted-peer checks are skipped'); return; }
+    if (!LAN_IP) { tc.skip('no LAN address: the untrusted-peer checks did not run'); return; }
     // from this machine's LAN address: not a trusted peer, so its headers say nothing
     const lan = { port: P1, useTls: true, host: LAN_IP, ca };
     assert.equal(await probe(s, lan, { 'X-Forwarded-For': '203.0.113.9', 'CF-Connecting-IP': '203.0.113.9', 'X-Real-IP': '203.0.113.9' }), LAN_IP);
@@ -884,7 +885,7 @@ beside('Cloudflare simulation: client address, cache headers, ranges, brotli, th
     assert.equal(rg.status, 206); assert.equal(rg.headers['content-range'], `bytes 100-199/${file.length}`);
     assert.ok(rg.body.equals(file.subarray(100, 200)));
     // a run of compressed blocks through the proxy, as the edge asks for it (gzip, br): the exact bytes
-    const run = await rawRequest({ ...edge, data: req('GET', `/data-blocks/${EXE}?b=1&n=2`, { host: 'nfsu2.test', headers: { 'Accept-Encoding': 'gzip, br' } }) });
+    const run = await rawRequest({ ...edge, data: req('GET', `/data-blocks/v2/${EXE}?b=1&n=2`, { host: 'nfsu2.test', headers: { 'Accept-Encoding': 'gzip, br' } }) });
     assert.equal(run.status, 200); assert.equal(run.headers['content-encoding'], 'br');
     assert.match(run.headers['cache-control'], /private, no-store, no-transform/);
     assert.ok(zlib.brotliDecompressSync(run.body).equals(file.subarray(1 << 20, 3 << 20)));

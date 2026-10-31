@@ -270,6 +270,9 @@ export class QuickChat {
     }
   }
 
+  /** quick chat is on in this game (its setting): the touch controls' chat button shows (touch.ts) */
+  get enabled() { return this.on; }
+
   /** for the page's test hooks */
   state() { return { on: this.on, open: this.open, mode: this.mode, lines: [...this.lines.keys()], sent: this.sent.length }; }
 }

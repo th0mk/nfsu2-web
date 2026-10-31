@@ -148,7 +148,7 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Limits {
-            sessions: 3500.0,
+            sessions: 4000.0,
             per_vip: 3.0,
             per_group: 8.0,
             per_site: 32.0,
@@ -166,7 +166,7 @@ impl Default for Limits {
             act_rate: 1.0,
             announce_ms: 1000.0,
             personas: 4.0,
-            games: 1050.0,
+            games: 1200.0,
             open_per_vip: 2.0,
             open_per_group: 4.0,
             started_per_vip: 2.0,
@@ -221,7 +221,10 @@ const FAR_AHEAD: f64 = 0.4;
 /// direction and laps), once the track had QUICK_WINS clean wins (two finishers or more, no line), is a `[cheat]` line
 /// (`quick_win`): a car made faster than any tuning makes one, a speed hack, wins far quicker than the best honest
 /// racers do (the free-roam lobbies' races of 2026-10-30 on nfsu2.xyz: one player's sprint in 0.58 of it; of 4,727
-/// other wins the quickest 0.78).  The tracks kept (`Lobby::wins`), and the quickest winners each.
+/// other wins the quickest 0.78).  Not when another finisher of the race came close (the winner over THIRD_SHARE of
+/// its time): that time can be driven, and the track's best winners were slower cars (nfsu2.xyz, 2026-10-31: four
+/// racers within 4 s of each other, all under 70 % of the third quickest of 10 clean wins).  The tracks kept
+/// (`Lobby::wins`), and the quickest winners each.
 const THIRD_SHARE: f64 = 0.7;
 const QUICK_WINS: u32 = 10;
 const TRACKS_KEPT: usize = 4096;
@@ -230,6 +233,11 @@ const TOP_KEPT: usize = 4;
 const RACE_MPS: f64 = 350.0 / 3.6;
 /// a finisher who drove less than this share of what another racer drove (`race_cheats`)
 const DROVE_SHARE: f64 = 0.5;
+/// a racer still on the way when the race ended: its way counts against a finisher's when its time is at most this
+/// much longer (s; the race ends 30 s after the first finished).  A game that went on far longer was cut off from the
+/// others' race: nfsu2.xyz, 2026-10-31, one went on alone for 12 minutes, drove 19.6 km and made the race's 2:54
+/// winner one who drove "under half"
+const ENDED_S: f64 = 40.0;
 /// a top speed no car of the game makes, however tuned (m/s: 420 km/h), an edited save's (`race_cheats`): of the
 /// 38,967 personas with a top speed record on nfsu2.xyz on 2026-10-30, half had under 218 km/h, the fastest tuned
 /// cars 377, 12 over 380 and 5 over 420 (one the racer of a circuit won at 383 km/h on average); a free-roam lobby
@@ -322,13 +330,14 @@ pub struct Player {
     pub own: Option<Own>,
 }
 
-/// A racer's own figures (`race_cheats`): finished, its place, time (s), average and top speed (m/s), and whether a
-/// `[cheat]` line told of it
+/// A racer's own figures (`race_cheats`): finished, its place, time (s), average and top speed (m/s), a drift race's
+/// points, and whether a `[cheat]` line told of it
 #[derive(Clone, Copy, Debug)]
 pub struct Own {
     pub finished: bool,
     pub place: u8,
     pub time: f64,
+    pub score: i32,
     pub avg: f64,
     pub top: f64,
     pub told: bool,
@@ -741,13 +750,14 @@ fn fit(fields: Fields, max: usize, drop: &[&str]) -> Fields {
 /// and of a racer who left the race, a car put far away (nfsu2.xyz, 2026-10-29: one game had another racer drive
 /// 462 km in a 4-minute sprint; 18 lines of a morning came of such figures, each about a racer other than the
 /// reporter, none of them a cheat).  One line a racer a race, for a finisher whose own game says it did what no racer
-/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), RACE_MPS or more on
-/// average, or a way (its average times its time) under DROVE_SHARE of another racer's own, finished or not (a cheat
-/// that ends its race at once: a test's racewin won a sprint in 4.77 s having driven 65 m, the other racer 1021 m by
-/// the race's end 30 s later; an honest finisher drives the whole way, and nobody twice as much before the race
-/// ends).  The way is looked at again at every report: the other racer's may come after the finisher's.  A drift race
-/// is won by points and is left out.  The line names the race's track and laps and the racer's top speed: the other
-/// finishers' times are on the race's `[online]` lines (often none yet: one who won in 30 s had the others give up).
+/// does: a time under its race type's shortest (the title's `min_race_s`: the report is not taken either), RACE_MPS or
+/// more on average, or a way (its average times its time) under DROVE_SHARE of another racer's own, finished or still
+/// on the way when the race ended (ENDED_S) (a cheat that ends its race at once: a test's racewin won a sprint in
+/// 4.77 s having driven 65 m, the other racer 1021 m by the race's end 30 s later; an honest finisher drives the whole
+/// way, and nobody twice as much before the race ends).  The way is looked at again at every report: the other
+/// racer's may come after the finisher's.  A drift race (the title's report type "drift") is won by points: only its
+/// top speed is looked at.  The line names the race's track and laps and the racer's top speed: the other finishers'
+/// times are on the race's `[online]` lines (often none yet: one who won in 30 s had the others give up).
 fn race_cheats(
     game: &str,
     r: &RaceReport,
@@ -759,16 +769,15 @@ fn race_cheats(
 ) -> Vec<String> {
     let kind = r.kind;
     let type_name = report_types.get(kind as usize).copied();
-    if type_name == Some("drift") {
-        return Vec::new();
-    }
+    let drift = type_name == Some("drift");
     if let Some(p) = mine
         && players[me].own.is_none()
     {
         let speed = |v: f64| if v < 1000.0 { v.max(0.0) } else { 0.0 };
         let time = if p.time < 100_000.0 { p.time.max(0.0) } else { 0.0 };
         let finished = !p.dropped && p.place >= 1 && time > 0.0;
-        players[me].own = Some(Own { finished, place: p.place, time, avg: speed(p.avg), top: speed(p.top), told: false });
+        let score = p.score.max(0);
+        players[me].own = Some(Own { finished, place: p.place, time, score, avg: speed(p.avg), top: speed(p.top), told: false });
     }
     let ty = type_name.unwrap_or("race");
     let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
@@ -781,21 +790,23 @@ fn race_cheats(
             continue;
         }
         if let Some(&min) = min_race_s.get(kind as usize)
+            && !drift
             && o.finished
             && o.time < min
         {
             why.push(format!("under the {} s a {ty} race takes at least", js::number_to_string(min)));
         }
-        if o.finished && o.avg >= RACE_MPS {
+        if !drift && o.finished && o.avg >= RACE_MPS {
             why.push(format!("{:.0} km/h on average, which no car does", o.avg * 3.6));
         }
         let most = players
             .iter()
             .enumerate()
-            .filter_map(|(j, x)| Some((x.own.filter(|_| j != i)?, &x.name)))
+            .filter_map(|(j, x)| Some((x.own.filter(|y| j != i && (y.finished || y.time <= o.time + ENDED_S))?, &x.name)))
             .map(|(x, name)| (x.avg * x.time, name))
             .max_by(|a, b| a.0.total_cmp(&b.0));
         let each = if let Some((d, other)) = most
+            && !drift
             && o.finished
             && drove < DROVE_SHARE * d
         {
@@ -817,7 +828,11 @@ fn race_cheats(
             (true, 1) => "won".to_string(),
             (true, n) => format!("finished {n} in"),
         };
-        let time = if o.finished { format!(" in {}", fmt_time(o.time)) } else { String::new() };
+        let time = match (o.finished, drift) {
+            (true, false) => format!(" in {}", fmt_time(o.time)),
+            (true, true) => format!(" with {} points", o.score),
+            (false, _) => String::new(),
+        };
         lines.push(format!(
             "[cheat] {} \"{}\": {place} the online race \"{game}\" ({ty}, track {}{laps}){time}, {}: {each}by its own game; \
              its top speed {:.0} km/h",
@@ -858,9 +873,9 @@ fn far_ahead(game: &str, kind: u8, report_types: &[&str], order: &[RacePlayer], 
     ))
 }
 
-/// The `[cheat]` line of a race whose result stands, when its winner took under THIRD_SHARE of the third quickest
-/// other winner's time of its track; else None, and a clean win (two finishers or more, its winner told of by no line,
-/// `told`) counts in the track's
+/// The `[cheat]` line of a race whose result stands, when its winner took under THIRD_SHARE of the third quickest other
+/// winner's time of its track, and no other finisher came close (THIRD_SHARE); else None, and a clean win (two
+/// finishers or more, its winner told of by no line, `told`) counts in the track's
 fn quick_win(
     wins: &mut HashMap<(u8, u16, u8, u8), Wins>,
     game: &str,
@@ -877,7 +892,8 @@ fn quick_win(
     let w = order.iter().find(|p| p.place == 1 && p.time > 0.0)?;
     let key = (r.kind, r.track, r.dir, r.laps);
     let who = lower(&w.name);
-    if let Some(t) = wins.get(&key).and_then(|x| Some((x.third(&who)?, x.wins))).filter(|&(t, _)| w.time < THIRD_SHARE * t) {
+    let close = order.iter().any(|p| p.place > 1 && p.time > 0.0 && w.time >= THIRD_SHARE * p.time);
+    if !close && let Some(t) = wins.get(&key).and_then(|x| Some((x.third(&who)?, x.wins))).filter(|&(t, _)| w.time < THIRD_SHARE * t) {
         let vip = players.iter().find(|p| lower(&p.name) == who).map_or(0, |p| p.vip);
         let ty = type_name.unwrap_or("race");
         let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
@@ -1319,6 +1335,8 @@ impl Core {
         x.lkey = Some(rand::hex(15));
         let addr = x.addr.clone();
         self.lobby.by_persona.insert(lower(&mine), s);
+        // (its Messenger lists in memory while it plays: the chat hides the lines of the players it blocks)
+        self.buddy_fetch(&lower(&mine));
         let taken = match (mine != asked, claimed) {
             (false, _) => String::new(),
             (true, false) => format!(" (\"{asked}\" is taken)"),
@@ -1758,6 +1776,26 @@ impl Core {
             return self.end_if_back(g);
         }
         let r = r.expect("checked");
+        let drift = self.title.report_types.get(r.kind as usize).copied() == Some("drift");
+        // a drift race: what the reporter's own game says it did, points and its biggest single drift with them (the
+        // result line has only the points, and what each report shows of the others is the others' own games' word)
+        if drift && let Some(p) = r.players.iter().find(|p| lower(&names[p.index as usize]) == persona) {
+            let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
+            let how = if p.dropped || p.place == 0 { "did not finish".to_string() } else { format!("{} of {}", p.place, r.players.len()) };
+            let name = self.lobby.game(g).expect("held").players[me].name.clone();
+            self.llog(
+                &format!(
+                    "[online] \"{gname}\" (drift, track {}{laps}): {name}'s own game: {how}, {} points, its biggest drift {}, top \
+                     speed {:.0} km/h, {}",
+                    r.track,
+                    p.score,
+                    p.drift_best,
+                    p.top * 3.6,
+                    fmt_time(p.time)
+                ),
+                s,
+            );
+        }
         // the reporter's own entry in its report (check_report: each index names one of the game's players)
         let own = r.players.iter().find(|p| !p.dropped && lower(&names[p.index as usize]) == persona);
         let finished = own.is_some();
@@ -1780,11 +1818,17 @@ impl Core {
             .collect();
         order.sort_by_key(|p| if p.place == 0 { 99 } else { p.place });
         let key = order.iter().map(|p| format!("{}:{}", p.name, p.place)).collect::<Vec<_>>().join(",");
+        // (a drift race's finishers by their points, as this report has them)
+        let points = |name: &str| r.players.iter().find(|p| lower(&names[p.index as usize]) == lower(name)).map_or(0, |p| p.score);
         let line = order
             .iter()
             .map(|p| {
                 let place = if p.place == 0 { "DNF".to_string() } else { p.place.to_string() };
-                let time = if p.place != 0 { format!(" {}", fmt_time(p.time)) } else { String::new() };
+                let time = match (p.place, drift) {
+                    (0, _) => String::new(),
+                    (_, true) => format!(" {} points", points(&p.name)),
+                    (_, false) => format!(" {}", fmt_time(p.time)),
+                };
                 format!("{place} {}{time}", p.name)
             })
             .collect::<Vec<_>>()
@@ -1834,7 +1878,9 @@ impl Core {
                 ""
             };
             let rt = self.title.report_types[r.kind as usize];
-            self.llog(&format!("[online] \"{gname}\" ({rt}, {}): {line}{tail}", if ranked { "ranked" } else { "unranked" }), s);
+            // (a drift race's line names its track and laps: its points go by them)
+            let at = if drift { format!(", track {}, {} lap{}", r.track, r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
+            self.llog(&format!("[online] \"{gname}\" ({rt}, {}{at}): {line}{tail}", if ranked { "ranked" } else { "unranked" }), s);
         } else {
             if !gm.reports.is_empty() && !gm.reports.iter().any(|(_, k)| *k == key) {
                 self.llog(&format!("[online] \"{gname}\": {spers}'s report differs ({line})"), s);

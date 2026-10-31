@@ -40,21 +40,17 @@ async fn the_page_waits_in_line_when_the_switch_is_full_and_gets_in_when_a_place
 }
 
 // the page holds a place only while a mailbox wants it (free roam while it runs, LAN play from the game's
-// WSAStartup to its last WSACleanup), and tells the switch whether LAN play is open; a module of before (a version
-// 2 mailbox, no want word) always wants it, as before
-// the page: the switch let go when no mailbox wants it, taken again when one does; LAN play open or not; a module of
-// before
+// WSAStartup to its last WSACleanup), and tells the switch whether LAN play is open
+// the page: the switch let go when no mailbox wants it, taken again when one does; LAN play open or not
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_page_lets_the_switch_go_when_no_mailbox_wants_it() {
     let _s = serial().await;
     if no_node() {
         return;
     }
-    let (sw, sw2, sw3) = (start(opts()).await, start(opts()).await, start(opts()).await);
-    page("mailboxes", &[sw.port, sw2.port, sw3.port]).await;
-    for s in [sw, sw2, sw3] {
-        s.close().await;
-    }
+    let sw = start(opts()).await;
+    page("mailboxes", &[sw.port]).await;
+    sw.close().await;
 }
 
 // an away player (the app's check, web/src/app/away.ts) gives the place back although the game still wants it, and
@@ -94,6 +90,18 @@ async fn the_page_takes_friends_car_states_by_their_fields() {
     }
     let sw = start(opts()).await;
     page("fpred", &[sw.port]).await;
+    sw.close().await;
+}
+
+// its hello took every other datagram as what changed too: a race's datagrams reach the game byte for byte
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_page_takes_races_datagrams_as_what_changed() {
+    let _s = serial().await;
+    if no_node() {
+        return;
+    }
+    let sw = start(opts()).await;
+    page("races", &[sw.port]).await;
     sw.close().await;
 }
 

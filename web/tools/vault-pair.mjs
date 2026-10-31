@@ -301,7 +301,7 @@ try {
   await confirmOk(a);
   await until('A unlinked', async () => !(await link(a)));
   await open(b);
-  await until('B told', async () => /no saves for this keyphrase/.test(await status(b)));
+  await until('B told', async () => /no saves for this passphrase/.test(await status(b)));
   check(true, `B: "${await status(b)}"`);
   check((await profiles(b)).includes('STUCK') && !!(await fileHash(b, 'nfsu2000.tga')), 'B keeps its saves and screenshot');
 

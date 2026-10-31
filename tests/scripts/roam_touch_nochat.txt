@@ -1,0 +1,30 @@
+# Touch controls in free roam with a friend near: the Quick chat button shows only with quick chat on.  Two new
+# careers (they start on one spot, within a horn's reach); Al has quick chat off (its button gone, the horn's
+# still there), Bo on (both buttons).
+#   node web/tools/roam-pair.mjs --page app --touch --size 915x412
+#        --a Al:roam_touch_nochat.txt:NFSU2_ROAM_SAY=0 --b Bo:roam_touch_nochat.txt
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++1200 log TAP canvas
++90   log SHOT touch_near
++1200 log TAP canvas
++90   log SHOT touch_near2
++1800 quit                            # (the other page's shots come later: it started later)

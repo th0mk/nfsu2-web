@@ -176,12 +176,17 @@ impl LanSwitch {
             let Some(Value::Object(m)) = parse_json(&data) else { return };
             match m.get("t").and_then(Value::as_str) {
                 Some("hello") => self.hello(peer, &m),
-                Some("lan") => self.set_lan(peer, nfsu2_util::json::is_num(m.get("on"), 1.0)),
+                Some("lan") => {
+                    // its sockets' ports first: a broadcast routed after the list changed sees them
+                    peer.udp.store(crate::udp_of(m.get("udp")), Relaxed);
+                    self.set_lan(peer, nfsu2_util::json::is_num(m.get("on"), 1.0))
+                }
                 Some("ping") => {
                     if let Some(id) = m.get("id").and_then(nfsu2_util::json::safe_integer) {
                         self.send(peer, Out::Text(Bytes::from(format!(r#"{{"t":"pong","id":{id}}}"#))));
                     }
                 }
+                Some("friend" | "room") => self.page_text(peer, m.clone()),
                 _ => {}
             }
             return;

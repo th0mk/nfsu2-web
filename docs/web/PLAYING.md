@@ -75,13 +75,20 @@ While you drive:
 - **Steering**, switched with the button in the top right corner and kept in this browser: **buttons** (◀ ▶, as the
   arrow keys; the default), a **thumb stick** that appears where the left thumb lands, or **tilt**, the phone held like
   a wheel. With tilt, Brake and the handbrake move under the left thumb, and the button beside the switch sets
-  straight ahead.
+  straight ahead. That button held opens the touch settings (the Controls sheet's Touch tab) over the game.
+- **Position**, in the Touch tab and kept in this browser: **Steering left** (the default) or **Steering right**, where
+  the pedals go under the left thumb and the steering, the gear buttons and Start under the right (◀ ▶ stay in their
+  order); either one **moved in**, 48 px further from the screen's sides (upright, as far as there is room), for
+  phones whose edges a thumb reaches badly. **Nitro on the steering side** (a switch there) puts Nitro under the thumb
+  that is not on Gas: above the steering, with Start above Gas instead; with tilt, Nitro and the handbrake trade
+  places.
 - **Gears:** with a manual gearbox (the race's Transmission choice, and always in a drag race), gear down and gear up
   above the steering.
-- **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages and
-  **Drift** (drift mode, lit while it is on), and the horn and quick chat while another player's car is within a
-  horn's reach. In free roam **Start** shows above the steering where it does something: at an event's or a shop's
-  marker, at an outrun offer, or at a race spot or lobby of other players.
+- **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,
+  **Drift** (drift mode, the game's drift icon, lit while it is on), the career status (the game's Career Status, as
+  D-pad Down on a controller; the keyboard has no key for it), and the horn and quick chat (not with quick chat off)
+  while another player's car is within a horn's reach. In free roam **Start** shows above the steering where it does
+  something: at an event's or a shop's marker, at an outrun offer, or at a race spot or lobby of other players.
 - **HUD:** a phone starts with the game's 4:3 HUD layout (Settings, Display, HUD layout), which keeps the minimap and
   the speedometer between the thumbs instead of under the steering and Brake.
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and
@@ -283,11 +290,20 @@ keys as the Mac app. Each change is saved at once and applies the next time you 
 - **Cloud saves:** Enable cloud saving (in Saves, beside Cloud saves) keeps your saves on the server too, under a
   passphrase only you have (it was called a keyphrase before): `nfsu2-xyz-` and 8 words. In another browser (another
   PC, a phone), enter it in the box and press Load: any case, with or without `nfsu2-xyz`. There is no account and no
-  email.
+  email. Until you have them, Play asks to turn them on once you have a profile (again a week after each Not now,
+  three times at most): it shows your profiles, their money and the hours played in this browser, and Download backup
+  there keeps a file of them instead.
   - The page locks the saves with the passphrase before they leave the browser: the server keeps bytes it cannot
     read, under a code made from the passphrase. Keep the passphrase safe, in a password manager say: it is the only
     way back to these saves, and nobody can look it up for you. The box shows its first 3 characters; the eye shows
     all of it and copies it, the arrow downloads it as a file.
+  - **In your browser's passwords:** Chrome, Edge and the other Chromium browsers offer to save the passphrase with
+    your passwords (user name "Cloud saves") when it is made or loaded: choose Save. Unlike the saves, the browser's
+    passwords stay when this site's data is cleared, and your other devices may get them too. A browser with no
+    profile and no cloud saves then asks the browser for it as the page opens (Chrome shows its own "Cloud saves"
+    chooser, once; nothing if it has none) and offers those saves. Every browser's password manager also fills the
+    passphrase into the box, ready for Load. Firefox and Safari offer to save a passphrase you typed or pasted there
+    for Load; one the page made for you, keep with Copy or the download.
   - From then on that browser syncs by itself: its saves go to the server after the game saves and when it closes,
     and a newer save from your other browser comes in when the page opens and when you press Play. If both browsers
     changed them since they last synced, the page asks which to keep: it shows both, their profiles, money and when
@@ -366,7 +382,7 @@ or use a Room to keep to a group.
 
 Good to know:
 
-- **How many:** up to 6500 players on a server set up as VPS.md describes (2000 with the older Node server), 128 on
+- **How many:** up to 8000 players on a server set up as VPS.md describes (2000 with the older Node server), 128 on
   one started by hand (its owner can change that). Only free roam and the LAN and Online screens take a place;
   single-player takes none. When it is full, you wait in line for a place, first come first served: the top of the
   screen shows your place and, once a few went in, about how long it takes. You play alone meanwhile and join the
@@ -376,7 +392,8 @@ Good to know:
   nearest to them (fewer while it is busy, 8 at the least), and your game shows up to 32 of their cars at once: phones
   start at 16 and tablets at 24 (Settings, Online, more: Players' cars shown: 16, 20, 24, 28 or 32). Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
-  as the game's own opponents do. The world map also marks the other players in free roam, the nearest 2048 past those
+  in the game's orange. The game's own outrun challengers are grey on both (the legend's Opponent Car too), so you can
+  tell them from players. The world map also marks the other players in free roam, the nearest 2048 past those
   32, and while it is open every marker moves smoothly with its player. Its legend (the list on the
   map's left) has two rows of ours after the game's: **Players** and **Players' races**. Pick one with Up or Down and
   Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers (a crew-mate's
@@ -535,6 +552,18 @@ Good to know:
   reads as a slur is no crew. Everyone else is still there, unlike a Room. Not private: anyone who types the same name
   joins, but other players never learn your crews: the server tells each game which players near it share one. A
   player on an older version is in no crew.
+- **Friends:** touch front bumpers with another player (nose to nose, both cars' fronts) for 3 seconds, solid or in
+  ghost mode, and a line under the middle of the picture offers **Add Bo as a friend**: press **F**, click or tap the
+  line, or use the page menu (F9, ☰, or Home on a controller). The other player's line then says **Al wants to be
+  friends: accept**; once both said yes you are friends. Touching the side or the back of a car offers nothing, nor
+  does a race, an outrun or a race lobby. Both of you need a claimed name ("Your name": a claim needs cloud saves);
+  without one the line says so. Your friends are listed under **Friends** in the Online section of the start page:
+  where each one plays now (free roam and its room, the game's Online lobby, offline), with **Join** to drive in their
+  room, and **Remove**; a request you could not answer in the game waits there (30 days), with Accept and Decline.
+  In free roam the server pairs friends first, as crew-mates, so you see each other however busy it is. A friend is a
+  friend in the game's Online mode too (EA Messenger), up to 50. The server takes a request only between two players
+  whose cars are within 30 m of each other, so nobody can ask you from across the map. Your friends see the name of
+  the room you play in, nobody else (it is told to the server only once you have a friend, and kept in memory only).
 - **Rooms:** set the same "Room" to see only some of the players' cars. A room is a filter between players, not
   privacy: every browser on the server still sees your name ("Your name", or the profile name), whether you are in
   the menus or driving, and the room, and someone with their own tools could join it. Play on a server only with

@@ -3,13 +3,22 @@
 //   node --test web/test/away.test.mjs
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+import { sourceKeys } from '../tools/i18n-keys.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const js = (await esbuild.build({ entryPoints: [path.join(ROOT, 'web/src/app/away.ts')], bundle: true, format: 'esm', write: false })).outputFiles[0].text;
 const { AwayCheck } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+// the two texts as away.ts writes them (the English is the key the page translates), so new wording needs no change
+// here: the warning counts down in {n}, the other is for when the place went back
+const TEXTS = sourceKeys(fs.readFileSync(path.join(ROOT, 'web/src/app/away.ts'), 'utf8')).keys.map(k => k.key);
+const WARN = TEXTS.find(k => k.includes('{n}')), AWAY = TEXTS.find(k => !k.includes('{n}'));
+assert.ok(TEXTS.length === 2 && WARN && AWAY, `away.ts's texts: ${JSON.stringify(TEXTS)}`);
+const warn = n => WARN.replace('{n}', String(n));
+const isWarn = s => !!s && s.startsWith(WARN.slice(0, WARN.indexOf('{n}')));
 
 const L = { inputMs: 20 * 60_000, hiddenMs: 10 * 60_000, warnMs: 60_000 };
 const MIN = 60_000;
@@ -40,13 +49,13 @@ test('no input for 20 min: a warning that counts down 60 s, then the place goes 
     x.tick(20 * MIN - 1000);
     assert.deepEqual(x.g.shown, [], 'nothing before 20 min');
     x.tick(1000);
-    assert.match(x.g.shown.at(-1), /^Still there\? In 60 s you stop playing with others/);
+    assert.equal(x.g.shown.at(-1), warn(60));
     x.tick(30_000);
-    assert.match(x.g.shown.at(-1), /In 30 s/);
+    assert.equal(x.g.shown.at(-1), warn(30));
     assert.deepEqual(x.g.calls, []);
     x.tick(30_000);
     assert.deepEqual(x.g.calls, [true], 'the place went back');
-    assert.match(x.g.shown.at(-1), /^You were away/);
+    assert.equal(x.g.shown.at(-1), AWAY);
     x.tick(10 * MIN);
     assert.deepEqual(x.g.calls, [true], 'once');
     x.use(); x.tick(1000);
@@ -60,13 +69,13 @@ test('input during the warning: it goes and the place stays', () => {
   const x = setup();
   try {
     x.tick(20 * MIN + 10_000);
-    assert.match(x.g.shown.at(-1), /^Still there\?/);
+    assert.ok(isWarn(x.g.shown.at(-1)), 'the warning');
     x.use(); x.tick(1000);
     assert.equal(x.g.shown.at(-1), null);
     x.tick(5 * MIN);
     assert.deepEqual(x.g.calls, []);
     x.tick(15 * MIN);                        // 20 min after that input: the warning again
-    assert.match(x.g.shown.at(-1), /^Still there\?/);
+    assert.ok(isWarn(x.g.shown.at(-1)), 'the warning');
   } finally { done(x); }
 });
 
@@ -79,8 +88,8 @@ test('a tab in the background for 10 min: the place goes back at once, no warnin
     assert.deepEqual(x.g.calls, []);
     x.tick(1000);
     assert.deepEqual(x.g.calls, [true]);
-    assert.ok(!x.g.shown.some(s => s && /Still there/.test(s)), 'no warning');
-    assert.match(x.g.shown.at(-1), /^You were away/, 'the message for when they come back');
+    assert.ok(!x.g.shown.some(isWarn), 'no warning');
+    assert.equal(x.g.shown.at(-1), AWAY, 'the message for when they come back');
     x.hide(false); x.tick(5000);
     assert.deepEqual(x.g.calls, [true], 'seeing the tab again is not input');
     x.use(); x.tick(1000);
@@ -112,7 +121,7 @@ test('the place given up some other way during the warning (the game left free r
   const x = setup();
   try {
     x.tick(20 * MIN + 5000);
-    assert.match(x.g.shown.at(-1), /^Still there\?/);
+    assert.ok(isWarn(x.g.shown.at(-1)), 'the warning');
     x.g.holding = false; x.tick(1000);
     assert.equal(x.g.shown.at(-1), null);
     x.tick(5 * MIN);

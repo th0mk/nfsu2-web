@@ -7,5 +7,27 @@
 #   ./nfsu2 ban <player> <for> [message]   off until the ban ends: <for> is 30m, 12h, 3d, 2w or perm
 #   ./nfsu2 unban <name | #ban>            lift a ban
 #   ./nfsu2 bans                           the bans
+#   ./nfsu2 logs [days] > logs.gz          the server's log of the last days (1: today so far), gzipped ("What the log
+#                                          keeps"); from your computer: ssh root@<vps> /srv/nfsu2/nfsu2 logs 2 > logs.gz
 # <player> is an address (10.77.x.y) or a name, as `who` shows them; the message needs no quotes.
-cd "$(dirname "$0")" && exec docker compose exec -T server /app/nfsu2-server ctl "$@"
+cd "$(dirname "$0")" || exit 1
+if [ "$1" = logs ]; then
+  days=${2:-1}
+  case $days in
+    '' | *[!0-9]*) echo "logs [days]: a number of days, 1 for today so far" >&2; exit 2 ;;
+  esac
+  if [ -t 1 ]; then
+    echo "logs [days] > logs.gz: it is gzipped, send it to a file" >&2
+    exit 2
+  fi
+  # each day's file, the last $days of them: the days that ended as they are (gzipped), today's gzipped now
+  exec docker compose exec -T server sh -c '
+    cd /state/logs || exit 1
+    for f in $(ls | grep -E "^[0-9]{4}-[0-9]{2}-[0-9]{2}[.]log([.]gz)?$" | sort | tail -n "$1"); do
+      case $f in
+        *.gz) cat "$f" ;;
+        *) gzip -c "$f" ;;
+      esac
+    done' sh "$days"
+fi
+exec docker compose exec -T server /app/nfsu2-server ctl "$@"

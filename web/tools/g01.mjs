@@ -1,6 +1,7 @@
 // G-01, clean logs (PLAN G-01): the markers a scripted run's log must not have, in one place for the test tools.
-//   import { g01, readReviewed } from './g01.mjs';
+//   import { g01, g01Extra, readReviewed } from './g01.mjs';
 //   g01(log, game)  the reasons the log fails G-01, [] when it is clean
+//   g01Extra(log, game)  only the ones Most Wanted added (run-suite.mjs takes the others from judge.mjs)
 // The suite's markers, named as web/tools/run-suite.mjs has always named them: fault (FAULT IN GUEST, GUEST MEMORY
 // FAULT, HOST SEGV), timeout (TIME LIMIT REACHED), trap ([trap]), unresolved-icall (UNRESOLVED INDIRECT),
 // expect-failed ([expect] FAIL), net-blocked ([net] / [roam] BLOCKED).  And the ones Most Wanted added, which hold for
@@ -55,6 +56,14 @@ export function g01(log, game, reviewed = readReviewed(game)) {
   if (log.includes('UNRESOLVED INDIRECT')) why.push('unresolved-icall');
   if (has(/^\[expect\] FAIL/m)) why.push('expect-failed');
   if (has(/^\[(net|roam)\] BLOCKED/m)) why.push('net-blocked');
+  return [...why, ...g01Extra(log, game, reviewed)];
+}
+
+/** the reasons Most Wanted added (cxx-throw .. init-count), alone: run-suite.mjs takes the suite's markers from
+ *  judge.mjs, these from here */
+export function g01Extra(log, game, reviewed = readReviewed(game)) {
+  const why = [];
+  const has = re => re.test(log);
   // a C++ throw stop, and the type the next lines of its report name
   for (const m of log.matchAll(/GUEST RAISEEXCEPTION: code 0xe06d7363\b/gi)) {
     const next = log.slice(m.index).split('\n').slice(1, 16).join('\n');

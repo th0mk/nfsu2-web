@@ -226,7 +226,7 @@ export class ScreenshotsPart {
 
   private async remove() {
     const i = this.at(), s = this.shots[i];
-    if (!s || !await this.deps.confirm(t('Delete this screenshot?'), t('{file} goes from this browser. A backup you downloaded keeps its copy.', { file: s.path }), t('Delete'), true)) return;
+    if (!s || !await this.deps.confirm(t('Delete this screenshot?'), t('{file} is deleted from this browser; downloaded backups keep their copy.', { file: s.path }), t('Delete'), true)) return;
     try { await removePath(this.deps.saveDir, s.path); }
     catch (e) { this.$('#shot-meta').textContent = t('It was not deleted: {error}', { error: String(e) }); return; }
     this.shots.splice(i, 1);

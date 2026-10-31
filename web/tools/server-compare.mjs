@@ -108,7 +108,7 @@ function pingProbe(port) {
   ws.on('message', (d, bin) => {
     if (bin) return;
     const m = JSON.parse(String(d));
-    if (m.t === 'welcome') { ws.send(JSON.stringify({ t: 'hello', name: 'probe', deltas: 1 })); timer = setInterval(() => { sent.set(++id, performance.now()); ws.send(JSON.stringify({ t: 'ping', id })); }, 100); }
+    if (m.t === 'welcome') { ws.send(JSON.stringify({ t: 'hello', name: 'probe' })); timer = setInterval(() => { sent.set(++id, performance.now()); ws.send(JSON.stringify({ t: 'ping', id })); }, 100); }
     if (m.t === 'pong' && sent.has(m.id)) { rtt.push(performance.now() - sent.get(m.id)); sent.delete(m.id); }
   });
   ws.on('error', () => {});
@@ -197,7 +197,7 @@ async function httpLoad(port, first = 0) {
   const manifest = await (await fetch(`${base}/data-manifest`)).json();
   const files = manifest.files.filter(f => !f.d && f.s > 0);
   const runs = [];
-  for (const f of files) for (let b = 0; b * (1 << 20) < f.s; b += 4) runs.push(`/data-blocks/${f.p.split('/').map(encodeURIComponent).join('/')}?b=${b}&n=4&m=${f.m}&s=${f.s}`);
+  for (const f of files) for (let b = 0; b * (1 << 20) < f.s; b += 4) runs.push(`/data-blocks/v2/${f.p.split('/').map(encodeURIComponent).join('/')}?b=${b}&n=4&m=${f.m}&s=${f.s}`);
   const lat = []; let bytes = 0, requests = 0, errors = 0;
   const end = Date.now() + SECONDS * 1000;
   const client = async (c) => {

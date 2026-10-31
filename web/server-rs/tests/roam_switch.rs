@@ -52,6 +52,7 @@ async fn on_the_switch_frames_to_the_hub_reach_it_its_lists_come_back_a_departur
     // its next tick (one a second)
     let (got, vip, id) = a.until_ms(2500, |g| list_from_hub(g, a.vip)).await;
     assert_eq!(be32(&got, 8), a.vip, "Ann got a list from 10.77.0.253");
+    assert!(a.until(|g| Some(g.bundled.is_empty())).await, "a page that takes no bundles: the list alone");
     assert_eq!(be16(&got, 12), 47210);
     assert_eq!(be16(&got, 14), 47210);
     assert_eq!(vip, b.vip);
@@ -64,6 +65,12 @@ async fn on_the_switch_frames_to_the_hub_reach_it_its_lists_come_back_a_departur
     let list = a.until(|g| g.peers().filter(|l| l.len() == 3)).await;
     assert!(list.iter().all(|p| p["vip"] != ROAM_HUB_VIP), "{list:?}");
     assert!(list.iter().any(|p| p["vip"] == VHOST_VIP && p["server"] == true));
+    // back from the LAN screens: free roam alone
+    for x in [&a, &b] {
+        x.text(r#"{"t":"lan","on":0}"#);
+        x.text(r#"{"t":"ping","id":77}"#);
+        x.until(|g| g.ctl.iter().any(|m| m["t"] == "pong" && m["id"] == 77).then_some(())).await;
+    }
     let n = sw.lan.breakdown().await;
     assert_eq!((n.players, n.roam), (2, 2), "both counted in free roam (the console's [players] line): {n:?}");
     assert!(wait_for(2500, || hub.in_roam() == 2).await, "both driving in free roam (/players): {}", hub.in_roam());

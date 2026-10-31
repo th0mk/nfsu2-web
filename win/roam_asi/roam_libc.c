@@ -62,6 +62,12 @@ char *strstr(const char *h, const char *n){                    /* runtime/names.
     }
     return 0;
 }
+char *strchr(const char *s, int c){                             /* runtime/names.h's name filter */
+    for (;; s++){
+        if (*s == (char)c) return (char *)s;
+        if (!*s) return 0;
+    }
+}
 long strtol(const char *s, char **end, int base){
     const char *p = s;
     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f' || *p == '\v') p++;

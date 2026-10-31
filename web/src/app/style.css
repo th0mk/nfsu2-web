@@ -423,6 +423,10 @@ summary:hover { color: var(--text); }
 .keymask { position: absolute; inset: 0; overflow: hidden; white-space: pre; color: var(--lime); pointer-events: none; }
 .keybox.masked input { color: transparent; caret-color: var(--lime); }
 .keybox:not(.masked) .keymask { display: none; }
+/* filled in by the browser's passwords (pwkeep.ts): the page cannot read it before the player acts, so the field draws
+ * its own dots, in the box's colours rather than the browser's autofill tint */
+.keyfield input:is(:autofill, :-webkit-autofill) { -webkit-text-fill-color: var(--lime); color: var(--lime); box-shadow: inset 0 0 0 40px var(--field); filter: none; }
+.keybox:has(input:is(:autofill, :-webkit-autofill)) .keymask { display: none; }
 .icon-btn {
   display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0;
   border: 0; border-radius: 6px; background: none; color: var(--muted);
@@ -445,6 +449,7 @@ summary:hover { color: var(--text); }
 .vault-sides span { grid-row: 2; grid-column: 1 / -1; min-width: 0; }
 .vault-sides em { grid-row: 1; grid-column: 2; color: var(--lime); font-style: normal; font-weight: 700; }
 .dlg ul.vault-sides { margin: 0 0 16px; padding: 0; color: inherit; }
+.dlg .vault-sides li { row-gap: 4px; }        /* 68 px: on the dialog's 4 px grid */
 .dlg p.warn { color: var(--warn); }
 #vault-replaced { margin-top: 8px; }
 #vault-replaced .text-btn { padding: 0; height: 24px; }
@@ -504,14 +509,21 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .stage-menu:active { background: rgba(0, 0, 0, 0.72); color: var(--lime); }
 /* touch controls (touch.ts) while the player drives: dim and see-through like the menu's button, lime while
  * pressed.  The small round ones in a row after the menu's button (the mode button and tilt's straight-ahead top
- * right), the left thumb's bottom left, the right thumb's bottom right; free roam adds a row's end and Start. */
+ * right), the steering's group bottom left, the pedals' bottom right; free roam adds a row's end and Start.
+ * The two groups are placed from the inline start (the steering's side) and end (the pedals'): steering on the right
+ * (touch.ts position, [data-right]) turns the direction round, so they swap sides as mirror images, and their
+ * margins (--start, --end) swap with them; moved in adds --in to both (--steer, --pedal; touch.ts placeIn).  The
+ * small buttons and the menus' keep left and right (upright, free roam's row under the first goes with the steering,
+ * away from Nitro), and so does the order of ◀ ▶ and of the gears (their own rules below). */
 .touch {
   position: absolute; inset: 0; z-index: 3; pointer-events: none; -webkit-user-select: none; user-select: none;
   --l: max(12px, env(safe-area-inset-left)); --r: max(12px, env(safe-area-inset-right));
   --t: max(12px, env(safe-area-inset-top)); --b: max(12px, env(safe-area-inset-bottom));
+  --start: var(--l); --end: var(--r); --in: 0px; --steer: calc(var(--start) + var(--in)); --pedal: calc(var(--end) + var(--in));
   /* the margins as padding, for auto's size to read (touch.ts autoTouchSize): it moves none of the controls */
   padding: var(--t) var(--r) var(--b) var(--l);
 }
+.touch[data-right] { direction: rtl; --start: var(--r); --end: var(--l); }
 .touch > * { position: absolute; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; }
 .tc {
   display: flex; align-items: center; justify-content: center; text-align: center;
@@ -524,51 +536,69 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .tc.big { bottom: var(--b); border-radius: calc(16px * var(--ts)); }
 .tc.big svg { width: calc(32px * var(--ts)); height: calc(32px * var(--ts)); }
 .tc.round { border-radius: 50%; font-size: calc(14px * var(--ts)); line-height: calc(16px * var(--ts)); }
-/* Nitro: the nitrous bottle of the game's performance shop (Upscaled HUD's copy, white), a mask in the control's colour */
-.tc .nitro { width: calc(48px * var(--ts)); height: calc(17px * var(--ts)); background: currentColor; mask: url(./nitro.png) center / contain no-repeat; }
+/* the game's pictures (Upscaled HUD's copies, white), masks in the control's colour: Nitro the nitrous bottle of the
+ * performance shop, Drift the Quick Race drift icon, the career status the pause menu's statistics icon */
+.tc :is(.nitro, .drift, .status) { background: currentColor; mask: center / contain no-repeat; }
+.tc .nitro { width: calc(48px * var(--ts)); height: calc(17px * var(--ts)); mask-image: url(./nitro.png); }
+.tc .drift { width: calc(38px * var(--ts)); height: calc(21px * var(--ts)); mask-image: url(./drift.png); }
+.tc .status { width: calc(24px * var(--ts)); height: calc(22px * var(--ts)); mask-image: url(./status.png); }
 .tc.pill { height: calc(40px * var(--ts)); padding: 0 calc(20px * var(--ts)); border-radius: calc(20px * var(--ts)); }
 .tc[data-ctl="pause"] { left: calc(var(--l) + 56px * var(--ts)); }
 .tc[data-ctl="camera"] { left: calc(var(--l) + 112px * var(--ts)); }
 .tc[data-ctl="reset"] { left: calc(var(--l) + 168px * var(--ts)); }
 .tc[data-ctl="map"] { left: calc(var(--l) + 224px * var(--ts)); }
 .tc[data-ctl="msgs"] { left: calc(var(--l) + 280px * var(--ts)); }
-.tc[data-ctl="drift"] { left: calc(var(--l) + 336px * var(--ts)); font-size: calc(var(--fs, 12px) * var(--ts)); line-height: calc(14px * var(--ts)); }
-.tc[data-ctl="horn"] { left: calc(var(--l) + 392px * var(--ts)); }
-.tc[data-ctl="chat"] { left: calc(var(--l) + 448px * var(--ts)); }
+.tc[data-ctl="drift"] { left: calc(var(--l) + 336px * var(--ts)); }
+.tc[data-ctl="status"] { left: calc(var(--l) + 392px * var(--ts)); }
+.tc[data-ctl="horn"] { left: calc(var(--l) + 448px * var(--ts)); }
+.tc[data-ctl="chat"] { left: calc(var(--l) + 504px * var(--ts)); }
 /* drift mode on: its button lime, with a ring */
 .tc.lit { color: var(--lime); box-shadow: inset 0 0 0 calc(2px * var(--ts)) var(--lime); }
 .tc[data-ctl="mode"] { right: var(--r); }
 .tc[data-ctl="center"] { right: calc(var(--r) + 56px * var(--ts)); }
-.tc[data-ctl="start"] { left: var(--l); bottom: calc(var(--b) + 128px * var(--ts)); }
-.tc[data-ctl="left"] { left: var(--l); width: calc(80px * var(--ts)); height: calc(104px * var(--ts)); }
-.tc[data-ctl="right"] { left: calc(var(--l) + 88px * var(--ts)); width: calc(80px * var(--ts)); height: calc(104px * var(--ts)); }
-.tc[data-ctl="gas"] { right: var(--r); width: calc(84px * var(--ts)); height: calc(148px * var(--ts)); }
-.tc[data-ctl="brake"] { right: calc(var(--r) + 92px * var(--ts)); width: calc(84px * var(--ts)); height: calc(104px * var(--ts)); }
-.tc[data-ctl="nitro"] { right: calc(var(--r) + 12px * var(--ts)); bottom: calc(var(--b) + 160px * var(--ts)); width: calc(60px * var(--ts)); height: calc(60px * var(--ts)); }
+.tc[data-ctl="start"] { inset-inline-start: var(--steer); bottom: calc(var(--b) + 128px * var(--ts)); }
+.tc[data-ctl="left"] { inset-inline-start: var(--steer); width: calc(80px * var(--ts)); height: calc(104px * var(--ts)); }
+.tc[data-ctl="right"] { inset-inline-start: calc(var(--steer) + 88px * var(--ts)); width: calc(80px * var(--ts)); height: calc(104px * var(--ts)); }
+.tc[data-ctl="gas"] { inset-inline-end: var(--pedal); width: calc(84px * var(--ts)); height: calc(148px * var(--ts)); }
+.tc[data-ctl="brake"] { inset-inline-end: calc(var(--pedal) + 92px * var(--ts)); width: calc(84px * var(--ts)); height: calc(104px * var(--ts)); }
+.tc[data-ctl="nitro"] { inset-inline-end: calc(var(--pedal) + 12px * var(--ts)); bottom: calc(var(--b) + 160px * var(--ts)); width: calc(60px * var(--ts)); height: calc(60px * var(--ts)); }
 .tc[data-ctl="hb"] {
-  right: calc(var(--r) + 106px * var(--ts)); bottom: calc(var(--b) + 116px * var(--ts)); width: calc(56px * var(--ts)); height: calc(56px * var(--ts));
+  inset-inline-end: calc(var(--pedal) + 106px * var(--ts)); bottom: calc(var(--b) + 116px * var(--ts)); width: calc(56px * var(--ts)); height: calc(56px * var(--ts));
   font-size: calc(12px * var(--ts)); line-height: calc(14px * var(--ts));
 }
-/* a manual gearbox: gear down and up above the left thumb's controls (the arrows, the stick's corner, or tilt's
+/* a manual gearbox: gear down and up above the steering thumb's controls (the arrows, the stick's corner, or tilt's
  * Brake and handbrake: the arrows as tall as that Brake), and free roam's Start above them */
 .touch { --gb: calc(112px * var(--ts)); }
 .touch[data-steering="stick"] { --gb: calc(132px * var(--ts)); }
 .tc.gear { bottom: calc(var(--b) + var(--gb)); width: calc(80px * var(--ts)); height: calc(56px * var(--ts)); border-radius: calc(16px * var(--ts)); }
 .tc.gear svg { width: calc(32px * var(--ts)); height: calc(32px * var(--ts)); stroke-width: 2.5; }
-.tc[data-ctl="down"] { left: var(--l); }
-.tc[data-ctl="up"] { left: calc(var(--l) + 88px * var(--ts)); }
+.tc[data-ctl="down"] { inset-inline-start: var(--steer); }
+.tc[data-ctl="up"] { inset-inline-start: calc(var(--steer) + 88px * var(--ts)); }
+/* steering on the right: ◀ and gear down still on the left of ▶ and gear up */
+.touch[data-right] :is(.tc[data-ctl="left"], .tc[data-ctl="down"]) { inset-inline-start: calc(var(--steer) + 88px * var(--ts)); }
+.touch[data-right] :is(.tc[data-ctl="right"], .tc[data-ctl="up"]) { inset-inline-start: var(--steer); }
 .touch[data-gears] .tc[data-ctl="start"] { bottom: calc(var(--b) + var(--gb) + 72px * var(--ts)); }
 .touch:not([data-gears]) .gear { display: none; }
-/* tilt: Brake and the handbrake under the left thumb, Nitro beside Gas */
-.touch[data-steering="tilt"] .tc[data-ctl="brake"] { right: auto; left: var(--l); }
-.touch[data-steering="tilt"] .tc[data-ctl="hb"] { right: auto; left: calc(var(--l) + 96px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
-.touch[data-steering="tilt"] .tc[data-ctl="nitro"] { right: calc(var(--r) + 96px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+/* tilt: Brake and the handbrake under the steering's thumb, Nitro beside Gas */
+.touch[data-steering="tilt"] .tc[data-ctl="brake"] { inset-inline-end: auto; inset-inline-start: var(--steer); }
+.touch[data-steering="tilt"] .tc[data-ctl="hb"] { inset-inline-end: auto; inset-inline-start: calc(var(--steer) + 96px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+.touch[data-steering="tilt"] .tc[data-ctl="nitro"] { inset-inline-end: calc(var(--pedal) + 96px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+/* Nitro on the steering's side (touch.ts nitroSteerSide), for the thumb that is not on Gas: above the steering, or
+ * above the gears, where Start was, and Start where Nitro was, above Gas; with tilt Nitro and the handbrake trade
+ * places (Brake and Nitro under one thumb, Gas and the handbrake under the other).  As specific as the upright and
+ * tilt rules they override */
+.touch[data-nitro] .tc.round[data-ctl="nitro"] { inset-inline-end: auto; inset-inline-start: calc(var(--steer) + 12px * var(--ts)); bottom: calc(var(--b) + var(--gb)); }
+.touch[data-nitro][data-gears] .tc.round[data-ctl="nitro"] { bottom: calc(var(--b) + var(--gb) + 72px * var(--ts)); }
+.touch[data-nitro]:not([data-steering="tilt"]) .tc[data-ctl="start"] { inset-inline-start: auto; inset-inline-end: var(--pedal); bottom: calc(var(--b) + 176px * var(--ts)); }
+.touch[data-nitro][data-steering="tilt"] .tc.round[data-ctl="nitro"] { inset-inline-start: calc(var(--steer) + 96px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+.touch[data-nitro][data-steering="tilt"] .tc.round[data-ctl="hb"] { inset-inline-start: auto; inset-inline-end: calc(var(--pedal) + 96px * var(--ts)); }
 .touch:not([data-steering="buttons"]) :is([data-ctl="left"], [data-ctl="right"]),
 .touch:not([data-steering="stick"]) .stick,
 .touch:not([data-steering="tilt"]) [data-ctl="center"],
 .touch:not([data-roam]) .roam,
 .touch[data-no-engage] [data-ctl="start"],
-.touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]) { display: none; }
+.touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]),
+.touch[data-no-chat] [data-ctl="chat"] { display: none; }
 /* the menus': the arrows as a D-pad bottom left, Back over OK bottom right, in the bars beside the game's 4:3 menus
  * (--bar wide): the keys as big as the bar leaves room for, 44 to 52 px.  A faint rim: the bars are black behind the
  * movies and the profile screens */
@@ -587,13 +617,15 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .tc.wide { right: var(--r); width: var(--w); height: var(--k); border-radius: 999px; }
 .tc[data-ctl="m-back"] { bottom: calc(var(--b) + var(--k) + 12px * var(--ts)); }
 .tc[data-ctl="m-ok"] { bottom: var(--b); }
-/* the thumb stick: anywhere in the lower left; at rest it waits in the corner, a touch brings it under the thumb */
-.stick { left: 0; bottom: 0; width: 42%; height: 72%; }
+/* the thumb stick: anywhere in the steering's lower corner; at rest it waits in the corner, a touch brings it under the
+ * thumb (touch.ts sets its left then: left here, as the knob moves, whichever the side) */
+.stick { inset-inline-start: 0; bottom: 0; width: 42%; height: 72%; }
 .stick-base {
-  position: absolute; left: calc(var(--l) + 60px * var(--ts)); top: calc(100% - var(--b) - 60px * var(--ts));
+  position: absolute; left: calc(var(--steer) + 60px * var(--ts)); top: calc(100% - var(--b) - 60px * var(--ts));
   width: calc(120px * var(--ts)); height: calc(120px * var(--ts));
   border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid rgba(255, 255, 255, 0.24); background: rgba(0, 0, 0, 0.24);
 }
+.touch[data-right] .stick-base { left: calc(100% - var(--steer) - 60px * var(--ts)); }
 .stick-knob {
   position: absolute; left: 50%; top: 50%; width: calc(52px * var(--ts)); height: calc(52px * var(--ts)); border-radius: 50%;
   transform: translate(calc(-50% + var(--dx, 0px)), -50%); background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.5);
@@ -618,29 +650,35 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   html[data-touch] .stage:has(> .touch[data-mode="drive"]) :is(.toasts, .hud-fps) { top: max(16px, env(safe-area-inset-top)); }
   html[data-touch] .toast.away { top: calc(var(--pic-h) / 2); }
   html[data-touch] .touch { --k: calc(56px * var(--ts)); --w: calc(136px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="map"] { left: var(--l); top: calc(var(--t) + 56px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="msgs"] { left: calc(var(--l) + 56px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="drift"] { left: calc(var(--l) + 112px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="horn"] { left: calc(var(--l) + 168px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="chat"] { left: calc(var(--l) + 224px * var(--ts)); top: calc(var(--t) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="status"] { left: calc(var(--l) + 224px * var(--ts)); }
+  html[data-touch] .tc:is([data-ctl="map"], [data-ctl="msgs"], [data-ctl="drift"], [data-ctl="horn"], [data-ctl="chat"]) { left: auto; top: calc(var(--t) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="map"] { inset-inline-start: var(--start); }
+  html[data-touch] .tc[data-ctl="msgs"] { inset-inline-start: calc(var(--start) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="drift"] { inset-inline-start: calc(var(--start) + 112px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="horn"] { inset-inline-start: calc(var(--start) + 168px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="chat"] { inset-inline-start: calc(var(--start) + 224px * var(--ts)); }
   html[data-touch] .stick { top: calc(var(--pic-h) + 12px + 52px * var(--ts)); height: auto; width: 50%; }
   /* below the picture, on black: a light backing, and room for bigger pedals and steering */
   html[data-touch] :is(.tc, .stage-menu) { background: rgba(255, 255, 255, 0.1); }
   html[data-touch] :is(.tc.on, .stage-menu:active) { background: rgba(255, 255, 255, 0.2); }
   html[data-touch] .stick-base { background: rgba(255, 255, 255, 0.06); }
   html[data-touch] .tc[data-ctl="left"] { width: calc(88px * var(--ts)); height: calc(120px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="right"] { left: calc(var(--l) + 96px * var(--ts)); width: calc(88px * var(--ts)); height: calc(120px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="right"] { inset-inline-start: calc(var(--steer) + 96px * var(--ts)); width: calc(88px * var(--ts)); height: calc(120px * var(--ts)); }
   html[data-touch] .tc[data-ctl="gas"] { width: calc(88px * var(--ts)); height: calc(200px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="brake"] { right: calc(var(--r) + 96px * var(--ts)); width: calc(88px * var(--ts)); height: calc(140px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="nitro"] { right: calc(var(--r) + 12px * var(--ts)); bottom: calc(var(--b) + 212px * var(--ts)); width: calc(64px * var(--ts)); height: calc(64px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="hb"] { right: calc(var(--r) + 110px * var(--ts)); bottom: calc(var(--b) + 152px * var(--ts)); width: calc(60px * var(--ts)); height: calc(60px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="start"] { bottom: calc(var(--b) + 132px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="brake"] { inset-inline-end: calc(var(--pedal) + 96px * var(--ts)); width: calc(88px * var(--ts)); height: calc(140px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="nitro"] { inset-inline-end: calc(var(--pedal) + 12px * var(--ts)); bottom: calc(var(--b) + 212px * var(--ts)); width: calc(64px * var(--ts)); height: calc(64px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="hb"] { inset-inline-end: calc(var(--pedal) + 110px * var(--ts)); bottom: calc(var(--b) + 152px * var(--ts)); width: calc(60px * var(--ts)); height: calc(60px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="start"] { bottom: calc(var(--b) + var(--gb)); }
   html[data-touch] .touch { --gb: calc(132px * var(--ts)); }
   html[data-touch] .touch[data-steering="tilt"] { --gb: calc(148px * var(--ts)); }
   html[data-touch] .tc.gear { width: calc(88px * var(--ts)); height: calc(64px * var(--ts)); }
-  html[data-touch] .tc[data-ctl="up"] { left: calc(var(--l) + 96px * var(--ts)); }
-  html[data-touch] .touch[data-steering="tilt"] .tc[data-ctl="hb"] { right: auto; left: calc(var(--l) + 100px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
-  html[data-touch] .touch[data-steering="tilt"] .tc[data-ctl="nitro"] { right: calc(var(--r) + 100px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="up"] { inset-inline-start: calc(var(--steer) + 96px * var(--ts)); }
+  html[data-touch] .touch[data-right] :is(.tc[data-ctl="left"], .tc[data-ctl="down"]) { inset-inline-start: calc(var(--steer) + 96px * var(--ts)); }
+  html[data-touch] .touch[data-steering="tilt"] .tc[data-ctl="hb"] { inset-inline-end: auto; inset-inline-start: calc(var(--steer) + 100px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+  html[data-touch] .touch[data-steering="tilt"] .tc[data-ctl="nitro"] { inset-inline-end: calc(var(--pedal) + 100px * var(--ts)); bottom: calc(var(--b) + 24px * var(--ts)); }
+  html[data-touch] .touch[data-nitro]:not([data-steering="tilt"]) .tc[data-ctl="start"] { bottom: calc(var(--b) + 224px * var(--ts)); }
+  html[data-touch] .touch[data-nitro][data-steering="tilt"] .tc.round[data-ctl="nitro"] { inset-inline-start: calc(var(--steer) + 100px * var(--ts)); }
+  html[data-touch] .touch[data-nitro][data-steering="tilt"] .tc.round[data-ctl="hb"] { inset-inline-end: calc(var(--pedal) + 100px * var(--ts)); }
 }
 .stick-base.on { border-color: rgba(200, 240, 136, 0.5); }
 .stick-base.on .stick-knob { border-color: var(--lime); background: rgba(0, 0, 0, 0.72); }
@@ -683,6 +721,11 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .pause-hint-list { color: var(--muted); }
 .pause-hint-list::before { content: " · "; }
+/* free roam's friends (friends.ts): the line over the game while front bumpers touch, as the pause menu's line; one
+ * that offers nothing (a request sent, or why not) is no button.  On the start page a row a friend, where it plays in
+ * lime while it plays */
+.friend-prompt:not(.offer), .friend-prompt:not(.offer):active { cursor: default; color: var(--muted); }
+.friend-state.ok { color: var(--lime); }
 /* the away check (away.ts): in the middle, until the player is back; a kick or a ban (shell.ts netRemoved) the same,
  * over the touch controls it leaves; upright, in the middle of the picture */
 .toast.away {
@@ -909,6 +952,14 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg-field { display: flex; align-items: center; gap: 12px; }
 .dlg-field input[type="text"] { flex: 1; min-width: 0; }
 .dlg.help { width: min(560px, calc(100vw - 32px)); }
+/* the changelog (changelog.ts): the help sheet's width, the releases scrolling under the title and Close */
+.dlg.changelog { width: min(560px, calc(100vw - 32px)); }
+.dlg.changelog[open] { display: flex; flex-direction: column; overflow: hidden; }
+#changelog-body { min-height: 0; overflow: hidden auto; }
+#changelog-body h3:first-child { margin-top: 0; }
+#changelog-body ul { margin: 0; }
+#changelog-body li + li { margin-top: 8px; }
+#changelog-body strong { color: var(--text); font-style: italic; font-weight: 700; }
 /* one screenshot (shots.ts): as large as the window allows, under it its place, Download and Delete */
 .dlg.shot-view { width: min(1232px, calc(100vw - 32px)); }
 .shot-view .dlg-head .hint { margin: 0; }
@@ -944,8 +995,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg p.set-note { margin: 0; }
 
 /* ---------------------------------------------------------------- narrow */
-/* no room for the buttons beside the title (the longest name is Português (Brasil)): the buttons under the note */
-@media (max-width: 819px) {
+/* no room for the buttons beside the title (the longest name is Português (Brasil), the title on two lines at most):
+   the buttons under the note */
+@media (max-width: 899px) {
   .top-row { flex-wrap: wrap; }
   .brand { flex-basis: 100%; }
 }
@@ -958,10 +1010,16 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 @media (max-width: 559px) {
   .top, .panel { padding: 16px; }
   .brand h1 { font-size: 24px; }
-  /* the language list across the header, Discord and Donate under it at half its width each */
+  /* two by two under the note, at half its width each: the language list and Changelog, then Discord and Donate.  A
+     long language name ends in "…"; where a button's word doesn't fit beside its icon (a long word in another
+     language, a 320 px screen), the header goes without its icons, the globe too (shell.ts fitTop) */
   .top-end { flex: 1 1 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .top-end .lang-pick { grid-column: 1 / -1; }
-  .lang-pick select { width: 100%; }
+  .top-end .lang-pick { min-width: 0; }
+  .lang-pick select { width: 100%; max-width: 100%; text-overflow: ellipsis; }
+  .top-end .btn svg { flex: none; }
+  .top-end[data-tight] .btn { padding-inline: 8px; }
+  .top-end[data-tight] svg { display: none; }
+  .top-end[data-tight] .lang-pick select { padding-left: 12px; }
   /* a button's words wrap where they are wider than the screen (another language's); one line stays 40 px tall */
   .btn { height: auto; min-height: 40px; padding: 4px 16px; white-space: normal; text-align: center; }
   /* the channel's name still in one piece, unless the whole link is wider than the line (Polish) */

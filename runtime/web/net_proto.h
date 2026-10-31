@@ -68,6 +68,9 @@
                                    (roam_game.c mp_panel) */
 #define NET_KIND_SAY      18u   /* TX ring only, never on the switch: quick chat, a phrase said (by a friend near,
                                    one in our race lobby, or the player), as a JSON object (roam_game.c say_*) */
+#define NET_KIND_FRIEND   19u   /* TX ring only, never on the switch: the player's car and a friend's touched front
+                                   bumpers for 3 s, or parted after that, as a JSON object {"id","name","on"}
+                                   (roam_game.c bump_*): the page's "Add friend" */
 #define NET_BROADCAST      0xFFFFFFFFu
 #define NET_ROAM_HUB       0x0A4D00FDu  /* 10.77.0.253: the server's free-roam hub (web/server-rs/crates/roam),
                                    an address the switch never hands out */
@@ -100,11 +103,9 @@
 #define NET_PAGE_IDLE        4u /* no mailbox wants the switch (want 0 for a while): the page let it go, so
                                    the place is free for another player; it connects again on want */
 
-/* caps (C): what the module takes from the page while it runs, besides what every module of this version takes */
-#define NET_CAP_ROOM         1u /* room_gen and room_name: free roam's room, changed while the game runs */
-
 /* peer_bits: one bit per host of the switch's network (at most a /21) */
 #define NET_PEER_BITS     2048u
+#define NET_UDP_PORTS_SET 0x80000000u   /* udp_ports: this module says which ports have a socket */
 
 typedef struct {
     /* fixed, written by C before it registers the mailbox */
@@ -112,13 +113,17 @@ typedef struct {
     uint32_t tx_slots, rx_slots, tx_off, rx_off;               /*  16: offsets from the mailbox */
     /* C -> page */
     uint32_t mode, port, tx_head, tx_bell;                     /*  32 */
-    uint32_t rx_tail, c_alive, want, caps;                     /*  48: c_alive: +1 per network-thread loop;
+    uint32_t rx_tail, c_alive, want, udp_ports;                /*  48: c_alive: +1 per network-thread loop;
                                                                   want: this endpoint needs the switch now
                                                                   (free roam: while it runs; LAN play: from
                                                                   the game's WSAStartup to its last
                                                                   WSACleanup), C rings tx_bell on a change;
-                                                                  caps: what this module takes from the page
-                                                                  (NET_CAP_*; 0 in a module of before) */
+                                                                  udp_ports (LAN play): NET_UDP_PORTS_SET and
+                                                                  bit port % 31 of each port a UDP socket is
+                                                                  bound to, so the switch sends a LAN broadcast
+                                                                  only where a socket takes it (0: not said, an
+                                                                  older module: every broadcast), C rings
+                                                                  tx_bell on a change */
     /* page -> C */
     uint32_t page_state, vip, netmask, generation;             /*  64: generation: +1 per switch connection */
     uint32_t tx_tail, rx_head, rx_bell, rx_full_drop;          /*  80 */
@@ -142,7 +147,7 @@ typedef struct {
                                                                   it (an invite link), its name in UTF-8 ending in
                                                                   a 0 byte (none: no room), the words little-endian;
                                                                   room_gen +1 a change (0: not changed), written
-                                                                  after the name (roam_plat_room; NET_CAP_ROOM) */
+                                                                  after the name (roam_plat_room) */
     uint32_t pad[2];                                           /* 504 .. 511 */
 } net_mailbox;
 
@@ -167,7 +172,6 @@ _Static_assert(offsetof(net_mailbox, tx_wait_n) == 136, "tx_wait_n");
 _Static_assert(offsetof(net_mailbox, peer_bits) == 144, "peer_bits");
 _Static_assert(offsetof(net_mailbox, crews_gen) == 400, "crews_gen");
 _Static_assert(offsetof(net_mailbox, crews_rgb) == 420, "crews_rgb");
-_Static_assert(offsetof(net_mailbox, caps) == 60, "caps");
 _Static_assert(offsetof(net_mailbox, room_gen) == 436, "room_gen");
 _Static_assert(offsetof(net_mailbox, room_name) == 440, "room_name");
 _Static_assert(offsetof(net_slot, src_port) == 16, "src_port");

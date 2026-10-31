@@ -1,0 +1,41 @@
+# Free roam's friends on the player's own page (roam-pair --page app), ghost mode on both (NFSU2_ROAM_COLLIDE=0):
+# A parks on the lot facing north, B (roam_friend_app_b.txt) parks facing it with the noses 0.3 m into each other
+# (no driving: the same at any frame rate).  After 3 s each page's line offers "Add ... as a friend"; both press
+# F now and then (shots between): whoever asks first, the other accepts, and both lines say friends.  The page's
+# keyphrase token is the test setting NFSU2_TEST_CLAIM (app/shell.ts testClaim, a development server's only).
+#   node web/tools/roam-pair.mjs --page app --base ... --a "Al:roam_friend_app_a.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_TEST_CLAIM=<43 A>" \
+#        --b "Bo:roam_friend_app_b.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_TEST_CLAIM=<43 B>"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  roam teleport 1695.3 -883.6 24.6 0x4000
++300  roam teleport 1695.3 -883.6 24.6 0x4000
++0    log placed
++900  log SHOT a_1
++0    log KEY KeyF                         # F acts only while the line offers something: whoever asks first,
++400  log SHOT a_2
++0    log KEY KeyF                         # the other's next F accepts
++400  log SHOT a_3
++0    log KEY KeyF
++400  log SHOT a_4
++0    log KEY KeyF
++600  log SHOT a_end
++0    roam mp bump
++0    log done

@@ -1172,18 +1172,15 @@ pub(crate) mod tests {
             .spawn(move || {
                 let st = Stats::new(StatsOptions::new(Some(d.clone()), clocks(Rc::new(Cell::new(T0))), quiet()));
                 let alpha = st.p.get("alpha").map(|r| (r.all[0], r.all[1].is_some()));
-                let b = crate::buddy::Buddies::new(Some(d.clone()), Default::default());
+                let _ = crate::buddy::Buddies::new(Some(d.clone()), Default::default());
                 let bad = Stats::new(StatsOptions::new(Some(bad), clocks(Rc::new(Cell::new(T0))), quiet()));
-                (alpha, b.serialize(), bad.p.len())
+                (alpha, crate::buddy::shelf_texts(&d), bad.p.len())
             })
             .unwrap();
         let (alpha, buddies, bad) = t.join().expect("read on the online host's stack");
         // (the array in "1" is a count block of none of the fields, as `clean` makes it)
         assert_eq!(alpha, Some((Some(Counts { races: 2.0, rw: 1.0, ..Default::default() }), true)));
-        assert_eq!(
-            buddies,
-            r#"{"v":3,"note":"NFSU2 online Messenger lists (persona names; friend requests and messages waiting for their persona)","personas":[{"name":"Alpha","seen":"2026-10","B":["Bravo"]}]}"#
-        );
+        assert_eq!(buddies, [r#"{"v":4,"name":"Alpha","seen":"2026-10","B":["Bravo"]}"#]);
         assert_eq!(bad, 0);
     }
 

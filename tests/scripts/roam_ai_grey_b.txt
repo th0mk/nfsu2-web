@@ -1,0 +1,30 @@
+# Free roam: the AI racers grey on the maps, instance B: a new career's
+# prologue (no challengers of its own), jumping 70 m behind Al's car every
+# 120 frames so that Al's minimap and map show a player's arrow beside the
+# grey ones (roam_ai_grey_a.txt renders); B's own arrow of Al is never grey.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp status
++0    loop 60
++0    roam mp follow Al 70 30
++120  endloop
++0    roam mp status
++10   quit

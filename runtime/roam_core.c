@@ -453,11 +453,6 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put16(&w, m->u.mapd.req); rc_put16(&w, m->u.mapd.base); rc_put8(&w, m->u.mapd.part); rc_put8(&w, m->u.mapd.nparts);
         rc_put16(&w, m->u.mapd.total); rc_put8(&w, m->u.mapd.n); rc_putb(&w, m->u.mapd.data, m->u.mapd.len);
         break;
-    case RC_MSG_MAP:
-        if (m->u.map.nparts < 1 || m->u.map.nparts > RC_MAP_PARTS || m->u.map.part >= m->u.map.nparts || m->u.map.n > RC_MAP_PER) return -1;
-        rc_put16(&w, m->u.map.req); rc_put8(&w, m->u.map.part); rc_put8(&w, m->u.map.nparts);
-        rc_put16(&w, m->u.map.total); rc_put8(&w, m->u.map.n); rc_putb(&w, m->u.map.data, (uint32_t)m->u.map.n * RC_MAP_ENTRY);
-        break;
     case RC_MSG_LOBBY: {
         const rc_lobby *l = &m->u.lobby;
         if (!lobby_ok(l)) return -1;
@@ -604,9 +599,8 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return RC_E_FIELD;
         break;
     case RC_MSG_MAPREQ:
-        m->u.mapreq.req = (uint16_t)rc_get16(&r);
-        m->u.mapreq.max = !r.err && r.len - r.n >= 2 ? (uint16_t)rc_get16(&r) : RC_MAP_MAX_V1;   /* (a core before 2048: req only) */
-        m->u.mapreq.base = !r.err && r.len - r.n >= 2 ? (uint16_t)rc_get16(&r) : 0;               /* (...before MAPD: no base) */
+        m->u.mapreq.req = (uint16_t)rc_get16(&r); m->u.mapreq.max = (uint16_t)rc_get16(&r); m->u.mapreq.base = (uint16_t)rc_get16(&r);
+        if (r.err) return RC_E_SHORT;
         break;
     case RC_MSG_MAPD: {
         m->u.mapd.req = (uint16_t)rc_get16(&r); m->u.mapd.base = (uint16_t)rc_get16(&r);
@@ -624,14 +618,6 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         m->u.mapd.data = r.p + r.n; m->u.mapd.len = (uint16_t)len; r.n += len;
         break;
     }
-    case RC_MSG_MAP:
-        m->u.map.req = (uint16_t)rc_get16(&r); m->u.map.part = (uint8_t)rc_get8(&r); m->u.map.nparts = (uint8_t)rc_get8(&r);
-        m->u.map.total = (uint16_t)rc_get16(&r); m->u.map.n = (uint8_t)rc_get8(&r);
-        if (r.err) return RC_E_SHORT;
-        if (m->u.map.nparts < 1 || m->u.map.nparts > RC_MAP_PARTS || m->u.map.part >= m->u.map.nparts || m->u.map.n > RC_MAP_PER) return RC_E_FIELD;
-        if (!r_have(&r, (uint32_t)m->u.map.n * RC_MAP_ENTRY)) return RC_E_SHORT;
-        m->u.map.data = r.p + r.n; r.n += (uint32_t)m->u.map.n * RC_MAP_ENTRY;
-        break;
     case RC_MSG_LOBBY: {
         rc_lobby *l = &m->u.lobby;
         l->op = (uint8_t)rc_get8(&r); l->arg = (uint8_t)rc_get8(&r); l->state = (uint8_t)rc_get8(&r); l->max = (uint8_t)rc_get8(&r);
@@ -1255,31 +1241,35 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;
     memcpy(m->u.hello.name, s->conf.name, sizeof m->u.hello.name);
     int n = 0;
-    /* a core of version 1 (the beacon and the hub may reach one too) reads 7
-     * ids at most, and drops a longer HELLO */
-    int cap = to && to->core_ver >= 2 ? RC_MAX_PEERS : RC_PEERS_V1;
-    /* the ids we hear: our group first, then the established ones the hub's
-     * last list left out (they are going), then the others that spoke lately;
-     * with the group full not those (a peer that sees its id here takes us as
-     * established: with a larger max_players of its own it would join
-     * one-sidedly, and never get a snapshot) */
+    /* a peer that sees its id here takes us as established, so it is named
+     * once established, or heard while the group has room (with the group full
+     * not: with a larger max_players of its own it would join one-sidedly, and
+     * never get a snapshot) */
     int full = group_count(s) + 1 >= s->conf.max_players;
+    if (to){
+        /* to one peer: its own id or none.  Whether its id is among them is all
+         * a receiver of any core version reads of a HELLO's ids (rc_receive; the
+         * whole list counts only with RC_HF_ALL), so the others only cost bytes:
+         * 32 ids were 128 of a HELLO's ~170, to each peer every 2 s, and a list
+         * whose length changed with every link went whole in a compact bundle
+         * (nfsu2.xyz 2026-10-31: HELLOs 13 % of the bytes to the pages, 119 each;
+         * this way 15.5 in a 128-player crowd, its links as before) */
+        if (to->id && to->last_rx_us && (to->state == RC_PS_EST || (!full && to->state == RC_PS_HEARD))) m->u.hello.seen[n++] = to->id;
+        m->u.hello.n_seen = (uint8_t)n;
+        return;
+    }
+    /* to everyone (the beacon, the hub): the ids we hear, our group first, then
+     * the established ones the hub's last list left out (they are going), then
+     * the others that spoke lately; a core of version 1 (the beacon and the
+     * hub may reach one too) reads 7 ids at most, and drops a longer HELLO */
     for (int pass = 0; pass < 3; pass++)
-        for (int i = 0; i < RC_TABLE && n < cap; i++){
+        for (int i = 0; i < RC_TABLE && n < RC_PEERS_V1; i++){
             const rc_peer *p = &s->peer[i];
             if (!p->id || !p->last_rx_us) continue;
             if (pass < 2 && (p->state != RC_PS_EST || (pass == 0) != in_group(s, p))) continue;
             if (pass == 2 && (full || p->state != RC_PS_HEARD)) continue;
             m->u.hello.seen[n++] = p->id;
         }
-    /* more than the list holds (the hub's links overlap for a moment while
-     * one goes and another comes): the peer it goes to always finds its id,
-     * or it would take it that we no longer hear it */
-    if (to && to->id && to->last_rx_us && (to->state == RC_PS_EST || (!full && to->state == RC_PS_HEARD))){
-        int have = 0;
-        for (int k = 0; k < n; k++) if (m->u.hello.seen[k] == to->id) have = 1;
-        if (!have){ if (n < cap) n++; m->u.hello.seen[n - 1] = to->id; }
-    }
     m->u.hello.n_seen = (uint8_t)n;
 }
 static void send_hello(rc_session *s, rc_peer *p, int64_t now){ rc_msg m; fill_hello(s, &m, p, p->reads_crews); tx(s, p, &m); p->last_hello_tx = now; }

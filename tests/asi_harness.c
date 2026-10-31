@@ -410,6 +410,7 @@ int roam_plat_solid(void){ return -1; }
 int roam_plat_quickchat(void){ return 0; }
 int roam_plat_say_pick(void){ return -1; }
 int roam_plat_said(const char *json){ (void)json; return 1; }
+int roam_plat_friend(const char *json){ (void)json; return 0; }
 void roam_plat_say_marks(const uint32_t *ids, const float *xys, int n){ (void)ids; (void)xys; (void)n; }
 uint32_t roam_plat_crews(uint32_t crews[RC_CREW_MAX], uint32_t rgb[RC_CREW_MAX]){ (void)crews; (void)rgb; return 0; }
 uint32_t roam_plat_room(char name[64]){ (void)name; return 0; }

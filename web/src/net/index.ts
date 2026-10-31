@@ -30,18 +30,19 @@
 // mailbox has wanted it for idleMs the page closes the socket ("idle": the
 // switch frees the address at once) and tells C (NET_PAGE_IDLE); the next
 // want connects again.  The switch also hears whether LAN play is open
-// ({"t":"lan"}): LAN broadcasts go only to the browsers that have it open.
+// ({"t":"lan"}): LAN broadcasts go only to the browsers that have it open,
+// and with "udp" (the bound UDP ports as bits, Endpoint.udpPorts) only to
+// those of them with a socket on the broadcast's port.
 // A player who is away (the app's check, web/src/app/away.ts) gives the place
 // back the same way, wanted or not: setAway(true) closes the socket ("idle")
 // and tells C NET_PAGE_IDLE (Online and LAN play lose their connections, free
 // roam its friends), and nothing connects until setAway(false).
 //
-// With a switch that takes bundles (its welcome's "bundle":1, nfsu2-lan) what C
-// queued at once goes as one message: free roam's snapshot to each friend, the
-// same bytes, once with the friends' addresses (TxBundle); and the switch sends
-// this page its datagrams as bundles too (the hello's "bundle":1), compact ones
-// (kind 33: the same frames, about a quarter fewer bytes, proto.ts unpackCompact)
-// once its hello says "compact":1 as well.
+// What C queued at once goes to the switch as one message (a bundle, nfsu2-lan):
+// free roam's snapshot to each friend, the same bytes, once with the friends'
+// addresses (TxBundle); and the switch sends this page its datagrams as compact
+// bundles (kind 33: the same frames, about a quarter fewer bytes, proto.ts
+// unpackCompact; the hello's "bundle":1 and "compact":1).
 //
 // The operator may remove a player (web/server-rs/crates/lan, Kicks and bans):
 // the switch sends {"t":"kick"} or {"t":"ban"} with the operator's message,
@@ -88,6 +89,11 @@ export interface NetOptions {
   onLobby?: (json: string) => void;
   /** quick chat from the game (NET_KIND_SAY): a phrase said, by a friend or the player, as JSON */
   onSay?: (json: string) => void;
+  /** free roam's friends: the player's car and another's touched front bumpers for 3 s, or parted after that
+   *  (NET_KIND_FRIEND), as JSON from the game */
+  onBump?: (json: string) => void;
+  /** free roam's friends: a {"t":"friend",...} message from the server (server-rs src/app/friends.rs) */
+  onFriend?: (m: Record<string, unknown>) => void;
   /** the switch welcomed this page again after the link was lost (a server restart, as for a deploy) */
   onBack?: () => void;
   /** the server is full and this page waits in line for a place: where it is, as the switch last said; null: not
@@ -149,14 +155,16 @@ export interface NetLink {
   setSolid(on: boolean): void;
   /** quick chat: the player says phrase p (runtime/roam_game.c say_frame sends it); false: no free roam */
   say(p: number): boolean;
+  /** free roam's friends: a message to the server ({"t":"friend",...m}, or m's own "t": "room"); false: the link is
+   *  not up now */
+  friend(m: Record<string, unknown>): boolean;
   /** free roam's crews, changed while the game runs (the page menu): their hashes (players.ts roomHash), in the
    *  player's order, at most 4, and their colours (0x00rrggbb; 0 or none: the place's default) */
   setCrews(hashes: readonly number[], rgbs?: readonly number[]): void;
-  /** whether the game takes a room changed while it runs (a module of before does not) */
-  canRoom(): boolean;
   /** free roam's room, changed while the game runs (an invite link): its name ('' for none), as the game is given it
    *  (players.ts roomText); the game leaves its friends of the old room and the server links it in the new one once
-   *  the player is not in an outrun, a race lobby or a race.  false: this game does not take it (canRoom) */
+   *  the player is not in an outrun, a race lobby or a race.  false: no free-roam mailbox yet (it takes it as it
+   *  registers one) */
   setRoom(name: string): boolean;
   close(): void;
 }
@@ -280,18 +288,19 @@ class Endpoint {
   sent = 0;
   /** free roam: its game is not driving, as its last HELLO or SNAP said (a race, a shop, the menus, loading) */
   away = false;
-  constructor(readonly kind: 'roam' | 'lan', readonly ver: number, buf: SharedArrayBuffer, ptr: number, size: number) {
+  constructor(readonly kind: 'roam' | 'lan', buf: SharedArrayBuffer, ptr: number, size: number) {
     // shared memory is never detached: views made now stay valid after the
     // memory grows (the mailbox lies inside the current buffer)
-    const hdr = ver === 2 ? P.NET_V2_HDR_BYTES : P.NET_HDR_BYTES;
-    this.i32 = new Int32Array(buf, ptr, hdr / 4);
-    this.f64 = new Float64Array(buf, ptr, hdr / 8);
+    this.i32 = new Int32Array(buf, ptr, P.NET_HDR_BYTES / 4);
+    this.f64 = new Float64Array(buf, ptr, P.NET_HDR_BYTES / 8);
     this.dv = new DataView(buf, ptr, size);
     this.u8 = new Uint8Array(buf, ptr, size);
   }
   mode() { return Atomics.load(this.i32, P.W_MODE); }
-  /** C needs the switch now (a module of before always does) */
-  wants() { return this.ver === 2 || Atomics.load(this.i32, P.W_WANT) !== 0; }
+  /** C needs the switch now */
+  wants() { return Atomics.load(this.i32, P.W_WANT) !== 0; }
+  /** LAN play: the UDP ports its sockets are bound to, as bits (P.W_UDP_PORTS), or 0 when the module does not say */
+  udpPorts() { return Atomics.load(this.i32, P.W_UDP_PORTS) >>> 0; }
   ring() { Atomics.add(this.i32, P.W_RX_BELL, 1); Atomics.notify(this.i32, P.W_RX_BELL); }
   /** a received frame into the RX ring; false = the ring is full */
   put(b: ArrayBuffer): boolean {
@@ -334,13 +343,16 @@ class Link implements NetLink {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** whether LAN play is open, as the switch last heard it (hello or {"t":"lan"}) */
   private lanSent = false;
-  /** the switch takes bundles (its welcome said so) */
-  private bundles = false;
+  /** the UDP ports the switch last heard (lanPorts), 0 none said */
+  private udpSent = 0;
   /** the last body of each source's free-roam datagrams of each type in this connection's compact bundles (the
    *  switch's deltas are made against them: proto.ts unpackCompact) */
   private refs = new Map<number, Uint8Array>();
   /** friends' last car states, for the compact bundles' entries by their fields (proto.ts fpredTake) */
   private fp: P.FpredState = new Map();
+  /** the last other datagrams (LAN play's UDP: races) it was sent by source and kind, which the switch's deltas of
+   *  those are made against (proto.ts unpackCompact) */
+  private others = new Map<number, Uint8Array>();
   /** while a bundle from the switch is taken apart: the endpoints to ring once it is */
   private ringLater: Set<Endpoint> | null = null;
   private pings = new Map<number, number>();
@@ -397,15 +409,14 @@ class Link implements NetLink {
     const r = await this.proc.registered(kind);
     if (this.closed) return;
     const buf = this.proc.memory.buffer as unknown as SharedArrayBuffer;
-    const i32 = new Int32Array(buf, r.ptr, P.NET_V2_HDR_BYTES / 4);
+    const i32 = new Int32Array(buf, r.ptr, 8);
     const magic = i32[P.W_MAGIC] >>> 0, ver = i32[P.W_VERSION];
-    const size = ver === 2 ? P.NET_V2_MAILBOX_BYTES : P.NET_MAILBOX_BYTES, hdr = ver === 2 ? P.NET_V2_HDR_BYTES : P.NET_HDR_BYTES;
-    if (magic !== P.NET_MAGIC || (ver !== P.NET_VERSION && ver !== 3 && ver !== 2) || r.size !== size || i32[P.W_HDR_BYTES] !== hdr ||
+    if (magic !== P.NET_MAGIC || ver !== P.NET_VERSION || r.size !== P.NET_MAILBOX_BYTES || i32[P.W_HDR_BYTES] !== P.NET_HDR_BYTES ||
         i32[P.W_SLOT_BYTES] !== P.NET_SLOT_BYTES || i32[P.W_TX_SLOTS] !== P.NET_TX_SLOTS || i32[P.W_RX_SLOTS] !== P.NET_RX_SLOTS) {
       this.log(`${name} mailbox does not match this page (magic ${magic.toString(16)}, version ${ver}, ${r.size} bytes): no ${name === 'lan' ? 'LAN play' : 'free roam'}`);
       return;
     }
-    const ep = new Endpoint(name, ver, buf, r.ptr, r.size);
+    const ep = new Endpoint(name, buf, r.ptr, r.size);
     if (name === 'roam') this.roam = ep; else this.lan = ep;
     if (name === 'roam' && this.solid) Atomics.store(ep.i32, P.W_SOLID, this.solid);
     if (name === 'roam') { this.publishCrews(ep); this.publishRoom(ep); }
@@ -429,20 +440,21 @@ class Link implements NetLink {
     ep.ring();                                     // wake C's network thread so it sees the address now
   }
   private publishPeers(ep: Endpoint) {
-    // bit h: the host h of our network (a module of before: the address's last byte, so 10.77.1.5 sets 10.77.0.5's
-    // bit too; it then only waits for an answer where it could have known at once that nobody is there; one of
-    // version 3 has bits for a /22, and waits the same way for a host past them)
-    const words = ep.ver === 2 ? 8 : ep.ver === 3 ? P.NET_V3_PEER_BITS / 32 : P.NET_PEER_BITS / 32, bits = new Uint32Array(words);
+    // bit h: the host h of our network
+    const words = P.NET_PEER_BITS / 32, bits = new Uint32Array(words);
     for (const v of this.peerVips) {
       if (this.vipNum && ((v ^ this.vipNum) & this.netmask) !== 0) continue;
-      const h = ep.ver === 2 ? v & 255 : (v & ~this.netmask) >>> 0;
+      const h = (v & ~this.netmask) >>> 0;
       if (h < words * 32) bits[h >>> 5] |= 1 << (h & 31);
     }
     for (let i = 0; i < words; i++) Atomics.store(ep.i32, P.W_PEER_BITS + i, bits[i] | 0);
     Atomics.store(ep.i32, P.W_SWITCH_PEERS, this.peers.length);
   }
-  /** LAN play is open: the game's LAN or Online screens (a module of before: once it attached) */
+  /** LAN play is open: the game's LAN or Online screens */
   private lanOpen() { return !!this.lan && this.lan.wants(); }
+  /** the UDP ports LAN play's sockets are bound to (Endpoint.udpPorts): the switch sends a LAN broadcast only to a
+   * page with a socket on its port, the others would drop it (0: the module does not say, every broadcast) */
+  private lanPorts() { return (this.lan && (this.lan.udpPorts() & P.NET_UDP_PORTS_SET) ? this.lan.udpPorts() : 0); }
   /** connect when a mailbox wants the switch, let it go idleMs after none does, and tell the switch about LAN play */
   private checkWant() {
     if (this.closed) return;
@@ -454,9 +466,10 @@ class Link implements NetLink {
       this.idleTimer = setTimeout(() => this.goIdle(), this.o.idleMs ?? 10_000);
     }
     const lan = this.lanOpen(), ws = this.ws;
-    if (lan !== this.lanSent && ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ t: 'lan', on: lan ? 1 : 0 }));
-      this.lanSent = lan;
+    const udp = lan ? this.lanPorts() : 0;
+    if ((lan !== this.lanSent || udp !== this.udpSent) && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ t: 'lan', on: lan ? 1 : 0, ...(udp ? { udp } : {}) }));
+      this.lanSent = lan; this.udpSent = udp;
     }
   }
   /** nothing wanted the switch for idleMs: its place goes back (the switch frees the address at once) */
@@ -519,6 +532,12 @@ class Link implements NetLink {
     Atomics.store(this.roam.i32, P.W_SAY, (this.picks << 8 | (p & 0xff)) | 0);
     return true;
   }
+  friend(m: Record<string, unknown>): boolean {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN || this.state !== 'online') return false;
+    ws.send(JSON.stringify({ t: 'friend', ...m }));
+    return true;
+  }
   setCrews(hashes: readonly number[], rgbs: readonly number[] = []) {
     this.crews = hashes.slice(0, P.CREW_WORDS);
     this.crewsRgb = rgbs.slice(0, P.CREW_WORDS).map(v => v & 0xffffff);
@@ -527,18 +546,12 @@ class Link implements NetLink {
     this.log(`crews: ${this.crews.length} (the page menu)`);
   }
   /** the crews into the roam mailbox once the page changed them: their four words first, then the colours' four,
-   *  then the count, which the game watches (it takes the words when the count moves).  Not into a module of before's
-   *  256-byte header. */
+   *  then the count, which the game watches (it takes the words when the count moves). */
   private publishCrews(ep: Endpoint) {
-    if (!this.crewsGen || ep.i32.length < P.W_CREWS_RGB + P.CREW_WORDS) return;
+    if (!this.crewsGen) return;
     for (let i = 0; i < P.CREW_WORDS; i++) Atomics.store(ep.i32, P.W_CREWS + i, (this.crews[i] ?? 0) | 0);
     for (let i = 0; i < P.CREW_WORDS; i++) Atomics.store(ep.i32, P.W_CREWS_RGB + i, this.crewsRgb[i] ?? 0);
     Atomics.store(ep.i32, P.W_CREWS_GEN, this.crewsGen | 0);
-  }
-  /** whether the game takes a room changed while it runs (its mailbox says NET_CAP_ROOM; a module of before does not) */
-  canRoom(): boolean {
-    const ep = this.roam;
-    return !!ep && ep.i32.length > P.W_ROOM_NAME + P.ROOM_WORDS && (Atomics.load(ep.i32, P.W_CAPS) & P.NET_CAP_ROOM) !== 0;
   }
   setRoom(name: string): boolean {
     let b = new TextEncoder().encode(name);
@@ -546,15 +559,15 @@ class Link implements NetLink {
     if (b.length > P.ROOM_BYTES) { let n = P.ROOM_BYTES; while (n > 0 && (b[n] & 0xc0) === 0x80) n--; b = b.slice(0, n); }
     this.room = b;
     this.roomGen = (this.roomGen + 1) >>> 0 || 1;
-    if (!this.roam || !this.canRoom()) return false;
+    if (!this.roam) return false;
     this.publishRoom(this.roam);
     this.log(`room: ${b.length ? 'changed' : 'none'} (the page)`);
     return true;
   }
   /** the room into the roam mailbox once the page changed it: its 16 words (the name, then 0 bytes), then the count,
-   *  which the game watches.  Not into a module without NET_CAP_ROOM. */
+   *  which the game watches. */
   private publishRoom(ep: Endpoint) {
-    if (!this.roomGen || !this.canRoom()) return;
+    if (!this.roomGen) return;
     for (let i = 0; i < P.ROOM_WORDS; i++) {
       let w = 0;
       for (let k = 0; k < 4; k++) w |= (this.room[4 * i + k] ?? 0) << 8 * k;
@@ -575,17 +588,18 @@ class Link implements NetLink {
     this.state = 'connecting'; this.setPage(P.NET_PAGE_CONNECTING);
     this.refs = new Map();
     this.fp = new Map();
+    this.others = new Map();
     const ws = new WebSocket(u.href);
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
     ws.onopen = () => {
-      // deltas: the switch sends what changed on the peer list, not the whole list each time (nfsu2-lan); lan: LAN
-      // play is open, so it takes LAN broadcasts; bundle: this page takes bundles; compact: and compact ones (a
-      // switch of before ignores it and sends bundles as they were); delta: and in those a free-roam datagram as
-      // what changed since its source's last one (proto.ts unpackCompact; `refs`, kept for this connection); fpred: and
-      // a friend's car state by its fields, rounded (proto.ts fpredTake; `fp`)
+      // lan: LAN play is open, so it takes LAN broadcasts and the peer list (nfsu2-lan); bundle, compact: this page takes compact bundles; delta: and in those
+      // a free-roam datagram as what changed since its source's last one (proto.ts unpackCompact; `refs`, kept for this
+      // connection); fpred: and a friend's car state by its fields, rounded (proto.ts fpredTake; `fp`); ldelta: and
+      // every other datagram (a race's) as what changed since its source's last one of its kind (`others`)
       this.lanSent = this.lanOpen();
-      ws.send(JSON.stringify({ t: 'hello', name: this.o.name ?? 'player', deltas: 1, lan: this.lanSent ? 1 : 0, bundle: 1, compact: 1, delta: 1, fpred: 1,
+      this.udpSent = this.lanSent ? this.lanPorts() : 0;
+      ws.send(JSON.stringify({ t: 'hello', name: this.o.name ?? 'player', lan: this.lanSent ? 1 : 0, ...(this.udpSent ? { udp: this.udpSent } : {}), bundle: 1, compact: 1, delta: 1, fpred: 1, ldelta: 1,
         ...(this.o.id ? { id: this.o.id } : {}), ...(this.o.id && this.o.was?.length ? { was: this.o.was } : {}),
         ...(this.o.claim ? { claim: this.o.claim } : {}), ...(this.o.block?.length ? { block: this.o.block } : {}),
         ...(this.vipNum && this.token ? { vip: P.ipStr(this.vipNum), token: this.token } : {}), ...(this.ticket ? { ticket: this.ticket } : {}) }));
@@ -639,7 +653,6 @@ class Link implements NetLink {
       const again = this.vipNum === vip;
       this.vipNum = vip; this.vip = P.ipStr(vip); this.netmask = mask; this.generation++;
       this.token = typeof m.token === 'string' ? m.token : '';
-      this.bundles = m.bundle === 1;
       this.state = 'online'; this.backoff = 250; this.failed = 0; this.st.connections++;
       for (const ep of this.eps()) { this.publishPeers(ep); this.publishOnline(ep); }
       this.log(`on the virtual LAN as ${this.vip}${this.st.connections > 1 ? (again ? ' (the same address again)' : ' (a new address)') : ''}`);
@@ -659,7 +672,7 @@ class Link implements NetLink {
         if (!this.queuedAt) {
           this.queuedAt = now(); this.full = true;
           this.log(`the server is full: in line for a place, ${m.pos} of ${m.of}`);
-          this.o.onNotice?.(N('The server is full: you are in line for a place, and join the others by yourself when it is your turn'));
+          this.o.onNotice?.(N('The server is full: you\'re in line and join the others when it\'s your turn'));
         } else this.log(`back in line, ${m.pos} of ${m.of}`);
       }
       this.o.onQueue?.({ pos: m.pos, of: m.of, ...(typeof m.eta === 'number' ? { eta: m.eta } : {}) });
@@ -676,6 +689,8 @@ class Link implements NetLink {
       for (const g of m.gone) if (this.peerMap.delete(g >>> 0)) this.peerLeft(g >>> 0);
       for (const p of m.peers) this.peerMap.set(p.vip >>> 0, { name: String(p.name ?? ''), server: !!p.server });
       this.peersUpdated();
+    } else if (m.t === 'friend') {
+      this.o.onFriend?.(m);
     } else if (m.t === 'pong' && typeof m.id === 'number') {
       const t0 = this.pings.get(m.id);
       if (t0 === undefined) return;
@@ -726,10 +741,10 @@ class Link implements NetLink {
     }
   }
   /** how long free roam's TX ring may wait still (ms; 0: send it now): while it holds only free roam's own datagrams,
-   *  until the next car state to a friend comes or TX_HOLD_MS after the last send (to a switch that takes bundles), or
-   *  TX_HOLD_AWAY_MS while the game is not driving (half the ring at most) */
+   *  until the next car state to a friend comes or TX_HOLD_MS after the last send, or TX_HOLD_AWAY_MS while the game
+   *  is not driving (half the ring at most) */
   private txHold(ep: Endpoint): number {
-    if (ep.kind !== 'roam' || !this.bundles || this.state !== 'online') return 0;
+    if (ep.kind !== 'roam' || this.state !== 'online') return 0;
     const i32 = ep.i32, dv = ep.dv, txOff = i32[P.W_TX_OFF], head = Atomics.load(i32, P.W_TX_HEAD);
     let tail = Atomics.load(i32, P.W_TX_TAIL);
     if (tail === head || ((head - tail) | 0) >= P.NET_TX_SLOTS / 2) return 0;
@@ -750,7 +765,7 @@ class Link implements NetLink {
     if (tail === head) return;
     const c0 = performance.now();
     const txOff = i32[P.W_TX_OFF], ws = this.ws, open = !!ws && ws.readyState === WebSocket.OPEN && this.state === 'online';
-    const t = now(), bundle = open && this.bundles ? new TxBundle() : null;
+    const t = now(), bundle = new TxBundle();
     let waitSum = 0, waitMax = ep.f64[P.D_TX_WAIT_MS_MAX], n = 0;
     while (tail !== head) {
       const s = txOff + ((tail >>> 0) % P.NET_TX_SLOTS) * P.NET_SLOT_BYTES;
@@ -767,6 +782,9 @@ class Link implements NetLink {
       } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_SAY) {
         // quick chat: the same
         if (len <= P.NET_MAX_PAYLOAD) this.o.onSay?.(new TextDecoder().decode(ep.u8.slice(s + P.S_DATA, s + P.S_DATA + len)));
+      } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_FRIEND) {
+        // front bumpers: the same
+        if (len <= P.NET_MAX_PAYLOAD) this.o.onBump?.(new TextDecoder().decode(ep.u8.slice(s + P.S_DATA, s + P.S_DATA + len)));
       } else if (open && len <= P.NET_MAX_PAYLOAD) {
         const f = new Uint8Array(P.F_DATA + len), fv = new DataView(f.buffer), dst = dv.getUint32(s + P.S_DST_IP, true);
         f[P.F_KIND] = dv.getUint32(s + P.S_KIND, true);
@@ -779,7 +797,7 @@ class Link implements NetLink {
           sentNow(f, len, t - dv.getFloat64(s + P.S_T_MS, true));
           ep.away = roamAway(dv, s + P.S_DATA, len) ?? ep.away;
         }
-        if (bundle) bundle.add(f, dst >>> 0); else ws!.send(f);
+        bundle.add(f, dst >>> 0);
         this.st.framesOut++; this.st.bytesOut += len;
         if (ep.kind === 'lan') this.st.lanOut++;
         const w = t - dv.getFloat64(s + P.S_T_MS, true);
@@ -788,7 +806,7 @@ class Link implements NetLink {
       tail = (tail + 1) | 0;
       Atomics.store(i32, P.W_TX_TAIL, tail);
     }
-    if (bundle) for (const m of bundle.messages()) ws!.send(m);
+    if (open) for (const m of bundle.messages()) ws!.send(m);
     if (open) ep.sent = performance.now();
     if (n) {
       ep.f64[P.D_TX_WAIT_MS_SUM] += waitSum; ep.f64[P.D_TX_WAIT_MS_MAX] = waitMax;
@@ -801,22 +819,11 @@ class Link implements NetLink {
   private rx(b: ArrayBuffer) {
     const c0 = performance.now();
     const u = new Uint8Array(b);
-    if (u.length >= 4 && u[0] === P.NET_KIND_BUNDLE) {
-      // each frame on its own (a copy: a LAN TCP frame may wait in a queue), C rung once for all of them
-      const dv = new DataView(b), ring = this.ringLater = new Set();
-      for (let at = 4; at + 4 <= u.length;) {
-        const f = at + 4 + 4 * u[at], end = f + dv.getUint16(at + 2);
-        if (end > u.length) break;
-        this.rxFrame(b.slice(f, end));
-        at = end;
-      }
-      this.ringLater = null;
-      for (const ep of ring) ep.ring();
-    } else if (u.length >= 4 && u[0] === P.NET_KIND_COMPACT) {
-      // the same, each frame put together again first (proto.ts unpackCompact)
+    if (u.length >= 4 && u[0] === P.NET_KIND_COMPACT) {
+      // each frame on its own, put together again first (proto.ts unpackCompact), C rung once for all of them
       const ring = this.ringLater = new Set();
       this.st.compactIn++;
-      this.st.deltaIn += P.unpackCompact(u, this.vipNum, f => this.rxFrame(f), this.refs, this.fp);
+      this.st.deltaIn += P.unpackCompact(u, this.vipNum, f => this.rxFrame(f), this.refs, this.fp, this.others);
       this.ringLater = null;
       for (const ep of ring) ep.ring();
     } else this.rxFrame(b);

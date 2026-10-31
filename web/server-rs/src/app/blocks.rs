@@ -22,9 +22,8 @@
 //! One block (n=1, all the page asks for) to a client that takes br is better still: the block as kept.rs keeps it,
 //! compressed once at brotli's best (or as it is, kept.rs having found it does not compress), with its length.  A
 //! block not kept yet is answered as above and queued to be kept; a shared cache may keep that answer EDGE_WHILE
-//! only, then asks again and keeps the kept one for good.  The manifest names these at /data-blocks/v2/ (the same
-//! files): the shared cache's copies of the answers from before they were kept are at the old addresses, which still
-//! answer.
+//! only, then asks again and keeps the kept one for good.  The addresses are /data-blocks/v2/ (v2 since blocks are
+//! kept, so that no shared cache's copy of an answer from before is ever asked for again).
 
 use std::io::{self, Write};
 use std::os::unix::fs::{FileExt, MetadataExt};
@@ -211,10 +210,9 @@ impl App {
         if start >= size {
             return self.plain(q, s, 416, "Range not satisfiable", &[], Cache::Store, true).await;
         }
-        // the version: m and s (a page of before names no size)
-        let size_s = etag::num(size as f64);
+        // the version: m and s
         let named = u.param("m").as_deref() == Some(etag::num(etag::mtime_s(&md)).as_str())
-            && u.param("s").unwrap_or_else(|| size_s.clone()) == size_s;
+            && u.param("s").as_deref() == Some(etag::num(size as f64).as_str());
         let accept = q.headers.get("accept-encoding");
         // one block to a client that takes br: as kept.rs keeps it, if it does yet
         let kept = match &self.kept {

@@ -8,13 +8,7 @@
  * (main thread) owns the context-state word.  The header is a plain array
  * of 32-bit words so the TypeScript side mirrors it by index:
  * web/src/audio/proto.ts carries the same numbers and web/tools/check-proto.mjs
- * compares the two files.
- *
- * The ring's size: the page and the game module are deployed apart, so either
- * may be older.  A page that reads the size from AR_FRAMES says so in
- * AR_PAGE_FRAMES (before it reports a running context); with a page that does
- * not, the pump uses the first AUDIO_RING_FRAMES_OLD frames, the size such a
- * page's worklet has built in. */
+ * compares the two files. */
 #ifndef NFSU2_AUDIO_PROTO_H
 #define NFSU2_AUDIO_PROTO_H
 #include <stdint.h>
@@ -23,7 +17,6 @@
 #define AUDIO_MAGIC        0x4E415544u  /* 'NAUD' */
 #define AUDIO_VERSION      1u
 #define AUDIO_RING_FRAMES  16384u       /* power of two: 372 ms at 44.1 kHz (a phone's 175 ms bursts, smoothly) */
-#define AUDIO_RING_FRAMES_OLD 8192u     /* the size built into pages before AR_PAGE_FRAMES */
 #define AUDIO_RATE         44100u       /* the mixer's output rate */
 
 /* header words */
@@ -48,7 +41,6 @@ enum {
     AR_WALL_MS = 17,     /* pump: milliseconds mixed on the wall clock (no consumer) */
     AR_MIXED = 18,       /* pump: frames mixed (low 32 bits) */
     AR_PAGE_RATE = 19,   /* page: the context's real sample rate */
-    AR_PAGE_FRAMES = 20, /* page: the ring size its worklet uses (AR_FRAMES); 0 = an older page (AUDIO_RING_FRAMES_OLD) */
     AR_HDR_WORDS = 32
 };
 enum { AR_CTX_NONE = 0, AR_CTX_RUNNING = 1, AR_CTX_SUSPENDED = 2, AR_CTX_CLOSED = 3 };

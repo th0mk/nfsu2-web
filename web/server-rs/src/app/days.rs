@@ -2,7 +2,7 @@
 //! the ones that opened the page, played (pressed Play, or came onto the switch), drove in free roam, and were in
 //! the game's Online mode.  The page says "page" at a load and "play" at Play (/seen); the switch's hellos and
 //! [`Days::sweep`] (every `SWEEP_EVERY`: who is in free roam or Online now, `LanSwitch::who`) add the rest.  Each
-//! kind counts in the ones before it too (an older page that says nothing still counts as one that played).
+//! kind counts in the ones before it too (a browser seen in free roam or Online played, whatever /seen said).
 //!
 //! Only a keyed hash of an id is kept (64 bits of HMAC-SHA256), with a new random key each day, and the day's sets go
 //! at its end: nothing links one day's browsers to the next day's, or to a ban.  The day so far is in the state

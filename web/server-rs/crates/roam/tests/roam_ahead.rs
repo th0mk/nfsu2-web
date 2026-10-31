@@ -1,5 +1,5 @@
 //! What the hub does that the Node server's hub never did: links that look ahead at the cars' speeds, and the world
-//! map's answer (MAPREQ / MAP, MAPD).
+//! map's answer (MAPREQ / MAPD).
 
 mod kit;
 
@@ -186,119 +186,6 @@ fn the_grid_links_as_every_pair_with_the_cars_moving() {
     }
 }
 
-/// the MAP datagrams the hub sent since the last clear
-fn maps(k: &Kit) -> Vec<(u32, Map)> {
-    k.sent.lock().iter().filter_map(|(vip, f)| map_of(f).map(|m| (*vip, m))).collect()
-}
-
-// the world map: the players of the room in free roam, past the one asking and its links, nearest first, in parts of
-// 230, 512 at most to a page that asks for no more; not those in a race, another room or gone quiet; one answer a second
-#[test]
-fn the_world_map_lists_the_others_nearest_first() {
-    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
-    for i in 0..600 {
-        join(&mut k, i);
-    }
-    k.from(W(600), &hello_with(700, &HelloOpts { core: 4, room: fnv1a("blue"), ..Default::default() }));
-    // player i at x = 10 i (rounded), heading a quarter turn (64)
-    for i in 0..=600u32 {
-        let status = if i == 7 { 3 } else { 2 };
-        k.from(W(i), &snap_moving(100 + i, [i as f64 * 10.0 + 0.25, 3.75, 0.0], [0.0; 3], std::f64::consts::FRAC_PI_2, status));
-    }
-    k.from(W(600), &snap(700, [5.0, 0.0, 0.0]));
-    k.hub.tick();
-    k.clear();
-    k.from(W(0), &mapreq(100, 9));
-    let m = maps(&k);
-    assert_eq!(m.iter().map(|(_, x)| (x.0, x.1, x.2, x.4.len())).collect::<Vec<_>>(), [(9, 0, 3, 230), (9, 1, 3, 230), (9, 2, 3, 52)]);
-    assert!(m.iter().all(|(vip, x)| *vip == W(0) && x.3 == 597), "to the one asking: 600 less itself, its link, the one racing");
-    let all: Vec<(i16, i16, u8)> = m.into_iter().flat_map(|(_, x)| x.4).collect();
-    // its link is 1 (the nearest), 7 races, 600 is in another room
-    let want: Vec<(i16, i16, u8)> = (2..600).filter(|&i| i != 7).take(512).map(|i| (i * 10, 4, 64)).collect();
-    assert_eq!(all, want);
-    // again within a second: nothing; after it: an answer
-    k.clear();
-    k.step(500.0);
-    k.from(W(0), &mapreq(100, 10));
-    assert!(maps(&k).is_empty(), "one answer a second");
-    k.step(600.0);
-    k.from(W(0), &mapreq(100, 11));
-    assert_eq!(maps(&k).len(), 3);
-    // a player alone in its room: one empty part; a stranger (no HELLO): nothing
-    k.clear();
-    k.from(W(600), &mapreq(700, 1));
-    assert_eq!(maps(&k).into_iter().map(|(_, x)| x).collect::<Vec<_>>(), [(1, 0, 1, 0, vec![])]);
-    k.clear();
-    k.from(W(900), &mapreq(900, 1));
-    assert!(maps(&k).is_empty());
-    // positions older than 5 s are not shown
-    k.step(5000.0);
-    k.from(W(1), &snap(101, [10.0, 0.0, 0.0]));
-    k.clear();
-    k.from(W(0), &mapreq(100, 12));
-    assert_eq!(maps(&k).into_iter().map(|(_, x)| (x.3, x.4.len())).collect::<Vec<_>>(), [(0, 0)], "only its link 1 is fresh");
-}
-
-// a page that says how many it takes: 2048 at most, in nine parts (the core takes them in any order), fewer when it
-// asks for fewer
-#[test]
-fn the_world_map_takes_2048_from_a_page_that_asks() {
-    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
-    for i in 0..2200 {
-        join(&mut k, i);
-        k.from(W(i), &snap(100 + i, [i as f64 * 5.0, 0.0, 0.0]));
-    }
-    k.hub.tick();
-    k.clear();
-    k.from(W(0), &mapreq_max(100, 1, 4000));
-    let m = maps(&k);
-    let parts: Vec<(u8, u8, usize)> = m.iter().map(|(_, x)| (x.1, x.2, x.4.len())).collect();
-    assert_eq!(parts.len(), 9);
-    assert!(parts.iter().enumerate().all(|(j, p)| p.0 as usize == j && p.1 == 9), "{parts:?}");
-    assert_eq!(parts.iter().map(|p| p.2).sum::<usize>(), 2048);
-    assert!(m.iter().all(|(_, x)| x.3 == 2198), "2200 less itself and its link");
-    let all: Vec<i16> = m.into_iter().flat_map(|(_, x)| x.4).map(|e| e.0).collect();
-    assert!(all.windows(2).all(|w| w[0] < w[1]) && all[0] <= 10 && all[2047] <= 2050 * 5, "nearest first");
-    k.clear();
-    k.step(1100.0);
-    k.from(W(0), &mapreq_max(100, 2, 300));
-    assert_eq!(maps(&k).into_iter().map(|(_, x)| (x.1, x.2, x.4.len())).collect::<Vec<_>>(), [(0, 2, 230), (1, 2, 70)]);
-}
-
-// one answer a second for a browser, whatever its endpoints: a BYE and a HELLO, or another port, make a new player,
-// not a new answer (the second security audit: that way a few clients kept the hub's thread busy with maps)
-#[test]
-fn the_world_map_answers_a_browser_once_a_second_whatever_its_endpoints() {
-    let mut k = Kit::new(RoamOptions::default());
-    for i in 0..20 {
-        join(&mut k, i);
-        k.from(W(i), &snap(100 + i, [i as f64 * 10.0, 0.0, 0.0]));
-    }
-    k.hub.tick();
-    k.clear();
-    k.from(W(0), &mapreq(100, 1));
-    assert_eq!(maps(&k).len(), 1);
-    // again as a new player on the same endpoint, then on other ports: nothing within the second
-    k.clear();
-    k.from(W(0), &bye(100));
-    join(&mut k, 0);
-    k.from(W(0), &mapreq(100, 2));
-    for port in [47211, 47212] {
-        k.hub.frame(W(0), &frame_ports(W(0), &hello_with(100, &HelloOpts { core: 4, ..Default::default() }), port, 47210));
-        k.hub.frame(W(0), &frame_ports(W(0), &mapreq(100, 3), port, 47210));
-    }
-    assert!(maps(&k).is_empty(), "one answer a second for the browser");
-    // another browser is not held back by it; and past the second (and a tick, which forgets old answers) it asks again
-    k.from(W(1), &mapreq(101, 1));
-    assert_eq!(maps(&k).len(), 1);
-    k.clear();
-    k.step(1000.0);
-    k.hub.tick();
-    k.clear();
-    k.from(W(0), &mapreq(100, 4));
-    assert_eq!(maps(&k).len(), 1);
-}
-
 /// the MAPD datagrams the hub sent since the last clear
 fn mapds(k: &Kit) -> Vec<(u32, Mapd)> {
     k.sent.lock().iter().filter_map(|(vip, f)| mapd_of(f).map(|m| (*vip, m))).collect()
@@ -311,6 +198,77 @@ fn mapd_answer(k: &Kit) -> (u16, u16, u16, Vec<MapdEntry>) {
     let (req, base, n, total) = (m[0].1.0, m[0].1.1, m[0].1.3, m[0].1.4);
     assert!(m.iter().enumerate().all(|(j, (_, x))| (x.0, x.1, x.2 as usize, x.3, x.4) == (req, base, j, n, total)), "one answer's parts");
     (req, base, total, m.into_iter().flat_map(|(_, x)| x.5).collect())
+}
+
+// the world map: the players of the room in free roam, past the one asking and its links; not those in a race, another
+// room or gone quiet (5 s); a player alone in its room gets one empty datagram, a stranger (no HELLO) nothing
+#[test]
+fn the_world_map_shows_the_room_in_free_roam_lately() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..10 {
+        join(&mut k, i);
+    }
+    k.from(W(10), &hello_with(110, &HelloOpts { room: fnv1a("blue"), ..Default::default() }));
+    // player i at x = 10 i (rounded), heading a quarter turn (64)
+    for i in 0..=10u32 {
+        let status = if i == 7 { 3 } else { 2 };
+        k.from(W(i), &snap_moving(100 + i, [i as f64 * 10.0 + 0.25, 3.75, 0.0], [0.0; 3], std::f64::consts::FRAC_PI_2, status));
+    }
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_base(100, 1, 2048, 0));
+    // its link is 1 (the nearest), 7 races, 10 is in another room
+    let want: Vec<MapdEntry> = (2..10u16).filter(|&i| i != 7).map(|i| (i, Some((i as i16 * 10, 4, 64, 0, 0)))).collect();
+    assert_eq!(mapd_answer(&k), (1, 0, 7, want));
+    // a player alone in its room: one empty datagram; a stranger (no HELLO): nothing
+    k.clear();
+    k.from(W(10), &mapreq_base(110, 1, 2048, 0));
+    assert_eq!(mapds(&k).into_iter().map(|(vip, x)| (vip, x.0, x.1, x.2, x.3, x.4, x.5.len())).collect::<Vec<_>>(), [(W(10), 1, 0, 0, 1, 0, 0)]);
+    k.clear();
+    k.from(W(20), &mapreq_base(120, 1, 2048, 0));
+    assert!(mapds(&k).is_empty());
+    // positions older than 5 s are not shown
+    k.step(5100.0);
+    k.from(W(1), &snap(101, [10.0, 0.0, 0.0]));
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_base(100, 2, 2048, 0));
+    assert_eq!(mapd_answer(&k).2, 0, "only its link 1 is fresh");
+}
+
+// one answer a quarter second for a browser, whatever its endpoints: a BYE and a HELLO, or another port, make a new
+// player, not a new answer (the second security audit: that way a few clients kept the hub's thread busy with maps)
+#[test]
+fn the_world_map_answers_a_browser_once_a_quarter_second_whatever_its_endpoints() {
+    let mut k = Kit::new(RoamOptions::default());
+    for i in 0..20 {
+        join(&mut k, i);
+        k.from(W(i), &snap(100 + i, [i as f64 * 10.0, 0.0, 0.0]));
+    }
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_base(100, 1, 2048, 0));
+    assert_eq!(mapds(&k).len(), 1);
+    // again as a new player on the same endpoint, then on other ports: nothing within the quarter second
+    k.clear();
+    k.from(W(0), &bye(100));
+    join(&mut k, 0);
+    k.from(W(0), &mapreq_base(100, 2, 2048, 0));
+    for port in [47211, 47212] {
+        k.hub.frame(W(0), &frame_ports(W(0), &hello(100), port, 47210));
+        k.hub.frame(W(0), &frame_ports(W(0), &mapreq_base(100, 3, 2048, 0), port, 47210));
+    }
+    assert!(mapds(&k).is_empty(), "one answer a quarter second for the browser");
+    // another browser is not held back by it; and past the quarter second (and a tick, which forgets old answers) it
+    // asks again
+    k.from(W(1), &mapreq_base(101, 1, 2048, 0));
+    assert_eq!(mapds(&k).len(), 1);
+    k.clear();
+    k.step(250.0);
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_base(100, 4, 2048, 0));
+    assert_eq!(mapds(&k).len(), 1);
 }
 
 // a page since MAPD gets what changed since the answer it holds: everyone at first (by slot, with their velocities),
@@ -441,7 +399,7 @@ fn the_world_map_places_a_car_going_straight_once() {
     assert!(turned.len() == 2 && turned[0] <= 4 && (16..=22).contains(&turned[1]), "{placed:?}");
 }
 
-// MAPD from nothing for 2048 of 2200: 16 full datagrams; a page before MAPD still gets MAP once a second
+// MAPD from nothing for 2048 of 2200: 16 full datagrams
 #[test]
 fn the_world_map_sends_2048_in_16_mapd_datagrams() {
     let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
@@ -464,13 +422,6 @@ fn the_world_map_sends_2048_in_16_mapd_datagrams() {
     k.step(300.0);
     k.from(W(0), &mapreq_base(100, 2, 2048, 1));
     assert_eq!(mapds(&k).into_iter().map(|(_, x)| (x.0, x.1, x.2, x.3, x.5.len())).collect::<Vec<_>>(), [(2, 1, 0, 1, 0)]);
-    k.clear();
-    k.from(W(1), &mapreq(101, 1));
-    assert_eq!(maps(&k).len(), 3, "MAP to a page before MAPD");
-    k.clear();
-    k.step(300.0);
-    k.from(W(1), &mapreq(101, 2));
-    assert!(maps(&k).is_empty(), "...once a second");
 }
 
 // roam_core asks as the hub reads it, and takes the hub's answer in parts, in any order

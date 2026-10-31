@@ -156,6 +156,15 @@ pub async fn run(o: Options, cores: usize) {
             die(&format!("{dir}: {e}"));
         }
     }
+    // the console kept in the state folder too, a file a day (nfsu2_util::logfile): it outlasts a deploy
+    let logs = paths::join(&o.state, "logs");
+    let logs_up = match nfsu2_util::logfile::to_files(Path::new(&logs)) {
+        Ok(()) => true,
+        Err(e) => {
+            log::error(&format!("{logs}: {e} (no log files: the console only)"));
+            false
+        }
+    };
     if !o.artifacts.is_empty()
         && let Err(e) = std::fs::create_dir_all(&o.artifacts)
     {
@@ -285,6 +294,10 @@ pub async fn run(o: Options, cores: usize) {
         app.vault_forward = super::vault_forward::VaultForward::from_env().unwrap_or_else(|e| die(&e));
     }
     let app = Arc::new(app);
+    // the pages' friend messages (friends.rs)
+    if let Some(f) = &app.friends {
+        f.attach();
+    }
     let o = &app.o;
     let control = super::control::listen(app.clone());
 
@@ -315,21 +328,27 @@ pub async fn run(o: Options, cores: usize) {
                 // the tunnel's) and get fewer of the other cars' updates meanwhile (nfsu2-lan lag.rs)
                 log::line(&format!(
                     "[players] {} on the switch: {} in Online mode, {} on the LAN or Online screens, {} in free roam ({} of them not driving: \
-                     a race, a shop, the menus), {} on an older page (until its tab closes), {} leaving or starting; {} of all of them bundling \
-                     (a page loaded since the server has bundles); {} more than a second behind on their connection, {} getting fewer car \
-                     updates ({} left out since the last count)",
+                     a race, a shop, the menus), {} leaving or starting; {} more than a second behind on their connection, {} getting \
+                     fewer car updates ({} left out since the last count)",
                     b.players,
                     b.online,
                     b.lan,
                     b.roam,
                     b.away,
-                    b.older,
                     b.other,
-                    b.bundles,
                     b.behind,
                     b.thinning,
                     b.thinned - thinned
                 ));
+                // LAN broadcasts (server.dll's adverts) not sent to pages with LAN play open but no socket on their port
+                // (nfsu2-lan Peer::takes_udp)
+                let skipped = b.bcast_skipped - was.bcast_skipped;
+                if skipped > 0 {
+                    log::line(&format!(
+                        "[players] LAN broadcasts not sent since the last count (no socket on their port there): {skipped} ({:.1} Mbit/s)",
+                        (b.bcast_skipped_bytes - was.bcast_skipped_bytes) as f64 * 8.0 / 1e6 / BREAKDOWN_EVERY.as_secs_f64()
+                    ));
+                }
                 // the line (nfsu2-lan queue.rs): pages waiting for a place, and how long the longest of those let in
                 // waited
                 if b.waiting > 0 || b.waited > 0 {
@@ -435,6 +454,9 @@ pub async fn run(o: Options, cores: usize) {
                 }
                 if let Some(c) = &app.covers {
                     c.prune();
+                }
+                if let Some(f) = &app.friends {
+                    f.prune();
                 }
                 // the claimed names: the ended ones go, names.json written when anything changed
                 if let Some(n) = &app.names {
@@ -713,6 +735,14 @@ pub async fn run(o: Options, cores: usize) {
             log::KEEP_FILES
         ));
     }
+    lines.push(if logs_up {
+        format!(
+            "  logs      : the console in {logs} too, a file a day (UTC), gzipped once it ended, the last {} days",
+            nfsu2_util::logfile::DAYS_KEPT
+        )
+    } else {
+        "  logs      : the console only (the log files could not be made: above)".into()
+    });
     if !o.online_trace.is_empty() {
         lines.push(format!("  trace     : lobby messages (secrets redacted) into {}", o.online_trace));
     }

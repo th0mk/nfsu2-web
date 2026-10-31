@@ -1,8 +1,10 @@
 //! The server's stand-in for EA's online servers of NFS Underground 2, for the game's own Online mode (main menu,
 //! Online) between browsers on this server.  It keeps the rules and the console lines of the Node server it
-//! replaced, and its two files in the state folder (online/stats.json, online/buddies.json) byte for byte as that one
-//! wrote them, so the results and friends lists kept before are read as they are.  What is the game's own (rooms,
-//! config, flags, race types, the report and STAT formats, the Messenger's title, the news) is a table: title.rs.
+//! replaced, and its results in the state folder (online/stats.json) byte for byte as that one wrote them, so the
+//! results kept before are read as they are; the friends lists, one buddies.json then, are one file a persona since
+//! 2026-10-31 (online/friends/, buddy.rs), and free roam's pages befriend through them too ([`OnlineHost::friends`]).
+//! What is the game's own (rooms, config, flags, race types, the report and STAT formats, the Messenger's title, the
+//! news) is a table: title.rs.
 //!
 //! - browser: lifted DirtySock -> winsock.c (pcnfs05.ea.com = 10.77.0.1) -> runtime/web/net_lan.c -> page -> /lan
 //!   WebSocket -> the switch (nfsu2-lan)
@@ -64,6 +66,7 @@ use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
 pub use crate::title::Title;
+pub use crate::buddy::{FriendAsk, FriendReply, FriendRow};
 pub use crate::trace::LobbyTrace;
 
 /// 10.77.0.1: the server's own host on the virtual LAN, the address the switch never hands to a browser (vhost.rs)
@@ -110,6 +113,7 @@ enum Event {
     Info(oneshot::Sender<serde_json::Value>),
     Vips(oneshot::Sender<HashSet<u32>>),
     Attach(SwitchSend),
+    Friends(Arc<str>, Arc<str>, FriendAsk, oneshot::Sender<FriendReply>),
     Stop,
 }
 
@@ -136,6 +140,13 @@ impl OnlineHost {
     /// the switch's way to its browsers
     pub fn attach_switch(&self, send: SwitchSend) {
         let _ = self.tx.send(Event::Attach(send));
+    }
+    /// a page's friends lists (EA Messenger's, buddy.rs): as the keyphrase `owner` (nfsu2-claims; its claimed name is
+    /// the persona), on behalf of client `group`
+    pub fn friends(&self, owner: Arc<str>, group: Arc<str>, ask: FriendAsk) -> oneshot::Receiver<FriendReply> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Event::Friends(owner, group, ask, tx));
+        rx
     }
 }
 
@@ -178,6 +189,11 @@ fn run(title: &'static Title, o: OnlineOptions, rx: mpsc::Receiver<Event>) {
                 let _ = tx.send(core.vips());
             }
             Some(Event::Attach(send)) => core.attach(send),
+            Some(Event::Friends(owner, group, ask, tx)) => {
+                let mut out = None;
+                guarded(&mut core, None, |c| out = Some(c.friends(&owner, &group, ask)));
+                let _ = tx.send(out.unwrap_or_default());
+            }
             Some(Event::Stop) => {
                 guarded(&mut core, None, |c| c.stop());
                 return;

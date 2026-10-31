@@ -35,6 +35,8 @@ async function standIn(t, json) {
 /** a node process: its exit code and what it printed */
 const node = (args, env = process.env) => new Promise(res => {
   const c = spawn(process.execPath, args, { cwd: REPO, env });
+  const t = setTimeout(() => c.kill(), 120_000);           // a tool that never ends: its exit code null fails the test
+  c.on('exit', () => clearTimeout(t));
   let out = '', err = '';
   c.stdout.on('data', d => { out += d; }); c.stderr.on('data', d => { err += d; });
   c.on('exit', code => res({ code, out, err }));

@@ -92,7 +92,7 @@ if [ "$BUILD" = 1 ]; then
     fi
   fi
   # ---- 3. the page ----
-  if [ ! -f web/dist/main.js ] || [ -n "$(find web/src web/index.html web/build.mjs app/registry-defaults.txt -newer web/dist/main.js -type f -print -quit 2>/dev/null || true)" ]; then
+  if [ ! -f web/dist/main.js ] || [ -n "$(find web/src web/index.html web/build.mjs app/registry-defaults.txt CHANGELOG.md -newer web/dist/main.js -type f -print -quit 2>/dev/null || true)" ]; then
     say "Building the page"
     if ! (cd web && node build.mjs) > "$STATE/page-build.log" 2>&1; then
       tail -40 "$STATE/page-build.log"

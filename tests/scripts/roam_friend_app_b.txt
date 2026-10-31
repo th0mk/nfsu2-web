@@ -1,0 +1,36 @@
+# Free roam's friends on the player's own page, instance B (with roam_friend_app_a.txt): parks facing A, the noses
+# 0.3 m into each other, and presses F now and then (shots between: b_1 .. b_end).
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++960  roam teleport 1695.3 -879.96 24.6 0xc000
++300  roam teleport 1695.3 -879.96 24.6 0xc000
++0    log placed
++900  log SHOT b_1
++0    log KEY KeyF                         # F acts only while the line offers something: whoever asks first,
++400  log SHOT b_2
++0    log KEY KeyF                         # the other's next F accepts
++400  log SHOT b_3
++0    log KEY KeyF
++400  log SHOT b_4
++0    log KEY KeyF
++600  log SHOT b_end
++0    roam mp bump
++0    log done

@@ -30,7 +30,7 @@ function entries(game) {
 // the Dockerfile, its ignore file, and what may go into its build (sources only, never gen/ (the lifted game code),
 // out/ (the module) or the game folder)
 const DOCKERFILE = 'web/server-rs/Dockerfile', IGNORE = 'web/server-rs/Dockerfile.dockerignore';
-const ALLOWED = ['app/registry-defaults.txt', 'web/package.json', 'web/package-lock.json', 'web/build.mjs', 'web/index.html', 'web/src/',
+const ALLOWED = ['app/registry-defaults.txt', 'CHANGELOG.md', 'web/package.json', 'web/package-lock.json', 'web/build.mjs', 'web/index.html', 'web/src/',
   'web/server-rs/'];
 
 const ignore = fs.readFileSync(path.join(REPO, IGNORE), 'utf8').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));

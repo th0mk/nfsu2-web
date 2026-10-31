@@ -67,6 +67,7 @@ import { fileURLToPath } from 'node:url';
 import { serverCommand } from './server-cmd.mjs';
 import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
 import { seedSave } from './save-seed.mjs';
+import { own, stop } from './children.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -144,6 +145,8 @@ const SEED = opt('seed', '');               // a save tree each instance starts 
 const WASM_OF = new Map(opts('wasm-of').map(kv => [+kv.slice(0, kv.indexOf('=')), path.resolve(kv.slice(kv.indexOf('=') + 1))]));
 const PY = fs.existsSync(path.join(REPO, '.venv/bin/python')) ? path.join(REPO, '.venv/bin/python') : 'python3';
 fs.mkdirSync(OUT, { recursive: true });
+// a car trace a run of before left (tools/lan_trace.py reads every i<n>/cars.csv) is not taken for this run's
+for (const d of fs.readdirSync(OUT)) if (/^i\d+$/.test(d)) fs.rmSync(path.join(OUT, d, 'cars.csv'), { force: true });
 
 // lan_race.sh's scripts
 const MODES = LAN.modes;
@@ -198,11 +201,12 @@ function url(i) {
 }
 
 // our own server (stopped by its child handle only)
-let server = null;
-const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'), { flags: 'a' });
+let server = null, serverDied = null;
+const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'));
 async function startServer() {
   const c = spawn(...serverCommand(['--data', DATA,
     '--http-port', String(HTTP_PORT), '--dev', '--artifacts', OUT, ...(GAME === 'ug2' ? [] : ['--game', GAME]), ...(LAN.server ?? []), ...(opt('impair', '') ? ['--lan-impair', opt('impair', '')] : [])]), { stdio: ['ignore', 'pipe', 'pipe'] });
+  own(c);
   c.stdout.pipe(serverLog, { end: false }); c.stderr.pipe(serverLog, { end: false });
   await new Promise((res, rej) => {
     let out = '';
@@ -211,13 +215,13 @@ async function startServer() {
     c.on('exit', code => { clearTimeout(t); rej(new Error(`server exited (${code})`)); });
   });
   serverLog.write(`--- server pid ${c.pid} up at ${new Date().toISOString()}\n`);
+  c.on('exit', (code, sig) => { if (server === c) serverDied = `server-died(${code ?? sig})`; });
   return c;
 }
 async function stopServer() {
   if (!server) return;
   const c = server; server = null;
-  const gone = new Promise(r => c.once('exit', r));
-  c.kill('SIGTERM'); await gone;
+  await stop(c);
   serverLog.write(`--- server stopped at ${new Date().toISOString()}\n`);
 }
 if (OWN) server = await startServer();
@@ -361,7 +365,10 @@ console.log(trace);
 const near = [...trace.matchAll(/within \d+ m of the viewer: (\d+) samples, err median \S+ m, p95 (\S+) m; jumps (\d+)/g)];
 const pairs = PLAYERS * (PLAYERS - 1);
 const nearOk = near.length === pairs && near.every(([, n, p, j]) => +n >= 500 && +p < 1.5 && (+j === 0 || LAN.traceJumps === false));
-if (!nearOk && !DROP && LAN.trace !== false) summary.why.push('trace');
+// (the start page keeps no car trace: NFSU2_CAR_TRACE is a path setting, which it leaves out)
+if (PAGE === 'app') summary.trace = 'none with --page app';
+else if (!nearOk && !DROP && LAN.trace !== false) summary.why.push('trace');
+if (serverDied) summary.why.push(serverDied);
 summary.pass = summary.why.length === 0;
 fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
 console.log(JSON.stringify(summary, null, 2));

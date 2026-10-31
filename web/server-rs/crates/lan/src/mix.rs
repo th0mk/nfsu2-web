@@ -53,13 +53,17 @@ fn roam_type(data: &[u8]) -> usize {
     if t < R { t } else { 0 }
 }
 
-/// the kind of a datagram (the switch's copy: byte 1 says whether free roam's checked out) that went to `dst` in a
-/// compact bundle
-pub(crate) fn of_entry(data: &[u8], dst: u32) -> usize {
+/// nfsu2-roam's ROAM_HUB_VIP: the free-roam hub's address, whose lists, map and lobbies go in bundles too
+const HUB_VIP: u32 = crate::BASE | 0xFD;
+
+/// the kind of a datagram (the switch's copy: byte 1 says whether free roam's checked out) that went from `src` to
+/// `dst` in a compact bundle (the hub's by their type, as its messages of their own were: `of_host`)
+pub(crate) fn of_entry(data: &[u8], src: u32, dst: u32) -> usize {
     if data.len() < 16 {
         return OTHER_KIND;
     }
     match data[0] {
+        KIND_UDP if src == HUB_VIP && data[1] == ROAM_OK && data.len() > 16 + 5 => HUB + roam_type(data),
         KIND_UDP if data[1] == ROAM_OK && data.len() > 16 + 5 => roam_type(data),
         KIND_UDP if u16::from_be_bytes([data[14], data[15]]) == ROAM_PORT => ROAM_BAD,
         KIND_UDP => UDP_OTHER,
@@ -136,16 +140,19 @@ mod tests {
     fn kinds() {
         let mut roam = b"N2FR\x01\x06".to_vec();
         roam.resize(24, 0);
-        assert_eq!(name(of_entry(&frame(1, ROAM_OK, BASE | 2, ROAM_PORT, &roam), BASE | 9)), "ping");
-        assert_eq!(name(of_entry(&frame(1, 0, BASE | 2, ROAM_PORT, &roam), BASE | 9)), "free roam's port, unchecked");
-        assert_eq!(name(of_entry(&frame(1, 0, BASE | 2, 3659, &roam), BASE | 9)), "UDP, other ports");
-        assert_eq!(name(of_entry(&frame(3, 0, BASE | 2, 9999, &roam), BASE | 9)), "LAN UDP");
-        assert_eq!(name(of_entry(&frame(3, 0, BASE | 2, 9999, &roam), BROADCAST)), "LAN UDP broadcast");
-        assert_eq!(name(of_entry(&[3, 0, 0], BASE | 9)), "other frames");
+        assert_eq!(name(of_entry(&frame(1, ROAM_OK, BASE | 2, ROAM_PORT, &roam), BASE | 2, BASE | 9)), "ping");
+        assert_eq!(name(of_entry(&frame(1, 0, BASE | 2, ROAM_PORT, &roam), BASE | 2, BASE | 9)), "free roam's port, unchecked");
+        assert_eq!(name(of_entry(&frame(1, 0, BASE | 2, 3659, &roam), BASE | 2, BASE | 9)), "UDP, other ports");
+        assert_eq!(name(of_entry(&frame(3, 0, BASE | 2, 9999, &roam), BASE | 2, BASE | 9)), "LAN UDP");
+        assert_eq!(name(of_entry(&frame(3, 0, BASE | 2, 9999, &roam), BASE | 2, BROADCAST)), "LAN UDP broadcast");
+        assert_eq!(name(of_entry(&[3, 0, 0], BASE | 2, BASE | 9)), "other frames");
         let mut peers = roam.clone();
         peers[5] = 2;
         let (hub, online) = (Some(BASE | 0xFD), Some(BASE | 1));
         assert_eq!(name(of_host(&frame(1, 0, BASE | 0xFD, ROAM_PORT, &peers), hub, online)), "hub peers");
+        // the hub's list in a bundle: the same kind
+        assert_eq!(name(of_entry(&frame(1, ROAM_OK, BASE | 0xFD, ROAM_PORT, &peers), BASE | 0xFD, BASE | 9)), "hub peers");
+        assert_eq!(name(of_entry(&frame(1, ROAM_OK, BASE | 2, ROAM_PORT, &peers), BASE | 2, BASE | 9)), "peers");
         peers[5] = 200;
         assert_eq!(name(of_host(&frame(1, 0, BASE | 0xFD, ROAM_PORT, &peers), hub, online)), "hub ?");
         assert_eq!(name(of_host(&frame(4, 0, BASE | 1, 0, &[1; 30]), hub, online)), "Online server");

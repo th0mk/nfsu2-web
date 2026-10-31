@@ -22,6 +22,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import { serverCommand } from './server-cmd.mjs';
+import { own, stop } from './children.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -106,8 +107,8 @@ function lanFrame(kind, src, dst, sport, dport, op, cid, data = null) {
 
 let server = null;
 if (OWN) {
-  server = spawn(...serverCommand(['--data', DATA, '--http-port', String(HTTP_PORT), '--port', '0',
-    '--dev', '--max-peers', '250', '--state', path.join(OUT, 'state')]), { stdio: ['ignore', 'pipe', 'pipe'] });
+  server = own(spawn(...serverCommand(['--data', DATA, '--http-port', String(HTTP_PORT), '--port', '0',
+    '--dev', '--max-peers', '250', '--state', path.join(OUT, 'state')]), { stdio: ['ignore', 'pipe', 'pipe'] }));
   const log = fs.createWriteStream(path.join(OUT, 'server.log'));
   server.stdout.pipe(log); server.stderr.pipe(log);
   await new Promise((res, rej) => { let o = ''; server.stdout.on('data', d => { o += d; if (o.includes('access')) res(); }); server.on('exit', c => rej(new Error(`server exited ${c}`))); });
@@ -130,7 +131,7 @@ class Browser {
     this.ws.binaryType = 'nodebuffer';
     await new Promise((res, rej) => {
       this.ws.on('message', (d, bin) => {
-        if (!bin) { const m = JSON.parse(String(d)); if (m.t === 'welcome') { this.vip = m.vip >>> 0; this.ws.send(JSON.stringify({ t: 'hello', name: `load${this.i}`, deltas: 1 })); res(); } return; }
+        if (!bin) { const m = JSON.parse(String(d)); if (m.t === 'welcome') { this.vip = m.vip >>> 0; this.ws.send(JSON.stringify({ t: 'hello', name: `load${this.i}` })); res(); } return; }
         this.frame(Buffer.from(d));
       });
       this.ws.on('error', rej); this.ws.on('close', () => { this.closed = true; rej(new Error('closed')); });
@@ -279,7 +280,7 @@ const result = {
   races: stats.races, reports: stats.reports, messagesIn: stats.msgs, resets: stats.resets, abuse,
   server: { before, afterLogins: peak, after },
 };
-if (server) { const gone = new Promise(r => server.once('exit', r)); server.kill('SIGTERM'); await gone; }
+await stop(server);
 fs.writeFileSync(path.join(OUT, 'load.json'), JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 process.exit(0);

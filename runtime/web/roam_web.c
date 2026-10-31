@@ -119,7 +119,6 @@ static int mailbox_once(void){
     m->magic = NET_MAGIC; m->version = NET_VERSION; m->hdr_bytes = NET_HDR_BYTES; m->slot_bytes = NET_SLOT_BYTES;
     m->tx_slots = NET_TX_SLOTS; m->rx_slots = NET_RX_SLOTS;
     m->tx_off = NET_HDR_BYTES; m->rx_off = NET_HDR_BYTES + NET_TX_SLOTS * NET_SLOT_BYTES;
-    m->caps = NET_CAP_ROOM;
     MB = m;
     nfsu2_register(HOST_KIND_NET, m, NET_MAILBOX_BYTES);
     return 0;
@@ -299,6 +298,13 @@ int roam_plat_said(const char *json){
     if (!MB) return -1;
     if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
     return tx_push(NET_KIND_SAY, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
+}
+/* front bumpers: the page's "Add friend" (NET_KIND_FRIEND) */
+int roam_plat_friend(const char *json){
+    int n = (int)strlen(json);
+    if (!MB) return -1;
+    if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
+    return tx_push(NET_KIND_FRIEND, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
 }
 void roam_plat_say_marks(const uint32_t *ids, const float *xys, int n){
     GwMark m[GW_MARKS_MAX];

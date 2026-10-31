@@ -1035,7 +1035,7 @@ client.on(Events.MessageCreate, guard('message', m => {
       author: m.member?.displayName ?? m.author.username, text: m.content.slice(0, 4000), files: [...m.attachments.values()].map(a => a.name),
       // the staff channel and its reports' threads: a look may learn from them, never repeat them
       ...(CFG.staffChannel && (m.channelId === CFG.staffChannel || m.channel.parentId === CFG.staffChannel) ? { staff: true } : {}),
-    });
+    }, [...m.attachments.values()].map(a => ({ url: a.url, name: a.name, size: a.size, type: a.contentType })));
   }
   const thread = m.channel;
   // staff mentioning the bot in the staff channel: their answer, for every thread of a report

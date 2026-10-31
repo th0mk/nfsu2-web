@@ -15,6 +15,7 @@ base64.workspace = true
 getrandom.workspace = true
 libc.workspace = true
 crossbeam-utils.workspace = true
+flate2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

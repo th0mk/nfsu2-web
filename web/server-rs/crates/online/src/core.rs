@@ -186,6 +186,7 @@ impl Core {
             Action::LobbyTick => {
                 self.tick_timer = Some(self.set_timeout(5000.0, Action::LobbyTick));
                 self.lobby_tick();
+                self.buddy_tick();
             }
             Action::Later(k) => self.later_timer(k, id),
             Action::RedirectorIdle(c) => self.redirector_idle(c),

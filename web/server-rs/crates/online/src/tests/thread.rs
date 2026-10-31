@@ -94,7 +94,7 @@ fn on_its_own_thread() {
     // a browser that left; the server stops: the files are there when stop() returns
     host.peer_gone(a);
     host.stop();
-    assert!(!dir.join("stats.json").exists() && !dir.join("buddies.json").exists(), "nothing to keep: no file");
+    assert!(!dir.join("stats.json").exists() && !dir.join("friends").exists(), "nothing to keep: no file");
 }
 
 #[test]
@@ -132,11 +132,5 @@ fn stop_writes_what_is_kept() {
     let _ = host.info().blocking_recv().unwrap();
     host.stop();
     let month = crate::jsx::month_of(nfsu2_util::now_ms() as f64);
-    let b = std::fs::read_to_string(dir.join("buddies.json")).unwrap();
-    assert_eq!(
-        b,
-        format!(
-            r#"{{"v":3,"note":"NFSU2 online Messenger lists (persona names; friend requests and messages waiting for their persona)","personas":[{{"name":"Alpha","seen":"{month}","B":["Bravo"]}}]}}"#
-        )
-    );
+    assert_eq!(crate::buddy::shelf_texts(&dir), [format!(r#"{{"v":4,"name":"Alpha","seen":"{month}","B":["Bravo"]}}"#)]);
 }

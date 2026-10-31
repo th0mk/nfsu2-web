@@ -1,11 +1,10 @@
 // The predownload worker: the install folder but the movies (datacache.ts
 // aheadFiles) into the game data cache ahead of play, so a game never waits
-// on the network for its data.  Blocks come compressed from a server that
-// offers it (one a request, at the game's own addresses, which Cloudflare can
-// keep), else as byte ranges.  The page starts it ("Download all game data")
+// on the network for its data.  Blocks come compressed, one a request, at the
+// game's own addresses, which Cloudflare can keep.  The page starts it ("Download all game data")
 // and stops it before a game starts, since the I/O worker writes the same files.
 //
-// Page -> worker: { t: 'start', manifestUrl, dataBase, language, texpack }, { t: 'stop' } (both addresses absolute)
+// Page -> worker: { t: 'start', manifestUrl, language, texpack }, { t: 'stop' } (the address absolute)
 // Worker -> page: { t: 'progress', have, total }   (bytes in the cache; at most every 250 ms)
 //                 { t: 'done', have, total }       (all of it is in the cache)
 //                 { t: 'stopped' }                 (after 'stop')
@@ -13,21 +12,20 @@
 // Every file is closed before 'done', 'stopped' or 'error'.  What was written
 // stays: a stopped or failed download goes on from there the next time.
 import {
-  BLOCK, CACHE_DIR, aheadFiles, blockCount, blockLen, blockRuns, dataUrl, manifestFiles, openCacheFile, putBlock, runUrl, scanCache,
+  BLOCK, CACHE_DIR, aheadFiles, blockCount, blockLen, blockRuns, manifestFiles, openCacheFile, putBlock, runUrl, scanCache,
   type CacheFile, type DataFile, type Manifest,
 } from './datacache';
 import { fmtBytes } from '../app/checks';
 
-export type ToPredownload = { t: 'start'; manifestUrl: string; dataBase: string; language: string; texpack: string } | { t: 'stop' };
+export type ToPredownload = { t: 'start'; manifestUrl: string; language: string; texpack: string } | { t: 'stop' };
 export type FromPredownload =
   | { t: 'progress' | 'done'; have: number; total: number }
   | { t: 'stopped' } | { t: 'error'; msg: string };
 
-// Requests at once (over HTTP/1.1 Chrome holds 6 connections to a server: the page keeps the rest).  From a server
-// with compressed blocks, one block a request, at the address the game's own reads use (datacache.ts runUrl), so
-// one copy in Cloudflare's cache serves both; byte ranges from an older server take RUN blocks a request (a few
-// seconds on a slow line, so a stop is quick and little is fetched twice).
-const LANES = 4, RUN = 8;
+// Requests at once (over HTTP/1.1 Chrome holds 6 connections to a server: the page keeps the rest), one block a
+// request, at the address the game's own reads use (datacache.ts runUrl), so one copy in Cloudflare's cache serves
+// both.
+const LANES = 4;
 const ATTEMPTS = 8;
 
 const post = (m: FromPredownload) => (self as unknown as Worker).postMessage(m);
@@ -43,11 +41,11 @@ class Retry extends Error {}
 
 function closeFile(cf: CacheFile | null) { if (cf) { cf.h.flush(); cf.h.close(); cf.haveH.flush(); cf.haveH.close(); } }
 
-async function download(cfg: { manifestUrl: string; dataBase: string; language: string; texpack: string }): Promise<{ have: number; total: number } | null> {
+async function download(cfg: { manifestUrl: string; language: string; texpack: string }): Promise<{ have: number; total: number } | null> {
   const r = await fetch(cfg.manifestUrl, { cache: 'no-cache', signal: abort.signal });
   if (!r.ok) throw new Error(`the list of game files did not load (HTTP ${r.status})`);
   const m = await r.json() as Manifest;
-  const served = blockRuns(m, cfg.manifestUrl), runMax = served ? 1 : RUN;
+  const served = blockRuns(m, cfg.manifestUrl);
   const scan = await scanCache(aheadFiles(manifestFiles(m), cfg.language, cfg.texpack));
   const total = scan.total;
   let have = scan.have, shown = 0;
@@ -69,9 +67,7 @@ async function download(cfg: { manifestUrl: string; dataBase: string; language: 
     const file: Shared = { cf: null, runs: 0 };
     for (let bi = 0; bi < blockCount(f.size); bi++) {
       if (m?.[bi]) continue;
-      const prev = runs[runs.length - 1];
-      if (prev?.f === f && prev.end === bi && prev.end - prev.first < runMax) prev.end++;
-      else { runs.push({ f, first: bi, end: bi + 1, file }); file.runs++; }
+      runs.push({ f, first: bi, end: bi + 1, file }); file.runs++;
     }
   }
   const open = new Set<Promise<CacheFile>>();
@@ -87,12 +83,11 @@ async function download(cfg: { manifestUrl: string; dataBase: string; language: 
     while (first < run.end && cf.have[first]) first++;
     if (first === run.end) return;
     const start = first * BLOCK, end = Math.min(run.f.size, run.end * BLOCK);
-    // compressed runs (the browser undoes the Content-Encoding), or a byte range
-    const res = served ? await fetch(runUrl(served.url, run.f.path, first, run.end - first, run.f), { cache: 'no-store', signal: abort.signal })
-      : await fetch(dataUrl(cfg.dataBase, run.f.path), { headers: { Range: `bytes=${start}-${end - 1}` }, cache: 'no-store', signal: abort.signal });
+    // compressed (the browser undoes the Content-Encoding)
+    const res = await fetch(runUrl(served.url, run.f.path, first, run.end - first, run.f), { cache: 'no-store', signal: abort.signal });
     if (res.status === 429 || res.status >= 500) { await res.body?.cancel(); throw new Retry(`HTTP ${res.status}`); }
-    if (res.status !== 206 && res.status !== 200) throw new Error(`the server answered HTTP ${res.status} for ${run.f.path}`);
-    let at = served || res.status === 206 ? start : 0;   // a 200 to a range is the whole file, from its first block
+    if (res.status !== 200) throw new Error(`the server answered HTTP ${res.status} for ${run.f.path}`);
+    let at = start;
     const buf = new Uint8Array(BLOCK);
     let fill = 0;
     const rd = res.body!.getReader();

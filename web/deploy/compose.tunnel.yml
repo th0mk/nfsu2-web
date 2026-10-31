@@ -28,7 +28,7 @@ services:
   # four copies of the tunnel, 4 connections to Cloudflare each: a connection to a far or lossy Cloudflare site
   # slows every player on it (nfsu2.xyz, 2026-10-22: two of one copy's four went to Amsterdam, lost ~100 times
   # the packets of the Helsinki ones, and ~600 of 2,950 players got the others' cars seconds late), and one that
-  # drops (every few hours) drops its players; with 16, each is about a sixteenth of them (at 7000 players ~440 a
+  # drops (every few hours) drops its players; with 16, each is about a sixteenth of them (at 8000 players 500 a
   # connection; the Helsinki ones carried ~740 each that day without trouble).  Restart only the copy that has a bad
   # one (docker restart nfsu2-web-cloudflared-N; docker compose restart restarts them all).
   cloudflared:

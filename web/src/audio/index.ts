@@ -25,8 +25,8 @@ import { HostKind } from '../host/abi';
 import { abs } from '../base';
 import {
   AR_CTX, AR_CTX_CLOSED, AR_CTX_RUNNING, AR_CTX_SUSPENDED, AR_FRAMES, AR_HDR_WORDS, AR_LOUD, AR_MAGIC, AR_MIXED, AR_MODE, AR_MUTED,
-  AR_NOSOUND, AR_OFF_PCM, AR_PAGE_FRAMES, AR_PAGE_RATE, AR_PEAK, AR_QUANTA, AR_R, AR_RESET, AR_RMS, AR_TARGET, AR_UNDERRUNS,
-  AR_VERSION, AR_W, AR_WALL_MS, AUDIO_MAGIC, AUDIO_RATE, AUDIO_RING_FRAMES, AUDIO_RING_FRAMES_OLD, AUDIO_VERSION,
+  AR_NOSOUND, AR_OFF_PCM, AR_PAGE_RATE, AR_PEAK, AR_QUANTA, AR_R, AR_RESET, AR_RMS, AR_TARGET, AR_UNDERRUNS,
+  AR_VERSION, AR_W, AR_WALL_MS, AUDIO_MAGIC, AUDIO_RATE, AUDIO_RING_FRAMES, AUDIO_VERSION,
 } from './proto';
 
 export interface AudioOptions {
@@ -137,15 +137,9 @@ export async function attachAudio(proc: GameProcess, opts: AudioOptions = {}): P
     gain = c.createGain(); gain.gain.value = audible(); gain.connect(c.destination);
     const connect = () => {
       if (!ring || node || ctx !== c) return;
-      // the module's ring size (an older module's is AUDIO_RING_FRAMES_OLD), told
-      // to the pump before the context reads as running
-      const f = h ? Atomics.load(h, AR_FRAMES) : 0;
-      const frames = f >= AUDIO_RING_FRAMES_OLD && f <= AUDIO_RING_FRAMES && !(f & (f - 1)) && AR_OFF_PCM + f * 8 <= ring.size
-        ? f : AUDIO_RING_FRAMES_OLD;
-      if (h) Atomics.store(h, AR_PAGE_FRAMES, frames);
       node = new AudioWorkletNode(c, 'nfsu2-out', {
         numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
-        processorOptions: { buf: proc.memory.buffer as unknown as SharedArrayBuffer, ptr: ring.ptr, frames },
+        processorOptions: { buf: proc.memory.buffer as unknown as SharedArrayBuffer, ptr: ring.ptr },
       });
       node.connect(gain!);
       if (h) Atomics.store(h, AR_PAGE_RATE, c.sampleRate | 0);
@@ -198,8 +192,10 @@ export async function attachAudio(proc: GameProcess, opts: AudioOptions = {}): P
   proc.registered(HostKind.Audio).then(reg => {
     if (closed) return;
     const view = new Int32Array(proc.memory.buffer, reg.ptr, AR_HDR_WORDS);
-    if (view[AR_MAGIC] !== AUDIO_MAGIC || view[AR_VERSION] !== AUDIO_VERSION) {
-      log(`[audio] ring at 0x${reg.ptr.toString(16)} has magic 0x${(view[AR_MAGIC] >>> 0).toString(16)} version ${view[AR_VERSION]}: not ours, no sound`);
+    if (view[AR_MAGIC] !== AUDIO_MAGIC || view[AR_VERSION] !== AUDIO_VERSION || view[AR_FRAMES] !== AUDIO_RING_FRAMES ||
+        AR_OFF_PCM + AUDIO_RING_FRAMES * 8 > reg.size) {
+      log(`[audio] ring at 0x${reg.ptr.toString(16)} has magic 0x${(view[AR_MAGIC] >>> 0).toString(16)} version ${view[AR_VERSION]}, ` +
+          `${view[AR_FRAMES]} frames in ${reg.size} bytes: not ours, no sound`);
       return;
     }
     h = view; ring = reg; resetSeen = Atomics.load(h, AR_RESET);

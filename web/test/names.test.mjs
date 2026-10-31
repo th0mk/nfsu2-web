@@ -91,7 +91,7 @@ int main(void){
       names.push(n.slice(0, 24));
     }
     for (let k = 0; k < 5000; k++) { let n = ''; for (let j = rnd(25); j > 0; j--) n += String.fromCharCode(32 + rnd(95)); names.push(n); }
-    const c = execFileSync(bin, { input: names.join('\n') + '\n', encoding: 'utf8' }).trim();
+    const c = execFileSync(bin, { input: names.join('\n') + '\n', encoding: 'utf8', timeout: 120_000 }).trim();
     assert.equal(c.length, names.length);
     const js = names.map(n => (blockedName(n) ? '1' : '0')).join('');
     const diff = names.filter((n, i) => c[i] !== js[i]);

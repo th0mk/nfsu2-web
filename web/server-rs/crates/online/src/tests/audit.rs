@@ -234,13 +234,16 @@ fn onl3_messenger_memory() {
             if w.c(cb).l("RADD").code.is_empty() {
                 ok += 1;
             }
+            // (gone: a persona online keeps its list in memory, one that left makes room)
+            w.close(cb);
+            w.close(cl);
         }
         ok
     };
     assert!(made(&mut w, "G") <= 5, "one client: at most listRate new lists");
     made(&mut w, "H");
     made(&mut w, "I");
-    assert!(w.core.buddies.lists.len() <= 10, "{} lists kept (the cap is 10)", w.core.buddies.lists.len());
+    assert!(w.core.buddies.lists.len() <= 10, "{} lists in memory (the cap is 10)", w.core.buddies.lists.len());
 }
 
 // ONL-4: a Messenger connection that logged in twice and closed breaks nobody's Messenger
@@ -347,7 +350,7 @@ fn onl6_blocked_list_follows_the_name() {
     w.send(mb, "RADM", fields![("USER", "Alice"), ("ID", 3)]);
     w.close(mb);
     w.core.buddy_save();
-    let stored = std::fs::read_to_string(dir.join("buddies.json")).unwrap();
+    let stored = crate::buddy::shelf_texts(&dir).join("\n");
     assert!(stored.contains(r#""I":["Mallory"]"#), "the blocked list is kept: {stored}");
     assert!(!stored.contains("still there") && !stored.contains(r#""R""#), "nothing of Mallory's waits: {stored}");
     // over a restart: whoever plays as Alice has the list
@@ -364,7 +367,7 @@ fn onl6_blocked_list_follows_the_name() {
     w.send(b2, "RDEL", fields![("LIST", "I"), ("USER", "Mallory")]);
     assert!(!w.core.buddies.blocked("mallory"));
     w.core.buddy_save();
-    assert!(!std::fs::read_to_string(dir.join("buddies.json")).unwrap().contains(r#""I""#));
+    assert!(!crate::buddy::shelf_texts(&dir).join("\n").contains(r#""I""#));
 }
 
 fn board(w: &mut World, kind: u32) -> Vec<String> {
@@ -514,6 +517,71 @@ fn a_race_no_racer_drives_is_a_cheat_line() {
         ["[cheat] 10.77.4.6 \"Plane\": raced in the online race \"planes\" (sprint, track 4102, 1 lap), an edited car (no \
           car of the game makes 420 km/h): by its own game; its top speed 432 km/h"]
     );
+    // a racer whose game went on alone long after the race ended (nfsu2.xyz, 2026-10-31: 19.6 km in 12 minutes) says
+    // nothing of the winner's way (9.7 km in 2:54)
+    race_of(&mut w, "split", "Funny", "Gone", &[(0, 1, 174.09, 55.97, false), (1, 0, 720.0, 27.28, true)]);
+    assert_eq!(cheats(&w).len(), 3, "{:?}", cheats(&w));
+}
+
+/// a drift race's report: (index, place, time, points, the biggest single drift's points, top speed m/s, dropped)
+fn resu_drift(players: &[(u8, u8, f32, i32, i32, f32, bool)]) -> String {
+    let mut b = vec![0u8; 8 + 55 * players.len()];
+    b[0] = 3;
+    b[1] = players.len() as u8;
+    b[2] = 3;
+    b[4..6].copy_from_slice(&4311u16.to_be_bytes());
+    b[7] = 3;
+    for (i, (index, place, time, score, best, top, out)) in players.iter().enumerate() {
+        let o = 8 + 55 * i;
+        b[o] = *index;
+        b[o + 1] = *place;
+        b[o + 2] = if *out { 0x0b } else { 1 };
+        b[o + 8..o + 12].copy_from_slice(&time.to_be_bytes());
+        b[o + 16..o + 20].copy_from_slice(&(top * 0.6).to_be_bytes());
+        b[o + 20..o + 24].copy_from_slice(&top.to_be_bytes());
+        b[o + 44..o + 48].copy_from_slice(&score.to_be_bytes());
+        b[o + 48..o + 52].copy_from_slice(&best.to_be_bytes());
+        if *out {
+            b[o + 32..o + 36].copy_from_slice(&(-1.0f32).to_be_bytes());
+        }
+    }
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(b)
+}
+
+// a drift race: each racer's own game's points and biggest drift on a line of its own, the result by points with the
+// track; a top speed no car makes is an edited car's, as in other races
+#[test]
+fn a_drift_races_points_are_logged_and_an_edited_car_is_a_cheat_line() {
+    let mut w = world();
+    let (ga, gb) = (client(&mut w, "10.77.7.1"), client(&mut w, "10.77.7.2"));
+    let (x, y) = (login(&mut w, ga, "Slider"), login(&mut w, gb, "Rocket"));
+    let auth = race(&mut w, "dh", &[x, y], vec![]).unwrap();
+    w.advance(100_000.0);
+    // (Rocket first with 1.2 million points and 125 m/s: 450 km/h)
+    let rows = [(1, 1, 70.0, 1_200_000, 1_150_000, 125.0, false), (0, 2, 80.5, 310_400, 42_000, 61.0, false)];
+    for c in [x, y] {
+        w.send(c, "rank", fields![("AUTH", auth.as_str()), ("RESU", resu_drift(&rows)), ("NAME0", "Slider"), ("NAME1", "Rocket")]);
+    }
+    let t = w.text();
+    let has = |want: &str| t.iter().any(|l| l == want);
+    assert!(
+        has("[online] \"dh\" (drift, track 4311, 3 laps): Slider's own game: 2 of 2, 310400 points, its biggest drift 42000, top speed 220 km/h, 1:20.50"),
+        "{}",
+        t.join("\n")
+    );
+    assert!(
+        has("[online] \"dh\" (drift, track 4311, 3 laps): Rocket's own game: 1 of 2, 1200000 points, its biggest drift 1150000, top speed 450 km/h, 1:10.00"),
+        "{}",
+        t.join("\n")
+    );
+    assert!(has("[online] \"dh\" (drift, unranked, track 4311, 3 laps): 1 Rocket 1200000 points, 2 Slider 310400 points"), "{}", t.join("\n"));
+    let cheats: Vec<&String> = t.iter().filter(|l| l.starts_with("[cheat]")).collect();
+    assert_eq!(
+        cheats,
+        ["[cheat] 10.77.7.2 \"Rocket\": won the online race \"dh\" (drift, track 4311, 3 laps) with 1200000 points, an edited car \
+          (no car of the game makes 420 km/h): by its own game; its top speed 450 km/h"]
+    );
 }
 
 // what a game shows of another racer is no [cheat] line (nfsu2.xyz, 2026-10-29: Ozz's game had Nef win a 4-minute
@@ -573,27 +641,31 @@ fn a_report_without_a_player_who_never_raced_is_taken() {
 #[test]
 fn a_win_far_under_the_tracks_third_quickest_is_a_cheat_line() {
     let mut w = world();
-    let race_of = |w: &mut World, k: usize, a: &str, t: f32| {
+    let race_of = |w: &mut World, k: usize, a: &str, t: f32, next: f32| {
         let (ga, gb) = (client(w, &format!("10.77.9.{}", 2 * k + 1)), client(w, &format!("10.77.9.{}", 2 * k + 2)));
         let b = format!("Other{k}");
         let (x, y) = (login(w, ga, a), login(w, gb, &b));
         let auth = race(w, &format!("q{k}"), &[x, y], vec![]).unwrap();
         w.advance(120_000.0);
         for c in [x, y] {
-            report(w, c, &auth, &[a, &b], &[(0, 1, t), (1, 2, t + 5.0)], 1);
+            report(w, c, &auth, &[a, &b], &[(0, 1, t), (1, 2, next)], 1);
         }
     };
+    let cheats = |w: &World| w.text().into_iter().filter(|l| l.starts_with("[cheat]")).collect::<Vec<String>>();
     for k in 0..10 {
-        race_of(&mut w, k, &format!("Fair{k}"), 100.0 + k as f32);
+        race_of(&mut w, k, &format!("Fair{k}"), 100.0 + k as f32, 105.0 + k as f32);
     }
-    race_of(&mut w, 10, "Fast", 72.0);
-    assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "72 s: over 70 % of 102 s\n{}", w.text().join("\n"));
-    race_of(&mut w, 11, "Rocket", 60.0);
-    let l: Vec<String> = w.text().into_iter().filter(|l| l.starts_with("[cheat]")).collect();
+    race_of(&mut w, 10, "Fast", 72.0, 100.0);
+    assert_eq!(cheats(&w), Vec::<String>::new(), "72 s: over 70 % of 102 s");
+    // two cars far quicker than the track's best winners, close together (nfsu2.xyz, 2026-10-31: four within 4 s):
+    // that time can be driven, and it is a clean win
+    race_of(&mut w, 11, "Pair", 60.0, 62.0);
+    assert_eq!(cheats(&w), Vec::<String>::new(), "the next finisher close behind");
+    race_of(&mut w, 12, "Rocket", 59.0, 100.0);
     assert_eq!(
-        l,
-        ["[cheat] 10.77.9.23 \"Rocket\": won the online race \"q11\" (sprint, track 4014, 2 laps) in 1:00.00, under 70 % of the \
-          third quickest other winner's time of the track's 11 clean wins (1:41.00): as the result stands"]
+        cheats(&w),
+        ["[cheat] 10.77.9.25 \"Rocket\": won the online race \"q12\" (sprint, track 4014, 2 laps) in 0:59.00, under 70 % of the \
+          third quickest other winner's time of the track's 12 clean wins (1:40.00): as the result stands"]
     );
 }
 
@@ -623,7 +695,7 @@ fn race_types() {
     for x in [c, d] {
         report(&mut w, x, &auth, &["Drift1", "Drift2"], &[(0, 1, 104.0), (1, 2, 92.0)], 3);
     }
-    assert!(w.logged("\"drift\" (drift, unranked): 1 Drift1"), "{}", w.text().join("\n"));
+    assert!(w.logged("\"drift\" (drift, unranked, track 4014, 2 laps): 1 Drift1 0 points, 2 Drift2 0 points"), "{}", w.text().join("\n"));
     assert_eq!(boards(&mut w), [0, 0, 2, 2, 0, 0]);
     // the seventh: the result is taken and logged; no board or career counts it
     let g = client(&mut w, "10.77.0.6");

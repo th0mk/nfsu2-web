@@ -97,6 +97,12 @@ what it would do. Run again after a failure, it keeps the module and image of be
 `module/release.json`, the module's and the image's commits, for the forum bot (`discord-bot/`): after a release of
 only the page or the server, the image's commit is what is live. `NFSU2_DIR` names another folder than `/srv/nfsu2`.
 
+**The changelog:** the start page's Changelog button lists `CHANGELOG.md`, which is part of the image. Before a
+release, add its section at the top: the commits after the newest section's commit, up to the release's, as one line
+per change written for players (the file's head says how). Commit it, wait for its image, and release with that commit
+(`release.sh root@<vps> <folder> <changelog commit>`: it changed only the page). `release.sh` notes when the image's
+`CHANGELOG.md` ends before the module's commit.
+
 **When something is wrong:**
 
 | What you see | Why |
@@ -193,7 +199,7 @@ minute of a change. A keyphrase deleted from the cloud frees its name.
 
 ## Sizing
 
-For up to 6500 players at once (the image's limit, of the server's 7000; the Node server's was 2000, [From the Node
+For up to 8000 players at once (the image's limit; the Node server's was 2000, [From the Node
 server](#from-the-node-server)): 8 vCPU for 2000 and 16 for 4000 to 6000 (4000 in free roam took the Rust server 6-8 cores of a Ryzen 9 5900X,
 and a Cloudflare Tunnel's cloudflared pays for each message again, `web/server-rs/README.md`), 8 GB of memory (the
 compose file's limit), 40 GB of disk and a 1 Gbit/s port with a few TB of traffic a month.
@@ -338,12 +344,14 @@ NFSU2_IMAGE=ghcr.io/th0mk/nfsu2-web-rs:sha-<commit>
   commit, then `docker compose up -d`. The state volume serves either.
 - `UV_THREADPOOL_SIZE` means nothing to the Rust server; `NFSU2_THREADS` sets its worker threads (by default half
   the cores, 2 to 8). Its console has the Node server's lines.
-- **7000 players** where the Node server took 2000 (`--max-peers` 1 to 7000, the image's `NFSU2_MAX_PEERS=6500`: at 5,857 players the game's
-  CPU quota was 82 % full, nfsu2.xyz 2026-10-30): the
-  virtual network is 10.77.0.0/19 (addresses in 10.77.0-27.x), and the game module's peer bits cover a /21, so for a player on 10.77.8-27.x the
+- **8000 players** where the Node server took 2000 (`--max-peers` 1 to 8000, the image's `NFSU2_MAX_PEERS=8000`: at 6,758 players the game
+  used 1.70 cores a thousand and the port sent 757 Mbit/s, nfsu2.xyz 2026-10-31, so 8000 at that rate would fill about 91 % of the
+  slice's 15 and ~900 Mbit/s; LAN adverts only to the pages with a socket on their port and the hub's lists in bundles came
+  with the raise, for a quarter of the bytes to the pages and some of the messages): the
+  virtual network is 10.77.0.0/19, all of it (addresses in 10.77.0-31.x), and the game module's peer bits cover a /21, so for a player on 10.77.8-31.x the
   game asks that host itself (a LAN race's connect to one who has just gone ends after the same 3 s as "timed out"
   instead of "unreachable"; nothing else differs, and pages and modules of before need no change). Online mode takes
-  3500 lobby sessions and 1050 games (Node: 1000 and 300), the free-roam hub 7168 players. 7000 players need 65536
+  4000 lobby sessions and 1200 games (Node: 1000 and 300), the free-roam hub 8192 players. 8000 players need 65536
   open files (`ulimits: { nofile: 65536 }` in `compose.yml`), and past about 3000 in free roam more workers than 8
   (`NFSU2_THREADS=12` in `.env`; `compose.yml` passes it on) keep them at 32 friends each instead of the busy cap's 8.
 
@@ -528,8 +536,8 @@ plays the VP6 movies anyway.
     restarts);
   - closes, without an answer, a connection that asks for another name (the bare address, a scanner's made-up
     name), on 80 and on 443; a TLS handshake without your name fails, so the certificate is not shown;
-  - opens at most 55900 connections to the server (one per request in progress; with 7000 players the Rust server
-    takes 56000, 8 per player; the Node image, at most 2000 players, takes 16000);
+  - opens at most 63900 connections to the server (one per request in progress; with 8000 players the Rust server
+    takes 64000, 8 per player; the Node image, at most 2000 players, takes 16000);
   - has its admin API off: nothing reconfigures it while it runs, and a changed `.env` takes `docker compose up -d`.
 - **NFSU2_HOST is one name.** For a second name, or a wildcard, edit the Caddyfile in `compose.yml` and the
   server's `NFSU2_HOST` (a comma list; `*.example.com` for one label under it). A wildcard certificate needs Let's
@@ -579,12 +587,23 @@ and HTTP/3's UDP, and port 80 stays with whatever has it (another API, say), whi
 
 ## What the log keeps
 
+The server keeps its log in the state volume too, one file a day (UTC) in `logs/`, each line after its time
+(`2026-10-31T10:20:40.155Z`). A deploy or a restart does not lose it, and it reaches further back than Docker's own
+(`docker compose logs`, 100 MB: about 16 hours with 4,000 players). A day that ended is gzipped (20-30 MB with 4,000
+players) and kept for 30 days. To get it out, on the VPS or from your computer:
+
+```sh
+ssh root@<vps> /srv/nfsu2/nfsu2 logs 2 > logs.gz    # the last 2 days (1: today so far), gzipped
+gzcat logs.gz | grep -F '[cheat]'                   # zcat on Linux
+```
+
+`nfsu2` is the operator's script of [kick and ban](#kick-and-ban): copy it to the VPS again after it changed.
+
 `docker compose logs server` is the server's console: start-up, players joining (by virtual address, `10.77.x.x`)
 and leaving (by virtual address and nickname), refused requests and connections, and errors (method, path and the
 server's own stack, never the client's details). Every 5 minutes while anyone is on, a `[players]` line says what
-the players on the switch do, each counted once: in Online mode, on the LAN or Online screens, in free roam, on an
-older page (one loaded before the page let its place go; it holds the place until its tab closes), and leaving or
-starting (the page lets the place go 10 s after the last network feature). It ends with how many players are more
+the players on the switch do, each counted once: in Online mode, on the LAN or Online screens, in free roam, and
+leaving or starting (the page lets the place go 10 s after the last network feature). It ends with how many players are more
 than a second behind on their connection (the server times each one's round trip every second, queues past the
 server included: cloudflared's, the tunnel's) and how many of them get fewer of the other cars' updates meanwhile,
 with the updates left out since the last line. Many players behind while the server is idle: look at the tunnel
@@ -595,12 +614,15 @@ After each multiplayer race from free roam, every player's game reports it once 
 laps and cars), the player's nickname, place (or "did not finish", "quit") and the car as the game rated it (its
 type, the game's class and rating, the race's average rating, power, weight, top speed, and the factor its engine
 power had in the race) and its time. For evening out the cars:
-`docker compose logs -t server --since 24h | grep '\[race\]'`.
+`gzcat logs.gz | grep -F '[race]'`.
 
 Cheats are `[cheat]` lines, each with the player's virtual address and nickname, as [kick and ban](#kick-and-ban)
 take them. The lines are for you to read: nobody is kicked or banned by them. A line about a race (Online mode's, or
 a race lobby's in free roam) ends with a handle, `(ban c17)`, that `ban` takes for a week after the line, long after
-the player left: `./nfsu2 ban c17 2w Cheating in races`. Free roam's lines get none.
+the player left: `./nfsu2 ban c17 2w Cheating in races`. The same player's next lines keep the handle, under any name,
+in any browser that has its keyphrase or page id, and say the names its earlier lines had and the bans of it since
+(`(ban c17; before as "Bob"; was ban #4)`: banned, and back once that ban ended or was lifted; `ban #4 in force`: back
+past a ban that still holds). Free roam's lines get none.
 
 - **In races**: every racer's game reports the race's results too (each racer's time, how far it came, the way it
   drove), only from a player who asked to join the race's lobby, naming only its players, one report a race. Once
@@ -610,21 +632,31 @@ the player left: `./nfsu2 ban c17 2w Cheating in races`. Free roam's lines get n
   free-roam sprint's average: 107 km/h); won in under half the race's quickest clean win the server saw since it
   started (two reports, another finisher), which a teleport to the finish with nobody else over the line does; won,
   once the race had 10 clean wins, in under 70 % of the third quickest other winner's time (a car made faster than
-  any tuning makes it: the honest wins of a day came at 78 % of it or more); or came under half the way by two
-  reports or more, as a cheat that ends the race at once does ("having driven 0.6 % of the way"). One player's report
-  cannot make a winner or a time, and the line says how many of the race's reports saw it. A car no tuning makes (an
+  any tuning makes it: the honest wins of a day came at 78 % of it or more), unless another racer finished close
+  behind (over 70 % of its time: that time can be driven); or came under half the way by two reports or more, as a
+  cheat that ends the race at once does ("having driven 0.6 % of the way"). One player's report cannot make a winner
+  or a time, and the line says how many of the race's reports saw it, and what the winner's own game said when it did
+  not agree ("its own game: did not finish": a game out of step with the others, more likely than a cheat) or sent
+  no report. A car no tuning makes (an
   edited save's: 600 kW, 420 km/h or a rating of 1000 or more; the game's best cars make 450 kW, 380 km/h and 800) is
   a line of its own, `raced in the race of lobby … in an edited car`, whether it won or not.
   In Online mode each racer is judged by its own game's figures (`won the online race …`, "by its own game"): a time
   under the shortest its race type takes (the result is not taken either), 350 km/h or more on average, or a way
-  under half another racer's own (both by their own games: "each by its own game"), or a top speed of 420 km/h or
-  more, finished or not ("an edited car": of 39,000 players' top speed records 5 went over it); a race won in under
-  40 % of the next finisher's time, by the result; and, once the track (race type, track, direction, laps) had 10
-  clean wins since the start, one won in under 70 % of the third quickest other winner's time there. A report that
+  under half another racer's own (both by their own games: "each by its own game"; a racer who finished, or was on
+  the way when the race ended, 30 s after the first: a game that went on alone long after says nothing), or a top
+  speed of 420 km/h or more, finished or not ("an edited car": of 39,000 players' top speed records 5 went over it);
+  a race won in under 40 % of the next finisher's time, by the result; and, once the track (race type, track,
+  direction, laps) had 10 clean wins since the start, one won in under 70 % of the third quickest other winner's time
+  there, unless another racer finished close behind (over 70 % of its time). A report that
   leaves out a player of the race (one who joined as it started and never raced) is taken and looked at, as any
   other. An Online line names the track and laps and the racer's own top speed;
   the other racers' times are on that race's `[online]` lines (`grep -F '"<race name>"'`). A drift race is won by
-  points and is left out.
+  points: of the checks above only the edited car's top speed is made (and in a free-roam lobby the edited car's
+  line). An Online drift race's result line has the points and the track (`(drift, ranked, track 4311, 3 laps): 1 Bob
+  310400 points, ...`), and each racer's report a line of what its own game said (`Bob's own game: 1 of 4, 310400
+  points, its biggest drift 42000, top speed 220 km/h, 3:10.50`): what the game does with a car that hits a barrier
+  mid-drift (its drift so far lost) never reaches the server, so there is no line for it, and points far above the
+  others' on a track are for you to compare.
 - **Speed hacks in races**: a game whose clock runs fast does not get past a race's start, in a free-roam lobby
   (1.25 and 1.5 times as fast in a test) or in Online mode (1.5): every racer stays on the pre-race screen. The race's
   finish times are the same in every game, so they could not show one either.
@@ -641,20 +673,20 @@ the player left: `./nfsu2 ban c17 2w Cheating in races`. Free roam's lines get n
   players named twice`), a race whose other racers quit, by the one report that came. The World Map's jump stays in free roam, so a teleport that lands within 25 m of an event's
   start or 45 m of a shop's door is taken for one, whoever made it.
 
-The races won by cheating: `docker compose logs -t server --since 24h | grep '\[cheat\]' | grep 'race'`; and the
-cheats that bother others in free roam: `... | grep -e 'next to' -e 'race lobby'`.
+The races won by cheating: `gzcat logs.gz | grep -F '[cheat]' | grep 'race'`; and the cheats that bother others in
+free roam: `... | grep -e 'next to' -e 'race lobby'`.
 
 - **No player's real IP address** is written, and the page sends the server nothing about the player but the
   nickname, a random id the browser keeps for [bans](#kick-and-ban), a token of its keyphrase when it has one
   (claimed names and bans: the server keeps only hashes of it), and after a multiplayer race its car and place.
 - **`--access-log`** adds a line per request with the client's IP address and the URL. It is off by default, for
   debugging only: add it to the server's `command` in `compose.yml` (`["--behind-proxy", "--access-log"]`), and
-  the log then holds your friends' addresses for as long as Docker keeps it.
+  the log then holds your friends' addresses for as long as Docker keeps it, and the log files for 30 days.
 - **What one client can cause** is limited per minute: 2 lines about its refused requests, 2 about its refused
   `/lan` connections, 20 joins and leaves, 30 lines of Online mode and 3000 access-log lines; then one line saying
   how many were left out. Errors are written in full.
-- **Docker keeps the console** in files it rotates (the `local` log driver: 5 files of 20 MB per container), so
-  the log never fills the disk.
+- **Docker keeps the console** in files it rotates (the `local` log driver: 5 files of 20 MB per container), and
+  the server its log files for 30 days (about 1 GB with 4,000 players), so the log never fills the disk.
 
 The console names paths and addresses: it is yours.
 
@@ -734,8 +766,9 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
   blocker): a name many block is one to look at (`grep blocks` in the log).
 - **What is kept**: `bans.json` in the state volume, with keyed hashes of the addresses, ids and keyphrases only
   (the key, `bans.key`, beside it): none can be read back from them. The handles of `[cheat]` lines are kept there
-  the same way, for a week. The log has a `[ban]` line for each kick, ban
-  and lift, and when a banned player is turned away (2 a minute per client at most).
+  the same way, for a week, with the names of their earlier lines and the numbers of the bans made of them. The log
+  has a `[ban]` line for each kick, ban (`in place of #6` when it replaced one) and lift, and when a banned player is
+  turned away (2 a minute per client at most).
 - **How it works**: the commands go to `control.sock` in the state volume, which only the server's own user and
   root can open; nothing on the network reaches it. Without Docker: `sudo /opt/nfsu2-web/nfsu2-server ctl --state
   /var/lib/nfsu2-web who` (and the same for the others).
@@ -1045,8 +1078,8 @@ paths to the VPS, so pick a VPS location between you.
 - **Keepalive:** the switch pings every connection every 25 s. Proxies and Cloudflare then never cut a quiet player,
   and the switch finds players whose connection died.
 - **Limits:**
-  - 6500 players on the switch with the Rust image (`NFSU2_MAX_PEERS=6500`; the server's own default is 128, and
-    7000 is the most addresses it hands out on its virtual network, 10.77.0.0/19: 250 in each of 10.77.0-27.x), 2000 with
+  - 8000 players on the switch with the Rust image (`NFSU2_MAX_PEERS=8000`; the server's own default is 128, and
+    8000 is the most addresses it hands out on its virtual network, 10.77.0.0/19: 250 in each of 10.77.0-31.x), 2000 with
     the Node image (its network is 10.77.0.0/21);
   - when every place is taken a game waits in line for one, first come first served (nfsu2-lan `queue.rs`): the
     line's first takes the next place that frees up, and while anyone waits a newcomer waits too. The game shows

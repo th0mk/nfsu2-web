@@ -10,17 +10,15 @@
 // and returns false.  Only a processor that returned false lets Chrome drop
 // its AudioWorkletNode (and the context it belongs to); one that returns true
 // forever keeps both alive as long as the page lives.
-// The ring's size comes from the page (the module's AR_FRAMES; an older
-// module's is AUDIO_RING_FRAMES_OLD).
 import {
-  AR_HDR_WORDS, AR_LOUD, AR_OFF_PCM, AR_QUANTA, AR_R, AR_UNDERRUNS, AR_W, AUDIO_RATE, AUDIO_RING_FRAMES_OLD,
+  AR_HDR_WORDS, AR_LOUD, AR_OFF_PCM, AR_QUANTA, AR_R, AR_UNDERRUNS, AR_W, AUDIO_RATE, AUDIO_RING_FRAMES,
 } from './proto';
 
 // AudioWorkletGlobalScope (TypeScript ships no lib for it)
 declare const sampleRate: number;
 declare class AudioWorkletProcessor { readonly port: MessagePort; constructor(options?: unknown); }
 declare function registerProcessor(name: string, ctor: new (options: { processorOptions: Opts }) => AudioWorkletProcessor): void;
-interface Opts { buf: SharedArrayBuffer; ptr: number; frames?: number }
+interface Opts { buf: SharedArrayBuffer; ptr: number }
 
 const SILENT = 1 / 32768;
 
@@ -28,13 +26,12 @@ class NfsuOut extends AudioWorkletProcessor {
   private h: Int32Array | null;
   private pcm: Float32Array | null;
   private step: number;
-  private frames: number;
+  private frames = AUDIO_RING_FRAMES;
   private frac = 0;               // resampling: position between ring frames r and r+1
 
   constructor(o: { processorOptions: Opts }) {
     super();
-    const { buf, ptr, frames } = o.processorOptions;
-    this.frames = frames ?? AUDIO_RING_FRAMES_OLD;
+    const { buf, ptr } = o.processorOptions;
     this.h = new Int32Array(buf, ptr, AR_HDR_WORDS);
     this.pcm = new Float32Array(buf, ptr + AR_OFF_PCM, this.frames * 2);
     this.step = AUDIO_RATE / sampleRate;

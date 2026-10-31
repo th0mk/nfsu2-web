@@ -16,6 +16,7 @@ pub mod covers;
 pub mod days;
 mod etag;
 mod files;
+mod friends;
 mod kept;
 mod lan;
 mod manifest;
@@ -155,9 +156,9 @@ const STATUS: [(u16, &str); 8] = [
     (503, "Service Unavailable"),
 ];
 
-pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /seen\nDisallow: /lan\nDisallow: /vault\nDisallow: /names";
+pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /seen\nDisallow: /lan\nDisallow: /vault\nDisallow: /names\nDisallow: /friends";
 /// what ROBOTS_TXT keeps search engines out of, under each base
-const DISALLOW: [&str; 9] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/seen", "/lan", "/vault", "/names"];
+const DISALLOW: [&str; 10] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/seen", "/lan", "/vault", "/names", "/friends"];
 
 /// /robots.txt for an origin with the games under these bases ("" the root: ROBOTS_TXT)
 pub fn robots_txt(bases: &[String]) -> String {
@@ -257,6 +258,8 @@ pub struct App {
     pub covers: Option<covers::CoversRoute>,
     /// claimed names (/names), none without keyphrase saves
     pub names: Option<names::NamesRoute>,
+    /// free roam's friends (/friends and the pages' friend messages), none without the Online host, the hub or names
+    pub friends: Option<Arc<friends::Friends>>,
     /// the operator's bans (the control socket: control.rs), checked at /lan
     pub bans: Arc<nfsu2_bans::Bans>,
     /// how many come each day (days.rs: /seen, the hellos, the sweep)
@@ -351,6 +354,10 @@ impl App {
             raw.insert(code, s.into_bytes());
         }
         let max_conns = limits::max_connections(o.max_peers);
+        let friends = match (&online, &roam, &names) {
+            (Some(on), Some(r), Some(n)) => Some(friends::Friends::new(on.clone(), r.clone(), lan.clone(), n.claims.clone())),
+            _ => None,
+        };
         App {
             host_check,
             real_state,
@@ -382,6 +389,7 @@ impl App {
             vault_box_key: None,
             covers: covers.map(covers::CoversRoute::new),
             names,
+            friends,
             bans,
             days,
             lan_sndbuf,
@@ -609,12 +617,15 @@ impl App {
         if under && q.method == "PUT" && self.o.dev && !self.o.artifacts.is_empty() && p.starts_with("/artifacts/") {
             return self.put_artifact(q, s, &p[11..]).await;
         }
-        // keyphrase saves and claimed names: their own methods and bodies (vault.rs, names.rs)
+        // keyphrase saves, claimed names and friends: their own methods and bodies (vault.rs, names.rs, friends.rs)
         if under && p == "/vault" {
             return self.vault(q, s, &u).await;
         }
         if under && p == "/names" {
             return self.names(q, s, &u).await;
+        }
+        if under && p == "/friends" {
+            return self.friends_route(q, s, &u).await;
         }
         // the hand-over store: under a base only (the address both games share; covers.rs)
         if under && !base.is_empty() && p == "/covers" && self.covers.is_some() {
@@ -661,8 +672,10 @@ impl App {
         if let Some(rest) = p.strip_prefix("/data-blocks")
             && rest.starts_with('/')
         {
-            // (the manifest's addresses since blocks are kept: the same files)
-            let rest = rest.strip_prefix(blocks::V2).filter(|r| r.starts_with('/')).unwrap_or(rest);
+            // (the manifest's addresses since blocks are kept; the ones from before, without /v2, are no more)
+            let Some(rest) = rest.strip_prefix(blocks::V2).filter(|r| r.starts_with('/')) else {
+                return self.not_found(q, s).await;
+            };
             let file = files::resolve_game(self.o.game, &self.o.data, rest);
             return self.send_blocks(q, s, file, &u).await;
         }
@@ -766,7 +779,7 @@ impl App {
     /// is full and whether free roam is busy, nothing else, no names, addresses or times; online: in the game's Online
     /// mode (logged in, or racing an online race), null with --online off; roam: driving in free roam, or paused
     /// there, as of the hub's last tick (nfsu2-roam), null with --roam-hub off; full: a game that connects now waits in
-    /// line (a page of before: gets "LAN full"); queue: the pages waiting in line (nfsu2-lan queue.rs); roamBusy: the
+    /// line (a connection without ?queue, which cannot wait: "LAN full"); queue: the pages waiting in line (nfsu2-lan queue.rs); roamBusy: the
     /// hub gives fewer than askCap links a player, so the page does not ask the free-roam question now (false with
     /// --roam-hub off).  ?room=<hash> (roam_core's rc_room_hash of a Room setting, decimal,
     /// not 0) adds room: how many of roam are in that room (with --roam-hub on).  ?crews=<hash>,<hash>,... (the

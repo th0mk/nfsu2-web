@@ -44,7 +44,7 @@ test("the page's horns are horn.c's", { skip: !CC && 'no wasi-sdk in deps/' }, (
   try {
     for (const name of H.HORN_NAMES) for (const [held, rate] of [[H.previewHold(name), 48000], [0.275, 44100]]) {
       execFileSync(process.execPath, [path.join(REPO, 'web/test/wasi-run.mjs'), w, name, String(held), String(rate), `/tmp/${name}.f32`],
-        { encoding: 'utf8', env: { ...process.env, WASI_DIR: `/tmp=${dir}` }, stdio: ['ignore', 'pipe', 'pipe'] });
+        { encoding: 'utf8', env: { ...process.env, WASI_DIR: `/tmp=${dir}` }, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 });
       const b = fs.readFileSync(path.join(dir, `${name}.f32`));
       const c = new Float32Array(b.buffer, b.byteOffset, b.length / 4), t = H.renderHorn(name, held, rate);
       let diff = 0;

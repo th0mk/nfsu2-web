@@ -101,11 +101,17 @@ for (const [name, b, state, code] of CASES) {
 test('graphics check: the titles and the browser\'s name in the text', async () => {
   let c = await gpuCheck({ ua: UA.chromeWin, gpu: null, webgl: null });
   assert.equal(c.label, 'Graphics (WebGPU)');
+  // the text as written (td, the key the page translates) filled with the browser's name, not its wording
+  const filled = c => c.td.replace(/\{(\w+)\}/g, (m, k) => c.v[k]);
   c = await gpuCheck({ ua: UA.chromeMac, gpu: null });
-  assert.equal(c.detail, 'Chrome could not use this computer\'s graphics for the game. Restart Chrome; if that does not help, update Chrome and the system.');
+  assert.equal(c.code, 'GPU-ADAPTER');
+  assert.deepEqual(c.v, { browser: 'Chrome', Browser: 'Chrome' });
+  assert.equal(c.detail, filled(c));
+  assert.ok(c.detail.includes('Chrome'), c.detail);
   // Safari 26 with WebGPU but no adapter: "the browser", capitalised where it starts the sentence
   c = await gpuCheck({ ua: UA.safariMac, gpu: null });
-  assert.match(c.detail, /^The browser could not use .* Restart the browser; .* update the browser and the system\.$/);
+  assert.deepEqual(c.v, { browser: 'the browser', Browser: 'The browser' });
+  assert.equal(c.detail, filled(c));
   assert.equal(c.tl, 'Graphics (WebGPU)');
   c = await gpuCheck({ ua: UA.chromeWin, gpu: adapter() });
   assert.equal(c.label, 'Graphics: nvidia ampere');

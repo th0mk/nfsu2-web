@@ -50,6 +50,7 @@
       </div>
       <div class="top-end">
         <label class="lang-pick"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3C9.5 5.6 8.2 8.6 8.2 12s1.3 6.4 3.8 9"/></svg><select id="lang-pick" data-i18n-attr="aria-label" aria-label="Language"></select></label>
+        <button type="button" class="btn" id="changelog-btn" aria-haspopup="dialog"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><span data-i18n>Changelog</span></button>
         <a class="btn" href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"/></svg>Discord</a>
         <button type="button" class="btn donate" id="donate-btn" aria-haspopup="dialog"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-8.5-5.2-8.5-11A4.75 4.75 0 0 1 12 6.6a4.75 4.75 0 0 1 8.5 2.9c0 5.8-8.5 11-8.5 11z"/></svg><span data-i18n>Donate</span></button>
       </div>
@@ -70,7 +71,7 @@
         <button type="button" class="text-btn" id="log-btn" hidden data-i18n>Download log</button>
       </div>
       <p class="msg" id="lastgame" hidden></p>
-      <p class="msg" id="report" hidden data-i18n-html>Help get it fixed: download the log and post it in <a href="https://discord.gg/SSHm5g43gh"target="_blank" rel="noopener noreferrer">#bug-reports on our Discord</a>, with what you were doing when it happened.</p>
+      <p class="msg" id="report" hidden data-i18n-html>Post the log in <a href="https://discord.gg/SSHm5g43gh" target="_blank" rel="noopener noreferrer">#bug-reports on our Discord</a>, with what you were doing.</p>
       <p class="msg" id="newer" aria-live="polite" hidden></p>
       <ul class="problems" id="problems" aria-live="polite"></ul>
       <p class="msg warn" id="override" hidden></p>
@@ -85,26 +86,36 @@
           <button type="button" class="tab" role="tab" data-tab="site" data-i18n>Site</button>
         </div>
         <div class="tab-panel" role="tabpanel" data-tab="keys">
-          <p class="hint touch-only" data-i18n>Tap the game's menus, or use the arrows, OK and Back beside them. While you drive, touch controls show on the game. A controller works too.</p>
-          <!-- the steering's list, the level horizon's switch and the sizes: controls.ts -->
+          <p class="hint touch-only" data-i18n>Tap the game's menus, or use the arrows, OK and Back beside them. Touch controls show while you drive.</p>
+          <!-- the steering's list, the position's, Nitro's and the level horizon's switches and the sizes: controls.ts -->
           <div class="set touch-only" data-steer>
             <label class="set-label" data-i18n>Steering</label>
-            <p class="set-help" data-i18n>How you steer while driving. The button in the game's top right corner switches it too.</p>
+            <p class="set-help" data-i18n>The button at the game's top right switches it too.</p>
             <div class="set-control"><select></select></div>
+          </div>
+          <div class="set touch-only" data-position>
+            <label class="set-label" data-i18n>Position</label>
+            <p class="set-help" data-i18n>Which thumb steers. Moved in keeps the controls off the screen's edges.</p>
+            <div class="set-control"><select></select></div>
+          </div>
+          <div class="set touch-only" data-nitro>
+            <label class="set-label" data-i18n>Nitro on the steering side</label>
+            <p class="set-help" data-i18n>For the thumb that isn't on Gas.</p>
+            <div class="set-control"><span class="val" aria-hidden="true"></span><input type="checkbox" class="switch" role="switch"></div>
           </div>
           <div class="set touch-only" data-level>
             <label class="set-label" data-i18n>Level horizon</label>
-            <p class="set-help" data-i18n>With tilt steering, the view turns against the phone, so the road's horizon stays level.</p>
+            <p class="set-help" data-i18n>With tilt steering, keeps the horizon level.</p>
             <div class="set-control"><span class="val" aria-hidden="true"></span><input type="checkbox" class="switch" role="switch"></div>
           </div>
           <div class="set touch-only" data-size>
             <label class="set-label" data-i18n>Control size</label>
-            <p class="set-help" data-i18n>How big the touch controls on the game are. Auto sizes them for this screen.</p>
+            <p class="set-help" data-i18n>Auto sizes them for this screen.</p>
             <div class="set-control"><select></select></div>
           </div>
           <div class="set touch-only" data-menu-size>
             <label class="set-label" data-i18n>Menu button size</label>
-            <p class="set-help" data-i18n>How big the game's small menu buttons are: Back, Continue and the others at the bottom, and the arrows. Auto sizes the arrows for a finger and leaves the buttons at the bottom at the game's size: OK and Back on the touch controls do the same.</p>
+            <p class="set-help" data-i18n>The game's menu arrows and bottom buttons. Auto makes the arrows finger-sized and leaves the bottom buttons as they are.</p>
             <div class="set-control"><select></select></div>
           </div>
           <dl class="keys key-only">
@@ -113,12 +124,12 @@
             <div><dt><kbd>Alt</kbd></dt><dd data-i18n>Nitrous</dd></div>
             <div><dt><kbd data-i18n>Space</kbd></dt><dd data-i18n>Handbrake</dd></div>
             <div><dt><kbd>Shift</kbd> <kbd data-i18n>Ctrl</kbd></dt><dd data-i18n>Shift up, shift down (manual)</dd></div>
-            <div><dt><kbd>C</kbd> <kbd>B</kbd></dt><dd data-i18n>Change camera, look back</dd></div>
+            <div><dt><kbd>C</kbd> <kbd>B</kbd></dt><dd data-i18n>Camera, look back</dd></div>
             <div><dt><kbd>R</kbd></dt><dd data-i18n>Respawn</dd></div>
             <div><dt><kbd>H</kbd> <kbd>J</kbd></dt><dd data-i18n>Hydraulics (hold, then the arrows)</dd></div>
             <div><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
             <div><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
-            <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): a group, then a phrase</dd></div>
+            <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): group, then phrase</dd></div>
             <div><dt><kbd>Enter</kbd></dt><dd data-i18n>Start an event, take an outrun</dd></div>
             <div><dt><kbd>M</kbd> <kbd>Tab</kbd></dt><dd data-i18n>Map, messages</dd></div>
             <div><dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd data-i18n>Pause</dd></div>
@@ -133,40 +144,33 @@
             <div class="touch-only"><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
             <div><dt data-i18n-html><kbd>Home</kbd> or both sticks pressed in</dt><dd data-i18n>The menu, on a controller</dd></div>
             <div class="key-only"><dt><kbd>F8</kbd></dt><dd data-i18n>Frame-rate counter</dd></div>
-            <div class="key-only"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode while you drive, F12 again for the photo (shown in Saves)</dd></div>
+            <div class="key-only"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>
             <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
           </dl>
         </div>
       </div>
     </section>
 
-    <section class="panel" id="changes" aria-labelledby="changes-title">
-      <h2 id="changes-title" data-i18n>Changes from the original</h2>
-      <div class="prose">
-        <p data-i18n>The PC game's own code, recompiled to run in Chrome and Firefox with WebGPU graphics and Web Audio sound. It runs at up to 120 fps in widescreen at your screen's resolution, with the original look at its highest settings.</p>
-        <p data-i18n>Drive with friends in free roam and race them in Online mode on this server, with no account, and honk at them with eight horns. Play on a keyboard, an Xbox or PlayStation controller, a steering wheel or a phone's touch controls, with your saves in this browser or in the cloud.</p>
-      </div>
-    </section>
-
     <section class="panel" id="about" aria-labelledby="about-title">
       <h2 id="about-title" data-i18n>About this project</h2>
       <div class="prose">
-        <p data-i18n>My brother and I played this game together about 20 years ago. I tried porting it to the browser, and it worked surprisingly well, so I put it online for others to enjoy. It got a bit out of hand. It's great to see so many people playing it.</p>
-        <p data-i18n-html>If you enjoy the project and want to help with the costs of hosting and development, you can <a href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer">buy me a coffee</a>. It comes with no perks, apart from a role on the Discord server.</p>
-        <p data-i18n-html>Rights holders can email <a href="mailto:legal@nfsu2.xyz">legal@nfsu2.xyz</a>. Support emails won't be answered: for help, ask on <a href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer">our Discord</a>.</p>
+        <p data-i18n>The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.</p>
+        <p data-i18n>My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.</p>
+        <p data-i18n-html>To help with hosting and development costs, you can <a href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer">buy me a coffee</a>. No perks, apart from a Discord role.</p>
+        <p data-i18n-html>Rights holders: <a href="mailto:legal@nfsu2.xyz">legal@nfsu2.xyz</a>. Support emails won't be answered; ask on <a href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer">our Discord</a>.</p>
       </div>
       <h3 data-i18n>Credits</h3>
       <div class="prose">
-        <p data-i18n-html>The source code is on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. This port is based on <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a> by Talha Müderrisoğlu, the original x86 → C static recompiler for NFSU2, which in turn follows the method of <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>.</p>
-        <p data-i18n-html>The texture pack is built from LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>.</p>
+        <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>.</p>
+        <p data-i18n-html>Texture pack: LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>.</p>
       </div>
       <h3 data-i18n>Translations</h3>
       <div class="prose">
-        <p data-i18n-html>The dubbed voices and movies, and the Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
-        <p data-i18n>Portuguese (Brazil): TraduMix's and MixMods' translation (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro).</p>
-        <p data-i18n>Polish: PLProjekt's translation (Daniel Graszka, MaDeR, Marcin Piech, Nati, Mateusz Wilkowski, alter).</p>
-        <p data-i18n-html>Turkish: muntazam's <a href="https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch" target="_blank" rel="noopener noreferrer">translation</a>.</p>
-        <p data-i18n-html>Hungarian: GameHunter's <a href="http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html" target="_blank" rel="noopener noreferrer">translation</a> (L_zooltan).</p>
+        <p data-i18n-html>Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
+        <p data-i18n>Portuguese (Brazil): TraduMix and MixMods (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro).</p>
+        <p data-i18n>Polish: PLProjekt (Daniel Graszka, MaDeR, Marcin Piech, Nati, Mateusz Wilkowski, alter).</p>
+        <p data-i18n-html>Turkish: <a href="https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch" target="_blank" rel="noopener noreferrer">muntazam</a>.</p>
+        <p data-i18n-html>Hungarian: <a href="http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html" target="_blank" rel="noopener noreferrer">GameHunter</a> (L_zooltan).</p>
         <p data-i18n-html>English subtitles: VileStuff's <a href="https://nfsmods.xyz/mod/5286" target="_blank" rel="noopener noreferrer">English Subtitles Fixed</a>.</p>
       </div>
     </section>
@@ -197,9 +201,11 @@
           <p class="hint" id="vault-when" role="status" hidden></p>
         </div>
         <form class="vault-row" id="vault-form">
+          <!-- a login form to the browser's passwords: this user name (pwkeep.ts ID, never translated) and the passphrase -->
+          <input type="text" name="username" autocomplete="username" value="Cloud saves" hidden>
           <div class="keybox masked" id="vault-box">
             <div class="keyfield">
-              <input type="text" id="vault-input" placeholder="Enter your passphrase" spellcheck="false" autocomplete="off" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
+              <input type="password" id="vault-input" name="password" placeholder="Enter your passphrase" spellcheck="false" autocomplete="current-password" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
               <span class="keymask" id="vault-mask" aria-hidden="true"></span>
             </div>
             <button type="button" class="icon-btn" id="vault-file" data-i18n-attr="aria-label" aria-label="Download passphrase" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
@@ -207,7 +213,7 @@
           </div>
           <button type="submit" class="btn" id="vault-load" data-i18n>Load</button>
         </form>
-        <p class="hint" id="vault-about" data-i18n>Make a passphrase, or enter yours to load your saves.</p>
+        <p class="hint" id="vault-about" data-i18n>Enter your passphrase to load your saves.</p>
         <p class="hint" id="vault-claim" hidden></p>
         <p class="hint warn" id="vault-status" role="status"></p>
         <div id="vault-sides"></div>
@@ -231,11 +237,12 @@
       <h2 id="online-title" data-i18n>Online</h2>
       <p class="hint" id="online-note" hidden></p>
       <div id="online-body"></div>
+      <div class="friends" id="friends" hidden></div>
     </section>
 
     <section class="panel" id="settings" aria-labelledby="settings-title">
       <h2 id="settings-title" data-i18n>Settings</h2>
-      <p class="hint" id="settings-note">Saved in this browser. Changes apply the next time you press Play.</p>
+      <p class="hint" id="settings-note">Changes apply the next time you press Play.</p>
       <div id="settings-body"></div>
       <div class="raw">
         <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
@@ -258,7 +265,7 @@
       </div>
       <div class="row">
         <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
-        <button type="button" class="btn" id="clear-cache" data-i18n>Delete the game data on this PC</button>
+        <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
       </div>
       <p class="msg" id="data-msg" role="status"></p>
     </section>
@@ -291,14 +298,15 @@
 
 <dialog class="dlg menu" id="menu" aria-labelledby="menu-title">
   <h2 id="menu-title" data-i18n>Menu</h2>
-  <p class="hint" data-i18n>The game keeps running behind this menu.</p>
+  <p class="hint" data-i18n>The game keeps running.</p>
   <p class="hint" id="menu-save"></p>
   <div class="menu-actions">
     <button type="button" class="btn selected" data-act="resume" data-i18n>Back to the game</button>
     <button type="button" class="btn" data-act="fullscreen">Full screen</button>
     <button type="button" class="btn" data-act="fps">Frame-rate counter: off</button>
-    <button type="button" class="btn" data-act="solid" data-i18n-attr="title" title="On: you drive through the other players' cars, and they through yours. Off: you collide with them." hidden>Ghost mode: off</button>
+    <button type="button" class="btn" data-act="solid" data-i18n-attr="title" title="On: drive through other players' cars. Off: collide with them." hidden>Ghost mode: off</button>
     <button type="button" class="btn" data-act="crews" aria-haspopup="dialog" hidden>Crews: none</button>
+    <button type="button" class="btn selected" data-act="friend" hidden></button>
     <div class="menu-radio">
       <button type="button" class="btn" data-act="radio" aria-pressed="false"><span id="radio-label">Radio: off</span></button>
       <button type="button" class="icon" data-act="radio-folder" data-i18n-attr="aria-label title" aria-label="Music folder" title="Music folder"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg></button>
@@ -314,7 +322,7 @@
 <!-- the menu's Crews (a game in free roam), over the menu; after it in the page, so it is the top dialog (padnav.ts) -->
 <dialog class="dlg crews-pop" id="crews-pop" aria-labelledby="crews-pop-title" aria-describedby="crews-pop-help">
   <h2 id="crews-pop-title" data-i18n>Crews</h2>
-  <p class="hint" id="crews-pop-help" data-i18n>Friends who type the same crew name always see each other in free roam, however far apart, with names and map arrows in the crew's colour. Up to 4 crews. Anyone who types the name joins.</p>
+  <p class="hint" id="crews-pop-help" data-i18n>Players with the same crew name always see each other in free roam, with names and map arrows in the crew's colour. Anyone who types the name joins. Up to 4 crews.</p>
   <div class="crews-pop-box" id="crews-pop-box"></div>
   <div class="row end">
     <button type="button" class="btn selected" data-act="crews-done" data-i18n>Done</button>
@@ -347,10 +355,18 @@
   </div>
 </dialog>
 
+<dialog class="dlg changelog" id="changelog" aria-labelledby="changelog-title">
+  <form method="dialog" class="dlg-head">
+    <h2 id="changelog-title" data-i18n>Changelog</h2>
+    <button class="btn" value="close" data-i18n>Close</button>
+  </form>
+  <div id="changelog-body"></div>
+</dialog>
+
 <dialog class="dlg" id="donate" aria-labelledby="donate-title">
   <form method="dialog">
     <h2 id="donate-title" data-i18n>Support the project</h2>
-    <p data-i18n>If you enjoy the project and want to help with the costs of hosting and development, you can buy me a coffee on Ko-fi. It comes with no perks, apart from a role on the Discord server.</p>
+    <p data-i18n>To help with hosting and development costs, you can buy me a coffee on Ko-fi. No perks, apart from a Discord role.</p>
     <div class="row end">
       <button class="btn" value="close" data-i18n>Not now</button>
       <a class="btn selected" id="donate-go" href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer" data-i18n>Donate on Ko-fi</a>

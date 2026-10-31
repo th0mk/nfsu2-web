@@ -60,7 +60,7 @@ function games(t, { exeSha, ids = ['ug2'] } = {}) {
   }
 }
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
-const check = (g, env = {}) => spawnSync('bash', [path.join(REPO, 'web/tools/gencheck.sh')], { cwd: REPO, encoding: 'utf8', env: envWith({ GEN: g, ...env }) });
+const check = (g, env = {}) => spawnSync('bash', [path.join(REPO, 'web/tools/gencheck.sh')], { cwd: REPO, encoding: 'utf8', timeout: 120_000, env: envWith({ GEN: g, ...env }) });
 
 test('gencheck: a gen stamped from this checkout passes', () => {
   const r = check(gen('ok'));
@@ -115,14 +115,14 @@ test('a plain ./gen.sh drops web-lift.txt and leaves gen/all unstamped until it 
   // a core file holding a hook marker stops it before it writes anything
   const heap = path.join(t, 'runtime/heap.c'), heapSrc = fs.readFileSync(heap, 'utf8');
   fs.appendFileSync(heap, '/* HOOK_SITE(0x00401000) */\n');
-  let r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith() });
+  let r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', timeout: 300_000, env: envWith() });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stderr, /runtime\/heap\.c:\d+:\/\* HOOK_SITE/);
   assert.doesNotMatch(r.stdout, /OVERRIDE/);
   assert.equal(fs.readFileSync(path.join(t, 'gen/all/stamp.txt'), 'utf8'), STAMP, 'the stamp untouched');
   assert.ok(fs.existsSync(path.join(t, 'gen/all/web-lift.txt')), 'web-lift.txt untouched');
   fs.writeFileSync(heap, heapSrc);
-  r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith() });
+  r = spawnSync('bash', [path.join(t, 'gen.sh'), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', timeout: 300_000, env: envWith() });
   assert.notEqual(r.status, 0, 'gen.sh failed (no lifter in the copy)');
   assert.match(r.stdout, /OVERRIDE \(\d+\)/, 'it got past its preamble');
   assert.ok(!fs.existsSync(path.join(t, 'gen/all/web-lift.txt')), 'web-lift.txt is gone');
@@ -141,7 +141,7 @@ test('gen.sh and web/gen.sh refuse to lift through a worktree\'s link to the sha
   fs.writeFileSync(path.join(t, 'SPEED2.EXE'), 'x');
   games(t, { ids: ['ug2', 'mw'] });
   const SCRIPTS = { 'gen.sh': '\\./gen\\.sh', 'web/gen.sh': 'web/gen\\.sh' };
-  const lift = (script, env) => spawnSync('bash', [path.join(t, script), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', env: envWith(env) });
+  const lift = (script, env) => spawnSync('bash', [path.join(t, script), path.join(t, 'SPEED2.EXE')], { cwd: t, encoding: 'utf8', timeout: 300_000, env: envWith(env) });
   const untouched = what => {
     assert.ok(fs.existsSync(path.join(t, 'shared/all/web-lift.txt')), `${what}: the shared web-lift.txt is there`);
     assert.ok(fs.existsSync(path.join(t, 'shared/server/shard_0000.c')), `${what}: the shared gen/server is not emptied`);

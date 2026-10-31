@@ -23,7 +23,8 @@
 //                    script's own keys reach only the game, never the page) and `log STICK <x> <y>` moves the right
 //                    stick there for the page (quick chat's picker: tests/scripts/roam_say_view_a.txt); with
 //                    --touch the pages take taps (the touch controls show), and `log TAP <selector>` taps there
-//                    (tests/scripts/roam_say_touch.txt)
+//                    (tests/scripts/roam_say_touch.txt), `log HOLD <ms> <selector>` holds a finger there that long
+//                    (tests/scripts/roam_touch_status.txt)
 //                    `log CREW join <name>` / `log CREW leave <name>` / `log CREW colour <k> <name>` (the palette's
 //                    k-th colour, from 0) do that in the menu's Crews popup (F9, Crews) and go back (Done, Back to
 //                    the game), `log CREW shot <name>` saves the page with the popup open
@@ -78,6 +79,11 @@
 // (the page console), <name>.pose.csv (the pose log from the page's OPFS) and
 // <out>/summary.json; then runs tools/roam_compare.py for the first (the driver)
 // against every other instance.
+// Ends with one line, PASS roam-pair or FAIL roam-pair: <why>, and exit code 0 or 1.  An instance fails when it timed
+// out, did not quit with exit code 0, or its log has one of web/tools/judge.mjs's failures (a fault, a trap, an
+// [expect] FAIL, a script wait that ran out, a page error ...; the stall watchdog's report is only counted, as several
+// games loading in one browser trip it), or one of this tool's page steps failed (log SHOT, MENU, KEY, TAP, HOLD ...).
+// The run fails when our own server ended by itself, or roam_compare.py failed.
 import { chromium } from 'playwright';
 import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
@@ -89,6 +95,8 @@ import { makeTestCerts } from '../test/cf-sim.mjs';
 import { serverCommand } from './server-cmd.mjs';
 import { seedSave } from './save-seed.mjs';
 import { GAMES, gameOf, usage, nothingFor, requireGame } from './rig-game.mjs';
+import { logWhy } from './judge.mjs';
+import { own, stop } from './children.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
@@ -131,6 +139,20 @@ const SPEEDHACK = new Map(opts('speedhack').map(x => [x.split(':')[0], +(x.split
 const HIDE = opts('hide').map(x => { const [n, at, dur] = x.split(':'); return { name: n, at: +at * 1000, dur: +(dur ?? 8) * 1000 }; });
 const TOUCH = argv.includes('--touch');      // the pages take taps (`log TAP <selector>`): the touch controls show
 fs.mkdirSync(OUT, { recursive: true });
+// what a run of before left in <out> and this one reads back is not taken for this run's
+for (const [name] of SPECS) {
+  for (const f of [`${name}.pose.csv`, ...FETCH.map(x => `${name}.${x.replaceAll('/', '_')}`)]) fs.rmSync(path.join(OUT, f), { force: true });
+}
+fs.rmSync(path.join(OUT, 'summary.json'), { force: true });
+// script lines only the start page acts on (--page app; log TAP, HOLD and SCROLL also --touch): elsewhere they do nothing
+const FINGER = ['TAP', 'HOLD', 'SCROLL'];
+for (const [name, script] of SPECS) {
+  let txt = '';
+  try { txt = fs.readFileSync(path.join(REPO, 'tests/scripts', script), 'utf8'); } catch { continue; }
+  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CREW|INVITE(?:-NO)?|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
+    .filter(c => !APP || (FINGER.includes(c) && !TOUCH));
+  if (app.length) console.log(`roam-pair: warning: ${name}'s ${script} has log ${app.join(', ')}, which only --page app${app.some(c => FINGER.includes(c)) ? ' --touch' : ''} does`);
+}
 
 const COMMON = {
   NFSU2_SAVEDIR: '/save', NFSU2_READONLY_DATA: '1', NOMOVIES: '1', SNDSYNC: '0', GPUVS: '1', NFSU2_FNG_LOG: '1',
@@ -165,12 +187,14 @@ function url(i, name, script, own) {
 
 // our own server (stopped by its child handle only)
 let server = null;
-const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'), { flags: 'a' });
+const serverLog = fs.createWriteStream(path.join(OUT, 'server.log'));
+let serverDied = null;                        // our server ended by itself: why
 async function startServer() {
   const certs = HTTPS ? makeTestCerts(path.join(OUT, 'certs')) : null;
   const c = spawn(...serverCommand(['--data', DATA,
     ...(certs ? ['--port', String(HTTPS_PORT), '--tls-cert', certs.cert, '--tls-key', certs.key] : []),
     '--http-port', String(HTTP_PORT), '--dev', ...(PLAY ? ['--artifacts', OUT] : []), ...SERVER_OF[GAME]]), { stdio: ['ignore', 'pipe', 'pipe'] });
+  own(c);
   c.stdout.pipe(serverLog, { end: false }); c.stderr.pipe(serverLog, { end: false });
   await new Promise((res, rej) => {
     let out = '';
@@ -179,13 +203,17 @@ async function startServer() {
     c.on('exit', code => { clearTimeout(t); rej(new Error(`server exited (${code})`)); });
   });
   serverLog.write(`--- server pid ${c.pid} up at ${new Date().toISOString()}\n`);
+  c.on('exit', (code, sig) => {
+    if (server !== c) return;                 // stopServer's
+    serverDied = `server-died(${code ?? sig})`;
+    serverLog.write(`--- server ended by itself (${code ?? sig}) at ${new Date().toISOString()}\n`);
+  });
   return c;
 }
 async function stopServer() {
   if (!server) return;
   const c = server; server = null;
-  const gone = new Promise(r => c.once('exit', r));
-  c.kill('SIGTERM'); await gone;
+  await stop(c);
   serverLog.write(`--- server stopped at ${new Date().toISOString()}\n`);
 }
 if (OWN) server = await startServer();
@@ -193,9 +221,9 @@ const CROWD = +opt('crowd', 0);
 let crowd = null;
 if (CROWD) {
   const log = fs.openSync(path.join(OUT, 'crowd.log'), 'w');
-  crowd = spawn(process.execPath, [path.join(REPO, 'web/tools/roam-crowd.mjs'), '--base', BASE, '--n', String(CROWD), '--seconds', String(TMO / 1000),
+  crowd = own(spawn(process.execPath, [path.join(REPO, 'web/tools/roam-crowd.mjs'), '--base', BASE, '--n', String(CROWD), '--seconds', String(TMO / 1000),
     ...(opt('crowd-race', '') ? ['--race', opt('crowd-race', '')] : []), ...opt('crowd-args', '').split(' ').filter(Boolean)],
-    { cwd: REPO, stdio: ['ignore', log, log] });
+    { cwd: REPO, stdio: ['ignore', log, log] }));
 }
 
 // CHROME_ARGS: more of the browser's options, separated by spaces (inside WSL: the Vulkan ones of online-pair's note)
@@ -233,6 +261,31 @@ async function start(i, name, script, own) {
     // a finger's tap on the page (--touch), at a script's `log TAP <selector>`
     const tk = APP && TOUCH && /LOG TAP (.+)$/.exec(m.text());
     if (tk) void page.tap(tk[1].trim(), { timeout: 5000 }).then(() => w(`[tap] ${tk[1].trim()}`), e => w(`[tap] ${tk[1]} failed: ${e}`));
+    // a finger held there for so many ms (a long press; Playwright taps only), at a script's `log HOLD <ms> <selector>`
+    const hk = APP && TOUCH && /LOG HOLD (\d+) (.+)$/.exec(m.text());
+    if (hk) void (async () => {
+      const box = await page.locator(hk[2].trim()).boundingBox({ timeout: 5000 });
+      if (!box) throw new Error('not shown');
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
+      await page.waitForTimeout(+hk[1]);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await cdp.detach();
+    })().then(() => w(`[hold] ${hk[1]} ms ${hk[2].trim()}`), e => w(`[hold] ${hk[2]} failed: ${e}`));
+    // a finger swiped up so many px in the middle of it, and how far it scrolled, at a script's
+    // `log SCROLL <px> <selector>`
+    const sc = APP && TOUCH && /LOG SCROLL (\d+) (.+)$/.exec(m.text());
+    if (sc) void (async () => {
+      const sel = sc[2].trim(), el = page.locator(sel), box = await el.boundingBox({ timeout: 5000 });
+      if (!box) throw new Error('not shown');
+      const top = () => el.evaluate(d => d.scrollTop);
+      const was = await top();
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Input.synthesizeScrollGesture', { x: box.x + box.width / 2, y: box.y + box.height * 0.7, yDistance: -sc[1], gestureSourceType: 'touch', speed: 800 });
+      await cdp.detach();
+      await page.waitForTimeout(300);
+      return `${was} -> ${await top()}`;
+    })().then(r => w(`[scroll] ${sc[2].trim()}: ${r}`), e => w(`[scroll] ${sc[2]} failed: ${e}`));
     // the menu's Crews popup as the player uses it, at a script's `log CREW <op> ...`: F9, Crews, the act in the popup,
     // Done, Back to the game
     const ck = APP && /LOG CREW (join|leave|colour|shot) (?:(\d+) )?(.+)$/.exec(m.text());
@@ -373,7 +426,7 @@ for (const x of inst) {
   x.log.end();
 }
 await browser.close();
-if (crowd) crowd.kill('SIGTERM');
+await stop(crowd);
 if (bounced) await bounced;
 await stopServer();
 serverLog.end();
@@ -397,13 +450,32 @@ for (const x of inst) {
     net: grab(/^NET \{/).pop() ?? null,
   };
 }
-fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
-console.log(JSON.stringify(summary, null, 2));
+// the verdict (the header says what fails a run)
+summary.why = [];
+if (serverDied) summary.why.push(serverDied);
+inst.forEach((x, i) => {
+  const L = fs.readFileSync(path.join(OUT, `${x.name}.log`), 'utf8').split('\n').map(l => l.replace(/^[\d.]+ /, '')).join('\n');
+  const why = [];
+  if (res[i] !== 'done') why.push('timeout');
+  const exit = /^(?:\[\d+!?\] )?EXIT (\S+)/m.exec(L)?.[1];
+  if (res[i] === 'done' && exit !== '0') why.push(`exit=${exit ?? 'none'}`);
+  if (res[i] === 'done' && !L.includes('quit at guest frame')) why.push('no-quit');
+  why.push(...logWhy(L, { allow: ['freeze'] }));
+  if (/^\[(shot|menu|key|stick|tap|hold|scroll|crew|invite)\] .*failed: /m.test(L)) why.push('page-step-failed');
+  summary[x.name].why = why;
+  summary[x.name].freezes = (L.match(/^(?:\[\d+!?\] )?\[watchdog\] no Present for/gm) ?? []).length;
+  summary.why.push(...why.map(w => `${x.name}:${w}`));
+});
 const pa = path.join(OUT, `${SPECS[0][0]}.pose.csv`);
 for (const [name] of SPECS.slice(1)) {
   const pb = path.join(OUT, `${name}.pose.csv`);
   if (!fs.existsSync(pa) || !fs.existsSync(pb)) continue;
   console.log(`--- ${SPECS[0][0]} as shown by ${name}`);
   try { console.log(execFileSync('python3', [path.join(REPO, 'tools/roam_compare.py'), pa, pb], { encoding: 'utf8' })); }
-  catch (e) { console.log(`roam_compare.py failed: ${e.stdout ?? ''}${e.stderr ?? e}`); }
+  catch (e) { console.log(`roam_compare.py failed: ${e.stdout ?? ''}${e.stderr ?? e}`); summary.why.push(`compare-failed:${name}`); }
 }
+summary.pass = summary.why.length === 0;
+fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));
+console.log(JSON.stringify(summary, null, 2));
+console.log(summary.pass ? `PASS roam-pair (${OUT})` : `FAIL roam-pair: ${summary.why.join(' ')} (${OUT})`);
+process.exitCode = summary.pass ? 0 : 1;

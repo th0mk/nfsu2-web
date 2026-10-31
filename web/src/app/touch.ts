@@ -2,21 +2,28 @@
 //   steering  three ways, switched with the mode button (top right) or the Controls sheet's touch tab, and kept in
 //             this browser:
 //               buttons  ◀ ▶ press the arrow keys, so the game's own keyboard steering applies (the default)
-//               stick    a thumb stick where the left thumb lands: the controller's left stick
+//               stick    a thumb stick where the steering's thumb lands: the controller's left stick
 //               tilt     the phone is the wheel, from its motion sensor: the controller's left stick.  Straight ahead
 //                        is how the phone is held when driving first starts with tilt, kept through menus and races
 //                        until the Straight ahead button sets it anew
 //   pedals    Gas and Brake press the up and down arrows; Nitro and the handbrake are the controller's LB and RB
 //             (Alt, the nitrous key, would turn the other keys into Alt+key).  Nitro holds Gas too, so the thumb on
 //             Gas can go up to it, and a thumb slides between Gas, Brake and Nitro without letting go.  With tilt,
-//             Brake and the handbrake go under the left thumb.
-//   gears     with a manual gearbox, gear down and up above the left thumb: the controller's X and A, as on a pad
+//             Brake and the handbrake go under the steering's thumb.
+//   gears     with a manual gearbox, gear down and up above the steering: the controller's X and A, as on a pad
 //             (Ctrl and Shift on the keyboard would be modifiers too)
 //   small     pause, camera (held: look back), reset; in free roam also the map, messages, drift mode (X, lit while it
-//             is on: drift.ts), and the horn and quick chat (quickchat.ts) while a friend's car is within a horn's reach;
+//             is on: drift.ts), the career's status (the game's Legend: the controller's D-pad Down, the keyboard has
+//             no key for it), and the horn and quick chat (quickchat.ts; not with its setting off) while a friend's car
+//             is within a horn's reach;
 //             Start (Engage) only while Engage does something: an event's or a shop's marker, an outrun offer, a race
 //             spot or lobby (the game's status "roam_near" and "engage", runtime/web/status_web.c; a game without them
-//             shows these always)
+//             shows these always).  The steering button held opens the touch settings (deps.settings)
+//   position  which thumb steers: the steering, the gear buttons and Start under the left thumb and the pedals under
+//             the right, or the other way round; either way by the screen's sides or moved in from them (EDGE_IN px,
+//             as far as there is room).  One list in the Controls sheet's touch tab, kept in this browser; and a
+//             switch there puts Nitro on the steering's side, for the thumb that is not on Gas, with Start in its
+//             place above Gas (nitroSteerSide)
 //   horizon   while tilt steers, the game's 3D view turns against the phone's tilt from straight ahead, so the road's
 //             horizon stays level with the real one (the HUD stays on the phone; runtime/overrides.c sub_005c7ec0).
 //             Not in a cutscene (a race's start); faded in and out.  A switch in the Controls sheet's touch tab.
@@ -40,7 +47,7 @@
 // they hide when a keyboard or a controller is used, until the next touch.  The game reads its input once a frame,
 // so a key a tap presses stays down HOLD_MS at least.
 import { STORAGE } from '@game/storage';
-import { PAD_A, PAD_LB, PAD_RB, PAD_X } from '../input/proto';
+import { PAD_A, PAD_DDOWN, PAD_LB, PAD_RB, PAD_X } from '../input/proto';
 import type { GameSession } from './game';
 import { touchFirst } from './device';
 import { N, percent, t } from './i18n';
@@ -53,6 +60,8 @@ const STORE = STORAGE.LOCAL.TOUCH_STEERING;
 const HOLD_MS = 150;
 /** a control with a hold (Camera): down this long, it presses the hold's keys instead of its own */
 const LONG_MS = 250;
+/** a control with a long press (the steering button): down this long, it does that instead of its own */
+const PRESS_MS = 500;
 
 const STEER_EVENT = STORE;
 let steeringNow: Steering = (() => {
@@ -82,45 +91,90 @@ const STICK_PX = 64, TILT_DEG = 30;
 /** the level horizon: the most it turns the view (degrees), how long it takes to come and go (ms) */
 const LEVEL_MAX_DEG = 60, LEVEL_FADE_MS = 400;
 
-const LEVEL_STORE = STORAGE.LOCAL.TOUCH_LEVEL, LEVEL_EVENT = LEVEL_STORE;
-let levelOn = (() => { try { return localStorage.getItem(LEVEL_STORE) !== 'off'; } catch { return true; } })();
-/** the level horizon's switch (the Controls sheet): on unless turned off in this browser */
-export function levelHorizon(): boolean { return levelOn; }
-export function setLevelHorizon(on: boolean) {
-  levelOn = on;
-  try { localStorage.setItem(LEVEL_STORE, on ? 'on' : 'off'); } catch { /* not kept: a private window */ }
-  dispatchEvent(new Event(LEVEL_EVENT));
+/** a switch kept in this browser, in the Controls sheet's touch tab: as it starts unless turned the other way */
+export interface SwitchSetting {
+  get(): boolean;
+  set(on: boolean): void;
+  /** fn runs when it is turned */
+  on(fn: () => void): void;
 }
-/** fn runs when the switch changes */
-export function onLevelHorizon(fn: () => void) { addEventListener(LEVEL_EVENT, fn); }
+function switchSetting(store: string, start: boolean): SwitchSetting {
+  let now = (() => { try { const s = localStorage.getItem(store); return s === null ? start : s === 'on'; } catch { return start; } })();
+  return {
+    get: () => now,
+    set(on) {
+      if (on === now) return;
+      now = on;
+      try { localStorage.setItem(store, on ? 'on' : 'off'); } catch { /* not kept: a private window */ }
+      dispatchEvent(new Event(store));
+    },
+    on: fn => addEventListener(store, fn),
+  };
+}
+/** the level horizon (with tilt): on unless turned off */
+export const levelHorizon = switchSetting(STORAGE.LOCAL.TOUCH_LEVEL, true);
+/** Nitro on the steering's side, for the thumb that is not on Gas (and Start where Nitro was, above Gas): off unless
+ *  turned on */
+export const nitroSteerSide = switchSetting(STORAGE.LOCAL.TOUCH_NITRO, false);
+
+/** a choice kept in this browser, picked from a list in the Controls sheet's touch tab: the first unless another was */
+export interface ListSetting<T extends string | number = string | number> {
+  readonly values: readonly T[];
+  get(): T;
+  set(to: T): void;
+  /** a value in the Controls sheet's list, in the page's language */
+  name(v: T): string;
+  /** fn runs when the choice changes */
+  on(fn: () => void): void;
+}
+
+/** the touch controls' position: which thumb steers, and the two groups by the screen's sides or moved in */
+export type Position = 'left' | 'left-in' | 'right' | 'right-in';
+const POSITION_NAMES: Record<Position, string> = {
+  left: N('Steering left'), 'left-in': N('Steering left, moved in'), right: N('Steering right'), 'right-in': N('Steering right, moved in'),
+};
+/** moved in: the px the two groups move in from the screen's sides, as far as that leaves them their room */
+const EDGE_IN = 48;
+export const touchPosition: ListSetting<Position> = (() => {
+  const store = STORAGE.LOCAL.TOUCH_POSITION, values: readonly Position[] = ['left', 'left-in', 'right', 'right-in'];
+  let now: Position = (() => {
+    try { const s = localStorage.getItem(store) as Position; return values.includes(s) ? s : 'left'; } catch { return 'left'; }
+  })();
+  return {
+    values,
+    get: () => now,
+    set(to) {
+      if (to === now || !values.includes(to)) return;
+      now = to;
+      try { if (to === 'left') localStorage.removeItem(store); else localStorage.setItem(store, to); } catch { /* not kept: a private window */ }
+      dispatchEvent(new Event(store));
+    },
+    name: v => t(POSITION_NAMES[v]),
+    on: fn => addEventListener(store, fn),
+  };
+})();
 
 /** a size: auto (for the screen), or a share of the size at 100 % */
 export type Size = 'auto' | number;
-/** a size kept in this browser, picked in the Controls sheet's touch tab: auto unless another was picked */
-export interface SizeSetting {
-  readonly sizes: readonly Size[];
-  get(): Size;
-  set(to: Size): void;
+/** a size kept in this browser, picked in the Controls sheet's touch tab: auto unless another was picked.  Its name
+ *  of auto says what that gives on this screen, and on() runs when that changes too */
+export interface SizeSetting extends ListSetting<Size> {
   /** the size now: the one picked, or auto's for the screen */
   scale(): number;
-  /** a size in the Controls sheet's list, in the page's language: auto with what it gives on this screen */
-  name(s: Size): string;
-  /** fn runs when the choice changes, or what auto gives (the screen's size changed) */
-  on(fn: () => void): void;
   /** auto may give another size now (the screen's changed, or what it measures is there) */
   check(): void;
 }
-function sizeSetting(store: string, sizes: readonly Size[], auto: () => number): SizeSetting {
+function sizeSetting(store: string, values: readonly Size[], auto: () => number): SizeSetting {
   let now: Size = (() => {
-    try { const n = Number(localStorage.getItem(store)); return sizes.includes(n) ? n : 'auto'; } catch { return 'auto'; }
+    try { const n = Number(localStorage.getItem(store)); return values.includes(n) ? n : 'auto'; } catch { return 'auto'; }
   })();
   let autoNow = 0;
   const changed = () => dispatchEvent(new Event(store));
   const self: SizeSetting = {
-    sizes,
+    values,
     get: () => now,
     set(to) {
-      if (to === now || !sizes.includes(to)) return;
+      if (to === now || !values.includes(to)) return;
       now = to;
       try { if (to === 'auto') localStorage.removeItem(store); else localStorage.setItem(store, String(to)); } catch { /* not kept: a private window */ }
       changed();
@@ -135,9 +189,11 @@ function sizeSetting(store: string, sizes: readonly Size[], auto: () => number):
 }
 
 /** the px the controls take between their margins at 100 % (style.css), the most they do (free roam with a manual
- *  gearbox): across, the row of small buttons; down, that row over the controls under the left thumb.  Upright, the
- *  space under the picture: across, the steering beside the pedals; down, two rows over the left thumb's */
-const ROOM = { across: 608, down: 324 }, ROOM_UPRIGHT = { across: 384, down: 372 };
+ *  gearbox): across, the row of small buttons; down, that row over the controls under the steering's thumb (nitro:
+ *  more with Nitro there, a round button where Start's pill was); sides, the steering's group beside the pedals' with
+ *  a gap (what moved in leaves them).  Upright, the space under the picture: across, the steering beside the pedals;
+ *  down, two rows over the steering thumb's */
+const ROOM = { across: 664, down: 324, nitro: 20, sides: 360 }, ROOM_UPRIGHT = { across: 384, down: 372, nitro: 8, sides: 384 };
 /** the controls' root, once there: its padding is their margins */
 let edges: HTMLElement | null = null;
 const upright = () => document.documentElement.hasAttribute('data-touch') && innerHeight >= innerWidth;
@@ -150,7 +206,7 @@ function autoTouchSize(): number {
   const m = edges ? getComputedStyle(edges) : null, px = (v?: string) => parseFloat(v ?? '') || 12;
   const room = upright() ? ROOM_UPRIGHT : ROOM;
   const fit = Math.min((w - px(m?.paddingLeft) - px(m?.paddingRight)) / room.across,
-    (h - px(m?.paddingTop) - px(m?.paddingBottom)) / room.down);
+    (h - px(m?.paddingTop) - px(m?.paddingBottom)) / (room.down + (nitroSteerSide.get() ? room.nitro : 0)));
   return Math.max(0.8, Math.floor(Math.min(want, fit) * 20 + 1e-9) / 20);
 }
 /** the touch controls' size (style.css --ts) */
@@ -179,6 +235,8 @@ interface Ctl {
   keys?: string[]; bit?: number; act?: () => void;
   /** keys a hold presses for as long as it lasts (from LONG_MS); a tap presses the control's own as it lifts */
   hold?: string[];
+  /** what a long press does (from PRESS_MS), instead of act as it lifts */
+  long?: () => void;
   /** a finger slides between the controls of a group */
   group?: 'steer' | 'pedal';
   fingers: Set<number>; downAt: number; upTimer: number; holdTimer: number; held: boolean;
@@ -211,18 +269,6 @@ const ICONS = {
   menuDown: '<path class="fill" d="M5 8l7 9 7-9z"/>',
 };
 
-/** a word on a small round control (Drift): 12 px, or as much smaller as a language's longer word needs to fit inside
- *  (WORD_FIT px across at 100 %), 9 px at the least */
-const WORD_PX = 12, WORD_FIT = 40;
-let measure: CanvasRenderingContext2D | null | undefined;
-function wordPx(word: string): number {
-  measure ??= document.createElement('canvas').getContext('2d');
-  if (!measure) return WORD_PX;
-  measure.font = `italic 700 ${WORD_PX}px ${getComputedStyle(document.documentElement).getPropertyValue('--font') || 'sans-serif'}`;
-  const w = measure.measureText(word).width;
-  return w <= WORD_FIT ? WORD_PX : Math.max(9, Math.floor(WORD_PX * WORD_FIT / w * 2) / 2);
-}
-
 /** the roll of the phone in the screen's plane, radians, 0 = upright, + = turned clockwise (a wheel turned right);
  *  null when it lies too flat to tell.  Gravity in the device's frame from beta and gamma (W3C device orientation:
  *  x right, y up, z out of the screen in the natural orientation), then turned into the screen's frame. */
@@ -239,6 +285,10 @@ export interface TouchDeps {
   log(s: string): void;
   /** the chat button: quick chat's phrases (quickchat.ts) */
   chat?(): void;
+  /** quick chat is on in this game (its setting): else no chat button */
+  chatOn?(): boolean;
+  /** the steering button held: the touch settings (the Controls sheet's touch tab) */
+  settings?(): void;
 }
 
 export class TouchControls {
@@ -304,7 +354,8 @@ export class TouchControls {
     this.knobEl = document.createElement('div'); this.knobEl.className = 'stick-knob';
     this.baseEl.append(this.knobEl); this.stickEl.append(this.baseEl);
     root.append(this.stickEl);
-    // inner: an icon (Nitro's is a picture, style.css); or text, the words on it ("\n": a second line)
+    // inner: an icon (Nitro's, Drift's and the career status' are the game's pictures, style.css); or text, the words
+    // on it ("\n": a second line)
     const add = (id: string, label: string, inner: string | { text: string }, c: Partial<Ctl>, cls = '') => {
       const el = document.createElement('div');
       el.className = `tc ${cls}`.trim(); el.dataset.ctl = id;
@@ -319,10 +370,11 @@ export class TouchControls {
     add('reset', N('Reset'), path(ICONS.reset), { keys: ['KeyR'] }, 'small');
     add('map', N('Map'), path(ICONS.map), { keys: ['KeyM'] }, 'small roam');
     add('msgs', N('Messages'), path(ICONS.msgs), { keys: ['Tab'] }, 'small roam');
-    add('drift', N('Drift mode (in free roam)'), { text: N('Drift') }, { keys: ['KeyX'] }, 'small roam');
+    add('drift', N('Drift mode (in free roam)'), '<i class="drift" aria-hidden="true"></i>', { keys: ['KeyX'] }, 'small roam');
+    add('status', N('Career status'), '<i class="status" aria-hidden="true"></i>', { bit: 1 << PAD_DDOWN }, 'small roam');
     add('horn', N('Horn'), path(ICONS.horn), { keys: ['KeyN'] }, 'small roam');
     add('chat', N('Quick chat'), path(ICONS.chat), { act: () => this.deps.chat?.() }, 'small roam');
-    add('mode', N('Steering'), path(ICONS[this.steering]), { act: () => this.nextSteering() }, 'small');
+    add('mode', N('Steering'), path(ICONS[this.steering]), { act: () => this.nextSteering(), long: () => this.deps.settings?.() }, 'small');
     add('center', N('Straight ahead'), path(ICONS.center), { act: () => this.recenter() }, 'small');
     add('start', N('Start an event'), { text: N('Start') }, { keys: ['Enter'] }, 'pill roam');
     add('left', N('Steer left'), path(ICONS.left), { keys: ['ArrowLeft'], group: 'steer' }, 'big');
@@ -345,10 +397,15 @@ export class TouchControls {
     stage.append(root);
     touchSize.on(() => this.applySize());
     menuSize.on(() => this.applyMenuSize());
+    touchPosition.on(() => this.applyPosition());
+    nitroSteerSide.on(() => this.applyNitro());
+    addEventListener('resize', () => this.placeIn());
     edges = root;
     this.applySize();
     touchSize.check();
     menuSize.check();
+    this.applyPosition();
+    this.applyNitro(true);
 
     root.addEventListener('pointerdown', this.onDown);
     root.addEventListener('pointermove', this.onMove);
@@ -371,7 +428,6 @@ export class TouchControls {
       c.el.setAttribute('aria-label', t(c.label));
       if (c.text === undefined) continue;
       const lines = t(c.text).split('\n');
-      if (c.el.classList.contains('small')) c.el.style.setProperty('--fs', `${wordPx(lines[0])}px`);
       if (lines.length === 1) { c.el.textContent = lines[0]; continue; }
       const span = document.createElement('span');
       lines.forEach((l, i) => { if (i) span.append(document.createElement('br')); span.append(l); });
@@ -428,7 +484,7 @@ export class TouchControls {
   /** the level horizon: the view turned against the tilt while tilt steers outside a cutscene, faded in and out
    *  (smoothstep) as that starts and ends, the tilt itself as the sensor gives it (a smoothed one would lag) */
   private level(now: number) {
-    const on = this.mode === 'drive' && this.steering === 'tilt' && levelOn && (this.drive & 8) === 0;
+    const on = this.mode === 'drive' && this.steering === 'tilt' && levelHorizon.get() && (this.drive & 8) === 0;
     const dt = Math.min(100, now - this.levelAt);
     this.levelAt = now;
     this.levelK = Math.max(0, Math.min(1, this.levelK + (on ? dt : -dt) / LEVEL_FADE_MS));
@@ -444,9 +500,10 @@ export class TouchControls {
     this.root.toggleAttribute('data-roam', (this.drive & 3) === 2);
     this.root.toggleAttribute('data-gears', (this.drive & 4) !== 0);
     // free roam's buttons for now and then: Start while Engage does something, Horn and Quick chat with friends near
-    // (one that goes from under a finger lets go)
+    // (one that goes from under a finger lets go), Quick chat only with its setting on
     this.root.toggleAttribute('data-no-engage', this.engage === 0);
     this.root.toggleAttribute('data-alone', this.near === 0);
+    this.root.toggleAttribute('data-no-chat', this.deps.chatOn?.() === false);
     if (this.engage === 0) this.letGo('start');
     if (this.near === 0) this.letGo('horn');
     this.ctls.get('drift')!.el.classList.toggle('lit', (this.drift & 1) !== 0);
@@ -519,7 +576,7 @@ export class TouchControls {
         this.deps.log(`[app] touch controls: ${n} of ${held} finger(s) cancelled by the phone`);
         if (n < 3 || this.mode !== 'drive' || toldCancel) return;
         toldCancel = true;
-        this.deps.toast(t('The phone took your fingers off the controls: on many phones, three fingers on the screen take a screenshot. Nitro gives gas too, so slide your thumb up to it from Gas, or turn the three-finger gesture off in the phone\'s settings.'), 10000);
+        this.deps.toast(t('The phone took over your touches: on many phones, three fingers take a screenshot. Slide your thumb from Gas up to Nitro (it gives gas too), or turn off the three-finger gesture in the phone\'s settings.'), 10000);
       }, 50);
     }
     this.cancelled.n++;
@@ -538,7 +595,21 @@ export class TouchControls {
     c.fingers.add(finger);
     if (c.fingers.size > 1) return;
     c.el.classList.add('on');
-    if (c.act) return;
+    if (c.act) {
+      // a long press: its fingers let go (their lift does not act), then what it does
+      if (c.long) {
+        clearTimeout(c.holdTimer);
+        c.holdTimer = setTimeout(() => {
+          c.holdTimer = 0;
+          if (!c.fingers.size) return;
+          for (const f of c.fingers) this.byFinger.delete(f);
+          c.fingers.clear(); c.el.classList.remove('on');
+          if (this.ticks) navigator.vibrate?.(8);
+          c.long!();
+        }, PRESS_MS) as unknown as number;
+      }
+      return;
+    }
     if (this.ticks) navigator.vibrate?.(8);
     if (c.hold) {                             // a hold from LONG_MS on, else a tap as it lifts (release)
       clearTimeout(c.holdTimer);
@@ -559,6 +630,7 @@ export class TouchControls {
     c.fingers.delete(finger);
     if (c.fingers.size) return;
     c.el.classList.remove('on');
+    if (c.long) { clearTimeout(c.holdTimer); c.holdTimer = 0; }
     if (c.act) return;
     if (c.hold) {
       if (c.held) { c.held = false; for (const k of c.hold) this.keyUp(k); return; }
@@ -585,9 +657,9 @@ export class TouchControls {
   }
   /** the control's keys or button up (now: also one waiting for its HOLD_MS, and a hold) */
   private up(c: Ctl, now = false) {
-    if (now && c.hold) {
+    if (now && (c.hold || c.long)) {
       clearTimeout(c.holdTimer); c.holdTimer = 0;
-      if (c.held) { c.held = false; for (const k of c.hold) this.keyUp(k); }
+      if (c.held && c.hold) { c.held = false; for (const k of c.hold) this.keyUp(k); }
     }
     if (now) { c.el.classList.remove('on'); if (!c.upTimer && !c.downAt) return; }
     clearTimeout(c.upTimer); c.upTimer = 0;
@@ -656,7 +728,7 @@ export class TouchControls {
     clearTimeout(this.tiltCheck);
     this.tiltCheck = setTimeout(() => {
       if (!this.tiltHeard && this.mode === 'drive' && this.steering === 'tilt')
-        this.deps.toast(t('Tilt has no motion sensor to read in this browser. The steering button (top right) switches to buttons.'), 6000);
+        this.deps.toast(t('Tilt can\'t read a motion sensor in this browser. The steering button (top right) switches to buttons.'), 6000);
     }, 2000) as unknown as number;
   }
   private tiltOff() {
@@ -674,7 +746,7 @@ export class TouchControls {
     if (to === 'tilt') void askMotion().then(ok => { if (!ok) this.deps.toast(t('Tilt needs the motion sensor, which was not allowed.'), 5000); });
     setSteering(to);
     this.deps.toast(to === 'tilt' ? t('Steering: tilt. Hold the phone like a wheel; the button beside this one sets straight ahead.')
-      : t('Steering: {how}', { how: t(NAMES[to]) }), to === 'tilt' ? 5000 : 2000);
+      : t('Steering: {how}. Hold this button for the touch settings.', { how: t(NAMES[to]) }), to === 'tilt' ? 5000 : 3000);
   }
   /** the steering changed (here or in the Controls sheet) */
   private applySteering(to: Steering) {
@@ -698,6 +770,33 @@ export class TouchControls {
     this.scale = s;
     this.stage.style.setProperty('--ts', String(s));
     if (was) this.deps.log(`[app] touch controls: size ${Math.round(s * 100)} %${touchSize.get() === 'auto' ? ' (auto)' : ''}`);
+    this.placeIn();
+  }
+
+  // ---- the position ----------------------------------------------------------------------------
+  /** which thumb steers (style.css .touch[data-right]), the groups moved in or not */
+  private applyPosition() {
+    const p = touchPosition.get(), was = this.root.dataset.position;
+    this.root.dataset.position = p;
+    this.root.toggleAttribute('data-right', p.startsWith('right'));
+    this.placeIn();
+    if (was) this.deps.log(`[app] touch controls: steering on the ${p.startsWith('right') ? 'right' : 'left'}${p.endsWith('-in') ? ', moved in' : ''}`);
+  }
+  /** Nitro on the steering's side (style.css .touch[data-nitro]), which takes more room upright (auto's size) */
+  private applyNitro(start = false) {
+    const on = nitroSteerSide.get();
+    if (on === this.root.hasAttribute('data-nitro')) return;
+    this.root.toggleAttribute('data-nitro', on);
+    touchSize.check();
+    if (!start) this.deps.log(`[app] touch controls: Nitro on the ${on ? 'steering' : 'pedals'}' side`);
+  }
+  /** moved in: EDGE_IN px from the sides, or as much of it as leaves the two groups their room at this size
+   *  (style.css --in) */
+  private placeIn() {
+    const want = touchPosition.get().endsWith('-in') ? EDGE_IN : 0;
+    const m = getComputedStyle(this.root), px = (v: string) => parseFloat(v) || 12;
+    const free = innerWidth - px(m.paddingLeft) - px(m.paddingRight) - (upright() ? ROOM_UPRIGHT : ROOM).sides * this.scale;
+    this.root.style.setProperty('--in', `${Math.max(0, Math.min(want, Math.floor(free / 2)))}px`);
   }
   /** the menus' small buttons at the size picked, or auto's, for the game (runtime/menusize.c): auto's the arrows
    *  alone, the help bar at the game's size */

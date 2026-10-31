@@ -7,8 +7,8 @@
 //!    while the crew drives about; a crew of 65 in one room is no reason for a link;
 //! 3. the counts: the browsers in free roam or paused there, by crew, in any room, a browser once; on the hub's thread
 //!    as of its last tick;
-//! 4. the lists' crew marks (roam_core.h RC_HF_HUBCREW): a player that reads them and is in a crew learns which of its
-//!    peers share one of its crews, and no other player's crews; the others get the lists of before.
+//! 4. the lists' crew marks: a player in a crew learns which of its peers share one of its crews, and no other
+//!    player's crews; a player in no crew gets a plain list.
 
 mod kit;
 
@@ -101,20 +101,18 @@ fn the_wire_a_hello_names_its_crews_after_its_ids() {
     assert_eq!((k.info("bad"), k.info("players")), (1.0, 1.0));
 }
 
-// the lists' crew marks: to a player whose HELLO says it reads them (core 8) and that is in a crew, its own crews, then
-// a mark a link, bit c: that player is in its crew c too (whatever its core: the hub has its crews); a player of core 7
-// or in no crew gets a list of before, byte for byte; and no list carries a crew of anyone but its receiver
+// the lists' crew marks: to a player in a crew, its own crews, then a mark a link, bit c: that player is in its crew c
+// too; a player in no crew gets a plain list, byte for byte; and no list carries a crew of anyone but its receiver
 #[test]
 fn the_lists_mark_crew_mates_and_name_no_other_crews() {
     let (x, y, z, w) = (fnv1a("bluebirds"), fnv1a("owls"), fnv1a("hawks"), fnv1a("wrens"));
     for (how, o) in ways() {
         let mut k = Kit::new(o);
-        // A (x, y), B (y, z), C a core 7 (z, x), D in no crew, E (z, w): all within 40 m, so all linked
-        let who: [(Option<&[u32]>, bool); 5] =
-            [(Some(&[x, y]), true), (Some(&[y, z]), true), (Some(&[z, x]), false), (None, true), (Some(&[z, w]), true)];
-        for (i, &(crews, hubcrew)) in who.iter().enumerate() {
+        // A (x, y), B (y, z), C (z, x), D in no crew, E (z, w): all within 40 m, so all linked
+        let who: [Option<&[u32]>; 5] = [Some(&[x, y]), Some(&[y, z]), Some(&[z, x]), None, Some(&[z, w])];
+        for (i, &crews) in who.iter().enumerate() {
             let i = i as u32;
-            k.from(V(i), &hello_with(100 + i, &HelloOpts { core: if hubcrew { 8 } else { 7 }, crews, hubcrew, ..Default::default() }));
+            k.from(V(i), &hello_with(100 + i, &HelloOpts { crews, ..Default::default() }));
             k.from(V(i), &snap(100 + i, [i as f64 * 10.0 + 0.25, 0.25, 0.0]));
         }
         k.hub.tick();
@@ -133,20 +131,16 @@ fn the_lists_mark_crew_mates_and_name_no_other_crews() {
         assert_eq!(
             [mark(0, 1), mark(0, 2), mark(0, 3), mark(0, 4)],
             [0b10, 0b01, 0, 0],
-            "{how}: B in y, C in x (a core 7: the hub has its crews)"
+            "{how}: B in y, C in x"
         );
         assert_eq!(crew_marks(&of(1)).map(|m| m.0), Some(vec![y, z]), "{how}: B's own crews");
         assert_eq!([mark(1, 0), mark(1, 2), mark(1, 3), mark(1, 4)], [0b01, 0b10, 0, 0b10], "{how}: A in y, C and E in z");
+        assert_eq!(crew_marks(&of(2)).map(|m| m.0), Some(vec![z, x]), "{how}: C's own crews");
+        assert_eq!([mark(2, 0), mark(2, 1), mark(2, 3), mark(2, 4)], [0b10, 0b01, 0, 0b01], "{how}: A in x, B and E in z");
         assert_eq!([mark(4, 0), mark(4, 1), mark(4, 2), mark(4, 3)], [0, 0b01, 0b01, 0], "{how}: E (z, w): B and C in z");
-        for (i, why) in [(2, "a core 7"), (3, "in no crew")] {
-            let f = of(i);
-            assert_eq!(crew_marks(&f), None, "{how}: {why}: no marks");
-            assert_eq!(
-                &f[16..],
-                &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..],
-                "{how}: {why}: a list of before"
-            );
-        }
+        let f = of(3);
+        assert_eq!(crew_marks(&f), None, "{how}: in no crew: no marks");
+        assert_eq!(&f[16..], &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..], "{how}: in no crew: a plain list");
         // no crew of anyone but the receiver in its datagram (C's x and z are A's and B's too: w is E's alone)
         let has = |f: &[u8], h: u32| f.windows(4).any(|b| b == h.to_le_bytes());
         for i in 0..4 {

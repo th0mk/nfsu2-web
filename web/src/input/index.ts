@@ -5,10 +5,12 @@
 //        layout independent) and its Windows virtual-key code; e.key gives
 //        the characters the layout typed (WM_CHAR, cp1252).  The C side
 //        applies keyboard_mac.m's delivery rules (Alt and SYS messages,
-//        autorepeat, keys whose release was lost).  Every key the game uses
-//        has its browser default prevented; Meta combinations stay the
-//        browser's, and Meta going down releases every held key because
-//        macOS browsers send no keyup for keys released while Cmd is held.
+//        autorepeat, keys whose release was lost, keys held through a
+//        release, which their next autorepeat presses again).  Every key
+//        the game uses has its browser default prevented; Meta combinations
+//        stay the browser's, and Meta going down releases every held key
+//        because macOS browsers send no keyup for keys released while Cmd
+//        is held.
 // Mouse: positions relative to the shown image (the C side maps them into
 //        the game's client area and HUD), buttons with pointer capture, the
 //        wheel in WHEEL_DELTA units with the place it turned at (IKF_WHEEL_AT),
@@ -24,7 +26,8 @@
 // Pads:  polled every frame (gamepad.ts), with the page's share (padPage) and
 //        the touch controls' virtual controller merged in (touchPad).
 // Life:  blur and a hidden page deactivate the game (it parks, as after an
-//        alt-tab on Windows) and release everything held; focus and a visible
+//        alt-tab on Windows) and release everything held (a key still down
+//        is pressed again by its next autorepeat); focus and a visible
 //        page reactivate it; requestQuit() is WM_CLOSE.  Fullscreen locks the
 //        keyboard (navigator.keyboard.lock) so Escape and the browser's
 //        reserved shortcuts reach the game; holding Escape leaves fullscreen.

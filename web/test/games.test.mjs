@@ -81,8 +81,11 @@ test('every game\'s profile has the same fields and its own id', async () => {
 });
 
 test('build.mjs --game: the profile behind @game, the game\'s own folders and texts', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'build-games-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // web/ in a repository's copy: the page's changelog is the repository's CHANGELOG.md, beside web/
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'build-games-')), root = path.join(top, 'web');
+  t.after(() => fs.rmSync(top, { recursive: true, force: true }));
+  fs.mkdirSync(root);
+  fs.writeFileSync(path.join(top, 'CHANGELOG.md'), '# Changelog\n');
   const w = (f, s) => { fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true }); fs.writeFileSync(path.join(root, f), typeof s === 'string' ? s : JSON.stringify(s)); };
   const read = f => fs.readFileSync(path.join(root, f), 'utf8');
   // build.mjs builds the folder it is in, wherever it is run from
@@ -159,8 +162,9 @@ test('Most Wanted\'s page body: its name, keys and panels, no Underground 2 text
   const mw = pageHtml('mw'), body = mw.slice(mw.indexOf('<body'));
   assert.match(body, /<h1>Most Wanted Revived<\/h1>/);
   assert.doesNotMatch(body, /Underground 2(?! Revived)|Hydraulics|Drift mode|Quick chat|outrun|Photo mode|Garage &gt; Save/);
-  // its own changes, about and credits (TRACKER M6-11), none of Underground 2's paragraphs
-  assert.match(body, /<section class="panel" id="changes"[^]*?version 1\.3[^]*?<section class="panel" id="about"[^]*?makers of Underground 2 Revived[^]*?ko-fi\.com[^]*?legal@nfsrevived\.xyz[^]*?same static recompiler/);
+  // its own changes, about and credits (TRACKER M6-11; the changes at the top of About since main folded its Changes
+  // panel in), none of Underground 2's paragraphs
+  assert.match(body, /<section class="panel" id="about"[^]*?version 1\.3[^]*?makers of Underground 2 Revived[^]*?ko-fi\.com[^]*?legal@nfsrevived\.xyz[^]*?same static recompiler/);
   assert.doesNotMatch(body, /Drive with friends|My brother|legal@nfsu2\.xyz|language packs|240 fps|WidescreenFix/);
   assert.match(body, /<section class="panel" id="online" aria-labelledby="online-title" hidden>/);
   assert.match(body, /<kbd>G<\/kbd><\/dt><dd data-i18n>Speedbreaker<\/dd>/);

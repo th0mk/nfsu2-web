@@ -676,6 +676,7 @@ dependencies = [
  "base64",
  "bytes",
  "crossbeam-utils",
+ "flate2",
  "getrandom 0.3.4",
  "libc",
  "parking_lot",

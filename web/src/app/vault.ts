@@ -87,7 +87,7 @@ export function readPhrase(text: string): { phrase: string } | { bad: string; wh
   else if (w[0] === NEUTRAL) w = w.slice(1);
   if (!w.length) return bad(N('Type or paste your passphrase.'));
   const unknown = w.find(x => !WORD_SET.has(x));
-  if (unknown) return bad(N('"{word}" is not a passphrase word. Passphrases are made for you by Enable cloud saving: check the spelling, or make one there.'), { word: unknown });
+  if (unknown) return bad(N('"{word}" is not a passphrase word. Check the spelling, or make one with Enable cloud saving.'), { word: unknown });
   if (w.length !== PHRASE_WORDS) return bad(N('A passphrase has {n} words after {prefix}; this has {got}.'), { n: PHRASE_WORDS, prefix: SHOWN, got: w.length });
   return { phrase: [PREFIX, ...w].join('-') };
 }

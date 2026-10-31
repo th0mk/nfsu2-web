@@ -27,8 +27,9 @@ test('the server: /lan accepts its own pages and tools, refuses other sites; an 
       srv.stdout.on('data', d => { out += d; if (out.includes('  access    :')) { clearTimeout(t); res(); } });
       srv.on('exit', c => { clearTimeout(t); rej(new Error('server exited ' + c + ' ' + out)); });
     });
-    const open = (headers, q = '', first = null, keep = false) => new Promise(res => {
+    const open = (headers, q = '', first = null, keep = false) => new Promise((res, rej) => {
       const ws = new WebSocket(`ws://127.0.0.1:${hport}/lan${q}`, { headers });
+      setTimeout(() => rej(new Error(`no welcome and no close in 5 s (${q || 'no query'})`)), 5000).unref();
       if (first) ws.on('open', () => ws.send(JSON.stringify(first)));
       ws.on('message', (d, bin) => { if (!bin) { const m = JSON.parse(String(d)); if (m.t === 'welcome') { res(keep ? { ...m, ws } : m); if (!keep) ws.close(); } } });
       ws.on('error', () => res(null)); ws.on('unexpected-response', () => res(null)); ws.on('close', () => res(null));

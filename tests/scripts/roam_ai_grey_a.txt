@@ -1,0 +1,76 @@
+# Free roam: the game's AI racers (the outrun challengers) grey on the minimap
+# and the world map, a player's arrow in the game's colour (instance A,
+# renders).  Al plays a career past the prologue (roam-pair --seed <a stage
+# 2-4 save> --fresh Bo); Bo (roam_ai_grey_b.txt, a new career's prologue: no
+# challengers) keeps 70 m behind Al.  Al drives on the autopilot until a
+# challenger is out, then jumps 150 m behind it: mp status "N AI racers', N of
+# them grey (0 grey friends')", and on the world map mp map "N grey (AI
+# racers')" and "world map: N AI racer marker(s) grey".  The arrows' own
+# orange (cf8030, as before) and three greys (mp airgb), dumps of each:
+# mm_<colour> the minimap, wm_<colour> the map.
+#   node web/tools/roam-pair.mjs --page play --play-only Al --size 1280x720 --seed <save> --fresh Bo
+#        --a Al:roam_ai_grey_a.txt --b Bo:roam_ai_grey_b.txt --drive 8000 --watch 8000
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitcars 1 3000
++0    autopilot on                    # off the save's spot (a race spot holds the challengers off)
++0    roam mp waitoutrun tuner 20000
++0    autopilot off
++0    roam mp follow tuner 150 0
++120  roam mp status
++0    roam mp airgb cf8030
++0    roam mp follow tuner 150 0
++40   dump mm_cf8030
++3    dump mm_cf8030
++30   roam mp status
++0    roam mp airgb c8c8c8
++0    roam mp follow tuner 150 0
++40   dump mm_c8c8c8
++3    dump mm_c8c8c8
++30   roam mp status
++0    roam mp airgb 9a9a9a
++0    roam mp follow tuner 150 0
++40   dump mm_9a9a9a
++3    dump mm_9a9a9a
++30   roam mp status
++0    roam mp airgb 6e6e6e
++0    roam mp follow tuner 150 0
++40   dump mm_6e6e6e
++3    dump mm_6e6e6e
++30   roam mp status
++0    roam mp airgb cf8030
++0    roam mp follow tuner 150 0
++40   tapuntil M UI_InGame_WorldMap.fng 90 1500
++90   roam mp map
++0    dump wm_cf8030
++3    dump wm_cf8030
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++0    roam mp airgb c8c8c8
++0    roam mp follow tuner 150 0
++300  tap M                           # (tapuntil would match the map seen before)
++90   tap M
++90   roam mp map
++0    dump wm_c8c8c8
++3    dump wm_c8c8c8
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++0    roam mp airgb 9a9a9a
++0    roam mp follow tuner 150 0
++300  tap M
++90   tap M
++90   roam mp map
++0    dump wm_9a9a9a
++3    dump wm_9a9a9a
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++0    roam mp airgb 6e6e6e
++0    roam mp follow tuner 150 0
++300  tap M
++90   tap M
++90   roam mp map
++0    dump wm_6e6e6e
++3    dump wm_6e6e6e
++60   tapuntil ESCAPE HUD_SingleRace.fng 120 1200
++120  roam mp status
++10   quit

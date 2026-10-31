@@ -7,7 +7,9 @@
   "scripts": {
     "start": "bash ./start.sh",
     "build": "node build.mjs",
-    "check": "tsc -p ."
+    "check": "tsc -p .",
+    "test": "node tools/unit-tests.mjs",
+    "test:fast": "node tools/unit-tests.mjs --fast"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

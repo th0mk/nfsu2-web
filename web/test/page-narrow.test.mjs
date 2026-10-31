@@ -38,7 +38,7 @@ function newerSource() {
   const web = path.join(HERE, '..');
   const built = Math.min(...['main.js', 'main.css', 'index.html'].map(f => fs.statSync(path.join(web, 'dist', f), { throwIfNoEntry: false }))
     .filter(Boolean).map(s => s.mtimeMs));
-  const src = ['index.html', 'build.mjs', '../app/registry-defaults.txt', ...fs.readdirSync(path.join(web, 'src'), { recursive: true }).map(f => path.join('src', String(f)))];
+  const src = ['index.html', 'build.mjs', '../app/registry-defaults.txt', '../CHANGELOG.md', ...fs.readdirSync(path.join(web, 'src'), { recursive: true }).map(f => path.join('src', String(f)))];
   let newest = '', at = built;
   for (const f of src) {
     const s = fs.statSync(path.join(web, f), { throwIfNoEntry: false });

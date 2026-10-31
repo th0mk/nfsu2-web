@@ -1052,7 +1052,7 @@ fn ea_messenger_away() {
     let (_, a) = messenger(&mut w, "10.77.0.2", "Alpha");
     assert_eq!(roster(&mut w, a), pair("Bravo", ""), "a request 31 days old");
     w.core.buddy_save();
-    let stored = std::fs::read_to_string(dir.join("buddies.json")).unwrap();
+    let stored = crate::buddy::shelf_texts(&dir).join("\n");
     assert!(!stored.contains("old news") && !stored.contains("\"R\""), "{stored}");
 }
 

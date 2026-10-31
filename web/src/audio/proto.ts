@@ -5,7 +5,6 @@
 export const AUDIO_MAGIC = 0x4E415544;
 export const AUDIO_VERSION = 1;
 export const AUDIO_RING_FRAMES = 16384;
-export const AUDIO_RING_FRAMES_OLD = 8192;  // what a module without AR_PAGE_FRAMES uses, and pages before it
 export const AUDIO_RATE = 44100;
 
 export const AR_MAGIC = 0;
@@ -28,7 +27,6 @@ export const AR_RESET = 16;       // pump: rebuild the context when this changes
 export const AR_WALL_MS = 17;     // pump: ms mixed without a consumer
 export const AR_MIXED = 18;       // pump: frames mixed (low 32 bits)
 export const AR_PAGE_RATE = 19;   // page: the context's sample rate
-export const AR_PAGE_FRAMES = 20; // page: the ring size its worklet uses (AR_FRAMES), set before the context reads as running
 export const AR_HDR_WORDS = 32;
 
 export const AR_CTX_NONE = 0, AR_CTX_RUNNING = 1, AR_CTX_SUSPENDED = 2, AR_CTX_CLOSED = 3;

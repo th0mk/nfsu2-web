@@ -42,9 +42,9 @@ async fn every_share_comes_back_when_the_client_goes() {
     // a download read a little, then reset
     for (path, enc) in [
         ("/data/TRACKS/noise.bin", ""),
-        ("/data-blocks/TRACKS/big.bin?b=0&n=8", "zstd"),
-        ("/data-blocks/TRACKS/big.bin?b=0&n=8", "br"),
-        ("/data-blocks/TRACKS/big.bin?b=0&n=8", "gzip"),
+        ("/data-blocks/v2/TRACKS/big.bin?b=0&n=8", "zstd"),
+        ("/data-blocks/v2/TRACKS/big.bin?b=0&n=8", "br"),
+        ("/data-blocks/v2/TRACKS/big.bin?b=0&n=8", "gzip"),
     ] {
         let mut s = kit.send(path, &[("Accept-Encoding", enc)]).await;
         let mut b = [0u8; 4096];
@@ -143,7 +143,7 @@ async fn runs_come_back_exact() {
     let raw = std::fs::read(kit.path("game/TRACKS/mixed.bin")).unwrap();
     for enc in ["zstd", "br", "gzip", ""] {
         for (b, n) in [(0u64, 3u64), (3, 2), (2, 8), (4, 1)] {
-            let a = kit.get(&format!("/data-blocks/TRACKS/mixed.bin?b={b}&n={n}"), &[("Accept-Encoding", enc)]).await;
+            let a = kit.get(&format!("/data-blocks/v2/TRACKS/mixed.bin?b={b}&n={n}"), &[("Accept-Encoding", enc)]).await;
             assert_eq!(a.status, 200);
             let want = &raw[(b << 20) as usize..raw.len().min(((b + n) << 20) as usize)];
             let got_enc = a.header("content-encoding").unwrap_or("");
@@ -195,9 +195,9 @@ async fn a_block_goes_out_as_kept_once_it_is() {
     assert_eq!(a.header("cloudflare-cdn-cache-control"), Some(nfsu2_headers::EDGE_KEEP));
     assert_eq!(a.header("cdn-cache-control"), Some(nfsu2_headers::EDGE_KEEP));
     assert_eq!(decoded("br", &a.body), block(1));
-    // the old address, the same bytes; one that names no version: never kept by a shared cache
+    // the address from before /v2: none; one that names no version: never kept by a shared cache
     let old = kit.get(&format!("/data-blocks/TRACKS/late.bin?b=1&n=1&{v}"), &all).await;
-    assert_eq!((old.header("content-encoding"), &old.body), (Some("br"), &a.body));
+    assert_eq!(old.status, 404);
     let bare = kit.get("/data-blocks/v2/TRACKS/late.bin?b=1&n=1", &all).await;
     assert_eq!(bare.header("cloudflare-cdn-cache-control"), Some("no-store"));
     // a HEAD: the kept block's head
@@ -836,7 +836,7 @@ fn bench_routes() {
         ("/index.html 200", "/index.html", String::new()),
         ("/index.html 304", "/index.html", format!("If-None-Match: {etag}\r\n")),
         ("/data/ range", "/data/GLOBAL/small.bin", "Range: bytes=0-99\r\n".to_string()),
-        ("/data-blocks/ as is", "/data-blocks/GLOBAL/small.bin?b=0&n=1", String::new()),
+        ("/data-blocks/ as is", "/data-blocks/v2/GLOBAL/small.bin?b=0&n=1", String::new()),
         ("404", "/nothing/here.js", String::new()),
     ] {
         // (NFSU2_BENCH_ROUTE: that one alone, for a profiler)

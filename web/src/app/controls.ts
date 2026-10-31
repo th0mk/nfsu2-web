@@ -3,8 +3,10 @@
 // drawing of a pad with what each button the game uses does beside it, the buttons named as Xbox or PlayStation
 // names them (the switch under it; a PlayStation controller connecting, or taking over in the game, picks those
 // names).  While a steering wheel is connected (in the game: drives), the tab is the wheel's instead (wheel-setup.ts).
-// The touch tab has the steering's list, the level horizon's switch, the controls' size and the game's menu buttons'
-// (touch.ts), the same in both copies and in step with the touch controls' own steering button.
+// The touch tab has the steering's list, the controls' position (which thumb steers, by the sides or moved in), the
+// switches for Nitro on the steering's side and the level horizon, the controls' size and the game's menu buttons'
+// (touch.ts), the same in both copies and in step with the touch controls' own steering button (held, it opens the
+// menu's copy at this tab).
 //
 // The drawing: a front view in its own units (260 x 180, x 130 the middle, the triggers above y 0) at SCALE in the
 // SVG's 336 px, the labels in rows of px left and right of it and over its middle, each joined to its control by a
@@ -13,8 +15,8 @@
 import { drivingPad, familyOf, PAD_DRIVER_EVENT } from '../input/gamepad';
 import { PADF_PLAYSTATION } from '../input/proto';
 import { wheelSection } from './wheel-setup';
-import { askMotion, levelHorizon, menuSize, onLevelHorizon, onSteering, setLevelHorizon, setSteering, steering, STEERING, steeringName,
-  touchSize, type SizeSetting, type Steering } from './touch';
+import { askMotion, levelHorizon, menuSize, nitroSteerSide, onSteering, setSteering, steering, STEERING, steeringName, touchPosition,
+  touchSize, type ListSetting, type Steering, type SwitchSetting } from './touch';
 import { language, N, onLanguage, t } from './i18n';
 
 export type Tab = 'keys' | 'pad' | 'site';
@@ -245,34 +247,38 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     onLanguage(fill);
     fill();
   }
-  const level = root.querySelector<HTMLElement>('[data-level]');
-  if (level) {
-    const sw = level.querySelector<HTMLInputElement>('.switch')!, val = level.querySelector('.val')!;
-    sw.id = `${id}-level`; level.querySelector('label')!.htmlFor = sw.id;
-    const help = level.querySelector('.set-help')!; help.id = `${id}-level-help`; sw.setAttribute('aria-describedby', help.id);
-    const show = () => { sw.checked = levelHorizon(); val.textContent = sw.checked ? t('On') : t('Off'); };
-    sw.onchange = () => setLevelHorizon(sw.checked);
-    onLevelHorizon(show);
+  // the switches: Nitro on the steering's side, the level horizon
+  const toggle = (set: HTMLElement | null, name: string, setting: SwitchSetting) => {
+    if (!set) return;
+    const sw = set.querySelector<HTMLInputElement>('.switch')!, val = set.querySelector('.val')!;
+    sw.id = `${id}-${name}`; set.querySelector('label')!.htmlFor = sw.id;
+    const help = set.querySelector('.set-help')!; help.id = `${id}-${name}-help`; sw.setAttribute('aria-describedby', help.id);
+    const show = () => { sw.checked = setting.get(); val.textContent = sw.checked ? t('On') : t('Off'); };
+    sw.onchange = () => setting.set(sw.checked);
+    setting.on(show);
     onLanguage(show);
     show();
-  }
-  // the sizes' lists: the touch controls' and the game's menu buttons'
-  const sizeList = (set: HTMLElement | null, name: string, setting: SizeSetting) => {
+  };
+  toggle(root.querySelector<HTMLElement>('[data-nitro]'), 'nitro', nitroSteerSide);
+  toggle(root.querySelector<HTMLElement>('[data-level]'), 'level', levelHorizon);
+  // the touch controls' position's list and the sizes': the touch controls' and the game's menu buttons'
+  const list = <T extends string | number>(set: HTMLElement | null, name: string, setting: ListSetting<T>) => {
     if (!set) return;
     const sel = set.querySelector('select')!;
     sel.id = `${id}-${name}`; set.querySelector('label')!.htmlFor = sel.id;
     const help = set.querySelector('.set-help')!; help.id = `${id}-${name}-help`; sel.setAttribute('aria-describedby', help.id);
     const fill = () => {
-      sel.replaceChildren(...setting.sizes.map(s => { const o = document.createElement('option'); o.value = String(s); o.textContent = setting.name(s); return o; }));
+      sel.replaceChildren(...setting.values.map(v => { const o = document.createElement('option'); o.value = String(v); o.textContent = setting.name(v); return o; }));
       sel.value = String(setting.get());
     };
-    sel.onchange = () => setting.set(sel.value === 'auto' ? 'auto' : Number(sel.value));
+    sel.onchange = () => { const to = setting.values.find(v => String(v) === sel.value); if (to !== undefined) setting.set(to); };
     setting.on(fill);
     onLanguage(fill);
     fill();
   };
-  sizeList(root.querySelector<HTMLElement>('[data-size]'), 'size', touchSize);
-  sizeList(root.querySelector<HTMLElement>('[data-menu-size]'), 'menu-size', menuSize);
+  list(root.querySelector<HTMLElement>('[data-position]'), 'position', touchPosition);
+  list(root.querySelector<HTMLElement>('[data-size]'), 'size', touchSize);
+  list(root.querySelector<HTMLElement>('[data-menu-size]'), 'menu-size', menuSize);
   if (opts.follow) {
     const seen = (g: Gamepad) => {
       sheet.family(familyOf(g.id).family === PADF_PLAYSTATION ? 'ps' : 'xb');

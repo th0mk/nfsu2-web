@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use crate::conn::{Conn, Out};
 use crate::queue::Line;
 use crate::text::{js_string, new_token, token_fits, token_hash};
-use crate::{ADDRS, AttachCtx, CtlBuckets, LAN_OFF, LAN_ON, LanSwitch, MASK, Pair, Peer, slot, vip_at};
+use crate::{ADDRS, AttachCtx, CtlBuckets, LanSwitch, MASK, Pair, Peer, slot, vip_at};
 
 /// A departed holder's address, kept for its token only.
 pub(crate) struct Reservation {
@@ -33,12 +33,10 @@ pub(crate) struct Members {
     pub(crate) reserved: IndexMap<u32, Reservation>,
     next: usize,
     /// the peer list: addresses that joined, got their name or left since the last change went out, and the ones
-    /// that left; when the whole list last went to the clients that take no changes
+    /// that left
     changed: IndexSet<u32>,
     left: IndexSet<u32>,
     delta_armed: bool,
-    full_armed: bool,
-    full_at: f64,
     /// the store: a save waits (`era` tells a stale timer), the order of what was saved
     save_armed: bool,
     save_gen: u64,
@@ -57,8 +55,6 @@ impl Members {
             changed: IndexSet::new(),
             left: IndexSet::new(),
             delta_armed: false,
-            full_armed: false,
-            full_at: f64::NEG_INFINITY,
             save_armed: false,
             save_gen: 0,
             save_seq: 0,
@@ -183,9 +179,9 @@ impl LanSwitch {
             token_hash: token_hash(&token),
             name: Default::default(),
             hello: false.into(),
-            deltas: false.into(),
             bundle: false.into(),
-            lan: crate::LAN_NULL.into(),
+            lan: false.into(),
+            udp: 0.into(),
             frames_in: 0.into(),
             frames_out: 0.into(),
             fed_online: false.into(),
@@ -208,14 +204,14 @@ impl LanSwitch {
         m.peers.insert(vip, peer.clone());
         // (a replaced holder's place on it goes with it)
         m.lan.swap_remove(&vip);
-        if peer.lan() != Some(false) {
+        if peer.lan() {
             m.lan.insert(vip, peer.clone());
         }
         *conn.peer.lock() = Some(peer.clone());
         // the welcome (and a resume's whole list, which has the newcomer on it) are queued before the other players'
         // readers can find the newcomer: nothing they route to it comes first (Node sent both before it went back to
         // its event loop)
-        let welcome = format!(r#"{{"t":"welcome","vip":{vip},"vipStr":"{}","mask":"{MASK}","token":"{token}","bundle":1}}"#, vip_str(vip));
+        let welcome = format!(r#"{{"t":"welcome","vip":{vip},"vipStr":"{}","mask":"{MASK}","token":"{token}"}}"#, vip_str(vip));
         conn.push(Out::Text(Bytes::from(welcome)));
         if peer.hello.load(Relaxed) {
             let list = self.list_for(m, &peer);
@@ -310,7 +306,7 @@ impl LanSwitch {
     /// logic runs after that reader ended): on the list of those with LAN play open or not, while it holds its address
     pub(crate) fn set_lan(&self, peer: &Arc<Peer>, on: bool) {
         let mut m = self.members.lock();
-        peer.lan.store(if on { LAN_ON } else { LAN_OFF }, Relaxed);
+        peer.lan.store(on, Relaxed);
         self.lan_changed(&mut m, peer);
         // the peer list follows LAN play (`list_for`): the whole list as it opens, no changes while it is shut
         if !m.peers.get(&peer.vip).is_some_and(|p| Arc::ptr_eq(p, peer)) || !peer.hello.load(Relaxed) {
@@ -328,9 +324,9 @@ impl LanSwitch {
     /// shut: then only the server's own hosts (the Online host, which the game connects to as it opens the Online
     /// screens, before the whole list could come).  Only LAN play needs the other players' addresses (the module's
     /// peer bits answer a connect to an address nobody holds at once; runtime/web/net_lan.c); free roam's come from
-    /// its hub.  A page of before says nothing about LAN play and gets it all, as it did.
+    /// its hub.
     fn list_for(&self, m: &Members, peer: &Peer) -> Bytes {
-        let all = peer.lan() != Some(false);
+        let all = peer.lan();
         peer.listed.store(all, Relaxed);
         if all { self.peer_list(m) } else { self.hosts_list() }
     }
@@ -340,7 +336,7 @@ impl LanSwitch {
         if !m.peers.get(&vip).is_some_and(|p| Arc::ptr_eq(p, peer)) {
             return;
         }
-        let want = peer.lan() != Some(false);
+        let want = peer.lan();
         if want == m.lan.contains_key(&vip) {
             return;
         }
@@ -458,11 +454,6 @@ impl LanSwitch {
             m.delta_armed = true;
             self.after(Duration::from_millis(self.o.peers_ms), |sw| sw.send_delta());
         }
-        if !m.full_armed {
-            m.full_armed = true;
-            let ms = (self.o.peers_ms as f64).max(m.full_at + self.o.full_peers_ms - nfsu2_util::mono_ms());
-            self.after(Duration::from_secs_f64(ms / 1000.0), |sw| sw.send_full());
-        }
     }
 
     /// a timer of the switch's (ended by `stop()`)
@@ -509,23 +500,7 @@ impl LanSwitch {
         m.left.clear();
         let msg = Bytes::from(s);
         for p in m.peers.values() {
-            if p.deltas.load(Relaxed) && p.listed.load(Relaxed) && p.open() {
-                self.send(p, Out::Text(msg.clone()));
-            }
-        }
-    }
-
-    /// the whole list to the clients that take no changes, at most every `full_peers_ms`
-    fn send_full(&self) {
-        let mut m = self.members.lock();
-        m.full_armed = false;
-        m.full_at = nfsu2_util::mono_ms();
-        if !m.peers.values().any(|p| !p.deltas.load(Relaxed) && p.open()) {
-            return;
-        }
-        let msg = self.peer_list(&m);
-        for p in m.peers.values() {
-            if !p.deltas.load(Relaxed) && p.open() {
+            if p.listed.load(Relaxed) && p.open() {
                 self.send(p, Out::Text(msg.clone()));
             }
         }
@@ -678,14 +653,13 @@ fn block_names(m: &Map<String, Value>) -> Vec<String> {
         .collect()
 }
 
-/// a connection's first hello: its player's name, and whether it takes the changes to the peer list, bundles, and has
-/// LAN play open (a page of before says nothing: it gets every broadcast)
+/// a connection's first hello: its player's name, whether it takes bundles (and which), and whether it has LAN play
+/// open
 fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool) {
     use nfsu2_util::json::is_num;
     peer.hello.store(true, Relaxed);
-    peer.deltas.store(is_num(m.get("deltas"), 1.0), Relaxed);
     peer.bundle.store(is_num(m.get("bundle"), 1.0), Relaxed);
-    use crate::conn::{COMPACT, DELTAS, FPRED, PLAIN};
+    use crate::conn::{COMPACT, DELTAS, FPRED, OTHERS, PLAIN};
     let compact = match (is_num(m.get("compact"), 1.0), is_num(m.get("delta"), 1.0), is_num(m.get("fpred"), 1.0)) {
         (false, ..) => PLAIN,
         (true, false, _) => COMPACT,
@@ -693,11 +667,10 @@ fn greet(peer: &Peer, m: &Map<String, Value>, fpred: bool) {
         (true, true, true) => FPRED,
     };
     let compact = if compact == FPRED && !fpred { DELTAS } else { compact };
+    let compact = if compact >= DELTAS && is_num(m.get("ldelta"), 1.0) { compact | OTHERS } else { compact };
     peer.conn.compact.store(compact, Relaxed);
-    let lan = m.get("lan");
-    if is_num(lan, 0.0) || is_num(lan, 1.0) {
-        peer.lan.store(if is_num(lan, 1.0) { LAN_ON } else { LAN_OFF }, Relaxed);
-    }
+    peer.lan.store(is_num(m.get("lan"), 1.0), Relaxed);
+    peer.udp.store(crate::udp_of(m.get("udp")), Relaxed);
     if let Some(Value::String(name)) = m.get("name") {
         let _ = peer.name.set(crate::clean_name(name).into_boxed_str());
     }
@@ -729,7 +702,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_welcome_is_queued_before_anyone_can_send_to_the_newcomer() {
         const N: usize = 300;
-        let sw = LanSwitch::new(LanOptions { max_peers: 7000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 8000, ..LanOptions::default() }, "", None, None, None, None);
         // a sender on another core: it looks at each address the switch hands out next, as soon as it is taken
         let watcher = {
             let sw = sw.clone();
@@ -761,7 +734,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn what_full_costs() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 7000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 8000, ..LanOptions::default() }, "", None, None, None, None);
         let peers: Vec<_> = (0..1000).map(|i| crate::route::tests::peer(&sw, &format!("g{i}"))).collect();
         let t = std::time::Instant::now();
         let mut n = 0;

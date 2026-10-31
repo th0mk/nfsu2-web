@@ -97,26 +97,26 @@ fn the_world_map_brings_the_rooms_open_lobbies() {
     k.from(W(3), &lobby(103, 1, 0, 0xA5, 0x5555, 0, 0, 0, 6, &[103, 103]));
     k.hub.tick();
     k.clear();
-    k.from(W(0), &mapreq(100, 7));
+    k.from(W(0), &mapreq_base(100, 7, 2048, 0));
     assert_eq!(lobbies(&k), [(W(0), 7, vec![(50, -20, 0x2222, 2, 4, 1), (500, 0, 0x1111, 1, 6, 0)])]);
     // without the flag: the map, no lobbies; another room: its own
     k.clear();
-    k.from(W(3), &mapreq(103, 1));
+    k.from(W(3), &mapreq_base(103, 1, 2048, 0));
     assert!(lobbies(&k).is_empty() && !k.sent.lock().is_empty(), "a player that takes none gets its map only");
     k.clear();
-    k.from(W(4), &mapreq(104, 1));
+    k.from(W(4), &mapreq_base(104, 1, 2048, 0));
     assert_eq!(lobbies(&k), [(W(4), 1, vec![(0, 0, 0x4444, 1, 6, 0)])]);
     // 1 closes its lobby (another id closes nothing), 2's advert goes stale: none listed
     k.from(W(2), &lobby(102, 5, 0, 0xFF, 0x2222, 50, -20, 1, 4, &[]));
     k.from(W(1), &lobby(101, 5, 0, 0xA1, 0x1111, 500, 0, 0, 6, &[]));
     k.step(1100.0);
     k.clear();
-    k.from(W(0), &mapreq(100, 8));
+    k.from(W(0), &mapreq_base(100, 8, 2048, 0));
     assert_eq!(lobbies(&k), [(W(0), 8, vec![(50, -20, 0x2222, 2, 4, 1)])], "only 2's, closed with another id");
     k.step(3100.0);
     k.from(W(0), &snap(100, [0.0, 0.0, 0.0]));
     k.clear();
-    k.from(W(0), &mapreq(100, 9));
+    k.from(W(0), &mapreq_base(100, 9, 2048, 0));
     assert_eq!(lobbies(&k), [(W(0), 9, vec![])], "a stale advert is a lobby gone");
 }
 
@@ -131,12 +131,12 @@ fn a_blocked_hosts_lobby_is_not_listed() {
     }
     k.from(W(1), &lobby(101, 1, 0, 0xA1, 0x1111, 500, 0, 0, 6, &[101]));
     k.clear();
-    k.from(W(0), &mapreq(100, 7));
+    k.from(W(0), &mapreq_base(100, 7, 2048, 0));
     assert_eq!(lobbies(&k), [(W(0), 7, vec![(500, 0, 0x1111, 1, 6, 0)])]);
     k.hub.blocks(W(0), vec!["P".into()]);
     k.step(1100.0);
     k.clear();
-    k.from(W(0), &mapreq(100, 8));
+    k.from(W(0), &mapreq_base(100, 8, 2048, 0));
     assert_eq!(lobbies(&k), [(W(0), 8, vec![])]);
 }
 
@@ -161,12 +161,12 @@ fn a_lobby_is_not_there_for_one_kept_apart_from_its_players() {
             assert!(link(&k, 0, member) && !link(&k, 0, outsider) && !link(&k, outsider, 0), "{way}: not carl and {outsider}");
             assert!(!link(&k, 1, 2) && link(&k, 3, 0) && link(&k, 3, 1) && link(&k, 3, 2), "{way}: dave with all of them");
             k.clear();
-            k.from(W(outsider), &mapreq(100 + outsider, 1));
-            let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| map_of(f)).flat_map(|m| m.4).collect();
+            k.from(W(outsider), &mapreq_base(100 + outsider, 1, 2048, 0));
+            let map: Vec<_> = k.sent.lock().iter().filter_map(|(_, f)| mapd_of(f)).flat_map(|m| m.5).collect();
             assert_eq!(lobbies(&k), [(W(outsider), 1, vec![])], "{way}: no lobby on {outsider}'s map");
-            assert!(!map.iter().any(|e| e.0 == 0), "{way}: nor carl: {map:?}");
+            assert!(!map.iter().any(|e| e.1.is_some_and(|p| p.0 == 0)), "{way}: nor carl: {map:?}");
             k.clear();
-            k.from(W(3), &mapreq(103, 1));
+            k.from(W(3), &mapreq_base(103, 1, 2048, 0));
             assert_eq!(lobbies(&k).first().map(|l| l.2.len()), Some(1), "{way}: dave sees it");
             // the member leaves the lobby
             k.step(600.0);
@@ -223,7 +223,7 @@ fn lobbies_on_the_wire_roam_core_and_the_hub_agree() {
     assert_eq!(ad[16 + 23], 25, "the host's away seconds in the byte after n, once reserved: the hub takes the advert all the same");
     k.from(W(0), &ad);
     k.clear();
-    k.from(W(1), &mapreq(101, 1));
+    k.from(W(1), &mapreq_base(101, 1, 2048, 0));
     assert_eq!(lobbies(&k), [(W(1), 1, vec![(-1234, 567, 0x0BADF00D, 2, 6, 0)])]);
     // the hub's datagrams to a C session that asks (req 1): it holds the lobby
     let frames: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();

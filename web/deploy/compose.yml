@@ -54,7 +54,7 @@ services:
       - ${NFSU2_MODULE:-./module}:/module:ro
       - state:/state
     # what the systemd unit (nfsu2-web.service) allows the server, as far as a container goes: nothing to write
-    # but its state, no capabilities, no swap, 65536 open files (the Rust image's 7000 players take up to 56000
+    # but its state, no capabilities, no swap, 65536 open files (the Rust image's 8000 players take up to 64000
     # connections, 8 each); 8 GB of memory, not the unit's 3 GB (the live Node server reached 2.6 GB with 110 players)
     read_only: true
     cap_drop: [ALL]
@@ -74,7 +74,7 @@ configs:
   caddyfile:
     # web/deploy/Caddyfile for NFSU2_HOST.  Caddy names no software (no Server or Via header, also not on its
     # redirects and errors), closes a connection for any other name (the bare address, a scanner's made-up name)
-    # without an answer, and opens at most 55900 connections to the server (the Rust image takes 56000 with 7000
+    # without an answer, and opens at most 63900 connections to the server (the Rust image takes 64000 with 8000
     # players).  It believes no proxy in front: the client's address is the one that connected, and a
     # CF-Connecting-IP a client sends is replaced by it (behind Cloudflare's proxy: compose.cloudflare.yml).  The
     # admin API (127.0.0.1:2019) stays off: nothing reconfigures Caddy while it runs.
@@ -96,7 +96,7 @@ configs:
       	reverse_proxy 127.0.0.1:${NFSU2_HTTP_PORT:-8080} {
       		header_up CF-Connecting-IP {client_ip}
       		transport http {
-      			max_conns_per_host 55900
+      			max_conns_per_host 63900
       		}
       	}
       	header -Server

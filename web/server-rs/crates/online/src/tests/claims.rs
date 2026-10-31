@@ -115,7 +115,7 @@ fn messenger_lists_follow_the_claim() {
     assert_eq!(roster(&mut w, mc), ["Alpha"]);
     assert!(w.core.buddies.list("Charlie").unwrap().temp);
     w.core.buddy_save();
-    let text = std::fs::read_to_string(dir.join("buddies.json")).unwrap();
+    let text = crate::buddy::shelf_texts(&dir).join("\n");
     assert!(!text.contains("{\"name\":\"Charlie\""), "{text}");
     assert!(text.contains(&format!("\"owner\":\"{a}\"")), "{text}");
     w.send(mc, "DISC", vec![]);
@@ -159,7 +159,7 @@ fn lists_of_before_go_to_the_first_claim() {
     assert!(roster(&mut w, n).is_empty(), "NAME's shared list went");
     w.send(m, "DISC", vec![]);
     w.core.buddy_save();
-    let text = std::fs::read_to_string(dir.join("buddies.json")).unwrap();
+    let text = crate::buddy::shelf_texts(&dir).join("\n");
     assert!(text.contains("\"Delta\"") && !text.contains("\"NAME\"") && !text.contains("\"Player\""), "{text}");
     // its first keyphrase gets it, with its blocked list
     claims.claim("Delta", &owner_of_token(&token('D')).unwrap(), now(&w)).unwrap();
@@ -186,4 +186,57 @@ fn a_name_change_takes_the_lists_along() {
     assert!(w.core.buddies.list("Alpha").is_none());
     assert_eq!(roster(&mut w, mb), ["Speedy"]);
     assert!(w.logged("lists moved from \"alpha\""), "{:?}", w.text());
+}
+
+// free roam's pages befriend through the Messenger's lists, as their keyphrase's claimed name: a request waits on
+// both lists, a request back makes friends, and the Messenger hears of it; names nobody claimed take no part
+#[test]
+fn pages_befriend_through_the_messenger_lists() {
+    use crate::buddy::FriendAsk::{Answer, Ask, Block, List, Remove};
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("online");
+    let claims = Arc::new(Claims::in_memory());
+    let mut w = world_with(&claims, Some(dir.clone()));
+    let [a, b, c] = ['A', 'B', 'C'].map(|k| owner_of_token(&token(k)).unwrap());
+    for (n, o) in [("Alpha", &a), ("Bravo", &b), ("Charlie", &c)] {
+        claims.claim(n, o, now(&w)).unwrap();
+    }
+    let g: Arc<str> = Arc::from("g1");
+    let names = |r: &crate::buddy::FriendReply| r.friends.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    // Alpha's Messenger is open: it hears of Bravo's request
+    let (_, ma) = player(&mut w, "10.77.0.2", "Alpha", Some('A'));
+    let r = w.core.friends(&b, &g, Ask("Alpha".into()));
+    assert_eq!((r.me.as_deref(), r.done, r.sent.clone()), (Some("Bravo"), "asked", vec!["Alpha".to_string()]));
+    w.deliver();
+    assert_eq!(w.c(ma).l("RNOT").g("ATTR"), "R");
+    assert_eq!(w.core.friends(&a, &g, List).asks, ["Bravo"]);
+    // asked back: friends, each on the other's list, the Messenger told
+    let r = w.core.friends(&a, &g, Ask("Bravo".into()));
+    assert_eq!((r.done, names(&r), r.asks.len()), ("friends", vec!["Bravo".to_string()], 0));
+    assert_eq!(roster(&mut w, ma), ["Bravo"]);
+    let r = w.core.friends(&b, &g, List);
+    assert_eq!(r.friends, [crate::buddy::FriendRow { name: "Alpha".into(), online: true, contact: None }]);
+    assert_eq!(w.core.friends(&b, &g, Ask("Alpha".into())).done, "friends", "already");
+    // what takes no part: oneself, a name nobody claimed, a keyphrase without a name
+    assert_eq!(w.core.friends(&a, &g, Ask("alpha".into())).done, "self");
+    assert_eq!(w.core.friends(&a, &g, Ask("Delta".into())).done, "claim");
+    let r = w.core.friends(&owner_of_token(&token('D')).unwrap(), &g, List);
+    assert_eq!((r.me, r.done), (None, "claim"));
+    // a request declined goes from both lists
+    assert_eq!(w.core.friends(&c, &g, Ask("Alpha".into())).done, "asked");
+    assert_eq!(w.core.friends(&a, &g, Answer("Charlie".into(), false)).done, "ok");
+    assert!(w.core.friends(&c, &g, List).sent.is_empty() && w.core.friends(&a, &g, List).asks.is_empty());
+    assert_eq!(w.core.friends(&a, &g, Answer("Charlie".into(), true)).done, "none", "nothing to answer");
+    // blocked: its requests never arrive
+    assert_eq!(w.core.friends(&a, &g, Block("Charlie".into())).done, "ok");
+    assert_eq!(w.core.friends(&c, &g, Ask("Alpha".into())).done, "asked");
+    assert!(w.core.friends(&a, &g, List).asks.is_empty());
+    // over a restart: the friends are kept
+    w.core.stop();
+    let mut w = world_with(&claims, Some(dir.clone()));
+    assert_eq!(names(&w.core.friends(&a, &g, List)), ["Bravo"]);
+    // friends no more, on neither list
+    assert_eq!(w.core.friends(&b, &g, Remove("Alpha".into())).done, "ok");
+    assert!(w.core.friends(&a, &g, List).friends.is_empty() && w.core.friends(&b, &g, List).friends.is_empty());
+    assert_eq!(w.core.friends(&b, &g, Remove("Alpha".into())).done, "none");
 }

@@ -398,8 +398,8 @@ pub fn parse(argv: &[String], env: &dyn Fn(&str) -> Option<String>, repo: &str, 
     if !(0.0..=100_000.0).contains(&vault_gb) {
         return Err("--vault-gb: the gigabytes keyphrase saves may take, 0 (none) to 100000".into());
     }
-    if !(max_peers.fract() == 0.0 && (1.0..=7000.0).contains(&max_peers)) {
-        return Err("--max-peers: 1 to 7000".into());
+    if !(max_peers.fract() == 0.0 && (1.0..=8000.0).contains(&max_peers)) {
+        return Err("--max-peers: 1 to 8000".into());
     }
     let tls = if behind {
         Tls::Proxy
@@ -606,8 +606,8 @@ mod tests {
         assert_eq!(s.err(&["--online", "maybe"], &[]), "--online: on or off");
         assert_eq!(s.err(&["--roam-hub", "no"], &[]), "--roam-hub: on or off");
         assert_eq!(s.err(&["--online-trace", "t.log"], &[]), "--online-trace is a test aid: it needs --dev");
-        for v in ["0", "7001", "1.5", "x", "Infinity"] {
-            assert_eq!(s.err(&["--max-peers", v], &[]), "--max-peers: 1 to 7000", "{v}");
+        for v in ["0", "8001", "1.5", "x", "Infinity"] {
+            assert_eq!(s.err(&["--max-peers", v], &[]), "--max-peers: 1 to 8000", "{v}");
         }
         for v in ["-1", "100001", "x", "Infinity"] {
             assert_eq!(s.err(&["--vault-gb", v], &[]), "--vault-gb: the gigabytes keyphrase saves may take, 0 (none) to 100000", "{v}");

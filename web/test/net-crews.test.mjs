@@ -5,7 +5,6 @@
 // - the crews' four words, then their colours' four (0x00rrggbb; 0: the place's default), then crews_gen (+1 a change,
 //   a colour alone too), each with Atomics.store
 // - set before the game registered its free-roam mailbox: written once it does
-// - a module of before (a 256-byte header): nothing written past it
 // With a fake game process (as web/test/page-lifecycle.test.mjs has); the mailbox never wants the switch, so no socket.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,11 +36,11 @@ function fakeProc() {
     register(kind, ptr, size) { regs.set(kind, { ptr, size }); for (const r of waiters.get(kind) ?? []) r({ ptr, size }); waiters.delete(kind); },
   };
 }
-/** the mailbox header as the runtime fills it (version 2: the 256-byte header of a module of before) */
-function mailbox(proc, ver = P.NET_VERSION) {
-  const hdr = ver === 2 ? P.NET_V2_HDR_BYTES : P.NET_HDR_BYTES, size = ver === 2 ? P.NET_V2_MAILBOX_BYTES : P.NET_MAILBOX_BYTES;
+/** the mailbox header as the runtime fills it */
+function mailbox(proc) {
+  const hdr = P.NET_HDR_BYTES, size = P.NET_MAILBOX_BYTES;
   const i32 = new Int32Array(proc.memory.buffer, PTR, size / 4);
-  Object.assign(i32, { [P.W_MAGIC]: P.NET_MAGIC | 0, [P.W_VERSION]: ver, [P.W_HDR_BYTES]: hdr, [P.W_SLOT_BYTES]: P.NET_SLOT_BYTES,
+  Object.assign(i32, { [P.W_MAGIC]: P.NET_MAGIC | 0, [P.W_VERSION]: P.NET_VERSION, [P.W_HDR_BYTES]: hdr, [P.W_SLOT_BYTES]: P.NET_SLOT_BYTES,
     [P.W_TX_SLOTS]: P.NET_TX_SLOTS, [P.W_RX_SLOTS]: P.NET_RX_SLOTS, [P.W_TX_OFF]: hdr, [P.W_RX_OFF]: hdr + P.NET_TX_SLOTS * P.NET_SLOT_BYTES });
   return { i32, size };
 }
@@ -127,23 +126,4 @@ test('crews never changed: nothing written (the game keeps NFSU2_ROAM_CREW)', as
     assert.equal(i32[P.W_SOLID], 2, 'the solid word beside it, as before');
     link.close();
   } finally { w.stop(); }
-});
-
-test('a module of before (a 256-byte header): nothing written past it', async () => {
-  // it always wants the switch: a socket that never opens
-  const g = globalThis, had = { location: g.location, WebSocket: g.WebSocket };
-  g.location = { protocol: 'http:', host: 'localhost', href: 'http://localhost/' };
-  g.WebSocket = class { static OPEN = 1; readyState = 0; close() {} send() {} };
-  const proc = fakeProc(), w = watchStores();
-  try {
-    const link = attachNet(proc, {});
-    link.setCrews([7, 8]);
-    const { i32 } = mailbox(proc, 2);
-    proc.register(NET, PTR, P.NET_V2_MAILBOX_BYTES);
-    await tick(20);
-    link.setCrews([9]);
-    assert.deepEqual(w.seen, []);
-    assert.equal(i32[P.W_CREWS_GEN], 0, 'its TX ring\'s first slot stays as it was');
-    link.close();
-  } finally { w.stop(); Object.assign(g, had); }
 });

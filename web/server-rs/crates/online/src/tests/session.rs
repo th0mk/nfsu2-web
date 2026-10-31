@@ -602,13 +602,13 @@ fn latin1(v: &Value) -> String {
     crate::jsx::latin1_decode(&unhex(v.as_str().unwrap()))
 }
 
-/// What a session did: the frames the host sent, the lines it logged, the files its stop left (stats.json and
-/// buddies.json), and the lobby's clock at the end
+/// What a session did: the frames the host sent, the lines it logged, the files its stop left (stats.json and the
+/// friends lists' shelf), and the lobby's clock at the end
 struct Run {
     frames: usize,
     lines: Vec<String>,
     stats: Option<String>,
-    buddies: Option<String>,
+    buddies: Vec<String>,
     t: f64,
 }
 
@@ -706,7 +706,7 @@ fn run(s: &Session, dir: &std::path::Path) -> Run {
     let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok();
     let lines = w.lines.borrow().iter().map(|(l, _)| l.clone()).collect();
     let frames = w.sent.lock().len();
-    Run { frames, lines, stats: read("stats.json"), buddies: read("buddies.json"), t: w.t.get() }
+    Run { frames, lines, stats: read("stats.json"), buddies: crate::buddy::shelf_texts(dir), t: w.t.get() }
 }
 
 /// a session from its seed: consistent after every step, and its files read back as they were written
@@ -720,9 +720,7 @@ fn check(s: &Session, seed: u64) {
         let back = crate::stats::Stats::new(crate::stats::StatsOptions::new(dir.clone(), crate::stats::tests::clocks(clock), quiet));
         assert_eq!(*text, back.serialize(), "seed {seed}: stats.json read back");
     }
-    if let Some(text) = &r.buddies {
-        assert_eq!(*text, crate::buddy::Buddies::new(dir, Default::default()).serialize(), "seed {seed}: buddies.json read back");
-    }
+    assert_eq!(r.buddies, crate::buddy::shelf_reread(tmp.path()), "seed {seed}: the friends lists read back");
     // what the session went through (each seed's share of the rules)
     let n = |p: &str| r.lines.iter().filter(|l| l.contains(p)).count();
     eprintln!(
