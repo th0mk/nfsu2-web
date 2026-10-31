@@ -301,8 +301,10 @@ typedef struct {
     int      ghost;              /* passes through every car (sub_0069ab60) until clear of the others (ghost_frame) */
     int64_t  clear_us;           /* since when it is clear of every other car (0: it is not) */
     float    gap;                /* while a ghost: the smallest gap between its bounding sphere and another car's (m) */
-    float    pl0[3];             /* where the player's car was when this car came (world), for the shove line */
+    float    pl0[3];             /* where the player's car was when this car came or jumped (world), for the shove line */
     long     pl_f;               /* that frame (0: logged) */
+    const char *pl_why;          /* "came" or "jumped" */
+    uint8_t  epoch;              /* its friend's teleport epoch as the core had it last frame (rc_interp's) */
     uint32_t susp;               /* its ISuspension when it is SuspensionSimple's (0 otherwise) */
     float    snap[5][GUARD_N];   /* the four wheels' and the suspension's fields as last seen finite (susp_guard) */
     uint64_t snap_ok[5];
@@ -336,6 +338,10 @@ static struct {
     unsigned taken;                                  /* cars of ours the game made its own (car_ours) */
     unsigned ghosts, solid, reghost, ghost_skips;    /* cars made ghosts, made solid again, ghosts again after a jump;
                                                       * car pairs whose collision a ghost skipped */
+    double step_s;                                   /* the simulation's time this frame (s; clock_step) */
+    float jp[3], jv; int jp_ok;                      /* the player's car last frame: where (world), its speed (self_jump) */
+    unsigned self_jumps;                             /* jumps of the player's car (a new teleport epoch each) */
+    float self_pl0[3]; long self_f;                  /* where it landed and that frame, for the settle line (0: logged) */
 } R;
 static rc_session g_s;
 static Car g_car[MAX_CARS];
@@ -647,14 +653,20 @@ static void car_pose(CPU *c, Car *k, const float *pw, const float *qw, const flo
  * shoved it 0.6 to 0.9 m (pair runs, wave 15).  So a friend's car comes as a ghost: it collides with no car until its
  * bounding sphere is clear of every other vehicle's (the rigid bodies' list G_VEHLIST: the player's, traffic, the
  * police, other friends') by GHOST_GAP_M for GHOST_HOLD_US; then it is solid.  It is a ghost again when its friend's
- * car jumped more than GHOST_JUMP_M in a frame (a Jump to Safehouse, a reset).  The game's pair test (0x699940) asks
+ * page moved its car, however short the way (a Jump to Safehouse, the game's reset, a warp): that page saw its own
+ * car go farther in a frame than its speed takes it (self_jump: SELF_JUMP_M beyond) and started a new teleport epoch,
+ * which the core snaps to and this page sees change; or when the car is drawn more than GHOST_JUMP_M from where it
+ * was the frame before (a jump no epoch announced).  A page whose own car jumped makes every friend's car a ghost
+ * too, so a car moved onto another shoves it on neither page (a solid car moved 20 m or less onto another did).
+ * The game's pair test (0x699940) asks
  * both cars' collision rule (RBVehicle's, main vtable +0x48: 0x69AB60; RBRemote's 0x69B740) once their spheres
  * (RBVehicle +0x118) meet, a->rule(b) && b->rule(a), and collides only when both answer 1: the rule answers 0 when
  * either is a ghost of ours (sub_0069ab60).  It is symmetric, as the friend's page makes the player's car the same
- * way.  NFSU2_ROAM_GHOST=0 (test aid): friends' cars solid from the start. */
+ * way.  NFSU2_ROAM_GHOST=0 (test aid): friends' cars solid from the start, and solid after jumps. */
 #define GHOST_GAP_M      1.0f
 #define GHOST_HOLD_US    300000
 #define GHOST_JUMP_M     20.f
+#define SELF_JUMP_M      2.f             /* beyond its speed's way (x1.25, the faster of this frame's and the last's) */
 #define RB_RADIUS        0xd0u           /* IRigidBody + 0xD0 = RBVehicle + 0x118: the bounding sphere's radius (0x6998DB) */
 void sub_0069ab60_orig(CPU *c);
 static int g_nghost;
@@ -702,6 +714,30 @@ static void ghost_frame(int64_t host){
         n++;
     }
     g_nghost = n;
+}
+/* the player's car (its state for the wire, world frame) went farther since last frame than its speed takes it: a
+ * new teleport epoch before this state goes out, and every friend's car here a ghost until clear */
+static void self_jump(const rc_state *ls){
+    float sp = sqrtf(ls->v[0] * ls->v[0] + ls->v[1] * ls->v[1] + ls->v[2] * ls->v[2]);
+    if (!isfinite(sp)) sp = 0;
+    if (R.jp_ok){
+        float e2 = 0, vmax = sp > R.jv ? sp : R.jv, dt = R.step_s < 0 ? 0.f : R.step_s > 1.0 ? 1.f : (float)R.step_s;
+        for (int i = 0; i < 3; i++){ float e = ls->p[i] - R.jp[i]; e2 += e * e; }
+        float d = sqrtf(e2), lim = vmax * dt * 1.25f + SELF_JUMP_M;
+        if (d > lim){
+            int n = 0;
+            R.self_jumps++;
+            roam_plat_lock(); rc_bump_epoch(&g_s); roam_plat_unlock();
+            for (int k = 0; R.ghost_on && k < MAX_CARS; k++){
+                if (!g_car[k].st || g_car[k].ghost) continue;
+                g_car[k].ghost = 1; g_car[k].clear_us = 0; R.reghost++; n++;
+            }
+            memcpy(R.self_pl0, ls->p, sizeof R.self_pl0); R.self_f = autotest_frame();
+            fprintf(stderr, "[roam] f=%ld my car jumped %.1f m (its speed's way %.1f m): a new teleport epoch; %d friends' cars "
+                    "here ghosts until clear\n", autotest_frame(), (double)d, (double)(lim - SELF_JUMP_M), n);
+        }
+    }
+    memcpy(R.jp, ls->p, sizeof R.jp); R.jv = sp; R.jp_ok = 1;
 }
 
 /* ---- the session ---- */
@@ -752,11 +788,13 @@ static void init_once(void){
 static int64_t clock_step(int in_roam, int64_t host){
     uint32_t sim = rd(G_SIM), steps = sim ? rd(sim + 0x28u) : 0u;
     float P = sim ? rdf(sim + 0x20u) : 0.f;
-    double wdt = (steps >= R.last_steps && steps - R.last_steps < 1000u && isfinite(P) && P > 0.f && P < 1.f)
-                 ? (double)(steps - R.last_steps) * P : 0.0;
+    int stepped = sim && steps >= R.last_steps && steps - R.last_steps < 1000u && isfinite(P) && P > 0.f && P < 1.f;
+    double wdt = stepped ? (double)(steps - R.last_steps) * P : 0.0;
     R.last_steps = steps;
     int64_t hdt = host - R.last_host, frame_dt = 0;
     if (hdt < 0 || hdt > 1000000) hdt = 0;
+    /* self_jump's time: no step taken, only a warp moved the car; no steps to read, the host's time (or a second) */
+    R.step_s = stepped ? wdt : hdt > 0 ? (double)hdt * 1e-6 : 1.0;
     if (!in_roam){
         R.sync = (double)host;
         if (R.in_roam){ roam_plat_lock(); rc_bump_clock(&g_s); roam_plat_unlock(); }
@@ -782,7 +820,8 @@ static int64_t clock_step(int in_roam, int64_t host){
 /* friends' cars: one each for the friends in free roam, the nearest first while there are more than cars */
 typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, have_pose; rc_pose pose; float dist;
                  uint32_t key, cfg_gen; char car[RC_CFG_TYPE_NAME + 1];
-                 int bad; uint32_t bad_key; } View;   /* bad: its record names no player car (bad_key; car: the name it gave) */
+                 int bad; uint32_t bad_key;     /* bad: its record names no player car (bad_key; car: the name it gave) */
+                 uint8_t epoch; } View;         /* its teleport epoch (the core's, of the states it has) */
 static View g_v[RC_TABLE];
 static int g_nv;
 
@@ -858,6 +897,7 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
             if (mine >= 0) v->have_pose = rc_interp_eval(&p->mo, (int64_t)R.sync, frame_dt, render_delay(i, p, frame_dt), 250000, &v->pose);
             else v->have_pose = rc_interp_peek(&p->mo, p->mo.t[p->mo.n - 1], 0, &v->pose);
         }
+        v->epoch = p->mo.epoch;            /* set with the first state (visible needs one) */
         float dx = v->pose.p[0] - g_lp[0], dy = v->pose.p[1] - g_lp[1];
         v->dist = v->have_pose ? sqrtf(dx * dx + dy * dy) : 1e9f;
     }
@@ -894,19 +934,24 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
             else if (host - car->far_us > FAR_US){ car_kill(c, car, "far away"); continue; }
         } else car->far_us = 0;
         car->seen_us = host;
+        int moved = v->epoch != car->epoch;                   /* its page moved its car (a new teleport epoch) */
+        car->epoch = v->epoch;
         if (R.ghost_on && !car->ghost && car->frames){       /* its friend's car jumped (a Jump to Safehouse, a reset): a ghost again */
             float ps[3], e2 = 0; w2s(v->pose.p, ps);
             for (int i = 0; i < 3; i++){ float e = ps[i] - car->last[i]; e2 += e * e; }
-            if (e2 > GHOST_JUMP_M * GHOST_JUMP_M){
+            if (moved || e2 > GHOST_JUMP_M * GHOST_JUMP_M){
                 car->ghost = 1; car->clear_us = 0; R.reghost++;
-                fprintf(stderr, "[roam] f=%ld %s's car jumped %.1f m: a ghost until clear\n", autotest_frame(), car->name, (double)sqrtf(e2));
+                memcpy(car->pl0, g_lp, sizeof car->pl0); car->pl_f = autotest_frame(); car->pl_why = "jumped";
+                fprintf(stderr, "[roam] f=%ld %s's car jumped %.1f m%s: a ghost until clear\n", autotest_frame(), car->name,
+                        (double)sqrtf(e2), moved ? " (a new teleport epoch)" : "");
             }
         }
         car_pose(c, car, v->pose.p, v->pose.q, v->pose.v, v->pose.w, v->pose.steer, v->pose.throttle, v->pose.brake);
-        if (car->pl_f && autotest_frame() - car->pl_f >= 120 && g_lp_ok){    /* how far the player's car went since this car came */
+        if (car->pl_f && autotest_frame() - car->pl_f >= 120 && g_lp_ok){    /* how far the player's car went since this car came or jumped */
             float dx = g_lp[0] - car->pl0[0], dy = g_lp[1] - car->pl0[1], dz = g_lp[2] - car->pl0[2];
-            fprintf(stderr, "[roam] f=%ld the player's car moved %.2f m in the %ld frames since %s's car came%s\n", autotest_frame(),
-                    (double)sqrtf(dx * dx + dy * dy + dz * dz), autotest_frame() - car->pl_f, car->name, car->ghost ? " (still a ghost)" : "");
+            fprintf(stderr, "[roam] f=%ld the player's car moved %.2f m in the %ld frames since %s's car %s%s\n", autotest_frame(),
+                    (double)sqrtf(dx * dx + dy * dy + dz * dz), autotest_frame() - car->pl_f, car->name, car->pl_why ? car->pl_why : "came",
+                    car->ghost ? " (still a ghost)" : "");
             car->pl_f = 0;
         }
         float dx = v->pose.p[0] - car->p0[0], dy = v->pose.p[1] - car->p0[1], dz = v->pose.p[2] - car->p0[2];
@@ -963,7 +1008,8 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
     memcpy(car->p0, best->pose.p, sizeof car->p0);
     car->ghost = R.ghost_on;
     if (car->ghost){ R.ghosts++; g_nghost++; }
-    memcpy(car->pl0, g_lp, sizeof car->pl0); car->pl_f = autotest_frame();
+    memcpy(car->pl0, g_lp, sizeof car->pl0); car->pl_f = autotest_frame(); car->pl_why = "came";
+    car->epoch = best->epoch;
     R.creates++;
     car_pose(c, car, best->pose.p, best->pose.q, best->pose.v, best->pose.w, best->pose.steer, best->pose.throttle, best->pose.brake);
     fprintf(stderr, "[roam] f=%ld %s's car: %s (key %08x), ISimable 0x%08x, driver class %u, active %u, %.1f m away%s; rigid bodies %u of %u, "
@@ -1178,7 +1224,16 @@ void roam_mw_frame(CPU *c){
     int64_t frame_dt = clock_step(in_roam, host);
     rc_state ls; uint32_t sim = 0;
     int have = in_roam && local_state(c, &ls, &sim);
-    if (have){ ls.t_us = (uint32_t)(int64_t)R.sync; memcpy(g_lp, ls.p, sizeof g_lp); g_lp_ok = 1; }
+    if (have){
+        ls.t_us = (uint32_t)(int64_t)R.sync; memcpy(g_lp, ls.p, sizeof g_lp); g_lp_ok = 1;
+        self_jump(&ls);                       /* before this state goes out: it carries the new epoch */
+        if (R.self_f && autotest_frame() - R.self_f >= 120){
+            float dx = ls.p[0] - R.self_pl0[0], dy = ls.p[1] - R.self_pl0[1], dz = ls.p[2] - R.self_pl0[2];
+            fprintf(stderr, "[roam] f=%ld the player's car moved %.2f m in the %ld frames since its jump\n", autotest_frame(),
+                    (double)sqrtf(dx * dx + dy * dy + dz * dz), autotest_frame() - R.self_f);
+            R.self_f = 0;
+        }
+    } else R.jp_ok = 0;
     /* the car's record: its vehicle's name and key, every 5 s while in free roam (sent when it changed) */
     uint8_t rec[RC_CFG_MAX]; int recn = 0;
     if (have && host >= R.cfg_next){
@@ -1234,10 +1289,10 @@ void roam_game_report(void){
             "records of no player car %u\n",
             R.joins, R.leaves, R.creates, R.create_fail, R.fail_at[1], R.fail_at[2], R.fail_at[3], R.fail_at[4], R.fail_at[5], R.fail_at[6],
             R.fail_at[0] + R.fail_at[7], R.kills, R.lost, R.refused);
-    fprintf(stderr, "  [roam] ghosts: %u cars came as ghosts, %u went solid, %u ghosts again after a jump, %u car pairs' collisions skipped; "
-            "the car loader's pool %u KB (the game's %u); wheel and suspension fields put back %u; cars of ours kept from the budget's "
-            "evictions %u, made the game's own %u\n",
-            R.ghosts, R.solid, R.reghost, R.ghost_skips, R.pool_kb, R.pool_kb_game, R.nan_fixed, g_evict_kept, R.taken);
+    fprintf(stderr, "  [roam] ghosts: %u cars came as ghosts, %u went solid, %u ghosts again after a jump, %u car pairs' collisions skipped, "
+            "%u jumps of my car; the car loader's pool %u KB (the game's %u); wheel and suspension fields put back %u; cars of ours kept "
+            "from the budget's evictions %u, made the game's own %u\n",
+            R.ghosts, R.solid, R.reghost, R.ghost_skips, R.self_jumps, R.pool_kb, R.pool_kb_game, R.nan_fixed, g_evict_kept, R.taken);
     fprintf(stderr, "  [roam] datagrams sent %llu (%llu bytes), received %llu (%llu bytes), blocked %llu, send errors %llu\n",
             (unsigned long long)ps.sent, (unsigned long long)ps.sent_bytes, (unsigned long long)ps.recv, (unsigned long long)ps.recv_bytes,
             (unsigned long long)ps.blocked, (unsigned long long)ps.send_err);

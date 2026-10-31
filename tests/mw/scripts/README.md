@@ -213,3 +213,9 @@ careers load onto the one safehouse spot, so each page makes the other's car whe
 as a ghost (it collides with no car) and neither car is shoved ("the player's car moved ... since ...'s car came"),
 then A drives off with the game's AI and each friend's car goes solid once clear of every other car.  The pair with
 `--env NFSU2_ROAM_GHOST=0` is the control (solid from the start: the shove).
+`roam_mp_jump_a.txt` and `roam_mp_jump_b.txt` are the same pair for a short jump onto another car: from the one spot
+A warps 12 m ahead (`teleport`), both cars go solid, then A warps back onto B's car, a jump under the 20 m by
+which a friend's car drawn farther from where it was is a ghost again.  A's page sees its own car jump (a new teleport
+epoch, every friend's car there a ghost until clear) and B's page sees the epoch change (A's car a ghost there), so
+B's `where` series and both "moved" lines show no shove; then A drives off and both go solid again.  The same scripts
+on a build without the epoch rule are the control (B shoved).

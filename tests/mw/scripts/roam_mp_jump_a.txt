@@ -1,0 +1,38 @@
+# Most Wanted, free roam with friends: a short jump onto another car (TRACKER M10-15's jump rule), instance A of
+# web/tools/roam-pair.mjs --game mw (--a Alice:roam_mp_jump_a.txt --b Bob:roam_mp_jump_b.txt, the freeroam seed).  Both
+# careers load onto the one safehouse spot (the car lot's gate) and each friend's car comes as a ghost.  A warps its car
+# 12 m ahead along the spot's heading, so both cars are clear and solid on both screens, then 600 frames on warps it
+# back onto the spot, onto B's car: a jump of 12 m, under the 20 m a friend's car must be drawn from where it was to be
+# a ghost again by distance.  A's page sees its own car jump (a new teleport epoch; B's car a ghost here) and B's page
+# sees the new epoch (A's car a ghost there), so neither car is shoved.  Then A drives off with the game's AI, both cars
+# go solid again, and A closes.  The places are the freeroam seed's: the spot (where `where` has both cars stand) and
+# 12 m along its heading, at the spot's height.  On a build without the epoch rule both cars were shoved (B 1.3 m).
+0     waitmem 0x00925e90 3 3600                          # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng'Load_complete.@b8a7c6cd 900    # the seed's alias loaded
++0    tapuntil RETURN MainMenu.fng 90 900
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:e072db21@4b4e388a 600     # the career menu, on Resume Career
++0    tap RETURN
++0    waitmem 0x00925e90 6 6000                          # the world (GameFlow 6): free roam
++300  log roam_mp_jump: free roam
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++300  roam mp status
++0    where
++0    teleport -2158.04 153.03 989.10 -0.7990 -0.0348 0.6003    # 12 m ahead
++60   where
++600  roam mp status                                     # both cars clear and solid
++0    where
++0    log roam_mp_jump: back
++0    teleport -2148.45 153.03 981.90 -0.7990 -0.0348 0.6003    # back onto the spot: onto B's car
++2    where
++300  where
++0    roam mp status
++0    autopilot on
++2400 roam mp status
++0    autopilot off
++300  roam mp status
++2    log roam_mp_jump: done
++0    close
