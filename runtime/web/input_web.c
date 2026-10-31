@@ -270,6 +270,12 @@ typedef struct { int kind, x, y, dx, dy; unsigned btn; uint64_t us; } MouseStep;
 #define MOUSE_STEPS 64
 static MouseStep g_ms[MOUSE_STEPS];
 static int g_ms_head, g_ms_n;
+/* the game's client area in pixels: 1280x720 until the device is made (the renderer answers 0x0 before) */
+static void game_px(unsigned *w, unsigned *h){
+    unsigned lw = 1280, lh = 720; metal_game_size(&lw, &lh);
+    if (!lw || !lh){ lw = 1280; lh = 720; }
+    *w = lw; *h = lh;
+}
 static int g_view_x = 640, g_view_y = 360, g_view_dx, g_view_dy;   /* what the game has taken */
 static int g_view_placed;                     /* the game has taken a position the pointer gave (game.h cursor_away) */
 static unsigned g_view_btn;
@@ -344,7 +350,7 @@ void metal_get_cursor(int *x, int *y){
     int vx = g_view_x, vy = g_view_y;
     if (g_game.cursor_away && !g_view_placed){
         /* the pointer has not been over the game yet: a whole client area above and left of it */
-        unsigned lw = 1280, lh = 720; metal_game_size(&lw, &lh);
+        unsigned lw, lh; game_px(&lw, &lh);
         vx = -(int)lw; vy = -(int)lh;
     }
     if (x) *x = vx;
@@ -382,8 +388,7 @@ static void mouse_release_all(void){
  * relative motion DirectInput reports is the same move in game pixels */
 static double g_last_nx = -1, g_last_ny = -1, g_frac_dx, g_frac_dy;
 static void mouse_move(const InEv *e){
-    unsigned lw = 1280, lh = 720; metal_game_size(&lw, &lh);
-    if (!lw || !lh){ lw = 1280; lh = 720; }
+    unsigned lw, lh; game_px(&lw, &lh);
     double ax = atomic_load(&g_ui_asp) / 10000.0, ay = atomic_load(&g_ui_asp_y) / 10000.0;
     double nx = ((double)e->a / 65536.0 - (1.0 - ax) * 0.5) / ax;
     double ny = ((double)e->b / 65536.0 - (1.0 - ay) * 0.5) / ay;
