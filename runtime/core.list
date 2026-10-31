@@ -32,6 +32,7 @@ game.h
 win32.c
 win32_ext.c
 win32_misc.c
+tickmono.h
 fileio.c
 res.c
 lifecycle.c

@@ -4,6 +4,7 @@
 #include "cpu.h"
 #include "game.h"
 #include "memmap.h"
+#include "tickmono.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -246,10 +247,11 @@ uint32_t host_ms(void){ return (uint32_t)(host_us() / 1000ull) + 1000u; }
  * whole, a read that straddled vclock_tick too), and Most Wanted's CommUDP takes a datagram's receive tick, read on
  * DirtySock's socket thread, minus its own later read as unsigned: one step back there is 2^32 ms of silence,
  * past its 120 s timeout (0x8509C6), and it drops the race link with a DISC (TRACKER M8-28).  A read behind the
- * latest answer gets the latest; the first ones, and every 1000th, are logged.  NFSU2_TEST_TICK_BACK=1 answers
- * host_ms as before (the test switch, L-063). */
+ * latest answer gets the latest (tickmono.h, as Underground 2's NetTick in game_ug2.c); the first ones, and every
+ * 1000th, are logged.  NFSU2_TEST_TICK_BACK=1 answers host_ms as before (the test switch, L-063). */
 static uint32_t exe_tick_ms(void){
     uint32_t v = host_ms();
+    static TickMono mono;
     static _Atomic int mode = -1;               /* 0 as host_ms, 1 never back */
     int m = atomic_load(&mode);
     if (m < 0){
@@ -260,21 +262,7 @@ static uint32_t exe_tick_ms(void){
                     : "answers the virtual clock as it is (test switch NFSU2_TEST_TICK_BACK=1)");
         atomic_store(&mode, m);
     }
-    if (!m) return v;
-    static _Atomic uint32_t last, backs;
-    uint32_t l = atomic_load(&last);
-    for (;;){
-        if (l && (int32_t)(v - l) <= 0){
-            if (v != l){
-                uint32_t n = atomic_fetch_add(&backs, 1u) + 1u;
-                if (n <= 5u || n % 1000u == 0u)
-                    fprintf(stderr, "[clock] GetTickCount: a read %u ms behind the latest answer gets that answer (%u so far)\n",
-                            l - v, n);
-            }
-            return l;
-        }
-        if (atomic_compare_exchange_weak(&last, &l, v)) return v;
-    }
+    return m ? tick_mono(&mono, v, "GetTickCount") : v;
 }
 uint64_t host_qpc(void){ return host_us(); }
 
