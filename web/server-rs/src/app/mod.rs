@@ -155,28 +155,16 @@ const STATUS: [(u16, &str); 8] = [
     (503, "Service Unavailable"),
 ];
 
-pub const ROBOTS_TXT: &str = "User-agent: *
-Allow: /
-Disallow: /data/
-Disallow: /data-manifest
-Disallow: /game.wasm
-Disallow: /game.json
-Disallow: /players
-Disallow: /seen
-Disallow: /lan
-Disallow: /vault
-Disallow: /names";
+pub const ROBOTS_TXT: &str = "User-agent: *\nAllow: /\nDisallow: /data/\nDisallow: /data-manifest\nDisallow: /game.wasm\nDisallow: /game.json\nDisallow: /players\nDisallow: /seen\nDisallow: /lan\nDisallow: /vault\nDisallow: /names";
 /// what ROBOTS_TXT keeps search engines out of, under each base
 const DISALLOW: [&str; 9] = ["/data/", "/data-manifest", "/game.wasm", "/game.json", "/players", "/seen", "/lan", "/vault", "/names"];
 
 /// /robots.txt for an origin with the games under these bases ("" the root: ROBOTS_TXT)
 pub fn robots_txt(bases: &[String]) -> String {
-    let mut s = String::from("User-agent: *
-Allow: /");
+    let mut s = String::from("User-agent: *\nAllow: /");
     for b in bases {
         for d in DISALLOW {
-            s.push_str("
-Disallow: ");
+            s.push_str("\nDisallow: ");
             s.push_str(b);
             s.push_str(d);
         }

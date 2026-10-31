@@ -580,7 +580,9 @@ mod tests {
             s.err(&["--no-such-option"], &[]),
             format!(
                 "unknown option --no-such-option\noptions: {}",
-                "--data --dist --wasm --port --http-port --http-socket --bind --state --tls-cert --tls-key --trusted-proxies --real-ip-header --max-peers              --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --base-path --behind-proxy --dev --access-log              --print-entries"
+                "--data --dist --wasm --port --http-port --http-socket --bind --state --tls-cert --tls-key --trusted-proxies --real-ip-header --max-peers \
+             --artifacts --lan-impair --host --online --online-trace --roam-hub --vault-gb --game --base-path --behind-proxy --dev --access-log \
+             --print-entries"
             )
         );
         assert_eq!(s.err(&["--http-port"], &[]), "--http-port needs a value");
