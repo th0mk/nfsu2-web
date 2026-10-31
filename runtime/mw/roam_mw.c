@@ -469,6 +469,30 @@ typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, 
                  uint32_t key, cfg_gen; char car[RC_CFG_TYPE_NAME + 1]; } View;
 static View g_v[RC_TABLE];
 static int g_nv;
+
+/* How far behind its sender's clock a friend's car is drawn (rc_interp_eval's delay), roam_game.c's rule for solid
+ * cars (friends' cars here are solid: the game collides them): where the friend is now, the newest state carried on by
+ * the one-way delay (half the smallest of the last 8 round trips, at most 150 ms), so a contact is at the same spot on
+ * both screens; a change is slewed at 5 % of the frame's time, so the car never jumps.  With a fixed 100 ms in the
+ * past instead, a pair's run (pair1) showed the car 100 ms behind its friend, 2.2 m at 24 m/s. */
+#define RD_PINGS 8
+static struct { uint32_t id; int32_t rtt[RD_PINGS], last; int n, h, init; int64_t d; } g_rd[RC_TABLE];
+static int64_t render_delay(int i, const rc_peer *p, int64_t frame_dt){
+    if (g_rd[i].id != p->id){ memset(&g_rd[i], 0, sizeof g_rd[i]); g_rd[i].id = p->id; }
+    if (p->rtt_us > 0 && p->rtt_us != g_rd[i].last){
+        g_rd[i].last = p->rtt_us; g_rd[i].rtt[g_rd[i].h] = p->rtt_us; g_rd[i].h = (g_rd[i].h + 1) % RD_PINGS;
+        if (g_rd[i].n < RD_PINGS) g_rd[i].n++;
+    }
+    int32_t m = 0;
+    for (int k = 0; k < g_rd[i].n; k++) if (k == 0 || g_rd[i].rtt[k] < m) m = g_rd[i].rtt[k];
+    int64_t want = -(int64_t)(m / 2 < 150000 ? m / 2 : 150000);
+    if (!g_rd[i].init){ g_rd[i].d = want; g_rd[i].init = 1; }
+    else {
+        int64_t lim = (frame_dt > 1000000 ? 1000000 : frame_dt < 0 ? 0 : frame_dt) / 20 + 1, d = want - g_rd[i].d;
+        g_rd[i].d += d > lim ? lim : d < -lim ? -lim : d;
+    }
+    return g_rd[i].d;
+}
 static float g_lp[3];
 static int g_lp_ok;
 
@@ -505,7 +529,7 @@ static void cars_frame(CPU *c, int in_roam, int64_t host, int64_t frame_dt){
         int mine = -1;
         for (int k = 0; k < MAX_CARS; k++) if (g_car[k].st && g_car[k].peer == i && g_car[k].peer_id == p->id) mine = k;
         if (v->visible){
-            if (mine >= 0) v->have_pose = rc_interp_eval(&p->mo, (int64_t)R.sync, frame_dt, 100000, 250000, &v->pose);
+            if (mine >= 0) v->have_pose = rc_interp_eval(&p->mo, (int64_t)R.sync, frame_dt, render_delay(i, p, frame_dt), 250000, &v->pose);
             else v->have_pose = rc_interp_peek(&p->mo, p->mo.t[p->mo.n - 1], 0, &v->pose);
         }
         float dx = v->pose.p[0] - g_lp[0], dy = v->pose.p[1] - g_lp[1];
