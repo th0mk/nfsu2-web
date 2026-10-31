@@ -1071,12 +1071,15 @@ static uint32_t ws_socket(CPU *c){
     return shandle(s);
 }
 
+__attribute__((weak)) void guest_backtrace(CPU *c, int maxn);   /* dispatch.c (none in the unit tests) */
 static uint32_t ws_closesocket(CPU *c){
     if (need_startup()) return 0xFFFFFFFFu;
     WsSock *s = sget(A(c, 0)); if (!s) FAIL(WSAENOTSOCK);
     if (g_probe.h == A(c, 0)) g_probe.h = 0;          /* deny_tick: no second try on another socket */
-    if (ws_dbg() && s->type != 1) ws_log("closesocket: %s socket 0x%x from 0x%08x", s->type == 3 ? "raw" : "udp", A(c, 0),
-                                         c->eip);
+    if (ws_dbg() && s->type != 1){
+        ws_log("closesocket: %s socket 0x%x from 0x%08x", s->type == 3 ? "raw" : "udp", A(c, 0), c->eip);
+        if (s->type == 2 && s->bound && guest_backtrace) guest_backtrace(c, 12);   /* who closed a bound one */
+    }
     sclose(s, s->linger_on && !s->linger_s);
     return 0;
 }

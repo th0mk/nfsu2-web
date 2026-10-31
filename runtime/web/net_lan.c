@@ -108,6 +108,11 @@ static void bump(void){
     __builtin_wasm_memory_atomic_notify((int *)&g_seq, 0xFFFFFFFFu);
 }
 static int dbg(void){ static int v = -1; if (v < 0){ const char *e = getenv("NFSU2_VLAN_DEBUG"); v = e && *e && *e != '0'; } return v; }
+/* NFSU2_VLAN_DEBUG=2: every race datagram, each with the wall clock (the pages share it), not only the first ones */
+static int dbg_all(void){ static int v = -1; if (v < 0){ const char *e = getenv("NFSU2_VLAN_DEBUG"); v = e && atoi(e) >= 2; } return v; }
+__attribute__((weak)) long long autotest_wall_us(void);   /* autotest.c: the shared wall clock (none in lan_unit) */
+/* the game's own state of its race link, appended to each line (Most Wanted: runtime/mw/online_mw.c); none here */
+__attribute__((weak)) int mw_link_probe(char *b, int n){ (void)b; (void)n; return 0; }
 static const char *ipn(uint32_t n, char *b){ const uint8_t *q = (const uint8_t *)&n; snprintf(b, 16, "%u.%u.%u.%u", q[0], q[1], q[2], q[3]); return b; }
 static int is_loop_n(uint32_t n){ return ((const uint8_t *)&n)[0] == 127; }
 static uint32_t own_n(void){ return H(g_vip); }
@@ -493,6 +498,14 @@ static void race_log(const char *what, uint32_t ip_n, uint16_t sport, uint16_t d
     for (i = 0; i < nt && !(t[i].what == what && t[i].ip == ip_n); i++) {}
     if (i == nt && nt < 32){ t[nt].what = what; t[nt].ip = ip_n; t[nt].k = 0; t[nt].last = 0; nt++; }
     uint64_t now = now_us();
+    if (dbg_all()){
+        char b[16], hx[2 * 40 + 1] = "", st[256] = ""; long long w = (autotest_wall_us ? autotest_wall_us() : (long long)now_us()) / 1000;
+        for (int j = 0; p && j < n && j < 40; j++) snprintf(hx + 2 * j, 3, "%02x", p[j]);
+        if (sport == RACE_PORT || dport == RACE_PORT) mw_link_probe(st, (int)sizeof st);
+        ws_log("virtual LAN: race t=%lld.%03lld %s %s :%u -> :%u, %d bytes %s%s", w / 1000, w % 1000, what, ipn(ip_n, b),
+               sport, dport, n, hx, st);
+        return;
+    }
     if (i < nt){
         int show = t[i].k < RACE_LOG_N || (data && now - t[i].last >= RACE_LOG_GAP_US);
         t[i].last = now;

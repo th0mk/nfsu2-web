@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include "widescreen.h"               /* HOOK_SITE */
 
 int winsock_online(void);                    /* winsock.c: online on (browser, NFSU2_ONLINE) */
 
@@ -191,4 +192,66 @@ void online_lobby_read(uint32_t link, const uint8_t *p, int n){
             g_keep = 0;
         }
     }
+}
+
+/* ---- the race link's state, for runtime/web/net_lan.c's race log (NFSU2_VLAN_DEBUG=2) ----
+ * DirtySock's ConnApi (ref [0x9B9D14], 0x79F090's singleton; clients from +0x198, 0xB0 bytes each, the count at
+ * +0x190) checks each active client's NetGameLink (client +0x9C) on the lobby thread (0x85C260 from ConnApiUpdate
+ * 0x85D110): no datagram taken in for its timeout [ref+0xDC] (15000 ms by default) drops the link.  NetGameLink takes
+ * a datagram in (0x83EF10, which stamps +0x44 with the tick) only with 0x21B bytes free in its input buffer (used
+ * +0x198 of +0x19C), which the game empties (0x83F690 from 0x78B120 and the room's 0x7A1640).  Any thread. */
+uint32_t host_ms(void);                 /* win32.c: the exe's GetTickCount, NetTick's clock */
+int mw_link_probe(char *b, int n){
+    uint32_t ref = MR32(0x009b9d14u);
+    if (!ref || !mem_is_committed(ref) || !mem_is_committed(ref + 0x198u)) return 0;
+    uint32_t cnt = MR32(ref + 0x190u), tmo = MR32(ref + 0xdcu), now = host_ms();
+    int o = snprintf(b, (size_t)n, " | tick %u tmo %u room %d", now, tmo, (int)MR32(0x009b4220u));
+    for (uint32_t i = 0; i < cnt && i < 8 && o < n - 64; i++){
+        uint32_t c = ref + 0x198u + 0xb0u * i;
+        if (!mem_is_committed(c + 0xa0u)) break;
+        uint32_t st = MR32(c + 0x88u), l = MR32(c + 0x9cu);
+        if (!l || !mem_is_committed(l) || !mem_is_committed(l + 0x1a0u)){ o += snprintf(b + o, (size_t)(n - o), " c%u st %u", i, st); continue; }
+        uint32_t cm = MR32(l), cs = cm && mem_is_committed(cm + 0x98u) ? MR32(cm + 0x94u) : 99u;
+        o += snprintf(b + o, (size_t)(n - o), " c%u st %u cs %u buf %u/%u rcvd -%d", i, st, cs, MR32(l + 0x198u),
+                      MR32(l + 0x19cu), (int)(now - MR32(l + 0x44u)));
+    }
+    return o;
+}
+
+/* ---- why ConnApi drops a peer (a log line each time) ----
+ * The three calls of its disconnect 0x85C0A0 in the per-client update 0x85C260 (ebp the client, edi the ConnApi
+ * ref): the game stopped the connections (bit 0 of [ref+0x2C] clear), a connect that took over 10 s (state 1,
+ * tick - [client+0xA4] > 10000), and an active link (state 3) whose NetGameLink is no longer open ([link+0x79], the
+ * CommUDP state 2-4) or took nothing in for the timeout ([ref+0xDC]; tick [link+0x24] - last receive [link+0x44]). */
+#define CONNAPI_STOPPED   HOOK_SITE(0x0085c2a2)
+#define CONNAPI_SLOW      HOOK_SITE(0x0085c43e)
+#define CONNAPI_LINK_DOWN HOOK_SITE(0x0085c4a1)
+/* CommUDP's own timeout in its update 0x8505E0 (ebp the CommUDP ref, esi the tick): an open link (state 4) whose last
+ * datagram came in over 120 s before (tick - [ref+0xE8], unsigned: a datagram stamped after the tick is 2^32 ms) and
+ * that sent within 2 s goes to 0x84FDA0, which sends DISC and closes it (state 5); ConnApi then drops the peer */
+#define COMMUDP_TIMEOUT   HOOK_SITE(0x008509eb)
+int mw_online_hook(CPU *c, uint32_t va){
+    if (va == COMMUDP_TIMEOUT){
+        uint32_t r = c->ebp, last = mem_is_committed(r + 0xecu) ? MR32(r + 0xe8u) : 0u, sent = MR32(r + 0xe4u);
+        fprintf(stderr, "[net] CommUDP closes its link: no datagram for %u ms (tick %u, last datagram %u%s, last send %u; "
+                "the datagram in hand: stamp %u, seq 0x%x ack 0x%x, %d bytes)\n", c->esi - last, c->esi, last,
+                (int32_t)(c->esi - last) < 0 ? ": stamped after the tick" : "", sent, MR32(0x009c3ab4u), MR32(0x009c3ab8u),
+                MR32(0x009c3abcu), (int)MR32(0x009c3ab0u));
+        return 1;
+    }
+    if (va != CONNAPI_STOPPED && va != CONNAPI_SLOW && va != CONNAPI_LINK_DOWN) return 0;
+    uint32_t cl = c->ebp, ref = c->edi, idx = ref && cl >= ref + 0x198u ? (cl - ref - 0x198u) / 0xb0u : 99u;
+    uint32_t link = mem_is_committed(cl + 0xa0u) ? MR32(cl + 0x9cu) : 0u;
+    if (va == CONNAPI_STOPPED || !link || !mem_is_committed(link + 0x80u)){
+        fprintf(stderr, "[net] ConnApi drops peer %u: %s (state %u)\n", idx,
+                va == CONNAPI_STOPPED ? "the game stopped its connections" : va == CONNAPI_SLOW ? "no connection in 10 s"
+                : "no link", mem_is_committed(cl + 0x8cu) ? MR32(cl + 0x88u) : 0u);
+        return 1;
+    }
+    uint32_t comm = MR32(link), cst = comm && mem_is_committed(comm + 0x98u) ? MR32(comm + 0x94u) : 99u;
+    fprintf(stderr, "[net] ConnApi drops peer %u: %s; link open %u, CommUDP state %u, tick %u, last receive %d ms "
+            "before, timeout %u ms, input buffer %u of %u\n", idx, va == CONNAPI_SLOW ? "no connection in 10 s"
+            : "the link is down", MR8(link + 0x79u), cst, MR32(link + 0x24u), (int)(MR32(link + 0x24u) - MR32(link + 0x44u)),
+            mem_is_committed(ref + 0xe0u) ? MR32(ref + 0xdcu) : 0u, MR32(link + 0x198u), MR32(link + 0x19cu));
+    return 1;
 }
