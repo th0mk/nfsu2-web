@@ -40,6 +40,9 @@
  *                             The fix takes the car off the plans as the cop manager lets it go; 1 leaves it
  *                             there; 2 also makes the freed block hold something else when a walk first meets it
  *                             (the trap of run c5-s7b).  Each walk that meets such a car is logged either way.
+ *   NFSU2_TEST_RESET_LEAK=1   the game's own leak at every device restore (TRACKER M7-40, B-012; reset_leak below):
+ *                             two managed objects are made again over their old pointers, a texture and an index
+ *                             buffer a Reset; the fix releases each old one first.
  * Each fix logs its first 20 hits ("[fix] f=N ..."). */
 #include "cpu.h"
 #include "game.h"
@@ -106,7 +109,45 @@ static void purecall_caller(CPU *c){
             MR32(c->esp), c->ecx, o ? b : " none");
 }
 static void plan_car_check(uint32_t car, uint32_t plan, const char *where);
+/* M7-40 (B-012): the device restore makes two of the game's managed objects again over their old pointers (D3D9's
+ * managed pool survives a Reset, so on Windows too each Reset leaks them):
+ *   - the environment map's cube, 0x6BD4B0 (from the restore 0x6BD806): `mov [0x982A64], 0` at 0x6BD4EA, then
+ *     CreateCubeTexture (device +0x64: the edge [0x8F8FF4], 1 level, MANAGED) into [0x982A64] at 0x6BD526 when the
+ *     map is on ([0x8F945B]).  Its other readers lock its faces (0x6BF62E, 0x6BF66C) and hand it to the effect
+ *     (0x6C5BB2, ID3DXEffect::SetTexture, which takes its own reference); nothing else keeps the pointer.
+ *   - the screen-quad renderer's index buffer at 0x93CAF4 + 4, 0x6C0E80 (thiscall on 0x93CAF4 from four init paths):
+ *     CreateIndexBuffer (device +0x6C: INDEX16, MANAGED) into [esi] at 0x6C0EF8; its vertex buffer beside it is a
+ *     DEFAULT one, released with the device's.  The renderer's bind 0x6C1010 hands it to SetIndices (the device takes
+ *     its own reference); nothing else reads 0x93CAF8.
+ * Before each of the two, the old object (if any) is released and its slot cleared: the game's reference, the one the
+ * pointer held.  NFSU2_TEST_RESET_LEAK=1 keeps the game's way (each restore then leaves one more texture id live). */
+#define ENVCUBE_SITE HOOK_SITE(0x006bd4ea)     /* mov [0x982A64], ebx (0) */
+#define QUADIB_SITE  HOOK_SITE(0x006c0ef8)     /* call [ecx+0x6C]: CreateIndexBuffer(..., pp = esi, 0) */
+#define ENVCUBE      0x00982a64u
+uint32_t com_obj_release(CPU *c, uint32_t o);   /* com.c */
+static int reset_leak(CPU *c, uint32_t va){
+    static int off = -1, hits;
+    int cube = va == ENVCUBE_SITE;
+    uint32_t slot = cube ? ENVCUBE : c->esi;
+    uint32_t old = mem_is_committed(slot) && mem_is_committed(slot + 3u) ? MR32(slot) : 0u;
+    if (!old) return 1;
+    if (test_switch("NFSU2_TEST_RESET_LEAK", &off)){
+        if (hit_log(&hits))
+            fprintf(stderr, "[fix] f=%ld TEST: device restore: the %s 0x%08x at 0x%08x is made again over its old "
+                    "pointer (the game's way: leaked)\n", autotest_frame(), cube ? "environment cube" :
+                    "screen quads' index buffer", old, slot);
+        return 1;
+    }
+    uint32_t left = com_obj_release(c, old);
+    MR32(slot) = 0u;
+    if (hit_log(&hits))
+        fprintf(stderr, "[fix] f=%ld device restore: the old %s 0x%08x at 0x%08x released before it is made again "
+                "(%u references left)\n", autotest_frame(), cube ? "environment cube" : "screen quads' index buffer",
+                old, slot, left);
+    return 1;
+}
 int mw_fix_hook(CPU *c, uint32_t va){
+    if (va == ENVCUBE_SITE || va == QUADIB_SITE) return reset_leak(c, va);
     if (va == PURECALL_ADD_SITE) return purecall_add_hook(c);
     if (va == CRT_PURECALL_SITE){ purecall_caller(c); return 1; }
     if (va != PURECALL_SITE) return 0;
