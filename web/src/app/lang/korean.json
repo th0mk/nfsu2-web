@@ -658,7 +658,6 @@
   "Nitrous, handbrake": "니트로, 핸드브레이크",
   "Look back, camera": "후방 보기, 카메라",
   "Respawn, pause": "리스폰, 일시정지",
-  "Start event, map, messages": "이벤트 시작, 지도, 메시지",
   "Use the guess": "추정값 사용",
   "Set up the wheel": "핸들 설정",
   "Set up in this browser.": "이 브라우저에서 설정됨.",
@@ -1161,5 +1160,8 @@
   "Not sent: try again in a moment": "보내지 못했어요. 잠시 후 다시 시도해 주세요",
   "Use this passphrase here too?": "이 암호 문구를 여기서도 사용할까요?",
   "Sent. This browser syncs from now on.": "보냈어요. 이제부터 이 브라우저가 동기화돼요.",
-  "Games": "게임"
+  "Games": "게임",
+  "Request sent": "요청을 보냈어요",
+  "Shift up": "기어 올림",
+  "Shift down": "기어 내림"
 }

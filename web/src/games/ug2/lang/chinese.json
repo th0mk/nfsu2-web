@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "英文字幕：VileStuff 的 <0>English Subtitles Fixed</0>。",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "遊玩時存檔：<0><1>Esc</1> 或 </0><2>Start</2> &gt; 車庫 &gt; 儲存",
   "press in: horn": "按下：喇叭",
-  "Shift up": "升檔",
-  "Shift down": "降檔",
   "Quick chat (with other players): group, then phrase": "快速聊天（與其他玩家同玩時）：先選分類，再選短語",
   "Photo mode; F12 again takes the photo": "拍照模式；再按 F12 拍照",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "此頁面未啟用跨來源隔離（沒有 SharedArrayBuffer）。請從 NFSU2 網頁伺服器開啟。",
   "Message a friend (in free roam)": "傳訊息給好友（自由漫遊中）",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "此通關密語保存了你的 Most Wanted 雲端存檔，但還沒有 Underground 2 的存檔。也要將此處的存檔以此通關密語傳送上去嗎？每款遊戲各自保存自己的存檔。"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "此通關密語保存了你的 Most Wanted 雲端存檔，但還沒有 Underground 2 的存檔。也要將此處的存檔以此通關密語傳送上去嗎？每款遊戲各自保存自己的存檔。",
+  "Start event, map, messages": "開始賽事、地圖、訊息"
 }

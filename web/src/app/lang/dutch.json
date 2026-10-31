@@ -718,7 +718,6 @@
   "Nitrous, handbrake": "Nitro, handrem",
   "Look back, camera": "Terugkijken, camera",
   "Respawn, pause": "Resetten, pauze",
-  "Start event, map, messages": "Event starten, kaart, berichten",
   "Use the guess": "Schatting gebruiken",
   "Set up the wheel": "Stuur instellen",
   "Set up in this browser.": "Ingesteld in deze browser.",
@@ -1233,5 +1232,8 @@
   "Not sent: try again in a moment": "Niet verstuurd: probeer het zo nog eens",
   "Use this passphrase here too?": "Deze wachtwoordzin ook hier gebruiken?",
   "Sent. This browser syncs from now on.": "Verstuurd. Deze browser synchroniseert vanaf nu.",
-  "Games": "Spellen"
+  "Games": "Spellen",
+  "Request sent": "Verzoek verstuurd",
+  "Shift up": "Opschakelen",
+  "Shift down": "Afschakelen"
 }

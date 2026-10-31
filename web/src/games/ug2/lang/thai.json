@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "ซับไตเติลภาษาอังกฤษ: <0>English Subtitles Fixed</0> ของ VileStuff",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "บันทึกระหว่างเล่น: <0><1>Esc</1> หรือ </0><2>Start</2> &gt; โรงรถ &gt; บันทึก",
   "press in: horn": "กดลง: แตร",
-  "Shift up": "เกียร์ขึ้น",
-  "Shift down": "เกียร์ลง",
   "Quick chat (with other players): group, then phrase": "แชตด่วน (เมื่อเล่นกับผู้เล่นคนอื่น): กลุ่ม แล้ววลี",
   "Photo mode; F12 again takes the photo": "โหมดถ่ายภาพ กด F12 อีกครั้งเพื่อถ่ายภาพ",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเว็บเซิร์ฟเวอร์ NFSU2",
   "Message a friend (in free roam)": "ส่งข้อความถึงเพื่อน (ในการขับอิสระ)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "วลีรหัสนี้มีเซฟบนคลาวด์ของ Most Wanted แต่ยังไม่มีเซฟของ Underground 2 ต้องการส่งเซฟที่นี่ภายใต้วลีรหัสนี้ด้วยหรือไม่ แต่ละเกมเก็บเซฟของตัวเองแยกกัน"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "วลีรหัสนี้มีเซฟบนคลาวด์ของ Most Wanted แต่ยังไม่มีเซฟของ Underground 2 ต้องการส่งเซฟที่นี่ภายใต้วลีรหัสนี้ด้วยหรือไม่ แต่ละเกมเก็บเซฟของตัวเองแยกกัน",
+  "Start event, map, messages": "เริ่มอีเวนต์ แผนที่ ข้อความ"
 }

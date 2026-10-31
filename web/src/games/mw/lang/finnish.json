@@ -886,7 +886,6 @@
   "Nitrous, handbrake": "Typpi, käsijarru",
   "Look back, camera": "Katso taakse, kamera",
   "Respawn, pause": "Palaa tielle, tauko",
-  "Start event, map, messages": "Aloita tapahtuma, kartta, viestit",
   "Sticks": "Tikut",
   "Switches you set up": "Asettamasi kytkimet",
   "Nitrous, handbrake and respawn": "Typpi, käsijarru ja tielle palaaminen",
@@ -1259,5 +1258,7 @@
   "Need for Speed: Underground 2 (2004) in the browser: the PC game's own code with WebGPU graphics, up to 120 fps widescreen, free roam with friends and Online.": "Need for Speed: Underground 2 (2004) selaimessa: PC-pelin oma koodi WebGPU-grafiikalla, jopa 120 fps laajakuvana, vapaa ajelu kavereiden kanssa ja Online.",
   "Play Underground 2": "Pelaa Underground 2:ta",
   "Need for Speed: Most Wanted (2005) in the browser: the PC game's own code (version 1.3) with WebGPU graphics and Web Audio sound.": "Need for Speed: Most Wanted (2005) selaimessa: PC-pelin oma koodi (versio 1.3) WebGPU-grafiikalla ja Web Audio -äänellä.",
-  "Play Most Wanted": "Pelaa Most Wantedia"
+  "Play Most Wanted": "Pelaa Most Wantedia",
+  "Shift up": "Vaihda ylös",
+  "Shift down": "Vaihda alas"
 }

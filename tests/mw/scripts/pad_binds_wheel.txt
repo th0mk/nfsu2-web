@@ -1,0 +1,28 @@
+# Most Wanted: the input bindings with a steering wheel plugged in from the first frame (TRACKER M6-37, M6-38): as
+# pad_binds.txt, the device the wheel (dinput_pad.c's driving device), so runtime/mw/pad_mw.c writes its wheel
+# layout: the paddles (the page's RB and LB) shift up and down, A (Cross) nitrous, X (Square) the handbrake, the
+# pedals (RT, LT) gas and brake, the rest as the pad's.  tests/mw/checks/pad_binds_wheel.sh checks the rows.
+#   node web/tools/run-suite.mjs --game mw --script pad_binds_wheel.txt --marker 'pad_binds_wheel: done' --env NFSU2_QUIT_FRAMES=4000
+0     pad connect wheel                                  # dinput_pad.c's driving device
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++30   log pad_binds_wheel: table
++0    peek 0x0091f418 64
++0    peek 0x0091f518 64
++0    peek 0x0091f618 64
++0    peek 0x0091f718 64
++0    peek 0x0091f818 64
++0    peek 0x0091f918 64
++0    peek 0x0091fa18 64
++0    peek 0x0091fb18 64
++0    peek 0x0091fc18 64
++0    peek 0x0091fd18 64
++0    peek 0x0091fe18 64
++0    peek 0x0091ff18 64
++0    peek 0x00920018 64
++0    peek 0x00920118 64
++0    peek 0x00920218 64
++0    peek 0x00920318 28
++0    log pad_binds_wheel: done
++0    close

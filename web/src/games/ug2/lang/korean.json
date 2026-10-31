@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "영어 자막: VileStuff의 <0>English Subtitles Fixed</0>.",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "플레이 중 저장하려면: <0><1>Esc</1> 또는 </0><2>Start</2> &gt; 차고 &gt; 저장",
   "press in: horn": "누르면 경적",
-  "Shift up": "기어 올림",
-  "Shift down": "기어 내림",
   "Quick chat (with other players): group, then phrase": "빠른 채팅(다른 플레이어와 있을 때): 그룹, 그다음 문구",
   "Photo mode; F12 again takes the photo": "사진 모드, F12를 다시 누르면 사진 촬영",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). NFSU2 웹 서버에서 여세요.",
   "Message a friend (in free roam)": "친구에게 메시지(자유 주행에서)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "이 암호 문구에는 Most Wanted 클라우드 저장 데이터가 있지만 Underground 2 저장 데이터는 아직 없어요. 여기 있는 저장 데이터도 이 암호 문구로 보낼까요? 게임마다 저장 데이터가 따로 보관돼요."
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "이 암호 문구에는 Most Wanted 클라우드 저장 데이터가 있지만 Underground 2 저장 데이터는 아직 없어요. 여기 있는 저장 데이터도 이 암호 문구로 보낼까요? 게임마다 저장 데이터가 따로 보관돼요.",
+  "Start event, map, messages": "이벤트 시작, 지도, 메시지"
 }

@@ -3,6 +3,7 @@
 // and controller bits the touch controls press.
 import type { PadLayout } from '../../app/controls';
 import type { TouchSet } from '../../app/touch';
+import type { WheelRow } from '../../app/wheel-setup';
 import { PAD_A, PAD_LB, PAD_RB, PAD_X } from '../../input/proto';
 import { N } from '../../app/i18n';
 
@@ -32,6 +33,16 @@ export const PAD: PadLayout = {
   brackets: [{ x: 90.5, y0: 110, y1: 150, from: 123, to: [85, 94] }, { x: 244.5, y0: 70, y1: 124, from: 80, to: [217, 54] }],
   unused: [],
 };
+
+/** a steering wheel's list in the sheet (src/app/wheel-setup.ts): runtime/pad_ug2.c g_prof_wheel */
+export const WHEEL: readonly WheelRow[] = [
+  { keys: N('Wheel and pedals'), does: N('Steer, throttle, brake and reverse') },
+  { keys: N('Left and right paddles'), does: N('Shift down, shift up') },
+  { keys: [['A', 'cross'], ['X', 'square']], does: N('Nitrous, handbrake') },
+  { keys: [['B', 'circle'], ['Y', 'triangle']], does: N('Look back, camera') },
+  { keys: [['view', 'Share'], ['menu', 'Options']], does: N('Respawn, pause') },
+  { keys: [['up', 'up'], ['left', 'left'], ['right', 'right']], does: N('Start event, map, messages') },
+];
 
 /** the touch controls' keys and controller bits (src/app/touch.ts) */
 export const TOUCH: TouchSet = {

@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "英語字幕: VileStuff の <0>English Subtitles Fixed</0>。",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "プレイ中にセーブするには: <0><1>Esc</1>または</0><2>Start</2> &gt;「ガレージ」&gt;「セーブ」",
   "press in: horn": "押すとホーン",
-  "Shift up": "シフトアップ",
-  "Shift down": "シフトダウン",
   "Quick chat (with other players): group, then phrase": "クイックチャット（他のプレイヤーといるとき）: グループ、次にフレーズ",
   "Photo mode; F12 again takes the photo": "フォトモード。もう一度 F12 で撮影",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。NFSU2 Webサーバーから開いてください。",
   "Message a friend (in free roam)": "フレンドにメッセージ（フリーロームで）",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "このパスフレーズにはMost Wantedのクラウドセーブがありますが、Underground 2のセーブデータはまだありません。ここにあるセーブデータもこのパスフレーズで送りますか？セーブデータはゲームごとに別々に保存されます。"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "このパスフレーズにはMost Wantedのクラウドセーブがありますが、Underground 2のセーブデータはまだありません。ここにあるセーブデータもこのパスフレーズで送りますか？セーブデータはゲームごとに別々に保存されます。",
+  "Start event, map, messages": "イベント開始、マップ、メッセージ"
 }

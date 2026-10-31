@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "Engelse ondertitels: <0>English Subtitles Fixed</0> van VileStuff.",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Opslaan tijdens het spelen: <0><1>Esc</1> of </0><2>Start</2> &gt; Garage &gt; Opslaan",
   "press in: horn": "klik: claxon",
-  "Shift up": "Opschakelen",
-  "Shift down": "Afschakelen",
   "Quick chat (with other players): group, then phrase": "Snelchat (met andere spelers): groep, dan zin",
   "Photo mode; F12 again takes the photo": "Fotomodus; nog eens F12 maakt de foto",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "De pagina is niet cross-origin-geïsoleerd (geen SharedArrayBuffer). Open de pagina via de NFSU2-webserver.",
   "Message a friend (in free roam)": "Bericht aan een vriend (in Verkennen)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Deze wachtwoordzin bewaart je opgeslagen spellen van Most Wanted in de cloud, maar nog geen van Underground 2. De opgeslagen spellen hier ook onder deze wachtwoordzin versturen? Elk spel houdt zijn eigen opgeslagen spellen."
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Deze wachtwoordzin bewaart je opgeslagen spellen van Most Wanted in de cloud, maar nog geen van Underground 2. De opgeslagen spellen hier ook onder deze wachtwoordzin versturen? Elk spel houdt zijn eigen opgeslagen spellen.",
+  "Start event, map, messages": "Event starten, kaart, berichten"
 }

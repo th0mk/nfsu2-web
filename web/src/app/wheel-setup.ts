@@ -1,5 +1,6 @@
 // The Controls sheet's steering wheel (controls.ts, the Controller tab): while a wheel is connected, what its controls
-// do in the game (runtime/dinput_pad.c g_prof_wheel, the buttons as web/src/input/wheel.ts puts them), and its
+// do in the game (src/games/<id>/controls.ts WHEEL: the game's wheel layout, runtime/pad_ug2.c g_prof_wheel or
+// runtime/mw/pad_mw.c, the buttons as web/src/input/wheel.ts puts them), and its
 // set-up, for a wheel the page reads wrong: let go, turn the wheel to full lock, press each pedal (WheelLearn).  The
 // set-up is kept in this browser for that model, and the game's controller follows it at once (gamepad.ts).  While a
 // game runs, the sheet is the wheel's only while the wheel drives (a controller takes over with a button pressed on it,
@@ -14,6 +15,11 @@ import {
   type ShifterMode, type SwitchStep,
 } from '../input/wheel';
 import { N, t } from './i18n';
+import { WHEEL } from '@game/controls';
+
+/** a row of the wheel's list (src/games/<id>/controls.ts WHEEL): its controls, a name (English, translated where
+ *  drawn) or key caps with each button's Xbox and PlayStation names, and what they do (English) */
+export interface WheelRow { keys: string | readonly (readonly [string, string])[]; does: string }
 
 const SHIFTER_NAMES: Record<ShifterMode, string> = {
   'push-up': N('Sequential: push to shift up'),
@@ -81,12 +87,7 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
     const row = (dt: string, dd: string) => `<div><dt>${dt}</dt><dd>${esc(t(dd))}</dd></div>`;
     box.innerHTML = `<p class="wheel-name"></p>
     <dl class="keys wheel-keys">
-      ${row(esc(t('Wheel and pedals')), N('Steer, throttle, brake and reverse'))}
-      ${row(esc(t('Left and right paddles')), N('Shift down, shift up'))}
-      ${row(`${cap('A', 'cross')} ${cap('X', 'square')}`, N('Nitrous, handbrake'))}
-      ${row(`${cap('B', 'circle')} ${cap('Y', 'triangle')}`, N('Look back, camera'))}
-      ${row(`${cap('view', 'Share')} ${cap('menu', 'Options')}`, N('Respawn, pause'))}
-      ${row(`${cap('up', 'up')} ${cap('left', 'left')} ${cap('right', 'right')}`, N('Start event, map, messages'))}
+      ${WHEEL.map(r => row(typeof r.keys === 'string' ? esc(t(r.keys)) : r.keys.map(([xb, ps]) => cap(xb, ps)).join(' '), r.does)).join('')}
     </dl>
     <dl class="keys radio-keys" hidden>
       ${row(esc(t('Sticks')), N('Steer, throttle, brake and reverse'))}

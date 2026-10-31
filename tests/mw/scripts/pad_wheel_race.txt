@@ -1,0 +1,48 @@
+# Most Wanted: a steering wheel's pedals in a race with runtime/mw/pad_mw.c's layout (TRACKER M6-37, M6-38; PLAN
+# D-65): as pad_race.txt with the synthetic controller plugged in as a wheel (dinput_pad.c's driving device; the
+# page gives a wheel's gas pedal as RT and its brake pedal as LT, web/src/input/wheel.ts), so the gas pedal drives
+# instead of pausing the game as it did on the game's own layout.  tests/mw/checks/pad_wheel_race.sh reads the lines.
+#   node web/tools/run-suite.mjs --game mw --script pad_wheel_race.txt --marker 'pad_wheel_race: results' --env NFSU2_QUIT_FRAMES=12000
+0     pad connect wheel                                  # dinput_pad.c's driving device
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MainMenu.fng 90 6000
++0    waitfng MainMenu.fng@4b4e388a 600                  # the main menu takes input, on Career
++0    tapuntil RIGHT MainMenu.fng@4b4e388c 40 600        # Quick Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:cdf0cc03@4b4e388a 600     # "quick race", on its random Quick Race
++0    tapuntil RIGHT MainMenu_Sub.fng:cdf0cc03@4b4e388b 40 600   # Custom Race
++0    tap RETURN
++0    waitfng MainMenu_Sub.fng:1f203817@4b4e388a 600     # "custom race mode select", on Circuit
++0    tap RETURN
++0    waitfng Track_Select.fng:3de80a85:4d36bf77 600     # "circuit track select", on City Perimeter
++0    tap RETURN
++0    waitfng Track_Options.fng:a6ed015d@b2980ba8 600    # "circuit options", as they come
++0    tap RETURN
++0    waitfng Car_Select.fng:d18d600a 600                # the car list (its "TOP SPEED" up)
++0    tap RETURN
++0    waitfng Dialog.fng:8cd532a0@b8a7c6cd 600           # "Select your transmission", on Auto
++0    tapuntil RETURN Loading.fng 30 600                 # (a RETURN this soon after the dialog can be dropped, L-229)
++0    waitmem 0x00925e90 6 6000                          # racing (GameFlow 6)
++0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
++0    log pad_wheel_race: GO
++0    breaker watch
++0    trigger RT 1                                       # the gas pedal (the page's RT): GAME_ACTION_GAS, Rz above its centre
++0    breaker wait above 20 1200
++0    trigger RT 0.5
++90   trigger RT 0
++0    log pad_wheel_race: gas by the pedal
++30   trigger LT 1                                       # the brake pedal (LT): GAME_ACTION_BRAKE, Z above its centre
++0    breaker wait below 10 1200
++0    trigger LT 0
++0    log pad_wheel_race: braked by the pedal
++0    pad START down                                     # HUDACTION_PAUSEREQUEST: Menu, button 9
++0    waitfng Pause_Main.fng 300
++0    pad START up
++60   log pad_wheel_race: paused by Menu
++0    tap ESCAPE
++0    waitgone Pause_Main.fng 600
++60   log pad_wheel_race: resumed
++0    racewin
++0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
++0    log pad_wheel_race: results
++0    close

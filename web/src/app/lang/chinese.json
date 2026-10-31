@@ -658,7 +658,6 @@
   "Nitrous, handbrake": "氮氣、手煞車",
   "Look back, camera": "向後看、視角",
   "Respawn, pause": "重置車輛、暫停",
-  "Start event, map, messages": "開始賽事、地圖、訊息",
   "Use the guess": "使用推測值",
   "Set up the wheel": "設定方向盤",
   "Set up in this browser.": "已在此瀏覽器中設定。",
@@ -1161,5 +1160,8 @@
   "Not sent: try again in a moment": "未送出：請稍後再試",
   "Use this passphrase here too?": "也要在這裡使用此通關密語嗎？",
   "Sent. This browser syncs from now on.": "已傳送。此瀏覽器從現在起會同步。",
-  "Games": "遊戲"
+  "Games": "遊戲",
+  "Request sent": "已送出邀請",
+  "Shift up": "升檔",
+  "Shift down": "降檔"
 }

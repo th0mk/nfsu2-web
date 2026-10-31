@@ -2,10 +2,12 @@
 # The pad is plugged in from the first frame, so the game's own enumeration at the start offers it and its input
 # set-up binds it (a pad plugged in mid-race is offered to the game but its buttons do nothing in the race, as
 # pad_menu_boot.txt's header says for the front end).  The race as in speedbreaker.txt, the gas (Up) held from
-# GO; above 55 mph the pad's Y switches the Speedbreaker on and at once off again (each press held until
-# the game has switched).
+# GO; above 40 mph the pad's right stick pressed in (RS: GAME_ACTION_GAMEBREAKER in runtime/mw/pad_mw.c's layout,
+# PLAN D-65) switches the Speedbreaker on and at once off again (each press held until the game has switched).
+# 40, not 55: the car runs straight on into the first bend at 45 to 50 mph and in some runs stays against the wall
+# there (zz speed traces: 2 of 4 runs; the Speedbreaker itself switches at any speed).
 #   NFSU2_SAVE_SEED=DIR/new node web/tools/run-suite.mjs --game mw --script speedbreaker_pad.txt \
-#     --marker 'speedbreaker_pad: off by Y' --env NFSU2_QUIT_FRAMES=12000
+#     --marker 'speedbreaker_pad: off by RS' --env NFSU2_QUIT_FRAMES=12000
 0     pad connect
 +0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000
@@ -30,15 +32,15 @@
 +0    log speedbreaker_pad: GO
 +0    breaker watch
 +0    down UP                                            # the gas (the keyboard's), held: the start's straight
-+0    breaker wait above 55 3000
-+0    pad Y                                              # the pad's GAMEBREAKER, held until the game has seen it
++0    breaker wait above 40 3000
++0    pad RS                                             # the pad's GAMEBREAKER, held until the game has seen it
 +0    breaker wait on 60
-+0    pad Y up
-+0    log speedbreaker_pad: on by Y
++0    pad RS up
++0    log speedbreaker_pad: on by RS
 +0    breaker                                            # (a frame between the release and the next press)
-+0    pad Y
++0    pad RS
 +0    breaker wait off 60
-+0    pad Y up
-+0    log speedbreaker_pad: off by Y
++0    pad RS up
++0    log speedbreaker_pad: off by RS
 +0    up UP
 +0    close

@@ -176,7 +176,7 @@ PURSUIT_MS; with the EALayer3 music pack in the data folder and NFSMW_EALAYER3_L
 mode; SNDDUMP=/save/music.raw records the mixer for a gap count).
 
 The Speedbreaker: `speedbreaker.txt` (a Custom Race circuit: Right Ctrl on and off, G on, the drain to the game's
-switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its Y on and off).
+switch-off, the refill above 100 mph) and `speedbreaker_pad.txt` (the pad plugged in at the start: its right stick pressed in, on and off).
 `breaker_ai.txt` holds G from 10 frames after the AI has driven and let go (TRACKER M4-47: a press in the first frame
 or two after Game.ClearAIControl is lost, and a key held from then on makes no new press), with what the game's CanUse
 says; `breaker_ai_taps.txt` taps G twelve times from `BA_FIRST` frames after the AI let go (`BA_AI=off`: the control

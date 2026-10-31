@@ -738,7 +738,6 @@
   "Nitrous, handbrake": "N2O, freno a mano",
   "Look back, camera": "Guarda indietro, visuale",
   "Respawn, pause": "Ripristina auto, pausa",
-  "Start event, map, messages": "Inizia gara, mappa, messaggi",
   "Use the guess": "Usa la stima",
   "Set up the wheel": "Configura il volante",
   "Set up in this browser.": "Configurato in questo browser.",
@@ -1257,5 +1256,8 @@
   "Not sent: try again in a moment": "Non inviato: riprova tra un attimo",
   "Use this passphrase here too?": "Usare questa frase segreta anche qui?",
   "Sent. This browser syncs from now on.": "Inviato. Da ora questo browser si sincronizza.",
-  "Games": "Giochi"
+  "Games": "Giochi",
+  "Request sent": "Richiesta inviata",
+  "Shift up": "Marcia +",
+  "Shift down": "Marcia -"
 }

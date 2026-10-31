@@ -6,7 +6,9 @@
  * DIJOYSTATE's 0x50 too) with a STABLE guidInstance: a game keys the
  * bindings it saves on it.  Layout:
  *   axes    X/Y = left stick, Z = left trigger, Rx/Ry = right stick,
- *           Rz = right trigger (triggers rest at the minimum)
+ *           Rz = right trigger (triggers rest at the minimum, or at the
+ *           centre for a game that reads every axis from there: game.h
+ *           pad_trigger_centre)
  *   POV 0   D-pad;  POV 1  left stick as four directions (menus)
  *   buttons 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 View, 7 Menu, 8 LS, 9 RS,
  *           10 LT and 11 RT pressed to the end of their travel (as a
@@ -321,6 +323,12 @@ static Dev *dev_of(uint32_t obj, int create){
     for (int a = 0; a < NAXES; a++){ d->mn[a] = 0; d->mx[a] = 65535; d->sat[a] = 10000; }
     return d;
 }
+/* 1: the IDirectInputDevice8 obj is the pad, 2: the wheel, 0: none of ours (for a game's own pad code: the
+ * layout runtime/mw/pad_mw.c writes) */
+int dipad_kind(uint32_t obj){
+    Dev *d = obj ? dev_of(obj, 0) : 0;
+    return !d ? 0 : d->wheel ? 2 : 1;
+}
 /* CreateDevice with one of our guidInstances (guid: the pad's or the wheel's) */
 void dipad_created(uint32_t obj, uint32_t guid){
     Dev *d = dev_of(obj, 1);
@@ -455,14 +463,31 @@ static uint32_t stick_pov(Dev *d, float x, float y){
     static const uint32_t P[5] = {0xFFFFFFFFu, 0u, 9000u, 18000u, 27000u};
     return P[dir];
 }
+/* A trigger (0..1) for a game that reads every axis from its centre (game.h pad_trigger_centre): at rest one below
+ * the middle of the range, so that its half above the centre reads 0 (Most Wanted's 0x628940 measures from
+ * 32767.5), pulled all the way the maximum; DirectInput's dead zone and saturation as scale_axis has them. */
+static int32_t scale_trigger_centred(float t, const Dev *d, int a){
+    if (t > 1.f) t = 1.f; if (!(t > 0.f)) t = 0.f;
+    double dz = d->dz[a] > 10000u ? 10000.0 : d->dz[a];
+    double sat = d->sat[a] > 10000u ? 10000.0 : d->sat[a];
+    if (sat < dz) sat = dz;
+    double mag = t * 10000.0, f;
+    if (mag <= dz) f = 0; else if (mag >= sat) f = 1; else f = (mag - dz) / (sat - dz);
+    int64_t lo = d->mn[a], hi = d->mx[a], rest = lo + (hi - lo) / 2;
+    return (int32_t)(rest + (int64_t)(f * (double)(hi - rest) + 0.5));
+}
 static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     uint8_t st[0x110];
     memset(st, 0, sizeof st);
     for (int a = 0; a < NAXES; a++){
         int src = k_axis_src[a];
         float t = s->axis[src];
-        if (src >= PAD_AXIS_LT) t = t * 2.f - 1.f;          /* triggers rest at the minimum */
-        int32_t v = scale_axis(t, d, a);
+        int32_t v;
+        if (src >= PAD_AXIS_LT && g_game.pad_trigger_centre) v = scale_trigger_centred(t, d, a);
+        else {
+            if (src >= PAD_AXIS_LT) t = t * 2.f - 1.f;      /* triggers rest at the minimum */
+            v = scale_axis(t, d, a);
+        }
         memcpy(st + k_axis_ofs[a], &v, 4);
     }
     uint32_t b = s->buttons;

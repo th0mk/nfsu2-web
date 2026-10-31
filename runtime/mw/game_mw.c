@@ -245,7 +245,8 @@ static int mw_movie_alt(const char *path, int i, char *out, unsigned cap){
  *   pad_rescan          no search after the start (above): the pad stays one device, whichever
  *                       controller drives it (a wheel after a pad included)
  *   pad_trigger_axes, pad_jolt, pad_hold_screen, pad_fe_keys   UG2's pad features: MW's driving
- *                       layout, its rumble and its controls screen are M6-37's */
+ *                       layout is pad_mw.c's (its triggers are axes alone), its rumble and its controls
+ *                       screen are M6-37's and M6-38's */
 const GameOps g_game = {
     .id = "mw",
     .exe_name = "speed.exe",
@@ -307,6 +308,8 @@ const GameOps g_game = {
                                                  * sites (fixes_mw.c) and a debugging lift's HOOKS=... reach it */
     .pad_late = &mw_pad_late,                   /* a late pad: the input manager's callback, then the input set-up */
     .pad_buttons = "X A B Y LB RB LT RT BACK START LS RS",  /* a DualShock's order, which its layout expects */
+    .pad_trigger_centre = 1,                    /* its axes are read from the centre (0x628940): the triggers rest
+                                                 * there, the gas and brake of pad_mw.c's layout */
     .online_host_va = 0x008f42c8u,              /* the lobby host's getter 0x56E440 (port 30920 at 0x8F42E8), also
                                                  * pushed at 0x78ACC0: the server's Online stand-in (title.rs MW) */
     .online_host = "pcnfs06.ea.com",

@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "İngilizce altyazılar: VileStuff'ın <0>English Subtitles Fixed</0> modu.",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Oynarken kaydetmek için: <0><1>Esc</1> ya da </0><2>Start</2> &gt; Garaj &gt; Kaydet",
   "press in: horn": "içeri bas: korna",
-  "Shift up": "Vites yükselt",
-  "Shift down": "Vites düşür",
   "Quick chat (with other players): group, then phrase": "Hızlı sohbet (diğer oyuncularla): önce grup, sonra ifade",
   "Photo mode; F12 again takes the photo": "Fotoğraf modu; yeniden F12 fotoğrafı çeker",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Sayfa cross-origin yalıtımlı değil (SharedArrayBuffer yok). Sayfayı NFSU2 web sunucusundan aç.",
   "Message a friend (in free roam)": "Arkadaşına mesaj gönder (serbest sürüşte)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Bu parola ifadesi Most Wanted bulut kayıtlarını tutuyor ama henüz Underground 2 kaydı yok. Buradaki kayıtlar da bu ifadeyle gönderilsin mi? Her oyun kendi kayıtlarını tutar."
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Bu parola ifadesi Most Wanted bulut kayıtlarını tutuyor ama henüz Underground 2 kaydı yok. Buradaki kayıtlar da bu ifadeyle gönderilsin mi? Her oyun kendi kayıtlarını tutar.",
+  "Start event, map, messages": "Etkinliği başlat, harita, mesajlar"
 }

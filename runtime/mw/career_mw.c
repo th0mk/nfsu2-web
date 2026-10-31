@@ -53,7 +53,7 @@
  *                    busted or evaded (the state's addresses and the end's sites: log_pursuit and mw_aid_hook below)
  *   breaker [watch]  log the player's Speedbreaker (on or off, its charge, the car's speed), once or whenever it
  *                    changes (a tenth of the charge); breaker wait on|off|full|empty [N] waits up to N frames for it,
- *                    breaker wait above MPH [N] for the car's speed, breaker wait charge X [N] for a charge of X or more,
+ *                    breaker wait above|below MPH [N] for the car's speed, breaker wait charge X [N] for a charge of X or more,
  *                    breaker wait rise X [N] for the charge X above where it is (or full)
  *   rapsheet         log the rap sheet, the impound strikes and markers (pursuit_mw.c, which says what it reads)
  *   icons [T]        log the world map's icons, those of type T one by one (12 pursuit breakers, 11 hiding spots);
@@ -726,13 +726,14 @@ static void log_breaker(CPU *c, int only_changes){
             player_mph(c));
 }
 /* breaker wait: v[0] 1 on, 0 off, 2 full, 3 empty, 4 the car above x mph, 5 the charge at x or more, 6 the charge
- * x above where it was when the wait began (from, at most full) */
+ * x above where it was when the wait began (from, at most full), 7 the car below x mph */
 static int breaker_met(CPU *c, int want, float x, float from){
     uint32_t pl = player_iface();
     if (!pl) return 0;
     int on = MR8(pl + PL_BREAKER_ON); float ch = rdf(pl + PL_BREAKER);
     return want == 1 ? on : want == 0 ? !on : want == 2 ? ch >= 1.0f : want == 3 ? ch <= 0.0f
-         : want == 4 ? player_mph(c) > x : want == 5 ? ch >= x : ch >= fminf(from + x, 1.0f) - 1e-4f;
+         : want == 4 ? player_mph(c) > x : want == 5 ? ch >= x : want == 7 ? player_mph(c) < x
+         : ch >= fminf(from + x, 1.0f) - 1e-4f;
 }
 static struct { int op, done, rel; float v[6]; long since; char text[96]; } Q;
 
@@ -981,10 +982,10 @@ void mw_frame(CPU *c){
     case Q_BREAKER: log_breaker(c, 0); break;
     case Q_BWATCH: bw_on = 1; bw_last[0] = bw_last[1] = bw_last[2] = bw_last[3] = -2; log_breaker(c, 1); break;
     case Q_BWAIT: {                     /* done once v[0] holds (breaker_met), or after v[1] frames */
-        static const char *const nm[] = { "off", "on", "full", "empty", "above", "charge", "rise" };
+        static const char *const nm[] = { "off", "on", "full", "empty", "above", "charge", "rise", "below" };
         int met = breaker_met(c, (int)Q.v[0], Q.v[2], Q.v[3]);
         if (!met && f - Q.since < (long)Q.v[1]) return;
-        fprintf(stderr, "[mwbreaker] f=%ld breaker wait %s: %s after %ld frames\n", f, nm[(int)Q.v[0] % 7],
+        fprintf(stderr, "[mwbreaker] f=%ld breaker wait %s: %s after %ld frames\n", f, nm[(int)Q.v[0] % 8],
                 met ? "satisfied" : "TIMEOUT", f - Q.since);
         log_breaker(c, 0);
         break; }
@@ -1050,18 +1051,19 @@ int mw_aid_cmd(CPU *c, const char *line, long *wait_start){
         Q.v[2] = -1.0f;                 /* breaker: the count when the wait begins, read at the anchor */
     }
     else if (!strcasecmp(cmd, "breaker")){
-        /* breaker [watch] | breaker wait on|off|full|empty [N] | breaker wait above MPH [N] | breaker wait charge X [N]
+        /* breaker [watch] | breaker wait on|off|full|empty [N] | breaker wait above|below MPH [N] | breaker wait charge X [N]
          * | breaker wait rise X [N] (the charge X above where it is now, or full) */
         long n = 6000; char a2[32] = {0}; float x = 0.0f; int used2 = 0, used3 = 0;
         if (sscanf(p, "%31s %31s %n", a1, a2, &used2) == 2){
             const char *q = p + used2;
-            if (!strcasecmp(a2, "above") || !strcasecmp(a2, "charge") || !strcasecmp(a2, "rise")){
+            if (!strcasecmp(a2, "above") || !strcasecmp(a2, "below") || !strcasecmp(a2, "charge") || !strcasecmp(a2, "rise")){
                 sscanf(q, "%f %n", &x, &used3); q += used3; }
             sscanf(q, "%ld", &n);
         }                               /* (one word: a1 holds it, "watch" or nothing) */
         Q.op = !strcasecmp(a1, "watch") ? Q_BWATCH : !strcasecmp(a1, "wait") ? Q_BWAIT : Q_BREAKER;
         Q.v[0] = !strcasecmp(a2, "off") ? 0.0f : !strcasecmp(a2, "full") ? 2.0f : !strcasecmp(a2, "empty") ? 3.0f
-               : !strcasecmp(a2, "above") ? 4.0f : !strcasecmp(a2, "charge") ? 5.0f : !strcasecmp(a2, "rise") ? 6.0f : 1.0f;
+               : !strcasecmp(a2, "above") ? 4.0f : !strcasecmp(a2, "charge") ? 5.0f : !strcasecmp(a2, "rise") ? 6.0f
+               : !strcasecmp(a2, "below") ? 7.0f : 1.0f;
         Q.v[1] = (float)n; Q.v[2] = x; Q.since = f;
         { uint32_t pl = player_iface(); Q.v[3] = pl ? rdf(pl + PL_BREAKER) : 0.0f; }   /* rise: from here */
     }

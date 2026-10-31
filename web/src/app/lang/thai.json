@@ -658,7 +658,6 @@
   "Nitrous, handbrake": "ไนตรัส เบรกมือ",
   "Look back, camera": "มองหลัง กล้อง",
   "Respawn, pause": "รีเซ็ตรถ หยุดชั่วคราว",
-  "Start event, map, messages": "เริ่มอีเวนต์ แผนที่ ข้อความ",
   "Use the guess": "ใช้ค่าที่คาดเดา",
   "Set up the wheel": "ตั้งค่าพวงมาลัย",
   "Set up in this browser.": "ตั้งค่าไว้ในเบราว์เซอร์นี้แล้ว",
@@ -1161,5 +1160,8 @@
   "Not sent: try again in a moment": "ส่งไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่",
   "Use this passphrase here too?": "ต้องการใช้วลีรหัสนี้ที่นี่ด้วยหรือไม่",
   "Sent. This browser syncs from now on.": "ส่งแล้ว เบราว์เซอร์นี้จะซิงค์ตั้งแต่นี้ไป",
-  "Games": "เกม"
+  "Games": "เกม",
+  "Request sent": "ส่งคำขอแล้ว",
+  "Shift up": "เกียร์ขึ้น",
+  "Shift down": "เกียร์ลง"
 }

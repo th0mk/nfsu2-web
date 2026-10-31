@@ -1,12 +1,12 @@
-# Most Wanted: the controller in a race as the game binds it (TRACKER M6-16, M6-37; the table: pad_binds.txt and
-# web/tools/mw-binds.py).  With a pad there from the first frame the game's input set-up gives it its layout for a
-# pad it does not know by name: X gas, B brake, A handbrake, Y Speedbreaker, LT nitrous, LB look back, RB respawn,
-# RT pause, the left stick steers, the D-pad's up starts an event (buttons in the order the runtime gives MW's pad,
-# game.h pad_buttons "X A B Y LB RB LT RT BACK START LS RS").  A Custom Race circuit as race_frames.txt picks it, the
-# menus by keyboard; from GO: X held until the car is past 20 mph (career_mw.c `breaker wait above`), released; RT
-# (the trigger) until the pause menu takes input, released; Esc back; Start, which does not pause (no PAUSEREQUEST
-# binding of button 9), then the stick right; racewin.  tests/mw/checks/pad_race.sh reads the lines.
+# Most Wanted: the controller in a race with runtime/mw/pad_mw.c's layout (TRACKER M6-16, M6-37; PLAN D-65; the table:
+# pad_binds.txt and web/tools/mw-binds.py): RT gas and LT brake as the triggers' axes, Menu pause, the left stick
+# steers; RT no longer pauses (the game's own layout for a pad it does not know by name put pause there).  A Custom
+# Race circuit as race_frames.txt picks it, the menus by keyboard; from GO: the right trigger pulled until the car is
+# past 20 mph (career_mw.c `breaker wait above`), then half way for a while, let go; the left trigger until the car
+# is below 10 mph, let go; Menu (START) until the pause menu takes input; Esc back; racewin.
+# tests/mw/checks/pad_race.sh reads the lines.
 #   node web/tools/run-suite.mjs --game mw --script pad_race.txt --marker 'pad_race: results' --env NFSU2_QUIT_FRAMES=12000
+#   (NFSU2_PAD_LOG=1 adds the "[pad] Most Wanted's default pad layout" line the check also reads)
 0     pad connect
 +0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
 +0    tapuntil RETURN MainMenu.fng 90 6000
@@ -30,19 +30,22 @@
 +0    waitexpr b:[0x0091e000]+0x16c != 0 3000            # GO: the player's race timer runs
 +0    log pad_race: GO
 +0    breaker watch
-+0    pad X down                                         # GAME_ACTION_GAS: button 0
++0    trigger RT 1                                       # GAME_ACTION_GAS: the right trigger's axis (Rz above its centre)
 +0    breaker wait above 20 1200
-+0    pad X up
-+0    log pad_race: gas by X
-+0    trigger RT 1                                       # HUDACTION_PAUSEREQUEST: button 7
++0    trigger RT 0.5
++90   trigger RT 0
++0    log pad_race: gas by RT
++30   trigger LT 1                                       # GAME_ACTION_BRAKE: the left trigger's axis (Z above its centre)
++0    breaker wait below 10 1200
++0    trigger LT 0
++0    log pad_race: braked by LT
++0    pad START down                                     # HUDACTION_PAUSEREQUEST: Menu, button 9
 +0    waitfng Pause_Main.fng 300
-+0    trigger RT 0
-+60   log pad_race: paused by RT
++0    pad START up
++60   log pad_race: paused by Menu
 +0    tap ESCAPE
 +0    waitgone Pause_Main.fng 600
 +60   log pad_race: resumed
-+0    tappad START 6
-+120  log pad_race: start pressed
 +0    racewin
 +0    waitfng InGamePhotoMaster.fng:5dfb6667 1200        # the winner's post-race screen takes input
 +0    log pad_race: results

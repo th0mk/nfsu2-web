@@ -1000,7 +1000,6 @@
   "Nitrous, handbrake": "Nitro, kézifék",
   "Look back, camera": "Hátranézés, kamera",
   "Respawn, pause": "Visszahelyezés, szünet",
-  "Start event, map, messages": "Verseny indítása, térkép, üzenetek",
   "Sticks": "Karok",
   "Switches you set up": "Beállított kapcsolók",
   "Nitrous, handbrake and respawn": "Nitro, kézifék és visszahelyezés",
@@ -1164,5 +1163,8 @@
   "Not sent: try again in a moment": "Nem ment el: próbáld újra egy kicsit később",
   "Use this passphrase here too?": "Itt is használod ezt a jelmondatot?",
   "Sent. This browser syncs from now on.": "Elküldve. Ez a böngésző mostantól szinkronizál.",
-  "Games": "Játékok"
+  "Games": "Játékok",
+  "Request sent": "Kérés elküldve",
+  "Shift up": "Felváltás",
+  "Shift down": "Visszaváltás"
 }

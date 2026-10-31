@@ -36,6 +36,7 @@ const UG2_UNSET = {
   sound_wall_catchup: 'the wall clock\'s old rule: a backlog over 100 ms dropped, the cursors a slice at a time',
   pad_late: 'UG2 finds a late controller by its own 32-frame rescan (pad_rescan)',
   pad_buttons: 'UG2\'s pad keeps the button order its layouts (pad_ug2.c) were made for',
+  pad_trigger_centre: 'UG2\'s triggers rest at the minimum of their axes, which its pedal axes (pad_ug2.c) expect',
   gpu_stages: 'UG2 keeps its 4 texture stages and no depth textures (0), as it always has',
   d3d_sm3: 'UG2 keeps its 2.0 shader model caps (0), as it always has',
   gpu_msaa: 'UG2 has no multisampled back buffer (0): its multisampling answers and its passes stay as they were',

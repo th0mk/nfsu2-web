@@ -264,6 +264,10 @@ typedef struct GameOps {
     int pad_fe_keys;                /* 1: in the front end (flow_fe) the pad's A, B and View also post Enter,
                                      * Escape and Q to the window (UG2's text fields and quit prompt take
                                      * characters only); 0 = the pad's buttons are DirectInput's alone */
+    int pad_trigger_centre;         /* 1: the triggers' axes (Z, Rz) rest at the centre of their range and reach
+                                     * its maximum pulled, for a game that reads every axis from the centre
+                                     * (Most Wanted: a trigger at the minimum read as pressed); 0 = they rest at
+                                     * the minimum, as a DirectInput pad's do */
 
     /* ---- the game's own Win32 imports ---- */
     int (*win32_misc)(CPU *c, const char *dll, const char *n, uint32_t *r);

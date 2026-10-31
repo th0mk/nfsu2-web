@@ -758,7 +758,6 @@
   "Nitrous, handbrake": "Нитро, ручник",
   "Look back, camera": "Задний вид, камера",
   "Respawn, pause": "Восстановление, пауза",
-  "Start event, map, messages": "Старт гонки, карта, сообщения",
   "Use the guess": "Использовать автонастройку",
   "Set up the wheel": "Настроить руль",
   "Set up in this browser.": "Настроен в этом браузере.",
@@ -1281,5 +1280,8 @@
   "Not sent: try again in a moment": "Не отправлено: попробуйте ещё раз чуть позже",
   "Use this passphrase here too?": "Использовать эту парольную фразу и здесь?",
   "Sent. This browser syncs from now on.": "Отправлено. Теперь этот браузер синхронизируется.",
-  "Games": "Игры"
+  "Games": "Игры",
+  "Request sent": "Запрос отправлен",
+  "Shift up": "Передача +",
+  "Shift down": "Передача −"
 }

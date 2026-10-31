@@ -19,11 +19,10 @@
   "English subtitles: VileStuff's <0>English Subtitles Fixed</0>.": "Subtítulos en inglés: <0>English Subtitles Fixed</0> de VileStuff.",
   "To save while playing: <0><1>Esc</1> or </0><2>Start</2> &gt; Garage &gt; Save": "Para guardar mientras juegas: <0><1>Esc</1> o </0><2>Start</2> &gt; Garaje &gt; Guardar",
   "press in: horn": "pulsar: bocina",
-  "Shift up": "Subir marcha",
-  "Shift down": "Bajar marcha",
   "Quick chat (with other players): group, then phrase": "Chat rápido (con otros jugadores): grupo, luego frase",
   "Photo mode; F12 again takes the photo": "Modo foto; F12 otra vez hace la foto",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La página no tiene aislamiento de origen cruzado (no hay SharedArrayBuffer). Ábrela desde el servidor web de NFSU2.",
   "Message a friend (in free roam)": "Escribir a un amigo (en circulación libre)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Esta frase secreta guarda tus partidas en la nube de Most Wanted, pero todavía ninguna de Underground 2. ¿Enviar también las partidas guardadas de aquí con ella? Cada juego conserva sus propias partidas."
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Esta frase secreta guarda tus partidas en la nube de Most Wanted, pero todavía ninguna de Underground 2. ¿Enviar también las partidas guardadas de aquí con ella? Cada juego conserva sus propias partidas.",
+  "Start event, map, messages": "Iniciar evento, mapa, mensajes"
 }

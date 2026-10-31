@@ -667,7 +667,6 @@
   "Nitrous, handbrake": "Nitro, el freni",
   "Look back, camera": "Arkaya bak, kamera",
   "Respawn, pause": "Aracı sıfırla, duraklat",
-  "Start event, map, messages": "Etkinliği başlat, harita, mesajlar",
   "Use the guess": "Tahmini kullan",
   "Set up the wheel": "Direksiyonu ayarla",
   "Set up in this browser.": "Bu tarayıcıda ayarlandı.",
@@ -1170,5 +1169,8 @@
   "Not sent: try again in a moment": "Gönderilemedi: birazdan tekrar dene",
   "Use this passphrase here too?": "Bu parola ifadesi burada da kullanılsın mı?",
   "Sent. This browser syncs from now on.": "Gönderildi. Bu tarayıcı artık eşitleniyor.",
-  "Games": "Oyunlar"
+  "Games": "Oyunlar",
+  "Request sent": "İstek gönderildi",
+  "Shift up": "Vites yükselt",
+  "Shift down": "Vites düşür"
 }
