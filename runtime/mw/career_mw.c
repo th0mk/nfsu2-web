@@ -266,7 +266,7 @@ static void watch_race(CPU *c){
  * player's RESET action does exactly this (the input handler at 0x6A8B88: ResetVehicle(true), then 0x47CC50, which
  * clears the input controllers' held state), and so does the aid: while the autopilot drives (in a race: GRaceStatus
  * active, GO, the local racer not finished; in free roam: `autopilot on`), a car that moved less than STUCK_M
- * metres in STUCK_S seconds (STUCK_S_RACE in a race) of game time (the simulation's steps x its step, [0x9203B0] +0x28 x +0x20, so a slow or
+ * metres in STUCK_S seconds (STUCK_S_RACE in a race, or less than STUCK_M_FAST in STUCK_S_RACE_FAST) of game time (the simulation's steps x its step, [0x9203B0] +0x28 x +0x20, so a slow or
  * paused frame rate changes nothing) is reset that way and the watch starts again from where it is put.  (R, the
  * RESET binding, tapped with the AI let go did not move the car in the LAN runs: the key is not bound to that action
  * by the PC game's defaults, inferred, not checked.)  No reset in a pursuit: the bust timer ran from 1.0 to 4.9 in the
@@ -305,7 +305,12 @@ static void watch_race(CPU *c){
 #define SAME_M     40.0f                /* a wedge this near the streak's first: the same place (run g4: wedges 35 m apart) */
 #define SAME_N     3                    /* the SAME_N-th wedge there in a row: on ahead along the way it came */
 #define AHEAD_M    40.0f                /* metres ahead (and BACK_STEP per racer index), then the road's reset */
-#define IID_RESET       0x00620250u     /* IResetable, the ResetCar behaviour's interface */
+/* and sooner, in a race, for a car that has all but stopped: the AI-driven player's car of bin 11's rival race 2
+ * (12_1_2_r_circuit) hit a roadside object at sim (-2050.5, 2584) at 43 m/s, down to 8 m/s in 10 frames, then crept
+ * 3 m in 4.7 s, its own way out going nowhere, until the 5 s watch reset it (c5-t11a, four times in nine laps) */
+#define STUCK_S_RACE_FAST 2.5
+#define STUCK_M_FAST 6.0f
+#define IID_RESET        0x00620250u     /* IResetable, the ResetCar behaviour's interface */
 #define RESET_VEHICLE    0x08u           /* IResetable::ResetVehicle(bool manual) 0x6B08C0 */
 #define FN_INPUT_CLEAR   0x0047cc50u     /* the input handler's call after a reset: the controllers' held state cleared */
 #define G_SIM            0x009203b0u     /* the simulation: +0x20 its step (float, s), +0x28 the steps it ran */
@@ -455,8 +460,9 @@ static void wedge_watch(CPU *c){
         if (d >= STUCK_M) U.futile = 0;
         U.since = t > 0.0 ? t : 1e-9; memcpy(U.p, q, sizeof q); return;
     }
-    if (t - U.since < (racing ? STUCK_S_RACE : STUCK_S) * (U.futile >= 3 ? 4 : 1)) return;   /* resets that put it back
-                                                                                               where it was: less often */
+    double mult = U.futile >= 3 ? 4 : 1;   /* resets that put it back where it was: less often */
+    if (t - U.since < (racing ? STUCK_S_RACE : STUCK_S) * mult &&
+        !(racing && d < STUCK_M_FAST && t - U.since >= STUCK_S_RACE_FAST * mult)) return;
     if (pursuit_obj(c, 0)){             /* a reset with cops on the car ends in the bust (below): none */
         fprintf(stderr, "[mwrace] f=%ld autopilot: the car moved %.1f m in %.1f s of game time in a pursuit: no reset\n", f, d,
                 t - U.since);
