@@ -1,0 +1,110 @@
+# Most Wanted: the first of two runs that load profiles saved with a controller's bindings (TRACKER M6-37; PLAN D-65;
+# the save tree this run leaves seeds pad_profile_load.txt).  With the pad plugged in from the first frame, a first
+# start makes PADA and PADB as profiles_make.txt makes ALPHA and BRAVO.  Before each is saved, the joystick bindings
+# runtime/mw/pad_mw.c changed are poked back to the game's own layout for a pad it does not know by name (the
+# pad_binds run of a build before pad_mw.c; GAME.md 13.1): X gas, B brake, A handbrake, Y Speedbreaker, LT nitrous,
+# RB respawn, LB look back, RT pause, no gears, no camera.  PADA is saved so, as a build before pad_mw.c saved a
+# profile; PADB with the player's own gas on Y as well.  The table 0x91F418 holds 76 rows of 0x34 bytes, the first
+# joystick binding (type, device, code) at +0x1C; a poke writes the type and the code of rows 0, 1, 4..9, 15, 16, 18
+# (types 2 a button, 0 none; button codes 0 X, 1 A, 2 B, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT).  The save keeps rows 0..18
+# and the pad's name hash.
+#   NFSU2_SAVE_SEED=<a folder holding only d3dx9_26.dll> node web/tools/run-suite.mjs --game mw \
+#     --script pad_profile_make.txt --marker 'pad_profile_make: PADB saved' --env NFSMW_D3DX=/save/d3dx9_26.dll \
+#     --env FILELIST=1 --env NFSU2_PAD_LOG=1 --env NFSU2_QUIT_FRAMES=9000 --save-out DIR
+# tests/mw/checks/pad_profile_make.sh wants both saves written after the pokes.
+0     pad connect
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_Main.fng:be97590f@b8a7c6cc 600          # Create a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:be97590f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype PADA
++0    waitfng MC_Main.fng'PADA 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias PADA?  (No)
++0    log pad_profile_make: the game's layout for PADA
++0    poke 0x0091f434 2                                  # row 0 GAS: button X
++0    poke 0x0091f43c 0
++0    poke 0x0091f468 2                                  # row 1 BRAKE: button B
++0    poke 0x0091f470 2
++0    poke 0x0091f504 2                                  # row 4 HANDBRAKE: button A
++0    poke 0x0091f50c 1
++0    poke 0x0091f538 2                                  # row 5 GAMEBREAKER: button Y
++0    poke 0x0091f540 3
++0    poke 0x0091f56c 2                                  # row 6 NOS: button LT
++0    poke 0x0091f574 6
++0    poke 0x0091f5a0 0                                  # row 7 SHIFTDOWN: none
++0    poke 0x0091f5a8 0
++0    poke 0x0091f5d4 0                                  # row 8 SHIFTUP: none
++0    poke 0x0091f5dc 0
++0    poke 0x0091f608 2                                  # row 9 RESET: button RB
++0    poke 0x0091f610 5
++0    poke 0x0091f740 0                                  # row 15 CAM_ACTION_CHANGE: none
++0    poke 0x0091f748 0
++0    poke 0x0091f774 2                                  # row 16 LOOKBACK: button LB
++0    poke 0x0091f77c 4
++0    poke 0x0091f7dc 2                                  # row 18 PAUSEREQUEST: button RT
++0    poke 0x0091f7e4 7
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++0    log pad_profile_make: PADA saved
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tap RETURN                                         # Create
++0    waitfng MC_Main.fng:7209349f@b8a7c6cc 600          # unsaved changes lost, sure?  (No)
++0    tapuntil LEFT MC_Main.fng:7209349f@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng:b01be5dd 600                   # the autosave notes
++0    tap RETURN
++0    waitfng MC_Main.fng:b380362f 600
++0    tap RETURN
++0    waitfng MC_Main.fng:4f876b6f 600                   # Enter name: NAME
++0    loop 4
++0    nstap BACK
++20   endloop
++0    nstype PADB
++0    waitfng MC_Main.fng'PADB 600
++0    tap RETURN                                         # Accept
++0    waitfng MC_Main.fng'Do_you_want_to_save@b8a7c6cc 600          # save the alias PADB?  (No)
++0    log pad_profile_make: the game's layout with the gas on Y for PADB
++0    poke 0x0091f434 2                                  # row 0 GAS: button Y (the player's own)
++0    poke 0x0091f43c 3
++0    poke 0x0091f468 2                                  # row 1 BRAKE: button B
++0    poke 0x0091f470 2
++0    poke 0x0091f504 2                                  # row 4 HANDBRAKE: button A
++0    poke 0x0091f50c 1
++0    poke 0x0091f538 2                                  # row 5 GAMEBREAKER: button Y
++0    poke 0x0091f540 3
++0    poke 0x0091f56c 2                                  # row 6 NOS: button LT
++0    poke 0x0091f574 6
++0    poke 0x0091f5a0 0                                  # row 7 SHIFTDOWN: none
++0    poke 0x0091f5a8 0
++0    poke 0x0091f5d4 0                                  # row 8 SHIFTUP: none
++0    poke 0x0091f5dc 0
++0    poke 0x0091f608 2                                  # row 9 RESET: button RB
++0    poke 0x0091f610 5
++0    poke 0x0091f740 0                                  # row 15 CAM_ACTION_CHANGE: none
++0    poke 0x0091f748 0
++0    poke 0x0091f774 2                                  # row 16 LOOKBACK: button LB
++0    poke 0x0091f77c 4
++0    poke 0x0091f7dc 2                                  # row 18 PAUSEREQUEST: button RT
++0    poke 0x0091f7e4 7
++0    tapuntil LEFT MC_Main.fng'Do_you_want_to_save@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_Main.fng'Save_complete. 600
++0    tap RETURN                                         # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # back in the Alias Manager
++0    log pad_profile_make: PADB saved
++0    close

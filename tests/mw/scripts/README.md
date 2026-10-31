@@ -23,6 +23,10 @@ race), `race_loop.txt` (25 Quick Races in a row, each ended by `racewin`, with t
 and `race_win.txt` (a Custom Race sprint the AI-driven car wins over the line, saved; seeded with
 `profiles_make.txt`'s saves).
 
+Profiles and the controller: `pad_profile_make.txt` (the pad plugged in at a first start: PADA saved with the game's
+own pad layout poked back, PADB with the player's gas on Y as well), then `pad_profile_load.txt` seeded with its saves
+(runtime/mw/pad_mw.c writes the modern layout over PADA's at its load and keeps PADB's).
+
 The player's page (web/tools/app-test.mjs --game mw, not run-suite): `app_rw_probe.txt` (a first start makes and
 saves the alias ROTEST, then a Custom Race to GO and 600 frames of it, quit in the race) and `app_load_probe.txt` (the
 one alias of the save folder loads at the start, then the main menu: after a restore, an import or a rename).

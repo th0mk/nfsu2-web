@@ -24,8 +24,13 @@
  * face button (A, Cross) is nitrous and its left one (X, Square) the handbrake, the rest as the pad's: UG2's wheel
  * layout.  The other rows (the D-pad's HUD actions, the menus' directions, skipping a cutscene) stay the game's.
  * A profile saved with the game's own layout for this controller (a build before this one) gets the modern one at
- * its load; one with the player's own bindings keeps them.  The axis types (0x628940, centre 32767.5): 4/5 the
- * X, Y or Z axis (code 0..2) below or above its centre, 6/7 Rx, Ry or Rz, 8/9 the sliders. */
+ * its load; one with the player's own bindings keeps them.  That comparison is all the check there is: the joystick
+ * bindings of rows 0..18 against what the game's lookup last wrote, dword by dword, and a table that differs
+ * anywhere (the player's own, or a garbled one) is kept as the game loaded it.  Nothing here reads the profile; the
+ * bounds checks are the game's own in 0x56E200 (the hash read only when it fits, 0x56E216; a row past the end
+ * skipped, 0x56E240).  tests/mw/scripts/pad_profile_make.txt and pad_profile_load.txt load one profile of each
+ * kind.  The axis types (0x628940, centre 32767.5): 4/5 the X, Y or Z axis (code 0..2) below or above its centre,
+ * 6/7 Rx, Ry or Rz, 8/9 the sliders. */
 #include "cpu.h"
 #include <stdio.h>
 #include <string.h>

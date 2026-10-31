@@ -1,0 +1,46 @@
+# Most Wanted: the second of two runs (TRACKER M6-37; PLAN D-65), seeded with the save tree pad_profile_make.txt
+# left: PADA with the game's own pad layout, PADB with the player's gas on Y as well, both saved with the pad
+# plugged in.  The pad is plugged in from the first frame again, so the game's lookup ran at the input set-up and
+# runtime/mw/pad_mw.c wrote its layout over it.  The boot list loads PADA: its saved pad is the one plugged in, so
+# the game keeps the saved rows (0x56E200 calls the lookup only for another pad), and pad_mw.c finds them equal to
+# the game's own layout and writes the modern one ("[pad] ... (a profile with the game's own layout)", NFSU2_PAD_LOG).
+# The Alias Manager then loads PADB, which differs from the game's layout and so is kept as saved.  The table
+# 0x91F418 is peeked after each load (rows 0..19).
+#   NFSU2_SAVE_SEED=DIR/pad_profile_make node web/tools/run-suite.mjs --game mw --script pad_profile_load.txt \
+#     --marker 'pad_profile_load: done' --env NFSMW_D3DX=/save/d3dx9_26.dll --env NFSU2_PAD_LOG=1 \
+#     --env NFSU2_QUIT_FRAMES=9000
+# tests/mw/checks/pad_profile_load.sh wants the modern layout after PADA's load and PADB's rows after its own.
+0     pad connect
++0    waitmem 0x00925e90 3 3600       # the front end (GameFlow 3)
++0    tapuntil RETURN MC_Main.fng 90 3000
++0    waitfng MC_List.fng^PADA 600                       # the boot list, PADA highlighted
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete. 600
++0    tapuntil RETURN MainMenu.fng@4b4e388a 90 900        # Continue
++0    waitfng MainMenu.fng@4b4e388a 900                  # the main menu, on Career
++30   log pad_profile_load: PADA loaded
++0    peek 0x0091f418 64
++0    peek 0x0091f518 64
++0    peek 0x0091f618 64
++0    peek 0x0091f718 64
++0    tapuntil RIGHT MainMenu.fng@4b4e3890 40 600        # Career .. Alias Manager
++0    tap RETURN
++0    waitfng MC_ProfileManager.fng@4b4e388a 600         # on Create
++0    tapuntil RIGHT MC_ProfileManager.fng@4b4e388b 40 300   # Load
++0    tap RETURN
++0    waitfng MC_Main.fng:87c7577e@b8a7c6cc 600          # load a new alias?  (No)
++0    tapuntil LEFT MC_Main.fng:87c7577e@b8a7c6cd 30 300  # Yes
++0    tap RETURN
++0    waitfng MC_List.fng^PADA 600                       # the list, PADA highlighted
++0    tapuntil DOWN MC_List.fng^PADB 40 300              # PADB
++0    tap RETURN
++0    waitfng MC_Main.fng'Load_complete. 600
++0    tapuntil RETURN MC_ProfileManager.fng@4b4e388b 90 900   # Continue
++0    waitfng MC_ProfileManager.fng@4b4e388b 600         # back on Load
++30   log pad_profile_load: PADB loaded
++0    peek 0x0091f418 64
++0    peek 0x0091f518 64
++0    peek 0x0091f618 64
++0    peek 0x0091f718 64
++0    log pad_profile_load: done
++0    close
