@@ -45,9 +45,10 @@ void mw_ws_frame(CPU *c);                       /* widescreen_mw.c: a title buil
 void mw_status_frame(CPU *c);                   /* status_mw.c: the chase, sampled for the page's state */
 void mw_status(StatusOut *s);                   /* status_mw.c: the page's state, at every Present */
 void roam_mw_install(void);                     /* roam_mw.c: the car loader's pool grown for friends' cars */
-/* once a pass of the main loop, between the update and the render: the test aids, friends' cars, the title, then the
- * page's state's sample (status_mw.c) */
-static void mw_on_frame(CPU *c){ mw_frame(c); roam_mw_frame(c); mw_ws_frame(c); mw_status_frame(c); }
+void racehorn_mw_frame(CPU *c);                 /* racehorn_mw.c: horns in races between players */
+/* once a pass of the main loop, between the update and the render: the test aids, friends' cars, the race horns, the
+ * title, then the page's state's sample (status_mw.c) */
+static void mw_on_frame(CPU *c){ mw_frame(c); roam_mw_frame(c); racehorn_mw_frame(c); mw_ws_frame(c); mw_status_frame(c); }
 int mw_debug_hook(CPU *c, uint32_t va);        /* debug_mw.c: NFSMW_HOOKLOG, a debugging lift's extra hooks */
 float mw_ui_band(void);                         /* widescreen_mw.c: the HUD's band for a quad of 0x6D1260 */
 

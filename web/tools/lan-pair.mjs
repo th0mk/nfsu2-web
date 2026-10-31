@@ -30,6 +30,10 @@
 //                    one is left out of the judgement and of the trace check
 //        [--wasm-of N=<file>]  instance N (1-based) runs that module instead of the server's (the null platform's
 //                    and the play page's /game.wasm): a game of another version in the same race
+//        [--horn]    in the race each instance holds N (its horn: runtime/racehorn.c, Most Wanted's
+//                    runtime/mw/racehorn_mw.c) for a second, one after the other: instance n 10 + 4 (n - 1) s after
+//                    its race began (the scripts' --after; an --after of --host-arg/--join-arg replaces it); each
+//                    must log its own horn ("[horn] my horn") and hear every other's ("[horn] <name>'s horn")
 //        --mode drift|streetx: drift and Street X games (the mode carousel's 4th and 5th entries, as the
 //                    "mode" dumps of the runs show: Circuit, Sprint, Drag, Drift, Street X)
 //        [--game ug2|mw]   the game (ug2 unless given): its script generator, modes and results screen (Most
@@ -163,8 +167,10 @@ if (!Number.isInteger(HOSTI) || HOSTI < 0 || HOSTI >= PLAYERS) {
 const ROLE = [...Array(PLAYERS).keys()];
 [ROLE[0], ROLE[HOSTI]] = [ROLE[HOSTI], ROLE[0]];
 const NAMEOF = ROLE.map(k => NAMES[k]);
-const scripts = ROLE.map(k => k === 0 ? gen('host', NAMES[0], 0, [...MODES[MODE].h, ...opts('host-arg')])
-  : gen('join', NAMES[k], k, [...(LAN.hostName ? [LAN.hostName, NAMES[0]] : []), ...MODES[MODE].j, ...opts('join-arg')]));
+const HORN = argv.includes('--horn');
+const hornAfter = (i) => (HORN ? ['--after', `+${10000 + 4000 * i}ms log horn; +0 down N; +1000ms up N`] : []);
+const scripts = ROLE.map((k, i) => k === 0 ? gen('host', NAMES[0], 0, [...MODES[MODE].h, ...hornAfter(i), ...opts('host-arg')])
+  : gen('join', NAMES[k], k, [...(LAN.hostName ? [LAN.hostName, NAMES[0]] : []), ...MODES[MODE].j, ...hornAfter(i), ...opts('join-arg')]));
 fs.writeFileSync(path.join(OUT, 'host.txt'), scripts[HOSTI]);
 fs.writeFileSync(path.join(OUT, 'join.txt'), scripts[ROLE.indexOf(1)]);
 if (HOSTI) console.log(`lan-pair: instance ${HOSTI + 1} hosts (--host-instance)`);
@@ -339,6 +345,8 @@ for (const x of inst) {
   if (has(/^\[net\] BLOCKED/m)) why.push(`${n}:net-blocked`);
   if (has(/^PAGEERROR|^CRASH/m)) why.push(`${n}:page-error`);
   if (RACES > 1 && !has(new RegExp(`LOG results_r${RACES}$`, 'm'))) why.push(`${n}:no-results-r${RACES}`);
+  if (HORN && !log.includes('[horn] my horn')) why.push(`${n}:no-horn`);
+  if (HORN) for (const y of inst) if (y !== x && !y.dropped && !log.includes(`[horn] ${y.name}'s horn`)) why.push(`${n}:no-horn-of-${y.name}`);
   const L = log.split('\n'), grab = (re) => L.filter(l => re.test(l));
   summary.result[x.name] = {
     exit: x.exitCode(), quit: grab(/quit at guest frame/).pop() ?? null,
@@ -349,6 +357,7 @@ for (const x of inst) {
     status: grab(/^\[status\]/).slice(-3),
     lobby: grab(/^\[guest\] .*(auth|Server ready|login)/).slice(0, 8),
     page: grab(/^NET \{/).pop() ?? null,
+    ...(HORN ? { horn: grab(/^\[horn\]/).slice(0, 8) } : {}),
     ...(LAN.waits ? { ranOut: grab(WAIT_OUT).slice(0, 4) } : {}),
     ...(LAN.peerUdp ? { udp } : {}),
     why,

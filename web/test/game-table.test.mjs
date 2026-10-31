@@ -142,8 +142,8 @@ test('game_mw.c sets every GameOps field but the ones Most Wanted leaves 0, and 
   // the per-frame anchor (Q-24): core runs on_frame at frame_site, a hook site of MW's own file the lift collects
   // (tools/genstamp.sh hooks: HOOK_SITE in runtime/mw/*.c); its other hooks are a debugging lift's (debug_mw.c)
   assert.equal(t.get('on_frame'), 'mw_on_frame');
-  assert.match(read('runtime/mw/game_mw.c'), /static void mw_on_frame\(CPU \*c\)\{ mw_frame\(c\); roam_mw_frame\(c\); mw_ws_frame\(c\); mw_status_frame\(c\); \}/,
-    'the test aids, free roam\'s friends\' cars (roam_mw.c), a title built for the old shape (widescreen_mw.c), then the page state\'s sample (status_mw.c)');
+  assert.match(read('runtime/mw/game_mw.c'), /static void mw_on_frame\(CPU \*c\)\{ mw_frame\(c\); roam_mw_frame\(c\); racehorn_mw_frame\(c\); mw_ws_frame\(c\); mw_status_frame\(c\); \}/,
+    'the test aids, free roam\'s friends\' cars (roam_mw.c), the race horns (racehorn_mw.c), a title built for the old shape (widescreen_mw.c), then the page state\'s sample (status_mw.c)');
   // the page's state (status_web.c at every Present): status_mw.c's drive, pause and rate
   assert.equal(t.get('status'), 'mw_status');
   assert.match(read('runtime/mw/status_mw.c'), /\nvoid mw_status_frame\(CPU \*c\)\{[\s\S]*\nvoid mw_status\(StatusOut \*s\)\{/);

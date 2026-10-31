@@ -68,6 +68,7 @@ void mw_ws_frame(CPU *c){ (void)c; }
 void mw_status_frame(CPU *c){ (void)c; }
 void mw_status(StatusOut *s){ (void)s; }
 void roam_mw_install(void){ }
+void racehorn_mw_frame(CPU *c){ (void)c; }
 float mw_ui_band(void){ return 1.f; }
 void mw_bot_present(void){}                 /* the career bot (bot_mw.c, test only) */
 int  mw_debug_hook(CPU *c, uint32_t va){ (void)c; (void)va; return 0; }
