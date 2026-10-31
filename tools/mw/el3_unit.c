@@ -46,11 +46,7 @@ static void wle32(uint8_t *p, uint32_t v){ p[0] = (uint8_t)v; p[1] = (uint8_t)(v
 static uint32_t first_count(unsigned n){ return 1152u * n - EL3_DELAY; }
 
 /* ---------------------------------------------------------------------------------------------- SND's stream --- */
-#define SND_STREAMS 0x009c1f44u         /* the stream objects by SND's stream index */
-#define SO_CHANS    0x62u               /* byte: the stream's channels */
-#define SO_READ     0x28u               /* word a channel: the ring entry it takes next */
-#define SO_RING     0x7cu               /* the ring: 32 bytes an entry */
-#define GUEST      (32u << 20)         /* the guest memory this test maps (SND_STREAMS is in it) */
+#define GUEST     (32u << 20)         /* the guest memory this test maps (SND_STREAMS is in it) */
 #define STACK       0x00010000u
 #define STATES      0x00020000u         /* voice states, EL3_STATE bytes each */
 #define PARAMS      0x0002f000u
@@ -224,6 +220,34 @@ static void t_failed(void){
     if (pairs_taken()) fail("%u decoder(s) left", pairs_taken());
 }
 
+/* the block bounds the decoding: a block that ends inside its data, or a pair whose count needs more frames than its
+ * data holds, is an error (with the window of committed memory before, 64 KiB, both decoded the bytes after it: the
+ * rest of the frame, the other pair's frames); the same block whole decodes, and so does the other pair */
+static void t_bounds(void){
+    uint32_t s[4] = { voice_state(0), voice_state(1), voice_state(2), voice_state(3) };
+    const unsigned f2[1] = { 2 }, f12[2] = { 1, 2 };
+    for (int whole = 0; whole < 2; whole++){
+        snd_stream(0, 2);
+        block(0, first_count(2), 2, f2, whole ? 0 : 12u + 4u * 2u + FRAME + 10u);
+        create(s[0], 0, 0, 2, 1); create(s[1], 0, 1, 2, 1);
+        unsigned long e = g_errors;
+        int32_t n = decode(s[0], 2000);
+        if (whole ? n != (int32_t)first_count(2) || g_errors != e : g_errors != e + 1u || has_decoder(s[0]))
+            fail("a block %s: %d samples, %lu errors", whole ? "whole" : "cut inside its second frame", n, g_errors - e);
+        release(s[0]); release(s[1]);
+    }
+    snd_stream(0, 4);
+    block(0, first_count(2), 4, f12, 0);
+    for (unsigned c = 0; c < 4; c++) create(s[c], 0, c, 4, 2);
+    unsigned long e = g_errors;
+    decode(s[0], 2000);
+    int32_t n = decode(s[2], 2000);
+    if (g_errors != e + 1u || has_decoder(s[0]) || !has_decoder(s[2]) || n != (int32_t)first_count(2))
+        fail("four channels, pair 0 one frame short: %lu errors, pair 1 %d samples", g_errors - e, n);
+    for (unsigned c = 0; c < 4; c++) release(s[c]);
+    if (pairs_taken()) fail("%u decoder(s) left", pairs_taken());
+}
+
 int main(int argc, char **argv){
     if (argc != 2){ fprintf(stderr, "usage: el3_unit <test>\n"); return 2; }
     g_test = argv[1];
@@ -232,7 +256,7 @@ int main(int argc, char **argv){
     memset(g_cbits, 0xFF, GUEST >> 17);                     /* all of it committed */
     signal(SIGALRM, on_alarm);
     static const struct { const char *name; void (*f)(void); } T[] = {
-        { "count", t_count }, { "stream", t_stream }, { "failed", t_failed },
+        { "count", t_count }, { "stream", t_stream }, { "failed", t_failed }, { "bounds", t_bounds },
     };
     for (unsigned i = 0; i < sizeof T / sizeof *T; i++)
         if (!strcmp(T[i].name, g_test)){ T[i].f(); printf("PASS %s\n", g_test); return 0; }

@@ -231,6 +231,10 @@ static const char *el3_block(El3Pair *s, const uint8_t *p, uint32_t lim, uint32_
 #define FN_STREAM   0x00826838u         /* (sample): its stream */
 #define FN_BLOCK    0x0081e092u         /* (stream, channel, &samples, &more): the channel's data in the next block, 0 none */
 #define FN_GIVEBACK 0x0081e1e8u         /* (stream, channel, samples) */
+#define SND_STREAMS 0x009c1f44u         /* SND's stream objects, by its stream index (0x81E092 reads it so) */
+#define SO_CHANS    0x62u               /* byte: the stream's channels */
+#define SO_READ     0x28u               /* word a channel: the ring entry 0x81E092 hands it next */
+#define SO_RING     0x7cu               /* the blocks ready, 32 bytes each (0x81DEEE): +4 the count, +8 + 4 * channel the data */
 /* Our functions: addresses inside the int3 padding after 0x829410, which no code calls or jumps to, patched in
  * dispatch.c's table (dispatch_patch) */
 #define FN_CREATE0  0x00829443u
@@ -247,7 +251,7 @@ long autotest_frame(void);
 static El3Pair *g_pairs[PAIRS];
 static El3Pair *g_last[4];              /* the pair each channel pair's first channel made last (for the second) */
 static int g_log = -1;
-static unsigned long g_voices, g_errors, g_calls;
+static unsigned long g_voices, g_errors, g_calls, g_bounds;
 
 static int el3_log(void){
     if (g_log < 0){ const char *e = getenv("NFSMW_EALAYER3_LOG"); g_log = e && *e && *e != '0'; }
@@ -291,6 +295,26 @@ static void el3_stop(uint32_t st, El3Pair *s, const char *why){
     MR32(st + ST_PAIR) = 0; MR32(st + ST_MAGIC) = 0;
 }
 
+/* The bytes of a channel's data in its block, at p, which ent (a ring entry of the stream object so) handed out.  SND's
+ * block parser 0x81C675 keeps the block's address in the word before channel 0's data (for the block's release) and
+ * leaves the chunk's size at the block's +4, as in the file; the data ends there, or where another pair's data starts.
+ * So a block that ends inside its data, or a count larger than its frames hold, is an error, not a decoding on into
+ * the next block or another pair's data (as with the window of committed memory before).  0 when it does not add up. */
+static uint32_t el3_bytes(uint32_t so, uint32_t ent, uint32_t sch, uint32_t p){
+    uint32_t nch = MR8(so + SO_CHANS);
+    if (!nch || nch > 6u || sch >= nch || MR32(ent + 8u + 4u * sch) != p) return 0;
+    uint32_t c0 = MR32(ent + 8u);
+    if (c0 < 4u || !mem_is_committed(c0 - 4u) || !mem_is_committed(c0 - 1u)) return 0;
+    uint32_t b = MR32(c0 - 4u);
+    if (!mem_is_committed(b) || !mem_is_committed(b + 7u)) return 0;
+    uint32_t size = MR32(b + 4u), head = 12u + 4u * nch;
+    if (size < head || size > (1u << 20) || b > 0xFFFFFFFFu - size || p < b + head || p - b >= size) return 0;
+    uint32_t end = b + size;
+    for (uint32_t k = 0; k < nch; k++){ uint32_t q = MR32(ent + 8u + 4u * k); if (q > p && q < end) end = q; }
+    for (uint64_t a = p & ~0x3FFFu; a < end; a += 0x4000u) if (!mem_is_committed((uint32_t)a)) return 0;
+    return end - p;
+}
+
 /* cdecl (state, n, -, float *out, -): n samples of the voice's channel */
 static void el3_decode(CPU *c){
     uint32_t st = MR32(c->esp + 4u), out = MR32(c->esp + 16u);
@@ -304,6 +328,8 @@ static void el3_decode(CPU *c){
     }
     while (s && given < n){
         if (MR32(st + ST_USED) >= MR32(st + ST_COUNT)){
+            uint32_t so = MR32(SND_STREAMS + 4u * stream);     /* the entry 0x81E092 hands over (it reads the same) */
+            uint32_t ent = so + SO_RING + 32u * (uint32_t)(int32_t)(int16_t)MR16(so + SO_READ + 2u * sch);
             uint32_t a[4] = { stream, sch, st + ST_COUNT, st + ST_MORE };
             uint32_t p = call_guest(c, FN_BLOCK, 4, a);
             if (!p || p == 0xFFFFFFFFu){                           /* nothing yet, or the stream's end */
@@ -319,9 +345,15 @@ static void el3_decode(CPU *c){
             if (s->blocks == j){                                   /* this channel is the first at this block */
                 const char *why = s->failed;                       /* ... or the other one failed at it */
                 if (!why){
-                    uint32_t lim = 0x10000u;
-                    while (lim && !mem_is_committed(p + lim - 1u)) lim >>= 1;
-                    why = el3_block(s, &MR8(p), lim, MR32(st + ST_COUNT), !MR32(st + ST_MORE));
+                    uint32_t lim = el3_bytes(so, ent, sch, p);
+                    if (lim && el3_log() && ++g_bounds <= 40u){
+                        uint32_t b = MR32(MR32(ent + 8u) - 4u);
+                        fprintf(stderr, "[el3] f=%ld stream %u channel %u: block %u at %08x, %u bytes, the channel's data at "
+                                "+%u, %u bytes of it, %u samples\n", autotest_frame(), stream, ch, j, b, MR32(b + 4u), p - b,
+                                lim, MR32(st + ST_COUNT));
+                    }
+                    why = !lim ? "the block's bounds are not where SND keeps them" :
+                          el3_block(s, &MR8(p), lim, MR32(st + ST_COUNT), !MR32(st + ST_MORE));
                 }
                 if (why){ el3_stop(st, s, why); s = 0; break; }
             }

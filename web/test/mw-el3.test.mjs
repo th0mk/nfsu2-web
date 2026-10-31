@@ -13,7 +13,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const OUT = path.join(REPO, 'out/mw/el3unit');
 const BIN = path.join(OUT, 'el3_unit');
 const haveClang = spawnSync('clang', ['--version'], { encoding: 'utf8' }).status === 0;
-const TESTS = ['count', 'stream', 'failed'];
+const TESTS = ['count', 'stream', 'failed', 'bounds'];
 
 test('el3_unit builds with the sanitizers', { skip: !haveClang && 'no clang' }, () => {
   fs.mkdirSync(OUT, { recursive: true });
