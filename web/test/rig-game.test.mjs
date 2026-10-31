@@ -2,7 +2,7 @@
 //   node --test web/test/rig-game.test.mjs
 // 1. Every tool's --help prints its own header comment and then what it has for the game: Underground 2's (the
 //    default) or Most Wanted's, "none yet" with the reason until it has some (run-suite, app-test, intro-test, lan-pair,
-//    online-pair, shader-check and deploy-e2e have some); it starts nothing.
+//    online-pair, roam-pair, roam-crowd, shader-check and deploy-e2e have some); it starts nothing.
 // 2. --game mw stops a tool that has nothing for Most Wanted yet, before it starts a server, a browser or a build
 //    (the tools of 1. that have something; 6. for run-suite); an unknown game stops every
 //    tool.
@@ -26,7 +26,8 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const P1 = +(process.env.NFSU2_TEST_RIG_PORT1 || 9791), P2 = +(process.env.NFSU2_TEST_RIG_PORT2 || 9792);
 const TOOLS = ['run-suite', 'app-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'vault-pair', 'audio-test',
   'intro-test', 'bench', 'shader-check', 'deploy-e2e'];
-const FOR_MW = new Set(['run-suite', 'app-test', 'intro-test', 'lan-pair', 'online-pair', 'shader-check', 'deploy-e2e']);   // the tools that have something for Most Wanted (3. checks what)
+const FOR_MW = new Set(['run-suite', 'app-test', 'intro-test', 'lan-pair', 'online-pair', 'roam-pair', 'roam-crowd', 'shader-check',
+  'deploy-e2e']);   // the tools that have something for Most Wanted (3. checks what)
 // a server nobody runs, should a tool get past its --help or its check (none may): no own server, nothing reached
 const NOWHERE = { 'lan-pair': ['--base', 'http://127.0.0.1:9'], 'online-pair': ['--base', 'http://127.0.0.1:9'],
   'roam-pair': ['--base', 'http://127.0.0.1:9'], 'run-suite': ['--base', 'http://127.0.0.1:9'], 'app-test': ['--base', 'http://127.0.0.1:9'],
