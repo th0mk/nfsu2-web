@@ -395,8 +395,8 @@ async fn ug2_under_u2_on_the_shared_site_and_at_the_root_elsewhere() {
         (200, Some("index, follow"), Some("text/plain; charset=utf-8"))
     );
     let want = "User-agent: *\nAllow: /\nDisallow: /u2/data/\nDisallow: /u2/data-manifest\nDisallow: /u2/game.wasm\nDisallow: /u2/game.json\n\
-                Disallow: /u2/players\nDisallow: /u2/lan\nDisallow: /u2/vault\nDisallow: /u2/names\nDisallow: /mw/data/\n\
-                Disallow: /mw/data-manifest\nDisallow: /mw/game.wasm\nDisallow: /mw/game.json\nDisallow: /mw/players\nDisallow: /mw/lan\n\
+                Disallow: /u2/players\nDisallow: /u2/seen\nDisallow: /u2/lan\nDisallow: /u2/vault\nDisallow: /u2/names\nDisallow: /mw/data/\n\
+                Disallow: /mw/data-manifest\nDisallow: /mw/game.wasm\nDisallow: /mw/game.json\nDisallow: /mw/players\nDisallow: /mw/seen\nDisallow: /mw/lan\n\
                 Disallow: /mw/vault\nDisallow: /mw/names\n";
     assert_eq!(String::from_utf8_lossy(&r.body), want);
     // keyphrase saves under /u2 (no token: 401, how a page tells a server with them)
