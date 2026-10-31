@@ -355,9 +355,17 @@ static int car_tier(uint32_t key){
  * the package levels on it, then the later career record (the latest car won).  Up to bin 9 the bot raced the latest
  * car won; at bin 8 that is the Lancer Evolution, below the Cayman S won a bin earlier (bin8_start's cars: two IS300s,
  * Supra, RX-8, Cayman S, Lancer). */
+/* The car bought at the car lot this run (lot_frame) and NFSMW_BOT_PREFER=<name> (a run after it) rank a tier higher:
+ * the lot's dearest unlocked cars at bin 5 are tier 2 like the cars the rivals gave, which hold more packages */
+static uint32_t lot_car_handle;
+static int car_preferred(uint32_t r){
+    static const char *pref; static int got;
+    if (!got){ got = 1; pref = getenv("NFSMW_BOT_PREFER"); }
+    return (lot_car_handle && MR32(r) == lot_car_handle) || (pref && *pref && !strcmp(car_name(rd(r + 8u)), pref));
+}
 static int car_rank(uint32_t prof, uint32_t r){
     int lv = car_levels(prof, MR32(r));
-    return (4 - car_tier(rd(r + 8u))) * 1000 + (lv > 0 ? lv : 0) * 10 + MR8(r + 0x11u) % 10;
+    return (4 - car_tier(rd(r + 8u)) + car_preferred(r)) * 1000 + (lv > 0 ? lv : 0) * 10 + MR8(r + 0x11u) % 10;
 }
 static void log_cars(void){
     uint32_t prof = profile(), cur = rd(prof + 0xa8u);
@@ -376,8 +384,8 @@ static void log_races(const struct race *r, int n){
 }
 
 /* ---- the bot ---- */
-enum { B_OFF, B_ROAM, B_GOTO, B_ENGAGE, B_RACE, B_PURSUIT, B_SAVE, B_SHOP, B_CAR, B_DONE };
-static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", "pursuit", "save", "shop", "car", "done" };
+enum { B_OFF, B_ROAM, B_GOTO, B_ENGAGE, B_RACE, B_PURSUIT, B_SAVE, B_SHOP, B_CAR, B_LOT, B_DONE };
+static const char *const st_name[] = { "off", "roam", "goto", "engage", "race", "pursuit", "save", "shop", "car", "lot", "done" };
 #define SETTLE_S      1.5               /* game seconds in free roam before the bot decides */
 #define ENGAGE_TRIES  5                 /* Enters at a race's start before it is skipped for now */
 #define ENGAGE_EVERY  90                /* frames between them */
@@ -446,6 +454,9 @@ static struct {
                                            (decide, pursuit_frame): on now, tried, met; the bin they count in */
     int unsticks;                       /* unstick: the standing car set on a road before a forced pursuit, this time */
     int rejoin_stand;                   /* pursuit_frame: the car stands where a rejoin set it (since rejoin_t) */
+    int lot_bin, lot_in, lot_done, lot_target, lot_seen, lot_entered, lot_cars0;   /* B_LOT (lot_frame) */
+    long lot_cost[33];
+    unsigned char lot_bad[33];
     double rejoin_t;
     struct gates g;
 } B;
@@ -680,6 +691,63 @@ static void shop_frame(CPU *c){
     B.shop_cash = g.cash;
     set_state(B_ROAM, "shop over");
 }
+/* ---- the car lot: a faster car bought with the career's cash ----
+ * The rivals from bin 5 on drive the fastest cars (Webster beat the bot's tier-2 Cayman S and CLK500 in six
+ * challenges of c6-b4, by a second in a sprint, by 23 mph in a speedtrap), and the cars the beaten rivals give are tier
+ * 2 at best.  The car lot (menu_gate_carlot/zone_carlot_1, career_carlot.txt) sells them: once a bin, with the cash
+ * for a car of LOT_MIN_COST and LOT_RESERVE left, the bot goes there (the car set inside the gate, Enter), looks at
+ * every car once (Car_Select.fng with the 'Career' label 0xD9D6B954: "k / N" in the strings of label 0x18, "Cost:"),
+ * then takes the dearest one the funds reach: Enter, the game's dialogs answered Yes.  A car the game does not sell
+ * (one locked until a later rival: "Unlock_this_car_by_beating_JV" in c6-lot1, the label shown for every car) brings
+ * the list back with no car more: the next dearest is tried.  The lot's cars have no names on the screen, so the cost
+ * picks (c6-lot1 at bin 5: 26,000 to 120,000 for the first 26, then 80,000 to 300,000 for six locked ones); the car
+ * bought is then the career's best by car_rank (car_tier knows the names) and is taken at the safehouse (B_CAR), the
+ * shop after it. */
+static const float lot_pos[3] = { -2147.32f, 152.29f, 981.63f }, lot_dir[3] = { 0.0f, 0.0f, 1.0f };
+#define LOT_MIN_COST  150000            /* the cheapest car worth buying (the dearest unlocked ones at bin 5: 120,000) */
+#define LOT_RESERVE   5000              /* cash kept back */
+static int best_tier(void){             /* the best tier among the career's cars that can be driven (1 the fastest) */
+    uint32_t prof = profile();
+    int t = 9;
+    for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)
+        if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu && car_free(prof, MR32(r)) &&
+            car_tier(rd(r + 8u)) < t) t = car_tier(rd(r + 8u));
+    return t;
+}
+static long lot_min(void){              /* NFSMW_BOT_LOT_MIN=N: the cheapest car worth buying instead of LOT_MIN_COST */
+    const char *e = getenv("NFSMW_BOT_LOT_MIN");
+    return e && atol(e) > 0 ? atol(e) : LOT_MIN_COST;
+}
+static int lot_wanted(const struct gates *g){
+    return !B.once && B.lot_bin != g->bin && g->cash >= lot_min() + LOT_RESERVE && best_tier() > 1 && !lot_car_handle;
+}
+static void go_lot(CPU *c, const struct gates *g){
+    B.lot_bin = g->bin; B.lot_in = 0; B.lot_done = 0; B.lot_target = 0; B.lot_seen = 0; B.lot_entered = 0;
+    memset(B.lot_cost, 0, sizeof B.lot_cost); memset(B.lot_bad, 0, sizeof B.lot_bad);
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f the car lot: cash %d, the best car's tier %d\n", autotest_frame(), mw_game_time(), g->cash,
+            best_tier());
+    mw_aid_autopilot(c, AP_STAND);
+    memcpy(B.tpos, lot_pos, sizeof B.tpos); memcpy(B.tdir, lot_dir, sizeof B.tdir);
+    mw_aid_teleport(c, lot_pos, lot_dir);
+    set_state(B_LOT, "a faster car");
+}
+static void lot_frame(CPU *c){
+    long f = autotest_frame();
+    if (!B.lot_in){                     /* at the gate: Enter until the lot opens (mw_bot_present takes it) */
+        if (pursuit_on(c, B_ROAM)) return;
+        if (mw_fe_input_top(0) || !settled(c) || f - B.last_tap < ENGAGE_EVERY) return;
+        if (B.tries >= SHOP_TRIES){ set_state(B_ROAM, "the car lot did not open"); return; }
+        autotest_tap(DIK_RETURN, 6); B.last_tap = f; B.tries++;
+        return;
+    }
+    if (!settled(c)) return;            /* left the lot: free roam again */
+    struct gates g; read_gates(c, &g);
+    fprintf(stderr, "[mwbot] f=%ld t=%.1f car lot over: cars %d -> %d, cash %d\n", f, mw_game_time(), B.lot_cars0, g.cars, g.cash);
+    log_cars();
+    pick_car();
+    if (B.want_car){ B.shop_bin = -1; B.car_swapped = 0; set_state(B_CAR, "the car bought, taken at the safehouse"); }
+    else set_state(B_ROAM, "car lot over");
+}
 /* a number in what a screen shows (mw_fe_shows): the value of the first string after the one that begins with KEY
  * ("'cost" ... ":9588bd38'5,500"), commas skipped; -1 when not there */
 static long shows_num(const char *s, const char *key){
@@ -748,6 +816,7 @@ static void decide(CPU *c){
     if (B.stop_ready && g.won >= g.won_req && g.ms >= g.ms_req && g.bounty >= g.bounty_req){
         set_state(B_DONE, "the rival's requirements are met (bot run N ready)"); return;
     }
+    if (lot_wanted(&g)){ go_lot(c, &g); return; }
     if (shop_wanted(&g)){ go_shop(c, &g); return; }
     int n = read_races(c, g.binobj, r, MAX_RACES, 0), pick = -1;
     if (g.won < g.won_req)              /* the race not won yet that was tried the least (a lost race waits its turn) */
@@ -1389,6 +1458,7 @@ void mw_bot_frame(CPU *c){
         break;
     case B_PURSUIT: pursuit_frame(c); break;
     case B_SHOP: shop_frame(c); break;
+    case B_LOT: lot_frame(c); break;
     case B_CAR:                        /* another car: Jump to Safe House, Car Select, Resume Free Roam (mw_bot_present) */
         if (pursuit_on(c, B_CAR)) break;
         if (B.car_swapped){ if (settled(c)) set_state(B.once ? B_DONE : B_ROAM, "the car changed"); break; }
@@ -1608,6 +1678,63 @@ void mw_bot_present(void){
         }
     }
     else if (B.st == B_SHOP && !strcasecmp(nm, "ShoppingCart.fng")){ what = "Enter: check out"; B.sh_paid = 1; }
+    else if (B.st == B_LOT && !strcasecmp(nm, "Car_Select.fng")){
+        /* the car lot (lot_frame): every car seen once, then the dearest the funds reach, Enter; a car more in the
+         * career, or none to buy, and Escape leaves */
+        char sh[2048]; mw_fe_shows(sh, sizeof sh);
+        long k = shows_nth(sh, "00000018", 2), n = shows_nth(sh, "00000018", 0), cost = shows_num(sh, "Cost:"),
+             funds = shows_num(sh, "Funds:");
+        int cars = career_cars(profile());
+        if (!B.lot_in){
+            B.lot_in = 1; B.lot_cars0 = cars;
+            fprintf(stderr, "[mwbot] f=%ld the car lot: %ld cars, funds %ld, the career's cars %d\n", f, n, funds, cars);
+        }
+        if (!B.lot_done && cars > B.lot_cars0){
+            B.lot_done = 1;
+            uint32_t prof = profile(), key = 0; int hi = -1;
+            for (uint32_t i = 0, r = prof + PROF_CARDB; prof && i < 200u; i++, r += 0x14u)   /* the newest career record */
+                if (mem_is_committed(r + 0x13u) && MR32(r) != 0xffffffffu && MR8(r + 0x11u) != 0xffu && MR8(r + 0x11u) > hi){
+                    hi = MR8(r + 0x11u); lot_car_handle = MR32(r); key = rd(r + 8u);
+                }
+            fprintf(stderr, "[mwbot] f=%ld the car lot: bought car %d / %ld for %ld (funds now %ld), cars %d -> %d: %s (handle %#x, "
+                    "career record %d)\n", f, B.lot_target, n, B.lot_target > 0 && B.lot_target < 33 ? B.lot_cost[B.lot_target] : -1L,
+                    funds, B.lot_cars0, cars, car_name(key), lot_car_handle, hi);
+        }
+        if (B.lot_done){ key = DIK_ESCAPE; what = "Escape: leave the lot"; }
+        else if (k < 1 || k > 32 || n < 1 || n > 32){
+            if (f - S.since < 150) return;
+            B.lot_done = 1; key = DIK_ESCAPE; what = "Escape: the lot's list not read";
+        } else {
+            if (B.lot_entered){         /* the Enter's answer: the list back with no car more */
+                B.lot_entered = 0;
+                if (k == B.lot_target){
+                    B.lot_bad[k] = 1; B.lot_target = 0;
+                    fprintf(stderr, "[mwbot] f=%ld the car lot: car %ld / %ld (%ld) not sold (locked, or refused)\n", f, k, n, cost);
+                }
+            }
+            if (!B.lot_cost[k]){ B.lot_cost[k] = cost > 0 ? cost : -1; B.lot_seen++; }
+            if (B.lot_seen < n){ key = DIK_RIGHT; what = "the lot: the next car"; }
+            else {
+                if (!B.lot_target){
+                    long bc = 0;
+                    char b[400]; int o = 0;
+                    for (int i = 1; i <= n && i < 33; i++){
+                        if (o < 360) o += snprintf(b + o, sizeof b - (size_t)o, " %ld", B.lot_cost[i]);
+                        if (!B.lot_bad[i] && B.lot_cost[i] >= lot_min() && B.lot_cost[i] <= funds - LOT_RESERVE &&
+                            B.lot_cost[i] > bc){ bc = B.lot_cost[i]; B.lot_target = i; }
+                    }
+                    fprintf(stderr, "[mwbot] f=%ld the car lot's costs:%s; funds %ld: %s %d\n", f, b, funds,
+                            B.lot_target ? "to car" : "none to buy", B.lot_target);
+                }
+                if (!B.lot_target){ B.lot_done = 1; key = DIK_ESCAPE; what = "Escape: no car to buy"; }
+                else if (k != B.lot_target){
+                    long fwd = (B.lot_target - k + n) % n;
+                    key = fwd <= n / 2 ? DIK_RIGHT : DIK_LEFT; what = "the lot: to the car picked";
+                }
+                else { B.lot_entered = 1; what = "Enter: buy the car picked"; }
+            }
+        }
+    }
     else if (!strcasecmp(nm, "Car_Select.fng")){
         /* The career's cars ('k / N' in the strings of label 0x18, the list in career-record order): from the safehouse
          * menu for pick_car's car, and after a bust (the sheet, then this).  After a bust the car taken is the current
