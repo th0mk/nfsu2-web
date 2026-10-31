@@ -459,7 +459,10 @@ inst.forEach((x, i) => {
   if (res[i] !== 'done') why.push('timeout');
   const exit = /^(?:\[\d+!?\] )?EXIT (\S+)/m.exec(L)?.[1];
   if (res[i] === 'done' && exit !== '0') why.push(`exit=${exit ?? 'none'}`);
-  if (res[i] === 'done' && !L.includes('quit at guest frame')) why.push('no-quit');
+  // (a game other than Underground 2 ends its script by `close`: its own exit after the WM_CLOSE, as run-suite.mjs's
+  // closedByGame takes it)
+  const closed = GAME !== 'ug2' && /^(?:\[\d+!?\] )?app: the game exited \(code 0\) after the quit request$/m.test(L);
+  if (res[i] === 'done' && !L.includes('quit at guest frame') && !closed) why.push('no-quit');
   why.push(...logWhy(L, { allow: ['freeze'] }));
   if (/^\[(shot|menu|key|stick|tap|hold|scroll|crew|invite)\] .*failed: /m.test(L)) why.push('page-step-failed');
   summary[x.name].why = why;
