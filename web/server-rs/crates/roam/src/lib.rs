@@ -18,6 +18,12 @@
 //!   for, by the hub's slot of each, as what changed since that answer: each player come, or moved off where the
 //!   page has it, placed (x, y in whole metres, heading a byte, velocity in m/s: the page moves its marker on at
 //!   it), each one gone gone.  A player standing costs nothing, a car going straight little.
+//! - player -> hub -> player: while it drives, four times a second (a quarter second after each answer), a NEARREQ for
+//!   its minimap: the same, but of the players within the radius it asks for (its minimap's reach, 1000 m at most), at
+//!   most the 128 nearest (it asks for 64), each where it is at the question, placed again 2 m off where the page has
+//!   it, in one NEARD datagram laid out as a MAPD.  One answer a browser every `near_gap_ms` (150), every 500 ms while
+//!   the hub's thread is 60 % busy and every second at 75 %: the links come first (bench.rs bench_near: 3000 players
+//!   asking took 3 to 6 % of the thread).
 //!
 //! The links, in each room: the pairs of players with a position younger than `stale_ms` (60 s: one in a shop or a
 //! race keeps its links for a while), nearest first, each player at most its degree of them.  "Nearest" looks ahead,
@@ -170,6 +176,8 @@ pub struct RoamOptions {
     pub map_max: usize,
     pub map_gap_ms: f64,
     pub map_fresh_ms: f64,
+    /// the minimap (NEARREQ): one answer a browser every near_gap_ms at most (the game asks again 200 ms after each)
+    pub near_gap_ms: f64,
 }
 
 impl Default for RoamOptions {
@@ -197,6 +205,7 @@ impl Default for RoamOptions {
             map_max: 2048,
             map_gap_ms: 250.0,
             map_fresh_ms: 5_000.0,
+            near_gap_ms: 150.0,
         }
     }
 }
@@ -383,12 +392,19 @@ fn run(
     let mut next = Some(Instant::now() + every);
     // the crews' counts made at a tick, then swapped with /players' (the two tables are kept: no allocation a tick)
     let mut crews = Vec::new();
+    // how long the thread worked on ticks and frames since `since`: the hub hears how busy its thread was each second
+    let (mut work, mut since) = (Duration::ZERO, Instant::now());
     loop {
+        if since.elapsed() >= Duration::from_secs(1) {
+            hub.set_thread_busy(work.as_secs_f64() / since.elapsed().as_secs_f64());
+            (work, since) = (Duration::ZERO, Instant::now());
+        }
         let cmd = match next {
             Some(at) => {
                 let now = Instant::now();
                 if now >= at {
                     guard(|| hub.tick());
+                    work += now.elapsed();
                     crowded.store(hub.crowded(), Ordering::Relaxed);
                     in_roam.store(hub.in_roam(), Ordering::Relaxed);
                     let rooms = hub.in_rooms();
@@ -416,7 +432,9 @@ fn run(
         match cmd {
             Cmd::Frame(from, data, owner) => {
                 pending.fetch_sub(1, Ordering::Relaxed);
+                let t0 = Instant::now();
                 guard(|| hub.frame_from(from, &data, owner.as_ref()));
+                work += t0.elapsed();
             }
             Cmd::Gone(vip) => guard(|| hub.peer_gone(vip)),
             Cmd::Attach(send) => hub.attach_switch(Box::new(move |vip, f| send(vip, f, None).sent())),

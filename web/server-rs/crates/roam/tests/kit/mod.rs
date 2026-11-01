@@ -157,6 +157,21 @@ pub fn mapreq_base(sender: u32, req: u16, max: u16, base: u16) -> Vec<u8> {
     dgram(10, sender, &[req.to_le_bytes(), max.to_le_bytes(), base.to_le_bytes()].concat())
 }
 
+/// the minimap's question (NEARREQ): for max players at most within radius m, what changed since its answer base
+pub fn nearreq(sender: u32, req: u16, max: u16, base: u16, radius: u16) -> Vec<u8> {
+    dgram(18, sender, &[req.to_le_bytes(), max.to_le_bytes(), base.to_le_bytes(), radius.to_le_bytes()].concat())
+}
+
+/// the minimap's answer (NEARD) in a frame of the hub's, read as a MAPD's
+pub fn neard_of(f: &[u8]) -> Option<Mapd> {
+    if f[16 + 5] != 19 {
+        return None;
+    }
+    let mut g = f.to_vec();
+    g[16 + 5] = 17;
+    mapd_of(&g)
+}
+
 /// a MAPD entry: the player's key, and where it is placed (x, y, heading, vx, vy), or None: gone
 pub type MapdEntry = (u16, Option<(i16, i16, u8, i8, i8)>);
 /// a MAPD datagram: (req, base, part, nparts, total, entries)
