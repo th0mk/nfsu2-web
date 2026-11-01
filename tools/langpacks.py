@@ -69,13 +69,16 @@ Extra Options mod's ShowSubs; neither is used.
 "Need for Speed Underground 2 Turkish Translation Patch" at moddb.com)
 extracted: its archive holds an Inno Setup installer, nfsu2tr11.exe, which
 `innoextract nfsu2tr11.exe` unpacks (into app/) without running it; or any
-folder below which it has LANGUAGES/English.bin.  Turkish takes English's
-place as Polish does: its text spells the Turkish letters with accented ones
-the game's fonts have (ş is ÿ, ı is í, ğ is ý, İ is Í, Ş is þ, Ğ is Ý), and
-its fonts' textures (LanguageTextures.bin, and one in GLOBALA.BUN) draw those
-as the Turkish ones; also its memory-card texts and credits.  The port shows
-the movies' subtitles itself (runtime/language.c), so the Extra Options mod
-the translation asks for is not needed.
+folder below which it has LANGUAGES/LanguageTextures.bin.  Turkish takes
+English's place as Polish does, with its own text: tools/lang/turkish.json,
+every one of the game's texts translated from English (by the label the
+game's code and menus look it up by, its hash where none is known) and the
+memory-card texts.  The translation gives its fonts: their textures
+(LanguageTextures.bin, and one in GLOBALA.BUN) draw accented letters the
+game's fonts have as the Turkish ones (ş is ÿ, ı is í, ğ is ý, İ is Í, Ş is
+þ, Ğ is Ý), and the text is written in those.  The credits stay the game's.  The port
+shows the movies' subtitles itself (runtime/language.c), so the Extra Options
+mod the translation asks for is not needed.
 
 <installer> (--hu) is GameHunter's Hungarian translation (v1.1, 2005, by
 L_zooltan; nfs_underground2.exe from gamehunter.hu or magyaritasok.hu), or the
@@ -85,7 +88,7 @@ which spells ő and ű as õ and û (the game's fonts have no ő or ű, and
 Hungarian texts of the time wrote them so), its memory-card texts and credits.
 Rerunning it copies only what changed.  Prints what each pack holds.
 """
-import argparse, filecmp, gzip, os, re, shutil, struct, sys
+import argparse, filecmp, gzip, json, os, re, shutil, struct, sys
 
 LANGS = ['french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish',
          'korean', 'chinese', 'japanese', 'russian', 'thai']
@@ -131,15 +134,16 @@ PL = [
     ('CREDITS/POLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
     ('CREDITS/POLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
 ]
-# Turkish: (file in the translation, the game's file it stands in for)
+# Turkish: (file in the translation, the game's file it stands in for); the text is TR_TEXT's
 TR = [
-    ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
     ('LANGUAGES/LanguageTextures.bin', 'LANGUAGES/LanguageTextures.bin'),
     ('GLOBAL/GLOBALA.BUN', 'GLOBAL/GLOBALA.BUN'),
-    ('memcard/LOCALE_ENGLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
-    ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
-    ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
 ]
+TR_TEXT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lang', 'turkish.json')
+# its letters as the translation's fonts draw them, and the game's fonts' own ’ ™ — …; the rest is Latin-1
+TR_LETTERS = {'ş': 0xff, 'ı': 0xed, 'ğ': 0xfd, 'İ': 0xcd, 'Ş': 0xfe, 'Ğ': 0xdd,
+              '’': 0x81, '™': 0x82, '—': 0x83, '…': 0x86}
+TR_LATIN = set(map(chr, range(0x20, 0x7f))) | set('ÇÖÜçöü©®Ñ\xa0')
 # Hungarian: (file in the installer, the game's file it stands in for)
 HU = [
     ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
@@ -300,14 +304,37 @@ def pl(src, game):
     done(p, 'polish')
 
 
+def str_hash(s):
+    """the game's hash of a text's label (bStringHash)"""
+    h = 0xffffffff
+    for c in s.encode('ascii'): h = (h * 33 + c) & 0xffffffff
+    return h
+
+
+def tr_bytes(s):
+    """a Turkish text in the letters of the translation's fonts"""
+    bad = sorted(set(c for c in s if c not in TR_LETTERS and c not in TR_LATIN))
+    if bad: sys.exit(f'{TR_TEXT}: {bad} in "{s}", letters the fonts lack')
+    return bytes(TR_LETTERS.get(c) or ord(c) for c in s)
+
+
 def tr(src, game):
-    root = next((d for d, _, _ in os.walk(src) if find(d, 'LANGUAGES/English.bin')), None)
-    if not root: sys.exit(f'{src}: no LANGUAGES/English.bin below it, not the translation (innoextract its nfsu2tr11.exe)')
+    root = next((d for d, _, _ in os.walk(src) if find(d, 'LANGUAGES/LanguageTextures.bin')), None)
+    if not root: sys.exit(f'{src}: no LANGUAGES/LanguageTextures.bin below it, not the translation (innoextract its nfsu2tr11.exe)')
     missing = [s for s, _ in TR if not find(root, s)]
     if missing: sys.exit(f'{root}: the translation is not all there, missing:\n  ' + '\n  '.join(missing))
     p = Pack(game, 'turkish')
-    if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
-        sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
+    if p.same_as_game('LANGUAGES/LanguageTextures.bin', src=find(root, 'LANGUAGES/LanguageTextures.bin')):
+        sys.exit(f'{root}: its LANGUAGES/LanguageTextures.bin is the game\'s own, not the translation')
+    with open(TR_TEXT, encoding='utf-8') as f: t = json.load(f)
+    texts = {int(k, 16) if k.startswith('0x') else str_hash(k): tr_bytes(v) for k, v in t['texts'].items()}
+    for rel in ('LANGUAGES/English.bin', 'memcard/LOCALE_ENGLISH.loc'):
+        if not find(game, rel): sys.exit(f'{game}: no {rel}')
+    with open(find(game, 'LANGUAGES/English.bin'), 'rb') as f: data, changed = with_texts(f.read(), texts, whole=True)
+    print(f'turkish: {changed} of its {len(texts)} texts differ from English\'s')
+    p.add_data(data, 'LANGUAGES/English.bin')
+    with open(find(game, 'memcard/LOCALE_ENGLISH.loc'), 'rb') as f:
+        p.add_data(with_loc(f.read(), [tr_bytes(s) for s in t['memcard']]), 'memcard/LOCALE_ENGLISH.loc')
     for s, rel in TR: p.add_file(find(root, s), rel)
     done(p, 'turkish')
 
@@ -347,11 +374,13 @@ def end_texts(path):
     return out
 
 
-def with_texts(data, texts):
-    """A language file (chunks: id, size, data) with these texts, and how many of them differ from its own.  Its
-    text chunk: { 16, count, table, strings } and a character table, then the table (hash, offset into the strings;
-    in hash order) and the 0-terminated strings.  A changed text goes after the others; the chunks after the text
-    (the fonts) stay 0x80-aligned behind a pad chunk (id 0), as the game's own file has them."""
+def with_texts(data, texts, whole=False):
+    """A language file (chunks: id, size, data) with these texts (bytes, in the file's letters), and how many of them
+    differ from its own.  Its text chunk: { 16, count, table, strings } and a character table, then the table (hash,
+    offset into the strings; in hash order) and the 0-terminated strings.  A changed text goes after the others; or,
+    whole, the strings are written anew, each once, so that a translation of every text leaves no English behind
+    (the file stays the size of a language's).  The chunks after the text (the fonts) stay 0x80-aligned behind a pad
+    chunk (id 0), as the game's own file has them."""
     q = 0
     while q < len(data) and struct.unpack_from('<I', data, q)[0] != STRINGS: q += 8 + struct.unpack_from('<I', data, q + 4)[0]
     if q >= len(data): sys.exit('English.bin: no text in it')
@@ -361,10 +390,17 @@ def with_texts(data, texts):
     if head != 16 or tab + 8 * n != sd or sd > size: sys.exit('English.bin: a text chunk of another layout')
     at = dict(struct.unpack_from('<II', c, tab + 8 * i) for i in range(n))
     old = lambda h: c[sd + at[h]:c.index(b'\0', sd + at[h])] if h in at else None
-    strs, changed = bytearray(c[sd:]), 0
-    for h, t in sorted(texts.items()):
-        if old(h) == t.encode('ascii'): continue
-        at[h] = len(strs); strs += t.encode('ascii') + b'\0'; changed += 1
+    if whole:
+        changed = sum(old(h) != t for h, t in texts.items())
+        new, strs, offs = {**{h: old(h) for h in at}, **texts}, bytearray(), {}
+        for h in sorted(new):
+            if new[h] not in offs: offs[new[h]] = len(strs); strs += new[h] + b'\0'
+            at[h] = offs[new[h]]
+    else:
+        strs, changed = bytearray(c[sd:]), 0
+        for h, t in sorted(texts.items()):
+            if old(h) == t: continue
+            at[h] = len(strs); strs += t + b'\0'; changed += 1
     strs += bytes(-len(strs) % 4)
     body = (struct.pack('<IIII', 16, len(at), tab, tab + 8 * len(at)) + c[16:tab]
             + b''.join(struct.pack('<II', h, at[h]) for h in sorted(at)) + strs)
@@ -378,6 +414,21 @@ def with_texts(data, texts):
     return bytes(out + data[r:]), changed
 
 
+def with_loc(data, texts):
+    """A memory-card text file (memcard/LOCALE_*.loc) with these texts (bytes, in the language file's letters).  Its
+    chunks LOCH and LOCI, then LOCL, the last: tag, size (its 8 bytes in it), 0, the count, each text's offset from the
+    chunk's start, the texts in UTF-16 each followed by four 0 bytes, then padding to 4."""
+    q = data.find(b'LOCL')
+    if q < 0 or q + struct.unpack_from('<I', data, q + 4)[0] != len(data): sys.exit('LOCALE_ENGLISH.loc: of another layout')
+    n = struct.unpack_from('<I', data, q + 12)[0]
+    if len(texts) != n: sys.exit(f'{TR_TEXT}: {len(texts)} memory-card texts, the game has {n}')
+    body, offs = bytearray(), []
+    for t in texts:
+        offs.append(16 + 4 * n + len(body)); body += t.decode('latin1').encode('utf-16-le') + bytes(4)
+    body += bytes(-len(body) % 4)
+    return data[:q] + b'LOCL' + struct.pack(f'<III{n}I', 16 + 4 * n + len(body), 0, n, *offs) + body
+
+
 def subs(src, game):
     texts = {}
     for d, _, names in sorted(os.walk(src)):
@@ -386,7 +437,7 @@ def subs(src, game):
     if not texts: sys.exit(f'{src}: no endscript below it that changes English\'s text, not the mod')
     eng = find(game, 'LANGUAGES/English.bin')
     if not eng: sys.exit(f'{game}: no LANGUAGES/English.bin')
-    with open(eng, 'rb') as f: data, changed = with_texts(f.read(), texts)
+    with open(eng, 'rb') as f: data, changed = with_texts(f.read(), {h: t.encode('ascii') for h, t in texts.items()})
     print(f'english: {changed} of the mod\'s {len(texts)} texts differ from the game folder\'s')
     p = Pack(game, 'english')
     p.add_data(data, 'LANGUAGES/English.bin')

@@ -421,7 +421,8 @@ the game folder, one folder per language, whose files a game in that language re
    [moddb.com](https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch)) and extract it into
    a fifth empty folder. It holds a Windows installer, `nfsu2tr11.exe` (Inno Setup): unpack it there with
    [innoextract](https://constexpr.org/innoextract/) (`innoextract nfsu2tr11.exe`, into `app/`), never run. The
-   Extra Options mod it asks for is not needed either.
+   tool takes its fonts, which draw the Turkish letters; the text is this repository's own
+   translation (`tools/lang/turkish.json`). The Extra Options mod it asks for is not needed either.
 6. Download the Hungarian translation (GameHunter's v1.1 by L_zooltan, `nfs_underground2.exe`, from
    [gamehunter.hu](http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html) or
    [magyaritasok.hu](https://magyaritasok.hu/games/need-for-speed-underground-2), the GameHunter TEAM one) into a

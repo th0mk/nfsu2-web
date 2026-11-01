@@ -42,8 +42,8 @@ web/start.sh --data "/path/to/Need for Speed Underground 2"
 Open **http://localhost:8080/** in Chrome or Firefox and press **Play**. The start page has the settings, your saves
 and the controls. The player's guide is [docs/web/PLAYING.md](docs/web/PLAYING.md). The game plays in any of its
 thirteen languages, in Brazilian Portuguese, in Polish, in Turkish or in Hungarian; the dubbed voices and movies and the
-Portuguese, Polish, Turkish and Hungarian text come from mods, as language packs
-([docs/web/VPS.md](docs/web/VPS.md#languages)). The menus and HUD can be redrawn at four times their size, from a mod
+Portuguese, Polish and Hungarian text come from mods, the Turkish text is this repository's own translation
+(`tools/lang/turkish.json`, with a mod's fonts), as language packs ([docs/web/VPS.md](docs/web/VPS.md#languages)). The menus and HUD can be redrawn at four times their size, from a mod
 as a texture pack ([docs/web/VPS.md](docs/web/VPS.md#texture-packs)).
 
 To play with friends, run the server behind HTTPS, for example on a small VPS with Docker:
@@ -73,7 +73,7 @@ Thai support, whose patch `runtime/language.c` follows), from TraduMix's and Mix
 translation (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro), from PLProjekt's Polish translation
 (Daniel Graszka, MaDeR, Marcin Piech, Nati, Mateusz Wilkowski, alter), from VileStuff's
 [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), from muntazam's
-[Turkish translation](https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch) and from
+[Turkish translation](https://www.moddb.com/mods/need-for-speed-underground-2-turkish-translation-patch) (its fonts) and from
 GameHunter's [Hungarian translation](http://www.gamehunter.hu/2010/08/need-for-speed-underground-2-pc.html)
 (L_zooltan). The texture pack is built from LunicAura106's
 [Upscaled HUD](https://nfsmods.xyz/mod/4319). Built with the help of Claude Code.
