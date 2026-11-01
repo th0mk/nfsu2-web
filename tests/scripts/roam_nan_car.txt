@@ -1,0 +1,27 @@
+# The player's car at NaN (issue 55), with a career that has been in free roam (a stage 2 or later save):
+#  1. the career's kept spot (Career +0x8744 kept, +0x8750 the place: where the car was when it left free roam, saved
+#     in the profile) made NaN in the crib: the old game put the car there, nothing drawn but the HUD; now the log
+#     says "[carspot] ... the career's kept spot is no place (nan ...): the new career's start instead", and the car
+#     starts there (1695.3 -883.6 24.1), with no "[roam] ... my car is not a number" at the load.
+#  2. in free roam the car's rigid body made NaN (as a hit could leave it): now "[roam] ... my car is not a number
+#     ... back to <where it last was>", and the car is a number again some frames later.
+#   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page play --a Nan:roam_nan_car.txt
+#        --seed <that save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitfng UI_CareerCrib.fng 6000
++0    poke 0x863484 1                 # a spot kept (+0x8745..+0x874F are padding: the save skips them)
++0    poke 0x863490 0x7fc00000        # its x: NaN
++1    peekx 0x863484 6
++0    waitroam 6000
++0    bot off
++300  peekx *(*0x8900ac+4)+0x60 3     # the player's car's place
++0    dump nan_spot
++0    roam mp carpeek me 60 3
++0    roam mp carpoke rb 20 nan 3      # the rigid body's place and momentum: NaN
++0    roam mp carpoke rb 70 nan 3
++1    roam mp carpeek me 60 3
++60   roam mp carpeek me 60 3
++0    dump nan_rescue1
++300  roam mp carpeek me 60 3
++0    dump nan_rescue2
++10   quit

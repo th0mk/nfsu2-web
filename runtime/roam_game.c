@@ -106,6 +106,10 @@
 #define G_GAMEMODE      0x00850078u   /* 1 career, 0x200 LAN */
 #define G_WORLD         0x00890080u   /* World*: +0x10 cars, +0x14/+0x18 AI range, +0x1C cars[] */
 #define G_PLAYER1       0x008900acu   /* Player*: +4 car */
+#define G_HOTPOS        0x00890140u   /* the hot-position jump (Player 0x600E10 -> Car 0x5FBD60): where, */
+#define G_HOTPOS_ANGLE  0x008900d0u   /* ...the heading (u16), */
+#define G_HOTPOS_JUMP   0x008900cdu   /* ...1: jump there (the player's next update), */
+#define G_HOTPOS_VALID  0x008900ceu   /* ...1: the place is set */
 #define G_RACE          0x00890118u   /* race coordinator: +0 state (4 racing), +0x24 racers, +0xC40 encounters */
 #define G_CAREER_RACE   0x00863470u   /* career race being run (0 = free roam) */
 #define G_TRACK         0x0089e7a0u   /* race parameters: the track (4000 free roam; 4701.. URL, 4706 the Dyno Shop) */
@@ -218,6 +222,7 @@
 #define SPAWN_X         1695.3f       /* the new career's start, where every new player appears (the airport's car park) */
 #define SPAWN_Y         (-883.6f)
 #define SPAWN_Z         24.1f
+#define SPAWN_H         0xf840u       /* ...the car's heading there (car +0x40C) */
 #define SPAWN_M         5             /* a car this near it is not shown to others, and the player there is passable */
 #define JUMP_M          5.f           /* a friend's car drawn this far from where it was last frame is a ghost again */
 #define HIT_REPORT_US   50000         /* a hit's push (roam_game_contact) holds until the friend's snapshots from this long after it come */
@@ -352,6 +357,7 @@ static struct {
     int hit_share;                            /* NFSU2_ROAM_HIT_SHARE: % of a hit with a friend's car the player's car keeps (roam_game_contact);
                                                  -1: by the two cars' weights (car_mass, their square roots), 100: the game's own (the whole hit) */
     int test_mass, test_fmass;                /* NFSU2_ROAM_TEST_MASS / _FMASS (test aid, kg): car_mass of the player's car / friends' cars */
+    int test_hitnan;                          /* NFSU2_ROAM_TEST_HITNAN (test aid): the game's first hit with a friend's car leaves my car at NaN */
     char name[RC_NAME_MAX + 1], room[64];
     char crew[RC_CREW_MAX][100]; int ncrew;   /* NFSU2_ROAM_CREW: the crews' names, in the player's order (crews_parse; the
                                                  page's 24 characters are up to 96 bytes of UTF-8) */
@@ -370,6 +376,7 @@ static double g_vscale = 1.0;                 /* world seconds per stamp second 
 static int64_t g_last_host;
 /* local car */
 static float g_lp[3]; static int g_lp_ok;
+static uint16_t g_lh;                         /* its heading there (car +0x40C) */
 static float g_lv[3];                         /* its velocity (m/s of world time) */
 static float g_lf[2];                         /* where it points: its forward row in x and y, of length 1 (or 0) */
 static int64_t g_cfg_next;
@@ -455,6 +462,7 @@ static int64_t g_cost_win_t0;
 /* statistics */
 static int g_joins, g_leaves;                 /* changed with the session lock held */
 static uint32_t g_teleports, g_clock_snaps, g_acquires, g_releases, g_load_fail, g_creates, g_reuses, g_restores;
+static uint32_t g_rescues, g_hit_nans;        /* car_rescue's jumps; hits whose result was not a number (roam_game_contact) */
 static int64_t g_ready_at;                    /* the last friend's car in (roam_plat_now_us) */
 /* test aid: per-frame pose log */
 static rh_file *g_poselog;
@@ -5456,6 +5464,7 @@ static void init_once(CPU *c){
     O.hit_share = env_int("NFSU2_ROAM_HIT_SHARE", -1, -1, 100);
     O.test_mass = env_int("NFSU2_ROAM_TEST_MASS", 0, 0, 20000);
     O.test_fmass = env_int("NFSU2_ROAM_TEST_FMASS", 0, 0, 20000);
+    O.test_hitnan = env_int("NFSU2_ROAM_TEST_HITNAN", 0, 0, 1);
     O.test_owncars = env_int("NFSU2_ROAM_TEST_OWNCARS", 0, 0, 1);
     O.test_outside = env_int("NFSU2_ROAM_TEST_OUTSIDE", 0, 0, 1);
     O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", MAX_CARS, 0, MAX_CARS);
@@ -5901,6 +5910,43 @@ static int engage_ours(void){
     return 0;
 #endif
 }
+/* A player's car ended up at NaN in free roam (issue 55; most likely in a hit
+ * with a friend's car, roam_game_contact) and was drawn nowhere: a black
+ * screen under the HUD, an empty radar, nothing sent to friends (local_state).
+ * Leaving free roam the game keeps where the car is in the career (Career
+ * +0x8750, 0x513B30) and the profile saves that, so every later load put the
+ * car there again (carspot.c mends the kept spot).  The car goes back where
+ * it last was: the hot-position jump builds its physics again from a place
+ * and a heading (0x5FBD60 -> 0x5F52C0), and friends' cars are ghosts until
+ * they are clear of it.  With no good place this time in free roam, to the new
+ * career's start.  Again after RESCUE_US while the jump has not happened. */
+#define RESCUE_US       2000000
+#define PLACE_MAX       100000.f      /* farther out than this (m): no place on the map */
+static int64_t g_rescue_at;
+static int fin3(uint32_t a, float lim){
+    for (uint32_t i = 0; i < 3u; i++){ float v = MRF32(a + 4u * i); if (!__builtin_isfinite(v) || __builtin_fabsf(v) > lim) return 0; }
+    return 1;
+}
+/* the car's place, velocity and rows are numbers */
+static int car_sane(uint32_t car){
+    return fin3(car + 0x60u, PLACE_MAX) && fin3(car + 0x70u, 1e4f) && fin3(car + 0x90u, 2.f) && fin3(car + 0xa0u, 2.f) && fin3(car + 0xb0u, 2.f);
+}
+static void car_rescue(int64_t host){
+    uint32_t car = player_car();
+    if (!ok(car, 0x9e0) || car_sane(car) || (g_rescue_at && host - g_rescue_at < RESCUE_US)) return;
+    g_rescue_at = host;
+    float p[3] = { SPAWN_X, SPAWN_Y, SPAWN_Z };
+    uint16_t h = SPAWN_H;
+    if (g_lp_ok){ memcpy(p, g_lp, sizeof p); h = g_lh; }
+    MRF32(G_HOTPOS) = p[0]; MRF32(G_HOTPOS + 4) = p[1]; MRF32(G_HOTPOS + 8) = p[2] + 0.5f;
+    MR16(G_HOTPOS_ANGLE) = h; MR8(G_HOTPOS_VALID) = 1; MR8(G_HOTPOS_JUMP) = 1;
+    ghost_all();
+    if (++g_rescues <= 8)
+        rlog("[roam] f=%ld my car is not a number (at %.1f %.1f %.1f, velocity %.1f %.1f %.1f): back to %.1f %.1f %.1f, %s\n", rh_frame(),
+             (double)MRF32(car + 0x60u), (double)MRF32(car + 0x64u), (double)MRF32(car + 0x68u), (double)MRF32(car + 0x70u),
+             (double)MRF32(car + 0x74u), (double)MRF32(car + 0x78u), (double)p[0], (double)p[1], (double)p[2],
+             g_lp_ok ? "where it last was" : "the new career's start (no good place this time in free roam)");
+}
 void roam_game_frame(CPU *c){
     if (!g_inited) init_once(c);
     if (!O.on) return;
@@ -5986,6 +6032,7 @@ void roam_game_frame(CPU *c){
     int world_runs = in_roam && g_sync_paused <= 1 && !g_parked;
     g_horn = world_runs && rh_horn_held(!has_hydraulics(player_car()));
     rc_state ls; int have_ls = in_roam && local_state(&ls);
+    if (in_roam && !have_ls) car_rescue(host);
     /* what friends can't see for themselves (last frame's): our car lets
      * every car through, we take no outrun now */
     if (have_ls && (!O.collide || g_pass.me)) ls.bits |= RC_BIT_PASS;
@@ -5999,7 +6046,7 @@ void roam_game_frame(CPU *c){
             if (rc_sqrtf(dx*dx + dy*dy + dz*dz) > v * wdt + 10.f){
                 g_teleports++; ghost_all(); roam_plat_lock(); rc_bump_epoch(&g_s); roam_plat_unlock(); }
         }
-        memcpy(g_lp, ls.p, sizeof g_lp); g_lp_ok = 1;
+        memcpy(g_lp, ls.p, sizeof g_lp); g_lp_ok = 1; g_lh = MR16(player_car() + 0x40cu);
         for (int i = 0; i < 3; i++) g_lv[i] = ls.v[i] / (float)g_vscale;
         float f[3], l[3], u[3]; rc_q2m(ls.q, f, l, u);
         float fl = rc_sqrtf(f[0] * f[0] + f[1] * f[1]);
@@ -6275,6 +6322,7 @@ void roam_game_report(void){
     rlog("\n  [roam] free-roam multiplayer: joins %d, leaves %d, slots acquired %u / released %u, cars created %u, "
                     "load failures %u, looks reused %u, rides given back %u, local teleports %u, clock re-anchors %u\n", __atomic_load_n(&g_joins, __ATOMIC_RELAXED),
             __atomic_load_n(&g_leaves, __ATOMIC_RELAXED), g_acquires, g_releases, g_creates, g_load_fail, g_reuses, g_restores, g_teleports, g_clock_snaps);
+    if (g_rescues || g_hit_nans) rlog("  [roam] my car not a number: put back %u time(s), %u hit(s) with friends' cars undone\n", g_rescues, g_hit_nans);
     rlog("  [roam] datagrams sent %llu (%llu bytes), received %llu (%llu bytes), blocked %llu, send errors %llu, "
                     "impairment dropped %llu duplicated %llu\n", (unsigned long long)ps.sent, (unsigned long long)ps.sent_bytes,
             (unsigned long long)ps.recv, (unsigned long long)ps.recv_bytes, (unsigned long long)ps.blocked,
@@ -6291,10 +6339,6 @@ void roam_game_report(void){
 
 /* ---- script commands ("roam mp ...", roam.c; the port's test harness only) ------------------- */
 #ifdef ROAM_HOST_SCRIPT
-#define G_HOTPOS        0x00890140u
-#define G_HOTPOS_ANGLE  0x008900d0u
-#define G_HOTPOS_JUMP   0x008900cdu
-#define G_HOTPOS_VALID  0x008900ceu
 /* the crew (1..) whose colour an FE object has, 0: none (mp status, mp map) */
 static int colour_crew(uint32_t o){
     int32_t col[4];
@@ -6924,16 +6968,21 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     if (!strcasecmp(sub, "carpoke") || !strcasecmp(sub, "carpeek")){
         /* "mp carpoke K OFF VALUE [N]": N floats (VALUE may be nan) into slot
          * K's car at +OFF (hex), the way the game's physics could leave them;
-         * "mp carpeek K OFF [N]" logs them */
+         * "mp carpeek K OFF [N]" logs them.  K "me": the player's car, "rb":
+         * its rigid body (roam_game_contact) */
         char a3[32] = {0}, a4[32] = {0}; sscanf(args + used, "%*s %*s %31s %31s", a3, a4);
-        int k = atoi(a1); uint32_t off = (uint32_t)strtoul(a2, 0, 16);
-        if (k < 0 || k >= NSLOT || !ok(g_sl[k].car, 0x9e0) || off >= 0x9e0u){ rlog("[roam] f=%ld mp %s: no car in slot %d\n", f, sub, k); return 1; }
+        int k = atoi(a1); uint32_t off = (uint32_t)strtoul(a2, 0, 16), base, lim = 0x9e0u;
+        uint32_t me = player_car(), mb = ok(me, 0x40) ? rd32(me + 0x3cu) : 0;
+        if (!strcasecmp(a1, "me")) base = me;
+        else if (!strcasecmp(a1, "rb")){ base = ok(mb, 0x6c) && MR32(mb + 0x5cu) ? rd32(mb + 0x68u) : 0; lim = 0x168u; }   /* (RB_KEEP_SZ) */
+        else base = k >= 0 && k < NSLOT ? g_sl[k].car : 0;
+        if (!ok(base, lim) || off >= lim){ rlog("[roam] f=%ld mp %s: no car %s\n", f, sub, a1); return 1; }
         int poke = !strcasecmp(sub, "carpoke"), n = atoi(poke ? a4 : a3); if (n < 1) n = 1;
         float v = poke ? (float)atof(a3) : 0.f;
-        for (int i = 0; i < n && off + 4u * (uint32_t)i < 0x9e0u; i++){
-            uint32_t a = g_sl[k].car + off + 4u * (uint32_t)i;
+        for (int i = 0; i < n && off + 4u * (uint32_t)i < lim; i++){
+            uint32_t a = base + off + 4u * (uint32_t)i;
             if (poke) MRF32(a) = v;
-            rlog("[roam] f=%ld mp %s slot %d +0x%x = %g (0x%08x)\n", f, sub, k, off + 4u * (uint32_t)i, (double)MRF32(a), MR32(a));
+            rlog("[roam] f=%ld mp %s %s +0x%x = %g (0x%08x)\n", f, sub, a1, off + 4u * (uint32_t)i, (double)MRF32(a), MR32(a));
         }
         return 1;
     }
@@ -7162,6 +7211,23 @@ static void block_hit(Slot *s, int64_t host){
 #define G_CRASH_VIEW    0x007a1864u   /* float 30: the hit (t m/s) that starts the crash view */
 #define G_CRASH_CAP     0x007a1858u   /* float 40: what 0x59FB70 caps the hit at first */
 #define CRASH_VIEW_X    1.5f          /* a friend's car: the player's car's part of the hit starts it at this x the game's */
+/* What the pair can change of the player's car, kept to put back when the
+ * game's result is not a number (issue 55, car_rescue): the pair moves the
+ * rigid body ([body +0x68]: its place +0x20 through the body's vtable +0x20,
+ * its rows +0x30 and momentum +0x70 in the rewind, 0x593630; the rewind reads
+ * up to +0x164), gives it the impulse and runs the car's physics (0x6012B0)
+ * through the rest of the step: the car from its place (+0x60) through its
+ * rows, wheels, suspension, slips and speeds (+0x43F).  A hit undone leaves
+ * the cars inside each other for the step; friends' cars are posed again
+ * from their reports every frame. */
+#define CAR_KEEP_AT     0x60u
+#define CAR_KEEP_SZ     0x3e0u
+#define RB_KEEP_SZ      0x168u
+static uint8_t g_keep_car[CAR_KEEP_SZ], g_keep_rb[RB_KEEP_SZ];
+static int contact_sane(uint32_t me, uint32_t rb, const float *st){
+    for (int i = 0; i < CS_N; i++) if (!__builtin_isfinite(st[i])) return 0;
+    return car_sane(me) && fin3(rb + 0x20u, PLACE_MAX) && fin3(rb + 0x30u, 1e30f) && fin3(rb + 0x40u, 1e30f) && fin3(rb + 0x50u, 1e30f);
+}
 void roam_game_contact(CPU *c, void (*orig)(CPU *)){
     uint32_t pair = c->ecx, me = O.on && O.collide && O.hit_share != 100 ? player_car() : 0;
     uint32_t mb = ok(me, 0x40) ? rd32(me + 0x3cu) : 0;
@@ -7173,7 +7239,7 @@ void roam_game_contact(CPU *c, void (*orig)(CPU *)){
             if (g_sl[j].st == SL_ACTIVE && !g_sl[j].hidden && ok(g_sl[j].car, 0x9e0) && MR32(g_sl[j].car + 0x3cu) == other) k = j;
     }
     uint32_t rb = k >= 0 && ok(mb, 0x6c) && MR32(mb + 0x5cu) ? rd32(mb + 0x68u) : 0;
-    if (!ok(rb, 0xcc)){ orig(c); return; }
+    if (!ok(rb, RB_KEEP_SZ) || !ok(me, CAR_KEEP_AT + CAR_KEEP_SZ)){ orig(c); return; }
     Slot *s = &g_sl[k];
     float st0[CS_N], st[CS_N];
     float mm = car_mass(me, 1), mf = car_mass(s->car, 0);
@@ -7182,10 +7248,21 @@ void roam_game_contact(CPU *c, void (*orig)(CPU *)){
     uint32_t pl = rd32(G_PLAYER1), mode = ok(pl, 0x5c) ? MR32(pl + 0x58u) : 0;
     float view = MRF32(G_CRASH_VIEW), cap = MRF32(G_CRASH_CAP), need = again || keep <= 0.f ? 1e30f : CRASH_VIEW_X * view / keep;
     contact_get(me, rb, st0);
+    memcpy(g_keep_car, GPTR(me + CAR_KEEP_AT), CAR_KEEP_SZ); memcpy(g_keep_rb, GPTR(rb), RB_KEEP_SZ);
     MRF32(G_CRASH_VIEW) = need;
     if (need > cap) MRF32(G_CRASH_CAP) = need;
     orig(c);
     MRF32(G_CRASH_VIEW) = view; MRF32(G_CRASH_CAP) = cap;
+    if (O.test_hitnan == 1 && !again){ O.test_hitnan = 2; MRF32(rb + 0x20u) = __builtin_nanf(""); MRF32(rb + 0x70u) = __builtin_nanf(""); }
+    contact_get(me, rb, st);
+    if (!contact_sane(me, rb, st)){
+        float p[3]; rd3(rb + 0x20u, p);
+        memcpy(GPTR(me + CAR_KEEP_AT), g_keep_car, CAR_KEEP_SZ); memcpy(GPTR(rb), g_keep_rb, RB_KEEP_SZ);
+        if (++g_hit_nans <= 8 || g_hit_nans % 100u == 0)
+            rlog("[roam] f=%ld hit with %s's car: the game left my car not a number (at %.1f %.1f %.1f): the hit undone (%u so far)\n",
+                 rh_frame(), s->name, (double)p[0], (double)p[1], (double)p[2], g_hit_nans);
+        return;
+    }
     if (mode != 6u && ok(pl, 0x5c) && MR32(pl + 0x58u) == 6u)
         rlog("[roam] f=%ld hit with %s's car: the crash view (my car's part of the hit over %.0f)\n", rh_frame(), s->name, (double)(CRASH_VIEW_X * view));
     if (again){
@@ -7200,8 +7277,6 @@ void roam_game_contact(CPU *c, void (*orig)(CPU *)){
     }
     s->hit_step = g_step;
     block_hit(s, roam_plat_now_us());
-    contact_get(me, rb, st);
-    for (int i = 0; i < CS_N; i++) if (!__builtin_isfinite(st[i])) return;
     for (int i = 0; i < 3; i++){ dv[i] = st[CS_V + i] - st0[CS_V + i]; d2 += dv[i] * dv[i]; push[i] = -(1.f - keep) * dv[i]; }
     for (int i = 0; i < CS_N; i++) st[i] = st0[i] + keep * (st[i] - st0[i]);
     contact_set(me, rb, st);
