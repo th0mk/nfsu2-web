@@ -208,15 +208,19 @@
 #define LEND_OPP        0
 #define NOPP            0
 #endif
-#define NSLOT           32            /* NOPP opponent cars + the rest of our own */
+#define NSLOT           48            /* NOPP opponent cars + the rest of our own */
 #define WORLD_INDEX     22            /* World::IndexCars' cars[] (World +0x1C; other fields follow) */
 #define KIND_OUT        4             /* a racer record kind IndexCars skips (1 human, 2 AI racer, 3 traffic) */
 #define SKIN_GAME       6             /* the game's paint slots, DUMMY_SKIN1-6 */
 #ifdef ROAM_HOST_WIN
 #define MAX_CARS        5             /* the Windows plugin: the game's own paint slots and car index only */
+#define DEF_CARS        MAX_CARS
 #else
 #define MAX_CARS        NSLOT
+#define DEF_CARS        32            /* NFSU2_ROAM_MAX_CARS unset (the Settings' Players' cars shown: 16 to 48; phones start
+                                         at 16, tablets at 24) */
 #endif
+#define CARPOOL_KB_CAR  1500          /* the car pool's room for each car past DEF_CARS (NFSU2_ROAM_CARPOOL_KB unset) */
 #define CLEAR_M         6.f           /* a ghost becomes solid once its centre is this far from the player's car's */
 #define SOLID_M         20.f          /* ...and has its body only this near it (cars touch from ~5 m; a frame at 20 fps and 160 m/s closing is 8) */
 #define SPAWN_X         1695.3f       /* the new career's start, where every new player appears (the airport's car park) */
@@ -291,7 +295,8 @@ static uint32_t ai_car(uint32_t w, int i){
     return ok(car, 0x9e0) ? car : 0;
 }
 static int car_out(uint32_t car){ return __builtin_fabsf(MRF32(car + 0x68u) - PARK_Z) >= 0.001f; }   /* 0x5ED430 */
-#define RIDE_ENTRIES    128           /* the car loader's ride entries with free-roam multiplayer on (g_pools) */
+#define RIDE_ENTRIES    160           /* the car loader's ride entries with free-roam multiplayer on (g_pools): 48 friends' cars,
+                                         a new look's ride beside the old one, and RIDES_FREE kept free */
 static uint32_t loader_entry(uint32_t h){
     uint32_t head = G_CARLOADER + 0x58u, e = rd32(head);
     for (int k = 0; e && e != head && k < 4 * RIDE_ENTRIES; k++, e = rd32(e)) if (rd32(e + 0x123cu) == h) return e;
@@ -360,6 +365,9 @@ static struct {
     int test_hitnan;                          /* NFSU2_ROAM_TEST_HITNAN (test aid): the game's first hit with a friend's car leaves my car at NaN */
     int near_max;                             /* NFSU2_ROAM_NEAR: arrows on the minimap for the players without a car shown, at most
                                                  (near_update; 0: none) */
+    int cars_auto;                            /* NFSU2_ROAM_CARS_AUTO: max_cars is the device's default (the page's), not the
+                                                 player's pick: fewer once the frames are slow with more (cars_cut) */
+    int cut_us;                               /* ...a frame this long or more is slow (NFSU2_ROAM_CUT_MS; 0: never cut) */
     char name[RC_NAME_MAX + 1], room[64];
     char crew[RC_CREW_MAX][100]; int ncrew;   /* NFSU2_ROAM_CREW: the crews' names, in the player's order (crews_parse; the
                                                  page's 24 characters are up to 96 bytes of UTF-8) */
@@ -2325,7 +2333,8 @@ static void tags_update(CPU *c){
 #define FN_POOL_ALLOC   0x0043f8f0u   /* cdecl (pool) */
 #define FN_NODE_ALLOC   0x00440ec0u   /* cdecl (): a list node, +8 its data */
 #define MM_AIRACER      3u
-#define MM_POOL         256u          /* the minimap's visual and icon pools with free roam on (g_pools) */
+#define MM_POOL         384u          /* the minimap's visual and icon pools with free roam on (g_pools): the friends' cars' arrows,
+                                         the others' (near_update) and the game's own */
 static struct { uint32_t hud, copy[NSLOT], hash[NSLOT]; int ncopy; int said, stop;
                 int32_t col[NSLOT][3];                                  /* each copy's own colour (b, g, r) */
                 uint32_t orig; int vis; } g_mm;                         /* AIRACERINDICATOR_0; its copies are 0 unknown, 1 hidden, 2 shown */
@@ -3163,6 +3172,42 @@ typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, 
                                           of them, rc_peer_friend; 0: none) */ } PeerView;
 static PeerView g_pv[RC_TABLE]; static int g_npv;
 static struct { uint32_t id, gen; int horn; } g_phorn[RC_TABLE];   /* each peer's horn, as its record (cfg_gen) has it */
+
+/* ---- fewer cars on a slow machine -------------------------------------------------------------- */
+/* Each friend's car shown costs the game's thread about 0.28 ms a frame (a Ryzen 5900X at 1080p, all of them in
+ * view: 32 cars 14 ms, 48 cars 18.5 ms), a laptop's several times that.  The page shows 48 by default on a computer
+ * with 8 cores and 8 GB or more (device.ts manyCars), a guess.  So while more than DEF_CARS of them are shown in free
+ * roam, the frames are timed: after CUT_WINDOW_US of it with CUT_SHARE of them slow (O.cut_us: 40 fps or a frame and a
+ * half of the display), the cars shown go down to DEF_CARS for the rest of the game, the hub hears it (rc_set_links),
+ * and the cars past it are parked, as for a friend gone (the players they were show on the minimap: near_update).
+ * Only for the device's default (O.cars_auto): a player who picked 48 keeps 48.  A gap over CUT_GAP_US (a load, a
+ * pause, the tab away) counts as no frame. */
+#define CUT_FRAME_US    25000
+#define CUT_WINDOW_US   10000000
+#define CUT_SHARE       0.6f
+#define CUT_GAP_US      250000
+static struct { int64_t last, since; int n, slow, done; } g_cut;
+static void cars_cut(CPU *c, uint32_t w, int64_t host){
+    int64_t dt = g_cut.last ? host - g_cut.last : 0;
+    g_cut.last = host;
+    if (g_cut.done || !O.cars_auto || O.max_cars <= DEF_CARS || g_sync_paused) { g_cut.since = 0; return; }
+    int shown = 0;
+    for (int k = 0; k < NSLOT; k++) shown += g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden && g_sl[k].world == w;
+    if (shown <= DEF_CARS || dt <= 0 || dt > CUT_GAP_US){ if (shown <= DEF_CARS) g_cut.since = 0; return; }
+    if (!g_cut.since){ g_cut.since = host; g_cut.n = g_cut.slow = 0; }
+    g_cut.n++; g_cut.slow += dt >= O.cut_us;
+    if (host - g_cut.since < CUT_WINDOW_US) return;
+    float share = (float)g_cut.slow / (float)g_cut.n;
+    rlog("[roam] f=%ld %d friends' cars shown: %d of %d frames in %.0f s took %d ms or more%s\n", rh_frame(), shown, g_cut.slow, g_cut.n,
+         (double)(host - g_cut.since) / 1e6, O.cut_us / 1000, share > CUT_SHARE ? "" : ": as many as before");
+    g_cut.since = 0;
+    if (share <= CUT_SHARE) return;
+    rlog("[roam] f=%ld the frames are slow with %d cars: %d friends' cars shown from now on (this device's default was %d)\n",
+         rh_frame(), shown, DEF_CARS, O.max_cars);
+    O.max_cars = DEF_CARS; g_cut.done = 1;
+    for (int k = DEF_CARS; k < NSLOT; k++) release(c, k, "fewer cars shown");
+    roam_plat_lock(); rc_set_links(&g_s, DEF_CARS); roam_plat_unlock();
+}
 
 /* ---- the minimap's other players --------------------------------------------------------------- */
 /* The minimap shows an arrow for a car of the World's list only (an AI
@@ -5720,26 +5765,34 @@ static void init_once(CPU *c){
     O.test_hitnan = env_int("NFSU2_ROAM_TEST_HITNAN", 0, 0, 1);
     O.test_owncars = env_int("NFSU2_ROAM_TEST_OWNCARS", 0, 0, 1);
     O.test_outside = env_int("NFSU2_ROAM_TEST_OUTSIDE", 0, 0, 1);
-    O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", MAX_CARS, 0, MAX_CARS);
+    O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
     O.near_max = env_int("NFSU2_ROAM_NEAR", NEAR_DEF, 0, NEAR_SLOTS);
+    O.cars_auto = env_int("NFSU2_ROAM_CARS_AUTO", 0, 0, 1);
+    {   /* 40 fps, or a frame and a half of a display slower than 60 Hz (a phone's Low Power Mode is 30 Hz) */
+        int hz = env_int("NFSU2_DISPLAY_HZ", 60, 1, 1000), us = 1500000 / hz;
+        O.cut_us = env_int("NFSU2_ROAM_CUT_MS", 0, 0, 1000) * 1000;
+        if (!O.cut_us) O.cut_us = us > CUT_FRAME_US ? us : CUT_FRAME_US;
+    }
 #if MPRACES
     g_mp.alone_us = (int64_t)env_int("NFSU2_ROAM_LOBBY_ALONE_S", (int)(MP_ALONE_US / 1000000), 5, 3600) * 1000000;
     g_mp.idle_us = (int64_t)env_int("NFSU2_ROAM_LOBBY_IDLE_S", (int)(MP_IDLE_US / 1000000), 10, 3600) * 1000000;
 #endif
-    /* at most 30: each snapshot goes to up to 32 friends, and 60 tripled what each of them got from that player
+    /* at most 30: each snapshot goes to up to 48 friends, and 60 tripled what each of them got from that player
      * (the server's port the limit, nfsu2.xyz 2026-10-22) for little they see: they draw a car 100 ms in the past,
      * between its snapshots */
     O.rate = env_int("NFSU2_ROAM_RATE", 20, 10, 30);
     O.delay_ms = env_int("NFSU2_ROAM_DELAY", 100, 0, 1000);
     O.extrap_ms = env_int("NFSU2_ROAM_EXTRAP", 250, 0, 1000);
-    O.carpool_kb = env_int("NFSU2_ROAM_CARPOOL_KB", CARPOOL_KB, 0, 128000);
+    /* (more cars shown than DEF_CARS: room for each of them) */
+    int carpool = CARPOOL_KB + (O.max_cars > DEF_CARS ? (O.max_cars - DEF_CARS) * CARPOOL_KB_CAR : 0);
+    O.carpool_kb = env_int("NFSU2_ROAM_CARPOOL_KB", carpool, 0, 128000);
     /* at or below the game's own size the player's car and traffic fill the pool and no friend's car is shown:
      * the value the Settings panel's old "Car memory pool" row left in players' files (its help said "never
      * below the game's own 11000"), so it counts as unset */
     if (O.carpool_kb <= CARPOOL_KB_GAME){
         rlog("[roam] NFSU2_ROAM_CARPOOL_KB=%d is not above the game's own %d KB (no room for friends' cars), using %d\n",
-             O.carpool_kb, CARPOOL_KB_GAME, CARPOOL_KB);
-        O.carpool_kb = CARPOOL_KB;
+             O.carpool_kb, CARPOOL_KB_GAME, carpool);
+        O.carpool_kb = carpool;
     }
     int port = env_int("NFSU2_ROAM_PORT", RC_DEFAULT_PORT, 1024, 65535);
     int maxp = env_int("NFSU2_ROAM_MAX_PLAYERS", RC_MAX_PLAYERS, 2, RC_MAX_PLAYERS);
@@ -5761,6 +5814,11 @@ static void init_once(CPU *c){
     cf.platform = RC_PLAT_MAC;
 #endif
     cf.test_mode = O.test; cf.max_players = maxp; cf.rate_hz = O.rate; cf.duels = DUELS; cf.lobbies = MPRACES;
+#ifndef ROAM_HOST_WIN
+    /* the hub links us with as many players as we show cars (a hub before version 10 gives 32; 0 shown: not said, 32
+     * for quick chat and the lobbies); the Windows plugin's 5 cars say nothing */
+    cf.links = O.max_cars;
+#endif
     /* quick chat: where there is a page to pick and show phrases (settings.ini quick_chat = off: neither, and the
      * HELLO tells the others to send none) */
     cf.say = SAYS && roam_plat_quickchat() && env_int("NFSU2_ROAM_SAY", 1, 0, 1);
@@ -6492,6 +6550,7 @@ void roam_game_frame(CPU *c){
             } else if (!s->hidden && !(g_du.st == DU_RACE && s->car == g_du.car)){ soft_park(c, s->car); s->hidden = 1; }
             /* (an outrun's opponent stays where it was: parked, the game would count it 120 km behind) */
         }
+        cars_cut(c, w, host);
         arrows_update(c, w);
         arrow_colours(c, w);
         near_update(c, w, host, 1);
@@ -7023,6 +7082,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     if (!strcasecmp(sub, "waitpeers") || !strcasecmp(sub, "waitcars") || !strcasecmp(sub, "waitsolid") || !strcasecmp(sub, "waithidden")){
         /* friends established / friends' cars shown / of those, solid (no longer ghosts) / friends' cars hidden or parked */
         int want = atoi(a1); long tmo = a2[0] ? atol(a2) : 0;
+        if (strcasecmp(sub, "waithidden") && O.max_cars > 0 && want > O.max_cars) want = O.max_cars;   /* (no more are shown, or linked) */
         if (*wait_start < 0) *wait_start = f;
         int have = 0;
         if (!strcasecmp(sub, "waitpeers")){ roam_plat_lock(); have = rc_established(&g_s); roam_plat_unlock(); }
@@ -7595,15 +7655,15 @@ void roam_game_goals(CPU *c, void (*orig)(CPU *)){
  *  - the car loader's rides (CarLoadedRideInfoSlotPool, 22 x 0x1240 bytes):
  *    its Load (0x63AE70) waits until one is free, purging, for good when every
  *    entry is in use (the player's, the opponent cars', traffic's (up to 7), a
- *    car of our own's first ride, each friend's): 128 (600 KB);
+ *    car of our own's first ride, each friend's): RIDE_ENTRIES (160, 730 KB);
  *  - the minimap's visuals and icons (MinimapEntity 102 x 8, MinimapElements
  *    102 x 0x20 bytes), taken with 0x43F8F0, which never grows a pool: a
  *    friend's arrow is one of each (minimap arrows), and an icon the pool
- *    could not give is linked in as a null pointer (0x4EC790): 256 each. */
+ *    could not give is linked in as a null pointer (0x4EC790): MM_POOL (384) each. */
 static struct { uint32_t name, count; const char *what; int said; } g_pools[] = {
     { 0x007a8694u, RIDE_ENTRIES, "rides the car loader holds" },   /* "CarLoadedRideInfoSlotPool" */
-    { 0x00790b18u, 256, "minimap visuals" },                       /* "MinimapEntity" */
-    { 0x00790b08u, 256, "minimap icons" },                         /* "MinimapElements" */
+    { 0x00790b18u, MM_POOL, "minimap visuals" },                   /* "MinimapEntity" */
+    { 0x00790b08u, MM_POOL, "minimap icons" },                     /* "MinimapElements" */
 };
 /* The Cars pool's extra memory.  A track load adds the difference between
  * its size (0x7FA9D4 table, free roam's raised to O.carpool_kb) and the

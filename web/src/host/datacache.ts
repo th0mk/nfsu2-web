@@ -7,6 +7,11 @@
 
 export const BLOCK = 1 << 20;
 export const CACHE_DIR = 'cache';
+/** the game data's cache files the I/O worker keeps open in this browser (io-worker.ts CACHE_OPEN, which says why):
+ *  512 in Chrome (Edge, Opera...) and Firefox on Windows, 64 elsewhere (Safari takes 251 handles at most) */
+export function cacheOpen(ua: string): number {
+  return /Windows/.test(ua) && /\b(Chrome|Firefox)\//.test(ua) ? 512 : 64;
+}
 /** where the server has the manifest and the install folder (web/server-rs/src/app/manifest.rs) */
 export const MANIFEST_URL = '/data-manifest', DATA_BASE = '/data/';
 

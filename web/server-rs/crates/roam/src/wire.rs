@@ -47,7 +47,11 @@ pub(crate) const MARK_FRIEND: u8 = 0x80;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX: the start page's four words)
 pub(crate) const CREWS: usize = 4;
 /// the most ids a HELLO names (roam_core.h RC_MAX_PEERS: its decoder takes no more)
-const SEEN_MAX: usize = 32;
+const SEEN_MAX: usize = 48;
+/// the most links a player has (roam_core.h RC_MAX_PEERS, core version 10: its HELLO says how many it wants, at most
+/// this); a core before version 10 reads lists of 32 at most (RC_PEERS_V9) and says nothing
+pub(crate) const LINKS_MAX: usize = 48;
+pub(crate) const LINKS_V9: usize = 32;
 /// a LOBBY's ops (roam_core.h RC_LOBBY_*) the hub keeps: the host's advert and its end, and a player's ask to join
 pub(crate) const LOBBY_ADVERT: u8 = 1;
 /// a player's ask to join (to its host, and a copy to the hub: the hub links the two first)
@@ -85,6 +89,8 @@ pub(crate) enum Msg<'a> {
         /// its crews as it sent them (HF_CREW), 0 after them: none for a HELLO without the flag, or with the flag
         /// and nothing after its ids
         crews: [u32; CREWS],
+        /// the links it wants (core version 10: the byte after its crews), 0 not said
+        links: u8,
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
     /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); t_us: its time on
@@ -328,6 +334,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             let flags = u16_le(d, 14);
             let mut crews = [0u32; CREWS];
+            let mut links = 0u8;
             // the crews after the ids it hears (n_seen, then n_seen ids), only with the flag: without it the bytes
             // after the name's are not read, as before the flag (a page of before sends what it likes there)
             if flags & HF_CREW != 0 {
@@ -347,9 +354,14 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
                     if crews[..n].contains(&0) {
                         return None;
                     }
+                    // (as roam_core.c's decoder: a byte after them is the links it wants, past that a newer core's)
+                    if at + 1 + 4 * n < end {
+                        links = d[at + 1 + 4 * n];
+                    }
                 }
             }
-            Msg::Hello { sender, core, status, room, name, lobbies: flags & HF_LOBBY != 0, marks: flags & HF_HUBCREW != 0, crews }
+            let (lobbies, marks) = (flags & HF_LOBBY != 0, flags & HF_HUBCREW != 0);
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links }
         }
         MSG_SNAP => {
             if end < 22 + 52 {
@@ -429,18 +441,11 @@ pub(crate) fn peers_crew_len(n: usize, k: usize) -> usize {
 }
 
 /// Writes a PEERS datagram into `b` (exactly `peers_len(n)` bytes long, or `peers_crew_len(n, mine.len())` with marks):
-/// list = [{ vip, port, id }] (at most 32: roam_core's RC_MAX_PEERS).  With marks (`b` the longer, `marks` n bytes) the
+/// list = [{ vip, port, id }] (at most the receiver's degree: 48, LINKS_MAX).  With marks (`b` the longer, `marks` n bytes) the
 /// list ends in the receiver's crew marks (HF_CREW on it): `mine` (its crews, at most CREWS, none 0; maybe none), then
 /// a byte per entry, `marks[i]` bit c: entry i is in crew `mine[c]` too; MARK_FRIEND: entry i is its friend.  So a
 /// player learns which of its peers are in its crews, and its friends, without anyone's crews but its own going out.
-pub(crate) fn write_peers(
-    b: &mut [u8],
-    sender: u32,
-    seq: u16,
-    list: impl ExactSizeIterator<Item = PeerEntry>,
-    mine: &[u32],
-    marks: &[u8],
-) {
+pub(crate) fn write_peers(b: &mut [u8], sender: u32, seq: u16, list: impl ExactSizeIterator<Item = PeerEntry>, mine: &[u32], marks: &[u8]) {
     let len = b.len();
     let n = list.len();
     let with = len > peers_len(n);

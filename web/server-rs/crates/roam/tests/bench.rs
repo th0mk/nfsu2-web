@@ -29,7 +29,12 @@ fn bench(what: &str, players: u32, rooms: u32, area: f64) {
 
 /// `step`: how far a player moves in x and y each second at most
 fn bench_moving(what: &str, players: u32, rooms: u32, area: f64, step: f64) {
-    bench_with(what, players, rooms, area, step, &|_| Vec::new(), &|_| Vec::new())
+    bench_links(what, players, rooms, area, step, 0)
+}
+
+/// `links`: the links every player asks for (core version 10), 0: none said (a core before, 32)
+fn bench_links(what: &str, players: u32, rooms: u32, area: f64, step: f64, links: u8) {
+    bench_with(what, players, rooms, area, step, links, &|_| Vec::new(), &|_| Vec::new())
 }
 
 /// `crews(i)`: player i's crews (none: a HELLO of before, without the crew flag); players i of one room are the ones
@@ -41,6 +46,7 @@ fn bench_with(
     rooms: u32,
     area: f64,
     step: f64,
+    links: u8,
     crews: &dyn Fn(u32) -> Vec<u32>,
     blocks: &dyn Fn(u32) -> Vec<String>,
 ) {
@@ -54,7 +60,8 @@ fn bench_with(
             let (c, room) = (crews(i), if rooms > 1 { 1 + i % rooms } else { 0 });
             let crews = (!c.is_empty()).then_some(&c[..]);
             let name = format!("p{i}");
-            frame(vip(i), &hello_with(1000 + i, &HelloOpts { core: 2, room, crews, name: name.as_bytes(), ..Default::default() }))
+            let core = if links > 0 { 10 } else { 2 };
+            frame(vip(i), &hello_with(1000 + i, &HelloOpts { core, room, crews, name: name.as_bytes(), links, ..Default::default() }))
         })
         .collect();
     for i in 0..players {
@@ -151,8 +158,8 @@ fn bench_2000_players_in_8_rooms_of_250() {
 /// other, so that what else the machine does weighs on both alike
 fn with_and_without(what: &str, players: u32, rooms: u32, area: f64, step: f64, crews: &dyn Fn(u32) -> Vec<u32>) {
     let at = what.find(',').unwrap_or(what.len());
-    bench_with(&format!("{}, no crews", &what[..at]), players, rooms, area, step, &|_| Vec::new(), &|_| Vec::new());
-    bench_with(what, players, rooms, area, step, crews, &|_| Vec::new());
+    bench_with(&format!("{}, no crews", &what[..at]), players, rooms, area, step, 0, &|_| Vec::new(), &|_| Vec::new());
+    bench_with(what, players, rooms, area, step, 0, crews, &|_| Vec::new());
 }
 
 #[test]
@@ -167,6 +174,18 @@ fn bench_crews() {
     let big = |i: u32| (0..4).map(|k| 0x2000_0000 + k * 1000 + (i + 16 * k) / 64).collect();
     with_and_without("2000 players in one room of 3 km, each in 4 crews of 64", 2000, 1, 3000.0, 15.0, &big);
     with_and_without("4000 players in one room of 3 km, 1000 crews of 2-6", 4000, 1, 3000.0, 15.0, &small_crews(1));
+}
+
+/// the links a tick makes for players that ask for 32, 40 and 48 (core version 10): a crowd's links cost the tick
+/// about their number
+#[test]
+#[ignore]
+fn bench_links_32_40_48() {
+    for links in [32u8, 40, 48] {
+        bench_links(&format!("3000 players in one room of 4 km, 15 m/s, {links} links"), 3000, 1, 4000.0, 15.0, links);
+        bench_links(&format!("3000 players in one room of 1 km, 15 m/s, {links} links"), 3000, 1, 1000.0, 15.0, links);
+        bench_links(&format!("2000 players on one spot of 10 m, {links} links"), 2000, 1, 10.0, 0.5, links);
+    }
 }
 
 #[test]
@@ -195,8 +214,8 @@ fn bench_blocks() {
         ("2000 players in 8 rooms of 250", 8, 1000.0, 15.0),
         ("2000 players on one spot of 10 m", 1, 10.0, 0.5),
     ] {
-        bench_with(&format!("{what}, no blocks"), 2000, rooms, area, step, &|_| Vec::new(), &|_| Vec::new());
-        bench_with(&format!("{what}, 100 blocking 10 each"), 2000, rooms, area, step, &|_| Vec::new(), &blocks(rooms));
+        bench_with(&format!("{what}, no blocks"), 2000, rooms, area, step, 0, &|_| Vec::new(), &|_| Vec::new());
+        bench_with(&format!("{what}, 100 blocking 10 each"), 2000, rooms, area, step, 0, &|_| Vec::new(), &blocks(rooms));
     }
 }
 

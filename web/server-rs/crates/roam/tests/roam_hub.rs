@@ -194,6 +194,31 @@ fn the_wire_a_sessions_hello_to_the_hub_names_its_crews() {
     }
 }
 
+// the wire: a session that wants 40 links (rc_config.links, its game's Players' cars shown) says so after its crews,
+// and in a crowd of 60 that want 48 the hub links it with 40; one that says nothing gets 32, as a core before version 10
+#[test]
+fn the_wire_a_sessions_hello_to_the_hub_says_the_links_it_wants() {
+    let Some(run) = hubwire("roam_hubwire_links.wasm") else { return };
+    for (arg, want) in [(Some("40"), 40), (None, 32)] {
+        let h = unhex(&run(&[&["hellocrew"][..], arg.as_slice()].concat()));
+        let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
+        k.from(V(0), &h);
+        k.from(V(0), &snap(0x1234ABCD, [0.25, 0.25, 0.0]));
+        for i in 1..=60u32 {
+            k.from(V(i), &hello_with(100 + i, &HelloOpts { core: 10, links: 48, ..Default::default() }));
+            k.from(V(i), &snap(100 + i, [((i - 1) % 8) as f64 * 3.0 - 9.25, ((i - 1) / 8) as f64 * 3.0 - 9.25, 0.0]));
+        }
+        k.hub.tick();
+        let l = Lists(k.lists());
+        l.both_ends();
+        assert_eq!(l.of(0).len(), want, "{arg:?}");
+        match decode_roam(&h) {
+            Some(RoamMsg::Hello { core, crews, .. }) => assert_eq!((core, crews.len()), (10, 2), "its crews still read"),
+            other => panic!("not its HELLO: {other:?}"),
+        }
+    }
+}
+
 // the hub's crew marks as the C core takes them: a session's own HELLO and four players near it, in its "Night Owls", in "Red", in its "Blue Room", in none; the list the hub makes for it,
 // given to a session in those two crews, colours each player as the hub marked it (rc_peer_crew), and names no crew but
 // the session's own; with friends (the server's friends lists: the session's keyphrase and the one in "Red", and the
@@ -768,8 +793,6 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
 
 // ---- the hub on its thread (the idle hub, frames posted and its lists: tests/roam_thread.rs) ----
 
-
-
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
     let t0 = Instant::now();
     while !f() {
@@ -806,7 +829,7 @@ fn on_its_thread_busy_workers_cut_the_links() {
     hub.stop();
     assert!(cut.is_ok(), "both workers busy, and the cap stayed");
     let first = lines.lock()[0].clone();
-    assert!(first.ends_with("% busy: at most 24 links a player (was 32)"), "{first}");
+    assert!(first.ends_with("% busy: at most 36 links a player (was 48)"), "{first}");
 }
 
 #[test]

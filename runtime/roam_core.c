@@ -391,10 +391,11 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
-        if (m->u.hello.n_crews){
-            if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX) return -1;
+        if (m->u.hello.n_crews || m->u.hello.links){
+            if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
+            if (m->u.hello.links) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
         }
         break; }
     case RC_MSG_PEERS:
@@ -525,6 +526,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             for (int i = 0; i < m->u.hello.n_crews; i++) m->u.hello.crews[i] = rc_get32(&r);
             if (r.err) return RC_E_SHORT;
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
+            if (r.n < r.len) m->u.hello.links = (uint8_t)rc_get8(&r);
             r.n = r.len;                                              /* (a newer core's additions) */
         }
         break; }
@@ -1163,6 +1165,11 @@ void rc_set_crews(rc_session *s, const uint32_t *crews, int n){
     s->hub_hello_tx = INT64_MIN / 4;
     if (!s->conf.hub_ip) for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state != RC_PS_FREE) s->peer[i].last_hello_tx = INT64_MIN / 4;
 }
+void rc_set_links(rc_session *s, int links){
+    if (links == s->conf.links) return;
+    s->conf.links = links;
+    s->hub_hello_tx = INT64_MIN / 4;                                /* (a HELLO due at the next tick) */
+}
 static void drop_peer(rc_session *s, int i, const char *why);
 int rc_set_room(rc_session *s, uint32_t room){
     if (room == s->conf.room) return 0;
@@ -1264,6 +1271,8 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
         int n = s->conf.n_crews < 0 ? 0 : s->conf.n_crews > RC_CREW_MAX ? RC_CREW_MAX : s->conf.n_crews;
         for (int i = 0; i < n; i++) if (s->conf.crews[i]) m->u.hello.crews[m->u.hello.n_crews++] = s->conf.crews[i];
     }
+    /* the hub (to nobody with our crews): the links we want */
+    if (crews && !to) m->u.hello.links = (uint8_t)(s->conf.links < 0 ? 0 : s->conf.links > RC_MAX_PEERS ? RC_MAX_PEERS : s->conf.links);
     if (s->conf.duels) m->h.flags |= RC_HF_DUELS;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
@@ -1631,9 +1640,10 @@ void rc_tick(rc_session *s, int64_t now){
             if (p->state != RC_PS_EST) continue;
             m.u.peers.e[n].ip = p->ip; m.u.peers.e[n].port = p->port; m.u.peers.e[n].id = p->id; n++;
         }
-        /* a core of version 1 gets the first 7 (it drops a longer list) */
+        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32 (each drops a longer list) */
         for (int i = 0; i < RC_TABLE && n; i++) if (s->peer[i].state == RC_PS_EST){
-            m.u.peers.n = (uint8_t)(s->peer[i].core_ver >= 2 || n < RC_PEERS_V1 ? n : RC_PEERS_V1);
+            int most = s->peer[i].core_ver >= 10 ? RC_MAX_PEERS : s->peer[i].core_ver >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
+            m.u.peers.n = (uint8_t)(n < most ? n : most);
             tx(s, &s->peer[i], &m);
         }
         s->peers_dirty = 0; s->last_peers_tx = now;

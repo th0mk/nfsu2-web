@@ -13,8 +13,9 @@
  *   roam_hubwire lobbies <hex>... a session that takes race lobbies asks for the world map as above and takes
  *                                 these datagrams; then "lobbies <gen> <n> x,y,race,n,max,state ..."
  *   roam_hubwire racerep          a race's report to the hub, as roam_core encodes it, in hex
- *   roam_hubwire hellocrew        a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
+ *   roam_hubwire hellocrew [n]    a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
  *                                 (rc_room_hash) after the ids of the two players the hub listed, who said hello
+ *                                 (with n: then the n links it wants, rc_config.links)
  *   roam_hubwire hubcrew <hex>    a session in those two crews takes this list from the hub; then each player
  *                                 listed as "a.b.c.d:port:crew" (rc_peer_crew: 0 or 1, -1 for none), "f" after
  *                                 it for a friend (rc_peer_friend) */
@@ -56,6 +57,7 @@ int main(int argc, char **argv){
         c.self_id = 0x1234ABCDu; c.port = 47210; c.max_players = RC_MAX_PLAYERS; c.rate_hz = 20; strcpy(c.name, "Ann K.");
         c.hub_ip = 0x0A4D00FDu; c.hub_port = 47210;
         c.crews[0] = rc_room_hash("Blue Room"); c.crews[1] = rc_room_hash("Night Owls"); c.n_crews = 2;
+        c.links = argc > 2 ? atoi(argv[2]) : 0;
         rc_io io; memset(&io, 0, sizeof io); io.send = sent_hello;
         rc_session_init(&S, &c, &io);
         int64_t t = 1000000;

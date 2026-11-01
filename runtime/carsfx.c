@@ -92,7 +92,7 @@ int fileio_resolve_game(const char *win, char *out, size_t outsz);     /* fileio
 #define FADE_M    30.f
 #define SOUND_MPS 343.f
 #define STALE_MS  250u
-#define CARS      32
+#define CARS      48                 /* friends' cars heard (roam_game.c NSLOT) */
 #define F_LOOP    1u
 #define F_STOP    2u
 #define K_ENG     1.1f               /* a GIN layer's gain for its volume (0 .. 1), as the game plays the player's own (measured, below) */

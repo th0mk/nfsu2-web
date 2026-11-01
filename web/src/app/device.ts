@@ -10,6 +10,7 @@
 //   touch first: the primary pointer is a finger (phones, tablets), not a
 //                laptop whose screen also takes touch.
 // The Controls sheet and the hints follow touch first (html[data-touch]).
+import { cacheOpen } from '../host/datacache';
 
 export function isPhone(): boolean {
   const uad = (navigator as unknown as { userAgentData?: { mobile?: boolean } }).userAgentData;
@@ -28,11 +29,24 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  or 100% once the render check found room to spare on this one (rendercheck.ts), full screen (no browser bars
  *  over the game), and the game's 4:3 HUD: on a phone's long screen the wide one puts the minimap under the touch
  *  controls' steering and the speedometer under Brake, the 4:3 one between the thumbs.  Players' cars shown in free
- *  roam: 16 on phones, 24 on tablets, 32 elsewhere (an iPhone was stopped for memory as 22 friends' cars loaded at
- *  once at the new career's start, 2026-10-25). */
+ *  roam: 16 on phones, 24 on tablets (an iPhone was stopped for memory as 22 friends' cars loaded at once at the new
+ *  career's start, 2026-10-25), 48 on a computer that can take them (`manyCars`), the file's 32 on the others; the
+ *  game shows 32 after all once its frames are slow with more (roam_game.c cars_cut, NFSU2_ROAM_CARS_AUTO). */
 export function deviceDefaults(): Record<string, string> {
   if (isPhone()) return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16' };
-  return touchFirst() ? { roam_max_cars: '24' } : {};
+  if (touchFirst()) return { roam_max_cars: '24' };
+  return manyCars() ? { roam_max_cars: '48' } : {};
+}
+
+/** a computer for 48 friends' cars: each one costs the game's thread about 0.28 ms a frame on a Ryzen 5900X (16 more:
+ *  14 -> 18.5 ms with all of them in view), loading them its memory, and their files the I/O worker's open cache
+ *  files: 8 or more logical cores, 8 GB of memory or more where the browser says (Chrome and Edge, which say at most
+ *  8; Firefox and Safari say nothing), and a browser whose I/O worker keeps 512 files open (datacache.ts cacheOpen:
+ *  with 64, a crowd's 210 files of 32 cars were closed and opened again 230 times a minute, ~25 ms each) */
+export function manyCars(cores = navigator.hardwareConcurrency,
+                         memoryGB = (navigator as unknown as { deviceMemory?: number }).deviceMemory,
+                         ua = navigator.userAgent): boolean {
+  return (cores ?? 0) >= 8 && (memoryGB === undefined || memoryGB >= 8) && cacheOpen(ua) >= 512;
 }
 
 /** the render check's verdict on this phone: in this browser only, like the other device defaults (settings.ini,

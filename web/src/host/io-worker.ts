@@ -15,7 +15,7 @@
 import {
   CTL_IO_DOORBELL, E, MAX_THREADS, Op, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig,
 } from './proto';
-import { BLOCK, CACHE_DIR, av1Path, blockRuns, cacheKey, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
+import { BLOCK, CACHE_DIR, av1Path, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
 
 interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
@@ -87,7 +87,7 @@ let cacheDir: FileSystemDirectoryHandle | null = null;
 // waiting on it, ~8 ms in Firefox and ~2 ms in Chrome (NVMe disk, 2026-10-29; a hard disk takes longer).  Among a
 // free-roam crowd's cars 64 were too few: some 230 files were closed and opened again a minute.  Chrome and Firefox
 // on Windows took 2000 handles at once without a word, so there 512 stay open.
-const CACHE_OPEN = /Windows/.test(navigator.userAgent) && /\b(Chrome|Firefox)\//.test(navigator.userAgent) ? 512 : 64;
+const CACHE_OPEN = cacheOpen(navigator.userAgent);
 const cacheFiles = new Map<string, Promise<CacheFile | null>>(), cacheSeen = new Set<string>();
 let keeping = true, kept = 0;                              // blocks still go into the cache (keepBlock)
 

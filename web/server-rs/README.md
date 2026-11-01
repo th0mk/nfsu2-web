@@ -179,6 +179,15 @@ snapshots, 0 bad, 127,000 Online logins), real games: roam-pair (a friend's car 
 is), lan-pair and online-pair pass.  3000 driving at once was more than the bots could take on the same Mac (they fell
 behind, the switch dropped their snapshots; the server stayed at 1.5 cores): 4000 driving is the table above.
 
+## 48 links a player (2026-11-01, Ryzen 9 5900X, WSL)
+
+A game of core version 10 asks the hub for as many links as it shows friends' cars (48 by default on a computer that
+can take them, phones 16); older games get 32.  300 roam-crowd bots circling within 120 m of each other (`--bundle`):
+at 32 links the server took 2.48 cores, at 48 links 2.47 (the bundles: WebSocket messages a second barely moved, in
+6,200, out 9,000-10,000), and 20 MB/s of datagrams (with the switch's 16-byte headers, plain bundles) became 25 MB/s.
+The hub's tick (bench.rs `bench_links_32_40_48`, a loaded machine): 3000 players in 4 km 44 / 56 / 72 ms at 32 / 40 /
+48 links, in 1 km 36 / 45 / 54, 2000 on one spot 60 / 69 / 76: a tick every 500 ms.
+
 ## How the work is shared out
 
 - **HTTP** (nfsu2-http): the server's own HTTP/1.1 and TLS (rustls), a task per connection on a tokio runtime of

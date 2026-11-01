@@ -193,8 +193,12 @@ const JOINED_PER_VIP: usize = 4;
 const JOINED_IDS: usize = 12;
 /// Two players of a room who share a crew are linked after the race lobbies' links and before all others, each
 /// player with at most this many such links (`crew_pairs`): half of the 32, so that the cars around it still show
-/// (under the busy cap, 8 links a player, a crew of 9 or more in one place takes all of them)
+/// (under the busy cap, 8 links a player, a crew of 9 or more in one place takes all of them); half of its own links
+/// for a player that asks for fewer than 32 (a phone's 16: 8)
 const CREW_LINKS: u32 = 16;
+fn crew_cap(degree: usize) -> u32 {
+    CREW_LINKS.min((degree / 2).max(1) as u32)
+}
 /// a crew of more players than this in one room gets no links first (its pairs grow as the square of its players:
 /// 64 are 2016), its players link by distance as everyone does, and it counts in `crewSkips`
 const CREW_GROUP_MAX: usize = 64;
@@ -575,7 +579,8 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
     let n = |v: usize, d: usize| if v > 0 { v } else { d };
     let f = |v: f64, d: f64| if v.is_finite() && v > 0.0 { v } else { d };
     RoamOptions {
-        degree: n(o.degree, d.degree),
+        // (roam_core reads a list of RC_MAX_PEERS at most)
+        degree: n(o.degree, d.degree).min(wire::LINKS_MAX),
         tick_ms: if o.tick_ms > 0 { o.tick_ms } else { d.tick_ms },
         stale_ms: f(o.stale_ms, d.stale_ms),
         gone_ms: f(o.gone_ms, d.gone_ms),
@@ -650,6 +655,8 @@ struct Scratch {
     ahead: Vec<[f64; 3]>,
     view: Vec<[f64; 3]>,
     deg: Vec<usize>,
+    /// each place's crew links at most (`crew_cap`)
+    ccap: Vec<u32>,
     mark: Vec<u32>,
     since: Vec<f64>,
     pairs: Vec<Pair>,
@@ -1096,7 +1103,7 @@ impl Hub {
         // (a HELLO: its name against the claims)
         let mut check = false;
         match m {
-            Msg::Hello { sender, status, room, name, lobbies, marks, crews, .. } => {
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links } => {
                 // another start of the game on the same endpoint (where its car was, and its clock's epochs, start again)
                 if p.id != sender {
                     p.links.clear();
@@ -1121,7 +1128,8 @@ impl Hub {
                     p.friend_ids = friend_ids(owner, self.friends.get(&from));
                 }
                 check = true;
-                p.degree = degree;
+                // the links it wants (core 10), the hub's most at most; a core before reads lists of 32 at most
+                p.degree = if core >= 10 && links > 0 { (links as usize).min(degree) } else { degree.min(wire::LINKS_V9) };
                 p.lobbies = lobbies;
                 p.marks = marks;
                 let was = p.crews[0] != 0;
@@ -1636,7 +1644,8 @@ impl Hub {
     /// (`friend_id`).  A friendship goes both ways in the server's lists, so each of these friends in free roam now (as
     /// of the last tick) has `me` on its list here too: one befriended while it was away is linked from now on.
     pub fn friends(&mut self, vip: u32, me: Arc<str>, owners: Vec<Arc<str>>) {
-        let theirs: Vec<u32> = owners.iter().filter_map(|o| self.player(*self.owners_at.get(o)?)).map(|p| p.vip).filter(|&v| v != vip).collect();
+        let theirs: Vec<u32> =
+            owners.iter().filter_map(|o| self.player(*self.owners_at.get(o)?)).map(|p| p.vip).filter(|&v| v != vip).collect();
         if owners.is_empty() {
             self.friends.remove(&vip);
         } else {
@@ -1944,15 +1953,20 @@ impl Hub {
     /// the cap on the links: a quarter down while the server is busy, 2 up once it has room again
     fn adjust(&mut self, now: f64) {
         let busy = (self.busy)();
-        let was = self.cap;
+        let old = self.cap;
+        // a cut comes down from the most links any player has (32 for every core before version 10, while the hub's
+        // most is 48): from the hub's most, the first cut would have cut nobody's
+        let top = self.players().map(|p| p.degree).max().unwrap_or(self.o.degree);
+        let mut was = old;
         self.st.busy = js_round(busy * 100.0);
         let o = &self.o;
         if busy > o.busy_high && now - self.cap_at >= o.cap_down_ms {
-            self.cap = o.min_degree.min(o.degree).max(self.cap * 3 / 4);
+            was = old.min(top.max(o.min_degree));
+            self.cap = o.min_degree.min(o.degree).max(was * 3 / 4);
         } else if busy < o.busy_low && now - self.cap_at >= o.cap_up_ms {
             self.cap = o.degree.min(self.cap + 2);
         }
-        if self.cap == was {
+        if self.cap == old {
             return;
         }
         self.cap_at = now;
@@ -2091,6 +2105,7 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
     s.ahead.clear();
     s.view.clear();
     s.deg.clear();
+    s.ccap.clear();
     for (i, &slot) in list.iter().enumerate() {
         let p = player(slots, slot);
         let (at, v, status, heading, age) =
@@ -2107,6 +2122,7 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
         s.view.push([soon[0] + a.cos() * view, soon[1] + a.sin() * view, soon[2]]);
         // a player's links at most: its degree, under the cap
         s.deg.push(p.map_or(0, |p| p.degree.min(cap)));
+        s.ccap.push(p.map_or(0, |p| crew_cap(p.degree)));
         s.local[slot as usize] = i as u32;
     }
 }
@@ -2373,6 +2389,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         ahead,
         view,
         deg,
+        ccap,
         mark,
         since,
         pairs,
@@ -2410,8 +2427,8 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         for &(_, a, b) in cpairs.iter() {
             let (a, b) = (a as usize, b as usize);
             let (sa, sb) = (list[a], list[b]);
-            if ccount[a] < CREW_LINKS
-                && ccount[b] < CREW_LINKS
+            if ccount[a] < ccap[a]
+                && ccount[b] < ccap[b]
                 && fresh[sa as usize].len() < deg[a]
                 && fresh[sb as usize].len() < deg[b]
                 && !linked(fresh, sa, sb)
@@ -2517,6 +2534,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         ahead,
         view,
         deg,
+        ccap,
         local: at,
         fresh,
         grid,
@@ -2615,8 +2633,8 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         ccount.resize(m, 0);
         for &(_, a, b) in cpairs.iter() {
             let (i, j) = (a as usize, b as usize);
-            if ccount[i] < CREW_LINKS
-                && ccount[j] < CREW_LINKS
+            if ccount[i] < ccap[i]
+                && ccount[j] < ccap[j]
                 && room(fcount, i)
                 && room(fcount, j)
                 && !has_place(&flinks[i * stride..i * stride + fcount[i] as usize], b)

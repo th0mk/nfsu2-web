@@ -49,10 +49,10 @@ test('the device line: screen, cores, touch, Home Screen, a 30 Hz display before
     /^screen 390x844 at 3x, touch, Home Screen app, the display at 30 Hz before Play \(Low Power Mode/);
 });
 
-test("free roam's players' cars shown: 16 on a phone, 24 on a tablet, the file's 32 elsewhere", () => {
+test("free roam's players' cars shown: 16 on a phone, 24 on a tablet, 48 on a computer that can take them, the file's 32 on the others", () => {
   // 2026-10-25, an iPhone's kept log: stopped for memory as 22 friends' cars loaded at once at the new career's start
-  const on = (ua, touchPoints, w, h, coarse) => {
-    Object.defineProperty(globalThis, 'navigator', { value: { userAgent: ua, maxTouchPoints: touchPoints }, configurable: true, writable: true });
+  const on = (ua, touchPoints, w, h, coarse, cores = 4, deviceMemory = undefined) => {
+    Object.defineProperty(globalThis, 'navigator', { value: { userAgent: ua, maxTouchPoints: touchPoints, hardwareConcurrency: cores, deviceMemory }, configurable: true, writable: true });
     globalThis.screen = { width: w, height: h };
     globalThis.matchMedia = () => ({ matches: coarse });
     return deviceDefaults().roam_max_cars;
@@ -63,6 +63,14 @@ test("free roam's players' cars shown: 16 on a phone, 24 on a tablet, the file's
   assert.equal(on('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36', 5, 412, 915, true), '16');
   assert.equal(on(mac, 5, 820, 1180, true), '24');                                 // an iPad
   assert.equal(on('Mozilla/5.0 (Linux; Android 15; SM-X910) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', 10, 1848, 2960, true), '24');
-  assert.equal(on(mac, 0, 1512, 982, false), undefined);                           // a Mac
-  assert.equal(on('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36', 10, 1920, 1080, false), undefined);   // a touch laptop
+  assert.equal(on(mac, 0, 1512, 982, false), undefined);                           // a Mac of 4 cores
+  assert.equal(on(mac, 0, 1512, 982, false, 14), undefined);                       // ...of 14: its I/O worker keeps 64 files open
+  const firefox = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0';
+  assert.equal(on(firefox, 0, 2560, 1440, false, 16), '48');                       // Firefox on Windows (says no memory)
+  const win = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36';
+  assert.equal(on(win, 10, 1920, 1080, false), undefined);                          // a touch laptop of 4 cores
+  assert.equal(on(win, 0, 1920, 1080, false, 24, 8), '48');                         // a desktop of 24 cores and 8 GB (Chrome's most)
+  assert.equal(on(win, 0, 1920, 1080, false, 8, 4), undefined);                     // 8 cores, 4 GB
+  assert.equal(on(win, 0, 1920, 1080, false, 6, 8), undefined);                     // 6 cores
+  assert.equal(on(mac, 5, 820, 1180, true, 8, 8), '24', 'a tablet stays at 24 whatever its cores');
 });

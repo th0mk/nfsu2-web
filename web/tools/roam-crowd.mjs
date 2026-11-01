@@ -5,7 +5,7 @@
 //   node web/tools/roam-crowd.mjs [--base http://localhost:8655] [--n 62] [--seconds 120] [--room <name>] [--crew <name>]
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
-//        [--race 1-3:60:120] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
+//        [--race 1-3:60:120] [--links 48] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -23,6 +23,8 @@
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
 //          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
+// --links  the links every player asks the hub for (1-48, as the game asks for its Players' cars shown); without it they
+//          say nothing, and the hub gives them 32 (a game before core version 10)
 // --crew   every player is in this crew (the Crews setting's one name): the hub links them to the players who share it
 //          first, wherever they are, and those see them in the crew's colour.
 // --race   players first to last (Bot01 is 1) are in a race from one second to the other after the start: they
@@ -49,7 +51,7 @@ const opt = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 && i + 1
 const BASE = opt('base', 'http://localhost:8655'), N = +opt('n', 62), SECONDS = +opt('seconds', 120), ROOM = opt('room', ''), CREW = opt('crew', '');
 const SPEED = +opt('speed', 15), CAR = opt('car', '350Z'), STAGGER = +opt('stagger', 50), TRACK = opt('track', ''), OUTF = opt('out', '');
 const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.includes('--bundle'), FIRST = +opt('first', 0);
-const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0);
+const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0), LINKS = +opt('links', 0);
 const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
 const ALL_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR', 'ESCALADE', 'TIBURON',
@@ -161,6 +163,7 @@ class Bot {
           ws.send(JSON.stringify({ t: 'hello', name: this.name, ...(BUNDLE ? { bundle: 1 } : {}) }));
           const io = this.x.crowd_io(), m8 = this.mem();
           const b = Buffer.from(`${this.name}\0${this.car}\0${PARTS}\0`, 'latin1'); m8.set(b, io);
+          if (LINKS) this.x.crowd_links(LINKS);
           this.x.crowd_init(this.id, roomHash(ROOM), roomHash(CREW), HUB, PORT, bhash(this.car), STATES, nowUs());
           this.ready = true;
         }

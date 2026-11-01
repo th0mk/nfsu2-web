@@ -64,7 +64,7 @@ const GROUPS: Group[] = [
     { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam: 1 to 4, then 1 to 4 (controller: right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
-    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('The nearest ones. Phones start at 16 and tablets at 24, to save memory.'), c: { t: 'seg', opts: [['16', '16'], ['20', '20'], ['24', '24'], ['28', '28'], ['32', '32']] }, more: true },
+    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('The nearest ones. Phones start at 16 and tablets at 24, to save memory.'), c: { t: 'seg', opts: [['16', '16'], ['20', '20'], ['24', '24'], ['28', '28'], ['32', '32'], ['40', '40'], ['48', '48']] }, more: true },
   ] },
   { title: N('Crews'), more: '', own: true, at: 'crews-body', items: [
     { key: 'roam_crew', label: N('Crews'), help: N('Players with the same crew name always see each other in free roam, with names and map arrows in the crew\'s colour. Anyone who types the name joins. Up to 4 crews.'), c: { t: 'crews', placeholder: N('Crew name') } },

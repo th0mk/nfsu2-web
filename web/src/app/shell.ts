@@ -592,6 +592,9 @@ async function startGame() {
   const firstName = profiles.length || r.source.NFSU2_ROAM_NAME !== 'settings.ini' ? '' : newProfileName(r.env.NFSU2_ROAM_NAME ?? '');
   if (firstName) r.env.NFSU2_NEW_PROFILE_NAME = firstName;
   if (playAs) r.env.NFSU2_ROAM_NAME = playAs;
+  // Players' cars shown by this device's default, not the player's pick: the game shows 32 after all once its frames
+  // are slow with more (roam_game.c cars_cut)
+  if (r.source.NFSU2_ROAM_MAX_CARS === 'device') r.env.NFSU2_ROAM_CARS_AUTO = '1';
   // the room and crews in Unicode's composed form, as the page hashes them (players.ts roomText): one "é" whichever way
   for (const k of ['NFSU2_ROAM_ROOM', 'NFSU2_ROAM_CREW'] as const) if (r.env[k]) r.env[k] = roomText(r.env[k]);
   // the names this game goes by, for the log as it leaves the browser (privacy.ts)

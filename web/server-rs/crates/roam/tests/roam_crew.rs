@@ -89,7 +89,7 @@ fn the_wire_a_hello_names_its_crews_after_its_ids() {
         ("crews cut short", hello_raw(HF_CREW, 2, &ids, &tail(2, &[a]))),
         ("a crew cut short", hello_raw(HF_CREW, 2, &ids, &tail(1, &[a])[..3])),
         ("ids cut short", hello_raw(HF_CREW, 3, &ids, &[])),
-        ("33 ids", hello_raw(HF_CREW, 33, &[1; 33], &tail(1, &[a]))),
+        ("49 ids", hello_raw(HF_CREW, 49, &[1; 49], &tail(1, &[a]))),
     ] {
         assert_eq!(crews_in(&h), None, "{what}: a bad HELLO");
     }
@@ -128,11 +128,7 @@ fn the_lists_mark_crew_mates_and_name_no_other_crews() {
             assert_eq!(peers_of(&of(i)).len(), 4, "{how}: {i} linked with the 4 others");
         }
         assert_eq!(crew_marks(&of(0)).map(|m| m.0), Some(vec![x, y]), "{how}: A's own crews");
-        assert_eq!(
-            [mark(0, 1), mark(0, 2), mark(0, 3), mark(0, 4)],
-            [0b10, 0b01, 0, 0],
-            "{how}: B in y, C in x"
-        );
+        assert_eq!([mark(0, 1), mark(0, 2), mark(0, 3), mark(0, 4)], [0b10, 0b01, 0, 0], "{how}: B in y, C in x");
         assert_eq!(crew_marks(&of(1)).map(|m| m.0), Some(vec![y, z]), "{how}: B's own crews");
         assert_eq!([mark(1, 0), mark(1, 2), mark(1, 3), mark(1, 4)], [0b01, 0b10, 0, 0b10], "{how}: A in y, C and E in z");
         assert_eq!(crew_marks(&of(2)).map(|m| m.0), Some(vec![z, x]), "{how}: C's own crews");
@@ -140,7 +136,11 @@ fn the_lists_mark_crew_mates_and_name_no_other_crews() {
         assert_eq!([mark(4, 0), mark(4, 1), mark(4, 2), mark(4, 3)], [0, 0b01, 0b01, 0], "{how}: E (z, w): B and C in z");
         let f = of(3);
         assert_eq!(crew_marks(&f), None, "{how}: in no crew: no marks");
-        assert_eq!(&f[16..], &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..], "{how}: in no crew: a plain list");
+        assert_eq!(
+            &f[16..],
+            &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..],
+            "{how}: in no crew: a plain list"
+        );
         // no crew of anyone but the receiver in its datagram (C's x and z are A's and B's too: w is E's alone)
         let has = |f: &[u8], h: u32| f.windows(4).any(|b| b == h.to_le_bytes());
         for i in 0..4 {
