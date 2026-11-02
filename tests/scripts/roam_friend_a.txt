@@ -40,3 +40,4 @@
 +600  roam mp bump
 +600  roam mp bump
 +600  log done
++60   quit

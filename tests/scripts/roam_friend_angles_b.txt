@@ -1,0 +1,77 @@
+# Free roam's friends, front bumpers at an angle, instance B (with roam_friend_angles_a.txt): parks with its nose 0.2 m
+# into A's (A at 1695.3 -883.6 facing north, its nose ~1.97 m ahead) in one place after another, ghost mode, and waits
+# for its game to count the two as touching (mp waitbump: satisfied, or TIMEOUT where it must not count); between the
+# places it parks 30 m away for a while (the bumpers parted: "apart from Al's").  Until 2026-11-02 only the head-on
+# place counted (37 degrees at most, measured at the cars' places, not their noses):
+#   1 40 degrees off head-on, the noses centred          counts
+#   2 55 degrees off, B's nose 0.8 m east of A's          counts
+#   3 55 degrees off, 0.8 m west                          counts
+#   4 head-on, 1.3 m east (the bumpers overlap 0.5 m)     counts
+#   5 75 degrees off (nearly into A's side)               not
+#   6 head-on, 1.9 m east (no overlap)                    not
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++960  roam teleport 1724.0 -883.6 24.6 0xc000   # away first
++300  log placed
++0    roam mp bump
++0    log PLACE 1
++0    roam teleport 1694.16 -880.27 24.6 0xdc72
++120  roam teleport 1694.16 -880.27 24.6 0xdc72
++0    roam mp bump
++0    roam mp waitbump Al 2400
++240  roam mp bump                     # held a while: A sees B a little later
++0    roam teleport 1724.0 -883.6 24.6 0xc000
++900  log PLACE 2
++0    roam teleport 1694.65 -880.61 24.6 0xe71c
++120  roam teleport 1694.65 -880.61 24.6 0xe71c
++0    roam mp bump
++0    roam mp waitbump Al 2400
++240  roam mp bump                     # held a while: A sees B a little later
++0    roam teleport 1724.0 -883.6 24.6 0xc000
++900  log PLACE 3
++0    roam teleport 1693.05 -880.61 24.6 0xe71c
++120  roam teleport 1693.05 -880.61 24.6 0xe71c
++0    roam mp bump
++0    roam mp waitbump Al 2400
++240  roam mp bump                     # held a while: A sees B a little later
++0    roam teleport 1724.0 -883.6 24.6 0xc000
++900  log PLACE 4
++0    roam teleport 1696.60 -879.86 24.6 0xc000
++120  roam teleport 1696.60 -879.86 24.6 0xc000
++0    roam mp bump
++0    roam mp waitbump Al 2400
++240  roam mp bump                     # held a while: A sees B a little later
++0    roam teleport 1724.0 -883.6 24.6 0xc000
++900  log PLACE 5
++0    roam teleport 1693.59 -881.17 24.6 0xf555
++120  roam teleport 1693.59 -881.17 24.6 0xf555
++0    roam mp bump
++0    roam mp waitbump Al 1500
++0    roam mp bump
++0    roam teleport 1724.0 -883.6 24.6 0xc000
++900  log PLACE 6
++0    roam teleport 1697.20 -879.86 24.6 0xc000
++120  roam teleport 1697.20 -879.86 24.6 0xc000
++0    roam mp bump
++0    roam mp waitbump Al 1500
++0    roam mp bump
++0    log done
++60   quit

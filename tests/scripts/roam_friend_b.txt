@@ -9,6 +9,10 @@
 #   apart:                 B_Y=-876.6 B_ROLL=0 B_PUSH=0 (7 m: no [bump])
 #   nose to tail:          B_Y=-891.1 B_ANG=0x4000 B_ROLL=45 B_PUSH=600 (behind A, pushing its tail: no [bump])
 #   side by side:          B_X=1697.2 B_Y=-883.6 B_ROLL=0 B_PUSH=0 (1.9 m to A's right, facing the other way: no [bump])
+#   at an angle, solid:    B_X=1692.43 B_Y=-878.21 B_ANG=0xdc72 B_ROLL=30 B_PUSH=0 (40 degrees off head-on, the noses
+#                          2.5 m apart: creeps into A's nose and stops, a [bump] on both; none before 2026-11-02);
+#                          B_X=1692.57 B_Y=-877.76 B_ANG=0xd555 B_ROLL=30 B_PUSH=0 (30 degrees off, 0.5 m to the west).
+#                          With a long B_PUSH, B slides off A's nose and drives on.  More angles: roam_friend_angles_b.txt
 #   no claimed name:       any of them without NFSU2_TEST_CLAIM on B (A hears "theirs", B "claim")
 #   node web/tools/roam-pair.mjs --base ... --a "Al:roam_friend_a.txt:NFSU2_TEST_CLAIM=<43 A>,NFSU2_TEST_FRIEND=add" \
 #        --b "Bo:roam_friend_b.txt:NFSU2_TEST_CLAIM=<43 B>,NFSU2_TEST_FRIEND=add,B_X=...,B_Y=...,B_ANG=...,B_ROLL=...,B_PUSH=...,B_BACK=..."
@@ -46,3 +50,4 @@
 +${B_BACK} up DOWN                      # backing away
 +600  roam mp bump
 +0    log done
++60   quit

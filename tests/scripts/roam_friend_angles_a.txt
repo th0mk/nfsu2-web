@@ -1,0 +1,34 @@
+# Free roam's friends, front bumpers at an angle, instance A (with roam_friend_angles_b.txt): A parks on the lot facing
+# north at 1695.3 -883.6 (as roam_friend_a.txt) and stands, the handbrake on, while B parks against its nose in one
+# place after another; A's own game says each time it counts the two noses as touching ("front bumpers: touching
+# Bo's").  Ghost mode on both (NFSU2_ROAM_COLLIDE=0): the places are where B is put, not where it is pushed.
+#   node web/tools/roam-pair.mjs --base ... --a "Al:roam_friend_angles_a.txt:NFSU2_ROAM_COLLIDE=0" \
+#        --b "Bo:roam_friend_angles_b.txt:NFSU2_ROAM_COLLIDE=0"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  roam teleport 1695.3 -883.6 24.6 0x4000
++300  roam teleport 1695.3 -883.6 24.6 0x4000   # again: a car can roll off its first place
++0    log placed
++0    down SPACE                        # the handbrake
++0    roam mp waitgone Bo 40000          # B's places, then B quits
++0    roam mp bump
++0    log done
++60   quit
