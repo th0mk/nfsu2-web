@@ -23,6 +23,5 @@
   "Photo mode; F12 again takes the photo": "โหมดถ่ายภาพ กด F12 อีกครั้งเพื่อถ่ายภาพ",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเว็บเซิร์ฟเวอร์ NFSU2",
   "Message a friend (in free roam)": "ส่งข้อความถึงเพื่อน (ในการขับอิสระ)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "วลีรหัสนี้มีเซฟบนคลาวด์ของ Most Wanted แต่ยังไม่มีเซฟของ Underground 2 ต้องการส่งเซฟที่นี่ภายใต้วลีรหัสนี้ด้วยหรือไม่ แต่ละเกมเก็บเซฟของตัวเองแยกกัน",
-  "Start event, map, messages": "เริ่มอีเวนต์ แผนที่ ข้อความ"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "วลีรหัสนี้มีเซฟบนคลาวด์ของ Most Wanted แต่ยังไม่มีเซฟของ Underground 2 ต้องการส่งเซฟที่นี่ภายใต้วลีรหัสนี้ด้วยหรือไม่ แต่ละเกมเก็บเซฟของตัวเองแยกกัน"
 }

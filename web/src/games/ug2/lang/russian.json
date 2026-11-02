@@ -23,6 +23,5 @@
   "Photo mode; F12 again takes the photo": "Фоторежим; ещё раз F12 — снимок",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Страница не изолирована от других источников (нет SharedArrayBuffer). Откройте её с веб-сервера NFSU2.",
   "Message a friend (in free roam)": "Написать другу (в свободной езде)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Под этой парольной фразой хранятся ваши облачные сохранения Most Wanted, но пока нет ни одного сохранения Underground 2. Отправить и здешние сохранения под ней? У каждой игры свои сохранения.",
-  "Start event, map, messages": "Старт гонки, карта, сообщения"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Под этой парольной фразой хранятся ваши облачные сохранения Most Wanted, но пока нет ни одного сохранения Underground 2. Отправить и здешние сохранения под ней? У каждой игры свои сохранения."
 }

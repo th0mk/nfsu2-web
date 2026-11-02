@@ -23,6 +23,5 @@
   "Photo mode; F12 again takes the photo": "Tryb fotograficzny; ponownie F12 robi zdjęcie",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Strona nie ma izolacji między źródłami (brak SharedArrayBuffer). Otwórz ją z serwera WWW NFSU2.",
   "Message a friend (in free roam)": "Napisz do znajomego (w przejażdżce)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Ta fraza dostępu przechowuje twoje zapisy w chmurze z Most Wanted, ale jeszcze żadnych z Underground 2. Wysłać pod nią również tutejsze zapisy? Każda gra ma własne zapisy.",
-  "Start event, map, messages": "Start wyścigu, mapa, wiadomości"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "Ta fraza dostępu przechowuje twoje zapisy w chmurze z Most Wanted, ale jeszcze żadnych z Underground 2. Wysłać pod nią również tutejsze zapisy? Każda gra ma własne zapisy."
 }

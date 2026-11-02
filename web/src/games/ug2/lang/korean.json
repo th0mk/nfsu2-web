@@ -23,6 +23,5 @@
   "Photo mode; F12 again takes the photo": "사진 모드, F12를 다시 누르면 사진 촬영",
   "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). NFSU2 웹 서버에서 여세요.",
   "Message a friend (in free roam)": "친구에게 메시지(자유 주행에서)",
-  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "이 암호 문구에는 Most Wanted 클라우드 저장 데이터가 있지만 Underground 2 저장 데이터는 아직 없어요. 여기 있는 저장 데이터도 이 암호 문구로 보낼까요? 게임마다 저장 데이터가 따로 보관돼요.",
-  "Start event, map, messages": "이벤트 시작, 지도, 메시지"
+  "This passphrase keeps your Most Wanted cloud saves but none of Underground 2's yet. Send the saves here under it too? Each game keeps its own saves.": "이 암호 문구에는 Most Wanted 클라우드 저장 데이터가 있지만 Underground 2 저장 데이터는 아직 없어요. 여기 있는 저장 데이터도 이 암호 문구로 보낼까요? 게임마다 저장 데이터가 따로 보관돼요."
 }
