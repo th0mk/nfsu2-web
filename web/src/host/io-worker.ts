@@ -103,7 +103,13 @@ async function cacheFile(n: DNode) {
     const ms = performance.now() - t0;
     sum.opened++; sum.openMs += ms; if (ms > sum.openMax) sum.openMax = ms; if (again) sum.reopened++;
     return cf;
-  }, e => { if (keeping) note(`[data] ${n.path} is not kept on this PC: ${e}`); return null; });
+  }, e => {
+    if (keeping) note(`[data] ${n.path} is not kept on this PC: ${e}`);
+    // the site's data deleted (the cache folder with it): the save folder back before the game's next save needs it
+    // (any error: Firefox answers some calls in a removed folder with UnknownError)
+    void saveGone().then(gone => { if (gone) void recover(); });
+    return null;
+  });
   cacheFiles.set(k, p);
   for (const [ok, op] of cacheFiles) {
     if (cacheFiles.size <= CACHE_OPEN) break;
@@ -362,6 +368,7 @@ async function dataRead(n: DNode, pos: number, dst: { ptr: number; len: number }
 // ---------------------------------------------------------------- /save ----
 let saveRoot: FileSystemDirectoryHandle;
 async function saveDirAt(parts: string[], create: boolean): Promise<FileSystemDirectoryHandle | null> {
+  if (recovering) await recovering;
   let d = saveRoot;
   for (const p of parts) {
     if (!p || p === '.') continue;
@@ -373,6 +380,7 @@ async function saveDirAt(parts: string[], create: boolean): Promise<FileSystemDi
 async function saveEntry(rel: string): Promise<{ parent: FileSystemDirectoryHandle; name: string; kind: 'file' | 'directory' | null; h: FileSystemHandle | null } | null> {
   const parts = rel.split('/').filter(p => p && p !== '.');
   if (parts.some(p => p === '..')) return null;
+  if (recovering) await recovering;
   if (!parts.length) return { parent: saveRoot, name: '', kind: 'directory', h: saveRoot };
   const parent = await saveDirAt(parts.slice(0, -1), false);
   if (!parent) return null;
@@ -383,22 +391,88 @@ async function saveEntry(rel: string): Promise<{ parent: FileSystemDirectoryHand
 }
 
 // Why a file of the save folder did not open, for the log (a save that fails is a "[file] CANNOT OPEN" line of the
-// game's, which says no more).  Chrome refuses a sync access handle while the page writes the file (createWritable:
-// NoModificationAllowedError), never for its reads (getFile).  And a browser that clears the site's data while a
-// game runs (Discord 2026-10-31: in each game, after a while, every new open of a game data cache file or a save
-// failed with NotFoundError, and each next start found the save folder empty) leaves this worker's save folder
-// handle on a folder that is gone: nothing more can be saved in this game.  Said once each.
+// game's, which says no more), said once each.  Chrome refuses a sync access handle while the page writes the file
+// (createWritable: NoModificationAllowedError), never for its reads (getFile).
+//
+// A browser that clears the site's data while a game runs (Discord 2026-10-31: in each game, after a while, every new
+// open of a game data cache file or a save failed with NotFoundError, and each next start found the save folder
+// empty) leaves this worker's folder handles on folders that are gone, and every save after it failed.  So when an
+// open or a create in /save, or a cache file's open, finds the save folder gone (recover), this worker makes it and
+// the cache folder again, tells the page ('save-gone'), which writes the saves back into it (the cloud's, else those
+// of the game's start: shell.ts saveGone), and holds every /save call until the page answers ('save-ready'),
+// SAVE_WAIT_MS at most: under the stall watchdog's 15 s (runtime/watchdog.c), as the game's thread waits for it like
+// for any slow disk.  The call that found it then runs again: the game's save lands on what came back.
 const troubleSaid = new Set<string>();
-async function saveTrouble(what: string, err: unknown) {
+/** true: the save folder was gone and is made again (the caller tries once more) */
+async function saveTrouble(what: string, err: unknown, again = false): Promise<boolean> {
   const name = (err as Error)?.name ?? 'Error';
-  if (troubleSaid.has(name)) return;
-  troubleSaid.add(name);
-  let gone = false;
-  if (name === 'NotFoundError')
-    try { await (await navigator.storage.getDirectory()).getDirectoryHandle(cfg.saveDir); }
-    catch (e) { gone = (e as Error)?.name === 'NotFoundError'; }
-  note(gone ? `[save] the save folder is gone: the browser deleted this site's data while the game ran (low disk space, or its settings?); nothing more can be saved in this game (${name})`
-    : `[save] ${what}: ${name}: ${(err as Error)?.message ?? err}`);
+  // whatever the call answered (Chrome: NotFoundError; Firefox: UnknownError for a create in a removed folder), the
+  // folder itself is looked at: gone, it is made again
+  if (!again && await saveGone()) { await recover(); return true; }
+  if (!troubleSaid.has(name)) { troubleSaid.add(name); note(`[save] ${what}: ${name}: ${(err as Error)?.message ?? err}`); }
+  return false;
+}
+/** whether this worker's save folder is gone (keys() of a folder deleted under its handle answers NotFoundError, in
+ *  Chrome and Firefox alike) */
+async function saveGone(): Promise<boolean> {
+  try { for await (const _ of (saveRoot as unknown as { keys(): AsyncIterable<string> }).keys()) break; return false; }
+  catch (e) { return (e as Error)?.name === 'NotFoundError'; }
+}
+const SAVE_WAIT_MS = 12_000;
+let recovering: Promise<void> | null = null, saveAnswered: (() => void) | null = null;
+/** a profile's own file: "NFS Underground 2/<NAME>/<NAME>" (any case), not a cover shoot's ("<NAME> DVD 1") */
+const isProfilePath = (p: string[]) => p.length === 3 && p[0] === 'NFS Underground 2' && p[1].toLowerCase() === p[2].toLowerCase() &&
+  !/ (DVD|Magazine) \d+$/.test(p[1]);
+/** the save folder's generation: one more each time it is made again (an Fd's of another was opened in a deleted one) */
+let rootGen = 1;
+/**
+ * A file the game wrote into a save folder the browser deleted since it opened it (its sync handle on a file that is
+ * gone): its bytes, read back from that handle, written again into the folder made again, as the newest of that path.
+ * False: they could not be read back or written, so the save is lost (the game saves again at its next save point).
+ */
+async function salvage(rel: string, bytes: Uint8Array | null): Promise<boolean> {
+  if (await saveGone()) await recover();
+  const p = rel.split('/');
+  // never zeros, nor a profile that is none, over what the refill brought back
+  if (bytes && (bytes.every(b => b === 0) || isProfilePath(p) &&
+      (bytes.length < 8 || bytes[0] !== 0x32 || bytes[1] !== 0x30 || bytes[2] !== 0x43 || bytes[3] !== 0x4d ||
+       new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true) !== bytes.length))) bytes = null;
+  if (bytes) try {
+    const d = await saveDirAt(p.slice(0, -1), true);
+    if (d) {
+      const sh = await ((await d.getFileHandle(p[p.length - 1], { create: true })) as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }) as FileSystemSyncAccessHandle;
+      sh.truncate(0); sh.write(bytes, { at: 0 }); sh.flush(); sh.close();
+      note(`[save] a file the game wrote as the browser deleted the save folder: written again into the new one (${bytes.length} bytes)`);
+      return true;
+    }
+  } catch { /* lost */ }
+  note('[save] a file the game wrote as the browser deleted the save folder could not be written again: that save is lost');
+  return false;
+}
+function recover(): Promise<void> {
+  recovering ??= (async () => {
+    const t0 = performance.now();
+    const opfs = await navigator.storage.getDirectory();
+    saveRoot = await opfs.getDirectoryHandle(cfg.saveDir, { create: true });
+    rootGen++;
+    if (cacheDir) {
+      // the cache files open are of the folder that went: opened again in the new one, and kept again
+      cacheFiles.clear(); cacheSeen.clear(); aheadDone.clear(); keeping = true; kept = 0;
+      try { cacheDir = await opfs.getDirectoryHandle(CACHE_DIR, { create: true }); } catch { cacheDir = null; }
+    }
+    const top = fds.get(4);
+    if (top?.mount === 'save') top.dh = saveRoot;            // /save itself, as the game lists it
+    note('[save] the save folder is gone: the browser deleted this site\'s data while the game ran (low disk space, or its settings?); made again, the page puts the saves back');
+    const answered = await new Promise<boolean>(res => {
+      saveAnswered = () => res(true);
+      setTimeout(() => res(false), SAVE_WAIT_MS);
+      (self as unknown as Worker).postMessage({ t: 'save-gone' });
+    });
+    saveAnswered = null;
+    note(answered ? `[save] the saves are back after ${((performance.now() - t0) / 1000).toFixed(1)} s: the game saves on`
+      : `[save] the page did not put the saves back within ${SAVE_WAIT_MS / 1000} s: the game saves on without them`);
+  })().finally(() => { recovering = null; });
+  return recovering;
 }
 
 // ------------------------------------------------------------------ fds ----
@@ -407,6 +481,8 @@ interface Fd {
   node?: DNode;                                   // /data
   sh?: FileSystemSyncAccessHandle; dh?: FileSystemDirectoryHandle; fh?: FileSystemFileHandle;   // /save
   wrote?: boolean;                                // /save: written or truncated since it was opened
+  gen?: number;                                   // /save: rootGen when it was opened
+  end?: number;                                   // /save: its size as this fd made it (a deleted file's getSize() reads 2^64-1)
   preopen?: string; dirents?: { name: string; type: number; ino: number }[];
 }
 const fds = new Map<number, Fd>();
@@ -445,7 +521,7 @@ async function statSave(rel: string): Promise<{ type: number; size: number; mtim
 }
 
 // O flags (path_open oflags): 1 CREAT, 2 DIRECTORY, 4 EXCL, 8 TRUNC; fdflags: 1 APPEND
-async function op(o: Op, a: bigint[]): Promise<number> {
+async function op(o: Op, a: bigint[], again = false): Promise<number> {
   const n = (i: number) => Number(a[i]);
   switch (o) {
     case Op.FdPrestatGet: {
@@ -485,21 +561,36 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       if (e.kind && oflags & 4) return E.EXIST;
       let fh: FileSystemFileHandle;
       try { fh = e.kind ? e.h as FileSystemFileHandle : await e.parent.getFileHandle(e.name, { create: true }); }
-      catch (err) { void saveTrouble('a file of the save folder could not be made', err); return E.IO; }
+      catch (err) { return await saveTrouble('a file of the save folder could not be made', err, again) ? op(o, a, true) : E.IO; }
       let sh: FileSystemSyncAccessHandle;
       try { sh = await (fh as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }); }
-      catch (err) { void saveTrouble('a file of the save folder could not be opened', err); return E.ACCES; }
+      catch (err) { return await saveTrouble('a file of the save folder could not be opened', err, again) ? op(o, a, true) : E.ACCES; }
       if (oflags & 8) sh.truncate(0);
-      const fd = allocFd({ mount: 'save', kind: 'file', path: rel, pos: 0, append: !!(fdflags & 1), sh, fh, wrote: !!(oflags & 8) });
+      const fd = allocFd({ mount: 'save', kind: 'file', path: rel, pos: 0, append: !!(fdflags & 1), sh, fh, wrote: !!(oflags & 8), gen: rootGen,
+        end: oflags & 8 ? 0 : sh.getSize() });
       dv().setUint32(n(8), fd, true); return 0;
     }
     case Op.FdClose: {
       const f = fds.get(n(0)); if (!f) return E.BADF;
       if (f.preopen) return 0;
-      if (f.sh) { f.sh.flush(); f.sh.close(); }
+      let lost = false;
+      if (f.sh) {
+        // written into a save folder the browser deleted since it was opened: its bytes went with that folder
+        const away = f.mount === 'save' && !!f.wrote && (f.gen !== rootGen || await saveGone());
+        let bytes: Uint8Array | null = null;
+        if (away) try {
+          // (getSize() of a deleted file is 2^64-1 in Chrome: its size as this fd made it, and only if all of it reads back)
+          const n = f.end ?? 0, b = new Uint8Array(n);
+          bytes = n > 0 && f.sh.read(b, { at: 0 }) === n ? b : null;
+        } catch { bytes = null; }
+        try { f.sh.flush(); f.sh.close(); } catch (e) { if (!away) throw e; }
+        if (away) lost = !await salvage(f.path, bytes);
+      }
       fds.delete(n(0));
-      // posted before the call returns, so the page hears of a save before the game can exit after it
-      if (f.wrote) (self as unknown as Worker).postMessage({ t: 'saved', path: f.path });
+      // posted before the call returns, so the page hears of a save before the game can exit after it; never for one
+      // that went with a deleted folder (no "Progress saved" for it)
+      if (f.wrote && !lost) (self as unknown as Worker).postMessage({ t: 'saved', path: f.path });
+      else if (lost) (self as unknown as Worker).postMessage({ t: 'lost', path: f.path });
       return 0;
     }
     case Op.FdRead: case Op.FdPread: {
@@ -523,7 +614,7 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       if (f.mount === 'dev') { dv().setUint32(pw ? n(4) : n(3), src.reduce((a, x) => a + x.len, 0), true); return 0; }
       let pos = pw ? n(3) : (f.append ? f.sh!.getSize() : f.pos), put = 0;
       for (const s of src) { const k = f.sh!.write(u8().slice(s.ptr, s.ptr + s.len), { at: pos }); pos += k; put += k; }
-      if (put) f.wrote = true;
+      if (put) { f.wrote = true; f.end = Math.max(f.end ?? 0, pos); }
       if (!pw) f.pos = pos;
       dv().setUint32(pw ? n(4) : n(3), put, true); return 0;
     }
@@ -550,8 +641,8 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       if (f.kind === 'dir') { writeFilestat(n(1), inoOf(f.path), FT_DIR, 0, 0); return 0; }
       writeFilestat(n(1), inoOf(f.path), FT_FILE, f.sh!.getSize(), Date.now() / 1000); return 0;
     }
-    case Op.FdFilestatSetSize: { const f = fds.get(n(0)); if (!f) return E.BADF; if (!f.sh) return E.ROFS; f.sh.truncate(n(1)); f.wrote = true; return 0; }
-    case Op.FdAllocate: { const f = fds.get(n(0)); if (!f?.sh) return E.BADF; const need = n(1) + n(2); if (f.sh.getSize() < need) f.sh.truncate(need); return 0; }
+    case Op.FdFilestatSetSize: { const f = fds.get(n(0)); if (!f) return E.BADF; if (!f.sh) return E.ROFS; f.sh.truncate(n(1)); f.wrote = true; f.end = n(1); return 0; }
+    case Op.FdAllocate: { const f = fds.get(n(0)); if (!f?.sh) return E.BADF; const need = n(1) + n(2); if (f.sh.getSize() < need) { f.sh.truncate(need); f.end = need; } return 0; }
     case Op.FdFilestatSetTimes: case Op.PathFilestatSetTimes: return 0;
     case Op.PathFilestatGet: {
       const dir = fds.get(n(0)); if (!dir || dir.kind !== 'dir') return E.BADF;
@@ -584,7 +675,7 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       const rel = normRel(joinRel(dir.path, readPath(n(1), n(2)))); if (!rel) return E.PERM;
       const e = await saveEntry(rel); if (!e) return E.NOENT; if (e.kind) return E.EXIST;
       try { await e.parent.getDirectoryHandle(e.name, { create: true }); }
-      catch (err) { void saveTrouble('a folder of the save folder could not be made', err); return E.IO; }
+      catch (err) { return await saveTrouble('a folder of the save folder could not be made', err, again) ? op(o, a, true) : E.IO; }
       return 0;
     }
     case Op.PathRemoveDirectory: case Op.PathUnlinkFile: {
@@ -595,6 +686,8 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       if (o === Op.PathRemoveDirectory && e.kind === 'file') return E.NOTDIR;
       for (const [k, f] of fds) if (f.mount === 'save' && f.path === rel && f.sh) { f.sh.close(); fds.delete(k); }
       try { await e.parent.removeEntry(e.name); } catch { return E.NOTEMPTY; }
+      // a profile the game deleted (its own Delete): the page's cloud saves expect one fewer
+      if (o === Op.PathUnlinkFile && isProfilePath(rel.split('/'))) (self as unknown as Worker).postMessage({ t: 'removed', path: rel });
       return 0;
     }
     case Op.PathRename: {
@@ -606,7 +699,10 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       const pb = await saveDirAt(rb.split('/').slice(0, -1), false); if (!pb) return E.NOENT;
       for (const [k, f] of fds) if (f.mount === 'save' && f.path === ra && f.sh) { f.sh.close(); fds.delete(k); }
       const eb = await saveEntry(rb); if (eb?.kind === 'file') await eb.parent.removeEntry(eb.name);
-      await (ea.h as any).move(pb, rb.split('/').pop()); return 0;
+      await (ea.h as any).move(pb, rb.split('/').pop());
+      // a file written under another name and moved into place (the runtime's registry.txt.tmp): saved as that one
+      if (ea.kind === 'file') (self as unknown as Worker).postMessage({ t: 'saved', path: rb });
+      return 0;
     }
     case Op.FdRenumber: { const f = fds.get(n(0)); if (!f) return E.BADF; fds.delete(n(0)); fds.set(n(1), f); return 0; }
     case Op.FdAdvise: return 0;
@@ -643,7 +739,8 @@ async function serve() {
   }
 }
 
-onmessage = async (e: MessageEvent<Init>) => {
+onmessage = async (e: MessageEvent<Init | { t: 'save-ready' }>) => {
+  if ('t' in e.data) { if (e.data.t === 'save-ready') saveAnswered?.(); return; }
   ({ memory, cfg } = e.data);
   ctl = new Int32Array(e.data.ctl); rpcI32 = new Int32Array(e.data.rpc); rpcI64 = new BigInt64Array(e.data.rpc);
   try {

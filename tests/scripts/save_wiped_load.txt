@@ -1,0 +1,6 @@
+# After save_wiped.txt: the next game loads the profile it saved into the save folder made again (web/tools/save-wipe.mjs).
+0     nstapuntil RETURN MC_Background.fng 120 4000
++300  nstapuntil RETURN GarageMain.fng 200 3000     # the profile's load dialogs -> main menu
++300  peek 0x83a9e0 8
++0    expect b:0x83aa00 == 1
++60   quit

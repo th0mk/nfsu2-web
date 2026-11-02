@@ -21,10 +21,10 @@ import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const entry = `export * as P from './web/src/app/profile.ts'; export { readBackup, addProfiles, readVault, backupItems } from './web/src/app/saves-ui.ts';
+const entry = `export * as P from './web/src/app/profile.ts'; export { readBackup, addProfiles, readVault, backupItems, refillSaves, snapshotFile } from './web/src/app/saves-ui.ts';
   export { zip } from './web/src/app/zip.ts';`;
 const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false, platform: 'neutral' })).outputFiles[0].text;
-const { P, readBackup, addProfiles, readVault, backupItems, zip } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { P, readBackup, addProfiles, readVault, backupItems, refillSaves, snapshotFile, zip } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 
 const DIR = 'NFS Underground 2', B = 36;
 const enc = new TextEncoder();
@@ -294,4 +294,49 @@ test('the PC game\'s profiles: one whose name inside the game does not make come
   const fs = folder({ [at('TOBI')]: profile('TOBI'), [at('TOBI DVD 1')]: cover('t') });
   await addProfiles(fs, await readBackup(zh, 'TOBI', ['TOBI']));
   assert.deepEqual(sorted(fs.m.keys()), sorted([at('TOBI'), at('TOBI DVD 1'), at('ads')]));
+});
+
+test('the saves back in a save folder the browser deleted during a game: the cloud\'s with this device\'s own, or the start\'s', async () => {
+  const dec = new TextDecoder(), text = (fs, p) => { const v = fs.m.get(p); return typeof v === 'string' ? v : dec.decode(v); };
+  // the folder as the game's start had it: two profiles, this device's settings, the graphics options, the LAN file
+  const start = [
+    { path: at('TOP'), data: profile('TOP', { career: ['RX7'] }) }, { path: at('OLD'), data: profile('OLD') },
+    { path: 'settings.ini', data: enc.encode('roam_name = Old\nfps = 120\n') }, { path: 'registry.txt', data: enc.encode('Res=1\n') },
+    { path: 'gamefile.bin', data: new Uint8Array([7, 7]) }, { path: `${DIR}/TOP/GARAGE.DAT`, data: enc.encode('g-start') },
+  ];
+  // the cloud's version: newer TOP, a profile from another browser, its settings (none of the device's)
+  const topFile = profile('TOP', { career: ['SKYLINE'] });
+  const cloud = (await readVault(z({ [at('TOP')]: topFile, [at('MEH')]: profile('MEH'), [`${DIR}/TOP/GARAGE.DAT`]: 'g-cloud',
+    'settings.ini': 'roam_name = Cloud\n' }))).entries;
+  // the game wrote its profile already (the page answered late): it stays, the newest
+  const mine = profile('TOP', { career: ['GTO'] });
+  const absent = fs => async (p, d) => { if (fs.m.has(p)) return false; await fs.writeFile(p, d); return true; };
+  const fs = folder({ [at('TOP')]: mine }); fs.writeIfAbsent = absent(fs);
+  assert.deepEqual(await refillSaves(fs, cloud, start), { written: 6, failed: [] });
+  assert.deepEqual(sorted(fs.m.keys()), sorted([at('TOP'), at('MEH'), at('OLD'), `${DIR}/TOP/GARAGE.DAT`, 'settings.ini', 'registry.txt', 'gamefile.bin']));
+  assert.equal(fs.m.get(at('TOP')), mine, 'never over a file the folder has');
+  assert.equal(text(fs, `${DIR}/TOP/GARAGE.DAT`), 'g-cloud');
+  assert.match(text(fs, 'settings.ini'), /roam_name = Cloud/, 'the cloud\'s settings');
+  assert.match(text(fs, 'settings.ini'), /^fps\s*=\s*120$/m, 'this device\'s own from the start');
+  assert.doesNotMatch(text(fs, 'settings.ini'), /Old/);
+  assert.deepEqual([text(fs, 'registry.txt'), [...fs.m.get('gamefile.bin')]], ['Res=1\n', [7, 7]], 'what a keyphrase never keeps, from the start');
+  assert.equal(fs.m.get(at('OLD')), start[1].data, 'every file of the start the cloud lacks comes too (never one lost)');
+  // no cloud saves: the start's, all of it
+  const fs2 = folder({}); fs2.writeIfAbsent = absent(fs2);
+  assert.deepEqual(await refillSaves(fs2, null, start), { written: start.length, failed: [] });
+  for (const f of start) assert.equal(fs2.m.get(f.path), f.data, f.path);
+  // a write that fails is tried again after the others; one that fails twice is said, the rest written
+  const fs3 = folder({}), tries = {};
+  fs3.writeIfAbsent = async (p, d) => { tries[p] = (tries[p] ?? 0) + 1; if (p === at('OLD') || (p === at('TOP') && tries[p] === 1)) throw new Error(`no room for ${p}`); return absent(fs3)(p, d); };
+  const r3 = await refillSaves(fs3, null, start);
+  assert.deepEqual([r3.written, r3.failed.map(f => f.path)], [start.length - 1, [at('OLD')]]);
+  assert.ok(fs3.m.has(at('TOP')) && !fs3.m.has(at('OLD')));
+  // the start follows the game's saves (shell.ts onSaved), but a file written to be renamed (registry.txt.tmp)
+  const snap = start.slice(), newer = profile('OLD', { career: ['SUPRA'] });
+  await snapshotFile(snap, 'x', at('OLD'), newer);
+  await snapshotFile(snap, 'x', at('NEW'), profile('NEW'));
+  await snapshotFile(snap, 'x', 'registry.txt.tmp', enc.encode('Res=2\n'));
+  await snapshotFile(snap, 'x', 'nfsu2000.tga', new Uint8Array(9));
+  assert.deepEqual(snap.map(f => f.path), [...start.map(f => f.path), at('NEW')]);
+  assert.equal(snap.find(f => f.path === at('OLD')).data, newer);
 });

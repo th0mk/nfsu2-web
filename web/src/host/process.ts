@@ -18,6 +18,13 @@ export interface ProcessOptions {
   onSaved?: (path: string) => void;
   /** a line of the host's own for the log, from no game thread (the I/O worker's "[data] ...") */
   onNote?: (s: string) => void;
+  /** the browser deleted the save folder during the game, and the I/O worker made an empty one: the saves back into
+   *  it, before the game's next save there (the I/O worker holds every save call until this resolves, 12 s at most) */
+  onSaveGone?: () => Promise<void>;
+  /** the game deleted a file of the save overlay: a profile's (its own Delete), path relative to /save */
+  onRemoved?: (path: string) => void;
+  /** a file the game wrote as the browser deleted the save folder could not be kept (path relative to /save) */
+  onLost?: (path: string) => void;
 }
 
 export interface GameProcess {
@@ -88,7 +95,15 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
     io.onmessage = (e) => { if (e.data.t === 'io-ready') res(); else if (e.data.t === 'io-error') rej(new Error(e.data.msg)); };
     io.postMessage({ memory, ctl: ctlBuf, rpc, cfg });
   });
-  io.onmessage = (e) => { if (e.data.t === 'saved') o.onSaved?.(e.data.path); else if (e.data.t === 'log') o.onNote?.(e.data.s); };
+  io.onmessage = (e) => {
+    if (e.data.t === 'saved') o.onSaved?.(e.data.path);
+    else if (e.data.t === 'removed') o.onRemoved?.(e.data.path);
+    else if (e.data.t === 'lost') o.onLost?.(e.data.path);
+    else if (e.data.t === 'log') o.onNote?.(e.data.s);
+    else if (e.data.t === 'save-gone')
+      void Promise.resolve().then(() => o.onSaveGone?.()).catch(err => o.onNote?.(`[app] the saves could not be put back: ${err}`))
+        .finally(() => io.postMessage({ t: 'save-ready' }));
+  };
 
   for (let s = 0; s < pool; s++) ctl[CTL_POOL + 4 * s] = POOL_NONE;   // each worker makes its slot idle when ready
   let started = 0, starting = 0, mostBusy = 0;

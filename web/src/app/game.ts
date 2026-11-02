@@ -58,6 +58,12 @@ export interface SessionOptions {
   netRename?(r: NetRename): void;
   /** the game finished writing a file of the save overlay (path relative to /save) */
   onSaved?(path: string): void;
+  /** the browser deleted the save folder during the game: the saves back into the new one (process.ts onSaveGone) */
+  onSaveGone?(): Promise<void>;
+  /** the game deleted a profile's file (process.ts onRemoved) */
+  onRemoved?(path: string): void;
+  /** a save the game wrote as the browser deleted the save folder was not kept (process.ts onLost) */
+  onLost?(path: string): void;
   /** tests: where frame dumps go, and their scale */
   artifacts?: string; dumpScale?: number;
   toggleFullscreen(): void;
@@ -96,6 +102,9 @@ export class GameSession {
       cfg: { args: ['nfsu2', '/data/SPEED2.EXE'], env: o.env, dataBase: DATA_BASE, manifestUrl: MANIFEST_URL, saveDir: o.saveDir },
       onLog: (line, fd, t) => o.log(`${tid(t, fd)} ${line}`),
       onSaved: o.onSaved,
+      onSaveGone: o.onSaveGone,
+      onRemoved: o.onRemoved,
+      onLost: o.onLost,
       onNote: o.log,
     });
     s.exited = s.proc.exited.then(code => { s.exitCode = code; s.detach(); return code; });

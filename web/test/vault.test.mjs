@@ -821,3 +821,29 @@ test('saves past the cap name their largest files in the log; one stuck on the L
   assert.equal(new DataView(sent.find(e => e.name === at('TOBI')).data.buffer, sent.find(e => e.name === at('TOBI')).data.byteOffset).getUint32(0xA16A, true), 5000);
   assert.deepEqual(b2.logs, []);
 });
+
+test('sends held back while the save folder is not whole (the browser deleted it during a game), then let go', async () => {
+  const srv = server(), a = browser(srv);
+  seed(a, 1000);
+  a.files.set(at('MEH'), profile('MEH'));
+  await a.sync.create();
+  const rev = a.sync.link.rev;
+  // the folder deleted; the game saves its profile into the new one before the saves are back
+  a.files.clear();
+  a.files.set(at('TOP'), profile('TOP', { money: 2000 }));
+  a.sync.hold(true);
+  await a.sync.push({ playing: true });
+  assert.equal(a.sync.link.rev, rev, 'held: the one profile does not replace the cloud\'s two');
+  // the cloud's back in (MEH, settings.ini), the game's TOP newest: sent once let go
+  a.files.set(at('MEH'), profile('MEH')); a.files.set('settings.ini', enc.encode('# settings\n'));
+  a.sync.hold(false);
+  await a.sync.push({ playing: true });
+  assert.notEqual(a.sync.link.rev, rev);
+  const sent = await unzip((await a.sync.peek(a.sync.link.phrase)).zip);
+  assert.deepEqual(sent.map(e => e.name).sort(), [at('MEH'), at('TOP'), 'settings.ini'].sort());
+  assert.equal(a.money(at('TOP')), 2000);
+  // the link kept again where the page keeps it (deleted with the site's data)
+  a.link = null;
+  a.sync.keepLink();
+  assert.equal(JSON.parse(a.link).rev, a.sync.link.rev);
+});

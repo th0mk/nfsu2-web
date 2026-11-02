@@ -1,0 +1,27 @@
+# The browser deletes the site's data during a game (web/src/host/io-worker.ts recover, shell.ts saveGone): the
+# driver (web/tools/save-wipe.mjs) clears it with Storage.clearDataForOrigin once this script says WIPE, at Options;
+# leaving Options then saves the profile the title loaded (Autosave, env NFSU2_AUTOSAVE=1) into the save folder made
+# again, after the saves came back into it.  Good: "[save] the saves are back", the profile's "[write]" with no
+# "CANNOT OPEN" after it, and the expect below.
+0     nstapuntil RETURN MC_Background.fng 120 4000
++300  nstapuntil RETURN GarageMain.fng 200 3000     # the profile's load dialogs -> main menu
++600  nstap RIGHT
++60   nstap RIGHT
++60   nstap RIGHT
++60   nstap RIGHT
++60   nstap RIGHT
++120  nstap RETURN                                  # Options
++0    waitfng UI_OptionsMain.fng 600
++120  log WIPE now
++900  nstap RIGHT
++60   nstap RIGHT
++90   nstap RETURN                                  # Gameplay
++300  nstap DOWN
++40   nstap DOWN                                    # Speedometer Units
++60   nstap LEFT                                    # the other unit: something to save
++90   nstap ESCAPE
++300  nstap ESCAPE                                  # the main menu: Autosave saves the profile
++0    waitfng MC_Main.fng 1200
++600  peek 0x83a9e0 8
++0    expect b:0x83aa00 == 1
++300  quit

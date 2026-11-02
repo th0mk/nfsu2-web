@@ -461,6 +461,15 @@ summary:hover { color: var(--text); }
 .eye[aria-pressed="true"] .off { display: block; }
 #vault-about, #vault-status { margin-top: 8px; }
 #vault-conflict { margin-top: 12px; }
+/* a conflict's two sides as the choice (vault-ui.ts choiceOf): each card with its own button under it, side by side,
+ * or stacked (each button under its card) where they do not fit */
+.vault-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 8px 0 0; }
+/* (the two columns share their rows: the cards as tall as each other, the buttons too) */
+.vault-pick { display: grid; grid-row: span 2; grid-template-rows: subgrid; gap: 8px; min-width: 0; }
+.vault-pick .vault-sides { margin: 0; grid-template-columns: 1fr; }
+.vault-pick .btn { width: 100%; height: auto; min-height: 40px; padding-block: 6px; white-space: normal; text-align: center; }
+.dlg .vault-choice { margin: 0 0 16px; }
+.dlg .vault-pick ul.vault-sides { margin: 0; }
 #vault-on { margin-top: 4px; gap: 4px 16px; }
 #vault-on .text-btn { padding: 0; height: 24px; }
 /* a conflict's two sides (vault-ui.ts sidesOf), in the section and in its questions: two cards side by side, where on
@@ -1114,6 +1123,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .dlg p { margin-bottom: 16px; }
 .dlg ul { margin: 0 0 16px; padding-left: 24px; color: var(--muted); font-size: 14px; line-height: 20px; }
 .dlg .row.end { margin-top: 8px; }
+/* a question answered by buttons in its body (vault-ui.ts askAtPlay): no footer, the dialog's padding under the text */
+.dlg:has(.row.end[hidden]) #confirm-body > :last-child { margin-bottom: 0; }
 .dlg-field { display: flex; align-items: center; gap: 12px; }
 .dlg-field input[type="text"] { flex: 1; min-width: 0; }
 .dlg.help { width: min(560px, calc(100vw - 32px)); }

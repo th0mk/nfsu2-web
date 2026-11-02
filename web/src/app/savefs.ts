@@ -10,6 +10,8 @@
 
 import { BLOCK, CACHE_DIR } from '../host/datacache';
 import { coverOf } from './profile';
+import { crc32 } from './zip';
+import { N } from './i18n';
 
 export const PROFILES_DIR = 'NFS Underground 2';   // what the game creates under the save root
 /** an F12 screenshot: an image file at the top of the save folder (nfsu2000.tga ...) */
@@ -51,13 +53,162 @@ export async function exists(saveDir: string, path: string): Promise<boolean> {
   } catch { return false; }
 }
 
-/** Write a whole file (creating its folders). */
+/** Write a whole file (creating its folders).  A file it made, whose write then failed (the browser's storage full),
+ *  goes again: an empty profile left behind would be sent to the cloud as one. */
 export async function writeFile(saveDir: string, path: string, data: string | Uint8Array | Blob): Promise<void> {
   const p = parts(path);
   if (!p.length) throw new Error('empty path');
-  const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), true);
-  const w = await (await d.getFileHandle(p[p.length - 1], { create: true })).createWritable();
-  await w.write(data as FileSystemWriteChunkType); await w.close();
+  const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), true), name = p[p.length - 1];
+  let had = true;
+  try { await d.getFileHandle(name); } catch { had = false; }
+  await writeInto(d, name, data, had);
+}
+async function writeInto(d: FileSystemDirectoryHandle, name: string, data: string | Uint8Array | Blob, had: boolean) {
+  try { const w = await (await d.getFileHandle(name, { create: true })).createWritable(); await w.write(data as FileSystemWriteChunkType); await w.close(); }
+  catch (e) { if (!had) await d.removeEntry(name).catch(() => {}); throw e; }
+}
+
+/** Write a file only where none is, or an empty one (the game's own of that path, written meanwhile, stays): false when
+ *  one was there.  Looked for again once made, just before the write. */
+export async function writeIfAbsent(saveDir: string, path: string, data: string | Uint8Array): Promise<boolean> {
+  const p = parts(path);
+  if (!p.length) throw new Error('empty path');
+  const d = await dirOf(await saveRoot(saveDir), p.slice(0, -1), true), name = p[p.length - 1];
+  const sized = async () => (await (await d.getFileHandle(name)).getFile()).size;
+  let had = true;
+  try { if (await sized() > 0) return false; } catch { had = false; }
+  await d.getFileHandle(name, { create: true });
+  if (await sized() > 0) return false;
+  await writeInto(d, name, data, had);
+  return true;
+}
+
+/** the folder beside a save folder where writeTogether stages its files (no listing, backup or cloud save sees it) */
+export const stagingDir = (saveDir: string) => `${saveDir}~incoming`;
+/** in the staging folder: the files of a writeTogether whose moves began (PlanFile; n<i>: file i staged, o<i>: the file
+ *  it replaces, moved aside); gone once all of them are in place */
+const PLAN = 'plan.json';
+/** a file of a writeTogether's plan: its path in the save folder (dir: in that folder beside it instead), and its
+ *  CRC-32 and size (what tells the incoming copy from a file written there since) */
+interface PlanFile { path: string; crc: number; size: number; dir?: string }
+/** a file a writeTogether writes into another folder beside the save folder (the copy Put back brings back) */
+export interface BesideFile { dir: string; path: string; data: string | Uint8Array }
+/** the folder a plan's file goes into */
+async function baseOf(saveDir: string, f: { dir?: string }): Promise<FileSystemDirectoryHandle> {
+  return f.dir ? (await root()).getDirectoryHandle(f.dir, { create: true }) : saveRoot(saveDir);
+}
+/** a staged file's name before f4e3f301's staging folder (beside the file it replaced): never listed */
+const isStaged = (name: string) => name.endsWith('.incoming');
+
+type MovableFile = FileSystemFileHandle & { move?(dir: FileSystemDirectoryHandle, name: string): Promise<void> };
+/** a file moved into another folder of the OPFS, under a name, over one there (refused for a file a worker holds open) */
+async function moveFile(from: FileSystemDirectoryHandle, name: string, to: FileSystemDirectoryHandle, as: string) {
+  const h = await from.getFileHandle(name) as MovableFile;
+  if (typeof h.move === 'function') { await h.move(to, as); return; }
+  // (a browser without move(): copied, then removed)
+  let had = true;
+  try { await to.getFileHandle(as); } catch { had = false; }
+  await writeInto(to, as, new Uint8Array(await (await h.getFile()).arrayBuffer()), had);
+  await from.removeEntry(name);
+}
+const there = (d: FileSystemDirectoryHandle, name: string) => d.getFileHandle(name).then(() => true, () => false);
+/** A file of the save dir renamed (moved over the one of the new name: no room needed). */
+export async function renameFile(saveDir: string, from: string, to: string): Promise<void> {
+  const base = await saveRoot(saveDir);
+  await moveFile(base, from, base, to);
+}
+/** the file there is the plan's incoming copy (its size and CRC): not one written there since */
+async function incoming(d: FileSystemDirectoryHandle, name: string, f: PlanFile): Promise<boolean> {
+  try {
+    const b = new Uint8Array(await (await (await d.getFileHandle(name)).getFile()).arrayBuffer());
+    return b.length === f.size && crc32(b) === f.crc;
+  } catch { return false; }
+}
+
+/**
+ * A writeTogether whose moves did not all end, undone, the last first.  Each step says by itself what is left of it,
+ * so an undo cut short and run again (the tab closed, a move refused) does only what is left: the incoming copy still
+ * at its path (n<i> not staged, that file the plan's) goes back into the staging folder, and the file it replaced comes
+ * back where nothing or only the incoming copy is.  Nothing is removed: a file written there since (a game's save)
+ * stays.  False: some step failed (the plan and what is staged stay, for the next try).
+ */
+async function rollBack(saveDir: string, stage: FileSystemDirectoryHandle): Promise<boolean> {
+  let plan: PlanFile[];
+  try { plan = JSON.parse(await (await (await stage.getFileHandle(PLAN)).getFile()).text()) as PlanFile[]; }
+  catch { return !await there(stage, PLAN); }          // no plan: no move began (one that cannot be read: kept)
+  // (a plan of paths only, cae4d8df's: no file there is known as its incoming copy, so none moves)
+  plan = plan.map(f => typeof f === 'string' ? { path: f, crc: -1, size: -1 } : f);
+  let ok = true;
+  for (let i = plan.length - 1; i >= 0; i--) {
+    try {
+      const f = plan[i], p = parts(f.path), name = p[p.length - 1], d = await dirOf(await baseOf(saveDir, f), p.slice(0, -1), true);
+      if (!await there(stage, `n${i}`) && await incoming(d, name, f)) await moveFile(d, name, stage, `n${i}`);
+      if (await there(stage, `o${i}`) && (!await there(d, name) || await incoming(d, name, f))) await moveFile(stage, `o${i}`, d, name);
+    } catch { ok = false; }
+  }
+  if (ok) await stage.removeEntry(PLAN).catch(() => { ok = false; });
+  await pruneSaveDir(saveDir, () => true).catch(() => {});   // the folders it made, empty again
+  return ok;
+}
+
+/**
+ * The staging folder at the page's start (by the tab that owns the saves), and before each writeTogether: a
+ * writeTogether a closed tab left halfway through its moves is undone, then what it staged goes.  False: it could not
+ * all be undone (the plan stays: tried again next time).
+ */
+export async function settleStaged(saveDir: string): Promise<boolean> {
+  let stage: FileSystemDirectoryHandle;
+  try { stage = await (await root()).getDirectoryHandle(stagingDir(saveDir)); } catch { return true; }
+  if (!await rollBack(saveDir, stage)) return false;
+  await (await root()).removeEntry(stagingDir(saveDir), { recursive: true }).catch(() => {});
+  return true;
+}
+
+/** A restore refused while one that stopped halfway is not undone yet (settleStaged false): nothing was written. */
+export class UndoPending extends Error {
+  readonly why = N('a restore that stopped earlier is not undone yet, so nothing was written');
+  readonly code = 'SAVES-UNDO-PENDING';
+  constructor() { super('a restore that stopped earlier is not undone yet, so nothing was written'); }
+}
+
+/**
+ * Write files all or none (a restore's, a cloud take's: a profile and its GARAGE.DAT of two versions lost the cars of
+ * slots 6-10).  Each is written into the staging folder beside the save folder first (stagingDir); then, the files
+ * noted there (PLAN), each file it replaces is moved aside and the new one moved into place.  A write that fails (the
+ * browser's storage full) changes nothing here; a move refused (a file another tab's game holds open) undoes the
+ * moves before it.  Either way it throws, the saves as they were.  The moves need no room, and a tab closed during
+ * them is undone at the next page's start (settleStaged).  While an earlier one is not undone it writes nothing.
+ */
+export async function writeTogether(saveDir: string, files: { path: string; data: string | Uint8Array }[], beside: BesideFile[] = []): Promise<void> {
+  if (!await settleStaged(saveDir)) throw new UndoPending();
+  const stage = await (await root()).getDirectoryHandle(stagingDir(saveDir), { create: true });
+  const all: { path: string; data: string | Uint8Array; dir?: string }[] = [...files, ...beside];
+  const clear = () => root().then(r => r.removeEntry(stagingDir(saveDir), { recursive: true })).catch(() => {});
+  const enc = new TextEncoder(), plan: PlanFile[] = [];
+  try {
+    for (const [i, f] of all.entries()) {
+      if (!parts(f.path).length) throw new Error('empty path');
+      const b = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+      await writeInto(stage, `n${i}`, b, false);
+      plan.push({ path: f.path, crc: crc32(b), size: b.length, ...f.dir ? { dir: f.dir } : {} });
+    }
+    await writeInto(stage, PLAN, JSON.stringify(plan), false);
+  } catch (e) {
+    await clear();
+    throw e;
+  }
+  try {
+    for (const [i, f] of all.entries()) {
+      const p = parts(f.path), name = p[p.length - 1], d = await dirOf(await baseOf(saveDir, f), p.slice(0, -1), true);
+      if (await there(d, name)) await moveFile(d, name, stage, `o${i}`);
+      await moveFile(stage, `n${i}`, d, name);
+    }
+  } catch (e) {
+    if (await rollBack(saveDir, stage)) await clear();
+    throw e;
+  }
+  await stage.removeEntry(PLAN);                       // all in place: nothing to undo from here on
+  await clear();
 }
 
 export interface Entry { path: string; size: number; mtime: number }
@@ -69,7 +220,7 @@ export async function listFiles(saveDir: string): Promise<Entry[]> {
     for await (const [name, h] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
       const r = rel ? rel + '/' + name : name;
       if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, r);
-      else { const f = await (h as FileSystemFileHandle).getFile(); out.push({ path: r, size: f.size, mtime: f.lastModified }); }
+      else if (!isStaged(name)) { const f = await (h as FileSystemFileHandle).getFile(); out.push({ path: r, size: f.size, mtime: f.lastModified }); }
     }
   }
   try { await walk(await saveRoot(saveDir, false), ''); } catch { /* no save dir yet */ }
@@ -97,7 +248,8 @@ export function filesOf(saveDir: string) {
   return {
     listFiles: () => listFiles(saveDir), readBytes: (path: string) => readBytes(saveDir, path),
     readText: (path: string) => readText(saveDir, path), writeFile: (path: string, data: string | Uint8Array) => writeFile(saveDir, path, data),
-    remove: (path: string) => removePath(saveDir, path),
+    remove: (path: string) => removePath(saveDir, path), exists: (path: string) => exists(saveDir, path),
+    writeIfAbsent: (path: string, data: Uint8Array) => writeIfAbsent(saveDir, path, data),
   };
 }
 
@@ -109,6 +261,35 @@ export async function clearSaveDir(saveDir: string, keep: (name: string) => bool
   const names: string[] = [];
   for await (const [name] of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) if (!keep(name)) names.push(name);
   for (const n of names) await d.removeEntry(n, { recursive: true });
+}
+
+/** Remove every file of the save dir keep() does not take (its path), and the folders that leaves empty (the game
+ *  would list an empty profile folder): what a restore replaced, after it wrote its own. */
+export async function pruneSaveDir(saveDir: string, keep: (path: string) => boolean): Promise<void> {
+  async function walk(d: FileSystemDirectoryHandle, rel: string): Promise<boolean> {     // true: d is empty now
+    const kids: [string, FileSystemHandle][] = [];
+    for await (const e of (d as any).entries() as AsyncIterable<[string, FileSystemHandle]>) kids.push(e);
+    let empty = true;
+    for (const [name, h] of kids) {
+      const r = rel ? `${rel}/${name}` : name;
+      if (h.kind === 'directory') { if (await walk(h as FileSystemDirectoryHandle, r)) await d.removeEntry(name, { recursive: true }); else empty = false; }
+      else if (keep(r)) empty = false;
+      else await d.removeEntry(name);
+    }
+    return empty;
+  }
+  let d: FileSystemDirectoryHandle;
+  try { d = await saveRoot(saveDir, false); } catch { return; }
+  await walk(d, '');
+}
+
+/** A small file beside the save dirs (in none: no backup, cloud save or restore touches it), or null. */
+export async function readBeside(name: string): Promise<string | null> {
+  try { return await (await (await (await root()).getFileHandle(name)).getFile()).text(); } catch { return null; }
+}
+export async function writeBeside(name: string, text: string): Promise<void> {
+  const w = await (await (await root()).getFileHandle(name, { create: true })).createWritable();
+  await w.write(text); await w.close();
 }
 
 /** Remove the whole save dir (test runs: &fresh). */

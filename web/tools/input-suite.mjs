@@ -44,6 +44,9 @@ const SCEN = [
   ['kb_profile_prefill', 'kb_profile_prefill', ['NFSU2_NEW_PROFILE_NAME=Alex_the_Great'], null, null, 300],
   // in Chinese the box starts empty, not with the pack's NAME (font bytes the field never takes)
   ['kb_profile_zh', 'kb_profile_zh', ['NFSU2_LANGUAGE=chinese'], null, null, 300],
+  // Enter in that empty box makes no profile without a name
+  ['kb_profile_zh_empty', 'kb_profile_zh_empty', ['NFSU2_LANGUAGE=chinese'], null, null, 300],
+  ['kb_profile_pl_empty', 'kb_profile_zh_empty', ['NFSU2_LANGUAGE=polish'], null, null, 300],
   ['kb_no_pad_controls', 'kb_no_pad_controls', [], null, null, 300],
   // an x typed into the game's text entry (a name, a chat line) is no drift-mode key (drift.c x_is_typing)
   ['kb_typing_x', 'kb_typing_x', [], null, null, 400],

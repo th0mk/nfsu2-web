@@ -24,7 +24,8 @@ function dosTime(ms: number): { time: number; date: number } {
            date: ((y - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() };
 }
 
-export function zip(entries: ZipEntry[]): Uint8Array {
+/** comment: the archive's comment (its end record's: every reader skips it) */
+export function zip(entries: ZipEntry[], comment = ''): Uint8Array {
   const te = new TextEncoder();
   const locals: Uint8Array[] = [], centrals: Uint8Array[] = [];
   let off = 0;
@@ -45,16 +46,26 @@ export function zip(entries: ZipEntry[]): Uint8Array {
     off += lh.length + e.data.length;
   }
   const cdSize = centrals.reduce((a, c) => a + c.length, 0);
-  const end = new Uint8Array(22), ev = new DataView(end.buffer);
+  const note = te.encode(comment).subarray(0, 65535);
+  const end = new Uint8Array(22 + note.length), ev = new DataView(end.buffer);
   ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
-  ev.setUint32(12, cdSize, true); ev.setUint32(16, off, true);
-  const out = new Uint8Array(off + cdSize + 22);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, off, true); ev.setUint16(20, note.length, true);
+  end.set(note, 22);
+  const out = new Uint8Array(off + cdSize + end.length);
   let p = 0;
   for (const b of [...locals, ...centrals, end]) { out.set(b, p); p += b.length; }
   return out;
 }
 
 export class ZipError extends Error {}
+
+/** A zip's archive comment ('' for none, or no zip). */
+export function zipComment(buf: Uint8Array): string {
+  const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--)
+    if (v.getUint32(i, true) === 0x06054b50) { const n = v.getUint16(i + 20, true); return i + 22 + n <= buf.length ? new TextDecoder().decode(buf.subarray(i + 22, i + 22 + n)) : ''; }
+  return '';
+}
 
 /**
  * A deflated entry, inflated into a buffer of its declared size: a stream that yields more is stopped there

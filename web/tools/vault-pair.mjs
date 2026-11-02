@@ -237,7 +237,7 @@ try {
   await rename(a, 'RENAMED', 'FROMA');
   await until('A sent its rename', async () => (await link(a))?.rev !== rev1);
   await rename(b, 'RENAMED', 'FROMB');
-  await b.waitForSelector('#vault-conflict:not([hidden])', { timeout: 20000 });
+  await b.waitForSelector('#vault-sides .vault-choice', { timeout: 20000 });
   check(/^Changed here and in another browser/.test(await status(b)), `B sees the conflict: "${await status(b)}"`);
   const sides = await b.locator('#vault-sides').innerText();
   check(/This browser[\s\S]*FROMB \$[\s\S]*Cloud[\s\S]*FROMA \$/.test(sides), `B shows both sides: ${JSON.stringify(sides)}`);

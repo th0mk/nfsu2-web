@@ -8,7 +8,7 @@
 // deleted.  The game data is never part of a backup and never written back:
 // it stays on the server.
 
-import { cacheBytes, clearCache, clearSaveDir, filesOf, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
+import { cacheBytes, clearCache, filesOf, pruneSaveDir, UndoPending, writeTogether, type BesideFile, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
 import { AUTOSAVE_SEEN, coverOf, fixedName, isProfileFile, isProfileName, modCars, NAME_MAX, profileInside, renameProfile, sealed, withName, type RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
@@ -16,7 +16,7 @@ import { fmtBytes } from './checks';
 import { resolveEnv, withDevice } from './settings';
 import { gameDataKept, type DownloadState, type DownloadStatus, type Predownload } from './predownload';
 import { ScreenshotsPart } from './shots';
-import { GAMEFILE, kept } from './vault';
+import { GAMEFILE, isCover, keeps, kept } from './vault';
 import { dateLocale, listOf, live, N, t, tn, tvars, type Msg } from './i18n';
 
 export interface SavesDeps {
@@ -63,12 +63,27 @@ export function settingsWarnings(text: string): string[] {
 }
 
 /** A path from a backup that may be written into the save overlay, or null. */
-export function safeEntryPath(name: string): string | null {
+export function safeEntryPath(name: string): string | null { return entryPath(name, false); }
+/**
+ * safeEntryPath's rules; loose: control characters but NUL let through.  A profile the game named with heap bytes (a
+ * failed cover shoot's save before 2e9ecee, 2026-10-27) lives in a folder of them (0x1D, 0x1E), which the browser
+ * keeps: a restore takes it in loose, and renames it (backupIn, profilesIn: fixedName) before finalPaths checks the
+ * paths it writes as safeEntryPath does.
+ */
+function entryPath(name: string, loose: boolean): string | null {
   const n = name.replace(/\\/g, '/');
   if (n.startsWith('/') || /^[A-Za-z]:/.test(n)) return null;
   const parts = n.split('/').filter(p => p !== '' && p !== '.');
-  if (!parts.length || parts.some(p => p === '..' || p.length > 255 || /[\x00-\x1f]/.test(p))) return null;
+  if (!parts.length || parts.some(p => p === '..' || p.length > 255 || (loose ? /\x00/ : /[\x00-\x1f]/).test(p))) return null;
   return parts.join('/');
+}
+/** A restore's entries whose path, as it would be written, safeEntryPath does not take (control characters left in
+ *  what the restore did not rename): skipped. */
+function finalPaths(r: Restore): Restore {
+  const ok: Restore['entries'] = [];
+  for (const e of r.entries) if (safeEntryPath(e.path) === e.path) ok.push(e); else r.skipped.push(e.path);
+  r.entries = ok;
+  return r;
 }
 
 export async function exportSaves(saveDir: string): Promise<{ zip: Uint8Array; files: number; name: string; shotBytes: number }> {
@@ -107,19 +122,19 @@ export interface Restore {
   repaired: { name: string; to: string }[];
 }
 
-type FileIn = { path: string; data: Uint8Array; mtime?: number };
+export type FileIn = { path: string; data: Uint8Array; mtime?: number };
 const lower = (s: string) => s.toLowerCase();
 
 /** A zip of this page's backup or of the PC game's profiles, or a profile's own file (fileName: its name, for the
  *  messages); here: the profiles in this browser, whose names a profile added beside them with its name mended does not take. */
 export async function readBackup(buf: Uint8Array, fileName = 'the file', here: string[] = []): Promise<Restore> {
-  if (isProfileFile(buf)) return profilesIn([{ path: fileName, data: buf }], [], here);
+  if (isProfileFile(buf)) return finalPaths(profilesIn([{ path: fileName, data: buf }], [], here));
   // a backup zipped from a folder ("saves/NFS Underground 2/...") still restores: strip one common top folder
   const listed = await listZip(buf);
-  const names = listed.map(n => safeEntryPath(n)).filter((x): x is string => !!x);
+  const names = listed.map(n => entryPath(n, true)).filter((x): x is string => !!x);
   const top = names.length && names.every(n => n.includes('/') && n.split('/')[0] === names[0].split('/')[0]) &&
     !names.some(n => n.startsWith(PROFILES_DIR + '/')) ? names[0].split('/')[0] + '/' : '';
-  const local = (name: string) => { let p = safeEntryPath(name); if (p && top && p.startsWith(top)) p = p.slice(top.length); return p; };
+  const local = (name: string) => { let p = entryPath(name, true); if (p && top && p.startsWith(top)) p = p.slice(top.length); return p; };
   let shots = 0, other = 0;
   const refused: string[] = [];
   const all = await unzip(buf, (name, size) => {
@@ -129,7 +144,7 @@ export async function readBackup(buf: Uint8Array, fileName = 'the file', here: s
     return (other += size) <= MAX_OTHER || ((other -= size), false);
   }, refused);
   const files = all.map(e => ({ path: local(e.name)!, data: e.data, mtime: e.mtime }));
-  return files.some(e => e.path === 'registry.txt' || e.path === 'settings.ini') ? backupIn(files, refused) : profilesIn(files, refused, here);
+  return finalPaths(files.some(e => e.path === 'registry.txt' || e.path === 'settings.ini') ? backupIn(files, refused) : profilesIn(files, refused, here));
 }
 
 /**
@@ -139,27 +154,30 @@ export async function readBackup(buf: Uint8Array, fileName = 'the file', here: s
  */
 function backupIn(files: FileIn[], skipped: string[]): Restore {
   const out: Restore = { kind: 'backup', entries: [], profiles: [], skipped, refused: [], modded: [], edited: [], repaired: [] };
+  // by each profile's folder as it is (two may differ in case only: each its own)
   const gone = new Set<string>(), moved = new Map<string, string>();
   const mains = files.filter(e => { const s = e.path.split('/'); return s.length === 3 && s[0] === PROFILES_DIR && lower(s[2]) === lower(s[1]) && !coverOf(s[1]); });
-  const folders = new Set(mains.map(e => lower(e.path.split('/')[1])));
-  // the names taken: the profiles that come in as they are, and those of cover shoots whose profile is not here
-  const taken = new Set<string>(), mend: { e: FileIn; folder: string; inside: string; edited: boolean }[] = [];
-  for (const e of files) {
-    const c = e.path.startsWith(PROFILES_DIR + '/') ? coverOf(e.path.split('/')[1]) : null;
-    if (c && !folders.has(lower(c.profile))) taken.add(lower(c.profile));
-  }
+  const mend: { e: FileIn; folder: string; inside: string; edited: boolean }[] = [];
   for (const e of mains) {
     const folder = e.path.split('/')[1], r = profileInside(e.data);
-    if ('bad' in r) { out.refused.push({ name: folder, why: r.bad }); gone.add(lower(folder)); continue; }
+    if ('bad' in r) { out.refused.push({ name: folder, why: r.bad }); gone.add(folder); continue; }
     if (!isProfileName(r.inside) || lower(r.inside) !== lower(folder)) { mend.push({ e, folder, inside: r.inside, edited: r.edited }); continue; }
-    taken.add(lower(folder));
     out.profiles.push(folder);
     if (r.edited) { out.edited.push(folder); e.data = sealed(e.data); }
     if (modCars(e.data)) out.modded.push(folder);
   }
+  // the names taken: every folder of the profiles' (a profile's, a cover shoot's profile, files without a profile:
+  // an orphan GARAGE.DAT), but those of the profiles mended
+  const mending = new Set(mend.map(m => m.folder)), taken = new Set<string>();
+  for (const e of files) {
+    const s = e.path.split('/');
+    if (s.length < 3 || s[0] !== PROFILES_DIR) continue;
+    const of = coverOf(s[1])?.profile ?? s[1];
+    if (!mending.has(of)) taken.add(lower(of));
+  }
   for (const { e, folder, inside, edited } of mend) {
     const to = fixedName(folder, inside, taken);
-    taken.add(lower(to)); moved.set(lower(folder), to);
+    taken.add(lower(to)); moved.set(folder, to);
     e.data = withName(e.data, to);
     out.profiles.push(to); out.repaired.push({ name: folder, to });
     if (edited) out.edited.push(to);
@@ -168,7 +186,7 @@ function backupIn(files: FileIn[], skipped: string[]): Restore {
   out.entries = files.flatMap(e => {
     const s = e.path.split('/');
     if (s.length < 3 || s[0] !== PROFILES_DIR) return [e];
-    const c = coverOf(s[1]), of = lower(c?.profile ?? s[1]);
+    const c = coverOf(s[1]), of = c?.profile ?? s[1];
     if (gone.has(of)) return [];
     const to = moved.get(of);
     if (to === undefined) return [e];
@@ -225,9 +243,25 @@ function profilesIn(files: FileIn[], skipped: string[], here: string[] = []): Re
   return out;
 }
 
-export async function restoreSaves(saveDir: string, r: Restore) {
-  await clearSaveDir(saveDir);
-  for (const e of r.entries) await writeFile(saveDir, e.path, e.data);
+/** the restores of the save folder, one at a time: a backup's restore and a cloud take at once pruned what the other
+ *  wrote */
+let writer: Promise<unknown> = Promise.resolve();
+export function oneWriter<T>(job: () => Promise<T>): Promise<T> {
+  const p = writer.then(job, job);
+  writer = p.catch(() => {});
+  return p;
+}
+/** every restore asked for so far has ended (a game starts after them: shell.ts startGame, SavesPanel.settled) */
+export const writesDone = (): Promise<void> => writer.then(() => {});
+
+/** A backup of this page's in place of everything here: its files written all or none (savefs.ts writeTogether: a write
+ *  that fails, the browser's storage full, leaves the saves here as they were), then what it does not have goes. */
+export function restoreSaves(saveDir: string, r: Restore): Promise<void> {
+  return oneWriter(async () => {
+    await writeTogether(saveDir, r.entries);
+    const theirs = new Set(r.entries.map(e => e.path));
+    await pruneSaveDir(saveDir, path => theirs.has(path));
+  });
 }
 
 /**
@@ -241,25 +275,124 @@ export async function readVault(buf: Uint8Array): Promise<Restore> {
   const refused: string[] = [];
   let other = 0;
   const all = await unzip(buf, (name, size) => {
-    const p = safeEntryPath(name);
+    const p = entryPath(name, true);
     return !!p && !isScreenshot(p) && size <= MAX_ENTRY && ((other += size) <= MAX_OTHER || ((other -= size), false));
   }, refused);
-  const files = all.map(e => ({ path: safeEntryPath(e.name)!, data: e.data, mtime: e.mtime }));
-  return backupIn(kept(files), refused);
+  const files = all.map(e => ({ path: entryPath(e.name, true)!, data: e.data, mtime: e.mtime }));
+  return finalPaths(backupIn(kept(files), refused));
 }
 
-/** readVault's saves in place of the ones here: everything goes but what a keyphrase does not keep (vault.ts kept()):
- *  the screenshots (and a test's input script), the DVD and magazine covers of the profiles they bring, the game's
- *  graphics options, the LAN server's file, and the device's own settings, which settings.ini keeps from the one here
- *  (settings.ts withDevice). */
-export async function restoreVault(saveDir: string, r: Restore) {
-  const names = new Set(r.profiles.map(lower)), dec = new TextDecoder();
-  const ini = r.entries.find(e => e.path === 'settings.ini');
-  const settings = withDevice(ini ? dec.decode(ini.data) : null, await readText(saveDir, 'settings.ini'));
-  await clearSaveDir(saveDir, name => isScreenshot(name) || name === 'autotest-script.txt' || name === 'registry.txt' || name === GAMEFILE || name === PROFILES_DIR);
-  await clearSaveDir(saveDir, name => names.has(lower(coverOf(name)?.profile ?? '')), PROFILES_DIR);
-  for (const e of r.entries) if (e !== ini) await writeFile(saveDir, e.path, e.data);
-  if (settings !== null) await writeFile(saveDir, 'settings.ini', settings);
+/**
+ * The profiles of a keyphrase's version (its files as vault.ts kept() has them) that readVault would leave out (another
+ * version's, a path it cannot write): a version taken by itself (VaultSync.pull) must not lose one, so the player is
+ * asked instead.  Their folders.
+ */
+export function leftOut(files: FileIn[]): string[] {
+  const r = restoredOf(files);
+  const came = new Set([...r.profiles, ...r.repaired.map(x => x.name)]);
+  return files.map(f => f.path.split('/'))
+    .filter(s => s.length === 3 && s[0] === PROFILES_DIR && lower(s[1]) === lower(s[2]) && !coverOf(s[1]) && !came.has(s[1])).map(s => s[1]);
+}
+
+/** what a restore makes of a version's files (readVault's paths, as restoreVault writes them) */
+function restoredOf(files: FileIn[]) {
+  const loose = files.flatMap(f => { const p = entryPath(f.path, true); return p ? [{ ...f, path: p }] : []; });
+  return finalPaths(backupIn(loose, []));
+}
+/** The profiles a restore of a version's files brings, by the names they come in under (a broken name mended). */
+export function profilesComing(files: FileIn[]): string[] { return restoredOf(files).profiles; }
+
+/**
+ * readVault's saves in place of the ones here: everything goes but what a keyphrase does not keep (vault.ts kept()):
+ * the screenshots (and a test's input script), the DVD and magazine covers of the profiles they bring (those of a
+ * profile whose name the restore mends under its new name), the game's graphics options, the LAN server's file, and
+ * the device's own settings, which settings.ini keeps from the one here (settings.ts withDevice).  Their files are
+ * written first, then what they replace goes: a write that fails (the browser's storage full) leaves the saves here.
+ */
+export function restoreVault(saveDir: string, r: Restore, still?: () => Promise<boolean>, beside: BesideFile[] = []): Promise<boolean> {
+  return oneWriter(async () => {
+    if (still && !await still()) return false;             // (the saves here changed since it was decided: VaultSync.take)
+    const names = new Set(r.profiles.map(lower)), dec = new TextDecoder(), mended = new Map(r.repaired.map(x => [x.name, x.to]));
+    const ini = r.entries.find(e => e.path === 'settings.ini');
+    const settings = withDevice(ini ? dec.decode(ini.data) : null, await readText(saveDir, 'settings.ini'));
+    const here = await listFiles(saveDir), files: FileIn[] = [];
+    // every folder here and of the version: a cover moved under a mended profile's name takes the next free number
+    const folders = new Set([...here.map(f => f.path), ...r.entries.map(e => e.path)].map(p => p.split('/'))
+      .filter(s => s.length >= 3 && s[0] === PROFILES_DIR).map(s => s[1]));
+    for (const f of here) {                                  // the covers here of a profile it mends, renamed
+      const s = f.path.split('/'), c = s.length === 3 && s[0] === PROFILES_DIR ? coverOf(s[1]) : null, to = c && mended.get(c.profile);
+      if (!c || !to) continue;
+      const [kind, num] = [c.cover.replace(/ \d+$/, ''), +c.cover.replace(/^\D+/, '')];
+      let n = num, folder = `${to} ${kind} ${n}`;
+      while (folders.has(folder)) folder = `${to} ${kind} ${++n}`;
+      folders.add(folder);
+      files.push({ path: `${PROFILES_DIR}/${folder}/${lower(s[2]) === lower(s[1]) ? folder : s[2]}`, data: await readBytes(saveDir, f.path) });
+    }
+    files.push(...r.entries.filter(e => e !== ini));
+    if (settings !== null) files.push({ path: 'settings.ini', data: new TextEncoder().encode(settings) });
+    await writeTogether(saveDir, files, beside);
+    // what it replaces goes; a profile it leaves out (one this game cannot load: 'drops') stays here, its covers too
+    const written = new Set(files.map(f => f.path)), stays = new Set(r.refused.map(x => x.name));
+    for (const p of r.skipped) { const s = p.split('/'); if (s.length === 3 && s[0] === PROFILES_DIR && lower(s[1]) === lower(s[2])) stays.add(s[1]); }
+    await pruneSaveDir(saveDir, path => {
+      const s = path.split('/'), of = s.length >= 3 && s[0] === PROFILES_DIR ? coverOf(s[1])?.profile ?? s[1] : null;
+      return written.has(path) || isScreenshot(path) || path === 'autotest-script.txt' || path === 'registry.txt' || path === GAMEFILE ||
+        (of !== null && stays.has(of)) || (isCover(path) && names.has(lower(coverOf(s[1])!.profile)));
+    });
+    return true;
+  });
+}
+
+/** The save folder as a game's start has it, for refillSaves: all but the screenshots, the covers (1 MB each) and a
+ *  test's input script; a player's is some 100 KB. */
+export async function snapshotSaves(saveDir: string): Promise<FileIn[]> {
+  const out: FileIn[] = [];
+  for (const f of await listFiles(saveDir))
+    if (snapshotted(f.path) && f.size <= MAX_ENTRY) out.push({ path: f.path, data: await readBytes(saveDir, f.path), mtime: f.mtime });
+  return out;
+}
+/** what a snapshotSaves keeps: not the screenshots, the covers, a test's input script, nor a file written to be renamed
+ *  (registry.txt.tmp: the runtime's registry, renamed to registry.txt once written) */
+const snapshotted = (path: string) => !isScreenshot(path) && !isCover(path) && path !== 'autotest-script.txt' && !/\.tmp$/i.test(path);
+
+/** A file the game (or the page) wrote during the game into a snapshotSaves of its start, so the start's saves that
+ *  come back after the browser deleted the folder are as the game last saved them (shell.ts onSaved). */
+export async function snapshotFile(start: FileIn[], saveDir: string, path: string, data?: Uint8Array) {
+  if (!snapshotted(path)) return;
+  const d = data ?? await readBytes(saveDir, path).catch(() => null);
+  if (!d || d.length > MAX_ENTRY) return;
+  const i = start.findIndex(f => f.path === path), f = { path, data: d, mtime: Date.now() };
+  if (i >= 0) start[i] = f; else start.push(f);
+}
+
+/**
+ * The saves back in a save folder the browser deleted during a game (shell.ts saveGone, io-worker.ts recover): cloud,
+ * a keyphrase's version (readVault's entries), with every file of start (the folder as the game's start had it,
+ * snapshotSaves) it lacks, this device's settings in settings.ini among them; without cloud saves, start.  A file the
+ * folder has already stays (the game wrote it since: the newest), looked for again just before each write.  A write
+ * that fails is tried once more after the others; failed: those that failed again (none left half there).
+ */
+export async function refillSaves(fs: { writeIfAbsent(path: string, data: Uint8Array): Promise<boolean> }, cloud: FileIn[] | null,
+    start: FileIn[]): Promise<{ written: number; failed: { path: string; error: unknown }[] }> {
+  const files: FileIn[] = [];
+  if (cloud) {
+    const dec = new TextDecoder(), ini = cloud.find(e => e.path === 'settings.ini'), mine = start.find(e => e.path === 'settings.ini');
+    const settings = withDevice(ini ? dec.decode(ini.data) : null, mine ? dec.decode(mine.data) : null);
+    files.push(...cloud.filter(e => e !== ini));
+    if (settings !== null) files.push({ path: 'settings.ini', data: new TextEncoder().encode(settings) });
+    const have = new Set(files.map(f => f.path));
+    files.push(...start.filter(f => !have.has(f.path)));
+  } else files.push(...start);
+  let written = 0, again: FileIn[] = [];
+  const failed: { path: string; error: unknown }[] = [];
+  for (const round of [1, 2]) {
+    const todo = round === 1 ? files : again;
+    again = [];
+    for (const f of todo)
+      try { if (await fs.writeIfAbsent(f.path, f.data)) written++; }
+      catch (error) { if (round === 1) again.push(f); else failed.push({ path: f.path, error }); }
+  }
+  return { written, failed };
 }
 
 /** What a restore says of the profiles whose name inside it mends (Restore.repaired), one line each. */
@@ -301,7 +434,10 @@ export function backupItems(r: Restore, vault = false): string[] {
  * changes.  The new folders are written before the old ones go.  Their names leave
  * AUTOSAVE_SEEN, so the page's Autosave comes to them as to new profiles.
  */
-export async function addProfiles(fs: RenameFiles, r: Restore) {
+export function addProfiles(fs: RenameFiles, r: Restore): Promise<void> {
+  return oneWriter(() => addProfilesNow(fs, r));
+}
+async function addProfilesNow(fs: RenameFiles, r: Restore) {
   const names = new Set(r.profiles.map(lower));
   const written = new Set(r.entries.map(e => e.path.split('/')[1]));
   const old = new Set<string>();
@@ -361,7 +497,7 @@ export class SavesPanel {
   private writing: Promise<unknown> = Promise.resolve();
 
   /** Resolves when the section writes nothing into the saves: a game starts after that. */
-  settled(): Promise<void> { return this.writing.then(() => {}, () => {}); }
+  settled(): Promise<void> { return Promise.all([this.writing.catch(() => {}), writesDone()]).then(() => {}); }
   private write<T>(job: Promise<T>): Promise<T> { this.writing = job; return job; }
 
   /** Show the profiles, the screenshots and the downloaded game data as they are now. */
@@ -498,7 +634,7 @@ export class SavesPanel {
     if (ok.disabled) return;
     ok.disabled = true;
     let r: Awaited<ReturnType<typeof renameProfile>>;
-    try { r = await this.write(renameProfile(filesOf(this.deps.saveDir), PROFILES_DIR, from, to)); }
+    try { r = await this.write(oneWriter(() => renameProfile(filesOf(this.deps.saveDir), PROFILES_DIR, from, to))); }
     catch (err) { this.renaming = null; this.msg(() => t('Renaming {name} stopped: {error}', { name: from, error: String(err) })); await this.refresh(); return; }
     if ('refused' in r) { ok.disabled = this.deps.busy(); say(r.refused); return; }
     this.renaming = null; this.focusName = to;
@@ -583,7 +719,8 @@ export class SavesPanel {
         this.deps.onRestored();
       }
     } catch (err) {
-      this.msg(() => adding ? t('Adding stopped halfway: {error}. Add the profiles again before playing.', { error: String(err) })
+      this.msg(() => err instanceof UndoPending ? t('An earlier restore stopped halfway and is not undone yet, so nothing was changed. Reload the page, then try again.')
+        : adding ? t('Adding stopped halfway: {error}. Add the profiles again before playing.', { error: String(err) })
         : t('Restoring stopped halfway: {error}. Restore the backup again before playing.', { error: String(err) }));
     }
     this.deps.onChanged?.();
