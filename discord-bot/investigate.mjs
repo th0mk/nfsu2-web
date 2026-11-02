@@ -10,7 +10,10 @@ import { costOf } from './spend.mjs';
 import { TOOL_DEFS, Tools } from './tools.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const MAX_TURNS = 16;                            // a look that needs more is cut short: the long ones cost the most
+// a look that needs more is cut short: each turn reads the whole look again, so the long ones cost the most (looks of
+// 11 to 16 turns were 12% of the looks and 44% of the money, Oct 31 to Nov 2); calls made together count as one turn
+const MAX_TURNS = 8;
+const FIRST_PASS_MODEL = 'claude-haiku-5-5';     // the quick pass over a new suggestion (firstPass)
 const MAX_REPEATS = 2;                           // calls made again word for word: a look going round in circles answers
 // calls in a row that bring nothing (an error, no matches, a line or two): a look that stalls answers.  Looks made
 // calls such as `read x`, `search /^$/ in attachments/none` or `search_threads /zzzznomatch/` to fill a turn
@@ -34,33 +37,40 @@ export const VERDICT = {
   },
 };
 
+// The system prompt is the same for every look until the next release (or a change to system.md or knowledge.md), so
+// looks read it from the cache.  Whatever changes with each commit goes in the first message instead (opening): a
+// change in the system prompt writes all of it again (~37k tokens at the 1-hour price), and the guide alone changed
+// about 10 times a day
 async function systemBlocks(repo, recent) {
   const own = async f => (await repo.file(`discord-bot/${f}`)) || fs.readFileSync(path.join(HERE, f), 'utf8');
-  const [rules, notes, playing] = [await own('system.md'), await own('knowledge.md'), await repo.file('docs/web/PLAYING.md')];
+  // the guide of the live version: what players have now, and it changes only with a release
+  const guide = 'docs/web/PLAYING.md';
+  const playing = (recent.liveRev && await repo.fileAt(recent.liveRev, guide)) || await repo.file(guide);
+  const [rules, notes] = [await own('system.md'), await own('knowledge.md')];
   const history = [
     `Live version: ${recent.live}`,
-    `Newest commit: ${recent.head}`,
     `Releases the bot saw (newest first):\n${recent.releases || 'none yet'}`,
-    recent.notLive ? `Commits not live yet (newest first):\n${recent.notLive}` : 'Commits not live yet: none',
     `Commits of the last days up to the live version (newest first; when made, and when they went live):\n${recent.recent || 'none'}`,
   ].join('\n\n');
   return [
     { type: 'text', text: `${rules}\n\n${notes}` },
-    // kept an hour: looks are often more than 5 minutes apart, and this part (~20k tokens) is the same for all of them
-    { type: 'text', text: `# The player's guide (docs/web/PLAYING.md)\n\n${playing}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
-    // the same for every look until the next commit or release (~5k tokens): kept an hour too, so a look reads it from
-    // the cache instead of writing it again
-    { type: 'text', text: `# The code's history, as of this look\n\n${history}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    // kept an hour: looks are often more than 5 minutes apart, and this part (~30k tokens) is the same for all of them
+    { type: 'text', text: `# The player's guide (${guide}, as of the live version)\n\n${playing}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    // the same until the next release (~5k tokens): kept an hour too
+    { type: 'text', text: `# The code's history, up to the live version\n\n${history}`, cache_control: { type: 'ephemeral', ttl: '1h' } },
   ];
 }
 
 /** the first user message: what is going on (volatile, so after the cached system prompt), the pictures, the thread */
-function opening({ now, threads, reports, thread, images }) {
+function opening({ now, recent, guild, threads, reports, thread, images }) {
   const ctx = [
     `Now: ${now}`,
+    `Newest commit: ${recent.head}`,
+    recent.notLive ? `Commits not live yet (newest first):\n${recent.notLive}` : 'Commits not live yet: none',
+    `A thread's link: https://discord.com/channels/${guild || '<server id>'}/<thread id>`,
     `Recent forum threads (id, category, what the bot did, title: summary):\n${threads || 'none yet'}`,
-    `Problems the developer has a report on in the staff channel, the latest change first (the report's first thread: ` +
-      `id and link; where it stands; its title):\n${reports || 'none yet'}`,
+    `Problems the developer has a report on in the staff channel, the latest change first (the report's first thread's ` +
+      `id; where it stands; its title):\n${reports || 'none yet'}`,
   ].join('\n\n');
   return [
     { type: 'text', text: `<context>\n${ctx}\n</context>` },
@@ -71,6 +81,45 @@ function opening({ now, threads, reports, thread, images }) {
         'Investigate this thread as your instructions say, then give your verdict.',
     },
   ];
+}
+
+/** what a look starts from: the bot's copy of the code brought up to date, what changed lately, the system prompt */
+async function start(repo) {
+  await repo.sync();
+  const recent = await repo.recent();
+  return { recent, system: await systemBlocks(repo, recent) };
+}
+const stamp = () => new Date().toISOString().slice(0, 16) + 'Z';
+
+/**
+ * A quick pass over a new post in a suggestion forum, with the cheapest model and no tools: most of them are wishes for
+ * the developer to read, with nothing for the bot to say (120 of the 370 looks Oct 31 to Nov 2, most of them silent).
+ * Its verdict stands only when it is a quiet one (action none, nothing for the staff); anything else gets a full look,
+ * which writes the reply.  The pass never posts.
+ * -> { verdict, quiet, usage, cost }
+ */
+export async function firstPass({ client, repo, guild, thread, images = [], threads = '', reports = '' }) {
+  const { recent, system } = await start(repo);
+  const content = opening({ now: stamp(), recent, guild, threads, reports, thread, images });
+  content.at(-1).text = content.at(-1).text.replace(/[^\n]*$/,
+    'This is a first, quick pass, without tools, over a new post in a suggestion forum. When the post needs nothing ' +
+    'from the bot (a wish for the developer to read: "Decide" says none), give your verdict with action none, and ' +
+    'the summary, category and tags. When a reply may be worth it (what it asks for may exist already, a browser ' +
+    'cannot do it, it would change the original game, it is a bug report or a question, or anything else "Decide" ' +
+    'answers), give action answer with an empty reply: a full look with the tools follows, and writes the reply.');
+  const res = await client.messages.create({
+    model: FIRST_PASS_MODEL, max_tokens: 4000, system, messages: [{ role: 'user', content }],
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: VERDICT } },
+  });
+  const u = res.usage;
+  const usage = { input: u.input_tokens, output: u.output_tokens, cacheWrite: u.cache_creation_input_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0 };
+  const cost = costOf(res.model ?? FIRST_PASS_MODEL, u);
+  let verdict = null;
+  if (res.stop_reason === 'end_turn') {
+    try { verdict = JSON.parse(res.content.filter(b => b.type === 'text').map(b => b.text).join('')); } catch { /* a full look then */ }
+  }
+  const quiet = !!verdict && verdict.action === 'none' && !verdict.escalate && !verdict.handoff && !verdict.duplicate_of;
+  return { verdict, quiet, usage, cost };
 }
 
 /** a tool call in a few words, for the log: search /iphone|ios/ in attachments/, read docs/web/PLAYING.md:520 */
@@ -108,13 +157,11 @@ function gist(out) {
  * told each step as it happens
  * -> { verdict, usage, cost, turns, log }
  */
-export async function investigate({ client, model, effort, maxTurns = MAX_TURNS, repo, archive, workDir, thread, images = [], threads = '', reports = '', threadIndex, step = () => {} }) {
-  await repo.sync();
+export async function investigate({ client, model, effort, maxTurns = MAX_TURNS, repo, archive, workDir, guild, thread, images = [], threads = '', reports = '', threadIndex, step = () => {} }) {
   const tools = new Tools({ repo, workDir, archive, threadIndex });
-  const recent = await repo.recent();
-  const system = await systemBlocks(repo, recent);
+  const { recent, system } = await start(repo);
   step(`code at ${recent.head.split(' ')[0]}, live ${recent.live.split(' ')[0]}${recent.notLive ? `, ${recent.notLive.split('\n').length} commit(s) not live yet` : ''}; asking ${model}`);
-  const messages = [{ role: 'user', content: opening({ now: new Date().toISOString().slice(0, 16) + 'Z', threads, reports, thread, images }) }];
+  const messages = [{ role: 'user', content: opening({ now: stamp(), recent, guild, threads, reports, thread, images }) }];
   const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
   let cost = 0;                                  // null once a turn's model has no prices
   const log = [];

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Archive } from './archive.mjs';
 import { matchFeatures, matchFixes } from './fixes.mjs';
 import { General } from './general.mjs';
-import { blocks, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
+import { blocks, firstPass, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
 import { Spend, metered } from './spend.mjs';
 import { Tags } from './tags.mjs';
@@ -225,12 +225,21 @@ async function look(threadId, why, extra) {
   // staff are waiting for this one: "typing…" in the thread until the reply is there (Discord shows it ~10 s a call)
   const typing = byStaff && setInterval(() => thread.sendTyping().catch(() => {}), 8000);
   if (typing) thread.sendTyping().catch(() => {});
-  let res;
-  try {
+  const context = { repo, guild: thread.guildId, thread: text, images, threads: recentThreads(threadId), reports: reportList(threadId) };
+  let res = null, first = null;
+  // a new suggestion: a quick pass first (investigate.mjs firstPass), and a full look only when it sees something to say
+  if (why === 'new post' && SUGGESTIONS.test(st.forum ?? '')) {
+    first = await firstPass({ client: anthropic, ...context }).catch(e => { say(`first pass failed: ${e.message}`); return null; });
+    if (first) say(`first pass: ${first.verdict?.action ?? 'no verdict'}${first.cost != null ? ` ($${first.cost.toFixed(4)})` : ''}, ` +
+      `${first.quiet ? 'nothing to say, no full look' : 'a full look'}`);
+    if (first?.quiet) res = { verdict: first.verdict, turns: 1, cost: first.cost, usage: first.usage, log: ['first pass only'] };
+  }
+  if (!res) try {
     res = await investigate({
-      client: anthropic, model: CFG.model, effort: fix ? FIX_EFFORT : CFG.effort, maxTurns: fix ? FIX_TURNS : undefined, repo, archive, workDir,
-      thread: text, images, threads: recentThreads(threadId), reports: reportList(threadId), threadIndex: () => threadIndex(threadId), step: say,
+      client: anthropic, model: CFG.model, effort: fix ? FIX_EFFORT : CFG.effort, maxTurns: fix ? FIX_TURNS : undefined, ...context,
+      archive, workDir, threadIndex: () => threadIndex(threadId), step: say,
     });
+    if (first) res.cost = res.cost == null || first.cost == null ? null : res.cost + first.cost;
   } catch (e) {
     if (!byStaff) { clearInterval(typing); throw e; }
     res = { verdict: null, turns: 0, cost: 0, log: [`failed: ${e.message}`] };
@@ -916,16 +925,17 @@ async function download(url) {
   } catch { return null; }
 }
 
-/** one known thread as the model sees it; its summary cut to `max` characters */
-function threadLine([id, t], max = Infinity) {
+/** one known thread as the model sees it; its summary cut to `max` characters; with link false, without its link (the
+ *  context of a look gives the pattern once: ~20 tokens a line less) */
+function threadLine([id, t], max = Infinity, link = true) {
   const what = (t.summary || (t.snippet ? `first post: ${t.snippet}` : '')).slice(0, max);
-  return `- ${id} https://discord.com/channels/${t.guild}/${id} #${t.forum}, ${(t.active ?? t.created).slice(0, 10)} ` +
+  return `- ${id}${link ? ` https://discord.com/channels/${t.guild}/${id}` : ''} #${t.forum}, ${(t.active ?? t.created).slice(0, 10)} ` +
     `[${[t.category, t.status, t.staffMsg && 'developer told'].filter(Boolean).join(', ')}] ${t.title}${what ? `: ${what}` : ''}`;
 }
 const byActivity = (a, b) => (b[1].active ?? b[1].created).localeCompare(a[1].active ?? a[1].created);
 /** the threads active last, for the context */
 function recentThreads(except) {
-  return Object.entries(threads).filter(([id]) => id !== except).sort(byActivity).slice(0, 30).map(e => threadLine(e, 160)).join('\n');
+  return Object.entries(threads).filter(([id]) => id !== except).sort(byActivity).slice(0, 30).map(e => threadLine(e, 160, false)).join('\n');
 }
 /** the problems the developer has a report on (the staff channel), the latest change first: the report's first
  *  thread, where it stands, how many threads, its title.  What a look points a poster to and joins a thread to */
@@ -934,7 +944,7 @@ function reportList(except) {
     const r = t.report, at = r?.log.at(-1)?.[0] ?? Date.parse(t.active ?? t.created) / 1000;
     const where = !r ? 'open' : r.again ? 'reported again after a fix or a "works now"'
       : r.fix ? `${r.fix.added ? 'added' : 'fixed'} by ${r.fix.commit}, live` : r.confirmed ? 'solved, the poster says' : 'open';
-    return { at, line: `- ${id} https://discord.com/channels/${t.guild}/${id} [${where}, ${r?.threads.length ?? 1} thread(s), ` +
+    return { at, line: `- ${id} [${where}, ${r?.threads.length ?? 1} thread(s), ` +
       `last change ${new Date(at * 1000).toISOString().slice(0, 10)}] ${(r?.title ?? t.summary ?? t.title).slice(0, 150)}` };
   }).sort((a, b) => b.at - a.at).slice(0, 25).map(x => x.line).join('\n');
 }

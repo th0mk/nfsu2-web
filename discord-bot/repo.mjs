@@ -162,6 +162,11 @@ export class Repo {
     try { return fs.readFileSync(path.join(this.dir, rel), 'utf8'); } catch { return ''; }
   }
 
+  /** a file as it is in a commit, '' when it is not there */
+  async fileAt(rev, rel) {
+    try { return await this.git(['show', `${rev}:${rel}`]); } catch { return ''; }
+  }
+
   /** what changed lately, as the model's starting point: the live commit, what is not live yet, the last days */
   async recent(days = 4) {
     const fmt = ['--no-merges', LOG_DATE, `--format=${LOG_FORMAT}`];
@@ -171,9 +176,13 @@ export class Repo {
     const known = live && await this.has(live);
     const out = { head, live: live ? `${live} (not in this copy of the code)` : 'unknown (the bot could not read it just now)', releases: this.releaseList() };
     if (known) {
+      out.liveRev = live;
       out.live = await log('-1', live);
       out.notLive = (await this.git(['log', '--no-merges', LOG_DATE, '--format=%h %cd %s', '-n', '40', `${live}..HEAD`])).trim();
-      out.recent = await log('-n', '80', `--since=${days} days ago`, live);
+      // the days before the live commit, not before now: the list stays the same until the next release, and so does
+      // the cached system prompt it is part of (investigate.mjs)
+      const made = Number((await this.git(['log', '-1', '--format=%ct', live])).trim());
+      out.recent = await log('-n', '80', `--since=${new Date((made - days * 86400) * 1000).toISOString()}`, live);
     } else {
       out.recent = await log('-n', '80', `--since=${days} days ago`);
     }
