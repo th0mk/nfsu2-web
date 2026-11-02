@@ -10,10 +10,11 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (56ab552)
+## 2026-11-02 (7dd3a82)
 
+- **World map:** spots where 24 or more players have been parked for a minute show as car meets ("Meet: n cars"). The legend's Car meets row picks the nearest, Left and Right the next, and C starts the GPS there.
 - **Free roam:** parked, press O (on a controller, hold D-pad down) to open the trunk, then the hood, then the doors, and show your car off. Other players see them open; they close when you drive off.
-- **Photo mode:** cars keep their full detail however far away or zoomed out, and once the camera stands still the picture's edges are smoothed. New in the panel: Blur and Focus (a real lens blur), Brightness, Vignette, filters (Black and white, Warm, Cool, Vivid, Faded), Crop with a Grid, and Cars (all, friends & crews, only yours, none). In free roam, friends' cars stand still while you take photos (Freeze friends' cars).
+- **Photo mode:** cars keep their full detail however far away or zoomed out, and once the camera stands still the picture's edges are smoothed. New in the panel: Blur and Focus (a real lens blur), Brightness, Vignette, filters (Black and white, Warm, Cool, Vivid, Faded), Crop with a Grid, and Cars (all, friends & crews, only yours, none; hidden cars take their neon with them). Freeze time (on at first) stops everything, friends' cars too; off, the world drives on under the camera.
 - **Languages:** Ukrainian, for the game (its text and subtitles) and this page.
 - **Free roam:** names over cars no longer pile up in a crowd. Friends' and crews' come first, and names fade out between 25 and 60 m.
 - **Free roam:** the Add friend line while your front bumpers touch is bigger, in quick chat's style, just above the outrun line.
