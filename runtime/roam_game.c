@@ -5801,7 +5801,12 @@ static void bump_frame(int64_t host, int can){
  * a kerb or a barrier with its wheels free), falling faster than FLY_FALL_MPS (off a ledge, or
  * through a hole in the world).  FLY_GROUND_S on the ground ends it (the Respawn button puts the
  * car there); a shorter touch does not, so a car that skims the road now and then keeps its count.
- * NFSU2_ROAM_FLY_S changes FLY_S (tests).  Not in the Windows plugin (no page, no switch). */
+ * NFSU2_ROAM_FLY_S changes FLY_S in a run an input script drives (a test), never in a player's game:
+ * settings.ini passes on any UPPER_CASE variable, but in the browser NFSU2_INPUT_SCRIPT only the
+ * page's test aids set (settings.ts PATH_VARS; script= on a development server only); the Mac has no
+ * switch to leave (roam_bsd.c).  Not test mode (O.test): the players' path test
+ * (NFSU2_ROAM_WEBTEST=vlan) is not in it, and settings.ini can turn it on (NFSU2_ROAM_HARNESS).
+ * Not in the Windows plugin (no page, no switch). */
 #define FLY_S           120
 #define FLY_TELL_S      30.f          /* a flight this long gets a line */
 #define FLY_GROUND_S    3.f
@@ -5817,7 +5822,12 @@ static int g_fly_fake;                    /* "mp fly fake on" (tests): the car c
 #endif
 /* every frame: `can` = free roam proper, the world ran `dt` (s) */
 static void fly_frame(int can, float dt){
-    if (g_fly_s < 0) g_fly_s = env_int("NFSU2_ROAM_FLY_S", FLY_S, 5, 3600);
+    if (g_fly_s < 0){
+        const char *scr = rh_opt("NFSU2_INPUT_SCRIPT"), *k = rh_opt("NFSU2_ROAM_FLY_S");
+        int test = scr && *scr;
+        g_fly_s = test ? env_int("NFSU2_ROAM_FLY_S", FLY_S, 5, 3600) : FLY_S;
+        if (!test && k && *k) rlog("[roam] NFSU2_ROAM_FLY_S is for tests (an input script's run): %d s\n", FLY_S);
+    }
     uint32_t me = can && !g_fly_gone && dt > 0.f ? player_car() : 0;
     if (!me || !ok(me, 0x9e0) || MR32(me + 0x28u) != 1u) return;
     int ground = 0;
