@@ -1,0 +1,41 @@
+# The game throwing away the part animation banks with one of ours on the list (showoff.c sub_00438140).  New career ->
+# prologue free roam; O: the trunk opens, so the player's car type's PARTS_ANIMATIONS.BIN is loaded (showoff's own
+# bank); then a cover shoot's start and end (0x633A00 -> 0x61C600, 0x61C5B0: each unloads the car loader's record and
+# calls 0x438140(0)), twice, the second time after O has loaded ours again.  The live game of 2026-11-02 (7dd3a82)
+# crashed there (any car lot, garage, cover shoot or race lobby after a friend's car opened a part): 0x438140 read the
+# next bank from the one it had just deleted, a null indirect call in 0x4380F0, exit 134.  Good: "[showoff] ... of
+# ours unloaded first" each time, no "UNRESOLVED INDIRECT CALL", no trap, quit at the end.
+# NFSU2_TEST_BANKS_GAMEWAY=1: the game's walk, for the A/B (crashes at the first shoot).
+#   node web/tools/run-suite.mjs --base <server> --script showoff_banks.txt --marker banks_end
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log open1
++0    tap O
++3000ms log shoot1
++0    roam call 0x633a00 ecx=0x8a3288
++90   roam call 0x61c5b0 ecx=0x8a3288
++300  log open2
++0    tap O
++3000ms log shoot2
++0    roam call 0x633a00 ecx=0x8a3288
++90   roam call 0x633a00 ecx=0x8a3288
++90   roam call 0x61c5b0 ecx=0x8a3288
++300  log banks_end
++10   quit

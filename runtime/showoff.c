@@ -56,6 +56,7 @@
 #include "roam_core.h"            /* RC_OPEN_* */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <time.h>
@@ -230,6 +231,7 @@ static int bank_ready(CPU *c, uint32_t ti){
     uint32_t type = ok(ti, 0xd4) ? MR32(ti + 0xd0u) : 0;
     if (!type) return -1;
     if (bank_of(type)) return 1;
+    if (!roam_world()) return 0;                                       /* loads only out in free roam (sub_00438140) */
     Bank *k = 0;
     for (int i = 0; i < S.nbank && !k; i++) if (S.bank[i].type == type) k = &S.bank[i];
     if (!k){
@@ -435,4 +437,57 @@ void sub_00615a10(CPU *c){                       /* the car's lights (the hood's
     put_on(k, b, keep);
     sub_00615a10_orig(c);
     take_off(b, keep);
+}
+
+/* ---- the game throws away the animation banks: ours first, and safely -------------------------------------------------
+ * 0x438140 (cdecl, a car type's hash, 0: every bank) takes each bank of that type off the list (G_BANKS), lets go of its
+ * animations (0x4380F0) and deletes it (its vtable's first, 1), then reads the next bank from the one it has just
+ * deleted.  The game calls it with 0 only (from 0x61C63F, 0x61C5E2, 0x63B118, 0x637A05: the car loader's one record),
+ * each time right after unloading that record's file, which takes its bank off: the list is empty and the walk never
+ * runs.  Ours were still on it (a friend's open trunk is enough: any car lot, garage, cover shoot or race lobby
+ * after it), so the walk deleted one and went on from freed memory: the heap keeps its free list there (heap.c, +0 and
+ * +4 of a free block), the next "bank" was 0 and the game crashed calling through it (0x4380F0's null indirect call,
+ * exit 134, from 18:05 UTC on 2026-11-02).  Here our files are unloaded first, the way the game unloads its own (so
+ * their banks go as its do), and the walk reads the next bank before it deletes one.  Their cars' parts show closed
+ * until their banks are in again (bank_ready, out in free roam only).  Test: tests/scripts/showoff_banks.txt;
+ * NFSU2_TEST_BANKS_GAMEWAY=1 (script runs only) the game's way, for the A/B. */
+#define FN_BANK_FREE   0x004380f0u   /* thiscall bank: lets go of its animations */
+static void drop_ours(CPU *c){
+    int n = 0;
+    for (int i = 0; i < S.nbank; i++){
+        Bank *k = &S.bank[i];
+        if (!k->file || !bank_of(k->type)) continue;                   /* (still loading: not on the list yet) */
+        uint32_t a = k->file;
+        gcall(c, FN_UNLOAD, 0, 1, &a);
+        k->file = 0; k->st = 0; k->tries = 0; n++;
+    }
+    if (!n) return;
+    for (int i = 0; i < SO_CARS; i++){                                 /* their parts open again once the banks are back */
+        Car *k = &S.car[i];
+        for (int p = 0; p < 4; p++) if (k->node[p]) MR32(k->node[p] + 0x10u) = 1u;
+        k->has = 0;
+    }
+    count_live();
+    fprintf(stderr, "[showoff] f=%ld the game throws the part animations away: %d of ours unloaded first\n", autotest_frame(), n);
+}
+void sub_00438140_orig(CPU *c);
+void sub_00438140(CPU *c){
+    static int game_way = -1;                                          /* test aid, script runs only: the game's walk */
+    if (game_way < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_BANKS_GAMEWAY"); game_way = s && *s && e && *e == '1'; }
+    if (game_way){ sub_00438140_orig(c); return; }
+    uint32_t type = MR32(c->esp + 4u);
+    drop_ours(c);
+    uint32_t e = rd32(G_BANKS), b = e ? e - 4u : 0;
+    for (int n = 0; b && b != G_BANKS - 4u && n < 4096 && ok(b, 0x28); n++){
+        uint32_t ne = MR32(b + 4u), next = ne ? ne - 4u : 0;           /* read before the bank is deleted */
+        if (!type || MR32(b + 0x24u) == type){
+            uint32_t pv = MR32(b + 8u), nx = MR32(b + 4u), one = 1;
+            MR32(pv) = nx; MR32(nx + 4u) = pv;
+            gcall(c, FN_BANK_FREE, b, 0, 0);
+            gcall(c, MR32(MR32(b)), b, 1, &one);
+            fprintf(stderr, "[showoff] f=%ld a bank was still on the list: deleted\n", autotest_frame());
+        }
+        b = next;
+    }
+    POP32(c->eip);                                                    /* (cdecl) */
 }
