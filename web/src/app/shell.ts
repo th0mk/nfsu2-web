@@ -35,7 +35,7 @@ import { TouchControls } from './touch';
 import { TextField } from './textentry';
 import { PauseHint } from './pausehint';
 import { DriftPanel } from './drift';
-import { PhotoMode } from './photo';
+import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRemoved } from '../net';
 import { blockList, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
@@ -1202,12 +1202,12 @@ function toast(msg: string, ms: number) {
 }
 
 /** F12 (photo.ts: photo mode's picture, or where it cannot open): the next frame the renderer draws, as a PNG beside the
- *  saves (Saves on the start page shows it) */
+ *  saves (Saves on the start page shows it), with the site's address in a corner unless photo mode's panel turned it off */
 async function screenshot() {
   const r = session?.renderer;
   if (!r?.dump) { toast(t('No screenshot: nothing on screen yet.'), 2500); return; }
   try {
-    const png = await r.dump('screenshot');
+    const png = await r.dump('screenshot', photoMark());
     if (!png.size) throw new Error('the game ended first');
     const name = await saveScreenshot(SAVE, png);
     log.add(`[app] screenshot ${name}, ${fmtBytes(png.size)}`);

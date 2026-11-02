@@ -94,8 +94,9 @@ export interface Subsystem {
 export interface RendererSubsystem extends Subsystem {
   /** the game's image inside the canvas, in canvas pixels */
   imageRect(): { x: number; y: number; w: number; h: number };
-  /** tests: the next frame as PNG (also uploaded as <name>.png with RendererOptions.artifacts) */
-  dump?(name: string): Promise<Blob>;
+  /** tests, F12: the next frame as PNG (also uploaded as <name>.png with RendererOptions.artifacts); mark: the
+   *  site's address in its corner */
+  dump?(name: string, mark?: boolean): Promise<Blob>;
   /** each frame's time from its submit until the GPU had done it, ms, since the last call (rendercheck.ts) */
   doneMs?(): number[];
   /** the game's textures on the GPU now, bytes, those unpacked from DXT and those DXT1 as ASTC (the log's copy,

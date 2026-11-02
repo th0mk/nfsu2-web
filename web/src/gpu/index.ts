@@ -109,8 +109,9 @@ export interface Renderer {
   readonly device: GPUDevice;
   stats(): RendererStats;
   /** read the back buffer of the next encoded frame as PNG; with opts.artifacts it is also
-   *  uploaded as <name>.png (an autotest dump falling on the same frame keeps its own name) */
-  dump(name: string): Promise<Blob>;
+   *  uploaded as <name>.png (an autotest dump falling on the same frame keeps its own name); mark: the site's
+   *  address in its corner (png-worker.ts) */
+  dump(name: string, mark?: boolean): Promise<Blob>;
   /** distributions of the frames since the last call with reset (or since attach) */
   window(reset?: boolean): RendererWindow;
   /** each frame's time from its submit until the GPU had done it (onSubmittedWorkDone, so every
@@ -266,7 +267,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   const WIN_MAX = 1 << 17;
   let winEnc: number[] = [], winGpu: number[] = [], winDraws = 0, winPasses = 0, winCalls = { ...enc.calls };
   let done: number[] = [];
-  const dumpWaiters: { name: string; resolve: (b: Blob) => void }[] = [];
+  const dumpWaiters: { name: string; mark?: boolean; resolve: (b: Blob) => void }[] = [];
   const pending = new Set<Promise<unknown>>();
   const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
     { async: boolean; value: Promise<string> | string } }).waitAsync;
@@ -512,9 +513,9 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       dumpName = `nfsu2_g${String(U[fw + F.dumpFrame]).padStart(6, '0')}_${lab}`;
     }
     const waiter = dumpWaiters.shift();
-    const reads: { name: string | null; rb: Readback; waiter?: (b: Blob) => void }[] = [];
+    const reads: { name: string | null; rb: Readback; waiter?: (b: Blob) => void; mark?: boolean }[] = [];
     // an autotest dump keeps its frame-numbered name; a dump(name) request names its own
-    if (dumpName || waiter) reads.push({ name: dumpName ?? waiter!.name, rb: copyOut(ce, scr), waiter: waiter?.resolve });
+    if (dumpName || waiter) reads.push({ name: dumpName ?? waiter!.name, rb: copyOut(ce, scr), waiter: waiter?.resolve, mark: waiter?.mark });
     if (dumpName) for (const id of opts.dumpTex ?? []) {
       const sn = enc.snapshot(ce, id);
       if (sn) { log(`[gpu] dump texture ${id}: ${sn.info}`); reads.push({ name: `${dumpName}_tex${id}`, rb: copyOut(ce, sn.tex) }); }
@@ -565,7 +566,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     C2[cw + C.framesDone] = frames; C2[cw + C.stDraws] = enc.totalDraws >>> 0; C2[cw + C.stPasses] = enc.totalPasses >>> 0;
     C2[cw + C.stEncUs] = Math.round(encMsTotal * 1000) >>> 0; C2[cw + C.stErrors] = errors; C2[cw + C.stPipelines] = enc.pipelinesMade;
     for (const r of reads) {
-      const job = readback(r.rb).then(async png => {
+      const job = readback(r.rb, r.mark).then(async png => {
         r.waiter?.(png);
         if (!r.name) return;
         let where = '';
@@ -614,7 +615,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // the PNG is made in a worker (png-worker.ts), started at the first dump: here the frame is only copied out
   let pngWorker: Worker | null = null, pngNext = 0;
   const pngWaiting = new Map<number, { resolve: (b: Blob) => void; reject: (e: Error) => void }>();
-  async function readback(rb: Readback): Promise<Blob> {
+  async function readback(rb: Readback, mark?: boolean): Promise<Blob> {
     await rb.buf.mapAsync(GPUMapMode.READ);
     const px = rb.buf.getMappedRange().slice(0);
     rb.buf.unmap(); rb.buf.destroy();
@@ -627,7 +628,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       };
       w.onerror = e => { for (const p of pngWaiting.values()) p.reject(new Error(e.message || 'the PNG worker failed')); pngWaiting.clear(); };
     }
-    const id = pngNext++, msg: ToPng = { id, px, w: rb.w, h: rb.h, bpr: rb.bpr, scale: opts.dumpScale ?? 1 };
+    const id = pngNext++, msg: ToPng = { id, px, w: rb.w, h: rb.h, bpr: rb.bpr, scale: opts.dumpScale ?? 1, mark };
     return new Promise((resolve, reject) => {
       pngWaiting.set(id, { resolve, reject });
       pngWorker!.postMessage(msg, [px]);
@@ -731,7 +732,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       return w;
     },
     doneMs: () => { const d = done; done = []; return d; },
-    dump: (name: string) => new Promise<Blob>(resolve => dumpWaiters.push({ name, resolve })),
+    dump: (name: string, mark?: boolean) => new Promise<Blob>(resolve => dumpWaiters.push({ name, mark, resolve })),
     imageRect: () => imgRect ?? { x: 0, y: 0, w: canvas.width, h: canvas.height },
     flush: async () => {
       while (pending.size) await Promise.allSettled([...pending]);

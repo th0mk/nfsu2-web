@@ -5,7 +5,8 @@
 // While it is on, the page keeps the keyboard, the mouse, the touch screen and the controller from the game and sends
 // what they do as photo events (input/index.ts photo(): the keys and buttons held as bits, the sticks, drags, the
 // wheel and pinches, the sliders' values), hides its other things on the game, and shows a panel: orbit or free, zoom,
-// tilt, friends' names (in free roam with them), reset, the picture, leave, and what the keys do.  It reads the game's
+// tilt, friends' names (in free roam with them), the site's address on the pictures (photoMark: every F12 picture,
+// menus too), reset, the picture, leave, and what the keys do.  It reads the game's
 // status (runtime/web/status_web.c) every frame: photo (1 it can open, 2 it is on, 4 the free camera, 8 the names on,
 // 16 friends' names can show), photo_fov, photo_roll.
 import type { GameSession } from './game';
@@ -42,12 +43,19 @@ const dz = (v: number) => (Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 
 
 type Hint = [string, string];
 
+const MARK_STORE = 'nfsu2-photo-mark';
+/** F12 pictures carry the site's address in a corner (png-worker.ts), unless the panel's box turned it off */
+export function photoMark(): boolean {
+  try { return localStorage.getItem(MARK_STORE) !== 'off'; } catch { return true; }
+}
+
 export class PhotoMode {
   private root: HTMLElement;
   private flash: HTMLElement;
   private zoom: HTMLInputElement;
   private tilt: HTMLInputElement;
   private names: HTMLInputElement;
+  private mark: HTMLInputElement;
   private hints: HTMLElement;
   private session: GameSession | null = null;
   private raf = 0;
@@ -78,13 +86,16 @@ export class PhotoMode {
       '<button type="button" data-mode="1"></button></span></div>' +
       '<label class="ph-slider"><span class="ph-zoom-l"></span><input type="range" class="ph-zoom" min="0" max="1000" step="1"></label>' +
       '<label class="ph-slider"><span class="ph-tilt-l"></span><input type="range" class="ph-tilt" min="-450" max="450" step="5"></label>' +
-      '<label class="ph-check" hidden><input type="checkbox" class="ph-names"><span class="ph-names-l"></span></label>' +
+      '<label class="ph-check ph-names-c" hidden><input type="checkbox" class="ph-names"><span class="ph-names-l"></span></label>' +
+      '<label class="ph-check"><input type="checkbox" class="ph-mark"><span class="ph-mark-l"></span></label>' +
       '<div class="ph-buttons"><button type="button" data-act="reset"></button>' +
       '<button type="button" class="ph-shoot" data-act="shoot"></button><button type="button" data-act="leave"></button></div>' +
       '<div class="ph-hints"></div>';
     this.zoom = p.querySelector('.ph-zoom')!;
     this.tilt = p.querySelector('.ph-tilt')!;
     this.names = p.querySelector('.ph-names')!;
+    this.mark = p.querySelector('.ph-mark')!;
+    this.mark.checked = photoMark();
     this.hints = p.querySelector('.ph-hints')!;
     p.addEventListener('click', e => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -106,6 +117,11 @@ export class PhotoMode {
     }
     this.tilt.addEventListener('dblclick', () => { this.tilt.value = '0'; this.send(PH_ROLL, 0); });
     this.names.addEventListener('change', () => { this.send(PH_NAMES, this.names.checked ? 1 : 0); this.canvas()?.focus({ preventScroll: true }); });
+    this.mark.addEventListener('change', () => {
+      try { if (this.mark.checked) localStorage.removeItem(MARK_STORE); else localStorage.setItem(MARK_STORE, 'off'); } catch { /* not kept: a private window */ }
+      this.deps.log(`[app] photo mode: the site's address on pictures ${this.mark.checked ? 'on' : 'off'}`);
+      this.canvas()?.focus({ preventScroll: true });
+    });
     const f = this.flash = document.createElement('div');
     f.className = 'photo-flash'; f.hidden = true;          // (hidden by a timer: with reduced motion no animation ends)
     stage.append(p, f);
@@ -243,7 +259,8 @@ export class PhotoMode {
     q('.ph-zoom-l').textContent = t('Zoom');
     q('.ph-tilt-l').textContent = t('Tilt');
     q('.ph-names-l').textContent = t('Names');
-    (q('.ph-check') as HTMLElement).hidden = !this.namesHere;
+    (q('.ph-names-c') as HTMLElement).hidden = !this.namesHere;
+    q('.ph-mark-l').textContent = t('nfsu2.xyz on pictures');
     q('[data-act="reset"]').textContent = t('Reset');
     q('[data-act="shoot"]').textContent = t('Take photo');
     q('[data-act="leave"]').textContent = t('Leave');

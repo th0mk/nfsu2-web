@@ -133,8 +133,9 @@ static uint32_t fe_list_of(uint32_t first, uint32_t o, int depth){
 }
 /* a copy of the package's object o under another name's hash, after it in
  * its list: as roam_game.c's fe_clone makes them (Clone, vtable slot 1, then
- * the drawing data an image or a string needs to be drawn at all) */
-static uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash){
+ * the drawing data an image or a string needs to be drawn at all); intro.c's
+ * title line too */
+uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash){
     uint32_t l = ok(pk, 0x54) && ok(o, 0x5c) && ok(MR32(o), 8) ? fe_list_of(pk + 0x4cu, o, 0) : 0;
     if (!l) return 0;
     uint32_t n = 0, last = 0;
