@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (7dd3a82)
+## 2026-11-02 (0181d97)
 
 - **World map:** spots where 24 or more players have been parked for a minute show as car meets. The legend's Car meets row picks one, and C starts the GPS there.
 - **Free roam:** parked, press O (on a controller, hold D-pad down) to open the trunk, then the hood, then the doors, and show your car off. Other players see them open.
@@ -30,6 +30,7 @@ not guessed.
 - **Touch controls:** a lighter look while driving, Pressurize and Bounce buttons for a car with hydraulics, gear buttons in Performance Tuning's drag test runs, and Steering moved in, for big phones.
 - **Controllers:** the right stick turns the car in the garage and the shops. On Hotplug, a controller that switches off and on again keeps its buttons.
 - **Profiles:** in Chinese, Japanese, Korean, Thai, Polish and Hungarian a new profile's name no longer begins with broken letters.
+- **Saves:** when the browser deletes this site's data during a game, your saves come back (from cloud saves, or as they were when you pressed Play) and saving goes on. A restore or a cloud copy cut short never loses a profile, and each cloud-saves choice has its own button under its card.
 
 ## 2026-10-31 (d079aff)
 
