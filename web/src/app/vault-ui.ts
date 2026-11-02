@@ -21,7 +21,7 @@ import { listFiles, listProfiles, readBytes, readText, removeSaveDir, writeFile 
 import { backupItems, readVault, repairNotes, restoreVault, type Restore } from './saves-ui';
 import { downloadBlob } from './logs';
 import { zip } from './zip';
-import { kept, keeps, keptBy, profilesIn, readPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side } from './vault';
+import { kept, keeps, keptBy, keysOf, profilesIn, readPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side } from './vault';
 import { codeOf, dateLocale, live, N, t, tn, tvars, type Msg } from './i18n';
 import { canKeep, keepPhrase, keptPhrase, markOf } from './pwkeep';
 
@@ -43,11 +43,10 @@ export interface VaultPanelDeps {
   log(s: string): void;
 }
 
-/** how long `token()` waits for the section to know whether this server keeps cloud saves (`start`) */
-const READY_WAIT_MS = 5000;
-
 /** where a save folder's link is kept (localStorage) */
 const linkKey = (saveDir: string) => `nfsu2-keyphrase:${saveDir}`;
+/** how long Play waits for the section to know whether this server keeps cloud saves (`started`) */
+const READY_WAIT_MS = 5000;
 /** how often Play offered cloud saves for it, and when last (localStorage, Offer as JSON) */
 const offerKey = (saveDir: string) => `nfsu2-cloud-offer:${saveDir}`;
 /** which phrase the browser was asked to keep in its passwords (pwkeep.ts markOf); 'asked' once the browser was asked
@@ -161,17 +160,18 @@ export class VaultPanel {
   private readonly key: string;
   private readonly input: HTMLInputElement;
 
-  /** `start` has found whether this server keeps cloud saves (and set up the sync, with the link kept here) */
-  private ready: Promise<void>;
-  private readyNow: () => void = () => {};
-  private starting = false;               // start() asking the server
+  /** start() at work (asking the server, then setting up the sync), null: not now */
+  private starting: Promise<void> | null = null;
+  /** `token` before `start`: the kept link's phrase and its token */
+  private early: { phrase: string; token: Promise<string> } | null = null;
+  /** the name this keyphrase claims (showClaim) */
+  private claimed: string | null = null;
   /** the phrase linked when the section last showed (undefined: not shown yet): `onLink` when it changes */
   private shownLink: string | null | undefined = undefined;
   /** this page looked at the browser's passwords (`passwords`) */
   private pwLooked = false;
 
   constructor(private root: HTMLElement, private d: VaultPanelDeps) {
-    this.ready = new Promise<void>(r => { this.readyNow = r; });
     this.key = linkKey(d.saveDir);
     this.input = this.$<HTMLInputElement>('#vault-input');
     const on = (id: string, f: () => unknown) => { this.$<HTMLButtonElement>(id).onclick = () => void f(); };
@@ -240,18 +240,26 @@ export class VaultPanel {
   }
 
   /** Shows the section when this server keeps keyphrase saves (asked again when the server answers again, after it
-   *  did not as the page started: once shown, nothing more). */
-  async start() {
-    if (this.sync || this.starting) return;
-    this.starting = true;
-    const on = await vaultAvailable().finally(() => { this.starting = false; setTimeout(() => this.readyNow(), 0); });
+   *  did not as the page started: once shown, nothing more).  Called while it runs: that same run. */
+  start(): Promise<void> {
+    if (this.sync) return Promise.resolve();
+    return this.starting ??= this.begin().finally(() => { this.starting = null; });
+  }
+  private async begin() {
+    const on = await vaultAvailable();
     if (!on || this.sync) return;
     this.makeSync();
-    this.readyNow();
     this.root.hidden = false;
     await this.loadReplaced();
     this.show();
     if (this.owned) { this.check(); void this.passwords(); }
+  }
+  /** Play: a `start` still asking the server is waited for (READY_WAIT_MS at most), so Play's questions and its pull
+   *  of newer saves (askAtPlay, offerable, beforePlay) have the sync.  (Until 2026-11-02 the claimed names' `token`
+   *  waited for it, and Play with it.) */
+  async started(): Promise<void> {
+    const s = this.starting;
+    if (s) await Promise.race([s.catch(() => {}), new Promise(r => setTimeout(r, READY_WAIT_MS))]);
   }
 
   /** This tab owns the saves now and has loaded its settings: it syncs from here on. */
@@ -473,18 +481,32 @@ export class VaultPanel {
     const l = await this.make() ? this.sync?.link : null, st = this.sync?.state;
     return l ? { phrase: l.phrase } : { why: st?.s === 'error' ? tvars(st.why.t, st.why.v) : '' };
   }
-  /** the linked keyphrase's token (claim.ts: the claimed names), null without one */
-  // (it waits for `start`: asked before the section knew its link, it answered none, and the line under Your name
-  // said the player's own claimed name was another player's: a player's report, 2026-10-29)
+  /** the linked keyphrase's token (claim.ts: the claimed names; the friends; the switch's hello), null without one.
+   *  Before `start` has set up the sync: the link kept here.  (2026-10-29, a player's report: asked before the section
+   *  knew its link, it answered none, and the line under Your name said the player's own claimed name was another
+   *  player's.  Until 2026-11-02 it waited up to 5 s for `start` instead, so a slower first /vault check, or one that
+   *  failed and answered later, still left the page without the passphrase, the line never asking again.) */
   async token(): Promise<string | null> {
-    await Promise.race([this.ready, new Promise(r => setTimeout(r, READY_WAIT_MS))]);
-    return this.sync ? this.sync.token() : null;
+    if (this.sync) return this.sync.token();
+    const l = this.load();
+    if (typeof l?.phrase !== 'string') return null;
+    if (this.early?.phrase !== l.phrase) {
+      const token = keysOf(l.phrase).then(k => k.token);
+      token.catch(() => { if (this.early?.token === token) this.early = null; });
+      this.early = { phrase: l.phrase, token };
+    }
+    return this.early.token;
   }
-  /** a keyphrase is linked here */
-  linked(): boolean { return !!this.sync?.link; }
-  /** the line about the name this keyphrase claims (null: none) */
+  /** a keyphrase is linked here (before `start`: one is kept here) */
+  linked(): boolean { return this.sync ? !!this.sync.link : typeof this.load()?.phrase === 'string'; }
+  /** the line about the name this keyphrase claims (null: none); drawn again as the section shows (the name can be
+   *  known before `start` set up the sync) */
   showClaim(name: string | null) {
-    const p = this.$<HTMLElement>('#vault-claim');
+    this.claimed = name;
+    this.claimLine();
+  }
+  private claimLine() {
+    const p = this.$<HTMLElement>('#vault-claim'), name = this.claimed;
     p.hidden = !name || !this.sync?.link;
     p.textContent = name ? t('This passphrase also holds your claim on {name}.', { name }) : '';
   }
@@ -648,8 +670,10 @@ export class VaultPanel {
     if (phrase !== this.shownLink) {
       const first = this.shownLink === undefined;
       this.shownLink = phrase;
-      if (!first) this.d.onLink?.();
+      // (the claimed name was the last one's: asked again with this one)
+      if (!first) { this.claimed = null; this.d.onLink?.(); }
     }
+    this.claimLine();
     const working = st.s === 'working';
     // beside the heading: Enable cloud saving, or what it is doing, or when it last synced
     this.$('#vault-make').hidden = !!l || working;

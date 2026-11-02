@@ -381,10 +381,16 @@ async function askCloud() {
   body.append(p(t('Your career is saved only in this browser, and browsers sometimes clear site data (low disk space, cleared history).')),
     await vault.stake(playedMs()),
     p(t('Cloud saves keep a copy on this server under a passphrase only you have, so you can get your saves back here or in another browser.')));
-  // the name, when it is free to claim: the new keyphrase claims it at once, and its popup says so
+  // the name, when it is free to claim: the new keyphrase claims it at once, and its popup says so; another player's:
+  // the keyphrase does not hold it, said before Play's question about the name (2026-11-02, a player's report: given a
+  // passphrase, then told the name was claimed)
   const name = onlineName(await typedName());
   const info = name ? await claims.check(name) : null;
+  const taken = name && info?.state === 'taken' ? info.name ?? name : null;
   if (name && info?.state === 'free' && !info.mine) body.append(p(t('It also claims your name {name}, so no one else can play under it.', { name })));
+  // (the other player may be this one, its passphrase in another browser: a new one here could not get the name back)
+  if (taken) body.append(p(t('{name} is claimed by another player, so this passphrase keeps your saves but not that name.', { name: taken })),
+    p(t('If it\'s yours, choose Not now and enter your passphrase under Cloud saves.')));
   body.append(p(t('You can change this under Cloud saves on the start page.')));
   // or a file of them, kept where the player likes (Saves, Download backup)
   const backup = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Download backup') });
@@ -409,7 +415,7 @@ async function askCloud() {
   const phrase = await enableCloud();
   if (!phrase) return;
   const claimed = name && info?.state === 'free' && !info.mine ? await claimQuietly(playDeps(), name, info, quietCheck) : null;
-  await showPassphrase(phrase, claimed?.name ?? null);
+  await showPassphrase(phrase, claimed?.name ?? null, taken);
 }
 
 /** Cloud saves turned on (Play's question, or Claim under Your name without a keyphrase): the keyphrase made, or
@@ -425,8 +431,8 @@ async function enableCloud(): Promise<string | null> {
 }
 
 /** A keyphrase just made, shown whole to keep (copy, download): for the saves, and for the name it claimed (null:
- *  none), which it is the only way back to as well */
-async function showPassphrase(phrase: string, claimed: string | null) {
+ *  none), which it is the only way back to as well; taken: the name another player claimed, which it does not hold */
+async function showPassphrase(phrase: string, claimed: string | null, taken: string | null = null) {
   const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
   const box = Object.assign(document.createElement('p'), { className: 'keyphrase', textContent: phrase });
   const copy = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Copy') });
@@ -446,6 +452,7 @@ async function showPassphrase(phrase: string, claimed: string | null) {
   } else {
     kept.append(p(t('Passphrase made. Keep it safe: it is the only way back to these saves.')), box, row,
       p(t('To load your saves, enter it under Cloud saves on the start page.')));
+    if (taken) kept.append(p(t('{name} is claimed by another player, so this passphrase keeps your saves but not that name.', { name: taken })));
   }
   // its "Save password?" (vault-ui.ts asked it as the keyphrase was made)
   if (canKeep()) kept.append(p(t('Your browser may also offer to save it with your passwords: choose Save.')));
@@ -537,7 +544,9 @@ async function startGame() {
     return;
   }
   // a cloud-saves conflict waiting (nothing syncs until it is settled): settled first, or no game; before the questions
-  // that write settings.ini, which the cloud's saves would replace
+  // that write settings.ini, which the cloud's saves would replace.  (A first check of the server still under way: its
+  // answer first, 5 s at most, so these and the pull below know the passphrase's sync.)
+  await vault.started();
   const cloud = await vault.askAtPlay();
   if (cloud === 'stop') return;
   if (cloud === 'taken') await loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`));

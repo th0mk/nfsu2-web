@@ -48,8 +48,9 @@ export interface NameRowDeps {
   linked(): boolean;
   /** cloud saves turned on: the keyphrase made (null: not on, and the player was told why) */
   enable(): Promise<string | null>;
-  /** a keyphrase just made, shown to keep, for the name it claimed (null: none yet) */
-  showPassphrase(phrase: string, claimed: string | null): Promise<void>;
+  /** a keyphrase just made, shown to keep, for the name it claimed (null: none yet); taken: the name another player
+   *  claimed, which it does not hold */
+  showPassphrase(phrase: string, claimed: string | null, taken: string | null): Promise<void>;
   /** the name the game takes when Your name is empty (the newest profile's) */
   profileName(): Promise<string | null>;
   /** Your name written to settings.ini */
@@ -150,6 +151,9 @@ export class NameRow {
         if (mine && mine.next <= Date.now()) return show(t('{name} was your name before your change: yours until {date}.', { name, date: day(i.until ?? 0) }), 'ok', t('Change name'));
         return show(t('{name} was your name before your change: yours until {date}.', { name, date: day(i.until ?? 0) }), 'ok');
       case 'taken':
+        // with a passphrase here, entering one is no way back to it: that one is another (2026-11-02, a player's
+        // report: told to enter the passphrase this browser already had)
+        if (this.d.linked()) return show(t('Another passphrase claimed {name}, not the one this browser syncs with, so you play as {alt}. Pick another name.', { name, alt: this.alt }), 'bad', null, this.alt);
         return show(t('Another player claimed {name}, so you play as {alt}. Pick another name, or if it\'s yours, enter your passphrase under Cloud saves.', { name, alt: this.alt }), 'bad', null, this.alt);
       case 'free':
         if (mine && mine.next > Date.now()) return show(t('{name} is free. You can change your name again on {date}.', { name, date: day(mine.next) }));
@@ -169,9 +173,12 @@ export class NameRow {
     if (!name) return;
     const phrase = this.d.linked() ? null : await this.made();
     if (phrase === undefined) return;
-    if (phrase && this.info?.state !== 'free') { await this.d.showPassphrase(phrase, null); return; }
-    const mine = await this.claimNow(name);
-    if (phrase) await this.d.showPassphrase(phrase, mine);
+    if (phrase && this.info?.state !== 'free') {
+      await this.d.showPassphrase(phrase, null, this.info?.state === 'taken' ? this.info.name ?? name : null);
+      return;
+    }
+    const r = await this.claimNow(name);
+    if (phrase) await this.d.showPassphrase(phrase, r.claimed, r.taken ? name : null);
   }
 
   /** a keyphrase made for the claim (cloud saves on), the name asked about again; undefined: none */
@@ -183,14 +190,14 @@ export class NameRow {
     return phrase;
   }
 
-  /** the claim itself: the name claimed, or null (the line says why) */
-  private async claimNow(name: string): Promise<string | null> {
+  /** the claim itself: the name claimed, or null (the line says why); taken: another player's claim came first */
+  private async claimNow(name: string): Promise<{ claimed: string | null; taken: boolean }> {
     this.claiming = true; this.note = null; this.draw();
     let captcha: string | null = null;
     if (this.info?.captcha) {
       this.check.replaceChildren();
       captcha = await turnstile(this.info.captcha, this.check);
-      if (!captcha) { this.claiming = false; this.note = t('Cloudflare\'s check did not pass. Try again.'); this.draw(); return null; }
+      if (!captcha) { this.claiming = false; this.note = t('Cloudflare\'s check did not pass. Try again.'); this.draw(); return { claimed: null, taken: false }; }
     }
     const r = await this.d.claims.claim(name, captcha);
     this.claiming = false;
@@ -199,12 +206,12 @@ export class NameRow {
       if (this.els?.input.value.trim() !== r.mine.name) await this.d.save(r.mine.name);
       this.d.say(t('Claimed: {name}.', { name: r.mine.name }));
       await this.ask();
-      return r.mine.name;
+      return { claimed: r.mine.name, taken: false };
     }
     this.d.log(`[app] claim: your name not claimed (${r.error})`);
     this.note = claimError(r, name);
     this.draw();
-    return null;
+    return { claimed: null, taken: r.error === 'taken' };
   }
 }
 
@@ -236,7 +243,9 @@ export async function settleName(d: PlayNameDeps, typed: string, saveDir: string
   const alt = await digitsFor(name, d.seed());
   const info = await d.claims.check(name, alt);
   if (!info) return null;
-  d.log(`[app] your name: ${info.state === 'yours' || info.state === 'old' ? 'claimed with this browser\'s keyphrase' : info.state === 'taken' ? 'claimed by another player' : info.state}`);
+  const linked = d.linked();
+  d.log(`[app] your name: ${info.state === 'yours' || info.state === 'old' ? 'claimed with this browser\'s keyphrase'
+    : info.state === 'taken' ? `claimed by another player (${linked ? 'with another passphrase than this browser\'s' : 'no passphrase here'})` : info.state}`);
   switch (info.state) {
     case 'yours':
     case 'old':
@@ -254,10 +263,11 @@ export async function settleName(d: PlayNameDeps, typed: string, saveDir: string
       ask(k);
       return await pick(d, t('{name} is claimed', { name }),
         [para(t('Another player claimed {name}. Pick another, or play as {alt} this time.', { name, alt }))], alt, quiet,
-        para(t('Is {name} yours? Enter your passphrase under Cloud saves to get it back here.', { name }))) ?? alt;
+        para(linked ? t('This browser\'s passphrase did not claim {name}: another one did, first.', { name })
+          : t('Is {name} yours? Enter your passphrase under Cloud saves to get it back here.', { name }))) ?? alt;
     }
     case 'free':
-      if (d.linked() && !info.mine) await claimQuietly(d, name, info, quiet);
+      if (linked && !info.mine) await claimQuietly(d, name, info, quiet);
       return name;
     default:
       return null;
