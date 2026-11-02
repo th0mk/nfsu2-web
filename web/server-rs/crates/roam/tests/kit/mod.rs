@@ -85,11 +85,14 @@ pub struct HelloOpts<'a> {
     /// the links it wants (core version 10): a byte after the crews (with none, a count of 0 and the crew flag); 0
     /// none
     pub links: u8,
+    /// the other player of its outrun (core version 11): its id after the links byte (that byte 0 if no links are
+    /// said); 0 none
+    pub duel: u32,
 }
 
 impl Default for HelloOpts<'_> {
     fn default() -> Self {
-        HelloOpts { room: 0, status: 2, name: b"p", seen: &[], cfg_rev: 3, core: 9, crews: None, flags: 0, links: 0 }
+        HelloOpts { room: 0, status: 2, name: b"p", seen: &[], cfg_rev: 3, core: 9, crews: None, flags: 0, links: 0, duel: 0 }
     }
 }
 
@@ -111,15 +114,18 @@ pub fn hello_with(sender: u32, o: &HelloOpts) -> Vec<u8> {
     }
     let crews = match o.crews {
         Some(c) => c,
-        None if o.links > 0 => &[],
+        None if o.links > 0 || o.duel != 0 => &[],
         None => return dgram_flags(1, sender, o.flags, &p),
     };
     p.push(crews.len() as u8);
     for c in crews {
         p.extend_from_slice(&c.to_le_bytes());
     }
-    if o.links > 0 {
+    if o.links > 0 || o.duel != 0 {
         p.push(o.links);
+    }
+    if o.duel != 0 {
+        p.extend_from_slice(&o.duel.to_le_bytes());
     }
     dgram_flags(1, sender, HF_CREW | o.flags, &p)
 }

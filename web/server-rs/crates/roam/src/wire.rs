@@ -91,6 +91,9 @@ pub(crate) enum Msg<'a> {
         crews: [u32; CREWS],
         /// the links it wants (core version 10: the byte after its crews), 0 not said
         links: u8,
+        /// the other player of its outrun (core version 11: the id after the links byte, roam_core.c rc_set_duel), 0
+        /// none: the two are linked first once each names the other (`duel_pairs`)
+        duel: u32,
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
     /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); t_us: its time on
@@ -335,6 +338,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             let flags = u16_le(d, 14);
             let mut crews = [0u32; CREWS];
             let mut links = 0u8;
+            let mut duel = 0u32;
             // the crews after the ids it hears (n_seen, then n_seen ids), only with the flag: without it the bytes
             // after the name's are not read, as before the flag (a page of before sends what it likes there)
             if flags & HF_CREW != 0 {
@@ -354,14 +358,19 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
                     if crews[..n].contains(&0) {
                         return None;
                     }
-                    // (as roam_core.c's decoder: a byte after them is the links it wants, past that a newer core's)
-                    if at + 1 + 4 * n < end {
-                        links = d[at + 1 + 4 * n];
+                    // (as roam_core.c's decoder: a byte after them is the links it wants, then four the other player of
+                    // its outrun, past that a newer core's)
+                    let o = at + 1 + 4 * n;
+                    if o < end {
+                        links = d[o];
+                    }
+                    if o + 5 <= end {
+                        duel = u32_le(d, o + 1);
                     }
                 }
             }
             let (lobbies, marks) = (flags & HF_LOBBY != 0, flags & HF_HUBCREW != 0);
-            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links }
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel }
         }
         MSG_SNAP => {
             if end < 22 + 52 {

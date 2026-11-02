@@ -458,6 +458,7 @@ static int g_ping_tx[NN][NN], g_hello_tx[NN][NN];   /* PINGs and HELLOs each nod
 #define HUB_PORT 47210
 static int g_hub_on, g_hub_link[NN][NN], g_hub_hello[NN], g_hub_snap[NN], g_hub_snapx[NN], g_hub_bye[NN], g_hub_lobby[NN];
 static int g_hub_ncrews[NN]; static uint32_t g_hub_crews[NN][RC_CREW_MAX];   /* each node's crews, as its last HELLO to the hub had them */
+static uint32_t g_hub_duel[NN];             /* ...and its outrun's other player (rc_set_duel) */
 static uint32_t g_hub_room[NN];             /* ...and its room */
 static uint16_t g_hub_flags[NN];            /* ...and its flags: with RC_HF_HUBCREW its lists end in crew marks */
 static rc_lobby g_hub_lobby_last[NN];
@@ -465,7 +466,8 @@ static int64_t g_hub_next;
 static void hub_in(int from, const uint8_t *b, int len){
     rc_msg m; if (rc_decode(b, len, &m) != RC_OK) return;
     if (m.h.type == RC_MSG_HELLO){ g_hub_hello[from]++; g_hub_flags[from] = m.h.flags; g_hub_room[from] = m.u.hello.room;
-                                   g_hub_ncrews[from] = m.u.hello.n_crews; memcpy(g_hub_crews[from], m.u.hello.crews, sizeof g_hub_crews[from]); }
+                                   g_hub_ncrews[from] = m.u.hello.n_crews; memcpy(g_hub_crews[from], m.u.hello.crews, sizeof g_hub_crews[from]);
+                                   g_hub_duel[from] = m.u.hello.duel; }
     else if (m.h.type == RC_MSG_SNAP){ g_hub_snap[from]++; if (m.h.flags & RC_HF_STATEX) g_hub_snapx[from]++; }
     else if (m.h.type == RC_MSG_BYE) g_hub_bye[from]++;
     else if (m.h.type == RC_MSG_LOBBY){ g_hub_lobby[from]++; g_hub_lobby_last[from] = m.u.lobby; }
@@ -1253,6 +1255,64 @@ static void t_duel(void){
           "inbox: %d kept, %u dropped, %d taken", kept, g_n[1].duel_dropped, taken);
 }
 
+/* ---- 4d'. an outrun's other player (rc_set_duel): the hub hears it, and the session keeps it while the hub's
+ * lists leave it out; it goes as any peer goes, and the session says how -- */
+static void t_duel_hub(void){
+    mesh(3, 8);
+    g_hub_on = 1; g_hub_next = 0; memset(g_hub_link, 0, sizeof g_hub_link); memset(g_hub_duel, 0, sizeof g_hub_duel);
+    for (int i = 0; i < 3; i++){ g_n[i].conf.hub_ip = HUB_IP; g_n[i].conf.hub_port = HUB_PORT; g_n[i].conf.duels = 1; }
+    uint32_t id[3]; for (int i = 0; i < 3; i++) id[i] = g_n[i].conf.self_id;
+    hub_links(0, 1); hub_links(0, 2);
+    drive(3, g_now + 4000000);
+    CHECK(est(0) == 2 && est(1) == 1 && !g_hub_duel[0], "outrun, hub: established, no outrun named (%d %d %08x)", est(0), est(1), g_hub_duel[0]);
+    rc_set_duel(&g_n[0], id[1]); rc_set_duel(&g_n[1], id[0]);
+    int hellos = g_hub_hello[0];
+    drive(3, g_now + 30000);
+    CHECK(g_hub_hello[0] > hellos && g_hub_duel[0] == id[1] && g_hub_duel[1] == id[0] && !g_hub_duel[2],
+          "outrun, hub: the next HELLO names the other player (%08x %08x %08x)", g_hub_duel[0], g_hub_duel[1], g_hub_duel[2]);
+    /* the hub's lists leave 1 and 2 out (a crowd nearer): 2 goes "out of range", the outrun's two keep each other */
+    memset(g_hub_link, 0, sizeof g_hub_link);
+    drive(3, g_now + 6000000);
+    int k1 = peer_of(0, id[1]), k0 = peer_of(1, id[0]);
+    CHECK(k1 >= 0 && g_n[0].peer[k1].state == RC_PS_EST && k0 >= 0 && g_n[1].peer[k0].state == RC_PS_EST && peer_of(0, id[2]) < 0,
+          "outrun, hub: unlisted, the outrun's two keep each other, the other peer went");
+    CHECK(!g_n[0].duel_gone && !g_n[1].duel_gone && g_n[0].peer[k1].rx_snap > 0, "outrun, hub: nothing gone, its snapshots still come");
+    /* the outrun is over: the unlisted one goes at the next tick */
+    rc_set_duel(&g_n[0], 0); rc_set_duel(&g_n[1], 0);
+    drive(3, g_now + 1100000);
+    CHECK(peer_of(0, id[1]) < 0 && peer_of(1, id[0]) < 0 && !g_hub_duel[0], "outrun over: the unlisted peer goes, the HELLO names nobody");
+    /* nothing heard of it for T_DROP: gone, silent; our own list kept coming (no late one) */
+    hub_links(0, 1);
+    drive(3, g_now + 3000000);
+    rc_set_duel(&g_n[0], id[1]); rc_set_duel(&g_n[1], id[0]);
+    drive(3, g_now + 1000000);
+    g_drop[1][0] = 1;
+    drive(3, g_now + 9000000);
+    k1 = peer_of(0, id[1]);
+    CHECK(k1 >= 0 && !g_n[0].duel_gone, "outrun, silence: 9 s without a packet, still here");
+    drive(3, g_now + 2500000);
+    CHECK(peer_of(0, id[1]) < 0 && g_n[0].duel_gone == RC_DGONE_SILENT && !g_n[0].hub_late_us,
+          "outrun, silence: gone after 10 s, as silent (%d), the hub's lists on time", g_n[0].duel_gone);
+    g_drop[1][0] = 0;
+    /* its BYE: gone, as it said */
+    rc_set_duel(&g_n[0], 0); rc_set_duel(&g_n[1], 0);
+    drive(3, g_now + 4000000);
+    rc_set_duel(&g_n[0], id[2]); rc_set_duel(&g_n[2], id[0]); hub_links(0, 2);
+    drive(3, g_now + 3000000);
+    CHECK(peer_of(0, id[2]) >= 0 && !g_n[0].duel_gone, "outrun, BYE: another outrun, its player here");
+    rc_shutdown(&g_n[2], 0);
+    drive(2, g_now + 100000);
+    CHECK(peer_of(0, id[2]) < 0 && g_n[0].duel_gone == RC_DGONE_SAID, "outrun, BYE: gone as it said (%d)", g_n[0].duel_gone);
+    /* our own link stands 4 s: the next list after it marks the gap (hub_late_us) */
+    g_hub_on = 0;
+    drive(2, g_now + 4000000);
+    int64_t back = g_now;
+    g_hub_on = 1; g_hub_next = 0;
+    drive(2, g_now + 1100000);
+    CHECK(g_n[0].hub_late_us >= back && g_n[0].hub_late_us <= g_now, "a list after 4 s without one: late (%lld)", (long long)(g_n[0].hub_late_us - back));
+    g_hub_on = 0;
+}
+
 /* ---- 4f. state extensions: wheel heights, nitrous, hydraulics, only to a peer that reads them -- */
 static void t_statex(void){
     /* layout: a length byte, 4 x int16 mm, the nitrous byte, the hydraulics and landings bytes; 0 = none */
@@ -1655,6 +1715,7 @@ int main(int argc, char **argv){
     t_hub();
     t_far();
     t_duel();
+    t_duel_hub();
     t_lobby();
     t_say();
     t_statex();

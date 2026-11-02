@@ -213,9 +213,36 @@ fn the_wire_a_sessions_hello_to_the_hub_says_the_links_it_wants() {
         l.both_ends();
         assert_eq!(l.of(0).len(), want, "{arg:?}");
         match decode_roam(&h) {
-            Some(RoamMsg::Hello { core, crews, .. }) => assert_eq!((core, crews.len()), (10, 2), "its crews still read"),
+            Some(RoamMsg::Hello { core, crews, .. }) => assert_eq!((core, crews.len()), (11, 2), "its crews still read"),
             other => panic!("not its HELLO: {other:?}"),
         }
+    }
+}
+
+// the wire: a session in an outrun (rc_set_duel) names its other player after the links it wants; in a crowd of 60
+// nearer to it than that player (2 km off), the hub links the two first once that one names it back, and not before
+#[test]
+fn the_wire_a_sessions_hello_to_the_hub_names_its_outruns_other_player() {
+    let Some(run) = hubwire("roam_hubwire_duel.wasm") else { return };
+    let h = unhex(&run(&["hellocrew", "40", "a1"]));
+    let none = unhex(&run(&["hellocrew", "40"]));
+    assert_eq!(h.len(), none.len() + 4, "four bytes more: {}", hex(&h));
+    assert_eq!(&h[h.len() - 8..h.len() - 4], &0xA1u32.to_le_bytes(), "the id last, before the CRC: {}", hex(&h));
+    assert_eq!(h[h.len() - 9], 40, "after the links it wants");
+    for back in [0, 0x1234ABCD] {
+        let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
+        k.from(V(0), &h);
+        k.from(V(0), &snap(0x1234ABCD, [0.25, 0.25, 0.0]));
+        for i in 1..=60u32 {
+            k.from(V(i), &hello_with(100 + i, &HelloOpts { core: 10, links: 48, ..Default::default() }));
+            k.from(V(i), &snap(100 + i, [((i - 1) % 8) as f64 * 3.0 - 9.25, ((i - 1) / 8) as f64 * 3.0 - 9.25, 0.0]));
+        }
+        k.from(V(61), &hello_with(0xA1, &HelloOpts { core: 11, links: 40, duel: back, ..Default::default() }));
+        k.from(V(61), &snap(0xA1, [2000.25, 0.25, 0.0]));
+        k.hub.tick();
+        let l = Lists(k.lists());
+        l.both_ends();
+        assert_eq!((l.has(0, 61), l.of(0).len()), (back != 0, 40), "named back: {back:#x}");
     }
 }
 

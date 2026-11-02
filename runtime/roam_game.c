@@ -3158,6 +3158,7 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
 
 /* ---- per-frame --------------------------------------------------------------------------------- */
 typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, paused; float dist; uint32_t cfg_gen;
+                 int roams;            /* its status: in free roam, or paused there (shown or not) */
                  float rank;           /* the slots' order (assign): the nearest of the distances SOON_S and LOOK_S
                                           on, both cars at their speeds, and from our view point VIEW_M ahead (as
                                           the hub links, nfsu2-roam) */
@@ -3181,16 +3182,18 @@ static struct { uint32_t id, gen; int horn; } g_phorn[RC_TABLE];   /* each peer'
  * half of the display), the cars shown go down to DEF_CARS for the rest of the game, the hub hears it (rc_set_links),
  * and the cars past it are parked, as for a friend gone (the players they were show on the minimap: near_update).
  * Only for a device's default (O.cars_auto): a player who picked 40 or 48 keeps it.  A gap over CUT_GAP_US (a load, a
- * pause, the tab away) counts as no frame. */
+ * pause, the tab away) counts as no frame, and so does an outrun between players (du_on): its friend's car may be one
+ * past DEF_CARS, and parked it would end the outrun. */
 #define CUT_FRAME_US    25000
 #define CUT_WINDOW_US   10000000
 #define CUT_SHARE       0.6f
 #define CUT_GAP_US      250000
 static struct { int64_t last, since; int n, slow, done; } g_cut;
+static int du_on(void);
 static void cars_cut(CPU *c, uint32_t w, int64_t host){
     int64_t dt = g_cut.last ? host - g_cut.last : 0;
     g_cut.last = host;
-    if (g_cut.done || !O.cars_auto || O.max_cars <= DEF_CARS || g_sync_paused) { g_cut.since = 0; return; }
+    if (g_cut.done || !O.cars_auto || O.max_cars <= DEF_CARS || g_sync_paused || du_on()) { g_cut.since = 0; return; }
     int shown = 0;
     for (int k = 0; k < NSLOT; k++) shown += g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden && g_sl[k].world == w;
     if (shown <= DEF_CARS || dt <= 0 || dt > CUT_GAP_US){ if (shown <= DEF_CARS) g_cut.since = 0; return; }
@@ -3668,7 +3671,14 @@ static int64_t render_delay(int i, const rc_peer *p, int64_t frame_dt){
  *    (race +0xBEC/+0xBF0, as the game's result message 0x4A7B30 does), so
  *    a few metres of network delay never make two winners;
  *  - a player who leaves (back to the menus, quits, loses the connection)
- *    loses: the other wins.
+ *    loses: the other wins.  The server's hub keeps the two linked however
+ *    many players are nearer (rc_set_duel), and the friend's car keeps its
+ *    slot: by distance alone the one who fell behind went from both screens
+ *    in a crowd, and both games won (Discord, 2026-10-31).  A friend whose
+ *    snapshots stop waits where it was drawn, the order held, until it comes
+ *    back or the session lets it go; then a win only when it went (its BYE,
+ *    a restart, nothing heard of it for 10 s while our own link stood: on its
+ *    screen we are the one gone), else a loss, so the two never both win.
  * While it runs both still count as in free roam: friends' cars stay, and
  * friends still see the two.  Messages: RC_MSG_DUEL (roam_core.h), each
  * repeated until answered (a datagram lost on a LAN).  Not in the Windows
@@ -3695,7 +3705,9 @@ static int64_t render_delay(int i, const rc_peer *p, int64_t frame_dt){
 #define DU_RANK_MPS     2.f           /* the order changes when the other gets away this much faster (m/s) */
 #define DU_AWAY_US      1000000
 #define DU_OFFER_US     15000000      /* a challenge nobody takes goes */
-#define DU_GONE_US      2000000       /* a friend whose car is not shown for this long has left the outrun */
+#define DU_GONE_US      2000000       /* a friend out of free roam (its status: the menus, a shop, a race) this long has left the outrun */
+#define DU_CUT_US       3000000       /* no list from the hub for this long: our own link stands (or the whole page stood) */
+#define DU_CUT_KEEP_US  15000000      /* ...and a list after such a gap counts for this long (a friend unheard for T_DROP went then) */
 #define DU_NOTE_US      4000000
 enum { DU_IDLE, DU_SENT, DU_GOT, DU_ACCEPTED, DU_RACE, DU_OVER };
 static const char *const du_st[] = { "idle", "challenge sent", "challenged", "accepted", "racing", "over" };
@@ -3710,7 +3722,10 @@ static struct {
     int      won;                             /* our game's result: 1 won, 2 lost, 0 none (yet) */
     int      their;                           /* the friend's game's, for us: 1 we won, 2 we lost */
     int      posted, nres;                    /* we gave the game a result; results still to send */
-    int64_t  gone_at;
+    int64_t  gone_at;                         /* the friend's car not shown since (0: shown) */
+    int      gone_why;                        /* the session let the friend go: how (rc_set_duel, RC_DGONE_*; 0: not, or for no word) */
+    int      unlisted;                        /* the hub's last list left the friend out (the session keeps it: logged when that changes) */
+    int64_t  hub_heard, hub_late;             /* the hub's last list (0: no hub), and the last one after a gap (rc_session hub_late_us) */
     float    gap, away;                       /* metres between the cars; how much faster we get away (m/s, smoothed) */
     float    was[4]; int64_t away_at;         /* where the two cars were (ours x y, the friend's x y), and when */
     uint32_t ranks;                           /* order changes */
@@ -3725,6 +3740,13 @@ static int du_racing(uint32_t race){
 }
 /* the outrun's friend keeps the slot (assign) */
 static int du_keeps(int k){ return g_du.st != DU_IDLE && g_sl[k].peer_id == g_du.id; }
+static int du_on(void){ return g_du.st != DU_IDLE; }
+/* our own link stood lately: no list from the hub for DU_CUT_US now, or one came after such a gap within DU_CUT_KEEP_US
+ * (the WebSocket, or the whole page, a phone's locked screen): a friend whose packets stopped then is gone on our
+ * screen, and we are gone on its */
+static int du_cut(int64_t host){
+    return g_du.hub_heard && (host - g_du.hub_heard > DU_CUT_US || (g_du.hub_late && host - g_du.hub_late < DU_CUT_KEEP_US));
+}
 static void du_note(int64_t host, const char *fmt, const char *name){
     snprintf(g_du.note, sizeof g_du.note, fmt, name);
     g_du.note_until = host + DU_NOTE_US;
@@ -3849,6 +3871,7 @@ static int du_start(CPU *c, int64_t host){
     gcall0(c, FN_ENGAGE_DONE, G_ENGAGE);
     MR32(w + 0x1cu + 4u * first) = keep; MR32(w + 0x18u) = end;
     g_du.car = car; g_du.won = g_du.their = 0; g_du.posted = 0; g_du.nres = 0; g_du.gone_at = 0; g_du.ranks = 0; g_du.away = 0; g_du.away_at = 0;
+    g_du.unlisted = 0;
     if (MR32(G_RACETYPE) != 7u || MR32(race + 0x24u) != 2u){
         rlog("[roam] f=%ld outrun with %s: the game did not start it (race type %u, %u racers)\n", rh_frame(), g_du.name,
                 MR32(G_RACETYPE), MR32(race + 0x24u));
@@ -4043,18 +4066,47 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
             break;
         }
         if (g_du.mine && g_du.op == RC_DUEL_START && host - g_du.since < 1000000 && host - g_du.tx_at >= 300000) du_send(host, RC_DUEL_START, 0);
-        /* the friend is gone (not shown, not in free roam, no packets): its
-         * car stays where it was (the slots leave it), and we win */
         const PeerView *v = du_pv(g_du.id);
+        if (!v && in_roam){
+            /* the session let the friend go, and the slots parked its car: the result at once, before the game's next
+             * update counts the car 120 km behind.  A win when it went (its BYE, a restart, another room; or nothing
+             * heard of it for T_DROP while our own link stood); a loss when our link stood (then we went, on its
+             * screen) or for no word (its session let us go first: we went silent there) */
+            if (!g_du.posted){
+                int won = g_du.gone_why == RC_DGONE_SAID || (g_du.gone_why == RC_DGONE_SILENT && !du_cut(host));
+                if (won) du_note(host, "%s left the outrun", g_du.name);
+                else du_note(host, "The connection dropped: the outrun with %s is lost", g_du.name);
+                du_post(won, g_du.gone_why == RC_DGONE_SAID ? "the friend left the session" : g_du.gone_why != RC_DGONE_SILENT ?
+                        "the friend's game let us go" : won ? "nothing heard of the friend for 10 s" : "our own link stood");
+            }
+            break;
+        }
+        if (v && !v->listed != g_du.unlisted){
+            g_du.unlisted = !v->listed;
+            rlog("[roam] f=%ld outrun with %s: %s, %.0f m apart\n", rh_frame(), g_du.name,
+                 g_du.unlisted ? "the hub's list leaves it out (kept for the outrun)" : "on the hub's list again", (double)g_du.gap);
+        }
         if (!car_out(g_du.car) || (k >= 0 && g_sl[k].car != g_du.car)){
-            /* its car was parked (the friend left the session): at once, before the game's next update counts it */
+            /* its car was parked with the friend still here (the slots keep it: du_keeps): the game's next update
+             * would count it 120 km behind.  Ours is the result, and the friend's game takes it (RC_DUEL_RESULT) */
             if (!g_du.posted){ du_note(host, "%s left the outrun", g_du.name); du_post(1, "the friend's car is gone"); }
             break;
         }
-        if (k < 0 || !v || !v->visible){
-            if (!g_du.gone_at) g_du.gone_at = host;
-            if (host - g_du.gone_at > DU_GONE_US && !g_du.posted){ du_note(host, "%s left the outrun", g_du.name); du_post(1, "the friend is gone"); }
+        if (!v || k < 0 || !v->visible){
+            /* not shown: out of free roam (its status) for DU_GONE_US, it left; its snapshots stopped (a stall, its
+             * link), its car waits where it was and the order stands (du_rank) until it comes back or goes */
+            if (!g_du.gone_at){
+                g_du.gone_at = host;
+                rlog("[roam] f=%ld outrun with %s: its car not shown (%s), %.0f m apart\n", rh_frame(), g_du.name,
+                     !v ? "we are not in free roam" : v->roams ? "no snapshots" : "out of free roam", (double)g_du.gap);
+            }
+            if (v && !v->roams && host - g_du.gone_at > DU_GONE_US && !g_du.posted){
+                du_note(host, "%s left the outrun", g_du.name); du_post(1, "the friend left free roam"); }
             break;
+        }
+        if (g_du.gone_at){
+            rlog("[roam] f=%ld outrun with %s: its car shown again after %.1f s\n", rh_frame(), g_du.name, (host - g_du.gone_at) / 1e6);
+            g_du.away_at = 0;                         /* (its jump to where it is counts for nothing) */
         }
         g_du.gone_at = 0;
         if (g_du.their){ du_post(g_du.their == 1, "the friend's game has its result"); break; }
@@ -6384,6 +6436,13 @@ void roam_game_frame(CPU *c){
         if (!rc_take_duel(&g_s, &duin[4 * nduin], &op, &arg, &duin[4 * nduin + 3])) break;
         duin[4 * nduin + 1] = op; duin[4 * nduin + 2] = arg; nduin++;
     }
+#if DUELS
+    /* our outrun's friend, for the hub (it links the two first) and the session (it keeps the friend); and how the
+     * friend went if it went, as of the peers below (du_frame) */
+    rc_set_duel(&g_s, g_du.st != DU_IDLE ? g_du.id : 0);
+    g_du.gone_why = g_s.duel_gone;
+    g_du.hub_heard = g_s.conf.hub_ip ? g_s.hub_heard_us : 0; g_du.hub_late = g_s.hub_late_us;
+#endif
 #if MPRACES
     /* race lobby messages for us (mp_frame) */
     uint32_t mpfrom[RC_LOBBY_INBOX]; rc_lobby mpin[RC_LOBBY_INBOX]; int nmpin = 0;
@@ -6411,6 +6470,7 @@ void roam_game_frame(CPU *c){
                          (p->status == RC_ST_PAUSED ||
                           (p->status == RC_ST_ROAM && host - p->last_snap_rx < 2000000));
             v->paused = p->status == RC_ST_PAUSED; v->duels = p->duels; v->listed = rc_peer_listed(&g_s, i);
+            v->roams = p->status == RC_ST_ROAM || p->status == RC_ST_PAUSED;
             v->crew = rc_peer_crew(&g_s, i) + 1;
             if (!v->crew && rc_peer_friend(&g_s, i)) v->crew = FRIEND_CREW;
             v->cfg_gen = p->cfg_gen; v->cfg_len = 0; v->has_cfg = p->cfg_len > 0; v->err = 0;
@@ -7177,8 +7237,14 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
             float d = du_dist(car); if (d < nd) nd = d;
         }
         if (!strcasecmp(sub, "outrun")){
-            rlog("[roam] f=%ld mp outrun: %s%s%s%s, %.0f m apart, getting away %.1f m/s faster; %u challenge(s), %u raced, %u won, %u lost\n", f, st[g_du.st],
-                    g_du.id ? " with " : "", g_du.id ? g_du.name : "", g_du.icon ? ", challenge offered" : "", (double)g_du.gap, (double)g_du.away,
+            /* the friend in our session: established, and on the hub's last list (rc_set_duel keeps it either way) */
+            const char *in = "";
+            roam_plat_lock();
+            for (int i = 0; g_du.id && i < RC_TABLE; i++)
+                if (g_s.peer[i].state == RC_PS_EST && g_s.peer[i].id == g_du.id) in = rc_peer_listed(&g_s, i) ? ", listed by the hub" : ", not listed by the hub";
+            roam_plat_unlock();
+            rlog("[roam] f=%ld mp outrun: %s%s%s%s%s, %.0f m apart, getting away %.1f m/s faster; %u challenge(s), %u raced, %u won, %u lost\n", f, st[g_du.st],
+                    g_du.id ? " with " : "", g_du.id ? g_du.name : "", in, g_du.icon ? ", challenge offered" : "", (double)g_du.gap, (double)g_du.away,
                     g_du.offers, g_du.races, g_du.wins, g_du.losses);
             static const char *const emm[] = { "the game's", "held", "standing down", "paused" };
             char near[32] = "";

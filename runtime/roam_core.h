@@ -21,12 +21,13 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      10         /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      11         /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
                                        10: lists of up to RC_MAX_PEERS (48), and its HELLO to the hub ends in the links
-                                       it wants, rc_config.links) */
+                                       it wants, rc_config.links; 11: in an outrun, after the links, the id of its
+                                       other player, rc_set_duel) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -338,7 +339,8 @@ typedef struct {
         struct { uint16_t core_ver; uint8_t platform, status; uint16_t listen_port, cfg_rev;
                  uint32_t room; char name[RC_NAME_MAX + 1]; uint8_t n_seen; uint32_t seen[RC_MAX_PEERS];
                  uint8_t n_crews; uint32_t crews[RC_CREW_MAX];             /* crews: with RC_HF_CREW only */
-                 uint8_t links; } hello;   /* after the crews (their count too, 0 or not): the links we want, 0: not said (core 10, to the hub) */
+                 uint8_t links;            /* after the crews (their count too, 0 or not): the links we want, 0: not said (core 10, to the hub) */
+                 uint32_t duel; } hello;   /* after the links (the byte too, 0 or not): our outrun's other player, 0: none (core 11, to the hub) */
         struct { uint8_t n; struct { uint32_t ip; uint16_t port; uint32_t id; } e[RC_MAX_PEERS];
                  uint8_t n_mine; uint32_t mine[RC_CREW_MAX]; uint8_t crew[RC_MAX_PEERS]; } peers;   /* the crew marks: with RC_HF_CREW only */
         struct { uint8_t status, epoch; uint16_t cfg_rev; uint8_t n, clock; rc_state s[RC_SNAP_STATES]; } snap;
@@ -488,7 +490,8 @@ typedef struct {
      * it gets a HELLO every second and a SNAP twice a second, and answers
      * every half second with a PEERS list of the players near us.  While it
      * answers, that list is who our peers are: nobody else is taken, a peer
-     * it no longer lists goes ("out of range"), and there is no discovery
+     * it no longer lists goes ("out of range"; not our outrun's other
+     * player, rc_set_duel), and there is no discovery
      * and no gossip.  Silent for 10 s (or from the start): discovery and
      * gossip as without one. */
     uint32_t hub_ip;
@@ -572,6 +575,10 @@ typedef struct {
     int64_t   hub_since, hub_heard_us, hub_hello_tx, hub_snap_tx;  int hub_was;
     uint32_t  hub_lists;           /* PEERS lists from the hub */
     uint32_t  rx_unlisted;         /* HELLOs of players the hub does not list for us: ignored */
+    int64_t   hub_late_us;         /* a list came after none for over T_HUB_LATE (our link, or the whole page, stood): when */
+    /* our outrun's other player (rc_set_duel; 0: none): the hub hears of it, a peer of that id stays while the hub's
+     * lists leave it out, and how it went if it went (RC_DGONE_*; 0 while it is here) */
+    uint32_t  duel_with;  uint8_t duel_gone;
     /* DUEL messages for us from established peers, oldest first, until the
      * game side takes them (rc_take_duel) */
     struct { uint32_t from; uint8_t op, arg; uint32_t duel; } duel_in[RC_DUEL_INBOX];
@@ -640,6 +647,13 @@ int  rc_peer_friend(const rc_session *s, int i);
 void rc_set_crews(rc_session *s, const uint32_t *crews, int n);
 /* the links we want from the hub changed while the session runs (rc_config.links): it hears at the next tick */
 void rc_set_links(rc_session *s, int links);
+/* Our outrun's other player (its id; 0: the outrun is over), while the outrun lasts: the hub hears it at the next tick
+ * and links the two before anyone else once both name each other, and the peer of that id is not let go when the
+ * hub's lists leave it out ("out of range": a crowd nearer than it, the hub's busy cap), only when it goes as any
+ * peer goes.  How it went then: duel_gone, one of these (RC_DGONE_SAID: its BYE, a restart, another room; SILENT: no
+ * packets for T_DROP) */
+enum { RC_DGONE_SAID = 1, RC_DGONE_SILENT = 2 };
+void rc_set_duel(rc_session *s, uint32_t id);
 /* our room changed while the session runs (rc_room_hash, 0: none): every
  * peer of the old one goes, with the world map's markers and lobbies, and the
  * hub (or the peers) hears the new one at the next tick.  The number of

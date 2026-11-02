@@ -13,9 +13,10 @@
  *   roam_hubwire lobbies <hex>... a session that takes race lobbies asks for the world map as above and takes
  *                                 these datagrams; then "lobbies <gen> <n> x,y,race,n,max,state ..."
  *   roam_hubwire racerep          a race's report to the hub, as roam_core encodes it, in hex
- *   roam_hubwire hellocrew [n]    a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
+ *   roam_hubwire hellocrew [n] [id]  a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
  *                                 (rc_room_hash) after the ids of the two players the hub listed, who said hello
- *                                 (with n: then the n links it wants, rc_config.links)
+ *                                 (with n: then the n links it wants, rc_config.links; with id, hex: then the
+ *                                 other player of its outrun, rc_set_duel)
  *   roam_hubwire hubcrew <hex>    a session in those two crews takes this list from the hub; then each player
  *                                 listed as "a.b.c.d:port:crew" (rc_peer_crew: 0 or 1, -1 for none), "f" after
  *                                 it for a friend (rc_peer_friend) */
@@ -77,6 +78,7 @@ int main(int argc, char **argv){
             n = rc_encode(&h, b, sizeof b);
             rc_receive(&S, ip[k], 47210, b, n, t += 1000);
         }
+        if (argc > 3) rc_set_duel(&S, (uint32_t)strtoul(argv[3], 0, 16));
         hub_hello_n = 0;
         rc_tick(&S, t += 1500000);
         if (!hub_hello_n){ printf("none\n"); return 1; }

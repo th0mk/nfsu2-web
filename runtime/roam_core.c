@@ -391,11 +391,12 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
-        if (m->u.hello.n_crews || m->u.hello.links){
+        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel){
             if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
-            if (m->u.hello.links) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
+            if (m->u.hello.links || m->u.hello.duel) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
+            if (m->u.hello.duel) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
         }
         break; }
     case RC_MSG_PEERS:
@@ -527,6 +528,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             if (r.err) return RC_E_SHORT;
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
             if (r.n < r.len) m->u.hello.links = (uint8_t)rc_get8(&r);
+            if (r.n + 4 <= r.len) m->u.hello.duel = rc_get32(&r);
             r.n = r.len;                                              /* (a newer core's additions) */
         }
         break; }
@@ -925,6 +927,7 @@ int rc_interp_eval(rc_interp *ip, int64_t now_us, int64_t frame_dt_us, int64_t d
 #define T_HUB_HELLO    1000000      /* to the hub: a HELLO this often */
 #define T_HUB_SNAP      500000      /* and a SNAP (where we are) this often */
 #define T_HUB_GRACE    2500000      /* a peer the hub has not listed for this long goes (its list comes every second, twice since 2026-10-23) */
+#define T_HUB_LATE     3000000      /* a list after none for this long: our link (or the whole page) stood (hub_late_us) */
 #define T_HUB_SILENT  10000000      /* no list for this long (or from the start): discovery and gossip again */
 #define T_FAR_FED      1500000      /* a far peer's HELLOs and pings are rarer while it got a SNAP within this (rc_tick) */
 #define RL_DGRAMS      100          /* per second and source */
@@ -1170,7 +1173,12 @@ void rc_set_links(rc_session *s, int links){
     s->conf.links = links;
     s->hub_hello_tx = INT64_MIN / 4;                                /* (a HELLO due at the next tick) */
 }
-static void drop_peer(rc_session *s, int i, const char *why);
+void rc_set_duel(rc_session *s, uint32_t id){
+    if (id == s->duel_with) return;
+    s->duel_with = id; s->duel_gone = 0;
+    s->hub_hello_tx = INT64_MIN / 4;                                /* (a HELLO due at the next tick) */
+}
+static void drop_peer(rc_session *s, int i, const char *why, int gone);
 int rc_set_room(rc_session *s, uint32_t room){
     if (room == s->conf.room) return 0;
     s->conf.room = room;
@@ -1180,7 +1188,7 @@ int rc_set_room(rc_session *s, uint32_t room){
     for (int i = 0; i < RC_TABLE; i++){
         if (s->peer[i].state == RC_PS_FREE) continue;
         n += s->peer[i].state == RC_PS_EST;
-        drop_peer(s, i, "the room changed");
+        drop_peer(s, i, "the room changed", RC_DGONE_SAID);
     }
     s->map_n = 0; s->map_total = 0; s->map_held = 0; s->map_gen++;
     s->near_n = 0; s->near_total = 0; s->near_held = 0; s->near_gen++;
@@ -1271,8 +1279,11 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
         int n = s->conf.n_crews < 0 ? 0 : s->conf.n_crews > RC_CREW_MAX ? RC_CREW_MAX : s->conf.n_crews;
         for (int i = 0; i < n; i++) if (s->conf.crews[i]) m->u.hello.crews[m->u.hello.n_crews++] = s->conf.crews[i];
     }
-    /* the hub (to nobody with our crews): the links we want */
-    if (crews && !to) m->u.hello.links = (uint8_t)(s->conf.links < 0 ? 0 : s->conf.links > RC_MAX_PEERS ? RC_MAX_PEERS : s->conf.links);
+    /* the hub (to nobody with our crews): the links we want, and our outrun's other player */
+    if (crews && !to){
+        m->u.hello.links = (uint8_t)(s->conf.links < 0 ? 0 : s->conf.links > RC_MAX_PEERS ? RC_MAX_PEERS : s->conf.links);
+        m->u.hello.duel = s->duel_with;
+    }
     if (s->conf.duels) m->h.flags |= RC_HF_DUELS;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
@@ -1334,9 +1345,11 @@ static void answer_cfg(rc_session *s, rc_peer *p, uint8_t have_mask, int64_t now
     p->cfg_answer_us = now + T_CFG_ANSWER;
     send_cfg(s, p, have_mask);
 }
-static void drop_peer(rc_session *s, int i, const char *why){
+/* gone: how, for our outrun's other player (RC_DGONE_*; 0: the hub's lists, which never let it go) */
+static void drop_peer(rc_session *s, int i, const char *why, int gone){
     rc_peer *p = &s->peer[i];
     if (p->state == RC_PS_EST) note(s, RC_EV_LEAVE, i, p->name, " left: ", why);
+    if (s->duel_with && p->id == s->duel_with && !s->duel_gone) s->duel_gone = (uint8_t)gone;
     s->peers_dirty = 1;
     peer_clear(p, p->configured);
 }
@@ -1387,6 +1400,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (m.h.type == RC_MSG_NEARD){ near_answer(s, &m, now); return; }
         if (m.h.type == RC_MSG_LOBBIES){ lobbies_from_hub(s, &m); return; }
         if (m.h.type != RC_MSG_PEERS) return;
+        if (s->hub_heard_us && now - s->hub_heard_us > T_HUB_LATE) s->hub_late_us = now;
         s->hub_heard_us = now; s->hub_lists++;
         int marks = (m.h.flags & RC_HF_CREW) != 0;
         for (int k = 0; k < m.u.peers.n; k++){
@@ -1444,14 +1458,14 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (id_elsewhere(s, m.h.sender, i)){ s->rx_dup_id++; return; }
         note(s, RC_EV_RESTART, i, p->name, " restarted", "");
         int conf = p->configured;
-        drop_peer(s, i, "restart");
+        drop_peer(s, i, "restart", RC_DGONE_SAID);
         p->state = RC_PS_CANDIDATE; p->configured = conf; p->ip = ip; p->port = port; p->added_us = now;
     }
     if (!p->id) p->id = m.h.sender;
     p->rx++; p->last_rx_us = now; p->lost = 0;
     switch (m.h.type){
     case RC_MSG_HELLO: {
-        if (m.u.hello.room != s->conf.room){ s->rx_room++; if (p->state == RC_PS_EST) drop_peer(s, i, "other room"); return; }
+        if (m.u.hello.room != s->conf.room){ s->rx_room++; if (p->state == RC_PS_EST) drop_peer(s, i, "other room", RC_DGONE_SAID); return; }
         int first = !p->name[0];
         memcpy(p->name, m.u.hello.name, sizeof p->name);
         p->platform = m.u.hello.platform; p->status = m.u.hello.status; p->cfg_rev_seen = m.u.hello.cfg_rev;
@@ -1583,7 +1597,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (s->nbye < 4) k = s->nbye++;
         else for (int j = 1; j < 4; j++) if (s->bye[j].at < s->bye[k].at) k = j;      /* the oldest goes */
         s->bye[k].id = m.h.sender; s->bye[k].at = now;
-        drop_peer(s, i, m.u.bye.reason == 1 ? "switched off" : "quit");
+        drop_peer(s, i, m.u.bye.reason == 1 ? "switched off" : "quit", RC_DGONE_SAID);
         break; }
     }
 }
@@ -1610,9 +1624,11 @@ void rc_tick(rc_session *s, int64_t now){
     for (int i = 0; i < RC_TABLE; i++){
         rc_peer *p = &s->peer[i];
         if (p->state == RC_PS_FREE) continue;
-        if (p->last_rx_us && now - p->last_rx_us > T_DROP){ drop_peer(s, i, "timeout"); continue; }
-        /* lists keep coming without it (a silent hub drops nobody) */
-        if (hub && s->hub_heard_us && !p->configured && s->hub_heard_us - p->hub_listed_us > T_HUB_GRACE){ drop_peer(s, i, "out of range"); continue; }
+        if (p->last_rx_us && now - p->last_rx_us > T_DROP){ drop_peer(s, i, "timeout", RC_DGONE_SILENT); continue; }
+        /* lists keep coming without it (a silent hub drops nobody); our outrun's other player stays (rc_set_duel: a
+         * crowd nearer than it, or the hub's busy cap, ended the outrun as a win on both screens) */
+        if (hub && s->hub_heard_us && !p->configured && s->hub_heard_us - p->hub_listed_us > T_HUB_GRACE && !(s->duel_with && p->id == s->duel_with)){
+            drop_peer(s, i, "out of range", 0); continue; }
         if (!p->last_rx_us && !p->configured && now - p->added_us > T_GOSSIP_FORGET){ peer_clear(p, 0); continue; }
         if (p->state == RC_PS_EST && now - p->last_rx_us > T_LOST && !p->lost){
             p->lost = 1; note(s, RC_EV_NOTE, i, p->name, ": no packets for 3 s", ""); }

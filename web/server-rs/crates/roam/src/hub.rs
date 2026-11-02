@@ -456,6 +456,9 @@ struct Player {
     lobby: Option<(HubLobby, f64)>,
     /// the lobby it asked to join (its id), and when
     join: Option<(u32, f64)>,
+    /// the other player of its outrun, as its last HELLO named it (wire `Msg::Hello::duel`; 0: none): the two are
+    /// linked first while each names the other (`duel_pairs`)
+    duel: u32,
     /// the lobby of the race it last reported, and when (one report a race is logged); the same of its last results
     /// (RACERES, sent with the report)
     reported: Option<(u32, f64)>,
@@ -617,6 +620,8 @@ struct Stats {
     tick_ms_max: f64,
     busy: f64,
     cap_cuts: u64,
+    /// links outruns between players needed made before any other (`duel_pairs`), at the last tick
+    duel_links: u64,
     /// links a race lobby needed made before the others (`lobby_pairs`), at the last tick
     lobby_links: u64,
     /// links made for crews before the others (`crew_pairs`), and the crews too large for that (CREW_GROUP_MAX
@@ -673,6 +678,10 @@ struct Scratch {
     near_v: Vec<Near>,
     /// each Near's vectors of what it found, kept for the next tick
     found: Vec<Found>,
+    /// the outruns' pairs (`duel_pairs`), places in the room, the lower first; the room's players who name another, as
+    /// (their id, their place), sorted
+    dpairs: Vec<(u32, u32)>,
+    dids: Vec<(u32, u32)>,
     /// the race lobbies' pairs (`lobby_pairs`), places in the room, the host first; the room's ids to places; the
     /// players asking to join a lobby (its id, their place); the players near a lobby's start
     lpairs: Vec<(u32, u32)>,
@@ -1073,6 +1082,7 @@ impl Hub {
                     crews: [0; wire::CREWS],
                     lobby: None,
                     join: None,
+                    duel: 0,
                     reported: None,
                     resulted: None,
                     links: Vec::new(),
@@ -1103,7 +1113,7 @@ impl Hub {
         // (a HELLO: its name against the claims)
         let mut check = false;
         match m {
-            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links } => {
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel } => {
                 // another start of the game on the same endpoint (where its car was, and its clock's epochs, start again)
                 if p.id != sender {
                     p.links.clear();
@@ -1132,6 +1142,7 @@ impl Hub {
                 p.degree = if core >= 10 && links > 0 { (links as usize).min(degree) } else { degree.min(wire::LINKS_V9) };
                 p.lobbies = lobbies;
                 p.marks = marks;
+                p.duel = duel;
                 let was = p.crews[0] != 0;
                 p.crews = distinct(crews);
                 crewed = Some((was, p.crews[0] != 0));
@@ -1826,11 +1837,14 @@ impl Hub {
         s.room_of.clear();
         self.owners_at.clear();
         let mut rooms = 0;
+        // (no player in an outrun, no outrun's pair to look for)
+        let mut dueling = 0;
         for &slot in &self.order {
             let Some(Some(p)) = self.slots.get(slot as usize) else { continue };
             if p.p.is_none() || now - p.pos_at > self.o.stale_ms || p.impostor {
                 continue;
             }
+            dueling += (p.duel != 0) as usize;
             if let Some(o) = &p.owner {
                 self.owners_at.insert(o.clone(), slot);
             }
@@ -1850,10 +1864,15 @@ impl Hub {
         s.local.clear();
         s.local.resize(self.slots.len(), NONE);
         let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep };
-        let (mut lobby_links, mut crew_links, mut crew_skips) = (0, 0, 0);
+        let (mut duel_links, mut lobby_links, mut crew_links, mut crew_skips) = (0, 0, 0, 0);
         for r in 0..rooms {
             let list = std::mem::take(&mut s.rooms[r]);
             prepare(&self.slots, &list, self.cap, &self.o, now, s);
+            if dueling > 1 {
+                duel_pairs(&self.slots, &list, s);
+            } else {
+                s.dpairs.clear();
+            }
             lobby_pairs(&self.slots, &list, now, s);
             block_pairs(&self.slots, &list, &self.blocks, s);
             self.apart.extend(s.bpairs.iter().map(|&(a, b)| (list[a as usize], list[b as usize])).map(|(x, y)| (x.min(y), x.max(y))));
@@ -1863,11 +1882,12 @@ impl Hub {
             } else {
                 s.cpairs.clear();
             }
-            let (lobby, crew) = if list.len() > self.o.exact_room {
+            let (duel, lobby, crew) = if list.len() > self.o.exact_room {
                 link_many(&self.slots, &list, &w, s)
             } else {
                 link_every_pair(&self.slots, &list, &w, s)
             };
+            duel_links += duel;
             lobby_links += lobby;
             crew_links += crew;
             for &slot in &list {
@@ -1876,6 +1896,7 @@ impl Hub {
             s.rooms[r] = list;
         }
         self.apart.sort_unstable();
+        self.st.duel_links = duel_links;
         self.st.lobby_links = lobby_links;
         self.st.crew_links = crew_links;
         self.st.crew_skips = crew_skips;
@@ -2069,6 +2090,7 @@ impl Hub {
             "tickMsMax": num(st.tick_ms_max),
             "busy": num(st.busy),
             "capCuts": st.cap_cuts,
+            "duelLinks": st.duel_links,
             "lobbyLinks": st.lobby_links,
             "crewLinks": st.crew_links,
             "crewSkips": st.crew_skips,
@@ -2145,6 +2167,33 @@ fn join(fresh: &mut [Vec<Link>], a: u32, b: u32, since: f64) {
 /// since when the players in slots a and b are linked: since the link of the last tick, or now
 fn since_of(slots: &[Option<Player>], a: u32, b: u32, now: f64) -> f64 {
     player(slots, a).and_then(|p| p.links.iter().find(|l| l.slot == b)).map_or(now, |l| l.since)
+}
+
+/// The links outruns between players need before any other (roam_game.c du_*: the game races the other player's car
+/// as its own peer shows it): two players of the room who each name the other as their outrun's (`Player::duel`, its
+/// HELLO's since core version 11), into `s.dpairs` as places in the room, the lower first.  By distance alone the one
+/// who fell behind was let go as soon as a player's links' worth of others were nearer (40 a computer, 16 a phone, 8
+/// under the busy cap: a crowd round the start, the 62 m of a phone's log of 2026-11-01), and both games saw the other
+/// leave and won.  Only the two together: a HELLO names whom it likes, and one player's word alone would have the hub
+/// link it first with anyone of its room.  Looks only at the players who name someone (a sorted list of them, no map).
+fn duel_pairs(slots: &[Option<Player>], list: &[u32], s: &mut Scratch) {
+    let Scratch { dpairs, dids, .. } = s;
+    dpairs.clear();
+    dids.clear();
+    dids.extend(list.iter().enumerate().filter_map(|(j, &q)| player(slots, q).filter(|p| p.duel != 0).map(|p| (p.id, j as u32))));
+    if dids.len() < 2 {
+        return;
+    }
+    dids.sort_unstable();
+    for &(id, i) in dids.iter() {
+        let Some(want) = player(slots, list[i as usize]).map(|p| p.duel) else { continue };
+        // the one it names, naming it back (each pair once: from its lower place)
+        for &(_, j) in dids[dids.partition_point(|e| e.0 < want)..].iter().take_while(|e| e.0 == want) {
+            if i < j && player(slots, list[j as usize]).is_some_and(|q| q.duel == id) {
+                dpairs.push((i, j));
+            }
+        }
+    }
 }
 
 /// The links a race lobby needs before any other (roam_game.c mp_*: its messages go between linked players only): its
@@ -2381,8 +2430,8 @@ pub(crate) fn crew_count(counts: &[(u32, u32)], crew: u32) -> usize {
 
 /// The links of a room of at most `exact_room` players: every pair of them, nearest first (a link younger than
 /// `hold_ms` before them all, an older one at `keep` its distance), into the links while both ends have room.  The
-/// race lobbies' links and the crews' come first; returns how many of each were made.
-fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch) -> (u64, u64) {
+/// outruns' links, the race lobbies' and the crews' come first; returns how many of each were made.
+fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch) -> (u64, u64, u64) {
     let m = list.len();
     let Scratch {
         soon,
@@ -2397,6 +2446,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         sorting,
         local: at,
         fresh,
+        dpairs,
         lpairs,
         cpairs,
         ccount,
@@ -2405,10 +2455,10 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         bnext,
         ..
     } = s;
-    // the race lobbies' links first, then the crews'
+    // the outruns' links first, then the race lobbies', then the crews'
     let linked = |fresh: &[Vec<Link>], a: u32, b: u32| fresh[a as usize].iter().any(|l| l.slot == b);
-    let mut made = 0;
-    for &(a, b) in lpairs.iter() {
+    let (mut duel, mut made) = (0, 0);
+    for (k, &(a, b)) in dpairs.iter().chain(lpairs.iter()).enumerate() {
         let (a, b) = (a as usize, b as usize);
         let (sa, sb) = (list[a], list[b]);
         if fresh[sa as usize].len() < deg[a]
@@ -2417,7 +2467,11 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
             && !kept_apart(bstart, bnext, a, b)
         {
             join(fresh, sa, sb, since_of(slots, sa, sb, w.now));
-            made += 1;
+            if k < dpairs.len() {
+                duel += 1;
+            } else {
+                made += 1;
+            }
         }
     }
     let mut crew = 0;
@@ -2443,7 +2497,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
     }
     // a pair linked already is one of the links made first, and those are the first of each player's new links: only
     // they are looked through (a few a player), not all of its links
-    let first = made + crew > 0;
+    let first = duel + made + crew > 0;
     if first {
         npre.clear();
         npre.extend(list.iter().map(|&slot| fresh[slot as usize].len() as u32));
@@ -2497,7 +2551,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
             open -= (fresh[sa as usize].len() == deg[a]) as usize + (fresh[sb as usize].len() == deg[b]) as usize;
         }
     }
-    (made, crew)
+    (duel, made, crew)
 }
 
 /// whether `places` has `j` (every one compared, without a branch: there are at most a degree of them, and this
@@ -2524,10 +2578,10 @@ fn has_place(places: &[u32], j: u32) -> bool {
 ///
 /// What the order asks of a pair, which players have room and which pairs were or are linked, is read from arrays
 /// by place in the room (a player's last links and its new ones, as places), not from the players.  (Not inlined
-/// into the tick: there it made the every-pair loop of the small rooms 1 % slower.)  The race lobbies' links and the
-/// crews' come first, as in `link_every_pair`; returns how many of each were made.
+/// into the tick: there it made the every-pair loop of the small rooms 1 % slower.)  The outruns' links, the race
+/// lobbies' and the crews' come first, as in `link_every_pair`; returns how many of each were made.
 #[inline(never)]
-fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch) -> (u64, u64) {
+fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch) -> (u64, u64, u64) {
     let m = list.len();
     let Scratch {
         soon,
@@ -2549,6 +2603,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         ostart,
         fcount,
         flinks,
+        dpairs,
         lpairs,
         cpairs,
         ccount,
@@ -2610,9 +2665,9 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
     flinks.clear();
     flinks.resize(m * stride, 0);
     let room = |fcount: &[u32], i: usize| (fcount[i] as usize) < deg[i];
-    // the race lobbies' links first, then the crews'
-    let mut made = 0;
-    for &(a, b) in lpairs.iter() {
+    // the outruns' links first, then the race lobbies', then the crews'
+    let (mut duel, mut made) = (0, 0);
+    for (k, &(a, b)) in dpairs.iter().chain(lpairs.iter()).enumerate() {
         let (i, j) = (a as usize, b as usize);
         if room(fcount, i)
             && room(fcount, j)
@@ -2624,7 +2679,11 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                 flinks[a * stride + fcount[a] as usize] = b as u32;
                 fcount[a] += 1;
             }
-            made += 1;
+            if k < dpairs.len() {
+                duel += 1;
+            } else {
+                made += 1;
+            }
         }
     }
     let mut crew = 0;
@@ -2707,7 +2766,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
     for n in near.drain(..).chain(near_a.drain(..)).chain(near_v.drain(..)) {
         found.push(n.into_found());
     }
-    (made, crew)
+    (duel, made, crew)
 }
 
 /// whether one of the two players' browsers blocks the other (`Hub::blocks`)

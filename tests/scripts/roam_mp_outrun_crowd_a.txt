@@ -1,0 +1,45 @@
+# Free-roam outrun between two players in a crowd, instance A (challenges,
+# drives away): as roam_mp_outrun_a.txt, with a crowd round the new career's
+# start where B (roam_mp_outrun_crowd_b.txt) stays, so that as A gets away,
+# more players are nearer to each of the two than the other (the hub's links
+# went to them, and both games won: "a win for us (the friend's car is
+# gone)").  Run (inside WSL, ghosts so the crowd shoves nobody):
+#   node web/tools/roam-pair.mjs --out <dir> --drive 8000 --watch 8000 \
+#     --a Al:roam_mp_outrun_crowd_a.txt --b Bo:roam_mp_outrun_crowd_b.txt \
+#     --env NFSU2_ROAM_COLLIDE=0 --crowd 90 --crowd-args "--spread 4 --speed 1 --links 32"
+# A should win 300 m on ("outrun with Bo: over, WON"), B lose ("over, LOST"),
+# neither see the other leave.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 30 6000
++0    roam mp waitcars 1 3000
++0    roam mp status
++1500 roam mp waitoutrun prompt 1200
++0    roam mp outrun
++30   tap RETURN
++0    roam mp waitoutrun race 900
++0    roam mp outrun
++0    autopilot on
++600  roam mp outrun
++0    roam mp waitoutrun idle ${ROAM_DRIVE_FRAMES}
++0    roam mp outrun
++0    autopilot off
++0    roam mp status
++300  roam mp outrun
++10   quit
