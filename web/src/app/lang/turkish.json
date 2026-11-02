@@ -304,7 +304,7 @@
   "Online mode": "Çevrimiçi mod",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Oyunun Çevrimiçi menüsü EA girişini atlar: lobi, sohbet ve bu sunucudaki herkesle yarışlar.",
   "Players' cars shown": "Gösterilen oyuncu arabaları",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "En yakındakiler. Bellekten tasarruf için telefonlar 16'dan, tabletler 24'ten başlar.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Serbest sürüşte en yakın kaç oyuncu arabasının görüneceği. Daha fazlası kare hızını düşürebilir.",
   "Game": "Oyun",
   "More game settings": "Diğer oyun ayarları",
   "Language": "Dil",

@@ -298,7 +298,7 @@
   "Online mode": "โหมดออนไลน์",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "เมนูออนไลน์ของเกมจะข้ามการล็อกอิน EA: มีล็อบบี้ แชต และการแข่งกับทุกคนบนเซิร์ฟเวอร์นี้",
   "Players' cars shown": "จำนวนรถผู้เล่นที่แสดง",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "คันที่ใกล้ที่สุด โทรศัพท์เริ่มที่ 16 คัน แท็บเล็ตเริ่มที่ 24 คัน เพื่อประหยัดหน่วยความจำ",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "จำนวนรถของผู้เล่นที่ใกล้ที่สุดที่แสดงขณะขับอิสระ ยิ่งมากเฟรมเรตอาจยิ่งลดลง",
   "Game": "เกม",
   "More game settings": "การตั้งค่าเกมเพิ่มเติม",
   "Language": "ภาษา",

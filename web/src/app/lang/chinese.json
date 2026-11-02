@@ -298,7 +298,7 @@
   "Online mode": "線上模式",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "遊戲的「線上」選單會略過 EA 登入：可與此伺服器上的所有人使用大廳、聊天與比賽。",
   "Players' cars shown": "顯示的玩家車輛數",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "最近的車輛。為節省記憶體，手機預設為 16 輛，平板為 24 輛。",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "自由漫遊中顯示多少輛最近的玩家車輛。數量越多，影格率可能越低。",
   "Game": "遊戲",
   "More game settings": "更多遊戲設定",
   "Language": "語言",

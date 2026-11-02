@@ -337,7 +337,7 @@
   "Online mode": "Onlinemodus",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Het online menu van het spel slaat de EA-inlog over: lobby, chat en races met iedereen op deze server.",
   "Players' cars shown": "Getoonde spelerswagens",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "De dichtstbijzijnde. Telefoons beginnen op 16 en tablets op 24, om geheugen te sparen.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Hoeveel van de dichtstbijzijnde spelerswagens Verkennen toont. Meer kan de framerate verlagen.",
   "Game": "Spel",
   "More game settings": "Meer spelinstellingen",
   "Language": "Taal",

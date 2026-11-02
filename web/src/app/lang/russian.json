@@ -363,7 +363,7 @@
   "Online mode": "Игра через Интернет",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Пункт «Игра через Интернет» в игре пропускает вход в систему EA: лобби, чат и гонки со всеми на этом сервере.",
   "Players' cars shown": "Видимые машины игроков",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "Ближайшие. На телефонах по умолчанию 16, на планшетах 24 — для экономии памяти.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Сколько ближайших машин игроков видно в свободной езде. Чем больше, тем ниже может быть частота кадров.",
   "Game": "Игра",
   "More game settings": "Дополнительные настройки игры",
   "Language": "Язык",

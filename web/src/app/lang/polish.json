@@ -363,7 +363,7 @@
   "Online mode": "Tryb sieciowy",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Menu Sieć w grze pomija logowanie EA: poczekalnia, czat i wyścigi ze wszystkimi na tym serwerze.",
   "Players' cars shown": "Widoczne samochody graczy",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "Najbliższe. Telefony zaczynają od 16, a tablety od 24, aby oszczędzać pamięć.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Ile najbliższych samochodów graczy widać na przejażdżce. Więcej może obniżyć liczbę klatek.",
   "Game": "Gra",
   "More game settings": "Więcej ustawień gry",
   "Language": "Język",

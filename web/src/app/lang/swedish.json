@@ -337,7 +337,7 @@
   "Online mode": "Online-läge",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Spelets Online-meny hoppar över EA-inloggningen: lobby, chatt och race med alla på den här servern.",
   "Players' cars shown": "Spelarbilar som visas",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "De närmaste. Telefoner börjar på 16 och surfplattor på 24, för att spara minne.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Hur många av de närmaste spelarbilarna läget Utforska visar. Fler kan sänka bildfrekvensen.",
   "Game": "Spel",
   "More game settings": "Fler spelinställningar",
   "Language": "Språk",

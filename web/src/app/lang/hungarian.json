@@ -534,7 +534,7 @@
   "Online mode": "Online mód",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "A játék Online menüje kihagyja az EA bejelentkezést: lobbi, chat és versenyek mindenkivel ezen a szerveren.",
   "Players' cars shown": "Látható játékosautók",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "A legközelebbiek. A memória kímélése miatt telefonon 16, tableten 24 az alapérték.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Hány legközelebbi játékosautót mutat a Felfedező mód. Több autó csökkentheti a képkockasebességet.",
   "Game": "Játék",
   "More game settings": "További játékbeállítások",
   "Language": "Nyelv",

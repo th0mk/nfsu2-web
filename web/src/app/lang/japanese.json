@@ -298,7 +298,7 @@
   "Online mode": "オンラインモード",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "ゲームの「オンライン」メニューでEAログインを省略します。このサーバーの全員と、ロビー、チャット、レースを楽しめます。",
   "Players' cars shown": "表示するプレイヤーの車",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "近い順に表示します。メモリを節約するため、スマートフォンは16台、タブレットは24台から始まります。",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "フリーロームで表示する近くのプレイヤーの車の台数です。多いとフレームレートが下がることがあります。",
   "Game": "ゲーム",
   "More game settings": "その他のゲーム設定",
   "Language": "言語",

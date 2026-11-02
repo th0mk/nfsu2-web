@@ -298,7 +298,7 @@
   "Online mode": "온라인 모드",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "게임의 온라인 메뉴에서 EA 로그인을 건너뛰어요. 이 서버의 모두와 로비, 채팅, 레이스를 즐길 수 있어요.",
   "Players' cars shown": "표시할 플레이어 차",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "가까운 순서로 보여요. 메모리를 아끼기 위해 휴대폰은 16대, 태블릿은 24대에서 시작해요.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "자유 주행에서 가까운 플레이어 차를 몇 대까지 보여 줄지 정해요. 많을수록 프레임 레이트가 떨어질 수 있어요.",
   "Game": "게임",
   "More game settings": "게임 설정 더 보기",
   "Language": "언어",

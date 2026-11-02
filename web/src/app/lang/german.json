@@ -337,7 +337,7 @@
   "Online mode": "Online-Modus",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Das Online-Menü des Spiels überspringt den EA-Log-in: Lobby, Chat und Rennen mit allen auf diesem Server.",
   "Players' cars shown": "Angezeigte Spielerwagen",
-  "The nearest ones. Phones start at 16 and tablets at 24, to save memory.": "Die nächsten. Handys starten bei 16, Tablets bei 24, um Speicher zu sparen.",
+  "How many of the nearest players' cars free roam shows. More can lower the frame rate.": "Wie viele der nächsten Spielerwagen die freie Fahrt zeigt. Mehr kann die Bildrate senken.",
   "Game": "Spiel",
   "More game settings": "Weitere Spieleinstellungen",
   "Language": "Sprache",
