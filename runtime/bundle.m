@@ -226,7 +226,7 @@ static const struct { const char *key, *env; int kind; const char *vals; } g_key
     { "roam_crew_colours",        "NFSU2_ROAM_CREW_RGB",        K_RGBS  | K_IC },
     { "roam_max_players",         "NFSU2_ROAM_MAX_PLAYERS",     K_INT   | K_IC, "2..49" },
     { "roam_max_cars",            "NFSU2_ROAM_MAX_CARS",        K_INT   | K_IC, "0..48" },
-    { "roam_collide",             "NFSU2_ROAM_COLLIDE",         K_BOOL  | K_IC },
+    { "roam_collide",             "NFSU2_ROAM_COLLIDE",         K_ENUM  | K_IC, "on|off|none" },
     { "roam_rate",                "NFSU2_ROAM_RATE",            K_INT   | K_IC, "10..30" },
     { "roam_delay",               "NFSU2_ROAM_DELAY",           K_INT   | K_IC, "0..1000" },
     { "roam_extrap",              "NFSU2_ROAM_EXTRAP",          K_INT   | K_IC, "0..1000" },
@@ -447,8 +447,9 @@ static const char *const k_template =
 "#roam_max_cars = 32\n"
 "# on = friends' cars are solid: drawn where they are now, and one that\n"
 "# appears on your car lets you through until you are apart.  off = ghosts,\n"
-"# and your car one for your friends.\n"
-"# [NFSU2_ROAM_COLLIDE]\n"
+"# and your car one for your friends.  none = ghosts, and traffic and the\n"
+"# game's tuners pass through you too (not in races, not an outrun's\n"
+"# opponent).  [NFSU2_ROAM_COLLIDE]\n"
 "#roam_collide = on\n"
 "# Snapshots per second (10 to 30), the delay ghost cars are shown with in\n"
 "# ms (0 to 1000) and the longest cars are extrapolated in ms (0 to 1000).\n"

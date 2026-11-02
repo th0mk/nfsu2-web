@@ -1,0 +1,35 @@
+# Ghost mode from the page menu (F9) on the player's own page: the menu's Ghost mode item steps Off, Players,
+# Everything, Off, and the game follows at once (roam_game.c solid_follow: "solid cars ... (the page's menu)", mp
+# status "Ghost mode off/players/everything"); settings.ini keeps the last (roam_collide = on, off, none).
+#   node web/tools/roam-pair.mjs --page app --solo --base ... --a "Al:roam_ghost_menu.txt"
+#   (inside WSL: NFSU2_BROWSER=chromium and CHROME_ARGS with --enable-unsafe-webgpu and the Vulkan flags)
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++600  roam mp status
++0    log MENU solid                  # Off -> Players
++120  roam mp status
++0    log MENU solid                  # Players -> Everything
++120  roam mp status
++0    log MENU solid                  # Everything -> Off
++120  roam mp status
++0    log MENU solid                  # Off -> Players
++120  roam mp status
++0    log MENU solid                  # Players -> Everything (kept in settings.ini)
++120  roam mp status
++10   quit

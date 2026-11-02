@@ -120,7 +120,7 @@ While you drive:
 | Enter | Choose (menus); in free roam, start an event at its marker or take an outrun |
 | F12 | Photo mode while you drive (see below), and in it the photo; elsewhere a screenshot. Both are PNGs kept with your saves and shown in Saves on the start page |
 | **F8** | Frame-rate counter: off, on, detailed |
-| **F9** | The page menu: when the game last saved, full screen, counter, ghost mode and crews (in free roam), radio, controls, log, **Quit game**, and Stop waiting: play offline while you wait in line; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
+| **F9** | The page menu: when the game last saved, full screen, counter, ghost mode (off, players, everything) and crews (in free roam), radio, controls, log, **Quit game**, and Stop waiting: play offline while you wait in line; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
 | **Hold Esc** | Leave full screen (a short press still goes to the game) |
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
@@ -208,7 +208,7 @@ that room.
 
 | Where | Settings |
 |---|---|
-| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode, players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
+| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
@@ -414,9 +414,14 @@ Good to know:
   sends you their car 5 times a second instead of 20 (past 1 km, twice), which saves traffic and doesn't show at that
   distance. When many players arrive at once, their cars load one after another, about one a second, so the last of 32
   can take half a minute to appear.
-- **Ghost mode:** off by default: you collide with the other players' cars (Online, Ghost mode; on: you drive through
-  them, and they through yours). The page menu (F9) switches it while you play, at once, and keeps it for your next
-  games. A car that appears on top of yours, at a garage or after a jump, lets you through until you are apart. Each
+- **Ghost mode:** Online, Ghost mode. **Off** (the default): you collide with the other players' cars. **Players**: you
+  drive through them, and they through yours. **Everything**: traffic and the game's tuners pass through you as well
+  (and through the other players' cars on your screen), in free roam with others only: races stay as the game has
+  them, and an outrun's opponent is solid while it runs, as in the game: the tuner you race, or a player whose Ghost
+  mode is Off or Everything too (with Players, or on an older version, you two drive through each other as before).
+  Traffic and tuners are in your game only, so this changes nothing for the others. The page menu (F9) switches
+  between the three while you play, at once, and keeps it for your next games. With Off, a car that appears on top
+  of yours, at a garage or after a jump, lets you through until you are apart. Each
   player's own game moves their car: a car you hit is pushed in its owner's game, and moves on your screen as it does
   there. A hit is shared between the two cars by their models' weight (0.96 t for the Peugeot 106 to 2.9 t for the
   Hummer): driving into a standing car of your weight, you go on at about half your speed and it leaves at about the

@@ -146,6 +146,7 @@ static const struct { uint32_t va; uint16_t len; uint8_t kind; uint32_t crc; con
     { 0x004CA8E8u,  6, RF_REF, 0x109EE202u, "G_MM_ZOOM: fdiv dword ptr [0x78e098]" },
     { 0x004FFC90u,  6, RF_REF, 0xC775E574u, "G_NRACES: mov edx, dword ptr [0x8383e4]" },
     { 0x004FFD24u,  6, RF_REF, 0x36C481B1u, "G_NRACES: mov edi, dword ptr [0x8383e4]" },
+    { 0x005FFCBAu,  6, RF_REF, 0x168AB1F8u, "G_PAIR_PASSES: cmp edx, dword ptr [0x802084]" },
     { 0x00610014u,  6, RF_REF, 0x31B3CDA9u, "G_PARTOWNERS: mov ecx, dword ptr [0x8a1cb8]" },
     { 0x0061B566u,  6, RF_REF, 0xF072E2ADu, "G_PARTOWNERS: mov ebp, dword ptr [0x8a1cb8]" },
     { 0x0057F0ACu,  5, RF_REF, 0xED9F7EEDu, "G_PARTPACKS: mov esi, 0x86658c" },

@@ -63,7 +63,8 @@ export const NET_UDP_PORTS_SET = 0x80000000;
 export const W_PAGE_STATE = 16, W_VIP = 17, W_NETMASK = 18, W_GENERATION = 19;   // page -> C
 export const W_TX_TAIL = 20, W_RX_HEAD = 21, W_RX_BELL = 22, W_RX_FULL_DROP = 23;
 export const W_TX_OFFLINE_DROP = 24, W_RX_OVERSIZE = 25, W_SWITCH_PEERS = 26;
-export const W_SOLID = 27;                    // free roam's solid cars as the page's menu switched them: 0 not, 1 off, 2 on
+export const W_SOLID = 27;                    // free roam's solid cars as the page's menu switched them: 0 not, 1 off, 2 on, 3 none
+                                              // (off, and traffic and tuners pass through too; an older module: not switched)
 export const W_TX_WAIT_N = 34;
 export const W_SAY = 35;                      // quick chat: the phrase the player picked (bits 0-7) under a count that changes with each pick
 export const W_PEER_BITS = 36;                // NET_PEER_BITS / 32 words: bit h = host h of our network is on the switch

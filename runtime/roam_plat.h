@@ -58,7 +58,9 @@ void     roam_plat_notice(const char *name, const char *what);
  * the session lock held */
 int      roam_plat_lobby(const char *json);
 /* solid cars as the player switched them while the game runs (the page's
- * menu, web): 1 on, 0 off, -1 not switched (NFSU2_ROAM_COLLIDE holds) */
+ * menu, web): 1 on, 0 off, 2 off and the game's traffic and tuners pass
+ * through too (Ghost mode: Everything), -1 not switched (NFSU2_ROAM_COLLIDE
+ * holds) */
 int      roam_plat_solid(void);
 /* quick chat (roam_game.c say_*): whether this platform has it (the page's
  * picker and lines: web; elsewhere the HELLO does not offer it), the phrase

@@ -279,7 +279,7 @@ int roam_plat_lobby(const char *json){
 /* solid cars as the page's menu switched them (net_proto.h solid) */
 int roam_plat_solid(void){
     uint32_t v = MB ? ld(&MB->solid) : 0;
-    return v == 1 ? 0 : v == 2 ? 1 : -1;
+    return v == 1 ? 0 : v == 2 ? 1 : v == 3 ? 2 : -1;
 }
 /* quick chat: the page picks (net_proto.h say: the phrase, under a count that changes with each pick), the game
  * tells it what was said (NET_KIND_SAY) and, every frame, where the names of those who spoke are (the renderer's

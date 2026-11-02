@@ -1,0 +1,49 @@
+# Ghost mode Everything (roam_collide = none; runtime/roam_game.c ghost_pair): in free roam with others on, the game's
+# traffic and tuners pass through the player's car; an outrun's tuner is solid.  One page of a career past the
+# prologue: run-suite --script roam_ghost_traffic.txt with NFSU2_SAVE_SEED=<ItsukiT's tree> (~/crash-live/seed-itsukit),
+# --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<its own> --env NFSU2_ROAM_COLLIDE=none
+# (=on: the game's own hits; NFSU2_ROAM=0: the solo career, where the other mp lines say multiplayer is off).
+# "mp traffic jump 0" puts the player's car right on the nearest traffic car (racer: tuner), five times 3 frames
+# apart (driving into one does not do: traffic stops for a car in its way, tuners steer round it).  Then mp traffic
+# says what the game did: contacts let through ("Ghost mode Everything: ... passes through my car"), contacts with
+# the outrun's tuner resolved, and how fast the player's car goes (standing: through; thrown off: a hit).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    autopilot on                    # off the save's spot (a race spot holds the tuners off)
++1800 roam mp traffic
++0    autopilot off
++60   roam mp traffic jump 0          # on a traffic car
++3    roam mp traffic jump 0
++3    roam mp traffic jump 0
++3    roam mp traffic jump 0
++3    roam mp traffic jump 0
++20   roam mp traffic
++60   roam mp traffic
++0    autopilot on
++0    roam mp waitoutrun tuner 20000
++0    autopilot off
++60   roam mp traffic jump racer 0    # on a tuner, no outrun: through
++3    roam mp traffic jump racer 0
++3    roam mp traffic jump racer 0
++3    roam mp traffic jump racer 0
++3    roam mp traffic jump racer 0
++20   roam mp traffic racer
++60   roam mp traffic racer
++60   roam mp traffic outrun          # the game's outrun against the nearest tuner
++60   roam mp outrun
++0    roam mp traffic jump racer 0    # on the outrun's tuner: hits
++3    roam mp traffic jump racer 0
++3    roam mp traffic jump racer 0
++3    roam mp traffic jump racer 0
++3    roam mp traffic jump racer 0
++20   roam mp traffic racer
++60   roam mp traffic racer
++0    roam mp traffic jump 0          # a traffic car during the outrun: through
++3    roam mp traffic jump 0
++3    roam mp traffic jump 0
++20   roam mp traffic
++0    roam mp status
++600  roam mp traffic
++10   quit

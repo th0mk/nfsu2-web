@@ -120,10 +120,14 @@ test('crews never changed: nothing written (the game keeps NFSU2_ROAM_CREW)', as
     const { i32 } = mailbox(proc);
     proc.register(NET, PTR, P.NET_MAILBOX_BYTES);
     await tick(20);
-    link.setSolid(true);
+    link.setSolid('on');
     assert.deepEqual(w.seen, []);
     assert.equal(i32[P.W_CREWS_GEN], 0);
     assert.equal(i32[P.W_SOLID], 2, 'the solid word beside it, as before');
+    link.setSolid('off');
+    assert.equal(i32[P.W_SOLID], 1, 'Ghost mode Players: off, as before');
+    link.setSolid('none');
+    assert.equal(i32[P.W_SOLID], 3, 'Ghost mode Everything: 3, which an older module takes as not switched');
     link.close();
   } finally { w.stop(); }
 });

@@ -152,8 +152,9 @@ export interface NetLink {
   setAway(on: boolean): void;
   /** the player stops waiting in line for a place: no switch for the rest of this game */
   goOffline(): void;
-  /** free roam's solid cars, switched while the game runs (the page menu; runtime/roam_game.c solid_follow) */
-  setSolid(on: boolean): void;
+  /** free roam's solid cars, switched while the game runs (the page menu; runtime/roam_game.c solid_follow), as
+   *  roam_collide has them: on, off (Ghost mode: Players) or none (Ghost mode: Everything) */
+  setSolid(collide: 'on' | 'off' | 'none'): void;
   /** quick chat: the player says phrase p (runtime/roam_game.c say_frame sends it); false: no free roam */
   say(p: number): boolean;
   /** free roam's friends: a message to the server ({"t":"friend",...m}, or m's own "t": "room"); false: the link is
@@ -380,7 +381,7 @@ class Link implements NetLink {
   private stayOff = false;
   /** the switch's kick or ban message, until its close comes */
   private removal: NetRemoved | null = null;
-  /** the roam mailbox's solid word (setSolid): 0 not switched, 1 off, 2 on */
+  /** the roam mailbox's solid word (setSolid): 0 not switched, 1 off, 2 on, 3 none */
   private solid = 0;
   /** quick chat's picks so far (say): the count in the roam mailbox's say word */
   private picks = 0;
@@ -528,10 +529,10 @@ class Link implements NetLink {
       this.checkWant();
     }
   }
-  setSolid(on: boolean) {
-    this.solid = on ? 2 : 1;
+  setSolid(collide: 'on' | 'off' | 'none') {
+    this.solid = collide === 'on' ? 2 : collide === 'none' ? 3 : 1;
     if (this.roam) Atomics.store(this.roam.i32, P.W_SOLID, this.solid);
-    this.log(`solid cars ${on ? 'on' : 'off'} (the page menu)`);
+    this.log(`solid cars ${collide === 'on' ? 'on' : collide === 'none' ? 'off, traffic and tuners pass through too' : 'off'} (the page menu)`);
   }
   /** quick chat: the player says phrase p (the game sends it while they drive in free roam); false: no free roam */
   say(p: number): boolean {

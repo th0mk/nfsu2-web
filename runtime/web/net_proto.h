@@ -129,7 +129,10 @@ typedef struct {
     uint32_t tx_tail, rx_head, rx_bell, rx_full_drop;          /*  80 */
     uint32_t tx_offline_drop, rx_oversize, switch_peers, solid;       /*  96: solid: free roam's solid cars as the
                                                                   page's menu switched them (0 not switched,
-                                                                  1 off, 2 on; roam_plat_solid) */
+                                                                  1 off, 2 on, 3 off with traffic and tuners
+                                                                  passing through too: Ghost mode Everything,
+                                                                  which an older module takes as not switched;
+                                                                  roam_plat_solid) */
     double   switch_rtt_ms;                                    /* 112: last ping to the switch */
     double   tx_wait_ms_sum, tx_wait_ms_max;                   /* 120: C queued -> page sent */
     uint32_t tx_wait_n, say;                                   /* 136: say: quick chat, the phrase the player

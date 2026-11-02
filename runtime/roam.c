@@ -595,11 +595,17 @@ void sub_005f46a0(CPU *c){
     sub_005f46a0_orig(c);
 }
 /* A touching pair of collision bodies (0x5B2610, thiscall, from the
- * collision step 0x5FFA50 only): a hit between the player's car and a
- * friend's car is shared between the two (roam_game.c, roam_game_contact) */
+ * collision step 0x5FFA50 only): with Ghost mode Everything the game's own
+ * cars pass through the player's car and friends' cars (roam_game.c,
+ * roam_game_ghost_pair: not resolved); a hit between the player's car and a
+ * friend's car is shared between the two (roam_game_contact) */
 void sub_005b2610_orig(CPU *c);
+int roam_game_ghost_pair(uint32_t contact);
 void roam_game_contact(CPU *c, void (*orig)(CPU *));
-void sub_005b2610(CPU *c){ roam_game_contact(c, sub_005b2610_orig); }
+void sub_005b2610(CPU *c){
+    if (roam_game_ghost_pair(c->ecx)){ POP32(c->eip); return; }    /* thiscall, ret */
+    roam_game_contact(c, sub_005b2610_orig);
+}
 /* The race's end, for the random encounters (0x42EFB0): new goals for the AI
  * range's cars that are out, through their brains; friends' cars have none
  * to give up and are left out (roam_game.c, roam_game_goals) */

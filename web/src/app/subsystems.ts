@@ -52,7 +52,7 @@ export const attachNet: AttachNet = (proc, o) => {
     holding: () => link.state === 'connecting' || link.state === 'online' || link.state === 'offline' || link.state === 'queued',
     away: (on: boolean) => link.setAway(on),
     offline: () => link.goOffline(),
-    solid: (on: boolean) => link.setSolid(on),
+    solid: (collide: 'on' | 'off' | 'none') => link.setSolid(collide),
     say: (p: number) => link.say(p),
     friend: (m: Record<string, unknown>) => link.friend(m),
     crews: (hashes: readonly number[], rgbs: readonly number[]) => link.setCrews(hashes, rgbs),

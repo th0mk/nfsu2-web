@@ -1,0 +1,48 @@
+# An outrun between two players with Ghost mode Everything (roam_collide = none) on both, instance A (challenges,
+# drives off): their two cars are solid for each other while it runs (roam_game.c du_solid), whatever Ghost mode lets
+# through otherwise; with Players (off) on either side they stay ghosts.  B (roam_ghost_outrun_b.txt) takes the
+# challenge, then jumps 15 m ahead of A's standing car and drives into it ("hit with Bo's car" here, "hit with Al's
+# car" there); A drives off after.  roam-pair --a "Al:roam_ghost_outrun_a.txt:NFSU2_ROAM_COLLIDE=none"
+# --b "Bo:roam_ghost_outrun_b.txt:NFSU2_ROAM_COLLIDE=none" --drive 8000 --watch 8000; mp status says "the outrun's,
+# solid" and "collision body on" for the friend's car near enough while it runs.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp status
++1500 roam mp waitoutrun prompt 1200
++0    roam mp outrun
++30   tap RETURN
++0    roam mp waitoutrun race 900
++0    roam mp outrun
++30   roam mp status
++150  roam mp status
++150  roam mp status
++150  roam mp status
++150  roam mp status
++150  roam mp status
++150  roam mp status
++0    autopilot on                    # (B has rammed the car by now)
++0    roam mp outrun
++0    roam mp waitoutrun idle ${ROAM_DRIVE_FRAMES}
++0    roam mp outrun
++0    autopilot off
++0    roam mp status
++300  roam mp outrun
++10   quit

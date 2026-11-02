@@ -20,8 +20,7 @@ import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SL
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
 
 type Control =
-  /** inv: on when the key is off (Ghost mode is roam_collide = off) */
-  | { t: 'switch'; inv?: boolean }
+  | { t: 'switch' }
   | { t: 'seg'; opts: [value: string, label: string][] }
   /** a choice of more than a row of buttons holds: a drop-down list; preview: a Listen button beside it plays the
    *  value chosen (the promise ends when it has played), stop ends that early */
@@ -60,7 +59,8 @@ const GROUPS: Group[] = [
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
     { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
-    { key: 'roam_collide', label: N('Ghost mode'), help: N('Drive through other players\' cars instead of hitting them.'), c: { t: 'switch', inv: true } },
+    { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not an outrun\'s opponent.'),
+      c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
     { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['40', '40'], ['48', '48']] } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam: 1 to 4, then 1 to 4 (controller: right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
@@ -305,7 +305,7 @@ function optLabel(it: Item, value: string, label: string): string {
 /** A value as the panel shows it: the option's label, on/off, or the value with its unit. */
 function shown(it: Item, v: string): string {
   const c = it.c;
-  if (c.t === 'switch') return (v === 'on') !== !!c.inv ? t('on') : t('off');
+  if (c.t === 'switch') return v === 'on' ? t('on') : t('off');
   if (c.t === 'seg' || c.t === 'select') { const o = c.opts.find(([x]) => x.toLowerCase() === v.toLowerCase()); return o ? optLabel(it, o[0], o[1]) : v; }
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
   if (v === '') return t('empty');
@@ -603,12 +603,12 @@ export class SettingsPanel {
     const ctl = document.createElement('div'); ctl.className = 'set-control';
     let described: HTMLElement;                      // what aria-describedby goes on
     if (c.t === 'switch') {
-      const on = boolOn(cur || 'off') !== !!c.inv;
+      const on = boolOn(cur || 'off');
       const v = document.createElement('span'); v.className = 'val'; v.setAttribute('aria-hidden', 'true'); v.textContent = on ? t('On') : t('Off');
       const b = document.createElement('input'); b.type = 'checkbox'; b.className = 'switch'; b.id = id;
       b.setAttribute('role', 'switch');
       b.checked = on;
-      b.onchange = () => void this.put(it.key, b.checked !== !!c.inv ? 'on' : 'off');
+      b.onchange = () => void this.put(it.key, b.checked ? 'on' : 'off');
       ctl.append(v, b);
       described = b;
     } else if (c.t === 'seg') {

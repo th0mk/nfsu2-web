@@ -119,7 +119,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_crew_colours', env: 'NFSU2_ROAM_CREW_RGB', kind: 'rgbs', ic: true, scope: 'web' },
   { key: 'roam_max_players', env: 'NFSU2_ROAM_MAX_PLAYERS', kind: 'int', vals: '2..49', ic: true, scope: 'web' },
   { key: 'roam_max_cars', env: 'NFSU2_ROAM_MAX_CARS', kind: 'int', vals: '0..48', ic: true, scope: 'web', device: true },
-  { key: 'roam_collide', env: 'NFSU2_ROAM_COLLIDE', kind: 'bool', ic: true, scope: 'web' },
+  // on, off (Ghost mode for players' cars), none (for traffic and tuners too); a module before none took it for on
+  { key: 'roam_collide', env: 'NFSU2_ROAM_COLLIDE', kind: 'enum', vals: 'on|off|none', ic: true, scope: 'web' },
   // quick chat's fixed phrases (web/src/app/quickchat.ts, runtime/roam_game.c say_*): the page has the picker, so not in
   // bundle.m's table
   { key: 'quick_chat', env: 'NFSU2_ROAM_SAY', kind: 'bool', ic: true, scope: 'web' },
@@ -424,8 +425,11 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_max_cars = 32
 # on = the other players' cars are solid: drawn where they are now, and one
 # that appears on your car lets you through until you are apart.
-# off = Ghost mode: you drive through them, and they through yours.
-# [NFSU2_ROAM_COLLIDE]
+# off = Ghost mode for players: you drive through their cars, and they
+# through yours.  none = Ghost mode for everything: traffic and the game's
+# tuners pass through you too (in free roam with others; races stay as they
+# are), but not an outrun's opponent: the tuner, or a player who has on or
+# none too.  [NFSU2_ROAM_COLLIDE]
 #roam_collide = on
 # Quick chat: say one of your sixteen set phrases to the players near you
 # (1 to 4, then 1 to 4; a controller's right stick twice; the chat button on

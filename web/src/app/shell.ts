@@ -118,7 +118,9 @@ let displayHz = 60;
 let refreshMeasured: Promise<void> = Promise.resolve();
 let session: GameSession | null = null;
 let hudWide = true;                      // the running game's HUD is edge-anchored (hud = wide), not 4:3
-let solidCars: boolean | null = null;    // the running game's free roam has solid cars (null: no free roam)
+/** Ghost mode as roam_collide has it: on (Ghost mode off), off (Players), none (Everything) */
+type Collide = 'on' | 'off' | 'none';
+let roamCollide: Collide | null = null;  // the running game's free roam's Ghost mode: as it started, then as the menu changed it (null: no free roam)
 let roamCrews: Crew[] | null = null;     // the running game's crews: as it started, then as the menu changed them (null: no free roam)
 let roamRoom: string | null = null;      // the running game's room: as it started, then as an invite link changed it ('': none; null: no free roam)
 let crewDraft = '';                      // the crew name being typed in the menu
@@ -671,7 +673,7 @@ async function startGame() {
   const net = !/^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '') && !alone;
   const netName = net ? (r.env.NFSU2_ROAM_NAME?.trim() || 'Player') : null;
   hudWide = !/^(43|4:3)$/i.test(r.env.NFSU2_HUD?.trim() ?? '');
-  solidCars = net && r.env.NFSU2_ROAM === '1' ? r.env.NFSU2_ROAM_COLLIDE !== '0' : null;
+  roamCollide = net && r.env.NFSU2_ROAM === '1' ? collideOf(r.env.NFSU2_ROAM_COLLIDE) : null;
   roamCrews = net && r.env.NFSU2_ROAM === '1' ? crewsOf(r.env.NFSU2_ROAM_CREW ?? '', r.env.NFSU2_ROAM_CREW_RGB ?? '') : null;
   roamRoom = net && r.env.NFSU2_ROAM === '1' ? r.env.NFSU2_ROAM_ROOM ?? '' : null;
   crewDraft = ''; popCounts = new Map();
@@ -1223,7 +1225,7 @@ function openMenu() {
   fsButton.hidden = !canFullscreen() && fromHomeScreen();         // from an iPhone's Home Screen: already without bars
   m.querySelector<HTMLButtonElement>('[data-act="fps"]')!.textContent = fpsLabel(fps.mode);
   const solid = m.querySelector<HTMLButtonElement>('[data-act="solid"]')!;
-  solid.hidden = solidCars === null || !session?.net?.solid;
+  solid.hidden = roamCollide === null || !session?.net?.solid;
   solid.textContent = ghostLabel();
   const crews = m.querySelector<HTMLButtonElement>('[data-act="crews"]')!;
   crews.hidden = roamCrews === null || !session?.net?.crews;
@@ -1247,7 +1249,9 @@ function openMenu() {
 }
 /** the menu's frame-rate counter and Ghost mode buttons, with what they are at now */
 const fpsLabel = (mode: string) => t('Frame-rate counter: {mode}', { mode: t(mode === 'on' ? N('on') : mode === 'detailed' ? N('detailed') : N('off')) });
-const ghostLabel = () => solidCars ? t('Ghost mode: off') : t('Ghost mode: on');
+const ghostLabel = () => roamCollide === 'none' ? t('Ghost mode: everything') : roamCollide === 'off' ? t('Ghost mode: players') : t('Ghost mode: off');
+/** roam_collide's value from its variable (a test's page address may give 1 or 0; none set: on, the default) */
+const collideOf = (v: string | undefined): Collide => { const c = checkSetting('roam_collide', v ?? ''); return c?.ok ? c.value as Collide : 'on'; };
 const crewsLabel = () => roamCrews?.length ? t('Crews: {n}', { n: roamCrews.length }) : t('Crews: none');
 /** The menu's Crews popup (free roam only), over the menu: the Crews row's control, which changes the game's crews at
  *  once.  Done, Esc or a controller's B closes it, back to the menu on its Crews button; an Esc in a crew's palette
@@ -1525,15 +1529,15 @@ async function menuAction(act: string) {
       break;
     case 'fps': fps.cycle(); m.querySelector<HTMLButtonElement>('[data-act="fps"]')!.textContent = fpsLabel(fps.mode); break;
     case 'solid': {
-      if (solidCars === null || !session?.net?.solid) break;
-      solidCars = !solidCars;
-      session.net.solid(solidCars);
+      if (roamCollide === null || !session?.net?.solid) break;
+      roamCollide = roamCollide === 'on' ? 'off' : roamCollide === 'off' ? 'none' : 'on';     // off, players, everything, off
+      session.net.solid(roamCollide);
       m.querySelector<HTMLButtonElement>('[data-act="solid"]')!.textContent = ghostLabel();
       // and in settings.ini for the next game, as Online, Ghost mode would
-      const text = putKey(settingsText ?? TEMPLATE, 'roam_collide', solidCars ? 'on' : 'off').text;
+      const text = putKey(settingsText ?? TEMPLATE, 'roam_collide', roamCollide).text;
       try { await writeFile(SAVE, 'settings.ini', text); settingsText = text; void settings.refresh(); }
       catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
-      log.add(`[app] solid cars ${solidCars ? 'on' : 'off'} (the page menu)`);
+      log.add(`[app] roam_collide = ${roamCollide} (the page menu)`);
       break;
     }
     case 'crews': openCrews(); break;
@@ -1983,7 +1987,7 @@ export async function boot() {
   textField = new TextField($('#stage'), { log: logLine });
   pauseHint = new PauseHint($('#stage'), {
     open: openMenu, log: logLine,
-    roam: () => solidCars !== null && !!session?.net?.solid,
+    roam: () => roamCollide !== null && !!session?.net?.solid,
     fullscreen: () => canFullscreen() || !fromHomeScreen(),
   });
   driftPanel = new DriftPanel($('#stage'), { toast, wide: () => hudWide, log: logLine });
