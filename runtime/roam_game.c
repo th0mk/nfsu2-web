@@ -4709,7 +4709,8 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
     }
 }
 /* a player's LAN name: the letters and digits of its name in free roam, 12
- * at most (the game's name entry takes no more), "Player" for none */
+ * at most (the game's name entry takes no more), "Player" for none (one that
+ * reads as a slur once its other characters are gone: lan_names) */
 static void lan_name(const char *src, char *o){
     int n = 0;
     for (; *src && n < 12; src++) if ((*src >= 'A' && *src <= 'Z') || (*src >= 'a' && *src <= 'z') || (*src >= '0' && *src <= '9')) o[n++] = *src;
@@ -4722,20 +4723,27 @@ static void lan_name(const char *src, char *o){
  * changes nothing (two players named "AAAAAAAAAAA2" hung every game of their
  * lobby here: the third security audit), so then its last character is the
  * first of the other digits and letters that is free (there are more than
- * players).  Every game of the lobby works them out alike. */
+ * players).  A name that reads as a slur then (names.h: the free-roam name
+ * was none, but without its other characters it can be, "Ni_99_a" as
+ * "Ni99a", or with a character added) is "Player", taken or not as any.
+ * Every game of the lobby works them out alike. */
 static int lan_taken(char nm[RC_LOBBY_MAX][13], int i){
     for (int j = 0; j < i; j++) if (!strcasecmp(nm[i], nm[j])) return 1;
     return 0;
 }
-static void lan_names(char nm[RC_LOBBY_MAX][13]){
+static void lan_unique(char nm[RC_LOBBY_MAX][13], int i){
     static const char other[] = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (int k = 0; k < 12 && lan_taken(nm, i); k++){
+        int len = (int)strlen(nm[i]); if (len > 11) len = 11;
+        nm[i][len] = (char)('1' + i); nm[i][len + 1] = 0;
+    }
+    for (int k = 0; other[k] && lan_taken(nm, i); k++) nm[i][11] = other[k];   /* 12 characters by now */
+}
+static void lan_names(char nm[RC_LOBBY_MAX][13]){
     for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++){
         lan_name(mp_name(g_mp.l.ids[i]), nm[i]);
-        for (int k = 0; k < 12 && lan_taken(nm, i); k++){
-            int len = (int)strlen(nm[i]); if (len > 11) len = 11;
-            nm[i][len] = (char)('1' + i); nm[i][len + 1] = 0;
-        }
-        for (int k = 0; other[k] && lan_taken(nm, i); k++) nm[i][11] = other[k];   /* 12 characters by now */
+        lan_unique(nm, i);
+        if (name_blocked(nm[i])){ snprintf(nm[i], 13, "Player"); lan_unique(nm, i); }
     }
 }
 /* the trip, with the lobby's race */
