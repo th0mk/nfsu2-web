@@ -4130,7 +4130,7 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
             }
             break;
         }
-        if (v && !v->listed != g_du.unlisted){
+        if (v && (!v->listed) != g_du.unlisted){
             g_du.unlisted = !v->listed;
             rlog("[roam] f=%ld outrun with %s: %s, %.0f m apart\n", rh_frame(), g_du.name,
                  g_du.unlisted ? "the hub's list leaves it out (kept for the outrun)" : "on the hub's list again", (double)g_du.gap);
