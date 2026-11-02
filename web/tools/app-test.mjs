@@ -308,6 +308,8 @@ async function mwSteps() {
     const look = await page.evaluate(() => ({
       title: document.title, name: document.querySelector('h1')?.textContent,
       sections: [...document.querySelectorAll('section.panel')].filter(s => !s.hidden).map(s => s.id || 'play'),
+      // the panels' tabs (tabs.ts): the big panel's and About's
+      tabs: [...document.querySelectorAll('section.panel .tabs.big > .tab')].map(b => b.dataset.tab),
       rows: [...document.querySelectorAll('#settings .set[data-key]')].map(e => e.dataset.key),
       keys: [...document.querySelectorAll('#keys dl.keys dd')].map(e => e.textContent),
       pad: document.querySelector('#keys svg.pad')?.getAttribute('aria-label') ?? null,
@@ -318,8 +320,11 @@ async function mwSteps() {
     const ug2Rows = ['roam', 'horn', 'online', 'subtitles', 'show_hidden_races', 'hud', 'ui_textures'];
     report('start', p === 'ready' && !checks.some(c => c.endsWith(':fail')) && problems.every(t => /tested/.test(t)) &&
       look.title === 'Most Wanted Revived' && look.name === 'Most Wanted Revived' && !!tmpl?.text?.startsWith('# NFS Most Wanted settings') &&
-      // (its changes from the original at the top of About, as main folded the Changes panel in)
-      ['controls', 'saves', 'settings', 'game-data', 'about'].every(s => look.sections.includes(s)) && !look.sections.includes('online') &&
+      // (its changes from the original at the top of About; the big panel's tabs as main's page has them, without Online, and
+      // About's without Underground 2's Translations: src/games/mw/body.json)
+      ['settings', 'about'].every(s => look.sections.includes(s)) &&
+      ['saves', 'game', 'controls', 'other', 'about', 'credits'].every(s => look.tabs.includes(s)) &&
+      !look.tabs.includes('online') && !look.tabs.includes('translations') &&
       look.rows.includes('fps') && look.rows.includes('language') && look.rows.includes('autosave') && !look.rows.some(r => ug2Rows.includes(r)) && !look.keys.some(k => /Hydraulics|Drift|Quick chat|outrun/.test(k)) &&
       look.langs[0] === 'english' && look.langs.includes('finnish') &&
       // the keyboard's and the controller's rows are Most Wanted's (src/games/mw/body.json, src/games/mw/controls.ts: runtime/mw/
