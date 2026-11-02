@@ -1,0 +1,34 @@
+# Typing an x is a letter, not drift mode's key (runtime/drift.c x_is_typing): a new profile's name with x's in it
+# (the game's text entry, [0x83a9c0]), then X in the main menu, then X in a Quick Race.  Good: the name field holds
+# the x's, no "[drift] ... X" line before the race (the page's "Drift mode only works in free roam" note comes from
+# those), and one "[drift] f=... X outside free roam: nothing" in the race.  Run through the aicheck page
+# (web/tools/input-suite.mjs kb_typing_x): the keys go through the page's input layer as a player's do.
+0     nstapuntil RETURN MC_Background.fng 120 4000  # title -> "create a new profile?"
++120  nstap LEFT                                    # "Yes"
++30   nstap RETURN
++240  nstap BACK                                    # clear "NAME"
++8    nstap BACK
++8    nstap BACK
++8    nstap BACK
++20   nstype xXx1
++80   peek 0x83a9c0                                 # the text entry is up (byte)
++0    peek 0x83a8b0 2                               # what it holds: "xXx1"
++0    log typed
++0    nstap RETURN                                  # -> "save profile named xXx1?" ("No" selected)
++240  nstap LEFT                                    # "Yes"
++30   nstap RETURN
++240  nstapuntil RETURN GarageMain.fng 150 3000     # "Save complete." Continue -> main menu
++300  log mainmenu
++0    nstap X
++120  log x_in_menu
++0    tapuntil RETURN UI_QRModeSelect.fng 240 3000  # Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 240 3000 # Circuit
++200  tapuntil RETURN UI_QRModeOptions.fng 240 3000 # the first track
++200  tapuntil RETURN UI_QRCarSelect.fng 240 3000   # options
++200  tapuntil RETURN GenericDialog_SMALL.fng 240 3000   # car -> transmission
++200  tapuntil RETURN PC_Loading.fng 240 3000       # transmission -> loading
++0    waitmem 0x8654a4 6 12000
++600  log race
++0    nstap X
++120  log x_in_race
++60   quit

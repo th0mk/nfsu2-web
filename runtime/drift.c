@@ -114,7 +114,12 @@
  * outrun (kind 7) and leaving free roam, which give the camera back too.
  * Drift mode stays chosen and comes back in free roam.  X switches it in
  * free roam's world (paused too: it comes on when the driving does), and
- * anywhere else does nothing but tell the page.
+ * elsewhere in the world (a race) does nothing but tell the page.  In the
+ * front end, and while the game's text entry is up (a chat line in an
+ * Online room, a name: the object at 0x83A7B0, which takes every WM_CHAR
+ * while [0x83A9C0] and [0x83A9C4] are set, 0x55DBD0; input_web.c), X is a
+ * letter and nothing else: the page said "Drift mode only works in free
+ * roam" at every x typed in a lobby's chat (a player's report).
  *
  * The page (web/src/app/drift.ts) reads the status table (status_web.c):
  *   drift        bits: 1 drift mode chosen, 2 on now (the panel shows),
@@ -147,6 +152,8 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_DRIFTRACE    0x0089e7d9u   /* byte: a drift event */
 #define G_FORCEDRIFT   0x00890104u   /* the drift-event switch */
+#define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry (0x83A7B0) takes the typing ... */
+#define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
 #define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
 #define G_PLAYER1      0x008900acu   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
 #define G_PSET         0x0083aa64u   /* PlayerSettings, 0x28 each: +0x10 the camera view */
@@ -400,9 +407,15 @@ static void publish(void){
     host_status_set_n(D.slot, v, 8);
 }
 
+/* X is a letter here: the front end (and the loading screens), or the game's text entry is up */
+static int x_is_typing(void){
+    return rd32(G_FLOW) != 6u || (mem_is_committed(G_TXT_REC + 3u) && MR8(G_TXT_ON) && MR32(G_TXT_REC));
+}
+
 void drift_frame(CPU *c){
     int world = roam_world(), top = world && hud_on_top(), drive = top && MR32(race()) == 4u;
-    for (int n = x_presses(); n > 0; n--){
+    int typing = x_is_typing();
+    for (int n = x_presses(); n > 0 && !typing; n--){
         D.keys++;
         D.note = !world;
         if (world){ D.want = !D.want; fprintf(stderr, "[drift] f=%ld drift mode %s (X)\n", autotest_frame(), D.want ? "on" : "off"); }
