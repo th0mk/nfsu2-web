@@ -255,6 +255,7 @@ enum Cmd {
     OtherNames(oneshot::Sender<HashMap<u32, Vec<String>>>),
     Friends(u32, Arc<str>, Vec<Arc<str>>),
     RoomName(u32, String),
+    Flew(u32, f64),
     Linked(u32, String, oneshot::Sender<Option<(u32, Option<Arc<str>>)>>),
     Where(Vec<Arc<str>>, oneshot::Sender<Vec<Option<hub::Whereabouts>>>),
     Stop,
@@ -363,6 +364,12 @@ impl RoamHub {
         let _ = self.tx.send(Cmd::RoomName(vip, name));
     }
 
+    /// browser `vip`'s game says its car was in the air in free roam for `secs`, and its page leaves the switch:
+    /// `Hub::flew`
+    pub fn flew(&self, vip: u32, secs: f64) {
+        let _ = self.tx.send(Cmd::Flew(vip, secs));
+    }
+
     /// the browser and keyphrase of the player under `name` that browser `vip`'s player is linked with now:
     /// `Hub::linked_with`
     pub fn linked_with(&self, vip: u32, name: String) -> oneshot::Receiver<Option<(u32, Option<Arc<str>>)>> {
@@ -459,6 +466,7 @@ fn run(
             }),
             Cmd::Friends(vip, me, owners) => guard(|| hub.friends(vip, me, owners)),
             Cmd::RoomName(vip, name) => guard(|| hub.room_name(vip, name)),
+            Cmd::Flew(vip, secs) => guard(|| hub.flew(vip, secs)),
             Cmd::Linked(vip, name, tx) => guard(|| {
                 let _ = tx.send(hub.linked_with(vip, &name));
             }),

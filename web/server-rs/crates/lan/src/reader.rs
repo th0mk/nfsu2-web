@@ -190,7 +190,7 @@ impl LanSwitch {
                         self.send(peer, Out::Text(Bytes::from(format!(r#"{{"t":"pong","id":{id}}}"#))));
                     }
                 }
-                Some("friend" | "room") => self.page_text(peer, m.clone()),
+                Some("friend" | "room" | "flying") => self.page_text(peer, m.clone()),
                 _ => {}
             }
             return;

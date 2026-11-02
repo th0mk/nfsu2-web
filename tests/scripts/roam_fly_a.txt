@@ -1,0 +1,51 @@
+# Planes (roam_game.c fly_frame), instance A: new career -> prologue free roam.
+# First the car bounces on hydraulics (a debug setting): the traced wheels
+# read off the ground (CAR_GROUND, g=) in the air.  Then the car counts as a plane
+# ("roam mp fly fake on") until its game takes the player off the switch: with
+# NFSU2_ROAM_FLY_S=20 after 20 s, the page log says "the player's car was in the
+# air for 20 s: no switch for the rest of this game", the server log has the
+# [cheat] line, and B sees A leave.  Pair:
+#   roam-pair --a Alice:roam_fly_a.txt:NFSU2_ROAM_FLY_S=20 --b Bob:roam_fly_b.txt
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++900  roam mp fly ?
++0    poke 0x7e949c 2                 # hydraulics on every car (a debug setting): a bounce lifts wheels off
++0    trace 1 g=i:[[0x8900ac]+4]+0x390 z=f:[[0x8900ac]+4]+0x68
++0    down J
++20   down UP
++60   up UP
++20   down DOWN
++60   up DOWN
++20   down LEFT
++60   up LEFT
++20   up J
++60   untrace
++0    poke 0x7e949c 0xffffffff
++120  roam mp fly ?
++0    roam mp fly fake on
++300  roam mp fly ?
++300  roam mp fly ?
++300  roam mp fly ?
++300  roam mp fly ?
++300  roam mp fly ?
++0    roam mp fly fake off
++300  roam mp fly ?
++0    roam mp status
++10   quit

@@ -5789,6 +5789,66 @@ static void bump_frame(int64_t host, int can){
         } else if (!g_bump[k].on && g_bump[k].since && host - g_bump[k].last > BUMP_LAPSE_US) g_bump[k].since = 0;
     }
 }
+/* ---- planes: a car in the air for minutes leaves the others ------------------------------------
+ * Players flew and floated over free roam for minutes at a time (Discord, 2026-11-02): an edited
+ * car or a cheat holds a car up, which no car of the game does for longer than a jump (seconds).
+ * The player's own car, in free roam with others: FLY_S seconds of world time with no wheel on the
+ * ground (CAR_GROUND), and the page takes the player off the switch with a message, as an
+ * operator's kick does, and tells the server (its log); for the rest of this game, as a kick.
+ * The count stands (no time added, none taken off) while the world stands (pause, map, photo
+ * mode, loading), while the physics does not drive the car (mode 1), and for a car that is no
+ * plane: on its side or its roof (its up under FLY_UP: a crash), slower than FLY_MOVE_MPS (hung on
+ * a kerb or a barrier with its wheels free), falling faster than FLY_FALL_MPS (off a ledge, or
+ * through a hole in the world).  FLY_GROUND_S on the ground ends it (the Respawn button puts the
+ * car there); a shorter touch does not, so a car that skims the road now and then keeps its count.
+ * NFSU2_ROAM_FLY_S changes FLY_S (tests).  Not in the Windows plugin (no page, no switch). */
+#define FLY_S           120
+#define FLY_TELL_S      30.f          /* a flight this long gets a line */
+#define FLY_GROUND_S    3.f
+#define FLY_UP          0.5f          /* the car's up vector's height (car +0xB8) */
+#define FLY_MOVE_MPS    5.f
+#define FLY_FALL_MPS    15.f
+static float g_fly_air, g_fly_ground;     /* the count, and the time on the ground since the last of it (s) */
+static int g_fly_s = -1, g_fly_told, g_fly_gone;
+#ifdef ROAM_HOST_SCRIPT
+static int g_fly_fake;                    /* "mp fly fake on" (tests): the car counts as a plane, wherever it is */
+#else
+#define g_fly_fake 0
+#endif
+/* every frame: `can` = free roam proper, the world ran `dt` (s) */
+static void fly_frame(int can, float dt){
+    if (g_fly_s < 0) g_fly_s = env_int("NFSU2_ROAM_FLY_S", FLY_S, 5, 3600);
+    uint32_t me = can && !g_fly_gone && dt > 0.f ? player_car() : 0;
+    if (!me || !ok(me, 0x9e0) || MR32(me + 0x28u) != 1u) return;
+    int ground = 0;
+    for (uint32_t w = 0; w < 4; w++) ground |= MR8(me + CAR_GROUND + w) != 0;
+    if (ground && !g_fly_fake){
+        if (g_fly_air > 0.f && (g_fly_ground += dt) >= FLY_GROUND_S){
+            if (g_fly_told) rlog("[roam] f=%ld my car is on the ground again, after %.0f s in the air\n", rh_frame(), (double)g_fly_air);
+            g_fly_air = g_fly_ground = 0.f; g_fly_told = 0;
+        }
+        return;
+    }
+    g_fly_ground = 0.f;
+    float v[3]; rd3(me + 0x70u, v);
+    float speed = rc_sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if ((!(MRF32(me + 0xb8u) >= FLY_UP) || !(speed >= FLY_MOVE_MPS) || !(v[2] > -FLY_FALL_MPS)) && !g_fly_fake) return;
+    g_fly_air += dt;
+    if (!g_fly_told && g_fly_air >= FLY_TELL_S){
+        g_fly_told = 1;
+        rlog("[roam] f=%ld my car has been in the air for %.0f s (at %.0f %.0f %.0f, %.0f km/h)\n", rh_frame(), (double)g_fly_air,
+             (double)MRF32(me + 0x60u), (double)MRF32(me + 0x64u), (double)MRF32(me + 0x68u), (double)(speed * 3.6f));
+    }
+    if (g_fly_air < (float)g_fly_s) return;
+    char js[24]; snprintf(js, sizeof js, "{\"s\":%d}", g_fly_s);
+    roam_plat_lock();
+    int r = roam_plat_flying(js);
+    roam_plat_unlock();
+    rlog("[roam] f=%ld my car has been in the air for %d s: %s\n", rh_frame(), g_fly_s,
+         r > 0 ? "the page takes the player off the switch" : r < 0 ? "the page's ring is full, tried again in a second" : "not on the switch now");
+    if (r < 0){ g_fly_air = (float)g_fly_s - 1.f; return; }
+    g_fly_air = g_fly_ground = 0.f; g_fly_told = 0; g_fly_gone = r > 0;
+}
 #endif
 static uint8_t local_status(int in_roam){
     uint32_t flow = rd32(G_FLOW);
@@ -6705,6 +6765,7 @@ void roam_game_frame(CPU *c){
     }
 #if SAYS
     bump_frame(host, in_roam && world_runs && st == RC_ST_ROAM && !g_racing && g_du.st == DU_IDLE && !mp_busy());
+    fly_frame(in_roam && world_runs && st == RC_ST_ROAM, wdt);
 #endif
     du_frame(c, host, in_roam, world_runs, duin, nduin);
 #if MPRACES
@@ -6886,6 +6947,26 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         if (on){ rlog("[roam] f=%ld mp waitbump %s satisfied after %ld frames\n", f, a1, f - *wait_start); *wait_start = -1; return 1; }
         if (tmo && f - *wait_start >= tmo){ rlog("[roam] f=%ld mp waitbump %s TIMEOUT\n", f, a1); *wait_start = -1; return 1; }
         return 0;
+    }
+    if (!strcasecmp(sub, "fly")){
+        /* "mp fly ?": the planes' count (fly_frame) and the car as it reads it; "mp fly fake on|off": the car counts
+         * as a plane wherever it is (fly_frame), for what comes after the count.  (A car can't be held up from here:
+         * the physics puts back its own place and velocity, not the car's +0x60 and +0x70, nor its collision body's
+         * +0xB0 and +0xC0, each step) */
+        uint32_t me = player_car();
+        if (!me || !ok(me, 0x9e0)){ rlog("[roam] f=%ld mp fly: no car\n", f); return 1; }
+        if (!strcasecmp(a1, "fake")){
+            g_fly_fake = !strcasecmp(a2, "on");
+            rlog("[roam] f=%ld mp fly fake: %s\n", f, g_fly_fake ? "on" : "off");
+            return 1;
+        }
+        int gr = 0;
+        for (uint32_t w = 0; w < 4; w++) gr |= (MR8(me + CAR_GROUND + w) != 0) << w;
+        rlog("[roam] f=%ld mp fly ?: in the air %.1f s (of %d), on the ground %.1f s, gone %d; wheels on the ground %x, "
+             "up %.2f, velocity %.1f %.1f %.1f, height %.2f\n", f, (double)g_fly_air, g_fly_s, (double)g_fly_ground, g_fly_gone, gr,
+             (double)MRF32(me + 0xb8u), (double)MRF32(me + 0x70u), (double)MRF32(me + 0x74u), (double)MRF32(me + 0x78u),
+             (double)MRF32(me + 0x68u));
+        return 1;
     }
     if (!strcasecmp(sub, "bump")){
         /* front bumpers (bump_*): for each friend's car, how the two cars stand to each other now */

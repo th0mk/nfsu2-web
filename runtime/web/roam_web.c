@@ -306,6 +306,12 @@ int roam_plat_friend(const char *json){
     if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
     return tx_push(NET_KIND_FRIEND, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
 }
+/* a car that flew for minutes: the page leaves the switch (NET_KIND_FLYING), only while it is on it */
+int roam_plat_flying(const char *json){
+    int n = (int)strlen(json);
+    if (!MB || ld(&MB->page_state) != NET_PAGE_ONLINE || n <= 0 || n > (int)NET_MAX_PAYLOAD) return 0;
+    return tx_push(NET_KIND_FLYING, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
+}
 void roam_plat_say_marks(const uint32_t *ids, const float *xys, int n){
     GwMark m[GW_MARKS_MAX];
     if (n > GW_MARKS_MAX) n = GW_MARKS_MAX;

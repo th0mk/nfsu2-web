@@ -71,6 +71,9 @@
 #define NET_KIND_FRIEND   19u   /* TX ring only, never on the switch: the player's car and a friend's touched front
                                    bumpers for 3 s, or parted after that, as a JSON object {"id","name","on"}
                                    (roam_game.c bump_*): the page's "Add friend" */
+#define NET_KIND_FLYING   20u   /* TX ring only, never on the switch: the player's car flew in free roam for minutes,
+                                   as a JSON object {"s"} (the seconds; roam_game.c fly_frame): the page takes the
+                                   player off the switch, as an operator's kick does, and tells the server */
 #define NET_BROADCAST      0xFFFFFFFFu
 #define NET_ROAM_HUB       0x0A4D00FDu  /* 10.77.0.253: the server's free-roam hub (web/server-rs/crates/roam),
                                    an address the switch never hands out */

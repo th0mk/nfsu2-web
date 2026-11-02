@@ -246,3 +246,32 @@ fn results_name_only_the_lobbys_players() {
     let l = cheats(&k);
     assert!(l.len() == 1 && l[0].starts_with("[cheat] 10.77.0.10 \"Ann\": won the race of lobby 000000b6"), "{l:?}");
 }
+
+// Bob's game says his car was in the air for 2 minutes (runtime/roam_game.c fly_frame), and his page leaves the switch:
+// one line, with where his car was last and how many others were within 200 m along the ground (Ann, under him; not
+// Cat, 300 m off), once a page; a page whose player is not on the hub has its name on the switch
+#[test]
+fn a_car_in_the_air_for_minutes_is_one_line_a_page() {
+    let mut k = Kit::new(RoamOptions::default());
+    hello(&mut k, 0, b"Ann", 2);
+    hello(&mut k, 1, b"Bob", 2);
+    hello(&mut k, 2, b"Cat", 2);
+    k.hub.page_name(V(1), "Bob".into());
+    k.from(V(0), &snap(100, [150.0, 0.0, 0.0]));
+    k.from(V(1), &snap(101, [0.0, 0.0, 40.0]));
+    k.from(V(2), &snap(102, [300.0, 0.0, 0.0]));
+    k.hub.flew(V(1), 120.0);
+    k.hub.flew(V(1), 120.0);
+    assert_eq!(
+        cheats(&k),
+        ["[cheat] 10.77.0.11 \"Bob\": its car was in the air in free roam for 120 s, by its own game, last at 0 0 40, 1 other \
+          player within 200 m: its page left the switch"]
+    );
+    k.hub.page_name(V(5), "Eve".into());
+    k.hub.flew(V(5), f64::NAN);
+    assert_eq!(
+        cheats(&k)[1],
+        "[cheat] 10.77.0.15 \"Eve\": its car was in the air in free roam for 0 s, by its own game, not on the hub now: its \
+         page left the switch"
+    );
+}

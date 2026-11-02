@@ -114,6 +114,8 @@ export interface NetPeer { vip: string; name: string; self: boolean }
 export interface NetRemoved { ban: boolean; msg: string; until?: number }
 /** the switch's close codes for a kick and a ban */
 const CLOSE_KICKED = 4001, CLOSE_BANNED = 4003;
+/** why a player whose car flew in free roam for minutes goes off the switch (`flying`), over the game as a kick's */
+export const FLYING_MSG = "You're not an airplane, get down to the ground like the rest of us";
 /** a place in line: pos 1 is the next in, of everyone in line, eta about how many seconds until its turn (when the
  *  switch can tell: a few have gone in) */
 export interface NetQueue { pos: number; of: number; eta?: number }
@@ -518,6 +520,18 @@ class Link implements NetLink {
     if (this.state !== 'away') this.release('away');
     this.log('the player stopped waiting for a place: no switch for the rest of this game');
   }
+  /** the game: the player's car was in the air in free roam for `secs` (NET_KIND_FLYING, roam_game.c fly_frame): off
+   *  the switch for the rest of this game, as an operator's kick takes a player, with FLYING_MSG over the game; the
+   *  server hears it first ({"t":"flying"}: its log; a server of before lets it be) */
+  private flying(secs: number) {
+    if (this.closed || this.stayOff) return;
+    const ws = this.ws;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'flying', s: secs }));
+    this.stayOff = true;
+    if (this.state !== 'away') this.release('away');
+    this.log(`the player's car was in the air for ${secs} s: no switch for the rest of this game ("${FLYING_MSG}")`);
+    this.o.onRemoved?.({ ban: false, msg: FLYING_MSG });
+  }
   setAway(on: boolean) {
     if (this.closed || this.stayOff || on === (this.state === 'away')) return;
     if (on) {
@@ -806,6 +820,11 @@ class Link implements NetLink {
       } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_FRIEND) {
         // front bumpers: the same
         if (len <= P.NET_MAX_PAYLOAD) this.o.onBump?.(new TextDecoder().decode(ep.u8.slice(s + P.S_DATA, s + P.S_DATA + len)));
+      } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_FLYING) {
+        // a car in the air for minutes: off the switch, once this drain is done (it sends what came before)
+        let secs = 0;
+        try { secs = Number(JSON.parse(new TextDecoder().decode(ep.u8.slice(s + P.S_DATA, s + P.S_DATA + Math.min(len, 64)))).s) || 0; } catch { /* the line says 0 */ }
+        queueMicrotask(() => this.flying(secs));
       } else if (open && len <= P.NET_MAX_PAYLOAD) {
         const f = new Uint8Array(P.F_DATA + len), fv = new DataView(f.buffer), dst = dv.getUint32(s + P.S_DST_IP, true);
         f[P.F_KIND] = dv.getUint32(s + P.S_KIND, true);

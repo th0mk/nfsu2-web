@@ -18,6 +18,9 @@
 //!   minute while it has friends) -> {"t":"friend","op":"where","friends":[as GET /friends has them]}
 //! - {"t":"room","name":<its room's name>}: for its friends' Join on their start pages (the server knows rooms only
 //!   by their hashes; a page sends it once it has friends, and it is kept in memory only)
+//! - {"t":"flying","s":<seconds>}: its game says its car was in the air in free roam that long, and the page leaves
+//!   the switch for the rest of its game (runtime/roam_game.c fly_frame): a `[cheat]` line (nfsu2-roam `Hub::flew`),
+//!   no answer
 //! - {"t":"friend","op":"msg","name":<a friend>,"body":<at most PAGE_MSG_LEN characters>,"id":<the page's>}: a message
 //!   (nfsu2-online buddy.rs `page_send`: to the friend's EA Messenger, else its pages, else it waits 7 days) ->
 //!   {"t":"friend","op":"msg","name":...,"id":...,"done":"sent"|"kept"|"none"|"empty"|"off"|"full"|"claim"|"rate"}
@@ -144,6 +147,7 @@ impl Friends {
         }
         match op {
             (Some("room"), _) => self.roam.room_name(vip, name),
+            (Some("flying"), _) => self.roam.flew(vip, m.get("s").and_then(Value::as_f64).unwrap_or(0.0)),
             (Some("friend"), Some("list")) => self.send_list(vip, owner, group).await,
             (Some("friend"), Some("can")) => {
                 let c = self.can(vip, owner, group, &name).await;

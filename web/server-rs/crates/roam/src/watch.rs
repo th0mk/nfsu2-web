@@ -31,8 +31,9 @@
 //! older clock epoch) is left out: a page whose connection stalled opens another, and its SNAPs through the new one
 //! can come before the old one's held-back ones (a car that went back and forth 550 m in a second, on a test's bad
 //! connection, 2026-10-28).  A player gone from the hub without its BYE (its connection silent or dropped) keeps its
-//! watch for a minute (hub.rs WATCH_KEEP_MS): back in that time, it goes on with it.  Nothing looks at the height
-//! alone: a car that flies (an edited save) is left be unless it teleports or goes too fast.
+//! watch for a minute (hub.rs WATCH_KEEP_MS): back in that time, it goes on with it.  Nothing here looks at the height
+//! (the hub knows no ground): a car in the air for minutes is its own game's to see, which takes the player off the
+//! switch and says so (runtime/roam_game.c fly_frame, hub.rs `Hub::flew`).
 //!
 //! Each line of a teleport or a fast run says who was near where the car came to (the hub finds them: the other
 //! players of its room in free roam within NEAR_M, 40 m, each where its own last SNAP and speed have it now), and

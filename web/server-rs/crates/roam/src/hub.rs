@@ -409,7 +409,12 @@ const GAME_NAME_MAX: usize = 24;
 struct Page {
     name: String,
     told: Vec<String>,
+    /// its game said its car flew (`flew`): told once
+    flew: bool,
 }
+
+/// other players within this of a car that flew (m, along the ground) saw it (`Hub::flew`)
+const FLEW_SEEN_M: f64 = 200.0;
 
 /// whether a game shows the name `page` (a page's on the switch) as `game`: as roam_core.c `rc_name_clean` makes it,
 /// printable ASCII ('?' for any other character) of at most GAME_NAME_MAX, in any case
@@ -1729,13 +1734,58 @@ impl Hub {
     /// browser `vip`'s page goes by `name` on the switch (its hello's): its players' names are held against it
     /// (`name_check`)
     pub fn page_name(&mut self, vip: u32, name: String) {
-        self.pages.insert(vip, Page { name, told: Vec::new() });
+        self.pages.insert(vip, Page { name, told: Vec::new(), flew: false });
         if self.per_vip.contains_key(&vip) {
             let mine: Vec<u32> = self.order.iter().copied().filter(|&s| self.player(s).is_some_and(|p| p.vip == vip)).collect();
             for s in mine {
                 self.name_check(s);
             }
         }
+    }
+
+    /// Browser `vip`'s game says its car was in the air in free roam for `secs` (runtime/roam_game.c fly_frame), and its
+    /// page leaves the switch for the rest of its game, as after a kick: a `[cheat]` line, with where the car was last
+    /// and how many other players of its room in free roam were within FLEW_SEEN_M of it.  Once a page: the page says
+    /// so before it goes, and nothing else comes of it here.
+    pub fn flew(&mut self, vip: u32, secs: f64) {
+        let page = self.pages.get_mut(&vip);
+        if page.as_ref().is_some_and(|p| p.flew) {
+            return;
+        }
+        let page_name = page.map(|p| {
+            p.flew = true;
+            p.name.clone()
+        });
+        let me = self.players().filter(|p| p.vip == vip && p.p.is_some()).max_by(|a, b| a.pos_at.total_cmp(&b.pos_at));
+        let (name, at) = match (me, page_name) {
+            (Some(p), _) => (p.name.clone(), p.p.map(|a| (a, p.room))),
+            (None, Some(n)) => (n, None),
+            (None, None) => (String::new(), None),
+        };
+        let place = match at {
+            Some((a, room)) => {
+                let seen = self
+                    .players()
+                    .filter(|o| o.vip != vip && o.room == room && matches!(o.status, 2 | 5))
+                    .filter(|o| o.p.is_some_and(|b| (b[0] - a[0]).hypot(b[1] - a[1]) < FLEW_SEEN_M))
+                    .count();
+                format!(
+                    ", last at {:.0} {:.0} {:.0}, {seen} other player{} within {FLEW_SEEN_M:.0} m",
+                    a[0],
+                    a[1],
+                    a[2],
+                    if seen == 1 { "" } else { "s" }
+                )
+            }
+            None => ", not on the hub now".into(),
+        };
+        self.st.cheat_lines += 1;
+        (self.log)(&format!(
+            "[cheat] {} \"{}\": its car was in the air in free roam for {:.0} s, by its own game{place}: its page left the switch",
+            vip_str(vip),
+            js::printable(&name, 32),
+            if secs.is_finite() { secs.clamp(0.0, 86400.0) } else { 0.0 }
+        ));
     }
 
     /// The name over the car of the player in `slot` (its HELLO's) against its page's on the switch: another one is a

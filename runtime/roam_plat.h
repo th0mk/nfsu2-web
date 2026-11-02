@@ -75,6 +75,12 @@ int      roam_plat_said(const char *json);
  * which offers to add that player as a friend (1 sent, 0 this platform has
  * no page, -1 the ring is full).  With the session lock held */
 int      roam_plat_friend(const char *json);
+/* the player's car flew in free roam for minutes (roam_game.c fly_frame), as
+ * a JSON object for the page, which takes the player off the switch with its
+ * message, as an operator's kick does, and tells the server (1 sent, 0 this
+ * platform has no page or the page is not on the switch now, -1 the ring is
+ * full).  With the session lock held */
+int      roam_plat_flying(const char *json);
 /* where the names of the players who said something lately are this frame:
  * ids[i] at xys[3i], xys[3i + 1] (parts of the picture from its top left
  * corner) with the name's scale xys[3i + 2]; n = 0: none.  The page's lines

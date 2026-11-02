@@ -152,8 +152,9 @@
 //!
 //! ## Friends
 //!
-//! A page's {"t":"friend",...} and {"t":"room",...} go to the server as they came ([`LanSwitch::on_text`], with the
-//! page's address, its keyphrase's owner and its client), under the text messages' budget (`text_rate`, `max_text`):
+//! A page's {"t":"friend",...}, {"t":"room",...} and {"t":"flying",...} go to the server as they came
+//! ([`LanSwitch::on_text`], with the page's address, its keyphrase's owner and its client), under the text messages'
+//! budget (`text_rate`, `max_text`):
 //! free roam's friends (the server's friends.rs).  The server answers one page with [`LanSwitch::send_text`], and
 //! finds a friend's pages for a message by their keyphrase's owner ([`LanSwitch::vips_of_owner`]).
 //!
