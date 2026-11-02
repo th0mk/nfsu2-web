@@ -1,0 +1,63 @@
+# Ghost mode Everything (roam_collide = none; runtime/roam_game.c roam_game_near_miss): the game's traffic and tuners
+# pass through the player's car, and the game took driving through one for a near miss (style points, which fill the
+# nitrous).  Now they give none.  A career past the prologue (it has traffic, e.g. the Mac's work/seed/career/s2_r7):
+# run-suite --script roam_ghost_nearmiss.txt with NFSU2_SAVE_SEED=<a career save tree>, --env NFSU2_ROAM=1
+# --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<its own> --env NFSU2_ROAM_COLLIDE=none (=1: traffic solid, near
+# misses count as in the game).
+# The game counts a near miss when the player's car, at 30 mph or more, comes within 1.5 m of another car at 80 mph
+# or more between the two and they part without touching.  The player's car goes head on at the nearest traffic car,
+# four times 3 m to its left (the oncoming lane) and four times 0.5 m (through it): "mp traffic jump 80 180 LEFT" puts
+# it 80 m ahead, facing it, "mp traffic go 55" sets it going.  Not every run meets its car (the road bends, a car
+# brakes).  The log: "Ghost mode Everything: no near miss with a traffic car, ..." for each let go, "a near miss in
+# free roam" for each counted, and mp traffic's "near misses: N counted, M let go".  Measured 2026-11-02 (s2_r7):
+# none: 0 counted, 1 or 2 let go (cars driven through; before the change the game counted a COUPE driven through as
+# a near miss); =1: 0 or 1 counted (one: a gap of 1.1 m at 30 m/s).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    autopilot on                    # off the save's spot
++1800 roam mp traffic
++0    autopilot off
++60   roam mp traffic jump 80 180 3
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 3
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 3
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 3
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 0.5
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 0.5
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 0.5
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++60   roam mp traffic jump 80 180 0.5
++30   roam mp traffic go 55
++0    down UP
++180  roam mp traffic
++0    up UP
++0    roam mp status
++10   quit
