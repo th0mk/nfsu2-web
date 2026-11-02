@@ -34,7 +34,7 @@ const CFG = {
   waitS: Number(env.BOT_WAIT_S || 120),
   maxReplies: Number(env.BOT_MAX_REPLIES || 2),
   maxTalk: Number(env.BOT_MAX_TALK || 4),        // replies per thread in all, answering people who reply to the bot
-  budget: Number(env.BOT_BUDGET || 200),         // $ a month (UTC) for every model call; the looks wait when it runs short
+  budget: Number(env.BOT_BUDGET || 400),         // $ a month (UTC) for every model call; the looks wait when it runs short
   minConfidence: env.BOT_MIN_CONFIDENCE || 'medium',
   archive: env.BOT_ARCHIVE !== '0',
   state: path.resolve(HERE, env.BOT_STATE || 'state'),

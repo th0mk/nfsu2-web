@@ -105,7 +105,7 @@ report or update in the staff channel, and no more looks in that thread unless s
 still goes out; new logs still reach the report).
 
 Every model call goes on a meter (`spend.mjs`, `state/spend.json`): looks, sorting, tags, translations, release checks,
-against `BOT_BUDGET` dollars a month (200, UTC months). Only the looks wait for money: each day they may spend what is
+against `BOT_BUDGET` dollars a month (400, UTC months). Only the looks wait for money: each day they may spend what is
 left of the month over the days left in it, so a quiet day leaves more for the rest and a busy week can't spend the
 month. A look past today's share waits for the next day and runs then; staff's mentions and a release's notices
 (fix live, suggestion added) still get theirs at once. The
@@ -265,7 +265,7 @@ Run it with `BOT_DRY_RUN=1` for a day. Every reply it would have posted goes to 
 | `BOT_WAIT_S` | `120` | quiet time after the poster's last message before the look (at most 10 minutes after the first) |
 | `BOT_MAX_REPLIES` | `2` | replies per thread on the bot's own (logs, bumps and staff's mentions get a look past it) |
 | `BOT_MAX_TALK` | `4` | replies per thread in all, answering people who reply to the bot or mention it |
-| `BOT_BUDGET` | `200` | dollars a month for every model call; looks past the day's share wait for the next day |
+| `BOT_BUDGET` | `400` | dollars a month for every model call; looks past the day's share wait for the next day |
 | `BOT_ARCHIVE` | on | `0`: don't keep messages (the model then can't search other channels) |
 | `BOT_STATE` | `state` (`/state` in Docker) | where the clone, the archive, the thread list, the verdicts and the translations go |
 | `BOT_REPO`, `BOT_BRANCH` | this checkout, `main` | where the code comes from (in `compose.yml`: GitHub over SSH) |
