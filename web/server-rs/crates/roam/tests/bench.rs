@@ -2,7 +2,9 @@
 //! pair of each), and in 8 rooms of 250 (every pair of rooms just under `exact_room`: the most pairs a tick sorts);
 //! and the same with crews (bench_crews: crews of 2 to 6 spread over the map, and every player in 4 crews of 64, the
 //! most a crew is linked first), and with blocks (bench_blocks: 1 player in 20 blocks 10 others).  And what the
-//! minimap's questions cost the hub's thread (bench_near).  Not a test: run it in release,
+//! minimap's questions cost the hub's thread (bench_near), and a tick from 2000 to 16000 players (bench_scale).  A
+//! tick's CPU is the process's and the hub's thread's own (the walks of a large room are read on more threads:
+//! `RoamOptions::link_threads`, BENCH_THREADS=n to set it).  Not a test: run it in release,
 //!   cargo.sh roam test --release -p nfsu2-roam --test bench -- --ignored --nocapture
 
 mod kit;
@@ -21,6 +23,15 @@ impl Lcg {
         self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         (self.0 >> 11) as f64 / (1u64 << 53) as f64
     }
+}
+
+/// the CPU time of the calling thread (ms; Linux: /proc/thread-self/schedstat, 0 elsewhere): a tick's own, without
+/// the threads it reads its walks on (`RoamOptions::link_threads`)
+fn thread_cpu_ms() -> f64 {
+    std::fs::read_to_string("/proc/thread-self/schedstat")
+        .ok()
+        .and_then(|s| s.split_whitespace().next()?.parse::<f64>().ok())
+        .map_or(0.0, |ns| ns / 1e6)
 }
 
 fn bench(what: &str, players: u32, rooms: u32, area: f64) {
@@ -50,7 +61,9 @@ fn bench_with(
     crews: &dyn Fn(u32) -> Vec<u32>,
     blocks: &dyn Fn(u32) -> Vec<String>,
 ) {
-    let mut k = Kit::new(RoamOptions { max_players: 4096, ..RoamOptions::default() });
+    let d = RoamOptions::default();
+    let link_threads = std::env::var("BENCH_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(d.link_threads);
+    let mut k = Kit::new(RoamOptions { max_players: 16384, link_threads, ..d });
     let mut r = Lcg(7);
     let mut pos: Vec<[f64; 3]> =
         (0..players).map(|_| [r.unit() * area - area / 2.0, r.unit() * area - area / 2.0, r.unit() * 20.0]).collect();
@@ -70,7 +83,7 @@ fn bench_with(
             k.hub.blocks(vip(i), b);
         }
     }
-    let (mut times, mut cpu) = (Vec::new(), Vec::new());
+    let (mut times, mut cpu, mut own) = (Vec::new(), Vec::new(), Vec::new());
     let mut frames_ms = 0.0;
     for t in 0..23 {
         k.clear();
@@ -92,30 +105,35 @@ fn bench_with(
             k.hub.frame(vip(i), &frame(vip(i), &d));
         }
         frames_ms += t0.elapsed().as_secs_f64() * 1000.0;
-        let (t0, c0) = (Instant::now(), process_cpu_seconds());
+        let (t0, c0, h0) = (Instant::now(), process_cpu_seconds(), thread_cpu_ms());
         k.hub.tick();
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
         // the first ticks make the links; from then on most are kept
         if t >= 3 {
             times.push(ms);
             cpu.push((process_cpu_seconds() - c0) * 1000.0);
+            own.push(thread_cpu_ms() - h0);
         }
         k.step(1000.0);
     }
     times.sort_by(f64::total_cmp);
     cpu.sort_by(f64::total_cmp);
+    own.sort_by(f64::total_cmp);
     let crewed = if k.info("crewLinks") > 0.0 || k.info("crewSkips") > 0.0 {
         format!(" ({} for crews, {} crews too large)", k.info("crewLinks"), k.info("crewSkips"))
     } else {
         String::new()
     };
     println!(
-        "{what}: a tick {:.2} ms (median of {}; {:.2} to {:.2}; CPU {:.2} ms), {} links{crewed}; {:.0} ns a frame (HELLO or SNAP)",
+        "{what}: a tick {:.2} ms (median of {}; {:.2} to {:.2}; CPU {:.2} ms, the hub's thread {:.2} ms, least {:.2}), {} links{crewed}; \
+         {:.0} ns a frame (HELLO or SNAP)",
         times[times.len() / 2],
         times.len(),
         times[0],
         times[times.len() - 1],
         cpu[cpu.len() / 2],
+        own[own.len() / 2],
+        own[0],
         k.info("links"),
         frames_ms * 1e6 / (23.0 * 2.0 * players as f64)
     );
@@ -349,5 +367,19 @@ fn bench_near_minimap() {
         bench_near(&format!("3000 in 4 km, 500 in 300 m; {at}"), 3000, 500, 4000.0, 500.0, ask_ms, radius);
         bench_near(&format!("12000 in 4 km, 1000 in 300 m; {at}"), 12000, 1000, 4000.0, 500.0, ask_ms, radius);
         bench_near(&format!("12000 in 8 km, 1000 in 300 m; {at}"), 12000, 1000, 8000.0, 500.0, ask_ms, radius);
+    }
+}
+
+/// 2000 to 16000 players in one room, and 8000 and 16000 in a smaller one and in 8 rooms: what a tick costs past the
+/// 12000 players of the switch (BENCH_THREADS=1: the walks on the hub's thread alone)
+#[test]
+#[ignore]
+fn bench_scale() {
+    for n in [2000u32, 4000, 6000, 8000, 12000, 16000] {
+        bench_links(&format!("{n} players in one room of 8 km, 15 m/s, 32 links"), n, 1, 8000.0, 15.0, 32);
+    }
+    for n in [8000u32, 16000] {
+        bench_links(&format!("{n} players in one room of 3 km, 15 m/s, 32 links"), n, 1, 3000.0, 15.0, 32);
+        bench_links(&format!("{n} players in 8 rooms of 4 km, 15 m/s, 32 links"), n, 8, 4000.0, 15.0, 32);
     }
 }

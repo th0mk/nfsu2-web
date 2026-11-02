@@ -818,6 +818,50 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
     }
 }
 
+// 1500 players in a room of 2 km, driving (view points), a few not driving, 16, 32 or 48 links each, some coming and
+// going: with their walks read on 4 threads, the hub sends what it sends with them read on its own thread, byte for
+// byte, tick after tick (`RoamOptions::link_threads`)
+#[test]
+fn walks_read_on_threads_link_as_on_the_hubs_own() {
+    let run = |threads: usize| {
+        let mut k = Kit::new(RoamOptions { link_threads: threads, ..RoamOptions::default() });
+        let mut seed: u32 = 4242;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed as f64 / 4294967296.0
+        };
+        let n = 1500u32;
+        let vip = |i: u32| 0x0A4D_0100 + i;
+        let mut pos: Vec<[f64; 3]> = (0..n).map(|_| [rnd() * 2000.0 - 1000.0, rnd() * 2000.0 - 1000.0, rnd() * 10.0]).collect();
+        let vel: Vec<[f64; 3]> = (0..n).map(|_| [rnd() * 60.0 - 30.0, rnd() * 60.0 - 30.0, 0.0]).collect();
+        let mut sent = Vec::new();
+        for tick in 0..6u32 {
+            k.clear();
+            for i in 0..n {
+                // players 7 mod 13 go at the fourth tick
+                if i % 13 == 7 && tick >= 3 {
+                    continue;
+                }
+                let (p, v) = (&mut pos[i as usize], vel[i as usize]);
+                p[0] += v[0] * 0.5;
+                p[1] += v[1] * 0.5;
+                let status = if i % 11 == 4 { 3 } else { 2 };
+                let links = [16u8, 32, 48][(i % 3) as usize];
+                k.from(vip(i), &hello_with(1000 + i, &HelloOpts { core: 10, status, links, ..Default::default() }));
+                k.from(vip(i), &snap_moving(1000 + i, *p, v, v[1].atan2(v[0]), status));
+            }
+            k.hub.tick();
+            sent.push(k.sent.lock().clone());
+            k.step(500.0);
+        }
+        (sent, k.info("links"))
+    };
+    let (one, links) = run(1);
+    // (pairs: about 32 a player, two players a pair)
+    assert!(links > 1500.0 * 10.0, "a crowd's links ({links})");
+    assert!(one == run(4).0, "the same lists, byte for byte");
+}
+
 // ---- the hub on its thread (the idle hub, frames posted and its lists: tests/roam_thread.rs) ----
 
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {

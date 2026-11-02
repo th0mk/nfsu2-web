@@ -181,6 +181,10 @@ pub struct RoamOptions {
     pub map_fresh_ms: f64,
     /// the minimap (NEARREQ): one answer a browser every near_gap_ms at most (the game asks again 200 ms after each)
     pub near_gap_ms: f64,
+    /// the threads a tick reads a large room's walks ahead on (each player's nearest ones, `link_many`), its own
+    /// thread among them: by default a quarter of the cores, 1 to 4; 1, on the hub's thread alone.  The links are the
+    /// same either way.
+    pub link_threads: usize,
 }
 
 impl Default for RoamOptions {
@@ -209,6 +213,7 @@ impl Default for RoamOptions {
             map_gap_ms: 250.0,
             map_fresh_ms: 5_000.0,
             near_gap_ms: 150.0,
+            link_threads: std::thread::available_parallelism().map_or(1, |n| (n.get() / 4).clamp(1, 4)),
         }
     }
 }

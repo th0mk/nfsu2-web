@@ -13,7 +13,8 @@ use nfsu2_util::json::num;
 use nfsu2_util::{js, vip_str};
 use serde_json::{Value, json};
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use crate::links::{Cand, Found, Grid, Heap, Near, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable};
 use crate::results::{self, Results};
@@ -607,6 +608,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         map_gap_ms: f(o.map_gap_ms, d.map_gap_ms),
         map_fresh_ms: f(o.map_fresh_ms, d.map_fresh_ms),
         near_gap_ms: f(o.near_gap_ms, d.near_gap_ms),
+        link_threads: n(o.link_threads, d.link_threads).min(64),
     }
 }
 
@@ -710,9 +712,20 @@ struct Scratch {
     marks: Vec<u8>,
     /// a large room's links of the last tick, sorted (`link_many`)
     olds: Vec<Cand>,
-    /// each place's links of the last tick as places in the room: `olinks[ostart[i]..ostart[i + 1]]`
+    /// each place's links of the last tick as places in the room: `olinks[ostart[i]..ostart[i + 1]]`, and since when
+    /// each one is (`osince`, by the same index)
     olinks: Vec<u32>,
+    osince: Vec<f64>,
     ostart: Vec<u32>,
+    /// each place's walks read ahead (`Walks`): walk w of place i at `pre[(3 i + w) n..][..pre_n[3 i + w]]`, and how
+    /// many of them the tick took (`pre_at`)
+    pre: Vec<(f64, u32)>,
+    pre_n: Vec<u16>,
+    pre_at: Vec<u16>,
+    /// how far each walk is read ahead (`Walks::want`), and by slot how far its walks went at the last tick, plus 1 (0:
+    /// not known)
+    want: Vec<u16>,
+    walk_used: Vec<[u16; 3]>,
     /// each place's new links as places (`flinks[i * stride..][..fcount[i]]`)
     fcount: Vec<u32>,
     flinks: Vec<u32>,
@@ -723,11 +736,12 @@ struct Scratch {
 /// The bytes of a block of lists: what a list waiting in a slow player's queue keeps at most
 const LIST_BLOCK: usize = 4096;
 
-/// what the links of a room are weighed by
+/// what the links of a room are weighed by, and the threads its walks are read on (`RoamOptions::link_threads`)
 struct Weigh {
     now: f64,
     hold_ms: f64,
     keep: f64,
+    threads: usize,
 }
 
 /// how far apart places i and j of a room count: the nearest of the two soon_ms on, the two look_ms on, and either
@@ -1863,7 +1877,7 @@ impl Hub {
         s.fresh.resize_with(self.slots.len(), Vec::new);
         s.local.clear();
         s.local.resize(self.slots.len(), NONE);
-        let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep };
+        let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep, threads: self.o.link_threads };
         let (mut duel_links, mut lobby_links, mut crew_links, mut crew_skips) = (0, 0, 0, 0);
         for r in 0..rooms {
             let list = std::mem::take(&mut s.rooms[r]);
@@ -2560,6 +2574,147 @@ fn has_place(places: &[u32], j: u32) -> bool {
     places.iter().fold(false, |found, &x| found | (x == j))
 }
 
+/// a room at least this large reads its walks on more than the hub's thread (a smaller one's take well under a ms)
+const WALKS_SHARED: usize = 1024;
+
+/// a share of a room's places whose walks are read on one thread (`Walks::read`)
+struct Part<'p> {
+    first: usize,
+    pre: &'p mut [(f64, u32)],
+    pre_n: &'p mut [u16],
+    found: Vec<Found>,
+}
+
+/// a part's walks (soon, ahead, from the view point) and the kept vectors it did not take
+type PartDone = ([Vec<Near>; 3], Vec<Found>);
+
+/// The walks of a large room's players (`link_many`), read ahead: each player's walks give their nearest ones in an
+/// order of their own, whatever the links make of them (a walk reads only the places), so the first ones of every
+/// walk can be read before the links are made, on several threads, and the links take them from there in the order
+/// they would have read them themselves.  Each walk is read as far as `want` says (`link_many`: as far as it went at
+/// the last tick, and a little more); one that needs more goes on from there on the hub's thread, in the grids the
+/// links have taken the full players out of by then.
+struct Walks<'a> {
+    grid: &'a Grid,
+    grid_a: &'a Grid,
+    soon: &'a [[f64; 3]],
+    ahead: &'a [[f64; 3]],
+    view: &'a [[f64; 3]],
+    /// how far each walk is read ahead (3 a place, at least 1: the links take each walk's nearest one first), and the
+    /// most of them
+    want: &'a [u16],
+    n: usize,
+}
+
+impl Walks<'_> {
+    /// how far walk k (3 i + w) is read ahead
+    fn wanted(&self, k: usize) -> usize {
+        self.want[k] as usize
+    }
+
+    /// every place's three walks, in `near`, `near_a` and `near_v` by place, and what each gave so far in `pre` and
+    /// `pre_n`; from the view point only where it is not the place soon (else it gives what the first walk gives, and
+    /// the links never take it)
+    #[allow(clippy::too_many_arguments)]
+    fn read(
+        &self,
+        threads: usize,
+        found: &mut Vec<Found>,
+        near: &mut Vec<Near>,
+        near_a: &mut Vec<Near>,
+        near_v: &mut Vec<Near>,
+        pre: &mut Vec<(f64, u32)>,
+        pre_n: &mut Vec<u16>,
+    ) {
+        let m = self.soon.len();
+        near.clear();
+        near_a.clear();
+        near_v.clear();
+        pre.clear();
+        pre.resize(m * 3 * self.n, (0.0, 0));
+        pre_n.clear();
+        pre_n.resize(m * 3, 0);
+        let threads = if m >= WALKS_SHARED { threads.max(1) } else { 1 };
+        // parts, four a thread: one thread held up (a busy machine) holds up a little of the walks only, as the others
+        // take the parts left
+        let per = m.div_ceil(if threads == 1 { 1 } else { 4 * threads }).max(1);
+        let parts: Vec<Mutex<Option<Part>>> = pre
+            .chunks_mut(per * 3 * self.n)
+            .zip(pre_n.chunks_mut(per * 3))
+            .enumerate()
+            .map(|(t, (pre, pre_n))| {
+                // the vectors kept from the last tick, a share to each part
+                let found = found.split_off(found.len() - found.len().min(3 * per));
+                Mutex::new(Some(Part { first: t * per, pre, pre_n, found }))
+            })
+            .collect();
+        let done: Vec<Mutex<Option<PartDone>>> = parts.iter().map(|_| Mutex::new(None)).collect();
+        let next = AtomicUsize::new(0);
+        let work = || {
+            loop {
+                let t = next.fetch_add(1, Ordering::Relaxed);
+                let Some(slot) = parts.get(t) else { break };
+                let Some(mut p) = slot.lock().unwrap_or_else(|e| e.into_inner()).take() else { continue };
+                let walks = self.part(p.first, p.pre, p.pre_n, &mut p.found);
+                *done[t].lock().unwrap_or_else(|e| e.into_inner()) = Some((walks, p.found));
+            }
+        };
+        if threads == 1 {
+            work();
+        } else {
+            let work = &work;
+            std::thread::scope(|sc| {
+                for _ in 1..threads {
+                    // (a thread not to be had: the others take its parts)
+                    let _ = std::thread::Builder::new().name("roam-links".into()).spawn_scoped(sc, work);
+                }
+                work();
+            });
+        }
+        for d in done {
+            let Some(([s, a, v], f)) = d.into_inner().unwrap_or_else(|e| e.into_inner()) else { continue };
+            near.extend(s);
+            near_a.extend(a);
+            near_v.extend(v);
+            found.extend(f);
+        }
+    }
+
+    /// places from `first` on, as many as `pre_n` has room for (3 a place)
+    fn part(&self, first: usize, pre: &mut [(f64, u32)], pre_n: &mut [u16], found: &mut Vec<Found>) -> [Vec<Near>; 3] {
+        let count = pre_n.len() / 3;
+        let mut out = [Vec::with_capacity(count), Vec::with_capacity(count), Vec::with_capacity(count)];
+        for k in 0..count {
+            let i = first + k;
+            let mut walks = [
+                Near::new(self.grid, self.soon, i as u32, found.pop().unwrap_or_default()),
+                Near::new(self.grid_a, self.ahead, i as u32, found.pop().unwrap_or_default()),
+                Near::from(self.grid, self.view[i], i as u32, found.pop().unwrap_or_default()),
+            ];
+            for (w, near) in walks.iter_mut().enumerate() {
+                if w == WALK_VIEW as usize && self.view[i] == self.soon[i] {
+                    continue;
+                }
+                let (g, pos) = if w == WALK_AHEAD as usize { (self.grid_a, self.ahead) } else { (self.grid, self.soon) };
+                let at = (3 * k + w) * self.n;
+                let want = self.wanted(3 * i + w);
+                let mut got = 0;
+                while got < want {
+                    let Some(e) = near.next(g, pos) else { break };
+                    pre[at + got] = e;
+                    got += 1;
+                }
+                pre_n[3 * k + w] = got as u16;
+            }
+            let [s, a, v] = walks;
+            out[0].push(s);
+            out[1].push(a);
+            out[2].push(v);
+        }
+        out
+    }
+}
+
 /// The links of a room larger than `exact_room`, as `link_every_pair` makes them from every pair sorted (at one
 /// place in the order the pair of the lower index first), without sorting them all: the last tick's links at their own place,
 /// and each player's nearest one after another (Near) while it has room, merged in that order.  A player walks three
@@ -2580,6 +2735,14 @@ fn has_place(places: &[u32], j: u32) -> bool {
 /// by place in the room (a player's last links and its new ones, as places), not from the players.  (Not inlined
 /// into the tick: there it made the every-pair loop of the small rooms 1 % slower.)  The outruns' links, the race
 /// lobbies' and the crews' come first, as in `link_every_pair`; returns how many of each were made.
+///
+/// Most of a large room's links are the last tick's again (97 % of 256,000 at 16000 players), and every player's
+/// walks have to go past its own links and the full players near it to the next one that can still link: a million
+/// of them a tick at 16000 players, nearly all taken only to read the next.  So the walks are read ahead on threads
+/// of their own (`Walks`), each nearest one that cannot link any more is passed over as it is read (`advance`), not
+/// sent through the heap, and a player whose links are full goes out of the grids, so the walks still to be read
+/// pass it by.  The links are the same, byte for byte (tests/roam_hub.rs: on one thread or four); on a Ryzen 9 5900X
+/// at 16000 players in one room the hub's thread went from about 1.2 s a tick to 0.4 s.
 #[inline(never)]
 fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch) -> (u64, u64, u64) {
     let m = list.len();
@@ -2600,7 +2763,13 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         found,
         olds,
         olinks,
+        osince,
         ostart,
+        pre,
+        pre_n,
+        pre_at,
+        want,
+        walk_used,
         fcount,
         flinks,
         dpairs,
@@ -2615,18 +2784,36 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
     grid.build(soon);
     grid_a.build(ahead);
     heap.clear();
-    near.clear();
-    near_a.clear();
-    near_v.clear();
     olds.clear();
     olinks.clear();
+    osince.clear();
     ostart.clear();
+    // every player's walks read ahead (on threads of their own in a large room): as far as each one went at the last
+    // tick and a quarter more, its links at most (a walk new to the room, its links).  How far they are read makes no
+    // difference to the links, only to the threads' share of the work: most walks go 5 to 15, a few hundreds (a
+    // player looking for one more link in a crowd of full ones), and which ones those are changes from tick to tick.
+    want.clear();
+    for (i, &slot) in list.iter().enumerate() {
+        let most = deg[i].max(1);
+        for went in walk_used.get(slot as usize).copied().unwrap_or([0; 3]) {
+            let v = match went {
+                0 => most,
+                n => n as usize - 1 + 2 + (n as usize - 1) / 4,
+            };
+            want.push(v.clamp(1, most) as u16);
+        }
+    }
+    let ahead_n = want.iter().copied().max().unwrap_or(1) as usize;
+    Walks { grid, grid_a, soon, ahead, view, want, n: ahead_n }.read(w.threads, found, near, near_a, near_v, pre, pre_n);
+    pre_at.clear();
+    pre_at.resize(m * 3, 0);
     for (i, &slot) in list.iter().enumerate() {
         ostart.push(olinks.len() as u32);
         if let Some(a) = player(slots, slot) {
             for l in &a.links {
                 let Some(j) = local(at, l.slot) else { continue };
                 olinks.push(j as u32);
+                osince.push(l.since);
                 // each link once: by its lower end, or by the only end that lists it (j's links are in already)
                 if i < j || !has_place(&olinks[ostart[j] as usize..ostart[j + 1] as usize], i as u32) {
                     // a link's place in the order: younger than `hold_ms` first, older at `keep` its distance
@@ -2635,23 +2822,6 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                 }
             }
         }
-        let mut n = Near::new(grid, soon, i as u32, found.pop().unwrap_or_default());
-        if let Some((d, j)) = n.next(grid, soon) {
-            heap.push(Cand::by(d, i as u32, j, WALK_SOON));
-        }
-        near.push(n);
-        let mut n = Near::new(grid_a, ahead, i as u32, found.pop().unwrap_or_default());
-        if let Some((d, j)) = n.next(grid_a, ahead) {
-            heap.push(Cand::by(d, i as u32, j, WALK_AHEAD));
-        }
-        near_a.push(n);
-        let mut n = Near::from(grid, view[i], i as u32, found.pop().unwrap_or_default());
-        if view[i] != soon[i] {
-            if let Some((d, j)) = n.next(grid, soon) {
-                heap.push(Cand::by(d, i as u32, j, WALK_VIEW));
-            }
-        }
-        near_v.push(n);
     }
     ostart.push(olinks.len() as u32);
     olds.sort_unstable_by_key(|c| (order_key(c.d), c.pair()));
@@ -2709,6 +2879,64 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
             }
         }
     }
+    // Walk w of place i on to its next one that can still link: read ahead, or on from where the reading stopped
+    // (`pre_at` counts what it gave, read ahead or not: the next tick reads that far ahead).  One that cannot link is
+    // passed over at once, where the order would have taken it only to read the walk's next one: the other player
+    // full, the pair linked already, a link of the last tick (taken at its own place, `olds`) or kept apart.  None of
+    // that changes later in the tick (no player gets room back, no link goes), so the links are the same, and a
+    // player looking for one more link in a crowd of full ones no longer sends each of them through the heap.
+    macro_rules! advance {
+        ($i:expr, $walk:expr) => {{
+            let (i, walk): (usize, u8) = ($i, $walk);
+            let k = i * 3 + walk as usize;
+            loop {
+                let (got, read) = (pre_at[k] as usize, pre_n[k] as usize);
+                pre_at[k] = pre_at[k].saturating_add(1);
+                let e = if got < read {
+                    Some(pre[k * ahead_n + got])
+                } else if read == want[k] as usize {
+                    // read as far as it was to be and wanting more: the walk goes on from there
+                    match walk {
+                        WALK_AHEAD => near_a[i].next(grid_a, ahead),
+                        WALK_VIEW => near_v[i].next(grid, soon),
+                        _ => near[i].next(grid, soon),
+                    }
+                } else {
+                    // the walk ended
+                    None
+                };
+                let Some((d, j)) = e else { break None };
+                let jl = j as usize;
+                if !room(fcount, jl)
+                    || old(i, jl)
+                    || has_place(&flinks[i * stride..i * stride + fcount[i] as usize], j)
+                    || kept_apart(bstart, bnext, i, jl)
+                {
+                    continue;
+                }
+                break Some((d, j));
+            }
+        }};
+    }
+    // a player with no room left (none at all, or filled by the lobbies and crews) out of the grids: the walks read
+    // from here on pass it by (`advance` would pass it over), and so on as each one fills
+    for i in 0..m {
+        if !room(fcount, i) {
+            grid.remove(i as u32);
+            grid_a.remove(i as u32);
+        }
+    }
+    // each walk's first one (as the walks were read: soon, ahead, then from the view point), but none for a player
+    // with no room left (the order would have taken it only to find that)
+    for i in 0..m {
+        if room(fcount, i) {
+            for walk in [WALK_SOON, WALK_AHEAD, WALK_VIEW] {
+                if let Some((d, j)) = advance!(i, walk) {
+                    heap.push(Cand::by(d, i as u32, j, walk));
+                }
+            }
+        }
+    }
     let mut o = 0;
     loop {
         // the next in the order: the heap's nearest one or the next link of the last tick
@@ -2728,22 +2956,12 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
             }
         };
         let (i, j) = (c.i() as usize, c.j() as usize);
-        if c.nearest() {
-            // i's next nearest one of that walk, while it has room
-            if room(fcount, i) {
-                let next = match c.walk() {
-                    WALK_AHEAD => near_a[i].next(grid_a, ahead),
-                    WALK_VIEW => near_v[i].next(grid, soon),
-                    _ => near[i].next(grid, soon),
-                };
-                if let Some((d, k)) = next {
-                    heap.push(Cand::by(d, i as u32, k, c.walk()));
-                }
-            }
-            // a link of the last tick: in the order at its own place
-            if old(i, j) {
-                continue;
-            }
+        // i's next one of that walk, while it has room (a link of the last tick is never one: `advance`)
+        if c.nearest()
+            && room(fcount, i)
+            && let Some((d, k)) = advance!(i, c.walk())
+        {
+            heap.push(Cand::by(d, i as u32, k, c.walk()));
         }
         if room(fcount, i)
             && room(fcount, j)
@@ -2754,14 +2972,27 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
             let since = if c.nearest() {
                 w.now
             } else {
-                player(slots, list[i]).and_then(|a| a.links.iter().find(|l| l.slot == list[j])).map_or(w.now, |l| l.since)
+                // its first in i's links, as `olinks` has them in the same order (all but those out of the room)
+                let (a, z) = (ostart[i] as usize, ostart[i + 1] as usize);
+                olinks[a..z].iter().position(|&x| x as usize == j).map_or(w.now, |k| osince[a + k])
             };
             join(fresh, list[i], list[j], since);
             for (a, b) in [(i, j), (j, i)] {
                 flinks[a * stride + fcount[a] as usize] = b as u32;
                 fcount[a] += 1;
+                // full now: out of the walks still to be read
+                if !room(fcount, a) {
+                    grid.remove(a as u32);
+                    grid_a.remove(a as u32);
+                }
             }
         }
+    }
+    // how far each walk went, for the next tick's read ahead (by slot, 0: not known)
+    walk_used.resize(slots.len(), [0; 3]);
+    for (i, &slot) in list.iter().enumerate() {
+        let used = |w: usize| pre_at[3 * i + w].saturating_add(1);
+        walk_used[slot as usize] = [used(0), used(1), used(2)];
     }
     for n in near.drain(..).chain(near_a.drain(..)).chain(near_v.drain(..)) {
         found.push(n.into_found());

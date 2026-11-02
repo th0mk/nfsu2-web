@@ -109,6 +109,14 @@ pub(crate) struct Grid {
     /// where each cell's players start in `members` (one more than the cells: the end)
     start: Vec<u32>,
     members: Vec<u32>,
+    /// each member's position, in the order of `members`: a walk reads a cell's players one after another in memory
+    /// (by the list they are anywhere, and the reads of their positions were most of a ring's time)
+    mpos: Vec<[f64; 3]>,
+    /// where each cell's players end (`remove` takes players out: a cell's players in `start[c]..end[c]`); and by
+    /// index in the list, each one's place in `members` and its cell
+    end: Vec<u32>,
+    at: Vec<u32>,
+    cell_of: Vec<u32>,
 }
 
 impl Grid {
@@ -147,16 +155,44 @@ impl Grid {
         }
         self.members.clear();
         self.members.resize(pos.len(), 0);
+        self.at.clear();
+        self.at.resize(pos.len(), 0);
+        self.cell_of.clear();
         for (i, p) in pos.iter().enumerate() {
             let c = self.index(p);
             // `start[c]` moves on as the cell fills: afterwards each start is the next cell's
             self.members[self.start[c] as usize] = i as u32;
+            self.at[i] = self.start[c];
+            self.cell_of.push(c as u32);
             self.start[c] += 1;
         }
+        self.end.clear();
+        self.end.extend_from_slice(&self.start[..cells]);
         for c in (1..=cells).rev() {
             self.start[c] = self.start[c - 1];
         }
         self.start[0] = 0;
+        self.mpos.clear();
+        self.mpos.extend(self.members.iter().map(|&i| pos[i as usize]));
+    }
+
+    /// Takes list[i] out: the walks read from then on pass it by (a player whose links are full, which no pair can link
+    /// any more: `link_many`).  Its cell's last one takes its place; the order a cell's players are read in makes no
+    /// difference to a walk.  Once out, it stays out until the next `build`.
+    pub(crate) fn remove(&mut self, i: u32) {
+        let (Some(&c), Some(&p)) = (self.cell_of.get(i as usize), self.at.get(i as usize)) else { return };
+        let (c, p) = (c as usize, p as usize);
+        let last = self.end[c] as usize;
+        if p >= last {
+            return;
+        }
+        let last = last - 1;
+        let j = self.members[last];
+        self.members.swap(p, last);
+        self.mpos.swap(p, last);
+        self.at[j as usize] = p as u32;
+        self.at[i as usize] = last as u32;
+        self.end[c] -= 1;
     }
 
     fn index(&self, p: &[f64; 3]) -> usize {
@@ -164,13 +200,14 @@ impl Grid {
         ((x - self.x1) * self.rows + (y - self.y1)) as usize
     }
 
-    /// the players of cell (x, y): none outside the span
-    fn cell(&self, x: i64, y: i64) -> &[u32] {
+    /// the players of cell (x, y) and their positions: none outside the span
+    fn cell(&self, x: i64, y: i64) -> (&[u32], &[[f64; 3]]) {
         if x < self.x1 || x > self.x2 || y < self.y1 || y > self.y2 {
-            return &[];
+            return (&[], &[]);
         }
         let c = ((x - self.x1) * self.rows + (y - self.y1)) as usize;
-        &self.members[self.start[c] as usize..self.start[c + 1] as usize]
+        let (a, z) = (self.start[c] as usize, self.end[c] as usize);
+        (&self.members[a..z], &self.mpos[a..z])
     }
 }
 
@@ -269,7 +306,7 @@ impl Near {
             });
             // the ring's own go where they belong as they are read
             if self.r <= self.last {
-                self.ring(g, pos, self.r, &w);
+                self.ring(g, self.r, &w);
                 self.r += 1;
             }
         }
@@ -306,17 +343,17 @@ impl Near {
 
     /// the cells r rings around its own (the order they are read in does not matter: what they give is ordered);
     /// the rows and columns outside the grid's span are skipped, as they hold nobody
-    fn ring(&mut self, g: &Grid, pos: &[[f64; 3]], r: i64, w: &Within) {
+    fn ring(&mut self, g: &Grid, r: i64, w: &Within) {
         let (x0, y0) = (self.x0, self.y0);
         if r == 0 {
-            self.cell(g, pos, x0, y0, w);
+            self.cell(g, x0, y0, w);
             return;
         }
         let (xa, xb) = ((x0 - r).max(g.x1), (x0 + r).min(g.x2));
         for y in [y0 - r, y0 + r] {
             if y >= g.y1 && y <= g.y2 {
                 for x in xa..=xb {
-                    self.cell(g, pos, x, y, w);
+                    self.cell(g, x, y, w);
                 }
             }
         }
@@ -324,19 +361,19 @@ impl Near {
         for x in [x0 - r, x0 + r] {
             if x >= g.x1 && x <= g.x2 {
                 for y in ya..=yb {
-                    self.cell(g, pos, x, y, w);
+                    self.cell(g, x, y, w);
                 }
             }
         }
     }
 
     /// a cell's players into the pool, or into `ready` when they are within reach of the ring being read
-    fn cell(&mut self, g: &Grid, pos: &[[f64; 3]], x: i64, y: i64, w: &Within) {
+    fn cell(&mut self, g: &Grid, x: i64, y: i64, w: &Within) {
         let a = &self.at;
         let Found { pool, ready, .. } = &mut self.found;
-        for &j in g.cell(x, y) {
+        let (members, mpos) = g.cell(x, y);
+        for (&j, b) in members.iter().zip(mpos) {
             if j != self.i {
-                let b = &pos[j as usize];
                 let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
                 let sq = dx * dx + dy * dy + dz * dz;
                 if w.beyond(sq, || distance(a, b)) { pool.push((sq, j)) } else { ready.push((sq, j)) }
