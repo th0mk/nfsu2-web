@@ -58,6 +58,7 @@
 __attribute__((weak)) int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n){ (void)port; (void)ip_h; (void)p; (void)n; return -1; }
 __attribute__((weak)) int vlan_rt_recv(uint16_t port, uint32_t *ip_h, void *p, int cap){ (void)port; (void)ip_h; (void)p; (void)cap; return -1; }
 __attribute__((weak)) int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms){ (void)ip_h; (void)max; (void)within_ms; return 0; }
+__attribute__((weak)) int vlan_race_sent_to(uint32_t ip_h, uint32_t within_ms){ (void)ip_h; (void)within_ms; return 0; }
 __attribute__((weak)) int vlan_rt_say_pick(void){ return -1; }
 __attribute__((weak)) int vlan_rt_said(const char *json, int n){ (void)json; (void)n; return -1; }
 /* status_web.c in the browser; the Mac has no page */

@@ -1,7 +1,8 @@
 // The runtime's native unit tests, built with the commands in their heads and run: tests/objtable_unit.c (the kernel
 // object table of runtime/win32_ext.c: a full table takes back a finished thread's slot, never one a wait or a handle
-// still names) and tests/watchdog_unit.c (runtime/watchdog.c: no false stall from a stamp a little ahead of its
-// clock).  Every case of theirs passes, and each one ran.
+// still names), tests/watchdog_unit.c (runtime/watchdog.c: no false stall from a stamp a little ahead of its
+// clock) and tests/racenet_unit.c (runtime/racenet.c: the creator's list only from the creator, each joiner's car
+// states for its own slot only).  Every case of theirs passes, and each one ran.
 //   node --test web/test/runtime-unit.test.mjs        (macOS with clang: Xcode's command line tools; about 10 s)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -40,4 +41,11 @@ test('watchdog_unit: no false stall from a stamp ahead of the watchdog\'s clock,
   for (const c of ['ahead-us', 'ahead-s', 'stall', 'short', 'download']) assert.ok(pass.includes(c), `case ${c} passed`);
   assert.ok(pass.length >= 7, `every check ran (${pass.length})`);
   assert.match(out, /watchdog unit tests: all passed/);
+});
+
+test('racenet_unit: the creator\'s list only from the creator, a joiner\'s states only for its own slot', { skip }, () => {
+  const { out, pass } = run('racenet_unit', ['-O1', '-g', '-Wall', '-Wno-unused-function']);
+  for (const c of ['stranger', 'creator', 'second', 'direct', 'own-slot', 'taken-slot', 'rules', 'reset']) assert.ok(pass.includes(c), `case ${c} passed`);
+  assert.ok(pass.length >= 12, `every check ran (${pass.length})`);
+  assert.match(out, /racenet unit tests: all passed/);
 });
