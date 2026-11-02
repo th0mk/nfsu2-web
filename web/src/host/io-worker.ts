@@ -382,6 +382,25 @@ async function saveEntry(rel: string): Promise<{ parent: FileSystemDirectoryHand
   return { parent, name, kind: null, h: null };
 }
 
+// Why a file of the save folder did not open, for the log (a save that fails is a "[file] CANNOT OPEN" line of the
+// game's, which says no more).  Chrome refuses a sync access handle while the page writes the file (createWritable:
+// NoModificationAllowedError), never for its reads (getFile).  And a browser that clears the site's data while a
+// game runs (Discord 2026-10-31: in each game, after a while, every new open of a game data cache file or a save
+// failed with NotFoundError, and each next start found the save folder empty) leaves this worker's save folder
+// handle on a folder that is gone: nothing more can be saved in this game.  Said once each.
+const troubleSaid = new Set<string>();
+async function saveTrouble(what: string, err: unknown) {
+  const name = (err as Error)?.name ?? 'Error';
+  if (troubleSaid.has(name)) return;
+  troubleSaid.add(name);
+  let gone = false;
+  if (name === 'NotFoundError')
+    try { await (await navigator.storage.getDirectory()).getDirectoryHandle(cfg.saveDir); }
+    catch (e) { gone = (e as Error)?.name === 'NotFoundError'; }
+  note(gone ? `[save] the save folder is gone: the browser deleted this site's data while the game ran (low disk space, or its settings?); nothing more can be saved in this game (${name})`
+    : `[save] ${what}: ${name}: ${(err as Error)?.message ?? err}`);
+}
+
 // ------------------------------------------------------------------ fds ----
 interface Fd {
   mount: 'data' | 'save' | 'dev'; kind: 'dir' | 'file'; path: string; pos: number; append: boolean;
@@ -464,9 +483,12 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       if (oflags & 2) return e.kind ? E.NOTDIR : E.NOENT;
       if (!e.kind && !(oflags & 1)) return E.NOENT;
       if (e.kind && oflags & 4) return E.EXIST;
-      const fh = e.kind ? e.h as FileSystemFileHandle : await e.parent.getFileHandle(e.name, { create: true });
+      let fh: FileSystemFileHandle;
+      try { fh = e.kind ? e.h as FileSystemFileHandle : await e.parent.getFileHandle(e.name, { create: true }); }
+      catch (err) { void saveTrouble('a file of the save folder could not be made', err); return E.IO; }
       let sh: FileSystemSyncAccessHandle;
-      try { sh = await (fh as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }); } catch { return E.ACCES; }
+      try { sh = await (fh as any).createSyncAccessHandle({ mode: 'readwrite-unsafe' }); }
+      catch (err) { void saveTrouble('a file of the save folder could not be opened', err); return E.ACCES; }
       if (oflags & 8) sh.truncate(0);
       const fd = allocFd({ mount: 'save', kind: 'file', path: rel, pos: 0, append: !!(fdflags & 1), sh, fh, wrote: !!(oflags & 8) });
       dv().setUint32(n(8), fd, true); return 0;
@@ -561,7 +583,9 @@ async function op(o: Op, a: bigint[]): Promise<number> {
       const dir = fds.get(n(0)); if (!dir || dir.kind !== 'dir') return E.BADF; if (dir.mount === 'data') return E.ROFS;
       const rel = normRel(joinRel(dir.path, readPath(n(1), n(2)))); if (!rel) return E.PERM;
       const e = await saveEntry(rel); if (!e) return E.NOENT; if (e.kind) return E.EXIST;
-      await e.parent.getDirectoryHandle(e.name, { create: true }); return 0;
+      try { await e.parent.getDirectoryHandle(e.name, { create: true }); }
+      catch (err) { void saveTrouble('a folder of the save folder could not be made', err); return E.IO; }
+      return 0;
     }
     case Op.PathRemoveDirectory: case Op.PathUnlinkFile: {
       const dir = fds.get(n(0)); if (!dir || dir.kind !== 'dir') return E.BADF; if (dir.mount === 'data') return E.ROFS;
