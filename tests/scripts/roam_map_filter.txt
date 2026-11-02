@@ -2,13 +2,13 @@
 # game's own, crossed with Enter (the other players' markers, then the race lobbies' icons and labels, off the map),
 # the map closed and opened again (still crossed: the game's registry, MapPlayers / MapRaces), ticked again.  A career
 # with lobbies near: a server with roam-crowd.mjs --n 150 --spread 120 --cars all --lobbies 7:S2_SPRINT_3,S2_URL_2,
-# S2_CIRCUIT_5,S3_SPON_DRAG_6,S3_SPON_STREET_1 and a stage-3 save (12 kinds of places: our rows are 13 and 14, 12
-# Downs from the first; another career needs another count):
+# S2_CIRCUIT_5,S3_SPON_DRAG_6,S3_SPON_STREET_1 and a stage-3 save (12 kinds of places: our rows are 13 to 15, 12
+# Downs from the first reach Players; another career needs another count):
 #   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page app --a Ita:roam_map_filter.txt
 #        --seed <the stage-3 save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --fetch registry.txt
-# mp map: "legend 14 rows ... Players crossed ... N players' markers, M lobbies', N of them off the map".  The
-# layout of a full legend (our rows in the place of Your Car / Opponent Car, Up from the first row reaches them):
-# NFSU2_ROAM_TEST_LEGEND_TOP=1.  The shots show the lobby labels beside their icons, clear of the other icons.
+# mp map: "legend 15 rows ... Players crossed ... N players' markers, M lobbies', N of them off the map".  A fuller
+# legend (every row nearer the others, the rows past the package's 14 copies of its row 13):
+# NFSU2_ROAM_TEST_LEGEND_ROWS=n, n rows more.  The shots show the lobby labels beside their icons, clear of the others.
 0     bot on
 +0    waitroam 6000
 +0    bot off

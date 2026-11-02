@@ -66,7 +66,15 @@ pub(crate) const LOBBY_PLAYERS: usize = 6;
 /// unless gone, x, y (i16 LE, m), heading (u8, 256 a turn), its velocity's x and y (i8, m/s); at most MAPD_BYTES of
 /// entries a datagram, MAPD_PARTS datagrams an answer (2048 placed in all)
 pub(crate) const MAPD_GONE: u16 = 0x8000;
+/// ...and, to a MAPREQ with MAPREQ_PARKED in its flags, MAPD_PARKED set in a placed player's key when it has stood at
+/// one spot for a minute (hub.rs PARKED_MS: the world map's car meets count those)
+pub(crate) const MAPD_PARKED: u16 = 0x4000;
+pub(crate) const MAPREQ_PARKED: u16 = 1;
 pub(crate) const MAPD_PLACE: usize = 9;
+/// ...and in an answer to it (HF_MAPZ in its header's flags) a placed player's z (i16 LE, m) after its velocity: the
+/// map's GPS to a meet goes to a point of the road there, which it finds by its height too
+pub(crate) const MAPD_PLACE_Z: usize = 11;
+pub(crate) const HF_MAPZ: u16 = 0x0800;
 pub(crate) const MAPD_BYTES: usize = 1152;
 pub(crate) const MAPD_PARTS: usize = 16;
 pub(crate) const HDR: usize = 16;
@@ -108,11 +116,12 @@ pub(crate) enum Msg<'a> {
         clock: u8,
     },
     /// the world map's question (roam_core.h RC_MSG_MAPREQ): req is echoed in the answer, max entries at most; base
-    /// the answer it holds, 0 none
+    /// the answer it holds, 0 none; flags (a newer page's, 0 without: MAPREQ_PARKED)
     MapReq {
         req: u16,
         max: u16,
         base: u16,
+        flags: u16,
     },
     /// the minimap's question (roam_core.h RC_MSG_NEARREQ): a MAPREQ's fields, and how far from the asker at most (m)
     NearReq {
@@ -387,7 +396,12 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             }
             Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50), t_us: u32_le(d, 22), clock: d[21] }
         }
-        MSG_MAPREQ if end == HDR + 6 => Msg::MapReq { req: u16_le(d, 16), max: u16_le(d, 18), base: u16_le(d, 20) },
+        MSG_MAPREQ if end == HDR + 6 || end == HDR + 8 => Msg::MapReq {
+            req: u16_le(d, 16),
+            max: u16_le(d, 18),
+            base: u16_le(d, 20),
+            flags: if end == HDR + 8 { u16_le(d, 22) } else { 0 },
+        },
         MSG_NEARREQ if end == HDR + 8 => {
             Msg::NearReq { req: u16_le(d, 16), max: u16_le(d, 18), base: u16_le(d, 20), radius: u16_le(d, 22) }
         }
@@ -551,6 +565,7 @@ pub(crate) fn write_mapd(
     nparts: u8,
     total: u16,
     n: u8,
+    flags: u16,
     e: &[u8],
 ) {
     let len = b.len();
@@ -560,7 +575,7 @@ pub(crate) fn write_mapd(
     b[6..8].copy_from_slice(&(len as u16).to_le_bytes());
     b[8..12].copy_from_slice(&sender.to_le_bytes());
     b[12..14].copy_from_slice(&seq.to_le_bytes());
-    b[14..16].copy_from_slice(&[0, 0]);
+    b[14..16].copy_from_slice(&flags.to_le_bytes());
     b[16..18].copy_from_slice(&req.to_le_bytes());
     b[18..20].copy_from_slice(&base.to_le_bytes());
     b[20] = part;

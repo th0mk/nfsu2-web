@@ -236,6 +236,50 @@ fn the_world_map_shows_the_room_in_free_roam_lately() {
     assert_eq!(mapd_answer(&k).2, 0, "only its link 1 is fresh");
 }
 
+// a map that asks for them (MAPREQ flags 1) learns who has stood at one spot for a minute (0x4000 in the key: a car
+// meet counts those) and where everyone is, height and all (the GPS to a meet needs it); one placed again when it
+// drives off; a map that does not ask never sees the mark
+#[test]
+fn the_world_map_tells_who_has_stood_a_minute_when_asked() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..4 {
+        join(&mut k, i);
+    }
+    // 0 asks (1 beside it is its link); 2 stays within 25 m of one spot, 3 goes 3 m on every second
+    let snaps = |k: &mut Kit, t: f64| {
+        k.from(W(0), &snap(100, [0.0, 0.0, 0.0]));
+        k.from(W(1), &snap(101, [5.0, 0.0, 0.0]));
+        k.from(W(2), &snap(102, [500.0 + (t / 1000.0) % 20.0, 0.0, 17.4]));
+        k.from(W(3), &snap(103, [800.0 + 3.0 * (t / 1000.0).floor(), 0.0, 0.0]));
+    };
+    let ask = |k: &mut Kit, req: u16, base: u16, flags: u16| {
+        k.hub.tick();
+        k.clear();
+        k.from(W(0), &if flags != 0 { mapreq_flags(100, req, 2048, base, flags) } else { mapreq_base(100, req, 2048, base) });
+        mapd_answer(k).3.into_iter().map(|(key, _)| key).collect::<Vec<u16>>()
+    };
+    snaps(&mut k, 0.0);
+    assert_eq!(ask(&mut k, 1, 0, 1), [2, 3], "nobody has stood a minute yet");
+    let mut t = 0.0;
+    while t < 61_000.0 {
+        k.step(1000.0);
+        t += 1000.0;
+        snaps(&mut k, t);
+    }
+    k.step(300.0);
+    assert_eq!(ask(&mut k, 2, 0, 1), [2 | 0x4000, 3], "2 has stood a minute, 3 kept going");
+    let f = k.sent.lock().iter().find_map(|(_, f)| mapd_of(f).map(|_| f.clone())).unwrap();
+    let d = &f[16..];
+    assert_eq!(u16::from_le_bytes([d[14], d[15]]) & 0x0800, 0x0800, "heights with the answer");
+    assert_eq!(i16::from_le_bytes([d[25 + 9], d[25 + 10]]), 17, "2's height, whole metres");
+    // 2 drives off: placed again from the answer the map holds, no longer marked
+    k.step(300.0);
+    k.from(W(2), &snap(102, [600.0, 0.0, 0.0]));
+    assert_eq!(ask(&mut k, 3, 2, 1), [2], "2 placed again, unmarked");
+    k.step(300.0);
+    assert_eq!(ask(&mut k, 4, 0, 0), [2, 3], "not asked: no marks");
+}
+
 // one answer a quarter second for a browser, whatever its endpoints: a BYE and a HELLO, or another port, make a new
 // player, not a new answer (the second security audit: that way a few clients kept the hub's thread busy with maps)
 #[test]

@@ -72,6 +72,10 @@
 #define RC_MAP_MAX       2048       /* entries per answer at most (the hub's nearest) */
 #define RC_MAPD_GONE     0x8000u    /* a MAPD entry's key (u16: the hub's slot of the player) with this: it went */
 #define RC_MAPD_PLACE    9          /* ...without: x, y (int16, m), heading (u8), velocity x, y (int8, m/s) follow */
+#define RC_MAPD_PARKED   0x4000u    /* ...and, to a question with RC_MAPREQ_PARKED, this in a placed player's key: it has
+                                       stood at one spot for a minute (the hub's PARKED_MS; the world map's car meets) */
+#define RC_MAPREQ_PARKED 1u         /* a MAPREQ's flags (a u16 after base; none: 0): RC_MAPD_PARKED wanted */
+#define RC_MAPD_PLACE_Z  11         /* ...and in its answer (RC_HF_MAPZ) a placed player's z (int16, m) after the velocity */
 #define RC_MAPD_BYTES    1152       /* entries' bytes per MAPD datagram at most */
 #define RC_MAPD_PARTS    16         /* MAPD datagrams per answer at most */
 #define RC_NEAR_MAX      128        /* NEARD entries per answer at most: one datagram (RC_MAPD_BYTES / RC_MAPD_PLACE) */
@@ -233,6 +237,7 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
 /* header flags (HELLO, core 8 and up): this player reads the crew marks of
  * the hub's PEERS (RC_HF_CREW above); a hub sends them to no other */
 #define RC_HF_HUBCREW    0x0400
+#define RC_HF_MAPZ       0x0800     /* (MAPD) its placed entries carry z: RC_MAPD_PLACE_Z bytes each */
 /* in the hub's crew marks, past the crews' bits: that player's friendship with
  * this one goes both ways (the server's friends lists, EA Messenger's); a hub
  * of before sets none, a core of before reads only the crews' bits */
@@ -363,7 +368,7 @@ typedef struct {
         struct { uint32_t t0, t1, t2; } ping;          /* PING: t0 only */
         struct { uint8_t reason; } bye;
         struct { uint8_t op, arg; uint32_t to, duel; } duel;      /* to: the player it is for */
-        struct { uint16_t req, max, base; } mapreq;
+        struct { uint16_t req, max, base, flags; } mapreq;
         struct { uint16_t req, base, total, len; uint8_t part, nparts, n; const uint8_t *data; } mapd;   /* data: n entries, len bytes;
                                                                                                            NEARD's too */
         struct { uint16_t req, max, base, radius; } nearreq;
@@ -483,7 +488,9 @@ enum { RC_EV_JOIN = 1, RC_EV_LEAVE = 2, RC_EV_NOTE = 3, RC_EV_CFG = 4, RC_EV_RES
 /* a player on the world map (MAPD): the hub's key for it, where it was and
  * its heading and velocity (m/s) at at_us, when the hub said so; it is
  * x + vx * (now - at_us) on */
-typedef struct { uint16_t id; int16_t x, y; uint8_t heading; int8_t vx, vy; int64_t at_us; } rc_mapent;
+typedef struct { uint16_t id; int16_t x, y; uint8_t heading; int8_t vx, vy; uint8_t parked; int16_t z; int64_t at_us; } rc_mapent;
+                                    /* (parked: RC_MAPD_PARKED; z: RC_HF_MAPZ's, else RC_MAP_NO_Z) */
+#define RC_MAP_NO_Z      (-32768)
 
 typedef struct {
     uint32_t self_id;              /* random, nonzero, per start */
@@ -604,8 +611,9 @@ typedef struct {
      * as of the last complete answer (map_held its question; map_gen +1 for
      * each), by id */
     uint16_t  map_req;  int64_t map_asked_us;
+    uint16_t  map_want, map_flags;    /* the flags to ask with (the game's: RC_MAPREQ_PARKED), and our last question's */
     uint16_t  map_mask;  uint8_t map_nparts;  uint8_t map_part_n[RC_MAPD_PARTS];  uint16_t map_part_len[RC_MAPD_PARTS];
-    uint16_t  map_asm_total, map_asm_base;
+    uint16_t  map_asm_total, map_asm_base;  uint8_t map_asm_z;   /* (its parts' entries carry z: RC_HF_MAPZ) */
     uint8_t   map_asm[RC_MAPD_PARTS * RC_MAPD_BYTES];
     uint16_t  map_held;
     uint32_t  map_gen;  int map_n;  uint16_t map_total;

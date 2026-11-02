@@ -1,0 +1,46 @@
+# Free roam, car meets on the world map (roam_game.c meet_*): a spot where 24 players or more have been parked a minute
+# gets a green star and "Meet: <n> cars" (friends' cars and the hub's players alike: RC_MAPD_PARKED), fewer get
+# nothing, the legend's Car meets row hides them, and the GPS takes the player to one: the row picked picks the nearest
+# meet, Right the next, C asks to start the GPS (Yes is left of No), and the GPS stops next to the meet.  A stage-3
+# save (12 kinds of places: Players, Players' races and Car meets after them, 15 rows nearer each other; Up from the
+# first row reaches the last) and roam-crowd.mjs --n 74 --track <csv> parked in three groups by road points of the career's places
+# (the map's items: mp map items): 28 by (-1003, -172, 17), 20 by (458, 126, 9) (none), 26 by (-723, -913, 17), each
+# a grid of 5 across 6.25 m apart, their z 0.5 over the road's (the GPS finds the road by the height too):
+#   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page app --a Ita:roam_map_meets.txt
+#        --seed <the stage-3 save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env ROAM_CROWD_CARS=20
+# The log: "world map: 2 car meet(s): 28 cars at ..., 26 cars at ...", mp map's meets (the one picked, its GPS
+# target), "GPS: to the car meet at ..." and "GPS: at the car meet (...), stopped"; the shot gps_on without the GPS's
+# "Unable to find a path".
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam mp status
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++4500 tapuntil M UI_InGame_WorldMap.fng 90 1500   # (the cars parked a minute and more)
++600  roam mp map
++0    log SHOT open
++30   tap UP                          # Car meets, the last row: the nearest meet picked
++60   roam mp map
++0    log SHOT meet_picked
++30   tap RIGHT                       # the next one
++60   roam mp map
++0    log SHOT meet_next
++30   tap RIGHT                       # the nearest again
++60   roam mp map
++30   tap RETURN                      # Car meets crossed: none picked, the stars off the map
++90   roam mp map
++0    log SHOT meets_off
++30   tap RETURN
++90   tap DOWN                        # (the game's first row)
++30   tap UP                          # Car meets again: the nearest picked
++60   tap C                           # Activate GPS?
++90   log SHOT gps_ask
++30   tap LEFT                        # Yes
++20   tap RETURN
++600  log SHOT gps_on
++0    roam mp status
++0    roam mp follow meet 15          # next to the meet the GPS goes to: the GPS stops
++300  log SHOT arrived
++60   log MEETS DONE
++10   quit

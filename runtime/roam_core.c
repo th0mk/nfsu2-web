@@ -447,7 +447,10 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return -1;
         rc_put8(&w, m->u.duel.op); rc_put8(&w, m->u.duel.arg); rc_put32(&w, m->u.duel.to); rc_put32(&w, m->u.duel.duel);
         break;
-    case RC_MSG_MAPREQ: rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); rc_put16(&w, m->u.mapreq.base); break;
+    case RC_MSG_MAPREQ:
+        rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); rc_put16(&w, m->u.mapreq.base);
+        if (m->u.mapreq.flags) rc_put16(&w, m->u.mapreq.flags);     /* (a hub before them takes none: they go only when wanted) */
+        break;
     case RC_MSG_NEARREQ:
         rc_put16(&w, m->u.nearreq.req); rc_put16(&w, m->u.nearreq.max); rc_put16(&w, m->u.nearreq.base); rc_put16(&w, m->u.nearreq.radius);
         break;
@@ -600,6 +603,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         break;
     case RC_MSG_MAPREQ:
         m->u.mapreq.req = (uint16_t)rc_get16(&r); m->u.mapreq.max = (uint16_t)rc_get16(&r); m->u.mapreq.base = (uint16_t)rc_get16(&r);
+        m->u.mapreq.flags = !r.err && r.n < r.len ? (uint16_t)rc_get16(&r) : 0;
         if (r.err) return RC_E_SHORT;
         break;
     case RC_MSG_NEARREQ:
@@ -616,7 +620,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         uint32_t len = 0;
         for (int k = 0; k < m->u.mapd.n; k++){
             if (!r_have(&r, len + 2)) return RC_E_SHORT;
-            len += (r.p[r.n + len] | r.p[r.n + len + 1] << 8) & RC_MAPD_GONE ? 2 : RC_MAPD_PLACE;
+            len += (r.p[r.n + len] | r.p[r.n + len + 1] << 8) & RC_MAPD_GONE ? 2 : (m->h.flags & RC_HF_MAPZ) ? RC_MAPD_PLACE_Z : RC_MAPD_PLACE;
         }
         if (len > RC_MAPD_BYTES) return RC_E_FIELD;
         if (!r_have(&r, len)) return RC_E_SHORT;
@@ -1084,6 +1088,7 @@ int rc_ask_map(rc_session *s, int64_t now, int max){
     m.u.mapreq.req = ++s->map_req;
     m.u.mapreq.max = (uint16_t)(max < 0 ? 0 : max > RC_MAP_MAX ? RC_MAP_MAX : max);
     m.u.mapreq.base = s->map_held;
+    m.u.mapreq.flags = s->map_flags = s->map_want;
     s->map_mask = 0; s->map_nparts = 0; s->map_asked_us = now;
     tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m);
     return 1;
@@ -1096,6 +1101,7 @@ static void map_part(rc_session *s, const rc_msg *m, int64_t now){
     if (s->map_mask && (m->u.mapd.nparts != s->map_nparts || m->u.mapd.total != s->map_asm_total || m->u.mapd.base != s->map_asm_base))
         s->map_mask = 0;                                    /* not the same answer */
     s->map_nparts = m->u.mapd.nparts; s->map_asm_total = m->u.mapd.total; s->map_asm_base = m->u.mapd.base;
+    s->map_asm_z = (m->h.flags & RC_HF_MAPZ) != 0;
     memcpy(s->map_asm + (size_t)m->u.mapd.part * RC_MAPD_BYTES, m->u.mapd.data, m->u.mapd.len);
     s->map_part_n[m->u.mapd.part] = m->u.mapd.n; s->map_part_len[m->u.mapd.part] = m->u.mapd.len;
     s->map_mask |= (uint16_t)(1u << m->u.mapd.part);
@@ -1106,16 +1112,18 @@ static void map_part(rc_session *s, const rc_msg *m, int64_t now){
     for (int j = 0; j < s->map_nparts; j++){
         const uint8_t *e = s->map_asm + (size_t)j * RC_MAPD_BYTES;
         for (int k = 0; k < s->map_part_n[j]; k++){
-            uint16_t key = (uint16_t)(e[0] | e[1] << 8), id = key & (uint16_t)~RC_MAPD_GONE;
+            uint16_t key = (uint16_t)(e[0] | e[1] << 8), id = key & (uint16_t)~RC_MAPD_GONE, pk = 0;
+            if ((s->map_flags & RC_MAPREQ_PARKED) && !(key & RC_MAPD_GONE)){ pk = key & RC_MAPD_PARKED; id &= (uint16_t)~RC_MAPD_PARKED; }
             while (i < held && s->map_e[i].id < id){ if (n < RC_MAP_MAX) s->map_tmp[n++] = s->map_e[i]; i++; }
             if (i < held && s->map_e[i].id == id) i++;      /* (placed again, or gone) */
             if (key & RC_MAPD_GONE){ e += 2; continue; }
             if (n < RC_MAP_MAX){
                 rc_mapent *t = &s->map_tmp[n++];
                 t->id = id; t->x = (int16_t)(e[2] | e[3] << 8); t->y = (int16_t)(e[4] | e[5] << 8);
-                t->heading = e[6]; t->vx = (int8_t)e[7]; t->vy = (int8_t)e[8]; t->at_us = now;
+                t->heading = e[6]; t->vx = (int8_t)e[7]; t->vy = (int8_t)e[8]; t->parked = pk != 0; t->at_us = now;
+                t->z = s->map_asm_z ? (int16_t)(e[9] | e[10] << 8) : (int16_t)RC_MAP_NO_Z;
             }
-            e += RC_MAPD_PLACE;
+            e += s->map_asm_z ? RC_MAPD_PLACE_Z : RC_MAPD_PLACE;
         }
     }
     for (; i < held && n < RC_MAP_MAX; i++) s->map_tmp[n++] = s->map_e[i];

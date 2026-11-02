@@ -53,8 +53,15 @@ const MAP_AHEAD_MS: f64 = 1000.0;
 /// go with every answer a second at most
 const MAP_KEEP_MS: f64 = 10_000.0;
 const MAP_LOBBIES_GAP_MS: f64 = 1000.0;
+/// MAPD, to a map that asks (wire::MAPREQ_PARKED): a player whose SNAPs have stayed within STAY_M of one spot for
+/// PARKED_MS is parked (wire::MAPD_PARKED in its entry's key): the world map counts those for a car meet, and a busy
+/// spot of players passing or just come (a new career's start) is none
+const STAY_M: f64 = 25.0;
+const PARKED_MS: f64 = 60_000.0;
 /// MAPD's most players placed in one answer (MAPD_PARTS full datagrams)
 const MAPD_MAX: usize = wire::MAPD_PARTS * (wire::MAPD_BYTES / wire::MAPD_PLACE);
+/// ...with their heights (an answer to wire::MAPREQ_PARKED)
+const MAPD_MAX_Z: usize = wire::MAPD_PARTS * (wire::MAPD_BYTES / wire::MAPD_PLACE_Z);
 /// NEARD (the minimap's answer, roam_game.c near_*): one datagram, so 128 players placed at most, within NEAR_M at
 /// most of the asker (roam_core.h RC_NEAR_MAX, RC_NEAR_M).  The minimap shows a few hundred metres across a dozen
 /// pixels' arrows: a marker is placed again once it would be 2 m off (a pixel or two there) or its heading 11° off
@@ -91,9 +98,12 @@ struct MapCand {
     heading: u8,
     vx: i8,
     vy: i8,
+    /// it has stood at one spot for PARKED_MS
+    parked: bool,
 }
 
-/// a player as a browser's world map was last told (MAPD): its place, heading and velocity then, and when
+/// a player as a browser's world map was last told (MAPD): its place, heading and velocity then, and when; parked as
+/// its key said
 #[derive(Clone, Copy)]
 struct MapSent {
     slot: u32,
@@ -103,6 +113,7 @@ struct MapSent {
     heading: u8,
     vx: i8,
     vy: i8,
+    parked: bool,
     t: f64,
 }
 
@@ -502,6 +513,9 @@ struct Player {
     /// its velocity and heading (256 a turn) as of the position
     v: [f64; 3],
     pos_at: f64,
+    /// where its SNAPs have stayed within STAY_M of since `stay_at` (x, y): parked after PARKED_MS
+    stay: [f64; 2],
+    stay_at: f64,
     id: u32,
     room: u32,
     /// its name is claimed by another keyphrase (nfsu2-claims): it gets no links, shows on no map and counts nowhere,
@@ -1198,6 +1212,8 @@ impl Hub {
                     v: [0.0; 3],
                     heading: 0,
                     pos_at: 0.0,
+                    stay: [0.0; 2],
+                    stay_at: f64::INFINITY,
                     seen: 0.0,
                     lobbies: false,
                     marks: false,
@@ -1270,6 +1286,10 @@ impl Hub {
                 crewed = Some((was, p.crews[0] != 0));
             }
             Msg::Snap { sender, status, p: pos, v, heading, t_us, clock } if sender == p.id => {
+                let (dx, dy) = (pos[0] - p.stay[0], pos[1] - p.stay[1]);
+                if p.p.is_none() || dx * dx + dy * dy > STAY_M * STAY_M || !matches!(status, 2 | 5) {
+                    (p.stay, p.stay_at) = ([pos[0], pos[1]], now);
+                }
                 p.p = Some(pos);
                 p.v = v;
                 p.heading = heading;
@@ -1281,7 +1301,7 @@ impl Hub {
                     p.watch.reset();
                 }
             }
-            Msg::MapReq { req, max, base } if sender == p.id => ask = Some((req, max, base)),
+            Msg::MapReq { req, max, base, flags } if sender == p.id => ask = Some((req, max, base, flags)),
             Msg::NearReq { req, max, base, radius } if sender == p.id => ask_near = Some((req, max, base, radius)),
             Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids } if sender == p.id => {
                 match op {
@@ -1347,8 +1367,8 @@ impl Hub {
             results.add(now, by, r, &|id| self.who(id));
             self.results = results;
         }
-        if let Some((req, max, base)) = ask {
-            self.mapd(slot, req, max, base, now);
+        if let Some((req, max, base, flags)) = ask {
+            self.mapd(slot, req, max, base, flags & wire::MAPREQ_PARKED != 0, now);
         }
         if let Some((req, max, base, radius)) = ask_near {
             self.neard(slot, req, max, base, radius, now);
@@ -1438,8 +1458,8 @@ impl Hub {
     /// answer `base` the hub sent (from nothing when the hub has no such answer): a player come or moved off where the page has it now (`MAP_TOL_M`, `MAP_TOL_H`;
     /// the page moves each marker on at the velocity it was given) is placed, a player gone goes.  One answer to a
     /// browser every map_gap_ms at most, and its race lobbies with it every MAP_LOBBIES_GAP_MS.
-    fn mapd(&mut self, slot: u32, req: u16, most: u16, base: u16, now: f64) {
-        let max = self.o.map_max.min(MAPD_MAX).min(most as usize);
+    fn mapd(&mut self, slot: u32, req: u16, most: u16, base: u16, parked: bool, now: f64) {
+        let max = self.o.map_max.min(if parked { MAPD_MAX_Z } else { MAPD_MAX }).min(most as usize);
         let Some(p) = self.player(slot) else { return };
         if p.impostor || self.map_at.get(&p.vip).is_some_and(|&t| now < t) {
             return;
@@ -1474,10 +1494,10 @@ impl Hub {
             _ => &[],
         };
         let (mut b, (mut e, mut ends, mut next)) =
-            (if from.is_empty() { 0 } else { base }, map_diff(from, &list, at_t, MAP_TOL_M, MAP_TOL_H));
+            (if from.is_empty() { 0 } else { base }, map_diff(from, &list, at_t, MAP_TOL_M, MAP_TOL_H, parked));
         let mut parts = map_parts(&ends);
         if parts.len() > wire::MAPD_PARTS {
-            (b, (e, ends, next)) = (0, map_diff(&[], &list, at_t, MAP_TOL_M, MAP_TOL_H));
+            (b, (e, ends, next)) = (0, map_diff(&[], &list, at_t, MAP_TOL_M, MAP_TOL_H, parked));
             parts = map_parts(&ends);
         }
         for (k, &(a, z)) in parts.iter().enumerate() {
@@ -1499,6 +1519,7 @@ impl Hub {
                 parts.len() as u8,
                 total,
                 (z - a) as u8,
+                if parked { wire::HF_MAPZ } else { 0 },
                 &e[s0..s1],
             );
             self.seq = self.seq.wrapping_add(1);
@@ -1677,7 +1698,7 @@ impl Hub {
                     "the minimap grid's slot {q} out of date: {s:?}"
                 );
                 if s.live && s.room == room && self.shown_on_map(q, &s, now) {
-                    list.push(map_cand_of(q, s.id, s.p, s.heading, s.v, ahead_of(s.p, s.v, s.pos_at, now)));
+                    list.push(map_cand_of(q, s.id, s.p, s.heading, s.v, ahead_of(s.p, s.v, s.pos_at, now), false));
                 }
             }
         }
@@ -1693,9 +1714,9 @@ impl Hub {
             _ => &[],
         };
         let (mut b, (mut e, mut ends, mut next)) =
-            (if from.is_empty() { 0 } else { base }, map_diff(from, &list, now, NEAR_TOL_M, NEAR_TOL_H));
+            (if from.is_empty() { 0 } else { base }, map_diff(from, &list, now, NEAR_TOL_M, NEAR_TOL_H, false));
         if e.len() > wire::MAPD_BYTES || ends.len() > 255 {
-            (b, (e, ends, next)) = (0, map_diff(&[], &list, now, NEAR_TOL_M, NEAR_TOL_H));
+            (b, (e, ends, next)) = (0, map_diff(&[], &list, now, NEAR_TOL_M, NEAR_TOL_H, false));
         }
         self.near_list = list;
         let mut f = vec![0u8; F_DATA + wire::mapd_len(e.len())];
@@ -1704,7 +1725,7 @@ impl Hub {
         f[8..12].copy_from_slice(&vip.to_be_bytes());
         f[12..14].copy_from_slice(&hub_port.to_be_bytes());
         f[14..16].copy_from_slice(&port.to_be_bytes());
-        wire::write_mapd(&mut f[F_DATA..], wire::MSG_NEARD, self.id, self.seq, req, b, 0, 1, total, ends.len() as u8, &e);
+        wire::write_mapd(&mut f[F_DATA..], wire::MSG_NEARD, self.id, self.seq, req, b, 0, 1, total, ends.len() as u8, 0, &e);
         self.seq = self.seq.wrapping_add(1);
         (self.send)(vip, Bytes::from(f));
         self.st.nears += 1;
@@ -1770,7 +1791,7 @@ impl Hub {
             .iter()
             .filter_map(|&q| {
                 let o = self.player(q)?;
-                (o.room == room && self.map_shown(q, o, now)).then(|| map_cand(q, o, ahead(o, now)))
+                (o.room == room && self.map_shown(q, o, now)).then(|| map_cand(q, o, ahead(o, now), now))
             })
             .collect();
         list.sort_unstable_by_key(|c| c.slot);
@@ -3233,16 +3254,17 @@ fn ahead_of(pos: [f64; 3], v: [f64; 2], pos_at: f64, now: f64) -> [f64; 2] {
     [pos[0] + v[0] * dt, pos[1] + v[1] * dt]
 }
 
-/// a player in `slot` as a map places it, at `at` (`ahead`): whole metres, its velocity in whole m/s
-fn map_cand(slot: u32, o: &Player, at: [f64; 2]) -> MapCand {
-    map_cand_of(slot, o.id, o.p.unwrap_or_default(), o.heading, [o.v[0], o.v[1]], at)
+/// a player in `slot` as a map places it, at `at` (`ahead`): whole metres, its velocity in whole m/s; parked if it
+/// has stood at one spot for PARKED_MS by `now`
+fn map_cand(slot: u32, o: &Player, at: [f64; 2], now: f64) -> MapCand {
+    map_cand_of(slot, o.id, o.p.unwrap_or_default(), o.heading, [o.v[0], o.v[1]], at, now - o.stay_at >= PARKED_MS)
 }
 
 /// `map_cand` of a player with that id, position, heading and velocity
-fn map_cand_of(slot: u32, id: u32, p: [f64; 3], heading: u8, v: [f64; 2], at: [f64; 2]) -> MapCand {
+fn map_cand_of(slot: u32, id: u32, p: [f64; 3], heading: u8, v: [f64; 2], at: [f64; 2], parked: bool) -> MapCand {
     let c = |x: f64| (x + 0.5).floor().clamp(-32767.0, 32767.0) as i16;
     let w = |x: f64| x.round().clamp(-127.0, 127.0) as i8;
-    MapCand { slot, id, p, x: c(at[0]), y: c(at[1]), heading, vx: w(v[0]), vy: w(v[1]) }
+    MapCand { slot, id, p, x: c(at[0]), y: c(at[1]), heading, vx: w(v[0]), vy: w(v[1]), parked }
 }
 
 /// the NEARD grid's cell of a coordinate (m)
@@ -3252,15 +3274,21 @@ fn near_cell(x: f64) -> i32 {
 
 /// MAPD (and NEARD): the entries that take a map from `from` (by slot) to `list` (by slot): each player come, or moved
 /// off where the page has it now (tol_m metres, or its heading tol_h), placed, each one gone gone; with where each entry
-/// ends in the bytes, and what the map holds after them (by slot)
-fn map_diff(from: &[MapSent], list: &[MapCand], now: f64, tol_m: f64, tol_h: u8) -> (Vec<u8>, Vec<usize>, Vec<MapSent>) {
+/// ends in the bytes, and what the map holds after them (by slot).  With `parked`, a parked player's key has
+/// wire::MAPD_PARKED (a slot under it: every one), one parked since or no longer is placed again, and each placed
+/// one's height follows (wire::MAPD_PLACE_Z).
+fn map_diff(from: &[MapSent], list: &[MapCand], now: f64, tol_m: f64, tol_h: u8, parked: bool) -> (Vec<u8>, Vec<usize>, Vec<MapSent>) {
     let (mut e, mut ends, mut next) = (Vec::new(), Vec::new(), Vec::with_capacity(list.len()));
+    let pk = |c: &MapCand| parked && c.parked && c.slot < wire::MAPD_PARKED as u32;
     let place = |e: &mut Vec<u8>, c: &MapCand| {
-        e.extend_from_slice(&(c.slot as u16).to_le_bytes());
+        e.extend_from_slice(&(c.slot as u16 | if pk(c) { wire::MAPD_PARKED } else { 0 }).to_le_bytes());
         e.extend_from_slice(&c.x.to_le_bytes());
         e.extend_from_slice(&c.y.to_le_bytes());
         e.extend_from_slice(&[c.heading, c.vx as u8, c.vy as u8]);
-        MapSent { slot: c.slot, id: c.id, x: c.x, y: c.y, heading: c.heading, vx: c.vx, vy: c.vy, t: now }
+        if parked {
+            e.extend_from_slice(&((c.p[2] + 0.5).floor().clamp(-32767.0, 32767.0) as i16).to_le_bytes());
+        }
+        MapSent { slot: c.slot, id: c.id, x: c.x, y: c.y, heading: c.heading, vx: c.vx, vy: c.vy, parked: pk(c), t: now }
     };
     let (mut i, mut j) = (0, 0);
     while i < from.len() || j < list.len() {
@@ -3271,7 +3299,11 @@ fn map_diff(from: &[MapSent], list: &[MapCand], now: f64, tol_m: f64, tol_h: u8)
                 let dt = (now - a.t) / 1000.0;
                 let (dx, dy) = (c.x as f64 - (a.x as f64 + a.vx as f64 * dt), c.y as f64 - (a.y as f64 + a.vy as f64 * dt));
                 let dh = c.heading.wrapping_sub(a.heading).min(a.heading.wrapping_sub(c.heading));
-                next.push(if a.id != c.id || dx * dx + dy * dy > tol_m * tol_m || dh > tol_h { place(&mut e, c) } else { *a });
+                next.push(if a.id != c.id || dx * dx + dy * dy > tol_m * tol_m || dh > tol_h || a.parked != pk(c) {
+                    place(&mut e, c)
+                } else {
+                    *a
+                });
                 (i, j) = (i + 1, j + 1);
             }
             (Some(a), c) if c.is_none_or(|c| a.slot < c.slot) => {
