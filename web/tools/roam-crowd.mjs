@@ -5,7 +5,7 @@
 //   node web/tools/roam-crowd.mjs [--base http://localhost:8655] [--n 62] [--seconds 120] [--room <name>] [--crew <name>]
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
-//        [--race 1-3:60:120] [--links 48] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
+//        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 48] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
 //          one tick or one received message made them send goes as one message, a snapshot to several friends once
@@ -29,6 +29,8 @@
 //          first, wherever they are, and those see them in the crew's colour.
 // --race   players first to last (Bot01 is 1) are in a race from one second to the other after the start: they
 //          announce it (RC_ST_EVENT) and send no car meanwhile, as a game in a race does.
+// --paused players first to last (1-3) are paused (RC_ST_PAUSED, as a game in its pause menu): "(paused)" by their names.
+// --prefix the players' names: <prefix>01, <prefix>02, ... (Bot); a long one shows how a long name reads.
 // --lobbies every n-th player hosts a race lobby where it is at its first tick, one of these career races in turn (their
 //          names: the hub keeps the race's name hash), with 1 to 5 players, its advert to the hub once a second: the world
 //          map's lobby icons and labels (tests/scripts/roam_map_filter.txt).
@@ -54,6 +56,7 @@ const STATES = +opt('states', 1), SPREAD = +opt('spread', 20), BUNDLE = argv.inc
 const LOOP_MS = +opt('loop-ms', 0), HOLD = +opt('hold', 0), LINKS = +opt('links', 0);
 const PARTS = (p => p.startsWith('@') ? fs.readFileSync(p.slice(1), 'utf8').trim() : p)(opt('parts', ''));
 const RACE = (opt('race', '').match(/^(\d+)-(\d+):(\d+):(\d+)$/) ?? []).slice(1).map(Number);
+const PAUSED = (opt('paused', '').match(/^(\d+)-(\d+)$/) ?? []).slice(1).map(Number), PREFIX = opt('prefix', 'Bot');
 const ALL_CARS = ['PEUGOT', 'FOCUS', 'COROLLA', '240SX', 'MIATA', 'CIVIC', 'PEUGOT106', 'CORSA', 'HUMMER', 'NAVIGATOR', 'ESCALADE', 'TIBURON',
   'SENTRA', 'CELICA', 'IS300', 'SUPRA', 'GOLF', 'A3', 'RSX', 'ECLIPSE', 'TT', 'RX8', '350Z', 'G35', '3000GT', 'GTO', 'MUSTANGGT', 'SKYLINE',
   'LANCEREVO8', 'RX7', 'IMPREZAWRX'];
@@ -136,7 +139,7 @@ function bundled(q) {
 }
 class Bot {
   constructor(i) {
-    this.i = i; this.name = `Bot${String(i + 1).padStart(2, '0')}`; this.vip = 0; this.ready = false; this.car = CARS[i % CARS.length];
+    this.i = i; this.name = `${PREFIX}${String(i + 1).padStart(2, '0')}`; this.vip = 0; this.ready = false; this.car = CARS[i % CARS.length];
     this.id = (Math.random() * 0xfffffffe + 1) >>> 0;
     this.bundles = false; this.q = [];                     // the switch takes bundles; what waits to go as one
   }
@@ -206,10 +209,12 @@ class Bot {
   tick(t, snap = true) {
     if (!this.ready) return;
     const racing = RACE.length === 4 && this.i + 1 >= RACE[0] && this.i + 1 <= RACE[1] && t >= RACE[2] && t < RACE[3];
+    const paused = PAUSED.length === 2 && this.i + 1 >= PAUSED[0] && this.i + 1 <= PAUSED[1];
     if (racing !== !!this.racing) {
-      this.racing = racing; this.x.crowd_status(racing ? 3 : 2);
+      this.racing = racing; this.x.crowd_status(racing ? 3 : paused ? 5 : 2);
       console.log(`roam-crowd: t=${t.toFixed(0)}s ${this.name} ${racing ? 'in a race' : 'back in free roam'}`);
     }
+    if (paused && !this.paused) { this.paused = true; this.x.crowd_status(5); }
     if (racing || !snap) { this.x.crowd_wait(nowUs()); this.flush(); return; }
     const { p, v } = track(t, this.i);
     this.x.crowd_tick(nowUs(), p[0], p[1], p[2], v[0], v[1], v[2], Math.atan2(v[1], v[0]));

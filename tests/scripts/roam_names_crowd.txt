@@ -1,0 +1,30 @@
+# Names over friends' cars in a crowd (runtime/roam_game.c tags_update): one player in the new career's prologue
+# free roam among web/tools/roam-crowd.mjs's players parked in front of it; roam-pair --page app saves the page at
+# each "log SHOT <name>" (the nearest names whole, the farther ones faded or left out where they would cover one).
+#   roam-crowd --n 32 --cars all --track <meet.csv> (one server; the csv: 33 L rows 10000 s apart, one spot each,
+#   rows 9 to 58 m ahead of the start at 1695.25, -883.64, 24.11 facing 0.9817, -0.1903) and
+#   roam-pair --page app --solo --a Ann:roam_names_crowd.txt --env ROAM_CROWD_CARS=24
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++240  log SHOT here
++0    roam mp status
++600  log SHOT hud
++10   quit

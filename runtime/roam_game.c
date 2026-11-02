@@ -2053,7 +2053,15 @@ static void push_pose(Slot *s, rc_pose *P, int64_t newest, int64_t rt, float dt)
  * In free roam that part does not exist and nothing uses the objects, so
  * friends' cars get them the same way, from the same point of the frame
  * (roam_game_hud, after the HUD update: this frame's camera), the nearest
- * cars first.  Past the six, copies of ONLINE_PLAYER_1 (fe_clone). */
+ * cars first.  Past the six, copies of ONLINE_PLAYER_1 (fe_clone).
+ * Made for six players, that piles up names in a crowd, so here a name is
+ * at full strength to TAG_FULL_M and fades out by TAG_FADE_M (photo mode's
+ * and those who said something keep the 100 m), and one that would cover a
+ * name already placed is left out: crews' and friends' first, then those
+ * who said something (quick chat), then the nearest, one shown the frame
+ * before a little ahead and allowed to touch its neighbours, so names don't
+ * flicker as cars move.
+ * Original: up to six names, the nearest, at full strength to 100 m. */
 #define G_VIEW1         0x00832e50u   /* eView 1: [+0] +0x80 view*projection, +0x40 camera (+0x40 position, +0x50 forward) */
 #define G_VIEW_W        0x00870980u   /* view size in pixels (0x5BC1F0, 0x5BC200) */
 #define G_VIEW_H        0x00870984u
@@ -2071,7 +2079,13 @@ static void push_pose(Slot *s, rc_pose *P, int64_t newest, int64_t rt, float dt)
 #define FN_VIEW_SCREEN  0x005bc4a0u   /* thiscall view (out*, in*): world -> view pixels, z > 0 in front */
 #define TAG_SCR         0x100u        /* g_gmem scratch: +0 in, +0x10 out, +0x20 vectors, +0x40 "%s", +0x48 text */
 #define TAG_TEXT_MAX    (RC_NAME_MAX + 24)  /* "<name> (paused)", "<name> (paused, 12.3 km)" */
-#define TAG_NEAR_M      100.f         /* names from this far only for the crews, with the distance */
+#define TAG_NEAR_M      100.f         /* names from this far only for the crews, with the distance (photo mode: no others) */
+#define TAG_FULL_M      25.f          /* a name at full strength (and size: 25 m / distance past it, down to half) to here */
+#define TAG_FADE_M      60.f          /* ...and faded out by here, a crew's or friend's excepted (photo mode: TAG_NEAR_M) */
+#define TAG_EM          19.f          /* the names' font: an em in HUD units at scale 1 (Arial's widths, capitals 13.5 tall) */
+#define TAG_H           15.f          /* a name's height for the overlaps (HUD units at scale 1) */
+#define TAG_GAP         2.f           /* and the room a new name keeps from those placed (one shown before: none) */
+#define TAG_SAY_H       16.f          /* quick chat's line over a name (quickchat.ts: at least 0.7 of the size) */
 #define TAG_GAME        6             /* the HUD's ONLINE_PLAYER_1..6 */
 #define TAG_N           NSLOT
 #define TAG_DUEL        TAG_N         /* one more: the outrun's line of text (du_hud) */
@@ -2079,7 +2093,7 @@ static void push_pose(Slot *s, rc_pose *P, int64_t newest, int64_t rt, float dt)
 #define TAG_MPN         4
 #define TAG_ALL         (TAG_N + 1 + TAG_MPN)
 #define TAG_DUEL_MAX    120
-static struct { uint32_t hud, obj[TAG_ALL]; uint8_t looked[TAG_ALL], shown[TAG_ALL]; char text[TAG_ALL][TAG_DUEL_MAX]; uint32_t rgb[TAG_ALL]; } g_tag;
+static struct { uint32_t hud, obj[TAG_ALL]; uint8_t looked[TAG_ALL], shown[TAG_ALL], alpha[TAG_ALL]; char text[TAG_ALL][TAG_DUEL_MAX]; uint32_t rgb[TAG_ALL]; } g_tag;
 static void gstr(uint32_t a, const char *s, uint32_t cap){
     uint32_t i = 0;
     for (; s[i] && i + 1 < cap; i++) MR8(a + i) = (uint8_t)s[i];
@@ -2175,26 +2189,27 @@ static uint32_t tag_obj(CPU *c, int k, uint32_t pkg){
     if (!g_tag.obj[k]) rlog("[roam] f=%ld no %s in the HUD: one name fewer over friends' cars\n", rh_frame(), nm);
     return g_tag.obj[k];
 }
-static void tag_text_rgb(CPU *c, int k, uint32_t obj, const char *name, uint32_t rgb){
-    if (!strcmp(g_tag.text[k], name) && g_tag.rgb[k] == rgb) return;
-    snprintf(g_tag.text[k], sizeof g_tag.text[k], "%s", name);
-    g_tag.rgb[k] = rgb;
-    uint32_t col = g_gmem + TAG_SCR + 0x20u, fmt = g_gmem + TAG_SCR + 0x40u, txt = g_gmem + TAG_SCR + 0x48u;
-    for (uint32_t i = 0; i < 4; i++) MR32(col + 4u * i) = 0xffu;               /* white, as 0x4F80E0 */
+/* the label's text and its colour (rgb 0: white) at strength alpha (0..255), each set only when it changed.  The
+ * text through the string's own setter, which grows the string to fit: FEPrintf (0x537BE0) keeps a text within the
+ * object's string as it is, 20 for ONLINE_PLAYER_1's and its copies', which cut a long name's " (paused)" */
+static void tag_text_rgba(CPU *c, int k, uint32_t obj, const char *name, uint32_t rgb, uint8_t alpha){
+    int text = strcmp(g_tag.text[k], name) != 0;
+    if (!text && g_tag.rgb[k] == rgb && g_tag.alpha[k] == alpha) return;
+    g_tag.rgb[k] = rgb; g_tag.alpha[k] = alpha;
+    uint32_t col = g_gmem + TAG_SCR + 0x20u, txt = g_gmem + TAG_SCR + 0x48u;
+    for (uint32_t i = 0; i < 3; i++) MR32(col + 4u * i) = 0xffu;               /* white, as 0x4F80E0 */
     if (rgb){ MR32(col) = rgb & 0xffu; MR32(col + 4u) = rgb >> 8 & 0xffu; MR32(col + 8u) = rgb >> 16 & 0xffu; }   /* (blue, green, red, alpha) */
+    MR32(col + 12u) = alpha;
     uint32_t ac[2] = { col, 0 }; rh_call(c, FN_FE_COLOR, obj, 0, 2, ac);
+    if (!text) return;
+    snprintf(g_tag.text[k], sizeof g_tag.text[k], "%s", name);
     MR32(obj + 0x6cu) = (MR32(obj + 0x6cu) & ~0xfu) | 5u;                     /* centred */
     MR32(obj + 0x1cu) |= 0x100u;
-    gstr(fmt, "%s", 4); gstr(txt, name, TAG_DUEL_MAX);
-    if (k >= TAG_DUEL){
-        /* FEPrintf keeps a text within the object's string as it is (20 for
-         * ONLINE_PLAYER_1's); the string's own setter, which it calls, grows it */
-        gcall1(c, FN_FE_SETSTR, obj, txt);
-        MR32(obj + 0x1cu) |= 2u;
-        return;
-    }
-    uint32_t ap[3] = { obj, fmt, txt }; rh_call(c, FN_FE_PRINTF, 0, 0, 3, ap);
+    gstr(txt, name, TAG_DUEL_MAX);
+    gcall1(c, FN_FE_SETSTR, obj, txt);
+    MR32(obj + 0x1cu) |= 2u;
 }
+static void tag_text_rgb(CPU *c, int k, uint32_t obj, const char *name, uint32_t rgb){ tag_text_rgba(c, k, obj, name, rgb, 0xff); }
 static void tag_text(CPU *c, int k, uint32_t obj, const char *name){ tag_text_rgb(c, k, obj, name, 0); }
 /* the HUD's package is the top one: no screen over it (the world map, the
  * pause menu, a message), which hides the HUD's own parts but not ours */
@@ -2240,7 +2255,22 @@ static void tag_far(char *tx, int cap, const char *name, int paused, float d){
     else snprintf(ds, sizeof ds, "%.1f km", (double)d / 1000.0);
     snprintf(tx, (size_t)cap, paused ? "%s (paused, %s)" : "%s (%s)", name, ds);
 }
+/* a name's width in HUD units at scale 1: the names' font has Arial's widths (thousandths of an em, ' ' to '~'; on a
+ * picture of a crowd "EddieSK" was 73 units at full size, "Rokot" 51), a letter past them as wide as an n */
+static const uint16_t TAG_ADV[95] = {
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,     /*  !"#$%&'()*+,-./ */
+    556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,     /* 0-9 :;<=>? */
+   1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,     /* @A-O */
+    667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,     /* P-Z [\]^_ */
+    333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,     /* `a-o */
+    556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584 };        /* p-z {|}~ */
+static float tag_width(const char *s){
+    int w = 0;
+    for (; *s; s++){ unsigned ch = (uint8_t)*s; w += ch >= 32u && ch < 127u ? TAG_ADV[ch - 32u] : 556; }
+    return (float)w * (TAG_EM / 1000.f);
+}
 static long g_tag_self = -9;       /* photo mode's frame of the names (roam_game_names): the player's own too */
+static uint8_t g_tag_was[NSLOT + 1];   /* by car (g_sl, NSLOT the player's own): its name shown the frame before */
 static void tags_update(CPU *c){
     uint32_t pl = rd32(G_PLAYER1), hud = pl && ok(pl, PL_HUD + 4u) ? rd32(pl + PL_HUD) : 0;
     uint32_t pkg = hud && ok(hud, 0x14) ? rd32(hud + 0x10u) : 0;
@@ -2251,14 +2281,20 @@ static void tags_update(CPU *c){
     if (!hud || !ok(pkg, 0x20) || !g_gmem) return;
     uint32_t cam = rd32(G_VIEW1 + 0x40u);
     int on = O.labels && g_in_roam && MR8(G_SHOW_NAMES) && ok(cam, 0x60) && hud_on_top(pkg);
-    /* the cars a name shows on: in front of the camera, within 100 m (a
-     * crew's at any distance) and on the screen; the nearest TAG_N of them
-     * get one */
-    struct { int k; float d2, hx, hy, z; } t[NSLOT + 1];
+    /* the cars a name can show on: in front of the camera, on the screen and
+     * within TAG_FADE_M (photo mode, or one who said something: TAG_NEAR_M; a
+     * crew's or friend's at any distance), in their order: crews' and
+     * friends' (and in photo mode the player's own), then those who said
+     * something (both at full strength), then the rest, each the nearest
+     * first, one shown the frame before as if 0.85 times as far */
+    struct { int k, tier, was; float d2, key, hx, hy, z; } t[NSLOT + 1];
     int n = 0;
     Slot self = { 0 };                              /* (k == NSLOT) */
-    int with_self = rh_frame() - g_tag_self <= 1 && O.name[0] && ok(player_car(), 0x9e0);
+    int photo = rh_frame() - g_tag_self <= 1;
+    int with_self = photo && O.name[0] && ok(player_car(), 0x9e0);
     if (with_self){ snprintf(self.name, sizeof self.name, "%s", O.name); self.car = player_car(); }
+    float lim = photo ? TAG_NEAR_M : TAG_FADE_M;
+    int64_t now = roam_plat_now_us();
     for (int k = 0; on && k < NSLOT + with_self; k++){
         Slot *s = k < NSLOT ? &g_sl[k] : &self;
         if (k < NSLOT && (s->st != SL_ACTIVE || s->hidden || !s->name[0] || !ok(s->car, 0x9e0))) continue;
@@ -2268,52 +2304,73 @@ static void tags_update(CPU *c){
         for (int i = 0; i < 3; i++) d[i] = p[i] - MRF32(cam + 0x40u + 4u * (uint32_t)i);
         float ahead = d[0] * MRF32(cam + 0x50u) + d[1] * MRF32(cam + 0x54u) + d[2] * MRF32(cam + 0x58u);
         float d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-        if (ahead < 0.f || !(d2 > 0.f) || !(s->crew || d2 < TAG_NEAR_M * TAG_NEAR_M)) continue;
+        int says = k < NSLOT && say_live(s->peer, s->peer_id, now);
+        if (ahead < 0.f || !(d2 > 0.f) || !(s->crew || k == NSLOT || d2 < (says ? TAG_NEAR_M * TAG_NEAR_M : lim * lim))) continue;
         uint32_t in = gvec(g_gmem + TAG_SCR, u[0] * 1.7f + p[0], u[1] * 1.7f + p[1], u[2] * 1.7f + p[2]);
         uint32_t out = g_gmem + TAG_SCR + 0x10u, av[2] = { out, in };
         rh_call(c, FN_VIEW_SCREEN, G_VIEW1, 0, 2, av);
         float x = MRF32(out), y = MRF32(out + 4u), z = MRF32(out + 8u);
         float w = (float)(int32_t)MR32(G_VIEW_W), h = (float)(int32_t)MR32(G_VIEW_H);
         if (!(z > 0.f) || !(x >= 0.f) || !(x <= w) || !(y >= 0.f) || !(y <= h)) continue;
+        int tier = s->crew || k == NSLOT ? 0 : says ? 1 : 2;
+        float key = g_tag_was[k] ? d2 * (0.85f * 0.85f) : d2;
         int j = n++;
-        for (; j > 0 && t[j - 1].d2 > d2; j--) t[j] = t[j - 1];      /* nearest first */
-        t[j].k = k; t[j].d2 = d2; t[j].hx = x / w * 640.f; t[j].hy = y / h * 480.f; t[j].z = z;
+        for (; j > 0 && (t[j - 1].tier > tier || (t[j - 1].tier == tier && t[j - 1].key > key)); j--) t[j] = t[j - 1];
+        t[j].k = k; t[j].tier = tier; t[j].was = g_tag_was[k]; t[j].d2 = d2; t[j].key = key; t[j].hx = x / w * 640.f; t[j].hy = y / h * 480.f; t[j].z = z;
     }
-    for (int i = 0; i < TAG_N; i++){
-        if (i >= n){ tag_hide(c, i); continue; }
-        uint32_t obj = tag_obj(c, i, pkg);
-        if (!obj) continue;
-        const Slot *s = t[i].k < NSLOT ? &g_sl[t[i].k] : &self;
-        float hx = t[i].hx, hy = t[i].hy;
-        rh_hud_marker(&hx, &hy);
-        char tx[TAG_TEXT_MAX];
-        float d = rc_sqrtf(t[i].d2);
-        if (s->crew && d >= TAG_NEAR_M) tag_far(tx, sizeof tx, s->name, s->paused, d);
-        else snprintf(tx, sizeof tx, s->paused ? "%s (paused)" : "%s", s->name);
-        tag_text_rgb(c, i, obj, tx, s->crew ? O.crew_rgb[s->crew - 1] : 0);
-        /* (a crew's in front of the other names: a crew-mate far behind a crowd still reads) */
-        uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, hx - 320.f, hy - 240.f, s->crew ? t[i].z * 0.95f : t[i].z), 0 };
-        rh_call(c, FN_FE_POS, obj, 0, 2, ap);
-        float sc = 25.f / rc_sqrtf(t[i].d2);
+    /* each in that order where it covers no name placed before it (the boxes
+     * in HUD units, as the names are drawn): TAG_N at most */
+    float box[TAG_N][4];
+    int put[TAG_N], np = 0;
+    memset(g_tag_was, 0, sizeof g_tag_was);
+    for (int q = 0; q < n && np < TAG_N; q++){
+        const Slot *s = t[q].k < NSLOT ? &g_sl[t[q].k] : &self;
+        float d = rc_sqrtf(t[q].d2), hx = t[q].hx, hy = t[q].hy;
+        float sc = 25.f / d;
         if (sc < 0.5f) sc = 0.5f;
         if (sc > 1.f) sc = 1.f;
+        float a = t[q].tier < 2 || photo || d <= TAG_FULL_M ? 1.f : (TAG_FADE_M - d) / (TAG_FADE_M - TAG_FULL_M);
+        if (a < 0.06f) continue;
+        char tx[TAG_TEXT_MAX];
+        if (s->crew && d >= TAG_NEAR_M) tag_far(tx, sizeof tx, s->name, s->paused, d);
+        else snprintf(tx, sizeof tx, s->paused ? "%s (paused)" : "%s", s->name);
+        rh_hud_marker(&hx, &hy);
+        float hw = tag_width(tx) * sc * 0.5f, hh = TAG_H * sc * 0.5f;
+        float b[4] = { hx - hw, hy - hh - (t[q].tier == 1 ? TAG_SAY_H * (sc < 0.7f ? 0.7f : sc) : 0.f), hx + hw, hy + hh };
+        float g = t[q].was ? 0.f : TAG_GAP;
+        int hit = 0;
+        for (int i = 0; i < np && !hit; i++)
+            hit = b[0] - g < box[i][2] && box[i][0] < b[2] + g && b[1] - g < box[i][3] && box[i][1] < b[3] + g;
+        if (hit) continue;
+        int i = np;
+        memcpy(box[i], b, sizeof b);
+        put[np++] = q;
+        g_tag_was[t[q].k] = 1;
+        uint32_t obj = tag_obj(c, i, pkg);
+        if (!obj) continue;
+        tag_text_rgba(c, i, obj, tx, s->crew ? O.crew_rgb[s->crew - 1] : 0, (uint8_t)(a >= 1.f ? 255 : (int)(a * 32.f) * 8));
+        /* (a crew's in front of the other names: a crew-mate far behind a crowd still reads) */
+        uint32_t ap[2] = { gvec(g_gmem + TAG_SCR + 0x20u, hx - 320.f, hy - 240.f, s->crew ? t[q].z * 0.95f : t[q].z), 0 };
+        rh_call(c, FN_FE_POS, obj, 0, 2, ap);
         uint32_t as[2] = { gvec(g_gmem + TAG_SCR + 0x30u, sc, sc, 1.f), 0 };
         rh_call(c, FN_FE_SCALE, obj, 0, 2, as);
         gcall1(c, FN_FE_SHOW, 0, obj);
         g_tag.shown[i] = 1;
     }
+    for (int i = np; i < TAG_N; i++) tag_hide(c, i);
+    (void)put;                                      /* (the Windows plugin's: no quick chat) */
 #if SAYS
     /* quick chat: where the names of those who said something lately are (the page's lines go over them), and the
      * player's own line over their car, which has no name: just over its roof (1.2 m up; a friend's name is at 1.7),
      * unless the camera is in or right behind the car */
-    int64_t now = roam_plat_now_us();
     uint32_t mid[SAY_MARKS]; float mxy[3 * SAY_MARKS]; int nm = 0;
-    for (int i = 0; i < n && i < TAG_N && nm < SAY_MARKS; i++){
-        if (t[i].k == NSLOT) continue;                     /* (the player's own: below) */
-        const Slot *s = &g_sl[t[i].k];
+    for (int i = 0; i < np && nm < SAY_MARKS; i++){
+        int q = put[i];
+        if (t[q].k == NSLOT) continue;                     /* (the player's own: below) */
+        const Slot *s = &g_sl[t[q].k];
         if (!say_live(s->peer, s->peer_id, now)) continue;
-        float sc = 25.f / rc_sqrtf(t[i].d2);
-        mid[nm] = s->peer_id; mxy[3 * nm] = t[i].hx / 640.f; mxy[3 * nm + 1] = t[i].hy / 480.f;
+        float sc = 25.f / rc_sqrtf(t[q].d2);
+        mid[nm] = s->peer_id; mxy[3 * nm] = t[q].hx / 640.f; mxy[3 * nm + 1] = t[q].hy / 480.f;
         mxy[3 * nm + 2] = sc < 0.5f ? 0.5f : sc > 1.f ? 1.f : sc; nm++;
     }
     uint32_t me = player_car();
