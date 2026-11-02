@@ -727,6 +727,10 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   html[data-touch] .tc[data-ctl="gas"] { width: calc(88px * var(--ts)); height: calc(200px * var(--ts)); }
   html[data-touch] .tc[data-ctl="brake"] { inset-inline-end: calc(var(--pedal) + 96px * var(--ts)); width: calc(88px * var(--ts)); height: calc(140px * var(--ts)); }
   html[data-touch] .tc[data-ctl="nitro"] { inset-inline-end: calc(var(--pedal) + 12px * var(--ts)); bottom: calc(var(--b) + 212px * var(--ts)); width: calc(64px * var(--ts)); height: calc(64px * var(--ts)); }
+  /* free roam's second row out to the pedals' side (Pressurize and Bounce, then the horn and quick chat): Nitro there
+   * 8 px lower, still clear of Gas, so the row's end never covers it at auto's size (which leaves the controls 372 px
+   * of height; the row's bottom and Nitro's top took 380) */
+  html[data-touch] .touch[data-roam][data-hyd]:not([data-alone]):not([data-nitro]):not([data-steering="tilt"]) .tc[data-ctl="nitro"] { bottom: calc(var(--b) + 204px * var(--ts)); }
   html[data-touch] .tc[data-ctl="hb"] { inset-inline-end: calc(var(--pedal) + 110px * var(--ts)); bottom: calc(var(--b) + 152px * var(--ts)); width: calc(60px * var(--ts)); height: calc(60px * var(--ts)); }
   html[data-touch] .tc[data-ctl="start"] { bottom: calc(var(--b) + var(--gb)); }
   html[data-touch] .touch { --gb: calc(132px * var(--ts)); }
