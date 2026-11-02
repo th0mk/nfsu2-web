@@ -60,7 +60,7 @@ const thanks = m => !m.attachments.size && THANKS.test(m.content);
 const MAX_WAIT_MS = 10 * 60_000;                 // a thread that keeps growing is looked at after 10 minutes anyway
 const STARTUP_MS = 48 * 3600_000;                // at start, the forums' posts of the last 48 hours, nothing older
 const RELEASE_CHECK_MS = 5 * 60_000;             // how often the bot checks whether a new version went live
-const FIX_DAYS = 14, FIX_MAX = 3;                // a release is checked against threads of the last 14 days, 3 looks at most
+const FIX_DAYS = 14, FIX_MAX = 15;               // a release is checked against threads of the last 14 days, 15 looks at most
 const FIX_EFFORT = 'low', FIX_TURNS = 8;          // a fix check reads one commit against one thread: a short look
 const FEATURE_MAX = 5;                           // a release is checked against every open suggestion, 5 looks at most
 const SUGGESTIONS = /suggest/i;                  // the suggestion forums, by name
@@ -196,8 +196,9 @@ async function look(threadId, why, extra) {
   if (talk && st.replies >= CFG.maxTalk) return say(`skipped: ${st.replies} replies already, the most for answering replies`);
   if (!anyway && st.status === 'staff') return say('skipped: staff are in the thread');
   if (!anyway && st.replies >= CFG.maxReplies) return say(`skipped: ${st.replies} replies already`);
-  // staff asked: a look past the budget too.  Any other waits for the next day
-  if (!byStaff && !spend.allows()) {
+  // staff asked, or a release's notice (a few cents each, at most FIX_MAX + FEATURE_MAX a release): a look past the
+  // budget too.  Any other waits for the next day
+  if (!byStaff && !fix && !spend.allows()) {
     st.later = { why, ...(extra ? { extra } : {}), at: new Date().toISOString() }; save();
     return say(`skipped: today's $${spend.share().toFixed(2)} of the budget is spent, a look after midnight UTC`);
   }

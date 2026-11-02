@@ -24,7 +24,7 @@ and it says something only when it is worth it:
 
 - **when a fix goes live**, in a thread whose problem one of the release's commits fixes: that a fix may have solved
   it, what the fix changes (one plain sentence, no internals), to reload the page, and to post a new log if it still
-  happens. Only when a full look at the thread is sure; at most once a thread, at most 3 threads a release (short,
+  happens. Only when a full look at the thread is sure; at most once a thread, at most 15 threads a release (short,
   low-effort looks), threads of the last 14 days, also threads staff wrote in (one the bot never looked at is matched
   by its title and first post). A report about the thread turns ✅ Fixed.
 
@@ -107,7 +107,8 @@ still goes out; new logs still reach the report).
 Every model call goes on a meter (`spend.mjs`, `state/spend.json`): looks, sorting, tags, translations, release checks,
 against `BOT_BUDGET` dollars a month (200, UTC months). Only the looks wait for money: each day they may spend what is
 left of the month over the days left in it, so a quiet day leaves more for the rest and a busy week can't spend the
-month. A look past today's share waits for the next day and runs then; staff's mentions still get theirs at once. The
+month. A look past today's share waits for the next day and runs then; staff's mentions and a release's notices
+(fix live, suggestion added) still get theirs at once. The
 bot's first log line says what the month and the day spent so far.
 
 ## How it works
