@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (ee85068)
+## 2026-11-02 (2d2c4d4)
 
 - **Career:** once you have beaten Caleb, the shops have the wide body kits, and the other unique hoods, spoilers, rims and vinyls, for every car in your career.
 - **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
@@ -31,6 +31,7 @@ not guessed.
 - **Headlights:** a car on an overpass no longer lights the road under it.
 - **Photo mode:** pictures have nfsu2.xyz in a corner. A box in photo mode's panel turns it off.
 - **Title screen:** nfsu2.xyz under the copyright line.
+- **Languages:** Turkish is translated anew, by hand, the online menus too. In Polish the race HUD's DRAFT is translated, in Thai the race position no longer shows its number twice, and Portuguese is the translation's version 1.1.1.
 
 ## 2026-10-31 (d079aff)
 
