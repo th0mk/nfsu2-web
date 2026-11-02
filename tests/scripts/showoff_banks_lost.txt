@@ -1,0 +1,37 @@
+# A car type's part animations (showoff.c) gone while their file is still in: its next load must not unload that
+# file.  The game's file unload (0x580E90 -> 0x439D70) takes the first bank of the file's car type off the list, and
+# with none there it calls through 0 (0x4380F0, exit 134: on 2026-11-02 after the game's walk 0x438140 had deleted
+# ours, stack ... car_apply).  New career -> prologue free roam; O: the trunk opens (the player's car type's bank of
+# ours); a cover shoot's start and end with NFSU2_TEST_BANKS_LOST=1 (the walk deletes ours, their file still in);
+# 12 s later O: the hood opens, so bank_ready finds none, ten seconds after its load.  Good: "[showoff] ... loading
+# the car's part animations" again, the hood opens, no "UNRESOLVED INDIRECT CALL", no trap, quit at the end.
+#   node web/tools/run-suite.mjs --base <server> --script showoff_banks_lost.txt --marker lost_end
+#     --env NFSU2_TEST_BANKS_LOST=1 --env ROAM_PROFILE=<name>
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log open1
++0    tap O
++3000ms log shoot
++0    roam call 0x633a00 ecx=0x8a3288
++90   roam call 0x61c5b0 ecx=0x8a3288
++12000ms log open2
++0    tap O
++4000ms log lost_end
++10   quit
