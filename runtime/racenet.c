@@ -118,10 +118,12 @@
  *   creator's nor ours.
  * Who may speak for whom: the game's own race link is a handshaken CommUDP
  * link to the creator, but anyone on the virtual LAN who sends a datagram to
- * our UDP 3658 becomes a "race peer" (net_lan.c's list).  So the list is
- * taken only from an address the game's race link itself sends to
- * (vlan_race_sent_to: a joiner's game sends only to its creator), and only
- * from the first one it came from in this race; and each address on it
+ * our UDP 3658 becomes a "race peer" (net_lan.c's list).  So the creator
+ * lists only the race peers its race link sends to (its joiners: an open
+ * link drops datagrams from any other address and answers none of them,
+ * 0x753211), a joiner takes the list only from an address its race link
+ * sends to (vlan_race_sent_to: a joiner's game sends only to its creator),
+ * and only from the first one it came from in this race; and each address on it
  * speaks for one slot, the first its car states named, which no other
  * address may name in this race.  Both reset when the race is over.  The
  * messages are the same, so games with and without these checks race
@@ -378,10 +380,13 @@ void sub_00585d50(CPU *c){
     }
     sub_00585d50_orig(c);
 }
-/* the creator's list to each joiner: the others (every PL_MS, racenet_frame) */
+/* the creator's list to each joiner: the others (every PL_MS, racenet_frame).
+ * Only the race peers the game's race link sends to (its joiners), not
+ * everyone who sent a datagram to our UDP 3658 (above). */
 static void list_send(void){
-    uint32_t peers[NPL];
-    int n = vlan_race_peers(peers, NPL, PEER_MS);
+    uint32_t all[16], peers[NPL];
+    int na = vlan_race_peers(all, 16, PEER_MS), n = 0;
+    for (int i = 0; i < na && n < NPL; i++) if (vlan_race_sent_to(all[i], PEER_MS)) peers[n++] = all[i];
     for (int i = 0; i < n; i++){
         uint8_t m[8 + 4 * NPL];
         int k = 0;

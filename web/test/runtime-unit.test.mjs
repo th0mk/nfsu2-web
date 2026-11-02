@@ -45,7 +45,7 @@ test('watchdog_unit: no false stall from a stamp ahead of the watchdog\'s clock,
 
 test('racenet_unit: the creator\'s list only from the creator, a joiner\'s states only for its own slot', { skip }, () => {
   const { out, pass } = run('racenet_unit', ['-O1', '-g', '-Wall', '-Wno-unused-function']);
-  for (const c of ['stranger', 'creator', 'second', 'direct', 'own-slot', 'taken-slot', 'rules', 'reset']) assert.ok(pass.includes(c), `case ${c} passed`);
-  assert.ok(pass.length >= 12, `every check ran (${pass.length})`);
+  for (const c of ['stranger', 'creator', 'second', 'direct', 'own-slot', 'taken-slot', 'rules', 'reset', 'host-list']) assert.ok(pass.includes(c), `case ${c} passed`);
+  assert.ok(pass.length >= 13, `every check ran (${pass.length})`);
   assert.match(out, /racenet unit tests: all passed/);
 });

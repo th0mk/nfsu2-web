@@ -21,6 +21,8 @@
  *   rules      our slot, the creator's, a slot past 5, an address not on
  *              the list: refused
  *   reset      the race over: no list, no slots; the next race starts anew
+ *   host-list  the creator: its list only to the race peers its race link
+ *              sends to, naming only them (not a stranger who sent to 3658)
  * Every case prints "PASS <case> ..." or "FAIL <case> ..."; exit 1 on a FAIL. */
 #include <stdint.h>
 #include <stdio.h>
@@ -44,10 +46,22 @@ static int g_fail;
                              printf("\n"); fflush(stdout); }while(0)
 
 /* net_lan.c: the race's peers, the addresses the race link sends to, what was sent */
+#define NPL_MAX_TEST 8
 static uint32_t g_peer[4]; static int g_npeer;
 static uint32_t g_sentto[4]; static int g_nsentto;
 static int g_nout;
-int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n){ (void)port; (void)ip_h; (void)p; (void)n; g_nout++; return 0; }
+static uint32_t g_pl_to[8], g_pl_named[8][NPL_MAX_TEST]; static int g_pl_k[8], g_npl_out;   /* the creator's lists sent */
+int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n){
+    (void)port; g_nout++;
+    const uint8_t *m = p;
+    if (n >= 8 && !memcmp(m, "N2PL", 4) && g_npl_out < 8){
+        int k = g_npl_out++;
+        g_pl_to[k] = ip_h; g_pl_k[k] = m[6];
+        for (int i = 0; i < m[6] && i < NPL_MAX_TEST && 8 + 4 * i + 3 < n; i++)
+            g_pl_named[k][i] = (uint32_t)m[8 + 4 * i] | (uint32_t)m[9 + 4 * i] << 8 | (uint32_t)m[10 + 4 * i] << 16 | (uint32_t)m[11 + 4 * i] << 24;
+    }
+    return 0;
+}
 int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms){ (void)within_ms; int n = g_npeer < max ? g_npeer : max; memcpy(ip_h, g_peer, 4u * (size_t)n); return n; }
 int vlan_race_sent_to(uint32_t ip_h, uint32_t within_ms){ (void)within_ms; for (int i = 0; i < g_nsentto; i++) if (g_sentto[i] == ip_h) return 1; return 0; }
 /* the lifted functions racenet.c wraps */
@@ -166,6 +180,21 @@ int main(void){
     n = carspam(m, 3, 20); racenet_carspam(&g_c, m, n, j3);
     CHECK(out && g_calls == 4 && g_nbind == 1 && g_bind[0].ip == j3 && g_bind[0].slot == 3,
           "reset: out of the race nothing taken; in the next one j3 may name slot 3 (%d calls)", g_calls);
+
+    /* the creator: a stranger who sent a datagram to its UDP 3658 is a race
+     * peer too, but its race link sends only to its joiners */
+    MR32(G_NET_HOST) = 1;
+    g_peer[0] = j2; g_peer[1] = stranger; g_peer[2] = j3; g_npeer = 3;
+    g_sentto[0] = j2; g_sentto[1] = j3; g_nsentto = 2;
+    g_npl_out = 0; frame();
+    int to_s = 0, named_s = 0, each_other = g_npl_out == 2;
+    for (int k = 0; k < g_npl_out; k++){
+        to_s |= g_pl_to[k] == stranger;
+        for (int i = 0; i < g_pl_k[k] && i < NPL_MAX_TEST; i++) named_s |= g_pl_named[k][i] == stranger;
+        each_other &= g_pl_k[k] == 1 && g_pl_named[k][0] == (g_pl_to[k] == j2 ? j3 : j2);
+    }
+    CHECK(each_other && !to_s && !named_s, "host-list: the list only to the joiners the race link sends to, naming only them "
+          "(%d lists, to the stranger %d, naming it %d)", g_npl_out, to_s, named_s);
 
     printf(g_fail ? "racenet unit tests: FAILED\n" : "racenet unit tests: all passed\n");
     return g_fail;
