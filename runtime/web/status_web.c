@@ -72,7 +72,8 @@ static void *status_main(void *unused){
 
 /* "drive": what the page's touch controls (web/src/app/touch.ts) need of the
  * game, set at every Present (autotest.c): 1 while the player drives in a
- * race, 2 in free roam, 0 elsewhere, plus 4 with a manual gearbox and 8
+ * race (the crib's test runs too: roam.c roam_exploring), 2 in free roam,
+ * 0 elsewhere, plus 4 with a manual gearbox and 8
  * during a cutscene (the touch controls' level horizon waits).  Driving
  * is GameFlow 6 with a race HUD (HUD_*.fng) the top package; the pause menu
  * (UI_pause.fng), the results, the world's loading screen and the Engage

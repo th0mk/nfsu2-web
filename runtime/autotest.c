@@ -58,7 +58,8 @@
  *     axis LX|LY|RX|RY V       stick position, -1..1 (+X right, +Y down)
  *     trigger LT|RT V          trigger position, 0..1
  *     tappaduntil BUTTON NAME [every] [tmo]  like tapuntil, with a pad button
- *     poke ADDR VAL            write dword VAL to ADDR (debug only)
+ *     poke ADDR VAL [byte]     write dword (or byte) VAL to ADDR (debug only); ADDR
+ *                              may be an expression as trace's ([0x8900ac]+0x20)
  *     wzero [now]              world-time origin for absolute Nwms lines: the
  *                              start of the current race (GameFlow 6) when
  *                              racing, else (or with "now") the current time
@@ -392,7 +393,8 @@ static void load_script(const char *path){
             else e.addr = (uint32_t)strtoul(a1, 0, 0);
             e.n = a2[0] ? atol(a2) : 1; if (e.n < 1 || e.n > 64) e.n = 1; }
         else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = (uint32_t)strtoul(a1, 0, 0);
-            e.val = (uint32_t)strtoul(a2, 0, 0); }
+            if (strchr(a1, '[')) e.xtext = strdup(a1);
+            e.val = (uint32_t)strtoul(a2, 0, 0); e.n = !strcasecmp(a3, "byte"); }
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
@@ -902,10 +904,14 @@ static int fire(CPU *c, Ev *e, double tms){
             fprintf(stderr, "[autotest] f=%ld peek [0x%08x] = 0x%08x (%u, %g)\n", g_frame, a, v, v, (double)fv);
         }
         break;
-    case C_POKE:
-        if (mem_is_committed(e->addr + 3)){ MR32(e->addr) = e->val;
-            fprintf(stderr, "[autotest] f=%ld poke [0x%08x] <- 0x%08x\n", g_frame, e->addr, e->val); }
-        break;
+    case C_POKE: {
+        const char *x = e->xtext; int ok = 1;
+        uint32_t a = x ? tr_eval(&x, &ok) : e->addr;
+        if (!ok || !mem_is_committed(a + (e->n ? 0u : 3u))){
+            fprintf(stderr, "[autotest] f=%ld poke %s: unmapped\n", g_frame, e->xtext ? e->xtext : "?"); break; }
+        if (e->n) MR8(a) = (uint8_t)e->val; else MR32(a) = e->val;
+        fprintf(stderr, "[autotest] f=%ld poke%s [0x%08x] <- 0x%08x\n", g_frame, e->n ? " byte" : "", a, e->val);
+        break; }
     case C_WAITMEM: {
         if (g_wait_start < 0) g_wait_start = g_frame;
         uint32_t v = mem_is_committed(e->addr + 3) ? MR32(e->addr) : 0xDEADBEEFu;

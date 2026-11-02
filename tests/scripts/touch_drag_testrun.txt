@@ -1,0 +1,45 @@
+# The touch controls' gear buttons in a drag test run (status_web.c "drive" + 4, roam.c roam_exploring): from a
+# career save in stage 2 or later (NFSU2_SAVE_SEED, e.g. ~/crash-live/seed-itsukit), free roam -> the crib's
+# Performance Tuning / Dyno, the Drag setting, a dyno run, Test Run: the drag strip (track 4709, the drag byte set,
+# HUD_Drag), one racer and no career race, which read as free roam before.  The player's gearbox is then made
+# automatic (as most players drive), so only the drag can ask for the gear buttons.  Good: the [drive] lines say
+# "-> 5" in the test run (a race with a manual gearbox) and stay there after "PROBE automatic"; before the fix
+# they went to 6 (free roam, the seed's manual gearbox) and then 2 (free roam, no gear buttons).
+0     bot on
++0    waitroam 6000
++0    bot off
++120  log PROBE roam
++0    expect i:0x89e7a0 == 4000
++300  shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++120  tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RIGHT
++30   tap RETURN                      # Performance Tuning / Dyno
++60   tap LEFT
++30   tap RETURN
++0    waitfe UI_PerformanceTuning_Setting.fng 3000
++120  tap RIGHT                       # Drag
++60   tap RETURN
++60   tap LEFT
++30   tap RETURN
++0    waitfe UI_PerformanceDyno_Chart.fng 3000
++0    expect i:0x83a63c == 1           # the setting: 0 circuit, 1 drag (0x526970 picks the test run by it)
++600  tap RETURN
++0    waitfe UI_PerformanceDyno_Results.fng 3000
++200  tap RETURN
++0    waitfe UI_PerformanceDyno_MAIN.fng 3000
++120  tap RIGHT
++60   tap RETURN                      # Test Run
++0    waitfng HUD_Drag.fng 3000
++600  log PROBE testrun
++0    expect i:0x89e7a0 == 4709        # the drag strip (0x4FEFF0)
++0    expect b:0x89e7d8 == 1           # the drag byte
++0    poke [0x8900ac]+0x20 0 byte     # the player's gearbox: automatic
++60   log PROBE automatic
++60   status drag_end
++10   quit

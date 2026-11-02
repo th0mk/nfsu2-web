@@ -139,8 +139,13 @@ static int roaming(void){
     return rd32(G_FLOW) == 6u && ok(race, 0xc00) && MR32(race) == 4u && MR32(race + 0x24u) == 1u &&
            !rd32(G_CAREER_RACE);
 }
-/* free roam now (runtime/web/input_web.c: the touch controls' free-roam buttons) */
-int roam_exploring(void){ return roaming(); }
+/* free roam now (runtime/web/status_web.c "drive": the touch controls' free-roam buttons, else a race's with
+ * the gear buttons in a drag): on free roam's own track (4000; the race parameters' track, [0x89E7A0]), as
+ * roam_game.c's roaming() has it.  The crib's Performance Tuning test runs are one racer and no career race
+ * too, but a race on a track of their own (a circuit 4705, 0x4FEF80; a drag 4709 with the drag byte set,
+ * 0x4FEFF0): read as free roam, a drag test run on a phone had no gear buttons (a player's report). */
+#define G_TRACK         0x0089e7a0u
+int roam_exploring(void){ return roaming() && rd32(G_TRACK) % 1000u == 0; }
 /* One line per car of the world list (World +0 head; the list node is the
  * car's first two dwords). */
 static void log_cars(const char *why){
