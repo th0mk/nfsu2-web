@@ -1,0 +1,30 @@
+# Photo mode's Freeze time (runtime/photo.c) in a Quick Race: off, the race runs on under the camera (two pictures a
+# second apart differ; each is taken at once, no frames added up); on again, it stands (two pictures alike); then the
+# lens's blur with the focus on the car the orbit turns about.  Play page with artifacts= for the dumps.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
++0    photo hello
+7000wms autopilot on
+14000wms photo on
++30   photo freeze 0
++60   expect i:0x890084 == 0                       # the world runs on
++0    mark t0 i:0x86518c
++0    dump running_a
++60   dump running_b
++0    expect i:0x86518c > @t0                      # the race clock goes on
++60   photo freeze 1
++60   expect i:0x890084 == 1
++200  dump frozen_a
++60   dump frozen_b
++30   photo blur 0.6
++400  dump focus_car
++150  photo off
++30   expect i:0x890084 == 0
++10   quit

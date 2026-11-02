@@ -7,7 +7,7 @@
 // back (index.ts).  The look is wgsl.ts PHOTO.
 import { PHOTO } from './wgsl';
 
-export const PH_OFF = 0, PH_LIVE = 1, PH_ADD = 2, PH_DONE = 3;
+export const PH_OFF = 0, PH_LIVE = 1, PH_ADD = 2, PH_DONE = 3, PH_NOW = 4;
 
 /** the picture's look (app/photo.ts) */
 export interface PhotoLook {
@@ -97,7 +97,7 @@ export class PhotoPicture {
       this.target = target; this.done = this.count > 0 && this.count >= target;
       if (state === PH_DONE || n !== this.count + 1) return;
       this.count = n; this.done = n >= target;
-    } else { this.count = 0; this.target = 0; this.gen = 0; this.done = false; }
+    } else { this.count = 0; this.target = 0; this.gen = 0; this.done = state === PH_NOW; }   // (now: this frame is it)
     const k = this.count > 0 ? 1 / this.count : 1;
     const pass = enc.beginRenderPass({ colorAttachments: [{ view: this.accView!, loadOp: k === 1 ? 'clear' : 'load', clearValue: [0, 0, 0, 1], storeOp: 'store' }] });
     pass.setPipeline(this.addPipe);

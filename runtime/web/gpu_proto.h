@@ -217,14 +217,15 @@ typedef struct { uint32_t magic, pad; double input_ms, handoff_ms; } GwLat;
  * of the target frames of still picture gen, each drawn from a slightly
  * different spot (smooth edges, the lens's blur), which the page averages
  * (the first replaces what it had); GW_PHOTO_DONE: the picture has its
- * frames, this one adds nothing.  magic: GW_PHOTO_MAGIC; none, or
+ * frames, this one adds nothing; GW_PHOTO_NOW: the frame as it is is the
+ * picture (time runs on: nothing to add up).  magic: GW_PHOTO_MAGIC; none, or
  * GW_PHOTO_OFF: photo mode is off.  The page binds none of it.
  * ack is the page's, in both buffers' blocks (the game hands over only the
  * words before it): gen << 16 | the frames of that picture it has.  The game
  * draws frame n + 1 next, so a frame the page never encodes (a newer one
  * took its place, the GPU behind) is drawn again, and none counts twice. */
 #define GW_PHOTO_MAGIC 0x544F4850u        /* "PHOT" */
-enum { GW_PHOTO_OFF = 0, GW_PHOTO_LIVE = 1, GW_PHOTO_ADD = 2, GW_PHOTO_DONE = 3 };
+enum { GW_PHOTO_OFF = 0, GW_PHOTO_LIVE = 1, GW_PHOTO_ADD = 2, GW_PHOTO_DONE = 3, GW_PHOTO_NOW = 4 };
 typedef struct { uint32_t magic, state, n, target, gen, ack, pad[2]; } GwPhoto;
 #define GW_K_PHOTO     1600u
 #define GW_PHOTO_BYTES 32u

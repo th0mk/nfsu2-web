@@ -7,9 +7,11 @@
  * about a point at the car, which moves up to ORBIT_PAN_M from it; free flies
  * up to FREE_M from the car.  Both zoom (the field of view) and tilt.  In free
  * roam with friends their names over their cars can show (off at first), and
- * their cars stand where they were (roam_game_hold) as everything else does,
- * unless the page lets them drive on (its Freeze off; the still picture then
- * adds up their moves, a trail).
+ * their cars stand where they were (roam_game_hold) as everything else does.
+ * With the page's Freeze time off the world runs on instead (traffic, the
+ * racers, friends' cars; the camera follows the player's car, which gets no
+ * input and coasts), the sound with it, and each frame is the picture as it
+ * is (GW_PHOTO_NOW: no frames added up, so no smooth edges or lens blur).
  * Every car keeps its full model however far the camera is, and the cars can
  * be hidden: the others, or all (below, "the cars in the picture").
  *
@@ -85,7 +87,7 @@
  *               8 the names on, 16 friends' names can show here, 32 the focus
  *               follows the car; 64 << cars: the cars shown (0 all, 1 only the
  *               player's, 2 none, 3 the player's and friends' and crew-mates');
- *               256 friends' cars stand
+ *               256 time stands
  *   photo_fov   the field of view, degrees     photo_roll  the tilt, degrees
  *   photo_n     how many times it opened       photo_focus the focus distance, m */
 #include "cpu.h"
@@ -225,7 +227,7 @@ void photo_input(int cmd, int a, int b){
     case PH_FOCUS: atomic_store(&I.focus, a); break;                              /* cm; -1 the car */
     case PH_BLUR:  atomic_store(&I.blur, a); break;                               /* 0 .. 1000 */
     case PH_CARS:  atomic_store(&I.cars, a); break;                               /* 0 all, 1 only the player's, 2 none */
-    case PH_FREEZE: atomic_store(&I.freeze, a); break;                            /* friends' cars: 0 drive on, 1 stand */
+    case PH_FREEZE: atomic_store(&I.freeze, a); break;                            /* time: 0 runs on, 1 stands */
     default: break;
     }
 }
@@ -233,7 +235,7 @@ void photo_input(int cmd, int a, int b){
 #define NSLOTS 5
 static struct {
     int on, free, names, cars, drawn, patched, slots, slot[NSLOTS];
-    int drive_on;                                /* friends' cars drive on while photo mode is on (the page's Freeze off) */
+    int drive_on;                                /* time runs on while photo mode is on (the page's Freeze time off) */
     int game_lod;                                /* tests (photo fulldetail 0): the cars' models as the game picks them */
     long n, pause_at;
     double t, val[NSLOTS];
@@ -361,7 +363,7 @@ static void enter(CPU *c){
     for (int i = 0; i < 3; i++) cf[i] /= fl;
     P.fov0 = cam ? clampf((float)MR16(cam + CAM_FOV) * 360.f / 65536.f, FOV_MIN, FOV_MAX) : 71.5f;
     P.freeze_was = MR32(G_FREEZE);
-    MR32(G_FREEZE) = 1u;
+    MR32(G_FREEZE) = P.drive_on ? P.freeze_was : 1u;
     uint32_t arg[2] = { MOVER_DEBUG, 0u };
     gcall(c, FN_SET_MOVER, pl, 2, arg);
     if (mover_type(pl) != MOVER_DEBUG){
@@ -377,7 +379,7 @@ static void enter(CPU *c){
     P.fov = P.fov0; P.roll = 0; P.free = 0;
     memcpy(P.se, ce, sizeof P.se); memcpy(P.sl, p, sizeof P.sl);
     clear_input();
-    hush(c);
+    if (!P.drive_on) hush(c);
     P.least[0] = MR32(G_LEAST_LOD_A); P.least[1] = MR32(G_LEAST_LOD_B);
     MR32(G_LEAST_LOD_A) = 0; MR32(G_LEAST_LOD_B) = 0;
     P.mb_was = MR32(G_MOTION_BLUR); P.hl_was = MR32(G_HEADLIGHTS);
@@ -385,7 +387,8 @@ static void enter(CPU *c){
     roam_game_hold(!P.drive_on);
     P.focus_auto = 1; P.acc = 0; P.acc_n = 0;
     P.on = 1; P.n++; P.drawn = 0;
-    fprintf(stderr, "[photo] f=%ld on: the world stands, the orbit at %.1f m, field of view %.1f\n", autotest_frame(), P.dist, P.fov);
+    fprintf(stderr, "[photo] f=%ld on: the world %s, the orbit at %.1f m, field of view %.1f\n", autotest_frame(),
+            P.drive_on ? "runs on" : "stands", P.dist, P.fov);
 }
 static void leave(CPU *c, const char *why){
     uint32_t pl = player();
@@ -478,9 +481,13 @@ static void steer(uint32_t car, float dt){
     int fo = atomic_exchange(&I.focus, NONE_SET), bl = atomic_exchange(&I.blur, NONE_SET);
     if (fo != NONE_SET){ P.focus_auto = fo < 0; if (fo >= 0) P.focus = clampf((float)fo / 100.f, FOCUS_MIN, FOCUS_MAX); }
     if (bl != NONE_SET) P.blur = clampf((float)bl / 1000.f, 0.f, 1.f);
+    /* the focus that follows: what the lens keeps sharp is a plane across the view at that depth, so the orbit's
+     * point (the car, unless the orbit was moved off it), on the view's axis, or in the free camera the car's depth
+     * along the view (behind the camera: as it was) */
     if (P.focus_auto){
-        float v[3] = { cc[0] - P.se[0], cc[1] - P.se[1], cc[2] - P.se[2] };
-        P.focus = clampf(sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]), FOCUS_MIN, FOCUS_MAX);
+        float a[3] = { P.sl[0] - P.se[0], P.sl[1] - P.se[1], P.sl[2] - P.se[2] }, al = sqrtf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+        float t = P.free && al > 1e-3f ? ((cc[0] - P.se[0]) * a[0] + (cc[1] - P.se[1]) * a[1] + (cc[2] - P.se[2]) * a[2]) / al : al;
+        if (t > FOCUS_MIN * 0.5f) P.focus = clampf(t, FOCUS_MIN, FOCUS_MAX);
     }
 }
 
@@ -507,6 +514,7 @@ static void picture(void){
     /* the lens: what is far away blurs over a disc this wide (a radius, as a part of the view's half width), and the
      * frames as many as keep its points about BLUR_PX_AREA pixels apart (SAMPLES_SHARP at least, SAMPLES_BLUR most) */
     float coc = BLUR_FAR * P.blur * P.blur, r_px = coc * (float)w * 0.5f;
+    if (P.drive_on){ P.acc = P.acc_n = 0; gw_photo(4, 1, 1, P.gen); return; }   /* GW_PHOTO_NOW */
     if (!same || !w || !h){
         P.acc = 0; P.gen = P.gen % 0xfffeu + 1u;
         P.acc_n = (int)clampf(ceilf(PI * r_px * r_px / BLUR_PX_AREA), SAMPLES_SHARP, SAMPLES_BLUR);
@@ -569,7 +577,7 @@ static void publish(int can){
     if (!P.slots){ P.slots = 1; for (int i = 0; i < NSLOTS; i++){ P.slot[i] = host_status_slot(k[i]); P.val[i] = -1; } }
     double v[NSLOTS] = { (double)((can && !P.on ? 1 : 0) | (P.on ? 2 : 0) | (P.on && P.free ? 4 : 0) | (P.names ? 8 : 0) |
                                   (P.on && roam_game_names_here() ? 16 : 0) | (P.focus_auto ? 32 : 0) | P.cars << 6 |
-                                  (P.drive_on ? 0 : 256)),
+                                  (P.drive_on ? 0 : 256)),   /* (256: time stands) */
                          floor(P.fov * 10.f + 0.5f) / 10.0, floor(P.roll * 10.f + 0.5f) / 10.0, (double)P.n,
                          floor(P.focus * 10.f + 0.5f) / 10.0 };
     if (!memcmp(v, P.val, sizeof v)) return;
@@ -603,8 +611,12 @@ void photo_frame(CPU *c){
     int fz = atomic_exchange(&I.freeze, -1);
     if (fz >= 0 && (fz == 0) != P.drive_on){
         P.drive_on = !fz;
-        if (P.on) roam_game_hold(!P.drive_on);
-        fprintf(stderr, "[photo] f=%ld friends' cars %s\n", autotest_frame(), P.drive_on ? "drive on" : "stand");
+        if (P.on){
+            roam_game_hold(!P.drive_on);
+            MR32(G_FREEZE) = P.drive_on ? P.freeze_was : 1u;
+            if (P.drive_on) volumes(c, G_VOLUMES); else hush(c);
+        }
+        fprintf(stderr, "[photo] f=%ld time %s\n", autotest_frame(), P.drive_on ? "runs on" : "stands");
     }
     int cs = atomic_exchange(&I.cars, -1);
     if (cs >= CARS_ALL && cs <= CARS_BUDDIES && cs != P.cars){
@@ -727,7 +739,7 @@ static void act(CPU *c){
  * may draw comes from the Car detail option ([0x8A1C10] and [0x8A1C14], set by 0x5D2850: 1 with Low, which never
  * draws the full model): 0 while photo mode is on.
  * The cars photo mode hides are not drawn at all: neither render (0x620AE0, whose override is showoff.c's and asks
- * photo_hides first, and 0x6162E0, which the car drawing
+ * photo_hides first, as its 0x615A10's does, the car's lights and neon; and 0x6162E0, which the car drawing
  * 0x6316D0 calls instead; both thiscall on the car's render info, car +0x554; ret 0x30) nor its flares (0x615630,
  * ret 0x18). */
 #define RET_CAR_SIZE   0x00620c7eu   /* the car render's call of 0x48ACB0 returns here */
@@ -763,7 +775,7 @@ void sub_00615630(CPU *c){
 
 /* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, other (Tab), reset, names [0|1], hold MASK,
  * move X Y [UP [CLOSER]], turn X Y (-1..1), drag DX DY, pan DX DY (view heights), dolly N (wheel notches), fov DEG,
- * roll DEG, focus M (0: the car), blur 0..1, cars 0|1|2|3 (all, only the player's, none, friends and crews), freeze 0|1 (friends' cars) */
+ * roll DEG, focus M (0: the car), blur 0..1, cars 0|1|2|3 (all, only the player's, none, friends and crews), freeze 0|1 (time runs on, stands) */
 int photo_script(const char *s){
     char w[16] = {0}; float a = 0, b = 0, z = 0, k = 0;
     int n = sscanf(s, "%15s %f %f %f %f", w, &a, &b, &z, &k);

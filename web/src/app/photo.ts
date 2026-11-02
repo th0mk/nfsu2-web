@@ -12,8 +12,8 @@
 // fills as they come); the look and the crop are the renderer's (Renderer.photoLook), shown on the game as they are
 // kept.  Those choices, the blur, the cars shown and the freeze stay for the next time (localStorage).  It reads the game's status
 // (runtime/web/status_web.c) every frame: photo (1 it can open, 2 it is on, 4 the free camera, 8 the names on, 16
-// friends' names can show, 32 the focus follows the car, 256 friends' cars stand), photo_fov, photo_roll, photo_focus.
-// In free roam with friends their cars stand while photo mode is on, unless Freeze friends' cars is off.
+// friends' names can show, 32 the focus follows the car, 256 time stands), photo_fov, photo_roll, photo_focus.
+// Freeze time off: the world runs on (traffic, racers, friends' cars), each frame is the picture, no Blur or Focus.
 import type { GameSession } from './game';
 import type { PadSnapshot } from '../input/gamepad';
 import { CROPS, FILTERS, cropRect, focusM, focusV, type Filter } from './photolook';
@@ -129,7 +129,7 @@ export class PhotoMode {
       pick('ph-filter') + pick('ph-crop') + pick('ph-cars') +
       '<label class="ph-check"><input type="checkbox" class="ph-grid"><span class="ph-grid-l"></span></label>' +
       '<label class="ph-check ph-names-c" hidden><input type="checkbox" class="ph-names"><span class="ph-names-l"></span></label>' +
-      '<label class="ph-check ph-freeze-c" hidden><input type="checkbox" class="ph-freeze"><span class="ph-freeze-l"></span></label>' +
+      '<label class="ph-check"><input type="checkbox" class="ph-freeze"><span class="ph-freeze-l"></span></label>' +
       '<label class="ph-check"><input type="checkbox" class="ph-mark"><span class="ph-mark-l"></span></label>' +
       '<div class="ph-buttons"><button type="button" data-act="reset"></button>' +
       '<button type="button" class="ph-shoot" data-act="shoot"></button><button type="button" data-act="leave"></button></div>' +
@@ -175,7 +175,7 @@ export class PhotoMode {
     this.grid.addEventListener('change', () => { this.kept.grid = this.grid.checked; this.keep(); back(); });
     this.names.addEventListener('change', () => { this.send(PH_NAMES, this.names.checked ? 1 : 0); back(); });
     this.freeze.addEventListener('change', () => {
-      this.kept.freeze = this.freeze.checked; this.keep(); this.send(PH_FREEZE, this.kept.freeze ? 1 : 0); back();
+      this.kept.freeze = this.freeze.checked; this.keep(); this.send(PH_FREEZE, this.kept.freeze ? 1 : 0); this.lens(); back();
     });
     this.mark.addEventListener('change', () => {
       try { if (this.mark.checked) localStorage.removeItem(MARK_STORE); else localStorage.setItem(MARK_STORE, 'off'); } catch { /* not kept: a private window */ }
@@ -244,13 +244,16 @@ export class PhotoMode {
   /** the cars shown to the game: the list's (Friends & crews only where the list has it, else all) */
   private sendCars() { this.send(PH_CARS, this.kept.cars === 3 && !this.namesHere ? 0 : this.kept.cars); }
 
+  /** the lens's sliders: they need time to stand (the picture's frames add up), and Focus a blur */
+  private lens() { this.blur.disabled = !this.kept.freeze; this.focus.disabled = !this.kept.freeze || this.kept.blur <= 0; }
+
   /** a slider moved */
   private slid(s: HTMLInputElement) {
     const v = +s.value;
     if (s === this.zoom) this.send(PH_FOV, Math.round((FOV_MAX - (v / 1000) * (FOV_MAX - FOV_MIN)) * 100));
     else if (s === this.tilt) this.send(PH_ROLL, Math.round(v * 10));
     else if (s === this.focus) this.send(PH_FOCUS, Math.round(focusM(v) * 100));
-    else if (s === this.blur) { this.kept.blur = v; this.send(PH_BLUR, v); this.focus.disabled = v <= 0; this.keep(); }
+    else if (s === this.blur) { this.kept.blur = v; this.send(PH_BLUR, v); this.lens(); this.keep(); }
     else if (s === this.exposure) { this.kept.exposure = v; this.keep(); }
     else if (s === this.vignette) { this.kept.vignette = v; this.keep(); }
   }
@@ -330,7 +333,7 @@ export class PhotoMode {
       this.input()?.releaseAll?.();                 // what the game held when the page took the keys goes up
       this.steer(0, 0, 0);
       this.send(PH_BLUR, this.kept.blur); this.sendCars(); this.send(PH_FREEZE, this.kept.freeze ? 1 : 0);
-      this.focus.disabled = this.kept.blur <= 0;
+      this.lens();
       this.lookSent = ''; this.sendLook();
       this.fill();
       this.setBare(false);
@@ -364,8 +367,7 @@ export class PhotoMode {
     q('.ph-grid-l').textContent = t('Grid');
     q('.ph-names-l').textContent = t('Names');
     (q('.ph-names-c') as HTMLElement).hidden = !this.namesHere;
-    q('.ph-freeze-l').textContent = t("Freeze friends' cars");
-    (q('.ph-freeze-c') as HTMLElement).hidden = !this.namesHere;
+    q('.ph-freeze-l').textContent = t('Freeze time');
     q('.ph-mark-l').textContent = t('nfsu2.xyz on pictures');
     q('[data-act="reset"]').textContent = t('Reset');
     q('[data-act="shoot"]').textContent = t('Take photo');

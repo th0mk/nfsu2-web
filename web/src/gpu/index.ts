@@ -18,11 +18,12 @@ import * as P from './proto';
 import { C, F } from './proto';
 import { Encoder } from './encoder';
 import type { FromPng, ToPng } from './png-worker';
-import { PH_ADD, PH_DONE, PH_OFF, PLAIN_LOOK, PhotoPicture, type PhotoLook } from './photo-picture';
+import { PH_ADD, PH_DONE, PH_NOW, PH_OFF, PLAIN_LOOK, PhotoPicture, type PhotoLook } from './photo-picture';
 export type { PhotoLook } from './photo-picture';
 
-/** how long photo() waits for a whole still picture before it keeps the picture as it is (the camera kept moving) */
-const PHOTO_WAIT_MS = 8000;
+/** how long photo() waits for a whole still picture before it keeps the picture as it is: the camera still moving
+ *  (a key held: the frame as it is), or still adding up frames (a slow GPU and the most blur) */
+const PHOTO_MOVING_MS = 600, PHOTO_WAIT_MS = 8000;
 
 export interface RendererOptions {
   /** where frame dumps go: a URL prefix that accepts PUT <prefix><name>.png (the dev server's /artifacts/) */
@@ -118,7 +119,8 @@ export interface Renderer {
    *  address in its corner (png-worker.ts) */
   dump(name: string, mark?: boolean): Promise<Blob>;
   /** photo mode's picture (photo-picture.ts) as PNG: the first frame that has a whole still picture (or, past
-   *  PHOTO_WAIT_MS, the picture as it is), with the look and the crop; photo mode off: dump()'s */
+   *  PHOTO_MOVING_MS with the camera moving, or PHOTO_WAIT_MS, the picture as it is), with the look and the crop; photo
+   *  mode off: dump()'s */
   photo(name: string, mark?: boolean): Promise<Blob>;
   /** photo mode's look and crop (app/photo.ts), shown from the next frame on and kept by photo() */
   photoLook(look: PhotoLook): void;
@@ -483,7 +485,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   // photo mode's picture (GwPhoto): state, n, target, gen, or null while photo mode is off (or the module has none)
   const photoOf = (b: number): [number, number, number, number] | null => {
     const U = u32(), fw = cw + C.frame + b * (P.FRAME_BYTES >> 2), at = (U[fw + F.k] + P.K_PHOTO) >>> 2;
-    if (U[at] !== P.PHOTO_MAGIC || U[at + 1] === PH_OFF || U[at + 1] > PH_DONE) return null;
+    if (U[at] !== P.PHOTO_MAGIC || U[at + 1] === PH_OFF || U[at + 1] > PH_NOW) return null;
     return [U[at + 1], U[at + 2], U[at + 3], U[at + 4]];
   };
   // ...and the frames of still picture gen the average has, back to the game in both buffers' blocks (GwPhoto ack)
@@ -553,7 +555,9 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     // photo mode's picture: the first frame with the whole still picture (or one past PHOTO_WAIT_MS) keeps it, and the
     // autotest's dumps get it as kept (photo() with photo mode off: dump()'s, the next frame)
     if (!ph) dumpWaiters.push(...photoWaiters.splice(0));
-    const pw = ph && photoWaiters.length && (pic!.done || t0 - photoWaiters[0].since > PHOTO_WAIT_MS) ? photoWaiters.shift() : undefined;
+    const waited = photoWaiters.length ? t0 - photoWaiters[0].since : 0;
+    const pw = ph && photoWaiters.length && (pic!.done || (ph[0] !== PH_ADD && ph[0] !== PH_DONE && waited > PHOTO_MOVING_MS) ||
+      waited > PHOTO_WAIT_MS) ? photoWaiters.shift() : undefined;
     const shot = ph && (pw || dumpName) ? pic!.shot(ce, linear, look) : null;
     if (pw && !pic!.done) log(`[gpu] photo mode's picture kept as it is (${pic!.count} of ${pic!.target} frames)`);
     const waiter = pw ?? dumpWaiters.shift();

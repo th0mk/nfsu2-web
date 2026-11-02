@@ -429,6 +429,7 @@ void sub_00620ae0(CPU *c){                       /* the car's drawing */
 }
 void sub_00615a10_orig(CPU *c);
 void sub_00615a10(CPU *c){                       /* the car's lights (the hood's and the trunk's parts) */
+    if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0xcu; return; }    /* (its neon too; thiscall, ret 0xC) */
     uint32_t b = 0, keep[2]; Car *k = drawn(c->ecx, &b);
     if (!k){ sub_00615a10_orig(c); return; }
     put_on(k, b, keep);
