@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (251cf1a)
+## 2026-11-02 (4bead18)
 
 - **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
 - **Minimap:** every player near you gets an arrow, not only those whose cars your game shows.
