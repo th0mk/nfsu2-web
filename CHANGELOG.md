@@ -10,6 +10,13 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
+## 2026-11-02 (251cf1a)
+
+- **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Fast computers start at 40 and drop to 32 if the frames stay slow; other computers start at 32, tablets 24, phones 16.
+- **Minimap:** every player near you gets an arrow, not only those whose cars your game shows.
+- **Frame rate:** other players' cars cost less a frame in a busy free roam.
+- **Free roam:** a car that went missing (only the HUD drawn, an empty minimap, a lower frame rate) is put back where it last was, and a profile saved that way loads again at the airport car park.
+
 ## 2026-10-31 (d079aff)
 
 - **Free roam:** touch front bumpers with another player for 3 seconds to add them as a friend, or add a claimed name on this page. Your friends are listed in this page's Friends & crews tab, with where they play and Join. Both of you need a claimed name.
