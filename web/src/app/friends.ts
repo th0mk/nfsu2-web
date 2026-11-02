@@ -4,8 +4,8 @@
 // page's side:
 // - FriendPrompt, over the game: the game says when the player's car and another's touch nose to nose
 //   (runtime/roam_game.c bump_*, NET_KIND_FRIEND), the page asks the server what that player is to it ("can"), and a
-//   line among the notes at the top (the toasts) offers it: "Add Bravo as a friend" (F, a click or a tap on the line, or the
-//   page's menu: a controller's every button is the game's), "Bravo wants to be friends: accept", or says why not;
+//   line in quick chat's look, just above the game's outrun line, offers it: "Add Bravo as a friend" (F, a click or a tap
+//   on the line, or the page's menu: a controller's every button is the game's), "Bravo wants to be friends: accept", or says why not;
 //   gone once the cars part.  It also tells the server the room's name once the player has friends (their Join), asks
 //   where the friends play every minute ("where"), says in the notices when one comes into free roam, and fills the
 //   page menu's Friends popup (Join a friend's room).
@@ -136,6 +136,20 @@ const WHERE_MS = 60_000;
 /** what touching the other car may lead to: the server's answer to "can", or what the page did since */
 type St = 'wait' | 'new' | 'asks' | 'asked' | 'friends' | 'claim' | 'theirs';
 
+/** the line's top edge, in the game's HUD units from the middle of the picture: just above the game's outrun line
+ *  (runtime/roam_game.c du_hud: its middle at -165), which shows too, as the cars are near each other */
+const LINE_TOP_U = -195;
+/** the line's icon (18x16 units): a person with a plus while it offers something, else a person */
+const PERSON_PLUS = 'M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM0 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5zM14.5 3.25h1.5v2h2v1.5h-2v2h-1.5v-2h-2v-1.5h2z';
+const PERSON = 'M9 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 15c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z';
+function personIcon(d: string): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg'), p = document.createElementNS(ns, 'path');
+  s.setAttribute('viewBox', '0 0 18 16'); s.setAttribute('aria-hidden', 'true');
+  p.setAttribute('d', d);
+  s.append(p);
+  return s;
+}
+
 export interface FriendPromptDeps {
   /** a friend message to the server on the game's link (net/index.ts friend); false: not connected now */
   send(m: Record<string, unknown>): boolean;
@@ -170,15 +184,16 @@ export class FriendPrompt {
   private where: Friend[] | null = null;
   private was = new Map<string, Friend['where']>();
   private whereAt = 0;
+  /** where the line was put last (place) */
+  private spot = '';
 
-  /** toasts: the box of the notes at the top of the game (shell.ts toast): the line is one of them while the cars touch,
-   *  clear of the cars and the game's own prompts */
-  constructor(toasts: HTMLElement, private deps: FriendPromptDeps) {
+  /** stage: the game's box; the line goes over the picture while the cars touch (place) */
+  constructor(stage: HTMLElement, private deps: FriendPromptDeps) {
     const b = this.root = document.createElement('button');
-    b.type = 'button'; b.className = 'toast friend-prompt'; b.tabIndex = -1; b.hidden = true; b.dataset.nfsu2Ui = '';
+    b.type = 'button'; b.className = 'friend-prompt'; b.tabIndex = -1; b.hidden = true; b.dataset.nfsu2Ui = '';
     b.onpointerdown = e => e.preventDefault();     // the canvas keeps the focus (and with it the keyboard)
     b.onclick = () => this.act();
-    toasts.append(b);
+    stage.append(b);
     // caught before the game's input: F is the game's for nothing (its key maps: dinput_kbd.c), and only while the
     // line offers something
     window.addEventListener('keydown', e => this.key(e), { capture: true });
@@ -192,6 +207,7 @@ export class FriendPrompt {
       const now = performance.now();
       if (!this.listed && now - this.triedAt > LIST_TRY_MS) { this.triedAt = now; this.listed = this.deps.send({ op: 'list' }); }
       if (this.listed && this.friends.length && now - this.whereAt > WHERE_MS) this.askWhere();
+      if (!this.root.hidden) this.place();         // (the window may change size while it shows)
       this.raf = requestAnimationFrame(tick);
     };
     if (on) this.raf = requestAnimationFrame(tick);
@@ -354,21 +370,37 @@ export class FriendPrompt {
     if (!e.repeat) this.act();
   }
 
+  /** the line in the middle of the picture, its top LINE_TOP_U HUD units above the middle (--u: one unit, its size) */
+  private place() {
+    const v = this.session?.viewRect();
+    if (!v || !v.w || !v.h) return;
+    const u = Math.min(v.w / 640, v.h / 480), x = v.x + v.w / 2, y = v.y + v.h / 2 + LINE_TOP_U * u;
+    const spot = `${x} ${y} ${u}`;
+    if (spot === this.spot) return;
+    this.spot = spot;
+    const s = this.root.style;
+    s.left = `${x}px`;
+    s.setProperty('--y', `${y}px`);
+    s.setProperty('--u', `${u}px`);
+  }
+
   private draw() {
     const w = this.who, b = this.root;
     if (!w || w.st === 'wait') { b.hidden = true; return; }
     const kbd = (k: string) => { const e = document.createElement('kbd'); e.textContent = k; return e; };
-    const key = touchFirst() ? [] : [kbd('F')];
-    const text = (s: string) => document.createTextNode(s);
+    const offer = this.actionable(), key = offer && !touchFirst() ? [kbd('F')] : [];
+    const text = (s: string) => Object.assign(document.createElement('span'), { textContent: s });
+    const line = (s: string) => b.replaceChildren(personIcon(offer ? PERSON_PLUS : PERSON), ...key, text(s));
     switch (w.st) {
-      case 'new': b.replaceChildren(...key, text(t('Add {name} as a friend', { name: w.name }))); break;
-      case 'asks': b.replaceChildren(...key, text(t('{name} wants to be friends: accept', { name: w.name }))); break;
-      case 'asked': b.replaceChildren(text(t('Friend request sent to {name}', { name: w.name }))); break;
-      case 'friends': b.replaceChildren(text(t('You and {name} are friends', { name: w.name }))); break;
-      case 'claim': b.replaceChildren(text(t('Claim your name on the start page to add friends'))); break;
-      case 'theirs': b.replaceChildren(text(t('{name} has no claimed name, so can\'t add friends yet', { name: w.name }))); break;
+      case 'new': line(t('Add {name} as a friend', { name: w.name })); break;
+      case 'asks': line(t('{name} wants to be friends: accept', { name: w.name })); break;
+      case 'asked': line(t('Friend request sent to {name}', { name: w.name })); break;
+      case 'friends': line(t('You and {name} are friends', { name: w.name })); break;
+      case 'claim': line(t('Claim your name on the start page to add friends')); break;
+      case 'theirs': line(t('{name} has no claimed name, so can\'t add friends yet', { name: w.name })); break;
     }
-    b.classList.toggle('offer', this.actionable());
+    b.classList.toggle('offer', offer);
+    this.place();
     b.hidden = false;
   }
 

@@ -593,7 +593,7 @@ Good to know:
   joins, but other players never learn your crews: the server tells each game which players near it share one. A
   player on an older version is in no crew.
 - **Friends:** touch front bumpers with another player (nose to nose, both cars' fronts) for 3 seconds, solid or in
-  ghost mode, and a note at the top offers **Add Bo as a friend**: press **F**, click or tap the
+  ghost mode, and a line above the outrun one offers **Add Bo as a friend**: press **F**, click or tap the
   line, or use the page menu (F9, ☰, or Home on a controller). The other player's line then says **Al wants to be
   friends: accept**; once both said yes you are friends. Touching the side or the back of a car offers nothing, nor
   does a race, an outrun or a race lobby. Both of you need a claimed name ("Your name": a claim needs cloud saves);

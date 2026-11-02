@@ -148,7 +148,7 @@ let radio: Radio | null = null;          // made at the first click on Radio: a 
 const theRadio = () => radio ??= new Radio(radioPort, l => log.add(`[radio] ${l}`));
 let lobbyPanel: LobbyPanel;
 let quickChat: QuickChat;                // free roam's fixed phrases (quickchat.ts)
-let friendPrompt: FriendPrompt;          // free roam's friends: Add friend in the toasts when front bumpers touch (friends.ts)
+let friendPrompt: FriendPrompt;          // free roam's friends: Add friend over the game when front bumpers touch (friends.ts)
 let friendsPanel: FriendsPanel;          // ...and the friends on the start page
 const msgStore = new MessageStore();      // messages between friends (messages.ts): the conversations in this browser
 let friendMessages: FriendMessages;       // ...in the game: the log's lines, I and its card
@@ -2027,7 +2027,7 @@ export async function boot() {
   });
   touch = new TouchControls($('#stage'), { toast, log: logLine, chat: () => quickChat.toggle(), chatOn: () => quickChat.enabled,
     settings: () => openHelp('keys') });
-  friendPrompt = new FriendPrompt($('#stage .toasts'), {
+  friendPrompt = new FriendPrompt($('#stage'), {
     send: m => session?.net?.friend?.(m) ?? false, room: () => roamRoom ?? '', toast: s => toast(s, 5000), log: logLine,
     notice: friendNotice, menu: menuName, placed: () => { if ($<HTMLDialogElement>('#friends-pop').open) drawPopFriends(); },
   });

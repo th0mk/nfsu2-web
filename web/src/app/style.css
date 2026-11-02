@@ -785,16 +785,32 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .pause-hint-list { color: var(--muted); }
 .pause-hint-list::before { content: " · "; }
-/* free roam's friends (friends.ts): the line in the toasts at the top while front bumpers touch, a toast with the key
- * cap; one that offers nothing (a request sent, or why not) is no button.  On the start page (and in the page menu's Friends) a
- * line a friend: the name, where it plays after it in small text (lime while it plays; the name dimmed while it does
- * not), the icons at its end (Message an envelope, lime with a dot while messages wait to be read: messages.ts; Remove
- * a grey can, red under the pointer); the friend's own line under it */
-.friend-prompt { border: 0; -webkit-tap-highlight-color: transparent; }
+/* free roam's friends (friends.ts): the line while front bumpers touch, in quick chat's look over the cars (.qc-b: bold
+ * italic lime, an icon first, its size with the HUD, its shadow, its pop), in the middle of the picture just above the
+ * game's outrun line (friends.ts place: --y its top, --u one HUD unit), the key cap after the icon; one that offers
+ * nothing (a request sent, or why not) is grey and no button.  On a touch screen on its side it keeps under the row of
+ * small buttons, as the toasts do.  On the start page (and in the page menu's Friends) a line a friend: the name, where
+ * it plays after it in small text (lime while it plays; the name dimmed while it does not), the icons at its end
+ * (Message an envelope, lime with a dot while messages wait to be read: messages.ts; Remove a grey can, red under the
+ * pointer); the friend's own line under it */
+.friend-prompt {
+  --u: 1px;
+  position: absolute; left: 50%; top: var(--y, 16px); z-index: 4; translate: -50% 0; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: calc(3 * var(--u)); padding: 0; border: 0; background: none;
+  font: italic 700 max(14px, calc(16 * var(--u))) / 1.2 var(--font); color: var(--lime); text-align: center;
+  text-shadow: 0 0 2px #000, 0 1px 3px #000, 0 0 calc(5 * var(--u)) rgba(0, 0, 0, 0.6);
+  pointer-events: none; -webkit-tap-highlight-color: transparent;
+  transform-origin: 50% 100%; animation: qc-pop 0.22s ease-out both;
+}
+.friend-prompt svg { width: 1.1em; height: 1em; flex: none; fill: currentColor; filter: drop-shadow(0 1px 2px #000); }
+.friend-prompt kbd { flex: none; min-width: 1.4em; padding: 0 0.35em; border-radius: 3px; font: italic 700 0.75em/1.45 var(--font); text-shadow: none; }
 .friend-prompt.offer { pointer-events: auto; cursor: pointer; }
-.friend-prompt.offer:active { color: var(--lime); }
+.friend-prompt.offer:active { color: var(--text); }
 .friend-prompt:not(.offer) { color: var(--muted); }
-.friend-prompt kbd { min-width: 0; margin-right: 8px; padding: 0 6px; border-radius: 3px; font: 700 0.85em/1.5 var(--font); vertical-align: 1px; }
+.stage:has(> .touch[data-mode="drive"]) > .friend-prompt { top: max(var(--y, 0px), calc(max(12px, env(safe-area-inset-top)) + 12px + 48px * var(--ts))); }
+@media (orientation: portrait) {
+  html[data-touch] .stage:has(> .touch[data-mode="drive"]) > .friend-prompt { top: var(--y, 16px); }   /* the buttons are under the picture */
+}
 .fl, .dlg ul.fl { list-style: none; margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
 .fl li { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; min-height: 40px; }
 .fl li + li { box-shadow: inset 0 1px var(--line); }
