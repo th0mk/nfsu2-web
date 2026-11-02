@@ -131,13 +131,21 @@ Checked against the guide or the code, and confirmed by players in threads:
      when you drive near. Settings, Game, More game settings, Show hidden races (off by default) puts them on the map
      and the radar from the next Play.
   Saves (Saves, Download backup) and escalating only when all three are done and still nothing shows.
+- Wide body kits, the most asked question of all (how to get them, locked after finishing the game, more than one
+  car): as in the original game, 11 outrun wins in stage 5 put a star on the map before the last URL race (S5_URL_9),
+  and the car driven there gets its wide body; the other stages' outruns give unique hoods, spoilers, rims and
+  vinyls the same way, one car each. Since 2970e8e, once Caleb is beaten the shops have all of these unique visual parts
+  for every car of the career, free (the Body Shop's last category, Wide Body Kits): the original game's ending opens
+  them only in Customize mode, whose cars free roam never drives. The developer chose this on 2026-11-02 after the
+  forum's "Unlock wide body kits." suggestion. The unique performance parts stay one per stage. Save editors and other
+  people's 100 % saves are not needed for it.
 - Career, a unique-part text message (the wide body kit, a performance part: "go to the star on the map") but no
   star on the map: the original game, the same on PC, not a bug (the developer checked it on 2026-11-02 and keeps
   it). In stage 5, once the last URL race (S5_URL_9) is won, the map shows only Caleb's race and no stars, but the
-  message still arrives at the 6th and 11th stage-5 outrun win. Collect the stars before that race; afterwards only
-  an earlier save brings them back (cloud saves' earlier copy, or a backup). After Caleb is beaten the list stays
-  empty. The wide body star never shows while driving an SUV (Hummer, Navigator, Escalade): switch cars. Show hidden
-  races does not change any of this (stars are not races).
+  message still arrives at the 6th and 11th stage-5 outrun win. Since 2970e8e, beating Caleb puts every unique visual
+  part in the shops for every car (above), so that is the answer; the stage-5 unique performance part is only on an
+  earlier save (cloud saves' earlier copy, or a backup). The wide body star never shows while driving an SUV (Hummer,
+  Navigator, Escalade): switch cars. Show hidden races does not change any of this (stars are not races).
 - Firefox: when a problem shows only in Firefox (its log has Firefox errors, or Chrome works), Chrome is the browser
   most tested.
 - A phone that stutters or shakes at 60 fps but runs smoothly at 30: its GPU no longer finishes a frame in 16.7 ms,
@@ -214,7 +222,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   menu's Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each
   stage, and Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for
   the eyes, in the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in Settings,
-  Game, more: Show hidden races, since dec0e11; the guide lists them all). A feature
+  Game, more: Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once
+  Caleb is beaten, since 2970e8e; the guide lists them all). A feature
   named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
