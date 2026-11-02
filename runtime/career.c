@@ -29,7 +29,10 @@
  *                              only implementation: the heap track's soaks
  *                              and the LAN race scripts use it too
  *   racewin                    finish the player now (1st if nobody finished)
- *   careerlist                 log stage, bank and the available races
+ *   careerlist                 log stage, bank and the available races; the
+ *                              stage's outrun wins, the "other" events open
+ *                              (unique parts' stars, cover shoots), the map's
+ *                              markers and the other event being run
  *   fnglist [x]                log the active front-end packages (overlays too;
  *                              x: FNGInfo flags and control mask)
  *   waitfe NAME [tmo]          wait until package NAME is active (overlays too)
@@ -40,6 +43,7 @@
  *                              next = the available race the bot would pick)
  *   shopgo NAME                teleport onto a shop's marker (CC_CAR_LOT_1 ...)
  *   showgo NAME                teleport onto a cover shoot's marker (STAGE_2_DVD_1)
+ *                              or an other event's (STAGE_3_PERF_1)
  *   waitroam [tmo]             wait until the car is in free roam (2 s settled)
  *   cargo K [BEHIND]           jump behind the K-th car of the car manager
  *   outrun [K] [tmo]           challenge the free-roam tuner in racer slot K
@@ -119,6 +123,16 @@ void autotest_tap(unsigned dik, long frames);
 #define G_NSHOWS         0x00838408u
 #define SHOW_SIZE        0x40u
 #define G_VISUAL_TWEAK   0x007fa290u
+/* "Other" events: [0x838424] x [0x838420], 0x18 bytes (+0 name, +2 its
+ * trigger's name, +4 stage, +6 what opens it: 2 the stage's outrun wins
+ * (stage record +0xDC) reaching +7; +0xC the shop or cover it leads to):
+ * the unique parts' stars (STAGE_5_VISUAL_5, the wide body kit) and the
+ * cover shoots' (STAGE_2_SHOW_1).  Career +0x7148: those open now (32),
+ * Career +0: the map's markers (64 of 0x18 bytes: +0 trigger, +4 race,
+ * +8 shop, +0xC cover, +0x10 other event), Career +0xC08: the one being
+ * run. */
+#define G_OTHERS         0x00838424u
+#define G_NOTHERS        0x00838420u
 
 /* ---- expressions ---------------------------------------------------------- */
 static const char *xp;
@@ -439,6 +453,26 @@ static void career_list(void){
         uint32_t r = MR32(G_CAREER + 0x71c8u + 4u * (uint32_t)i);
         if (r) fprintf(stderr, " %s(%s%s)", race_name(r), race_type(r), race_won(r) ? ",won" : "");
     }
+    fputc('\n', stderr);
+    /* the other events open now, the map's markers by kind (the other events
+     * and shops by name), the other event being run */
+    uint32_t st = MR32(G_CAREER + 0x7af8u), run = MR32(G_CAREER + 0xc08u), n[5] = { 0 };
+    fprintf(stderr, "[career] f=%ld stage %u: %u outrun wins, other events open:", autotest_frame(), st,
+            st < 8 ? MR32(G_CAREER + 0x72d8u + st * 0x104u + 0xdcu) : 0u);
+    for (uint32_t i = 0; i < 32u; i++){
+        uint32_t e = MR32(G_CAREER + 0x7148u + 4u * i);
+        if (e) fprintf(stderr, " %s", race_name(e));
+    }
+    fprintf(stderr, "; markers:");
+    for (uint32_t i = 0; i < 64u; i++){
+        uint32_t m = G_CAREER + 0x18u * i;
+        if (!MR32(m)) continue;
+        for (uint32_t k = 0; k < 5u; k++) if (k == 4u || MR32(m + 4u + 4u * k)){ n[k]++; break; }
+        if (MR32(m + 0x10u)) fprintf(stderr, " %s", race_name(MR32(m + 0x10u)));
+        else if (MR32(m + 8u) && run) fprintf(stderr, " shop %s", gstr(MR32(m + 8u)));
+    }
+    fprintf(stderr, " (%u races, %u shops, %u cover shoots, %u other events, %u more)", n[0], n[1], n[2], n[3], n[4]);
+    if (run) fprintf(stderr, "; running %s", race_name(run));
     fputc('\n', stderr);
 }
 /* the available race that is not won yet (of type ty, if given) that moves the
@@ -1080,8 +1114,14 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
         uint32_t t = MR32(G_SHOWS), n = MR32(G_NSHOWS), q = 0;
         for (uint32_t i = 0; t && i < n && !q; i++) if (!strcasecmp(gstr(t + i * SHOW_SIZE), a1)) q = t + i * SHOW_SIZE;
         char what[64]; snprintf(what, sizeof what, "showgo %s", a1);
-        if (!q) fprintf(stderr, "[career] f=%ld %s: no such showcase\n", f, what);
-        else goto_marker(marker_by_hash(MR32(q + 0x2cu)), what);
+        if (q){ goto_marker(marker_by_hash(MR32(q + 0x2cu)), what); return 1; }
+        /* ... or an "other" event's (STAGE_3_PERF_1: its trigger, the name at +2) */
+        t = MR32(G_OTHERS); n = MR32(G_NOTHERS);
+        for (uint32_t i = 0; t && i < n && !q; i++) if (!strcasecmp(race_name(t + i * 0x18u), a1)) q = t + i * 0x18u;
+        if (!q){ fprintf(stderr, "[career] f=%ld %s: no such showcase or other event\n", f, what); return 1; }
+        uint32_t h = 0xffffffffu;
+        for (const char *s = gstr(MR32(G_STRPOOL) + MR16(q + 2u)); *s; s++) h = h * 33u + (uint8_t)*s;   /* bStringHash */
+        goto_marker(marker_by_hash(h), what);
         return 1;
     }
     if (!strcasecmp(cmd, "cargo")){
