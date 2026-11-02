@@ -6,6 +6,7 @@ use std::sync::Arc;
 use super::world::{C, Opts, World};
 use crate::buddy::BuddyLimits;
 use crate::lobby::Limits;
+use crate::stats::Period;
 use crate::trace::{LobbyTrace, TraceState};
 use crate::vhost::{DATA, lan_frame};
 use crate::{PORT_LOBBY, VHOST_VIP};
@@ -372,7 +373,7 @@ fn onl6_blocked_list_follows_the_name() {
 
 fn board(w: &mut World, kind: u32) -> Vec<String> {
     let mut b: Vec<String> =
-        w.core.stats.board(kind, false).iter().map(|r| format!("{}:{}:{}:{}", r.name, r.points, r.wins, r.losses)).collect();
+        w.core.stats.board(kind, Period::All).iter().map(|r| format!("{}:{}:{}:{}", r.name, r.points, r.wins, r.losses)).collect();
     b.sort();
     b
 }
@@ -782,7 +783,7 @@ fn a_win_far_under_the_tracks_third_quickest_is_a_cheat_line() {
 #[test]
 fn race_types() {
     let mut w = world();
-    let boards = |w: &mut World| (0..6).map(|t| w.core.stats.board(t, false).len()).collect::<Vec<_>>();
+    let boards = |w: &mut World| (0..6).map(|t| w.core.stats.board(t, Period::All).len()).collect::<Vec<_>>();
     // a quarter-mile drag: times well under the other types' 20 s
     let g = client(&mut w, "10.77.0.2");
     let a = login(&mut w, g, "Drag1");
@@ -932,6 +933,119 @@ fn leavers_decide_nothing() {
     }
     assert!(!w.logged("\"d\" (circuit"), "{}", w.text().join("\n"));
     assert_eq!(board(&mut w, 0), ["Ann:67:0:1", "Bob:100:1:0", "Cat:0:0:1", "Dan:0:0:1"], "counted nowhere");
+}
+
+/// The three games' reports of a test race (online-pair, 2026-11-02): a ranked circuit of OLHOST, OLJOIN3 and OLJOIN
+/// (NAME0..2).  OLJOIN3 finished first (0:29.9); the others were still on the way when the race ended 30 s later, and
+/// every game put them out on the road: state 0x0b, places 2 and 3 where they were then, times of 60 s.
+const OUT_OF_TIME: [(&str, &str); 3] = [
+    (
+        "OLJOIN3",
+        "AwMAAQ+rAAIAAgsEP4m32UJwK4ZCXtcLQejLTkITDAhBCj1xAAAAAL+AAAAAAAAAAAAAAAAAAAAAAAAAAAACAAYBAQEEPvgFa0HvSsEAAAAAQcasJUITKMZBBwo+QXx64kIntncAAAAAAAAAAAAAAAAAAAAAAAAAAgMLBD+DJh9CbyuGQmrhSEHfmzxCEkAiQQ/XCwAAAAC/gAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    ),
+    (
+        "OLJOIN",
+        "AwMAAg+rAAIAAgsEP4o5X0JwpyxCXhR8QelCK0IS5VdBDXCkAAAAAL+AAAAAAAAAAAAAAAAAAAAAAAAAAAACAAgBAQEEPvkMtEHxo9gAAAAAQdrPN0IUPcZBC9cLQXThSEIdnkUAAAAAAAAAAAAAAAAAAAAAAAgAAAECAwsEP4PSeEJvsKVCaczOQdaGTkITRdFBDwo+AAAAAL+AAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    ),
+    (
+        "OLHOST",
+        "AwMAAA+rAAIAAgsEP4nvTkJvsGNCXpmaQd+VMkITPLlBBZmaAAAAAL+AAAAAAAAAAAAAAAAAAAAAAAAAAAACAAYBAQEEPvk9okHxOdwAAAAAQeytxEIUhHZBCj1xQX199UIalBoAAAAAAAAAAAAAAAAAAAAAAAoAAAEAAQIDCwQ/g5CJQm70vUJpCj5B53kdQhOipUEVHrkAAAAAv4AAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    ),
+];
+
+// a race that one racer finished and the others ran out of time in counts: the reports of the racers put out on the
+// road (they raced to the end and saw the finisher cross the line) decide it with the finisher's.  Until 2026-11 they
+// decided nothing ("did not finish"), the finisher's alone could not, and such a race never counted nor showed
+// Official Race Results.  The racers out of time did not finish, and did not leave: no disconnect in their careers
+#[test]
+fn racers_out_of_time_decide_with_the_finisher() {
+    let mut w = world();
+    let names = ["OLHOST", "OLJOIN3", "OLJOIN"];
+    let gs: Vec<u32> = (0..3).map(|i| client(&mut w, &format!("10.77.0.{}", i + 2))).collect();
+    let s: Vec<C> = (0..3).map(|i| login(&mut w, gs[i], names[i])).collect();
+    let auth = race(&mut w, "o", &s, fields![("SYSFLAGS", 1 << 18)]).unwrap();
+    w.advance(125_000.0);
+    let s: Vec<C> = (0..3).map(|i| login(&mut w, gs[i], names[i])).collect();
+    let session = |who: &str| s[names.iter().position(|n| *n == who).unwrap()];
+    let rep = |w: &mut World, (who, resu): (&str, &str)| {
+        let mut f = fields![("AUTH", auth.as_str()), ("RESU", resu)];
+        for (i, n) in names.iter().enumerate() {
+            f.extend(fields![(format!("NAME{i}"), *n)]);
+        }
+        w.send(session(who), "rank", f);
+    };
+    rep(&mut w, OUT_OF_TIME[0]);
+    assert!(board(&mut w, 0).is_empty(), "the finisher's report alone decides nothing");
+    rep(&mut w, OUT_OF_TIME[1]);
+    assert!(
+        w.logged("\"o\" (circuit, ranked): 1 OLJOIN3 0:30.21, DNF OLHOST (out of time), DNF OLJOIN (out of time)"),
+        "{}",
+        w.text().join("\n")
+    );
+    assert_eq!(board(&mut w, 0), ["OLHOST:0:0:1", "OLJOIN3:100:1:0", "OLJOIN:0:0:1"]);
+    assert_eq!([s[1], s[2]].map(|c| w.c(c).count("$rfn")), [1, 1], "Official Race Results on both screens");
+    rep(&mut w, OUT_OF_TIME[2]);
+    assert!(!w.logged("decides nothing") && !w.logged("differs"), "{}", w.text().join("\n"));
+    assert_eq!(w.c(s[0]).count("$rfn"), 1);
+    // no disconnect for a racer who ran out of time (STAT [1]); one for a racer who left
+    let disconnects = |w: &mut World, who: &str| -> String {
+        w.send(s[0], "user", fields![("PERS", who)]);
+        w.c(s[0]).l("user").g("STAT").split(',').nth(1).unwrap().to_string()
+    };
+    assert_eq!(disconnects(&mut w, "OLJOIN"), "0");
+    assert!(w.core.lobby.games.is_empty(), "every racer reported: the race is over");
+}
+
+// two finishers' games may tell a racer who did not finish differently: one counts a leaver as gone, the other left it
+// out of its report; one saw two racers out of time in one order on the road, the other in the other.  Only the
+// finishers' places are compared, and the result has every racer either report named (a ranked race of three keeps
+// its points with its leaver left out of the report that decided it)
+#[test]
+fn the_others_places_do_not_decide() {
+    let mut w = world();
+    let names = ["Ann", "Bob", "Cat", "Dan", "Eve"];
+    let gs: Vec<u32> = (0..5).map(|i| client(&mut w, &format!("10.77.0.{}", i + 2))).collect();
+    let login_all = |w: &mut World| -> Vec<C> { (0..5).map(|i| login(w, gs[i], names[i])).collect() };
+    let rep = |w: &mut World, c: C, auth: &str, names: &[&str], players: &[(u8, u8, f32, i32, bool)]| {
+        let mut f = fields![("AUTH", auth), ("RESU", resu_full(0, 4014, players))];
+        for (i, n) in names.iter().enumerate() {
+            f.extend(fields![(format!("NAME{i}"), *n)]);
+        }
+        w.send(c, "rank", f);
+    };
+    // Ann, Bob and Cat, ranked: Cat leaves; Ann's game counts it as gone, Bob's leaves it out
+    let s = login_all(&mut w);
+    let auth = race(&mut w, "l", &s[0..3], fields![("SYSFLAGS", 1 << 18)]).unwrap();
+    w.advance(200_000.0);
+    let s = login_all(&mut w);
+    rep(&mut w, s[0], &auth, &names[0..3], &[(0, 2, 190.0, 0, false), (1, 1, 186.0, 0, false), (2, 3, 60.0, 0, true)]);
+    rep(&mut w, s[1], &auth, &names[0..2], &[(0, 2, 190.1, 0, false), (1, 1, 186.0, 0, false)]);
+    assert!(w.logged("\"l\" (circuit, ranked): 1 Bob 3:06.00, 2 Ann 3:10.10, DNF Cat"), "{}", w.text().join("\n"));
+    assert_eq!(board(&mut w, 0), ["Ann:50:0:1", "Bob:100:1:0", "Cat:0:0:1"]);
+    rep(&mut w, s[2], &auth, &names[0..3], &[(0, 1, 60.0, 0, true), (1, 2, 60.0, 0, true), (2, 3, 60.0, 0, true)]);
+    // all five (Ann first, Bob second; Cat and Dan left, Eve never got going): Ann's game has Cat and Dan at other
+    // places than Bob's, and Eve gone; Bob's game left Eve out
+    let auth = race(&mut w, "m", &s, fields![("SYSFLAGS", 1 << 18), ("MAXSIZE", 6)]).unwrap();
+    w.advance(200_000.0);
+    let s = login_all(&mut w);
+    let ann = [(0, 1, 180.0, 0, false), (1, 2, 181.0, 0, false), (2, 4, 50.0, 0, true), (3, 3, 51.0, 0, true), (4, 5, 9.0, 0, true)];
+    let bob = [(0, 1, 180.0, 0, false), (1, 2, 181.0, 0, false), (2, 3, 50.0, 0, true), (3, 4, 51.0, 0, true)];
+    rep(&mut w, s[0], &auth, &names, &ann);
+    rep(&mut w, s[1], &auth, &names[0..4], &bob);
+    assert!(w.logged("\"m\" (circuit, ranked): 1 Ann 3:00.00, 2 Bob 3:01.00, DNF Cat, DNF Dan, DNF Eve"), "{}", w.text().join("\n"));
+    assert!(!w.logged("differs"), "{}", w.text().join("\n"));
+    assert_eq!(board(&mut w, 0), ["Ann:150:1:1", "Bob:175:1:1", "Cat:0:0:2", "Dan:0:0:1", "Eve:0:0:1"]);
+    // the leavers' careers: a disconnect for each race they left
+    w.send(s[0], "user", fields![("PERS", "Cat")]);
+    assert_eq!(w.c(s[0]).l("user").g("STAT").split(',').nth(1), Some("2"));
+    // finishers whose games had the finishers the other way round still differ
+    let auth = race(&mut w, "n", &s[0..3], fields![("SYSFLAGS", 1 << 18)]).unwrap();
+    w.advance(200_000.0);
+    let s = login_all(&mut w);
+    rep(&mut w, s[0], &auth, &names[0..3], &[(0, 1, 180.0, 0, false), (1, 2, 180.1, 0, false), (2, 3, 190.0, 0, false)]);
+    rep(&mut w, s[1], &auth, &names[0..3], &[(0, 2, 180.1, 0, false), (1, 1, 180.0, 0, false), (2, 3, 190.0, 0, false)]);
+    assert!(w.logged("\"n\": Bob's report differs (1 Bob 3:00.00, 2 Ann 3:00.10, 3 Cat 3:10.00)"), "{}", w.text().join("\n"));
+    assert!(!w.logged("\"n\" (circuit"), "{}", w.text().join("\n"));
 }
 
 // a restart (a release) mid-race: the races go on in their players' browsers and count when the players report after

@@ -710,12 +710,15 @@ Good to know:
   In the original game the Filter always hid all others, so a game made with Collision Detection off was seen by no
   one. A game with **Private Room** on is not listed, as in the original game.
 - **Ranked games** need three players at least. Ranked races give ranking points by place. After a ranked race the
-  results screen lists whose results came in (received or waiting), then, once the games of two players who finished
-  sent the same result, Official Race Results: each player's place, time (drift: score) and the ranking points the
-  race gave (100 for the winner down to 0 for the last; 0 for a player who left the race, shown as Disconnected).
-- **A race counts** in Rankings once the games of two players who finished it sent the same result (every game
-  sends its own at the results screen), so a race that only one player finished does not count. A player who left
-  the race decides nothing: their game counts every player as gone. Each player races from their own browser.
+  results screen lists whose results came in (received or waiting), then, once the games of two players sent the
+  same finishing order, Official Race Results: each player's place, time (drift: score) and the ranking points the
+  race gave (100 for the winner down to 0 for the last; 0 for a player who did not finish, shown as Disconnected:
+  who left the race, or was still on the way when it ended, 30 s after the first finisher).
+- **A race counts** in Rankings once the games of two players who raced to the end (finished, or were still on the
+  way when the race ended) sent the same finishing order (every game sends its own at the results screen), so a race
+  counts even when only its winner finished. A player who left the race decides nothing: their game counts every
+  player as gone. Each player races from their own browser. **Monthly Point Leaders** (Online Main Menu) shows this
+  month's two leaders of each race type and, on its other page, last month's.
 - **EA Messenger** (the Online Main Menu's button): Search finds the players online on this server and those with a
   race in Rankings. **Send Friend Request** reaches the other player now, or when they next come online: they see you
   in their list with a green arrow and pick **Answer Friend Request**: Accept, Decline or Block. Your friends stay on

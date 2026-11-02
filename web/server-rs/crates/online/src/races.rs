@@ -55,7 +55,8 @@ struct KeptRace {
     auth: String,
     ranked: bool,
     players: Vec<KeptPlayer>,
-    /// the reports so far: the reporter's browser, and the places it reported ("name:place,...")
+    /// the reports so far: the reporter's browser, and the places it reported ("name:place,...|name,...": the
+    /// finishers, then the others; before 2026-11 "name:place,..." with place 0 for one who did not finish)
     reports: Vec<(u32, String)>,
     result: Option<String>,
     /// a ranked race's table ($rfn, the frame as it goes), in base64

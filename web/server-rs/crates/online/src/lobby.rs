@@ -50,8 +50,8 @@
 //! published have their own rates; a browser keeps `open_per_vip` open games and `started_per_vip` started ones (a
 //! client `open_per_group`, `started_per_group`); a race needs players in different browsers, and is over once its
 //! players' browsers have been gone from the switch for `orphan_ms`.  A race's result counts once two of its players
-//! who finished it, in different browsers, reported the same places, no sooner than the race type's shortest race; a
-//! ranked race needs three players for its points.
+//! who finished it, in different browsers, reported the same places for the racers who crossed the finish line, no
+//! sooner than the race type's shortest race; a ranked race needs three players for its points.
 //!
 //! Sessions and games are kept by id.  A session that left (and a game that ended) stays readable until the event
 //! that ended it is over (the graveyard), so the code still handling that event goes on with it: a send to a gone
@@ -69,7 +69,7 @@ use sha2::{Digest, Sha256};
 use crate::aries::{FieldMap, Fields, FrameReader, MAX_FRAME, V, encode_fields, encode_frame, is_secret};
 use crate::core::Core;
 use crate::jsx::{self, clean_text, day, lower, valid_name};
-use crate::stats::{RACE_TYPES, Race, RacePlayer, RaceReport, ReportPlayer, decode_result, race_points};
+use crate::stats::{OUT, Period, RACE_TYPES, Race, RacePlayer, RaceReport, ReportPlayer, decode_result, race_points};
 use crate::timers::{Action, TimerId};
 use crate::vhost::{ConnId, Svc};
 use crate::{PORT_BUDDY, PORT_LOBBY};
@@ -998,6 +998,21 @@ fn quick_win(
     None
 }
 
+/// What decides a race's result in a kept report ("Ann:1,Bob:2|Cat,Dan", `Core::rank`): the racers who crossed the
+/// finish line at their places.  A report kept from before 2026-11 named every racer, "Cat:0" for one who did not
+/// finish: it reads the same.
+fn finishers_of(key: &str) -> String {
+    let done = key.split('|').next().unwrap_or("");
+    done.split(',').filter(|e| !e.is_empty() && !e.ends_with(":0")).collect::<Vec<_>>().join(",")
+}
+
+/// the racers a kept report names who did not finish (after '|'; before 2026-11 "name:0")
+fn others_of(key: &str) -> Vec<&str> {
+    let (done, rest) = key.split_once('|').unwrap_or((key, ""));
+    let old = done.split(',').filter_map(|e| e.strip_suffix(":0"));
+    old.chain(rest.split(',')).filter(|e| !e.is_empty()).collect()
+}
+
 /// a race time in a console line: "3:06.82"
 pub(crate) fn fmt_time(t: f64) -> String {
     let m = (t / 60.0).floor();
@@ -1760,12 +1775,20 @@ impl Core {
     /// players, once per player (the first that passes the checks) (the same names as the game's players, places
     /// 1..n, the race and its times no shorter than the type's shortest race and no longer than the race has been
     /// going).  The race's result is the first report that another player, in another browser, sent too (the same
-    /// places): one player alone cannot decide it; later reports are compared with it.  Only the reports of players who
-    /// finished decide it: the game of a player who left the race (dropped out, quit) reports every player as dropped
-    /// and is back first, so two of them decided a fifth of the live results as "everyone DNF" before the finishers
-    /// reported (2026-10-24); such a report is logged, and its player sees the table.  A ranked race of fewer than
-    /// three players (the game's own minimum) counts as unranked.  The game is told "Unranked" either way (what the
-    /// game shows after the race); a ranked game's players see its table on their results screens (`results_table`).
+    /// places for the racers who crossed the finish line, `ReportPlayer::finished`): one player alone cannot decide
+    /// it; later reports are compared with it.  The others did not finish, and are not compared: a racer who left may
+    /// be gone in one game's report and left out of another's.  The reports that decide it are those of the players
+    /// who raced to the end: who finished, and who was still on the way when the race ended, 30 s after the first
+    /// finisher (`stats::OUT`: its game saw the finishers cross the line).  Until 2026-11 only the finishers' did, and
+    /// the racers on the way were out like leavers: a race that one racer finished and the others ran out of time in
+    /// (a test race, 2026-11-02: "did not finish: the report decides nothing" twice) never counted, nor showed
+    /// "Official Race Results".  The game of a player who left the race (dropped out, quit) reports every player as
+    /// dropped and is back first, so two of them decided a fifth of the live results as "everyone DNF" before the
+    /// finishers reported (2026-10-24); such a report decides nothing, is logged, and its player sees the table.  The
+    /// result is the report that decided it: the finishers at their places, the others DNF (a disconnect in the
+    /// career only for one who left).  A ranked race of fewer than three players (the game's own minimum) counts as
+    /// unranked.  The game is told "Unranked" either way (what the game shows after the race); a ranked game's players
+    /// see its table on their results screens (`results_table`).
     fn rank(&mut self, s: SessId, f: &FieldMap, code: &str) {
         let reply = |core: &mut Core| {
             let time = (core.now() / 1000.0).floor() % 100_000.0;
@@ -1848,8 +1871,9 @@ impl Core {
             );
         }
         // the reporter's own entry in its report (check_report: each index names one of the game's players)
-        let own = r.players.iter().find(|p| !p.dropped && lower(&names[p.index as usize]) == persona);
-        let finished = own.is_some();
+        let own = r.players.iter().find(|p| p.finished() && lower(&names[p.index as usize]) == persona);
+        // (its game saw the finishers cross the line: it finished, or the race ended with it on the way)
+        let finished = r.players.iter().any(|p| p.raced_to_the_end() && lower(&names[p.index as usize]) == persona);
         // its records: what its own game measured of it (stats.rs add_records), whether the result stands or not
         if let Some(p) = own {
             let name = self.lobby.game(g).expect("held").players[me].name.clone();
@@ -1864,44 +1888,67 @@ impl Core {
             .map(|p| {
                 let want = lower(&names[p.index as usize]);
                 let name = gm.players.iter().find(|x| lower(&x.name) == want).map(|x| x.name.clone()).unwrap_or_default();
-                RacePlayer { name, place: if p.dropped { 0 } else { p.place as u32 }, time: p.time }
+                let place = if p.finished() { p.place as u32 } else { 0 };
+                RacePlayer { name, place, time: p.time, left: !p.finished() && p.state != OUT }
             })
             .collect();
         order.sort_by_key(|p| if p.place == 0 { 99 } else { p.place });
-        let key = order.iter().map(|p| format!("{}:{}", p.name, p.place)).collect::<Vec<_>>().join(",");
+        // the report as kept (`finishers_of` is what is compared): the racers who crossed the finish line at their
+        // places, then after '|' the others it names
+        let others: Vec<&str> = order.iter().filter(|p| p.place == 0).map(|p| p.name.as_str()).collect();
+        let key = format!(
+            "{}|{}",
+            order.iter().filter(|p| p.place != 0).map(|p| format!("{}:{}", p.name, p.place)).collect::<Vec<_>>().join(","),
+            others.join(",")
+        );
+        let decides = finishers_of(&key);
         // (a drift race's finishers by their points, as this report has them)
         let points = |name: &str| r.players.iter().find(|p| lower(&names[p.index as usize]) == lower(name)).map_or(0, |p| p.score);
-        let line = order
-            .iter()
-            .map(|p| {
-                let place = if p.place == 0 { "DNF".to_string() } else { p.place.to_string() };
-                let time = match (p.place, drift) {
-                    (0, _) => String::new(),
-                    (_, true) => format!(" {} points", points(&p.name)),
-                    (_, false) => format!(" {}", fmt_time(p.time)),
-                };
-                format!("{place} {}{time}", p.name)
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+        let line_of = |order: &[RacePlayer]| {
+            order
+                .iter()
+                .map(|p| {
+                    let place = if p.place == 0 { "DNF".to_string() } else { p.place.to_string() };
+                    let time = match (p.place, drift) {
+                        (0, _) if !p.left => " (out of time)".to_string(),
+                        (0, _) => String::new(),
+                        (_, true) => format!(" {} points", points(&p.name)),
+                        (_, false) => format!(" {}", fmt_time(p.time)),
+                    };
+                    format!("{place} {}{time}", p.name)
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let line = line_of(&order);
         let svip = self.lobby.s(s).vip;
         let gm = self.lobby.game(g).expect("held");
         // the ranked table goes to this player's results screen alone once the result stands, else to every reporter's
         let mut to = None;
-        if !finished {
+        if !finished || decides.is_empty() {
             if gm.result.is_some() {
                 to = Some(s);
             }
-            self.llog(&format!("[online] \"{gname}\": {spers} did not finish: the report decides nothing ({line})"), s);
+            let why = if finished { "'s report has no racer who finished" } else { " did not finish" };
+            self.llog(&format!("[online] \"{gname}\": {spers}{why}: the report decides nothing ({line})"), s);
         } else if let Some(result) = &gm.result {
             to = Some(s);
-            if key != *result {
+            if finishers_of(result) != decides {
                 self.llog(&format!("[online] \"{gname}\": {spers}'s report differs ({line}); the result stands"), s);
             }
-        } else if gm.reports.iter().any(|(v, k)| *k == key && *v != svip) {
+        } else if let Some(matched) = gm.reports.iter().find(|(v, k)| finishers_of(k) == decides && *v != svip).map(|(_, k)| k.clone()) {
+            // the racers the matching report named and this one left out (a game may leave out one who left early): they
+            // did not finish either
+            for name in others_of(&matched) {
+                if !order.iter().any(|p| lower(&p.name) == lower(name)) {
+                    order.push(RacePlayer { name: name.to_string(), place: 0, time: 0.0, left: true });
+                }
+            }
+            let line = line_of(&order);
             let ranked = gm.ranked && order.len() >= 3;
             let was_ranked = gm.ranked;
-            let table = gm.ranked.then(|| self.table_frame(g, &r, &names, ranked && (r.kind as usize) < RACE_TYPES.len()));
+            let n = order.len();
+            let table = gm.ranked.then(|| self.table_frame(g, &r, &names, n, ranked && (r.kind as usize) < RACE_TYPES.len()));
             let far = far_ahead(&gname, r.kind, &order, &self.lobby.game(g).expect("held").players);
             let lobby = &mut self.lobby;
             let players = &lobby.games.get(&g).or_else(|| lobby.dead.get(&g)).expect("held").players;
@@ -1932,7 +1979,7 @@ impl Core {
             let at = if drift { format!(", track {}, {} lap{}", r.track, r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
             self.llog(&format!("[online] \"{gname}\" ({rt}, {}{at}): {line}{tail}", if ranked { "ranked" } else { "unranked" }), s);
         } else {
-            if !gm.reports.is_empty() && !gm.reports.iter().any(|(_, k)| *k == key) {
+            if !gm.reports.is_empty() && !gm.reports.iter().any(|(_, k)| finishers_of(k) == decides) {
                 self.llog(&format!("[online] \"{gname}\": {spers}'s report differs ({line})"), s);
             }
             self.lobby.game_mut(g).expect("held").reports.push((svip, key));
@@ -1978,11 +2025,10 @@ impl Core {
 
     /// The ranked table ($rfn) from the report that decided the result: per player of the game (OPPOn, at most the
     /// table's 6) DATAn, a list in hex (SPEED2.EXE 0x58df4f, 0x7425d0 "l*"): the time in ms (drift: the score), the
-    /// place (-2 "Disconnected": dropped out), two numbers the screen does not show (0), the rating points (0 when the
-    /// race gives none)
-    fn table_frame(&self, g: GameId, r: &RaceReport, names: &[String], points: bool) -> Vec<u8> {
+    /// place (-2 "Disconnected": did not finish), two numbers the screen does not show (0), the rating points of a race
+    /// of n racers (0 when the race gives none)
+    fn table_frame(&self, g: GameId, r: &RaceReport, names: &[String], n: usize, points: bool) -> Vec<u8> {
         let hex = |x: i64| if x < 0 { format!("-{:x}", -x) } else { format!("{x:x}") };
-        let n = r.players.len();
         let mut f: Fields = Vec::new();
         for (i, pl) in self.lobby.game(g).expect("held").players.iter().take(6).enumerate() {
             let want = lower(&pl.name);
@@ -2076,12 +2122,13 @@ impl Core {
     /// A ranking (the game's Rankings screens, SPEED2.EXE 0x58c700 and 0x58c990, the channel from 0x5826e0): CHAN
     /// 6..11 a race type's overall board (Overall Rankings), 12..17 the asking player's own row of it (RANGE=1
     /// FIND=$<persona>, or "$" for one's own), 18..23 the current month's board (Current Month's Leaderboard, its first
-    /// two), 24..29 last month's (Last Month's Leaderboard: none, the server keeps no past month).  Each six in the
-    /// screens' order, Drift before Drag (`SLOT_TYPES`; until 2026-10-25 read as race types, so the Drift pages showed
-    /// the drag board); INDEX (the race type and the player's class, 0x58ce30) only goes back.  Rows: +snp N
-    /// (name), R (rank), P (points), S (points,wins,losses), O.  R and P in decimal (SPEED2.EXE 0x7420b0 reads digits
-    /// 0-9 only; the screen shows P, sorts its list by it and takes the player's class from it), S in hex (0x7425d0,
-    /// "l*"; the screen shows its wins and losses).
+    /// two), 24..29 last month's (Last Month's Leaderboard: the month before's counts as they were when it ended;
+    /// until 2026-11 the server kept none, and the page was empty).  Each six in the screens' order, Drift before Drag
+    /// (`SLOT_TYPES`; until 2026-10-25 read as race types, so the Drift pages showed the drag board); INDEX (the race
+    /// type and the player's class, 0x58ce30) only goes back.  Rows: +snp N (name), R (rank), P (points), S
+    /// (points,wins,losses), O.  R and P in decimal (SPEED2.EXE 0x7420b0 reads digits 0-9 only; the screen shows P,
+    /// sorts its list by it and takes the player's class from it), S in hex (0x7425d0, "l*"; the screen shows its wins
+    /// and losses).
     fn snap(&mut self, s: SessId, f: &FieldMap) {
         let chan = jsx::to_int32(f.num("CHAN", f64::NAN));
         let index = f.get("INDEX").map_or(V::N(0.0), V::from);
@@ -2089,14 +2136,19 @@ impl Core {
         let range = 100i32.min(0i32.max(jsx::to_int32(f.num("RANGE", 0.0))));
         // (in 64 bits: CHAN - 6 does not overflow for a CHAN near -2^31)
         let at = chan as i64 - 6;
-        let kind = (0..18).contains(&at).then(|| SLOT_TYPES[(at % 6) as usize]);
-        let (own, monthly) = ((6..12).contains(&at), at >= 12);
+        let kind = (0..24).contains(&at).then(|| SLOT_TYPES[(at % 6) as usize]);
+        let own = (6..12).contains(&at);
+        let period = match at {
+            12..18 => Period::Month,
+            18.. => Period::LastMonth,
+            _ => Period::All,
+        };
         let find = f.get("FIND").map(str::to_string);
         // the board as last built (stats.rs: at most every few seconds), and its rows by name
         let (rows, total) = {
             let persona = self.lobby.s(s).persona.clone().unwrap_or_default();
             let board = match kind {
-                Some(k) => Some(self.stats.ranking(k, monthly)),
+                Some(k) => Some(self.stats.ranking(k, period)),
                 None => None,
             };
             let all: &[crate::stats::BoardRow] = board.map_or(&[], |b| &b.rows);
@@ -2875,5 +2927,16 @@ mod tests {
         let f = fit(fields![("A", "x".repeat(10)), ("B", "y")], 6, &["A"]);
         assert_eq!(f.len(), 1);
         assert!(four_printable("auth") && four_printable("\\x80") && !four_printable("ab") && !four_printable("a b "));
+    }
+
+    // a kept report's finishers and the others it names, as kept now and as races.json kept them before 2026-11
+    #[test]
+    fn kept_reports() {
+        assert_eq!(finishers_of("Bob:1,Ann:2|Cat,Dan"), "Bob:1,Ann:2");
+        assert_eq!(others_of("Bob:1,Ann:2|Cat,Dan"), ["Cat", "Dan"]);
+        assert_eq!(finishers_of("Bob:1,Ann:2,Cat:0"), "Bob:1,Ann:2");
+        assert_eq!(others_of("Bob:1,Ann:2,Cat:0"), ["Cat"]);
+        assert_eq!((finishers_of("Bob:1|"), others_of("Bob:1|")), ("Bob:1".to_string(), vec![]));
+        assert_eq!(finishers_of("|Ann,Bob"), "");
     }
 }

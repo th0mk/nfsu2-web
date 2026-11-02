@@ -9,7 +9,7 @@
 use super::world::{C, Opts, World, ip};
 use crate::aries::{Fields, V, encode_fields, encode_frame};
 use crate::lobby::Limits;
-use crate::stats::{Race, RacePlayer};
+use crate::stats::{Period, Race, RacePlayer};
 use crate::vhost::{DATA, lan_frame};
 use crate::{PORT_BUDDY, PORT_HTTP, PORT_LOBBY, PORT_REDIRECTOR, VHOST_VIP};
 
@@ -646,7 +646,7 @@ fn results() {
     w.advance(20_000.0);
     report(&mut w, b2, &auth);
     assert!(w.logged("not taken: a time the race has not had"));
-    assert_eq!(w.core.stats.board(0, false).len(), 0);
+    assert_eq!(w.core.stats.board(0, Period::All).len(), 0);
     assert!(w.core.stats.rec("Bravo", false).is_none(), "no records from a report not taken");
     // after the race: Bravo's report alone decides nothing (a report not taken was not his one report); Alpha's,
     // from another browser with the same places, makes the result
@@ -655,13 +655,13 @@ fn results() {
     let b3 = w.login(gb3, "Bravo");
     report(&mut w, b3, &auth);
     assert!(!w.logged("\"r1\" (circuit"), "one report alone");
-    assert_eq!(w.core.stats.board(0, false).len(), 0);
+    assert_eq!(w.core.stats.board(0, Period::All).len(), 0);
     let ga2 = w.client("10.77.0.2");
     let a2 = w.login(ga2, "Alpha");
     report(&mut w, a2, &auth);
     assert!(w.logged("\"r1\" (circuit, unranked): 1 Bravo 3:06.82, 2 Alpha 3:07.67"), "{}", w.text().join("\n"));
     report(&mut w, a2, &auth);
-    assert_eq!(w.core.stats.board(0, false).iter().map(|r| r.races).sum::<f64>(), 2.0, "counted once");
+    assert_eq!(w.core.stats.board(0, Period::All).iter().map(|r| r.races).sum::<f64>(), 2.0, "counted once");
     assert_eq!(w.core.lobby.games.len(), 0, "both players reported: the race is over");
     // a report for no race of this server's
     w.send(a2, "rank", fields![("AUTH", "f00"), ("RESU", RESU), ("NAME0", "Alpha"), ("NAME1", "Bravo")]);
@@ -693,7 +693,12 @@ fn results() {
     assert_eq!(w.c(a2).l("snap").g("COUNT"), "0", "no sprint races yet");
     // points in P are decimal, in S hex: 28 ranked wins, 2800 points (hex af0: the game read P "af0" as 0)
     for _ in 0..28 {
-        let players = ["Alpha", "Bravo"].iter().enumerate().map(|(i, n)| RacePlayer { name: n.to_string(), place: i as u32 + 1, time: 60.0 });
+        let players = ["Alpha", "Bravo"].iter().enumerate().map(|(i, n)| RacePlayer {
+            name: n.to_string(),
+            place: i as u32 + 1,
+            time: 60.0,
+            left: false,
+        });
         w.core.stats.add_race(&Race { kind: 4, ranked: true, track: 4011, players: players.collect() });
     }
     w.send(a2, "snap", fields![("INDEX", 4), ("CHAN", 16), ("RANGE", 1), ("FIND", "$")]);
@@ -702,14 +707,16 @@ fn results() {
 }
 
 // the rankings: the screens' channels go in their own order, Drift before Drag (SPEED2.EXE 0x58ce30, 0x5826e0): the
-// overall boards 6..11, one's own row 12..17, the month's leaders 18..23; last month's (24..29) are empty
+// overall boards 6..11, one's own row 12..17, the month's leaders 18..23, last month's 24..29 (the month before's, as
+// it ended)
 #[test]
 fn rankings_channels() {
     let mut w = world();
     let g = w.client("10.77.0.2");
     let a = w.login(g, "Alpha");
     let add = |w: &mut World, kind: u32, names: [&str; 2]| {
-        let players = names.iter().enumerate().map(|(i, n)| RacePlayer { name: n.to_string(), place: i as u32 + 1, time: 60.0 });
+        let players =
+            names.iter().enumerate().map(|(i, n)| RacePlayer { name: n.to_string(), place: i as u32 + 1, time: 60.0, left: false });
         w.core.stats.add_race(&Race { kind, ranked: true, track: 4011, players: players.collect() });
     };
     add(&mut w, 3, ["Alpha", "Drifter"]);
@@ -728,8 +735,18 @@ fn rankings_channels() {
     assert_eq!(rows(&mut w, 14, true), ["Alpha 100"], "one's own Drift row");
     assert!(rows(&mut w, 15, true).is_empty(), "no drag race of one's own");
     assert_eq!(rows(&mut w, 20, false), ["Alpha 100", "Drifter 0"], "the month's drift leaders");
-    assert!(rows(&mut w, 26, false).is_empty(), "last month's leaders: none kept");
+    assert!(rows(&mut w, 26, false).is_empty(), "last month's leaders: no month before yet");
     assert_eq!(w.c(a).l("snap").g("TOTAL"), "0");
+    assert!(rows(&mut w, 30, false).is_empty(), "past the last channel: nothing");
+    // the next month (the Monthly Point Leaders' Last Month's Leaderboard): the month that ended is last month's
+    let m0 = crate::jsx::month_of(w.t.get());
+    while crate::jsx::month_of(w.t.get()) == m0 {
+        w.t.set(w.t.get() + 86_400_000.0);
+    }
+    assert!(rows(&mut w, 20, false).is_empty(), "this month's drift leaders: none yet");
+    assert_eq!(rows(&mut w, 26, false), ["Alpha 100", "Drifter 0"], "last month's drift leaders");
+    assert_eq!(rows(&mut w, 27, false), ["Dragger 100", "Other 0"], "last month's drag leaders");
+    assert_eq!(rows(&mut w, 8, false), ["Alpha 100", "Drifter 0"], "the overall board stays");
 }
 
 // names: a name another browser holds comes with four digits (the same for one client); its own browser takes it

@@ -110,8 +110,8 @@ fn stats_save() {
     for i in 0..50_000u32 {
         for track in 0..5 {
             let players = vec![
-                RacePlayer { name: format!("Player{}", 2 * i), place: 1, time: 60.0 + track as f64 },
-                RacePlayer { name: format!("Player{}", 2 * i + 1), place: 2, time: 61.5 + track as f64 },
+                RacePlayer { name: format!("Player{}", 2 * i), place: 1, time: 60.0 + track as f64, left: false },
+                RacePlayer { name: format!("Player{}", 2 * i + 1), place: 2, time: 61.5 + track as f64, left: false },
             ];
             st.add_race(&Race { kind: track % 2, ranked: true, track: 4000 + track as i64, players });
         }
