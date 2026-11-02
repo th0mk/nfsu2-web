@@ -78,10 +78,10 @@ While you drive:
   straight ahead. That button held opens the touch settings (the Controls sheet's Touch tab) over the game.
 - **Position**, in the Touch tab and kept in this browser: **Steering left** (the default) or **Steering right**, where
   the pedals go under the left thumb and the steering, the gear buttons and Start under the right (◀ ▶ stay in their
-  order); either one **moved in**, 48 px further from the screen's sides (upright, as far as there is room), for
-  phones whose edges a thumb reaches badly. **Nitro on the steering side** (a switch there) puts Nitro under the thumb
-  that is not on Gas: above the steering, with Start above Gas instead; with tilt, Nitro and the handbrake trade
-  places.
+  order); either one **moved in**, 48 px further from the screen's sides, or **moved in more**, 112 px (upright, as
+  far as there is room), for phones whose edges a thumb reaches badly. **Nitro on the steering side** (a switch
+  there) puts Nitro under the thumb that is not on Gas: above the steering, with Start above Gas instead; with tilt,
+  Nitro and the handbrake trade places.
 - **Gears:** with a manual gearbox (the race's Transmission choice, and always in a drag race), gear down and gear up
   above the steering.
 - **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,

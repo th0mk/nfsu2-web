@@ -20,10 +20,10 @@
 //             spot or lobby (the game's status "roam_near" and "engage", runtime/web/status_web.c; a game without them
 //             shows these always).  The steering button held opens the touch settings (deps.settings)
 //   position  which thumb steers: the steering, the gear buttons and Start under the left thumb and the pedals under
-//             the right, or the other way round; either way by the screen's sides or moved in from them (EDGE_IN px,
-//             as far as there is room).  One list in the Controls sheet's touch tab, kept in this browser; and a
-//             switch there puts Nitro on the steering's side, for the thumb that is not on Gas, with Start in its
-//             place above Gas (nitroSteerSide)
+//             the right, or the other way round; either way by the screen's sides, moved in from them (EDGE_IN px)
+//             or moved in more (EDGE_IN_MORE px), as far as there is room.  One list in the Controls sheet's touch
+//             tab, kept in this browser; and a switch there puts Nitro on the steering's side, for the thumb that is
+//             not on Gas, with Start in its place above Gas (nitroSteerSide)
 //   horizon   while tilt steers, the game's 3D view turns against the phone's tilt from straight ahead, so the road's
 //             horizon stays level with the real one (the HUD stays on the phone; runtime/overrides.c sub_005c7ec0).
 //             Not in a cutscene (a race's start); faded in and out.  A switch in the Controls sheet's touch tab.
@@ -128,14 +128,15 @@ export interface ListSetting<T extends string | number = string | number> {
 }
 
 /** the touch controls' position: which thumb steers, and the two groups by the screen's sides or moved in */
-export type Position = 'left' | 'left-in' | 'right' | 'right-in';
+export type Position = 'left' | 'left-in' | 'left-more' | 'right' | 'right-in' | 'right-more';
 const POSITION_NAMES: Record<Position, string> = {
-  left: N('Steering left'), 'left-in': N('Steering left, moved in'), right: N('Steering right'), 'right-in': N('Steering right, moved in'),
+  left: N('Steering left'), 'left-in': N('Steering left, moved in'), 'left-more': N('Steering left, moved in more'),
+  right: N('Steering right'), 'right-in': N('Steering right, moved in'), 'right-more': N('Steering right, moved in more'),
 };
-/** moved in: the px the two groups move in from the screen's sides, as far as that leaves them their room */
-const EDGE_IN = 48;
+/** moved in (more): the px the two groups move in from the screen's sides, as far as that leaves them their room */
+const EDGE_IN = 48, EDGE_IN_MORE = 112;
 export const touchPosition: ListSetting<Position> = (() => {
-  const store = 'nfsu2-touch-position', values: readonly Position[] = ['left', 'left-in', 'right', 'right-in'];
+  const store = 'nfsu2-touch-position', values: readonly Position[] = ['left', 'left-in', 'left-more', 'right', 'right-in', 'right-more'];
   let now: Position = (() => {
     try { const s = localStorage.getItem(store) as Position; return values.includes(s) ? s : 'left'; } catch { return 'left'; }
   })();
@@ -782,7 +783,7 @@ export class TouchControls {
     this.root.dataset.position = p;
     this.root.toggleAttribute('data-right', p.startsWith('right'));
     this.placeIn();
-    if (was) this.deps.log(`[app] touch controls: steering on the ${p.startsWith('right') ? 'right' : 'left'}${p.endsWith('-in') ? ', moved in' : ''}`);
+    if (was) this.deps.log(`[app] touch controls: steering on the ${p.startsWith('right') ? 'right' : 'left'}${p.endsWith('-in') ? ', moved in' : p.endsWith('-more') ? ', moved in more' : ''}`);
   }
   /** Nitro on the steering's side (style.css .touch[data-nitro]), which takes more room upright (auto's size) */
   private applyNitro(start = false) {
@@ -792,10 +793,10 @@ export class TouchControls {
     touchSize.check();
     if (!start) this.deps.log(`[app] touch controls: Nitro on the ${on ? 'steering' : 'pedals'}' side`);
   }
-  /** moved in: EDGE_IN px from the sides, or as much of it as leaves the two groups their room at this size
-   *  (style.css --in) */
+  /** moved in (more): EDGE_IN (EDGE_IN_MORE) px from the sides, or as much of it as leaves the two groups their room
+   *  at this size (style.css --in) */
   private placeIn() {
-    const want = touchPosition.get().endsWith('-in') ? EDGE_IN : 0;
+    const p = touchPosition.get(), want = p.endsWith('-in') ? EDGE_IN : p.endsWith('-more') ? EDGE_IN_MORE : 0;
     const m = getComputedStyle(this.root), px = (v: string) => parseFloat(v) || 12;
     const free = innerWidth - px(m.paddingLeft) - px(m.paddingRight) - (upright() ? ROOM_UPRIGHT : ROOM).sides * this.scale;
     this.root.style.setProperty('--in', `${Math.max(0, Math.min(want, Math.floor(free / 2)))}px`);
