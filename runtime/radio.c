@@ -6,8 +6,13 @@
  *     suits it; its tags stand in the song's table entry, so the plaque shows them.  No track suits the place:
  *     silence, as when every song of the place is Off;
  *   - the stream reader hands the mixer the track's sound, which the page decodes into two rings
- *     (runtime/web/radio_proto.h).  When the track is over the reader says "end of stream" and the runtime has the
- *     game stop its song the way it does on leaving a menu, so the game starts its next song.
+ *     (runtime/web/radio_proto.h).  When the track is over the reader hands the mixer silence and the runtime has the
+ *     game stop its song the way it does on leaving a menu, so the game starts its next song.  The reader never says
+ *     "end of stream": the mixer would free that reader's input and voice alone (0x7292ac), the game's stop, which
+ *     finds the song through its voice, would leave the other reader playing unseen, and that one would take the
+ *     blocks of the songs after it from the music's stream (the two readers of an EALayer3 song also share one
+ *     decoder).  Both readers take the page's words as they were at the start of the mixer step, so they hand over
+ *     the same frames and the track ends for both in the same step.
  * A track the page cannot decode is skipped; a page that does not answer in 20 s gives silence, and one that stops
  * writing in the middle of a track ends it; memory that does not look right switches the radio off (radio_fail),
  * never the game.  Radio off: every wrapper calls the game's own code.  Log lines are "[radio] ...".
@@ -69,7 +74,6 @@ void guest_noyield(int d);        /* win32_ext.c: no fair yield, a free mutex ta
 #define VOICE_CHANNELS     4u            /* in a voice: the mixer input of each channel, a word apiece */
 #define VOICE_CHANNEL_N    0x23u         /* byte */
 #define VOICE_ALIVE        0x6du         /* byte */
-#define END_OF_STREAM      0xffffffffu
 #define SOUND_API_ACTIVE   0x008b7bbcu   /* byte: the music's event system is up */
 #define SOUND_API_BUSY     0x008b7bc0u   /* word: the event system's tick or one of its calls is under way; a call that finds it set does nothing (overrides.c, sub_0073b900) */
 #define SOUND_GROUPS_OWNER 0x0082b974u   /* pointer to the first of the game's sound owners */
@@ -86,6 +90,7 @@ enum { SONG_GAME, SONG_WAITING, SONG_FOLDER, SONG_SILENT };   /* who makes the s
 
 typedef struct { uint32_t reader[MUSIC_INPUTS], count; uint8_t side[MUSIC_INPUTS]; int paused; } Music;   /* the song's readers: none while the game has no song in the mixer */
 typedef struct { int who, over, ended, again; uint32_t place, seq, read[CHANNELS], phase[CHANNELS], waited, starved; } Song;   /* place: 0 menus, 1 driving */
+typedef struct { uint32_t total, written; } PageNow;   /* the page's words at the start of this mixer step, for both readers */
 typedef struct {
     int was_on;
     int lent;                                      /* the table entry lent the page's tags, or NO_TAGS_LENT */
@@ -98,6 +103,7 @@ typedef struct {
 
 static Music g_music;
 static Song g_song;
+static PageNow g_page_now;
 static Radio g_radio = { .lent = NO_TAGS_LENT };
 
 _Static_assert(TRAX_TABLE + TRAX_ENTRY_SIZE * RADIO_TRACKS < GUEST_END, "the table is in the guest");
@@ -299,6 +305,13 @@ static void follow_page(const HostStatusRadio *r){
     }
 }
 
+/* Once a mixer step, after follow_page: how far the page has written, the same for both readers.  Read by each reader,
+ * a write landing between the two put one side a step ahead of the other: the track then ended for that side first. */
+static void take_page_now(const HostStatusRadio *r){
+    g_page_now.total = __atomic_load_n(&r->reply.total, __ATOMIC_RELAXED);
+    g_page_now.written = __atomic_load_n(&r->reply.written, __ATOMIC_ACQUIRE);
+}
+
 /* the Game Music Volume slider counts while driving; in the menus the game's own music is at the menu's level */
 static float track_volume(void){
     float slider = MRF32(GAME_MUSIC_VOLUME);
@@ -331,15 +344,14 @@ static int ring_frame(const float *ring, uint32_t from, uint32_t have, uint64_t 
 
 /* What the page wrote is only trusted so far: `have` is cut to the ring, the ring index is masked, a sample is
  * NaN (silence) or limited to full scale, `total` only ends a track, and a page that stops writing ends it after as
- * long as a wait for a track.  Returns 1 when the track is over. */
-static int read_folder_track(HostStatusRadio *r, unsigned ch, uint32_t out, uint32_t n){
+ * long as a wait for a track.  Sets g_song.over when the track is over; past its end the frames are silence. */
+static void read_folder_track(HostStatusRadio *r, unsigned ch, uint32_t out, uint32_t n){
     if (ch >= CHANNELS || !g_radio.ring){
         radio_fail(r, "the rings are not there");
         memset(g_mem + out, 0, 4u * n);
-        return 0;
+        return;
     }
-    uint32_t total = __atomic_load_n(&r->reply.total, __ATOMIC_RELAXED);
-    uint32_t written = __atomic_load_n(&r->reply.written, __ATOMIC_ACQUIRE);
+    uint32_t total = g_page_now.total, written = g_page_now.written;
     uint32_t have = written - g_song.read[ch];
     const float *ring = g_radio.ring + ch * RING_FRAMES;
     float volume = track_volume();
@@ -358,7 +370,6 @@ static int read_folder_track(HostStatusRadio *r, unsigned ch, uint32_t out, uint
     if (made) g_song.starved = 0;
     else g_song.starved += n;
     g_song.over = made == 0 && (g_song.read[ch] >= total || written >= total || g_song.starved > WAIT_FRAMES);
-    return g_song.over;
 }
 
 /* the ring of a reader: the side its input feeds (the two sides differ, follow_music_inputs) */
@@ -379,7 +390,11 @@ void sub_007292bc(CPU *c){
     if (on && g_song.who == SONG_SILENT && page_has_track_for(r, g_song.place)) g_radio.stop = "a track fits this place now";
     if (on && !g_radio.stop && g_song.who == SONG_FOLDER && g_song.over && !g_song.ended) g_radio.stop = "track over";
     if (g_radio.stop) stop_game_song(c);
-    if (on) follow_music_inputs(r);
+    if (on){
+        follow_music_inputs(r);
+        follow_page(r);
+        take_page_now(r);
+    }
     sub_007292bc_orig(c);
 }
 
@@ -422,16 +437,14 @@ void sub_0072d18d(CPU *c){
         sub_0072d18d_orig(c);
         return;
     }
-    follow_page(r);
     sub_0072d18d_orig(c);
-    int over = 0;
     if (g_song.who == SONG_FOLDER && !g_music.paused){
-        over = read_folder_track(r, ring_of_reader(reader), out, n);
+        read_folder_track(r, ring_of_reader(reader), out, n);
     } else {
         memset(g_mem + out, 0, 4u * n);
         if (g_song.who != SONG_SILENT) g_song.waited += n;
     }
-    if (g_song.who != SONG_SILENT) c->eax = over ? END_OF_STREAM : n;
+    if (g_song.who != SONG_SILENT) c->eax = n;   /* never the end of the stream, also past the track's end (see the top) */
 }
 #else
 void sub_007292bc(CPU *c){ sub_007292bc_orig(c); }

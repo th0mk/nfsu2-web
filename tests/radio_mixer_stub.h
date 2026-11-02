@@ -18,6 +18,8 @@
 #define MENUS_ONLY 1u
 #define DRIVING_ONLY 2u
 #define PAGE_RING_FRAMES (1u << 17)
+#define NO_VOICE    0xffffffffu        /* a stream without a voice */
+#define READER_ENDS 0xffffffffu        /* a reader's "end of stream": the game's mixer frees that input (0x7292ac) */
 
 typedef struct { int game_song, race_sounds, folder_song; } Ear;
 static Ear ear[2];
@@ -25,6 +27,7 @@ static struct {
     int readers, pending, restart, in_step, paused, muted, plaques, plaque_folder_song, last_index, stops;
     int song_slot[2], reuse_addresses, song_on_both_sides, voices;
     int noyield, stop_noyield;                     /* guest_noyield's depth now, and in the last stop */
+    int page_writes_between, ends_of_stream;       /* the page writes only after the song's first reader of a step (from the first one fed); readers that said end of stream */
 } g;
 static struct { int next_id, served_seq, silent; uint32_t track_steps, frames_per_step; } pg;
 static CPU cpu;
@@ -56,11 +59,15 @@ static void page_serves_track(uint32_t seq){
     publish_tags();
 }
 
+static void page_writes(void){
+    if (g_page.reply.written < g_page.reply.total && g_page.reply.written - g_page.rings.read < PAGE_RING_FRAMES) g_page.reply.written += pg.frames_per_step ? pg.frames_per_step : STEP_FRAMES;
+}
+
 static void page_step(void){
     uint32_t seq = g_page.request.req_seq;
     if (pg.silent || !seq) return;
     if ((int)seq != pg.served_seq) page_serves_track(seq);
-    if (g_page.reply.written < g_page.reply.total && g_page.reply.written - g_page.rings.read < PAGE_RING_FRAMES) g_page.reply.written += pg.frames_per_step ? pg.frames_per_step : STEP_FRAMES;
+    if (!g.page_writes_between) page_writes();
 }
 
 static unsigned add_input(float marker, float left, float right){
@@ -81,7 +88,7 @@ static unsigned add_input(float marker, float left, float right){
 
 static int remove_song_readers(void){
     int had = g.song_slot[0] || g.song_slot[1];
-    MR32(STREAM + STREAM_VOICE) = END_OF_STREAM;
+    MR32(STREAM + STREAM_VOICE) = NO_VOICE;
     MR8(VOICES + VOICE_SIZE + VOICE_ALIVE) = 0;
     for (int k = 0; k < 2; k++) if (g.song_slot[k]) MR8(INPUTS + INPUT_SIZE * (unsigned)(g.song_slot[k] - 1)) = 0;
     g.song_slot[0] = g.song_slot[1] = 0;
@@ -129,12 +136,19 @@ void sub_00739320_orig(CPU *c){
 }
 
 static void pull_inputs(void){
+    int song_readers = 0;
     memset(ear, 0, sizeof ear);
     if (g.muted || g.paused) return;
     for (unsigned i = 0; i < MR8(MIXER_INPUT_COUNT); i++){
         uint32_t input = INPUTS + INPUT_SIZE * i;
         if (MR8(input + INPUT_KIND) != 2u) continue;
         call(sub_0072d18d, MR32(input + INPUT_READER), STEP_FRAMES, 0, OUT);
+        if (cpu.eax == READER_ENDS){
+            MR8(input + INPUT_KIND) = 0;
+            g.ends_of_stream++;
+            continue;
+        }
+        if (g.page_writes_between && g_music.count && ((int)i + 1 == g.song_slot[0] || (int)i + 1 == g.song_slot[1]) && ++song_readers == 1) page_writes();
         float s = MRF32(OUT);
         for (int e = 0; e < 2; e++){
             if (!(MRF32(input + INPUT_GAINS + 4u * (unsigned)e) > 0.0f) || s == 0.0f) continue;

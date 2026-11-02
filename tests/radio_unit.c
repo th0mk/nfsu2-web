@@ -81,7 +81,7 @@ static void reset(void){
     MR32(OWNER + MUSIC_STREAM) = 0;
     MR8(STREAM_HANDLES) = 1;
     MR32(STREAM_TABLE) = STREAM;
-    MR32(STREAM + STREAM_VOICE) = END_OF_STREAM;
+    MR32(STREAM + STREAM_VOICE) = NO_VOICE;
     MR32(VOICE_TABLE) = VOICES;
     MR16(VOICE_COUNT) = 4;
     MR32(GAME_FLOW) = FLOW;
@@ -200,6 +200,22 @@ TEST(folder_song_ends__next_folder_song_plays){
     folder_song_lasts(40);
     folder_song_plays_in_main_menu();
     steps(40);
+    expect_folder_song(2);
+}
+TEST(folder_song_ends__no_reader_says_end_of_stream){
+    folder_song_lasts(40);
+    folder_song_plays_in_main_menu();
+    steps(40);
+    expect(g.ends_of_stream == 0, "the mixer frees no reader of the song: the game stops the song");
+    expect_folder_song(2);
+}
+TEST(page_writes_between_the_two_readers__both_sides_in_step_and_end_together){
+    g.page_writes_between = 1;
+    folder_song_lasts(40);
+    folder_song_plays_in_main_menu();
+    expect(g_song.read[0] == g_song.read[1], "both sides have taken the same frames");
+    steps(40);
+    expect(g.ends_of_stream == 0, "the mixer frees no reader of the song: the game stops the song");
     expect_folder_song(2);
 }
 TEST(game_song_ends_before_folder_song__same_folder_song_goes_on){
