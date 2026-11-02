@@ -2283,6 +2283,9 @@ static int hud_on_top(uint32_t pkg){
 #endif
 #define SAY_NEAR_M      250.f         /* heard from as far as a horn is (horn.c FAR_M), and from anyone in our race lobby */
 #define SAY_SHOW_US     5000000       /* the line over the car: as long as the page shows it */
+#define SAY_COUNTDOWN   152           /* the special phrase, a countdown (phrases.ts COUNTDOWN): 5 s and GO!, so its */
+#define SAY_COUNT_US    6500000       /* line stays over the car longer */
+#define SAY_UNTIL(p)    ((p) == SAY_COUNTDOWN ? SAY_COUNT_US : SAY_SHOW_US)
 #define SAY_BURST       3             /* at most this many from one player in SAY_WINDOW_US (the page keeps the player's
                                          own to that): more from a friend are not shown */
 #define SAY_WINDOW_US   6000000
@@ -6290,8 +6293,8 @@ static void room_alone(int64_t host, uint8_t st){
  * driving in free roam it goes to every friend (rc_send_say) and back to the page as said by the player.  A friend's
  * is shown when their car was within SAY_NEAR_M of ours when last seen, or they are in our race lobby, while we are
  * in free roam and not racing; not past SAY_BURST in SAY_WINDOW_US from one friend, nor the same phrase again within
- * SAY_AGAIN_US.  To the page as {"id","name","p"} (+ "me" for the player's own, "lobby" for a lobby's).  With the
- * lock held. */
+ * SAY_AGAIN_US.  To the page as {"id","name","p"} (+ "me" for the player's own, "lobby" for a lobby's, "d" a
+ * friend's distance in metres when last seen; the page shows the countdown big within 50 m).  With the lock held. */
 static int say_burst(const int64_t *t, int64_t host){
     int k = 0;
     for (int i = 0; i < SAY_BURST; i++) k += t[i] && host - t[i] < SAY_WINDOW_US;
@@ -6302,12 +6305,13 @@ static void say_stamp(int64_t *t, int64_t host){
     for (int i = 1; i < SAY_BURST; i++) if (t[i] < t[o]) o = i;   /* the oldest goes */
     t[o] = host;
 }
-static void say_page(uint32_t id, const char *name, int phrase, int me, int lobby){
+static void say_page(uint32_t id, const char *name, int phrase, int me, int lobby, float d){
     char buf[128], ids[16]; MpJs j = { buf, 0, sizeof buf };
     snprintf(ids, sizeof ids, "%u", id);
     js_raw(&j, "{"); js_key(&j, "id"); js_raw(&j, ids); js_str(&j, "name", name); js_int(&j, "p", phrase);
     if (me) js_int(&j, "me", 1);
     if (lobby) js_int(&j, "lobby", 1);
+    if (d >= 0.f && d < 1e8f) js_int(&j, "d", (int)(d + 0.5f));
     js_raw(&j, "}");
     if (roam_plat_said(buf) < 0) rlog("[roam] f=%ld quick chat: the page's ring is full, a line lost\n", rh_frame());
 }
@@ -6323,8 +6327,8 @@ static void say_send(int phrase, int64_t host, int can){
     if (say_burst(g_say.mine, host)){ rlog("[roam] f=%ld quick chat: phrase %d not said (too many at once)\n", rh_frame(), phrase); return; }
     say_stamp(g_say.mine, host);
     int to = rc_send_say(&g_s, (uint8_t)phrase, ++g_say.seq);
-    g_say.said++; g_say.mine_until = host + SAY_SHOW_US;
-    say_page(g_s.conf.self_id, g_s.conf.name, phrase, 1, 0);
+    g_say.said++; g_say.mine_until = host + SAY_UNTIL(phrase);
+    say_page(g_s.conf.self_id, g_s.conf.name, phrase, 1, 0, -1.f);
     rlog("[roam] f=%ld quick chat: said phrase %d to %d player(s)\n", rh_frame(), phrase, to);
 }
 static void say_recv(uint32_t from, int phrase, uint8_t seq, int64_t host, int can){
@@ -6346,9 +6350,9 @@ static void say_recv(uint32_t from, int phrase, uint8_t seq, int64_t host, int c
     w->seq = seq; w->heard = 1;
     if (why){ g_say.dropped++; rlog("[roam] f=%ld quick chat: %s's phrase %d not shown (%s, %.0f m)\n", rh_frame(), p->name, phrase, why, (double)d); return; }
     say_stamp(w->t, host);
-    w->phrase = (uint8_t)phrase; w->at = host; w->until = host + SAY_SHOW_US;
+    w->phrase = (uint8_t)phrase; w->at = host; w->until = host + SAY_UNTIL(phrase);
     g_say.heard++;
-    say_page(from, p->name, phrase, 0, lobby);
+    say_page(from, p->name, phrase, 0, lobby, d);
     rlog("[roam] f=%ld quick chat: %s said phrase %d (%.0f m%s)\n", rh_frame(), p->name, phrase, (double)d, lobby ? ", our lobby" : "");
 }
 static void say_frame(int64_t host, int in_roam, uint8_t st){

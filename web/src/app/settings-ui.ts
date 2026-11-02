@@ -773,9 +773,12 @@ export class SettingsPanel {
       for (let i = 0; i < 4; i++) {
         const s = document.createElement('select'); s.id = `${id}-${g * 4 + i}`; s.dataset.slot = String(g * 4 + i);
         s.setAttribute('aria-label', t('Group {n}, phrase {i}', { n: g + 1, i: i + 1 }));
-        for (const c of CATS) {
+        // the special ones (the countdown) in a group of their own, first; then the categories'
+        for (const c of [{ id: null, name: N('Special') }, ...CATS]) {
           const og = document.createElement('optgroup'); og.label = t(c.name);
-          PHRASES.forEach((p, n) => { if (p.cat === c.id) og.append(new Option(t(p.text), String(n), false, n === layout[g * 4 + i])); });
+          PHRASES.forEach((p, n) => {
+            if (c.id === null ? !!p.special : !p.special && p.cat === c.id) og.append(new Option(t(p.text), String(n), false, n === layout[g * 4 + i]));
+          });
           s.append(og);
         }
         s.onchange = save;

@@ -999,6 +999,20 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .qc-b svg { width: 0.95em; height: 0.95em; flex: none; fill: currentColor; filter: drop-shadow(0 1px 2px #000); }
 @keyframes qc-pop { 0% { opacity: 0; transform: translateY(30%) scale(0.6); } 70% { opacity: 1; transform: scale(1.06); } 100% { transform: none; } }
+/* the countdown, a special phrase (quickchat.ts): its stopwatch in the picker and over the car, dimmed in a race (it
+ * does nothing there); its big number for the players near the one who said it, the chat lines' lime and shadow, in
+ * the picture's middle a quarter down (placed by the page), a pop at each */
+svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertical-align: -0.14em; fill: none; stroke: var(--lime); stroke-width: 1.6; stroke-linecap: round; }
+.qc-b svg.qc-watch { width: 0.95em; height: 0.95em; margin-right: 0; fill: none; stroke: currentColor; }
+.qc-off { color: var(--muted); }
+.qc-off svg.qc-watch { stroke: var(--muted); }
+.qc-count { position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%); transition: opacity 0.6s linear; }
+.qc-count.out { opacity: 0; }
+.qc-count span {
+  display: block; white-space: nowrap; transform-origin: 50% 50%; animation: qc-pop 0.22s ease-out both;
+  font: italic 700 calc(80 * var(--u)) / 1 var(--font); color: var(--lime);
+  text-shadow: 0 0 2px #000, 0 2px 6px #000, 0 0 calc(14 * var(--u)) rgba(0, 0, 0, 0.6);
+}
 /* quick chat's picker: on the left in the notices' place (they step aside while it is open), the race lobby's card
  * in its sizes (.lobby: its width, padding and text, the title, the places' rows, the key caps, the hint); on a touch
  * screen all sixteen at the top, big enough to tap */

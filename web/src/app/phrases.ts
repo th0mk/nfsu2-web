@@ -1,8 +1,9 @@
 // Quick chat's phrases (quickchat.ts) and the groups the player puts sixteen of them in (settings.ini quick_chat_phrases,
 // quick_chat_groups; the start page's Your phrases row).  A phrase on the wire is its number here, its place in
 // PHRASES: the numbers are the protocol, so a phrase is only ever added at the end, never moved or removed (a game
-// with fewer shows nothing for a number it does not have).  The first sixteen were the only ones before, and are
-// still everyone's default.  Pure (no DOM): settings.ts checks the settings with it.
+// with fewer shows nothing for a number it does not have).  The first sixteen were the only ones before, and were
+// everyone's default until the countdown took One more?'s place (2026-11-03).  Pure (no DOM): settings.ts checks the
+// settings with it.
 import { N } from './i18n';
 
 /** the library's categories: also the names a group can take (each translated) */
@@ -19,8 +20,8 @@ export const CATS = [
 ] as const;
 export type CatId = typeof CATS[number]['id'];
 
-/** every phrase, in the order of its number, with its category */
-export const PHRASES: readonly { text: string; cat: CatId }[] = ([
+/** every phrase, in the order of its number, with its category; special: not said as words (quickchat.ts) */
+export const PHRASES: readonly { text: string; cat: CatId; special?: 'countdown' }[] = ([
   // 0-15: the first sixteen, the default layout
   [N('Hey!'), 'hi'], [N('Nice car!'), 'nice'], [N('Thanks!'), 'thanks'], [N('Bye!'), 'hi'],
   [N('Yes'), 'reply'], [N('No'), 'reply'], [N('Sorry!'), 'thanks'], [N('lol'), 'reply'],
@@ -69,12 +70,17 @@ export const PHRASES: readonly { text: string; cat: CatId }[] = ([
   [N('I\'m stuck!'), 'help'], [N('Help?'), 'help'], [N('Lag!'), 'help'], [N('AFK a sec'), 'help'], [N('Out of nitrous'), 'help'],
   [N('Tuning tips?'), 'help'], [N('Which car is that?'), 'help'], [N('New here!'), 'help'], [N('First time?'), 'help'],
   [N('On my phone!'), 'help'],
-] as [string, CatId][]).map(([text, cat]) => ({ text, cat }));
+  // 152: special, a countdown for the players near (5 s, then GO!: quickchat.ts; roam_game.c SAY_COUNTDOWN)
+  [N('Countdown'), 'race', 'countdown'],
+] as [string, CatId, 'countdown'?][]).map(([text, cat, special]) => special ? { text, cat, special } : { text, cat });
+
+/** the countdown's number */
+export const COUNTDOWN = 152;
 
 /** the slots: four groups of four */
 export const SLOTS = 16;
-/** the default: the first sixteen, in the groups they always had */
-export const DEFAULT_PHRASES: readonly number[] = Array.from({ length: SLOTS }, (_, i) => i);
+/** the default: the first sixteen, in the groups they always had, but the countdown in the last place (One more?'s) */
+export const DEFAULT_PHRASES: readonly number[] = [...Array.from({ length: SLOTS - 1 }, (_, i) => i), COUNTDOWN];
 export const DEFAULT_GROUPS: readonly CatId[] = ['hi', 'reply', 'drive', 'race'];
 
 const CAT_IDS = new Set<string>(CATS.map(c => c.id));

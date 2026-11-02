@@ -442,7 +442,7 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # of 1 to 4, and the four groups' names (hi, reply, thanks, nice, drive,
 # meet, race, react or help).  The start page's Your phrases picks them.
 # [NFSU2_ROAM_SAY_PHRASES, NFSU2_ROAM_SAY_GROUPS]
-#quick_chat_phrases = 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+#quick_chat_phrases = 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,152
 #quick_chat_groups = hi,reply,drive,race
 # Snapshots per second (10 to 30), the delay ghost cars are shown with in
 # ms (0 to 1000) and the longest cars are extrapolated in ms (0 to 1000).

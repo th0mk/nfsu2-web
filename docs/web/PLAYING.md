@@ -475,17 +475,24 @@ Good to know:
   | Hey! | Yes | Follow me! | Race? |
   | Nice car! | No | Wait up! | Join my race! |
   | Thanks! | Sorry! | Let's go! | gg |
-  | Bye! | lol | Nice! | One more? |
+  | Bye! | lol | Nice! | Countdown (special) |
 
   Online, Your phrases, Choose phrases puts any of about 150 phrases in each place (greetings, replies,
   thanks and sorry, compliments, driving together, car meets, races, reactions, help) and names each group.
+
+  **Countdown** is a special phrase, with a stopwatch in the picker (in Choose phrases under Special; in the sixteen
+  you start with in One more?'s place, since 2026-11-03): a start for the players lined up behind you in free roam.
+  It counts 5, 4, 3, 2, 1 and GO!, big in the middle of the picture for you and the players within 50 m of you, over
+  your car for the others who see your phrases. While one is on near you, and for 10 seconds after its GO!, nobody
+  else's shows and yours waits. In a race it is dimmed and does nothing (the race has its own start).
 
   A phrase shows over your car and in the chat log on the left, for the players within 250 m (where they hear your
   horn) and everyone in your race lobby, wherever they are; in the lobby's card it shows beside your name. Over a car
   only while its name shows (within 100 m, in front of you, the game's player-names option on). Three phrases in six
   seconds at most; then the picker asks you to wait. Online, Quick chat turns it off: you then neither see
   nor send phrases, and the others' games send you none. Players on an older version neither see yours nor send any,
-  and those who have not reloaded the page since the phrases came see only the first sixteen.
+  and those who have not reloaded the page since the phrases came see only the first sixteen (since the countdown
+  came: no countdown).
 
   It works in races with other players too: the races of free roam's lobbies, the game's Online races and its LAN
   races, with free roam on or off, while you drive and on the results (free roam's trips leave those after about

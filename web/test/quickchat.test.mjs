@@ -7,6 +7,9 @@
 //   the touch button, and 1-4, Esc and the right stick stay the game's
 // - a race between players (the game's "netrace") with free roam off: the picker, and the phrase goes to the race
 // - quick chat off: no picker anywhere
+// - the countdown (the special phrase, in the default sixteen's last place): its stopwatch in the picker, 5 to 1 and
+//   GO! big for the one who said it and a friend within 50 m, over the car for one farther; while one is on and 10 s
+//   after, another's is not shown and the player's own waits; in a race dimmed, and it says nothing there
 // The module is bundled from web/src with esbuild into a blank page.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -30,6 +33,7 @@ test.after(() => browser.close());
  *  that reached the game (the canvas) w.game */
 async function page() {
   const p = await browser.newPage();
+  await p.clock.install();
   await p.setContent('<div id="stage" style="position:relative;width:640px;height:480px"><canvas id="game" tabindex="0"></canvas></div>');
   await p.addScriptTag({ content: js });
   await p.evaluate(() => {
@@ -37,8 +41,10 @@ async function page() {
     w.st = {}; w.said = []; w.game = [];
     document.getElementById('game').addEventListener('keydown', e => w.game.push(e.code));
     w.qc = new w.M.QuickChat(document.getElementById('stage'), { line() {}, lobby() {}, place() {}, log() {} });
-    w.session = { status: { read: () => new Map(Object.entries(w.st)) }, net: { say: (p, race) => { w.said.push([p, race]); return true; } } };
+    w.session = { status: { read: () => new Map(Object.entries(w.st)) }, net: { say: (p, race) => { w.said.push([p, race]); return true; } },
+      viewRect: () => ({ x: 0, y: 0, w: 640, h: 480 }) };
   });
+  await p.clock.runFor(1000);           // (the page's clock is the test's: past the status's 100 ms between reads)
   return p;
 }
 /** a game started: quick chat on or off, free roam on or off, the game's "drive" and "netrace" */
@@ -115,5 +121,51 @@ test('quick chat off: no picker', async () => {
     await touch(p);
     assert.equal(await open(p), -1);
   }
+  await p.close();
+});
+
+/** what the game sends back (roam_game.c say_page): a phrase said by player id */
+const from = (p, o) => p.evaluate(o => /** @type {any} */ (window).qc.said(JSON.stringify(o)), o);
+const count = p => p.evaluate(() => /** @type {any} */ (window).qc.state().count);
+const text = (p, sel) => p.evaluate(sel => document.querySelector(sel)?.textContent ?? null, sel);
+
+test('the countdown: big near, over the car far, one at a time, not in a race', async () => {
+  const p = await page();
+  await game(p, true, true, 2);
+  await key(p, 'Digit4');
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.qc-row svg.qc-watch').length), 1, 'the fourth group shows it with its stopwatch');
+  assert.equal(await text(p, '.qc-row:nth-of-type(5) .qc-text'), 'Countdown', 'in the last place (the default sixteen)');
+  await key(p, 'Digit4');
+  assert.deepEqual(await said(p), [[152, false]], 'said as a phrase, in free roam');
+  await from(p, { id: 1, name: 'Me', p: 152, me: 1 });
+  assert.deepEqual(await count(p), { id: 1, big: true, text: '5' }, 'the player\'s own: big');
+  assert.equal(await text(p, '.qc-count'), '5');
+  for (const n of ['4', '3', '2', '1', 'GO!']) {
+    await p.clock.runFor(1000);
+    assert.equal((await count(p))?.text, n);
+  }
+  await from(p, { id: 2, name: 'Ann', p: 152, d: 10 });
+  assert.equal((await count(p))?.id, 1, 'another\'s while one is on: not shown');
+  await p.clock.runFor(1000);
+  assert.equal(await count(p), null, 'gone after GO!');
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.qc-count').length), 0);
+  await from(p, { id: 2, name: 'Ann', p: 152, d: 10 });
+  assert.equal(await count(p), null, 'nor within 10 s after');
+  await key(p, 'Digit4'); await key(p, 'Digit4');
+  assert.deepEqual(await said(p), [[152, false]], 'the player\'s own waits too');
+  assert.equal(await text(p, '.qc-wait'), 'Wait a moment');
+  await p.clock.runFor(10000);
+  await from(p, { id: 3, name: 'Bo', p: 152, d: 80 });
+  assert.deepEqual(await count(p), { id: 3, big: false, text: '5' }, 'past 50 m: over the car');
+  assert.deepEqual(await p.evaluate(() => /** @type {any} */ (window).qc.state().lines), [3]);
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.qc-line svg.qc-watch').length), 1, 'its line with the stopwatch');
+  await p.clock.runFor(17000);
+  await from(p, { id: 4, name: 'Cy', p: 152, d: 50 });
+  assert.equal((await count(p))?.big, true, 'within 50 m: big');
+  await game(p, true, false, 1, 1);
+  await key(p, 'Digit4');
+  assert.equal(await p.evaluate(() => document.querySelectorAll('.qc-row .qc-off svg.qc-watch').length), 1, 'in a race: dimmed');
+  await key(p, 'Digit4');
+  assert.deepEqual(await said(p), [], 'and it says nothing there');
   await p.close();
 });
