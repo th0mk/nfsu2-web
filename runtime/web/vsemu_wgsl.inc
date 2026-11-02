@@ -2,7 +2,7 @@
  *
  * Included at the end of vsemu.c (wasm builds, or native with -DVSEMU_WGSL for
  * offline tools) so it shares the parser's private VSProg/VSIns and token
- * macros.  The authoritative contract with the renderer is docs/web/gpu-abi.md:
+ * macros.  Its contract with the renderer:
  * module layout, bindings, structs, override constants.
  *
  * Semantics are the Mac backends' on purpose (the Mac build is the reference
@@ -41,7 +41,7 @@ static void wb_put(WBuf *b, const char *fmt, ...){
     b->n += (size_t)w;
 }
 
-/* ---- shared module text (gpu-abi.md sections 2-5) ---- */
+/* ---- shared module text ---- */
 static const char W_VOUT[] =
     "struct VOut {\n"
     "  @builtin(position) pos: vec4f,\n"
@@ -52,7 +52,7 @@ static const char W_VOUT[] =
 /* K is a 64 KB window of the frame's VS constant arena, bound once for many
  * draws; a draw's block {stride, tsel, base, pad; c[0..255]} starts at row
  * kb = instance_index (the draw's firstInstance), so a draw no longer needs a
- * bind group of its own (gpu-abi.md section 3). */
+ * bind group of its own. */
 static const char W_VSPAR[] =
     "struct VSWin { c: array<vec4f, " WSTR(GW_KWIN_ROWS) "> }\n"
     "@group(0) @binding(0) var<storage, read> VB: array<u32>;\n"

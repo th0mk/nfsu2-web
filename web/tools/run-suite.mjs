@@ -107,7 +107,7 @@ const OPT = [{ name: 'outrun', script: 'career_outrun.txt', marker: 'player comp
 { name: 'sponsor', script: 'career_sponsor.txt', marker: 'waitfng UI_postrace.fng satisfied', extra: 'NFSU2_CAREER_RACEWIN=3', alarm: 400,
   seed: true, blocked: SEED ? undefined : 'needs a career save in stage 2 before its sponsor: NFSU2_SAVE_SEED=<save tree>' }];
 
-// the environment of tests/run_suite.sh + tools/autorun.sh (DESIGN.md section 5)
+// the environment of tests/run_suite.sh + tools/autorun.sh
 const SUITE_ENV = {
   NFSU2_SAVEDIR: '/save', NFSU2_READONLY_DATA: '1', NFSU2_DISCORD: '0', NOFOCUS: '2', NFSU2_FNG_LOG: '1',
   NFSU2_STATUS_EVERY: '600', NOMOVIES: '1', SNDSYNC: '0', GPUVS: '1', FIXMAT: '0', FIXMAT_MODE: '3',

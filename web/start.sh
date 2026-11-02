@@ -19,7 +19,7 @@
 #      ~/projects/nsfu2/Need for Speed - Underground 2 if it exists.  Ctrl-C stops it.
 # It prints the address for this Mac, http://localhost:<port>/; --open also opens
 # it in Chrome.  The server listens on this Mac only: other PCs need HTTPS, from
-# a certificate or a proxy or tunnel in front (docs/web/VPS.md).
+# a certificate or a proxy or tunnel in front (web/deploy/).
 # A build that fails stops here with its error (the last 40 lines; the whole log
 # is in out/web/server/), instead of starting the server with a stale or missing
 # module, page or server.

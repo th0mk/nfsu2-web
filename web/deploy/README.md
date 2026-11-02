@@ -1,9 +1,7 @@
 # NFS Underground 2 in the browser: the server bundle
 
 This folder runs the game's web server on a Linux VPS, with HTTPS in front, so
-friends can play with you in Chrome, without Docker. The full guide, with the TLS
-and Cloudflare options, is `docs/web/VPS.md` in the repository ("Without Docker");
-this is the short version.
+friends can play with you in Chrome, without Docker.
 
 It holds the server, the page and the game module. **It does not hold the game.**
 You copy your own NFS Underground 2 folder to the VPS yourself.
@@ -17,7 +15,7 @@ You copy your own NFS Underground 2 folder to the VPS yourself.
    only the game's own files (the server serves nothing else), then make them readable on the VPS:
    `rsync -rlt SPEED2.EXE server.dll server.cfg CARS CREDITS FRONTEND GLOBAL LANGUAGES memcard MOVIES NIS pfdata SOUND speech SUBTITLES TRACKS root@<vps>:/srv/nfsu2/game/`
    `ssh root@<vps> chmod -R u=rwX,go=rX /srv/nfsu2/game`
-   The other languages' voices and movies, if you built them (`LANGPACKS`, docs/web/VPS.md "Languages"), the same
+   The other languages' voices and movies, if you built them (`LANGPACKS`), the same
    way: `rsync -rlt LANGPACKS root@<vps>:/srv/nfsu2/game/`, then the `chmod` again.
 4. **TLS**, in one of these ways:
    - Caddy in front: `deploy/Caddyfile`. Simplest: a Let's Encrypt certificate,
@@ -40,4 +38,4 @@ Cloudflare customer connects from those addresses too, so Caddy (its Cloudflare
 variant, with `deploy/cloudflare-origin-pull-ca.pem`) or the server (variant B
 with `--trusted-proxies cloudflare`) asks them for Cloudflare's certificate.
 
-**SSH:** log in with a key only (`docs/web/VPS.md`, "SSH").
+**SSH:** log in with a key only.

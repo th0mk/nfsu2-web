@@ -23,7 +23,7 @@
  * pulltest.wgsl, index.txt).  A vertex shader gets a synthetic declaration
  * (one element per dcl'd input with a typical NFSU2 type), so this checks the
  * shader bodies; the real (shader, declaration) pairs come from the in-game
- * dump (NFSU2_SHADER_DUMP, docs/web/gpu-abi.md section 9). */
+ * dump (NFSU2_SHADER_DUMP). */
 #include "vsemu.h"
 #include "wgsl.h"
 #include <stdio.h>

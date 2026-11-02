@@ -1,4 +1,4 @@
-# compose.yml with a Cloudflare Tunnel in front instead of Caddy (docs/web/VPS.md, "Cloudflare"): cloudflared
+# compose.yml with a Cloudflare Tunnel in front instead of Caddy: cloudflared
 # connects out to Cloudflare, so the VPS needs no open port for the game at all.  cloudflared and the server
 # share one network namespace (a Docker network, not the VPS's): cloudflared reaches the server there, nothing
 # else can, and the client's address comes from Cloudflare's CF-Connecting-IP.  In Cloudflare's dashboard the

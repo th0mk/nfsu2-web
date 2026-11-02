@@ -1,4 +1,4 @@
-// The WGSL shader ABI (docs/web/gpu-abi.md) as WebGPU objects: the bind group
+// The WGSL shader ABI as WebGPU objects: the bind group
 // layouts and pipeline layouts every game pipeline uses, the uniform sizes and
 // the override constants.  The renderer and the shader check both build their
 // pipelines from here, so the check validates exactly what the game will run.

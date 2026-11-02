@@ -90,7 +90,7 @@ const OUT = path.resolve(arg('--out', 'out/web/app-test'));
 const ONLY = arg('--only', '') ? new Set(arg('--only').split(',')) : null;
 const RUN = `apptest-${Date.now().toString(36)}`;
 const SAVE = `${RUN}-a`, SAVE2 = `${RUN}-b`, SAVE3 = `${RUN}-c`;
-// the test suite's environment (DESIGN.md section 5); movies stay on/off through settings.ini
+// the test suite's environment; movies stay on/off through settings.ini
 const ENV = ['SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_TIMEOUT=400'].map(e => `env=${encodeURIComponent(e)}`).join('&');
 fs.mkdirSync(OUT, { recursive: true });
 

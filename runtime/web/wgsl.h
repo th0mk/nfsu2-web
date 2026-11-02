@@ -1,6 +1,5 @@
 /* WGSL backend of the D3D9 shader translator (runtime/web/vsemu_wgsl.inc,
- * compiled as part of vsemu.c) and the shader dump used to validate it.
- * The contract with the WebGPU renderer is docs/web/gpu-abi.md. */
+ * compiled as part of vsemu.c) and the shader dump used to validate it. */
 #ifndef WGSL_H
 #define WGSL_H
 #include <stddef.h>

@@ -145,7 +145,7 @@ export class Encoder {
       unaligned: f.has('texture-compression-unaligned' as GPUFeatureName) };
     this.views();
     const d = device;
-    // the shader ABI's explicit layouts (docs/web/gpu-abi.md section 2), shared with the shader check
+    // the shader ABI's explicit layouts, shared with the shader check
     const abi = createShaderAbi(d);
     this.bgl0 = abi.group0; this.bgl1 = abi.group1; this.bgl1c = abi.group1Cube;
     this.pl2d = abi.layout2d; this.plCube = abi.layoutCube;
@@ -774,7 +774,7 @@ export class Encoder {
 
       // group 0: vertex source + VS constants + PS parameters.  K is a 64 KB window of the
       // frame's constant arena that many draws share: the draw's block is row kb of it, given
-      // as firstInstance (gpu-abi.md section 3).  A new bind group only for another vertex
+      // as firstInstance.  A new bind group only for another vertex
       // source, other PS parameters or a block past the window.
       const isz = u32[w + D.ixIsz];
       const src = isz ? Src.Pool : vsid > 0 ? Src.Raw : Src.TVert;

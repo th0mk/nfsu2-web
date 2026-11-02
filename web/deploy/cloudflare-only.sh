@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Only Cloudflare's addresses reach the server's TLS port (compose.origin.yml, docs/web/VPS.md "Cloudflare's proxy,
-# straight to the server"): a table of its own in nftables, so nothing else on the VPS changes (Docker's rules, ufw's,
-# other ports).  The server also asks Cloudflare's addresses for its origin-pull certificate; this keeps everyone
+# Only Cloudflare's addresses reach the server's TLS port (compose.origin.yml): a table of its own in
+# nftables, so nothing else on the VPS changes (Docker's rules, ufw's, other ports).  The server also asks Cloudflare's addresses for its origin-pull certificate; this keeps everyone
 # else from reaching it past Cloudflare.  Run as root; again when Cloudflare's list changes (www.cloudflare.com/ips).
 #
 #   web/deploy/cloudflare-only.sh [port]          the port (default 28443) for Cloudflare's addresses only

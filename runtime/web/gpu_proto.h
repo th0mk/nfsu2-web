@@ -165,7 +165,7 @@ typedef struct { uint32_t op, len; uint32_t a[6]; } GwCmd;
  * constant arena holds this block at GW_K_HL, bound as group 0 binding 3 (H)
  * for the lit pixel shaders, which add car k's light at q * t (q: their
  * coordinate in the player's light, uv1; t: columns) with the falloff
- * coordinate s * q'.w + o (gpu-abi.md section 2).  n = 0: none this frame. */
+ * coordinate s * q'.w + o.  n = 0: none this frame. */
 #define GW_HL_MAX   8
 typedef struct { float t[16]; float col[4]; } GwHLight;
 typedef struct { uint32_t n; float s, o, pad; GwHLight l[GW_HL_MAX]; } GwHL;
@@ -214,7 +214,7 @@ typedef struct { uint32_t magic, pad; double input_ms, handoff_ms; } GwLat;
 /* The page binds the VS constant arena (K) in windows of GW_KWIN_ROWS rows of
  * 16 bytes: 64 KB, the default maxUniformBufferBindingSize.  A draw's block
  * (16-byte header + c[0..255]) starts at row firstInstance of its window, so
- * consecutive draws share one bind group (gpu-abi.md section 3). */
+ * consecutive draws share one bind group. */
 #define GW_KWIN_ROWS 4096u
 
 /* Layout word: changes whenever a struct above changes shape. */

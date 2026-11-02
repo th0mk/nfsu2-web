@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the bundle that runs the server on a VPS without Docker (docs/web/VPS.md, "Without Docker"):
+# Builds the bundle that runs the server on a VPS without Docker:
 #
 #   web/deploy/pack.sh [--out <dir>] [--no-build] [--data "<game folder>"] [--arch amd64|arm64] [--server <binary>]
 #
@@ -11,7 +11,7 @@
 #   out/web/          the game module (nfsu2.wasm, nfsu2.json), built here with web/build.sh
 #   deploy/           nfsu2-web.service (systemd), Caddyfile (an example), cloudflared.yml (an example),
 #                     cloudflare-origin-pull-ca.pem (for Caddy behind Cloudflare's proxy)
-#   README.md         the short version of docs/web/VPS.md
+#   README.md         how to set it up
 # The server finds the page and the module in the folder NFSU2_REPO names (the unit sets /opt/nfsu2-web).
 # The bundle NEVER holds the game folder or anything from it: the files are copied from a
 # fixed list, and the bundle is refused if any file in it has the name and size

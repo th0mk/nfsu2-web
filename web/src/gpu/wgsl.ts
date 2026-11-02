@@ -1,7 +1,7 @@
 // Built-in WGSL: the copy/composite passes, and fallbacks for the
 // pretransformed-vertex (TVert) path and the fixed-function fragment stage
 // (the translator's vs_0 / ps_0 / ps_256 replace them as soon as the game
-// registers those, docs/web/gpu-abi.md).  The game's own shaders come
+// registers those).  The game's own shaders come
 // from the translator (track gpu-shaders) over the same bindings:
 //   group 0: VB (storage, vertex pulling), K (VS constants, dynamic offset),
 //            P (PS parameters, dynamic offset)
@@ -46,7 +46,7 @@ ${VOUT}
 }`;
 
 // metal.m fmain/fmain_nd: col0 x tex0, alpha test (a < ref discards), vertex
-// fog.  ALPHA_FUNC as in docs/web/gpu-abi.md: 7 = the Mac's test, 8 = the
+// fog.  ALPHA_FUNC: 7 = the Mac's test, 8 = the
 // no-discard twin (alpha_ref <= 0) that keeps hidden-surface removal on tile
 // GPUs.  Used only until the translator's ps_0 / ps_256 arrive.
 export const FF_FS = (cube: boolean) => /* wgsl */`

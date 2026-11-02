@@ -1,4 +1,4 @@
-// Shader ABI check (docs/web/gpu-abi.md section 9): compiles every WGSL module
+// Shader ABI check: compiles every WGSL module
 // of a shader dump in this browser's WebGPU, builds render pipelines with the
 // ABI's explicit layouts, and runs the vertex-pulling compute test against a
 // CPU decoder with com.c decl_fetch semantics, and runs every vertex shader
@@ -248,7 +248,7 @@ var<private> KILL: u32;
   const ob = mk(np * 20, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC);
   const rd = mk(np * 20, GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST);
   // the lit pixel shaders also read H, the other cars' headlights: none (n = 0), as the
-  // reference interpreter has no such term (a web-only addition, gpu-abi.md section 3)
+  // reference interpreter has no such term (a web-only addition)
   const hb = /@group\(0\) @binding\(3\)/.test(code) ? mk(HLPAR_SIZE, GPUBufferUsage.UNIFORM) : null;
   const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
     { binding: 2, resource: { buffer: pb } }, { binding: 4, resource: { buffer: ib } }, { binding: 5, resource: { buffer: ob } },

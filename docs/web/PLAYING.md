@@ -3,7 +3,7 @@
 The game runs in Google Chrome, Edge and the other Chromium browsers (Brave, Opera), in Firefox, and in Safari 26 (on a
 Mac, or an iPhone or iPad with iOS 26 or iPadOS 26). One server hosts it: it keeps the game files, serves the game to the
 browsers and connects players for free roam. On a Mac it serves that Mac; for other PCs it goes behind HTTPS, usually
-on a VPS ([VPS.md](VPS.md)). Nothing is installed on the players' PCs, and no file is picked by hand.
+on a VPS (`web/deploy/`). Nothing is installed on the players' PCs, and no file is picked by hand.
 
 ## 1. Start it (on the Mac)
 
@@ -33,8 +33,8 @@ or two. The page shows a problem only when there is one, with what to do about i
 ## 2. Other PCs
 
 The browser runs the game only on a secure page (`https://`, or `localhost` on the machine itself), so friends play
-from a server behind HTTPS: a certificate on the server, or a proxy or tunnel in front of it. [VPS.md](VPS.md) has
-the ways to set that up. Each player then opens that `https://` address in the latest **Google Chrome** or
+from a server behind HTTPS: a certificate on the server, or a proxy or tunnel in front of it (`web/deploy/` has a
+Docker setup). Each player then opens that `https://` address in the latest **Google Chrome** or
 **Firefox** and presses **Play**.
 
 The first start on a PC downloads about 7 MB of game code and, while playing, the game data it needs, compressed on
@@ -216,7 +216,7 @@ that room.
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
   Thai, Portuguese (Brazil), Polish, Turkish or Hungarian, for the menus and all the game's text. Where the server
-  has the [language packs](VPS.md#languages), French, German, Italian, Spanish, Japanese and Russian also play with
+  has the language packs, French, German, Italian, Spanish, Japanese and Russian also play with
   their dubbed voices and movies, Chinese, Japanese and Thai with their full text, and Russian, Portuguese, Polish,
   Turkish and Hungarian with their text at all. Without the packs those five play in English, and the other
   languages with English voices and movies. Your browser fetches only your language's files: the dubbed voices are
@@ -229,7 +229,7 @@ that room.
 - **Subtitles:** on by default: the movies' lines as text (the PSA, the tutorials and the story) in every language
   but French, German, Italian and Spanish, whose movies are dubbed. English's are VileStuff's
   [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), with who says each line, where the server has its
-  [language pack](VPS.md#languages) (without it English has none: the game's own English lines stop at their first
+  language pack (without it English has none: the game's own English lines stop at their first
   apostrophe).
 - **Show hidden races:** off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10 and 10
   in the later stages) that are not on the map or the radar: in the original game one shows only when you drive near it,
@@ -238,7 +238,7 @@ that room.
   (the GPS takes you there), and the map offers up to 8 races of each kind at once instead of 1 to 4, so they take no
   others off it. Turned off again, a career is as it was: the races open stay open.
 - **Menus and HUD:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
-  HUD](https://nfsmods.xyz/mod/4319) where the server has its [texture pack](VPS.md#texture-packs): the menus, the
+  HUD](https://nfsmods.xyz/mod/4319) where the server has its texture pack: the menus, the
   race HUD, the fonts and the car and brand logos redrawn at four times their size, sharp on a large screen. The
   game's layout stays as it is. Your browser fetches the pack only with Upscaled (about 5 MB to download). A language
   with fonts of its own (Russian, Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger
@@ -390,7 +390,7 @@ or use a Room to keep to a group.
 
 Good to know:
 
-- **How many:** up to 12000 players on a server set up as VPS.md describes (2000 with the older Node server), 128 on
+- **How many:** up to 12000 players on a server set up with `web/deploy/` (2000 with the older Node server), 128 on
   one started by hand (its owner can change that). Only free roam and the LAN and Online screens take a place;
   single-player takes none. When it is full, you wait in line for a place, first come first served: the top of the
   screen shows your place and, once a few went in, about how long it takes. You play alone meanwhile and join the

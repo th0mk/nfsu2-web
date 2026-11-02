@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# NFS Underground 2 in the browser: the server (web/server-rs) as a container image (docs/web/VPS.md).
+# NFS Underground 2 in the browser: the server (web/server-rs) as a container image (web/deploy/compose.yml).
 #
 #   docker build -f web/server-rs/Dockerfile -t nfsu2-web-rs .
 #

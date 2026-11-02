@@ -20,7 +20,7 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
 - The game runs in 16 languages (English and 15 translations); the page too. Touch controls on phones and tablets;
   pads, wheels, 8BitDo and PS2 adapters through the browser.
 - Self-hosting is for people running their own server: the README (their own copy of the game, patched to v1.2 North
-  America, with that exact SPEED2.EXE) and docs/web/VPS.md. "CANNOT OPEN" lines for game files in their log mean the
+  America, with that exact SPEED2.EXE) and web/deploy/. "CANNOT OPEN" lines for game files in their log mean the
   game folder they gave the server is incomplete.
 
 ## Getting the log

@@ -2,8 +2,7 @@
 """The game's music in fewer bytes: pfdata/MusicSFx.mus and MusicSFx.mpf
 rebuilt so the songs in 4-bit ADPCM become EALayer3, the MP3 variant the game
 already plays its other songs in, and without the streams no song uses.  No
-game code changes: the game's own decoder plays both (docs/web/VPS.md, "Smaller
-music").
+game code changes: the game's own decoder plays both.
 
     tools/musicpack.py <game folder> <out folder> [--jobs N]
 

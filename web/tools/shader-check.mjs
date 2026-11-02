@@ -1,4 +1,4 @@
-// Validate the WGSL shader set in Chrome (docs/web/gpu-abi.md section 9).
+// Validate the WGSL shader set in Chrome.
 //
 //   node web/tools/shader-check.mjs --game [--out out/web/shaders]
 //       run the quick race headless with NFSU2_SHADER_DUMP (null renderer),
@@ -97,7 +97,7 @@ async function upload(dir) {
 const waitDone = async ms => { try { await page.waitForFunction(() => document.title === 'DONE', null, { timeout: ms }); return true; } catch { return false; } };
 
 if (argv.includes('--game')) {
-  // DESIGN.md section 5 suite environment + the dump
+  // the suite's environment + the dump
   const env = ['NOMOVIES=1', 'SNDSYNC=0', 'GPUVS=1', 'NFSU2_FNG_LOG=1', 'NFSU2_STATUS_EVERY=600', 'NFSU2_DISCORD=0',
     'NFSU2_SHADER_DUMP=/save/shaders', ...argv.flatMap((a, i) => a === '--env' ? [argv[i + 1]] : [])];
   const u = `${origin}/test/hostcheck.html?wasm=/game.wasm&pages=16384&arg=/data/SPEED2.EXE&save=${save}&fresh` +

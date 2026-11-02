@@ -1,4 +1,4 @@
-# compose.yml with Cloudflare's proxy (orange cloud) in front of Caddy (docs/web/VPS.md, "Cloudflare"): Caddy
+# compose.yml with Cloudflare's proxy (orange cloud) in front of Caddy: Caddy
 # believes CF-Connecting-IP, the player's address, only from Cloudflare's proxy, and the server reads it.
 #
 # Cloudflare's addresses are not its proxy alone: any Cloudflare customer can connect from them (a Worker's TCP

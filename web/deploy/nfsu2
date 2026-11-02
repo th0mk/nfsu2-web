@@ -1,5 +1,5 @@
 #!/bin/sh
-# The operator's commands to the game server of the Docker setup in this folder (docs/web/VPS.md, "Kick and ban"):
+# The operator's commands to the game server of the Docker setup in this folder:
 # copy it next to compose.yml (/srv/nfsu2), chmod +x, then
 #   ./nfsu2 who [name]                     the players on the switch, and who left in the last hour (a name: theirs,
 #                                          or the one over their car)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A new version on a Docker VPS (docs/web/VPS.md, /srv/nfsu2) in one command, from your own machine: the game module
+# A new version on a Docker VPS (/srv/nfsu2) in one command, from your own machine: the game module
 # of a commit, and the image of that commit (or a later one), then the server restarted and checked.
 #
 #   web/deploy/release.sh root@<vps> <folder>              the module in <folder> (nfsu2.wasm, nfsu2.json), and the

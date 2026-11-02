@@ -42,12 +42,10 @@ web/start.sh --data "/path/to/Need for Speed Underground 2"
 Open **http://localhost:8080/** in Chrome or Firefox and press **Play**. The start page has the settings, your saves
 and the controls. The player's guide is [docs/web/PLAYING.md](docs/web/PLAYING.md). The game plays in any of its
 thirteen languages, in Brazilian Portuguese, in Polish, in Turkish or in Hungarian; the dubbed voices and movies and the
-Portuguese, Polish, Turkish and Hungarian text come from mods, as language packs
-([docs/web/VPS.md](docs/web/VPS.md#languages)). The menus and HUD can be redrawn at four times their size, from a mod
-as a texture pack ([docs/web/VPS.md](docs/web/VPS.md#texture-packs)).
+Portuguese, Polish, Turkish and Hungarian text come from mods, as language packs. The menus and HUD can be redrawn at
+four times their size, from a mod as a texture pack.
 
-To play with friends, run the server behind HTTPS, for example on a small VPS with Docker:
-[docs/web/VPS.md](docs/web/VPS.md).
+To play with friends, run the server behind HTTPS (other PCs need a secure context): `web/deploy/` has a Docker setup.
 Everyone who plays from the same server can meet in free roam.
 
 ## How it works
@@ -60,7 +58,7 @@ Everyone who plays from the same server can meet in free roam.
 - **`web/server-rs/`:** the server, in Rust: serves the page, the module and your game folder, and connects players
   for multiplayer.
 
-More in [docs/web/DESIGN.md](docs/web/DESIGN.md). The same tree still builds the native macOS version
+The same tree still builds the native macOS version
 (`./gen.sh`, `./build.sh && ./link.sh`, `./run.sh`).
 
 ## Credits

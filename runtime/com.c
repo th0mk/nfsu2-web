@@ -38,7 +38,7 @@ void metal_begin_frame(void);
 #include "gfx.h"
 #include "vsemu.h"
 #ifdef __wasm__
-/* The browser renderer takes WGSL instead of MSL (docs/web/gpu-abi.md). */
+/* The browser renderer takes WGSL instead of MSL. */
 #include "web/wgsl.h"
 #define SHADER_TEXT_CAP (256*1024)
 #else

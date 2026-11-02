@@ -1,5 +1,5 @@
-# compose.yml for a VPS where port 80 belongs to something else (another site or API): Caddy on 443 only
-# (docs/web/VPS.md, "Port 80 taken").  It gets its Let's Encrypt certificate with the TLS challenge, on 443, and
+# compose.yml for a VPS where port 80 belongs to something else (another site or API): Caddy on 443 only.
+# It gets its Let's Encrypt certificate with the TLS challenge, on 443, and
 # has no http -> https redirect: http://<your name> reaches whatever has port 80, so share the https:// link
 # (Chrome tries https first anyway, and after the first visit HSTS keeps it there).  Not for Cloudflare's proxy,
 # which lets no certificate challenge through to 443: with Cloudflare, the tunnel (compose.tunnel.yml) needs no

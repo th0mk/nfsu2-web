@@ -146,7 +146,7 @@ static void gw_init(void){
      * in wasm.  An explicit GPUVS=0 still wins. */
     if (g_on) setenv("GPUVS", "1", 0);
     if (g_on){
-        /* the translator's built-in modules (docs/web/gpu-abi.md section 1): vs_0
+        /* the translator's built-in modules: vs_0
          * for TVert draws, ps_0 / ps_256 for draws without a pixel shader */
         static char t[16384];
         if (wgsl_tvert_module(t, sizeof t) > 0) shader_put(GW_SHADER_VS, 0, t);

@@ -1476,7 +1476,7 @@ int ps_to_msl(const VSProg *p, int id, char *out, size_t cap){
 }
 
 #if defined(__wasm__) || defined(VSEMU_WGSL)
-/* WGSL backend for the browser build (docs/web/gpu-abi.md); web-only code
+/* WGSL backend for the browser build; web-only code
  * lives in runtime/web/ and shares the parser's private types from here. */
 #include "web/vsemu_wgsl.inc"
 #endif

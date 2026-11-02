@@ -1,4 +1,4 @@
-# NFS Underground 2 in the browser on a VPS, with Docker (docs/web/VPS.md): the server's image (Dockerfile)
+# NFS Underground 2 in the browser on a VPS, with Docker: the server's image (Dockerfile)
 # and Caddy, which does HTTPS with a Let's Encrypt certificate it gets and renews by itself.  Both use the VPS's
 # own network, as Caddy and the server do without Docker: Caddy on ports 80 and 443, forwarding to the server on
 # 127.0.0.1:8080, which nothing outside the VPS can reach.  So Caddy sees every player's real address, over IPv6
@@ -14,9 +14,9 @@
 #   NFSU2_HTTP_PORT=8080             the server's port on 127.0.0.1, if 8080 is taken on the VPS
 #   NFSU2_THREADS=12                 the Rust image's worker threads (default half the cores, 2 to 8); with
 #                                    more than about 3000 players in free roam, 8 workers keep them at fewer
-#                                    friends each (web/server-rs/README.md, "Measured")
+#                                    friends each
 #   NFSU2_SLICE=nfsu2.slice          the systemd slice every container here runs in (nfsu2.slice: its CPUQuota
-#                                    keeps the rest of the VPS its share; docs/web/VPS.md, "A share of the VPS")
+#                                    keeps the rest of the VPS its share)
 # then:  docker compose up -d && docker compose logs -f server
 # Port 80 taken by something else on the VPS: compose.443.yml.  A Cloudflare Tunnel instead of Caddy:
 # compose.tunnel.yml.  Cloudflare's proxy (orange cloud) in front of Caddy: compose.cloudflare.yml.  Cloudflare's
@@ -41,9 +41,9 @@ services:
       NFSU2_HTTP_PORT: ${NFSU2_HTTP_PORT:-8080}
       NFSU2_REAL_IP_HEADER: ${NFSU2_REAL_IP_HEADER:-x-forwarded-for}
       NFSU2_THREADS: ${NFSU2_THREADS:-}
-      # the room for keyphrase saves, in GB (docs/web/VPS.md, "Keyphrase saves"; 50 when not set, 0: none)
+      # the room for keyphrase saves, in GB (50 when not set, 0: none)
       NFSU2_VAULT_GB: ${NFSU2_VAULT_GB:-}
-      # Cloudflare Turnstile's keys for claiming a name (docs/web/VPS.md, "Claimed names"; none: no check)
+      # Cloudflare Turnstile's keys for claiming a name (none: no check)
       NFSU2_TURNSTILE_SITE: ${NFSU2_TURNSTILE_SITE:-}
       NFSU2_TURNSTILE_SECRET: ${NFSU2_TURNSTILE_SECRET:-}
     volumes:

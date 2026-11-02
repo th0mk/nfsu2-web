@@ -3,7 +3,7 @@
 # Paths: the bundle in /opt/nfsu2-web, the game folder in /srv/nfsu2/game
 # (readable by everyone: chmod -R u=rwX,go=rX), state (the ETag key, the switch's addresses) in
 # /var/lib/nfsu2-web.  Logs: journalctl -u nfsu2-web.
-# Pick ONE ExecStart (docs/web/VPS.md, "Without Docker", "TLS: pick one"):
+# Pick ONE ExecStart:
 [Unit]
 Description=NFS Underground 2 in the browser (web server)
 After=network-online.target

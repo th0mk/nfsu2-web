@@ -1,5 +1,5 @@
-# compose.yml with Cloudflare's proxy (orange cloud) straight to the server: no Caddy, no tunnel (docs/web/VPS.md,
-# "Cloudflare's proxy, straight to the server").  The server does TLS itself, with a Cloudflare Origin CA
+# compose.yml with Cloudflare's proxy (orange cloud) straight to the server: no Caddy, no tunnel.
+# The server does TLS itself, with a Cloudflare Origin CA
 # certificate, on NFSU2_TLS_PORT of the VPS's own network (an Origin Rule in Cloudflare sends https://NFSU2_HOST
 # there); it believes CF-Connecting-IP only from Cloudflare's addresses, and those must show Cloudflare's origin-pull
 # certificate or their handshakes fail.  So turn Authenticated Origin Pulls on (SSL/TLS, Origin Server) BEFORE

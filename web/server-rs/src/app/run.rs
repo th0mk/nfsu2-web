@@ -557,7 +557,7 @@ pub async fn run(o: Options, cores: usize) {
     }
     match o.tls {
         Tls::None => lines
-            .push("  other PCs : none: they need HTTPS, from --tls-cert/--tls-key or a proxy or tunnel in front (docs/web/VPS.md)".into()),
+            .push("  other PCs : none: they need HTTPS, from --tls-cert/--tls-key or a proxy or tunnel in front".into()),
         Tls::Cert => lines.push(format!(
             "  HTTPS     : port {} on {}, certificate {}",
             o.https_port,
