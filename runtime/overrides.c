@@ -681,12 +681,15 @@ void sub_005bc210(CPU *restrict c){
     g_cull_lifted++;
     sub_005bc210_orig(c);
 }
+static int g_pc_watch;             /* sub_005c5930's PARTCULL=2 check: count the parts found outside */
+static uint32_t g_pc_out;
 void sub_005bc300(CPU *restrict c){
 #ifdef __wasm__
-    if (frustum_native(c)) return;
+    if (frustum_native(c)){ if (g_pc_watch && !c->eax) g_pc_out++; return; }
 #endif
     g_cull_lifted++;
     sub_005bc300_orig(c);
+    if (g_pc_watch && !c->eax) g_pc_out++;
 }
 void sub_0048ac60(CPU *restrict c){
 #ifdef __wasm__
@@ -694,6 +697,83 @@ void sub_0048ac60(CPU *restrict c){
 #endif
     g_cull_lifted++;
     sub_0048ac60_orig(c);
+}
+/* --- sub_005c5930: a model's parts into the render lists --------------------
+ * (item, M, a3, flags, a5), thiscall (the view), ret 0x14.  The model
+ * [[item+0xC]] has [+0x10] parts of 0x3C bytes at [+0x14] (a box: lo at +0,
+ * hi at +0x10; +0x38 bit 0: never tested), and each is tested against the
+ * view (sub_005bc300(lo, hi, M) above: 0 outside, then left out) unless
+ * flags has bit 2.  ~30 models a car, tested part by part.  When the box
+ * round all of a model's tested parts is inside every plane of the view by
+ * a margin, so is each part's box (the same M), and the game's test of each
+ * would pass it: the model goes in with bit 2, its parts untested (7 models
+ * in 10 among 48 friends' cars, 4 parts each: ~0.2 ms a frame less).
+ * Anything else is tested as before.
+ * PARTCULL=0 off; PARTCULL=2 checks: such a model is tested as before, and
+ * a part found outside is counted ([partcull] lines). */
+void sub_005c5930_orig(CPU *c);
+static int g_pc_on = -1;
+static uint64_t g_pc_models, g_pc_fast, g_pc_parts, g_pc_bad;
+/* the box lo..hi, through M when M is not 0, inside the six planes at [th]+0xC0
+ * (n.x n.y n.z d; inside: n.p + d >= [0x7D7D3C] over the whole box) by a margin */
+static int pc_inside(uint32_t th, uint32_t M, const float lo[3], const float hi[3]){
+    float C[3], H[3], c0[3], h0[3];
+    for (int j = 0; j < 3; j++){ c0[j] = (hi[j] + lo[j]) * 0.5f; h0[j] = (hi[j] - lo[j]) * 0.5f; }
+    for (int j = 0; j < 3; j++){
+        if (!M){ C[j] = c0[j]; H[j] = h0[j]; continue; }
+        float cc = MRF32(M + 0x30u + 4u * (uint32_t)j), hh = 0;
+        for (int i = 0; i < 3; i++){
+            float m = MRF32(M + 16u * (uint32_t)i + 4u * (uint32_t)j);
+            cc += c0[i] * m; hh += h0[i] * __builtin_fabsf(m);
+        }
+        C[j] = cc; H[j] = hh;
+    }
+    float K = MRF32(0x007d7d3cu);
+    uint32_t p = MR32(th) + 0xc0u;
+    for (int k = 0; k < 6; k++, p += 16u){
+        float nx = MRF32(p), ny = MRF32(p + 4u), nz = MRF32(p + 8u), d = MRF32(p + 12u);
+        float s = C[0] * nx + C[1] * ny + C[2] * nz + d;
+        float r = __builtin_fabsf(nx) * H[0] + __builtin_fabsf(ny) * H[1] + __builtin_fabsf(nz) * H[2];
+        float tol = 0.01f + 1e-5f * (__builtin_fabsf(s) + r + __builtin_fabsf(d));   /* the game's float rounding, with room */
+        if (!(s - r > K + tol)) return 0;                                            /* (a NaN too) */
+    }
+    return 1;
+}
+void sub_005c5930(CPU *c){
+    if (g_pc_on < 0){ const char *e = getenv("PARTCULL"); g_pc_on = e ? atoi(e) : 1; }
+    uint32_t e = c->esp, item = MR32(e + 4u), fl = MR32(e + 16u);
+    uint32_t W = g_pc_on && item && !(fl & 4u) ? MR32(item + 0xcu) : 0;
+    uint32_t mdl = W ? MR32(W) : 0, n = mdl ? MR32(mdl + 0x10u) : 0, parts = n ? MR32(mdl + 0x14u) : 0;
+    if (!parts || n < 2u || n > 4096u){ sub_005c5930_orig(c); return; }
+    float lo[3] = { 1e30f, 1e30f, 1e30f }, hi[3] = { -1e30f, -1e30f, -1e30f };
+    uint32_t tested = 0, fin = 1;
+    for (uint32_t i = 0, p = parts; i < n; i++, p += 0x3cu){
+        if (MR8(p + 0x38u) & 1u) continue;
+        for (int j = 0; j < 3; j++){
+            float a = MRF32(p + 4u * (uint32_t)j), b = MRF32(p + 0x10u + 4u * (uint32_t)j);
+            fin &= (uint32_t)(__builtin_fabsf(a) < 1e30f) & (uint32_t)(__builtin_fabsf(b) < 1e30f);
+            if (a < lo[j]) lo[j] = a;
+            if (b > hi[j]) hi[j] = b;
+        }
+        tested++;
+    }
+    g_pc_models++;
+    if (tested < 2u || !fin || !pc_inside(c->ecx, MR32(e + 8u), lo, hi)){ sub_005c5930_orig(c); return; }
+    g_pc_fast++; g_pc_parts += tested;
+    if (g_pc_on == 2){
+        uint32_t out0 = g_pc_out;
+        g_pc_watch = 1; sub_005c5930_orig(c); g_pc_watch = 0;
+        if (g_pc_out != out0){
+            g_pc_bad += g_pc_out - out0;
+            fprintf(stderr, "[partcull] model %08x: %u of %u part(s) outside, taken as inside\n", mdl, g_pc_out - out0, tested);
+        }
+        if ((g_pc_fast & 0x3ffffu) == 0)
+            fprintf(stderr, "[partcull] %llu models, %llu inside (%llu parts not tested), %llu wrong\n", (unsigned long long)g_pc_models,
+                    (unsigned long long)g_pc_fast, (unsigned long long)g_pc_parts, (unsigned long long)g_pc_bad);
+        return;
+    }
+    MR32(e + 16u) = fl | 4u;
+    sub_005c5930_orig(c);
 }
 
 /* --- sub_0068ce7c: D3DXMatrixMultiply, the SSE version ---------------------

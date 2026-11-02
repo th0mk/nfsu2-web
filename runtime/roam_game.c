@@ -368,6 +368,8 @@ static struct {
     int cars_auto;                            /* NFSU2_ROAM_CARS_AUTO: max_cars is the device's default (the page's), not the
                                                  player's pick: fewer once the frames are slow with more (cars_cut) */
     int cut_us;                               /* ...a frame this long or more is slow (NFSU2_ROAM_CUT_MS; 0: never cut) */
+    int friend_pairs;                         /* NFSU2_ROAM_FRIEND_PAIRS: the collision step tests friends' cars against each other too
+                                                 (roam_game_pair_skip; 0: skipped) */
     char name[RC_NAME_MAX + 1], room[64];
     char crew[RC_CREW_MAX][100]; int ncrew;   /* NFSU2_ROAM_CREW: the crews' names, in the player's order (crews_parse; the
                                                  page's 24 characters are up to 96 bytes of UTF-8) */
@@ -867,6 +869,34 @@ static void body_set(CPU *c, uint32_t car, int solid){
     if (!solid && MR8(body + 0x17u) == 0) gcall0(c, FN_BODY_DISABLE, body);
     else if (solid && MR8(body + 0x17u) != 0) MR8(body + 0x17u) = 0;
 }
+/* Friends' cars against each other.  The collision step tests every pair of
+ * bodies near each other (0x5B5050 from 0x5FFA50: the box test, then the
+ * pair's contact, its impulse and the hit's sparks and sound), two friends'
+ * cars as well.  Both are posed from their players' reports every frame
+ * (apply_pose), so the game's result is put back the next frame, and their
+ * own hit is each friend's game's, with its own car.  Among 48 cars round
+ * the new career's start such pairs took ~0.3 ms a frame.  So the step
+ * skips a pair of two friends' cars' bodies (roam.c, roam_game_pair_skip;
+ * NFSU2_ROAM_FRIEND_PAIRS=1 tests them as before).  Two friends' cars that
+ * touch make no sparks or sound here then (125 hits in a minute among 48
+ * cars standing close round the start): chosen for the frame time
+ * (2026-11-02).  body_update enters each friend's body in g_fb by its
+ * address (direct-mapped: one pushed out by another is just tested). */
+#define FB_N 256u
+static uint8_t g_fb[FB_N];                    /* slot + 1 of the body hashed here (0: none) */
+static uint32_t g_fb_skips, g_fb_tests;       /* pairs skipped / tested (mp status) */
+static uint32_t g_ff_contacts, g_ff_hits;     /* NFSU2_ROAM_FRIEND_PAIRS=1: contacts of two friends' cars, and those that hit (an impulse) */
+static inline uint32_t fb_hash(uint32_t body){ return ((body >> 3) * 0x9E3779B1u) >> 24; }
+static int fb_friend(uint32_t body){
+    int k = (int)g_fb[fb_hash(body)] - 1;
+    return k >= 0 && g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden && ok(g_sl[k].car, 0x40) && MR32(g_sl[k].car + 0x3cu) == body;
+}
+int roam_game_pair_skip(uint32_t pair){
+    if (!O.on || !ok(pair, 0x240)) return 0;
+    if (!O.friend_pairs && fb_friend(MR32(pair + 0x238u)) && fb_friend(MR32(pair + 0x23cu))){ g_fb_skips++; return 1; }
+    g_fb_tests++;
+    return 0;
+}
 /* a shown friend's car: solid unless it is a ghost or passable, and a ghost
  * until it is clear of the player's car.  Its body only while it is near the
  * player's car: the game's collision step (0x5FFA50 in World::DoTimestep)
@@ -888,6 +918,8 @@ static void body_update(CPU *c, int k){
         near = d2 < SOLID_M * SOLID_M;
     }
     body_set(c, s->car, O.collide && !s->ghost && !s->soft && near);
+    uint32_t body = rd32(s->car + 0x3cu);
+    if (body) g_fb[fb_hash(body)] = (uint8_t)(k + 1);
 }
 static void ghost_all(void){ for (int k = 0; k < NSLOT; k++) g_sl[k].ghost = 1; }
 /* Passable cars.  A friend's car has no physics of its own here: it is
@@ -5767,6 +5799,7 @@ static void init_once(CPU *c){
     O.test_outside = env_int("NFSU2_ROAM_TEST_OUTSIDE", 0, 0, 1);
     O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
     O.near_max = env_int("NFSU2_ROAM_NEAR", NEAR_DEF, 0, NEAR_SLOTS);
+    O.friend_pairs = env_int("NFSU2_ROAM_FRIEND_PAIRS", 0, 0, 1);
     O.cars_auto = env_int("NFSU2_ROAM_CARS_AUTO", 0, 0, 1);
     {   /* 40 fps, or a frame and a half of a display slower than 60 Hz (a phone's Low Power Mode is 30 Hz) */
         int hz = env_int("NFSU2_DISPLAY_HZ", 60, 1, 1000), us = 1500000 / hz;
@@ -6739,6 +6772,8 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     if (!strcasecmp(sub, "status")){
         roam_plat_lock();
         rlog("[roam] f=%ld mp status: %s, %d friend(s), my cfg rev %u\n", f, rc_status_name(g_s.status), rc_established(&g_s), g_s.cfg_rev);
+        rlog("[roam]   collision pairs: %u of friends' cars skipped, %u tested; %u contacts of two friends' cars, %u with a hit\n",
+             g_fb_skips, g_fb_tests, g_ff_contacts, g_ff_hits);
         for (int i = 0; i < RC_TABLE; i++){
             const rc_peer *p = &g_s.peer[i]; char b[16];
             if (p->state == RC_PS_FREE) continue;
@@ -7564,6 +7599,16 @@ static int contact_sane(uint32_t me, uint32_t rb, const float *st){
     return car_sane(me) && fin3(rb + 0x20u, PLACE_MAX) && fin3(rb + 0x30u, 1e30f) && fin3(rb + 0x40u, 1e30f) && fin3(rb + 0x50u, 1e30f);
 }
 void roam_game_contact(CPU *c, void (*orig)(CPU *)){
+    if (O.friend_pairs && ok(c->ecx, 0x18)){
+        uint32_t pr = MR32(c->ecx + 0x14u);
+        if (ok(pr, 0x248) && fb_friend(MR32(c->ecx + 0xcu)) && fb_friend(MR32(c->ecx + 0x10u))){
+            uint32_t r0 = MR32(pr + 0x244u); float i0 = ok(r0, 0x64) ? MRF32(r0 + 0x60u) : 0.f;
+            orig(c);
+            uint32_t r1 = MR32(pr + 0x244u);
+            g_ff_contacts++; g_ff_hits += ok(r1, 0x64) && (r1 != r0 || MRF32(r1 + 0x60u) != i0);
+            return;
+        }
+    }
     uint32_t pair = c->ecx, me = O.on && O.collide && O.hit_share != 100 ? player_car() : 0;
     uint32_t mb = ok(me, 0x40) ? rd32(me + 0x3cu) : 0;
     uint32_t a = mb && ok(pair, 0x14) ? MR32(pair + 0xcu) : 0, b = a ? MR32(pair + 0x10u) : 0;

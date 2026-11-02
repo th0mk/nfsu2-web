@@ -693,6 +693,33 @@ static GwDraw *raw_rec(Buf *B, unsigned stride, unsigned base, unsigned tex, int
     D->vsid = vsid; D->koff = koff; D->ksz = ksz;
     return D;
 }
+/* A raw draw with everything the same as the last record's: the same state,
+ * shaders and VS constants (all but the vertex base), its vertices right
+ * after the last record's in the raw arena.  The game draws every light
+ * streak and glow of a car as a quad of its own (0x5C5580: ~48 a car, the
+ * vertices in world space, the same constants), and each was a record and a
+ * copy of the constants; they go into the last record instead: the same
+ * triangles in the same order (GW_MERGE=0: a record each). */
+static int g_merge = -1;
+static uint64_t g_merged;
+static GwDraw *raw_merge(Buf *B, unsigned stride, unsigned tex, int vsid, const float *k, unsigned nk, unsigned need){
+    if (g_merge < 0){ const char *e = getenv("GW_MERGE"); g_merge = e ? atoi(e) != 0 : 1; }
+    if (!g_merge || !B->dn) return NULL;
+    GwDraw *P = &B->d[B->dn - 1];
+    if (P->kind != GW_DRAW || P->vsid != vsid || P->ix_isz || P->koff != B->last_koff || P->ksz != 16u + nk * 16u
+        || B->last_vs != vsid || P->rawoff + P->count * stride != B->rvn || B->rvn + need > MAXRV) return NULL;
+    const uint32_t *h = (const uint32_t *)(B->kb + P->koff);
+    uint32_t tsel = 0;
+    for (int q = 0; q < 4; q++) tsel |= ((uint32_t)((int)g_cur_proj[q]) & 3u) << (8 * q);
+    if (h[0] != stride || h[1] != tsel || memcmp(h + 4, k, nk * 16u)) return NULL;
+    if (P->tex != tex || P->target != g_cur_target || P->blend != g_cur_blend || memcmp(&P->aref, &g_cur_aref, 4)
+        || P->depth != g_cur_depth || P->tex1 != g_cur_tex1 || P->tex2 != g_cur_tex2 || P->tex3 != g_cur_tex3
+        || P->ps != ps_of(tex) || P->psci != psc_put(B) || memcmp(P->proj, g_cur_proj, sizeof P->proj)
+        || memcmp(P->smp, g_cur_smp, sizeof P->smp) || P->bcol != g_cur_bcol || P->cull != g_cur_cull
+        || memcmp(P->fogv, g_cur_fog, sizeof P->fogv) || P->clip != g_cur_clip) return NULL;
+    g_merged++;
+    return P;
+}
 int metal_draw_raw(const void *src, unsigned nverts, unsigned stride, unsigned prim, unsigned tex, int vsid,
                    const float *k, unsigned nk){
     if (nverts < 3 || !stride || stride > 256u) return 0;
@@ -703,10 +730,14 @@ int metal_draw_raw(const void *src, unsigned nverts, unsigned stride, unsigned p
     Buf *B = &g_b[g_cur];
     const uint8_t *S = (const uint8_t *)src;
     unsigned need = tris * 3u * stride, roff = (B->rvn + 255u) & ~255u;
-    if (roff + need > MAXRV){ g_ov_rv++; return 0; }
-    if (B->dn >= MAXD){ g_ov_d++; return 0; }
-    GwDraw *D = raw_rec(B, stride, roff, tex, vsid, k, nk);
-    if (!D) return 0;
+    GwDraw *D = raw_merge(B, stride, tex, vsid, k, nk, need);
+    if (D){ roff = B->rvn; D->count += tris * 3; }
+    else {
+        if (roff + need > MAXRV){ g_ov_rv++; return 0; }
+        if (B->dn >= MAXD){ g_ov_d++; return 0; }
+        D = raw_rec(B, stride, roff, tex, vsid, k, nk);
+        if (!D) return 0;
+    }
     uint8_t *dst = B->rv + roff;
     if (prim == 4) memcpy(dst, S, need);
     else for (unsigned t = 0; t < tris; t++){
@@ -717,6 +748,7 @@ int metal_draw_raw(const void *src, unsigned nverts, unsigned stride, unsigned p
         for (int q = 0; q < 3; q++){ memcpy(dst, S + (size_t)idx[q] * stride, stride); dst += stride; }
     }
     B->rvn = roff + need;
+    if (D != &B->d[B->dn]) return 1;        /* (merged) */
     D->count = tris * 3; D->rawoff = roff;
     B->dn++;
     return 1;
@@ -1063,4 +1095,5 @@ void metal_budget_report(void){
     fprintf(stderr, "  [gpu] shaders: %u VS + %u PS WGSL, %u VS + %u PS without WGSL (CPU vertex path / built-in fragment); "
                     "overflows draw %u tvert %u raw %u const %u\n",
             g_vs_n, g_ps_n, g_msl_vs, g_msl_ps, g_ov_d, g_ov_v, g_ov_rv, g_ov_kb);
+    fprintf(stderr, "  [gpu] raw draws merged into the one before: %.1f/frame\n", g_presents ? (double)g_merged / (double)g_presents : 0.0);
 }
