@@ -3903,7 +3903,8 @@ static int64_t render_delay(int i, const rc_peer *p, int64_t frame_dt){
 
 /* ---- outruns between players --------------------------------------------------------------------- */
 /* Two players who stay near each other in free roam (within DU_NEAR_M for
- * DU_NEAR_US) get the game's own outrun challenge: the HUD's outrun icon
+ * DU_NEAR_US, and not in a crowd: DU_CROWD others that near, as at a car
+ * meet) get the game's own outrun challenge: the HUD's outrun icon
  * (0x4DB890: the "!" and two cars, the D-pad's Up lit) and a line of text
  * naming the friend (du_hud).  Engage (Enter, or the pad's D-pad Up: the
  * game's action 0xF, however the player set it) challenges; the friend gets
@@ -3960,6 +3961,7 @@ static int64_t render_delay(int i, const rc_peer *p, int64_t frame_dt){
 #define FN_ENGAGE_DONE  0x005010e0u   /* thiscall G_ENGAGE: what Engage does after starting one */
 #define DU_NEAR_M       25.f          /* the game's own reach for a challenge is 30 m (0x40C030): less in a crowd */
 #define DU_NEAR_US      4000000
+#define DU_CROWD        4             /* this many other players' cars within DU_NEAR_M: a crowd (a car meet), no outrun offered */
 #define DU_PROMPT_M     35.f          /* the offer stays while the two are this near */
 #define DU_KEEP_M       60.f          /* a challenge stands while the two are this near */
 #define DU_RANK_MPS     2.f           /* the order changes when the other gets away this much faster (m/s) */
@@ -3992,6 +3994,7 @@ static struct {
     uint32_t icon, hud;                       /* the car the HUD's outrun icon is on (0 off), in this HUD */
     int      engage;                          /* Engage held last frame */
     int      busy;                            /* we take no outrun now (du_free): the snapshots say so (RC_BIT_BUSY) */
+    int      crowd, crowd_logs;               /* other players' cars within DU_NEAR_M (du_crowd); its changes logged */
     int      solid_mine, solid_theirs;        /* each game keeps the two cars solid for the outrun (du_solid) */
     char     note[TAG_DUEL_MAX]; int64_t note_until;
     uint32_t offers, races, wins, losses;     /* statistics */
@@ -4065,6 +4068,15 @@ static float du_dist(uint32_t car){
     uint32_t me = player_car();
     float dx = MRF32(car + 0x60u) - MRF32(me + 0x60u), dy = MRF32(car + 0x64u) - MRF32(me + 0x64u);
     return rc_sqrtf(dx * dx + dy * dy);
+}
+/* other players' cars shown within DU_NEAR_M of ours, however they are (parked, in a menu): DU_CROWD of them is a
+ * crowd, where everyone stands near someone (a car meet) and no outrun is offered (du_frame) */
+static int du_crowd(void){
+    int n = 0;
+    if (player_car())
+        for (int k = 0; k < NSLOT; k++)
+            if (g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden && ok(g_sl[k].car, 0x9e0) && du_dist(g_sl[k].car) < DU_NEAR_M) n++;
+    return n;
 }
 static void du_icon(CPU *c, uint32_t car){
     uint32_t pl = world() ? rd32(G_PLAYER1) : 0, hud = pl ? rd32(pl + PL_HUD) : 0;
@@ -4278,7 +4290,12 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
     int press = eng && !g_du.engage;
     g_du.engage = eng;
     int free = du_free(in_roam, world_runs);
-    int offer = free && !em_near();                 /* (a challenger of the game's in reach: Engage is its outrun's) */
+    int crowd = free ? du_crowd() : 0;
+    if ((crowd >= DU_CROWD) != (g_du.crowd >= DU_CROWD) && g_du.crowd_logs++ < 20)
+        rlog("[roam] f=%ld outruns between players: %s (%d other players within %.0f m)\n", rh_frame(),
+             crowd >= DU_CROWD ? "none offered in a crowd" : "offered again", crowd, (double)DU_NEAR_M);
+    g_du.crowd = crowd;
+    int offer = free && !em_near() && crowd < DU_CROWD;   /* (a challenger of the game's in reach: Engage is its outrun's) */
     g_du.busy = !offer;
     /* who has been near for the time it takes */
     for (int k = 0; k < NSLOT; k++){
@@ -8195,8 +8212,10 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
             for (int i = 0; g_du.id && i < RC_TABLE; i++)
                 if (g_s.peer[i].state == RC_PS_EST && g_s.peer[i].id == g_du.id) in = rc_peer_listed(&g_s, i) ? ", listed by the hub" : ", not listed by the hub";
             roam_plat_unlock();
-            rlog("[roam] f=%ld mp outrun: %s%s%s%s%s, %.0f m apart, getting away %.1f m/s faster; %u challenge(s), %u raced, %u won, %u lost\n", f, st[g_du.st],
+            rlog("[roam] f=%ld mp outrun: %s%s%s%s%s, %.0f m apart, getting away %.1f m/s faster; %d other player(s) within %.0f m%s; "
+                    "%u challenge(s), %u raced, %u won, %u lost\n", f, st[g_du.st],
                     g_du.id ? " with " : "", g_du.id ? g_du.name : "", in, g_du.icon ? ", challenge offered" : "", (double)g_du.gap, (double)g_du.away,
+                    g_du.crowd, (double)DU_NEAR_M, g_du.crowd >= DU_CROWD ? " (a crowd: none offered)" : "",
                     g_du.offers, g_du.races, g_du.wins, g_du.losses);
             static const char *const emm[] = { "the game's", "held", "standing down", "paused" };
             char near[32] = "";

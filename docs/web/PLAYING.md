@@ -511,15 +511,15 @@ Good to know:
 - **Headlights:** the other players' headlights light the road in front of their cars, as yours do, a little dimmer
   and in their own colour; in Online and LAN races too. Display, more: Other cars' headlights (All cars: AI racers and
   traffic too; Off: only yours, as in the original game). The Windows plugin draws only your own.
-- **Outruns:** stay within about 25 m of another player for 4 seconds, away from the shops' and the garage's doors
-  and from either player's open events (20 m), and the game offers an outrun, as it does with
-  its own tuners: the outrun icon lights up and the top of the screen says "Press Enter to challenge ... to an
-  outrun" (on a controller, D-pad up, the game's Engage). The other player sees "... challenges you to an outrun" and
-  takes it with Enter as well, or lets it go: a challenge lapses after 15 seconds, or when you are more than 60 m
-  apart. Then both games run the game's own outrun against each other's car: its "Feet" meter, and whoever gets
-  1,000 feet (300 m) ahead of the other wins, and the bank pays or charges as in an outrun against a tuner. Leaving it
-  (back to the menus, quitting, losing the connection) loses it. The other players' cars stay, and they see the two
-  drive. Players on the Windows plugin are not offered outruns.
+- **Outruns:** stay within about 25 m of another player for 4 seconds, away from the shops' and the garage's doors and
+  from either player's open events (20 m), and not in a crowd (4 or more other players within 25 m of you, as at a car
+  meet), and the game offers an outrun, as it does with its own tuners: the outrun icon lights up and the top of the
+  screen says "Press Enter to challenge ... to an outrun" (on a controller, D-pad up, the game's Engage). The other
+  player sees "... challenges you to an outrun" and takes it with Enter as well, or lets it go: a challenge lapses
+  after 15 seconds, or when you are more than 60 m apart. Then both games run the game's own outrun against each
+  other's car: its "Feet" meter, and whoever gets 1,000 feet (300 m) ahead of the other wins, and the bank pays or
+  charges as in an outrun against a tuner. Leaving it (back to the menus, quitting, losing the connection) loses it.
+  The other players' cars stay, and they see the two drive. Players on the Windows plugin are not offered outruns.
 - **The game's own tuners** come out to challenge you in free roam with other players around, as they do offline, so
   their outruns and what winning them opens up (the unique parts) are there online too. The other players' cars stay
   while you race a tuner; they see your car, not the tuner, which is in your game only. Both are offered: a tuner
