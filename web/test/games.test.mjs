@@ -173,7 +173,9 @@ test('Most Wanted\'s page body: its name, keys and panels, no Underground 2 text
   // panel in), none of Underground 2's paragraphs
   assert.match(body, /<section class="panel" id="about"[^]*?version 1\.3[^]*?makers of Underground 2 Revived[^]*?ko-fi\.com[^]*?legal@nfsrevived\.com[^]*?same static recompiler/);
   assert.doesNotMatch(body, /Drive with friends|My brother|legal@nfsu2\.xyz|language packs|240 fps|WidescreenFix/);
-  assert.match(body, /<section class="panel" id="online" aria-labelledby="online-title" hidden>/);
+  // no free roam or Online yet, nor Underground 2's translations: neither tab (main's tabs, tabs.ts)
+  assert.doesNotMatch(body, /class="tab" role="tab" data-tab="online"|data-tab="translations"/);
+  assert.match(body, /class="tab" role="tab" data-tab="saves"[^]*?class="tab" role="tab" data-tab="game"/);
   assert.match(body, /<kbd>G<\/kbd><\/dt><dd data-i18n>Speedbreaker<\/dd>/);
 });
 
