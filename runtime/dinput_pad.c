@@ -409,7 +409,8 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
         int32_t v = scale_axis(t, d, a);
         memcpy(st + k_axis_ofs[a], &v, 4);
     }
-    uint32_t b = s->buttons;
+    uint32_t showoff_pad(uint32_t b);                  /* showoff.c: D-pad down held while the car stands */
+    uint32_t b = showoff_pad(s->buttons);
     uint32_t pov[4] = { pov_of(!!(b & 1u << PAD_DUP), !!(b & 1u << PAD_DDOWN),
                                !!(b & 1u << PAD_DLEFT), !!(b & 1u << PAD_DRIGHT)),
                         stick_pov(d, s->axis[PAD_AXIS_LX], s->axis[PAD_AXIS_LY]),

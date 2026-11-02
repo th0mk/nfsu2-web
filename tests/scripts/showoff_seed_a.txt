@@ -1,0 +1,15 @@
+# Show-off between players of two car types, instance A (with showoff_seed_b.txt): a saved career (roam-pair
+# --seed-for A:<save tree>) in free roam; it stands and opens its trunk, then its hood, then its doors (O), each some
+# seconds apart, and keeps them open.  B's game loads A's car type's part animations for A's car.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++1500 log stand
++0    tap O
++6000ms tap O
++6000ms tap O
++30000ms roam mp status
++10   quit

@@ -55,6 +55,10 @@ uint64_t    roam_win_ns(void);
 #define rh_carsfx_begin(pos, fwd, vel)    ((void)(pos), (void)(fwd), (void)(vel))
 #define rh_carsfx_car(who, name, p, v, st) ((void)(who), (void)(name), (void)(p), (void)(v), (void)(st))
 #define rh_carsfx_end()  ((void)0)
+/* no show-off here: the companion opens no parts and shows friends' cars closed (showoff.c needs the port's
+ * overrides of the cars' drawing) */
+#define rh_showoff_mine() ((uint8_t)0)
+#define rh_showoff_car(c, k, car, open) ((void)(c), (void)(k), (void)(car), (void)(open))
 /* the game's "No Profile" in English only (the port also knows the other
  * languages' names from the game's text, language.c) */
 #define rh_no_profile(name) (!strcasecmp((name), "No Profile"))

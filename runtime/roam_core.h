@@ -44,11 +44,19 @@
 #define RC_TABLE         96         /* known addresses (configured, gossiped, heard): the peers and those going or coming */
 #define RC_SNAP_STATES   3          /* states per SNAP (newest first): loss redundancy */
 #define RC_STATE_BYTES   52
-#define RC_STATEX_BYTES  29         /* a state's extension (RC_HF_STATEX), its length byte included, at most */
+#define RC_STATEX_BYTES  30         /* a state's extension (RC_HF_STATEX), its length byte included, at most */
+#define RC_STATEX_FULL   29         /* ...without the open parts (none open; every core before them) */
 #define RC_STATEX_SLIP   24         /* ...without the engine (no engine sound; every core before it) */
 #define RC_STATEX_HYD    12         /* ...without the wheels' slip (no wheel slides; every core before that) */
 #define RC_STATEX_V4     10         /* ...as the first cores of version 4 sent it (no hydraulics) */
 #define RC_STATEX_ENG    5          /* the engine's bytes, after the hydraulics or after the slip */
+#define RC_STATEX_OPEN   1          /* the open parts' byte (RC_OPEN_*), after the engine of RC_STATEX_FULL */
+/* the open parts (rc_state open): the car is shown off (showoff.c), these open on friends' screens */
+#define RC_OPEN_HOOD     0x01
+#define RC_OPEN_TRUNK    0x02
+#define RC_OPEN_LDOOR    0x04
+#define RC_OPEN_RDOOR    0x08
+#define RC_OPEN_ALL      0x0f
 #define RC_SLIP_STEP     0.5f       /* a wheel's slip on the wire: int8 steps of this (m/s), up to 63.5 */
 #define RC_BUF_STATES    32         /* jitter buffer per peer */
 #define RC_OFFWIN        64         /* clock-offset samples per peer */
@@ -193,8 +201,13 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
  * while the car's engine sounds) the engine (RC_STATEX_ENG: its sound's rpm,
  * u16, and its three voices' volumes, u8 each, see rc_state), so 12, 17, 24
  * or 29 bytes: the length says which; whatever a newer core adds comes
- * after the engine of the longest form, and is skipped.  Only to a peer
- * whose HELLO carries the flag: an older core counts the longer SNAP as bad */
+ * after the engine of the longest form, and is skipped.  The first such:
+ * (only while one of the car's parts is open: its hood, trunk or doors,
+ * showoff.c) the longest form, its slip and engine 0 where they have none,
+ * then the open parts (RC_STATEX_OPEN: RC_OPEN_* bits), 30 bytes; a core
+ * before it reads the 29 and skips the byte, so it shows the car closed.
+ * Only to a peer whose HELLO carries the flag: an older core counts the
+ * longer SNAP as bad */
 #define RC_HF_STATEX     0x0040
 /* header flags (HELLO): this player takes quick chat (RC_MSG_SAY); an older
  * core sends none and counts the type as bad */
@@ -279,6 +292,7 @@ typedef struct {
                                       10000 at the most; the clutch and the limiter in it), 0: none */
     uint8_t  eng_acc, eng_dcl, eng_base;   /* ...its voices' volumes, 255 = full: the pulling and the letting-off
                                               recordings (GIN) and the engine model under them (the AEMS bank) */
+    uint8_t  open;                 /* the car's open parts (RC_OPEN_*: hood, trunk, doors), 0: none */
 } rc_state;
 
 typedef struct {
@@ -403,6 +417,7 @@ typedef struct {
     uint8_t slipx, surf[4];        /* as rc_state: slip 0 when no wheel slides */
     float   slip[8];
     float   eng, eng_acc, eng_dcl, eng_base;   /* as rc_state (the volumes 0 .. 1): eng 0 when the sender sent no engine */
+    uint8_t open;                  /* as rc_state */
     int     mode;                  /* RC_MODE_* */
 } rc_pose;
 enum { RC_MODE_NONE = 0, RC_MODE_INTERP = 1, RC_MODE_EXTRAP = 2, RC_MODE_HOLD = 3 };

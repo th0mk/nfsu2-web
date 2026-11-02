@@ -174,6 +174,7 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     const menus = esc(t('In menus: D-pad and {a}, {b} goes back.')).replace('{a}', cap('A', 'cross')).replace('{b}', cap('B', 'circle'));
     pad.innerHTML = padSvg() + `<div class="pad-foot">
     <p class="hint">${menus}</p>
+    <p class="hint">${esc(t('Parked in free roam: hold D-pad down to open trunk, then hood, then doors.'))}</p>
     <div class="seg" role="radiogroup" aria-label="${esc(t('Button names'))}">
       <label class="opt"><input type="radio" name="${id}-fam" value="xb">Xbox</label>
       <label class="opt"><input type="radio" name="${id}-fam" value="ps">PlayStation</label>

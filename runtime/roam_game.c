@@ -621,6 +621,8 @@ static int local_state(rc_state *s){
         }
     /* the engine as the game sounds it, for friends' games (eng_state) */
     eng_state(car, s);
+    /* the parts the player has open to show the car off (showoff.c): friends' games open them too */
+    s->open = rh_showoff_mine();
     if (g_sync_paused > 1){ for (int i = 0; i < 3; i++){ s->v[i] = 0; s->w[i] = 0; } s->speed = 0; s->rpm = 0; for (int i = 0; i < 8; i++) s->slip[i] = 0; }
     for (int i = 0; i < 3; i++) if (!__builtin_isfinite(s->p[i]) || !__builtin_isfinite(s->v[i])) return 0;
     /* the stamp clock may run a little faster than the world (it is pulled
@@ -3690,6 +3692,20 @@ static void sounds_update(const rc_state *ls, int heard){
     }
     rh_horn_end();
     g_horns_on = heard || g_horn;
+}
+
+/* the parts friends have open on their cars (showoff.c), each shown car's from its pose; none on the others */
+static void showoff_peers(CPU *c){
+    uint8_t open[NSLOT] = {0};
+    for (int i = 0; i < g_npv; i++){
+        const PeerView *v = &g_pv[i];
+        if (!v->visible || !v->have_pose || !v->pose.ext || !v->pose.open) continue;
+        for (int k = 0; k < NSLOT; k++) if (g_sl[k].st == SL_ACTIVE && g_sl[k].peer_id == v->id && !g_sl[k].hidden) open[k] = v->pose.open;
+    }
+    for (int k = 0; k < NSLOT; k++){
+        uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
+        rh_showoff_car(c, k, ok(car, 0x9e0) ? car : 0, open[k]);
+    }
 }
 
 /* How far behind its sender's clock a friend's car is drawn (the render
@@ -6859,6 +6875,7 @@ void roam_game_frame(CPU *c){
 #endif
     g_engage = in_roam && world_runs && engage_ours();
     sounds_update(have_ls ? &ls : 0, world_runs);
+    showoff_peers(c);
     if (g_poselog && have_ls){
         uint32_t me = player_car();
         rh_fprintf(g_poselog, "L,%lld,%.0f,%08x,%.4f,%.4f,%.4f,%.3f,0,0,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", (long long)host, g_sync, g_s.conf.self_id,

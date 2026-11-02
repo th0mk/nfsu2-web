@@ -1,0 +1,44 @@
+# Show-off (runtime/showoff.c) on one page: new career -> prologue free roam, the car standing.  O four times: the
+# trunk, the hood too, the doors too, all closed ("[showoff] ... step N" and each part's "opens"/"closes" lines);
+# D-pad down held 1.5 s: the trunk again, then a tap of it: the game's Career Status (UI_Status_Career.fng) as before;
+# then driving off closes the trunk by itself, and O while driving does nothing.
+#   node web/tools/run-suite.mjs --base <server> --script showoff_steps.txt (or roam-pair --solo --a Ann:showoff_steps.txt)
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log steps
++0    tap O
++2000ms tap O
++2000ms tap O
++2500ms tap O
++2500ms log hold
++0    pad DDOWN down
++1500ms pad DDOWN up
++2000ms log tap
++0    tappad DDOWN 6
++0    waitfng UI_Status_Career.fng 300
++60   tap ESCAPE                    # back to the game
++240  log drive
++0    down UP
++90   tap O
++60   up UP
++0    down DOWN
++90   up DOWN
++300  log end
++10   quit

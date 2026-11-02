@@ -1376,13 +1376,34 @@ static void t_statex(void){
     /* (a core before the engine reads 16 as the hydraulics and 28 as the slip, and skips the rest: the two tests below) */
     *s = keep;
     en = rc_encode(&m, eb, sizeof eb);
-    eb[22 + 52] = RC_STATEX_BYTES - 1 + 3; eb[en - 4] = 0xAA; eb[en - 3] = 0xBB; eb[en - 2] = 0xCC;
+    eb[22 + 52] = RC_STATEX_FULL - 1 + 3; eb[en - 4] = 0xAA; eb[en - 3] = 0xBB; eb[en - 2] = 0xCC;
     int eln = en + 3; eb[6] = (uint8_t)eln; eb[7] = (uint8_t)(eln >> 8);
     uint32_t ec = rc_crc32(eb, (uint32_t)eln - 4); for (int k = 0; k < 4; k++) eb[eln - 4 + k] = (uint8_t)(ec >> (8 * k));
     e = rc_decode(eb, eln, &d);
     CHECK(e == RC_OK && d.u.snap.s[0].slip[4] == 21.5f && d.u.snap.s[0].eng == 5948 && d.u.snap.s[0].eng_dcl == 38,
           "a newer core's fields after the engine: skipped (e %d)", e);
-    s->eng = 0; s->eng_acc = 0; s->eng_dcl = 0; s->eng_base = 0;
+    /* the open parts: only while one is open, the longest form (slip and engine 0 where none, as a core before them
+     * reads them: no slide, no engine) and their byte after it; a core before them reads the 29 and skips the byte, as
+     * the test above skips 3 */
+    for (int i = 0; i < 8; i++) s->slip[i] = 0;
+    s->eng = 0; s->eng_acc = 0; s->eng_dcl = 0; s->eng_base = 0; s->open = RC_OPEN_TRUNK | RC_OPEN_HOOD | 0x40;
+    en = rc_encode(&m, eb, sizeof eb);
+    CHECK(en == 16 + 6 + 52 + 30 + 4 && ex[0] == 29 && (int8_t)ex[18] == 0 && ex[20] == 8 && le16(ex + 24) == 0 && ex[26] == 0 && ex[29] == 3,
+          "open parts: the longest form, slips and engine 0, then their bits (%d bytes)", en);
+    e = rc_decode(eb, en, &d);
+    CHECK(e == RC_OK && d.u.snap.s[0].open == 3 && d.u.snap.s[0].slipx && d.u.snap.s[0].slip[4] == 0 && !d.u.snap.s[0].eng &&
+          d.u.snap.s[0].surf[2] == 8 && d.u.snap.s[0].nos == 7, "...decode: open, no slide, no engine (e %d)", e);
+    eb[22 + 52] = RC_STATEX_BYTES - 1 + 2; eb[en - 4] = 0xAA; eb[en - 3] = 0xBB;
+    eln = en + 2; eb[6] = (uint8_t)eln; eb[7] = (uint8_t)(eln >> 8);
+    ec = rc_crc32(eb, (uint32_t)eln - 4); for (int k = 0; k < 4; k++) eb[eln - 4 + k] = (uint8_t)(ec >> (8 * k));
+    e = rc_decode(eb, eln, &d);
+    CHECK(e == RC_OK && d.u.snap.s[0].open == 3 && d.u.snap.s[0].nos == 7, "a newer core's fields after the open parts: skipped (e %d)", e);
+    s->open = 0x30;
+    en = rc_encode(&m, eb, sizeof eb);
+    CHECK(en == 16 + 6 + 52 + 12 + 4, "no known part open: no open parts' byte (%d bytes)", en);
+    e = rc_decode(eb, en, &d);
+    CHECK(e == RC_OK && !d.u.snap.s[0].open, "...and none decoded (e %d)", e);
+    s->open = 0;
     /* a newer core's longer extension: its own fields skipped */
     uint8_t lb[RC_MAX_DGRAM]; memcpy(lb, b, (size_t)n - 4);
     lb[22 + 52] = RC_STATEX_SLIP - 1 + 3; lb[n - 4] = 0xAA; lb[n - 3] = 0xBB; lb[n - 2] = 0xCC;
@@ -1415,7 +1436,7 @@ static void t_statex(void){
             rc_state st; memset(&st, 0, sizeof st); st.q[3] = 1; st.t_us = (uint32_t)g_now; st.p[0] = (float)i;
             st.ext = 1; st.nos = 60; st.hyd = 0x36; st.thumps = 3; for (int w = 0; w < 4; w++) st.wz[w] = 0.1f * (float)(w + 1);
             st.slip[6] = 12.f; st.slip[7] = -3.5f; st.surf[3] = 15;
-            st.eng = 4000; st.eng_acc = 255; st.eng_dcl = 51; st.eng_base = 102;
+            st.eng = 4000; st.eng_acc = 255; st.eng_dcl = 51; st.eng_base = 102; st.open = RC_OPEN_LDOOR | RC_OPEN_RDOOR;
             rc_set_status(&g_n[i], RC_ST_ROAM); rc_push_state(&g_n[i], &st, g_now);
         }
         net_run(g_now + 10000, 3);
@@ -1436,8 +1457,9 @@ static void t_statex(void){
           "...and the wheels' slip and surfaces (%d %g %g %u)", P.slipx, (double)P.slip[6], (double)P.slip[7], P.surf[3]);
     CHECK(ok1 && P.eng == 4000.f && P.eng_acc == 1.f && fabsf(P.eng_dcl - 0.2f) < 1e-6f && fabsf(P.eng_base - 0.4f) < 1e-6f,
           "...and its engine (%g %g %g %g)", (double)P.eng, (double)P.eng_acc, (double)P.eng_dcl, (double)P.eng_base);
+    CHECK(ok1 && P.open == (RC_OPEN_LDOOR | RC_OPEN_RDOOR), "...and its open parts (%x)", P.open);
     int ok2 = k2 >= 0 && rc_interp_peek(&g_n[2].peer[k2].mo, g_n[2].peer[k2].mo.t[g_n[2].peer[k2].mo.n - 1], 250000, &P);
-    CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng, "the older peer's pose has none");
+    CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng && !P.open, "the older peer's pose has none");
 }
 
 /* ---- 4f. crews: the HELLO's tail to the hub, and without a hub to a peer that reads them; the hub's marks ---- */

@@ -1,0 +1,38 @@
+# Show-off between players of two car types, instance B (watches; with showoff_seed_a.txt): new career -> prologue
+# free roam; jumps behind A's car ("mp follow", onto A's road) and saves the page every 4 s (c_back_*) as A opens its
+# trunk, hood and doors, then from A's left side (c_side_*).  Its log: A's car type's part animations loading, and
+# A's parts opening ("[showoff] ... slot K: trunk opens").  roam-pair --page app.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++900  roam mp follow 0 9
++2000ms log SHOT c_back_1
++4000ms log SHOT c_back_2
++4000ms log SHOT c_back_3
++4000ms log SHOT c_back_4
++4000ms log SHOT c_back_5
++4000ms log SHOT c_back_6
++0    roam mp follow 0 1 7 -90
++3000ms log SHOT c_side_1
++4000ms log SHOT c_side_2
++0    roam mp follow 0 1 7 90
++3000ms log SHOT c_side_3
++0    roam mp status
++10   quit
