@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { SLURS, blockedName } from '../src/app/names.mjs';
+import { SLURS, EDGE_OK, PID_STEMS, blockedName } from '../src/app/names.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(REPO, 'out/web/test'); fs.mkdirSync(OUT, { recursive: true });
@@ -24,11 +24,18 @@ const BLOCKED = ['nigger', 'N1gg3r', 'n i g g e r', 'n.i.g.g.a', 'NiQQa', 'nlgga
   'Hitler', 'Hitler3858', 'adolfhitler', 'AdolfH', 'H1tl3r', 'gitler', 'Himmler', 'zigHael', 'NAZZI', 'JewsHunter',
   'nigahunter', 'Niga', 'NigaBoi', 'Nig4', 'MEGANIGA', 'KneeGro', 'CzarnuchJebany', 'CHURKA', 'xoxol', 'pidor',
   'PIDARAZ', 'vladpidr', 'cwel666', 'gigacwel', 'Mongoloid', 'TALIBAN', 'Et_Binladen', 'samrapist', 'RapeAddict',
-  'ASphaltMolester', '1488', 'Sam1488', 'kkk1488', 'Sam14881488'];
+  'ASphaltMolester', '1488', 'Sam1488', 'kkk1488', 'Sam14881488',
+  // the words of the live server's names of 2026-11-02, made up the same ways: niger, nig, a niga or nyga starting
+  // or ending a part, digits after a lone n, a pid word after a vowel, Nazi nicknames, hate aimed at Jews
+  'Nate_Higgers', 'NateHiggers', 'N8_Higgers', 'Niger', 'Nigerz', 'xN1gerx', 'NIG_ER', 'BigNig', 'nigs', 'nigabro',
+  'tinyniga', 'SuperNiga', 'HOLYNIGA', 'gigaNyga', 'MrN1663r', 'BigN199a', 'N166ER', 'nupidor', 'JaPidor', 'LolP1dr',
+  'TheAustrianArtist', 'austrian_painter', 'PintorAustriaco', 'Uncle_Adolf', 'Kitler88', 'AdolfFitler', 'XitIer',
+  'Kristal_Nacht', 'HateJews', 'JewSlayer', 'GasJews', 'JEBAC_ZYDOW', 'pedophile', 'Pedofilo', 'OsamaBin',
+  'Al_Qaeda', 'xChigga', 'Nazista', 'ZyklonB'];
 const UNICODE = ['ñigga', 'nіgga', 'ｎｉｇｇａ', 'ΝΙGGΑ', 'n̲i̲g̲g̲a̲', 'ⓕⓐⓖ', 'fаg', 'Ηitler', 'Ｈｉｔｌｅｒ', 'Lander１４８８'];
 // other words with those letters in them, the player names this server sees most (Turkish) among them
 const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'mustafagamer', 'Rafa96', 'Vefa', 'Safa',
-  'Pakize', 'Nigar', 'Niger', 'Nigeria', 'Nigerian', 'Nigel', 'Raccoon', 'Tycoon', 'Cocoon', 'spicy', 'Spice',
+  'Pakize', 'Nigar', 'Nigeria', 'Nigerian', 'Nigel', 'Raccoon', 'Tycoon', 'Cocoon', 'spicy', 'Spice',
   'despicable', 'Pakistan', 'Fagundes', 'Bigger', 'Trigger', 'Digger', 'Knight', 'Chinook', 'Scunthorpe', 'Cooper',
   'Ahmet35', 'Emre_34', 'Gökhan', 'İbrahim', 'Thom', 'Player', 'NAME', 'OLHOST', 'Speedy', '',
   // a name and a number: a year, two digits, the digits the Online mode adds to a taken name (lobby.rs free_variant)
@@ -38,10 +45,14 @@ const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'musta
   'Spider', 'MR.SPIDER', 'Shinigami', 'Zuniga', 'Vlado', 'Ataliba_Neto', 'Grapes', 'Trapezio', 'Adolf', 'Nazim',
   'Nazif', 'Nygaard', 'Mongol', 'Churkin', 'jacob88', 'Jane8848', 'Ahmet1448',
   // English words that end in "pid" before an r or a
-  'RapidRacer', 'rapid racer', 'CupidRacer', 'Stupidrift', 'StupidArmy', 'TepidRide'];
+  'RapidRacer', 'rapid racer', 'CupidRacer', 'Stupidrift', 'StupidArmy', 'TepidRide',
+  // the words that start or end a part as niga or nyga would, the new words' letters, a lone n and a year
+  'Hoonigan', 'Hooniga', 'Minigame', 'Minigas', 'Kniga', 'Kunigas', 'Niigaki', 'NIGAMI', 'Nygard', 'TonyGamer',
+  'Antony Gaming', 'Brony_Gamer', 'Higgins', 'Higgs', 'Austria', 'AustrianGP', 'Painter', 'Artist', 'Osama',
+  'PepiDroga', 'N1995', 'Hakan1994TR'];
 
 test('names.mjs: the lists\' words, the ways round them, and not the other words', () => {
-  for (const w of [...SLURS.anywhere, ...SLURS.whole]) assert.ok(blockedName(w), w);
+  for (const w of [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge]) assert.ok(blockedName(w), w);
   for (const n of [...BLOCKED, ...UNICODE]) assert.ok(blockedName(n), n);
   for (const n of ALLOWED) assert.ok(!blockedName(n), n);
   // a word of the whole list only as a part on its own
@@ -53,6 +64,10 @@ test('names.h has the lists of names.mjs', () => {
   const list = k => [...new RegExp(`\\b${k}\\[\\] = \\{([^}]*)\\}`).exec(h)[1].matchAll(/"([^"]*)"/g)].map(m => m[1]);
   assert.deepEqual(list('anywhere'), [...SLURS.anywhere]);
   assert.deepEqual(list('whole'), [...SLURS.whole]);
+  assert.deepEqual(list('edge'), [...SLURS.edge]);
+  assert.deepEqual(list('edge_ok_start'), [...EDGE_OK.start]);
+  assert.deepEqual(list('edge_ok_end'), [...EDGE_OK.end]);
+  assert.deepEqual(list('stems'), [...PID_STEMS]);
 });
 
 test('names.h answers as names.mjs (25,000 ASCII names)', { skip: !haveClang && 'no clang' }, () => {
@@ -74,8 +89,9 @@ int main(void){
     let seed = 7;
     const rnd = n => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) % n; };
     const pick = a => a[rnd(a.length)];
-    const pieces = [...SLURS.anywhere, ...SLURS.whole, 'mustafa', 'gs', 'raccoon', 'spice', 'niger', 'pakize', 'xx', 'gamer', 'a', 'g',
-      'dani', 'hakan', 'van', '99', '1995', '69', '1488', '88'];
+    const pieces = [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge, ...EDGE_OK.start, ...EDGE_OK.end, ...PID_STEMS, 'mustafa', 'gs',
+      'raccoon', 'spice', 'niger', 'nigeria', 'pakize', 'xx', 'gamer', 'a', 'g', 'dani', 'hakan', 'van', 'n', 'pid', 'pepi', 'droga',
+      '99', '1995', '1663', '69', '1488', '88'];
     const swap = { o: '0', i: '1!|l', e: '3', a: '4@', s: '5$', t: '7+', g: '69q', b: '8' };
     const names = [...BLOCKED, ...ALLOWED.filter(n => /^[ -~]*$/.test(n))];
     for (let k = 0; k < 20000; k++) {

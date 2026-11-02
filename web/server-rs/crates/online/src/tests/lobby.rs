@@ -210,6 +210,9 @@ fn a_game() {
     let a = w.login(ga, "Alpha");
     let b = w.login(gb, "Bravo");
     let p = "TRACK=4123\nDIR=0\nLAPS=2";
+    // a game name that reads as a slur (nfsu2-names) is refused, as a name would be
+    w.send(a, "gcre", fields![("NAME", "088.N1663r"), ("PARAMS", p)]);
+    assert_eq!(w.c(a).l("gcre").code, "inam");
     w.send(
         a,
         "gcre",

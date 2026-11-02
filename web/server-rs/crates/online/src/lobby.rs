@@ -2369,8 +2369,9 @@ impl Core {
         if mv >= self.lobby.l.open_per_vip || mg >= self.lobby.l.open_per_group {
             return self.lsend(s, "gcre", &[], "full");
         }
+        // the game names its game after the host ("088.Alpha"), a name the login took; an edited one may send any
         let name = clean_text(f.str("NAME"), self.lobby.l.game_name_len as usize);
-        if name.is_empty() {
+        if name.is_empty() || nfsu2_names::blocked_name(&name) {
             return self.lsend(s, "gcre", &[], "inam");
         }
         let persona = self.lobby.s(s).persona.clone().unwrap_or_default();

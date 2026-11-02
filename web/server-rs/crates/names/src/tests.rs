@@ -88,6 +88,47 @@ pub(crate) const BLOCKED: &[&str] = &[
     "Sam1488",
     "kkk1488",
     "Sam14881488",
+    // the words of the live server's names of 2026-11-02, made up the same ways: niger, nig, a niga or nyga starting
+    // or ending a part, digits after a lone n, a pid word after a vowel, Nazi nicknames, hate aimed at Jews
+    "Nate_Higgers",
+    "NateHiggers",
+    "N8_Higgers",
+    "Niger",
+    "Nigerz",
+    "xN1gerx",
+    "NIG_ER",
+    "BigNig",
+    "nigs",
+    "nigabro",
+    "tinyniga",
+    "SuperNiga",
+    "HOLYNIGA",
+    "gigaNyga",
+    "MrN1663r",
+    "BigN199a",
+    "N166ER",
+    "nupidor",
+    "JaPidor",
+    "LolP1dr",
+    "TheAustrianArtist",
+    "austrian_painter",
+    "PintorAustriaco",
+    "Uncle_Adolf",
+    "Kitler88",
+    "AdolfFitler",
+    "XitIer",
+    "Kristal_Nacht",
+    "HateJews",
+    "JewSlayer",
+    "GasJews",
+    "JEBAC_ZYDOW",
+    "pedophile",
+    "Pedofilo",
+    "OsamaBin",
+    "Al_Qaeda",
+    "xChigga",
+    "Nazista",
+    "ZyklonB",
 ];
 /// 'ñigga', 'nіgga' (Cyrillic і), fullwidth, 'ΝΙGGΑ' (Greek Ν Ι Α), combining low lines, circled, 'fаg' (Cyrillic а),
 /// 'Ηitler' (Greek Η), fullwidth, fullwidth digits
@@ -116,7 +157,6 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Safa",
     "Pakize",
     "Nigar",
-    "Niger",
     "Nigeria",
     "Nigerian",
     "Nigel",
@@ -184,12 +224,35 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Stupidrift",
     "StupidArmy",
     "TepidRide",
+    // the words that start or end a part as niga or nyga would, the new words' letters, a lone n and a year
+    "Hoonigan",
+    "Hooniga",
+    "Minigame",
+    "Minigas",
+    "Kniga",
+    "Kunigas",
+    "Niigaki",
+    "NIGAMI",
+    "Nygard",
+    "TonyGamer",
+    "Antony Gaming",
+    "Brony_Gamer",
+    "Higgins",
+    "Higgs",
+    "Austria",
+    "AustrianGP",
+    "Painter",
+    "Artist",
+    "Osama",
+    "PepiDroga",
+    "N1995",
+    "Hakan1994TR",
 ];
 
 // names.mjs: the lists' words, the ways round them, and not the other words
 #[test]
 fn lists_ways_round_and_other_words() {
-    for w in ANYWHERE.iter().chain(WHOLE) {
+    for w in ANYWHERE.iter().chain(WHOLE).chain(EDGE) {
         assert!(blocked_name(w), "{w}");
     }
     for n in BLOCKED.iter().chain(UNICODE) {
@@ -240,11 +303,11 @@ fn read_as_nfkd_without_marks_and_lookalikes() {
 
 #[test]
 fn numbers_and_letters() {
-    // three or more digits are a number, and a split
-    assert!(blocked_name("fag123") && !blocked_name("ni999a") && !blocked_name("ni9999a"));
+    // three or more digits are a number, and a split (but after a lone n or ni: digits_after_a_lone_n)
+    assert!(blocked_name("fag123") && !blocked_name("xni999a") && !blocked_name("xni9999a") && blocked_name("ni999a"));
     // two that end a part, or before a capital after a small letter, are a number; between small letters, letters
     assert!(!blocked_name("Dani99") && !blocked_name("Dani99GS") && blocked_name("ni99a"));
-    assert!(!blocked_name("Ni99A") && blocked_name("NI99A"));
+    assert!(!blocked_name("Xni99A") && blocked_name("XNI99A") && blocked_name("Ni99A"));
     // one digit is always read as a letter, or for 2 as none: a split, the name's letters still read together
     assert!(blocked_name("f4g") && blocked_name("f2ag") && blocked_name("fa2g2") && !blocked_name("fa2g2x"));
     // 1488 anywhere, in any run of digits, past the 255 letters too; not its digits apart
@@ -254,7 +317,7 @@ fn numbers_and_letters() {
 
 #[test]
 fn parts_and_runs() {
-    assert!(blocked_name("niiiiggggaaaa") && !blocked_name("Niger") && !blocked_name("nige"));
+    assert!(blocked_name("niiiiggggaaaa") && blocked_name("Niger") && !blocked_name("Nigeria") && !blocked_name("nige"));
     assert!(blocked_name("XxCoonXx") && !blocked_name("xxcoonxx") && blocked_name("xx_coon_xx"));
     assert!(blocked_name("F A G") && blocked_name("f.a.g.s") && !blocked_name("f a g x"));
     assert!(!blocked_name("Van Dyke") && !blocked_name("VanDyke") && blocked_name("Dyke") && blocked_name("X Dyke"));
@@ -262,9 +325,31 @@ fn parts_and_runs() {
 }
 
 #[test]
-fn a_pid_word_after_a_vowel_is_english() {
+fn a_pid_word_after_an_english_start_is_english() {
     assert!(!blocked_name("RapidRacer") && !blocked_name("xStupidorx") && !blocked_name("Insipidar"));
     assert!(blocked_name("vladpidr") && blocked_name("Pidr228") && blocked_name("xpidrx") && blocked_name("rapid_pidr"));
+    // after a vowel only into the next part, never at a part's start
+    assert!(!blocked_name("PepiDroga") && !blocked_name("pepi droga") && blocked_name("dapidor"));
+    assert!(blocked_name("YaPidor") && blocked_name("ya_pidor") && blocked_name("LilP1dr"));
+}
+
+#[test]
+fn edge_words_start_or_end_a_part() {
+    assert!(blocked_name("nigabro") && blocked_name("x_nigabro") && blocked_name("bignigas") && blocked_name("Big_Niga"));
+    // the letters together count too, and only an edge: not inside a part
+    assert!(blocked_name("n.i.g.a.b.r.o") && !blocked_name("xnigabrox") && !blocked_name("Hoonigan"));
+    // the words of the ok lists, there and only there
+    assert!(!blocked_name("Nigar") && !blocked_name("Zuniga") && !blocked_name("Kniga_x") && !blocked_name("Minigas"));
+    assert!(blocked_name("Nigar_niga") && blocked_name("Kniga_bigniga") && blocked_name("xZunigaX_niga"));
+}
+
+#[test]
+fn digits_after_a_lone_n() {
+    // before a letter they are letters
+    assert!(blocked_name("N1663r") && blocked_name("BigN199a") && blocked_name("Nl99A") && blocked_name("n111gg3er"));
+    // at the end, or after more than an n (or ni), a number
+    assert!(!blocked_name("N1995") && !blocked_name("N1663") && !blocked_name("Kaan1998GS") && !blocked_name("Hakan1994TR"));
+    assert!(!blocked_name("N_1663r") && !blocked_name("Nas1663r"));
 }
 
 // the lobby's chat: a word at a time, two words together for the anywhere list, one-letter words in a row
@@ -273,8 +358,9 @@ fn chat_lines() {
     let slur = |l: &str| chat_slur(l).map(str::to_string);
     for (line, span) in [
         ("you nigger", "nigger"),
-        ("Sranie> nate higgers", "nate higgers"),
-        ("nig ger lol", "nig ger"),
+        ("Sranie> nate higgers", "higgers"),
+        ("nig ger lol", "nig"),
+        ("nibb a", "nibb a"),
         ("SIEG HEIL", "SIEG HEIL"),
         ("n i g g e r", "n i g g e r"),
         ("so F A G", "F A G"),
@@ -287,6 +373,10 @@ fn chat_lines() {
         ("porch monkey", "porch monkey"),
         ("van Dyke_fag", "Dyke_fag"),
         ("van dyke-nigger", "dyke-nigger"),
+        ("lol niger", "niger"),
+        ("ya pidor", "pidor"),
+        ("big nigabro", "nigabro"),
+        ("austrian artist", "austrian artist"),
     ] {
         assert_eq!(slur(line).as_deref(), Some(span), "{line}");
     }
@@ -304,6 +394,8 @@ fn chat_lines() {
         "a b c d e",
         "the spice must flow",
         "hi! I'm Nigel from Nigeria",
+        "pepi droga",
+        "Zuniga and Nigar",
         "lap 1:48.8",
         "",
         "   ",
@@ -311,8 +403,8 @@ fn chat_lines() {
         assert_eq!(slur(line), None, "{line}");
     }
     // the span is the line's own text
-    let line = "a\u{a0}nate  higgers b";
-    assert_eq!(chat_slur(line), Some("nate  higgers"));
+    let line = "a\u{a0}porch  monkey b";
+    assert_eq!(chat_slur(line), Some("porch  monkey"));
 }
 
 #[test]
