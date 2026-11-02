@@ -5,7 +5,7 @@
 # S2_CIRCUIT_5,S3_SPON_DRAG_6,S3_SPON_STREET_1 and a stage-3 save (12 kinds of places: our rows are 13 and 14, 12
 # Downs from the first; another career needs another count):
 #   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page app --a Ita:roam_map_filter.txt
-#        --seed <ItsukiT's save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --fetch registry.txt
+#        --seed <the stage-3 save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --fetch registry.txt
 # mp map: "legend 14 rows ... Players crossed ... N players' markers, M lobbies', N of them off the map".  The
 # layout of a full legend (our rows in the place of Your Car / Opponent Car, Up from the first row reaches them):
 # NFSU2_ROAM_TEST_LEGEND_TOP=1.  The shots show the lobby labels beside their icons, clear of the other icons.

@@ -335,7 +335,7 @@ static void pool_log(const char *why){
 
 /* ---- options --------------------------------------------------------------------------- */
 /* a player's option without a comment after it: the Mac's settings.ini only
- * knows whole-line comments, so "roam_name = Thom   ; me" would make the
+ * knows whole-line comments, so "roam_name = Tobi   ; me" would make the
  * comment part of the name; on both platforms a ';' or '#' at the start or
  * after a blank starts a comment ("Team#1" stays a name) */
 static const char *opt(const char *k){
@@ -5877,7 +5877,7 @@ static uint8_t local_status(int in_roam){
 }
 /* each crew's colour unless the player picked another (the Crews setting's
  * colour dots: NFSU2_ROAM_CREW_RGB), by its place: cyan, magenta, violet,
- * red (Thom's pick, 2026-10-24); the page's CREW_PALETTE starts with them.
+ * red (picked 2026-10-24); the page's CREW_PALETTE starts with them.
  * No green or orange: the game's own arrows for the player and the others */
 static const uint32_t CREW_RGB[RC_CREW_MAX] = { 0x3cd2ff, 0xff50c8, 0xa078ff, 0xff4646 };
 /* friends (the server's friends lists: the hub marks them, RC_MARK_FRIEND) are seen as crew-mates are, wherever they

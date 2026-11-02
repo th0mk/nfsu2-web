@@ -34,7 +34,7 @@ test('the crews a value names', () => {
   assert.deepEqual(C.crewList('Zoë, zoË, КОМАНДА, команда'), ['Zoë', 'КОМАНДА'], 'capitals past A to Z small too (players.ts roomFold)');
   assert.equal(C.crewsValue(['Blue Room', 'Night Owls']), 'Blue Room, Night Owls');
   assert.deepEqual(C.crewList(C.crewsValue(['Blue Room', 'Night Owls', 'x'])), ['Blue Room', 'Night Owls', 'x']);
-  assert.deepEqual(C.CREW_PALETTE, ['3cd2ff', 'ff50c8', 'a078ff', 'ff4646', '4f7dff', 'fff03c', '3cf0f0', 'ff9ad5'], 'Thom\'s 8, the defaults first');
+  assert.deepEqual(C.CREW_PALETTE, ['3cd2ff', 'ff50c8', 'a078ff', 'ff4646', '4f7dff', 'fff03c', '3cf0f0', 'ff9ad5'], 'the 8 picked, the defaults first');
   assert.equal(C.CREW_COLOUR_NAMES.length, C.CREW_PALETTE.length, 'a name for each');
 });
 

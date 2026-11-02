@@ -179,7 +179,7 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Emre_34",
     "G\u{f6}khan",
     "\u{130}brahim",
-    "Thom",
+    "Tobi",
     "Player",
     "NAME",
     "OLHOST",
@@ -205,7 +205,7 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Shinigami",
     "Zuniga",
     "Vlado",
-    "Ataliba_Neto",
+    "Vitaliba_Nox",
     "Grapes",
     "Trapezio",
     "Adolf",
@@ -244,9 +244,9 @@ pub(crate) const ALLOWED: &[&str] = &[
     "Painter",
     "Artist",
     "Osama",
-    "PepiDroga",
+    "TopiDrift",
     "N1995",
-    "Hakan1994TR",
+    "Doran1994TR",
 ];
 
 // names.mjs: the lists' words, the ways round them, and not the other words
@@ -329,7 +329,7 @@ fn a_pid_word_after_an_english_start_is_english() {
     assert!(!blocked_name("RapidRacer") && !blocked_name("xStupidorx") && !blocked_name("Insipidar"));
     assert!(blocked_name("vladpidr") && blocked_name("Pidr228") && blocked_name("xpidrx") && blocked_name("rapid_pidr"));
     // after a vowel only into the next part, never at a part's start
-    assert!(!blocked_name("PepiDroga") && !blocked_name("pepi droga") && blocked_name("dapidor"));
+    assert!(!blocked_name("TopiDrift") && !blocked_name("topi drift") && blocked_name("dapidor"));
     assert!(blocked_name("YaPidor") && blocked_name("ya_pidor") && blocked_name("LilP1dr"));
 }
 
@@ -348,7 +348,7 @@ fn digits_after_a_lone_n() {
     // before a letter they are letters
     assert!(blocked_name("N1663r") && blocked_name("BigN199a") && blocked_name("Nl99A") && blocked_name("n111gg3er"));
     // at the end, or after more than an n (or ni), a number
-    assert!(!blocked_name("N1995") && !blocked_name("N1663") && !blocked_name("Kaan1998GS") && !blocked_name("Hakan1994TR"));
+    assert!(!blocked_name("N1995") && !blocked_name("N1663") && !blocked_name("Kaan1998GS") && !blocked_name("Doran1994TR"));
     assert!(!blocked_name("N_1663r") && !blocked_name("Nas1663r"));
 }
 
@@ -358,7 +358,7 @@ fn chat_lines() {
     let slur = |l: &str| chat_slur(l).map(str::to_string);
     for (line, span) in [
         ("you nigger", "nigger"),
-        ("Sranie> nate higgers", "higgers"),
+        ("Kestrel> nate higgers", "higgers"),
         ("nig ger lol", "nig"),
         ("nibb a", "nibb a"),
         ("SIEG HEIL", "SIEG HEIL"),
@@ -384,7 +384,7 @@ fn chat_lines() {
     for line in [
         "merci kurwa",
         "SEN? MERC? AMK",
-        "HACI> DOM TORETTO H?S FATHER",
+        "KUZO> DOM TORETTO H?S FATHER",
         "rapid race",
         "stupid race",
         "go ok",
@@ -394,7 +394,7 @@ fn chat_lines() {
         "a b c d e",
         "the spice must flow",
         "hi! I'm Nigel from Nigeria",
-        "pepi droga",
+        "topi drift",
         "Zuniga and Nigar",
         "lap 1:48.8",
         "",

@@ -1,5 +1,5 @@
 # The touch controls' gear buttons in a drag test run (status_web.c "drive" + 4, roam.c roam_exploring): from a
-# career save in stage 2 or later (NFSU2_SAVE_SEED, e.g. ~/crash-live/seed-itsukit), free roam -> the crib's
+# career save in stage 2 or later (NFSU2_SAVE_SEED), free roam -> the crib's
 # Performance Tuning / Dyno, the Drag setting, a dyno run, Test Run: the drag strip (track 4709, the drag byte set,
 # HUD_Drag), one racer and no career race, which read as free roam before.  The player's gearbox is then made
 # automatic (as most players drive), so only the drag can ask for the gear buttons.  Good: the [drive] lines say

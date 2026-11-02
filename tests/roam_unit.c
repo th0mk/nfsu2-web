@@ -39,7 +39,7 @@ static void t_layout(void){
     rc_msg m; memset(&m, 0, sizeof m);
     m.h.type = RC_MSG_HELLO; m.h.sender = 0xA1B2C3D4u; m.h.seq = 0x1234; m.h.flags = 0;
     m.u.hello.core_ver = 1; m.u.hello.platform = RC_PLAT_MAC; m.u.hello.status = RC_ST_ROAM; m.u.hello.listen_port = 47210;
-    m.u.hello.cfg_rev = 7; m.u.hello.room = 0x01020304u; strcpy(m.u.hello.name, "Thom"); m.u.hello.n_seen = 2;
+    m.u.hello.cfg_rev = 7; m.u.hello.room = 0x01020304u; strcpy(m.u.hello.name, "Tobi"); m.u.hello.n_seen = 2;
     m.u.hello.seen[0] = 0x11111111u; m.u.hello.seen[1] = 0x22222222u;
     int n = rc_encode(&m, b, sizeof b);
     /* header 16 + core_ver 2 + platform 1 + status 1 + port 2 + rev 2 + room 4 + len 1 + name 4 + n_seen 1 + 8 + crc 4 */
@@ -47,7 +47,7 @@ static void t_layout(void){
     CHECK(!memcmp(b, "N2FR", 4) && b[4] == 1 && b[5] == RC_MSG_HELLO, "HELLO magic/version/type");
     CHECK(le16(b + 6) == n && le32(b + 8) == 0xA1B2C3D4u && le16(b + 12) == 0x1234 && le16(b + 14) == 0, "HELLO header fields");
     CHECK(le16(b + 16) == 1 && b[18] == RC_PLAT_MAC && b[19] == RC_ST_ROAM && le16(b + 20) == 47210 && le16(b + 22) == 7 &&
-          le32(b + 24) == 0x01020304u && b[28] == 4 && !memcmp(b + 29, "Thom", 4) && b[33] == 2 &&
+          le32(b + 24) == 0x01020304u && b[28] == 4 && !memcmp(b + 29, "Tobi", 4) && b[33] == 2 &&
           le32(b + 34) == 0x11111111u && le32(b + 38) == 0x22222222u, "HELLO payload offsets");
     CHECK(le32(b + n - 4) == rc_crc32(b, (uint32_t)n - 4), "HELLO CRC trailer");
 
@@ -1444,7 +1444,7 @@ static void t_statex(void){
 static void t_crews(void){
     uint8_t b[RC_MAX_DGRAM]; rc_msg m, d; memset(&m, 0, sizeof m);
     uint32_t A = rc_room_hash("Blue Room"), B = rc_room_hash("Night Owls");
-    m.h.type = RC_MSG_HELLO; m.h.sender = 7; m.h.flags = RC_HF_CREW; strcpy(m.u.hello.name, "Thom");
+    m.h.type = RC_MSG_HELLO; m.h.sender = 7; m.h.flags = RC_HF_CREW; strcpy(m.u.hello.name, "Tobi");
     m.u.hello.n_seen = 1; m.u.hello.seen[0] = 0x11111111u;
     int base = 16 + 2 + 1 + 1 + 2 + 2 + 4 + 1 + 4 + 1 + 4 + 4;
     int n = rc_encode(&m, b, sizeof b);

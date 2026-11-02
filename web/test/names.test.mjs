@@ -37,19 +37,19 @@ const UNICODE = ['ñigga', 'nіgga', 'ｎｉｇｇａ', 'ΝΙGGΑ', 'n̲i̲g̲g�
 const ALLOWED = ['Mustafa69', 'MustafaGS', 'Mustafa_GS', 'Mustafa Gamer', 'mustafagamer', 'Rafa96', 'Vefa', 'Safa',
   'Pakize', 'Nigar', 'Nigeria', 'Nigerian', 'Nigel', 'Raccoon', 'Tycoon', 'Cocoon', 'spicy', 'Spice',
   'despicable', 'Pakistan', 'Fagundes', 'Bigger', 'Trigger', 'Digger', 'Knight', 'Chinook', 'Scunthorpe', 'Cooper',
-  'Ahmet35', 'Emre_34', 'Gökhan', 'İbrahim', 'Thom', 'Player', 'NAME', 'OLHOST', 'Speedy', '',
+  'Ahmet35', 'Emre_34', 'Gökhan', 'İbrahim', 'Tobi', 'Player', 'NAME', 'OLHOST', 'Speedy', '',
   // a name and a number: a year, two digits, the digits the Online mode adds to a taken name (lobby.rs free_variant)
   'Hakan1995', 'Furkan1999', 'Ozan_1996', 'Can 1969', 'Kaan1998', 'Dani99', 'Toni69', 'Dani99GS', 'Ozan1996GS',
   'Hakan1993TR', 'Dani9912', 'Strannik', 'VanDyke', 'Van Dyke',
   // the live names with the new words' letters in them, other numbers with 88
-  'Spider', 'MR.SPIDER', 'Shinigami', 'Zuniga', 'Vlado', 'Ataliba_Neto', 'Grapes', 'Trapezio', 'Adolf', 'Nazim',
+  'Spider', 'MR.SPIDER', 'Shinigami', 'Zuniga', 'Vlado', 'Vitaliba_Nox', 'Grapes', 'Trapezio', 'Adolf', 'Nazim',
   'Nazif', 'Nygaard', 'Mongol', 'Churkin', 'jacob88', 'Jane8848', 'Ahmet1448',
   // English words that end in "pid" before an r or a
   'RapidRacer', 'rapid racer', 'CupidRacer', 'Stupidrift', 'StupidArmy', 'TepidRide',
   // the words that start or end a part as niga or nyga would, the new words' letters, a lone n and a year
   'Hoonigan', 'Hooniga', 'Minigame', 'Minigas', 'Kniga', 'Kunigas', 'Niigaki', 'NIGAMI', 'Nygard', 'TonyGamer',
   'Antony Gaming', 'Brony_Gamer', 'Higgins', 'Higgs', 'Austria', 'AustrianGP', 'Painter', 'Artist', 'Osama',
-  'PepiDroga', 'N1995', 'Hakan1994TR'];
+  'TopiDrift', 'N1995', 'Doran1994TR'];
 
 test('names.mjs: the lists\' words, the ways round them, and not the other words', () => {
   for (const w of [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge]) assert.ok(blockedName(w), w);
@@ -90,7 +90,7 @@ int main(void){
     const rnd = n => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) % n; };
     const pick = a => a[rnd(a.length)];
     const pieces = [...SLURS.anywhere, ...SLURS.whole, ...SLURS.edge, ...EDGE_OK.start, ...EDGE_OK.end, ...PID_STEMS, 'mustafa', 'gs',
-      'raccoon', 'spice', 'niger', 'nigeria', 'pakize', 'xx', 'gamer', 'a', 'g', 'dani', 'hakan', 'van', 'n', 'pid', 'pepi', 'droga',
+      'raccoon', 'spice', 'niger', 'nigeria', 'pakize', 'xx', 'gamer', 'a', 'g', 'dani', 'hakan', 'van', 'n', 'pid', 'topi', 'drift',
       '99', '1995', '1663', '69', '1488', '88'];
     const swap = { o: '0', i: '1!|l', e: '3', a: '4@', s: '5$', t: '7+', g: '69q', b: '8' };
     const names = [...BLOCKED, ...ALLOWED.filter(n => /^[ -~]*$/.test(n))];

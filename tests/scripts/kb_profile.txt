@@ -16,7 +16,7 @@
 +8    nstap BACK
 +8    nstap BACK
 +8    nstap BACK
-+20   nstype Thom M4 Pro
++20   nstype Tobi M4 Pro
 +80   dump name_typed
 +0    peek 0x83a9b4 3
 +0    nsdown BACK                                   # held: 1 + 3 autorepeats
@@ -24,9 +24,9 @@
 +10   nsup BACK
 +40   dump name_after_repeat
 +0    nstap CAPSLOCK                                # Caps Lock on: capitals without Shift
-+20   nstype mas
++20   nstype ias
 +20   nstap CAPSLOCK                                # off again
-+20   nstype 1                                      # -> "ThoMAS1"
++20   nstype 1                                      # -> "TobIAS1"
 +40   dump name_retyped
 +0    nstap RETURN                                  # -> "save profile named ...?" ("No" selected)
 +240  dump name_confirm

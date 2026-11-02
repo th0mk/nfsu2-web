@@ -682,13 +682,13 @@ fn a_drift_races_points_are_logged_and_an_edited_car_is_a_cheat_line() {
     );
 }
 
-// what a game shows of another racer is no [cheat] line (nfsu2.xyz, 2026-10-29: Ozz's game had Nef win a 4-minute
-// sprint at 7457 km/h, and a racer who left at 91 km): only each racer's own game's figures count
+// what a game shows of another racer is no [cheat] line (nfsu2.xyz, 2026-10-29: one game had another racer win a
+// 4-minute sprint at 7457 km/h, and a racer who left at 91 km): only each racer's own game's figures count
 #[test]
 fn what_a_game_shows_of_the_others_is_no_cheat_line() {
     let mut w = world();
     let (ga, gb, gc) = (client(&mut w, "10.77.6.1"), client(&mut w, "10.77.6.2"), client(&mut w, "10.77.6.3"));
-    let (x, y, z) = (login(&mut w, ga, "Ozz"), login(&mut w, gb, "Nef"), login(&mut w, gc, "Left"));
+    let (x, y, z) = (login(&mut w, ga, "Ann"), login(&mut w, gb, "Bob"), login(&mut w, gc, "Left"));
     let auth = race(&mut w, "seen", &[x, y, z], vec![]).unwrap();
     // (a game that says nothing for 120 s is dropped: each pings on the way)
     for _ in 0..3 {
@@ -698,13 +698,13 @@ fn what_a_game_shows_of_the_others_is_no_cheat_line() {
         }
     }
     let send = |w: &mut World, c, rows: &[(u8, u8, f32, f32, bool)]| {
-        let f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, rows)), ("NAME0", "Ozz"), ("NAME1", "Nef"), ("NAME2", "Left")];
+        let f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, rows)), ("NAME0", "Ann"), ("NAME1", "Bob"), ("NAME2", "Left")];
         w.send(c, "rank", f);
     };
     send(&mut w, x, &[(1, 1, 223.37, 2071.4, false), (0, 2, 225.18, 36.98, false), (2, 3, 57.34, 1600.0, true)]);
     send(&mut w, y, &[(1, 1, 223.37, 37.5, false), (0, 2, 225.18, 37.1, false), (2, 3, 57.34, 30.0, true)]);
     send(&mut w, z, &[(1, 1, 223.37, 37.5, false), (0, 2, 225.18, 37.1, false), (2, 3, 57.34, 30.0, true)]);
-    assert!(w.logged("\"seen\" (sprint, unranked): 1 Nef 3:43.37, 2 Ozz 3:45.18"), "{}", w.text().join("\n"));
+    assert!(w.logged("\"seen\" (sprint, unranked): 1 Bob 3:43.37, 2 Ann 3:45.18"), "{}", w.text().join("\n"));
     assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "{}", w.text().join("\n"));
 }
 

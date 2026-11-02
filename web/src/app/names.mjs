@@ -25,7 +25,7 @@
 // ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the
 // neo-Nazi code).  A swear word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an
 // English word that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part
-// ("PepiDroga"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
+// ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
 export const SLURS = Object.freeze({
   anywhere: Object.freeze(['nigg', 'niqq', 'faggot', 'tranny', 'trannie', 'retard', 'ibne', 'wetback', 'beaner',
     'raghead', 'towelhead', 'chingchong', 'jigaboo', 'porchmonkey', 'junglebunny',
@@ -99,7 +99,7 @@ function at(s, i, w) {
 }
 /** a "pid" word of the anywhere list (pidor, pidar, pidr) at s[i] is the end of an English word: not at the start of
  *  a part, and right after the start of one of those words ("RapidRacer", "Stupidrift"), or after a vowel and into
- *  the next part ("PepiDroga"); "vladpidr", "dapidor", "YaPidor" are slurs.  starts[j]: a part starts at s[j] */
+ *  the next part ("TopiDrift"); "vladpidr", "dapidor", "YaPidor" are slurs.  starts[j]: a part starts at s[j] */
 function englishPid(s, i, w, starts) {
   if (!w.startsWith('pid') || starts[i]) return false;
   if (STEMS.some(st => st.length <= i && s.startsWith(st, i - st.length))) return true;

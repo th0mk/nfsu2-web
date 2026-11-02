@@ -136,7 +136,7 @@ const FIXES = {
   },
 };
 
-// Fixed answers to how-to questions asked again and again in the chat, which Thom chose to have answered (the wide body
+// Fixed answers to how-to questions asked again and again in the chat, picked to be answered (the wide body
 // kit, 2026-11-02): `re` lets a message through the filter and must be in the author's own words, `when` tells the
 // model which questions it answers, and `en` is the reply (translated like a fix).  Only the author's own question
 // gets it, never a remark, a picture or someone else's question.

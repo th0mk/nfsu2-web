@@ -1,10 +1,10 @@
 # The race's cars evened out (mprace.c balance_race), host side, with carbal_mp_b.txt: two careers' cars in a
-# circuit race of free roam's.  A (ItsukiT's stage 3, 240SX rated 302) opens a lobby at the multiplayer-only
-# S3_CIRCUIT_11 by its start, B (Zelshia's stage 2, 240SX rated 241) comes there and joins, the game's AI drives.
+# circuit race of free roam's.  A (a stage-3 save, 240SX rated 302) opens a lobby at the multiplayer-only
+# S3_CIRCUIT_11 by its start, B (a stage-2 save, 240SX rated 241) comes there and joins, the game's AI drives.
 # Every second of the race: our car's speed, the Catch Up multiplier (car +0x468), the engine's torque scale
 # (engine +0x90), the governor (info +0x2C0), the curve's first point and the nitrous (info +0x230, +0x2DC), and
 # each racer's car's +0x468.
-#   node web/tools/roam-pair.mjs --seed <ItsukiT tree> --seed-for Bob:<Zelshia tree> --a Ann:carbal_mp_a.txt
+#   node web/tools/roam-pair.mjs --seed <stage 3 tree> --seed-for Bob:<stage 2 tree> --a Ann:carbal_mp_a.txt
 #        --b Bob:carbal_mp_b.txt --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S3_CIRCUIT_11 --drive 60000 --watch 60000
 0     bot on
 +0    waitroam 6000

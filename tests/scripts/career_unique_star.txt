@@ -1,12 +1,12 @@
 # The career's unique-part stars (the "other" events STAGE_n_PERF_k / STAGE_n_VISUAL_k, opened by the stage's outrun
-# wins) on the map, in a stage-3 career (ItsukiT's save): careerlist logs the stage's outrun wins, the other events
+# wins) on the map, in a stage-3 career save: careerlist logs the stage's outrun wins, the other events
 # open and the map's markers.  Then the career is put to stage 5 by hand with 11 outrun wins, so STAGE_5_PERF_3 (6)
 # and STAGE_5_VISUAL_5 (11, the wide body kit) open; then the save's first won race counts as S5_URL_9 instead, and
 # both go: the game's open list (0x527D30) holds only Caleb's race (S5_CIRCUIT_36) in stage 5 once S5_URL_9 is won,
 # and adds no other events then (as the PC game: its SMS still comes on the 11th win, from 0x533A90).  Last the
 # stage-3 star is engaged: during it the map's only marker is its shop.  The map is opened with plain taps (tapuntil
 # matches a screen seen before); the play page in WSL draws a few frames a second, so the dumps wait long.
-#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <ItsukiT's save tree>
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <a stage-3 career save tree>
 #        --a Uni:career_unique_star.txt[:NFSU2_ROAM=0]
 0     bot on
 +0    waitroam 6000

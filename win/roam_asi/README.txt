@@ -38,7 +38,7 @@ If friends do not appear
 - On the Mac the same settings are roam = on, roam_name, roam_peers,
   roam_port in ~/Library/Application Support/NFSU2/settings.ini.
 - Comments in the .ini: a ';' or '#' at the start of a value or after a
-  space starts a comment ("Name = Thom ; me" is Thom, "Name = Team#1" stays
+  space starts a comment ("Name = Tobi ; me" is Tobi, "Name = Team#1" stays
   Team#1).
 
 What to expect

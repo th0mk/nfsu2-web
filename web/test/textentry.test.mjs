@@ -16,7 +16,7 @@ const { takes, fit, edits } = await import('data:text/javascript;base64,' + Buff
 const apply = (text, chars) => chars.reduce((t, c) => c === 8 ? t.slice(0, -1) : t + String.fromCharCode(c), text);
 
 test('a profile name takes letters and digits, 7 of them', () => {
-  assert.equal(fit('Thom M4 Pro!', 1, 7), 'ThomM4P');
+  assert.equal(fit('Tobi M4 Pro!', 1, 7), 'TobiM4P');
   assert.equal(fit('Zoë_99', 1, 7), 'Zo99');
   assert.equal(fit('😀abc', 1, 7), 'abc');
 });
@@ -28,9 +28,9 @@ test('the kinds with more characters', () => {
 });
 
 test('the game ends up with the field\'s text', () => {
-  const cases = [['NAME', 'T'], ['', 'THOM'], ['THOM', 'THO'], ['THOM', 'THAM'], ['THOM', 'THOM'], ['ABC', ''], ['Zoe', 'Zoé']];
+  const cases = [['NAME', 'T'], ['', 'TOBI'], ['TOBI', 'TOB'], ['TOBI', 'TONI'], ['TOBI', 'TOBI'], ['ABC', ''], ['Zoe', 'Zoé']];
   for (const [from, to] of cases) assert.equal(apply(from, edits(from, to)), to, `${from} -> ${to}`);
   assert.deepEqual(edits('NAME', 'T'), [8, 8, 8, 8, 0x54]);
-  assert.deepEqual(edits('THOM', 'THOMAS'), [0x41, 0x53]);
+  assert.deepEqual(edits('TOBI', 'TOBIAS'), [0x41, 0x53]);
   assert.deepEqual(edits('Zoe', 'Zoé'), [8, 0xE9]);
 });

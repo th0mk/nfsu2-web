@@ -100,9 +100,9 @@ test('the key and token: PBKDF2-SHA-256, 100,000 rounds; sealed saves open with 
 
 test('a player\'s folder packs far below what the server takes; the hash is of the content', async () => {
   const files = [
-    { path: at('THOM'), data: profile('THOM'), mtime: 1 },
-    { path: `${DIR}/THOM DVD 1/THOM DVD 1`, data: cover(), mtime: 2 },
-    { path: `${DIR}/THOM Magazine 1/THOM Magazine 1`, data: cover(), mtime: 3 },
+    { path: at('TOBI'), data: profile('TOBI'), mtime: 1 },
+    { path: `${DIR}/TOBI DVD 1/TOBI DVD 1`, data: cover(), mtime: 2 },
+    { path: `${DIR}/TOBI Magazine 1/TOBI Magazine 1`, data: cover(), mtime: 3 },
     { path: 'registry.txt', data: enc.encode('[HKEY]\nx=1\n'.repeat(30)), mtime: 4 },
     { path: 'settings.ini', data: enc.encode('# settings\n#fps = 60\n'.repeat(200)), mtime: 5 },
   ];
@@ -116,16 +116,16 @@ test('a player\'s folder packs far below what the server takes; the hash is of t
   assert.equal(await V.contentHash([...files].reverse()), h, 'nor the order');
   assert.notEqual(await V.contentHash(files.map((f, i) => i === 3 ? { ...f, data: enc.encode('changed') } : f)), h);
   assert.notEqual(await V.contentHash(files.map((f, i) => i === 3 ? { ...f, path: 'registry2.txt' } : f)), h);
-  assert.deepEqual(V.profilesIn(files), ['THOM']);
-  assert.ok(V.keeps('settings.ini') && V.keeps(at('THOM')) && !V.keeps('nfsu2000.tga') && !V.keeps('autotest-script.txt'));
-  assert.ok(!V.keeps('registry.txt') && V.keptBy(1)('registry.txt') && V.keptBy(1)(`${DIR}/THOM DVD 1/THOM DVD 1`));
-  assert.ok(V.keptBy(2)('registry.txt') && !V.keptBy(2)(`${DIR}/THOM DVD 1/THOM DVD 1`) && !V.keptBy(2)('nfsu2000.tga'));
-  assert.ok(!V.keptBy(3)('registry.txt') && !V.keptBy(3)(`${DIR}/THOM DVD 1/THOM DVD 1`) && V.keptBy(3)(at('THOM')));
+  assert.deepEqual(V.profilesIn(files), ['TOBI']);
+  assert.ok(V.keeps('settings.ini') && V.keeps(at('TOBI')) && !V.keeps('nfsu2000.tga') && !V.keeps('autotest-script.txt'));
+  assert.ok(!V.keeps('registry.txt') && V.keptBy(1)('registry.txt') && V.keptBy(1)(`${DIR}/TOBI DVD 1/TOBI DVD 1`));
+  assert.ok(V.keptBy(2)('registry.txt') && !V.keptBy(2)(`${DIR}/TOBI DVD 1/TOBI DVD 1`) && !V.keptBy(2)('nfsu2000.tga'));
+  assert.ok(!V.keptBy(3)('registry.txt') && !V.keptBy(3)(`${DIR}/TOBI DVD 1/TOBI DVD 1`) && V.keptBy(3)(at('TOBI')));
   assert.ok(!V.keeps('gamefile.bin') && V.keptBy(1)('gamefile.bin') && V.keptBy(2)('gamefile.bin') && V.keptBy(3)('gamefile.bin'));
-  assert.ok(!V.keptBy(4)('gamefile.bin') && !V.keptBy(4)('registry.txt') && V.keptBy(4)('settings.ini') && V.keptBy(4)(at('THOM')));
-  assert.ok(!V.keeps(`${DIR}/THOM DVD 1/THOM DVD 1`) && !V.keeps(`${DIR}/THOM Magazine 12/THOM Magazine 12`));
-  assert.ok(V.keeps(`${DIR}/THOM/GARAGE.DAT`) && V.keeps(`${DIR}/THOM/GARAGE.OLD`), 'the garage\'s slots 6-10 go with their profile (runtime/garage.c)');
-  assert.ok(V.isCover(`${DIR}/THOM DVD 1/THOM DVD 1`) && !V.isCover(at('THOM')) && !V.isCover('THOM DVD 1'));
+  assert.ok(!V.keptBy(4)('gamefile.bin') && !V.keptBy(4)('registry.txt') && V.keptBy(4)('settings.ini') && V.keptBy(4)(at('TOBI')));
+  assert.ok(!V.keeps(`${DIR}/TOBI DVD 1/TOBI DVD 1`) && !V.keeps(`${DIR}/TOBI Magazine 12/TOBI Magazine 12`));
+  assert.ok(V.keeps(`${DIR}/TOBI/GARAGE.DAT`) && V.keeps(`${DIR}/TOBI/GARAGE.OLD`), 'the garage\'s slots 6-10 go with their profile (runtime/garage.c)');
+  assert.ok(V.isCover(`${DIR}/TOBI DVD 1/TOBI DVD 1`) && !V.isCover(at('TOBI')) && !V.isCover('TOBI DVD 1'));
   await assert.rejects(V.unpack(enc.encode('not deflate')), /damaged/);
 });
 
@@ -200,7 +200,7 @@ function browser(srv, link = null) {
 
 /** b's saves: one profile with this much money, its settings */
 function seed(b, money, ini = '# settings\n') {
-  b.files.set(at('THOM'), profile('THOM', { money }));
+  b.files.set(at('TOBI'), profile('TOBI', { money }));
   b.files.set('settings.ini', enc.encode(ini));
   b.files.set('nfsu2000.tga', new Uint8Array(100));        // a screenshot: never sent
 }
@@ -215,32 +215,32 @@ test('two browsers on one keyphrase: made, loaded, synced both ways', async () =
   // the server holds neither the keyphrase nor a save: only sealed bytes under the token
   const [[token, held]] = srv.kept;
   assert.equal(token, (await V.keysOf(phrase)).token);
-  assert.ok(!Buffer.from(held.cur.body).includes('THOM') && !Buffer.from(held.cur.body).includes('settings'));
+  assert.ok(!Buffer.from(held.cur.body).includes('TOBI') && !Buffer.from(held.cur.body).includes('settings'));
   // b: an unknown keyphrase, then a's
   assert.equal(await b.sync.peek('nfsu2-xyz-acid-acorn-acre-acts-afar-affix-aged-agent'), null);
   const got = await b.sync.peek(phrase);
-  assert.deepEqual((await unzip(got.zip)).map(e => e.name).sort(), [at('THOM'), 'settings.ini']);
+  assert.deepEqual((await unzip(got.zip)).map(e => e.name).sort(), [at('TOBI'), 'settings.ini']);
   b.files.set('nfsu2001.tga', new Uint8Array(5));
   for (const e of await unzip(got.zip)) b.files.set(e.name, e.data);
   await b.sync.adopt(phrase, got.remote);
   assert.equal(b.sync.state.s, 'synced');
-  assert.equal(b.money(at('THOM')), 1000);
+  assert.equal(b.money(at('TOBI')), 1000);
   // nothing changed: nothing sent, nothing taken
   const rev = srv.kept.get(token).cur.rev;
   await b.sync.push(); await a.sync.pull(); await b.sync.pull();
   assert.equal(srv.kept.get(token).cur.rev, rev);
   // a plays: b takes it (b's screenshot stays)
-  a.files.set(at('THOM'), profile('THOM', { money: 2000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 2000 }));
   await a.sync.push();
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 2000);
+  assert.equal(b.money(at('TOBI')), 2000);
   assert.equal(b.taken, 1);
   assert.ok(b.files.has('nfsu2001.tga'));
   // b plays: a takes it
-  b.files.set(at('THOM'), profile('THOM', { money: 3000 }));
+  b.files.set(at('TOBI'), profile('TOBI', { money: 3000 }));
   await b.sync.push();
   await a.sync.pull();
-  assert.equal(a.money(at('THOM')), 3000);
+  assert.equal(a.money(at('TOBI')), 3000);
   assert.equal(a.sync.state.s, 'synced');
 });
 
@@ -252,8 +252,8 @@ test('a conflict, settled either way; the same change on both sides is none', as
   for (const e of await unzip(got.zip)) b.files.set(e.name, e.data);
   await b.sync.adopt(phrase, got.remote);
   // both play
-  a.files.set(at('THOM'), profile('THOM', { money: 5000 }));
-  b.files.set(at('THOM'), profile('THOM', { money: 7000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 5000 }));
+  b.files.set(at('TOBI'), profile('TOBI', { money: 7000 }));
   await a.sync.push();
   await b.sync.push();
   assert.equal(b.sync.state.s, 'conflict');
@@ -261,20 +261,20 @@ test('a conflict, settled either way; the same change on both sides is none', as
   assert.equal(b.sync.state.theirs.saved, srv.now);
   // while it waits for the player, nothing syncs by itself
   await b.sync.pull(); await b.sync.push();
-  assert.equal(b.money(at('THOM')), 7000);
+  assert.equal(b.money(at('TOBI')), 7000);
   // b keeps its own: a takes it
   await b.sync.keepMine();
   assert.equal(b.sync.state.s, 'synced');
   await a.sync.pull();
-  assert.equal(a.money(at('THOM')), 7000);
+  assert.equal(a.money(at('TOBI')), 7000);
   // again, and a takes the other's this time
-  a.files.set(at('THOM'), profile('THOM', { money: 8000 }));
-  b.files.set(at('THOM'), profile('THOM', { money: 9000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 8000 }));
+  b.files.set(at('TOBI'), profile('TOBI', { money: 9000 }));
   await b.sync.push();
   await a.sync.pull();
   assert.equal(a.sync.state.s, 'conflict');
   await a.sync.takeTheirs();
-  assert.equal(a.money(at('THOM')), 9000);
+  assert.equal(a.money(at('TOBI')), 9000);
   assert.equal(a.sync.state.s, 'synced');
   // both pages bring settings.ini up to date the same way: no conflict
   const up = enc.encode('# settings\n#new = 1\n');
@@ -296,7 +296,7 @@ test('a send the server kept but never answered is this browser\'s own: no confl
   const lost = async (u, i) => { const r = await srv.fetch(u, i); if (i?.method === 'PUT') throw new TypeError('fetch failed'); return r; };
   const save = async (x, money, fetch = srv.fetch) => {
     srv.now += 60_000;
-    x.files.set(at('THOM'), profile('THOM', { money }));
+    x.files.set(at('TOBI'), profile('TOBI', { money }));
     x.deps.fetch = fetch;
     try { await x.sync.push(); } finally { x.deps.fetch = srv.fetch; }
   };
@@ -310,18 +310,18 @@ test('a send the server kept but never answered is this browser\'s own: no confl
   assert.equal(a.sync.state.s, 'synced');
   assert.equal(a.sync.link.sent, undefined);
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 3000);
+  assert.equal(b.money(at('TOBI')), 3000);
   // twice unanswered (the second over the first), then the page reloaded with a save since: it follows its own and sends
   await assert.rejects(save(a, 4000, lost));
   await assert.rejects(save(a, 5000, lost));
-  a.files.set(at('THOM'), profile('THOM', { money: 6000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 6000 }));
   const a2 = reloaded(a);
   await a2.sync.pull();
   assert.equal(a2.sync.state.s, 'synced');
   await a2.sync.push();
   assert.equal(a2.sync.state.s, 'synced');
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 6000);
+  assert.equal(b.money(at('TOBI')), 6000);
   // unanswered, and the same files kept since: linked at the next look, nothing sent again
   await assert.rejects(save(a2, 7000, lost));
   const kept = rev(), a3 = reloaded(a2);
@@ -329,14 +329,14 @@ test('a send the server kept but never answered is this browser\'s own: no confl
   assert.equal(a3.sync.state.s, 'synced');
   assert.equal(rev(), kept);
   // unanswered, then the files went back to what was synced: sent again, so the server does not keep the other
-  const back = a3.files.get(at('THOM'));
+  const back = a3.files.get(at('TOBI'));
   await assert.rejects(save(a3, 7500, lost));
-  a3.files.set(at('THOM'), back);
+  a3.files.set(at('TOBI'), back);
   await a3.sync.push();
   assert.equal(a3.sync.state.s, 'synced');
   assert.equal(a3.sync.link.sent, undefined);
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 7000);
+  assert.equal(b.money(at('TOBI')), 7000);
   // another browser's version is still a conflict, with both sides' profiles
   await save(b, 8000);
   const theirs = rev();
@@ -345,8 +345,8 @@ test('a send the server kept but never answered is this browser\'s own: no confl
   await save(a3, 10000);
   assert.deepEqual([a3.sync.state.s, a3.sync.state.why], ['conflict', 'both']);
   const st = a3.sync.state;
-  assert.deepEqual([st.here.profiles, st.cloud.profiles, st.cloud.saved], [[{ name: 'THOM', money: 10000 }], [{ name: 'THOM', money: 8000 }], st.theirs.saved]);
-  assert.equal(a3.money(at('THOM')), 10000);
+  assert.deepEqual([st.here.profiles, st.cloud.profiles, st.cloud.saved], [[{ name: 'TOBI', money: 10000 }], [{ name: 'TOBI', money: 8000 }], st.theirs.saved]);
+  assert.equal(a3.money(at('TOBI')), 10000);
 });
 
 test('no profile here is never sent by itself; a torn profile waits; the copy of an earlier day', async () => {
@@ -354,29 +354,29 @@ test('no profile here is never sent by itself; a torn profile waits; the copy of
   seed(a, 1000);
   await a.sync.create();
   // the game is writing the profile while it is read: checksums that do not hold
-  a.files.set(at('THOM'), profile('THOM', { money: 1500, stale: true }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 1500, stale: true }));
   const rev = a.sync.link.rev;
   await a.sync.push({ playing: true });
   assert.equal(a.sync.link.rev, rev, 'not sent during a game');
-  a.files.set(at('THOM'), profile('THOM', { money: 1500 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 1500 }));
   await a.sync.push({ playing: true });
   assert.notEqual(a.sync.link.rev, rev);
   // the next day: the version of the day before is the earlier copy
   srv.now += DAY;
-  a.files.set(at('THOM'), profile('THOM', { money: 2500 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 2500 }));
   await a.sync.push();
   assert.equal(a.sync.link.earlier, srv.now - DAY);
   const e = await a.sync.peek(a.sync.link.phrase, true);
-  const prof = (await unzip(e.zip)).find(x => x.name === at('THOM')).data;
+  const prof = (await unzip(e.zip)).find(x => x.name === at('TOBI')).data;
   assert.equal(new DataView(prof.buffer, prof.byteOffset).getUint32(0xA16A, true), 1500);
   // the profiles gone here (cleared storage): nothing sent; the keyphrase's come back
-  a.files.delete(at('THOM'));
+  a.files.delete(at('TOBI'));
   await a.sync.push();
   assert.deepEqual([a.sync.state.s, a.sync.state.why], ['conflict', 'empty']);
   await a.sync.takeTheirs();
-  assert.equal(a.money(at('THOM')), 2500);
+  assert.equal(a.money(at('TOBI')), 2500);
   // or, sent anyway
-  a.files.delete(at('THOM'));
+  a.files.delete(at('TOBI'));
   await a.sync.push();
   await a.sync.keepMine();
   assert.equal(a.sync.state.s, 'synced');
@@ -408,7 +408,7 @@ test('deleted elsewhere, and the server\'s refusals', async () => {
   for (const e of await unzip(got.zip)) b.files.set(e.name, e.data);
   await b.sync.adopt(phrase, got.remote);
   srv.refuse = 429;
-  a.files.set(at('THOM'), profile('THOM', { money: 1 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 1 }));
   await assert.rejects(a.sync.push());
   // the message in English, the same as written for the page's language, and its code (the same in every language)
   const err = (msg, code, v) => ({ s: 'error', msg, why: { t: msg, v }, code });
@@ -427,11 +427,11 @@ test('deleted elsewhere, and the server\'s refusals', async () => {
   assert.equal(srv.kept.size, 0);
   await a.sync.pull();
   assert.equal(a.sync.state.s, 'gone');
-  assert.equal(a.money(at('THOM')), 1);
+  assert.equal(a.money(at('TOBI')), 1);
   // a keeps the keyphrase and sends nothing by itself, after a reload too
   assert.equal(a.sync.link.phrase, phrase);
   assert.equal(a.sync.link.gone, true);
-  a.files.set(at('THOM'), profile('THOM', { money: 2 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 2 }));
   await a.sync.push();
   assert.equal(srv.kept.size, 0);
   const a2 = browser(srv, a.link); a2.files = a.files;          // a reloaded
@@ -472,46 +472,46 @@ test('a version older than the one here, or with no profile, never replaces the 
   const token = (await V.keysOf(phrase)).token, backup = srv.kept.get(token);
   // a plays on: b takes it
   srv.now += 60_000;
-  a.files.set(at('THOM'), profile('THOM', { money: 5000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 5000 }));
   await a.sync.push();
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 5000);
+  assert.equal(b.money(at('TOBI')), 5000);
   // the server goes back (its folder restored from a backup): b keeps its saves and asks
   srv.kept.set(token, backup);
   await b.sync.pull();
   assert.deepEqual([b.sync.state.s, b.sync.state.why], ['conflict', 'older']);
-  assert.equal(b.money(at('THOM')), 5000);
+  assert.equal(b.money(at('TOBI')), 5000);
   await b.sync.keepMine();
   assert.equal(b.sync.state.s, 'synced');
   await a.sync.pull();
   assert.equal(a.sync.state.s, 'synced');
-  assert.equal(a.money(at('THOM')), 5000);
+  assert.equal(a.money(at('TOBI')), 5000);
   // a keeps its empty saves over the cloud's: b, unchanged since, keeps its profile and asks
   srv.now += 60_000;
-  a.files.delete(at('THOM'));
+  a.files.delete(at('TOBI'));
   await a.sync.push();
   assert.deepEqual([a.sync.state.s, a.sync.state.why], ['conflict', 'empty']);
   await a.sync.keepMine();
   await b.sync.pull();
   assert.deepEqual([b.sync.state.s, b.sync.state.why], ['conflict', 'bare']);
-  assert.equal(b.money(at('THOM')), 5000);
+  assert.equal(b.money(at('TOBI')), 5000);
   await b.sync.takeTheirs();
-  assert.ok(!b.files.has(at('THOM')));
+  assert.ok(!b.files.has(at('TOBI')));
 });
 
 test('covers stay in the browser that took them; a version with covers (sent before) brings none', async () => {
   const srv = server(), a = browser(srv), b = browser(srv);
   seed(a, 1000);
-  const dvd = n => `${DIR}/THOM DVD ${n}/THOM DVD ${n}`;
+  const dvd = n => `${DIR}/TOBI DVD ${n}/TOBI DVD ${n}`;
   a.files.set(dvd(1), new Uint8Array(crypto.randomBytes(1048612)));         // a picture: packs to as much
   const phrase = await a.sync.create();
   const token = (await V.keysOf(phrase)).token;
   assert.ok(srv.kept.get(token).cur.body.length < 16 << 10);
   const got = await b.sync.peek(phrase);
-  assert.deepEqual((await unzip(got.zip)).map(e => e.name).sort(), [at('THOM'), 'settings.ini']);
+  assert.deepEqual((await unzip(got.zip)).map(e => e.name).sort(), [at('TOBI'), 'settings.ini']);
   for (const e of await unzip(got.zip)) b.files.set(e.name, e.data);
   await b.sync.adopt(phrase, got.remote);
-  // b's own cover of THOM, and one of a profile b no longer has
+  // b's own cover of TOBI, and one of a profile b no longer has
   b.files.set(dvd(2), cover());
   b.files.set(`${DIR}/GONE DVD 1/GONE DVD 1`, cover());
   // a cover shoot changes no file a keyphrase keeps: nothing sent
@@ -519,22 +519,22 @@ test('covers stay in the browser that took them; a version with covers (sent bef
   a.files.set(dvd(3), cover());
   await a.sync.push();
   assert.equal(srv.kept.get(token).cur.rev, rev);
-  // a plays: b takes it, its cover of THOM stays, the other one goes
-  a.files.set(at('THOM'), profile('THOM', { money: 2000 }));
+  // a plays: b takes it, its cover of TOBI stays, the other one goes
+  a.files.set(at('TOBI'), profile('TOBI', { money: 2000 }));
   await a.sync.push();
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 2000);
+  assert.equal(b.money(at('TOBI')), 2000);
   assert.ok(b.files.has(dvd(2)) && !b.files.has(dvd(1)) && !b.files.has(`${DIR}/GONE DVD 1/GONE DVD 1`));
   assert.ok(a.files.has(dvd(1)) && a.files.has(dvd(3)));
   // a version sent before the covers stayed out, with a (black) cover: b takes it, without the cover, and the hash
   // leaves it out (b is synced with it, so b sends nothing)
   srv.now += 60_000;
-  const old = [{ path: at('THOM'), data: profile('THOM', { money: 3000 }) }, { path: dvd(1), data: cover() },
+  const old = [{ path: at('TOBI'), data: profile('TOBI', { money: 3000 }) }, { path: dvd(1), data: cover() },
     { path: 'settings.ini', data: enc.encode('# settings\n') }];
   const k = await V.keysOf(phrase), etag = `"${srv.kept.get(token).cur.rev.toString(16).padStart(16, '0')}"`;
   assert.ok('saved' in await new V.VaultApi(k.token, srv.fetch).put(await V.seal(k.key, await V.pack(old)), etag));
   await b.sync.pull();
-  assert.equal(b.money(at('THOM')), 3000);
+  assert.equal(b.money(at('TOBI')), 3000);
   assert.ok(b.files.has(dvd(2)) && !b.files.has(dvd(1)));
   const rev2 = srv.kept.get(token).cur.rev;
   await b.sync.push();
@@ -546,7 +546,7 @@ test('a link from when covers were sent: unchanged files still count as unchange
   const srv = server(), a = browser(srv);
   seed(a, 1000);
   const phrase = await a.sync.create();
-  const dvd = `${DIR}/THOM DVD 1/THOM DVD 1`;
+  const dvd = `${DIR}/TOBI DVD 1/TOBI DVD 1`;
   /** b, synced with a's version as a link from before 2026-10-25 kept it: no v, the hash over the covers too */
   async function before(change) {
     const b = browser(srv), got = await b.sync.peek(phrase);
@@ -563,11 +563,11 @@ test('a link from when covers were sent: unchanged files still count as unchange
   // b unchanged since; a sends a new version: b takes it, no question
   const b = await before();
   srv.now += 60_000;
-  a.files.set(at('THOM'), profile('THOM', { money: 2000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 2000 }));
   await a.sync.push();
   await b.sync.pull();
   assert.equal(b.sync.state.s, 'synced');
-  assert.equal(b.money(at('THOM')), 2000);
+  assert.equal(b.money(at('TOBI')), 2000);
   assert.ok(b.files.has(dvd));
   assert.equal(b.sync.link.v, 4);
   // b unchanged since and nothing new: it sends nothing
@@ -576,13 +576,13 @@ test('a link from when covers were sent: unchanged files still count as unchange
   assert.equal(srv.kept.get((await V.keysOf(phrase)).token).cur.rev, rev);
   assert.equal(c.sync.state.s, 'synced');
   // b played since; a sends a new version: both changed, the player picks
-  const d = await before(x => x.files.set(at('THOM'), profile('THOM', { money: 9000 })));
+  const d = await before(x => x.files.set(at('TOBI'), profile('TOBI', { money: 9000 })));
   srv.now += 60_000;
-  a.files.set(at('THOM'), profile('THOM', { money: 3000 }));
+  a.files.set(at('TOBI'), profile('TOBI', { money: 3000 }));
   await a.sync.push();
   await d.sync.pull();
   assert.deepEqual([d.sync.state.s, d.sync.state.why], ['conflict', 'both']);
-  assert.equal(d.money(at('THOM')), 9000);
+  assert.equal(d.money(at('TOBI')), 9000);
 });
 
 // ---- the device's own settings ----
@@ -629,7 +629,7 @@ test('the graphics options and the device\'s settings stay in each browser', asy
   const phrase = await pc.sync.create();
   const got = await phone.sync.peek(phrase);
   const sent = await unzip(got.zip);
-  assert.deepEqual(sent.map(e => e.name).sort(), [at('THOM'), 'settings.ini']);
+  assert.deepEqual(sent.map(e => e.name).sort(), [at('TOBI'), 'settings.ini']);
   assert.deepEqual(fromFile(dec.decode(sent.find(e => e.name === 'settings.ini').data)), { NFSU2_ROAM_NAME: 'Ann' });
   // the phone, with its own, loads them: its own stay
   phone.files.set('settings.ini', enc.encode(ini([['render', 'scale:0.5'], ['fps', '30']])));
@@ -661,12 +661,12 @@ test('the graphics options and the device\'s settings stay in each browser', asy
   // a version sent before, with the other browser's graphics options and device settings: taken without them, and
   // the phone is in sync with it (it sends nothing)
   srv.now += 60_000;
-  const old = [{ path: at('THOM'), data: profile('THOM', { money: 3000 }) }, { path: 'registry.txt', data: enc.encode('d g_RacingResolution=5\n') },
+  const old = [{ path: at('TOBI'), data: profile('TOBI', { money: 3000 }) }, { path: 'registry.txt', data: enc.encode('d g_RacingResolution=5\n') },
     { path: 'settings.ini', data: enc.encode(ini([['render', 'scale:2'], ['roam_name', 'Cy']])) }];
   const k = await V.keysOf(phrase), etag = `"${rev2.toString(16).padStart(16, '0')}"`;
   assert.ok('saved' in await new V.VaultApi(k.token, srv.fetch).put(await V.seal(k.key, await V.pack(old)), etag));
   await phone.sync.pull();
-  assert.equal(phone.money(at('THOM')), 3000);
+  assert.equal(phone.money(at('TOBI')), 3000);
   assert.deepEqual(fromFile(dec.decode(phone.files.get('settings.ini'))), { NFSU2_RENDER: 'scale:0.5', NFSU2_FPS: '60', NFSU2_ROAM_NAME: 'Cy' });
   assert.equal(dec.decode(phone.files.get('registry.txt')), 'd g_RacingResolution=1\n');
   const rev3 = srv.kept.get(token).cur.rev;
@@ -679,7 +679,7 @@ test('links that counted the graphics options, the device\'s settings or the LAN
   const srv = server(), a = browser(srv);
   seed(a, 1000);
   const phrase = await a.sync.create();
-  const dvd = `${DIR}/THOM DVD 1/THOM DVD 1`;
+  const dvd = `${DIR}/TOBI DVD 1/TOBI DVD 1`;
   /** what a link of version v counted, as the page of that time kept it: 1, all but the screenshots; 2, the covers out
    *  too; 3, registry.txt out too and settings.ini without the device's settings */
   const counted = (v, files) => files.filter(([p]) => !p.endsWith('.tga') && (v < 2 || p !== dvd) && (v < 3 || p !== 'registry.txt'))
@@ -707,11 +707,11 @@ test('links that counted the graphics options, the device\'s settings or the LAN
     // unchanged since; a sends a new version: b takes it, no question, and keeps its own
     const b = await linkOf(v);
     srv.now += 60_000;
-    a.files.set(at('THOM'), profile('THOM', { money: 2000 + v }));
+    a.files.set(at('TOBI'), profile('TOBI', { money: 2000 + v }));
     await a.sync.push();
     await b.sync.pull();
     assert.equal(b.sync.state.s, 'synced', `v${v}`);
-    assert.equal(b.money(at('THOM')), 2000 + v);
+    assert.equal(b.money(at('TOBI')), 2000 + v);
     assert.equal(b.sync.link.v, 4);
     assert.equal(fromFile(dec.decode(b.files.get('settings.ini'))).NFSU2_RENDER, 'scale:0.5');
     assert.ok(b.files.has('registry.txt') && b.files.has(dvd));
@@ -729,7 +729,7 @@ test('links that counted the graphics options, the device\'s settings or the LAN
       assert.notEqual(rev(), r1, `v${v}`);
       const r2 = rev(), k = await V.keysOf(phrase);
       const sent = await unzip(await V.unpack(await V.unseal(k.key, srv.kept.get(token).cur.body)));
-      assert.deepEqual(sent.map(e => e.name).sort(), [at('THOM'), 'settings.ini']);
+      assert.deepEqual(sent.map(e => e.name).sort(), [at('TOBI'), 'settings.ini']);
       scale(c, 'scale:2'); c.files.set('gamefile.bin', gamefile(3));
       await c.sync.push();
       assert.equal(rev(), r2, `v${v}`);
@@ -737,9 +737,9 @@ test('links that counted the graphics options, the device\'s settings or the LAN
       assert.equal(a.sync.state.s, 'synced');
     }
     // played since: both changed, the player picks
-    const d = await linkOf(v, x => x.files.set(at('THOM'), profile('THOM', { money: 9000 })));
+    const d = await linkOf(v, x => x.files.set(at('TOBI'), profile('TOBI', { money: 9000 })));
     srv.now += 60_000;
-    a.files.set(at('THOM'), profile('THOM', { money: 3000 + v }));
+    a.files.set(at('TOBI'), profile('TOBI', { money: 3000 + v }));
     await a.sync.push();
     await d.sync.pull();
     assert.deepEqual([d.sync.state.s, d.sync.state.why], ['conflict', 'both'], `v${v}`);
@@ -752,7 +752,7 @@ test('the LAN server\'s file (gamefile.bin) stays in each browser', async () => 
   pc.files.set('gamefile.bin', gamefile(1));
   const phrase = await pc.sync.create();
   const got = await phone.sync.peek(phrase);
-  assert.deepEqual((await unzip(got.zip)).map(e => e.name).sort(), [at('THOM'), 'settings.ini']);
+  assert.deepEqual((await unzip(got.zip)).map(e => e.name).sort(), [at('TOBI'), 'settings.ini']);
   // the phone, with its own, loads them: its own stays
   phone.files.set('gamefile.bin', gamefile(2));
   await phone.deps.restore(got.zip);
@@ -765,24 +765,24 @@ test('the LAN server\'s file (gamefile.bin) stays in each browser', async () => 
   assert.equal(srv.kept.get(token).cur.rev, rev);
   // it plays: the phone takes the profile and keeps its own file
   srv.now += 60_000;
-  pc.files.set(at('THOM'), profile('THOM', { money: 2000 }));
+  pc.files.set(at('TOBI'), profile('TOBI', { money: 2000 }));
   await pc.sync.push();
   assert.notEqual(srv.kept.get(token).cur.rev, rev);
   await phone.sync.pull();
   assert.equal(phone.sync.state.s, 'synced');
-  assert.equal(phone.money(at('THOM')), 2000);
+  assert.equal(phone.money(at('TOBI')), 2000);
   assert.deepEqual(phone.files.get('gamefile.bin'), gamefile(2));
   assert.deepEqual(pc.files.get('gamefile.bin'), gamefile(3));
   // a version sent before (by an older page), with the other browser's file: taken without it, and the phone is in
   // sync with it (it sends nothing)
   srv.now += 60_000;
   const rev2 = srv.kept.get(token).cur.rev;
-  const old = [{ path: at('THOM'), data: profile('THOM', { money: 3000 }) }, { path: 'gamefile.bin', data: gamefile(4) },
+  const old = [{ path: at('TOBI'), data: profile('TOBI', { money: 3000 }) }, { path: 'gamefile.bin', data: gamefile(4) },
     { path: 'settings.ini', data: enc.encode('# settings\n') }];
   const k = await V.keysOf(phrase), etag = `"${rev2.toString(16).padStart(16, '0')}"`;
   assert.ok('saved' in await new V.VaultApi(k.token, srv.fetch).put(await V.seal(k.key, await V.pack(old)), etag));
   await phone.sync.pull();
-  assert.equal(phone.money(at('THOM')), 3000);
+  assert.equal(phone.money(at('TOBI')), 3000);
   assert.deepEqual(phone.files.get('gamefile.bin'), gamefile(2));
   const rev3 = srv.kept.get(token).cur.rev;
   await phone.sync.push();
@@ -798,7 +798,7 @@ test('saves past the cap name their largest files in the log; one stuck on the L
   assert.equal(a.sync.state.code, 'VAULT-TOO-LARGE');
   assert.equal(a.logs.length, 1);
   assert.match(a.logs[0], /^\[app\] keyphrase: the saves pack into 30\d KB \(3 files, 1 profiles\); the largest packed: other\.bin 30\d\.\d KB, /);
-  assert.match(a.logs[0], /NFS Underground 2\/THOM\/THOM \d+\.\d KB/);
+  assert.match(a.logs[0], /NFS Underground 2\/TOBI\/TOBI \d+\.\d KB/);
   // a browser linked by the page before 2026-10-28 (version 3: its hash over the LAN server's file too), whose file
   // grew past the cap since while it played: its saves go, without the file
   const b = browser(srv);
@@ -810,14 +810,14 @@ test('saves past the cap name their largest files in the log; one stuck on the L
   l.hash = await V.contentHash([...b.files].filter(([p]) => !p.endsWith('.tga')).map(([path, data]) => ({ path, data })));
   const b2 = browser(srv, JSON.stringify(l)); b2.files = b.files;        // b reloaded with the new page
   b2.files.set('gamefile.bin', crypto.randomBytes(300 << 10));
-  b2.files.set(at('THOM'), profile('THOM', { money: 5000 }));
+  b2.files.set(at('TOBI'), profile('TOBI', { money: 5000 }));
   const k = await V.keysOf(phrase), rev = srv.kept.get(k.token).cur.rev;
   await b2.sync.push();
   assert.equal(b2.sync.state.s, 'synced');
   assert.equal(b2.sync.link.v, 4);
   assert.notEqual(srv.kept.get(k.token).cur.rev, rev);
   const sent = await unzip(await V.unpack(await V.unseal(k.key, srv.kept.get(k.token).cur.body)));
-  assert.deepEqual(sent.map(e => e.name).sort(), [at('THOM'), 'settings.ini']);
-  assert.equal(new DataView(sent.find(e => e.name === at('THOM')).data.buffer, sent.find(e => e.name === at('THOM')).data.byteOffset).getUint32(0xA16A, true), 5000);
+  assert.deepEqual(sent.map(e => e.name).sort(), [at('TOBI'), 'settings.ini']);
+  assert.equal(new DataView(sent.find(e => e.name === at('TOBI')).data.buffer, sent.find(e => e.name === at('TOBI')).data.byteOffset).getUint32(0xA16A, true), 5000);
   assert.deepEqual(b2.logs, []);
 });

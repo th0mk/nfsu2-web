@@ -543,7 +543,7 @@ Good to know:
     Multiplayer as above.
   - **Multiplayer opens a lobby** at the start: the panel shows it, its race, career stage, track and laps and its six
     places (drag 4, 3 on the three-lane track) with the players in them, the host first and yours marked. The players
-    near see "Thom's circuit (1/6)" over the start (from about 250 m); everyone in free roam sees its race's icon on
+    near see "Ann's circuit (1/6)" over the start (from about 250 m); everyone in free roam sees its race's icon on
     the world map (M), and the nearest four lobbies their words beside it ("Circuit 1/6") where these cover no other
     icon (the legend's Players' races row hides them). They join at the start:
     within 15 m of it the panel shows the lobby and Enter joins (at an open race: its card's Accept, then **Join**).

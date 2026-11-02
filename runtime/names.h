@@ -34,7 +34,7 @@
  * neo-Nazi code).  A swear word is no such name.  A "pid" word (pidor,
  * pidar, pidr) right after the start of an English word that ends in "pid"
  * (rapid, cupid, stupid), or after a vowel when it runs into the next part
- * ("PepiDroga"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
+ * ("TopiDrift"), is no slur ("RapidRacer"; "dapidor", "YaPidor" are).
  * Header only: no state.
  */
 #ifndef NAMES_H

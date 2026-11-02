@@ -151,7 +151,7 @@ void app_local_network_notice(void){
  * slur (names.h).  K_PEERS: IPv4 literals a.b.c.d or a.b.c.d:port,
  * separated by commas, ';' or blanks (no host names).  Anything else is
  * logged and ignored, so a typo never silently selects a default.  K_IC (added to a kind): after the value, ';' or '#'
- * after a blank starts a comment ("roam_name = Thom ; me" is Thom,
+ * after a blank starts a comment ("roam_name = Tobi ; me" is Tobi,
  * "Team#1" stays Team#1), the rule the free-roam options follow in the
  * runtime and in the Windows plugin's .ini.
  * K_PATH: a folder (absolute, ~/..., or a name), printable, under 1024

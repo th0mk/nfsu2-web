@@ -1,7 +1,7 @@
 # Multiplayer races from free roam, a full lobby (drag: 4 players), the host: opens it at ${MP_RACE} and waits
 # while three join (mprace_full_b.txt x3) and a fifth tries (mprace_full_e.txt, a run-suite page in the same room);
 # never starts, drives away at the end (the lobby called off for the others).
-#   roam-pair --seed <ItsukiT> --a Ann:mprace_full_a.txt --b Bob:mprace_full_b.txt --c Cat:mprace_full_b.txt
+#   roam-pair --seed <a stage-3 save tree> --a Ann:mprace_full_a.txt --b Bob:mprace_full_b.txt --c Cat:mprace_full_b.txt
 #        --d Dan:mprace_full_b.txt --env MP_RACE=S3_SPON_DRAG_6 --env MP_PLAYERS=4 (+ the fifth: mprace_full_e.txt)
 0     bot on
 +0    waitroam 6000

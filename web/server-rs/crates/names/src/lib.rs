@@ -23,7 +23,7 @@
 //! The other offensive names go the same way (picked from the live server's names, 2026-10-26 and 2026-11-02): Nazi
 //! ones and their nicknames, hate aimed at a group, terror, sexual violence; and a name with 1488 in it (the neo-Nazi
 //! code).  A swear word is no such name.  A "pid" word (pidor, pidar, pidr) right after the start of an English word
-//! that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part ("PepiDroga"), is no
+//! that ends in "pid" (rapid, cupid, stupid), or after a vowel when it runs into the next part ("TopiDrift"), is no
 //! slur ("RapidRacer"; "dapidor", "YaPidor" are).
 //!
 //! The Online lobby's chat is read with the same lists, a word at a time ([`chat_slur`]); here only.
@@ -454,7 +454,7 @@ impl Letters {
 
 /// A "pid" word of the anywhere list (pidor, pidar, pidr) at s[i] is the end of an English word: not at the start of
 /// a part (starts[j]: a part starts at s[j]), and right after the start of one of those words ("RapidRacer",
-/// "Stupidrift"), or after a vowel and into the next part ("PepiDroga"); "vladpidr", "dapidor", "YaPidor" are slurs.
+/// "Stupidrift"), or after a vowel and into the next part ("TopiDrift"); "vladpidr", "dapidor", "YaPidor" are slurs.
 fn english_pid(s: &[u8], i: usize, w: &[u8], starts: &[bool]) -> bool {
     if !w.starts_with(b"pid") || starts[i] {
         return false;

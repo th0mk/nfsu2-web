@@ -79,7 +79,7 @@ pub(crate) mod tests {
         assert_eq!(etag_of(&KEY, &["manifest", "abc"]), "\"hWN06E5JbvKr11mCWqBV1D\"");
         assert_eq!(etag_of(&KEY, &["/x/y", &num(123.0), &num(1729512345123.4567)]), "\"6Nn736TQhXw_HdiX9IqQRT\"");
         assert_eq!(etag_of(&KEY, &["br", "/a/b.wasm", &num(0.0), &num(0.0)]), "\"ykFGyTmIRH6O7HRQfcAlfX\"");
-        assert_eq!(etag_of(&KEY, &["/home/thom/é.bin", &num(65536.0), &num(1760000000999.9998)]), "\"fI9jopdU4Ag5SGFl44IajZ\"");
+        assert_eq!(etag_of(&KEY, &["/home/user/é.bin", &num(65536.0), &num(1760000000999.9998)]), "\"X9qPpgFd4gaFHgBuGGlC1c\"");
     }
 
     #[test]

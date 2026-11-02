@@ -110,7 +110,7 @@ console.log(`single settings: ${agree} agree, ${diffs} differ (${cases.length} c
 
 // ---- whole files through the readers (comments, sections, quotes, duplicates, missing '=')
 const files = [
-  '# NFSU2 settings, read at every launch.\nmovies = off\n  fps = 120  \n[section]\n; comment\nhud = "43"\nhud = wide\nno equals here\nroam_name = Thom ; me\nroam_room = Team#1\nresolution =\nNFSU2_STATUS_EVERY = 600\npad_log = 1\nrender = scale:0.75\nwatchdog = soon\n',
+  '# NFSU2 settings, read at every launch.\nmovies = off\n  fps = 120  \n[section]\n; comment\nhud = "43"\nhud = wide\nno equals here\nroam_name = Tobi ; me\nroam_room = Team#1\nresolution =\nNFSU2_STATUS_EVERY = 600\npad_log = 1\nrender = scale:0.75\nwatchdog = soon\n',
   'movies=OFF\r\nsound = 0\r\nbackground=Run\r\ngamepad = TRUE\r\n',
   "fps = 'auto'\nmax_pixels = 6000000\nroam_room = Team ; ours\nroam_rate = 20 # default\nroam = yes ; on\n",
 ];

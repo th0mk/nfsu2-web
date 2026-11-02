@@ -228,7 +228,7 @@ fn pieces() -> Vec<&'static str> {
     // the neo-Nazi code and other numbers, names with the new words' letters in them
     p.extend(["1488", "88", "spider", "shinigami", "zuniga", "adolf"]);
     // a lone n before digits, the "pid" words' surroundings, Nigeria
-    p.extend(["n", "1663", "pid", "pepi", "droga", "nigeria"]);
+    p.extend(["n", "1663", "pid", "topi", "drift", "nigeria"]);
     p
 }
 
