@@ -720,8 +720,9 @@ async function startGame() {
   photo.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
-  // (free roam's and the races' between players: free roam on or not)
-  quickChat.start(session, net && r.env.NFSU2_ROAM_SAY !== '0',
+  // (the races' between players free roam on or not; free roam's only with it on: the career's free roam alone keeps
+  // 1-4, Esc and the right stick for the game)
+  quickChat.start(session, net && r.env.NFSU2_ROAM_SAY !== '0', net && r.env.NFSU2_ROAM === '1',
     phrasesOf(r.env.NFSU2_ROAM_SAY_PHRASES), groupsOf(r.env.NFSU2_ROAM_SAY_GROUPS), blockList(r.env.NFSU2_ROAM_BLOCK ?? ''));
   fps.memory = session.proc.memory;
   const st = session;

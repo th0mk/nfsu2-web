@@ -4,10 +4,12 @@
 // quick_chat_groups).
 //   pick   keys 1-4 open a group and 1-4 again says its phrase; a controller's right stick the same (a flick up, right,
 //          down or left: the game leaves that stick unused, in races too); on a touch screen the chat button shows all
-//          sixteen and a tap says one.  Open while driving in free roam, and in a race between players (Online, LAN,
-//          a free-roam lobby's) while driving and on its results (the game's status "netrace"; the results' menus take
-//          none of 1-4 either), never in a race of the career.  Esc, PICK_MS without a pick, or leaving those closes
-//          it.  At most BURST phrases in WINDOW_MS (the game keeps the same limit): then the picker asks to wait.
+//          sixteen and a tap says one.  Open while driving in free roam with free roam on, and in a race between
+//          players (Online, LAN, a free-roam lobby's) while driving and on its results (the game's status "netrace";
+//          the results' menus take none of 1-4 either), free roam on or off; never in a race of the career, nor in
+//          the career's free roam with free roam off (1-4, Esc and the right stick stay the game's there).  Esc,
+//          PICK_MS without a pick, or leaving those closes it.  At most BURST phrases in WINDOW_MS (the game keeps the
+//          same limit): then the picker asks to wait.
 //   wire   a phrase is its number in the library.  In free roam the game sends it to the players around
 //          (runtime/roam_game.c say_*: within 250 m, or in our race lobby); in a race to the race's players
 //          (runtime/racehorn.c qc_*: the page puts it in the LAN mailbox).  Either way back to this page as said by the
@@ -61,6 +63,8 @@ const nameKey = (n: string) => n.trim().toLowerCase();
 export class QuickChat {
   private session: GameSession | null = null;
   private on = false;
+  /** free roam with others on (settings.ini roam): else free roam is the career's alone, with nobody to say it to */
+  private roam = false;
   private layer: HTMLElement;
   private picker: HTMLElement;
   /** the lines over cars by the player's id (until: performance.now() it goes; out: fading) */
@@ -103,10 +107,10 @@ export class QuickChat {
     }, { capture: true });
   }
 
-  /** a game started: quick chat on (the setting) or off, with the player's sixteen (phrases.ts phrasesOf, groupsOf),
-   *  and the names the player blocks (settings.ts blockList) */
-  start(s: GameSession, on: boolean, layout: readonly number[], groups: readonly CatId[], blocked: readonly string[] = []) {
-    this.session = s; this.on = on; this.drive = 0; this.netrace = 0; this.driveAt = 0;
+  /** a game started: quick chat on (the setting) or off, free roam with others on or off, with the player's sixteen
+   *  (phrases.ts phrasesOf, groupsOf), and the names the player blocks (settings.ts blockList) */
+  start(s: GameSession, on: boolean, roam: boolean, layout: readonly number[], groups: readonly CatId[], blocked: readonly string[] = []) {
+    this.session = s; this.on = on; this.roam = roam; this.drive = 0; this.netrace = 0; this.driveAt = 0;
     this.layout = layout; this.groups = groups;
     this.blocked = new Set(blocked.map(nameKey));
   }
@@ -125,10 +129,10 @@ export class QuickChat {
     this.layer.style.setProperty('--u', `${u}px`);
   }
 
-  /** driving in free roam (the game's status: runtime/web/status_web.c "drive" 2, not in a cutscene); messages.ts
-   *  asks too */
+  /** driving in free roam with others (the game's status: runtime/web/status_web.c "drive" 2, not in a cutscene; it
+   *  says 2 in the career's free roam with free roam off too); messages.ts asks too */
   driving(): boolean {
-    if (!this.session || !this.on) return false;
+    if (!this.session || !this.on || !this.roam) return false;
     this.readStatus();
     return (this.drive & 3) === 2 && (this.drive & 8) === 0;
   }
@@ -138,7 +142,7 @@ export class QuickChat {
     this.readStatus();
     return this.netrace > 0;
   }
-  /** the picker may open: driving in free roam, or in a race between players */
+  /** the picker may open: driving in free roam with others, or in a race between players */
   private can(): boolean { return this.driving() || this.racing(); }
   private readStatus() {
     const s = this.session, now = performance.now();
