@@ -2916,7 +2916,7 @@ static uint32_t query_getdata(uint32_t q, uint32_t p, uint32_t size){
     if (!slot || !first || !metal_occlusion_result(slot, &seq, &n))
         return 1u;                                /* S_FALSE */
     if (!MR32(q + 20u)){
-        if ((seq - first) & 0x800000u) return 1u; /* the earlier query's: S_FALSE */
+        if ((seq - first) & (1u << 23)) return 1u; /* the earlier query's: S_FALSE */
         MR32(q + 20u) = 1u;
     }
     if (MR32(q + 16u) && g_req_w && g_req_h && g_bb_w && g_bb_h)
