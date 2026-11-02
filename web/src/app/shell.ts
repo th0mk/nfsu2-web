@@ -19,7 +19,7 @@
 // While any of them is given, the start page says whether it is in effect.
 
 import registryDefaults from '../../../app/registry-defaults.txt';
-import { browserName, check, checkBrowser, checkGpu, checkIsolation, checkStorage, fmtBytes, type Check } from './checks';
+import { browserName, check, checkBrowser, checkGpu, checkIsolation, checkStorage, fmtBytes, NO_JIT, noJit, type Check } from './checks';
 import { codeOf, dateLocale, language as pageLanguage, lastLanguage, LANGUAGES, listOf, live, LOCALE, N, NATIVE, onLanguage, setLanguage, t, T, tn, tvars, type Msg } from './i18n';
 import { loadGame, serverRev, type Loaded } from './loader';
 import { claimInstance } from './instance';
@@ -1654,10 +1654,16 @@ async function loadModule() {
     void checkNewer();
   } catch (e) {
     moduleFails++;
-    const wait = Math.min(30, 2 ** moduleFails);
-    log.add(`[app] the game module did not load (attempt ${moduleFails}): ${e}; next try in ${wait} s`);
     moduleLoading = false;
     setProgress(0);
+    // the browser's interpreter instead of its compiler: no try again makes that work, the player's setting does
+    if (noJit(e)) {
+      log.add(`[app] the game module did not load: ${e}; the JavaScript optimizer is off for this site`);
+      setCheck(check('module', N('Game module'), 'fail', NO_JIT, 'PAGE-NO-JIT'));
+      return;
+    }
+    const wait = Math.min(30, 2 ** moduleFails);
+    log.add(`[app] the game module did not load (attempt ${moduleFails}): ${e}; next try in ${wait} s`);
     setCheck(check('module', N('Game module'), 'fail', N('The game did not load ({error}). Trying again in {n} s, or press Retry.'), 'MODULE-LOAD', { error: String(e), n: wait }));
     moduleTimer = setTimeout(() => void loadModule(), wait * 1000);
   }
@@ -2010,7 +2016,8 @@ export async function boot() {
   void checkStorage().then(({ answer, ...c }) => { setCheck(c); void answer?.then(setCheck); });
   refreshMeasured = measureRefresh(60).then(r => { displayHz = r.hz; log.add(`[app] display refresh ${r.raw.toFixed(1)} Hz -> ${r.hz}`); });
 
-  if (crossOriginIsolated) await loadModule();
+  // no WebAssembly at all (the JavaScript optimizer off): the isolation check says so, once
+  if (crossOriginIsolated) { if (typeof WebAssembly !== 'undefined') await loadModule(); }
   else setCheck(check('module', N('Game module'), 'fail', N('Not loaded: the page is not isolated (see above).'), 'MODULE-NOT-ISOLATED'));
   evaluate();
   (window as any).__nfsu2 = {

@@ -65,3 +65,12 @@ test('Firefox: tested; another browser: the warning', () => {
   assert.equal(browser({ ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0' }).code, 'BROWSER-FIREFOX-OLD');
   assert.equal(browser({ ua: 'SomeBrowser/1.0' }).code, 'BROWSER-OTHER');
 });
+
+// the JavaScript optimizer off for the site: Chrome has no WebAssembly then, or only its interpreter, whose compile of
+// the game fails (a player's Chrome); the page says what to turn on instead of trying again every 30 s
+test('the JavaScript optimizer off is told apart from other module failures', () => {
+  assert.ok(C.noJit(new Error('CompileError: WebAssembly.compileStreaming(): Compiling function #22361:"guest_main_thread" failed: exnref not supported by the Wasm interpreter @+34321165')));
+  assert.ok(C.noJit(new ReferenceError('WebAssembly is not defined')));
+  assert.ok(!C.noJit(new TypeError('Failed to fetch')));
+  assert.ok(!C.noJit(new Error('/game.wasm: HTTP 503')));
+});

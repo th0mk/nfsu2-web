@@ -87,6 +87,9 @@ const CASES = [
   ['Firefox on Intel integrated graphics', { ua: UA.firefoxWin, gpu: adapter(undefined, {}), webgl: 'Intel(R) HD Graphics 400' }, 'warn', 'GPU-INTEGRATED-FIREFOX'],
   ['Firefox on a graphics card', { ua: UA.firefoxWin, gpu: adapter(undefined, {}), webgl: 'NVIDIA GeForce GTX 980 Direct3D11 vs_5_0 ps_5_0' }, 'ok', undefined],
   ['Chrome on a graphics card', { ua: UA.chromeWin, gpu: adapter() }, 'ok', undefined],
+  // Chrome's WebGPU flag hands out the processor's stand-in where it can't use the graphics (a Steam Deck: ~13 fps)
+  ['Chrome on Linux given SwiftShader', { ua: UA.chromeLinux, gpu: adapter(['texture-compression-bc'], { vendor: 'google', architecture: 'swiftshader', description: '' }) }, 'warn', 'GPU-SOFTWARE'],
+  ['Chrome on Windows given a fallback adapter', { ua: UA.chromeWin, gpu: adapter(undefined, { vendor: 'google', architecture: '', description: '', isFallbackAdapter: true }) }, 'warn', 'GPU-SOFTWARE'],
 ];
 
 for (const [name, b, state, code] of CASES) {

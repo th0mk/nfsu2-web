@@ -29,10 +29,16 @@ OUT="$ROOT/out/web"; mkdir -p "$OUT/obj" "$OUT/obj/srv" "$OUT/rt"
 OBJCACHE="${OBJCACHE:-$HOME/.cache/nsfu2-web/obj}"; mkdir -p "$OBJCACHE"
 
 # The guest owns [0, GUEST_END) of linear memory (runtime/cpu.h); the
-# runtime's data starts there.  Initial memory covers the guest span plus room
-# for the runtime heap; it can grow to 4 GB.
+# runtime's data starts there.  The page gives the game INITIAL_MB at start
+# (nfsu2.json "pages"): the guest span plus room for the runtime heap; it can
+# grow to 4 GB.  The module itself declares only MIN_MB, just past the
+# runtime's data (~30 MB) and main stack (8 MB): the runtime heap then takes
+# all its memory through runtime/web/sbrk.c, which keeps it one run however
+# much the page gave, and the [status] line's brk= says how much of the memory
+# the game has used (~930 MB with the renderer in the menus and a race).
 GUEST_END=671088640   # 0x28000000
 INITIAL_MB="${INITIAL_MB:-1024}"
+MIN_MB="${MIN_MB:-704}"
 TARGET="--target=wasm32-wasip1-threads -pthread"
 FEAT="-msimd128 -mbulk-memory -mnontrapping-fptoint -mtail-call -mexception-handling -mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false"
 DEFS="-D_WASI_EMULATED_MMAN -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS"
@@ -106,7 +112,7 @@ PAGES=$(( INITIAL_MB * 16 ))
 rm -f "$OUT/nfsu2.wasm"
 $CC $TARGET $OPT $FEAT -o "$OUT/nfsu2.wasm" $OBJS \
   -Wl,--import-memory,--export-memory,--shared-memory,--max-memory=4294967296 \
-  -Wl,--initial-memory=$(( INITIAL_MB * 1048576 )),--global-base=$GUEST_END \
+  -Wl,--initial-memory=$(( MIN_MB * 1048576 )),--global-base=$GUEST_END \
   -Wl,-z,stack-size=$(( 8 * 1048576 )) -Wl,--no-stack-first \
   -lsetjmp -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks 2>&1 | \
   { grep -v "^$" || true; } > "$OUT/link.log"

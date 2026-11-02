@@ -977,17 +977,19 @@ static void status_line(double t, double tms, const char *label){
     /* the frame pacer's spin on the clock per sleep since the last line (win32_ext.c sleep_precise_ns) */
     if (k > 0 && k < (int)sizeof ms){ int pacer_spin_status(char *, size_t); pacer_spin_status(ms + k, sizeof ms - (size_t)k); }
 #endif
-    fprintf(stderr, "[status]%s%s f=%ld t=%.1fs fps=%.1f cpu=%.0f%% gcpu=%.2fms/f flow=%u rss=%ldMB%s\n",
+#ifdef __wasm__
+    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = the top of all the runtime heap ever took
+     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included */
+    uint64_t memory_bytes(void), heap_break(void);
+    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_break() >> 20));
+#else
+    char rss[24]; snprintf(rss, sizeof rss, "%ldMB", (long)(ru.ru_maxrss / (1024 * 1024)));
+#endif
+    fprintf(stderr, "[status]%s%s f=%ld t=%.1fs fps=%.1f cpu=%.0f%% gcpu=%.2fms/f flow=%u rss=%s%s\n",
             label ? " " : "", label ? label : "", g_frame, tms / 1e3, dt > 0 ? nf / dt : 0.0,
             dt > 0 ? 100.0 * (cpu - g_st_cpu) / dt : 0.0,
             nf > 0 ? (gcpu - g_st_gcpu) / nf : 0.0,
-            mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u,
-            
-#ifdef __wasm__
-            (long)((uintptr_t)sbrk(0) >> 20), ms);   /* no ru_maxrss: the wasm memory's size (it only grows) */
-#else
-            (long)(ru.ru_maxrss / (1024 * 1024)), ms);
-#endif
+            mem_is_committed(0x8654a4u) ? MR32(0x8654a4u) : 0u, rss, ms);
     g_st_t = t; g_st_f = g_frame; g_st_cpu = cpu; g_st_gcpu = gcpu;
 }
 

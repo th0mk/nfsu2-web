@@ -181,7 +181,7 @@ try {
     await shot(page, 'start.png');
     const problems = await page.locator('#problems li').allTextContents();
     report('start', p === 'ready' && !checks.some(c => c.endsWith(':fail')) && !!tmpl?.text?.startsWith('# NFSU2 settings') &&
-      problems.every(t => /tested/.test(t)),            // at most the other-browser note
+      problems.every(t => /tested|GPU-SOFTWARE/.test(t)),   // at most the other-browser note, and SwiftShader's (WSL)
       { phase: p, checks, problems, pageToReadyMs: ms, loadLine, templateBytes: tmpl?.size });
   }
 

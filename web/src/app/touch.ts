@@ -459,6 +459,9 @@ export class TouchControls {
     this.center = this.lastRoll = null;
     if (this.sentRoll) { this.sentRoll = 0; this.session?.input?.viewRoll?.(0); }
     this.session = null;
+    // the game's input too: its closures hold the game's memory, and a 32-bit Chrome refused the next game its
+    // gigabyte while this one was still held ("could not allocate memory" at the second Play, host/memory.ts)
+    this.menuTo = null;
     this.drive = this.frames = 0;
   }
 

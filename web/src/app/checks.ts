@@ -23,6 +23,13 @@ export const MIN_CHROME = 140;
 /** Atomics.waitAsync (the renderer's and the network's doorbells) is in Firefox from 145 */
 export const MIN_FIREFOX = 145;
 
+/** The JavaScript optimizer is off for this site: Chrome's site setting (since 133), Android's Advanced Protection
+ *  (Chrome 137 on Android 16) or Edge's Enhanced security.  Chrome then has no WebAssembly at all (checkIsolation), or
+ *  only its interpreter, which can't compile the game: "exnref not supported by the Wasm interpreter" (shell.ts). */
+export const NO_JIT = N('The JavaScript optimizer is off for this site, and the game can\'t run without it. In Chrome: Settings, Privacy and security, JavaScript optimization and security, allow this site (Android\'s Advanced Protection turns it off). In Edge: add this site as an exception to Enhanced security.');
+/** a game module that did not compile for that reason */
+export const noJit = (e: unknown) => /Wasm interpreter|WebAssembly is not defined/i.test(String(e));
+
 /**
  * A Chromium browser's name (Google Chrome, Microsoft Edge, Brave, Opera; Chromium where it names itself not), its
  * own major version (Opera's and Samsung Internet's aren't Chromium's) and Chromium's, or null (another browser),
@@ -93,12 +100,18 @@ export function checkIsolation(): Check {
   if (!crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
     return check('isolation', label, 'fail', N('The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.'), 'PAGE-NOT-ISOLATED');
   }
-  try { new WebAssembly.Memory({ initial: 1, maximum: 65536, shared: true }); }
-  catch (e) { return check('isolation', label, 'fail', N('Shared 4 GB WebAssembly memory is not available: {error}'), 'PAGE-NO-MEMORY', { error: String(e) }); }
+  // the JavaScript optimizer off for this site (Chrome's site setting, Android's Advanced Protection, Edge's Enhanced
+  // security): Chrome then has no WebAssembly at all, or only its interpreter, which can't compile the game (shell.ts)
+  if (typeof WebAssembly === 'undefined') return check('isolation', label, 'fail', NO_JIT, 'PAGE-NO-JIT');
+  // shared memory at all, of one page and no more: a 32-bit Chrome (most phones with up to 4 GB) sets aside up to
+  // 1 GB of its addresses for a memory's maximum until the memory is collected, the gigabyte the game asks for at
+  // Play (host/memory.ts); whether the game gets its memory is Play's question
+  try { new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }); }
+  catch (e) { return check('isolation', label, 'fail', N('Shared WebAssembly memory is not available: {error}'), 'PAGE-NO-MEMORY', { error: String(e) }); }
   if (typeof (Atomics as { waitAsync?: unknown }).waitAsync !== 'function') {
     return check('isolation', label, 'fail', N('This browser is too old for the game (no Atomics.waitAsync). Update {browser}.'), 'PAGE-NO-WAITASYNC', { browser: browserName() });
   }
-  return check('isolation', label, 'ok', N('HTTPS or localhost, cross-origin isolated, threads and 4 GB memory available.'));
+  return check('isolation', label, 'ok', N('HTTPS or localhost, cross-origin isolated, threads and shared memory available.'));
 }
 
 /**
@@ -168,6 +181,15 @@ export async function checkGpu(lostBefore = false): Promise<Check & { adapter?: 
   const ffg = ff && windows && !info ? firefoxGraphics() : null;
   if (ffg) info = ffg.name;
   const named = info ? N('Graphics: {info}') : label;
+  // the processor standing in for the graphics (Chrome's SwiftShader, Mesa's llvmpipe): what Chrome hands out with its
+  // WebGPU flag where it can't use the graphics, as on a Steam Deck (Chrome on Linux with Vulkan off): the game runs
+  // at ~13 fps.  That player's fix was Vulkan for Chrome and for ANGLE (the flags below, as in Chrome 156 on Linux)
+  if (chromium && ((ad.info as { isFallbackAdapter?: boolean } | undefined)?.isFallbackAdapter || /swiftshader|llvmpipe|lavapipe|softpipe/i.test(info))) {
+    return { ...check('gpu', named, 'warn', linux
+      ? N('Chrome gave the game its software graphics, which run on the processor, so the game will be very slow. Turn on chrome://flags/#enable-vulkan and chrome://flags/#default-angle-vulkan, then restart Chrome.')
+      : N('Chrome isn\'t using this computer\'s graphics. Turn on graphics acceleration in chrome://settings/system and restart Chrome. If it\'s already on, update the graphics driver.'),
+    'GPU-SOFTWARE', { info }), adapter: info };
+  }
   // no BC (PowerVR, Mali): the renderer unpacks the textures (web/src/gpu/dxt.ts), so it plays.  With ASTC (iPhones,
   // iPads, most phones) the most of them go up as ASTC instead (astc.ts): ~50 MB more, not 200, nothing to say
   if (!ad.features.has('texture-compression-bc') && !ad.features.has('texture-compression-astc')) {
