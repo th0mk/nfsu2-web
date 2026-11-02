@@ -223,7 +223,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   stage, and Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for
   the eyes, in the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in Settings,
   Game, more: Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once
-  Caleb is beaten, since 2970e8e; the guide lists them all). A feature
+  Caleb is beaten, since 2970e8e; opening the trunk, hood and doors parked in free roam, O (then again: the hood,
+  the doors, all closed) or a controller's D-pad down held a second, other players see them, they close when the car
+  drives off, the trunk shows no trunk audio, since 1ccb47ac; the guide lists them all). A feature
   named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
