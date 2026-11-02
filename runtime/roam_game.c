@@ -375,6 +375,7 @@ static struct {
                                                  -1: by the two cars' weights (car_mass, their square roots), 100: the game's own (the whole hit) */
     int test_mass, test_fmass;                /* NFSU2_ROAM_TEST_MASS / _FMASS (test aid, kg): car_mass of the player's car / friends' cars */
     int test_hitnan;                          /* NFSU2_ROAM_TEST_HITNAN (test aid): the game's first hit with a friend's car leaves my car at NaN */
+    int test_hitfling;                        /* NFSU2_ROAM_TEST_HITFLING (test aid, scripted runs only): ...going up at 300 m/s (contact_wild) */
     int near_max;                             /* NFSU2_ROAM_NEAR: arrows on the minimap for the players without a car shown, at most
                                                  (near_update; 0: none) */
     int cars_auto;                            /* NFSU2_ROAM_CARS_AUTO: max_cars is the device's default (the page's), not the
@@ -490,6 +491,7 @@ static int64_t g_cost_win_t0;
 static int g_joins, g_leaves;                 /* changed with the session lock held */
 static uint32_t g_teleports, g_clock_snaps, g_acquires, g_releases, g_load_fail, g_creates, g_reuses, g_restores;
 static uint32_t g_rescues, g_hit_nans;        /* car_rescue's jumps; hits whose result was not a number (roam_game_contact) */
+static uint32_t g_hit_wild;                   /* hits that threw the player's car farther than a hit can (contact_wild) */
 static uint32_t g_gp_n, g_gp_said, g_gp_calls;   /* Ghost mode Everything: contacts let through, cars named in the log,
                                                     contacts looked at (ghost_pair) */
 static uint32_t g_gp_racer;                       /* ...contacts with an outrun's racer, resolved */
@@ -6601,6 +6603,8 @@ static void init_once(CPU *c){
     O.test_mass = env_int("NFSU2_ROAM_TEST_MASS", 0, 0, 20000);
     O.test_fmass = env_int("NFSU2_ROAM_TEST_FMASS", 0, 0, 20000);
     O.test_hitnan = env_int("NFSU2_ROAM_TEST_HITNAN", 0, 0, 1);
+    {   const char *scr = rh_opt("NFSU2_INPUT_SCRIPT");               /* settings.ini can't set it: an input script's run only */
+        O.test_hitfling = scr && *scr ? env_int("NFSU2_ROAM_TEST_HITFLING", 0, 0, 1) : 0; }
     O.test_owncars = env_int("NFSU2_ROAM_TEST_OWNCARS", 0, 0, 1);
     O.test_outside = env_int("NFSU2_ROAM_TEST_OUTSIDE", 0, 0, 1);
     O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
@@ -7090,7 +7094,12 @@ static int engage_ours(void){
  * it last was: the hot-position jump builds its physics again from a place
  * and a heading (0x5FBD60 -> 0x5F52C0), and friends' cars are ghosts until
  * they are clear of it.  With no good place this time in free roam, to the new
- * career's start.  Again after RESCUE_US while the jump has not happened. */
+ * career's start.  Again after RESCUE_US while the jump has not happened.
+ * The jump does nothing to the camera, and needs to do nothing: the drive
+ * camera, NaN while the car was, follows the car again within 15 frames, and
+ * the picture is back (no motion blur kept from those frames); a camera made
+ * NaN on its own is right again the next frame (2026-11-02, issue 57:
+ * tests/scripts/roam_nan_camera.txt) */
 #define RESCUE_US       2000000
 #define PLACE_MAX       100000.f      /* farther out than this (m): no place on the map */
 static int64_t g_rescue_at;
@@ -7521,6 +7530,7 @@ void roam_game_report(void){
                     "load failures %u, looks reused %u, rides given back %u, local teleports %u, clock re-anchors %u\n", __atomic_load_n(&g_joins, __ATOMIC_RELAXED),
             __atomic_load_n(&g_leaves, __ATOMIC_RELAXED), g_acquires, g_releases, g_creates, g_load_fail, g_reuses, g_restores, g_teleports, g_clock_snaps);
     if (g_rescues || g_hit_nans) rlog("  [roam] my car not a number: put back %u time(s), %u hit(s) with friends' cars undone\n", g_rescues, g_hit_nans);
+    if (g_hit_wild) rlog("  [roam] %u hit(s) with friends' cars undone: they threw my car farther than a hit can\n", g_hit_wild);
     rlog("  [roam] datagrams sent %llu (%llu bytes), received %llu (%llu bytes), blocked %llu, send errors %llu, "
                     "impairment dropped %llu duplicated %llu\n", (unsigned long long)ps.sent, (unsigned long long)ps.sent_bytes,
             (unsigned long long)ps.recv, (unsigned long long)ps.recv_bytes, (unsigned long long)ps.blocked,
@@ -8571,6 +8581,40 @@ static int contact_sane(uint32_t me, uint32_t rb, const float *st){
     for (int i = 0; i < CS_N; i++) if (!__builtin_isfinite(st[i])) return 0;
     return car_sane(me) && fin3(rb + 0x20u, PLACE_MAX) && fin3(rb + 0x30u, 1e30f) && fin3(rb + 0x40u, 1e30f) && fin3(rb + 0x50u, 1e30f);
 }
+/* A hit no two cars can give (issue 57: a car flung out of the world, over a
+ * wall): the game's result for the player's car, against the friend's car as
+ * an immovable thing, changed its velocity by more than HIT_DV_X times the
+ * speed the two closed at (each car's own velocity, the friend's as the game
+ * has it on its car: car +0x70) plus HIT_DV_SLACK, or moved its place
+ * farther than its speeds before and after carry it in the step plus
+ * HIT_MOVE_SLACK (the pair rewinds the car to the moment they touch and
+ * moves it on: within the step).  A real hit changes the velocity by at most
+ * about twice the closing speed (a car bouncing straight back off a wall);
+ * the game's own measured 1.1 x (32 m/s into a standing car: back at 3.5),
+ * and the hardest of 194 players' logs (2026-11-02) 105 m/s at some 50 m/s
+ * closing, against a friend driving at it.  Such a hit is undone as one that
+ * is not a number (contact_sane): the two pass through each other for the
+ * step instead.  NFSU2_ROAM_TEST_HITFLING (test aid, scripted runs only): the
+ * game's first hit leaves the player's car going up at 300 m/s. */
+#define HIT_DV_X        2.5f
+#define HIT_DV_SLACK    10.f          /* m/s */
+#define HIT_MOVE_SLACK  1.f           /* m */
+static int contact_wild(uint32_t me, uint32_t fc, const float *st0, const float *st, float wdt, float *out){
+    float dv2 = 0, rel2 = 0, v02 = 0, v12 = 0, mv2 = 0;
+    for (int i = 0; i < 3; i++){
+        float dv = st[CS_V + i] - st0[CS_V + i], rel = st0[CS_V + i] - MRF32(fc + 0x70u + 4u * (uint32_t)i);
+        float p0, p1 = MRF32(me + 0x60u + 4u * (uint32_t)i), mv;
+        memcpy(&p0, g_keep_car + (0x60u - CAR_KEEP_AT) + 4u * (uint32_t)i, 4);
+        mv = p1 - p0;
+        dv2 += dv * dv; rel2 += rel * rel; v02 += st0[CS_V + i] * st0[CS_V + i]; v12 += st[CS_V + i] * st[CS_V + i]; mv2 += mv * mv;
+    }
+    float t = __builtin_isfinite(wdt) && wdt > 0.f && wdt < 0.25f ? wdt : 0.25f, v0 = rc_sqrtf(v02), v1 = rc_sqrtf(v12);
+    out[0] = rc_sqrtf(dv2); out[1] = rc_sqrtf(rel2); out[2] = rc_sqrtf(mv2);
+    if (!__builtin_isfinite(out[1])) return 0;                      /* the friend's car's velocity: no bound to put */
+    float dv_max = HIT_DV_X * out[1] + HIT_DV_SLACK, v1_max = v0 + dv_max;   /* the place: by the speed a hit can leave */
+    out[3] = (v0 + (v1 < v1_max ? v1 : v1_max)) * t + HIT_MOVE_SLACK;
+    return out[0] > dv_max || out[2] > out[3];
+}
 /* Ghost mode Everything (O.ghost_all): in free roam with others on, the
  * game's own cars -- traffic (driver 4) and its AI racers, the outrun tuners
  * (3) -- pass through the player's car, and through friends' cars, which
@@ -8720,6 +8764,10 @@ void roam_game_contact(CPU *c, void (*orig)(CPU *)){
     orig(c);
     MRF32(G_CRASH_VIEW) = view; MRF32(G_CRASH_CAP) = cap;
     if (O.test_hitnan == 1 && !again){ O.test_hitnan = 2; MRF32(rb + 0x20u) = __builtin_nanf(""); MRF32(rb + 0x70u) = __builtin_nanf(""); }
+    if (O.test_hitfling == 1 && !again){
+        O.test_hitfling = 2;
+        MRF32(rb + 0xa8u) += 300.f; MRF32(rb + 0x78u) += 300.f * mm; MRF32(me + 0x78u) += 300.f; MRF32(me + 0x68u) += 5.f;
+    }
     contact_get(me, rb, st);
     if (!contact_sane(me, rb, st)){
         float p[3]; rd3(rb + 0x20u, p);
@@ -8727,6 +8775,15 @@ void roam_game_contact(CPU *c, void (*orig)(CPU *)){
         if (++g_hit_nans <= 8 || g_hit_nans % 100u == 0)
             rlog("[roam] f=%ld hit with %s's car: the game left my car not a number (at %.1f %.1f %.1f): the hit undone (%u so far)\n",
                  rh_frame(), s->name, (double)p[0], (double)p[1], (double)p[2], g_hit_nans);
+        return;
+    }
+    float wild[4];
+    if (contact_wild(me, s->car, st0, st, MRF32(G_WORLDDT), wild)){
+        memcpy(GPTR(me + CAR_KEEP_AT), g_keep_car, CAR_KEEP_SZ); memcpy(GPTR(rb), g_keep_rb, RB_KEEP_SZ);
+        if (++g_hit_wild <= 8 || g_hit_wild % 100u == 0)
+            rlog("[roam] f=%ld hit with %s's car: the game threw my car (velocity changed by %.1f m/s at %.1f m/s closing; moved %.1f m, "
+                 "%.1f m at most): the hit undone (%u so far)\n", rh_frame(), s->name, (double)wild[0], (double)wild[1],
+                 (double)wild[2], (double)wild[3], g_hit_wild);
         return;
     }
     if (mode != 6u && ok(pl, 0x5c) && MR32(pl + 0x58u) == 6u)

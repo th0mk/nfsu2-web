@@ -1,0 +1,45 @@
+# The camera after the player's car was at NaN in free roam (issue 57): new career -> prologue free roam, the car's
+# rigid body made NaN every frame for 1.5 s (as a bad hit could leave it).  While it is, the trace's camera (cx cy,
+# eView 1's camera [0x832E90] +0x40) is NaN too and the world is black (dump nan).  Once the pokes stop, car_rescue
+# puts the car back where it last was ("[roam] ... my car is not a number ... back to ...") and within some 15 frames
+# the camera follows it again (numbers, about 6 m behind px py), the picture with it (dumps after1, after2): no
+# photo mode or respawn needed.  Then R (respawn): the camera follows the car to the road (dump respawn).
+#   node web/tools/roam-pair.mjs --solo --a Cam:roam_nan_camera.txt --watch 3000
+#   (frames: --page play --size 960x540; in the PC's WSL with NFSU2_BROWSER=chromium and CHROME_ARGS="--enable-unsafe-webgpu
+#   --ignore-gpu-blocklist --enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan --use-angle=vulkan
+#   --enable-unsafe-swiftshader", ~7 min)
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++1500 trace 15 cx=f:[0x832e90]+0x40 cy=f:[0x832e90]+0x44 cz=f:[0x832e90]+0x48 px=f:[[0x8900ac]+4]+0x60 py=f:[[0x8900ac]+4]+0x64 pz=f:[[0x8900ac]+4]+0x68 mv=i:[[0x8900ac]+0x238]+0xc
++0    log cam_before
++0    dump before
++30   loop 90
++1    roam mp carpoke rb 20 nan 3      # the rigid body's place and momentum: NaN
++0    roam mp carpoke rb 70 nan 3
++0    endloop
++0    log nan_done
++0    dump nan
++60   dump after1
++240  log cam_after
++0    dump after2
++0    tap R                            # respawn
++240  log cam_after_respawn
++0    dump respawn
++30   untrace
++0    quit
