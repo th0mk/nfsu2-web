@@ -152,20 +152,42 @@ static void roam_state(void){
  * set with the HUD's outrun icon by 0x500D20 and tested by 0x500D80), or one
  * of ours (roam_game_engage: a friend's outrun, a multiplayer-only race spot,
  * a lobby to join or to start).  "roam_near": friends' cars within a horn's
- * reach (roam_game_near), so Horn and Quick chat show only then. */
+ * reach (roam_game_near), so Horn and Quick chat show only then.
+ * "hydraulics": while the player drives a car with hydraulics, so the
+ * Pressurize and Bounce buttons show only then: the level its Hydraulics part
+ * gives it (RideInfo +0x581), or the game's own for every car when that is
+ * not -1, as the driver's hydraulics controls (0x4078A0) read it.  2 while
+ * a press of H or J would set them going, 1 while not: they start 0.22 s
+ * after the press (0x407400) if the car is then at 10 mph or less and the
+ * race has them (0x407370 with 1; the press itself only counts under 30
+ * mph), so a key held from faster never starts them.  The page presses its
+ * key again when this goes to 2. */
 #define PL_MARKER    0x9acu
+#define PL_CAR       4u
+#define CAR_SPEED    0x430u           /* float: m/s */
 #define G_OUTRUN_ST  0x00860a58u      /* Career4230 (0x85EF70) +0x1AE8 */
+#define G_HYD_LEVEL  0x007e949cu      /* int: every car's hydraulics level, -1: each its own */
+#define G_HYD_ON     0x007e94a0u      /* byte: the hydraulics at all */
 int roam_game_engage(void); int roam_game_near(void);
+static uint32_t rd32_ok(uint32_t a){ return a && mem_is_committed(a) && mem_is_committed(a + 3u) ? MR32(a) : 0u; }
+static int hydraulics(void){
+    uint32_t car = rd32_ok(rd32_ok(G_PLAYER0) + PL_CAR), ride = rd32_ok(car + 0x10u);
+    int32_t lv = ride && mem_is_committed(ride + 0x581u) ? (int8_t)MR8(ride + 0x581u) : 0, all = (int32_t)rd32_ok(G_HYD_LEVEL);
+    if ((all > -1 ? all : lv) == 0) return 0;
+    /* 0x407370 (1): races of the kinds without them (the race parameters' bytes, as it reads them), the speed */
+    if (!MR8(G_HYD_ON) || MR8(0x0089e7d9u) || MR32(0x00890104u) || MR8(0x0089e7e3u) || MR32(0x0089010cu)) return 1;
+    return mem_is_committed(car + CAR_SPEED + 3u) && MRF32(car + CAR_SPEED) * 2.237f <= 10.f ? 2 : 1;
+}
 static void touch_state(int drive){
-    static int slot[2] = { -2, -2 };
-    static double last[2] = { -1, -1 };
-    if (slot[0] == -2){ slot[0] = host_status_slot("engage"); slot[1] = host_status_slot("roam_near"); }
+    static int slot[3] = { -2, -2, -2 };
+    static double last[3] = { -1, -1, -1 };
+    if (slot[0] == -2){ slot[0] = host_status_slot("engage"); slot[1] = host_status_slot("roam_near"); slot[2] = host_status_slot("hydraulics"); }
     int roam = (drive & 3) == 2;
     uint32_t p = roam && mem_is_committed(G_PLAYER0 + 3u) ? MR32(G_PLAYER0) : 0u;
     int marker = p && mem_is_committed(p + PL_MARKER + 3u) && MR32(p + PL_MARKER);
     int outrun = roam && mem_is_committed(G_OUTRUN_ST + 3u) && MR32(G_OUTRUN_ST) == 2u;
-    double v[2] = { roam && (marker || outrun || roam_game_engage()), roam ? (double)roam_game_near() : 0 };
-    if (v[0] != last[0] || v[1] != last[1]){ last[0] = v[0]; last[1] = v[1]; host_status_set_n(slot, v, 2); }
+    double v[3] = { roam && (marker || outrun || roam_game_engage()), roam ? (double)roam_game_near() : 0, (drive & 3) ? hydraulics() : 0 };
+    if (v[0] != last[0] || v[1] != last[1] || v[2] != last[2]){ last[0] = v[0]; last[1] = v[1]; last[2] = v[2]; host_status_set_n(slot, v, 3); }
 }
 /* "sms": the text message of ours (sms.c) the game has in its inbox this
  * game, 0 none, so the page asks for it no more (web/src/app/playtime.ts) */

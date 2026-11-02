@@ -19,6 +19,12 @@
 //             Start (Engage) only while Engage does something: an event's or a shop's marker, an outrun offer, a race
 //             spot or lobby (the game's status "roam_near" and "engage", runtime/web/status_web.c; a game without them
 //             shows these always).  The steering button held opens the touch settings (deps.settings)
+//   hydraulics  with a car that has them (the game's status "hydraulics"), Pressurize and Bounce among the small
+//             buttons: a tap turns one on (lit) and holds its key, H or J, as a keyboard player holds it, until a tap
+//             turns it off or the other on.  Meanwhile the steering (the arrow keys, or the stick's x) and Gas and
+//             Brake (the up and down arrows) pick the corners, and Gas drives no more: the game's own.  The game
+//             starts them only at 10 mph or less, a moment after the key goes down, so the key is pressed again
+//             whenever the car gets that slow (status 2)
 //   position  which thumb steers: the steering, the gear buttons and Start under the left thumb and the pedals under
 //             the right, or the other way round; either way by the screen's sides, moved in from them (EDGE_IN px)
 //             or moved in more (EDGE_IN_MORE px), as far as there is room.  One list in the Controls sheet's touch
@@ -61,6 +67,8 @@ const HOLD_MS = 150;
 const LONG_MS = 250;
 /** a control with a long press (the steering button): down this long, it does that instead of its own */
 const PRESS_MS = 500;
+/** the keys Pressurize and Bounce hold while on (the game's Hydraulic Pressurize and Bounce) */
+const HYD_KEYS = { lift: 'KeyH', bounce: 'KeyJ' } as const;
 
 const STEER_EVENT = 'nfsu2-touch-steering';
 let steeringNow: Steering = (() => {
@@ -191,9 +199,11 @@ function sizeSetting(store: string, values: readonly Size[], auto: () => number)
 /** the px the controls take between their margins at 100 % (style.css), the most they do (free roam with a manual
  *  gearbox): across, the row of small buttons; down, that row over the controls under the steering's thumb (nitro:
  *  more with Nitro there, a round button where Start's pill was); sides, the steering's group beside the pedals' with
- *  a gap (what moved in leaves them).  Upright, the space under the picture: across, the steering beside the pedals;
- *  down, two rows over the steering thumb's */
-const ROOM = { across: 664, down: 324, nitro: 20, sides: 360 }, ROOM_UPRIGHT = { across: 384, down: 372, nitro: 8, sides: 384 };
+ *  a gap (what moved in leaves them); hyd, what Pressurize and Bounce add to the row while they show in free roam
+ *  (a race's row is shorter with them).  Upright, the space under the picture: across, the steering beside the
+ *  pedals (free roam's second row, with them, as wide); down, two rows over the steering thumb's */
+const ROOM = { across: 664, down: 324, nitro: 20, sides: 360, hyd: 112 },
+  ROOM_UPRIGHT = { across: 384, down: 372, nitro: 8, sides: 384, hyd: 0 };
 /** the controls' root, once there: its padding is their margins */
 let edges: HTMLElement | null = null;
 const upright = () => document.documentElement.hasAttribute('data-touch') && innerHeight >= innerWidth;
@@ -205,7 +215,8 @@ function autoTouchSize(): number {
   // their margins: the root's padding (style.css .touch), 12 px before it is there; upright, the top's under the picture
   const m = edges ? getComputedStyle(edges) : null, px = (v?: string) => parseFloat(v ?? '') || 12;
   const room = upright() ? ROOM_UPRIGHT : ROOM;
-  const fit = Math.min((w - px(m?.paddingLeft) - px(m?.paddingRight)) / room.across,
+  const hyd = edges?.hasAttribute('data-hyd') && edges.hasAttribute('data-roam') ? room.hyd : 0;
+  const fit = Math.min((w - px(m?.paddingLeft) - px(m?.paddingRight)) / (room.across + hyd),
     (h - px(m?.paddingTop) - px(m?.paddingBottom)) / (room.down + (nitroSteerSide.get() ? room.nitro : 0)));
   return Math.max(0.8, Math.floor(Math.min(want, fit) * 20 + 1e-9) / 20);
 }
@@ -267,6 +278,9 @@ const ICONS = {
   up: '<path d="M6 15l6-6 6 6"/>',
   menuUp: '<path class="fill" d="M5 16l7-9 7 9z"/>',
   menuDown: '<path class="fill" d="M5 8l7 9 7-9z"/>',
+  // a car side on, lifted off its wheels (an arrow up), or bouncing on them (arcs over it)
+  lift: '<path d="M3 13h18M5 13l2-3h10l2 3"/><circle cx="7" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M7 13.5v5M17 13.5v5M12 8V3M9.5 5.5 12 3l2.5 2.5"/>',
+  bounce: '<path d="M3 15h18M5 15l2-3h10l2 3"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/><path d="M5 8c1.5-4 3.5-4 5 0M14 8c1.5-4 3.5-4 5 0"/>',
 };
 
 /** the roll of the phone in the screen's plane, radians, 0 = upright, + = turned clockwise (a wheel turned right);
@@ -311,6 +325,12 @@ export class TouchControls {
   private engage: number | undefined;
   private near: number | undefined;
   private drift = 0;
+  /** the player's car has hydraulics (the game's status: 2 slow enough to start them, 1 not; undefined: a game that
+   *  does not say), the one of Pressurize and Bounce turned on ('' neither) */
+  private hydraulics: number | undefined;
+  private hyd: '' | 'lift' | 'bounce' = '';
+  private hydWide = false;
+  private hydWorks = false;
   private statusAt = 0;
   /** a finger touched the game; a keyboard or controller was used after the last touch */
   private seen = touchFirst();
@@ -374,6 +394,8 @@ export class TouchControls {
     add('status', N('Career status'), '<i class="status" aria-hidden="true"></i>', { bit: 1 << PAD_DDOWN }, 'small roam');
     add('horn', N('Horn'), path(ICONS.horn), { keys: ['KeyN'] }, 'small roam');
     add('chat', N('Quick chat'), path(ICONS.chat), { act: () => this.deps.chat?.() }, 'small roam');
+    add('lift', N('Hydraulics: pressurize'), path(ICONS.lift), { act: () => this.setHyd(this.hyd === 'lift' ? '' : 'lift') }, 'small hyd');
+    add('bounce', N('Hydraulics: bounce'), path(ICONS.bounce), { act: () => this.setHyd(this.hyd === 'bounce' ? '' : 'bounce') }, 'small hyd');
     add('mode', N('Steering'), path(ICONS[this.steering]), { act: () => this.nextSteering(), long: () => this.deps.settings?.() }, 'small');
     add('center', N('Straight ahead'), path(ICONS.center), { act: () => this.recenter() }, 'small');
     add('start', N('Start an event'), { text: N('Start') }, { keys: ['Enter'] }, 'pill roam');
@@ -449,7 +471,7 @@ export class TouchControls {
   state() {
     return { shown: this.mode === 'drive', menu: this.mode === 'menu', drive: this.drive, steering: this.steering, lx: this.lx,
       buttons: this.padButtons, keys: [...this.keys.keys()], roll: this.sentRoll, menuScale: this.menuScale, menuBar: this.menuBar, menuSent: !!this.menuTo,
-      engage: this.engage, near: this.near, drift: this.drift };
+      engage: this.engage, near: this.near, drift: this.drift, hydraulics: this.hydraulics, hyd: this.hyd };
   }
 
   /** the game ended: everything let go, nothing of it kept */
@@ -476,6 +498,7 @@ export class TouchControls {
       if (st) {
         this.drive = st.get('drive') ?? 0; this.frames = st.get('frames') ?? 0;
         this.engage = st.get('engage'); this.near = st.get('roam_near'); this.drift = st.get('drift') ?? 0;
+        this.hydraulics = st.get('hydraulics');
       }
     }
     if (!this.away && (s.input?.padPressed?.() ?? 0) > this.touchedAt) this.away = true;
@@ -510,7 +533,33 @@ export class TouchControls {
     if (this.engage === 0) this.letGo('start');
     if (this.near === 0) this.letGo('horn');
     this.ctls.get('drift')!.el.classList.toggle('lit', (this.drift & 1) !== 0);
+    // Pressurize and Bounce with a car that has hydraulics (in free roam they make the row longer: auto's size may
+    // change).  A press of H or J from over 10 mph never starts them: the one on is pressed again when the car gets
+    // that slow
+    const hyd = (this.hydraulics ?? 0) > 0 && mode === 'drive', wide = hyd && (this.drive & 3) === 2;
+    if (!hyd) this.setHyd('');
+    this.root.toggleAttribute('data-hyd', hyd);
+    if (wide !== this.hydWide) { this.hydWide = wide; touchSize.check(); }
+    const works = this.hydraulics === 2;
+    if (works && !this.hydWorks) this.pressHydAgain();
+    this.hydWorks = works;
     this.setMode(mode);
+  }
+
+  /** Pressurize or Bounce on, its key (H, J) held from now on, or neither ('') */
+  private setHyd(to: '' | 'lift' | 'bounce') {
+    if (to === this.hyd) return;
+    if (this.hyd) { this.keyUp(HYD_KEYS[this.hyd]); this.ctls.get(this.hyd)!.el.classList.remove('lit'); }
+    this.hyd = to;
+    if (to) { this.keyDown(HYD_KEYS[to]); this.ctls.get(to)!.el.classList.add('lit'); if (this.ticks) navigator.vibrate?.(8); }
+  }
+  /** the key of the one on let go and pressed again HOLD_MS later, so the game starts them now (runtime/web/
+   *  status_web.c "hydraulics"): it took the first press when the car was too fast, or not at all */
+  private pressHydAgain() {
+    const on = this.hyd;
+    if (!on) return;
+    this.keyUp(HYD_KEYS[on]);
+    setTimeout(() => { if (this.hyd === on) this.keyDown(HYD_KEYS[on]); }, HOLD_MS);
   }
 
   /** the driving controls, the menu's or none: every control let go on a change, the stick and tilt at rest */
@@ -518,6 +567,7 @@ export class TouchControls {
     if (mode === this.mode) return;
     const drove = this.mode === 'drive';
     for (const c of this.ctls.values()) { c.fingers.clear(); this.up(c, true); }
+    this.setHyd('');
     this.byFinger.clear();
     this.stickUp();
     this.tiltOff();

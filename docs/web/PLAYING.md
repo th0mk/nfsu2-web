@@ -89,6 +89,11 @@ While you drive:
   D-pad Down on a controller, T or F4 on a keyboard), and the horn and quick chat (not with quick chat off)
   while another player's car is within a horn's reach. In free roam **Start** shows above the steering where it does
   something: at an event's or a shop's marker, at an outrun offer, or at a race spot or lobby of other players.
+- **Hydraulics:** with a car that has them (the Hydraulics part, Car Specialties), **Pressurize** and **Bounce** join
+  the small buttons (in free roam after the career status, upright in the second row; in a race after reset). A tap
+  turns one on (lit, as H or J held on a keyboard), another tap turns it off, or the other one on. While one is on,
+  the steering and Gas and Brake pick the corners instead of driving, under 10 mph as with H and J; turned on faster,
+  it starts working once the car is that slow.
 - **HUD:** a phone starts with the game's 4:3 HUD layout (Game, Display, HUD layout), which keeps the minimap and
   the speedometer between the thumbs instead of under the steering and Brake.
 - **Sizes**, in the Controls sheet's Touch tab and kept in this browser: **Control size** for the touch controls, and
@@ -109,7 +114,7 @@ While you drive:
 | Left Shift, left Ctrl | Gear up, gear down (manual gearbox) |
 | C, B | Camera, look back |
 | R | Respawn |
-| H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph |
+| H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
 | X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button |
 | 1 to 4, then 1 to 4 | Quick chat in free roam with other players: a group, then a phrase (see section 6) |

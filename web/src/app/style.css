@@ -576,7 +576,15 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .tc[data-ctl="status"] { left: calc(var(--l) + 392px * var(--ts)); }
 .tc[data-ctl="horn"] { left: calc(var(--l) + 448px * var(--ts)); }
 .tc[data-ctl="chat"] { left: calc(var(--l) + 504px * var(--ts)); }
-/* drift mode on: its button lime, with a ring */
+/* a car with hydraulics (touch.ts): Pressurize and Bounce after the career status in free roam, the horn and quick
+ * chat after them; after reset in a race */
+.tc[data-ctl="lift"] { left: calc(var(--l) + 448px * var(--ts)); }
+.tc[data-ctl="bounce"] { left: calc(var(--l) + 504px * var(--ts)); }
+.touch[data-hyd] .tc[data-ctl="horn"] { left: calc(var(--l) + 560px * var(--ts)); }
+.touch[data-hyd] .tc[data-ctl="chat"] { left: calc(var(--l) + 616px * var(--ts)); }
+.touch:not([data-roam]) .tc[data-ctl="lift"] { left: calc(var(--l) + 224px * var(--ts)); }
+.touch:not([data-roam]) .tc[data-ctl="bounce"] { left: calc(var(--l) + 280px * var(--ts)); }
+/* drift mode on, Pressurize or Bounce on: the button lime, with a ring */
 .tc.lit { color: var(--lime); box-shadow: inset 0 0 0 calc(2px * var(--ts)) var(--lime); }
 .tc[data-ctl="mode"] { right: var(--r); }
 .tc[data-ctl="center"] { right: calc(var(--r) + 56px * var(--ts)); }
@@ -622,7 +630,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .touch:not([data-roam]) .roam,
 .touch[data-no-engage] [data-ctl="start"],
 .touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]),
-.touch[data-no-chat] [data-ctl="chat"] { display: none; }
+.touch[data-no-chat] [data-ctl="chat"],
+.touch:not([data-hyd]) .hyd { display: none; }
 /* the menus': the arrows as a D-pad bottom left, Back over OK bottom right, in the bars beside the game's 4:3 menus
  * (--bar wide): the keys as big as the bar leaves room for, 44 to 52 px.  A faint rim: the bars are black behind the
  * movies and the profile screens */
@@ -681,6 +690,15 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   html[data-touch] .tc[data-ctl="drift"] { inset-inline-start: calc(var(--start) + 112px * var(--ts)); }
   html[data-touch] .tc[data-ctl="horn"] { inset-inline-start: calc(var(--start) + 168px * var(--ts)); }
   html[data-touch] .tc[data-ctl="chat"] { inset-inline-start: calc(var(--start) + 224px * var(--ts)); }
+  /* Pressurize and Bounce in the second row: after drift mode in free roam (the horn and quick chat after them, the
+   * row then as wide as the steering beside the pedals), at its start in a race */
+  html[data-touch] .tc.hyd { left: auto; top: calc(var(--t) + 56px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="lift"] { inset-inline-start: calc(var(--start) + 168px * var(--ts)); }
+  html[data-touch] .tc[data-ctl="bounce"] { inset-inline-start: calc(var(--start) + 224px * var(--ts)); }
+  html[data-touch] .touch[data-hyd] .tc[data-ctl="horn"] { inset-inline-start: calc(var(--start) + 280px * var(--ts)); }
+  html[data-touch] .touch[data-hyd] .tc[data-ctl="chat"] { inset-inline-start: calc(var(--start) + 336px * var(--ts)); }
+  html[data-touch] .touch:not([data-roam]) .tc[data-ctl="lift"] { left: auto; inset-inline-start: var(--start); }
+  html[data-touch] .touch:not([data-roam]) .tc[data-ctl="bounce"] { left: auto; inset-inline-start: calc(var(--start) + 56px * var(--ts)); }
   html[data-touch] .stick { top: calc(var(--pic-h) + 12px + 52px * var(--ts)); height: auto; width: 50%; }
   /* below the picture, on black: a light backing, and room for bigger pedals and steering */
   html[data-touch] :is(.tc, .stage-menu) { background: rgba(255, 255, 255, 0.1); }
