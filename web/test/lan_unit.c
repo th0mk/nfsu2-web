@@ -31,6 +31,8 @@
 int winsock_call(CPU *c, const char *dll, const char *n, uint32_t *out);
 net_mailbox *vlan_test_mailbox(void);
 int vlan_test_pump(void);
+int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms);
+int vlan_race_sent_to(uint32_t ip_h, uint32_t within_ms);
 void nfsu2_sha256(const void *data, size_t n, uint8_t out[32]);
 void mem_commit(uint32_t, uint32_t);
 
@@ -199,6 +201,12 @@ int main(void){
     check("an 8-byte buffer: WSAEMSGSIZE with the head copied", r == 0xFFFFFFFFu && err() == WSAEMSGSIZE && !memcmp(g_buf2, "01234567", 8), "err %u", err());
     r = WS("recvfrom", 6, u3, GA(g_buf2), 100u, 0u, GA(g_sa2), lenp(16));
     check("... and the rest discarded", r == 0xFFFFFFFFu && err() == WSAEWOULDBLOCK, "err %u", err());
+    rx_put(NET_KIND_LAN_UDP, 0x0A4D0009u, ME, 3658, 3658, 0, 0, "x", 1);   /* anyone may send to our race port */
+    r = WS("recvfrom", 6, u3, GA(g_buf2), 100u, 0u, GA(g_sa2), lenp(16));
+    { uint32_t rp[4]; int nrp = vlan_race_peers(rp, 4, 5000), heard = 0;
+      for (int i = 0; i < nrp; i++) heard |= rp[i] == 0x0A4D0009u;
+      check("a datagram from 10.77.0.9 to 3658: a race peer, but not one the race link sent to (10.77.0.3 is)",
+            r == 1 && heard && !vlan_race_sent_to(0x0A4D0009u, 5000) && vlan_race_sent_to(PEER, 5000), "r=%d peers %d", (int)r, nrp); }
     tx_drain();
     rx_put(NET_KIND_LAN_UDP, PEER, ME, 5000, 4444, 0, 0, "x", 1);
     got = tx_take(&f);
