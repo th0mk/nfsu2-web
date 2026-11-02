@@ -10,7 +10,16 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (2d2c4d4)
+## 2026-11-02 (56ab552)
+
+- **Free roam:** parked, press O (on a controller, hold D-pad down) to open the trunk, then the hood, then the doors, and show your car off. Other players see them open; they close when you drive off.
+- **Photo mode:** cars keep their full detail however far away or zoomed out, and once the camera stands still the picture's edges are smoothed. New in the panel: Blur and Focus (a real lens blur), Brightness, Vignette, filters (Black and white, Warm, Cool, Vivid, Faded), Crop with a Grid, and Cars (all, friends & crews, only yours, none). In free roam, friends' cars stand still while you take photos (Freeze friends' cars).
+- **Languages:** Ukrainian, for the game (its text and subtitles) and this page.
+- **Free roam:** names over cars no longer pile up in a crowd. Friends' and crews' come first, and names fade out between 25 and 60 m.
+- **Free roam:** the Add friend line while your front bumpers touch is bigger, in quick chat's style, just above the outrun line.
+- **Touch controls:** Pressurize and Bounce no longer leave a hydraulics key held.
+- **Quick chat:** no longer opens in the career's free roam when free roam is off.
+- **Claimed names:** your own claimed name is no longer shown as another player's when the cloud check is slow.
 
 - **Career:** once you have beaten Caleb, the shops have the wide body kits, and the other unique hoods, spoilers, rims and vinyls, for every car in your career.
 - **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
