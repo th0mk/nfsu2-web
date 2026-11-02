@@ -7,7 +7,10 @@
 +240  tap BACK
 +8    tap BACK
 +8    tap BACK
-+8    tap BACK                        # clear the default "NAME"
++8    tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK                        # clear the default "NAME", or the up to 7 letters of Your name (overrides.c sub_004ff3b0)
 +20   type ROTEST
 +60   dump name
 +0    tap RETURN                      # -> "save the profile named ROTEST?"

@@ -778,11 +778,11 @@ async function ug2Steps() {
 
   // ------------------------------------------------------------ saves --
   if (want('saves') || want('restore') || want('pcsave')) {
+    await tab(page, 'saves');                                          // (the settings step left another tab open)
     await page.waitForSelector('#profiles .name', { timeout: 15000 });   // listed again when the game ended
     await page.waitForFunction(() => !/Counting/.test(document.querySelector('#cache-info').textContent));
     const listed = await page.locator('#profiles .name').allTextContents();
     const cacheInfo = await page.locator('#cache-info').textContent();
-    await tab(page, 'saves');
     await page.locator('#saves').screenshot({ path: path.join(OUT, 'saves.png') });
     const dl = page.waitForEvent('download');
     await page.click('#export');
