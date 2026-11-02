@@ -10,6 +10,14 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
+## 2026-11-03 (44c9024)
+
+- **Quick chat:** Countdown, a new phrase with a stopwatch (in the sixteen you start with, in One more?'s place, and under Special in Choose phrases): 5, 4, 3, 2, 1 and GO!, big in the middle of the picture for you and the players within 50 m, for a start in free roam.
+- **World map:** a spot where 16 or more players have been parked for a minute is a car meet (was 24).
+- **Free roam:** no outrun is offered in a crowd (4 or more other players within 25 m, as at a car meet); a challenge already made stands.
+- **Free roam:** with Ghost mode on Everything, other players' cars stay ghosts in an outrun too, as with Players. The tuner you race in an outrun stays solid.
+- **Free roam:** a hit with another player's car that throws yours farther than a hit can (the game loading, the car gone, the view broken) is undone: the two cars pass through each other instead.
+
 ## 2026-11-02 (d4fa27f)
 
 - **Free roam:** on a highway, the players shown are the ones on your road before the ones on the street below, and the other way round.
