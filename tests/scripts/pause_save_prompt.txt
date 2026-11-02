@@ -1,0 +1,25 @@
+# The pause menu's Save (runtime/savegame.c) with the game's Save option at Prompt ([0x844AD9] 0, [0x844AD8] 1)
+# from a game's start, from a career save past the prologue: the save screen asks as for the game's own saves:
+# "Are you sure you want to save the profile named ...?" (the job's 0x4000000), Yes (the left button: the right
+# one, No, has the focus); "Do you want to overwrite previously saved game?", Yes; "Save complete.", Continue;
+# "[save] ... Save: over ... (the profile written)".
+#   node web/tools/roam-pair.mjs --solo --a Sav:pause_save_prompt.txt --seed <save tree> --env NFSU2_ROAM=0 --out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++300  poke 0x844ad9 0 byte              # Save: Prompt
++0    poke 0x844ad8 1 byte
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++120  expect i:0x836514 >= 67108864     # are you sure
++0    tap LEFT                          # Yes
++30   tap RETURN
++240  tap LEFT                          # overwrite: Yes
++30   tap RETURN
++240  tap RETURN                        # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 900
++0    log LOG saved_prompt
++120  quit

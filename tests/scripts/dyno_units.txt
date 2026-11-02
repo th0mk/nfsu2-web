@@ -10,7 +10,8 @@
 +60   tap ESCAPE
 +0    waitfng UI_Pause.fng 600
 +120  dump pause
-+0    tap RIGHT
++0    tap RIGHT                       # Save (the car stands: not greyed out)
++60   tap RIGHT                       # Jump to Garage
 +60   tap RIGHT
 +60   dump pause_options_item
 +0    tap RETURN

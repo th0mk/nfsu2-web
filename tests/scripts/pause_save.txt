@@ -1,0 +1,51 @@
+# The pause menu's Save (runtime/savegame.c) in career free roam, from a career save past the prologue (run-suite's
+# NFSU2_SAVE_SEED, roam-pair's --seed), the game's Save option at Autosave ([0x844AD9] 1): standing still, Save is
+# the second item, after Return to Explore Mode; it keeps the car's place in the career (+0x8750, heading +0x8760),
+# the game's save screen (MC_Main.fng) writes the profile at once, with no "Do you want to overwrite previously
+# saved game?" (whose No turns Autosave off: Save leaves the game as its Yes does first), and ends on "Save
+# complete." (Continue); "[save] ... Save: over ... (the profile written)", the pause menu is back, the career's
+# flag (+0x8744) and the Save option as they were.  Again: the same.  Then driving: Save greyed out ("(greyed out: moving)"), and Options two to the right as without it.
+# With Save at Prompt or Off: pause_save_prompt.txt.
+#   node web/tools/roam-pair.mjs --solo --a Sav:pause_save.txt --seed <save tree> --env NFSU2_ROAM=0 --out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++300  mark px f:[[0x8900ac]+4]+0x60    # where the car stands
++0    mark py f:[[0x8900ac]+4]+0x64
++0    mark pz f:[[0x8900ac]+4]+0x68
++0    mark kept b:0x863484
++0    poke 0x844ad9 1 byte              # Save: Autosave
++0    poke 0x844ad8 1 byte
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++150  tap RETURN                        # "Save complete.": Continue (the only button)
++0    waitexpr i:0x836514 == 0 600      # the save over, no question
++0    log LOG saved_autosave
++60   expect f:0x863490 == @px          # the car's place kept in the career
++0    expect f:0x863494 == @py
++0    expect f:0x863498 == @pz
++0    expect b:0x863484 == @kept        # the flag as it was
++0    expect b:0x844ad9 == 1            # Autosave as it was
++0    waitfng UI_Pause.fng 600
++60   tap RETURN                        # Save again (the menu still on it)
++0    waitfng MC_Main.fng 600
++150  tap RETURN                        # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 600
++0    log LOG saved_again
++60   expect b:0x844ad9 == 1
++0    tap ESCAPE                        # back to the game
++120  trace 30 vx=f:[[0x8900ac]+4]+0x70 vy=f:[[0x8900ac]+4]+0x74
++0    down UP
++150  tap ESCAPE                        # moving: Save greyed out
++0    waitfng UI_Pause.fng 600
++0    up UP
++0    untrace
++120  tap RIGHT
++60   tap RIGHT                         # Options, as without Save
++60   tap RETURN
++0    waitfng UI_PauseOptionsMain.fng 600
++0    log LOG options_reached
++60   quit

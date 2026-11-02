@@ -1,0 +1,22 @@
+# The pause menu's Save (runtime/savegame.c), then a load of that save: part 1.  From a career save past the
+# prologue, the car taken to the airport's car park (the new career's start, far from where the save left it),
+# standing still: Save (the game's Save option at Autosave).  "[save] ... Save: the career at X Y Z" is the place;
+# copy the profile out (roam-pair --fetch "NFS Underground 2/<NAME>/<NAME>") and load it with
+# pause_save_reload.txt: the car starts there.
+#   node web/tools/roam-pair.mjs --solo --a Sav:pause_save_spot.txt --seed <save tree> --env NFSU2_ROAM=0 --out <dir>
+#        --fetch "NFS Underground 2/<NAME>/<NAME>" --fetch "NFS Underground 2/<NAME>/GARAGE.DAT"
+0     bot on
++0    waitroam 6000
++0    bot off
++120  teleport 1695.25 -883.64 24.11 0xf840
++400  peekx *(*0x8900ac+4)+0x60 3      # where the car stands now
++0    poke 0x844ad9 1 byte              # Save: Autosave
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++150  tap RETURN                        # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 1200
++0    log LOG saved_spot
++120  quit

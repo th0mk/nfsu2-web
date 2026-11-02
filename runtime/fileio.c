@@ -244,6 +244,7 @@ int fileio_resolve_save(const char *win, char *out, size_t outsz){ return resolv
 /* A profile the game saves, "<root>/NFS Underground 2/<NAME>/<NAME>" (any
  * case): garage.c keeps its slots 6-10 in a file beside it. */
 void garage_profile_written(const char *path);
+void savegame_profile_written(void);          /* savegame.c: the pause menu's Save, for its log */
 void garage_profile_deleted(const char *path);
 static int is_profile(const char *path){
     static const char dir[] = "NFS Underground 2";
@@ -751,7 +752,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
 #endif
         if(f->fd>=0) close(f->fd);
         if(f->dir) closedir(f->dir);
-        if(f->wr){ if (f->fd >= 0 && is_profile(f->path)) garage_profile_written(f->path); g_open_wr--; }
+        if(f->wr){ if (f->fd >= 0 && is_profile(f->path)){ garage_profile_written(f->path); savegame_profile_written(); } g_open_wr--; }
         f->used=0; r=1;
     }
     else if (!strcmp(n,"GetFileAttributesA")){
@@ -832,7 +833,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
             if ((g_wroot[0] && !path_under(a, g_wroot)) || (g_ro_root && path_under(a, g_root)))
                 r = (uint32_t)copy_file(a, b);
             else r = write_allowed("MoveFileA (source)", GS(A(c,0)), a) && rename(a,b)==0;
-            if (r && is_profile(b)) garage_profile_written(b);
+            if (r && is_profile(b)){ garage_profile_written(b); savegame_profile_written(); }
         }
     }
     else if (!strcmp(n,"CopyFileA")){

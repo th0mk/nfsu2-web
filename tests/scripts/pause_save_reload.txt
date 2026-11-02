@@ -1,0 +1,15 @@
+# The pause menu's Save (runtime/savegame.c), then a load of that save: part 2 (part 1: pause_save_spot.txt).  From
+# the save part 1 made (its profile put in the seed's place): the career's crib, Return to Explore Mode, and the car
+# where Save left it, within a metre ("${SX}" "${SY}": its place as part 1's log has it).
+#   node web/tools/roam-pair.mjs --solo --a Sav:pause_save_reload.txt --seed <that save tree> --env NFSU2_ROAM=0
+#        --env SXLO=... --env SXHI=... --env SYLO=... --env SYHI=... --out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++120  peekx *(*0x8900ac+4)+0x60 3
++0    expect f:[[0x8900ac]+4]+0x60 > ${SXLO}
++0    expect f:[[0x8900ac]+4]+0x60 < ${SXHI}
++0    expect f:[[0x8900ac]+4]+0x64 > ${SYLO}
++0    expect f:[[0x8900ac]+4]+0x64 < ${SYHI}
++0    log LOG reloaded
++30   quit

@@ -39,7 +39,8 @@
 +0    log QUIT to the main menu
 +0    tap ESCAPE
 +0    waitfe UI_pause.fng 600
-+120  tap RIGHT
++120  tap RIGHT                       # Save (the car stands: not greyed out)
++40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT

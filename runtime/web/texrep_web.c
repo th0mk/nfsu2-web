@@ -235,9 +235,70 @@ static int builtin_uploaded(unsigned mid, const uint8_t *data, size_t n){
     return 0;
 }
 
+/* ---- copied at run time, with or without a pack: the crib menu's Save icon, for the pause menu's Save (savegame.c)
+ * The crib menu's Save item draws the front end's texture 0x8ADA6FD4 (FRONTEND/FrontB.lzc), which the world does not
+ * have.  INGAME_ICON_VOIP_MUTE (GLOBAL/InGameCommon.bun), which nothing in the PC game draws, gets its levels instead,
+ * copied from the game's own upload of it: the front end comes before free roam (Resume Career goes through the
+ * crib).  Both are 128 x 64 DXT3 and each is known by its level 0 (CRC-32, Adler-32; nothing else in the game data
+ * has either).  Until the copy is there the slot keeps the game's own picture. */
+#define CRIB_SAVE_CRC    0xe67ab8c3u
+#define CRIB_SAVE_ADLER  0xa6278273u
+#define VOIP_MUTE_CRC    0xdaa6fa6du
+#define VOIP_MUTE_ADLER  0xb85b6f66u
+#define CP_W             128u
+#define CP_H             64u
+#define CP_FMT           PHOTO_ICON_KEY_FMT      /* DXT3, as both are (and the photo icon's original) */
+#define CP_LEVELS_MAX    8u                      /* 128 x 64 down to 1 x 1 */
+static struct { unsigned src, dst, levels, got; int done, on; uint8_t *buf; } g_cp;
+static size_t cp_level_bytes(unsigned l){ return (size_t)metal_level_pitch(CP_W, l, CP_FMT) * metal_level_rows(CP_H, l, CP_FMT); }
+static size_t cp_off(unsigned l){ size_t o = 0; for (unsigned k = 0; k < l; k++) o += cp_level_bytes(k); return o; }
+static void cp_show(void){
+    if (!g_cp.done || !g_cp.dst || g_cp.on) return;
+    metal_replace_texture(g_cp.dst, CP_W, CP_H, g_cp.levels, CP_FMT, g_cp.buf);
+    g_cp.on = 1;
+    fprintf(stderr, "[texrep] t%u: the crib's Save icon in INGAME_ICON_VOIP_MUTE, for the pause menu's Save\n", g_cp.dst);
+}
+/* 1: this upload was to the slot, which shows the copy (gpu_web.c drops the game's own) */
+static int copied_uploaded(unsigned mid, unsigned level, const uint8_t *data, size_t n){
+    if (!level && n == cp_level_bytes(0)){
+        crc_init();
+        uint32_t crc = crc32(data, n), adler = adler32(data, n);
+        if (crc == CRIB_SAVE_CRC && adler == CRIB_SAVE_ADLER && !g_cp.done){
+            if (!g_cp.buf) g_cp.buf = malloc(cp_off(CP_LEVELS_MAX));
+            g_cp.src = g_cp.buf ? mid : 0; g_cp.got = 0;
+            g_cp.levels = g_bi_levels[mid] < 1 ? 1u : g_bi_levels[mid] > CP_LEVELS_MAX ? CP_LEVELS_MAX : g_bi_levels[mid];
+        } else if (crc == VOIP_MUTE_CRC && adler == VOIP_MUTE_ADLER){
+            g_cp.dst = mid; g_cp.on = 0;
+            cp_show();
+            return g_cp.on;
+        } else if (mid == g_cp.dst && g_cp.on){
+            /* the game wrote something else into it: its own texture again (gpu_web.c dropped this upload) */
+            metal_replace_texture(mid, CP_W, CP_H, g_bi_levels[mid] ? g_bi_levels[mid] : 1u, CP_FMT, NULL);
+            metal_upload_texture(mid, 0, data, metal_level_pitch(CP_W, 0, CP_FMT), CP_W, CP_H, CP_FMT);
+            g_cp.dst = 0; g_cp.on = 0;
+            return 1;
+        }
+    }
+    if (mid == g_cp.src && !g_cp.done && level < g_cp.levels && n >= cp_level_bytes(level)){
+        memcpy(g_cp.buf + cp_off(level), data, cp_level_bytes(level));
+        g_cp.got |= 1u << level;
+        if (g_cp.got == (1u << g_cp.levels) - 1u){
+            g_cp.done = 1;
+            fprintf(stderr, "[texrep] t%u: the crib's Save icon kept (%u levels)\n", mid, g_cp.levels);
+            cp_show();
+        }
+    }
+    return mid == g_cp.dst && g_cp.on;
+}
+static void cp_gone(unsigned mid){
+    if (mid == g_cp.src) g_cp.src = 0;
+    if (mid == g_cp.dst){ g_cp.dst = 0; g_cp.on = 0; }
+}
+
 /* ---- the guest thread's hooks (com.c) ----------------------------------------------------------- */
 void texrep_created(unsigned mid, unsigned w, unsigned h, unsigned levels, unsigned d3dfmt, unsigned usage, unsigned pool){
     (void)usage; (void)pool;
+    cp_gone(mid);
     if (mid && mid < TEXREP_MAXTEX){
         g_bi[mid] = w == PHOTO_ICON_KEY_W && h == PHOTO_ICON_KEY_H && d3dfmt == PHOTO_ICON_KEY_FMT;
         g_bi_levels[mid] = (uint8_t)(levels > 255 ? 255 : levels);
@@ -249,6 +310,7 @@ void texrep_created(unsigned mid, unsigned w, unsigned h, unsigned levels, unsig
     g_t[mid].st = w <= 0xFFFF && h <= 0xFFFF && may_be(w, h, d3dfmt);
 }
 void texrep_uploaded(unsigned mid, unsigned level, const uint8_t *data, unsigned pitch, unsigned rows){
+    if (mid && mid < TEXREP_MAXTEX && g_bi[mid] && copied_uploaded(mid, level, data, (size_t)pitch * rows)) return;
     if (mid && mid < TEXREP_MAXTEX && g_bi[mid] && !level && builtin_uploaded(mid, data, (size_t)pitch * rows)) return;
     if (!g_on || !mid || mid >= TEXREP_MAXTEX || !g_t[mid].st || level) return;
     size_t n = (size_t)pitch * rows;
@@ -279,7 +341,7 @@ void texrep_surface_written(unsigned mid){
     }
     g_t[mid].st = 0;
 }
-void texrep_released(unsigned mid){ if (mid && mid < TEXREP_MAXTEX) g_t[mid].st = 0, g_bi[mid] = 0; }
+void texrep_released(unsigned mid){ cp_gone(mid); if (mid && mid < TEXREP_MAXTEX) g_t[mid].st = 0, g_bi[mid] = 0; }
 void texrep_frame(void){ }
 void texrep_report(void){
     if (!g_on) return;

@@ -80,7 +80,8 @@
  *    Their action (0x4C26B0, called through the vtable only) on Photo
  *    Mode's Accept asks for photo mode, then does what the menu's Resume
  *    does (free roam 0x4C2510, a race 0x4C24C0).  Photo mode opens once the
- *    game runs again.
+ *    game runs again.  savegame.c's Save goes in through the same two
+ *    patches (after Return to Explore Mode; its Accept before ours).
  *
  * The page (status_web.c) reads:
  *   photo       bits: 1 photo mode can open now, 2 it is on, 4 the free camera,
@@ -703,11 +704,14 @@ void sub_004c2640(CPU *c){
     P.after = no ? 0u : it;
 }
 /* A menu's AddOption (thiscall: item; ret 4): after that Replay, Photo Mode, an item of Replay's kind with its own
- * icon and label. */
+ * icon and label (and savegame.c's Save after Return to Explore Mode). */
 void sub_0050dab0(CPU *c);
+void savegame_item(CPU *c, uint32_t menu, uint32_t it);
+int savegame_accept(CPU *c);
 static void add_item(CPU *c){
     uint32_t menu = c->ecx, it = MR32(c->esp + 4u);
     sub_0050dab0(c);
+    savegame_item(c, menu, it);
     if (!it || it != P.after) return;
     P.after = 0;
     uint32_t n = ITEM_BYTES, ph = gcall(c, FN_NEW, 0, 1, &n);
@@ -718,11 +722,12 @@ static void add_item(CPU *c){
     gcall(c, FN_ADD_ITEM, menu, 1, &ph);
 }
 /* Their action (thiscall: package, message, ...; ret 0x14): Photo Mode's Accept asks for photo mode, then resumes
- * the game as the menu's Resume does; Replay's as the game has it. */
+ * the game as the menu's Resume does; Save's is savegame.c's; Replay's as the game has it. */
 void sub_004c26b0(CPU *c);
 void sub_004c2510(CPU *c);
 void sub_004c24c0(CPU *c);
 static void act(CPU *c){
+    if (savegame_accept(c)) return;
     uint32_t it = c->ecx, msg = MR32(c->esp + 8u);
     if (msg != MSG_ACCEPT || !ok(it, IT_LABEL + 4u) || MR32(it + IT_LABEL) != P.label || MR8(it + IT_GREY)){ sub_004c26b0(c); return; }
     P.pause_at = autotest_frame();

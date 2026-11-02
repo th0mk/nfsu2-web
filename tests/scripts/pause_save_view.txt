@@ -1,0 +1,30 @@
+# The pause menu's Save (runtime/savegame.c) as the player sees it: career free roam from a career save (roam-pair's
+# --seed), standing still, the pause menu with Save chosen (the crib menu's Save icon and the game's "Save"),
+# then the save screen over it (with Autosave on, no question: "Save complete.", Continue), and the pause menu back;
+# "[texrep] ... the crib's Save icon in INGAME_ICON_VOIP_MUTE" before the pause.  Dumps need /test/play.html:
+#   node web/tools/roam-pair.mjs --solo --page play --size 1600x900 --a Sav:pause_save_view.txt --seed <save tree>
+#        --env NFSU2_ROAM=0 --out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++300  poke 0x844ad9 1 byte              # Save: Autosave
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++200  dump pause_first
++0    tap RIGHT                        # Save
++90   dump pause_save
++3    dump pause_save
++3    dump pause_save
++0    tap RETURN
++0    waitfng MC_Main.fng 600
++10   dump save_screen
++3    dump save_screen
++120  dump save_complete
++3    dump save_complete
++0    tap RETURN                        # Continue
++0    waitexpr i:0x836514 == 0 1200
++90   dump pause_back
++3    dump pause_back
++0    tap RIGHT
++90   dump pause_next
++30   quit

@@ -8865,6 +8865,9 @@ int roam_game_cars(void){
 }
 /* status_web.c, on the guest thread: Engage does something of ours now (engage_ours, this frame's) */
 int roam_game_engage(void){ return O.on && g_engage; }
+/* savegame.c, on the guest thread: in a race lobby (hosting it, asked into it, in it, its countdown, the trip): a
+ * trip out of free roam (mprace.c) can start at any moment */
+int roam_game_in_lobby(void){ return g_mp.st != MP_IDLE; }
 /* status_web.c, on the guest thread: friends' cars shown within a horn's reach (SAY_NEAR_M), so the touch controls'
  * Horn and Quick chat show; once there, until none is within 50 m more (no flicker at the edge) */
 int roam_game_near(void){

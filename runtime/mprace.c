@@ -98,6 +98,7 @@
 long autotest_frame(void);
 const char *autotest_top_fng(void);
 void autotest_tap(unsigned dik, long frames);
+int savegame_busy(void);                  /* savegame.c: the pause menu's Save at its save, or a save screen up */
 int career_fe_active(const char *name);
 void dispatch_indirect(CPU *c, uint32_t addr);
 
@@ -939,6 +940,10 @@ static void step_race(CPU *c, long f){
     M.dlg_at = 0;
     /* free roam: pause; UI_Pause: Quit, Yes */
     if (M.phase == MPR_OUT){
+        /* the pause menu's Save (savegame.c) at its save (greyed out in a lobby, so only one begun before): Quit
+         * waits until it is over, so the save is never cut off; its questions are the player's, whose input stays
+         * theirs meanwhile (M.owns) */
+        if (flow == 6u && savegame_busy()){ M.next = f + 30; return; }
         if (flow == 6u && on("UI_pause.fng")){
             if (!M.quit){ send_to(c, MSG_QUIT_YES, gstr_tmp(c, "UI_Pause.fng")); M.quit = 1; M.next = f + SETTLE; mlog("quit to the main menu%s", ""); }
             return;
@@ -1247,8 +1252,9 @@ void mprace_frame(CPU *c){
     note_net_car();
     if (M.phase == MPR_IDLE || M.phase == MPR_DONE || M.phase == MPR_FAILED){ M.owns = 0; return; }
     long f = clk();
-    /* the player's input is ours out of free roam and back, not in the race, not on its results */
-    M.owns = M.phase == MPR_OUT || M.phase == MPR_LAN || (M.phase == MPR_BACK && !on("UI_PostRaceResults.fng"));
+    /* the player's input is ours out of free roam and back, not in the race, not on its results, not while the
+     * pause menu's Save saves */
+    M.owns = (M.phase == MPR_OUT && !savegame_busy()) || M.phase == MPR_LAN || (M.phase == MPR_BACK && !on("UI_PostRaceResults.fng"));
     if (step_racing(f)) return;
     if (keys_run(f) || f < M.next) return;
     if (M.goal == G_RACE_GOAL){
