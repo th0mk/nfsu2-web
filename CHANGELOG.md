@@ -10,12 +10,22 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (4bead18)
+## 2026-11-02 (af266ee)
 
 - **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
 - **Minimap:** every player near you gets an arrow, not only those whose cars your game shows.
 - **Frame rate:** other players' cars cost less a frame in a busy free roam.
 - **Free roam:** a car that went missing (only the HUD drawn, an empty minimap, a lower frame rate) is put back where it last was, and a profile saved that way loads again at the airport car park.
+- **Free roam:** Ghost mode (Settings, Online, and the page menu, F9) is Off, Players or Everything. Everything also lets traffic and the game's tuners drive through you; an outrun's opponent stays solid.
+- **Free roam:** an outrun between two players no longer ends, with both of you winning, when a crowd comes between you.
+- **Online races:** a ranked race counts when the others run out of time, and Last Month's Leaderboard is no longer empty.
+- **Radio:** the end of a track no longer stops the radio or crashes the game.
+- **Phones:** Play after an earlier game no longer fails with "could not allocate memory" or "Out of memory".
+- **This page:** says when the browser's JavaScript optimizer is off for the site, and where to allow it, and when Chrome draws the game without the graphics card.
+- **Touch controls:** a lighter look while driving, Pressurize and Bounce buttons for a car with hydraulics, gear buttons in Performance Tuning's drag test runs, and Steering moved in more, for big phones.
+- **Controllers:** the right stick turns the car in the garage and the shops. On Hotplug, a controller that switches off and on again keeps its buttons.
+- **Drift mode:** typing an x in a chat or a name no longer says "Drift mode only works in free roam".
+- **Profiles:** in Chinese, Japanese, Korean, Thai, Polish and Hungarian a new profile's name box starts empty, so the name no longer begins with broken letters. A cloud copy or backup whose name inside is broken comes in renamed instead of left out.
 
 ## 2026-10-31 (d079aff)
 
