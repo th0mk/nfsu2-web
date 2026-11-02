@@ -12,9 +12,9 @@
 #   NFSU2_MODULE=/srv/nfsu2/module   nfsu2.wasm and nfsu2.json from web/build.sh (default ./module)
 #   NFSU2_IMAGE=<image>              the server's image (default ghcr.io/th0mk/nfsu2-web-rs:latest)
 #   NFSU2_HTTP_PORT=8080             the server's port on 127.0.0.1, if 8080 is taken on the VPS
-#   NFSU2_THREADS=12                 the Rust image's worker threads (default half the cores, 2 to 8); with
-#                                    more than about 3000 players in free roam, 8 workers keep them at fewer
-#                                    friends each
+#   NFSU2_THREADS=12                 the Rust image's worker threads (12 when not set; the image alone takes half
+#                                    the cores, 2 to 8); with more than about 3000 players in free roam, 8
+#                                    workers keep them at fewer friends each
 #   NFSU2_SLICE=nfsu2.slice          the systemd slice every container here runs in (nfsu2.slice: its CPUQuota
 #                                    keeps the rest of the VPS its share)
 # then:  docker compose up -d && docker compose logs -f server
@@ -40,7 +40,7 @@ services:
       NFSU2_HOST: ${NFSU2_HOST:?set NFSU2_HOST in .env, the name players open (game.example.com)}
       NFSU2_HTTP_PORT: ${NFSU2_HTTP_PORT:-8080}
       NFSU2_REAL_IP_HEADER: ${NFSU2_REAL_IP_HEADER:-x-forwarded-for}
-      NFSU2_THREADS: ${NFSU2_THREADS:-}
+      NFSU2_THREADS: ${NFSU2_THREADS:-12}
       # the room for keyphrase saves, in GB (50 when not set, 0: none)
       NFSU2_VAULT_GB: ${NFSU2_VAULT_GB:-}
       # Cloudflare Turnstile's keys for claiming a name (none: no check)
@@ -51,28 +51,26 @@ services:
       - ${NFSU2_MODULE:-./module}:/module:ro
       - state:/state
     # what the systemd unit (nfsu2-web.service) allows the server, as far as a container goes: nothing to write
-    # but its state, no capabilities, no swap, 131072 open files (the Rust image's 12000 players take up to 96000
-    # connections, 8 each); 8 GB of memory, not the unit's 3 GB (the live Node server reached 2.6 GB with 110 players)
+    # but its state, no capabilities, no swap, 131072 open files (the Rust image's 14000 players take up to 112000
+    # connections, 8 each); 12 GB of memory (about half a GB a thousand players), not the unit's 3 GB
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    mem_limit: 8g
-    memswap_limit: 8g
+    mem_limit: 12g
+    memswap_limit: 12g
     ulimits: { nofile: 131072 }
-    # the game's share of the VPS's CPU, with Caddy's (or cloudflared's): web/deploy/nfsu2.slice
+    # the game's share of the VPS's CPU, with Caddy's (or cloudflared's): web/deploy/nfsu2.slice.  A cgroup of its
+    # own (no `cgroup: host`): the server does not see the slice, so a full slice never gives players fewer friends
+    # (the console's "CPU quota" line at the start says "none seen"); only its own workers over 85 % busy do
     cgroup_parent: ${NFSU2_SLICE:-nfsu2.slice}
-    # the VPS's cgroup tree (read only), not one of its own, so that the server sees what the whole slice uses: over
-    # 85 % of its quota free roam gives players fewer friends (the console's "CPU quota" line at the start says the
-    # quota it found, the [players] lines what the slice used)
-    cgroup: host
     # the console, kept by Docker in files it rotates (5 of 20 MB), so the log never fills the VPS's disk
     logging: { driver: local }
 configs:
   caddyfile:
     # web/deploy/Caddyfile for NFSU2_HOST.  Caddy names no software (no Server or Via header, also not on its
     # redirects and errors), closes a connection for any other name (the bare address, a scanner's made-up name)
-    # without an answer, and opens at most 95900 connections to the server (the Rust image takes 96000 with 12000
-    # players).  It believes no proxy in front: the client's address is the one that connected, and a
+    # without an answer, and opens at most 111900 connections to the server (the Rust image takes 112000 with
+    # 14000 players).  It believes no proxy in front: the client's address is the one that connected, and a
     # CF-Connecting-IP a client sends is replaced by it (behind Cloudflare's proxy: compose.cloudflare.yml).  The
     # admin API (127.0.0.1:2019) stays off: nothing reconfigures Caddy while it runs.
     content: |
@@ -93,7 +91,7 @@ configs:
       	reverse_proxy 127.0.0.1:${NFSU2_HTTP_PORT:-8080} {
       		header_up CF-Connecting-IP {client_ip}
       		transport http {
-      			max_conns_per_host 95900
+      			max_conns_per_host 111900
       		}
       	}
       	header -Server

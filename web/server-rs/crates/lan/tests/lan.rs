@@ -7,7 +7,7 @@
 //! audit's F1), the latency of a frame through the switch on this machine, what a peer learns about the others,
 //! the peer list, the limits (players, frame size and rate, control messages, a broadcast charged per receiver,
 //! limits shared by one client address, a flood never getting a slower receiver cut: the audit's F2), WebSocket
-//! keepalive and idle close, the 12000 addresses of 10.77.0.0/18, LAN play's broadcasts only to the browsers with it
+//! keepalive and idle close, the 14000 addresses of 10.77.0.0/18, LAN play's broadcasts only to the browsers with it
 //! open, a page that lets go freeing its address at once, bundles.
 
 mod harness;
@@ -36,7 +36,7 @@ async fn addresses_peer_lists_unicast_broadcast_ping_disconnect_reconnect() {
     let wb = b.welcome().await;
     let mut c = Client::connect(sw.port, "Carol").await;
     let wc = c.welcome().await;
-    // addresses: round the forty-eight /24s of 10.77.0.0/18 in order of arrival; mask /18
+    // addresses: round the fifty-six /24s of 10.77.0.0/18 in order of arrival; mask /18
     assert_eq!(wa["vipStr"], "10.77.0.2");
     assert_eq!(wb["vipStr"], "10.77.1.2");
     assert_eq!(wc["vipStr"], "10.77.2.2");
@@ -857,7 +857,7 @@ async fn a_resume_replaces_the_same_clients_older_connection_only_with_the_token
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn reservations_never_handed_to_another_client_a_silent_resume_times_out() {
     let _s = serial().await;
-    let sw = start(LanOptions { max_peers: 12000, resume_wait_ms: 300, ..opts() }).await;
+    let sw = start(LanOptions { max_peers: 14000, resume_wait_ms: 300, ..opts() }).await;
     let now = nfsu2_util::now_ms();
     for (i, v) in all_vips().into_iter().enumerate() {
         let mut h = [0u8; 32];
@@ -866,7 +866,7 @@ async fn reservations_never_handed_to_another_client_a_silent_resume_times_out()
     }
     let c = Client::with(sw.port, "C", "?g=newcomer", Opts::default()).await;
     assert_eq!(c.closed().await, (1013, "LAN full".into()), "a newcomer waits for an address to free; nobody's reservation is given away");
-    assert_eq!(sw.info().await["reserved"], 12000, "every reservation kept");
+    assert_eq!(sw.info().await["reserved"], 14000, "every reservation kept");
     sw.lan.clear_reserved();
     let t0 = Instant::now();
     let (ws, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/lan?resume", sw.port)).await.unwrap();
@@ -888,7 +888,7 @@ async fn reservations_never_handed_to_another_client_a_silent_resume_times_out()
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn churning_connections_never_takes_a_dropped_players_address() {
     let _s = serial().await;
-    let sw = start(LanOptions { max_peers: 12000, group_reserve: 8, site_reserve: 16, ..opts() }).await;
+    let sw = start(LanOptions { max_peers: 14000, group_reserve: 8, site_reserve: 16, ..opts() }).await;
     let mut alice = Client::with(sw.port, "Alice", "?g=alice", Opts::default()).await;
     alice.welcome().await;
     let mut bob = Client::with(sw.port, "Bob", "?g=bob", Opts::default()).await;
@@ -959,7 +959,7 @@ async fn churning_connections_never_takes_a_dropped_players_address() {
     assert!(!sw.lan.full(), "not full once the kept addresses run out");
     sw.close().await;
     // a client that drops many connections keeps groupReserve reservations (its own oldest go), a site siteReserve
-    let sw2 = start(LanOptions { max_peers: 12000, group_reserve: 3, site_reserve: 5, ..opts() }).await;
+    let sw2 = start(LanOptions { max_peers: 14000, group_reserve: 3, site_reserve: 5, ..opts() }).await;
     async fn leave(port: u16, q: &str, n: usize) -> Vec<u32> {
         let mut cs = Vec::new();
         for _ in 0..n {
