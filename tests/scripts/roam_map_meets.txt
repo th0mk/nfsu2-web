@@ -1,10 +1,10 @@
-# Free roam, car meets on the world map (roam_game.c meet_*): a spot where 24 players or more have been parked a minute
+# Free roam, car meets on the world map (roam_game.c meet_*): a spot where 16 players or more have been parked a minute
 # gets a green star and "Meet: <n> cars" (friends' cars and the hub's players alike: RC_MAPD_PARKED), fewer get
 # nothing, the legend's Car meets row hides them, and the GPS takes the player to one: the row picked picks the nearest
 # meet, Right the next, C asks to start the GPS (Yes is left of No), and the GPS stops next to the meet.  A stage-3
 # save (12 kinds of places: Players, Players' races and Car meets after them, 15 rows nearer each other; Up from the
-# first row reaches the last) and roam-crowd.mjs --n 74 --track <csv> parked in three groups by road points of the career's places
-# (the map's items: mp map items): 28 by (-1003, -172, 17), 20 by (458, 126, 9) (none), 26 by (-723, -913, 17), each
+# first row reaches the last) and roam-crowd.mjs --n 66 --track <csv> parked in three groups by road points of the career's places
+# (the map's items: mp map items): 28 by (-1003, -172, 17), 12 by (458, 126, 9) (none), 26 by (-723, -913, 17), each
 # a grid of 5 across 6.25 m apart, their z 0.5 over the road's (the GPS finds the road by the height too):
 #   node web/tools/roam-pair.mjs --base http://localhost:<port> --solo --page app --a Ita:roam_map_meets.txt
 #        --seed <the stage-3 save tree> --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env ROAM_CROWD_CARS=20

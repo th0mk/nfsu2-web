@@ -5879,7 +5879,7 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
  * game stops the GPS when the player engages a place's event (0x541120); at a
  * meet nothing would, so meet_gps stops it within MEET_ARRIVE_M of the spot.
  * Not in the Windows plugin (as the lobbies). */
-#define MEET_MIN        24            /* players standing near one spot: a meet (fewer: a busy spot) */
+#define MEET_MIN        16            /* players standing near one spot: a meet (fewer: a busy spot) */
 #define MEET_R          50.f          /* ...within this of it (m) */
 #define MEET_SLOW_MPS   4.f           /* (14 km/h) standing, for a meet */
 #define MEET_EVERY_US   1000000       /* the meets found again this often while the map is open */
