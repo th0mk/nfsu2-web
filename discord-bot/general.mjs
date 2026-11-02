@@ -62,7 +62,8 @@ const pointsToForum = m => POINTER.test(m.content ?? '') ||
 const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 // One-line fixes for problems the page names by a code, from the guide (docs/web/PLAYING.md, section 8) and
-// knowledge.md: `when` tells the model which, `re` must find it in the author's words (or they posted a picture), and
+// knowledge.md: `when` tells the model which, `re` must find it in the author's words (or they posted a picture,
+// unless `words`: then only their words count), and
 // `en` is the reply (the model translates it for other languages).  Anything less certain gets the forum pointer.
 const FIXES = {
   'page-not-isolated': {
@@ -78,7 +79,7 @@ const FIXES = {
   'gpu-adapter-android': {
     when: 'GPU-ADAPTER-ANDROID: "Chrome cannot use the graphics of this phone or tablet yet" (often a Samsung Galaxy)',
     re: /GPU-ADAPTER-ANDROID|android|samsung|galaxy|xclipse|exynos|phone|tablet|celular|telefone|m[óo]vil|телефон|smartfon/i,
-    en: 'Update Android and Chrome. If that does not help, type chrome://flags/#enable-unsafe-webgpu into Chrome\'s address bar, set "Unsafe WebGPU Support" to Enabled and restart Chrome: on some phones, Samsungs among them, the game then runs.',
+    en: 'Update Android and Chrome. If that does not help, type chrome://flags/#enable-unsafe-webgpu into Chrome\'s address bar (or open chrome://flags and search "Unsafe WebGPU"), set it to Enabled and tap Relaunch: on some phones, Samsungs among them, the game then runs.',
   },
   'gpu-adapter-win': {
     when: 'GPU-ADAPTER-WIN: "Chrome could not use this computer\'s graphics. On Windows it needs graphics with DirectX 12"',
@@ -120,8 +121,14 @@ const FIXES = {
     re: /\bTV\b|television|xbox|playstation|\bps[45]\b|tizen|webos/i,
     en: 'TV and game console browsers have no WebGPU, which the game needs, so it cannot run there. A PC with Chrome or Firefox, or a phone or tablet with Chrome (Android 12 or newer) or Safari (iOS 26), can play it.',
   },
+  'cannot-reach': {
+    when: 'the page says "This device can\'t reach the server" (or Offline, not connected) while others play',
+    re: /reach|offline|not connected|connect|conex|conect|подключ|соедин|sunucu|serwer|servidor|server/i,
+    en: 'Your network is blocking the server (some providers block Cloudflare; in Spain they do during football matches, and it works again after the match): try mobile data or another Wi-Fi, or turn off an ad blocker, a web filter or private DNS.',
+  },
   'iphone-full-screen': {
-    when: 'full screen does not work on an iPhone (Safari\'s bars stay)',
+    when: 'they say full screen does not work on an iPhone (Safari\'s bars stay); the page\'s yellow iPhone note in a screenshot is not this',
+    words: true,
     re: /full.?screen/i,
     en: 'An iPhone cannot show a web page full screen: add the page to your Home Screen (Safari, Share) and open it from there. That copy has its own saves: cloud saves bring them over.',
   },
@@ -155,12 +162,12 @@ const SORT_SYSTEM = `You read the general chat of "Underground 2 Revived" (Need 
 For each marked author:
 - why: a few words on what they say in the chat.
 - kind: "report" when the author says something goes wrong for them, now, in the game or on the page: a crash, a freeze, an error message or code, the game or the site will not start, load or connect, a controller, sound, graphics or saves not working, something broken since an update. "Is anyone else having X?" counts when they have X. Asking how to fix or get past such a thing ("how do I fix this?", "how to get past this error?") is a report too. Everything else is "other": how-to questions (controls, settings, progress, cars, tuning, saves, multiplayer, "how do I ..."), wishes and suggestions, opinions about the game or a device, chat and jokes, a problem mentioned in passing ("lol it crashes on my phone") or one they explain themselves ("must be all the players"), how the career or the game is meant to work (no races left, unlocking parts, the map), an answer or advice to someone else, someone else's problem, a problem from long ago or one they solved, a line quoted from someone else. When unsure, "other".
-- handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now. A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
+- handled: true when someone else in the chat already answered them with something that fits their problem (an explanation, something to try, a question back about it, a pointer to a channel), or they said it works now or found the cause themselves ("nvm", "got it", "found it", "it was my VPN"). A wild guess ("maybe a VPN? idk"), a joke or "same here" is not an answer.
 - fix: the id of a fix below when their problem is unmistakably that one: the page's code or its message, or exactly the case the fix names, is in their words or their picture. Else "". Never on a guess: a fix that does not fit is worse than none.
 - fix_text: when fix is set and they don't write in English, the fix's sentence in their language, nothing added or left out; else "".
 - need: what a forum post about it needs: "log" (a crash, freeze, glitch, lag, disconnect or anything else in the game), "screenshot" (a message or error the page shows), "saves" (only when their own saves or profile were lost or will not load).
-- thread: when their problem is clearly the one an open forum thread in the list is about, that thread's id; else "".
-- lang: the language their messages are written in, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...); never a guess from their name.
+- thread: when their problem is clearly the one an open forum thread in the list is about, that thread's id; else "". Judge by what the thread is about, not by words its title shares with theirs ("Black screen" may be a black world in free roam, not a game that won't open).
+- lang: the language of their own words, as a two-letter code (en, pt, es, ru, tr, pl, fr, de, it, ...); never a guess from their name, nor from the language of a screenshot.
 
 Fixes:
 ${Object.entries(FIXES).map(([id, f]) => `- ${id}, for ${f.when}: ${f.en}`).join('\n')}
@@ -377,7 +384,7 @@ export class General {
       if (this.full(m.channelId)) { console.log(`[general] #${channel.name} ${said}: the channel had its pointers this hour`); continue; }
       // a fix only when the author's own words name it, or they posted a picture the model read it from
       const own = lines.filter(l => l.author === author);
-      const fix = FIXES[s.fix] && (FIXES[s.fix].re.test(own.map(l => l.text).join('\n')) || own.some(l => l.files.some(f => IMAGE.test(f.name)))) ? s.fix : '';
+      const fix = FIXES[s.fix] && (FIXES[s.fix].re.test(own.map(l => l.text).join('\n')) || (!FIXES[s.fix].words && own.some(l => l.files.some(f => IMAGE.test(f.name))))) ? s.fix : '';
       const thread = !fix && known.has(s.thread) ? s.thread : '';
       // they posted it in the forum already: that thread gets the bot's look there
       if (thread && owners.get(thread) === author) { console.log(`[general] #${channel.name} ${said}: their own thread ${thread}, no pointer`); continue; }

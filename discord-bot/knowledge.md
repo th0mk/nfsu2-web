@@ -58,7 +58,7 @@ The log is the most useful thing in a bug report. Say exactly how:
 - Online or free-roam races: the log after the race (F9, Download log), who created the race, how many players, what
   went wrong (cars jumping, results missing, endless loading, disconnect).
 - Saves and cloud saves: what happened, which browsers, whether cloud saves are on. Never ask for the passphrase.
-- Sound: browser and system, the output latency setting (Settings, Game, more), what is wrong (none, late, crackling).
+- Sound: browser and system, the output latency setting (Settings, Game, More game settings), what is wrong (none, late, crackling).
 
 ## Answers that keep coming up
 
@@ -84,14 +84,53 @@ Checked against the guide or the code, and confirmed by players in threads:
 - The site or the server cannot be reached while others play: their network blocks it (some providers block
   Cloudflare or the domain; firewalls and antivirus can too). Mobile data or another network shows it. The server is
   behind Cloudflare: wherever Cloudflare works, the game does. Other players posting in the last hour shows the
-  server is up.
+  server is up. Known cases, each confirmed by players:
+  - Spain during LaLiga football matches (weekends, afternoon to late evening): Spanish providers block Cloudflare's
+    addresses by court order, so the page can't reach the server or stays at loading. It works again after the
+    match; players got in with a VPN meanwhile. Ask whether they are in Spain before anything else.
+  - NordVPN's Threat Protection, antivirus web filters and some school or work networks flag the new `.xyz` domain:
+    the page goes Offline and Cloud saves disappear. Turn the filter off or allow `nfsu2.xyz`.
+  - "This site can't be reached" / the address can't be found (DNS) on a school, university or work network: setting
+    the device's DNS to 1.1.1.1 or 9.9.9.9 fixed it.
 - Stuck behind a barrier or off the map: R respawns.
-- Career, no races left on the map (and nothing on the radar): the races left are the original game's hidden races.
-  They never show on the map or the radar, only on the street: their marker appears when you drive near. Drive
-  around the city, the newer areas too. Since dec0e11 there is a setting for it: Settings, Game, More game settings,
-  Show hidden races (off by default, MaxHwoy's Show Hidden Races Mod) puts them on the map and the radar like the
-  others, from the next Play. Someone who still finds none can attach the saves (Saves, Download backup): escalate
-  it, the developer can tell where they are. (The developer answered this on 2026-10-26.)
+- Career free roam with a black world and only the HUD (empty radar, often lower frame rate; menus and quick races
+  fine), often after a hard hit from another player: the car was lost off the map and the profile kept that spot, so
+  it came back at every Play. Fixed on 1 November (0f17d0a), live since the 2 November release: reload the page and
+  Play, and the car starts at the airport car park. On an older page, R respawns.
+- Sound late: Settings, Game, More game settings, Output latency "Lowest" (the default) is the shortest; Balanced
+  and Robust add delay and are for crackling or dropouts. Never suggest Robust for late sound. Bluetooth headphones
+  add their own delay.
+- A laptop with a graphics card that plays badly or shows a black picture, while its log names the Intel or AMD
+  integrated chip: Chrome runs on the wrong one. Windows Settings, System, Display, Graphics: add Chrome, set High
+  performance, then quit Chrome completely and start it again. Players confirmed it.
+- Touch Nitro or the thumb stick do nothing while Gas and steering work: they act as the controller's buttons, so
+  Settings, Controller, More controller settings, Controller must be On or Hotplug, not Off. A poster confirmed it.
+- Steam Deck or Steam Controller: buttons act as arrow keys, Enter and Esc and no pad shows in Controls, Controller:
+  Steam Input is in its keyboard mode; add Chrome to Steam as a non-Steam game with a gamepad layout and start it
+  through Steam (confirmed). The game crawls on a Steam Deck with sound playing: Chrome draws WebGPU on SwiftShader
+  (`chrome://gpu`: Vulkan Disabled); a player fixed it by starting Chrome with
+  `--enable-features=Vulkan --use-angle=vulkan` (2026-11-01).
+- Quick Race's Free Run has no world map in the original game: M does nothing there. The world map is in a career's
+  free roam.
+- Turning the car in the garage or a shop: drag with the middle mouse button (the wheel) held. A controller can't.
+- A saves backup too big for Discord: a long career's DVD and magazine covers are about 1 MB each, so it passes the
+  limit even without F12 screenshots. Say so and escalate without it; don't blame screenshots.
+- Minimap with no roads (markers only, the world map fine) on Intel graphics: a bug in Intel's graphics driver. Staff
+  advise updating the Intel driver; no game fix yet.
+- Career, no races left on the map (and nothing on the radar), or parts and cars still locked: the most common post
+  of all, and members answer it right. Answer in this order, briefly:
+  1. Career Status says what the stage still needs (URL races, sponsor races, cover shoots, the car's stars): T or
+     F4 on a keyboard, D-pad Down on a controller, the Career status button (top row) on a touch screen.
+  2. Most often it is the car's visual rating (its stars): a stage's sponsor asks for DVD cover shoots, and a shoot
+     shows on the map only once the car's visual rating reaches what it needs (checked in the game's code). More
+     stars come from visual parts: body kits, paint and vinyls, rims, and the specialties (neons, tint, hydraulics,
+     audio). Players who did this got their next races ("upgraded my car to 3 stars and got invited for a special
+     event, then a URL race showed"). A shop not found yet is not on the map: drive around the city, the newer areas
+     too. Parts and cars unlock as the stage's races are won.
+  3. Only then the original game's hidden races: they never show on the map or the radar, only a marker on the street
+     when you drive near. Settings, Game, More game settings, Show hidden races (off by default) puts them on the map
+     and the radar from the next Play.
+  Saves (Saves, Download backup) and escalating only when all three are done and still nothing shows.
 - Career, a unique-part text message (the wide body kit, a performance part: "go to the star on the map") but no
   star on the map: the original game, the same on PC, not a bug (the developer checked it on 2026-11-02 and keeps
   it). In stage 5, once the last URL race (S5_URL_9) is won, the map shows only Caleb's race and no stars, but the
@@ -110,7 +149,7 @@ Checked against the guide or the code, and confirmed by players in threads:
   row with a size such as 1916x884 (the screen's own at the page's resolution scale), not 1080p or 1440p, which draw
   more pixels than a phone's default 75%.
 
-## Known open problems (as of 2026-10-28)
+## Known open problems (as of 2026-11-02)
 
 The developer updates this list. Check the commits after that date before calling one open: a fix may have come. The
 context lists every problem the developer has a report on, with its first thread: point posters there, and set
@@ -120,6 +159,7 @@ context lists every problem the developer has a report on, with its first thread
   to 14, but newer ones too); some logs end in `GPU-LOST` instead. Several improvements are live; it still happens.
   No setting fixes it. Ask for the log from the start page right after it happened, and point to the report on it;
   escalate only a log on the live version that adds something.
+  Kicked out every 15 to 20 minutes on an iPhone is this problem too: say so and link the report in the first reply.
 - Huawei phones and tablets with Maleoon graphics: the unsafe-webgpu flag lets the game start, then the graphics
   stop (`GPU-LOST`) within half a minute to a few minutes; frame rate 30 does not help. No fix.
 - Android phones with 2 to 4 GB of memory: the game does not start, the browser cannot reserve its memory ("could
@@ -142,12 +182,15 @@ context lists every problem the developer has a report on, with its first thread
 - Radio with a music folder: songs played slowed down and an octave low where the game mixes its sound at 22050 Hz
   (machines the game rates as slow). Fixed on 28 October (492b451): on a version with it, a report of slow songs is
   new; ask for the log after a few songs, and the files' type (mp3, flac, ...).
+- Radio with a music folder: the game crashes (exit code 134) as Radio starts a song in the menus, after an outrun or
+  a race (crib, garage). Radio off in F9 avoids it (a poster's three logs, 2026-11-02).
 
 ## Decided
 
 The developer said these in public; repeat them briefly and kindly when a post asks for exactly one, otherwise none:
 
-- No other games will be revived by this project.
+- Other games (Most Wanted, others): this project is Underground 2, and the developer has announced nothing else.
+  Never say another game will or won't come, and never point to other sites that run one.
 - No text or voice chat in free roam: it needs moderation. Quick chat (1-4, then 1-4) is there instead. The game's
   own Online mode keeps its Lobby and game-room chat, with a slur filter (the guide's section 7).
 - No cloud streaming of the game: too complex and too expensive.
@@ -190,6 +233,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   open chrome://flags and search for "Unsafe WebGPU". Don't tell players to set it back to Default afterwards: it
   doesn't matter. The flag is worth a try for any `GPU-ADAPTER-ANDROID` (the page says so since 0583ca5), not only
   Xclipse.
+- iPhone and iPad need iOS 26 or iPadOS 26 (iPhone 11 and newer can update). On iOS 18 with Safari's WebGPU
+  feature flag on, the page may say Ready but Play shows nothing: it still can't run there. Say it once; don't
+  change that answer later in the thread.
 - iPhone: a web page cannot go full screen. Adding the page to the Home Screen (Share menu) opens it without the
   browser's bars. That copy has its own saves: cloud saves bring them over. Only controllers iOS knows (Xbox,
   PlayStation, Switch, MFi) reach the page.
@@ -209,3 +255,5 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 - Don't answer questions about moderation, bans, kicks, names, donations, Discord channels, server load or the
   server's setup: staff answer those (none).
 - Don't guess at release plans or say what the developer will do, beyond the decisions above.
+- Career progress from races with other players (online or free-roam races counting in the career): undecided by
+  the developer. None, also in suggestion threads.

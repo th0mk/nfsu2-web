@@ -86,7 +86,7 @@ While you drive:
   above the steering.
 - **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,
   **Drift** (drift mode, the game's drift icon, lit while it is on), the career status (the game's Career Status, as
-  D-pad Down on a controller; the keyboard has no key for it), and the horn and quick chat (not with quick chat off)
+  D-pad Down on a controller, T or F4 on a keyboard), and the horn and quick chat (not with quick chat off)
   while another player's car is within a horn's reach. In free roam **Start** shows above the steering where it does
   something: at an event's or a shop's marker, at an outrun offer, or at a race spot or lobby of other players.
 - **HUD:** a phone starts with the game's 4:3 HUD layout (Game, Display, HUD layout), which keeps the minimap and
