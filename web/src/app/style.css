@@ -531,8 +531,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .stage-menu svg { display: block; width: calc(24px * var(--ts)); height: calc(24px * var(--ts)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .stage-menu:active { background: rgba(0, 0, 0, 0.72); color: var(--lime); }
-/* touch controls (touch.ts) while the player drives: dim and see-through like the menu's button, lime while
- * pressed.  The small round ones in a row after the menu's button (the mode button and tilt's straight-ahead top
+/* touch controls (touch.ts) while the player drives: see-through, lighter than the menu's button (which, with the
+ * Steering switch, keeps the darker fill so both stay easy to find), back to full and lime while pressed or on (lit).
+ * The menus' arrows and OK/Back, in the black bars beside the menus, keep the darker fill.  The small round ones in a row after the menu's button (the mode button and tilt's straight-ahead top
  * right), the steering's group bottom left, the pedals' bottom right; free roam adds a row's end and Start.
  * The two groups are placed from the inline start (the steering's side) and end (the pedals'): steering on the right
  * (touch.ts position, [data-right]) turns the direction round, so they swap sides as mirror images, and their
@@ -556,6 +557,10 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .tc svg { width: calc(24px * var(--ts)); height: calc(24px * var(--ts)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tc svg .fill { fill: currentColor; stroke: none; }
 .tc.on { background: rgba(0, 0, 0, 0.72); color: var(--lime); }
+/* driving: black 20 % and white 55 % (the Steering switch keeps the 40 % and 72 % above), pressed as above */
+.touch[data-mode="drive"] .tc:not([data-ctl="mode"]) { background: rgba(0, 0, 0, 0.2); color: rgba(255, 255, 255, 0.55); }
+.touch[data-mode="drive"] .tc.lit:not([data-ctl="mode"]) { color: var(--lime); }
+.touch[data-mode="drive"] .tc.on:not([data-ctl="mode"]) { background: rgba(0, 0, 0, 0.72); color: var(--lime); }
 .tc.small { top: var(--t); width: calc(48px * var(--ts)); height: calc(48px * var(--ts)); border-radius: 50%; }
 .tc.big { bottom: var(--b); border-radius: calc(16px * var(--ts)); }
 .tc.big svg { width: calc(32px * var(--ts)); height: calc(32px * var(--ts)); }
@@ -656,12 +661,12 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .stick-base {
   position: absolute; left: calc(var(--steer) + 60px * var(--ts)); top: calc(100% - var(--b) - 60px * var(--ts));
   width: calc(120px * var(--ts)); height: calc(120px * var(--ts));
-  border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid rgba(255, 255, 255, 0.24); background: rgba(0, 0, 0, 0.24);
+  border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid rgba(255, 255, 255, 0.16); background: rgba(0, 0, 0, 0.12);
 }
 .touch[data-right] .stick-base { left: calc(100% - var(--steer) - 60px * var(--ts)); }
 .stick-knob {
   position: absolute; left: 50%; top: 50%; width: calc(52px * var(--ts)); height: calc(52px * var(--ts)); border-radius: 50%;
-  transform: translate(calc(-50% + var(--dx, 0px)), -50%); background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.5);
+  transform: translate(calc(-50% + var(--dx, 0px)), -50%); background: rgba(0, 0, 0, 0.2); border: 2px solid rgba(255, 255, 255, 0.36);
 }
 /* the field for a phone's keyboard while the game asks for text (textentry.ts): a value box at the top, where the
  * keyboard coming up from below leaves it in sight; the stage's no-select would keep WebKit from typing into it */
@@ -703,7 +708,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   /* below the picture, on black: a light backing, and room for bigger pedals and steering */
   html[data-touch] :is(.tc, .stage-menu) { background: rgba(255, 255, 255, 0.1); }
   html[data-touch] :is(.tc.on, .stage-menu:active) { background: rgba(255, 255, 255, 0.2); }
-  html[data-touch] .stick-base { background: rgba(255, 255, 255, 0.06); }
+  html[data-touch] .touch[data-mode="drive"] .tc:not([data-ctl="mode"]) { background: rgba(255, 255, 255, 0.05); }
+  html[data-touch] .touch[data-mode="drive"] .tc.on:not([data-ctl="mode"]) { background: rgba(255, 255, 255, 0.2); }
+  html[data-touch] .stick-base { background: rgba(255, 255, 255, 0.03); }
   html[data-touch] .tc[data-ctl="left"] { width: calc(88px * var(--ts)); height: calc(120px * var(--ts)); }
   html[data-touch] .tc[data-ctl="right"] { inset-inline-start: calc(var(--steer) + 96px * var(--ts)); width: calc(88px * var(--ts)); height: calc(120px * var(--ts)); }
   html[data-touch] .tc[data-ctl="gas"] { width: calc(88px * var(--ts)); height: calc(200px * var(--ts)); }
