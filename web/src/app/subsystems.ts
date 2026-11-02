@@ -53,7 +53,7 @@ export const attachNet: AttachNet = (proc, o) => {
     away: (on: boolean) => link.setAway(on),
     offline: () => link.goOffline(),
     solid: (collide: 'on' | 'off' | 'none') => link.setSolid(collide),
-    say: (p: number) => link.say(p),
+    say: (p: number, race?: boolean) => link.say(p, race),
     friend: (m: Record<string, unknown>) => link.friend(m),
     crews: (hashes: readonly number[], rgbs: readonly number[]) => link.setCrews(hashes, rgbs),
     room: (name: string) => link.setRoom(name),

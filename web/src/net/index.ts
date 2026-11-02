@@ -157,8 +157,9 @@ export interface NetLink {
   /** free roam's solid cars, switched while the game runs (the page menu; runtime/roam_game.c solid_follow), as
    *  roam_collide has them: on, off (Ghost mode: Players) or none (Ghost mode: Everything) */
   setSolid(collide: 'on' | 'off' | 'none'): void;
-  /** quick chat: the player says phrase p (runtime/roam_game.c say_frame sends it); false: no free roam */
-  say(p: number): boolean;
+  /** quick chat: the player says phrase p (runtime/roam_game.c say_frame sends it; race: in a race between players,
+   *  runtime/racehorn.c qc_say); false: no free roam (race: no LAN play) */
+  say(p: number, race?: boolean): boolean;
   /** free roam's friends: a message to the server ({"t":"friend",...m}, or m's own "t": "room"); false: the link is
    *  not up now */
   friend(m: Record<string, unknown>): boolean;
@@ -548,11 +549,14 @@ class Link implements NetLink {
     if (this.roam) Atomics.store(this.roam.i32, P.W_SOLID, this.solid);
     this.log(`solid cars ${collide === 'on' ? 'on' : collide === 'none' ? 'off, traffic and tuners pass through too' : 'off'} (the page menu)`);
   }
-  /** quick chat: the player says phrase p (the game sends it while they drive in free roam); false: no free roam */
-  say(p: number): boolean {
-    if (!this.roam) return false;
+  /** quick chat: the player says phrase p (the game sends it while they drive in free roam, into the free-roam
+   *  mailbox; race: in a race between players, into the LAN mailbox, whose game sends it to the race's players); false:
+   *  no such mailbox */
+  say(p: number, race = false): boolean {
+    const ep = race ? this.lan : this.roam;
+    if (!ep) return false;
     this.picks = (this.picks + 1) & 0xffffff;
-    Atomics.store(this.roam.i32, P.W_SAY, (this.picks << 8 | (p & 0xff)) | 0);
+    Atomics.store(ep.i32, P.W_SAY, (this.picks << 8 | (p & 0xff)) | 0);
     return true;
   }
   friend(m: Record<string, unknown>): boolean {

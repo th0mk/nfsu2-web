@@ -431,10 +431,11 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # are), but not an outrun's opponent: the tuner, or a player who has on or
 # none too.  [NFSU2_ROAM_COLLIDE]
 #roam_collide = on
-# Quick chat: say one of your sixteen set phrases to the players near you
-# (1 to 4, then 1 to 4; a controller's right stick twice; the chat button on
-# a touch screen), and see theirs over their cars.  off = neither, and the
-# others send you none.  [NFSU2_ROAM_SAY]
+# Quick chat: say one of your sixteen set phrases to the players near you in
+# free roam, or to everyone in a multiplayer race, while driving and on its
+# results (1 to 4, then 1 to 4; a controller's right stick twice; the chat
+# button on a touch screen), and see theirs.  off = neither, and the others
+# send you none in free roam.  [NFSU2_ROAM_SAY]
 #quick_chat = on
 # Your sixteen: the phrases' numbers (web/src/app/phrases.ts), four for each
 # of 1 to 4, and the four groups' names (hi, reply, thanks, nice, drive,

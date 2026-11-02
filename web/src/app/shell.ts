@@ -720,8 +720,9 @@ async function startGame() {
   photo.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
-  quickChat.start(session, net && r.env.NFSU2_ROAM === '1' && r.env.NFSU2_ROAM_SAY !== '0',
-    phrasesOf(r.env.NFSU2_ROAM_SAY_PHRASES), groupsOf(r.env.NFSU2_ROAM_SAY_GROUPS));
+  // (free roam's and the races' between players: free roam on or not)
+  quickChat.start(session, net && r.env.NFSU2_ROAM_SAY !== '0',
+    phrasesOf(r.env.NFSU2_ROAM_SAY_PHRASES), groupsOf(r.env.NFSU2_ROAM_SAY_GROUPS), blockList(r.env.NFSU2_ROAM_BLOCK ?? ''));
   fps.memory = session.proc.memory;
   const st = session;
   let tries = 0;
@@ -1048,7 +1049,8 @@ function friendNotice(name: string, text: string) {
   placeNotices();
   iconLine('chat', FRIEND_ICON, at < 0 ? [text] : [text.slice(0, at), b, text.slice(at + name.length)]);
 }
-/** free roam: quick chat (quickchat.ts), a phrase said, from the game; and the lines over the cars in each frame */
+/** quick chat (quickchat.ts) in free roam and races between players: a phrase said, from the game; and free roam's
+ *  lines over the cars in each frame */
 function say(json: string) {
   placeNotices();
   quickChat.said(json);

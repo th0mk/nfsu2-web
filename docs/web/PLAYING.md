@@ -87,7 +87,9 @@ While you drive:
 - **Small buttons** along the top: pause, camera (held: look back), reset; in free roam also the map, messages,
   **Drift** (drift mode, the game's drift icon, lit while it is on), the career status (the game's Career Status, as
   D-pad Down on a controller, T or F4 on a keyboard), and the horn and quick chat (not with quick chat off)
-  while another player's car is within a horn's reach. In free roam **Start** shows above the steering where it does
+  while another player's car is within a horn's reach. In a race with other players quick chat shows after reset
+  (in landscape after Pressurize and Bounce, on a car with hydraulics), and on its results beside the menu's button.
+  In free roam **Start** shows above the steering where it does
   something: at an event's or a shop's marker, at an outrun offer, or at a race spot or lobby of other players.
 - **Hydraulics:** with a car that has them (the Hydraulics part, Car Specialties), **Pressurize** and **Bounce** join
   the small buttons (in free roam after the career status, upright in the second row; in a race after reset). A tap
@@ -117,7 +119,7 @@ While you drive:
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
 | X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button |
-| 1 to 4, then 1 to 4 | Quick chat in free roam with other players: a group, then a phrase (see section 6) |
+| 1 to 4, then 1 to 4 | Quick chat in free roam and in races with other players: a group, then a phrase (see section 6) |
 | I | Message a friend in free roam: the answer to the newest message, or a friend to pick (see section 6, Friends) |
 | M, Tab | Map, messages |
 | T | Career status: what the stage still needs |
@@ -162,11 +164,11 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   brake, the left stick steers, LB is nitrous, RB the handbrake, A and X shift, Y and B are camera and look back, View
   respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages. A
   click of the left stick is the horn, unless your car has hydraulics: then the stick clicks are the game's hydraulics
-  (left: pressurize, right: bounce). In free roam with other players the right stick is quick chat: a flick for a
-  group, another for its phrase. In the garage, the shops and the main menu the right stick turns the car round and
-  tilts the view, as the middle-button drag does: right turns the view right, as in photo mode (and as a drag to the
-  right), down looks down on the car; full stick turns about 60° a second. Each screen starts at the game's own
-  angle.
+  (left: pressurize, right: bounce). In free roam and in races with other players the right stick is quick chat: a
+  flick for a group, another for its phrase. In the garage, the shops and the main menu the right stick turns the car
+  round and tilts the view, as the middle-button drag does: right turns the view right, as in photo mode (and as a
+  drag to the right), down looks down on the car; full stick turns about 60° a second. Each screen starts at the
+  game's own angle.
 - **Steering wheel:** a Logitech G29, G920 or G923, and other wheels the browser shows as a game controller. The wheel
   steers, the pedals are throttle and brake (and reverse), the paddles shift down and up, Cross (A) is nitrous, Square
   (X) the handbrake, Circle and Triangle (B and Y) look back and camera, Share respawns, Options pauses, PS opens the
@@ -479,6 +481,14 @@ Good to know:
   seconds at most; then the picker asks you to wait. Online, Quick chat turns it off: you then neither see
   nor send phrases, and the others' games send you none. Players on an older version neither see yours nor send any,
   and those who have not reloaded the page since the phrases came see only the first sixteen.
+
+  It works in races with other players too: the races of free roam's lobbies, the game's Online races and its LAN
+  races, with free roam on or off, while you drive and on the results (free roam's trips leave those after about
+  10 seconds; an Online race goes back to the game room, which has its own chat). Same keys, stick and chat button,
+  never in a race of your career or a Quick Race. A phrase goes to everyone in the race and shows in the chat log on
+  the left, not over the cars; the race's creator passes each player's on to the others, so with a creator on an older
+  version you hear only the creator's. Players you block (Online, More online settings, Blocked players) are not
+  shown. With Quick chat off you neither see nor send phrases in races either.
 - **Engines:** the others hear your engine from your car, as you hear it yourself: the game's own recordings of your
   car's engine (each car has its own, and the engine upgrades change it), pulling as you accelerate and letting off as
   you lift, at your revs, with the limiter and a launch's wheelspin as your game plays them; louder the nearer they
@@ -617,7 +627,8 @@ Good to know:
   by commas, up to 32 (capitals don't count). You and they never see each other in free roam, wherever you are: no
   car, no name, no horn, no quick chat or outrun, no message about them, nobody on the world map. Neither of you sees
   a race lobby the other hosts or is in, so you don't race each other from free roam (unless you both join one at
-  the same moment). It takes effect the next time you press Play. It goes by name: a player who changes a claimed
+  the same moment). In a race you are both in anyway (an Online or LAN race), your page shows none of their quick
+  chat phrases. It takes effect the next time you press Play. It goes by name: a player who changes a claimed
   name stays blocked while the old name is still theirs (14 days); after that, or for a name nobody claimed, block
   the new name. The game's Online menu has its own: block a player in EA Messenger there. The server's log says whom
   you block, so its operator sees who many players block (and can ban them). A server of before this version takes
@@ -667,7 +678,8 @@ Good to know:
   terror and sexual violence. Swear words are fine.
 - **Chat in the Lobby and in a game room** is read the same way, word by word: a line with a slur in it reaches no
   one but you, and after three of them in ten minutes you cannot chat for ten minutes. Swear words are fine. A player
-  you block in EA Messenger is not heard there either.
+  you block in EA Messenger is not heard there either. In the race itself and on its results, quick chat's set
+  phrases work (1 to 4, then 1 to 4; section 6, Quick chat).
 - **Submit Complaint** (choose a player in a game room) tells the server's operator about that player, with their
   last few chat lines (of the last ten minutes) that you could see; the operator decides what happens. Without a
   complaint no chat is written down anywhere, only the word that kept a line from the others.

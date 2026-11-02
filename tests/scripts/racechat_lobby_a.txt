@@ -1,0 +1,37 @@
+# Quick chat in a free-roam lobby's race (runtime/racehorn.c qc_*), host side, with racechat_lobby_b.txt and
+# racechat_lobby_c.txt: mprace_lobby_a.txt's trip, with phrases as if picked on the page: four at once in the race
+# (0, 4, 8, 9: the fourth is one too many, "not said") and one on its results (12).  The others' logs say
+# "[racechat] Ann said phrase 0 ..."; the joiners' phrases reach each other through the host ("passed on by the
+# race's creator").
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:racechat_lobby_a.txt --b Bob:racechat_lobby_b.txt
+#        --c Cid:racechat_lobby_c.txt --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPRINT_3 --env MP_PLAYERS=3
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++0    roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++4000ms log CHAT race
++0    roam racesay 0
++100ms roam racesay 4
++100ms roam racesay 8
++100ms roam racesay 9
++0    waitfng UI_PostRaceResults.fng 30000
++0    log CHAT results
++1000ms roam racesay 12
++0    roam mp waittrip 40000
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

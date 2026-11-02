@@ -637,6 +637,17 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .touch[data-alone] :is([data-ctl="horn"], [data-ctl="chat"]),
 .touch[data-no-chat] [data-ctl="chat"],
 .touch:not([data-hyd]) .hyd { display: none; }
+/* a race between players (touch.ts netrace): Quick chat in the first row after Reset while driving (after Pressurize
+ * and Bounce in landscape when the car has hydraulics; upright those are in the second row), beside the menu's button
+ * on the results (the menus' controls).  Upright, right: auto over the second row's inline start, which a Position on
+ * the right (direction rtl) would take instead of left */
+.touch[data-netrace]:not([data-no-chat]) .tc[data-ctl="chat"] { display: flex; top: var(--t); left: calc(var(--l) + 224px * var(--ts)); }
+.touch[data-netrace][data-hyd]:not([data-no-chat]) .tc[data-ctl="chat"] { left: calc(var(--l) + 336px * var(--ts)); }
+.touch[data-netrace][data-mode="menu"]:not([data-no-chat]) .tc[data-ctl="chat"] { left: calc(var(--l) + 56px * var(--ts)); }
+@media (orientation: portrait) {
+  html[data-touch] .touch[data-netrace]:not([data-no-chat]) .tc[data-ctl="chat"] { top: var(--t); left: calc(var(--l) + 224px * var(--ts)); right: auto; }
+  html[data-touch] .touch[data-netrace][data-mode="menu"]:not([data-no-chat]) .tc[data-ctl="chat"] { left: calc(var(--l) + 56px * var(--ts)); }
+}
 /* the menus': the arrows as a D-pad bottom left, Back over OK bottom right, in the bars beside the game's 4:3 menus
  * (--bar wide): the keys as big as the bar leaves room for, 44 to 52 px.  A faint rim: the bars are black behind the
  * movies and the profile screens */

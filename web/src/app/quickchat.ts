@@ -1,17 +1,22 @@
-// Quick chat in free roam: set phrases the players say to each other.  Nobody types anything, so there is nothing to
-// moderate, and each player reads a phrase in their own language.  Each player picks sixteen of the library's
-// (phrases.ts) on the start page, in four groups of four (settings.ini quick_chat_phrases, quick_chat_groups).
+// Quick chat in free roam and in races between players: set phrases the players say to each other.  Nobody types
+// anything, so there is nothing to moderate, and each player reads a phrase in their own language.  Each player picks
+// sixteen of the library's (phrases.ts) on the start page, in four groups of four (settings.ini quick_chat_phrases,
+// quick_chat_groups).
 //   pick   keys 1-4 open a group and 1-4 again says its phrase; a controller's right stick the same (a flick up, right,
-//          down or left: the game leaves that stick unused); on a touch screen the chat button shows all sixteen and a
-//          tap says one.  Esc, PICK_MS without a pick, or no longer driving in free roam closes it.  At most BURST
-//          phrases in WINDOW_MS (runtime/roam_game.c keeps the same limit): then the picker asks to wait.
-//   wire   a phrase is its number in the library: the game sends it to the players around (roam_game.c say_*: within
-//          250 m, or in our race lobby) and back to this page as said by the player.  A number this page has no phrase
-//          for (a newer page's) is not shown.
-//   show   a line over the car of each player who said something, where the game draws the name over it: the game
-//          tells where in each frame it draws (marks(), the renderer's GwMarks), so the line moves with the car in the
-//          same picture; the player's own over their car.  Also the chat log on the left, in the notices' place, and
-//          beside the player's name in a race lobby's card.
+//          down or left: the game leaves that stick unused, in races too); on a touch screen the chat button shows all
+//          sixteen and a tap says one.  Open while driving in free roam, and in a race between players (Online, LAN,
+//          a free-roam lobby's) while driving and on its results (the game's status "netrace"; the results' menus take
+//          none of 1-4 either), never in a race of the career.  Esc, PICK_MS without a pick, or leaving those closes
+//          it.  At most BURST phrases in WINDOW_MS (the game keeps the same limit): then the picker asks to wait.
+//   wire   a phrase is its number in the library.  In free roam the game sends it to the players around
+//          (runtime/roam_game.c say_*: within 250 m, or in our race lobby); in a race to the race's players
+//          (runtime/racehorn.c qc_*: the page puts it in the LAN mailbox).  Either way back to this page as said by the
+//          player.  A number this page has no phrase for (a newer page's) is not shown, nor what a player this one
+//          blocks (settings.ini roam_block) said.
+//   show   in free roam, a line over the car of each player who said something, where the game draws the name over it:
+//          the game tells where in each frame it draws (marks(), the renderer's GwMarks), so the line moves with the
+//          car in the same picture; the player's own over their car.  In free roam and in races the chat log on the
+//          left, in the notices' place, and in free roam beside the player's name in a race lobby's card.
 import type { GameSession } from './game';
 import { t } from './i18n';
 import { catName, DEFAULT_GROUPS, DEFAULT_PHRASES, PHRASES, type CatId } from './phrases';
@@ -33,8 +38,8 @@ const ARROWS = ['↑', '→', '↓', '←'];
 /** a speech balloon: what marks a line as chat */
 export const ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H8l-3.5 2.6V12H3a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>';
 
-/** what the game sends (roam_game.c say_page) */
-interface Said { id: number; name: string; p: number; me?: number; lobby?: number }
+/** what the game sends (roam_game.c say_page; racehorn.c qc_page, with race) */
+interface Said { id: number; name: string; p: number; me?: number; lobby?: number; race?: number }
 
 export interface QuickChatDeps {
   /** a line in the chat log (the notices' place): the name, what was said, whether it is the player's own */
@@ -50,6 +55,8 @@ export interface QuickChatDeps {
 
 type Mode = 'keys' | 'pad' | 'touch';
 const KEYS: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
+/** a player's name as a block compares it: trimmed, capitals not counting (the server's: roam hub.rs) */
+const nameKey = (n: string) => n.trim().toLowerCase();
 
 export class QuickChat {
   private session: GameSession | null = null;
@@ -64,11 +71,17 @@ export class QuickChat {
   private closeTimer = 0;
   private sent: number[] = [];
   private drive = 0;
+  /** the game's status "netrace" (runtime/racehorn.c qc_status): 1 driving in a race between players, 2 on its
+   *  results, 0 not (also a game without it: no picker in races) */
+  private netrace = 0;
   private driveAt = 0;
   private armed = true;
   /** the player's sixteen: the phrase in each slot (group * 4 + place), and each group's name */
   private layout: readonly number[] = DEFAULT_PHRASES;
   private groups: readonly CatId[] = DEFAULT_GROUPS;
+  /** the names of the players this one blocks (settings.ini roam_block), as the server compares them: their phrases
+   *  are not shown (the server keeps them out of free roam; a race's go round it) */
+  private blocked = new Set<string>();
 
   constructor(stage: HTMLElement, private deps: QuickChatDeps) {
     this.layer = document.createElement('div');
@@ -90,10 +103,12 @@ export class QuickChat {
     }, { capture: true });
   }
 
-  /** a game started: quick chat on (the setting) or off, with the player's sixteen (phrases.ts phrasesOf, groupsOf) */
-  start(s: GameSession, on: boolean, layout: readonly number[], groups: readonly CatId[]) {
-    this.session = s; this.on = on; this.drive = 0; this.driveAt = 0;
+  /** a game started: quick chat on (the setting) or off, with the player's sixteen (phrases.ts phrasesOf, groupsOf),
+   *  and the names the player blocks (settings.ts blockList) */
+  start(s: GameSession, on: boolean, layout: readonly number[], groups: readonly CatId[], blocked: readonly string[] = []) {
+    this.session = s; this.on = on; this.drive = 0; this.netrace = 0; this.driveAt = 0;
     this.layout = layout; this.groups = groups;
+    this.blocked = new Set(blocked.map(nameKey));
   }
   stop() {
     this.session = null; this.on = false;
@@ -113,14 +128,24 @@ export class QuickChat {
   /** driving in free roam (the game's status: runtime/web/status_web.c "drive" 2, not in a cutscene); messages.ts
    *  asks too */
   driving(): boolean {
-    const s = this.session, now = performance.now();
-    if (!s || !this.on) return false;
-    if (now - this.driveAt > 100) {
-      this.driveAt = now;
-      const st = s.status?.read();
-      if (st) this.drive = st.get('drive') ?? 0;
-    }
+    if (!this.session || !this.on) return false;
+    this.readStatus();
     return (this.drive & 3) === 2 && (this.drive & 8) === 0;
+  }
+  /** in a race between players, driving or on its results (racehorn.c's "netrace"): the picker opens there too */
+  private racing(): boolean {
+    if (!this.session || !this.on) return false;
+    this.readStatus();
+    return this.netrace > 0;
+  }
+  /** the picker may open: driving in free roam, or in a race between players */
+  private can(): boolean { return this.driving() || this.racing(); }
+  private readStatus() {
+    const s = this.session, now = performance.now();
+    if (!s || now - this.driveAt <= 100) return;
+    this.driveAt = now;
+    const st = s.status?.read();
+    if (st) { this.drive = st.get('drive') ?? 0; this.netrace = st.get('netrace') ?? 0; }
   }
 
   private key(e: KeyboardEvent) {
@@ -130,9 +155,10 @@ export class QuickChat {
     if (el?.closest?.('input, textarea, select, dialog[open], [data-nfsu2-ui]') || document.querySelector('dialog[open]')) return;
     const k = KEYS[e.code];
     if (k === undefined && !(e.code === 'Escape' && this.open >= 0)) return;
-    if (!this.driving()) { if (this.open >= 0) this.close(); return; }
-    // the game binds none of 1-4 (its key maps: dinput_kbd.c DIMAP=1), and gets them all the same, so a control the
-    // player put on one still works; Esc closes the picker instead of pausing the game
+    if (!this.can()) { if (this.open >= 0) this.close(); return; }
+    // the game binds none of 1-4 (its driving key maps: dinput_kbd.c DIMAP=1; nor do its menus, the results': the
+    // front end's key table), and gets them all the same, so a control the player put on one still works; Esc closes
+    // the picker instead of pausing the game (or leaving the results)
     if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); }
     if (e.repeat) return;
     if (e.code === 'Escape') this.close();
@@ -146,7 +172,7 @@ export class QuickChat {
     if (r < REST) { this.armed = true; return mine; }
     if (r < FLICK || !this.armed) return mine;
     this.armed = false;
-    if (!this.driving()) return false;
+    if (!this.can()) return false;
     const dir = Math.abs(x) > Math.abs(y) ? (x > 0 ? 1 : 3) : (y < 0 ? 0 : 2);
     if (!mine) this.group(dir, 'pad');
     else this.pick(this.open * 4 + dir);
@@ -156,7 +182,7 @@ export class QuickChat {
   /** the touch controls' chat button: all sixteen, or closed again */
   toggle() {
     if (this.open === 4) { this.close(); return; }
-    if (!this.driving()) return;
+    if (!this.can()) return;
     this.mode = 'touch'; this.open = 4;
     this.draw();
   }
@@ -184,9 +210,11 @@ export class QuickChat {
     const s = this.session, now = performance.now(), p = this.layout[slot];
     if (!s || p === undefined || !PHRASES[p]) return;
     if (this.wait(now) > 0) { this.draw(); return; }
-    if (!s.net?.say?.(p)) { this.close(); return; }
+    // (in free roam the free-roam mailbox's game says it, in a race the LAN mailbox's)
+    const race = !this.driving() && this.racing();
+    if (!s.net?.say?.(p, race)) { this.close(); return; }
     this.sent.push(now);
-    this.deps.log(`[chat] said ${p} (${PHRASES[p].text})`);
+    this.deps.log(`[chat] said ${p} (${PHRASES[p].text})${race ? ' in the race' : ''}`);
     this.close();
   }
 
@@ -218,7 +246,7 @@ export class QuickChat {
         kids.push(col);
       }
       const m = this.deps.message;
-      if (m?.on()) {
+      if (m?.on() && this.driving()) {               // (messages go in free roam: messages.ts)
         const b = el('button', 'qc-say qc-msg', t('Message a friend')) as HTMLButtonElement;
         b.type = 'button';
         b.addEventListener('click', () => { this.close(); m.open(); });
@@ -238,13 +266,17 @@ export class QuickChat {
     p.replaceChildren(...kids);
   }
 
-  /** a phrase said (roam_game.c say_page, NET_KIND_SAY): its line over the car, the log, the lobby's card */
+  /** a phrase said (roam_game.c say_page, racehorn.c qc_page: NET_KIND_SAY): its line over the car (free roam), the
+   *  log, the lobby's card (free roam) */
   said(json: string) {
     let s: Said;
     try { s = JSON.parse(json) as Said; } catch { this.deps.log(`[chat] not JSON: ${json.slice(0, 80)}`); return; }
     if (!this.on || typeof s.id !== 'number' || typeof s.p !== 'number' || !(s.p >= 0 && s.p < PHRASES.length)) return;
-    const text = t(PHRASES[s.p].text), me = !!s.me, name = String(s.name ?? '');
-    this.deps.log(`[chat] ${me ? 'you' : name} said ${s.p} (${PHRASES[s.p].text})${s.lobby ? ', in our lobby' : ''}`);
+    const text = t(PHRASES[s.p].text), me = !!s.me, name = String(s.name ?? ''), where = s.race ? ', in the race' : s.lobby ? ', in our lobby' : '';
+    if (!me && this.blocked.has(nameKey(name))) { this.deps.log(`[chat] ${name} said ${s.p}${where}: not shown (blocked)`); return; }
+    this.deps.log(`[chat] ${me ? 'you' : name} said ${s.p} (${PHRASES[s.p].text})${where}`);
+    // a race: the log only (the game tells nobody where its racers' names are drawn)
+    if (s.race) { this.deps.line(name, text, me); return; }
     this.lines.get(s.id)?.el.remove();
     // the place on .qc-line (every frame), the look and its pop on .qc-b
     const el = document.createElement('div'), b = document.createElement('div');
@@ -285,5 +317,5 @@ export class QuickChat {
   get enabled() { return this.on; }
 
   /** for the page's test hooks */
-  state() { return { on: this.on, open: this.open, mode: this.mode, lines: [...this.lines.keys()], sent: this.sent.length }; }
+  state() { return { on: this.on, open: this.open, mode: this.mode, lines: [...this.lines.keys()], sent: this.sent.length, netrace: this.netrace }; }
 }

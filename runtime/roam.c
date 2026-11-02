@@ -907,6 +907,11 @@ int roam_cmd(CPU *c, const char *line, long *wait_start){
     long f = autotest_frame();
     if (!strcasecmp(sub, "mp")) return roam_game_cmd(c, rest, wait_start);
     if (!strcasecmp(sub, "asi")) return roam_asipeer_cmd(c, rest, wait_start);
+    if (!strcasecmp(sub, "racesay")){             /* quick chat in a race between players, as picked on the page */
+        void racehorn_test_say(int phrase);
+        racehorn_test_say(atoi(a1));
+        fprintf(stderr, "[roam] f=%ld racesay %d\n", f, atoi(a1));
+        return 1; }
     g_active = 1;
     if (!strcasecmp(sub, "call") || !strcasecmp(sub, "cars") || !strcasecmp(sub, "ghost") ||
         !strcasecmp(sub, "types") || !strcasecmp(sub, "loader") || !strcasecmp(sub, "rewind") ||

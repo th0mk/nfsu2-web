@@ -1270,6 +1270,36 @@ int vlan_rt_recv(uint16_t port, uint32_t *ip_h, void *p, int cap){
     pthread_mutex_unlock(&g_mu);
     return r;
 }
+/* quick chat in a race between players (racehorn.c qc_*): the phrase the player
+ * picked on the page lately (net_proto.h say, which the page writes into this
+ * mailbox while its status says such a race), once; -1 none new */
+int vlan_rt_say_pick(void){
+    static uint32_t seen;
+    uint32_t v = MB ? ld(&MB->say) : 0u;
+    if (v == seen) return -1;
+    seen = v;
+    return (int)(v & 0xffu);
+}
+/* and what was said, for this page alone (NET_KIND_SAY, a JSON object; never
+ * on the switch): 0 queued, -1 not (no mailbox, too long, the ring full but
+ * for the control frames' reserve) */
+int vlan_rt_said(const char *json, int n){
+    pthread_mutex_lock(&g_mu);
+    int r = -1;
+    if (MB && n > 0 && n <= (int)NET_MAX_PAYLOAD && tx_free() > TX_RESERVE){
+        uint32_t h = MB->tx_head;
+        net_slot *s = tx_slot(h);
+        s->len = (uint32_t)n; s->kind = NET_KIND_SAY; s->src_ip = g_vip; s->dst_ip = 0;
+        s->src_port = s->dst_port = 0; s->t_ms = (double)now_us() / 1000.0;
+        memcpy(s->data, json, (size_t)n);
+        st(&MB->tx_head, h + 1);
+        __atomic_add_fetch(&MB->tx_bell, 1, __ATOMIC_SEQ_CST);
+        __builtin_wasm_memory_atomic_notify((int *)&MB->tx_bell, 1);
+        r = 0;
+    }
+    pthread_mutex_unlock(&g_mu);
+    return r;
+}
 /* the race's peers heard from or sent to within the last within_ms (host order) */
 int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms){
     pthread_mutex_lock(&g_mu);

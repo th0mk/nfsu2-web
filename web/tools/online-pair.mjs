@@ -13,6 +13,13 @@
 //        [--ranked]  the host creates a ranked game (Options: Game Type)
 //        [--horn]    in the race each instance holds N (its horn, runtime/racehorn.c) for a second, one after the
 //                    other: instance n 3 + 4 (n - 1) s after the start; the others' logs say "[horn] <name>'s horn"
+//        [--say]     quick chat (runtime/racehorn.c qc_*): instance n says phrase n - 1 12 + 3 (n - 1) s after the start
+//                    and phrase 11 + n n s into the results, which it leaves 20 s after them (n: 1 to 4, then
+//                    again); every other instance must show both ("[racechat] <name> said phrase ..."), or leave them
+//                    out when its NFSU2_ROAM_BLOCK names that player (--page app); with NFSU2_ROAM_SAY=0 (--env-i<n>)
+//                    an instance neither says nor shows any, as the creator still passes the others' on.  The game takes them as if picked
+//                    on the page ("roam racesay"); with --page app the page's own keys are pressed instead (1 then n,
+//                    4 then n: a script's `log KEY <code> ...`, as roam-pair's), and its log says "[chat] <name> said ..."
 //        [--quit-mid N:MS]   instance N's game quits MS after its race started (the others race on)
 //        [--racewin N:MS]   instance N's game ends its race MS after it started, the way not driven (racewin: as a
 //                    cheat that finishes the race at once does; the server's [cheat] lines see it)
@@ -31,7 +38,8 @@
 //        [--page play [--size 960x540] [--play-only N]]   the renderer's test page (frame dumps to
 //                    <out>/i<n>-*.png through the server's /artifacts/); else the null platform
 //        [--page app]  each instance is the player's start page (web/index.html): Play is clicked; the
-//                    renderer, audio, input and network are the app's (the name from roam_name, free roam off)
+//                    renderer, audio, input and network are the app's (the name from roam_name, free roam off); a
+//                    script's `log KEY <code> ...` presses those keys on the page
 //        [--hide N[:FROM[:TO]]]   instance N's tab goes to the background (another tab in front: really hidden,
 //                    no animation frames and throttled timers, as in Chrome for a player) when its script logs
 //                    FROM (default: the host race-start, a joiner ready) and comes back when it logs TO (default
@@ -79,6 +87,8 @@ const WAIT_ROOM = +opt('wait-room', 70000), JOIN_WAIT = +opt('join-wait', 40000)
 const MODES = { circuit: 0, sprint: 1, drag: 2, drift: 3, streetx: 4 };
 const RANKED = argv.includes('--ranked');
 const HORN = argv.includes('--horn');
+// --say: quick chat in the race and on its results (runtime/racehorn.c qc_*; --page app: pressed on the page)
+const SAY = argv.includes('--say');
 const EA_LOGIN = argv.includes('--ea-login') || argv.includes('--canary');
 // --quit-mid N:MS: instance N quits its game MS after its race started (the others race on)
 const QUIT_MID = opt('quit-mid', '') ? opt('quit-mid', '').split(':').map(Number) : [0, 0];
@@ -261,6 +271,12 @@ function raceFlow(w, host, race, raceMs, inst) {
     w('+0    autopilot on 6000'); w('+0    wzero'); w('+0    log race-start');
   }
   if (HORN && race === 1) { w(`+${3000 + 4000 * (inst - 1)}ms log horn`); w('+0    down N'); w('+1000ms up N'); }
+  // quick chat: group g's phrase in place k (the start page's default sixteen: phrase 4 (g - 1) + k - 1), as the
+  // game takes a pick from the page, or the page's own keys
+  const place = (inst - 1) % 4 + 1;
+  const say = (g, label) => { w(`+0    log ${label}`); w(PAGE === 'app' ? `+0    log KEY Digit${g} Digit${place}` : `+0    roam racesay ${4 * (g - 1) + place - 1}`); };
+  // (after the creator's pre-race screen, UI_OLPreRaceStart, which comes once the world is there: no picker on it)
+  if (SAY && race === 1) { w(`+${12000 + 3000 * (inst - 1)}ms log say-race`); say(1, 'say'); }
   if (RACEWIN[0] === inst) { w(`+${RACEWIN[1]}ms log racewin`); w('+0    racewin'); }
   if (QUIT_MID[0] === inst) {
     // this player's process ends in the middle of the race (sockets closed, nothing more sent)
@@ -274,6 +290,7 @@ function raceFlow(w, host, race, raceMs, inst) {
   w(`+0    waitfng ${RANKED ? 'UI_PostRace_TournResults.fng' : 'UI_PostRaceResults.fng'} 30000`);
   w(`+0    log results${x}`);
   w('+0    untrace');
+  if (SAY && race === 1) { w(`+${1000 * inst}ms log say-results`); say(4, 'say'); w(`+${20000 - 1000 * inst}ms log said`); }
   w(`+180  dump results${x}`);
   w(`+3000ms dump results_2${x}`);
   if (RANKED) {
@@ -400,8 +417,17 @@ async function start(i) {
     w(s); lines.push(s); console.log(`online-pair: ${NAMES[i]} ${s.slice(14)}`);
   }).catch(e => w(`[online-pair] tab switch failed: ${e}`)));
   const hideRe = hide && new RegExp(`\\bLOG ${hide.from}$`), showRe = hide && new RegExp(`\\bLOG ${hide.to}(_r\\d+)?$`);
+  // --page app: a script's `log KEY <code> ...` presses those keys on the page as the player does, one after the other
+  // (KeyboardEvent.code; the script's own keys reach only the game: roam-pair's), e.g. quick chat's (--say)
+  let keys = Promise.resolve();
+  const press = (codes) => (keys = keys.then(async () => {
+    for (const k of codes) { await page.keyboard.press(k); await new Promise(r => setTimeout(r, 250)); }
+    w(`[online-pair] pressed ${codes.join(' ')}`);
+  }).catch(e => w(`[online-pair] key press failed: ${e}`)));
   page.on('console', m => {
     const t = m.text(); w(t);
+    const pk = PAGE === 'app' && /\bLOG KEY ([\w ]+)$/.exec(t);
+    if (pk) void press(pk[1].trim().split(/\s+/));
     const g = /^\[\d+!?\] ([^]*)$/.exec(t);
     if (g) lines.push(g[1]); else { const e = /^EXIT (-?\d+)$/.exec(t); if (e) exit = +e[1]; lines.push(t); }
     if (PAGE === 'app') { const x = /guest exited with code (-?\d+)|\[app\] the game exited with code (-?\d+)/.exec(t); if (x) exit = +(x[1] ?? x[2]); }
@@ -475,6 +501,24 @@ for (const x of inst) {
   if (log.includes('UNRESOLVED INDIRECT')) why.push(`${n}:unresolved-icall`);
   if (has(/^\[net\] BLOCKED/m)) why.push(`${n}:net-blocked`);
   if (has(/^PAGEERROR|^CRASH/m)) why.push(`${n}:page-error`);
+  if (SAY && flow) {
+    // each other player's two phrases shown here, or left out when this one blocks them (the page: --page app); none
+    // with quick chat off here (NFSU2_ROAM_SAY=0), and none from a player with it off
+    const env = (i, k) => [...opts('env'), ...opts(`env-i${i + 1}`)].filter(kv => kv.startsWith(`${k}=`)).map(kv => kv.slice(k.length + 1)).pop();
+    const off = (i) => /^(0|off)$/i.test(env(i, 'NFSU2_ROAM_SAY') ?? '');
+    const blocked = new Set((env(x.i, 'NFSU2_ROAM_BLOCK') ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+    for (const y of inst) {
+      if (y === x || QUIT_MID[0] === y.i + 1) continue;
+      const place = y.i % 4 + 1;
+      for (const p of [place - 1, 11 + place]) {
+        const shown = PAGE === 'app' ? new RegExp(`^\\[chat\\] ${y.name} said ${p} \\(.*\\), in the race$`, 'm')
+          : new RegExp(`^\\[racechat\\] ${y.name} said phrase ${p} `, 'm');
+        const left = new RegExp(`^\\[chat\\] ${y.name} said ${p}, in the race: not shown \\(blocked\\)$`, 'm');
+        const ok = off(x.i) || off(y.i) ? !has(shown) : blocked.has(y.name.toLowerCase()) ? has(left) && !has(shown) : has(shown);
+        if (!ok) why.push(`${n}:say-${y.name}-${p}`);
+      }
+    }
+  }
   if (HIDE?.n === x.i + 1) {
     // in the background the game was told (deactivated) and kept running in the network session
     if (!x.hidden.some(h => h.state === 'hidden')) why.push(`${n}:never-hidden`);
@@ -488,6 +532,7 @@ for (const x of inst) {
     online: grab(/^\[net\] (online|virtual LAN: tcp connect 10\.77\.0\.1)/).slice(0, 8),
     lanstats: grab(/^\[net\] virtual LAN (stats|at exit)/).slice(-1),
     ...(HIDE?.n === x.i + 1 ? { hidden: x.hidden, background: grab(/^app: (de)?activated|the game keeps running|^\[online-pair\]/) } : {}),
+    ...(SAY ? { chat: grab(/^\[(racechat|chat)\] /) } : {}),
     why,
   };
   summary.why.push(...why);

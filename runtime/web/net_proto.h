@@ -67,7 +67,8 @@
                                    the game, its state as a JSON object ("{}": none), sent when it changes
                                    (roam_game.c mp_panel) */
 #define NET_KIND_SAY      18u   /* TX ring only, never on the switch: quick chat, a phrase said (by a friend near,
-                                   one in our race lobby, or the player), as a JSON object (roam_game.c say_*) */
+                                   one in our race lobby, or the player), as a JSON object (roam_game.c say_*);
+                                   in the LAN mailbox, one said in a race between players (racehorn.c qc_*) */
 #define NET_KIND_FRIEND   19u   /* TX ring only, never on the switch: the player's car and a friend's touched front
                                    bumpers for 3 s, or parted after that, as a JSON object {"id","name","on"}
                                    (roam_game.c bump_*): the page's "Add friend" */
@@ -140,7 +141,9 @@ typedef struct {
     double   tx_wait_ms_sum, tx_wait_ms_max;                   /* 120: C queued -> page sent */
     uint32_t tx_wait_n, say;                                   /* 136: say: quick chat, the phrase the player
                                                                   picked (bits 0-7) and a count (bits 8-31) that
-                                                                  changes with each pick (roam_plat_say_pick) */
+                                                                  changes with each pick (roam_plat_say_pick; in
+                                                                  the LAN mailbox in a race between players,
+                                                                  vlan_rt_say_pick) */
     uint32_t peer_bits[NET_PEER_BITS / 32];                    /* 144: page: bit h set = the host h of our
                                                                   network (vip & ~netmask) is on the switch (us too) */
     uint32_t crews_gen, crews[4], crews_rgb[4];                /* 400: page: free roam's crews as the page's menu

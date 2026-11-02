@@ -157,8 +157,9 @@ export interface NetSubsystem extends Subsystem {
   offline?(): void;
   /** free roam's solid cars, switched while the game runs (the page menu), as roam_collide has them */
   solid?(collide: 'on' | 'off' | 'none'): void;
-  /** quick chat: the player says phrase p (quickchat.ts); false: the game has no free roam */
-  say?(p: number): boolean;
+  /** quick chat: the player says phrase p (quickchat.ts; race: in a race between players); false: the game has no free
+   *  roam (race: no LAN play) */
+  say?(p: number, race?: boolean): boolean;
   /** free roam's friends: a message to the server (friends.ts); false: not connected now */
   friend?(m: Record<string, unknown>): boolean;
   /** free roam's crews, changed while the game runs (the page menu): their hashes, in the player's order, and their

@@ -15,7 +15,8 @@
 //   small     pause, camera (held: look back), reset; in free roam also the map, messages, drift mode (X, lit while it
 //             is on: drift.ts), the career's status (the game's Legend: the controller's D-pad Down, the keyboard has
 //             no key for it), and the horn and quick chat (quickchat.ts; not with its setting off) while a friend's car
-//             is within a horn's reach;
+//             is within a horn's reach; quick chat also in a race between players, and on its results among the
+//             menus' controls (the game's status "netrace");
 //             Start (Engage) only while Engage does something: an event's or a shop's marker, an outrun offer, a race
 //             spot or lobby (the game's status "roam_near" and "engage", runtime/web/status_web.c; a game without them
 //             shows these always).  The steering button held opens the touch settings (deps.settings)
@@ -331,6 +332,8 @@ export class TouchControls {
   private hyd: '' | 'lift' | 'bounce' = '';
   private hydWide = false;
   private hydWorks = false;
+  /** a race between players (runtime/racehorn.c "netrace": 1 driving, 2 its results): Quick chat shows there too */
+  private netrace = 0;
   private statusAt = 0;
   /** a finger touched the game; a keyboard or controller was used after the last touch */
   private seen = touchFirst();
@@ -499,6 +502,7 @@ export class TouchControls {
         this.drive = st.get('drive') ?? 0; this.frames = st.get('frames') ?? 0;
         this.engage = st.get('engage'); this.near = st.get('roam_near'); this.drift = st.get('drift') ?? 0;
         this.hydraulics = st.get('hydraulics');
+        this.netrace = st.get('netrace') ?? 0;
       }
     }
     if (!this.away && (s.input?.padPressed?.() ?? 0) > this.touchedAt) this.away = true;
@@ -530,6 +534,7 @@ export class TouchControls {
     this.root.toggleAttribute('data-no-engage', this.engage === 0);
     this.root.toggleAttribute('data-alone', this.near === 0);
     this.root.toggleAttribute('data-no-chat', this.deps.chatOn?.() === false);
+    this.root.toggleAttribute('data-netrace', this.netrace > 0);
     if (this.engage === 0) this.letGo('start');
     if (this.near === 0) this.letGo('horn');
     this.ctls.get('drift')!.el.classList.toggle('lit', (this.drift & 1) !== 0);
