@@ -31,7 +31,10 @@
 //                    (tests/scripts/roam_crew_menu.txt); `log INVITE <fragment>` opens that invite link in the page
 //                    as a link pasted into its address does (the fragment without its #, which starts a comment in a
 //                    script: room=Blue%20Room), saves the question as <out>/<instance>-invite-<k>.png (k from 1) and
-//                    presses Join; `log INVITE-NO <fragment>` presses Not now (tests/scripts/roam_invite.txt)
+//                    presses Join; `log INVITE-NO <fragment>` presses Not now (tests/scripts/roam_invite.txt);
+//                    `log FRIENDS shot <name>` opens the menu's Friends popup (F9, Friends), saves the page and says
+//                    what the popup says, and goes back; `log FRIENDS join <friend>` presses that friend's Join there
+//                    (tests/scripts/roam_friend_app_a.txt)
 //        [--page play [--size 960x540] [--play-only Bob]]   the renderer's test page (test/play.html, WebGPU)
 //                    instead: frame dumps go to the server's /artifacts/ as <name>-*.png (a server of our own
 //                    gets --artifacts <out>); --play-only: only that instance renders, the others run hostcheck
@@ -149,7 +152,7 @@ const FINGER = ['TAP', 'HOLD', 'SCROLL'];
 for (const [name, script] of SPECS) {
   let txt = '';
   try { txt = fs.readFileSync(path.join(REPO, 'tests/scripts', script), 'utf8'); } catch { continue; }
-  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CREW|INVITE(?:-NO)?|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
+  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CREW|FRIENDS|INVITE(?:-NO)?|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
     .filter(c => !APP || (FINGER.includes(c) && !TOUCH));
   if (app.length) console.log(`roam-pair: warning: ${name}'s ${script} has log ${app.join(', ')}, which only --page app${app.some(c => FINGER.includes(c)) ? ' --touch' : ''} does`);
 }
@@ -300,6 +303,22 @@ async function start(i, name, script, own) {
         .then(() => page.waitForTimeout(200)).then(() => page.click(`${pop} [data-act="crews-done"]`))
         .then(() => page.click('#menu [data-act="resume"]'))
         .then(() => w(`[crew] ${op} ${k ?? ''} ${arg}`), e => w(`[crew] ${op} ${arg} failed: ${e}`));
+    }
+    // the menu's Friends popup as the player uses it, at a script's `log FRIENDS shot <name>` (F9, Friends, its
+    // picture once the server answered, what it says, Done, Back to the game) or `log FRIENDS join <friend>` (that
+    // friend's Join, which goes back to the game itself)
+    const fk = APP && /LOG FRIENDS (shot|join) (\S+)/.exec(m.text());
+    if (fk) {
+      const [, op, arg] = fk, pop = '#friends-pop';
+      const act = op === 'join'
+        ? () => page.waitForTimeout(800).then(() => page.locator(`${pop} .fl li`, { has: page.locator('.fl-name', { hasText: arg }) }).locator('.fl-join').click({ timeout: 5000 }))
+        : () => page.waitForTimeout(800).then(() => page.screenshot({ path: path.join(OUT, `${name}-${arg}.png`) }))
+          .then(() => page.evaluate(() => document.getElementById('friends-pop-box').innerText.replace(/\s*\n+\s*/g, ' / ')))
+          .then(said => { w(`[friends] the popup: ${said}`); return page.click(`${pop} [data-act="friends-done"]`); })
+          .then(() => page.click('#menu [data-act="resume"]'));
+      void page.keyboard.press('F9').then(() => page.click('#menu [data-act="friends"]', { timeout: 5000 }))
+        .then(() => page.waitForSelector(`${pop}[open]`, { timeout: 5000 })).then(act)
+        .then(() => w(`[friends] ${op} ${arg}`), e => w(`[friends] ${op} ${arg} failed: ${e}`));
     }
     // an invite link opened in the page, at a script's `log INVITE <fragment>`: the question box, its picture and
     // what it says, then Join (or Not now)

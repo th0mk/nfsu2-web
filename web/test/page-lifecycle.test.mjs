@@ -70,7 +70,10 @@ function fakeProc() {
 }
 
 // ---- audio ------------------------------------------------------------------------
-test('audio: detach ends the worklet (stop, then close after it stopped) and leaves nothing on the context', async () => {
+// a ring as the module makes it: the page refuses one of another size (audio/index.ts)
+const RING = AP.AR_OFF_PCM + AP.AUDIO_RING_FRAMES * 8;
+
+test('audio: detach ends the worklet (stop, then close after it stopped) and leaves nothing on the context', async (t) => {
   const made = [];
   g.AudioWorkletNode = class {
     constructor(ctx, name, o) {
@@ -90,11 +93,12 @@ test('audio: detach ends the worklet (stop, then close after it stopped) and lea
   const proc = fakeProc();
   const ptr = 4096;
   const h = new Int32Array(proc.memory.buffer, ptr, AP.AR_HDR_WORDS);
-  h[AP.AR_MAGIC] = AP.AUDIO_MAGIC; h[AP.AR_VERSION] = AP.AUDIO_VERSION;
+  h[AP.AR_MAGIC] = AP.AUDIO_MAGIC; h[AP.AR_VERSION] = AP.AUDIO_VERSION; h[AP.AR_FRAMES] = AP.AUDIO_RING_FRAMES;
   const logs = [];
   const before = win.count() + doc.count();
   const a = await attachAudio(proc, { context: ctx, gestureTarget: win, log: s => logs.push(s) });
-  proc.register(2 /* HostKind.Audio */, ptr, 4096);
+  t.after(() => a.detach());   // a failed check still ends the audio's timer: the file then ends, not hangs
+  proc.register(2 /* HostKind.Audio */, ptr, RING);
   await tick();
   assert.equal(made.length, 1, 'the worklet node is made once the ring registers');
   const node = made[0];
@@ -111,7 +115,7 @@ test('audio: detach ends the worklet (stop, then close after it stopped) and lea
   assert.equal(win.count() + doc.count(), before, 'no listener left on window or document');
 });
 
-test('audio: a context that is not running is closed at once (the stop is still sent)', async () => {
+test('audio: a context that is not running is closed at once (the stop is still sent)', async (t) => {
   const made = [];
   g.AudioWorkletNode = class {
     constructor() { this.sent = []; made.push(this); const n = this; this.port = { onmessage: null, postMessage(m) { n.sent.push(m); }, close() {} }; }
@@ -124,9 +128,10 @@ test('audio: a context that is not running is closed at once (the stop is still 
   };
   const proc = fakeProc();
   const h = new Int32Array(proc.memory.buffer, 4096, AP.AR_HDR_WORDS);
-  h[AP.AR_MAGIC] = AP.AUDIO_MAGIC; h[AP.AR_VERSION] = AP.AUDIO_VERSION;
+  h[AP.AR_MAGIC] = AP.AUDIO_MAGIC; h[AP.AR_VERSION] = AP.AUDIO_VERSION; h[AP.AR_FRAMES] = AP.AUDIO_RING_FRAMES;
   const a = await attachAudio(proc, { context: ctx, gestureTarget: win, log: () => {} });
-  proc.register(2, 4096, 4096);
+  t.after(() => a.detach());
+  proc.register(2, 4096, RING);
   await tick();
   ctx.state = 'suspended';
   a.detach();

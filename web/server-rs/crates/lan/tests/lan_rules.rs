@@ -1,5 +1,5 @@
 //! The switch's own tests, the second half (tests/lan.rs has the first): the audit's F2 (what one client can make the
-//! switch send, and whom it can get cut), the store, the 8000 addresses, LAN play's broadcasts, a page that lets go,
+//! switch send, and whom it can get cut), the store, the 12000 addresses, LAN play's broadcasts, a page that lets go,
 //! the breakdown, bundles, a player behind on its path (lag.rs).
 
 mod harness;
@@ -227,9 +227,9 @@ async fn a_receiver_that_stopped_reading_goes_not_the_player_streaming_to_it() {
     use tokio::io::AsyncWriteExt;
     let _s = serial().await;
     let sw = start(stream_opts()).await;
-    let guest = raw_peer(sw.port, "Guest", "?g=guest").await;
+    let guest = stalled_peer(&sw, "Guest", Some("guest"), 8 << 10);
     // stops reading, still sends: text pings every 200 ms
-    let (_gr, mut gw) = guest.into_split();
+    let (_gr, mut gw) = tokio::io::split(guest);
     let keep = tokio::spawn(async move {
         loop {
             sleep(200).await;
@@ -278,6 +278,9 @@ async fn a_broadcast_costs_its_size_for_every_player_it_reaches() {
         site_byte_rate: RATE as f64,
         site_frame_rate: 100000.0,
         max_peers: 16,
+        // the senders' budgets decide what gets through, not a receiver's queue: a whole burst at once is more than
+        // the 64 KB a Linux socket's writer may leave queued
+        roam_queue: 1 << 20,
         ..opts()
     })
     .await;
@@ -462,14 +465,14 @@ async fn with_a_store_an_address_nobody_came_back_for_is_gone_for_the_hosts() {
     sw.close().await;
 }
 
-// addresses: 8000 on 10.77.0.0/19, handed out round all thirty-two of its /24s; never .0, .1 or .252 and up; full past them
+// addresses: 12000 on 10.77.0.0/18, handed out round the forty-eight of its /24s; never .0, .1 or .252 and up; full past them
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn addresses_8000_round_the_thirty_two_24s_full_past_them() {
+async fn addresses_12000_round_the_forty_eight_24s_full_past_them() {
     let _s = serial().await;
-    let lan = LanSwitch::new(LanOptions { max_peers: 8000, ..LanOptions::default() }, "", None, None, None, None);
+    let lan = LanSwitch::new(LanOptions { max_peers: 12000, ..LanOptions::default() }, "", None, None, None, None);
     let mut got = Vec::new();
     let now = nfsu2_util::now_ms();
-    for i in 0..8000 {
+    for i in 0..12000 {
         let v = lan.allocate();
         assert!(v != 0, "address {i}");
         got.push(v);
@@ -479,9 +482,10 @@ async fn addresses_8000_round_the_thirty_two_24s_full_past_them() {
     let mut want: Vec<String> = (0..16).map(|b| format!("10.77.{b}.2")).collect();
     want.extend(["10.77.16.2".to_string(), "10.77.17.2".to_string()]);
     assert_eq!(first, want);
-    assert_eq!(ip_str(got[32]), "10.77.0.3");
-    assert_eq!(ip_str(got[7999]), "10.77.31.251");
-    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 8000, "all distinct");
+    assert_eq!(ip_str(got[47]), "10.77.47.2");
+    assert_eq!(ip_str(got[48]), "10.77.0.3");
+    assert_eq!(ip_str(got[11999]), "10.77.47.251");
+    assert_eq!(got.iter().collect::<HashSet<_>>().len(), 12000, "all distinct");
     let mut sorted = got.clone();
     sorted.sort();
     let mut all = all_vips();
@@ -598,6 +602,9 @@ async fn breakdown_online_lan_screens_free_roam_leaving_or_starting() {
     let mut b = sw.lan.breakdown().await;
     assert!(b.mix.iter().all(|&n| n == 0));
     b.mix.clear();
+    // (nor what they sent and the messages: their hellos, the welcomes)
+    assert!(b.msgs.iter().any(|&n| n > 0) && b.mix_in.iter().any(|&n| n > 0));
+    (b.mix_in, b.msgs) = (Vec::new(), Vec::new());
     assert_eq!(b, Breakdown { players: 5, online: 1, lan: 1, roam: 2, other: 1, ..Breakdown::default() });
     // (the Online host is on the peer list, as { vip, name, server: true }; the hub is on none)
     let list = all[1].got().ctl.iter().rev().find(|m| m["t"] == "peers").cloned().unwrap();
@@ -835,8 +842,18 @@ impl Laggy {
             }
         });
         let q = due.clone();
+        // a page in free roam: its HELLO to the hub every second (the switch times only free roam's players by every
+        // probe)
+        let hello = frame(0x2, &frame_of(0x0A4D_00FD, &roam_datagram(1, 40), 1, 47210, 47210));
         let writer = tokio::spawn(async move {
+            let mut hello_at = Instant::now();
             loop {
+                if hello_at <= Instant::now() {
+                    hello_at = Instant::now() + Duration::from_secs(1);
+                    if w.write_all(&hello).await.is_err() {
+                        return;
+                    }
+                }
                 let ready: Vec<Vec<u8>> = {
                     let mut q = q.lock().unwrap();
                     let mut v = Vec::new();
@@ -939,6 +956,46 @@ async fn a_player_behind_gets_a_share_of_the_snapshots_and_all_again_once_it_kee
     assert_eq!(sw.info().await["thinned"].as_u64().unwrap(), thinned);
     s.close().await;
     drop(laggy);
+    sw.close().await;
+}
+
+// the probe times free roam's drivers every time and the others every 10th: only free roam's car states follow the
+// round trips (and a player in free roam who is not driving gets one in 16), and each ping and its pong were two
+// messages through cloudflared for every page (lib.rs `probe`)
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_probe_times_free_roams_drivers_every_time_the_others_every_tenth() {
+    let _s = serial().await;
+    let sw = start(LanOptions { probe_ms: 0, keepalive_ms: 3_600_000, ..unlimited() }).await;
+    let mut roamer = Client::connect(sw.port, "Roamer").await;
+    roamer.welcome().await;
+    let mut menus = Client::connect(sw.port, "Menus").await;
+    menus.welcome().await;
+    let mut racer = Client::connect(sw.port, "Racer").await;
+    racer.welcome().await;
+    // the roamer's HELLO to the hub, as its page sends one every second in free roam (its status byte, 122, is none of
+    // the not-driving ones); the racer's says it is in a race (RC_ST 3), its CRC made again
+    roamer.udp(0x0A4D_00FD, 47210, 47210, &roam_datagram(1, 40), 1, 0);
+    let mut d = roam_datagram(1, 40);
+    d[19] = 3;
+    let n = d.len() - 4;
+    let crc = crc32fast::hash(&d[..n]);
+    d[n..].copy_from_slice(&crc.to_le_bytes());
+    racer.udp(0x0A4D_00FD, 47210, 47210, &d, 1, 0);
+    for c in [&mut roamer, &mut racer] {
+        c.ping(vec![1]);
+        c.until_true(|g| g.pongs.len() >= 1).await;
+    }
+    let (r0, m0, c0) = (roamer.got().pings, menus.got().pings, racer.got().pings);
+    for _ in 0..20 {
+        sw.lan.probe();
+    }
+    roamer.until_true(|g| g.pings >= r0 + 20).await;
+    sleep(200).await;
+    let (r, m, c) = (roamer.got().pings - r0, menus.got().pings - m0, racer.got().pings - c0);
+    assert_eq!((r, m, c), (20, 2, 2), "20 probes: the driver timed by each, the pages in the menus and in a race by every 10th");
+    roamer.close().await;
+    menus.close().await;
+    racer.close().await;
     sw.close().await;
 }
 

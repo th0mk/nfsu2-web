@@ -6,9 +6,9 @@
   "Start an event, take an outrun": "เริ่มอีเวนต์ รับคำท้าเอาท์รัน",
   "Map, messages": "แผนที่ ข้อความ",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "โค้ดของเกมเวอร์ชัน PC เอง ที่คอมไพล์ใหม่สำหรับ Chrome และ Firefox: สูงสุด 120 fps แบบจอกว้าง ขับอิสระและแข่งออนไลน์กับเพื่อน รวมถึงคอนโทรลเลอร์ พวงมาลัย และปุ่มสัมผัส",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "เมื่อราว 20 ปีก่อน เคยเล่นเกมนี้ด้วยกันกับพี่น้อง ลองพอร์ตมาเล่นบนเบราว์เซอร์แล้วปรากฏว่าทำงานได้ดีเกินคาด แล้วเรื่องก็บานปลายไปหน่อย ดีใจมากที่เห็นคนมาเล่นกันเยอะขนาดนี้",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "เมื่อราว 20 ปีก่อน เคยเล่นเกมนี้ด้วยกันกับพี่น้อง ด้วยเหตุนี้จึงลองพอร์ตมาเล่นบนเบราว์เซอร์ เพื่อจะได้กลับมาเล่นด้วยกันอีกครั้ง ปรากฏว่าทำงานได้ดีเกินคาด แล้วเรื่องก็บานปลายไปหน่อย ดีใจมากที่เห็นคนมาเล่นกันเยอะขนาดนี้",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "ผู้ถือลิขสิทธิ์: <0>legal@nfsu2.xyz</0> อีเมลขอความช่วยเหลือจะไม่ได้รับการตอบกลับ ให้ถามใน<1>Discord ของเรา</1>",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "ซอร์สโค้ดอยู่บน <0>GitHub</0> สร้างขึ้นจาก <1>NFSU2Recomp</1> ของ Talha Müderrisoğlu ตัวรีคอมไพล์แบบสแตติก x86 → C ต้นฉบับสำหรับ NFSU2 ตามแนวทางของ <2>N64: Recompiled</2> และ <3>XenonRecomp</3>",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "ซอร์สโค้ดอยู่บน <0>GitHub</0> สร้างขึ้นจาก <1>NFSU2Recomp</1> ของ Talha Müderrisoğlu ตัวรีคอมไพล์แบบสแตติก x86 → C ต้นฉบับสำหรับ NFSU2 ตามแนวทางของ <2>N64: Recompiled</2> และ <3>XenonRecomp</3> โปรเจกต์นี้ฟอร์กมาจาก <4>NFSU2Recomp เวอร์ชันสัญญาอนุญาต MIT เมื่อวันที่ 16 ตุลาคม 2026</4> และใช้เฉพาะโค้ดจากเวอร์ชันนั้น",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "แพ็กเทกซ์เจอร์: <0>Upscaled HUD</0> ของ LunicAura106",
   "Translations": "การแปล",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "เสียงพากย์และวิดีโอที่พากย์แล้ว รวมถึงข้อความภาษาจีนตัวเต็ม ญี่ปุ่น รัสเซีย และไทย: <0>Multi 13 languages mod</0> ของ KyoriAsh (พร้อมการรองรับภาษาไทยของ Lee-Ryo)",
@@ -23,5 +23,6 @@
   "Shift down": "เกียร์ลง",
   "Quick chat (with other players): group, then phrase": "แชตด่วน (เมื่อเล่นกับผู้เล่นคนอื่น): กลุ่ม แล้ววลี",
   "Photo mode; F12 again takes the photo": "โหมดถ่ายภาพ กด F12 อีกครั้งเพื่อถ่ายภาพ",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเว็บเซิร์ฟเวอร์ NFSU2"
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "หน้านี้ไม่ได้แยกส่วนแบบ cross-origin (ไม่มี SharedArrayBuffer) ให้เปิดจากเว็บเซิร์ฟเวอร์ NFSU2",
+  "Message a friend (in free roam)": "ส่งข้อความถึงเพื่อน (ในการขับอิสระ)"
 }

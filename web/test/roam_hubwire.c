@@ -7,14 +7,18 @@
  *                                 ("ask <hex>": its MAPREQ) and takes these datagrams from the hub (each "ask"
  *                                 among them: it asks again, a second on); then "map <gen> <total> <n>
  *                                 id:x,y,h,vx,vy ..." (what it holds)
+ *   roam_hubwire near <hex>...    the same for the minimap (its NEARREQ for 64 within 300 m, the hub's NEARDs);
+ *                                 then "near <gen> <total> <n> id:x,y,h,vx,vy ..."
  *   roam_hubwire lobby            a race lobby's advert to the hub (to 0), as roam_core encodes it, in hex
  *   roam_hubwire lobbies <hex>... a session that takes race lobbies asks for the world map as above and takes
  *                                 these datagrams; then "lobbies <gen> <n> x,y,race,n,max,state ..."
  *   roam_hubwire racerep          a race's report to the hub, as roam_core encodes it, in hex
- *   roam_hubwire hellocrew        a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
+ *   roam_hubwire hellocrew [n]    a session's HELLO to the hub, in hex: its crews "Blue Room" and "Night Owls"
  *                                 (rc_room_hash) after the ids of the two players the hub listed, who said hello
+ *                                 (with n: then the n links it wants, rc_config.links)
  *   roam_hubwire hubcrew <hex>    a session in those two crews takes this list from the hub; then each player
- *                                 listed as "a.b.c.d:port:crew" (rc_peer_crew: 0 or 1, -1 for none) */
+ *                                 listed as "a.b.c.d:port:crew" (rc_peer_crew: 0 or 1, -1 for none), "f" after
+ *                                 it for a friend (rc_peer_friend) */
 #include "roam_core.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +30,7 @@ static void unhex(const char *h, uint8_t *b, int *n){
 }
 static void sent(void *user, uint32_t ip, uint16_t port, const uint8_t *buf, int len){
     (void)user;
-    if (ip != 0x0A4D00FDu || port != 47210 || len < 6 || buf[5] != RC_MSG_MAPREQ) return;
+    if (ip != 0x0A4D00FDu || port != 47210 || len < 6 || (buf[5] != RC_MSG_MAPREQ && buf[5] != RC_MSG_NEARREQ)) return;
     printf("ask ");
     for (int i = 0; i < len; i++) printf("%02x", buf[i]);
     printf("\n");
@@ -53,6 +57,7 @@ int main(int argc, char **argv){
         c.self_id = 0x1234ABCDu; c.port = 47210; c.max_players = RC_MAX_PLAYERS; c.rate_hz = 20; strcpy(c.name, "Ann K.");
         c.hub_ip = 0x0A4D00FDu; c.hub_port = 47210;
         c.crews[0] = rc_room_hash("Blue Room"); c.crews[1] = rc_room_hash("Night Owls"); c.n_crews = 2;
+        c.links = argc > 2 ? atoi(argv[2]) : 0;
         rc_io io; memset(&io, 0, sizeof io); io.send = sent_hello;
         rc_session_init(&S, &c, &io);
         int64_t t = 1000000;
@@ -93,11 +98,35 @@ int main(int argc, char **argv){
         rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000);
         printf("ok");
         for (int k = 0; k < m.u.peers.n; k++){
-            uint32_t ip = m.u.peers.e[k].ip; int crew = -2;
+            uint32_t ip = m.u.peers.e[k].ip; int crew = -2, friend = 0;
             for (int i = 0; i < RC_TABLE; i++)
-                if (S.peer[i].state != RC_PS_FREE && S.peer[i].ip == ip && S.peer[i].port == m.u.peers.e[k].port) crew = rc_peer_crew(&S, i);
-            printf(" %u.%u.%u.%u:%u:%d", ip >> 24, (ip >> 16) & 255u, (ip >> 8) & 255u, ip & 255u, m.u.peers.e[k].port, crew);
+                if (S.peer[i].state != RC_PS_FREE && S.peer[i].ip == ip && S.peer[i].port == m.u.peers.e[k].port){
+                    crew = rc_peer_crew(&S, i); friend = rc_peer_friend(&S, i);
+                }
+            printf(" %u.%u.%u.%u:%u:%d%s", ip >> 24, (ip >> 16) & 255u, (ip >> 8) & 255u, ip & 255u, m.u.peers.e[k].port, crew, friend ? "f" : "");
         }
+        printf("\n");
+        return 0;
+    }
+    if (!strcmp(argv[1], "near")){
+        rc_config c; memset(&c, 0, sizeof c);
+        c.self_id = 0x1234ABCDu; c.port = 47210; c.max_players = RC_MAX_PLAYERS; c.rate_hz = 20;
+        c.hub_ip = 0x0A4D00FDu; c.hub_port = 47210;
+        rc_io io; memset(&io, 0, sizeof io); io.send = sent;
+        rc_session_init(&S, &c, &io);
+        int64_t t = 1000000;
+        rc_tick(&S, t);
+        m.h.type = RC_MSG_PEERS; m.h.sender = 0xB0Bu;                 /* the hub answers: an empty list */
+        n = rc_encode(&m, b, sizeof b);
+        rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000);
+        if (!rc_ask_near(&S, t += 1000, 64, 300)){ printf("not asked\n"); return 0; }
+        for (int i = 2; i < argc; i++){
+            if (!strcmp(argv[i], "ask")){ if (!rc_ask_near(&S, t += 250000, 64, 300)){ printf("not asked\n"); return 0; } continue; }
+            unhex(argv[i], b, &n); rc_receive(&S, 0x0A4D00FDu, 47210, b, n, t += 1000);
+        }
+        printf("near %u %u %d", S.near_gen, S.near_total, S.near_n);
+        for (int i = 0; i < S.near_n; i++)
+            printf(" %u:%d,%d,%u,%d,%d", S.near_e[i].id, S.near_e[i].x, S.near_e[i].y, S.near_e[i].heading, S.near_e[i].vx, S.near_e[i].vy);
         printf("\n");
         return 0;
     }

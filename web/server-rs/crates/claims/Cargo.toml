@@ -1,6 +1,6 @@
 [package]
 name = "nfsu2-claims"
-description = "Claimed names: who may play under a name, by the keyphrase that claimed it (its cloud saves), for 180 days after it last played"
+description = "Claimed names: who may play under a name, by the keyphrase that claimed it (its cloud saves), as long as the keyphrase: two years after it last played or used it"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -15,6 +15,10 @@ pub(crate) const MSG_BYE: u8 = 8;
 pub(crate) const MSG_MAPREQ: u8 = 10;
 /// the world map's answer to a MAPREQ that names the answer it holds (roam_core.h RC_MSG_MAPD): what changed since
 pub(crate) const MSG_MAPD: u8 = 17;
+/// the minimap's question (roam_core.h RC_MSG_NEARREQ: a MAPREQ's fields and a radius) and its answer, one datagram laid
+/// out as a MAPD (RC_MSG_NEARD)
+pub(crate) const MSG_NEARREQ: u8 = 18;
+pub(crate) const MSG_NEARD: u8 = 19;
 pub(crate) const MSG_LOBBY: u8 = 12;
 pub(crate) const MSG_LOBBIES: u8 = 13;
 /// a player's report of a multiplayer race (roam_core.h RC_MSG_RACEREP): only to the hub, which logs it
@@ -36,14 +40,22 @@ pub(crate) const HF_LOBBY: u16 = 0x0080;
 /// ids it hears: a count (at most CREWS), then that many hashes (u32 LE, rc_room_hash of each crew's word, never 0);
 /// whatever comes after them is skipped (room for what a newer core adds)
 pub(crate) const HF_CREW: u16 = 0x0200;
+/// HELLO's flag: this player reads the hub's crew marks (roam_core.h RC_HF_HUBCREW; `write_peers`)
+pub(crate) const HF_HUBCREW: u16 = 0x0400;
+/// in a list's crew marks, past the crews' bits: that player is a friend (roam_core.h RC_MARK_FRIEND; `write_peers`)
+pub(crate) const MARK_FRIEND: u8 = 0x80;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX: the start page's four words)
 pub(crate) const CREWS: usize = 4;
 /// HELLO's flag: the player's game follows its crews (roam_core.h RC_HF_GAME): HF_CREW's count byte (0 with none) and
-/// crews, then one byte, the game (RC_GAME_*: 1 Most Wanted).  A HELLO without it is Underground 2's (0), as every
-/// HELLO before the flag; one with it but no game after its crews is no HELLO
+/// crews, the links' byte (0: not said), then one byte, the game (RC_GAME_*: 1 Most Wanted).  A HELLO without it is
+/// Underground 2's (0), as every HELLO before the flag; one with it but no game after its links is no HELLO
 pub(crate) const HF_GAME: u16 = 0x0800;
 /// the most ids a HELLO names (roam_core.h RC_MAX_PEERS: its decoder takes no more)
-const SEEN_MAX: usize = 32;
+const SEEN_MAX: usize = 48;
+/// the most links a player has (roam_core.h RC_MAX_PEERS, core version 10: its HELLO says how many it wants, at most
+/// this); a core before version 10 reads lists of 32 at most (RC_PEERS_V9) and says nothing
+pub(crate) const LINKS_MAX: usize = 48;
+pub(crate) const LINKS_V9: usize = 32;
 /// a LOBBY's ops (roam_core.h RC_LOBBY_*) the hub keeps: the host's advert and its end, and a player's ask to join
 pub(crate) const LOBBY_ADVERT: u8 = 1;
 /// a player's ask to join (to its host, and a copy to the hub: the hub links the two first)
@@ -76,11 +88,15 @@ pub(crate) enum Msg<'a> {
         name: &'a [u8],
         /// its flags say it takes race lobbies (HF_LOBBY)
         lobbies: bool,
+        /// ...and reads the hub's crew marks (HF_HUBCREW)
+        marks: bool,
         /// its crews as it sent them (HF_CREW), 0 after them: none for a HELLO without the flag, or with the flag
         /// and nothing after its ids
         crews: [u32; CREWS],
         /// its game (HF_GAME), 0 (Underground 2) without the flag
         game: u8,
+        /// the links it wants (core version 10: the byte after its crews), 0 not said
+        links: u8,
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
     /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); t_us: its time on
@@ -100,6 +116,13 @@ pub(crate) enum Msg<'a> {
         req: u16,
         max: u16,
         base: u16,
+    },
+    /// the minimap's question (roam_core.h RC_MSG_NEARREQ): a MAPREQ's fields, and how far from the asker at most (m)
+    NearReq {
+        req: u16,
+        max: u16,
+        base: u16,
+        radius: u16,
     },
     /// a race lobby (roam_core.h RC_MSG_LOBBY), checked as roam_core.c's lobby_ok: what the hub keeps of one sent to
     /// it (to 0)
@@ -139,6 +162,8 @@ pub(crate) struct RaceRep<'a> {
     pub host: bool,
     /// left with its pause menu's Quit
     pub quit: bool,
+    /// raced in a car whose game data is edited (its type's record in GLOBAL\GlobalB not the game's: RC_RR_EDITED)
+    pub edited: bool,
     pub car_type: u8,
     /// 0 fastest .. 3; -1 not rated
     pub class: i8,
@@ -167,7 +192,7 @@ fn racerep(d: &[u8], o: usize) -> Option<RaceRep<'_>> {
         || !(1..=LOBBY_PLAYERS as u8).contains(&players)
         || place > players
         || !(-1..=3).contains(&class)
-        || flags & !3 != 0
+        || flags & !7 != 0
     {
         return None;
     }
@@ -190,6 +215,7 @@ fn racerep(d: &[u8], o: usize) -> Option<RaceRep<'_>> {
         players,
         host: flags & 1 != 0,
         quit: flags & 2 != 0,
+        edited: flags & 4 != 0,
         car_type: d[o + 15],
         class,
         rating: nums[0],
@@ -315,6 +341,7 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             let flags = u16_le(d, 14);
             let mut crews = [0u32; CREWS];
             let mut game = 0u8;
+            let mut links = 0u8;
             // the crews after the ids it hears (n_seen, then n_seen ids), only with the flag: without it the bytes
             // after the name's are not read, as before the flag (a page of before sends what it likes there)
             if flags & HF_CREW != 0 {
@@ -334,13 +361,17 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
                     if crews[..n].contains(&0) {
                         return None;
                     }
-                    // the game after the crews (what a newer core adds after it is skipped)
+                    // (as roam_core.c's decoder: a byte after them is the links it wants; with HF_GAME the game follows
+                    // it; past that a newer core's)
+                    let l = at + 1 + 4 * n;
+                    if l < end {
+                        links = d[l];
+                    }
                     if flags & HF_GAME != 0 {
-                        let g = at + 1 + 4 * n;
-                        if g >= end {
+                        if l + 1 >= end {
                             return None;
                         }
-                        game = d[g];
+                        game = d[l + 1];
                     }
                 } else if flags & HF_GAME != 0 {
                     return None;
@@ -348,7 +379,8 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             } else if flags & HF_GAME != 0 {
                 return None;
             }
-            Msg::Hello { sender, core, status, room, name, lobbies: flags & HF_LOBBY != 0, crews, game }
+            let (lobbies, marks) = (flags & HF_LOBBY != 0, flags & HF_HUBCREW != 0);
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, game }
         }
         MSG_SNAP => {
             if end < 22 + 52 {
@@ -366,6 +398,9 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50), t_us: u32_le(d, 22), clock: d[21] }
         }
         MSG_MAPREQ if end == HDR + 6 => Msg::MapReq { req: u16_le(d, 16), max: u16_le(d, 18), base: u16_le(d, 20) },
+        MSG_NEARREQ if end == HDR + 8 => {
+            Msg::NearReq { req: u16_le(d, 16), max: u16_le(d, 18), base: u16_le(d, 20), radius: u16_le(d, 22) }
+        }
         MSG_LOBBY => {
             // op arg state max, to, lobby, race, x y, t, n, a reserved byte, then n ids (roam_core.c rc_encode)
             if end < HDR + 24 {
@@ -409,7 +444,9 @@ pub fn decode_roam(d: &[u8]) -> Option<RoamMsg> {
         },
         Msg::Snap { sender, status, p, .. } => RoamMsg::Snap { sender, status, p },
         Msg::Bye => RoamMsg::Bye { sender },
-        Msg::MapReq { .. } | Msg::Lobby { .. } | Msg::RaceRep(_) | Msg::RaceRes(_) | Msg::Other => RoamMsg::Other { kind, sender },
+        Msg::MapReq { .. } | Msg::NearReq { .. } | Msg::Lobby { .. } | Msg::RaceRep(_) | Msg::RaceRes(_) | Msg::Other => {
+            RoamMsg::Other { kind, sender }
+        }
     })
 }
 
@@ -423,28 +460,22 @@ pub(crate) fn peers_crew_len(n: usize, k: usize) -> usize {
     peers_len(n) + 1 + 4 * k + n
 }
 
-/// Writes a PEERS datagram into `b` (exactly `peers_len(n)` bytes long, or `peers_crew_len(n, mine.len())` with crews):
-/// list = [{ vip, port, id }] (at most 32: roam_core's RC_MAX_PEERS).  With `mine` (the
-/// receiver's crews, at most CREWS, none 0) the list ends in its crew marks (HF_CREW on it): `mine`, then a byte per
-/// entry, `marks[i]` bit c: entry i is in crew `mine[c]` too.  So a player learns which of its peers are in its crews
-/// without anyone's crews but its own going out.
-pub(crate) fn write_peers(
-    b: &mut [u8],
-    sender: u32,
-    seq: u16,
-    list: impl ExactSizeIterator<Item = PeerEntry>,
-    mine: &[u32],
-    marks: &[u8],
-) {
+/// Writes a PEERS datagram into `b` (exactly `peers_len(n)` bytes long, or `peers_crew_len(n, mine.len())` with marks):
+/// list = [{ vip, port, id }] (at most the receiver's degree: 48, LINKS_MAX).  With marks (`b` the longer, `marks` n bytes) the
+/// list ends in the receiver's crew marks (HF_CREW on it): `mine` (its crews, at most CREWS, none 0; maybe none), then
+/// a byte per entry, `marks[i]` bit c: entry i is in crew `mine[c]` too; MARK_FRIEND: entry i is its friend.  So a
+/// player learns which of its peers are in its crews, and its friends, without anyone's crews but its own going out.
+pub(crate) fn write_peers(b: &mut [u8], sender: u32, seq: u16, list: impl ExactSizeIterator<Item = PeerEntry>, mine: &[u32], marks: &[u8]) {
     let len = b.len();
     let n = list.len();
+    let with = len > peers_len(n);
     b[..4].copy_from_slice(b"N2FR");
     b[4] = 1;
     b[5] = MSG_PEERS;
     b[6..8].copy_from_slice(&(len as u16).to_le_bytes());
     b[8..12].copy_from_slice(&sender.to_le_bytes());
     b[12..14].copy_from_slice(&seq.to_le_bytes());
-    b[14..16].copy_from_slice(&if mine.is_empty() { 0 } else { HF_CREW }.to_le_bytes());
+    b[14..16].copy_from_slice(&if with { HF_CREW } else { 0 }.to_le_bytes());
     // the count's low byte: one byte holds every count roam_core reads (RC_MAX_PEERS at most, as above)
     b[16] = n as u8;
     for (i, e) in list.enumerate() {
@@ -453,7 +484,7 @@ pub(crate) fn write_peers(
         b[o + 4..o + 6].copy_from_slice(&e.port.to_le_bytes());
         b[o + 6..o + 10].copy_from_slice(&e.id.to_le_bytes());
     }
-    if !mine.is_empty() {
+    if with {
         let mut o = 17 + 10 * n;
         b[o] = mine.len() as u8;
         o += 1;
@@ -472,9 +503,10 @@ pub fn encode_peers(sender: u32, seq: u16, list: &[PeerEntry]) -> Vec<u8> {
     encode_peers_crews(sender, seq, list, &[], &[])
 }
 
-/// A PEERS datagram with crew marks (`write_peers`; none with `mine` empty)
+/// A PEERS datagram with crew marks (`write_peers`; none with `mine` and `marks` empty)
 pub fn encode_peers_crews(sender: u32, seq: u16, list: &[PeerEntry], mine: &[u32], marks: &[u8]) -> Vec<u8> {
-    let mut b = vec![0u8; if mine.is_empty() { peers_len(list.len()) } else { peers_crew_len(list.len(), mine.len()) }];
+    let with = !mine.is_empty() || !marks.is_empty();
+    let mut b = vec![0u8; if with { peers_crew_len(list.len(), mine.len()) } else { peers_len(list.len()) }];
     write_peers(&mut b, sender, seq, list.iter().copied(), mine, marks);
     b
 }
@@ -515,15 +547,27 @@ pub(crate) fn mapd_len(bytes: usize) -> usize {
     HDR + 9 + bytes + CRC
 }
 
-/// One MAPD datagram, part `part` of `nparts` of the answer to question `req` (roam_core.h RC_MSG_MAPD) into `b`
-/// (exactly `mapd_len(e.len())` bytes long): what changed since the answer `base` (0: from nothing), `total` players
-/// past the asker and its peers, n entries in `e`.
+/// One MAPD datagram (or, `kind` MSG_NEARD, the minimap's NEARD laid out the same), part `part` of `nparts` of the
+/// answer to question `req` (roam_core.h RC_MSG_MAPD) into `b` (exactly `mapd_len(e.len())` bytes long): what changed
+/// since the answer `base` (0: from nothing), `total` players past the asker and its peers, n entries in `e`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn write_mapd(b: &mut [u8], sender: u32, seq: u16, req: u16, base: u16, part: u8, nparts: u8, total: u16, n: u8, e: &[u8]) {
+pub(crate) fn write_mapd(
+    b: &mut [u8],
+    kind: u8,
+    sender: u32,
+    seq: u16,
+    req: u16,
+    base: u16,
+    part: u8,
+    nparts: u8,
+    total: u16,
+    n: u8,
+    e: &[u8],
+) {
     let len = b.len();
     b[..4].copy_from_slice(b"N2FR");
     b[4] = 1;
-    b[5] = MSG_MAPD;
+    b[5] = kind;
     b[6..8].copy_from_slice(&(len as u16).to_le_bytes());
     b[8..12].copy_from_slice(&sender.to_le_bytes());
     b[12..14].copy_from_slice(&seq.to_le_bytes());

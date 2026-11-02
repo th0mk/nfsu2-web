@@ -99,7 +99,8 @@ only the page or the server, the image's commit is what is live. `NFSU2_DIR` nam
 
 **The changelog:** the start page's Changelog button lists `CHANGELOG.md`, which is part of the image. Before a
 release, add its section at the top: the commits after the newest section's commit, up to the release's, as one line
-per change written for players (the file's head says how). Commit it, wait for its image, and release with that commit
+per change written for players (the file's head says how). One section a day: a second release that day adds its
+lines to the day's section and moves its commit on. Commit it, wait for its image, and release with that commit
 (`release.sh root@<vps> <folder> <changelog commit>`: it changed only the page). `release.sh` notes when the image's
 `CHANGELOG.md` ends before the module's commit.
 
@@ -182,10 +183,11 @@ sees a keyphrase, a key or a save, and its files name no player.
 ## Claimed names
 
 With keyphrase saves on, a player's keyphrase can claim their name (PLAYING.md, Online: "Your name is yours"): while
-the claim holds (180 days after they last played under it) nobody else plays under it in the Online menu or free
-roam, and EA Messenger keeps its lists for it. The server keeps `names.json` in the state folder: each name, a code
-made from its keyphrase's token (never the keyphrase), when it was claimed and last played. Written whole within a
-minute of a change. A keyphrase deleted from the cloud frees its name.
+the claim holds (as long as the keyphrase: two years after they last played under it or used the keyphrase) nobody
+else plays under it in the Online menu or free roam, and EA Messenger keeps its lists for it. The server keeps
+`names.json` in the state folder: each name, a code made from its keyphrase's token (never the keyphrase), when it was
+claimed and last played or used. Written whole within a minute of a change. A keyphrase deleted from the cloud frees
+its name.
 
 - **Cloudflare Turnstile** (a check that a person, not a script, claims a name): create a widget in the Cloudflare
   dashboard (Turnstile, Add widget: the site's hostname, mode Managed), then put its two keys in `.env`:
@@ -199,10 +201,11 @@ minute of a change. A keyphrase deleted from the cloud frees its name.
 
 ## Sizing
 
-For up to 8000 players at once (the image's limit; the Node server's was 2000, [From the Node
-server](#from-the-node-server)): 8 vCPU for 2000 and 16 for 4000 to 6000 (4000 in free roam took the Rust server 6-8 cores of a Ryzen 9 5900X,
-and a Cloudflare Tunnel's cloudflared pays for each message again, `web/server-rs/README.md`), 8 GB of memory (the
-compose file's limit), 40 GB of disk and a 1 Gbit/s port with a few TB of traffic a month.
+For up to 12000 players at once (the image's limit; the Node server's was 2000, [From the Node
+server](#from-the-node-server)): 8 vCPU for 2000, 16 for 4000 to 8000 and some 24 for 12000 (4000 in free roam took the Rust server 6-8 cores of a Ryzen 9 5900X,
+and a Cloudflare Tunnel's cloudflared pays for each message again, `web/server-rs/README.md`; at 6,758 players the game used 1.70
+cores a thousand, nfsu2.xyz 2026-10-31), 8 GB of memory (the compose file's limit), 40 GB of disk and a 1 Gbit/s port with a few
+TB of traffic a month, more past about 8000 (the port sent 757 Mbit/s at 6,758).
 
 - Measured on a live server behind a Cloudflare Tunnel (16 vCPU, 2026-10-21): 1209 players, 165 of them in the
   game's Online mode and most of the rest in free roam, took the server 0.7 of a core over its 8 workers and 340 MB,
@@ -344,15 +347,16 @@ NFSU2_IMAGE=ghcr.io/th0mk/nfsu2-web-rs:sha-<commit>
   commit, then `docker compose up -d`. The state volume serves either.
 - `UV_THREADPOOL_SIZE` means nothing to the Rust server; `NFSU2_THREADS` sets its worker threads (by default half
   the cores, 2 to 8). Its console has the Node server's lines.
-- **8000 players** where the Node server took 2000 (`--max-peers` 1 to 8000, the image's `NFSU2_MAX_PEERS=8000`: at 6,758 players the game
-  used 1.70 cores a thousand and the port sent 757 Mbit/s, nfsu2.xyz 2026-10-31, so 8000 at that rate would fill about 91 % of the
-  slice's 15 and ~900 Mbit/s; LAN adverts only to the pages with a socket on their port and the hub's lists in bundles came
-  with the raise, for a quarter of the bytes to the pages and some of the messages): the
-  virtual network is 10.77.0.0/19, all of it (addresses in 10.77.0-31.x), and the game module's peer bits cover a /21, so for a player on 10.77.8-31.x the
+- **12000 players** where the Node server took 2000 (`--max-peers` 1 to 12000, the image's `NFSU2_MAX_PEERS=12000`: at 6,758 players the game
+  used 1.70 cores a thousand and the port sent 757 Mbit/s, nfsu2.xyz 2026-10-31, so past about 8000 a 16 vCPU VPS with a 1 Gbit/s
+  port is full, [Sizing](#sizing)): the virtual network is 10.77.0.0/18 (addresses in 10.77.0-47.x, the welcome's mask
+  255.255.192.0), and the game module's peer bits cover a /21, so for a player on 10.77.8-47.x the
   game asks that host itself (a LAN race's connect to one who has just gone ends after the same 3 s as "timed out"
-  instead of "unreachable"; nothing else differs, and pages and modules of before need no change). Online mode takes
-  4000 lobby sessions and 1200 games (Node: 1000 and 300), the free-roam hub 8192 players. 8000 players need 65536
-  open files (`ulimits: { nofile: 65536 }` in `compose.yml`), and past about 3000 in free roam more workers than 8
+  instead of "unreachable"; nothing else differs, and pages and modules of before need no change). A game open across
+  the restart from the /19 (8000 players) keeps the /19's mask for LAN and Online races until a reload, so it
+  reaches nobody on 10.77.32-47.x there until then; free roam takes the new mask at once. Online mode takes
+  6000 lobby sessions and 1800 games (Node: 1000 and 300), the free-roam hub 12288 players. 12000 players need 131072
+  open files (`ulimits: { nofile: 131072 }` in `compose.yml`), and past about 3000 in free roam more workers than 8
   (`NFSU2_THREADS=12` in `.env`; `compose.yml` passes it on) keep them at 32 friends each instead of the busy cap's 8.
 
 Tested 2026-10-21 on Docker Desktop (WSL), the images built from the checkout: amd64 and arm64 built; the amd64 one
@@ -390,7 +394,7 @@ players the evening before.
 
 ## Languages
 
-Every player picks the game's language in Settings. The North American game folder has the text of thirteen,
+Every player picks the game's language on the start page (the list at its top, or Game, Language). The North American game folder has the text of thirteen,
 but English voices and movies only, and short early versions of the Chinese, Japanese and Thai text. The rest comes
 from KyoriAsh's "Multi 13 languages" mod ([nfsmods.xyz/mod/5749](https://nfsmods.xyz/mod/5749)), for Brazilian
 Portuguese TraduMix's and MixMods' translation, for Polish PLProjekt's, for Turkish muntazam's, for Hungarian
@@ -437,12 +441,12 @@ A player's browser fetches only their own language's pack: "Preload the game dat
 voices (Russian 94 MB), and the dubbed movies (206 MB in all) stream in place of the English ones (725 MB). Without
 `LANGPACKS` every language but Russian, Portuguese, Polish, Turkish and Hungarian still plays its text, with English
 voices and movies; those five play in English. All but French, German, Italian and Spanish (whose texts leave the lines
-their dubs speak empty) show the movies' subtitles (Settings, Game, Subtitles, on by default), English only with its
+their dubs speak empty) show the movies' subtitles (Game, Subtitles, on by default), English only with its
 pack: the game folder's English lines stop at their first apostrophe ("But if you"). The North American game shows none.
 
 ## Texture packs
 
-Settings, Display, More, Menus and HUD, Upscaled (Original is the default) shows LunicAura106's "Upscaled HUD" (UHUD,
+Game, Display, More, Menus and HUD, Upscaled (Original is the default) shows LunicAura106's "Upscaled HUD" (UHUD,
 [nfsmods.xyz/mod/4319](https://nfsmods.xyz/mod/4319)): the menus, the race HUD, the fonts and the car and brand logos
 redrawn at four times their size. It comes from a texture pack, `TEXPACKS/uhud.pak` in the game folder, which the
 port reads in place of the game's textures on the GPU only (`runtime/web/texrep_web.c`): the game keeps reading its
@@ -632,8 +636,8 @@ forwarding.
     restarts);
   - closes, without an answer, a connection that asks for another name (the bare address, a scanner's made-up
     name), on 80 and on 443; a TLS handshake without your name fails, so the certificate is not shown;
-  - opens at most 63900 connections to the server (one per request in progress; with 8000 players the Rust server
-    takes 64000, 8 per player; the Node image, at most 2000 players, takes 16000);
+  - opens at most 95900 connections to the server (one per request in progress; with 12000 players the Rust server
+    takes 96000, 8 per player; the Node image, at most 2000 players, takes 16000);
   - has its admin API off: nothing reconfigures it while it runs, and a changed `.env` takes `docker compose up -d`.
 - **NFSU2_HOST is one name.** For a second name, or a wildcard, edit the Caddyfile in `compose.yml` and the
   server's `NFSU2_HOST` (a comma list; `*.example.com` for one label under it). A wildcard certificate needs Let's
@@ -710,7 +714,11 @@ After each multiplayer race from free roam, every player's game reports it once 
 laps and cars), the player's nickname, place (or "did not finish", "quit") and the car as the game rated it (its
 type, the game's class and rating, the race's average rating, power, weight, top speed, and the factor its engine
 power had in the race) and its time. For evening out the cars:
-`gzcat logs.gz | grep -F '[race]'`.
+`gzcat logs.gz | grep -F '[race]'`. Once the server judged the race (below), one more `[race]` line has its result as
+the racers' games saw it, every racer in order with its time, and names with its address any racer whose own game sent
+no report (`the result by 3 of 4 racers' games: 1 Bob 1:35.0, 2 Ann 1:41.0, DNF Cid; no report from its own game:
+10.77.3.41 "Bob"`): such a racer has no `[race]` line of its own, and no `[cheat]` line names it unless it won by
+cheating. To find a player's races: `grep -F '[race]' | grep -F ' Bob '`.
 
 Cheats are `[cheat]` lines, each with the player's virtual address and nickname, as [kick and ban](#kick-and-ban)
 take them. The lines are for you to read: nobody is kicked or banned by them. A line about a race (Online mode's, or
@@ -735,15 +743,26 @@ past a ban that still holds). Free roam's lines get none.
   not agree ("its own game: did not finish": a game out of step with the others, more likely than a cheat) or sent
   no report. A car no tuning makes (an
   edited save's: 600 kW, 420 km/h or a rating of 1000 or more; the game's best cars make 450 kW, 380 km/h and 800) is
-  a line of its own, `raced in the race of lobby … in an edited car`, whether it won or not.
+  a line of its own, `raced in the race of lobby … in an edited car`, whether it won or not. A car whose game data is
+  edited ("its game has the car's data edited (GlobalB)": the browser's copy of the game's car data changed, as a guide
+  passed among players does it) but whose numbers any tuning makes is such a line only when it gained by it: its time
+  beat 95 % of the honest cars rated like it (within 60) in the same race, of the last 1,024 the server saw since it
+  started, 10 of them at least. Else its `[race]` line says so ("no gain seen: its 50.90 s beat 48 % of the 282 honest
+  cars rated 505-625 in this race"): an edit may gain nothing, and five of a day's did not. Every edited-car line says
+  what its time beat (against any car's when too few were rated like it: that never decides).
   In Online mode each racer is judged by its own game's figures (`won the online race …`, "by its own game"): a time
   under the shortest its race type takes (the result is not taken either), 350 km/h or more on average, or a way
   under half another racer's own (both by their own games: "each by its own game"; a racer who finished, or was on
   the way when the race ended, 30 s after the first: a game that went on alone long after says nothing), or a top
   speed of 420 km/h or more, finished or not ("an edited car": of 39,000 players' top speed records 5 went over it);
   a race won in under 40 % of the next finisher's time, by the result; and, once the track (race type, track,
-  direction, laps) had 10 clean wins since the start, one won in under 70 % of the third quickest other winner's time
-  there, unless another racer finished close behind (over 70 % of its time). A report that
+  direction, laps) had 10 clean races since the start, one won in under 70 % of the third quickest other racer's time
+  there (any finisher's, not the winners' alone: quick cars' races are often close), unless another racer finished
+  close behind (over 70 % of its time). The time, average and way count only once another racer's game saw the racer
+  finish at the same time (within 1 s), and not when another finisher came within 5 % of it: an honest game's own
+  figures can be wrong (in a day, two drag winners' own times 7 s short of what the other racer's game saw, a circuit
+  winner at "388 km/h" with a top speed of 183 and the second 0.15 s behind, and one whose game counted the first lap
+  of two), while a cheat's own figures are the others' too. A report that
   leaves out a player of the race (one who joined as it started and never raced) is taken and looked at, as any
   other. An Online line names the track and laps and the racer's own top speed;
   the other racers' times are on that race's `[online]` lines (`grep -F '"<race name>"'`). A drift race is won by
@@ -856,7 +875,7 @@ no quotes, but over ssh an apostrophe needs them twice (`"'Don't ram'"`), or log
   its game shows "…" over its car`: `grep` it for one who left, and ban the address within the hour.
 - **Banning again** replaces the earlier ban of the same player: `ban Bob perm` after `ban Bob 1d` leaves one ban,
   for good.
-- **Blocks**: players block others by name (Settings, Online, More online settings, Blocked players): the free-roam
+- **Blocks**: players block others by name (Online, More online settings, Blocked players): the free-roam
   hub links neither way, nor with the host of a race lobby the other is in. The log has a line each time such a page
   connects (again after a dropped connection), `[roam] 10.77.4.17 blocks "Bob", "carl"` (`who 10.77.4.17` names the
   blocker): a name many block is one to look at (`grep blocks` in the log).
@@ -1174,8 +1193,8 @@ paths to the VPS, so pick a VPS location between you.
 - **Keepalive:** the switch pings every connection every 25 s. Proxies and Cloudflare then never cut a quiet player,
   and the switch finds players whose connection died.
 - **Limits:**
-  - 8000 players on the switch with the Rust image (`NFSU2_MAX_PEERS=8000`; the server's own default is 128, and
-    8000 is the most addresses it hands out on its virtual network, 10.77.0.0/19: 250 in each of 10.77.0-31.x), 2000 with
+  - 12000 players on the switch with the Rust image (`NFSU2_MAX_PEERS=12000`; the server's own default is 128, and
+    12000 is the most addresses it hands out on its virtual network, 10.77.0.0/18: 250 in each of 10.77.0-47.x), 2000 with
     the Node image (its network is 10.77.0.0/21);
   - when every place is taken a game waits in line for one, first come first served (nfsu2-lan `queue.rs`): the
     line's first takes the next place that frees up, and while anyone waits a newcomer waits too. The game shows

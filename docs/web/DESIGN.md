@@ -174,7 +174,7 @@ renderer, AudioWorklet sound, keyboard, mouse and pad input, and free roam over 
     about 40 MB on the network); its sections then read from this PC. Only while OPFS keeps the blocks;
     `NFSU2_TRACK_AHEAD=0` turns it off. The data but the movies crosses
     the network in 61 % of its size (1.28 of 2.09 GB, kept; 1.39 GB compressed as it is sent; tracks about a third).
-    "Preload the game data" (Game data on this PC, at the bottom of the start page) fills the cache with all but the
+    "Preload the game data" (Game data on this device, in the start page's Other tab) fills the cache with all but the
     movies ahead of play from its own worker (`predownload-worker.ts`, 4 blocks at once, each at the address the game's
     own reads use, so one copy in Cloudflare's cache serves both). It runs only while no game
     runs in the tab: Play pauses it, and the game's end resumes it.
@@ -402,7 +402,9 @@ struct VOut { @builtin(position) pos: vec4f; @location(0) col0: vec4f; @location
     They build their wasm programs with wasi-sdk from `deps/`, and refuse a server binary older than its sources.
     `npm run test:fast` leaves out the six slow files (about 11 s).
   - `.github/workflows/tests.yml` runs every crate's `cargo test` and the fast unit tests on each push to main and each
-    pull request; it does not hold back the image yet.
+    pull request; it does not hold back the image yet. `tools/hooks/pre-push` (on with `git config core.hooksPath
+    tools/hooks`) runs the same tests a push to main touches, on the pushed commit in `../nsfu2-web-wt/prepush`, and
+    stops the push when one fails.
 - `node web/tools/predownload-test.mjs` checks "Preload the game data" in Chrome against its own server and a
   made-up game folder: byte-exact cache, no movies, zstd where the bytes compress, stop and resume, retries, a refused
   file, Play pausing it, a second tab. `web/test/data-blocks.test.mjs` checks the server's `/data-blocks/` (and its kept blocks),

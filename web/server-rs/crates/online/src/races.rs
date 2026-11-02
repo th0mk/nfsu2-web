@@ -128,6 +128,7 @@ impl Core {
                         reported: p.reported,
                         results: None,
                         own: None,
+                        seen: Vec::new(),
                     }
                 })
                 .collect();

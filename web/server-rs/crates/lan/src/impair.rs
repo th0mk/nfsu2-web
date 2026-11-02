@@ -70,7 +70,7 @@ struct Delayed {
 
 /// a browser's host number on the switch (10.77.0.3 -> 3; lib.rs MASK)
 fn host_of(vip: u32) -> u32 {
-    vip & 0x1fff
+    vip & 0x3fff
 }
 
 /// a number as an unsigned 32-bit integer: its whole part modulo 2^32 (0 for one that is not finite)

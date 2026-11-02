@@ -6,9 +6,9 @@
   "Start an event, take an outrun": "開始賽事、接受超越賽",
   "Map, messages": "地圖、訊息",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "PC 版遊戲本身的程式碼，重新編譯給 Chrome 與 Firefox 使用：寬螢幕最高 120 fps、與朋友自由漫遊和線上比賽，並支援控制器、方向盤與觸控操作。",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "大約 20 年前，我和兄弟一起玩過這款遊戲。我試著把它移植到瀏覽器上，結果出奇地順利，之後事情就有點一發不可收拾了。看到這麼多人在玩，真的很開心。",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "大約 20 年前，我和兄弟一起玩過這款遊戲。因為這樣，我試著把它移植到瀏覽器上，讓我們能再一起玩。結果出奇地順利，之後事情就有點一發不可收拾了。看到這麼多人在玩，真的很開心。",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "權利人：<0>legal@nfsu2.xyz</0>。客服相關的電子郵件不會回覆；請到<1>我們的 Discord</1> 詢問。",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "原始碼在 <0>GitHub</0> 上。以 Talha Müderrisoğlu 的 <1>NFSU2Recomp</1> 為基礎，它是 NFSU2 最初的 x86 → C 靜態重編譯器，沿用 <2>N64: Recompiled</2> 與 <3>XenonRecomp</3> 的方法。",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "原始碼在 <0>GitHub</0> 上。以 Talha Müderrisoğlu 的 <1>NFSU2Recomp</1> 為基礎，它是 NFSU2 最初的 x86 → C 靜態重編譯器，沿用 <2>N64: Recompiled</2> 與 <3>XenonRecomp</3> 的方法。本專案分支自 <4>NFSU2Recomp 於 2026 年 10 月 16 日的 MIT 授權版本</4>，只使用該版本的程式碼。",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "材質包：LunicAura106 的 <0>Upscaled HUD</0>。",
   "Translations": "翻譯",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "配音的語音與影片，以及繁體中文、日文、俄文與泰文的文字：KyoriAsh 的 <0>Multi 13 languages mod</0>（含 Lee-Ryo 的泰文支援）。",
@@ -23,5 +23,6 @@
   "Shift down": "降檔",
   "Quick chat (with other players): group, then phrase": "快速聊天（與其他玩家同玩時）：先選分類，再選短語",
   "Photo mode; F12 again takes the photo": "拍照模式；再按 F12 拍照",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "此頁面未啟用跨來源隔離（沒有 SharedArrayBuffer）。請從 NFSU2 網頁伺服器開啟。"
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "此頁面未啟用跨來源隔離（沒有 SharedArrayBuffer）。請從 NFSU2 網頁伺服器開啟。",
+  "Message a friend (in free roam)": "傳訊息給好友（自由漫遊中）"
 }

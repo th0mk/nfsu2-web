@@ -12,8 +12,6 @@
 import { blockedName } from './names.mjs';
 import { at } from '../base';
 
-/** a claim holds this long after the player last played under it (nfsu2-claims HOLD_DAYS) */
-export const HOLD_DAYS = 180;
 /** the name before a change stays the player's this long (GRACE_DAYS) */
 export const GRACE_DAYS = 14;
 /** the game's names for nobody in particular, which nobody claims (lower case) */

@@ -34,6 +34,9 @@
 //                       another server: name=http://host:port/url (a page A/B against an older build's server)
 //     --run NAME        output directory out/web/bench/NAME (default bench-<date>-<time>)
 //     --timeout S       per-run limit (default 400)
+//     --throttle N      the page's main thread (the WebGPU encoder, rAF, the page's other work) N times slower
+//                       (DevTools CPU throttling; it takes pages only, so the game's workers run at full speed:
+//                       NFSU2_FRAME_BURN_MS adds busy work to each of the game's frames)
 //     --game ID         ug2 (default) or mw: the game's race script and module; Most Wanted has none yet
 //     --help            this text and the game's race
 // Comparing builds' work: an uncapped race is not the same race twice (camera, HUD and AI timers follow real
@@ -78,7 +81,7 @@ if (argv.includes('--help')) usage(import.meta.url, GAME, 'The race', RACE ? [`-
 if (!RACE) nothingFor(GAME, NONE);
 const o = { base: 'http://localhost:8625', fps: 'uncapped,120', runs: 2, headed: false, size: '1800x1098',
   script: RACE.script, env: [], jsFlags: '', chromeArgs: [], profile: '', warmup: 0, cpuprofile: false,
-  profFrom: 0, cpuFrom: 0, interval: 250, run: '', timeout: 400, wasm: 'game=/game.wasm', trace: 0,
+  profFrom: 0, cpuFrom: 0, interval: 250, run: '', timeout: 400, throttle: 0, wasm: 'game=/game.wasm', trace: 0,
   traceCats: 'toplevel,gpu,gpu.dawn,disabled-by-default-gpu.dawn,gpu.service,viz,cc,benchmark,disabled-by-default-gpu.decoder,v8' };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i], v = () => argv[++i];
@@ -87,7 +90,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--env') o.env.push(v()); else if (a === '--js-flags') o.jsFlags = v(); else if (a === '--chrome-arg') o.chromeArgs.push(v());
   else if (a === '--profile') o.profile = path.resolve(v()); else if (a === '--warmup') o.warmup = +v();
   else if (a === '--cpuprofile') o.cpuprofile = true; else if (a === '--prof-from') o.profFrom = +v();
-  else if (a === '--interval') o.interval = +v(); else if (a === '--cpu-from') o.cpuFrom = +v(); else if (a === '--wasm') o.wasm = v(); else if (a === '--run') o.run = v(); else if (a === '--timeout') o.timeout = +v();
+  else if (a === '--interval') o.interval = +v(); else if (a === '--cpu-from') o.cpuFrom = +v(); else if (a === '--wasm') o.wasm = v(); else if (a === '--run') o.run = v(); else if (a === '--timeout') o.timeout = +v(); else if (a === '--throttle') o.throttle = +v();
   else if (a === '--trace') o.trace = +v(); else if (a === '--trace-cats') o.traceCats = v();
   else if (a === '--game') v();                    // gameOf() above
   else { console.error(`unknown option ${a}`); process.exit(2); }
@@ -349,6 +352,7 @@ async function runOnce(fps, label, timed, wasm = variants[0].url) {
   const dir = o.profile || fs.mkdtempSync(path.join(TMP, 'chprof-'));
   const ctx = await chromium.launchPersistentContext(dir, { ...pickBrowser(), headless: !o.headed, args, viewport: null });
   const page = ctx.pages()[0] ?? await ctx.newPage();
+  if (o.throttle > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: o.throttle });
   const browser = { close: async () => { await ctx.close(); if (!o.profile) fs.rmSync(dir, { recursive: true, force: true }); } };
   const lines = [], loads = [];
   let cpu0 = null, cpu1 = null, f0 = 0, f1 = 0, tw0 = 0, tw1 = 0, cpuE = null, twE = 0, mark0 = null, mark1 = null, mt0 = 0, mt1 = 0;

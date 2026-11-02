@@ -1,0 +1,92 @@
+#!/bin/sh
+# Before a push to main: the CI's tests (.github/workflows/tests.yml) that the pushed commits touch, on the pushed commit
+# itself, so main's CI stays green.  They run in a worktree of their own (../nsfu2-web-wt/prepush, kept between pushes
+# for its builds; deps/ is the main checkout's), not in the checkout pushing: its edits and other sessions' do not count.
+#   server tests  every crate's cargo test (about 2.5 min) when web/server-rs, runtime, the page's network code or the
+#                 other files those tests read changed
+#   page tests    the server built, then the fast unit tests and lan-wasm (about 30 s) when anything in web/ or runtime
+#                 changed
+# Nothing runs for other branches, deletes, or commits that touch neither.  One push at a time: a second waits.
+# On: git config core.hooksPath tools/hooks (once per clone; worktrees share it)
+set -u
+zero=0000000000000000000000000000000000000000
+common=$(cd "$(git rev-parse --git-common-dir)" && pwd) || exit 1
+main_tree=$(dirname "$common")
+tree=${NFSU2_PREPUSH_TREE:-$(dirname "$main_tree")/nsfu2-web-wt/prepush}
+
+sha='' files=''
+while read -r lref lsha rref rsha; do
+  [ "$rref" = refs/heads/main ] && [ "$lsha" != $zero ] || continue
+  sha=$lsha
+  if [ "$rsha" != $zero ] && git cat-file -e "$rsha^{commit}" 2>/dev/null; then base=$rsha
+  else base=$(git merge-base "$lsha" refs/remotes/origin/main 2>/dev/null) || base=''; fi
+  if [ -n "$base" ]; then files=$(git diff --name-only "$base" "$lsha")
+  else files='web/server-rs/ runtime/'; fi          # nothing to compare with: all of them
+done
+[ -n "$sha" ] || exit 0
+files=$(printf '%s\n' "$files" | grep -v '\.md$')
+server=$(printf '%s\n' "$files" | grep -Ec '^(web/server-rs/|runtime/|web/src/net/|web/src/app/names\.mjs$|web/tools/i18n-keys\.mjs$|web/test/wasi-run\.mjs$|web/package-lock\.json$)')
+page=$(printf '%s\n' "$files" | grep -Ec '^(web/|runtime/)')
+[ "$server" -gt 0 ] || [ "$page" -gt 0 ] || exit 0
+
+# the hook's git variables would point the worktree's git at this checkout
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+
+lock=$tree.lock
+mkdir -p "$(dirname "$tree")"
+said=''
+until mkdir "$lock" 2>/dev/null; do
+  pid=$(cat "$lock/pid" 2>/dev/null)
+  if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then rm -rf "$lock"; continue; fi
+  [ -n "$said" ] || echo "pre-push: another push's tests are running (pid ${pid:-?}), waiting"
+  said=1
+  sleep 5
+done
+echo $$ > "$lock/pid"
+trap 'rm -rf "$lock"' EXIT
+trap 'exit 1' INT TERM HUP
+
+short=$(git rev-parse --short "$sha")
+what=$([ "$server" -gt 0 ] && echo "server + page" || echo "page")
+echo "pre-push: $what tests on $short in $tree (server tests take ~3 min: give git push a long timeout)"
+
+if [ ! -e "$tree/.git" ]; then
+  git -C "$main_tree" worktree add -q --detach "$tree" "$sha" || exit 1
+else
+  git -C "$tree" checkout -q --force --detach "$sha" && git -C "$tree" clean -qfd || exit 1
+fi
+[ -e "$tree/deps" ] || ln -s "$main_tree/deps" "$tree/deps"
+
+fail=''
+step() {   # name, log file, command...
+  name=$1 log=$2; shift 2
+  start=$(date +%s)
+  if "$@" >"$log" 2>&1; then echo "pre-push: $name passed ($(( $(date +%s) - start )) s)"; return 0; fi
+  echo "pre-push: $name FAILED ($(( $(date +%s) - start )) s), $log:"
+  grep -E 'FAILED|panicked|AssertionError|✖|not ok|error(\[|:)' "$log" | grep -v '^test .* ok$' | head -30 | sed 's/^/  /' |
+    grep . || tail -15 "$log" | sed 's/^/  /'
+  fail=1
+  return 1
+}
+
+# the page's packages as the pushed package-lock.json wants them
+want=$(git -C "$tree" rev-parse HEAD:web/package-lock.json)
+if [ "$(cat "$tree/web/node_modules/.prepush-lock" 2>/dev/null)" != "$want" ]; then
+  step 'npm ci' "$tree.npm.log" sh -c "cd '$tree/web' && npm ci --no-audit --no-fund --loglevel=error" || exit 1
+  echo "$want" > "$tree/web/node_modules/.prepush-lock"
+fi
+
+export CARGO_TARGET_DIR="$tree/web/server-rs/target"
+step 'server build' "$tree.build.log" sh -c "cd '$tree/web/server-rs' && cargo build --profile ci --locked -p nfsu2-server" || exit 1
+if [ "$page" -gt 0 ]; then
+  step 'page tests' "$tree.page.log" sh -c "cd '$tree/web' && node build.mjs && \
+    NFSU2_SERVER_BIN='$CARGO_TARGET_DIR/ci/nfsu2-server' node tools/unit-tests.mjs --fast test/lan-wasm.test.mjs"
+fi
+if [ "$server" -gt 0 ]; then
+  step 'server tests' "$tree.server.log" sh -c "cd '$tree/web/server-rs' && cargo test --profile ci --locked --workspace --no-fail-fast"
+fi
+
+if [ -n "$fail" ]; then
+  echo "pre-push: push to main stopped: fix the failing test first"
+  exit 1
+fi

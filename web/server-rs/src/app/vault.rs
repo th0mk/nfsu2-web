@@ -164,6 +164,7 @@ impl App {
                     if let Some(m) = meta
                         && nfsu2_headers::etag_matches(inm.as_deref(), &etag(m.cur.rev))
                     {
+                        self.names_used(&id, now);
                         let mut h = self.vault_hdrs(q, forwarded);
                         vault_headers(&mut h, m.cur.rev, m.cur.saved, m.prev.map(|p| p.saved), v.store.is_launch_copy(&m));
                         s.head(304, h.0);
@@ -182,6 +183,8 @@ impl App {
                     v.misses.take(&key, &site);
                     return self.vault_plain(q, s, forwarded, 404, "Not found", &[]).await;
                 };
+                // the keyphrase was used: its claimed name lasts as long as it (names.rs)
+                self.names_used(&id, now);
                 let mut h = self.vault_hdrs(q, forwarded);
                 h.set("content-type", "application/octet-stream");
                 h.set("content-length", body.len().to_string());
@@ -220,6 +223,7 @@ impl App {
                 let mut h = self.vault_hdrs(q, forwarded);
                 let (code, text) = match put {
                     Put::Saved { meta, created } => {
+                        self.names_used(&id, now);
                         vault_headers(&mut h, meta.cur.rev, meta.cur.saved, meta.prev.map(|p| p.saved), false);
                         if created { (201, "Saved") } else { (200, "Saved") }
                     }

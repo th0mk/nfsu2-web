@@ -133,9 +133,9 @@ test('/players with --max-peers 1: full while one plays, the next game of before
   } finally { await s.stop(); }
 });
 
-test('the page\'s line', async () => {
+test('the page\'s numbers and lines', async () => {
   const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/players.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral' });
-  const { playersText, queueText, roomHash, roomFold } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
+  const { countText, fullLine, queueText, roomHash, roomFold, roomLine } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
   // the room's hash as roam_core.c makes it (tests/roam_unit.c checks the same names): capitals, blanks and invisible
   // characters do not count
   assert.equal(roomHash('blueroom'), 0x160fba32);
@@ -162,28 +162,20 @@ test('the page\'s line', async () => {
     sum = (Math.imul(sum, 31) + h) >>> 0;
   }
   assert.equal(sum.toString(16), '198373d3');
-  assert.equal(playersText({ players: 3, online: 1, roam: 2, room: 0 }, ' Blue '),
-    'Playing now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": nobody in free roam there.');
-  assert.equal(playersText({ players: 3, online: 1, roam: 2, room: 2 }, 'Blue'),
-    'Playing now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue": 2 in free roam there.');
-  assert.equal(playersText({ players: 3, online: 1, roam: 2 }, 'Blue'),
-    'Playing now: 3 players, 1 in Online mode, 2 in free roam. You are in room "Blue".', 'an older server: no count');
-  assert.equal(playersText({ players: 0, online: 0, room: 0 }, 'Blue'), 'Nobody is playing right now.');
-  assert.equal(playersText({ players: 0, online: 0 }), 'Nobody is playing right now.');
-  assert.equal(playersText({ players: 1, online: 0 }), 'Playing now: 1 player, 0 in Online mode.');
-  assert.equal(playersText({ players: 3, online: 2 }), 'Playing now: 3 players, 2 in Online mode.');
-  assert.equal(playersText({ players: 3, online: null }), 'Playing now: 3 players.');
-  assert.equal(playersText({ players: 3, online: 1, roam: 2 }), 'Playing now: 3 players, 1 in Online mode, 2 in free roam.');
-  assert.equal(playersText({ players: 3, online: null, roam: 0 }), 'Playing now: 3 players, 0 in free roam.');
-  assert.equal(playersText({ players: 3, online: 2, roam: null }), 'Playing now: 3 players, 2 in Online mode.');
-  assert.equal(playersText({ players: 3, online: 1, full: false }), 'Playing now: 3 players, 1 in Online mode.');
-  assert.equal(playersText({ players: 128, online: 9, roam: 100, full: true }),
-    'Playing now: 128 players, 9 in Online mode, 100 in free roam. The server is full: multiplayer starts when a place frees up.');
-  assert.equal(playersText({ players: 5000, online: 300, roam: 1800, full: true, queue: 120 }),
-    'Playing now: 5000 players, 300 in Online mode, 1800 in free roam. The server is full, with 120 in line. ' +
-    'At Play you can wait in line (playing alone until your turn) or play offline.');
-  assert.match(playersText({ players: 5000, online: 300, full: true, queue: 1 }), /full, with 1 in line/);
-  assert.match(playersText({ players: 5000, online: 300, full: true, queue: 0 }), /full: multiplayer starts when a place frees up\.$/);
+  // the Playing now panel's numbers (grouped as the page's language writes them; '–' for one the server does not give),
+  // the Room row's line and the line under the numbers while the server is full
+  assert.deepEqual([7592, 0, 3, null, undefined, -1, 1.5].map(countText), ['7,592', '0', '3', '–', '–', '–', '–']);
+  assert.equal(roomLine({ players: 3, online: 1, roam: 2, room: 0 }, ' Blue '), 'You are in room "Blue": nobody in free roam there.');
+  assert.equal(roomLine({ players: 3, online: 1, roam: 2, room: 2 }, 'Blue'), 'You are in room "Blue": 2 in free roam there.');
+  assert.equal(roomLine({ players: 3, online: 1, roam: 2 }, 'Blue'), 'You are in room "Blue".', 'an older server: no count');
+  assert.equal(roomLine({ players: 3, online: 1, roam: 2, room: 2 }, ' '), '', 'no room');
+  assert.equal(fullLine({ players: 3, online: 1, full: false }), '');
+  assert.equal(fullLine({ players: 3, online: 1 }), '');
+  assert.equal(fullLine({ players: 128, online: 9, roam: 100, full: true }), 'The server is full: multiplayer starts when a place frees up.');
+  assert.equal(fullLine({ players: 5000, online: 300, roam: 1800, full: true, queue: 120 }),
+    'The server is full, with 120 in line. At Play you can wait in line (playing alone until your turn) or play offline.');
+  assert.match(fullLine({ players: 5000, online: 300, full: true, queue: 1 }), /full, with 1 in line/);
+  assert.match(fullLine({ players: 5000, online: 300, full: true, queue: 0 }), /full: multiplayer starts when a place frees up\.$/);
   // the line over a game that waits for a place
   assert.equal(queueText({ pos: 1, of: 40 }), 'The server is full. In line for a place: next.');
   assert.equal(queueText({ pos: 1, of: 40, eta: 20 }), 'The server is full. In line for a place: next (less than a minute).');
@@ -192,6 +184,4 @@ test('the page\'s line', async () => {
   assert.equal(queueText({ pos: 23, of: 40, eta: 2 * 3600 }), 'The server is full. In line for a place: 23rd of 40 (about 2 h).');
   assert.equal(queueText({ pos: 101, of: 140 }), 'The server is full. In line for a place: 101st of 140.');
   assert.equal(queueText({ pos: 112, of: 140 }), 'The server is full. In line for a place: 112th of 140.');
-  assert.equal(playersText({ players: -1, online: 0 }), '');
-  assert.equal(playersText({}), '');
 });

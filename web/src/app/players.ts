@@ -1,7 +1,7 @@
-// How many play on this server now, for the start page's Multiplayer settings: the server's /players (three
+// How many play on this server now, for the start page's Playing now panel: the server's /players (three
 // counts, whether it is full, how many wait in line for a place and whether free roam is busy, nothing else; with a Room setting, how many are in
 // free roam in that room too, and with crews how many in each).  Asked every 15 s, and only while the start page is visible and no game runs; a
-// server without the route shows nothing.  Whether the server answered at all goes to reached() (offline mode).
+// server without the route shows no panel.  Whether the server answered at all goes to reached() (offline mode).
 
 /** roam: driving in free roam or paused there (null, or missing from an older server: not shown);
  *  roamBusy: free roam gives fewer cars a player now (the server's hub cut its links), so the first Play does not ask about it;
@@ -13,7 +13,7 @@ export interface PlayerCounts {
   queue?: number;
 }
 
-import { t, tn, type Msg } from './i18n';
+import { count, live, onLanguage, t, tn, type Msg } from './i18n';
 import { at } from '../base';
 
 const EVERY_MS = 15_000;
@@ -70,24 +70,67 @@ export function roomHash(name: string): number {
   return !kept ? 0 : h || 1;
 }
 
-/** The line the page shows ('' for an answer it cannot read); room: the player's Room setting, when free roam is on
- *  ('' for none): free roam shows only that room's players, which the line says, with how many are there. */
-export function playersText(c: PlayerCounts, room = ''): string {
-  if (!Number.isInteger(c.players) || c.players < 0) return '';
-  if (c.players === 0) return t('Nobody is playing right now.');
-  const known = (k: number | null | undefined): k is number => Number.isInteger(k) && k! >= 0;
-  const list = [tn(c.players, '{n} player', '{n} players')];
-  if (known(c.online)) list.push(t('{n} in Online mode', { n: c.online }));
-  if (known(c.roam)) list.push(t('{n} in free roam', { n: c.roam }));
+const known = (k: number | null | undefined): k is number => Number.isInteger(k) && k! >= 0;
+
+/** a count as the page writes it in its language (7,592; 7.592; 7 592), '–' for one the server does not give */
+export const countText = (k: number | null | undefined): string => known(k) ? count(k) : '–';
+
+/** The Room row's line about who is there ('' for none): room is the player's Room setting while free roam is on ('' for
+ *  none), where free roam shows only that room's players. */
+export function roomLine(c: PlayerCounts, room: string): string {
   room = room.trim();
-  const inRoom = !room ? '' : ' ' + (!known(c.room) ? t('You are in room "{room}".', { room })
-    : c.room === 0 ? t('You are in room "{room}": nobody in free roam there.', { room }) : t('You are in room "{room}": {n} in free roam there.', { room, n: c.room }));
+  if (!room) return '';
+  return !known(c.room) ? t('You are in room "{room}".', { room })
+    : c.room === 0 ? t('You are in room "{room}": nobody in free roam there.', { room }) : t('You are in room "{room}": {n} in free roam there.', { room, n: c.room });
+}
+
+/** The line under the numbers while the server is full ('' while it is not): how many wait in line, and what Play does. */
+export function fullLine(c: PlayerCounts): string {
+  if (c.full !== true) return '';
   const waiting = Number.isInteger(c.queue) && c.queue! > 0 ? c.queue! : 0;
-  const full = c.full !== true ? ''
-    : ' ' + (waiting ? tn(waiting, 'The server is full, with {n} in line. At Play you can wait in line (playing alone until your turn) or play offline.',
-      'The server is full, with {n} in line. At Play you can wait in line (playing alone until your turn) or play offline.')
-      : t('The server is full: multiplayer starts when a place frees up.'));
-  return t('Playing now: {list}.', { list: list.join(', ') }) + inRoom + full;
+  return waiting ? tn(waiting, 'The server is full, with {n} in line. At Play you can wait in line (playing alone until your turn) or play offline.',
+    'The server is full, with {n} in line. At Play you can wait in line (playing alone until your turn) or play offline.')
+    : t('The server is full: multiplayer starts when a place frees up.');
+}
+
+/** The start page's Playing now panel (index.html #players): everyone on the server, those in free roam and those in
+ *  the game's Online mode (its lobbies and races), '–' until the server says; under them the server full, or why it
+ *  does not answer.  The numbers drawn again in the page's language when that changes (its digit grouping). */
+export class PlayersPanel {
+  private last: PlayerCounts | null = null;
+  constructor(private root: HTMLElement) {
+    onLanguage(() => this.draw());
+    // (a line may break after the slash: races/ lobbies, not races/lob-bies)
+    live(root.querySelector('#players-online-label')!, () => t('in races/lobbies').replace(/\//g, '/\u200b'));
+  }
+
+  /** the server's answer; null: a server without the route (no panel) */
+  show(c: PlayerCounts | null) {
+    this.root.hidden = !c;
+    this.last = c;
+    this.draw();
+    this.note(c ? () => fullLine(c) : () => '');
+  }
+
+  /** the server does not answer: the numbers unknown, the line says why */
+  offline(why: Msg) {
+    this.root.hidden = false;
+    this.last = null;
+    this.draw();
+    this.note(why);
+  }
+
+  private draw() {
+    const c = this.last, n = (id: string, k: number | null | undefined) => { this.root.querySelector(id)!.textContent = countText(k); };
+    n('#players-all', c && Number.isInteger(c.players) ? c.players : null);
+    n('#players-roam', c?.roam);
+    n('#players-online', c?.online);
+  }
+
+  private note(f: Msg) {
+    const p = this.root.querySelector<HTMLElement>('#players-note')!;
+    live(p, f); p.hidden = !p.textContent;
+  }
 }
 
 /** 1st, 2nd, 3rd, 4th, ..., 11th, 12th, 13th, ..., 21st */
@@ -140,13 +183,14 @@ export async function askCrews(hashes: readonly number[], ms: number): Promise<M
   } catch { return null; }
 }
 
-/** show(line, crews) at once and every 15 s while idle() and the page is visible (crews: crewCounts); reached(whether
+/** show(counts, room, crews) at once and every 15 s while idle() and the page is visible (counts: null from a server
+ *  without the route; room: the Room setting it was asked with, '' for none; crews: crewCounts); reached(whether
  *  the server answered: Reach); room(): the Room setting while free roam is on ('' for none); crews(): the Crews setting's
  *  hashes ([] for none, at most 4); last(): the newest answer (null before the first, or from a server without
  *  the route); fresh(ms): asked now, whatever the page does (Play: whether the server is full), within ms, then the
  *  newest answer.  An answer that comes after a later question's is not shown: it was asked with the settings of
  *  before (the page's first question goes before settings.ini is read, the next one at once after it). */
-export function watchPlayers(show: (line: Msg, crews: Map<number, number>) => void, idle: () => boolean, reached?: (r: Reach) => void,
+export function watchPlayers(show: (c: PlayerCounts | null, room: string, crews: Map<number, number>) => void, idle: () => boolean, reached?: (r: Reach) => void,
                              room: () => string = () => '', crews: () => number[] = () => []) {
   let gone = false, last: PlayerCounts | null = null, asked = 0;
   // quiet: a miss is not passed on (fresh: Play's short question, whose timeout says nothing about the server)
@@ -158,11 +202,11 @@ export function watchPlayers(show: (line: Msg, crews: Map<number, number>) => vo
       const q = [hash ? `room=${hash}` : '', mine.length ? `crews=${mine.join(',')}` : ''].filter(Boolean).join('&');
       const r = await fetch(at(q ? `players?${q}` : 'players'), { cache: 'no-store', signal: AbortSignal.timeout(ms) });
       if (!quiet || r.status < 500) reached?.(reachOf(r.status));
-      if (r.status === 404) { gone = true; last = null; show(() => '', new Map()); return; }
+      if (r.status === 404) { gone = true; last = null; show(null, '', new Map()); return; }
       if (!r.ok) return;
       const c = await r.json() as PlayerCounts, inRoom = hash ? name : '';
       if (n !== asked) return;
-      last = c; show(() => playersText(c, inRoom), crewCounts(c, mine));
+      last = c; show(c, inRoom, crewCounts(c, mine));
     } catch { if (!quiet) reached?.(missed()); }
   };
   const ask = async () => { if (document.visibilityState === 'visible' && idle()) await get(5000); };

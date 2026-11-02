@@ -67,17 +67,26 @@ void olfilter_install(void){ dispatch_patch(FN_FILTER_MSG, filter_msg); }
 
 /* The bytes the game sends the online host's lobby (winsock.c), a message
  * after another: [0..3] kind, [4..7] code, [8..11] big-endian length with
- * these 12.  olfilter_lobby_mark() puts "filt" in a gsea's code within the
- * bytes about to go (the game's own buffer), olfilter_lobby_sent() moves on
- * by the bytes that went: a send cut short marks the rest when it goes. */
-typedef struct { uint32_t link, at, len; uint8_t hdr[12]; int mark; } Stream;
+ * these 12.  olfilter_lobby_mark() puts a code in the message's header
+ * within the bytes about to go (the game's own buffer), olfilter_lobby_sent()
+ * moves on by the bytes that went: a send cut short marks the rest when it
+ * goes.  The codes: "filt" in a gsea (above), and in a rank (the race's
+ * report) "ed" and our car's type when its game data is edited
+ * (mprace_rank_code: the host's [cheat] lines). */
+typedef struct { uint32_t link, at, len; uint8_t hdr[12]; int mark; char code[4]; } Stream;
 static Stream g_out;
+
+int mprace_rank_code(char code[4]);   /* mprace.c */
+static int code_for(Stream *st){
+    if (!memcmp(st->hdr, "gsea", 4) && filter_on()){ memcpy(st->code, "filt", 4); return 1; }
+    return !memcmp(st->hdr, "rank", 4) && mprace_rank_code(st->code);
+}
 
 static void walk(Stream *st, uint8_t *p, int n, int patch){
     for (int i = 0; i < n;){
         if (st->at < 12u){
-            if (st->at == 4u) st->mark = patch && !memcmp(st->hdr, "gsea", 4) && filter_on();
-            if (st->at >= 4u && st->at < 8u && st->mark && !p[i]) p[i] = (uint8_t)"filt"[st->at - 4u];
+            if (st->at == 4u) st->mark = patch && code_for(st);
+            if (st->at >= 4u && st->at < 8u && st->mark && !p[i]) p[i] = (uint8_t)st->code[st->at - 4u];
             st->hdr[st->at++] = p[i++];
             if (st->at == 12u){
                 st->len = (uint32_t)st->hdr[8] << 24 | (uint32_t)st->hdr[9] << 16 | (uint32_t)st->hdr[10] << 8 | st->hdr[11];

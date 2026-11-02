@@ -622,6 +622,73 @@ void mprace_perf_survey(CPU *c, uint32_t car){
     mprace_perf_log("perf survey, the car again", car);
 }
 
+/* ---- a car whose game data is edited ----------------------------------------------------------- */
+/* A guide passed among players (2026-10-31) has an AI agent edit the copy of
+ * GLOBAL\GlobalB that the page keeps in the browser's storage (OPFS
+ * cache/GLOBAL_GLOBALB.BUN.* and GLOBAL_GlobalB.lzc.*, rebuilt to the same
+ * size, so the page takes them as downloaded).  It edits one car type's
+ * record in CarTypeInfo (chunk 0x34600): the torque curve (+0x310, 5 kN m at
+ * the peak, about 3,600 kW), the upgrades' torque (x10), gears and final
+ * drive, all-wheel drive, grip, downforce and brakes (x2.5 to x3) and the
+ * governor (+0x3A0, 800 mph), all between +0x1E0 and +0x6C4.  Each car's
+ * physics info is built from its type's record (above: the physics block
+ * +0x110, the parts' tables after it), so bytes +0x110 .. +0x720 of each
+ * player type are summed (CRC-32) and compared with the game's own sums
+ * (GLOBAL\GLOBALB.BUN of the game this port is made for, SHA-256
+ * 07e1c37a..., the file the site serves).  The game never writes there.
+ * The race reports carry the result: a lobby race's RACEREP (RC_RR_EDITED,
+ * roam_game.c) and an Online race's rank frame (olfilter.c: the code "ed"
+ * and the type in two hex digits).  The server writes a [cheat] line.  An
+ * edit anywhere else (the parts' own tables, another chunk) is not seen. */
+#define CT_SUM_FROM     0x110u
+#define CT_SUM_TO       0x720u
+static const uint32_t CT_SUMS[N_PLAYER_TYPES] = {
+    0xbbff02ebu, 0xdc269ca3u, 0x678488f9u, 0x78b51a07u, 0x1eabb42fu, 0x0dce4aaeu, 0x7684bd1eu, 0xd8c13365u,   /* PEUGOT .. CORSA */
+    0x790325eeu, 0x95cb4ea7u, 0xb631903bu, 0x7ef76aebu, 0x034d68a1u, 0xedb1a022u, 0x12895fdfu, 0xfbe26540u,   /* HUMMER .. SUPRA */
+    0x0e5a5746u, 0x49aeebc9u, 0xcd8cf0c6u, 0xecebef4du, 0xf607d6e0u, 0xa197d1efu, 0xa528c03du, 0x28746f50u,   /* GOLF .. G35 */
+    0xc3e9f971u, 0x1c398960u, 0xad33a4dcu, 0x5cbe2b44u, 0xd7bd80b8u, 0xfe107760u, 0x5b18496du };             /* 3000GT .. IMPREZAWRX */
+uint32_t rc_crc32(const uint8_t *p, uint32_t n);             /* roam_core.c */
+/* the player types whose records are not the game's (bit = type); a line when that changes (the first: as the game's) */
+static uint32_t edited_types(void){
+    static uint32_t logged = 0xffffffffu;
+    uint32_t types = rd(G_CARTYPES), mask = 0;
+    if (!types || !okm(types, CARTYPE_SIZE * N_PLAYER_TYPES)) return 0;
+    for (uint32_t t = 0; t < N_PLAYER_TYPES; t++){
+        uint32_t r = types + CARTYPE_SIZE * t;
+        if (rc_crc32(g_mem + r + CT_SUM_FROM, CT_SUM_TO - CT_SUM_FROM) != CT_SUMS[t]) mask |= 1u << t;
+    }
+    if (mask != logged){
+        logged = mask;
+        fprintf(stderr, "[cars] the player cars' data (CarTypeInfo +0x%x..+0x%x): %s", CT_SUM_FROM, CT_SUM_TO, mask ? "edited:" : "as the game's");
+        for (uint32_t t = 0; t < N_PLAYER_TYPES; t++)
+            if (mask >> t & 1u){
+                char nm[24] = ""; uint32_t r = types + CARTYPE_SIZE * t;
+                for (int k = 0; k < (int)sizeof nm - 1 && MR8(r + (uint32_t)k); k++) nm[k] = (char)MR8(r + (uint32_t)k);
+                fprintf(stderr, " %s (type %u, sum %08x, the game's %08x)", nm, t, rc_crc32(g_mem + r + CT_SUM_FROM, CT_SUM_TO - CT_SUM_FROM), CT_SUMS[t]);
+            }
+        fputc('\n', stderr);
+    }
+    return mask;
+}
+int mprace_type_edited(int type){ return type >= 0 && type < N_PLAYER_TYPES && (edited_types() >> type & 1u); }
+/* our car's type in an Online or LAN race (mprace_frame), for its rank: the game sends that once the race's world is
+ * gone (a test's Online race: no car by then) */
+static int g_net_type = -1;
+static void note_net_car(void){
+    if (rd(G_FLOW) != 6u || !(rd(G_GAMEMODE) & 0x208u)) return;
+    uint32_t pl = rd(G_PLAYER1), pi = pl ? perf_info(rd(pl + 4u)) : 0;
+    if (pi) g_net_type = (int)rd(pi + PI_TYPE);
+}
+int mprace_rank_code(char code[4]){
+    uint32_t pl = rd(G_PLAYER1), pi = pl ? perf_info(rd(pl + 4u)) : 0, mask = edited_types();
+    int type = pi ? (int)rd(pi + PI_TYPE) : g_net_type;
+    if (!mask || (type >= 0 && !mprace_type_edited(type))) return 0;
+    char s[5]; snprintf(s, sizeof s, "ed%02x", type >= 0 && type < N_PLAYER_TYPES ? (unsigned)type : 0xffu);
+    memcpy(code, s, 4);
+    fprintf(stderr, "[cars] the Online race's report says our car's data is edited (%.4s)\n", s);
+    return 1;
+}
+
 /* The race's setup (0x53FEB0) looks the network car's handle up among the
  * front end's cars (G_FECARS +0x9BD8: 91 records, 0x5036F0; each +8 its
  * handle) and fills the race car's description from the one it finds; with
@@ -1177,6 +1244,7 @@ static uint32_t gstr_tmp(CPU *c, const char *s){
 
 void mprace_frame(CPU *c){
     clk_step();
+    note_net_car();
     if (M.phase == MPR_IDLE || M.phase == MPR_DONE || M.phase == MPR_FAILED){ M.owns = 0; return; }
     long f = clk();
     /* the player's input is ours out of free roam and back, not in the race, not on its results */

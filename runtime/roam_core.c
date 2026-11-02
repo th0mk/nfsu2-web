@@ -370,7 +370,7 @@ static int lobby_ok(const rc_lobby *l){
 static int in(float f, float lo, float hi){ return f_finite(f) && f >= lo && f <= hi; }
 static int racerep_ok(const rc_racerep *r){
     if (!r->lobby || !r->race || r->players < 1 || r->players > RC_LOBBY_MAX || r->place > r->players) return 0;
-    if (r->cls < -1 || r->cls > 3 || r->flags & ~(RC_RR_HOST | RC_RR_QUIT)) return 0;
+    if (r->cls < -1 || r->cls > 3 || r->flags & ~(RC_RR_HOST | RC_RR_QUIT | RC_RR_EDITED)) return 0;
     if (!in(r->rating, 0.f, 5000.f) || !in(r->field, 0.f, 5000.f) || !in(r->factor, 0.01f, 100.f) || !in(r->kw, 0.f, 10000.f)
         || !in(r->kg, 0.f, 50000.f) || !in(r->kmh, 0.f, 2000.f) || !in(r->time, 0.f, 100000.f)) return 0;
     uint32_t n = 0; while (n < RC_RACEREP_NAME && r->name[n]) n++;
@@ -401,13 +401,18 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
-        /* the game after the crews: their count goes first, 0 with none */
-        if (m->u.hello.n_crews || (m->h.flags & RC_HF_GAME)){
-            if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX) return -1;
+        /* after the crews (their count goes first, 0 with none): the links we
+         * want, then with RC_HF_GAME our game; a HELLO with the game always
+         * has the links' byte (0: not said), so a hub of before reads the links
+         * where they always were */
+        if (m->u.hello.n_crews || m->u.hello.links || (m->h.flags & RC_HF_GAME)){
+            if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
+            if (m->u.hello.links || (m->h.flags & RC_HF_GAME))
+                rc_put8(&w, m->u.hello.links);                     /* (a core or hub before version 10 skips it) */
+            if (m->h.flags & RC_HF_GAME) rc_put8(&w, m->u.hello.game);
         }
-        if (m->h.flags & RC_HF_GAME) rc_put8(&w, m->u.hello.game);
         break; }
     case RC_MSG_PEERS:
         if (m->u.peers.n > RC_MAX_PEERS) return -1;
@@ -448,7 +453,10 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, m->u.duel.op); rc_put8(&w, m->u.duel.arg); rc_put32(&w, m->u.duel.to); rc_put32(&w, m->u.duel.duel);
         break;
     case RC_MSG_MAPREQ: rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); rc_put16(&w, m->u.mapreq.base); break;
-    case RC_MSG_MAPD:
+    case RC_MSG_NEARREQ:
+        rc_put16(&w, m->u.nearreq.req); rc_put16(&w, m->u.nearreq.max); rc_put16(&w, m->u.nearreq.base); rc_put16(&w, m->u.nearreq.radius);
+        break;
+    case RC_MSG_MAPD: case RC_MSG_NEARD:
         if (m->u.mapd.nparts < 1 || m->u.mapd.nparts > RC_MAPD_PARTS || m->u.mapd.part >= m->u.mapd.nparts || m->u.mapd.len > RC_MAPD_BYTES) return -1;
         rc_put16(&w, m->u.mapd.req); rc_put16(&w, m->u.mapd.base); rc_put8(&w, m->u.mapd.part); rc_put8(&w, m->u.mapd.nparts);
         rc_put16(&w, m->u.mapd.total); rc_put8(&w, m->u.mapd.n); rc_putb(&w, m->u.mapd.data, m->u.mapd.len);
@@ -534,7 +542,8 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             for (int i = 0; i < m->u.hello.n_crews; i++) m->u.hello.crews[i] = rc_get32(&r);
             if (r.err) return RC_E_SHORT;
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
-            if (m->h.flags & RC_HF_GAME){
+            if (r.n < r.len) m->u.hello.links = (uint8_t)rc_get8(&r);
+            if (m->h.flags & RC_HF_GAME){                             /* after the links' byte */
                 m->u.hello.game = (uint8_t)rc_get8(&r);
                 if (r.err) return RC_E_SHORT;
             }
@@ -602,7 +611,12 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         m->u.mapreq.req = (uint16_t)rc_get16(&r); m->u.mapreq.max = (uint16_t)rc_get16(&r); m->u.mapreq.base = (uint16_t)rc_get16(&r);
         if (r.err) return RC_E_SHORT;
         break;
-    case RC_MSG_MAPD: {
+    case RC_MSG_NEARREQ:
+        m->u.nearreq.req = (uint16_t)rc_get16(&r); m->u.nearreq.max = (uint16_t)rc_get16(&r);
+        m->u.nearreq.base = (uint16_t)rc_get16(&r); m->u.nearreq.radius = (uint16_t)rc_get16(&r);
+        if (r.err) return RC_E_SHORT;
+        break;
+    case RC_MSG_MAPD: case RC_MSG_NEARD: {
         m->u.mapd.req = (uint16_t)rc_get16(&r); m->u.mapd.base = (uint16_t)rc_get16(&r);
         m->u.mapd.part = (uint8_t)rc_get8(&r); m->u.mapd.nparts = (uint8_t)rc_get8(&r);
         m->u.mapd.total = (uint16_t)rc_get16(&r); m->u.mapd.n = (uint8_t)rc_get8(&r);
@@ -933,6 +947,7 @@ int rc_interp_eval(rc_interp *ip, int64_t now_us, int64_t frame_dt_us, int64_t d
 #define T_HUB_SNAP      500000      /* and a SNAP (where we are) this often */
 #define T_HUB_GRACE    2500000      /* a peer the hub has not listed for this long goes (its list comes every second, twice since 2026-10-23) */
 #define T_HUB_SILENT  10000000      /* no list for this long (or from the start): discovery and gossip again */
+#define T_FAR_FED      1500000      /* a far peer's HELLOs and pings are rarer while it got a SNAP within this (rc_tick) */
 #define RL_DGRAMS      100          /* per second and source */
 #define RL_BYTES     65536
 
@@ -1114,6 +1129,42 @@ static void map_part(rc_session *s, const rc_msg *m, int64_t now){
     memcpy(s->map_e, s->map_tmp, (size_t)n * sizeof *s->map_e);
     s->map_n = n; s->map_total = s->map_asm_total; s->map_held = s->map_req; s->map_gen++;
 }
+int rc_ask_near(rc_session *s, int64_t now, int max, int radius_m){
+    if (s->closed || !s->conf.hub_ip || !s->hub_heard_us || !hub_mode(s, now)) return 0;
+    rc_msg m; hdr(s, &m, RC_MSG_NEARREQ);
+    m.u.nearreq.req = ++s->near_req;
+    if (!m.u.nearreq.req) m.u.nearreq.req = ++s->near_req;  /* (0 is no answer's) */
+    m.u.nearreq.max = (uint16_t)(max < 0 ? 0 : max > RC_NEAR_MAX ? RC_NEAR_MAX : max);
+    m.u.nearreq.base = s->near_held;
+    m.u.nearreq.radius = (uint16_t)(radius_m < 0 ? 0 : radius_m > RC_NEAR_M ? RC_NEAR_M : radius_m);
+    s->near_asked_us = now;
+    tx_to(s, s->conf.hub_ip, s->conf.hub_port, &m);
+    return 1;
+}
+/* the hub's answer to our last minimap question (one datagram): it changes
+ * the players we hold, as map_part's whole answer does */
+static void near_answer(rc_session *s, const rc_msg *m, int64_t now){
+    if (m->u.mapd.req != s->near_req || !s->near_asked_us || m->u.mapd.nparts != 1) return;
+    s->near_asked_us = 0;
+    if (m->u.mapd.base && m->u.mapd.base != s->near_held) return;
+    int n = 0, i = 0, held = m->u.mapd.base ? s->near_n : 0;
+    const uint8_t *e = m->u.mapd.data;
+    for (int k = 0; k < m->u.mapd.n; k++){
+        uint16_t key = (uint16_t)(e[0] | e[1] << 8), id = key & (uint16_t)~RC_MAPD_GONE;
+        while (i < held && s->near_e[i].id < id){ if (n < RC_NEAR_MAX) s->near_tmp[n++] = s->near_e[i]; i++; }
+        if (i < held && s->near_e[i].id == id) i++;          /* (placed again, or gone) */
+        if (key & RC_MAPD_GONE){ e += 2; continue; }
+        if (n < RC_NEAR_MAX){
+            rc_mapent *t = &s->near_tmp[n++];
+            t->id = id; t->x = (int16_t)(e[2] | e[3] << 8); t->y = (int16_t)(e[4] | e[5] << 8);
+            t->heading = e[6]; t->vx = (int8_t)e[7]; t->vy = (int8_t)e[8]; t->at_us = now;
+        }
+        e += RC_MAPD_PLACE;
+    }
+    for (; i < held && n < RC_NEAR_MAX; i++) s->near_tmp[n++] = s->near_e[i];
+    memcpy(s->near_e, s->near_tmp, (size_t)n * sizeof *s->near_e);
+    s->near_n = n; s->near_total = m->u.mapd.total; s->near_held = s->near_req; s->near_gen++;
+}
 int rc_established(const rc_session *s){ int n = 0; for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state == RC_PS_EST) n++; return n; }
 /* an established peer counts for the group (max_players) unless the hub
  * decides and its last list left it out: it goes within T_HUB_GRACE, and a
@@ -1135,12 +1186,17 @@ void rc_set_crews(rc_session *s, const uint32_t *crews, int n){
     s->hub_hello_tx = INT64_MIN / 4;
     if (!s->conf.hub_ip) for (int i = 0; i < RC_TABLE; i++) if (s->peer[i].state != RC_PS_FREE) s->peer[i].last_hello_tx = INT64_MIN / 4;
 }
+void rc_set_links(rc_session *s, int links){
+    if (links == s->conf.links) return;
+    s->conf.links = links;
+    s->hub_hello_tx = INT64_MIN / 4;                                /* (a HELLO due at the next tick) */
+}
 static void drop_peer(rc_session *s, int i, const char *why);
 int rc_set_room(rc_session *s, uint32_t room){
     if (room == s->conf.room) return 0;
     s->conf.room = room;
     /* the old room's players go (a listed peer stays a candidate: its HELLO is of the other room now, so it does not
-     * come back), and so do the world map's markers and race lobbies of it until the next question */
+     * come back), and so do the world map's and the minimap's markers and race lobbies of it until the next question */
     int n = 0;
     for (int i = 0; i < RC_TABLE; i++){
         if (s->peer[i].state == RC_PS_FREE) continue;
@@ -1148,6 +1204,7 @@ int rc_set_room(rc_session *s, uint32_t room){
         drop_peer(s, i, "the room changed");
     }
     s->map_n = 0; s->map_total = 0; s->map_held = 0; s->map_gen++;
+    s->near_n = 0; s->near_total = 0; s->near_held = 0; s->near_gen++;
     s->lobbies_n = 0; s->lobbies_gen++;
     s->noted_room = 0;
     /* HELLOs due at the next tick: the hub links us in the new room by it; without a hub, the peers hear it */
@@ -1165,6 +1222,9 @@ int rc_peer_crew(const rc_session *s, int i){
             if (s->conf.crews[c] && p->hub_crews[k] == s->conf.crews[c]) return c;
     }
     return -1;
+}
+int rc_peer_friend(const rc_session *s, int i){
+    return i >= 0 && i < RC_TABLE && s->peer[i].hub_friend;
 }
 static int group_count(const rc_session *s){
     int n = 0;
@@ -1232,6 +1292,8 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
         int n = s->conf.n_crews < 0 ? 0 : s->conf.n_crews > RC_CREW_MAX ? RC_CREW_MAX : s->conf.n_crews;
         for (int i = 0; i < n; i++) if (s->conf.crews[i]) m->u.hello.crews[m->u.hello.n_crews++] = s->conf.crews[i];
     }
+    /* the hub (to nobody with our crews): the links we want */
+    if (crews && !to) m->u.hello.links = (uint8_t)(s->conf.links < 0 ? 0 : s->conf.links > RC_MAX_PEERS ? RC_MAX_PEERS : s->conf.links);
     if (s->conf.duels) m->h.flags |= RC_HF_DUELS;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
@@ -1344,6 +1406,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
          * (the hub lists us on theirs at the same time), and stays while it
          * is listed (rc_tick drops the others) */
         if (m.h.type == RC_MSG_MAPD){ map_part(s, &m, now); return; }
+        if (m.h.type == RC_MSG_NEARD){ near_answer(s, &m, now); return; }
         if (m.h.type == RC_MSG_LOBBIES){ lobbies_from_hub(s, &m); return; }
         if (m.h.type != RC_MSG_PEERS) return;
         s->hub_heard_us = now; s->hub_lists++;
@@ -1363,6 +1426,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
             q->n_hub_crews = 0;
             for (int c = 0; marks && c < m.u.peers.n_mine; c++)
                 if (m.u.peers.crew[k] >> c & 1u) q->hub_crews[q->n_hub_crews++] = m.u.peers.mine[c];
+            q->hub_friend = marks && (m.u.peers.crew[k] & RC_MARK_FRIEND);
         }
         return;
     }
@@ -1576,9 +1640,19 @@ void rc_tick(rc_session *s, int64_t now){
         if (!p->last_rx_us && !p->configured && now - p->added_us > T_GOSSIP_FORGET){ peer_clear(p, 0); continue; }
         if (p->state == RC_PS_EST && now - p->last_rx_us > T_LOST && !p->lost){
             p->lost = 1; note(s, RC_EV_NOTE, i, p->name, ": no packets for 3 s", ""); }
-        int64_t every = p->state == RC_PS_EST ? T_HELLO_EST : T_HELLO_CAND;
+        /* a peer far away gets its HELLO and ping as much rarer as its
+         * SNAPs (every 4th or 10th: out of sight), while those still go (they
+         * keep us alive at its end): a ping's round trip only places a solid
+         * car in sight (roam_game.c render_delay), and a HELLO to an
+         * established peer only repeats what went at its change (status, car
+         * look, room).  It is pinged at once when it comes near
+         * (rc_push_state).  Through the browser's server each one is a
+         * datagram in and one out, to each of 32 peers (roam-crowd, 30 bots
+         * in rings 400 m apart: 36 % fewer datagrams, 22 % fewer bytes). */
+        int slow = p->state == RC_PS_EST && p->far > 1 && now - p->last_snap_tx < T_FAR_FED ? p->far : 1;
+        int64_t every = p->state == RC_PS_EST ? T_HELLO_EST * slow : T_HELLO_CAND;
         if (now - p->last_hello_tx >= every) send_hello(s, p, now);
-        if (p->state == RC_PS_EST && now - p->last_ping_tx >= T_PING){
+        if (p->state == RC_PS_EST && now - p->last_ping_tx >= T_PING * slow){
             rc_msg m; hdr(s, &m, RC_MSG_PING); m.u.ping.t0 = (uint32_t)now; tx(s, p, &m); p->last_ping_tx = now; }
         if (p->state == RC_PS_EST) want_cfg(s, p, p->cfg_rev_seen, now);
     }
@@ -1590,9 +1664,10 @@ void rc_tick(rc_session *s, int64_t now){
             if (p->state != RC_PS_EST) continue;
             m.u.peers.e[n].ip = p->ip; m.u.peers.e[n].port = p->port; m.u.peers.e[n].id = p->id; n++;
         }
-        /* a core of version 1 gets the first 7 (it drops a longer list) */
+        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32 (each drops a longer list) */
         for (int i = 0; i < RC_TABLE && n; i++) if (s->peer[i].state == RC_PS_EST){
-            m.u.peers.n = (uint8_t)(s->peer[i].core_ver >= 2 || n < RC_PEERS_V1 ? n : RC_PEERS_V1);
+            int most = s->peer[i].core_ver >= 10 ? RC_MAX_PEERS : s->peer[i].core_ver >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
+            m.u.peers.n = (uint8_t)(n < most ? n : most);
             tx(s, &s->peer[i], &m);
         }
         s->peers_dirty = 0; s->last_peers_tx = now;
@@ -1658,6 +1733,8 @@ int rc_push_state(rc_session *s, const rc_state *st, int64_t now){
         rc_peer *p = &s->peer[i];
         if (p->state != RC_PS_EST || !s->io.send) continue;
         int e = snap_every(p, &s->last[0]), x = ext && p->statex;
+        if (e == 1 && p->far > 1) p->last_ping_tx = INT64_MIN / 4;   /* come near: its round trip now (rc_tick) */
+        p->far = (uint8_t)e;
         if (e > 1 && (uint16_t)(s->seq + i) % (uint16_t)e) continue;
         const uint8_t *d = b; int dn = n;
         if (e > 1 || x){
@@ -1670,6 +1747,7 @@ int rc_push_state(rc_session *s, const rc_state *st, int64_t now){
             d = bv[v]; dn = nv[v];
         }
         s->io.send(s->io.user, p->ip, p->port, d, dn); s->tx++; s->tx_bytes += (uint32_t)dn;
+        p->last_snap_tx = now;
     }
     if (to_hub && s->io.send){
         s->io.send(s->io.user, s->conf.hub_ip, s->conf.hub_port, b, n); s->tx++; s->tx_bytes += (uint32_t)n;

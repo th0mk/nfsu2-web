@@ -16,6 +16,7 @@
 #include "memmap.h"
 #include "module.h"
 #include "winsock.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -338,14 +339,66 @@ static uint32_t ug2_qpc_caller(CPU *c){ return c->eip == 0x0043bdfeu ? MR32(c->e
  * stops while the game thread does not present (race loading, hitches).  On
  * Windows the network thread keeps real time meanwhile, and a Windows peer
  * expects the Mac to: so NetTick returns real monotonic milliseconds
- * (winsock.c's clock).  NFSU2_NETTICK=virtual restores the old clock. */
+ * (winsock.c's clock).
+ * NFSU2_NETTICK=virtual restores the old clock.
+ *
+ * Never less than any thread was given before.  In the browser each guest
+ * thread runs on its own web worker, whose clock is set to the page's only to
+ * within about half the best round trip of its 'clock' messages (web/src/host
+ * game-worker.ts), so two threads can read the same moment a millisecond or
+ * more apart.  CommUDP's update (0x7530B0, from its socket callback 0x753700
+ * and its send 0x753AF0) runs on two threads (about 93 % and 7 % of the calls
+ * in a LAN race, switching about 1,900 times), and it stamps each datagram it
+ * takes with NetTick (SocketRecvfrom, 0x74A71B).  Its timeout (0x753482..
+ * 0x753492) closes an open link whose last datagram is over 120 s old,
+ * computed tick - stamp UNSIGNED: a stamp read on one thread a millisecond
+ * ahead of a later tick on the other reads as 2^32 ms of silence, and the
+ * update sends DISC and drops the race link.  (Most Wanted's CommUDP has the
+ * same check; there the step-backs between threads dropped about half of the
+ * loaded LAN races.)  A read behind the latest answer gets the latest
+ * (compared modulo 2^32); the first five, and every 1000th, are logged.
+ * Test switches (L-063): NFSU2_TEST_NETTICK_BACK=1 answers each thread's own
+ * clock as before; NFSU2_TEST_NETTICK_SKEW=N puts every second thread to
+ * call NetTick N ms ahead, as a worker whose clock was set N ms off. */
+static uint32_t nettick_never_back(uint32_t v){
+    static _Atomic uint32_t last, backs;
+    uint32_t l = atomic_load(&last);
+    for (;;){
+        if (l && (int32_t)(v - l) <= 0){
+            if (v != l){
+                uint32_t n = atomic_fetch_add(&backs, 1u) + 1u;
+                if (n <= 5u || n % 1000u == 0u)
+                    ws_log("NetTick: a read %u ms behind the latest answer gets that answer (%u so far)", l - v, n);
+            }
+            return l;
+        }
+        if (atomic_compare_exchange_weak(&last, &l, v)) return v;
+    }
+}
 void sub_0074b730_orig(CPU *c);
 void sub_0074b730(CPU *c){
-    static int virt = -1;
-    if (virt < 0){ const char *e = getenv("NFSU2_NETTICK"); virt = e && !strcmp(e, "virtual"); }
-    if (virt){ sub_0074b730_orig(c); return; }
+    static _Atomic int virt = -1;
+    static int back, skew;
+    static _Atomic int tids;
+    static _Thread_local int tid;
+    if (atomic_load(&virt) < 0){
+        const char *e = getenv("NFSU2_TEST_NETTICK_BACK");
+        back = e && *e == '1';
+        e = getenv("NFSU2_TEST_NETTICK_SKEW");
+        skew = e ? atoi(e) : 0;
+        if (back || skew) ws_log("NetTick: test switches: %s, every second thread %d ms ahead",
+                                 back ? "each thread's own clock (NFSU2_TEST_NETTICK_BACK)" : "never back", skew);
+        e = getenv("NFSU2_NETTICK");
+        atomic_store(&virt, e && !strcmp(e, "virtual"));
+    }
+    if (atomic_load(&virt)){ sub_0074b730_orig(c); return; }
     POP32(c->eip);
-    c->eax = (uint32_t)(ws_now_us() / 1000ull);
+    uint32_t v = (uint32_t)(ws_now_us() / 1000ull);
+    if (skew){
+        if (!tid) tid = atomic_fetch_add(&tids, 1) + 1;
+        if (!(tid & 1)) v += (uint32_t)skew;
+    }
+    c->eax = back ? v : nettick_never_back(v);
 }
 
 /* ---- the settings menu's resolution labels (com.c) ------------------------ */

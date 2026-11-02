@@ -53,7 +53,7 @@ configs:
       	reverse_proxy 127.0.0.1:${NFSU2_HTTP_PORT:-8080} {
       		header_up CF-Connecting-IP {client_ip}
       		transport http {
-      			max_conns_per_host 63900
+      			max_conns_per_host 95900
       		}
       	}
       	header -Server

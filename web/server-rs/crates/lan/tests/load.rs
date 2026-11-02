@@ -296,7 +296,7 @@ fn free_roam_crowd_on_the_switch() {
     // NFSU2_LOAD_SECS: how long each size is measured (after 3 s to warm up)
     let secs = std::env::var("NFSU2_LOAD_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(5);
     for n in sizes {
-        let sw = switch_rt.block_on(async { start(LanOptions { max_peers: 8000, ..LanOptions::default() }).await });
+        let sw = switch_rt.block_on(async { start(LanOptions { max_peers: 12000, ..LanOptions::default() }).await });
         let (lan, port) = (sw.lan.clone(), sw.port);
         players_rt.block_on(crowd(port, n, Duration::from_secs(3), Duration::from_secs(secs), lan));
         switch_rt.block_on(sw.close());

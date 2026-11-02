@@ -1,0 +1,39 @@
+# The minimap's other players (runtime/roam_game.c near_update): one player in
+# the new career's prologue free roam among web/tools/roam-crowd.mjs's players,
+# more of them than the cars shown (circles around its start); once the cars
+# are shown and the hub has answered, frame dumps with an arrow on the minimap
+# for every player within its reach, the friends' cars' and the others' alike,
+# and the arrows counted (mp near); then a drive, and again.  With
+# NFSU2_ROAM_NEAR=0 the same without the others' arrows.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers ${ROAM_CROWD_CARS} 6000
++0    roam mp waitcars ${ROAM_CROWD_CARS} 6000
++900  roam mp near all
++0    roam mp status
++0    dump n_start
++120  dump n_start2
++0    roam call 0x5fae20 ecx=*0x8900ac          # autopilot on
++5000ms roam mp near
++0    dump n_drive1
++5000ms roam mp near
++0    dump n_drive2
++0    roam call 0x5faf10 ecx=*0x8900ac          # autopilot off
++0    roam mp status
++10   quit

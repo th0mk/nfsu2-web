@@ -9,8 +9,8 @@
 //    virtual adapters' host names and hardware addresses, made from the addresses, lose their numbers.
 //  - The time zone keeps its offset from UTC and its daylight saving, not its names (a city, a country).
 // The page tells it the names it knows (name(): settings, profiles, notices), and every line of the log goes through
-// learn() as it comes, for the lines that bring a name in (a friend joining, a race lobby, quick chat, a profile
-// saved): a name stays known after its line left the log.  scrub() learns from the text it is given too (a copy kept
+// learn() as it comes, for the lines that bring a name in (a friend joining, a race lobby, quick chat, a friend's
+// message, a profile saved): a name stays known after its line left the log.  scrub() learns from the text it is given too (a copy kept
 // by an earlier page).  A name that is also a word of the log's own (a player called "driver", or "500") is replaced
 // only where it stands as a name, between the words that frame names in these lines (PRE, POST); any other name
 // wherever it stands, so a line nobody thought of does not give it away.
@@ -95,6 +95,7 @@ export class Privacy {
     }
     if (l.startsWith('[notice] ') && (m = /^\[notice\] (.+?) (?:joined free roam|left|lost the connection|is in a race|is in free roam|turned free roam off)$/.exec(l))) return got(m[1], 'player');
     if (l.startsWith('[chat] ') && (m = /^\[chat\] (.+) said \d+ \(/.exec(l))) return got(m[1], 'player');
+    if (l.startsWith('[msg] ') && (m = /^\[msg\] (?:from|to|sending to) (.+?)(?:, on the start page| from the start page: .*| failed: .*|: \w+| \(\d+ characters\))?$/.exec(l))) return got(m[1], 'player');
     if (l.startsWith('[horn] ') && (m = /^\[horn\] (.+)'s horn, [\d.]+ m away/.exec(l))) return got(m[1], 'player');
     if (l.startsWith('[carsfx] ') && (m = /^\[carsfx\] (.+): [^:]+, \d+% \(voice \d+\)$/.exec(l))) return got(m[1], 'player');
     if (l.startsWith('[mprace] ')) {

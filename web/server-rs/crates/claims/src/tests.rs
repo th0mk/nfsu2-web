@@ -80,7 +80,7 @@ fn defaults_slurs_and_nonsense_are_never_claimed() {
 }
 
 #[test]
-fn a_claim_holds_180_days_after_the_last_game() {
+fn a_claim_holds_two_years_after_the_last_game() {
     let c = Claims::in_memory();
     let (a, b) = (owner(1), owner(2));
     c.claim("Alex", &a, NOW).unwrap();
@@ -95,6 +95,26 @@ fn a_claim_holds_180_days_after_the_last_game() {
     assert_eq!(c.status("Alex", Some(&b), gone), Status::Free);
     assert!(c.mine(&a, gone).is_none());
     assert!(c.claim("Alex", &b, gone).is_ok());
+}
+
+// the keyphrase's cloud saves read or saved hold its current name as long as the keyphrase, not the name it changed from
+#[test]
+fn a_claim_lasts_as_long_as_its_keyphrase() {
+    let c = Claims::in_memory();
+    let (a, b) = (owner(1), owner(2));
+    c.claim("Alex", &a, NOW).unwrap();
+    let later = NOW + 500 * DAY_MS;
+    c.used(&a, later);
+    assert_eq!(c.mine(&a, later).unwrap().until, later + HOLD_DAYS * DAY_MS);
+    // another keyphrase's use does not, nor a keyphrase without a name
+    c.used(&b, later + DAY_MS);
+    assert_eq!(c.mine(&a, later).unwrap().until, later + HOLD_DAYS * DAY_MS);
+    assert!(c.mine(&b, later).is_none());
+    // after a change the old name keeps its grace, the new one holds from the use
+    c.claim("Racer", &a, later + 2 * DAY_MS).unwrap();
+    c.used(&a, later + 3 * DAY_MS);
+    assert_eq!(c.status("Alex", Some(&a), later + 3 * DAY_MS), Status::Yours { until: later + 2 * DAY_MS + GRACE_DAYS * DAY_MS, current: false });
+    assert_eq!(c.mine(&a, later + 3 * DAY_MS).unwrap().until, later + 3 * DAY_MS + HOLD_DAYS * DAY_MS);
 }
 
 #[test]

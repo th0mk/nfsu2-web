@@ -24,13 +24,21 @@ export const MIN_CHROME = 140;
 /** Atomics.waitAsync (the renderer's and the network's doorbells) is in Firefox from 145 */
 export const MIN_FIREFOX = 145;
 
-/** "Google Chrome" major version, or null (another browser), from User-Agent Client Hints. */
-export function chromeVersion(): { brand: string; major: number } | null {
+/**
+ * A Chromium browser's name (Google Chrome, Microsoft Edge, Brave, Opera; Chromium where it names itself not), its
+ * own major version (Opera's and Samsung Internet's aren't Chromium's) and Chromium's, or null (another browser),
+ * from User-Agent Client Hints.  Their lists hold a made-up "Not?A_Brand" too.
+ */
+export function chromeVersion(): { brand: string; own: number; major: number } | null {
   const uad = (navigator as any).userAgentData as { brands?: { brand: string; version: string }[] } | undefined;
-  const b = uad?.brands?.find(x => x.brand === 'Google Chrome') ?? uad?.brands?.find(x => x.brand === 'Chromium');
-  if (b) return { brand: b.brand, major: parseInt(b.version, 10) };
+  const all = uad?.brands ?? [];
+  const named = all.find(x => !/^Chromium$|Not.A.Brand/i.test(x.brand)), engine = all.find(x => x.brand === 'Chromium') ?? named;
+  if (engine) {
+    const b = named ?? engine;
+    return { brand: b.brand, own: parseInt(b.version, 10), major: parseInt(engine.version, 10) };
+  }
   const m = /Chrome\/(\d+)/.exec(navigator.userAgent);
-  return m ? { brand: 'Chromium', major: +m[1] } : null;
+  return m ? { brand: 'Chromium', own: +m[1], major: +m[1] } : null;
 }
 
 /** Firefox's major version, or null (another browser; Firefox on iOS is WebKit and says FxiOS). */
@@ -44,10 +52,19 @@ export function browserName(): string {
   return firefoxVersion() !== null ? 'Firefox' : chromeVersion() ? 'Chrome' : N('the browser');
 }
 
+/** Safari's major version, 0 for the other browsers on an iPhone or iPad (all Safari's engine, no Version/), or null */
+export function safariVersion(): number | null {
+  const ua = navigator.userAgent;
+  if (!/AppleWebKit\//.test(ua) || /Chrome\/|Firefox\//.test(ua)) return null;     // Chromium says AppleWebKit too
+  const m = /Version\/(\d+)/.exec(ua);
+  return m ? +m[1] : 0;
+}
+
 /**
  * Which browser this is: a warning at most, never a reason to stop.  What the
  * game needs is checked by what it is (WebGPU, isolation, storage below), so
- * another browser that has all of it may play.
+ * Edge, Brave, Opera (Chrome's engine) and Safari get no warning: the checks
+ * below say what one lacks.
  */
 export function checkBrowser(): Check {
   const f = firefoxVersion();
@@ -55,13 +72,17 @@ export function checkBrowser(): Check {
     if (f < MIN_FIREFOX) return check('browser', 'Firefox {v}', 'warn', N('Tested on Firefox {min} or newer: update it (Help, About Firefox) if something doesn\'t work.'), 'BROWSER-FIREFOX-OLD', { v: f, min: MIN_FIREFOX });
     return check('browser', 'Firefox {v}', 'ok', N('A tested browser.'), undefined, { v: f });
   }
+  if (homeScreenInstead()) return check('browser', N('Browser'), 'warn', N('For full screen on iPhone, add this page to the Home Screen (Share menu) and play from its icon. That copy has its own saves: Cloud saves bring yours over.'), 'BROWSER-IPHONE');
   const c = chromeVersion();
-  const other = N('Only Chrome and Firefox are tested. This browser may still work.');
-  if (homeScreenInstead()) return check('browser', N('Browser'), 'warn', N('Only Chrome and Firefox are tested. For full screen on iPhone, add this page to the Home Screen (Share menu) and play from its icon. That copy has its own saves: Cloud saves bring yours over.'), 'BROWSER-IPHONE');
-  if (!c) return check('browser', N('Browser'), 'warn', other, 'BROWSER-OTHER');
-  if (c.major < MIN_CHROME) return check('browser', 'Chrome {v}', 'warn', N('Tested on Chrome {min} or newer: update it (Help, About Google Chrome) if something doesn\'t work.'), 'BROWSER-CHROME-OLD', { v: c.major, min: MIN_CHROME });
-  if (c.brand !== 'Google Chrome') return check('browser', '{brand} {v}', 'warn', other, 'BROWSER-CHROMIUM', { brand: c.brand, v: c.major });
-  return check('browser', 'Chrome {v}', 'ok', N('A tested browser.'), undefined, { v: c.major });
+  if (c) {
+    const brand = c.brand.replace(/^(Google|Microsoft) /, '');
+    if (c.major < MIN_CHROME) return check('browser', '{brand} {v}', 'warn', N('Tested on Chrome {min} or newer: update it (Help, About Google Chrome) if something doesn\'t work.'), 'BROWSER-CHROME-OLD', { brand, v: c.own, min: MIN_CHROME });
+    return check('browser', '{brand} {v}', 'ok', N('A tested browser.'), undefined, { brand, v: c.own });
+  }
+  const s = safariVersion();
+  if (s) return check('browser', 'Safari {v}', 'ok', N('A tested browser.'), undefined, { v: s });
+  if (s === 0) return check('browser', N('Browser'), 'ok', N('A tested browser.'));
+  return check('browser', N('Browser'), 'warn', N('Only Chrome and Firefox are tested. This browser may still work.'), 'BROWSER-OTHER');
 }
 
 export function checkIsolation(): Check {

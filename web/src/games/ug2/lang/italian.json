@@ -6,9 +6,9 @@
   "Start an event, take an outrun": "Inizia una gara, accetta un inseguimento",
   "Map, messages": "Mappa, messaggi",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "Il codice originale del gioco per PC, ricompilato per Chrome e Firefox: fino a 120 fps in widescreen, modalità Esplora e gare Online con gli amici, e controller, volanti e comandi touch.",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "Io e mio fratello giocavamo insieme a questo gioco circa 20 anni fa. Ho provato a portarlo nel browser, ha funzionato sorprendentemente bene e la cosa mi è un po' sfuggita di mano. È bellissimo vedere così tante persone giocarci.",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "Io e mio fratello giocavamo insieme a questo gioco circa 20 anni fa. Per questo ho provato a portarlo nel browser, così da poterci giocare di nuovo insieme. Ha funzionato sorprendentemente bene e la cosa mi è un po' sfuggita di mano. È bellissimo vedere così tante persone giocarci.",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "Titolari dei diritti: <0>legal@nfsu2.xyz</0>. Le email di assistenza non riceveranno risposta; chiedi sul <1>nostro Discord</1>.",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "Codice sorgente su <0>GitHub</0>. Basato su <1>NFSU2Recomp</1> di Talha Müderrisoğlu, il ricompilatore statico x86 → C originale per NFSU2, sulla scia di <2>N64: Recompiled</2> e <3>XenonRecomp</3>.",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "Codice sorgente su <0>GitHub</0>. Basato su <1>NFSU2Recomp</1> di Talha Müderrisoğlu, il ricompilatore statico x86 → C originale per NFSU2, sulla scia di <2>N64: Recompiled</2> e <3>XenonRecomp</3>. Questo progetto è un fork della <4>versione con licenza MIT di NFSU2Recomp del 16 ottobre 2026</4> e usa solo codice di quella versione.",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "Pacchetto di texture: l'<0>Upscaled HUD</0> di LunicAura106.",
   "Translations": "Traduzioni",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "Voci e filmati doppiati, e testo in cinese, giapponese, russo e thailandese: la <0>Multi 13 languages mod</0> di KyoriAsh, con il supporto per il thailandese di Lee-Ryo.",
@@ -23,5 +23,6 @@
   "Shift down": "Marcia -",
   "Quick chat (with other players): group, then phrase": "Chat rapida (con altri giocatori): gruppo, poi frase",
   "Photo mode; F12 again takes the photo": "Modalità foto; di nuovo F12 scatta la foto",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La pagina non ha l'isolamento cross-origin (manca SharedArrayBuffer). Aprila dal server web NFSU2."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "La pagina non ha l'isolamento cross-origin (manca SharedArrayBuffer). Aprila dal server web NFSU2.",
+  "Message a friend (in free roam)": "Scrivi a un amico (in modalità Esplora)"
 }

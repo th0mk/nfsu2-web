@@ -1,5 +1,6 @@
 # Free roam's friends on the player's own page, instance B (with roam_friend_app_a.txt): parks facing A, the noses
-# 0.3 m into each other, and presses F now and then (shots between: b_1 .. b_end).
+# 0.3 m into each other, and presses F now and then (shots between: b_1 .. b_end); then, friends, waits while A goes
+# into another room and joins it back from its page menu's Friends.
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN
@@ -23,7 +24,8 @@
 +960  roam teleport 1695.3 -879.96 24.6 0xc000
 +300  roam teleport 1695.3 -879.96 24.6 0xc000
 +0    log placed
-+900  log SHOT b_1
++0    roam mp waitbump Al 6000
++120  log SHOT b_1
 +0    log KEY KeyF                         # F acts only while the line offers something: whoever asks first,
 +400  log SHOT b_2
 +0    log KEY KeyF                         # the other's next F accepts
@@ -33,4 +35,9 @@
 +0    log KEY KeyF
 +600  log SHOT b_end
 +0    roam mp bump
-+0    log done
++0    roam mp waitfriend Al 6000
++0    roam mp waitgone Al 12000
++0    roam mp waitfriend Al 9000             # (A back in this room, still our friend)
++300  roam mp status
++0    log SHOT b_joined
++600  quit                               # (after A's last look at B)

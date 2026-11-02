@@ -118,8 +118,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_crew', env: 'NFSU2_ROAM_CREW', kind: 'crews', ic: true, scope: 'web' },
   // and each one's colour, in the same order (crews.ts): bundle.m's K_RGBS
   { key: 'roam_crew_colours', env: 'NFSU2_ROAM_CREW_RGB', kind: 'rgbs', ic: true, scope: 'web' },
-  { key: 'roam_max_players', env: 'NFSU2_ROAM_MAX_PLAYERS', kind: 'int', vals: '2..33', ic: true, scope: 'web' },
-  { key: 'roam_max_cars', env: 'NFSU2_ROAM_MAX_CARS', kind: 'int', vals: '0..32', ic: true, scope: 'web', device: true },
+  { key: 'roam_max_players', env: 'NFSU2_ROAM_MAX_PLAYERS', kind: 'int', vals: '2..49', ic: true, scope: 'web' },
+  { key: 'roam_max_cars', env: 'NFSU2_ROAM_MAX_CARS', kind: 'int', vals: '0..48', ic: true, scope: 'web', device: true },
   { key: 'roam_collide', env: 'NFSU2_ROAM_COLLIDE', kind: 'bool', ic: true, scope: 'web' },
   // quick chat's fixed phrases (web/src/app/quickchat.ts, runtime/roam_game.c say_*): the page has the picker, so not in
   // bundle.m's table

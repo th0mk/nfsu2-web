@@ -3,6 +3,10 @@
 # (no driving: the same at any frame rate).  After 3 s each page's line offers "Add ... as a friend"; both press
 # F now and then (shots between): whoever asks first, the other accepts, and both lines say friends.  The page's
 # keyphrase token is the test setting NFSU2_TEST_CLAIM (app/shell.ts testClaim, a development server's only).
+# Then, friends (each waits for the hub's mark: mp waitfriend): B's name over its car in the friends' tint (a_tint;
+# mp status says "our friend", and counts its minimap arrow in a crew's colour: the friends'); A goes into room
+# "Blue Room" (an invite link), B's car gone; A's page menu has Friends: B in free roam (no room) with a Join
+# (a_friends), which takes A back into B's room, B's car back (a_joined).
 #   node web/tools/roam-pair.mjs --page app --base ... --a "Al:roam_friend_app_a.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_TEST_CLAIM=<43 A>" \
 #        --b "Bo:roam_friend_app_b.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_TEST_CLAIM=<43 B>"
 0     tapuntil RETURN MC_Background.fng 120 4000
@@ -28,7 +32,8 @@
 +900  roam teleport 1695.3 -883.6 24.6 0x4000
 +300  roam teleport 1695.3 -883.6 24.6 0x4000
 +0    log placed
-+900  log SHOT a_1
++0    roam mp waitbump Bo 6000               # (B parked too, the noses 3 s together: the line offers Add friend)
++120  log SHOT a_1
 +0    log KEY KeyF                         # F acts only while the line offers something: whoever asks first,
 +400  log SHOT a_2
 +0    log KEY KeyF                         # the other's next F accepts
@@ -38,4 +43,14 @@
 +0    log KEY KeyF
 +600  log SHOT a_end
 +0    roam mp bump
-+0    log done
++0    roam mp waitfriend Bo 6000             # (once B accepted: the hub marks it our friend, RC_MARK_FRIEND)
++120  roam mp status                     # Bo: "our friend"
++0    log SHOT a_tint
++60   log INVITE room=Blue%20Room
++0    roam mp waitgone Bo 3000
++300  log FRIENDS shot a_friends
++300  log FRIENDS join Bo
++0    roam mp waitcars 1 3000
++300  roam mp status
++0    log SHOT a_joined
++60   quit

@@ -3,17 +3,27 @@
 What changed for players, newest first: the start page's Changelog button shows this file (web/build.mjs turns it
 into /changelog.json).
 
-Each release gets a section, written when its module is built: `## <date> (<commit>)`, the commit being the last one
-the release brings, so the next section covers the commits after it. One line per change, in plain text, as
-`- **Area:** what changed`, written for players. Left out: the server's insides, the forum bot, logs, tests, docs and
-cheat checks. A change that may or may not belong here is asked about before the release, not guessed.
+Each day with a release gets one section, written when its module is built: `## <date> (<commit>)`, the commit being
+the last one the day's releases bring, so the next section covers the commits after it. A second release on the same
+day adds its lines to that day's section and moves its commit on (web/build.mjs stops on a date twice). One line per
+change, in plain text, as `- **Area:** what changed`, written for players. Left out: the server's insides, the forum
+bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
+not guessed.
 
-## 2026-10-31 (81d18c9)
+## 2026-10-31 (d079aff)
 
-- **Touch controls:** Steering on the left or right, Nitro on the steering side, and a Career status button in free roam. Hold Steering to open the touch settings.
+- **Free roam:** touch front bumpers with another player for 3 seconds to add them as a friend, or add a claimed name on this page. Your friends are listed in this page's Friends & crews tab, with where they play and Join. Both of you need a claimed name.
+- **Friends:** write to each other. In free roam press I (on a touch screen, tap the message or quick chat's Message a friend); on this page, the envelope next to a friend. A friend who is away gets it when they are back.
+- **Free roam:** friends stand out: their names over their cars show at any distance, in pale lime, as do their arrows on the minimap and world map. When a friend comes into free roam a notice says so, and the page menu (F9) has Join.
+- **Messages:** the offer to add a friend and the line's messages (a place freed up, the server full) show at the top of the screen, as the page's other messages do.
+- **Frame rate:** slower PCs get back the frames they lost with the 29 October update.
+- **Touch controls:** Steering on the left or right, Nitro on the steering side, and a Career status button in free roam. Hold Steering to open the touch settings. No Quick chat button when quick chat is off.
+- **Free roam:** the game's outrun challengers are grey on the minimap and the world map, so they no longer look like players.
 - **Cloud saves:** offered sooner, and your browser can keep the passphrase with your passwords.
+- **Names:** a claimed name stays yours as long as the passphrase does, instead of 180 days after your last game.
+- **Profiles:** your first profile's name starts as the one under "Your name", so one Enter takes it.
 - **Keys:** a key held while the game lost focus works again without pressing it again.
-- **This page:** shorter texts. "Changes from the original" is now at the top of About.
+- **This page:** a Changelog button at the top, tabs for the big panel and for About, and Playing now under Play. Edge, Brave, Opera and Safari no longer get "Only Chrome and Firefox are tested". Shorter texts, and "Changes from the original" is now at the top of About.
 
 ## 2026-10-30 (b1f5c1a)
 

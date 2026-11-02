@@ -13,7 +13,7 @@
   { "why": "",
     "at": "<div><dt><kbd>Esc</kbd> <kbd>P</kbd></dt>", "put": "<div><dt><kbd>Esc</kbd></dt>" },
   { "why": "photo mode is Underground 2's (runtime/photo.c): F12 takes a screenshot here, as Saves says",
-    "at": "\n            <div class=\"key-only\"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>",
+    "at": "\n              <div class=\"key-only\"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>",
     "put": "" },
   { "why": "Most Wanted's changes from the original (TRACKER M6-11), at the top of About: the PC game's code, its controls and aliases; no high frame rate races, widescreen, free roam or Online yet",
     "at": "<p data-i18n>The PC game's own code, recompiled for Chrome and Firefox", "until": "</p>",
@@ -30,11 +30,13 @@
   { "why": "Underground 2's texture pack (Most Wanted has none)",
     "at": "\n        <p data-i18n-html>Texture pack:", "until": "</p>", "put": "" },
   { "why": "Underground 2's translations and subtitles (Most Wanted's text is its own)",
-    "at": "\n      <h3 data-i18n>Translations</h3>", "until": "</div>", "put": "" },
+    "at": "\n        <button type=\"button\" class=\"tab\" role=\"tab\" data-tab=\"translations\" data-i18n>Translations</button>", "put": "" },
+  { "why": "",
+    "at": "\n      <div class=\"pane prose\" role=\"tabpanel\" data-tab=\"translations\" hidden>", "until": "</div>", "put": "" },
   { "why": "Underground 2's Garage > Save: an alias saves by itself (autosave) or from the Alias Manager",
-    "at": "\n      <p class=\"hint\" data-i18n-html>To save while playing: <span class=\"key-only\"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>",
+    "at": "\n        <p class=\"hint\" data-i18n-html>To save while playing: <span class=\"key-only\"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>",
     "put": "" },
-  { "why": "no free roam or Online in Most Wanted yet: the section is hidden (settings-ui.ts shows it only with its rows)",
-    "at": "<section class=\"panel\" id=\"online\" aria-labelledby=\"online-title\">",
-    "put": "<section class=\"panel\" id=\"online\" aria-labelledby=\"online-title\" hidden>" }
+  { "why": "no free roam or Online in Most Wanted yet: no Online tab (its pane stays hidden, with no rows)",
+    "at": "\n        <button type=\"button\" class=\"tab\" role=\"tab\" data-tab=\"online\" data-i18n>Online</button>",
+    "put": "" }
 ]

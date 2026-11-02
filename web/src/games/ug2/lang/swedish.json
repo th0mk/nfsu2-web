@@ -6,9 +6,9 @@
   "Start an event, take an outrun": "Starta en tävling, anta en outrun-utmaning",
   "Map, messages": "Karta, meddelanden",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "PC-spelets egen kod, omkompilerad för Chrome och Firefox: upp till 120 fps i bredbild, läget Utforska och Online-race med vänner, och handkontroller, rattar och pekkontroller.",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "Min bror och jag spelade det här spelet tillsammans för ungefär 20 år sedan. Jag försökte porta det till webbläsaren, det fungerade förvånansvärt bra, och det gick lite överstyr. Det är kul att se så många som spelar det.",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "Min bror och jag spelade det här spelet tillsammans för ungefär 20 år sedan. Därför försökte jag porta det till webbläsaren, så att vi kunde spela tillsammans igen. Det fungerade förvånansvärt bra, och det gick lite överstyr. Det är kul att se så många som spelar det.",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "Rättighetsinnehavare: <0>legal@nfsu2.xyz</0>. Supportmejl besvaras inte; fråga på <1>vår Discord</1>.",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "Källkod på <0>GitHub</0>. Bygger på <1>NFSU2Recomp</1> av Talha Müderrisoğlu, den ursprungliga statiska x86 → C-omkompilatorn för NFSU2, efter förebild av <2>N64: Recompiled</2> och <3>XenonRecomp</3>.",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "Källkod på <0>GitHub</0>. Bygger på <1>NFSU2Recomp</1> av Talha Müderrisoğlu, den ursprungliga statiska x86 → C-omkompilatorn för NFSU2, efter förebild av <2>N64: Recompiled</2> och <3>XenonRecomp</3>. Projektet är en fork av <4>den MIT-licensierade versionen av NFSU2Recomp från 16 oktober 2026</4> och använder bara kod från den versionen.",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "Texturpaket: <0>Upscaled HUD</0> av LunicAura106.",
   "Translations": "Översättningar",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "Dubbade röster och filmer, och kinesisk, japansk, rysk och thailändsk text: <0>Multi 13 languages mod</0> av KyoriAsh, med stöd för thai av Lee-Ryo.",
@@ -23,5 +23,6 @@
   "Shift down": "Växla ned",
   "Quick chat (with other players): group, then phrase": "Snabbchatt (med andra spelare): grupp, sedan fras",
   "Photo mode; F12 again takes the photo": "Fotoläge; F12 igen tar fotot",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från NFSU2-webbservern."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Sidan är inte cross-origin-isolerad (ingen SharedArrayBuffer). Öppna den från NFSU2-webbservern.",
+  "Message a friend (in free roam)": "Skriv till en vän (i läget Utforska)"
 }

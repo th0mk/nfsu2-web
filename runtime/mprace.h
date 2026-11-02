@@ -112,6 +112,13 @@ struct CPU;
 /* test aid: the player's car rated as every player car type, stock and with
  * every performance part, then put back (roam mp perf survey) */
 void mprace_perf_survey(struct CPU *c, uint32_t car);
+/* 1 when player car type `type`'s record in GLOBAL\GlobalB (its physics and
+ * parts' tables) is not the game's own: edited game data */
+int  mprace_type_edited(int type);
+/* an Online race's rank frame's code (olfilter.c): "ed" and the type of the
+ * car we drive in two hex digits when its data is edited ("edff": a type is
+ * edited and we have no car now); 0 (code untouched) when not */
+int  mprace_rank_code(char code[4]);
 /* the last trip's race, for its report to the server (roam_game.c, RC_MSG_RACEREP): the network race's type, track
  * and laps, its cars and their average rating, our place (0: not finished), whether we hosted it or quit it, our car
  * as rated in the race, its engine power's factor there and the race's time (s, 0: none) */

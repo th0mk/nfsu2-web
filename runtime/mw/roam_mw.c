@@ -760,6 +760,7 @@ static void init_once(void){
     cf.test_mode = R.test; cf.max_players = maxp; cf.rate_hz = env_int("NFSU2_ROAM_RATE", 20, 10, 30);
     cf.discovery = env_int("NFSU2_ROAM_DISCOVERY", 1, 0, 1) && !R.test;
     cf.game = RC_GAME_MW;               /* the HELLO says Most Wanted: an MW hub takes it, a UG2 hub and UG2 peers do not */
+    cf.links = R.max_cars;              /* the hub links us with as many players as we show cars (roam_game.c's rule; 0: not said) */
     rc_io io = { 0, 0, 0, 0 };
     rc_session_init(&g_s, &cf, &io);
     roam_plat_cfg pc = { (uint16_t)port, R.test, cf.discovery, opt("NFSU2_ROAM_IMPAIR") };

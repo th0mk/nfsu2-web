@@ -65,6 +65,10 @@ pub fn dgram_flags(kind: u8, sender: u32, flags: u16, payload: &[u8]) -> Vec<u8>
 
 /// the HELLO flag of a player that reads crews (roam_core.h RC_HF_CREW)
 pub const HF_CREW: u16 = 0x0200;
+/// ...and of one that reads the hub's crew marks (roam_core.h RC_HF_HUBCREW: every core of now)
+pub const HF_HUBCREW: u16 = 0x0400;
+/// a crew mark's bit for a friend (roam_core.h RC_MARK_FRIEND)
+pub const MARK_FRIEND: u8 = 0x80;
 
 pub struct HelloOpts<'a> {
     pub room: u32,
@@ -76,11 +80,16 @@ pub struct HelloOpts<'a> {
     /// its crews: with them the HELLO has the crew flag and ends with them (a count, the hashes); None, a HELLO of
     /// before
     pub crews: Option<&'a [u32]>,
+    /// flags besides the crew flag (HF_HUBCREW)
+    pub flags: u16,
+    /// the links it wants (core version 10): a byte after the crews (with none, a count of 0 and the crew flag); 0
+    /// none
+    pub links: u8,
 }
 
 impl Default for HelloOpts<'_> {
     fn default() -> Self {
-        HelloOpts { room: 0, status: 2, name: b"p", seen: &[], cfg_rev: 3, core: 9, crews: None }
+        HelloOpts { room: 0, status: 2, name: b"p", seen: &[], cfg_rev: 3, core: 9, crews: None, flags: 0, links: 0 }
     }
 }
 
@@ -100,12 +109,19 @@ pub fn hello_with(sender: u32, o: &HelloOpts) -> Vec<u8> {
         let at = 14 + nl + 4 * i;
         p[at..at + 4].copy_from_slice(&s.to_le_bytes());
     }
-    let Some(crews) = o.crews else { return dgram(1, sender, &p) };
+    let crews = match o.crews {
+        Some(c) => c,
+        None if o.links > 0 => &[],
+        None => return dgram_flags(1, sender, o.flags, &p),
+    };
     p.push(crews.len() as u8);
     for c in crews {
         p.extend_from_slice(&c.to_le_bytes());
     }
-    dgram_flags(1, sender, HF_CREW, &p)
+    if o.links > 0 {
+        p.push(o.links);
+    }
+    dgram_flags(1, sender, HF_CREW | o.flags, &p)
 }
 
 pub fn hello(sender: u32) -> Vec<u8> {
@@ -149,6 +165,21 @@ pub fn snap_moving(sender: u32, pos: [f64; 3], v: [f64; 3], heading: f64, status
 /// the world map's question (MAPREQ): for max players at most, what changed since its answer base (0: none)
 pub fn mapreq_base(sender: u32, req: u16, max: u16, base: u16) -> Vec<u8> {
     dgram(10, sender, &[req.to_le_bytes(), max.to_le_bytes(), base.to_le_bytes()].concat())
+}
+
+/// the minimap's question (NEARREQ): for max players at most within radius m, what changed since its answer base
+pub fn nearreq(sender: u32, req: u16, max: u16, base: u16, radius: u16) -> Vec<u8> {
+    dgram(18, sender, &[req.to_le_bytes(), max.to_le_bytes(), base.to_le_bytes(), radius.to_le_bytes()].concat())
+}
+
+/// the minimap's answer (NEARD) in a frame of the hub's, read as a MAPD's
+pub fn neard_of(f: &[u8]) -> Option<Mapd> {
+    if f[16 + 5] != 19 {
+        return None;
+    }
+    let mut g = f.to_vec();
+    g[16 + 5] = 17;
+    mapd_of(&g)
 }
 
 /// a MAPD entry: the player's key, and where it is placed (x, y, heading, vx, vy), or None: gone

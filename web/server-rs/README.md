@@ -189,6 +189,15 @@ snapshots, 0 bad, 127,000 Online logins), real games: roam-pair (a friend's car 
 is), lan-pair and online-pair pass.  3000 driving at once was more than the bots could take on the same Mac (they fell
 behind, the switch dropped their snapshots; the server stayed at 1.5 cores): 4000 driving is the table above.
 
+## 48 links a player (2026-11-01, Ryzen 9 5900X, WSL)
+
+A game of core version 10 asks the hub for as many links as it shows friends' cars (48 by default on a computer that
+can take them, phones 16); older games get 32.  300 roam-crowd bots circling within 120 m of each other (`--bundle`):
+at 32 links the server took 2.48 cores, at 48 links 2.47 (the bundles: WebSocket messages a second barely moved, in
+6,200, out 9,000-10,000), and 20 MB/s of datagrams (with the switch's 16-byte headers, plain bundles) became 25 MB/s.
+The hub's tick (bench.rs `bench_links_32_40_48`, a loaded machine): 3000 players in 4 km 44 / 56 / 72 ms at 32 / 40 /
+48 links, in 1 km 36 / 45 / 54, 2000 on one spot 60 / 69 / 76: a tick every 500 ms.
+
 ## How the work is shared out
 
 - **HTTP** (nfsu2-http): the server's own HTTP/1.1 and TLS (rustls), a task per connection on a tokio runtime of
@@ -233,7 +242,7 @@ behind, the switch dropped their snapshots; the server stayed at 1.5 cores): 400
 | nfsu2-roam | the free-roam hub |
 | nfsu2-online | the game's Online mode |
 | nfsu2-vault | keyphrase saves (`/vault`): each player's saves as the page sealed them, one file per keyphrase, the copy of an earlier day, the caps, the sweep of the unused, the launch copy's mark; and the hand-over store (`covers`, `/covers` under a base): covers kept once for the move to the shared address, 30 days at most |
-| nfsu2-claims | claimed names (`/names`): which keyphrase may play under a name, for 180 days after it last played; one name a keyphrase, a change a week; read by the Online lobby, EA Messenger and the free-roam hub |
+| nfsu2-claims | claimed names (`/names`): which keyphrase may play under a name, as long as the keyphrase (two years after it last played or used it); one name a keyphrase, a change a week; read by the Online lobby, EA Messenger and the free-roam hub |
 | nfsu2-server (src/) | the routes, the rules, the wiring, the start-up |
 | nfsu2-roamload | thousands of simulated players: driving or idle, in line, leaving and coming back (as web/tools/roam-crowd.mjs, lighter) |
 
@@ -259,12 +268,15 @@ players.
 
 ## Where it differs from the Node server
 
-- 8000 players (`--max-peers` 1 to 8000; the image's `NFSU2_MAX_PEERS=8000`), Node's 2000: the switch's network is
-  10.77.0.0/19 (the welcome's mask 255.255.224.0; addresses round all thirty-two of its /24s, 10.77.0-31.x), the free-roam
-  hub takes 8192 players, Online mode 4000 lobby sessions, 1200 games and 16000 streams.  The game module's peer bits
-  (mailbox v4) cover a /21: for a player on 10.77.8-31.x the game asks that host itself (`runtime/web/net_lan.c`): a LAN race's
+- 12000 players (`--max-peers` 1 to 12000; the image's `NFSU2_MAX_PEERS=12000`), Node's 2000: the switch's network is
+  10.77.0.0/18 (the welcome's mask 255.255.192.0; addresses round the forty-eight /24s, 10.77.0-47.x), the free-roam
+  hub takes 12288 players, Online mode 6000 lobby sessions, 1800 games and 24000 streams.  The game module's peer bits
+  (mailbox v4) cover a /21: for a player on 10.77.8-47.x the game asks that host itself (`runtime/web/net_lan.c`): a LAN race's
   connect to one who has just left sends its SYN and ends after the same 3 s with WSAETIMEDOUT instead of
-  WSAEHOSTUNREACH.  Nothing else differs: the page and the module need no change (`crates/lan/tests/page.mjs`).
+  WSAEHOSTUNREACH.  Nothing else differs: the page and the module need no change (`crates/lan/tests/page.mjs`).  A game
+  open across the restart from the /19 keeps the /19's mask for LAN and Online races until its address changes
+  (net_lan.c takes the mask with a new address only), so it reaches nobody on 10.77.32-47.x there until a reload; free
+  roam reads the mask the page has now (`runtime/web/roam_web.c`).
 - A full switch keeps a line (nfsu2-lan `queue.rs`) for the pages that say they can wait (/lan?queue): Node closed
   every newcomer with "LAN full", and the page asked again every 5 s, so whoever asked first after a place freed up
   got it.  A page of before still gets "LAN full".

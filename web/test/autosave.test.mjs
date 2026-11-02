@@ -12,6 +12,8 @@
 // - renaming a profile (profile.ts renameProfile) moves its folder, file and
 //   cover shoots, changes the name inside and the two checksums it moves, and
 //   nothing else; a refused rename, or one that fails halfway, leaves the saves as they were
+// - a first profile's name field starts with Your name's letters and digits (profile.ts newProfileName), never NAME,
+//   Player or a slur
 // The profiles here are synthetic (the layout of profile.ts's header comment).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -252,4 +254,11 @@ test('cover shoots are told from profiles by their folder name', () => {
   assert.deepEqual(P.coverOf('CLAUDE DVD 1'), { profile: 'CLAUDE', cover: 'DVD 1' });
   assert.deepEqual(P.coverOf('A B Magazine 10'), { profile: 'A B', cover: 'Magazine 10' });
   for (const f of ['CLAUDE', 'DVD 1', 'CLAUDE DVD', 'CLAUDE dvd 1', 'CLAUDE DVD 1x']) assert.equal(P.coverOf(f), null, f);
+});
+
+test('a first profile\'s name field starts with Your name, as the game\'s field takes it', () => {
+  const cases = [['Alex', 'Alex'], ['Alex_the_Great', 'Alexthe'], ['Dani-99', 'Dani99'], ['RapidRacer', 'RapidRa'],
+    ['NAME', ''], ['player', ''], ['N_A_M_E', ''], ['__', ''], ['', ''], ['Nigger', ''], ['N-i-g-g-e-r', '']];
+  for (const [i, o] of cases) assert.equal(P.newProfileName(i), o, JSON.stringify(i));
+  for (const [, o] of cases) if (o) assert.ok(P.isProfileName(o), o);
 });

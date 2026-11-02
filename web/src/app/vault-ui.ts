@@ -9,7 +9,7 @@
 //
 // When it syncs: the page opens (or this tab takes the saves over), Play (newer saves from another browser come in
 // first, 4 s at most), 10 s after the game's last save of a burst, when the game ends, a few seconds after the Saves
-// or Settings section changed the files, and Sync now.
+// tab or a setting changed the files, and Sync now.
 //
 // A conflict (both changed) shows both sides, their profiles and when they were saved, the newer one marked; each way
 // out asks first, saying what it replaces.  Nothing syncs while one waits, so Play asks for it before the game starts
@@ -398,7 +398,7 @@ export class VaultPanel {
 
   /** The game saved a profile: sent 10 s after the last save of a burst. */
   saved() { this.later(10_000); }
-  /** The Saves or Settings section changed the files: sent in a few seconds. */
+  /** The Saves tab or a setting changed the files: sent in a few seconds. */
   changed() { this.later(3000); }
   private later(ms: number) {
     clearTimeout(this.timer);

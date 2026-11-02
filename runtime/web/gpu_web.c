@@ -1076,9 +1076,14 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
  * and reads its input, only once the page can take that one too.  Without it
  * a GPU-bound page had the GPU's frames, a frame ready and one recorded
  * between a press and the screen: with ~16 ms of GPU work a frame at 60 Hz,
- * input ~78 ms old at the next rAF, now ~61, at the same frame rate.  Not in
- * mailbox mode (frames replaced, nothing queues) nor while the page draws
- * nothing (a hidden tab), at most 100 ms.  NFSU2_WAIT_TAKEN=0: no wait (A/B). */
+ * input ~78 ms old at the next rAF, now ~61, at the same frame rate.  Taken
+ * is the page's claim (GW_ST_ENC, set before it uploads and encodes the
+ * frame), not its end: the game records its next frame while the page
+ * encodes this one.  Waiting for the end put the page's encode into every
+ * frame's time, which a slow computer felt (the page 6x slower and 22 ms of
+ * game work a frame: 35.4 fps -> 31.8).  Not in mailbox mode (frames
+ * replaced, nothing queues) nor while the page draws nothing (a hidden tab),
+ * at most 100 ms.  NFSU2_WAIT_TAKEN=0: no wait (A/B). */
 static void wait_taken(void){
     static int on = -1;
     if (on < 0){ const char *e = getenv("NFSU2_WAIT_TAKEN"); on = !(e && *e == '0'); }
@@ -1088,7 +1093,7 @@ static void wait_taken(void){
     int unlocked = 0;
     for (;;){
         int32_t s = ald(&g_ctl->state);
-        if (GW_ST_READY(s) != mine || ald(&g_ctl->attached) != GW_ATTACHED) break;
+        if (GW_ST_READY(s) != mine || GW_ST_ENC(s) || ald(&g_ctl->attached) != GW_ATTACHED) break;
         double left = 100.0 - (now_ms() - t0);
         if (left <= 0) break;
         if (!unlocked){ guest_wait_begin(); unlocked = 1; }
@@ -1102,6 +1107,10 @@ void metal_present(void){
     g_presents++;
     if (g_on) gw_attached();          /* the first present waits for the page; a detach ends recording */
     if (!g_on){ g_gframe++; tex_free_due(0); g_handed = 0; return; }
+    /* NFSU2_FRAME_BURN_MS=<ms>: busy work in every frame, a slower CPU for
+     * measurements (web/tools/bench.mjs --throttle slows the page's side) */
+    { static double burn = -1; if (burn < 0){ const char *e = getenv("NFSU2_FRAME_BURN_MS"); burn = e ? atof(e) : 0; }
+      if (burn > 0){ double t = now_ms(); while (now_ms() - t < burn) {} } }
     /* a readback handed the frame over already: only what was drawn since */
     if (!g_handed || g_b[g_cur].dn){ handoff(0, 0, 0, 0, 0); wait_taken(); }
     g_handed = 0;

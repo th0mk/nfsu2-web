@@ -194,39 +194,83 @@ fn the_wire_a_sessions_hello_to_the_hub_names_its_crews() {
     }
 }
 
+// the wire: a session that wants 40 links (rc_config.links, its game's Players' cars shown) says so after its crews,
+// and in a crowd of 60 that want 48 the hub links it with 40; one that says nothing gets 32, as a core before version 10
+#[test]
+fn the_wire_a_sessions_hello_to_the_hub_says_the_links_it_wants() {
+    let Some(run) = hubwire("roam_hubwire_links.wasm") else { return };
+    for (arg, want) in [(Some("40"), 40), (None, 32)] {
+        let h = unhex(&run(&[&["hellocrew"][..], arg.as_slice()].concat()));
+        let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
+        k.from(V(0), &h);
+        k.from(V(0), &snap(0x1234ABCD, [0.25, 0.25, 0.0]));
+        for i in 1..=60u32 {
+            k.from(V(i), &hello_with(100 + i, &HelloOpts { core: 10, links: 48, ..Default::default() }));
+            k.from(V(i), &snap(100 + i, [((i - 1) % 8) as f64 * 3.0 - 9.25, ((i - 1) / 8) as f64 * 3.0 - 9.25, 0.0]));
+        }
+        k.hub.tick();
+        let l = Lists(k.lists());
+        l.both_ends();
+        assert_eq!(l.of(0).len(), want, "{arg:?}");
+        match decode_roam(&h) {
+            Some(RoamMsg::Hello { core, crews, .. }) => assert_eq!((core, crews.len()), (10, 2), "its crews still read"),
+            other => panic!("not its HELLO: {other:?}"),
+        }
+    }
+}
+
 // the hub's crew marks as the C core takes them: a session's own HELLO and four players near it, in its "Night Owls", in "Red", in its "Blue Room", in none; the list the hub makes for it,
 // given to a session in those two crews, colours each player as the hub marked it (rc_peer_crew), and names no crew but
-// the session's own
+// the session's own; with friends (the server's friends lists: the session's keyphrase and the one in "Red", and the
+// one in none), it marks those two as its friends (rc_peer_friend), the crew-mate's crew kept
 #[test]
 fn the_wire_the_hubs_crew_marks_colour_a_sessions_peers() {
     let Some(run) = hubwire("roam_hubwire_marks.wasm") else { return };
     let h = unhex(&run(&["hellocrew"]));
     let (blue, owls, red) = (room_hash("Blue Room"), room_hash("Night Owls"), room_hash("Red"));
-    let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
-    k.from(V(0), &h);
-    k.from(V(0), &snap(0x1234ABCD, [0.25, 0.25, 0.0]));
-    let who: [Option<&[u32]>; 4] = [Some(&[owls]), Some(&[red]), Some(&[red, blue]), None];
-    for (i, crews) in who.iter().enumerate() {
-        let i = i as u32 + 1;
-        k.from(V(i), &hello_with(100 + i, &HelloOpts { crews: *crews, ..Default::default() }));
-        k.from(V(i), &snap(100 + i, [i as f64 * 10.0 + 0.25, 0.25, 0.0]));
+    let key = |c: char| nfsu2_claims::owner_of_token(&c.to_string().repeat(43)).unwrap();
+    for friends in [false, true] {
+        let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
+        let owners = [Some(key('A')), None, Some(key('C')), None, Some(key('E'))];
+        if friends {
+            k.hub.friends(V(0), key('A'), vec![key('C'), key('E')]);
+            k.hub.friends(V(2), key('C'), vec![key('A')]);
+            k.hub.friends(V(4), key('E'), vec![key('A')]);
+        }
+        k.hub.frame_from(V(0), &frame(V(0), &h), owners[0].as_ref());
+        k.hub.frame_from(V(0), &frame(V(0), &snap(0x1234ABCD, [0.25, 0.25, 0.0])), owners[0].as_ref());
+        let who: [Option<&[u32]>; 4] = [Some(&[owls]), Some(&[red]), Some(&[red, blue]), None];
+        for (i, crews) in who.iter().enumerate() {
+            let i = i as u32 + 1;
+            let o = owners[i as usize].as_ref();
+            k.hub.frame_from(V(i), &frame(V(i), &hello_with(100 + i, &HelloOpts { crews: *crews, ..Default::default() })), o);
+            k.hub.frame_from(V(i), &frame(V(i), &snap(100 + i, [i as f64 * 10.0 + 0.25, 0.25, 0.0])), o);
+        }
+        k.hub.tick();
+        let f = k.sent.lock().iter().find(|(vip, _)| *vip == V(0)).map(|(_, f)| f.clone()).expect("the session's list");
+        assert_eq!(crew_marks(&f).map(|m| m.0), Some(vec![blue, owls]), "its own crews, and no other: {}", hex(&f[16..]));
+        let want = |e: &PeerEntry| {
+            let i = (0..4).find(|&i| V(i + 1) == e.vip);
+            let crew = match i {
+                Some(0) => 1,
+                Some(2) => 0,
+                _ => -1,
+            };
+            format!("{crew}{}", if friends && matches!(i, Some(1 | 3)) { "f" } else { "" })
+        };
+        let list = peers_of(&f);
+        assert_eq!(list.len(), 4);
+        let expect: Vec<String> = list
+            .iter()
+            .map(|e| format!("{}.{}.{}.{}:{}:{}", e.vip >> 24, e.vip >> 16 & 255, e.vip >> 8 & 255, e.vip & 255, e.port, want(e)))
+            .collect();
+        assert_eq!(
+            run(&["hubcrew", &hex(&f[16..])]),
+            format!("ok {}", expect.join(" ")),
+            "friends {friends}: the session's crews and friends by the hub's marks"
+        );
+        assert!(!f.windows(4).any(|b| b == red.to_le_bytes()), "no crew of another player's on its list");
     }
-    k.hub.tick();
-    let f = k.sent.lock().iter().find(|(vip, _)| *vip == V(0)).map(|(_, f)| f.clone()).expect("the session's list");
-    assert_eq!(crew_marks(&f).map(|m| m.0), Some(vec![blue, owls]), "its own crews, and no other: {}", hex(&f[16..]));
-    let want = |e: &PeerEntry| match (0..4).find(|&i| V(i + 1) == e.vip) {
-        Some(0) => 1,
-        Some(2) => 0,
-        _ => -1,
-    };
-    let list = peers_of(&f);
-    assert_eq!(list.len(), 4);
-    let expect: Vec<String> = list
-        .iter()
-        .map(|e| format!("{}.{}.{}.{}:{}:{}", e.vip >> 24, e.vip >> 16 & 255, e.vip >> 8 & 255, e.vip & 255, e.port, want(e)))
-        .collect();
-    assert_eq!(run(&["hubcrew", &hex(&f[16..])]), format!("ok {}", expect.join(" ")), "the session's crews by the hub's marks");
-    assert!(!f.windows(4).any(|b| b == red.to_le_bytes()), "no crew of another player's on its list");
 }
 
 /// the lists by player i (10.77.0.(10 + i), port 47210)
@@ -749,8 +793,6 @@ fn six_hundred_players_the_grid_links_as_every_pair_does() {
 
 // ---- the hub on its thread (the idle hub, frames posted and its lists: tests/roam_thread.rs) ----
 
-
-
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {
     let t0 = Instant::now();
     while !f() {
@@ -787,7 +829,7 @@ fn on_its_thread_busy_workers_cut_the_links() {
     hub.stop();
     assert!(cut.is_ok(), "both workers busy, and the cap stayed");
     let first = lines.lock()[0].clone();
-    assert!(first.ends_with("% busy: at most 24 links a player (was 32)"), "{first}");
+    assert!(first.ends_with("% busy: at most 36 links a player (was 48)"), "{first}");
 }
 
 #[test]

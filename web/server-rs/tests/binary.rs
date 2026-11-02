@@ -1384,8 +1384,9 @@ fn friend_msgs(g: &Got, from: usize) -> Vec<Value> {
 // Free roam's friends through the whole server (src/app/friends.rs): pages whose players the hub linked ask about each
 // other and befriend each other with their messages on /lan, each hears of the other's request and of the friendship;
 // /friends shows the lists to the start page (where each friend plays) and takes its answers, a removal, a block;
-// what is no claimed name, not linked, or not this server's own page takes no part; and the friends are kept over a
-// restart (the friends lists' shelf, nfsu2-online buddy.rs)
+// what is no claimed name, not linked, or not this server's own page takes no part; friends message each other (to
+// the open page at once, else it waits and the start page takes it with the lists; a stranger's, an empty one, past
+// the limit: not); and the friends are kept over a restart (the friends lists' shelf, nfsu2-online buddy.rs)
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn free_roams_friends_through_the_server() {
     use nfsu2_claims::{Claims, owner_of_token};
@@ -1413,7 +1414,7 @@ async fn free_roams_friends_through_the_server() {
         }
     };
     // the start page: its own lists; no keyphrase, another site, a keyphrase without a name
-    assert_eq!(lists('A').await, serde_json::json!({ "me": "Al_", "done": "ok", "friends": [], "asks": [], "sent": [] }));
+    assert_eq!(lists('A').await, serde_json::json!({ "me": "Al_", "done": "ok", "friends": [], "asks": [], "sent": [], "mail": [] }));
     assert_eq!(http(port, "GET", "/friends", &[], "").await.0, 401);
     assert_eq!(http(port, "GET", "/friends", &[("authorization", &bearer('A')), ("sec-fetch-site", "cross-site")], "").await.0, 403);
     assert_eq!(http(port, "GET", "/friends", &[("authorization", &bearer('A')), ("origin", "https://evil.example")], "").await.0, 403);
@@ -1482,11 +1483,45 @@ async fn free_roams_friends_through_the_server() {
     let k = n(&al);
     ask(&al, "can", "Bo");
     assert_eq!(first(&al, "can", k).await["st"], "friends");
+    // messages: to Bo's open page at once; to a stranger, an empty one, then past the limit (3 at once) not
+    let say = |b: &Browser, name: &str, body: &str, id: u32| {
+        b.text(&serde_json::json!({ "t": "friend", "op": "msg", "name": name, "body": body, "id": id }).to_string())
+    };
+    async fn done(b: &Browser, id: u32, from: usize) -> Value {
+        b.until_ms(4000, move |g| friend_msgs(g, from).into_iter().find(|m| m["op"] == "msg" && m["id"] == id)).await
+    }
+    let (ka, kb) = (n(&al), n(&bo));
+    say(&al, "Bo_", "meet me at the airport", 1);
+    assert_eq!(done(&al, 1, ka).await["done"], "sent");
+    let m = first(&bo, "mail", kb).await;
+    assert_eq!((m["from"].as_str(), m["body"].as_str()), (Some("Al_"), Some("meet me at the airport")), "{m}");
+    // (one at a time: each is handled on its own task)
+    say(&al, "Cy_", "hi", 2);
+    assert_eq!(done(&al, 2, ka).await["done"], "none", "not friends");
+    say(&al, "Bo_", "   ", 3);
+    assert_eq!(done(&al, 3, ka).await["done"], "empty");
+    say(&al, "Bo_", "one more", 4);
+    assert_eq!(done(&al, 4, ka).await["done"], "rate", "3 at once, then one every 2 s");
+    let k = n(&dee);
+    say(&dee, "Al_", "hi", 5);
+    assert_eq!(done(&dee, 5, k).await["done"], "claim", "Dee has no claimed name");
     // the start page: Bo plays in free roam, in the room of everyone; then Bo leaves
     assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "" }]));
+    // ...and the game's page on its link (its notices, the page menu's Friends)
+    let k = n(&al);
+    al.text(r#"{"t":"friend","op":"where"}"#);
+    assert_eq!(first(&al, "where", k).await["friends"], serde_json::json!([{ "name": "Bo_", "where": "roam", "room": "" }]));
     bo.close().await;
     sleep(1200).await;
     assert_eq!(lists('A').await["friends"], serde_json::json!([{ "name": "Bo_", "where": "" }]));
+    // Bo away: Al's message waits; Bo's start page takes it with the lists (once), and answers to Al's open page
+    sleep(1000).await;
+    let ka = n(&al);
+    say(&al, "Bo_", "race later?", 6);
+    assert_eq!(done(&al, 6, ka).await["done"], "kept");
+    let mail = lists('B').await["mail"].clone();
+    assert_eq!((mail[0]["from"].as_str(), mail[0]["body"].as_str(), mail.as_array().map(Vec::len)), (Some("Al_"), Some("race later?"), Some(1)), "{mail}");
+    assert_eq!(lists('B').await["mail"], serde_json::json!([]));
     // the start page's answers: a removal (friends no more, on both lists), a block, an op that is none
     let post = |c: char, op: &str, name: &str| {
         let (b, body) = (bearer(c), serde_json::json!({ "op": op, "name": name }).to_string());
@@ -1496,9 +1531,20 @@ async fn free_roams_friends_through_the_server() {
             serde_json::from_str::<Value>(&r).unwrap()
         }
     };
+    let ka = n(&al);
+    let r = http(port, "POST", "/friends", &[("authorization", &bearer('B')), ("content-type", "application/json")], r#"{"op":"msg","name":"Al_","body":"sure"}"#).await;
+    assert_eq!((r.0, serde_json::from_str::<Value>(&r.1).unwrap()["done"].clone()), (200, Value::from("sent")), "{}", r.1);
+    assert_eq!(first(&al, "mail", ka).await["body"], "sure");
     assert_eq!(post('B', "remove", "Al_").await["done"], "ok");
     assert_eq!(lists('A').await["friends"], serde_json::json!([]));
     assert_eq!(post('A', "remove", "Bo_").await["done"], "none");
+    // a request by name from the start page: the name as typed, the claim's spelling; Cy's open page hears of it
+    let kc = n(&cy);
+    let r = post('A', "ask", "cy").await;
+    assert_eq!((r["done"].as_str(), r["sent"].clone()), (Some("asked"), serde_json::json!(["Cy_"])), "{r}");
+    assert_eq!(first(&cy, "asks", kc).await["name"], "Al_");
+    assert_eq!(post('A', "ask", "Nobody").await["done"], "claim", "a name nobody claimed");
+    assert_eq!(post('A', "ask", "al").await["done"], "self");
     assert_eq!(http(port, "POST", "/friends", &[("authorization", &bearer('A'))], r#"{"op":"befriend","name":"Bo"}"#).await.0, 400, "no such op");
     assert_eq!(post('A', "block", "Cy").await["done"], "name", "a name as the lists have it: its Online form");
     assert_eq!(post('A', "block", "Cy_").await["done"], "ok");
@@ -1515,7 +1561,13 @@ async fn free_roams_friends_through_the_server() {
     }
     assert_eq!(srv.stop().await, Some(0));
     let lines = srv.lines();
-    for l in ["\"Al_\" asked \"Bo_\" to be friends (free roam)", "\"Bo_\" and \"Al_\" are friends (asked back in free roam)"] {
+    for l in [
+        "\"Al_\" asked \"Bo_\" to be friends (free roam)",
+        "\"Bo_\" and \"Al_\" are friends (asked back in free roam)",
+        "\"Al_\" sent \"Bo_\" a message (got it)",
+        "\"Al_\" sent \"Bo_\" a message (away, it waits)",
+        "\"Al_\" asked \"Cy_\" to be friends (the start page)",
+    ] {
         assert!(lines.iter().any(|x| x.contains(l)), "{l}: {lines:?}");
     }
     let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--vault-gb", "1"]), port);

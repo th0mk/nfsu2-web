@@ -192,6 +192,7 @@ impl LanSwitch {
             probe: parking_lot::Mutex::new(crate::lag::Probe::new(now)),
             share: crate::lag::SHARE_FULL.into(),
             away: false.into(),
+            roam_at: 0.into(),
             listed: false.into(),
             ident: ctx.ident.clone(),
             since: now_ms(),
@@ -211,7 +212,9 @@ impl LanSwitch {
         // the welcome (and a resume's whole list, which has the newcomer on it) are queued before the other players'
         // readers can find the newcomer: nothing they route to it comes first (Node sent both before it went back to
         // its event loop)
-        let welcome = format!(r#"{{"t":"welcome","vip":{vip},"vipStr":"{}","mask":"{MASK}","token":"{token}"}}"#, vip_str(vip));
+        // "bundle":1 for pages of before 2026-10-31 (ebe65786): they bundle what they send only when the welcome says
+        // so, and sent every friend its own copy of each car state without it (nfsu2.xyz 2026-10-31: 8x the bytes in)
+        let welcome = format!(r#"{{"t":"welcome","vip":{vip},"vipStr":"{}","mask":"{MASK}","token":"{token}","bundle":1}}"#, vip_str(vip));
         conn.push(Out::Text(Bytes::from(welcome)));
         if peer.hello.load(Relaxed) {
             let list = self.list_for(m, &peer);
@@ -702,7 +705,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_welcome_is_queued_before_anyone_can_send_to_the_newcomer() {
         const N: usize = 300;
-        let sw = LanSwitch::new(LanOptions { max_peers: 8000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 12000, ..LanOptions::default() }, "", None, None, None, None);
         // a sender on another core: it looks at each address the switch hands out next, as soon as it is taken
         let watcher = {
             let sw = sw.clone();
@@ -734,7 +737,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn what_full_costs() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 8000, ..LanOptions::default() }, "", None, None, None, None);
+        let sw = LanSwitch::new(LanOptions { max_peers: 12000, ..LanOptions::default() }, "", None, None, None, None);
         let peers: Vec<_> = (0..1000).map(|i| crate::route::tests::peer(&sw, &format!("g{i}"))).collect();
         let t = std::time::Instant::now();
         let mut n = 0;

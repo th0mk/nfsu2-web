@@ -29,7 +29,8 @@
 //! - PSET SHOW STAT PROD -> ack; when it changed, PGET USER SHOW STAT PROD TITL EXTR ATTR to every online player who
 //!   has this persona as a friend (at most once a second, the latest)
 //! - SEND USER BODY SUBJ TYPE -> SEND; RECV USER (the sender) BODY SUBJ TYPE TIME to the persona; to one that is away
-//!   and has the sender as a friend it waits (`MAIL_DAYS`) for that persona's next login
+//!   and has the sender as a friend it goes to that persona's pages (`PageMailHook`), else waits (`MAIL_DAYS`) for
+//!   its next login or page.  One that reads as a slur reaches no one (`msg_slur`: the lobby chat's rule)
 //! - GINV/GRSP/GRVK USER ... -> ack; passed on to the persona (USER = the sender)
 //! - USCH USER MAXR ID -> USCH ID SIZE=n, then n x USER ID USER (the Search: personas online or known from their
 //!   races whose names start with the text)
@@ -66,7 +67,10 @@
 //! persona's messages, invites and requests never arrive.
 //!
 //! Free roam's pages befriend through the same lists (`friends`, the page's keyphrase for the persona: its claimed
-//! name), so a friend made by touching front bumpers in free roam is a friend in the Messenger too.
+//! name), so a friend made by touching front bumpers in free roam is a friend in the Messenger too.  Pages message
+//! their friends through the same store (`page_send`, `PAGE_MSG_LEN` characters): to the Messenger of a friend logged
+//! in there, else to the friend's pages, else it waits as the Messenger's own do, and a page takes the ones that
+//! waited with its list (`FriendAsk::ListMail`).
 //!
 //! A buddy connection's state stays readable until the event that closed it is over, so the code still handling that
 //! event goes on with it (a handler whose own answer closed the connection goes on with no persona, and fails where
@@ -98,6 +102,8 @@ const ASK_DAYS: f64 = 30.0;
 const MAX_MAIL: usize = 20;
 const ALL_MAIL: usize = 20_000;
 const MAIL_DAYS: f64 = 7.0;
+/// a page's message to a friend, at most (characters): three lines of free roam's log (web/src/app/messages.ts)
+pub const PAGE_MSG_LEN: usize = 120;
 const DAY_MS: f64 = 86_400_000.0;
 /// how long after the friends list the waiting messages go: the game files a message under the player's entry of its
 /// Messenger, which a friend from the list gets only once every message the game had to read is handled (its RGET's
@@ -148,7 +154,27 @@ pub enum FriendAsk {
     Remove(String),
     /// name blocked: friends no more, its request gone, and the next ones never arrive
     Block(String),
+    /// the lists, and the messages that waited for the persona (`FriendReply::mail`: the page's now, gone from here)
+    ListMail,
+    /// a message to the friend `name` (`page_send`): at most `PAGE_MSG_LEN` characters
+    Send(String, String),
+    /// a request to the persona `name` from the start page (its name typed: the server's friends.rs gives the claimed
+    /// name as its claim spells it); friends at once when `name` asked first
+    AskByName(String),
 }
+
+/// a message for a page (`FriendReply::mail`, `PageMailHook`): who sent it, its text, and when (ms since 1970)
+#[derive(Clone, Debug, PartialEq)]
+pub struct PageMail {
+    pub from: String,
+    pub body: String,
+    pub t: f64,
+}
+
+/// Where a friend's message goes when its persona is not in the Messenger (`Core::set_page_mail`): the persona's
+/// pages (the server's friends.rs, the open pages that play with its keyphrase).  True: one took it.  Called on the
+/// Online thread with the persona's name as given.
+pub type PageMailHook = Box<dyn Fn(&str, &PageMail) -> bool + Send>;
 
 /// one friend as the page sees it
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -173,6 +199,8 @@ pub struct FriendReply {
     /// the requests that wait for its answer, and its own that wait for theirs
     pub asks: Vec<String>,
     pub sent: Vec<String>,
+    /// `FriendAsk::ListMail`: the messages that waited for it, oldest first
+    pub mail: Vec<PageMail>,
 }
 
 /// a message that waits for its persona: who sent it, its text, and when (ms since 1970)
@@ -270,6 +298,11 @@ pub struct Buddies {
     blockers: HashMap<String, u32>,
     /// the messages waiting, on the lists in memory
     mail: usize,
+    /// where a message goes when its persona is not in the Messenger (`PageMailHook`); None: it waits
+    page_mail: Option<PageMailHook>,
+    /// lower-case persona -> when its messages that read as a slur went (the last `slur_window_ms` of the lobby's
+    /// limits), and until when its messages are off (`msg_slur`)
+    msg_slurs: HashMap<String, (Vec<f64>, f64)>,
     /// when requests and messages that waited too long were last let go, and the shelf last swept
     pruned: f64,
     swept: f64,
@@ -522,6 +555,8 @@ impl Buddies {
             met_by: HashMap::new(),
             blockers: HashMap::new(),
             mail: 0,
+            page_mail: None,
+            msg_slurs: HashMap::new(),
             pruned: f64::NEG_INFINITY,
             swept: now as f64,
             made: HashMap::new(),
@@ -1415,9 +1450,16 @@ impl Core {
         };
         let mk = lower(&me);
         self.buddy_fetch(&mk);
+        let mut mail = Vec::new();
         let done = match ask {
             FriendAsk::List => "ok",
-            FriendAsk::Ask(name) => self.page_ask(&me, group, &name),
+            FriendAsk::ListMail => {
+                mail = self.take_page_mail(&mk);
+                "ok"
+            }
+            FriendAsk::Send(name, body) => self.page_send(&me, group, &name, &body),
+            FriendAsk::Ask(name) => self.page_ask(&me, group, &name, "free roam"),
+            FriendAsk::AskByName(name) => self.page_ask(&me, group, &name, "the start page"),
             FriendAsk::Answer(name, yes) => self.page_answer(&me, group, &name, yes),
             FriendAsk::Remove(name) => {
                 let k = lower(&name);
@@ -1452,11 +1494,12 @@ impl Core {
             .map(|(_, (n, _))| n.clone())
             .collect();
         let sent = l.into_iter().flat_map(|l| l.r.iter()).filter(|(k, (_, t))| waits(t) && not_friend(k)).map(|(_, (n, _))| n.clone()).collect();
-        FriendReply { me: Some(me), done, friends, asks, sent }
+        FriendReply { me: Some(me), done, friends, asks, sent, mail }
     }
 
-    /// the page of persona `me` asks `name` to be friends (`FriendAsk::Ask`)
-    fn page_ask(&mut self, me: &str, group: &Arc<str>, name: &str) -> &'static str {
+    /// the page of persona `me` asks `name` to be friends (`FriendAsk::Ask` in free roam, `AskByName` on the start
+    /// page: `via` says which, in the log)
+    fn page_ask(&mut self, me: &str, group: &Arc<str>, name: &str, via: &str) -> &'static str {
         let (mk, k) = (lower(me), lower(name));
         if !valid_name(name) {
             return "name";
@@ -1478,7 +1521,8 @@ impl Core {
         }
         // two requests that cross make friends
         if let Some(asker) = self.buddies.request(&k, &mk, now).map(str::to_string) {
-            return match self.befriend_as(me, group, &asker, "asked back in free roam") {
+            let how = if via == "free roam" { "asked back in free roam" } else { "asked back on the start page" };
+            return match self.befriend_as(me, group, &asker, how) {
                 Ok(true) => "friends",
                 _ => "full",
             };
@@ -1496,7 +1540,7 @@ impl Core {
         self.asked_list(name);
         self.buddies.ask(&mk, k.clone(), name.to_string(), now.floor());
         self.touch_lists();
-        (self.log)(&format!("[online] \"{me}\" asked \"{name}\" to be friends (free roam)"), Some(group));
+        (self.log)(&format!("[online] \"{me}\" asked \"{name}\" to be friends ({via})"), Some(group));
         if let Some(o) = self.buddies.online.get(&k).copied() {
             let _ = self.bsend(o, "RNOT", &fields![("USER", me), ("CHNG", "A"), ("ATTR", ASKED_ME)], "");
             let p = self.presence_of(&mk, me);
@@ -1560,26 +1604,138 @@ impl Core {
     /// a message to persona k (lower case) that is away waits for it when k has the sender as a friend and does not
     /// block it, while there is room (the oldest of k's goes for it)
     fn keep_mail(&mut self, k: &str, from: &str, f: &FieldMap, t: f64) {
-        let me = lower(from);
-        self.buddy_fetch(k);
-        if self.buddies.mail >= ALL_MAIL || self.buddies.blocks(k, &me) {
+        let body = clean_text(f.str("BODY"), 500);
+        // a friend's pages take it first (`PageMailHook`)
+        if self.page_mail_to(k, &PageMail { from: from.to_string(), body: body.clone(), t: t.floor() }) {
             return;
         }
+        let subj = clean_text(f.str("SUBJ"), 64);
+        let kind = jsx::slice16(f.get("TYPE").unwrap_or("C"), 4).to_string();
+        self.keep(k, Mail { from: from.to_string(), body, subj, kind, t: t.floor() });
+    }
+
+    /// `keep_mail`'s store: false when it is not kept (no room, k blocks the sender or has it on no list)
+    fn keep(&mut self, k: &str, m: Mail) -> bool {
+        let me = lower(&m.from);
+        self.buddy_fetch(k);
+        if self.buddies.mail >= ALL_MAIL || self.buddies.blocks(k, &me) {
+            return false;
+        }
         self.buddies.mark(k);
-        let Some(l) = self.buddies.lists.get_mut(k).filter(|l| l.b.contains_key(&me)) else { return };
-        l.m.push(Mail {
-            from: from.to_string(),
-            body: clean_text(f.str("BODY"), 500),
-            subj: clean_text(f.str("SUBJ"), 64),
-            kind: jsx::slice16(f.get("TYPE").unwrap_or("C"), 4).to_string(),
-            t: t.floor(),
-        });
+        let Some(l) = self.buddies.lists.get_mut(k).filter(|l| l.b.contains_key(&me)) else { return false };
+        l.m.push(m);
         self.buddies.mail += 1;
         if l.m.len() > MAX_MAIL {
             l.m.remove(0);
             self.buddies.mail -= 1;
         }
         self.touch_lists();
+        true
+    }
+
+    /// where a friend's message goes when its persona k (lower case) is not in the Messenger: its pages
+    /// (`PageMailHook`), when k has the sender as a friend and does not block it.  True: a page took it
+    fn page_mail_to(&mut self, k: &str, m: &PageMail) -> bool {
+        let me = lower(&m.from);
+        self.buddy_fetch(k);
+        let Some(name) = self.buddies.lists.get(k).filter(|l| l.b.contains_key(&me)).map(|l| l.name.clone()) else { return false };
+        if self.buddies.blocks(k, &me) {
+            return false;
+        }
+        self.buddies.page_mail.as_ref().is_some_and(|f| f(&name, m))
+    }
+
+    /// Where a friend's messages go when its persona is not in the Messenger (the server's friends.rs: its pages)
+    pub fn set_page_mail(&mut self, f: PageMailHook) {
+        self.buddies.page_mail = Some(f);
+    }
+
+    /// the messages that waited for persona `me` (lower case), for its page, and gone from the store (a sender blocked
+    /// since is left out)
+    fn take_page_mail(&mut self, me: &str) -> Vec<PageMail> {
+        let Some(l) = self.buddies.lists.get_mut(me).filter(|l| !l.m.is_empty()) else { return Vec::new() };
+        let mail = std::mem::take(&mut l.m);
+        self.buddies.mail -= mail.len();
+        self.buddies.mark(me);
+        self.touch_lists();
+        let now = self.bnow();
+        mail.into_iter()
+            .filter(|m| now - m.t < MAIL_DAYS * DAY_MS && !self.buddies.blocks(me, &lower(&m.from)))
+            .map(|m| PageMail { from: m.from, body: m.body, t: m.t })
+            .collect()
+    }
+
+    /// A friend's message of persona `mk` (lower case) that reads as a slur (nfsu2-names `chat_slur`, as the lobby's
+    /// chat): it reaches no one (its sender is told it went), and the lobby's `slur_lines` of them in its
+    /// `slur_window_ms` turn the persona's messages off for its `slur_mute_ms`, the log says so.  True: it reads as one
+    fn msg_slur(&mut self, mk: &str, who: &str, body: &str, group: Option<&Arc<str>>) -> bool {
+        let Some(word) = nfsu2_names::chat_slur(body).map(str::to_string) else { return false };
+        let (now, l) = (self.bnow(), self.lobby.l);
+        let x = self.buddies.msg_slurs.entry(mk.to_string()).or_default();
+        x.0.retain(|t| now - t < l.slur_window_ms);
+        x.0.push(now);
+        let muted = x.0.len() as f64 >= l.slur_lines;
+        if muted {
+            x.1 = now + l.slur_mute_ms;
+            x.0.clear();
+        }
+        let off = nfsu2_util::js::number_to_string(l.slur_mute_ms / 1000.0);
+        let then = if muted { format!("; messages off for {off} s") } else { String::new() };
+        let word = serde_json::to_string(&word).expect("a string");
+        (self.log)(&format!("[online] \"{who}\": a message with {word} in it, sent to no one{then}"), group.map(|g| &**g));
+        true
+    }
+
+    /// persona `mk`'s (lower case) messages are off now (`msg_slur`)
+    fn msg_muted(&mut self, mk: &str) -> bool {
+        let now = self.bnow();
+        let Some(x) = self.buddies.msg_slurs.get(mk) else { return false };
+        if x.1 > now {
+            return true;
+        }
+        if x.0.iter().all(|t| now - t >= self.lobby.l.slur_window_ms) {
+            self.buddies.msg_slurs.remove(mk);
+        }
+        false
+    }
+
+    /// The page of persona `me` sends its friend `name` a message (`FriendAsk::Send`): to the friend's EA Messenger
+    /// when it is logged in there, else to its pages (`PageMailHook`), else it waits (`MAIL_DAYS`).  "sent", "kept",
+    /// "none" (not friends), "empty", "off" (its messages are off: `msg_slur`), "full" (no room for it to wait)
+    fn page_send(&mut self, me: &str, group: &Arc<str>, name: &str, body: &str) -> &'static str {
+        let (mk, k) = (lower(me), lower(name));
+        let body = clean_text(body, PAGE_MSG_LEN);
+        if body.is_empty() {
+            return "empty";
+        }
+        if self.msg_muted(&mk) {
+            return "off";
+        }
+        self.buddy_fetch(&k);
+        let Some(to) = self.buddies.list(me).and_then(|l| l.b.get(&k).cloned()) else { return "none" };
+        // one that reads as a slur, or to a friend that blocks the sender: its sender sees it go, nobody gets it
+        if self.msg_slur(&mk, me, &body, Some(group)) || self.buddies.blocks(&k, &mk) {
+            return "sent";
+        }
+        let now = self.bnow();
+        let o = self.buddies.online.get(&k).copied().filter(|o| self.buddies.conns.get(o).is_some_and(|x| x.persona.is_some()));
+        let done = if let Some(o) = o {
+            let rec = fields![("USER", me), ("BODY", body.as_str()), ("SUBJ", ""), ("TYPE", "C"), ("TIME", (now / 1000.0).floor())];
+            if self.bsend(o, "RECV", &rec, "").is_ok() { "sent" } else { "full" }
+        } else if self.page_mail_to(&k, &PageMail { from: me.to_string(), body: body.clone(), t: now.floor() }) {
+            "sent"
+        } else if self.keep(&k, Mail { from: me.to_string(), body, subj: String::new(), kind: "C".into(), t: now.floor() }) {
+            "kept"
+        } else {
+            "full"
+        };
+        let how = match done {
+            "sent" => "got it",
+            "kept" => "away, it waits",
+            _ => "no room for it",
+        };
+        (self.log)(&format!("[online] \"{me}\" sent \"{to}\" a message ({how})"), Some(group));
+        done
     }
 
     /// the messages that waited for persona `me` (lower case), to connection b, and gone from the store (a sender
@@ -1949,7 +2105,11 @@ impl Core {
                 }
                 x.msgs_v -= 1.0;
                 self.bsend(b, kind, &with_id, "")?;
-                // away: a message from a friend waits for the persona (an invite is forgotten)
+                // a message that reads as a slur, or one while the sender's are off, reaches no one (`msg_slur`)
+                if kind == "SEND" && (self.msg_muted(&me) || self.msg_slur(&me, &bp, &clean_text(f.str("BODY"), 500), Some(&group))) {
+                    return Ok(());
+                }
+                // away: a message from a friend goes to its pages, or waits for the persona (an invite is forgotten)
                 let Some(o) = o.filter(|o| self.buddies.conns.get(o).is_some_and(|x| x.persona.is_some())) else {
                     if kind == "SEND" && valid_name(&to) {
                         self.keep_mail(&k, &bp, f, t);

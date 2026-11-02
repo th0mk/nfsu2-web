@@ -2,7 +2,8 @@
 //! Online) between browsers on this server.  It keeps the rules and the console lines of the Node server it
 //! replaced, and its results in the state folder (online/stats.json) byte for byte as that one wrote them, so the
 //! results kept before are read as they are; the friends lists, one buddies.json then, are one file a persona since
-//! 2026-10-31 (online/friends/, buddy.rs), and free roam's pages befriend through them too ([`OnlineHost::friends`]).
+//! 2026-10-31 (online/friends/, buddy.rs), and free roam's pages befriend and message through them too
+//! ([`OnlineHost::friends`]; a message for a page goes out through [`OnlineHost::page_mail`]).
 //! What is the game's own (rooms, config, flags, race types, the report and STAT formats, the Messenger's title, the
 //! news) is a table: title.rs.
 //!
@@ -66,7 +67,7 @@ use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
 pub use crate::title::Title;
-pub use crate::buddy::{FriendAsk, FriendReply, FriendRow};
+pub use crate::buddy::{FriendAsk, FriendReply, FriendRow, PAGE_MSG_LEN, PageMail, PageMailHook};
 pub use crate::trace::LobbyTrace;
 
 /// 10.77.0.1: the server's own host on the virtual LAN, the address the switch never hands to a browser (vhost.rs)
@@ -114,6 +115,7 @@ enum Event {
     Vips(oneshot::Sender<HashSet<u32>>),
     Attach(SwitchSend),
     Friends(Arc<str>, Arc<str>, FriendAsk, oneshot::Sender<FriendReply>),
+    PageMail(PageMailHook),
     Stop,
 }
 
@@ -140,6 +142,10 @@ impl OnlineHost {
     /// the switch's way to its browsers
     pub fn attach_switch(&self, send: SwitchSend) {
         let _ = self.tx.send(Event::Attach(send));
+    }
+    /// where a friend's message goes when its persona is not in EA Messenger (buddy.rs `PageMailHook`: its pages)
+    pub fn page_mail(&self, f: PageMailHook) {
+        let _ = self.tx.send(Event::PageMail(f));
     }
     /// a page's friends lists (EA Messenger's, buddy.rs): as the keyphrase `owner` (nfsu2-claims; its claimed name is
     /// the persona), on behalf of client `group`
@@ -194,6 +200,7 @@ fn run(title: &'static Title, o: OnlineOptions, rx: mpsc::Receiver<Event>) {
                 guarded(&mut core, None, |c| out = Some(c.friends(&owner, &group, ask)));
                 let _ = tx.send(out.unwrap_or_default());
             }
+            Some(Event::PageMail(f)) => core.set_page_mail(f),
             Some(Event::Stop) => {
                 guarded(&mut core, None, |c| c.stop());
                 return;

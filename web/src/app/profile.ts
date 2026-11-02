@@ -34,6 +34,7 @@
 // Pure (no DOM, no OPFS) so it can be checked under node; turnOnAutosave and
 // renameProfile take the save folder's file functions.
 
+import { readsAsSlur, UNCLAIMABLE } from './claim';
 import { fill, N, t, tn, type Vars } from './i18n';
 import { checksum, isMemcardFile } from './memcard';
 
@@ -257,6 +258,16 @@ export async function turnOnAutosave(fs: SaveFiles, profilesDir: string): Promis
  */
 export const NAME_MAX = 7;
 export const isProfileName = (s: string) => /^[A-Za-z0-9]+$/.test(s) && s.length <= NAME_MAX;
+
+/**
+ * What a first profile's name field starts with instead of the game's NAME (shell.ts NFSU2_NEW_PROFILE_NAME,
+ * runtime/overrides.c sub_004ff3b0): the letters and digits of Your name, the first NAME_MAX.  '' for none, and for
+ * the game's names for nobody (NAME, Player) or a name that reads as a slur.
+ */
+export function newProfileName(yours: string): string {
+  const n = yours.replace(/[^A-Za-z0-9]/g, '').slice(0, NAME_MAX);
+  return !n || UNCLAIMABLE.includes(n.toLowerCase()) || readsAsSlur(yours) || readsAsSlur(n) ? '' : n;
+}
 
 /**
  * A cover shoot's save, a folder of its own beside its profile's: "<NAME> DVD 1",

@@ -1,0 +1,26 @@
+# A first profile's name field starts with Your name, not NAME (runtime/overrides.c sub_004ff3b0): the page passes
+# NFSU2_NEW_PROFILE_NAME when its save folder has no profile (shell.ts); the run gives Alex_the_Great, so the field
+# starts as "Alexthe" (letters and digits, 7 at most).  The field (0x83a7b0): +0x100 the text, +0x200 its length,
+# +0x208 the characters it has had.  One Enter takes the name as it is, Yes saves the profile under it.
+#   node web/tools/input-suite.mjs <outdir> kb_profile_prefill
+0     nstapuntil RETURN MC_Background.fng 120 4000  # title -> "create a new profile?"
++120  nstap LEFT                                    # "Yes"
++30   nstap RETURN
++240  dump name_prefilled
++0    peek 0x83a8b0 8
++0    peek 0x83a9b8 1
++0    expect i:0x83a9b0 == 7
++0    expect b:0x83a8b0 == 65                       # A
++0    expect b:0x83a8b6 == 101                      # e, the seventh
++0    expect b:0x83a8b7 == 0
++0    nstap RETURN                                  # -> "save profile named Alexthe?" ("No" selected)
++240  dump name_confirm
++0    nstap LEFT                                    # "Yes"
++30   nstap RETURN
++240  dump save_complete
++0    peek 0x83a9e0 8
++0    expect b:0x83aa00 == 1                        # a profile is loaded
++0    expect b:0x83a9e0 == 65                       # its name: Alexthe
++0    expect b:0x83a9e6 == 101
++0    expect b:0x83a9e7 == 0
++60   quit

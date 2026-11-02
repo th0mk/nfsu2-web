@@ -6,9 +6,9 @@
   "Start an event, take an outrun": "イベントを開始、アウトランを受ける",
   "Map, messages": "マップ、メッセージ",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "PC版ゲーム本来のコードを、ChromeとFirefox向けに再コンパイルしました。ワイドスクリーンで最大120 fps、友達とのフリーロームとオンラインレース、コントローラー、ハンドルコントローラー、タッチ操作に対応しています。",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "約20年前、兄弟と一緒にこのゲームを遊んでいました。ブラウザに移植してみたら驚くほどうまく動き、そこから少し大ごとになりました。こんなに多くの人が遊んでくれているのを見られてうれしいです。",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "約20年前、兄弟と一緒にこのゲームを遊んでいました。それでまた一緒に遊べるように、ブラウザへの移植を試してみました。驚くほどうまく動き、そこから少し大ごとになりました。こんなに多くの人が遊んでくれているのを見られてうれしいです。",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "権利者の方: <0>legal@nfsu2.xyz</0>。サポートに関するメールにはお答えできません。<1>私たちの Discord</1> でご質問ください。",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "ソースコードは <0>GitHub</0> にあります。ベースは Talha Müderrisoğlu の <1>NFSU2Recomp</1> で、<2>N64: Recompiled</2> と <3>XenonRecomp</3> に倣った、NFSU2 向けの元祖 x86 → C 静的リコンパイラです。",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "ソースコードは <0>GitHub</0> にあります。ベースは Talha Müderrisoğlu の <1>NFSU2Recomp</1> で、<2>N64: Recompiled</2> と <3>XenonRecomp</3> に倣った、NFSU2 向けの元祖 x86 → C 静的リコンパイラです。このプロジェクトは <4>2026年10月16日時点の MIT ライセンス版 NFSU2Recomp</4> からフォークしたもので、そのバージョンのコードだけを使っています。",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "テクスチャパック: LunicAura106 の <0>Upscaled HUD</0>。",
   "Translations": "翻訳",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "吹き替えの音声とムービー、中国語・日本語・ロシア語・タイ語のテキスト: KyoriAsh の <0>Multi 13 languages mod</0>（Lee-Ryo によるタイ語対応を含む）。",
@@ -23,5 +23,6 @@
   "Shift down": "シフトダウン",
   "Quick chat (with other players): group, then phrase": "クイックチャット（他のプレイヤーといるとき）: グループ、次にフレーズ",
   "Photo mode; F12 again takes the photo": "フォトモード。もう一度 F12 で撮影",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。NFSU2 Webサーバーから開いてください。"
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "このページはクロスオリジン分離されていません（SharedArrayBufferがありません）。NFSU2 Webサーバーから開いてください。",
+  "Message a friend (in free roam)": "フレンドにメッセージ（フリーロームで）"
 }

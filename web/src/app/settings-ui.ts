@@ -1,5 +1,6 @@
-// The settings on the start page: a form over settings.ini, in Settings and,
-// for the Online group, in a section of its own under Saves.  Every change
+// The settings on the start page: a form over settings.ini, in the big panel's
+// tabs (Online; Game; the Controller part of Controls; Other: the file as text
+// and the lines without a row).  Every change
 // rewrites the one line of that key (settingsPut, bundle.m's settings_put), so
 // the file stays the source of truth and keeps the player's own comments;
 // "Reset" puts the template's commented-out line back, also on the lines the
@@ -37,10 +38,11 @@ type Control =
 
 /** link: the words of help that link to a page (a mod's, say), opened in a new tab */
 interface Item { key: string; label: string; help: string; link?: { text: string; href: string }; c: Control; more?: boolean }
-/** status: the group shows a line of the page's own under its title (Online: who plays on this server now);
- *  own: the group is a section of the page of its own (#online, under Saves), named by that section's heading;
- *  more: the title of its "more" part.  The texts are English (N), translated where they are drawn. */
-interface Group { title: string; more: string; items: Item[]; status?: boolean; own?: boolean }
+/** own: the group has no heading of its own, its tab's name says it (Online; Friends & crews' Crews); at: the id of the
+ *  element it goes in (Crews in Friends & crews, the Controls tab's Controller part), else the Online tab's (own) or the
+ *  Game tab's; head: its heading, else its title; more: the title of its "more" part.  The texts are English (N),
+ *  translated where they are drawn. */
+interface Group { title: string; more: string; items: Item[]; own?: boolean; at?: string; head?: string }
 
 /** each language's name in English (translated where it is shown), beside its own name */
 const LANGUAGE_NAMES: Record<Language, string> = {
@@ -52,20 +54,22 @@ const LANGUAGE_NAMES: Record<Language, string> = {
 const LANGUAGE_OPTS = LANGUAGES.map(l => [l, LANGUAGE_NAMES[l]] as [string, string]);
 
 const GROUPS: Group[] = [
-  { title: N('Online'), more: N('More online settings'), status: true, own: true, items: [
+  { title: N('Online'), more: N('More online settings'), own: true, items: [
     { key: 'roam', label: N('Free roam with others'), help: N('See other players\' cars in career free roam, and they see yours.'), c: { t: 'switch' } },
     { key: 'roam_name', label: N('Your name'), help: N('Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.'), c: { t: 'text', placeholder: N('profile name') } },
-    { key: 'roam_crew', label: N('Crews'), help: N('Players with the same crew name always see each other in free roam, with names and map arrows in the crew\'s colour. Anyone who types the name joins. Up to 4 crews.'), c: { t: 'crews', placeholder: N('Crew name') } },
     { key: 'horn', label: N('Your horn'), help: N('N or the left stick click, with other players.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
-    { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room. Not private: everyone still sees your name.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
+    { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Drive through other players\' cars instead of hitting them.'), c: { t: 'switch', inv: true } },
     { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam: 1 to 4, then 1 to 4 (controller: right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
-    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('The nearest ones. Phones start at 16 and tablets at 24, to save memory.'), c: { t: 'seg', opts: [['16', '16'], ['20', '20'], ['24', '24'], ['28', '28'], ['32', '32']] }, more: true },
+    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('The nearest ones. Phones start at 16 and tablets at 24, to save memory.'), c: { t: 'seg', opts: [['16', '16'], ['20', '20'], ['24', '24'], ['28', '28'], ['32', '32'], ['40', '40'], ['48', '48']] }, more: true },
+  ] },
+  { title: N('Crews'), more: '', own: true, at: 'crews-body', items: [
+    { key: 'roam_crew', label: N('Crews'), help: N('Players with the same crew name always see each other in free roam, with names and map arrows in the crew\'s colour. Anyone who types the name joins. Up to 4 crews.'), c: { t: 'crews', placeholder: N('Crew name') } },
   ] },
   { title: N('Game'), more: N('More game settings'), items: [
     { key: 'language', label: N('Language'), help: N('Menus, subtitles, dubbed voices and this page.'), c: { t: 'select', opts: LANGUAGE_OPTS } },
@@ -92,7 +96,7 @@ const GROUPS: Group[] = [
     { key: 'resolution', label: N('Fixed render size'), help: N('Always render at this size, such as 2560x1440. Empty: the game\'s own setting.'), c: { t: 'text', placeholder: N('WxH') }, more: true },
     { key: 'max_pixels', label: N('Pixel limit'), help: N('Most pixels rendered at 100% and below (0 = no limit). 150% and 200% scale up from it.'), c: { t: 'num', min: 0, step: 100000 }, more: true },
   ] },
-  { title: N('Controller'), more: N('More controller settings'), items: [
+  { title: N('Controller'), more: N('More controller settings'), at: 'controller-body', head: N('Settings'), items: [
     { key: 'rumble', label: N('Rumble'), help: N('Controller rumble, and phone vibration with the touch controls.'), c: { t: 'switch' } },
     { key: 'gamepad', label: N('Controller'), help: N('On keeps a controller once it was connected; hotplug only while connected.'), c: { t: 'seg', opts: [['on', N('On')], ['hotplug', N('Hotplug')], ['off', N('Off')]] }, more: true },
     { key: 'gamepad_menu_keys', label: N('Menu buttons'), help: N('A, B and View also act as Enter, Esc and Q in the menus.'), c: { t: 'switch' }, more: true },
@@ -125,7 +129,7 @@ const READ_ONLY = N('Read only: the game runs in another tab. Change settings th
 const NOTE = N('Changes apply the next time you press Play.');
 
 /** a small button with a drawn sign (the Crews row's Join and Leave), its name for a screen reader and as its tooltip */
-function iconButton(cls: string, name: string, path: string): HTMLButtonElement {
+export function iconButton(cls: string, name: string, path: string): HTMLButtonElement {
   const b = document.createElement('button'); b.type = 'button'; b.className = `icon-btn ${cls}`;
   b.setAttribute('aria-label', name); b.title = name;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
@@ -393,11 +397,11 @@ export class SettingsPanel {
   private fileOnly!: Resolved;
   private saves = 0;                       // writes so far (tests wait on data-saved)
   private openMore = new Set<string>();    // "More ... settings" kept open across re-renders
-  private status: Msg = () => '';          // the Online group's line (setStatus)
+  private roomLine: Msg = () => '';        // the Room row's line about who is there (setRoomLine)
   private crewCounts = new Map<number, number>();   // how many are in free roam in each crew, by hash (setCrewCounts)
   private crewDraft = '';                  // the crew name being typed, kept across re-renders
   private phrasesOpen = false;             // Your phrases' Choose phrases open, kept across re-renders
-  /** root: the Settings section; online: the section of the group that is its own (Online, under Saves) */
+  /** root: the big panel, every tab of it (index.html #settings); online: its Online tab (#online) */
   constructor(private root: HTMLElement, private deps: SettingsDeps, private online: HTMLElement) {
     root.querySelector<HTMLButtonElement>('#settings-text-save')!.onclick = () => void this.saveRaw();
     root.querySelector<HTMLButtonElement>('#settings-reset-all')!.onclick = () => void this.resetAll();
@@ -472,24 +476,25 @@ export class SettingsPanel {
     const note = this.online.querySelector<HTMLElement>('#online-note')!;
     note.textContent = ro ? t(READ_ONLY) : ''; note.hidden = !ro;
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.set')?.dataset.key;
-    this.root.querySelector('#settings-body')!.replaceChildren(...GAME_GROUPS.filter(g => !g.own).map(g => this.group(g)), ...this.others());
-    const own = GAME_GROUPS.filter(g => g.own);
-    this.online.hidden = !own.length;
+    this.root.querySelector('#settings-body')!.replaceChildren(...GAME_GROUPS.filter(g => !g.own && !g.at).map(g => this.group(g)));
+    for (const g of GAME_GROUPS.filter(g => g.at)) this.root.querySelector(`#${g.at}`)?.replaceChildren(this.group(g));
+    this.root.querySelector('#settings-lines')!.replaceChildren(...this.others());
+    const own = GAME_GROUPS.filter(g => g.own && !g.at);
     this.online.querySelector('#online-body')!.replaceChildren(...own.map(g => this.group(g)));
     this.syncRaw();
     const row = focusKey ? this.find<HTMLElement>(`.set[data-key="${focusKey}"]`) : null;
     if (row) this.focusRow(row);
   }
 
-  /** an element of the Settings section or of the Online one */
+  /** an element of the panel (the Online tab is in it) */
   private find<T extends Element>(sel: string): T | null { return this.root.querySelector<T>(sel) ?? this.online.querySelector<T>(sel); }
 
-  /** The Online group's line under its title ('' hides it); kept across re-renders, and drawn again in the page's
-   *  language when that changes. */
-  setStatus(line: string | Msg) {
-    this.status = typeof line === 'string' ? () => line : line;
-    const p = this.find<HTMLElement>('#group-status');
-    if (p) { live(p, this.status); p.hidden = !p.textContent; }
+  /** The Room row's line about who is in the room (players.ts roomLine; '' hides it); kept across re-renders, and drawn
+   *  again in the page's language when that changes. */
+  setRoomLine(line: Msg) {
+    this.roomLine = line;
+    const p = this.find<HTMLElement>('#set-roam_room-count');
+    if (p) { live(p, line); p.hidden = !p.textContent; }
   }
 
   /** How many are in free roam in each crew now, by its hash (players.ts crewCounts; a crew it lacks: not known),
@@ -501,16 +506,11 @@ export class SettingsPanel {
 
   private group(g: Group): HTMLElement {
     const box = document.createElement('div'); box.className = 'group';
-    // a group in its own section has that section's heading
+    // a group in a tab of its own has that tab's name
     if (!g.own) {
-      const h = document.createElement('h3'); h.id = `group-${g.title.toLowerCase().replace(/\W+/g, '-')}`; h.textContent = t(g.title);
+      const h = document.createElement('h3'); h.id = `group-${g.title.toLowerCase().replace(/\W+/g, '-')}`; h.textContent = t(g.head ?? g.title);
       box.setAttribute('role', 'group'); box.setAttribute('aria-labelledby', h.id);
       box.append(h);
-    }
-    if (g.status) {
-      const p = document.createElement('p'); p.className = 'hint group-status'; p.id = 'group-status';
-      live(p, this.status); p.hidden = !p.textContent;
-      box.append(p);
     }
     box.append(...g.items.filter(i => !i.more).map(i => this.row(i)));
     const more = g.items.filter(i => i.more);
@@ -542,7 +542,7 @@ export class SettingsPanel {
     const h = document.createElement('h3'); h.id = 'group-other'; h.textContent = t('Other settings in this file');
     box.setAttribute('role', 'group'); box.setAttribute('aria-labelledby', h.id);
     const p = document.createElement('p'); p.className = 'set-help';
-    p.textContent = t('Lines without a control above. They apply at Play; edit the file as text below to change them.');
+    p.textContent = t('Lines without a control on this page. They apply at Play; edit the file as text below to change them.');
     const ul = document.createElement('ul');
     for (const o of other) {
       const li = document.createElement('li'); li.className = 'set-help';
@@ -739,7 +739,13 @@ export class SettingsPanel {
     // a room or crews with free roam off do nothing: new players often never turned it on (the first Play does not ask
     // while the server's free roam is busy), and saw nobody in the room their friends named
     if (ROAM_ROWS.includes(it.key) && cur && this.current('roam') !== 'on')
-      this.state(row, t('Needs Free roam with others (above).'), 'env');
+      this.state(row, it.key === 'roam_crew' ? t('Needs Free roam with others (Online).') : t('Needs Free roam with others (above).'), 'env');
+    // who is in the room now (setRoomLine), while free roam is on in one
+    if (it.key === 'roam_room') {
+      const p = document.createElement('p'); p.className = 'set-state free'; p.id = 'set-roam_room-count';
+      live(p, this.roomLine); p.hidden = !p.textContent;
+      row.append(p);
+    }
     this.describe(described, row);
     // (a link copies what is there: read only or not)
     if (this.ro()) for (const el of row.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button:not(.room-link):not(.crew-link), input, select')) el.disabled = true;

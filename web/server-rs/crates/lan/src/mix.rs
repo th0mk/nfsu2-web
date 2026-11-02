@@ -4,6 +4,11 @@
 //! of a host (the free-roam hub's lists and map, the Online server's segments: `send_to`, a WebSocket message each,
 //! never in a bundle) counts as its whole frame.  On nfsu2.xyz (2026-10-30, 5,800 players) the entries other than car
 //! states carried more bytes than the car states, 104 bytes each on average: this says which they were.
+//!
+//! The same kinds count what the pages send (`of_page`): each entry of a page's bundle under its datagram's kind (those
+//! to the hub as the hub's), the destinations an entry lists past the first, the bundles' and entries' headers and the
+//! control messages (JSON) as kinds of their own.  After the 2026-10-31 release the server took in 865 Mbit/s, and
+//! nothing counted what (`MSGS`: and how many messages each way, which cloudflared pays for one by one).
 
 use crate::compact::ROAM_OK;
 use crate::{BROADCAST, KIND_UDP};
@@ -25,10 +30,18 @@ const OTHER_KIND: usize = R + 4;
 const HUB: usize = R + 5;
 const ONLINE: usize = HUB + R;
 const OTHER_HOST: usize = ONLINE + 1;
+/// from the pages: the destinations a bundle entry lists (4 bytes each; one alone is in its frame), the bundles' and
+/// their entries' headers, the control messages (JSON), LAN play's TCP segments (the Online server's and a LAN race
+/// host's streams)
+pub(crate) const ADDRS: usize = OTHER_HOST + 1;
+pub(crate) const FRAMING: usize = OTHER_HOST + 2;
+pub(crate) const TEXT: usize = OTHER_HOST + 3;
+const LAN_TCP: usize = OTHER_HOST + 4;
 /// the kinds
-pub const KINDS: usize = OTHER_HOST + 1;
-/// runtime/web/net_proto.h: LAN play's UDP
+pub const KINDS: usize = LAN_TCP + 1;
+/// runtime/web/net_proto.h: LAN play's UDP and TCP
 const KIND_LAN_UDP: u8 = 3;
+const KIND_LAN_TCP: u8 = 4;
 /// runtime/roam_core.h RC_DEFAULT_PORT
 const ROAM_PORT: u16 = 47210;
 
@@ -43,7 +56,11 @@ pub fn name(i: usize) -> String {
         OTHER_KIND => "other frames".into(),
         i if i < ONLINE => format!("hub {}", ROAM_TYPES[i - HUB]),
         ONLINE => "Online server".into(),
-        _ => "other host".into(),
+        OTHER_HOST => "other host".into(),
+        ADDRS => "destinations".into(),
+        FRAMING => "bundle headers".into(),
+        TEXT => "control messages".into(),
+        _ => "LAN TCP".into(),
     }
 }
 
@@ -71,6 +88,65 @@ pub(crate) fn of_entry(data: &[u8], src: u32, dst: u32) -> usize {
         KIND_LAN_UDP => LAN_UDP,
         _ => OTHER_KIND,
     }
+}
+
+/// the kind of a frame a page sent to `dst`: free roam's by their type (those to the hub as the hub's)
+pub(crate) fn of_page(data: &[u8], dst: u32) -> usize {
+    if data.len() < 16 {
+        return OTHER_KIND;
+    }
+    let roam = data.len() > 16 + 5 && &data[16..20] == b"N2FR";
+    match data[0] {
+        KIND_UDP if roam && dst == HUB_VIP => HUB + roam_type(data),
+        KIND_UDP if roam => roam_type(data),
+        KIND_UDP if u16::from_be_bytes([data[14], data[15]]) == ROAM_PORT => ROAM_BAD,
+        KIND_UDP => UDP_OTHER,
+        KIND_LAN_UDP if dst == BROADCAST => LAN_BCAST,
+        KIND_LAN_UDP => LAN_UDP,
+        KIND_LAN_TCP => LAN_TCP,
+        _ => OTHER_KIND,
+    }
+}
+
+/// WebSocket messages each way by type (`Stats::msg`), and the writes the server made (each batch a page's writer
+/// took): every one is work for the kernel and for cloudflared, whatever its size
+pub(crate) const IN_BUNDLE: usize = 0;
+pub(crate) const IN_FRAME: usize = 1;
+pub(crate) const IN_TEXT: usize = 2;
+pub(crate) const IN_PONG: usize = 3;
+pub(crate) const IN_PING: usize = 4;
+pub(crate) const OUT_BUNDLE: usize = 5;
+pub(crate) const OUT_FRAME: usize = 6;
+pub(crate) const OUT_TEXT: usize = 7;
+pub(crate) const OUT_HOST: usize = 8;
+pub(crate) const OUT_PING: usize = 9;
+pub(crate) const OUT_PONG: usize = 10;
+pub(crate) const OUT_WRITES: usize = 11;
+pub const MSGS: usize = 12;
+
+/// The count's line of messages: each way a second, by type, and the writes
+pub fn msg_line(now: &[u64], was: &[u64], secs: f64) -> Option<String> {
+    let d = |i: usize| now[i].saturating_sub(was.get(i).copied().unwrap_or(0)) as f64 / secs.max(1.0);
+    let (inn, out) = ((IN_BUNDLE..=IN_PING).map(d).sum::<f64>(), (OUT_BUNDLE..=OUT_PONG).map(d).sum::<f64>());
+    if inn + out == 0.0 {
+        return None;
+    }
+    Some(format!(
+        "in {inn:.0}/s (bundles {:.0}, frames {:.0}, control {:.0}, pongs {:.0}, pings {:.0}), out {out:.0}/s (bundles {:.0}, \
+         frames {:.0}, control {:.0}, hosts {:.0}, pings {:.0}, pongs {:.0}) in {:.0} writes/s",
+        d(IN_BUNDLE),
+        d(IN_FRAME),
+        d(IN_TEXT),
+        d(IN_PONG),
+        d(IN_PING),
+        d(OUT_BUNDLE),
+        d(OUT_FRAME),
+        d(OUT_TEXT),
+        d(OUT_HOST),
+        d(OUT_PING),
+        d(OUT_PONG),
+        d(OUT_WRITES)
+    ))
 }
 
 /// the kind of a host's message (its source at [4..8])
@@ -157,6 +233,14 @@ mod tests {
         assert_eq!(name(of_host(&frame(1, 0, BASE | 0xFD, ROAM_PORT, &peers), hub, online)), "hub ?");
         assert_eq!(name(of_host(&frame(4, 0, BASE | 1, 0, &[1; 30]), hub, online)), "Online server");
         assert_eq!(name(of_host(&frame(4, 0, BASE | 7, 0, &[1; 30]), hub, online)), "other host");
+        // what pages send
+        assert_eq!(name(of_page(&frame(1, 0, BASE | 2, ROAM_PORT, &roam), BASE | 9)), "ping");
+        assert_eq!(name(of_page(&frame(1, 0, BASE | 2, ROAM_PORT, &peers), HUB_VIP)), "hub ?");
+        assert_eq!(name(of_page(&frame(4, 0, BASE | 2, 0, &[1; 30]), BASE | 1)), "LAN TCP");
+        assert_eq!(name(of_page(&frame(3, 0, BASE | 2, 9999, &roam), BROADCAST)), "LAN UDP broadcast");
+        for k in [ADDRS, FRAMING, TEXT] {
+            assert!(!name(k).is_empty());
+        }
         let names: std::collections::HashSet<String> = (0..KINDS).map(name).collect();
         assert_eq!(names.len(), KINDS, "each its own");
     }
@@ -174,5 +258,18 @@ mod tests {
         assert!(l.starts_with("2.4 Mbit/s: LAN UDP 67 % (1.6 Mbit/s, 1667/s, 120.0 B each), car state 33 %"), "{l}");
         assert!(l.ends_with(", 1 smaller kinds"), "{l}");
         assert_eq!(line(&now, &now, 300.0), None);
+    }
+
+    #[test]
+    fn the_message_line() {
+        let mut now = vec![0u64; MSGS];
+        now[IN_BUNDLE] = 6000;
+        now[OUT_BUNDLE] = 3000;
+        now[OUT_PING] = 300;
+        now[OUT_WRITES] = 3000;
+        let l = msg_line(&now, &[], 300.0).unwrap();
+        assert!(l.starts_with("in 20/s (bundles 20, frames 0, control 0, pongs 0, pings 0), out 11/s (bundles 10,"), "{l}");
+        assert!(l.ends_with("pings 1, pongs 0) in 10 writes/s"), "{l}");
+        assert_eq!(msg_line(&now, &now, 300.0), None);
     }
 }

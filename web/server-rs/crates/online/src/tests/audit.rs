@@ -523,6 +523,103 @@ fn a_race_no_racer_drives_is_a_cheat_line() {
     assert_eq!(cheats(&w).len(), 3, "{:?}", cheats(&w));
 }
 
+/// a race report with each player's average and top speed: (index, place, time, average m/s, top m/s, dropped)
+fn resu_top(kind: u8, players: &[(u8, u8, f32, f32, f32, bool)]) -> String {
+    use base64::Engine;
+    let mut b = base64::engine::general_purpose::STANDARD
+        .decode(resu_avg(kind, &players.iter().map(|p| (p.0, p.1, p.2, p.3, p.5)).collect::<Vec<_>>()))
+        .unwrap();
+    for (i, p) in players.iter().enumerate() {
+        let o = 8 + 55 * i;
+        b[o + 20..o + 24].copy_from_slice(&p.4.to_be_bytes());
+    }
+    base64::engine::general_purpose::STANDARD.encode(b)
+}
+
+// a racer's own time, average and way count once another racer's game saw it finish at that time, and nobody finished
+// close to it (nfsu2.xyz, 2026-10-31, all honest racers: two drag winners' own games 7 s short of the others' and so
+// 357 and 500 km/h on average, one with no other report; a circuit winner at "388 km/h" with a top speed of 183, the
+// second 0.15 s behind; one whose own game counted the first lap of two); a cheat's own figures are the others' too
+#[test]
+fn a_racers_own_figures_count_once_another_game_saw_them() {
+    let mut w = world();
+    let cheats = |w: &World| w.text().iter().filter(|l| l.starts_with("[cheat]")).cloned().collect::<Vec<_>>();
+    type Rows<'a> = &'a [(u8, u8, f32, f32, f32, bool)];
+    let race_of = |w: &mut World, name: &str, a: &str, b: &str, kind: u8, ra: Rows, rb: Option<Rows>| {
+        let k = a.bytes().last().unwrap() - b'0';
+        let (ga, gb) = (client(w, &format!("10.77.10.{k}")), client(w, &format!("10.77.11.{k}")));
+        let (x, y) = (login(w, ga, a), login(w, gb, b));
+        let auth = race(w, name, &[x, y], vec![]).unwrap();
+        // (a game that says nothing for 120 s is dropped: each pings once on the way)
+        w.advance(100_000.0);
+        for c in [x, y] {
+            w.send(c, "~png", fields![("TIME", 1)]);
+        }
+        w.advance(80_000.0);
+        for (c, rows) in [(x, Some(ra)), (y, rb)] {
+            let Some(rows) = rows else { continue };
+            w.send(c, "rank", fields![("AUTH", auth.as_str()), ("RESU", resu_top(kind, rows)), ("NAME0", a), ("NAME1", b)]);
+        }
+    };
+    // its own game 7 s short (0:17.35 at 99 m/s, 357 km/h; top 89 m/s), the other's 0:24.14
+    race_of(&mut w, "short", "Drag1", "Other1", 2, &[(0, 1, 17.35, 99.2, 89.2, false), (1, 2, 31.3, 60.0, 80.0, false)],
+        Some(&[(0, 1, 24.14, 70.0, 89.2, false), (1, 2, 31.3, 60.0, 80.0, false)]));
+    // its own report alone (500 km/h on average)
+    race_of(&mut w, "alone", "Drag2", "Other2", 2, &[(0, 1, 14.09, 138.9, 96.7, false), (1, 2, 20.0, 60.0, 80.0, false)], None);
+    // a close race (388 km/h on average, top 51 m/s), both games agree
+    let close: Rows = &[(0, 1, 81.11, 107.8, 50.8, false), (1, 2, 81.3, 30.0, 50.0, false)];
+    race_of(&mut w, "close", "Circ1", "Other3", 0, close, Some(close));
+    // its own game counted one lap of two: 3087 m in 1:22.13, the other 6418 m; the other's game saw it at 2:35.34
+    race_of(&mut w, "lap", "Circ2", "Other4", 0, &[(0, 1, 82.13, 37.59, 48.6, false), (1, 2, 174.95, 36.68, 50.0, false)],
+        Some(&[(0, 1, 155.34, 41.3, 48.6, false), (1, 2, 174.95, 36.68, 50.0, false)]));
+    assert_eq!(cheats(&w), Vec::<String>::new());
+    // a circuit won in 0:30.08 at 383 km/h on average (top 113 m/s), the other game saw it too and gave up
+    let fast: Rows = &[(0, 1, 30.08, 106.4, 113.0, false), (1, 0, 40.0, 30.0, 50.0, true)];
+    race_of(&mut w, "warp", "Circ3", "Other5", 0, fast, Some(fast));
+    assert_eq!(
+        cheats(&w),
+        ["[cheat] 10.77.10.3 \"Circ3\": won the online race \"warp\" (circuit, track 4102, 1 lap) in 0:30.08, 383 km/h on \
+          average, which no car does: by its own game; its top speed 407 km/h"]
+    );
+}
+
+// a racer whose game says its car's data is edited (the rank's code "ed" and the car type: runtime/mprace.c; a guide
+// passed among players, 2026-10-31, edits one car in the browser's copy of GlobalB) is a [cheat] line however it did,
+// finished or not; the game's own code (0) and other codes are none
+#[test]
+fn a_car_of_edited_game_data_is_a_cheat_line() {
+    use crate::aries::encode_frame;
+    let mut w = world();
+    let cheats = |w: &World| w.text().iter().filter(|l| l.starts_with("[cheat]")).cloned().collect::<Vec<_>>();
+    let race_of = |w: &mut World, name: &str, a: &str, b: &str, codes: [&str; 2], players: &[(u8, u8, f32, f32, bool)]| {
+        let (ga, gb) = (client(w, &format!("10.77.5.{}", name.len())), client(w, &format!("10.77.6.{}", name.len())));
+        let (x, y) = (login(w, ga, a), login(w, gb, b));
+        let auth = race(w, name, &[x, y], vec![]).unwrap();
+        w.advance(61_000.0);
+        for (c, code) in [x, y].into_iter().zip(codes) {
+            let f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, players)), ("NAME0", a), ("NAME1", b)];
+            w.send_raw(c, &encode_frame("rank", code, &f).unwrap());
+        }
+    };
+    let honest = [(0, 1, 56.49, 29.83, false), (1, 2, 58.15, 29.64, false)];
+    race_of(&mut w, "plain", "Fast1", "Slow1", ["", "filt"], &honest);
+    race_of(&mut w, "odd", "Fast2", "Slow2", ["edz9", "ed1"], &honest);
+    assert_eq!(cheats(&w), Vec::<String>::new());
+    race_of(&mut w, "supra", "Tuner", "Slow3", ["ed0f", ""], &honest);
+    assert_eq!(
+        cheats(&w),
+        ["[cheat] 10.77.5.5 \"Tuner\": won the online race \"supra\" (sprint, track 4102, 1 lap) in 0:56.49, an edited car \
+          (SUPRA, type 15: its game has the car's data edited, GlobalB): by its own game; its top speed 134 km/h"]
+    );
+    // not finished, and a car its game could not tell
+    race_of(&mut w, "gone", "Slow4", "Quit", ["", "edff"], &[(0, 1, 56.49, 29.83, false), (1, 0, 30.0, 25.0, true)]);
+    assert_eq!(
+        cheats(&w)[1..],
+        ["[cheat] 10.77.6.4 \"Quit\": raced in the online race \"gone\" (sprint, track 4102, 1 lap), an edited car (type \
+          unknown: its game has the car's data edited, GlobalB): by its own game; its top speed 112 km/h"]
+    );
+}
+
 /// a drift race's report: (index, place, time, points, the biggest single drift's points, top speed m/s, dropped)
 fn resu_drift(players: &[(u8, u8, f32, i32, i32, f32, bool)]) -> String {
     let mut b = vec![0u8; 8 + 55 * players.len()];
@@ -592,7 +689,13 @@ fn what_a_game_shows_of_the_others_is_no_cheat_line() {
     let (ga, gb, gc) = (client(&mut w, "10.77.6.1"), client(&mut w, "10.77.6.2"), client(&mut w, "10.77.6.3"));
     let (x, y, z) = (login(&mut w, ga, "Ozz"), login(&mut w, gb, "Nef"), login(&mut w, gc, "Left"));
     let auth = race(&mut w, "seen", &[x, y, z], vec![]).unwrap();
-    w.advance(240_000.0);
+    // (a game that says nothing for 120 s is dropped: each pings on the way)
+    for _ in 0..3 {
+        w.advance(80_000.0);
+        for c in [x, y, z] {
+            w.send(c, "~png", fields![("TIME", 1)]);
+        }
+    }
     let send = |w: &mut World, c, rows: &[(u8, u8, f32, f32, bool)]| {
         let f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, rows)), ("NAME0", "Ozz"), ("NAME1", "Nef"), ("NAME2", "Left")];
         w.send(c, "rank", f);
@@ -600,6 +703,7 @@ fn what_a_game_shows_of_the_others_is_no_cheat_line() {
     send(&mut w, x, &[(1, 1, 223.37, 2071.4, false), (0, 2, 225.18, 36.98, false), (2, 3, 57.34, 1600.0, true)]);
     send(&mut w, y, &[(1, 1, 223.37, 37.5, false), (0, 2, 225.18, 37.1, false), (2, 3, 57.34, 30.0, true)]);
     send(&mut w, z, &[(1, 1, 223.37, 37.5, false), (0, 2, 225.18, 37.1, false), (2, 3, 57.34, 30.0, true)]);
+    assert!(w.logged("\"seen\" (sprint, unranked): 1 Nef 3:43.37, 2 Ozz 3:45.18"), "{}", w.text().join("\n"));
     assert!(!w.text().iter().any(|l| l.starts_with("[cheat]")), "{}", w.text().join("\n"));
 }
 
@@ -636,8 +740,9 @@ fn a_report_without_a_player_who_never_raced_is_taken() {
     assert!(w.logged("\"late\": Late's race report not taken: not the game's players"), "{}", w.text().join("\n"));
 }
 
-// a win far quicker than the track's best winners (a car no tuning makes, a speed hack): once the track had 10 clean
-// wins, one under 70 % of the third quickest other winner's time is a [cheat] line
+// a win far quicker than the track's best racers (a car no tuning makes, a speed hack): once the track had 10 clean
+// races, one under 70 % of the third quickest other racer's time (any finisher's, not the winners' alone) is a [cheat]
+// line
 #[test]
 fn a_win_far_under_the_tracks_third_quickest_is_a_cheat_line() {
     let mut w = world();
@@ -661,11 +766,15 @@ fn a_win_far_under_the_tracks_third_quickest_is_a_cheat_line() {
     // that time can be driven, and it is a clean win
     race_of(&mut w, 11, "Pair", 60.0, 62.0);
     assert_eq!(cheats(&w), Vec::<String>::new(), "the next finisher close behind");
-    race_of(&mut w, 12, "Rocket", 59.0, 100.0);
+    // as quick as the track's quick racers, the winners' and the others' (nfsu2.xyz, 2026-10-31: a drag racer's 23.3 s
+    // wins were under 70 % of the third quickest winner's, with others finishing in 23.4 to 24 s)
+    race_of(&mut w, 12, "Peer", 58.0, 100.0);
+    assert_eq!(cheats(&w), Vec::<String>::new(), "58 s: over 70 % of 72 s (Pair 60, Other11 62, Fast 72)");
+    race_of(&mut w, 13, "Rocket", 40.0, 100.0);
     assert_eq!(
         cheats(&w),
-        ["[cheat] 10.77.9.25 \"Rocket\": won the online race \"q12\" (sprint, track 4014, 2 laps) in 0:59.00, under 70 % of the \
-          third quickest other winner's time of the track's 12 clean wins (1:40.00): as the result stands"]
+        ["[cheat] 10.77.9.27 \"Rocket\": won the online race \"q13\" (sprint, track 4014, 2 laps) in 0:40.00, under 70 % of the \
+          third quickest other racer's time of the track's 13 clean races (1:02.00): as the result stands"]
     );
 }
 

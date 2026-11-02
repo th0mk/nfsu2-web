@@ -5,7 +5,10 @@
 //!    other back is not, nor a friend in another room, nor one without a keyphrase;
 //! 2. linked_with: the player of that name (its Online form) that the page's player is linked with, its car within
 //!    30 m, with its browser and keyphrase (if its page has one); none farther, linked or not;
-//! 3. whereabouts: by keyphrase, the room and its name as the page told it; none for one not in free roam.
+//! 3. whereabouts: by keyphrase, the room and its name as the page told it; none for one not in free roam;
+//! 4. the lists' friend marks: a player with friends whose core reads the hub's marks has its friends marked on its
+//!    lists (MARK_FRIEND, with a crew-mate's bits where it is one), a one-way friend not; one of an older core gets a
+//!    plain list.
 
 mod kit;
 
@@ -13,7 +16,7 @@ use std::sync::Arc;
 
 use kit::*;
 use nfsu2_claims::owner_of_token;
-use nfsu2_roam::{RoamOptions, Whereabouts};
+use nfsu2_roam::{RoamOptions, Whereabouts, encode_peers};
 
 fn owner(c: char) -> Arc<str> {
     owner_of_token(&c.to_string().repeat(43)).unwrap()
@@ -27,8 +30,12 @@ fn U(i: u32) -> u32 {
 
 /// a player named `name`, of keyphrase `key` (None: none), at (x, y) in `room`: its HELLO and SNAP
 fn put(k: &mut Kit, vip: u32, id: u32, room: u32, name: &[u8], key: Option<char>, at: [f64; 2]) {
+    put_with(k, vip, id, &HelloOpts { core: 6, room, name, ..Default::default() }, key, at);
+}
+
+fn put_with(k: &mut Kit, vip: u32, id: u32, h: &HelloOpts, key: Option<char>, at: [f64; 2]) {
     let o = key.map(owner);
-    k.hub.frame_from(vip, &frame(vip, &hello_with(id, &HelloOpts { core: 6, room, name, ..Default::default() })), o.as_ref());
+    k.hub.frame_from(vip, &frame(vip, &hello_with(id, h)), o.as_ref());
     k.hub.frame_from(vip, &frame(vip, &snap(id, [at[0], at[1], 0.0])), o.as_ref());
 }
 
@@ -135,4 +142,53 @@ fn friends_find_where_one_plays() {
     k.hub.peer_gone(V(1));
     k.hub.tick();
     assert_eq!(k.hub.whereabouts(&[owner('B')]), [None]);
+}
+
+// the friend marks: to a player whose core reads the hub's marks, MARK_FRIEND on each friend's entry (both ways), with
+// a crew-mate's bits where it is one too; none on a one-way friend's, nor on anyone's to an older core
+#[test]
+fn the_lists_mark_friends() {
+    let owls = fnv1a("owls");
+    let mut k = Kit::new(RoamOptions::default());
+    k.hub.friends(V(0), owner('A'), vec![owner('B'), owner('C'), owner('D')]);
+    k.hub.friends(V(1), owner('B'), vec![owner('A')]);
+    k.hub.friends(V(2), owner('C'), vec![owner('A')]);
+    k.hub.friends(V(4), owner('E'), vec![owner('A')]);
+    let reads = HelloOpts { core: 6, crews: Some(&[]), flags: HF_HUBCREW, ..Default::default() };
+    // A; B a friend; C a friend in A's crew; D listed by A, not back; E lists A, A not E; F no keyphrase
+    put_with(&mut k, V(0), 100, &HelloOpts { name: b"Alpha", crews: Some(&[owls]), ..reads }, Some('A'), [0.25, 0.25]);
+    put_with(&mut k, V(1), 101, &HelloOpts { name: b"Bravo", ..reads }, Some('B'), [10.25, 0.25]);
+    put_with(&mut k, V(2), 102, &HelloOpts { name: b"Charlie", crews: Some(&[owls]), ..reads }, Some('C'), [20.25, 0.25]);
+    put_with(&mut k, V(3), 103, &HelloOpts { name: b"Delta", ..reads }, Some('D'), [30.25, 0.25]);
+    put_with(&mut k, V(4), 104, &HelloOpts { name: b"Echo", ..reads }, Some('E'), [40.25, 0.25]);
+    put_with(&mut k, V(5), 105, &HelloOpts { name: b"Fox", ..reads }, None, [50.25, 0.25]);
+    k.hub.tick();
+    let sent = k.sent.lock().clone();
+    let of = |i: u32| sent.iter().find(|(vip, _)| *vip == V(i)).map(|(_, f)| f.clone()).unwrap_or_else(|| panic!("a list to {i}"));
+    let marks = |i: u32| {
+        let f = of(i);
+        let m = crew_marks(&f);
+        peers_of(&f).iter().enumerate().map(|(at, e)| (e.vip, m.as_ref().map_or(0, |m| m.1[at]))).collect::<Vec<_>>()
+    };
+    let mark = |i: u32, j: u32| marks(i).iter().find(|e| e.0 == V(j)).unwrap_or_else(|| panic!("{j} on {i}'s list")).1;
+    assert_eq!(crew_marks(&of(0)).map(|m| m.0), Some(vec![owls]), "A's own crew");
+    assert_eq!(
+        [mark(0, 1), mark(0, 2), mark(0, 3), mark(0, 4), mark(0, 5)],
+        [MARK_FRIEND, MARK_FRIEND | 1, 0, 0, 0],
+        "A: B a friend, C a friend and a crew-mate; D, E one way; F none"
+    );
+    assert_eq!(mark(1, 0), MARK_FRIEND, "B: A, in no crew of B's");
+    assert_eq!(crew_marks(&of(1)).map(|m| m.0), Some(vec![]), "B: no crews of its own");
+    assert!(marks(1).iter().all(|&(v, m)| v == V(0) || m == 0), "B: no other friend");
+    assert_eq!(mark(2, 0), MARK_FRIEND | 1, "C: A");
+    assert_eq!(crew_marks(&of(3)), None, "D: no friends of its own (told none): a plain list");
+    assert_eq!(mark(4, 0), 0, "E: A lists it not");
+    // an older core (no HF_HUBCREW): no marks, as before
+    put_with(&mut k, V(1), 101, &HelloOpts { core: 6, name: b"Bravo", ..Default::default() }, Some('B'), [10.25, 0.25]);
+    k.clear();
+    k.hub.tick();
+    let f = k.sent.lock().iter().find(|(vip, _)| *vip == V(1)).map(|(_, f)| f.clone()).unwrap();
+    assert_eq!(crew_marks(&f), None, "B of an older core: a plain list");
+    assert_eq!(&f[16..], &encode_peers(0xB0B, u16::from_le_bytes([f[28], f[29]]), &peers_of(&f))[..], "byte for byte");
+    assert_eq!(mark(0, 1), MARK_FRIEND, "A still sees B marked");
 }

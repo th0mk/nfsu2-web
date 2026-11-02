@@ -100,6 +100,7 @@ impl LanSwitch {
         // free roam: whether the sender drives, from its own HELLO or SNAP (away.rs)
         if let Some(st) = away::status(data) {
             peer.away.store(away::away(st), Relaxed);
+            peer.roam_at.store((mono_ms() as u64).max(1), Relaxed);
         }
         if paid > 0 {
             self.stats.frames.add(paid as u64);
@@ -275,8 +276,9 @@ impl LanSwitch {
     }
 
     /// a datagram to p, into its bundle when it takes them, else as it is.  Free roam's wait for the bundle clock's
-    /// next tick; LAN play's go at once (with whatever else is queued): a race's car updates, 5 to 20 a second for each
-    /// car, a tick's wait apart (up to `bundle_max_ms`, at random) made the other cars wobble
+    /// next tick; LAN play's for LAN play's short one (`lan_ms`, with whatever else is queued): a race's creator sends
+    /// each joiner a datagram a frame (60 a second at 60 fps) and the joiners' own come in between, each a message of
+    /// its own to the page until 2026-10-31, while a tick's wait of up to 25 ms, at random, made the other cars wobble
     fn post(&self, p: &Arc<Peer>, data: &Bytes, src: u32, dst: u32) -> bool {
         if !p.takes_bundles() {
             return self.send(p, Out::Frame { data: data.clone(), src, dst });
@@ -286,7 +288,7 @@ impl LanSwitch {
             return false;
         }
         let clock = if (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]) {
-            None
+            self.lan_clock.as_deref()
         } else if p.away.load(Relaxed) && data[1] == compact::ROAM_OK && Some(src) != self.roam_vip && self.slow.is_some() {
             // free roam from another player to one who is not driving: the slow clock's tick, or sooner with whatever
             // else goes to it (away.rs)
@@ -521,8 +523,8 @@ pub(crate) mod tests {
     /// under a millisecond).
     #[tokio::test]
     async fn a_broadcast_refused_walks_no_peer() {
-        let sw = LanSwitch::new(LanOptions { max_peers: 8000, ..LanOptions::default() }, "", None, None, None, None);
-        let peers: Vec<_> = (0..8000).map(|i| peer(&sw, &format!("g{i}"))).collect();
+        let sw = LanSwitch::new(LanOptions { max_peers: 12000, ..LanOptions::default() }, "", None, None, None, None);
+        let peers: Vec<_> = (0..12000).map(|i| peer(&sw, &format!("g{i}"))).collect();
         let p = &peers[0].2;
         for b in [&mut *p.buckets.lock(), &mut *p.group.buckets.lock()] {
             b.frames.v = 0.0;
@@ -534,7 +536,7 @@ pub(crate) mod tests {
             assert!(!sw.route(p, &f, std::iter::repeat_n(BROADCAST, 255)));
         }
         let ms = t.elapsed().as_secs_f64() * 1000.0;
-        assert!(ms < 500.0, "2000 refused messages of 255 broadcasts at 8000 players took {ms:.0} ms");
+        assert!(ms < 500.0, "2000 refused messages of 255 broadcasts at 12000 players took {ms:.0} ms");
         assert!(peers.iter().all(|(c, ..)| c.out.q.lock().len() <= 1), "nothing sent (a welcome at most)");
         sw.stop();
     }

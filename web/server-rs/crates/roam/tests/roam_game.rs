@@ -1,8 +1,8 @@
 //! The game in a HELLO (roam_core.h RC_HF_GAME, PLAN D-18): Most Wanted's pages say theirs after their crews,
 //! Underground 2's say none (as every HELLO before the flag), and a hub takes the players of its own game only.
-//! 1. the wire: a HELLO without the flag is Underground 2's; with it, the game after the crews' count and crews, and
-//!    what follows it skipped; the flag without the crews' flag, without a crew count or without the game byte is no
-//!    HELLO;
+//! 1. the wire: a HELLO without the flag is Underground 2's; with it, the game after the crews' count, the crews and
+//!    the links' byte (core version 10's), and what follows it skipped; the flag without the crews' flag, without a
+//!    crew count, without the links' byte or without the game byte is no HELLO;
 //! 2. the hub of each game: its own players join and are linked, the other game's are refused and counted
 //!    (`foreign`), their SNAPs go nowhere, and a player whose HELLO turns out to be another game's is gone; a HELLO
 //!    as Underground 2's pages of before send it (no game) joins Underground 2's hub, never Most Wanted's.
@@ -36,9 +36,9 @@ fn hello_tail(sender: u32, flags: u16, tail: &[u8]) -> Vec<u8> {
     dgram_flags(1, sender, flags, &p)
 }
 /// a HELLO of this game: Underground 2's as its pages send it (the crew flags, no crews, no game), another game's with
-/// the game flag, a crew count of 0 and the game
+/// the game flag, a crew count of 0, the links' byte (0: not said) and the game
 fn hello_of(sender: u32, game: u8) -> Vec<u8> {
-    if game == UG2 { hello_tail(sender, HF_CREW | HF_HUBCREW, &[]) } else { hello_tail(sender, HF_CREW | HF_HUBCREW | HF_GAME, &[0, game]) }
+    if game == UG2 { hello_tail(sender, HF_CREW | HF_HUBCREW, &[]) } else { hello_tail(sender, HF_CREW | HF_HUBCREW | HF_GAME, &[0, 0, game]) }
 }
 fn game_of(d: &[u8]) -> Option<u8> {
     match decode_roam(d) {
@@ -53,17 +53,18 @@ fn the_wire() {
     assert_eq!(game_of(&hello_of(7, UG2)), Some(UG2), "Underground 2's");
     assert_eq!(game_of(&hello_of(7, MW)), Some(MW), "Most Wanted's");
     let blue = room_hash("blue");
-    match decode_roam(&hello_tail(7, HF_CREW | HF_GAME, &[1, 0x11, 0x22, 0x33, 0x44, MW, 0xAA, 0xBB])) {
+    match decode_roam(&hello_tail(7, HF_CREW | HF_GAME, &[1, 0x11, 0x22, 0x33, 0x44, 20, MW, 0xAA, 0xBB])) {
         Some(RoamMsg::Hello { game, crews, room, .. }) => assert_eq!((game, crews, room), (MW, vec![0x44332211], blue)),
-        m => panic!("the game after one crew, then more: {m:?}"),
+        m => panic!("the game after one crew and the links, then more: {m:?}"),
     }
     // the flag without what it says
     assert_eq!(game_of(&hello_tail(7, HF_GAME, &[0, MW])), None, "without the crews' flag");
     assert_eq!(game_of(&hello_tail(7, HF_CREW | HF_GAME, &[])), None, "no crew count");
-    assert_eq!(game_of(&hello_tail(7, HF_CREW | HF_GAME, &[0])), None, "no game");
-    assert_eq!(game_of(&hello_tail(7, HF_CREW | HF_GAME, &[1, 1, 0, 0, 0])), None, "a crew, no game");
-    // a hub of before reads Most Wanted's HELLO as a HELLO with no crews: the game byte is what it skips
-    match decode_roam(&hello_tail(7, HF_CREW, &[0, MW])) {
+    assert_eq!(game_of(&hello_tail(7, HF_CREW | HF_GAME, &[0])), None, "no links, no game");
+    assert_eq!(game_of(&hello_tail(7, HF_CREW | HF_GAME, &[0, 0])), None, "the links, no game");
+    assert_eq!(game_of(&hello_tail(7, HF_CREW | HF_GAME, &[1, 1, 0, 0, 0, 0])), None, "a crew and the links, no game");
+    // a hub of before reads Most Wanted's HELLO as a HELLO with no crews and its links: the game byte is what it skips
+    match decode_roam(&hello_tail(7, HF_CREW, &[0, 0, MW])) {
         Some(RoamMsg::Hello { game, crews, .. }) => assert_eq!((game, crews.len()), (UG2, 0)),
         m => panic!("{m:?}"),
     }

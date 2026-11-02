@@ -1,5 +1,5 @@
-// The game data (all but the movies) onto this PC ahead of play ("Game data on this PC", at
-// the bottom of the start page): the predownload worker fills the cache the
+// The game data (all but the movies) onto this device ahead of play ("Game data on this device", in
+// the start page's Other tab): the predownload worker fills the cache the
 // game reads from.  It only runs while no game runs in this tab, because the
 // game's I/O worker writes the same cache files.  A game pauses it, and it
 // goes on after the game ends.

@@ -15,7 +15,7 @@ use tokio::time::Instant;
 use crate::compact::KIND_COMPACT;
 use crate::conn::{Conn, Out};
 use crate::text::parse_json;
-use crate::{AttachCtx, Cut, KIND_BUNDLE, LanSwitch, Peer};
+use crate::{AttachCtx, Cut, KIND_BUNDLE, LanSwitch, Peer, mix};
 
 pub(crate) async fn read_loop<R>(sw: Arc<LanSwitch>, conn: Arc<Conn>, mut r: R, pre: Bytes, ctx: Arc<AttachCtx>)
 where
@@ -91,6 +91,7 @@ where
                 }
             }
             Ok(Message::Ping(d)) => {
+                sw.stats.msg(mix::IN_PING);
                 // answered here, under the rate and while the queue has room (nfsu2-ws answers none itself): an answer
                 // to every ping queues pongs without a limit for a client that never reads (the phase-2 deploy
                 // review's finding 1, of the ws library's own answer: gigabytes in seconds); a copy, not the block the
@@ -100,6 +101,7 @@ where
                 }
             }
             Ok(Message::Pong(d)) => {
+                sw.stats.msg(mix::IN_PONG);
                 // only a pong carrying the payload of one of the switch's pings counts: its round trip is timed, and
                 // for a ping queued since the keepalive's last tick it says the client is there (lag.rs)
                 if let Some(p) = &peer {
@@ -169,6 +171,8 @@ impl LanSwitch {
         let n = data.len();
         let o = &self.o;
         if text {
+            self.stats.msg(mix::IN_TEXT);
+            self.stats.entry_in(mix::TEXT, n);
             if n > o.max_text || !peer.ctl.lock().texts.take_at(mono_ms(), 1.0) {
                 self.stats.limited.inc();
                 return;
@@ -200,6 +204,8 @@ impl LanSwitch {
                 return;
             }
             self.stats.bundles_in.inc();
+            self.stats.msg(mix::IN_BUNDLE);
+            self.stats.entry_in(mix::FRAMING, 4);
             // each entry as a frame of its own; a broken entry, or one over the budgets, ends the bundle
             let mut at = 4;
             while at + 4 <= n {
@@ -212,6 +218,11 @@ impl LanSwitch {
                     return;
                 }
                 let frame = data.slice(f..end);
+                self.stats.entry_in(mix::FRAMING, 4);
+                if k > 0 {
+                    self.stats.entry_in(mix::ADDRS, 4 * k);
+                }
+                self.stats.entry_in(mix::of_page(&frame, if k == 0 { be32(&frame, 8) } else { be32(&data, at + 4) }), len);
                 let routed = if k == 0 {
                     self.route(peer, &frame, std::iter::once(be32(&frame, 8)))
                 } else {
@@ -225,10 +236,12 @@ impl LanSwitch {
             return;
         }
         // (a compact bundle is the switch's own: the page takes its sources as they are)
+        self.stats.msg(mix::IN_FRAME);
         if n > o.max_frame || data[0] == KIND_COMPACT {
             self.stats.limited.inc();
             return;
         }
+        self.stats.entry_in(mix::of_page(&data, be32(&data, 8)), n);
         self.route(peer, &data, std::iter::once(be32(&data, 8)));
     }
 }

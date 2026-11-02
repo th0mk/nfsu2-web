@@ -35,6 +35,12 @@
 //! say how many of the race's reports saw it, and what the winner's own game said when it did not agree or sent no
 //! report (nfsu2.xyz, 2026-10-31: three of five games had a stock car win a 19.2 km circuit in 49 s, its own game said
 //! it did not finish).
+//!
+//! Every race judged is a `[race]` line of its result (`result_line`): its racers in order as the reports had them,
+//! and the ones whose own game sent no report.  A racer's game that sends none has no `[race]` line of its own (its car
+//! report goes with its results, roam_game.c) and is named by no `[cheat]` line unless it won by cheating: nfsu2.xyz,
+//! 2026-10-31, a player said another "always wins races" in a Miata at 400 km/h, and nothing in the day's log named
+//! that player in any race.
 
 use std::collections::HashMap;
 
@@ -115,6 +121,22 @@ pub(crate) enum OwnGame {
     Out,
 }
 
+/// A judged race's result (`result_line`): its racers in order, each with its time when it finished (the finishers by
+/// time, each at the middle one of the times the reports gave it; then the others, as the reports named them), the
+/// ones whose own game sent no report, how many reports came of how many racers, and its racers as the hub knew them
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Outcome {
+    pub lobby: u32,
+    pub race: u32,
+    pub mode: u8,
+    pub laps: u8,
+    pub order: Vec<(u32, Option<f64>)>,
+    pub silent: Vec<u32>,
+    pub reports: usize,
+    pub racers: usize,
+    pub names: HashMap<u32, String>,
+}
+
 /// The races' reports, until each is judged; the clean wins of each race (its name hash and laps) so far
 #[derive(Default)]
 pub(crate) struct Results {
@@ -171,6 +193,88 @@ pub(crate) fn mode_name(game: u8, mode: u8) -> &'static str {
 /// a time as m:ss.s
 fn clock(s: f64) -> String {
     format!("{}:{:04.1}", (s / 60.0).floor(), s % 60.0)
+}
+
+/// A race's result line (`Outcome`): "[race] lobby 7dcff53a, race c7483590 (drag, 1 lap): the result by 3 of 4 racers'
+/// games: 1 Ann 0:10.8, 2 Bob 0:27.0, DNF Cid; no report from its own game: 10.77.3.41 \"Ann\""; `who` as for `line`.
+/// A drift race is won by points: its finishers in no order.
+pub(crate) fn result_line(game: u8, o: &Outcome, who: &dyn Fn(u32) -> String) -> String {
+    let name = |id: u32| {
+        let w = who(id);
+        w.split_once(" \"").map_or(w.clone(), |(_, n)| n.trim_end_matches('"').to_string())
+    };
+    let drift = o.mode == MODE_DRIFT;
+    let mut place = 0;
+    let rows: Vec<String> = o
+        .order
+        .iter()
+        .map(|&(id, t)| match (t, drift) {
+            (Some(t), false) => {
+                place += 1;
+                format!("{place} {} {}", name(id), clock(t))
+            }
+            (Some(_), true) => format!("finished {}", name(id)),
+            (None, _) => format!("DNF {}", name(id)),
+        })
+        .collect();
+    let mut s = format!(
+        "[race] lobby {:08x}, race {:08x} ({}, {} lap{}): the result by {} of {} racers' games{}: {}",
+        o.lobby,
+        o.race,
+        mode_name(game, o.mode),
+        o.laps,
+        if o.laps == 1 { "" } else { "s" },
+        o.reports,
+        o.racers,
+        if drift { " (won by points: no order)" } else { "" },
+        rows.join(", ")
+    );
+    if !o.silent.is_empty() {
+        s += &format!("; no report from its own game: {}", o.silent.iter().map(|&id| who(id)).collect::<Vec<_>>().join(", "));
+    }
+    s
+}
+
+/// One race's result by its reports (`Outcome`, its names left to the caller)
+fn outcome(race: &Race) -> Option<Outcome> {
+    let first = race.reports.first()?.1;
+    let mut ids: Vec<u32> = Vec::new();
+    for (_, r) in &race.reports {
+        for x in &r.rows[..r.n] {
+            if x.id != 0 && !ids.contains(&x.id) {
+                ids.push(x.id);
+            }
+        }
+    }
+    let time = |id: u32| {
+        let mut t: Vec<f64> = race
+            .reports
+            .iter()
+            .flat_map(|(_, r)| r.rows[..r.n].iter().filter(|x| x.id == id && x.flags & RS_FINISHED != 0 && x.time > 0.0).map(|x| x.time))
+            .collect();
+        t.sort_by(f64::total_cmp);
+        t.get(t.len().saturating_sub(1) / 2).copied()
+    };
+    let mut order: Vec<(u32, Option<f64>)> = ids.iter().map(|&id| (id, time(id))).collect();
+    // (a stable sort: the ones who did not finish stay in the reports' order, after the finishers)
+    order.sort_by(|a, b| match (a.1, b.1) {
+        (Some(x), Some(y)) => x.total_cmp(&y),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    });
+    let silent = ids.iter().copied().filter(|id| !race.reports.iter().any(|(by, _)| by == id)).collect();
+    Some(Outcome {
+        lobby: first.lobby,
+        race: first.race,
+        mode: first.mode,
+        laps: first.laps,
+        order,
+        silent,
+        reports: race.reports.len(),
+        racers: race.reports.iter().map(|(_, r)| r.n).max().unwrap_or(0),
+        names: HashMap::new(),
+    })
 }
 
 /// A verdict's `[cheat]` line; `who`: a player's address and name by its id (`10.77.3.41 "Bob"`)
@@ -258,9 +362,16 @@ impl Results {
         true
     }
 
-    /// the races due (every racer's report came, or RESULTS_WAIT_MS went by), judged and forgotten: the cheats'
-    /// verdicts.  A clean win by two reports or more, with another finisher, may be its race's quickest.
+    /// the cheats' verdicts of `judged`
+    #[cfg(test)]
     pub(crate) fn due(&mut self, now: f64) -> Vec<Verdict> {
+        self.judged(now).into_iter().filter_map(|(_, v)| v).collect()
+    }
+
+    /// the races due (every racer's report came, or RESULTS_WAIT_MS went by), judged and forgotten: each one's result,
+    /// and a cheat's verdict when its winner cheated.  A clean win by two reports or more, with another finisher, may
+    /// be its race's quickest.
+    pub(crate) fn judged(&mut self, now: f64) -> Vec<(Outcome, Option<Verdict>)> {
         let due: Vec<u32> = self
             .races
             .iter()
@@ -270,20 +381,22 @@ impl Results {
             })
             .map(|(&l, _)| l)
             .collect();
-        let mut cheats = Vec::new();
+        let mut out = Vec::new();
         for l in due {
             let Some(race) = self.races.remove(&l) else { continue };
-            let Some((v, cheat)) = judge(&race.reports, &self.best, &race.names) else { continue };
-            if cheat {
-                cheats.push(Verdict { names: race.names, ..v });
-                continue;
+            let Some(o) = outcome(&race) else { continue };
+            let mut cheat = None;
+            if let Some((v, is)) = judge(&race.reports, &self.best, &race.names) {
+                let k = (v.race, v.laps);
+                if is {
+                    cheat = Some(Verdict { names: race.names.clone(), ..v });
+                } else if v.seen >= BEST_SEEN && v.next.is_some() && (self.best.len() < BEST_KEPT || self.best.contains_key(&k)) {
+                    self.best.entry(k).or_default().add(racer(&race.names, v.winner), v.time);
+                }
             }
-            let k = (v.race, v.laps);
-            if v.seen >= BEST_SEEN && v.next.is_some() && (self.best.len() < BEST_KEPT || self.best.contains_key(&k)) {
-                self.best.entry(k).or_default().add(racer(&race.names, v.winner), v.time);
-            }
+            out.push((Outcome { names: race.names, ..o }, cheat));
         }
-        cheats
+        out
     }
 }
 
@@ -382,6 +495,39 @@ mod tests {
 
     fn judged(reports: &[(u32, RaceRes)]) -> Option<Verdict> {
         judged_in(&mut Results::default(), reports)
+    }
+
+    // every race judged is a result line: its racers in order, a finisher at the middle one of the reports' times, the
+    // ones whose own game sent nothing named with their address (nfsu2.xyz, 2026-10-31: a player said another always
+    // won, and its game sent no report of any race); a drift race's finishers in no order
+    #[test]
+    fn a_race_is_a_result_line() {
+        let mut x = Results::default();
+        let who = |id: u32| format!("10.77.0.{id} \"P{id}\"");
+        let by = |r: &[(u32, bool, f64, f64, f64)], b: u32, lobby: u32| rep_of(lobby, r, b);
+        let rows2 = [(1, true, 95.0, 2.0, 5800.0), (2, true, 101.0, 2.0, 5810.0), (3, false, 110.0, 1.5, 4300.0)];
+        let rows3 = [(1, true, 95.4, 2.0, 5800.0), (2, true, 101.0, 2.0, 5810.0), (3, false, 110.0, 1.5, 4300.0)];
+        x.add(0.0, 2, by(&rows2, 2, 0xA1), &|id| Some(who(id)));
+        x.add(0.0, 3, by(&rows3, 3, 0xA1), &|id| Some(who(id)));
+        assert_eq!(x.judged(80_000.0), vec![], "two of three reports: the third may come");
+        let j = x.judged(RESULTS_WAIT_MS);
+        assert_eq!(j.len(), 1);
+        assert_eq!(j[0].1, None, "no cheat");
+        assert_eq!(
+            result_line(0, &j[0].0, &who),
+            "[race] lobby 000000a1, race 0badf00d (sprint, 2 laps): the result by 2 of 3 racers' games: 1 P1 1:35.0, 2 P2 \
+             1:41.0, DNF P3; no report from its own game: 10.77.0.1 \"P1\""
+        );
+        // a drift race
+        let mut d = by(&rows2, 2, 0xA2);
+        d.mode = MODE_DRIFT;
+        x.add(0.0, 2, d, &|_| None);
+        let j = x.judged(RESULTS_WAIT_MS);
+        assert_eq!(
+            result_line(0, &j[0].0, &|id| format!("p{id}")),
+            "[race] lobby 000000a2, race 0badf00d (drift, 2 laps): the result by 1 of 3 racers' games (won by points: no \
+             order): finished p1, finished p2, DNF p3; no report from its own game: p1, p3"
+        );
     }
 
     // a teleport to the finish: Bob (2) in 21 s, Ann (1) 1:30 later; by her own game the sprint is 5.8 km

@@ -205,6 +205,13 @@ impl App {
         }
     }
 
+    /// a keyphrase used (its cloud saves read or saved, /vault): its claimed name lasts as long as it does
+    pub(super) fn names_used(&self, vault_id: &[u8; 32], now: i64) {
+        if let Some(n) = &self.names {
+            n.claims.used(&owner_of_id(vault_id), now);
+        }
+    }
+
     async fn too_many_names(&self, q: &Request, s: &mut Response) -> Res {
         self.plain(q, s, 429, "Too many requests", &[("retry-after", "60")], Cache::Store, true).await
     }
@@ -239,6 +246,13 @@ mod tests {
         let body = json!({ "name": name }).to_string();
         let a = kit.request("POST", "/names", &[who, ("Content-Type", "application/json")], body.as_bytes()).await;
         (a.status, j(&a.body))
+    }
+
+    // a claim lasts as long as its keyphrase: as long as the cloud keeps one nobody uses
+    #[test]
+    fn a_claim_holds_as_long_as_a_keyphrase() {
+        let o = nfsu2_vault::VaultOptions::sized(std::path::PathBuf::from("/x"), 1.0);
+        assert_eq!(nfsu2_claims::HOLD_DAYS * nfsu2_claims::DAY_MS, o.unused_ms);
     }
 
     #[tokio::test]

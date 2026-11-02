@@ -367,15 +367,29 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
         // rq_end >= head, so draining to head never applies a later frame's uploads
         const head = Atomics.load(I, cw + C.rqHead) >>> 0;
         const s = Atomics.load(I, cw + C.state), r = s & 3, e = (s >> 2) & 3;
+        // a pending frame is taken while fewer than maxInFlight are on the GPU: claimed first, so the game, which
+        // waits for this claim (gpu_web.c wait_taken), records its next frame while this one uploads and encodes
+        const take = !!r && !e && inFlight < maxInFlight;
+        if (take) {
+          if (Atomics.compareExchange(I, cw + C.state, s, s | (r << 2)) !== s) continue;
+          Atomics.notify(I, cw + C.state);
+        }
+        // a frame claimed before and still waiting for its uploads (below) is ours too: the claim stays (e === r)
+        const mine = take || (!!r && e === r);
         // a pending frame: its resources first, nothing recorded after it
-        const limit = r && !e ? U[cw + C.frame + (r - 1) * (P.FRAME_BYTES >> 2) + F.rqEnd] : head;
+        const limit = r && (!e || mine) ? U[cw + C.frame + (r - 1) * (P.FRAME_BYTES >> 2) + F.rqEnd] : head;
         let tail: number;
-        try { tail = enc.drain(limit); } catch (x) { failed('resource upload', x); break; }
-        waiting(!!r && !e && inFlight >= maxInFlight);
+        try { tail = enc.drain(limit); } catch (x) {
+          failed('resource upload', x);
+          // the frame stays pending, as if not taken (only the page changes a claimed state)
+          if (mine) { Atomics.store(I, cw + C.state, s & 3); Atomics.notify(I, cw + C.state); }
+          break;
+        }
+        waiting(!!r && !mine);
         // a frame waits for the rest of its uploads (the drain stops while the ASTC workers hold their most) and for
-        // a texture it samples with a level still out with them (their hand-back pumps again)
-        if (!r || e || inFlight >= maxInFlight || ((limit - tail) | 0) > 0 || enc.framePending(r - 1)) break;
-        if (Atomics.compareExchange(I, cw + C.state, s, s | (r << 2)) !== s) continue;
+        // a texture it samples with a level still out with them (their hand-back pumps again); a claimed one stays
+        // claimed meanwhile, so the game goes on recording its next
+        if (!mine || ((limit - tail) | 0) > 0 || enc.framePending(r - 1)) break;
         try { encodeAndSubmit(r - 1); failRun = 0; } catch (x) { failed('encode', x); }
         Atomics.store(I, cw + C.state, 0); Atomics.notify(I, cw + C.state);
       }

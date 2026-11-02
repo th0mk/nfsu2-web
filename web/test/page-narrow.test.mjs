@@ -5,8 +5,9 @@
 // (web/tools/server-cmd.mjs), on the game folder (NFSU2_DATA) or, without one, a made-up one: the page's layout needs
 // no game.  As a phone (touch: the touch controls' settings) and as a window with a mouse (a desktop zoomed in: the
 // keys), each with cloud saves turned on first (their buttons).  Then in every language (i18n.ts LANGUAGES), with every
-// <details> open, on each Controls tab: the page as it is, and again with every button and line the page hides until it
-// needs one shown (Retry, the bug report's line, a cloud conflict's buttons, …).  The page is never wider than the
+// <details> open, on each tab (the big panel's, the Controls sheet's in it, About's): the page as it is, and again with
+// every button and line the page hides until it needs one shown (Retry, the bug report's line, a cloud conflict's
+// buttons, …).  The page is never wider than the
 // screen, and no box or text reaches past the screen's edges or into its panel's padding.
 // The widths are those of the fonts the page names (style.css --font: Helvetica Neue on a Mac, Arial on Windows): a
 // machine with none of them draws its text in a wider fallback (Linux without fonts-liberation, Arial's widths: DejaVu
@@ -27,6 +28,10 @@ import { serverCommand, SERVER_BIN } from '../tools/server-cmd.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.NFSU2_TEST_PAGE_PORT || 8534);
 const WIDTH = 320;
+/** each tab measured: [the panel, its tab, the Controls sheet's tab in it] */
+const VIEWS = [['settings', 'saves'], ['settings', 'online'], ['settings', 'friends'], ['settings', 'game'],
+  ['settings', 'controls', 'keys'], ['settings', 'controls', 'pad'], ['settings', 'controls', 'site'], ['settings', 'other'],
+  ['about', 'credits'], ['about', 'translations']];
 const out = await esbuild.build({ entryPoints: [path.join(HERE, '../src/app/i18n.ts')], bundle: true, write: false, format: 'esm', platform: 'neutral' });
 const { LANGUAGES } = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
 const SKIP = !fs.existsSync(path.join(HERE, '../dist/main.js')) ? 'no page built (node web/build.mjs)'
@@ -150,16 +155,21 @@ async function look(browser, kind, touch) {
       for (const shown of ['as it is', 'everything shown']) {
         await page.evaluate(all => {
           for (const d of document.querySelectorAll('.app details')) d.open = true;
-          if (all) window.__shown = [...document.querySelectorAll('.app [hidden]:not(.tab-panel)')].map(el => { el.hidden = false; return el; });
+          // (a tab's pane is the tabs' to show)
+          if (all) window.__shown = [...document.querySelectorAll('.app [hidden]:not(.tab-panel):not(.pane)')].map(el => { el.hidden = false; return el; });
         }, shown === 'everything shown');
-        for (const tab of ['keys', 'pad', 'site']) {
-          await page.click(`.tab[data-tab="${tab}"]`);
+        for (const [panel, tab, sub] of VIEWS) {
+          await page.click(`#${panel} > .tabs > .tab[data-tab="${tab}"]`);
+          if (sub) await page.click(`#keys .tab[data-tab="${sub}"]`);
           await frames();
           const m = await page.evaluate(measure);
           looks++;
-          if (m.wider > 0 || m.past.length || m.intoPadding.length) found[`${kind}, ${lang}, ${shown}, ${tab} tab`] = m;
+          if (m.wider > 0 || m.past.length || m.intoPadding.length) found[`${kind}, ${lang}, ${shown}, ${[tab, sub].filter(Boolean).join(' ')} tab`] = m;
         }
-        await page.click('.tab[data-tab="keys"]');
+        await page.click('#settings > .tabs > .tab[data-tab="controls"]');
+        await page.click('#keys .tab[data-tab="keys"]');
+        await page.click('#about > .tabs > .tab[data-tab="about"]');
+        await page.click('#settings > .tabs > .tab[data-tab="saves"]');
         // hidden again, as the page had them, before the next language
         await page.evaluate(() => { for (const el of window.__shown ?? []) el.hidden = true; window.__shown = []; });
       }

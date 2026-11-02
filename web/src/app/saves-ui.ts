@@ -4,8 +4,8 @@
 // restoring one, or adding the PC game's profiles beside the ones here
 // (readBackup tells them apart, and refuses another game's: src/games/save-marks.ts), and the F12 screenshots
 // (shots.ts); a keyphrase's saves come in as a
-// backup does (readVault, restoreVault: vault-ui.ts).  And the section at the bottom of the page, the game data on
-// this PC: how much of it, all of it downloaded ahead (predownload.ts), or
+// backup does (readVault, restoreVault: vault-ui.ts).  And the Other tab's game data on
+// this device: how much of it, all of it downloaded ahead (predownload.ts), or
 // deleted.  The game data is never part of a backup and never written back:
 // it stays on the server.
 
@@ -304,7 +304,7 @@ const QUIT_TO_CHANGE = N('Quit the game (or close the other tab that runs it) to
 const QUIT_TO_RENAME = N('Quit the game (or close the other tab that runs it) to rename a profile or restore a backup.');
 
 export class SavesPanel {
-  /** root: the Saves section; dataPanel: Game data on this PC */
+  /** root: the Saves tab; dataPanel: Game data on this device */
   constructor(private root: HTMLElement, private dataPanel: HTMLElement, private deps: SavesDeps) {
     root.querySelector<HTMLButtonElement>('#export')!.onclick = () => void this.doExport();
     const inp = root.querySelector<HTMLInputElement>('#import')!;
@@ -373,7 +373,7 @@ export class SavesPanel {
     if (active && st.total) this.data = { have: st.have, total: st.total };
     if (st.state !== this.shownState) {
       this.shownState = st.state;
-      if (st.state === 'done') { this.data = { have: st.have, total: st.total }; this.dataMsg(() => t('The game data is on this PC now.')); }
+      if (st.state === 'done') { this.data = { have: st.have, total: st.total }; this.dataMsg(() => t('The game data is on this device now.')); }
       if (st.state === 'error') { const e = st.error; this.dataMsg(() => t('Preloading stopped: {error}. What\'s done is kept.', { error: e ?? '' }), true); }
       if (!active) void this.refresh();                         // counted again; shown now with what is known
     }
@@ -400,11 +400,11 @@ export class SavesPanel {
     fetchBtn.hidden = !!d && rest <= 0;
     if (d && rest <= 0)
       info.textContent = 'serviceWorker' in navigator
-        ? t('All game data ({size}) is on this PC; only the movies stream from the server. The game starts offline too, without movies.', { size: fmtBytes(d.total) })
-        : t('All game data ({size}) is on this PC; only the movies stream from the server.', { size: fmtBytes(d.total) });
+        ? t('All game data ({size}) is on this device; only the movies stream from the server. The game starts offline too, without movies.', { size: fmtBytes(d.total) })
+        : t('All game data ({size}) is on this device; only the movies stream from the server.', { size: fmtBytes(d.total) });
     else if (d ? d.have : this.kept.bytes)
-      info.textContent = (d ? t('{have} of {total} is on this PC (movies not included).', { have: fmtBytes(d.have), total: fmtBytes(d.total) })
-        : t('{have} is on this PC.', { have: fmtBytes(this.kept.bytes) })) + ' ' +
+      info.textContent = (d ? t('{have} of {total} is on this device (movies not included).', { have: fmtBytes(d.have), total: fmtBytes(d.total) })
+        : t('{have} is on this device.', { have: fmtBytes(this.kept.bytes) })) + ' ' +
         t('Preload the rest so loading never waits on the network.');
     else
       info.textContent = t('Nothing here yet: the game downloads data as it needs it. Preload it now so loading never waits on the network.');
@@ -574,11 +574,11 @@ export class SavesPanel {
   private async doClearCache() {
     if (this.deps.busy()) return;
     const dl = this.deps.download;
-    if (!await this.deps.confirm(t('Delete the game data on this PC?'), (dl.running ? t('This stops preloading.') + ' ' : '') +
+    if (!await this.deps.confirm(t('Delete the game data on this device?'), (dl.running ? t('This stops preloading.') + ' ' : '') +
       t('The game downloads it again as needed. Your saves stay.'), t('Delete game data'), true)) return;
     await dl.stop();
     await clearCache();
     await this.refresh();
-    this.dataMsg(() => t('Game data on this PC deleted.'));
+    this.dataMsg(() => t('Game data on this device deleted.'));
   }
 }

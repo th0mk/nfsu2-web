@@ -4,6 +4,11 @@ A fan project that runs the PC game *Need for Speed: Underground 2* (2004) in Go
 x86 code is translated to C ahead of time and compiled to WebAssembly. Direct3D 9 runs on WebGPU and the sound on
 Web Audio. You bring your own copy of the game.
 
+Based on [NFSU2Recomp](https://github.com/TalhaMudo/NFSU2Recomp) by Talha Müderrisoğlu, the original x86 → C static
+recompiler for NFSU2. This project was forked from
+[its MIT-licensed version of 16 October 2026](https://github.com/TalhaMudo/NFSU2Recomp/tree/3d187ce7e5f1b99c0580866da4dbaa6d59dd23c7)
+and uses only code from that version.
+
 > Not affiliated with or endorsed by Electronic Arts. This repository contains none of the game's code or data.
 
 ![The start page: Play, the controls, your saves and Online](docs/web/start-page.png)
@@ -60,7 +65,8 @@ More in [docs/web/DESIGN.md](docs/web/DESIGN.md). The same tree still builds the
 
 ## Credits
 
-Based on Talha Müderrisoğlu's static recompilation of NFSU2 for Apple Silicon, which in turn follows the method of
+Based on Talha Müderrisoğlu's [NFSU2Recomp](https://github.com/TalhaMudo/NFSU2Recomp) (its MIT version, see the
+top), the static recompilation of NFSU2 for Apple Silicon, which in turn follows the method of
 [N64: Recompiled](https://github.com/N64Recomp/N64Recomp) and [XenonRecomp](https://github.com/hedge-dev/XenonRecomp).
 The language packs are built from KyoriAsh's [Multi 13 languages mod](https://nfsmods.xyz/mod/5749) (with Lee-Ryo's
 Thai support, whose patch `runtime/language.c` follows), from TraduMix's and MixMods' Brazilian Portuguese

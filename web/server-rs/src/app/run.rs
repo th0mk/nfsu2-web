@@ -239,6 +239,8 @@ pub async fn run(o: Options, cores: usize) {
         bundle_max_ms: fixed.unwrap_or_else(|| env_num("NFSU2_BUNDLE_MAX_MS", d.bundle_max_ms)),
         bundle_budget: env_num("NFSU2_BUNDLE_BUDGET", d.bundle_budget),
         bundle_jitter: env_num("NFSU2_BUNDLE_JITTER", (d.bundle_jitter * 100.0) as u64) as f64 / 100.0,
+        // LAN play's clock, 4 ms; NFSU2_LAN_MS another (0: none, each datagram at once), for measurements
+        lan_ms: env_num("NFSU2_LAN_MS", d.lan_ms),
         fpred: env_num("NFSU2_FPRED", 1) != 0,
         send_buffer_os: lan_sndbuf,
         ..d
@@ -378,6 +380,14 @@ pub async fn run(o: Options, cores: usize) {
                 // the same and the hosts' messages by kind (nfsu2-lan mix.rs): where the bytes to the pages went
                 if let Some(l) = nfsu2_lan::mix::line(&b.mix, &was.mix, BREAKDOWN_EVERY.as_secs_f64()) {
                     log::line(&format!("[players] to the pages by kind since the last count: {l}"));
+                }
+                // what the pages sent, by kind, and the WebSocket messages each way (each one is work for the kernel and
+                // cloudflared, whatever its size)
+                if let Some(l) = nfsu2_lan::mix::line(&b.mix_in, &was.mix_in, BREAKDOWN_EVERY.as_secs_f64()) {
+                    log::line(&format!("[players] from the pages by kind since the last count: {l}"));
+                }
+                if let Some(l) = nfsu2_lan::mix::msg_line(&b.msgs, &was.msgs, BREAKDOWN_EVERY.as_secs_f64()) {
+                    log::line(&format!("[players] WebSocket messages since the last count: {l}"));
                 }
                 let slice = slice.map_or(String::new(), |q| {
                     format!("; {} {:.2} of its {} cores ({:.0} %)", q.group, q.used, q.cores, q.share() * 100.0)

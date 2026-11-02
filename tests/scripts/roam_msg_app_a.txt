@@ -1,0 +1,50 @@
+# Messages between friends on the player's own page (roam-pair --page app), instance A (with roam_msg_app_b.txt): the
+# two become friends as in roam_friend_app_a/b.txt (ghost mode, noses touching, F), then A presses I: no message to
+# answer, so the card lists the friends (Bob in free roam), 1 picks Bob, A types and Enter sends it; the log shows
+# "To Bob ...", then Bob's answer with "I Write back".  Shots at each step.  The keyphrase tokens are the test setting
+# NFSU2_TEST_CLAIM; the server's state folder has names.json with Ann and Bob claimed by them (43 A, 43 B).
+#   node web/tools/roam-pair.mjs --page app --base ... \
+#        --a "Ann:roam_msg_app_a.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_TEST_CLAIM=<43 A>" \
+#        --b "Bob:roam_msg_app_b.txt:NFSU2_ROAM_COLLIDE=0,NFSU2_TEST_CLAIM=<43 B>"
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++900  roam teleport 1695.3 -883.6 24.6 0x4000
++300  roam teleport 1695.3 -883.6 24.6 0x4000
++0    log placed
++900  log SHOT a_1
++0    log KEY KeyF                         # F acts only while the line offers something: whoever asks first,
++400  log SHOT a_2
++0    log KEY KeyF                         # the other's next F accepts
++400  log SHOT a_3
++0    log KEY KeyF
++400  log SHOT a_4
++0    log KEY KeyF
++600  log SHOT a_end
++300  log KEY KeyI                         # nothing to answer: the friends to pick
++60   log SHOT a_pick
++60   log KEY Digit1
++30   log KEY KeyH KeyI Space KeyB KeyO KeyB Space KeyR KeyA KeyC KeyE Space KeyL KeyA KeyT KeyE KeyR
++30   log SHOT a_write
++60   log KEY Enter
++60   log SHOT a_sent
++480  log SHOT a_reply
++60   log done
++60   quit

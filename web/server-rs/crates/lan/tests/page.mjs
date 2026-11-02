@@ -186,8 +186,8 @@ function roundedDatagram(d) {
 }
 
 const cases = {
-  // the page: in line when the switch is full (where it is, and a notice once), its place kept across a dropped link,
-  // in when a place frees up, with a notice (a switch with room for one)
+  // the page: in line when the switch is full (where it is; no notice: the line over the game says it), its place kept
+  // across a dropped link, in when a place frees up, with a notice once (a switch with room for one)
   async full([port]) {
     const { attachNet } = await pageNet(port);
     const game = (name, notices, line) => {
@@ -205,20 +205,19 @@ const cases = {
         await until(() => qb.length === 1);
         assert.deepEqual(qb[0], { pos: 1, of: 1 });
         assert.equal(b.state, 'queued');
-        assert.equal(nb.length, 1, 'a notice once');
-        assert.ok(TEXTS.has(nb[0]), nb[0]);
+        assert.deepEqual(nb, [], 'no notice in line: the line over the game says it');
         assert.equal((await state(port)).info.waiting, 1);
-        // its link drops: back to the same place, with no second notice
+        // its link drops: back to the same place, with no notice
         b['ws'].close(4000, 'dropped');
         await until(async () => (await state(port)).info.rejoined === 1);
         await until(() => qb.length === 2 && b.state === 'queued');
         assert.deepEqual(qb[1], { pos: 1, of: 1 });
-        assert.equal(nb.length, 1);
+        assert.deepEqual(nb, []);
         assert.equal((await state(port)).info.waiting, 1);
         a.close();
         assert.match(await b.online, /^10\.77\.([0-9]|1[0-9])\.\d+$/);
-        await until(() => nb.length === 2);
-        assert.ok(TEXTS.has(nb[1]) && nb[1] !== nb[0], `another notice once in: ${nb[1]}`);
+        await until(() => nb.length === 1);
+        assert.ok(TEXTS.has(nb[0]) && /freed up/.test(nb[0]), `a notice once in: ${nb[0]}`);
         assert.equal(qb.at(-1), null, 'out of line');
         assert.deepEqual([na, qa], [[], []], 'the first game heard nothing');
         // a third waits in line, then stops waiting (the page menu's Play offline): out of line for good
@@ -273,13 +272,13 @@ const cases = {
       assert.notEqual(v2, v1, 'a new address (the old one went back)');
       want(lanMb, 0); await sleep(100); want(lanMb, 1); await sleep(500);
       assert.equal((await peers()).length, 1); assert.equal((await state(port)).info.released, 1, 'a short break keeps the place');
-      // peer bits: one bit per host of the /19 up to the module's 2048 (a peer in another /24 has its own bit; the
+      // peer bits: one bit per host of the /18 up to the module's 2048 (a peer in another /24 has its own bit; the
       // third lands in 10.77.4.x, past a /22); the seventh lands in 10.77.8.x, past the /21 and the bitmap: no bit
       // (the module asks that host itself, runtime/web/net_lan.c), and nothing written past the bitmap (its header's
       // padding)
       const others = Array.from({ length: 7 }, (_, i) => new Client(port, `O${i + 1}`));
       for (const o of others) await o.welcome();
-      const hs = others.map(o => (o.vip & 0x1fff) >>> 0), low = hs.filter(h => h < P.NET_PEER_BITS);
+      const hs = others.map(o => (o.vip & 0x3fff) >>> 0), low = hs.filter(h => h < P.NET_PEER_BITS);
       assert.ok(low.some(h => h >= 1024), `a host past the /22 (${hs.map(h => h.toString(16))})`);
       assert.ok(low.length < hs.length, `a host past the /21 (${hs.map(h => h.toString(16))})`);
       for (const h of low) await until(() => (Atomics.load(lanMb.w, P.W_PEER_BITS + (h >>> 5)) >>> (h & 31)) & 1);
@@ -518,6 +517,17 @@ const cases = {
       const mix = (await state(port)).info.mix;
       console.log(`race datagrams: ${mix['LAN UDP'][1]}, ${(mix['LAN UDP'][0] / mix['LAN UDP'][1]).toFixed(1)} bytes each (plain ${5 + 4 + 8 + 141})`);
       assert.ok(mix['LAN UDP'][0] / mix['LAN UDP'][1] < 60, `${(mix['LAN UDP'][0] / mix['LAN UDP'][1]).toFixed(1)} bytes a race datagram`);
+      // the game's own of one frame (a race's creator sends each joiner one, one after the other) go in one message:
+      // the page waits TX_HOLD_LAN_MS (1) after the first before it sends (it sent at once, so the rest of the frame
+      // went in messages of their own)
+      const in0 = (await state(port)).info.bundlesIn, n1 = r1.dgrams().length, n2 = r2.dgrams().length;
+      for (const [c, j] of [[r1, 0], [r2, 1], [r1, 2]]) {
+        txPush(memory, lanMb, { kind: 3, dst: c.vip, sport: 6112, dport: 6112, data: Buffer.from([0, 64, 0, 0, j, 0, 0, 0, 9, 9]) });
+        txBell(lanMb);
+      }
+      await r1.until(() => r1.dgrams().length >= n1 + 2); await r2.until(() => r2.dgrams().length >= n2 + 1);
+      assert.equal((await state(port)).info.bundlesIn, in0 + 1, "a frame's three datagrams, one message");
+      assert.ok(link.stats().txWaitMeanMs >= 0.9, `they waited ${link.stats().txWaitMeanMs.toFixed(2)} ms for the rest of the frame`);
       await r1.close(); await r2.close();
     } finally { link.close(); }
   },

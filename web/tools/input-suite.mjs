@@ -40,6 +40,8 @@ const SCEN = [
   ['kb_focus_mouse', 'kb_focus_mouse', [], null, 'kbdrev-07-kb_focus_mouse', 300],
   ['kb_focus_regain', 'kb_focus_regain', [], null, null, 300],
   ['kb_profile', 'kb_profile', [], null, 'int2-fin-kb/kb_profile', 300],
+  // a first profile's name field starting with Your name (overrides.c sub_004ff3b0)
+  ['kb_profile_prefill', 'kb_profile_prefill', ['NFSU2_NEW_PROFILE_NAME=Alex_the_Great'], null, null, 300],
   ['kb_no_pad_controls', 'kb_no_pad_controls', [], null, null, 300],
   ['kb_pad_capture_escape', 'kb_pad_capture_escape', [], null, 'kbdrev-07-kb_pad_capture_escape', 300],
   ['kb_rebind_save', 'kb_rebind_save', [], 'kb', 'int2-fin-kb/kb_rebind_save', 400],

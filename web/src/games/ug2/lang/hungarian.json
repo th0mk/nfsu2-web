@@ -8,9 +8,9 @@
   "Map, messages": "Térkép, üzenetek",
   "Photo mode; F12 again takes the photo": "Fotó mód; az újabb F12 elkészíti a fotót",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "A PC-s játék saját kódja, újrafordítva Chrome-ra és Firefoxra: akár 120 fps szélesvásznon, Felfedező mód és Online versenyek a barátokkal, valamint kontrollerek, kormányok és érintéses irányítás.",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "A testvéremmel nagyjából 20 éve együtt játszottunk ezzel a játékkal. Megpróbáltam átültetni böngészőre, meglepően jól működött, és kicsit elszaladt velem a ló. Nagyon jó látni, hogy ennyien játszanak vele.",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "A testvéremmel nagyjából 20 éve együtt játszottunk ezzel a játékkal. Ezért próbáltam meg átültetni böngészőre, hogy újra együtt játszhassunk. Meglepően jól működött, és kicsit elszaladt velem a ló. Nagyon jó látni, hogy ennyien játszanak vele.",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "Jogtulajdonosok: <0>legal@nfsu2.xyz</0>. A segítségkérő e-mailekre nem jön válasz; kérdezz a <1>Discordunkon</1>.",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "Forráskód a <0>GitHubon</0>. Talha Müderrisoğlu <1>NFSU2Recomp</1> projektjén alapul, amely az NFSU2 eredeti, statikus x86 → C újrafordítója, az <2>N64: Recompiled</2> és a <3>XenonRecomp</3> mintájára.",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "Forráskód a <0>GitHubon</0>. Talha Müderrisoğlu <1>NFSU2Recomp</1> projektjén alapul, amely az NFSU2 eredeti, statikus x86 → C újrafordítója, az <2>N64: Recompiled</2> és a <3>XenonRecomp</3> mintájára. Ez a projekt az <4>NFSU2Recomp 2026. október 16-i, MIT-licencű változatának</4> forkja, és csak abból a változatból használ kódot.",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "Textúracsomag: LunicAura106 <0>Upscaled HUD</0> modja.",
   "Translations": "Fordítások",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "Szinkronizált hangok és videók, valamint kínai, japán, orosz és thai szövegek: KyoriAsh <0>Multi 13 languages mod</0> nevű modja, Lee-Ryo thai támogatásával.",
@@ -23,5 +23,6 @@
   "press in: horn": "benyomva: duda",
   "Shift up": "Felváltás",
   "Shift down": "Visszaváltás",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). Az NFSU2 webszerveréről nyisd meg."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "Az oldal nem cross-origin izolált (nincs SharedArrayBuffer). Az NFSU2 webszerveréről nyisd meg.",
+  "Message a friend (in free roam)": "Üzenet egy barátnak (Felfedező módban)"
 }

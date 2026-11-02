@@ -102,6 +102,11 @@ export function percent(x: number): string {
   return new Intl.NumberFormat(current === 'english' ? 'en-GB' : LOCALE[current], { style: 'percent' }).format(x);
 }
 
+/** a whole number in the page's language, its thousands grouped (7592: 7,592; 7.592 in German) */
+export function count(n: number): string {
+  return new Intl.NumberFormat(current === 'english' ? 'en-GB' : LOCALE[current]).format(n);
+}
+
 /** f again whenever the page's language changes */
 export function onLanguage(f: () => void) { listeners.push(f); }
 

@@ -11,6 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +25,7 @@ test('aliasguard: the guest access macros keep their may_alias types', { skip: !
   console.log(r.stdout.trim());
   assert.equal(r.status, 0, r.stdout + r.stderr);
   // a cpu.h whose 16- and 64-bit accesses lost the type: the guard refuses it
-  const dir = fs.mkdtempSync(path.join(REPO, 'out/web/aliasguard-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aliasguard-'));
   try {
     const h = fs.readFileSync(path.join(REPO, 'runtime/cpu.h'), 'utf8')
       .replace(/\(gm_u16 +\*\)/g, '(uint16_t *)').replace(/\(gm_u64 +\*\)/g, '(uint64_t *)').replace(/\(gm_f64 +\*\)/g, '(double *)');

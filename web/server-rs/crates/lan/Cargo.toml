@@ -1,6 +1,6 @@
 [package]
 name = "nfsu2-lan"
-description = "The virtual LAN switch between the browsers (10.77.0.0/19), on every core"
+description = "The virtual LAN switch between the browsers (10.77.0.0/18), on every core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

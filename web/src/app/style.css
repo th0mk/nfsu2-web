@@ -120,6 +120,13 @@ h3 { font-size: 16px; line-height: 24px; color: var(--lime); margin: 32px 0 8px;
 .panel-head + .msg { margin: -12px 0 16px; }
 #settings[data-readonly] #settings-note, #online[data-readonly] #online-note { color: var(--warn); }
 
+/* who plays on this server now (players.ts PlayersPanel): three numbers in the game's value boxes */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat { padding: 12px; border-radius: 8px; background: var(--field); color: var(--muted); font-size: 14px; line-height: 20px; }
+.stat span { display: block; }
+.stat b { display: block; color: var(--lime); font-size: 24px; line-height: 32px; font-style: italic; font-variant-numeric: tabular-nums; }
+#players-note { margin-top: 12px; }
+
 /* the game's slider bar under its header, here the download */
 .bar { margin-top: 12px; height: 8px; border-radius: 4px; background: #585858; overflow: hidden; }
 .bar-fill { height: 100%; width: 0; border-radius: 4px; background: var(--lime); box-shadow: 0 0 8px var(--lime-glow); transition: width 0.2s linear; }
@@ -201,6 +208,25 @@ kbd {
 .tab { height: 36px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 24px; }
 .tab:hover { color: var(--text); }
 .tab[aria-selected="true"] { color: var(--lime); box-shadow: inset 0 -3px var(--lime); }
+
+/* a panel's own tabs as its heading (tabs.ts: the big panel's, About's): the Controls sheet's tabs at a heading's
+ * size, 44 px with its 28 px line (the panes start 88 px down, as under an h2).  Where one line is too narrow for them
+ * (a narrow column, longer words): the sheet's size (data-fit="small"), and where that is too, or on a phone, rows of
+ * three, each tab on its own divider (data-fit="rows") */
+.tabs.big { margin: -4px 0 24px; }
+.tabs.big > .tab { flex: none; height: 44px; font-size: 20px; line-height: 28px; }
+.tabs.big[data-fit] > .tab { height: 40px; font-size: 16px; line-height: 24px; }
+.tabs.big[data-fit="rows"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; box-shadow: none; }
+.tabs.big[data-fit="rows"] > .tab { height: auto; min-height: 40px; padding: 8px 4px; box-shadow: inset 0 -1px var(--line); }
+/* a word longer than its third of a phone (Translations at 320 px): split where the language allows, else anywhere */
+.tabs.big[data-fit="rows"] > .tab, .stat span { hyphens: auto; overflow-wrap: anywhere; }
+.tabs.big[data-fit="rows"] > .tab[aria-selected="true"] { box-shadow: inset 0 -3px var(--lime); }
+.pane > :first-child { margin-top: 0; }
+#settings-note { margin-bottom: 16px; }
+#game-data > h3 { margin-top: 0; }
+#cache-info { margin-bottom: 16px; }
+#controller-body:not(:empty) { margin-top: 32px; }
+
 /* a row as in Settings and the game's Controls menu: what it does, its keys on the right.  Where the keys do not fit
  * beside its longest word (another language's words with a key, a phone) they go under it, still on the right, their
  * words wrapped if they are wider than the row */
@@ -246,14 +272,12 @@ kbd .glyph { display: inline-block; width: 14px; height: 14px; vertical-align: -
 .wheel-learn .text-btn { padding: 0; }
 .wheel-learn [data-wheel="skip"] { margin-right: 24px; }
 
-/* ------------------------------------- changes from the original, about */
+/* ------------------------------------------------------------------ about */
 .prose { display: grid; gap: 12px; font-size: 14px; line-height: 20px; }
 
 /* -------------------------------------------------------------- settings */
 .group h3 { margin-top: 32px; }
 .group:first-child h3 { margin-top: 0; }
-.group-status { margin-bottom: 4px; }
-#online .group-status { margin-top: -12px; }          /* the section's subtitle, as Settings' note: 4px under its heading */
 .set {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label ctl" "help ctl";
   column-gap: 16px; padding: 12px 0; align-items: center;
@@ -753,11 +777,40 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 }
 .pause-hint-list { color: var(--muted); }
 .pause-hint-list::before { content: " · "; }
-/* free roam's friends (friends.ts): the line over the game while front bumpers touch, as the pause menu's line; one
- * that offers nothing (a request sent, or why not) is no button.  On the start page a row a friend, where it plays in
- * lime while it plays */
-.friend-prompt:not(.offer), .friend-prompt:not(.offer):active { cursor: default; color: var(--muted); }
-.friend-state.ok { color: var(--lime); }
+/* free roam's friends (friends.ts): the line in the toasts at the top while front bumpers touch, a toast with the key
+ * cap; one that offers nothing (a request sent, or why not) is no button.  On the start page (and in the page menu's Friends) a
+ * line a friend: the name, where it plays after it in small text (lime while it plays; the name dimmed while it does
+ * not), the icons at its end (Message an envelope, lime with a dot while messages wait to be read: messages.ts; Remove
+ * a grey can, red under the pointer); the friend's own line under it */
+.friend-prompt { border: 0; -webkit-tap-highlight-color: transparent; }
+.friend-prompt.offer { pointer-events: auto; cursor: pointer; }
+.friend-prompt.offer:active { color: var(--lime); }
+.friend-prompt:not(.offer) { color: var(--muted); }
+.friend-prompt kbd { min-width: 0; margin-right: 8px; padding: 0 6px; border-radius: 3px; font: 700 0.85em/1.5 var(--font); vertical-align: 1px; }
+.fl, .dlg ul.fl { list-style: none; margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
+.fl li { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; min-height: 40px; }
+.fl li + li { box-shadow: inset 0 1px var(--line); }
+.fl-name { flex: 1; min-width: 0; font-style: italic; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-st { margin-left: 8px; color: var(--muted); font: 400 14px/20px var(--font); }
+.fl-st.ok { color: var(--lime); }
+.fl li.off .fl-name { color: var(--muted); }
+.fl-act { flex: none; display: flex; gap: 2px; margin-left: auto; }
+.fl .fl-yes { color: var(--lime); }
+.fl .fl-del { color: var(--edge); opacity: 0.6; }
+.fl .fl-del:is(:hover, :focus-visible) { color: var(--bad); opacity: 1; }
+.fl .fl-msg { position: relative; }
+.fl .fl-msg.unread { color: var(--lime); }
+.fl .fl-msg.unread::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--lime);
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.fl-contact { flex-basis: 100%; margin-top: -8px; padding-bottom: 8px; color: var(--muted); font-size: 14px; line-height: 20px; }
+#friends > .set { box-shadow: inset 0 1px var(--line); }   /* under the Crews row, as the rows of a group */
+/* a request by name (friends.ts addField): the Crews row's box (its field's rules) under the list, a setting's 240 px
+ * (the row's width on a phone), what the last one did under it */
+.fl-add { flex: none; width: 240px; }
+.friends-pop-box { margin-bottom: 16px; }
+.friends-pop-box .hint:last-child { margin-bottom: 0; }
 /* the away check (away.ts): in the middle, until the player is back; a kick or a ban (shell.ts netRemoved) the same,
  * over the touch controls it leaves; upright, in the middle of the picture */
 .toast.away {
@@ -816,13 +869,27 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .drift-pop span { font: 400 calc(13 * var(--u)) / 1 var(--font); letter-spacing: 0.08em; }
 .drift-pop b { font: italic 700 calc(26 * var(--u)) / 1 var(--font); font-variant-numeric: tabular-nums; }
 @keyframes drift-pop { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
-/* quick chat's lines in the log (shell.ts chatLine): a speech balloon first, upright and brighter than the notices,
- * as big as the race lobby card's text, for 8 s */
+/* quick chat's lines in the log (shell.ts chatLine), and a friend's coming into free roam (friendNotice) the same: a
+ * speech balloon (a person) first, upright and brighter than the notices, as big as the race lobby card's text, 8 s */
 .notices div.chat {
   display: flex; align-items: center; gap: calc(2 * var(--u)); animation-duration: 8s;
   font-style: normal; font-size: max(13px, calc(11 * var(--u))); color: rgba(255, 255, 255, 0.9);
 }
 .notices div.chat svg { width: 0.9em; height: 0.9em; flex: none; fill: rgba(200, 240, 136, 0.9); }
+/* a friend's message in the log (shell.ts msgLine, messages.ts): quick chat's line with an envelope, wrapping under the
+ * name (the envelope's width in), a note after the player's own in grey; on a touch screen a tap on one answers it;
+ * "I Write back" under the newest, as quick chat's picker shows its keys */
+.notices div.msg { display: block; padding-left: 1.15em; text-indent: -1.15em; overflow-wrap: anywhere; }
+.notices div.msg svg { display: inline-block; vertical-align: -0.1em; margin-right: calc(2 * var(--u)); fill: none; color: rgba(200, 240, 136, 0.9); }
+.notices div.msg i { color: rgba(255, 255, 255, 0.62); }
+.notices div.msg.tap { pointer-events: auto; cursor: pointer; }
+.notices div.msg-hint {
+  display: flex; align-items: center; gap: 0.4em; font-style: normal; font-size: max(11px, calc(9 * var(--u))); color: rgba(255, 255, 255, 0.62);
+}
+.notices .msg-hint kbd {
+  min-width: 1.6em; padding: 0 0.4em; text-align: center; border: 1px solid var(--edge); border-radius: 3px; background: var(--field);
+  font: 700 0.85em/1.5 var(--font); color: var(--text);
+}
 /* free roam: quick chat over the cars (quickchat.ts): the phrase in lime after a speech balloon, over the name the
  * game draws, sized with the HUD (--u, 16 units at the nearest) and scaled with the name by the line's transform
  * (quickchat.ts LINE_MIN: never below 70 %), which follows the game's marks every frame; it pops up, and fades out
@@ -830,7 +897,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 /* photo mode (photo.ts): the panel, a column at the right edge (Take photo first, the keys under the buttons; it
  * scrolls on a screen too short for it), a flash at each picture, the camera's hand on the picture; the page's other
  * things on the game hidden while it is on (its toasts stay: the picture's) */
-.stage.photo :is(.touch, .qc-lines, .qc-picker, .drift-panel, .drift-pop, .pause-hint, .notices, .lobby, .lobby-cover, .hud-fps, .stage-menu) {
+.stage.photo :is(.touch, .qc-lines, .qc-picker, .drift-panel, .drift-pop, .pause-hint, .friend-prompt, .notices, .lobby, .lobby-cover, .hud-fps, .stage-menu) {
   display: none !important;
 }
 .stage.photo canvas { cursor: grab; }
@@ -914,6 +981,31 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   font: italic 700 14px/1.2 var(--font); text-align: left; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .qc-say:active { border-color: var(--lime); color: var(--lime); }
+.qc-picker .qc-msg { grid-column: 1 / -1; text-align: center; }
+/* messages between friends (messages.ts): the card is quick chat's picker, in its place and look (the log steps aside
+ * as for the picker), taking clicks: the message answered, a field for the new one, the characters left; or the
+ * friends to pick, where each plays on the right.  On a touch screen at the top, as the picker's sheet, its rows and
+ * Send big enough to tap */
+.msg-card { pointer-events: auto; outline: none; }
+.msg-quote { margin-top: 0.5em; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
+.msg-quote b { font-style: normal; color: var(--lime); }
+.msg-input {
+  display: block; box-sizing: border-box; width: 100%; margin-top: 0.5em; padding: 0.3em 0.5em; border: 1px solid var(--edge); border-radius: 3px;
+  background: var(--field); color: var(--text); font: inherit; outline: none;
+}
+.msg-input:focus { border-color: var(--lime); }
+.msg-foot { display: flex; justify-content: space-between; align-items: center; gap: 0.6em; }
+.msg-left { font-variant-numeric: tabular-nums; }
+.msg-friend { cursor: pointer; }
+.msg-where { margin-left: auto; font-size: 0.85em; color: var(--muted); }
+.msg-where.ok { color: var(--lime); }
+.msg-card[data-mode="touch"] { display: block; width: min(440px, calc(100% - 32px)); padding: 12px 16px; font-size: 16px; }
+.msg-card[data-mode="touch"] .msg-friend {
+  display: flex; width: 100%; min-height: 40px; align-items: center; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: none; color: var(--text); font: inherit; text-align: left; touch-action: manipulation;
+}
+.msg-card .msg-send { min-height: 40px; padding: 4px 16px; font-size: 16px; }
+.msg-card[data-mode="touch"] .msg-foot { margin-top: 8px; }
 /* free roam: the race lobby (lobby.ts): a card on the right under the game's Bank box, a little wider than it and its
  * text about the size of the HUD's (--u: one HUD unit), and over the trip to the race and back a cover of the whole
  * picture with the lobby in the middle, in the same step */
@@ -1021,6 +1113,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 .menu-radio svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #menu-save { margin-top: -12px; }
 #menu-save:empty { display: none; }
+/* a conversation with a friend (messages.ts ChatDialog): the messages scrolling under the name and Close, newest at
+ * the bottom, each with who and when; the field and Send under them; what became of a message, and the characters
+ * left, under the field */
+.dlg.chat[open] { display: flex; flex-direction: column; overflow: hidden; }
+#chat-log { display: flex; flex-direction: column; gap: 12px; min-height: 96px; margin-bottom: 16px; overflow: hidden auto; }
+#chat-log .hint { margin: 0; }
+.chat-msg p { margin: 0; overflow-wrap: anywhere; }
+.chat-head { display: flex; align-items: baseline; gap: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.chat-head b { font-style: italic; }
+.chat-msg.in .chat-head b { color: var(--lime); }
+.chat-msg.out .chat-head b { color: var(--text); }
+.chat-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+#chat-left { margin-left: auto; font-variant-numeric: tabular-nums; }
 /* the menu's Crews popup (a game in free roam): the Crews row's control under the help, Done under it */
 .crews-pop-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .dlg ul.crews { margin: 0; padding: 0; color: inherit; font-size: inherit; line-height: inherit; }
@@ -1035,9 +1140,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 }
 @media (max-width: 959px) {
   .app { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 48px; gap: 16px; }
-  /* one column of panels: Saves and Online right under Play, then Controls and the rest */
+  /* one column of panels: who plays and the big panel right under Play, About last */
   .side, .content { display: contents; }
-  .top, .hero, #saves, #online { order: -1; }
+  .top, .hero, .players, .tabbed { order: -1; }
 }
 @media (max-width: 559px) {
   .top, .panel { padding: 16px; }
@@ -1063,6 +1168,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
   /* a value box fills the row, beside what stays at its own width (Listen) */
   .set-control > select, .set-control > input[type="text"], .set-control > input[type="number"], .set-control > .linkbox,
   .set-control .crew-add { flex: 1 1 160px; width: auto; min-width: 0; max-width: none; }
+  .set-control .fl-add { flex: none; width: 100%; }   /* (in the Friends row's column: no basis, which is its height) */
   .opt { flex: 1; justify-content: center; padding: 0 8px; }
   /* Reset all settings on a line of its own, under the text editor's line (and the editor, when open) */
   .raw { display: flex; flex-direction: column; }
@@ -1071,6 +1177,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.64); }
 /* the Controls tabs' three words on the smallest phones (Swedish, Danish), and with a mouse (a desktop zoomed in) the
  * Keyboard tab's longer word (Dutch, Swedish) */
 @media (max-width: 359px) {
+  .stat { padding-inline: 8px; }                   /* room for 7,592 in a third of the smallest phones */
   .tabs { gap: 16px; }
   html:not([data-touch]) .tabs { gap: 8px; }
 }

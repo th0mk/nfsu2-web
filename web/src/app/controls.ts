@@ -155,7 +155,9 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
   const pad = panels.find(p => p.dataset.tab === 'pad')!;
   const wheel = wheelSection(pad, cap);
   let svg: SVGElement, radios: HTMLInputElement[] = [];
-  /** the drawing and its foot, in the page's language; the wheel's part after them */
+  /** the drawing and its foot, in the page's language; the wheel's part after them, then what the page keeps there
+   *  (data-keep: the start page's Controller settings, settings-ui.ts) */
+  const kept = [...pad.querySelectorAll<HTMLElement>(':scope > [data-keep]')];
   const draw = () => {
     const menus = esc(t('In menus: D-pad and {a}, {b} goes back.')).replace('{a}', cap('A', 'cross')).replace('{b}', cap('B', 'circle'));
     pad.innerHTML = padSvg() + `<div class="pad-foot">
@@ -164,7 +166,7 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
       <label class="opt"><input type="radio" name="${id}-fam" value="xb">Xbox</label>
       <label class="opt"><input type="radio" name="${id}-fam" value="ps">PlayStation</label>
     </div></div>`;
-    pad.append(wheel.box);
+    pad.append(wheel.box, ...kept);
     svg = pad.querySelector('svg')!;
     radios = [...pad.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
     for (const r of radios) r.onchange = () => { if (r.checked) sheet.family(r.value as Family); };

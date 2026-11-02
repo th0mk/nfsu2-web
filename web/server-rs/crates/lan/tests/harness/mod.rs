@@ -42,9 +42,9 @@ pub fn ip_str(v: u32) -> String {
     nfsu2_util::vip_str(v)
 }
 
-/// every address the switch hands out: host bytes 2-251 in each of 10.77.0-31.x (10.77.0.0/19)
+/// every address the switch hands out: host bytes 2-251 in each of 10.77.0-47.x (10.77.0.0/18)
 pub fn all_vips() -> Vec<u32> {
-    (0..32u32).flat_map(|b| (0..250u32).map(move |i| (10 << 24) | (77 << 16) | (b << 8) | (i + 2))).collect()
+    (0..48u32).flat_map(|b| (0..250u32).map(move |i| (10 << 24) | (77 << 16) | (b << 8) | (i + 2))).collect()
 }
 
 /// the tests' options: WebSocket messages of up to 1 MiB taken (max_payload), so that the switch's own limits decide
@@ -656,7 +656,8 @@ pub const PONG: u8 = 0xA;
 /// a client that never reads, with its hello sent, on an in-memory pipe that holds `cap` bytes instead of a socket:
 /// the switch's writer to it stops once they are written, on every system (a loopback socket's buffers are the
 /// kernel's to size; macOS's took a whole burst, and the switch's queue a test measures stayed empty).  Keep the
-/// returned end: dropping it closes the connection.  `group`: as ?g=<id> names it.
+/// returned end: dropping it closes the connection; what is written to it reaches the switch as the client's
+/// frames.  `group`: as ?g=<id> names it.
 pub fn stalled_peer(sw: &Switch, name: &str, group: Option<&str>, cap: usize) -> tokio::io::DuplexStream {
     let (ours, theirs) = tokio::io::duplex(cap);
     let (r, w) = tokio::io::split(theirs);

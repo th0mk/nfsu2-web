@@ -84,6 +84,20 @@ test('names, addresses and the zone go; the rest stays as it was', () => {
   assert.equal(lines[34], '  --- native state applier (12 types 7/3/1, 0 left)');
 });
 
+test('messages between friends: the friend\'s name goes, the rest stays', () => {
+  const lines = new Privacy('salt').scrub(`[msg] from Night Owl
+[msg] from Night Owl, on the start page
+[msg] sending to Night Owl (12 characters)
+[msg] to Night Owl: kept
+[msg] to Night Owl from the start page: sent
+[msg] to Night Owl failed: TypeError: Failed to fetch
+`).split('\n');
+  const owl = /^\[msg\] from (player-\w{4})$/.exec(lines[0])?.[1];
+  assert.ok(owl, lines[0]);
+  assert.deepEqual(lines.slice(1, 6), [`[msg] from ${owl}, on the start page`, `[msg] sending to ${owl} (12 characters)`, `[msg] to ${owl}: kept`,
+    `[msg] to ${owl} from the start page: sent`, `[msg] to ${owl} failed: TypeError: Failed to fetch`]);
+});
+
 test('a stand-in holds in every log of a browser, and differs between browsers', () => {
   const a = new Privacy('one').scrub(LOG), b = new Privacy('one').scrub(LOG), c = new Privacy('two').scrub(LOG);
   assert.equal(a, b);

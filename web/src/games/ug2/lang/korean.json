@@ -6,9 +6,9 @@
   "Start an event, take an outrun": "이벤트 시작, 아웃런 받기",
   "Map, messages": "지도, 메시지",
   "The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.": "PC 게임 원래의 코드를 Chrome과 Firefox용으로 다시 컴파일했어요: 와이드스크린에서 최대 120 fps, 친구들과의 자유 주행과 온라인 레이스, 그리고 컨트롤러, 핸들, 터치 컨트롤.",
-  "My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "약 20년 전, 저는 형제와 함께 이 게임을 즐겼습니다. 브라우저로 이식해 보았더니 놀라울 만큼 잘 작동했고, 그러다 일이 좀 커졌네요. 이렇게 많은 분들이 플레이하는 걸 보니 정말 기쁩니다.",
+  "My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.": "약 20년 전, 저는 형제와 함께 이 게임을 즐겼습니다. 그래서 다시 함께 플레이할 수 있도록 브라우저로 이식해 보았습니다. 놀라울 만큼 잘 작동했고, 그러다 일이 좀 커졌네요. 이렇게 많은 분들이 플레이하는 걸 보니 정말 기쁩니다.",
   "Rights holders: <0>legal@nfsu2.xyz</0>. Support emails won't be answered; ask on <1>our Discord</1>.": "권리자: <0>legal@nfsu2.xyz</0>. 지원 문의 이메일에는 답변하지 않으니 <1>저희 Discord</1>에서 물어봐 주세요.",
-  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>.": "소스 코드는 <0>GitHub</0>에 있습니다. Talha Müderrisoğlu의 <1>NFSU2Recomp</1> 기반이며, 이는 <2>N64: Recompiled</2>와 <3>XenonRecomp</3>를 따른 NFSU2의 원조 x86 → C 정적 리컴파일러입니다.",
+  "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "소스 코드는 <0>GitHub</0>에 있습니다. Talha Müderrisoğlu의 <1>NFSU2Recomp</1> 기반이며, 이는 <2>N64: Recompiled</2>와 <3>XenonRecomp</3>를 따른 NFSU2의 원조 x86 → C 정적 리컴파일러입니다. 이 프로젝트는 <4>2026년 10월 16일의 MIT 라이선스 버전 NFSU2Recomp</4>에서 포크했으며, 그 버전의 코드만 사용합니다.",
   "Texture pack: LunicAura106's <0>Upscaled HUD</0>.": "텍스처 팩: LunicAura106의 <0>Upscaled HUD</0>.",
   "Translations": "번역",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "더빙된 음성과 동영상, 그리고 중국어, 일본어, 러시아어, 태국어 텍스트: KyoriAsh의 <0>Multi 13 languages mod</0>(Lee-Ryo의 태국어 지원 포함).",
@@ -23,5 +23,6 @@
   "Shift down": "기어 내림",
   "Quick chat (with other players): group, then phrase": "빠른 채팅(다른 플레이어와 있을 때): 그룹, 그다음 문구",
   "Photo mode; F12 again takes the photo": "사진 모드, F12를 다시 누르면 사진 촬영",
-  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). NFSU2 웹 서버에서 여세요."
+  "The page is not cross-origin isolated (no SharedArrayBuffer). Open it from the NFSU2 web server.": "이 페이지는 교차 출처 격리가 되어 있지 않아요(SharedArrayBuffer 없음). NFSU2 웹 서버에서 여세요.",
+  "Message a friend (in free roam)": "친구에게 메시지(자유 주행에서)"
 }

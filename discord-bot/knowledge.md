@@ -6,7 +6,9 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
 
 ## The project
 
-- Players open https://nfsu2.xyz in Chrome or Firefox (Safari on iOS 26 / iPadOS 26 and macOS works too, less tested)
+- Players open https://nfsu2.xyz in Chrome, Edge (or another Chromium browser: Brave, Opera) or Firefox (Safari 26 on a
+  Mac, iPhone or iPad works too). Chromium browsers run the game as Chrome does: the `BROWSER-CHROMIUM` warning ("Only
+  Chrome and Firefox are tested") is harmless, and the release after 371f501 no longer shows it, nor one for Safari.
   and press Play. The server has the game files: players need no copy of their own and install nothing. Saves stay in
   the browser, or also on the server with cloud saves (a passphrase only the player has; the page called it a keyphrase before 2026-10-29, so players may say either).
 - The page updates itself: before a game it loads the new version by itself; during a game it shows "A new version of

@@ -73,8 +73,9 @@
 //             the page as Chrome answers (a test browser's own password manager is off: --enable-automation)
 //   full      a full server (needs one started with --max-peers 1: the step holds that place itself): the first
 //             Play's free-roam question says the server is full, and nothing more is asked after it; in line, the
-//             place over the game and the page menu's Stop waiting; in once the place frees up; a later Play asks to
-//             wait in line or play offline (Esc waits): offline, no network at all; Stop waiting leaves the line
+//             place over the game and the page menu's Stop waiting; in once the place frees up (told in the toast); a
+//             later Play asks to wait in line or play offline (Esc waits): offline, no network at all; Stop waiting
+//             leaves the line
 //   page      what the page shows and asks for: no /server-info, /setup or /ca.crt (all 404), every
 //             setting has a name and a description, the controls sheet is on the page and in F9's dialog
 //   mobile    the start page at phone size
@@ -197,6 +198,8 @@ const RECORD_GPU_AUDIO = () => {
 };
 // the settings show at once, read only until the tab owns the saves
 const settingsReady = page => page.waitForFunction(() => !!document.querySelector('#settings .set') && !document.querySelector('#settings').hasAttribute('data-readonly'), null, { timeout: 15000 });
+// the big panel's tab (tabs.ts): what is in another one is hidden, and a click waits for it to show
+const tab = (page, name) => page.click(`#settings > .tabs > .tab[data-tab="${name}"]`);
 // settings writes are async: each one bumps #settings[data-saved]
 const saved = page => page.evaluate(() => +(document.querySelector('#settings').dataset.saved ?? 0));
 async function settle(page, before, n = 1) {
@@ -561,12 +564,14 @@ async function ug2Steps() {
   // --------------------------------------------------------- settings --
   if (want('settings') || want('play') || want('saves') || want('restore') || want('pcsave')) {
     await settingsReady(page);
+    await tab(page, 'game');
     await page.locator('#settings').screenshot({ path: path.join(OUT, 'settings.png') });
     let n0 = await saved(page);
     await page.click('.set[data-key="movies"] .switch'); await settle(page, n0++);          // movies: on -> off
     await page.click('.set[data-key="fps"] .opt:has-text("120")'); await settle(page, n0++);
     await page.click('#settings summary:has-text("More display")');
     await page.click('.set[data-key="fps_counter"] .opt:has-text("Detailed")'); await settle(page, n0++);
+    await tab(page, 'online');
     await page.click('.set[data-key="roam"] .switch'); await settle(page, n0++);            // roam on (validated bool)
     // the name typed is kept as Online takes it (settings-ui.ts onlineName): Tester_a_comm
     await page.fill('#set-roam_name', 'Tester ; a comment'); await page.press('#set-roam_name', 'Tab'); await settle(page, n0++);
@@ -590,6 +595,7 @@ async function ug2Steps() {
       env.NFSU2_ROAM_NAME === 'Tester_a_comm' && env.NFSU2_ROAM === '0' && env.NFSU2_HORN === 'train' && env.NFSU2_ROAM_MAX_CARS === '20' && env.SNDSYNC === '0' && !('WINDOW' in env);
     // the raw editor: a refused value is kept in the file but shown as ignored; a setting the panel has no row for
     // (roam_rate) and one the browser ignores (roam_port, the Mac app's) are listed under the groups
+    await tab(page, 'other');
     await page.click('#settings-raw summary');
     const ta = page.locator('#settings-text');
     await ta.fill((await ta.inputValue()).replace('#hud = wide', 'hud = ultrawide').replace('#roam_rate = 20', 'roam_rate = 30')
@@ -610,12 +616,14 @@ async function ug2Steps() {
     }));
     // Reset puts the template line back
     const moreDisplay = await page.locator('#settings summary:has-text("More display")').textContent();   // fps_counter and hud
+    await tab(page, 'game');
     await page.click('#settings summary:has-text("More display")');
     n0 = await saved(page);
     await page.click('.set[data-key="hud"] .text-btn'); await settle(page, n0);
     const file2 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset on a line without a row (roam_rate): its template line back
     n0 = await saved(page);
+    await tab(page, 'other');
     await page.click('#settings-other li:has-text("roam_rate") .text-btn'); await settle(page, n0);
     const file3 = (await readOpfs(page, SAVE, 'settings.ini')).text;
     // Reset all settings: asks, then the template with the name (roam_port, the Mac app's line, goes too)
@@ -631,6 +639,7 @@ async function ug2Steps() {
     // the steps after this one play with movies off and the detailed counter (play's F8, saves' and restore's
     // settings.ini): set again after the reset
     n0 = await saved(page);
+    await tab(page, 'game');
     await page.click('.set[data-key="movies"] .switch'); await settle(page, n0++);
     const more = page.locator('#settings details:has(> summary:has-text("More display"))');
     if (!await more.evaluate(d => d.open)) await page.click('#settings summary:has-text("More display")');
@@ -690,6 +699,7 @@ async function ug2Steps() {
     await page.waitForFunction(() => !/Counting/.test(document.querySelector('#cache-info').textContent));
     const listed = await page.locator('#profiles .name').allTextContents();
     const cacheInfo = await page.locator('#cache-info').textContent();
+    await tab(page, 'saves');
     await page.locator('#saves').screenshot({ path: path.join(OUT, 'saves.png') });
     const dl = page.waitForEvent('download');
     await page.click('#export');
@@ -878,7 +888,7 @@ async function ug2Steps() {
     const a = watch(await c2.newPage(), 'O1'), b = watch(await c2.newPage(), 'O2');
     await open(a, `save=${RUN}-o&fresh&env=NOMOVIES%3D1`);
     await open(b, `save=${RUN}-o`, 60000, ['waiting', 'ready', 'error']);
-    await b.waitForSelector('#settings[data-readonly] .set');
+    await b.waitForSelector('#settings[data-readonly] .set', { state: 'attached' });
     const before = (await readOpfs(b, `${RUN}-o`, 'settings.ini')).text;
     const ro = await b.evaluate(() => ({ note: document.querySelector('#settings-note').textContent,
       disabled: [...document.querySelectorAll('#settings-body button, #settings-body input')].every(e => e.disabled),
@@ -1418,7 +1428,7 @@ async function ug2Steps() {
     await r.route(playersUrl, route => route.fulfill({ contentType: 'application/json', body: '{"players":700,"online":40,"full":false,"roamBusy":true}' }));
     await r.goto(`${BASE}/`);
     await waitPhase(r, ['ready', 'error'], 60000);
-    await r.waitForFunction(() => /700 players/.test(document.querySelector('#online')?.textContent ?? ''), null, { timeout: 10000 });
+    await r.waitForFunction(() => document.querySelector('#players-all')?.textContent === '700', null, { timeout: 10000 });
     await r.click('#play');
     const busyAsked = await r.waitForSelector('#confirm[open]', { timeout: 4000 }).then(() => true, () => false);
     await waitPhase(r, ['playing', 'exited'], 60000);
@@ -1711,6 +1721,7 @@ async function ug2Steps() {
       { kAsk, loaded, kAfter, kLog, kGets, nAsk, nKept, nAgain, nLink, nGets, zKept, zGets, zGetsAgain, zAsk });
 
     // the cloud copy goes (the dev server's state stays clean)
+    await tab(r, 'saves');
     await r.click('#vault-delete');
     await r.waitForSelector('#confirm[open]', { timeout: 5000 });
     await r.click('#confirm-ok');
@@ -1741,7 +1752,7 @@ async function ug2Steps() {
     let holder = await hold();
     await f.goto(`${BASE}/`);
     await waitPhase(f, ['ready', 'error'], 60000);
-    await f.waitForFunction(() => /server is full/.test(document.querySelector('#online')?.textContent ?? ''), null, { timeout: 20000 });
+    await f.waitForFunction(() => /server is full/.test(document.querySelector('#players-note')?.textContent ?? ''), null, { timeout: 20000 });
     // the first Play: the free-roam question, saying the server is full; turned on, nothing more is asked
     await f.click('#play');
     await f.waitForSelector('#confirm[open]', { timeout: 10000 });
@@ -1763,6 +1774,10 @@ async function ug2Steps() {
     // line gone
     holder.close(1000, 'closed');
     await f.waitForFunction(() => document.querySelector('#queue').hidden && !!window.__nfsu2.session?.net?.vip(), null, { timeout: 20000 });
+    // told in the toast over the game, where the line was
+    const inToast = await f.waitForFunction(() => { const t = document.querySelector('#toast'); return !t.hidden && t.textContent; }, null, { timeout: 5000 })
+      .then(h => h.jsonValue(), () => null);
+    await shot(f, 'full-in.png');
     const inLog = (await f.evaluate(() => window.__nfsu2.log.tail(300))).filter(l => /in line|in from the line|freed up/.test(l));
     await stop();
     // a later Play on a full server: wait in line or play offline
@@ -1791,11 +1806,12 @@ async function ug2Steps() {
     await stop();
     holder.close(1000, 'closed');
     await c6.close();
-    report('full', /The server is full right now/.test(roamAsk.text) && roamAsk.ok === 'Turn on' && !second &&
+    report('full', /The server is full\. You wait in line too/.test(roamAsk.text) && roamAsk.ok === 'Turn on' && !second &&
       /^The server is full\. In line for a place: next/.test(inLine ?? '') && stopShown && inLog.some(l => /in from the line/.test(l)) &&
+      /^A place on the server freed up/.test(inToast ?? '') &&
       fullAsk.title === 'The server is full' && fullAsk.ok === 'Wait in line' && fullAsk.cancel === 'Play offline' &&
       !offline.net && !offline.line && !left.line && /Playing offline/.test(left.toast) && left.log === 1,
-      { roamAsk, second, inLine, stopShown, inLog, fullAsk, offline, left });
+      { roamAsk, second, inLine, stopShown, inLog, inToast, fullAsk, offline, left });
   }
 
   // ------------------------------------------------------------- page --

@@ -102,7 +102,9 @@ export interface NetOptions {
   /** the operator removed this player from playing with others (a kick or a ban), with its message: the page stays
    *  off the switch for the rest of this game */
   onRemoved?: (r: NetRemoved) => void;
-  /** milliseconds between pings to the switch (default 2000) */
+  /** milliseconds between pings to the switch (default 10000): their round trip is only shown (the F9 log's
+   *  "lan rtt ms"); the switch times free roam's paths with pings of its own.  Each ping and its answer were a
+   *  message each way through cloudflared for every page, 2 s apart */
   pingMs?: number;
   /** milliseconds no mailbox wants the switch before the page lets it go (default 10000) */
   idleMs?: number;
@@ -195,6 +197,11 @@ const TX_HOLD_MS = 50;
  *  roam, 70 % of a driving player's messages).  The server holds what its friends send it as long (nfsu2-lan away.rs);
  *  a HELLO or SNAP that says it drives again goes at once. */
 const TX_HOLD_AWAY_MS = 500;
+/** LAN play's TX ring waits this long after its first frame came: a race's creator sends each joiner a datagram every
+ *  frame, one after the other, and the page woke at the first, so the rest of the frame's went in messages of their
+ *  own (web/tools/lan-pair.mjs, 4 players: the creator's page sent 74 messages a second for 178 datagrams, about a
+ *  quarter fewer this way); the switch puts what comes for a page in 4 ms together (nfsu2-lan `lan_ms`) */
+const TX_HOLD_LAN_MS = 1;
 /** runtime/roam_core.h: a datagram's type (header byte 5): HELLO, the car state, a ping and its answer */
 const RC_MSG_HELLO = 1, RC_MSG_SNAP = 3, RC_MSG_PING = 6, RC_MSG_PONG = 7;
 
@@ -288,6 +295,8 @@ class Endpoint {
   sent = 0;
   /** free roam: its game is not driving, as its last HELLO or SNAP said (a race, a shop, the menus, loading) */
   away = false;
+  /** LAN play: when its TX ring got its first frame since the last drain (performance.now(); 0: empty) */
+  firstAt = 0;
   constructor(readonly kind: 'roam' | 'lan', buf: SharedArrayBuffer, ptr: number, size: number) {
     // shared memory is never detached: views made now stay valid after the
     // memory grows (the mailbox lies inside the current buffer)
@@ -603,7 +612,7 @@ class Link implements NetLink {
         ...(this.o.id ? { id: this.o.id } : {}), ...(this.o.id && this.o.was?.length ? { was: this.o.was } : {}),
         ...(this.o.claim ? { claim: this.o.claim } : {}), ...(this.o.block?.length ? { block: this.o.block } : {}),
         ...(this.vipNum && this.token ? { vip: P.ipStr(this.vipNum), token: this.token } : {}), ...(this.ticket ? { ticket: this.ticket } : {}) }));
-      this.pingTimer = setInterval(() => this.ping(), this.o.pingMs ?? 2000);
+      this.pingTimer = setInterval(() => this.ping(), this.o.pingMs ?? 10_000);
     };
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') { let m: any; try { m = JSON.parse(e.data); } catch { return; } this.control(m); }
@@ -631,7 +640,7 @@ class Link implements NetLink {
       if (e.code === 1013 && !this.full) {
         this.full = true;
         this.log('the server is full (LAN full); trying again until a place frees up');
-        this.o.onNotice?.(N('The server is full: playing with others waits for a free place'));
+        this.o.onNotice?.(N('The server is full: playing with others waits for a free place.'));
       }
       // one line when the link goes, then one every 30 s while it stays away
       const t = now();
@@ -661,7 +670,7 @@ class Link implements NetLink {
         this.log(`in from the line after ${s < 60 ? `${s} s` : `${Math.round(s / 60)} min`}`);
         this.ticket = ''; this.queuedAt = 0; this.o.onQueue?.(null);
       }
-      if (this.full) { this.full = false; this.o.onNotice?.(N('A place on the server freed up: you can play with others now')); }
+      if (this.full) { this.full = false; this.o.onNotice?.(N('A place on the server freed up: you can play with others now.')); }
       if (this.lost) { this.lost = false; this.o.onBack?.(); }
       this.resolveOnline(this.vip);
     } else if (m.t === 'queue' && Number.isInteger(m.pos) && Number.isInteger(m.of)) {
@@ -669,10 +678,10 @@ class Link implements NetLink {
       if (typeof m.ticket === 'string') this.ticket = m.ticket;
       if (this.state !== 'queued') {
         this.state = 'queued'; this.setPage(P.NET_PAGE_OFFLINE); this.backoff = 250; this.failed = 0;
+        // (no notice: the line over the game, onQueue, says it)
         if (!this.queuedAt) {
           this.queuedAt = now(); this.full = true;
           this.log(`the server is full: in line for a place, ${m.pos} of ${m.of}`);
-          this.o.onNotice?.(N('The server is full: you\'re in line and join the others when it\'s your turn'));
         } else this.log(`back in line, ${m.pos} of ${m.of}`);
       }
       this.o.onQueue?.({ pos: m.pos, of: m.of, ...(typeof m.eta === 'number' ? { eta: m.eta } : {}) });
@@ -744,6 +753,7 @@ class Link implements NetLink {
    *  until the next car state to a friend comes or TX_HOLD_MS after the last send, or TX_HOLD_AWAY_MS while the game
    *  is not driving (half the ring at most) */
   private txHold(ep: Endpoint): number {
+    if (ep.kind === 'lan' && this.state === 'online') return this.lanHold(ep);
     if (ep.kind !== 'roam' || this.state !== 'online') return 0;
     const i32 = ep.i32, dv = ep.dv, txOff = i32[P.W_TX_OFF], head = Atomics.load(i32, P.W_TX_HEAD);
     let tail = Atomics.load(i32, P.W_TX_TAIL);
@@ -758,7 +768,18 @@ class Link implements NetLink {
     const left = ep.sent + (ep.away ? TX_HOLD_AWAY_MS : TX_HOLD_MS) - performance.now();
     return left > 0 ? Math.ceil(left) : 0;
   }
+  /** how long LAN play's TX ring may wait still (ms; 0: send it now): TX_HOLD_LAN_MS from its first frame (half the
+   *  ring at most) */
+  private lanHold(ep: Endpoint): number {
+    const head = Atomics.load(ep.i32, P.W_TX_HEAD), tail = Atomics.load(ep.i32, P.W_TX_TAIL);
+    if (tail === head || ((head - tail) | 0) >= P.NET_TX_SLOTS / 2) return 0;
+    const t = performance.now();
+    if (!ep.firstAt) ep.firstAt = t;
+    const left = ep.firstAt + TX_HOLD_LAN_MS - t;
+    return left > 0 ? Math.ceil(left) : 0;
+  }
   private drainTx(ep: Endpoint) {
+    ep.firstAt = 0;
     const i32 = ep.i32, dv = ep.dv;
     let tail = Atomics.load(i32, P.W_TX_TAIL);
     const head = Atomics.load(i32, P.W_TX_HEAD);

@@ -77,95 +77,34 @@
       <p class="msg warn" id="override" hidden></p>
     </section>
 
-    <section class="panel" id="controls" aria-labelledby="controls-title">
-      <h2 id="controls-title" data-i18n>Controls</h2>
-      <div id="keys">
-        <div class="tabs" role="tablist" data-i18n-attr="aria-label" aria-label="Controls">
-          <button type="button" class="tab" role="tab" data-tab="keys"><span class="key-only" data-i18n>Keyboard</span><span class="touch-only" data-i18n>Touch</span></button>
-          <button type="button" class="tab" role="tab" data-tab="pad" data-i18n>Controller</button>
-          <button type="button" class="tab" role="tab" data-tab="site" data-i18n>Site</button>
-        </div>
-        <div class="tab-panel" role="tabpanel" data-tab="keys">
-          <p class="hint touch-only" data-i18n>Tap the game's menus, or use the arrows, OK and Back beside them. Touch controls show while you drive.</p>
-          <!-- the steering's list, the position's, Nitro's and the level horizon's switches and the sizes: controls.ts -->
-          <div class="set touch-only" data-steer>
-            <label class="set-label" data-i18n>Steering</label>
-            <p class="set-help" data-i18n>The button at the game's top right switches it too.</p>
-            <div class="set-control"><select></select></div>
-          </div>
-          <div class="set touch-only" data-position>
-            <label class="set-label" data-i18n>Position</label>
-            <p class="set-help" data-i18n>Which thumb steers. Moved in keeps the controls off the screen's edges.</p>
-            <div class="set-control"><select></select></div>
-          </div>
-          <div class="set touch-only" data-nitro>
-            <label class="set-label" data-i18n>Nitro on the steering side</label>
-            <p class="set-help" data-i18n>For the thumb that isn't on Gas.</p>
-            <div class="set-control"><span class="val" aria-hidden="true"></span><input type="checkbox" class="switch" role="switch"></div>
-          </div>
-          <div class="set touch-only" data-level>
-            <label class="set-label" data-i18n>Level horizon</label>
-            <p class="set-help" data-i18n>With tilt steering, keeps the horizon level.</p>
-            <div class="set-control"><span class="val" aria-hidden="true"></span><input type="checkbox" class="switch" role="switch"></div>
-          </div>
-          <div class="set touch-only" data-size>
-            <label class="set-label" data-i18n>Control size</label>
-            <p class="set-help" data-i18n>Auto sizes them for this screen.</p>
-            <div class="set-control"><select></select></div>
-          </div>
-          <div class="set touch-only" data-menu-size>
-            <label class="set-label" data-i18n>Menu button size</label>
-            <p class="set-help" data-i18n>The game's menu arrows and bottom buttons. Auto makes the arrows finger-sized and leaves the bottom buttons as they are.</p>
-            <div class="set-control"><select></select></div>
-          </div>
-          <dl class="keys key-only">
-            <div><dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd data-i18n>Throttle, brake and reverse</dd></div>
-            <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd data-i18n>Steer (or W S A D)</dd></div>
-            <div><dt><kbd>Alt</kbd></dt><dd data-i18n>Nitrous</dd></div>
-            <div><dt><kbd data-i18n>Space</kbd></dt><dd data-i18n>Handbrake</dd></div>
-            <div><dt><kbd>Shift</kbd> <kbd data-i18n>Ctrl</kbd></dt><dd data-i18n>Shift up, shift down (manual)</dd></div>
-            <div><dt><kbd>C</kbd> <kbd>B</kbd></dt><dd data-i18n>Camera, look back</dd></div>
-            <div><dt><kbd>R</kbd></dt><dd data-i18n>Respawn</dd></div>
-            <div><dt><kbd>H</kbd> <kbd>J</kbd></dt><dd data-i18n>Hydraulics (hold, then the arrows)</dd></div>
-            <div><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
-            <div><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
-            <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): group, then phrase</dd></div>
-            <div><dt><kbd>Enter</kbd></dt><dd data-i18n>Start an event, take an outrun</dd></div>
-            <div><dt><kbd>M</kbd> <kbd>Tab</kbd></dt><dd data-i18n>Map, messages</dd></div>
-            <div><dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd data-i18n>Pause</dd></div>
-          </dl>
-          <p class="hint key-only" data-i18n>In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.</p>
-        </div>
-        <!-- the controller's drawing: controls.ts -->
-        <div class="tab-panel" role="tabpanel" data-tab="pad" hidden></div>
-        <div class="tab-panel" role="tabpanel" data-tab="site" hidden>
-          <dl class="keys">
-            <div class="key-only"><dt><kbd>F9</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
-            <div class="touch-only"><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
-            <div><dt data-i18n-html><kbd>Home</kbd> or both sticks pressed in</dt><dd data-i18n>The menu, on a controller</dd></div>
-            <div class="key-only"><dt><kbd>F8</kbd></dt><dd data-i18n>Frame-rate counter</dd></div>
-            <div class="key-only"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>
-            <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
-          </dl>
-        </div>
+    <section class="panel players" id="players" aria-labelledby="players-title">
+      <h2 id="players-title" data-i18n>Playing now</h2>
+      <!-- players.ts PlayersPanel: the numbers, and a line under them (the server full, or not answering) -->
+      <div class="stats">
+        <p class="stat"><b id="players-all">–</b> <span data-i18n>in total</span></p>
+        <p class="stat"><b id="players-roam">–</b> <span data-i18n>in free roam</span></p>
+        <p class="stat"><b id="players-online">–</b> <span id="players-online-label"></span></p>
       </div>
+      <p class="hint" id="players-note" hidden></p>
     </section>
 
-    <section class="panel" id="about" aria-labelledby="about-title">
-      <h2 id="about-title" data-i18n>About this project</h2>
-      <div class="prose">
+    <section class="panel" id="about" data-i18n-attr="aria-label" aria-label="About this project">
+      <div class="tabs big" role="tablist" data-i18n-attr="aria-label" aria-label="About this project">
+        <button type="button" class="tab" role="tab" data-tab="about" data-i18n>About</button>
+        <button type="button" class="tab" role="tab" data-tab="credits" data-i18n>Credits</button>
+        <button type="button" class="tab" role="tab" data-tab="translations" data-i18n>Translations</button>
+      </div>
+      <div class="pane prose" role="tabpanel" data-tab="about">
         <p data-i18n>The PC game's own code, recompiled for Chrome and Firefox: up to 120 fps in widescreen, free roam and Online races with friends, and controllers, wheels and touch controls.</p>
-        <p data-i18n>My brother and I played this game together about 20 years ago. I tried porting it to the browser, it worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.</p>
+        <p data-i18n>My brother and I played this game together about 20 years ago. Because of that I tried porting it to the browser so we could play together again. It worked surprisingly well, and it got a bit out of hand. It's great to see so many people playing it.</p>
         <p data-i18n-html>To help with hosting and development costs, you can <a href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer">buy me a coffee</a>. No perks, apart from a Discord role.</p>
         <p data-i18n-html>Rights holders: <a href="mailto:legal@nfsu2.xyz">legal@nfsu2.xyz</a>. Support emails won't be answered; ask on <a href="https://discord.gg/25zXmQ2Ua9" target="_blank" rel="noopener noreferrer">our Discord</a>.</p>
       </div>
-      <h3 data-i18n>Credits</h3>
-      <div class="prose">
-        <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>.</p>
+      <div class="pane prose" role="tabpanel" data-tab="credits" hidden>
+        <p data-i18n-html>Source code on <a href="https://github.com/th0mk/nfsu2-web" target="_blank" rel="noopener noreferrer">GitHub</a>. Based on Talha Müderrisoğlu's <a href="https://github.com/TalhaMudo/NFSU2Recomp" target="_blank" rel="noopener noreferrer">NFSU2Recomp</a>, the original x86 → C static recompiler for NFSU2, after <a href="https://github.com/N64Recomp/N64Recomp" target="_blank" rel="noopener noreferrer">N64: Recompiled</a> and <a href="https://github.com/hedge-dev/XenonRecomp" target="_blank" rel="noopener noreferrer">XenonRecomp</a>. This project was forked from NFSU2Recomp's <a href="https://github.com/TalhaMudo/NFSU2Recomp/tree/3d187ce7e5f1b99c0580866da4dbaa6d59dd23c7" target="_blank" rel="noopener noreferrer">MIT-licensed version of 16 October 2026</a> and uses only code from that version.</p>
         <p data-i18n-html>Texture pack: LunicAura106's <a href="https://nfsmods.xyz/mod/4319" target="_blank" rel="noopener noreferrer">Upscaled HUD</a>.</p>
       </div>
-      <h3 data-i18n>Translations</h3>
-      <div class="prose">
+      <div class="pane prose" role="tabpanel" data-tab="translations" hidden>
         <p data-i18n-html>Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <a href="https://nfsmods.xyz/mod/5749" target="_blank" rel="noopener noreferrer">Multi 13 languages mod</a>, with Lee-Ryo's Thai support.</p>
         <p data-i18n>Portuguese (Brazil): TraduMix and MixMods (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro).</p>
         <p data-i18n>Polish: PLProjekt (Daniel Graszka, MaDeR, Marcin Piech, Nati, Mateusz Wilkowski, alter).</p>
@@ -177,97 +116,189 @@
   </div>
 
   <div class="content">
-    <section class="panel" id="saves" aria-labelledby="saves-title">
-      <div class="panel-head">
-        <h2 id="saves-title" data-i18n>Saves</h2>
-        <div class="row">
-          <button type="button" class="btn" id="export" data-i18n>Download backup</button>
-          <label class="btn file-btn" data-i18n-html>Restore<input type="file" id="import"></label>
-        </div>
+    <!-- the big panel: its tabs are its heading (tabs.ts); the whole of it is SettingsPanel's (settings-ui.ts) -->
+    <section class="panel tabbed" id="settings">
+      <div class="tabs big" role="tablist">
+        <button type="button" class="tab" role="tab" data-tab="saves" data-i18n>Saves</button>
+        <button type="button" class="tab" role="tab" data-tab="online" data-i18n>Online</button>
+        <button type="button" class="tab" role="tab" data-tab="friends" data-i18n>Friends &amp; crews</button>
+        <button type="button" class="tab" role="tab" data-tab="game" data-i18n>Game</button>
+        <button type="button" class="tab" role="tab" data-tab="controls" data-i18n>Controls</button>
+        <button type="button" class="tab" role="tab" data-tab="other" data-i18n>Other</button>
       </div>
-      <p class="msg" id="saves-msg" role="status"></p>
-      <ul class="profiles" id="profiles" data-i18n-attr="aria-label" aria-label="Profiles in this browser"></ul>
-      <p class="hint" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
-      <div class="panel-head sub">
-        <h3 data-i18n>Screenshots</h3>
-        <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
-      </div>
-      <p class="hint" id="shots-info" hidden data-i18n>None yet.</p>
-      <ul class="shots" id="shots" data-i18n-attr="aria-label" aria-label="Screenshots in this browser"></ul>
-      <div class="vault" id="vault" hidden>
-        <div class="panel-head sub">
-          <h3 data-i18n>Cloud saves</h3>
-          <button type="button" class="btn" id="vault-make" data-i18n>Enable cloud saving</button>
-          <p class="hint" id="vault-when" role="status" hidden></p>
-        </div>
-        <form class="vault-row" id="vault-form">
-          <!-- a login form to the browser's passwords: this user name (pwkeep.ts ID, never translated) and the passphrase -->
-          <input type="text" name="username" autocomplete="username" value="Cloud saves" hidden>
-          <div class="keybox masked" id="vault-box">
-            <div class="keyfield">
-              <input type="password" id="vault-input" name="password" placeholder="Enter your passphrase" spellcheck="false" autocomplete="current-password" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
-              <span class="keymask" id="vault-mask" aria-hidden="true"></span>
-            </div>
-            <button type="button" class="icon-btn" id="vault-file" data-i18n-attr="aria-label" aria-label="Download passphrase" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
-            <button type="button" class="icon-btn eye" id="vault-eye" aria-label="Show passphrase" aria-pressed="false"><svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1Q11.3 5 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.3-.5 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button>
-          </div>
-          <button type="submit" class="btn" id="vault-load" data-i18n>Load</button>
-        </form>
-        <p class="hint" id="vault-about" data-i18n>Enter your passphrase to load your saves.</p>
-        <p class="hint" id="vault-claim" hidden></p>
-        <p class="hint warn" id="vault-status" role="status"></p>
-        <div id="vault-sides"></div>
-        <div class="row" id="vault-conflict" hidden>
-          <button type="button" class="btn" id="vault-mine" data-i18n>Keep this browser's</button>
-          <button type="button" class="btn" id="vault-theirs" data-i18n>Use the cloud's</button>
-        </div>
-        <div class="row" id="vault-on" hidden>
-          <button type="button" class="text-btn" id="vault-sync" data-i18n>Sync now</button>
-          <button type="button" class="text-btn" id="vault-earlier" hidden>Go back</button>
-          <button type="button" class="text-btn" id="vault-stop" data-i18n>Stop syncing</button>
-          <button type="button" class="text-btn" id="vault-delete" data-i18n>Delete from cloud</button>
-        </div>
-        <p class="hint" id="vault-replaced" hidden><span id="vault-replaced-text"></span> <button type="button" class="text-btn" id="vault-putback" data-i18n>Put back</button></p>
-        <p class="msg" id="vault-msg" role="status"></p>
-      </div>
-      <p class="msg warn" id="storage-note" hidden></p>
-    </section>
 
-    <section class="panel" id="online" aria-labelledby="online-title">
-      <h2 id="online-title" data-i18n>Online</h2>
-      <p class="hint" id="online-note" hidden></p>
-      <div id="online-body"></div>
-      <div class="friends" id="friends" hidden></div>
-    </section>
-
-    <section class="panel" id="settings" aria-labelledby="settings-title">
-      <h2 id="settings-title" data-i18n>Settings</h2>
-      <p class="hint" id="settings-note">Changes apply the next time you press Play.</p>
-      <div id="settings-body"></div>
-      <div class="raw">
-        <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
-        <details id="settings-raw">
-          <summary data-i18n>Edit settings.ini as text</summary>
-          <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
+      <div class="pane" role="tabpanel" data-tab="saves" id="saves">
+        <div class="panel-head">
+          <h3 data-i18n>Profiles</h3>
           <div class="row">
-            <button type="button" class="btn" id="settings-text-save" data-i18n>Save file</button>
-            <span class="hint" id="settings-text-msg" role="status"></span>
+            <button type="button" class="btn" id="export" data-i18n>Download backup</button>
+            <label class="btn file-btn" data-i18n-html>Restore<input type="file" id="import"></label>
           </div>
-        </details>
+        </div>
+        <p class="msg" id="saves-msg" role="status"></p>
+        <ul class="profiles" id="profiles" data-i18n-attr="aria-label" aria-label="Profiles in this browser"></ul>
+        <p class="hint" data-i18n-html>To save while playing: <span class="key-only"><kbd>Esc</kbd> or </span><kbd>Start</kbd> &gt; Garage &gt; Save</p>
+        <div class="panel-head sub">
+          <h3 data-i18n>Screenshots</h3>
+          <p class="hint key-only" data-i18n-html>Screenshot with <kbd>F12</kbd></p>
+        </div>
+        <p class="hint" id="shots-info" hidden data-i18n>None yet.</p>
+        <ul class="shots" id="shots" data-i18n-attr="aria-label" aria-label="Screenshots in this browser"></ul>
+        <div class="vault" id="vault" hidden>
+          <div class="panel-head sub">
+            <h3 data-i18n>Cloud saves</h3>
+            <button type="button" class="btn" id="vault-make" data-i18n>Enable cloud saving</button>
+            <p class="hint" id="vault-when" role="status" hidden></p>
+          </div>
+          <form class="vault-row" id="vault-form">
+            <!-- a login form to the browser's passwords: this user name (pwkeep.ts ID, never translated) and the passphrase -->
+            <input type="text" name="username" autocomplete="username" value="Cloud saves" hidden>
+            <div class="keybox masked" id="vault-box">
+              <div class="keyfield">
+                <input type="password" id="vault-input" name="password" placeholder="Enter your passphrase" spellcheck="false" autocomplete="current-password" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
+                <span class="keymask" id="vault-mask" aria-hidden="true"></span>
+              </div>
+              <button type="button" class="icon-btn" id="vault-file" data-i18n-attr="aria-label" aria-label="Download passphrase" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+              <button type="button" class="icon-btn eye" id="vault-eye" aria-label="Show passphrase" aria-pressed="false"><svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1Q11.3 5 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.3-.5 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg></button>
+            </div>
+            <button type="submit" class="btn" id="vault-load" data-i18n>Load</button>
+          </form>
+          <p class="hint" id="vault-about" data-i18n>Enter your passphrase to load your saves.</p>
+          <p class="hint" id="vault-claim" hidden></p>
+          <p class="hint warn" id="vault-status" role="status"></p>
+          <div id="vault-sides"></div>
+          <div class="row" id="vault-conflict" hidden>
+            <button type="button" class="btn" id="vault-mine" data-i18n>Keep this browser's</button>
+            <button type="button" class="btn" id="vault-theirs" data-i18n>Use the cloud's</button>
+          </div>
+          <div class="row" id="vault-on" hidden>
+            <button type="button" class="text-btn" id="vault-sync" data-i18n>Sync now</button>
+            <button type="button" class="text-btn" id="vault-earlier" hidden>Go back</button>
+            <button type="button" class="text-btn" id="vault-stop" data-i18n>Stop syncing</button>
+            <button type="button" class="text-btn" id="vault-delete" data-i18n>Delete from cloud</button>
+          </div>
+          <p class="hint" id="vault-replaced" hidden><span id="vault-replaced-text"></span> <button type="button" class="text-btn" id="vault-putback" data-i18n>Put back</button></p>
+          <p class="msg" id="vault-msg" role="status"></p>
+        </div>
+        <p class="msg warn" id="storage-note" hidden></p>
       </div>
-    </section>
 
-    <section class="panel" id="game-data" aria-labelledby="game-data-title">
-      <h2 id="game-data-title" data-i18n>Game data on this PC</h2>
-      <p class="hint" id="cache-info">Counting…</p>
-      <div class="bar" id="data-bar" role="progressbar" data-i18n-attr="aria-label" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
-        <div class="bar-fill"></div>
+      <div class="pane" role="tabpanel" data-tab="online" id="online" hidden>
+        <p class="hint" id="online-note" hidden></p>
+        <div id="online-body"></div>
       </div>
-      <div class="row">
-        <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
-        <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
+
+      <!-- the Crews setting (settings-ui.ts), then the friends (friends.ts FriendsPanel) -->
+      <div class="pane" role="tabpanel" data-tab="friends" hidden>
+        <div id="crews-body"></div>
+        <div id="friends"></div>
       </div>
-      <p class="msg" id="data-msg" role="status"></p>
+
+      <div class="pane" role="tabpanel" data-tab="game" hidden>
+        <p class="hint" id="settings-note">Changes apply the next time you press Play.</p>
+        <div id="settings-body"></div>
+      </div>
+
+      <div class="pane" role="tabpanel" data-tab="controls" id="controls" hidden>
+        <div id="keys">
+          <div class="tabs" role="tablist" data-i18n-attr="aria-label" aria-label="Controls">
+            <button type="button" class="tab" role="tab" data-tab="keys"><span class="key-only" data-i18n>Keyboard</span><span class="touch-only" data-i18n>Touch</span></button>
+            <button type="button" class="tab" role="tab" data-tab="pad" data-i18n>Controller</button>
+            <button type="button" class="tab" role="tab" data-tab="site" data-i18n>Site</button>
+          </div>
+          <div class="tab-panel" role="tabpanel" data-tab="keys">
+            <p class="hint touch-only" data-i18n>Tap the game's menus, or use the arrows, OK and Back beside them. Touch controls show while you drive.</p>
+            <!-- the steering's list, the position's, Nitro's and the level horizon's switches and the sizes: controls.ts -->
+            <div class="set touch-only" data-steer>
+              <label class="set-label" data-i18n>Steering</label>
+              <p class="set-help" data-i18n>The button at the game's top right switches it too.</p>
+              <div class="set-control"><select></select></div>
+            </div>
+            <div class="set touch-only" data-position>
+              <label class="set-label" data-i18n>Position</label>
+              <p class="set-help" data-i18n>Which thumb steers. Moved in keeps the controls off the screen's edges.</p>
+              <div class="set-control"><select></select></div>
+            </div>
+            <div class="set touch-only" data-nitro>
+              <label class="set-label" data-i18n>Nitro on the steering side</label>
+              <p class="set-help" data-i18n>For the thumb that isn't on Gas.</p>
+              <div class="set-control"><span class="val" aria-hidden="true"></span><input type="checkbox" class="switch" role="switch"></div>
+            </div>
+            <div class="set touch-only" data-level>
+              <label class="set-label" data-i18n>Level horizon</label>
+              <p class="set-help" data-i18n>With tilt steering, keeps the horizon level.</p>
+              <div class="set-control"><span class="val" aria-hidden="true"></span><input type="checkbox" class="switch" role="switch"></div>
+            </div>
+            <div class="set touch-only" data-size>
+              <label class="set-label" data-i18n>Control size</label>
+              <p class="set-help" data-i18n>Auto sizes them for this screen.</p>
+              <div class="set-control"><select></select></div>
+            </div>
+            <div class="set touch-only" data-menu-size>
+              <label class="set-label" data-i18n>Menu button size</label>
+              <p class="set-help" data-i18n>The game's menu arrows and bottom buttons. Auto makes the arrows finger-sized and leaves the bottom buttons as they are.</p>
+              <div class="set-control"><select></select></div>
+            </div>
+            <dl class="keys key-only">
+              <div><dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd data-i18n>Throttle, brake and reverse</dd></div>
+              <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd data-i18n>Steer (or W S A D)</dd></div>
+              <div><dt><kbd>Alt</kbd></dt><dd data-i18n>Nitrous</dd></div>
+              <div><dt><kbd data-i18n>Space</kbd></dt><dd data-i18n>Handbrake</dd></div>
+              <div><dt><kbd>Shift</kbd> <kbd data-i18n>Ctrl</kbd></dt><dd data-i18n>Shift up, shift down (manual)</dd></div>
+              <div><dt><kbd>C</kbd> <kbd>B</kbd></dt><dd data-i18n>Camera, look back</dd></div>
+              <div><dt><kbd>R</kbd></dt><dd data-i18n>Respawn</dd></div>
+              <div><dt><kbd>H</kbd> <kbd>J</kbd></dt><dd data-i18n>Hydraulics (hold, then the arrows)</dd></div>
+              <div><dt><kbd>N</kbd></dt><dd data-i18n>Horn (with other players)</dd></div>
+              <div><dt><kbd>X</kbd></dt><dd data-i18n>Drift mode (in free roam)</dd></div>
+              <div><dt><kbd>1</kbd>–<kbd>4</kbd></dt><dd data-i18n>Quick chat (with other players): group, then phrase</dd></div>
+              <div><dt><kbd>I</kbd></dt><dd data-i18n>Message a friend (in free roam)</dd></div>
+              <div><dt><kbd>Enter</kbd></dt><dd data-i18n>Start an event, take an outrun</dd></div>
+              <div><dt><kbd>M</kbd> <kbd>Tab</kbd></dt><dd data-i18n>Map, messages</dd></div>
+              <div><dt><kbd>Esc</kbd> <kbd>P</kbd></dt><dd data-i18n>Pause</dd></div>
+            </dl>
+            <p class="hint key-only" data-i18n>In menus: arrow keys and Enter, Esc goes back. Change keys in the game's Options, Controls.</p>
+          </div>
+          <!-- the controller's drawing: controls.ts; under it the Controller settings (settings-ui.ts), on the page only -->
+          <div class="tab-panel" role="tabpanel" data-tab="pad" hidden><div id="controller-body" data-keep></div></div>
+          <div class="tab-panel" role="tabpanel" data-tab="site" hidden>
+            <dl class="keys">
+              <div class="key-only"><dt><kbd>F9</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
+              <div class="touch-only"><dt><kbd>☰</kbd></dt><dd data-i18n>Menu: full screen, controls, log, quit</dd></div>
+              <div><dt data-i18n-html><kbd>Home</kbd> or both sticks pressed in</dt><dd data-i18n>The menu, on a controller</dd></div>
+              <div class="key-only"><dt><kbd>F8</kbd></dt><dd data-i18n>Frame-rate counter</dd></div>
+              <div class="key-only"><dt><kbd>F12</kbd></dt><dd data-i18n>Photo mode; F12 again takes the photo</dd></div>
+              <div class="key-only"><dt data-i18n-html>Hold <kbd>Esc</kbd></dt><dd data-i18n>Leave full screen</dd></div>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" role="tabpanel" data-tab="other" hidden>
+        <div id="game-data">
+          <h3 data-i18n>Game data on this device</h3>
+          <p class="hint" id="cache-info">Counting…</p>
+          <div class="bar" id="data-bar" role="progressbar" data-i18n-attr="aria-label" aria-label="Game data preload" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+            <div class="bar-fill"></div>
+          </div>
+          <div class="row">
+            <button type="button" class="btn" id="fetch-all" hidden>Preload the game data</button>
+            <button type="button" class="btn" id="clear-cache" data-i18n>Delete game data</button>
+          </div>
+          <p class="msg" id="data-msg" role="status"></p>
+        </div>
+        <div id="settings-lines"></div>
+        <div class="raw">
+          <button type="button" class="text-btn" id="settings-reset-all" data-i18n>Reset all settings</button>
+          <details id="settings-raw">
+            <summary data-i18n>Edit settings.ini as text</summary>
+            <textarea id="settings-text" spellcheck="false" rows="20" wrap="off" aria-label="settings.ini"></textarea>
+            <div class="row">
+              <button type="button" class="btn" id="settings-text-save" data-i18n>Save file</button>
+              <span class="hint" id="settings-text-msg" role="status"></span>
+            </div>
+          </details>
+        </div>
+      </div>
     </section>
   </div>
 </main>
@@ -306,6 +337,7 @@
     <button type="button" class="btn" data-act="fps">Frame-rate counter: off</button>
     <button type="button" class="btn" data-act="solid" data-i18n-attr="title" title="On: drive through other players' cars. Off: collide with them." hidden>Ghost mode: off</button>
     <button type="button" class="btn" data-act="crews" aria-haspopup="dialog" hidden>Crews: none</button>
+    <button type="button" class="btn" data-act="friends" aria-haspopup="dialog" hidden data-i18n>Friends</button>
     <button type="button" class="btn selected" data-act="friend" hidden></button>
     <div class="menu-radio">
       <button type="button" class="btn" data-act="radio" aria-pressed="false"><span id="radio-label">Radio: off</span></button>
@@ -326,6 +358,15 @@
   <div class="crews-pop-box" id="crews-pop-box"></div>
   <div class="row end">
     <button type="button" class="btn selected" data-act="crews-done" data-i18n>Done</button>
+  </div>
+</dialog>
+<!-- the menu's Friends (a game in free roam, with friends), over the menu, as its Crews -->
+<dialog class="dlg friends-pop" id="friends-pop" aria-labelledby="friends-pop-title" aria-describedby="friends-pop-help">
+  <h2 id="friends-pop-title" data-i18n>Friends</h2>
+  <p class="hint" id="friends-pop-help" data-i18n>Join a friend's room: free roam shows its players from now on.</p>
+  <div class="friends-pop-box" id="friends-pop-box"></div>
+  <div class="row end">
+    <button type="button" class="btn selected" data-act="friends-done" data-i18n>Done</button>
   </div>
 </dialog>
 <dialog class="dlg playlist" id="playlist" aria-labelledby="playlist-title">
@@ -372,6 +413,20 @@
       <a class="btn selected" id="donate-go" href="https://ko-fi.com/nfsu2xyz" target="_blank" rel="noopener noreferrer" data-i18n>Donate on Ko-fi</a>
     </div>
   </form>
+</dialog>
+
+<!-- a conversation with a friend (messages.ts ChatDialog), from the Friends tab's envelope -->
+<dialog class="dlg chat" id="chat-pop" aria-labelledby="chat-pop-title">
+  <form method="dialog" class="dlg-head">
+    <h2 id="chat-pop-title"></h2>
+    <button class="btn" value="close" data-i18n>Close</button>
+  </form>
+  <div id="chat-log" aria-live="polite"></div>
+  <div class="dlg-field">
+    <input type="text" id="chat-text" autocomplete="off" enterkeyhint="send" aria-labelledby="chat-pop-title">
+    <button type="button" class="btn selected" id="chat-send" data-i18n>Send</button>
+  </div>
+  <div class="chat-foot"><span id="chat-note"></span><span id="chat-left"></span></div>
 </dialog>
 
 <dialog class="dlg confirm" id="claim-check" aria-labelledby="claim-check-title">

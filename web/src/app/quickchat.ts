@@ -43,6 +43,8 @@ export interface QuickChatDeps {
   lobby(name: string, text: string): void;
   /** the picker's place (the notices', placed again for the picture's size now: place()) */
   place(): void;
+  /** messages between friends (messages.ts): whether the touch sheet offers "Message a friend", and opening it */
+  message?: { on(): boolean; open(): void };
   log(s: string): void;
 }
 
@@ -108,8 +110,9 @@ export class QuickChat {
     this.layer.style.setProperty('--u', `${u}px`);
   }
 
-  /** driving in free roam (the game's status: runtime/web/status_web.c "drive" 2, not in a cutscene) */
-  private driving(): boolean {
+  /** driving in free roam (the game's status: runtime/web/status_web.c "drive" 2, not in a cutscene); messages.ts
+   *  asks too */
+  driving(): boolean {
     const s = this.session, now = performance.now();
     if (!s || !this.on) return false;
     if (now - this.driveAt > 100) {
@@ -123,7 +126,8 @@ export class QuickChat {
   private key(e: KeyboardEvent) {
     if (!this.session || e.metaKey || e.ctrlKey || e.altKey) return;
     const el = e.target as HTMLElement | null;
-    if (el?.closest?.('input, textarea, select, dialog[open]') || document.querySelector('dialog[open]')) return;
+    // (the page's own things over the game take their keys: messages.ts's card picks a friend with 1-9)
+    if (el?.closest?.('input, textarea, select, dialog[open], [data-nfsu2-ui]') || document.querySelector('dialog[open]')) return;
     const k = KEYS[e.code];
     if (k === undefined && !(e.code === 'Escape' && this.open >= 0)) return;
     if (!this.driving()) { if (this.open >= 0) this.close(); return; }
@@ -212,6 +216,13 @@ export class QuickChat {
           col.append(b);
         }
         kids.push(col);
+      }
+      const m = this.deps.message;
+      if (m?.on()) {
+        const b = el('button', 'qc-say qc-msg', t('Message a friend')) as HTMLButtonElement;
+        b.type = 'button';
+        b.addEventListener('click', () => { this.close(); m.open(); });
+        kids.push(b);
       }
     } else {
       kids.push(el('div', 'qc-title', t(catName(this.groups[this.open]))));
