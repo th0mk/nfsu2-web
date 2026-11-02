@@ -62,6 +62,8 @@ const SCEN = [
   ['pad_hotplug', 'pad_hotplug', ['NFSU2_PAD=hotplug'], null, 'pad-rvf-hotplug', 300],
   ['pad_hotplug_controls', 'pad_hotplug_controls', ['NFSU2_PAD=hotplug'], null, null, 600],
   ['pad_hotplug_race', 'pad_hotplug_race', ['NFSU2_PAD=hotplug'], null, null, 300],
+  // the pad's bindings back after an unplug (dinput_pad.c keep_bindings)
+  ['pad_hotplug_bindings', 'pad_hotplug_bindings', ['NFSU2_PAD=hotplug'], null, null, 300],
   // a steering wheel: the game's driving device, its layout and steering; a wheel taking over from a pad and back
   ['pad_wheel_race', 'pad_wheel_race', [], null, null, 300],
   ['pad_wheel_switch', 'pad_wheel_switch', [], null, null, 300],

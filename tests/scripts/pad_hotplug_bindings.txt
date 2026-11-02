@@ -1,0 +1,24 @@
+# NFSU2_PAD=hotplug: the pad's bindings come back with it (runtime/dinput_pad.c keep_bindings / bindings_back).
+# A wireless pad that switches itself off when left alone is unplugged; plugged in again, the game made a new
+# device whose input channel took the default layout until a restart (a player's report: Shift Up on RB and Down
+# on LB were back on A and X).  Here Shift Up (7) goes from A to RB in the pad's in-game table (channel 1 +0x18,
+# as the Joypad page binds it), the pad is unplugged and plugged in again: RB is Shift Up still.
+0     pad connect
++90   expect i:0x874fc8 == 7                         # A: Shift Up (the default layout)
++0    expect i:0x874fdc == 5                         # RB: what the default puts there
++0    poke 0x874fc8 0x05
++0    poke 0x874fdc 0x07                             # RB: Shift Up
++0    log --- unplugged ---
++0    pad disconnect
++90   expect i:0x86ffb4 == 0                         # the game let the device go
++0    expect i:0x8751e0 == -1                        # and its channel
++0    log --- plugged in again ---
++0    pad connect
++90   expect i:0x86ffb4 != 0                         # a new device
++0    expect i:0x8751e0 == 0                         # on channel 1 again
++0    expect i:0x874fdc == 7                         # RB: Shift Up still
++0    expect i:0x874fc8 == 5
++0    tappaduntil START MC_Background.fng 120 4000   # and the pad drives the menus
++200  tappad A
++0    waitfng GarageMain.fng 3000
++30   quit
