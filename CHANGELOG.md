@@ -10,8 +10,9 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (0181d97)
+## 2026-11-02 (4fda7e1)
 
+- **Free roam:** Save in the pause menu (Esc), second from the left: standing still, the career is saved where you are, with no trip to the garage, and Resume Career starts you there.
 - **World map:** spots where 24 or more players have been parked for a minute show as car meets. The legend's Car meets row picks one, and C starts the GPS there.
 - **Free roam:** parked, press O (on a controller, hold D-pad down) to open the trunk, then the hood, then the doors, and show your car off. Other players see them open.
 - **Photo mode:** cars keep their full detail however far away, and a still camera smooths the picture's edges. New in the panel: Blur and Focus (a real lens blur), Brightness, Vignette, filters, Crop with a Grid, which players' cars show, and Freeze time (on at first; off, the world drives on). Pictures have nfsu2.xyz in a corner; a box in the panel turns it off.
