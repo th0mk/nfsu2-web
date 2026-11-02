@@ -893,13 +893,25 @@ void sub_004e8b70(CPU *c){
  * typed under Your name as NFSU2_NEW_PROFILE_NAME (shell.ts; never the digits
  * the page may play under instead), and while no profile is loaded the box
  * starts with its letters and digits.  The other kind-6 boxes (12 at most)
- * stay as they are. */
+ * stay as they are.
+ * The default itself is no name the field makes in six of the languages: in
+ * the Chinese, Japanese and Thai packs, in Korean, and in the Polish and
+ * Hungarian packs (NAME with an accented letter) it has bytes of the game's font that the
+ * field never takes (0x4FF310: letters and digits only), and what is typed
+ * goes after them.  A profile named so lives in a folder the I/O worker names
+ * by the path's UTF-8, with U+FFFD for those bytes, which the game reads back
+ * from the folder's listing as other bytes than the name inside; the page
+ * refused such a profile from a backup or the cloud (Discord 2026-11-02: a
+ * Chinese player's "<font bytes>ads", D6 8B 89 the pack's NAME).  So the box
+ * starts empty instead, as the game's own Chinese, Japanese and Thai text has
+ * it, whenever a profile is made (no Your name to put in its place). */
 #define TXT_TEXT         0x100u        /* what is typed (and shown); +0 what it started with */
 #define TXT_LEN          0x200u
 #define TXT_KIND         0x204u
 #define TXT_MOST         0x20cu
 #define NEW_PROFILE_MOST 7u
 uint32_t language_text(uint32_t hash);  /* language.c: the game's text by its hash, a guest address (0: none) */
+static int name_char(uint8_t b){ return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9'); }
 void sub_004ff3b0_orig(CPU *c);
 void sub_004ff3b0(CPU *c){
     static const char *want;
@@ -907,8 +919,8 @@ void sub_004ff3b0(CPU *c){
     if (!got){ got = 1; want = getenv("NFSU2_NEW_PROFILE_NAME"); if (want && !*want) want = 0; }
     uint32_t self = c->ecx;
     sub_004ff3b0_orig(c);
-    if (!want || !self || !mem_is_committed(self) || !mem_is_committed(self + TXT_MOST + 3u)) return;
-    if (MR32(self + TXT_KIND) != 6u || MR32(self + TXT_MOST) != NEW_PROFILE_MOST || MR8(PROFILE_NAME + 0x20u)) return;
+    if (!self || !mem_is_committed(self) || !mem_is_committed(self + TXT_MOST + 3u)) return;
+    if (MR32(self + TXT_KIND) != 6u || MR32(self + TXT_MOST) != NEW_PROFILE_MOST) return;
     /* the game's start: empty, or its default name */
     uint32_t def = language_text(0x818f0385u), len = MR32(self + TXT_LEN);
     if (len){
@@ -916,16 +928,21 @@ void sub_004ff3b0(CPU *c){
         for (uint32_t i = 0; i <= len; i++) if (MR8(def + i) != MR8(self + TXT_TEXT + i)) return;
     }
     char name[NEW_PROFILE_MOST]; uint32_t n = 0;
-    for (const char *p = want; *p && n < NEW_PROFILE_MOST; p++)
-        if ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9')) name[n++] = *p;
-    if (!n) return;
+    if (want && !MR8(PROFILE_NAME + 0x20u))
+        for (const char *p = want; *p && n < NEW_PROFILE_MOST; p++) if (name_char((uint8_t)*p)) name[n++] = *p;
+    if (!n){
+        uint32_t bad = 0;
+        for (uint32_t i = 0; i < len; i++) bad += !name_char(MR8(self + TXT_TEXT + i));
+        if (!bad) return;                    /* NAME, NOM, NAAM ...: the game's own start */
+    }
     for (uint32_t i = 0; i < 0x100u; i++){
         uint8_t b = i < n ? (uint8_t)name[i] : 0u;
         MR8(self + TXT_TEXT + i) = b;
         MR8(self + i) = b;
     }
     MR32(self + TXT_LEN) = n;
-    fprintf(stderr, "[profile] a new profile's name starts as Your name (NFSU2_NEW_PROFILE_NAME), not the game's default\n");
+    if (n) fprintf(stderr, "[profile] a new profile's name starts as Your name (NFSU2_NEW_PROFILE_NAME), not the game's default\n");
+    else fprintf(stderr, "[profile] a new profile's name starts empty: the game's default in this language (%u bytes) is no name its field makes\n", len);
 }
 
 /* --- sub_0050b410: FEng's level sorter, more than 512 objects a package ---

@@ -1,0 +1,28 @@
+# A new profile's name box in Chinese starts empty (runtime/overrides.c sub_004ff3b0): the Chinese pack's text for
+# NAME (0x818F0385) is D6 8B 89, bytes of the game's font that the field never takes, and what was typed went after
+# them: a Chinese player's profile "<D6 8B 89>ads", which the page refused from the cloud (Discord, 2026-11-02).
+# No Your name in the run.  The field (0x83a7b0): +0x100 the text, +0x200 its length.  Typed letters go in as they
+# would, Yes saves the profile under them.
+#   node web/tools/input-suite.mjs <outdir> kb_profile_zh
+0     nstapuntil RETURN MC_Background.fng 120 4000  # title -> "create a new profile?"
++120  nstap LEFT                                    # "Yes"
++30   nstap RETURN
++240  dump name_empty
++0    peek 0x83a8b0 8
++0    expect i:0x83a9b0 == 0
++0    expect b:0x83a8b0 == 0
++0    nstype ads
++60   peek 0x83a8b0 8
++0    expect i:0x83a9b0 == 3
++0    expect b:0x83a8b0 == 97                       # a
++0    nstap RETURN                                  # -> "save profile named ads?" ("No" selected)
++240  dump name_confirm
++0    nstap LEFT                                    # "Yes"
++30   nstap RETURN
++240  dump save_complete
++0    peek 0x83a9e0 8
++0    expect b:0x83aa00 == 1                        # a profile is loaded
++0    expect b:0x83a9e0 == 97                       # its name: ads, nothing in front
++0    expect b:0x83a9e2 == 115
++0    expect b:0x83a9e3 == 0
++60   quit
