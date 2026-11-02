@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (29bc272)
+## 2026-11-02 (ee85068)
 
 - **Career:** once you have beaten Caleb, the shops have the wide body kits, and the other unique hoods, spoilers, rims and vinyls, for every car in your career.
 - **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
@@ -29,6 +29,8 @@ not guessed.
 - **Drift mode:** typing an x in a chat or a name no longer says "Drift mode only works in free roam".
 - **Profiles:** in Chinese, Japanese, Korean, Thai, Polish and Hungarian a new profile's name box starts empty, so the name no longer begins with broken letters. A cloud copy or backup whose name inside is broken comes in renamed instead of left out.
 - **Headlights:** a car on an overpass no longer lights the road under it.
+- **Photo mode:** pictures have nfsu2.xyz in a corner. A box in photo mode's panel turns it off.
+- **Title screen:** nfsu2.xyz under the copyright line.
 
 ## 2026-10-31 (d079aff)
 
