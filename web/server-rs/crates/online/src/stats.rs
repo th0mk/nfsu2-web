@@ -8,7 +8,8 @@
 //! lobby.rs; the others' reports are only compared with it.  Rating points per race: (players - place) * 100 /
 //! (players - 1), so the winner gets 100 and the last 0, ranked races only.  Every count is kept twice: overall and
 //! for the current month (the month's counts start again when it changes, as the game's monthly rankings did), and
-//! the month before's counts stay as they were when it ended (the Monthly Point Leaders' Last Month's Leaderboard).  A
+//! the month before's counts stay as they were when it ended (the Monthly Point Leaders' Last Month's Leaderboard,
+//! from November 2026 on: `FIRST_WHOLE_MONTH`).  A
 //! persona's records come from its own entry in its own reports (`add_records`: what another player's game saw of it
 //! is a guess).  Personas not seen for `prune_months` months are forgotten; with MAX_PERSONAS of them, the least
 //! recently seen goes for a new one (the Online audit's ONL-7: a full store refused every new player), and a persona
@@ -43,6 +44,12 @@ const MAX_BEST: usize = 300;
 /// the largest figure a record takes (a report's figure past it is no car's): top speed in m/s (540 km/h), drift
 /// points, powerslide in m, jump in s
 const RECORD_MAX: [f64; 4] = [150.0, 100_000_000.0, 10_000.0, 60.0];
+/// The first month whose counts are kept whole until it ends, so the first one Last Month's Leaderboard shows (from
+/// 1 December 2026).  The server before (until 2026-11) cleared a month's counts when the next one began: every
+/// persona it saw from 1 November 2026 on lost its October, and only those not back since keep theirs, so a board of
+/// October 2026 would name the wrong leaders.  A record's counts of a month before it stay in the file as they are,
+/// shown nowhere (`last_shown`).
+const FIRST_WHOLE_MONTH: &str = "2026-11";
 
 /// one race type's counts (f64: a hand-edited file's numbers are kept, fractions too, from 0 to 2^31)
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -407,7 +414,8 @@ impl Stats {
             let table = match period {
                 Period::All => &r.all,
                 Period::Month => &r.month,
-                Period::LastMonth => &r.last,
+                Period::LastMonth if last_shown(r) => &r.last,
+                Period::LastMonth => return,
             };
             let Some(c) = table.get(t).copied().flatten() else { return };
             if c.races == 0.0 {
@@ -596,6 +604,11 @@ fn roll(r: &mut Record, m: &str) {
         r.month_key = m.to_string();
         r.month = Default::default();
     }
+}
+
+/// a record's last month's counts show (Last Month's Leaderboard): those of FIRST_WHOLE_MONTH or later
+fn last_shown(r: &Record) -> bool {
+    !r.last_key.is_empty() && month_parts(&r.last_key) >= month_parts(FIRST_WHOLE_MONTH)
 }
 
 /// the month before a month ("2026-01" -> "2025-12")
@@ -934,18 +947,20 @@ pub(crate) mod tests {
         assert_eq!(st.rec("Bravo", false).unwrap().best["0:4014"], 99.5);
         assert_eq!(st.stat_field(Some("nobody"), false), "0,".repeat(38));
         assert_eq!(st.board(0, Period::LastMonth).len(), 0, "no month before kept yet");
-        // a new month: the monthly counts start again, the overall ones stay, the month that ended is last month's
+        // a new month: the monthly counts start again, the overall ones stay, the month that ended is kept as last
+        // month's, but October 2026 shows nowhere (FIRST_WHOLE_MONTH: the server before kept no month whole)
         t.set(1_793_577_600_000.0); // Date.UTC(2026, 10, 2)
         assert_eq!(st.board(0, Period::Month).len(), 0);
         assert_eq!(st.board(0, Period::All).len(), 3);
-        let last: Vec<(String, f64)> = st.board(0, Period::LastMonth).iter().map(|r| (r.name.clone(), r.points)).collect();
-        assert_eq!(last, [("Alpha".to_string(), 100.0), ("Bravo".to_string(), 50.0), ("Charlie".to_string(), 0.0)]);
+        assert!(st.board(0, Period::LastMonth).is_empty(), "October 2026: not shown");
+        let alpha = st.rec("Alpha", false).unwrap();
+        assert_eq!((alpha.last_key.as_str(), alpha.last[0].map(|c| c.points)), ("2026-10", Some(100.0)), "but kept");
         assert_eq!(st.stat_field(Some("Alpha"), true), "0,".repeat(38));
         st.add_race(&race(1, false, 1, &[("Alpha", 1, 50.0), ("Bravo", 2, 51.0)]));
         assert_eq!(st.board(1, Period::Month)[0].name, "Alpha");
         assert_eq!(st.board(1, Period::LastMonth).len(), 0, "this month's race is not last month's");
-        // the month after: November's counts are last month's, October's are gone; a persona that did not race in
-        // November has none
+        // the month after: November's counts are last month's (the first month shown), October's are gone; a persona
+        // that did not race in November has none
         t.set(1_796_169_600_000.0); // Date.UTC(2026, 11, 2)
         let last: Vec<String> = st.board(1, Period::LastMonth).iter().map(|r| r.name.clone()).collect();
         assert_eq!(last, ["Alpha", "Bravo"]);
@@ -992,6 +1007,34 @@ pub(crate) mod tests {
         .unwrap();
         let mut e = Stats::new(opts());
         assert!(e.board(0, Period::LastMonth).is_empty());
+    }
+
+    // the file the server before left in November 2026: it cleared October for every persona it saw since 1 November
+    // ("Back"), and only one not back since still has it ("Gone").  October shows nowhere, so Gone does not lead a
+    // board of one; its counts stay in the file.  From December, November's leaders show
+    #[test]
+    fn last_month_before_november_2026_not_shown() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path().to_path_buf();
+        std::fs::write(
+            d.join("stats.json"),
+            r#"{"v":1,"personas":[
+                {"name":"Gone","seen":"2026-10","all":{"0":{"races":5,"rw":4,"points":400}},"month":{"key":"2026-10","t":{"0":{"races":5,"rw":4,"points":400}}},"best":{}},
+                {"name":"Back","seen":"2026-11","all":{"0":{"races":9,"rw":9,"points":900}},"month":{"key":"2026-11","t":{"0":{"races":1,"rw":1,"points":100}}},"best":{}}
+            ]}"#,
+        )
+        .unwrap();
+        let t = Rc::new(Cell::new(1_793_577_600_000.0)); // Date.UTC(2026, 10, 2)
+        let mut st = Stats::new(StatsOptions::new(Some(d.clone()), clocks(t.clone()), quiet()));
+        assert!(st.board(0, Period::LastMonth).is_empty(), "October 2026: not shown");
+        assert!(st.ranking(0, Period::LastMonth).rows.is_empty());
+        assert!(
+            st.serialize().contains(r#""last":{"key":"2026-10","t":{"0":{"races":5,"rw":4,"rl":0,"uw":0,"ul":0,"points":400,"dc":0}}}"#),
+            "kept in the file"
+        );
+        t.set(1_796_169_600_000.0); // Date.UTC(2026, 11, 2)
+        let got: Vec<(String, f64)> = st.board(0, Period::LastMonth).iter().map(|r| (r.name.clone(), r.points)).collect();
+        assert_eq!(got, [("Back".to_string(), 100.0)], "November's leaders");
     }
 
     // saved atomically with public fields only, read back, a damaged file kept aside, pruned

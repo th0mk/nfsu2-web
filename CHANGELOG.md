@@ -19,7 +19,7 @@ not guessed.
 - **Free roam:** a car that went missing (only the HUD drawn, an empty minimap, a lower frame rate) is put back where it last was, and a profile saved that way loads again at the airport car park.
 - **Free roam:** Ghost mode (Settings, Online, and the page menu, F9) is Off, Players or Everything. Everything also lets traffic and the game's tuners drive through you; an outrun's opponent stays solid.
 - **Free roam:** an outrun between two players no longer ends, with both of you winning, when a crowd comes between you.
-- **Online races:** a ranked race counts when the others run out of time, and Last Month's Leaderboard is no longer empty.
+- **Online races:** a ranked race counts when the others run out of time, and from 1 December Last Month's Leaderboard shows the month before's leaders (it was always empty).
 - **Quick chat:** works in races with other players too (free-roam race spots, the Online menu and LAN), while racing and on the results, and no longer needs free roam to be on. Quick chat off mutes it there too.
 - **Radio:** the end of a track no longer stops the radio or crashes the game.
 - **Phones:** Play after an earlier game no longer fails with "could not allocate memory" or "Out of memory".

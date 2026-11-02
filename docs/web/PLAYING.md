@@ -748,7 +748,8 @@ Good to know:
   way when the race ended) sent the same finishing order (every game sends its own at the results screen), so a race
   counts even when only its winner finished. A player who left the race decides nothing: their game counts every
   player as gone. Each player races from their own browser. **Monthly Point Leaders** (Online Main Menu) shows this
-  month's two leaders of each race type and, on its other page, last month's.
+  month's two leaders of each race type and, on its other page, last month's (from 1 December 2026, with November's
+  leaders first: the server kept no whole month before it).
 - **EA Messenger** (the Online Main Menu's button): Search finds the players online on this server and those with a
   race in Rankings. **Send Friend Request** reaches the other player now, or when they next come online: they see you
   in their list with a green arrow and pick **Answer Friend Request**: Accept, Decline or Block. Your friends stay on

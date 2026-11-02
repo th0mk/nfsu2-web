@@ -2123,7 +2123,8 @@ impl Core {
     /// 6..11 a race type's overall board (Overall Rankings), 12..17 the asking player's own row of it (RANGE=1
     /// FIND=$<persona>, or "$" for one's own), 18..23 the current month's board (Current Month's Leaderboard, its first
     /// two), 24..29 last month's (Last Month's Leaderboard: the month before's counts as they were when it ended;
-    /// until 2026-11 the server kept none, and the page was empty).  Each six in the screens' order, Drift before Drag
+    /// until 2026-11 the server kept none, and the page was empty; November 2026 is the first month shown, stats.rs
+    /// `FIRST_WHOLE_MONTH`).  Each six in the screens' order, Drift before Drag
     /// (`SLOT_TYPES`; until 2026-10-25 read as race types, so the Drift pages showed the drag board); INDEX (the race
     /// type and the player's class, 0x58ce30) only goes back.  Rows: +snp N (name), R (rank), P (points), S
     /// (points,wins,losses), O.  R and P in decimal (SPEED2.EXE 0x7420b0 reads digits 0-9 only; the screen shows P,

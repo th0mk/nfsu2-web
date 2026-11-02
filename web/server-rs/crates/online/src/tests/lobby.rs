@@ -708,10 +708,10 @@ fn results() {
 
 // the rankings: the screens' channels go in their own order, Drift before Drag (SPEED2.EXE 0x58ce30, 0x5826e0): the
 // overall boards 6..11, one's own row 12..17, the month's leaders 18..23, last month's 24..29 (the month before's, as
-// it ended)
+// it ended, from November 2026 on: stats.rs FIRST_WHOLE_MONTH)
 #[test]
 fn rankings_channels() {
-    let mut w = world();
+    let mut w = World::new(Opts { t0: Some(1_792_411_200_000.0), ..Default::default() }); // Date.UTC(2026, 9, 19, 12)
     let g = w.client("10.77.0.2");
     let a = w.login(g, "Alpha");
     let add = |w: &mut World, kind: u32, names: [&str; 2]| {
@@ -738,15 +738,24 @@ fn rankings_channels() {
     assert!(rows(&mut w, 26, false).is_empty(), "last month's leaders: no month before yet");
     assert_eq!(w.c(a).l("snap").g("TOTAL"), "0");
     assert!(rows(&mut w, 30, false).is_empty(), "past the last channel: nothing");
+    let next_month = |w: &mut World| {
+        let m0 = crate::jsx::month_of(w.t.get());
+        while crate::jsx::month_of(w.t.get()) == m0 {
+            w.t.set(w.t.get() + 86_400_000.0);
+        }
+    };
+    // November 2026: October shows nowhere (the server before kept no month whole)
+    next_month(&mut w);
+    assert!(rows(&mut w, 20, false).is_empty(), "this month's drift leaders: none yet");
+    assert!(rows(&mut w, 26, false).is_empty(), "October 2026's leaders: not shown");
+    add(&mut w, 3, ["Alpha", "Drifter"]);
+    add(&mut w, 2, ["Dragger", "Other"]);
     // the next month (the Monthly Point Leaders' Last Month's Leaderboard): the month that ended is last month's
-    let m0 = crate::jsx::month_of(w.t.get());
-    while crate::jsx::month_of(w.t.get()) == m0 {
-        w.t.set(w.t.get() + 86_400_000.0);
-    }
+    next_month(&mut w);
     assert!(rows(&mut w, 20, false).is_empty(), "this month's drift leaders: none yet");
     assert_eq!(rows(&mut w, 26, false), ["Alpha 100", "Drifter 0"], "last month's drift leaders");
     assert_eq!(rows(&mut w, 27, false), ["Dragger 100", "Other 0"], "last month's drag leaders");
-    assert_eq!(rows(&mut w, 8, false), ["Alpha 100", "Drifter 0"], "the overall board stays");
+    assert_eq!(rows(&mut w, 8, false), ["Alpha 200", "Drifter 0"], "the overall board stays");
 }
 
 // names: a name another browser holds comes with four digits (the same for one client); its own browser takes it
