@@ -69,10 +69,12 @@ static int      g_detached;      /* the page never attached: dropped back to nul
 #define KZERO  256u                         /* K arena bytes [0, 256): an all-zero block for TVert draws (base 0) */
 #define KFIRST 2048u                        /* [GW_K_HL, + GW_HL_BYTES): the frame's headlights; [GW_K_MARKS, + GW_MARKS_BYTES):
                                                quick chat's places; [GW_K_TONE, + GW_TONE_BYTES): Exposure and
-                                               White Level; [GW_K_LAT, + GW_LAT_BYTES): input age; the draws'
+                                               White Level; [GW_K_LAT, + GW_LAT_BYTES): input age;
+                                               [GW_K_PHOTO, + GW_PHOTO_BYTES): photo mode's picture; the draws'
                                                blocks from here */
 _Static_assert(GW_K_HL >= KZERO && GW_K_HL + GW_HL_BYTES <= KFIRST && GW_K_MARKS + GW_MARKS_BYTES <= KFIRST
-               && GW_K_TONE + GW_TONE_BYTES <= KFIRST && GW_K_LAT + GW_LAT_BYTES <= KFIRST, "K arena");
+               && GW_K_TONE + GW_TONE_BYTES <= KFIRST && GW_K_LAT + GW_LAT_BYTES <= KFIRST
+               && GW_K_PHOTO + GW_PHOTO_BYTES <= KFIRST, "K arena");
 
 typedef struct {
     GwDraw  *d;  unsigned dn;
@@ -910,6 +912,25 @@ void gw_marks(const GwMark *m, int n){
 /* tonemenu.c: Exposure (as a multiplier) and White Level for every frame from the next handed over */
 static GwTone g_tone = { GW_TONE_MAGIC, 1.f, 1.f, 1.f };
 void gw_tone(float mult, float white, float knee){ g_tone.mult = mult; g_tone.white = white; g_tone.knee = knee; }
+/* photo.c: photo mode's picture, for the next frame handed over; the back buffer's size (its frames' pixels) */
+static GwPhoto g_photo = { GW_PHOTO_MAGIC, GW_PHOTO_OFF, 0, 0, 0, 0, { 0, 0 } };
+void gw_photo(uint32_t state, uint32_t n, uint32_t target, uint32_t gen){
+    g_photo.state = state; g_photo.n = n; g_photo.target = target; g_photo.gen = gen;
+}
+/* the frames of still picture gen the page has (its ack, in either buffer's block) */
+uint32_t gw_photo_got(uint32_t gen){
+    uint32_t got = 0;
+    for (int b = 0; b < 2; b++){
+        if (!g_b[b].kb) continue;
+        uint32_t a = __atomic_load_n((uint32_t *)(g_b[b].kb + GW_K_PHOTO + offsetof(GwPhoto, ack)), __ATOMIC_ACQUIRE);
+        if (a >> 16 == (gen & 0xffffu) && (a & 0xffffu) > got) got = a & 0xffffu;
+    }
+    return got;
+}
+void gw_size(unsigned *w, unsigned *h){
+    unsigned vw, vh; view_wh(&vw, &vh);
+    *w = g_bb_w ? g_bb_w : vw; *h = g_bb_h ? g_bb_h : vh;
+}
 void metal_request_dump(long guest_frame, const char *label){
     snprintf(g_dump_label, sizeof g_dump_label, "%s", label ? label : "dump");
     for (char *q = g_dump_label; *q; q++) if (*q == '/' || *q == ' ' || *q == '\\') *q = '_';
@@ -924,6 +945,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     F->draws = (uint32_t)(uintptr_t)B->d; F->tv = (uint32_t)(uintptr_t)B->v; F->raw = (uint32_t)(uintptr_t)B->rv;
     F->k = (uint32_t)(uintptr_t)B->kb; F->psc = (uint32_t)(uintptr_t)B->psc;
     memcpy(B->kb + GW_K_TONE, &g_tone, sizeof g_tone);
+    memcpy(B->kb + GW_K_PHOTO, &g_photo, offsetof(GwPhoto, ack));       /* (ack is the page's) */
     { GwLat *L = (GwLat *)(B->kb + GW_K_LAT);
       L->magic = GW_LAT_MAGIC; L->input_ms = hfr_frame_input_ms(); L->handoff_ms = now_ms(); }
     F->rq_end = (uint32_t)g_ctl->rq_head;

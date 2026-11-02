@@ -91,3 +91,39 @@ export const TONE = COPY + /* wgsl */`
   let b = s + (tone.y - s) * (m * t) / (1.0 + (m - 1.0) * t);
   return vec4f(select(y, b, y > vec3f(s)), 1.0);
 }`;
+
+// Photo mode's picture (photo-picture.ts): fs_add takes the back buffer pixel for pixel into the average (the blend
+// weighs it); fs_look draws the average with the picture's look: exposure (a.x, times), the tint (b.rgb, times),
+// saturation (a.z, 0 grey), contrast (a.y, about the middle), fade (b.w: blacks lifted that far), vignette (a.w: the
+// corners of the kept part darker by that much), then Exposure and White Level as TONE does (t: mult, white, knee;
+// t.w 1: on).  crop: the kept part (left, top, right, bottom, 0 .. 1).  The preview only (g.y 1): outside the kept
+// part dimmed, and with g.x 1 the lines of thirds over it, g.zw its size in pixels.
+export const PHOTO = COPY + /* wgsl */`
+struct Look { a: vec4f, b: vec4f, t: vec4f, crop: vec4f, g: vec4f }
+@group(0) @binding(2) var<uniform> L: Look;
+@fragment fn fs_add(i: BOut) -> @location(0) vec4f { return vec4f(textureLoad(src, vec2i(i.pos.xy), 0).rgb, 1.0); }
+@fragment fn fs_look(i: BOut) -> @location(0) vec4f {
+  var c = textureSample(src, smp, i.uv).rgb * L.a.x * L.b.rgb;
+  c = mix(vec3f(dot(c, vec3f(0.2126, 0.7152, 0.0722))), c, L.a.z);
+  c = (c - vec3f(0.5)) * L.a.y + vec3f(0.5);
+  c = vec3f(L.b.w) + c * (1.0 - L.b.w);
+  let sz = max(L.crop.zw - L.crop.xy, vec2f(1e-6));
+  let p = (i.uv - L.crop.xy) / sz;
+  c *= 1.0 - L.a.w * smoothstep(0.25, 1.0, length(p - vec2f(0.5)) * 1.41421356);
+  c = clamp(c, vec3f(0.0), vec3f(1.0));
+  if (L.t.w > 0.5) {
+    let y = min(c * L.t.x, vec3f(1.0));
+    let s = L.t.z * L.t.y;
+    let m = (1.0 - s) / (L.t.y - s);
+    let t = max(y - s, vec3f(0.0)) / (1.0 - s);
+    c = select(y, s + (L.t.y - s) * (m * t) / (1.0 + (m - 1.0) * t), y > vec3f(s));
+  }
+  if (L.g.y > 0.5) {
+    if (any(p < vec2f(0.0)) || any(p > vec2f(1.0))) { c *= 0.3; }
+    else if (L.g.x > 0.5) {
+      let d = min(abs(p - vec2f(1.0 / 3.0)), abs(p - vec2f(2.0 / 3.0))) * L.g.zw;
+      if (min(d.x, d.y) < 0.75) { c = mix(c, vec3f(1.0), 0.55); }
+    }
+  }
+  return vec4f(c, 1.0);
+}`;

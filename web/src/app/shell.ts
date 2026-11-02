@@ -1250,13 +1250,14 @@ function toast(msg: string, ms: number) {
   (toast as any).timer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
-/** F12 (photo.ts: photo mode's picture, or where it cannot open): the next frame the renderer draws, as a PNG beside the
- *  saves (Saves on the start page shows it), with the site's address in a corner unless photo mode's panel turned it off */
-async function screenshot() {
+/** F12 (photo.ts: photo mode's picture, or where it cannot open): the next frame the renderer draws (photo mode's: its
+ *  still picture once it has all its frames, with its look and crop), as a PNG beside the saves (Saves on the start
+ *  page shows it), with the site's address in a corner unless photo mode's panel turned it off */
+async function screenshot(photo = false) {
   const r = session?.renderer;
   if (!r?.dump) { toast(t('No screenshot: nothing on screen yet.'), 2500); return; }
   try {
-    const png = await r.dump('screenshot', photoMark());
+    const png = await (photo && r.photo ? r.photo('screenshot', photoMark()) : r.dump('screenshot', photoMark()));
     if (!png.size) throw new Error('the game ended first');
     const name = await saveScreenshot(SAVE, png);
     log.add(`[app] screenshot ${name}, ${fmtBytes(png.size)}`);
@@ -2042,7 +2043,7 @@ export async function boot() {
     fullscreen: () => canFullscreen() || !fromHomeScreen(),
   });
   driftPanel = new DriftPanel($('#stage'), { toast, wide: () => hudWide, log: logLine });
-  photo = new PhotoMode($('#stage'), { shoot: screenshot, screenshot: () => void screenshot(), log: logLine });
+  photo = new PhotoMode($('#stage'), { shoot: () => screenshot(true), screenshot: () => void screenshot(), log: logLine });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });
   setInterval(() => { if (document.visibilityState === 'visible') void checkNewer(); }, NEWER_EVERY_MS);
 

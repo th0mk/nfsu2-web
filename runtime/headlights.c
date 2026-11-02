@@ -53,8 +53,9 @@ void sub_005d6d20_orig(CPU *c);
 
 #ifdef __wasm__
 #include "web/gpu_proto.h"
+int photo_hides(uint32_t ri);                    /* photo.c: a car photo mode does not draw */
 
-#define VIEW9        0x008331d0u   /* eView 9 (0x48B1E0(9): 0x832DE0 + 9 * 0x70): the player's headlight */
+#define VIEW9       0x008331d0u   /* eView 9 (0x48B1E0(9): 0x832DE0 + 9 * 0x70): the player's headlight */
 #define CUR_VIEW     0x00870848u   /* the viewport (eView +0x58) being rendered (0x5CAAD0); view 9 shares view 1's */
 #define LIT_CB       0x00488b90u   /* 0x5D6D20's callback that marks a solid lit */
 #define HL_ENABLE    0x00870cc4u   /* g_CarHeadlightEnable */
@@ -210,7 +211,7 @@ static void make_lights(void){
         if (!car_ok(car)) break;
         if (!wanted(car, me) || !MR8(car + CAR_ACTIVE) || MR8(car + CAR_BLINKOUT)) continue;
         uint32_t ri = MR32(car + CAR_RENDER);
-        if (!ri || !mem_is_committed(ri + 0x383u)) continue;
+        if (!ri || !mem_is_committed(ri + 0x383u) || photo_hides(ri)) continue;      /* (photo mode hides it: no light) */
         double d2 = 0;
         for (int k = 0; k < 3; k++){ double d = MRF32(car + CAR_POS + 4u * (uint32_t)k) - Cp.m[3][k]; d2 += d * d; }
         if (!(d2 < REACH_M * REACH_M)) continue;

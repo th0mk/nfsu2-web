@@ -211,6 +211,24 @@ typedef struct { uint32_t magic, pad; double input_ms, handoff_ms; } GwLat;
 #define GW_K_LAT       1568u
 #define GW_LAT_BYTES   24u
 
+/* Photo mode's picture (photo.c): every frame's VS constant arena holds this
+ * block at GW_K_PHOTO, which the page reads with the frame it encodes.  state
+ * GW_PHOTO_LIVE: the frame as it is (the camera moves); GW_PHOTO_ADD: frame n
+ * of the target frames of still picture gen, each drawn from a slightly
+ * different spot (smooth edges, the lens's blur), which the page averages
+ * (the first replaces what it had); GW_PHOTO_DONE: the picture has its
+ * frames, this one adds nothing.  magic: GW_PHOTO_MAGIC; none, or
+ * GW_PHOTO_OFF: photo mode is off.  The page binds none of it.
+ * ack is the page's, in both buffers' blocks (the game hands over only the
+ * words before it): gen << 16 | the frames of that picture it has.  The game
+ * draws frame n + 1 next, so a frame the page never encodes (a newer one
+ * took its place, the GPU behind) is drawn again, and none counts twice. */
+#define GW_PHOTO_MAGIC 0x544F4850u        /* "PHOT" */
+enum { GW_PHOTO_OFF = 0, GW_PHOTO_LIVE = 1, GW_PHOTO_ADD = 2, GW_PHOTO_DONE = 3 };
+typedef struct { uint32_t magic, state, n, target, gen, ack, pad[2]; } GwPhoto;
+#define GW_K_PHOTO     1600u
+#define GW_PHOTO_BYTES 32u
+
 /* The page binds the VS constant arena (K) in windows of GW_KWIN_ROWS rows of
  * 16 bytes: 64 KB, the default maxUniformBufferBindingSize.  A draw's block
  * (16-byte header + c[0..255]) starts at row firstInstance of its window, so
@@ -245,4 +263,6 @@ _Static_assert(GW_K_MARKS >= GW_K_HL + GW_HL_BYTES, "GwMarks after GwHL");
 _Static_assert(sizeof(GwTone) == GW_TONE_BYTES && GW_K_TONE >= GW_K_MARKS + GW_MARKS_BYTES, "GwTone after GwMarks");
 _Static_assert(sizeof(GwLat) == GW_LAT_BYTES && offsetof(GwLat, input_ms) == 8 && GW_K_LAT % 8 == 0
                && GW_K_LAT >= GW_K_TONE + GW_TONE_BYTES, "GwLat after GwTone");
+_Static_assert(sizeof(GwPhoto) == GW_PHOTO_BYTES && GW_K_PHOTO >= GW_K_LAT + GW_LAT_BYTES && offsetof(GwPhoto, ack) == 20,
+               "GwPhoto after GwLat");
 #endif

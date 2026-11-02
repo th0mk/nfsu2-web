@@ -392,7 +392,11 @@ static int g_inited, g_net_ok;
 static long g_frame0;
 /* sync clock (µs): world time pulled to the host clock */
 static double g_sync; static int g_sync_paused, g_in_roam;
-static uint32_t g_step;                       /* frames (world steps) counted here: roam_game_contact's passes of one step */
+/* photo mode (photo.c) holds friends' cars where they are, as the world stands for it: no slots handed out or given
+ * up, no pose written (its pictures add up several frames of the same moment); back at their friends' places after */
+static int g_photo_hold;
+void roam_game_hold(int on){ g_photo_hold = on; }
+static uint32_t g_step;                      /* frames (world steps) counted here: roam_game_contact's passes of one step */
 static double g_vscale = 1.0;                 /* world seconds per stamp second (velocities on the wire) */
 static int64_t g_last_host;
 /* local car */
@@ -6780,8 +6784,8 @@ void roam_game_frame(CPU *c){
         rides_tidy(c);
         loader_watch(c, host);
         if (!rd32(G_TRACKSTREAMER + 0x168u)) stream_hold_end(host);
-        assign(c, host);
-        for (int k = 0; k < NSLOT; k++){
+        if (!g_photo_hold) assign(c, host);
+        for (int k = 0; k < NSLOT && !g_photo_hold; k++){
             Slot *s = &g_sl[k];
             if (s->st == SL_FREE || s->st == SL_PARKED) continue;
             PeerView *v = 0;
@@ -6844,7 +6848,7 @@ void roam_game_frame(CPU *c){
             } else if (!s->hidden && !(g_du.st == DU_RACE && s->car == g_du.car)){ soft_park(c, s->car); s->hidden = 1; }
             /* (an outrun's opponent stays where it was: parked, the game would count it 120 km behind) */
         }
-        cars_cut(c, w, host);
+        if (!g_photo_hold) cars_cut(c, w, host);
         arrows_update(c, w);
         arrow_colours(c, w);
         near_update(c, w, host, 1);
@@ -6917,6 +6921,15 @@ void roam_game_hud(CPU *c){
 /* photo mode (photo.c): whether friends' names can show here, and the names over their cars, and the player's own over
  * theirs, placed for photo mode's camera (its frame of the front end, which draws them alone): the FE objects shown */
 int roam_game_names_here(void){ return O.on && g_net_ok && O.labels && g_in_roam && MR8(G_SHOW_NAMES); }
+/* photo mode's Cars: Friends & crews: whether the car of this render info (car +0x554) is one of ours whose player is
+ * a friend or in one of the player's crews (its slot's crew, FRIEND_CREW for a friend in none) */
+int roam_game_buddy_car(uint32_t ri){
+    for (int k = 0; k < NSLOT && ri; k++){
+        const Slot *s = &g_sl[k];
+        if (s->st == SL_ACTIVE && s->crew && ok(s->car, 0x558) && MR32(s->car + 0x554u) == ri) return 1;
+    }
+    return 0;
+}
 int roam_game_names(CPU *c, uint32_t *obj, int max){
     if (!roam_game_names_here()) return 0;
     g_tag_self = rh_frame();

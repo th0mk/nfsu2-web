@@ -1,0 +1,40 @@
+# Photo mode in free roam with others (runtime/photo.c, roam_game.c), instance A on the play page (dumps), with
+# photo_buddies_b.txt (B: in A's crew, drives circles) and photo_buddies_c.txt (C: in none, stands ahead).  A takes
+# pictures with Cars: Friends & crews (B shown, C not), All cars, then friends' cars driving on (B's trail) and held
+# again.  roam-pair --page play --play-only Ann --a Ann:photo_buddies_a.txt:NFSU2_ROAM_CREW=Night Owls
+#   --b Bob:photo_buddies_b.txt:NFSU2_ROAM_CREW=Night Owls --c Cid:photo_buddies_c.txt --env NFSU2_ROAM_ROOM=<r>
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 2 3000
++1500 roam mp status
++0    photo hello
++0    photo on
++30   photo dolly -6
++0    photo cars 3
++300  dump buddies
++150  photo cars 0
++300  dump all
++150  photo freeze 0
++300  dump driving
++150  photo freeze 1
++300  dump held
++150  photo off
++30   roam mp status
++10   quit

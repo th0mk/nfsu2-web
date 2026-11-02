@@ -5,12 +5,19 @@
 // While it is on, the page keeps the keyboard, the mouse, the touch screen and the controller from the game and sends
 // what they do as photo events (input/index.ts photo(): the keys and buttons held as bits, the sticks, drags, the
 // wheel and pinches, the sliders' values), hides its other things on the game, and shows a panel: orbit or free, zoom,
-// tilt, friends' names (in free roam with them), the site's address on the pictures (photoMark: every F12 picture,
-// menus too), reset, the picture, leave, and what the keys do.  It reads the game's
-// status (runtime/web/status_web.c) every frame: photo (1 it can open, 2 it is on, 4 the free camera, 8 the names on,
-// 16 friends' names can show), photo_fov, photo_roll.
+// tilt, the lens (blur, focus), the picture's look (exposure, vignette, filter) and crop (lines of thirds over it with
+// Grid), the cars shown, friends' names (in free roam with them), the site's address on the pictures (photoMark: every
+// F12 picture, menus too), reset, the picture, leave, and what the keys do.  Once the camera stands still the renderer
+// adds up several frames into one picture (gpu/photo-picture.ts: smooth edges, the lens's blur; the Take photo button
+// fills as they come); the look and the crop are the renderer's (Renderer.photoLook), shown on the game as they are
+// kept.  Those choices, the blur, the cars shown and the freeze stay for the next time (localStorage).  It reads the game's status
+// (runtime/web/status_web.c) every frame: photo (1 it can open, 2 it is on, 4 the free camera, 8 the names on, 16
+// friends' names can show, 32 the focus follows the car, 256 friends' cars stand), photo_fov, photo_roll, photo_focus.
+// In free roam with friends their cars stand while photo mode is on, unless Freeze friends' cars is off.
 import type { GameSession } from './game';
 import type { PadSnapshot } from '../input/gamepad';
+import { CROPS, FILTERS, cropRect, focusM, focusV, type Filter } from './photolook';
+import type { PhotoLook } from '../gpu/photo-picture';
 import {
   PAD_A, PAD_AXIS_LT, PAD_AXIS_LX, PAD_AXIS_LY, PAD_AXIS_RT, PAD_AXIS_RX, PAD_AXIS_RY, PAD_B, PAD_BACK, PAD_DDOWN,
   PAD_DLEFT, PAD_DRIGHT, PAD_DUP, PAD_LB, PAD_LS, PAD_RB, PAD_RS, PAD_START, PAD_X, PAD_Y,
@@ -21,10 +28,27 @@ import { padSeen, touchFirst } from './device';
 
 // runtime/photo.c: the events (PH_*) and the bits of PH_HOLD (HB_*)
 const PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG = 5, PH_PAN = 6, PH_DOLLY = 7,
-  PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11, PH_NAMES = 12;
+  PH_FOV = 8, PH_ROLL = 9, PH_MODE = 10, PH_RESET = 11, PH_NAMES = 12, PH_FOCUS = 13, PH_BLUR = 14, PH_CARS = 15, PH_FREEZE = 16;
 const HB_FWD = 1, HB_BACK = 2, HB_LEFT = 4, HB_RIGHT = 8, HB_UP = 16, HB_DOWN = 32, HB_TL = 64, HB_TR = 128,
   HB_TU = 256, HB_TD = 512, HB_ZIN = 4096, HB_ZOUT = 8192, HB_RL = 16384, HB_RR = 32768, HB_FAST = 65536;
 const FOV_MIN = 15, FOV_MAX = 110, ROLL_MAX = 45;
+/** the panel's choices kept between photo modes */
+interface Kept { filter: Filter; exposure: number; vignette: number; crop: string; grid: boolean; blur: number; cars: number; freeze: boolean }
+const KEPT_STORE = 'nfsu2-photo';
+const KEPT0: Kept = { filter: 'none', exposure: 0, vignette: 0, crop: 'full', grid: false, blur: 0, cars: 0, freeze: true };
+function loadKept(): Kept {
+  try {
+    const k = { ...KEPT0, ...JSON.parse(localStorage.getItem(KEPT_STORE) ?? '{}') } as Kept;
+    if (!(k.filter in FILTERS)) k.filter = 'none';
+    if (!(k.crop in CROPS)) k.crop = 'full';
+    k.exposure = Math.max(-200, Math.min(200, +k.exposure || 0));
+    k.vignette = Math.max(0, Math.min(1000, +k.vignette || 0));
+    k.blur = Math.max(0, Math.min(1000, +k.blur || 0));
+    k.cars = [0, 1, 2, 3].includes(k.cars) ? k.cars : 0;
+    k.grid = !!k.grid; k.freeze = k.freeze !== false;
+    return k;
+  } catch { return { ...KEPT0 }; }
+}
 
 /** the keys that steer the camera while they are held */
 const HELD: Record<string, number> = {
@@ -54,8 +78,18 @@ export class PhotoMode {
   private flash: HTMLElement;
   private zoom: HTMLInputElement;
   private tilt: HTMLInputElement;
+  private blur: HTMLInputElement;
+  private focus: HTMLInputElement;
+  private exposure: HTMLInputElement;
+  private vignette: HTMLInputElement;
+  private filter: HTMLSelectElement;
+  private crop: HTMLSelectElement;
+  private cars: HTMLSelectElement;
+  private grid: HTMLInputElement;
   private names: HTMLInputElement;
+  private freeze: HTMLInputElement;
   private mark: HTMLInputElement;
+  private shootBtn: HTMLButtonElement;
   private hints: HTMLElement;
   private session: GameSession | null = null;
   private raf = 0;
@@ -75,28 +109,44 @@ export class PhotoMode {
   private pinch: { d: number; x: number; y: number } | null = null;
   private shooting = false;
   private flashTimer = 0;
+  private kept = loadKept();
+  private lookSent = '';
+  private progress = -1;
 
   constructor(private stage: HTMLElement, private deps: {
     shoot(): Promise<void>; screenshot(): void; log(s: string): void;
   }) {
     const p = this.root = document.createElement('div');
     p.className = 'photo-panel'; p.hidden = true; p.dataset.nfsu2Ui = '';
+    const slider = (cls: string, min: number, max: number, step = 1) =>
+      `<label class="ph-slider"><span class="${cls}-l"></span><input type="range" class="${cls}" min="${min}" max="${max}" step="${step}"></label>`;
+    const pick = (cls: string) => `<label class="ph-pick"><span class="${cls}-l"></span><select class="${cls}"></select></label>`;
     p.innerHTML =
       '<div class="ph-head"><b class="ph-title"></b><span class="ph-mode"><button type="button" data-mode="0"></button>' +
       '<button type="button" data-mode="1"></button></span></div>' +
-      '<label class="ph-slider"><span class="ph-zoom-l"></span><input type="range" class="ph-zoom" min="0" max="1000" step="1"></label>' +
-      '<label class="ph-slider"><span class="ph-tilt-l"></span><input type="range" class="ph-tilt" min="-450" max="450" step="5"></label>' +
+      slider('ph-zoom', 0, 1000) + slider('ph-tilt', -450, 450, 5) + slider('ph-blur', 0, 1000) + slider('ph-focus', 0, 1000) +
+      slider('ph-exposure', -200, 200, 5) + slider('ph-vignette', 0, 1000) +
+      pick('ph-filter') + pick('ph-crop') + pick('ph-cars') +
+      '<label class="ph-check"><input type="checkbox" class="ph-grid"><span class="ph-grid-l"></span></label>' +
       '<label class="ph-check ph-names-c" hidden><input type="checkbox" class="ph-names"><span class="ph-names-l"></span></label>' +
+      '<label class="ph-check ph-freeze-c" hidden><input type="checkbox" class="ph-freeze"><span class="ph-freeze-l"></span></label>' +
       '<label class="ph-check"><input type="checkbox" class="ph-mark"><span class="ph-mark-l"></span></label>' +
       '<div class="ph-buttons"><button type="button" data-act="reset"></button>' +
       '<button type="button" class="ph-shoot" data-act="shoot"></button><button type="button" data-act="leave"></button></div>' +
       '<div class="ph-hints"></div>';
-    this.zoom = p.querySelector('.ph-zoom')!;
-    this.tilt = p.querySelector('.ph-tilt')!;
-    this.names = p.querySelector('.ph-names')!;
-    this.mark = p.querySelector('.ph-mark')!;
+    const q = <E extends Element>(s: string) => p.querySelector<E>(s)!;
+    this.zoom = q('.ph-zoom'); this.tilt = q('.ph-tilt'); this.blur = q('.ph-blur'); this.focus = q('.ph-focus');
+    this.exposure = q('.ph-exposure'); this.vignette = q('.ph-vignette');
+    this.filter = q('.ph-filter'); this.crop = q('.ph-crop'); this.cars = q('.ph-cars');
+    this.grid = q('.ph-grid'); this.names = q('.ph-names'); this.freeze = q('.ph-freeze'); this.mark = q('.ph-mark');
+    this.shootBtn = q('.ph-shoot'); this.hints = q('.ph-hints');
     this.mark.checked = photoMark();
-    this.hints = p.querySelector('.ph-hints')!;
+    const k = this.kept;
+    this.blur.value = String(k.blur); this.exposure.value = String(k.exposure); this.vignette.value = String(k.vignette);
+    this.grid.checked = k.grid; this.freeze.checked = k.freeze;
+    for (const v of Object.keys(CROPS)) this.crop.add(new Option('', v));
+    for (const v of Object.keys(FILTERS)) this.filter.add(new Option('', v));
+    this.crop.value = k.crop; this.filter.value = k.filter;          // (the cars' list: fill(), by who is here)
     p.addEventListener('click', e => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
       if (!b) return;
@@ -105,22 +155,32 @@ export class PhotoMode {
       else if (b.dataset.act === 'shoot') void this.shoot();
       else if (b.dataset.act === 'leave') this.leave();
     });
-    // the buttons leave the keyboard with the game's canvas; the sliders give it back when let go
+    // the buttons leave the keyboard with the game's canvas; the sliders and lists give it back when let go
+    const back = () => this.canvas()?.focus({ preventScroll: true });
     p.addEventListener('pointerdown', e => { if ((e.target as HTMLElement).closest('button')) e.preventDefault(); });
-    for (const s of [this.zoom, this.tilt]) {
+    for (const s of [this.zoom, this.tilt, this.blur, this.focus, this.exposure, this.vignette]) {
       s.addEventListener('pointerdown', () => { this.sliding = s; });
-      s.addEventListener('input', () => {
-        if (s === this.zoom) this.send(PH_FOV, Math.round((FOV_MAX - (+s.value / 1000) * (FOV_MAX - FOV_MIN)) * 100));
-        else this.send(PH_ROLL, Math.round(+s.value * 10));
-      });
-      s.addEventListener('change', () => { this.sliding = null; this.canvas()?.focus({ preventScroll: true }); });
+      s.addEventListener('input', () => this.slid(s));
+      s.addEventListener('change', () => { this.sliding = null; back(); });
     }
     this.tilt.addEventListener('dblclick', () => { this.tilt.value = '0'; this.send(PH_ROLL, 0); });
-    this.names.addEventListener('change', () => { this.send(PH_NAMES, this.names.checked ? 1 : 0); this.canvas()?.focus({ preventScroll: true }); });
+    this.focus.addEventListener('dblclick', () => this.send(PH_FOCUS, -1));          // the car again
+    this.exposure.addEventListener('dblclick', () => { this.exposure.value = '0'; this.slid(this.exposure); });
+    for (const s of [this.filter, this.crop, this.cars]) s.addEventListener('change', () => {
+      if (s === this.cars) { this.kept.cars = +s.value; this.sendCars(); }
+      else if (s === this.filter) this.kept.filter = s.value as Filter;
+      else this.kept.crop = s.value;
+      this.keep(); back();
+    });
+    this.grid.addEventListener('change', () => { this.kept.grid = this.grid.checked; this.keep(); back(); });
+    this.names.addEventListener('change', () => { this.send(PH_NAMES, this.names.checked ? 1 : 0); back(); });
+    this.freeze.addEventListener('change', () => {
+      this.kept.freeze = this.freeze.checked; this.keep(); this.send(PH_FREEZE, this.kept.freeze ? 1 : 0); back();
+    });
     this.mark.addEventListener('change', () => {
       try { if (this.mark.checked) localStorage.removeItem(MARK_STORE); else localStorage.setItem(MARK_STORE, 'off'); } catch { /* not kept: a private window */ }
       this.deps.log(`[app] photo mode: the site's address on pictures ${this.mark.checked ? 'on' : 'off'}`);
-      this.canvas()?.focus({ preventScroll: true });
+      back();
     });
     const f = this.flash = document.createElement('div');
     f.className = 'photo-flash'; f.hidden = true;          // (hidden by a timer: with reduced motion no animation ends)
@@ -179,6 +239,34 @@ export class PhotoMode {
   private canvas() { return this.stage.querySelector('canvas'); }
   private send(what: number, a = 0, b = 0): boolean { return !!this.input()?.photo?.(what, a, b); }
   private leave() { if (this.send(PH_OPEN, 0)) this.deps.log('[app] photo mode: leave'); }
+  private keep() { try { localStorage.setItem(KEPT_STORE, JSON.stringify(this.kept)); } catch { /* not kept: a private window */ } }
+
+  /** the cars shown to the game: the list's (Friends & crews only where the list has it, else all) */
+  private sendCars() { this.send(PH_CARS, this.kept.cars === 3 && !this.namesHere ? 0 : this.kept.cars); }
+
+  /** a slider moved */
+  private slid(s: HTMLInputElement) {
+    const v = +s.value;
+    if (s === this.zoom) this.send(PH_FOV, Math.round((FOV_MAX - (v / 1000) * (FOV_MAX - FOV_MIN)) * 100));
+    else if (s === this.tilt) this.send(PH_ROLL, Math.round(v * 10));
+    else if (s === this.focus) this.send(PH_FOCUS, Math.round(focusM(v) * 100));
+    else if (s === this.blur) { this.kept.blur = v; this.send(PH_BLUR, v); this.focus.disabled = v <= 0; this.keep(); }
+    else if (s === this.exposure) { this.kept.exposure = v; this.keep(); }
+    else if (s === this.vignette) { this.kept.vignette = v; this.keep(); }
+  }
+
+  /** the picture's look and crop to the renderer, when they change */
+  private sendLook() {
+    const r = this.session?.renderer;
+    if (!r?.photoLook) return;
+    const k = this.kept, rc = r.imageRect(), f = FILTERS[k.filter];
+    const look: PhotoLook = { ...f, exposure: 2 ** (k.exposure / 100), vignette: k.vignette / 1000 * 0.8,
+      crop: cropRect(CROPS[k.crop], rc.w / Math.max(1, rc.h)), grid: k.grid };
+    const key = JSON.stringify(look);
+    if (key === this.lookSent) return;
+    this.lookSent = key;
+    r.photoLook(look);
+  }
 
   /** the held keys and buttons, the left stick and shoulders, the right stick: sent when they change */
   private steer(move = this.sent.move < 0 ? 0 : this.sent.move, lift = this.sent.lift < 0 ? 0 : this.sent.lift,
@@ -219,11 +307,16 @@ export class PhotoMode {
     if (pageDialog()) this.letGo();                 // the controller goes to the dialog, a key's up to it too
     this.free = (bits & 4) !== 0;
     for (const b of this.root.querySelectorAll<HTMLButtonElement>('[data-mode]')) b.classList.toggle('on', (b.dataset.mode === '1') === this.free);
-    if (((bits & 16) !== 0) !== this.namesHere) { this.namesHere = !this.namesHere; this.fill(); }
+    if (((bits & 16) !== 0) !== this.namesHere) { this.namesHere = !this.namesHere; this.fill(); this.sendCars(); }
     this.names.checked = (bits & 8) !== 0;
-    const fov = st.get('photo_fov') ?? 70, roll = st.get('photo_roll') ?? 0;
+    const fov = st.get('photo_fov') ?? 70, roll = st.get('photo_roll') ?? 0, focus = st.get('photo_focus') ?? 10;
     if (this.sliding !== this.zoom) this.zoom.value = String(Math.round((FOV_MAX - fov) / (FOV_MAX - FOV_MIN) * 1000));
     if (this.sliding !== this.tilt) this.tilt.value = String(Math.round(roll * 10));
+    if (this.sliding !== this.focus) this.focus.value = String(focusV(focus));
+    this.sendLook();
+    // the picture's frames so far: the Take photo button fills as they come
+    const pr = s.renderer?.photoProgress?.(), p = pr && pr.target > 0 ? Math.min(1, pr.n / pr.target) : 0;
+    if (p !== this.progress) { this.progress = p; this.shootBtn.style.setProperty('--ph-p', String(p)); }
   }
 
   /** photo mode came on or went off in the game */
@@ -236,9 +329,12 @@ export class PhotoMode {
     if (on) {
       this.input()?.releaseAll?.();                 // what the game held when the page took the keys goes up
       this.steer(0, 0, 0);
+      this.send(PH_BLUR, this.kept.blur); this.sendCars(); this.send(PH_FREEZE, this.kept.freeze ? 1 : 0);
+      this.focus.disabled = this.kept.blur <= 0;
+      this.lookSent = ''; this.sendLook();
       this.fill();
       this.setBare(false);
-      this.deps.log('[app] photo mode: on');
+      this.deps.log(`[app] photo mode: on (blur ${this.kept.blur / 10} %, ${this.kept.filter}, crop ${this.kept.crop}, cars ${this.kept.cars})`);
     } else {
       this.root.hidden = true; this.flash.hidden = true;
       this.deps.log('[app] photo mode: off');
@@ -258,12 +354,31 @@ export class PhotoMode {
     q('[data-mode="1"]').textContent = t('Free');
     q('.ph-zoom-l').textContent = t('Zoom');
     q('.ph-tilt-l').textContent = t('Tilt');
+    q('.ph-blur-l').textContent = t('Blur');
+    q('.ph-focus-l').textContent = t('Focus');
+    q('.ph-exposure-l').textContent = t('Brightness');
+    q('.ph-vignette-l').textContent = t('Vignette');
+    q('.ph-filter-l').textContent = t('Filter');
+    q('.ph-crop-l').textContent = t('Crop');
+    q('.ph-cars-l').textContent = t('Cars');
+    q('.ph-grid-l').textContent = t('Grid');
     q('.ph-names-l').textContent = t('Names');
     (q('.ph-names-c') as HTMLElement).hidden = !this.namesHere;
+    q('.ph-freeze-l').textContent = t("Freeze friends' cars");
+    (q('.ph-freeze-c') as HTMLElement).hidden = !this.namesHere;
     q('.ph-mark-l').textContent = t('nfsu2.xyz on pictures');
     q('[data-act="reset"]').textContent = t('Reset');
     q('[data-act="shoot"]').textContent = t('Take photo');
     q('[data-act="leave"]').textContent = t('Leave');
+    const filterName: Record<Filter, string> = { none: t('Original'), bw: t('Black and white'), warm: t('Warm'), cool: t('Cool'),
+      vivid: t('Vivid'), faded: t('Faded') };
+    for (const o of this.filter.options) o.text = filterName[o.value as Filter];
+    for (const o of this.crop.options) o.text = o.value === 'full' ? t('Whole picture') : o.value;
+    // the cars shown: Friends & crews (3) only in free roam with friends; kept, it reads as All cars elsewhere
+    const carsName = [t('All cars'), t('Only mine'), t('No cars'), t('Friends & crews')];
+    this.cars.replaceChildren(...(this.namesHere ? [0, 3, 1, 2] : [0, 1, 2]).map(v => new Option(carsName[v], String(v))));
+    this.cars.value = String(this.kept.cars === 3 && !this.namesHere ? 0 : this.kept.cars);
+    this.focus.title = t('Double-click: focus on your car');
     const names = (k: string): Hint[] => (this.namesHere ? [[k, N('Names')]] : []);
     const list: Hint[] = touchFirst() && !padSeen()
       ? [[t('Drag'), N('Turn')], [t('Two fingers'), N('Move')], [t('Pinch'), N('Closer, farther')]]

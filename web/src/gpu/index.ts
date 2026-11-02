@@ -18,6 +18,11 @@ import * as P from './proto';
 import { C, F } from './proto';
 import { Encoder } from './encoder';
 import type { FromPng, ToPng } from './png-worker';
+import { PH_ADD, PH_DONE, PH_OFF, PLAIN_LOOK, PhotoPicture, type PhotoLook } from './photo-picture';
+export type { PhotoLook } from './photo-picture';
+
+/** how long photo() waits for a whole still picture before it keeps the picture as it is (the camera kept moving) */
+const PHOTO_WAIT_MS = 8000;
 
 export interface RendererOptions {
   /** where frame dumps go: a URL prefix that accepts PUT <prefix><name>.png (the dev server's /artifacts/) */
@@ -112,6 +117,13 @@ export interface Renderer {
    *  uploaded as <name>.png (an autotest dump falling on the same frame keeps its own name); mark: the site's
    *  address in its corner (png-worker.ts) */
   dump(name: string, mark?: boolean): Promise<Blob>;
+  /** photo mode's picture (photo-picture.ts) as PNG: the first frame that has a whole still picture (or, past
+   *  PHOTO_WAIT_MS, the picture as it is), with the look and the crop; photo mode off: dump()'s */
+  photo(name: string, mark?: boolean): Promise<Blob>;
+  /** photo mode's look and crop (app/photo.ts), shown from the next frame on and kept by photo() */
+  photoLook(look: PhotoLook): void;
+  /** photo mode's still picture so far: frames in it and frames it will have (0: the camera moves; photo mode off) */
+  photoProgress(): { n: number; target: number };
   /** distributions of the frames since the last call with reset (or since attach) */
   window(reset?: boolean): RendererWindow;
   /** each frame's time from its submit until the GPU had done it (onSubmittedWorkDone, so every
@@ -268,6 +280,9 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   let winEnc: number[] = [], winGpu: number[] = [], winDraws = 0, winPasses = 0, winCalls = { ...enc.calls };
   let done: number[] = [];
   const dumpWaiters: { name: string; mark?: boolean; resolve: (b: Blob) => void }[] = [];
+  // photo mode (photo-picture.ts): its picture, made at the first frame of photo mode; the look; photo() waiting
+  let pic: PhotoPicture | null = null, look: PhotoLook = PLAIN_LOOK, picState = PH_OFF;
+  const photoWaiters: { name: string; mark?: boolean; since: number; resolve: (b: Blob) => void }[] = [];
   const pending = new Set<Promise<unknown>>();
   const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
     { async: boolean; value: Promise<string> | string } }).waitAsync;
@@ -465,6 +480,20 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     toneSaid = said;
     return on ? t : null;
   };
+  // photo mode's picture (GwPhoto): state, n, target, gen, or null while photo mode is off (or the module has none)
+  const photoOf = (b: number): [number, number, number, number] | null => {
+    const U = u32(), fw = cw + C.frame + b * (P.FRAME_BYTES >> 2), at = (U[fw + F.k] + P.K_PHOTO) >>> 2;
+    if (U[at] !== P.PHOTO_MAGIC || U[at + 1] === PH_OFF || U[at + 1] > PH_DONE) return null;
+    return [U[at + 1], U[at + 2], U[at + 3], U[at + 4]];
+  };
+  // ...and the frames of still picture gen the average has, back to the game in both buffers' blocks (GwPhoto ack)
+  const photoAck = (gen: number, n: number) => {
+    const U = u32();
+    for (let s = 0; s < P.GW_NBUF; s++) {
+      const k = U[cw + C.frame + s * (P.FRAME_BYTES >> 2) + F.k];
+      if (k) Atomics.store(U, (k + P.K_PHOTO + P.PHOTO_ACK) >>> 2, ((gen & 0xffff) << 16 | (n & 0xffff)) >>> 0);
+    }
+  };
   const encodeAndSubmit = (b: number) => {
     const t0 = performance.now();
     const ce = device.createCommandEncoder();
@@ -474,8 +503,10 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const cur = ctx.getCurrentTexture();
     sinceRaf++; winUnshownFrames++;
     if (t0 - winUnshownT > SUMMARY_MS) summary(t0);
-    const tone = toneOf(b);
-    const st = enc.encodeFrame(b, ce, direct && !tone ? cur : undefined);
+    const tone = toneOf(b), ph = photoOf(b);
+    if (!ph && picState !== PH_OFF) { pic?.destroy(); pic = null; }           // photo mode ended: its textures go
+    picState = ph ? ph[0] : PH_OFF;
+    const st = enc.encodeFrame(b, ce, direct && !tone && !ph ? cur : undefined);
     burn?.(ce);
     const scr = enc.screen!;   // the canvas texture itself, or the back buffer
     const tsEnd: GPURenderPassTimestampWrites | undefined = slot >= 0 ? { querySet: qs!, endOfPassWriteIndex: 2 * slot + 1 } : undefined;
@@ -497,8 +528,15 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       const one = w === scr.width && h === scr.height;
       const rect: [number, number, number, number] = [Math.floor((cvw - w) / 2), Math.floor((cvh - h) / 2), w, h];
       imgRect = { x: rect[0], y: rect[1], w, h };
+      if (ph) {
+        // photo mode: the frame into the picture's average, which shows with the picture's look
+        pic ??= new PhotoPicture(device);
+        pic.add(ce, enc.screenView!, scr.width, scr.height, linear, ph[0], ph[1], ph[2], ph[3]);
+        if (pic.gen) photoAck(pic.gen, pic.count);
+        pic.show(ce, cur.createView(), canvasFormat, one ? nearest : linear, rect, look, tone, tsEnd);
+      }
       // the back buffer's own view: its bind group is made once (Encoder.copyBg), not every frame
-      if (tone) enc.toneQuad(ce, enc.screenView!, cur.createView(), canvasFormat, one ? nearest : linear, tone, rect, tsEnd);
+      else if (tone) enc.toneQuad(ce, enc.screenView!, cur.createView(), canvasFormat, one ? nearest : linear, tone, rect, tsEnd);
       else enc.copyQuad(ce, enc.screenView!, cur.createView(), canvasFormat, one ? nearest : linear, rect, true, tsEnd);
     }
     if (slot >= 0) {
@@ -512,10 +550,16 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       const lab = new TextDecoder().decode(new Uint8Array(mem.buffer).slice((fw + F.dumpLabel) * 4, (fw + F.dumpLabel) * 4 + 64)).replace(/\0.*$/s, '');
       dumpName = `nfsu2_g${String(U[fw + F.dumpFrame]).padStart(6, '0')}_${lab}`;
     }
-    const waiter = dumpWaiters.shift();
+    // photo mode's picture: the first frame with the whole still picture (or one past PHOTO_WAIT_MS) keeps it, and the
+    // autotest's dumps get it as kept (photo() with photo mode off: dump()'s, the next frame)
+    if (!ph) dumpWaiters.push(...photoWaiters.splice(0));
+    const pw = ph && photoWaiters.length && (pic!.done || t0 - photoWaiters[0].since > PHOTO_WAIT_MS) ? photoWaiters.shift() : undefined;
+    const shot = ph && (pw || dumpName) ? pic!.shot(ce, linear, look) : null;
+    if (pw && !pic!.done) log(`[gpu] photo mode's picture kept as it is (${pic!.count} of ${pic!.target} frames)`);
+    const waiter = pw ?? dumpWaiters.shift();
     const reads: { name: string | null; rb: Readback; waiter?: (b: Blob) => void; mark?: boolean }[] = [];
     // an autotest dump keeps its frame-numbered name; a dump(name) request names its own
-    if (dumpName || waiter) reads.push({ name: dumpName ?? waiter!.name, rb: copyOut(ce, scr), waiter: waiter?.resolve, mark: waiter?.mark });
+    if (dumpName || waiter) reads.push({ name: dumpName ?? waiter!.name, rb: shot ? copyOut(ce, shot.tex, shot) : copyOut(ce, scr), waiter: waiter?.resolve, mark: waiter?.mark });
     if (dumpName) for (const id of opts.dumpTex ?? []) {
       const sn = enc.snapshot(ce, id);
       if (sn) { log(`[gpu] dump texture ${id}: ${sn.info}`); reads.push({ name: `${dumpName}_tex${id}`, rb: copyOut(ce, sn.tex) }); }
@@ -582,11 +626,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   };
 
   type Readback = { buf: GPUBuffer; w: number; h: number; bpr: number };
-  const copyOut = (ce: GPUCommandEncoder, t: GPUTexture): Readback => {
-    const bpr = Math.ceil(t.width * 4 / 256) * 256;
-    const buf = device.createBuffer({ size: bpr * t.height, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    ce.copyTextureToBuffer({ texture: t }, { buffer: buf, bytesPerRow: bpr }, [t.width, t.height, 1]);
-    return { buf, w: t.width, h: t.height, bpr };
+  const copyOut = (ce: GPUCommandEncoder, t: GPUTexture, r?: { x: number; y: number; w: number; h: number }): Readback => {
+    const x = r?.x ?? 0, y = r?.y ?? 0, w = r?.w ?? t.width, h = r?.h ?? t.height;
+    const bpr = Math.ceil(w * 4 / 256) * 256;
+    const buf = device.createBuffer({ size: bpr * h, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+    ce.copyTextureToBuffer({ texture: t, origin: [x, y, 0] }, { buffer: buf, bytesPerRow: bpr }, [w, h, 1]);
+    return { buf, w, h, bpr };
   };
 
   // The game's lock buffer gets the texture's rows once the GPU has them, unless the game stopped waiting: it then
@@ -733,7 +778,13 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     },
     doneMs: () => { const d = done; done = []; return d; },
     dump: (name: string, mark?: boolean) => new Promise<Blob>(resolve => dumpWaiters.push({ name, mark, resolve })),
-    imageRect: () => imgRect ?? { x: 0, y: 0, w: canvas.width, h: canvas.height },
+    photo: (name: string, mark?: boolean) => new Promise<Blob>(resolve => {
+      if (picState !== PH_OFF) photoWaiters.push({ name, mark, since: performance.now(), resolve });
+      else dumpWaiters.push({ name, mark, resolve });
+    }),
+    photoLook: (l: PhotoLook) => { look = l; },
+    photoProgress: () => (picState === PH_OFF || !pic ? { n: 0, target: 0 } : { n: pic.count, target: picState === PH_ADD || picState === PH_DONE ? pic.target : 0 }),
+    imageRect:() => imgRect ?? { x: 0, y: 0, w: canvas.width, h: canvas.height },
     flush: async () => {
       while (pending.size) await Promise.allSettled([...pending]);
       if (enc.warmDirty) try { localStorage.setItem(WARM_KEY, JSON.stringify(enc.warmEntries().slice(-4000))); } catch { /* full or off */ }
@@ -747,7 +798,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       const I = i32();
       Atomics.store(I, cw + C.attached, P.DETACHED);
       for (const w of [C.attached, C.state, C.rqTail, C.bell]) Atomics.notify(I, cw + w);
-      for (const d of dumpWaiters.splice(0)) d.resolve(new Blob([], { type: 'image/png' }));
+      for (const d of [...dumpWaiters.splice(0), ...photoWaiters.splice(0)]) d.resolve(new Blob([], { type: 'image/png' }));
+      pic?.destroy(); pic = null;
       // a PNG the worker is making still comes (a screenshot taken just before the game ended)
       void Promise.allSettled([...pending]).then(() => pngWorker?.terminate());
       try { ctx.unconfigure(); } catch { /* already gone */ }

@@ -1,0 +1,26 @@
+# Photo mode's full car models (runtime/photo.c), large: the orbit at its farthest, zoomed out a little, the picture
+# with every car's full model, then with the game's own (photo fulldetail 0), then no cars (no headlights either).
+# Run on the play page at a large size (w=2560&h=1440) with artifacts=; the log's "[photo] ... picture" lines count
+# the car renders that got their full model only for photo mode.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
++0    photo hello
+7000wms autopilot on
+14000wms photo on
++30   photo dolly -40                              # the orbit at its farthest
++0    photo fov 90
++400  dump lod_full
++200  photo fulldetail 0
++400  dump lod_game
++200  photo fulldetail 1
++0    photo cars 2
++400  dump lod_nocars
++200  photo off
++10   quit

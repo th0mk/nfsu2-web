@@ -18,6 +18,10 @@ export const K_TONE = 1552, TONE_BYTES = 16, TONE_MAGIC = 0x454E4F54;
 // word, then (float64) when the game read the input the frame simulates with and when it handed the frame off, in ms
 // of performance.timeOrigin + performance.now()
 export const K_LAT = 1568, LAT_BYTES = 24, LAT_MAGIC = 0x4E54414C;
+// GwPhoto: photo mode's picture (runtime/photo.c) at this byte offset of every frame's VS constant arena (not bound):
+// magic, state (0 off, 1 the frame as it is, 2 frame n of target frames of still picture gen, 3 it has them), n, target,
+// gen; at PHOTO_ACK the page's answer in both buffers' blocks: gen << 16 | the frames of it the page has
+export const K_PHOTO = 1600, PHOTO_BYTES = 32, PHOTO_MAGIC = 0x544F4850, PHOTO_ACK = 20;
 // the VS constant arena is bound in windows of this many 16-byte rows (GW_KWIN_ROWS)
 export const KWIN_ROWS = 4096;
 

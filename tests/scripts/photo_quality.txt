@@ -1,0 +1,52 @@
+# Photo mode's picture (runtime/photo.c, web/src/gpu/photo-picture.ts) in a Quick Race: the cars' full models far
+# away (A/B with the game's own), the game's motion blur off (A/B), the still picture's frames added up (smooth
+# edges), the lens's blur, the cars hidden.  Run on the play page with artifacts= for the dumps (in photo mode a dump
+# is the picture as F12 keeps it).  A slow page (a software GPU) encodes a dump some frames after it was asked for,
+# and the picture needs its frames first: each step waits long, and its dump comes well before the next change.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
++0    photo hello
+7000wms autopilot on
+14000wms photo on
++30   expect i:0x890084 == 1
++0    expect i:0x870cdc == 0                       # the game's motion blur off
++0    photo speedblur 1
++300  dump speed_on
++150  photo speedblur 0
++300  dump speed_off
++150  photo dolly -40                              # the orbit at its farthest
++0    photo fov 105                                # zoomed out
++300  dump far_full
++150  photo fulldetail 0
++300  dump far_game
++150  photo fulldetail 1
++0    photo fov 25                                 # zoomed in: edges
++1    dump aa_live
++300  dump aa_done
++150  photo fov 70
++0    photo dolly 13                               # about 6 m from the car
++0    photo blur 0.5
++450  dump blur50
++150  photo blur 1
++450  dump blur100
++150  photo focus 40                               # the far side sharp, the car blurred
++450  dump blur100_far
++150  photo blur 0
++0    photo focus 0
++300  dump cars_all
++150  photo cars 1
++300  dump cars_mine
++150  photo cars 2
++300  dump cars_none
++150  photo cars 0
++0    photo off
++30   expect i:0x890084 == 0
++0    expect i:0x870cdc == 1                       # its motion blur back
++10   quit
