@@ -434,9 +434,48 @@ static int force_rain(void){
     if (fr < 0){ const char *e = getenv("FORCERAIN"); fr = e ? atoi(e) : 0; }
     return fr;
 }
+/* --- One weather for everyone in free roam --------------------------------
+ * sub_0061e380(x, y) is the rain at a place: the "Rain" zone's rain there
+ * (its param 0) when v = |0.5 cos(t + x/50) + 0.5| <= the zone's threshold
+ * (param 1), else 0 (sub_006134e0: t the world timer 0x7fb718 in s, the
+ * angle in degrees), so the rain comes and goes in a 6-minute cycle, shifted
+ * by 1 s for every 50 m along x (measured at the prologue's spot: rain 0.75
+ * below v ~0.05, about 52 s of every 6 minutes, from 2:00 after a load on
+ * the game's clock).  Rain::Update takes it at the camera (the drops, the
+ * fog, the sound), and the car physics at each car (sub_005a4d80 and
+ * sub_005aad90 through 0x5ed5d0): a grip x (1 - 0.025 x rain), as the game's
+ * weather tip says.  The world timer starts at 1 s with each World
+ * (0x5ff490 -> 0x576cf0), so in free roam each player had their own weather,
+ * and their own grip at the same place.  Network races need nothing: every
+ * client's world timer follows the race host's (0x601a60).
+ * In free roam's world with free-roam multiplayer on, t is the device's UTC
+ * time mod 360 s instead, the same for everyone whose clock is right (a
+ * clock some seconds off only moves the rain's start and end as much).  The
+ * formula and the zones stay the game's, so it rains as often and as long
+ * as before; only where in the cycle a world starts changes (the game's own
+ * clock started each load at the same point).  Solo, races, the Dyno Shop
+ * and LAN keep the game's clock. */
+int roam_game_shared_weather(void);       /* roam_game.c: free roam's world with free-roam multiplayer on */
+#define A_WORLD_T   0x007fb718u           /* WorldTimer in seconds (float) */
+#define A_TICKS     0x0086518cu           /* WorldTimer in ticks: a new value each world step */
+static float shared_weather_t(void){
+    static uint32_t at = ~0u; static float t;
+    uint32_t tick = MR32(A_TICKS);
+    if (tick != at){                      /* the clock once a step: the car physics asks once per car */
+        struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+        t = (float)((double)(ts.tv_sec % 360) + (double)ts.tv_nsec * 1e-9);
+        at = tick;
+    }
+    return t;
+}
 void sub_0061e380_orig(CPU *c);
 void sub_0061e380(CPU *c){
-    sub_0061e380_orig(c);
+    if (roam_game_shared_weather()){
+        float own = MRF32(A_WORLD_T);
+        MRF32(A_WORLD_T) = shared_weather_t();
+        sub_0061e380_orig(c);
+        MRF32(A_WORLD_T) = own;
+    } else sub_0061e380_orig(c);
     int fr = force_rain();
     if (fr == 1 || fr == 4) ST(0) = 1.0; else if (fr == 2 || fr == 3) ST(0) = 0.0;
 }

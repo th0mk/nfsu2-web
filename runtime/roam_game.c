@@ -8858,6 +8858,14 @@ void roam_game_parked(int on){
     roam_plat_unlock();
     if (on && was_roam) rlog("[roam] f=%ld the app is in the background: friends see you paused\n", rh_frame());
 }
+/* overrides.c (the rain at a place, on the guest thread): free roam's world
+ * with free-roam multiplayer on, where the weather follows the clock everyone
+ * shares; also while no friend is connected yet, so it doesn't change when one
+ * comes.  Free roam's own track (not the Dyno Shop's), no career race, no LAN */
+int roam_game_shared_weather(void){
+    return O.on && rd32(G_FLOW) == 6u && rd32(G_TRACK) % 1000u == 0 && !rd32(G_CAREER_RACE) &&
+           !(rd32(G_GAMEMODE) & 0x200u);
+}
 /* discord.c (the port's Discord presence): friends connected now, i.e.
  * established and not lost; 0 while free-roam multiplayer is off.  Takes the
  * session lock, so any thread may ask. */
