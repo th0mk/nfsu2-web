@@ -1,0 +1,22 @@
+# The controller's right stick turns the car in the front end's car viewer (runtime/dinput_pad.c sub_004a5d90), here
+# the main menu's: right for a second (the car turns about 60 degrees), left for half a second (back 30), then down
+# and up (the camera rises, then sinks).  With NFSU2_PAD_LOG=1 each stick move logs "[pad] the right stick turns the
+# car (... the car at N degrees)" and its end "the right stick let go: the car at N degrees, the camera at H".
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                     # "No" profile
++0    waitfng UI_Main.fng 3000
++600  pad connect
++0    dump garage0
++0    axis RX 1
++1000ms axis RX 0
++0    dump garage_right
++500ms axis RX -1
++500ms axis RX 0
++0    dump garage_left
++500ms axis RY 1
++600ms axis RY 0
++0    dump garage_down
++500ms axis RY -1
++300ms axis RY 0
++0    dump garage_up
++500ms quit

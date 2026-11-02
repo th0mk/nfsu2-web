@@ -1216,3 +1216,67 @@ void sub_005c1000(CPU *c){
     c->eax &= ~0xffu;
     c->zf = 1;
 }
+
+/* ---- the right stick turns the car in the garage and the shops ----------------
+ * The front end's car viewer (the garage, the shops, the car lots) runs its
+ * frame from its message handler (0x4d8d20, message 0xc98356ba): the update
+ * (0x4d82d0), then the mouse (0x4a5d90, thiscall: the viewer).  While the
+ * middle button is held (the mouse at 0x8763d0: +0x27 down, +0x29 let go this
+ * frame) the drag sets the viewer's turn speed +0x248 = dx / 2 and its tilt
+ * speed +0x24c = dy / 2, and stops the showcase that turns the car once
+ * nothing was pressed for a while ([0x8363fc] = 0, its idle clock [0x837aa0]
+ * = the game's time [0x8651ac]).  Letting go sets both back to 0, and so does
+ * a GenericDialog.fng over the viewer.  The next update turns the car by
+ * +0x248 x dt x 60 degrees (+0x274) and moves its camera up or down by
+ * 0.1 x +0x24c x dt x 60 (0x44ce00: camera +0x144, through 0x4454e0; from
+ * 1.2 to 5.2).  The consoles' right stick sets the same two, -1 to 1
+ * (0x4a5740: actions 0x42 to 0x47), which no binding of the PC's front-end
+ * pad table reaches.  So here, after the game's own and unless the middle
+ * button is held, the controller's right stick out of its dead zone
+ * (gamepad_read) sets them at the consoles' scale: full stick turns the car 60
+ * degrees a second, about a fast drag.  Stick right turns the view right, as
+ * photo mode's right stick turns its orbit camera (photo.c) and as a drag to
+ * the right turns it here: the car's near side moves right, the garage behind
+ * it left.  (The consoles' axis, 0x44, turns it the other way.)  Stick down
+ * looks further down at the car: the camera
+ * rises, as photo mode's and a drag down here do.  Back at rest both go to 0
+ * once.  A wheel's and an RC radio's right stick is always at rest
+ * (web/src/input/wheel.ts).  The angle starts over on every screen, as the
+ * game has it. */
+#define VW_CAMERA    0x23cu        /* the viewer's camera (+0xa8 its height) */
+#define VW_TURN      0x248u        /* float: the viewer's turn speed (60 degrees a second at 1) */
+#define VW_TILT      0x24cu        /* float: its camera's tilt speed */
+#define VW_ANGLE     0x274u        /* float: the car's angle, degrees */
+#define CAM_HEIGHT   0xa8u
+#define G_FE_BUSY    0x00838578u   /* the front end takes no input now (0x510c30) */
+#define G_MOUSE_MID  0x008763f7u   /* byte: the mouse's middle button is down */
+#define G_SHOWCASE   0x008363fcu   /* byte: the showcase turns the car */
+#define G_VIEW_IDLE  0x00837aa0u   /* when the viewer was last turned (the showcase starts a while after) */
+#define G_FE_TIME    0x008651acu   /* the game's time */
+int career_fe_active(const char *name);
+void sub_004a5d90_orig(CPU *c);
+void sub_004a5d90(CPU *c){
+    static uint32_t turning;       /* the viewer the stick turns, 0 none */
+    uint32_t v = c->ecx;
+    sub_004a5d90_orig(c);
+    if (MR8(G_MOUSE_MID)){ turning = 0; return; }             /* the drag's */
+    PadState s;
+    float x = 0.f, y = 0.f;
+    if (pad_mode() != MODE_OFF && gamepad_read(&s) && !s.wheel){ x = s.axis[PAD_AXIS_RX]; y = s.axis[PAD_AXIS_RY]; }
+    if ((x == 0.f && y == 0.f) || MR32(G_FE_BUSY) || career_fe_active("GenericDialog.fng")){
+        if (turning == v){
+            MRF32(v + VW_TURN) = 0.f; MRF32(v + VW_TILT) = 0.f;
+            uint32_t cam = MR32(v + VW_CAMERA);
+            if (pad_log()) fprintf(stderr, "[pad] the right stick let go: the car at %.0f degrees, the camera at %.2f\n",
+                                   MRF32(v + VW_ANGLE), cam && mem_is_committed(cam + CAM_HEIGHT + 3u) ? MRF32(cam + CAM_HEIGHT) : -1.f);
+        }
+        turning = 0;
+        return;
+    }
+    MRF32(v + VW_TURN) = x;
+    MRF32(v + VW_TILT) = y;
+    MR8(G_SHOWCASE) = 0;
+    MR32(G_VIEW_IDLE) = MR32(G_FE_TIME);
+    if (!turning && pad_log()) fprintf(stderr, "[pad] the right stick turns the car (viewer 0x%08x, the car at %.0f degrees)\n", v, MRF32(v + VW_ANGLE));
+    turning = v;
+}

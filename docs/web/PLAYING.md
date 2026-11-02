@@ -158,7 +158,10 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages. A
   click of the left stick is the horn, unless your car has hydraulics: then the stick clicks are the game's hydraulics
   (left: pressurize, right: bounce). In free roam with other players the right stick is quick chat: a flick for a
-  group, another for its phrase.
+  group, another for its phrase. In the garage, the shops and the main menu the right stick turns the car round and
+  tilts the view, as the middle-button drag does: right turns the view right, as in photo mode (and as a drag to the
+  right), down looks down on the car; full stick turns about 60° a second. Each screen starts at the game's own
+  angle.
 - **Steering wheel:** a Logitech G29, G920 or G923, and other wheels the browser shows as a game controller. The wheel
   steers, the pedals are throttle and brake (and reverse), the paddles shift down and up, Cross (A) is nitrous, Square
   (X) the handbrake, Circle and Triangle (B and Y) look back and camera, Share respawns, Options pauses, PS opens the
