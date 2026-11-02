@@ -241,13 +241,17 @@ static int bank_ready(CPU *c, uint32_t ti){
     }
     long f = autotest_frame();
     if (k->st == 1 && f - k->since < 600) return 0;                    /* on the way (10 s at most) */
-    if (k->st){                                                        /* in, but its bank thrown away (or lost): again */
-        if (k->file){ uint32_t a = k->file; gcall(c, FN_UNLOAD, 0, 1, &a); }
+    char nm[24], path[64];
+    cstr(ti, nm, sizeof nm);
+    /* not in after 10 s, or its bank gone with the file still in: load it again.  The old file is left loaded, never
+     * unloaded: the game's file unload (0x580E90 -> 0x439D70) takes the first bank of the file's car type off the list,
+     * and with none there it calls through 0 (exit 134, 2026-11-02: ... car_apply); one that comes in late is a
+     * second bank of the type, which 0x438140 (sub_00438140) deletes at the latest */
+    if (k->st){
+        if (k->file) fprintf(stderr, "[showoff] f=%ld %s: the part animations are not in: loading them again (the first file left loaded)\n", f, nm);
         k->file = 0; k->st = 0;
     }
     if (k->tries >= 3) return -1;
-    char nm[24], path[64];
-    cstr(ti, nm, sizeof nm);
     snprintf(path, sizeof path, "CARS\\%s\\PARTS_ANIMATIONS.BIN", nm);
     for (int i = 0; i < 64; i++) MR8(k->name + (uint32_t)i) = (uint8_t)path[i < (int)sizeof path ? i : 63];
     MR8(k->name + 63u) = 0;
@@ -450,7 +454,9 @@ void sub_00615a10(CPU *c){                       /* the car's lights (the hood's
  * exit 134, from 18:05 UTC on 2026-11-02).  Here our files are unloaded first, the way the game unloads its own (so
  * their banks go as its do), and the walk reads the next bank before it deletes one.  Their cars' parts show closed
  * until their banks are in again (bank_ready, out in free roam only).  Test: tests/scripts/showoff_banks.txt;
- * NFSU2_TEST_BANKS_GAMEWAY=1 (script runs only) the game's way, for the A/B. */
+ * NFSU2_TEST_BANKS_GAMEWAY=1 (script runs only) the game's way, for the A/B; NFSU2_TEST_BANKS_LOST=1 (script runs
+ * only) the walk deletes ours with their files still in, as the live game's did when it got through
+ * (tests/scripts/showoff_banks_lost.txt, bank_ready). */
 #define FN_BANK_FREE   0x004380f0u   /* thiscall bank: lets go of its animations */
 static void drop_ours(CPU *c){
     int n = 0;
@@ -472,11 +478,14 @@ static void drop_ours(CPU *c){
 }
 void sub_00438140_orig(CPU *c);
 void sub_00438140(CPU *c){
-    static int game_way = -1;                                          /* test aid, script runs only: the game's walk */
-    if (game_way < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_BANKS_GAMEWAY"); game_way = s && *s && e && *e == '1'; }
+    static int game_way = -1, lost = -1;                               /* test aids, script runs only: the game's walk; */
+    if (game_way < 0){                                                 /* ours deleted with their files still in */
+        const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_BANKS_GAMEWAY"), *l = getenv("NFSU2_TEST_BANKS_LOST");
+        game_way = s && *s && e && *e == '1'; lost = s && *s && l && *l == '1';
+    }
     if (game_way){ sub_00438140_orig(c); return; }
     uint32_t type = MR32(c->esp + 4u);
-    drop_ours(c);
+    if (!lost) drop_ours(c);
     uint32_t e = rd32(G_BANKS), b = e ? e - 4u : 0;
     for (int n = 0; b && b != G_BANKS - 4u && n < 4096 && ok(b, 0x28); n++){
         uint32_t ne = MR32(b + 4u), next = ne ? ne - 4u : 0;           /* read before the bank is deleted */
