@@ -1,0 +1,29 @@
+# The body shop's Wide Body Kits after Caleb (runtime/uniques.c), as the player sees it: a stage-3 career save
+# with stage 5's final event (Caleb's race) marked won, then the body shop's last category (Wide Body Kits)
+# opened and its kits stepped through.  The shop decides its categories' locks on the way in: without "uniques won"
+# (or with it only once inside) the category shows a lock and does not open.  Frames: wb_cat, wb_kit1..3.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <a stage-3 career save tree>
+#        --a Uni:career_uniques_caleb_shop.txt:NFSU2_ROAM=0
+#   (inside WSL: NFSU2_BROWSER=chromium and CHROME_ARGS with --enable-unsafe-webgpu and the Vulkan flags)
+0     bot on
++0    waitroam 6000
++0    bot off
++600  uniques won
++60   shopgo CC_BODYSHOP_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the body shop
++1500 fnglist
++0    loop 12
++30   tap RIGHT                       # to the last category: Wide Body Kits
++60   endloop
++200  dump wb_cat
++30   tap RETURN                      # its kits
++600  dump wb_kit1
++0    fnglist
++30   tap DOWN
++300  dump wb_kit2
++30   tap DOWN
++300  dump wb_kit3
++0    log UNIQUES DONE
++10   quit

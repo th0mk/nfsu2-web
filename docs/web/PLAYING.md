@@ -285,6 +285,11 @@ that room.
   profile with its first 5 cars, driving the first one when yours was one of the other 5. A profile changed
   elsewhere (played in the PC game) loads here with its 5 too: the other 5 are kept aside in the profile's folder,
   as `GARAGE.OLD`.
+- **Unique parts after Caleb:** the outruns' unique visual parts (the wide body kits, and the unique hoods, spoilers,
+  rims and vinyls) go, as in the original game, to the one car you drive to their star, and the wide body's star
+  (11 outrun wins in stage 5) comes only before the last URL race. Once you have beaten Caleb, the shops have all of
+  them for every car in your career, as the original game's ending has them in Customize mode, whose cars free roam
+  never drives. The unique performance parts stay one per stage.
 - **Power Units:** the game's Options, Gameplay (also in the pause menu's) has a row after Speedometer Units: the
   engine's power in bhp or kW wherever the game shows it (the dyno, the performance shop's parts), whatever the
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).

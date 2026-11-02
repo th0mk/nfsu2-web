@@ -1,0 +1,19 @@
+# The unique visual parts after Caleb (runtime/uniques.c), in a stage-3 career save, inside a body
+# shop: `uniques` logs the shown car's unique (level-4) parts per slot and how many the game's unlock check
+# (0x52A010) lets through for the shops (filter 6) and the garage (2).  First as the save is (none in the shops), then
+# with stage 5's final event (Caleb's race, S5_CIRCUIT_36) marked won ("uniques won"): all of them in the shops, the
+# garage still only the car's own.  Good: the "uniques:" totals, UNIQUES DONE.
+#   node web/tools/roam-pair.mjs --solo --seed <a stage-3 career save tree> --a Uni:career_uniques_caleb.txt:NFSU2_ROAM=0
+0     bot on
++0    waitroam 6000
++0    bot off
++600  shopgo CC_BODYSHOP_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the body shop
++900  fnglist
++0    uniques
++60   uniques won
++60   uniques
++60   log UNIQUES DONE
++10   quit

@@ -53,6 +53,11 @@
  *   outrunwin                  win the outrun in progress (RACEWIN does too)
  *   visual                     log the car's visual rating (0x528410: with the
  *                              NFSU2_CAREER_BOT_VISUAL tweak, and its own)
+ *   uniques [won]              log the shown car's unique (level-4) visual parts
+ *                              per slot and how many the shops' check (0x52A010,
+ *                              filter 6) and the garage's (2) let through, and
+ *                              whether Caleb is beaten (uniques.c); "won" first
+ *                              adds a won record of stage 5's final event
  *   watchw X                   debug: log the guest functions that write X
  *   bot on|off                 the career bot below (also NFSU2_CAREER_BOT=1)
  * X/ARG/FN are expressions: numbers, "*X" (guest dword at X), "(X)", "+", "-",
@@ -950,6 +955,53 @@ static void bot_tick(void){
     }
 }
 
+/* "uniques [won]": the shown car's unique (level-4) visual parts, slot by slot
+ * (CARSLOTID names from the table at 0x802DE8, {id, name} pairs), and how many
+ * of them 0x52A010 lets through for the shops (filter 6) and the garage (2).
+ * Parts as a shop lists them (0x539960): the first by 0x61BA30(car type, slot,
+ * 0, -1), the next by 0x61BA50(part, car type, slot, 0, -1), on the parts
+ * database 0x8A2B68; the car type from the shown car ([0x8389AC], its method
+ * +4). */
+int uniques_caleb_beaten(void);
+static void uniques_list(CPU *c, int won){
+    if (won){
+        uint32_t si = MR32(0x0086262cu), n = MR32(G_CAREER + 0x7afcu);
+        if (si && mem_is_committed(si + 0x2bu) && n < 0x181u){
+            uint32_t r = G_CAREER + 0x7b00u + 8u * n;
+            MR32(r) = MR32(si + 0x28u); MR32(r + 4u) = 0; MR8(r + 6u) = 1;
+            MR32(G_CAREER + 0x7afcu) = n + 1u;
+            fprintf(stderr, "[career] uniques: stage 5's final event 0x%08x marked won (record %u)\n", MR32(si + 0x28u), n);
+        }
+    }
+    uint32_t car = MR32(0x008389acu), ct = 0;      /* set in the front end (garage, shops), 0 in free roam */
+    if (car && mem_is_committed(car) && mem_is_committed(MR32(car) + 7u)) ct = guest_call(c, MR32(MR32(car) + 4u), car, 0, 0);
+    fprintf(stderr, "[career] f=%ld uniques: Caleb beaten %d, shown car 0x%08x, car type %u, game mode %u, garage flag %u\n",
+            autotest_frame(), uniques_caleb_beaten(), car, ct, MR32(0x00850078u), MR32(0x0083898cu));
+    if (!car || ct > 64u) return;
+    unsigned tot = 0, tshop = 0, tgar = 0, parts = 0;
+    for (uint32_t slot = 0; slot < 0x4cu; slot++){
+        uint32_t e = 0x00802de8u + 8u * slot, nm = MR32(e + 4u);
+        const char *name = MR32(e) == slot && nm >= 0x783000u && nm < 0x7e8000u ? (const char *)&MR8(nm) : "?";
+        unsigned all = 0, uniq = 0, shop = 0, gar = 0, lv[8] = {0};
+        uint32_t prev = 0, price = 0;
+        for (int k = 0; k < 4096; k++){
+            uint32_t a[4] = { ct, slot, 0, 0xffffffffu }, b[5] = { prev, ct, slot, 0, 0xffffffffu };
+            uint32_t p = prev ? guest_call(c, 0x0061ba50u, 0x008a2b68u, 5, b) : guest_call(c, 0x0061ba30u, 0x008a2b68u, 4, a);
+            if (!p || p == prev || !mem_is_committed(p + 13u)) break;
+            prev = p; all++; lv[MR8(p + 5u) >> 5]++;
+            if ((MR8(p + 5u) >> 5) != 4u) continue;
+            if (!uniq++){ uint32_t pa[2] = { slot, p }; price = guest_call(c, 0x00514280u, G_CAREER, 2, pa); }  /* a buy's price (0x5289F0) */
+            uint32_t s6[4] = { 6u, slot, p, MR32(0x008389b0u) }, s2[4] = { 2u, slot, p, MR32(0x008389b0u) };
+            if (guest_call(c, 0x0052a010u, 0, 4, s6) & 0xffu) shop++;
+            if (guest_call(c, 0x0052a010u, 0, 4, s2) & 0xffu) gar++;
+        }
+        if (uniq) fprintf(stderr, "[career] uniques: slot %u %s: %u parts (levels 0-7: %u %u %u %u %u %u %u %u), %u unique (the first $%u), %u in the shops, %u in the garage\n",
+                          slot, name, all, lv[0], lv[1], lv[2], lv[3], lv[4], lv[5], lv[6], lv[7], uniq, price, shop, gar);
+        tot += uniq; tshop += shop; tgar += gar; parts += all;
+    }
+    fprintf(stderr, "[career] uniques: %u parts, %u of them unique, %u in the shops, %u in the garage\n", parts, tot, tshop, tgar);
+}
+
 static void run_job(CPU *c, const char *line){
     char cmd[32] = {0}; int used = 0;
     sscanf(line, "%31s %n", cmd, &used);
@@ -985,7 +1037,8 @@ static void run_job(CPU *c, const char *line){
         fprintf(stderr, "[career] f=%ld visual rating %.2f (its own %.2f, tweak %.2f)\n", autotest_frame(),
                 visual_rating(0), visual_rating(1), (double)MRF32(G_VISUAL_TWEAK));
         g_cpu = 0;
-    } else if (!strcasecmp(cmd, "racewin")) race_win(c);
+    } else if (!strcasecmp(cmd, "uniques")) uniques_list(c, !strncasecmp(rest, "won", 3));
+    else if (!strcasecmp(cmd, "racewin")) race_win(c);
     else if (!strcasecmp(cmd, "outrunwin")) outrun_win();
     else if (!strcasecmp(cmd, "bot")){
         B.on = !strncasecmp(rest, "on", 2); B.phase = BOT_IDLE; B.nkeys = 0;
@@ -1019,7 +1072,7 @@ static void queue(const char *line){
 int career_is_cmd(const char *cmd){
     static const char *const k[] = { "call", "memdump", "waitx", "teleport", "autopilot", "racewin",
                                      "careerlist", "careergo", "shopgo", "peekx", "fnglist", "bot", "waitfe", "tapfe", "waitroam", "showgo", "cargo", "watchw",
-                                     "outrun", "outrunwin", "visual", 0 };
+                                     "outrun", "outrunwin", "visual", "uniques", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -1045,7 +1098,8 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
         queue(line); return 1;
     }
     if (!strcasecmp(cmd, "call") || !strcasecmp(cmd, "autopilot") || !strcasecmp(cmd, "racewin") ||
-        !strcasecmp(cmd, "bot") || !strcasecmp(cmd, "outrunwin") || !strcasecmp(cmd, "visual")){
+        !strcasecmp(cmd, "bot") || !strcasecmp(cmd, "outrunwin") || !strcasecmp(cmd, "visual") ||
+        !strcasecmp(cmd, "uniques")){
         queue(line); return 1; }
     if (!strcasecmp(cmd, "memdump")){
         uint32_t a = eval(a1), n = eval(a2);
