@@ -595,15 +595,6 @@ void sub_005f46a0(CPU *c){
 void sub_005b2610_orig(CPU *c);
 void roam_game_contact(CPU *c, void (*orig)(CPU *));
 void sub_005b2610(CPU *c){ roam_game_contact(c, sub_005b2610_orig); }
-/* A pair of collision bodies near each other (0x5B5050, thiscall, ret 4,
- * from the collision step 0x5FFA50): two friends' cars are not tested
- * against each other (roam_game.c, roam_game_pair_skip) */
-void sub_005b5050_orig(CPU *c);
-int roam_game_pair_skip(uint32_t pair);
-void sub_005b5050(CPU *c){
-    if (roam_game_pair_skip(c->ecx)){ POP32(c->eip); c->esp += 4u; return; }
-    sub_005b5050_orig(c);
-}
 /* The race's end, for the random encounters (0x42EFB0): new goals for the AI
  * range's cars that are out, through their brains; friends' cars have none
  * to give up and are left out (roam_game.c, roam_game_goals) */
