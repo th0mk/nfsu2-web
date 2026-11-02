@@ -393,6 +393,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "A szerver megtelt. Várólistán vagy, a helyed: {pos}/{of} ({wait}).",
   "The server is full. In line for a place: {pos} of {of}.": "A szerver megtelt. Várólistán vagy, a helyed: {pos}/{of}.",
   "the name inside is \"{name}\"": "a benne lévő név: „{name}”",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}: a benne lévő név sérült volt, ezért {to} néven kerül be.",
   "its checksums do not match (edited outside the game?)": "nem egyeznek az ellenőrzőösszegei (játékon kívül szerkesztették?)",
   "not a profile file (no \"20CM\")": "nem profilfájl (nincs benne „20CM”)",
   "{n} bytes, not {size}": "{n} bájt {size} helyett",

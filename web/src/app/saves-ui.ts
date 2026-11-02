@@ -9,7 +9,7 @@
 // it stays on the server.
 
 import { cacheBytes, clearCache, clearSaveDir, filesOf, isScreenshot, listFiles, listProfiles, PROFILES_DIR, readBytes, readText, writeFile, type Profile } from './savefs';
-import { AUTOSAVE_SEEN, coverOf, isProfileFile, modCars, NAME_MAX, profileName, renameProfile, sealed, type RenameFiles } from './profile';
+import { AUTOSAVE_SEEN, coverOf, fixedName, isProfileFile, isProfileName, modCars, NAME_MAX, profileInside, renameProfile, sealed, withName, type RenameFiles } from './profile';
 import { listZip, unzip, zip, ZipError, type ZipEntry } from './zip';
 import { downloadBlob, stamp } from './logs';
 import { fmtBytes } from './checks';
@@ -101,14 +101,19 @@ export interface Restore {
   modded: string[];
   /** profiles a save editor changed (profile.ts profileName's edited): sealed again, restored with a warning */
   edited: string[];
+  /** profiles whose only fault was the name inside (not one the game's field makes, or not their file's): they come in
+   *  as `to` (profile.ts fixedName), that name written inside and their checksums made again, with a note; name: as
+   *  found (their folder's, or their own file's) */
+  repaired: { name: string; to: string }[];
 }
 
 type FileIn = { path: string; data: Uint8Array; mtime?: number };
 const lower = (s: string) => s.toLowerCase();
 
-/** A zip of this page's backup or of the PC game's profiles, or a profile's own file (fileName: its name, for the messages). */
-export async function readBackup(buf: Uint8Array, fileName = 'the file'): Promise<Restore> {
-  if (isProfileFile(buf)) return profilesIn([{ path: fileName, data: buf }], []);
+/** A zip of this page's backup or of the PC game's profiles, or a profile's own file (fileName: its name, for the
+ *  messages); here: the profiles in this browser, whose names a profile added beside them with its name mended does not take. */
+export async function readBackup(buf: Uint8Array, fileName = 'the file', here: string[] = []): Promise<Restore> {
+  if (isProfileFile(buf)) return profilesIn([{ path: fileName, data: buf }], [], here);
   // a backup zipped from a folder ("saves/NFS Underground 2/...") still restores: strip one common top folder
   const listed = await listZip(buf);
   const names = listed.map(n => safeEntryPath(n)).filter((x): x is string => !!x);
@@ -124,26 +129,52 @@ export async function readBackup(buf: Uint8Array, fileName = 'the file'): Promis
     return (other += size) <= MAX_OTHER || ((other -= size), false);
   }, refused);
   const files = all.map(e => ({ path: local(e.name)!, data: e.data, mtime: e.mtime }));
-  return files.some(e => e.path === 'registry.txt' || e.path === 'settings.ini') ? backupIn(files, refused) : profilesIn(files, refused);
+  return files.some(e => e.path === 'registry.txt' || e.path === 'settings.ini') ? backupIn(files, refused) : profilesIn(files, refused, here);
 }
 
-/** A backup of this page's: every entry, but a profile the game would not load and its cover shoots. */
+/**
+ * A backup of this page's: every entry, but a profile the game would not load and its cover shoots.  A profile whose
+ * only fault is the name inside (one the game's field does not make, or not its folder's) comes in under fixedName's
+ * name, with its folder's other files and its cover shoots.
+ */
 function backupIn(files: FileIn[], skipped: string[]): Restore {
-  const out: Restore = { kind: 'backup', entries: [], profiles: [], skipped, refused: [], modded: [], edited: [] };
-  const gone = new Set<string>();
+  const out: Restore = { kind: 'backup', entries: [], profiles: [], skipped, refused: [], modded: [], edited: [], repaired: [] };
+  const gone = new Set<string>(), moved = new Map<string, string>();
+  const mains = files.filter(e => { const s = e.path.split('/'); return s.length === 3 && s[0] === PROFILES_DIR && lower(s[2]) === lower(s[1]) && !coverOf(s[1]); });
+  const folders = new Set(mains.map(e => lower(e.path.split('/')[1])));
+  // the names taken: the profiles that come in as they are, and those of cover shoots whose profile is not here
+  const taken = new Set<string>(), mend: { e: FileIn; folder: string; inside: string; edited: boolean }[] = [];
   for (const e of files) {
-    const s = e.path.split('/');
-    if (s.length !== 3 || s[0] !== PROFILES_DIR || lower(s[2]) !== lower(s[1]) || coverOf(s[1])) continue;
-    let r = profileName(e.data);
-    if ('name' in r && lower(r.name) !== lower(s[1])) r = { bad: t('the name inside is "{name}"', { name: r.name }) };
-    if ('bad' in r) { out.refused.push({ name: s[1], why: r.bad }); gone.add(lower(s[1])); continue; }
-    out.profiles.push(s[1]);
-    if (r.edited) { out.edited.push(s[1]); e.data = sealed(e.data); }
-    if (modCars(e.data)) out.modded.push(s[1]);
+    const c = e.path.startsWith(PROFILES_DIR + '/') ? coverOf(e.path.split('/')[1]) : null;
+    if (c && !folders.has(lower(c.profile))) taken.add(lower(c.profile));
   }
-  out.entries = files.filter(e => {
+  for (const e of mains) {
+    const folder = e.path.split('/')[1], r = profileInside(e.data);
+    if ('bad' in r) { out.refused.push({ name: folder, why: r.bad }); gone.add(lower(folder)); continue; }
+    if (!isProfileName(r.inside) || lower(r.inside) !== lower(folder)) { mend.push({ e, folder, inside: r.inside, edited: r.edited }); continue; }
+    taken.add(lower(folder));
+    out.profiles.push(folder);
+    if (r.edited) { out.edited.push(folder); e.data = sealed(e.data); }
+    if (modCars(e.data)) out.modded.push(folder);
+  }
+  for (const { e, folder, inside, edited } of mend) {
+    const to = fixedName(folder, inside, taken);
+    taken.add(lower(to)); moved.set(lower(folder), to);
+    e.data = withName(e.data, to);
+    out.profiles.push(to); out.repaired.push({ name: folder, to });
+    if (edited) out.edited.push(to);
+    if (modCars(e.data)) out.modded.push(to);
+  }
+  out.entries = files.flatMap(e => {
     const s = e.path.split('/');
-    return !(s.length >= 3 && s[0] === PROFILES_DIR && gone.has(lower(coverOf(s[1])?.profile ?? s[1])));
+    if (s.length < 3 || s[0] !== PROFILES_DIR) return [e];
+    const c = coverOf(s[1]), of = lower(c?.profile ?? s[1]);
+    if (gone.has(of)) return [];
+    const to = moved.get(of);
+    if (to === undefined) return [e];
+    // a mended profile's folder and cover shoots under its new name, each folder's own file named as it
+    const folder = c ? `${to} ${c.cover}` : to;
+    return [{ ...e, path: [PROFILES_DIR, folder, ...s.length === 3 && lower(s[2]) === lower(s[1]) ? [folder] : s.slice(2)].join('/') }];
   });
   return out;
 }
@@ -152,29 +183,41 @@ function backupIn(files: FileIn[], skipped: string[]): Restore {
  * Profiles found by what they hold, wherever they are in the zip: each one the game
  * would load goes to "NFS Underground 2/<the name inside>/", and its cover shoots
  * ("<NAME> DVD 1/<NAME> DVD 1" anywhere) beside it.  Everything else is left out.
+ * One whose only fault is the name inside (one the game's field does not make) comes
+ * in under fixedName's name, which neither those nor the profiles here have.
  */
-function profilesIn(files: FileIn[], skipped: string[]): Restore {
-  const out: Restore = { kind: 'profiles', entries: [], profiles: [], skipped, refused: [], modded: [], edited: [] };
-  const found = new Map<string, FileIn & { name: string; edited: boolean }>();
+function profilesIn(files: FileIn[], skipped: string[], here: string[] = []): Restore {
+  const out: Restore = { kind: 'profiles', entries: [], profiles: [], skipped, refused: [], modded: [], edited: [], repaired: [] };
+  const found = new Map<string, FileIn & { name: string; edited: boolean; mended?: boolean }>();
+  const mend: (FileIn & { own: string; inside: string; edited: boolean })[] = [];
   const covers: (FileIn & { profile: string; cover: string })[] = [];
   for (const e of files) {
     const s = e.path.split('/'), file = s[s.length - 1], folder = s.length > 1 ? s[s.length - 2] : '';
     const c = coverOf(file);                            // named as its folder; "20CM" too, but no profile
     if (c) { covers.push({ ...e, ...c }); continue; }
     if (!isProfileFile(e.data)) { out.skipped.push(e.path); continue; }
-    const r = profileName(e.data);
+    const r = profileInside(e.data);
     if ('bad' in r) out.refused.push({ name: folder || file, why: r.bad });
-    else if (found.has(lower(r.name))) out.skipped.push(e.path);          // a second copy of one
-    else found.set(lower(r.name), { ...e, name: r.name, edited: r.edited });
+    else if (!isProfileName(r.inside)) mend.push({ ...e, own: file, inside: r.inside, edited: r.edited });
+    else if (found.has(lower(r.inside))) out.skipped.push(e.path);          // a second copy of one
+    else found.set(lower(r.inside), { ...e, name: r.inside, edited: r.edited });
+  }
+  // the mended ones' names: none of the others', none here (an added profile of a name here replaces it)
+  const taken = new Set([...found.keys(), ...here.map(lower)]), was = new Map<string, string>();
+  for (const m of mend) {
+    const to = fixedName(m.own, m.inside, taken);
+    taken.add(lower(to)); was.set(lower(m.own), lower(to));
+    found.set(lower(to), { ...m, name: to, data: withName(m.data, to), mended: true });
+    out.repaired.push({ name: m.own, to });
   }
   for (const p of found.values()) {
-    out.entries.push({ path: `${PROFILES_DIR}/${p.name}/${p.name}`, data: p.edited ? sealed(p.data) : p.data, mtime: p.mtime });
+    out.entries.push({ path: `${PROFILES_DIR}/${p.name}/${p.name}`, data: p.edited && !p.mended ? sealed(p.data) : p.data, mtime: p.mtime });
     out.profiles.push(p.name);
     if (p.edited) out.edited.push(p.name);
     if (modCars(p.data)) out.modded.push(p.name);
   }
   for (const c of covers) {
-    const p = found.get(lower(c.profile));
+    const p = found.get(lower(c.profile)) ?? found.get(was.get(lower(c.profile)) ?? '');
     if (!p) { out.skipped.push(c.path); continue; }
     const folder = `${p.name} ${c.cover}`;
     out.entries.push({ path: `${PROFILES_DIR}/${folder}/${folder}`, data: c.data, mtime: c.mtime });
@@ -219,9 +262,14 @@ export async function restoreVault(saveDir: string, r: Restore) {
   if (settings !== null) await writeFile(saveDir, 'settings.ini', settings);
 }
 
-/** What a restore's question says of its profiles' state: changed by a save editor, mod cars, left out, skipped. */
+/** What a restore says of the profiles whose name inside it mends (Restore.repaired), one line each. */
+export function repairNotes(r: Pick<Restore, 'repaired'>): string[] {
+  return r.repaired.map(x => t('{from}: its name inside was broken, so it comes in as {to}.', { from: x.name, to: x.to }));
+}
+
+/** What a restore's question says of its profiles' state: a name mended, changed by a save editor, mod cars, left out, skipped. */
 function restoreNotes(r: Restore): string[] {
-  const items: string[] = [];
+  const items: string[] = [...repairNotes(r)];
   const refused = r.refused.map(x => `${x.name}: ${x.why}`).join('; ');
   if (r.edited.length) items.push(tn(r.edited.length, '{names} was edited with a save editor: values the game wouldn\'t make can crash it or break the career.',
     '{names} were edited with a save editor: values the game wouldn\'t make can crash it or break the career.', { names: listOf(r.edited) }));
@@ -479,7 +527,7 @@ export class SavesPanel {
   private async doImport(file: File) {
     if (this.deps.busy()) { this.msg(() => t('Quit the game first: restoring replaces the saves it is using.')); return; }
     let r: Restore;
-    try { r = await readBackup(new Uint8Array(await file.arrayBuffer()), file.name); }
+    try { r = await readBackup(new Uint8Array(await file.arrayBuffer()), file.name, this.profiles.map(p => p.name)); }
     catch (err) {
       const name = file.name;
       this.msg(() => err instanceof ZipError ? t('{file} cannot be restored: {why}.', { file: name, why: err.message === 'not a zip file' ? t('it is neither a backup (a zip) nor a profile of the game\'s') : err.message })

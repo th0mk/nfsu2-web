@@ -137,11 +137,45 @@ export const profileMoney = (file: Uint8Array): number | null => file.length ===
  * Autosave and Rename take it.  A save editor that makes them again is not seen here.
  */
 export function profileName(file: Uint8Array): { name: string; edited: boolean } | { bad: string } {
+  const r = profileInside(file);
+  if ('bad' in r) return r;
+  const name = r.inside;
+  if (!isProfileName(name)) return { bad: t('the name inside, "{name}", is not one the game makes (1 to {n} letters and digits)', { name, n: NAME_MAX }) };
+  return { name, edited: r.edited };
+}
+
+/**
+ * profileName's checks but the name: the name inside as it is (a byte a character), or why the page does not take
+ * the file at all.  A profile whose only fault is its name comes in with another one (fixedName, withName).
+ */
+export function profileInside(file: Uint8Array): { inside: string; edited: boolean } | { bad: string } {
   const bad = checkShape(file);
   if (bad) return { bad: t(bad.t, bad.v) };
-  const name = nameInside(file);
-  if (!isProfileName(name)) return { bad: t('the name inside, "{name}", is not one the game makes (1 to {n} letters and digits)', { name, n: NAME_MAX }) };
-  return { name, edited: !sealedRight(file) };
+  return { inside: nameInside(file), edited: !sealedRight(file) };
+}
+
+/** A profile file whole, as the game wrote it: the shape of this version's, and its checksums hold (whatever its name). */
+export const profileWhole = (file: Uint8Array) => !checkShape(file) && sealedRight(file);
+
+/**
+ * The name a profile from elsewhere comes in under when the name inside is not one the game's field makes, or not
+ * its file's: its file's own name when the field makes that, else the letters and digits of its file's name ("ë" as
+ * "e"), or the ASCII letters and digits of the name inside (its other bytes are the game's font's, no letters of
+ * ours), or Profile when none of them has any; one that taken (lower case) does not have, with digits at its end if
+ * need be.  The game's new-profile box starts with its language's text for NAME, which in Chinese, Japanese, Korean,
+ * Thai, Polish and Hungarian has bytes the field itself never takes (overrides.c sub_004ff3b0), and a failed cover
+ * shoot's save could name a profile with heap bytes (sub_004e8b70).
+ */
+export function fixedName(own: string, inside: string, taken: Set<string>): string {
+  const keep = (s: string) => s.replace(/[^A-Za-z0-9]/g, '').slice(0, NAME_MAX);
+  const names = [own, keep(own.normalize('NFKD')), keep(inside)].filter(n => isProfileName(n) && !readsAsSlur(n));
+  if (!names.length) names.push('Profile');
+  const free = names.find(n => !taken.has(n.toLowerCase()));
+  if (free) return free;
+  for (let i = 2; ; i++) {
+    const n = names[0].slice(0, NAME_MAX - String(i).length) + i;
+    if (!taken.has(n.toLowerCase())) return n;
+  }
 }
 
 // ------------------------------------------------------- mod cars --
@@ -297,7 +331,8 @@ export interface RenameFiles extends SaveFiles {
  * its line in AUTOSAVE_SEEN (so a Save choice made in the game stays).  Refused,
  * with nothing written, when the new name is not one the game's field takes,
  * when another save has it (the I/O worker finds names in any case), or when the
- * file fails readSaveMode's checks.  A change of case only is a rename too.  The
+ * file fails readSaveMode's checks but the name inside (a name the game's field
+ * does not make is what a rename mends).  A change of case only is a rename too.  The
  * new folders are written in full before the old ones go: a rename that stops
  * halfway leaves the profile as it was, under its old name.
  */
@@ -315,7 +350,7 @@ export async function renameProfile(fs: RenameFiles, profilesDir: string, from: 
   const main = folders.get(from)?.find(path => own(from, path));
   if (!main) return { refused: t('There is no profile {name} in this browser.', { name: from }) };
   const file = await fs.readBytes(main);
-  const bad = checkProfile(file, from);
+  const bad = checkFile(file);
   if (bad) return { refused: t('{name} cannot be renamed here: {why}.', { name: from, why: t(bad.t, bad.v) }) };
   const moves: [string, string][] = [[from, to]];
   for (const f of folders.keys()) { const c = coverOf(f); if (c && same(c.profile, from)) moves.push([f, `${to} ${c.cover}`]); }

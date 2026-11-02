@@ -21,10 +21,10 @@ import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const entry = `export * as P from './web/src/app/profile.ts'; export { readBackup, addProfiles } from './web/src/app/saves-ui.ts';
+const entry = `export * as P from './web/src/app/profile.ts'; export { readBackup, addProfiles, readVault, backupItems } from './web/src/app/saves-ui.ts';
   export { zip } from './web/src/app/zip.ts';`;
 const js = (await esbuild.build({ stdin: { contents: entry, resolveDir: ROOT, loader: 'ts' }, bundle: true, format: 'esm', write: false, platform: 'neutral' })).outputFiles[0].text;
-const { P, readBackup, addProfiles, zip } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
+const { P, readBackup, addProfiles, readVault, backupItems, zip } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));
 
 const DIR = 'NFS Underground 2', B = 36;
 const enc = new TextEncoder();
@@ -172,8 +172,10 @@ test('a backup of the page\'s restores in place, without a profile the game woul
   assert.deepEqual(paths(r), sorted([at('EDIT'), at('MOD'), at('frik'), at('frik DVD 1'), 'autosave-profiles.txt', 'nfsu2000.tga', 'registry.txt', 'settings.ini']));
   const e = r.entries.find(x => x.path === at('EDIT')).data;
   assert.deepEqual([P.profileName(e), e[9000]], [{ name: 'EDIT', edited: false }, edited[9000]], 'sealed again, the edit kept');
+  // another name inside than its folder's: its folder's written inside (it used to be left out)
   const inside = await readBackup(z({ 'registry.txt': 'x', [at('NAMEA')]: profile('NAMEB') }));
-  assert.deepEqual([inside.profiles, inside.refused], [[], [{ name: 'NAMEA', why: 'the name inside is "NAMEB"' }]]);
+  assert.deepEqual([inside.profiles, inside.refused, inside.repaired], [['NAMEA'], [], [{ name: 'NAMEA', to: 'NAMEA' }]]);
+  assert.deepEqual(P.profileName(inside.entries.find(e => e.path === at('NAMEA')).data), { name: 'NAMEA', edited: false });
 });
 
 /** the save folder in memory, as savefs.ts filesOf gives it */
@@ -217,4 +219,79 @@ test('adding: a profile of the same name goes with its covers (in any case), all
   assert.deepEqual([...fs2.m.keys()], [at('MEH')]);
   assert.deepEqual([...fs2.m.get(at('MEH'))], [...meh]);
   assert.deepEqual(fs2.writes, [at('MEH'), `-${DIR}/MEH Magazine 2`]);
+});
+
+// The game's new-profile box in Chinese starts with its text D6 8B 89 (LANGPACKS/chinese, 0x818F0385), the field
+// keeps what is typed after it: a profile named so, its folder as the I/O worker decodes the path (U+FFFD).
+const ZH = Buffer.from([0xd6, 0x8b, 0x89]).toString('latin1') + 'ads';
+const ZH_DIR = new TextDecoder().decode(Buffer.from(ZH, 'latin1'));
+const nameOf = f => { let n = ''; for (let i = B + 53761; f[i]; i++) n += String.fromCharCode(f[i]); return n; };
+/** the bytes two profile files differ in */
+const diff = (a, b) => { const d = []; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d.push(i); return d; };
+const same = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
+const nameOrSums = i => (i >= 20 && i < 28) || (i >= B + 53761 && i < B + 53761 + 32);
+
+test('fixedName: its own name when the game makes it, else its letters and digits, the name inside\'s, or Profile; never one taken', () => {
+  const none = new Set();
+  assert.equal(P.fixedName('THOM', ZH, none), 'THOM');
+  assert.equal(P.fixedName(ZH_DIR, ZH, none), 'ads', 'the folder\'s letters and digits');
+  assert.equal(P.fixedName('名稱', ZH, none), 'ads', 'the name inside\'s ASCII letters and digits (its other bytes are the game\'s font\'s)');
+  assert.equal(P.fixedName(ZH_DIR, ZH, new Set(['ads'])), 'ads2', 'digits at the end of the first, when all are taken');
+  assert.equal(P.fixedName('名稱', '\x88\xa3\xd4', none), 'Profile', 'nothing of a name in either');
+  assert.equal(P.fixedName('Zoë-Racer 2', '', none), 'ZoeRace', 'seven of them at most');
+  assert.equal(P.fixedName('ads', ZH, new Set(['ads', 'oads', 'profile'])), 'ads2', 'digits at the end');
+  assert.equal(P.fixedName('ABCDEFG', '', new Set(['abcdefg', 'profile', 'abcdef2'])), 'ABCDEF3');
+});
+
+test('a backup or a cloud version: a profile whose name inside the game does not make comes in mended, its folder\'s files and covers with it', async () => {
+  const zh = profile('X', { inside: ZH }), garage = new Uint8Array([1, 2, 3, 4]), dvd = cover('zh');
+  const files = {
+    'settings.ini': 'movies = off\n', [at('frik')]: profile('frik'),
+    [at(ZH_DIR)]: zh, [`${DIR}/${ZH_DIR}/GARAGE.DAT`]: garage, [at(`${ZH_DIR} DVD 1`)]: dvd,
+  };
+  for (const [how, r] of [['backup', await readBackup(z({ 'registry.txt': 'x', ...files }))], ['cloud', await readVault(z(files))]]) {
+    assert.equal(r.kind, 'backup', how);
+    assert.deepEqual([sorted(r.profiles), r.refused, r.repaired, r.edited], [['ads', 'frik'], [], [{ name: ZH_DIR, to: 'ads' }], []], how);
+    const covers = how === 'cloud' ? [] : [at('ads DVD 1')];          // covers stay in the browser that took them (vault.ts kept)
+    assert.deepEqual(paths(r).filter(p => p.startsWith(DIR)), sorted([at('ads'), `${DIR}/ads/GARAGE.DAT`, ...covers, at('frik')]), how);
+    const got = r.entries.find(e => e.path === at('ads')).data;
+    assert.deepEqual(P.profileName(got), { name: 'ads', edited: false }, `${how}: the name written inside, the checksums made again`);
+    assert.ok(diff(zh, got).every(nameOrSums), `${how}: nothing else changes`);
+    assert.ok(got.subarray(B + 53761 + 3, B + 53761 + 32).every(b => b === 0), 'NUL-padded');
+    assert.ok(same(r.entries.find(e => e.path === `${DIR}/ads/GARAGE.DAT`).data, garage), `${how}: slots 6-10 go with it`);
+    if (covers.length) assert.ok(same(r.entries.find(e => e.path === at('ads DVD 1')).data, dvd), 'its cover shoot too');
+    assert.ok(backupItems(r, how === 'cloud').includes(`${ZH_DIR}: its name inside was broken, so it comes in as ads.`), `${how}: the question says so`);
+  }
+  assert.equal(nameOf(zh), ZH, 'the file read is not touched');
+
+  // a name taken already: the next one; a save editor's change too: sealed, with its warning; a profile of another
+  // version stays out as before
+  const edited = Buffer.from(profile('X', { inside: ZH })); edited[0xA16A] ^= 0x40;
+  const r = await readVault(z({ [at('ads')]: profile('ads'), [at(ZH_DIR)]: new Uint8Array(edited), [at('OLDV')]: profile('OLDV', { version: 0x10C }) }));
+  assert.deepEqual([sorted(r.profiles), r.repaired, r.edited, r.refused.map(x => x.name)], [['ads', 'ads2'], [{ name: ZH_DIR, to: 'ads2' }], ['ads2'], ['OLDV']]);
+  const e = r.entries.find(x => x.path === at('ads2')).data;
+  assert.deepEqual([P.profileName(e), e[0xA16A]], [{ name: 'ads2', edited: false }, edited[0xA16A]]);
+  // the folder's name when the game makes it; heap bytes of a failed cover save (2026-10-27) as well
+  const heap = Buffer.from('a09c1d25f846232520d8252528d82525c4501e2530d82525cc501e25a89c1d25', 'hex').toString('latin1');
+  const two = await readVault(z({ [at('KEIICHI')]: profile('X', { inside: ZH }), [at('THOM')]: profile('X', { inside: heap }) }));
+  assert.deepEqual(sorted(two.repaired.map(x => `${x.name}>${x.to}`)), ['KEIICHI>KEIICHI', 'THOM>THOM']);
+  assert.deepEqual(paths(two), [at('KEIICHI'), at('THOM')]);
+});
+
+test('the PC game\'s profiles: one whose name inside the game does not make comes in under its file\'s name, never one here', async () => {
+  const zh = profile('X', { inside: ZH });
+  const one = await readBackup(zh, 'KEIICHI');
+  assert.deepEqual([one.kind, one.profiles, one.repaired, one.refused, paths(one)], ['profiles', ['KEIICHI'], [{ name: 'KEIICHI', to: 'KEIICHI' }], [], [at('KEIICHI')]]);
+  assert.deepEqual(P.profileName(one.entries[0].data), { name: 'KEIICHI', edited: false });
+  const here = await readBackup(zh, 'KEIICHI', ['keiichi', 'THOM']);
+  assert.deepEqual([here.profiles, here.repaired], [['ads'], [{ name: 'KEIICHI', to: 'ads' }]], 'a profile here keeps its name: no replacing it');
+  const named = await readBackup(zh, `${ZH_DIR} (1)`);
+  assert.deepEqual(named.profiles, ['ads1'], 'the letters and digits of its file\'s name');
+  const pc = await readBackup(z({ [`${DIR}/${ZH_DIR}/${ZH_DIR}`]: zh, [`${DIR}/${ZH_DIR} DVD 2/${ZH_DIR} DVD 2`]: cover('c'), 'MEH/MEH': profile('MEH') }));
+  assert.deepEqual([sorted(pc.profiles), pc.repaired, pc.skipped], [['MEH', 'ads'], [{ name: ZH_DIR, to: 'ads' }], []]);
+  assert.deepEqual(paths(pc), sorted([at('MEH'), at('ads'), at('ads DVD 2')]), 'its cover shoot with it');
+  // added beside the profiles here: nothing of theirs goes
+  const fs = folder({ [at('THOM')]: profile('THOM'), [at('THOM DVD 1')]: cover('t') });
+  await addProfiles(fs, await readBackup(zh, 'THOM', ['THOM']));
+  assert.deepEqual(sorted(fs.m.keys()), sorted([at('THOM'), at('THOM DVD 1'), at('ads')]));
 });

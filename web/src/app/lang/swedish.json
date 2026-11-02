@@ -151,6 +151,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "Servern är full. I kö för en plats: {n} av {of} ({wait}).",
   "The server is full. In line for a place: {pos} of {of}.": "Servern är full. I kö för en plats: {n} av {of}.",
   "the name inside is \"{name}\"": "namnet i filen är \"{name}\"",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}: namnet i filen var trasigt, så den kommer in som {to}.",
   "its checksums do not match (edited outside the game?)": "dess kontrollsummor stämmer inte (redigerad utanför spelet?)",
   "not a profile file (no \"20CM\")": "inte en profilfil (ingen \"20CM\")",
   "{n} bytes, not {size}": "{n} byte, inte {size}",

@@ -151,6 +151,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "Serveren er fuld. I kø til en plads: nr. {n} af {of} ({wait}).",
   "The server is full. In line for a place: {pos} of {of}.": "Serveren er fuld. I kø til en plads: nr. {n} af {of}.",
   "the name inside is \"{name}\"": "navnet i filen er \"{name}\"",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}: navnet i filen var ødelagt, så den kommer ind som {to}.",
   "its checksums do not match (edited outside the game?)": "dens kontrolsummer passer ikke (redigeret uden for spillet?)",
   "not a profile file (no \"20CM\")": "ikke en profilfil (ingen \"20CM\")",
   "{n} bytes, not {size}": "{n} byte, ikke {size}",

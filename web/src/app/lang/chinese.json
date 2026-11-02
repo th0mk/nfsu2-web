@@ -145,6 +145,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "伺服器已滿。排隊等候空位：第 {n} 位，共 {of} 位（{wait}）。",
   "The server is full. In line for a place: {pos} of {of}.": "伺服器已滿。排隊等候空位：第 {n} 位，共 {of} 位。",
   "the name inside is \"{name}\"": "內含的名稱為「{name}」",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}：內含的名稱已損壞，因此以 {to} 匯入。",
   "its checksums do not match (edited outside the game?)": "檢查碼不符（是否在遊戲外被編輯過？）",
   "not a profile file (no \"20CM\")": "不是玩家檔案（沒有「20CM」）",
   "{n} bytes, not {size}": "{n} 位元組，而非 {size}",

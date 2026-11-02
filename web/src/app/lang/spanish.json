@@ -153,6 +153,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "El servidor está lleno. En la lista de espera: puesto {n} de {of} ({wait}).",
   "The server is full. In line for a place: {pos} of {of}.": "El servidor está lleno. En la lista de espera: puesto {n} de {of}.",
   "the name inside is \"{name}\"": "el nombre que contiene es \"{name}\"",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}: el nombre que contiene estaba dañado, así que entra como {to}.",
   "its checksums do not match (edited outside the game?)": "sus sumas de comprobación no coinciden (¿se editó fuera del juego?)",
   "not a profile file (no \"20CM\")": "no es un archivo de perfil (no tiene \"20CM\")",
   "{n} bytes, not {size}": "tiene {n} bytes en vez de {size}",

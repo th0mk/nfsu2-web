@@ -145,6 +145,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "서버가 가득 찼어요. 자리 대기: {of}명 중 {n}번째({wait}).",
   "The server is full. In line for a place: {pos} of {of}.": "서버가 가득 찼어요. 자리 대기: {of}명 중 {n}번째.",
   "the name inside is \"{name}\"": "파일 안의 이름이 '{name}'임",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}: 파일 안의 이름이 손상되어 {to}(으)로 들어와요.",
   "its checksums do not match (edited outside the game?)": "체크섬이 일치하지 않음(게임 밖에서 편집했나요?)",
   "not a profile file (no \"20CM\")": "프로필 파일이 아님('20CM' 없음)",
   "{n} bytes, not {size}": "{size}바이트가 아닌 {n}바이트",

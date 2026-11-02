@@ -155,6 +155,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "Сервер заполнен. Ваше место в очереди: {n} из {of} ({wait}).",
   "The server is full. In line for a place: {pos} of {of}.": "Сервер заполнен. Ваше место в очереди: {n} из {of}.",
   "the name inside is \"{name}\"": "внутри указано имя «{name}»",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}: имя внутри было повреждено, поэтому профиль придёт как {to}.",
   "its checksums do not match (edited outside the game?)": "его контрольные суммы не совпадают (изменён вне игры?)",
   "not a profile file (no \"20CM\")": "это не файл профиля (нет «20CM»)",
   "{n} bytes, not {size}": "{n} байт вместо {size}",

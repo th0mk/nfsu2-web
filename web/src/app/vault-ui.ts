@@ -18,7 +18,7 @@
 // issue 33: a player who took the cloud's lost 7 hours).
 
 import { listFiles, listProfiles, readBytes, readText, removeSaveDir, writeFile } from './savefs';
-import { backupItems, readVault, restoreVault } from './saves-ui';
+import { backupItems, readVault, repairNotes, restoreVault, type Restore } from './saves-ui';
 import { downloadBlob } from './logs';
 import { zip } from './zip';
 import { kept, keeps, keptBy, profilesIn, readPhrase, sideOf, vaultAvailable, VaultError, VaultSync, type Link, type Remote, type SaveFile, type Side } from './vault';
@@ -231,8 +231,10 @@ export class VaultPanel {
       log: line => this.d.log(line) });
     s.onChange = () => this.show();
     s.onTaken = r => {
-      this.msg(() => t('Saves from your other browser came in ({when}).', { when: short(r.saved) }));
-      this.d.log('[app] keyphrase: the saves another browser sent came in');
+      const mended = this.mended;
+      this.mended = { repaired: [] };
+      this.msg(() => [t('Saves from your other browser came in ({when}).', { when: short(r.saved) }), ...repairNotes(mended)].join(' '));
+      this.d.log(`[app] keyphrase: the saves another browser sent came in${mended.repaired.length ? `, ${mended.repaired.length} profile(s) with the name inside mended` : ''}`);
     };
     this.sync = s;
   }
@@ -334,10 +336,15 @@ export class VaultPanel {
     return kept(out, o.was);
   }
 
+  /** the profiles whose name inside the last version taken by itself mended (said with onTaken's line) */
+  private mended: Pick<Restore, 'repaired'> = { repaired: [] };
+
   /** a version of the keyphrase's (its zip) in place of the saves here, when no game uses them */
   private async restore(zip: Uint8Array) {
     if (this.d.playing() || this.held || !this.d.owner()) throw new VaultError(N('a game is running here: the other browser\'s saves come in after it'), 'VAULT-PLAYING');
-    await restoreVault(this.d.saveDir, await readVault(zip));
+    const r = await readVault(zip);
+    await restoreVault(this.d.saveDir, r);
+    this.mended = r;
     this.d.onRestored();
   }
 

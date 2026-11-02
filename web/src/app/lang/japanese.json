@@ -145,6 +145,7 @@
   "The server is full. In line for a place: {pos} of {of} ({wait}).": "サーバーが満員です。順番待ち: {of}人中{n}番目（{wait}）。",
   "The server is full. In line for a place: {pos} of {of}.": "サーバーが満員です。順番待ち: {of}人中{n}番目。",
   "the name inside is \"{name}\"": "ファイル内の名前が「{name}」になっています",
+  "{from}: its name inside was broken, so it comes in as {to}.": "{from}：ファイル内の名前が壊れていたため、{to}として読み込みます。",
   "its checksums do not match (edited outside the game?)": "チェックサムが一致しません（ゲーム外で編集された？）",
   "not a profile file (no \"20CM\")": "プロフィールファイルではありません（「20CM」がありません）",
   "{n} bytes, not {size}": "{size}バイトではなく{n}バイトです",

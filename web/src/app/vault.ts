@@ -30,7 +30,7 @@
 
 import { WORDS } from './vault-words';
 import { unzip, zip } from './zip';
-import { coverOf, profileMoney, profileName } from './profile';
+import { coverOf, profileMoney, profileWhole } from './profile';
 import { isScreenshot, PROFILES_DIR } from './savefs';
 import { withoutDevice } from './settings';
 import { fill, N, type Vars } from './i18n';
@@ -183,12 +183,12 @@ function profileFiles(files: SaveFile[]): SaveFile[] {
 /** The profiles among the files, by name. */
 export const profilesIn = (files: SaveFile[]): string[] => profileFiles(files).map(f => f.path.split('/')[1]);
 
-/** every profile whole, as the game wrote it (its checksums hold): none was read halfway through a save */
+/** every profile whole, as the game wrote it (its checksums hold): none was read halfway through a save (a name inside
+ *  the game's field does not make is no half save: such a profile once held every send during a game back) */
 const wholeProfiles = (files: SaveFile[]) => files.every(f => {
   const p = f.path.split('/');
   if (p.length !== 3 || p[0] !== PROFILES_DIR || p[1].toLowerCase() !== p[2].toLowerCase() || coverOf(p[1])) return true;
-  const r = profileName(f.data);
-  return 'name' in r && !r.edited;
+  return profileWhole(f.data);
 });
 
 // ------------------------------------------------------------- the server --

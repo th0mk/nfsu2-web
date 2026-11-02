@@ -383,6 +383,23 @@ test('no profile here is never sent by itself; a torn profile waits; the copy of
   assert.equal(a.sync.link.profiles, 0);
 });
 
+test('a profile whose name inside the game\'s field does not make is no torn one: sent during a game', async () => {
+  // the Chinese new-profile box's own text (D6 8B 89) kept in front of a name: a whole save all the same
+  const srv = server(), a = browser(srv), zh = Buffer.from([0xd6, 0x8b, 0x89]).toString('latin1') + 'ads';
+  const dir = new TextDecoder().decode(Buffer.from(zh, 'latin1'));
+  seed(a, 1000);
+  a.files.set(at(dir), profile(zh));
+  await a.sync.create();
+  const rev = a.sync.link.rev;
+  a.files.set(at(dir), profile(zh, { money: 2000 }));
+  await a.sync.push({ playing: true });
+  const sent = a.sync.link.rev;
+  assert.notEqual(sent, rev, 'sent');
+  a.files.set(at(dir), profile(zh, { money: 3000, stale: true }));
+  await a.sync.push({ playing: true });
+  assert.equal(a.sync.link.rev, sent, 'a torn one still waits');
+});
+
 test('deleted elsewhere, and the server\'s refusals', async () => {
   const srv = server(), a = browser(srv), b = browser(srv);
   seed(a, 1000);

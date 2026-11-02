@@ -222,6 +222,21 @@ test('a profile the game named with stale heap bytes gets a name again', async (
   assert.deepEqual(mode(g, 'NAME2'), { mode: 'autosave' });
 });
 
+test('a profile named with the Chinese new-profile box\'s own text, or another name inside than its folder\'s, gets a name again', async () => {
+  // the box starts with D6 8B 89 (LANGPACKS/chinese's NAME), the field keeps what is typed after it; the I/O worker
+  // makes the folder of the path's UTF-8 (U+058B, U+FFFD)
+  const zh = Buffer.from([0xd6, 0x8b, 0x89]).toString('latin1') + 'ads', dir = new TextDecoder().decode(Buffer.from(zh, 'latin1'));
+  const fs = folder({ [at(dir)]: profile('X', 1, 1, { inside: zh }), [`${DIR}/${dir}/GARAGE.DAT`]: 'g', [at('KEI')]: profile('X', 0, 1, { inside: 'OTHER' }) });
+  assert.deepEqual(mode(fs.m.get(at(dir)), dir), { mode: 'autosave' }, 'the page\'s own checks take it as it is');
+  assert.deepEqual(await P.renameProfile(fs, DIR, dir, 'ads'), { files: 2 });
+  assert.equal(name(fs.m.get(at('ads'))), 'ads');
+  assert.equal(new TextDecoder().decode(fs.m.get(`${DIR}/ads/GARAGE.DAT`)), 'g', 'slots 6-10 with it');
+  assert.match(mode(fs.m.get(at('KEI')), 'KEI').bad ?? '', /name inside is "OTHER"/, 'Autosave leaves it alone');
+  assert.deepEqual(await P.renameProfile(fs, DIR, 'KEI', 'KEI2'), { files: 1 }, 'a rename mends it');
+  assert.deepEqual(mode(fs.m.get(at('KEI2')), 'KEI2'), { mode: 'prompt' });
+  assert.deepEqual([...fs.m.keys()].sort(), [at('KEI2'), `${DIR}/ads/GARAGE.DAT`, at('ads')].sort());
+});
+
 test('a refused rename writes nothing', async () => {
   const corrupt = Buffer.from(profile('BROKEN')); corrupt[500] ^= 0xff;
   const files = { [at('THOM')]: profile('THOM'), [at('AUTO')]: profile('AUTO'), [at('BROKEN')]: corrupt, [`${DIR}/NEW DVD 2/NEW DVD 2`]: cover() };
