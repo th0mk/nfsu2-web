@@ -16,7 +16,9 @@ use serde_json::{Value, json};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::links::{Cand, Found, Grid, Heap, Near, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable};
+use crate::links::{
+    Cand, Found, Grid, Heap, Level, Near, Place, WALK_AHEAD, WALK_SOON, WALK_VIEW, before, distance, order_key, sort_stable, square, weigh,
+};
 use crate::results::{self, Results};
 use crate::watch::{self, Seen, Watch};
 use crate::wire::{self, F_DATA, KIND_UDP, Msg};
@@ -525,6 +527,8 @@ struct Player {
     /// `in_roam()` read it
     status: u8,
     heading: u8,
+    /// where its car's nose points up or down (wire `slope`, %): where its places ahead are (`prepare`)
+    slope: i8,
     vip: u32,
     port: u16,
     /// the hub's port it last wrote to (the source port of its list)
@@ -689,6 +693,9 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         look_ms: f(o.look_ms, d.look_ms),
         away_m: f(o.away_m, d.away_m),
         view_m: f(o.view_m, d.view_m),
+        level_slack_m: f(o.level_slack_m, d.level_slack_m),
+        level_grade: f(o.level_grade, d.level_grade),
+        level_k: f(o.level_k, d.level_k),
         // (one answer is MAPD_PARTS datagrams at most)
         map_max: n(o.map_max, d.map_max).min(MAPD_MAX),
         map_gap_ms: f(o.map_gap_ms, d.map_gap_ms),
@@ -745,9 +752,9 @@ struct Scratch {
     // by the place in the room's list: where each one is, and where the links weigh it (`prepare`): soon_ms on,
     // look_ms on, and its view point
     pos: Vec<[f64; 3]>,
-    soon: Vec<[f64; 3]>,
-    ahead: Vec<[f64; 3]>,
-    view: Vec<[f64; 3]>,
+    soon: Vec<Place>,
+    ahead: Vec<Place>,
+    view: Vec<Place>,
     deg: Vec<usize>,
     /// each place's crew links at most (`crew_cap`)
     ccap: Vec<u32>,
@@ -829,13 +836,15 @@ struct Weigh {
     hold_ms: f64,
     keep: f64,
     threads: usize,
+    /// what a gap in height between two roads weighs (RoamOptions level_*)
+    level: Level,
 }
 
 /// how far apart places i and j of a room count: the nearest of the two soon_ms on, the two look_ms on, and either
-/// one's view point to the other soon_ms on
+/// one's view point to the other soon_ms on (each weighed with its gap in height, `weigh`)
 #[inline]
-fn apart(soon: &[[f64; 3]], ahead: &[[f64; 3]], view: &[[f64; 3]], i: usize, j: usize) -> f64 {
-    distance(&soon[i], &soon[j]).min(distance(&ahead[i], &ahead[j])).min(distance(&view[i], &soon[j])).min(distance(&view[j], &soon[i]))
+fn apart(soon: &[Place], ahead: &[Place], view: &[Place], i: usize, j: usize, l: &Level) -> f64 {
+    weigh(&soon[i], &soon[j], l).min(weigh(&ahead[i], &ahead[j], l)).min(weigh(&view[i], &soon[j], l)).min(weigh(&view[j], &soon[i], l))
 }
 
 /// The hub's logic, without its timer (`RoamHub` gives it one).
@@ -1211,6 +1220,7 @@ impl Hub {
                     p: None,
                     v: [0.0; 3],
                     heading: 0,
+                    slope: 0,
                     pos_at: 0.0,
                     stay: [0.0; 2],
                     stay_at: f64::INFINITY,
@@ -1285,7 +1295,7 @@ impl Hub {
                 p.crews = distinct(crews);
                 crewed = Some((was, p.crews[0] != 0));
             }
-            Msg::Snap { sender, status, p: pos, v, heading, t_us, clock } if sender == p.id => {
+            Msg::Snap { sender, status, p: pos, v, heading, slope, t_us, clock } if sender == p.id => {
                 let (dx, dy) = (pos[0] - p.stay[0], pos[1] - p.stay[1]);
                 if p.p.is_none() || dx * dx + dy * dy > STAY_M * STAY_M || !matches!(status, 2 | 5) {
                     (p.stay, p.stay_at) = ([pos[0], pos[1]], now);
@@ -1293,6 +1303,7 @@ impl Hub {
                 p.p = Some(pos);
                 p.v = v;
                 p.heading = heading;
+                p.slope = slope;
                 p.pos_at = p.seen;
                 p.status = status;
                 if matches!(status, 2 | 5) {
@@ -2115,7 +2126,8 @@ impl Hub {
         s.fresh.resize_with(self.slots.len(), Vec::new);
         s.local.clear();
         s.local.resize(self.slots.len(), NONE);
-        let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep, threads: self.o.link_threads };
+        let level = Level::new(self.o.level_slack_m, self.o.level_grade, self.o.level_k);
+        let w = Weigh { now, hold_ms: self.o.hold_ms, keep: self.o.keep, threads: self.o.link_threads, level };
         let (mut duel_links, mut lobby_links, mut crew_links, mut crew_skips) = (0, 0, 0, 0);
         for r in 0..rooms {
             let list = std::mem::take(&mut s.rooms[r]);
@@ -2373,6 +2385,13 @@ const AGE_MAX_S: f64 = 1.0;
 /// camera looks that way: what is in front shows from farther away).  Only a car in free roam moves on and has a view
 /// point (a paused game's last SNAP has the speed it had), and a player not in free roam (a shop, a race, the menus,
 /// loading) is away_m up, out of the way of the cars shown.
+///
+/// The heights say which road a car is on (`Level`), so they go with the road: the place soon is at the height its
+/// SNAP had (a car's speed up or down is a jump's as often as a hill's: moved on, one leaving a ramp at 8 m/s was 8 m
+/// up a second on, over a road above), and the place ahead and the view point, a hundred metres on and more, are up
+/// or down the slope its car's nose is on (wire `slope`) for the way they are along it: else a car 150 m on up a hill
+/// was 20 m over the view point, and weighed as on a road above.  The "up" of a player not in free roam is a place's
+/// fourth number, apart from its height.
 fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, now: f64, s: &mut Scratch) {
     s.pos.clear();
     s.soon.clear();
@@ -2382,18 +2401,23 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
     s.ccap.clear();
     for (i, &slot) in list.iter().enumerate() {
         let p = player(slots, slot);
-        let (at, v, status, heading, age) =
-            p.map_or(([0.0; 3], [0.0; 3], 0, 0, 0.0), |p| (p.p.unwrap_or_default(), p.v, p.status, p.heading, (now - p.pos_at) / 1000.0));
+        let (at, v, status, heading, slope, age) = p.map_or(([0.0; 3], [0.0; 3], 0, 0, 0, 0.0), |p| {
+            (p.p.unwrap_or_default(), p.v, p.status, p.heading, p.slope, (now - p.pos_at) / 1000.0)
+        });
         let (v, view) = if status == 2 { (v, o.view_m) } else { ([0.0; 3], 0.0) };
         let up = if matches!(status, 2 | 5) { 0.0 } else { o.away_m };
         let age = age.clamp(0.0, AGE_MAX_S);
-        let on = |t: f64| [at[0] + v[0] * t, at[1] + v[1] * t, at[2] + v[2] * t + up];
-        let soon = on(age + o.soon_ms / 1000.0);
         let a = f64::from(heading) * std::f64::consts::PI / 128.0;
+        let (fx, fy, s1) = (a.cos(), a.sin(), f64::from(slope) / 100.0);
+        // t seconds on, and how far that is along where its nose points (backwards: down a slope it points up)
+        let along = v[0] * fx + v[1] * fy;
+        let on = |t: f64| [at[0] + v[0] * t, at[1] + v[1] * t, at[2] + s1 * along * t, up];
+        let ts = age + o.soon_ms / 1000.0;
+        let soon = [at[0] + v[0] * ts, at[1] + v[1] * ts, at[2], up];
         s.pos.push(at);
         s.soon.push(soon);
         s.ahead.push(on(age + o.look_ms / 1000.0));
-        s.view.push([soon[0] + a.cos() * view, soon[1] + a.sin() * view, soon[2]]);
+        s.view.push([soon[0] + fx * view, soon[1] + fy * view, at[2] + s1 * (along * ts + view), up]);
         // a player's links at most: its degree, under the cap
         s.deg.push(p.map_or(0, |p| p.degree.min(cap)));
         s.ccap.push(p.map_or(0, |p| crew_cap(p.degree)));
@@ -2602,10 +2626,10 @@ fn kept_apart(bstart: &[u32], bnext: &[u32], a: usize, b: usize) -> bool {
 /// name and its arrow never showed.  The rest of the links come in the order of before: a crew-mate near enough is
 /// linked by distance anyway, only sooner.
 ///
-/// "Nearest" here is the plain distance of the two places soon_ms on (`s.soon`, where the links weigh first: a car
-/// moved on a second, a player not in free roam away_m up, so a crew-mate driving comes before one in a shop),
-/// compared as its square: these pairs need no order but their own (the rest is the Node hub's order, bit for bit),
-/// and four Math.hypot a pair (`apart`) would cost more than the rest of this.  The order decides only which of a
+/// "Nearest" here is the distance of the two places soon_ms on as the links weigh it (`s.soon`, where the links weigh
+/// first: a car moved on a second, a player not in free roam away_m up, so a crew-mate driving comes before one in a
+/// shop, and one on its road before one on a road above it), compared as its square: these pairs need no order but
+/// their own, and four Math.hypot a pair (`apart`) would cost more than the rest of this.  The order decides only which of a
 /// player's crew-mates are linked first when it has more of them than CREW_LINKS, or than room; a pair linked at the
 /// last tick weighs as the links do (younger than hold_ms first, older at keep its distance), so that a crew of more
 /// than CREW_LINKS driving about does not trade its links every tick.
@@ -2654,9 +2678,7 @@ fn crew_pairs(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch
             }
             for &(_, j) in &cmembers[x + 1..e] {
                 let j = j as usize;
-                let (a, b) = (&soon[i], &soon[j]);
-                let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-                let sq = dx * dx + dy * dy + dz * dz;
+                let sq = square(&soon[i], &soon[j], &w.level);
                 let d = if cmark[j] != stamp {
                     sq
                 } else if w.now - csince[j] < w.hold_ms {
@@ -2773,11 +2795,11 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         for j in i + 1..m {
             let linked = mark[j] == stamp;
             let d = if !linked {
-                apart(soon, ahead, view, i, j)
+                apart(soon, ahead, view, i, j, &w.level)
             } else if w.now - since[j] < w.hold_ms {
                 -1.0
             } else {
-                apart(soon, ahead, view, i, j) * w.keep
+                apart(soon, ahead, view, i, j, &w.level) * w.keep
             };
             order.push((order_key(d), pairs.len() as u32));
             pairs.push(Pair { since: if linked { since[j] } else { w.now }, a: i as u32, b: j as u32 });
@@ -2835,9 +2857,9 @@ type PartDone = ([Vec<Near>; 3], Vec<Found>);
 struct Walks<'a> {
     grid: &'a Grid,
     grid_a: &'a Grid,
-    soon: &'a [[f64; 3]],
-    ahead: &'a [[f64; 3]],
-    view: &'a [[f64; 3]],
+    soon: &'a [Place],
+    ahead: &'a [Place],
+    view: &'a [Place],
     /// how far each walk is read ahead (3 a place, at least 1: the links take each walk's nearest one first), and the
     /// most of them
     want: &'a [u16],
@@ -3019,8 +3041,8 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         ..
     } = s;
     let cand = |d: f64, i: usize, j: usize, nearest: bool| Cand::new(d, i as u32, j as u32, nearest);
-    grid.build(soon);
-    grid_a.build(ahead);
+    grid.build(soon, w.level);
+    grid_a.build(ahead, w.level);
     heap.clear();
     olds.clear();
     olinks.clear();
@@ -3055,7 +3077,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                 // each link once: by its lower end, or by the only end that lists it (j's links are in already)
                 if i < j || !has_place(&olinks[ostart[j] as usize..ostart[j + 1] as usize], i as u32) {
                     // a link's place in the order: younger than `hold_ms` first, older at `keep` its distance
-                    let d = if w.now - l.since < w.hold_ms { -1.0 } else { apart(soon, ahead, view, i, j) * w.keep };
+                    let d = if w.now - l.since < w.hold_ms { -1.0 } else { apart(soon, ahead, view, i, j, &w.level) * w.keep };
                     olds.push(cand(d, i, j, false));
                 }
             }

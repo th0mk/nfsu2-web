@@ -151,6 +151,24 @@ pub fn snap(sender: u32, pos: [f64; 3]) -> Vec<u8> {
     snap_n(sender, pos, 2, 1)
 }
 
+/// a SNAP of one state with a velocity, a heading (radians, 0 = +x, a turn about z) and its nose `slope` up (a
+/// tangent: 0.1 for 10 %)
+pub fn snap_pose(sender: u32, pos: [f64; 3], v: [f64; 3], heading: f64, slope: f64, status: u8) -> Vec<u8> {
+    let mut d = snap_moving(sender, pos, v, heading, status);
+    // the turn about z, then the nose up about the car's left (y): q = yaw * pitch
+    let (sz, cz) = ((heading / 2.0).sin(), (heading / 2.0).cos());
+    let (sy, cy) = ((-slope.atan() / 2.0).sin(), (-slope.atan() / 2.0).cos());
+    let q = [-sz * sy, cz * sy, sz * cy, cz * cy];
+    let p = &mut d[16..];
+    for (k, x) in q.iter().enumerate() {
+        p[34 + 2 * k..36 + 2 * k].copy_from_slice(&((x * 32767.0).round() as i16).to_le_bytes());
+    }
+    let len = d.len();
+    let crc = crc32fast::hash(&d[..len - 4]);
+    d[len - 4..].copy_from_slice(&crc.to_le_bytes());
+    d
+}
+
 /// a SNAP of one state with a velocity and a heading (radians, 0 = +x, a turn about z)
 pub fn snap_moving(sender: u32, pos: [f64; 3], v: [f64; 3], heading: f64, status: u8) -> Vec<u8> {
     let mut d = snap_n(sender, pos, status, 1);

@@ -41,6 +41,91 @@ pub(crate) fn distance(a: &[f64; 3], b: &[f64; 3]) -> f64 {
     hypot3(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 }
 
+/// A place as the links weigh it: x, y, the height, and how far up a player not in free roam counts (`prepare`:
+/// RoamOptions::away_m, 0 in free roam).  The two stay apart: the height says whether two cars are on one road or on
+/// two roads one above the other (`Level`), the "up" only puts a player in a shop farther off.
+pub(crate) type Place = [f64; 4];
+
+/// How the links weigh a gap in height that no road between two places explains.  A car on a highway and one on the
+/// street under it are a few metres apart, and neither shows to the other; a link between them took a car's room from
+/// one on the same road farther on.  A gap of up to `slack` metres, plus `grade` of the way across (a road up a hill,
+/// a ramp, a car in the air over a bump), counts as it is, as it always did; each metre past that counts `k` metres
+/// more.  So two cars on one road, however steep, weigh as before, and a car on a road above or below weighs as one
+/// far off: linked when there is room, after the cars on its own road when there is not.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Level {
+    pub(crate) slack: f64,
+    pub(crate) grade: f64,
+    pub(crate) k: f64,
+    /// grade's square
+    grade2: f64,
+}
+
+impl Default for Level {
+    /// no gap weighs more than it is
+    fn default() -> Level {
+        Level::new(f64::INFINITY, 0.0, 0.0)
+    }
+}
+
+impl Level {
+    pub(crate) fn new(slack: f64, grade: f64, k: f64) -> Level {
+        Level { slack, grade, k, grade2: grade * grade }
+    }
+
+    /// a gap in height `dz` as it counts, between two places `h2` apart across (the square of the distance in x and
+    /// y); the same for (a, b) and (b, a), bit for bit.  Whether it is past what a road explains is found from the
+    /// squares, both tests at once (one branch, nearly always the same way: a walk weighs every player of each cell it
+    /// reads), and only a gap past it takes a root.
+    #[inline]
+    pub(crate) fn gap(&self, h2: f64, dz: f64) -> f64 {
+        let v = dz.abs();
+        let over = v - self.slack;
+        if (over <= 0.0) | (over * over <= self.grade2 * h2) {
+            return v;
+        }
+        v + self.k * (over - self.grade * h2.sqrt()).max(0.0)
+    }
+
+    /// the third side of a pair's distance: the gap in height as it counts and the difference in "up"
+    #[inline]
+    fn up(&self, a: &Place, b: &Place, h2: f64) -> f64 {
+        self.gap(h2, a[2] - b[2]) + (a[3] - b[3]).abs()
+    }
+}
+
+/// How far apart two places count for the links: `hypot3` of their differences in x and y and of `Level::up`.  Never
+/// less than the distance in x and y (the grid's walk needs that); for two places with no gap past the slack and one
+/// "up", the distance of before, bit for bit.
+#[inline]
+pub(crate) fn weigh(a: &Place, b: &Place, l: &Level) -> f64 {
+    let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    if one_level(a, b, dz, l) {
+        return hypot3(dx, dy, dz);
+    }
+    hypot3(dx, dy, l.up(a, b, dx * dx + dy * dy))
+}
+
+/// the square of `weigh`, rounded (within 1e-15 of it, as the square of a distance always was)
+#[inline]
+pub(crate) fn square(a: &Place, b: &Place, l: &Level) -> f64 {
+    let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    let h2 = dx * dx + dy * dy;
+    if one_level(a, b, dz, l) {
+        return h2 + dz * dz;
+    }
+    let u = l.up(a, b, h2);
+    h2 + u * u
+}
+
+/// Two places within the slack of each other in height and alike "up": nearly every pair a walk weighs (a crowd on
+/// one spot is on one road), which takes the sums of before and nothing more (`Level::up` gives the same: `dz` as it
+/// is).  One test for both (one branch, nearly always the same way).
+#[inline]
+fn one_level(a: &Place, b: &Place, dz: f64, l: &Level) -> bool {
+    (dz.abs() <= l.slack) & (a[3] == b[3])
+}
+
 /// A number's place in the order of numbers as a u64 (the sign flipped, a negative one's bits all flipped; -0 as 0,
 /// which it equals).
 #[inline]
@@ -111,17 +196,20 @@ pub(crate) struct Grid {
     members: Vec<u32>,
     /// each member's position, in the order of `members`: a walk reads a cell's players one after another in memory
     /// (by the list they are anywhere, and the reads of their positions were most of a ring's time)
-    mpos: Vec<[f64; 3]>,
+    mpos: Vec<Place>,
     /// where each cell's players end (`remove` takes players out: a cell's players in `start[c]..end[c]`); and by
     /// index in the list, each one's place in `members` and its cell
     end: Vec<u32>,
     at: Vec<u32>,
     cell_of: Vec<u32>,
+    /// how its walks weigh a gap in height (`weigh`)
+    level: Level,
 }
 
 impl Grid {
-    /// the grid of every position in `pos`
-    pub(crate) fn build(&mut self, pos: &[[f64; 3]]) {
+    /// the grid of every position in `pos`, its walks weighing gaps in height as `level` says
+    pub(crate) fn build(&mut self, pos: &[Place], level: Level) {
+        self.level = level;
         self.start.clear();
         self.members.clear();
         if pos.is_empty() {
@@ -195,13 +283,13 @@ impl Grid {
         self.end[c] -= 1;
     }
 
-    fn index(&self, p: &[f64; 3]) -> usize {
+    fn index(&self, p: &Place) -> usize {
         let (x, y) = ((p[0] / self.cell).floor() as i64, (p[1] / self.cell).floor() as i64);
         ((x - self.x1) * self.rows + (y - self.y1)) as usize
     }
 
     /// the players of cell (x, y) and their positions: none outside the span
-    fn cell(&self, x: i64, y: i64) -> (&[u32], &[[f64; 3]]) {
+    fn cell(&self, x: i64, y: i64) -> (&[u32], &[Place]) {
         if x < self.x1 || x > self.x2 || y < self.y1 || y > self.y2 {
             return (&[], &[]);
         }
@@ -232,7 +320,9 @@ impl Grid {
 pub(crate) struct Near {
     i: u32,
     /// where the walk is from: list[i]'s position, or a point of its own (`from`)
-    at: [f64; 3],
+    at: Place,
+    /// how it weighs a gap in height (its grid's)
+    level: Level,
     x0: i64,
     y0: i64,
     last: i64,
@@ -259,15 +349,15 @@ pub(crate) struct Found {
 
 impl Near {
     /// `found`: empty vectors to keep them in (reused from tick to tick)
-    pub(crate) fn new(g: &Grid, pos: &[[f64; 3]], i: u32, found: Found) -> Near {
+    pub(crate) fn new(g: &Grid, pos: &[Place], i: u32, found: Found) -> Near {
         Near::from(g, pos[i as usize], i, found)
     }
 
-    /// the others of list[i] nearest first from point `at` (distance(at, pos[j])), not from its own position
-    pub(crate) fn from(g: &Grid, at: [f64; 3], i: u32, found: Found) -> Near {
+    /// the others of list[i] nearest first from point `at` (weigh(at, pos[j])), not from its own position
+    pub(crate) fn from(g: &Grid, at: Place, i: u32, found: Found) -> Near {
         let (x0, y0) = ((at[0] / g.cell).floor() as i64, (at[1] / g.cell).floor() as i64);
         let last = (x0 - g.x1).max(g.x2 - x0).max(y0 - g.y1).max(g.y2 - y0);
-        Near { i, at, x0, y0, last, r: 0, found }
+        Near { i, at, level: g.level, x0, y0, last, r: 0, found }
     }
 
     /// its vectors back (emptied), for the next tick
@@ -279,7 +369,7 @@ impl Near {
         f
     }
 
-    pub(crate) fn next(&mut self, g: &Grid, pos: &[[f64; 3]]) -> Option<(f64, u32)> {
+    pub(crate) fn next(&mut self, g: &Grid, pos: &[Place]) -> Option<(f64, u32)> {
         loop {
             if let Some((d, j)) = self.found.next.pop() {
                 return Some((f64::from_bits(d), j));
@@ -295,10 +385,10 @@ impl Near {
                 return None;
             }
             let w = Within::new(reach);
-            let a = &self.at;
+            let (a, l) = (&self.at, &self.level);
             let Found { pool, ready, .. } = &mut self.found;
             pool.retain(|&(sq, j)| {
-                if w.beyond(sq, || distance(a, &pos[j as usize])) {
+                if w.beyond(sq, || weigh(a, &pos[j as usize], l)) {
                     return true;
                 }
                 ready.push((sq, j));
@@ -317,11 +407,11 @@ impl Near {
     /// within sqrt(s) (1 + MARGIN / 5) go: the CHUNK nearest by their squares are among them (their distances are at
     /// most sqrt(s) (1 + 2e-15)), and every one left is farther (a square over s (1 + MARGIN) is a distance over
     /// sqrt(s) (1 + MARGIN / 2.1)).
-    fn order(&mut self, pos: &[[f64; 3]]) {
-        let a = &self.at;
+    fn order(&mut self, pos: &[Place]) {
+        let (a, l) = (&self.at, &self.level);
         let Found { ready, next, .. } = &mut self.found;
         if ready.len() <= 2 * CHUNK {
-            next.extend(ready.drain(..).map(|(_, j)| (distance(a, &pos[j as usize]).to_bits(), j)));
+            next.extend(ready.drain(..).map(|(_, j)| (weigh(a, &pos[j as usize], l).to_bits(), j)));
         } else {
             ready.select_nth_unstable_by(CHUNK - 1, |x, y| x.0.total_cmp(&y.0));
             let s = ready[CHUNK - 1].0;
@@ -330,7 +420,7 @@ impl Near {
                 if sq > far {
                     return true;
                 }
-                let d = distance(a, &pos[j as usize]);
+                let d = weigh(a, &pos[j as usize], l);
                 if d > within {
                     return true;
                 }
@@ -369,14 +459,13 @@ impl Near {
 
     /// a cell's players into the pool, or into `ready` when they are within reach of the ring being read
     fn cell(&mut self, g: &Grid, x: i64, y: i64, w: &Within) {
-        let a = &self.at;
+        let (a, l) = (&self.at, &self.level);
         let Found { pool, ready, .. } = &mut self.found;
         let (members, mpos) = g.cell(x, y);
         for (&j, b) in members.iter().zip(mpos) {
             if j != self.i {
-                let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-                let sq = dx * dx + dy * dy + dz * dz;
-                if w.beyond(sq, || distance(a, b)) { pool.push((sq, j)) } else { ready.push((sq, j)) }
+                let sq = square(a, b, l);
+                if w.beyond(sq, || weigh(a, b, l)) { pool.push((sq, j)) } else { ready.push((sq, j)) }
             }
         }
     }
@@ -577,23 +666,50 @@ mod tests {
         assert_eq!((v.i(), v.j(), v.nearest(), v.walk()), ((1 << 30) - 1, 3, true, WALK_VIEW));
     }
 
+    /// the hub's rule (RoamOptions level_*)
+    const STEEP: Level = Level { slack: 5.0, grade: 0.2, k: 25.0, grade2: 0.2 * 0.2 };
+
+    /// every other of list[i] (but i) from `from` by (weigh, j), as a sort of them all gives them
+    fn sorted(pos: &[Place], i: u32, from: &Place, l: &Level) -> Vec<(f64, u32)> {
+        let mut want: Vec<(f64, u32)> = (0..pos.len() as u32).filter(|&j| j != i).map(|j| (weigh(from, &pos[j as usize], l), j)).collect();
+        want.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+        want
+    }
+
+    /// each one's walk gives the others as `sorted` does, bit for bit
+    fn walks_as_sorted(pos: &[Place], l: Level) {
+        let mut g = Grid::default();
+        g.build(pos, l);
+        for i in 0..pos.len() as u32 {
+            let mut n = Near::new(&g, pos, i, Found::default());
+            let got: Vec<(f64, u32)> = std::iter::from_fn(|| n.next(&g, pos)).collect();
+            let want = sorted(pos, i, &pos[i as usize], &l);
+            assert_eq!(got.len(), want.len(), "{} players, player {i}, {l:?}", pos.len());
+            assert!(
+                got.iter().zip(&want).all(|(a, b)| a.0.to_bits() == b.0.to_bits() && a.1 == b.1),
+                "{} players, player {i}, {l:?}",
+                pos.len()
+            );
+        }
+    }
+
+    /// a place in free roam (nothing "up")
+    fn at(x: f64, y: f64, z: f64) -> Place {
+        [x, y, z, 0.0]
+    }
+
     #[test]
     fn near_walks_nearest_first() {
-        let pos: Vec<[f64; 3]> = (0..50).map(|i| [(i * 7 % 50) as f64 * 3.0, (i * 11 % 50) as f64 * 2.0, 0.0]).collect();
-        let mut g = Grid::default();
-        g.build(&pos);
-        for i in 0..pos.len() as u32 {
-            let mut n = Near::new(&g, &pos, i, Found::default());
-            let got: Vec<(f64, u32)> = std::iter::from_fn(|| n.next(&g, &pos)).collect();
-            let mut want: Vec<(f64, u32)> =
-                (0..pos.len() as u32).filter(|&j| j != i).map(|j| (distance(&pos[i as usize], &pos[j as usize]), j)).collect();
-            want.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
-            assert_eq!(got, want, "player {i}");
+        let pos: Vec<Place> = (0..50).map(|i| at((i * 7 % 50) as f64 * 3.0, (i * 11 % 50) as f64 * 2.0, 0.0)).collect();
+        for l in [Level::default(), STEEP] {
+            walks_as_sorted(&pos, l);
         }
     }
 
     // the walk on lattices whose points sit on the cells' edges (distances of exactly the reach, 5 m cells), on a few
-    // spots (players at one place), and on scattered float32 positions near and far: all others by (distance, j)
+    // spots (players at one place), and on scattered float32 positions near and far: all others by (distance, j); and
+    // the same with roads over roads (a lattice at 0 m and one 6 to 30 m over it; a highway over streets with a hill
+    // and players in a shop), where gaps in height weigh more than they are
     #[test]
     fn near_walks_nearest_first_at_the_edges() {
         let mut seed = 7u64;
@@ -601,52 +717,112 @@ mod tests {
             seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
             (seed >> 11) as f64 / (1u64 << 53) as f64
         };
-        let lattice =
-            |n: usize, step: f64| -> Vec<[f64; 3]> { (0..n * n).map(|k| [(k % n) as f64 * step, (k / n) as f64 * step, 0.0]).collect() };
-        let mut layouts = vec![lattice(10, 1.0), lattice(12, 5.0), lattice(9, 2.5)];
-        layouts.push((0..120).map(|k| [[0.0, 0.0, 0.0], [5.0, 0.0, 0.0], [0.0, 10.0, 1.0]][k % 3]).collect());
+        let lattice = |n: usize, step: f64, z: f64| -> Vec<Place> {
+            (0..n * n).map(|k| at((k % n) as f64 * step, (k / n) as f64 * step, z)).collect()
+        };
+        let mut layouts = vec![lattice(10, 1.0, 0.0), lattice(12, 5.0, 0.0), lattice(9, 2.5, 0.0)];
+        layouts.push((0..120).map(|k| [at(0.0, 0.0, 0.0), at(5.0, 0.0, 0.0), at(0.0, 10.0, 1.0)][k % 3]).collect());
         layouts.push(
             (0..300)
                 .map(|k| {
                     let r = if k % 10 == 0 { 15000.0 } else { 400.0 };
-                    [(rnd() * 2.0 - 1.0) * r, (rnd() * 2.0 - 1.0) * r, rnd() * 20.0].map(|x| x as f32 as f64)
+                    [(rnd() * 2.0 - 1.0) * r, (rnd() * 2.0 - 1.0) * r, rnd() * 20.0, 0.0].map(|x| x as f32 as f64)
+                })
+                .collect(),
+        );
+        for (n, step, up) in [(10, 5.0, 6.0), (12, 2.5, 10.0), (8, 5.0, 30.0)] {
+            let mut two = lattice(n, step, 0.0);
+            two.extend(lattice(n, step, up));
+            layouts.push(two);
+        }
+        layouts.push(
+            (0..400)
+                .map(|k| {
+                    let (x, y) = ((rnd() * 2.0 - 1.0) * 300.0, (rnd() * 2.0 - 1.0) * 300.0);
+                    let z = match k % 4 {
+                        0 => 12.0,
+                        1 => 0.2 * x.abs(),
+                        _ => rnd() * 2.0,
+                    };
+                    [x, y, z, if k % 9 == 0 { 100.0 } else { 0.0 }].map(|v| v as f32 as f64)
                 })
                 .collect(),
         );
         for pos in &layouts {
-            let mut g = Grid::default();
-            g.build(pos);
-            for i in 0..pos.len() as u32 {
-                let mut n = Near::new(&g, pos, i, Found::default());
-                let got: Vec<(f64, u32)> = std::iter::from_fn(|| n.next(&g, pos)).collect();
-                let mut want: Vec<(f64, u32)> =
-                    (0..pos.len() as u32).filter(|&j| j != i).map(|j| (distance(&pos[i as usize], &pos[j as usize]), j)).collect();
-                want.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
-                assert_eq!(got.len(), want.len(), "{} players, player {i}", pos.len());
-                assert!(
-                    got.iter().zip(&want).all(|(a, b)| a.0.to_bits() == b.0.to_bits() && a.1 == b.1),
-                    "{} players, player {i}",
-                    pos.len()
-                );
+            for l in [Level::default(), STEEP] {
+                walks_as_sorted(pos, l);
             }
         }
     }
 
-    // from a point of its own (inside the players' span, on a cell's edge, far outside it): all others but i by
-    // (distance(at, pos[j]), j)
+    // from a point of its own (inside the players' span, on a cell's edge, far outside it, above them, in a shop): all
+    // others but i by (weigh(from, pos[j]), j)
     #[test]
     fn near_walks_nearest_first_from_a_point() {
-        let pos: Vec<[f64; 3]> = (0..80).map(|i| [(i * 7 % 40) as f64 * 5.0, (i * 13 % 40) as f64 * 2.5, (i % 3) as f64]).collect();
-        let mut g = Grid::default();
-        g.build(&pos);
-        for (i, at) in [(0u32, [37.5, 20.0, 1.0]), (5, [15.0, 10.0, 0.0]), (79, [-400.0, 900.0, 100.0]), (12, [190.0, -3.0, 0.0])] {
-            let mut n = Near::from(&g, at, i, Found::default());
-            let got: Vec<(f64, u32)> = std::iter::from_fn(|| n.next(&g, &pos)).collect();
-            let mut want: Vec<(f64, u32)> =
-                (0..pos.len() as u32).filter(|&j| j != i).map(|j| (distance(&at, &pos[j as usize]), j)).collect();
-            want.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
-            assert_eq!(got.len(), want.len(), "from {at:?}");
-            assert!(got.iter().zip(&want).all(|(a, b)| a.0.to_bits() == b.0.to_bits() && a.1 == b.1), "from {at:?}");
+        let pos: Vec<Place> = (0..80).map(|i| at((i * 7 % 40) as f64 * 5.0, (i * 13 % 40) as f64 * 2.5, (i % 3) as f64 * 7.0)).collect();
+        let froms = [
+            (0u32, at(37.5, 20.0, 1.0)),
+            (5, at(15.0, 10.0, 0.0)),
+            (79, at(-400.0, 900.0, 100.0)),
+            (12, at(190.0, -3.0, 0.0)),
+            (3, [60.0, 40.0, 14.0, 100.0]),
+        ];
+        for l in [Level::default(), STEEP] {
+            let mut g = Grid::default();
+            g.build(&pos, l);
+            for (i, from) in froms {
+                let mut n = Near::from(&g, from, i, Found::default());
+                let got: Vec<(f64, u32)> = std::iter::from_fn(|| n.next(&g, &pos)).collect();
+                let want = sorted(&pos, i, &from, &l);
+                assert_eq!(got.len(), want.len(), "from {from:?}");
+                assert!(got.iter().zip(&want).all(|(a, b)| a.0.to_bits() == b.0.to_bits() && a.1 == b.1), "from {from:?}");
+            }
         }
+    }
+
+    // two places with no gap past what a road explains, and the same "up", weigh what their distance always was, bit
+    // for bit; any two weigh the same both ways, never less than their distance in x and y, and their square is the
+    // weight's
+    #[test]
+    fn weighs_as_the_distance_on_one_road() {
+        let mut seed = 3u64;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for _ in 0..20000 {
+            let up = |r: f64| if r < 0.2 { 100.0 } else { 0.0 };
+            let a = [(rnd() - 0.5) * 6000.0, (rnd() - 0.5) * 6000.0, rnd() * 60.0, up(rnd())].map(|v| v as f32 as f64);
+            let b = [a[0] + (rnd() - 0.5) * 400.0, a[1] + (rnd() - 0.5) * 400.0, a[2] + (rnd() - 0.5) * 40.0, up(rnd())]
+                .map(|v| v as f32 as f64);
+            for l in [Level::default(), STEEP] {
+                let d = weigh(&a, &b, &l);
+                let across = (a[0] - b[0]).hypot(a[1] - b[1]);
+                assert_eq!(d.to_bits(), weigh(&b, &a, &l).to_bits(), "{a:?} {b:?}");
+                assert_eq!(square(&a, &b, &l).to_bits(), square(&b, &a, &l).to_bits(), "{a:?} {b:?}");
+                assert!(d >= across * (1.0 - 1e-15), "{a:?} {b:?}");
+                assert!((square(&a, &b, &l) - d * d).abs() <= d * d * 1e-14, "{a:?} {b:?}");
+                if (a[2] - b[2]).abs() <= l.slack + l.grade * across && a[3] == b[3] {
+                    let (x, y) = ([a[0], a[1], a[2]], [b[0], b[1], b[2]]);
+                    assert_eq!(d.to_bits(), distance(&x, &y).to_bits(), "{a:?} {b:?}");
+                    let (dx, dy, dz) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+                    assert_eq!(square(&a, &b, &l).to_bits(), (dx * dx + dy * dy + dz * dz).to_bits(), "{a:?} {b:?}");
+                }
+            }
+        }
+    }
+
+    // what gaps weigh: a road up a hill as it is; the street under a highway (10 m below) as a car 135 m off, less
+    // to the side, as it is once in sight; a car 4 m up over a bump beside ours as it is; a player in a shop 100 m up
+    #[test]
+    fn weighs_a_road_above_as_one_far_off() {
+        let w = |a: Place, b: Place| (weigh(&a, &b, &STEEP) * 10.0).round() / 10.0;
+        assert_eq!(w(at(0.0, 0.0, 0.0), at(100.0, 0.0, 20.0)), 102.0);
+        assert_eq!(w(at(0.0, 0.0, 10.0), at(0.0, 0.0, 0.0)), 135.0);
+        assert_eq!(w(at(0.0, 0.0, 10.0), at(8.0, 0.0, 0.0)), 95.3);
+        assert_eq!(w(at(0.0, 0.0, 10.0), at(40.0, 0.0, 0.0)), 41.2);
+        assert_eq!(w(at(0.0, 0.0, 4.0), at(3.0, 0.0, 0.0)), 5.0);
+        assert_eq!(w([0.0, 0.0, 0.0, 100.0], at(0.0, 0.0, 0.0)), 100.0);
+        assert_eq!(w([30.0, 0.0, 2.0, 100.0], [0.0, 0.0, 0.0, 100.0]), 30.1);
     }
 }

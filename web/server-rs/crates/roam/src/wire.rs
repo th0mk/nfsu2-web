@@ -104,14 +104,16 @@ pub(crate) enum Msg<'a> {
         duel: u32,
     },
     /// v: the newest state's velocity, 0 where roam_core's decoder would not take it (not finite, 200 m/s or more);
-    /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); t_us: its time on
-    /// the sender's clock (µs, wraps), which counts on while the clock epoch `clock` stays
+    /// heading: where its car points, 256 a turn (the game's atan2 of the forward row, roam_game.c); slope: how steeply
+    /// its nose points up or down (`slope`); t_us: its time on the sender's clock (µs, wraps), which counts on while
+    /// the clock epoch `clock` stays
     Snap {
         sender: u32,
         status: u8,
         p: [f64; 3],
         v: [f64; 3],
         heading: u8,
+        slope: i8,
         t_us: u32,
         clock: u8,
     },
@@ -316,6 +318,25 @@ fn heading(d: &[u8], o: usize) -> u8 {
     ((f1.atan2(f0) * 128.0 / std::f64::consts::PI + 0.5).floor() as i64 & 255) as u8
 }
 
+/// the steepest slope `slope` gives (%): steeper than a road, a car's nose points that way in the air or on its side
+pub(crate) const SLOPE_MAX: f64 = 30.0;
+
+/// how steeply a state's car points up (+) or down, in metres a hundred metres across: its forward row's height over
+/// its length in x and y (roam_core.c rc_q2m), within SLOPE_MAX; 0 for a quaternion of almost nothing or a car
+/// pointing (nearly) straight up or down.  On a road, the road's slope where the car points.
+fn slope(d: &[u8], o: usize) -> i8 {
+    let q = [0, 2, 4, 6].map(|k| i16::from_le_bytes([d[o + k], d[o + k + 1]]) as f64 / 32767.0);
+    if q.iter().map(|x| x * x).sum::<f64>() < 0.25 {
+        return 0;
+    }
+    let (f0, f1, f2) = (1.0 - 2.0 * (q[1] * q[1] + q[2] * q[2]), 2.0 * (q[0] * q[1] + q[2] * q[3]), 2.0 * (q[0] * q[2] - q[1] * q[3]));
+    let across = f0.hypot(f1);
+    if across < 0.1 {
+        return 0;
+    }
+    (100.0 * f2 / across).clamp(-SLOPE_MAX, SLOPE_MAX).round() as i8
+}
+
 /// One free-roam datagram, or None: the fields the hub needs (HELLO, SNAP, BYE), checked as roam_core.c's decoder
 /// does.  Every index is behind a length check above it.
 pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
@@ -394,7 +415,16 @@ pub(crate) fn decode(d: &[u8]) -> Option<(u8, u32, Msg<'_>)> {
             if !p.iter().all(|x| x.is_finite()) || p[0].abs() > 20000.0 || p[1].abs() > 20000.0 || p[2].abs() > 2000.0 {
                 return None;
             }
-            Msg::Snap { sender, status, p, v: velocity(d, 38), heading: heading(d, 50), t_us: u32_le(d, 22), clock: d[21] }
+            Msg::Snap {
+                sender,
+                status,
+                p,
+                v: velocity(d, 38),
+                heading: heading(d, 50),
+                slope: slope(d, 50),
+                t_us: u32_le(d, 22),
+                clock: d[21],
+            }
         }
         MSG_MAPREQ if end == HDR + 6 || end == HDR + 8 => Msg::MapReq {
             req: u16_le(d, 16),
