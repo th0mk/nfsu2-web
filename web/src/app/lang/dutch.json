@@ -347,7 +347,7 @@
   "No commas, # or ; in a crew name.": "Geen komma's, # of ; in een crewnaam.",
   "Up to 4 crews: leave one to join another.": "Maximaal 4 crews: verlaat er een om bij een andere aan te sluiten.",
   "Ghost mode": "Spookmodus",
-  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not an outrun's opponent.": "Spelers: je rijdt door de wagens van andere spelers heen. Alles: in Verkennen ook door verkeer en de tuners van het spel, maar niet door je tegenstander in een outrun.",
+  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Spelers: je rijdt door de wagens van andere spelers heen. Alles: in Verkennen ook door verkeer en de tuners van het spel, maar niet door een tuner waartegen je een outrun rijdt.",
   "Online mode": "Onlinemodus",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Het online menu van het spel slaat de EA-inlog over: lobby, chat en races met iedereen op deze server.",
   "Players' cars shown": "Getoonde spelerswagens",

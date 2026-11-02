@@ -308,7 +308,7 @@
   "No commas, # or ; in a crew name.": "크루 이름에는 쉼표, #, ;를 쓸 수 없어요.",
   "Up to 4 crews: leave one to join another.": "크루는 최대 4개예요: 다른 크루에 가입하려면 하나를 탈퇴하세요.",
   "Ghost mode": "고스트 모드",
-  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not an outrun's opponent.": "플레이어: 다른 플레이어의 차를 통과해요. 모두: 자유 주행에서는 일반 차량과 게임의 AI 레이서도 통과하지만, 아웃런 상대는 통과하지 않아요.",
+  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "플레이어: 다른 플레이어의 차를 통과해요. 모두: 자유 주행에서는 일반 차량과 게임의 AI 레이서도 통과하지만, 아웃런으로 겨루는 AI 레이서는 통과하지 않아요.",
   "Online mode": "온라인 모드",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "게임의 온라인 메뉴에서 EA 로그인을 건너뛰어요. 이 서버의 모두와 로비, 채팅, 레이스를 즐길 수 있어요.",
   "Players' cars shown": "표시할 플레이어 차",

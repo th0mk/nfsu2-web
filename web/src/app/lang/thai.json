@@ -308,7 +308,7 @@
   "No commas, # or ; in a crew name.": "ชื่อทีมห้ามมีจุลภาค (,) # หรือ ;",
   "Up to 4 crews: leave one to join another.": "เข้าได้สูงสุด 4 ทีม: ออกจากทีมหนึ่งก่อนจึงจะเข้าร่วมทีมอื่นได้",
   "Ghost mode": "โหมดผี",
-  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not an outrun's opponent.": "ผู้เล่น: ขับทะลุรถของผู้เล่นคนอื่น ทั้งหมด: ในการขับอิสระ ขับทะลุรถบนถนนและนักแข่ง AI ของเกมด้วย แต่ไม่ทะลุคู่แข่งเอาท์รัน",
+  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "ผู้เล่น: ขับทะลุรถของผู้เล่นคนอื่น ทั้งหมด: ในการขับอิสระ ขับทะลุรถบนถนนและนักแข่ง AI ของเกมด้วย แต่ไม่ทะลุนักแข่ง AI ที่คุณแข่งเอาท์รันด้วย",
   "Online mode": "โหมดออนไลน์",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "เมนูออนไลน์ของเกมจะข้ามการล็อกอิน EA: มีล็อบบี้ แชต และการแข่งกับทุกคนบนเซิร์ฟเวอร์นี้",
   "Players' cars shown": "จำนวนรถผู้เล่นที่แสดง",

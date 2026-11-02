@@ -1,6 +1,7 @@
-# An outrun between two players with Ghost mode Everything on both, instance B (is challenged, rams A): takes A's
-# challenge (roam_ghost_outrun_a.txt), then jumps 15 m ahead of A's standing car, facing it, and drives into it: the
-# two cars are solid for each other while the outrun runs (roam_game.c du_solid), so both games log the hit.
+# An outrun between two players and Ghost mode, instance B (is challenged, rams A): takes A's challenge
+# (roam_ghost_outrun_a.txt), then jumps 15 m ahead of A's standing car, facing it, and drives into it.  With Ghost
+# mode Off on both the two cars are solid for each other while the outrun runs (roam_game.c du_solid), so both games
+# log the hit; with Everything or Players they drive through each other (no hit).
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN

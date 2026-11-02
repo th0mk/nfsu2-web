@@ -308,7 +308,7 @@
   "No commas, # or ; in a crew name.": "クルー名にコンマ、#、; は使えません。",
   "Up to 4 crews: leave one to join another.": "クルーは最大4つです。別のクルーに参加するには、どれかを抜けてください。",
   "Ghost mode": "ゴーストモード",
-  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not an outrun's opponent.": "プレイヤー: 他のプレイヤーの車をすり抜けます。すべて: フリーロームでは一般車とゲームのAIレーサーもすり抜けますが、アウトランの相手はすり抜けません。",
+  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "プレイヤー: 他のプレイヤーの車をすり抜けます。すべて: フリーロームでは一般車とゲームのAIレーサーもすり抜けますが、アウトランで競っているAIレーサーはすり抜けません。",
   "Online mode": "オンラインモード",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "ゲームの「オンライン」メニューでEAログインを省略します。このサーバーの全員と、ロビー、チャット、レースを楽しめます。",
   "Players' cars shown": "表示するプレイヤーの車",

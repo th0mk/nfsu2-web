@@ -1,10 +1,11 @@
-# An outrun between two players with Ghost mode Everything (roam_collide = none) on both, instance A (challenges,
-# drives off): their two cars are solid for each other while it runs (roam_game.c du_solid), whatever Ghost mode lets
-# through otherwise; with Players (off) on either side they stay ghosts.  B (roam_ghost_outrun_b.txt) takes the
-# challenge, then jumps 15 m ahead of A's standing car and drives into it ("hit with Bo's car" here, "hit with Al's
-# car" there); A drives off after.  roam-pair --a "Al:roam_ghost_outrun_a.txt:NFSU2_ROAM_COLLIDE=none"
-# --b "Bo:roam_ghost_outrun_b.txt:NFSU2_ROAM_COLLIDE=none" --drive 8000 --watch 8000; mp status says "the outrun's,
-# solid" and "collision body on" for the friend's car near enough while it runs.
+# An outrun between two players and Ghost mode, instance A (challenges, drives off).  B (roam_ghost_outrun_b.txt)
+# takes the challenge, then jumps 15 m ahead of A's standing car and drives into it; A drives off after.
+#  - Ghost mode Off (roam_collide = on) on both: their two cars are solid for each other while it runs (roam_game.c
+#    du_solid), whatever else lets them through ("hit with Bo's car" here, "hit with Al's car" there); mp status says
+#    "the outrun's, solid" and "collision body on" for the friend's car near enough while it runs.
+#  - Ghost mode Everything (none) or Players (off) on either side: they stay ghosts, no "hit with" line on either.
+#   roam-pair --a "Al:roam_ghost_outrun_a.txt:NFSU2_ROAM_COLLIDE=none" --b "Bo:roam_ghost_outrun_b.txt:NFSU2_ROAM_COLLIDE=none"
+#   --drive 8000 --watch 8000 (or =on on both)
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
 +30   tap RETURN

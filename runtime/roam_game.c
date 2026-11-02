@@ -48,8 +48,9 @@
  *    the past (NFSU2_ROAM_DELAY), smoothed through the jitter buffer; the
  *    player's own car is then passable on every friend's screen too.  With
  *    NFSU2_ROAM_COLLIDE=none (Ghost mode: Everything) the game's traffic and
- *    tuners pass through the player's car as well (ghost_pair); an outrun's
- *    opponent stays solid (du_solid, outrun_racer).  The page's menu
+ *    tuners pass through the player's car as well (ghost_pair); the tuner of
+ *    an outrun stays solid (outrun_racer), and a friend in an outrun only
+ *    with Ghost mode Off on both sides (du_solid).  The page's menu
  *    switches between them while the game runs (solid_follow).
  *  - names over friends' cars, as the game's own LAN races show them
  *    (roam_game_hud).
@@ -898,8 +899,8 @@ static void body_set(CPU *c, uint32_t car, int solid){
  * 0x595040), friends' cars against each other too, which two cars posed by
  * us never need; 32 of them crossing each other's paths took 3-4.5 ms a
  * frame (a crowd round the new career's start, roam-crowd --spread 10).
- * With ghost cars, an outrun's opponent whose game keeps the two solid as
- * ours does (du_solid) is solid while it runs, a ghost until clear first */
+ * An outrun's opponent whose game keeps the two solid as ours does (du_solid:
+ * Ghost mode Off on both) is solid while it runs, a ghost until clear first */
 static void body_update(CPU *c, int k){
     Slot *s = &g_sl[k];
     uint32_t me = player_car();
@@ -3997,15 +3998,17 @@ static int du_racing(uint32_t race){
     return (g_du.st == DU_RACE || g_du.st == DU_OVER) && g_du.car && MR32(G_RACETYPE) == 7u && MR32(race + 0x24u) >= 2u;
 }
 /* The two cars solid for each other while the outrun runs, so it is raced
- * as the game's own (against a tuner, whose car the player's can hit),
- * whatever Ghost mode lets through otherwise: when both games say so with
- * their challenge, answer and start (the DUEL arg DU_ARG_SOLID: Ghost mode
- * Off or Everything when the challenge came; Players keeps friends' cars
- * ghosts in outruns too).  Each game then leaves out for the other's car
- * what only one of them knows (soft_update): its player's events, hits and
- * Ghost mode, and the cars standing.  A game of an older version says
- * nothing (0) and ignores ours, so the two stay as Ghost mode has them on
- * both screens */
+ * as the game's own (against a tuner, whose car the player's can hit): when
+ * both games say so with their challenge, answer and start (the DUEL arg
+ * DU_ARG_SOLID: Ghost mode Off when the challenge came).  Players and
+ * Everything keep friends' cars ghosts in outruns too: Everything is more
+ * ghost than Players, and a player who picked it collided with a friend in
+ * an outrun (2026-11-02); its tuner the player races stays solid (ghost_pair,
+ * outrun_racer).  Each game then leaves out for the other's car what only
+ * one of them knows (soft_update): its player's events, hits and Ghost mode,
+ * and the cars standing.  A game of an older version says nothing (0) and
+ * ignores ours, and one that says so for Everything (6f7bb374) meets a 0
+ * from ours, so the two stay as Ghost mode has them on both screens */
 #define DU_ARG_SOLID    1u
 static int du_solid(uint32_t car){
     uint32_t race = rd32(G_RACE);
@@ -4013,7 +4016,7 @@ static int du_solid(uint32_t car){
 }
 static int du_solid_peer(uint32_t id){ return id && id == g_du.id && du_solid(g_du.car); }
 static uint8_t du_arg(void){ return g_du.solid_mine ? (uint8_t)DU_ARG_SOLID : 0; }
-static int du_wants_solid(void){ return O.collide || O.ghost_all; }
+static int du_wants_solid(void){ return O.collide; }
 /* the outrun's friend keeps the slot (assign) */
 static int du_keeps(int k){ return g_du.st != DU_IDLE && g_sl[k].peer_id == g_du.id; }
 static int du_on(void){ return g_du.st != DU_IDLE; }

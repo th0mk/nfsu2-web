@@ -347,7 +347,7 @@
   "No commas, # or ; in a crew name.": "Inga kommatecken, # eller ; i ett crewnamn.",
   "Up to 4 crews: leave one to join another.": "Upp till 4 crews: lämna en för att gå med i en annan.",
   "Ghost mode": "Spökläge",
-  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not an outrun's opponent.": "Spelare: kör igenom andra spelares bilar. Allt: i Utforska även genom trafik och spelets tuners, men inte genom din motståndare i ett outrun-race.",
+  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Spelare: kör igenom andra spelares bilar. Allt: i Utforska även genom trafik och spelets tuners, men inte genom en tuner du kör outrun-race mot.",
   "Online mode": "Online-läge",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Spelets Online-meny hoppar över EA-inloggningen: lobby, chatt och race med alla på den här servern.",
   "Players' cars shown": "Spelarbilar som visas",

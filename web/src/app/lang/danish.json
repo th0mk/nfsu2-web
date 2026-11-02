@@ -347,7 +347,7 @@
   "No commas, # or ; in a crew name.": "Ingen kommaer, # eller ; i et crewnavn.",
   "Up to 4 crews: leave one to join another.": "Op til 4 crews: forlad et for at blive medlem af et andet.",
   "Ghost mode": "Spøgelsestilstand",
-  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not an outrun's opponent.": "Spillere: kør igennem andre spilleres biler. Alt: i udforsknings-mode også igennem trafik og spillets tunere, men ikke din modstander i et Outrun-løb.",
+  "Players: drive through other players' cars. Everything: also through traffic and the game's tuners in free roam, but not a tuner you race in an outrun.": "Spillere: kør igennem andre spilleres biler. Alt: i udforsknings-mode også igennem trafik og spillets tunere, men ikke en tuner, du kører Outrun-løb mod.",
   "Online mode": "Online-tilstand",
   "The game's Online menu skips the EA login: lobby, chat and races with everyone on this server.": "Spillets Online-menu springer EA-login over: lobby, chat og løb med alle på denne server.",
   "Players' cars shown": "Spillerbiler, der vises",

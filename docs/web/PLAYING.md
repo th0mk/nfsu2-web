@@ -432,8 +432,8 @@ Good to know:
 - **Ghost mode:** Online, Ghost mode. **Off** (the default): you collide with the other players' cars. **Players**: you
   drive through them, and they through yours. **Everything**: traffic and the game's tuners pass through you as well
   (and through the other players' cars on your screen), in free roam with others only: races stay as the game has
-  them, and an outrun's opponent is solid while it runs, as in the game: the tuner you race, or a player whose Ghost
-  mode is Off or Everything too (with Players, or on an older version, you two drive through each other as before).
+  them, and the tuner you race in an outrun is solid while it runs, as in the game. An outrun with another player is
+  solid only when you both have Ghost mode Off; with Players or Everything you two drive through each other.
   Traffic and tuners are in your game only, so this changes nothing for the others. The page menu (F9) switches
   between the three while you play, at once, and keeps it for your next games. With Off, a car that appears on top
   of yours, at a garage or after a jump, lets you through until you are apart. Each

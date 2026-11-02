@@ -429,8 +429,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # off = Ghost mode for players: you drive through their cars, and they
 # through yours.  none = Ghost mode for everything: traffic and the game's
 # tuners pass through you too (in free roam with others; races stay as they
-# are), but not an outrun's opponent: the tuner, or a player who has on or
-# none too.  [NFSU2_ROAM_COLLIDE]
+# are), but not a tuner you race in an outrun.  An outrun with another
+# player is solid only when you both have on.  [NFSU2_ROAM_COLLIDE]
 #roam_collide = on
 # Quick chat: say one of your sixteen set phrases to the players near you in
 # free roam, or to everyone in a multiplayer race, while driving and on its
