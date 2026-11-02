@@ -12,36 +12,24 @@ not guessed.
 
 ## 2026-11-02 (7dd3a82)
 
-- **World map:** spots where 24 or more players have been parked for a minute show as car meets ("Meet: n cars"). The legend's Car meets row picks the nearest, Left and Right the next, and C starts the GPS there.
-- **Free roam:** parked, press O (on a controller, hold D-pad down) to open the trunk, then the hood, then the doors, and show your car off. Other players see them open; they close when you drive off.
-- **Photo mode:** cars keep their full detail however far away or zoomed out, and once the camera stands still the picture's edges are smoothed. New in the panel: Blur and Focus (a real lens blur), Brightness, Vignette, filters (Black and white, Warm, Cool, Vivid, Faded), Crop with a Grid, and Cars (all, friends & crews, only yours, none; hidden cars take their neon with them). Freeze time (on at first) stops everything, friends' cars too; off, the world drives on under the camera.
-- **Languages:** Ukrainian, for the game (its text and subtitles) and this page.
-- **Free roam:** names over cars no longer pile up in a crowd. Friends' and crews' come first, and names fade out between 25 and 60 m.
-- **Free roam:** the Add friend line while your front bumpers touch is bigger, in quick chat's style, just above the outrun line.
-- **Touch controls:** Pressurize and Bounce no longer leave a hydraulics key held.
-- **Quick chat:** no longer opens in the career's free roam when free roam is off.
-- **Claimed names:** your own claimed name is no longer shown as another player's when the cloud check is slow.
-
+- **World map:** spots where 24 or more players have been parked for a minute show as car meets. The legend's Car meets row picks one, and C starts the GPS there.
+- **Free roam:** parked, press O (on a controller, hold D-pad down) to open the trunk, then the hood, then the doors, and show your car off. Other players see them open.
+- **Photo mode:** cars keep their full detail however far away, and a still camera smooths the picture's edges. New in the panel: Blur and Focus (a real lens blur), Brightness, Vignette, filters, Crop with a Grid, which players' cars show, and Freeze time (on at first; off, the world drives on). Pictures have nfsu2.xyz in a corner; a box in the panel turns it off.
 - **Career:** once you have beaten Caleb, the shops have the wide body kits, and the other unique hoods, spoilers, rims and vinyls, for every car in your career.
-- **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
+- **Languages:** Ukrainian, for the game (its text and subtitles) and this page. Turkish is translated anew, by hand, the online menus too.
+- **Free roam:** up to 48 players' cars at once, each costing less of the frame rate. Players' cars shown (Settings, Online tab) starts at 32 on computers, 24 on tablets and 16 on phones.
+- **Free roam:** Ghost mode (Settings, Online, and the page menu, F9) is Off, Players or Everything. Everything also lets traffic and the game's tuners drive through you.
+- **Free roam:** names over cars no longer pile up in a crowd. Friends' and crews' come first, and names fade out between 25 and 60 m.
 - **Minimap:** every player near you gets an arrow, not only those whose cars your game shows.
-- **Frame rate:** other players' cars cost less a frame in a busy free roam.
-- **Free roam:** a car that went missing (only the HUD drawn, an empty minimap, a lower frame rate) is put back where it last was, and a profile saved that way loads again at the airport car park.
-- **Free roam:** Ghost mode (Settings, Online, and the page menu, F9) is Off, Players or Everything. Everything also lets traffic and the game's tuners drive through you; an outrun's opponent stays solid.
-- **Free roam:** an outrun between two players no longer ends, with both of you winning, when a crowd comes between you.
-- **Online races:** a ranked race counts when the others run out of time, and from 1 December Last Month's Leaderboard shows the month before's leaders (it was always empty).
-- **Quick chat:** works in races with other players too (free-roam race spots, the Online menu and LAN), while racing and on the results, and no longer needs free roam to be on. Quick chat off mutes it there too.
+- **Quick chat:** works in races with other players too (free-roam race spots, the Online menu and LAN), and no longer needs free roam to be on.
+- **Online races:** a ranked race counts when the others run out of time, and from 1 December Last Month's Leaderboard shows last month's leaders.
+- **Free roam:** a car that went missing (only the HUD drawn, an empty minimap) is put back where it last was, and a profile saved that way loads again.
+- **Free roam:** an outrun between two players no longer ends when a crowd comes between you.
 - **Radio:** the end of a track no longer stops the radio or crashes the game.
 - **Phones:** Play after an earlier game no longer fails with "could not allocate memory" or "Out of memory".
-- **This page:** says when the browser's JavaScript optimizer is off for the site, and where to allow it, and when Chrome draws the game without the graphics card.
-- **Touch controls:** a lighter look while driving, Pressurize and Bounce buttons for a car with hydraulics, gear buttons in Performance Tuning's drag test runs, and Steering moved in more, for big phones.
+- **Touch controls:** a lighter look while driving, Pressurize and Bounce buttons for a car with hydraulics, gear buttons in Performance Tuning's drag test runs, and Steering moved in, for big phones.
 - **Controllers:** the right stick turns the car in the garage and the shops. On Hotplug, a controller that switches off and on again keeps its buttons.
-- **Drift mode:** typing an x in a chat or a name no longer says "Drift mode only works in free roam".
-- **Profiles:** in Chinese, Japanese, Korean, Thai, Polish and Hungarian a new profile's name box starts empty, so the name no longer begins with broken letters. A cloud copy or backup whose name inside is broken comes in renamed instead of left out.
-- **Headlights:** a car on an overpass no longer lights the road under it.
-- **Photo mode:** pictures have nfsu2.xyz in a corner. A box in photo mode's panel turns it off.
-- **Title screen:** nfsu2.xyz under the copyright line.
-- **Languages:** Turkish is translated anew, by hand, the online menus too. In Polish the race HUD's DRAFT is translated, in Thai the race position no longer shows its number twice, and Portuguese is the translation's version 1.1.1.
+- **Profiles:** in Chinese, Japanese, Korean, Thai, Polish and Hungarian a new profile's name no longer begins with broken letters.
 
 ## 2026-10-31 (d079aff)
 
