@@ -530,7 +530,8 @@ Good to know:
   in or by a race lobby. On the Windows plugin the tuners stay away while other players are about.
 - **Races with other players:** a race of your career can be raced with the players around you, as the game's own LAN
   race on its track, in your career car. That takes a car of your own: in a new career's prologue (the 350Z you
-  start in) you cannot join or open a lobby, and the panel says so; from your first car on you can.
+  start in) you cannot join or open a lobby, and the panel says so; from your first car on you can. Lobbies are
+  joined from your career's free roam only: in Quick Race's Free Run the panel says so too.
   - **An open race** (its marker in the street): its card asks Accept or Decline as always, and Accept asks once more:
     **Solo** (the career race, as before) or **Multiplayer**.
   - **A race that is not open** in your career has no marker of the game's. Within about 50 m its start shows

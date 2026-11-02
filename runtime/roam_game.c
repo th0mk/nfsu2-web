@@ -4528,8 +4528,13 @@ static void spots_read(CPU *c, int64_t host){
 #define MP_STALE_US     3000000       /* in free roam this long with the trip not over: it is over (mprace_end_in_roam) */
 #define MP_NOTE_US      5000000
 /* a career with no car of its own yet (a new one's prologue, mprace_car_ok) neither joins nor opens a lobby: the
- * LAN race would build its car from garbage */
-#define MP_NOCAR        "Multiplayer races take a car of your own: buy one in your career first"
+ * LAN race would build its car from garbage.  Nor does free roam out of Quick Race's Free Run (the game's mode is
+ * not the career's): the trip's way there and back is the career's, and mprace_start refuses it, so a player from
+ * there who joined a lobby left it at the countdown's end with "The race could not start", every time (a player's
+ * report, 2026-11-02).  The texts are lobby.ts's, which translates them */
+#define MP_NOCAR        "Multiplayer races need your own car: buy one in your career first"
+#define MP_NOCAREER     "Join multiplayer races from your career's free roam"
+static const char *mp_cannot(void){ return !(rd32(G_GAMEMODE) & 1u) ? MP_NOCAREER : !mprace_car_ok() ? MP_NOCAR : 0; }
 #define MP_SEEN         16
 enum { MP_IDLE, MP_HOST, MP_ASKED, MP_IN, MP_COUNT, MP_TRIP };
 static const char *const mp_st[] = { "idle", "hosting", "asked to join", "in a lobby", "counting down", "on the trip" };
@@ -4751,7 +4756,8 @@ static MpLobby *mp_joinable(void){
 static void mp_ask_in(void){ roam_plat_lock(); mp_send(RC_LOBBY_JOIN, 0, g_mp.l.host); mp_send(RC_LOBBY_JOIN, 0, 0); roam_plat_unlock(); }
 static int mp_join(int64_t host, MpLobby *l){
     if (g_mp.st != MP_IDLE || !l) return 0;
-    if (!mprace_car_ok()){ mp_note(host, MP_NOCAR); return 0; }
+    const char *no = mp_cannot();
+    if (no){ mp_note(host, no); return 0; }
     g_mp.l = *l;
     g_mp.asked_host = l->host; g_mp.asked_id = l->id; g_mp.asked_at = host;
     mp_to(MP_ASKED, host);
@@ -4899,7 +4905,8 @@ static void mp_trip(int64_t host){
 /* the player pressed Engage (or chose Multiplayer) at a spot of race r: our
  * lobby there, or the one waiting there */
 static int mp_engage_spot(int64_t host, uint32_t r){
-    if (!mprace_car_ok()){ mp_note(host, MP_NOCAR); return 0; }
+    const char *no = mp_cannot();
+    if (no){ mp_note(host, no); return 0; }
     MpLobby *l = mp_joinable();
     if (l) return mp_join(host, l);
     return mp_open(host, r);
@@ -5074,7 +5081,8 @@ static int mp_line(int64_t host, char *tx, int n){
         const MpSpot *sp = mp_spot_here();
         MpLobby *l = mp_joinable();
         if (l && (!sp || sp->kind == MPS_ONLY)){
-            if (!mprace_car_ok()) snprintf(tx, (size_t)n, "%s's %s: %s", mp_name(l->host), race_kind(l->race), MP_NOCAR);
+            const char *no = mp_cannot();
+            if (no) snprintf(tx, (size_t)n, "%s's %s: %s", mp_name(l->host), race_kind(l->race), no);
             else snprintf(tx, (size_t)n, "Press Enter to join %s's %s (%d of %d). Quitting the race costs $%d%s", mp_name(l->host), race_kind(l->race),
                           l->n, l->max, MPRACE_QUIT_FEE, l->race && mprace_evened(race_net_mode(l->race)) ? ". The cars are evened out" : "");
             return 1;
@@ -5241,7 +5249,7 @@ static void mp_panel(int64_t host, int in_roam){
         }
         /* a message first, for its few seconds (back from the race at the spot: the place and the prize) */
         if (g_mp.note[0] && host < g_mp.note_until){ js_str(&j, "v", "note"); js_str(&j, "text", g_mp.note); }
-        else if (l && (!sp || sp->kind == MPS_ONLY) && !mprace_car_ok()){ js_str(&j, "v", "note"); js_str(&j, "text", MP_NOCAR); }
+        else if (l && (!sp || sp->kind == MPS_ONLY) && mp_cannot()){ js_str(&j, "v", "note"); js_str(&j, "text", mp_cannot()); }
         else if (l && (!sp || sp->kind == MPS_ONLY)){ js_str(&j, "v", "join"); js_race(&j, l->race); js_players(&j, l); js_int(&j, "fee", MPRACE_QUIT_FEE);
             if (l->race && mprace_evened(race_net_mode(l->race))) js_int(&j, "even", 1); }
         else if (full){ js_str(&j, "v", "full"); js_race(&j, full->race); js_players(&j, full); }

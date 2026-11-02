@@ -4,7 +4,7 @@
 # mprace_car_ok): a hang at the race's start, a trap in a car's wheels, the runtime's memory written over.
 #   node web/tools/roam-pair.mjs --seed <a stage-2 career save> --fresh Neo --a Ann:mprace_lobby_a.txt
 #        --b Neo:mprace_nocar_b.txt --env MP_RACE=S2_SPRINT_3 --env MP_PLAYERS=2
-# Neo's log: "race lobby: Multiplayer races take a car of your own ..." and no trip; Ann's lobby keeps 1 player
+# Neo's log: "race lobby: Multiplayer races need your own car ..." and no trip; Ann's lobby keeps 1 player
 # (its waitlobby times out, its Enter starts nothing).
 0     bot on
 +0    waitroam 6000

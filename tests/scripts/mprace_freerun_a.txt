@@ -1,0 +1,19 @@
+# Multiplayer races from free roam, the host beside mprace_freerun_b.txt (a player in Quick Race's Free Run, who must
+# not get in): from a career save, a lobby at MP_RACE's multiplayer-only spot, then its players now and then.  Fixed
+# waits only (a wait that runs out fails the run): the lobby keeps 1 player.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp lobby
++1800 roam mp lobby
++1800 roam mp lobby
++1800 roam mp lobby
++1800 roam mp lobby
++0    log LOBBY DONE
++60   quit

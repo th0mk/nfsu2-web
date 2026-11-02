@@ -1,0 +1,33 @@
+# Multiplayer races from free roam: a player in Quick Race's Free Run (free roam, but not the career's: the game's mode
+# is not 1) at another player's lobby (mprace_freerun_a.txt, from a career save) neither joins nor goes: the panel
+# says why and Enter says it again.  A player's report (2026-11-02): such a player joined, and at the countdown's end
+# its trip failed at once with "The race could not start" (mprace_start takes the career's way there and back only).
+# Its profile is a career's with cars of its own (the same save), so the car's check alone lets it in.
+#   node web/tools/roam-pair.mjs --seed <a stage-2 career save> --a Ann:mprace_freerun_a.txt
+#        --b Neo:mprace_freerun_b.txt --env MP_RACE=S2_SPRINT_3
+# Neo's log: "race lobby: Join multiplayer races from your career's free roam", the lobby idle, no trip.
+0       waitfng UG_LS_Splash.fng 12000                   # title
++1000ms tapuntil RETURN UI_Main.fng 120 6000             # title -> the profile -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000     # Quick Race -> mode select
++2500ms tap RIGHT                                        # (input is ignored while the screen animates in)
++333ms  tap RIGHT
++333ms  tap RIGHT
++333ms  tap RIGHT
++333ms  tap RIGHT
++333ms  tap RIGHT
++500ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000      # mode 6, Free Run -> car
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000  # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000          # transmission -> loading
++0      waitroam 6000
++0      roam smsauto on
++0      log FREERUN in free roam
++0      roam mp waitpeers 1 12000
++0      roam mp waitlobby 0 12000
++0      roam mp follow Ann 6 0
++300    roam mp lobby
++0      log FREERUN at the lobby
++0      tap RETURN
++60     roam mp lobby
++600    roam mp lobby
++0      log FREERUN DONE
++60     quit
