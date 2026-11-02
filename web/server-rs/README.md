@@ -181,8 +181,8 @@ behind, the switch dropped their snapshots; the server stayed at 1.5 cores): 400
 
 ## 48 links a player (2026-11-01, Ryzen 9 5900X, WSL)
 
-A game of core version 10 asks the hub for as many links as it shows friends' cars (40 by default on a computer that
-can take them, 48 when the player picks it, phones 16); older games get 32.  300 roam-crowd bots circling within 120 m of each other (`--bundle`):
+A game of core version 10 asks the hub for as many links as it shows friends' cars (32 by default on a computer, up to
+48 when the player picks it, phones 16); older games get 32.  300 roam-crowd bots circling within 120 m of each other (`--bundle`):
 at 32 links the server took 2.48 cores, at 48 links 2.47 (the bundles: WebSocket messages a second barely moved, in
 6,200, out 9,000-10,000), and 20 MB/s of datagrams (with the switch's 16-byte headers, plain bundles) became 25 MB/s.
 The hub's tick (bench.rs `bench_links_32_40_48`, a loaded machine): 3000 players in 4 km 44 / 56 / 72 ms at 32 / 40 /

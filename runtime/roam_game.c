@@ -3175,12 +3175,12 @@ static struct { uint32_t id, gen; int horn; } g_phorn[RC_TABLE];   /* each peer'
 
 /* ---- fewer cars on a slow machine -------------------------------------------------------------- */
 /* Each friend's car shown costs the game's thread about 0.28 ms a frame (a Ryzen 5900X at 1080p, all of them in
- * view: 32 cars 14 ms, 48 cars 18.5 ms), a laptop's several times that.  The page shows 40 by default on a computer
- * with 8 cores and 8 GB or more (device.ts manyCars), a guess.  So while more than DEF_CARS of them are shown in free
+ * view: 32 cars 14 ms, 48 cars 18.5 ms), a laptop's several times that.  The page's device default was more than 32
+ * on a computer with 8 cores and 8 GB or more (48, then 40) until 2026-11-02; now none is.  So while more than DEF_CARS of them are shown in free
  * roam, the frames are timed: after CUT_WINDOW_US of it with CUT_SHARE of them slow (O.cut_us: 40 fps or a frame and a
  * half of the display), the cars shown go down to DEF_CARS for the rest of the game, the hub hears it (rc_set_links),
  * and the cars past it are parked, as for a friend gone (the players they were show on the minimap: near_update).
- * Only for the device's default (O.cars_auto): a player who picked 40 or 48 keeps it.  A gap over CUT_GAP_US (a load, a
+ * Only for a device's default (O.cars_auto): a player who picked 40 or 48 keeps it.  A gap over CUT_GAP_US (a load, a
  * pause, the tab away) counts as no frame. */
 #define CUT_FRAME_US    25000
 #define CUT_WINDOW_US   10000000

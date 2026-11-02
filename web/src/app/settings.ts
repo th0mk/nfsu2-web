@@ -416,9 +416,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_discovery = on
 # Largest group: you and the players you exchange cars with at once (2 to
 # 49; the server picks the nearest), and other players' cars shown at once
-# (0 to 48, the nearest; the page offers 16, 24, 32, 40 or 48: 40 on a
-# computer that can take them, 32 on others, 16 on phones, 24 on tablets): the
-# server sends you as many players' cars as that.
+# (0 to 48, the nearest; the page offers 16, 24, 32, 40 or 48: 32 on
+# computers, 16 on phones, 24 on tablets): the server sends you as many
+# players' cars as that.
 # [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]
 #roam_max_players = 49
 #roam_max_cars = 32

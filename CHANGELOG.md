@@ -12,7 +12,7 @@ not guessed.
 
 ## 2026-11-02 (251cf1a)
 
-- **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Fast computers start at 40 and drop to 32 if the frames stay slow; other computers start at 32, tablets 24, phones 16.
+- **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
 - **Minimap:** every player near you gets an arrow, not only those whose cars your game shows.
 - **Frame rate:** other players' cars cost less a frame in a busy free roam.
 - **Free roam:** a car that went missing (only the HUD drawn, an empty minimap, a lower frame rate) is put back where it last was, and a profile saved that way loads again at the airport car park.

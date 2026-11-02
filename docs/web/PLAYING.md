@@ -208,7 +208,7 @@ that room.
 
 | Where | Settings |
 |---|---|
-| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode, players' cars shown (16, 24, 32, 40 or 48; 40 on a computer that can take them, 32 on others, phones start at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
+| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode, players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
@@ -397,11 +397,9 @@ Good to know:
   others by yourself when it is your turn. The page menu's "Stop waiting: play offline" leaves the line for the rest
   of that game, and when the server is full as you press Play the start page asks whether to wait in line or play
   offline (or, the first time, says so in its free-roam question). The server pairs each player with the players
-  nearest to them, as many as their game shows cars (fewer while it is busy, 8 at the least): 40 in Chrome, Edge or
-  Firefox on a Windows computer with 8 cores or more (and 8 GB of memory or more, where the browser says), 32 on other
-  computers, 24 on tablets and 16 on phones (Online: Players' cars shown: 16, 24, 32, 40 or 48; 48 only when you pick it). On
-  a computer that shows 40 by itself, the game goes down to 32 for the rest of the game when its frame rate stays
-  under 40 among more than 32 cars; a number you pick yourself stays as you set it. Their names show
+  nearest to them, as many as their game shows cars (fewer while it is busy, 8 at the least): 32 on computers, 24 on
+  tablets and 16 on phones, or what you pick (Online: Players' cars shown: 16, 24, 32, 40 or 48; more cars can lower
+  the frame rate). Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
   in the game's orange. The game's own outrun challengers are grey on both (the legend's Opponent Car too), so you can
   tell them from players. The minimap also has an arrow, the same as a car's, for the players near you whose cars
