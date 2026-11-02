@@ -49,6 +49,7 @@ test('Underground 2\'s names are the ones it always had', () => {
       TOUCH_STEERING: 'nfsu2-touch-steering', TOUCH_LEVEL: 'nfsu2-touch-level', TOUCH_NITRO: 'nfsu2-touch-nitro', TOUCH_POSITION: 'nfsu2-touch-position', TOUCH_SIZE: 'nfsu2-touch-size', MENU_SIZE: 'nfsu2-menu-size',
       KEYPHRASE_LINK: 'nfsu2-keyphrase:', KEYPHRASE_KEPT: 'nfsu2-keyphrase-kept:', CLOUD_OFFER: 'nfsu2-cloud-offer:',
       NAME_ASKED: 'nfsu2-name-asked:', NAME_CLAIMED: 'nfsu2-name-claimed:', CLAIM_TRIED: 'nfsu2-claim-tried:',
+      MESSAGES: 'nfsu2.msgs.', PAGE_TAB: 'nfsu2.page.tab',
     },
     SESSION: { UPDATE: 'nfsu2-update', OTHER_BUILD: 'nfsu2-other-build' },
   });

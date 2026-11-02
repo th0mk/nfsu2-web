@@ -112,6 +112,8 @@ export interface LocalKeys {
   readonly NAME_ASKED: string;
   readonly NAME_CLAIMED: string;
   readonly CLAIM_TRIED: string;
+  readonly MESSAGES: string;
+  readonly PAGE_TAB: string;
 }
 
 /** T, which tsc checks is a whole profile: each profile's `export type Checked = Profile<typeof self>` */

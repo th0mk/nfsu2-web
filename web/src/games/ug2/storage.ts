@@ -43,6 +43,10 @@ export const STORAGE = {
     NAME_ASKED: 'nfsu2-name-asked:',
     NAME_CLAIMED: 'nfsu2-name-claimed:',
     CLAIM_TRIED: 'nfsu2-claim-tried:',
+    /** a friend's messages kept in this browser, by the player's name (messages.ts) */
+    MESSAGES: 'nfsu2.msgs.',
+    /** the big panel's open tab (shell.ts, tabs.ts) */
+    PAGE_TAB: 'nfsu2.page.tab',
   },
   SESSION: {
     UPDATE: 'nfsu2-update',

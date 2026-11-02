@@ -15,6 +15,7 @@
 import type { GameSession } from './game';
 import { t } from './i18n';
 import { touchFirst } from './device';
+import { STORAGE } from '@game/storage';
 
 /** an envelope: what marks a line in the log as a friend's message (quick chat's have a speech balloon) */
 export const MSG_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 4l6.2 5 6.2-5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
@@ -70,7 +71,7 @@ export class MessageStore {
     this.changed(Object.keys(early).length > 0);
   }
 
-  private storeKey() { return `nfsu2.msgs.${this.me}`; }
+  private storeKey() { return `${STORAGE.LOCAL.MESSAGES}${this.me}`; }
 
   private changed(save = true) {
     if (save && this.me) {

@@ -35,6 +35,10 @@ export const STORAGE = {
     NAME_ASKED: 'nfsmw-name-asked:',
     NAME_CLAIMED: 'nfsmw-name-claimed:',
     CLAIM_TRIED: 'nfsmw-claim-tried:',
+    /** a friend's messages kept in this browser, by the player's name (messages.ts) */
+    MESSAGES: 'nfsmw.msgs.',
+    /** the big panel's open tab (shell.ts, tabs.ts) */
+    PAGE_TAB: 'nfsmw.page.tab',
   },
   SESSION: {
     UPDATE: 'nfsmw-update',

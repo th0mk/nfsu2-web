@@ -1847,7 +1847,7 @@ export async function boot() {
   // the language this browser showed last, at once (settings.ini says which it is: applyLanguage, once it is read)
   void setLanguage(lastLanguage(), logLine);
   // the big panel's tabs (the one open last, or the one the address names: #friends) and About's
-  panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true });
+  panelTabs($('#settings'), { store: STORAGE.LOCAL.PAGE_TAB, hash: true });
   panelTabs($('#about'));
   settings = new SettingsPanel($('#settings'), {
     // another language or texture pack counts other files as the game data (its pack); a keyphrase sends the file
