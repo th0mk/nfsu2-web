@@ -330,6 +330,8 @@ export class TouchControls {
    *  does not say), the one of Pressurize and Bounce turned on ('' neither) */
   private hydraulics: number | undefined;
   private hyd: '' | 'lift' | 'bounce' = '';
+  /** the press again of the one on's key, while it waits (pressHydAgain), so only one waits and none outlives it */
+  private hydTimer = 0;
   private hydWide = false;
   private hydWorks = false;
   /** a race between players (runtime/racehorn.c "netrace": 1 driving, 2 its results): Quick chat shows there too */
@@ -551,20 +553,28 @@ export class TouchControls {
     this.setMode(mode);
   }
 
-  /** Pressurize or Bounce on, its key (H, J) held from now on, or neither ('') */
+  /** Pressurize or Bounce on, its key (H, J) held from now on, or neither (''): a press again still waiting is
+   *  dropped (the key is up meanwhile, and held now if another one is on).  Leaving the driving controls, stop() and
+   *  the buttons hiding all come here */
   private setHyd(to: '' | 'lift' | 'bounce') {
     if (to === this.hyd) return;
+    clearTimeout(this.hydTimer); this.hydTimer = 0;
     if (this.hyd) { this.keyUp(HYD_KEYS[this.hyd]); this.ctls.get(this.hyd)!.el.classList.remove('lit'); }
     this.hyd = to;
     if (to) { this.keyDown(HYD_KEYS[to]); this.ctls.get(to)!.el.classList.add('lit'); if (this.ticks) navigator.vibrate?.(8); }
   }
   /** the key of the one on let go and pressed again HOLD_MS later, so the game starts them now (runtime/web/
-   *  status_web.c "hydraulics"): it took the first press when the car was too fast, or not at all */
+   *  status_web.c "hydraulics"): it took the first press when the car was too fast, or not at all.  One already
+   *  waiting (the status back at 2 before it ran) starts over: the key is still up, and two would hold it twice */
   private pressHydAgain() {
     const on = this.hyd;
     if (!on) return;
-    this.keyUp(HYD_KEYS[on]);
-    setTimeout(() => { if (this.hyd === on) this.keyDown(HYD_KEYS[on]); }, HOLD_MS);
+    if (this.hydTimer) clearTimeout(this.hydTimer);
+    else this.keyUp(HYD_KEYS[on]);
+    this.hydTimer = setTimeout(() => {
+      this.hydTimer = 0;
+      if (this.hyd === on) this.keyDown(HYD_KEYS[on]);
+    }, HOLD_MS) as unknown as number;
   }
 
   /** the driving controls, the menu's or none: every control let go on a change, the stick and tilt at rest */
