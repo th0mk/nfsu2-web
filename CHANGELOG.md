@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-02 (af266ee)
+## 2026-11-02 (727545e)
 
 - **Free roam:** up to 48 players' cars at once. Players' cars shown (Settings, Online tab) is 16, 24, 32, 40 or 48. Computers start at 32, tablets 24, phones 16; more cars can lower the frame rate.
 - **Minimap:** every player near you gets an arrow, not only those whose cars your game shows.
@@ -19,6 +19,7 @@ not guessed.
 - **Free roam:** Ghost mode (Settings, Online, and the page menu, F9) is Off, Players or Everything. Everything also lets traffic and the game's tuners drive through you; an outrun's opponent stays solid.
 - **Free roam:** an outrun between two players no longer ends, with both of you winning, when a crowd comes between you.
 - **Online races:** a ranked race counts when the others run out of time, and Last Month's Leaderboard is no longer empty.
+- **Quick chat:** works in races with other players too (free-roam race spots, the Online menu and LAN), while racing and on the results, and no longer needs free roam to be on. Quick chat off mutes it there too.
 - **Radio:** the end of a track no longer stops the radio or crashes the game.
 - **Phones:** Play after an earlier game no longer fails with "could not allocate memory" or "Out of memory".
 - **This page:** says when the browser's JavaScript optimizer is off for the site, and where to allow it, and when Chrome draws the game without the graphics card.
