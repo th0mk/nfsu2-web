@@ -92,6 +92,13 @@ Checked against the guide or the code, and confirmed by players in threads:
   Show hidden races (off by default, MaxHwoy's Show Hidden Races Mod) puts them on the map and the radar like the
   others, from the next Play. Someone who still finds none can attach the saves (Saves, Download backup): escalate
   it, the developer can tell where they are. (The developer answered this on 2026-10-26.)
+- Career, a unique-part text message (the wide body kit, a performance part: "go to the star on the map") but no
+  star on the map: the original game, the same on PC, not a bug (the developer checked it on 2026-11-02 and keeps
+  it). In stage 5, once the last URL race (S5_URL_9) is won, the map shows only Caleb's race and no stars, but the
+  message still arrives at the 6th and 11th stage-5 outrun win. Collect the stars before that race; afterwards only
+  an earlier save brings them back (cloud saves' earlier copy, or a backup). After Caleb is beaten the list stays
+  empty. The wide body star never shows while driving an SUV (Hummer, Navigator, Escalade): switch cars. Show hidden
+  races does not change any of this (stars are not races).
 - Firefox: when a problem shows only in Firefox (its log has Firefox errors, or Chrome works), Chrome is the browser
   most tested.
 - A phone that stutters or shakes at 60 fps but runs smoothly at 30: its GPU no longer finishes a frame in 16.7 ms,
