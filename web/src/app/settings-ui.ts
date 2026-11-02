@@ -47,6 +47,7 @@ const LANGUAGE_NAMES: Record<Language, string> = {
   english: N('English'), french: N('French'), german: N('German'), italian: N('Italian'), spanish: N('Spanish'), dutch: N('Dutch'),
   swedish: N('Swedish'), danish: N('Danish'), korean: N('Korean'), chinese: N('Chinese'), japanese: N('Japanese'), russian: N('Russian'),
   thai: N('Thai'), portuguese: N('Portuguese (Brazil)'), polish: N('Polish'), turkish: N('Turkish'), hungarian: N('Hungarian'),
+  ukrainian: N('Ukrainian'),
 };
 const LANGUAGE_OPTS = LANGUAGES.map(l => [l, LANGUAGE_NAMES[l]] as [string, string]);
 

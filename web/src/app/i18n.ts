@@ -15,7 +15,7 @@
 
 /** the game's languages (runtime/language.c), settings.ini language's values; english is the default */
 export const LANGUAGES = ['english', 'french', 'german', 'italian', 'spanish', 'dutch', 'swedish', 'danish', 'korean',
-  'chinese', 'japanese', 'russian', 'thai', 'portuguese', 'polish', 'turkish', 'hungarian'] as const;
+  'chinese', 'japanese', 'russian', 'thai', 'portuguese', 'polish', 'turkish', 'hungarian', 'ukrainian'] as const;
 export type Language = typeof LANGUAGES[number];
 type Forms = Partial<Record<Intl.LDMLPluralRule, string>>;
 export type Vars = Record<string, string | number>;
@@ -25,13 +25,13 @@ export type Vars = Record<string, string | number>;
 export const LOCALE: Record<Language, string> = {
   english: 'en', french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch: 'nl', swedish: 'sv', danish: 'da',
   korean: 'ko', chinese: 'zh-Hant', japanese: 'ja', russian: 'ru', thai: 'th', portuguese: 'pt-BR', polish: 'pl', turkish: 'tr',
-  hungarian: 'hu',
+  hungarian: 'hu', ukrainian: 'uk',
 };
 /** each language in its own words (the pickers) */
 export const NATIVE: Record<Language, string> = {
   english: 'English', french: 'Français', german: 'Deutsch', italian: 'Italiano', spanish: 'Español', dutch: 'Nederlands',
   swedish: 'Svenska', danish: 'Dansk', korean: '한국어', chinese: '繁體中文', japanese: '日本語', russian: 'Русский', thai: 'ไทย',
-  portuguese: 'Português (Brasil)', polish: 'Polski', turkish: 'Türkçe', hungarian: 'Magyar',
+  portuguese: 'Português (Brasil)', polish: 'Polski', turkish: 'Türkçe', hungarian: 'Magyar', ukrainian: 'Українська',
 };
 
 let current: Language = 'english';

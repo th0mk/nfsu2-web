@@ -3,11 +3,12 @@
 "Multi 13 languages" mod for NFSU2 (KyoriAsh, nfsmods.xyz/mod/5749), from
 TraduMix's and MixMods' Brazilian Portuguese translation, from PLProjekt's
 Polish one, from VileStuff's English subtitles, from muntazam's Turkish
-translation and from GameHunter's Hungarian one.
+translation (its fonts, with tools/lang/turkish.json's text), from GameHunter's
+Hungarian one and from Clark X.'s Ukrainian one.
 
     tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>]
                        [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>]
-                       [--hu <installer>]
+                       [--hu <installer>] [--uk <translation folder>]
 
 Each source builds its own languages' packs; the others are left as they are.
 
@@ -90,6 +91,17 @@ folder it is in.  It is read, never run: an Astrum InstallWizard package, as
 the Polish one.  Hungarian takes English's place as Portuguese does: its text,
 which spells ő and ű as õ and û (the game's fonts have no ő or ű, and
 Hungarian texts of the time wrote them so), its memory-card texts and credits.
+
+<translation folder> (--uk) is Clark X.'s Ukrainian translation ("Need for
+Speed Underground 2 - Ukrainian.exe", 2022, from kuli.com.ua) unpacked with
+`innoextract` (into app/), never run; or any folder below which it has
+LANGUAGES/English.bin and GLOBAL/GLOBALA.BUN.  Ukrainian takes English's place
+as Russian does, on the Russian pack's fonts (its LanguageTextures.bin and
+GLOBALA.BUN are those): its text writes І і Ї ї Є є as bytes 0xE2-0xE7 of
+their glyph table, the rest in Russian's order; also its memory-card texts and
+credits.  The rest of the installer is not used: a GlobalB.lzc that differs
+from the game's in one byte (the ™ of a shave gel's name) and two files the
+game never reads (LANGUAGES/Labels.bin, Largest.bin).
 Rerunning it copies only what changed, each as a new file (a copy of the game
 folder made of hard links keeps its own).  Prints what each pack holds.
 """
@@ -164,6 +176,15 @@ TR_LATIN = set(map(chr, range(0x20, 0x7f))) | set('ÇÖÜçöü©®Ñ\xa0')
 # Hungarian: (file in the installer, the game's file it stands in for)
 HU = [
     ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
+    ('memcard/LOCALE_ENGLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
+    ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
+    ('CREDITS/UK_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
+]
+# Ukrainian: (file in the translation, the game's file it stands in for)
+UK = [
+    ('LANGUAGES/English.bin', 'LANGUAGES/English.bin'),
+    ('LANGUAGES/LanguageTextures.bin', 'LANGUAGES/LanguageTextures.bin'),
+    ('GLOBAL/GLOBALA.BUN', 'GLOBAL/GLOBALA.BUN'),
     ('memcard/LOCALE_ENGLISH.loc', 'memcard/LOCALE_ENGLISH.loc'),
     ('CREDITS/NA_ENGLISH.TXT', 'CREDITS/NA_ENGLISH.TXT'),
     ('CREDITS/UK_ENGLISH.TXT', 'CREDITS/UK_ENGLISH.TXT'),
@@ -374,6 +395,18 @@ def hu(src, game):
     done(p, 'hungarian')
 
 
+def uk(src, game):
+    root = next((d for d, _, _ in os.walk(src) if find(d, 'LANGUAGES/English.bin') and find(d, 'GLOBAL/GLOBALA.BUN')), None)
+    if not root: sys.exit(f'{src}: no LANGUAGES/English.bin and GLOBAL/GLOBALA.BUN below it, not the translation (innoextract its installer)')
+    missing = [s for s, _ in UK if not find(root, s)]
+    if missing: sys.exit(f'{root}: the translation is not all there, missing:\n  ' + '\n  '.join(missing))
+    p = Pack(game, 'ukrainian')
+    if p.same_as_game('LANGUAGES/English.bin', src=find(root, 'LANGUAGES/English.bin')):
+        sys.exit(f'{root}: its LANGUAGES/English.bin is the game\'s own, not the translation')
+    for s, rel in UK: p.add_file(find(root, s), rel)
+    done(p, 'ukrainian')
+
+
 STRINGS = 0x39000           # a language file's text: its chunk's id
 
 
@@ -468,7 +501,7 @@ def subs(src, game):
 
 
 def main():
-    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>] [--hu <installer>]')
+    ap = argparse.ArgumentParser(usage='tools/langpacks.py <game folder> [--multi13 <mod folder>] [--ptbr <translation folder>] [--pl <installer>] [--subs <subtitles folder>] [--tr <translation folder>] [--hu <installer>] [--uk <translation folder>]')
     ap.add_argument('game')
     ap.add_argument('--multi13', metavar='MOD', help='the Multi 13 languages mod, every archive extracted')
     ap.add_argument('--ptbr', metavar='FOLDER', help='the Brazilian Portuguese translation, extracted')
@@ -476,8 +509,9 @@ def main():
     ap.add_argument('--subs', metavar='FOLDER', help='the English Subtitles Fixed mod, extracted')
     ap.add_argument('--tr', metavar='FOLDER', help='the Turkish translation, its installer extracted (innoextract), never run')
     ap.add_argument('--hu', metavar='INSTALLER', help='the Hungarian translation\'s installer (or its folder), never run')
+    ap.add_argument('--uk', metavar='FOLDER', help='the Ukrainian translation, its installer extracted (innoextract), never run')
     a = ap.parse_args()
-    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr or a.hu): sys.exit(__doc__)
+    if not (a.multi13 or a.ptbr or a.pl or a.subs or a.tr or a.hu or a.uk): sys.exit(__doc__)
     if not find(a.game, 'SPEED2.EXE'): sys.exit(f'{a.game}: no SPEED2.EXE, not the game folder')
     if a.multi13: multi13(a.multi13, a.game)
     if a.ptbr: ptbr(a.ptbr, a.game)
@@ -485,6 +519,7 @@ def main():
     if a.subs: subs(a.subs, a.game)
     if a.tr: tr(a.tr, a.game)
     if a.hu: hu(a.hu, a.game)
+    if a.uk: uk(a.uk, a.game)
 
 
 if __name__ == '__main__':
