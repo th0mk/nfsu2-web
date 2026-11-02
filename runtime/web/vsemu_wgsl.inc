@@ -277,7 +277,11 @@ static int w_defs_finite(const VSProg *p){
  *                                 x falloff ramp (stage 2)
  *     mad rA.rgb, rA, c0, v0      x HEADLIGHTCOLOR + the vertex light
  * before the texture multiply; after that mad, every other car's light is
- * added the same way, from its coordinate uv1 * t and its own colour. */
+ * added the same way, from its coordinate uv1 * t and its own colour.  p.z
+ * is not the projector's depth but the point's height above that car's road
+ * plane (metres): the light fades out from 2 m + 6 % of the distance ahead
+ * (p.w) below it, gone 1.5 m lower, so a car on an overpass does not light
+ * the street under it. */
 static const char W_HL[] =
     "struct HLight { t: mat4x4f, col: vec4f }\n"
     "struct HLPar { n: u32, s: f32, o: f32, pad: f32, l: array<HLight, " WSTR(GW_HL_MAX) "> }\n"
@@ -288,7 +292,8 @@ static const char W_HL[] =
     "    let p = q * H.l[k].t;\n"
     "    let l1 = textureSample(tex1, smp1, p.xy / p.w).rgb;\n"
     "    let l2 = textureSample(tex2, smp2, vec2f(H.s * p.w + H.o, v)).rgb;\n"
-    "    a += select(vec3f(0.0), l1 * l2 * H.l[k].col.rgb, p.w > 0.0);\n"
+    "    let road = saturate((p.z + 3.5 + 0.06 * p.w) / 1.5);\n"
+    "    a += select(vec3f(0.0), l1 * l2 * H.l[k].col.rgb * road, p.w > 0.0);\n"
     "  }\n"
     "  return a;\n"
     "}\n";

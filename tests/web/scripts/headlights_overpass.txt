@@ -1,0 +1,44 @@
+# Other cars' light stops below their own road (runtime/headlights.c): a
+# car on an overpass must not light the street under it.  Quick Race,
+# Circuit, Resort Loop: 15 s after the start, the AI racers gone and the
+# player's car still behind the line (a still frame but for the crowd), the
+# player's own light copied once more at 3x (headlights self) at the car's
+# height, 8 m above it (a car on a bridge overhead: nothing may land on
+# this road) and 8 m below it, each moment next to "off".
+#   node web/tools/run-page.mjs "<base>/test/play.html?...&env=NFSU2_FPS=30&script=/tests/web/scripts/headlights_overpass.txt&artifacts=/artifacts/ho_"
+# NFSU2_FPS=30 (frame counts below are at 30 fps): a headless renderer
+# slower than the game replaces frames and loses dumps.  2026-11-02: the
+# copy 8 m above added ~1.3 (mean of frame - off) before the cut, ~0.4
+# (the crowd's noise, as off vs off) after; at the car 2.1 both ways.
+0       waitfng UG_LS_Splash.fng 12000                  # title
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0      waitmem 0x8654a4 6 6000
++0      log race_loaded
++450    headlights off
++3      dump o_a_off
++3      dump o_a_off
++3      dump o_a_off
++2      headlights self:3
++3      dump o_b_self
++3      dump o_b_self
++3      dump o_b_self
++2      headlights self:3@8
++3      dump o_c_above8
++3      dump o_c_above8
++3      dump o_c_above8
++2      headlights self:3@-8
++3      dump o_d_below8
++3      dump o_d_below8
++3      dump o_d_below8
++2      headlights off
++3      dump o_f_off
++3      dump o_f_off
++3      dump o_f_off
++30     quit

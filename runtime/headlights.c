@@ -28,13 +28,22 @@
  *  - the solids of the view being drawn that their frusta (Rel_k * VP9)
  *    touch are marked lit too, so they are drawn with the lit effects.
  * The light goes through walls and cars as the player's own does (it has no
- * shadow); from the driver's seat that was never seen.  Only the web
- * renderer draws the extra light (the Mac's translator has no such term):
- * elsewhere the override is the game's function.
+ * shadow); from the driver's seat that was never seen.  But it also went
+ * down through the road the car is on: a car on an overpass lit the street
+ * under it.  So the light stops below the car's own road: T_k's z column
+ * (the projector's depth, which the shaders never read) carries instead the
+ * height of the lit point above the plane through car k's position across
+ * its up axis (rotation row 2), in metres; the shader fades the light out
+ * from 2 m below that plane, more the farther ahead (a road dipping or the
+ * car pitching), gone 1.5 m lower (vsemu_wgsl.inc W_HL).  Under an
+ * overpass the street is 6 m or more below the car on it.
+ * Only the web renderer draws the extra light (the Mac's translator has no
+ * such term): elsewhere the override is the game's function.
  *   NFSU2_HEADLIGHTS=players (default) | all (every other car: AI racers and
  *   traffic too) | off | self (the player's own light once more: a test of
- *   the term), optionally :GAIN (0.6); the script command "headlights MODE"
- *   sets it for an A/B within one run. */
+ *   the term), optionally :GAIN (0.6), and for self @DZ: that copy DZ metres
+ *   higher (a car on a bridge overhead, a test of the cut); the script
+ *   command "headlights MODE" sets it for an A/B within one run. */
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,10 +89,13 @@ static unsigned long g_marked, g_frames_lit;
  * readable where several pools overlap (picked from rendered variants,
  * 2026-10-20); "MODE:GAIN" sets another */
 static float g_gain = 0.6f;
+static float g_lift;                            /* HL_SELF: the copy this many metres higher */
 static int mode_of(const char *s){
     char m[16] = "";
-    if (s){ size_t n = strcspn(s, ":"); if (n < sizeof m){ memcpy(m, s, n); m[n] = 0; }
-            if (s[n] == ':'){ float g = (float)atof(s + n + 1); if (g >= 0.f && g <= 4.f) g_gain = g; } }
+    if (s){ size_t n = strcspn(s, ":@"); if (n < sizeof m){ memcpy(m, s, n); m[n] = 0; }
+            if (s[n] == ':'){ float g = (float)atof(s + n + 1); if (g >= 0.f && g <= 4.f) g_gain = g; }
+            const char *at = strchr(s, '@');
+            g_lift = at ? (float)atof(at + 1) : 0.f; }
     if (!m[0] || !strcmp(m, "players") || !strcmp(m, "on") || !strcmp(m, "1")) return HL_PLAYERS;
     if (!strcmp(m, "all")) return HL_ALL;
     if (!strcmp(m, "off") || !strcmp(m, "0")) return HL_OFF;
@@ -210,11 +222,21 @@ static void make_lights(void){
     for (int i = 0; i < nn; i++){
         uint32_t car = near[i].car, col = MR32(MR32(car + CAR_RENDER) + 0x380u);
         M4 Ck, Cki, Rel, VPk, T;
-        car_m4(car, &Ck); rigid_inv(&Cki, &Ck);
+        car_m4(car, &Ck);
+        if (g_mode == HL_SELF) Ck.m[3][2] += g_lift;
+        rigid_inv(&Cki, &Ck);
         m4_mul(&Rel, &Cki, &Cp);                         /* world -> world: car k's frame onto the player's */
         m4_mul(&VPk, &Rel, &g_vp9);
         frustum(g_pl[g_n], &VPk);
         m4_mul(&T, &Mi, &Rel); m4_mul(&T, &T, &M);
+        /* z column: the height above car k's road plane, (X - P_k) . U_k
+         * for the world point X = q * Mi, so the column Mi * (U_k, -P_k . U_k) */
+        double g[4] = { Ck.m[2][0], Ck.m[2][1], Ck.m[2][2], 0 };
+        for (int a = 0; a < 3; a++) g[3] -= Ck.m[3][a] * Ck.m[2][a];
+        for (int r = 0; r < 4; r++){
+            double s = 0; for (int a = 0; a < 4; a++) s += Mi.m[r][a] * g[a];
+            T.m[r][2] = s;
+        }
         GwHLight *L = &g_blk.l[g_n];
         for (int j = 0; j < 4; j++) for (int r = 0; r < 4; r++) L->t[4 * j + r] = (float)T.m[r][j];   /* columns */
         L->col[0] = g_gain * (float)(col & 0xffu) / 255.f; L->col[1] = g_gain * (float)((col >> 8) & 0xffu) / 255.f;
