@@ -37,7 +37,7 @@ import { PauseHint } from './pausehint';
 import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
-import type { NetQueue, NetRemoved } from '../net';
+import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 import { blockList, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
 import { exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, writeFile } from './savefs';
 import { newProfileName, turnOnAutosave } from './profile';
@@ -66,7 +66,7 @@ import { playedMs, PlayTime, SMS_AFTER_MS } from './playtime';
 import { canKeep } from './pwkeep';
 import { keepPageId, PAGE_ID_FILE, pageId, seen } from './page-id';
 import { NameClaims, onlineName } from './claim';
-import { claimQuietly, NameRow, quietCheck, settleName, type PlayNameDeps } from './claim-ui';
+import { claimQuietly, NameRow, quietCheck, renamePick, settleName, type PlayNameDeps } from './claim-ui';
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
 import { moviesKept, Predownload } from './predownload';
 import { movieCodec } from '../host/movie';
@@ -699,7 +699,7 @@ async function startGame() {
       module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump,
       friend: friendMsg,
       netBack, netQueue, onSaved,
-      netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved,
+      netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
       netBlock: net && r.env.NFSU2_ROAM === '1' ? blockList(r.env.NFSU2_ROAM_BLOCK ?? '') : undefined,
       artifacts: q.get('artifacts') ?? undefined, dumpScale: q.get('dumpscale') ? +q.get('dumpscale')! : undefined,
       toggleFullscreen, padPage: PAD_PAGE, log: logLine, onFatal: stopFatal, onOtherBuild: otherBuild,
@@ -1160,14 +1160,53 @@ function netQueue(q: NetQueue | null) {
  *  the player plays on (an input REMOVED_MS after it came up) */
 const REMOVED_MS = 8000;
 let removedTimer: ReturnType<typeof setInterval> | null = null;
+/** an end the operator set, in the page's language: "4 Nov 2026, 14:05" */
+const until = (ms: number) => new Date(ms).toLocaleString(dateLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+/** the operator's message (in its own words), as a sentence after the page's */
+const said = (msg: string) => msg ? ` ${msg}${/[.!?]$/.test(msg) ? '' : '.'}` : '';
 function netRemoved(r: NetRemoved) {
-  const why = r.msg ? `: ${r.msg}${/[.!?]$/.test(r.msg) ? '' : '.'}` : '.';
-  const head = !r.ban ? 'You were removed from playing with others'
-    : r.until ? `You can't play with others until ${new Date(r.until).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
-    : "You can't play with others any more";
-  const t = $('#removed');
-  t.textContent = `${head}${why} You can keep playing on your own.`;
-  t.hidden = false;
+  const head = !r.ban ? t('You were removed from playing with others.')
+    : r.until ? t('You can\'t play with others until {when}.', { when: until(r.until) })
+    : t('You can\'t play with others any more.');
+  removedLine(`${head}${said(r.msg)} ${t('You can keep playing on your own.')}`);
+}
+/** the operator's race ban (net/index.ts onRaces): why and until when, over the game (again when the LAN or Online
+ *  screens open); null: lifted */
+function netRaces(r: NetRaces | null) {
+  if (!r) { toast(t('You can race other players again.'), 6000); return; }
+  const head = r.until ? t('You can\'t race other players until {when}.', { when: until(r.until) }) : t('You can\'t race other players any more.');
+  toast(`${head}${said(r.msg)} ${t('Free roam stays open.')}`, 12_000);
+}
+/** the operator took the player's name away (net/index.ts onRename): a question for another (claim-ui.ts renamePick);
+ *  picked, the game plays under it at once (the input's name) and the page goes back to the others; Not now: playing
+ *  with others waits for another name, as the line over the game says */
+let renaming = false;
+async function netRename(r: NetRename) {
+  privacy.name(r.name, 'you');
+  if (renaming) return;
+  renaming = true;
+  try {
+    const name = await renamePick(playDeps(), r.name, r.msg);
+    if (!name) {
+      log.add('[app] your name: none picked (playing with others waits for another name)');
+      removedLine(t('Playing with others waits for another name: change it under Online on the start page.'));
+      return;
+    }
+    privacy.name(name, 'you');
+    log.add(`[app] your name: another picked (${session?.input?.name?.(name) ? 'the game plays under it now' : 'the game did not take it'})`);
+    session?.net?.rename?.(name);
+    hideRemoved();
+    void settings.refresh();
+  } finally {
+    renaming = false;
+  }
+}
+/** the line over the game for a player off the others, until the player plays on (an input REMOVED_MS after it came
+ *  up) */
+function removedLine(text: string) {
+  const box = $('#removed');
+  box.textContent = text;
+  box.hidden = false;
   const from = performance.now() + REMOVED_MS;
   if (removedTimer) clearInterval(removedTimer);
   removedTimer = setInterval(() => {

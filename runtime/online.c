@@ -56,6 +56,7 @@
 #include <string.h>
 
 int winsock_online(void);                    /* winsock.c: online on (browser, NFSU2_ONLINE) */
+unsigned roam_plat_name(char out[33]);       /* web/roam_web.c: the name picked on the page while the game runs */
 
 #define G_PROFILE          0x00850080u  /* the online/LAN profile object */
 #define G_NETMODE          0x00850078u  /* 8 online, 0x200 LAN */
@@ -102,9 +103,13 @@ static int clean(char out[16], const char *src){
     return 1;
 }
 
-/* the player's name: roam_name without a comment after it (roam_game.c's
- * opt(): a ';' or '#' at the start or after a blank), else the profile's */
+/* the player's name: the one it picked on the page while the game runs (the
+ * operator took the old one away: roam_plat_name), else roam_name without a
+ * comment after it (roam_game.c's opt(): a ';' or '#' at the start or after a
+ * blank), else the profile's */
 static int player_name(char out[16], const char **from){
+    char picked[33];
+    if (roam_plat_name(picked) && clean(out, picked)){ *from = "the name picked on the page"; return 1; }
     const char *v = getenv("NFSU2_ROAM_NAME");
     char buf[64]; int n = 0;
     for (int i = 0; v && v[i] && n < (int)sizeof buf - 1; i++){

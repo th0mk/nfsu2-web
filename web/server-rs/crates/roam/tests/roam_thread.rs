@@ -17,7 +17,7 @@ use nfsu2_util::{FrameCtx, Host, SendResult};
 use parking_lot::Mutex;
 
 fn ctx() -> FrameCtx {
-    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None }
+    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None, no_races: false }
 }
 
 fn wait_for(what: &str, mut f: impl FnMut() -> bool) {

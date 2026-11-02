@@ -1,7 +1,14 @@
-//! The operator's bans (the server's control socket: `nfsu2-server ctl ban ...`): who may not play with others, for
-//! a while or for good, and the message their page shows them (nfsu2-lan's Kicks and bans).  And the marks of the
+//! The operator's bans (the server's control socket: `nfsu2-server ctl ban ...`): who may not play with others, or not
+//! race them, for a while or for good, and the message their page shows them (nfsu2-lan's Kicks and bans).  The names
+//! the operator took away (`rename`).  What each player had before, for a year ([`PAST_MS`]).  And the marks of the
 //! players a `[cheat]` line of a race names: a handle (`c17`) that `ban` takes for [`MARK_MS`] (7 days), long after
 //! the player left (`Bans::mark`).
+//!
+//! A ban is of a [`Kind`]: a full one turns the player's connections away (free roam, Online, LAN: the bans from
+//! before kinds, and an entry of the file without one); a race ban lets the player play on with others but never race
+//! them (the switch drops its LAN play and its free-roam lobby and outrun messages, the Online lobby refuses it a
+//! game); a rename takes the player's name away from everyone (the name goes on the names taken away, `Bans::deny`,
+//! and the player picks another) and is in force no longer than that moment: it is the player's history.
 //!
 //! There are no accounts, so a ban names a client the three ways the server knows one, each as a keyed hash
 //! (HMAC-SHA256 under `bans.key` in the state folder, base64url, 22 characters): `bans.json` holds no address, no id
@@ -16,24 +23,28 @@
 //!   nfsu2-claims makes of its token (the switch's `AttachOpts::on_claim`), for as long as the ban lasts: the same on
 //!   every device and browser the player types it into.
 //!
-//! A connection that matches any is turned away ([`Bans::by_addr`] when it connects, [`Bans::by_hello`] at its
-//! hello).  A hello that matches by what the ban was made with (the player's page ids and keyphrase then) adds what
-//! else it names: its address (as above), and its other page ids and keyphrase, each for [`LINK_MS`] (30 days) after
-//! it was last seen with one of those, at most [`KEYS_MAX`] of each (the first ones stay).  So the player's new
-//! browser is turned away while it keeps showing up with the banned keyphrase, and a month after.  A hello that
-//! matches only by what was added so is turned away and adds nothing: a keyphrase the player typed into someone
-//! else's browser bans that browser for a month at most, and never its owner's own keyphrase or address.  An address
-//! never adds anything (whoever shares it would be banned).  None of it stops a player who clears the site's data,
-//! leaves its keyphrase (and its cloud saves and its name) behind and changes networks: without accounts no ban can.
+//! A connection that matches a full ban is turned away ([`Bans::by_addr`] when it connects, [`Bans::by_hello`] at
+//! its hello); one that matches a race ban (at its hello, its address too) races nobody.  A hello that matches by what
+//! the ban was made with (the player's page ids and keyphrase then) adds what else it names: its address (as above),
+//! and its other page ids and keyphrase, each for [`LINK_MS`] (30 days) after it was last seen with one of those, at
+//! most [`KEYS_MAX`] of each (the first ones stay).  So the player's new browser is turned away while it keeps showing
+//! up with the banned keyphrase, and a month after.  A hello that matches only by what was added so is turned away
+//! and adds nothing: a keyphrase the player typed into someone else's browser bans that browser for a month at most,
+//! and never its owner's own keyphrase or address.  An address never adds anything (whoever shares it would be
+//! banned).  None of it stops a player who clears the site's data, leaves its keyphrase (and its cloud saves and its
+//! name) behind and changes networks: without accounts no ban can.
 //!
-//! A new ban takes the place of the bans that name one of the same page ids or keyphrases (for a player without
-//! either: the same address), so `ban Bob perm` after `ban Bob 1d` leaves one ban, for good.  Bans, and what they
-//! name for a time, go once their time is up, at the next change or listing; so do marks.  The file is written whole:
-//! a temporary file beside it (0600), renamed over it.
+//! A new ban takes the place of the bans of its kind that name one of the same page ids or keyphrases (for a player
+//! without either: the same address), so `ban Bob perm` after `ban Bob 1d` leaves one ban, for good; a race ban and a
+//! full ban of one player both stand (the full one ends, the race ban goes on).  A ban whose time is up, one lifted
+//! and one replaced go to the player's history (`Bans::history`), kept [`PAST_MS`] after it ended; so do renames.
+//! What is over goes at the next change or listing; so do marks.  The file is written whole: a temporary file beside
+//! it (0600), renamed over it.  A server from before kinds reads a race ban as a full one (its file has no kind).
 
 use std::io::{self, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use hmac::{Hmac, Mac};
 use parking_lot::Mutex;
@@ -47,6 +58,8 @@ pub const ADDR_MS: i64 = 7 * DAY;
 pub const LINK_MS: i64 = 30 * DAY;
 /// how long a `[cheat]` line's mark lasts after its last line (ms)
 pub const MARK_MS: i64 = 7 * DAY;
+/// how long a ban that ended, and a rename, stay in the player's history (ms)
+pub const PAST_MS: i64 = 365 * DAY;
 /// the longest message a kick or a ban carries (characters)
 pub const MSG_MAX: usize = 200;
 /// the longest ban short of one for good (ms): ten years
@@ -56,6 +69,9 @@ pub const FOR_MAX: i64 = 3650 * DAY;
 pub const KEYS_MAX: usize = 32;
 /// the most marks kept (the oldest go first)
 const MARKS_MAX: usize = 5000;
+/// the most bans kept in the history (the oldest go first), and names taken away
+const PAST_MAX: usize = 20_000;
+const NAMES_MAX: usize = 10_000;
 /// the most names of earlier lines a mark keeps, and bans (the latest stay)
 const MARK_NAMES_MAX: usize = 8;
 /// a key seen again this soon after its time was last set is not written again
@@ -64,11 +80,38 @@ const MIN: i64 = 60_000;
 const HOUR: i64 = 60 * MIN;
 const DAY: i64 = 24 * HOUR;
 
+/// What a ban takes away (the crate doc)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    /// playing with others at all: its connections are turned away
+    #[default]
+    Full,
+    /// racing others: Online's games, free roam's lobby races and outruns, LAN play
+    Races,
+    /// its name (`Bans::rename`): in force no longer than that moment
+    Name,
+}
+
+impl Kind {
+    /// for the operator: "ban", "race ban", "rename"
+    pub fn word(self) -> &'static str {
+        match self {
+            Kind::Full => "ban",
+            Kind::Races => "race ban",
+            Kind::Name => "rename",
+        }
+    }
+}
+
 /// One ban.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Ban {
     /// its number (`unban #4`)
     pub id: u64,
+    /// what it takes away (a file from before kinds: full bans)
+    #[serde(default)]
+    pub kind: Kind,
     /// the player's name when it was banned, for the operator (anyone can take any name: a ban never matches by one)
     pub name: String,
     /// what the player's page shows
@@ -103,13 +146,15 @@ pub struct Held {
 }
 
 impl Ban {
+    /// whether it is in force now (a rename never is)
     pub fn live(&self, now: i64) -> bool {
-        self.until.is_none_or(|u| u > now)
+        self.kind != Kind::Name && self.until.is_none_or(|u| u > now)
     }
-    /// its page's control message: {"t":"ban","msg":...,"until":ms}, without until for good
+    /// Its page's control message: {"t":"ban","msg":...,"until":ms} for a full ban, {"t":"races",...} for a race
+    /// ban, without until for good
     pub fn message(&self) -> String {
         let mut m = Map::new();
-        m.insert("t".into(), "ban".into());
+        m.insert("t".into(), if self.kind == Kind::Races { "races" } else { "ban" }.into());
         m.insert("msg".into(), self.msg.clone().into());
         if let Some(u) = self.until {
             m.insert("until".into(), u.into());
@@ -133,6 +178,65 @@ impl Ban {
     fn until_for(&self, ms: i64, now: i64) -> i64 {
         self.until.map_or(now + ms, |u| u.min(now + ms))
     }
+    /// every key it named, whatever their time (the player's history)
+    pub fn keys(&self) -> Keys {
+        let hs = |l: &[Held]| l.iter().map(|x| x.h.clone()).collect::<Vec<_>>();
+        Keys {
+            addrs: hs(&self.addrs),
+            pages: self.pages.iter().cloned().chain(hs(&self.later_pages)).collect(),
+            owners: self.owners.iter().cloned().chain(hs(&self.later_owners)).collect(),
+        }
+    }
+}
+
+/// How a ban in the history ended (`Past`)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum How {
+    /// its time was up (a rename: made)
+    Over,
+    /// the operator lifted it (`unban`)
+    Lifted,
+    /// a new ban of its kind took its place (`Past::by`)
+    Replaced,
+}
+
+/// A ban that ended, or a rename, in its player's history for `PAST_MS` after `ended`
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Past {
+    pub ban: Ban,
+    /// when it ended (ms since 1970), and how
+    pub ended: i64,
+    pub how: How,
+    /// the ban that took its place
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<u64>,
+}
+
+/// One of a player's bans (`Bans::history`): in force, or in the history
+#[derive(Clone, Debug, PartialEq)]
+pub struct Record {
+    pub ban: Ban,
+    /// None: in force
+    pub past: Option<(i64, How, Option<u64>)>,
+}
+
+/// A name the operator took away (`Bans::rename`), from everyone, for good (`unname` gives it back)
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Denied {
+    /// as the player had it
+    pub name: String,
+    pub at: i64,
+    /// the rename's number
+    pub by: u64,
+}
+
+/// What a hello's player is under (`Bans::by_hello`): the full ban that turns it away, the race ban that keeps it
+/// out of races (each the one that lasts longest)
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Verdict {
+    pub full: Option<Ban>,
+    pub races: Option<Ban>,
 }
 
 /// Whom a ban or a mark names: the keyed hashes of addresses (`Bans::addr`), page ids and keyphrases (`Bans::keys`)
@@ -161,7 +265,7 @@ impl Keys {
         }
     }
     /// whether they name one of the same page ids or keyphrases (for keys without either: one of the same addresses)
-    fn same_player(&self, o: &Keys) -> bool {
+    pub fn same_player(&self, o: &Keys) -> bool {
         if self.pages.is_empty() && self.owners.is_empty() {
             return self.addrs.iter().any(|a| o.addrs.contains(a));
         }
@@ -175,6 +279,20 @@ pub fn kick_message(msg: &str) -> String {
     m.insert("t".into(), "kick".into());
     m.insert("msg".into(), clean_msg(msg).into());
     Value::Object(m).to_string()
+}
+
+/// a rename's control message, which the page shows before it asks for another name: {"t":"rename","name":...,"msg":...}
+pub fn rename_message(name: &str, msg: &str) -> String {
+    let mut m = Map::new();
+    m.insert("t".into(), "rename".into());
+    m.insert("name".into(), clean_msg(name).into());
+    m.insert("msg".into(), clean_msg(msg).into());
+    Value::Object(m).to_string()
+}
+
+/// a race ban lifted while its player plays: {"t":"races","lifted":true}
+pub fn races_lifted_message() -> String {
+    r#"{"t":"races","lifted":true}"#.to_string()
 }
 
 /// What a hello names its client by (`Bans::by_hello`): its page's ids (the one it plays with, then the ones the page
@@ -202,12 +320,12 @@ pub struct Mark {
 }
 
 /// What a `[cheat]` line of a race says of its player (`Bans::mark`): its handle, the other names of its earlier lines
-/// (oldest first), and the bans made of it since its first line, each with whether it is in force
+/// (oldest first), and the bans made of it since its first line, each with whether it is in force and its kind
 #[derive(Clone, Debug, PartialEq)]
 pub struct Marked {
     pub handle: String,
     pub before: Vec<String>,
-    pub bans: Vec<(u64, bool)>,
+    pub bans: Vec<(u64, bool, Kind)>,
 }
 
 impl Mark {
@@ -219,7 +337,7 @@ impl Mark {
 
 #[derive(Default, Serialize, Deserialize)]
 struct File {
-    /// the last ban's number
+    /// the last ban's number (renames count too)
     next: u64,
     bans: Vec<Ban>,
     /// the last mark's number, and the marks
@@ -227,6 +345,12 @@ struct File {
     next_mark: u64,
     #[serde(default)]
     marks: Vec<Mark>,
+    /// the bans that ended and the renames, oldest first
+    #[serde(default)]
+    past: Vec<Past>,
+    /// the names taken away, oldest first
+    #[serde(default)]
+    names: Vec<Denied>,
 }
 
 /// The bans of a state folder.  Every call takes one lock; the ones that change something write the file under it
@@ -236,6 +360,7 @@ pub struct Bans {
     path: PathBuf,
     key: Vec<u8>,
     file: Mutex<File>,
+    deny: Arc<nfsu2_names::Deny>,
 }
 
 impl Bans {
@@ -243,12 +368,19 @@ impl Bans {
     pub fn open(dir: &Path) -> io::Result<Bans> {
         let key = load_key(&dir.join("bans.key"))?;
         let path = dir.join("bans.json");
-        let file = match std::fs::read(&path) {
+        let file: File = match std::fs::read(&path) {
             Ok(b) => serde_json::from_slice(&b).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
             Err(e) if e.kind() == io::ErrorKind::NotFound => File::default(),
             Err(e) => return Err(e),
         };
-        Ok(Bans { path, key, file: Mutex::new(file) })
+        let deny = Arc::new(nfsu2_names::Deny::default());
+        deny.set(file.names.iter().map(|d| d.name.clone()));
+        Ok(Bans { path, key, file: Mutex::new(file), deny })
+    }
+
+    /// the names taken away, as the switch, the Online lobby and free roam's hub look them up (it follows every change)
+    pub fn deny(&self) -> Arc<nfsu2_names::Deny> {
+        self.deny.clone()
     }
 
     /// an address's hash: what bans name it by, and what the switch keeps of it (`AttachOpts::ident`)
@@ -282,40 +414,54 @@ impl Bans {
         nfsu2_util::js::base64url(&mac.finalize().into_bytes())[..22].to_string()
     }
 
-    /// the live ban an address (its hash) is under now, the one that lasts longest
+    /// the live full ban an address (its hash) is under now, the one that lasts longest
     pub fn by_addr(&self, addr: &str, now: i64) -> Option<Ban> {
         let f = self.file.lock();
-        longest(&f.bans, |b| b.live(now) && b.at_addr(addr, now)).map(|i| f.bans[i].clone())
+        longest(&f.bans, |b| b.kind == Kind::Full && b.live(now) && b.at_addr(addr, now)).map(|i| f.bans[i].clone())
     }
 
-    /// The live ban a hello's page ids or keyphrase are under now, the one that lasts longest.  When it was made with
-    /// one of them, what else the hello names is added to it: its other page ids and its keyphrase for `LINK_MS` (up to
-    /// `KEYS_MAX` each), the address it came from (its hash) for `ADDR_MS`, or each kept that much longer.  A hello
-    /// that matches only by what a ban took in later adds nothing.
-    pub fn by_hello(&self, s: &Seen, now: i64) -> Option<Ban> {
+    /// The live bans a hello's page ids or keyphrase are under now (a race ban: its address too), of each kind the
+    /// one that lasts longest.  When one was made with them, what else the hello names is added to it: its other page
+    /// ids and its keyphrase for `LINK_MS` (up to `KEYS_MAX` each), the address it came from (its hash) for
+    /// `ADDR_MS`, or each kept that much longer.  A hello that matches only by what a ban took in later (or by its
+    /// address) adds nothing.
+    pub fn by_hello(&self, s: &Seen, now: i64) -> Verdict {
         let pages: Vec<String> = s.pages.iter().map(|p| self.page(p)).collect();
         let owners: Vec<String> = s.owner.map(|o| self.owner(o)).into_iter().collect();
         let mut f = self.file.lock();
-        let Some(i) = longest(&f.bans, |b| b.live(now) && b.made_for(&pages, &owners)) else {
-            return longest(&f.bans, |b| b.live(now) && b.took_in(&pages, &owners, now)).map(|i| f.bans[i].clone());
-        };
-        let b = &mut f.bans[i];
-        let (link, addr) = (b.until_for(LINK_MS, now), b.until_for(ADDR_MS, now));
-        let mut changed = false;
-        for p in pages.iter().filter(|p| !b.pages.contains(p)) {
-            changed |= hold(&mut b.later_pages, p, link, KEYS_MAX);
+        let (mut v, mut changed) = (Verdict::default(), false);
+        for kind in [Kind::Full, Kind::Races] {
+            let ban = match longest(&f.bans, |b| b.kind == kind && b.live(now) && b.made_for(&pages, &owners)) {
+                Some(i) => {
+                    let b = &mut f.bans[i];
+                    let (link, addr) = (b.until_for(LINK_MS, now), b.until_for(ADDR_MS, now));
+                    for p in pages.iter().filter(|p| !b.pages.contains(p)) {
+                        changed |= hold(&mut b.later_pages, p, link, KEYS_MAX);
+                    }
+                    for o in owners.iter().filter(|o| !b.owners.contains(o)) {
+                        changed |= hold(&mut b.later_owners, o, link, KEYS_MAX);
+                    }
+                    if let Some(a) = s.addr {
+                        changed |= hold(&mut b.addrs, a, addr, usize::MAX);
+                    }
+                    Some(b.clone())
+                }
+                None => longest(&f.bans, |b| {
+                    b.kind == kind
+                        && b.live(now)
+                        && (b.took_in(&pages, &owners, now) || (kind == Kind::Races && s.addr.is_some_and(|a| b.at_addr(a, now))))
+                })
+                .map(|i| f.bans[i].clone()),
+            };
+            match kind {
+                Kind::Full => v.full = ban,
+                _ => v.races = ban,
+            }
         }
-        for o in owners.iter().filter(|o| !b.owners.contains(o)) {
-            changed |= hold(&mut b.later_owners, o, link, KEYS_MAX);
-        }
-        if let Some(a) = s.addr {
-            changed |= hold(&mut b.addrs, a, addr, usize::MAX);
-        }
-        let ban = b.clone();
         if changed {
             self.save_or_say(&mut f, now);
         }
-        Some(ban)
+        v
     }
 
     /// whether `ban` names one of these keys (a connection's: `Bans::keys`) now: the other connections a new ban removes
@@ -323,74 +469,136 @@ impl Bans {
         ban.made_for(&k.pages, &k.owners) || ban.took_in(&k.pages, &k.owners, now) || k.addrs.iter().any(|a| ban.at_addr(a, now))
     }
 
-    /// A new ban of the player `k` names (`name` for the operator), with `msg`, until `until` (None: for good).  It
-    /// takes the place of the bans that name one of its page ids or keyphrases (a player without either: one of its
-    /// addresses); their numbers come back with it.
-    pub fn add(&self, name: &str, k: &Keys, msg: &str, until: Option<i64>, now: i64) -> io::Result<(Ban, Vec<u64>)> {
-        let mut f = self.file.lock();
-        let mut replaced = Vec::new();
-        let by_id = !k.pages.is_empty() || !k.owners.is_empty();
-        f.bans.retain(|b| {
-            let same = if by_id {
-                b.made_for(&k.pages, &k.owners) || b.took_in(&k.pages, &k.owners, now)
-            } else {
-                k.addrs.iter().any(|a| b.addrs.iter().any(|x| &x.h == a))
-            };
-            if same && b.live(now) {
-                replaced.push(b.id);
-            }
-            !same
-        });
-        f.next += 1;
-        let mut b = Ban {
-            id: f.next,
-            name: name.to_string(),
-            msg: clean_msg(msg),
-            at: now,
-            until,
-            pages: vec![],
-            owners: vec![],
-            later_pages: vec![],
-            later_owners: vec![],
-            addrs: vec![],
-        };
-        let mut own = Keys::default();
-        own.extend(k.clone());
-        let addr = b.until_for(ADDR_MS, now);
-        b.addrs = own.addrs.into_iter().map(|h| Held { h, until: addr }).collect();
-        (b.pages, b.owners) = (own.pages, own.owners);
-        f.bans.push(b.clone());
-        // the marks of the player (a ban by its handle, or of one with a mark by its name or address)
-        for m in f.marks.iter_mut().filter(|m| m.at + MARK_MS > now && k.same_player(&m.keys)) {
-            m.bans.push(b.id);
-            if m.bans.len() > MARK_NAMES_MAX {
-                m.bans.remove(0);
-            }
+    /// A new ban of `kind` (full or races) of the player `k` names (`name` for the operator), with `msg`, until
+    /// `until` (None: for good).  It takes the place of the bans of its kind that name one of its page ids or
+    /// keyphrases (a player without either: one of its addresses); their numbers come back with it.
+    pub fn add(&self, kind: Kind, name: &str, k: &Keys, msg: &str, until: Option<i64>, now: i64) -> io::Result<(Ban, Vec<u64>)> {
+        if kind == Kind::Name {
+            return Err(io::Error::other("a rename is no ban to add (Bans::rename)"));
         }
+        let mut f = self.file.lock();
+        prune(&mut f, now);
+        let id = f.next + 1;
+        let by_id = !k.pages.is_empty() || !k.owners.is_empty();
+        let (same, rest): (Vec<Ban>, Vec<Ban>) = std::mem::take(&mut f.bans).into_iter().partition(|b| {
+            b.kind == kind
+                && if by_id {
+                    b.made_for(&k.pages, &k.owners) || b.took_in(&k.pages, &k.owners, now)
+                } else {
+                    k.addrs.iter().any(|a| b.addrs.iter().any(|x| &x.h == a))
+                }
+        });
+        f.bans = rest;
+        let replaced: Vec<u64> = same.iter().map(|b| b.id).collect();
+        f.past.extend(same.into_iter().map(|ban| Past { ban, ended: now, how: How::Replaced, by: Some(id) }));
+        f.next = id;
+        let b = new_ban(id, kind, name, k, msg, until, now);
+        f.bans.push(b.clone());
+        note_on_marks(&mut f, k, id, now);
         self.save(&mut f, now)?;
         Ok((b, replaced))
     }
 
-    /// The bans `sel` names, lifted: "#4" or "4" (a number), or a name (any case: every ban of that name).
+    /// The player `k` names (`player` for the operator) has its `names` taken away from everyone, with `msg`: a
+    /// rename in its history, and the names on the names taken away (`deny`: as they read, nfsu2-names `letters`), but
+    /// for one with no letters, NAME and Player (the game's names for nobody in particular) and one taken away
+    /// already.  The rename comes back with the names it took away.
+    pub fn rename(&self, player: &str, names: &[String], k: &Keys, msg: &str, now: i64) -> io::Result<(Ban, Vec<String>)> {
+        let mut f = self.file.lock();
+        prune(&mut f, now);
+        f.next += 1;
+        let id = f.next;
+        let b = new_ban(id, Kind::Name, player, k, msg, Some(now), now);
+        f.past.push(Past { ban: b.clone(), ended: now, how: How::Over, by: None });
+        let nobody = [nfsu2_names::letters("NAME"), nfsu2_names::letters("Player")];
+        let mut took = Vec::new();
+        for n in names {
+            let l = nfsu2_names::letters(n);
+            if l.is_empty() || nobody.contains(&l) || f.names.iter().any(|d| nfsu2_names::letters(&d.name) == l) {
+                continue;
+            }
+            let name: String = clean_msg(n).chars().take(64).collect();
+            f.names.push(Denied { name: name.clone(), at: now, by: id });
+            took.push(name);
+        }
+        let over = f.names.len().saturating_sub(NAMES_MAX);
+        f.names.drain(..over);
+        self.deny.set(f.names.iter().map(|d| d.name.clone()));
+        note_on_marks(&mut f, k, id, now);
+        self.save(&mut f, now)?;
+        Ok((b, took))
+    }
+
+    /// the name taken away that `name` reads as, if any
+    pub fn denied_as(&self, name: &str) -> Option<Denied> {
+        let l = nfsu2_names::letters(name);
+        if l.is_empty() {
+            return None;
+        }
+        self.file.lock().names.iter().find(|d| nfsu2_names::letters(&d.name) == l).cloned()
+    }
+
+    /// the names taken away, oldest first
+    pub fn denied(&self) -> Vec<Denied> {
+        self.file.lock().names.clone()
+    }
+
+    /// The names taken away that `name` reads as, given back
+    pub fn undeny(&self, name: &str, now: i64) -> io::Result<Vec<Denied>> {
+        let l = nfsu2_names::letters(name);
+        let mut f = self.file.lock();
+        let (gone, kept): (Vec<Denied>, Vec<Denied>) = std::mem::take(&mut f.names)
+            .into_iter()
+            .partition(|d| d.name.eq_ignore_ascii_case(name.trim()) || (!l.is_empty() && nfsu2_names::letters(&d.name) == l));
+        f.names = kept;
+        if !gone.is_empty() {
+            self.deny.set(f.names.iter().map(|d| d.name.clone()));
+            self.save(&mut f, now)?;
+        }
+        Ok(gone)
+    }
+
+    /// The bans `sel` names, lifted (to their players' history): "#4" or "4" (a number), or a name (any case: every
+    /// ban of that name).
     pub fn remove(&self, sel: &str, now: i64) -> io::Result<Vec<Ban>> {
         let sel = sel.trim();
         let num = sel.strip_prefix('#').unwrap_or(sel).parse::<u64>().ok();
         let mut f = self.file.lock();
-        let mut gone = Vec::new();
-        f.bans.retain(|b| {
-            let hit = match num {
-                Some(n) => b.id == n,
-                None => b.name.to_lowercase() == sel.to_lowercase(),
-            };
-            if hit && b.live(now) {
-                gone.push(b.clone());
-            }
-            !hit
+        prune(&mut f, now);
+        let (gone, kept): (Vec<Ban>, Vec<Ban>) = std::mem::take(&mut f.bans).into_iter().partition(|b| match num {
+            Some(n) => b.id == n,
+            None => b.name.to_lowercase() == sel.to_lowercase(),
         });
+        f.bans = kept;
         if !gone.is_empty() {
+            f.past.extend(gone.iter().map(|b| Past { ban: b.clone(), ended: now, how: How::Lifted, by: None }));
             self.save(&mut f, now)?;
         }
         Ok(gone)
+    }
+
+    /// The live ban #`id` made another kind (full or races) and/or to last `until` (None: for good): it before and
+    /// after.  None: no such ban in force.
+    pub fn change(&self, id: u64, kind: Option<Kind>, until: Option<Option<i64>>, now: i64) -> io::Result<Option<(Ban, Ban)>> {
+        let mut f = self.file.lock();
+        prune(&mut f, now);
+        let Some(b) = f.bans.iter_mut().find(|b| b.id == id) else { return Ok(None) };
+        let before = b.clone();
+        if let Some(k) = kind.filter(|&k| k != Kind::Name) {
+            b.kind = k;
+        }
+        if let Some(u) = until {
+            b.until = u;
+            // what it holds for a time never outlasts it
+            if let Some(end) = u {
+                for l in [&mut b.addrs, &mut b.later_pages, &mut b.later_owners] {
+                    l.iter_mut().for_each(|x| x.until = x.until.min(end));
+                }
+            }
+        }
+        let after = b.clone();
+        self.save(&mut f, now)?;
+        Ok(Some((before, after)))
     }
 
     /// the live bans, oldest first (the ones whose time is up go)
@@ -402,6 +610,40 @@ impl Bans {
             self.save_or_say(&mut f, now);
         }
         f.bans.clone()
+    }
+
+    /// The ban (in force, or in the history) of that number
+    pub fn record(&self, id: u64, now: i64) -> Option<Record> {
+        let mut f = self.file.lock();
+        prune(&mut f, now);
+        f.bans
+            .iter()
+            .find(|b| b.id == id)
+            .map(|b| Record { ban: b.clone(), past: None })
+            .or_else(|| f.past.iter().find(|p| p.ban.id == id).map(past_record))
+    }
+
+    /// The bans of the player `k` names, in force and in the history (renames too), oldest first: each one that
+    /// named one of its page ids or keyphrases (for keys without either: one of its addresses), whatever their time
+    pub fn history(&self, k: &Keys, now: i64) -> Vec<Record> {
+        let mut f = self.file.lock();
+        prune(&mut f, now);
+        let mut v: Vec<Record> = f.past.iter().filter(|p| k.same_player(&p.ban.keys())).map(past_record).collect();
+        v.extend(f.bans.iter().filter(|b| k.same_player(&b.keys())).map(|b| Record { ban: b.clone(), past: None }));
+        v.sort_by_key(|r| (r.ban.at, r.ban.id));
+        v
+    }
+
+    /// The bans (in force and in the history) of a player called `name` (any case), oldest first: for one the switch
+    /// does not know now
+    pub fn history_by_name(&self, name: &str, now: i64) -> Vec<Record> {
+        let mut f = self.file.lock();
+        prune(&mut f, now);
+        let is = |b: &Ban| b.name.eq_ignore_ascii_case(name.trim());
+        let mut v: Vec<Record> = f.past.iter().filter(|p| is(&p.ban)).map(past_record).collect();
+        v.extend(f.bans.iter().filter(|b| is(b)).map(|b| Record { ban: b.clone(), past: None }));
+        v.sort_by_key(|r| (r.ban.at, r.ban.id));
+        v
     }
 
     /// The handle of a `[cheat]` line's player (`k`, `name` for the operator): "c17", which `ban` takes for `MARK_MS`;
@@ -443,7 +685,11 @@ impl Bans {
                 (m, true)
             }
         };
-        let bans = m.bans.iter().map(|&id| (id, f.bans.iter().any(|b| b.id == id && b.live(now)))).collect();
+        let of = |id: u64| {
+            let b = f.bans.iter().find(|b| b.id == id).or_else(|| f.past.iter().map(|p| &p.ban).find(|b| b.id == id));
+            b.map_or((id, false, Kind::Full), |b| (id, b.live(now), b.kind))
+        };
+        let bans = m.bans.iter().map(|&id| of(id)).collect();
         if changed {
             self.save(&mut f, now)?;
         }
@@ -475,6 +721,43 @@ impl Bans {
     }
 }
 
+/// a ban as `add` and `rename` make it: the keys it was made with, its addresses for `ADDR_MS`
+fn new_ban(id: u64, kind: Kind, name: &str, k: &Keys, msg: &str, until: Option<i64>, now: i64) -> Ban {
+    let mut b = Ban {
+        id,
+        kind,
+        name: name.to_string(),
+        msg: clean_msg(msg),
+        at: now,
+        until,
+        pages: vec![],
+        owners: vec![],
+        later_pages: vec![],
+        later_owners: vec![],
+        addrs: vec![],
+    };
+    let mut own = Keys::default();
+    own.extend(k.clone());
+    let addr = if kind == Kind::Name { now } else { b.until_for(ADDR_MS, now) };
+    b.addrs = own.addrs.into_iter().map(|h| Held { h, until: addr }).collect();
+    (b.pages, b.owners) = (own.pages, own.owners);
+    b
+}
+
+/// the marks of the player `k` names (a ban by its handle, or of one with a mark by its name or address) have ban `id`
+fn note_on_marks(f: &mut File, k: &Keys, id: u64, now: i64) {
+    for m in f.marks.iter_mut().filter(|m| m.at + MARK_MS > now && k.same_player(&m.keys)) {
+        m.bans.push(id);
+        if m.bans.len() > MARK_NAMES_MAX {
+            m.bans.remove(0);
+        }
+    }
+}
+
+fn past_record(p: &Past) -> Record {
+    Record { ban: p.ban.clone(), past: Some((p.ended, p.how, p.by)) }
+}
+
 /// `h` held until `until` in `l` (at most `max` long): false when that changed nothing worth writing
 fn hold(l: &mut Vec<Held>, h: &str, until: i64, max: usize) -> bool {
     if let Some(x) = l.iter_mut().find(|x| x.h == h) {
@@ -491,21 +774,27 @@ fn hold(l: &mut Vec<Held>, h: &str, until: i64, max: usize) -> bool {
     true
 }
 
-/// the bans whose time is up go, and so do what they name for a time and the marks whose time is up
+/// the bans whose time is up go to the history, what the others name for a time goes when its time is up, and so do
+/// the history's bans a year after they ended and the marks whose time is up
 fn prune(f: &mut File, now: i64) {
-    f.bans.retain(|b| b.live(now));
+    let (live, over): (Vec<Ban>, Vec<Ban>) = std::mem::take(&mut f.bans).into_iter().partition(|b| b.live(now));
+    f.bans = live;
+    f.past.extend(over.into_iter().map(|ban| Past { ended: ban.until.unwrap_or(now), how: How::Over, by: None, ban }));
     for b in &mut f.bans {
         for l in [&mut b.addrs, &mut b.later_pages, &mut b.later_owners] {
             l.retain(|x| x.until > now);
         }
     }
+    f.past.retain(|p| p.ended + PAST_MS > now);
+    let over = f.past.len().saturating_sub(PAST_MAX);
+    f.past.drain(..over);
     f.marks.retain(|m| m.at + MARK_MS > now);
 }
 
 /// how much the file holds: what `list` compares to see whether `prune` took anything
-fn counts(f: &File) -> (usize, usize, usize) {
+fn counts(f: &File) -> (usize, usize, usize, usize) {
     let held = f.bans.iter().map(|b| b.addrs.len() + b.later_pages.len() + b.later_owners.len()).sum();
-    (f.bans.len(), held, f.marks.len())
+    (f.bans.len(), held, f.marks.len(), f.past.len())
 }
 
 /// of the bans `f` takes, the index of the one that lasts longest (for good first)
@@ -576,292 +865,4 @@ pub fn when(ms: i64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const T0: i64 = 1_790_000_000_000;
-
-    fn bans() -> (tempfile::TempDir, Bans) {
-        let dir = tempfile::tempdir().unwrap();
-        let b = Bans::open(dir.path()).unwrap();
-        (dir, b)
-    }
-
-    /// a player's keys: its address's hash, its page id, its keyphrase's owner
-    fn who(b: &Bans, addr: Option<&str>, page: Option<&str>, owner: Option<&str>) -> Keys {
-        b.keys(addr, page, owner)
-    }
-
-    /// a hello: its page ids, its keyphrase's owner, its address's hash
-    fn hello(b: &Bans, pages: &[&str], owner: Option<&str>, addr: Option<&str>, now: i64) -> Option<Ban> {
-        b.by_hello(&Seen { pages, owner, addr }, now)
-    }
-
-    #[test]
-    fn a_ban_turns_away_its_address_and_its_page() {
-        let (_d, b) = bans();
-        let (a1, a2) = (b.addr("203.0.113.5"), b.addr("198.51.100.7"));
-        assert_ne!(a1, a2);
-        assert_eq!(a1.len(), 22);
-        let (ban, replaced) =
-            b.add("Bob", &who(&b, Some(&a1), Some("page-1"), None), " Ramming,\n3 days ", Some(T0 + 3 * DAY), T0).unwrap();
-        assert!(replaced.is_empty());
-        assert_eq!((ban.id, ban.msg.as_str()), (1, "Ramming, 3 days"));
-        assert_eq!(b.by_addr(&a1, T0 + 1).map(|x| x.id), Some(1));
-        assert_eq!(b.by_addr(&a2, T0 + 1), None);
-        assert_eq!(hello(&b, &["page-2"], None, Some(&a2), T0 + 1), None);
-        // the banned page at another address: that address is banned too
-        assert_eq!(hello(&b, &["page-1"], None, Some(&a2), T0 + 1).map(|x| x.id), Some(1));
-        assert_eq!(b.by_addr(&a2, T0 + 2).map(|x| x.id), Some(1));
-        // and its time is up with the ban's
-        assert_eq!(b.by_addr(&a1, T0 + 3 * DAY), None);
-        assert_eq!(hello(&b, &["page-1"], None, None, T0 + 3 * DAY), None);
-        assert!(b.list(T0 + 3 * DAY).is_empty());
-    }
-
-    #[test]
-    fn an_address_is_banned_for_a_week_after_it_was_last_the_players_and_never_bans_a_page() {
-        let (_d, b) = bans();
-        let a = b.addr("203.0.113.5");
-        b.add("Bob", &who(&b, Some(&a), Some("p"), None), "", None, T0).unwrap();
-        // whoever else comes from that address is turned away, but their page and keyphrase are not banned for it
-        assert!(b.by_addr(&a, T0 + DAY).is_some());
-        assert_eq!(hello(&b, &["someone-else"], Some("their-keyphrase"), Some(&a), T0 + DAY), None);
-        let ban = &b.list(T0 + DAY)[0];
-        assert_eq!((ban.pages.len(), ban.later_pages.len(), ban.later_owners.len()), (1, 0, 0));
-        assert!(b.by_addr(&a, T0 + ADDR_MS).is_none(), "the address goes after a week");
-        // the page comes back from it after two weeks: a week more for the address
-        assert!(hello(&b, &["p"], None, Some(&a), T0 + 14 * DAY).is_some());
-        assert!(b.by_addr(&a, T0 + 20 * DAY).is_some());
-        assert!(b.by_addr(&a, T0 + 21 * DAY).is_none());
-        // for good: the page still
-        assert!(hello(&b, &["p"], None, None, T0 + 3000 * DAY).is_some());
-        assert_eq!(b.list(T0 + 3000 * DAY)[0].addrs, vec![]);
-    }
-
-    #[test]
-    fn a_banned_keyphrase_brings_in_a_new_browser_for_a_month_and_that_spreads_no_further() {
-        let (_d, b) = bans();
-        let (home, phone, cafe) = (b.addr("203.0.113.5"), b.addr("198.51.100.7"), b.addr("192.0.2.1"));
-        b.add("Bob", &who(&b, Some(&home), Some("pc"), Some("bob-key")), "", None, T0).unwrap();
-        // the keyphrase in a new browser on another network: turned away, and that browser and network are taken in
-        assert_eq!(hello(&b, &["phone"], Some("bob-key"), Some(&phone), T0 + 1).map(|x| x.id), Some(1));
-        let ban = &b.list(T0 + 2)[0];
-        assert_eq!((ban.pages.len(), ban.later_pages.len(), ban.owners.len(), ban.addrs.len()), (1, 1, 1, 2));
-        assert!(b.by_addr(&phone, T0 + 2).is_some());
-        // that browser alone, without the keyphrase: turned away, but it brings in nothing (a friend's browser, say:
-        // not its network, not its owner's own keyphrase)
-        assert!(hello(&b, &["phone"], Some("friend-key"), Some(&cafe), T0 + 3).is_some());
-        assert!(b.by_addr(&cafe, T0 + 4).is_none());
-        assert!(hello(&b, &["friend-pc"], Some("friend-key"), None, T0 + 4).is_none());
-        // for a month after it was last seen with the keyphrase (seen alone, it is not kept longer)
-        assert!(hello(&b, &["phone"], None, None, T0 + LINK_MS).is_some());
-        assert!(hello(&b, &["phone"], None, None, T0 + 1 + LINK_MS).is_none());
-        // seen with it again: another month
-        assert!(hello(&b, &["phone"], Some("bob-key"), None, T0 + 40 * DAY).is_some());
-        assert!(hello(&b, &["phone"], None, None, T0 + 69 * DAY).is_some());
-        assert!(hello(&b, &["phone"], None, None, T0 + 70 * DAY + 1).is_none());
-        assert_eq!(b.list(T0 + 71 * DAY)[0].later_pages, vec![], "gone from the file");
-        // a banned page with a new keyphrase: that keyphrase for a month, but not a browser it is used in then
-        assert!(hello(&b, &["pc"], Some("bob-new-key"), None, T0 + 80 * DAY).is_some());
-        assert!(hello(&b, &["fresh"], Some("bob-new-key"), None, T0 + 81 * DAY).is_some());
-        assert!(hello(&b, &["fresh"], None, None, T0 + 82 * DAY).is_none());
-        // a page that found the banned id beside its new one: the new one for a month
-        assert!(hello(&b, &["cleared", "pc"], None, None, T0 + 90 * DAY).is_some());
-        assert!(hello(&b, &["cleared"], None, None, T0 + 91 * DAY).is_some());
-        let ban = &b.list(T0 + 92 * DAY)[0];
-        assert_eq!((ban.later_pages.len(), ban.later_owners.len()), (1, 1));
-        // what the ban was made with lasts as long as it does
-        assert!(hello(&b, &["pc"], None, None, T0 + 3000 * DAY).is_some());
-        assert!(hello(&b, &["x"], Some("bob-key"), None, T0 + 3000 * DAY).is_some());
-        // a ban for a week: what it takes in goes with it
-        let (_d2, b) = bans();
-        b.add("Eve", &who(&b, None, Some("e"), Some("eve-key")), "", Some(T0 + 7 * DAY), T0).unwrap();
-        assert!(hello(&b, &["e2"], Some("eve-key"), None, T0 + 1).is_some());
-        assert_eq!(b.list(T0 + 2)[0].later_pages[0].until, T0 + 7 * DAY);
-        // the file names nothing as it came
-        let text = std::fs::read_to_string(&b.path).unwrap();
-        assert!(!text.contains("eve-key") && !text.contains("\"e2\""), "{text}");
-    }
-
-    #[test]
-    fn a_ban_takes_in_at_most_keys_max_pages_and_keyphrases_and_keeps_the_first() {
-        let (_d, b) = bans();
-        b.add("Bob", &who(&b, None, Some("p0"), Some("k0")), "", None, T0).unwrap();
-        for i in 1..100 {
-            let (p, k) = (format!("p{i}"), format!("k{i}"));
-            assert!(hello(&b, &[&p], Some("k0"), None, T0 + i).is_some(), "{p} with the banned keyphrase");
-            assert!(hello(&b, &["p0"], Some(&k), None, T0 + i).is_some(), "{k} in the banned page");
-        }
-        let ban = &b.list(T0 + 100)[0];
-        assert_eq!((ban.later_pages.len(), ban.later_owners.len()), (KEYS_MAX, KEYS_MAX));
-        assert!(hello(&b, &["p1"], None, None, T0 + 101).is_some() && hello(&b, &["p32"], None, None, T0 + 101).is_some());
-        assert!(hello(&b, &["p33"], None, None, T0 + 101).is_none(), "past the cap: turned away that time, not kept");
-        assert!(hello(&b, &["x"], Some("k32"), None, T0 + 101).is_some());
-        assert!(hello(&b, &["x"], Some("k33"), None, T0 + 101).is_none());
-    }
-
-    #[test]
-    fn a_new_ban_of_the_same_page_or_keyphrase_takes_the_place_of_the_old_one() {
-        let (_d, b) = bans();
-        let a = b.addr("203.0.113.5");
-        b.add("Bob", &who(&b, Some(&a), Some("p"), None), "a day", Some(T0 + DAY), T0).unwrap();
-        b.add("Eve", &who(&b, Some(&a), Some("q"), None), "eve", Some(T0 + DAY), T0).unwrap();
-        let (ban, replaced) = b.add("Bob", &who(&b, Some(&a), Some("p"), None), "for good", None, T0 + 1).unwrap();
-        assert_eq!((ban.id, replaced), (3, vec![1]));
-        let names: Vec<_> = b.list(T0 + 2).iter().map(|x| (x.id, x.name.clone())).collect();
-        assert_eq!(names, vec![(2, "Eve".to_string()), (3, "Bob".to_string())]);
-        // a player without a page id: by address
-        let c = b.addr("192.0.2.1");
-        b.add("Old", &who(&b, Some(&c), None, None), "", Some(T0 + DAY), T0).unwrap();
-        let (_, replaced) = b.add("Old", &who(&b, Some(&c), None, None), "", None, T0).unwrap();
-        assert_eq!(replaced, vec![4]);
-        // the longest of two that match is the one a page is told
-        assert_eq!(b.by_addr(&a, T0 + 2).map(|x| x.until), Some(None));
-        // the same keyphrase in another browser
-        b.add("Kim", &who(&b, None, Some("k1"), Some("kim-key")), "", Some(T0 + DAY), T0).unwrap();
-        assert_eq!(b.add("Kim", &who(&b, None, Some("k2"), Some("kim-key")), "", None, T0 + 1).unwrap().1, vec![6]);
-        // a player in two browsers at once (its keys together): both, each once
-        let mut two = who(&b, Some(&c), Some("t1"), Some("two-key"));
-        two.extend(who(&b, Some(&c), Some("t2"), Some("two-key")));
-        let (ban, _) = b.add("Two", &two, "", None, T0).unwrap();
-        assert_eq!((ban.pages.len(), ban.owners.len(), ban.addrs.len()), (2, 1, 1));
-    }
-
-    #[test]
-    fn bans_are_lifted_by_number_or_name() {
-        let (_d, b) = bans();
-        let a = b.addr("203.0.113.5");
-        b.add("Bob", &who(&b, Some(&a), Some("p"), None), "", None, T0).unwrap();
-        b.add("bob", &who(&b, None, Some("q"), None), "", None, T0).unwrap();
-        b.add("Eve", &who(&b, None, Some("r"), None), "", None, T0).unwrap();
-        assert_eq!(b.remove("#3", T0).unwrap().len(), 1);
-        assert_eq!(b.remove("BOB", T0).unwrap().iter().map(|x| x.id).collect::<Vec<_>>(), vec![1, 2]);
-        assert!(b.remove("4", T0).unwrap().is_empty());
-        assert!(b.by_addr(&a, T0).is_none());
-    }
-
-    #[test]
-    fn a_cheat_lines_player_is_marked_for_a_week_by_one_handle() {
-        let (_d, b) = bans();
-        let a = b.addr("203.0.113.5");
-        assert_eq!(b.mark("Bob", who(&b, Some(&a), Some("bob-page"), Some("bob-key")), T0).unwrap().handle, "c1");
-        assert_eq!(b.mark("Eve", who(&b, None, Some("eve-page"), None), T0 + 1).unwrap().handle, "c2");
-        // Bob again, in another browser with his keyphrase, and at another address: the same handle, from then
-        let a2 = b.addr("198.51.100.7");
-        assert_eq!(b.mark("Bobby", who(&b, Some(&a2), Some("bob-phone"), Some("bob-key")), T0 + DAY).unwrap().handle, "c1");
-        let m = b.marked("C1", T0 + DAY).expect("Bob's mark");
-        assert_eq!((m.name.as_str(), m.keys.addrs.len(), m.keys.pages.len(), m.keys.owners.len()), ("Bobby", 2, 2, 1));
-        assert!(b.marked("c3", T0).is_none() && b.marked("x1", T0).is_none() && b.marked("c", T0).is_none());
-        // a week after its last line
-        assert!(b.marked("c1", T0 + DAY + MARK_MS - 1).is_some());
-        assert!(b.marked("c1", T0 + DAY + MARK_MS).is_none());
-        assert!(b.marked("c2", T0 + 1 + MARK_MS).is_none());
-        // a ban by its keys: whoever has one of them
-        let (ban, _) = b.add(&m.name, &m.keys, "", None, T0 + DAY).unwrap();
-        assert!(hello(&b, &["bob-phone"], None, None, T0 + DAY).is_some());
-        assert!(b.covers(&ban, &who(&b, None, Some("new"), Some("bob-key")), T0 + DAY));
-        assert!(b.by_addr(&a2, T0 + DAY).is_some());
-        // the file: hashes only, and the marks outlive a restart; a new handle after the old ones
-        let text = std::fs::read_to_string(&b.path).unwrap();
-        assert!(!text.contains("bob-") && !text.contains("203.0.113"), "{text}");
-        // (Bob's next lines at once, nothing new of him: the file is not written again)
-        std::fs::write(&b.path, "kept").unwrap();
-        for i in 1..=50 {
-            assert_eq!(b.mark("Bobby", who(&b, Some(&a2), Some("bob-phone"), Some("bob-key")), T0 + DAY + i).unwrap().handle, "c1");
-        }
-        assert_eq!(std::fs::read_to_string(&b.path).unwrap(), "kept");
-        std::fs::write(&b.path, text).unwrap();
-        let b = Bans::open(b.path.parent().unwrap()).unwrap();
-        assert_eq!(b.marked("c1", T0 + DAY).map(|m| m.name), Some("Bobby".into()));
-        assert_eq!(b.mark("Kim", who(&b, None, Some("kim"), None), T0 + DAY).unwrap().handle, "c3");
-        // their time up: gone from the file
-        b.list(T0 + DAY + MARK_MS);
-        let file: Value = serde_json::from_str(&std::fs::read_to_string(&b.path).unwrap()).unwrap();
-        assert_eq!(file["marks"].as_array().map(Vec::len), Some(0), "{file}");
-    }
-
-    // a marked player back under other names (one ban of it ended, one in force): its earlier lines' names, each
-    // once, and its bans, by the handle or by name
-    #[test]
-    fn a_mark_says_the_players_earlier_names_and_its_bans() {
-        let (_d, b) = bans();
-        let k = || who(&b, None, Some("jek-page"), None);
-        assert_eq!(b.mark("ChinaJek", k(), T0).unwrap(), Marked { handle: "c1".into(), before: vec![], bans: vec![] });
-        let keys = b.marked("c1", T0).unwrap().keys;
-        let (one, _) = b.add("ChinaJek", &keys, "", Some(T0 + DAY), T0).unwrap();
-        assert_eq!(b.mark("ChinaJek", k(), T0 + 1).unwrap().bans, [(one.id, true)]);
-        let m = b.mark("SuperCharger", k(), T0 + 2 * DAY).unwrap();
-        assert_eq!(m, Marked { handle: "c1".into(), before: vec!["ChinaJek".into()], bans: vec![(one.id, false)] });
-        assert_eq!(b.mark("Zooom", k(), T0 + 2 * DAY + 1).unwrap().before, ["ChinaJek", "SuperCharger"]);
-        assert_eq!(b.mark("chinajek", k(), T0 + 2 * DAY + 2).unwrap().before, ["SuperCharger", "Zooom"]);
-        // banned by its name (not the handle): the mark has that ban too
-        let (two, _) = b.add("chinajek", &k(), "", None, T0 + 3 * DAY).unwrap();
-        let m = b.mark("chinajek", k(), T0 + 3 * DAY).unwrap();
-        assert_eq!(m.bans, [(one.id, false), (two.id, true)]);
-        // kept over a restart
-        let b = Bans::open(b.path.parent().unwrap()).unwrap();
-        let m = b.marked("c1", T0 + 3 * DAY).unwrap();
-        assert_eq!((m.before.len(), m.bans), (2, vec![one.id, two.id]));
-    }
-
-    #[test]
-    fn the_file_keeps_hashes_only_and_outlives_a_restart() {
-        let dir = tempfile::tempdir().unwrap();
-        let b = Bans::open(dir.path()).unwrap();
-        let a = b.addr("203.0.113.5");
-        b.add("Bob", &who(&b, Some(&a), Some("page-secret"), Some("owner-secret")), "msg", Some(T0 + DAY), T0).unwrap();
-        let text = std::fs::read_to_string(dir.path().join("bans.json")).unwrap();
-        assert!(!text.contains("203.0.113") && !text.contains("page-secret") && !text.contains("owner-secret"), "{text}");
-        use std::os::unix::fs::PermissionsExt;
-        for f in ["bans.json", "bans.key"] {
-            assert_eq!(std::fs::metadata(dir.path().join(f)).unwrap().permissions().mode() & 0o777, 0o600, "{f}");
-        }
-        drop(b);
-        let b = Bans::open(dir.path()).unwrap();
-        assert_eq!(b.addr("203.0.113.5"), a, "the same key");
-        assert_eq!(hello(&b, &["page-secret"], None, None, T0 + 1).map(|x| x.msg), Some("msg".into()));
-        assert!(hello(&b, &["elsewhere"], Some("owner-secret"), None, T0 + 1).is_some());
-        let (next, _) = b.add("Eve", &who(&b, None, Some("x"), None), "", None, T0).unwrap();
-        assert_eq!(next.id, 2);
-        // a file from before keyphrases and marks
-        let old = r#"{"next":1,"bans":[{"id":1,"name":"Old","at":0,"until":null,"pages":["x"],"addrs":[{"h":"y","until":9}]}]}"#;
-        std::fs::write(dir.path().join("bans.json"), old).unwrap();
-        let ban = Bans::open(dir.path()).unwrap().list(0)[0].clone();
-        assert_eq!((ban.owners.len(), ban.later_pages.len(), ban.addrs[0].until), (0, 0, 9));
-        // a broken file: not taken for no bans
-        std::fs::write(dir.path().join("bans.json"), "{").unwrap();
-        assert!(Bans::open(dir.path()).is_err());
-    }
-
-    #[test]
-    fn messages_for_the_page() {
-        let (_d, b) = bans();
-        let (ban, _) = b.add("B", &who(&b, None, Some("p"), None), "Bye \"now\"", Some(T0 + DAY), T0).unwrap();
-        assert_eq!(ban.message(), format!(r#"{{"t":"ban","msg":"Bye \"now\"","until":{}}}"#, T0 + DAY));
-        let (ban, _) = b.add("B", &who(&b, None, Some("p"), None), "", None, T0).unwrap();
-        assert_eq!(ban.message(), r#"{"t":"ban","msg":""}"#);
-        assert_eq!(kick_message("a\u{202E}b\tc"), r#"{"t":"kick","msg":"ab c"}"#);
-        assert_eq!(clean_msg(&"x".repeat(300)).len(), MSG_MAX);
-    }
-
-    #[test]
-    fn how_long_as_the_operator_writes_it() {
-        assert_eq!(parse_for("30m"), Ok(Some(30 * MIN)));
-        assert_eq!(parse_for("30min"), Ok(Some(30 * MIN)));
-        assert_eq!(parse_for("12h"), Ok(Some(12 * HOUR)));
-        assert_eq!(parse_for("3D"), Ok(Some(3 * DAY)));
-        assert_eq!(parse_for("2w"), Ok(Some(14 * DAY)));
-        assert_eq!(parse_for("perm"), Ok(None));
-        assert_eq!(parse_for("forever"), Ok(None));
-        for bad in ["", "3", "d", "0d", "-1d", "1.5d", "3 days", "99999999999999w", "3651d"] {
-            assert!(parse_for(bad).is_err(), "{bad}");
-        }
-        assert_eq!(span(45 * MIN), "45 min");
-        assert_eq!(span(5 * HOUR + 10 * MIN), "5 h 10 min");
-        assert_eq!(span(3 * DAY - 1), "3 d");
-        assert_eq!(span(2 * DAY + 23 * HOUR), "2 d 23 h");
-        assert_eq!(span(12 * HOUR), "12 h");
-        assert_eq!(when(1_793_109_900_000), "2026-10-27 14:05 UTC");
-    }
-}
+mod tests;

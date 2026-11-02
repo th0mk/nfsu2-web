@@ -1288,8 +1288,8 @@ impl Core {
         if self.lobby.s(s).account.is_some() {
             return self.lsend(s, kind, &[], "logn");
         }
-        // a name that reads as a slur (nfsu2-names) as one the game would not let one type
-        if !valid_name(&name) || nfsu2_names::blocked_name(&name) {
+        // a name that reads as a slur (nfsu2-names), or the operator took away, as one the game would not let one type
+        if !valid_name(&name) || nfsu2_names::blocked_name(&name) || self.denied(&name) {
             return self.lsend(s, kind, &[], if kind == "acct" { "inam" } else { "imst" });
         }
         let x = self.lobby.sm(s);
@@ -1328,7 +1328,7 @@ impl Core {
             return self.lsend(s, "cper", &[], "auth");
         }
         let p = f.str("PERS").to_string();
-        if !valid_name(&p) || nfsu2_names::blocked_name(&p) {
+        if !valid_name(&p) || nfsu2_names::blocked_name(&p) || self.denied(&p) {
             return self.lsend(s, "cper", &[], "invp");
         }
         let lp = lower(&p);
@@ -1441,6 +1441,16 @@ impl Core {
         }
     }
 
+    /// the operator took name away (nfsu2-bans `rename`: it reads as one of the names taken away)
+    fn denied(&self, name: &str) -> bool {
+        self.deny.as_ref().is_some_and(|d| d.has(name))
+    }
+
+    /// s's player races nobody (the operator's race ban: its connection's last frame said so, FrameCtx::no_races)
+    fn races_off(&self, s: SessId) -> bool {
+        self.vh.conns.get(&self.lobby.s(s).conn).is_some_and(|c| c.no_races)
+    }
+
     /// s may play under name as far as the claims go: nobody claimed it, or s's keyphrase did
     fn may_claim(&self, name: &str, s: SessId) -> bool {
         self.may_claim_as(name, self.lobby.s(s).owner.as_deref())
@@ -1487,7 +1497,7 @@ impl Core {
         for i in 0..20 {
             let d = if i == 0 { own.to_string() } else { rand::int(1000, 10000).to_string() };
             let cut = format!("{}{d}", jsx::slice16(name, 15 - d.len()));
-            let v = if nfsu2_names::blocked_name(&cut) { format!("Player{d}") } else { cut };
+            let v = if nfsu2_names::blocked_name(&cut) || self.denied(&cut) { format!("Player{d}") } else { cut };
             if nfsu2_names::blocked_name(&v) {
                 continue; // digits that are no name either (1488): other ones
             }
@@ -2410,6 +2420,11 @@ impl Core {
         if self.lobby.s(s).game.is_some() {
             self.game_leave(s, None);
         }
+        // a player under a race ban makes no game (its page told it why: nfsu2-bans)
+        if self.races_off(s) {
+            self.llog(&format!("[online] {}: under a race ban: made no game", self.who(s)), s);
+            return self.lsend(s, "gcre", &[], "full");
+        }
         let now = self.now();
         if self.lobby.games.len() as f64 >= self.lobby.l.games || !self.lobby.sm(s).creates.take(now, 1.0) {
             return self.lsend(s, "gcre", &[], "full");
@@ -2545,6 +2560,11 @@ impl Core {
     fn game_join(&mut self, s: SessId, f: &FieldMap) {
         let now = self.now();
         if !self.lobby.sm(s).acts.take(now, 1.0) {
+            return self.lsend(s, "gjoi", &[], "full");
+        }
+        // nor joins one
+        if self.races_off(s) {
+            self.llog(&format!("[online] {}: under a race ban: joined no game", self.who(s)), s);
             return self.lsend(s, "gjoi", &[], "full");
         }
         let ident = f.num("IDENT", f64::NAN);

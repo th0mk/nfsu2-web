@@ -1198,5 +1198,17 @@
   "Send friend request": "친구 요청 보내기",
   "That's your own name": "내 이름이에요",
   "Not a player's name": "플레이어 이름이 아니에요",
-  "Not sent: try again in a moment": "보내지 못했어요. 잠시 후 다시 시도해 주세요"
+  "Not sent: try again in a moment": "보내지 못했어요. 잠시 후 다시 시도해 주세요",
+  "You were removed from playing with others.": "다른 플레이어와의 플레이에서 제외됐어요.",
+  "You can't play with others until {when}.": "{when}까지 다른 플레이어와 플레이할 수 없어요.",
+  "You can't play with others any more.": "이제 다른 플레이어와 플레이할 수 없어요.",
+  "You can keep playing on your own.": "혼자서는 계속 플레이할 수 있어요.",
+  "You can race other players again.": "다시 다른 플레이어와 레이스할 수 있어요.",
+  "You can't race other players until {when}.": "{when}까지 다른 플레이어와 레이스할 수 없어요.",
+  "You can't race other players any more.": "이제 다른 플레이어와 레이스할 수 없어요.",
+  "Free roam stays open.": "다른 플레이어와 자유 주행은 계속할 수 있어요.",
+  "Playing with others waits for another name: change it under Online on the start page.": "다른 이름을 정할 때까지 다른 플레이어와의 플레이는 대기해요: 시작 페이지의 '온라인'에서 바꾸세요.",
+  "{name} isn't allowed here.": "{name} 이름은 여기서 사용할 수 없어요.",
+  "Pick another name to keep playing with others.": "다른 플레이어와 계속 플레이하려면 다른 이름을 정하세요.",
+  "Pick another name": "다른 이름 정하기"
 }

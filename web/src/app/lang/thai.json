@@ -1198,5 +1198,17 @@
   "Send friend request": "ส่งคำขอเป็นเพื่อน",
   "That's your own name": "นี่คือชื่อของคุณเอง",
   "Not a player's name": "ไม่ใช่ชื่อผู้เล่น",
-  "Not sent: try again in a moment": "ส่งไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่"
+  "Not sent: try again in a moment": "ส่งไม่สำเร็จ: ลองใหม่อีกครั้งในอีกสักครู่",
+  "You were removed from playing with others.": "คุณถูกนำออกจากการเล่นกับผู้อื่น",
+  "You can't play with others until {when}.": "คุณเล่นกับผู้อื่นไม่ได้จนถึง {when}",
+  "You can't play with others any more.": "คุณเล่นกับผู้อื่นไม่ได้อีกต่อไป",
+  "You can keep playing on your own.": "คุณยังเล่นคนเดียวต่อได้",
+  "You can race other players again.": "คุณแข่งกับผู้เล่นคนอื่นได้อีกครั้งแล้ว",
+  "You can't race other players until {when}.": "คุณแข่งกับผู้เล่นคนอื่นไม่ได้จนถึง {when}",
+  "You can't race other players any more.": "คุณแข่งกับผู้เล่นคนอื่นไม่ได้อีกต่อไป",
+  "Free roam stays open.": "การขับอิสระกับผู้อื่นยังเปิดอยู่",
+  "Playing with others waits for another name: change it under Online on the start page.": "ต้องใช้ชื่ออื่นก่อนจึงจะเล่นกับผู้อื่นได้: เปลี่ยนชื่อได้ในส่วน “ออนไลน์” ของหน้าเริ่มต้น",
+  "{name} isn't allowed here.": "ไม่อนุญาตให้ใช้ชื่อ {name} ที่นี่",
+  "Pick another name to keep playing with others.": "เลือกชื่ออื่นเพื่อเล่นกับผู้อื่นต่อ",
+  "Pick another name": "เลือกชื่ออื่น"
 }

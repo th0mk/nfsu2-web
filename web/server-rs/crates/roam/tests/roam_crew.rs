@@ -423,7 +423,7 @@ fn in_free_roam_by_crew() {
 }
 
 fn ctx() -> FrameCtx {
-    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None }
+    FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None, no_races: false }
 }
 
 // on its thread the hub keeps the crews' counts of its last tick for /players

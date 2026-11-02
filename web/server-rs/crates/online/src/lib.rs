@@ -101,6 +101,8 @@ pub struct OnlineOptions {
     /// the claimed names (nfsu2-claims): who may play under a name, and whose EA Messenger lists are kept; None: every
     /// name is anyone's, and every list is kept (as before names could be claimed)
     pub claims: Option<Arc<nfsu2_claims::Claims>>,
+    /// the names the operator took away (nfsu2-bans `rename`): no login or persona under one; None: none
+    pub deny: Option<Arc<nfsu2_names::Deny>>,
 }
 
 enum Event {
@@ -151,6 +153,7 @@ fn run(o: OnlineOptions, rx: mpsc::Receiver<Event>) {
         log: Rc::new(move |line: &str, key: Option<&str>| log(line, key)),
         tap: o.tap,
         claims: o.claims,
+        deny: o.deny,
         clocks: Rc::new(Clocks { now: Box::new(|| now_ms() as f64), timer: Box::new(mono_ms) }),
         limits: Default::default(),
         buddy_limits: Default::default(),

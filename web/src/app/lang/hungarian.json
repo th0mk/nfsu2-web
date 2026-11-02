@@ -1201,5 +1201,17 @@
   "Send friend request": "Barátkérés küldése",
   "That's your own name": "Ez a saját neved",
   "Not a player's name": "Ez nem játékosnév",
-  "Not sent: try again in a moment": "Nem ment el: próbáld újra egy kicsit később"
+  "Not sent: try again in a moment": "Nem ment el: próbáld újra egy kicsit később",
+  "You were removed from playing with others.": "Kizártak a másokkal való játékból.",
+  "You can't play with others until {when}.": "Nem játszhatsz másokkal eddig: {when}.",
+  "You can't play with others any more.": "Többé nem játszhatsz másokkal.",
+  "You can keep playing on your own.": "Egyedül tovább játszhatsz.",
+  "You can race other players again.": "Újra versenyezhetsz más játékosokkal.",
+  "You can't race other players until {when}.": "Nem versenyezhetsz más játékosokkal eddig: {when}.",
+  "You can't race other players any more.": "Többé nem versenyezhetsz más játékosokkal.",
+  "Free roam stays open.": "A Felfedező mód másokkal továbbra is elérhető.",
+  "Playing with others waits for another name: change it under Online on the start page.": "Másokkal csak másik névvel játszhatsz: ezt a kezdőlap Online részében változtathatod meg.",
+  "{name} isn't allowed here.": "Ez a név itt nem engedélyezett: {name}.",
+  "Pick another name to keep playing with others.": "Válassz másik nevet, hogy továbbra is játszhass másokkal.",
+  "Pick another name": "Válassz másik nevet"
 }

@@ -140,7 +140,7 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
     }
     let (mut resume, mut queue) = (false, false);
     let (mut group, mut site) = (None, None);
-    let (mut ident, mut refuse, mut gate) = (None, None, None);
+    let (mut ident, mut refuse, mut gate, mut rename, mut norace) = (None, None, None, None, None);
     for kv in query.split('&').filter(|kv| !kv.is_empty()) {
         let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
         match k {
@@ -149,17 +149,27 @@ async fn serve(lan: Arc<LanSwitch>, mut s: TcpStream) {
             "g" if group.is_none() => group = Some(v.to_string()),
             "s" if site.is_none() => site = Some(v.to_string()),
             // the server's bans: its id for the client's address, a client it turns away at once, a page id or a
-            // keyphrase's owner it turns away at the hello (with {"t":"ban","msg":<what matched>,"ids":[...]})
+            // keyphrase's owner it turns away at the hello (with {"t":"ban","msg":<what matched>,"ids":[...]}), a
+            // name it takes away ({"t":"rename","name":...}), a page id it keeps out of races ({"t":"races"})
             "ident" => ident = Some(v.to_string()),
             "refuse" => refuse = Some(Bytes::from(json!({ "t": "ban", "msg": v }).to_string())),
             "gate" => gate = Some(v.to_string()),
+            "rename" => rename = Some(v.to_string()),
+            "norace" => norace = Some(v.to_string()),
             _ => {}
         }
     }
-    let on_hello: Option<nfsu2_lan::OnHello> = gate.map(|g| {
+    let on_hello: Option<nfsu2_lan::OnHello> = (gate.is_some() || rename.is_some() || norace.is_some()).then(|| {
         Box::new(move |h: &nfsu2_lan::Hello| {
-            let hit = h.ids.iter().copied().chain(h.owner).find(|x| *x == g)?;
-            Some(Bytes::from(json!({ "t": "ban", "msg": hit, "ids": h.ids }).to_string()))
+            let mut a = nfsu2_lan::HelloAnswer::default();
+            if let Some(hit) = gate.as_deref().and_then(|g| h.ids.iter().copied().chain(h.owner).find(|x| *x == g)) {
+                a.refuse = Some((Bytes::from(json!({ "t": "ban", "msg": hit, "ids": h.ids }).to_string()), nfsu2_lan::CLOSE_BANNED));
+            } else if rename.as_deref() == Some(h.name) {
+                a.refuse = Some((Bytes::from(json!({ "t": "rename", "name": h.name }).to_string()), nfsu2_lan::CLOSE_RENAME));
+            } else if norace.as_deref().is_some_and(|n| h.ids.contains(&n)) {
+                a.no_races = Some(Bytes::from(json!({ "t": "races", "msg": "no" }).to_string()));
+            }
+            a
         }) as nfsu2_lan::OnHello
     });
     // a keyphrase's owner: "owner-" and its token (the server's is a hash: nfsu2-claims)

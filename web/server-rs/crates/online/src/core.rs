@@ -27,6 +27,7 @@ pub struct CoreOptions {
     pub log: LogFn,
     pub tap: Option<Tap>,
     pub claims: Option<Arc<nfsu2_claims::Claims>>,
+    pub deny: Option<Arc<nfsu2_names::Deny>>,
     pub clocks: Rc<Clocks>,
     pub limits: Limits,
     pub buddy_limits: BuddyLimits,
@@ -46,6 +47,8 @@ pub struct Core {
     pub cause: Option<Arc<dyn Charge>>,
     /// the claimed names (OnlineOptions::claims)
     pub claims: Option<Arc<nfsu2_claims::Claims>>,
+    /// the names taken away (OnlineOptions::deny)
+    pub deny: Option<Arc<nfsu2_names::Deny>>,
     /// the browsers that spoke to this host and are still on the switch
     here: HashSet<u32>,
     pub timers: Timers,
@@ -81,6 +84,7 @@ impl Core {
             races_read: false,
             cause: None,
             claims: o.claims.clone(),
+            deny: o.deny,
             here: HashSet::new(),
             timers: Timers::default(),
             tick_timer: None,

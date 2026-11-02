@@ -612,3 +612,54 @@ pub fn chat_slur(line: &str) -> Option<&str> {
     }
     None
 }
+
+/// A name's letters as the lists read it (above: the digits and signs that stand for letters as those, numbers and
+/// everything else left out): what names that read the same have in common ("B4d_Name", "bad name", "BadName99").
+/// The names the operator took away ([`Deny`]) are compared by it.
+pub fn letters(name: &str) -> String {
+    let str = read(name);
+    let mut out = String::with_capacity(str.len());
+    let mut i = 0;
+    while i < str.len() {
+        let r = str[i..].iter().take_while(|c| c.is_ascii_digit()).count();
+        if r > 0 && number(&str, i, r) {
+            i += r;
+            continue;
+        }
+        if let Some(c) = letter(str[i]) {
+            out.push(char::from(c));
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The names the server's operator took away (nfsu2-bans: `rename`), by their [`letters`]: nobody plays under one, or
+/// under a name that reads the same.  The switch's hello, the Online lobby and free roam's hub look a name up here;
+/// the bans write it (`set`), and each change moves `generation` on (the hub looks at a player's name again then).
+#[derive(Default, Debug)]
+pub struct Deny {
+    set: std::sync::RwLock<std::collections::HashSet<String>>,
+    generation: std::sync::atomic::AtomicU64,
+}
+
+impl Deny {
+    /// the names taken away now (as they were typed, or their letters already: the same)
+    pub fn set(&self, names: impl IntoIterator<Item = String>) {
+        let set = names.into_iter().map(|n| letters(&n)).filter(|l| !l.is_empty()).collect();
+        *self.set.write().unwrap_or_else(|e| e.into_inner()) = set;
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    /// whether `name` reads as one of them
+    pub fn has(&self, name: &str) -> bool {
+        let set = self.set.read().unwrap_or_else(|e| e.into_inner());
+        !set.is_empty() && {
+            let l = letters(name);
+            !l.is_empty() && set.contains(&l)
+        }
+    }
+    /// moves on with each `set`
+    pub fn generation(&self) -> u64 {
+        self.generation.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}

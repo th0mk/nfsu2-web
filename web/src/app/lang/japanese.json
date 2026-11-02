@@ -1198,5 +1198,17 @@
   "Send friend request": "フレンド申請を送る",
   "That's your own name": "自分の名前です",
   "Not a player's name": "プレイヤー名ではありません",
-  "Not sent: try again in a moment": "送れませんでした。少ししてからもう一度お試しください"
+  "Not sent: try again in a moment": "送れませんでした。少ししてからもう一度お試しください",
+  "You were removed from playing with others.": "他のプレイヤーとのプレイから外されました。",
+  "You can't play with others until {when}.": "{when}まで他のプレイヤーとプレイできません。",
+  "You can't play with others any more.": "今後、他のプレイヤーとプレイすることはできません。",
+  "You can keep playing on your own.": "一人でプレイを続けることはできます。",
+  "You can race other players again.": "他のプレイヤーと再びレースできるようになりました。",
+  "You can't race other players until {when}.": "{when}まで他のプレイヤーとレースできません。",
+  "You can't race other players any more.": "今後、他のプレイヤーとレースすることはできません。",
+  "Free roam stays open.": "他のプレイヤーとのフリーロームは引き続き利用できます。",
+  "Playing with others waits for another name: change it under Online on the start page.": "別の名前にするまで、他のプレイヤーとのプレイは待機になります。スタートページの「オンライン」で変更してください。",
+  "{name} isn't allowed here.": "{name}はここでは使用できません。",
+  "Pick another name to keep playing with others.": "他のプレイヤーとプレイを続けるには、別の名前を選んでください。",
+  "Pick another name": "別の名前を選んでください"
 }

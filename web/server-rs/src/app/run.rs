@@ -168,12 +168,16 @@ pub async fn run(o: Options, cores: usize) {
             }),
             tap: tap.clone(),
             claims: claims.clone(),
+            // the names the operator took away (control.rs rename): no login under one
+            deny: Some(bans.deny()),
         })
     });
     // (its lines: the cap on the players' links going down while the server is busy and back up, at most one every 5 s)
     let m = marker.clone();
     let roam_log = Arc::new(move |line: &str| log::line(m.tag(line).as_deref().unwrap_or(line)));
-    let roam = o.roam_hub.then(|| RoamHub::spawn_with(RoamOptions::default(), roam_log, claims.clone()));
+    // (a player under a name taken away plays alone, as under another's claimed name)
+    let roam_options = RoamOptions { deny: Some(bans.deny()), ..RoamOptions::default() };
+    let roam = o.roam_hub.then(|| RoamHub::spawn_with(roam_options, roam_log, claims.clone()));
     // keyphrase saves: a folder in the state folder (none with --vault-gb 0)
     let vault = (o.vault_gb > 0.0).then(|| {
         let dir = paths::join(&o.state, "vault");
@@ -636,7 +640,7 @@ pub async fn run(o: Options, cores: usize) {
     let bans = app.bans.list(nfsu2_util::now_ms()).len();
     lines.push(if control_up {
         format!(
-            "  bans      : {bans}; nfsu2-server ctl who, kick, ban, unban, bans (through {})",
+            "  bans      : {bans}; nfsu2-server ctl who, kick, ban, raceban, rename, unban, bans, history (through {})",
             paths::join(&o.state, super::control::SOCKET)
         )
     } else {

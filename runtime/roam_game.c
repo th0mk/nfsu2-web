@@ -6449,6 +6449,23 @@ static void room_follow(void){
     snprintf(O.room, sizeof O.room, "%s", name);
     rlog("[roam] f=%ld room changed (the page): %08x -> %08x, %d friend(s) left with the old one\n", rh_frame(), was, h, left);
 }
+/* The player picked another name while the game runs (roam_plat_name: the operator took the old one away, and the
+ * page asked for another): the HELLOs carry it from the next tick on (the hub and the friends take a new name), as
+ * NFSU2_ROAM_NAME at the start would have.  Online mode's next login takes it too (online.c player_name). */
+static uint32_t g_name_gen;
+static void name_follow(void){
+    char name[33];
+    uint32_t gen = roam_plat_name(name);
+    if (!gen || gen == g_name_gen) return;
+    g_name_gen = gen;
+    rc_name_clean(O.name, name, sizeof name);
+    roam_plat_lock();
+    snprintf(g_s.conf.name, sizeof g_s.conf.name, "%s", O.name);
+    g_s.hub_hello_tx = INT64_MIN / 4;
+    for (int i = 0; i < RC_TABLE; i++) if (g_s.peer[i].state != RC_PS_FREE) g_s.peer[i].last_hello_tx = INT64_MIN / 4;
+    roam_plat_unlock();
+    rlog("[roam] f=%ld my name: %s (picked on the page)\n", rh_frame(), O.name);
+}
 #endif
 /* Engage does something of ours now (roam_game_engage: the touch controls' Start, beside the game's own markers and
  * outruns): a friend's outrun on the HUD to challenge or to take, a multiplayer-only race spot (an open race's
@@ -6510,6 +6527,7 @@ void roam_game_frame(CPU *c){
     solid_follow();
     crews_follow();
     room_follow();
+    name_follow();
 #endif
     g_step++;
     uint64_t t0 = rh_ns();

@@ -131,7 +131,12 @@
 //! (`AttachOpts::refuse`, the server checks), or at its hello (`AttachOpts::on_hello` asks the server, with a
 //! [`Hello`]): by the id its page keeps in its storage ("id", at most 64 characters), the ones the page found in its
 //! other stores besides it ("was", at most [`WAS_MAX`] of them), or the keyphrase it plays with ("claim": below, as
-//! its owner).  The switch keeps who was on it for the operator's `who` ([`LanSwitch::who`]): each player's address
+//! its owner).  A hello under a name the operator took away is turned away the same way with [`CLOSE_RENAME`] (its
+//! page asks the player for another name and comes back).  A player under a race ban ([`HelloAnswer::no_races`], or
+//! [`LanSwitch::set_races`] while it plays) stays, but no frame that races goes from it or to it (`races`: LAN play,
+//! which every race between browsers is once it starts, and free roam's outrun and lobby messages), and the hub's list
+//! of lobby races does not reach it; the hosts hear of it with each frame (`FrameCtx::no_races`: the Online lobby
+//! gives it no game).  The switch keeps who was on it for the operator's `who` ([`LanSwitch::who`]): each player's address
 //! and name (with the other names its game shows in free roam: `Host::other_names`), the opaque id the server gave
 //! its client address (`AttachOpts::ident`, a keyed hash), its page's id and its keyphrase's owner, and the same of
 //! the players who left in the last `GONE_MS`, so that one who just left can still be banned.  None of it is ever
@@ -272,6 +277,26 @@ pub const BROADCAST: u32 = 0xFFFF_FFFF;
 /// the close codes of a kick and a ban (the crate doc's Kicks and bans): the page stays off the switch after them
 pub const CLOSE_KICKED: u16 = 4001;
 pub const CLOSE_BANNED: u16 = 4003;
+/// the close code of a name taken away (the crate doc's Kicks and bans): the page asks for another name, then comes back
+pub const CLOSE_RENAME: u16 = 4004;
+/// free roam's datagrams that race another player (runtime/roam_core.h): an outrun's (RC_MSG_DUEL), a lobby race's
+/// (RC_MSG_LOBBY); and the hub's list of lobby races (RC_MSG_LOBBIES)
+const ROAM_DUEL: u8 = 9;
+const ROAM_LOBBY: u8 = 12;
+const ROAM_LOBBIES: u8 = 13;
+
+/// a free-roam datagram's type (runtime/roam_core.h: "N2FR", version, type after the frame's 16 bytes), None for any
+/// other frame.  Its CRC is not checked: a frame that is no such datagram is none to an honest game either.
+fn roam_type(data: &[u8]) -> Option<u8> {
+    (data.len() > 21 && data[0] == KIND_UDP && &data[16..20] == b"N2FR").then(|| data[21])
+}
+
+/// A frame that races another player: LAN play's (kinds 3-5: the game's LAN races, and Online's and free roam's lobby
+/// races once they start, go from browser to browser so), or free roam's outrun or lobby message.  None goes from or
+/// to a player under a race ban (`Conn::no_races`).
+pub(crate) fn races(data: &[u8]) -> bool {
+    (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]) || matches!(roam_type(data), Some(ROAM_DUEL | ROAM_LOBBY))
+}
 /// the most ids a hello's "was" names (the page keeps its id in two stores: one other is all it sends)
 pub const WAS_MAX: usize = 4;
 /// the players who left in this long are kept for `who` (ms), this many at most
@@ -508,14 +533,26 @@ impl LanOptions {
 pub type OnJoin = Box<dyn Fn(u32, bool, usize) + Send + Sync>;
 /// `AttachOpts::on_leave`: (vip, name, players on the switch now)
 pub type OnLeave = Box<dyn Fn(u32, &str, usize) + Send + Sync>;
-/// `AttachOpts::on_hello`: what the hello names its client by -> the control message that turns it away, or None
-pub type OnHello = Box<dyn Fn(&Hello) -> Option<Bytes> + Send + Sync>;
+/// `AttachOpts::on_hello`: what the hello names its client by -> what the server makes of it
+pub type OnHello = Box<dyn Fn(&Hello) -> HelloAnswer + Send + Sync>;
 
 /// What a hello names its client by, for the operator's bans (the crate doc's Kicks and bans): its page's id first,
-/// then the ones the page found besides it ("was"); the owner of the keyphrase it plays with (`AttachOpts::on_claim`)
+/// then the ones the page found besides it ("was"); the owner of the keyphrase it plays with (`AttachOpts::on_claim`);
+/// the name it plays under ("name", as it came)
 pub struct Hello<'a> {
     pub ids: Vec<&'a str>,
     pub owner: Option<&'a str>,
+    pub name: &'a str,
+}
+
+/// What the server makes of a hello (`AttachOpts::on_hello`)
+#[derive(Default)]
+pub struct HelloAnswer {
+    /// the control message that turns the client away, and the close after it: `CLOSE_BANNED`, or `CLOSE_RENAME` (its
+    /// name was taken away)
+    pub refuse: Option<(Bytes, u16)>,
+    /// it races nobody (a race ban): the control message its page hears of it
+    pub no_races: Option<Bytes>,
 }
 /// `AttachOpts::on_claim`: the hello's "claim" (a keyphrase's token) -> the owner the hosts are told of, or None
 pub type OnClaim = Box<dyn Fn(&str) -> Option<Arc<str>> + Send + Sync>;
@@ -543,7 +580,8 @@ pub struct AttachOpts {
     pub ident: Option<String>,
     /// a banned client: this control message, then the close with `CLOSE_BANNED`; it never gets a place
     pub refuse: Option<Bytes>,
-    /// the hello's ids (its page's own) and keyphrase: a message back turns the client away as `refuse` does
+    /// the hello's ids (its page's own), keyphrase and name: the answer turns the client away as `refuse` does (or with
+    /// `CLOSE_RENAME`), or keeps it out of races
     pub on_hello: Option<OnHello>,
     /// the hello's "claim" (the token of the keyphrase its page plays with): the owner its frames name to the hosts
     /// (`FrameCtx::owner`); never kept or shown otherwise
@@ -1137,6 +1175,10 @@ impl LanSwitch {
             self.stats.shed.inc();
             return SendResult::Full;
         }
+        // a player under a race ban is shown no lobby races (it could join none)
+        if p.conn.no_races.load(Relaxed) && roam_type(&data) == Some(ROAM_LOBBIES) {
+            return SendResult::Sent;
+        }
         if let Some(c) = cause {
             c.spend(1, data.len());
         }
@@ -1337,13 +1379,27 @@ impl LanSwitch {
     pub(crate) fn expel_conn(&self, conn: &Arc<Conn>, msg: Bytes, code: u16) {
         conn.expelled.store(true, Relaxed);
         conn.push(Out::Text(msg));
-        let reason: &[u8] = if code == CLOSE_KICKED { b"kicked" } else { b"banned" };
+        let reason: &[u8] = match code {
+            CLOSE_KICKED => b"kicked",
+            CLOSE_RENAME => b"rename",
+            _ => b"banned",
+        };
         conn.close(conn::close_payload(code, reason));
     }
 
-    /// a hello (the first control message of a connection) whose ids or keyphrase the server turns away: the
-    /// connection goes, and true.  The id and the owner its claim names are kept either way (for `who`, and the owner
-    /// for the hosts).
+    /// The player at `vip` races nobody from now on (`off`, a race ban), or may again: its page hears `msg`.  False:
+    /// nobody is there.
+    pub fn set_races(&self, vip: u32, off: bool, msg: Bytes) -> bool {
+        let guard = slot(vip).map(|i| self.table[i].load());
+        let Some(p) = guard.as_ref().and_then(|g| g.as_ref()).filter(|p| p.open()) else { return false };
+        p.conn.no_races.store(off, Relaxed);
+        self.send(p, Out::Text(msg));
+        true
+    }
+
+    /// a hello (the first control message of a connection) whose ids, keyphrase or name the server turns away: the
+    /// connection goes, and true.  One under a race ban stays, out of races.  The id and the owner its claim names are
+    /// kept either way (for `who`, and the owner for the hosts).
     pub(crate) fn hello_refused(&self, conn: &Arc<Conn>, ctx: &AttachCtx, b: &Bytes) -> bool {
         if b.len() > self.o.max_text || !conn.open() {
             return false;
@@ -1373,16 +1429,17 @@ impl LanSwitch {
             }
         }
         let owner = conn.owner.get().map(|o| &**o);
-        if ids.is_empty() && owner.is_none() {
-            return false;
+        let name = m.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+        let Some(a) = ctx.on_hello.as_ref().map(|f| f(&Hello { ids, owner, name })) else { return false };
+        if let Some((msg, code)) = a.refuse {
+            self.expel_conn(conn, msg, code);
+            return true;
         }
-        match ctx.on_hello.as_ref().and_then(|f| f(&Hello { ids, owner })) {
-            Some(msg) => {
-                self.expel_conn(conn, msg, CLOSE_BANNED);
-                true
-            }
-            None => false,
+        if let Some(msg) = a.no_races {
+            conn.no_races.store(true, Relaxed);
+            conn.push(Out::Text(msg));
         }
+        false
     }
 
     /// the switch's counts and its players, as JSON (for the tests: names and virtual addresses only, never a real

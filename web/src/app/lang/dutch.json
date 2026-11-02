@@ -1270,5 +1270,17 @@
   "Send friend request": "Vriendschapsverzoek versturen",
   "That's your own name": "Dat is je eigen naam",
   "Not a player's name": "Geen spelersnaam",
-  "Not sent: try again in a moment": "Niet verstuurd: probeer het zo nog eens"
+  "Not sent: try again in a moment": "Niet verstuurd: probeer het zo nog eens",
+  "You were removed from playing with others.": "Je bent verwijderd uit het spelen met anderen.",
+  "You can't play with others until {when}.": "Je kunt tot {when} niet met anderen spelen.",
+  "You can't play with others any more.": "Je kunt niet meer met anderen spelen.",
+  "You can keep playing on your own.": "Je kunt alleen verder spelen.",
+  "You can race other players again.": "Je kunt weer racen tegen andere spelers.",
+  "You can't race other players until {when}.": "Je kunt tot {when} niet racen tegen andere spelers.",
+  "You can't race other players any more.": "Je kunt niet meer racen tegen andere spelers.",
+  "Free roam stays open.": "Verkennen met anderen blijft mogelijk.",
+  "Playing with others waits for another name: change it under Online on the start page.": "Spelen met anderen wacht op een andere naam: wijzig hem onder Online op de startpagina.",
+  "{name} isn't allowed here.": "{name} is hier niet toegestaan.",
+  "Pick another name to keep playing with others.": "Kies een andere naam om met anderen te blijven spelen.",
+  "Pick another name": "Kies een andere naam"
 }

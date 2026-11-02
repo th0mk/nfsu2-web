@@ -113,6 +113,7 @@ pub fn online_host() -> (Arc<OnlineHost>, Arc<Mutex<Vec<String>>>) {
         log: Arc::new(move |line: &str, _key: Option<&str>| l2.lock().unwrap().push(line.to_string())),
         tap: None,
         claims: None,
+        deny: None,
     });
     (h, lines)
 }

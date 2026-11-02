@@ -72,6 +72,8 @@ pub struct Client {
     pub conns: HashMap<u16, Conn>,
     /// the keyphrase its page's hello named (FrameCtx::owner)
     pub owner: Option<Arc<str>>,
+    /// its player races nobody (FrameCtx::no_races: the operator's race ban)
+    pub no_races: bool,
 }
 
 /// a stream: its browser and its port
@@ -113,6 +115,8 @@ pub struct Opts {
     pub t0: Option<f64>,
     /// the claimed names (nfsu2-claims)
     pub claims: Option<Arc<nfsu2_claims::Claims>>,
+    /// the names taken away (nfsu2-bans `rename`)
+    pub deny: Option<Arc<nfsu2_names::Deny>>,
 }
 
 impl World {
@@ -126,6 +130,7 @@ impl World {
             log: Rc::new(move |s: &str, k: Option<&str>| l2.borrow_mut().push((s.to_string(), k.map(str::to_string)))),
             tap: None,
             claims: o.claims,
+            deny: o.deny,
             clocks: Rc::new(Clocks { now: Box::new(move || t2.get()), timer: Box::new(move || tt2.get()) }),
             limits: o.limits,
             buddy_limits: o.buddy,
@@ -217,7 +222,7 @@ impl World {
     /// a browser at `vip` of client `group` (the lobby tests: the browser's own address stands for its client)
     pub fn client_of(&mut self, vip: &str, group: &str) -> u32 {
         let v = ip(vip);
-        if let Some(old) = self.clients.insert(v, Client { group: group.into(), conns: HashMap::new(), owner: None }) {
+        if let Some(old) = self.clients.insert(v, Client { group: group.into(), conns: HashMap::new(), owner: None, no_races: false }) {
             for (port, c) in old.conns {
                 self.orphans.insert((v, port), c);
             }
@@ -236,7 +241,8 @@ impl World {
 
     pub fn raw(&mut self, vip: u32, frame: &[u8]) {
         let (group, owner) = (self.clients[&vip].group.clone(), self.clients[&vip].owner.clone());
-        self.core.frame(vip, frame, &FrameCtx { group, site: None, cause: None, slot: None, owner });
+        let no_races = self.clients[&vip].no_races;
+        self.core.frame(vip, frame, &FrameCtx { group, site: None, cause: None, slot: None, owner, no_races });
         self.deliver();
     }
 

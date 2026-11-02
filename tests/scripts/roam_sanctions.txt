@@ -1,0 +1,37 @@
+# The operator's rename and race ban (web/server-rs src/app/control.rs) on a player driving in free roam, on the start
+# page: roam-pair --page app --solo --a "Rex:roam_sanctions.txt".  The operator takes the name away (log CTL rename):
+# the page asks for another (shot rename_box) and gets one (log RENAME Okayname); the game plays under it from then on
+# (its log: "my name: Okayname (picked on the page)"; the server's who).  Then a race ban: the page says so over the
+# game (shot race_ban) and the player drives on; lifted (shot race_lifted).  The [ctl] lines say what the server did.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++300  log CTL who
++0    log CTL rename Rex Offensive name
++240  log SHOT rename_box
++60   log RENAME Okayname
++600  log CTL who
++0    roam mp status
++0    log CTL raceban Okayname 1d Testing the race ban
++12   log SHOT race_ban
++300  log CTL history Okayname
++0    log CTL unban Okayname
++12   log SHOT race_lifted
++300  log CTL who
++0    log CTL names
++10   quit

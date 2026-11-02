@@ -344,6 +344,32 @@ uint32_t roam_plat_room(char name[64]){
     }
     return 0;
 }
+/* A new name from the page (input event IEV_NAME, input_web.c): the operator took the old one away and the player
+ * picked another (web/src/app/shell.ts netRename).  Its pieces come on the input thread; the whole one is kept here,
+ * for free roam (roam_game.c name_follow) and Online mode's next login (online.c player_name). */
+static pthread_mutex_t g_name_mx = PTHREAD_MUTEX_INITIALIZER;
+static char g_name_in[33], g_name[33];
+static atomic_uint g_name_gen;
+void roam_plat_name_piece(int off, int total, const char *b, int n){
+    if (total < 1 || total > 32 || off < 0 || off >= total) return;
+    for (int i = 0; i < n && off + i < total; i++) g_name_in[off + i] = b[i] ? b[i] : ' ';
+    if (off + n < total) return;                                     /* more pieces to come */
+    g_name_in[total] = 0;
+    pthread_mutex_lock(&g_name_mx);
+    memcpy(g_name, g_name_in, sizeof g_name);
+    atomic_fetch_add(&g_name_gen, 1);
+    pthread_mutex_unlock(&g_name_mx);
+    fprintf(stderr, "[roam] a new name from the page (%d characters)\n", total);
+}
+/* the page's newest name, and how many it sent (0: none: out is left as it is) */
+uint32_t roam_plat_name(char out[33]){
+    if (!atomic_load(&g_name_gen)) return 0;
+    pthread_mutex_lock(&g_name_mx);
+    uint32_t g = atomic_load(&g_name_gen);
+    memcpy(out, g_name, 33);
+    pthread_mutex_unlock(&g_name_mx);
+    return g;
+}
 static uint8_t place(const rc_peer *p){ return p->status == RC_ST_PAUSED ? RC_ST_ROAM : p->status; }
 /* we are in free roam and the friend's car was within NEAR_M of ours (on the
  * ground) when last seen: SNAPs come only from free roam, so its newest state

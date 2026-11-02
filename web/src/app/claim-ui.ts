@@ -313,6 +313,7 @@ async function pick(d: PlayNameDeps, title: string, before: Node[], alt: string,
     if (n !== seq) return;
     got.info = i;
     const [text, state] = !i ? ['', ''] : i.state === 'taken' ? [t('Another player claimed {name}.', { name }), 'bad']
+      : i.state === 'blocked' ? [t('{name} isn\'t allowed here.', { name }), 'bad']
       : i.state === 'default' ? [t('{name} is the game\'s default and can\'t be claimed. Pick your own.', { name }), 'env']
       : i.state === 'yours' || i.state === 'old' ? [t('{name} is yours.', { name }), 'ok'] : [t('{name} is free.', { name }), 'free'];
     line.textContent = text; line.dataset.state = state;
@@ -328,10 +329,59 @@ async function pick(d: PlayNameDeps, title: string, before: Node[], alt: string,
   await check();
   const name = onlineName(f.value.trim());
   const info = got.info;
-  if (!name || local(f.value.trim()) || !info || info.state === 'taken' || info.state === 'default') return null;
+  if (!name || local(f.value.trim()) || !info || info.state === 'taken' || info.state === 'default' || info.state === 'blocked') return null;
   await d.save(name);
   d.log('[app] your name: one of the player\'s own picked at Play');
   if (info.state === 'free' && d.linked() && !info.mine) await claimQuietly(d, name, info, quiet);
+  return name;
+}
+
+/**
+ * The server's operator took the player's name away (net/index.ts onRename: `was`, with the operator's `msg`): a
+ * question for another, the box empty and checked as it is typed (a name another player claimed, or one the server
+ * does not allow, will not do; a server without claims asks nothing).  The name picked, saved as Your name; null: Not
+ * now.
+ */
+export async function renamePick(d: PlayNameDeps, was: string, msg: string): Promise<string | null> {
+  const body = document.createElement('div');
+  body.append(para(t('{name} isn\'t allowed here.', { name: was })));
+  if (msg) body.append(para(msg));
+  const row = document.createElement('p'); row.className = 'dlg-field';
+  const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'rename-ask-name', textContent: t('Your name') });
+  const f = Object.assign(document.createElement('input'), { type: 'text', id: 'rename-ask-name', maxLength: 15, autocomplete: 'off', spellcheck: false });
+  row.append(label, f);
+  const line = Object.assign(document.createElement('p'), { className: 'hint claim-line' });
+  line.setAttribute('aria-live', 'polite');
+  body.append(row, line);
+  const same = (a: string, b: string) => onlineName(a)?.toLowerCase() === onlineName(b)?.toLowerCase();
+  let seq = 0, good = false;
+  const check = async () => {
+    const n = ++seq, typed = f.value.trim();
+    good = false;
+    const bad = !typed ? [t('Pick another name to keep playing with others.'), 'env'] : local(typed)
+      ?? (same(typed, was) ? [t('{name} isn\'t allowed here.', { name: onlineName(typed)! }), 'bad'] : null);
+    if (bad) { line.textContent = bad[0]; line.dataset.state = bad[1]; f.setCustomValidity(bad[0]); return; }
+    const name = onlineName(typed)!;
+    const i = await d.claims.check(name);
+    if (n !== seq) return;
+    const [text, state] = !i ? ['', ''] : i.state === 'taken' ? [t('Another player claimed {name}.', { name }), 'bad']
+      : i.state === 'blocked' ? [t('{name} isn\'t allowed here.', { name }), 'bad']
+      : i.state === 'default' ? [t('{name} is the game\'s default and can\'t be claimed. Pick your own.', { name }), 'bad']
+      : i.state === 'yours' || i.state === 'old' ? [t('{name} is yours.', { name }), 'ok'] : [t('{name} is free.', { name }), 'free'];
+    line.textContent = text; line.dataset.state = state;
+    f.setCustomValidity(state === 'bad' ? text : '');
+    good = state !== 'bad';
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  f.oninput = () => { clearTimeout(timer); timer = setTimeout(() => void check(), 250); };
+  void check();
+  const answer = d.choose(t('Pick another name'), body, t('Use this name'), t('Not now'));
+  f.focus();
+  if (await answer !== 'ok') return null;
+  await check();
+  const name = onlineName(f.value.trim());
+  if (!name || !good) return null;
+  await d.save(name);
   return name;
 }
 

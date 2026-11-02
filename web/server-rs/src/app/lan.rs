@@ -139,16 +139,45 @@ impl App {
             bytes::Bytes::from(b.message())
         });
         let (bans, a, k0, days) = (self.bans.clone(), ident.clone(), key_.clone(), self.days.clone());
+        let deny = self.bans.deny();
         let on_hello: nfsu2_lan::OnHello = Box::new(move |h| {
+            let now = nfsu2_util::now_ms();
             // a game on the switch: it played today (days.rs), by its page's own id
             if let Some(id) = h.ids.first() {
-                days.seen(id, super::days::Seen::Play, nfsu2_util::now_ms());
+                days.seen(id, super::days::Seen::Play, now);
             }
+            let mut answer = nfsu2_lan::HelloAnswer::default();
             let seen = nfsu2_bans::Seen { pages: &h.ids, owner: h.owner, addr: a.as_deref() };
-            let b = bans.by_hello(&seen, nfsu2_util::now_ms())?;
-            let line = format!("[ban] turned away a client of ban #{} \"{}\" (its page or keyphrase)", b.id, b.name);
-            log::limited("ban", "turned away", &k0, &line, 2);
-            Some(bytes::Bytes::from(b.message()))
+            let v = bans.by_hello(&seen, now);
+            // a full ban: turned away
+            if let Some(b) = v.full {
+                let line = format!("[ban] turned away a client of ban #{} \"{}\" (its page or keyphrase)", b.id, b.name);
+                log::limited("ban", "turned away", &k0, &line, 2);
+                answer.refuse = Some((bytes::Bytes::from(b.message()), nfsu2_lan::CLOSE_BANNED));
+                return answer;
+            }
+            // a name taken away (`rename`): its page asks for another, with the rename's message
+            if deny.has(h.name)
+                && let Some(d) = bans.denied_as(h.name)
+            {
+                let msg = bans.record(d.by, now).map(|r| r.ban.msg).unwrap_or_default();
+                let line = format!(
+                    "[ban] asked a client under \"{}\" for another name (\"{}\": rename #{})",
+                    js::printable(h.name, 32),
+                    d.name,
+                    d.by
+                );
+                log::limited("ban", "turned away", &k0, &line, 2);
+                answer.refuse = Some((bytes::Bytes::from(nfsu2_bans::rename_message(h.name, &msg)), nfsu2_lan::CLOSE_RENAME));
+                return answer;
+            }
+            // a race ban: it plays on, out of races
+            if let Some(b) = v.races {
+                let line = format!("[ban] a client of race ban #{} \"{}\" plays on, out of races", b.id, b.name);
+                log::limited("ban", "turned away", &k0, &line, 2);
+                answer.no_races = Some(bytes::Bytes::from(b.message()));
+            }
+            answer
         });
         // a reconnecting page says ?resume and sends its old address with the token in its first message (nfsu2-lan);
         // the group and site ids stand for the client's address without naming it (the shared limits)

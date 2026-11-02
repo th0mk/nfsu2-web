@@ -63,6 +63,8 @@ pub struct FrameCtx {
     /// the keyphrase its page plays with, as the server knows it (nfsu2-claims: an owner of claimed names), from the
     /// hello's "claim"; None: none
     pub owner: Option<Arc<str>>,
+    /// its player races nobody (the operator's race ban, nfsu2-bans): the Online lobby gives it no game
+    pub no_races: bool,
 }
 
 /// The frames a host has been posted and not handled yet.  Node's hosts could never fall behind: they ran inside the

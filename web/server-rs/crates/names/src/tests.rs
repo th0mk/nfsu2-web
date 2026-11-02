@@ -416,3 +416,25 @@ fn letters_past_255_are_not_read() {
     assert!(blocked_name(&(x(300) + "_fag")) && blocked_name(&(x(300) + " " + &x(300) + "_fag")));
     assert!(!blocked_name(&(x(300) + "fag")));
 }
+
+// the operator's names taken away: a name that reads the same is taken away with it, another is not
+#[test]
+fn names_taken_away_by_their_letters() {
+    assert_eq!(letters("B4d_N4me"), "badname");
+    assert_eq!(letters("Bad Name 1995"), "badname");
+    assert_eq!(letters("Dani99GS"), "danigs");
+    assert_eq!(letters("1234"), "");
+    let d = Deny::default();
+    assert!(!d.has("BadName"));
+    let g = d.generation();
+    d.set(["Bad_Name".to_string(), "4444".to_string()]);
+    assert!(d.generation() > g);
+    for same in ["BadName", "b4d n4me", "BADNAME", "Bad.Name.2000", "8adName"] {
+        assert!(d.has(same), "{same}");
+    }
+    for other in ["BadNames", "Bad", "GoodName", "", "1234"] {
+        assert!(!d.has(other), "{other}");
+    }
+    d.set([]);
+    assert!(!d.has("BadName"));
+}

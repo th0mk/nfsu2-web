@@ -148,6 +148,9 @@ pub(crate) struct Conn {
     pub(crate) browser: std::sync::OnceLock<Arc<str>>,
     /// the keyphrase its page plays with, as the server knows it (its hello's "claim": `AttachOpts::on_claim`)
     pub(crate) owner: std::sync::OnceLock<Arc<str>>,
+    /// it races nobody (a race ban: its hello's `HelloAnswer::no_races`, or `LanSwitch::set_races`): no frame that
+    /// races another player goes from it or to it (`crate::races`)
+    pub(crate) no_races: AtomicBool,
 }
 
 impl Conn {
@@ -173,6 +176,7 @@ impl Conn {
             expelled: AtomicBool::new(false),
             browser: Default::default(),
             owner: Default::default(),
+            no_races: AtomicBool::new(false),
         }
     }
 

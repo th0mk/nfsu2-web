@@ -1318,5 +1318,17 @@
   "Send friend request": "Надіслати запит на дружбу",
   "That's your own name": "Це ваше власне ім'я",
   "Not a player's name": "Це не ім'я гравця",
-  "Not sent: try again in a moment": "Не надіслано: спробуйте ще раз за мить"
+  "Not sent: try again in a moment": "Не надіслано: спробуйте ще раз за мить",
+  "You were removed from playing with others.": "Вас вилучено з гри з іншими.",
+  "You can't play with others until {when}.": "Ви не можете грати з іншими до {when}.",
+  "You can't play with others any more.": "Ви більше не можете грати з іншими.",
+  "You can keep playing on your own.": "Ви можете й далі грати самі.",
+  "You can race other players again.": "Ви знову можете змагатися з іншими гравцями.",
+  "You can't race other players until {when}.": "Ви не можете змагатися з іншими гравцями до {when}.",
+  "You can't race other players any more.": "Ви більше не можете змагатися з іншими гравцями.",
+  "Free roam stays open.": "Вільна їзда з іншими лишається доступною.",
+  "Playing with others waits for another name: change it under Online on the start page.": "Гра з іншими чекає на інше ім'я: змініть його в розділі «Онлайн» на стартовій сторінці.",
+  "{name} isn't allowed here.": "Ім'я {name} тут заборонене.",
+  "Pick another name to keep playing with others.": "Оберіть інше ім'я, щоб і далі грати з іншими.",
+  "Pick another name": "Оберіть інше ім'я"
 }

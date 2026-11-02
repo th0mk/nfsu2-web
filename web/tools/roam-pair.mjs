@@ -34,7 +34,10 @@
 //                    presses Join; `log INVITE-NO <fragment>` presses Not now (tests/scripts/roam_invite.txt);
 //                    `log FRIENDS shot <name>` opens the menu's Friends popup (F9, Friends), saves the page and says
 //                    what the popup says, and goes back; `log FRIENDS join <friend>` presses that friend's Join there
-//                    (tests/scripts/roam_friend_app_a.txt)
+//                    (tests/scripts/roam_friend_app_a.txt); `log RENAME <name>` answers the box that asks for
+//                    another name (the operator took the player's away) with that name (tests/scripts/roam_sanctions.txt)
+//        `log CTL <words>`  any page: an operator's command to our own server (nfsu2-server ctl: who, raceban,
+//                    rename ...), its answer in the instance's log as [ctl]
 //        [--page play [--size 960x540] [--play-only Bob]]   the renderer's test page (test/play.html, WebGPU)
 //                    instead: frame dumps go to the server's /artifacts/ as <name>-*.png (a server of our own
 //                    gets --artifacts <out>); --play-only: only that instance renders, the others run hostcheck
@@ -86,7 +89,7 @@ import { pickBrowser } from './browser.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { makeTestCerts } from '../test/cf-sim.mjs';
 import { serverCommand } from './server-cmd.mjs';
@@ -135,7 +138,7 @@ const FINGER = ['TAP', 'HOLD', 'SCROLL'];
 for (const [name, script] of SPECS) {
   let txt = '';
   try { txt = fs.readFileSync(path.join(REPO, 'tests/scripts', script), 'utf8'); } catch { continue; }
-  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CREW|FRIENDS|INVITE(?:-NO)?|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
+  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
     .filter(c => !APP || (FINGER.includes(c) && !TOUCH));
   if (app.length) console.log(`roam-pair: warning: ${name}'s ${script} has log ${app.join(', ')}, which only --page app${app.some(c => FINGER.includes(c)) ? ' --touch' : ''} does`);
 }
@@ -271,6 +274,19 @@ async function start(i, name, script, own) {
       await page.waitForTimeout(300);
       return `${was} -> ${await top()}`;
     })().then(r => w(`[scroll] ${sc[2].trim()}: ${r}`), e => w(`[scroll] ${sc[2]} failed: ${e}`));
+    // an operator's command to our own server (its control socket: kick, ban, raceban, rename ...), at a script's
+    // `log CTL <words>`: its answer in the log
+    const ct = /LOG CTL (.+)$/.exec(m.text());
+    if (ct && OWN) {
+      const words = ct[1].trim().split(/\s+/);
+      void new Promise(res => execFile(...serverCommand(['ctl', ...words]), (e, out, err) => res(`${out}${err}`.trim())))
+        .then(said => w(`[ctl] ${ct[1].trim()}: ${said.replace(/\n/g, ' / ')}`));
+    }
+    // the box that asks for another name after the operator took the player's away, answered with that name, at a
+    // script's `log RENAME <name>`
+    const rn = APP && /LOG RENAME (\S+)/.exec(m.text());
+    if (rn) void page.fill('#rename-ask-name', rn[1], { timeout: 10_000 }).then(() => page.waitForTimeout(600))
+      .then(() => page.click('#confirm-ok')).then(() => w(`[rename] ${rn[1]}`), e => w(`[rename] ${rn[1]} failed: ${e}`));
     // the menu's Crews popup as the player uses it, at a script's `log CREW <op> ...`: F9, Crews, the act in the popup,
     // Done, Back to the game
     const ck = APP && /LOG CREW (join|leave|colour|shot) (?:(\d+) )?(.+)$/.exec(m.text());

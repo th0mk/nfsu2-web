@@ -50,6 +50,7 @@ fn on_its_own_thread() {
         log: Arc::new(move |s: &str, k: Option<&str>| l2.lock().push((s.to_string(), k.map(str::to_string)))),
         tap: None,
         claims: None,
+        deny: None,
     });
     let out: Arc<Mutex<Vec<(u32, Bytes)>>> = Arc::default();
     let o2 = out.clone();
@@ -68,6 +69,7 @@ fn on_its_own_thread() {
         cause: Some(b.clone() as Arc<dyn Charge>),
         slot: None,
         owner: None,
+        no_races: false,
     };
     let send = |op: u8, data: &[u8]| Bytes::from(lan_frame(4, a, VHOST_VIP, 50000, PORT_LOBBY, op, 7, data));
     host.frame(a, send(SYN, &[]), ctx(&budget));
@@ -108,6 +110,7 @@ fn stop_writes_what_is_kept() {
         log: Arc::new(|_: &str, _: Option<&str>| {}),
         tap: None,
         claims: None,
+        deny: None,
     });
     let out: Arc<Mutex<Vec<Bytes>>> = Arc::default();
     let o2 = out.clone();
@@ -116,7 +119,7 @@ fn stop_writes_what_is_kept() {
         SendResult::Sent
     }));
     let a = ip("10.77.0.2");
-    let ctx = FrameCtx { group: "g".into(), site: None, cause: None, slot: None, owner: None };
+    let ctx = FrameCtx { group: "g".into(), site: None, cause: None, slot: None, owner: None, no_races: false };
     let send = |op: u8, port: u16, cid: u32, data: &[u8]| Bytes::from(lan_frame(4, a, VHOST_VIP, 50000 + cid as u16, port, op, cid, data));
     host.frame(a, send(SYN, PORT_LOBBY, 1, &[]), ctx.clone());
     host.frame(a, send(DATA, PORT_LOBBY, 1, &encode_frame("auth", "", &fields![("NAME", "Alpha")]).unwrap()), ctx.clone());

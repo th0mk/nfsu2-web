@@ -141,6 +141,11 @@ impl LanSwitch {
             tap(&own(data, vip, dst));
         }
         if self.roam_vip == Some(dst) {
+            // a player under a race ban advertises no lobby race to the hub, and asks to join none (crate::races)
+            if peer.conn.no_races.load(Relaxed) && crate::races(data) {
+                self.stats.dropped.inc();
+                return;
+            }
             if let Some(roam) = &self.roam {
                 roam.frame(vip, own(data, vip, dst), self.frame_ctx(peer, None));
             }
@@ -229,12 +234,19 @@ impl LanSwitch {
             cause: cause.map(|c| c as Arc<dyn nfsu2_util::Charge>),
             slot: None,
             owner: peer.conn.owner.get().cloned(),
+            no_races: peer.conn.no_races.load(Relaxed),
         }
     }
 
     /// one frame to one peer, through the impairment when it is on (LAN play's kinds only), always through
-    /// `send_frame` (the queue rules)
+    /// `send_frame` (the queue rules).  A frame that races (crate::races) neither leaves a player under a race ban nor
+    /// reaches one: its honest friends' games never hear its outrun offers and lobby races, nor it theirs, and no LAN
+    /// play (a race once it starts) goes either way.
     pub(crate) fn deliver(&self, from: &Arc<Peer>, p: &Arc<Peer>, data: &Bytes, dst: u32) {
+        if (from.conn.no_races.load(Relaxed) || p.conn.no_races.load(Relaxed)) && crate::races(data) {
+            self.stats.dropped.inc();
+            return;
+        }
         match &self.impair {
             Some(im) if (KIND_LAN_UDP..=KIND_LAN_ICMP).contains(&data[0]) => im.deliver(&self.stats, from, p, data, dst),
             _ => self.deliver_now(from, p, data, dst),

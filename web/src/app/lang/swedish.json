@@ -1270,5 +1270,17 @@
   "Send friend request": "Skicka vänförfrågan",
   "That's your own name": "Det är ditt eget namn",
   "Not a player's name": "Inte ett spelarnamn",
-  "Not sent: try again in a moment": "Inte skickat: försök igen om en stund"
+  "Not sent: try again in a moment": "Inte skickat: försök igen om en stund",
+  "You were removed from playing with others.": "Du har tagits bort från spel med andra.",
+  "You can't play with others until {when}.": "Du kan inte spela med andra förrän {when}.",
+  "You can't play with others any more.": "Du kan inte spela med andra längre.",
+  "You can keep playing on your own.": "Du kan fortsätta spela ensam.",
+  "You can race other players again.": "Du kan köra race mot andra spelare igen.",
+  "You can't race other players until {when}.": "Du kan inte köra race mot andra spelare förrän {when}.",
+  "You can't race other players any more.": "Du kan inte köra race mot andra spelare längre.",
+  "Free roam stays open.": "Utforska med andra är fortfarande öppet.",
+  "Playing with others waits for another name: change it under Online on the start page.": "Spel med andra får vänta på ett annat namn: byt det under Online på startsidan.",
+  "{name} isn't allowed here.": "{name} är inte tillåtet här.",
+  "Pick another name to keep playing with others.": "Välj ett annat namn för att fortsätta spela med andra.",
+  "Pick another name": "Välj ett annat namn"
 }

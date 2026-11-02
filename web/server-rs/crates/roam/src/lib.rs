@@ -185,6 +185,9 @@ pub struct RoamOptions {
     /// thread among them: by default a quarter of the cores, 1 to 4; 1, on the hub's thread alone.  The links are the
     /// same either way.
     pub link_threads: usize,
+    /// the names the operator took away (nfsu2-bans `rename`): a player under one plays alone, as under a name another
+    /// keyphrase claimed; None: none
+    pub deny: Option<std::sync::Arc<nfsu2_names::Deny>>,
 }
 
 impl Default for RoamOptions {
@@ -214,6 +217,7 @@ impl Default for RoamOptions {
             map_fresh_ms: 5_000.0,
             near_gap_ms: 150.0,
             link_threads: std::thread::available_parallelism().map_or(1, |n| (n.get() / 4).clamp(1, 4)),
+            deny: None,
         }
     }
 }
@@ -550,7 +554,7 @@ mod tests {
             in_rooms: Arc::new(Mutex::new(HashMap::new())),
             in_crews: Arc::new(Mutex::new(Vec::new())),
         };
-        let ctx = FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None };
+        let ctx = FrameCtx { group: Arc::from("client"), site: None, cause: None, slot: None, owner: None, no_races: false };
         for _ in 0..100_000 {
             hub.frame(0x0A4D_0005, Bytes::from_static(b"a frame"), ctx.clone());
         }

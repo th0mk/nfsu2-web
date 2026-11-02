@@ -1,6 +1,6 @@
 [package]
 name = "nfsu2-bans"
-description = "The operator's bans: who may not play with others, for a while or for good, by keyed hashes of their address and their page's id"
+description = "The operator's bans: who may not play with others, or race them, for a while or for good, by keyed hashes of their address, page id and keyphrase; their history; the names taken away"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 nfsu2-util.workspace = true
+nfsu2-names.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -14,7 +14,7 @@ import { StatusReader } from './status';
 import { DATA_BASE, MANIFEST_URL } from '../host/datacache';
 import type { GameInfo } from './loader';
 import type { PadPage } from '../input/gamepad';
-import type { NetQueue, NetRemoved } from '../net';
+import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 
 export interface SessionOptions {
   module: WebAssembly.Module;
@@ -52,6 +52,10 @@ export interface SessionOptions {
   netBlock?: string[];
   /** the server's operator removed the player from playing with others (a kick or a ban) */
   netRemoved?(r: NetRemoved): void;
+  /** the operator's race ban: the player plays on with others but races none of them (null: lifted) */
+  netRaces?(r: NetRaces | null): void;
+  /** the operator took the player's name away: the page asks for another */
+  netRename?(r: NetRename): void;
   /** the game finished writing a file of the save overlay (path relative to /save) */
   onSaved?(path: string): void;
   /** tests: where frame dumps go, and their scale */
@@ -138,7 +142,7 @@ export class GameSession {
     })).then(i => { s.input = i; });
     if (o.netName !== null)
       void attach('network', () => attachNet(s.proc, {
-        ...common, name: o.netName!, id: o.netId, was: o.netWas, claim: o.netClaim, block: o.netBlock, notice: o.notice, lobby: o.lobby, say: o.say, bump: o.bump, friend: o.friend, back: o.netBack, queue: o.netQueue, removed: o.netRemoved,
+        ...common, name: o.netName!, id: o.netId, was: o.netWas, claim: o.netClaim, block: o.netBlock, notice: o.notice, lobby: o.lobby, say: o.say, bump: o.bump, friend: o.friend, back: o.netBack, queue: o.netQueue, removed: o.netRemoved, races: o.netRaces, rename: o.netRename,
       })).then(n => { s.net = n; });
     return s;
   }

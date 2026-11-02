@@ -6,7 +6,7 @@
 import type { GameProcess } from '../host/process';
 import type { PadPage, TouchPad } from '../input/gamepad';
 import type { TextEntry } from '../input/index';
-import type { NetQueue, NetRemoved } from '../net';
+import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 
 /** Given to every subsystem. */
 export interface CommonOptions {
@@ -80,6 +80,11 @@ export interface NetOptions extends CommonOptions {
   block?: string[];
   /** the operator removed this player from playing with others (a kick or a ban) */
   removed?: (r: NetRemoved) => void;
+  /** the operator's race ban: this player plays on with others but races none of them, until when and why (null: it
+   *  races again) */
+  races?: (r: NetRaces | null) => void;
+  /** the operator took this player's name away: the page asks for another (NetSubsystem.rename) */
+  rename?: (r: NetRename) => void;
 }
 
 /** What an attach call returns.  Everything but detach is optional. */
@@ -122,6 +127,9 @@ export interface InputSubsystem extends Subsystem {
   sms?(id: number): boolean;
   /** photo mode (runtime/photo.c, photo.ts): what (its PH_* number) and its values; false: it cannot reach the game */
   photo?(what: number, a?: number, b?: number): boolean;
+  /** a new name for free roam and Online mode, now (the operator took the old one away); false: it cannot reach the
+   *  game */
+  name?(name: string): boolean;
   /** every key and button the game holds goes up (photo mode takes the keys) */
   releaseAll?(): void;
   /** performance.now() of the player's last key, mouse or controller input; null: the page cannot tell
@@ -156,6 +164,8 @@ export interface NetSubsystem extends Subsystem {
   away?(on: boolean): void;
   /** the player stops waiting in line for a place (a full server): off the server's LAN for the rest of this game */
   offline?(): void;
+  /** the player picked another name after the operator took its name away: back on the server's LAN under it */
+  rename?(name: string): void;
   /** free roam's solid cars, switched while the game runs (the page menu), as roam_collide has them */
   solid?(collide: 'on' | 'off' | 'none'): void;
   /** quick chat: the player says phrase p (quickchat.ts; race: in a race between players); false: the game has no free

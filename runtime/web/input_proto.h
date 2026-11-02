@@ -86,6 +86,9 @@ enum {
     IEV_LOG = 12,         /* Download log: how long ago the last frame was, a stall report if long (watchdog.c) */
     IEV_SMS = 13,         /* a = a text message of ours for the game's phone (sms.c) */
     IEV_PHOTO = 14,       /* photo mode (photo.c): dik = what (PH_*), a, b its values */
+    IEV_NAME = 15,        /* a new name for free roam and Online mode (the operator took the old one away): a piece of
+                             it, dik = where it starts, vk = the whole length (1..32), ch[3], a and b (little-endian)
+                             its next 11 bytes (roam_web.c roam_plat_name_piece) */
 };
 enum {                    /* event flags */
     IKF_REPEAT = 1,       /* autorepeat */

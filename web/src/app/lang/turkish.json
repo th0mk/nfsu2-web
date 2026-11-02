@@ -1207,5 +1207,17 @@
   "Send friend request": "Arkadaşlık isteği gönder",
   "That's your own name": "Bu senin kendi adın",
   "Not a player's name": "Bir oyuncu adı değil",
-  "Not sent: try again in a moment": "Gönderilemedi: birazdan tekrar dene"
+  "Not sent: try again in a moment": "Gönderilemedi: birazdan tekrar dene",
+  "You were removed from playing with others.": "Başkalarıyla oynamaktan çıkarıldın.",
+  "You can't play with others until {when}.": "{when} tarihine kadar başkalarıyla oynayamazsın.",
+  "You can't play with others any more.": "Artık başkalarıyla oynayamazsın.",
+  "You can keep playing on your own.": "Tek başına oynamaya devam edebilirsin.",
+  "You can race other players again.": "Diğer oyuncularla yeniden yarışabilirsin.",
+  "You can't race other players until {when}.": "{when} tarihine kadar diğer oyuncularla yarışamazsın.",
+  "You can't race other players any more.": "Artık diğer oyuncularla yarışamazsın.",
+  "Free roam stays open.": "Başkalarıyla serbest sürüş açık kalıyor.",
+  "Playing with others waits for another name: change it under Online on the start page.": "Başkalarıyla oynamak için başka bir ad gerekiyor: bunu başlangıç sayfasında Çevrimiçi altından değiştir.",
+  "{name} isn't allowed here.": "{name} adına burada izin verilmiyor.",
+  "Pick another name to keep playing with others.": "Başkalarıyla oynamaya devam etmek için başka bir ad seç.",
+  "Pick another name": "Başka bir ad seç"
 }

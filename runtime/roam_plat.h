@@ -97,6 +97,10 @@ uint32_t roam_plat_crews(uint32_t crews[RC_CREW_MAX], uint32_t rgb[RC_CREW_MAX])
  * and a number that changes with each change (0: not changed, NFSU2_ROAM_ROOM
  * holds) */
 uint32_t roam_plat_room(char name[64]);
+/* the name the player picked while the game runs, after the operator took the
+ * old one away (web): into out (ending in a 0 byte), and a number that changes
+ * with each one (0: none, NFSU2_ROAM_NAME holds) */
+uint32_t roam_plat_name(char out[33]);
 const char *roam_ip_str(uint32_t ip, char *buf);   /* buf >= 16 */
 
 #endif

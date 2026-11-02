@@ -1270,5 +1270,17 @@
   "Send friend request": "Freundschaftsanfrage senden",
   "That's your own name": "Das ist dein eigener Name",
   "Not a player's name": "Kein Spielername",
-  "Not sent: try again in a moment": "Nicht gesendet: Versuch es gleich noch einmal"
+  "Not sent: try again in a moment": "Nicht gesendet: Versuch es gleich noch einmal",
+  "You were removed from playing with others.": "Du wurdest vom Spielen mit anderen ausgeschlossen.",
+  "You can't play with others until {when}.": "Du kannst bis {when} nicht mit anderen spielen.",
+  "You can't play with others any more.": "Du kannst nicht mehr mit anderen spielen.",
+  "You can keep playing on your own.": "Du kannst allein weiterspielen.",
+  "You can race other players again.": "Du kannst wieder Rennen gegen andere Spieler fahren.",
+  "You can't race other players until {when}.": "Du kannst bis {when} keine Rennen gegen andere Spieler fahren.",
+  "You can't race other players any more.": "Du kannst keine Rennen mehr gegen andere Spieler fahren.",
+  "Free roam stays open.": "Die freie Fahrt mit anderen bleibt möglich.",
+  "Playing with others waits for another name: change it under Online on the start page.": "Das Spielen mit anderen wartet auf einen anderen Namen: Ändere ihn auf der Startseite unter Online.",
+  "{name} isn't allowed here.": "{name} ist hier nicht erlaubt.",
+  "Pick another name to keep playing with others.": "Wähle einen anderen Namen, um weiter mit anderen zu spielen.",
+  "Pick another name": "Wähle einen anderen Namen"
 }

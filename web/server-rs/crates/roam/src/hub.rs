@@ -681,6 +681,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         map_fresh_ms: f(o.map_fresh_ms, d.map_fresh_ms),
         near_gap_ms: f(o.near_gap_ms, d.near_gap_ms),
         link_threads: n(o.link_threads, d.link_threads).min(64),
+        deny: o.deny,
     }
 }
 
@@ -976,25 +977,33 @@ impl Hub {
         self.claims = claims;
     }
 
-    /// a player's name against the claims, when its name, its owner or the claims changed since it was last looked
-    /// at: another keyphrase's name makes it an impostor (the console says so once); its own claim hears it plays
+    /// a player's name against the claims and the names the operator took away (`RoamOptions::deny`), when its name,
+    /// its owner, the claims or those names changed since it was last looked at: another keyphrase's name, or one taken
+    /// away, makes it an impostor (the console says so once); its own claim hears it plays
     fn check_claim(&mut self, slot: u32, now: f64) {
-        let Some(c) = &self.claims else { return };
-        let g = c.generation();
+        if self.claims.is_none() && self.o.deny.is_none() {
+            return;
+        }
+        // both generations in one number, never 0 (0: not looked at yet)
+        let cg = self.claims.as_ref().map_or(0, |c| c.generation());
+        let dg = self.o.deny.as_ref().map_or(0, |d| d.generation());
+        let g = (cg << 32 | dg & 0xFFFF_FFFF).wrapping_add(1);
         let Some(Some(p)) = self.slots.get_mut(slot as usize) else { return };
         if p.checked != g {
             p.checked = g;
             let was = p.impostor;
-            p.impostor = !c.may_use(&p.name, p.owner.as_deref(), now as i64);
+            let denied = self.o.deny.as_ref().is_some_and(|d| d.has(&p.name));
+            p.impostor = denied || self.claims.as_ref().is_some_and(|c| !c.may_use(&p.name, p.owner.as_deref(), now as i64));
             if p.impostor && !was {
                 (self.log)(&format!(
-                    "[roam] {} plays as \"{}\", a name another keyphrase claimed: no links",
+                    "[roam] {} plays as \"{}\", {}: no links",
                     nfsu2_util::vip_str(p.vip),
-                    js::printable(&p.name, 32)
+                    js::printable(&p.name, 32),
+                    if denied { "a name the operator took away" } else { "a name another keyphrase claimed" }
                 ));
             }
         }
-        if let Some(o) = p.owner.as_deref().filter(|_| !p.impostor && now - p.seen_claim >= SEEN_EVERY_MS) {
+        if let (Some(c), Some(o)) = (&self.claims, p.owner.as_deref().filter(|_| !p.impostor && now - p.seen_claim >= SEEN_EVERY_MS)) {
             p.seen_claim = now;
             c.seen(&p.name, o, now as i64);
         }

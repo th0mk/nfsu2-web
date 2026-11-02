@@ -70,3 +70,32 @@ fn playing_holds_the_claim() {
     let now = T0 + 30 * 86_400_000;
     assert_eq!(claims.mine(&owner('A'), now).unwrap().until, now + nfsu2_claims::HOLD_DAYS * nfsu2_claims::DAY_MS);
 }
+
+// a name the operator took away (nfsu2-bans rename, RoamOptions::deny), and one that reads as it, plays alone the
+// same way, claims or none; from its next HELLO on when it is taken away while its player drives
+#[test]
+fn a_name_taken_away_plays_alone() {
+    let deny = Arc::new(nfsu2_names::Deny::default());
+    deny.set(["B4d_N4me".to_string()]);
+    let mut k = Kit::new(RoamOptions { deny: Some(deny.clone()), ..RoamOptions::default() });
+    place(&mut k, 0, b"Racer", 0.0, None);
+    place(&mut k, 1, b"BadName", 10.0, None);
+    place(&mut k, 2, b"Driver", 20.0, Some('B'));
+    k.hub.tick();
+    assert!(linked(&k, 0, 2) && linked(&k, 2, 0));
+    assert!(!linked(&k, 0, 1) && !linked(&k, 1, 0) && !linked(&k, 2, 1));
+    assert_eq!(k.lines.lock().iter().filter(|l| l.contains("a name the operator took away")).count(), 1, "{:?}", k.lines.lock());
+    // Driver's name taken away now: alone from its next HELLO
+    deny.set(["B4d_N4me".to_string(), "Driver".to_string()]);
+    k.clear();
+    place(&mut k, 2, b"Driver", 20.0, Some('B'));
+    k.hub.tick();
+    assert!(!linked(&k, 0, 2) && !linked(&k, 2, 0));
+    // given back
+    deny.set([]);
+    k.clear();
+    place(&mut k, 1, b"BadName", 10.0, None);
+    place(&mut k, 2, b"Driver", 20.0, Some('B'));
+    k.hub.tick();
+    assert!(linked(&k, 0, 1) && linked(&k, 0, 2));
+}

@@ -43,7 +43,7 @@ export const attachInput: AttachInput = (proc, element, o) =>
 
 export const attachNet: AttachNet = (proc, o) => {
   const link = netAttach(proc, { name: o.name, id: o.id, was: o.was, claim: o.claim, block: o.block, log: o.log, onNotice: o.notice, onLobby: o.lobby, onSay: o.say, onBump: o.bump, onFriend: o.friend, onBack: o.back,
-    onQueue: o.queue, onRemoved: o.removed });
+    onQueue: o.queue, onRemoved: o.removed, onRaces: o.races, onRename: o.rename });
   const friends = () => link.peers.filter(p => !p.self);
   return {
     detach: () => link.close(),
@@ -52,6 +52,7 @@ export const attachNet: AttachNet = (proc, o) => {
     holding: () => link.state === 'connecting' || link.state === 'online' || link.state === 'offline' || link.state === 'queued',
     away: (on: boolean) => link.setAway(on),
     offline: () => link.goOffline(),
+    rename: (name: string) => link.rename(name),
     solid: (collide: 'on' | 'off' | 'none') => link.setSolid(collide),
     say: (p: number, race?: boolean) => link.say(p, race),
     friend: (m: Record<string, unknown>) => link.friend(m),

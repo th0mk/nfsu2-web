@@ -1118,3 +1118,36 @@ fn count_of_players() {
     w.login(ga2, "Alpha");
     assert_eq!(count(&w), (1, 0));
 }
+
+// the operator's race ban (FrameCtx::no_races): its player chats in the lobby but makes and joins no game, from its
+// next frame on (one can come while it plays); a name taken away (nfsu2-bans rename) logs in nowhere
+#[test]
+fn a_race_banned_player_gets_no_game_and_a_name_taken_away_no_login() {
+    let deny = std::sync::Arc::new(nfsu2_names::Deny::default());
+    deny.set(["B4d_N4me".to_string()]);
+    let mut w = World::new(Opts { deny: Some(deny), ..Opts::default() });
+    let (ga, gb) = (w.client("10.77.0.2"), w.client("10.77.0.3"));
+    let a = w.login(ga, "Alpha");
+    let b = w.login(gb, "Bravo");
+    let p = "TRACK=4123\nDIR=0\nLAPS=2";
+    w.clients.get_mut(&ga).unwrap().no_races = true;
+    w.send(a, "gcre", fields![("NAME", "088.Alpha"), ("MAXSIZE", 4), ("PARAMS", p)]);
+    assert_eq!(w.c(a).l("gcre").code, "full");
+    assert!(w.logged("\"Alpha\": under a race ban: made no game"));
+    w.send(b, "gcre", fields![("NAME", "088.Bravo"), ("MAXSIZE", 4), ("PARAMS", p)]);
+    assert_eq!(w.c(b).l("gcre").code, "");
+    w.send(a, "gjoi", fields![("NAME", "088.Bravo")]);
+    assert_eq!(w.c(a).l("gjoi").code, "full");
+    assert!(w.logged("\"Alpha\": under a race ban: joined no game"));
+    // lifted: it joins
+    w.clients.get_mut(&ga).unwrap().no_races = false;
+    w.send(a, "gjoi", fields![("NAME", "088.Bravo")]);
+    assert_eq!(w.c(a).l("gjoi").code, "");
+    // the name taken away, and one that reads as it
+    for name in ["B4d_N4me", "BadName"] {
+        let g = w.client("10.77.0.4");
+        let c = w.connect(g, PORT_LOBBY);
+        w.send(c, "auth", fields![("NAME", name), ("PASS", "x")]);
+        assert_eq!(w.c(c).l("auth").code, "imst", "{name}");
+    }
+}

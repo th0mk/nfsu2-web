@@ -495,6 +495,7 @@ name = "nfsu2-bans"
 version = "0.1.0"
 dependencies = [
  "hmac",
+ "nfsu2-names",
  "nfsu2-util",
  "parking_lot",
  "serde",
@@ -608,6 +609,7 @@ dependencies = [
  "bytes",
  "crc32fast",
  "nfsu2-claims",
+ "nfsu2-names",
  "nfsu2-util",
  "parking_lot",
  "serde_json",

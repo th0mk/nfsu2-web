@@ -831,7 +831,8 @@ async fn kicks_and_bans_through_the_control_socket() {
     let host = format!("localhost:{port}");
     let sock = state.join("control.sock").to_string_lossy().to_string();
     assert!(
-        srv.lines().contains(&format!("  bans      : 0; nfsu2-server ctl who, kick, ban, unban, bans (through {sock})")),
+        srv.lines()
+            .contains(&format!("  bans      : 0; nfsu2-server ctl who, kick, ban, raceban, rename, unban, bans, history (through {sock})")),
         "{:?}",
         srv.lines()
     );
@@ -966,6 +967,106 @@ async fn kicks_and_bans_through_the_control_socket() {
     assert!(lines.iter().any(|l| l == "[ban] turned away a client of ban #1 \"Ann\" (its page or keyphrase)"), "{lines:?}");
     assert!(lines.iter().any(|l| l == "[ban] lifted #1 \"Ann\""), "{lines:?}");
     assert!(lines.iter().any(|l| l.starts_with("[ban] #2 \"Racer\" (c1) for 1 d (until ")), "{lines:?}");
+    assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
+}
+
+// A race ban keeps its player on the switch, out of races: its page hears why at once and at each hello, and that it
+// races again when the ban is lifted; `change` makes it a full ban and back.  A rename takes the name away from
+// everyone: the player's page is asked for another, a hello under it (or under one that reads the same) is too, one
+// under another name plays on.  `history` says what each player had, and a new ban's reply what it had before
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn race_bans_renames_and_history_through_the_control_socket() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (data, wasm) = game_folder(tmp.path());
+    let (port, state) = (free_port(), tmp.path().join("state"));
+    let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--online", "off", "--roam-hub", "off"]), port);
+    srv.ready().await;
+    let host = format!("localhost:{port}");
+    let hello = |name: &str, id: &str| serde_json::json!({ "t": "hello", "name": name, "id": id }).to_string();
+    let open = |xff: &'static str, name: &'static str, id: &'static str| {
+        let (host, hello) = (host.clone(), hello(name, id));
+        async move {
+            let b = Browser::open_from(&host, port, "", None, None, Some(xff)).await;
+            b.text(&hello);
+            b
+        }
+    };
+    let cat = open("192.0.2.1", "Cat", "page-cat").await;
+    let dan = open("192.0.2.2", "B4dName", "page-dan").await;
+    let t0 = Instant::now();
+    while !ctl(&state, &["who"]).1.contains("\"B4dName\"") && t0.elapsed() < Duration::from_secs(3) {
+        sleep(50).await;
+    }
+    let races = |g: &Got| g.ctl.iter().rev().find(|m| m["t"] == "races").cloned();
+
+    // a race ban: Cat stays, out of races, and hears why; again in another tab
+    let cat_vip = nfsu2_util::vip_str(cat.vip);
+    let rb = ctl(&state, &["raceban", "cat", "2w", "Cheating", "in", "races"]);
+    assert_eq!(rb.0, 0, "{}", rb.1);
+    assert!(rb.1.starts_with("race ban #1: \"Cat\" for 14 d (until "), "{}", rb.1);
+    assert!(rb.1.ends_with(&format!("by its page and its address\nout of races now: {cat_vip} \"Cat\"")), "{}", rb.1);
+    assert_eq!(cat.until_ms(3000, races).await["msg"], "Cheating in races");
+    let tab = open("192.0.2.1", "Cat", "page-cat").await;
+    assert_eq!(tab.until_ms(3000, races).await["msg"], "Cheating in races");
+    sleep(200).await;
+    assert!(cat.is_open() && tab.is_open(), "a race ban removes nobody");
+    assert!(ctl(&state, &["bans"]).1.contains("race ban until "), "{}", ctl(&state, &["bans"]).1);
+    // made a full ban: removed; a race ban for a week again
+    let ch = ctl(&state, &["change", "#1", "full"]);
+    assert!(ch.1.starts_with("#1 \"Cat\": ban for 14 d (until "), "{}", ch.1);
+    assert_eq!(cat.until_ms(3000, |g| g.closed.clone()).await, (4003, "banned".into()));
+    let ch = ctl(&state, &["change", "#1", "1w", "races"]);
+    assert!(ch.1.starts_with("#1 \"Cat\": race ban for 7 d (until "), "{}", ch.1);
+    // lifted: the one on the switch races again
+    let cat = open("192.0.2.1", "Cat", "page-cat").await;
+    assert_eq!(cat.until_ms(3000, races).await["until"].is_i64(), true);
+    let cat_vip = nfsu2_util::vip_str(cat.vip);
+    assert_eq!(ctl(&state, &["unban", "#1"]), (0, format!("lifted #1 \"Cat\" (race ban); races again: {cat_vip} \"Cat\"")));
+    assert_eq!(cat.until_ms(3000, |g| races(g).filter(|m| m["lifted"] == true)).await["lifted"], true);
+
+    // a rename: Dan's page is asked for another name
+    let rn = ctl(&state, &["rename", "b4dname", "Offensive", "name"]);
+    assert_eq!(rn.0, 0, "{}", rn.1);
+    assert!(rn.1.starts_with("rename #2: \"B4dName\" taken away from everyone, and the names that read the same"), "{}", rn.1);
+    assert_eq!(dan.until_ms(3000, |g| g.closed.clone()).await, (4004, "rename".into()));
+    let told = dan.got().ctl.iter().find(|m| m["t"] == "rename").cloned().expect("the rename's message");
+    assert_eq!((told["name"].clone(), told["msg"].clone()), (Value::from("B4dName"), Value::from("Offensive name")));
+    // a hello under a name that reads the same: asked too; under another, Dan plays on
+    let (got, closed) =
+        turned_away_hello(&host, port, "192.0.2.3", serde_json::json!({ "t": "hello", "name": "BadName", "id": "page-eve" })).await;
+    assert_eq!((kinds(&got).last().cloned(), closed), (Some("rename".to_string()), Some((4004, "rename".to_string()))));
+    assert_eq!(got.last().map(|m| m["msg"].clone()), Some(Value::from("Offensive name")));
+    let dan = open("192.0.2.2", "Dan", "page-dan").await;
+    sleep(200).await;
+    assert!(dan.is_open());
+    assert!(ctl(&state, &["names"]).1.starts_with("\"B4dName\""), "{}", ctl(&state, &["names"]).1);
+
+    // the history: Dan's under its new name (by its page), Cat's by its ban's number
+    let h = ctl(&state, &["history", "dan"]);
+    assert!(h.1.starts_with("\"Dan\": 1 in the last year\n#2 rename \"B4dName\", on "), "{}", h.1);
+    let h = ctl(&state, &["history", "#1"]);
+    assert!(h.1.contains("#1 race ban \"Cat\", 7 d from ") && h.1.contains(", lifted "), "{}", h.1);
+    assert!(ctl(&state, &["history", "Nobody"]).1.ends_with("no bans or renames in the last year"));
+    // a new ban says what the player had before
+    let rb = ctl(&state, &["raceban", "cat", "perm"]);
+    assert!(rb.1.contains("\nbefore: 1 (history lists them)\n  #1 race ban \"Cat\""), "{}", rb.1);
+    // the name given back
+    assert_eq!(ctl(&state, &["unname", "badname"]), (0, "gave back \"B4dName\": anyone may play under it again".into()));
+    assert_eq!(ctl(&state, &["names"]), (0, "no names taken away".into()));
+
+    assert_eq!(srv.stop().await, Some(0));
+    let lines = srv.lines();
+    for start in [
+        "[ban] race ban #1 \"Cat\" for 14 d (until ",
+        "[ban] a client of race ban #1 \"Cat\" plays on, out of races",
+        "[ban] changed #1 \"Cat\": ban for 14 d",
+        "[ban] lifted #1 \"Cat\" (race ban); races again: ",
+        "[ban] rename #2 \"B4dName\": \"B4dName\": \"Offensive name\"; asked for another name: ",
+        "[ban] asked a client under \"BadName\" for another name (\"B4dName\": rename #2)",
+        "[ban] gave back \"B4dName\"",
+    ] {
+        assert!(lines.iter().any(|l| l.starts_with(start)), "{start}: {lines:?}");
+    }
     assert!(!lines.iter().any(|l| l.contains("192.0.2")), "no client address in the log: {lines:?}");
 }
 
