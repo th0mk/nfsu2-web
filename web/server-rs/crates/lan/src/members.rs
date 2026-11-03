@@ -196,6 +196,8 @@ impl LanSwitch {
             listed: false.into(),
             ident: ctx.ident.clone(),
             since: now_ms(),
+            country: ctx.country,
+            lan_to: Default::default(),
         });
         if let Some(h) = &hello {
             peer.ctl.lock().texts.take_at(now, 1.0);

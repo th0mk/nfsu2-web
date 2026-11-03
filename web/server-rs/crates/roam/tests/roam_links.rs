@@ -78,3 +78,25 @@ fn a_player_that_asks_for_fewer_gets_fewer() {
     assert_eq!(links_of(&k, 0), 20);
     assert!((1..60).all(|i| (33..=48).contains(&links_of(&k, i))), "the others keep more than 32");
 }
+
+// the pairs the server's counts read (nfsu2-lan paths.rs): each link once, the lower address first, the same links the
+// lists name; a player gone takes its pairs with it
+#[test]
+fn link_pairs_are_the_links_once() {
+    let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
+    for i in 0..5u32 {
+        k.from(W(i), &hello(100 + i));
+        k.from(W(i), &snap(100 + i, [i as f64 * 3.0 + 0.25, 0.25, 0.0]));
+    }
+    k.hub.tick();
+    let pairs = k.hub.link_pairs();
+    assert_eq!(pairs.len(), 10, "five players near each other: every pair linked once, {pairs:x?}");
+    assert!(pairs.iter().all(|&(a, b)| a < b));
+    let listed: usize = (0..5).map(|i| links_of(&k, i)).sum();
+    assert_eq!(listed, 2 * pairs.len(), "the lists name each link from both ends");
+    k.hub.peer_gone(W(4));
+    k.hub.tick();
+    let pairs = k.hub.link_pairs();
+    assert_eq!(pairs.len(), 6);
+    assert!(pairs.iter().all(|&(a, b)| a != W(4) && b != W(4)));
+}

@@ -161,6 +161,13 @@ pub trait Host: Send + Sync + 'static {
         let _ = tx.send(HashMap::new());
         rx
     }
+    /// each pair of browsers whose players this host links now, once (the lower address first), for the server's
+    /// counts of the players' paths (nfsu2-lan paths.rs): the free-roam hub's links; the others have none
+    fn link_pairs(&self) -> oneshot::Receiver<Vec<(u32, u32)>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = tx.send(Vec::new());
+        rx
+    }
     /// the server stops: save what is kept, end the timers
     fn stop(&self);
 }

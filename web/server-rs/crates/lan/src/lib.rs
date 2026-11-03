@@ -243,6 +243,7 @@ mod impair;
 mod lag;
 mod members;
 pub mod mix;
+pub mod paths;
 mod queue;
 mod reader;
 mod route;
@@ -586,6 +587,9 @@ pub struct AttachOpts {
     /// the hello's "claim" (the token of the keyphrase its page plays with): the owner its frames name to the hosts
     /// (`FrameCtx::owner`); never kept or shown otherwise
     pub on_claim: Option<OnClaim>,
+    /// the client's country (two letters of ISO 3166-1, upper case), as a trusted proxy named it: only for the counts of
+    /// `paths` (paths.rs), never shown for one player
+    pub country: Option<[u8; 2]>,
 }
 
 /// What the players on the switch do (`LanSwitch::breakdown`).
@@ -818,6 +822,11 @@ pub(crate) struct Peer {
     /// its client's id for the operator's bans (`AttachOpts::ident`), and when it took its place (ms since 1970)
     ident: Option<Arc<str>>,
     since: i64,
+    /// its client's country (`AttachOpts::country`, paths.rs `code`; 0: not known)
+    country: u16,
+    /// the players its LAN play sent UDP to since the last `paths` (races, and their lobbies), a few, at the places
+    /// paths.rs `race_with` puts them: only its own reader writes them, `paths` takes them
+    lan_to: [AtomicU32; paths::LAN_TO],
 }
 
 impl Peer {
@@ -865,6 +874,7 @@ pub(crate) struct AttachCtx {
     ident: Option<Arc<str>>,
     on_hello: Option<OnHello>,
     on_claim: Option<OnClaim>,
+    country: u16,
 }
 
 /// The sender's buckets while the Online host handles its frame: what the host sends because of it is spent from
@@ -1123,6 +1133,7 @@ impl LanSwitch {
             ident: opts.ident.map(Arc::from),
             on_hello: opts.on_hello,
             on_claim: opts.on_claim,
+            country: opts.country.map_or(0, paths::code),
         });
         let conn = Arc::new(Conn::new(self.conn_ids.fetch_add(1, Relaxed)));
         // a banned client hears why and goes (its reader answers the close handshake); without ?resume the welcome
@@ -1281,6 +1292,26 @@ impl LanSwitch {
         n.msgs = s.msgs.get().to_vec();
         (n.waiting, n.waited) = self.line_view();
         n
+    }
+
+    /// The counts of where the players are and how long their paths are (paths.rs), as lines for the console: each
+    /// player's round trip by country and by region, free roam's links now (the hub's `link_pairs`) and LAN play's
+    /// pairs since the last call, which it takes.  None while no player has a round trip yet.
+    pub async fn paths(&self) -> Vec<String> {
+        let roam = match &self.roam {
+            Some(h) => h.link_pairs().await.unwrap_or_default(),
+            None => Vec::new(),
+        };
+        let all = self.all.load();
+        let (mut seen, mut lan, mut to) = (Vec::with_capacity(all.len()), Vec::new(), Vec::new());
+        for p in all.iter() {
+            seen.push(paths::Seen { vip: p.vip, country: p.country, base: p.probe.lock().base() });
+            paths::take(&p.lan_to, &mut to);
+            lan.extend(to.drain(..).filter(|&d| d != p.vip).map(|d| (p.vip.min(d), p.vip.max(d))));
+        }
+        lan.sort_unstable();
+        lan.dedup();
+        paths::lines(&seen, &roam, &lan)
     }
 
     /// Who is on the switch, then who left it in the last `GONE_MS` (oldest first), for the operator's `who`, kick and

@@ -268,6 +268,7 @@ enum Cmd {
     Blocks(u32, Vec<String>),
     PageName(u32, String),
     OtherNames(oneshot::Sender<HashMap<u32, Vec<String>>>),
+    Pairs(oneshot::Sender<Vec<(u32, u32)>>),
     Friends(u32, Arc<str>, Vec<Arc<str>>),
     RoomName(u32, String),
     Flew(u32, f64),
@@ -479,6 +480,9 @@ fn run(
             Cmd::OtherNames(tx) => guard(|| {
                 let _ = tx.send(hub.other_names());
             }),
+            Cmd::Pairs(tx) => guard(|| {
+                let _ = tx.send(hub.link_pairs());
+            }),
             Cmd::Friends(vip, me, owners) => guard(|| hub.friends(vip, me, owners)),
             Cmd::RoomName(vip, name) => guard(|| hub.room_name(vip, name)),
             Cmd::Flew(vip, secs) => guard(|| hub.flew(vip, secs)),
@@ -541,6 +545,11 @@ impl Host for RoamHub {
     fn other_names(&self) -> oneshot::Receiver<HashMap<u32, Vec<String>>> {
         let (tx, rx) = oneshot::channel();
         let _ = self.tx.send(Cmd::OtherNames(tx));
+        rx
+    }
+    fn link_pairs(&self) -> oneshot::Receiver<Vec<(u32, u32)>> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.tx.send(Cmd::Pairs(tx));
         rx
     }
     fn stop(&self) {

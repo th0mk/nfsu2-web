@@ -140,6 +140,13 @@ impl Probe {
         Some(sent >= self.tick_at)
     }
 
+    /// the path's round trip without queues (ms): its lowest of the last 30-60 s, as the base above (not capped at
+    /// `floor`); None before its first pong (paths.rs, the server's counts)
+    pub(crate) fn base(&self) -> Option<f64> {
+        let b = self.base_now.min(self.base_prev);
+        b.is_finite().then_some(b)
+    }
+
     /// how far behind the path is now (ms): the last round trip, or longer while a ping waits longer than that
     pub(crate) fn lag(&self, now: f64) -> f64 {
         let waiting = self.out.front().map_or(0.0, |(_, sent)| now - sent);

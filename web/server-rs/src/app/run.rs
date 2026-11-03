@@ -332,6 +332,11 @@ pub async fn run(o: Options, cores: usize) {
                 if let Some(l) = nfsu2_lan::mix::msg_line(&b.msgs, &was.msgs, BREAKDOWN_EVERY.as_secs_f64()) {
                     log::line(&format!("[players] WebSocket messages since the last count: {l}"));
                 }
+                // where the players are (Cloudflare's country) and how long their paths are: to the server, and from one
+                // player to another through it, of free roam's links and LAN play's pairs (nfsu2-lan paths.rs)
+                for l in lan.paths().await {
+                    log::line(&format!("[players] {l}"));
+                }
                 let slice = slice.map_or(String::new(), |q| {
                     format!("; {} {:.2} of its {} cores ({:.0} %)", q.group, q.used, q.cores, q.share() * 100.0)
                 });

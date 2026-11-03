@@ -360,6 +360,21 @@ fn client_ip_from_trusted_proxies_only() {
 }
 
 #[test]
+fn the_country_from_trusted_proxies_only() {
+    let t = ProxyTrust::parse("10.0.0.0/8").unwrap();
+    let cc = "cf-ipcountry";
+    assert_eq!(client_country(&q("10.1.2.3", &[(cc, "DE")]), &t), Some(*b"DE"));
+    assert_eq!(client_country(&q("127.0.0.1", &[(cc, " br ")]), &t), Some(*b"BR"));
+    // a header from a peer that is not trusted is never read
+    assert_eq!(client_country(&q("203.0.113.5", &[(cc, "DE")]), &t), None);
+    // none known, Tor, nonsense, none
+    for v in ["XX", "T1", "D", "DEU", "1A", ""] {
+        assert_eq!(client_country(&q("10.1.2.3", &[(cc, v)]), &t), None, "{v:?}");
+    }
+    assert_eq!(client_country(&q("10.1.2.3", &[]), &t), None);
+}
+
+#[test]
 fn https_and_the_forwarded_host() {
     let t = ProxyTrust::parse("").unwrap();
     let mut p = q("203.0.113.5", &[("x-forwarded-proto", "https"), ("x-forwarded-host", "game.example.com")]);

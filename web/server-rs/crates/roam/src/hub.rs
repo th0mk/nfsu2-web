@@ -2368,6 +2368,19 @@ impl Hub {
         })
     }
 
+    /// each pair of browsers linked now, once (the lower address first; a browser's endpoints are one), sorted: the
+    /// server's counts of the players' paths (nfsu2-lan paths.rs).  Addresses only, never a position.
+    pub fn link_pairs(&self) -> Vec<(u32, u32)> {
+        let mut v = Vec::new();
+        for p in self.players() {
+            let to = p.links.iter().filter(|l| self.live(l)).filter_map(|l| self.player(l.slot)).map(|o| o.vip);
+            v.extend(to.filter(|&o| o != p.vip).map(|o| (p.vip.min(o), p.vip.max(o))));
+        }
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
     /// each player's links now, by `vip:port`, for the tests
     pub fn links(&self) -> Vec<(String, Vec<String>)> {
         let name = |p: &Player| format!("{}:{}", p.vip, p.port);

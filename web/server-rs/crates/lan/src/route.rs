@@ -188,7 +188,14 @@ impl LanSwitch {
         }
         let one = slot(dst).map(|i| self.table[i].load());
         match one.as_deref().and_then(|p| p.as_ref()).filter(|p| p.open()) {
-            Some(p) => self.deliver(peer, p, data, dst),
+            Some(p) => {
+                // LAN play's UDP from one player to another (a race, its lobby): the pair, for the 5-minute counts
+                // (paths.rs; a load or two, rarely a store)
+                if data[0] == KIND_LAN_UDP {
+                    crate::paths::race_with(&peer.lan_to, dst);
+                }
+                self.deliver(peer, p, data, dst)
+            }
             None => self.stats.dropped.inc(),
         }
     }
@@ -461,6 +468,7 @@ pub(crate) mod tests {
             ident: None,
             on_hello: None,
             on_claim: None,
+            country: 0,
         });
         let p = sw.admit(&conn, &ctx, None).expect("admitted");
         (conn, ctx, p)
