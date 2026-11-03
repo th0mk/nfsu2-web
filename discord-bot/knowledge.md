@@ -212,8 +212,10 @@ context lists every problem the developer has a report on, with its first thread
 - Radio with a music folder: songs played slowed down and an octave low where the game mixes its sound at 22050 Hz
   (machines the game rates as slow). Fixed on 28 October (492b451): on a version with it, a report of slow songs is
   new; ask for the log after a few songs, and the files' type (mp3, flac, ...).
-- Radio with a music folder: the game crashes (exit code 134) as Radio starts a song in the menus, after an outrun or
-  a race (crib, garage). Radio off in F9 avoids it (a poster's three logs, 2026-11-02).
+- Radio with a music folder: the game crashed (exit code 134, `sub_0072dcf8` or `sub_0072ad58` at the top of the
+  stack) as one song ended and Radio started the next: in the menus after an outrun or a race, or on the trip to a
+  race. Fixed on 2 November (fbe1cef9), live since that afternoon; Radio no longer needs to be off. On a version with
+  it, a report of this crash is new: escalate it with the log.
 - A controller's right stick looking round the car (live since the morning of 3 November): seen from the side or the
   front the car has no front wheels (looking back, no rear ones), its reflections are wrong, "things not loaded".
   That is how it is drawn, not loading: no log needed. Fixed on 3 November (77a2a706), which also makes the stick
