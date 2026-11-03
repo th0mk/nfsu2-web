@@ -1,0 +1,14 @@
+# The lobby's warning to a car usually outpaced in the race's stage (roam_game.c mp_outpaced), the host side (with
+# mprace_outpaced_b.txt): "roam mp open" opens a lobby for MP_RACE where the car stands, the other joins; no race.
+#   node web/tools/roam-pair.mjs --seed <save tree> --a Ann:mprace_outpaced_a.txt --b Bob:mprace_outpaced_b.txt
+#        --env MP_RACE=S5_CIRCUIT_28   (a stage-5 race: a car of class 2 or 3 is warned; S2_SPRINT_3: no car is)
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  roam mp open ${MP_RACE}
++0    roam mp waitlobby 2 9000
++60   roam mp lobby
++0    log LOBBY joined
++300  quit

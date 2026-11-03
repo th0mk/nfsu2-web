@@ -1274,5 +1274,6 @@
   "Multiplayer race: {pos} place. Only a win counts in your career": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} นับในโหมดอาชีพของคุณเฉพาะเมื่อชนะเท่านั้น",
   "crew": "ทีม",
   "A win counts in your career, and so does a crew-mate's": "ถ้าชนะจะนับในโหมดอาชีพของคุณ สมาชิกทีมชนะก็นับด้วย",
-  "A win counts in your career, and so does a friend's or crew-mate's": "ถ้าชนะจะนับในโหมดอาชีพของคุณ เพื่อนหรือสมาชิกทีมชนะก็นับด้วย"
+  "A win counts in your career, and so does a friend's or crew-mate's": "ถ้าชนะจะนับในโหมดอาชีพของคุณ เพื่อนหรือสมาชิกทีมชนะก็นับด้วย",
+  "Stage {n} race: the cars here are usually much faster than yours": "การแข่งด่าน {n}: รถที่นี่มักเร็วกว่ารถของคุณมาก"
 }

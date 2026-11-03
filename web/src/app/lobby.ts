@@ -18,8 +18,10 @@ interface LobbyState {
   /** the lobby's players, the host first; me: our place in it (-1: none); max: its places; t: the countdown's
    *  seconds; closes: the seconds left of a lobby nobody joined (its last minute); away: its host made no input
    *  lately, the seconds until it closes; fee: what quitting the race costs; even: the race evens out the cars
-   *  (their engines) */
+   *  (their engines); outpaced: our car's class is one the race's stage's cars usually leave far behind (runtime
+   *  mp_outpaced) */
   names?: string[]; me?: number; max?: number; t?: number; closes?: number; away?: number; fee?: number; even?: number;
+  outpaced?: number;
   why?: string; step?: string; text?: string;
   /** counts: 1 a win counts in our career (a race we could win with Solo here); c: each player's own (1 counts for
    *  them); fr: each player our friend (their win counts for us too); cr: each player a crew-mate, not a friend (the same) */
@@ -230,7 +232,10 @@ export class LobbyPanel {
           this.act('Enter', t('Open a lobby')));
         break;
       case 'join':
-        kids.push(...this.title(s, host), this.places(s), ...this.career(s), this.act('Enter', t('Join')));
+        kids.push(...this.title(s, host), this.places(s), ...this.career(s));
+        // (a warning only: the player may join anyway)
+        if (s.outpaced && s.stage) kids.push(el('div', 'lobby-warn', t('Stage {n} race: the cars here are usually much faster than yours', { n: s.stage })));
+        kids.push(this.act('Enter', t('Join')));
         break;
       case 'full':
         // (kept out: no other lobby opens beside it, one race at a start)

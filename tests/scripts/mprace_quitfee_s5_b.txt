@@ -1,0 +1,34 @@
+# The fee for quitting follows the stage (mprace_quit_fee: 3/16 of what a win pays the player), a joiner at stage 5
+# quits (with mprace_open_a.txt, MP_RACE=S5_CIRCUIT_28: a lobby of a race no career here counts): its stage set to 5
+# before it joins (a win pays $2000 there), back to its own 2 once the race runs; out of its bank $375, not $75.
+#   node web/tools/roam-pair.mjs --seed ~/crash-live/seed-frikand --a Ann:mprace_open_a.txt --b Bob:mprace_quitfee_s5_b.txt
+#        --env MP_RACE=S5_CIRCUIT_28
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    poke 0x862838 5                 # the stage (Career +0x7AF8): 5
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 12000
++300  roam mp lobby
++0    mark bank0 i:0x861e74
++0    log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    poke 0x862838 2                 # back to its own stage: the prizes (and the fee) are the trip's start's
++0    log LOBBY race
++0    autopilot on 6000
++1200 log LOBBY joiner quits in the race: pause, Quit, Yes
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++60   tap UP
++30   tap RETURN
++60   tap LEFT
++20   tap RETURN
++0    roam mp waittrip 40000
++60   expect i:0x861e74 == @bank0-375
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

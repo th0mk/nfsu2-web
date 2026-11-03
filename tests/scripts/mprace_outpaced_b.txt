@@ -1,0 +1,19 @@
+# The lobby's warning to a car usually outpaced in the race's stage, the joining side (with mprace_outpaced_a.txt):
+# its car's class ("mp perf"), the join view's line at the top (a stage-5 race: "Stage 5 race: its cars are usually
+# much faster than yours" for a car of class 2 or 3; with --page app the panel's warning, log SHOT), then it joins
+# anyway: the log says "joining a stage 5 race in a class N car (warned ...)".
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp perf
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 12000
++300  roam mp lobby
++0    log SHOT outpaced
++0    log LOBBY join view
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    roam mp lobby
++0    log LOBBY DONE
++300  quit

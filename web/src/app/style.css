@@ -1084,7 +1084,8 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 .lobby-title { font-size: 1.1em; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.02em; color: var(--lime); }
 .lobby-sub, .lobby-hint { color: var(--muted); font-size: 0.85em; }
 .lobby-why { margin-top: 0.4em; color: var(--muted); }
-/* its host made no input lately: the seconds until the lobby closes (lobby.ts away) */
+/* its host made no input lately: the seconds until the lobby closes (lobby.ts away); a lobby whose race's stage
+ * usually has much faster cars than ours (outpaced) */
 .lobby-warn { margin-top: 0.3em; font-size: 0.85em; font-weight: 700; color: var(--warn); }
 .lobby-places { list-style: none; margin: 0.5em 0 0; padding: 0; }
 .lobby-places li { display: flex; gap: 0.6em; align-items: baseline; padding: 0.12em 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }

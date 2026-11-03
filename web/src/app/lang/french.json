@@ -1382,5 +1382,6 @@
   "Multiplayer race: {pos} place. Only a win counts in your career": "Course multijoueur : position {n}. Seule une victoire compte dans votre carrière",
   "crew": "équipe",
   "A win counts in your career, and so does a crew-mate's": "Une victoire compte dans votre carrière, celle d'un coéquipier aussi",
-  "A win counts in your career, and so does a friend's or crew-mate's": "Une victoire compte dans votre carrière, celle d'un ami ou d'un coéquipier aussi"
+  "A win counts in your career, and so does a friend's or crew-mate's": "Une victoire compte dans votre carrière, celle d'un ami ou d'un coéquipier aussi",
+  "Stage {n} race: the cars here are usually much faster than yours": "Course de l'étape {n} : les voitures ici sont généralement bien plus rapides que la vôtre"
 }

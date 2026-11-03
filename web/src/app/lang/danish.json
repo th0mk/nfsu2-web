@@ -1355,5 +1355,6 @@
   "Multiplayer race: {pos} place. Only a win counts in your career": "Flerspillerløb: {n}. plads. Kun en sejr tæller i din karriere",
   "crew": "crew",
   "A win counts in your career, and so does a crew-mate's": "En sejr tæller i din karriere, også et crewmedlems",
-  "A win counts in your career, and so does a friend's or crew-mate's": "En sejr tæller i din karriere, også en vens eller et crewmedlems"
+  "A win counts in your career, and so does a friend's or crew-mate's": "En sejr tæller i din karriere, også en vens eller et crewmedlems",
+  "Stage {n} race: the cars here are usually much faster than yours": "Løb på niveau {n}: bilerne her er som regel meget hurtigere end din"
 }

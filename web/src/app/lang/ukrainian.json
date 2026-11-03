@@ -1409,5 +1409,6 @@
   "Multiplayer race: {pos} place. Only a win counts in your career": "Мережева гонка: місце {n}. У кар'єрі зараховується лише перемога",
   "crew": "команда",
   "A win counts in your career, and so does a crew-mate's": "Перемога зарахується у вашій кар'єрі, як і перемога учасника команди",
-  "A win counts in your career, and so does a friend's or crew-mate's": "Перемога зарахується у вашій кар'єрі, як і перемога друга або учасника команди"
+  "A win counts in your career, and so does a friend's or crew-mate's": "Перемога зарахується у вашій кар'єрі, як і перемога друга або учасника команди",
+  "Stage {n} race: the cars here are usually much faster than yours": "Гонка етапу {n}: машини тут зазвичай набагато швидші за вашу"
 }

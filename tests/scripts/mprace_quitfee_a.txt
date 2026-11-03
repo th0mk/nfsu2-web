@@ -1,5 +1,5 @@
 # Multiplayer races from free roam, the host quits the race with its pause menu's Quit 20 s in (with
-# mprace_lobby_b.txt): the race ends for every game; the host comes back with the fee (MPRACE_QUIT_FEE, $75) out of
+# mprace_lobby_b.txt): the race ends for every game; the host comes back with the fee (mprace_quit_fee: $75 at stage 2) out of
 # its bank, the joiner ("lost your connection to the host") with nothing taken.
 0     bot on
 +0    waitroam 6000

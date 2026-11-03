@@ -1,5 +1,5 @@
 # Multiplayer races from free roam, a URL race of 2 heats, the joiner quits heat 2 with its pause menu's Quit 20 s in
-# (with mprace_heats_a.txt): the quitter pays the fee (MPRACE_QUIT_FEE, $75) and is out; the host, left alone by the
+# (with mprace_heats_a.txt): the quitter pays the fee (mprace_quit_fee: $75 at stage 2) and is out; the host, left alone by the
 # Quit, won the series (1st, its prize; the career's race when it counts), whatever the points after heat 1.
 0     bot on
 +0    waitroam 6000

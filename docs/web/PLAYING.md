@@ -601,6 +601,10 @@ Good to know:
     still drives as itself and your upgrades still count, by less; a car far ahead of the others stays ahead, by less.
     The lobby says so before you join, and after the race the note says how your engine was changed. Street X and
     drift races leave the cars as they are: there the rating did not decide who won.
+  - **A lobby warns you** when its race's stage usually has much faster cars than yours ("Stage 5 race: the cars here
+    are usually much faster than yours"): a stock car (the game's lowest class) at a stage 3, 4 or 5
+    race, a class-2 car at a stage-5 race. In the live races of 2026-10-31 to 11-03 such cars won a quarter to half as
+    often as an even field would let them, evened out or not. You can still join.
   - **A win counts in your career** where you could win the race with Solo: a race open in your career (its marker in
     the street), or a normal race of your stage you have not won yet (the game opens only a few of a stage's races at a
     time; a multiplayer win takes any of them). A sponsor or URL race counts only when it is open, an SUV race only in
@@ -624,7 +628,8 @@ Good to know:
   - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
     stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200
     and $100), 5th and 6th nothing. **Quitting the race**
-    (its pause menu's Quit) costs $75, as the panel says before you join: the host's quit ends the race for everyone,
+    (its pause menu's Quit) costs 3/16 of what 1st pays you ($75 at stages 1 to 3, $225 at stage 4, $375 at stage 5;
+    never more than your bank holds), as the panel says before you join: the host's quit ends the race for everyone,
     and in a race of two either player's does. When everyone else quits a race that way, the one who stayed wins it
     (1st: the career's win where it counts, else 1st's prize; a URL event's remaining heats too); a race that ends
     under you any other way (a lost connection, a game closed) costs nothing and counts for nobody. The win, the prize or the fee

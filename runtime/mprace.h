@@ -24,8 +24,12 @@ typedef struct {
                                     * connect at once (mprace_host_up when that comes later) */
 } MpRace;
 enum { MPR_IDLE = 0, MPR_OUT, MPR_LAN, MPR_RACE, MPR_BACK, MPR_DONE, MPR_FAILED };
-/* what quitting a started race with its pause menu's Quit costs the bank (what it holds at most) */
-#define MPRACE_QUIT_FEE 75
+/* what quitting a started race with its pause menu's Quit costs the bank (what it holds at most): this share of what
+ * 1st place pays the player (mprace_prize_of(1), the player's stage's): $75 at stages 1 to 3 ($400 for a win), $225
+ * at stage 4 ($1200), $375 at stage 5 ($2000) */
+#define MPRACE_QUIT_SHARE_NUM 3
+#define MPRACE_QUIT_SHARE_DEN 16
+int  mprace_quit_fee(void);
 /* the least prize money of 1st to 4th (mprace_prize_of) */
 #define MPRACE_PRIZE_FLOOR { 400, 300, 200, 100 }
 /* a race's evening out (mprace.c balance_race): a car's engine power at most this much up, and down; the faster
@@ -86,7 +90,7 @@ float mprace_factor(void);
 /* a network race of this type (its N_MODE: circuit 0, sprint 1, drag 2, drift 3, URL 4, Street X 10) evens
  * out the cars */
 int  mprace_evened(int net_mode);
-/* the player quit the race (its pause menu's Quit); the fee the bank paid for it (less than MPRACE_QUIT_FEE when it
+/* the player quit the race (its pause menu's Quit); the fee the bank paid for it (less than mprace_quit_fee when it
  * held less, 0 before the crib) */
 int  mprace_quit(void);
 int  mprace_fee(void);
@@ -149,6 +153,8 @@ typedef struct {
 /* the performance of a car (a car object: its physics info [car + 0x10] +
  * 0x10); 0 when it has none */
 int  mprace_car_perf(uint32_t car, CarPerf *p);
+/* only its class (0 fastest .. 3; -1: no physics info), cheap enough for every frame */
+int  mprace_car_class(uint32_t car);
 /* one log line: who's car and its numbers */
 void mprace_perf_log(const char *who, uint32_t car);
 /* the engine's power times f: all of its torque curve (the turbo's is in it)

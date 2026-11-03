@@ -14,7 +14,7 @@
  * of the profile and before Return to Explore Mode, whose autosave (the
  * profile changed) then saves it as any money; with the game's autosave off
  * the crib takes no snapshot and saves nothing, as for any money.  A player
- * who quits the race with its pause menu's Quit pays MPRACE_QUIT_FEE out of
+ * who quits the race with its pause menu's Quit pays mprace_quit_fee out of
  * the bank there instead (never more than it holds).  A race that ends under
  * the player (the host's game gone, or in a race of two the other player's:
  * either one's quit ends it) costs nothing, and a closed tab saves nothing
@@ -446,6 +446,10 @@ int mprace_car_perf(uint32_t car, CarPerf *p){
     }
     return 1;
 }
+int mprace_car_class(uint32_t car){
+    uint32_t pi = perf_info(car);
+    return pi ? (int)(int8_t)MR8(pi + PI_CLASS) : -1;
+}
 void mprace_perf_log(const char *who, uint32_t car){
     CarPerf p;
     if (!mprace_car_perf(car, &p)){ fprintf(stderr, "[mprace] f=%ld %s: no physics info\n", autotest_frame(), who); return; }
@@ -806,6 +810,10 @@ int mprace_prize_of(int place){
     return p > floor_of[place - 1] ? p : floor_of[place - 1];
 }
 static int prize_at(int place){ return place >= 1 && place <= MP_PRIZE_N ? M.prizes[place - 1] : 0; }
+/* the fee for quitting: a share of what a win pays, so that it weighs the same at every stage (the panel says it
+ * before one joins; on the trip the prizes of its start) */
+static int fee_of(int win){ return win * MPRACE_QUIT_SHARE_NUM / MPRACE_QUIT_SHARE_DEN; }
+int mprace_quit_fee(void){ return fee_of(mprace_prize_of(1)); }
 /* the race's final results (M.res, M.place): its winner, and whether the career gets the race */
 static void credit_decide(void){
     int first = -1, second = -1;
@@ -913,8 +921,9 @@ int mprace_start(const MpRace *r){
     fprintf(stderr, "[mprace] f=%ld start: %s, mode %d, track %d%s, %d laps, %d heat%s, %d players, LAN name %s%s%s\n", M.frame0,
             r->host ? "host" : "join", r->mode, r->track, r->reverse ? " reverse" : "", r->laps, M.r.heats, M.r.heats == 1 ? "" : "s",
             r->players, r->name, r->host ? "" : ", host ", r->host ? "" : r->host_name);
-    fprintf(stderr, "[mprace] f=%ld start: a win %s; prize money $%d/%d/%d/%d; friends in the race:", M.frame0,
-            M.r.credit ? "counts in the career" : "does not count in the career", M.prizes[0], M.prizes[1], M.prizes[2], M.prizes[3]);
+    fprintf(stderr, "[mprace] f=%ld start: a win %s; prize money $%d/%d/%d/%d, quitting costs $%d; friends in the race:", M.frame0,
+            M.r.credit ? "counts in the career" : "does not count in the career", M.prizes[0], M.prizes[1], M.prizes[2], M.prizes[3],
+            fee_of(M.prizes[0]));
     for (int i = 0; i < M.r.nfriends; i++) fprintf(stderr, " %s", M.r.friends[i]);
     fprintf(stderr, "%s\n", M.r.nfriends ? "" : " none");
     { uint32_t pl = rd(G_PLAYER1); mprace_perf_log("our car in free roam", pl ? rd(pl + 4u) : 0); }
@@ -979,7 +988,8 @@ static void pay(CPU *c, int in_roam, const char *where){
         MR32(G_CAREER + C_BANK) = b + (uint32_t)M.prize;
         fprintf(stderr, "[mprace] f=%ld the prize: $%d into the bank ($%u -> $%u)%s\n", autotest_frame(), M.prize, b, b + (uint32_t)M.prize, where);
     } else if (M.quit_race){
-        M.fee = b < MPRACE_QUIT_FEE ? (int)b : MPRACE_QUIT_FEE;
+        int fee = fee_of(prize_at(1) > 0 ? prize_at(1) : mprace_prize_of(1));
+        M.fee = b < (uint32_t)fee ? (int)b : fee;
         MR32(G_CAREER + C_BANK) = b - (uint32_t)M.fee;
         fprintf(stderr, "[mprace] f=%ld the fee for quitting the race: $%d out of the bank ($%u -> $%u)%s\n", autotest_frame(), M.fee, b, b - (uint32_t)M.fee, where);
     }
@@ -1259,7 +1269,7 @@ int mprace_series(MpSeries *s){
  * that leaves one player in it (a race of two: either one's Quit ends it for
  * the other too, the game's own way; of three or more, the last one left),
  * the one who stayed won it -- 1st place, the career's race if it counts for
- * them, else 1st's prize money -- and the quitter pays MPRACE_QUIT_FEE as
+ * them, else 1st's prize money -- and the quitter pays mprace_quit_fee as
  * before.  A race that ends under a player for any other reason (a
  * connection lost, the host's game gone, a closed tab) still counts for
  * nobody.  The game cannot tell them apart: the other games see a racer gone

@@ -1274,5 +1274,6 @@
   "Multiplayer race: {pos} place. Only a win counts in your career": "多人比賽：第 {n} 名。只有獲勝才會計入你的生涯模式",
   "crew": "車隊",
   "A win counts in your career, and so does a crew-mate's": "獲勝會計入你的生涯模式，隊友獲勝也算",
-  "A win counts in your career, and so does a friend's or crew-mate's": "獲勝會計入你的生涯模式，好友或隊友獲勝也算"
+  "A win counts in your career, and so does a friend's or crew-mate's": "獲勝會計入你的生涯模式，好友或隊友獲勝也算",
+  "Stage {n} race: the cars here are usually much faster than yours": "第 {n} 階段的比賽：這裡的車通常比你的快很多"
 }

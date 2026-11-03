@@ -4916,6 +4916,19 @@ static int mp_kept_out(const MpLobby *l){
     uint32_t st = MR8(l->race + 0x37u);
     return st && rd32(G_CAREER + C_STAGE) > st && !mp_mate(l->host) ? (int)st : 0;
 }
+/* A race whose cars are usually much faster than ours: its career stage (the lobby's join view warns, mp_panel
+ * "outpaced"; the player may join anyway), else 0.  By race stage, the class from which a car is outpaced: of the
+ * lobby races 2026-10-31 .. 11-03 (135,000, the server's [race] lines), a car of these classes won 22-52 % of the
+ * races an equal field gives it (a stock car in a stage 3, 4, 5 race 0.52, 0.27, 0.22; class 2 in a stage-5 race
+ * 0.45), every other pair 0.73 or more (a stock car in a stage 1-2 race 0.73: most cars there are stock).  The stage
+ * says which cars race there: players up to stage 2 drive stock cars (91 %), at stage 5 three in four class 0 */
+static const int8_t MP_OUTPACED_CLS[6] = { 4, 4, 4, 3, 3, 2 };
+static int mp_outpaced(uint32_t race){
+    if (!race || !ok(race, RACE_SZ)) return 0;
+    uint32_t st = MR8(race + 0x37u);
+    int cls = st >= 1u && st <= 5u ? mprace_car_class(player_car()) : -1;
+    return cls >= 0 && cls >= MP_OUTPACED_CLS[st] ? (int)st : 0;
+}
 /* one message about lobby l to `to` (0: the hub); the session lock is ours */
 static void mp_send_of(const MpLobby *l, uint8_t op, uint8_t arg, uint32_t to){
     rc_lobby m; memset(&m, 0, sizeof m);
@@ -5075,6 +5088,9 @@ static int mp_join(int64_t host, MpLobby *l){
     if (g_mp.st != MP_IDLE || !l) return 0;
     const char *no = mp_cannot();
     if (no){ mp_note(host, no); return 0; }
+    if (mp_outpaced(l->race))
+        rlog("[roam] f=%ld race lobby: joining a stage %d race in a class %d car (warned: its cars are usually much faster)\n",
+             rh_frame(), mp_outpaced(l->race), mprace_car_class(player_car()));
     g_mp.l = *l;
     g_mp.asked_host = l->host; g_mp.asked_id = l->id; g_mp.asked_at = host;
     mp_to(MP_ASKED, host);
@@ -5505,8 +5521,12 @@ static int mp_line(int64_t host, char *tx, int n){
         if (l && (!sp || sp->kind == MPS_ONLY)){
             const char *no = mp_cannot();
             if (no) snprintf(tx, (size_t)n, "%s's %s: %s", mp_name(l->host), race_kind(l->race), no);
+            /* (a car usually outpaced there: said in place of the fee and the evening out, the line holds 120) */
+            else if (mp_outpaced(l->race))
+                snprintf(tx, (size_t)n, "Press Enter to join %s's %s (%d of %d). Stage %d race: its cars are usually much faster than yours",
+                         mp_name(l->host), race_kind(l->race), l->n, l->max, mp_outpaced(l->race));
             else snprintf(tx, (size_t)n, "Press Enter to join %s's %s (%d of %d)%s. Quitting the race costs $%d%s", mp_name(l->host), race_kind(l->race),
-                          l->n, l->max, mp_counts(l->race) ? ": a win counts in your career" : "", MPRACE_QUIT_FEE,
+                          l->n, l->max, mp_counts(l->race) ? ": a win counts in your career" : "", mprace_quit_fee(),
                           l->race && mprace_evened(race_net_mode(l->race)) ? ". The cars are evened out" : "");
             return 1;
         }
@@ -5734,8 +5754,16 @@ static void mp_panel(int64_t host, int in_roam){
         /* a message first, for its few seconds (back from the race at the spot: the place and the prize) */
         if (g_mp.note[0] && host < g_mp.note_until){ js_str(&j, "v", "note"); js_str(&j, "text", g_mp.note); }
         else if (l && (!sp || sp->kind == MPS_ONLY) && mp_cannot()){ js_str(&j, "v", "note"); js_str(&j, "text", mp_cannot()); }
-        else if (l && (!sp || sp->kind == MPS_ONLY)){ js_str(&j, "v", "join"); js_race(&j, l->race); js_players(&j, l); js_int(&j, "fee", MPRACE_QUIT_FEE);
-            if (l->race && mprace_evened(race_net_mode(l->race))) js_int(&j, "even", 1); }
+        else if (l && (!sp || sp->kind == MPS_ONLY)){ js_str(&j, "v", "join"); js_race(&j, l->race); js_players(&j, l); js_int(&j, "fee", mprace_quit_fee());
+            if (l->race && mprace_evened(race_net_mode(l->race))) js_int(&j, "even", 1);
+            /* (a car usually outpaced in the race's stage: the join view warns, once in the log a lobby) */
+            static uint32_t warned;
+            if (mp_outpaced(l->race)){
+                js_int(&j, "outpaced", 1);
+                if (warned != l->id) rlog("[roam] f=%ld race lobby %08x: a stage %d race, our car class %d: the join view warns its cars are usually much faster\n",
+                                          rh_frame(), l->id, mp_outpaced(l->race), mprace_car_class(player_car()));
+                warned = l->id;
+            } }
         else if (full){ js_str(&j, "v", "full"); js_race(&j, full->race); js_players(&j, full);
             if (keeps) js_int(&j, "only", mp_kept_out(keeps)); }              /* (kept out: up to this stage, Enter opens none) */
         else if (sp && sp->kind == MPS_ONLY){
