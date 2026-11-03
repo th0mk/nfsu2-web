@@ -5,7 +5,8 @@
 //   pick   keys 1-4 open a group and 1-4 again says its phrase; on a controller the right stick pressed in shows the
 //          four groups, then a flick (up, right, down or left) opens one and another says its phrase (the stick
 //          itself looks round the car while driving, runtime/look.c: the game gets it at rest while the picker has
-//          it); on a touch screen the chat button shows all sixteen and a tap says one.  Open while driving in free
+//          it; a right stick the game's controls steer or work a pedal with is the game's, its click too: the game's
+//          status "rstick", runtime/dinput_pad.c); on a touch screen the chat button shows all sixteen and a tap says one.  Open while driving in free
 //          roam with free roam on, and in a race between players (Online, LAN, a free-roam lobby's) while driving and
 //          on its results (the game's status "netrace"; the results' menus take none of 1-4 either), free roam on or
 //          off; never in a race of the career, nor in the career's free roam with free roam off (1-4, Esc and the
@@ -109,6 +110,10 @@ export class QuickChat {
   private netrace = 0;
   /** the game's status "nocount" (runtime/web/status_web.c): 1 while the player's countdown would not start here */
   private nocount = 0;
+  /** the game's status "rstick" (runtime/dinput_pad.c): 1 while the game's controls read the controller's right stick
+   *  (the steering or a pedal on it): then its click is the game's, not the picker's (pressed in by accident while
+   *  steering, it took the stick from the game) */
+  private rstick = 0;
   private driveAt = 0;
   private armed = true;
   /** the player's sixteen: the phrase in each slot (group * 4 + place), and each group's name */
@@ -141,7 +146,8 @@ export class QuickChat {
   /** a game started: quick chat on (the setting) or off, free roam with others on or off, with the player's sixteen
    *  (phrases.ts phrasesOf, groupsOf), and the names the player blocks (settings.ts blockList) */
   start(s: GameSession, on: boolean, roam: boolean, layout: readonly number[], groups: readonly CatId[], blocked: readonly string[] = []) {
-    this.session = s; this.on = on; this.roam = roam; this.drive = 0; this.netrace = 0; this.nocount = 0; this.driveAt = 0;
+    this.session = s; this.on = on; this.roam = roam; this.drive = 0; this.netrace = 0; this.nocount = 0; this.rstick = 0;
+    this.driveAt = 0;
     this.layout = layout; this.groups = groups;
     this.blocked = new Set(blocked.map(nameKey));
   }
@@ -182,7 +188,10 @@ export class QuickChat {
     if (!s || now - this.driveAt <= 100) return;
     this.driveAt = now;
     const st = s.status?.read();
-    if (st) { this.drive = st.get('drive') ?? 0; this.netrace = st.get('netrace') ?? 0; this.nocount = st.get('nocount') ?? 0; }
+    if (st) {
+      this.drive = st.get('drive') ?? 0; this.netrace = st.get('netrace') ?? 0; this.nocount = st.get('nocount') ?? 0;
+      this.rstick = st.get('rstick') ?? 0;
+    }
   }
   /** a countdown of the player's would start now: in free roam (not in a race), and not at a car meet where the
    *  player has not stayed */
@@ -222,8 +231,10 @@ export class QuickChat {
   }
 
   /** the right stick pressed in (gamepad.ts PadPage.click): the four groups, or the picker closed again; true: the
-   *  picker took it (where it can open), else it is the game's */
+   *  picker took it (where it can open), else it is the game's (also wherever the game's controls read the stick) */
   click(): boolean {
+    this.readStatus();
+    if (this.rstick > 0) return false;
     if (this.open >= 0) { this.close(); return true; }
     if (!this.can()) return false;
     this.armed = false;                              // (a flick counts once the stick was back at rest)

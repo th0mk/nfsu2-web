@@ -173,9 +173,12 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   (left: pressurize, right: bounce). While driving (free roam, races, races with other players) the right stick
   looks round the car: the view turns to where it points (right looks right, half way out half as far) and swings
   back behind the car when you let go; with the bumper and hood cameras it turns on the spot. Straight down is the
-  game's own look back, as B (whatever button you bound to it). In
-  free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
-  bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. In the
+  game's own look back, as B (whatever button you bound to it). If you steer, accelerate or brake with the right
+  stick (the game's Options, Controls, Joypad Configuration), the left stick looks round instead, as long as the game
+  uses nothing of it (no steering or pedal, no direction bound to a control); if it does, neither stick looks round.
+  In free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
+  bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. With the
+  right stick steering or on a pedal, its click stays the game's (bounce), and 1 to 4 open quick chat. In the
   garage, the shops and the main menu the right stick turns the car round and tilts the view, as the middle-button
   drag does: right turns the view right, as in photo mode (and as a drag to the right), down looks down on the car;
   full stick turns about 60° a second. Each screen starts at the game's own angle.

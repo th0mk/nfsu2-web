@@ -7,6 +7,8 @@
 //   closes it
 // - the career's free roam with free roam off (the game's "drive" is 2 there too): no picker by a key, the stick, its
 //   click or the touch button, and 1-4, Esc and the right stick stay the game's
+// - the right stick on the game's steering or a pedal (the game's "rstick"): its click is the game's, the keys still
+//   open the picker
 // - a race between players (the game's "netrace") with free roam off: the picker, and the phrase goes to the race
 // - quick chat off: no picker anywhere
 // - the countdown (the special phrase, in the default sixteen's last place): its stopwatch in the picker, 5 to 1 and
@@ -119,6 +121,27 @@ test('the career\'s free roam with free roam off: no picker, the keys and the st
   assert.equal(await open(p), -1, 'nor the touch button');
   assert.equal(await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('.qc-picker')).hidden), true);
   assert.deepEqual(await said(p), []);
+  await p.close();
+});
+
+test('a right stick the game\'s controls read (the game\'s "rstick"): its click is the game\'s, 1-4 still open it', async () => {
+  const p = await page();
+  await game(p, true, true, 2);
+  await p.evaluate(() => { /** @type {any} */ (window).st.rstick = 1; });
+  await p.clock.runFor(200);                                     // (the status is read again)
+  assert.equal(await click(p), false, 'the click goes to the game (its hydraulics), no picker');
+  assert.equal(await open(p), -1);
+  assert.equal(await flick(p, 1, 0), false, 'the stick stays the game\'s (its steering)');
+  await key(p, 'Digit1');
+  assert.equal(await open(p), 0, 'the keys still open it');
+  assert.equal(await click(p), false, 'and a click there is still the game\'s');
+  assert.equal(await open(p), 0, 'the picker stays open');
+  await key(p, 'Digit1');
+  assert.deepEqual(await said(p), [[0, false]]);
+  await p.evaluate(() => { /** @type {any} */ (window).st.rstick = 0; });
+  await p.clock.runFor(200);
+  assert.equal(await click(p), true, 'the stick the look\'s again: the click opens the picker');
+  assert.equal(await open(p), 5);
   await p.close();
 });
 

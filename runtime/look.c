@@ -16,6 +16,11 @@
  * its picker is open (web/src/app/quickchat.ts): the view swings back then.
  * A wheel's and an RC radio's right stick is always at rest
  * (web/src/input/wheel.ts).
+ * A stick the game reads is not the look's: with the steering or a pedal on
+ * the right stick (the game's Joypad Configuration) the left stick looks
+ * round, if the game reads none of it either, else nothing does
+ * (dinput_pad.c pad_look_stick; players steered with the right stick, and
+ * it turned the view as it steered, 2026-11-03).
  *
  * How: the drive camera puts the camera where it wants it each frame, in the
  * main loop's update (0x5811C0, before the sound's 0x483B40); the frame is
@@ -142,11 +147,13 @@ static float from_back(float x, float y){ return PI_F - fabsf(atan2f(x, -y)); }
 
 /* the turn the stick asks for now (rad, + right; 0 at rest), its back side kept as the turn now has it; *back: it
  * points straight back, where it holds Look Back (where a button has it) instead of turning the view */
+int pad_look_stick(void);                            /* dinput_pad.c: PAD_AXIS_RX, PAD_AXIS_LX (Y the next), -1 none */
 static float stick_yaw(int can, int *back){
     PadState s;
     *back = 0;
-    if (!can || !gamepad_read(&s) || s.wheel) return 0.f;
-    float x = s.axis[PAD_AXIS_RX], y = s.axis[PAD_AXIS_RY], r = hypotf(x, y);
+    int st = pad_look_stick();
+    if (!can || st < 0 || !gamepad_read(&s) || s.wheel) return 0.f;
+    float x = s.axis[st], y = s.axis[st + 1], r = hypotf(x, y);
     int pad_look_back_bound(void);                   /* dinput_pad.c: a button of the pad's is Look Back */
     if (pad_look_back_bound()){
         float off = from_back(x, y);
@@ -163,8 +170,9 @@ static float stick_yaw(int can, int *back){
 
 /* dinput_pad.c fill_state, as the game reads the pad: whether the stick (in s) holds the button bound to Look Back */
 int look_back_held(const PadState *s){
-    if (!L.back || !s || s->wheel) return 0;
-    float x = s->axis[PAD_AXIS_RX], y = s->axis[PAD_AXIS_RY];
+    int st = pad_look_stick();
+    if (!L.back || !s || s->wheel || st < 0) return 0;
+    float x = s->axis[st], y = s->axis[st + 1];
     return hypotf(x, y) > SNAP_R_OFF && from_back(x, y) < SNAP_OUT && driving_car() != 0;
 }
 
@@ -238,11 +246,12 @@ void look_view(uint32_t id, uint32_t cam){
     uint32_t car = driving_car();
     int back = 0;
     float want = stick_yaw(car != 0, &back);
+    const char *which = pad_look_stick() == PAD_AXIS_LX ? "left" : "right";
     if (pad_log() && back != L.back)
-        fprintf(stderr, back ? "[pad] the right stick holds Look Back\n" : "[pad] the right stick lets go of Look Back\n");
+        fprintf(stderr, back ? "[pad] the %s stick holds Look Back\n" : "[pad] the %s stick lets go of Look Back\n", which);
     if (pad_log() && !back && !L.back && (want != 0.f) != L.looking){
-        if (want != 0.f) fprintf(stderr, "[pad] the right stick looks round the car\n");
-        else fprintf(stderr, "[pad] the right stick let go (the view turned %.0f degrees)%s\n",
+        if (want != 0.f) fprintf(stderr, "[pad] the %s stick looks round the car\n", which);
+        else fprintf(stderr, "[pad] the %s stick let go (the view turned %.0f degrees)%s\n", which,
                      (double)(L.yaw * 57.29578f), car ? "" : ": no look now");
     }
     L.looking = want != 0.f;

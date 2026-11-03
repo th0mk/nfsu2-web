@@ -402,6 +402,41 @@ static int chan_reads_axis(uint32_t ch, uint32_t ofs){
 #define ACT_LOOK_BACK   0x09u            /* the game's action id (its keyboard map 0x7fcac0: "Look Back") */
 static int g_look_back_bound;            /* the pad last read has a button on it */
 int look_back_held(const PadState *s);   /* look.c */
+
+/* ---- the look's stick -------------------------------------------------------------
+ * The look round the car (look.c) takes the right stick, unless the game reads it: the steering's or a pedal's axis
+ * on it (Options > Controls > Joypad Configuration; players who steer with the right stick, or accelerate and brake
+ * with it, 2026-11-03: the stick steered and turned the view at once).  Then it takes the left stick, if the game
+ * reads neither of that one's axes nor its directions (POV 1, an action on one in the in-game tables: 0x5c1840 sets
+ * the bits of all four for each button and direction pressed, +0x98 being the front end's); else there is no look.
+ * The page hears "rstick" (status_web.c's block): 1 while the game reads the right stick, when its click and flicks
+ * are the game's again, not quick chat's (web/src/app/quickchat.ts). */
+static int g_look_stick = PAD_AXIS_RX;   /* PAD_AXIS_RX, PAD_AXIS_LX, or -1: no look */
+__attribute__((weak)) int host_status_slot(const char *name){ (void)name; return -1; }
+__attribute__((weak)) void host_status_set_n(const int *slot, const double *value, int n){ (void)slot; (void)value; (void)n; }
+static int pov1_bound(uint32_t ch){
+    static const uint32_t tab[3] = {0x018u, 0x118u, 0x198u};
+    for (int t = 0; t < 3; t++)
+        for (uint32_t k = 20; k < 24; k++) if (MR32(ch + tab[t] + 4u * k)) return 1;   /* POV 1: down, up, left, right */
+    return 0;
+}
+static void look_stick_from(uint32_t ch){
+    int r = chan_reads_axis(ch, k_axis_ofs[3]) || chan_reads_axis(ch, k_axis_ofs[4]);
+    int l = chan_reads_axis(ch, k_axis_ofs[0]) || chan_reads_axis(ch, k_axis_ofs[1]) || pov1_bound(ch);
+    int st = !r ? PAD_AXIS_RX : !l ? PAD_AXIS_LX : -1;
+    static int slot = -2, said = -1;
+    if (slot == -2) slot = host_status_slot("rstick");
+    if (r != said && slot >= 0){ double v = r; host_status_set_n(&slot, &v, 1); }
+    if (st == g_look_stick && r == said) return;
+    if (said >= 0 || st != PAD_AXIS_RX)
+        fprintf(stderr, "[pad] looking round: %s\n", st == PAD_AXIS_RX ? "the right stick"
+                : st == PAD_AXIS_LX ? "the left stick (the game's controls read the right one)"
+                : "none (the game's controls read both sticks)");
+    g_look_stick = st;
+    said = r;
+}
+/* look.c: the stick the look turns with (PAD_AXIS_RX or PAD_AXIS_LX, its Y the next axis), -1 none */
+int pad_look_stick(void){ return g_look_stick; }
 static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     uint8_t st[0x110];
     memset(st, 0, sizeof st);
@@ -442,7 +477,9 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
         int on = src == SRC_LT_FULL ? d->trig[0] : src == SRC_RT_FULL ? d->trig[1] : !!(b & (1u << src));
         if (on) st[0x30 + i] = 0x80;
     }
-    /* the right stick straight back while driving holds the button the player has on Look Back (look.c): the
+    /* the look's stick, as the game's controls leave it free (not while the Joypad page waits for an axis) */
+    if (ch && !axis_bind && !s->wheel) look_stick_from(ch);
+    /* the look's stick straight back while driving holds the button the player has on Look Back (look.c): the
      * channel's in-game table (+0x18, by button) gives it */
     int lb = -1;
     for (int i = 0; ch && i < NBTNS && lb < 0; i++) if (MR32(ch + 0x018u + 4u * (uint32_t)i) == ACT_LOOK_BACK) lb = i;
