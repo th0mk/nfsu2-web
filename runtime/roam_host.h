@@ -73,7 +73,7 @@ void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
 
 #define ROAM_HOST_SCRIPT 1
 #define ROAM_HOOK_RET    0x00581475u     /* the return address guest calls see */
-#define RH_FE_NODES      4096            /* objects FEng draws of one package: overrides.c's level sorter (the game: 512) */
+#define RH_FE_NODES      8192            /* objects FEng draws of one package: overrides.c's level sorter (the game: 512) */
 #define GPTR(a)         (g_mem + (uint32_t)(a))
 #define rh_committed(a)  mem_is_committed(a)
 #define rlog(...)        fprintf(stderr, __VA_ARGS__)

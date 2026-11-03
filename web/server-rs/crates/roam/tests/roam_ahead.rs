@@ -468,6 +468,38 @@ fn the_world_map_sends_2048_in_16_mapd_datagrams() {
     assert_eq!(mapds(&k).into_iter().map(|(_, x)| (x.0, x.1, x.2, x.3, x.5.len())).collect::<Vec<_>>(), [(2, 1, 0, 1, 0)]);
 }
 
+// MAPD from nothing, with heights (flags 1), for 4096 of 4300: 40 datagrams to a page that takes more than 16 (flags
+// 2); a page before it (no flag 2) gets 16 of 104, as before, however many it asks for
+#[test]
+fn the_world_map_sends_4096_in_40_mapd_datagrams_to_a_page_that_takes_them() {
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..4300 {
+        join(&mut k, i);
+        k.from(W(i), &snap(100 + i, [i as f64 * 3.0, 0.0, 0.0]));
+    }
+    k.hub.tick();
+    k.clear();
+    k.from(W(0), &mapreq_flags(100, 1, 4096, 0, 3));
+    let m = mapds(&k);
+    assert_eq!(m.len(), 40);
+    assert!(m[..39].iter().all(|(_, x)| x.5.len() == 104) && m[39].1.5.len() == 40, "full datagrams, the rest last");
+    let (_, _, total, all) = mapd_answer(&k);
+    assert_eq!((total, all.len()), (4298, 4096));
+    let keys: Vec<u16> = all.iter().map(|e| e.0).collect();
+    assert!(keys.windows(2).all(|w| w[0] < w[1]) && keys[0] <= 2 && keys[4095] <= 4098, "the nearest, by slot");
+    // a quarter second on, nobody moved: one empty datagram
+    k.clear();
+    k.step(300.0);
+    k.from(W(0), &mapreq_flags(100, 2, 4096, 1, 3));
+    assert_eq!(mapds(&k).into_iter().map(|(_, x)| (x.0, x.1, x.2, x.3, x.5.len())).collect::<Vec<_>>(), [(2, 1, 0, 1, 0)]);
+    // a page before: 16 datagrams at most
+    k.clear();
+    k.step(300.0);
+    k.from(W(1), &mapreq_flags(101, 1, 4096, 0, 1));
+    let m = mapds(&k);
+    assert!(m.len() == 16 && m.iter().all(|(_, x)| x.5.len() == 104), "{}", m.len());
+}
+
 // roam_core asks as the hub reads it, and takes the hub's answer in parts, in any order
 #[test]
 fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
@@ -518,11 +550,11 @@ fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
     let mut lines = got.lines();
     let ask = lines.next().unwrap_or("");
     assert_eq!(ask.strip_prefix("ask ").map(|h| h.len()), Some(2 * (16 + 6 + 4)), "{got}");
-    // its MAPREQ, as the hub reads it: req 1, 2048 at most, from nothing
+    // its MAPREQ, as the hub reads it: req 1, 4096 at most, from nothing
     let a = unhex(&ask[4..]);
     assert_eq!(
         (a[5], u16::from_le_bytes([a[16], a[17]]), u16::from_le_bytes([a[18], a[19]]), u16::from_le_bytes([a[20], a[21]])),
-        (10, 1, 2048, 0)
+        (10, 1, 4096, 0)
     );
     let entry = |i: u32, x: f64, vy: i32| format!("{i}:{},7,192,0,{vy}", x as i32);
     let want: Vec<String> = (2..301).map(|i| entry(i, -3.0 * i as f64, -((i % 9) as i32))).collect();
@@ -547,4 +579,28 @@ fn the_world_map_on_the_wire_roam_core_asks_and_takes_the_answer() {
     let want: Vec<String> =
         (2..301).filter(|&i| i != 5).map(|i| if i == 6 { "6:-18,40,192,0,0".to_string() } else { entry(i, -3.0 * i as f64, -((i % 9) as i32)) }).collect();
     assert_eq!(lines.next().unwrap_or(""), format!("map 2 298 298 {}", want.join(" ")));
+    // the game's question (who is parked, heights, wide: flags 3) for 4096 of 4300, as the hub reads it; its 40
+    // datagrams taken in any order (the last first, the halves swapped): 4096 held
+    let mut k = Kit::new(RoamOptions { degree: 1, ..RoamOptions::default() });
+    for i in 0..4301 {
+        join(&mut k, i);
+        k.from(W(i), &snap(100 + i, [i as f64 * 3.0, 0.0, 0.0]));
+    }
+    k.hub.tick();
+    let ask = run(&["mapwide".to_string()]);
+    let a = unhex(ask.lines().next().unwrap_or("").strip_prefix("ask ").unwrap_or(""));
+    assert_eq!(a.len(), 16 + 8 + 4, "{ask}");
+    assert_eq!((u16::from_le_bytes([a[18], a[19]]), u16::from_le_bytes([a[22], a[23]])), (4096, 3));
+    k.clear();
+    k.from(W(0), &mapreq_flags(100, 1, 4096, 0, 3));
+    let mut parts: Vec<String> = k.sent.lock().iter().map(|(_, f)| hex(&f[16..])).collect();
+    assert_eq!(parts.len(), 40);
+    parts.reverse();
+    parts.rotate_left(20);
+    let got = run(&[vec!["mapwide".to_string()], parts.clone()].concat());
+    let held = got.lines().nth(1).unwrap_or("");
+    assert!(held.starts_with("map 1 4299 4096 ") && held.split(' ').count() == 4 + 4096, "{}", &held[..held.len().min(80)]);
+    // one part short: nothing yet
+    let got = run(&[vec!["mapwide".to_string()], parts[1..].to_vec()].concat());
+    assert!(got.ends_with("map 0 0 0"), "{got}");
 }

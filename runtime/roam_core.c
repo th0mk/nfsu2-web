@@ -1144,8 +1144,8 @@ static void map_part(rc_session *s, const rc_msg *m, int64_t now){
     s->map_asm_z = (m->h.flags & RC_HF_MAPZ) != 0;
     memcpy(s->map_asm + (size_t)m->u.mapd.part * RC_MAPD_BYTES, m->u.mapd.data, m->u.mapd.len);
     s->map_part_n[m->u.mapd.part] = m->u.mapd.n; s->map_part_len[m->u.mapd.part] = m->u.mapd.len;
-    s->map_mask |= (uint16_t)(1u << m->u.mapd.part);
-    if (s->map_mask != (1u << s->map_nparts) - 1u) return;
+    s->map_mask |= (uint64_t)1 << m->u.mapd.part;
+    if (s->map_mask != ((uint64_t)1 << s->map_nparts) - 1u) return;
     s->map_mask = 0; s->map_asked_us = 0;                    /* answered: a repeat of a part changes nothing */
     if (s->map_asm_base && s->map_asm_base != s->map_held) return;
     int n = 0, i = 0, held = s->map_asm_base ? s->map_n : 0;

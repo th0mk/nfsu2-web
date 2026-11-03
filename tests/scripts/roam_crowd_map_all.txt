@@ -7,12 +7,13 @@
 #        --env NFSU2_ROAM_WEBTEST=vlan --env ROAM_PROFILE=Ann --env ROAM_CROWD_CARS=32
 # (the game lets the first press of M after a while go by: two taps, which do
 # not close it)
-# With the hub's whole answer (2200 players: the server's --max-peers 3000,
-# four roam-crowd.mjs --n 550 --first 0/550/1100/1650 --spread 120) the map
-# takes 2048 + 32 car markers, more than the renderer's list of 1024 objects
-# a package and FEng's 512 nodes of the game: mp map's "FEng drew N objects of
-# one package at most" stays under its nodes, and the dumps show the Car Lot's
-# icon west of the crowd (it was gone at 512).  While the map is open its
+# With the hub's whole answer (4300 players: the server's --max-peers 5000
+# --trusted-proxies 127.0.0.1, nfsu2-roamload --n 4300 --rate 1 --spread 6000
+# --room 0) the map takes 4096 + 32 car markers (the hub's answer in 40
+# datagrams), more than the renderer's list of 1024 objects a package and
+# FEng's 512 nodes of the game: mp map's "FEng drew N objects of one package
+# at most" stays under its nodes, and the dumps show the Car Lot's icon west
+# of the crowd (it was gone at 512).  While the map is open its
 # markers move (WM_STEP_US): the second mp map's markers are not where the
 # first's were.
 0     tapuntil RETURN MC_Background.fng 120 4000

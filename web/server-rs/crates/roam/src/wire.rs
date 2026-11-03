@@ -64,7 +64,8 @@ pub(crate) const LOBBIES_MAX: usize = 96;
 pub(crate) const LOBBY_PLAYERS: usize = 6;
 /// a MAPD entry (roam_core.h RC_MAPD_*): a player's key (u16 LE: the hub's slot, MAPD_GONE set when it went), then,
 /// unless gone, x, y (i16 LE, m), heading (u8, 256 a turn), its velocity's x and y (i8, m/s); at most MAPD_BYTES of
-/// entries a datagram, MAPD_PARTS datagrams an answer (2048 placed in all)
+/// entries a datagram, MAPD_PARTS datagrams an answer (2048 placed in all), MAPD_PARTS_WIDE to a MAPREQ with
+/// MAPREQ_WIDE in its flags (a page before it takes 16 at most; the game's 4096 with heights take 40)
 pub(crate) const MAPD_GONE: u16 = 0x8000;
 /// ...and, to a MAPREQ with MAPREQ_PARKED in its flags, MAPD_PARKED set in a placed player's key when it has stood at
 /// one spot for a minute (hub.rs PARKED_MS: the world map's car meets count those)
@@ -77,6 +78,8 @@ pub(crate) const MAPD_PLACE_Z: usize = 11;
 pub(crate) const HF_MAPZ: u16 = 0x0800;
 pub(crate) const MAPD_BYTES: usize = 1152;
 pub(crate) const MAPD_PARTS: usize = 16;
+pub(crate) const MAPREQ_WIDE: u16 = 2;
+pub(crate) const MAPD_PARTS_WIDE: usize = 48;
 pub(crate) const HDR: usize = 16;
 pub(crate) const CRC: usize = 4;
 

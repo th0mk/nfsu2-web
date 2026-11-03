@@ -1,4 +1,4 @@
-# Free roam, car meets on the world map (roam_game.c meet_*): a spot where 16 players or more have been parked a minute
+# Free roam, car meets on the world map (roam_game.c meet_*): a spot where 20 players or more have been parked a minute
 # gets a green star and "Meet: <n> cars" (friends' cars and the hub's players alike: RC_MAPD_PARKED), fewer get
 # nothing, the legend's Car meets row hides them, and the GPS takes the player to one: the row picked picks the nearest
 # meet, Right the next, C asks to start the GPS (Yes is left of No), and the GPS stops next to the meet.  A stage-3

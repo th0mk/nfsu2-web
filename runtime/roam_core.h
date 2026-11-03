@@ -69,15 +69,16 @@
 #define RC_EXT_PERF      1
 #define RC_EXT_HORN      2          /* car-look record extension 2: the player's horn, 1 byte */
 #define RC_DUEL_INBOX    16         /* DUEL messages held for the game side */
-#define RC_MAP_MAX       2048       /* entries per answer at most (the hub's nearest) */
+#define RC_MAP_MAX       4096       /* entries per answer at most (the hub's nearest) */
 #define RC_MAPD_GONE     0x8000u    /* a MAPD entry's key (u16: the hub's slot of the player) with this: it went */
 #define RC_MAPD_PLACE    9          /* ...without: x, y (int16, m), heading (u8), velocity x, y (int8, m/s) follow */
 #define RC_MAPD_PARKED   0x4000u    /* ...and, to a question with RC_MAPREQ_PARKED, this in a placed player's key: it has
                                        stood at one spot for a minute (the hub's PARKED_MS; the world map's car meets) */
 #define RC_MAPREQ_PARKED 1u         /* a MAPREQ's flags (a u16 after base; none: 0): RC_MAPD_PARKED wanted */
+#define RC_MAPREQ_WIDE   2u         /* ...an answer of up to RC_MAPD_PARTS datagrams taken (without: 16, as a page before) */
 #define RC_MAPD_PLACE_Z  11         /* ...and in its answer (RC_HF_MAPZ) a placed player's z (int16, m) after the velocity */
 #define RC_MAPD_BYTES    1152       /* entries' bytes per MAPD datagram at most */
-#define RC_MAPD_PARTS    16         /* MAPD datagrams per answer at most */
+#define RC_MAPD_PARTS    48         /* MAPD datagrams per answer at most (RC_MAP_MAX with z: 40) */
 #define RC_NEAR_MAX      128        /* NEARD entries per answer at most: one datagram (RC_MAPD_BYTES / RC_MAPD_PLACE) */
 #define RC_NEAR_M        1000       /* a NEARREQ's radius at most (m) */
 #define RC_LOBBY_MAX     6          /* players in a race lobby: the game's network race takes 6 */
@@ -632,8 +633,8 @@ typedef struct {
      * as of the last complete answer (map_held its question; map_gen +1 for
      * each), by id */
     uint16_t  map_req;  int64_t map_asked_us;
-    uint16_t  map_want, map_flags;    /* the flags to ask with (the game's: RC_MAPREQ_PARKED), and our last question's */
-    uint16_t  map_mask;  uint8_t map_nparts;  uint8_t map_part_n[RC_MAPD_PARTS];  uint16_t map_part_len[RC_MAPD_PARTS];
+    uint16_t  map_want, map_flags;    /* the flags to ask with (the game's: RC_MAPREQ_PARKED | RC_MAPREQ_WIDE), and our last question's */
+    uint64_t  map_mask;  uint8_t map_nparts;  uint8_t map_part_n[RC_MAPD_PARTS];  uint16_t map_part_len[RC_MAPD_PARTS];
     uint16_t  map_asm_total, map_asm_base;  uint8_t map_asm_z;   /* (its parts' entries carry z: RC_HF_MAPZ) */
     uint8_t   map_asm[RC_MAPD_PARTS * RC_MAPD_BYTES];
     uint16_t  map_held;

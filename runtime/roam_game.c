@@ -380,6 +380,8 @@ static struct {
     int test_hitfling;                        /* NFSU2_ROAM_TEST_HITFLING (test aid, scripted runs only): ...going up at 300 m/s (contact_wild) */
     int near_max;                             /* NFSU2_ROAM_NEAR: arrows on the minimap for the players without a car shown, at most
                                                  (near_update; 0: none) */
+    int map_max;                              /* NFSU2_ROAM_MAP_MAX: the hub's players on the world map, at most (map_update;
+                                                 0: none; the page's phones 2048: each marker costs the open map's frames) */
     int cars_auto;                            /* NFSU2_ROAM_CARS_AUTO: max_cars is the device's default (the page's), not the
                                                  player's pick: fewer once the frames are slow with more (cars_cut) */
     int cut_us;                               /* ...a frame this long or more is slow (NFSU2_ROAM_CUT_MS; 0: never cut) */
@@ -2130,9 +2132,11 @@ static void tag_hide(CPU *c, int k){
  * package frees it with the rest.  0 when the list is not as expected. */
 #define FN_FE_PACKAGE   0x0052cef0u   /* cdecl (package name) -> FEPackage* */
 #define FN_FE_FINDOBJ   0x005379c0u   /* cdecl (package name, hash) -> FE object of any type */
+#define FE_WALK         16384         /* a list of FE objects or of the world map's markers walked this far at most
+                                         (a broken one ends): past what the map's package holds (FE_LIST_MAX) */
 static uint32_t fe_list_of(uint32_t first, uint32_t o, int depth){   /* the address of the list's "first" that holds o */
     int n = 0;
-    for (uint32_t it = rd32(first); it && n < 4096; it = rd32(it + 4u), n++){
+    for (uint32_t it = rd32(first); it && n < FE_WALK; it = rd32(it + 4u), n++){
         if (it == o) return first;
         if (depth < 8 && rd32(it + 0x18u) == 5u){ uint32_t l = fe_list_of(it + 0x64u, o, depth + 1); if (l) return l; }
     }
@@ -2190,18 +2194,25 @@ static uint32_t fe_copy(CPU *c, uint32_t o, const char *name, int depth){
     }
     return cl;
 }
+/* while a run of copies goes into one list (g_fcl.on: wm_dress, the map's thousands of markers in one frame), the
+ * list the last copy went into, its count and last as it left them: the next copy into it is not walked again (a walk
+ * each, 4000 copies took 4000 x 4000 steps) */
+static struct { int on; uint32_t l, n, last; } g_fcl;
 static uint32_t fe_clone(CPU *c, uint32_t pkg, uint32_t o, const char *name){
     uint32_t pk = gcall1(c, FN_FE_PACKAGE, 0, pkg), l = ok(pk, 0x54) ? fe_list_of(pk + 0x4cu, o, 0) : 0;
     if (!l || !ok(rd32(o), 8)) return 0;
-    uint32_t n = 0, last = 0;
-    for (uint32_t it = rd32(l); it && n < 4096; it = rd32(it + 4u)){ last = it; n++; }
-    if (n != rd32(l - 4u) || last != rd32(l + 4u)) return 0;          /* not the count and last we take it for */
+    if (!(g_fcl.on && g_fcl.l == l && g_fcl.n == rd32(l - 4u) && g_fcl.last == rd32(l + 4u))){
+        uint32_t n = 0, last = 0;
+        for (uint32_t it = rd32(l); it && n < FE_WALK; it = rd32(it + 4u)){ last = it; n++; }
+        if (n != rd32(l - 4u) || last != rd32(l + 4u)) return 0;      /* not the count and last we take it for */
+    }
     uint32_t cl = fe_copy(c, o, name, 0);
     if (!cl) return 0;
     uint32_t nx = rd32(o + 4u);
     MR32(cl + 4u) = nx; MR32(cl + 8u) = o; MR32(o + 4u) = cl;
     if (nx) MR32(nx + 8u) = cl; else MR32(l + 4u) = cl;
     MR32(l - 4u) += 1;
+    if (g_fcl.on){ g_fcl.l = l; g_fcl.n = rd32(l - 4u); g_fcl.last = rd32(l + 4u); }
     return cl;
 }
 /* an image's or a string's colour: its drawing data's first four ints
@@ -2749,7 +2760,7 @@ static void arrow_colours(CPU *c, uint32_t w){
 #ifdef ROAM_HOST_WIN
 #define FE_LIST_MAX     1024          /* the FE renderer's list of a package's objects to draw */
 #else
-#define FE_LIST_MAX     4096          /* ...past its 1024 in a list of overrides.c's */
+#define FE_LIST_MAX     8192          /* ...past its 1024 in a list of overrides.c's */
 #endif
 #define WM_SPARE        16            /* objects left to the package itself */
 static struct { int done, said, copies, asks, others, lobbies, nf, steps; uint32_t map, gen, fake; int64_t asked, got, moved, step_us;
@@ -2785,14 +2796,14 @@ static uint32_t wm_mark(CPU *c, uint32_t map, uint32_t pkg, uint32_t car){
  * groups' (type 5: +0x64 the first), groups themselves aside */
 static int fe_objects(uint32_t first, int depth){
     int n = 0, k = 0;
-    for (uint32_t o = rd32(first); ok(o, 0x5c) && k < 4096; o = rd32(o + 4u), k++)
+    for (uint32_t o = rd32(first); ok(o, 0x5c) && k < FE_WALK; o = rd32(o + 4u), k++)
         n += rd32(o + 0x18u) != 5u ? 1 : depth < 8 ? fe_objects(o + 0x64u, depth + 1) : 0;
     return n;
 }
 /* a package's string objects in the log (mp map strings): their hashes and texts */
 static void fe_strings(uint32_t first, int depth){
     int k = 0;
-    for (uint32_t o = rd32(first); ok(o, 0x5c) && k < 4096; o = rd32(o + 4u), k++){
+    for (uint32_t o = rd32(first); ok(o, 0x5c) && k < FE_WALK; o = rd32(o + 4u), k++){
         uint32_t t = rd32(o + 0x18u);
         if (t == 5u && depth < 8){ fe_strings(o + 0x64u, depth + 1); continue; }
         if (t != 2u) continue;
@@ -2808,7 +2819,7 @@ static void fe_strings(uint32_t first, int depth){
 /* a package's objects of any kind left of x0 in the log (mp map parts): kind, hash, place, size, flags */
 static void fe_parts(uint32_t first, int depth, float x0){
     int k = 0;
-    for (uint32_t o = rd32(first); ok(o, 0x5c) && k < 4096; o = rd32(o + 4u), k++){
+    for (uint32_t o = rd32(first); ok(o, 0x5c) && k < FE_WALK; o = rd32(o + 4u), k++){
         uint32_t t = rd32(o + 0x18u), d = rd32(o + 0x2cu);
         if (t == 5u && depth < 8) fe_parts(o + 0x64u, depth + 1, x0);
         if (!ok(d, 0x40) || MRF32(d + 0x1cu) > x0) continue;
@@ -2824,7 +2835,8 @@ static int wm_room(uint32_t pk){
 /* a copy of AIRACERINDICATOR_0 for each car marker without an object, at most max */
 static int wm_dress(CPU *c, uint32_t map, uint32_t pkg, int max){
     uint32_t o0 = 0; int copies = 0;
-    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < 4096 && copies < max && ok(e, WM_MARK_SZ); e = rd32(e), i++){
+    g_fcl.on = 1; g_fcl.l = 0;
+    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < FE_WALK && copies < max && ok(e, WM_MARK_SZ); e = rd32(e), i++){
         if (MR32(e + 8u) != WM_CAR || MR32(e + 0xcu)) continue;
         char nm[24]; snprintf(nm, sizeof nm, "ROAM_MAPCAR_%d", g_wm.copies);
         if (!o0) o0 = wm_find(c, pkg, "AIRACERINDICATOR_0");
@@ -2840,6 +2852,7 @@ static int wm_dress(CPU *c, uint32_t map, uint32_t pkg, int max){
         if (g_wm.col_ok) fe_colour_to(c, cl, g_wm.col);
         MR32(e + 0xcu) = cl; copies++; g_wm.copies++;
     }
+    g_fcl.on = 0;
     return copies;
 }
 #if MPRACES
@@ -2867,7 +2880,7 @@ static void crew_map_open(CPU *c, uint32_t map, uint32_t pkg, uint32_t pk, uint3
     for (int k = 0; k < NSLOT; k++) any |= g_sl[k].st == SL_ACTIVE && g_sl[k].crew;
     if (!any || !g_gmem) return;
     uint32_t base = wm_find(c, pkg, WMC_TEXT);
-    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < 4096 && ok(e, WM_MARK_SZ); e = rd32(e), i++){
+    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < FE_WALK && ok(e, WM_MARK_SZ); e = rd32(e), i++){
         uint32_t o = MR32(e + 0xcu);
         if (MR32(e + 8u) != WM_CAR || !ok(o, 0x34)) continue;
         float x = MRF32(e + 0x10u), y = MRF32(e + 0x14u);
@@ -2928,7 +2941,7 @@ static int slot_car(uint32_t car){
 static void ai_map_open(CPU *c, uint32_t map, uint32_t pkg, uint32_t w){
     int32_t b = (int32_t)(g_ai_rgb & 0xffu), g = (int32_t)(g_ai_rgb >> 8 & 0xffu), r = (int32_t)(g_ai_rgb >> 16 & 0xffu), col[4];
     int n = 0;
-    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < 4096 && ok(e, WM_MARK_SZ); e = rd32(e), i++){
+    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < FE_WALK && ok(e, WM_MARK_SZ); e = rd32(e), i++){
         uint32_t o = MR32(e + 0xcu);
         if (MR32(e + 8u) != WM_CAR || !ok(o, 0x34)) continue;
         float x = MRF32(e + 0x10u), y = MRF32(e + 0x14u);
@@ -3200,7 +3213,7 @@ static void wmf_open(CPU *c, uint32_t scr, uint32_t map, uint32_t pkg, uint32_t 
      * the AI range and ours, each where its car was as the map opened; all
      * of them moved with their cars from then on (wm_live) */
     g_wm.nf = 0;
-    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < 4096 && ok(e, WM_MARK_SZ); e = rd32(e), i++){
+    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < FE_WALK && ok(e, WM_MARK_SZ); e = rd32(e), i++){
         if (MR32(e + 8u) != WM_CAR) continue;
         float x = MRF32(e + 0x10u), y = MRF32(e + 0x14u);
         for (int k = 0; k < NSLOT; k++){
@@ -3403,6 +3416,7 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
      * answer, marked (or moved) when the answer is in */
     int n = -1, total = 0, ask = host - g_wm.got >= WM_LIVE_US && (g_wm.got || g_wm.asks < WM_ASKS) && (!g_wm.asks || host - g_wm.asked > WM_ASK_US);
     int most = ask ? g_wm.others + wm_room(pk) : 0;                   /* (the markers made, and room for more) */
+    if (most > O.map_max) most = O.map_max;
     roam_plat_lock();
     if (g_s.map_gen != g_wm.gen){
         g_wm.gen = g_s.map_gen;
@@ -3410,13 +3424,13 @@ static void map_update(CPU *c, uint32_t w, int64_t host){
         memcpy(g_wm_in, g_s.map_e, (size_t)n * sizeof *g_wm_in);
     } else if (ask){
 #if MPRACES
-        /* (who has stood a minute, for the car meets, from a hub that tells it: one that answered no first question
-         * with it is asked plainly from then on) */
+        /* (who has stood a minute, for the car meets, from a hub that tells it, in as many datagrams as RC_MAP_MAX
+         * takes: a hub that answered no first question with them is asked plainly from then on) */
         if (g_wm.asks && !g_wm.got && !g_map_plain){
             g_map_plain = 1;
             rlog("[roam] f=%ld world map: no answer to a question for the parked players: asked without from now on\n", rh_frame());
         }
-        g_s.map_want = g_map_plain ? 0 : RC_MAPREQ_PARKED;
+        g_s.map_want = g_map_plain ? 0 : RC_MAPREQ_PARKED | RC_MAPREQ_WIDE;
 #endif
         if (rc_ask_map(&g_s, host, most < RC_MAP_MAX ? most : RC_MAP_MAX)){ g_wm.asks++; g_wm.asked = host; }
     }
@@ -6493,7 +6507,7 @@ static void wm_view_box(CPU *c, uint32_t map, float view[4]){
 /* the icons shown on the map (every marker but the cars'), as boxes: max at most */
 static int wm_icon_boxes(uint32_t map, float (*box)[4], int max){
     int nb = 0;
-    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < 4096 && nb < max && ok(e, WM_MARK_SZ); e = rd32(e), i++){
+    for (uint32_t e = rd32(map + 4u), i = 0; e && e != map + 4u && i < FE_WALK && nb < max && ok(e, WM_MARK_SZ); e = rd32(e), i++){
         uint32_t o = MR32(e + 0xcu);
         if (MR32(e + 8u) == WM_CAR || !ok(o, 0x20) || (MR32(o + 0x1cu) & 1u)) continue;
         float x = MRF32(e + 0x1cu), y = MRF32(e + 0x20u);
@@ -6602,7 +6616,7 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
  * game stops the GPS when the player engages a place's event (0x541120); at a
  * meet nothing would, so meet_gps stops it within MEET_ARRIVE_M of the spot.
  * Not in the Windows plugin (as the lobbies). */
-#define MEET_MIN        16            /* players standing near one spot: a meet (fewer: a busy spot) */
+#define MEET_MIN        20            /* players standing near one spot: a meet (fewer: a busy spot) */
 #define MEET_R          50.f          /* ...within this of it (m) */
 #define MEET_SLOW_MPS   4.f           /* (14 km/h) standing, for a meet */
 #define MEET_EVERY_US   1000000       /* the meets found again this often while the map is open */
@@ -7383,6 +7397,7 @@ static void init_once(CPU *c){
     O.test_outside = env_int("NFSU2_ROAM_TEST_OUTSIDE", 0, 0, 1);
     O.max_cars = env_int("NFSU2_ROAM_MAX_CARS", DEF_CARS, 0, MAX_CARS);
     O.near_max = env_int("NFSU2_ROAM_NEAR", NEAR_DEF, 0, NEAR_SLOTS);
+    O.map_max = env_int("NFSU2_ROAM_MAP_MAX", RC_MAP_MAX, 0, RC_MAP_MAX);
     O.cars_auto = env_int("NFSU2_ROAM_CARS_AUTO", 0, 0, 1);
     {   /* 40 fps, or a frame and a half of a display slower than 60 Hz (a phone's Low Power Mode is 30 Hz) */
         int hz = env_int("NFSU2_DISPLAY_HZ", 60, 1, 1000), us = 1500000 / hz;
@@ -8682,7 +8697,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         uint32_t scr = ok(pk, 0x54) ? wm_screen(pk) : 0, map = scr ? rd32(scr + WM_MAP) : 0;
         if (!ok(map, 0x2c)){ rlog("[roam] f=%ld mp map: the world map is not open\n", f); return 1; }
         int n = 0, cars = 0, drawn = 0, tinted = 0, grey = 0;
-        for (uint32_t e = rd32(map + 4u); e && e != map + 4u && n < 4096 && ok(e, WM_MARK_SZ); e = rd32(e), n++){
+        for (uint32_t e = rd32(map + 4u); e && e != map + 4u && n < FE_WALK && ok(e, WM_MARK_SZ); e = rd32(e), n++){
             if (MR32(e + 8u) != WM_CAR) continue;
             cars++;
             uint32_t o = MR32(e + 0xcu);

@@ -1043,7 +1043,7 @@ void sub_004ff3b0(CPU *c){
  * (roam_host.h RH_FE_NODES; the list below); the packages are drawn one
  * after another, and sub_0050b430 lets go of the nodes after each. */
 #define FE_LIST      1024u                /* the renderer's own list: +0x110 the count, +0x114 entries (object, depth key) */
-#define FE_LIST_BIG  4096u                /* ...and ours past it */
+#define FE_LIST_BIG  8192u                /* ...and ours past it */
 #define FE_NODES     FE_LIST_BIG
 void sub_0050b410_orig(CPU *c);
 void sub_0050b410(CPU *c){

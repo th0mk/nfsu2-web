@@ -176,6 +176,9 @@ export const KEYS: readonly KeyDef[] = [
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
+  // free roam's world map: the other players marked at most (runtime/roam_game.c map_update; phones 2048: device.ts).
+  // Not in bundle.m's table: the Mac's free roam has no hub
+  { key: 'roam_map_max', env: 'NFSU2_ROAM_MAP_MAX', kind: 'int', vals: '0..4096', ic: true, scope: 'web', device: true },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -450,6 +453,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]
 #roam_max_players = 49
 #roam_max_cars = 32
+# Other players marked on the world map at once (0 to 4096, the nearest; 2048
+# on phones).  [NFSU2_ROAM_MAP_MAX]
+#roam_map_max = 4096
 # on = the other players' cars are solid: drawn where they are now, and one
 # that appears on your car lets you through until you are apart.
 # off = Ghost mode for players: you drive through their cars, and they

@@ -81,3 +81,17 @@ test("free roam's players' cars shown: 16 on a phone, 24 on a tablet, the file's
   assert.equal(on(win, 0, 1920, 1080, false, 6, 8), undefined);                     // 6 cores
   assert.equal(on(mac, 5, 820, 1180, true, 8, 8), '24', 'a tablet stays at 24 whatever its cores');
 });
+
+test("free roam's world map: 2048 other players on a phone, the file's 4096 on tablets and computers", () => {
+  const on = (ua, touchPoints, w, h, coarse) => {
+    Object.defineProperty(globalThis, 'navigator', { value: { userAgent: ua, maxTouchPoints: touchPoints, hardwareConcurrency: 8 }, configurable: true, writable: true });
+    globalThis.screen = { width: w, height: h };
+    globalThis.matchMedia = () => ({ matches: coarse });
+    return deviceDefaults().roam_map_max;
+  };
+  const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15';
+  assert.equal(on('Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1', 5, 390, 844, true), '2048');
+  assert.equal(on('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36', 5, 412, 915, true), '2048');
+  assert.equal(on(mac, 5, 820, 1180, true), undefined);                            // an iPad
+  assert.equal(on(mac, 0, 1512, 982, false), undefined);                           // a Mac
+});

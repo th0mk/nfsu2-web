@@ -7,6 +7,7 @@
  *                                 ("ask <hex>": its MAPREQ) and takes these datagrams from the hub (each "ask"
  *                                 among them: it asks again, a second on); then "map <gen> <total> <n>
  *                                 id:x,y,h,vx,vy ..." (what it holds)
+ *   roam_hubwire mapwide <hex>... the same, asking as the game does (RC_MAPREQ_PARKED | RC_MAPREQ_WIDE)
  *   roam_hubwire near <hex>...    the same for the minimap (its NEARREQ for 64 within 300 m, the hub's NEARDs);
  *                                 then "near <gen> <total> <n> id:x,y,h,vx,vy ..."
  *   roam_hubwire lobby            a race lobby's advert to the hub (to 0), as roam_core encodes it, in hex
@@ -132,12 +133,13 @@ int main(int argc, char **argv){
         printf("\n");
         return 0;
     }
-    if (!strcmp(argv[1], "map") || !strcmp(argv[1], "lobbies")){
+    if (!strcmp(argv[1], "map") || !strcmp(argv[1], "mapwide") || !strcmp(argv[1], "lobbies")){
         rc_config c; memset(&c, 0, sizeof c);
         c.self_id = 0x1234ABCDu; c.port = 47210; c.max_players = RC_MAX_PLAYERS; c.rate_hz = 20;
         c.hub_ip = 0x0A4D00FDu; c.hub_port = 47210; c.lobbies = !strcmp(argv[1], "lobbies");
         rc_io io; memset(&io, 0, sizeof io); io.send = sent;
         rc_session_init(&S, &c, &io);
+        if (!strcmp(argv[1], "mapwide")) S.map_want = RC_MAPREQ_PARKED | RC_MAPREQ_WIDE;   /* (as the game asks) */
         int64_t t = 1000000;
         rc_tick(&S, t);
         m.h.type = RC_MSG_PEERS; m.h.sender = 0xB0Bu;                 /* the hub answers: an empty list */
