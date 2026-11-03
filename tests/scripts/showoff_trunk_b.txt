@@ -1,0 +1,37 @@
+# Show-off's open trunk with its audio on a friend's car, instance B (watches; with showoff_trunk_a.txt): new career
+# -> prologue free roam; says what its drawing of A's car has ("mp trunk 0": the layout, its places, each piece's
+# own model, and A's racer record's driver kind), then jumps beside A's back corner ("mp follow") and photo mode's
+# orbit saves the page from above its own car, A's open trunk beyond it (t_side_a, t_side_b: either side).  roam-pair --page app.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++900  roam mp follow 0 2 3.2
++3000ms roam mp trunk 0
++0    photo on
++0    photo names 0
++60   photo dolly -8
++60   photo drag 0.65 0.3
++3000ms log SHOT t_side_a
++4000ms photo drag -1.3 0
++3000ms log SHOT t_side_b
++4000ms photo off
++60   roam mp trunk 0
++0    roam mp status
++10   quit

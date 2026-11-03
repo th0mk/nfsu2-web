@@ -422,6 +422,31 @@ static void put_on(Car *k, uint32_t b, uint32_t *keep){
 }
 static void take_off(uint32_t b, const uint32_t *keep){ MR32(b + 0xcu) = keep[0]; MR32(b + 0x10u) = keep[1]; }
 
+/* The trunk's audio (the layout, ride slot 0x22, and its 12 pieces, 0x23..0x2E, on the layout's places, render info
+ * +0x2184): 0x620AE0 draws it only for a car whose racer record's driver is a human (car +0x14, +4 == 1: never a
+ * friend's car, kind 2 or 4), and out in the world (not the front end, no cover shoot) each piece as an empty box of
+ * its size (AUDIO_COMP_EMPTY_*, +0x2B74: what shows through a hatch's glass) instead of its own model (+0x2274).  The
+ * cover shoot, which opens the trunk out in the world, has its flag (G_SHOWCASE, 0x499DB0) set: the pieces' own
+ * models then, and the car at its first LOD (0x62118F).  So while a car's trunk is open (opening, open or closing)
+ * near the camera, its drawing runs with that flag and a human's driver kind, both as they were again after.
+ * Nothing else in 0x620AE0 or what it calls reads either (the flag's three reads are 0x62118F, 0x630883 and
+ * 0x630C29; the kind's one 0x6306D4). */
+#define G_SHOWCASE     0x00836352u   /* byte: a cover shoot is on (0x4CE770 sets it, 0x499FA0 clears it) */
+#define G_VIEW1        0x00832e50u   /* eView 1: +0x40 its camera (+0x40 its position) */
+#define CAR_REC        0x14u         /* car: its racer record (+4 the driver: 1 a human, 2 an AI racer, 3 traffic) */
+#define CAR_POS        0x60u
+#define TRUNK_NEAR_M   40.f          /* farther off the pieces are a few pixels: the game's boxes */
+static uint32_t trunk_rec(const Car *k){
+    static int game_way = -1;                                          /* test aid, script runs only: the game's drawing */
+    if (game_way < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_TRUNK_GAMEWAY"); game_way = s && *s && e && *e == '1'; }
+    if (game_way) return 0;
+    uint32_t n = k->node[1], car = k->car, rec = ok(car, 0x9e0) ? rd32(car + CAR_REC) : 0, cam = rd32(G_VIEW1 + 0x40u);
+    if (!n || MR32(n + 0x10u) == 1u || !ok(rec, 8) || rd32(k->ri) != car || !ok(cam, 0x4c)) return 0;
+    float dx = MRF32(car + CAR_POS) - MRF32(cam + 0x40u), dy = MRF32(car + CAR_POS + 4u) - MRF32(cam + 0x44u),
+          dz = MRF32(car + CAR_POS + 8u) - MRF32(cam + 0x48u), d2 = dx * dx + dy * dy + dz * dz;
+    return d2 == d2 && d2 < TRUNK_NEAR_M * TRUNK_NEAR_M ? rec : 0;
+}
+
 /* photo.c: a car photo mode does not draw (its Cars list); none where photo mode is not built in */
 __attribute__((weak)) int photo_hides(uint32_t ri){ (void)ri; return 0; }
 void sub_00620ae0_orig(CPU *c);
@@ -430,7 +455,10 @@ void sub_00620ae0(CPU *c){                       /* the car's drawing */
     uint32_t b = 0, keep[2]; Car *k = drawn(c->ecx, &b);
     if (!k){ sub_00620ae0_orig(c); return; }
     put_on(k, b, keep);
+    uint32_t rec = trunk_rec(k), kind = 0; uint8_t shoot = 0;
+    if (rec){ shoot = MR8(G_SHOWCASE); kind = MR32(rec + 4u); MR8(G_SHOWCASE) = 1; MR32(rec + 4u) = 1u; }
     sub_00620ae0_orig(c);
+    if (rec){ MR8(G_SHOWCASE) = shoot; MR32(rec + 4u) = kind; }
     take_off(b, keep);
 }
 void sub_00615a10_orig(CPU *c);

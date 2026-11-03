@@ -8778,7 +8778,8 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         }
         return 1;
     }
-    if (!strcasecmp(sub, "cfgdump") || !strcasecmp(sub, "cfgtest") || !strcasecmp(sub, "parts") || !strcasecmp(sub, "setpart")){
+    if (!strcasecmp(sub, "cfgdump") || !strcasecmp(sub, "cfgtest") || !strcasecmp(sub, "parts") || !strcasecmp(sub, "setpart") ||
+        !strcasecmp(sub, "trunk")){
         if (g_njob == NJOB){ rlog("[roam] f=%ld mp %s: busy\n", f, sub); return 1; }
         snprintf(g_job[g_njob++], sizeof g_job[0], "%s", args);
         return 1;
@@ -8827,6 +8828,38 @@ static void run_job(CPU *c, const char *job){
         rlog("[roam] f=%ld mp cfgtest: %s, %d parts in a %d-byte record, %d not found%s%s; rebuilt ride: %d of 170 part slots differ, "
                         "%d other bytes differ (first at +0x%x); performance/tuning bytes differing %d, physics block bytes differing %d\n",
                 f, tn, cc.n_parts, n, miss, why[0] ? ": " : "", why, diff_slots, diff_bytes, first, diff_perf, diff_phys);
+        return;
+    }
+    if (!strcasecmp(sub, "trunk")){
+        /* "mp trunk [K]": the player's car's (or slot K's) trunk audio as the car's drawing (0x620AE0) has it: the
+         * layout (ride slot 0x22) and the 12 pieces (0x23..0x2E), the layout's places (render info +0x2184, from
+         * its markers), each piece's own model (+0x2274 + 0xC0 a piece, its first LOD: the front end's and the
+         * cover shoot's) and the stand-in boxes (+0x2B74, the world's), and its racer record's driver kind (only
+         * 1, a human's, has the trunk's audio drawn) */
+        int k = a1[0] ? atoi(a1) : -1;
+        uint32_t car = k < 0 ? player_car() : k < NSLOT ? g_sl[k].car : 0;
+        uint32_t ride = ok(car, 0x9e0) ? rd32(car + 0x10u) : 0, ri = ok(car, 0x9e0) ? rd32(car + 0x554u) : 0;
+        uint32_t rec = ok(car, 0x9e0) ? rd32(car + 0x14u) : 0;
+        if (!ok(ride, 0x8f0) || !ok(ri, 0x2d48)){ rlog("[roam] f=%ld mp trunk: no car\n", f); return; }
+        uint32_t lay = rd32(ride + 0x618u);
+        char ln[48] = "-";
+        if (ok(lay, 0xe)){ uint32_t np = gcall0(c, FN_PART_NAME, lay); if (np) cstr(np, ln, sizeof ln); }
+        int places = 0, own = 0, pieces = 0, boxes = 0;
+        for (uint32_t i = 0; i < 12u; i++) places += rd32(ri + 0x2184u + 4u * i) != 0;
+        for (uint32_t i = 0; i < 6u; i++) boxes += rd32(ri + 0x2b74u + 0x18u * i + 0xcu) != 0;
+        char pl[600] = {0}; int at = 0;
+        for (uint32_t i = 0; i < 12u; i++){
+            uint32_t p = rd32(ride + 0x61cu + 4u * i);
+            char pn[48] = "-";
+            if (ok(p, 0xe)){ uint32_t np = gcall0(c, FN_PART_NAME, p); if (np) cstr(np, pn, sizeof pn); pieces++; }
+            int m0 = rd32(ri + 0x2274u + 0xc0u * i + 0xcu) != 0, m1 = rd32(ri + 0x2274u + 0xc0u * i + 0x60u + 0xcu) != 0;
+            own += m0 || m1;
+            if (at < (int)sizeof pl - 64)
+                at += snprintf(pl + at, sizeof pl - (size_t)at, " %u:%s%s%s%s", i, pn, rd32(ri + 0x2184u + 4u * i) ? "@" : "", m0 ? "+" : "", m1 ? "*" : "");
+        }
+        rlog("[roam] f=%ld mp trunk %d: driver kind %u, layout %s (byte5 %02x), places %d of 12, pieces %d, own models %d, "
+             "stand-in boxes %d of 6;%s\n", f, k, rec ? rd32(rec + 4u) : 0u, ln, ok(lay, 6) ? MR8(lay + 5u) : 0u, places, pieces, own,
+             boxes, pl);
         return;
     }
     if (!strcasecmp(sub, "parts") || !strcasecmp(sub, "setpart")){

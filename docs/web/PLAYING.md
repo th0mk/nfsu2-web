@@ -526,8 +526,8 @@ Good to know:
   game draws it for any car. Between players on different versions, neither sees the other's.
 - **Trunk, hood and doors:** parked in free roam, O opens the trunk, pressed again the hood too, then both doors too,
   then closes them all; on a controller, hold D-pad down for a second (a short press is still Career Status). The
-  others see them open; they close by themselves when the car drives off. The open trunk shows no trunk audio. Players
-  on an older version see your car closed.
+  others see them open; they close by themselves when the car drives off. The open trunk shows its trunk audio, the
+  layout, speakers and amps, on your car and on the others'. Players on an older version see your car closed.
 - **Headlights:** the other players' headlights light the road in front of their cars, as yours do, a little dimmer
   and in their own colour; in Online and LAN races too. Display, more: Other cars' headlights (All cars: AI racers and
   traffic too; Off: only yours, as in the original game). The Windows plugin draws only your own.

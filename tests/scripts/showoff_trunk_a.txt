@@ -1,0 +1,14 @@
+# Show-off's open trunk with its audio on a friend's car, instance A (with showoff_trunk_b.txt): a saved career with
+# trunk audio fitted (roam-pair --page app --seed-for A:<save tree>) in free roam; it stands and opens its trunk (O)
+# once B's car is there, and keeps it open while B looks.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++600  roam mp trunk
++0    tap O
++300  roam mp trunk
++40000ms roam mp status
++10   quit
