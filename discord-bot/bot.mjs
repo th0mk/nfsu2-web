@@ -16,6 +16,7 @@ import { matchFeatures, matchFixes } from './fixes.mjs';
 import { General } from './general.mjs';
 import { blocks, firstPass, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
+import { folderTops, samePlace } from './sigs.mjs';
 import { Spend, metered } from './spend.mjs';
 import { Tags } from './tags.mjs';
 import { COMMAND as TRANSLATE, Translator } from './translate.mjs';
@@ -76,7 +77,7 @@ const VERDICTS = path.join(CFG.state, 'verdicts.jsonl');
 const LIVE_FILE = path.join(CFG.state, 'live.json');      // the live version the bot saw last
 /** per thread: { title, forum, guild, owner, created, active, status: new|seen|none|asked|answered|staff|failed, replies,
  *  summary, category, snippet (its first post, for threads the bot only indexed), closed (archived, locked or deleted:
- *  not one to point people to); for a problem reported to the staff:
+ *  not one to point people to), tops (where its logs crash or freeze, sigs.mjs); for a problem reported to the staff:
  *  staffMsg, staffThread (the report and its thread), report (on the first one: what its post shows, REPORT below),
  *  reportOf (on the later ones: the first thread's id); for a suggestion: votes ({ emoji: count } on its first post),
  *  messages and members (Discord's counts for the thread; members stop at 50), counted (when) } */
@@ -226,7 +227,10 @@ async function look(threadId, why, extra) {
   // staff are waiting for this one: "typing…" in the thread until the reply is there (Discord shows it ~10 s a call)
   const typing = byStaff && setInterval(() => thread.sendTyping().catch(() => {}), 8000);
   if (typing) thread.sendTyping().catch(() => {});
-  const context = { repo, guild: thread.guildId, thread: text, images, threads: recentThreads(threadId), reports: reportList(threadId) };
+  const tops = folderTops(workDir);
+  if (tops.length) st.tops = tops; else delete st.tops;
+  const context = { repo, guild: thread.guildId, thread: text, images, threads: recentThreads(threadId), reports: reportList(threadId),
+    places: placesOf(tops, threadId) };
   let res = null, first = null;
   // a new suggestion: a quick pass first (investigate.mjs firstPass), and a full look only when it sees something to say
   if (why === 'new post' && SUGGESTIONS.test(st.forum ?? '')) {
@@ -941,13 +945,33 @@ function recentThreads(except) {
 /** the problems the developer has a report on (the staff channel), the latest change first: the report's first
  *  thread, where it stands, how many threads, its title.  What a look points a poster to and joins a thread to */
 function reportList(except) {
+  const tops = reportTops(except);
   return Object.entries(threads).filter(([id, t]) => t.staffMsg && !t.reportOf && id !== except).map(([id, t]) => {
     const r = t.report, at = r?.log.at(-1)?.[0] ?? Date.parse(t.active ?? t.created) / 1000;
     const where = !r ? 'open' : r.again ? 'reported again after a fix or a "works now"'
       : r.fix ? `${r.fix.added ? 'added' : 'fixed'} by ${r.fix.commit}, live` : r.confirmed ? 'solved, the poster says' : 'open';
+    const logs = tops[id]?.length ? ` (logs: ${tops[id].slice(-2).join('; ')})` : '';
     return { at, line: `- ${id} [${where}, ${r?.threads.length ?? 1} thread(s), ` +
-      `last change ${new Date(at * 1000).toISOString().slice(0, 10)}] ${(r?.title ?? t.summary ?? t.title).slice(0, 150)}` };
+      `last change ${new Date(at * 1000).toISOString().slice(0, 10)}] ${(r?.title ?? t.summary ?? t.title).slice(0, 150)}${logs}` };
   }).sort((a, b) => b.at - a.at).slice(0, 25).map(x => x.line).join('\n');
+}
+/** each report's (its first thread's id) stack tops: those of its threads' logs, but the thread `except`'s */
+function reportTops(except) {
+  const m = {};
+  for (const [id, t] of Object.entries(threads)) {
+    if (id === except || !t.staffMsg || !t.tops) continue;
+    const list = m[t.reportOf ?? id] ??= [];
+    for (const s of t.tops) if (!list.includes(s)) list.push(s);
+  }
+  return m;
+}
+/** for a look: where this thread's logs crash or freeze, and the reports whose logs stop in the same place */
+function placesOf(tops, threadId) {
+  if (!tops.length) return '';
+  const same = Object.entries(reportTops(threadId)).filter(([id, ts]) => threads[id]?.staffMsg && !threads[id].reportOf &&
+    ts.some(a => tops.some(b => samePlace(a, b)))).map(([id]) => id);
+  return `Where this thread's logs crash or freeze (the functions at the top of the stack): ${tops.join('; ')}\n` +
+    `Reports whose logs stop in the same place: ${same.length ? same.slice(0, 5).join(', ') : 'none'}`;
 }
 /** every known thread, for the search_threads tool: [{ line, text }] */
 function threadIndex(except) {

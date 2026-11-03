@@ -119,6 +119,7 @@ While you drive:
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
 | X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button |
+| O | Parked in free roam: open the trunk, then the hood too, then the doors too, then close them all (see section 6); on a controller hold D-pad down a second |
 | 1 to 4, then 1 to 4 | Quick chat in free roam and in races with other players: a group, then a phrase (see section 6) |
 | I | Message a friend in free roam: the answer to the newest message, or a friend to pick (see section 6, Friends) |
 | M, Tab | Map, messages |
@@ -422,9 +423,12 @@ Good to know:
   as big as it is; theirs are left out at the minimap's edge, where the cars' arrows point the way. The world map
   also marks the other players in free roam, the nearest 2048 past those
   32, and while it is open every marker moves smoothly with its player. Its legend (the list on the
-  map's left) has two rows of ours after the game's: **Players** and **Players' races**. Pick one with Up or Down and
-  Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers (a crew-mate's
-  stays) or the players' race lobbies (yours stays) until you tick it again, and the game remembers it. A player in a
+  map's left) has three rows of ours after the game's: **Players**, **Players' races** and **Car meets**. Pick one with
+  Up or Down and Enter crosses it out, as with the game's own rows: the map then leaves out the other players' markers
+  (a crew-mate's stays), the players' race lobbies (yours stays) or the meets until you tick it again, and the game
+  remembers it. A spot where 16 or more players have been parked for a minute is a car meet: a green star and "Meet:"
+  with its number of cars on the world map (the new career's start doesn't count). Picking the Car meets row picks
+  the nearest meet, Left or Right the next, and C starts the GPS there; it stops when you arrive. A player in a
   race, a shop or the menus is not in your free roam: no car, no arrow, no marker until they are back. A player farther than 300 m
   sends you their car 5 times a second instead of 20 (past 1 km, twice), which saves traffic and doesn't show at that
   distance. When many players arrive at once, their cars load one after another, about one a second, so the last of 32
@@ -515,6 +519,10 @@ Good to know:
   version sees the body move but not the wheels, and no nitrous, and hears none of it.
 - **Tyre smoke:** when you slide, spin your wheels or do a burnout, the others see the smoke from your tyres, as the
   game draws it for any car. Between players on different versions, neither sees the other's.
+- **Trunk, hood and doors:** parked in free roam, O opens the trunk, pressed again the hood too, then both doors too,
+  then closes them all; on a controller, hold D-pad down for a second (a short press is still Career Status). The
+  others see them open; they close by themselves when the car drives off. The open trunk shows no trunk audio. Players
+  on an older version see your car closed.
 - **Headlights:** the other players' headlights light the road in front of their cars, as yours do, a little dimmer
   and in their own colour; in Online and LAN races too. Display, more: Other cars' headlights (All cars: AI racers and
   traffic too; Off: only yours, as in the original game). The Windows plugin draws only your own.

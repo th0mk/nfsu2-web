@@ -62,7 +62,7 @@ async function systemBlocks(repo, recent) {
 }
 
 /** the first user message: what is going on (volatile, so after the cached system prompt), the pictures, the thread */
-function opening({ now, recent, guild, threads, reports, thread, images }) {
+function opening({ now, recent, guild, threads, reports, places, thread, images }) {
   const ctx = [
     `Now: ${now}`,
     `Newest commit: ${recent.head}`,
@@ -70,8 +70,9 @@ function opening({ now, recent, guild, threads, reports, thread, images }) {
     `A thread's link: https://discord.com/channels/${guild || '<server id>'}/<thread id>`,
     `Recent forum threads (id, category, what the bot did, title: summary):\n${threads || 'none yet'}`,
     `Problems the developer has a report on in the staff channel, the latest change first (the report's first thread's ` +
-      `id; where it stands; its title):\n${reports || 'none yet'}`,
-  ].join('\n\n');
+      `id; where it stands; its title; where its logs crash or freeze):\n${reports || 'none yet'}`,
+    places,
+  ].filter(Boolean).join('\n\n');
   return [
     { type: 'text', text: `<context>\n${ctx}\n</context>` },
     ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.type, data: im.data } })),
@@ -157,11 +158,11 @@ function gist(out) {
  * told each step as it happens
  * -> { verdict, usage, cost, turns, log }
  */
-export async function investigate({ client, model, effort, maxTurns = MAX_TURNS, repo, archive, workDir, guild, thread, images = [], threads = '', reports = '', threadIndex, step = () => {} }) {
+export async function investigate({ client, model, effort, maxTurns = MAX_TURNS, repo, archive, workDir, guild, thread, images = [], threads = '', reports = '', places = '', threadIndex, step = () => {} }) {
   const tools = new Tools({ repo, workDir, archive, threadIndex });
   const { recent, system } = await start(repo);
   step(`code at ${recent.head.split(' ')[0]}, live ${recent.live.split(' ')[0]}${recent.notLive ? `, ${recent.notLive.split('\n').length} commit(s) not live yet` : ''}; asking ${model}`);
-  const messages = [{ role: 'user', content: opening({ now: stamp(), recent, guild, threads, reports, thread, images }) }];
+  const messages = [{ role: 'user', content: opening({ now: stamp(), recent, guild, threads, reports, places, thread, images }) }];
   const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
   let cost = 0;                                  // null once a turn's model has no prices
   const log = [];

@@ -91,6 +91,10 @@ Checked against the guide or the code, and confirmed by players in threads:
     match; players got in with a VPN meanwhile. Ask whether they are in Spain before anything else.
   - NordVPN's Threat Protection, antivirus web filters and some school or work networks flag the new `.xyz` domain:
     the page goes Offline and Cloud saves disappear. Turn the filter off or allow `nfsu2.xyz`.
+  - Kaspersky (Standard, Plus) flags `nfsu2.xyz` or its main.js as a malicious link or a trojan since 2 November: a
+    false positive, which staff reported to Kaspersky. The start page stays at "Loading the game" in every browser.
+    Adding `nfsu2.xyz` to Kaspersky's trusted addresses, or turning its web protection off, fixed it for several
+    players.
   - "This site can't be reached" / the address can't be found (DNS) on a school, university or work network: setting
     the device's DNS to 1.1.1.1 or 9.9.9.9 fixed it.
 - Stuck behind a barrier or off the map: R respawns.
@@ -111,6 +115,10 @@ Checked against the guide or the code, and confirmed by players in threads:
   through Steam (confirmed). The game crawls on a Steam Deck with sound playing: Chrome draws WebGPU on SwiftShader
   (`chrome://gpu`: Vulkan Disabled); a player fixed it by starting Chrome with
   `--enable-features=Vulkan --use-angle=vulkan` (2026-11-01).
+- A pad that Windows sees but Controls, Controller does not: close Steam, DS4Windows and other pad software, press a
+  button with the page in front, Controller On or Hotplug. If it still shows none, try Edge: on 3 November Opera GX
+  and, on one PC, Chrome never handed a PS5 pad to the page, while Edge did (both players confirmed). The game's own
+  Options, Controls screen lists only the keyboard; the pad's settings are on the page (F9, Controls, Controller).
 - Quick Race's Free Run has no world map in the original game: M does nothing there. The world map is in a career's
   free roam.
 - Turning the car in the garage or a shop: drag with the middle mouse button (the wheel) held. A controller can't.
@@ -158,21 +166,31 @@ Checked against the guide or the code, and confirmed by players in threads:
   row with a size such as 1916x884 (the screen's own at the page's resolution scale), not 1080p or 1440p, which draw
   more pixels than a phone's default 75%.
 
-## Known open problems (as of 2026-11-02)
+## Known open problems (as of 2026-11-03)
 
 The developer updates this list. Check the commits after that date before calling one open: a fix may have come. The
 context lists every problem the developer has a report on, with its first thread: point posters there, and set
-`duplicate_of` to it, rather than searching for "the main thread".
+`duplicate_of` to it, rather than searching for "the main thread". Where an entry names a thread, link that one.
 
+- Free roam since the release of 2 November, 22:47 UTC: the game freezes (`[watchdog] no Present`) or stops with
+  error 134 among many players, often right after another player's car opens or closes its hood, trunk or doors. The
+  logs stop in sub_00433ad0 < sub_00433d10 (a freeze's stack may start at sub_00433d10). No fix live, no workaround
+  known; thread 1566886167629144215. Not the error 134 in garages, car lots, cover shoots and race lobbies of 2
+  November (sub_004380f0 < sub_00438140), which is fixed and live since that release.
 - iPhone and iPad: the browser closes the game for memory, and the start page comes back (worst on 4 GB iPhones, 12
   to 14, but newer ones too); some logs end in `GPU-LOST` instead. Several improvements are live; it still happens.
-  No setting fixes it. Ask for the log from the start page right after it happened, and point to the report on it;
-  escalate only a log on the live version that adds something.
-  Kicked out every 15 to 20 minutes on an iPhone is this problem too: say so and link the report in the first reply.
+  No setting fixes it. Ask for the log from the start page right after it happened, and point to its thread,
+  1564554732649971802; escalate only a log on the live version that adds something.
+  Kicked out every 15 to 20 minutes on an iPhone is this problem too: say so and link the thread in the first reply.
+- iPhone Safari: quick repeated taps (the touch menus' arrows) zoom the page on iOS 26.6 and 27, although the
+  26 October fix against zooming is live. No fix yet.
 - Huawei phones and tablets with Maleoon graphics: the unsafe-webgpu flag lets the game start, then the graphics
-  stop (`GPU-LOST`) within half a minute to a few minutes; frame rate 30 does not help. No fix.
+  stop (`GPU-LOST`) within half a minute to a few minutes; frame rate 30 does not help. No fix; thread
+  1564433667739222136 (not 1564698358403301446, an AMD PC's).
 - Android phones with 2 to 4 GB of memory: the game does not start, the browser cannot reserve its memory ("could
-  not allocate memory" in the log) on every Play. No fix.
+  not allocate memory" in the log) on every Play. No fix; thread 1564275806937682000.
+- Event Results after a career race from free roam ignoring Enter and a click on Continue (keyboard, 3 November):
+  plugging in a controller got a player past it. Ask for the log while it is stuck (F9, Download log).
 - Phones with PowerVR BXM graphics (MediaTek Dimensity 7020/7025): the graphics stop within seconds in landscape
   (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
@@ -226,7 +244,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   Game, more: Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once
   Caleb is beaten, since 2970e8e; opening the trunk, hood and doors parked in free roam, O (then again: the hood,
   the doors, all closed) or a controller's D-pad down held a second, other players see them, they close when the car
-  drives off, the trunk shows no trunk audio, since 1ccb47ac; the guide lists them all). A feature
+  drives off, the trunk shows no trunk audio, since 1ccb47ac; car meets on the world map, with the GPS to them, since
+  109bdcc4; the guide lists them all). A feature
   named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
@@ -236,8 +255,11 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 ## Limits players hit (true as of these notes; check the guide and the code)
 
 - No WebGPU, no game: Firefox for Android (play in Chrome), Samsung TV browsers, Windows PCs without Direct3D 12
-  (Intel HD 4000 and older). Chrome on Linux needs the Vulkan driver. Players report that the Xbox's browser does not
-  run it either.
+  (Intel HD 4000 and older; NVIDIA cards whose last driver is 391.35, such as older GT 730s: Chrome offers them only
+  its D3D11 backend). Chrome on Linux needs the Vulkan driver. Players report that the Xbox's browser does not run it
+  either.
+- CPUs without SSE4.1 (AMD Phenom II and older): browsers turn WebAssembly SIMD off ("WebAssembly SIMD unsupported";
+  Firefox: "v128 not enabled"), and the game is built with it. No build without it.
 - Samsung Xclipse graphics (some Galaxy phones; `GPU-ADAPTER-ANDROID`, chrome://gpu says "Limited support / testing
   currently available on Android"): Chrome blocklists them, and chrome://flags/#enable-unsafe-webgpu, then restarting
   Chrome, lifts that. A player's Xclipse 540 (Android 16; the Exynos 1580 in the Galaxy A56) runs the game with it

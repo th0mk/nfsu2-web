@@ -119,13 +119,15 @@ bot's first log line says what the month and the day spent so far.
   a phone screenshot costs 1,456 tokens instead of 3,354, a 4K one 1,560 instead of 4,784.
 - `investigate.mjs`: one look. It sends Claude the rules (`system.md`), the maintainer's notes (`knowledge.md`),
   `docs/web/PLAYING.md` as of the live version, the live version, recent commits, recent threads and the problems the
-  developer has a report on (each report's first thread, where it stands; what it points posters to and joins
-  duplicates to), and the thread with the files it can read named at its top. The rules, the notes, the guide and the
-  code's history up to the live version (the same for every look until the next release, or a change to the rules or
-  the notes) are kept an hour in the prompt cache, so a look reads them for a tenth of the price instead of sending
-  them again; the newest commits, which change more often, go with the thread. Claude reads what it needs through the
-  tools, several calls a turn, at most 8 turns, then returns a verdict as JSON: none, ask or answer, and whether to
-  tell the developer. `vet()` drops weak answers and replies that paste code. A new post in a suggestion forum first
+  developer has a report on (each report's first thread, where it stands, where its logs crash or freeze; what it
+  points posters to and joins duplicates to), and the thread with the files it can read named at its top. `sigs.mjs`
+  reads the top three functions of each log's crash (`TRAP`) or freeze (watchdog) stack; the look is told the reports
+  whose logs stop in the same place (two functions in common), so threads join by the bug, not by the exit code.
+  The rules, the notes, the guide and the code's history up to the live version (the same for every look until the
+  next release, or a change to the rules or the notes) are kept an hour in the prompt cache, so a look reads them for
+  a tenth of the price instead of sending them again; the newest commits, which change more often, go with the
+  thread. Claude reads what it needs through the tools, several calls a turn, at most 8 turns, then returns a verdict
+  as JSON: none, ask or answer, and whether to tell the developer. `vet()` drops weak answers and replies that paste code. A new post in a suggestion forum first
   gets a quick pass with Haiku and no tools (`firstPass()`): when it finds nothing for the bot to say, its summary,
   category and tags stand and there is no full look; anything else gets the full look, which writes the reply.
 - `tools.mjs`: what Claude can do. It can search and read the code, read the thread's attachments, look at the git
