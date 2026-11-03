@@ -34,6 +34,7 @@ import { controlsSheet, type ControlsSheet, type Tab } from './controls';
 import { TouchControls } from './touch';
 import { TextField } from './textentry';
 import { PauseHint } from './pausehint';
+import { TitleMark } from './titlemark';
 import { DriftPanel } from './drift';
 import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
@@ -743,6 +744,7 @@ async function startGame() {
   touch.start(session, r.env.NFSU2_FF !== '0');   // Rumble off: no tick under a finger either
   textField.start(session);
   pauseHint.start(session);
+  titleMark.start(session);
   driftPanel.start(session);
   photo.start(session);
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
@@ -926,6 +928,7 @@ let awake: (() => void) | null = null;   // the running game's Wake Lock (displa
 let touch: TouchControls;                // the controls on the game while a finger drives (touch.ts)
 let textField: TextField;               // the field for a phone's keyboard while the game asks for text (textentry.ts)
 let pauseHint: PauseHint;               // the line to the page's menu under the game's pause menu (pausehint.ts)
+let titleMark: TitleMark;               // the site's address under the title screen's copyright (titlemark.ts)
 let driftPanel: DriftPanel;             // free roam's drift mode: its score under the game's Bank panel, a note at F2 (drift.ts)
 let photo: PhotoMode;                   // photo mode: F12 in the world, its panel and its keys (photo.ts)
 
@@ -933,6 +936,7 @@ function endStage() {
   touch.stop();
   textField.stop();
   pauseHint.stop();
+  titleMark.stop();
   driftPanel.stop();
   photo.stop();
   quickChat.stop();
@@ -2148,6 +2152,7 @@ export async function boot() {
     roam: () => roamCollide !== null && !!session?.net?.solid,
     fullscreen: () => canFullscreen() || !fromHomeScreen(),
   });
+  titleMark = new TitleMark($('#stage'));
   driftPanel = new DriftPanel($('#stage'), { toast, wide: () => hudWide, log: logLine });
   photo = new PhotoMode($('#stage'), { shoot: () => screenshot(true), screenshot: () => void screenshot(), log: logLine });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void checkNewer(); vault.shown(); } });

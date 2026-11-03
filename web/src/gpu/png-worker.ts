@@ -5,19 +5,17 @@
 // scaled down by `scale` when it is below 1, with the site's address in its
 // corner when `mark` is set (F12 pictures, unless photo mode's panel turned it off).
 
+import { drawMark, markBox } from './mark';
+
 export interface ToPng { id: number; px: ArrayBuffer; w: number; h: number; bpr: number; scale: number; mark?: boolean }
 export type FromPng = { id: number; png: Blob } | { id: number; error: string };
 
 const post = (m: FromPng) => (self as unknown as Worker).postMessage(m);
 
-/** the address bottom right, bold italic as the game's menus, ".xyz" in their green; 2.6 % of the picture's height */
+/** the address bottom right (mark.ts), 2.6 % of the picture's height */
 function mark(g: OffscreenCanvasRenderingContext2D, w: number, h: number) {
-  const px = Math.max(12, Math.round(h * 0.026)), m = Math.round(h * 0.024), y = h - m;
-  g.font = `italic 700 ${px}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  g.shadowColor = 'rgba(0,0,0,0.65)'; g.shadowBlur = px * 0.3; g.shadowOffsetY = Math.max(1, px * 0.06);
-  const x = w - m - g.measureText('nfsu2.xyz').width;
-  g.fillStyle = 'rgba(255,255,255,0.92)'; g.fillText('nfsu2', x, y);
-  g.fillStyle = '#b8de7d'; g.fillText('.xyz', x + g.measureText('nfsu2').width, y);
+  const px = Math.max(12, Math.round(h * 0.026)), m = Math.round(h * 0.024);
+  drawMark(g, px, w - m - markBox(g, px).w, h - m);
 }
 
 onmessage = async (e: MessageEvent<ToPng>) => {

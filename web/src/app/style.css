@@ -781,6 +781,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   font-size: 14px; line-height: 20px; pointer-events: none;
 }
 /* the game's pause menu: what opens the page's menu, under the game's panel (pausehint.ts places it), as a toast */
+/* the site's address under the title screen's copyright (titlemark.ts): drawn there, placed and faded by the game's status */
+.title-mark { position: absolute; z-index: 1; pointer-events: none; user-select: none; }
 .pause-hint {
   position: absolute; z-index: 3; transform: translateX(-50%); width: max-content;
   padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(0, 0, 0, 0.8);

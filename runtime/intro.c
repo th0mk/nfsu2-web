@@ -228,7 +228,13 @@ void sub_00566020(CPU *c){
  * Enter Key" (string 0xC4DF3FF2, the game's green) with the copyright's
  * alpha: it fades in and out with the copyright.  An object's drawing data (+0x2C):
  * colour (b, g, r, a ints) +0, position +0x1C, size +0x38; a change sets its
- * rebuild flag (+0x1C 0x400000), as FEng's setters do (menusize.c). */
+ * rebuild flag (+0x1C 0x400000), as FEng's setters do (menusize.c).
+ * In the browser the page draws the line instead (web/src/app/titlemark.ts),
+ * in the look of the mark on F12 pictures (bold italic, ".xyz" green, which
+ * the game's font can't do): the game makes no copy there and tells the page
+ * where the copyright is and how far it has faded in, every frame (status
+ * "title_a" its alpha 0..1, 0 off the title; "title_x"/"title_y" its middle
+ * in HUD units; "title_s" its size). */
 const char *autotest_top_fng(void);
 void dispatch_indirect(CPU *c, uint32_t addr);
 uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash);
@@ -245,7 +251,7 @@ uint32_t fe_copy(CPU *c, uint32_t pk, uint32_t o, uint32_t hash);
 #define FN_PKG_FIND   0x00517f80u   /* thiscall package (hash) -> its object, 0: none */
 #define FN_FE_SETSTR  0x00535fe0u   /* thiscall string object (char*): its text */
 
-static struct { uint32_t scr, hash; int off; } g_tl;
+static struct { uint32_t scr, hash; int off, told; } g_tl;
 
 /* a guest function with ecx and stack arguments, the CPU as it was after */
 static uint32_t gcall(CPU *c, uint32_t fn, uint32_t ecx, int n, const uint32_t *arg){
@@ -267,19 +273,55 @@ static uint32_t gstr(uint32_t a, const char *s){
     return a;
 }
 
-void intro_frame(CPU *c){
-    if (g_tl.off) return;
+#ifdef __wasm__
+int host_status_slot(const char *name);
+void host_status_set_n(const int *slot, const double *value, int n);
+/* the copyright as the page draws the line under it (titlemark.ts); a 0 when it is not up */
+static void title_tell(uint32_t o){
+    static int slot[4] = { -2 };
+    static double last[4] = { -1 };
+    if (slot[0] == -2){ slot[0] = host_status_slot("title_a"); slot[1] = host_status_slot("title_x"); slot[2] = host_status_slot("title_y"); slot[3] = host_status_slot("title_s"); }
+    double v[4] = { 0, last[1], last[2], last[3] };
+    if (o){
+        uint32_t d0 = MR32(o + 0x2cu);
+        int32_t a = (int32_t)MR32(d0 + 0xcu);
+        v[0] = a <= 0 ? 0 : a >= 255 ? 1 : a / 255.0;
+        v[1] = MRF32(d0 + 0x1cu); v[2] = MRF32(d0 + 0x20u); v[3] = MRF32(d0 + 0x38u);
+        if (!g_tl.told){
+            g_tl.told = 1;
+            fprintf(stderr, "[intro] title: the page draws \"%s\" under the copyright (y %.1f, size %.2f)\n", TITLE_LINE, v[2], v[3]);
+        }
+    }
+    if (slot[0] < 0 || !memcmp(v, last, sizeof v)) return;
+    memcpy(last, v, sizeof v);
+    host_status_set_n(slot, v, 4);
+}
+#endif
+
+/* the title's copyright while the title screen is up (and its package in *pk), else 0 */
+static uint32_t title_copyright(CPU *c, uint32_t *pk){
+    if (g_tl.off) return 0;
     const char *top = autotest_top_fng();
-    if (!top || strcasecmp(top, TITLE_FNG)) return;
+    if (!top || strcasecmp(top, TITLE_FNG)) return 0;
     if (!g_tl.scr){
         uint32_t n = 64u;
-        if (!(g_tl.scr = gcall(c, FN_NEW, 0, 1, &n))){ g_tl.off = 1; return; }
+        if (!(g_tl.scr = gcall(c, FN_NEW, 0, 1, &n))){ g_tl.off = 1; return 0; }
         uint32_t a = gstr(g_tl.scr, "SITE_ADDRESS_LINE");
         g_tl.hash = gcall(c, FN_FE_HASH, 0, 1, &a);
     }
-    uint32_t a = gstr(g_tl.scr, TITLE_FNG), pk = gcall(c, FN_FE_PACKAGE, 0, 1, &a), h = H_COPYRIGHT;
-    uint32_t o = ok(pk, 0x54) ? gcall(c, FN_PKG_FIND, pk, 1, &h) : 0;
-    if (!ok(o, 0x70) || MR32(o + 0x18u) != 2u || !ok(MR32(o + 0x2cu), 0x40)) return;   /* 2: a string */
+    uint32_t a = gstr(g_tl.scr, TITLE_FNG), h = H_COPYRIGHT;
+    *pk = gcall(c, FN_FE_PACKAGE, 0, 1, &a);
+    uint32_t o = ok(*pk, 0x54) ? gcall(c, FN_PKG_FIND, *pk, 1, &h) : 0;
+    return ok(o, 0x70) && MR32(o + 0x18u) == 2u && ok(MR32(o + 0x2cu), 0x40) ? o : 0;   /* 2: a string */
+}
+
+void intro_frame(CPU *c){
+    uint32_t pk = 0, o = title_copyright(c, &pk), a;
+#ifdef __wasm__
+    title_tell(o);                               /* the page draws the line: no copy */
+    return;
+#endif
+    if (!o) return;
     uint32_t line = gcall(c, FN_PKG_FIND, pk, 1, &g_tl.hash);
     if (!line){
         if (!(line = fe_copy(c, pk, o, g_tl.hash)) || !ok(MR32(line + 0x2cu), 0x40)){
