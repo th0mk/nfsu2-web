@@ -78,6 +78,12 @@ Checked against the guide or the code, and confirmed by players in threads:
   passwords (user name "Cloud saves"), which survive cleared site data. Look in the browser's password manager under
   nfsu2.xyz; a browser with no saves offers them back as the page opens, and the Cloud saves box fills it in for Load.
 - Loading a backup or a PC profile: Saves, Restore (the guide's section 5).
+- "Restoring stopped halfway: … Restore the backup again before playing" with no profiles left, on a page from before
+  the release of 2 November, 22:47 UTC: that restore emptied the save folder first, then wrote the backup's files, so
+  a write the browser refused (any error, `InvalidStateError` in Edge among them) left the folder empty. Not a fault
+  of the newer restore: since 0181d97 it writes the backup beside the save folder and moves it in all or none, so a
+  refused one leaves the saves as they were. Reload the page (Ctrl+F5 on a PC) and restore again. On a version with
+  it, a restore that leaves the profiles empty is new: escalate it with the log and the backup.
 - Progress not saved (often on a phone): a new profile starts on the game's Save = Prompt, whose "save?" question
   after a race opens on No, so tapping through skips the save. Pick Yes there once, or set the game's Options,
   Gameplay, Save (also in the pause menu's Options) to Autosave. The page sets each profile to Autosave by itself at
@@ -120,8 +126,15 @@ Checked against the guide or the code, and confirmed by players in threads:
   `--enable-features=Vulkan --use-angle=vulkan` (2026-11-01).
 - A pad that Windows sees but Controls, Controller does not: close Steam, DS4Windows and other pad software, press a
   button with the page in front, Controller On or Hotplug. If it still shows none, try Edge: on 3 November Opera GX
-  and, on one PC, Chrome never handed a PS5 pad to the page, while Edge did (both players confirmed). The game's own
-  Options, Controls screen lists only the keyboard; the pad's settings are on the page (F9, Controls, Controller).
+  and, on one PC, Chrome never handed a PS5 pad to the page, while Edge did (both players confirmed). The page's own
+  controller settings (Controller On, Hotplug or Off, dead zones, trigger full press, rumble, a wheel's set-up) are in
+  Controls, Controller (the start page, or F9 in the game).
+- Changing a controller's buttons, asked every day ("it only shows the keyboard configuration"): the game's Options,
+  Controls opens on Keyboard Configuration; Up to that title at the top, then Right, shows Joypad Configuration, the
+  controller's own buttons (checked: tests/scripts/pad_controls.txt). The game lists a controller only once it has
+  seen it: press a button on it before opening Controls (Controller On or Hotplug). Its buttons are kept with the
+  profile (leaving Options saves them), and since 5755e96 (live 2 November) through the pad switching itself off and
+  on; the keyboard's keys are kept for every profile.
 - Quick Race's Free Run has no world map in the original game: M does nothing there. The world map is in a career's
   free roam.
 - Turning the car in the garage or a shop: drag with the middle mouse button (the wheel) held, two fingers on a
@@ -159,6 +172,14 @@ Checked against the guide or the code, and confirmed by players in threads:
   part in the shops for every car (above), so that is the answer; the stage-5 unique performance part is only on an
   earlier save (cloud saves' earlier copy, or a backup). The wide body star never shows while driving an SUV (Hummer,
   Navigator, Escalade): switch cars. Show hidden races does not change any of this (stars are not races).
+- The game's outrun challengers (the tuners, grey arrows on the minimap) gone from the whole city, online or not: the
+  original game's limit, not a bug. Each stage offers only so many outruns: none once the stage's outrun wins reach 10
+  in stage 2, 15 in stage 3 and 20 in stages 4 and 5 (checked in the game's code), and none while a unique part's
+  star waits on the map. They come back with the next stage; a poster in stage 5 had them again once Caleb was beaten
+  (thread 1566761182046716045, solved by the poster). Online, also by design and only for a while: none by a race
+  lobby's spot or at a shop's or garage's door, and none during an outrun with another player; they come back as you
+  drive on. Ask the stage and point to Career Status (T or F4); escalate only none anywhere below the stage's limit,
+  with the log.
 - Firefox: when a problem shows only in Firefox (its log has Firefox errors, or Chrome works), Chrome is the browser
   most tested.
 - A phone that stutters or shakes at 60 fps but runs smoothly at 30: its GPU no longer finishes a frame in 16.7 ms,

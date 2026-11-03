@@ -4,7 +4,7 @@ The FAQ the bot posts with /faq (faq.mjs). A push changes the posted message wit
 "label:" right under a question names its button (80 characters at most); without one the question is the label.
 A button keeps working while its label stays the same. #channel-name becomes a link to that channel.
 Answers go to each reader in their Discord language (translated once, kept until the answer changes).
-No small text (-#). Discord takes 40 parts in a message: 6 topics with 18 questions take 38.
+No small text (-#). Discord takes 40 parts in a message: 6 topics with 19 questions take 39.
 -->
 # Frequently asked questions
 Pick a question: only you see the answer.
@@ -101,6 +101,12 @@ label: Controller
 - In Settings, Controller, More controller settings, set **Controller** to **On** or **Hotplug** (not **Off**).
 - Close Steam, DS4Windows and other pad software. Still nothing? Try Edge.
 - Steering wheels work too, without force feedback.
+
+### How do I change my controller's buttons?
+label: Controller buttons
+In the game: **Options**, **Controls**. It opens on Keyboard Configuration: go **Up** to that title at the top, then press **Right** for **Joypad Configuration**, your controller's buttons.
+- Press a button on the controller before you open Controls, or the game doesn't list it.
+- They're kept with your profile: leave Options to save them.
 
 ### Which key does what?
 label: Keys

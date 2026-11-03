@@ -134,8 +134,10 @@ While you drive:
 
 The start page shows these keys under **Controls**, and F9, Controls shows them while you play.
 
-- **Change the keys:** in the game, Options, Controls, and a controller's buttons there too. The horn stays on N (the
-  game has no horn of its own).
+- **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
+  Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
+  button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
+  the keys for every profile. The horn stays on N (the game has no horn of its own).
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
   with your car's Drift tuning from Performance Tuning / Dyno in the crib; the other modes' tuning is back when drift
   mode is off), but your nitrous stays (the drift races have none; X neither empties nor fills it). The camera is the
