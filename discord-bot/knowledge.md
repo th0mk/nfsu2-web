@@ -306,10 +306,12 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   a normal race of their current stage not won yet; sponsor and URL races only when open, SUV races in an SUV;
   never a race of a later stage, a story race or one already won). The winner's career gets the game's own win (the
   race won, its career prize, rep, the stage goes on, a stage's final moves to the next stage); an accepted friend
-  (Friends list) in the same race who finishes gets it too, strangers never. The lobby panel marks with a star whom
+  (Friends list) in the same race who finishes gets it too, and since 8027226 so does a crew-mate (a player in one
+  of their crews), strangers never. Only 1st place counts: 2nd or lower leaves the race on the map to win (Solo
+  still has it); since 8027226 the note after such a race says "Only a win counts in your career". The lobby panel marks with a star whom
   it counts for ("A win counts in your career"); the words over a lobby and on the world map end in "- career". A
   lobby whose race counts for the player who opened it takes only players up to that race's stage and the opener's
-  friends (a later stage's car would win it most of the time); the others see why at the spot, and since 85c39ac no
+  friends (and crew-mates since 8027226; a later stage's car would win it most of the time); the others see why at the spot, and since 85c39ac no
   other lobby opens at that start while it waits (before that they could open their own beside it; a full lobby still
   lets them). A
   URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
