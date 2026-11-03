@@ -158,7 +158,7 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry (0x83A7B0) takes the typing ... */
 #define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */
 #define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
-#define G_PLAYER1      0x008900acu   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player* of player 1, then 2: +4 its car, +0x10 its number, +0x9A4 its HUD */
 #define G_PSET         0x0083aa64u   /* PlayerSettings, 0x28 each: +0x10 the camera view */
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_STYLES       0x00864624u   /* the style table: 0x30 each, +7 the modes' mask */

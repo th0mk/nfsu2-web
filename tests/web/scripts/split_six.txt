@@ -1,0 +1,122 @@
+# Shared-engine six-player acceptance test. Dev URL: save=split-six-test,
+# env=NFSU2_SPLIT_PLAYERS=6, env=NOMOVIES=1, env=NFSU2_NET=off.
+# Current prototype inherits P1/P2 car selections for the extra pairs.
+0 pad connect
++0 localpad 1 connect 1
++0 localpad 2 connect 1
++0 localpad 3 connect 1
++0 localpad 4 connect 1
++0 localpad 5 connect 1
++0 localpad 6 connect 1
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappaduntil A UI_QRModeSelect.fng 150 3000
++200 tappaduntil A UI_QRTrackSelect.fng 150 1500
++200 tappaduntil A UI_QRModeOptions.fng 150 1500
++200 tappaduntil A 2P_PressStart.fng 150 1500
++200 localpad 1 START 1
++30 localpad 1 START 0
++200 tappad A
++200 tappad A
++200 localpad 2 START 1
++30 localpad 2 START 0
++200 tappad A
++200 tappad A
++0 waitmem 0x8654a4 6 6000
++700 dump six_race
++0 expect i:0xd00030 == 6
++0 expect x:0xd00000 != 0
++0 expect x:0xd00004 != 0
++0 expect x:0xd00008 != 0
++0 expect x:0xd0000c != 0
++0 expect x:0xd00010 != 0
++0 expect x:0xd00014 != 0
++0 localpad 1 RT 1
++0 localpad 2 RT 0.6
++0 localpad 3 RT 0.8
++0 localpad 4 RT 0.5
++0 localpad 5 RT 0.9
++0 localpad 6 RT 0.7
++600 dump six_driving
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.8
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.55
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.62
++0 expect f:[[[0xd00008]+4]+0x30]+0x2d4 > 0.75
++0 expect f:[[[0xd00008]+4]+0x30]+0x2d4 < 0.83
++0 expect f:[[[0xd0000c]+4]+0x30]+0x2d4 > 0.45
++0 expect f:[[[0xd0000c]+4]+0x30]+0x2d4 < 0.53
++0 expect f:[[[0xd00010]+4]+0x30]+0x2d4 > 0.85
++0 expect f:[[[0xd00010]+4]+0x30]+0x2d4 < 0.93
++0 expect f:[[[0xd00014]+4]+0x30]+0x2d4 > 0.64
++0 expect f:[[[0xd00014]+4]+0x30]+0x2d4 < 0.73
++0 localpad 1 LX -0.5
++0 localpad 2 LX 0.5
++0 localpad 3 LX -0.5
++0 localpad 4 LX 0.5
++0 localpad 5 LX -0.5
++0 localpad 6 LX 0.5
++120 dump six_steering
++0 expect f:[[[0xd00000]+4]+0x30]+0x2c8 > 0.1
++0 expect f:[[[0xd00004]+4]+0x30]+0x2c8 < -0.1
++0 expect f:[[[0xd00008]+4]+0x30]+0x2c8 > 0.1
++0 expect f:[[[0xd0000c]+4]+0x30]+0x2c8 < -0.1
++0 expect f:[[[0xd00010]+4]+0x30]+0x2c8 > 0.1
++0 expect f:[[[0xd00014]+4]+0x30]+0x2c8 < -0.1
++0 localpad 6 connect 0
++60 expect f:[[[0xd00014]+4]+0x30]+0x2d4 < 0.1
++0 expect f:[[[0xd00010]+4]+0x30]+0x2d4 > 0.3
++0 localpad 6 connect 1
++0 localpad 6 RT 0.7
++60 expect f:[[[0xd00014]+4]+0x30]+0x2d4 > 0.3
++0 localpad 1 connect 0
++0 localpad 2 connect 0
++0 localpad 3 connect 0
++0 localpad 4 connect 0
++0 localpad 5 connect 0
++0 localpad 6 connect 0
++120 dump six_stopped
++0 localpad 1 connect 1
++0 localpad 1 START 1
++30 localpad 1 START 0
++0 waitfng UI_Pause.fng 600
++60 dump six_pause
++0 mark pause1 i:0x86518c
++60 expect i:0x86518c == @pause1
++0 localpad 1 A 1
++30 localpad 1 A 0
++120 dump six_resume
++0 expect i:0x86518c > @pause1
++0 localpad 6 START 1
++30 localpad 6 START 0
++0 waitfng UI_Pause.fng 600
++60 dump six_pause_player6
++0 mark pause6 i:0x86518c
++60 expect i:0x86518c == @pause6
++0 localpad 6 A 1
++30 localpad 6 A 0
++120 dump six_resume_player6
++0 expect i:0x86518c > @pause6
++0 mark before_restart i:[0x890118]+0x14
++0 localpad 1 START 1
++30 localpad 1 START 0
++0 waitfng UI_Pause.fng 600
++120 localpad 1 DRIGHT 1
++10 localpad 1 DRIGHT 0
++60 localpad 1 A 1
++10 localpad 1 A 0
++120 localpad 1 DLEFT 1
++10 localpad 1 DLEFT 0
++60 localpad 1 A 1
++10 localpad 1 A 0
++0 waitmem 0x8654a4 6 4000
++700 dump six_restart
++0 expect i:0xd00030 == 6
++0 expect i:[0x890118] == 4
++0 expect i:[0x890118]+0x14 < @before_restart
++0 localpad 6 RT 1
++240 dump six_restart_player6_driving
++0 expect f:[[[0xd00014]+4]+0x30]+0x2d4 > 0.8
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.1
++0 localpad 6 RT 0
++60 status six_test_end

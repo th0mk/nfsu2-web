@@ -1,0 +1,23 @@
+# Return from mode selection to the chosen count, then Back to main menu.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++100 tappad A
++200 tap RIGHT
++150 tap RIGHT
++150 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++200 dump mode_back_four_mode
++0 tap ESCAPE
++300 dump mode_back_four_count
++0 tap LEFT
++150 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++200 dump mode_back_three_mode
++0 tappad B
++300 dump mode_back_three_count
++0 tap ESCAPE
++250 dump mode_back_main
++0 status mode_back_complete

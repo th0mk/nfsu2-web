@@ -111,7 +111,7 @@ void dispatch_indirect(CPU *c, uint32_t addr);
 #define G_QR_CAR        0x0083aab8u   /* player 1's quick-race / network car handle */
 #define G_QR_CARCAT     0x0083aac0u   /* its car select's category: 4 Career */
 #define G_RACECO        0x008900d8u   /* the race coordinator: +0 its state (4 racing, 6 paused) */
-#define G_PLAYER1       0x008900acu
+#define G_PLAYER1       SPLIT_PLAYERS_INDEX
 #define G_RACETYPE      0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define FN_PAUSE        0x005f4230u   /* thiscall coordinator (the player's +8): pause, UI_Pause */
 #define FN_FE_SEND      0x0055dda0u   /* cdecl (msg, package name): a message to that screen, as the help bar's buttons */

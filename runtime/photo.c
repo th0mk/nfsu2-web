@@ -126,7 +126,7 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define G_NET_ONLINE   0x0089cf69u   /* byte: an online session */
 #define G_NET_CLIENT   0x008669f4u   /* > 0 in a network race */
 #define G_NET_HOST     0x00866a14u
-#define G_PLAYER1      0x008900acu   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_VIEW1        0x00832e50u   /* eView 1: +0x40 its camera (+0x40 position, +0x50 forward, +0xC4 the field of view) */
 #define G_FREEZE       0x00890084u

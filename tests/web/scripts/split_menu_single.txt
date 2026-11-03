@@ -1,0 +1,23 @@
+# Quick Race remains single player after cancelling Split Screen setup.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++200 tappad A
++200 tappad B
++200 dump split_cancel_to_main
++100 tappad DLEFT
++200 tappaduntil A UI_QRModeSelect.fng 150 1500
++100 expect i:0x850078 == 2
++0 tappaduntil A UI_QRTrackSelect.fng 150 1500
++200 tappaduntil A UI_QRModeOptions.fng 150 1500
++200 tappaduntil A UI_QRCarSelect.fng 150 1500
++200 expect i:0x85ad28 == 0
++0 dump quick_race_single_car
++0 tappad A
++200 tappad A
++0 waitmem 0x8654a4 6 5000
++700 dump quick_race_single_view
++0 expect i:0xd00030 == 1
++0 status quick_race_single_complete

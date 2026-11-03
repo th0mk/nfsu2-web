@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
+#include "splitscreen_mem.h"
 
 /* Guest memory base. Guest 32-bit address -> host address in one ARM64 instruction:
  *   ldr w0, [x_base, w_addr, uxtw]        (zero extra cost)              */

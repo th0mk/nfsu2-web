@@ -448,7 +448,7 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
         memcpy(st + k_axis_ofs[a], &v, 4);
     }
     uint32_t showoff_pad(uint32_t b);                  /* showoff.c: D-pad down held while the car stands */
-    uint32_t b = showoff_pad(s->buttons);
+    uint32_t b = MR32(0x850078u) == 4 ? s->buttons : showoff_pad(s->buttons);
     uint32_t pov[4] = { pov_of(!!(b & 1u << PAD_DUP), !!(b & 1u << PAD_DDOWN),
                                !!(b & 1u << PAD_DLEFT), !!(b & 1u << PAD_DRIGHT)),
                         stick_pov(d, s->axis[PAD_AXIS_LX], s->axis[PAD_AXIS_LY]),
@@ -489,6 +489,29 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
 }
 /* look.c: whether the pad has a button on Look Back (else the stick turns the view round to the rear) */
 int pad_look_back_bound(void){ return g_look_back_bound; }
+
+#ifdef __wasm__
+/* Convert a local browser seat using the SAME ranges and button mapping as
+ * the virtual DI pad. Copy Dev so one seat's trigger/POV history never
+ * changes another's. Bindings still run through the guest record converter. */
+int dipad_local_state(unsigned seat, uint8_t out[0x110]){
+    static int pov[6], triggers[6][2];
+    if (seat >= 6) return 0;
+    PadState state;
+    int split_read_local(unsigned, PadState *);
+    if (!split_read_local(seat, &state)) { pov[seat] = 0; memset(triggers[seat], 0, sizeof triggers[seat]); return 0; }
+    Dev *source = 0;
+    for (int i = 0; i < 4; ++i) if (g_dev[i].obj && !g_dev[i].gone && !g_dev[i].wheel){ source = &g_dev[i]; break; }
+    if (!source) return 0;
+    Dev local = *source;
+    local.pov1 = pov[seat];
+    memcpy(local.trig, triggers[seat], sizeof local.trig);
+    fill_state(out, 0x110, &local, &state);
+    pov[seat] = local.pov1;
+    memcpy(triggers[seat], local.trig, sizeof local.trig);
+    return 1;
+}
+#endif
 
 /* ---- front-end keystrokes ----------------------------------------------------------
  * Some front-end input exists only as characters from the window procedure
@@ -833,7 +856,7 @@ static struct { float v[3], t; } g_jh[JOLT_HIST];   /* velocity at world time t 
 static int g_jhn;
 static float g_jolt_age, g_jolt_logt;   /* world seconds since this car appeared; since the last speed line */
 static void ff_jolt(void){
-    uint32_t pl = mem_is_committed(0x8900acu + 3u) ? MR32(0x8900acu) : 0u;
+    uint32_t pl = mem_is_committed(SPLIT_PLAYERS_INDEX + 3u) ? MR32(SPLIT_PLAYERS_INDEX) : 0u;
     uint32_t car = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0u;
     float dt = MRF32(0x865154u);
     if (MR32(0x8654a4u) != 6u || !car || !mem_is_committed(car + 0x7bu)){ g_jolt_car = 0; g_jolt = 0; return; }
@@ -1066,6 +1089,8 @@ void dipad_effect_free(uint32_t obj){
 uint32_t dipad_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint32_t *a){
     Dev *d = dev_of(self, 1);
     PadState s; gamepad_read(&s);
+    int split_menu_pad(PadState *);
+    split_menu_pad(&s);
     /* a controller of the other kind drives the pad (a wheel, and this is the
      * pad, or back): this device makes way for one of that kind */
     int other = s.connected && !!s.wheel != d->wheel;
@@ -1257,6 +1282,7 @@ void sub_00407750(CPU *c){
 #define WHEEL_STEERS 0.02f               /* |LX| from which the wheel is turned */
 void sub_005c1000_orig(CPU *c);
 void sub_005c1000(CPU *c){
+    if (MR32(c->esp + 4) >= 2){ c->eax = 0; c->zf = 1; POP32(c->eip); return; }
     uint32_t ret = MR32(c->esp);
     sub_005c1000_orig(c);
     if (ret != 0x0041dfeau || !(c->eax & 0xffu)) return;

@@ -773,6 +773,7 @@ static void rs_apply(void){
 static uint64_t g_rt_set=0, g_rt_screen=0;
 static uint64_t g_rt_tex=0;
 static uint32_t g_bb_w = 1280, g_bb_h = 720;   /* back buffer size */
+void com_backbuffer_size(unsigned *w, unsigned *h){ *w = g_bb_w; *h = g_bb_h; }
 /* Cube textures share the IDirect3DTexture9 vtable.  v12na: the cube
  * flag lives in the object header (CF_CUBE).  The old address bitmap was
  * only valid while COM memory was never reused, and that table had to be
@@ -3350,6 +3351,12 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t ss=A(c,1), ds=A(c,3);
             uint32_t stex = (ss && mem_is_committed(ss+31)) ? MR32(ss+28) : 0u;
             uint32_t dtex = (ds && mem_is_committed(ds+31)) ? MR32(ds+28) : 0u;
+#ifdef __wasm__
+            /* Cube surfaces share a texture id; preserve the selected face
+             * in the ordered copy record, as SetRenderTarget already does. */
+            if (stex && ss && mem_is_committed(ss+47)) stex |= (MR32(ss+44) & 7u) << 16;
+            if (dtex && ds && mem_is_committed(ds+47)) dtex |= (MR32(ds+44) & 7u) << 16;
+#endif
             if (ENVC("BLITLOG")){
                 static int nb2=0;
                 if (nb2 < 8){ nb2++;
@@ -3378,6 +3385,10 @@ int com_call(CPU *c, uint32_t magic){
                 }
                 srq = sr;
             }
+#ifdef __wasm__
+            int split_blur_region(uint32_t, uint32_t, uint32_t, uint32_t, int *);
+            if (!srp && !A(c,4) && split_blur_region(A(c,0), ss, ds, A(c,5), sr)) srq = sr;
+#endif
             if (metal_available() && (stex || dtex) && stex != dtex){
                 void metal_blit_rect(unsigned,unsigned,const int*);
                 metal_blit_rect(stex, dtex, srq);
@@ -3409,6 +3420,11 @@ int com_call(CPU *c, uint32_t magic){
                 uint32_t face = (surf && mem_is_committed(surf+47)) ? MR32(surf+44) : 0u;
                 g_cur_rt = tid;
                 metal_set_render_target(tid | ((face & 7u) << 16));
+#ifdef __wasm__
+                { uint32_t region[4]; int split_backbuffer_region(uint32_t, uint32_t[4]);
+                  void web_set_viewport(unsigned, unsigned, unsigned, unsigned, float, float);
+                  if (split_backbuffer_region(surf, region)) web_set_viewport(region[0], region[1], region[2], region[3], 0.f, 1.f); }
+#endif
                 if (tid) g_rt_set++; else g_rt_screen++;
             }
             r=0; }
@@ -3436,6 +3452,20 @@ int com_call(CPU *c, uint32_t magic){
         else if (MID(SetViewport)){
             static int nv2=0;
             uint32_t vp2=A(c,1);
+#ifdef __wasm__
+            if (vp2 && mem_is_committed(vp2 + 23)){
+                void web_set_viewport(unsigned, unsigned, unsigned, unsigned, float, float);
+                int split_backbuffer_region(uint32_t, uint32_t[4]);
+                uint32_t region[4];
+                if (!MR32(vp2) && !MR32(vp2+4) && split_backbuffer_region(g_bind_rt[0], region))
+                    web_set_viewport(region[0], region[1], region[2], region[3], MRF32(vp2+16), MRF32(vp2+20));
+                /* The existing widescreen port uses a virtual 4:3 guest
+                 * viewport (e.g. 1280x960 on a 1280x720 target). Its shaders
+                 * already apply that correction. Only split cells describe
+                 * physical target pixels; ordinary views fill their target. */
+                else web_set_viewport(0, 0, 0, 0, 0.f, 1.f);
+            }
+#endif
             if (ENVC("XFORM") && nv2<6 && vp2 && mem_is_committed(vp2+23)){ nv2++;
                 fprintf(stderr,"  [SetViewport] x=%u y=%u g=%u y=%u minZ=%.3f maxZ=%.3f\n",
                         MR32(vp2), MR32(vp2+4), MR32(vp2+8), MR32(vp2+12),
@@ -3982,6 +4012,7 @@ int com_call(CPU *c, uint32_t magic){
             if (!sf){ if(pp) MR32(pp)=0; r=0x8007000Eu; goto surf_done; }
             com_addref(self0);
             MR32(sf+40)=2;
+            MR32(sf+44)=cube3 ? face3 + 1u : 0u;
             uint32_t self=A(c,0);
             if (self && mem_is_committed(self+31)){
                 MR32(sf+4)=MR32(self+4); MR32(sf+8)=MR32(self+8);

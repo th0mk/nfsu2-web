@@ -45,6 +45,7 @@ import {
   shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
 } from './wheel';
 import { eightBitDoFace, HidPadReader } from './hidpad';
+import { LocalPadWriter } from './local-pads';
 
 export interface PadSnapshot { connected: boolean; buttons: number; axes: number[]; family: number; name: string; index: number; wheel?: boolean }
 
@@ -238,6 +239,7 @@ function stickDirs(x: number, y: number, prev: number): number {
 }
 
 export class PadPoller {
+  private localPads: LocalPadWriter | null;
   private order: number[] = [];            // controller indices in connection order
   private last: PadSnapshot | null = null;
   private f32 = new Float32Array(1);
@@ -296,6 +298,7 @@ export class PadPoller {
               private onPress: () => void, private log: (s: string) => void, private onUse?: () => void,
               private page?: PadPage) {
     this.h = h; this.u8 = u8;
+    this.localPads = new LocalPadWriter(u8.buffer, base);
     addEventListener('gamepadconnected', this.onConnect);
     addEventListener('gamepaddisconnected', this.onDisconnect);
     addEventListener(WHEEL_MAP_EVENT, this.onWheelMap);
@@ -308,6 +311,7 @@ export class PadPoller {
     removeEventListener(WHEEL_MAP_EVENT, this.onWheelMap);
     this.rumble(null);
     this.h = null; this.u8 = null;
+    this.localPads = null;
     if (driver) { driver = null; dispatchEvent(new Event(PAD_DRIVER_EVENT)); }
   }
 
@@ -348,6 +352,7 @@ export class PadPoller {
     const both = this.touch ? withTouch(s, this.touch) : s;
     if (this.touch && !g) this.buzz();
     const out = this.page ? this.forPage(both, pressed) : both;
+    this.localPads?.poll(pads, mapStandard, !!globalThis.document?.hidden || !!this.page?.dialog());
     if (this.same(out)) return;
     this.publish(out, !this.last || this.last.connected !== out.connected || this.last.index !== out.index || this.last.name !== out.name);
     this.last = out;

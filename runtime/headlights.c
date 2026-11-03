@@ -60,7 +60,7 @@ int photo_hides(uint32_t ri);                    /* photo.c: a car photo mode do
 #define LIT_CB       0x00488b90u   /* 0x5D6D20's callback that marks a solid lit */
 #define HL_ENABLE    0x00870cc4u   /* g_CarHeadlightEnable */
 #define HL_BIAS      0x0080052cu   /* B: x, y offsets after the projection */
-#define G_PLAYERS    0x008900b4u   /* Player*[]: +4 car (0x5BDAA0 takes the colour from [0]) */
+#define G_PLAYERS    SPLIT_PLAYERS_ORDER   /* Player*[]: +4 car (0x5BDAA0 takes the colour from [0]) */
 #define G_WORLD      0x00890080u   /* World*: its car list (car +0 next) has the World as head and end */
 #define G_GAMEMODE   0x00850078u   /* 8 online, 0x200 LAN */
 #define GM_NETWORK   0x208u
@@ -197,7 +197,10 @@ void headlights_vs_ramp(float s, float o){ g_ramp[0] = s; g_ramp[1] = o; }
 static void make_lights(void){
     g_n = 0;
     memset(&g_blk, 0, sizeof g_blk);
-    uint32_t pl = MR32(G_PLAYERS), me = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0, w = MR32(G_WORLD);
+    uint32_t split_render_player(void);
+    uint32_t pl = split_render_player();
+    if (!pl) pl = MR32(G_PLAYERS);
+    uint32_t me = pl && mem_is_committed(pl + 7u) ? MR32(pl + 4u) : 0, w = MR32(G_WORLD);
     if (!g_have_vp9 || !car_ok(me) || !w || !mem_is_committed(w + 3u)) goto out;
     M4 Cp, B = {{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}}, M, Mi;
     car_m4(me, &Cp);

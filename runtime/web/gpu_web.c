@@ -598,7 +598,12 @@ void metal_set_fog(unsigned enable, unsigned argb){
     g_cur_fog[2] = (float)( argb        & 0xFFu) / 255.0f;
     g_cur_fog[3] = enable ? 1.0f : 0.0f;
 }
-void metal_set_render_target(unsigned t){ g_cur_target = t; }
+static float g_viewport[6];
+void web_set_viewport(unsigned x, unsigned y, unsigned w, unsigned h, float z0, float z1){
+    g_viewport[0] = x; g_viewport[1] = y; g_viewport[2] = w; g_viewport[3] = h;
+    g_viewport[4] = z0; g_viewport[5] = z1;
+}
+void metal_set_render_target(unsigned t){ g_cur_target = t; memset(g_viewport, 0, sizeof g_viewport); }
 void metal_set_samplers(const unsigned k[4]){ for (int i = 0; i < 4; i++) g_cur_smp[i] = k[i]; }
 void metal_set_stage_tex(unsigned a, unsigned b, unsigned c3){ g_cur_tex1 = a; g_cur_tex2 = b; g_cur_tex3 = c3; }
 void metal_set_ps(int id, const float *c32){
@@ -685,10 +690,14 @@ static void smp_eff(unsigned tex, uint32_t out[4]){
     }
 }
 /* the record every draw shares: state at the time of the call */
+static unsigned g_hloff = GW_K_HL;
 static GwDraw *rec_draw(Buf *B, unsigned tex){
     GwDraw *D = &B->d[B->dn];
     memset(D, 0, sizeof *D);        /* slots are reused across frames (see metal.m's is_blit story) */
     D->kind = GW_DRAW; D->tex = tex; D->target = g_cur_target;
+    D->blit_src = g_hloff;
+    uint32_t region[2]; int split_effect_region(uint32_t *);
+    if (split_effect_region(region)){ D->clr_argb = region[0]; D->clr_flags = region[1]; }
     D->blend = g_cur_blend; D->aref = g_cur_aref; D->depth = g_cur_depth;
     D->tex1 = g_cur_tex1; D->tex2 = g_cur_tex2; D->tex3 = g_cur_tex3;
     D->ps = ps_of(tex); D->psci = psc_put(B);
@@ -697,6 +706,7 @@ static GwDraw *rec_draw(Buf *B, unsigned tex){
     D->bcol = g_cur_bcol; D->cull = g_cur_cull;
     memcpy(D->fogv, g_cur_fog, sizeof D->fogv);
     D->clip = g_cur_clip;
+    memcpy(D->viewport, g_viewport, sizeof D->viewport);
     return D;
 }
 void metal_draw_tv(const TVert *src, unsigned nverts, unsigned prim, unsigned tex){
@@ -767,6 +777,9 @@ static GwDraw *raw_merge(Buf *B, unsigned stride, unsigned tex, int vsid, const 
     if (g_merge < 0){ const char *e = getenv("GW_MERGE"); g_merge = e ? atoi(e) != 0 : 1; }
     if (!g_merge || !B->dn) return NULL;
     GwDraw *P = &B->d[B->dn - 1];
+    uint32_t region[2] = {0, 0}; int split_effect_region(uint32_t *);
+    split_effect_region(region);
+    if (P->clr_argb != region[0] || P->clr_flags != region[1]) return NULL;
     if (P->kind != GW_DRAW || P->vsid != vsid || P->ix_isz || P->koff != B->last_koff || P->ksz != 16u + nk * 16u
         || B->last_vs != vsid || P->rawoff + P->count * stride != B->rvn || B->rvn + need > MAXRV) return NULL;
     const uint32_t *h = (const uint32_t *)(B->kb + P->koff);
@@ -778,7 +791,8 @@ static GwDraw *raw_merge(Buf *B, unsigned stride, unsigned tex, int vsid, const 
         || P->depth != g_cur_depth || P->tex1 != g_cur_tex1 || P->tex2 != g_cur_tex2 || P->tex3 != g_cur_tex3
         || P->ps != ps_of(tex) || P->psci != psc_put(B) || memcmp(P->proj, g_cur_proj, sizeof P->proj)
         || memcmp(P->smp, smp, sizeof P->smp) || P->bcol != g_cur_bcol || P->cull != g_cur_cull
-        || memcmp(P->fogv, g_cur_fog, sizeof P->fogv) || P->clip != g_cur_clip) return NULL;
+        || memcmp(P->fogv, g_cur_fog, sizeof P->fogv) || P->clip != g_cur_clip
+        || P->blit_src != g_hloff || memcmp(P->viewport, g_viewport, sizeof g_viewport)) return NULL;
     g_merged++;
     return P;
 }
@@ -859,6 +873,7 @@ void metal_clear_target_ex(unsigned argb, unsigned flags, float z){
     memset(D, 0, sizeof *D);
     D->kind = GW_CLEAR; D->target = g_cur_target; D->clr_argb = argb; D->clr_flags = flags; D->clr_z = z;
     D->depth = g_cur_depth;
+    memcpy(D->viewport, g_viewport, sizeof D->viewport);
 }
 void metal_clear_target(unsigned argb){ metal_clear_target_ex(argb, 1u, 1.f); }
 
@@ -959,7 +974,12 @@ static void vsync_feed(void){
 /* runtime/headlights.c: the other cars' headlights for the frame being recorded */
 void gw_headlights(const GwHL *blk){
     if (!g_on || !blk) return;
-    memcpy(g_b[g_cur].kb + GW_K_HL, blk, sizeof *blk);
+    Buf *B = &g_b[g_cur];
+    if (!memcmp(B->kb + g_hloff, blk, sizeof *blk)) return;
+    unsigned off = (B->kn + 255u) & ~255u;
+    if (off + sizeof *blk > MAXKB){ g_ov_kb++; g_hloff = GW_K_HL; return; }
+    memcpy(B->kb + off, blk, sizeof *blk);
+    B->kn = off + sizeof *blk; g_hloff = off;
 }
 /* roam_game.c (through roam_web.c): quick chat's places over the cars for the frame being recorded */
 void gw_marks(const GwMark *m, int n){
@@ -1057,6 +1077,7 @@ static void handoff(uint32_t rb_id, uint32_t rb_tex, uint32_t rb_dst, uint32_t r
     Buf *N = &g_b[g_cur];
     N->dn = N->vn = N->rvn = N->pscn = 0; N->kn = KFIRST; N->last_ksz = 0;
     ((GwHL *)(N->kb + GW_K_HL))->n = 0;           /* no other cars' headlights until headlights.c sets them */
+    g_hloff = GW_K_HL;
     ((GwMarks *)(N->kb + GW_K_MARKS))->n = 0;     /* nor quick chat's places until roam_game.c does */
     g_frame_clear = g_clear_argb;
 }

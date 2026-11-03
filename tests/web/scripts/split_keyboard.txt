@@ -1,0 +1,58 @@
+# Mixed keyboard/controller regression; keyboard occupies seat 1, first pad seat 2.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++200 tappad A
++200 tappad A
++0 waitfng UI_QRModeSelect.fng 2000
++100 tappaduntil A UI_QRTrackSelect.fng 150 1500
++100 tappaduntil A UI_QRModeOptions.fng 150 1500
++100 tappaduntil A 2P_PressStart.fng 150 1500
++150 down RETURN
++20 up RETURN
++150 dump keyboard_car_select
++0 tap RETURN
++200 tap RETURN
++200 dump keyboard_second_join
++0 localpad 1 connect 1
++30 localpad 1 START 1
++20 localpad 1 START 0
++100 localpad 1 DRIGHT 1
++8 localpad 1 DRIGHT 0
++150 localpad 1 A 1
++8 localpad 1 A 0
++150 localpad 1 A 1
++8 localpad 1 A 0
++0 waitmem 0x8654a4 6 6000
++700 dump split_keyboard_lights
++0 expect i:0xd00030 == 2
++0 expect i:[[[0xd00000]+4]+0x10] == 0
++0 expect i:[[[0xd00004]+4]+0x10] == 1
++0 down W
++100 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0 up W
++30 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0 down UP
++0 localpad 1 RT 0.6
++300 dump split_keyboard_driving
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.5
++0 up UP
++0 localpad 1 RT 0
++30 dump split_keyboard_released
+# Exercise streak-only composite as well as the default overbright path.
++0 poke 0x870cfc 0
++180 dump split_keyboard_streaks_only
++0 poke 0x870cfc 1
++180 dump split_keyboard_bloom_restored
++0 status split_keyboard_complete
+# Losing the legacy controller must not disable the keyboard's input converter.
++0 pad disconnect
++30 down W
++100 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0 up W
++30 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0 status split_keyboard_unplug_complete

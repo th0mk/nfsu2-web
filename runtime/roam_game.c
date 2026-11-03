@@ -110,7 +110,7 @@
 #define G_FLOW          0x008654a4u   /* GameFlowManager state: 3 front end, 6 in the world */
 #define G_GAMEMODE      0x00850078u   /* 1 career, 0x200 LAN */
 #define G_WORLD         0x00890080u   /* World*: +0x10 cars, +0x14/+0x18 AI range, +0x1C cars[] */
-#define G_PLAYER1       0x008900acu   /* Player*: +4 car */
+#define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* Player*: +4 car */
 #define G_HOTPOS        0x00890140u   /* the hot-position jump (Player 0x600E10 -> Car 0x5FBD60): where, */
 #define G_HOTPOS_ANGLE  0x008900d0u   /* ...the heading (u16), */
 #define G_HOTPOS_JUMP   0x008900cdu   /* ...1: jump there (the player's next update), */

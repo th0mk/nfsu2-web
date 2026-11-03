@@ -11,8 +11,8 @@
 //   - every Z surface is depth32float, created at the size of the first target
 //     it is used with (the implicit one follows the screen); a size mismatch
 //     binds a scratch depth and turns the Z test off;
-//   - no viewport (com.c ignores SetViewport), full-target passes; a scissor only
-//     for the 2D UI's 4:3 band on a screen narrower than 4:3 (GwDraw.clip);
+//   - draw viewports follow Direct3D; a scissor also keeps the 2D UI in its
+//     4:3 band on a screen narrower than 4:3 (GwDraw.clip);
 //   - StretchRect: a copy when size and format match, else a scaled quad; from a
 //     source rectangle (the cover shoot's picture) always a scaled quad, opaque from
 //     the screen (the D3D back buffer has no alpha).
@@ -25,6 +25,7 @@ import { D, F, Kind, Op } from './proto';
 import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE } from './shader-abi';
 import { unpackDxt } from './dxt';
+import { drawViewport, drawScissor, type Viewport } from './viewport';
 import { dxt1HasPunch, dxt1ToAstc } from './astc';
 
 export interface EncodeStats {
@@ -63,6 +64,29 @@ const CMP: GPUCompareFunction[] = ['always', 'never', 'less', 'equal', 'less-equ
 const ADDR: GPUAddressMode[] = ['repeat', 'repeat', 'mirror-repeat', 'clamp-to-edge', 'clamp-to-edge', 'mirror-repeat'];
 
 export class Encoder {
+  private regionClearPipes = new Map<string, GPURenderPipeline>();
+  /** Attachment clears ignore viewports. A triangle clears only this player's
+   * pixels and preserves the colour/depth belonging to the other players. */
+  private regionClearPipe(flags: number, argb: number, z: number): GPURenderPipeline {
+    const key = `${flags & 3}:${argb}:${z}`;
+    let pipe = this.regionClearPipes.get(key);
+    if (pipe) return pipe;
+    const rgba = [(argb >>> 16 & 255) / 255, (argb >>> 8 & 255) / 255, (argb & 255) / 255, (argb >>> 24) / 255];
+    const module = this.device.createShaderModule({ label: 'split region clear', code: `
+      @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+        let xy = array<vec2f, 3>(vec2f(-1., -1.), vec2f(3., -1.), vec2f(-1., 3.));
+        return vec4f(xy[i], ${z.toFixed(9)}, 1.);
+      }
+      @fragment fn fs() -> @location(0) vec4f { return vec4f(${rgba.map(v => v.toFixed(9)).join(',')}); }
+    ` });
+    pipe = this.device.createRenderPipeline({ label: 'split region clear', layout: 'auto',
+      vertex: { module, entryPoint: 'vs' }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'bgra8unorm', writeMask: flags & 1 ? 15 : 0 }] },
+      primitive: { topology: 'triangle-list' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: !!(flags & 2), depthCompare: 'always' },
+    });
+    this.regionClearPipes.set(key, pipe);
+    return pipe;
+  }
   readonly device: GPUDevice;
   private queue: GPUQueue;
   private memory: WebAssembly.Memory;
@@ -95,7 +119,7 @@ export class Encoder {
   // per-draw scratch, reused so that a draw allocates nothing: group 0's dynamic
   // offsets, and the group 1 tuple of the previous draw (cube, 4 texture serials,
   // 4 sampler keys; [0] = -1 when the pass has none bound yet)
-  private dyn = new Uint32Array(2);
+  private dyn = new Uint32Array(3);
   private b1 = new Int32Array(9);
 
   // layouts and built-in pipelines
@@ -559,7 +583,7 @@ export class Encoder {
         { binding: 1, resource: { buffer: this.kBuf, size: KWIN_SIZE } },
         { binding: 2, resource: { buffer: this.pBuf, size: PSPAR_BYTES } },
         // the frame's other cars' headlights, in its VS constant arena (gpu_proto.h GwHL)
-        { binding: 3, resource: { buffer: this.kBuf, offset: P.K_HL, size: HLPAR_SIZE } }] });
+        { binding: 3, resource: { buffer: this.kBuf, size: HLPAR_SIZE } }] });
       this.bg0[src] = g;
     }
     return g;
@@ -650,7 +674,8 @@ export class Encoder {
     let clearArgb = u32[fw + F.clearArgb];
     let cPipe: GPURenderPipeline | null = null, cSrc = -1, cK = -1, cP = -1, cBcol = -1, cIx = '';
     // the pass's size, and the scissor in effect in it (a GwDraw.clip value; 0 = the whole target)
-    let passW = 0, passH = 0, cClip = 0;
+    let passW = 0, passH = 0, cH = -1;
+    let currentViewport: Viewport | null = null;
     // the previous draw's pipeline (pipelines outlive passes, so this survives a pass change)
     let lastKey = -1, lastPipe: GPURenderPipeline | null | undefined;
     const b1 = this.b1, dyn = this.dyn;
@@ -668,6 +693,7 @@ export class Encoder {
         w = t.w; h = t.h; key = (target & 0xFFFF) * 8 + face; passCube = target & 0xFFFF;
       }
       passW = w; passH = h;
+      currentViewport = null;
       passKey = target ? (target & 0xFFFF) : -1;
       const first = key === -1 ? !screenTouched : !touched.has(key);
       let zv: GPUTextureView | undefined, zclear = false, zval = 1;
@@ -696,7 +722,7 @@ export class Encoder {
       if (key === -1) screenTouched = true; else touched.add(key);
       passes++; this.calls.pass++;
       if (tr) tr.push(`  pass ${passes}: ${target ? `tex ${target & 0xFFFF}${(target >>> 16) ? ` face ${(target >>> 16) - 1}` : ''}` : 'SCREEN'} ${w}x${h} color ${first ? `clear ${c.toString(16)}` : 'load'}, z ${zv ? `zid ${zid} ${zclear ? `clear ${zval}` : 'load'}` : `none (zid ${zid})`}`);
-      cPipe = null; cSrc = -1; cK = -1; cP = -1; b1[0] = -1; cBcol = -1; cIx = ''; cClip = 0;
+      cPipe = null; cSrc = -1; cK = -1; cP = -1; b1[0] = -1; cBcol = -1; cIx = ''; cH = -1;
       return p;
     };
 
@@ -705,18 +731,20 @@ export class Encoder {
       const kind = u32[w + D.kind];
       if (kind === Kind.Blit) {
         const sid = u32[w + D.blitSrc], tgt = u32[w + D.target];
-        const st = sid ? this.tex[sid] : null, dt = tgt ? this.tex[tgt & 0xFFFF] : null;
+        const st = sid ? this.tex[sid & 0xFFFF] : null, dt = tgt ? this.tex[tgt & 0xFFFF] : null;
+        // Packed surface faces use 1..6; zero denotes an ordinary 2D target.
+        const sf = Math.max(0, ((sid >>> 16) & 7) - 1), df = Math.max(0, ((tgt >>> 16) & 7) - 1);
         const sTex = sid ? st?.tex : this.screen!, dTex = tgt ? dt?.tex : this.screen!;
         const r0 = u32[w + D.first], r1 = u32[w + D.count];   // a source rectangle (r1 0: the whole source)
         if (tr) tr.push(`  #${i} blit ${sid || 'SCREEN'}${r1 ? ` (${r0 & 0xFFFF},${r0 >>> 16})-(${r1 & 0xFFFF},${r1 >>> 16})` : ''} -> ${tgt ? tgt & 0xFFFF : 'SCREEN'}${!sTex || !dTex ? ' (missing: skipped)' : ''}`);
         if (!sTex || !dTex || sTex === dTex || (tgt && !dt!.rt)) { skipped++; continue; }
         endPass(); curT = -1; curZ = -1;
         if (r1 && this.blitRect(enc, sTex, r0, r1, tgt ? dt!.rtViews[0] : this.screenView!, !sid)) passes++;
-        else if (sTex.width === dTex.width && sTex.height === dTex.height && sTex.format === dTex.format && sTex.depthOrArrayLayers === 1 && dTex.depthOrArrayLayers === 1)
-          { enc.copyTextureToTexture({ texture: sTex }, { texture: dTex }, [sTex.width, sTex.height, 1]); this.calls.copy++; }
+        else if (sTex.width === dTex.width && sTex.height === dTex.height && sTex.format === dTex.format && sf < sTex.depthOrArrayLayers && df < dTex.depthOrArrayLayers)
+          { enc.copyTextureToTexture({ texture: sTex, origin: [0, 0, sf] }, { texture: dTex, origin: [0, 0, df] }, [sTex.width, sTex.height, 1]); this.calls.copy++; }
         else {
-          const sv = sid ? (st!.cube ? st!.face0 ??= st!.tex.createView({ dimension: '2d', baseArrayLayer: 0, arrayLayerCount: 1, baseMipLevel: 0, mipLevelCount: 1 }) : st!.view) : this.screenView!;
-          const dv = tgt ? dt!.rtViews[0] : this.screenView!;
+          const sv = sid ? (st!.cube ? st!.tex.createView({ dimension: '2d', baseArrayLayer: sf, arrayLayerCount: 1, baseMipLevel: 0, mipLevelCount: 1 }) : st!.view) : this.screenView!;
+          const dv = tgt ? dt!.rtViews[df] : this.screenView!;
           this.copyQuad(enc, sv, dv, 'bgra8unorm', this.linear);
           passes++;
         }
@@ -724,6 +752,19 @@ export class Encoder {
         continue;
       }
       const depth = u32[w + D.depth], zid = depth >>> 8, target = u32[w + D.target];
+      if (kind === Kind.Clear && f32[w + D.viewport + 2] > 0) {
+        endPass(); curT = target; curZ = zid;
+        pass = openPass(target, zid);
+        const vp = drawViewport(f32, w + D.viewport, passW, passH);
+        const z = f32[w + D.clrZ], flags = u32[w + D.clrFlags];
+        if (pass && vp && Number.isFinite(z) && (flags & 3)) {
+          pass.setViewport(vp[0], vp[1], vp[2], vp[3], 0, 1);
+          pass.setPipeline(this.regionClearPipe(flags, u32[w + D.clrArgb], Math.max(0, Math.min(1, z))));
+          pass.draw(3);
+        }
+        endPass(); curT = -1;
+        continue;
+      }
       if (kind === Kind.Clear) {
         const fl = u32[w + D.clrFlags];
         if (tr) tr.push(`  #${i} clear flags ${fl} argb ${u32[w + D.clrArgb].toString(16)} z ${f32[w + D.clrZ]} target ${target & 0xFFFF} zid ${zid}`);
@@ -744,6 +785,12 @@ export class Encoder {
       const count = u32[w + D.count];
       if (!pass || !count) { if (tr) tr.push(`  #${i} draw skipped: ${pass ? 'no vertices' : 'no pass (target missing)'}`); skipped++; continue; }
       const p: GPURenderPassEncoder = pass;
+      const viewport = drawViewport(f32, w + D.viewport, passW, passH);
+      if (!viewport) { skipped++; continue; }
+      if (!currentViewport || viewport.some((v, i) => v !== currentViewport![i])) {
+        p.setViewport(...viewport);
+        currentViewport = viewport;
+      }
 
       // pipeline
       const psid = i32[w + D.ps], vsid = i32[w + D.vsid];
@@ -764,11 +811,10 @@ export class Encoder {
       // the 2D UI on a screen narrower than 4:3 stays in its 4:3 band (gpu_proto.h GwDraw.clip), on the
       // back buffer or a target of its size
       const clip = passW === bbW && passH === bbH ? u32[w + D.clip] : 0;
-      if (clip !== cClip) {
-        const y0 = Math.min(clip & 0xFFFF, passH), y1 = Math.min(clip >>> 16, passH);
-        if (clip) p.setScissorRect(0, y0, passW, Math.max(0, y1 - y0)); else p.setScissorRect(0, 0, passW, passH);
-        cClip = clip;
-      }
+      // A viewport transforms coordinates; explicitly restrict rasterization
+      // too. Screen-space quads and light sprites must stay in their cell.
+      const fx0 = u32[w + D.clrArgb], fx1 = u32[w + D.clrFlags];
+      p.setScissorRect(...drawScissor(viewport, passW, passH, clip, fx0, fx1));
 
       // PS parameters: a new slot only when they differ from the previous draw's
       const psci = u32[w + D.psci];
@@ -790,11 +836,12 @@ export class Encoder {
       const isz = u32[w + D.ixIsz];
       const src = isz ? Src.Pool : vsid > 0 ? Src.Raw : Src.TVert;
       const koff = vsid > 0 ? u32[w + D.koff] : -1;
-      if (src !== cSrc || poff !== cP || (koff >= 0 && (cK < 0 || koff < cK || koff - cK > KWIN_SIZE - VSPAR_SIZE))) {
+      const hoff = u32[w + D.blitSrc];
+      if (src !== cSrc || poff !== cP || hoff !== cH || (koff >= 0 && (cK < 0 || koff < cK || koff - cK > KWIN_SIZE - VSPAR_SIZE))) {
         // the window starts at this draw's block (256-aligned below it); TVert draws read no K
         if (koff >= 0) cK = koff & ~255; else if (cK < 0) cK = 0;
-        dyn[0] = cK; dyn[1] = poff;
-        p.setBindGroup(0, this.group0(src), dyn, 0, 2); cSrc = src; cP = poff; this.calls.bg0++;
+        dyn[0] = cK; dyn[1] = poff; dyn[2] = hoff;
+        p.setBindGroup(0, this.group0(src), dyn, 0, 3); cSrc = src; cP = poff; cH = hoff; this.calls.bg0++;
       }
       const kb = koff >= 0 ? (koff - cK) >> 4 : 0;
 

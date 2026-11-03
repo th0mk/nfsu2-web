@@ -20,8 +20,7 @@
 #include <stddef.h>
 
 #define GW_MAGIC   0x55504757u          /* "WGPU" */
-#define GW_VERSION 5u                   /* 2: the headlights block in the K arena (GwHL); 3: K blocks 16-byte aligned, bound in windows;
-                                           4: GwDraw.clip; 5: GW_BLIT's source rectangle, a texture read back (GwFrame.rb_*) */
+#define GW_VERSION 7u                   /* 7: immutable per-draw headlights */
 #define GW_NBUF    2                    /* record buffers: one being written, one handed off */
 
 /* GwDraw.kind */
@@ -46,12 +45,12 @@ typedef struct {
     uint32_t koff;        /* VS constant block offset in the K arena (16-byte aligned) */
     float    proj[4];     /* per stage: TEXCOORDINDEX + 16 * projection mode */
     uint32_t smp[4];      /* packed sampler keys (com.c smp_push) */
-    uint32_t blit_src;    /* GW_BLIT: source texture id (0 = back buffer) */
+    uint32_t blit_src;    /* GW_BLIT: source texture id; GW_DRAW: headlight block byte offset */
     uint32_t bcol;        /* D3DRS_BLENDFACTOR (ARGB) */
     uint32_t cull;        /* D3DCULL: 1 none, 2 CW, 3 CCW */
     float    fogv[4];     /* fog colour rgb + enable */
-    uint32_t clr_argb;    /* GW_CLEAR: colour */
-    uint32_t clr_flags;   /* GW_CLEAR: D3DCLEAR_* (1 target, 2 Z, 4 stencil) */
+    uint32_t clr_argb;    /* GW_CLEAR: colour; GW_DRAW: normalized effect clip left|top<<16 */
+    uint32_t clr_flags;   /* GW_CLEAR: D3DCLEAR_*; GW_DRAW: normalized right|bottom<<16 (0 = no clip) */
     float    clr_z;       /* GW_CLEAR: Z value */
     uint32_t ksz;         /* VS constant block size in bytes (16 + 16 * nk) */
     uint32_t ix_isz;      /* indexed draw: index size 2 or 4; 0 = not indexed */
@@ -59,6 +58,7 @@ typedef struct {
     int32_t  ix_base;     /* indexed draw: BaseVertexIndex */
     uint32_t clip;        /* the 2D UI on a screen narrower than 4:3: rows y0 | y1 << 16 of the back buffer
                            * (its 4:3 band), the draw kept between them; 0 = the whole target (com.c) */
+    float viewport[6];   /* x,y,width,height,minZ,maxZ; width=0: full target */
 } GwDraw;
 
 typedef struct {
@@ -239,7 +239,7 @@ typedef struct { uint32_t magic, state, n, target, gen, ack, pad[2]; } GwPhoto;
 /* Layout word: changes whenever a struct above changes shape. */
 #define GW_LAYOUT ((uint32_t)(sizeof(GwDraw) | sizeof(GwFrame) << 8 | (sizeof(GwCtl) & 0xFFF) << 16) ^ (GW_VERSION << 28))
 
-_Static_assert(sizeof(GwDraw) == 156, "GwDraw");
+_Static_assert(sizeof(GwDraw) == 180, "GwDraw");
 _Static_assert(offsetof(GwDraw, kind) == 16 && offsetof(GwDraw, aref) == 24 && offsetof(GwDraw, depth) == 28, "GwDraw a");
 _Static_assert(offsetof(GwDraw, ps) == 44 && offsetof(GwDraw, psci) == 48 && offsetof(GwDraw, vsid) == 52, "GwDraw b");
 _Static_assert(offsetof(GwDraw, rawoff) == 56 && offsetof(GwDraw, koff) == 60 && offsetof(GwDraw, proj) == 64, "GwDraw c");

@@ -481,6 +481,8 @@ void sub_0061e380(CPU *c){
 }
 void hfr_rain_update(CPU *c);          /* framerate.c: sub_0061f120_orig at any frame rate */
 void sub_0061f120(CPU *c){
+    void split_rain_begin(CPU *); void split_rain_end(void);
+    split_rain_begin(c);
     uint32_t rain = c->ecx;
     int fr = force_rain();
     if (fr && rain && mem_is_committed(rain + 0x50a3u))
@@ -488,6 +490,7 @@ void sub_0061f120(CPU *c){
     hfr_rain_update(c);
     if (fr >= 3 && rain && mem_is_committed(rain + 0x50a3u)){
         MRF32(rain + 0x5098u) = 0.0f; MRF32(rain + 0x509cu) = 0.0f; }
+    split_rain_end();
 }
 
 /* --- Force the sky transition (FORCETOD) ----------------------------------

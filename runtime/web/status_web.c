@@ -89,7 +89,7 @@ static void *status_main(void *unused){
  * and 3 keep the gear).  The gearbox itself is no good to read: in a drag
  * race the car's controls (+0x30) become the game's lane steering once it
  * rolls. */
-#define G_PLAYER0    0x008900acu
+#define G_PLAYER0    SPLIT_PLAYERS_INDEX
 #define PL_GEARBOX   0x20u
 #define G_RACE_DRAG  0x0089e7d8u      /* race parameters (discord.c G_RACE) + R_DRAG */
 const char *autotest_top_fng(void);

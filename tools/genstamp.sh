@@ -22,7 +22,7 @@ hooks(){
 }
 sha(){ shasum -a 256 | cut -c1-16; }
 # the lifter: everything that decides gen/all's and gen/server's C
-LIFTER="tools/lift.py tools/lregs.py tools/genall.py tools/inline_hot.txt tools/retpast.txt tools/reloc2.py tools/argcount.py tools/flagabi.py tools/prepare_module.py"
+LIFTER="tools/lift.py tools/split_reloc.py runtime/splitscreen_mem.h tools/lregs.py tools/genall.py tools/inline_hot.txt tools/retpast.txt tools/reloc2.py tools/argcount.py tools/flagabi.py tools/prepare_module.py"
 case "${1:-}" in
   overrides) overrides ;;
   hooks) hooks ;;

@@ -1,0 +1,77 @@
+# Native Split Screen carousel: three players, separate car picks and driving.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 dump split_main_menu
++100 tappad DRIGHT
++200 dump split_menu_selected
++100 tappad A
++200 dump split_player_count
++100 tappad DRIGHT
++100 tappad A
++0 waitfng UI_QRModeSelect.fng 2000
++100 dump split_mode_select
++100 tappaduntil A UI_QRTrackSelect.fng 150 1500
++100 dump split_track_select
++100 tappaduntil A UI_QRModeOptions.fng 150 1500
++100 dump split_race_options
++100 tappaduntil A 2P_PressStart.fng 150 1500
++150 dump split_join_1
++0 localpad 1 connect 1
++30 localpad 1 START 1
++20 localpad 1 START 0
++150 dump split_pick_1
++0 localpad 1 A 1
++8 localpad 1 A 0
++150 localpad 1 A 1
++8 localpad 1 A 0
++150 dump split_join_2
++0 localpad 2 connect 1
++30 localpad 2 START 1
++20 localpad 2 START 0
++100 localpad 2 DRIGHT 1
++8 localpad 2 DRIGHT 0
++150 dump split_pick_2
++0 localpad 2 A 1
++8 localpad 2 A 0
++150 localpad 2 A 1
++8 localpad 2 A 0
++150 dump split_join_3
++0 localpad 3 connect 1
++30 localpad 3 START 1
++20 localpad 3 START 0
++100 localpad 3 DRIGHT 1
++8 localpad 3 DRIGHT 0
++100 localpad 3 DRIGHT 1
++8 localpad 3 DRIGHT 0
++150 dump split_pick_3
++0 localpad 3 A 1
++8 localpad 3 A 0
++150 localpad 3 A 1
++8 localpad 3 A 0
++0 waitmem 0x8654a4 6 6000
++700 dump split_three_selected_cars
++0 expect i:0xd00030 == 3
++0 expect i:[[[0xd00000]+4]+0x10] == 0
++0 expect i:[[[0xd00004]+4]+0x10] == 1
++0 expect i:[[[0xd00008]+4]+0x10] == 2
++0 localpad 1 RT 1
++0 localpad 2 RT 0
++0 localpad 3 RT 0
++0 localpad 1 LT 0
++600 dump split_effects_only_p1
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0 expect f:[[[0xd00008]+4]+0x30]+0x2d4 < 0.01
++0 localpad 1 RT 0
++0 localpad 1 RB 1
++0 localpad 3 RT 1
++600 dump split_effects_only_p3
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0 expect f:[[[0xd00008]+4]+0x30]+0x2d4 > 0.9
++0 localpad 3 RT 0
++0 localpad 3 RB 1
++300 dump split_effects_idle
++0 status split_effects_complete
+

@@ -180,7 +180,7 @@
 #define G_NETMODE    0x00850078u   /* 8 Online, 0x200 LAN (1 career) */
 #define G_NET_HOST   0x00866a14u   /* host race state, > 0: this game created the race */
 #define G_WORLD      0x00890080u   /* World*: +0 the cars' list (a car's first two dwords are its node) */
-#define G_PLAYER1    0x008900acu   /* Player*: +4 car */
+#define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 car */
 #define G_WORLDDT    0x00865154u   /* float: this frame's world dt (s) */
 #define G_RACE       0x00890118u   /* the race coordinator*: +0 state, +0x24 racers, +0xBD0 racer pointers */
 #define RC_RACING    4u            /*   (a network race stays at 4 behind the results, until it is left) */

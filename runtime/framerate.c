@@ -119,8 +119,8 @@ static const char *const g_fx_name[FX_N] = { "ticks", "timer", "particles", "tra
 #define A_FRAMECNT    0x00870818u   /* eFrameCounter (render) */
 #define A_STREAK_FC   0x008a44ecu   /* UpdateCarStreakingFlares: last frame */
 #define A_CARLIST     0x00890080u   /* car list head (sentinel) */
-#define A_RACERS      0x008900b4u   /* racer infos, [+4] = car */
-#define A_NRACERS     0x008900bcu
+#define A_RACERS      SPLIT_PLAYERS_ORDER   /* racer infos, [+4] = car */
+#define A_NRACERS     SPLIT_PLAYERS_COUNT
 #define A_SND_ON      0x007faaa8u
 #define A_SND_PAUSE   0x0082b8dcu
 #define A_ONLINE      0x0089cf69u   /* World+0x21 (byte): online session */

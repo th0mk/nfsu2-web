@@ -233,7 +233,7 @@ static void key_event(unsigned dik, int down){
 /* ---- script ----------------------------------------------------------- */
 enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_POKE, C_WAITFNG, C_TAPUNTIL,
        C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE,
-       C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL,
+       C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL, C_LOCALPAD,
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
        C_COVRESET, C_COVDUMP, C_TRACE, C_UNTRACE, C_EXPECT, C_WAITEXPR, C_MARK, C_EDGE, C_ROAM,
@@ -405,6 +405,13 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
             e.addr = (uint32_t)strtoul(a1, 0, 0); e.val = (uint32_t)strtoul(a2, 0, 0);
             e.n = a3[0] ? atol(a3) : 0; }
+        else if (!strcasecmp(cmd, "localpad")){
+            int seat = atoi(a1), key = gamepad_button_by_name(a2);
+            if (!strcasecmp(a2, "connect")) key = -1;
+            else if (key < 0){ int axis = gamepad_axis_by_name(a2); if (axis >= 0) key = PAD_NBUTTONS + axis; else key = -2; }
+            if (seat < 1 || seat > 6 || key == -2){ fprintf(stderr, "[autotest] invalid localpad seat/control on line %d\n", ln); continue; }
+            e.cmd = C_LOCALPAD; e.addr = seat - 1; e.key = (uint32_t)key; e.fv = (float)atof(a3);
+        }
         else if (!strcasecmp(cmd, "pad")){ e.cmd = C_PAD;
             if (!strcasecmp(a1, "connect") || !strcasecmp(a1, "disconnect")){
                 e.key = PAD_PLUG; e.n = !strcasecmp(a1, "connect") ? (!strcasecmp(a2, "wheel") ? 2 : 1) : 0; }
@@ -820,6 +827,11 @@ static int fire(CPU *c, Ev *e, double tms){
         if (g_nprel < 32){ g_prel[g_nprel].dik = e->key; g_prel[g_nprel].at = g_frame + (e->n > 0 ? e->n : 1); g_nprel++; }
         break;
     case C_AXIS: gamepad_synth_axis((int)e->key, e->fv); break;
+    case C_LOCALPAD:
+#ifdef __wasm__
+        gamepad_synth_local(e->addr, (int)e->key, e->fv);
+#endif
+        break;
     case C_NSDOWN: ns_sched(g_frame, KSYN_DOWN, e->text, 0, 0, 0); break;
     case C_NSUP:   ns_sched(g_frame, KSYN_UP, e->text, 0, 0, 0); break;
     case C_NSTAP:

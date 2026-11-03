@@ -82,7 +82,7 @@ void autotest_tap(unsigned dik, long frames);
 
 /* ---- guest globals (v1.2 NA, verified in our exe) ------------------------ */
 #define G_FLOW          0x008654a4u   /* TheGameFlowManager state (6 = in game) */
-#define G_PLAYER1       0x008900acu   /* PlayersByNumber[0] (Player*) */
+#define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*) */
 #define G_HOTPOS        0x00890140u   /* hot-position vec3 used by the jump */
 #define G_HOTPOS_ANGLE  0x008900d0u   /* u16 */
 #define G_HOTPOS_JUMP   0x008900cdu   /* u8: jump to the hot position */

@@ -47,7 +47,7 @@ CFLAGS="$TARGET $OPT $FEAT $DEFS -fno-delete-null-pointer-checks -include runtim
 # the lifted shards only: guest memory as an object of its own (cpu.h, NFSU2_GUEST_OBJ)
 SHARDFLAGS="-DNFSU2_GUEST_OBJ"
 export CC OBJDUMP CFLAGS SHARDFLAGS OUT FULL MEMCHECK OBJCACHE
-HDRSUM="$( (cat runtime/cpu.h runtime/web/compat/wasm_plat.h; echo "$CFLAGS $SHARDFLAGS") | shasum | cut -c1-16)"; export HDRSUM
+HDRSUM="$( (cat runtime/cpu.h runtime/splitscreen_mem.h runtime/web/compat/wasm_plat.h; echo "$CFLAGS $SHARDFLAGS") | shasum | cut -c1-16)"; export HDRSUM
 
 # ---- lifted shards (content-hash incremental, as build.sh) ----
 # gen/all (SPEED2.EXE) -> out/web/obj, gen/server (server.dll, the LAN server
@@ -92,6 +92,7 @@ HDRSUM="$( (cat runtime/cpu.h runtime/web/compat/wasm_plat.h; echo "$CFLAGS $SHA
 # load the lifted server.dll; enhance.c holds the graphics options (all off by
 # default, as on the Mac).
 RT="mem dispatch genexec heap watchdog win32 win32_ext com debug res fileio overrides d3dx_hle vsemu oracle autotest lifecycle widescreen framerate dinput_pad dikeys keyboard dinput_kbd career intro drifttest roam roam_core roam_game mprace mpcredit horn hornmenu optslider tonemenu powerunits radio drift carsfx racehorn racenet winsock online netrace module modheap enhance headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional garage sndlead carshadow hiddenraces carspot movie photo look savegame uniques showoff"
+RT="$RT splitscreen"
 WEB="$(cd runtime/web && ls *.c | sed 's/\.c$//')"
 pids=""
 for f in $RT; do

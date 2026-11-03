@@ -53,7 +53,7 @@ void mem_commit(uint32_t addr, uint32_t size);
 #define TEXT_LO    0x00401000u
 #define TEXT_HI    0x00783000u
 #define G_WORLD    0x00890080u
-#define G_PLAYER1  0x008900acu
+#define G_PLAYER1  SPLIT_PLAYERS_INDEX
 #define PARK_Z     (-123456.f)
 
 static int      g_state;                 /* 0 not yet, 1 running, -1 off */

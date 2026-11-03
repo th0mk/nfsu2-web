@@ -69,7 +69,7 @@ void autotest_tap(unsigned dik, long frames);
 /* ---- guest globals (v1.2 NA) ---------------------------------------------- */
 #define G_FLOW          0x008654a4u   /* TheGameFlowManager state (6 = in game) */
 #define G_WORLD         0x00890080u   /* World*: +0/+4 car list (bTList), +0x10 count */
-#define G_PLAYER1       0x008900acu   /* PlayersByNumber[0] (Player*), +4 = car */
+#define G_PLAYER1       SPLIT_PLAYERS_INDEX   /* PlayersByNumber[0] (Player*), +4 = car */
 #define G_RACE          0x00890118u   /* race coordinator: +0 state, +0x24 racers */
 #define G_CAREER_RACE   0x00863470u   /* Career 0x85AD40 +0x8730: race being run (0 = roam) */
 #define G_HOTPOS        0x00890140u
@@ -648,9 +648,10 @@ void sub_0063a6f0(CPU *c){
     else POP32(c->eip);
 }
 void sub_00610750_orig(CPU *c);
+void split_second_pool(CPU *c);
 int roam_game_pool_grow(uint32_t size);
 void sub_00610750(CPU *c){
-    if (roam_game_pool_grow(MR32(c->esp + 4u))) sub_00610750_orig(c);
+    if (roam_game_pool_grow(MR32(c->esp + 4u))) split_second_pool(c);
     else { POP32(c->eip); c->esp += 4u; }
 }
 void sub_005eba30_orig(CPU *c);   /* Car::SetDriverType(this, type) */

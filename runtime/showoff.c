@@ -73,7 +73,7 @@ long autotest_frame(void);
 #define G_RACEKIND     0x0089e7b0u   /* 0 free roam, 7 an outrun */
 #define G_CAREER_RACE  0x00863470u   /* the career race being run (0 = free roam) */
 #define G_FREEZE       0x00890084u   /* the world stands (photo mode) */
-#define G_PLAYER1      0x008900acu   /* Player*: +4 its car, +0x9A4 its HUD */
+#define G_PLAYER1      SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD */
 #define G_FENG         0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define G_TXT_ON       0x0083a9c0u   /* byte: the game's text entry takes the typing ... */
 #define G_TXT_REC      0x0083a9c4u   /* ... for this record (0: none) */

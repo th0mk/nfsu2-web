@@ -18,7 +18,7 @@
 #include <stddef.h>
 
 #define INPUT_MAGIC    0x4E494E50u  /* 'NINP' */
-#define INPUT_VERSION  1u
+#define INPUT_VERSION  2u
 #define INPUT_EV_N     1024u        /* power of two */
 #define INPUT_SYN_N    256u         /* power of two */
 #define INPUT_NAME_LEN 16u          /* bytes per key name (cp1252, NUL-terminated) */
@@ -118,24 +118,39 @@ typedef struct {
     float a, b;                   /* mouse: position (fractions) / button; scroll: lines */
 } SynReq;
 
+/* Independent local-player snapshots. The original single-player mailbox
+ * remains intact; shared-engine split input consumes these six records. */
+#define INPUT_LOCAL_PADS 6u
+#define IM_LOCAL_WORDS 32u
+#define IM_LOCAL_SEQ 0u
+#define IM_LOCAL_CONNECTED 1u
+#define IM_LOCAL_BUTTONS 2u
+#define IM_LOCAL_FAMILY 3u
+#define IM_LOCAL_AXIS 4u
+#define IM_LOCAL_NAME 10u
+#define IM_LOCAL_INDEX 26u
+#define IM_LOCAL_JOIN 27u
 typedef struct {
     _Atomic uint32_t h[IM_HDR_WORDS];
     char    pad_name[64];                         /* page: under IM_PAD_SEQ */
     char    names[256][INPUT_NAME_LEN];           /* page: key names by DIK, "" = none */
     InEv    ev[INPUT_EV_N];
     SynReq  syn[INPUT_SYN_N];
+    _Atomic uint32_t local_pad[INPUT_LOCAL_PADS][IM_LOCAL_WORDS];
 } HostMailbox;
 
 #define IM_OFF_PAD_NAME 256
 #define IM_OFF_NAMES    320
 #define IM_OFF_EV       4416
 #define IM_OFF_SYN      20800
-#define IM_BYTES        24896
+#define IM_OFF_LOCAL_PADS 24896
+#define IM_BYTES        25664
 _Static_assert(sizeof(InEv) == 16 && sizeof(SynReq) == 16, "input record sizes");
 _Static_assert(offsetof(HostMailbox, pad_name) == IM_OFF_PAD_NAME, "mailbox layout");
 _Static_assert(offsetof(HostMailbox, names) == IM_OFF_NAMES, "mailbox layout");
 _Static_assert(offsetof(HostMailbox, ev) == IM_OFF_EV, "mailbox layout");
 _Static_assert(offsetof(HostMailbox, syn) == IM_OFF_SYN, "mailbox layout");
+_Static_assert(offsetof(HostMailbox, local_pad) == IM_OFF_LOCAL_PADS, "local pad layout");
 _Static_assert(sizeof(HostMailbox) == IM_BYTES, "mailbox layout");
 _Static_assert(IM_TEXT + INPUT_TEXT_BYTES / 4 <= IM_HDR_WORDS, "the text entry fits the header");
 #endif
