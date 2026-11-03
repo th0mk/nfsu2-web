@@ -7,9 +7,9 @@ import { language, N, t, tn } from './i18n';
 
 /** what the game sends (roam_game.c mp_panel) */
 interface LobbyState {
-  /** spot: a multiplayer-only spot, Enter opens a lobby; join: a lobby here to join; full: the lobby here is full (or
-   *  one we are kept out of: only), Enter opens another; lobby: ours, or the one we are in; trip: the way to the race
-   *  and back; note: a message */
+  /** spot: a multiplayer-only spot, Enter opens a lobby; join: a lobby here to join; full: the lobby here is full,
+   *  Enter opens another (or one we are kept out of: only, Enter opens none); lobby: ours, or the one we are in; trip:
+   *  the way to the race and back; note: a message */
   v?: 'spot' | 'join' | 'full' | 'lobby' | 'trip' | 'note';
   /** lobby: host (ours), asked (joining), in (joined), count (the countdown, t seconds) */
   st?: 'host' | 'asked' | 'in' | 'count';
@@ -225,9 +225,11 @@ export class LobbyPanel {
         kids.push(...this.title(s, host), this.places(s), ...this.career(s), this.act('Enter', t('Join')));
         break;
       case 'full':
+        // (kept out: no other lobby opens beside it, one race at a start)
         kids.push(...this.title(s, host), this.places(s), el('div', 'lobby-why', s.only
           ? t('A career race for players up to stage {n} and {host}\'s friends.', { n: s.only, host })
-          : t('This lobby is full.')), this.act('Enter', t('Open another')));
+          : t('This lobby is full.')));
+        if (!s.only) kids.push(this.act('Enter', t('Open another')));
         break;
       case 'lobby': {
         const mine = s.me === 0;

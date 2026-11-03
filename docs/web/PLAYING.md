@@ -553,7 +553,8 @@ Good to know:
   joined from your career's free roam only: in Quick Race's Free Run the panel says so too.
   - **An open race** (its marker in the street): its card asks Accept or Decline as always, and Accept asks once more:
     **Multiplayer** or **Solo** (the career race, as before). Solo has the focus, so Enter at once races it Solo as
-    the game always did. A win counts in your career either way (below).
+    the game always did; but with another player's lobby waiting there that you can join, the question names them and
+    **Join** has the focus. A win counts in your career either way (below).
   - **A race that is not open** in your career has no marker of the game's. Within about 50 m its start shows
     "Circuit (multiplayer)" or the like, and at the start a panel on the right (under Bank) says it is multiplayer
     only there and why (you won it in your career, your sponsor's contract has no place for it, a URL race before
@@ -614,8 +615,8 @@ Good to know:
     words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the
     player who opened it takes players up to that race's stage and the opener's friends: a car of a later stage would
     win it most of the time, however the cars are evened out. Past that stage you see why at the spot ("A career race
-    for players up to stage 2 and ...'s friends"), and Enter opens a lobby of your own there. Solo stays as it always
-    was.
+    for players up to stage 2 and ...'s friends"), and while it waits there no other lobby opens at that start (one
+    race at a start; at a race open in your career its card's Accept races it Solo). Solo stays as it always was.
   - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
     stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200
     and $100), 5th and 6th nothing. **Quitting the race**

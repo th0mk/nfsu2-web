@@ -30,8 +30,7 @@
 +60   dump question
 +0    log SHOT question
 +0    roam mp ui
-+0    tap LEFT
-+30   tap RETURN                      # the left button: Multiplayer (Join) (Solo, the right one, has the focus)
++30   tap RETURN                      # Join: with a lobby here to join it has the focus (Solo, the left one, not)
 +120  dump lobby_line
 +0    log SHOT lobby_line
 +60   roam mp lobby
