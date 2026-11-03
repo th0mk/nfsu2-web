@@ -60,7 +60,8 @@
 //   cloudask  a Play with a profile in the browser and no cloud saves asks to turn them on: not at a Play that asked
 //             about free roam, not without a profile; it shows the profile, its money and the hours played (no
 //             Download backup since 2026-11-03); Esc is Not now, asked again a week later, three times at
-//             most (a browser asked before as 'asked' once); Turn on makes a passphrase and shows it (Copy, Download
+//             most, then once more past 12 games and 3 hours here (not under 3 hours, not twice) (a browser asked
+//             before as 'asked' once); Turn on makes a passphrase and shows it (Copy, Download
 //             passphrase, Continue: the game starts, the browser syncs), offers it to the browser's passwords (once;
 //             a link from before at the next page), all on the 4 px grid at 1280 and 390 px.  Then (cloudkept) a
 //             browser with no link and no profile asks its passwords for the passphrase, its chooser allowed the first
@@ -1215,6 +1216,14 @@ try {
     const weekOnOffer = await offer();
     await setCount(JSON.stringify({ asked: 3, at: 0 }));
     const thrice = await playAll();                        // three times: not again
+    // past 12 games started and 3 hours played here: once more, whatever the count and the week (under 3 hours: not)
+    await setCount(JSON.stringify({ asked: 3, at: Date.now() }));
+    await r.evaluate(() => { localStorage.setItem('nfsu2.play.games', '13'); localStorage.setItem('nfsu2.play.ms', String(2.9 * 3600_000)); });
+    const lateShort = await playAll();
+    await r.evaluate(() => localStorage.setItem('nfsu2.play.ms', String(6.5 * 3600_000)));
+    const late = await playAll();
+    const lateOffer = await offer();
+    const lateAgain = await playAll();
     // a browser asked once before 2026-10-31 ('asked'): asked again; Turn on
     await setCount('asked');
     await r.click('#play');
@@ -1264,7 +1273,8 @@ try {
       /sync them between your devices/.test(first.text) && !/change this/.test(first.text) &&
       !askGrid.off.length && !askNarrow.off.length && !askNarrow.overflow &&
       afterEsc.offer?.asked === 1 && afterEsc.link === null && inWeek.asked.length === 0 && weekOn.asked.join() === ASK && weekOnOffer?.asked === 2 &&
-      thrice.asked.length === 0 &&
+      thrice.asked.length === 0 && lateShort.asked.length === 0 && late.asked.join() === ASK && lateOffer?.asked === 3 && lateOffer?.late === true &&
+      lateAgain.asked.length === 0 &&
       /^nfsu2-xyz(-[a-z]+){8}$/.test(phrase) && shown.ok === 'Continue' && !shown.cancelShown && shown.focus === 'confirm-ok' &&
       /save it with your passwords/.test(shown.text) && /on another device to sync your saves/.test(shown.text) && /can't be recovered/.test(shown.text) &&
       !wide.off.length && !narrow.off.length && !narrow.overflow && copied && file.trim() === phrase && stillOpen === 'Your passphrase' &&
@@ -1273,8 +1283,9 @@ try {
       after.type === 'text' && box.type === 'password' && box.mask === phrase.slice(0, 3) + '•'.repeat(phrase.length - 3) && box.user === 'Cloud saves' &&
       box.auto === 'current-password' && oldLink.length === 1 && oldLink[0].password === phrase && oldLinkAgain.length === 0 &&
       cloudLog.some(l => /cloud saves: not now \(asked at Play, 1 of 3\)/.test(l)) && cloudLog.some(l => /cloud saves: turned on/.test(l)) &&
+      cloudLog.some(l => /cloud saves: not now \(asked at Play, once more, 1\d games and 7 h played here\)/.test(l)) &&
       cloudLog.some(l => /asked to keep it in its passwords/.test(l)),
-      { pwKind, withRoam, noProfile, first, askGrid, askNarrow, backupButton, afterEsc, inWeek, weekOn, weekOnOffer, thrice,
+      { pwKind, withRoam, noProfile, first, askGrid, askNarrow, backupButton, afterEsc, inWeek, weekOn, weekOnOffer, thrice, lateShort, late, lateOffer, lateAgain,
         shown, wide, narrow, copied, file: file.trim(), stillOpen, played,
         after: { phrase: after.link?.phrase, offer: after.offer, kept: after.kept, stored: after.stored.length, type: after.type, when: after.when }, cloudLog,
         oldLink: oldLink.length, oldLinkAgain: oldLinkAgain.length, box });

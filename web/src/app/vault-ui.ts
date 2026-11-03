@@ -59,11 +59,21 @@ const keptKey = (saveDir: string) => `nfsu2-keyphrase-kept:${saveDir}`;
  *  fifth Play) */
 const OFFER_AGAIN_MS = 7 * 86400_000;
 export const OFFER_TIMES = 3;
-interface Offer { asked: number; at: number }
+/** and once more, whatever the count and the week, once more than LATE_GAMES games were started here and more than
+ *  LATE_MS played (2026-11-03): a player who keeps playing on saves kept only here */
+const LATE_GAMES = 12, LATE_MS = 3 * 3600_000;
+/** asked: the offers counted against OFFER_TIMES; at: the last offer; late: the once-more one was made (or an offer
+ *  made past its numbers stood for it) */
+interface Offer { asked: number; at: number; late?: boolean }
+const lateDue = (o: Offer, games: number, played: number) => !o.late && games > LATE_GAMES && played > LATE_MS;
+const regularDue = (o: Offer) => o.asked < OFFER_TIMES && Date.now() - o.at >= OFFER_AGAIN_MS;
 /** the offers so far (before 2026-10-31 the key held a count of games, then 'asked' after the one offer) */
 function readOffer(v: string | null): Offer {
   if (v === 'asked') return { asked: 1, at: 0 };
-  try { const o = JSON.parse(v ?? '') as Partial<Offer> | null; if (typeof o?.asked === 'number') return { asked: o.asked, at: Number(o.at) || 0 }; }
+  try {
+    const o = JSON.parse(v ?? '') as Partial<Offer> | null;
+    if (typeof o?.asked === 'number') return { asked: o.asked, at: Number(o.at) || 0, late: o.late === true };
+  }
   catch { /* a count, or nothing */ }
   return { asked: 0, at: 0 };
 }
@@ -611,21 +621,23 @@ export class VaultPanel {
   // ---- offered at Play (shell.ts askCloud) ----
 
   /** Play may offer cloud saves: this server keeps them, this tab owns the saves and has no keyphrase, and they were
-   *  offered fewer than OFFER_TIMES times, the last one OFFER_AGAIN_MS ago or more (with storage off: never, as no
-   *  link would be kept either). */
-  offerable(): boolean {
+   *  offered fewer than OFFER_TIMES times, the last one OFFER_AGAIN_MS ago or more, or the once-more offer is due
+   *  (games started and play here: playtime.ts; with storage off: never, as no link would be kept either). */
+  offerable(games: number, played: number): boolean {
     const s = this.sync;
     if (!s || s.link || s.state.s === 'working' || !this.d.owner()) return false;
-    try { const o = readOffer(localStorage.getItem(offerKey(this.d.saveDir))); return o.asked < OFFER_TIMES && Date.now() - o.at >= OFFER_AGAIN_MS; }
+    try { const o = readOffer(localStorage.getItem(offerKey(this.d.saveDir))); return regularDue(o) || lateDue(o, games, played); }
     catch { return false; }
   }
-  /** Play offered them now: the how-manieth time (of OFFER_TIMES) */
-  offered(): number {
+  /** Play offered them now: which offer, for the log ("2 of 3", or the once-more one) */
+  offered(games: number, played: number): string {
     try {
-      const k = offerKey(this.d.saveDir), o = readOffer(localStorage.getItem(k));
-      localStorage.setItem(k, JSON.stringify({ asked: o.asked + 1, at: Date.now() } satisfies Offer));
-      return o.asked + 1;
-    } catch { return 1; /* storage off */ }
+      const k = offerKey(this.d.saveDir), o = readOffer(localStorage.getItem(k)), regular = regularDue(o);
+      // (an offer past the once-more numbers stands for that one too: not asked again at the next Play)
+      const late = o.late || games > LATE_GAMES && played > LATE_MS;
+      localStorage.setItem(k, JSON.stringify({ asked: regular ? o.asked + 1 : o.asked, at: Date.now(), late } satisfies Offer));
+      return regular ? `${o.asked + 1} of ${OFFER_TIMES}` : `once more, ${games} games and ${Math.round(played / 3600_000)} h played here`;
+    } catch { return 'storage off'; }
   }
   /** what the saves here hold, for Play's question (stakeOf): playedMs, the play counted in this browser */
   async stake(playedMs: number): Promise<HTMLElement> { return stakeOf(sideOf(await this.files()), playedMs); }

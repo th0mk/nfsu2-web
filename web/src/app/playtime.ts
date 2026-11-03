@@ -4,12 +4,13 @@
 // hours on, each game asks the game for the message (IEV_SMS) until its status "sms" says the inbox has it: the game
 // waits for career free roam, the only place with a phone, and a profile that has it already counts.  The count goes
 // on after the message: Play's cloud saves question says how long was played here (playedMs, shell.ts askCloud;
-// before 2026-10-31 it stopped at the message, near two hours).  Without storage (a private window) each load counts
-// from 0.
+// before 2026-10-31 it stopped at the message, near two hours).  The games started here are counted too (since
+// 2026-11-03): with the play, Play's question asks once more (vault-ui.ts offerable).  Without storage (a private
+// window) each load counts from 0.
 import type { GameSession } from './game';
 
 export const SMS_AFTER_MS = 2 * 3600_000;
-const PLAYED = 'nfsu2.play.ms', SENT = 'nfsu2.play.sms';
+const PLAYED = 'nfsu2.play.ms', SENT = 'nfsu2.play.sms', GAMES = 'nfsu2.play.games';
 const MSG = 1;                          /* sms.c: "Enjoying the game?" */
 const IDLE_MS = 5 * 60_000, TICK_MS = 5000;
 
@@ -18,6 +19,8 @@ const write = (key: string, v: string) => { try { localStorage.setItem(key, v); 
 
 /** the play counted in this browser so far, in ms (0 without storage) */
 export const playedMs = () => Math.max(0, Number(read(PLAYED)) || 0);
+/** the games started in this browser so far (counted since 2026-11-03; 0 without storage) */
+export const gamesStarted = () => Math.max(0, Math.floor(Number(read(GAMES)) || 0));
 
 export class PlayTime {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -27,8 +30,10 @@ export class PlayTime {
   /** the message is in the game's inbox: only the count goes on */
   private sent = read(SENT) === String(MSG);
 
-  /** afterMs: the play before the message (SMS_AFTER_MS; a test page's address may give less) */
+  /** a game started (counted); afterMs: the play before the message (SMS_AFTER_MS; a test page's address may give
+   *  less) */
   constructor(private s: GameSession, private afterMs: number, private log: (line: string) => void) {
+    write(GAMES, String(gamesStarted() + 1));
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 

@@ -50,7 +50,7 @@ import { privacy, SCRUB_NOTE } from './privacy';
 import { oneWriter, SavesPanel, snapshotFile, snapshotSaves, type FileIn } from './saves-ui';
 import { zip } from './zip';
 import { saveScreenshot } from './shots';
-import { forgetLink, OFFER_TIMES, VaultPanel } from './vault-ui';
+import { forgetLink, VaultPanel } from './vault-ui';
 import { Radio, MODES, radioWasOn, type Mode } from '../radio';
 import { canPickMusic, pickMusic } from '../radio-folder';
 import { RadioLink } from './radio-link';
@@ -63,7 +63,7 @@ import { ChatDialog, FriendMessages, MSG_ICON, MSG_KEY_LABEL, MessageStore } fro
 import { GameSession } from './game';
 import { AwayCheck, AWAY_LIMITS, type AwayLimits } from './away';
 import { changelog } from './changelog';
-import { playedMs, PlayTime, SMS_AFTER_MS } from './playtime';
+import { gamesStarted, playedMs, PlayTime, SMS_AFTER_MS } from './playtime';
 import { canKeep } from './pwkeep';
 import { keepPageId, PAGE_ID_FILE, pageId, seen } from './page-id';
 import { NameClaims, onlineName } from './claim';
@@ -374,18 +374,20 @@ async function askRoam(): Promise<boolean> {
  * Play asks a player with a profile here and no cloud saves to turn them on: the saves live only in this browser, and
  * browsers clear a site's data now and then.  First at the first Play with a profile here (a new player's second: the
  * first asks about free roam, and the next one asks), then a week after each Not now (or Esc), three times in all
- * (vault-ui.ts offerable; before 2026-10-31 once, at the fifth Play).  It shows what is at stake (the profiles, their
+ * (vault-ui.ts offerable; before 2026-10-31 once, at the fifth Play), and once more past 12 games started and 3 hours
+ * played here, whatever the count and the week (2026-11-03).  It shows what is at stake (the profiles, their
  * money, the hours played here; until 2026-11-03 also a Download backup button).  Not on a test page, offline, or where
  * the server keeps no cloud saves.  Turned on, the keyphrase is shown to keep (copy, download) before the game starts;
  * it failed, the reason.
  */
 async function askCloud() {
-  if (testPage() || offline || !vault.offerable() || !await newestProfile()) return;
-  const times = vault.offered();
+  const games = gamesStarted(), played = playedMs();
+  if (testPage() || offline || !vault.offerable(games, played) || !await newestProfile()) return;
+  const which = vault.offered(games, played);
   const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
   const body = document.createElement('div');
   body.append(p(t('Your saves are only in this browser, and browsers sometimes clear them.')),
-    await vault.stake(playedMs()),
+    await vault.stake(played),
     p(t('Cloud saves back them up and sync them between your devices.')));
   // the name, when it is free to claim: the new keyphrase claims it at once, and its popup says so; another player's:
   // the keyphrase does not hold it, said before Play's question about the name (2026-11-02, a player's report: given a
@@ -400,7 +402,7 @@ async function askCloud() {
   const answer = confirmBox(t('Turn on cloud saves?'), body, t('Turn on'), false, '', t('Not now'));
   $<HTMLButtonElement>('#confirm-ok').focus();
   const on = await answer;
-  log.add(`[app] cloud saves: ${on ? 'turned on' : 'not now'} (asked at Play, ${times} of ${OFFER_TIMES})`);
+  log.add(`[app] cloud saves: ${on ? 'turned on' : 'not now'} (asked at Play, ${which})`);
   if (!on) return;
   const phrase = await enableCloud();
   if (!phrase) return;
