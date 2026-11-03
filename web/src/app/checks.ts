@@ -251,6 +251,12 @@ export async function checkStorage(): Promise<Check & { answer?: Promise<Check> 
   const label = N('Browser storage');
   try { await navigator.storage.getDirectory(); }
   catch { return check('storage', label, 'fail', N('This window can\'t store files (a guest or private window?), so saves won\'t work.'), 'STORAGE-NONE'); }
+  // the page writes files (createWritable: Safari has it from 26 on) at Play: the registry's first seed, settings.ini,
+  // the cloud's saves.  Safari 18 with its WebGPU feature flag on passed every other check, then Play stopped with
+  // "createWritable is not a function" (Discord 2026-11-02)
+  if (typeof FileSystemFileHandle === 'undefined' || !('createWritable' in FileSystemFileHandle.prototype)) {
+    return check('storage', label, 'fail', N('This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).'), 'STORAGE-OLD');
+  }
   const verdict = (persisted: boolean): Check => persisted
     ? check('storage', label, 'ok', N('Saves and cached game data are kept for good.'))
     : check('storage', label, 'ok', N('Saves and game data stay until the disk is nearly full, when {browser} may clear them.'), undefined, { browser: browserName() });

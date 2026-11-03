@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "Adapter z kompresją tekstur BC.",
   "Browser storage": "Pamięć przeglądarki",
   "This window can't store files (a guest or private window?), so saves won't work.": "To okno nie może przechowywać plików (okno gościa lub prywatne?), więc zapisy nie będą działać.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Ta przeglądarka jest za stara dla gry: potrzebny jest iOS 26, iPadOS 26 lub Safari 26. Zaktualizuj to urządzenie (Ustawienia, Ogólne, Uaktualnienia).",
   "Saves and cached game data are kept for good.": "Zapisy i dane gry w pamięci podręcznej są przechowywane na stałe.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "Zapisy i dane gry są przechowywane, dopóki dysk nie będzie prawie pełny; wtedy {browser} może je usunąć.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} pyta (przy pasku adresu), czy przechowywać dane tej strony na stałe: zezwól, aby twoje zapisy przetrwały zapełnienie dysku.",

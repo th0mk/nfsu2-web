@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "BC doku sıkıştırmalı bağdaştırıcı.",
   "Browser storage": "Tarayıcı depolama alanı",
   "This window can't store files (a guest or private window?), so saves won't work.": "Bu pencere dosya saklayamıyor (misafir veya gizli pencere mi?), bu yüzden kayıtlar çalışmaz.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Bu tarayıcı oyun için fazla eski: iOS 26, iPadOS 26 veya Safari 26 gerekiyor. Bu cihazı güncelle (Ayarlar, Genel, Yazılım Güncelleme).",
   "Saves and cached game data are kept for good.": "Kayıtlar ve önbelleğe alınan oyun verisi kalıcı olarak saklanır.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "Kayıtlar ve oyun verisi disk neredeyse dolana kadar kalır; o zaman {browser} onları silebilir.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} adres çubuğunun yanında bu sitenin verisini kalıcı olarak saklamak için izin istiyor: izin ver ki disk dolduğunda da kayıtların yerinde kalsın.",

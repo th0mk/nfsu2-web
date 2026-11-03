@@ -268,8 +268,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   doesn't matter. The flag is worth a try for any `GPU-ADAPTER-ANDROID` (the page says so since 0583ca5), not only
   Xclipse.
 - iPhone and iPad need iOS 26 or iPadOS 26 (iPhone 11 and newer can update). On iOS 18 with Safari's WebGPU
-  feature flag on, the page may say Ready but Play shows nothing: it still can't run there. Say it once; don't
-  change that answer later in the thread.
+  feature flag on, older pages said Ready, then Play showed nothing or "Did not start" with "createWritable is not a
+  function"; the page now says `STORAGE-OLD` there. It still can't run there. Say it once; don't change that answer
+  later in the thread.
 - iPhone: a web page cannot go full screen. Adding the page to the Home Screen (Share menu) opens it without the
   browser's bars. That copy has its own saves: cloud saves bring them over. Only controllers iOS knows (Xbox,
   PlayStation, Switch, MFi) reach the page.

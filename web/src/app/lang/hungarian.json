@@ -38,6 +38,7 @@
   "Adapter with BC texture compression.": "Adapter BC-textúratömörítéssel.",
   "Browser storage": "Böngészőtárhely",
   "This window can't store files (a guest or private window?), so saves won't work.": "Ez az ablak nem tud fájlokat tárolni (vendég- vagy privát ablak?), így a mentések nem működnek.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Ez a böngésző túl régi a játékhoz: iOS 26, iPadOS 26 vagy Safari 26 kell hozzá. Frissítsd ezt az eszközt (Beállítások, Általános, Szoftverfrissítés).",
   "Saves and cached game data are kept for good.": "A mentések és a tárolt játékadatok véglegesen megmaradnak.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "A mentések és a játékadatok addig maradnak meg, amíg a lemez majdnem meg nem telik; akkor {browser} törölheti őket.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} a címsor mellett engedélyt kér, hogy ez az oldal véglegesen megtartsa az adatait: engedélyezd, hogy a mentéseid tele lemez esetén is megmaradjanak.",

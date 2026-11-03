@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "Adapter met BC-textuurcompressie.",
   "Browser storage": "Browseropslag",
   "This window can't store files (a guest or private window?), so saves won't work.": "Dit venster kan geen bestanden opslaan (een gast- of privévenster?), dus opslaan werkt niet.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Deze browser is te oud voor het spel: het vraagt iOS 26, iPadOS 26 of Safari 26. Werk dit apparaat bij (Instellingen, Algemeen, Software-update).",
   "Saves and cached game data are kept for good.": "Opgeslagen spellen en gecachete spelgegevens blijven voorgoed bewaard.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "Opgeslagen spellen en spelgegevens blijven bewaard tot de schijf bijna vol is; dan kan {browser} ze wissen.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} vraagt bij de adresbalk of deze site zijn gegevens voorgoed mag bewaren: sta dat toe, zodat je opgeslagen spellen een volle schijf overleven.",

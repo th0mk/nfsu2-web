@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "BCテクスチャ圧縮に対応したアダプターです。",
   "Browser storage": "ブラウザのストレージ",
   "This window can't store files (a guest or private window?), so saves won't work.": "このウィンドウはファイルを保存できないため（ゲストウィンドウまたはプライベートウィンドウ？）、セーブできません。",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "このブラウザはゲームを動かすには古すぎます。iOS 26、iPadOS 26、またはSafari 26が必要です。このデバイスをアップデートしてください（「設定」>「一般」>「ソフトウェアアップデート」）。",
   "Saves and cached game data are kept for good.": "セーブデータとキャッシュされたゲームデータは永続的に保存されます。",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "セーブデータとゲームデータは、ディスクがほぼいっぱいになるまで保存されます。そうなると、{browser}がそれらを消去することがあります。",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser}のアドレスバーのそばに、このサイトのデータを永続的に保存するかの確認が表示されます。許可すると、ディスクがいっぱいになってもセーブデータが残ります。",

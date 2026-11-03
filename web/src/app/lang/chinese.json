@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "支援 BC 材質壓縮的顯示介面卡。",
   "Browser storage": "瀏覽器儲存空間",
   "This window can't store files (a guest or private window?), so saves won't work.": "此視窗無法儲存檔案（是訪客視窗或私密瀏覽視窗嗎？），因此無法存檔。",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "此瀏覽器版本過舊，無法執行遊戲：需要 iOS 26、iPadOS 26 或 Safari 26。請更新此裝置（設定 > 一般 > 軟體更新）。",
   "Saves and cached game data are kept for good.": "存檔與快取的遊戲資料會永久保留。",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "存檔與遊戲資料會保留到磁碟快滿為止，屆時{browser}可能會清除它們。",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser}會在網址列旁詢問是否永久保存此網站的資料：請選擇允許，這樣磁碟滿了你的存檔也會保留。",

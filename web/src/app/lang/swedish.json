@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "Adapter med BC-texturkomprimering.",
   "Browser storage": "Webbläsarens lagring",
   "This window can't store files (a guest or private window?), so saves won't work.": "Det här fönstret kan inte lagra filer (ett gästfönster eller privat fönster?), så det går inte att spara.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Den här webbläsaren är för gammal för spelet: det kräver iOS 26, iPadOS 26 eller Safari 26. Uppdatera enheten (Inställningar, Allmänt, Programuppdatering).",
   "Saves and cached game data are kept for good.": "Sparfiler och cachade speldata behålls permanent.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "Sparfiler och speldata finns kvar tills disken är nästan full, då {browser} kan rensa dem.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} frågar vid adressfältet om den får behålla webbplatsens data permanent: tillåt det så att dina sparfiler finns kvar även när disken blir full.",

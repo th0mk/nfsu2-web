@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "BC 텍스처 압축을 지원하는 어댑터예요.",
   "Browser storage": "브라우저 저장소",
   "This window can't store files (a guest or private window?), so saves won't work.": "이 창은 파일을 저장할 수 없어서(게스트 창이나 시크릿 창인가요?) 게임을 저장할 수 없어요.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "이 브라우저는 게임을 실행하기에 너무 오래됐어요. iOS 26, iPadOS 26 또는 Safari 26이 필요하니 이 기기를 업데이트하세요(설정 > 일반 > 소프트웨어 업데이트).",
   "Saves and cached game data are kept for good.": "저장 데이터와 캐시된 게임 데이터는 계속 보관돼요.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "저장 데이터와 게임 데이터는 디스크가 거의 가득 찰 때까지 남아 있으며, 그때는 {browser}에서 지울 수 있어요.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser}의 주소 표시줄 옆에서 이 사이트의 데이터를 계속 보관할지 물어봐요. 허용하면 디스크가 가득 차도 저장 데이터가 남아요.",

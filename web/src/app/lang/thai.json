@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "อะแดปเตอร์รองรับการบีบอัดเท็กซ์เจอร์แบบ BC",
   "Browser storage": "พื้นที่จัดเก็บของเบราว์เซอร์",
   "This window can't store files (a guest or private window?), so saves won't work.": "หน้าต่างนี้จัดเก็บไฟล์ไม่ได้ (เป็นหน้าต่างผู้มาเยือนหรือหน้าต่างส่วนตัวหรือเปล่า) จึงเซฟเกมไม่ได้",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "เบราว์เซอร์นี้เก่าเกินไปสำหรับเกม ต้องใช้ iOS 26, iPadOS 26 หรือ Safari 26 ให้อัปเดตอุปกรณ์นี้ (การตั้งค่า > ทั่วไป > รายการอัปเดตซอฟต์แวร์)",
   "Saves and cached game data are kept for good.": "เซฟและข้อมูลเกมที่แคชไว้จะถูกเก็บไว้ถาวร",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "เซฟและข้อมูลเกมจะอยู่จนกว่าดิสก์จะใกล้เต็ม ซึ่งตอนนั้น {browser} อาจล้างข้อมูลเหล่านี้",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} จะถามที่ข้างแถบที่อยู่ว่าจะให้เก็บข้อมูลของเว็บไซต์นี้ไว้ถาวรหรือไม่ ให้กดอนุญาต เพื่อให้เซฟของคุณยังอยู่แม้ดิสก์เต็ม",

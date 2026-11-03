@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "Adaptador con compresión de texturas BC.",
   "Browser storage": "Almacenamiento del navegador",
   "This window can't store files (a guest or private window?), so saves won't work.": "Esta ventana no puede guardar archivos (¿es una ventana de invitado o privada?), así que las partidas guardadas no funcionarán.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Este navegador es demasiado antiguo para el juego: necesita iOS 26, iPadOS 26 o Safari 26. Actualiza este dispositivo (Ajustes > General > Actualización de software).",
   "Saves and cached game data are kept for good.": "Las partidas guardadas y los datos del juego en caché se conservan para siempre.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "Las partidas guardadas y los datos del juego se conservan hasta que el disco esté casi lleno; entonces {browser} puede borrarlos.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} pregunta, junto a la barra de direcciones, si puede conservar los datos de este sitio para siempre: permítelo para que tus partidas guardadas sobrevivan a un disco lleno.",

@@ -40,6 +40,7 @@
   "Adapter with BC texture compression.": "Adapter med BC-teksturkomprimering.",
   "Browser storage": "Browserlager",
   "This window can't store files (a guest or private window?), so saves won't work.": "Dette vindue kan ikke gemme filer (et gæstevindue eller privat vindue?), så gemte spil virker ikke.",
+  "This browser is too old for the game: it needs iOS 26, iPadOS 26 or Safari 26. Update this device (Settings, General, Software Update).": "Denne browser er for gammel til spillet: det kræver iOS 26, iPadOS 26 eller Safari 26. Opdater enheden (Indstillinger, Generelt, Softwareopdatering).",
   "Saves and cached game data are kept for good.": "Gemte spil og cachelagrede spildata bevares permanent.",
   "Saves and game data stay until the disk is nearly full, when {browser} may clear them.": "Gemte spil og spildata bliver, indtil disken er næsten fuld, hvor {browser} kan rydde dem.",
   "{Browser} asks by the address bar to keep this site's data for good: allow it so your saves survive a full disk.": "{Browser} spørger ved adresselinjen, om den må beholde dette websteds data permanent: tillad det, så dine gemte spil bliver, selv når disken bliver fuld.",

@@ -805,6 +805,7 @@ Good to know:
 | "Open elsewhere" | The game runs in another tab of this browser. Switch to it, or close it. |
 | `GAME-START`: "Did not start", "The game could not start" | Press **Play** again; if it happens again, **Download log** (on the start page) and post the log with the message. "could not allocate memory" (Chrome) or "Out of memory" (Safari): the browser would not set aside the game's 1 GB, most often on phones with 2 to 4 GB (a 32-bit Chrome, an iPhone's Home Screen app). Close other apps and reload the page; the log's `[memory]` line says what the browser refused. |
 | `STORAGE-NONE`: "This browser window cannot store files" | A guest or private window cannot keep saves: open the page in a normal window. |
+| `STORAGE-OLD`: "This browser is too old for the game" | Safari before 26 (iOS 18 with Safari's WebGPU feature flag on, for one) cannot write the game's files. Update to iOS 26, iPadOS 26 or macOS with Safari 26 (Settings, General, Software Update). |
 | `STORAGE-ASK`: the browser asks whether the site may keep its data | Allow it, so that your saves stay when the disk runs low (section 5). |
 | `BROWSER-CHROME-OLD`, `BROWSER-FIREFOX-OLD` | A warning: the game may still play. Update the browser (Chrome 140 or newer, Firefox 145 or newer). |
 | `BROWSER-OTHER` | A warning: the page does not know this browser (it knows Chrome, Edge, Brave, Opera, Firefox and Safari). It may work when every other check passes. |
