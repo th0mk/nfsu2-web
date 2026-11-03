@@ -105,6 +105,9 @@ Checked against the guide or the code, and confirmed by players in threads:
 - Sound late: Settings, Game, More game settings, Output latency "Lowest" (the default) is the shortest; Balanced
   and Robust add delay and are for crackling or dropouts. Never suggest Robust for late sound. Bluetooth headphones
   add their own delay.
+- The EA Trax songs differ from the original game's (other versions, longer intros, "covers", swear words): they are
+  the uncensored versions on purpose: unedited, some in longer album versions. Since 32540c78, Settings, Game, Songs,
+  Original plays them as the game shipped them, and F7 (keyboard only) plays the next song.
 - A laptop with a graphics card that plays badly or shows a black picture, while its log names the Intel or AMD
   integrated chip: Chrome runs on the wrong one. Windows Settings, System, Display, Graphics: add Chrome, set High
   performance, then quit Chrome completely and start it again. Players confirmed it.
@@ -271,7 +274,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   or a controller's D-pad down held a second, other players see them, they close when the car drives off, since
   1ccb47ac (the open trunk showed no trunk audio: empty boxes on the player's own car, nothing on others'; since
   68128859 it shows the layout, speakers and amps on every car); car meets on the world map, with the GPS to them,
-  since 109bdcc4; the guide
+  since 109bdcc4; Songs in Settings, Game (Uncensored or the game's Original versions) and F7 for the next song,
+  since 32540c78; the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
