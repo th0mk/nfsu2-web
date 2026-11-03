@@ -3972,9 +3972,14 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t buf = self ? (is_cube2 ? MR32(self + 104u + 4u*(face2 & 7u))
                                             : MR32(self + 32u + 4u*level)) : 0;
             gheap_check_block(c, buf, "LOCK BUFFER OVERRUN (UnlockRect)");   /* NFSU2_HEAPCHECK only */
-            if (metal_available() && mid && buf && w && h)
-                metal_upload_texture(mid, level, g_mem+buf,
-                                     metal_level_pitch(w,level,fmt), w, h, fmt);
+            /* a cube's face goes to its own layer: the menus' car environment map (a 256-pixel cube the game
+             * fills with LockRect, face by face) had all six faces written into face 0, and the cars in the
+             * menus reflected black past it */
+            if (metal_available() && mid && buf && w && h){
+                void metal_upload_texture_face(unsigned, unsigned, unsigned, const void *, unsigned, unsigned, unsigned, unsigned);
+                metal_upload_texture_face(mid, level, is_cube2 ? (face2 < 6u ? face2 : 0u) : 0u, g_mem+buf,
+                                          metal_level_pitch(w,level,fmt), w, h, fmt);
+            }
             if (metal_available() && mid && buf && w && h && iface==IF_TEX && !is_cube2)
                 texrep_uploaded(mid, level, g_mem+buf, metal_level_pitch(w,level,fmt), metal_level_rows(h,level,fmt));
             else if (iface==IF_SURF && mid) texrep_surface_written(mid);   /* the car skin composite */
