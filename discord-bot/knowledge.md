@@ -333,7 +333,10 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
   a quarter of that, at least $300/$200/$100). A race that counts pays the career's prize or that, whichever is more. Where the game would offer sponsors, the crib asks on the way back
   (Yes signs, No the next offer). A stage final won online plays the stage's movie after the crib's save. When everyone else
-  quits a race with the pause menu's Quit ($75 each), the one who stayed wins it; a lost connection or a closed tab
+  quits a race with the pause menu's Quit (each pays a fee: $75 at stages 1 to 3; since 9048c0e $225 at stage 4 and
+  $375 at stage 5, before that $75 at every stage), the one who stayed wins it; a lost connection or a closed tab
   counts for nobody (on the Mac app a quit does not hand over the win). The race card's question has Solo focused; since 85c39ac, with another player's lobby there to
-  join, Join is focused instead.
+  join, Join is focused instead. Since c9d0a59 a lobby's panel warns a stock car (the game's lowest class) at a stage
+  3, 4 or 5 race and a class-2 car at a stage-5 race that the cars there are usually much faster than theirs (in the
+  live races such cars won a quarter to half as often as an even field would); they can still join.
   Races of the main menu's Online mode never count. Solo is as it always was.
