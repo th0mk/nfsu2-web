@@ -212,6 +212,11 @@ context lists every problem the developer has a report on, with its first thread
   new; ask for the log after a few songs, and the files' type (mp3, flac, ...).
 - Radio with a music folder: the game crashes (exit code 134) as Radio starts a song in the menus, after an outrun or
   a race (crib, garage). Radio off in F9 avoids it (a poster's three logs, 2026-11-02).
+- A controller's right stick looking round the car (live since the morning of 3 November): seen from the side or the
+  front the car has no front wheels (looking back, no rear ones), its reflections are wrong, "things not loaded".
+  That is how it is drawn, not loading: no log needed. Fixed on 3 November (77a2a706), which also makes the stick
+  straight down the game's own Look Back; until that is live, B (Look Back) shows the rear view whole. Thread
+  1567127501359153282.
 
 ## Decided
 
@@ -238,7 +243,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
   (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
-  (right looks right, down looks back) and turns it in the garage; quick chat, with phrases to pick in Settings, Online;
+  (right looks right; straight down is the game's Look Back since 77a2a706) and turns it in the garage; quick chat,
+  with phrases to pick in Settings, Online;
   ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus and HUD; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
