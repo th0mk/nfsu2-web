@@ -368,7 +368,7 @@
   "Menus, HUD and maps": "Menüler, HUD ve haritalar",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Yükseltilmiş: LunicAura106'nın Upscaled HUD modu ve JeansBig'in Detailed Map modu, yüksek çözünürlüklerde keskin. Yaklaşık 25 MB indirme, telefonlarda ise daha fazla bellek.",
   "Pixelated textures": "Pikselli dokular",
-  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "Yumuşatma yok, dgVoodoo'nun point sampling'i gibi. Oyunun Doku Filtreleme seçeneğinin yerine geçer.",
+  "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Yumuşatmasız dokular, ilk PC oyunlarındaki gibi pikselli. Oyunun Doku Filtreleme seçeneğinin yerine geçer.",
   "Upscaled HUD": "Upscaled HUD",
   "Detailed Map": "Detailed Map",
   "Upscaled": "Yükseltilmiş",

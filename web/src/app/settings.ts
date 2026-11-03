@@ -330,8 +330,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # the memory; NFSU2_MAP_TEXTURES = original keeps the game's maps).
 # [NFSU2_UI_TEXTURES]
 #ui_textures = original
-# Textures without smoothing, as dgVoodoo's point sampling; on overrides the
-# game's Texture Filtering.  [NFSU2_PIXELATED_TEXTURES]
+# Textures without smoothing (point sampling), blocky like early PC games;
+# on overrides the game's Texture Filtering.  [NFSU2_PIXELATED_TEXTURES]
 #pixelated_textures = off
 
 # ---- Frame rate ----------------------------------------------------------

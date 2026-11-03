@@ -401,7 +401,7 @@
   "Menus, HUD and maps": "Menu's, HUD en kaarten",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Opgeschaald: Upscaled HUD van LunicAura106 en Detailed Map van JeansBig, scherp op hoge resoluties. Ongeveer 25 MB downloaden, en meer geheugen op telefoons.",
   "Pixelated textures": "Gepixelde textures",
-  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "Niet gladgestreken, zoals de point sampling van dgVoodoo. Vervangt de optie Texturefilters van het spel.",
+  "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "Textures zonder gladstrijken, blokkerig zoals in vroege pc-games. Vervangt de optie Texturefilters van het spel.",
   "Upscaled HUD": "Upscaled HUD",
   "Detailed Map": "Detailed Map",
   "Upscaled": "Opgeschaald",

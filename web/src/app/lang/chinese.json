@@ -362,7 +362,7 @@
   "Menus, HUD and maps": "選單、HUD 與地圖",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "高解析：LunicAura106 的 Upscaled HUD 與 JeansBig 的 Detailed Map，在高解析度下依然清晰。下載約 25 MB，在手機上會佔用更多記憶體。",
   "Pixelated textures": "像素化材質",
-  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "不做平滑處理，如同 dgVoodoo 的點取樣。會取代遊戲的「材質過濾」選項。",
+  "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "材質不做平滑處理，像早期 PC 遊戲一樣呈現方塊狀。會取代遊戲的「材質過濾」選項。",
   "Upscaled HUD": "Upscaled HUD",
   "Detailed Map": "Detailed Map",
   "Upscaled": "高解析",

@@ -362,7 +362,7 @@
   "Menus, HUD and maps": "메뉴, HUD와 맵",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "업스케일: LunicAura106의 Upscaled HUD와 JeansBig의 Detailed Map으로, 고해상도에서도 선명해요. 다운로드는 약 25 MB이고, 휴대폰에서는 메모리를 더 사용해요.",
   "Pixelated textures": "픽셀화된 텍스처",
-  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "부드럽게 처리하지 않아요. dgVoodoo의 포인트 샘플링과 같아요. 게임의 '텍스처 필터링'보다 우선해요.",
+  "Textures without smoothing, blocky like early PC games. Overrides the game's Texture Filtering.": "텍스처를 부드럽게 처리하지 않아 초창기 PC 게임처럼 각진 픽셀로 보여요. 게임의 '텍스처 필터링'보다 우선해요.",
   "Upscaled HUD": "Upscaled HUD",
   "Detailed Map": "Detailed Map",
   "Upscaled": "업스케일",
