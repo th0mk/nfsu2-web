@@ -7403,7 +7403,22 @@ static void init_once(CPU *c){
     rc_extrap_arc = env_int("NFSU2_ROAM_ARC", 1, 0, 2);
     /* (more cars shown than DEF_CARS: room for each of them) */
     int carpool = CARPOOL_KB + (O.max_cars > DEF_CARS ? (O.max_cars - DEF_CARS) * CARPOOL_KB_CAR : 0);
+#ifdef __wasm__
+    /* In the browser the pool comes out of the guest heap's 512 MB (heap.c GH_BASE..GH_LIMIT), with the world and
+     * everything else: 128000 KB left too little for the load back into free roam after a save (issue #68; 48 cars
+     * used 51 MB of it).  So players get the default; a scripted run (tests that shrink the pool to run out of car
+     * memory) still sets it.  Checked here, not only on the page: settings.ini passes UPPER_CASE lines on */
+    {   const char *scr = rh_opt("NFSU2_INPUT_SCRIPT");               /* settings.ini can't set it: an input script's run only */
+        if (scr && *scr) O.carpool_kb = env_int("NFSU2_ROAM_CARPOOL_KB", carpool, 0, 128000);
+        else {
+            const char *v = opt("NFSU2_ROAM_CARPOOL_KB");
+            O.carpool_kb = carpool;
+            if (v && *v) rlog("[roam] NFSU2_ROAM_CARPOOL_KB=%s is for test runs only, ignored: the pool is %d KB\n", v, carpool);
+        }
+    }
+#else
     O.carpool_kb = env_int("NFSU2_ROAM_CARPOOL_KB", carpool, 0, 128000);
+#endif
     /* at or below the game's own size the player's car and traffic fill the pool and no friend's car is shown:
      * the value the Settings panel's old "Car memory pool" row left in players' files (its help said "never
      * below the game's own 11000"), so it counts as unset */

@@ -130,7 +130,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_rate', env: 'NFSU2_ROAM_RATE', kind: 'int', vals: '10..30', ic: true, scope: 'web' },
   { key: 'roam_delay', env: 'NFSU2_ROAM_DELAY', kind: 'int', vals: '0..1000', ic: true, scope: 'web' },
   { key: 'roam_extrap', env: 'NFSU2_ROAM_EXTRAP', kind: 'int', vals: '0..1000', ic: true, scope: 'web' },
-  { key: 'roam_carpool_kb', env: 'NFSU2_ROAM_CARPOOL_KB', kind: 'int', vals: '0..128000', ic: true, scope: 'web' },
+  // only the Mac app reads it: in the browser the game sizes the pool (runtime/roam_game.c)
+  { key: 'roam_carpool_kb', env: 'NFSU2_ROAM_CARPOOL_KB', kind: 'int', vals: '0..128000', ic: true, scope: 'mac' },
   // LAN play
   { key: 'network', env: 'NFSU2_NET', kind: 'enum', vals: 'lan|on|off', scope: 'web' },
   { key: 'lan_interface', env: 'NFSU2_NET_IFACE', kind: 'ifname', scope: 'mac' },
@@ -464,10 +465,6 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_rate = 20
 #roam_delay = 100
 #roam_extrap = 250
-# The free-roam car memory pool in KB, raised for other players' cars (the
-# game's own is 11000; a value at or below it is ignored, as it would leave
-# no room for them).  [NFSU2_ROAM_CARPOOL_KB]
-#roam_carpool_kb = 48000
 `;
 
 /** The template's default for a key ("#key = value"), '' if the template leaves it empty or does not list it. */
