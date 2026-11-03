@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Archive } from './archive.mjs';
 import { matchFeatures, matchFixes } from './fixes.mjs';
 import { General } from './general.mjs';
+import { COMMAND as FAQ, Faq, PREFIX as FAQ_BUTTON } from './faq.mjs';
 import { blocks, firstPass, investigate, newClient, overlap, picture, vet } from './investigate.mjs';
 import { Repo, defaultSource } from './repo.mjs';
 import { folderTops, samePlace } from './sigs.mjs';
@@ -115,6 +116,9 @@ function isStaff(member, channel) {
 }
 
 const translator = new Translator({ client, anthropic, state: CFG.state });   // Apps, Translate on a message
+// the FAQ (faq.mjs): /faq posts it; its text is faq.md in the clone, like system.md, so a push updates the posted message
+const faq = new Faq({ client, anthropic, state: CFG.state, readFile: rel => repo.file(rel),
+  read: async () => (await repo.file('discord-bot/faq.md')) || fs.readFileSync(path.join(HERE, 'faq.md'), 'utf8') });
 const tags = new Tags({ client, anthropic, isStaff, dryRun: CFG.dryRun, onSolved: solved });   // forum tags (tags.mjs)
 
 // the general channels (general.mjs): nudges to the forums, spikes and a daily digest for the staff
@@ -1025,13 +1029,16 @@ client.on(Events.ClientReady, c => {
   repo.sync(true).catch(e => console.error(`[repo] ${e.message}`));
   // the staff channel's messages saved before they were marked, by its name
   if (archive && CFG.staffChannel) c.channels.fetch(CFG.staffChannel).then(ch => { archive.staffName = ch?.name; }).catch(() => {});
-  c.application.commands.set([TRANSLATE]).catch(e => console.error(`[translate] the command: ${e.message}`));
+  c.application.commands.set([TRANSLATE, FAQ]).catch(e => console.error(`[bot] the commands: ${e.message}`));
   let checking = null;                           // one check at a time: the first one reads every suggestion
   const release = () => checking ??= checkRelease().catch(e => console.error(`[release] ${e.message}`)).finally(() => { checking = null; });
   let counting = null;                           // the suggestions' votes, one count at a time
   const votes = () => counting ??= indexSuggestions(true).catch(e => console.error(`[votes] ${e.message}`)).finally(() => { counting = null; });
   indexForums().catch(e => console.error(`[bot] forum index: ${e.message}`)).finally(() => { release(); votes(); });
   setInterval(release, RELEASE_CHECK_MS);
+  // faq.md pushed: the posted FAQ follows (the clone is fetched at most every 5 minutes)
+  const faqs = () => repo.sync().then(() => faq.refresh()).catch(e => console.error(`[faq] ${e.message}`));
+  faqs(); setInterval(faqs, RELEASE_CHECK_MS);
   setInterval(votes, VOTES_MS);
   setInterval(() => general.tick().catch(e => console.error(`[general] ${e.message}`)), 60_000);
   // posts that came in shortly before a restart still get their look
@@ -1124,6 +1131,10 @@ client.on(Events.MessageCreate, guard('message', m => {
 client.on(Events.InteractionCreate, i => {
   if (i.isMessageContextMenuCommand() && i.commandName === TRANSLATE.name) {
     translator.handle(i).catch(e => console.error(`[translate] ${i.targetId}: ${e.stack || e}`));
+  } else if (i.isChatInputCommand() && i.commandName === FAQ.name) {
+    faq.command(i).catch(e => console.error(`[faq] /faq: ${e.stack || e}`));
+  } else if (i.isButton() && i.customId.startsWith(FAQ_BUTTON)) {
+    faq.click(i).catch(e => console.error(`[faq] ${i.customId}: ${e.stack || e}`));
   }
 });
 client.on(Events.Error, e => console.error(`[bot] discord: ${e.message}`));
