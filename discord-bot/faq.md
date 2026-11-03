@@ -114,7 +114,7 @@ label: Keys
 label: Mods and music
 - **Music:** F9, **Radio** plays a folder of your own songs in place of the game's (not on iPhone or iPad).
 - **The game's songs:** Settings, Game, **Songs**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
-- **Mods:** you can't add your own. A few come built in: Upscaled HUD (Settings, Display), English Subtitles Fixed and Show hidden races (Settings, Game).
+- **Mods:** you can't add your own. A few come built in: Upscaled HUD and Detailed Map (Settings, Display: Upscaled), English Subtitles Fixed and Show hidden races (Settings, Game).
 - **Other games:** this project is Underground 2. Nothing else has been announced.
 
 ### How do I report a bug?

@@ -265,7 +265,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
   (right looks right; straight down is the game's Look Back since 77a2a706) and turns it in the garage; quick chat,
   with phrases to pick in Settings, Online;
-  ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus and HUD; photo mode with F12 or the pause menu's
+  ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus, HUD and maps (Upscaled), which since 09e907f1
+  also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
+  shortcuts; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
   Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
   the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in Settings, Game, more:
