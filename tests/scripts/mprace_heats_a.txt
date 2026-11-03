@@ -1,0 +1,34 @@
+# Multiplayer races from free roam, a URL race of 2 heats (mprace.c series_*), host side, with mprace_heats_b.txt:
+# both from the same career save.  A opens a lobby at the URL race's start, starts it once B is in; the trip races
+# heat 1, leaves its game room for the lobby, creates heat 2's game, races it and goes back with the standing.  The
+# game's AI drives each heat.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_heats_a.txt --b Bob:mprace_heats_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_URL_3 --env MP_PLAYERS=2
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    mark bank0 i:0x861e74
++0    log LOBBY open
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 40000
++0    log LOBBY between the heats
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 2
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

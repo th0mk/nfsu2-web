@@ -88,6 +88,7 @@
  */
 #include "cpu.h"
 #include "mprace.h"
+#include "mpcredit.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -203,8 +204,10 @@ void dispatch_indirect(CPU *c, uint32_t addr);
  * to 2 s after each instead: about 10 s of the way to the race and as much of the way back */
 #define SETTLE          20
 #define RETAP           90
-#define MP_PRIZE_N      4
-static const int k_prize[MP_PRIZE_N] = { 400, 300, 200, 100 };   /* 1st to 4th; 5th and 6th nothing */
+#define MP_PRIZE_N      4             /* 1st to 4th get prize money; 5th and 6th nothing */
+#define G_RACES         0x008383e0u   /* the career's race table ([0x8383E4] races of 0x88 bytes: +0xD SUV, +0xF type, */
+#define G_NRACES        0x008383e4u   /* +0x30 the prize, +0x34 kind (3 normal), +0x37 stage) */
+#define C_STAGE         0x7af8u       /* Career: the current stage */
 
 enum { G_RACE_GOAL = 1, G_CAREER_GOAL = 2 };
 static struct {
@@ -213,6 +216,12 @@ static struct {
     long     next, since, step_at, look_at, load_at, frame0, results_at, left_at;   /* step_at: in the game's room */
     const char *scr; long scr_at, scr_tap;         /* the screen a step acts on, since when, and when it last acted there */
     int      place, prize, paid, raced, owns;
+    int      prizes[MP_PRIZE_N];                   /* the prize money of 1st to 4th (mprace_prize_of, at the start) */
+    int      credit, credited;                     /* MPC_*: the race in the career; 1 the career took it, -1 it did not */
+    int      topup;                                /* ...and the prize money paid on top of the career's prize (pay) */
+    float    lead;                                 /* how far ahead we won, the game's margin (mpcredit.h), when we won */
+    char     winner[16];                           /* the race's winner, its LAN name */
+    int      logged_credit, logged_cplace; char logged_winner[16];   /* credit_decide's last line (credit + 1, 0 none) */
     MpResult res[MPRACE_RESULTS_MAX]; int nres;    /* the race's results, as the game has them */
     int      look_off;                             /* the host: its search for LAN servers called off */
     int      quit_race, fee;                       /* the player quit the race (its pause menu); the fee the bank paid */
@@ -224,6 +233,7 @@ static struct {
     float    rep_factor;                           /* our engine power's factor (1: as it was) */
     uint32_t room[10];                             /* the host's room as last logged */
     long     ready, dlg_at, wait_at;
+    long     held;                                 /* the way back's time so far, while the player is not deciding */
     char     keys[16]; int nkeys; long key_at;     /* keys to press, one every 20 frames: L LEFT, R RETURN, E ESCAPE */
     char     why[96];
     const char *step;                              /* where the trip is, for the player (mprace_step) */
@@ -282,10 +292,32 @@ static void state_log(const char *where){
     fprintf(stderr, "[mprace] f=%ld state %s: mode 0x%x, race type %u, net host %d client %d, LAN mode %u, career race %08x, coordinator %u\n",
             autotest_frame(), where, rd(G_GAMEMODE), rd(G_RACETYPE), (int32_t)rd(G_NET_HOST), (int32_t)rd(G_NET_CLIENT),
             rd(G_NET + N_MODE), rd(G_CAREER_RACE), rd(rd(G_RACECO)));
+    if (getenv("NFSU2_MPRACE_TEST_PARAMS")){                       /* (test aid) the race's parameters 0x89E7A0, as words */
+        fprintf(stderr, "[mprace] f=%ld params %s:", autotest_frame(), where);
+        for (uint32_t i = 0; i < 0x80u; i += 4u) fprintf(stderr, "%s%08x", i % 32u ? " " : "  ", rd(0x0089e7a0u + i));
+        fputc('\n', stderr);
+        /* ...and the input actions' subscriptions of the two ports (0x579410: a ring at 0x8655A0 + 0x1C8 port, node
+         * +0 next, +8 the action; 0x579550 makes ports 0 and 1), each as many nodes as it holds or LOOP when its walk
+         * does not come back to its head (a free roam built as the LAN race whose start broke off hung in that walk) */
+        fprintf(stderr, "[mprace] f=%ld subscriptions %s:", autotest_frame(), where);
+        for (uint32_t p = 0; p < 2u; p++){
+            uint32_t h = 0x008655a0u + 0x1c8u * p, n = rd(h); int k = 0;
+            fprintf(stderr, " port %u:", p);
+            for (; n != h && k < 400; k++){
+                if (!okm(n, 12)){ fprintf(stderr, " BAD %08x", n); break; }
+                if (k < 24) fprintf(stderr, " %x", rd(n + 8u));
+                n = rd(n);
+            }
+            fprintf(stderr, "%s (%d)", k >= 400 ? " LOOP" : "", k);
+        }
+        fputc('\n', stderr);
+    }
 }
 static void mlog(const char *fmt, const char *a){ fprintf(stderr, "[mprace] f=%ld ", autotest_frame()); fprintf(stderr, fmt, a); fputc('\n', stderr); }
+static int series_cut(const char *why);
 static void fail(const char *why){
     if (M.goal == G_CAREER_GOAL) return;
+    if (series_cut(why)) return;                       /* (a URL race's heats broken off after one: not finished) */
     snprintf(M.why, sizeof M.why, "%s", why);
     mlog("FAILED: %s: back to the career", why); state_log("failed");
     M.goal = G_CAREER_GOAL; M.phase = MPR_BACK; M.since = clk();
@@ -711,16 +743,80 @@ int mprace_car_ok(void){ return garage_find(G_FECARS, rd(G_CAREER_CAR)) != 0; }
  * vtable is its only caller, so a patch of its entry sees every message. */
 void sub_004c2170(CPU *c);
 void dispatch_patch(uint32_t a, void (*f)(CPU *));
+static void quit_tell(void);
 static void pause_msg(CPU *c){
     uint32_t m = MR32(c->esp + 4u);
     if (M.phase == MPR_RACE && !M.results_at && !M.quit_race
         && (m == MSG_QUIT_YES || (m == MSG_PAUSE_LATER && rd(c->ecx + PAUSE_HELD) == MSG_QUIT_YES))){
         M.quit_race = 1;
         mlog("the player quits the race (its pause menu's Quit%s)", m == MSG_QUIT_YES ? "" : ", held back");
+        quit_tell();                                                     /* (the others: before the race is torn down) */
     }
     sub_004c2170(c);
 }
 
+/* ---- the race in the career, and the prize money -------------------------------------------- */
+/* A race that counts in the player's career (MpRace.credit: roam_game.c
+ * decides which do) and that the player won, or a friend of theirs won with
+ * the player over the line too, is the career's own win: in the crib on the
+ * way back (mpcredit.c), instead of the prize money.  Any other race pays its
+ * places' prize money: the career's normal race of the player's stage
+ * (GLOBALB's race table: stages 1-5 pay 250, 300, 350, 1200, 2000) for 1st,
+ * 3/4, 1/2 and 1/4 of that for 2nd to 4th, at least MPRACE_PRIZE_FLOOR. */
+/* the prize of the career's normal races of the player's stage (the least of them; the stage below for a stage with
+ * none, as after the last), 0: none known */
+static int stage_prize(void){
+    uint32_t tab = rd(G_RACES), n = rd(G_NRACES), st = rd(G_CAREER + C_STAGE);
+    if (!tab || n > 1024 || !okm(tab, n * 0x88u)) return 0;
+    for (uint32_t s = st > 9 ? 9 : st; s >= 1; s--){
+        uint32_t best = 0;
+        for (uint32_t i = 0; i < n; i++){
+            uint32_t r = tab + i * 0x88u, pr = MR32(r + 0x30u);
+            if (MR8(r + 0x37u) != s || MR8(r + 0x34u) != 3u || MR8(r + 0xdu) || MR8(r + 0xfu) == 3u || !pr || pr > 1000000u) continue;
+            if (!best || pr < best) best = pr;
+        }
+        if (best) return (int)best;
+    }
+    return 0;
+}
+int mprace_prize_of(int place){
+    static const int floor_of[MP_PRIZE_N] = MPRACE_PRIZE_FLOOR;
+    if (place < 1 || place > MP_PRIZE_N) return 0;
+    int p = stage_prize() * (MP_PRIZE_N + 1 - place) / MP_PRIZE_N;
+    return p > floor_of[place - 1] ? p : floor_of[place - 1];
+}
+static int prize_at(int place){ return place >= 1 && place <= MP_PRIZE_N ? M.prizes[place - 1] : 0; }
+/* the race's final results (M.res, M.place): its winner, and whether the career gets the race */
+static void credit_decide(void){
+    int first = -1, second = -1;
+    for (int k = 0; k < M.nres; k++) if (M.res[k].finished){ if (first < 0) first = k; else if (second < 0) second = k; }
+    snprintf(M.winner, sizeof M.winner, "%s", first >= 0 ? M.res[first].name : "");
+    M.credit = MPC_NONE; M.lead = 0.f;
+    /* the winner's margin as the game measures it (mpcredit.h): the next finisher's time over the winner's,
+     * (1 - t1 / t2) x 100, a drift race's points (p1 / p2 - 1) x 100; 100 when nobody else finished.  Ours when we
+     * won; a friend's win gives us the same (they raced it together), not the least a win counts */
+    float margin = 100.f;
+    if (first >= 0 && second >= 0 && M.res[first].points > 0) margin = M.res[second].points > 0 ? ((float)M.res[first].points / (float)M.res[second].points - 1.f) * 100.f : 100.f;
+    else if (first >= 0 && second >= 0) margin = M.res[second].time > 0.f ? (1.f - M.res[first].time / M.res[second].time) * 100.f : 100.f;
+    if (!(margin > 0.f)) margin = 0.f;
+    if (margin > 100.f) margin = 100.f;
+    if (M.r.credit && M.place == 1){ M.credit = MPC_WON; M.lead = margin; }
+    else if (M.r.credit && M.place > 1 && M.winner[0])
+        for (int i = 0; i < M.r.nfriends && i < 6; i++) if (!strcasecmp(M.r.friends[i], M.winner)){ M.credit = MPC_FRIEND; M.lead = margin; }
+    /* (the results' screen asks again each frame while we have no place: logged when the answer changes) */
+    if (M.logged_credit && M.logged_credit - 1 == M.credit && M.logged_cplace == M.place && !strcmp(M.logged_winner, M.winner)) return;
+    M.logged_credit = M.credit + 1; M.logged_cplace = M.place; snprintf(M.logged_winner, sizeof M.logged_winner, "%s", M.winner);
+    fprintf(stderr, "[mprace] f=%ld the race in the career: %s (place %d, winner %s%s%s, margin %.2f)\n", autotest_frame(),
+            !M.r.credit ? "it does not count for us" : M.credit == MPC_WON ? "we won it: it counts" : M.credit == MPC_FRIEND ? "our friend won it: it counts" : "not won",
+            M.place, M.winner[0] ? M.winner : "none", M.credit == MPC_FRIEND ? ", a friend" : "", "", (double)M.lead);
+}
+int mprace_credit(void){ return M.credit; }
+int mprace_credited(void){ return M.credited; }
+int mprace_topup(void){ return M.topup; }
+const char *mprace_winner(void){ return M.winner; }
+
+static void series_init(void);
+static void quit_reset(void);
 int mprace_start(const MpRace *r){
     static int patched;
     if (M.phase != MPR_IDLE && M.phase != MPR_DONE && M.phase != MPR_FAILED) return 0;
@@ -733,11 +829,19 @@ int mprace_start(const MpRace *r){
     if (!patched){ dispatch_patch(FN_PAUSE_MSG, pause_msg); patched = 1; }
     memset(&M, 0, sizeof M); memset(&g_bal, 0, sizeof g_bal);
     M.r = *r; M.goal = G_RACE_GOAL; M.frame0 = autotest_frame();
+    if (M.r.heats < 1) M.r.heats = 1;
+    if (M.r.nfriends < 0 || M.r.nfriends > 6) M.r.nfriends = 0;
+    for (int i = 0; i < MP_PRIZE_N; i++) M.prizes[i] = mprace_prize_of(i + 1);
+    series_init(); quit_reset();
     M.step = "Leaving free roam";
     to_phase(MPR_OUT);
-    fprintf(stderr, "[mprace] f=%ld start: %s, mode %d, track %d%s, %d laps, %d players, LAN name %s%s%s\n", M.frame0,
-            r->host ? "host" : "join", r->mode, r->track, r->reverse ? " reverse" : "", r->laps, r->players, r->name,
-            r->host ? "" : ", host ", r->host ? "" : r->host_name);
+    fprintf(stderr, "[mprace] f=%ld start: %s, mode %d, track %d%s, %d laps, %d heat%s, %d players, LAN name %s%s%s\n", M.frame0,
+            r->host ? "host" : "join", r->mode, r->track, r->reverse ? " reverse" : "", r->laps, M.r.heats, M.r.heats == 1 ? "" : "s",
+            r->players, r->name, r->host ? "" : ", host ", r->host ? "" : r->host_name);
+    fprintf(stderr, "[mprace] f=%ld start: a win %s; prize money $%d/%d/%d/%d; friends in the race:", M.frame0,
+            M.r.credit ? "counts in the career" : "does not count in the career", M.prizes[0], M.prizes[1], M.prizes[2], M.prizes[3]);
+    for (int i = 0; i < M.r.nfriends; i++) fprintf(stderr, " %s", M.r.friends[i]);
+    fprintf(stderr, "%s\n", M.r.nfriends ? "" : " none");
     { uint32_t pl = rd(G_PLAYER1); mprace_perf_log("our car in free roam", pl ? rd(pl + 4u) : 0); }
     return 1;
 }
@@ -749,13 +853,16 @@ float mprace_factor(void){ return M.rep_factor > 0.f ? M.rep_factor : 1.f; }
 int mprace_evened(int net_mode){ return balance_conf().on && balanced_mode(net_mode); }
 int mprace_quit(void){ return M.quit_race; }
 int mprace_fee(void){ return M.fee; }
+static int series_heat_place(int place);
 int mprace_report(MpReport *r){
     memset(r, 0, sizeof *r);
     if (!M.raced || !M.perf_logged || M.rep_car.type < 0) return 0;
     r->mode = M.rep_mode; r->track = M.rep_track; r->laps = M.rep_laps; r->cars = M.rep_cars;
     r->place = M.place; r->host = M.r.host; r->quit = M.quit_race;
     r->field = M.rep_field; r->factor = M.rep_factor; r->car = M.rep_car;
-    for (int k = 0; k < M.nres; k++) if (M.res[k].ours && M.res[k].finished) r->time = M.res[k].time;
+    MpResult res[MPRACE_RESULTS_MAX]; int n = mprace_heat_results(res, MPRACE_RESULTS_MAX);
+    r->place = series_heat_place(M.place);                              /* (a URL race's heats: the last heat's) */
+    for (int k = 0; k < n; k++) if (res[k].ours && res[k].finished) r->time = res[k].time;
     return 1;
 }
 const char *mprace_why(void){ return M.why[0] ? M.why : "unknown"; }
@@ -767,10 +874,31 @@ void mprace_player_gone(void){
     if (M.r.players < 2) fail("the others left the race");
 }
 int mprace_owns_input(void){ return __atomic_load_n(&M.owns, __ATOMIC_RELAXED); }   /* (the input thread asks) */
-/* the prize into the bank, or the quit's fee out of it (what it holds at most), once; where: for the log */
-static void pay(const char *where){
+/* the race into the career (the game's own win: its own prize with it), else the prize into the bank, or the quit's fee
+ * out of it (what it holds at most), once; in_roam: in free roam, not the crib; where: for the log */
+static void pay(CPU *c, int in_roam, const char *where){
     if (M.paid) return;
     M.paid = 1;
+    if (M.credit != MPC_NONE && M.r.credit){
+        int ok = mpcredit_win(c, M.r.credit, M.lead, in_roam);        /* (a friend's win: the winner's margin) */
+        M.credited = ok ? 1 : -1;
+        fprintf(stderr, "[mprace] f=%ld the race into the career: %s%s\n", autotest_frame(), ok ? "done" : "the game did not take it: the prize money instead", where);
+        if (ok){
+            /* never less for progressing: where the place's prize money (M.prize, the player's stage's: $400 for 1st
+             * at stages 1 to 3) is more than the career's own prize the game just paid ($250 to $350 for a normal
+             * race there), the difference too.  A win that waits for the next crib (in_roam) has no prize yet: none */
+            MpCredit cr; int career = mpcredit_last(&cr) && cr.race == M.r.credit ? cr.prize : -1;
+            int top = career >= 0 && M.prize > career ? M.prize - career : 0;
+            if (top > 0){
+                uint32_t b = rd(G_CAREER + C_BANK);
+                MR32(G_CAREER + C_BANK) = b + (uint32_t)top;
+                fprintf(stderr, "[mprace] f=%ld the place's prize money is more than the career's ($%d, $%d): $%d more ($%u -> $%u)\n",
+                        autotest_frame(), M.prize, career, top, b, b + (uint32_t)top);
+            }
+            M.topup = top; M.prize = 0;
+            return;
+        }
+    }
     uint32_t b = rd(G_CAREER + C_BANK);
     if (M.prize > 0){
         MR32(G_CAREER + C_BANK) = b + (uint32_t)M.prize;
@@ -781,9 +909,9 @@ static void pay(const char *where){
         fprintf(stderr, "[mprace] f=%ld the fee for quitting the race: $%d out of the bank ($%u -> $%u)%s\n", autotest_frame(), M.fee, b, b - (uint32_t)M.fee, where);
     }
 }
-void mprace_end_in_roam(void){
+void mprace_end_in_roam(CPU *c){
     if (M.phase == MPR_IDLE || M.phase == MPR_DONE || M.phase == MPR_FAILED) return;
-    pay(", in free roam");
+    pay(c, 1, ", in free roam");
     if (!M.raced && !M.why[0]) snprintf(M.why, sizeof M.why, "the trip lost its way");
     mlog("back in free roam without the trip's way back: %s", M.raced ? "done" : M.why);
     state_log("ended in free roam");
@@ -849,6 +977,289 @@ int mprace_results(MpResult *r, int max){
     memcpy(r, M.res, sizeof *r * (size_t)(n > 0 ? n : 0));
     return n;
 }
+
+/* ---- a URL race's heats ----------------------------------------------------------------------- */
+/* A URL race of the career has up to 3 heats (race record +0x7E; heat k's
+ * track at +0x18 + 4 k, a word, then a byte whose bit 0 is the reverse
+ * direction, then its laps: the career's own setup reads them so, 0x532EA0,
+ * into its race's heats, +0x54 each 0xD24 bytes, +0x34E8 their count).  The
+ * game's LAN race has no such thing: its settings (0x850080) hold one track.
+ * So the trip races each heat as a LAN game of its own, one after the other
+ * in the same LAN session: after a heat's results every game leaves its game
+ * room for the lobby, the host creates the next heat's game and the others
+ * join it, by its HOST and never a game they were in before (a game's name,
+ * "057.Ann", carries the server's count of its games).
+ * The career scores a URL by points per heat (0x513EB0: a racer's place in
+ * each heat it finished, 0x7F7B88[place]: 1st 8, 2nd 6, 3rd 4, 4th 3, 5th 2,
+ * 6th 1; none without a finish) and the most points win it (0x528710, which
+ * gives a tie to the player).  Here a tie goes to the better place in the
+ * last heat, then to the earlier name in the last heat's rows, the same in
+ * every game of the race.  The standing after the last heat is the race's
+ * result: M.res (each row's points the series' own), M.place, the prize and
+ * the career's win (credit_decide) go by it.  A player who leaves between
+ * heats is out: the host's room starts without it (ROOM_FRAMES, then the
+ * game's countdown).  A heat that ends without results (the host gone, a
+ * race of two that the other quit, our own Quit) ends the series as a race
+ * not finished: no place, nothing for anyone, the quitter's fee as before. */
+#define SER_HEATS       3
+static const int k_heat_points[7] = { 0, 8, 6, 4, 3, 2, 1 };         /* 0x7F7B88, by place (1 ..) */
+static struct {
+    int      heats, heat;                           /* the race's heats (1: no series); the one raced now (0 ..) */
+    int      track[SER_HEATS], laps[SER_HEATS], reverse[SER_HEATS];
+    int      n;                                     /* the series' players (by LAN name) and their points, their place */
+    struct { char name[16]; int points, last, in_last; } p[MPRACE_RESULTS_MAX];   /* in the last heat counted (0 none) */
+    char     joined[SER_HEATS][40];                 /* the joiner: the games it was in, by name */
+    MpResult hres[MPRACE_RESULTS_MAX]; int nhres, hplace;   /* the last heat's own rows and our place there (the race's
+                                                             * report to the server: a heat's times, not the points) */
+    int      between;                               /* from the last heat's game room to the lobby, for the next game */
+    int      alone;                                 /* the others quit mid-heat: the series is ours (quit_win) */
+    char     step[48];
+} S;
+#define G_RACES_SER     0x008383e0u
+#define G_NRACES_SER    0x008383e4u
+static int series_on(void){ return S.heats > 1; }
+static int series_last(void){ return S.heat + 1 >= S.heats; }
+/* at the trip's start: the race's heats from its record (M.r.race: its name hash); none found: one heat */
+static void series_init(void){
+    memset(&S, 0, sizeof S);
+    S.heats = 1;
+    if (M.r.heats <= 1) return;
+    uint32_t tab = rd(G_RACES_SER), n = rd(G_NRACES_SER), r = 0;
+    for (uint32_t i = 0; tab && i < n && i < 1024 && !r; i++) if (okm(tab + i * 0x88u, 0x88) && MR32(tab + i * 0x88u + 8u) == M.r.race) r = tab + i * 0x88u;
+    int h = r ? (int)(int8_t)MR8(r + 0x7eu) : 0;
+    if (h > M.r.heats) h = M.r.heats;
+    if (h > SER_HEATS) h = SER_HEATS;
+    if (h < 2){ fprintf(stderr, "[mprace] heats: the race %08x has %d in the table: one race\n", M.r.race, h); return; }
+    S.heats = h;
+    fprintf(stderr, "[mprace] heats: %d:", h);
+    for (int k = 0; k < h; k++){
+        S.track[k] = (int)(int16_t)MR16(r + 0x18u + 4u * (uint32_t)k); S.reverse[k] = MR8(r + 0x1au + 4u * (uint32_t)k) & 1u;
+        S.laps[k] = MR8(r + 0x1bu + 4u * (uint32_t)k);
+        fprintf(stderr, " track %d%s %d laps%s", S.track[k], S.reverse[k] ? " reverse" : "", S.laps[k], k + 1 < h ? "," : "\n");
+    }
+    M.r.track = S.track[0]; M.r.reverse = S.reverse[0]; M.r.laps = S.laps[0];
+}
+static int ser_find(const char *nm, int add){
+    for (int i = 0; i < S.n; i++) if (!strcasecmp(S.p[i].name, nm)) return i;
+    if (!add || S.n >= MPRACE_RESULTS_MAX) return -1;
+    memset(&S.p[S.n], 0, sizeof S.p[S.n]); snprintf(S.p[S.n].name, sizeof S.p[S.n].name, "%s", nm);
+    return S.n++;
+}
+/* the heat's rows (M.res, as the game shows them) into the points; out: the series' players so (S itself when out is
+ * &S: the heat counted for good) */
+typedef struct { int n; struct { char name[16]; int points, last, in_last; } p[MPRACE_RESULTS_MAX]; } SerTab;
+static void ser_add(SerTab *t){
+    int place = 0;
+    for (int i = 0; i < t->n; i++) t->p[i].in_last = 0, t->p[i].last = 0;
+    for (int k = 0; k < M.nres; k++){
+        const char *nm = M.res[k].name[0] ? M.res[k].name : "?";
+        int i = -1;
+        for (int j = 0; j < t->n; j++) if (!strcasecmp(t->p[j].name, nm)) i = j;
+        if (i < 0 && t->n < MPRACE_RESULTS_MAX){ i = t->n++; memset(&t->p[i], 0, sizeof t->p[i]); snprintf(t->p[i].name, sizeof t->p[i].name, "%s", nm); }
+        if (i < 0) continue;
+        t->p[i].in_last = 1;
+        if (M.res[k].finished){ place++; t->p[i].last = place; t->p[i].points += k_heat_points[place < 7 ? place : 0]; }
+    }
+}
+static void ser_tab(SerTab *t){ t->n = S.n; for (int i = 0; i < S.n; i++){ memcpy(t->p[i].name, S.p[i].name, 16); t->p[i].points = S.p[i].points; t->p[i].last = S.p[i].last; t->p[i].in_last = S.p[i].in_last; } }
+/* the standing: points, then the last heat's place (a finish before none), then the last heat's rows' order */
+static int ser_row(const char *nm){ for (int k = 0; k < M.nres; k++) if (!strcasecmp(M.res[k].name, nm)) return k; return 99; }
+static void ser_sort(SerTab *t){
+    for (int i = 1; i < t->n; i++)
+        for (int j = i; j > 0; j--){
+            int a = j - 1, b = j, la = t->p[a].last ? t->p[a].last : 99, lb = t->p[b].last ? t->p[b].last : 99;
+            int better = t->p[b].points > t->p[a].points || (t->p[b].points == t->p[a].points && (lb < la || (lb == la && ser_row(t->p[b].name) < ser_row(t->p[a].name))));
+            if (!better) break;
+            char tmp[sizeof t->p[0]]; memcpy(tmp, &t->p[a], sizeof tmp); memcpy(&t->p[a], &t->p[b], sizeof tmp); memcpy(&t->p[b], tmp, sizeof tmp);
+        }
+}
+/* the last heat's results: the standing as the race's result (M.res: a row per player, finished when it scored or
+ * raced the last heat, its points the series'; M.place ours) */
+static void ser_final(void){
+    memcpy(S.hres, M.res, sizeof S.hres); S.nhres = M.nres; S.hplace = results_place();
+    SerTab t; ser_tab(&t); ser_add(&t); ser_sort(&t);
+    MpResult out[MPRACE_RESULTS_MAX]; int n = 0, ours = -1;
+    for (int k = 0; k < M.nres; k++) if (M.res[k].ours) ours = k;
+    char me[16] = ""; if (ours >= 0) memcpy(me, M.res[ours].name, sizeof me);
+    for (int i = 0; i < t.n && n < MPRACE_RESULTS_MAX; i++){
+        MpResult *r = &out[n++]; memset(r, 0, sizeof *r);
+        memcpy(r->name, t.p[i].name, sizeof r->name);
+        r->finished = t.p[i].in_last && (t.p[i].points > 0 || t.p[i].last > 0);
+        r->points = t.p[i].points; r->ours = me[0] && !strcasecmp(me, t.p[i].name);
+        int k = ser_row(t.p[i].name);
+        if (k < M.nres){ r->clock = M.res[k].clock; r->done = M.res[k].done; r->dist = M.res[k].dist; }
+    }
+    memcpy(M.res, out, sizeof out); M.nres = n;
+}
+/* (the results' screen, each frame) the heat's rows logged once; the last heat: its standing, the place, the prize
+ * and the career's race by it */
+static void series_results(int first){
+    if (first){
+        fprintf(stderr, "[mprace] f=%ld heat %d of %d: its results\n", autotest_frame(), S.heat + 1, S.heats);
+        results_read(1);
+    }
+    if (!series_last()) return;
+    int was = M.place;
+    ser_final();
+    M.place = results_place();
+    if (first || M.place != was){
+        M.prize = prize_at(M.place);
+        fprintf(stderr, "[mprace] f=%ld the series' standing after %d heats: place %d, prize $%d\n", autotest_frame(), S.heats, M.place, M.prize);
+        for (int k = 0; k < M.nres; k++)
+            fprintf(stderr, "[mprace]   %d: %s%s, %d points%s\n", k + 1, M.res[k].name, M.res[k].ours ? " (ours)" : "", M.res[k].points,
+                    M.res[k].finished ? "" : ", out");
+        credit_decide();
+    }
+}
+/* after a heat's results (not the last): the next heat, in the same LAN session.  1: on to it; 0: no series, or the
+ * last heat */
+static int series_next(long f){
+    (void)f;
+    if (!series_on() || series_last()) return 0;
+    SerTab t; ser_tab(&t); ser_add(&t);
+    S.n = t.n; for (int i = 0; i < t.n; i++){ memcpy(S.p[i].name, t.p[i].name, 16); S.p[i].points = t.p[i].points; S.p[i].last = t.p[i].last; S.p[i].in_last = t.p[i].in_last; }
+    int rows = M.nres;
+    S.heat++;
+    M.r.track = S.track[S.heat]; M.r.reverse = S.reverse[S.heat]; M.r.laps = S.laps[S.heat];
+    if (M.r.host && rows >= 2) M.r.players = rows;
+    fprintf(stderr, "[mprace] f=%ld heat %d of %d next: track %d%s, %d laps, %d players; the points so far:", autotest_frame(), S.heat + 1, S.heats,
+            M.r.track, M.r.reverse ? " reverse" : "", M.r.laps, M.r.players);
+    for (int i = 0; i < S.n; i++) fprintf(stderr, " %s %d", S.p[i].name, S.p[i].points);
+    fputc('\n', stderr);
+    /* the next game, as the first: created, joined, ready and started again; the race's cars evened out again */
+    M.created = M.settings = M.started = 0; M.ready = 0; M.step_at = M.load_at = 0; M.look_at = 0; M.dlg_at = 0; M.ndlg = 0;
+    M.results_at = 0; M.place = 0; M.prize = 0; M.logged_place = 0; M.perf_logged = 0; memset(M.room, 0, sizeof M.room);
+    memset(&g_bal, 0, sizeof g_bal); quit_reset();
+    S.between = 1;
+    M.step = "Getting the next heat ready";
+    to_phase(MPR_LAN);
+    return 1;
+}
+/* the trip gives up after a heat was raced: the series ends there, as a race not finished (no place, no prize, the
+ * career's race not won; not "the race did not happen") */
+static int series_cut(const char *why){
+    if (!series_on() || S.heat < 1) return 0;
+    fprintf(stderr, "[mprace] f=%ld the series ends after %d of %d heats (%s): not finished, back to the career\n", autotest_frame(), S.heat, S.heats, why);
+    state_log("series cut");
+    S.between = 0; M.place = M.prize = 0; M.credit = MPC_NONE;
+    M.goal = G_CAREER_GOAL; M.phase = MPR_BACK; M.since = clk(); M.scr = 0;
+    M.step = "Back to free roam";
+    return 1;
+}
+/* the joiner: a game it was in already (the last heat's, still listed while its host leaves it) */
+static int series_old_game(uint32_t rec){
+    if (!series_on()) return 0;
+    char nm[40]; for (int i = 0; i < 36; i++) nm[i] = (char)MR8(rec + 4u + (uint32_t)i); nm[36] = 0;
+    for (int k = 0; k < S.heat && k < SER_HEATS; k++) if (S.joined[k][0] && !strcmp(S.joined[k], nm)) return 1;
+    return 0;
+}
+static void series_joined(uint32_t rec){
+    if (!series_on() || S.heat >= SER_HEATS) return;
+    for (int i = 0; i < 36; i++) S.joined[S.heat][i] = (char)MR8(rec + 4u + (uint32_t)i);
+    S.joined[S.heat][36] = 0;
+}
+/* the race's report (mprace_report, roam_game.c mp_report): the last heat's own rows and our place there */
+static int series_heat_place(int place){ return S.heats > 1 && S.nhres ? S.hplace : place; }
+int mprace_heat_results(MpResult *r, int max){
+    if (S.heats <= 1 || !S.nhres) return mprace_results(r, max);
+    int n = S.nhres < max ? S.nhres : max;
+    memcpy(r, S.hres, sizeof *r * (size_t)(n > 0 ? n : 0));
+    return n;
+}
+int mprace_series(MpSeries *s){
+    memset(s, 0, sizeof *s);
+    if (!series_on() || M.phase == MPR_IDLE) return 0;
+    s->heat = S.heat + 1; s->heats = S.heats; s->final = (series_last() && M.results_at) || S.alone;
+    SerTab t; ser_tab(&t); ser_sort(&t);
+    for (int i = 0; i < t.n && i < MPRACE_RESULTS_MAX; i++){
+        memcpy(s->p[i].name, t.p[i].name, sizeof s->p[i].name); s->p[i].points = t.p[i].points;
+        s->p[i].ours = M.r.name[0] && !strcasecmp(M.r.name, t.p[i].name);
+    }
+    s->n = t.n;
+    return 1;
+}
+
+/* ---- a race the others quit ----------------------------------------------------------------- */
+/* A player who quits the race with its pause menu's Quit gives it up: when
+ * that leaves one player in it (a race of two: either one's Quit ends it for
+ * the other too, the game's own way; of three or more, the last one left),
+ * the one who stayed won it -- 1st place, the career's race if it counts for
+ * them, else 1st's prize money -- and the quitter pays MPRACE_QUIT_FEE as
+ * before.  A race that ends under a player for any other reason (a
+ * connection lost, the host's game gone, a closed tab) still counts for
+ * nobody.  The game cannot tell them apart: the other games see a racer gone
+ * either way (a racer's end has RACING_CAR_ONLINE_DISCONNECT and nothing for
+ * a quit, the names at 0x80222C), and a race of two just ends.  So the
+ * quitter's own game says so, at the Quit's Yes, before the game tears the
+ * race down: "N2QT", version 1, flags (2: relayed), five 0 bytes, then the
+ * LAN name it races under (16 bytes), three times to each race peer on the
+ * horn's port (racehorn.c's HORN_PORT, 3659, beside the race link's 3658:
+ * the games' runtimes only), and the race's creator passes it on to the
+ * other joiners, as it does the frame rates (racenet.c).  A game that heard
+ * every other racer of its race quit, and whose race then ended without
+ * results, won it.  (The free-roam session cannot carry this: the links
+ * between a lobby's players end about a minute into the trip, "out of
+ * range", as the hub links them only while the lobby is open.)
+ * In a URL race's heats a Quit gives up the series: the quitter is out of it,
+ * as one who leaves between heats is, and a player left alone mid-heat by
+ * the others' Quits won the series, whatever the points so far (the others
+ * gave up the heats still to come). */
+#define QT_N            24
+#define QT_PORT         3659u          /* racehorn.c's HORN_PORT */
+#define QT_PEER_MS      5000u
+int  vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n);
+int  vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms);
+static struct { int n; char name[MPRACE_RESULTS_MAX][16]; } Q;   /* the racers heard to quit this race (this heat) */
+static void quit_reset(void){ memset(&Q, 0, sizeof Q); }
+static void quit_send_all(const uint8_t *m, uint32_t except){
+    uint32_t peers[16];
+    int n = vlan_race_peers(peers, 16, QT_PEER_MS);
+    for (int i = 0; i < n; i++) if (peers[i] != except) vlan_rt_send(QT_PORT, peers[i], m, QT_N);
+}
+/* the player quits: the race's other games hear it */
+static void quit_tell(void){
+    uint8_t m[QT_N]; memset(m, 0, sizeof m);
+    memcpy(m, "N2QT", 4); m[4] = 1;
+    for (int i = 0; i < 15 && M.r.name[i]; i++) m[8 + i] = (uint8_t)M.r.name[i];
+    for (int k = 0; k < 3; k++) quit_send_all(m, 0);
+    mlog("the race's other games told that %s quits it", M.r.name);
+}
+void mprace_quit_heard(uint8_t *m, int n, uint32_t from){
+    if (n < QT_N || memcmp(m, "N2QT", 4) || m[4] != 1) return;
+    char name[16]; int k = 0;
+    for (; k < 15 && m[8 + k] >= 0x20 && m[8 + k] <= 0x7e; k++) name[k] = (char)m[8 + k];
+    name[k] = 0;
+    if (!name[0]) return;
+    /* (only while we race or are on the way to it: no other game's packet is passed on at any other time) */
+    if (M.phase != MPR_RACE && M.phase != MPR_LAN) return;
+    if (!(m[5] & 2)){ m[5] |= 2; quit_send_all(m, from); }               /* the creator passes it on */
+    if (!strcasecmp(name, M.r.name)) return;
+    for (int i = 0; i < Q.n; i++) if (!strcasecmp(Q.name[i], name)) return;
+    if (Q.n < MPRACE_RESULTS_MAX) snprintf(Q.name[Q.n++], sizeof Q.name[0], "%s", name);
+    fprintf(stderr, "[mprace] f=%ld %s quits the race (its game says so)\n", autotest_frame(), name);
+}
+/* the race ended under us without results: every other racer of it quit (and we did not) */
+static int quit_alone(void){
+    int racers = M.rep_cars > 0 ? M.rep_cars : M.r.players;
+    return !M.quit_race && racers >= 2 && Q.n >= racers - 1;
+}
+/* ...we won it: 1st, the others not finished (in a series: ours, theirs given up), the prize and the career's race
+ * as for any 1st */
+static void quit_win(long f){
+    MpResult r[MPRACE_RESULTS_MAX]; int n = 0;
+    memset(r, 0, sizeof r);
+    snprintf(r[n].name, sizeof r[n].name, "%s", M.r.name); r[n].finished = 1; r[n].ours = 1;
+    if (series_on()){ int i = ser_find(M.r.name, 0); r[n].points = (i >= 0 ? S.p[i].points : 0) + k_heat_points[1]; }
+    n++;
+    for (int i = 0; i < Q.n && n < MPRACE_RESULTS_MAX; i++, n++) snprintf(r[n].name, sizeof r[n].name, "%s", Q.name[i]);
+    memcpy(M.res, r, sizeof r); M.nres = n;
+    M.results_at = f; S.alone = 1;
+    M.place = results_place(); M.prize = prize_at(M.place);
+    fprintf(stderr, "[mprace] f=%ld the others quit the race%s: we won it, place %d, prize $%d\n", autotest_frame(),
+            series_on() ? " (and with it the heats still to come)" : "", M.place, M.prize);
+    credit_decide();
+}
+
 /* the host's game in the joiner's list (its HOST our host's LAN name): its record, or 0 */
 static uint32_t find_game(void){
     uint32_t h = rd(G_LOBBY + 8u), n = h ? rd(h + 0x14u) : 0, arr = h ? rd(h + 0x40u) : 0;
@@ -856,7 +1267,7 @@ static uint32_t find_game(void){
         uint32_t p = rd(arr + 4u * k), rec = p ? rd(p) : 0;
         if (!okm(rec, 0x1c0)) continue;
         char host[17]; for (int i = 0; i < 16; i++) host[i] = (char)MR8(rec + 0x38u + (uint32_t)i); host[16] = 0;
-        if (!strcmp(host, M.r.host_name)) return rec;
+        if (!strcmp(host, M.r.host_name) && !series_old_game(rec)) return rec;
     }
     return 0;
 }
@@ -896,9 +1307,46 @@ static int dlg_answer(uint32_t msg){
 }
 static void dlg_text(char *t, int n){ int i = 0; for (; i < n - 1; i++){ t[i] = (char)MR8(G_DLG_TEXT + (uint32_t)i); if (!t[i]) break; } t[i] = 0; }
 
+/* between two heats: from the last heat's results and its game room to the lobby (the game's own way out: the room's
+ * Back, "exit this game session?" Yes; the host gone from the game sends the others there with a message), where
+ * the next heat's game is created and joined as the first was.  1 while on the way */
+static int step_between(long f){
+    if (!S.between) return 0;
+    uint32_t cb = rd(G_LOBBY + 0xcu);
+    if (rd(G_DLG)){
+        uint32_t nb = rd(G_DLG_NBUT);
+        char t[96]; dlg_text(t, sizeof t);
+        int cancel = nb == 1 && (rd(G_DLG_MSG3) == MSG_LOOK_CANCEL || rd(G_DLG_LABEL3) == LBL_CANCEL);
+        if (nb == 0 || cancel){
+            if (!M.wait_at) M.wait_at = f;
+            if (cancel && f - M.wait_at > 60 * 5){ dlg_answer(rd(G_DLG_MSG3)); M.wait_at = 0; M.next = f + 30; }
+            return 1;
+        }
+        M.wait_at = 0;
+        mlog("between the heats, a dialog: \"%s\": yes / OK", t);
+        dlg_answer(nb == 1 ? rd(G_DLG_MSG3) : rd(G_DLG_MSG1));
+        M.next = f + 30;
+        return 1;
+    }
+    M.wait_at = 0;
+    if (on("UI_PostRaceResults.fng")){ if (f - M.scr_tap >= 60 * 4){ autotest_tap(K_RET, 6); acted(f); } return 1; }
+    if (rd(G_FLOW) != 3u) return 1;                                               /* (the last heat's world going) */
+    if (cb == CB_ROOM){ if (act_ok("PC_OL_GameRoom.fng", f)){ autotest_tap(K_ESC, 6); acted(f); } return 1; }
+    if (cb == CB_LOBBY || on("UI_OLMAIN.fng")){
+        S.between = 0; M.scr = 0;
+        mlog("between the heats: in the lobby again, the next heat's game%s", M.r.host ? " to create" : " to join");
+        return 0;
+    }
+    return 1;
+}
+
 /* ---- toward the race -------------------------------------------------------------------------- */
 static void step_race(CPU *c, long f){
     uint32_t cb = rd(G_LOBBY + 0xcu), ctx = rd(G_LOBBY + 0x10u), flow = rd(G_FLOW);
+    /* the connection to the host's LAN game lost (the game's own screen, step_back answers it): the race is off at
+     * once (the room would wait for a start that cannot come) */
+    if (M.phase == MPR_LAN && on("UI_OL_Disconnect.fng")){ S.between = 0; fail("the connection to the host's game was lost"); return; }
+    if (!M.host_gone && step_between(f)) return;
     if (M.host_gone && M.phase == MPR_LAN){
         /* the host quit: its LAN server went with it (a "Connecting to lobby..." called off) */
         if (rd(G_DLG) && rd(G_DLG_NBUT) == 1u) dlg_answer(rd(G_DLG_MSG3));
@@ -1036,7 +1484,7 @@ static void step_race(CPU *c, long f){
         gs(G_NET + N_PASSWD, M.r.password, 13); gs(G_NET + N_PASSWD2, M.r.password, 13);
         uint32_t a[4] = { rec + 4u, G_NET + N_PASSWD, CB_JOINED, ctx };
         int32_t r = (int32_t)call(c, FN_GJOI, G_LOBBY, 4, a);
-        if (r >= 0){ uint32_t st = 0x12; call(c, FN_LANSTATE, G_NET, 1, &st); }
+        if (r >= 0){ uint32_t st = 0x12; call(c, FN_LANSTATE, G_NET, 1, &st); series_joined(rec); }
         char nm[40]; for (int i = 0; i < 36; i++) nm[i] = (char)MR8(rec + 4u + (uint32_t)i); nm[36] = 0;
         fprintf(stderr, "[mprace] f=%ld join the game %s: %d\n", autotest_frame(), nm, r);
         M.next = f + 60;                                                          /* (busy until the answer: no second join) */
@@ -1092,8 +1540,8 @@ static void step_race(CPU *c, long f){
 
 /* ---- the race and its results ----------------------------------------------------------------- */
 static int step_racing(long f){
-    if (rd(G_FLOW) == 6u && (rd(G_GAMEMODE) & 0x200u) && M.phase == MPR_LAN){ to_phase(MPR_RACE); M.raced = 1; mlog("the race is on%s", ""); }
-    if (M.phase == MPR_LAN && M.lan && rd(G_FLOW) != 3u){                                    /* (the room's start: the race's world loads) */
+    if (rd(G_FLOW) == 6u && (rd(G_GAMEMODE) & 0x200u) && M.phase == MPR_LAN && !S.between){ to_phase(MPR_RACE); M.raced = 1; mlog("the race is on%s", ""); }
+    if (M.phase == MPR_LAN && M.lan && rd(G_FLOW) != 3u && !S.between){                     /* (the room's start: the race's world loads) */
         M.step = "Loading the race";
         if (!M.load_at) M.load_at = f;
     }
@@ -1125,18 +1573,23 @@ static int step_racing(long f){
         int first = !M.results_at;
         if (first) M.results_at = f;
         results_read(0);                                                          /* (the way back's cover shows them) */
-        if (first || !M.place){
+        if (series_on()) series_results(first);                                   /* (a URL race's heats: by the standing) */
+        else if (first || !M.place){
             M.place = results_place();
-            M.prize = M.place >= 1 && M.place <= MP_PRIZE_N ? k_prize[M.place - 1] : 0;
+            M.prize = prize_at(M.place);
+            credit_decide();
         }
-        if (first || (M.place && !M.logged_place)){
+        if (!series_on() && (first || (M.place && !M.logged_place))){
             M.logged_place = M.place != 0;
             fprintf(stderr, "[mprace] f=%ld the results: place %d, prize $%d%s\n", autotest_frame(), M.place, M.prize, first ? "" : " (our row came later)");
             results_read(1);
         }
         /* the player reads them; Continue after 8 s, the host 4 s after the others (its leaving closes the server) */
         if (f - M.results_at > 60 * (M.r.host ? 12 : 8)){
-            autotest_tap(K_RET, 6); M.goal = G_CAREER_GOAL; M.step = "Back to free roam"; to_phase(MPR_BACK);
+            autotest_tap(K_RET, 6);
+            act_ok("UI_PostRaceResults.fng", f); acted(f);
+            if (series_next(f)) return 1;                                         /* (the next heat) */
+            M.goal = G_CAREER_GOAL; M.step = "Back to free roam"; to_phase(MPR_BACK);
             act_ok("UI_PostRaceResults.fng", f); acted(f);
         }
         return 1;
@@ -1145,7 +1598,9 @@ static int step_racing(long f){
      * results with their own Continue, before ours (the game's room came up, and the trip waited there for
      * good): back */
     if (rd(G_FLOW) == 3u){
-        if (M.results_at && !M.place){ M.place = results_place(); M.prize = M.place >= 1 && M.place <= MP_PRIZE_N ? k_prize[M.place - 1] : 0; }
+        if (M.results_at && series_next(f)) return 1;                             /* (a heat's results left: the next heat) */
+        if (!M.results_at && quit_alone()){ quit_win(f); M.goal = G_CAREER_GOAL; M.step = "Back to free roam"; to_phase(MPR_BACK); return 1; }
+        if (M.results_at && !M.place){ M.place = results_place(); M.prize = prize_at(M.place); credit_decide(); }
         if (M.results_at) fprintf(stderr, "[mprace] f=%ld the results left by the player: place %d, prize $%d\n", autotest_frame(), M.place, M.prize);
         else mlog("the race was left: not finished%s", M.quit_race ? " (the player's own Quit: the fee)" : "");
         M.goal = G_CAREER_GOAL; M.step = "Back to free roam"; to_phase(MPR_BACK);
@@ -1154,8 +1609,55 @@ static int step_racing(long f){
 }
 
 /* ---- back to the career --------------------------------------------------------------------- */
+/* The connection to the LAN game lost (the host's game closed under a player in its room, or its server gone):
+ * the game's own screen UI_OL_Disconnect (screen 0x4B9430, class 0x78FCE8; set up by 0x49DB00), not a dialog, and
+ * while it is up the game shows no dialog at all ([0x8383B4], ShowDialog 0x558020).  Its options' kinds are at
+ * +0x4C + 4 i (i 0 .. 2, its buttons 0xB8A7C6CC .. CE: 0x4D0470); kind 3 is back to the main menu (0x4B93A0: the
+ * flag cleared, LAN left 0x4A0140, UI_Main), kind 2 back to the LAN's own main screen (0x49D950), kinds 0 and 1 are
+ * the game's way out of the program (0x5B7C40, [0x864F4C] = 1): never those.  The answer as its button gives it,
+ * 0x4B95C0(i) on the screen.  1: answered */
+#define VT_OL_DISCONNECT 0x0078fce8u
+#define FN_DISCONNECT_PICK 0x004b95c0u
+static int disconnect_answer(CPU *c){
+    uint32_t s = screen_of(VT_OL_DISCONNECT);
+    if (!s) return 0;
+    int pick = -1;
+    for (int i = 0; i < 3 && pick < 0; i++) if (rd(s + 0x4cu + 4u * (uint32_t)i) == 3u) pick = i;
+    for (int i = 0; i < 3 && pick < 0; i++) if (rd(s + 0x4cu + 4u * (uint32_t)i) == 2u) pick = i;
+    fprintf(stderr, "[mprace] f=%ld the game's \"connection lost\" screen: options %u %u %u, %s%d\n", autotest_frame(), rd(s + 0x4cu), rd(s + 0x50u),
+            rd(s + 0x54u), pick < 0 ? "none to take" : "take ", pick);
+    if (pick < 0) return 0;
+    uint32_t a = (uint32_t)pick; call(c, FN_DISCONNECT_PICK, s, 1, &a);
+    return 1;
+}
+/* The race's parameters (GRaceParameters 0x89E7A0: +0 the track, +0x10 the race type, +0x40 .. +0x47 the network
+ * race's flags, +0x74 its racers) are the world the game builds next.  A race that ends goes through the game's
+ * front end load (flow 1, 0x57FF10), whose first step puts them back as the menus have them (0x5ED5F0: track 2000,
+ * race type 0, no racers); Return to Explore Mode then makes free roam of that (0x5404A0 sets the track, the race
+ * type and the player's car, nothing else).  A LAN race whose start broke off (the host's Start, then "the other
+ * players were unable to connect", or the host's game gone) never loaded its world, so the game never went that
+ * way: its parameters stayed the LAN race's (the host's game had built them, a joiner's too once the start reached
+ * it), and Return to Explore built free roam as that race: race type 1, the network race's flags, one racer, no
+ * traffic, the race's HUD (HUD_Drift after a drift race), and the game hung at the player's first change of control
+ * (its input setup 0x605C70 walking the actions' subscriptions, 0x579410, for good: tests with the game's autopilot,
+ * 2026-11-02).  On the way back, in the main menu, they get the same reset when they are not the menus' already. */
+#define G_RPARAMS        0x0089e7a0u
+#define FN_RPARAMS_RESET 0x005ed5f0u   /* thiscall GRaceParameters: as the front end has them */
+#define RP_TRACK_MENUS   0x7d0u
+static void params_reset(CPU *c){
+    uint32_t tr = rd(G_RPARAMS), ty = rd(G_RPARAMS + 0x10u), n = rd(G_RPARAMS + 0x74u), nf = rd(G_RPARAMS + 0x40u), nf2 = rd(G_RPARAMS + 0x44u);
+    if (tr == RP_TRACK_MENUS && !ty && !n) return;
+    call(c, FN_RPARAMS_RESET, G_RPARAMS, 0, 0);
+    fprintf(stderr, "[mprace] f=%ld the race's parameters were the LAN race's (track %u, race type %u, %u racers, flags %08x %08x): put back "
+            "as the menus have them (track %u, race type %u, %u racers)\n", autotest_frame(), tr, ty, n, nf, nf2, rd(G_RPARAMS), rd(G_RPARAMS + 0x10u),
+            rd(G_RPARAMS + 0x74u));
+}
 static void step_back(CPU *c, long f){
     uint32_t cb = rd(G_LOBBY + 0xcu), flow = rd(G_FLOW);
+    /* in the crib after the race's win: the player picks a sponsor, or the race's movie plays (mpcredit.c): theirs,
+     * the dialog too */
+    if (mpcredit_busy()){ M.next = f + 4; return; }
+    if (on("UI_OL_Disconnect.fng")){ if (act_ok("UI_OL_Disconnect.fng", f)){ disconnect_answer(c); acted(f); } return; }
     if (rd(G_DLG)){
         /* a dialog on the way back: Yes / OK (the left button, or the only
          * one); a "please wait" goes by itself, or with its Cancel after 5 s
@@ -1182,7 +1684,8 @@ static void step_back(CPU *c, long f){
         /* free roam again: done (the career's own free roam, not a LAN race's world); a test's
          * NFSU2_MPRACE_TEST_NODONE=1 misses it, as a trip that lost its way would (roam_game.c's MP_STALE_US) */
         static int nodone = -1;
-        if (nodone < 0){ const char *e = getenv("NFSU2_MPRACE_TEST_NODONE"); nodone = e && *e == '1'; }
+        if (nodone < 0){ const char *e = getenv("NFSU2_MPRACE_TEST_NODONE"), *p = getenv("NFSU2_MPRACE_TEST_NOCRIBPAY");
+                         nodone = (e && *e == '1') || (p && *p == '1'); }
         if ((rd(G_GAMEMODE) & 1u) && rd(G_RACETYPE) == 0 && rd(rd(G_RACECO)) == 4u && on("HUD_SingleRace.fng") && !nodone){
             state_log("back in free roam"); to_phase(M.why[0] ? MPR_FAILED : MPR_DONE);
             M.owns = 0;
@@ -1204,6 +1707,8 @@ static void step_back(CPU *c, long f){
         /* the main menu again after the crib's Return to Explore (its save went there instead, unsaved: a 2026-10-27
          * report, the host's server gone on the way back): the career once more, until the way back's time is up */
         if (M.crib_go){ M.resumed = M.crib_go = 0; mlog("the main menu after the crib: the career again%s", ""); }
+        state_log("in the main menu");
+        params_reset(c);                                                          /* (a start that broke off) */
         uint32_t a[3] = { S_MAIN, gstr_tmp(c, "UI_StartCareer.fng"), 0 };
         call(c, FN_FE_SWITCH, 0, 3, a);
         M.career = 1; acted(f);
@@ -1216,11 +1721,17 @@ static void step_back(CPU *c, long f){
         return;
     }
     if (on("UI_CareerCrib.fng") && !on("MC_Main.fng")){
-        /* the prize (or the fee), once the crib took its snapshot (the autosave on), so that its autosave sees it */
-        if (!M.paid){
+        /* the prize (or the fee), once the crib took its snapshot (the autosave on), so that its autosave sees it.  A
+         * test's NFSU2_MPRACE_TEST_NOCRIBPAY=1 misses it, and free roam's end too (as NODONE): a trip that lost its
+         * way, paid in free roam (mprace_end_in_roam; a career win waits beside the profile for the next crib) */
+        static int nocribpay = -1;
+        if (nocribpay < 0){ const char *e = getenv("NFSU2_MPRACE_TEST_NOCRIBPAY"); nocribpay = e && *e == '1'; }
+        if (!M.paid && nocribpay && !M.crib_go) mlog("the crib: no pay here (NFSU2_MPRACE_TEST_NOCRIBPAY)%s", "");
+        if (!M.paid && !nocribpay){
             if (rd(G_SNAPSHOT) == 0 && f - M.since < 60 * 3) return;               /* (its INIT_COMPLETE) */
-            pay(rd(G_SNAPSHOT) ? "" : "; the game's autosave is off: saved at the next save");
+            pay(c, 0, rd(G_SNAPSHOT) ? "" : "; the game's autosave is off: saved at the next save");
         }
+        if (mpcredit_busy()){ M.next = f + 4; return; }                          /* (the sponsor pick, the movie) */
         if (!M.crib_go){
             state_log("at the crib");
             send_to(c, MSG_CRIB_GO, gstr_tmp(c, "UI_CareerCrib.fng")); M.crib_go = 1; mlog("return to explore mode%s", "");
@@ -1255,6 +1766,11 @@ void mprace_frame(CPU *c){
     /* the player's input is ours out of free roam and back, not in the race, not on its results, not while the
      * pause menu's Save saves */
     M.owns = (M.phase == MPR_OUT && !savegame_busy()) || M.phase == MPR_LAN || (M.phase == MPR_BACK && !on("UI_PostRaceResults.fng"));
+    /* ...nor while the player picks a sponsor in the crib or watches the race's movie (mpcredit_busy: the page's
+     * cover goes too, mprace_covered), and the way back's time stands meanwhile; keys of ours still to press (the
+     * save's "LR": the movie comes as the save ends) would answer the question or skip the movie: dropped */
+    if (mpcredit_busy()){ M.owns = 0; M.nkeys = 0; }
+    if (M.goal == G_CAREER_GOAL){ if (mpcredit_busy()) M.since = f - M.held; else M.held = f - M.since; }
     if (step_racing(f)) return;
     if (keys_run(f) || f < M.next) return;
     if (M.goal == G_RACE_GOAL){

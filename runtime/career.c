@@ -60,6 +60,9 @@
  *                              adds a won record of stage 5's final event
  *   watchw X                   debug: log the guest functions that write X
  *   bot on|off                 the career bot below (also NFSU2_CAREER_BOT=1)
+ *   mpcredit NAME[,NAME] [MARGIN]  the wins of those races at the next crib, as
+ *                              multiplayer race's (mpcredit.c; MARGIN as the
+ *                              game measures it, 100 by default, -1 a friend's)
  * X/ARG/FN are expressions: numbers, "*X" (guest dword at X), "(X)", "+", "-",
  * and "*" between two operands (multiply), e.g. "*(*0x890118+0xbd0)".
  */
@@ -1072,7 +1075,7 @@ static void queue(const char *line){
 int career_is_cmd(const char *cmd){
     static const char *const k[] = { "call", "memdump", "waitx", "teleport", "autopilot", "racewin",
                                      "careerlist", "careergo", "shopgo", "peekx", "fnglist", "bot", "waitfe", "tapfe", "waitroam", "showgo", "cargo", "watchw",
-                                     "outrun", "outrunwin", "visual", "uniques", 0 };
+                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -1216,6 +1219,7 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
     if (!strcasecmp(cmd, "fnglist")){
         fprintf(stderr, "[career] f=%ld fe packages:", f); fe_each(fe_print, a1[0] ? (void *)1 : 0); fputc('\n', stderr); return 1; }
     if (!strcasecmp(cmd, "careergo")){ career_go(a1); return 1; }
+    if (!strcasecmp(cmd, "mpcredit")){ int mpcredit_test(const char *, float); mpcredit_test(a1, a2[0] ? (float)atof(a2) : 100.f); return 1; }
     if (!strcasecmp(cmd, "shopgo")){
         uint32_t sh = shop_by_name(a1);
         char what[64]; snprintf(what, sizeof what, "shopgo %s", a1);

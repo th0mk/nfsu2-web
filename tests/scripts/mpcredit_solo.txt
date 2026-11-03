@@ -1,0 +1,33 @@
+# The control for mpcredit_crib.txt: the same race won with Solo (the game's own race, finished by
+# NFSU2_CAREER_RACEWIN, then its post-race screens and the autosave), from the same career save, for comparing the
+# saved profiles.
+#   NFSU2_SAVE_SEED=<save tree> node web/tools/run-suite.mjs --base <server> --script mpcredit_solo.txt
+#        --marker "MPC done" --name <name> --env MPC_RACE=S2_CIRCUIT_5 --env NFSU2_CAREER_RACEWIN=3 --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++60   careerlist
++0    careergo ${MPC_RACE}
++300  tapfe RETURN UI_EngageRaceDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # Accept
++0    waitfe UI_PostRaceResults.fng 12000
++120  careerlist
++0    tap RETURN
++200  fnglist
++0    tap RETURN
++200  fnglist
++0    tap RETURN
++200  fnglist
++0    waitfe MC_Main.fng 1500
++120  fnglist
++0    tap LEFT
++30   tap RETURN                      # the autosave: Yes
++120  fnglist
++0    tap LEFT
++30   tap RETURN
++0    waitroam 4000
++120  careerlist
++0    fnglist
++0    log MPC done
++10   quit

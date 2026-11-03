@@ -1,0 +1,49 @@
+# Multiplayer races from free roam, then the career on its own (the original career races stay as they were):
+# after a lobby race that counts (MP_RACE, with mprace_solo_after_a/b.txt), a Solo career race at an open race
+# (SOLO_RACE): its card, Accept, Solo, the race with the AI, the game's own post-race screens, back in free roam.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    dump spot_line
++0    log LOBBY open
++0    tap RETURN
++60   dump lobby_line
++0    roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log SOLO career race
++0    careergo ${SOLO_RACE}
++300  tap RETURN                      # Engage: the race's card
++0    waitfng UI_EngageRaceDialog.fng 900
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++60   tap RIGHT
++30   tap RETURN                      # Solo (the right button)
++0    waitexpr x:0x863470 != 0 1200
++0    peek 0x863470 1
++0    waitmem 0x008654a4 6 6000
++0    waitfng HUD_SingleRace.fng 6000
++0    autopilot on 60000
++0    log SOLO racing
++0    waitmem 0x008654a4 3 60000
++0    log SOLO results
++0    bot on
++0    waitroam 9000
++0    bot off
++0    careerlist
++0    log LOBBY DONE
++60   quit

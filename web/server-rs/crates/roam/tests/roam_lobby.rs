@@ -527,3 +527,21 @@ fn race_reports_on_the_wire_roam_core_and_the_hub_agree() {
           class 2, rating 316.6 (the cars' average 280.5), 214 kW, 1450 kg, 249 km/h, power x1.250"]
     );
 }
+
+// a race that counted in the reporter's career (the report's credit byte, p[17]) says so at the end of its line
+#[test]
+fn a_race_that_counted_in_the_career_says_so() {
+    let mut k = Kit::new(RoamOptions::default());
+    k.from(W(0), &hello_with(100, &HelloOpts { core: 5, name: b"Ann", ..Default::default() }));
+    let mut d = racerep(100, 0xA3, 1, 2, 0, 239.3, b"PEUGOT", 64);
+    // (the payload after the datagram's 16-byte header: its byte +17; then the CRC again, kit::dgram's way)
+    d[16 + 17] = 2;
+    let n = d.len();
+    let crc = crc32fast::hash(&d[..n - 4]);
+    d[n - 4..].copy_from_slice(&crc.to_le_bytes());
+    k.from(W(0), &d);
+    let lines = k.lines.lock().clone();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].starts_with("[race] lobby 000000a3"), "{lines:?}");
+    assert!(lines[0].ends_with("power x1.000; a friend's win in the career"), "{lines:?}");
+}

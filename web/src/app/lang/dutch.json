@@ -127,6 +127,7 @@
   "Open a lobby": "Lobby openen",
   "Join": "Meedoen",
   "This lobby is full.": "Deze lobby is vol.",
+  "A career race for players up to stage {n} and {host}'s friends.": "Een carrièrerace voor spelers tot en met niveau {n} en vrienden van {host}.",
   "Open another": "Een andere openen",
   "Starting in {n}": "Start over {n}",
   "Joining {host}'s {kind}…": "Aanmelden voor de {kind} van {host}…",
@@ -1324,5 +1325,26 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Spelen met anderen wacht op een andere naam: wijzig hem onder Online op de startpagina.",
   "{name} isn't allowed here.": "{name} is hier niet toegestaan.",
   "Pick another name to keep playing with others.": "Kies een andere naam om met anderen te blijven spelen.",
-  "Pick another name": "Kies een andere naam"
+  "Pick another name": "Kies een andere naam",
+  "friend": "vriend",
+  "A win counts in your career": "Een overwinning telt in je carrière",
+  "A win counts in their career": "Een overwinning telt in de carrière van deze speler",
+  "A win counts in your career, and so does a friend's": "Een overwinning telt in je carrière, ook die van een vriend",
+  "Friend's win": "Winst van een vriend",
+  "Career win": "Carrièrewinst",
+  "Multiplayer race: {pos} place, won in your career": "Multiplayerrace: {n}e plaats, gewonnen in je carrière",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Multiplayerrace: {n}e plaats. {name} won: het telt ook in je carrière",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Multiplayerrace: {n}e plaats, gewonnen in je carrière, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Multiplayerrace: {n}e plaats. {name} won: het telt ook in je carrière, ${prize}",
+  "Getting the next heat ready": "Volgende heat wordt klaargezet",
+  "Heat {k} of {n}": "Heat {k} van {n}",
+  "{n} heats": {
+    "one": "{n} heat",
+    "other": "{n} heats"
+  },
+  "Standings": "Tussenstand",
+  "Final standings": "Eindstand",
+  "Heat {k} results": "Uitslag heat {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Multiplayerrace: {n}e plaats: de winst gaat bij je volgende bezoek aan de garage je carrière in",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Multiplayerrace: {n}e plaats. {name} won: het gaat bij je volgende garagebezoek je carrière in"
 }

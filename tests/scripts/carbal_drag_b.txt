@@ -19,7 +19,8 @@
 +120  tap LEFT
 +30   tap RETURN                      # Accept: Solo or Multiplayer?
 +0    waitfng IG_GenericDialog_MED.fng 600
-+60   tap RETURN                      # the right button, focused: Multiplayer
++60   tap LEFT
++30   tap RETURN                      # the left button: Multiplayer (Solo, the right one, has the focus)
 +60   roam mp lobby
 +0    roam mp waitlobby 2 3000
 +0    log LOBBY trip

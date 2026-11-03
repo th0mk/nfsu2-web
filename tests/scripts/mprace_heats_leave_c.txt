@@ -1,0 +1,21 @@
+# Multiplayer races from free roam, a URL race of 2 heats with three players, the third gone between the heats (with
+# mprace_heats_a.txt and mprace_heats_b.txt, MP_PLAYERS=3): C joins A's lobby, races heat 1 and closes its game as
+# soon as heat 1's results close (its tab gone).  A and B race heat 2 without it (A's room starts without C after
+# its wait), and C is out of the series' standing.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 40000
++0    log LOBBY gone between the heats
++0    quit

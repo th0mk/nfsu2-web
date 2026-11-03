@@ -1092,6 +1092,8 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
 .lobby-n { width: 1em; text-align: right; color: var(--muted); }
 .lobby-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lobby-tag { font-size: 0.75em; text-transform: uppercase; color: var(--lime); }
+/* a race that counts in a player's career (lobby.ts places, career) */
+.lobby-star { color: var(--lime); }
 /* quick chat: what a player of the lobby said lately, beside their name (lobby.ts say) */
 .lobby-said { max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9em; font-weight: 700; font-style: italic; color: var(--lime); }
 .lobby-act { display: flex; gap: 0.5em; align-items: center; margin-top: 0.6em; }

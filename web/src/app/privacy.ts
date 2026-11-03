@@ -29,8 +29,8 @@ const THREAD = /^\[\d+!\] /;
 const PLAYER_TAGS = /^\[(roam|notice|chat|horn|carsfx|mprace|online|lobby|racenet|net|guest)\]/;
 const WORD = '[\\p{L}\\p{N}_]';
 /** what stands before and after a name in the lines that print one */
-const PRE = String.raw`(?:^|f=\d+ |JOIN: |LEAVE: |with |behind |for |as |profile |name |\[notice\] |\[chat\] |\[carsfx\] |\[horn\] |\[roam\] {1,3}|autosave: |quick chat: |lobby [0-9a-f]{8}: |slot \d+:? |loading |car [0-9a-f]{4}(?: \(ours\))?, |NAME=|ROOM=|CREW=|"|'|NFS Underground 2/(?:[^/"\n]+/)?)`;
-const POST = String.raw`(?:'s |'s$|'| joined| left| quit| said| lost the connection| is | turned free roam off| called off| challenges|: | \(|, |"|/|$)`;
+const PRE = String.raw`(?:^|f=\d+ |JOIN: |LEAVE: |with |behind |for |as |profile |name |\[notice\] |\[chat\] |\[carsfx\] |\[horn\] |\[roam\] {1,3}|autosave: |quick chat: |lobby [0-9a-f]{8}: |slot \d+:? |loading |car [0-9a-f]{4}(?: \(ours\))?, |NAME=|ROOM=|CREW=|"|'|NFS Underground 2/(?:[^/"\n]+/)?|place\. |winner )`;
+const POST = String.raw`(?:'s |'s$|'| joined| left| quit| said| lost the connection| is | turned free roam off| called off| challenges| won it| quits the race|: | \(|, |"|/|$)`;
 const IPV4 = /(?<![\w./:-])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\w/]|\.\d)/g;
 
 /** 4 characters of a 32-bit FNV-1a hash of the salt and the name */
@@ -80,6 +80,7 @@ export class Privacy {
         return false;
       }
       if (l.includes(' race lobby ') && (m = /^\[roam\] f=\d+ race lobby [0-9a-f]{8}: (.+?)(?: (?:joined|left|quit), \d+ of \d+| is gone from it)/.exec(l))) return got(m[1], 'player');
+      if (l.includes(' won it: ') && (m = /^\[roam\] f=\d+ race lobby: Multiplayer race: \d+(?:st|nd|rd|th) place\. (.+?) won it: /.exec(l))) return got(m[1], 'player');
       if (l.includes(' quick chat: ') && (m = /^\[roam\] f=\d+ quick chat: (.+?)(?: said phrase |'s phrase \d)/.exec(l))) return got(m[1], 'player');
       if (l.includes(': loading ') && (m = /^\[roam\] f=\d+ slot \d+: loading (.+)'s \S+ \(\d+ parts/.exec(l))) return got(m[1], 'player');
       if (l.includes('(car of our own') && (m = /^\[roam\] f=\d+ slot \d+ \(car of our own, being created\) for (.+), [\d.]+ m away/.exec(l))) return got(m[1], 'player');
@@ -95,6 +96,14 @@ export class Privacy {
     if (l.startsWith('[mprace] ')) {
       if ((m = /^\[mprace\] f=\d+ the LAN name (.+)$/.exec(l))) return got(m[1], 'you');
       if ((m = /^\[mprace\]\s+row \d+: car [0-9a-f]{4}( \(ours\))?, (.+?), /.exec(l))) return got(m[2], m[1] ? 'you' : 'player');
+      // a race that counts in the career: the friends in it (LAN names: letters and digits), its winner
+      if ((m = /^\[mprace\] f=\d+ start: .*; friends in the race: (.+)$/.exec(l))) {
+        for (const n of m[1].split(' ')) if (n !== 'none') this.name(n, 'player');
+        return true;
+      }
+      if ((m = /^\[mprace\] f=\d+ the race in the career: .*\(place \d+, winner (.+?)(?:, a friend)?, margin /.exec(l)) && m[1] !== 'none') return got(m[1], 'player');
+      // a player who quit a race of ours, as its game told the others
+      if ((m = /^\[mprace\] f=\d+ (.+) quits the race \(its game says so\)$/.exec(l))) return got(m[1], 'player');
       return false;
     }
     if (l.startsWith('[online] ') && (m = /^\[online\] Online menu as (.+) \([^)]*\): /.exec(l))) return got(m[1], 'you');
@@ -144,6 +153,9 @@ export class Privacy {
       const re = new RegExp(`(?<=${PRE})(?:${framed.sort(byLength).map(escape).join('|')})(?=${POST})`, 'gmu');
       out = out.replace(re, n => label(n, this.names.get(n)!));
     }
+    // a race's friends, a list of LAN names (one word each): every known one, a log word too
+    out = out.replace(/(friends in the race: )(.+)$/gm, (_, pre: string, list: string) =>
+      pre + list.split(' ').map(n => this.names.has(n) ? label(n, this.names.get(n)!) : n).join(' '));
     // addresses: ours, the virtual LAN's, any other; the adapter made from ours
     out = out.replace(/(?<![\d.])10\.77\.\d{1,3}\.\d{1,3}(?!\d)/g, a => this.ours.has(a) ? 'vlan-you' : `vlan-${hash4(salt, a)}`);
     out = out.replace(IPV4, (a, ...o: string[]) => {

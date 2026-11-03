@@ -18,8 +18,8 @@
 +30   tap RETURN                      # Accept: Solo or Multiplayer?
 +0    waitfng IG_GenericDialog_MED.fng 600
 +60   roam mp ui
-+0    tap LEFT
-+30   tap RETURN                      # Solo: the career race
++0    tap RIGHT
++30   tap RETURN                      # Solo (the right button): the career race
 +0    log OVERLAP solo
 +0    waitmem 0x008654a4 6 1200
 +600  roam mp lobby

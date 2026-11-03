@@ -1,0 +1,14 @@
+# A multiplayer race's win that waits for the crib (runtime/mpcredit.c: the trip missed the crib, or the test aid),
+# and the tab closed before the crib: the win is kept beside the profile ("NFS Underground 2/<NAME>/MPWINS.DAT").
+# This run queues it in free roam and quits; a second run seeded from this one's save folder (--save-out) gives it
+# at the crib (mpcredit_crib.txt with MPC_RACE empty), and the file goes once the crib's autosave wrote the profile.
+#   NFSU2_SAVE_SEED=<save tree> node web/tools/run-suite.mjs --base <server> --script mpcredit_queue.txt
+#        --marker "MPC done" --name <name> --env MPC_RACE=S2_CIRCUIT_5 --env MPC_MARGIN=3 --save-out <dir>
+0     bot on
++0    waitroam 6000
++0    bot off
++60   careerlist
++0    mpcredit ${MPC_RACE} ${MPC_MARGIN}
++300  careerlist
++0    log MPC done
++10   quit

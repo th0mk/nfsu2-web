@@ -1,0 +1,30 @@
+# Multiplayer races from free roam, a URL race of 3 heats, a joining side (with mprace_heats3_a.txt): joins A's lobby
+# where A stands (both from the same save: the same place), races the three heats and goes back with the standing.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 12000
++300  roam mp lobby
++0    log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 60000
++0    log LOBBY between heats 1 and 2
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 2
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 60000
++0    log LOBBY between heats 2 and 3
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 3
++0    autopilot on 6000
++0    roam mp waittrip 60000
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

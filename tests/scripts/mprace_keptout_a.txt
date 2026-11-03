@@ -1,0 +1,22 @@
+# A career lobby keeps out players past its race's stage (roam_game.c mp_kept_out), the host's side (with
+# mprace_keptout_b.txt): a stage 2 career opens a lobby for a race of its stage that counts for it, and waits for
+# MP_PLAYERS players MP_WAIT frames (the lobby by "roam mp open": Enter at the spot may meet the race's own card, the
+# career picking its open races anew each load): a stage 3 stranger is kept out (the wait times out), the host's friend
+# (NFSU2_MPRACE_TEST_FRIENDS) joins.
+#   node web/tools/roam-pair.mjs --base <server> --seed <stage 2 save> --seed-for Bob:<stage 3 save>
+#        --a Ann:mprace_keptout_a.txt --b Bob:mprace_keptout_b.txt --env MP_RACE=S2_DRIFT_2 --env MP_WAIT=1500 --env MP_PLAYERS=2
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    roam mp open ${MP_RACE}
++0    roam mp waitlobby 1 3000
++0    log LOBBY waiting
++0    roam mp waitlobby ${MP_PLAYERS} ${MP_WAIT}
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

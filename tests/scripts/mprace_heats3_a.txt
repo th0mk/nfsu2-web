@@ -1,0 +1,34 @@
+# Multiplayer races from free roam, a URL race of 3 heats (mprace.c series_*), host side, with mprace_heats3_b.txt:
+# from an early career (no save reaches stage 4 or 5), "roam mp open" opens a lobby for MP_RACE (a later stage's
+# URL race: S4_URL_5, S5_URL_1 ...) where the car stands; B joins it there; the trip races all three heats and goes
+# back with the standing (prize money: a later stage's race does not count in the career).
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_heats3_a.txt --b Bob:mprace_heats3_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S5_URL_1
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  roam mp open ${MP_RACE}
++0    roam mp waitlobby 2 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 60000
++0    log LOBBY between heats 1 and 2
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 2
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 60000
++0    log LOBBY between heats 2 and 3
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 3
++0    autopilot on 6000
++0    roam mp waittrip 60000
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

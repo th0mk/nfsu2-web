@@ -1,0 +1,31 @@
+# The race lobby's panel and cover on the player's page for a race that counts in the career, the host's side (with
+# mprace_shots_career_b.txt): roam-pair --page app saves the page at each "log SHOT <name>": the spot ("A win counts
+# in your career"), the lobby with the star beside each player it counts for and the friend's tag, the countdown,
+# the cover, the results on the way back ("Career win") and the note back in free roam.
+#   roam-pair --page app --seed <a stage-2 save tree> --a Ann:mprace_shots_career_a.txt --b Bob:mprace_shots_career_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPON_DRIFT_2 --env NFSU2_MPRACE_TEST_COUNTS=S2_SPON_DRIFT_2
+#        --env NFSU2_MPRACE_TEST_FRIENDS=Ann,Bob
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  log SHOT spot
++0    tap RETURN
++120  log SHOT hosting
++0    roam mp waitlobby 2 9000
++120  log SHOT ready
++0    tap RETURN
++120  log SHOT count
++0    waitexpr i:0x850078 == 512 6000
++0    log SHOT cover_lan
++0    waitmem 0x008654a4 6 20000
++0    autopilot on 6000
++0    waitmem 0x008654a4 3 20000
++240  log SHOT cover_results
++0    roam mp waittrip 40000
++60   log SHOT note
++0    careerlist
++0    log LOBBY DONE
++60   quit

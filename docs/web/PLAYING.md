@@ -548,11 +548,13 @@ Good to know:
   start in) you cannot join or open a lobby, and the panel says so; from your first car on you can. Lobbies are
   joined from your career's free roam only: in Quick Race's Free Run the panel says so too.
   - **An open race** (its marker in the street): its card asks Accept or Decline as always, and Accept asks once more:
-    **Solo** (the career race, as before) or **Multiplayer**.
+    **Multiplayer** or **Solo** (the career race, as before). Solo has the focus, so Enter at once races it Solo as
+    the game always did. A win counts in your career either way (below).
   - **A race that is not open** in your career has no marker of the game's. Within about 50 m its start shows
     "Circuit (multiplayer)" or the like, and at the start a panel on the right (under Bank) says it is multiplayer
     only there and why (you won it in your career, your sponsor's contract has no place for it, a URL race before
-    its wins, an SUV race without an SUV, not open yet), and that Enter opens a lobby. A spot offers the race of your
+    its wins, an SUV race without an SUV), or, for a race of your stage the game has not opened yet, "★ A win counts
+    in your career" (its words end in "- career"), and that Enter opens a lobby. A spot offers the race of your
     stage there, else the last one you won there: never one of a stage you have not reached. None in the prologue,
     none while a story task runs, and none where the game has something of its own to enter at the same place (a race
     open in your career there, a cover shoot): Enter is the game's there, and an open race's card asks Solo or
@@ -571,10 +573,15 @@ Good to know:
   - **The host presses Enter** to start once another player is in. After a 5-second countdown every game in the lobby
     goes to the race by itself, behind a screen with the lobby on it and where the trip is ("Loading the race"): out
     of free roam and through the LAN menus (your keys and controller do nothing meanwhile) to the race on the career
-    race's track, direction and laps (a URL event: its first race; a LAN race takes at least 2 laps, Street X 4),
-    with no traffic and no AI racers. You drive the race. After the results every game goes back by itself,
-    behind the same screen, through the main menu and your crib, to where it left free roam, and the panel says your
-    place and prize: about a minute for the way out and back.
+    race's track, direction and laps (a LAN race takes at least 2 laps, Street X 4), with no traffic and no AI
+    racers. You drive the race. After the results every game goes back by itself, behind the same screen, through the
+    main menu and your crib, to where it left free roam, and the panel says your place and prize: about a minute for
+    the way out and back.
+  - **A URL event of 2 or 3 heats** races them all in one trip (the lobby says "2 heats"): after each heat's results
+    every game goes on to the next heat's track, with the standings between the heats on the screen, about 10 seconds
+    each. Each heat scores as in the career (8, 6, 4, 3, 2, 1 points by place, none without a finish); most points
+    wins the event, a tie goes to the better place in the last heat. Your place in the event is what counts for the
+    career and the prize. Leaving between heats leaves the event; a heat that ends early ends it unfinished.
   - **The cars are evened out** in circuit, sprint, drag and URL races: at the start every game rates the race's cars
     as the game itself does (its performance rating: the engine, gears, weight and drag with every part in) and
     changes each car's engine power so the cars come close: they head for a rating between their middle and the best
@@ -586,12 +593,34 @@ Good to know:
     still drives as itself and your upgrades still count, by less; a car far ahead of the others stays ahead, by less.
     The lobby says so before you join, and after the race the note says how your engine was changed. Street X and
     drift races leave the cars as they are: there the rating did not decide who won.
-  - **Your career is not touched:** the race does not count in it, is neither won nor lost there and opens nothing.
-    Only your bank changes: 1st $400, 2nd $300, 3rd $200, 4th $100, nothing for 5th or 6th. **Quitting the race**
+  - **A win counts in your career** where you could win the race with Solo: a race open in your career (its marker in
+    the street), or a normal race of your stage you have not won yet (the game opens only a few of a stage's races at a
+    time; a multiplayer win takes any of them). A sponsor or URL race counts only when it is open, an SUV race only in
+    an SUV; never a race of a later stage, a story race or one you have won. Win it and your career gets the game's own
+    win, as Solo gives it: the race is won, the career's prize for it goes into your bank (or your place's prize money
+    below, where that is more: $400 for 1st at stages 1 to 3, never less for a race that counts), and the stage's wins and
+    story go on from there; a stage's final race moves your career to the next stage, and its movie plays after the
+    crib's save, before free roam (a key skips it, as in the game). A win the way back could not give in the crib (the
+    trip lost its way) waits for your next crib visit, kept beside your profile, so it is still there after a reload.
+    Where the game would offer you its sponsors, your
+    crib on the way back asks with the game's own dialog, one offer after the other ("Sponsor offer 1 of 3: ...
+    Signing bonus ..., its races pay ...", **Sign** or **Next offer**), and your keys, controller and taps are yours
+    until you sign. A **friend's win** (a player on your Friends list) counts for you too, when you
+    finish the race. The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
+    words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the
+    player who opened it takes players up to that race's stage and the opener's friends: a car of a later stage would
+    win it most of the time, however the cars are evened out. Past that stage you see why at the spot ("A career race
+    for players up to stage 2 and ...'s friends"), and Enter opens a lobby of your own there. Solo stays as it always
+    was.
+  - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
+    stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200
+    and $100), 5th and 6th nothing. **Quitting the race**
     (its pause menu's Quit) costs $75, as the panel says before you join: the host's quit ends the race for everyone,
-    and in a race of two either player's does. A race that ends under you costs nothing. It goes in or out at the crib
-    on the way back, and the crib's autosave saves it with your profile (with the game's Save option at Prompt or Off
-    it waits for your next save, as any change in the crib does).
+    and in a race of two either player's does. When everyone else quits a race that way, the one who stayed wins it
+    (1st: the career's win where it counts, else 1st's prize; a URL event's remaining heats too); a race that ends
+    under you any other way (a lost connection, a game closed) costs nothing and counts for nobody. The win, the prize or the fee
+    goes in at the crib on the way back, and the crib's autosave saves it with your profile (with the game's Save
+    option at Prompt or Off it waits for your next save, as any change in the crib does).
   - A player who leaves the lobby in the countdown, quits the game, or whose game cannot set off is not waited for; the
     host's game waits a minute at most for the others in the LAN race's room, then starts with those who are ready.
     A race that cannot come together (the host's game gone, nobody else in the game in time) ends the trip: every game

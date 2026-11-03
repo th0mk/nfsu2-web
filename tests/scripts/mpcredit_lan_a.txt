@@ -1,0 +1,39 @@
+# A multiplayer race's career win with the game's autosave off and the tab closed before the next save
+# (runtime/mpcredit.c), host side, with mpcredit_lan_b.txt: the race counts (the race card: Multiplayer), the trip's
+# crib gives the win (in memory only: MPC_SAVE_FLAGS=0x00010000, Off) and keeps it in
+# "NFS Underground 2/<NAME>/MPWINS.DAT", then the page quits in free roam.  A second run from this page's save folder
+# (roam-pair --fetch the profile and MPWINS.DAT into a copy of the seed) gives the win again in its first crib and
+# saves it (mpcredit_crib.txt with MPC_RACE empty).
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mpcredit_lan_a.txt --b Bob:mpcredit_lan_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPON_CIRCUIT_3 --env MP_PLAYERS=2 --env NFSU2_MPRACE_TEST_FRIENDS=Ann,Bob
+#        --env MPC_SAVE_FLAGS=0x00010000 --fetch "NFS Underground 2/<NAME>/MPWINS.DAT" --fetch "NFS Underground 2/<NAME>/<NAME>"
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    peek 0x00844ad8 1
++0    poke 0x00844ad8 ${MPC_SAVE_FLAGS}
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 2
++0    log LOBBY open
++0    tap RETURN                      # Engage: the race's card
++0    waitfng UI_EngageRaceDialog.fng 900
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++60   tap RETURN                      # the right button, focused: Multiplayer
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    peek 0x00861e74 1                # the bank
++0    peek 0x00844ad8 1
++0    log LOBBY DONE
++60   quit

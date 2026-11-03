@@ -813,6 +813,7 @@ void racehorn_frame(CPU *c);                  /* racehorn.c: horns in races betw
 void racenet_frame(CPU *c);                   /* racenet.c: how the other players' cars came in, at a race's end */
 void racenet_prestep(CPU *c);                 /*   and the cars' own places back before the world's step */
 void mprace_frame(CPU *c);                    /* mprace.c: a multiplayer race's trip from free roam and back */
+void mpcredit_frame(CPU *c);                  /* mpcredit.c: a multiplayer race's win that waits for the crib */
 void optslider_frame(CPU *c);                 /* optslider.c: our option sliders' copied parts (the pause menu's Horn Volume) */
 void drift_frame(CPU *c);                     /* drift.c: drift mode in free roam (F2) */
 void showoff_frame(CPU *c);                   /* showoff.c: the car's trunk, hood and doors open */
@@ -834,7 +835,7 @@ __attribute__((weak)) int roam_asipeer_cmd(CPU *c, const char *args, long *wait_
     fprintf(stderr, "[roam] asi: not in this build (ASIPEER=1 ./link.sh orig makes out/nfsu2_asipeer)\n"); return 1; }
 int roam_hook(CPU *c, uint32_t ip){
     switch (ip){
-    case HOOK_SITE(0x00581475): reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); carspot_frame(); mprace_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); photo_frame(c); savegame_frame(); roam_frame(c); return 1;
+    case HOOK_SITE(0x00581475): reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); carspot_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); photo_frame(c); savegame_frame(); roam_frame(c); return 1;
     /* Player::Update's HUD step (0x600590), behind its call of the HUD
      * update (0x4EC5A0), where the game places its own LAN race labels */
     case HOOK_SITE(0x006005e0): roam_game_hud(c); return 1;

@@ -144,3 +144,21 @@ test('names the page tells it: a notice\'s friend, the profiles', () => {
   const out = p.scrub('[notice] Kite Runner left\n[app] Player is the game\'s own default\n');
   assert.match(out, /^\[notice\] player-\w{4} left\n\[app\] Player is the game's own default\n$/);
 });
+
+test('a race that counts in the career: its friends, its winner and the note lose their names', () => {
+  // Quill9 and Ferro2 only as friends at the race's start (no results came), driver (a word of the log too) as the
+  // winner and in the note, Juno Lake (the free-roam name) only in the note
+  const log = [
+    '[4!] [mprace] f=4000 start: a win counts in the career; prize money $400/300/200/100; friends in the race: Quill9 Ferro2',
+    '[4!] [mprace] f=7000 the race in the career: our friend won it: it counts (place 2, winner driver, a friend, margin 0.00)',
+    '[4!] [roam] f=9000 race lobby: Multiplayer race: 2nd place. driver won it: it counts in your career too, $900',
+    '[4!] [roam] f=9100 race lobby: Multiplayer race: 2nd place. Juno Lake won it: it counts in your career too',
+    '[4!] [mprace] f=8000 Wren5 quits the race (its game says so)',
+    '[4!] [gpu] the driver is up to date',
+    '',
+  ].join('\n');
+  const out = new Privacy('salt').scrub(log);
+  for (const gone of ['Quill9', 'Ferro2', 'Wren5', 'winner driver', 'place. driver', 'Juno Lake']) assert.ok(!out.includes(gone), `${gone} is still in:\n${out}`);
+  assert.match(out, /friends in the race: player-\w{4} player-\w{4}\n/);
+  assert.ok(out.includes('[4!] [gpu] the driver is up to date'), 'the log\'s own word stays');
+});

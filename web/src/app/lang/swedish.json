@@ -127,6 +127,7 @@
   "Open a lobby": "Öppna en lobby",
   "Join": "Gå med",
   "This lobby is full.": "Den här lobbyn är full.",
+  "A career race for players up to stage {n} and {host}'s friends.": "Ett karriärrace för spelare till och med nivå {n} och {host}s vänner.",
   "Open another": "Öppna en annan",
   "Starting in {n}": "Startar om {n}",
   "Joining {host}'s {kind}…": "Går med i {host}s {kind}…",
@@ -1324,5 +1325,26 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Spel med andra får vänta på ett annat namn: byt det under Online på startsidan.",
   "{name} isn't allowed here.": "{name} är inte tillåtet här.",
   "Pick another name to keep playing with others.": "Välj ett annat namn för att fortsätta spela med andra.",
-  "Pick another name": "Välj ett annat namn"
+  "Pick another name": "Välj ett annat namn",
+  "friend": "vän",
+  "A win counts in your career": "En seger räknas i din karriär",
+  "A win counts in their career": "En seger räknas i den här spelarens karriär",
+  "A win counts in your career, and so does a friend's": "En seger räknas i din karriär, även en väns",
+  "Friend's win": "En väns seger",
+  "Career win": "Karriärseger",
+  "Multiplayer race: {pos} place, won in your career": "Flerspelarrace: plats {n}, vunnet i din karriär",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Flerspelarrace: plats {n}. {name} vann: det räknas i din karriär också",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Flerspelarrace: plats {n}, vunnet i din karriär, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Flerspelarrace: plats {n}. {name} vann: det räknas i din karriär också, ${prize}",
+  "Getting the next heat ready": "Nästa heat förbereds",
+  "Heat {k} of {n}": "Heat {k} av {n}",
+  "{n} heats": {
+    "one": "{n} heat",
+    "other": "{n} heat"
+  },
+  "Standings": "Ställning",
+  "Final standings": "Slutställning",
+  "Heat {k} results": "Resultat heat {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Flerspelarrace: plats {n}: segern kommer in i din karriär vid ditt nästa garagebesök",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Flerspelarrace: plats {n}. {name} vann: det kommer in i din karriär vid ditt nästa garagebesök"
 }

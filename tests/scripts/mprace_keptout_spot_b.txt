@@ -1,0 +1,19 @@
+# A career lobby keeps out players past its race's stage, at a multiplayer-only spot of the one kept out (with
+# mprace_keptout_a.txt; a stage 3 career at a marker where it won its own race, MP_RACE=S2_DRIFT_4 for the stage 2
+# host): the spot says why (the top line, or the page's panel: --page app saves it at log SHOT), and Enter opens a
+# lobby of its own there.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log SHOT kept_out
++0    log LOBBY at the spot
++0    tap RETURN
++120  roam mp lobby
++0    log SHOT own_lobby
++0    log LOBBY DONE
++600  quit

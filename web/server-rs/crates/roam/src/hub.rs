@@ -294,7 +294,7 @@ fn race_line(player: &str, r: &wire::RaceRep) -> String {
     let name: String = r.name.iter().map(|&c| c as char).collect();
     format!(
         "[race] lobby {:08x}, race {:08x} ({mode}, track {}, {} lap{}, {} cars): {player}{} {how}{time}; {name} (type {}), \
-         class {}, rating {:.1} (the cars' average {:.1}), {:.0} kW, {:.0} kg, {:.0} km/h, power x{:.3}",
+         class {}, rating {:.1} (the cars' average {:.1}), {:.0} kW, {:.0} kg, {:.0} km/h, power x{:.3}{}",
         r.lobby,
         r.race,
         r.track,
@@ -309,7 +309,12 @@ fn race_line(player: &str, r: &wire::RaceRep) -> String {
         r.kw,
         r.kg,
         r.kmh,
-        r.factor
+        r.factor,
+        match r.credit {
+            1 => "; won it in the career",
+            2 => "; a friend's win in the career",
+            _ => "",
+        }
     )
 }
 

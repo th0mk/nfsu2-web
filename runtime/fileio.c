@@ -241,6 +241,8 @@ static int resolve_w(const char *win, char *out, size_t outsz){
 }
 /* runtime/garage.c: a file the game could read, by its guest path */
 int fileio_resolve_save(const char *win, char *out, size_t outsz){ return resolve(win, out, outsz); }
+/* runtime/mpcredit.c: a file of the save folder to write, by its guest path (the write root's, as the game's own writes) */
+int fileio_resolve_save_w(const char *win, char *out, size_t outsz){ return resolve_w(win, out, outsz); }
 /* A profile the game saves, "<root>/NFS Underground 2/<NAME>/<NAME>" (any
  * case): garage.c keeps its slots 6-10 in a file beside it. */
 void garage_profile_written(const char *path);

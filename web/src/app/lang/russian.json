@@ -129,6 +129,7 @@
   "Open a lobby": "Открыть лобби",
   "Join": "Присоединиться",
   "This lobby is full.": "Это лобби заполнено.",
+  "A career race for players up to stage {n} and {host}'s friends.": "Гонка карьеры для игроков до этапа {n} и друзей {host}.",
   "Open another": "Открыть другое",
   "Starting in {n}": "Старт через {n}",
   "Joining {host}'s {kind}…": "{kind} игрока {host}: подключение…",
@@ -1376,5 +1377,28 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Для игры с другими нужно другое имя: смените его в разделе «Онлайн» на стартовой странице.",
   "{name} isn't allowed here.": "Имя {name} здесь запрещено.",
   "Pick another name to keep playing with others.": "Выберите другое имя, чтобы и дальше играть с другими.",
-  "Pick another name": "Выберите другое имя"
+  "Pick another name": "Выберите другое имя",
+  "friend": "друг",
+  "A win counts in your career": "Победа засчитается в вашей карьере",
+  "A win counts in their career": "Победа засчитается в карьере этого игрока",
+  "A win counts in your career, and so does a friend's": "Победа засчитается в вашей карьере, как и победа друга",
+  "Friend's win": "Победа друга",
+  "Career win": "Победа в карьере",
+  "Multiplayer race: {pos} place, won in your career": "Сетевая гонка: {n}-е место, засчитано в карьере",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Сетевая гонка: {n}-е место. Победитель {name}: засчитано и в вашей карьере",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Сетевая гонка: {n}-е место, засчитано в карьере, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Сетевая гонка: {n}-е место. Победитель {name}: засчитано и в вашей карьере, ${prize}",
+  "Getting the next heat ready": "Готовим следующий заезд",
+  "Heat {k} of {n}": "Заезд {k} из {n}",
+  "{n} heats": {
+    "one": "{n} заезд",
+    "few": "{n} заезда",
+    "many": "{n} заездов",
+    "other": "{n} заезда"
+  },
+  "Standings": "Положение",
+  "Final standings": "Итоговое положение",
+  "Heat {k} results": "Результаты заезда {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Сетевая гонка: {n}-е место: победа засчитается в карьере при следующем заезде в гараж",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Сетевая гонка: {n}-е место. Победитель {name}: засчитается в вашей карьере при следующем заезде в гараж"
 }

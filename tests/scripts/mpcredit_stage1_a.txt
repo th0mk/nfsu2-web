@@ -1,0 +1,64 @@
+# A new career's way into stage 2 online (runtime/mpcredit.c), A's side, with mpcredit_stage1_b.txt: both from the
+# same stage 1 career one race short of stage 2 (MP_RACE, its last), friends (NFSU2_MPRACE_TEST_FRIENDS).  Race 1:
+# A opens a lobby at MP_RACE (the race card: Multiplayer), B joins; on the way back the stage is over: the save, stage
+# 2's movies (Scene07, UpperClass), free roam in stage 2.  Race 2: B opens one at MP_RACE2 (a stage 2 race), A joins
+# (Enter at its spot; no more keys then: a script's taps are not the player's, the trip does not mute them);
+# its win is stage 2's first, and the crib asks for the first sponsor (the game's dialog, [Sign] [Next offer]): A looks
+# at every offer (Next offer twice) and signs the third.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mpcredit_stage1_a.txt --b Bob:mpcredit_stage1_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=STAGE_1_SPRINT_1 --env MP_RACE2=S2_CIRCUIT_3 --env MP_PLAYERS=2
+#        --env NFSU2_MPRACE_TEST_FRIENDS=Ann,Bob
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    careerlist
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 2
++0    log LOBBY open
++0    tap RETURN                      # Engage: the race's card
++0    waitfng UI_EngageRaceDialog.fng 900
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++60   tap RETURN                      # the right button, focused: Multiplayer
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 1
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    peek 0x00862308 1                # stage 2's sponsor
++0    peek 0x00861e74 1                # the bank
++0    log LOBBY stage 2: join B at the next race
++120  roam mp waitlobby 0 20000
++0    careergo ${MP_RACE2}
++600  roam mp lobby
++0    tap RETURN                      # at B's lobby's spot: join it (no card; the world loaded first)
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race 2
++0    autopilot on 6000
++0    waitfe GenericDialog_MED.fng 30000
++0    log LOBBY sponsor offer
++120  fnglist
++0    tap RIGHT
++30   tap RETURN                      # Next offer
++120  waitfe GenericDialog_MED.fng 600
++120  tap RIGHT
++30   tap RETURN                      # Next offer
++120  waitfe GenericDialog_MED.fng 600
++120  tap LEFT
++30   tap RETURN                      # Sign
++0    roam mp waittrip 40000
++0    careerlist
++0    peek 0x00862308 1
++0    peek 0x00861e74 1
++0    log LOBBY DONE
++60   quit

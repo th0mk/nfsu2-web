@@ -1,0 +1,40 @@
+# Multiplayer races from free roam, a LAN race whose start breaks off, host side (with mprace_brk_b.txt): on a server
+# with --lan-impair loss=100 the race's own traffic never arrives, so the host's Start ends in "the other players were
+# unable to connect".  Both trips come back to free roam as free roam (race type 0, track 4000: the race's parameters
+# put back on the way, mprace.c params_reset).  Then, the server again without the impairment (the runner restarts
+# it once both pages logged LOBBY back1; the pages reconnect), a second race from the same spot runs to its results.
+#   server --dev --lan-impair loss=100 ...; roam-pair --seed <save> --a Ann:mprace_brk_a.txt --b Bob:mprace_brk_b.txt
+#        --env MP_RACE=S2_SPRINT_3 --env MP_PLAYERS=2
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   log LOBBY start
++0    tap RETURN
++0    roam mp waittrip 40000
++0    waitmem 0x008654a4 6 6000
++300  expect i:0x89e7b0 == 0
++0    expect i:0x89e7a0 == 4000
++0    log LOBBY back1
++1800 roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  log LOBBY open2
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   log LOBBY start2
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race2
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    expect i:0x89e7b0 == 0
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

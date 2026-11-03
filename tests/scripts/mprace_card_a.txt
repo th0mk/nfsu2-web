@@ -14,17 +14,22 @@
 +0    careergo ${MP_RACE}
 +300  roam mp spots 2
 +0    dump spot_line
++0    log SHOT spot_line
 +0    log LOBBY open
 +0    tap RETURN                      # Engage: the race's card
 +0    waitfng UI_EngageRaceDialog.fng 900
 +120  dump card
++0    log SHOT card
 +0    tap LEFT
 +30   tap RETURN                      # Accept: Solo or Multiplayer?
 +0    waitfng IG_GenericDialog_MED.fng 600
 +60   dump question
++0    log SHOT question
 +0    roam mp ui
-+0    tap RETURN                      # the right button, focused: Multiplayer (Join)
++0    tap LEFT
++30   tap RETURN                      # the left button: Multiplayer (Join) (Solo, the right one, has the focus)
 +120  dump lobby_line
++0    log SHOT lobby_line
 +60   roam mp lobby
 +0    roam mp waitlobby 2 6000
 +60   roam mp lobby
@@ -36,6 +41,7 @@
 +0    log LOBBY race
 +0    autopilot on 6000
 +0    roam mp waittrip 40000
++30   log SHOT note
 +0    careerlist
 +0    roam mp lobby
 +0    memdump 0x85ad40 0x8880 /save/c9.bin

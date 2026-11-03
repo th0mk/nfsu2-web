@@ -1,0 +1,45 @@
+# A multiplayer race's career win when the trip misses the crib, the joining side (with mpcredit_nocrib_a.txt): the
+# race's win (or its friend's), waiting beside the profile, then given in the crib and saved.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    peek 0x00844ad8 1
++0    poke 0x00844ad8 ${MPC_SAVE_FLAGS}
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 6000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log LOBBY join
++0    tap RETURN                      # Engage: the race's card
++0    waitfng UI_EngageRaceDialog.fng 900
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++60   tap RETURN                      # Multiplayer (Join)
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    peek 0x00861e74 1                # the bank
++0    log LOBBY the crib
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++400  careerlist
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1500
++120  tap LEFT
++30   tap RETURN                      # the autosave: Yes
++0    waitroam 6000
++60   careerlist
++0    peek 0x00861e74 1
++0    log LOBBY DONE
++60   quit

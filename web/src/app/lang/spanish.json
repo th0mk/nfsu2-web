@@ -128,6 +128,7 @@
   "Open a lobby": "Abrir un punto de encuentro",
   "Join": "Unirse",
   "This lobby is full.": "Este punto de encuentro está lleno.",
+  "A career race for players up to stage {n} and {host}'s friends.": "Una carrera del modo carrera para jugadores hasta la etapa {n} y amigos de {host}.",
   "Open another": "Abrir otro",
   "Starting in {n}": "Empieza en {n}",
   "Joining {host}'s {kind}…": "Uniéndote a {kind} de {host}…",
@@ -1350,5 +1351,27 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Para jugar con otros hace falta otro nombre: cámbialo en Online, en la página de inicio.",
   "{name} isn't allowed here.": "{name} no está permitido aquí.",
   "Pick another name to keep playing with others.": "Elige otro nombre para seguir jugando con otros.",
-  "Pick another name": "Elige otro nombre"
+  "Pick another name": "Elige otro nombre",
+  "friend": "amigo",
+  "A win counts in your career": "Una victoria cuenta en tu modo carrera",
+  "A win counts in their career": "Una victoria cuenta en el modo carrera de este jugador",
+  "A win counts in your career, and so does a friend's": "Una victoria cuenta en tu modo carrera, y también la de un amigo",
+  "Friend's win": "Victoria de un amigo",
+  "Career win": "Victoria de carrera",
+  "Multiplayer race: {pos} place, won in your career": "Carrera multijugador: puesto {n}, ganada en tu modo carrera",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Carrera multijugador: puesto {n}. {name} la ganó: también cuenta en tu modo carrera",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Carrera multijugador: puesto {n}, ganada en tu modo carrera, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Carrera multijugador: puesto {n}. {name} la ganó: también cuenta en tu modo carrera, ${prize}",
+  "Getting the next heat ready": "Preparando la siguiente manga",
+  "Heat {k} of {n}": "Manga {k} de {n}",
+  "{n} heats": {
+    "one": "{n} manga",
+    "many": "{n} mangas",
+    "other": "{n} mangas"
+  },
+  "Standings": "Clasificación",
+  "Final standings": "Clasificación final",
+  "Heat {k} results": "Resultados de la manga {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Carrera multijugador: puesto {n}: la victoria entra en tu modo carrera en tu próxima visita al garaje",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Carrera multijugador: puesto {n}. {name} la ganó: entra en tu modo carrera en tu próxima visita al garaje"
 }

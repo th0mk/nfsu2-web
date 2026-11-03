@@ -1376,5 +1376,29 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Гра з іншими чекає на інше ім'я: змініть його в розділі «Онлайн» на стартовій сторінці.",
   "{name} isn't allowed here.": "Ім'я {name} тут заборонене.",
   "Pick another name to keep playing with others.": "Оберіть інше ім'я, щоб і далі грати з іншими.",
-  "Pick another name": "Оберіть інше ім'я"
+  "Pick another name": "Оберіть інше ім'я",
+  "friend": "друг",
+  "A win counts in your career": "Перемога зарахується у вашій кар'єрі",
+  "A win counts in their career": "Перемога зарахується в кар'єрі цього гравця",
+  "A win counts in your career, and so does a friend's": "Перемога зарахується у вашій кар'єрі, як і перемога друга",
+  "Friend's win": "Перемога друга",
+  "Career win": "Перемога в кар'єрі",
+  "Multiplayer race: {pos} place, won in your career": "Мережева гонка: місце {n}, зараховано в кар'єрі",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Мережева гонка: місце {n}. Переможець {name}: зараховано й у вашій кар'єрі",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Мережева гонка: місце {n}, зараховано в кар'єрі, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Мережева гонка: місце {n}. Переможець {name}: зараховано й у вашій кар'єрі, ${prize}",
+  "Getting the next heat ready": "Готуємо наступний заїзд",
+  "Heat {k} of {n}": "Заїзд {k} з {n}",
+  "{n} heats": {
+    "one": "{n} заїзд",
+    "few": "{n} заїзди",
+    "many": "{n} заїздів",
+    "other": "{n} заїзду"
+  },
+  "Standings": "Поточні позиції",
+  "Final standings": "Підсумкові позиції",
+  "Heat {k} results": "Результати заїзду {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Мережева гонка: місце {n}: перемогу буде зараховано в кар'єрі під час наступного візиту в гараж",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Мережева гонка: місце {n}. Переможець {name}: буде зараховано у вашій кар'єрі під час наступного візиту в гараж",
+  "A career race for players up to stage {n} and {host}'s friends.": "Гонка кар'єри для гравців до етапу {n} і друзів {host}."
 }

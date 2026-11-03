@@ -1,0 +1,36 @@
+# Multiplayer races from free roam, a URL race of 2 heats, the joiner quits heat 2 with its pause menu's Quit 20 s in
+# (with mprace_heats_a.txt): the quitter pays the fee (MPRACE_QUIT_FEE, $75) and is out; the host, left alone by the
+# Quit, won the series (1st, its prize; the career's race when it counts), whatever the points after heat 1.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    mark bank0 i:0x861e74
++0    log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 40000
++0    log LOBBY between the heats
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 2
++0    autopilot on 6000
++1200 log LOBBY joiner quits heat 2: pause, Quit, Yes
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++60   tap UP
++30   tap RETURN
++60   tap LEFT
++20   tap RETURN
++0    roam mp waittrip 40000
++60   expect i:0x861e74 == @bank0-75
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

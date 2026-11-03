@@ -1,0 +1,19 @@
+# A career lobby keeps out players past its race's stage, the side that comes to it (with mprace_keptout_a.txt): a
+# stage 3 career drives to the stage 2 race's lobby, shows what the spot says (--page app: log SHOT), joins what Enter would join
+# ("roam mp join": the spot may be a race open in its career, the game's card): kept out nothing, as the host's
+# friend the host's lobby.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log SHOT kept_out
++0    log LOBBY at the spot
++0    roam mp join
++180  roam mp lobby
++0    log SHOT after_enter
++0    log LOBBY DONE
++600  quit

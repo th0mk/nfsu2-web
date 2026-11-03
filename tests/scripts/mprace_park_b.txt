@@ -1,0 +1,22 @@
+# Multiplayer races from free roam, a joining side that never drives the race (with mprace_lobby_a.txt): joins A's
+# lobby and stands at the start, so it does not finish: a friend's win does not count for a player who did not
+# finish (mprace.c credit_decide), and the race ends 30 s after the winner is over the line.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  roam mp lobby
++0    log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race: standing still
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

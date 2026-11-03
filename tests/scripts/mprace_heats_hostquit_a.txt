@@ -1,0 +1,25 @@
+# Multiplayer races from free roam, a URL race of 2 heats, the host gone between the heats (with
+# mprace_heats_left_b.txt): A races heat 1 and closes its game on the way to heat 2 (its tab gone, its LAN server with
+# it), as soon as its heat 1 results close: B's trip ends the series as a race not finished and brings it back to free
+# roam.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY heat 1
++0    autopilot on 6000
++0    waitexpr i:0x8654a4 == 3 40000
++0    log LOBBY between the heats
++0    log LOBBY host gone
++0    quit

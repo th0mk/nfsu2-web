@@ -290,5 +290,19 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 - Don't answer questions about moderation, bans, kicks, names, donations, Discord channels, server load or the
   server's setup: staff answer those (none).
 - Don't guess at release plans or say what the developer will do, beyond the decisions above.
-- Career progress from races with other players (online or free-roam races counting in the career): undecided by
-  the developer. None, also in suggestion threads.
+- Career progress from free-roam races with other players, since <commit> (before that live version: they don't
+  count, only the prize money): a race counts where the player could win it with Solo there (open on their map, or
+  a normal race of their current stage not won yet; sponsor and URL races only when open, SUV races in an SUV;
+  never a race of a later stage, a story race or one already won). The winner's career gets the game's own win (the
+  race won, its career prize, rep, the stage goes on, a stage's final moves to the next stage); an accepted friend
+  (Friends list) in the same race who finishes gets it too, strangers never. The lobby panel marks with a star whom
+  it counts for ("A win counts in your career"); the words over a lobby and on the world map end in "- career". A
+  lobby whose race counts for the player who opened it takes only players up to that race's stage and the opener's
+  friends (a later stage's car would win it most of the time); the others see why at the spot and can open their own. A
+  URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
+  by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
+  a quarter of that, at least $300/$200/$100). A race that counts pays the career's prize or that, whichever is more. Where the game would offer sponsors, the crib asks on the way back
+  (Sign / Next offer). A stage final won online plays the stage's movie after the crib's save. When everyone else
+  quits a race with the pause menu's Quit ($75 each), the one who stayed wins it; a lost connection or a closed tab
+  counts for nobody (on the Mac app a quit does not hand over the win). The race card's question has Solo focused.
+  Races of the main menu's Online mode never count. Solo is as it always was.

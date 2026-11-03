@@ -127,6 +127,7 @@
   "Open a lobby": "Lobby eröffnen",
   "Join": "Beitreten",
   "This lobby is full.": "Diese Lobby ist voll.",
+  "A career race for players up to stage {n} and {host}'s friends.": "Ein Karriererennen für Spieler bis Stufe {n} und Freunde von {host}.",
   "Open another": "Eine andere eröffnen",
   "Starting in {n}": "Start in {n}",
   "Joining {host}'s {kind}…": "Beitritt zum {kind} von {host}…",
@@ -1324,5 +1325,26 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Das Spielen mit anderen wartet auf einen anderen Namen: Ändere ihn auf der Startseite unter Online.",
   "{name} isn't allowed here.": "{name} ist hier nicht erlaubt.",
   "Pick another name to keep playing with others.": "Wähle einen anderen Namen, um weiter mit anderen zu spielen.",
-  "Pick another name": "Wähle einen anderen Namen"
+  "Pick another name": "Wähle einen anderen Namen",
+  "friend": "Freund",
+  "A win counts in your career": "Ein Sieg zählt in deiner Karriere",
+  "A win counts in their career": "Ein Sieg zählt in der Karriere des Spielers",
+  "A win counts in your career, and so does a friend's": "Ein Sieg zählt in deiner Karriere, auch der eines Freundes",
+  "Friend's win": "Sieg eines Freundes",
+  "Career win": "Karrieresieg",
+  "Multiplayer race: {pos} place, won in your career": "Multiplayer-Rennen: Platz {n}, in deiner Karriere gewonnen",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Multiplayer-Rennen: Platz {n}. {name} hat gewonnen: Das zählt auch in deiner Karriere",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Multiplayer-Rennen: Platz {n}, in deiner Karriere gewonnen, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Multiplayer-Rennen: Platz {n}. {name} hat gewonnen: Das zählt auch in deiner Karriere, ${prize}",
+  "Getting the next heat ready": "Nächster Lauf wird vorbereitet",
+  "Heat {k} of {n}": "Lauf {k} von {n}",
+  "{n} heats": {
+    "one": "{n} Lauf",
+    "other": "{n} Läufe"
+  },
+  "Standings": "Zwischenstand",
+  "Final standings": "Endstand",
+  "Heat {k} results": "Ergebnisse Lauf {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Multiplayer-Rennen: Platz {n}: Der Sieg kommt bei deinem nächsten Besuch in der Garage in deine Karriere",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Multiplayer-Rennen: Platz {n}. {name} hat gewonnen: Das kommt bei deinem nächsten Garagenbesuch in deine Karriere"
 }

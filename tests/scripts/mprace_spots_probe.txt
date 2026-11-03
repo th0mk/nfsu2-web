@@ -1,0 +1,8 @@
+# Every race spot of this career's free roam with its race, kind (solo or multiplayer, multiplayer only and why),
+# whether a win counts, and where (roam mp spots): for picking a test's race and place.
+0     bot on
++0    waitroam 6000
++0    bot off
++300  roam mp spots 80
++0    log LOBBY DONE
++60   quit

@@ -1,0 +1,40 @@
+# Multiplayer races from free roam that count in the career, with the sponsor pick (mpcredit.c), host side, with
+# mprace_sponsor_b.txt: both from the same stage 2 career, its sponsor taken away first (stage 2's record +0xE8 = 0,
+# as before the game's sponsor popup), both friends (NFSU2_MPRACE_TEST_FRIENDS), at a race that counts (MP_RACE).
+# After the race the crib on the way back asks which sponsor to sign (the game's dialog, [Sign] [Next offer], the
+# player's input while it is up): Next offer once, then Sign; then the trip goes on to free roam.
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mprace_sponsor_a.txt --b Bob:mprace_sponsor_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_DRIFT_2 --env MP_PLAYERS=2 --env NFSU2_MPRACE_TEST_FRIENDS=Ann,Bob
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    peek 0x00862308 1
++0    poke 0x00862308 0                # stage 2 without its sponsor
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    waitfe GenericDialog_MED.fng 30000
++0    log LOBBY sponsor offer
++120  fnglist
++0    tap RIGHT
++30   tap RETURN                      # Next offer
++120  waitfe GenericDialog_MED.fng 600
++120  tap LEFT
++30   tap RETURN                      # Sign
++0    roam mp waittrip 40000
++0    careerlist
++0    peek 0x00862308 1
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

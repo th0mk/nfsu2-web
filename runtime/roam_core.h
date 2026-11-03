@@ -333,6 +333,8 @@ typedef struct {
     uint8_t  flags;                /* RC_RR_* */
     uint8_t  type;                 /* the car's CarTypeInfo index */
     int8_t   cls;                  /* the game's class: 0 fastest .. 3, -1 not rated */
+    uint8_t  credit;               /* the race in the reporter's career: 0 not, 1 its win, 2 a friend's win (mprace.c MPC_*;
+                                    * the first of the three spare bytes after cls: older games send 0, older servers skip it) */
     float    rating;               /* the game's rating of the car */
     float    field;                /* the average rating of the race's cars */
     float    factor;               /* the car's engine power times this in the race (1: as it is) */

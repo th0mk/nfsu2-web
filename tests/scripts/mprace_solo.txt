@@ -14,8 +14,8 @@
 +120  tap LEFT
 +30   tap RETURN                      # Accept: Solo or Multiplayer?
 +0    waitfng IG_GenericDialog_MED.fng 600
-+60   tap LEFT
-+30   tap RETURN                      # Solo
++60   tap RIGHT
++30   tap RETURN                      # Solo (the right button)
 +0    waitexpr x:0x863470 != 0 1200
 +0    peek 0x863470 1
 +0    waitmem 0x008654a4 6 6000

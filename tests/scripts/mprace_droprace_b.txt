@@ -1,0 +1,19 @@
+# Multiplayer races from free roam, a joiner gone mid-race without a Quit (with mprace_lobby_a.txt): B joins, races
+# 20 s and closes its game (its tab gone, as a lost connection): A's race of two ends without results, and with no word
+# of a Quit from B's game it counts for nobody ("not finished", no prize).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  log LOBBY join
++0    tap RETURN
++60   roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++1200 log LOBBY joiner gone mid-race
++0    quit

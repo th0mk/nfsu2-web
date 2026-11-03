@@ -1,0 +1,54 @@
+# A multiplayer race's career win when the trip misses the crib (runtime/mpcredit.c), host side, with
+# mpcredit_nocrib_b.txt, under NFSU2_MPRACE_TEST_NOCRIBPAY=1 (mprace.c: no pay in the crib on the way back, and the
+# trip's end in free roam missed, as a trip that lost its way: roam_game.c ends it after 3 s, mprace_end_in_roam):
+# the win waits in "NFS Underground 2/<NAME>/MPWINS.DAT"; the car then goes into the crib, the win comes there, and
+# Return to Explore Mode's autosave saves it (the file goes).  MPC_SAVE_FLAGS: the game's Save option (0x00010101
+# Autosave).
+#   node web/tools/roam-pair.mjs --base <server> --seed <save tree> --a Ann:mpcredit_nocrib_a.txt --b Bob:mpcredit_nocrib_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPON_CIRCUIT_3 --env MP_PLAYERS=2 --env NFSU2_MPRACE_TEST_FRIENDS=Ann,Bob
+#        --env NFSU2_MPRACE_TEST_NOCRIBPAY=1 --env MPC_SAVE_FLAGS=0x00010101
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    peek 0x00844ad8 1
++0    poke 0x00844ad8 ${MPC_SAVE_FLAGS}
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 2
++0    log LOBBY open
++0    tap RETURN                      # Engage: the race's card
++0    waitfng UI_EngageRaceDialog.fng 900
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++60   tap RETURN                      # the right button, focused: Multiplayer
++60   roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    peek 0x00861e74 1                # the bank
++0    log LOBBY the crib
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++400  careerlist
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng 1500
++120  tap LEFT
++30   tap RETURN                      # the autosave: Yes
++0    waitroam 6000
++60   careerlist
++0    peek 0x00861e74 1
++0    log LOBBY DONE
++60   quit

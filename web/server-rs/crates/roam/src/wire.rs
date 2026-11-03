@@ -172,6 +172,9 @@ pub(crate) struct RaceRep<'a> {
     pub quit: bool,
     /// raced in a car whose game data is edited (its type's record in GLOBAL\GlobalB not the game's: RC_RR_EDITED)
     pub edited: bool,
+    /// the race in the reporter's career (roam_core.h rc_racerep credit, its first spare byte: 0 in older games): 0 not,
+    /// 1 its own win, 2 a friend's win
+    pub credit: u8,
     pub car_type: u8,
     /// 0 fastest .. 3; -1 not rated
     pub class: i8,
@@ -224,6 +227,7 @@ fn racerep(d: &[u8], o: usize) -> Option<RaceRep<'_>> {
         host: flags & 1 != 0,
         quit: flags & 2 != 0,
         edited: flags & 4 != 0,
+        credit: if d[o + 17] <= 2 { d[o + 17] } else { 0 },
         car_type: d[o + 15],
         class,
         rating: nums[0],

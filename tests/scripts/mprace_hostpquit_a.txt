@@ -1,0 +1,36 @@
+# Multiplayer races from free roam, the host quits the race with its pause menu's Quit 30 s in (with
+# mprace_quitfee_b.txt, a joiner who quit 20 s in, and mprace_lobby_c.txt, who stays): the host's quit ends the
+# race; the one who stayed heard both quits (the joiner's through the host's game, which passes it on) and wins it
+# (runtime/mprace.c quit_alone); the host and the joiner pay the fee.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    dump spot_line
++0    log LOBBY open
++0    tap RETURN
++60   dump lobby_line
++0    roam mp waitlobby ${MP_PLAYERS} 9000
++60   roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++1800 log LOBBY host quits in the race: pause, Quit, Yes
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++60   tap UP
++30   tap RETURN
++60   tap LEFT
++20   tap RETURN
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

@@ -1,0 +1,24 @@
+# The race lobby's panel and cover for a race that counts in the career, a joining side (with
+# mprace_shots_career_a.txt): its Join prompt at the start (the star, the friend's tag), the lobby as a player of it,
+# the results on the way back and the note.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  log SHOT join
++0    tap RETURN
++120  log SHOT joined
++0    roam mp waitlobby 2 3000
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    autopilot on 6000
++0    waitmem 0x008654a4 3 20000
++240  log SHOT cover_results
++0    roam mp waittrip 40000
++60   log SHOT note
++0    careerlist
++0    log LOBBY DONE
++60   quit

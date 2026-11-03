@@ -1,0 +1,49 @@
+# mpcredit_crib.txt in a stage 2 career whose sponsor is taken away first (stage 2's record +0xE8 = 0, as before the
+# sponsor popup): after the multiplayer race's win the crib asks which sponsor to sign (runtime/mpcredit.c: the
+# game's dialog, one offer after the other, [Sign] [Next offer]); the script answers Next offer once (RIGHT, RETURN),
+# then Sign (LEFT, RETURN): the second offer is signed, its bonus into the bank, then Return to Explore Mode and its
+# autosave.  Same environment as mpcredit_crib.txt.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    peek 0x00844ad8 1
++0    poke 0x00844ad8 ${MPC_SAVE_FLAGS}
++60   careerlist
++0    peek 0x00862308 1
++0    poke 0x00862308 0                # stage 2 without its sponsor
++0    mpcredit ${MPC_RACE} ${MPC_MARGIN}
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++0    waitfe GenericDialog_MED.fng 900
++120  fnglist
++0    dump sponsor_offer_1
++0    log SHOT sponsor_offer_1
++0    tap RIGHT
++30   tap RETURN                      # Next offer
++120  waitfe GenericDialog_MED.fng 600
++120  fnglist
++0    log SHOT sponsor_offer_2
++0    tap LEFT
++30   tap RETURN                      # Sign
++200  careerlist
++0    peek 0x00862308 1
++0    fnglist
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng ${MPC_MC_WAIT}
++120  fnglist
++0    tap LEFT
++30   tap RETURN                      # the autosave: Yes
++120  fnglist
++0    tap LEFT
++30   tap RETURN
++0    waitroam 4000
++120  careerlist
++0    peek 0x00862308 1
++0    fnglist
++0    log MPC done
++10   quit

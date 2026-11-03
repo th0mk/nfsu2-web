@@ -1,0 +1,49 @@
+# A multiplayer race's win in the career (runtime/mpcredit.c) without the race: from a career save (NFSU2_SAVE_SEED)
+# the bot loads free roam, "mpcredit" marks the win of race ${MPC_RACE} (margin ${MPC_MARGIN}: as the game measures
+# it, -1 a friend's win) for the next crib, the car goes into the crib (the win goes in after its snapshot), then
+# Return to Explore Mode (its autosave saves the profile) and free roam again; careerlist before and after.
+#   NFSU2_SAVE_SEED=<save tree> node web/tools/run-suite.mjs --base <server> --script mpcredit_crib.txt
+#        --marker "MPC done" --name <name> --env MPC_RACE=S2_CIRCUIT_5 --env MPC_MARGIN=3 --save-out <dir>
+# MPC_SAVE_FLAGS: the game's Save option ([0x844AD8] autosave, [0x844AD9] prompt): 0x00010101 Autosave (the seed's),
+# 0x00010000 Off (the crib takes no snapshot and saves nothing: the win stays in memory for the next save).
+# MPC_MC_WAIT: frames to wait for the autosave (MC_Main.fng, answered Yes); 1 with the autosave off (none comes).
+# The stage records' sponsors: peek of +0xE8 of stages 2..5 (0x862308 + 0x104 k).
+# MPC_CRIB_WAIT: frames in the crib before Return to Explore Mode (the race's movies play there first: a stage's
+# final, with NOMOVIES=2 the movie screen comes and goes at once).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    peek 0x00844ad8 1
++0    poke 0x00844ad8 ${MPC_SAVE_FLAGS}
++60   careerlist
++0    peek 0x00862308 1
++0    peek 0x0086240c 1
++0    mpcredit ${MPC_RACE} ${MPC_MARGIN}
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++${MPC_CRIB_WAIT} careerlist
++0    peek 0x00862308 1
++0    peek 0x0086240c 1
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitfe MC_Main.fng ${MPC_MC_WAIT}
++120  fnglist
++0    tap LEFT
++30   tap RETURN                      # the autosave: Yes
++120  fnglist
++0    waitroam ${MPC_ROAM_WAIT}         # (a race's movie plays first: keys now would skip it)
++0    tap LEFT
++30   tap RETURN
++0    waitroam 6000
++120  careerlist
++3600 careerlist
++0    fnglist
++0    tapfe ESCAPE UI_Pause.fng 150 900    # the keys work in free roam (after a race's movie too)
++120  fnglist
++0    tap ESCAPE
++0    log MPC done
++10   quit

@@ -1,0 +1,31 @@
+# Multiplayer races from free roam in a crowd, a joining side (with mprace_lobby_a.txt as the host): as
+# mprace_crowd_b.txt (the start packed with other players, roam-crowd --track of rings round it; this player stops
+# 12 m out, within reach of the lobby but farther than the crowd), at a start of any height (MP_Z).
+#   roam-pair --seed <a stage-2 save tree> --crowd 30 --crowd-args "--track <rings round the start> --room <r>"
+#        --a Ann:mprace_lobby_a.txt --b Bob:mprace_crowd2_b.txt --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPON_DRIFT_2
+#        --env MP_PLAYERS=2 --env MP_X=-885 --env MP_Y=-289 --env MP_Z=21.8
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++120  teleport ${MP_X} ${MP_Y} ${MP_Z}
++0    log LOBBY at the start, 12 m out
++0    roam mp waitlobby 0 3600
++0    roam mp lobby
++30   roam mp lobby
++0    log LOBBY join
++0    tap RETURN
++120  roam mp lobby
++0    roam mp waitlobby 2 600
++0    roam mp lobby
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit

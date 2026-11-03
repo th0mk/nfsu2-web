@@ -128,6 +128,7 @@
   "Open a lobby": "Abrir um lobby",
   "Join": "Entrar",
   "This lobby is full.": "Este lobby está cheio.",
+  "A career race for players up to stage {n} and {host}'s friends.": "Uma corrida de carreira para jogadores até a fase {n} e amigos de {host}.",
   "Open another": "Abrir outro",
   "Starting in {n}": "Começa em {n}",
   "Joining {host}'s {kind}…": "Entrando em {kind} de {host}…",
@@ -1350,5 +1351,27 @@
   "Playing with others waits for another name: change it under Online on the start page.": "Para jogar com os outros, é preciso outro nome: mude-o em Online, na página inicial.",
   "{name} isn't allowed here.": "{name} não é permitido aqui.",
   "Pick another name to keep playing with others.": "Escolha outro nome para continuar jogando com os outros.",
-  "Pick another name": "Escolha outro nome"
+  "Pick another name": "Escolha outro nome",
+  "friend": "amigo",
+  "A win counts in your career": "Uma vitória conta na sua carreira",
+  "A win counts in their career": "Uma vitória conta na carreira deste jogador",
+  "A win counts in your career, and so does a friend's": "Uma vitória conta na sua carreira, e a de um amigo também",
+  "Friend's win": "Vitória de um amigo",
+  "Career win": "Vitória na carreira",
+  "Multiplayer race: {pos} place, won in your career": "Corrida multijogador: {n}º lugar, vencida na sua carreira",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too": "Corrida multijogador: {n}º lugar. {name} venceu: também conta na sua carreira",
+  "Multiplayer race: {pos} place, won in your career, ${prize}": "Corrida multijogador: {n}º lugar, vencida na sua carreira, ${prize}",
+  "Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}": "Corrida multijogador: {n}º lugar. {name} venceu: também conta na sua carreira, ${prize}",
+  "Getting the next heat ready": "Preparando a próxima bateria",
+  "Heat {k} of {n}": "Bateria {k} de {n}",
+  "{n} heats": {
+    "one": "{n} bateria",
+    "many": "{n} baterias",
+    "other": "{n} baterias"
+  },
+  "Standings": "Classificação",
+  "Final standings": "Classificação final",
+  "Heat {k} results": "Resultados da bateria {k}",
+  "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Corrida multijogador: {n}º lugar: a vitória entra na sua carreira na sua próxima ida à garagem",
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Corrida multijogador: {n}º lugar. {name} venceu: entra na sua carreira na sua próxima ida à garagem"
 }

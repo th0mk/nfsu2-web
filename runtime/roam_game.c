@@ -4606,6 +4606,38 @@ static int race_why(uint32_t r, uint32_t stage){
     if (kind == 2) return MPW_URL;
     return MPW_LATER;
 }
+/* a test switch (NFSU2_MPRACE_TEST_*): only in a scripted run (NFSU2_INPUT_SCRIPT, set by the test pages), never
+ * from a player's settings.ini: it would make races count or strangers friends */
+static const char *mp_test_env(const char *name){ const char *s = getenv("NFSU2_INPUT_SCRIPT"); return s && *s ? getenv(name) : 0; }
+/* A win of race r in a multiplayer race counts in this career (mprace.c,
+ * mpcredit.c: the game's own win) when the player could win it with Solo
+ * here: a race open in the career now (its marker on the map, any stage), or
+ * a normal race of the player's current stage not won yet (the career opens
+ * a capped, random few of them at a time: friends at one stage have
+ * different ones open), a sponsor or URL race only when open (their gates:
+ * the sponsor's contract, the stars and wins a URL waits for), an SUV race
+ * only in an SUV.  Never a race of a later stage, a story race (no LAN race)
+ * or one already won; none in the prologue or while a story step runs */
+static int mp_counts(uint32_t r){
+    uint32_t stage = rd32(G_CAREER + C_STAGE);
+    if (!r || !ok(r, RACE_SZ) || !race_lan(r) || !stage || rd32(G_CAREER + C_GUIDED) || race_won(r)) return 0;
+    {   /* test aid: NFSU2_MPRACE_TEST_COUNTS, race names (comma-separated) that count whatever their gates (a URL race
+         * waits for the car's stars too, which a test save may not have) */
+        const char *e = mp_test_env("NFSU2_MPRACE_TEST_COUNTS");
+        if (e && *e){
+            char nm[40]; race_name(r, nm, sizeof nm);
+            size_t n = strlen(nm);
+            for (const char *s = e; *s; ){
+                const char *c = strchr(s, ','); size_t k = c ? (size_t)(c - s) : strlen(s);
+                if (n && k == n && !strncmp(s, nm, n)) return 1;
+                s += k + (c ? 1 : 0);
+            }
+        }
+    }
+    if (MR8(r + 0xdu) && !car_suv()) return 0;
+    if (race_open(r)) return 1;
+    return MR8(r + 0x37u) == stage && MR8(r + 0x34u) == 3u;
+}
 /* the spot of trigger e (a type-13 trigger), or MPS_NONE */
 static void spot_of(CPU *c, uint32_t e, uint32_t stage, MpSpot *sp){
     memset(sp, 0, sizeof *sp);
@@ -4698,6 +4730,7 @@ static void spots_read(CPU *c, int64_t host){
  * Lobbies are within a room, as everything in free roam. */
 #if MPRACES
 #include "mprace.h"
+#include "mpcredit.h"
 #define MP_JOIN_M       15.f          /* a player within this of a lobby's start joins it with Enter */
 #define MP_STAY_M       40.f          /* ...and stays in it while within this (the host too) */
 #define MP_ADVERT_US    1000000
@@ -4725,8 +4758,12 @@ static const char *mp_cannot(void){ return !(rd32(G_GAMEMODE) & 1u) ? MP_NOCAREE
 #define MP_SEEN         16
 enum { MP_IDLE, MP_HOST, MP_ASKED, MP_IN, MP_COUNT, MP_TRIP };
 static const char *const mp_st[] = { "idle", "hosting", "asked to join", "in a lobby", "counting down", "on the trip" };
-/* away_s: its host seems away (rc_lobby): the lobby closes in this many s (0: not) */
-typedef struct { uint32_t id, host, race; float x, y; uint8_t n, max, state, away_s; uint32_t ids[RC_LOBBY_MAX]; int64_t heard; } MpLobby;
+/* away_s: its host seems away (rc_lobby): the lobby closes in this many s (0: not); counts: bit i, a win counts in
+ * player i's career (mp_counts in that player's game: each JOIN says it, the host's ADVERT has them all; a game
+ * without it says none).  On the wire both go in t_ms, a START's countdown, unused by the other ops (older games and
+ * the hub skip it there): MP_COUNTS_ON | the bits */
+typedef struct { uint32_t id, host, race; float x, y; uint8_t n, max, state, away_s, counts; uint32_t ids[RC_LOBBY_MAX]; int64_t heard; } MpLobby;
+#define MP_COUNTS_ON    0x8000u
 static struct {
     int      st;
     MpLobby  l;                                  /* ours (hosting) or the one we are in */
@@ -4746,6 +4783,7 @@ static struct {
     uint32_t asked_host, asked_id; int64_t asked_at;   /* the lobby we last sent a JOIN to (its host, its id), and when */
     char     names[RC_LOBBY_MAX][RC_NAME_MAX + 1];   /* on the trip: the lobby's players' names (their links end in the menus) */
     char     lan[RC_LOBBY_MAX][13];              /* ...and their LAN names (lan_names), the race's results' */
+    uint8_t  friend_mask, trip_counts;           /* ...which are our friends (bit i), and whether a win counts in our career */
 } g_mp;
 static const char *race_kind(uint32_t r){
     if (!r) return "race";
@@ -4800,6 +4838,7 @@ static void mp_drop(int i){
         g_mp.l.ids[k] = g_mp.l.ids[k + 1]; g_mp.away[k] = g_mp.away[k + 1];
         memcpy(g_mp.names[k], g_mp.names[k + 1], sizeof g_mp.names[k]);
     }
+    g_mp.l.counts = (uint8_t)((g_mp.l.counts & ((1u << i) - 1u)) | ((g_mp.l.counts >> (i + 1)) << i));
     g_mp.l.n--;
 }
 static const rc_peer *mp_peer(uint32_t id){
@@ -4811,6 +4850,33 @@ static const char *mp_name(uint32_t id){
     const rc_peer *p = mp_peer(id);
     return p && p->name[0] ? p->name : "a player";
 }
+/* player id is our friend (the server's friends lists: the hub marks them, RC_MARK_FRIEND); a test's
+ * NFSU2_MPRACE_TEST_FRIENDS (free-roam names, comma-separated) names them instead */
+static int mp_friend(uint32_t id){
+    const rc_peer *p = mp_peer(id);
+    if (!p) return 0;
+    const char *e = mp_test_env("NFSU2_MPRACE_TEST_FRIENDS");
+    if (e && *e){
+        size_t n = strlen(p->name);
+        for (const char *s = e; *s; ){
+            const char *c = strchr(s, ','); size_t k = c ? (size_t)(c - s) : strlen(s);
+            if (n && k == n && !strncasecmp(s, p->name, n)) return 1;
+            s += k + (c ? 1 : 0);
+        }
+        return 0;
+    }
+    return p->hub_friend != 0;
+}
+/* A lobby whose race counts in its host's career (the host's bit of its counts: a career lobby) takes the players up
+ * to that race's stage and the host's friends: a player past the stage, in a car with a later stage's parts, would
+ * win it most of the time however the cars are evened out, and the host's career would not get the race.  0: we may
+ * join it; else the race's stage (the lobby shows as one we cannot join, as a full one).  Our game says so, not the
+ * host's: a JOIN does not carry the stage, and an older game joins anyway, as before */
+static int mp_kept_out(const MpLobby *l){
+    if (!l->race || !ok(l->race, RACE_SZ) || !(l->counts & 1u)) return 0;
+    uint32_t st = MR8(l->race + 0x37u);
+    return st && rd32(G_CAREER + C_STAGE) > st && !mp_friend(l->host) ? (int)st : 0;
+}
 /* one message about lobby l to `to` (0: the hub); the session lock is ours */
 static void mp_send_of(const MpLobby *l, uint8_t op, uint8_t arg, uint32_t to){
     rc_lobby m; memset(&m, 0, sizeof m);
@@ -4819,6 +4885,8 @@ static void mp_send_of(const MpLobby *l, uint8_t op, uint8_t arg, uint32_t to){
     m.x = (int16_t)(l->x < -32767.f ? -32767.f : l->x > 32767.f ? 32767.f : l->x);
     m.y = (int16_t)(l->y < -32767.f ? -32767.f : l->y > 32767.f ? 32767.f : l->y);
     if (op == RC_LOBBY_START){ int64_t t = (g_mp.start_at - roam_plat_now_us()) / 1000; m.t_ms = (uint16_t)(t < 0 ? 0 : t > 60000 ? 60000 : t); }
+    else if (op == RC_LOBBY_ADVERT) m.t_ms = (uint16_t)(MP_COUNTS_ON | (l->counts & 0x3fu));
+    else if (op == RC_LOBBY_JOIN) m.t_ms = (uint16_t)(MP_COUNTS_ON | (mp_counts(l->race) ? 1u : 0u));
     memcpy(m.ids, l->ids, sizeof m.ids);
     rc_send_lobby(&g_s, &m);
 }
@@ -4844,14 +4912,16 @@ static void mp_report(void){
     m.players = (uint8_t)(r.cars < 1 ? 1 : r.cars > RC_LOBBY_MAX ? RC_LOBBY_MAX : r.cars);
     m.place = (uint8_t)(r.place < 0 || r.place > m.players ? 0 : r.place);
     m.flags = (uint8_t)((r.host ? RC_RR_HOST : 0) | (r.quit ? RC_RR_QUIT : 0) | (mprace_type_edited(r.car.type) ? RC_RR_EDITED : 0));
+    m.credit = (uint8_t)(mprace_credited() > 0 ? mprace_credit() : 0);   /* the race in our career (the server's [race] line) */
     m.type = (uint8_t)r.car.type; m.cls = (int8_t)(r.car.cls < -1 || r.car.cls > 3 ? -1 : r.car.cls);
     m.rating = rr_in(r.car.rating, 0.f, 5000.f); m.field = rr_in(r.field, 0.f, 5000.f); m.factor = rr_in(r.factor, 0.01f, 100.f);
     m.kw = rr_in(r.car.power / 1000.f, 0.f, 10000.f); m.kg = rr_in(r.car.mass, 0.f, 50000.f); m.kmh = rr_in(r.car.top * 3.6f, 0.f, 2000.f);
     m.time = rr_in(r.time, 0.f, 100000.f);
     for (int i = 0; i < RC_RACEREP_NAME && r.car.name[i]; i++){ char ch = r.car.name[i]; m.name[i] = ch >= 0x20 && ch < 0x7f ? ch : '?'; }
     /* and the race's results as our game showed them, each row by its player's id (the LAN names the trip gave the
-     * lobby's players): the server compares every player's results for a racer far ahead of the others */
-    MpResult res[MPRACE_RESULTS_MAX]; int nr = mprace_results(res, MPRACE_RESULTS_MAX);
+     * lobby's players): the server compares every player's results for a racer far ahead of the others (a URL race
+     * of heats: its last heat's) */
+    MpResult res[MPRACE_RESULTS_MAX]; int nr = mprace_heat_results(res, MPRACE_RESULTS_MAX);
     rc_raceres q; memset(&q, 0, sizeof q);
     q.lobby = m.lobby; q.race = m.race; q.mode = m.mode; q.laps = m.laps;
     for (int k = 0; k < nr && q.n < RC_LOBBY_MAX; k++){
@@ -4877,7 +4947,7 @@ static int mp_open(int64_t host, uint32_t r){
     memset(&g_mp.l, 0, sizeof g_mp.l);
     roam_plat_lock(); do g_mp.l.id = roam_plat_random(); while (!g_mp.l.id); roam_plat_unlock();
     g_mp.l.host = g_s.conf.self_id; g_mp.l.race = r; g_mp.l.max = (uint8_t)race_max(r); g_mp.l.state = RC_LS_OPEN;
-    g_mp.l.n = 1; g_mp.l.ids[0] = g_s.conf.self_id;
+    g_mp.l.n = 1; g_mp.l.ids[0] = g_s.conf.self_id; g_mp.l.counts = mp_counts(r) ? 1u : 0u;
     memset(g_mp.away, 0, sizeof g_mp.away);
     if (!race_place(r, &g_mp.l.x, &g_mp.l.y)) return 0;
     g_mp.opened++;
@@ -4926,13 +4996,14 @@ static const MpSpot *mp_spot_here(void){
     }
     return only && !in_event(x, y) ? only : 0;
 }
-/* the lobby nearest the player that it may join now: open, room in it, its start within MP_JOIN_M, its host linked
- * with us (the hub links a lobby's host with the players near its start first: a JOIN goes over that link) */
+/* the lobby nearest the player that it may join now: open, room in it, not one we are kept out of (mp_kept_out), its
+ * start within MP_JOIN_M, its host linked with us (the hub links a lobby's host with the players near its start
+ * first: a JOIN goes over that link) */
 static MpLobby *mp_joinable(void){
     MpLobby *best = 0; float bd = MP_JOIN_M;
     for (int i = 0; i < g_mp.nseen; i++){
         MpLobby *l = &g_mp.seen[i];
-        if (l->state != RC_LS_OPEN || l->n >= l->max || !l->race || !mp_peer(l->host)) continue;
+        if (l->state != RC_LS_OPEN || l->n >= l->max || !l->race || !mp_peer(l->host) || mp_kept_out(l)) continue;
         float d = mp_dist(l->x, l->y);
         if (d < bd){ bd = d; best = l; }
     }
@@ -4966,6 +5037,7 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
             roam_plat_lock(); roam_plat_notice(mp_name(from), t); roam_plat_unlock();
         }
         if (!l) l = mp_seen(from, 1);
+        if (m->op == RC_LOBBY_ADVERT) l->counts = m->t_ms & MP_COUNTS_ON ? (uint8_t)(m->t_ms & 0x3fu) : 0;   /* (a START's is its countdown) */
         l->id = m->lobby; l->host = from; l->race = r; l->x = m->x; l->y = m->y; l->n = m->n; l->max = m->max; l->state = m->state;
         l->away_s = m->op != RC_LOBBY_ADVERT ? 0 : m->away_s > MP_IDLE_WARN_US / 1000000 ? MP_IDLE_WARN_US / 1000000 : m->away_s;
         memcpy(l->ids, m->ids, sizeof l->ids); l->heard = host;
@@ -4996,6 +5068,8 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
         if (g_mp.st != MP_HOST || m->lobby != g_mp.l.id) return;
         if (mp_in(&g_mp.l, from)){ mp_send_one(RC_LOBBY_ADVERT, 0, from); return; }            /* our answer was lost */
         if (g_mp.l.n >= g_mp.l.max || g_mp.l.state != RC_LS_OPEN){ mp_send_one(RC_LOBBY_LEAVE, RC_LL_FULL, from); return; }
+        if ((m->t_ms & MP_COUNTS_ON) && (m->t_ms & 1u)) g_mp.l.counts |= (uint8_t)(1u << g_mp.l.n);
+        else g_mp.l.counts &= (uint8_t)~(1u << g_mp.l.n);
         g_mp.away[g_mp.l.n] = 0; g_mp.l.ids[g_mp.l.n++] = from;
         rlog("[roam] f=%ld race lobby %08x: %s joined, %d of %d\n", rh_frame(), g_mp.l.id, mp_name(from), g_mp.l.n, g_mp.l.max);
         mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host;
@@ -5078,10 +5152,19 @@ static void mp_trip(int64_t host){
     t.mode = race_net_mode(r);
     t.track = MR16(r + 0x18u); t.reverse = MR8(r + 0x1au) & 1u; t.laps = MR8(r + 0x1bu);
     t.players = g_mp.l.n;
+    g_mp.friend_mask = 0;
+    t.heats = MR8(r + 0x34u) == 2u && MR8(r + 0x7eu) >= 1u && MR8(r + 0x7eu) <= 3u ? MR8(r + 0x7eu) : 1;
+    t.credit = mp_counts(r) ? r : 0;
     for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++){
         snprintf(g_mp.names[i], sizeof g_mp.names[i], "%s", mp_name(g_mp.l.ids[i]));
         memcpy(g_mp.lan[i], nm12[i], sizeof g_mp.lan[i]);
+        /* our friends among them (the hub's marks, while still linked: the links end in the menus) */
+        if (g_mp.l.ids[i] != g_s.conf.self_id && mp_friend(g_mp.l.ids[i]) && t.nfriends < 6){
+            snprintf(t.friends[t.nfriends++], sizeof t.friends[0], "%s", nm12[i]);
+            g_mp.friend_mask |= (uint8_t)(1u << i);
+        }
     }
+    g_mp.trip_counts = t.credit != 0;
     char nm[40]; race_name(r, nm, sizeof nm);
     rlog("[roam] f=%ld race lobby %08x: the trip to the LAN race: %s (mode %d, track %d%s, %d laps), %d players, %s\n", rh_frame(), g_mp.l.id, nm,
          t.mode, t.track, t.reverse ? " reverse" : "", t.laps, t.players, t.host ? "we host" : "we join");
@@ -5160,15 +5243,30 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
          * lost its way kept the lobby, and every race card closed itself until a restart */
         if (in_roam && ph != MPR_OUT && ph != MPR_DONE && ph != MPR_FAILED){
             if (!g_mp.roam_at) g_mp.roam_at = host;
-            if (host - g_mp.roam_at > MP_STALE_US){ rlog("[roam] f=%ld race lobby %08x: in free roam, the trip not over: over\n", rh_frame(), g_mp.l.id); mprace_end_in_roam(); ph = mprace_phase(); }
+            if (host - g_mp.roam_at > MP_STALE_US){ rlog("[roam] f=%ld race lobby %08x: in free roam, the trip not over: over\n", rh_frame(), g_mp.l.id); mprace_end_in_roam(c); ph = mprace_phase(); }
         } else g_mp.roam_at = 0;
         if (ph != MPR_DONE && ph != MPR_FAILED) return;
         if (!in_roam) return;                                     /* back once free roam is */
         char t[TAG_DUEL_MAX];
         int place = mprace_place(), prize = mprace_prize();
+        const char *th = place == 1 ? "st" : place == 2 ? "nd" : place == 3 ? "rd" : "th";
+        /* the winner by the name the lobby knew (the results have LAN names) */
+        const char *winner = mprace_winner();
+        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++) if (winner[0] && !strcasecmp(g_mp.lan[i], winner)){ winner = g_mp.names[i]; break; }
+        /* the career's own prize for the race (the crib paid it; a win still waiting for the next crib has none yet) */
+        MpCredit cr; int cprize = !mpcredit_pending() && mpcredit_last(&cr) ? cr.prize : 0;
+        char won[48] = "";
+        if (cprize > 0) snprintf(won, sizeof won, ", $%d", cprize + mprace_topup());   /* (and what the place's prize adds) */
+        /* (a win the trip could not give in the crib waits for the next visit there: said so, the garage as the
+         * player knows it) */
+        int waits = mprace_credited() > 0 && mpcredit_pending();
         if (ph == MPR_FAILED) snprintf(t, sizeof t, "The multiplayer race did not happen: %s", mprace_why());
-        else if (place && prize) snprintf(t, sizeof t, "Multiplayer race: %d%s place, $%d", place, place == 1 ? "st" : place == 2 ? "nd" : place == 3 ? "rd" : "th", prize);
-        else if (place) snprintf(t, sizeof t, "Multiplayer race: %d%s place", place, place == 1 ? "st" : place == 2 ? "nd" : place == 3 ? "rd" : "th");
+        else if (place && waits && mprace_credit() == MPC_WON) snprintf(t, sizeof t, "Multiplayer race: %d%s place: the win goes into your career at your next garage visit", place, th);
+        else if (place && waits) snprintf(t, sizeof t, "Multiplayer race: %d%s place. %s won it: into your career at your next garage visit", place, th, winner);
+        else if (place && mprace_credited() > 0 && mprace_credit() == MPC_WON) snprintf(t, sizeof t, "Multiplayer race: %d%s place, won in your career%s", place, th, won);
+        else if (place && mprace_credited() > 0) snprintf(t, sizeof t, "Multiplayer race: %d%s place. %s won it: it counts in your career too%s", place, th, winner, won);
+        else if (place && prize) snprintf(t, sizeof t, "Multiplayer race: %d%s place, $%d", place, th, prize);
+        else if (place) snprintf(t, sizeof t, "Multiplayer race: %d%s place", place, th);
         else if (mprace_quit() && mprace_fee()) snprintf(t, sizeof t, "Multiplayer race: you quit it, $%d fee", mprace_fee());
         else if (mprace_quit()) snprintf(t, sizeof t, "Multiplayer race: you quit it");
         else snprintf(t, sizeof t, "Multiplayer race: not finished");
@@ -5270,19 +5368,25 @@ static int mp_line(int64_t host, char *tx, int n){
         if (l && (!sp || sp->kind == MPS_ONLY)){
             const char *no = mp_cannot();
             if (no) snprintf(tx, (size_t)n, "%s's %s: %s", mp_name(l->host), race_kind(l->race), no);
-            else snprintf(tx, (size_t)n, "Press Enter to join %s's %s (%d of %d). Quitting the race costs $%d%s", mp_name(l->host), race_kind(l->race),
-                          l->n, l->max, MPRACE_QUIT_FEE, l->race && mprace_evened(race_net_mode(l->race)) ? ". The cars are evened out" : "");
+            else snprintf(tx, (size_t)n, "Press Enter to join %s's %s (%d of %d)%s. Quitting the race costs $%d%s", mp_name(l->host), race_kind(l->race),
+                          l->n, l->max, mp_counts(l->race) ? ": a win counts in your career" : "", MPRACE_QUIT_FEE,
+                          l->race && mprace_evened(race_net_mode(l->race)) ? ". The cars are evened out" : "");
             return 1;
         }
         if (sp && sp->kind == MPS_ONLY){
-            /* a lobby here with no room left: said, as Enter starts another */
+            /* a lobby here with no room left, or one we are kept out of: said, as Enter starts another */
             for (int i = 0; i < g_mp.nseen; i++){
                 const MpLobby *f = &g_mp.seen[i];
-                if (f->state != RC_LS_OPEN || !f->race || f->n < f->max || mp_dist(f->x, f->y) >= MP_JOIN_M) continue;
-                snprintf(tx, (size_t)n, "%s's %s is full (%d of %d). Press Enter to start another", mp_name(f->host), race_kind(f->race), f->n, f->max);
+                int only = mp_kept_out(f);
+                if (f->state != RC_LS_OPEN || !f->race || (f->n < f->max && !only) || mp_dist(f->x, f->y) >= MP_JOIN_M) continue;
+                char hn[24]; snprintf(hn, sizeof hn, "%s", mp_name(f->host));
+                if (only) snprintf(tx, (size_t)n, "%s's %s is for players up to stage %d and %s's friends. Press Enter to start another",
+                                   hn, race_kind(f->race), only, hn);
+                else snprintf(tx, (size_t)n, "%s's %s is full (%d of %d). Press Enter to start another", hn, race_kind(f->race), f->n, f->max);
                 return 1;
             }
-            snprintf(tx, (size_t)n, "Multiplayer %s here (%s): press Enter to open a lobby", race_kind(sp->race), mpw_text[sp->why]);
+            snprintf(tx, (size_t)n, "Multiplayer %s here (%s): press Enter to open a lobby", race_kind(sp->race),
+                     mp_counts(sp->race) ? "a win counts in your career" : mpw_text[sp->why]);
             return 1;
         }
         break; }
@@ -5371,21 +5475,65 @@ static void js_race(MpJs *j, uint32_t r){
     if (!r) return;
     if (r != cr){ cr = r; track_name(MR16(r + 0x18u), MR8(r + 0x1au) & 1, tn, sizeof tn); }
     js_str(j, "kind", race_kind(r));
-    if (tn[0]) js_str(j, "track", tn);
+    /* a URL race of heats: their number, not a track (each heat has its own: js_heats on the trip) */
+    int heats = MR8(r + 0x34u) == 2u && MR8(r + 0x7eu) >= 2u && MR8(r + 0x7eu) <= 3u ? MR8(r + 0x7eu) : 1;
+    if (heats > 1) js_int(j, "heats", heats);
+    else if (tn[0]) js_str(j, "track", tn);
     if (MR8(r + 0x37u) >= 1u && MR8(r + 0x37u) <= 9u) js_int(j, "stage", MR8(r + 0x37u));
     uint8_t ty = MR8(r + 0xfu); int laps = MR8(r + 0x1bu), lo = ty == 2 ? 4 : 2;
     if (MR8(r + 0x34u) != 2u && (ty == 0 || ty == 2 || ty == 5) && laps > 1) js_int(j, "laps", laps < lo ? lo : laps > 10 ? 10 : laps);
 }
+/* on the trip of a URL race's heats (mprace_series): heat, the one raced now or last (1 ..), and its track; fin: the
+ * last heat's results are in (res is the standing then); stand: the points after the heats raced so far, the leader
+ * first, each {n: the player's name, p: its points, me: 1 ours} */
+static void js_heats(MpJs *j){
+    MpSeries s; static int ct = -1, cr = -1; static char tn[64];
+    if (!mprace_series(&s) || !g_mp.l.race || s.heat < 1 || s.heat > 3) return;
+    uint32_t r = g_mp.l.race, k = (uint32_t)s.heat - 1u;
+    int num = (int)(int16_t)MR16(r + 0x18u + 4u * k), rev = MR8(r + 0x1au + 4u * k) & 1;
+    if (num != ct || rev != cr){ ct = num; cr = rev; track_name((uint32_t)num, rev, tn, sizeof tn); }
+    js_int(j, "heat", s.heat);
+    if (tn[0]) js_str(j, "track", tn);
+    if (s.final){ js_int(j, "fin", 1); return; }
+    if (!s.n) return;
+    js_key(j, "stand"); js_raw(j, "[");
+    for (int i = 0; i < s.n; i++){
+        const char *nm = s.p[i].name[0] ? s.p[i].name : "?";
+        for (int q = 0; q < g_mp.l.n && q < RC_LOBBY_MAX; q++) if (s.p[i].name[0] && !strcasecmp(g_mp.lan[q], s.p[i].name)){ nm = g_mp.names[q]; break; }
+        char t[32];
+        js_raw(j, i ? ",{\"n\":" : "{\"n\":"); js_val(j, nm);
+        snprintf(t, sizeof t, ",\"p\":%d", s.p[i].points); js_raw(j, t);
+        if (s.p[i].ours) js_raw(j, ",\"me\":1");
+        js_raw(j, "}");
+    }
+    js_raw(j, "]");
+}
+/* the lobby's players: names, the host first; me: our place (-1: none); max; counts: 1 a win counts in our career
+ * (mp_counts); c: each player's (its own game's say, ours ours), fr: each one our friend (a friend's win counts for us
+ * as ours does) -- c and fr only when some are */
 static void js_players(MpJs *j, const MpLobby *l){
     js_key(j, "names"); js_raw(j, "[");
-    int me = -1;
+    int me = -1, trip = l == &g_mp.l && g_mp.st == MP_TRIP, mine = trip ? g_mp.trip_counts : mp_counts(l->race);
+    uint32_t c = 0, fr = 0;
     for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++){
         if (i) js_raw(j, ",");
-        js_val(j, l == &g_mp.l && g_mp.st == MP_TRIP ? g_mp.names[i] : mp_name(l->ids[i]));
-        if (l->ids[i] == g_s.conf.self_id) me = i;
+        js_val(j, trip ? g_mp.names[i] : mp_name(l->ids[i]));
+        if (l->ids[i] == g_s.conf.self_id){ me = i; if (mine) c |= 1u << i; }
+        else {
+            if (l->counts >> i & 1u) c |= 1u << i;
+            if (trip ? g_mp.friend_mask >> i & 1u : mp_friend(l->ids[i])) fr |= 1u << i;
+        }
     }
     js_raw(j, "]");
     js_int(j, "me", me); js_int(j, "max", l->max);
+    if (mine && !trip) js_int(j, "counts", 1);
+    for (int pass = 0; pass < 2; pass++){
+        uint32_t m = pass ? fr : c;
+        if (!m) continue;
+        js_key(j, pass ? "fr" : "c"); js_raw(j, "[");
+        for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++) js_raw(j, i ? (m >> i & 1u ? ",1" : ",0") : (m & 1u ? "1" : "0"));
+        js_raw(j, "]");
+    }
 }
 /* the race's results, once the game showed them (mprace_results, by the LAN names the trip gave the lobby's players):
  * res, the rows in their order, each {n: the player's name, f: 1 finished, t: its time (s) or p: a drift's points,
@@ -5407,6 +5555,10 @@ static void js_results(MpJs *j){
     }
     js_raw(j, "]");
     if (mprace_prize() > 0) js_int(j, "prize", mprace_prize());
+    /* credit: the race counts in our career, 1 we won it, 2 a friend did (the crib gives it on the way back);
+     * credited: -1 the career did not take it (the prize money instead) */
+    if (mprace_credit() != MPC_NONE) js_int(j, "credit", mprace_credit());
+    if (mprace_credited() < 0) js_int(j, "credited", -1);
 }
 static void mp_panel(int64_t host, int in_roam){
     static char last[1200];
@@ -5415,7 +5567,7 @@ static void mp_panel(int64_t host, int in_roam){
     js_raw(&j, "{");
     int hud = in_roam && host - g_mp_hud_at < 250000;
     if (g_mp.st == MP_TRIP){
-        if (mprace_covered()){ js_str(&j, "v", "trip"); js_str(&j, "step", mprace_step()); js_race(&j, g_mp.l.race); js_players(&j, &g_mp.l); js_results(&j); }
+        if (mprace_covered()){ js_str(&j, "v", "trip"); js_str(&j, "step", mprace_step()); js_race(&j, g_mp.l.race); js_heats(&j); js_players(&j, &g_mp.l); js_results(&j); }
     } else if (hud && g_mp.st != MP_IDLE){
         static const char *const st[] = { "", "host", "asked", "in", "count" };
         js_str(&j, "v", "lobby"); js_str(&j, "st", st[g_mp.st]);
@@ -5432,15 +5584,19 @@ static void mp_panel(int64_t host, int in_roam){
         const MpLobby *full = 0;
         for (int i = 0; !l && sp && sp->kind == MPS_ONLY && i < g_mp.nseen; i++){
             const MpLobby *f = &g_mp.seen[i];
-            if (f->state == RC_LS_OPEN && f->race && f->n >= f->max && mp_dist(f->x, f->y) < MP_JOIN_M) full = f;
+            if (f->state == RC_LS_OPEN && f->race && (f->n >= f->max || mp_kept_out(f)) && mp_dist(f->x, f->y) < MP_JOIN_M) full = f;
         }
         /* a message first, for its few seconds (back from the race at the spot: the place and the prize) */
         if (g_mp.note[0] && host < g_mp.note_until){ js_str(&j, "v", "note"); js_str(&j, "text", g_mp.note); }
         else if (l && (!sp || sp->kind == MPS_ONLY) && mp_cannot()){ js_str(&j, "v", "note"); js_str(&j, "text", mp_cannot()); }
         else if (l && (!sp || sp->kind == MPS_ONLY)){ js_str(&j, "v", "join"); js_race(&j, l->race); js_players(&j, l); js_int(&j, "fee", MPRACE_QUIT_FEE);
             if (l->race && mprace_evened(race_net_mode(l->race))) js_int(&j, "even", 1); }
-        else if (full){ js_str(&j, "v", "full"); js_race(&j, full->race); js_players(&j, full); }
-        else if (sp && sp->kind == MPS_ONLY){ js_str(&j, "v", "spot"); js_race(&j, sp->race); js_str(&j, "why", mpw_text[sp->why]); }
+        else if (full){ js_str(&j, "v", "full"); js_race(&j, full->race); js_players(&j, full);
+            if (mp_kept_out(full)) js_int(&j, "only", mp_kept_out(full)); }       /* (kept out: up to this stage) */
+        else if (sp && sp->kind == MPS_ONLY){
+            js_str(&j, "v", "spot"); js_race(&j, sp->race);
+            if (mp_counts(sp->race)) js_int(&j, "counts", 1); else js_str(&j, "why", mpw_text[sp->why]);
+        }
     }
     js_raw(&j, "}");
     if (!strcmp(buf, last)) return;
@@ -5501,13 +5657,97 @@ static struct {
 #define MSG_MP_SOLO     0x4d505301u   /* our answers (not the game's messages: its screens ignore them) */
 #define MSG_MP_MULTI    0x4d505302u
 #define MSG_MP_BACK     0x4d505303u
-/* our labels in the game's language table (language.c: again whenever it loads another) */
+/* The card's question and its buttons in the game's language: the languages whose fonts draw their own letters
+ * (language_game_letters: Latin-1, Polish's, Turkish's and Hungarian's as their packs have them), as photo.c and
+ * sms.c do theirs; English for the others (Russian, Ukrainian, Chinese, Japanese, Korean, Thai: their fonts draw
+ * ASCII only).  UTF-8 here.  q_lobby: the host's name, then the race's kind (in brackets: every language keeps that
+ * order).  Each language's texts in one row of one brace (web/test/log-english.test.mjs takes such a row for the
+ * game's text, not a log line): the kinds in race_kind's order, then the buttons in mp_lang_name's */
+typedef struct {
+    const char *lang, *q_counts, *q_prize, *q_lobby, *q_lobby_counts;
+    const char *k_race, *k_url, *k_circuit, *k_sprint, *k_streetx, *k_drag, *k_drift;
+    const char *b_solo, *b_multi, *b_join, *b_cancel;
+} MpTexts;
+static const MpTexts mp_texts[] = {
+    { "english", "Race it with other players, or on your own? A win counts in your career either way, and so does a friend's win in your race.",
+      "Race it with other players, or on your own? With others, only the prize money goes to your career.",
+      "%s is starting a multiplayer %s here. Join, or race it on your own?", " A win counts in your career either way.",
+      "race", "URL race", "circuit", "sprint", "Street X", "drag", "drift", "Solo", "Multiplayer", "Join", "Cancel" },
+    { "french", "Course avec d'autres joueurs ou en solo ? Une victoire compte dans votre carrière dans les deux cas, celle d'un ami dans votre course aussi.",
+      "Course avec d'autres joueurs ou en solo ? Avec d'autres, seul l'argent du prix va dans votre carrière.",
+      "%s lance une course multijoueur ici (%s). Rejoindre ou courir seul ?", " Une victoire compte dans votre carrière dans les deux cas.",
+      "course", "course URL", "circuit", "sprint", "Street X", "drag", "drift", "Solo", "Multijoueur", "Rejoindre", "Annuler" },
+    { "german", "Mit anderen Spielern fahren oder allein? Ein Sieg zählt so oder so in deiner Karriere, auch der Sieg eines Freundes in deinem Rennen.",
+      "Mit anderen Spielern fahren oder allein? Mit anderen geht nur das Preisgeld in deine Karriere.",
+      "%s startet hier ein Multiplayer-Rennen (%s). Mitmachen oder allein fahren?", " Ein Sieg zählt so oder so in deiner Karriere.",
+      "Rennen", "URL-Rennen", "Rundkurs", "Sprint", "Street X", "Drag", "Drift", "Solo", "Multiplayer", "Mitmachen", "Abbrechen" },
+    { "italian", "Correre con altri giocatori o da solo? Una vittoria conta nella tua carriera in entrambi i casi, anche quella di un amico nella tua gara.",
+      "Correre con altri giocatori o da solo? Con altri, nella tua carriera va solo il premio in denaro.",
+      "%s sta avviando qui una gara multigiocatore (%s). Partecipare o correre da solo?", " Una vittoria conta nella tua carriera in entrambi i casi.",
+      "gara", "gara URL", "circuito", "sprint", "Street X", "drag", "drift", "Solo", "Multigiocatore", "Partecipa", "Annulla" },
+    { "spanish", "¿Correr con otros jugadores o solo? Una victoria cuenta en tu modo carrera en ambos casos, y también la de un amigo en tu carrera.",
+      "¿Correr con otros jugadores o solo? Con otros, solo el dinero del premio va a tu modo carrera.",
+      "%s está iniciando aquí una carrera multijugador (%s). ¿Unirte o correr solo?", " Una victoria cuenta en tu modo carrera en ambos casos.",
+      "carrera", "carrera URL", "circuito", "sprint", "Street X", "drag", "drift", "Solo", "Multijugador", "Unirse", "Cancelar" },
+    { "portuguese", "Correr com outros jogadores ou sozinho? Uma vitória conta na sua carreira nos dois casos, e a de um amigo na sua corrida também.",
+      "Correr com outros jogadores ou sozinho? Com outros, só o dinheiro do prêmio vai para a sua carreira.",
+      "%s está começando uma corrida multijogador aqui (%s). Entrar ou correr sozinho?", " Uma vitória conta na sua carreira nos dois casos.",
+      "corrida", "corrida URL", "circuito", "sprint", "Street X", "drag", "drift", "Solo", "Multijogador", "Entrar", "Cancelar" },
+    { "dutch", "Met andere spelers racen of alleen? Een overwinning telt hoe dan ook in je carrière, ook die van een vriend in je race.",
+      "Met andere spelers racen of alleen? Met anderen gaat alleen het prijzengeld naar je carrière.",
+      "%s start hier een multiplayerrace (%s). Meedoen of alleen racen?", " Een overwinning telt hoe dan ook in je carrière.",
+      "race", "URL-race", "circuit", "sprint", "Street X", "drag", "drift", "Solo", "Multiplayer", "Meedoen", "Annuleren" },
+    { "swedish", "Köra med andra spelare eller själv? En seger räknas i din karriär i båda fallen, även en väns seger i ditt race.",
+      "Köra med andra spelare eller själv? Med andra går bara prispengarna till din karriär.",
+      "%s startar ett flerspelarrace här (%s). Vara med eller köra själv?", " En seger räknas i din karriär i båda fallen.",
+      "race", "URL-race", "bana", "sprint", "Street X", "drag", "drift", "Solo", "Flerspelare", "Var med", "Avbryt" },
+    { "danish", "Køre med andre spillere eller selv? En sejr tæller i din karriere i begge tilfælde, også en vens sejr i dit løb.",
+      "Køre med andre spillere eller selv? Med andre går kun præmiepengene til din karriere.",
+      "%s starter et flerspillerløb her (%s). Være med eller køre selv?", " En sejr tæller i din karriere i begge tilfælde.",
+      "løb", "URL-løb", "bane", "sprint", "Street X", "drag", "drift", "Solo", "Flerspiller", "Vær med", "Annuller" },
+    { "polish", "Jechać z innymi graczami czy samemu? Wygrana liczy się w twojej karierze w obu przypadkach, wygrana znajomego w twoim wyścigu też.",
+      "Jechać z innymi graczami czy samemu? Z innymi do kariery trafia tylko nagroda pieniężna.",
+      "%s zaczyna tu wyścig wieloosobowy (%s). Dołączyć czy jechać samemu?", " Wygrana liczy się w twojej karierze w obu przypadkach.",
+      "wyścig", "wyścig URL", "okrążenia", "sprint", "Street X", "drag", "drift", "Solo", "Wieloosobowy", "Dołącz", "Anuluj" },
+    { "turkish", "Başka oyuncularla mı, tek başına mı? Kazanırsan iki durumda da kariyerinde sayılır, yarışındaki bir arkadaşın kazanırsa da.",
+      "Başka oyuncularla mı, tek başına mı? Başkalarıyla sadece para ödülü kariyerine gider.",
+      "%s burada çok oyunculu bir yarış başlatıyor (%s). Katılacak mısın, tek başına mı yarışacaksın?", " Kazanırsan iki durumda da kariyerinde sayılır.",
+      "yarış", "URL yarışı", "pist", "sprint", "Street X", "drag", "drift", "Solo", "Çok oyunculu", "Katıl", "İptal" },
+    { "hungarian", "Más játékosokkal versenyzel vagy egyedül? A győzelem mindkét esetben beszámít a karrieredbe, és egy barátodé is a versenyedben.",
+      "Más játékosokkal versenyzel vagy egyedül? Másokkal csak a pénzdíj kerül a karrieredbe.",
+      "%s többjátékos versenyt indít itt (%s). Csatlakozol vagy egyedül versenyzel?", " A győzelem mindkét esetben beszámít a karrieredbe.",
+      "verseny", "URL verseny", "kör", "sprint", "Street X", "drag", "drift", "Egyedül", "Többjátékos", "Csatlakozás", "Mégse" },
+};
+const char *language_name(void);
+void language_game_letters(const char *utf8, char *out, size_t n);
+static const MpTexts *mp_tx(void){
+    const char *l = language_name();
+    for (unsigned i = 1; l && i < sizeof mp_texts / sizeof mp_texts[0]; i++) if (!strcmp(l, mp_texts[i].lang)) return &mp_texts[i];
+    return &mp_texts[0];
+}
+/* a race's kind in the question's language (race_kind's English words in their order) */
+static const char *mp_kind_tx(uint32_t r){
+    static const char *const en[7] = { "race", "URL race", "circuit", "sprint", "Street X", "drag", "drift" };
+    const char *k = race_kind(r);
+    const MpTexts *tx = mp_tx();
+    const char *const tr[7] = { tx->k_race, tx->k_url, tx->k_circuit, tx->k_sprint, tx->k_streetx, tx->k_drag, tx->k_drift };
+    for (int i = 0; i < 7; i++) if (!strcmp(k, en[i])) return tr[i];
+    return k;
+}
+/* our labels in the game's language table (language.c: again whenever it loads another), in the game's language */
 uint32_t language_add_text(const char *name, const char *text);
 uint32_t language_text(uint32_t hash);
 void language_texts_frame(CPU *c);
 static void mp_lang(CPU *c){
-    if (mp_lang_hash[0]) return;
-    for (int i = 0; i < MP_LANG_N; i++) mp_lang_hash[i] = language_add_text(mp_lang_name[i], mp_lang_text[i]);
+    static const MpTexts *was;
+    const MpTexts *tx = mp_tx();
+    if (mp_lang_hash[0] && tx == was) return;
+    was = tx;
+    for (int i = 0; i < MP_LANG_N; i++){
+        const char *const b[MP_LANG_N] = { tx->b_solo, tx->b_multi, tx->b_join, tx->b_cancel };
+        char s[64]; language_game_letters(b[i] ? b[i] : mp_lang_text[i], s, sizeof s);
+        mp_lang_hash[i] = language_add_text(mp_lang_name[i], s);
+    }
     language_texts_frame(c);                  /* in the table at once: a question may come this frame */
 }
 /* a two-button question over package `from` (a name in guest memory).  The
@@ -5560,13 +5800,25 @@ static void mp_card(CPU *c){
         uint32_t r = rd32(G_ENGAGED_RACE);
         if (!r || !race_lan(r)){ sub_00499c00(c); return; }                        /* a race no LAN race can be: as before */
         MpLobby *l = mp_joinable();
-        char t[160];
-        if (l) snprintf(t, sizeof t, "%s is starting a multiplayer %s here. Race it on your own, or join?", mp_name(l->host), race_kind(l->race));
-        else snprintf(t, sizeof t, "Race it on your own, or with other players? With others, only the prize money goes to your career.");
+        char t[320];
+        /* (with others a win counts too where it counts with Solo: mp_counts; a friend's win too); in the game's
+         * language, in its letters */
+        int counts = mp_counts(r);
+        const MpTexts *tx = mp_tx();
+        char u[320];
+        if (l){
+            snprintf(u, sizeof u, tx->q_lobby, mp_name(l->host), mp_kind_tx(l->race));
+            if (counts && l->race == r){ size_t n = strlen(u); snprintf(u + n, sizeof u - n, "%s", tx->q_lobby_counts); }
+        } else snprintf(u, sizeof u, "%s", counts ? tx->q_counts : tx->q_prize);
+        language_game_letters(u, t, sizeof t);
         uint32_t from = rd32(self + 4u);
-        if (!mp_ask(c, from, t, 0, l ? 2 : 1, MSG_MP_SOLO, MSG_MP_MULTI, MSG_MP_BACK)){ sub_00499c00(c); return; }
+        /* Multiplayer (Join) left, Solo right: the dialog opens with its right button focused, so Enter at once races
+         * it Solo, as the card's Accept did before there was a question (a player's request) */
+        if (!mp_ask(c, from, t, l ? 2 : 1, 0, MSG_MP_MULTI, MSG_MP_SOLO, MSG_MP_BACK)){ sub_00499c00(c); return; }
         g_mpd.dlg = MPD_CARD; g_mpd.card = self; g_mpd.race = r;
-        rlog("[roam] f=%ld race card: Solo or Multiplayer?\n", rh_frame());
+        /* (which text in which language, not the text: it names the lobby's host, and players post their logs) */
+        rlog("[roam] f=%ld race card: Solo or Multiplayer? (%s, %s%s)\n", rh_frame(), tx->lang, l ? "a lobby here" : counts ? "it counts" : "prize money only",
+             l && counts && l->race == r ? ", it counts" : "");
         mp_card_ret(c);
         return;
     }
@@ -5612,6 +5864,9 @@ static void mp_ui_frame(CPU *c, int64_t host, int in_roam, int press, const MpSp
 #define MP_SEE_ONLY_M   50.f
 #define MP_RGB_LOBBY    0xffc832u
 #define MP_RGB_ONLY     0xa0d2ffu
+/* after a lobby's or spot's words (here and on the world map) where a win counts in the player's career (mp_counts):
+ * the game's fonts have no star, the page's panel says it in full */
+#define MP_COUNTS_TAG   " - career"
 /* the height of a race's start (its trigger's marker +0x14), else the player's car's */
 static float race_z(uint32_t r){
     uint32_t e = rd32(G_TRIGGERS + 0x440u + 4u * TRIG_EVENT), end = rd32(G_TRIGGERS + 0x444u + 4u * TRIG_EVENT), mk = r ? MR32(r + 0x28u) : 0;
@@ -5639,8 +5894,9 @@ static void mp_labels(CPU *c){
         float dx = l->x - mx, dy = l->y - my, d2 = dx * dx + dy * dy;
         if (d2 > MP_SEE_LOBBY_M * MP_SEE_LOBBY_M) continue;
         L[n].x = l->x; L[n].y = l->y; L[n].z = race_z(l->race); L[n].d2 = d2; L[n].rgb = MP_RGB_LOBBY;
-        if (l->host == g_s.conf.self_id) snprintf(L[n].t, sizeof L[n].t, "Your %s (%d/%d)", race_kind(l->race), l->n, l->max);
-        else snprintf(L[n].t, sizeof L[n].t, "%s's %s (%d/%d)", mp_name(l->host), race_kind(l->race), l->n, l->max);
+        const char *cr = mp_counts(l->race) ? MP_COUNTS_TAG : "";
+        if (l->host == g_s.conf.self_id) snprintf(L[n].t, sizeof L[n].t, "Your %s (%d/%d)%s", race_kind(l->race), l->n, l->max, cr);
+        else snprintf(L[n].t, sizeof L[n].t, "%s's %s (%d/%d)%s", mp_name(l->host), race_kind(l->race), l->n, l->max, cr);
         n++;
     }
     /* the multiplayer-only spots near, but those with a lobby */
@@ -5654,7 +5910,7 @@ static void mp_labels(CPU *c){
         if (taken) continue;
         L[n].x = x; L[n].y = y; L[n].z = race_z(sp->race); L[n].d2 = d2; L[n].rgb = MP_RGB_ONLY;
         char k[16]; snprintf(k, sizeof k, "%s", race_kind(sp->race)); k[0] = (char)(k[0] >= 'a' && k[0] <= 'z' ? k[0] - 32 : k[0]);
-        snprintf(L[n].t, sizeof L[n].t, "%s (multiplayer)", k);
+        snprintf(L[n].t, sizeof L[n].t, "%s (multiplayer)%s", k, mp_counts(sp->race) ? MP_COUNTS_TAG : "");
         n++;
     }
     /* on the screen, nearest first */
@@ -5848,13 +6104,14 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
     if (!hub){
         char t[64];
         if (g_mp.st != MP_IDLE && g_mp.l.race){
-            if (g_mp.l.host == g_s.conf.self_id) snprintf(t, sizeof t, "Your %s %d/%d", race_kind(g_mp.l.race), g_mp.l.n, g_mp.l.max);
-            else snprintf(t, sizeof t, "%s's %s %d/%d", mp_name(g_mp.l.host), race_kind(g_mp.l.race), g_mp.l.n, g_mp.l.max);
+            const char *cr = mp_counts(g_mp.l.race) ? MP_COUNTS_TAG : "";
+            if (g_mp.l.host == g_s.conf.self_id) snprintf(t, sizeof t, "Your %s %d/%d%s", race_kind(g_mp.l.race), g_mp.l.n, g_mp.l.max, cr);
+            else snprintf(t, sizeof t, "%s's %s %d/%d%s", mp_name(g_mp.l.host), race_kind(g_mp.l.race), g_mp.l.n, g_mp.l.max, cr);
             n += mp_map_icon(c, map, pkg, room, g_mp.l.race, g_mp.l.x, g_mp.l.y, t);
         }
         for (int i = 0; i < g_mp.nseen; i++){
             const MpLobby *l = &g_mp.seen[i];
-            snprintf(t, sizeof t, "%s's %s %d/%d", mp_name(l->host), race_kind(l->race), l->n, l->max);
+            snprintf(t, sizeof t, "%s's %s %d/%d%s", mp_name(l->host), race_kind(l->race), l->n, l->max, mp_counts(l->race) ? MP_COUNTS_TAG : "");
             n += mp_map_icon(c, map, pkg, room, l->race, l->x, l->y, t);
         }
     } else {
@@ -5867,7 +6124,7 @@ static int mp_map_icons(CPU *c, uint32_t map, uint32_t pkg, uint32_t room, int h
         roam_plat_unlock();
         for (int i = 0; i < k; i++){
             uint32_t r = race_by_hash(e[i].race);
-            char t[64]; snprintf(t, sizeof t, "%s %d/%d", race_kind(r), e[i].n, e[i].max);
+            char t[64]; snprintf(t, sizeof t, "%s %d/%d%s", race_kind(r), e[i].n, e[i].max, mp_counts(r) ? MP_COUNTS_TAG : "");
             if (t[0] >= 'a' && t[0] <= 'z') t[0] = (char)(t[0] - 32);
             n += mp_map_icon(c, map, pkg, room, r, e[i].x, e[i].y, t);
         }
@@ -7859,9 +8116,10 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         for (int i = 0; i < n && i < (a1[0] ? atoi(a1) : 12); i++){
             const MpSpot *sp = &g_spot.s[order[i]];
             char nm[40]; race_name(sp->race, nm, sizeof nm);
-            rlog("[roam]   %s (stage %u, type %u, track %u%s, %u laps): %s%s%s, %.0f m away\n", nm, MR8(sp->race + 0x37u), MR8(sp->race + 0xfu),
+            rlog("[roam]   %s (stage %u, type %u, track %u%s, %u laps): %s%s%s%s, %.0f m away (at %.0f %.0f)\n", nm, MR8(sp->race + 0x37u), MR8(sp->race + 0xfu),
                  MR16(sp->race + 0x18u), MR8(sp->race + 0x1au) & 1u ? " reverse" : "", MR8(sp->race + 0x1bu),
-                 sp->kind == MPS_OPEN ? "solo or multiplayer" : "multiplayer only", sp->why ? ": " : "", mpw_text[sp->why], sqrt((double)dist[i]));
+                 sp->kind == MPS_OPEN ? "solo or multiplayer" : "multiplayer only", sp->why ? ": " : "", mpw_text[sp->why],
+                 mp_counts(sp->race) ? "; a win counts in the career" : "", sqrt((double)dist[i]), (double)((sp->box[0] + sp->box[2]) / 2), (double)((sp->box[1] + sp->box[3]) / 2));
         }
         return 1;
     }
@@ -7988,17 +8246,40 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         /* the race lobby we host or are in, and the others heard of */
         char nm[40]; race_name(g_mp.l.race, nm, sizeof nm);
         rlog("[roam] f=%ld mp lobby: %s, lobby %08x of %s, %s, %d of %d players, state %u, away %u; trip phase %d; %d other lobbies heard of; "
-             "opened %u, joined %u, trips %u\n", f, mp_st[g_mp.st], g_mp.l.id, g_mp.l.host ? mp_name(g_mp.l.host) : "-", nm[0] ? nm : "-",
-             g_mp.l.n, g_mp.l.max, g_mp.l.state, g_mp.l.away_s, mprace_phase(), g_mp.nseen, g_mp.opened, g_mp.joined, g_mp.trips);
+             "opened %u, joined %u, trips %u; counts for us %d, counts mask %02x, friends", f, mp_st[g_mp.st], g_mp.l.id, g_mp.l.host ? mp_name(g_mp.l.host) : "-",
+             nm[0] ? nm : "-", g_mp.l.n, g_mp.l.max, g_mp.l.state, g_mp.l.away_s, mprace_phase(), g_mp.nseen, g_mp.opened, g_mp.joined, g_mp.trips,
+             g_mp.l.race ? mp_counts(g_mp.l.race) : -1, g_mp.l.counts);
+        int nf = 0;
+        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++) if (g_mp.l.ids[i] != g_s.conf.self_id && mp_friend(g_mp.l.ids[i])){ rlog(" %s", mp_name(g_mp.l.ids[i])); nf++; }
+        rlog("%s\n", nf ? "" : " none");
         for (int i = 0; i < g_mp.nseen; i++){
             const MpLobby *l = &g_mp.seen[i];
             race_name(l->race, nm, sizeof nm);
-            rlog("[roam]   %s's lobby %08x: %s (%s) at %.0f %.0f, %d of %d, state %u, %.0f m away, heard %.1f s ago\n", mp_name(l->host), l->id, nm,
-                 race_kind(l->race), (double)l->x, (double)l->y, l->n, l->max, l->state, (double)mp_dist(l->x, l->y),
-                 (double)(roam_plat_now_us() - l->heard) / 1e6);
+            rlog("[roam]   %s's lobby %08x: %s (%s) at %.0f %.0f, %d of %d, state %u, %.0f m away, heard %.1f s ago; counts for us %d, mask %02x; "
+                 "kept out %d\n", mp_name(l->host), l->id, nm, race_kind(l->race), (double)l->x, (double)l->y, l->n, l->max, l->state,
+                 (double)mp_dist(l->x, l->y), (double)(roam_plat_now_us() - l->heard) / 1e6, mp_counts(l->race), l->counts, mp_kept_out(l));
         }
         char tx[TAG_DUEL_MAX];
         if (mp_line(roam_plat_now_us(), tx, sizeof tx)) rlog("[roam]   the line at the top: %s\n", tx);   /* (when the HUD is up) */
+        return 1;
+    }
+    if (!strcasecmp(sub, "open")){
+        /* "mp open NAME" (test aid): a lobby for career race NAME (as the race table names it, any stage: a later
+         * stage's URL race of 3 heats from an early career) where the player's car is, not at the race's start */
+        uint32_t n = rd32(G_NRACES), r = 0, me = player_car();
+        for (uint32_t i = 0; i < n && i < 1024 && !r; i++){ char nm[40]; race_name(race_at(i), nm, sizeof nm); if (!strcasecmp(nm, a1)) r = race_at(i); }
+        int ok_ = r && me && race_lan(r) && mp_open(roam_plat_now_us(), r);
+        if (ok_){ g_mp.l.x = MRF32(me + 0x60u); g_mp.l.y = MRF32(me + 0x64u); mp_send_all(RC_LOBBY_ADVERT, 0); }
+        rlog("[roam] f=%ld mp open %s: %s\n", f, a1, ok_ ? "a lobby here" : !r ? "no such race" : "not opened");
+        return 1;
+    }
+    if (!strcasecmp(sub, "join")){
+        /* "mp join" (test aid): the lobby Enter would join here (mp_joinable: open, room in it, not one we are kept
+         * out of), whatever the spot (where a race is open in this career Enter is the game's card, by the career's
+         * random pick of open races each load) */
+        MpLobby *l = mp_joinable();
+        int ok_ = l && g_mp.st == MP_IDLE && mp_join(roam_plat_now_us(), l);
+        rlog("[roam] f=%ld mp join: %s%s\n", f, ok_ ? "asked to join " : "nothing to join here", ok_ ? mp_name(l->host) : "");
         return 1;
     }
     if (!strcasecmp(sub, "pull")){

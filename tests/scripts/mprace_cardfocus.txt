@@ -1,0 +1,21 @@
+# Multiplayer races from free roam: an open race's card, Accept, and Enter at once on the Solo or Multiplayer
+# question: Solo has the focus (the original game's Accept), so the career race starts as it always did.
+#   NFSU2_SAVE_SEED=<save tree> node web/tools/run-suite.mjs --base <server> --script mprace_cardfocus.txt
+#        --marker "FOCUS DONE" --net Foc --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<r>
+#        --env MP_RACE=S2_SPON_CIRCUIT_3
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    careergo ${MP_RACE}
++300  tap RETURN                      # Engage: the race's card
++0    waitfng UI_EngageRaceDialog.fng 900
++120  tap LEFT
++30   tap RETURN                      # Accept: Solo or Multiplayer?
++0    waitfng IG_GenericDialog_MED.fng 600
++90   tap RETURN                      # Enter at once: the focused button
++0    waitexpr x:0x863470 != 0 1200
++0    peek 0x863470 1
++0    roam mp lobby
++0    log FOCUS DONE
++10   quit
