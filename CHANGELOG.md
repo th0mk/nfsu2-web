@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (fefdf27)
+## 2026-11-03 (539cda6)
 
 - **Free roam:** lobby races count in your career. Win a race of your stage you haven't won yet, or finish one a friend wins, and your garage gives you the win on the way back, as with Solo: prize, rep, story, a stage's final and its movie, and any sponsor offer. A URL event races all its heats in one trip. Solo stays as it was.
 - **Free roam:** the lobby panel marks with a star whom a race counts for, and a lobby that counts for its host takes players up to that stage and the host's friends. Races that don't count pay by your stage, and one that counts never pays less. When everyone else quits a race, the one who stayed wins it.
@@ -19,6 +19,7 @@ not guessed.
 - **Free roam:** no outrun offers in a crowd (4 or more players within 25 m).
 - **Free roam:** with Ghost mode on Everything, other players' cars stay ghosts in outruns too.
 - **Free roam:** a hit that throws your car farther than a hit can is undone: the cars pass through each other instead.
+- **Free roam:** an open trunk shows its speakers and amps, on your car and on other players' cars.
 - **World map:** a car meet takes 16 parked players (was 24).
 - **Quick chat:** Countdown, a new phrase: 5, 4, 3, 2, 1, GO! big on screen for you and the players within 50 m.
 - **Controllers:** the right stick looks around the car while driving, and the view swings back behind once you let go. Quick chat opens with a click of the right stick.
