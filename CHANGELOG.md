@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (275a72a)
+## 2026-11-03 (3d46fd7)
 
 - **Free roam:** lobby races count in your career, as Solo races do: win a race of your stage you haven't won yet, or finish one a friend or crew-mate wins. A star in the lobby shows whom a race counts for.
 - **Free roam:** a lobby warns you when its stage's cars are usually much faster than yours, and quitting a race costs more at stages 4 and 5.
@@ -22,11 +22,14 @@ not guessed.
 - **Free roam:** no outrun offers in a crowd (4 or more players within 25 m), and Ghost mode on Everything covers outruns too.
 - **Free roam:** a hit that throws a car impossibly far is undone.
 - **Free roam:** an open trunk shows its speakers and amps.
+- **Free roam:** drift battles: with drift mode on, challenge a player as for an outrun. The most drift points in 90 seconds wins $100 from the other.
+- **Drift mode:** on a controller, hold D-pad down a second while driving. The car no longer slides more after drift mode is off.
+- **Online:** Personal Stats show your new rating right after a ranked race.
 - **World map:** a car meet takes 16 parked players (was 24).
 - **Maps:** Upscaled (Settings, Game, Display) also shows JeansBig's Detailed Map: the minimap and world map sharp at high resolutions, with the missing shortcuts.
 - **Quick chat:** a Countdown phrase: 5, 4, 3, 2, 1, GO! on screen for everyone within 50 m.
 - **Music:** Settings, Game, Songs: Original plays the EA Trax songs as the game shipped them, in place of the uncensored ones, and F7 skips to the next song.
-- **Controllers:** the right stick looks around the car while driving (straight down looks back), and a click of it opens quick chat.
+- **Controllers:** the right stick looks around the car while driving (straight down looks back), and a click of it opens quick chat. If you steer or brake with the right stick in the game's controls, the left stick looks around instead.
 - **Steering wheels:** Fanatec bases get their own layouts, and separate USB pedals of any make work with a wheel.
 - **Graphics:** Enhanced Contrast no longer draws flickering lines along the screen's edges, and is as sharp as the original.
 - **Photo mode:** the camera reaches twice as far.
