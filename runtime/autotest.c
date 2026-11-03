@@ -1008,12 +1008,24 @@ static void status_line(double t, double tms, const char *label){
  * [0x865558], WorldTimer/RealTimer (1/4000 s), then per car of
  * the World's list ([0x890080]: +0x10 count, +0x1C car pointers) whether it
  * is the local player's (player 1's vehicle), position +0x60 and speed
- * +0x430.  tools/lan_trace.py compares how each instance shows the others'
- * cars with where their owners had them at the same instant (LAN tests). */
+ * +0x430; then the frame's world step [0x865154] (s) and per car its
+ * velocity +0x70 and the forward vector's x, y (+0x90: the heading).  The
+ * position is the drawn one (racenet.c's fade offset is on at the Present).
+ * tools/lan_trace.py compares how each instance shows the others' cars with
+ * where their owners had them at the same instant (LAN tests), and
+ * tools/race_acc.py measures it close up.  Instances' wall clocks can differ
+ * (in the browser each page's clock is its I/O worker's time origin + now(),
+ * the origin the wall clock as that worker started: a WSL clock step between
+ * two pages' starts is that far between their traces), so every
+ * CTRACE_CLOCK_FRAMES racing frames a "[ctclock]" line on stderr gives this
+ * clock as read; web/tools/lan-pair.mjs stamps each line's arrival with its
+ * own monotonic clock (clock.csv), and the least difference lines the
+ * instances up. */
 static FILE *g_ctrace;
+#define CTRACE_CLOCK_FRAMES 30
 uint32_t autopilot_vehicle(void);        /* career.c: player 1's vehicle, 0 = none */
 static void car_trace(void){
-    static uint32_t last_w = 0;
+    static uint32_t last_w = 0, nclock = 0;
     if (!mem_is_committed(0x8654a7u) || MR32(0x8654a4u) != 6u) return;
     uint32_t w = MR32(0x00890080u);
     if (!w || !mem_is_committed(w + 0x3f)) return;
@@ -1026,15 +1038,27 @@ static void car_trace(void){
         fputc('\n', stderr);
     }
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    if (nclock++ % CTRACE_CLOCK_FRAMES == 0)
+        fprintf(stderr, "[ctclock] %lld.%06ld\n", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000));
     const char *top = autotest_top_fng();
     fprintf(g_ctrace, "%lld.%06ld,%ld,%d,%.7f,%u,%u,%u", (long long)ts.tv_sec, (long)(ts.tv_nsec / 1000), g_frame,
             top && !strncasecmp(top, "HUD_", 4), (double)MRF32(0x00865558u), MR32(0x0086518cu),
             MR32(0x008651acu), n);
-    for (uint32_t i = 0; i < n; i++){
-        uint32_t car = MR32(w + 0x1c + 4 * i);
-        if (car && mem_is_committed(car + 0x433))
+    uint32_t cars[8] = {0};
+    for (uint32_t i = 0; i < 8; i++){
+        uint32_t car = i < n ? MR32(w + 0x1c + 4 * i) : 0;
+        if (car && mem_is_committed(car + 0x433)){
+            cars[i] = car;
             fprintf(g_ctrace, ",%d,%.3f,%.3f,%.3f,%.3f", car == me, (double)MRF32(car + 0x60), (double)MRF32(car + 0x64),
                     (double)MRF32(car + 0x68), (double)MRF32(car + 0x430));
+        } else fprintf(g_ctrace, ",,,,,");
+    }
+    fprintf(g_ctrace, ",%.6f", (double)MRF32(0x00865154u));
+    for (uint32_t i = 0; i < 8; i++){
+        uint32_t car = cars[i];
+        if (car)
+            fprintf(g_ctrace, ",%.3f,%.3f,%.3f,%.4f,%.4f", (double)MRF32(car + 0x70), (double)MRF32(car + 0x74),
+                    (double)MRF32(car + 0x78), (double)MRF32(car + 0x90), (double)MRF32(car + 0x94));
         else fprintf(g_ctrace, ",,,,,");
     }
     fputc('\n', g_ctrace);
@@ -1151,6 +1175,8 @@ void autotest_init(void){
           setvbuf(g_ctrace, 0, _IOLBF, 0);
           fprintf(g_ctrace, "t,frame,hud,cap,worldtimer,realtimer,n");
           for (int i = 0; i < 8; i++) fprintf(g_ctrace, ",c%dlocal,c%dx,c%dy,c%dz,c%dv", i, i, i, i, i);
+          fprintf(g_ctrace, ",wdt");
+          for (int i = 0; i < 8; i++) fprintf(g_ctrace, ",c%dvx,c%dvy,c%dvz,c%dfx,c%dfy", i, i, i, i, i);
           fputc('\n', g_ctrace); } }
     { const char *fl = getenv("NFSU2_FNG_LOG"); g_fng_log = fl ? (atoi(fl) ? atoi(fl) : 1) : 0; }
     g_inited = 1;

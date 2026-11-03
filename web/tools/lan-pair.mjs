@@ -159,12 +159,16 @@ async function start(i) {
   await page.route(`**${scriptPath(i)}`, r => r.fulfill({ status: 200, contentType: 'text/plain; charset=utf-8', body: scripts[i] }));
   if (WASM_OF.has(i + 1)) await page.route('**/game.wasm', r => r.fulfill({ status: 200, contentType: 'application/wasm', path: WASM_OF.get(i + 1) }));
   const plog = fs.createWriteStream(path.join(dir, 'page.log'));
-  const lines = [];
+  const lines = [], clk = [];
   const r = { dropAt: null, dropped: 0 };
   let exit = null;
   const w = (s) => plog.write(`${((Date.now() - t0) / 1000).toFixed(3)} ${s}\n`);
   page.on('console', m => {
     const t = m.text(); w(t);
+    // the instance's trace clock as it read it, and when the line came by this tool's monotonic clock (clock.csv):
+    // the least difference lines the instances' car traces up (tools/race_acc.py; their wall clocks can differ)
+    const ck = /\[ctclock\] (\d+\.\d+)/.exec(t);
+    if (ck) clk.push(`${performance.now().toFixed(3)},${ck[1]}`);
     const g = /^\[\d+!?\] ([^]*)$/.exec(t);
     if (g) lines.push(g[1]); else { const e = /^EXIT (-?\d+)$/.exec(t); if (e) exit = +e[1]; lines.push(t); }
     if (DROP && DROP[0] === i + 1 && !r.dropAt && /network race begins/.test(t)) {
@@ -186,7 +190,7 @@ async function start(i) {
   const timer = setInterval(async () => {
     try { const s = await page.evaluate(() => { const n = globalThis.nfsu2Net; return n ? { ...n.stats(), peers: n.peers } : null; }); if (s) w(`NETSTAT ${JSON.stringify(s)}`); } catch {}
   }, 10000);
-  Object.assign(r, { i, name: NAMES[i], dir, page, ctx, plog, lines, timer, exitCode: () => exit, done: null });
+  Object.assign(r, { i, name: NAMES[i], dir, page, ctx, plog, lines, clk, timer, exitCode: () => exit, done: null });
   r.done = page.waitForFunction(() => document.title === 'DONE' || window.__nfsu2?.phase === 'exited', null, { timeout: TMO, polling: 1000 })
     .then(() => 'done', () => 'timeout');
   inst.push(r);
@@ -210,6 +214,7 @@ for (const x of inst) {
   clearInterval(x.timer);
   if (res[x.i] === 'timeout') x.lines.push(`TIME LIMIT REACHED: lan-pair stopped the run after ${(TMO / 1000).toFixed(0)} s`);
   fs.writeFileSync(path.join(x.dir, 'log.txt'), x.lines.join('\n') + '\n');
+  fs.writeFileSync(path.join(x.dir, 'clock.csv'), 'arrived_ms,trace_s\n' + x.clk.map(s => s + '\n').join(''));
   if (x.dropped) { x.plog.end(); continue; }
   try {
     const txt = await x.page.evaluate(async (dir) => {
