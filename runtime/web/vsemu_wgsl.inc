@@ -50,7 +50,7 @@ static const char W_VOUT[] =
     "  @location(6) fog: f32,\n"
     "}\n";
 /* K is a 64 KB window of the frame's VS constant arena, bound once for many
- * draws; a draw's block {stride, tsel, base, pad; c[0..255]} starts at row
+ * draws; a draw's block {stride, tsel, base, target w | h << 16; c[0..255]} starts at row
  * kb = instance_index (the draw's firstInstance), so a draw no longer needs a
  * bind group of its own. */
 static const char W_VSPAR[] =
@@ -668,11 +668,16 @@ int vs_to_wgsl(const VSProg *p, int id, const int decl[16][2], char *out, size_t
                 "  var oT0 = vec4f(0.0); var oT1 = vec4f(0.0); var oT2 = vec4f(0.0); var oT3 = vec4f(0.0);\n"
                 "  var oFog = vec4f(1.0);\n");
     wb_put(&ob, "%s", bodybuf);
-    /* Epilogue as the Mac: no half-pixel offset, no colour clamp;
-     * D3DTSS_TEXCOORDINDEX applied here so the pixel stage reads plain
-     * interpolants. */
+    /* Epilogue: D3D9's pixel centres, no colour clamp; D3DTSS_TEXCOORDINDEX
+     * applied here so the pixel stage reads plain interpolants.
+     * D3D9 samples pixel x at x, WebGPU at x + 0.5: the picture moves half a
+     * pixel right and down (KH.w: the target's width | height << 16, 0 = as
+     * it is; gpu_web.c target_wh), so the game's post passes, which add half
+     * a texel to their UVs, read texel centres again (without it, half a
+     * texel down and right, and the last row and column at 1.0). */
     wb_put(&ob, "  var o: VOut;\n"
-                "  o.pos = oPos;\n"
+                "  let ts = max(vec2f(f32(KH.w & 0xFFFFu), f32(KH.w >> 16u)), vec2f(1.0));\n"
+                "  o.pos = vec4f(oPos.xy + select(vec2f(0.0), vec2f(1.0, -1.0) / ts, KH.w != 0u) * oPos.w, oPos.zw);\n"
                 "  o.col0 = oD0; o.col1 = oD1;\n"
                 "  o.uv0 = tpick(KH.y & 3u, oT0, oT1, oT2, oT3);\n"
                 "  o.uv1 = tpick((KH.y >> 8u) & 3u, oT0, oT1, oT2, oT3);\n"

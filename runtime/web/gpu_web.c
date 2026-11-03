@@ -631,6 +631,59 @@ static unsigned psc_put(Buf *B){
 static int ps_of(unsigned tex){
     return (g_cur_ps > 0 && g_cur_ps < PSCUBE && metal_tex_is_cube(tex)) ? g_cur_ps + PSCUBE : g_cur_ps;
 }
+/* Lines along the bottom and right with Enhanced Contrast (2026-11-03): two
+ * differences from D3D9 at the edges of the screen.
+ * 1. D3D9 puts pixel x's centre at x, WebGPU at x + 0.5.  The game's passes
+ *    are made for D3D9: a full-screen quad at -1..1 with half a texel added
+ *    to its UVs reads each texel's centre there, and here half a texel
+ *    further right and down, so every pass blurred and shifted the picture
+ *    and the last row and column sampled at 1.0, half from the opposite edge
+ *    where the sampler wraps.  Every draw moves half a pixel right and down,
+ *    as D3D9 drew it: the target's size goes to the vertex shaders in the K
+ *    block's header (vsemu_wgsl.inc), and CPU-transformed vertices move here.
+ * 2. Enhanced Contrast's passes (ps 26-28, WRAP) add half a texel of the size
+ *    the game believes (its 4:3 menu row, 1280x960) to their UVs, while the
+ *    screen copy they read has the device's size (res_pick, com.c pulls such
+ *    targets to it): at 2560x1304 the last column still read at 1.0 and the
+ *    last row 18 % past its centre, at 1280x720 the first row 12 % before
+ *    its own.  A render target of the screen's size samples with CLAMP where
+ *    the game asked for WRAP: a copy of the screen is never tiled, and where
+ *    the sizes agree no sample reaches past an edge, so D3D9 drew the same.
+ * GW_HALFPX=0: both off, as before (diagnostics). */
+static int g_halfpx = -1;
+static int halfpx_on(void){
+    if (g_halfpx < 0){ const char *e = getenv("GW_HALFPX"); g_halfpx = e ? atoi(e) != 0 : 1; }
+    return g_halfpx;
+}
+void gw_size(unsigned *w, unsigned *h);
+static void screen_wh(unsigned *w, unsigned *h){     /* as handoff's F->bb_w/h */
+    *w = g_bb_w; *h = g_bb_h;
+    if (!*w || !*h) gw_size(w, h);
+}
+static uint32_t target_wh(void){
+    if (!halfpx_on()) return 0;
+    unsigned t = g_cur_target & 0xFFFFu, w = 0, h = 0;
+    if (!t) screen_wh(&w, &h);
+    else if (t < MAXTEX && g_tex[t].live){ w = g_tex[t].w; h = g_tex[t].h; }
+    return w && h && w <= 0xFFFFu && h <= 0xFFFFu ? w | h << 16 : 0u;
+}
+/* the four stages' sampler keys (com.c smp_push: U at bits 6-8, V at 9-11,
+ * 1 = WRAP, 3 = CLAMP), WRAP made CLAMP on a screen-sized render target */
+static void smp_eff(unsigned tex, uint32_t out[4]){
+    const unsigned t[4] = { tex, g_cur_tex1, g_cur_tex2, g_cur_tex3 };
+    unsigned bw = 0, bh = 0;
+    if (halfpx_on()) screen_wh(&bw, &bh);
+    for (int i = 0; i < 4; i++){
+        uint32_t k = g_cur_smp[i];
+        unsigned id = t[i];
+        if (bw && id && id < MAXTEX && g_tex[id].live && g_tex[id].rt && !g_tex[id].cube
+            && g_tex[id].w == bw && g_tex[id].h == bh){
+            if (((k >> 6) & 7u) == 1u) k = (k & ~(7u << 6)) | 3u << 6;
+            if (((k >> 9) & 7u) == 1u) k = (k & ~(7u << 9)) | 3u << 9;
+        }
+        out[i] = k;
+    }
+}
 /* the record every draw shares: state at the time of the call */
 static GwDraw *rec_draw(Buf *B, unsigned tex){
     GwDraw *D = &B->d[B->dn];
@@ -640,7 +693,7 @@ static GwDraw *rec_draw(Buf *B, unsigned tex){
     D->tex1 = g_cur_tex1; D->tex2 = g_cur_tex2; D->tex3 = g_cur_tex3;
     D->ps = ps_of(tex); D->psci = psc_put(B);
     memcpy(D->proj, g_cur_proj, sizeof D->proj);
-    memcpy(D->smp, g_cur_smp, sizeof D->smp);
+    smp_eff(tex, D->smp);
     D->bcol = g_cur_bcol; D->cull = g_cur_cull;
     memcpy(D->fogv, g_cur_fog, sizeof D->fogv);
     D->clip = g_cur_clip;
@@ -666,18 +719,24 @@ void metal_draw_tv(const TVert *src, unsigned nverts, unsigned prim, unsigned te
         else { idx[0] = t * 3; idx[1] = t * 3 + 1; idx[2] = t * 3 + 2; }               /* list */
         for (int k = 0; k < 3; k++) *dst++ = src[idx[k]];
     }
+    uint32_t wh = target_wh();
+    if (wh){
+        float hx = 1.f / (float)(wh & 0xFFFFu), hy = 1.f / (float)(wh >> 16);
+        for (TVert *v = B->v + B->vn; v < dst; v++){ v->x += v->w * hx; v->y -= v->w * hy; }
+    }
     GwDraw *D = rec_draw(B, tex);
     D->first = B->vn; D->count = tris * 3;
     B->dn++; B->vn += tris * 3;
 }
-/* the VS constant block {u32 stride, tsel, base, 0; vec4 c[nk]}, deduplicated
- * against the previous one.  base: byte offset of vertex 0 in the buffer the
- * shader pulls from (raw arena or pool).  Blocks are 16-byte aligned: the page
- * binds the arena in 64 KB windows and finds a block by its row there
+/* the VS constant block {u32 stride, tsel, base, target w | h << 16; vec4 c[nk]},
+ * deduplicated against the previous one.  base: byte offset of vertex 0 in the
+ * buffer the shader pulls from (raw arena or pool); the target's size moves the
+ * picture to D3D9's pixel centres (target_wh).  Blocks are 16-byte aligned: the
+ * page binds the arena in 64 KB windows and finds a block by its row there
  * (GW_KWIN_ROWS), so a block needs no dynamic offset of its own. */
 static GwDraw *raw_rec(Buf *B, unsigned stride, unsigned base, unsigned tex, int vsid, const float *k, unsigned nk){
     unsigned ksz = 16u + nk * 16u;
-    uint32_t hdr[4] = { stride, 0, base, 0 };
+    uint32_t hdr[4] = { stride, 0, base, target_wh() };
     for (int q = 0; q < 4; q++) hdr[1] |= ((uint32_t)((int)g_cur_proj[q]) & 3u) << (8 * q);
     unsigned koff;
     if (B->last_ksz == ksz && B->last_vs == vsid && B->kn &&
@@ -713,11 +772,12 @@ static GwDraw *raw_merge(Buf *B, unsigned stride, unsigned tex, int vsid, const 
     const uint32_t *h = (const uint32_t *)(B->kb + P->koff);
     uint32_t tsel = 0;
     for (int q = 0; q < 4; q++) tsel |= ((uint32_t)((int)g_cur_proj[q]) & 3u) << (8 * q);
-    if (h[0] != stride || h[1] != tsel || memcmp(h + 4, k, nk * 16u)) return NULL;
+    if (h[0] != stride || h[1] != tsel || h[3] != target_wh() || memcmp(h + 4, k, nk * 16u)) return NULL;
+    uint32_t smp[4]; smp_eff(tex, smp);
     if (P->tex != tex || P->target != g_cur_target || P->blend != g_cur_blend || memcmp(&P->aref, &g_cur_aref, 4)
         || P->depth != g_cur_depth || P->tex1 != g_cur_tex1 || P->tex2 != g_cur_tex2 || P->tex3 != g_cur_tex3
         || P->ps != ps_of(tex) || P->psci != psc_put(B) || memcmp(P->proj, g_cur_proj, sizeof P->proj)
-        || memcmp(P->smp, g_cur_smp, sizeof P->smp) || P->bcol != g_cur_bcol || P->cull != g_cur_cull
+        || memcmp(P->smp, smp, sizeof P->smp) || P->bcol != g_cur_bcol || P->cull != g_cur_cull
         || memcmp(P->fogv, g_cur_fog, sizeof P->fogv) || P->clip != g_cur_clip) return NULL;
     g_merged++;
     return P;
