@@ -258,6 +258,13 @@ context lists every problem the developer has a report on, with its first thread
   That is how it is drawn, not loading: no log needed. Fixed on 3 November (77a2a706), which also makes the stick
   straight down the game's own Look Back; until that is live, B (Look Back) shows the rear view whole. Thread
   1567127501359153282.
+- The right stick steering, or working the gas and brake, also turned the view (since the look round the car went
+  live on the morning of 3 November: braking looked back, "impossible to play"). Fixed on 3 November (c04e9dc0): a
+  right stick the game's Options, Controls, Joypad Configuration steers or brakes with no longer looks round; the left
+  stick does instead when the game uses none of it (no steering or pedal on it, no direction bound to a control),
+  else neither does, and the right stick's click stays the game's (bounce) with quick chat on 1-4. Until that is
+  live there is no switch for the look. Thread 1567191097149497415 (also 1567230313292112002, "Option to change view
+  stick on gamepad", which this answers).
 
 ## Decided
 
@@ -284,7 +291,8 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 - A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
   (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
   own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
-  (right looks right; straight down is the game's Look Back since 77a2a706) and turns it in the garage; quick chat,
+  (right looks right; straight down is the game's Look Back since 77a2a706; the left stick when the game's controls
+  steer or brake with the right one, since c04e9dc0) and turns it in the garage; quick chat,
   with phrases to pick in Settings, Online;
   ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus, HUD and maps (Upscaled), which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
