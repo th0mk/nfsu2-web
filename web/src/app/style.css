@@ -429,7 +429,7 @@ summary:hover { color: var(--text); }
 .shot:hover { border-color: var(--lime); box-shadow: 0 0 12px var(--lime-glow); }
 .shot .kind { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .shot .kind { color: var(--edge); font: italic 700 14px/20px var(--font); }     /* a file the page cannot draw */
-/* cloud saves (vault-ui.ts): Enable cloud saving beside the heading, or when it last synced; the keyphrase in a value
+/* cloud saves (vault-ui.ts): Turn on beside the heading, or when it last synced; the keyphrase in a value
  * box, its first 3 characters shown and the rest as dots (a mask over the field, which keeps the real text, its caret
  * and selection) until the eye shows it; the actions as text under it */
 .vault .hint:empty { display: none; }

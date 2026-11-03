@@ -58,8 +58,8 @@
 //             a name no name line, Esc is Not now (roam = off), not asked again; with one, the name to change (a
 //             refused one keeps the question open), Enter in it turns free roam on with the new name
 //   cloudask  a Play with a profile in the browser and no cloud saves asks to turn them on: not at a Play that asked
-//             about free roam, not without a profile; it shows the profile, its money and the hours played, and
-//             downloads the backup (the question stays); Esc is Not now, asked again a week later, three times at
+//             about free roam, not without a profile; it shows the profile, its money and the hours played (no
+//             Download backup since 2026-11-03); Esc is Not now, asked again a week later, three times at
 //             most (a browser asked before as 'asked' once); Turn on makes a passphrase and shows it (Copy, Download
 //             passphrase, Continue: the game starts, the browser syncs), offers it to the browser's passwords (once;
 //             a link from before at the next page), all on the 4 px grid at 1280 and 390 px.  Then (cloudkept) a
@@ -1188,7 +1188,7 @@ try {
     await profile(false);
     const noProfile = await playAll();                     // no profile: nothing
     await profile(true);
-    // the next Play asks: what is at stake, the backup from it (the question stays), Esc is Not now
+    // the next Play asks: what is at stake (and no backup button), Esc is Not now
     await r.click('#play');
     await r.waitForSelector('#confirm[open]', { timeout: 10000 });
     const first = await r.evaluate(() => ({ title: document.querySelector('#confirm-title').textContent, text: document.querySelector('#confirm-body').innerText,
@@ -1196,13 +1196,7 @@ try {
       ok: document.querySelector('#confirm-ok').textContent, cancel: document.querySelector('#confirm-cancel').textContent,
       cancelShown: !document.querySelector('#confirm-cancel').hidden, focus: document.activeElement?.id ?? null }));
     const askGrid = await grid();
-    const dl0 = r.waitForEvent('download');
-    await r.click('#confirm-body button:has-text("Download backup")');
-    const backupFile = (await dl0).suggestedFilename();
-    const backupSaid = await r.waitForFunction(() => { const h = document.querySelector('#confirm-body p.hint'); return h && !h.hidden ? h.textContent : null; }, null, { timeout: 5000 })
-      .then(h => h.jsonValue(), () => null);
-    const openAfterBackup = await title();
-    const askGridSaid = await grid();
+    const backupButton = await r.locator('#confirm-body button:has-text("Download backup")').count();
     await r.locator('#confirm').screenshot({ path: path.join(OUT, 'cloud-ask.png') });
     await r.setViewportSize({ width: 390, height: 844 });
     await r.waitForTimeout(200);
@@ -1266,12 +1260,13 @@ try {
     const ASK = 'Turn on cloud saves?', phrase = shown.phrase;
     report('cloudask', withRoam.asked.join() === 'Free roam with others?' && withRoam.count === null && noProfile.asked.length === 0 && noProfile.count === null &&
       first.title === ASK && first.ok === 'Turn on' && first.cancel === 'Not now' && first.cancelShown && first.focus === 'confirm-ok' &&
-      /^This browser\s+CLOUDT \$123,450 · 6 hours played$/.test(first.stake ?? '') && /^nfsu2-saves-.*\.zip$/.test(backupFile) && /^Downloaded nfsu2-saves-/.test(backupSaid ?? '') &&
-      openAfterBackup === ASK && !askGrid.off.length && !askGridSaid.off.length && !askNarrow.off.length && !askNarrow.overflow &&
+      /^This browser\s+CLOUDT \$123,450 · 6 hours played$/.test(first.stake ?? '') && backupButton === 0 &&
+      /sync them between your devices/.test(first.text) && !/change this/.test(first.text) &&
+      !askGrid.off.length && !askNarrow.off.length && !askNarrow.overflow &&
       afterEsc.offer?.asked === 1 && afterEsc.link === null && inWeek.asked.length === 0 && weekOn.asked.join() === ASK && weekOnOffer?.asked === 2 &&
       thrice.asked.length === 0 &&
       /^nfsu2-xyz(-[a-z]+){8}$/.test(phrase) && shown.ok === 'Continue' && !shown.cancelShown && shown.focus === 'confirm-ok' &&
-      /save it with your passwords/.test(shown.text) &&
+      /save it with your passwords/.test(shown.text) && /on another device to sync your saves/.test(shown.text) && /can't be recovered/.test(shown.text) &&
       !wide.off.length && !narrow.off.length && !narrow.overflow && copied && file.trim() === phrase && stillOpen === 'Your passphrase' &&
       played === 'playing' && after.link?.phrase === phrase && after.offer?.asked === 2 && /^Synced/.test(after.when) &&
       after.stored.length === 1 && after.stored[0].id === 'Cloud saves' && after.stored[0].password === phrase && after.kept === markOf(phrase) &&
@@ -1279,7 +1274,7 @@ try {
       box.auto === 'current-password' && oldLink.length === 1 && oldLink[0].password === phrase && oldLinkAgain.length === 0 &&
       cloudLog.some(l => /cloud saves: not now \(asked at Play, 1 of 3\)/.test(l)) && cloudLog.some(l => /cloud saves: turned on/.test(l)) &&
       cloudLog.some(l => /asked to keep it in its passwords/.test(l)),
-      { pwKind, withRoam, noProfile, first, askGrid, askGridSaid, askNarrow, backupFile, backupSaid, openAfterBackup, afterEsc, inWeek, weekOn, weekOnOffer, thrice,
+      { pwKind, withRoam, noProfile, first, askGrid, askNarrow, backupButton, afterEsc, inWeek, weekOn, weekOnOffer, thrice,
         shown, wide, narrow, copied, file: file.trim(), stillOpen, played,
         after: { phrase: after.link?.phrase, offer: after.offer, kept: after.kept, stored: after.stored.length, type: after.type, when: after.when }, cloudLog,
         oldLink: oldLink.length, oldLinkAgain: oldLinkAgain.length, box });

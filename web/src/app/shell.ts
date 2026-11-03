@@ -47,7 +47,7 @@ import { panelTabs } from './tabs';
 import { CREW_MAX, crewList, crewsOf, crewsValue, freeColour, rgbsValue, rgbWords, type Crew } from './crews';
 import { checkInvite, inviteLink, readInvite, sameName, type Invite } from './invite';
 import { privacy, SCRUB_NOTE } from './privacy';
-import { exportSaves, oneWriter, SavesPanel, snapshotFile, snapshotSaves, type FileIn } from './saves-ui';
+import { oneWriter, SavesPanel, snapshotFile, snapshotSaves, type FileIn } from './saves-ui';
 import { zip } from './zip';
 import { saveScreenshot } from './shots';
 import { forgetLink, OFFER_TIMES, VaultPanel } from './vault-ui';
@@ -375,18 +375,18 @@ async function askRoam(): Promise<boolean> {
  * browsers clear a site's data now and then.  First at the first Play with a profile here (a new player's second: the
  * first asks about free roam, and the next one asks), then a week after each Not now (or Esc), three times in all
  * (vault-ui.ts offerable; before 2026-10-31 once, at the fifth Play).  It shows what is at stake (the profiles, their
- * money, the hours played here) and downloads the backup for a player who would rather keep a file.  Not on a test
- * page, offline, or where the server keeps no cloud saves.  Turned on, the keyphrase is shown to keep (copy, download)
- * before the game starts; it failed, the reason.
+ * money, the hours played here; until 2026-11-03 also a Download backup button).  Not on a test page, offline, or where
+ * the server keeps no cloud saves.  Turned on, the keyphrase is shown to keep (copy, download) before the game starts;
+ * it failed, the reason.
  */
 async function askCloud() {
   if (testPage() || offline || !vault.offerable() || !await newestProfile()) return;
   const times = vault.offered();
   const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
   const body = document.createElement('div');
-  body.append(p(t('Your career is saved only in this browser, and browsers sometimes clear site data (low disk space, cleared history).')),
+  body.append(p(t('Your saves are only in this browser, and browsers sometimes clear them.')),
     await vault.stake(playedMs()),
-    p(t('Cloud saves keep a copy on this server under a passphrase only you have, so you can get your saves back here or in another browser.')));
+    p(t('Cloud saves back them up and sync them between your devices.')));
   // the name, when it is free to claim: the new keyphrase claims it at once, and its popup says so; another player's:
   // the keyphrase does not hold it, said before Play's question about the name (2026-11-02, a player's report: given a
   // passphrase, then told the name was claimed)
@@ -397,22 +397,6 @@ async function askCloud() {
   // (the other player may be this one, its passphrase in another browser: a new one here could not get the name back)
   if (taken) body.append(p(t('{name} is claimed by another player, so this passphrase keeps your saves but not that name.', { name: taken })),
     p(t('If it\'s yours, choose Not now and enter your passphrase under Cloud saves.')));
-  body.append(p(t('You can change this under Cloud saves on the start page.')));
-  // or a file of them, kept where the player likes (Saves, Download backup)
-  const backup = Object.assign(document.createElement('button'), { type: 'button', className: 'text-btn', textContent: t('Download backup') });
-  const said = Object.assign(document.createElement('p'), { className: 'hint', hidden: true });
-  backup.onclick = async () => {
-    try {
-      const e = await exportSaves(SAVE);
-      downloadBlob(e.zip as BlobPart, e.name, 'application/zip');
-      said.textContent = tn(e.files, 'Downloaded {name}: {n} file, {size}.', 'Downloaded {name}: {n} files, {size}.', { name: e.name, size: fmtBytes(e.zip.length) });
-      log.add('[app] cloud saves: a backup downloaded from Play\'s question');
-    } catch (err) { said.textContent = t('The backup failed: {error}', { error: String(err) }); }
-    said.hidden = false;
-  };
-  const row = document.createElement('div'); row.className = 'row keyphrase-do';
-  row.append(backup);
-  body.append(row, said);
   const answer = confirmBox(t('Turn on cloud saves?'), body, t('Turn on'), false, '', t('Not now'));
   $<HTMLButtonElement>('#confirm-ok').focus();
   const on = await answer;
@@ -451,15 +435,11 @@ async function showPassphrase(phrase: string, claimed: string | null, taken: str
   const row = document.createElement('div'); row.className = 'row keyphrase-do';
   row.append(copy, file);
   const kept = document.createElement('div');
-  if (claimed) {
-    kept.append(p(t('{name} is yours, held by this passphrase. Cloud saves are on too.', { name: claimed })),
-      p(t('Keep it safe: it\'s the only way to get {name} and your saves back, here or in another browser.', { name: claimed })),
-      box, row, p(t('To use it in another browser, enter it under Cloud saves on the start page.')));
-  } else {
-    kept.append(p(t('Passphrase made. Keep it safe: it is the only way back to these saves.')), box, row,
-      p(t('To load your saves, enter it under Cloud saves on the start page.')));
-    if (taken) kept.append(p(t('{name} is claimed by another player, so this passphrase keeps your saves but not that name.', { name: taken })));
-  }
+  // what it does (syncs the saves to the other devices it is entered on), then that only the player has it
+  if (claimed) kept.append(p(t('{name} is yours, held by this passphrase. Cloud saves are on too.', { name: claimed })));
+  kept.append(p(t('Enter it under Cloud saves on another device to sync your saves.')), box, row,
+    p(t('Store it somewhere safe: it can\'t be recovered.')));
+  if (taken && !claimed) kept.append(p(t('{name} is claimed by another player, so this passphrase keeps your saves but not that name.', { name: taken })));
   // its "Save password?" (vault-ui.ts asked it as the keyphrase was made)
   if (canKeep()) kept.append(p(t('Your browser may also offer to save it with your passwords: choose Save.')));
   const shown = confirmBox(t('Your passphrase'), kept, t('Continue'), false, '', '');

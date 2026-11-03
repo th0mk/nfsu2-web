@@ -148,7 +148,7 @@
         <div class="vault" id="vault" hidden>
           <div class="panel-head sub">
             <h3 data-i18n>Cloud saves</h3>
-            <button type="button" class="btn" id="vault-make" data-i18n>Enable cloud saving</button>
+            <button type="button" class="btn" id="vault-make" data-i18n>Turn on</button>
             <p class="hint" id="vault-when" role="status" hidden></p>
           </div>
           <form class="vault-row" id="vault-form">
@@ -156,7 +156,7 @@
             <input type="text" name="username" autocomplete="username" value="Cloud saves" hidden>
             <div class="keybox masked" id="vault-box">
               <div class="keyfield">
-                <input type="password" id="vault-input" name="password" placeholder="Enter your passphrase" spellcheck="false" autocomplete="current-password" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
+                <input type="password" id="vault-input" name="password" placeholder="Enter passphrase" spellcheck="false" autocomplete="current-password" autocapitalize="none" data-i18n-attr="placeholder aria-label" aria-label="Passphrase">
                 <span class="keymask" id="vault-mask" aria-hidden="true"></span>
               </div>
               <button type="button" class="icon-btn" id="vault-file" data-i18n-attr="aria-label" aria-label="Download passphrase" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
@@ -164,7 +164,7 @@
             </div>
             <button type="submit" class="btn" id="vault-load" data-i18n>Load</button>
           </form>
-          <p class="hint" id="vault-about" data-i18n>Enter your passphrase to load your saves.</p>
+          <p class="hint" id="vault-about" data-i18n>Loads your saves and username, and syncs them between your devices.</p>
           <p class="hint" id="vault-claim" hidden></p>
           <p class="hint warn" id="vault-status" role="status"></p>
           <div id="vault-sides"></div>

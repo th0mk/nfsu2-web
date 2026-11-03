@@ -675,7 +675,7 @@ export class VaultPanel {
       await this.sync.create();
       this.hidden = false;
       this.show();
-      this.msg(() => t('Passphrase made. Keep it safe: it is the only way back to these saves.'));
+      this.msg(() => t('Enter it on another device to sync your saves. Store it somewhere safe: it can\'t be recovered.'));
       this.d.log('[app] keyphrase: made one, the saves went to the server');
       if (this.sync.link) this.keep(this.sync.link.phrase);
       return true;
@@ -839,7 +839,7 @@ export class VaultPanel {
     }
     this.claimLine();
     const working = st.s === 'working';
-    // beside the heading: Enable cloud saving, or what it is doing, or when it last synced
+    // beside the heading: Turn on, or what it is doing, or when it last synced
     this.$('#vault-make').hidden = !!l || working;
     const note = this.$('#vault-when');
     note.hidden = !l && !working;
