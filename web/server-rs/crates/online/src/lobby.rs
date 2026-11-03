@@ -1935,6 +1935,8 @@ impl Core {
         let gm = self.lobby.game(g).expect("held");
         // the ranked table goes to this player's results screen alone once the result stands, else to every reporter's
         let mut to = None;
+        // the players whose reports came before the one that decided the result: their careers went without the race
+        let mut before: Vec<(SessId, String)> = Vec::new();
         if !finished || decides.is_empty() {
             if gm.result.is_some() {
                 to = Some(s);
@@ -1970,6 +1972,7 @@ impl Core {
             let gm = self.lobby.game_mut(g).expect("held");
             gm.result = Some(key);
             gm.table = table;
+            before = gm.players.iter().filter_map(|p| p.results.filter(|&x| x != s).map(|x| (x, p.name.clone()))).collect();
             if let Some(line) = far {
                 self.llog(&line, s);
             }
@@ -1995,9 +1998,13 @@ impl Core {
             self.lobby.game_mut(g).expect("held").reports.push((svip, key));
         }
         reply(self);
-        // the game asked for its career (user) at the login, before this report: once more, with the race in it
+        // the game asked for its career (user) at the login, before this report: once more, with the race in it (and to
+        // the players who reported before the result stood: the winner, at the results screen first, saw 0 points)
         let pers = self.lobby.s(s).persona.clone().unwrap_or_default();
         self.user_info(s, &pers);
+        for (x, name) in before {
+            self.user_info(x, &name);
+        }
         self.results_table(g, to);
         self.end_if_back(g);
     }
