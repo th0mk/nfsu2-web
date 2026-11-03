@@ -170,11 +170,11 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define MOVER_DEBUG    2u
 
 #define CENTRE_Z       0.5f          /* the point the orbit starts at: above the car's position, m */
-#define ORBIT_PAN_M    25.f          /* how far that point moves from it, sideways */
-#define ORBIT_UP_M     15.f          /* and up */
+#define ORBIT_PAN_M    50.f          /* how far that point moves from it, sideways */
+#define ORBIT_UP_M     30.f          /* and up */
 #define DIST_MIN       1.2f
-#define DIST_MAX       30.f          /* (nothing keeps the camera out of walls: in a street the houses can be in the way) */
-#define FREE_M         50.f          /* the free camera from the car's centre */
+#define DIST_MAX       60.f          /* (nothing keeps the camera out of walls: in a street the houses can be in the way) */
+#define FREE_M         100.f         /* the free camera from the car's centre */
 #define EYE_MIN_Z      -0.3f         /* the eye above the car's position, at least */
 #define MOVE_MPS       5.f
 #define TURN_DPS       100.f

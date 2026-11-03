@@ -1,0 +1,43 @@
+# Photo mode's reach (runtime/photo.c) in free roam: the orbit at its farthest from the point, that point moved its
+# farthest from the car (sideways and up), then the free camera flown its farthest.  The pictures show what the world
+# looks like from there (sections far from the car).  roam-pair --solo --page play --play-only Ann --a Ann:photo_range.txt
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++600  photo hello
++0    photo on
++60   dump start
++0    photo dolly -40                 # the orbit at its farthest from the point
++200  dump orbit_far
++0    photo hold 512                  # turned to look down on the car
++40   photo hold 0
++200  dump orbit_down
++0    photo hold 65553                # the point forward and up, fast
++900  photo hold 0
++200  dump orbit_point_far
++0    photo reset
++0    photo free
++0    photo hold 65554                # the free camera back and up, fast
++900  photo hold 0
++200  dump free_far
++0    photo hold 64                   # turned about
++90   photo hold 0
++200  dump free_far_turned
++300  photo off                       # (a headless page's dump lands some frames late)
++60   dump back
++10   quit
