@@ -34,8 +34,9 @@ type Control =
    *  drop-down list */
   | { t: 'phrases' };
 
-/** link: the words of help that link to a page (a mod's, say), opened in a new tab */
-interface Item { key: string; label: string; help: string; link?: { text: string; href: string }; c: Control; more?: boolean }
+/** link: the words of help that link to a page (a mod's, say), opened in a new tab; several for help that names several */
+interface Link { text: string; href: string }
+interface Item { key: string; label: string; help: string; link?: Link | Link[]; c: Control; more?: boolean }
 /** own: the group has no heading of its own, its tab's name says it (Online; Friends & crews' Crews); at: the id of the
  *  element it goes in (Crews in Friends & crews, the Controls tab's Controller part), else the Online tab's (own) or the
  *  Game tab's; head: its heading, else its title; more: the title of its "more" part.  The texts are English (N),
@@ -87,8 +88,7 @@ const GROUPS: Group[] = [
     { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu (F9) has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
     { key: 'render', label: N('Resolution scale'), help: N('Lower is faster but softer: 50% renders a quarter of the pixels. Phones start at 75%.'), c: { t: 'seg', opts: [['scale:0.5', '50%'], ['scale:0.75', '75%'], ['backing', '100%'], ['scale:1.5', '150%'], ['scale:2', '200%']] } },
     { key: 'fps', label: N('Frame rate'), help: N('Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.'), c: { t: 'seg', opts: [['auto', N('Auto')], ['30', '30'], ['60', '60'], ['120', '120'], ['240', '240']] } },
-    { key: 'ui_textures', label: N('Menus and HUD'), help: N('Upscaled: LunicAura106\'s Upscaled HUD, sharp at high resolutions. About 5 MB to download, and more memory on phones.'), link: { text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, c: { t: 'seg', opts: [['original', N('Original')], ['uhud', N('Upscaled')]] }, more: true },
-    { key: 'minimap', label: N('Minimap'), help: N('Detailed: JeansBig\'s Detailed Map, the minimap and world map sharp at high resolutions, with the missing shortcuts. About 0.5 MB per map.'), link: { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }, c: { t: 'seg', opts: [['original', N('Original')], ['detailed', N('Detailed')]] }, more: true },
+    { key: 'ui_textures', label: N('Menus, HUD and maps'), help: N('Upscaled: LunicAura106\'s Upscaled HUD and JeansBig\'s Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.'), link: [{ text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }], c: { t: 'seg', opts: [['original', N('Original')], ['uhud', N('Upscaled')]] }, more: true },
     { key: 'hud', label: N('Race HUD'), help: N('Wide anchors it to the screen edges; 4:3 is the original centred layout.'), c: { t: 'seg', opts: [['wide', N('Wide')], ['43', '4:3']] }, more: true },
     { key: 'movie_framing', label: N('Movie framing'), help: N('Fit keeps the 4:3 movies whole; fill crops them; stretch widens them.'), c: { t: 'seg', opts: [['fit', N('Fit')], ['fill', N('Fill')], ['stretch', N('Stretch')]] }, more: true },
     { key: 'cutscene_borders', label: N('Cutscene bars'), help: N('Letterbox bars across the whole width, or none.'), c: { t: 'seg', opts: [['full', N('Full')], ['off', N('Off')]] }, more: true },
@@ -596,13 +596,19 @@ export class SettingsPanel {
     label.textContent = t(it.label);
     if (label instanceof HTMLLabelElement) label.htmlFor = id;
     const help = document.createElement('p'); help.className = 'set-help'; help.id = `${id}-help`;
-    const helpText = t(it.help), linkText = it.link ? t(it.link.text) : '';
-    const at = it.link ? helpText.indexOf(linkText) : -1;
-    if (at < 0) help.textContent = helpText;
-    else {
-      const a = document.createElement('a'); a.href = it.link!.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = linkText;
-      help.append(helpText.slice(0, at), a, helpText.slice(at + linkText.length));
+    // each link on its words where they first stand in the help (in this language's text), in their order there
+    const helpText = t(it.help);
+    const links = (it.link ? Array.isArray(it.link) ? it.link : [it.link] : [])
+      .map(l => ({ href: l.href, text: t(l.text), at: helpText.indexOf(t(l.text)) })).filter(l => l.text && l.at >= 0)
+      .sort((x, y) => x.at - y.at);
+    let pos = 0;
+    for (const l of links) {
+      if (l.at < pos) continue;
+      const a = document.createElement('a'); a.href = l.href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = l.text;
+      help.append(helpText.slice(pos, l.at), a);
+      pos = l.at + l.text.length;
     }
+    help.append(helpText.slice(pos));
     const ctl = document.createElement('div'); ctl.className = 'set-control';
     let described: HTMLElement;                      // what aria-describedby goes on
     if (c.t === 'switch') {

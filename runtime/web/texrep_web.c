@@ -2,7 +2,7 @@
  * game folder (tools/texpacks.py builds them), picked with settings.ini
  * ui_textures = original | uhud (NFSU2_UI_TEXTURES): LunicAura106's
  * "Upscaled HUD", the menus, HUD, fonts, icons and logos redrawn at four
- * times their size; and minimap = original | detailed (NFSU2_MAP_TEXTURES):
+ * times their size; and with it (the page sets NFSU2_MAP_TEXTURES = detailed)
  * JeansBig's "Detailed Map", the minimap's and world map's maps redrawn at
  * 2048x2048.  Both can be on: their entries are looked up together.
  *

@@ -161,8 +161,9 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'songs', env: 'NFSU2_SONGS', kind: 'enum', vals: 'uncensored|original', scope: 'web' },
   // the player's horn, which the others hear too (runtime/horn.c).  Not in bundle.m's table either: NFSU2_HORN there
   { key: 'horn', env: 'NFSU2_HORN', kind: 'enum', vals: HORNS.join('|'), scope: 'web' },
-  // the menus' and HUD's textures: a texture pack in place of the game's (runtime/web/texrep_web.c; the page fetches
-  // ahead only the one picked: datacache.ts).  Not in bundle.m's table: the Mac's packs are "textures"
+  // the menus', HUD's and maps' textures: texture packs in place of the game's (runtime/web/texrep_web.c; the page
+  // fetches ahead only those picked: datacache.ts).  uhud also turns on the maps' pack (resolveEnv: NFSU2_MAP_TEXTURES).
+  // Not in bundle.m's table: the Mac's packs are "textures"
   { key: 'ui_textures', env: 'NFSU2_UI_TEXTURES', kind: 'enum', vals: 'original|uhud', scope: 'web', device: true },
   // the players this one blocks in free roam, by name (the page's hello to the server: net/index.ts).  Not in bundle.m's
   // table: the Mac's free roam has no hub
@@ -170,9 +171,6 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
-  // the minimap's and world map's maps: TEXPACKS/detailed.pak (tools/texpacks.py --detailed) the same way, with its
-  // changes to the Tracks table (detailed.tracks)
-  { key: 'minimap', env: 'NFSU2_MAP_TEXTURES', kind: 'enum', vals: 'original|detailed', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -313,18 +311,16 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # original game.  [NFSU2_HEADLIGHTS]
 #other_headlights = players
 
-# The menus' and the HUD's textures: original = the game's; uhud =
+# The menus', the HUD's and the maps' textures: original = the game's; uhud =
 # LunicAura106's Upscaled HUD (nfsmods.xyz/mod/4319): the menus, the race
 # HUD, the fonts and the car and brand logos redrawn at four times their
-# size, where this server has the mod's texture pack (a language pack's own
+# size, and JeansBig's Detailed Map (nfsmods.xyz/mod/4485): the minimap's
+# and the world map's maps redrawn at 2048x2048 with the missing shortcuts,
+# where this server has the mods' texture packs (a language pack's own
 # fonts stay; most phones' GPUs decode the larger textures into four times
-# the memory).  [NFSU2_UI_TEXTURES]
+# the memory; NFSU2_MAP_TEXTURES = original keeps the game's maps).
+# [NFSU2_UI_TEXTURES]
 #ui_textures = original
-# The minimap's and world map's maps: original = the game's; detailed =
-# JeansBig's Detailed Map (nfsmods.xyz/mod/4485): redrawn at 2048x2048 with
-# the missing shortcuts, shortcuts and off-road in their own colour, where
-# this server has the mod's texture pack.  [NFSU2_MAP_TEXTURES]
-#minimap = original
 
 # ---- Frame rate ----------------------------------------------------------
 
@@ -873,6 +869,10 @@ export function resolveEnv(text: string | null, environment: Record<string, stri
   }
   for (const [k, v] of Object.entries(APP_DEFAULTS)) if (!(k in env)) { env[k] = v; source[k] = 'default'; }
   for (const [k, v] of Object.entries(host)) if (!(k in env)) { env[k] = v; source[k] = 'host'; }
+  // the maps' pack (TEXPACKS/detailed.pak) comes with the menus' and HUD's: ui_textures = uhud shows both.
+  // NFSU2_MAP_TEXTURES = original in settings.ini keeps the game's maps (a test knob)
+  const ui = (env.NFSU2_UI_TEXTURES ?? '').toLowerCase();
+  if (!('NFSU2_MAP_TEXTURES' in env) && ui && ui !== 'original') { env.NFSU2_MAP_TEXTURES = 'detailed'; source.NFSU2_MAP_TEXTURES = source.NFSU2_UI_TEXTURES; }
   return { env, source, notes, file, byEnv, other };
 }
 

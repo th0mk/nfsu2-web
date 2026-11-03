@@ -227,7 +227,7 @@ that room.
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
-| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), minimap (original or detailed), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
+| Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
 - **Language:** English, French, German, Italian, Spanish, Dutch, Swedish, Danish, Korean, Chinese, Japanese, Russian,
@@ -256,16 +256,14 @@ that room.
   [Show Hidden Races Mod](https://nfsmods.xyz/mod/1583) has them, they are on the map and the radar like the others
   (the GPS takes you there), and the map offers up to 8 races of each kind at once instead of 1 to 4, so they take no
   others off it. Turned off again, a career is as it was: the races open stay open.
-- **Menus and HUD:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
-  HUD](https://nfsmods.xyz/mod/4319) where the server has its texture pack: the menus, the
-  race HUD, the fonts and the car and brand logos redrawn at four times their size, sharp on a large screen. The
-  game's layout stays as it is. Your browser fetches the pack only with Upscaled (about 5 MB to download). A language
-  with fonts of its own (Russian, Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger
-  textures into four times the memory.
-- **Minimap:** Original (the default) is the game's own map. Detailed shows JeansBig's
-  [Detailed Map](https://nfsmods.xyz/mod/4485) where the server has its [texture pack](VPS.md#texture-packs): the
-  minimap and the world map redrawn at four times their size, with the missing shortcuts, and shortcuts and off-road
-  in their own colour. Your browser fetches each map as the game loads it (about 0.5 MB each).
+- **Menus, HUD and maps:** Original (the default) is the game's own. Upscaled shows LunicAura106's [Upscaled
+  HUD](https://nfsmods.xyz/mod/4319) and JeansBig's [Detailed Map](https://nfsmods.xyz/mod/4485) where the server has
+  their texture packs: the menus, the race HUD, the fonts and the car and brand logos redrawn at four times their size,
+  and the minimap's, world map's and race menus' maps at 2048x2048, with the missing shortcuts, and shortcuts and
+  off-road in their own colour. The game's layout stays as it is. Your browser fetches the packs only with Upscaled
+  (about 25 MB in all; the maps as the game loads them). A language with fonts of its own (Russian,
+  Polish, Turkish, Chinese, Japanese, Thai) keeps them. Most phones decode the larger textures into four times the
+  memory.
 - **Radio:** the menu (F9) has a Radio line. It plays the music files of a folder on your device in place of the
   game's EA Trax songs. The folder icon picks the folder, its subfolders included; the list icon opens the Playlist:
   each track is Menu, Race, All or Off, and **Shuffle** plays them in random order. A new song starts with the next
@@ -354,7 +352,7 @@ that room.
     magazine covers (a cover is a picture of 1 MB: another browser's crib lists it, but the game says it cannot load
     it), the game's graphics options, the record of the LAN games and free-roam races this browser hosted
     (`gamefile.bin`), and of the settings full screen, the resolution scale, render size and pixel limit,
-    Menus and HUD, the frame rate and its counter, the output latency, the controller's settings and how many
+    menus, HUD and maps, the frame rate and its counter, the output latency, the controller's settings and how many
     players' cars free roam shows. A phone keeps its own and a PC its own.
   - The server keeps the copy of an earlier day too: "Go back to ..." brings it back when a day went wrong.
   - Your passphrase can also claim your name (**Online, Your name**: no one else plays under it; see "Your name is
