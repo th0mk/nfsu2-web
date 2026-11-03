@@ -185,6 +185,7 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define ST_TOTAL       0x2cu         /* points banked (float) */
 #define PL_HUD         0x9a4u
 #define VIEW_DRIFT     4u
+#define VIEW_LAST      4u            /* the last view: cameras.c puts the drift camera in every drive */
 #define CAR_RIDE       0x10u         /* car: its ride (RideInfo) */
 #define CAR_PHYSOBJ    0x34u         /* car: its physics object (Car::SetPhysicsMode 0x5F46A0): +0x38 .. +0x44 its wheels */
 #define WH_GRIP        0x188u        /* a wheel: a factor of its tyre's force (0x59D600), 1 from its constructor (0x5A81FF) */
@@ -331,15 +332,15 @@ static void camera_on(CPU *c){
         MR32(va) = VIEW_DRIFT - 1u;
         uint32_t one = 1;
         gcall(c, FN_CAMERA_KEY, pl, 1, &one);
-    } else if (D.saved > 3u) D.saved = 3u;
+    } else D.saved = VIEW_DRIFT;                   /* the player's own pick (cameras.c: every drive has the view) */
     D.cam = MR32(va) == VIEW_DRIFT;
     if (!D.cam){ MR32(va) = v; fprintf(stderr, "[drift] f=%ld no drift camera (view %u)\n", autotest_frame(), v); }
 }
 /* live: the world's camera too (the camera key's way), else only the view the next one is made for */
 static void camera_off(CPU *c, int live){
-    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= 3u ? D.saved : 3u;
+    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= VIEW_LAST ? D.saved : 3u;
     D.cam = 0;
-    if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE)) return;
+    if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE) || back == VIEW_DRIFT) return;
     if (live && pl){
         MR32(va) = back - 1u;                      /* the camera key's step wraps a -1 to 0 */
         uint32_t one = 1;
