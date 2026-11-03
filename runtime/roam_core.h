@@ -464,6 +464,10 @@ int  rc_interp_eval(rc_interp *ip, int64_t now_us, int64_t frame_dt_us, int64_t 
                     int64_t extrap_cap_us, rc_pose *out);
 /* the same, without touching any state (tests, logs) */
 int  rc_interp_peek(const rc_interp *ip, int64_t render_t, int64_t extrap_cap_us, rc_pose *out);
+/* How both carry a car on past its newest state: 0 in a straight line at its velocity; 1 along the curve its last
+ * two states' velocities turned on (its yaw rate when they are far apart in time or it nearly stands), the default;
+ * 2 along the curve of its yaw rate */
+extern int rc_extrap_arc;
 /* exp(-x) for x >= 0 from basic operations only (bit-reproducible) */
 float rc_expneg(float x);
 /* atan2(y, x) in radians (-pi .. pi) from basic operations only

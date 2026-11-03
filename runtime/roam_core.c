@@ -831,6 +831,29 @@ static void from_state(const rc_state *s, rc_pose *o){
     for (int i = 0; i < 8; i++) o->slip[i] = s->slip[i];
     o->eng = s->eng; o->eng_acc = s->eng_acc / 255.f; o->eng_dcl = s->eng_dcl / 255.f; o->eng_base = s->eng_base / 255.f;
 }
+/* Along the curve its path turns on (1): a friend's solid car is drawn where its driver is now, a round trip's half
+ * past its newest state, and in a straight line it ran wide of every bend.  Replayed through this code, a real drive
+ * (pose.csv, 20 states a second, 100 / 200 ms on): the error across the road 0.077 -> 0.009 m / 0.186 -> 0.028 m on
+ * average, the whole error 0.144 -> 0.098 / 0.288 -> 0.170 m; handbrake slides 0.235 -> 0.097 / 0.562 -> 0.241 m
+ * (with the yaw rate, 2: 0.140 / 0.327); the steps from frame to frame no rougher (2026-11-03).  The speed's change
+ * carried on too came out worse (0.107 / 0.201 m): the drive's changes of speed come and go faster than that. */
+int rc_extrap_arc = 1;
+/* How fast a car's course turns about the vertical (rad/s, left positive) as it goes on past its newest state: how much
+ * its velocity turned from the state before (what its path did), when the two are close in time and it moves; else
+ * its own yaw rate, which in a slide is more than its path turns */
+#define ARC_MAX_RAD_S  3.f
+static float turn_rate(const rc_interp *ip){
+    const rc_state *b = &ip->s[ip->n - 1];
+    float k = b->w[2];
+    if (rc_extrap_arc != 2 && ip->n >= 2){
+        const rc_state *a = &ip->s[ip->n - 2];
+        int64_t dt = ip->t[ip->n - 1] - ip->t[ip->n - 2];
+        float sa = a->v[0] * a->v[0] + a->v[1] * a->v[1], sb = b->v[0] * b->v[0] + b->v[1] * b->v[1];
+        if (dt >= 10000 && dt <= 150000 && sa > 9.f && sb > 9.f)
+            k = rc_atan2f(a->v[0] * b->v[1] - a->v[1] * b->v[0], a->v[0] * b->v[0] + a->v[1] * b->v[1]) / ((float)(int32_t)dt * 1e-6f);
+    }
+    return f_clamp(k, -ARC_MAX_RAD_S, ARC_MAX_RAD_S);
+}
 int rc_interp_peek(const rc_interp *ip, int64_t rt, int64_t cap_us, rc_pose *o){
     memset(o, 0, sizeof *o); o->q[3] = 1;
     if (ip->n == 0) return 0;
@@ -846,6 +869,18 @@ int rc_interp_peek(const rc_interp *ip, int64_t rt, int64_t cap_us, rc_pose *o){
         float ds = (float)(int32_t)dt * 1e-6f;                        /* dt <= cap_us */
         for (int i = 0; i < 3; i++) o->p[i] = s->p[i] + s->v[i] * ds;
         q_integrate(s->q, s->w, ds, o->q);
+        if (rc_extrap_arc){
+            /* along the curve: the velocity turned by k over the time, a = k ds at most 1 rad, the place its
+             * integral (sin a / k and (1 - cos a) / k, from their series) */
+            float a = f_clamp(turn_rate(ip) * ds, -1.f, 1.f), a2 = a * a;
+            float sa = a * (1.f - a2 / 6.f * (1.f - a2 / 20.f)), ca = 1.f - a2 * (0.5f - a2 / 24.f * (1.f - a2 / 30.f));
+            float c1 = ds * (1.f - a2 / 6.f * (1.f - a2 / 20.f)), c2 = ds * a * (0.5f - a2 / 24.f * (1.f - a2 / 30.f));
+            float vx = s->v[0], vy = s->v[1];
+            o->p[0] = s->p[0] + c1 * vx - c2 * vy;
+            o->p[1] = s->p[1] + c2 * vx + c1 * vy;
+            o->v[0] = ca * vx - sa * vy;
+            o->v[1] = sa * vx + ca * vy;
+        }
         return 1;
     }
     int k = 0;

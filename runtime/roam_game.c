@@ -42,8 +42,9 @@
  *    career's start (soft_update), so nobody walls off a shop, the garage
  *    or a race's start; a friend's car at that start is not shown at all
  *    (at_spawn): every new player appears on that spot.  They are
- *    drawn where the friend is now (predicted by half the round trip), so
- *    a contact is at the same spot on both screens.  Ghost cars
+ *    drawn where the friend is now (predicted by half the round trip, along
+ *    the curve the car is driving: roam_core.c rc_extrap_arc), so a contact
+ *    is at the same spot on both screens.  Ghost cars
  *    (NFSU2_ROAM_COLLIDE=0) have no collision body and are drawn a little in
  *    the past (NFSU2_ROAM_DELAY), smoothed through the jitter buffer; the
  *    player's own car is then passable on every friend's screen too.  With
@@ -3878,7 +3879,8 @@ static void showoff_peers(CPU *c){
  * delay of rc_interp_eval).  Ghost cars: the display delay
  * (NFSU2_ROAM_DELAY), smooth through the jitter buffer.  Solid cars: where
  * the friend is now, the newest state carried on by the one-way network
- * delay (half the smallest of the last 8 round trips, at most 150 ms): a
+ * delay (half the smallest of the last 8 round trips, at most 150 ms), along
+ * the curve it is driving (roam_core.c rc_extrap_arc): a
  * friend at 30 m/s drawn 150 ms in the past is hit 4.5 m behind the car's
  * real place, and at another spot on each screen.  A change is slewed at
  * 5 % of the frame's time, so the car never jumps. */
@@ -6646,6 +6648,8 @@ static void init_once(CPU *c){
     O.rate = env_int("NFSU2_ROAM_RATE", 20, 10, 30);
     O.delay_ms = env_int("NFSU2_ROAM_DELAY", 100, 0, 1000);
     O.extrap_ms = env_int("NFSU2_ROAM_EXTRAP", 250, 0, 1000);
+    /* friends' solid cars carried on along their curve (roam_core.c); 0: in a straight line, as before (A/B tests) */
+    rc_extrap_arc = env_int("NFSU2_ROAM_ARC", 1, 0, 2);
     /* (more cars shown than DEF_CARS: room for each of them) */
     int carpool = CARPOOL_KB + (O.max_cars > DEF_CARS ? (O.max_cars - DEF_CARS) * CARPOOL_KB_CAR : 0);
     O.carpool_kb = env_int("NFSU2_ROAM_CARPOOL_KB", carpool, 0, 128000);

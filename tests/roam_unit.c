@@ -934,11 +934,11 @@ static void truth(double t, float *p, float *v, float *q, float *w){
 }
 typedef struct { double mean, p99, max, extrap_frac; uint64_t snaps; double max_jerk, latency; } Metrics;
 static int cmpd(const void *a, const void *b){ double x = *(const double *)a, y = *(const double *)b; return x < y ? -1 : x > y; }
-static Metrics run_interp(int loss_pct, int jitter_us, int dup_pct, int reorder, double drift_ppm, int64_t latency_us){
+static Metrics run_interp_at(int loss_pct, int jitter_us, int dup_pct, int reorder, double drift_ppm, int64_t latency_us, int64_t delay){
     rc_interp ip; rc_interp_reset(&ip);
     static double err[40000]; int ne = 0;
     /* sender samples at 20 Hz on its own clock; receiver renders at 120 Hz */
-    const int64_t delay = 100000, cap = 250000;
+    const int64_t cap = 250000;
     int64_t sender_off = 123456789;                          /* the clocks are unrelated */
     struct { int64_t at; rc_state s; } q[64]; int qn = 0;
     int64_t next_sample = 0; uint32_t sent = 0;
@@ -998,6 +998,9 @@ static Metrics run_interp(int loss_pct, int jitter_us, int dup_pct, int reorder,
     M.snaps = ip.n_snap; M.max_jerk = max_jerk; M.latency = lat_n ? lat_sum / lat_n : 0;
     return M;
 }
+static Metrics run_interp(int loss_pct, int jitter_us, int dup_pct, int reorder, double drift_ppm, int64_t latency_us){
+    return run_interp_at(loss_pct, jitter_us, dup_pct, reorder, drift_ppm, latency_us, 100000);
+}
 static void t_interp(void){
     struct { const char *name; int loss, jit, dup, reord; double ppm; int64_t lat; double lim_p99, lim_max; } cs[] = {
         { "clean LAN (1 ms)",            0,     0, 0, 0,    0,   1000, 0.05, 0.10 },
@@ -1014,6 +1017,20 @@ static void t_interp(void){
                "max step change %.4f m\n", cs[i].name, 1000 * M.latency, M.mean, M.p99, M.max, 100 * M.extrap_frac, (unsigned long long)M.snaps, M.max_jerk);
         CHECK(M.p99 < cs[i].lim_p99 && M.max < cs[i].lim_max, "interp %s: p99 %.3f (< %.2f), max %.3f (< %.2f)", cs[i].name, M.p99, cs[i].lim_p99, M.max, cs[i].lim_max);
         if (cs[i].loss == 0 && cs[i].jit == 0) CHECK(M.extrap_frac < 0.01 && M.snaps == 0, "clean: < 1%% extrapolation, no snaps");
+    }
+    /* a solid car: drawn where its driver is now, 150 ms (+- 20) of delay ahead of its newest state, on the circle: in
+     * a straight line it runs wide (about v w t^2 / 2), along the curve its velocity turns on it stays on it */
+    {
+        Metrics A[3]; int was = rc_extrap_arc;
+        for (int m = 0; m < 3; m++){
+            rc_extrap_arc = m;
+            A[m] = run_interp_at(0, 20000, 0, 0, 0, 150000, -150000);
+            printf("  interp solid, 150 ms, %-18s error mean %.4f m, p99 %.4f m; extrapolating %.2f%%\n",
+                   m == 0 ? "straight line:" : m == 1 ? "curve of its path:" : "curve of its yaw:", A[m].mean, A[m].p99, 100 * A[m].extrap_frac);
+        }
+        rc_extrap_arc = was;
+        CHECK(A[0].extrap_frac > 0.9 && A[1].mean < 0.25 * A[0].mean && A[2].mean < 0.25 * A[0].mean,
+              "solid car on a curve: %.3f m off in a straight line, %.3f / %.3f m along the curve", A[0].mean, A[1].mean, A[2].mean);
     }
     /* teleport epoch: the car snaps to the new place, no glide through the city */
     rc_interp ip; rc_interp_reset(&ip);
