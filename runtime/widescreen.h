@@ -13,6 +13,9 @@
 /* Game aspect / device aspect (com.c res_pick).  1 = the device has the
  * game's own aspect; < 1 = wider screen (Hor+), > 1 = narrower (Vert+). */
 void  ws_set_mapping(float k);
+/* NFSU2_FOV_SCALE from a test script ("fovscale original|correct",
+ * autotest.c); 0 if the mode is not one of those. */
+int   ws_set_fov_scale(const char *mode);
 /* Clip-space factors the renderer applies itself (com.c aspect_apply):
  * perspective draws only when NFSU2_FOV=renderer, the 4:3 HUD always. */
 float ws_persp_x(void);

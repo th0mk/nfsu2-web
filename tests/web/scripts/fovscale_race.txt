@@ -1,0 +1,58 @@
+# 3D proportions A/B in a race (widescreen.c, NFSU2_FOV_SCALE): Quick Race's
+# car select, then the start line with the car standing still in each race
+# camera; each moment held ~150 frames per look (see fovscale_fe.txt).
+# Run on /test/play.html at a wide size (w=1600&h=900).
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++300  log car_select
++0    fovscale original
++150  dump qcs_o
++40   dump qcs_o
++150  fovscale correct
++150  dump qcs_c
++40   dump qcs_c
++150  fovscale original
++0    tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    log race_loaded
++600  log grid
++0    fovscale original
++150  dump cam0_o
++40   dump cam0_o
++150  fovscale correct
++150  dump cam0_c
++40   dump cam0_c
++150  fovscale original
++0    tap C
++120  log cam1
++0    fovscale original
++150  dump cam1_o
++40   dump cam1_o
++150  fovscale correct
++150  dump cam1_c
++40   dump cam1_c
++150  fovscale original
++0    tap C
++120  log cam2
++0    fovscale original
++150  dump cam2_o
++40   dump cam2_o
++150  fovscale correct
++150  dump cam2_c
++40   dump cam2_c
++150  fovscale original
++0    tap C
++120  log cam3
++0    fovscale original
++150  dump cam3_o
++40   dump cam3_o
++150  fovscale correct
++150  dump cam3_c
++40   dump cam3_c
++150  fovscale original
++60   status fovscale_race done
++30   quit

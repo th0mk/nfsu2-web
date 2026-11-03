@@ -81,6 +81,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'hud', env: 'NFSU2_HUD', kind: 'enum', vals: 'wide|43|4:3', scope: 'web' },
   { key: 'movie_framing', env: 'NFSU2_MOVIE', kind: 'enum', vals: 'fit|fill|stretch', scope: 'web' },
   { key: 'cutscene_borders', env: 'NFSU2_CUTSCENE_BORDERS', kind: 'enum', vals: 'full|off', scope: 'web' },
+  { key: 'fov_scale', env: 'NFSU2_FOV_SCALE', kind: 'enum', vals: 'original|correct', scope: 'web' },
   { key: 'other_headlights', env: 'NFSU2_HEADLIGHTS', kind: 'enum', vals: 'players|all|off', scope: 'web' },
   // graphics options and frame-rate counter
   { key: 'graphics', env: 'NFSU2_GRAPHICS', kind: 'enum', vals: 'original|enhanced|custom', scope: 'mac' },
@@ -306,6 +307,10 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # Cutscene letterbox bars: full = across the whole width; off = none.
 # [NFSU2_CUTSCENE_BORDERS]
 #cutscene_borders = full
+# 3D proportions: original = as the game drew them, about 10 % too wide
+# (round wheels look oval); correct = true proportions, with a little more
+# to the sides.  [NFSU2_FOV_SCALE]
+#fov_scale = original
 # Other cars' headlights on the road, as your own light it: players = your
 # friends' cars in free roam and the other players' in Online and LAN races;
 # all = every car, AI racers and traffic too; off = only yours, as in the

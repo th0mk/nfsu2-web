@@ -23,9 +23,15 @@
  *             overcast tint) are 640-unit HUD quads too and covered only the
  *             4:3 middle; the renderer leaves them full size.
  *
+ *   shape     optional square pixels in the views that fill the screen: the
+ *             game's projection makes the picture 4-14 % too wide (below).
+ *
  * Every hook site is listed with HOOK_SITE() so gen.sh can hand it to the
  * lifter (fill is an override of the whole function).  Options (all read once):
  *   NFSU2_FOV=game|renderer       where Hor+ is applied (default game)
+ *   NFSU2_FOV_SCALE=original|correct  the game's proportions (default) or
+ *                                 square pixels (WidescreenFix's "FOV Scale:
+ *                                 Mathematically Correct")
  *   NFSU2_HUD=43|wide             centred 4:3 HUD or edge-anchored HUD
  *   NFSU2_MOVIE=fit|fill|stretch  FMV framing (default fit = pillarbox)
  *   NFSU2_CUTSCENE_BORDERS=full|off  letterbox bars across the whole width
@@ -45,9 +51,11 @@ enum { HUD_43, HUD_WIDE };
 enum { MOV_FIT, MOV_FILL, MOV_STRETCH };
 enum { BRD_FULL, BRD_OFF };
 enum { RENDER_BACKING, RENDER_PANEL, RENDER_SCALE };
+enum { SHAPE_ORIGINAL, SHAPE_CORRECT };
 
 static int   g_init;
 static int   g_fov = FOV_GAME, g_hud = HUD_WIDE, g_movie = MOV_FIT, g_brd = BRD_FULL;
+static int   g_shape = SHAPE_ORIGINAL;
 static int   g_hudfix = 1;
 static int   g_render = RENDER_BACKING;
 static double g_render_f = 1.0;
@@ -71,6 +79,8 @@ static void ws_init(void){
         g_movie = opt_is(e, "fill") ? MOV_FILL : opt_is(e, "stretch") ? MOV_STRETCH : MOV_FIT;
     if ((e = getenv("NFSU2_CUTSCENE_BORDERS")) && *e)
         g_brd = (opt_is(e, "off") || *e == '0') ? BRD_OFF : BRD_FULL;
+    if ((e = getenv("NFSU2_FOV_SCALE")) && *e)
+        g_shape = (opt_is(e, "correct") || opt_is(e, "corrected")) ? SHAPE_CORRECT : SHAPE_ORIGINAL;
     /* HUDFIX=0: legacy, HUD stretched to the full width (diagnostic). */
     if ((e = getenv("HUDFIX")) && *e == '0') g_hudfix = 0;
     if ((e = getenv("NFSU2_RENDER")) && *e){
@@ -81,8 +91,9 @@ static void ws_init(void){
             else fprintf(stderr, "ws: NFSU2_RENDER=%s ignored (scale 0.25..2)\n", e);
         }
     }
-    fprintf(stderr, "ws: fov=%s hud=%s movie=%s cutscene borders=%s render=%s",
-            g_fov == FOV_GAME ? "game" : "renderer", g_hud == HUD_WIDE ? "wide" : "4:3",
+    fprintf(stderr, "ws: fov=%s fov scale=%s hud=%s movie=%s cutscene borders=%s render=%s",
+            g_fov == FOV_GAME ? "game" : "renderer", g_shape == SHAPE_CORRECT ? "correct" : "original",
+            g_hud == HUD_WIDE ? "wide" : "4:3",
             g_movie == MOV_FIT ? "fit" : g_movie == MOV_FILL ? "fill" : "stretch",
             g_brd == BRD_FULL ? "full" : "off",
             g_render == RENDER_PANEL ? "panel" : g_render == RENDER_SCALE ? "scale" : "backing");
@@ -122,6 +133,14 @@ void ws_set_mapping(float k){
         g_redirty_until = metal_frames() + 3; g_redirty_cap = 100000;
     }
     g_k = k;
+}
+/* The test script's "fovscale MODE" (autotest.c), for an A/B in one run. */
+int ws_set_fov_scale(const char *mode){
+    ws_init();
+    if (opt_is(mode, "original")) g_shape = SHAPE_ORIGINAL;
+    else if (opt_is(mode, "correct") || opt_is(mode, "corrected")) g_shape = SHAPE_CORRECT;
+    else return 0;
+    return 1;
 }
 float ws_persp_x(void){ ws_init(); return g_fov == FOV_RENDERER ? fminf(g_k, 1.f) : 1.f; }
 float ws_persp_y(void){ ws_init(); return g_fov == FOV_RENDERER ? fminf(1.f / g_k, 1.f) : 1.f; }
@@ -260,7 +279,18 @@ int ws_hook(CPU *c, uint32_t ip){
      * built from them.  Views 1/2 (player) and 4/5 (their road reflection,
      * projected in screen space) fill the screen and get Hor+ (or Vert+ on
      * a narrower screen).  The rear-view mirror (3), shadow views (9, 10)
-     * and the cube map faces (16-21) keep the game's projection. */
+     * and the cube map faces (16-21) keep the game's projection.
+     *
+     * Shape: in those views hscale = [0x7a27dc] = 1.1 and aspect = the view's
+     * H/W (960/1280) x [0x7a27e0] / [0x7a27d8] = 1.1 / 0.8696, so the angle
+     * is scaled, not its tangent, and pixels are not square: a wheel shows
+     * 1.14 times as wide as tall at the garage's ~32 degrees, 1.09-1.11 at
+     * the race cameras' 65-75.  NFSU2_FOV_SCALE=correct keeps the game's
+     * height (P11, after any Vert+) and makes P00 = P11 x the device's H/W
+     * (= the view's H/W x k): the picture shows 4-14 % more at the sides.  At
+     * 0x5c8025 P00 waits at [esp+0x28] (stored after 0x5c7fee, three pushes
+     * ago) and goes into the matrix after; the product and the culling
+     * planes are made of both, so they agree. */
     case HOOK_SITE(0x005c7fee):
     case HOOK_SITE(0x005c8025): {
         g_hits[ip == 0x005c7feeu ? 0 : 1]++;
@@ -268,15 +298,27 @@ int ws_hook(CPU *c, uint32_t ip){
         uint32_t view = mem_is_committed(c->ebp + 4u) ? MR32(c->ebp + 4u) : 0u;
         if (!(view == 1u || view == 2u || view == 4u || view == 5u)) return 1;
         double before = ST(0);
+        uint32_t vp = mem_is_committed(c->ebp + 0x5bu) ? MR32(c->ebp + 0x58u) : 0u;
+        uint32_t vw = vp && mem_is_committed(vp + 0x1bu) ? MR32(vp + 0x14u) : 0u;
+        uint32_t vh = vp && mem_is_committed(vp + 0x1bu) ? MR32(vp + 0x18u) : 0u;
         if (ip == 0x005c7feeu){ if (g_k < 1.f) ST(0) *= (double)g_k; }
         else if (g_k > 1.f) ST(0) /= (double)g_k;
         { static unsigned shown[2]; int s = ip == 0x005c7feeu ? 0 : 1;
           if (shown[s] < 4 && ST(0) != before){ shown[s]++;
-              uint32_t vp = MR32(c->ebp + 0x58u);
               fprintf(stderr, "ws: view %u %s %.4f -> %.4f (view size %ux%u)\n", view,
-                      s ? "P11" : "P00", before, ST(0),
-                      mem_is_committed(vp + 0x1bu) ? MR32(vp + 0x14u) : 0u,
-                      mem_is_committed(vp + 0x1bu) ? MR32(vp + 0x18u) : 0u); } }
+                      s ? "P11" : "P00", before, ST(0), vw, vh); } }
+        if (ip == 0x005c8025u && g_shape == SHAPE_CORRECT && vw && vh
+            && mem_is_committed(c->esp + 0x2bu)){
+            float p00 = MRF32(c->esp + 0x28u);
+            float sq = (float)(ST(0) * (double)vh / (double)vw * (double)g_k);
+            if (p00 > 0.01f && p00 < 100.f && sq > 0.01f && sq < 100.f){
+                MRF32(c->esp + 0x28u) = sq; g_hits[13]++;
+                static unsigned said;
+                if (said < 4 && fabsf(sq - p00) > 1e-4f){ said++;
+                    fprintf(stderr, "ws: view %u square pixels: P00 %.4f -> %.4f (P11 %.4f, k %.4f)\n",
+                            view, (double)p00, (double)sq, ST(0), (double)g_k); }
+            }
+        }
         return 1; }
     /* sub_004ebec0 puts a HUD marker over a world position: the view's
      * screen position (sub_005bc4a0, from the view*projection product, so
@@ -378,8 +420,8 @@ int ws_hook(CPU *c, uint32_t ip){
 void ws_report(void){
     if (!g_init) return;
     fprintf(stderr, "ws: hooks fov=%lu/%lu borders=%lu movie=%lu hud=%lu/%lu/%lu/%lu marker=%lu/%lu rain=%lu"
-            " fe-rerender=%lu fill=%lu (k=%.4f)\n",
+            " fe-rerender=%lu fill=%lu square=%lu (k=%.4f)\n",
             g_hits[0], g_hits[1], g_hits[2], g_hits[3],
             g_hits[4], g_hits[5], g_hits[6], g_hits[7], g_hits[8], g_hits[9], g_hits[10],
-            g_hits[11], g_hits[12], (double)g_k);
+            g_hits[11], g_hits[12], g_hits[13], (double)g_k);
 }
