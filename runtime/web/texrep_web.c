@@ -12,6 +12,12 @@
  * (the URL tracks' are placed and scaled differently).  Here they are
  * written into the table in memory at every frame, while the pack is on.
  *
+ * A version 2 pack (detailed.pak) keeps each entry's levels deflated, and
+ * most of them as how they differ from another entry's (tools/texpacks.py
+ * deltas): the 115 maps are six with a race's route drawn on, 19 MB in place
+ * of 539.  Its entry is unpacked when the game uploads the texture
+ * (inflate.h, ~25 ms for a 2048x2048 map and the map it differs from).
+ *
  * The game keeps reading its own files and sees every texture at its own
  * size.  When it uploads level 0 of a texture the pack has (the same CRC-32
  * and Adler-32, size and format), the GPU texture becomes the pack's, at the
@@ -31,11 +37,13 @@
  * size and format they look for always. */
 #include "texrep.h"
 #include "cpu.h"
+#include "inflate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include <time.h>
 
 int fileio_resolve_game(const char *win, char *out, size_t outsz);                  /* fileio.c */
 void metal_replace_texture(unsigned id, unsigned w, unsigned h, unsigned levels, unsigned f, const uint8_t *data);
@@ -47,13 +55,18 @@ unsigned metal_level_rows(unsigned h, unsigned level, unsigned f);
 typedef struct { uint32_t crc, adler; uint16_t ow, oh; uint32_t ofmt; uint16_t w, h; uint32_t fmt, levels, off, size, name; } Ent;
 _Static_assert(sizeof(Ent) == 40, "TEXPACKS entry");
 
+/* version 2's entries: their levels deflated, and those with a base as how they differ from it (tools/texpacks.py
+ * deltas): the base's off and size, 0 and 0 for none */
+typedef struct { uint32_t off, size; } Base;
+_Static_assert(sizeof(Base) == 8, "TEXPACKS base");
+
 /* the packs picked, each a TEXPACKS/<name>.pak; their entries are merged into one table, sorted by key */
 #define MAXPACKS 2
-typedef struct { char name[32]; FILE *fp; char *names; uint32_t names_at, names_len; } Pack;
+typedef struct { char name[32]; FILE *fp; char *names; uint32_t names_at, names_len, version; } Pack;
 static Pack g_packs[MAXPACKS]; static unsigned g_npacks;
 static int g_init, g_on, g_shown = 1, g_log;
 static char g_pack[72];                                   /* the packs' names, for the log */
-static Ent *g_ent; static uint8_t *g_src; static unsigned g_n;   /* g_src: an entry's pack */
+static Ent *g_ent; static uint8_t *g_src; static Base *g_base; static unsigned g_n;   /* g_src: an entry's pack */
 /* the packs' .tracks: a TrackInfo field of the track numbered num set to v */
 typedef struct { int16_t num; uint16_t off; float v; } TrackEdit;
 static TrackEdit *g_edits; static unsigned g_nedits;
@@ -163,29 +176,38 @@ static void open_pack(const char *env){
         fprintf(stderr, "[texrep] %s: the game folder has no TEXPACKS/%s.pak: the game's own textures\n", p->name, p->name);
         return;
     }
-    if (fread(hd, sizeof hd, 1, p->fp) != 1 || memcmp(hd, "NTXP", 4) || hd[1] != 1 || !hd[2] || hd[2] > 65536u){
+    if (fread(hd, sizeof hd, 1, p->fp) != 1 || memcmp(hd, "NTXP", 4) || (hd[1] != 1 && hd[1] != 2) || !hd[2] || hd[2] > 65536u){
         fprintf(stderr, "[texrep] %s: not a texture pack this runtime reads\n", path); fclose(p->fp); p->fp = 0; return;
     }
     unsigned n = hd[2];
+    p->version = hd[1];
     Ent *ent = realloc(g_ent, (g_n + n) * sizeof *g_ent);
     if (ent) g_ent = ent;
     uint8_t *src = ent ? realloc(g_src, g_n + n) : 0;
     if (src) g_src = src;
-    if (!ent || !src || fread(g_ent + g_n, sizeof *g_ent, n, p->fp) != n){
+    Base *base = src ? realloc(g_base, (g_n + n) * sizeof *g_base) : 0;
+    if (base) g_base = base;
+    if (!ent || !src || !base || fread(g_ent + g_n, sizeof *g_ent, n, p->fp) != n ||
+        (p->version == 2 && fread(g_base + g_n, sizeof *g_base, n, p->fp) != n)){
         fprintf(stderr, "[texrep] %s: unreadable\n", path); fclose(p->fp); p->fp = 0; return;
     }
+    if (p->version == 1) memset(g_base + g_n, 0, n * sizeof *g_base);
     memset(g_src + g_n, (int)g_npacks, n);
-    /* the names (for the log): from the entries to the first texture's levels */
+    /* the names (for the log): from the entries (and version 2's bases) to the first texture's levels */
     uint32_t first = UINT32_MAX;
     for (unsigned i = g_n; i < g_n + n; i++) if (g_ent[i].off < first) first = g_ent[i].off;
-    p->names_at = 16u + 40u * n;
+    p->names_at = 16u + (p->version == 2 ? 48u : 40u) * n;
     if (first > p->names_at && first - p->names_at < (1u << 20) && (p->names = malloc(first - p->names_at + 1))){
         p->names_len = (uint32_t)fread(p->names, 1, first - p->names_at, p->fp);
         p->names[p->names_len] = 0;
     }
     unsigned bad = 0;
-    for (unsigned i = g_n; i < g_n + n; i++)
-        if (ent_bytes(&g_ent[i]) != g_ent[i].size){ g_ent[i].ow = 0; bad++; }   /* never matched */
+    for (unsigned i = g_n; i < g_n + n; i++){
+        const Ent *e = &g_ent[i];
+        int ok = p->version == 1 ? ent_bytes(e) == e->size
+                                 : ent_bytes(e) && e->size && !g_base[i].off == !g_base[i].size;
+        if (!ok){ g_ent[i].ow = 0; bad++; }               /* never matched */
+    }
     fprintf(stderr, "[texrep] %s: %u textures%s\n", path, n - bad, bad ? " (some entries unreadable, left out)" : "");
     g_n += n;
     snprintf(g_pack + strlen(g_pack), sizeof g_pack - strlen(g_pack), "%s%s", g_npacks ? "+" : "", p->name);
@@ -199,12 +221,12 @@ static void init(void){
     open_pack("NFSU2_MAP_TEXTURES");
     if (!g_n) return;
     /* one table: sorted by key, with each entry's pack beside it */
-    struct { Ent e; uint8_t src; } *both = malloc(g_n * sizeof *both);
+    struct { Ent e; Base b; uint8_t src; } *both = malloc(g_n * sizeof *both);
     g_used = calloc(g_n, 1); g_shape = calloc(g_n, sizeof *g_shape);
     if (!both || !g_used || !g_shape){ fprintf(stderr, "[texrep] out of memory\n"); free(both); return; }
-    for (unsigned i = 0; i < g_n; i++){ both[i].e = g_ent[i]; both[i].src = g_src[i]; }
+    for (unsigned i = 0; i < g_n; i++){ both[i].e = g_ent[i]; both[i].b = g_base[i]; both[i].src = g_src[i]; }
     qsort(both, g_n, sizeof *both, cmp_ent);              /* cmp_ent reads the Ent at the start */
-    for (unsigned i = 0; i < g_n; i++){ g_ent[i] = both[i].e; g_src[i] = both[i].src; }
+    for (unsigned i = 0; i < g_n; i++){ g_ent[i] = both[i].e; g_base[i] = both[i].b; g_src[i] = both[i].src; }
     free(both);
     for (unsigned i = 0; i < g_n; i++)
         if (g_ent[i].ow) g_shape[g_nshape++] = shape(g_ent[i].ow, g_ent[i].oh, g_ent[i].ofmt);
@@ -229,16 +251,39 @@ static int find(uint32_t crc, uint32_t adler, unsigned w, unsigned h, unsigned f
         if (g_ent[lo].ow == w && g_ent[lo].oh == h && g_ent[lo].ofmt == fmt) return (int)lo;
     return -1;
 }
+static int grow(uint8_t **b, size_t *cap, size_t n){
+    if (n <= *cap) return 1;
+    uint8_t *x = realloc(*b, n);
+    if (!x) return 0;
+    *b = x; *cap = n;
+    return 1;
+}
+static int read_at(const Pack *p, uint32_t off, uint32_t size, uint8_t *to){
+    return !fseek(p->fp, (long)off, SEEK_SET) && fread(to, 1, size, p->fp) == size;
+}
+/* version 2: the deflated stream at off, unpacked into to's n bytes */
+static uint8_t *g_zbuf, *g_bbuf; static size_t g_zcap, g_bcap;
+static int unpack(const Pack *p, uint32_t off, uint32_t size, uint8_t *to, size_t n){
+    return grow(&g_zbuf, &g_zcap, size) && read_at(p, off, size, g_zbuf) && inflate_raw(g_zbuf, size, to, n);
+}
+static double g_unpack_ms;                                /* the last entry's, for the log */
 static const uint8_t *levels_of(const Ent *e){
-    if (e->size > g_bufcap){
-        uint8_t *b = realloc(g_buf, e->size);
-        if (!b) return 0;
-        g_buf = b; g_bufcap = e->size;
+    size_t i = (size_t)(e - g_ent), n = ent_bytes(e);
+    const Pack *p = &g_packs[g_src[i]];
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    int ok;
+    if (p->version == 1) ok = grow(&g_buf, &g_bufcap, e->size) && read_at(p, e->off, e->size, g_buf);
+    else {
+        ok = grow(&g_buf, &g_bufcap, n) && unpack(p, e->off, e->size, g_buf, n);
+        if (ok && g_base[i].size){
+            ok = grow(&g_bbuf, &g_bcap, n) && unpack(p, g_base[i].off, g_base[i].size, g_bbuf, n);
+            for (size_t k = 0; ok && k < n; k++) g_buf[k] ^= g_bbuf[k];
+        }
     }
-    const Pack *p = &g_packs[g_src[e - g_ent]];
-    if (fseek(p->fp, (long)e->off, SEEK_SET) || fread(g_buf, 1, e->size, p->fp) != e->size){
-        fprintf(stderr, "[texrep] %s: %s unreadable\n", p->name, ent_name(e)); return 0;
-    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    g_unpack_ms = (double)(t1.tv_sec - t0.tv_sec) * 1e3 + (double)(t1.tv_nsec - t0.tv_nsec) / 1e6;
+    if (!ok){ fprintf(stderr, "[texrep] %s: %s unreadable\n", p->name, ent_name(e)); return 0; }
     return g_buf;
 }
 
@@ -387,7 +432,8 @@ void texrep_uploaded(unsigned mid, unsigned level, const uint8_t *data, unsigned
         const Ent *e = &g_ent[i];
         metal_replace_texture(mid, e->w, e->h, e->levels, e->fmt, lv);
         g_t[mid].st = 2; g_t[mid].ent = i; g_used[i] = 1; g_shown_n++;
-        if (g_log) fprintf(stderr, "[texrep] t%u %s %ux%u -> %ux%u\n", mid, ent_name(e), e->ow, e->oh, e->w, e->h);
+        if (g_log) fprintf(stderr, "[texrep] t%u %s %ux%u -> %ux%u (%.1f ms)\n", mid, ent_name(e), e->ow, e->oh, e->w, e->h,
+                           g_unpack_ms);
     } else if (g_t[mid].st == 2){
         /* the game wrote something else into it: its own texture again (gpu_web.c dropped this upload) */
         metal_replace_texture(mid, g_t[mid].w, g_t[mid].h, g_t[mid].levels, g_t[mid].fmt, NULL);
