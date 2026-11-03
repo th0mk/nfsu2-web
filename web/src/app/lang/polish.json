@@ -389,6 +389,8 @@
   "Next song": "Następny utwór",
   "Autosave": "Autozapis",
   "Sets each profile's Save option to Autosave once. A later change in the game's Options stays.": "Jednorazowo ustawia opcję „Zapis” każdego profilu na „Autozapis”. Późniejsza zmiana w Opcjach gry zostaje zachowana.",
+  "Crash damage": "Uszkodzenia po zderzeniach",
+  "FRS Mods' Crashing Foreign Cars: cars dent, scratch, lose parts and break their lights where they are hit. Only what is seen: the car drives as before.": "Crashing Foreign Cars od FRS Mods: samochody wgniatają się, rysują, gubią części i tłuką światła tam, gdzie zostały uderzone. Tylko wygląd: auto prowadzi się tak jak wcześniej.",
   "Startup movies": "Filmy na starcie",
   "Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.": "Loga, PSA i intro. „Do pominięcia”: każdy z nich pomija Enter, Esc, Spacja, kliknięcie, A, B lub Start. „Oryginał”: pominąć można tylko intro.",
   "Skippable": "Do pominięcia",
