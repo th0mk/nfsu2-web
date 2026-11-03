@@ -599,7 +599,8 @@ Good to know:
     or a quarter less (the nitrous with it). No car keeps a stock car's top-speed governor (as with an ECU part), so
     the extra power counts at speed too. Grip, brakes, gears, weight and your tuning stay as they are, so your car
     still drives as itself and your upgrades still count, by less; a car far ahead of the others stays ahead, by less.
-    The lobby says so before you join, and after the race the note says how your engine was changed. Street X and
+    The lobby says so before you join ("Engine power is evened out", left out where it warns you, below), and after
+    the race the note says how your engine was changed. Street X and
     drift races leave the cars as they are: there the rating did not decide who won.
   - **A lobby warns you** when its race's stage usually has much faster cars than yours ("Stage 5 race: the cars here
     are usually much faster than yours"): a stock car (the game's lowest class) at a stage 3, 4 or 5

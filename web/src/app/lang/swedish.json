@@ -138,7 +138,7 @@
   "Closes in {n} s if nobody joins": "Stängs om {n} s om ingen går med",
   "Waiting for {host} to start": "Väntar på att {host} ska starta",
   "Drive away to leave": "Kör iväg för att lämna",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "Bilarna jämnas ut: långsammare får mer kraft, snabbare lite mindre",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "Motoreffekten jämnas ut: långsammare bilar får mer, snabbare lite mindre",
   "Quitting the race costs ${fee}": "Att hoppa av racet kostar ${fee}",
   "Loading": "Laddar",
   "{n} in free roam": "{n} i läget Utforska",

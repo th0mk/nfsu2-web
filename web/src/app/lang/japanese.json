@@ -135,7 +135,7 @@
   "Closes in {n} s if nobody joins": "誰も参加しなければ{n}秒後に閉じます",
   "Waiting for {host} to start": "{host}の開始を待っています",
   "Drive away to leave": "走り去ると退出します",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "車の性能差を調整します: 遅い車はパワーが上がり、速い車は少し下がります",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "エンジンの出力を調整します: 遅い車は出力が上がり、速い車は少し下がります",
   "Quitting the race costs ${fee}": "レースをリタイアすると${fee}かかります",
   "Loading": "読み込み中",
   "{n} in free roam": "フリーローム{n}人",

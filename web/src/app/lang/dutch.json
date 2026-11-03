@@ -138,7 +138,7 @@
   "Closes in {n} s if nobody joins": "Sluit over {n} s als niemand meedoet",
   "Waiting for {host} to start": "Wachten tot {host} start",
   "Drive away to leave": "Rij weg om de lobby te verlaten",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "De wagens worden gelijkgetrokken: langzamere krijgen meer vermogen, snellere iets minder",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "Het motorvermogen wordt gelijkgetrokken: langzamere wagens krijgen meer, snellere iets minder",
   "Quitting the race costs ${fee}": "De race verlaten kost ${fee}",
   "Loading": "Laden",
   "{n} in free roam": "{n} in Verkennen",

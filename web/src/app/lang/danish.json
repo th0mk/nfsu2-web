@@ -138,7 +138,7 @@
   "Closes in {n} s if nobody joins": "Lukker om {n} sek., hvis ingen deltager",
   "Waiting for {host} to start": "Venter på, at {host} starter",
   "Drive away to leave": "Kør væk for at forlade lobbyen",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "Bilerne udlignes: langsommere får mere kraft, hurtigere lidt mindre",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "Motorkraften udlignes: langsommere biler får mere, hurtigere lidt mindre",
   "Quitting the race costs ${fee}": "Det koster ${fee} at forlade løbet",
   "Loading": "Indlæser",
   "{n} in free roam": "{n} i udforsknings-mode",

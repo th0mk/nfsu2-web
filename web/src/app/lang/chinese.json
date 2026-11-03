@@ -135,7 +135,7 @@
   "Closes in {n} s if nobody joins": "若無人加入，將於 {n} 秒後關閉",
   "Waiting for {host} to start": "等待 {host} 開始",
   "Drive away to leave": "開走即可離開",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "車輛性能經過平衡：較慢的車獲得更多動力，較快的車則略為降低",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "引擎動力會經過調整：較慢的車獲得更多動力，較快的車則略為降低",
   "Quitting the race costs ${fee}": "退出比賽需支付 ${fee}",
   "Loading": "載入中",
   "{n} in free roam": "{n} 人在自由漫遊",

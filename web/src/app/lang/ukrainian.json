@@ -139,7 +139,7 @@
   "Closes in {n} s if nobody joins": "Закриється через {n} с, якщо ніхто не приєднається",
   "Waiting for {host} to start": "Чекаємо, поки {host} почне",
   "Drive away to leave": "Від'їдьте, щоб вийти",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "Машини вирівнюються: повільніші отримують більше потужності, швидші — трохи менше",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "Потужність двигунів вирівнюється: повільніші машини отримують більше, швидші — трохи менше",
   "Quitting the race costs ${fee}": "Вихід із гонки коштує ${fee}",
   "Loading": "Завантаження",
   "{n} in free roam": "{n} — у вільній їзді",

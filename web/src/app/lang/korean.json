@@ -135,7 +135,7 @@
   "Closes in {n} s if nobody joins": "아무도 참가하지 않으면 {n}초 후에 닫혀요",
   "Waiting for {host} to start": "{host} 님이 시작하기를 기다리는 중",
   "Drive away to leave": "이곳을 벗어나면 나가요",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "차량 성능을 맞춰요: 느린 차는 출력이 올라가고, 빠른 차는 조금 내려가요",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "엔진 출력을 맞춰요: 느린 차는 출력이 올라가고, 빠른 차는 조금 내려가요",
   "Quitting the race costs ${fee}": "레이스 중도 포기 비용: ${fee}",
   "Loading": "불러오는 중",
   "{n} in free roam": "자유 주행 {n}명",

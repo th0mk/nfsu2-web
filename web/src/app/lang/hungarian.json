@@ -199,7 +199,7 @@
   "Waiting for {host} to start": "Várakozás, amíg {host} elindítja",
   "{host} seems away: the lobby closes in {n} s": "Úgy tűnik, {host} elment: a lobbi {n} mp múlva bezárul",
   "Drive away to leave": "Hajts el, ha ki akarsz lépni",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "Az autók ki vannak egyenlítve: a lassabbak több erőt kapnak, a gyorsabbak kicsit kevesebbet",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "A motorteljesítmény ki van egyenlítve: a lassabb autók többet kapnak, a gyorsabbak kicsit kevesebbet",
   "Quitting the race costs ${fee}": "A versenyből kilépés díja: ${fee}",
   "Results": "Eredmények",
   "DNF": "Nem ért be",

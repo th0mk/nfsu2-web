@@ -140,7 +140,7 @@
   "Closes in {n} s if nobody joins": "Zamknie się za {n} s, jeśli nikt nie dołączy",
   "Waiting for {host} to start": "Czekanie, aż {host} rozpocznie wyścig",
   "Drive away to leave": "Odjedź, aby wyjść",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "Samochody są wyrównane: wolniejsze dostają więcej mocy, szybsze trochę mniej",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "Moc silników jest wyrównywana: wolniejsze samochody dostają więcej, szybsze trochę mniej",
   "Quitting the race costs ${fee}": "Przerwanie wyścigu kosztuje ${fee}",
   "Loading": "Wczytywanie",
   "{n} in free roam": "{n} na przejażdżce",

@@ -135,7 +135,7 @@
   "Closes in {n} s if nobody joins": "จะปิดใน {n} วินาทีหากไม่มีใครเข้าร่วม",
   "Waiting for {host} to start": "กำลังรอ {host} เริ่ม",
   "Drive away to leave": "ขับออกไปเพื่อออกจากล็อบบี้",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "รถถูกปรับให้สูสีกัน: คันที่ช้ากว่าได้กำลังเพิ่ม คันที่เร็วกว่าลดลงเล็กน้อย",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "กำลังเครื่องยนต์ถูกปรับให้สูสีกัน: รถที่ช้ากว่าได้เพิ่ม รถที่เร็วกว่าลดลงเล็กน้อย",
   "Quitting the race costs ${fee}": "การออกจากการแข่งกลางคันเสียค่าธรรมเนียม ${fee}",
   "Loading": "กำลังโหลด",
   "{n} in free roam": "{n} คนกำลังขับอิสระ",

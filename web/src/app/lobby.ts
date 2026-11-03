@@ -264,7 +264,8 @@ export class LobbyPanel {
         kids.push(el('div', 'lobby-note', noteText(s.text ?? '')));
         break;
     }
-    if (s.v === 'join' && s.even) kids.push(el('div', 'lobby-hint', t('Cars are balanced: slower ones get more power, faster ones a little less')));
+    // (what the evening out does, not that it makes the cars even: under the outpaced warning, none)
+    if (s.v === 'join' && s.even && !s.outpaced) kids.push(el('div', 'lobby-hint', t('Engine power is evened out: slower cars get more, faster ones a little less')));
     if (s.v === 'join' && s.fee) kids.push(el('div', 'lobby-hint', t('Quitting the race costs ${fee}', { fee: s.fee })));
     p.replaceChildren(...kids);
   }

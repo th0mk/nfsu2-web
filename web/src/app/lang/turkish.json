@@ -135,7 +135,7 @@
   "Closes in {n} s if nobody joins": "Kimse katılmazsa {n} sn içinde kapanır",
   "Waiting for {host} to start": "{host} adlı oyuncunun başlatması bekleniyor",
   "Drive away to leave": "Ayrılmak için uzaklaş",
-  "Cars are balanced: slower ones get more power, faster ones a little less": "Arabalar dengelendi: yavaş olanlara daha fazla güç, hızlı olanlara biraz daha az",
+  "Engine power is evened out: slower cars get more, faster ones a little less": "Motor gücü dengelenir: Yavaş arabalar daha fazla, hızlı olanlar biraz daha az güç alır",
   "Quitting the race costs ${fee}": "Yarıştan çıkmanın bedeli ${fee}",
   "Loading": "Yükleniyor",
   "{n} in free roam": "{n} serbest sürüşte",
