@@ -547,8 +547,7 @@ void sub_0060faa0(CPU *c){
  * the blur is round on the screen. */
 float input_view_roll(void);
 int photo_view(uint16_t *fov, float *roll, float *jit);
-int look_view(uint32_t id);                 /* look.c: the right stick's look round the car, */
-void look_turn(uint32_t cam);               /*   the camera's matrix turned by it */
+void look_view(uint32_t id, uint32_t cam);  /* look.c: the right stick's look round the car turns the camera */
 static void photo_shear(uint32_t plat, const float *j){
     float *V = (float *)(g_mem + plat), *Pr = V + 16, *M = V + 32;
     float p00 = Pr[0], p11 = Pr[5], p23 = Pr[11];
@@ -583,6 +582,7 @@ void sub_005c7ec0(CPU *c){
     float pj[5] = { 0 };
     int shift = 0;
     if (view && mem_is_committed(view + 0x43u) && (MR32(view + 4u) == 1u || MR32(view + 4u) == 4u)){
+        look_view(MR32(view + 4u), MR32(view + 0x40u));     /* till after Present, for everything drawn */
         float a = input_view_roll(), pr = 0.f;
         if (photo_view(&fov, &pr, pj)){
             a += pr;
@@ -591,11 +591,9 @@ void sub_005c7ec0(CPU *c){
             else fcam = 0;
             shift = (pj[0] != 0.f || pj[1] != 0.f || pj[2] != 0.f || pj[3] != 0.f) && plat && mem_is_committed(plat + 0xbfu);
         }
-        int look = look_view(MR32(view + 4u));
-        cam = a != 0.f || shift || look ? MR32(view + 0x40u) : 0u;
+        cam = a != 0.f || shift ? MR32(view + 0x40u) : 0u;
         if (cam && mem_is_committed(cam + 0x3fu)){
             memcpy(keep, g_mem + cam, sizeof keep);
-            if (look) look_turn(cam);
             if (a != 0.f) view_roll(cam, a);
             if (shift){
                 /* the lens's point (far away's move, in half widths) as the eye's move in metres, round in the view:

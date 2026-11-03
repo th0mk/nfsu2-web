@@ -399,6 +399,9 @@ static int chan_reads_axis(uint32_t ch, uint32_t ofs){
     if (MR8(ch + 0x368u) && MR8(ch + 0x367u)) return MR32(ch + 0x350u) == ofs;
     return (MR8(ch + 0x365u) && MR32(ch + 0x348u) == ofs) || (MR8(ch + 0x366u) && MR32(ch + 0x34cu) == ofs);
 }
+#define ACT_LOOK_BACK   0x09u            /* the game's action id (its keyboard map 0x7fcac0: "Look Back") */
+static int g_look_back_bound;            /* the pad last read has a button on it */
+int look_back_held(const PadState *s);   /* look.c */
 static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
     uint8_t st[0x110];
     memset(st, 0, sizeof st);
@@ -439,8 +442,16 @@ static void fill_state(uint8_t *buf, uint32_t size, Dev *d, const PadState *s){
         int on = src == SRC_LT_FULL ? d->trig[0] : src == SRC_RT_FULL ? d->trig[1] : !!(b & (1u << src));
         if (on) st[0x30 + i] = 0x80;
     }
+    /* the right stick straight back while driving holds the button the player has on Look Back (look.c): the
+     * channel's in-game table (+0x18, by button) gives it */
+    int lb = -1;
+    for (int i = 0; ch && i < NBTNS && lb < 0; i++) if (MR32(ch + 0x018u + 4u * (uint32_t)i) == ACT_LOOK_BACK) lb = i;
+    g_look_back_bound = lb >= 0;
+    if (lb >= 0 && look_back_held(s)) st[0x30 + lb] = 0x80;
     memcpy(buf, st, size < sizeof st ? size : sizeof st);
 }
+/* look.c: whether the pad has a button on Look Back (else the stick turns the view round to the rear) */
+int pad_look_back_bound(void){ return g_look_back_bound; }
 
 /* ---- front-end keystrokes ----------------------------------------------------------
  * Some front-end input exists only as characters from the window procedure

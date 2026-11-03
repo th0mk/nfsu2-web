@@ -1,7 +1,10 @@
 # The controller's right stick looks round while driving (runtime/look.c): in a Quick Race, right (the view turns
-# right, round the car), let go (back behind it), down (looking back), half way right (half as far), then with the
-# hood camera (the head turns: the eye stays), and paused (no look).  With NFSU2_PAD_LOG=1 each look logs
-# "[pad] the right stick looks round" and its end "the right stick let go (the view turned N degrees)".
+# right, round the car: the car from its side, both wheels on that side drawn), let go (back behind it), straight
+# back (the game's own Look Back, held as the pad's button: "[pad] the right stick holds Look Back"), let go (behind
+# at once), back and to the right (turned some 135 degrees, round the car's rear), left, half way right (half as
+# far), then with the hood camera (the head turns: the eye stays), and paused (no look).  With NFSU2_PAD_LOG=1 each
+# look logs "[pad] the right stick looks round" and its end "the right stick let go (the view turned N degrees)".
+# On the renderer's page (test/play.html) the dumps show it.
 0     pad connect
 +0    tappaduntil START MC_Background.fng 120 4000
 +200  tappad A                                       # no profile
@@ -18,9 +21,17 @@
 +0    axis RX 0
 +700ms dump look_rest
 +0    axis RY 1
-+700ms dump look_back
++700ms dump look_back                                # the game's Look Back
 +0    axis RY 0
-+0    axis RX 0.55
++300ms dump look_back_let_go                         # behind the car at once
++0    axis RX 0.7
++0    axis RY 0.7
++700ms dump look_back_right
++0    axis RY 0
++0    axis RX -1
++700ms dump look_left
++0    axis RX 0
++700ms axis RX 0.55
 +700ms dump look_half
 +0    axis RX 0
 +700ms tappad Y                                      # the bumper camera

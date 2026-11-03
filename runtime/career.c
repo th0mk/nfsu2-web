@@ -1052,10 +1052,16 @@ static void run_job(CPU *c, const char *line){
 }
 
 /* Main-loop hook.  sub_004022c0 is an empty function with ~300 callers; only
- * the call from GameLoop (return address 0x581475) does work. */
+ * GameLoop's do work: the call returning to 0x581475 (before the camera's
+ * and the sound's update), and the first after the frame's Present
+ * (0x5D2850), which gives back the camera the right stick's look turned for
+ * the frame drawn (look.c). */
+#define LOOK_END_RET     0x005814e0u
+void look_frame_end(void);
 void sub_004022c0_orig(CPU *c);
 void sub_004022c0(CPU *c){
-    if (MR32(c->esp) == MAINLOOP_RET){
+    if (MR32(c->esp) == LOOK_END_RET) look_frame_end();
+    else if (MR32(c->esp) == MAINLOOP_RET){
         if (!g_hooked) bot_init();
         g_hooked = 1;
         while (g_qh != g_qt){ Job *j = &g_q[g_qh]; g_qh = (g_qh + 1) % QMAX; run_job(c, j->line); }
