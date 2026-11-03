@@ -13,7 +13,7 @@
 //          settings.ini, logs).  Closing a file the game wrote there tells
 //          the page ({ t: 'saved', path }: "Progress saved", F9's last save).
 import {
-  CTL_IO_DOORBELL, E, MAX_THREADS, Op, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig,
+  CTL_IO_BEAT, CTL_IO_DOORBELL, E, IO_SLOW_MS, MAX_THREADS, Op, opName, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig,
 } from './proto';
 import { BLOCK, CACHE_DIR, av1Path, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
@@ -91,24 +91,49 @@ const CACHE_OPEN = cacheOpen(navigator.userAgent);
 const cacheFiles = new Map<string, Promise<CacheFile | null>>(), cacheSeen = new Set<string>();
 let keeping = true, kept = 0;                              // blocks still go into the cache (keepBlock)
 
+// A cache file that has not opened in OPEN_MS is given up for this game: its reads come from the server, as a file
+// this PC does not keep.  A player's game (Chrome on Linux, 64 files open and some 50 closed and opened again a minute)
+// read nothing more after one of its reads went into this worker and never came out, all from the cache: its free-roam
+// friends' cars stopped coming in, and leaving for the garage waited for good (2026-11-02, game ee850688).  The open
+// is the one step there with no limit (a fetch has STALL_MS); it took up to 15 s on a player's PC that did come back.
+const OPEN_MS = 10000;
+const cacheSkip = new Set<string>();
+let opens = 0;
 // Use the file at once, in the same task: a file that is not among the CACHE_OPEN newest is closed.
 async function cacheFile(n: DNode) {
   if (!cacheDir) return null;
   const k = cacheKey(n);
+  if (cacheSkip.has(k)) return null;
   let p = cacheFiles.get(k);
   if (p) { cacheFiles.delete(k); cacheFiles.set(k, p); return p; }
-  const t0 = performance.now(), again = cacheSeen.has(k);
+  const t0 = performance.now(), again = cacheSeen.has(k), f = faults(), dir = cacheDir;
   cacheSeen.add(k);
-  p = openCacheFile(cacheDir, n).then(cf => {
-    const ms = performance.now() - t0;
-    sum.opened++; sum.openMs += ms; if (ms > sum.openMax) sum.openMax = ms; if (again) sum.reopened++;
-    return cf;
-  }, e => {
-    if (keeping) note(`[data] ${n.path} is not kept on this PC: ${e}`);
-    // the site's data deleted (the cache folder with it): the save folder back before the game's next save needs it
-    // (any error: Firefox answers some calls in a removed folder with UnknownError)
-    void saveGone().then(gone => { if (gone) void recover(); });
-    return null;
+  steps.set(`${n.path} (its cache file)`, { t0, at: 'opening its cache file' });
+  // NFSU2_DATA_FAULT open:N: every Nth open never answers
+  const opening = f.open && ++opens % f.open === 0 ? new Promise<CacheFile>(() => {}) : openCacheFile(dir, n);
+  p = new Promise<CacheFile | null>(res => {
+    let over = false;
+    const late = setTimeout(() => {
+      over = true; cacheSkip.add(k); steps.delete(`${n.path} (its cache file)`);
+      note(`[data] ${n.path}: its cache file did not open in ${OPEN_MS / 1000} s; this game reads it from the server`);
+      res(null);
+    }, OPEN_MS);
+    opening.then(cf => {
+      clearTimeout(late); steps.delete(`${n.path} (its cache file)`);
+      const ms = performance.now() - t0;
+      // too late: closed again, the file stays given up
+      if (over) { try { cf.h.close(); cf.haveH.close(); } catch { /* gone */ } note(`[data] ${n.path}: its cache file opened after ${(ms / 1000).toFixed(1)} s, too late`); return; }
+      sum.opened++; sum.openMs += ms; if (ms > sum.openMax) sum.openMax = ms; if (again) sum.reopened++;
+      res(cf);
+    }, e => {
+      clearTimeout(late); steps.delete(`${n.path} (its cache file)`);
+      if (over) return;
+      if (keeping) note(`[data] ${n.path} is not kept on this PC: ${e}`);
+      // the site's data deleted (the cache folder with it): the save folder back before the game's next save needs it
+      // (any error: Firefox answers some calls in a removed folder with UnknownError)
+      void saveGone().then(gone => { if (gone) void recover(); });
+      res(null);
+    });
   });
   cacheFiles.set(k, p);
   for (const [ok, op] of cacheFiles) {
@@ -145,7 +170,7 @@ const note = (s: string) => (self as unknown as Worker).postMessage({ t: 'log', 
 // NFSU2_DATA_FAULT (tests, the web suite's datafault): fail:N fails every Nth try as a lost connection, hang:N
 // leaves every Nth unanswered until its stall timer, stall:MS sets that timer, deny:N loses every try at the
 // compressed address of each file's every Nth block (only its byte range comes), full:N fills this PC's cache
-// at the Nth block this game keeps.
+// at the Nth block this game keeps, open:N leaves every Nth cache file's opening unanswered (cacheFile's OPEN_MS).
 // Blocks waiting for a turn go by priority: the track's stream file first (a section the game waits for in the world
 // is a "Loading" screen in the middle of a drive), then the game's other reads (a friend's car, music, speech), then
 // the reading ahead of the track (readAhead).  That one starts only while the game fetches nothing (on a slow line a
@@ -153,7 +178,7 @@ const note = (s: string) => (self as unknown as Worker).postMessage({ t: 'log', 
 const FETCHES = 8, STALL_MS = 20000, SLOW_MS = 5000;
 const P_AHEAD = 0, P_GAME = 1, P_TRACK = 2, FILL_FETCHES = 2;
 interface Ticket { pri: number; ahead?: boolean }
-let fetching = 0, aheadFetching = 0, tries = 0, fault: { fail: number; hang: number; stall: number; deny: number; full: number } | null = null;
+let fetching = 0, aheadFetching = 0, tries = 0, fault: { fail: number; hang: number; stall: number; deny: number; full: number; open: number } | null = null;
 const fetchWait: { t: Ticket; go: () => void }[] = [];
 const mayFetch = (t: Ticket) => fetching < FETCHES &&
   (t.pri > P_AHEAD || fetching === aheadFetching && aheadFetching < FILL_FETCHES);
@@ -172,7 +197,7 @@ function faults() {
   if (!fault) {
     const kv = new Map((cfg.env?.NFSU2_DATA_FAULT ?? '').split(',').map(p => p.split(':') as [string, string]));
     const num = (k: string) => +(kv.get(k) ?? 0) || 0;
-    fault = { fail: num('fail'), hang: num('hang'), stall: num('stall') || STALL_MS, deny: num('deny'), full: num('full') };
+    fault = { fail: num('fail'), hang: num('hang'), stall: num('stall') || STALL_MS, deny: num('deny'), full: num('full'), open: num('open') };
   }
   return fault;
 }
@@ -269,6 +294,9 @@ function keepBlock(cf: CacheFile, n: DNode, bi: number, b: Uint8Array) {
 // the blocks being read: who waits for each (a read of the game asking for a block the reading ahead asked for first
 // raises its priority to its own)
 const tickets = new Map<string, Ticket>();
+// what each block being read waits for, since when (the watchdog's note of a request that does not come back)
+const steps = new Map<string, { t0: number; at: string }>();
+const step = (key: string, at: string) => { const s = steps.get(key); if (s) s.at = at; };
 async function getBlock(n: DNode, bi: number, pri: number): Promise<Uint8Array> {
   const key = n.path + '#' + bi;
   dataSummary(performance.now());
@@ -283,14 +311,17 @@ async function getBlock(n: DNode, bi: number, pri: number): Promise<Uint8Array> 
   const t: Ticket = { pri };
   p = (async () => {
     const start = bi * BLOCK, len = Math.min(BLOCK, n.size - start);
+    steps.set(key, { t0: performance.now(), at: 'its cache file' });
     const cf = await cacheFile(n);
     if (cf && cf.have[bi]) {
       try {
         const b = new Uint8Array(len); cf.h.read(b, { at: start }); memPut(key, b); sum.local++; return b;
       } catch (e) { note(`[data] ${n.path} block ${bi}: the cache file did not read (${e}); from the server`); }
     }
+    step(key, 'the server');
     const b = await fetchBlock(n, bi, start, len, t);
     // the file again: the one from before the fetch may have been closed meanwhile (CACHE_OPEN)
+    step(key, 'its cache file, to keep it');
     const cf2 = await cacheFile(n);
     if (cf2) keepBlock(cf2, n, bi, b);
     // a block read ahead stays out of the memory while this PC keeps it: the blocks being read stay there
@@ -298,7 +329,7 @@ async function getBlock(n: DNode, bi: number, pri: number): Promise<Uint8Array> 
     return b;
   })();
   inflight.set(key, p); tickets.set(key, t);
-  try { return await p; } finally { inflight.delete(key); tickets.delete(key); }
+  try { return await p; } finally { inflight.delete(key); tickets.delete(key); steps.delete(key); }
 }
 
 // ------------------------------------------------------- reading ahead ----
@@ -725,15 +756,35 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
 // on a Mac: about one race in three, up to 50 s).  With a timeout no wait was late in 18 races there (50 and
 // 1000 ms); 50 also bounds one that would be to a few frames.
 const DOORBELL_WAIT_MS = 50;
+// The request each slot has in this worker (op, its fd's file, since when, IO_SLOW_MS steps said): a request that
+// does not come back is written in the log with where it waits (steps), while this worker's loop still runs
+const pending: ({ op: number; what: string; t0: number; said: number } | null)[] = new Array(MAX_THREADS).fill(null);
+function watch() {
+  const now = performance.now(), slow = (x: { t0: number; said: number }) => {
+    if (now - x.t0 < IO_SLOW_MS * 2 ** x.said) return false;
+    x.said++; return true;
+  };
+  for (let s = 0; s < MAX_THREADS; s++) {
+    const r = pending[s];
+    if (!r || !slow(r)) continue;
+    const at = [...steps].filter(([, v]) => now - v.t0 >= IO_SLOW_MS).map(([k, v]) => `${k}: ${v.at} for ${((now - v.t0) / 1000).toFixed(0)} s`);
+    note(`[io] ${opName(r.op)} of ${r.what} unanswered for ${((now - r.t0) / 1000).toFixed(0)} s${at.length ? `; waiting: ${at.slice(0, 4).join('; ')}` : ''}`);
+  }
+}
 async function serve() {
   let seen = Atomics.load(ctl, CTL_IO_DOORBELL);
+  setInterval(watch, 5000);
   for (;;) {
+    Atomics.add(ctl, CTL_IO_BEAT, 1);
     for (let s = 0; s < MAX_THREADS; s++) {
       const b = s * (RPC_SLOT / 4);
       if (Atomics.compareExchange(rpcI32, b, RPC_POSTED, RPC_TAKEN) !== RPC_POSTED) continue;
       const opc = rpcI32[b + 1] as Op, nargs = rpcI32[b + 3], b64 = s * (RPC_SLOT / 8), args: bigint[] = [];
       for (let i = 0; i < nargs; i++) args.push(rpcI64[b64 + 2 + i]);
+      const fd = nargs ? fds.get(Number(args[0])) : undefined;
+      pending[s] = { op: opc, what: fd ? `${fd.preopen ?? `/${fd.mount}`}${fd.preopen ? '' : '/' + fd.path}` : nargs ? `fd ${args[0]}` : '-', t0: performance.now(), said: 0 };
       op(opc, args).catch(e => { console.error('io op', opc, e); return E.IO; }).then(r => {
+        pending[s] = null;
         rpcI32[b + 2] = r; Atomics.store(rpcI32, b, RPC_DONE); Atomics.notify(rpcI32, b);
       });
     }

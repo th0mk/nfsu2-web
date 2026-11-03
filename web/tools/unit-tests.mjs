@@ -18,6 +18,7 @@ const SLOW = new Set([
   'data-blocks',   // ~27 s: brotli at its best
   'lan-wasm',      // ~17 s: lan_unit.c built for wasm
   'roam-asi',      // ~11 s: the Windows plugin built with mingw
+  'io-stuck',      // ~30 s: the I/O worker's own 10 s and 20 s limits, waited out
 ]);
 const argv = process.argv.slice(2);
 const fast = argv.includes('--fast');

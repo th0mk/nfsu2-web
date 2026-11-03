@@ -10,6 +10,8 @@ export const CTL_EXIT = 2;           // 1 once the process exited (proc_exit / _
 export const CTL_EXIT_CODE = 3;
 export const CTL_SLEEP = 4;          // a word nobody notifies: Atomics.wait on it = sleep
 export const CTL_POOL_READY = 5;     // bumped and notified as each pool worker becomes ready (thread-spawn waits on it)
+export const CTL_IO_BEAT = 6;        // bumped by the I/O worker's loop (every 50 ms at most): a thread whose request
+                                     // goes unanswered tells a stuck request from a stopped worker (game-worker.ts io)
 export const CTL_POOL = 64;          // pool slot i: [CTL_POOL + 4*i + 0] state, +1 tid, +2 start arg
 // a slot's state: idle (its worker waits for a thread), 1 claimed, 2 running a thread, the process entry, or no worker
 // there (yet: the page starts workers as threads need them, process.ts)
@@ -37,6 +39,17 @@ export const enum Op {
   // the clock every game worker reads (game-worker.ts alignClock)
   Clock,
 }
+/** the ops' names for the log, by number (Op is a const enum: no names at run time); in Op's order */
+export const OP_NAMES = ['', 'fd_close', 'fd_read', 'fd_pread', 'fd_write', 'fd_pwrite', 'fd_seek', 'fd_tell', 'fd_sync',
+  'fd_fdstat_get', 'fd_fdstat_set_flags', 'fd_filestat_get', 'fd_filestat_set_size', 'fd_readdir', 'fd_prestat_get',
+  'fd_prestat_dir_name', 'fd_advise', 'fd_allocate', 'path_open', 'path_filestat_get', 'path_create_directory',
+  'path_remove_directory', 'path_unlink_file', 'path_rename', 'path_filestat_set_times', 'fd_filestat_set_times',
+  'fd_renumber', 'movie_open', 'movie_decode', 'movie_close', 'clock'];
+export const opName = (op: number) => OP_NAMES[op] ?? `op ${op}`;
+/** A request to the I/O worker unanswered this long is written in the log (by the asking thread, game-worker.ts io,
+ *  and by the I/O worker while its loop runs), and again at each doubling: a read that never comes back stops the
+ *  game's file thread, and every read after it waits (2026-11-02, a player's free roam: 12 min, then a hang). */
+export const IO_SLOW_MS = 20000;
 
 // WASI errno values used by the host
 export const E = {

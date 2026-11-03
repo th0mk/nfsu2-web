@@ -4,8 +4,8 @@
 // Everything that blocks (sleeps, waits, synchronous file I/O) blocks this
 // worker only, never the page.
 import {
-  CTL_EXIT, CTL_EXIT_CODE, CTL_IO_DOORBELL, CTL_NEXT_TID, CTL_POOL, CTL_POOL_READY, CTL_SLEEP, E, MAX_THREADS, Op,
-  POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_DONE, RPC_IDLE, RPC_POSTED, RPC_SLOT, type BootConfig, type ToPage,
+  CTL_EXIT, CTL_EXIT_CODE, CTL_IO_BEAT, CTL_IO_DOORBELL, CTL_NEXT_TID, CTL_POOL, CTL_POOL_READY, CTL_SLEEP, E, IO_SLOW_MS,
+  MAX_THREADS, Op, opName, POOL_IDLE, POOL_NONE, POOL_RUN_MAIN, RPC_DONE, RPC_IDLE, RPC_POSTED, RPC_SLOT, type BootConfig, type ToPage,
 } from './proto';
 
 interface Init { mod: WebAssembly.Module; memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer;
@@ -44,8 +44,20 @@ function io(op: Op, ...args: (number | bigint)[]): number {
   const t0 = performance.now();
   // wait on the value just checked: re-loading it for Atomics.wait could read
   // RPC_DONE (the I/O worker finished in between) and then sleep on DONE
-  // forever, the notify already gone (seen: a CreateFileA that never returned)
-  for (let v; (v = Atomics.load(rpcI32, b)) !== RPC_DONE;) Atomics.wait(rpcI32, b, v);
+  // forever, the notify already gone (seen: a CreateFileA that never returned).
+  // In slices of a second: a request still unanswered after IO_SLOW_MS goes into
+  // the log, with whether the I/O worker's loop still runs (CTL_IO_BEAT moved)
+  let next = IO_SLOW_MS, beat = Atomics.load(ctl, CTL_IO_BEAT);
+  for (let v; (v = Atomics.load(rpcI32, b)) !== RPC_DONE;) {
+    Atomics.wait(rpcI32, b, v, 1000);
+    const w = performance.now() - t0;
+    if (w < next) continue;
+    next *= 2;
+    const now = Atomics.load(ctl, CTL_IO_BEAT), runs = now !== beat;
+    beat = now;
+    post({ t: 'log', fd: 2, tid, s: `[io] thread ${tid}: ${opName(op)} (fd ${args[0] ?? '-'}) unanswered for ${(w / 1000).toFixed(0)} s; ` +
+      (runs ? 'the I/O worker runs (this request is stuck in it)' : 'the I/O worker has stopped (its loop has not run since)') });
+  }
   blockedMs += performance.now() - t0;
   const r = rpcI32[b + 2];
   Atomics.store(rpcI32, b, RPC_IDLE);
