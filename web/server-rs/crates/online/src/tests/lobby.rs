@@ -151,7 +151,7 @@ fn slurs_blocks_and_complaints() {
     // the sender sees its line as said; the room does not
     w.send(a, "mesg", fields![("TEXT", "nate higgers")]);
     assert!(heard(&w, a, "nate higgers") && !heard(&w, b, "nate higgers") && !heard(&w, c, "nate higgers"));
-    assert!(w.logged("\"Alpha\": a line with \"nate higgers\" in it, shown to no one else"));
+    assert!(w.logged("\"Alpha\": a line with \"higgers\" in it, shown to no one else"));
     // swearing goes through
     w.advance(2000.0);
     w.send(a, "mesg", fields![("TEXT", "merci kurwa")]);
