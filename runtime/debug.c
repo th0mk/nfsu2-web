@@ -102,6 +102,7 @@ void guest_hook(CPU *c, uint32_t ip){
     { int powerunits_hook(CPU *, uint32_t); if (powerunits_hook(c, ip)) return; }
     { int regional_hook(CPU *, uint32_t); if (regional_hook(c, ip)) return; }
     { int garage_hook(CPU *, uint32_t); if (garage_hook(c, ip)) return; }
+    { int vinylcat_hook(CPU *, uint32_t); if (vinylcat_hook(c, ip)) return; }
     { int sndlead_hook(CPU *, uint32_t); if (sndlead_hook(c, ip)) return; }
     { int drift_hook(CPU *, uint32_t); if (drift_hook(c, ip)) return; }
     { int quickrace_hook(CPU *, uint32_t); if (quickrace_hook(c, ip)) return; }

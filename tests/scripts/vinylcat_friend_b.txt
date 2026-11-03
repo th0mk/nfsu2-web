@@ -1,0 +1,20 @@
+# A vinyl of the hidden category on a friend's car, instance B (renders; see vinylcat_friend_a.txt): beside and behind
+# A's car before A puts the vinyl on (fv_before_side, fv_before) and after (fv_after_side, fv_after).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++60   tapuntil ESCAPE HUD_SingleRace.fng 90 900   # the save's inbox, when it opens on arrival
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 6000
++20000ms roam mp follow 0 7 0 -90
++200  dump fv_before_side
++0    roam mp follow 0 8
++200  dump fv_before
++0    roam mp status
++150000ms roam mp follow 0 7 0 -90
++200  dump fv_after_side
++0    roam mp follow 0 8
++200  dump fv_after
++0    roam mp status
++120  quit

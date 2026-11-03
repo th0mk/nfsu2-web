@@ -1,0 +1,53 @@
+# The vinyls' hidden category (runtime/vinylcat.c) in a career Graphics shop, as the player sees it: a career save
+# (stage 2 or later, roam on in its own room for "mp parts"), CC_GRAPHICS, Vinyls, the bottom layer, the categories
+# stepped through to the last, Special (vc_cats_last; vc_cats_sponsor one before), into it (vc_list: STREET REAPER
+# first, DEBUG VINYL left out), its vinyls (vc_v1 ..) with the shop's Visual Rating and price, and the add-to-setup
+# question (vc_apply).  The log's "[vinyls] car type ..." line lists the category's vinyls (name/level); "mp parts
+# 40" the vinyl slot's list (the index for vinylcat_friend_a.txt's EX_VINYL: 776 is D3).
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <career save>
+#        --a Ex:vinylcat_shop.txt:NFSU2_ROAM=1,NFSU2_ROAM_ROOM=<own>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x861e74 200000            # the bank: room for parts
++0    visual
++60   roam mp parts 40
++60   shopgo CC_GRAPHICS
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # into the shop
++1500 fnglist
++30   tap RIGHT                       # Vinyls
++120  tap RETURN
++600  fnglist
++0    dump vc_layers
++30   tap RETURN                      # the bottom layer
++600  fnglist
++0    dump vc_cats_first
++0    loop 40
++40   tap RIGHT
++0    endloop
++120  dump vc_cats_last
++30   tap LEFT
++120  dump vc_cats_sponsor
++30   tap RIGHT
++60   tap RETURN                      # into the hidden category
++600  fnglist
++0    dump vc_list
++30   tap DOWN
++300  dump vc_v1
++30   tap DOWN
++300  dump vc_v2
++30   tap DOWN
++300  dump vc_v3
++30   tap UP
++30   tap UP
++30   tap UP
++300  dump vc_v0
++0    visual
++30   tap RETURN                      # apply it
++300  fnglist
++0    dump vc_apply
++30   tap ESCAPE                      # No
++0    log VINYLS DONE
++10   quit
