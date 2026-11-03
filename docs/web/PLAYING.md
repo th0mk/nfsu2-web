@@ -576,8 +576,10 @@ Good to know:
     away (none of the game's keys or controller buttons and no driving for 2 minutes while others wait) gets a
     30-second countdown on every panel of the lobby, then it closes; one of those keys keeps it. A lobby is within
     your Room, as everything in free roam. At a race's start Enter is for the race: no outrun is offered there.
-  - **The host presses Enter** to start once another player is in. After a 5-second countdown every game in the lobby
-    goes to the race by itself, behind a screen with the lobby on it and where the trip is ("Loading the race"): out
+  - **The host presses Enter** to start once another player is in. The host's game goes at once, the others after a
+    5-second countdown: every game in the lobby goes to the race by itself, behind a screen with the lobby on it and
+    where the trip is ("Loading the race"). The race's LAN server starts in the host's game as soon as a player joins,
+    so by the Enter it already takes the others, who connect to it the moment they reach the LAN menus. Out
     of free roam and through the LAN menus (your keys and controller do nothing meanwhile) to the race on the career
     race's track, direction and laps (a LAN race takes at least 2 laps, Street X 4), with no traffic and no AI
     racers. You drive the race. After the results every game goes back by itself, behind the same screen, through the
@@ -628,10 +630,11 @@ Good to know:
     under you any other way (a lost connection, a game closed) costs nothing and counts for nobody. The win, the prize or the fee
     goes in at the crib on the way back, and the crib's autosave saves it with your profile (with the game's Save
     option at Prompt or Off it waits for your next save, as any change in the crib does).
-  - A player who leaves the lobby in the countdown, quits the game, or whose game cannot set off is not waited for; the
-    host's game waits a minute at most for the others in the LAN race's room, then starts with those who are ready.
-    A race that cannot come together (the host's game gone, nobody else in the game in time) ends the trip: every game
-    goes back to free roam by itself and says why. Players on an older version or the Windows plugin see no lobbies.
+  - A player who leaves the lobby in the countdown, quits the game, or whose game cannot set off, or gives up on the
+    way, is not waited for (its game tells the host's); the host's game waits 30 seconds at most for the others in the
+    LAN race's room, then starts with those who are ready. A race that cannot come together (the host's game gone or
+    given up, nobody else in the game in time) ends the trip at once: every game goes back to free roam by itself and
+    says why. Players on an older version or the Windows plugin see no lobbies.
 - **Crews:** friends who type the same crew name (Friends & crews, Crews, or the page menu (F9) while you play)
   always see each other, however far apart and however busy the server: the server pairs crew-mates first, before the
   nearest players (up to 16 crew-mates each, 8 while the server is busy), and your game gives their cars a place

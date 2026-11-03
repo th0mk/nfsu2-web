@@ -1,0 +1,14 @@
+# The joining side of mprace_srvidle_a.txt: joins A's lobby, stands there until A leaves it.
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++0    roam mp waitlobby 0 9000
++0    careergo ${MP_RACE}
++300  log LOBBY join
++0    tap RETURN
++0    roam mp waitlobby 2 3000
++7800 roam mp lobby
++0    log LOBBY DONE
++60   quit

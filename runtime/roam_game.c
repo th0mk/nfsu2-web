@@ -4807,6 +4807,12 @@ static struct {
     char     names[RC_LOBBY_MAX][RC_NAME_MAX + 1];   /* on the trip: the lobby's players' names (their links end in the menus) */
     char     lan[RC_LOBBY_MAX][13];              /* ...and their LAN names (lan_names), the race's results' */
     uint8_t  friend_mask, crew_mask, trip_counts; /* ...which are our friends (bit i), crew-mates (not friends), and whether a win counts in our career */
+    uint32_t tids[RC_LOBBY_MAX]; int tn;         /* hosting: the players its START named (Enter's), as every START names them */
+    int      srv;                                /* hosting: its LAN server started early (mprace_server_start: 1 runs, -1 failed) */
+    int      host_up;                            /* in a lobby: its host says its LAN server takes logins (a START's RC_LS_RACING) */
+    uint32_t host_ip;                            /* ...the host's address, as its START came (its link may end on the trip) */
+    int      told;                               /* on the trip: the others told that ours gave up before the race */
+    int64_t  up_tx;                              /* hosting, on the trip: the last START, again every second until the race */
 } g_mp;
 static const char *race_kind(uint32_t r){
     if (!r) return "race";
@@ -4852,7 +4858,7 @@ static void mp_to(int st, int64_t host){
     if (st != g_mp.st){ g_mp.alone_at = g_mp.roam_at = 0; g_mp.input_at = host; }
     if (st != g_mp.st && g_mp.st == MP_HOST) g_mp.l.away_s = 0;      /* (the countdown's adverts: not away) */
     g_mp.st = st; g_mp.since = host;
-    if (st == MP_IDLE) memset(&g_mp.l, 0, sizeof g_mp.l);
+    if (st == MP_IDLE){ memset(&g_mp.l, 0, sizeof g_mp.l); g_mp.host_up = 0; g_mp.host_ip = 0; g_mp.tn = 0; g_mp.srv = 0; }
 }
 static int mp_in(const MpLobby *l, uint32_t id){ for (int i = 0; i < l->n; i++) if (l->ids[i] == id) return 1; return 0; }
 /* hosting: player i out of our lobby (its id, since when it looked gone, its name on the trip) */
@@ -4860,8 +4866,11 @@ static void mp_drop(int i){
     for (int k = i; k + 1 < g_mp.l.n; k++){
         g_mp.l.ids[k] = g_mp.l.ids[k + 1]; g_mp.away[k] = g_mp.away[k + 1];
         memcpy(g_mp.names[k], g_mp.names[k + 1], sizeof g_mp.names[k]);
+        memcpy(g_mp.lan[k], g_mp.lan[k + 1], sizeof g_mp.lan[k]);     /* (on the trip: the results' names stay theirs) */
     }
     g_mp.l.counts = (uint8_t)((g_mp.l.counts & ((1u << i) - 1u)) | ((g_mp.l.counts >> (i + 1)) << i));
+    g_mp.friend_mask = (uint8_t)((g_mp.friend_mask & ((1u << i) - 1u)) | ((g_mp.friend_mask >> (i + 1)) << i));
+    g_mp.crew_mask = (uint8_t)((g_mp.crew_mask & ((1u << i) - 1u)) | ((g_mp.crew_mask >> (i + 1)) << i));
     g_mp.l.n--;
 }
 static const rc_peer *mp_peer(uint32_t id){
@@ -5072,6 +5081,7 @@ static int mp_join(int64_t host, MpLobby *l){
     mp_ask_in(); g_mp.tx_at = host;
     return 1;
 }
+static void mp_trip_names(void);
 /* one LOBBY message for us */
 static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
     uint32_t self = g_s.conf.self_id;
@@ -5094,13 +5104,26 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
         if ((g_mp.st == MP_ASKED || g_mp.st == MP_IN || g_mp.st == MP_COUNT) && g_mp.l.host == from && g_mp.l.id == m->lobby){
             if (l->away_s && !g_mp.l.away_s) rlog("[roam] f=%ld race lobby %08x: %s seems away, it closes in %d s\n", rh_frame(), l->id, mp_name(from), l->away_s);
             if (!l->away_s && g_mp.l.away_s) rlog("[roam] f=%ld race lobby %08x: %s is back\n", rh_frame(), l->id, mp_name(from));
-            g_mp.l = *l;
+            /* counting down: the players as the START named them, the host's at its Enter (each game works out the
+             * trip's LAN names from that list: lan_names); later messages only say whether we are still in */
+            if (g_mp.st != MP_COUNT) g_mp.l = *l;
             int in = mp_in(l, self);
             if (g_mp.st == MP_ASKED && in){ g_mp.joined++; mp_to(MP_IN, host); }
             else if (g_mp.st != MP_ASKED && !in){ mp_note(host, "You are no longer in the race"); mp_to(MP_IDLE, host); }
             if (m->op == RC_LOBBY_START && in && g_mp.st != MP_COUNT){
-                g_mp.start_at = host + (int64_t)m->t_ms * 1000; mp_to(MP_COUNT, host);
+                const rc_peer *hp = mp_peer(from);
+                g_mp.start_at = host + (int64_t)m->t_ms * 1000; g_mp.host_ip = hp ? hp->ip : 0; mp_to(MP_COUNT, host);
+                g_mp.tn = g_mp.l.n; memcpy(g_mp.tids, g_mp.l.ids, sizeof g_mp.tids); mp_trip_names();
             }
+            /* the host's LAN server takes logins (it started while the lobby waited, or the host logged in on it):
+             * our trip connects to it at once */
+            if (m->op == RC_LOBBY_START && in && m->state == RC_LS_RACING && g_mp.st == MP_COUNT && !g_mp.host_up){
+                g_mp.host_up = 1;
+                rlog("[roam] f=%ld race lobby %08x: %s's LAN server takes logins\n", rh_frame(), l->id, mp_name(from));
+            }
+        } else if (g_mp.st == MP_TRIP && m->op == RC_LOBBY_START && m->state == RC_LS_RACING && from == g_mp.l.host && from != self &&
+                   m->lobby == g_mp.l.id){
+            mprace_host_up();
         } else if (g_mp.st == MP_IDLE && mp_in(l, self)){
             /* our JOIN taken after we gave up asking (a connection seconds behind: on the live server hundreds
              * were): in, while still at its start and the lobby open; else out again, or the host would keep a
@@ -5143,6 +5166,10 @@ static void mp_recv(int64_t host, uint32_t from, const rc_lobby *m){
             char t[TAG_DUEL_MAX];
             snprintf(t, sizeof t, g_mp.l.away_s ? "%s seemed away: the race is called off" : "%s called off the race", mp_name(from));
             mp_note(host, t); mp_to(MP_IDLE, host);
+        } else if (g_mp.st == MP_TRIP && from == g_mp.l.host && from != self && m->lobby == g_mp.l.id){
+            /* the host's trip gave up before the race: ours ends now, not after minutes of looking for its game */
+            rlog("[roam] f=%ld race lobby %08x: %s's trip gave up\n", rh_frame(), g_mp.l.id, mp_name(from));
+            mprace_host_gone();
         }
         return;
     }
@@ -5185,37 +5212,45 @@ static void lan_names(char nm[RC_LOBBY_MAX][13]){
         if (name_blocked(nm[i])){ snprintf(nm[i], 13, "Player"); lan_unique(nm, i); }
     }
 }
+/* the trip's players as the START names them (the host's at its Enter, ours as its START came, while the players are
+ * still linked: the links end in the menus): their names, LAN names and which are our friends (the hub's marks) */
+static void mp_trip_names(void){
+    char nm12[RC_LOBBY_MAX][13]; lan_names(nm12);
+    g_mp.friend_mask = g_mp.crew_mask = 0;
+    for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++){
+        snprintf(g_mp.names[i], sizeof g_mp.names[i], "%s", mp_name(g_mp.l.ids[i]));
+        memcpy(g_mp.lan[i], nm12[i], sizeof g_mp.lan[i]);
+        /* our friends and crew-mates among them (the hub's marks) */
+        if (g_mp.l.ids[i] != g_s.conf.self_id && mp_mate(g_mp.l.ids[i])){
+            if (mp_friend(g_mp.l.ids[i])) g_mp.friend_mask |= (uint8_t)(1u << i);
+            else g_mp.crew_mask |= (uint8_t)(1u << i);
+        }
+    }
+}
 /* the trip, with the lobby's race */
 static void mp_trip(int64_t host){
     MpRace t; memset(&t, 0, sizeof t);
     uint32_t r = g_mp.l.race;
     t.host = g_mp.l.host == g_s.conf.self_id;
     const rc_peer *hp = t.host ? 0 : mp_peer(g_mp.l.host);
-    if (!t.host && !hp){ mp_note(host, "The race is off: its host is gone"); mp_to(MP_IDLE, host); return; }
-    t.host_ip = hp ? hp->ip : 0;
-    char nm12[RC_LOBBY_MAX][13]; lan_names(nm12);
-    snprintf(t.host_name, sizeof t.host_name, "%s", nm12[0]);
-    for (int i = 0; i < g_mp.l.n; i++) if (g_mp.l.ids[i] == g_s.conf.self_id) snprintf(t.name, sizeof t.name, "%s", nm12[i]);
+    t.host_ip = hp ? hp->ip : g_mp.host_ip;                           /* (the host left at its Enter: maybe unlinked by now) */
+    if (!t.host && !t.host_ip){ mp_note(host, "The race is off: its host is gone"); mp_to(MP_IDLE, host); return; }
+    if (!g_mp.tn){ g_mp.tn = g_mp.l.n; memcpy(g_mp.tids, g_mp.l.ids, sizeof g_mp.tids); mp_trip_names(); }   /* (else at the START) */
+    snprintf(t.host_name, sizeof t.host_name, "%s", g_mp.lan[0]);
+    for (int i = 0; i < g_mp.l.n; i++) if (g_mp.l.ids[i] == g_s.conf.self_id) snprintf(t.name, sizeof t.name, "%s", g_mp.lan[i]);
     if (!t.name[0]){ mp_note(host, "The race is off: you are not in it"); mp_to(MP_IDLE, host); return; }
     snprintf(t.password, sizeof t.password, "%08x", g_mp.l.id);
     t.race = MR32(r + 8u);
     t.mode = race_net_mode(r);
     t.track = MR16(r + 0x18u); t.reverse = MR8(r + 0x1au) & 1u; t.laps = MR8(r + 0x1bu);
     t.players = g_mp.l.n;
-    g_mp.friend_mask = g_mp.crew_mask = 0;
+    t.host_up = !t.host && g_mp.host_up;
     t.heats = MR8(r + 0x34u) == 2u && MR8(r + 0x7eu) >= 1u && MR8(r + 0x7eu) <= 3u ? MR8(r + 0x7eu) : 1;
     t.credit = mp_counts(r) ? r : 0;
-    for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++){
-        snprintf(g_mp.names[i], sizeof g_mp.names[i], "%s", mp_name(g_mp.l.ids[i]));
-        memcpy(g_mp.lan[i], nm12[i], sizeof g_mp.lan[i]);
-        /* our friends and crew-mates among them (the hub's marks, while still linked: the links end in the menus) */
-        if (g_mp.l.ids[i] != g_s.conf.self_id && mp_mate(g_mp.l.ids[i]) && t.nfriends < 6){
-            snprintf(t.friends[t.nfriends++], sizeof t.friends[0], "%s", nm12[i]);
-            if (mp_friend(g_mp.l.ids[i])) g_mp.friend_mask |= (uint8_t)(1u << i);
-            else g_mp.crew_mask |= (uint8_t)(1u << i);
-        }
-    }
+    for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++)
+        if ((g_mp.friend_mask | g_mp.crew_mask) >> i & 1u && t.nfriends < 6) snprintf(t.friends[t.nfriends++], sizeof t.friends[0], "%s", g_mp.lan[i]);
     g_mp.trip_counts = t.credit != 0;
+    g_mp.told = 0;
     char nm[40]; race_name(r, nm, sizeof nm);
     rlog("[roam] f=%ld race lobby %08x: the trip to the LAN race: %s (mode %d, track %d%s, %d laps), %d players, %s\n", rh_frame(), g_mp.l.id, nm,
          t.mode, t.track, t.reverse ? " reverse" : "", t.laps, t.players, t.host ? "we host" : "we join");
@@ -5277,6 +5312,19 @@ static int mp_idle(int64_t host, int world_runs){
     return 0;
 }
 static void mp_ui_frame(CPU *c, int64_t host, int in_roam, int press, const MpSpot *sp);
+/* hosting: the START, k times, to each player its Enter named who is still in the lobby: the countdown left, the
+ * players (the Enter's: every game works out the trip's LAN names from that list), and RC_LS_RACING once its LAN
+ * server takes logins (mprace_lan_up: their trips connect at once).  An older game takes it as any START */
+static void mp_starts(int64_t host, int k){
+    MpLobby s = g_mp.l; s.n = (uint8_t)g_mp.tn; memcpy(s.ids, g_mp.tids, sizeof s.ids);
+    int up = mprace_lan_up();
+    s.state = up ? RC_LS_RACING : RC_LS_STARTING;
+    if (up && !g_mp.host_up){ g_mp.host_up = 1; rlog("[roam] f=%ld race lobby %08x: our LAN server takes logins: the players told\n", rh_frame(), g_mp.l.id); }
+    roam_plat_lock();
+    for (int j = 0; j < k; j++) for (int i = 1; i < g_mp.tn; i++) if (mp_in(&g_mp.l, g_mp.tids[i])) mp_send_of(&s, RC_LOBBY_START, 0, g_mp.tids[i]);
+    roam_plat_unlock();
+    g_mp.up_tx = host;
+}
 /* per frame */
 static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const uint32_t *from, const rc_lobby *in, int nin){
     for (int i = 0; i < nin; i++) mp_recv(host, from[i], &in[i]);
@@ -5293,9 +5341,26 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
             if (g_mp.st == MP_TRIP) mprace_player_gone(); else g_mp.tx_at = 0;
             break;
         }
+    /* a LAN server started while our lobby waited (mprace_server_start) runs only while it waits: a trip takes it
+     * over, any other end of the lobby stops it */
+    if (g_mp.st != MP_HOST) mprace_server_stop(c);
     if (g_mp.st == MP_TRIP){
-        int ph = mprace_phase();
+        int ph = mprace_phase(), ours = g_mp.l.host == g_s.conf.self_id;
         if (quit && quit == g_mp.l.host && quit != g_s.conf.self_id) mprace_host_gone();   /* on the way to the race: its server is gone */
+        /* our trip gave up before the race: the others are told at once (a host's room sat out a minute for a
+         * player whose trip had failed; a host's players looked for its game for two) */
+        if (!g_mp.told && mprace_gave_up()){
+            g_mp.told = 1;
+            for (int k = 0; k < 3; k++){ if (ours) mp_send_all(RC_LOBBY_CLOSE, RC_LL_GONE); else mp_send_one(RC_LOBBY_LEAVE, RC_LL_LEFT, g_mp.l.host); }
+            rlog("[roam] f=%ld race lobby %08x: our trip gave up before the race: %s told\n", rh_frame(), g_mp.l.id, ours ? "the players" : "the host");
+        }
+        /* hosting, on the way to the race: the START again every second (a player that missed it; whether the LAN
+         * server takes logins yet), and the advert (the hub links the lobby's players with us first while there is
+         * one: at a busy start other links would take their places) */
+        if (ours && !g_mp.told && (ph == MPR_OUT || ph == MPR_LAN) && host - g_mp.up_tx >= 1000000){
+            mp_starts(host, 1);
+            mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host;
+        }
         /* free roam again with the trip not over (its own end comes within frames of the HUD): a trip that
          * lost its way kept the lobby, and every race card closed itself until a restart */
         if (in_roam && ph != MPR_OUT && ph != MPR_DONE && ph != MPR_FAILED){
@@ -5368,11 +5433,22 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         } else g_mp.alone_at = 0;
         mp_away(host);
         if (mp_idle(host, world_runs)){ mp_close(host, RC_LL_GONE, "You seemed away: the lobby is closed"); break; }
+        /* with a player in it, the LAN server starts (as the game's Host LAN Server would on the trip): by the
+         * host's Enter it takes logins, and neither the host's login nor the others wait for it.  A test's
+         * NFSU2_MPRACE_TEST_NOPRE=1: not (the trip as before, A/B) */
+        if (g_mp.l.n >= 2 && !g_mp.srv){
+            const char *no = mp_test_env("NFSU2_MPRACE_TEST_NOPRE");
+            char nm12[RC_LOBBY_MAX][13]; lan_names(nm12);
+            g_mp.srv = no && *no == '1' ? -1 : mprace_server_start(c, nm12[0]) ? 1 : -1;
+        }
         if (press && g_mp.l.n >= 2){
+            /* the host goes now: its way to the game's room is the race's longest (and its LAN server, started
+             * while the lobby waited, takes the others at once); the others after their countdown */
             g_mp.l.state = RC_LS_STARTING; g_mp.start_at = host + MP_COUNT_US;
-            mp_to(MP_COUNT, host);
-            for (int k = 0; k < 3; k++) for (int i = 1; i < g_mp.l.n; i++) mp_send_one(RC_LOBBY_START, 0, g_mp.l.ids[i]);
-            g_mp.tx_at = 0;
+            g_mp.tn = g_mp.l.n; memcpy(g_mp.tids, g_mp.l.ids, sizeof g_mp.tids); mp_trip_names();
+            mp_trip(host);
+            if (g_mp.st == MP_TRIP){ mp_starts(host, 3); mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host; }
+            break;
         }
         if (host - g_mp.tx_at >= MP_ADVERT_US){ mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host; }
         break;

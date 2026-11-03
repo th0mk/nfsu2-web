@@ -1,0 +1,23 @@
+# The LAN server started while a lobby waits (mprace.c mprace_server_start): what it costs in free roam.  A opens a
+# lobby, B joins (mprace_srvidle_b.txt); both stand ~2 minutes ([status] lines every 3600 frames: fps, gcpu, gil),
+# then A drives away (the lobby closes, the server stops: "stopped (no race)").  A/B with --env
+# NFSU2_MPRACE_TEST_NOPRE=1 (no server).
+#   node web/tools/roam-pair.mjs --seed <save tree> --a Ann:mprace_srvidle_a.txt --b Bob:mprace_srvidle_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPRINT_3
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    log LOBBY open
++0    tap RETURN
++0    roam mp waitlobby 2 9000
++0    log LOBBY full: standing
++7200 roam mp lobby
++0    log LOBBY drive away
++0    roam mp follow Bob 300 0
++300  roam mp lobby
++0    log LOBBY DONE
++60   quit

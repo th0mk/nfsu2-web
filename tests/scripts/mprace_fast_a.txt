@@ -1,0 +1,31 @@
+# Multiplayer races from free roam, host side, as mprace_lobby_a.txt but the host waits ~10 s with its lobby full
+# before its Enter, as hosts do (its LAN server, started when the first player joined, takes logins by then: the
+# host logs in at once, the others connect at once).  With mprace_lobby_b.txt (and mprace_lobby_c.txt):
+#   node web/tools/roam-pair.mjs --seed <save tree> --a Ann:mprace_fast_a.txt --b Bob:mprace_lobby_b.txt
+#        --env NFSU2_ROAM_ROOM=<r> --env MP_RACE=S2_SPRINT_3 --env MP_PLAYERS=2
+# NFSU2_MPRACE_TEST_NOPRE=1 (env): the server not started early (the trip as before, A/B).
+0     bot on
++0    waitroam 6000
++0    bot off
++0    roam smsauto on
++0    roam mp waitpeers 1 12000
++600  careergo ${MP_RACE}
++300  roam mp spots 1
++0    dump spot_line
++0    log LOBBY open
++0    tap RETURN
++60   dump lobby_line
++0    roam mp waitlobby ${MP_PLAYERS} 9000
++600  roam mp lobby
++0    log LOBBY start
++0    tap RETURN
++0    log LOBBY trip
++0    waitexpr i:0x850078 == 512 6000
++0    waitmem 0x008654a4 6 20000
++0    log LOBBY race
++0    autopilot on 6000
++0    roam mp waittrip 40000
++0    careerlist
++0    roam mp lobby
++0    log LOBBY DONE
++60   quit
