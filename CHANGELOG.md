@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (3d46fd7)
+## 2026-11-03 (93e0992)
 
 - **Free roam:** lobby races count in your career, as Solo races do: win a race of your stage you haven't won yet, or finish one a friend or crew-mate wins. A star in the lobby shows whom a race counts for.
 - **Free roam:** a lobby warns you when its stage's cars are usually much faster than yours, and quitting a race costs more at stages 4 and 5.
@@ -24,6 +24,7 @@ not guessed.
 - **Free roam:** an open trunk shows its speakers and amps.
 - **Free roam:** drift battles: with drift mode on, challenge a player as for an outrun. The most drift points in 90 seconds wins $100 from the other.
 - **Drift mode:** on a controller, hold D-pad down a second while driving. The car no longer slides more after drift mode is off.
+- **Races:** other players' cars in Online, LAN and free-roam races keep to their line and point the right way, your game no longer speeds up and slows down to follow the host, and a car whose connection stalls drives on instead of stopping and jumping.
 - **Online:** Personal Stats show your new rating right after a ranked race.
 - **World map:** a car meet takes 16 parked players (was 24).
 - **Maps:** Upscaled (Settings, Game, Display) also shows JeansBig's Detailed Map: the minimap and world map sharp at high resolutions, with the missing shortcuts.
