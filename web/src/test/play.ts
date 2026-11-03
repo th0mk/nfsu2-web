@@ -23,7 +23,9 @@
 //   detachat    <seconds>: detach the renderer then (the game drops to the null
 //               renderer at its next present), and try to attach a second one
 //   net         attach the virtual LAN under this player name (free roam, LAN play: web/src/net)
-//   bench       the perf benchmark (web/tools/bench.mjs): renderer distributions
+//   networker=0 with net: its link on the page's main thread instead of its worker (net/remote.ts, as the app)
+//   mainburn    <ms>[:<every ms>]: the main thread busy that long every 16 ms (or every <every ms>: test/burn.ts)
+//   bench      the perf benchmark (web/tools/bench.mjs): renderer distributions
 //               between the script's "log race_loaded" and "log drive_end"
 //               lines, printed as one "[bench] renderer {json}" line, and the race load
 //               time (the loading screen to the race)
@@ -31,6 +33,8 @@
 import { startProcess } from '../host/process';
 import { attachRenderer, type Renderer } from '../gpu/index';
 import { attachNet } from '../net/index';
+import { attachNetWorker } from '../net/remote';
+import { mainBurn } from './burn';
 const q = new URLSearchParams(location.search);
 const log = (s: string) => console.log(s);
 const W = +(q.get('w') ?? 1280), H = +(q.get('h') ?? 720);
@@ -72,8 +76,10 @@ const p = await startProcess({
     if (bench && r && s.includes(' LOG drive_end')) log(`[bench] renderer ${JSON.stringify(r.window(true))}`);
   },
 });
-const net = q.has('net') ? attachNet(p, { name: q.get('net') || 'player', log }) : null;
+// ?networker=0: the link on the page's main thread (attachNet) instead of its worker (attachNetWorker, as the app)
+const net = q.has('net') ? (q.get('networker') === '0' ? attachNet : attachNetWorker)(p, { name: q.get('net') || 'player', log }) : null;
 (globalThis as any).nfsu2Net = net;
+mainBurn(q, log);
 try {
   const trace = q.get('trace');
   r = await attachRenderer(p, canvas, { artifacts: q.get('artifacts') ?? undefined, dumpScale: q.get('dumpscale') ? +q.get('dumpscale')! : undefined, log,

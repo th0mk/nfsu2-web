@@ -2,6 +2,8 @@
 // (pool, I/O worker, mounts) and reports its output; title becomes DONE.
 import { startProcess } from '../host/process';
 import { attachNet } from '../net/index';
+import { attachNetWorker } from '../net/remote';
+import { mainBurn } from './burn';
 const q = new URLSearchParams(location.search);
 const pre = document.createElement('pre'); document.body.append(pre);
 const log = (s: string) => { pre.append(s + '\n'); console.log(s); };
@@ -43,7 +45,8 @@ const p = await startProcess({
 // front bumpers and the server's friend messages are logged ([bump], [friend]), the touched player is asked about at
 // once, and with NFSU2_TEST_FRIEND=add the page asks to befriend it (or accepts) as soon as the server says it may
 const autoAdd = allEnv.NFSU2_TEST_FRIEND === 'add';
-const net = q.has('net') ? attachNet(p, {
+// ?networker=0: the link on the page's main thread (attachNet) instead of its worker (attachNetWorker, as the app)
+const net = q.has('net') ? (q.get('networker') === '0' ? attachNet : attachNetWorker)(p, {
   name: q.get('net') || 'test', log, claim: allEnv.NFSU2_TEST_CLAIM || undefined,
   onNotice: t => log(`[notice] ${t}`), onLobby: j => log(`[lobby] ${j}`),
   onBump: j => {
@@ -58,6 +61,7 @@ const net = q.has('net') ? attachNet(p, {
 }) : null;
 void net?.online.then(() => { net.friend({ op: 'list' }); });
 (globalThis as any).nfsu2Net = net;
+mainBurn(q, log);
 const code = await p.exited;
 if (net) log(`NET ${JSON.stringify(net.stats())}`);
 log(`EXIT ${code}`); document.title = 'DONE';

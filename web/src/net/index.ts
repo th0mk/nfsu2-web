@@ -8,7 +8,11 @@
 //   C (TX rings) --> this file --> WebSocket --> switch --> other browsers
 //   C (RX rings) <-- this file <-- WebSocket <-- switch       (routed by frame kind)
 //
-// WebSockets live on the page's main thread, so this runs there.  It never
+// The page runs this in a worker of its own (remote.ts starts worker.ts, which
+// runs this file's Link), so that nothing on the page's main thread (each
+// frame's GPU work, the menus, a tab in the background) makes a datagram wait
+// either way; on the main thread (attachNet) when no worker can start, and in
+// the test harnesses that load this file alone.  It never
 // blocks: it sleeps on each TX ring's bell with Atomics.waitAsync (C rings it
 // when it queued frames) and writes received frames straight into the right RX
 // ring, then rings C's network thread with Atomics.notify.  The switch assigns
@@ -111,12 +115,17 @@ export interface NetOptions {
   /** the operator took this player's name away (the switch's {"t":"rename"}, then the close 4004): the page stays off
    *  the switch until the player picks another (rename) */
   onRename?: (r: NetRename) => void;
+  /** a mailbox of the game matched this page and the link took it: free roam's ('roam') or LAN play's ('lan') */
+  onAttached?: (kind: 'roam' | 'lan') => void;
   /** milliseconds between pings to the switch (default 10000): their round trip is only shown (the F9 log's
    *  "lan rtt ms"); the switch times free roam's paths with pings of its own.  Each ping and its answer were a
    *  message each way through cloudflared for every page, 2 s apart */
   pingMs?: number;
   /** milliseconds no mailbox wants the switch before the page lets it go (default 10000) */
   idleMs?: number;
+  /** the longest a wait for C's next TX frames lasts, in ms (default 1000): a wake-up of WebKit's that comes late
+   *  (worker.ts) is not later than this */
+  waitMs?: number;
 }
 export interface NetPeer { vip: string; name: string; self: boolean }
 /** a kick or a ban, as the switch said it: the operator's message (maybe ""), and a ban's end (ms since 1970; none:
@@ -148,9 +157,14 @@ export interface NetStats {
   switchRttMs: number; switchRttMeanMs: number; switchRttMaxMs: number;
   /** C queued -> sent on the socket */
   txWaitMeanMs: number; txWaitMaxMs: number;
+  /** the same for free roam's car states to friends alone, which never wait on purpose (txHold): the thread's delay */
+  snapWaitMeanMs: number; snapWaitMaxMs: number;
   peersOnSwitch: number;
-  /** main-thread time spent moving frames (both directions), ms in total, and calls */
+  /** time spent moving frames (both directions), ms in total, and calls */
   mainMs: number; mainCalls: number;
+  /** how late a task posted to the thread this runs on ran, ms, mean and most (a received message waits as long for
+   *  its turn before it goes to C): every LOOP_LAG_MS while the link is up */
+  loopLagMeanMs: number; loopLagMaxMs: number;
   /** LAN play: frames each way, TCP frames that waited for RX ring room (most at once),
    *  TCP connects refused here because the game had no LAN endpoint (and left unanswered, over the limit of such
    *  answers), peers that left */
@@ -305,6 +319,13 @@ function sameBut(a: Uint8Array, b: Uint8Array) {
   return true;
 }
 
+/** A frame that never waits on purpose (a car state to a friend, LAN play's) waits no longer than this here, not each
+ *  of them for seconds (the link's thread takes C's frames at once; the main thread's tasks are shorter): what C's
+ *  stamps say over it, or under 0, is another clock's (Endpoint.clock) */
+const CLOCK_STEP_MS = 50;
+/** the clocks are compared over this long, and the time before */
+const CLOCK_WINDOW_MS = 5000;
+
 /** One mailbox (free roam's or LAN play's) in shared wasm memory. */
 class Endpoint {
   i32: Int32Array; f64: Float64Array; dv: DataView; u8: Uint8Array;
@@ -316,6 +337,19 @@ class Endpoint {
   away = false;
   /** LAN play: when its TX ring got its first frame since the last drain (performance.now(); 0: empty) */
   firstAt = 0;
+  /** this thread's clock less the clock of the game thread that stamps this mailbox's frames (S_T_MS), when the two
+   *  differ by a step (CLOCK_STEP_MS), else 0: each reads performance.timeOrigin + performance.now(), and a context's
+   *  time origin is the wall clock when it started, so one started after the wall clock was set (a time sync: WSL
+   *  sets it about a second on every 35 s, and a test's link worker read 950 ms ahead of its game's threads; the page's
+   *  own main thread, from its load to Play, the same) reads another time.  The ping and pong stamps (sentNow) would
+   *  carry that difference.  From the frames' own stamps: the least time between C's stamp and the drain here, in the
+   *  last CLOCK_WINDOW_MS or two */
+  clock = 0;
+  /** the clock the log last said */
+  told = 0;
+  private lo = Infinity;
+  private loPrev = Infinity;
+  private loAt = -Infinity;
   constructor(readonly kind: 'roam' | 'lan', buf: SharedArrayBuffer, ptr: number, size: number) {
     // shared memory is never detached: views made now stay valid after the
     // memory grows (the mailbox lies inside the current buffer)
@@ -330,6 +364,18 @@ class Endpoint {
   /** LAN play: the UDP ports its sockets are bound to, as bits (P.W_UDP_PORTS), or 0 when the module does not say */
   udpPorts() { return Atomics.load(this.i32, P.W_UDP_PORTS) >>> 0; }
   ring() { Atomics.add(this.i32, P.W_RX_BELL, 1); Atomics.notify(this.i32, P.W_RX_BELL); }
+  /** a frame C stamped `at` (its clock) taken here at `t` (this thread's): how long it waited, in C's clock.  plain:
+   *  a frame that never waits on purpose (free roam's car states to friends, LAN play's), which alone set `clock` */
+  waited(t: number, at: number, plain: boolean): number {
+    const d = t - at;
+    if (plain) {
+      if (t - this.loAt > CLOCK_WINDOW_MS) { this.loPrev = this.lo; this.lo = Infinity; this.loAt = t; }
+      if (d < this.lo) this.lo = d;
+      const m = Math.min(this.lo, this.loPrev);
+      this.clock = m < 0 || m > CLOCK_STEP_MS ? m : 0;
+    }
+    return d - this.clock;
+  }
   /** a received frame into the RX ring; false = the ring is full */
   put(b: ArrayBuffer): boolean {
     const i32 = this.i32, fv = new DataView(b), len = b.byteLength - P.F_DATA;
@@ -342,14 +388,19 @@ class Endpoint {
     dv.setUint32(s + P.S_DST_IP, fv.getUint32(P.F_DST), true);
     dv.setUint16(s + P.S_SRC_PORT, fv.getUint16(P.F_SPORT), true);
     dv.setUint16(s + P.S_DST_PORT, fv.getUint16(P.F_DPORT), true);
-    dv.setFloat64(s + P.S_T_MS, now(), true);
+    dv.setFloat64(s + P.S_T_MS, now() - this.clock, true);
     this.u8.set(new Uint8Array(b, P.F_DATA, len), s + P.S_DATA);
     Atomics.store(i32, P.W_RX_HEAD, (head + 1) | 0);
     return true;
   }
 }
 
-class Link implements NetLink {
+/** what the link takes of the game process: its memory, its end and its mailboxes (worker.ts makes one of its own) */
+export type NetProcess = Pick<GameProcess, 'memory' | 'exited' | 'registered'>;
+/** how often, while the link is up, the thread it runs on is asked how late its tasks run (NetStats.loopLagMeanMs) */
+const LOOP_LAG_MS = 250;
+
+export class Link implements NetLink {
   state: NetState = 'waiting';
   vip: string | null = null;
   peers: NetPeer[] = [];
@@ -424,14 +475,37 @@ class Link implements NetLink {
   private autoAll = new AutoBucket();
   private st = { connections: 0, reconnects: 0, framesOut: 0, bytesOut: 0, framesIn: 0, bytesIn: 0, compactIn: 0, deltaIn: 0, rxFiltered: 0,
     rttSum: 0, rttN: 0, rttMax: 0, mainMs: 0, mainCalls: 0, rxFull: 0, rxOversize: 0,
-    lanOut: 0, lanIn: 0, lanWaited: 0, lanWaitedMax: 0, lanRefused: 0, lanRefuseHeld: 0, lanGone: 0 };
+    lanOut: 0, lanIn: 0, lanWaited: 0, lanWaitedMax: 0, lanRefused: 0, lanRefuseHeld: 0, lanGone: 0,
+    lagSum: 0, lagN: 0, lagMax: 0, snapWaitSum: 0, snapWaitN: 0, snapWaitMax: 0 };
+  /** the loop-lag sampler while the link is up (LOOP_LAG_MS): its channel, timer and when it last posted */
+  private lagPort: MessagePort | null = null;
+  private lagTimer: ReturnType<typeof setInterval> | null = null;
+  private lagAt = 0;
 
-  constructor(private proc: GameProcess, private o: NetOptions) {
+  constructor(private proc: NetProcess, private o: NetOptions) {
     this.online = new Promise(r => (this.resolveOnline = r));
   }
 
   private log(s: string) { this.o.log?.(`[net] ${s}`); }
   private eps(): Endpoint[] { return [this.roam, this.lan].filter((e): e is Endpoint => !!e); }
+  /** which mailboxes the link took (worker.ts tells the page) */
+  attached() { return { roam: !!this.roam, lan: !!this.lan }; }
+  /** the loop-lag sampler on (the socket opened) and off (it went): a message to itself every LOOP_LAG_MS */
+  private lagStart() {
+    if (this.lagTimer || typeof MessageChannel === 'undefined') return;
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => {
+      const d = performance.now() - this.lagAt;
+      this.st.lagSum += d; this.st.lagN++; if (d > this.st.lagMax) this.st.lagMax = d;
+    };
+    this.lagPort = ch.port1;
+    this.lagTimer = setInterval(() => { this.lagAt = performance.now(); ch.port2.postMessage(0); }, LOOP_LAG_MS);
+  }
+  private lagStop() {
+    if (this.lagTimer) { clearInterval(this.lagTimer); this.lagTimer = null; }
+    // (an open port would keep node's test runs going)
+    if (this.lagPort) { this.lagPort.onmessage = null; this.lagPort.close(); this.lagPort = null; }
+  }
 
   start() {
     this.proc.exited.then(() => this.close());
@@ -454,6 +528,7 @@ class Link implements NetLink {
     if (name === 'roam' && this.solid) Atomics.store(ep.i32, P.W_SOLID, this.solid);
     if (name === 'roam') { this.publishCrews(ep); this.publishRoom(ep); }
     if (name === 'lan') this.log('LAN play attached (the game opened its LAN screens)');
+    this.o.onAttached?.(name);
     this.publishPeers(ep);
     if (this.state === 'online') this.publishOnline(ep);
     else Atomics.store(ep.i32, P.W_PAGE_STATE, this.state === 'connecting' ? P.NET_PAGE_CONNECTING
@@ -526,6 +601,7 @@ class Link implements NetLink {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
     for (const ep of this.eps()) this.drainTx(ep);                 // what C queued last (free roam's BYEs)
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    this.lagStop();
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     const ws = this.ws; this.ws = null;
     if (ws) { ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null; ws.close(1000, 'idle'); }
@@ -664,6 +740,7 @@ class Link implements NetLink {
         ...(this.o.claim ? { claim: this.o.claim } : {}), ...(this.o.block?.length ? { block: this.o.block } : {}),
         ...(this.vipNum && this.token ? { vip: P.ipStr(this.vipNum), token: this.token } : {}), ...(this.ticket ? { ticket: this.ticket } : {}) }));
       this.pingTimer = setInterval(() => this.ping(), this.o.pingMs ?? 10_000);
+      this.lagStart();
     };
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') { let m: any; try { m = JSON.parse(e.data); } catch { return; } this.control(m); }
@@ -673,6 +750,7 @@ class Link implements NetLink {
       if (this.ws !== ws) return;
       this.ws = null;
       if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+      this.lagStop();
       this.pings.clear();
       if (this.closed) return;
       if (e.code === CLOSE_KICKED || e.code === CLOSE_BANNED) {
@@ -817,7 +895,7 @@ class Link implements NetLink {
       const hold = this.txHold(ep);
       if (!hold) this.drainTx(ep);
       const w = !hold && Atomics.load(ep.i32, P.W_TX_HEAD) !== Atomics.load(ep.i32, P.W_TX_TAIL) ? null
-        : waitAsync(ep.i32, P.W_TX_BELL, bell, hold || 1000);
+        : waitAsync(ep.i32, P.W_TX_BELL, bell, Math.min(hold || 1000, this.o.waitMs ?? 1000));
       if (w && w.async) { sync = 0; await w.value; }
       else if (++sync >= 32) { sync = 0; await new Promise(r => setTimeout(r, 0)); }
     }
@@ -892,15 +970,20 @@ class Link implements NetLink {
         fv.setUint16(P.F_SPORT, dv.getUint16(s + P.S_SRC_PORT, true));
         fv.setUint16(P.F_DPORT, dv.getUint16(s + P.S_DST_PORT, true));
         f.set(ep.u8.subarray(s + P.S_DATA, s + P.S_DATA + len), P.F_DATA);   // a copy: a socket cannot send shared memory
-        if (ep.kind === 'roam' && f[P.F_KIND] === P.NET_KIND_UDP) {
-          sentNow(f, len, t - dv.getFloat64(s + P.S_T_MS, true));
+        const roam = ep.kind === 'roam' && f[P.F_KIND] === P.NET_KIND_UDP;
+        const snap = roam && len >= 6 && f[P.F_DATA + 5] === RC_MSG_SNAP && dst !== P.NET_ROAM_HUB;
+        const w = ep.waited(t, dv.getFloat64(s + P.S_T_MS, true), snap || ep.kind === 'lan');
+        if (roam) {
+          sentNow(f, len, w);
           ep.away = roamAway(dv, s + P.S_DATA, len) ?? ep.away;
         }
         bundle.add(f, dst >>> 0);
         this.st.framesOut++; this.st.bytesOut += len;
         if (ep.kind === 'lan') this.st.lanOut++;
-        const w = t - dv.getFloat64(s + P.S_T_MS, true);
-        if (w >= 0 && w < 60000) { waitSum += w; n++; if (w > waitMax) waitMax = w; }
+        if (w >= 0 && w < 60000) {
+          waitSum += w; n++; if (w > waitMax) waitMax = w;
+          if (snap) { this.st.snapWaitSum += w; this.st.snapWaitN++; if (w > this.st.snapWaitMax) this.st.snapWaitMax = w; }
+        }
       } else Atomics.add(i32, P.W_TX_OFFLINE_DROP, 1);
       tail = (tail + 1) | 0;
       Atomics.store(i32, P.W_TX_TAIL, tail);
@@ -910,6 +993,11 @@ class Link implements NetLink {
     if (n) {
       ep.f64[P.D_TX_WAIT_MS_SUM] += waitSum; ep.f64[P.D_TX_WAIT_MS_MAX] = waitMax;
       Atomics.add(i32, P.W_TX_WAIT_N, n);
+    }
+    if (Math.abs(ep.clock - ep.told) > CLOCK_STEP_MS || (!ep.clock && ep.told)) {
+      this.log(ep.clock ? `this thread's clock reads ${Math.abs(ep.clock).toFixed(0)} ms ${ep.clock > 0 ? 'ahead of' : 'behind'} the game's (${ep.kind === 'lan' ? 'LAN play' : 'free roam'}): its waits are read without that`
+        : `this thread's clock and the game's agree again (${ep.kind === 'lan' ? 'LAN play' : 'free roam'})`);
+      ep.told = ep.clock;
     }
     this.st.mainMs += performance.now() - c0; this.st.mainCalls++;
   }
@@ -1011,6 +1099,8 @@ class Link implements NetLink {
       switchRttMs: f ? f[P.D_SWITCH_RTT_MS] : 0, switchRttMeanMs: s.rttN ? s.rttSum / s.rttN : 0, switchRttMaxMs: s.rttMax,
       txWaitMeanMs: txn ? tws / txn : 0, txWaitMaxMs: twm,
       peersOnSwitch: this.peers.length, mainMs: s.mainMs, mainCalls: s.mainCalls,
+      loopLagMeanMs: s.lagN ? s.lagSum / s.lagN : 0, loopLagMaxMs: s.lagMax,
+      snapWaitMeanMs: s.snapWaitN ? s.snapWaitSum / s.snapWaitN : 0, snapWaitMaxMs: s.snapWaitMax,
       lan: { attached: !!this.lan, framesOut: s.lanOut, framesIn: s.lanIn, waited: s.lanWaited, waitedMax: s.lanWaitedMax,
         refusedNoEndpoint: s.lanRefused, refuseHeld: s.lanRefuseHeld, peersGone: s.lanGone },
     };
@@ -1022,6 +1112,7 @@ class Link implements NetLink {
     this.closed = true; this.state = 'closed';
     if (this.queuedAt) { this.queuedAt = 0; this.o.onQueue?.(null); }
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    this.lagStop();
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
@@ -1041,10 +1132,10 @@ const now = () => performance.timeOrigin + performance.now();   // the runtime's
 const waitAsync = (Atomics as unknown as { waitAsync(a: Int32Array, i: number, v: number, t?: number):
   { async: false; value: 'not-equal' | 'timed-out' } | { async: true; value: Promise<'ok' | 'timed-out'> } }).waitAsync;
 
-/** Attach the virtual LAN to a running game process.  Returns at once; the
- *  socket opens when the runtime registers its first net mailbox (free roam
- *  or LAN play). */
-export function attachNet(proc: GameProcess, opts: NetOptions = {}): NetLink {
+/** Attach the virtual LAN to a running game process, on this thread (the page's own: remote.ts attachNetWorker
+ *  runs it in a worker instead).  Returns at once; the socket opens when the runtime registers its first net mailbox
+ *  (free roam or LAN play). */
+export function attachNet(proc: NetProcess, opts: NetOptions = {}): NetLink {
   const l = new Link(proc, opts);
   l.start();
   return l;
