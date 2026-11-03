@@ -329,6 +329,18 @@ static void fidelity(void){
           "predict: 200 ms on along the curve %.3f m off (a straight line %.3f m), heading %.4f rad off",
           dist3(op, truth), dist3(line, truth), yaw - ang);
 
+    /* an older game's state repeats the last velocity and spin: taken from the places and orientations */
+    {
+        Pred *po = pp; PState keep[2] = { po->s[0], po->s[1] }; int kn = po->n;
+        float t1 = po->s[1].t + 0.05f, a1 = om * t1;
+        float p1[3] = { R0 * sinf(a1), R0 * (1.f - cosf(a1)), 0 }, q1[4] = { 0, 0, sinf(a1 / 2), cosf(a1 / 2) };
+        float vold[3] = { po->s[1].v[0], po->s[1].v[1], po->s[1].v[2] }, wold[3] = { po->s[1].w[0], po->s[1].w[1], po->s[1].w[2] };
+        float vtrue[3] = { V0 * cosf(a1 - om * 0.025f), V0 * sinf(a1 - om * 0.025f), 0 };   /* (the mean over the 50 ms) */
+        put_state(t1, p1, vold, wold, q1, 0.25f);
+        float ev = dist3(po->s[1].v, vtrue), ew = fabsf(po->s[1].w[2] - om);
+        CHECK(po->old_states == 1 && ev < 0.05f && ew < 0.01f, "older game: a repeated velocity from the places (%.3f m/s off), spin from the orientations (%.4f rad/s off)", ev, ew);
+        po->s[0] = keep[0]; po->s[1] = keep[1]; po->n = kn; po->old_states = 0;
+    }
     /* the blend: put through the game's apply, the owner's controls kept */
     MR32(G_WORLDTIME) = (uint32_t)((t0 + 1.f / 30.f + 0.1f) * 4000.f); MRF32(G_WORLDDT) = 0.0083f;
     MR32(CTL + CTL_NPRED) = 3; MR32(CTL + CTL_HIT) = 0;

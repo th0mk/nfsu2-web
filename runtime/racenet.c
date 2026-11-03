@@ -462,7 +462,7 @@ typedef struct {
     int shown, own;                           /* put last step; the car ran on its own (a hit, a stall) */
     float tp[3], tq[4], tt;                   /* last step's target (without the correction) and its race time */
     float ep[3], eq[4], tau;                  /* the correction still shown, and how fast it goes */
-    uint32_t steps, own_steps, glides, snaps; /* for the log */
+    uint32_t steps, own_steps, glides, snaps, old_states; /* for the log */
     float glide_max, carried_max;
 } Pred;
 static Pred g_pred[NCARS];
@@ -477,6 +477,9 @@ static Pred *pred_of(uint32_t car, int add){
     for (int i = 0; i < NCARS; i++) if (!g_pred[i].car){ memset(&g_pred[i], 0, sizeof g_pred[i]); g_pred[i].car = car; g_pred[i].eq[3] = 1.f; return &g_pred[i]; }
     return 0;
 }
+static float len3(const float *a);
+static void pq_mul(const float *a, const float *b, float *o);
+static void pq_conj(const float *a, float *o);
 static int finite_n(const float *a, int n){ for (int i = 0; i < n; i++) if (!__builtin_isfinite(a[i])) return 0; return 1; }
 static void pq_norm(float *q){
     float n = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
@@ -498,6 +501,21 @@ static void pred_state(uint32_t car, uint32_t st){
     pq_norm(s.q);
     Pred *p = pred_of(car, 1);
     if (!p || (p->n && !(s.t > p->s[1].t))) return;
+    /* An older game sends the velocity and spin with every other state only:
+     * the others keep the last ones bit for bit (the controller's).  A moving
+     * car's own never repeat, so a repeated pair is old: its velocity from the
+     * two states' places, its spin from their orientations */
+    float dt = p->n ? s.t - p->s[1].t : 0.f;
+    if (p->n && dt >= 0.005f && dt <= 0.25f && !memcmp(s.v, p->s[1].v, sizeof s.v) && len3(s.v) > 1.f){
+        float dq[4], ic[4];
+        for (int i = 0; i < 3; i++) s.v[i] = (s.p[i] - p->s[1].p[i]) / dt;
+        if (!memcmp(s.w, p->s[1].w, sizeof s.w)){
+            pq_conj(p->s[1].q, ic); pq_mul(s.q, ic, dq);
+            float sg = dq[3] < 0.f ? -2.f : 2.f;
+            for (int i = 0; i < 3; i++) s.w[i] = sg * dq[i] / dt;
+        }
+        p->old_states++;
+    }
     if (p->n) p->s[0] = p->s[1];
     p->s[1] = s; p->n += p->n < 2;
     p->gas = MRF32(st + ST_GAS); p->brake = MRF32(st + ST_BRAKE); p->x78 = MRF32(st + ST_X78); p->w94 = MR16(st + ST_W94);
@@ -1135,8 +1153,9 @@ static void end(uint64_t t){
         Pred *pp = predict_on() ? pred_of(e->car, 0) : 0;
         if (pp && pp->steps + pp->own_steps)
             fprintf(stderr, "[racenet]   car %s where its owner has it: %u steps, %u on its own (a hit here, a stall), "
-                    "carried on up to %.0f ms, %u glides back (largest %.1f m), %u snaps\n", e->name[0] ? e->name : "-",
-                    pp->steps, pp->own_steps, (double)pp->carried_max * 1e3, pp->glides, (double)pp->glide_max, pp->snaps);
+                    "carried on up to %.0f ms, %u glides back (largest %.1f m), %u snaps; %u states with an older game's repeated velocity\n",
+                    e->name[0] ? e->name : "-", pp->steps, pp->own_steps, (double)pp->carried_max * 1e3, pp->glides, (double)pp->glide_max,
+                    pp->snaps, pp->old_states);
         double span = e->n > 1 ? (double)(e->last - e->first) / 1e6 : 0.;
         fprintf(stderr, "[racenet]   car %s: %u updates (%.1f/s, %u straight from their game), longest wait %.0f ms, "
                 "waits over 100/250/500 ms %u/%u/%u, jumps over 0.5 m %u, over 2 m %u (largest %.1f m), "
