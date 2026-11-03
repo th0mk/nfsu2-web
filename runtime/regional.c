@@ -34,8 +34,21 @@
 #define T_CORSA         7u
 
 static int g_on;
+#ifdef __SWITCH__
+int fileio_resolve_game(const char *win, char *out, size_t outsz);
+#endif
 
 void regional_install(void){
+#ifdef __SWITCH__
+    /* this port's native hosts read the game folder as it is: the two cars are on the lists only when their files are in it.
+     * An install without them (a plain North American game) would otherwise pick one of them as a race opponent and load
+     * forever (CANNOT OPEN CARS/PEUGOT106/GEOMETRY.BIN, flow 5 PC_Loading, found on the console) */
+    { char p[1024];
+      if (!fileio_resolve_game("CARS/CORSA/GEOMETRY.BIN", p, sizeof p) || !fileio_resolve_game("CARS/PEUGOT106/GEOMETRY.BIN", p, sizeof p)){
+          fprintf(stderr, "[cars] the Corsa and the 106 are not in this game folder (CARS/CORSA, CARS/PEUGOT106): they stay off the lists\n");
+          return;
+      } }
+#endif
     /* only on the data of the exe this port is made for */
     if (MR32(LOCKED_NA) != T_CORSA || MR32(LOCKED_NA + 4u) != T_PEUGOT106
         || MR8(AI_CARS_NA + AI_CARS_NA_N - 2u) != 5u || MR8(AI_CARS_NA + AI_CARS_NA_N - 1u) != 18u

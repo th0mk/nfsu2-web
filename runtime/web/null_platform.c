@@ -264,4 +264,6 @@ WEAK int  roam_plat_parse_peers(const char *list, int tm, uint16_t defport, uint
 WEAK const char *roam_ip_str(uint32_t ip, char *b){ sprintf(b, "%u.%u.%u.%u", ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255); return b; }
 
 /* ------------------------------------------------------------- dlsym */
+#ifndef NFSU2_LINUX_HOST   /* on the Linux test host the real dlsym (libEGL loads its driver with it) must not be shadowed */
 WEAK void *dlsym(void *h, const char *n){ (void)h; (void)n; return NULL; }
+#endif

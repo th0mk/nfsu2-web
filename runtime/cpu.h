@@ -19,13 +19,20 @@
 #define GSZ ((uint64_t)GUEST_END)
 #else
 extern uint8_t *g_mem;
+#ifdef __SWITCH__
+/* Nintendo Switch: no address-0 mapping and no 4 GB reservation; the guest span is one block (mem.c mem_init) that
+ * g_mem points at, as on the Mac, with the wasm build's size */
+#define GUEST_END 0x28000000u
+#define GSZ ((uint64_t)GUEST_END)
+#else
 /* The whole 32-bit guest address space is reserved as PROT_NONE; the regions
  * in use are made RW with mem_commit. A bad guest access then becomes a
  * diagnosable signal instead of crashing the host.                       */
 #define GSZ 0x100000000ull
 #endif
+#endif
 
-#ifdef __wasm__
+#if defined(__wasm__) || defined(__SWITCH__)
 /* Guest memory is untyped: the game stores a float with fstp and reads the
  * same bytes back with mov (every by-value vector copy does), so MRF32 and
  * MR32 of one address must never be assumed apart.  Plain float/uint32_t
@@ -67,6 +74,15 @@ typedef double   __attribute__((may_alias)) gm_f64;
  * compiles a shard that has such a table without jump tables. */
 extern __attribute__((weak)) uint8_t g_guest[];
 #define GMEM_ g_guest
+#elif defined(__SWITCH__) && defined(NFSU2_NX_GLOCAL) && defined(NFSU2_LREGS)
+/* Per lifted function: LR_ENTER copies g_mem into a local.  Stores through a
+ * global pointer are assumed to be able to overwrite that pointer (and the
+ * restrict CPU *), so the compiler reloads g_mem before every guest access;
+ * a local cannot be so targeted.  Same idea as wasm's g_guest object. */
+#define GMEM_ _gm
+#elif defined(__SWITCH__) && defined(NFSU2_NX_GCONST)
+extern uint8_t *const g_mem_c;      /* mem.c: the same object as g_mem, read-only for the compiler */
+#define GMEM_ g_mem_c
 #else
 #define GMEM_ g_mem
 #endif
@@ -81,7 +97,7 @@ uint8_t *guest_memchk(uint32_t a, unsigned n, const char *fn);
 #define MR64(a)  (*(gm_u64  *)guest_memchk((uint32_t)(a), 8, __func__))
 #define MRF32(a) (*(gm_f32  *)guest_memchk((uint32_t)(a), 4, __func__))
 #define MRF64(a) (*(gm_f64  *)guest_memchk((uint32_t)(a), 8, __func__))
-#elif defined(__wasm__)
+#elif defined(__wasm__) || defined(__SWITCH__)
 #define MR8(a)   (*(uint8_t *)(GMEM_ + (uint32_t)(a)))
 #define MR16(a)  (*(gm_u16  *)(GMEM_ + (uint32_t)(a)))
 #define MR32(a)  (*(gm_u32  *)(GMEM_ + (uint32_t)(a)))
@@ -171,9 +187,15 @@ typedef struct CPU {
 #else
 #define RG_(x) c->x
 #endif
+#if defined(NFSU2_NX_GLOCAL) && defined(NFSU2_LREGS)
+#define LR_ENTER uint8_t *restrict _gm = g_mem; uint32_t _r_eax = c->eax, _r_ecx = c->ecx, _r_edx = c->edx, _r_ebx = c->ebx, \
+    _r_esp = c->esp, _r_ebp = c->ebp, _r_esi = c->esi, _r_edi = c->edi, \
+    _r_cf = c->cf, _r_pf = c->pf, _r_af = c->af, _r_zf = c->zf, _r_sf = c->sf, _r_of = c->of
+#else
 #define LR_ENTER uint32_t _r_eax = c->eax, _r_ecx = c->ecx, _r_edx = c->edx, _r_ebx = c->ebx, \
     _r_esp = c->esp, _r_ebp = c->ebp, _r_esi = c->esi, _r_edi = c->edi, \
     _r_cf = c->cf, _r_pf = c->pf, _r_af = c->af, _r_zf = c->zf, _r_sf = c->sf, _r_of = c->of
+#endif
 #define LR_FG do{ _r_eax = c->eax; _r_ecx = c->ecx; _r_edx = c->edx; _r_ebx = c->ebx; \
     _r_esp = c->esp; _r_ebp = c->ebp; _r_esi = c->esi; _r_edi = c->edi; }while(0)
 #define LR_FF do{ _r_cf = c->cf; _r_pf = c->pf; _r_af = c->af; _r_zf = c->zf; _r_sf = c->sf; _r_of = c->of; }while(0)

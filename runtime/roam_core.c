@@ -1462,6 +1462,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (m.h.type != RC_MSG_PEERS) return;
         if (s->hub_heard_us && now - s->hub_heard_us > T_HUB_LATE) s->hub_late_us = now;
         s->hub_heard_us = now; s->hub_lists++;
+        s->hub_list_last = (uint32_t)m.u.peers.n; if (s->hub_list_last > s->hub_list_max) s->hub_list_max = s->hub_list_last;
         int marks = (m.h.flags & RC_HF_CREW) != 0;
         for (int k = 0; k < m.u.peers.n; k++){
             uint32_t id = m.u.peers.e[k].id;

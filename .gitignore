@@ -19,3 +19,13 @@ __pycache__/
 *.o
 *.log
 .DS_Store
+release/
+cache_browser/
+
+# Switch NSP build: never commit keys, game data or packages
+*.keys
+keys-min.txt
+prod.keys*
+*.nsp
+*.nsz
+*.nro

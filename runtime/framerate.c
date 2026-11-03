@@ -152,7 +152,7 @@ static uint64_t mono_ns(void){ return clock_gettime_nsec_np(CLOCK_UPTIME_RAW); }
 static _Atomic int g_hz_forced = -1;
 static int display_hz(void){
     int f = atomic_load(&g_hz_forced);
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     if (f < 0) f = 0;
 #else
     if (f < 0){ const char *e = getenv("NFSU2_DISPLAY_HZ"); f = e && *e ? atoi(e) : 0;

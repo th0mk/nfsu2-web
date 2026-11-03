@@ -1,0 +1,12 @@
+# probe: after the boot phase, tap RETURN every 300 frames and log the screens
+3400  log probe start
++0    tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++600  quit

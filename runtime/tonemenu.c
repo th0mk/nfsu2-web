@@ -18,7 +18,7 @@
 #include "cpu.h"
 #include "widescreen.h"           /* HOOK_SITE */
 
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 #include "optslider.h"
 #include <math.h>
 #include <stdio.h>

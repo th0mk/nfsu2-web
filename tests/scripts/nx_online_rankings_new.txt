@@ -1,0 +1,26 @@
+# Switch/yuzu FROM ZERO (clean SD, no profile): new profile CLAUDE -> main menu -> Online -> the lobby (UI_OLMAIN) -> RANKINGS.
+# Same navigation as nx_online_rankings.txt, with the new-profile steps of nx_quick_race.txt; every screen is gated with waitfng/tapuntil so a slow
+# host (yuzu) waits for it.  The test (runtime/switch/yuzu-online-test.ps1 -Fresh) reads the log.
+0         tapuntil RETURN MC_Background.fng 120 20000
++120      tap LEFT
++30       tap RETURN
++240      tap BACK
++8        tap BACK
++8        tap BACK
++8        tap BACK
++20       type CLAUDE
++30       tap RETURN
++120      tap LEFT
++20       tap RETURN
++0        tapuntil RETURN GarageMain.fng 45 20000
++0        log CP2_MAIN_MENU
++120      tap RIGHT
++60       tap RETURN
++0        waitfng UI_OLMAIN.fng 6000
++0        log CP3_ONLINE_LOBBY
++240      tap RIGHT
++30       tap RIGHT
++30       tap RETURN
++420      log CP4_RANKINGS
++180      log CP5_RANKINGS_LATER
++0        quit

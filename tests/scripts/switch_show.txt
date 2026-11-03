@@ -1,0 +1,6 @@
+# For the Switch slideshow: boot, then from the title screen through to the main menu, and stay there.
+# (Frame numbers are the game's own, the same at any speed; see switch_probe.txt for the screens in between.)
+3400  log at the title, going to the main menu
++0    tap RETURN
++300  tap RETURN
++600  log main menu reached

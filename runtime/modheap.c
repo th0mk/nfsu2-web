@@ -30,7 +30,7 @@
 void mem_commit(uint32_t, uint32_t);
 
 #define MH_BASE   0x01000000u
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* wasm: the guest span is 640 MB (cpu.h) and its main stack starts at
  * 0x05000000 (runtime/web/main_web.c), so two heaps of 32 MB each:
  * 0x01000000-0x05000000.  A host session peaks at 22.6 MB (Mac, four players,

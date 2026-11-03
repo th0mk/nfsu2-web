@@ -1,0 +1,20 @@
+# Switch/yuzu: brand-new profile CLAUDE -> main menu -> Online -> the Online Main Menu (UI_OLMAIN.fng), then quit.
+# The test (runtime/switch/yuzu-online-test.ps1) reads log.txt for: the new profile reaching GarageMain, "[net] on the virtual LAN as ... (N ms after the
+# connect started)", the Online Main Menu being reached, and checks the hub's own log for the join.  Same new-profile steps as nx_quick_race.txt.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type CLAUDE
++30   tap RETURN
++120  tap LEFT
++20   tap RETURN
++0    tapuntil RETURN GarageMain.fng 45 4000
++120  tap RIGHT
++60   tap RETURN
++0    waitfng UI_OLMAIN.fng 1800
++240  status online_menu
++60   quit

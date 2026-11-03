@@ -102,7 +102,7 @@ void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
 #define rh_showoff_mine() showoff_mine()
 #define rh_showoff_car(c, k, car, open) showoff_car((c), (k), (car), (open))
 typedef FILE rh_file;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* The pose log (a test aid) in the browser: every stdio flush is a
  * synchronous round trip to the I/O worker and an OPFS write.  With stdio's
  * 1 KB buffer that was a flush every ~3 frames and made roam_game_frame cost

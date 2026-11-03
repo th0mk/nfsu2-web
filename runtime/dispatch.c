@@ -111,7 +111,7 @@ void dispatch_tail(CPU *c){
         guest_fn f = g_dtab[off];
         if (!f && g_diag) f = diag_lookup(addr);
         if (f){ g_stat_indirect_ok++;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
             __attribute__((musttail))
 #endif
             return f(c); }
@@ -122,7 +122,7 @@ void dispatch_tail(CPU *c){
         guest_fn f = patch_at(addr);
         if (!f) f = module_fn_at(addr);
         if (f){ g_stat_indirect_ok++;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
             __attribute__((musttail))
 #endif
             return f(c); }
@@ -158,7 +158,7 @@ void dispatch_indirect(CPU *c, uint32_t addr){
      * address).  Every call used to scan the g_patch[] array linearly
      * first; a run has 377 million COM calls alone. */
     if (addr >= 0xE0000000u){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
         /* NFSU2_STACKPROBE: engine stack high-water at COM/Win32 calls (runtime/web/stackprobe.c) */
         { extern int g_stackprobe; if (g_stackprobe > 0){ void stackprobe_check(CPU *); stackprobe_check(c); } }
 #endif

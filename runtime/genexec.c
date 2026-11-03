@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
 extern uint8_t *g_mem;
 #endif
 void dispatch_indirect(CPU *c, uint32_t addr);

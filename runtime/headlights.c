@@ -51,7 +51,7 @@
 
 void sub_005d6d20_orig(CPU *c);
 
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 #include "web/gpu_proto.h"
 int photo_hides(uint32_t ri);                    /* photo.c: a car photo mode does not draw */
 
@@ -346,7 +346,7 @@ int headlights_set(const char *mode){ (void)mode; return 0; }
 /* 0x5D6D20, thiscall (eView*, callback), ret 8: the callback over that
  * view's visible entries */
 void sub_005d6d20(CPU *c){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     uint32_t list = c->ecx, view = MR32(c->esp + 4u), fn = MR32(c->esp + 8u);
     sub_005d6d20_orig(c);
     if (view != VIEW9 || fn != LIT_CB || !hl_on() || !MR32(HL_ENABLE)) return;
