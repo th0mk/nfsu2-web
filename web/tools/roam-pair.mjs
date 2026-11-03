@@ -20,8 +20,9 @@
 //                    without the race lobby's panel (tests/scripts/mprace_shots_a/b.txt); `log MENU <item>` opens
 //                    the page menu (F9), clicks that item (its data-act, e.g. solid) and goes back to the game;
 //                    `log KEY <code> ...` presses those keys on the page as the player does (KeyboardEvent.code: the
-//                    script's own keys reach only the game, never the page) and `log STICK <x> <y>` moves the right
-//                    stick there for the page (quick chat's picker: tests/scripts/roam_say_view_a.txt); with
+//                    script's own keys reach only the game, never the page), `log STICK <x> <y>` moves the right
+//                    stick there for the page and `log CLICK` presses it in (quick chat's picker:
+//                    tests/scripts/roam_say_view_a.txt); with
 //                    --touch the pages take taps (the touch controls show), and `log TAP <selector>` taps there
 //                    (tests/scripts/roam_say_touch.txt), `log HOLD <ms> <selector>` holds a finger there that long
 //                    (tests/scripts/roam_touch_status.txt)
@@ -138,7 +139,7 @@ const FINGER = ['TAP', 'HOLD', 'SCROLL'];
 for (const [name, script] of SPECS) {
   let txt = '';
   try { txt = fs.readFileSync(path.join(REPO, 'tests/scripts', script), 'utf8'); } catch { continue; }
-  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
+  const app = [...new Set([...txt.matchAll(/^[^#\n]*\blog (SHOT|MENU|KEY|STICK|CLICK|CREW|FRIENDS|INVITE(?:-NO)?|RENAME|TAP|HOLD|SCROLL)\b/gm)].map(m => m[1]))]
     .filter(c => !APP || (FINGER.includes(c) && !TOUCH));
   if (app.length) console.log(`roam-pair: warning: ${name}'s ${script} has log ${app.join(', ')}, which only --page app${app.some(c => FINGER.includes(c)) ? ' --touch' : ''} does`);
 }
@@ -246,6 +247,9 @@ async function start(i, name, script, own) {
     const sk = APP && /LOG STICK (-?[\d.]+) (-?[\d.]+)/.exec(m.text());
     if (sk) void page.evaluate(([x, y]) => window.__nfsu2.quickChatStick(x, y), [+sk[1], +sk[2]])
       .then(r => w(`[stick] ${sk[1]} ${sk[2]}: ${r ? 'the picker' : 'not used'}`), e => w(`[stick] failed: ${e}`));
+    // the right stick pressed in, as the page reads it (quick chat's picker), at a script's `log CLICK`
+    if (APP && /LOG CLICK\b/.test(m.text())) void page.evaluate(() => window.__nfsu2.quickChatClick())
+      .then(r => w(`[click] ${r ? 'the picker' : 'not used'}`), e => w(`[click] failed: ${e}`));
     // a finger's tap on the page (--touch), at a script's `log TAP <selector>`
     const tk = APP && TOUCH && /LOG TAP (.+)$/.exec(m.text());
     if (tk) void page.tap(tk[1].trim(), { timeout: 5000 }).then(() => w(`[tap] ${tk[1].trim()}`), e => w(`[tap] ${tk[1]} failed: ${e}`));

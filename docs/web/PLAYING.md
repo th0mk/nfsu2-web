@@ -165,11 +165,14 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   brake, the left stick steers, LB is nitrous, RB the handbrake, A and X shift, Y and B are camera and look back, View
   respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages. A
   click of the left stick is the horn, unless your car has hydraulics: then the stick clicks are the game's hydraulics
-  (left: pressurize, right: bounce). In free roam and in races with other players the right stick is quick chat: a
-  flick for a group, another for its phrase. In the garage, the shops and the main menu the right stick turns the car
-  round and tilts the view, as the middle-button drag does: right turns the view right, as in photo mode (and as a
-  drag to the right), down looks down on the car; full stick turns about 60° a second. Each screen starts at the
-  game's own angle.
+  (left: pressurize, right: bounce). While driving (free roam, races, races with other players) the right stick
+  looks round the car: the view turns to where it points (right looks right, down looks back, half way out half as
+  far) and swings back behind the car when you let go; with the bumper and hood cameras it turns on the spot. In
+  free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
+  bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. In the
+  garage, the shops and the main menu the right stick turns the car round and tilts the view, as the middle-button
+  drag does: right turns the view right, as in photo mode (and as a drag to the right), down looks down on the car;
+  full stick turns about 60° a second. Each screen starts at the game's own angle.
 - **Steering wheel:** a Logitech G29, G920 or G923, and other wheels the browser shows as a game controller. The wheel
   steers, the pedals are throttle and brake (and reverse), the paddles shift down and up, Cross (A) is nitrous, Square
   (X) the handbrake, Circle and Triangle (B and Y) look back and camera, Share respawns, Options pauses, PS opens the
@@ -471,8 +474,9 @@ Good to know:
   Options, from 10 % to 100 % (the most, and the default). Moving it sounds your horn at the new volume.
 - **Quick chat:** say one of your sixteen set phrases to the players near you. There is no typing, so there is nothing
   to read that someone made up, and everyone reads a phrase in their own language. Press 1 to 4 for a group, then 1 to
-  4 for its phrase; on a controller, flick the right stick (up, right, down, left) for a group, then again for the
-  phrase; on a touch screen, the chat button shows all sixteen. Esc closes it. These are the sixteen you start with:
+  4 for its phrase; on a controller, press the right stick in, flick it (up, right, down, left) for a group, then
+  again for the phrase; on a touch screen, the chat button shows all sixteen. Esc closes it (on a controller, a
+  second click). These are the sixteen you start with:
 
   | 1 Hi | 2 Reply | 3 Drive | 4 Race |
   |---|---|---|---|

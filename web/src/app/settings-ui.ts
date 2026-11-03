@@ -63,7 +63,7 @@ const GROUPS: Group[] = [
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
     { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['40', '40'], ['48', '48']] } },
-    { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: right stick twice; touch: the chat button).'), c: { t: 'switch' } },
+    { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press the right stick in, then flick it twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
   ] },

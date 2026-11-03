@@ -740,7 +740,7 @@ async function startGame() {
   friendPrompt.start(session, net && r.env.NFSU2_ROAM === '1');
   friendMessages.start(session, net && r.env.NFSU2_ROAM === '1');
   // (the races' between players free roam on or not; free roam's only with it on: the career's free roam alone keeps
-  // 1-4, Esc and the right stick for the game)
+  // 1-4, Esc and the right stick's click for the game)
   quickChat.start(session, net && r.env.NFSU2_ROAM_SAY !== '0', net && r.env.NFSU2_ROAM === '1',
     phrasesOf(r.env.NFSU2_ROAM_SAY_PHRASES), groupsOf(r.env.NFSU2_ROAM_SAY_GROUPS), blockList(r.env.NFSU2_ROAM_BLOCK ?? ''));
   fps.memory = session.proc.memory;
@@ -910,6 +910,7 @@ const PAD_PAGE: PadPage = {
   dialog: () => !!pageDialog(),
   press: padPress,
   stick: (x, y) => quickChat.stick(x, y),
+  click: () => quickChat.click(),
   capture: (s, pressed) => photo.pad(s, pressed),
 };
 
@@ -2177,6 +2178,7 @@ export async function boot() {
     get session() { return session; }, log, save: SAVE, download: () => download.status, offline: () => offline, displayHz: () => displayHz, retryModule: () => loadModule(),
     newer: () => newer, tried: () => tried, touch: () => touch.state(), textField: () => textField.state(), renderCheck: () => renderCheck?.state() ?? null,
     quickChat: () => quickChat.state(), quickChatStick: (x: number, y: number) => quickChat.stick(x, y),
+    quickChatClick: () => quickChat.click(),
     messages: () => friendMessages.state(),
     env: () => resolved().env, settingsText: () => settingsText, checks: () => [...checks.values()],
     fpsMode: (m?: FpsMode) => { if (m && FPS_MODES.includes(m)) fps.set(m); return fps.mode; },

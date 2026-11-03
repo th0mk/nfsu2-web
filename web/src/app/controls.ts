@@ -70,7 +70,7 @@ const RIGHT: Row[] = [
   { y: 90, xb: 'X', ps: 'square', does: N('Shift down') },
   { y: 104, xb: 'Y', ps: 'triangle', does: N('Camera') },
   { y: 118, xb: 'B', ps: 'circle', does: N('Look back') },
-  { y: 134, xb: 'RS', ps: 'R3', does: N('Quick chat'), sub: N('garage, shops: turn the car'), to: [162, 94] },
+  { y: 134, xb: 'RS', ps: 'R3', does: N('Free look'), sub: N('press in: quick chat'), to: [162, 94] },
 ];
 /** over the middle: View and Menu, their lines straight down */
 const MIDDLE: (Row & { x: number })[] = [

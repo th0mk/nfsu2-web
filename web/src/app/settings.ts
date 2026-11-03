@@ -434,8 +434,8 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 #roam_collide = on
 # Quick chat: say one of your sixteen set phrases to the players near you in
 # free roam, or to everyone in a multiplayer race, while driving and on its
-# results (1 to 4, then 1 to 4; a controller's right stick twice; the chat
-# button on a touch screen), and see theirs.  off = neither, and the others
+# results (1 to 4, then 1 to 4; a controller's right stick pressed in, then
+# flicked twice; the chat button on a touch screen), and see theirs.  off = neither, and the others
 # send you none in free roam.  [NFSU2_ROAM_SAY]
 #quick_chat = on
 # Your sixteen: the phrases' numbers (web/src/app/phrases.ts), four for each

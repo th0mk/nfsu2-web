@@ -1,8 +1,8 @@
 # Free-roam quick chat on the player's page, instance A (with roam_say_view_b.txt): roam-pair --page app saves the
 # page at each "log SHOT <name>".  New career -> prologue free roam; A stays where both start while B drives ahead of
 # it, and shoots B's line over B's car; then picks phrases itself as a player does: 3 and 1 on the keys
-# (Follow me!: its line over A's own car and in the log), the right stick (up opens Hi, right says Nice car!), and two
-# more at once, past the three in 6 s (the picker asks to wait).
+# (Follow me!: its line over A's own car and in the log), the right stick (its click shows the groups, up opens Hi,
+# right says Nice car!), and two more at once, past the three in 6 s (the picker asks to wait).
 #   roam-pair --page app --a Ann:roam_say_view_a.txt --b Bob:roam_say_view_b.txt --env NFSU2_ROAM_ROOM=<r>
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
@@ -31,7 +31,10 @@
 +30   log SHOT picker_keys
 +10   log KEY Digit1
 +20   log SHOT own
-+300  log STICK 0 -1
++300  log CLICK
++30   log SHOT picker_groups
++10   log STICK 0 0
++10   log STICK 0 -1
 +30   log SHOT picker_pad
 +10   log STICK 0 0
 +10   log STICK 1 0

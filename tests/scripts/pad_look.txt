@@ -1,0 +1,40 @@
+# The controller's right stick looks round while driving (runtime/look.c): in a Quick Race, right (the view turns
+# right, round the car), let go (back behind it), down (looking back), half way right (half as far), then with the
+# hood camera (the head turns: the eye stays), and paused (no look).  With NFSU2_PAD_LOG=1 each look logs
+# "[pad] the right stick looks round" and its end "the right stick let go (the view turned N degrees)".
+0     pad connect
++0    tappaduntil START MC_Background.fng 120 4000
++200  tappad A                                       # no profile
++0    waitfng GarageMain.fng 3000
++300  tappaduntil A UI_QRModeSelect.fng 150 3000
++200  tappaduntil A UI_QRTrackSelect.fng 150 1500
++200  tappaduntil A UI_QRModeOptions.fng 150 1500
++200  tappaduntil A UI_QRCarSelect.fng 150 1500
++200  tappaduntil A PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++600  dump look_behind                               # countdown over, the game's own view
++0    axis RX 1
++700ms dump look_right
++0    axis RX 0
++700ms dump look_rest
++0    axis RY 1
++700ms dump look_back
++0    axis RY 0
++0    axis RX 0.55
++700ms dump look_half
++0    axis RX 0
++700ms tappad Y                                      # the bumper camera
++90   tappad Y                                       # the hood camera
++90   dump hood_behind
++0    axis RX 1
++700ms dump hood_right
++0    axis RX 0
++500ms tappad Y                                      # the chase cameras again: near, far (the start's)
++90   tappad Y
++90   log --- paused with the stick out: no look ---
++0    axis RX 1
++300ms tappad START
++0    waitfng UI_Pause.fng 600
++500ms dump paused
++0    axis RX 0
++200ms quit

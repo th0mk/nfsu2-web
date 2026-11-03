@@ -16,8 +16,8 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
   is live, the answer is when it was fixed, since when it is live, and "reload the page (Ctrl+F5 on a PC)".
 - Multiplayer: free roam with everyone on the server (Online, Free roam with others), the game's Online mode (a name,
   no EA account) and races from free roam or the Online menus, up to 6 players. Crews, rooms, ghost mode (off by
-  default: cars collide; F9 switches it), quick chat (1-4, then 1-4; its special phrase Countdown counts 5 to GO!
-  for the players lined up near you), horn (N).
+  default: cars collide; F9 switches it), quick chat (1-4, then 1-4; a controller's right stick pressed in, then
+  flicked twice; its special phrase Countdown counts 5 to GO! for the players lined up near you), horn (N).
 - The game runs in 16 languages (English and 15 translations); the page too. Touch controls on phones and tablets;
   pads, wheels, 8BitDo and PS2 adapters through the browser.
 - Self-hosting is for people running their own server: the README (their own copy of the game, patched to v1.2 North
@@ -121,7 +121,8 @@ Checked against the guide or the code, and confirmed by players in threads:
   Options, Controls screen lists only the keyboard; the pad's settings are on the page (F9, Controls, Controller).
 - Quick Race's Free Run has no world map in the original game: M does nothing there. The world map is in a career's
   free roam.
-- Turning the car in the garage or a shop: drag with the middle mouse button (the wheel) held. A controller can't.
+- Turning the car in the garage or a shop: drag with the middle mouse button (the wheel) held, two fingers on a
+  touch screen, or a controller's right stick (since ad87a9fa).
 - A saves backup too big for Discord: a long career's DVD and magazine covers are about 1 MB each, so it passes the
   limit even without F12 screenshots. Say so and escalate without it; don't blame screenshots.
 - Minimap with no roads (markers only, the world map fine) on Intel graphics: a bug in Intel's graphics driver. Staff
@@ -234,19 +235,19 @@ life, controls, the page, languages, optional graphics settings (off by default:
 fixes of the original game's crashes and glitches. Changing its core gameplay mechanics is not done: handling and physics, car
 performance and tuning, AI and traffic, the career's progression, races and rewards, the economy.
 
-- A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say
-  where (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and
-  the car's own Drift tuning from Performance Tuning / Dyno; wheels; quick chat, with phrases to pick in Settings,
-  Online; ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus and HUD; photo mode with F12 or the pause
-  menu's Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each
-  stage, and Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for
-  the eyes, in the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in Settings,
-  Game, more: Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once
-  Caleb is beaten, since 2970e8e; opening the trunk, hood and doors parked in free roam, O (then again: the hood,
-  the doors, all closed) or a controller's D-pad down held a second, other players see them, they close when the car
-  drives off, the trunk shows no trunk audio, since 1ccb47ac; car meets on the world map, with the GPS to them, since
-  109bdcc4; the guide lists them all). A feature
-  named with a commit is there only once the live version has that commit.
+- A suggestion of an addition or improvement: none (the developer reads them), unless it exists already: then say where
+  (Power Units in Options, Gameplay; drift mode with X, and since 19f84c9 with the drift races' handling and the car's
+  own Drift tuning from Performance Tuning / Dyno; wheels; a controller's right stick looks round the car while driving
+  (right looks right, down looks back) and turns it in the garage; quick chat, with phrases to pick in Settings, Online;
+  ghost mode in F9; Upscaled HUD in Settings, Display, more: Menus and HUD; photo mode with F12 or the pause menu's
+  Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
+  Trade Car on the crib's car list, since 8d3d149; Exposure and White Level for a picture too bright for the eyes, in
+  the game's Options, Display and the pause menu's, since 2619bf7; hidden races on the map, in Settings, Game, more:
+  Show hidden races, since dec0e11; wide body kits and the other unique visual parts for every car once Caleb is beaten,
+  since 2970e8e; opening the trunk, hood and doors parked in free roam, O (then again: the hood, the doors, all closed)
+  or a controller's D-pad down held a second, other players see them, they close when the car drives off, the trunk
+  shows no trunk audio, since 1ccb47ac; car meets on the world map, with the GPS to them, since 109bdcc4; the guide
+  lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
 - A "bug" that is how the original game behaves (drift races have no music; a part's info screen; hidden races): say so

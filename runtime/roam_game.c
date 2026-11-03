@@ -2336,6 +2336,15 @@ static float tag_width(const char *s){
     for (; *s; s++){ unsigned ch = (uint8_t)*s; w += ch >= 32u && ch < 127u ? TAG_ADV[ch - 32u] : 556; }
     return (float)w * (TAG_EM / 1000.f);
 }
+/* the main view's eye and forward as it is drawn: the camera's, turned by the right stick's look round the car (look.c;
+ * the PC's ASI has none) */
+static void view_eye(uint32_t cam, float *e, float *f){
+    rd3(cam + 0x40u, e); rd3(cam + 0x50u, f);
+#ifndef ROAM_HOST_WIN
+    void look_eye(float *e, float *f);
+    look_eye(e, f);
+#endif
+}
 static long g_tag_self = -9;       /* photo mode's frame of the names (roam_game_names): the player's own too */
 static uint8_t g_tag_was[NSLOT + 1];   /* by car (g_sl, NSLOT the player's own): its name shown the frame before */
 static void tags_update(CPU *c){
@@ -2359,6 +2368,8 @@ static void tags_update(CPU *c){
     Slot self = { 0 };                              /* (k == NSLOT) */
     int photo = rh_frame() - g_tag_self <= 1;
     int with_self = photo && O.name[0] && ok(player_car(), 0x9e0);
+    float E[3] = { 0 }, F[3] = { 0 };
+    if (on) view_eye(cam, E, F);
     if (with_self){ snprintf(self.name, sizeof self.name, "%s", O.name); self.car = player_car(); }
     float lim = photo ? TAG_NEAR_M : TAG_FADE_M;
     int64_t now = roam_plat_now_us();
@@ -2368,8 +2379,8 @@ static void tags_update(CPU *c){
         uint32_t car = s->car;
         float p[3], u[3], d[3];
         rd3(car + 0x60u, p); rd3(car + 0xb0u, u);
-        for (int i = 0; i < 3; i++) d[i] = p[i] - MRF32(cam + 0x40u + 4u * (uint32_t)i);
-        float ahead = d[0] * MRF32(cam + 0x50u) + d[1] * MRF32(cam + 0x54u) + d[2] * MRF32(cam + 0x58u);
+        for (int i = 0; i < 3; i++) d[i] = p[i] - E[i];
+        float ahead = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
         float d2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
         int says = k < NSLOT && say_live(s->peer, s->peer_id, now);
         if (ahead < 0.f || !(d2 > 0.f) || !(s->crew || k == NSLOT || d2 < (says ? TAG_NEAR_M * TAG_NEAR_M : lim * lim))) continue;
@@ -2444,8 +2455,8 @@ static void tags_update(CPU *c){
     if (on && g_say.mine_until > now && nm < SAY_MARKS && ok(me, 0xc0)){
         float p[3], u[3], d[3];
         rd3(me + 0x60u, p); rd3(me + 0xb0u, u);
-        for (int i = 0; i < 3; i++) d[i] = p[i] - MRF32(cam + 0x40u + 4u * (uint32_t)i);
-        float ahead = d[0] * MRF32(cam + 0x50u) + d[1] * MRF32(cam + 0x54u) + d[2] * MRF32(cam + 0x58u);
+        for (int i = 0; i < 3; i++) d[i] = p[i] - E[i];
+        float ahead = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
         uint32_t in = gvec(g_gmem + TAG_SCR, u[0] * 1.2f + p[0], u[1] * 1.2f + p[1], u[2] * 1.2f + p[2]);
         uint32_t out = g_gmem + TAG_SCR + 0x10u, av[2] = { out, in };
         if (ahead > 2.f) rh_call(c, FN_VIEW_SCREEN, G_VIEW1, 0, 2, av);
@@ -5927,9 +5938,11 @@ static void mp_labels(CPU *c){
     }
     /* on the screen, nearest first */
     int m = 0;
+    float E[3] = { 0 }, F[3] = { 0 };
+    if (on) view_eye(cam, E, F);
     for (int i = 0; i < n; i++){
-        float d[3] = { L[i].x - MRF32(cam + 0x40u), L[i].y - MRF32(cam + 0x44u), L[i].z + 3.f - MRF32(cam + 0x48u) };
-        float ahead = d[0] * MRF32(cam + 0x50u) + d[1] * MRF32(cam + 0x54u) + d[2] * MRF32(cam + 0x58u);
+        float d[3] = { L[i].x - E[0], L[i].y - E[1], L[i].z + 3.f - E[2] };
+        float ahead = d[0] * F[0] + d[1] * F[1] + d[2] * F[2];
         if (ahead < 1.f) continue;
         uint32_t in = gvec(g_gmem + TAG_SCR, L[i].x, L[i].y, L[i].z + 3.f), out = g_gmem + TAG_SCR + 0x10u, av[2] = { out, in };
         rh_call(c, FN_VIEW_SCREEN, G_VIEW1, 0, 2, av);

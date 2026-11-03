@@ -2,9 +2,11 @@
 // (web/tools/browser.mjs):
 //   node --test web/test/quickchat.test.mjs
 // - free roam with free roam on: 1 opens the first group and 1 again says its first phrase (free roam's way), Esc
-//   closes the picker and the game does not get it, a flick of the right stick opens it
-// - the career's free roam with free roam off (the game's "drive" is 2 there too): no picker by a key, the stick or
-//   the touch button, and 1-4, Esc and the right stick stay the game's
+//   closes the picker and the game does not get it; a flick of the right stick alone is the game's (its look round
+//   the car), the stick's click shows the four groups, a flick opens one and another says its phrase, a second click
+//   closes it
+// - the career's free roam with free roam off (the game's "drive" is 2 there too): no picker by a key, the stick, its
+//   click or the touch button, and 1-4, Esc and the right stick stay the game's
 // - a race between players (the game's "netrace") with free roam off: the picker, and the phrase goes to the race
 // - quick chat off: no picker anywhere
 // - the countdown (the special phrase, in the default sixteen's last place): its stopwatch in the picker, 5 to 1 and
@@ -63,8 +65,12 @@ const key = (p, code) => p.evaluate(c => document.getElementById('game').dispatc
 const open = p => p.evaluate(() => /** @type {any} */ (window).qc.state().open);
 const said = p => p.evaluate(() => /** @type {any} */ (window).said);
 const keys = p => p.evaluate(() => /** @type {any} */ (window).game);
-/** the right stick flicked up and back: whether the picker took it */
-const flick = p => p.evaluate(() => { const q = /** @type {any} */ (window).qc; const took = q.stick(0, -1); q.stick(0, 0); return took; });
+/** the right stick flicked (up, or to x, y) and back: whether the picker took it */
+const flick = (p, x = 0, y = -1) => p.evaluate(([x, y]) => {
+  const q = /** @type {any} */ (window).qc; const took = q.stick(x, y); q.stick(0, 0); return took;
+}, [x, y]);
+/** the right stick pressed in: whether the picker took it */
+const click = p => p.evaluate(() => /** @type {any} */ (window).qc.click());
 const touch = p => p.evaluate(() => /** @type {any} */ (window).qc.toggle());
 
 test('free roam with free roam on: keys, Esc, the stick', async () => {
@@ -78,8 +84,23 @@ test('free roam with free roam on: keys, Esc, the stick', async () => {
   await key(p, 'Digit2');
   assert.equal(await key(p, 'Escape'), false, 'Esc closes the picker, not the game');
   assert.equal(await open(p), -1);
-  assert.equal(await flick(p), true, 'the stick opens it');
-  assert.equal(await open(p), 0);
+  assert.equal(await flick(p), false, 'a flick alone opens nothing: the game looks round with the stick');
+  assert.equal(await open(p), -1);
+  assert.equal(await click(p), true, 'the stick\'s click opens it');
+  assert.equal(await open(p), 5, 'the four groups');
+  assert.deepEqual(await p.evaluate(() => [...document.querySelectorAll('.qc-row')].map(r => r.textContent)),
+    ['↑Hi', '→Reply', '↓Drive', '←Race'], 'each with its flick');
+  assert.equal(await p.evaluate(() => {
+    const q = /** @type {any} */ (window).qc; q.stick(0, 0); return q.stick(0.5, 0);
+  }), true, 'back at rest, then part way out: the picker\'s still (the game gets it at rest)');
+  assert.equal(await flick(p, 1, 0), true, 'a flick right opens the second group');
+  assert.equal(await open(p), 1);
+  assert.equal(await flick(p, 0, 1), true, 'a flick down says its third phrase');
+  assert.deepEqual(await said(p), [[0, false], [6, false]]);
+  assert.equal(await open(p), -1);
+  assert.equal(await click(p), true);
+  assert.equal(await click(p), true, 'a second click closes it');
+  assert.equal(await open(p), -1);
   await p.close();
 });
 
@@ -93,6 +114,7 @@ test('the career\'s free roam with free roam off: no picker, the keys and the st
   assert.equal(await key(p, 'Escape'), true, 'Esc goes to the game (its pause menu)');
   assert.deepEqual(await keys(p), ['Digit1', 'Digit2', 'Numpad3', 'Digit4', 'Escape']);
   assert.equal(await flick(p), false, 'the stick stays the game\'s');
+  assert.equal(await click(p), false, 'and its click (a car\'s hydraulics)');
   await touch(p);
   assert.equal(await open(p), -1, 'nor the touch button');
   assert.equal(await p.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('.qc-picker')).hidden), true);

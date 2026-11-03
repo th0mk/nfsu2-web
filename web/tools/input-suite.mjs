@@ -74,6 +74,8 @@ const SCEN = [
   ['pad_wheel_switch', 'pad_wheel_switch', [], null, null, 300],
   // the right stick turns the car in the front end's car viewer (dinput_pad.c sub_004a5d90; the angles in the log)
   ['pad_garage_stick', 'pad_garage_stick', ['NFSU2_PAD_LOG=1'], null, null, 300],
+  // the right stick looks round while driving (look.c; its starts and ends in the log)
+  ['pad_look', 'pad_look', ['NFSU2_PAD_LOG=1'], null, null, 300],
   ['pad_bind_save', 'pad_bind_save', [], 'pad', 'pad-rvf-bind_save', 400],
   ['pad_bind_load', 'pad_bind_load', [], 'pad', 'pad-rvf-bind_load', 300],
   ['pad_bind_pedals', 'pad_bind_pedals', ['NFSU2_PAD_LOG=1'], null, null, 400],

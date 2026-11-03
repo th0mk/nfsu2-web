@@ -2,14 +2,16 @@
 // anything, so there is nothing to moderate, and each player reads a phrase in their own language.  Each player picks
 // sixteen of the library's (phrases.ts) on the start page, in four groups of four (settings.ini quick_chat_phrases,
 // quick_chat_groups).
-//   pick   keys 1-4 open a group and 1-4 again says its phrase; a controller's right stick the same (a flick up, right,
-//          down or left: the game leaves that stick unused, in races too); on a touch screen the chat button shows all
-//          sixteen and a tap says one.  Open while driving in free roam with free roam on, and in a race between
-//          players (Online, LAN, a free-roam lobby's) while driving and on its results (the game's status "netrace";
-//          the results' menus take none of 1-4 either), free roam on or off; never in a race of the career, nor in
-//          the career's free roam with free roam off (1-4, Esc and the right stick stay the game's there).  Esc,
-//          PICK_MS without a pick, or leaving those closes it.  At most BURST phrases in WINDOW_MS (the game keeps the
-//          same limit): then the picker asks to wait.
+//   pick   keys 1-4 open a group and 1-4 again says its phrase; on a controller the right stick pressed in shows the
+//          four groups, then a flick (up, right, down or left) opens one and another says its phrase (the stick
+//          itself looks round the car while driving, runtime/look.c: the game gets it at rest while the picker has
+//          it); on a touch screen the chat button shows all sixteen and a tap says one.  Open while driving in free
+//          roam with free roam on, and in a race between players (Online, LAN, a free-roam lobby's) while driving and
+//          on its results (the game's status "netrace"; the results' menus take none of 1-4 either), free roam on or
+//          off; never in a race of the career, nor in the career's free roam with free roam off (1-4, Esc and the
+//          right stick's click stay the game's there: the click is a car's hydraulics).  Esc, the stick's click
+//          again, PICK_MS without a pick, or leaving those closes it.  At most BURST phrases in WINDOW_MS (the game
+//          keeps the same limit): then the picker asks to wait.
 //   wire   a phrase is its number in the library.  In free roam the game sends it to the players around
 //          (runtime/roam_game.c say_*: within 250 m, or in our race lobby); in a race to the race's players
 //          (runtime/racehorn.c qc_*: the page puts it in the LAN mailbox).  Either way back to this page as said by the
@@ -70,6 +72,8 @@ export interface QuickChatDeps {
 }
 
 type Mode = 'keys' | 'pad' | 'touch';
+/** the picker's open: all sixteen (touch), the four groups (the controller's click) */
+const ALL = 4, GROUPS = 5;
 const KEYS: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
 /** a player's name as a block compares it: trimmed, capitals not counting (the server's: roam hub.rs) */
 const nameKey = (n: string) => n.trim().toLowerCase();
@@ -93,7 +97,8 @@ export class QuickChat {
   /** no countdown of a player past NEAR_M shown before this: after one over a car (one far away holds back no near
    *  one, nor the player's own: a player just outside a car meet could keep its start waiting) */
   private farFree = 0;
-  /** the picker: closed (-1), a group open (0-3), all of them (4, touch) */
+  /** the picker: closed (-1), a group open (0-3), all of them (ALL, touch), the groups to flick to (GROUPS, the
+   *  controller) */
   private open = -1;
   private mode: Mode = 'keys';
   private closeTimer = 0;
@@ -129,7 +134,7 @@ export class QuickChat {
     // caught before the game's input (attached later, at each Play): the keys the picker uses go to it alone
     window.addEventListener('keydown', e => this.key(e), { capture: true });
     stage.addEventListener('pointerdown', e => {
-      if (this.open === 4 && !this.picker.contains(e.target as Node) && !(e.target as Element).closest?.('[data-ctl="chat"]')) this.close();
+      if (this.open === ALL && !this.picker.contains(e.target as Node) && !(e.target as Element).closest?.('[data-ctl="chat"]')) this.close();
     }, { capture: true });
   }
 
@@ -197,28 +202,40 @@ export class QuickChat {
     if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); }
     if (e.repeat) return;
     if (e.code === 'Escape') this.close();
-    else if (this.open < 0 || this.open === 4 || this.mode !== 'keys') this.group(k, 'keys');
+    else if (this.open < 0 || this.open >= ALL || this.mode !== 'keys') this.group(k, 'keys');
     else this.pick(this.open * 4 + k);
   }
 
-  /** the right stick, every time the controller is read (gamepad.ts PadPage.stick); true: the picker has it */
+  /** the right stick, every time the controller is read (gamepad.ts PadPage.stick); true: the picker has it (opened
+   *  by the stick's click), else the game looks round with it */
   stick(x: number, y: number): boolean {
     const r = Math.hypot(x, y), mine = this.open >= 0 && this.mode === 'pad';
     if (r < REST) { this.armed = true; return mine; }
-    if (r < FLICK || !this.armed) return mine;
+    if (!mine) return false;
+    if (r < FLICK || !this.armed) return true;
     this.armed = false;
-    if (!this.can()) return false;
+    if (!this.can()) { this.close(); return false; }
     const dir = Math.abs(x) > Math.abs(y) ? (x > 0 ? 1 : 3) : (y < 0 ? 0 : 2);
-    if (!mine) this.group(dir, 'pad');
+    if (this.open === GROUPS) this.group(dir, 'pad');
     else this.pick(this.open * 4 + dir);
+    return true;
+  }
+
+  /** the right stick pressed in (gamepad.ts PadPage.click): the four groups, or the picker closed again; true: the
+   *  picker took it (where it can open), else it is the game's */
+  click(): boolean {
+    if (this.open >= 0) { this.close(); return true; }
+    if (!this.can()) return false;
+    this.armed = false;                              // (a flick counts once the stick was back at rest)
+    this.group(GROUPS, 'pad');
     return true;
   }
 
   /** the touch controls' chat button: all sixteen, or closed again */
   toggle() {
-    if (this.open === 4) { this.close(); return; }
+    if (this.open === ALL) { this.close(); return; }
     if (!this.can()) return;
-    this.mode = 'touch'; this.open = 4;
+    this.mode = 'touch'; this.open = ALL;
     this.draw();
   }
 
@@ -290,7 +307,15 @@ export class QuickChat {
     } else if (wait > 0) {
       kids.push(el('div', 'qc-title', t('Quick chat')), el('div', 'qc-wait', t('Wait a moment')));
       this.closeTimer = window.setTimeout(() => this.close(), Math.min(wait, PICK_MS));
-    } else if (this.open === 4) {
+    } else if (this.open === GROUPS) {
+      kids.push(el('div', 'qc-title', t('Quick chat')));
+      for (let g = 0; g < 4; g++) {
+        const row = el('div', 'qc-row');
+        row.append(el('kbd', '', ARROWS[g]), el('span', 'qc-text', t(catName(this.groups[g]))));
+        kids.push(row);
+      }
+      this.closeTimer = window.setTimeout(() => this.close(), PICK_MS);
+    } else if (this.open === ALL) {
       for (let g = 0; g < 4; g++) {
         const col = el('div', 'qc-group');
         col.append(el('div', 'qc-title', t(catName(this.groups[g]))));
