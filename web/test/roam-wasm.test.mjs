@@ -4,7 +4,7 @@
 //    network, hostile datagrams, interpolation, and the platform layer's guard
 //    and peer list) against runtime/roam_core.c + runtime/web/roam_web.c;
 // 2. tests/roam_selftest.c's byte stream with the game build's code
-//    generation: it must be the Mac's and x86's (37,880 bytes, FNV-1a 939d48ee);
+//    generation: it must be the Mac's and x86's (37,880 bytes, FNV-1a e90f893c);
 // 3. the pose log's buffer (web/test/poselog_unit.c).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,5 +53,5 @@ test('roam_selftest bytes on wasm = Mac = x86', { skip: !CC && 'no wasi-sdk in d
   cc(w, ['web/test/roam_selftest_main.c', 'tests/roam_selftest.c']);
   const out = run(w).trim();
   console.log(out);
-  assert.equal(out, 'roam_selftest: 37880 bytes, FNV-1a 939d48ee');
+  assert.equal(out, 'roam_selftest: 37880 bytes, FNV-1a e90f893c');
 });

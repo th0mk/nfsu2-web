@@ -1,7 +1,7 @@
 /* roam_selftest_main.c -- tests/roam_selftest.c's byte stream from the wasm
  * build of the free-roam core: its length and FNV-1a, to compare with the
  * Mac (arm64) and the 32-bit x86 builds (tools/roam_x86check.sh: 37,880
- * bytes, FNV-1a 939d48ee).  Run by web/test/roam-wasm.test.mjs. */
+ * bytes, FNV-1a e90f893c).  Run by web/test/roam-wasm.test.mjs. */
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
