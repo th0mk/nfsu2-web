@@ -226,7 +226,7 @@ that room.
 |---|---|
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
-| Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
+| Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, unique parts for every car, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
@@ -294,11 +294,12 @@ that room.
   profile with its first 5 cars, driving the first one when yours was one of the other 5. A profile changed
   elsewhere (played in the PC game) loads here with its 5 too: the other 5 are kept aside in the profile's folder,
   as `GARAGE.OLD`.
-- **Unique parts after Caleb:** the outruns' unique visual parts (the wide body kits, and the unique hoods, spoilers,
-  rims and vinyls) go, as in the original game, to the one car you drive to their star, and the wide body's star
-  (11 outrun wins in stage 5) comes only before the last URL race. Once you have beaten Caleb, the shops have all of
-  them for every car in your career, as the original game's ending has them in Customize mode, whose cars free roam
-  never drives. The unique performance parts stay one per stage.
+- **Unique parts for every car:** off by default. The outruns' unique visual parts (the wide body kits, and the
+  unique hoods, spoilers, rims and vinyls) go, as in the original game, to the one car you drive to their star, and
+  the wide body's star (11 outrun wins in stage 5) comes only before the last URL race. On (Settings, Game, More game
+  settings), once you have beaten Caleb, the shops have all of them for every car in your career, as the original
+  game's ending has them in Customize mode, whose cars free roam never drives. The unique performance parts stay one
+  per stage. Turned off again, parts bought while it was on stay the car's.
 - **Power Units:** the game's Options, Gameplay (also in the pause menu's) has a row after Speedometer Units: the
   engine's power in bhp or kW wherever the game shows it (the dyno, the performance shop's parts), whatever the
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).

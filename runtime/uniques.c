@@ -27,9 +27,13 @@
  *     stage info (its record +0x100) and +0x28 its final event, S5_CIRCUIT_36.
  * Here 0x515500 also says yes to a level-4 part with bit 4 asked once that same
  * event is won.  Nothing else changes: such a part is bought like any other and
- * is then the car's, in the profile too. */
+ * is then the car's, in the profile too.  Only with uniques = on
+ * (NFSU2_UNIQUES=1); off, the default, keeps the game's own rule, and parts
+ * bought while it was on stay the car's. */
 #include "cpu.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <strings.h>
 
 #define G_CAREER       0x0085ad40u
 #define C_NEVENTS      0x7afcu        /* career: events with a record */
@@ -57,12 +61,19 @@ int uniques_caleb_beaten(void){
 }
 
 static int g_said;
+/* NFSU2_UNIQUES=1|on (uniques = on, Settings, Game): the rule above.  Off by default: the game's own rule, each
+ * unique visual part for the one car that took its star (the page writes 1 or 0; the Mac app passes on/off) */
+static int uniques_on(void){
+    static int on = -1;
+    if (on < 0){ const char *e = getenv("NFSU2_UNIQUES"); on = e && (*e == '1' || !strcasecmp(e, "on") || !strcasecmp(e, "yes") || !strcasecmp(e, "true")); }
+    return on;
+}
 
 void sub_00515500_orig(CPU *c);
 void sub_00515500(CPU *c){
     uint32_t filter = MR32(c->esp + 4u), slot = MR32(c->esp + 8u), part = MR32(c->esp + 12u);
     sub_00515500_orig(c);
-    if ((c->eax & 0xffu) || !(filter & F_STAGE) || !committed(part, P_LEVEL + 1u)) return;
+    if (!uniques_on() || (c->eax & 0xffu) || !(filter & F_STAGE) || !committed(part, P_LEVEL + 1u)) return;
     if ((MR8(part + P_LEVEL) >> 5) != LEVEL_UNIQUE || !uniques_caleb_beaten()) return;
     c->eax = (c->eax & ~0xffu) | 1u;
     if (!g_said){

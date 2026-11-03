@@ -170,6 +170,9 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
+  // after Caleb, the unique visual parts in every career car's shops (runtime/uniques.c).  Not in bundle.m's table either:
+  // there a lower-case key, so it reaches the runtime as NFSU2_UNIQUES all the same
+  { key: 'uniques', env: 'NFSU2_UNIQUES', kind: 'bool', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -248,6 +251,13 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # original game: a hidden race shows only when you drive near it.
 # [NFSU2_SHOW_HIDDEN_RACES]
 #show_hidden_races = off
+
+# Once Caleb is beaten, the shops sell the outruns' unique visual parts (the
+# wide body kits, and the unique hoods, spoilers, rims and vinyls) for every
+# car in the career, as the original game's ending has them in Customize
+# mode.  off = the original game: each one only for the car driven to its
+# star.  Parts bought while it was on stay the car's.  [NFSU2_UNIQUES]
+#uniques = off
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"
