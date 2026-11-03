@@ -278,7 +278,7 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   68128859 it shows the layout, speakers and amps on every car); car meets on the world map, with the GPS to them,
   since 109bdcc4; Songs in Settings, Game (Uncensored or the game's Original versions) and F7 for the next song,
   since 32540c78; drift battles between players (drift mode on, then the challenge offered as for an outrun: 90 s,
-  most drift points win $100 out of the loser's bank, no nitrous, the cars drive through each other), since <commit>;
+  most drift points win $100 out of the loser's bank, no nitrous, the cars drive through each other), since 19dc8394;
   the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
