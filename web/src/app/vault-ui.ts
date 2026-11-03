@@ -2,7 +2,7 @@
 // another browser, synced, settled when two browsers changed them, gone back a day, stopped or deleted.  Shown only
 // where the server keeps them (vaultAvailable).  One box holds the keyphrase in every state: the one this browser
 // syncs with (read only, with its download), or one typed in to load.  It shows the first 3 characters and dots for
-// the rest until its eye shows it all.  Only the tab that owns the saves syncs (instance.ts); the link (the keyphrase
+// the rest until its eye shows it all, for 30 s.  Only the tab that owns the saves syncs (instance.ts); the link (the keyphrase
 // and the version it has) is kept in this browser's localStorage, beside the saves it is for.  Where the browser has
 // passwords for sites, it is asked to keep the keyphrase too, which outlives the site's data, and a browser with no
 // link and no profile is asked for the one it keeps, whose saves the page offers (pwkeep.ts, `passwords`).
@@ -223,6 +223,9 @@ function stakeOf(here: Side, playedMs: number): HTMLElement {
 const para = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
 
 const QUIT_FIRST = N('Quit the game first.');
+/** how long the box shows the whole passphrase (the eye, or Make) before its dots come back; typing in it starts the
+ *  wait again.  (2026-11-03: screenshots of the Saves tab, sent for help, had the phrase left shown in them.) */
+const SHOWN_MS = 30_000;
 
 export class VaultPanel {
   private sync: VaultSync | null = null;
@@ -230,6 +233,8 @@ export class VaultPanel {
   private owned = false;
   /** the box shows dots after the first 3 characters */
   private hidden = true;
+  /** shown, the dots come back at this (SHOWN_MS) */
+  private hideTimer: ReturnType<typeof setTimeout> | undefined;
   /** the box holds the linked keyphrase (not one typed in) */
   private holdsLink = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -260,8 +265,7 @@ export class VaultPanel {
     on('#vault-make', () => this.make());
     // shown, it is selected, and the linked keyphrase copied
     on('#vault-eye', async () => {
-      this.hidden = !this.hidden;
-      this.mask();
+      this.reveal(this.hidden);
       if (this.hidden || !this.input.value) return;
       this.input.focus(); this.input.select();
       if (!this.sync?.link) return;
@@ -278,6 +282,15 @@ export class VaultPanel {
     this.$<HTMLFormElement>('#vault-form').onsubmit = e => { e.preventDefault(); if (!this.sync?.link) void this.use(this.input.value); };
     // the dots follow the field's text and its scrolling
     for (const ev of ['input', 'scroll', 'keyup', 'select', 'pointerup', 'focus']) this.input.addEventListener(ev, () => this.mask());
+    this.input.addEventListener('input', () => { if (!this.hidden) this.reveal(true); });
+  }
+
+  /** the whole passphrase shown (for SHOWN_MS), or its dots */
+  private reveal(on: boolean) {
+    this.hidden = !on;
+    clearTimeout(this.hideTimer);
+    if (on) this.hideTimer = setTimeout(() => this.reveal(false), SHOWN_MS);
+    this.mask();
   }
 
   private $<T extends HTMLElement = HTMLElement>(sel: string) { return this.root.querySelector<T>(sel)!; }
@@ -685,7 +698,7 @@ export class VaultPanel {
     if (!this.sync || !this.d.owner()) return false;
     try {
       await this.sync.create();
-      this.hidden = false;
+      this.reveal(true);
       this.show();
       this.msg(() => t('Enter it on another device to sync your saves. Store it somewhere safe: it can\'t be recovered.'));
       this.d.log('[app] keyphrase: made one, the saves went to the server');
