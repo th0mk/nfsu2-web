@@ -4,7 +4,7 @@
 #include "cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
 #include <signal.h>
 #include <sys/mman.h>
 #endif
@@ -14,8 +14,13 @@
 void (*g_backtrace_fn)(struct CPU*,int) = 0;   /* set by dispatch.c */
 CPU *g_cur_cpu = 0;
 
-#ifndef __wasm__
+#if !defined(NFSU2_HOST_PLATFORM) || defined(__SWITCH__)
 uint8_t *g_mem = 0;
+#ifdef __SWITCH__
+/* a second name for g_mem that the lifted shards see as const (cpu.h NFSU2_NX_GCONST): the value is set once in mem_init, and a const object lets the
+ * compiler keep the base in a register across the guest stores instead of loading g_mem again before every access */
+extern uint8_t *g_mem_c __attribute__((alias("g_mem")));
+#endif
 #endif
 uint32_t g_image_base = 0x400000u, g_res_dir_va = 0, g_res_dir_size = 0;
 
@@ -36,13 +41,24 @@ uint8_t g_cbits[1u<<15] = {0};
 
 
 void mprot_arm(uint32_t);
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* wasm: the guest span [0, GUEST_END) is ordinary linear memory, readable,
  * writable and zero from the start.  Committing only keeps the bitmap
  * (mem_is_committed, genexec, autotest probes) and the statistics; release
  * zeroes the whole 16 KB pages so a released range still reads as zero
  * (heap.c relies on it).  No page is ever given back to the browser. */
+#ifdef __SWITCH__
+/* Switch: the guest span is one zeroed block (libnx's heap is taken whole at start: runtime/switch/nx_main.c) */
+void mem_init(void){
+    if (g_mem) return;
+    g_mem = aligned_alloc(0x4000, GUEST_END);
+    if (!g_mem){ fprintf(stderr, "mem_init: no memory for the %u MB guest span\n", GUEST_END >> 20); exit(1); }
+    memset(g_mem, 0, GUEST_END);
+    fprintf(stderr, "[nx] guest memory %p .. %p\n", (void *)g_mem, (void *)(g_mem + GUEST_END));
+}
+#else
 void mem_init(void){ }
+#endif
 void mem_commit(uint32_t addr, uint32_t size){
     uint64_t lo = addr & ~0x3FFFull;
     uint64_t hi = ((uint64_t)addr + size + 0x3FFF) & ~0x3FFFull;
@@ -263,7 +279,7 @@ void mem_fault_handler_install(void){
     sigaction(SIGSEGV,&sa,0); sigaction(SIGBUS,&sa,0);
 }
 
-#endif /* !__wasm__ */
+#endif /* !NFSU2_HOST_PLATFORM */
 
 int mem_load_pe(const char *path){
     FILE *f = fopen(path, "rb");

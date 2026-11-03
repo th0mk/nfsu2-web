@@ -1,0 +1,20 @@
+# Switch/yuzu, EXISTING profile (copied from the console; flag files keepsave + fnglog).  The user's own timing, no profile is created:
+#   open the game, 7 s: the profile loads by itself; 5 s: confirm; 1 s: main menu; RIGHT = Online, confirm; 7 s: the Online lobby;
+#   RIGHT twice = RANKINGS, confirm.  The first line taps RETURN until the confirm screen is up (it also skips the opening splash, which yuzu only ends by itself after minutes); waitfng gates make a slower host (yuzu) wait for each screen, on the console they are already true.
+# Each LOG line is a checkpoint: the test (runtime/switch/yuzu-online-test.ps1) pairs it with the screen that was on top at that moment.
+0         log CP0_OPEN
++0        tapuntil RETURN MC_Background.fng 120 20000
++0        log CP1_PROFILE_LOADED
++5000ms   tap RETURN
++0        waitfng GarageMain.fng 6000
++1000ms   log CP2_MAIN_MENU
++0        tap RIGHT
++600ms    tap RETURN
++0        waitfng UI_OLMAIN.fng 6000
++7000ms   log CP3_ONLINE_LOBBY
++0        tap RIGHT
++500ms    tap RIGHT
++500ms    tap RETURN
++7000ms   log CP4_RANKINGS
++3000ms   log CP5_RANKINGS_LATER
++0        quit

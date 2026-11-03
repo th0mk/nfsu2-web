@@ -1,0 +1,58 @@
+# exploration: existing profile -> Online Main Menu -> press each item in turn and log which screen opens (read the [fng] lines)
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN
++0    waitfng GarageMain.fng 1800
++300  tap RIGHT
++120  tap RETURN
++0    waitfng UI_OLMAIN.fng 1800
++240  log OLMAIN_UP
++0    log ITEM_0
++60   tap RETURN
++300  log AFTER_ITEM_0
++0    tap BACK
++200  log BACK_0
++0    tap RIGHT
++60   log MOVED_0
++0    log ITEM_1
++60   tap RETURN
++300  log AFTER_ITEM_1
++0    tap BACK
++200  log BACK_1
++0    tap RIGHT
++60   log MOVED_1
++0    log ITEM_2
++60   tap RETURN
++300  log AFTER_ITEM_2
++0    tap BACK
++200  log BACK_2
++0    tap RIGHT
++60   log MOVED_2
++0    log ITEM_3
++60   tap RETURN
++300  log AFTER_ITEM_3
++0    tap BACK
++200  log BACK_3
++0    tap RIGHT
++60   log MOVED_3
++0    log ITEM_4
++60   tap RETURN
++300  log AFTER_ITEM_4
++0    tap BACK
++200  log BACK_4
++0    tap RIGHT
++60   log MOVED_4
++0    log ITEM_5
++60   tap RETURN
++300  log AFTER_ITEM_5
++0    tap BACK
++200  log BACK_5
++0    tap RIGHT
++60   log MOVED_5
++0    log ITEM_6
++60   tap RETURN
++300  log AFTER_ITEM_6
++0    tap BACK
++200  log BACK_6
++0    tap RIGHT
++60   log MOVED_6
++60   quit

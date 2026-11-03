@@ -574,6 +574,7 @@ typedef struct {
      * that changes) */
     int64_t   hub_since, hub_heard_us, hub_hello_tx, hub_snap_tx;  int hub_was;
     uint32_t  hub_lists;           /* PEERS lists from the hub */
+    uint32_t  hub_list_last, hub_list_max;   /* players on the last list, and on the longest */
     uint32_t  rx_unlisted;         /* HELLOs of players the hub does not list for us: ignored */
     int64_t   hub_late_us;         /* a list came after none for over T_HUB_LATE (our link, or the whole page, stood): when */
     /* our outrun's other player (rc_set_duel; 0: none): the hub hears of it, a peer of that id stays while the hub's

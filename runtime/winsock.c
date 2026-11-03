@@ -84,7 +84,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -106,7 +106,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* the browser's virtual LAN (runtime/web/net_lan.c): every virtual socket is a
  * virtual fd, and the fd calls of the vlan code paths below go to it */
 #include "web/lan_vfd.h"
@@ -231,7 +231,7 @@ int ws_errno_to_wsa(int e){
 }
 
 void ws_fd_setup(int fd){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     (void)fd;                             /* virtual fds never block and never signal */
 #else
     int fl = fcntl(fd, F_GETFL); if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
@@ -326,7 +326,7 @@ static void ws_config(void){
             if (!g_vlan_path[0]){ ws_log("NFSU2_NET=vlan needs a hub socket (vlan:<path> or NFSU2_VLAN): network off"); mode = NET_OFF; }
         } else { ws_log("NFSU2_NET=\"%s\" is not off|lan|loopback|vlan[:path]: network off", m); mode = NET_OFF; }
     }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     /* the browser: no real network, only the server's virtual LAN (net_lan.c) */
     if (mode != NET_OFF){
         if (mode != NET_VLAN && m && *m) ws_log("NFSU2_NET=%s: in the browser LAN play is the server's virtual LAN", m);
@@ -339,7 +339,7 @@ static void ws_config(void){
         mode = NET_LOOP;
     }
     g_ws_mode = mode;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     g_online = mode == NET_VLAN && !env_off(getenv("NFSU2_ONLINE"));
 #else
     g_online = 0;                                          /* the Mac's hub (vlanhub.py) has no online host */
@@ -398,7 +398,7 @@ static int lan_ifname_ok(const char *n){
 }
 /* Interface name and index of the default IPv4 route (routing socket
  * RTM_GET: a read of the kernel's routing table, no traffic). */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 static int route_default_if(char *ifn, size_t ifnsz){ (void)ifn; (void)ifnsz; return 0; }   /* no interfaces in a browser */
 #else
 static int route_default_if(char *ifn, size_t ifnsz){
@@ -475,7 +475,7 @@ static void ifs_collect(void){
         }
         return;
     }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
     struct ifaddrs *ia = 0, *p;
     if (getifaddrs(&ia) != 0) ia = 0;
     for (p = ia; p && g_nifs < 16; p = p->ifa_next){
@@ -559,7 +559,7 @@ int winsock_lan_identity(NetIdent *id, char *why, size_t whysz){
     } else snprintf(why, whysz, "no LAN interface with an IPv4 address%s%s",
                     have_dflt ? "; default route via " : "", have_dflt ? dflt : "");
     if (!(id->mac[0] | id->mac[1] | id->mac[2] | id->mac[3] | id->mac[4] | id->mac[5])){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
         uint64_t hsh = 0;
         { char hn[256] = ""; gethostname(hn, sizeof hn); hsh = fnv(hn, strlen(hn), fnv("NFSU2-MAC", 9, 0)); }
 #else
@@ -717,7 +717,7 @@ static void sfinal(WsSock *s){                         /* last reference gone */
 }
 static void sclose(WsSock *s, int abortive){
     if (g_ws_mode == NET_VLAN) vlan_close(s, abortive);
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
     else if (s->fd >= 0 && s->type == 1 && abortive){
         struct linger l = { 1, 0 }; setsockopt(s->fd, SOL_SOCKET, SO_LINGER, &l, sizeof l);
     }
@@ -901,7 +901,7 @@ static int deny_sim(uint32_t ip){
     return g_deny_sim;
 }
 
-#ifndef __wasm__              /* BSD sockets (lan, loopback): not in a browser */
+#ifndef NFSU2_HOST_PLATFORM              /* BSD sockets (lan, loopback): not in a browser */
 /* Loopback guard: guest destination -> host loopback destinations.
  * Returns the number of host destinations (0 = BLOCKED, the error in *err). */
 static int loop_dest(uint32_t ip, uint16_t port, int udp, struct sockaddr_in out[2], int *err){
@@ -965,7 +965,7 @@ int winsock_session_active(void){ return g_startups > 0; }
  * NFSU2_ONLINE on, and the right lobby host string)?  Asked before the game's
  * first Winsock call, so it reads the configuration itself. */
 int winsock_online(void){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     ws_config();
     return g_online;
 #else
@@ -1012,7 +1012,7 @@ static uint32_t ws_cleanup(void){
 static uint32_t ws_socket(CPU *c){
     int af = (int)A(c, 0), type = (int)A(c, 1), proto = (int)A(c, 2);
     if (need_startup()) return 0xFFFFFFFFu;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     if (af != 2) FAIL(WSAEAFNOSUPPORT);                /* Windows' AF_INET (wasi-libc's is 1) */
 #else
     if (af != AF_INET) FAIL(WSAEAFNOSUPPORT);
@@ -1028,7 +1028,7 @@ static uint32_t ws_socket(CPU *c){
         int e = vlan_open(s);
         if (e){ s->used = 0; FAIL(e); }
     }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
     else {
         int fd = -1;
         if (type == 3){
@@ -1057,7 +1057,7 @@ static uint32_t ws_closesocket(CPU *c){
 }
 
 /* host bind for the BSD backends */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 static int bsd_bind(WsSock *s, uint32_t ip, uint16_t port){ (void)s; (void)ip; (void)port; return WSAENETDOWN; }
 static void bsd_local(WsSock *s, uint32_t *ip, uint16_t *port){ *ip = s->laddr; *port = s->lport; }
 #else
@@ -1121,7 +1121,7 @@ static uint32_t ws_listen(CPU *c){
     if (bl <= 0) bl = 1; if (bl > 128) bl = 128;
     int e = 0;
     if (g_ws_mode == NET_VLAN) e = vlan_listen(s, bl);
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
     else if (listen(s->fd, bl) != 0) e = ws_errno_to_wsa(errno);
 #endif
     if (e) FAIL(e);
@@ -1144,7 +1144,7 @@ static uint32_t ws_accept(CPU *c){
             e = vlan_accept(ls, ns);
             ip = ns->raddr; port = ns->rport;
         }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
         else {
             struct sockaddr_in a; socklen_t al = sizeof a;
             int fd = accept(ls->fd, (struct sockaddr *)&a, &al);
@@ -1174,12 +1174,12 @@ static uint32_t ws_accept(CPU *c){
 static void conn_poll(WsSock *s, short rev){
     if (s->state != ST_CONNECTING) return;
     if (g_ws_mode == NET_VLAN){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
         vlan_conn_update(s);         /* the other browser's answer, if it came (net_lan.c) */
 #endif
         if (ws_now_us() < s->conn_ready_us) return;
     }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
     else {
         if (!(rev & (POLLOUT | POLLERR | POLLHUP))) return;
         int err = 0; socklen_t l = sizeof err;
@@ -1204,14 +1204,14 @@ static uint32_t ws_connect(CPU *c){
         /* UDP (and raw): a default destination.  No packet.  SocketHost's
          * fallback route probe (UDP connect toward 24.1.1.1) comes here. */
         if (!ip && !port){ s->has_peer = 0; return 0; }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
         if (g_ws_mode == NET_LOOP){
             struct sockaddr_in hd[2]; int er = 0;
             if (loop_dest(ip, port, 1, hd, &er) < 0){ blocked("connect(udp)", ip, port, c); FAIL(er); }
         }
 #endif
         e = implicit_bind(s); if (e) FAIL(e);
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
         if (g_ws_mode == NET_LAN && s->fd >= 0 && !s->icmp_fake){
             struct sockaddr_in hd; memset(&hd, 0, sizeof hd); hd.sin_len = sizeof hd; hd.sin_family = AF_INET;
             hd.sin_port = htons(port); hd.sin_addr.s_addr = ip;
@@ -1240,7 +1240,7 @@ static uint32_t ws_connect(CPU *c){
         if (e && e != WSAECONNREFUSED && e != WSAETIMEDOUT && e != WSAEHOSTUNREACH){ FAIL(e); }
         s->bound = 1; s->state = ST_CONNECTING; s->conn_result = e;
     }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
     else {
         struct sockaddr_in hd[2]; int n = 1, er = 0;
         if (g_ws_mode == NET_LOOP){
@@ -1324,7 +1324,7 @@ static int send_one(WsSock *s, const uint8_t *buf, int len, int wflags, uint32_t
         if (!e && beyond) deny_ok();
         return e;
     }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     (void)c; (void)wflags; return WSAENETDOWN;          /* no BSD sockets in a browser */
 #else
     if (s->icmp_fake){ *sent = len; return 0; }
@@ -1430,7 +1430,7 @@ static int recv_one(WsSock *s, uint8_t *buf, int len, int peek, uint32_t *ip, ui
     if (s->shut_rd) return WSAESHUTDOWN;
     if (s->udp_reset && s->has_peer){ s->udp_reset = 0; return WSAECONNRESET; }
     if (g_ws_mode == NET_VLAN) return vlan_recvfrom(s, buf, len, peek, ip, port, got);
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     return WSAENETDOWN;                                   /* no BSD sockets in a browser */
 #else
     struct sockaddr_in a; memset(&a, 0, sizeof a);
@@ -1519,7 +1519,7 @@ static uint32_t ws_getname(CPU *c, int peer){
             if (g_ws_mode == NET_VLAN){
                 if (vlan_conn_was_reset(s)) FAIL(WSAENOTCONN);        /* reset: no longer connected */
             }
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
             else {
                 /* after a reset macOS says EINVAL; Windows says WSAENOTCONN,
                  * which is how DirtySock notices a dropped connection */
@@ -1689,7 +1689,7 @@ unk:
 static int fionread(WsSock *s, uint32_t *v){
     *v = 0;
     if (s->fd < 0) return 0;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     vlan_fionread(s, v); return 0;                        /* the virtual socket's queue (net_lan.c) */
 #endif
     if (s->type == 1){ int n = 0; if (ioctl(s->fd, FIONREAD, &n) == 0) *v = (uint32_t)n; return 0; }
@@ -1927,7 +1927,7 @@ static uint32_t ws_gethostbyname(CPU *c){
         if (st_blocked <= 200) ws_log("BLOCKED dns \"%s\" (mode %s) from 0x%08x", name, mode_name(g_ws_mode), c->eip);
         set_err(WSAHOST_NOT_FOUND); return 0;
     }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     return 0;                                             /* not reached: the browser has no lan mode */
 #else
     /* lan: the system resolver, with the guest lock released */
@@ -2176,7 +2176,7 @@ int winsock_call(CPU *c, const char *dll, const char *n, uint32_t *out){
 
 void winsock_report(void){
     if (g_ws_mode < 0) return;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     if (g_ws_mode == NET_VLAN) vlan_report();             /* the virtual LAN's own counters (net_lan.c) */
 #endif
     fprintf(stderr, "  network (%s)      : %llu sockets, %llu sends (%llu bytes), %llu receives (%llu bytes), "

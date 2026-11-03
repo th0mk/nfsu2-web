@@ -32,7 +32,7 @@
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 void nfsu2_sha256(const void *data, size_t n, uint8_t out[32]);   /* runtime/web/sha256.c: no CommonCrypto */
 #define CC_SHA256_DIGEST_LENGTH 32
 #define CC_SHA256(b, n, d) nfsu2_sha256((b), (n), (d))
@@ -79,7 +79,7 @@ static GuestMod g_mods[1] = {
 static int mod_lifted(const GuestMod *m){ return m->info->name[0] && *m->fn_count; }
 
 static int host_fds_open(void){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     return 0;                   /* no host fds behind a guest socket in the browser (runtime/web/net_lan.c) */
 #else
     int n = 0, max = getdtablesize();

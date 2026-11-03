@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 #include "web/host_abi.h"
 /* web/src/host/game-worker.ts: the I/O worker's VideoDecoder (movie.ts) */
 __attribute__((import_module("nfsu2"), import_name("movie_open")))

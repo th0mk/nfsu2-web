@@ -1475,7 +1475,7 @@ int ps_to_msl(const VSProg *p, int id, char *out, size_t cap){
     return ps_to_msl_ex(p, id, out, cap, 0u);
 }
 
-#if defined(__wasm__) || defined(VSEMU_WGSL)
+#if defined(NFSU2_HOST_PLATFORM) || defined(VSEMU_WGSL)
 /* WGSL backend for the browser build; web-only code
  * lives in runtime/web/ and shares the parser's private types from here. */
 #include "web/vsemu_wgsl.inc"

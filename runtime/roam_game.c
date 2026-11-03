@@ -6179,9 +6179,12 @@ static void periodic_log(int64_t host){
             g_s.rx_stray, g_s.rx_dup_id, (unsigned long long)ps.blocked, g_cost_win_n ? g_cost_win_sum / 1000.0 / (double)g_cost_win_n : 0.0,
             g_cost_win_max / 1000.0, (unsigned long long)g_cost_win_n, rh_heap_mb());
     if (g_s.conf.hub_ip)
-        rlog("[roam]   the server's hub: %s, %u lists, %u HELLOs of players it did not list ignored\n",
+        rlog("[roam]   we are: %s, %d state(s) kept, car at (%.0f, %.0f, %.0f), v %.1f, SNAP seq %u, epoch %u, clock %u\n", rc_status_name(g_s.status), g_s.nlast,
+             g_s.last[0].p[0], g_s.last[0].p[1], g_s.last[0].p[2], g_s.last[0].speed, (unsigned)g_s.seq, (unsigned)g_s.epoch, (unsigned)g_s.clock);
+    if (g_s.conf.hub_ip)
+        rlog("[roam]   the server's hub: %s, %u lists (last %u players, longest %u), %u HELLOs of players it did not list ignored\n",
                 g_s.hub_was == 2 ? "answering (it picks the players near us)" : g_s.hub_was == 1 ? "no answer yet" : "silent (broadcast discovery)",
-                g_s.hub_lists, g_s.rx_unlisted);
+                g_s.hub_lists, g_s.hub_list_last, g_s.hub_list_max, g_s.rx_unlisted);
     if (g_shold.n){
         rlog("[roam]   friends' cars waited for the city's sections %d time(s), %.1f s in all, the longest %.0f ms%s\n", g_shold.n,
              g_shold.us / 1e6, g_shold.max / 1e3, g_shold.gone ? " (some went after 5 s)" : "");
@@ -8259,3 +8262,6 @@ int roam_game_friend_car(uint32_t car){
     return 0;
 }
 #endif
+
+/* the console's relatorio.txt: how many friends are established now (read without the lock: a count for a report) */
+int nfsu2_roam_friends(void){ return g_inited && O.on ? rc_established(&g_s) : 0; }

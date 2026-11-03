@@ -51,7 +51,7 @@
 
 void sub_005d6d20_orig(CPU *c);
 
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 #include "web/gpu_proto.h"
 
 #define VIEW9        0x008331d0u   /* eView 9 (0x48B1E0(9): 0x832DE0 + 9 * 0x70): the player's headlight */
@@ -345,7 +345,7 @@ int headlights_set(const char *mode){ (void)mode; return 0; }
 /* 0x5D6D20, thiscall (eView*, callback), ret 8: the callback over that
  * view's visible entries */
 void sub_005d6d20(CPU *c){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     uint32_t list = c->ecx, view = MR32(c->esp + 4u), fn = MR32(c->esp + 8u);
     sub_005d6d20_orig(c);
     if (view != VIEW9 || fn != LIT_CB || !hl_on() || !MR32(HL_ENABLE)) return;

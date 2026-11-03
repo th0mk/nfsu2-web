@@ -1,0 +1,25 @@
+# Switch: new profile CLAUDE -> Go Underground -> wait until free-roam HUD -> drive -> quit.
+# Based on nx_career_roam.txt (LEFT selects career on GarageMain). No UG_Map assumption.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type CLAUDE
++30   tap RETURN
++120  tap LEFT
++20   tap RETURN
++0    tapuntil RETURN GarageMain.fng 45 4000
++300  tap LEFT
++60   tap RETURN
++300  tap RETURN
++300  tap RETURN
++300  tap RETURN
++0    waitfng HUD_Online.fng 8000
++0    waitfng HUD_FreeRoam.fng 8000
++360  down UP
++1800 status roam_drive
++60   up UP
++0    quit

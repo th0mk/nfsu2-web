@@ -307,7 +307,7 @@ static int path_under(const char *path, const char *dir){
  * it).  Any write-side operation (write_allowed) forgets it all, and while a
  * handle is open for writing it is not used: the save overlay may then get a
  * file of such a name.  Web only: a native open takes microseconds. */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 #define GF_CACHE 1
 #endif
 #ifdef GF_CACHE
@@ -603,7 +603,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         }
     }
     else if (!strcmp(n,"ReadFile")){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
         /* In the browser a read of the install folder can wait for the network
          * (a cache miss of the page's I/O worker, web/src/host/io-worker.ts).
          * The guest lock is released meanwhile, as Windows lets the other
@@ -726,7 +726,7 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
         FH*f=fh_get(A(c,0)); struct stat st;
         if(!f||f->fd<0||fstat(f->fd,&st)!=0) r=0;
         else {
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
             /* WASI has no birth time: the status-change time stands in */
             const struct timespec *ts[3] = { &st.st_ctim, &st.st_atim, &st.st_mtim };
 #else

@@ -68,7 +68,7 @@ static WStat g_wstat[64];
  * Only one thread runs guest code at a time.  That keeps the guest memory and
  * allocators shared by the lifted code safe, and keeps the instruction trace
  * consistent.  The lock is released only in blocking calls (Sleep/Wait*). */
-#ifndef __wasm__
+#ifndef NFSU2_HOST_PLATFORM
 static pthread_mutex_t g_guest = PTHREAD_MUTEX_INITIALIZER;
 #define gil_acquire(who) pthread_mutex_lock(&g_guest)
 #define gil_acquire_frame(who) pthread_mutex_lock(&g_guest)
@@ -115,11 +115,11 @@ static void unreg_cpu(CPU *c){
  * long computation (e.g. decoding an audio stream) starves the other threads.
  * The audio writes ~50 ms of silence every 30 s -- this measures whether
  * that is the culprit.  GILLOG=<ms> reports every hold above the threshold. */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 #include "web/host_abi.h"
 #endif
 static uint64_t gil_now_us(void){
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     /* the page's monotonic clock without WASI's clock_time_get (its i64 argument
      * costs a BigInt per call into JS): this runs on every guest lock hand-off */
     return (uint64_t)(nfsu2_now_ms() * 1000.0);
@@ -136,7 +136,7 @@ static int gil_thr_us(void){
     return v;
 }
 static void gil_took(void){ tl_gil_t0 = gil_now_us(); }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 static double gil_host_wait_ms(void);   /* of the current hold: file I/O round trips, sleeps */
 #endif
 static void gil_gave(void){
@@ -150,7 +150,7 @@ static void gil_gave(void){
         static int shown = 0;
         if (shown < 80){ shown++;
             double audio_time(void);
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
             fprintf(stderr, "  [GIL] t=%.3f s  lock held %.1f ms  guest eip=%08x tid %u (host waits %.1f ms)\n",
                     audio_time(), d/1000.0, tl_cpu ? tl_cpu->eip : 0u,
                     (tl_cpu && tl_cpu->fs_base) ? MR32(tl_cpu->fs_base + 0x24u) : 0u, gil_host_wait_ms());
@@ -161,7 +161,7 @@ static void gil_gave(void){
         }
     }
 }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* wasm: the guest lock is a FIFO ticket lock (web/ticketlock.h): browsers
  * schedule workers with no fairness promise, and an unordered futex mutex let
  * the main thread re-take the lock ahead of the DirectSound feeder, the
@@ -380,7 +380,7 @@ void guest_wait_begin(void){ ts_set(TS_IDLE, 0); guest_yield_begin(); }   /* wat
 void guest_wait_end(void){ guest_yield_end(); }
 /* Sleep with the big lock released (win32.c: the game's frame wait loop). */
 uint64_t g_sleep_late_ns, g_sleep_gil_ns, g_sleep_n;    /* diagnostics: sleep lateness / lock wait */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* wasm: nanosleep is the worker's Atomics.wait with a timeout, which wakes on
  * the OS timer.  On Windows that timer ticks every 1 ms or every 15.6 ms,
  * depending on what else the browser is doing (Chrome 155, 2026-10-19: a
@@ -737,7 +737,7 @@ void guest_fair_yield(void){
     if (tl_cs_depth || tl_noyield) return;    /* never yield inside a critical section */
     static _Thread_local uint32_t n = 0;
     if ((++n & 0x3FFu) != 0) return;          /* once every 1024 calls */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     /* FIFO lock: hand it over only when someone queues; they all run before
      * this thread gets it back, so no sched_yield or nap is needed */
     if (g_gil_use_mx){
@@ -920,7 +920,7 @@ static Obj *obj_get(uint32_t h){
 
 /* ---- guest thread ---- */
 #define GTHREAD_STACK 0x00100000u          /* 1 MB */
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 static uint32_t g_tstack_next = 0x06000000u;   /* wasm: 16 x 1 MB below the heap (cpu.h) */
 #else
 static uint32_t g_tstack_next = 0x60000000u;
@@ -951,7 +951,7 @@ static void thread_report(void){
                     " critical sections %d of %d\n",
             (unsigned long long)g_threads_started, (unsigned long long)g_threads_exited,
             (unsigned long long)g_teb_reused, g_teb_next, g_nstk_free, g_cs_used, MAXCS);
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     win32_gil_report();
 #endif
 }
@@ -998,7 +998,7 @@ void mem_altstack_install(void);
 static int guest_pthread_create(pthread_t *th, void *(*fn)(void*), void *arg){
     pthread_attr_t at;
     if (pthread_attr_init(&at) != 0) return pthread_create(th, 0, fn, arg);
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     /* wasm: this is only the shadow stack in linear memory (address-taken
      * locals); the call chain itself lives on the engine's stack */
     pthread_attr_setstacksize(&at, 4u*1024u*1024u);
@@ -1246,7 +1246,12 @@ static void reg_save(void){
         if (g_reg[i].is_str) fprintf(f, "s %s=%s\n", g_reg[i].name, g_reg[i].sv);
         else                 fprintf(f, "d %s=%u\n", g_reg[i].name, g_reg[i].dw);
     }
-    if (fclose(f) == 0) rename(tmp, reg_path());
+    if (fclose(f) == 0){
+#ifdef __SWITCH__
+        unlink(reg_path());            /* the console's FAT will not rename over an existing file: the registry was never saved */
+#endif
+        rename(tmp, reg_path());
+    }
     else unlink(tmp);
 }
 static int reg_find(const char *nm){
@@ -1339,7 +1344,7 @@ static uint32_t tz_info(uint32_t p){
             MR32(p + 168) = (uint32_t)(int32_t)(-(dst_off - std_off) / 60);
         }
     }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     /* the zone comes from the page (runtime/web/tz.c): show what the game got */
     { static int shown; if (!shown++){
         struct tm a, b; time_t td = to_dst + std_off, ts = to_std + dst_off; gmtime_r(&td, &a); gmtime_r(&ts, &b);
@@ -1445,8 +1450,12 @@ int win32_ext_call(CPU *c, const char *n, uint32_t *out){
         const char *vn = (nameptr && mem_is_committed(nameptr))
                          ? (const char*)(g_mem+nameptr) : "";
         if (*vn){
-            if (type == 4u && pdata && mem_is_committed(pdata+3))
-                reg_put_dword(vn, MR32(pdata));
+            if (type == 4u && pdata && mem_is_committed(pdata+3)){
+                /* NFSU2_LOCK_GFX (the Switch build): the graphics options (g_*) are the shipped preset's; the game's Options
+                 * screen may change them for the session but they are never saved */
+                static int lock = -1; if (lock < 0) lock = getenv("NFSU2_LOCK_GFX") != NULL;
+                if (!(lock && !strncasecmp(vn, "g_", 2))) reg_put_dword(vn, MR32(pdata));
+            }
             else if (type == 1u && pdata && mem_is_committed(pdata))
                 reg_put_string(vn, (const char*)(g_mem+pdata));
             if (getenv("REGLOG"))

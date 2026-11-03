@@ -55,6 +55,7 @@ static double now_ms(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t
 
 /* ---- state ------------------------------------------------------------- */
 static GwCtl   *g_ctl;
+static uint8_t *g_native_rq;          /* the resource ring (rq_ptr is 32 bits) */
 static GwVsync *g_vs;
 static int      g_on;            /* recording for a page renderer */
 static int      g_inited;
@@ -138,7 +139,7 @@ static void gw_init(void){
         uint8_t *rq = zalloc(RQ_CAP);
         if (!rq) ok = 0;
         if (!ok){ fprintf(stderr, "[gpu] out of memory for the record buffers: no rendering\n"); want = 0; }
-        else { g_ctl->rq_ptr = (uint32_t)(uintptr_t)rq; g_ctl->rq_cap = RQ_CAP; }
+        else { g_ctl->rq_ptr = (uint32_t)(uintptr_t)rq; g_ctl->rq_cap = RQ_CAP; g_native_rq = rq; }
     }
     g_on = want;
     /* The renderer runs the game's vertex shaders on the GPU (com.c reads
@@ -209,7 +210,7 @@ static GwCmd *rq_begin(uint32_t op, uint32_t payload){
         fprintf(stderr, "[gpu] resource record of %u bytes does not fit the queue: dropped (op %u)\n", len, op);
         return NULL;
     }
-    uint8_t *ring = (uint8_t *)(uintptr_t)g_ctl->rq_ptr;
+    uint8_t *ring = g_native_rq;
     for (int waited = 0;;){
         uint32_t head = (uint32_t)g_ctl->rq_head, tail = (uint32_t)ald(&g_ctl->rq_tail);
         uint32_t off = head & (cap - 1u), pad = off + len > cap ? cap - off : 0u;
@@ -1097,3 +1098,16 @@ void metal_budget_report(void){
             g_vs_n, g_ps_n, g_msl_vs, g_msl_ps, g_ov_d, g_ov_v, g_ov_rv, g_ov_kb);
     fprintf(stderr, "  [gpu] raw draws merged into the one before: %.1f/frame\n", g_presents ? (double)g_merged / (double)g_presents : 0.0);
 }
+
+#ifdef __SWITCH__
+/* The native host (runtime/switch/gpu_native.c) drains the record buffers in this process.  The address fields of
+ * GwCtl/GwFrame are 32 bits (wasm32), so on a 64-bit host it takes the real pointers from here instead. */
+void *gw_native_ctl(void){ gw_init(); return g_ctl; }
+int gw_native_on(void){ return g_on; }
+void *gw_native_ring(void){ return (void *)(uintptr_t)(g_on ? g_native_rq : NULL); }
+int gw_native_buf(int b, void **draws, void **tv, void **raw, void **k, void **psc){
+    if (b < 0 || b >= GW_NBUF || !g_on) return 0;
+    *draws = g_b[b].d; *tv = g_b[b].v; *raw = g_b[b].rv; *k = g_b[b].kb; *psc = g_b[b].psc;
+    return 1;
+}
+#endif

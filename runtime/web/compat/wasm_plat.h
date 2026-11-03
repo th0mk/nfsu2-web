@@ -3,6 +3,7 @@
  * few #ifdefs as possible.  Only on the include path of web/build. */
 #ifndef NFSU2_WASM_PLAT_H
 #define NFSU2_WASM_PLAT_H
+#define NFSU2_HOST_PLATFORM 1   /* no OS services: the page provides them (the shared runtime tests this, not __wasm__) */
 #include <stdint.h>
 #include <time.h>
 #include <pthread.h>

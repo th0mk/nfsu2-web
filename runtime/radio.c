@@ -30,7 +30,7 @@ void sub_004ac9f0_orig(CPU *c);   /* the game draws the plaque of the song: for 
 void sub_0072d18d_orig(CPU *c);   /* the stream reader, the mixer asks for frames: a song's reader gets the track's sound from the page */
 void sub_00739320_orig(CPU *c);   /* stops a song (24 places in the game): the track ends with it; we call it from the mixer step to end a song */
 
-#if defined(__wasm__) || defined(NFSU2_RADIO_TEST)
+#if defined(NFSU2_HOST_PLATFORM) || defined(NFSU2_RADIO_TEST)
 #include "web/status_proto.h"
 #include <stdint.h>
 #include <string.h>

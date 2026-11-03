@@ -228,6 +228,9 @@ static void key_event(unsigned dik, int down){
     } else win32_post_message(0x0101u, k->vk, lp | 0xC0000000u);  /* WM_KEYUP */
 }
 
+/* a key from the host (the Switch's pad, runtime/switch/nx_host.c), called on the guest thread at each Present */
+void autotest_key(unsigned dik, int down){ key_event(dik, down); }
+
 /* ---- script ----------------------------------------------------------- */
 enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_POKE, C_WAITFNG, C_TAPUNTIL,
        C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS,
@@ -707,7 +710,7 @@ static int fire(CPU *c, Ev *e, double tms){
     case C_AUDIORESET: { void audio_device_changed(const char *);
         audio_device_changed("autotest audioreset"); break; }
     case C_AUDIOSTALL:
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
         { void audio_test_stall(int); fprintf(stderr, "[autotest] f=%ld audiostall %ld ms (test-only)\n", g_frame, e->n);
           audio_test_stall((int)e->n); }
 #else
@@ -935,7 +938,7 @@ static int fire(CPU *c, Ev *e, double tms){
 }
 
 static double g_st_t = 0; static long g_st_f = 0; static double g_st_cpu = 0, g_st_gcpu = 0;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
 /* The browser has no CPU clocks: busy time of the guest threads instead (the
  * guest lock held minus host waits, win32_ext.c).  cpu= is then the guest
  * threads' share of one core (the page's renderer and audio not included). */
@@ -968,7 +971,7 @@ static void status_line(double t, double tms, const char *label){
         int com_live_line(char *, size_t); k += com_live_line(ms + k, sizeof ms - (size_t)k); }
     if (k > 0 && k < (int)sizeof ms){                                   /* a texture pack in use */
         int texrep_status(char *, size_t); texrep_status(ms + k, sizeof ms - (size_t)k); }
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     /* per-frame guest busy time (p50/p95/p99/max) and the guest lock's queue
      * since the last line (runtime/web/gcpu.c, win32_ext.c) */
     if (k > 0) k = (int)strlen(ms);
@@ -977,11 +980,13 @@ static void status_line(double t, double tms, const char *label){
     /* the frame pacer's spin on the clock per sleep since the last line (win32_ext.c sleep_precise_ns) */
     if (k > 0 && k < (int)sizeof ms){ int pacer_spin_status(char *, size_t); pacer_spin_status(ms + k, sizeof ms - (size_t)k); }
 #endif
-#ifdef __wasm__
+#if defined(__wasm__)
     /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = the top of all the runtime heap ever took
      * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included */
     uint64_t memory_bytes(void), heap_break(void);
     char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_break() >> 20));
+#elif defined(NFSU2_HOST_PLATFORM)
+    char rss[24]; snprintf(rss, sizeof rss, "%ldMB", (long)((uintptr_t)sbrk(0) >> 20));   /* no ru_maxrss: the heap's top (the Switch build) */
 #else
     char rss[24]; snprintf(rss, sizeof rss, "%ldMB", (long)(ru.ru_maxrss / (1024 * 1024)));
 #endif
@@ -1034,7 +1039,7 @@ static void car_trace(void){
 
 void autotest_on_present(CPU *c){
     if (!g_inited) return;
-#ifdef __wasm__
+#ifdef NFSU2_HOST_PLATFORM
     { void gcpu_frame(void); gcpu_frame(); }        /* per-frame guest busy time (runtime/web/gcpu.c) */
     { void status_web_frame(void); status_web_frame(); } /* whether the player drives (runtime/web/status_web.c) */
     { void input_web_frame(void); input_web_frame(); }   /* the game's text entry, for a phone's keyboard (runtime/web/input_web.c) */
