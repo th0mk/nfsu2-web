@@ -290,7 +290,7 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
 - Don't answer questions about moderation, bans, kicks, names, donations, Discord channels, server load or the
   server's setup: staff answer those (none).
 - Don't guess at release plans or say what the developer will do, beyond the decisions above.
-- Career progress from free-roam races with other players, since <commit> (before that live version: they don't
+- Career progress from free-roam races with other players, since 0bc01ce (before that live version: they don't
   count, only the prize money): a race counts where the player could win it with Solo there (open on their map, or
   a normal race of their current stage not won yet; sponsor and URL races only when open, SUV races in an SUV;
   never a race of a later stage, a story race or one already won). The winner's career gets the game's own win (the
