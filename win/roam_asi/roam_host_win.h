@@ -64,6 +64,13 @@ uint64_t    roam_win_ns(void);
 #define rh_no_profile(name) (!strcasecmp((name), "No Profile"))
 /* no drift mode here (drift.c): the ride's dyno setup is always its own */
 #define rh_drift_tuning(out) ((void)(out), 0)
+#define ROAM_HOST_DRIFT  0               /* ...so no drift battles */
+#define rh_drift_want()  0
+#define rh_drift_begin() ((void)0)
+#define rh_drift_go(c)   ((void)(c))
+#define rh_drift_score(b, p) (*(b) = 0, *(p) = 0)
+#define rh_drift_x()     0u
+#define rh_drift_end()   ((void)0)
 
 /* the pose log (test aid, PoseLog in the .ini) */
 typedef struct rh_file rh_file;

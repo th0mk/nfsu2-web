@@ -447,6 +447,7 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
     case RC_MSG_DUEL:
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return -1;
         rc_put8(&w, m->u.duel.op); rc_put8(&w, m->u.duel.arg); rc_put32(&w, m->u.duel.to); rc_put32(&w, m->u.duel.duel);
+        if (m->u.duel.op == RC_DUEL_SCORE) rc_put32(&w, m->u.duel.score);
         break;
     case RC_MSG_MAPREQ:
         rc_put16(&w, m->u.mapreq.req); rc_put16(&w, m->u.mapreq.max); rc_put16(&w, m->u.mapreq.base);
@@ -599,6 +600,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
     case RC_MSG_DUEL:
         m->u.duel.op = (uint8_t)rc_get8(&r); m->u.duel.arg = (uint8_t)rc_get8(&r);
         m->u.duel.to = rc_get32(&r); m->u.duel.duel = rc_get32(&r);
+        m->u.duel.score = m->u.duel.op == RC_DUEL_SCORE ? rc_get32(&r) : 0;
         if (r.err) return RC_E_SHORT;
         if (m->u.duel.op < 1 || m->u.duel.op >= RC_DUEL__N || !m->u.duel.to || !m->u.duel.duel) return RC_E_FIELD;
         break;
@@ -1021,21 +1023,23 @@ static int hub_mode(const rc_session *s, int64_t now){
     if (!s->hub_since) return 1;
     return now - (s->hub_heard_us ? s->hub_heard_us : s->hub_since) < T_HUB_SILENT;
 }
-int rc_send_duel(rc_session *s, uint32_t to, uint8_t op, uint8_t arg, uint32_t duel){
+int rc_send_duel(rc_session *s, uint32_t to, uint8_t op, uint8_t arg, uint32_t duel, uint32_t score){
+    int drift = op == RC_DUEL_SCORE || ((op == RC_DUEL_OFFER || op == RC_DUEL_ACCEPT || op == RC_DUEL_START) && (arg & RC_DA_DRIFT));
     for (int i = 0; i < RC_TABLE; i++){
         rc_peer *p = &s->peer[i];
-        if (p->state != RC_PS_EST || p->id != to || !p->duels) continue;
+        if (p->state != RC_PS_EST || p->id != to || !p->duels || (drift && !p->drifts)) continue;
         rc_msg m; hdr(s, &m, RC_MSG_DUEL);
-        m.u.duel.op = op; m.u.duel.arg = arg; m.u.duel.to = to; m.u.duel.duel = duel;
+        m.u.duel.op = op; m.u.duel.arg = arg; m.u.duel.to = to; m.u.duel.duel = duel; m.u.duel.score = op == RC_DUEL_SCORE ? score : 0;
         uint32_t before = s->tx;
         tx(s, p, &m);
         return s->tx != before;
     }
     return 0;
 }
-int rc_take_duel(rc_session *s, uint32_t *from, uint8_t *op, uint8_t *arg, uint32_t *duel){
+int rc_take_duel(rc_session *s, uint32_t *from, uint8_t *op, uint8_t *arg, uint32_t *duel, uint32_t *score){
     if (!s->n_duel_in) return 0;
     *from = s->duel_in[0].from; *op = s->duel_in[0].op; *arg = s->duel_in[0].arg; *duel = s->duel_in[0].duel;
+    if (score) *score = s->duel_in[0].score;
     for (int k = 1; k < s->n_duel_in; k++) s->duel_in[k - 1] = s->duel_in[k];
     s->n_duel_in--;
     return 1;
@@ -1340,6 +1344,7 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
         m->u.hello.duel = s->duel_with;
     }
     if (s->conf.duels) m->h.flags |= RC_HF_DUELS;
+    if (s->conf.duels && s->conf.drifts) m->h.flags |= RC_HF_DRIFT;
     if (s->conf.lobbies) m->h.flags |= RC_HF_LOBBY;
     if (s->conf.say) m->h.flags |= RC_HF_SAY;
     if (!to) m->h.flags |= RC_HF_ALL;
@@ -1525,6 +1530,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         memcpy(p->name, m.u.hello.name, sizeof p->name);
         p->platform = m.u.hello.platform; p->status = m.u.hello.status; p->cfg_rev_seen = m.u.hello.cfg_rev;
         p->core_ver = m.u.hello.core_ver; p->duels = (m.h.flags & RC_HF_DUELS) != 0;
+        p->drifts = p->duels && (m.h.flags & RC_HF_DRIFT) != 0;
         p->lobbies = (m.h.flags & RC_HF_LOBBY) != 0;
         p->statex = (m.h.flags & RC_HF_STATEX) != 0;
         p->say = (m.h.flags & RC_HF_SAY) != 0;
@@ -1632,6 +1638,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (s->n_duel_in == RC_DUEL_INBOX){ s->duel_dropped++; return; }
         s->duel_in[s->n_duel_in].from = m.h.sender; s->duel_in[s->n_duel_in].op = m.u.duel.op;
         s->duel_in[s->n_duel_in].arg = m.u.duel.arg; s->duel_in[s->n_duel_in].duel = m.u.duel.duel;
+        s->duel_in[s->n_duel_in].score = m.u.duel.score;
         s->n_duel_in++;
         break;
     case RC_MSG_LOBBY:

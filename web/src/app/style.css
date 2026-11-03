@@ -888,6 +888,13 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .drift-gain { display: flex; flex-direction: column; align-items: flex-end; gap: calc(5 * var(--u)); }
 .drift-gain b { color: #d8a020; }
 .drift-total, .drift-total b { color: #30cd30; }
+/* a drift battle's scoreboard (drift.ts) under it, the panel's rows: Time and its m:ss, then each player's place in
+ * italics, name and points, the player's own name green */
+.drift-board .drift-time b { color: #e8e8e8; }
+.drift-board .drift-who { gap: calc(8 * var(--u)); }
+.drift-board .drift-who i { font-weight: 700; color: #e8e8e8; width: calc(14 * var(--u)); }
+.drift-board .drift-who span { flex: 1; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.04em; color: #e8e8e8; }
+.drift-board .drift-who.me span { color: #30cd30; }
 /* the DRIFT counter (drift.ts): the drift event's, centred under free roam's arrow, the label over the points in big
  * italics: lime while a drift counts and when it banks, red (the drift event's) when a wall loses it; a banked or lost
  * one fades out */

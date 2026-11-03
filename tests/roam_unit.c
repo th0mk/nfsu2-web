@@ -218,6 +218,16 @@ static void t_roundtrip(void){
           CHECK(rc_decode(c, n, &d) == RC_E_FIELD, "DUEL with a bad field refused (%d)", k);
       }
       m.u.duel.op = 0; CHECK(rc_encode(&m, b, sizeof b) < 0, "DUEL without an op not encoded"); }
+    /* a drift battle's SCORE: 14 bytes, the points after the id; cut short refused */
+    memset(&m, 0, sizeof m); m.h.type = RC_MSG_DUEL; m.h.sender = 7;
+    m.u.duel.op = RC_DUEL_SCORE; m.u.duel.arg = 1; m.u.duel.to = 0xCAFEF00Du; m.u.duel.duel = 0x12345678u; m.u.duel.score = 4000000123u;
+    { int n = rc_encode(&m, b, sizeof b);
+      CHECK(n == RC_HDR + 14 + RC_CRC && rc_decode(b, n, &d) == RC_OK && d.u.duel.op == RC_DUEL_SCORE && d.u.duel.arg == 1 &&
+            d.u.duel.duel == 0x12345678u && d.u.duel.score == 4000000123u, "DUEL SCORE round trip (%d bytes, %u)", n, d.u.duel.score);
+      m.u.duel.op = RC_DUEL_OFFER; m.u.duel.arg = RC_DA_DRIFT | RC_DA_SOLID;
+      n = rc_encode(&m, b, sizeof b);
+      CHECK(n == RC_HDR + 10 + RC_CRC && rc_decode(b, n, &d) == RC_OK && d.u.duel.arg == (RC_DA_DRIFT | RC_DA_SOLID) && !d.u.duel.score,
+            "DUEL OFFER: no points on the wire (%d bytes)", n); }
     /* LOBBY: 24 bytes and 4 per player; a bad op, state, reason, id, race, size or player list refused */
     memset(&m, 0, sizeof m); m.h.type = RC_MSG_LOBBY; m.h.sender = 7;
     { rc_lobby *l = &m.u.lobby;
@@ -1253,12 +1263,12 @@ static void t_duel(void){
     CHECK(est(0) == 2 && p1 >= 0 && p2 >= 0 && g_n[0].peer[p1].duels && !g_n[0].peer[p2].duels,
           "the HELLO's flag says who takes outrun challenges (%d %d)", p1 >= 0 && g_n[0].peer[p1].duels, p2 >= 0 && g_n[0].peer[p2].duels);
     uint32_t bad2 = g_n[2].rx_bad;
-    CHECK(rc_send_duel(&g_n[0], 0x501, RC_DUEL_OFFER, 0, 0xD1) == 1 && rc_send_duel(&g_n[0], 0x502, RC_DUEL_OFFER, 0, 0xD2) == 0 &&
-          rc_send_duel(&g_n[0], 0x777, RC_DUEL_OFFER, 0, 0xD3) == 0, "DUEL goes to a peer that takes it, not to an older one or a stranger");
+    CHECK(rc_send_duel(&g_n[0], 0x501, RC_DUEL_OFFER, 0, 0xD1, 0) == 1 && rc_send_duel(&g_n[0], 0x502, RC_DUEL_OFFER, 0, 0xD2, 0) == 0 &&
+          rc_send_duel(&g_n[0], 0x777, RC_DUEL_OFFER, 0, 0xD3, 0) == 0, "DUEL goes to a peer that takes it, not to an older one or a stranger");
     net_run(g_now + 20000, 3);
     uint32_t from = 0, duel = 0; uint8_t op = 0, arg = 0;
-    CHECK(rc_take_duel(&g_n[1], &from, &op, &arg, &duel) == 1 && from == 0x500 && op == RC_DUEL_OFFER && duel == 0xD1 &&
-          !rc_take_duel(&g_n[1], &from, &op, &arg, &duel), "the challenge arrives once (from %x, op %d, id %x)", from, op, duel);
+    CHECK(rc_take_duel(&g_n[1], &from, &op, &arg, &duel, 0) == 1 && from == 0x500 && op == RC_DUEL_OFFER && duel == 0xD1 &&
+          !rc_take_duel(&g_n[1], &from, &op, &arg, &duel, 0), "the challenge arrives once (from %x, op %d, id %x)", from, op, duel);
     CHECK(g_n[2].rx_bad == bad2 && !g_n[2].n_duel_in, "the older game hears nothing it cannot read");
     /* one for somebody else, from an established peer: not ours */
     rc_msg m; memset(&m, 0, sizeof m); m.h.type = RC_MSG_DUEL; m.h.sender = 0x500;
@@ -1267,12 +1277,40 @@ static void t_duel(void){
     rc_receive(&g_n[1], node_ip(0), node_port(0), b, n, g_now);
     CHECK(!g_n[1].n_duel_in, "a DUEL for another player is dropped");
     /* the inbox holds RC_DUEL_INBOX, oldest first */
-    for (int k = 0; k < RC_DUEL_INBOX + 4; k++) rc_send_duel(&g_n[0], 0x501, RC_DUEL_RESULT, 1, 0x100u + (uint32_t)k);
+    for (int k = 0; k < RC_DUEL_INBOX + 4; k++) rc_send_duel(&g_n[0], 0x501, RC_DUEL_RESULT, 1, 0x100u + (uint32_t)k, 0);
     net_run(g_now + 20000, 3);
     int kept = g_n[1].n_duel_in, taken = 0; uint32_t seen = 0;
-    while (rc_take_duel(&g_n[1], &from, &op, &arg, &duel)) if (duel >= 0x100 && duel < 0x100 + RC_DUEL_INBOX + 4){ taken++; seen |= 1u << (duel - 0x100); }
+    while (rc_take_duel(&g_n[1], &from, &op, &arg, &duel, 0)) if (duel >= 0x100 && duel < 0x100 + RC_DUEL_INBOX + 4){ taken++; seen |= 1u << (duel - 0x100); }
     CHECK(kept == RC_DUEL_INBOX && g_n[1].duel_dropped == 4 && taken == RC_DUEL_INBOX && __builtin_popcount(seen) == RC_DUEL_INBOX && !g_n[1].n_duel_in,
           "inbox: %d kept, %u dropped, %d taken", kept, g_n[1].duel_dropped, taken);
+}
+
+/* ---- 4d''. drift battles: a drift challenge and SCORE only to a peer whose HELLO takes them, the points through -- */
+static void t_duel_drift(void){
+    mesh(3, 8);
+    for (int i = 0; i < 3; i++) g_n[i].conf.duels = 1;
+    g_n[0].conf.drifts = 1; g_n[1].conf.drifts = 1;           /* node 2: outruns only (a game of before) */
+    for (int i = 1; i < 3; i++){ rc_add_peer(&g_n[0], node_ip(i), node_port(i), 1, g_now); rc_add_peer(&g_n[i], node_ip(0), node_port(0), 1, g_now); }
+    drive(3, g_now + 3000000);
+    int p1 = peer_of(0, 0x501), p2 = peer_of(0, 0x502);
+    CHECK(est(0) == 2 && p1 >= 0 && p2 >= 0 && g_n[0].peer[p1].drifts && !g_n[0].peer[p2].drifts && g_n[0].peer[p2].duels,
+          "the HELLO's flag says who takes drift battles");
+    uint32_t bad2 = g_n[2].rx_bad;
+    CHECK(rc_send_duel(&g_n[0], 0x502, RC_DUEL_OFFER, RC_DA_DRIFT, 0xE1, 0) == 0 && rc_send_duel(&g_n[0], 0x502, RC_DUEL_SCORE, 0, 0xE1, 5) == 0 &&
+          rc_send_duel(&g_n[0], 0x502, RC_DUEL_OFFER, RC_DA_SOLID, 0xE2, 0) == 1, "an older game gets an outrun's challenge, no drift battle's");
+    CHECK(rc_send_duel(&g_n[0], 0x501, RC_DUEL_OFFER, RC_DA_DRIFT, 0xE3, 0) == 1 && rc_send_duel(&g_n[0], 0x501, RC_DUEL_SCORE, 1, 0xE3, 123456) == 1,
+          "a drift battle's challenge and points go to a game that takes them");
+    net_run(g_now + 20000, 3);
+    /* (the fake network may hand them over in either order: the game takes points only once the battle runs, and
+     * sends them again every second) */
+    uint32_t from = 0, duel = 0, pts = 0; uint8_t op = 0, arg = 0;
+    int got = g_n[1].n_duel_in, offer = 0, score = 0;
+    while (rc_take_duel(&g_n[1], &from, &op, &arg, &duel, &pts)){
+        if (op == RC_DUEL_OFFER && arg == RC_DA_DRIFT && duel == 0xE3 && !pts) offer++;
+        if (op == RC_DUEL_SCORE && arg == 1 && duel == 0xE3 && pts == 123456) score++;
+    }
+    CHECK(got == 2 && offer == 1 && score == 1, "the drift challenge and its points arrive (%d in: %d challenge, %d points)", got, offer, score);
+    CHECK(g_n[2].rx_bad == bad2 && g_n[2].n_duel_in == 1, "the older game got the outrun only, nothing it cannot read");
 }
 
 /* ---- 4d'. an outrun's other player (rc_set_duel): the hub hears it, and the session keeps it while the hub's
@@ -1758,6 +1796,7 @@ int main(int argc, char **argv){
     t_hub();
     t_far();
     t_duel();
+    t_duel_drift();
     t_duel_hub();
     t_lobby();
     t_say();

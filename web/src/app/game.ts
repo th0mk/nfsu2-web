@@ -35,6 +35,8 @@ export interface SessionOptions {
   say?(json: string): void;
   /** free roam: front bumpers touching for 3 s, or parted, as JSON from the game (friends.ts) */
   bump?(json: string): void;
+  /** free roam: a drift battle's scoreboard, as JSON from the game ("{}": none; drift.ts) */
+  battle?(json: string): void;
   /** free roam: a friend message from the server (friends.ts) */
   friend?(m: Record<string, unknown>): void;
   /** every frame drawn: quick chat's places over the cars in it (contract.ts RendererOptions.onMarks) */
@@ -160,7 +162,7 @@ export class GameSession {
     })).then(i => { s.input = i; });
     if (o.netName !== null)
       void attach('network', () => attachNet(s.proc, {
-        ...common, name: o.netName!, id: o.netId, was: o.netWas, claim: o.netClaim, block: o.netBlock, notice: o.notice, lobby: o.lobby, say: o.say, bump: o.bump, friend: o.friend, back: o.netBack, queue: o.netQueue, removed: o.netRemoved, races: o.netRaces, rename: o.netRename,
+        ...common, name: o.netName!, id: o.netId, was: o.netWas, claim: o.netClaim, block: o.netBlock, notice: o.notice, lobby: o.lobby, say: o.say, bump: o.bump, battle: o.battle, friend: o.friend, back: o.netBack, queue: o.netQueue, removed: o.netRemoved, races: o.netRaces, rename: o.netRename,
       })).then(n => { s.net = n; });
     return s;
   }

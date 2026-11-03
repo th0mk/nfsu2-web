@@ -98,6 +98,8 @@ export interface NetOptions {
   /** free roam's friends: the player's car and another's touched front bumpers for 3 s, or parted after that
    *  (NET_KIND_FRIEND), as JSON from the game */
   onBump?: (json: string) => void;
+  /** a drift battle's scoreboard (NET_KIND_BATTLE), as JSON from the game ("{}": none) */
+  onBattle?: (json: string) => void;
   /** free roam's friends: a {"t":"friend",...} message from the server (server-rs src/app/friends.rs) */
   onFriend?: (m: Record<string, unknown>) => void;
   /** the switch welcomed this page again after the link was lost (a server restart, as for a deploy) */
@@ -957,6 +959,9 @@ export class Link implements NetLink {
       } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_FRIEND) {
         // front bumpers: the same
         if (len <= P.NET_MAX_PAYLOAD) this.o.onBump?.(new TextDecoder().decode(ep.u8.slice(s + P.S_DATA, s + P.S_DATA + len)));
+      } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_BATTLE) {
+        // a drift battle's scoreboard: the same
+        if (len <= P.NET_MAX_PAYLOAD) this.o.onBattle?.(new TextDecoder().decode(ep.u8.slice(s + P.S_DATA, s + P.S_DATA + len)));
       } else if (dv.getUint32(s + P.S_KIND, true) === P.NET_KIND_FLYING) {
         // a car in the air for minutes: off the switch, once this drain is done (it sends what came before)
         let secs = 0;

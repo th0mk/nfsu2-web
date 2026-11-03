@@ -7,6 +7,9 @@
 // Not over a dialog of the page's.  It reads the game's status (runtime/web/status_web.c), as the pause hint does, every
 // frame while drift mode is on: drift (1 chosen, 2 on now, 4 the last X was elsewhere), drift_key (X presses), drift_x,
 // drift_gain, drift_total, drift_best, drift_st (0 a drift that counts) and drift_pend (its points).
+// In a drift battle with another player (roam_game.c db_*) a scoreboard goes under the panel, as a drift event's
+// standings: the time left, then both players with their points, the more first, the player's own row green; the game
+// sends it (roam_game.c db_panel, NET_KIND_BATTLE) as {"t","me","a","vs","b"} while the points count, "{}" after.
 import type { GameSession } from './game';
 import { t } from './i18n';
 import { pageDialog } from './padnav';
@@ -35,6 +38,9 @@ export class DriftPanel {
   private banked = -1;
   private counting = false;
   private pend = 0;
+  private board: HTMLElement;
+  private bs: { t: number; me: string; a: number; vs: string; b: number } | null = null;
+  private boardShown = false;
 
   constructor(stage: HTMLElement, private deps: { toast(msg: string, ms: number): void; wide(): boolean; log(s: string): void }) {
     const p = this.root = document.createElement('div');
@@ -50,7 +56,9 @@ export class DriftPanel {
     q.className = 'drift-pop'; q.hidden = true; q.dataset.nfsu2Ui = '';
     q.innerHTML = '<span></span><b></b>';
     q.addEventListener('animationend', () => { q.hidden = true; });
-    stage.append(p, q);
+    const b = this.board = document.createElement('div');
+    b.className = 'drift-panel drift-board'; b.hidden = true; b.dataset.nfsu2Ui = '';
+    stage.append(p, q, b);
   }
 
   /** a game started: the panel follows its drift mode until stop() */
@@ -66,6 +74,36 @@ export class DriftPanel {
     this.session = null;
     this.show(false);
     this.pop.hidden = true;
+    this.bs = null; this.board.hidden = true; this.boardShown = false;
+  }
+
+  /** a drift battle's scoreboard from the game ("{}": none) */
+  battle(json: string) {
+    let v: Record<string, unknown> = {};
+    try { v = JSON.parse(json) as Record<string, unknown>; } catch { /* none */ }
+    const n = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.floor(x)) : 0);
+    const s = (x: unknown) => (typeof x === 'string' ? x : '');
+    this.bs = typeof v.t === 'number' ? { t: n(v.t), me: s(v.me), a: n(v.a), vs: s(v.vs), b: n(v.b) } : null;
+    if (this.bs) this.fillBoard(this.bs);
+  }
+
+  /** Time: m:ss, then both players, the more points first (the player first on a tie) */
+  private fillBoard(bs: { t: number; me: string; a: number; vs: string; b: number }) {
+    const rows: [string, number, boolean][] = [[bs.me, bs.a, true], [bs.vs, bs.b, false]];
+    if (bs.b > bs.a) rows.reverse();
+    const time = document.createElement('div'), label = document.createElement('span'), left = document.createElement('b');
+    time.className = 'drift-time';
+    label.textContent = t('Time:');
+    left.textContent = `${Math.floor(bs.t / 60)}:${String(bs.t % 60).padStart(2, '0')}`;
+    time.append(label, left);
+    const lines = rows.map(([name, pts, me], k) => {
+      const d = document.createElement('div'), i = document.createElement('i'), w = document.createElement('span'), p = document.createElement('b');
+      d.className = me ? 'drift-who me' : 'drift-who';
+      i.textContent = `${k + 1}:`; w.textContent = name; p.textContent = String(pts);
+      d.append(i, w, p);
+      return d;
+    });
+    this.board.replaceChildren(time, ...lines);
   }
 
   private update() {
@@ -94,6 +132,8 @@ export class DriftPanel {
       }
     }
     this.show(this.on && !pageDialog());
+    const board = this.shown && this.bs !== null;
+    if (board !== this.boardShown) { this.boardShown = board; this.board.hidden = !board; }
     if (this.shown) this.place(s);
     else this.pop.hidden = true;
   }
@@ -142,5 +182,11 @@ export class DriftPanel {
     ps.left = `${v.x + v.w / 2}px`;                                      // its middle (the style's translate)
     ps.top = `${v.y + v.h / 2 + POP_TOP_U * u}px`;
     ps.setProperty('--u', `${u}px`);
+    if (this.boardShown) {                                               // the scoreboard: 4 under the panel, as wide
+      const bs = this.board.style;
+      bs.left = st.left;
+      bs.top = `${v.y + v.h / 2 + TOP_U * u + this.root.offsetHeight + 4 * u}px`;
+      bs.setProperty('--u', `${u}px`);
+    }
   }
 }

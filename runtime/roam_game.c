@@ -272,6 +272,7 @@ static uint32_t gcall1(CPU *c, uint32_t fn, uint32_t ecx, uint32_t a){ return rh
 static uint32_t player_car(void){ uint32_t p = rd32(G_PLAYER1); return p ? rd32(p + 4u) : 0; }
 static uint32_t world(void){ uint32_t w = rd32(G_WORLD); return ok(w, 0x80) ? w : 0; }
 static int du_racing(uint32_t race);
+static int du_battling(void);
 static int du_solid(uint32_t car);
 static int du_solid_peer(uint32_t id);
 static int outrun_racer(uint32_t car);
@@ -948,9 +949,11 @@ static void ghost_all(void){ for (int k = 0; k < NSLOT; k++) g_sl[k].ghost = 1; 
  * RC_BIT_PASS).  A car of a traffic type (a bus or a fire truck across the
  * airport's way out: a profile a save editor changed makes one the player's)
  * is passable whoever sees it: its own game says so, and every other game
- * sees its type, so a game that does not say so cannot keep it solid. */
+ * sees its type, so a game that does not say so cannot keep it solid.  A
+ * player in a drift battle (du_battling) lets every car through theirs and
+ * drives through every other, the other player's too: nobody wrecks a drift. */
 enum { SOFT_PAUSED = 1, SOFT_IDLE = 2, SOFT_DOOR = 4, SOFT_SPAWN = 8, SOFT_EVENT = 16, SOFT_SAYS = 32, SOFT_BLOCK = 64,
-       SOFT_TRAFFIC = 128 };
+       SOFT_TRAFFIC = 128, SOFT_BATTLE = 256 };
 /* an open event: its trigger's box, and what it leads to (FN_MARKER_WHAT's
  * out[kind]: 1 a race, 2 a shop, 3 a showcase (a cover shoot), 4 another
  * (the table at 0x838424: STAGE_2_SHOW_1, STAGE_3_PERF_1, ...)) */
@@ -1136,7 +1139,7 @@ static void soft_me(CPU *c, int64_t host, uint8_t status){
                  (ok(me, 0x70) && near_door(at[0], at[1]) ? SOFT_DOOR : 0) |
                  (ok(me, 0x70) && near_event(at[0], at[1]) ? SOFT_EVENT : 0) |
                  (ok(me, 0x70) && at_spawn(at) ? SOFT_SPAWN : 0) |
-                 (g_pass.blocking ? SOFT_BLOCK : 0) | (g_pass.traffic ? SOFT_TRAFFIC : 0);
+                 (g_pass.blocking ? SOFT_BLOCK : 0) | (g_pass.traffic ? SOFT_TRAFFIC : 0) | (du_battling() ? SOFT_BATTLE : 0);
 }
 /* a shown friend's car's reasons, the player's added; leaving them makes it
  * a ghost.  The friend's own (RC_BIT_PASS): near one of their open events,
@@ -3437,6 +3440,7 @@ typedef struct { int idx; uint32_t id; char name[RC_NAME_MAX + 1]; int visible, 
                                           the hub links, nfsu2-roam) */
                  int listed;           /* the hub's last list has it (or there is no hub): rc_peer_listed */
                  int duels;            /* takes outrun challenges (its HELLO) */
+                 int drifts;           /* ...and drift battles */
                  int has_cfg;          /* a complete car record is held */
                  int cfg_len;          /* > 0: the record is copied here (a slot needs it) */
                  uint8_t cfg[RC_CFG_MAX]; int have_pose; rc_pose pose; float err; uint32_t look;
@@ -3977,6 +3981,7 @@ static int64_t render_delay(int i, const rc_peer *p, int64_t frame_dt){
 #else
 #define DUELS           1
 #endif
+#define DRIFTS          (DUELS && ROAM_HOST_DRIFT)   /* drift battles (below): drift mode is drift.c's */
 #define G_ACTIONS       0x0086eaf0u   /* the joystick actions held this frame, a bit per action, 0 = held (0x5CFD60) */
 #define ACT_ENGAGE      15u           /* Engage */
 #define G_OUTRUN_STATE  (G_ENCOUNTERS + 0x1ae8u)  /* 2: an outrun can be taken (0x500D20) */
@@ -4026,6 +4031,15 @@ static struct {
     int      solid_mine, solid_theirs;        /* each game keeps the two cars solid for the outrun (du_solid) */
     char     note[TAG_DUEL_MAX]; int64_t note_until;
     uint32_t offers, races, wins, losses;     /* statistics */
+    /* drift battles (db_*) */
+    int      drift;                           /* this one is a drift battle (RC_DA_DRIFT), not an outrun */
+    int      db_on, db_go, db_done;           /* drift.c's battle runs; its points count; the result is out */
+    int64_t  db_go_at, db_end_at;             /* the off, the end (host clock) */
+    int64_t  db_score_at, db_left_at, db_xnote_until;
+    uint32_t db_mine, db_sent, db_theirs;     /* points banked: ours, ours as last sent, the friend's as last heard */
+    uint32_t db_final, db_their_final; int db_have_final;   /* the last of each (theirs: when it came) */
+    uint32_t db_xs;                           /* drift.c's X presses in the battle, as last seen */
+    uint32_t db_wins, db_losses, db_draws, db_paid;
 } g_du;
 static int du_racing(uint32_t race){
     return (g_du.st == DU_RACE || g_du.st == DU_OVER) && g_du.car && MR32(G_RACETYPE) == 7u && MR32(race + 0x24u) >= 2u;
@@ -4048,7 +4062,8 @@ static int du_solid(uint32_t car){
     return car && car == g_du.car && g_du.solid_mine && g_du.solid_theirs && ok(race, 0xc44) && du_racing(race);
 }
 static int du_solid_peer(uint32_t id){ return id && id == g_du.id && du_solid(g_du.car); }
-static uint8_t du_arg(void){ return g_du.solid_mine ? (uint8_t)DU_ARG_SOLID : 0; }
+static uint8_t du_arg(void){ return (uint8_t)((g_du.solid_mine ? DU_ARG_SOLID : 0) | (g_du.drift ? RC_DA_DRIFT : 0)); }
+static int du_battling(void){ return g_du.db_on; }
 static int du_wants_solid(void){ return O.collide; }
 /* the outrun's friend keeps the slot (assign) */
 static int du_keeps(int k){ return g_du.st != DU_IDLE && g_sl[k].peer_id == g_du.id; }
@@ -4060,19 +4075,24 @@ static int du_cut(int64_t host){
     return g_du.hub_heard && (host - g_du.hub_heard > DU_CUT_US || (g_du.hub_late && host - g_du.hub_late < DU_CUT_KEEP_US));
 }
 static void du_note(int64_t host, const char *fmt, const char *name){
-    snprintf(g_du.note, sizeof g_du.note, fmt, name);
+    char f[TAG_DUEL_MAX];
+    const char *o = 0;                                            /* a drift battle's: its name in the outrun's place */
+    for (const char *q = fmt; g_du.drift && *q && !o; q++) if (!memcmp(q, "outrun", 6)) o = q;
+    if (o) snprintf(f, sizeof f, "%.*sdrift battle%s", (int)(o - fmt), fmt, o + 6);
+    snprintf(g_du.note, sizeof g_du.note, o ? f : fmt, name);
     g_du.note_until = host + DU_NOTE_US;
     rlog("[roam] f=%ld outrun: %s\n", rh_frame(), g_du.note);
 }
 static void du_send(int64_t host, uint8_t op, uint8_t arg){
-    roam_plat_lock(); rc_send_duel(&g_s, g_du.id, op, arg, g_du.duel); roam_plat_unlock();
+    roam_plat_lock(); rc_send_duel(&g_s, g_du.id, op, arg, g_du.duel, 0); roam_plat_unlock();
     g_du.op = op; g_du.arg = arg; g_du.tx_at = host;
 }
 static void du_to(int st, int64_t host){
     if (st != g_du.st) rlog("[roam] f=%ld outrun with %s: %s -> %s\n", rh_frame(), g_du.name[0] ? g_du.name : "?", du_st[g_du.st], du_st[st]);
     g_du.st = st; g_du.since = host;
     if (st == DU_IDLE){ g_du.id = 0; g_du.duel = 0; g_du.car = 0; g_du.won = g_du.their = 0; g_du.posted = 0; g_du.nres = 0; g_du.op = 0;
-                        g_du.solid_mine = g_du.solid_theirs = 0; }
+                        g_du.solid_mine = g_du.solid_theirs = 0; g_du.drift = 0;
+                        if (g_du.db_on){ rh_drift_end(); g_du.db_on = 0; } }
 }
 /* the friend's slot with a car shown, or -1 */
 static int du_slot(uint32_t id){
@@ -4178,8 +4198,207 @@ static int du_free(int in_roam, int world_runs){
     return in_roam && world_runs && pl && ok(race, 0xc44) && MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) && !rd32(pl + PL_MARKER) &&
            !(g_pass.me & (SOFT_DOOR | SOFT_EVENT)) && !mp_busy();
 }
-/* the game's outrun against the friend's car, as Engage starts one */
+/* ---- drift battles between players ------------------------------------------------------------- */
+/* With drift mode on (X, drift.c) the challenge is a drift battle, when the
+ * friend's game takes those (RC_HF_DRIFT): offer, answer and start go as an
+ * outrun's, with RC_DA_DRIFT.  No game race then: drift mode with a clock
+ * (drift.c drift_battle_*).  Each game counts DB_COUNT_US down from its start
+ * (the challenger's at the answer, the friend's at the START, a one-way trip
+ * later) with drift mode on (the friend's too, if it was off) and the
+ * nitrous off, as in a drift event; from the off it counts the points its
+ * player banks in DB_LEN_US, the multiplier from X1, and at the end the
+ * drift that counts then as it stands.  Both cars and every other player's
+ * are passable meanwhile (SOFT_BATTLE, sent as RC_BIT_PASS: every other game
+ * lets them through too), so nobody wrecks a drift.  The points go to the
+ * friend as they bank (RC_DUEL_SCORE arg 0, again every DB_SCORE_US) and at
+ * the end (arg 1, repeated until the friend's last came, and a few times
+ * after); with both, each game decides the same: more points win, as many is
+ * a draw.  The winner's bank gets DB_PRIZE and the loser's pays it (never
+ * more than it holds; a career's free roam only), as an outrun's stake.
+ * Leaving (out of free roam for DB_LEFT_US: a race, a shop, the menus; the
+ * connection) loses; then, or when the friend's last points never come, no
+ * money moves: a leave pays nothing two players could repeat.  The career is
+ * never called: no outrun counts, no message comes. */
+#define DB_COUNT_US     3000000       /* the countdown */
+#define DB_LEN_US       90000000      /* the battle */
+#define DB_GO_US        1000000       /* "Go!" shows this long */
+#define DB_PRIZE        100u          /* the winner's, out of the loser's bank */
+#define DB_FINAL_US     6000000       /* the friend's last points are waited for this long after ours */
+#define DB_SCORE_US     1000000       /* our points go again at least this often (a datagram lost) */
+#define DB_SCORE_MIN_US 250000        /* ...and at most this often */
+#define DB_LEFT_US      1000000       /* out of free roam this long: we left */
+#define DB_NOTE_US      8000000
+#define C_BANK          0x7134u       /* Career: the bank */
+/* the friend's game takes drift battles */
+static int du_drifts(int k){ const PeerView *v = k >= 0 ? du_pv(g_sl[k].peer_id) : 0; return DRIFTS && v && v->drifts; }
+/* our challenge to the friend would be a drift battle: drift mode is on */
+static int du_drift_offer(int k){ return du_drifts(k) && rh_drift_want(); }
+/* free roam's world, paused or not (the pause menu, the map: still there) */
+static int db_here(void){
+    uint32_t race = rd32(G_RACE);
+    return rd32(G_FLOW) == 6u && rd32(G_TRACK) % 1000u == 0 && ok(race, 0xc44) && MR32(race + 0x24u) == 1u && !MR32(G_RACETYPE) &&
+           !rd32(G_CAREER_RACE) && world() && player_car();
+}
+/* 12345 as "12,345" */
+static void db_pts(char *o, int n, uint32_t v){
+    char t[12]; int len = snprintf(t, sizeof t, "%u", v), j = 0;
+    for (int i = 0; i < len && j + 2 < n; i++){ if (i && (len - i) % 3 == 0) o[j++] = ','; o[j++] = t[i]; }
+    o[j] = 0;
+}
+static void db_send(int64_t host, uint8_t arg, uint32_t pts){
+    roam_plat_lock(); rc_send_duel(&g_s, g_du.id, RC_DUEL_SCORE, arg, g_du.duel, pts); roam_plat_unlock();
+    g_du.db_score_at = host;
+}
+/* the battle starts here: the countdown, drift mode on, the nitrous off */
+static int db_start(CPU *c, int64_t host){
+    int k = du_slot(g_du.id);
+    if (k < 0 || !rd32(G_PLAYER1) || !db_here()) return 0;
+    du_icon(c, 0);
+    g_du.car = 0; g_du.won = g_du.their = 0; g_du.posted = 0; g_du.nres = 0; g_du.gone_at = 0; g_du.unlisted = 0;
+    g_du.db_go = g_du.db_done = 0; g_du.db_go_at = host + DB_COUNT_US; g_du.db_end_at = g_du.db_go_at + DB_LEN_US;
+    g_du.db_mine = g_du.db_sent = g_du.db_theirs = g_du.db_final = g_du.db_their_final = 0; g_du.db_have_final = 0;
+    g_du.db_score_at = g_du.db_left_at = g_du.db_xnote_until = 0;
+    rh_drift_begin(); g_du.db_on = 1; g_du.db_xs = rh_drift_x();
+    g_du.races++;
+    rlog("[roam] f=%ld drift battle with %s: on, %.0f m apart, the off in %.0f s, %.0f s long\n", rh_frame(), g_du.name,
+         (double)du_dist(g_sl[k].car), DB_COUNT_US / 1e6, DB_LEN_US / 1e6);
+    return 1;
+}
+/* the winner's bank gets DB_PRIZE, the loser's pays it (what it holds at most): the amount */
+static uint32_t db_pay(int won){
+    if (rd32(G_GAMEMODE) != 1u || !ok(G_CAREER + C_BANK, 3)) return 0;
+    uint32_t b = MR32(G_CAREER + C_BANK), d = won || b >= DB_PRIZE ? DB_PRIZE : b;
+    MR32(G_CAREER + C_BANK) = won ? b + d : b - d;
+    if (d) g_du.db_paid++;
+    rlog("[roam] f=%ld drift battle with %s: the bank %s $%u ($%u -> $%u)\n", rh_frame(), g_du.name, won ? "gets" : "pays", d, b, MR32(G_CAREER + C_BANK));
+    return d;
+}
+/* both last points known: the result, the money, the line */
+static void db_result(int64_t host){
+    char a[16], b[16];
+    db_pts(a, sizeof a, g_du.db_final); db_pts(b, sizeof b, g_du.db_their_final);
+    g_du.db_done = 1;
+    if (g_du.db_final != g_du.db_their_final){
+        int won = g_du.db_final > g_du.db_their_final;
+        uint32_t d = db_pay(won);
+        char m[16] = "";
+        if (d) snprintf(m, sizeof m, ": %s$%u", won ? "+" : "-", d);
+        if (won){ g_du.db_wins++; snprintf(g_du.note, sizeof g_du.note, "You won the drift battle with %s, %s to %s%s", g_du.name, a, b, m); }
+        else { g_du.db_losses++; snprintf(g_du.note, sizeof g_du.note, "%s won the drift battle, %s to %s%s", g_du.name, b, a, m); }
+    } else {
+        g_du.db_draws++;
+        snprintf(g_du.note, sizeof g_du.note, "The drift battle with %s is a draw, %s each", g_du.name, a);
+    }
+    g_du.note_until = host + DB_NOTE_US;
+    rlog("[roam] f=%ld drift battle with %s: over, %s, %u to %u\n", rh_frame(), g_du.name,
+         g_du.db_final > g_du.db_their_final ? "WON" : g_du.db_final < g_du.db_their_final ? "LOST" : "a DRAW", g_du.db_final, g_du.db_their_final);
+}
+/* the friend left it: ours, for no money */
+static void db_gone(int64_t host, const char *why){
+    du_note(host, "%s left the outrun", g_du.name);
+    g_du.note_until = host + DB_NOTE_US;
+    g_du.db_wins++;
+    rlog("[roam] f=%ld drift battle with %s: a win (%s), no money for a leave\n", rh_frame(), g_du.name, why);
+    du_to(DU_IDLE, host);
+}
+/* the battle runs (DU_RACE) */
+static void db_race(CPU *c, int64_t host){
+    if (g_du.mine && g_du.op == RC_DUEL_START && host - g_du.since < 1000000 && host - g_du.tx_at >= 300000) du_send(host, RC_DUEL_START, du_arg());
+    if (!db_here()){
+        /* we left free roam (a race's or a shop's marker, the menus): a loss, the friend's a win */
+        if (!g_du.db_left_at) g_du.db_left_at = host;
+        if (host - g_du.db_left_at < DB_LEFT_US) return;
+        rlog("[roam] f=%ld drift battle with %s: we left it (out of free roam), a loss, no money for a leave\n", rh_frame(), g_du.name);
+        for (int n = 0; n < 3; n++) du_send(host, RC_DUEL_CANCEL, RC_DC_LEFT);
+        g_du.db_losses++;
+        du_to(DU_IDLE, host);
+        return;
+    }
+    g_du.db_left_at = 0;
+    const PeerView *v = du_pv(g_du.id);
+    if (!v && g_in_roam){
+        /* the session let the friend go: it left (its BYE, a restart, another room, or nothing heard of it for T_DROP
+         * while our own link stood), else our link dropped (no result: on its screen we went) */
+        if (g_du.gone_why == RC_DGONE_SAID || (g_du.gone_why == RC_DGONE_SILENT && !du_cut(host))){ db_gone(host, "the friend went"); return; }
+        du_note(host, "The connection dropped: the outrun with %s is off", g_du.name);
+        rlog("[roam] f=%ld drift battle with %s: the connection dropped, no result\n", rh_frame(), g_du.name);
+        du_to(DU_IDLE, host);
+        return;
+    }
+    if (v && !v->roams){
+        /* out of free roam (its status: the menus, a shop, a race) for DU_GONE_US: it left */
+        if (!g_du.gone_at) g_du.gone_at = host;
+        if (host - g_du.gone_at > DU_GONE_US){ db_gone(host, "the friend left free roam"); return; }
+    } else g_du.gone_at = 0;
+    uint32_t xs = rh_drift_x();
+    if (xs != g_du.db_xs){ g_du.db_xs = xs; g_du.db_xnote_until = host + 2500000; }
+    if (!g_du.db_go && host >= g_du.db_go_at){
+        rh_drift_go(c); g_du.db_go = 1;
+        rlog("[roam] f=%ld drift battle with %s: the off\n", rh_frame(), g_du.name);
+    }
+    if (!g_du.db_go) return;
+    double b, p;
+    rh_drift_score(&b, &p);
+    g_du.db_mine = b > 0 && b < 4e9 ? (uint32_t)b : 0;
+    if ((g_du.db_mine != g_du.db_sent && host - g_du.db_score_at >= DB_SCORE_MIN_US) || host - g_du.db_score_at >= DB_SCORE_US){
+        db_send(host, 0, g_du.db_mine); g_du.db_sent = g_du.db_mine;
+    }
+    if (host < g_du.db_end_at) return;
+    uint32_t pend = p > 0 && p < 4e9 ? (uint32_t)p : 0;
+    g_du.db_final = g_du.db_mine + pend;
+    rlog("[roam] f=%ld drift battle with %s: the end, %u points (%u banked, %u of the drift that counts); the friend's so far %u\n",
+         rh_frame(), g_du.name, g_du.db_final, g_du.db_mine, pend, g_du.db_theirs);
+    rh_drift_end(); g_du.db_on = 0;
+    g_du.nres = 0; g_du.db_score_at = 0;
+    du_to(DU_OVER, host);
+}
+/* over for us (DU_OVER): our last points until the friend's came, then the result, and ours a few times more */
+static void db_over(int64_t host){
+    if (host - g_du.db_score_at >= 300000 && (!g_du.db_done || g_du.nres > 0)){
+        db_send(host, 1, g_du.db_final);
+        if (g_du.db_done) g_du.nres--;
+    }
+    if (!g_du.db_done && g_du.db_have_final){ db_result(host); g_du.nres = 4; }
+    if (!g_du.db_done && host - g_du.since > DB_FINAL_US){
+        g_du.db_done = 1;
+        du_note(host, "No points came from %s: the outrun has no result", g_du.name);
+        g_du.note_until = host + DB_NOTE_US;
+        rlog("[roam] f=%ld drift battle with %s: the friend's last points never came (its so far %u), no result\n", rh_frame(), g_du.name, g_du.db_theirs);
+        du_to(DU_IDLE, host);
+        return;
+    }
+    if (g_du.db_done && g_du.nres <= 0) du_to(DU_IDLE, host);
+}
+/* the page's scoreboard (db_panel, below): it shows, so the top line has only the countdown and the result */
+static int g_db_board;
+static void db_panel(int64_t host);
+/* the line at the top while it runs and after */
+static void db_line(int64_t host, char *tx, int n){
+    char a[16], b[16];
+    if (g_du.st == DU_RACE && host < g_du.db_xnote_until){ snprintf(tx, (size_t)n, "Drift mode stays on during the drift battle"); return; }
+    if (g_du.st == DU_RACE && !g_du.db_go){
+        int64_t l = g_du.db_go_at - host; int sec = l > 0 ? (int)((l + 999999) / 1000000) : 1;
+        snprintf(tx, (size_t)n, "Drift battle with %s: %d", g_du.name, sec);
+        return;
+    }
+    if (g_du.st == DU_RACE && host - g_du.db_go_at < DB_GO_US){ snprintf(tx, (size_t)n, "Drift battle with %s: go!", g_du.name); return; }
+    if (g_du.st == DU_RACE && g_db_board) return;                    /* the time and the points are the page's */
+    if (g_du.st == DU_RACE){
+        int64_t l = g_du.db_end_at - host; int sec = l > 0 ? (int)((l + 999999) / 1000000) : 0;
+        db_pts(a, sizeof a, g_du.db_mine); db_pts(b, sizeof b, g_du.db_theirs);
+        snprintf(tx, (size_t)n, "Drift battle %d:%02d - You %s - %s %s", sec / 60, sec % 60, a, g_du.name, b);
+        return;
+    }
+    if (g_du.st == DU_OVER && !g_du.db_done){
+        db_pts(a, sizeof a, g_du.db_final);
+        snprintf(tx, (size_t)n, "Drift battle over - You %s - waiting for %s", a, g_du.name);
+        return;
+    }
+    if (g_du.note[0] && host < g_du.note_until) snprintf(tx, (size_t)n, "%s", g_du.note);
+}
+/* the game's outrun against the friend's car, as Engage starts one; or a drift battle */
 static int du_start(CPU *c, int64_t host){
+    if (g_du.drift) return db_start(c, host);
     int k = du_slot(g_du.id);
     uint32_t w = world(), race = rd32(G_RACE), pl = rd32(G_PLAYER1);
     if (k < 0 || !w || !pl || !ok(race, 0xc44) || MR32(race + 0x24u) != 1u || MR32(G_RACETYPE)) return 0;
@@ -4245,7 +4464,7 @@ static void du_clear(CPU *c){
     gcall0(c, FN_EM_OVER, G_ENCOUNTERS);
 }
 /* one DUEL message from the friend `from` */
-static void du_recv(CPU *c, int64_t host, uint32_t from, uint8_t op, uint8_t arg, uint32_t duel, int in_roam, int world_runs){
+static void du_recv(CPU *c, int64_t host, uint32_t from, uint8_t op, uint8_t arg, uint32_t duel, uint32_t score, int in_roam, int world_runs){
     uint32_t self = g_s.conf.self_id;
     int ours = g_du.st != DU_IDLE && from == g_du.id && duel == g_du.duel;
     if (ours) g_du.heard = host;
@@ -4260,16 +4479,17 @@ static void du_recv(CPU *c, int64_t host, uint32_t from, uint8_t op, uint8_t arg
             if (self < from){ rlog("[roam] f=%ld outrun with %s: challenged each other, ours stands\n", rh_frame(), g_du.name);
                               goto accepted; }
             rlog("[roam] f=%ld outrun with %s: challenged each other, theirs stands\n", rh_frame(), g_du.name);
-            g_du.duel = duel; g_du.mine = 0;
+            g_du.duel = duel; g_du.mine = 0; g_du.drift = DRIFTS && (arg & RC_DA_DRIFT) != 0;
             du_send(host, RC_DUEL_ACCEPT, du_arg()); du_to(DU_ACCEPTED, host);
             return;
         }
         if (g_du.st != DU_IDLE || k < 0 || !du_able(k) || !du_free(in_roam, world_runs) || em_near() || du_dist(g_sl[k].car) > DU_KEEP_M){
-            roam_plat_lock(); rc_send_duel(&g_s, from, RC_DUEL_CANCEL, RC_DC_BUSY, duel); roam_plat_unlock();
+            roam_plat_lock(); rc_send_duel(&g_s, from, RC_DUEL_CANCEL, RC_DC_BUSY, duel, 0); roam_plat_unlock();
             return;
         }
         g_du.id = from; g_du.duel = duel; g_du.mine = 0; g_du.heard = host; g_du.op = 0;
         g_du.solid_mine = du_wants_solid(); g_du.solid_theirs = (arg & DU_ARG_SOLID) != 0;
+        g_du.drift = DRIFTS && (arg & RC_DA_DRIFT) != 0;
         snprintf(g_du.name, sizeof g_du.name, "%s", g_sl[k].name);
         du_to(DU_GOT, host);
         return; }
@@ -4298,8 +4518,16 @@ static void du_recv(CPU *c, int64_t host, uint32_t from, uint8_t op, uint8_t arg
     case RC_DUEL_RESULT:                                               /* the friend won (1) or lost (2) */
         if (ours && (g_du.st == DU_RACE || g_du.st == DU_OVER) && (arg == 1 || arg == 2)) g_du.their = arg == 1 ? 2 : 1;
         return;
+    case RC_DUEL_SCORE:                                                /* a drift battle's points: so far (0), the last (1) */
+        if (!ours || !g_du.drift || (g_du.st != DU_RACE && g_du.st != DU_OVER)) return;
+        if (arg == 1){
+            if (!g_du.db_have_final) rlog("[roam] f=%ld drift battle with %s: its last points came, %u\n", rh_frame(), g_du.name, score);
+            g_du.db_their_final = score; g_du.db_have_final = 1; g_du.db_theirs = score;
+        } else if (!g_du.db_have_final) g_du.db_theirs = score;
+        return;
     case RC_DUEL_CANCEL:
         if (!ours) return;
+        if (g_du.st == DU_RACE && g_du.drift){ db_gone(host, "the friend left"); return; }
         if (g_du.st == DU_RACE){ g_du.their = 1; du_note(host, "%s left the outrun", g_du.name); du_post(1, "the friend left"); return; }
         if (g_du.st == DU_OVER) return;
         if (g_du.st == DU_SENT) du_note(host, arg == RC_DC_BUSY ? "%s cannot race now" : "%s did not take the outrun", g_du.name);
@@ -4312,7 +4540,7 @@ static void du_recv(CPU *c, int64_t host, uint32_t from, uint8_t op, uint8_t arg
 /* per frame, after the slots (the friends' cars are where they are drawn) */
 static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const uint32_t *in, int nin){
     if (!DUELS) return;
-    for (int i = 0; i < nin; i++) du_recv(c, host, in[4 * i], (uint8_t)in[4 * i + 1], (uint8_t)in[4 * i + 2], in[4 * i + 3], in_roam, world_runs);
+    for (int i = 0; i < nin; i++) du_recv(c, host, in[5 * i], (uint8_t)in[5 * i + 1], (uint8_t)in[5 * i + 2], in[5 * i + 3], in[5 * i + 4], in_roam, world_runs);
     uint32_t race = rd32(G_RACE), me = player_car();
     int eng = in_roam && world_runs && !(rd32(G_ACTIONS) & (1u << ACT_ENGAGE));
     int press = eng && !g_du.engage;
@@ -4324,7 +4552,7 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
              crowd >= DU_CROWD ? "none offered in a crowd" : "offered again", crowd, (double)DU_NEAR_M);
     g_du.crowd = crowd;
     int offer = free && !em_near() && crowd < DU_CROWD;   /* (a challenger of the game's in reach: Engage is its outrun's) */
-    g_du.busy = !offer;
+    g_du.busy = !offer || (g_du.drift && g_du.st >= DU_RACE);   /* (a drift battle runs no game race: say so ourselves) */
     /* who has been near for the time it takes */
     for (int k = 0; k < NSLOT; k++){
         Slot *s = &g_sl[k];
@@ -4350,7 +4578,7 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         if (best < 0 || !press) break;
         roam_plat_lock(); do g_du.duel = roam_plat_random(); while (!g_du.duel); roam_plat_unlock();
         g_du.id = g_sl[best].peer_id; g_du.mine = 1; g_du.heard = host; g_du.offers++;
-        g_du.solid_mine = du_wants_solid(); g_du.solid_theirs = 0;
+        g_du.solid_mine = du_wants_solid(); g_du.solid_theirs = 0; g_du.drift = du_drift_offer(best);
         snprintf(g_du.name, sizeof g_du.name, "%s", g_sl[best].name);
         du_send(host, RC_DUEL_OFFER, du_arg());
         du_to(DU_SENT, host);
@@ -4379,6 +4607,7 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         }
         break;
     case DU_RACE: {
+        if (g_du.drift){ db_race(c, host); break; }
         if (!ok(race, 0xc44) || !me || !du_racing(race)){
             /* our game's outrun is over: its result to the friend, or we left it */
             g_du.won = ok(race, 0xc44) ? du_outcome(race) : 0;
@@ -4463,6 +4692,7 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         else if (g_du.away < -DU_RANK_MPS) du_rank(race, 0);
         break; }
     case DU_OVER:
+        if (g_du.drift){ db_over(host); break; }
         if (g_du.nres > 0 && host - g_du.tx_at >= 300000){ du_send(host, RC_DUEL_RESULT, (uint8_t)g_du.won); g_du.nres--; }
         if (!g_du.nres){
             if (ok(race, 0xc44)) du_clear(c);
@@ -4470,6 +4700,7 @@ static void du_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         }
         break;
     }
+    db_panel(host);
 }
 /* ---- keep right: new players leaving the airport ------------------------------------------------ */
 /* Every new player's car appears at the new career's start, the airport's
@@ -4523,13 +4754,16 @@ static void du_hud(CPU *c, int64_t host){
 #else
     if (g_in_roam && hud_on_top(pkg)){
 #endif
+        const char *what = g_du.drift ? "drift battle" : "outrun";
         if (g_du.st == DU_IDLE && g_du.icon){
             for (int k = 0; k < NSLOT; k++) if (g_sl[k].car == g_du.icon && g_sl[k].st == SL_ACTIVE)
-                snprintf(tx, sizeof tx, "Press Enter to challenge %s to an outrun", g_sl[k].name);
+                snprintf(tx, sizeof tx, du_drift_offer(k) ? "Press Enter to challenge %s to a drift battle" : "Press Enter to challenge %s to an outrun",
+                         g_sl[k].name);
         }
-        else if (g_du.st == DU_SENT) snprintf(tx, sizeof tx, "Waiting for %s to take the outrun", g_du.name);
-        else if (g_du.st == DU_GOT) snprintf(tx, sizeof tx, "%s challenges you to an outrun: press Enter to take it", g_du.name);
-        else if (g_du.st == DU_ACCEPTED) snprintf(tx, sizeof tx, "Outrun with %s", g_du.name);
+        else if (g_du.st == DU_SENT) snprintf(tx, sizeof tx, "Waiting for %s to take the %s", g_du.name, what);
+        else if (g_du.st == DU_GOT) snprintf(tx, sizeof tx, "%s challenges you to %s %s: press Enter to take it", g_du.name, g_du.drift ? "a" : "an", what);
+        else if (g_du.st == DU_ACCEPTED) snprintf(tx, sizeof tx, g_du.drift ? "Drift battle with %s" : "Outrun with %s", g_du.name);
+        else if (g_du.drift && (g_du.st == DU_RACE || g_du.st == DU_OVER)) db_line(host, tx, sizeof tx);
         if (!tx[0] && g_du.note[0] && host < g_du.note_until && g_du.st != DU_RACE && g_du.st != DU_OVER) snprintf(tx, sizeof tx, "%s", g_du.note);
         if (!tx[0] && g_du.st == DU_IDLE && !rd32(0x00838974u /* a dialog up */) && kr_line(host, kr_last)) snprintf(tx, sizeof tx, "%s", KR_TEXT);
     }
@@ -5779,6 +6013,28 @@ static void mp_panel(int64_t host, int in_roam){
     g_mp_panel = 1;
     snprintf(last, sizeof last, "%s", buf);
 }
+#endif
+/* A drift battle's scoreboard on the page while its points count (drift.ts, under the drift panel, as a drift
+ * event's standings): {"t": the seconds left, "me": our name, "a": our points banked, "vs": the friend's name, "b":
+ * its points as last heard}, "{}" otherwise; sent when it changes (a full ring: again next frame).  A platform with no
+ * page keeps the top line's (g_db_board 0) */
+#if DRIFTS && MPRACES
+static void db_panel(int64_t host){
+    static char last[200];
+    char buf[200]; MpJs j = { buf, 0, sizeof buf };
+    if (g_du.drift && g_du.st == DU_RACE && g_du.db_go){
+        int64_t l = g_du.db_end_at - host; int sec = l > 0 ? (int)((l + 999999) / 1000000) : 0;
+        js_raw(&j, "{"); js_int(&j, "t", sec); js_str(&j, "me", g_s.conf.name); js_int(&j, "a", (int)g_du.db_mine);
+        js_str(&j, "vs", g_du.name); js_int(&j, "b", (int)g_du.db_theirs); js_raw(&j, "}");
+    } else js_raw(&j, "{}");
+    if (!strcmp(buf, last)) return;
+    roam_plat_lock(); int r = roam_plat_battle(buf); roam_plat_unlock();
+    if (r < 0) return;
+    g_db_board = r > 0;
+    snprintf(last, sizeof last, "%s", buf);
+}
+#else
+static void db_panel(int64_t host){ (void)host; }
 #endif
 
 /* ---- multiplayer races from free roam: the pop-ups -------------------------------------------- */
@@ -7175,7 +7431,7 @@ static void init_once(CPU *c){
 #else
     cf.platform = RC_PLAT_MAC;
 #endif
-    cf.test_mode = O.test; cf.max_players = maxp; cf.rate_hz = O.rate; cf.duels = DUELS; cf.lobbies = MPRACES;
+    cf.test_mode = O.test; cf.max_players = maxp; cf.rate_hz = O.rate; cf.duels = DUELS; cf.drifts = DRIFTS; cf.lobbies = MPRACES;
 #ifndef ROAM_HOST_WIN
     /* the hub links us with as many players as we show cars (a hub before version 10 gives 32; 0 shown: not said, 32
      * for quick chat and the lobbies); the Windows plugin's 5 cars say nothing */
@@ -7767,11 +8023,11 @@ void roam_game_frame(CPU *c){
     }
     if (have_ls) rc_push_state(&g_s, &ls, host);
     /* outrun messages for us (du_frame) */
-    uint32_t duin[4 * RC_DUEL_INBOX]; int nduin = 0;
+    uint32_t duin[5 * RC_DUEL_INBOX]; int nduin = 0;
     while (nduin < RC_DUEL_INBOX){
         uint8_t op, arg;
-        if (!rc_take_duel(&g_s, &duin[4 * nduin], &op, &arg, &duin[4 * nduin + 3])) break;
-        duin[4 * nduin + 1] = op; duin[4 * nduin + 2] = arg; nduin++;
+        if (!rc_take_duel(&g_s, &duin[5 * nduin], &op, &arg, &duin[5 * nduin + 3], &duin[5 * nduin + 4])) break;
+        duin[5 * nduin + 1] = op; duin[5 * nduin + 2] = arg; nduin++;
     }
 #if DUELS
     /* our outrun's friend, for the hub (it links the two first) and the session (it keeps the friend); and how the
@@ -7806,7 +8062,7 @@ void roam_game_frame(CPU *c){
             v->visible = !p->lost && p->mo.n > 0 &&
                          (p->status == RC_ST_PAUSED ||
                           (p->status == RC_ST_ROAM && host - p->last_snap_rx < 2000000));
-            v->paused = p->status == RC_ST_PAUSED; v->duels = p->duels; v->listed = rc_peer_listed(&g_s, i);
+            v->paused = p->status == RC_ST_PAUSED; v->duels = p->duels; v->drifts = p->drifts; v->listed = rc_peer_listed(&g_s, i);
             v->roams = p->status == RC_ST_ROAM || p->status == RC_ST_PAUSED;
             v->crew = rc_peer_crew(&g_s, i) + 1;
             if (!v->crew && rc_peer_friend(&g_s, i)) v->crew = FRIEND_CREW;
@@ -8309,13 +8565,13 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         float mx = me ? MRF32(me + 0x60u) : 0, my = me ? MRF32(me + 0x64u) : 0;
         int64_t now = roam_plat_now_us();
         int cars = 0, hits = block_hits(now, &cars);
-        rlog("[roam] f=%ld mp %s: %d doors, %d open events of %d; the player at %.1f %.1f is%s%s%s%s%s%s%s%s; sends%s%s; "
+        rlog("[roam] f=%ld mp %s: %d doors, %d open events of %d; the player at %.1f %.1f is%s%s%s%s%s%s%s%s%s; sends%s%s; "
                 "on its spot for %.0f s, %d hit(s) from %d players' cars in %.0f s\n", f, sub, g_pass.n,
                 g_pass.nev, g_pass.evall, (double)mx, (double)my,
                 g_pass.me ? "" : " not passable", g_pass.me & SOFT_PAUSED ? " paused" : "", g_pass.me & SOFT_IDLE ? " standing" : "",
                 g_pass.me & SOFT_DOOR ? " near a door" : "", g_pass.me & SOFT_EVENT ? " near an event" : "",
                 g_pass.me & SOFT_SPAWN ? " at the start" : "", g_pass.me & SOFT_BLOCK ? " in the way" : "",
-                g_pass.me & SOFT_TRAFFIC ? " a traffic car" : "", !O.collide || g_pass.me ? " passable" : "", g_du.busy ? " no outruns" : (!O.collide || g_pass.me ? "" : " nothing"),
+                g_pass.me & SOFT_TRAFFIC ? " a traffic car" : "", g_pass.me & SOFT_BATTLE ? " in a drift battle" : "", !O.collide || g_pass.me ? " passable" : "", g_du.busy ? " no outruns" : (!O.collide || g_pass.me ? "" : " nothing"),
                 g_pass.stay_since ? (double)(now - g_pass.stay_since) / 1e6 : 0.0, hits, cars, (double)BLOCK_WIN_US / 1e6);
         if (ev) rlog("[roam]   the last sweep of the event triggers: %.0f us in %d frames, at most %.0f us a frame\n",
                      (double)g_pass.ev_cost[0] / 1e3, (int)g_pass.ev_cost[2], (double)g_pass.ev_cost[1] / 1e3);
@@ -8757,6 +9013,12 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                     g_du.id ? " with " : "", g_du.id ? g_du.name : "", in, g_du.icon ? ", challenge offered" : "", (double)g_du.gap, (double)g_du.away,
                     g_du.crowd, (double)DU_NEAR_M, g_du.crowd >= DU_CROWD ? " (a crowd: none offered)" : "",
                     g_du.offers, g_du.races, g_du.wins, g_du.losses);
+            rlog("[roam] f=%ld mp outrun: %s; drift battles: %u won, %u lost, %u drawn, %u paid; %s\n", f,
+                 g_du.drift ? "a drift battle" : "no drift battle", g_du.db_wins, g_du.db_losses, g_du.db_draws, g_du.db_paid,
+                 g_du.drift ? (g_du.st < DU_RACE ? "not started" : g_du.db_on ? "running" : g_du.db_done ? "decided" : "over, waiting") : (DRIFTS && rh_drift_want() ? "drift mode on" : "drift mode off"));
+            if (g_du.drift) rlog("[roam] f=%ld mp outrun: drift battle with %s: %u to %u (its last %s), the off %s, %.1f s left\n", f, g_du.name,
+                                 g_du.db_mine, g_du.db_theirs, g_du.db_have_final ? "came" : "not yet", g_du.db_go ? "done" : "to come",
+                                 g_du.st == DU_RACE ? (double)(g_du.db_end_at - roam_plat_now_us()) / 1e6 : 0.0);
             static const char *const emm[] = { "the game's", "held", "standing down", "paused" };
             char near[32] = "";
             if (nout) snprintf(near, sizeof near, ", nearest %.0f m", (double)nd);

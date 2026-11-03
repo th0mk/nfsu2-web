@@ -65,6 +65,8 @@ export interface NetOptions extends CommonOptions {
   say?: (json: string) => void;
   /** free roam: the player's car and another's touched front bumpers for 3 s, or parted, as JSON from the game */
   bump?: (json: string) => void;
+  /** free roam: a drift battle's scoreboard, as JSON from the game ("{}": none; drift.ts) */
+  battle?: (json: string) => void;
   /** free roam: a friend message from the server */
   friend?: (m: Record<string, unknown>) => void;
   /** the server's LAN took this page back after the link was lost (a server restart, as for a deploy) */

@@ -75,6 +75,10 @@ int      roam_plat_said(const char *json);
  * which offers to add that player as a friend (1 sent, 0 this platform has
  * no page, -1 the ring is full).  With the session lock held */
 int      roam_plat_friend(const char *json);
+/* a drift battle's scoreboard for the page (roam_game.c db_panel), as a JSON
+ * object, "{}" for none (1 sent, 0 this platform has no page, -1 the ring is
+ * full).  With the session lock held */
+int      roam_plat_battle(const char *json);
 /* the player's car flew in free roam for minutes (roam_game.c fly_frame), as
  * a JSON object for the page, which takes the player off the switch with its
  * message, as an operator's kick does, and tells the server (1 sent, 0 this

@@ -118,7 +118,7 @@ While you drive:
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
-| X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button |
+| X | Drift mode in free roam: drift handling, the drift camera and a drift score (see below); on a touch screen the Drift button, on a controller D-pad down held a second while driving |
 | O | Parked in free roam: open the trunk, then the hood too, then the doors too, then close them all (see section 6); on a controller hold D-pad down a second |
 | 1 to 4, then 1 to 4 | Quick chat in free roam and in races with other players: a group, then a phrase (see section 6) |
 | I | Message a friend in free roam: the answer to the newest message, or a friend to pick (see section 6, Friends) |
@@ -144,6 +144,7 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   while you drift, as in the races: lime when it banks, red when a wall loses it. Free roam's
   music plays on (the drift races have none). Just for fun: the points never go into the bank or the career. X again
   turns it off and gives your camera back. It is off in races and outruns and comes back in free roam after them.
+  With it on, challenging another player is a drift battle (see section 6, Drift battles).
 - **Photo mode (F12, or Photo Mode in the pause menu):** while you drive (a race, free roam, an outrun) the world
   stands still, the HUD goes and the camera comes loose from the car. Orbit (the first) turns around a point at your
   car, which you can move up to 25 m from it, from up to 30 m away; Free flies up to 50 m from the car. Drag with the
@@ -164,7 +165,8 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   on an Xbox pad: A is the bottom one (Cross on a PlayStation pad, B on a Nintendo-style pad such as most 8BitDo
   ones). The browser shows a pad to the page only after a button is pressed on it. The triggers are throttle and
   brake, the left stick steers, LB is nitrous, RB the handbrake, A and X shift, Y and B are camera and look back, View
-  respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages. A
+  respawns, Start pauses; D-pad up starts an event or takes an outrun, left and right are the map and messages, down
+  is Career Status (in free roam, held a second: drift mode while driving, the trunk, hood and doors parked). A
   click of the left stick is the horn, unless your car has hydraulics: then the stick clicks are the game's hydraulics
   (left: pressurize, right: bounce). While driving (free roam, races, races with other players) the right stick
   looks round the car: the view turns to where it points (right looks right, half way out half as far) and swings
@@ -546,6 +548,17 @@ Good to know:
   other's car: its "Feet" meter, and whoever gets 1,000 feet (300 m) ahead of the other wins, and the bank pays or
   charges as in an outrun against a tuner. Leaving it (back to the menus, quitting, losing the connection) loses it.
   The other players' cars stay, and they see the two drive. Players on the Windows plugin are not offered outruns.
+- **Drift battles:** with drift mode on (X), the challenge offered as for an outrun is a drift battle instead: "Press
+  Enter to challenge ... to a drift battle" (X off first for an outrun). The other player takes it with Enter (their
+  drift mode comes on for it, and goes back off after if it was off). After a 3-second countdown each of you has 90
+  seconds to bank as many drift points as you can, anywhere in the city: the multiplier starts at X1, there is no
+  nitrous (as in the drift races; yours is back after), X does nothing, and the two cars, and every other player's,
+  drive through each other, so nobody can wreck your drift. A scoreboard under the drift panel on the right shows the
+  time left and both players' points, the more first (the other's as their drifts bank); a drift still counting at
+  the end counts as it stands. More points win:
+  the winner gets $100 out of the loser's bank (never more than the loser has; not in Quick Race's Free Run), a draw
+  pays nothing. Leaving it (back to the menus, into a race or a shop, losing the connection) loses it, and then no
+  money moves. Players on an older version (and the Windows plugin) get an outrun's challenge instead.
 - **The game's own tuners** come out to challenge you in free roam with other players around, as they do offline, so
   their outruns and what winning them opens up (the unique parts) are there online too. The other players' cars stay
   while you race a tuner; they see your car, not the tuner, which is in your game only. Both are offered: a tuner

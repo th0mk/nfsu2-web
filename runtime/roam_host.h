@@ -62,6 +62,12 @@ uint32_t win32_heap_live(void);          /* win32.c: bytes in live heap blocks *
 void ws_hud_marker(float *x, float *y);  /* widescreen.c */
 int language_no_profile(const char *name);   /* language.c */
 int drift_kept_tuning(uint8_t *out);     /* drift.c */
+int drift_wanted(void);                  /* drift.c: drift mode chosen, and its drift battles */
+void drift_battle_begin(void);
+void drift_battle_go(CPU *c);
+void drift_battle_score(double *banked, double *pend);
+uint32_t drift_battle_x(void);
+void drift_battle_end(void);
 uint8_t showoff_mine(void);              /* showoff.c */
 void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
 
@@ -86,6 +92,13 @@ void showoff_car(CPU *c, int k, uint32_t car, uint8_t open);
 #define rh_carsfx_end()  carsfx_end()
 #define rh_no_profile(n) language_no_profile(n)
 #define rh_drift_tuning(out) drift_kept_tuning(out)
+#define ROAM_HOST_DRIFT  1               /* drift mode (drift.c): drift battles */
+#define rh_drift_want()  drift_wanted()
+#define rh_drift_begin() drift_battle_begin()
+#define rh_drift_go(c)   drift_battle_go(c)
+#define rh_drift_score(b, p) drift_battle_score((b), (p))
+#define rh_drift_x()     drift_battle_x()
+#define rh_drift_end()   drift_battle_end()
 #define rh_showoff_mine() showoff_mine()
 #define rh_showoff_car(c, k, car, open) showoff_car((c), (k), (car), (open))
 typedef FILE rh_file;

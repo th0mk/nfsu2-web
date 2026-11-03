@@ -306,6 +306,13 @@ int roam_plat_friend(const char *json){
     if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
     return tx_push(NET_KIND_FRIEND, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
 }
+/* a drift battle's scoreboard (NET_KIND_BATTLE): the page's, under the drift panel */
+int roam_plat_battle(const char *json){
+    int n = (int)strlen(json);
+    if (!MB) return -1;
+    if (n <= 0 || n > (int)NET_MAX_PAYLOAD) return 1;
+    return tx_push(NET_KIND_BATTLE, 0, 0, (const uint8_t *)json, n) ? 1 : -1;
+}
 /* a car that flew for minutes: the page leaves the switch (NET_KIND_FLYING), only while it is on it */
 int roam_plat_flying(const char *json){
     int n = (int)strlen(json);

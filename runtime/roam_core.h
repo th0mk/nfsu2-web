@@ -21,13 +21,13 @@
 #include <stddef.h>
 
 #define RC_PROTO_VER     1          /* header byte 4; a different value is ignored */
-#define RC_CORE_VER      11         /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
+#define RC_CORE_VER      12        /* HELLO: implementation revision (2: lists of up to 32 (RC_PEERS_V9); 3: RC_MSG_DUEL;
                                        4: state extensions, RC_HF_STATEX; 5: race lobbies, RC_HF_LOBBY; 6: quick chat,
                                        RC_HF_SAY; 7: crews, RC_HF_CREW; 8: crews from the hub, RC_HF_HUBCREW;
                                        9: a HELLO to one peer names only that peer, roam_core.c fill_hello;
                                        10: lists of up to RC_MAX_PEERS (48), and its HELLO to the hub ends in the links
                                        it wants, rc_config.links; 11: in an outrun, after the links, the id of its
-                                       other player, rc_set_duel) */
+                                       other player, rc_set_duel; 12: drift battles, RC_HF_DRIFT) */
 #define RC_MAGIC0        0x4E       /* "N2FR" */
 #define RC_MAGIC1        0x32
 #define RC_MAGIC2        0x46
@@ -163,7 +163,14 @@ enum { RC_DUEL_OFFER = 1,           /* I challenge you (duel: a new id) */
        RC_DUEL_START = 3,           /* the challenger's outrun runs: yours starts now */
        RC_DUEL_RESULT = 4,          /* arg 1: I won, 2: I lost */
        RC_DUEL_CANCEL = 5,          /* arg: RC_DC_* */
+       RC_DUEL_SCORE = 6,           /* a drift battle's points: arg 0 so far, 1 the last (the battle is over for me);
+                                       the points (u32) follow the duel's id.  Only to a peer whose HELLO carries
+                                       RC_HF_DRIFT: an older core counts the op as bad */
        RC_DUEL__N };
+/* DUEL arg bits of OFFER, ACCEPT and START (roam_game.c): the two cars solid for the outrun; a drift battle, not an
+ * outrun (only to a peer whose HELLO carries RC_HF_DRIFT: an older core reads it as an outrun) */
+#define RC_DA_SOLID      0x01
+#define RC_DA_DRIFT      0x02
 enum { RC_DC_WITHDRAWN = 1, RC_DC_BUSY = 2, RC_DC_LEFT = 3, RC_DC__N };
 /* player status (HELLO and SNAP) */
 enum { RC_ST_MENUS = 0, RC_ST_LOADING = 1, RC_ST_ROAM = 2, RC_ST_EVENT = 3, RC_ST_SHOP = 4,
@@ -241,6 +248,9 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
  * the hub's PEERS (RC_HF_CREW above); a hub sends them to no other */
 #define RC_HF_HUBCREW    0x0400
 #define RC_HF_MAPZ       0x0800     /* (MAPD) its placed entries carry z: RC_MAPD_PLACE_Z bytes each */
+/* header flags (HELLO): this player takes drift battles (RC_DA_DRIFT, RC_DUEL_SCORE); an older core sends none, reads a
+ * drift battle's challenge as an outrun's and counts a SCORE as bad */
+#define RC_HF_DRIFT      0x1000
 /* in the hub's crew marks, past the crews' bits: that player's friendship with
  * this one goes both ways (the server's friends lists, EA Messenger's); a hub
  * of before sets none, a core of before reads only the crews' bits */
@@ -372,7 +382,7 @@ typedef struct {
         struct { uint16_t cfg_rev; uint8_t have_mask; } cfgreq;
         struct { uint32_t t0, t1, t2; } ping;          /* PING: t0 only */
         struct { uint8_t reason; } bye;
-        struct { uint8_t op, arg; uint32_t to, duel; } duel;      /* to: the player it is for */
+        struct { uint8_t op, arg; uint32_t to, duel, score; } duel;   /* to: the player it is for; score: RC_DUEL_SCORE's */
         struct { uint16_t req, max, base, flags; } mapreq;
         struct { uint16_t req, base, total, len; uint8_t part, nparts, n; const uint8_t *data; } mapd;   /* data: n entries, len bytes;
                                                                                                            NEARD's too */
@@ -528,6 +538,7 @@ typedef struct {
     uint32_t hub_ip;
     uint16_t hub_port;
     int      duels;                /* we take outrun challenges (HELLO says so: RC_HF_DUELS) */
+    int      drifts;               /* ...and drift battles (RC_HF_DRIFT) */
     int      lobbies;              /* we take race lobbies (HELLO says so: RC_HF_LOBBY) */
     int      say;                  /* we take quick chat (HELLO says so: RC_HF_SAY) */
     int      links;                /* the players the hub links us with at most (our HELLO to it says so): the friends' cars
@@ -552,6 +563,7 @@ typedef struct {
     uint8_t  platform, status;
     uint16_t core_ver;             /* its HELLO's (0 until one came): below 2 it reads lists of RC_PEERS_V1 at most */
     uint8_t  duels;                /* its HELLO says it takes outrun challenges (RC_HF_DUELS) */
+    uint8_t  drifts;               /* ...and drift battles (RC_HF_DRIFT) */
     uint8_t  lobbies;              /* its HELLO says it takes race lobbies (RC_HF_LOBBY) */
     uint8_t  statex;              /* its HELLO says it reads state extensions (RC_HF_STATEX) */
     uint8_t  say;                  /* its HELLO says it takes quick chat (RC_HF_SAY) */
@@ -612,7 +624,7 @@ typedef struct {
     uint32_t  duel_with;  uint8_t duel_gone;
     /* DUEL messages for us from established peers, oldest first, until the
      * game side takes them (rc_take_duel) */
-    struct { uint32_t from; uint8_t op, arg; uint32_t duel; } duel_in[RC_DUEL_INBOX];
+    struct { uint32_t from; uint8_t op, arg; uint32_t duel, score; } duel_in[RC_DUEL_INBOX];
     int       n_duel_in;
     uint32_t  duel_dropped;        /* the inbox was full */
     /* the world map's other players (rc_ask_map): our last question, the
@@ -692,10 +704,11 @@ void rc_set_duel(rc_session *s, uint32_t id);
  * established peers that went (0 also for the same room: nothing changes) */
 int  rc_set_room(rc_session *s, uint32_t room);
 /* a DUEL message to the established peer with id `to`, if its HELLO said it
- * takes them; 1 when sent */
-int  rc_send_duel(rc_session *s, uint32_t to, uint8_t op, uint8_t arg, uint32_t duel);
+ * takes them (a drift battle's, RC_DA_DRIFT or RC_DUEL_SCORE: RC_HF_DRIFT); 1
+ * when sent.  score: RC_DUEL_SCORE's points (the others carry none) */
+int  rc_send_duel(rc_session *s, uint32_t to, uint8_t op, uint8_t arg, uint32_t duel, uint32_t score);
 /* the oldest DUEL message for us not taken yet; 1 when there was one */
-int  rc_take_duel(rc_session *s, uint32_t *from, uint8_t *op, uint8_t *arg, uint32_t *duel);
+int  rc_take_duel(rc_session *s, uint32_t *from, uint8_t *op, uint8_t *arg, uint32_t *duel, uint32_t *score);
 /* asks the hub (while it answers) for the world map's other players, max at
  * most (RC_MAP_MAX), as what changed since the answer we hold; 1 when asked.
  * The players are in map_e[0 .. map_n) once map_gen changes */

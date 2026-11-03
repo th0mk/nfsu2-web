@@ -713,7 +713,7 @@ async function startGame() {
     // scope, and with it this game, reachable
     const ids = net ? await keepPageId() : null;
     session = await GameSession.start({
-      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump,
+      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle,
       friend: friendMsg,
       netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost,
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
@@ -1137,6 +1137,8 @@ function say(json: string) {
 function marks(n: number, m: Float32Array, ids: Uint32Array) { quickChat.marks(n, m, ids); }
 /** free roam's friends: front bumpers touching (the game), and the server's friend messages (friends.ts) */
 function bump(json: string) { friendPrompt.bump(json); }
+/** a drift battle's scoreboard from the game (drift.ts) */
+function battle(json: string) { driftPanel.battle(json); }
 function friendMsg(m: Record<string, unknown>) { friendPrompt.server(m); friendMessages.server(m); }
 /** quick chat's line in the log: a speech balloon, the name, the phrase */
 function chatLine(name: string, text: string, me: boolean) {
