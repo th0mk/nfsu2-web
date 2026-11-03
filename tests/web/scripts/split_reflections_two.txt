@@ -83,3 +83,4 @@
 +0 expect i:[0x890118] == 4
 +0 expect i:[0x890118]+0x14 < @before_restart
 +0 status split_two_reflections_complete
++60 quit

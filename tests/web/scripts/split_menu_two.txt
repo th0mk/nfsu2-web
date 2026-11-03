@@ -61,3 +61,4 @@
 +0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
 +0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.5
 +0 status split_two_menu_complete
++60 quit

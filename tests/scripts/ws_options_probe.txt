@@ -7,6 +7,7 @@
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +90   dump mm_options
 +0    tap RETURN
 +300  dump opt0

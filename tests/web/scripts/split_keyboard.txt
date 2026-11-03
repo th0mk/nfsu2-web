@@ -56,3 +56,4 @@
 +0 up W
 +30 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
 +0 status split_keyboard_unplug_complete
++60 quit

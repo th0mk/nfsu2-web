@@ -5,6 +5,7 @@
 +0    waitfng GarageMain.fng 3000
 +300  tap RIGHT
 +60   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +120  dump mm_lan
 +0    log enter-LAN
 +0    tap RETURN

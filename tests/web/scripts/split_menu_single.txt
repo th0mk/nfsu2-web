@@ -21,3 +21,4 @@
 +700 dump quick_race_single_view
 +0 expect i:0xd00030 == 1
 +0 status quick_race_single_complete
++60 quit

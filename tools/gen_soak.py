@@ -49,12 +49,13 @@ def quit_to_menu(o, finished_ok=True):
 
 def menu_select(o, idx):
     # main menu carousel (Career, Quick Race, Online, LAN, Customize, Profile
-    # Manager, Options); it remembers its position and does not wrap
+    # Manager, Options: idx 0..6; Split Screen after Quick Race since
+    # runtime/splitscreen.c); it remembers its position and does not wrap
     o.append("+0    tapuntil ESCAPE UI_Main.fng 150 2400")
     o.append("+300  tap LEFT")
     for _ in range(6):
         o.append("+40   tap LEFT")
-    for _ in range(idx):
+    for _ in range(idx + (idx >= 2)):
         o.append("+40   tap RIGHT")
     o.append("+90   log main menu item %d" % idx)
 

@@ -71,3 +71,4 @@
 +0 localpad 3 RT 0
 +180 dump split_three_reflections_idle
 +0 status split_three_reflections_complete
++60 quit

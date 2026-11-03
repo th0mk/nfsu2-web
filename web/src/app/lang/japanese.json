@@ -753,6 +753,7 @@
   "Credits": "クレジット",
   "Source code on <0>GitHub</0>. Based on Talha Müderrisoğlu's <1>NFSU2Recomp</1>, the original x86 → C static recompiler for NFSU2, after <2>N64: Recompiled</2> and <3>XenonRecomp</3>. This project was forked from NFSU2Recomp's <4>MIT-licensed version of 16 October 2026</4> and uses only code from that version.": "ソースコードは <0>GitHub</0> にあります。ベースは Talha Müderrisoğlu の <1>NFSU2Recomp</1> で、<2>N64: Recompiled</2> と <3>XenonRecomp</3> に倣った、NFSU2 向けの元祖 x86 → C 静的リコンパイラです。このプロジェクトは <4>2026年10月16日時点の MIT ライセンス版 NFSU2Recomp</4> からフォークしたもので、そのバージョンのコードだけを使っています。",
   "Texture packs: LunicAura106's <0>Upscaled HUD</0>, JeansBig's <1>Detailed Map</1>.": "テクスチャパック: LunicAura106 の <0>Upscaled HUD</0>、JeansBig の <1>Detailed Map</1>。",
+  "Split screen: BirdSentinel (Zack)'s port of mihaits' <0>NFSU2-SplitScreen</0>.": "画面分割: BirdSentinel (Zack) が移植した mihaits の <0>NFSU2-SplitScreen</0>。",
   "Translations": "翻訳",
   "Dubbed voices and movies, and Chinese, Japanese, Russian and Thai text: KyoriAsh's <0>Multi 13 languages mod</0>, with Lee-Ryo's Thai support.": "吹き替えの音声とムービー、中国語・日本語・ロシア語・タイ語のテキスト: KyoriAsh の <0>Multi 13 languages mod</0>（Lee-Ryo によるタイ語対応を含む）。",
   "Portuguese (Brazil): TraduMix and MixMods (Fyro, Beater, Kerlyston F.; Junior_Djjr, SideWinder, Elyzandro).": "ポルトガル語（ブラジル）: TraduMix と MixMods（Fyro、Beater、Kerlyston F./Junior_Djjr、SideWinder、Elyzandro）。",

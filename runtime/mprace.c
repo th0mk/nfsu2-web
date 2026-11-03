@@ -321,7 +321,7 @@ static void state_log(const char *where){
          * does not come back to its head (a free roam built as the LAN race whose start broke off hung in that walk) */
         fprintf(stderr, "[mprace] f=%ld subscriptions %s:", autotest_frame(), where);
         for (uint32_t p = 0; p < 2u; p++){
-            uint32_t h = 0x008655a0u + 0x1c8u * p, n = rd(h); int k = 0;
+            uint32_t h = SPLIT_PORT_TABLES + 0x1c8u * p, n = rd(h); int k = 0;
             fprintf(stderr, " port %u:", p);
             for (; n != h && k < 400; k++){
                 if (!okm(n, 12)){ fprintf(stderr, " BAD %08x", n); break; }

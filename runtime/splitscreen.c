@@ -11,6 +11,10 @@
 #include "gamepad.h"
 #include "kbd.h"
 
+/* the labels shown (split_label_text: in the game's language) */
+enum { SL_SPLIT, SL_PLAYERS, SL_PLAYER, SL_PLAYER_UP, SL_JOIN, SL_JOIN_KB, SL_N };
+static void split_label_text(int which, unsigned n, char *out, size_t size);
+
 static int split_racing(void){
 #ifdef __wasm__
     return MR32(0x850078u) == 4 && MR32(0x89e7c0u) == 2 && MR32(0x8707e0u) == 3;
@@ -22,6 +26,16 @@ int split_render_limit(void){
     if (!split_racing()) return 1;
     unsigned n = MR32(SPLIT_PLAYERS_COUNT);
     return n >= 2 && n <= 6 ? (int)n : 2;
+}
+/* An address as the game's code names it -> where this build keeps it: the player tables 0x8900AC/B4/BC and the
+ * input port tables 0x8655A0.. moved (splitscreen_mem.h), and test scripts name the game's addresses
+ * (autotest.c peek/poke/waitmem/expect, roam.c's expressions).  The same address natively. */
+uint32_t split_guest_addr(uint32_t a){
+    if (a - 0x8900acu < 8u) return SPLIT_PLAYERS_INDEX + (a - 0x8900acu);
+    if (a - 0x8900b4u < 8u) return SPLIT_PLAYERS_ORDER + (a - 0x8900b4u);
+    if (a - 0x8900bcu < 4u) return SPLIT_PLAYERS_COUNT + (a - 0x8900bcu);
+    if (a - 0x8655a0u < 0x390u) return SPLIT_PORT_TABLES + (a - 0x8655a0u);
+    return a;
 }
 static uint32_t split_view(int id){ return 0x832de0u + (uint32_t)id * 0x70u; }
 static int split_current_view;
@@ -106,9 +120,13 @@ static uint32_t split_join_counter(unsigned seat){
 }
 static int split_requested(void){
 #ifdef __wasm__
-    const char *s = getenv("NFSU2_SPLIT_PLAYERS");
-    int n = split_menu_players ? split_menu_players : (s ? atoi(s) : 0);
-    if (MR32(0x850078u) == 4 && n >= 2 && n <= 6){
+    /* on hot paths (the settings reads, 0x55DDA0's callers, every frame's hooks): the game mode first, and the
+     * environment read once */
+    if (MR32(0x850078u) != 4) return 0;
+    static int env = -1;
+    if (env < 0){ const char *s = getenv("NFSU2_SPLIT_PLAYERS"); env = s ? atoi(s) : 0; }
+    int n = split_menu_players ? split_menu_players : env;
+    if (n >= 2 && n <= 6){
         unsigned type = MR32(0x83aab4u);
         int max = type == 8 ? 2 : type == 2 ? 4 : 6;
         return n < max ? n : max;
@@ -294,7 +312,7 @@ void split_create_humans(CPU *c){
         for (unsigned k = shift; k < shift + 2 && k < (unsigned)n; ++k)
             split_restore_seat((int)k);
         for (unsigned k = shift; k < shift + 2 && k < (unsigned)n; ++k)
-            snprintf((char *)g_mem + SPLIT_NAMES + k * 16, 16, "Player %u", k + 1);
+            split_label_text(SL_PLAYER, k + 1, (char *)g_mem + SPLIT_NAMES + k * 16, 16);
         args[0] = (unsigned)n - shift < 2 ? (unsigned)n - shift : 2;
         c->esp = (saved.esp - 256u) & ~15u;
         for (unsigned k = 3; k; --k) PUSH32(args[k - 1]);
@@ -368,6 +386,21 @@ static void split_count_bar(CPU *c){
             if (data){ MR32(data+12)=j ? 255 : 140; MR32(obj+0x1c)|=0x400000u; }
         }
     }
+}
+/* the main menu's heading as the game had it (its FEString's label hash, +0x60: the game's text in the player's
+ * language), and whether the count dialog has run in this menu (from then on its scrollbar is ours to keep right) */
+static uint32_t split_title_hash;
+static int split_bar_own;
+/* the game's text for a label hash (0x4FF9D0: edx the hash, the text in eax), 0 when it has none */
+static uint32_t split_lang_text(CPU *c, uint32_t hash){
+    CPU saved = *c;
+    c->esp = (c->esp - 256u) & ~15u;
+    c->edx = hash;
+    PUSH32(0x4ff9d0u);
+    dispatch_indirect(c, 0x4ff9d0u);
+    uint32_t r = c->eax;
+    *c = saved;
+    return r && mem_is_committed(r) ? r : 0;
 }
 static void split_menu_title(CPU *c, const char *text){
     split_text(SPLIT_FE_TEXT+160, text);
@@ -494,12 +527,21 @@ static void split_count_close(CPU *c){
     split_count_dialog=0; split_menu_open_pending=0;
     split_call(c,0x538ca0u,menu,0,0);
     split_call(c,0x50da50u,menu,0,0);
-    split_menu_title(c,"Main Menu");
+    /* the game's own heading back, in the player's language */
+    uint32_t text = split_title_hash ? split_lang_text(c, split_title_hash) : 0;
+    if (text){ uint32_t a[] = {MR32(menu+4), 0x42adb44cu, text}; split_call(c, 0x537b80u, 0, 3, a); }
+    else split_menu_title(c,"Main Menu");
+    fprintf(stderr,"[split] main menu heading %08x back: %.40s\n", split_title_hash, text ? (char *)g_mem + text : "(English)");
     split_menu_fade_in(c);
     split_count_bar(c);
 }
 static void split_count_open(CPU *c, unsigned players){
     uint32_t menu=split_main_menu;
+    if(!split_bar_own){
+        uint32_t a[]={MR32(menu+4),0x42adb44cu}, title=split_call(c,0x537a10u,0,2,a);
+        split_title_hash = title && mem_is_committed(title+0x63) ? MR32(title+0x60) : 0;
+    }
+    split_bar_own=1;
     memcpy(split_main_carousel,g_mem+menu+0x4c,sizeof split_main_carousel);
     split_call(c,0x51fd10u,menu+0x4c,0,0);
     /* Borrow the first three native icon objects and their spacing. Keeping
@@ -531,7 +573,7 @@ static void split_count_open(CPU *c, unsigned players){
     split_count_dialog=1;
     PadState pad; gamepad_read(&pad); split_menu_buttons=pad.buttons;
     uint8_t keys[256]; kbd_state(keys, sizeof keys); split_menu_escape=!!keys[1];
-    split_menu_title(c,"Split Screen");
+    { char s[96]; split_label_text(SL_SPLIT, 0, s, sizeof s); split_menu_title(c, s); }
     split_count_scheme(c,1);
     /* Hide unused shared icons before the first animated frame. */
     uint32_t node; memcpy(&node,split_main_carousel+4,4);
@@ -596,7 +638,127 @@ static void split_main_react(CPU *c){
         split_count_open(c, players);
     }
     if(menu==split_main_menu && split_count_dialog) split_count_scheme(c,0);
-    if(menu==split_main_menu) split_count_bar(c);
+    if(menu==split_main_menu && split_bar_own) split_count_bar(c);
+}
+/* ---- the labels in the game's language ---------------------------------------------------------------
+ * The Latin-script languages: texts of ours, in each game's own words ("Splitscreen", "Ecran partagé" ...), into
+ * the letters their fonts draw (language.c language_game_letters: Polish's, Turkish's, Hungarian's own).  The
+ * others' fonts spell in orders of their own, so theirs are cut from the game's own texts in that language:
+ * 0x6A2B93EB "2 Player Split-Screen" (the menu item's name, which ours replaces), 0xD9DC2F12 "PLAYER", 0xD87133BC
+ * "Player 1", 0x1F181F57 "Press START" (0xEEEB248E "Press START button" where that is empty).  English where a cut
+ * does not find what it expects (a language pack of another make). */
+const char *language_name(void);
+uint32_t language_text(uint32_t hash);
+void language_game_letters(const char *utf8, char *out, size_t n);
+/* a row: the language, then the texts in SL_* order */
+static const struct { const char *lang, *split, *players, *player, *player_up, *join, *join_kb; } SPLIT_TEXTS[] = {
+    { "english",    "Split Screen", "%u Players", "Player %u", "PLAYER %u",
+                      "Player %u: press START", "Player %u: press START or Enter" },
+    { "french",     "Écran partagé", "%u joueurs", "Joueur %u", "JOUEUR %u",
+                      "Joueur %u : appuyer sur START", "Joueur %u : appuyer sur START ou Entrée" },
+    { "german",     "Splitscreen", "%u Spieler", "Spieler %u", "SPIELER %u",
+                      "Spieler %u: START drücken", "Spieler %u: START oder Enter drücken" },
+    { "italian",    "Split-screen", "%u giocatori", "Giocatore %u", "GIOCATORE %u",
+                      "Giocatore %u: premi START", "Giocatore %u: premi START o Invio" },
+    { "spanish",    "Pantalla dividida", "%u jugadores", "Jugador %u", "JUGADOR %u",
+                      "Jugador %u: pulsa START", "Jugador %u: pulsa START o Intro" },
+    { "dutch",      "Gesplitst scherm", "%u spelers", "Speler %u", "SPELER %u",
+                      "Speler %u: druk op START", "Speler %u: druk op START of Enter" },
+    { "swedish",    "Delad skärm", "%u spelare", "Spelare %u", "SPELARE %u",
+                      "Spelare %u: tryck på START", "Spelare %u: tryck på START eller Enter" },
+    { "danish",     "Opdelt skærm", "%u spillere", "Spiller %u", "SPILLER %u",
+                      "Spiller %u: tryk på START", "Spiller %u: tryk på START eller Enter" },
+    { "portuguese", "Tela dividida", "%u jogadores", "Jogador %u", "JOGADOR %u",
+                      "Jogador %u: pressione START", "Jogador %u: pressione START ou Enter" },
+    { "polish",     "Podzielony ekran", "%u graczy", "Gracz %u", "GRACZ %u",
+                      "Gracz %u: wciśnij START", "Gracz %u: wciśnij START lub Enter" },
+    { "turkish",    "Bölünmüş Ekran", "%u Oyuncu", "Oyuncu %u", "OYUNCU %u",
+                      "Oyuncu %u: START'a bas", "Oyuncu %u: START'a ya da Enter'a bas" },
+    { "hungarian",  "Osztott képernyő", "%u játékos", "%u. Játékos", "%u. JÁTÉKOS",
+                      "%u. Játékos: nyomj START gombot", "%u. Játékos: nyomj START vagy Enter gombot" },
+};
+/* a text of the game's in its own letters (empty when it has none) */
+static int split_game_text(uint32_t hash, char *out, size_t n){
+    uint32_t s = language_text(hash);
+    out[0] = 0;
+    if (s && mem_is_committed(s)) snprintf(out, n, "%s", (const char *)g_mem + s);
+    return out[0] != 0;
+}
+/* The cuts for a language whose fonts spell in orders of their own: the split-screen name, the players' word
+ * around the number (pl_pre N pl_post), a player's (p_pre N p_post) and "Press START".  1 when the game's texts
+ * are as the cut expects. */
+typedef struct { char split[96], pl_pre[48], pl_post[48], p_pre[48], p_post[48], press[96]; } SplitCuts;
+static int split_cuts(const char *lang, SplitCuts *k){
+    char t[160], p[48], p1[48];
+    memset(k, 0, sizeof *k);
+    if (!split_game_text(0x6a2b93ebu, t, sizeof t) || !split_game_text(0xd9dc2f12u, p, sizeof p)) return 0;
+    if (!strcmp(lang, "russian") || !strcmp(lang, "ukrainian")){      /* "<split>: 2 <players>" (2-4 the same) */
+        char *c = strstr(t, ": 2 ");
+        if (!c || c == t || !c[4]) return 0;
+        snprintf(k->split, sizeof k->split, "%.*s", (int)(c - t), t);
+        snprintf(k->pl_post, sizeof k->pl_post, " %s", c + 4);
+    } else if (!strcmp(lang, "chinese")){                                 /* "2<player><split>" */
+        size_t lp = strlen(p);
+        if (t[0] != '2' || strncmp(t + 1, p, lp) || !t[1 + lp]) return 0;
+        snprintf(k->split, sizeof k->split, "%s", t + 1 + lp);
+        snprintf(k->pl_post, sizeof k->pl_post, "%s", p);
+    } else if (!strcmp(lang, "korean")){         /* "2<people> <race mode>": "2-4<people> <race mode>" */
+        char *sp = strchr(t, ' ');
+        if (t[0] != '2' || !sp || sp == t + 1 || !sp[1]) return 0;
+        snprintf(k->split, sizeof k->split, "2-4%s", t + 1);
+        snprintf(k->pl_post, sizeof k->pl_post, "%.*s", (int)(sp - t - 1), t + 1);
+    } else if (!strcmp(lang, "japanese")){
+        /* "<versus mode>" (the game's own name of split screen, in all its split-screen titles); its "PLAYER" is
+         * "driver settings", so the player's word is "Player 1" without its 1, a glyph of two bytes */
+        size_t l1 = split_game_text(0xd87133bcu, p1, sizeof p1) ? strlen(p1) : 0;
+        if (strchr(t, '2') || l1 < 4 || (uint8_t)p1[l1 - 2] < 0x80) return 0;
+        snprintf(k->split, sizeof k->split, "%s", t);
+        snprintf(k->p_pre, sizeof k->p_pre, "%.*s", (int)(l1 - 2), p1);
+        snprintf(k->pl_post, sizeof k->pl_post, " %s", k->p_pre);
+    } else if (!strcmp(lang, "thai")){       /* the run the mode select's and the car select's names share */
+        char m[160], s[160];
+        if (!split_game_text(0xef9f780du, m, sizeof m) || !split_game_text(0xf221d7edu, s, sizeof s)) return 0;
+        size_t best = 0, at = 0, lm = strlen(m);
+        for (size_t i = 0; i < lm; i++)
+            for (size_t l = lm - i; l > best; l--){
+                char w[160]; snprintf(w, sizeof w, "%.*s", (int)l, m + i);
+                if (strstr(s, w)){ best = l; at = i; break; }
+            }
+        if (best < 3) return 0;
+        snprintf(k->split, sizeof k->split, "%.*s", (int)best, m + at);
+        snprintf(k->pl_post, sizeof k->pl_post, " %s", p);
+    } else return 0;
+    /* a player (unless the language's own cut made it): "Player 1" with its own 1 replaced, else "PLAYER N" */
+    if (!k->p_pre[0]){
+        size_t l1 = split_game_text(0xd87133bcu, p1, sizeof p1) ? strlen(p1) : 0;
+        if (l1 > 1 && p1[l1 - 1] == '1' && !(p1[l1 - 2] >= '0' && p1[l1 - 2] <= '9'))
+            snprintf(k->p_pre, sizeof k->p_pre, "%.*s", (int)(l1 - 1), p1);
+        else snprintf(k->p_pre, sizeof k->p_pre, "%s ", p);
+    }
+    if (!split_game_text(0x1f181f57u, k->press, sizeof k->press) && !split_game_text(0xeeeb248eu, k->press, sizeof k->press))
+        snprintf(k->press, sizeof k->press, "START");
+    return 1;
+}
+/* label `which` (SL_*) for player or count n, in the game's letters */
+static void split_label_text(int which, unsigned n, char *out, size_t size){
+    const char *lang = language_name();
+    unsigned e = 0;
+    for (unsigned i = 0; i < sizeof SPLIT_TEXTS / sizeof SPLIT_TEXTS[0]; i++) if (!strcmp(lang, SPLIT_TEXTS[i].lang)) e = i + 1;
+    SplitCuts k;
+    if (!e && split_cuts(lang, &k)){
+        switch (which){
+        case SL_SPLIT: snprintf(out, size, "%s", k.split); break;
+        case SL_PLAYERS: snprintf(out, size, "%s%u%s", k.pl_pre, n, k.pl_post); break;
+        case SL_PLAYER: case SL_PLAYER_UP: snprintf(out, size, "%s%u%s", k.p_pre, n, k.p_post); break;
+        default: snprintf(out, size, "%s%u%s: %s%s", k.p_pre, n, k.p_post, k.press, which == SL_JOIN_KB ? " / Enter" : "");
+        }
+        return;
+    }
+    char u[160];
+    const typeof(SPLIT_TEXTS[0]) *r = &SPLIT_TEXTS[e ? e - 1 : 0];
+    const char *const f[SL_N] = { r->split, r->players, r->player, r->player_up, r->join, r->join_kb };
+    snprintf(u, sizeof u, f[which], n);
+    language_game_letters(u, out, size);
 }
 void sub_004ff9d0_orig(CPU *c);
 void sub_004ff9d0(CPU *c){
@@ -604,8 +766,8 @@ void sub_004ff9d0(CPU *c){
     uint32_t h = c->edx;
     if (h == 0x6a2b93ebu || (h >= SPLIT_CHOOSE + 2 && h <= SPLIT_CHOOSE + 4)){
         uint32_t p = SPLIT_FE_TEXT + (h == 0x6a2b93ebu ? 0 : (h - SPLIT_CHOOSE) * 32);
-        if (h == 0x6a2b93ebu) split_text(p, "Split Screen");
-        else snprintf((char *)g_mem + p, 32, "%u Players", h - SPLIT_CHOOSE);
+        if (h == 0x6a2b93ebu) split_label_text(SL_SPLIT, 0, (char *)g_mem + p, 64);
+        else split_label_text(SL_PLAYERS, h - SPLIT_CHOOSE, (char *)g_mem + p, 32);
         c->eax = p; POP32(c->eip); return;
     }
 #endif
@@ -614,7 +776,7 @@ void sub_004ff9d0(CPU *c){
 static void split_add_menu(CPU *c, uint32_t menu){
     static int installed;
     if (!installed){ dispatch_patch(0x4f98b0u, split_main_react); installed = 1; }
-    split_main_menu=menu; split_count_dialog=0;
+    split_main_menu=menu; split_count_dialog=0; split_bar_own=0;
     uint32_t p = split_alloc(c, 0x48);
     if (!p) return;
     uint32_t a[] = {0x883e25d6u, 0x6a2b93ebu, 0};
@@ -659,12 +821,12 @@ static int split_popup(CPU *c){
 }
 static void split_seat_title(CPU *c){
     char title[64];
-    snprintf(title, sizeof title, split_keyboard_seat < 0 ? "Player %d START / Keyboard ENTER" : "Player %d Press START", split_seat + 1);
+    split_label_text(split_keyboard_seat < 0 ? SL_JOIN_KB : SL_JOIN, (unsigned)split_seat + 1, title, sizeof title);
     split_label(c, "2P_PressStart.fng", 0x2ebb974du, title);
     split_text(SPLIT_FE_TEXT+256, "Player_Name");
     uint32_t p = SPLIT_FE_TEXT+256;
     uint32_t hash = split_call(c, 0x505450u, 0, 1, &p);
-    snprintf(title, sizeof title, "PLAYER %d", split_seat+1);
+    split_label_text(SL_PLAYER_UP, (unsigned)split_seat + 1, title, sizeof title);
     split_label(c, "UI_QRCarSelect.fng", hash, title);
     split_label(c, "GarageMain.fng", hash, title);
     split_label(c, "UI_PC_Help_Bar.fng", hash, title);
@@ -710,7 +872,7 @@ void sub_004fa2a0(CPU *c){
             split_joined[split_seat] = 1;
             POP32(c->eip); c->esp += 4; return;
         }
-        split_seat = (int)MR32(c->esp+4);
+        { uint32_t s = MR32(c->esp+4); split_seat = s < 6 ? (int)s : 0; }   /* the game passes 0 or 1 */
         split_carsel_active = 1;
         split_joined[split_seat] = 0;
         split_release_pad = 1;
@@ -927,6 +1089,11 @@ void sub_005f4250(CPU *c){
     split_hud_data_count = 0;
     sub_005f4250_orig(c);
     int n = split_requested();
+    /* the front end's player (0x85AD28) is the one who picked a car last; in the race, the results and the Post
+     * Race menu it is player 1 again, as in single player: the questions there (Quit to Main Menu?) listen to it.
+     * The car select is over: its last messages (while the race loaded) set split_carsel_active again, and it
+     * would keep the front end's controller to B on the Split-Screen Mode Select the race goes back to. */
+    if (n){ MR32(0x85ad28u) = 0; split_carsel_active = 0; }
     if (MR32(0x89e7c0u) != 2) return;
     for (unsigned index = 2; index < (unsigned)n; ++index){
         uint32_t racer = split_call(c, 0x5ed920u, 0x89e7a0u, 1, &index);
@@ -1253,6 +1420,22 @@ void sub_005c21e0_orig(CPU *c);
 void sub_005c21e0(CPU *c){
     sub_005c21e0_orig(c);
 #ifdef __wasm__
+    /* the reflection view's target and views 4 and 9 as the game had them before a split race, put back after it
+     * (single player's road reflection keeps its own size and settings) */
+    static int kept; static uint32_t kept_rt, kept_size[3]; static uint8_t kept_on[2];
+    if (split_racing() && !kept){
+        uint32_t rt = MR32(split_view(4) + 0x58);
+        kept_rt = rt;
+        if (rt) for (int i = 0; i < 3; ++i) kept_size[i] = MR32(rt + 16 + 4 * i);
+        kept_on[0] = MR8(split_view(4) + 8); kept_on[1] = MR8(split_view(9) + 8);
+        kept = 1;
+    } else if (!split_racing() && kept){
+        uint32_t rt = MR32(split_view(4) + 0x58);
+        if (rt && rt == kept_rt && MR32(rt + 16) == 1 && MR32(rt + 20) == 320 && MR32(rt + 24) == 240)
+            for (int i = 0; i < 3; ++i) MR32(rt + 16 + 4 * i) = kept_size[i];
+        MR8(split_view(4) + 8) = kept_on[0]; MR8(split_view(9) + 8) = kept_on[1];
+        kept = 0;
+    }
     if (split_racing()){
         for (int seat = 0; seat < split_render_limit(); ++seat){
             uint32_t view = split_view(split_view_id(seat)), rt = SPLIT_TARGETS + seat * 28u;
@@ -1373,6 +1556,8 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         return 1;
     }
     if (ip == 0x5cae12u){
+        /* Outside split screen the game's own call here is the only one. */
+        if (!split_racing()) return 1;
         split_call(c, 0x5cf420u, 0, 0, 0);
         int initialized = 0;
         if (split_racing()) for (int k = 1; k < split_render_limit(); ++k) if (!env_valid[k]){
@@ -1552,6 +1737,8 @@ int splitscreen_hook(CPU *c, uint32_t ip){
         }
         return 1;
     }
+    /* right after UI_Main's AddOption of Quick Race (0x4AEED5): Split Screen is the item after it (the carousel
+     * opens on Quick Race: one right), Online, LAN, Customize, Profile Manager and Options one place further */
     if (ip == 0x4aeed8u){ split_add_menu(c, c->esi); return 1; }
     if (ip == 0x4fc06bu){
         if (split_entering){
@@ -1603,7 +1790,11 @@ int splitscreen_hook(CPU *c, uint32_t ip){
     }
     if (ip == 0x5cb72du){
         split_current_view = 0;
-        if (refl_game_tex) MR32(0x870894u) = refl_game_tex;
+        /* the game's road reflection back, if a player's own is still selected (only ours are replaced: after a
+         * split race the game's texture may be another one) */
+        uint32_t now = MR32(0x870894u);
+        if (refl_game_tex && now != refl_game_tex)
+            for (int k = 1; k < 6; ++k) if (refl_tex[k] && now == refl_tex[k]){ MR32(0x870894u) = refl_game_tex; break; }
         return 1;
     }
     if (ip == 0x5c80b0u && split_racing()){

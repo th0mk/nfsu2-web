@@ -79,6 +79,7 @@ void autotest_tap(unsigned dik, long frames);
 #define G_CARTYPES      0x008a1cccu   /* CarTypeInfo[], 0x890 bytes, +0 name */
 #define HOOK_MAINLOOP   0x00581475u
 
+uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- expressions ---------------------------------------------------------- */
 static const char *xp;
 static uint32_t x_expr(void);
@@ -88,7 +89,7 @@ static uint32_t x_unary(void){
     x_ws();
     if (*xp == '*'){ xp++; return rd32(x_unary()); }
     if (*xp == '('){ xp++; uint32_t v = x_expr(); x_ws(); if (*xp == ')') xp++; return v; }
-    char *end; uint32_t v = (uint32_t)strtoul(xp, &end, 0); xp = end; return v;
+    char *end; uint32_t v = split_guest_addr((uint32_t)strtoul(xp, &end, 0)); xp = end; return v;
 }
 static uint32_t x_term(void){
     uint32_t v = x_unary();

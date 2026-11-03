@@ -29,7 +29,7 @@ async function rig(fn) {
   let t = 1000;
   performance.now = () => t;
   try {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf);
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf);
     const g = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', index: 0, mapping: 'standard',
       connected: true, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
     pads.push(g);

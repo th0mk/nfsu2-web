@@ -7,6 +7,7 @@
 +200  tap RETURN
 +0    waitfng GarageMain.fng 3000
 +300  tap RIGHT
++60  tap RIGHT        # (Split Screen, after Quick Race)
 +120  tap RETURN
 +0    waitfng UI_OLEALogin.fng 1500
 +200  tap DOWN

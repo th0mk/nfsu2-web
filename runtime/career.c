@@ -143,6 +143,7 @@ void autotest_tap(unsigned dik, long frames);
 #define G_NOTHERS        0x00838420u
 
 /* ---- expressions ---------------------------------------------------------- */
+uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 static const char *xp;
 static uint32_t x_expr(void);
 static void x_ws(void){ while (*xp == ' ' || *xp == '\t') xp++; }
@@ -151,7 +152,7 @@ static uint32_t x_unary(void){
     if (*xp == '*'){ xp++; uint32_t a = x_unary();
         return mem_is_committed(a) && mem_is_committed(a + 3) ? MR32(a) : 0u; }
     if (*xp == '('){ xp++; uint32_t v = x_expr(); x_ws(); if (*xp == ')') xp++; return v; }
-    char *end; uint32_t v = (uint32_t)strtoul(xp, &end, 0); xp = end; return v;
+    char *end; uint32_t v = split_guest_addr((uint32_t)strtoul(xp, &end, 0)); xp = end; return v;
 }
 static uint32_t x_term(void){        /* '*' after an operand multiplies */
     uint32_t v = x_unary();

@@ -11,6 +11,7 @@
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +90   tap RETURN                                   # Options
 +0    waitfng UI_OptionsMain.fng 600
 +300  tap RIGHT

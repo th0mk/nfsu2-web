@@ -64,3 +64,4 @@
 +0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.5
 +0 expect f:[[[0xd00008]+4]+0x30]+0x2d4 > 0.7
 +0 status split_three_complete
++60 quit

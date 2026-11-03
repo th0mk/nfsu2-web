@@ -75,3 +75,4 @@
 +300 dump split_effects_idle
 +0 status split_effects_complete
 
++60 quit

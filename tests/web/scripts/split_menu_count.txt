@@ -11,3 +11,4 @@
 +100 tappad DRIGHT
 +100 dump split_count_right
 +0 status split_count_navigation
++60 quit

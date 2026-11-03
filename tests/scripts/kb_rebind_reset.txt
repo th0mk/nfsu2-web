@@ -9,6 +9,7 @@
 +60   nstap RIGHT
 +60   nstap RIGHT
 +60   nstap RIGHT
++60   nstap RIGHT        # (Split Screen, after Quick Race)
 +120  nstap RETURN                                  # Options
 +0    waitfng UI_OptionsMain.fng 600
 +300  nstap RIGHT

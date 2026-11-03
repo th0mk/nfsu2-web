@@ -21,3 +21,4 @@
 +0 tap ESCAPE
 +250 dump mode_back_main
 +0 status mode_back_complete
++60 quit

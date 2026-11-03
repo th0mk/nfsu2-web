@@ -69,7 +69,7 @@
 
 #define G_FLOW       0x008654a4u   /* 6: in the world */
 #define G_RACE       0x00890118u   /* the race status: +0 4 racing (free roam too), 6 paused */
-#define G_PLAYER1    0x008900acu   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
+#define G_PLAYER1    SPLIT_PLAYERS_INDEX   /* Player*: +4 its car, +0x9A4 its HUD, +0x238 its camera mover */
 #define G_FENG       0x008384c4u   /* +8 the package manager: +0xE4 the top package, +0xC its name */
 #define PL_CAR       4u
 #define PL_HUD       0x9a4u

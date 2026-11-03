@@ -3462,8 +3462,9 @@ int com_call(CPU *c, uint32_t magic){
                 /* The existing widescreen port uses a virtual 4:3 guest
                  * viewport (e.g. 1280x960 on a 1280x720 target). Its shaders
                  * already apply that correction. Only split cells describe
-                 * physical target pixels; ordinary views fill their target. */
-                else web_set_viewport(0, 0, 0, 0, 0.f, 1.f);
+                 * physical target pixels; ordinary views fill their target
+                 * (all zero, as SetRenderTarget leaves it, so draws still merge). */
+                else web_set_viewport(0, 0, 0, 0, 0.f, 0.f);
             }
 #endif
             if (ENVC("XFORM") && nv2<6 && vp2 && mem_is_committed(vp2+23)){ nv2++;

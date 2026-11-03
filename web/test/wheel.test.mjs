@@ -485,7 +485,7 @@ test('the shifter through the poller: a move into third, the right paddle for a 
 test('a Fanatec base and its dead twin (its second collection, the same name): the base drives, its pedals as they are', async () => {
   const G2 = await load('web/src/input/gamepad.ts', '\n// a page with a Fanatec base');
   await withPads(async (pads) => {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
     const ax = (i) => +f[P.IM_PAD_AXIS + i].toFixed(3);
     // the twin first in Windows' order: every axis 0, never a report
     const twin = fakePad(CSLDD, 0, '', Array(10).fill(0), 64), base = fakePad(CSLDD, 1, '', DD_REST, 128);
@@ -505,7 +505,7 @@ test('a Fanatec base and its dead twin (its second collection, the same name): t
   // a twin that drove once (before this page knew of twins, or alone for a moment) is no first look for the base
   const G3 = await load('web/src/input/gamepad.ts', '\n// a page where the twin came alone');
   await withPads(async (pads) => {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf);
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf);
     const twin = fakePad(CSLDD, 0, '', Array(10).fill(0), 64), base = fakePad(CSLDD, 1, '', DD_REST, 128);
     pads.push(twin);
     const p = new G3.PadPoller(h, new Uint8Array(buf), 0, () => {}, () => {});
@@ -524,7 +524,7 @@ test('a Fanatec base and its dead twin (its second collection, the same name): t
 test('Fanatec pedals on their own USB: the wheel\'s gas and brake while connected, let go before their first report', async () => {
   const G2 = await load('web/src/input/gamepad.ts', '\n// a page with pedals on their own');
   await withPads(async (pads) => {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
     const ax = (i) => +f[P.IM_PAD_AXIS + i].toFixed(3);
     const LCK = 'FANATEC CSL Pedals LCK (Vendor: 0eb7 Product: 6205)';
     // the base's own pedal ports at +1 (nothing on them), the pedals not moved yet: every axis the browser's 0
@@ -549,7 +549,7 @@ test('Fanatec pedals on their own USB: the wheel\'s gas and brake while connecte
   // pedals alone: no controller (a stick of theirs would be pushed all the way)
   const G3 = await load('web/src/input/gamepad.ts', '\n// a page with pedals alone');
   await withPads(async (pads) => {
-    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf);
+    const buf = new SharedArrayBuffer(P.IM_BYTES), h = new Int32Array(buf);
     pads.push(fakePad('FANATEC CSL Elite Pedals (Vendor: 0eb7 Product: 6204)', 0, '', [-1, -1, -1], 0));
     const p = new G3.PadPoller(h, new Uint8Array(buf), 0, () => {}, () => {});
     p.poll();

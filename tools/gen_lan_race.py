@@ -112,6 +112,7 @@ def main():
     w('+0    waitfng GarageMain.fng 3000')
     w('+300  tap RIGHT')
     w('+60   tap RIGHT')
+    w('+60   tap RIGHT')                      # Quick Race -> Split Screen -> Online -> LAN
     w('+120  tap RETURN')
     if host:
         # the Host LAN Server button has no key; wait until "Looking for LAN

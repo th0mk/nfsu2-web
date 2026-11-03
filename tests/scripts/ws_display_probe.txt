@@ -7,6 +7,7 @@
 +40   tap RIGHT
 +40   tap RIGHT
 +40   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +90   tap RETURN                                   # Options
 +300  tap RIGHT                                    # Display
 +90   tap RETURN

@@ -26,6 +26,7 @@
 +60   nstap RIGHT
 +60   nstap RIGHT
 +60   nstap RIGHT
++60   nstap RIGHT        # (Split Screen, after Quick Race)
 +120  nstap RETURN                                  # Options
 +0    waitfng UI_OptionsMain.fng 600
 +300  nstap RIGHT
@@ -68,6 +69,7 @@
 +60   nstap LEFT
 +60   nstap LEFT
 +60   nstap LEFT
++60   nstap LEFT        # (Split Screen, after Quick Race)
 +200  nstapuntil RETURN UI_QRModeSelect.fng 150 3000
 +200  nstapuntil RETURN UI_QRTrackSelect.fng 150 1500
 +200  nstapuntil RETURN UI_QRModeOptions.fng 150 1500

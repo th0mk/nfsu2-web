@@ -27,3 +27,4 @@
 +0 waitfng UI_QRModeSelect.fng 2000
 +150 dump count_four_mode_select
 +0 status count_back_complete
++60 quit

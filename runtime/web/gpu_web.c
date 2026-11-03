@@ -975,6 +975,9 @@ static void vsync_feed(void){
 void gw_headlights(const GwHL *blk){
     if (!g_on || !blk) return;
     Buf *B = &g_b[g_cur];
+    /* one view: the frame's one block, which every draw of the frame reads (as before split screen); in a split
+     * race each player's views keep the block made for them, a new one in the arena after it */
+    if (split_render_limit() <= 1){ memcpy(B->kb + GW_K_HL, blk, sizeof *blk); g_hloff = GW_K_HL; return; }
     if (!memcmp(B->kb + g_hloff, blk, sizeof *blk)) return;
     unsigned off = (B->kn + 255u) & ~255u;
     if (off + sizeof *blk > MAXKB){ g_ov_kb++; g_hloff = GW_K_HL; return; }

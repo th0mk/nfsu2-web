@@ -1,0 +1,23 @@
+# Split Screen's labels in the game's language (run with env=NFSU2_LANGUAGE=<language>): the main menu's item, the
+# player count's heading and "3 players", the join prompt (with the keyboard's Enter) and the car select's player.
+0 pad connect
++0 tappaduntil START MC_Background.fng 120 4000
++200 tappad A
++0 waitfng GarageMain.fng 3000
++300 tappad DRIGHT
++200 dump lang_${NFSU2_LANGUAGE}_menu_item
++100 tappad A
++200 tappad DRIGHT
++200 dump lang_${NFSU2_LANGUAGE}_count_three
++100 tappad A
++0 waitfng UI_QRModeSelect.fng 2000
++100 tappaduntil A UI_QRTrackSelect.fng 150 1500
++100 tappaduntil A UI_QRModeOptions.fng 150 1500
++100 tappaduntil A 2P_PressStart.fng 150 1500
++150 dump lang_${NFSU2_LANGUAGE}_join
++0 localpad 1 connect 1
++30 localpad 1 START 1
++20 localpad 1 START 0
++150 dump lang_${NFSU2_LANGUAGE}_car_select
++0 status split_languages_complete
++60 quit

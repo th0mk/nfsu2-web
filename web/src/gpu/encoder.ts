@@ -25,7 +25,7 @@ import { D, F, Kind, Op } from './proto';
 import { COPY, FF_FS, TONE, TVERT_VS } from './wgsl';
 import { createShaderAbi, alphaFunc, PSCUBE, VSPAR_SIZE, KWIN_SIZE, PSPAR_SIZE, HLPAR_SIZE } from './shader-abi';
 import { unpackDxt } from './dxt';
-import { drawViewport, drawScissor, type Viewport } from './viewport';
+import { drawViewport, drawScissor } from './viewport';
 import { dxt1HasPunch, dxt1ToAstc } from './astc';
 
 export interface EncodeStats {
@@ -673,9 +673,12 @@ export class Encoder {
     const touched = new Set<number>();
     let clearArgb = u32[fw + F.clearArgb];
     let cPipe: GPURenderPipeline | null = null, cSrc = -1, cK = -1, cP = -1, cBcol = -1, cIx = '';
-    // the pass's size, and the scissor in effect in it (a GwDraw.clip value; 0 = the whole target)
-    let passW = 0, passH = 0, cH = -1;
-    let currentViewport: Viewport | null = null;
+    // the pass's size, the scissor in effect in it (a GwDraw.clip value; 0 = the whole target), whether a split
+    // screen's cells came in it (passCells: viewports and scissors then by viewport.ts), the headlights block bound
+    let passW = 0, passH = 0, cClip = 0, passCells = false, cH = -1;
+    // the viewport and scissor in effect in the pass (when it opens WebGPU's: the whole target), and the draw's
+    // (viewport.ts fills them in place, so a draw allocates nothing and sets either only when it changes)
+    const vpNow = [0, 0, 0, 0, 0, 1], vpDraw = [0, 0, 0, 0, 0, 1], scNow = [0, 0, 0, 0], scDraw = [0, 0, 0, 0];
     // the previous draw's pipeline (pipelines outlive passes, so this survives a pass change)
     let lastKey = -1, lastPipe: GPURenderPipeline | null | undefined;
     const b1 = this.b1, dyn = this.dyn;
@@ -693,7 +696,8 @@ export class Encoder {
         w = t.w; h = t.h; key = (target & 0xFFFF) * 8 + face; passCube = target & 0xFFFF;
       }
       passW = w; passH = h;
-      currentViewport = null;
+      vpNow[0] = 0; vpNow[1] = 0; vpNow[2] = w; vpNow[3] = h; vpNow[4] = 0; vpNow[5] = 1;
+      scNow[0] = 0; scNow[1] = 0; scNow[2] = w; scNow[3] = h; cClip = 0; passCells = false;
       passKey = target ? (target & 0xFFFF) : -1;
       const first = key === -1 ? !screenTouched : !touched.has(key);
       let zv: GPUTextureView | undefined, zclear = false, zval = 1;
@@ -755,7 +759,7 @@ export class Encoder {
       if (kind === Kind.Clear && f32[w + D.viewport + 2] > 0) {
         endPass(); curT = target; curZ = zid;
         pass = openPass(target, zid);
-        const vp = drawViewport(f32, w + D.viewport, passW, passH);
+        const vp = drawViewport(f32, w + D.viewport, passW, passH, vpDraw);
         const z = f32[w + D.clrZ], flags = u32[w + D.clrFlags];
         if (pass && vp && Number.isFinite(z) && (flags & 3)) {
           pass.setViewport(vp[0], vp[1], vp[2], vp[3], 0, 1);
@@ -785,11 +789,17 @@ export class Encoder {
       const count = u32[w + D.count];
       if (!pass || !count) { if (tr) tr.push(`  #${i} draw skipped: ${pass ? 'no vertices' : 'no pass (target missing)'}`); skipped++; continue; }
       const p: GPURenderPassEncoder = pass;
-      const viewport = drawViewport(f32, w + D.viewport, passW, passH);
-      if (!viewport) { skipped++; continue; }
-      if (!currentViewport || viewport.some((v, i) => v !== currentViewport![i])) {
-        p.setViewport(...viewport);
-        currentViewport = viewport;
+      // a split screen's cell or effect region (GwDraw.viewport, clrFlags): from then on in this pass every draw
+      // takes the general way; until then (and in any frame of one view) the whole target, as before split screen
+      const cell = f32[w + D.viewport + 2] !== 0 || u32[w + D.clrFlags] !== 0;
+      if (cell) passCells = true;
+      if (passCells) {
+        if (!drawViewport(f32, w + D.viewport, passW, passH, vpDraw)) { skipped++; continue; }
+        if (vpDraw[0] !== vpNow[0] || vpDraw[1] !== vpNow[1] || vpDraw[2] !== vpNow[2] || vpDraw[3] !== vpNow[3]
+            || vpDraw[4] !== vpNow[4] || vpDraw[5] !== vpNow[5]) {
+          p.setViewport(vpDraw[0], vpDraw[1], vpDraw[2], vpDraw[3], vpDraw[4], vpDraw[5]);
+          for (let q = 0; q < 6; q++) vpNow[q] = vpDraw[q];
+        }
       }
 
       // pipeline
@@ -811,10 +821,20 @@ export class Encoder {
       // the 2D UI on a screen narrower than 4:3 stays in its 4:3 band (gpu_proto.h GwDraw.clip), on the
       // back buffer or a target of its size
       const clip = passW === bbW && passH === bbH ? u32[w + D.clip] : 0;
-      // A viewport transforms coordinates; explicitly restrict rasterization
-      // too. Screen-space quads and light sprites must stay in their cell.
-      const fx0 = u32[w + D.clrArgb], fx1 = u32[w + D.clrFlags];
-      p.setScissorRect(...drawScissor(viewport, passW, passH, clip, fx0, fx1));
+      if (passCells) {
+        // A viewport transforms coordinates; explicitly restrict rasterization
+        // too. Screen-space quads and light sprites must stay in their cell.
+        drawScissor(vpDraw, passW, passH, clip, u32[w + D.clrArgb], u32[w + D.clrFlags], scDraw);
+        if (scDraw[0] !== scNow[0] || scDraw[1] !== scNow[1] || scDraw[2] !== scNow[2] || scDraw[3] !== scNow[3]) {
+          p.setScissorRect(scDraw[0], scDraw[1], scDraw[2], scDraw[3]);
+          for (let q = 0; q < 4; q++) scNow[q] = scDraw[q];
+        }
+      } else if (clip !== cClip) {
+        const y0 = Math.min(clip & 0xFFFF, passH), y1 = Math.min(clip >>> 16, passH);
+        scNow[0] = 0; scNow[1] = clip ? y0 : 0; scNow[2] = passW; scNow[3] = clip ? Math.max(0, y1 - y0) : passH;
+        p.setScissorRect(scNow[0], scNow[1], scNow[2], scNow[3]);
+        cClip = clip;
+      }
 
       // PS parameters: a new slot only when they differ from the previous draw's
       const psci = u32[w + D.psci];

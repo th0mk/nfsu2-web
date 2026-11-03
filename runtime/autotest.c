@@ -230,6 +230,7 @@ static void key_event(unsigned dik, int down){
     } else win32_post_message(0x0101u, k->vk, lp | 0xC0000000u);  /* WM_KEYUP */
 }
 
+uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- script ----------------------------------------------------------- */
 enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_POKE, C_WAITFNG, C_TAPUNTIL,
        C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE,
@@ -393,9 +394,9 @@ static void load_script(const char *path){
             e.val = a3[0] ? (uint32_t)atol(a3) : 90u; e.n = a4[0] ? atol(a4) : 0; }
         else if (!strcasecmp(cmd, "peek")){ e.cmd = C_PEEK;
             if (!strncasecmp(a1, "@in", 3)){ e.val = 1; e.addr = (uint32_t)strtoul(a1 + 3, 0, 0); }
-            else e.addr = (uint32_t)strtoul(a1, 0, 0);
+            else e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0));
             e.n = a2[0] ? atol(a2) : 1; if (e.n < 1 || e.n > 64) e.n = 1; }
-        else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = (uint32_t)strtoul(a1, 0, 0);
+        else if (!strcasecmp(cmd, "poke")){ e.cmd = C_POKE; e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0));
             if (strchr(a1, '[')) e.xtext = strdup(a1);
             e.val = (uint32_t)strtoul(a2, 0, 0); e.n = !strcasecmp(a3, "byte"); }
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
@@ -403,7 +404,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
         else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
-            e.addr = (uint32_t)strtoul(a1, 0, 0); e.val = (uint32_t)strtoul(a2, 0, 0);
+            e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0)); e.val = (uint32_t)strtoul(a2, 0, 0);
             e.n = a3[0] ? atol(a3) : 0; }
         else if (!strcasecmp(cmd, "localpad")){
             int seat = atoi(a1), key = gamepad_button_by_name(a2);
@@ -562,7 +563,7 @@ static uint32_t tr_eval(const char **pp, int *ok){
         p++; uint32_t a = tr_eval(&p, ok);
         if (*p == ']') p++;
         if (*ok && mem_is_committed(a) && mem_is_committed(a + 3)) v = MR32(a); else *ok = 0;
-    } else v = (uint32_t)strtoul(p, (char **)&p, 0);
+    } else v = split_guest_addr((uint32_t)strtoul(p, (char **)&p, 0));
     while (*p == '+' || *p == '-'){
         int neg = *p == '-'; p++;
         uint32_t k = (uint32_t)strtoul(p, (char **)&p, 0);

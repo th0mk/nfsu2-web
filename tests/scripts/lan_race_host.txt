@@ -6,6 +6,7 @@
 +0    waitfng GarageMain.fng 3000
 +300  tap RIGHT
 +60   tap RIGHT
++60   tap RIGHT        # (Split Screen, after Quick Race)
 +120  tap RETURN
 +8000ms click 0.407 0.919
 +0    waitfng UI_PC_LAN.fng 600

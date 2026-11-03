@@ -274,10 +274,7 @@ function evaluate() {
   if (pending) { if (phase !== 'exited') setPhase('boot', T('Loading'), () => `${label(pending)}: ${detail(pending)}`); return; }
   if (phase === 'exited') { updatePlay(); return; }
   const press = N('Press Play to start.');
-  const local = Number(resolved().env.NFSU2_SPLIT_PLAYERS ?? 1);
-  setPhase('ready', T('Ready'), local > 1
-    ? () => `Press Play, then choose Split Screen in the main menu. Select 2, 3 or 4 players, set up the race, then join and choose a car with each controller.`
-    : offline ? () => t('No connection to the server: you can play, but not with others. {press}', { press: t(press) }) : T(press));
+  setPhase('ready', T('Ready'), offline ? () => t('No connection to the server: you can play, but not with others. {press}', { press: t(press) }) : T(press));
 }
 
 function updatePlay() {
@@ -304,17 +301,7 @@ async function loadSettings(): Promise<string | null> {
 }
 /** this device's own defaults (a phone's: device.ts), below settings.ini and the page address */
 const DEVICE = deviceDefaults();
-function resolved(host: Record<string, string> = {}): Resolved {
-  const r = resolveEnv(settingsText, ENVIRONMENT, host, DEVICE);
-  // The Windows launcher's fixed player-count parameter is available on a
-  // normal local server; arbitrary environment/script parameters stay dev-only.
-  const local = addr.get('localPlayers');
-  if (local && /^[1-6]$/.test(local)) r.env.NFSU2_SPLIT_PLAYERS = local;
-  if (Number(r.env.NFSU2_SPLIT_PLAYERS ?? 1) > 1) {
-    r.env.NFSU2_NET = 'off'; r.env.NFSU2_ROAM = '0'; r.env.NFSU2_ONLINE = '0';
-  }
-  return r;
-}
+function resolved(host: Record<string, string> = {}): Resolved { return resolveEnv(settingsText, ENVIRONMENT, host, DEVICE); }
 /** the game's language (runtime/language.c): which language pack the page fetches ahead and counts */
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
 /** the texture packs picked (runtime/web/texrep_web.c), comma-separated, '' for none: the ones the page fetches ahead

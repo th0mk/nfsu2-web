@@ -211,6 +211,10 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   Windows the Game Bar may take it). The D-pad or left stick moves in it, A picks, B closes it; meanwhile the game
   gets no controller input. A stick pressed in alone reaches the game a moment later (0.12 s), so the shortcut never
   honks or works the hydraulics.
+- **Split screen:** the main menu's item after Quick Race. Pick 2, 3 or 4 players and the race, then each player
+  presses START on their own controller (one player may press Enter and drive on the keyboard) and picks a car. Every
+  player gets their own view, HUD, minimap and camera; player 1's controller works the results and Post Race menu.
+  Each view is a whole scene, so 3 or 4 players need a fast computer.
 - **Rumble:** a controller that can rumble in Chrome (Xbox, DualSense and others) shakes when you crash, scrape a
   wall or land hard. Controls, Controller, Rumble turns it off. Firefox has no rumble.
 - **Sound** starts with the Play click. If the browser still keeps it off, a note says so, and a click on the game or
