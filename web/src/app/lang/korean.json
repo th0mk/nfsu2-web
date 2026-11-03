@@ -448,6 +448,8 @@
   "Not ready": "준비 안 됨",
   "The game didn't load. It retries by itself, or press Retry.": "게임을 불러오지 못했어요. 자동으로 다시 시도하며, '다시 시도'를 눌러도 돼요.",
   "Fix the problem below, then reload this page.": "아래 문제를 해결한 뒤 이 페이지를 새로고침하세요.",
+  "Not loading": "불러오지 못함",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "백신 프로그램이나 네트워크에서 게임을 막고 있는 것 같아요. {site} 주소를 허용한 뒤 새로고침하세요.",
   "Open elsewhere": "다른 곳에서 실행 중",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "다른 탭에서 게임이 실행 중이에요. 그 탭으로 전환하거나, 닫으면 이 페이지가 이어받아요.",
   "Loading the game.": "게임을 불러오는 중이에요.",

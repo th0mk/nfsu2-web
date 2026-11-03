@@ -457,6 +457,8 @@
   "Not ready": "Hazır değil",
   "The game didn't load. It retries by itself, or press Retry.": "Oyun yüklenmedi. Kendiliğinden yeniden dener; ya da Yeniden dene'ye bas.",
   "Fix the problem below, then reload this page.": "Aşağıdaki sorunu gider, sonra bu sayfayı yeniden yükle.",
+  "Not loading": "Yüklenmiyor",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Büyük olasılıkla antivirüsün ya da ağın oyunu engelliyor. {site} adresine izin ver, sonra yeniden yükle.",
   "Open elsewhere": "Başka yerde açık",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Oyun başka bir sekmede çalışıyor. O sekmeye geç ya da onu kapat, bu sayfa devralır.",
   "Loading the game.": "Oyun yükleniyor.",

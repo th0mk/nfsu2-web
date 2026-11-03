@@ -510,6 +510,8 @@
   "Not ready": "Не готово",
   "The game didn't load. It retries by itself, or press Retry.": "Гра не завантажилася. Вона повторить спробу сама, або натисніть «Повторити».",
   "Fix the problem below, then reload this page.": "Усуньте проблему нижче, потім перезавантажте цю сторінку.",
+  "Not loading": "Не завантажується",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Найімовірніше, гру блокує ваш антивірус або мережа. Дозвольте доступ до {site}, потім перезавантажте сторінку.",
   "Open elsewhere": "Відкрито в іншій вкладці",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Гра вже запущена в іншій вкладці. Перейдіть до неї або закрийте її — тоді керування перейме ця сторінка.",
   "Loading the game.": "Завантаження гри.",

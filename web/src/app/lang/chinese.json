@@ -448,6 +448,8 @@
   "Not ready": "尚未就緒",
   "The game didn't load. It retries by itself, or press Retry.": "遊戲未能載入。系統會自動重試，你也可以按「重試」。",
   "Fix the problem below, then reload this page.": "請修正下方的問題，然後重新載入此頁面。",
+  "Not loading": "無法載入",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "你的防毒軟體或網路可能封鎖了遊戲。請允許 {site}，然後重新載入。",
   "Open elsewhere": "已在別處開啟",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "遊戲正在另一個分頁中執行。請切換到該分頁，或將它關閉，此頁面就會接手。",
   "Loading the game.": "正在載入遊戲。",

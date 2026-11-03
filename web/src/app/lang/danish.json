@@ -490,6 +490,8 @@
   "Not ready": "Ikke klar",
   "The game didn't load. It retries by itself, or press Retry.": "Spillet blev ikke indlæst. Det prøver igen af sig selv, eller tryk på Prøv igen.",
   "Fix the problem below, then reload this page.": "Ret problemet nedenfor, og genindlæs derefter siden.",
+  "Not loading": "Indlæser ikke",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Dit antivirus eller netværk blokerer sandsynligvis spillet. Tillad {site}, og genindlæs derefter.",
   "Open elsewhere": "Åben et andet sted",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Spillet kører i en anden fane. Skift til den, eller luk den, så tager denne side over.",
   "Loading the game.": "Indlæser spillet.",

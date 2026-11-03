@@ -518,6 +518,8 @@
   "Not ready": "Brak gotowości",
   "The game didn't load. It retries by itself, or press Retry.": "Gra się nie wczytała. Nastąpi automatyczna ponowna próba albo naciśnij „Ponów”.",
   "Fix the problem below, then reload this page.": "Usuń poniższy problem, a potem odśwież tę stronę.",
+  "Not loading": "Nie wczytuje się",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Prawdopodobnie twój antywirus lub sieć blokuje grę. Zezwól na {site}, a potem odśwież.",
   "Open elsewhere": "Otwarte w innej karcie",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Gra działa już w innej karcie. Przejdź do niej albo ją zamknij, a ta strona przejmie grę.",
   "Loading the game.": "Wczytywanie gry.",

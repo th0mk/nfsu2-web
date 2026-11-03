@@ -490,6 +490,8 @@
   "Not ready": "Inte redo",
   "The game didn't load. It retries by itself, or press Retry.": "Spelet laddades inte. Det försöker igen av sig självt, eller tryck på Försök igen.",
   "Fix the problem below, then reload this page.": "Åtgärda problemet nedan och ladda sedan om sidan.",
+  "Not loading": "Laddar inte",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Ditt antivirus eller nätverk blockerar troligen spelet. Tillåt {site} där och ladda sedan om.",
   "Open elsewhere": "Öppet någon annanstans",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Spelet körs i en annan flik. Byt till den, eller stäng den så tar den här sidan över.",
   "Loading the game.": "Laddar spelet.",

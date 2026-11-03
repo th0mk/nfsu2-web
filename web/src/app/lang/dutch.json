@@ -490,6 +490,8 @@
   "Not ready": "Niet klaar",
   "The game didn't load. It retries by itself, or press Retry.": "Het spel is niet geladen. Het probeert het vanzelf opnieuw, of druk op Opnieuw proberen.",
   "Fix the problem below, then reload this page.": "Los het probleem hieronder op en laad deze pagina daarna opnieuw.",
+  "Not loading": "Laadt niet",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Je antivirus of netwerk blokkeert het spel waarschijnlijk. Sta {site} toe en laad daarna opnieuw.",
   "Open elsewhere": "Elders geopend",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Het spel draait in een ander tabblad. Ga daarheen, of sluit het en deze pagina neemt het over.",
   "Loading the game.": "Het spel wordt geladen.",

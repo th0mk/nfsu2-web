@@ -518,6 +518,8 @@
   "Not ready": "Не готово",
   "The game didn't load. It retries by itself, or press Retry.": "Игра не загрузилась. Попытка повторится автоматически, или нажмите «Повторить».",
   "Fix the problem below, then reload this page.": "Устраните проблему ниже, затем перезагрузите эту страницу.",
+  "Not loading": "Не загружается",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Скорее всего, игру блокирует ваш антивирус или сеть. Разрешите доступ к {site}, затем перезагрузите страницу.",
   "Open elsewhere": "Открыто в другой вкладке",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Игра уже запущена в другой вкладке. Перейдите на неё или закройте её, и эта страница возьмёт управление на себя.",
   "Loading the game.": "Загрузка игры.",

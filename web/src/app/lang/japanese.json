@@ -448,6 +448,8 @@
   "Not ready": "準備できていません",
   "The game didn't load. It retries by itself, or press Retry.": "ゲームを読み込めませんでした。自動で再試行します。「再試行」を押すこともできます。",
   "Fix the problem below, then reload this page.": "下の問題を解決してから、このページを再読み込みしてください。",
+  "Not loading": "読み込めません",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "ウイルス対策ソフトかネットワークがゲームをブロックしている可能性があります。{site} を許可してから、再読み込みしてください。",
   "Open elsewhere": "別の場所で起動中",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "別のタブでゲームが実行中です。そのタブに切り替えるか、閉じてください。閉じると、このページが引き継ぎます。",
   "Loading the game.": "ゲームを読み込んでいます。",

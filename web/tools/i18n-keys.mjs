@@ -148,6 +148,16 @@ const LOCALE = { french: 'fr', german: 'de', italian: 'it', spanish: 'es', dutch
 export const LANGUAGE_FILES = Object.keys(LOCALE);
 export const langFile = l => path.join(WEB, 'src/app/lang', `${l}.json`);
 
+/** src/boot.ts's texts in each language's file: { language: { key: text } }.  boot.js shows them before the page's
+ *  script (and its language files) have arrived, so build.mjs puts them into it. */
+export function bootTexts() {
+  const keys = sourceKeys(fs.readFileSync(path.join(WEB, 'src/boot.ts'), 'utf8')).keys.map(k => k.key);
+  return Object.fromEntries(LANGUAGE_FILES.map(l => {
+    const have = JSON.parse(fs.readFileSync(langFile(l), 'utf8'));
+    return [l, Object.fromEntries(keys.filter(k => typeof have[k] === 'string').map(k => [k, have[k]]))];
+  }));
+}
+
 /** What is wrong with a language's file against the texts in use: [] when nothing. */
 export function check(lang, keys = catalog().keys) {
   const out = [];

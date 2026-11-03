@@ -504,6 +504,8 @@
   "Not ready": "Pas prêt",
   "The game didn't load. It retries by itself, or press Retry.": "Le jeu ne s'est pas chargé. Il réessaie tout seul, ou appuyez sur Réessayer.",
   "Fix the problem below, then reload this page.": "Corrigez le problème ci-dessous, puis rechargez cette page.",
+  "Not loading": "Ne se charge pas",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Votre antivirus ou votre réseau bloque sans doute le jeu. Autorisez {site}, puis rechargez.",
   "Open elsewhere": "Ouvert ailleurs",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Le jeu tourne dans un autre onglet. Passez-y, ou fermez-le et cette page prendra le relais.",
   "Loading the game.": "Chargement du jeu.",

@@ -448,6 +448,8 @@
   "Not ready": "ยังไม่พร้อม",
   "The game didn't load. It retries by itself, or press Retry.": "โหลดเกมไม่สำเร็จ ระบบจะลองใหม่เอง หรือกด “ลองอีกครั้ง”",
   "Fix the problem below, then reload this page.": "แก้ไขปัญหาด้านล่าง แล้วโหลดหน้านี้ใหม่",
+  "Not loading": "โหลดไม่ได้",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "แอนตี้ไวรัสหรือเครือข่ายของคุณอาจบล็อกเกมอยู่ อนุญาต {site} แล้วโหลดใหม่",
   "Open elsewhere": "เปิดอยู่ที่อื่น",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "เกมกำลังรันอยู่ในอีกแท็บหนึ่ง ให้สลับไปที่แท็บนั้น หรือปิดแท็บนั้นแล้วหน้านี้จะรับช่วงต่อ",
   "Loading the game.": "กำลังโหลดเกม",

@@ -30,11 +30,11 @@ export {};
 
 const CACHE = 'nfsu2-offline-2';
 const PAGE = '/', MODULE = '/game.wasm';
-/** what a start needs, and the module; the page loads the first five itself before Play */
-const KEPT = ['/', '/main.js', '/main.css', '/game.json', '/data-manifest',
+/** what a start needs, and the module; the page loads the first six itself before Play */
+const KEPT = ['/', '/boot.js', '/main.js', '/main.css', '/game.json', '/data-manifest',
   '/host/game-worker.js', '/host/io-worker.js', '/host/predownload-worker.js', '/gpu/png-worker.js', '/net/worker.js',
   '/audio/worklet.js'];
-const LATER = KEPT.slice(4);
+const LATER = KEPT.slice(5);
 /** the start page's language files (i18n.ts): one is kept once the page fetched it, and kept up to date with the rest */
 const LANG = /^\/lang\/[a-z]+\.json$/;
 const NAV_WAIT_MS = 4000, OFFLINE_MS = 30_000;

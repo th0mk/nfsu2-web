@@ -490,6 +490,8 @@
   "Not ready": "Nicht bereit",
   "The game didn't load. It retries by itself, or press Retry.": "Das Spiel wurde nicht geladen. Es versucht es automatisch erneut, oder drück auf „Erneut versuchen“.",
   "Fix the problem below, then reload this page.": "Behebe das Problem unten und lade diese Seite dann neu.",
+  "Not loading": "Lädt nicht",
+  "Your antivirus or network is probably blocking the game. Allow {site} in it, then reload.": "Dein Antivirenprogramm oder Netzwerk blockiert wahrscheinlich das Spiel. Erlaube dort {site} und lade dann neu.",
   "Open elsewhere": "Anderswo geöffnet",
   "The game is running in another tab. Switch to it, or close it and this page takes over.": "Das Spiel läuft schon in einem anderen Tab. Wechsle dorthin oder schließ ihn, dann übernimmt diese Seite.",
   "Loading the game.": "Das Spiel wird geladen.",
