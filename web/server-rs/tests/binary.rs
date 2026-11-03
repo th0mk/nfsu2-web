@@ -423,6 +423,12 @@ async fn the_lobby_trace_of_a_login() {
     let mut srv = Server::spawn(command(&data, &wasm, port, &state, &["--dev", "--online-trace", trace.to_str().unwrap()]), port);
     srv.ready().await;
     assert!(srv.lines().iter().any(|l| l.starts_with("  trace     : lobby messages (secrets redacted) into ")));
+    // no kept blocks on a --dev server: a test's fresh state folder would compress the whole game for most of an hour
+    assert!(
+        srv.lines().iter().any(|l| l == "  blocks    : compressed as they are sent (NFSU2_COMPRESS_THREADS=0, --dev's default)"),
+        "{:?}",
+        srv.lines()
+    );
     let a = Browser::open_at(&format!("localhost:{port}"), port, "", None).await;
     a.hello("Ann");
     let c = a.login("Ann").await;

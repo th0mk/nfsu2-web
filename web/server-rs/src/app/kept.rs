@@ -4,7 +4,7 @@
 //! the music 86 -> 84 %; the movies do not compress either way), and every block is tried, not only those whose
 //! first 64 KB compress (the answers' probe, blocks.rs: many car textures, sent as they are before), at about 100
 //! times the CPU: so never while a client waits.  A block not kept yet is answered as before and queued (blocks.rs).
-//! Threads of their own (NFSU2_COMPRESS_THREADS, 2 unless given; 0: none, the answers as before) at the lowest
+//! Threads of their own (NFSU2_COMPRESS_THREADS, 2 unless given, 0 with --dev; 0: the answers as before) at the lowest
 //! priority make what the answers queued first, then every block of each new manifest (a changed file is a new key),
 //! and remove what no file of the manifest has any more.  The lowest priority only puts them behind the server's
 //! other threads on a core they share: under a CPU quota (nfsu2.slice's 14 cores, which the free-roam hub's busy cap

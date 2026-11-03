@@ -34,7 +34,7 @@ const DAYS_SWEEP_EVERY: Duration = Duration::from_secs(30);
 const LAN_SNDBUF: u64 = 32 << 10;
 /// the threads that compress the game data's blocks at brotli's best, once, at the lowest priority
 /// (NFSU2_COMPRESS_THREADS; kept.rs): a game folder with every language pack (5600 blocks, 3100 that compress) in
-/// about half an hour
+/// about half an hour; none on a --dev server unless given
 const COMPRESS_THREADS: u64 = 2;
 /// keyphrase saves: counted at the start, then swept (the unused removed) and counted again every day
 const VAULT_SWEEP_EVERY: Duration = Duration::from_secs(24 * 3600);
@@ -227,6 +227,10 @@ pub async fn run(o: Options, cores: usize) {
         ));
     }
     let names = claims.clone().map(|c| super::names::NamesRoute::new(c, turnstile));
+    // the threads that keep the game data's blocks at brotli's best (kept.rs; 0: none): none on a --dev server unless
+    // given, where a test's fresh state folder took 2 cores for most of an hour (2026-11-03: three test servers at
+    // once, 6 of the PC's 20) for smaller downloads no test needs
+    let compress_threads = env_num("NFSU2_COMPRESS_THREADS", if o.dev { 0 } else { COMPRESS_THREADS }) as usize;
     let app = Arc::new(App::new(
         o,
         real_state,
@@ -240,8 +244,7 @@ pub async fn run(o: Options, cores: usize) {
         days.clone(),
         (cores / 2).max(2),
         lan_sndbuf,
-        // the threads that keep the game data's blocks at brotli's best (kept.rs; 0: none)
-        env_num("NFSU2_COMPRESS_THREADS", COMPRESS_THREADS) as usize,
+        compress_threads,
     ));
     // the pages' friend messages (friends.rs)
     if let Some(f) = &app.friends {
@@ -640,7 +643,10 @@ pub async fn run(o: Options, cores: usize) {
     ));
     lines.push(format!(
         "  blocks    : {}",
-        app.kept.as_ref().map_or_else(|| "compressed as they are sent (NFSU2_COMPRESS_THREADS=0)".into(), |k| k.summary())
+        app.kept.as_ref().map_or_else(
+            || format!("compressed as they are sent (NFSU2_COMPRESS_THREADS=0{})", if o.dev { ", --dev's default" } else { "" }),
+            |k| k.summary()
+        )
     ));
     let bans = app.bans.list(nfsu2_util::now_ms()).len();
     lines.push(if control_up {
