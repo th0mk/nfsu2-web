@@ -159,7 +159,7 @@
   "{n} bytes, not {size}": "{n} ไบต์ ไม่ใช่ {size}",
   "unexpected block sizes": "ขนาดบล็อกไม่ถูกต้อง",
   "saved by another version of the game (version {got}, not {want})": "บันทึกโดยเกมเวอร์ชันอื่น (เวอร์ชัน {got} ไม่ใช่ {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "ชื่อภายใน “{name}” ไม่ใช่ชื่อที่เกมสร้างได้ (ตัวอักษรและตัวเลข 1 ถึง {n} ตัว)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "ชื่อภายใน “{name}” ไม่ใช่ชื่อที่เกมสร้างได้ (ตัวอักษร ตัวเลข ช่องว่าง - และ _ 1 ถึง {n} ตัว)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "ชื่อโปรไฟล์คือตัวอักษรและตัวเลข 1 ถึง {n} ตัว เหมือนในเกม",
   "There is no profile {name} in this browser.": "ไม่มีโปรไฟล์ {name} ในเบราว์เซอร์นี้",
   "{name} cannot be renamed here: {why}.": "เปลี่ยนชื่อ {name} ที่นี่ไม่ได้: {why}",

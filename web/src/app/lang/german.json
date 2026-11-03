@@ -165,7 +165,7 @@
   "{n} bytes, not {size}": "{n} Bytes statt {size}",
   "unexpected block sizes": "unerwartete Blockgrößen",
   "saved by another version of the game (version {got}, not {want})": "mit einer anderen Version des Spiels gespeichert (Version {got} statt {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "der Name darin, „{name}“, ist keiner, den das Spiel vergibt (1 bis {n} Buchstaben und Ziffern)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "der Name darin, „{name}“, ist keiner, den das Spiel vergibt (1 bis {n} Buchstaben, Ziffern, Leerzeichen, - und _)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "Ein Profilname besteht wie im Spiel aus 1 bis {n} Buchstaben und Ziffern.",
   "There is no profile {name} in this browser.": "In diesem Browser gibt es kein Profil {name}.",
   "{name} cannot be renamed here: {why}.": "{name} kann hier nicht umbenannt werden: {why}.",

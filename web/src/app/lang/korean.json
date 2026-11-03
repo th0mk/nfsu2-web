@@ -159,7 +159,7 @@
   "{n} bytes, not {size}": "{size}바이트가 아닌 {n}바이트",
   "unexpected block sizes": "블록 크기가 예상과 다름",
   "saved by another version of the game (version {got}, not {want})": "다른 버전의 게임에서 저장됨(버전 {got}, 필요한 버전 {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "파일 안의 이름 '{name}': 게임에서 만들 수 없는 이름(영문자와 숫자 1~{n}자)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "파일 안의 이름 '{name}': 게임에서 만들 수 없는 이름(영문자, 숫자, 공백, -, _ 1~{n}자)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "프로필 이름은 게임과 같이 영문자와 숫자 1~{n}자예요.",
   "There is no profile {name} in this browser.": "이 브라우저에 {name} 프로필이 없어요.",
   "{name} cannot be renamed here: {why}.": "여기서는 {name} 프로필의 이름을 바꿀 수 없어요: {why}.",

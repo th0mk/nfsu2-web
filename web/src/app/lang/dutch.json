@@ -165,7 +165,7 @@
   "{n} bytes, not {size}": "{n} bytes in plaats van {size}",
   "unexpected block sizes": "onverwachte blokgroottes",
   "saved by another version of the game (version {got}, not {want})": "opgeslagen door een andere versie van het spel (versie {got}, niet {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "de naam erin, “{name}”, is er geen die het spel maakt (1 tot {n} letters en cijfers)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "de naam erin, “{name}”, is er geen die het spel maakt (1 tot {n} letters, cijfers, spaties, - en _)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "Een profielnaam bestaat, net als in het spel, uit 1 tot {n} letters en cijfers.",
   "There is no profile {name} in this browser.": "Er is geen profiel {name} in deze browser.",
   "{name} cannot be renamed here: {why}.": "De naam van {name} kan hier niet worden gewijzigd: {why}.",

@@ -85,8 +85,10 @@ test('profileName: the checks of a profile from elsewhere, and why one is refuse
   const old = profile('Velkira', { version: 0x10C }); old[0xA16A] ^= 0x40;
   assert.match(P.profileName(old).bad, /another version/, 'another version stays out, edited or not');
   assert.match(P.profileName(profile('Velkira', { version: 0x10C })).bad, /another version/);
-  assert.match(P.profileName(profile('X', { inside: 'TOOLONGNAME' })).bad, /not one the game makes/);
-  assert.match(P.profileName(profile('X', { inside: 'a b' })).bad, /not one the game makes/);
+  assert.match(P.profileName(profile('X', { inside: 'SIXTEENLETTERSXX' })).bad, /not one the game makes/);
+  for (const inside of ['a  b', ' ab', 'ab ', 'a.b', 'Zoë', 'ab DVD 1'])
+    assert.match(P.profileName(profile('X', { inside })).bad, /not one the game makes/, inside);
+  assert.deepEqual(P.profileName(profile('X', { inside: 'Big Bad__Wolf-2' })), { name: 'Big Bad__Wolf-2', edited: false }, '15 with spaces');
   assert.match(P.profileName(profile('Velkira').subarray(0, 54000)).bad, /54000 bytes/);
 });
 

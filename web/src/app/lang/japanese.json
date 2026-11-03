@@ -159,7 +159,7 @@
   "{n} bytes, not {size}": "{size}バイトではなく{n}バイトです",
   "unexpected block sizes": "ブロックサイズが想定外です",
   "saved by another version of the game (version {got}, not {want})": "別のバージョンのゲームで保存されています（バージョン{want}ではなく{got}）",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "ファイル内の名前「{name}」は、ゲームが作る名前ではありません（英数字1～{n}文字）",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "ファイル内の名前「{name}」は、ゲームが作る名前ではありません（英数字・スペース・-・_の1～{n}文字）",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "プロフィール名は、ゲームと同じく英数字1～{n}文字です。",
   "There is no profile {name} in this browser.": "このブラウザにプロフィール{name}はありません。",
   "{name} cannot be renamed here: {why}.": "{name}はここでは名前を変更できません: {why}。",

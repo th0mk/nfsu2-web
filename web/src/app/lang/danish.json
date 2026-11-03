@@ -165,7 +165,7 @@
   "{n} bytes, not {size}": "{n} byte, ikke {size}",
   "unexpected block sizes": "uventede blokstørrelser",
   "saved by another version of the game (version {got}, not {want})": "gemt af en anden version af spillet (version {got}, ikke {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "navnet i filen, \"{name}\", er ikke et, spillet laver (1 til {n} bogstaver og cifre)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "navnet i filen, \"{name}\", er ikke et, spillet laver (1 til {n} bogstaver, cifre, mellemrum, - og _)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "En profils navn er 1 til {n} bogstaver og cifre, som i spillet.",
   "There is no profile {name} in this browser.": "Der er ingen profil {name} i denne browser.",
   "{name} cannot be renamed here: {why}.": "{name} kan ikke omdøbes her: {why}.",

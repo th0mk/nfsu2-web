@@ -455,7 +455,9 @@ export class VaultPanel {
       return !still || await still();
     };
     const copy = this.copying;                         // (Use the cloud's: the saves here kept with the take)
-    try { if (!await restoreVault(this.d.saveDir, r, now, copy?.files)) return false; }
+    // a take by itself (VaultSync.pull: only while the saves here are those it synced) is the one that may follow an
+    // older page's mend with this browser's covers (saves-ui.ts renamedHere)
+    try { if (!await restoreVault(this.d.saveDir, r, now, copy?.files, !!still && !copy)) return false; }
     catch (e) { if (copy) await this.loadReplaced().catch(() => {}); throw e; }
     this.keptNow(copy);
     this.mended = r;

@@ -169,7 +169,7 @@
   "{n} bytes, not {size}": "{n} байт вместо {size}",
   "unexpected block sizes": "неожиданные размеры блоков",
   "saved by another version of the game (version {got}, not {want})": "сохранён другой версией игры (версия {got}, а не {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "имя внутри («{name}») не из тех, что создаёт игра (от 1 до {n} букв и цифр)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "имя внутри («{name}») не из тех, что создаёт игра (от 1 до {n} букв, цифр, пробелов, - и _)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "Имя профиля — от 1 до {n} букв и цифр, как в игре.",
   "There is no profile {name} in this browser.": "В этом браузере нет профиля {name}.",
   "{name} cannot be renamed here: {why}.": "Профиль {name} нельзя здесь переименовать: {why}.",

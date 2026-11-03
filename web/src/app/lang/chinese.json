@@ -159,7 +159,7 @@
   "{n} bytes, not {size}": "{n} 位元組，而非 {size}",
   "unexpected block sizes": "區塊大小異常",
   "saved by another version of the game (version {got}, not {want})": "由其他版本的遊戲儲存（版本 {got}，而非 {want}）",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "內含的名稱「{name}」不是遊戲會產生的名稱（1 至 {n} 個字母與數字）",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "內含的名稱「{name}」不是遊戲會產生的名稱（1 至 {n} 個字母、數字、空格、- 與 _）",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "玩家檔案名稱為 1 至 {n} 個字母與數字，與遊戲中相同。",
   "There is no profile {name} in this browser.": "此瀏覽器中沒有玩家檔案 {name}。",
   "{name} cannot be renamed here: {why}.": "無法在此重新命名 {name}：{why}。",

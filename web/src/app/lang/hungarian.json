@@ -433,7 +433,7 @@
   "{n} bytes, not {size}": "{n} bájt {size} helyett",
   "unexpected block sizes": "váratlan blokkméretek",
   "saved by another version of the game (version {got}, not {want})": "a játék egy másik verziója mentette (verzió: {got}, nem {want})",
-  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters and digits)": "a benne lévő „{name}” név nem olyan, amilyet a játék ad (1–{n} betű és számjegy)",
+  "the name inside, \"{name}\", is not one the game makes (1 to {n} letters, digits, spaces, - and _)": "a benne lévő „{name}” név nem olyan, amilyet a játék ad (1–{n} betű, számjegy, szóköz, - és _)",
   "A profile's name is 1 to {n} letters and digits, as in the game.": "A profil neve 1–{n} betűből és számjegyből áll, mint a játékban.",
   "There is no profile {name} in this browser.": "Ebben a böngészőben nincs {name} nevű profil.",
   "{name} cannot be renamed here: {why}.": "{name} itt nem nevezhető át: {why}.",
