@@ -24,6 +24,7 @@ mod pool;
 #[cfg(test)]
 mod route_tests;
 mod run;
+pub mod settings_days;
 #[cfg(test)]
 mod testkit;
 mod turnstile;
@@ -732,7 +733,8 @@ impl App {
     }
 
     /// /seen?at=page|play&id=<the page's id>: a browser opened the page or pressed Play, counted for the day
-    /// (days.rs); 204, no body, whatever it said
+    /// (days.rs); a day's first Play also tells its device and changed settings, &k=<pc|phone|tablet>&s=<key=value,...>
+    /// (settings_days.rs); 204, no body, whatever it said
     async fn send_seen(&self, q: &Request, s: &mut Response, u: &url::Url) -> Res {
         let what = match u.param("at").as_deref() {
             Some("page") => Some(days::Seen::Page),
@@ -740,7 +742,13 @@ impl App {
             _ => None,
         };
         if let (Some(what), Some(id), "GET") = (what, u.param("id"), q.method.as_str()) {
-            self.days.seen(&id, what, nfsu2_util::now_ms());
+            let now = nfsu2_util::now_ms();
+            self.days.seen(&id, what, now);
+            if what == days::Seen::Play {
+                if let Some(r) = settings_days::Report::parse(u.param("k").as_deref(), u.param("s").as_deref()) {
+                    self.days.told(&id, &r, now);
+                }
+            }
         }
         let h = self.headers(q, Cache::Store, true);
         s.head(204, h.0);

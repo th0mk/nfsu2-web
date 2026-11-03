@@ -328,6 +328,32 @@ async fn seen_counts_each_browser_once() {
     assert_eq!(kit.app.days.today(nfsu2_util::now_ms()).1, [2, 1, 0, 0]);
 }
 
+// /seen at a day's first Play: the device and the changed settings go into the day's totals (settings_days.rs); a
+// load, a Play without them (an older page), a bad device or no id tell nothing
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seen_tallies_the_settings_told_at_play() {
+    let kit = Kit::start(&[], |_| {}).await;
+    let (a, b) = ("AAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBB");
+    for path in [
+        format!("/seen?at=play&id={a}&k=phone&s=fps%3D30%2Croam_name%3Dset"),
+        format!("/seen?at=play&id={b}&k=pc&s="),
+        format!("/seen?at=play&id={b}&k=pc&s=fps=120,hud=43"),
+        format!("/seen?at=page&id={a}&k=pc&s=fps%3D60"),
+        format!("/seen?at=play&id={a}&k=toaster&s=fps%3D60"),
+        format!("/seen?at=play&id={a}"),
+        "/seen?at=play&k=pc&s=fps%3D60".to_string(),
+    ] {
+        let r = kit.get(&path, &[]).await;
+        assert_eq!(r.status, 204, "{path}");
+    }
+    let (_, _, t) = kit.app.days.settings(7, nfsu2_util::now_ms());
+    assert_eq!(t.reports, [2, 1, 0]);
+    assert_eq!(t.counts["fps"]["30"], [0, 1, 0]);
+    assert_eq!(t.counts["fps"]["120"], [1, 0, 0]);
+    assert_eq!(t.counts["roam_name"]["set"], [0, 1, 0]);
+    assert!(!t.counts["fps"].contains_key("60"));
+}
+
 /// an answer's whole length once its head is in (its Content-Length; none: no body)
 fn answer_len(b: &[u8]) -> Option<usize> {
     let end = b.windows(4).position(|w| w == b"\r\n\r\n")?;

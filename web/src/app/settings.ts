@@ -884,6 +884,42 @@ export function resolveEnv(text: string | null, environment: Record<string, stri
   return { env, source, notes, file, byEnv, other };
 }
 
+// ------------------------------------------------- the server's tally --
+
+/** kinds a report gives the value of (a switch as on/off, a choice, a number, a size) */
+const TOLD_VALUE: ReadonlySet<Kind> = new Set<Kind>(['bool', 'boolInv', 'enum', 'num', 'int', 'wxh']);
+/** kinds of the player's own words (a name, a room, crews, phrases, blocked players): a report says only "set" */
+const TOLD_SET: ReadonlySet<Kind> = new Set<Kind>(['name', 'room', 'text', 'crews', 'rgbs', 'phrases', 'sayGroups', 'names']);
+/** what the server takes as a value (web/server-rs src/app/settings_days.rs value_ok) */
+const TALLY_VALUE = /^[A-Za-z0-9:._+-]{1,24}$/;
+
+/**
+ * The settings a launch takes from settings.ini that differ from this device's defaults (`device`: deviceDefaults,
+ * else the template's), as "key=value" in the table's order: what the page tells the server at a day's first Play
+ * (page-id.ts seen), whose daily tally shows the operator what players change (web/server-rs src/app/settings_days.rs).
+ * A switch as on/off, a choice or number as it applies, the player's own words only as "set"; a setting the file
+ * gives by its variable's name (NFSU2_FPS = 30) as the setting.  Left out: the Mac's keys, the other kinds (LAN
+ * addresses and names, test lists), variables outside the table, and the page address's (a development server's).
+ */
+export function changedSettings(r: Resolved, device: Record<string, string> = {}): string[] {
+  const out: string[] = [];
+  for (const d of KEYS) {
+    if (d.scope !== 'web' || r.source[d.env] !== 'settings.ini') continue;
+    if (!TOLD_VALUE.has(d.kind) && !TOLD_SET.has(d.kind)) continue;
+    const v = r.env[d.env];
+    const def = checkSetting(d.key, device[d.key] ?? DEFAULTS.get(d.key) ?? '');
+    if (def?.ok && def.value === v) continue;
+    let told: string;
+    if (TOLD_SET.has(d.kind)) told = 'set';
+    else if (d.kind === 'bool' || d.kind === 'boolInv') told = (v === '1') === (d.kind === 'bool') ? 'on' : 'off';
+    else if (d.kind === 'wxh') told = v.replace(/\s+/g, '').toLowerCase();
+    else if (d.kind === 'num' || d.kind === 'int') told = Number.isFinite(Number(v.trim())) ? String(Number(v.trim())) : v.trim();
+    else told = lower(v);                            // an enum: "SCALE:0.75" is scale:0.75
+    if (TALLY_VALUE.test(told)) out.push(`${d.key}=${told}`);
+  }
+  return out;
+}
+
 // -------------------------------------------------------------- editing --
 
 /**

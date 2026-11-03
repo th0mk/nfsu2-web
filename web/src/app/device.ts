@@ -33,9 +33,15 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  several times that, and the game's own drop back to 32 (roam_game.c cars_cut) waits for frames under ~40 fps: it
  *  never helps a player who went from 144 to 100 fps (fast computers started at 48, then 40, until 2026-11-02). */
 export function deviceDefaults(): Record<string, string> {
-  if (isPhone()) return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16' };
-  if (touchFirst()) return { roam_max_cars: '24' };
+  const kind = deviceKind();
+  if (kind === 'phone') return { render: rememberedRender() === 'backing' ? 'backing' : 'scale:0.75', fullscreen: 'on', hud: '43', roam_max_cars: '16' };
+  if (kind === 'tablet') return { roam_max_cars: '24' };
   return {};
+}
+
+/** the device as its defaults see it: a phone, a touch-first one that is not a phone (a tablet), or a computer */
+export function deviceKind(): 'phone' | 'tablet' | 'pc' {
+  return isPhone() ? 'phone' : touchFirst() ? 'tablet' : 'pc';
 }
 
 /** the render check's verdict on this phone: in this browser only, like the other device defaults (settings.ini,
