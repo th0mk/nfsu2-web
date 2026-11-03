@@ -10,7 +10,7 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (b99f2dc)
+## 2026-11-03 (32540c7)
 
 - **Free roam:** lobby races count in your career, as Solo races do: win a race of your stage you haven't won yet, or finish one a friend or crew-mate wins. A star in the lobby shows whom a race counts for.
 - **Free roam:** a lobby warns you when its stage's cars are usually much faster than yours, and quitting a race costs more at stages 4 and 5.
@@ -24,6 +24,7 @@ not guessed.
 - **Free roam:** an open trunk shows its speakers and amps.
 - **World map:** a car meet takes 16 parked players (was 24).
 - **Quick chat:** a Countdown phrase: 5, 4, 3, 2, 1, GO! on screen for everyone within 50 m.
+- **Music:** Settings, Game, Songs: Original plays the EA Trax songs as the game shipped them, in place of the uncensored ones, and F7 skips to the next song.
 - **Controllers:** the right stick looks around the car while driving (straight down looks back), and a click of it opens quick chat.
 - **Steering wheels:** Fanatec bases get their own layouts, and separate USB pedals of any make work with a wheel.
 - **Graphics:** Enhanced Contrast no longer draws flickering lines along the screen's edges, and is as sharp as the original.
