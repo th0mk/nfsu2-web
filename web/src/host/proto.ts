@@ -33,6 +33,9 @@ export const enum Op {
   PathFilestatSetTimes, FdFilestatSetTimes, FdRenumber,
   // the movies' AV1 pictures (movie.ts, runtime/movie.c): not WASI
   MovieOpen, MovieDecode, MovieClose,
+  // the I/O worker's clock (its time origin + now, ms) as a float64 into the asking slot's scratch (arg 0: the slot):
+  // the clock every game worker reads (game-worker.ts alignClock)
+  Clock,
 }
 
 // WASI errno values used by the host

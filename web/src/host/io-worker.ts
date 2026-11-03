@@ -709,6 +709,10 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
     case Op.MovieOpen: return movieOpen(n(0), n(1));
     case Op.MovieDecode: return await movieDecode(memory, n(0), n(1), n(2), n(3), n(4), n(5), n(6), n(7), note);
     case Op.MovieClose: movieClose(n(0)); return 0;
+    case Op.Clock:
+      if (n(0) < 0 || n(0) >= MAX_THREADS) return E.INVAL;
+      new Float64Array(rpcI32.buffer)[(n(0) * RPC_SLOT + 128) / 8] = performance.timeOrigin + performance.now();
+      return 0;
   }
   return E.NOSYS;
 }

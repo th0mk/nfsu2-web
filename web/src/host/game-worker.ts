@@ -52,13 +52,34 @@ function io(op: Op, ...args: (number | bigint)[]): number {
   return r;
 }
 
-const monoNs = () => BigInt(Math.round(performance.now() * 1e3)) * 1000n + BigInt(Math.round(performance.timeOrigin * 1e3)) * 1000n;
+const monoNs = () => BigInt(Math.round(performance.now() * 1e3)) * 1000n + BigInt(T0US) * 1000n;
 // clock_time_get is the guest's most frequent host import (QueryPerformanceCounter, timeGetTime: ~100 calls
 // in a race frame).  It writes the same values as BigInt µs × 1000 would, but from integer microseconds held in doubles
 // (exact below 2^53) as two u32 halves: no BigInt and no DataView per call.
-const T0US = Math.round(performance.timeOrigin * 1e3);
-// the time origin is fixed for the worker's life: read once, not on each of the guest's ~1,000 timer reads a frame
-const T0MS = performance.timeOrigin;
+// The time origin is fixed for the worker's life: read once, not on each of the guest's ~1,000 timer reads a frame;
+// set to the I/O worker's clock before the worker takes a thread (alignClock)
+let T0MS = performance.timeOrigin;
+let T0US = Math.round(T0MS * 1e3);
+/** Every worker's clock is its time origin + now(), and a worker's time origin is the wall clock as it started (as the
+ *  browser had it then): one started after the system's clock was set reads that much off its elders.  WSL sets its
+ *  clock about a second every 35 s on a loaded box: a pool worker started a minute into a game read 3.9 s ahead of the
+ *  game's main thread, and EA's network clock (NetTick, runtime/winsock.c: never back across threads) jumped 4 s
+ *  under the game's main thread; a LAN race broke at its start.  So each worker reads the I/O worker's clock (the
+ *  first worker, started with the page) a few times before it takes a thread, and keeps the offset of the shortest
+ *  round trip when the offset is more than that round trip (else its own clock stays, as before) */
+function alignClock() {
+  const f64 = new Float64Array(rpcI32.buffer), at = (slot * RPC_SLOT + 128) / 8;
+  let best = Infinity, off = 0;
+  for (let k = 0; k < 5; k++) {
+    const t0 = T0MS + performance.now();
+    if (io(Op.Clock, slot) !== 0) return;
+    const t1 = T0MS + performance.now();
+    if (t1 - t0 < best) { best = t1 - t0; off = f64[at] - (t0 + t1) / 2; }
+  }
+  if (!(Math.abs(off) > Math.max(1, best))) return;
+  T0MS += off; T0US = Math.round(T0MS * 1e3);
+  post({ t: 'log', s: `[clock] game worker ${slot}: its clock read ${(-off).toFixed(1)} ms off the I/O worker's (asked in ${best.toFixed(2)} ms): it reads that one`, fd: 2, tid });
+}
 let u32v: Uint32Array | null = null;
 function writeUsAsNs(p: number, us: number) {
   if (p & 7) { dv().setBigUint64(p, BigInt(us) * 1000n, true); return; }
@@ -248,6 +269,7 @@ onmessage = async (e: MessageEvent<Init>) => {
   }
   const inst = await WebAssembly.instantiate(m.mod, imports);
   const ex = inst.exports as Record<string, any>;
+  alignClock(); blockedMs = 0;
   const i = CTL_POOL + 4 * slot;
   // ready: a thread may take this slot now (one waiting in threadSpawn is woken)
   Atomics.compareExchange(ctl, i, POOL_NONE, POOL_IDLE);
