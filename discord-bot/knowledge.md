@@ -194,6 +194,12 @@ context lists every problem the developer has a report on, with its first thread
   not allocate memory" in the log) on every Play. No fix; thread 1564275806937682000.
 - Event Results after a career race from free roam ignoring Enter and a click on Continue (keyboard, 3 November):
   plugging in a controller got a player past it. Ask for the log while it is stuck (F9, Download log).
+- Phones with Adreno 6xx graphics (Adreno 610 among them, often Android 10 or 11): `GPU-LOST` at the first frame, black
+  screen, every Play; the log's `[gpu] device lost` line says `VK_ERROR_FORMAT_NOT_SUPPORTED` "While checking external
+  image import support with TextureFormat::RGBA8Unorm". Chrome asks the phone's graphics driver whether it may use the
+  picture it made for the page, the driver says no, and Chrome takes that for a lost device: no fix on the game's side,
+  no setting or flag helps; a system update for the phone may. Since 3 November (pending release) the page says so
+  itself (`GPU-ANDROID-DRIVER`). Other Adreno 6xx phones play fine. First thread 1565320939904704613.
 - Phones with PowerVR BXM graphics (MediaTek Dimensity 7020/7025): the graphics stop within seconds in landscape
   (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
@@ -203,6 +209,13 @@ context lists every problem the developer has a report on, with its first thread
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for
   all of them. Fixed on 29 October: players' cars now wait while the city loads. Until that version is live, Players'
   cars shown at 16 (More online settings) shortens the wait; a screen that never ends needs a reload of the page.
+- Free roam: friends' cars stop coming in for good (the log: "did not load in 16 s" again and again for minutes), then
+  leaving free roam hangs on the loading screen. One log so far (Chrome on Linux, 2 November): one read of the game's
+  files went into the page and never came back, and every read after it waited (the watchdog: thread 3 in ReadFile
+  for minutes). Since 3 November (pending release) a cache file that does not open in 10 s is skipped (its reads come
+  from the server), and the log says `[io] … unanswered for N s` with the file: a log with such a line is new, escalate
+  it. Not this: "the car loader has been busy for N s" where the frame numbers barely moved (the tab was in the
+  background: the game waits there).
 - Back to free roam after a race with other players: endless loading. Two causes are fixed: the crash on the way back
   (`INVALID FREE` and a `TRAP` after the lobby screen, 39f2ca8, 26 October) and the trip stopping after the crib's
   save went to the main menu (db3f8b5, 27 October). A report on a version with both is new: escalate it with the log.
