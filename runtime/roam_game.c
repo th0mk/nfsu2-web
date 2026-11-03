@@ -4758,7 +4758,7 @@ static void spots_read(CPU *c, int64_t host){
 #define MP_STAY_M       40.f          /* ...and stays in it while within this (the host too) */
 #define MP_ADVERT_US    1000000
 #define MP_GONE_US      3500000       /* a lobby, or a player in one, not heard of for this long is gone */
-#define MP_COUNT_US     5000000       /* the countdown */
+#define MP_COUNT_US     2000000       /* from the host's Enter to every game's trip ("Starting the race"; 5 s before 11-03) */
 #define MP_ASK_US       5000000       /* a JOIN the host does not take in this long is off */
 #define MP_LATE_US      30000000      /* ...but taken this long after it was sent, still in (a connection seconds behind) */
 #define MP_AWAY_US      3000000       /* a player of ours gone from free roam or the start this long is out (a hitch is not) */
@@ -5341,9 +5341,9 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
             if (g_mp.st == MP_TRIP) mprace_player_gone(); else g_mp.tx_at = 0;
             break;
         }
-    /* a LAN server started while our lobby waited (mprace_server_start) runs only while it waits: a trip takes it
-     * over, any other end of the lobby stops it */
-    if (g_mp.st != MP_HOST) mprace_server_stop(c);
+    /* a LAN server started while our lobby waited (mprace_server_start) runs only while it waits and starts: a trip
+     * takes it over, any other end of the lobby stops it */
+    if (g_mp.st != MP_HOST && !(g_mp.st == MP_COUNT && g_mp.l.host == g_s.conf.self_id)) mprace_server_stop(c);
     if (g_mp.st == MP_TRIP){
         int ph = mprace_phase(), ours = g_mp.l.host == g_s.conf.self_id;
         if (quit && quit == g_mp.l.host && quit != g_s.conf.self_id) mprace_host_gone();   /* on the way to the race: its server is gone */
@@ -5442,12 +5442,12 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
             g_mp.srv = no && *no == '1' ? -1 : mprace_server_start(c, nm12[0]) ? 1 : -1;
         }
         if (press && g_mp.l.n >= 2){
-            /* the host goes now: its way to the game's room is the race's longest (and its LAN server, started
-             * while the lobby waited, takes the others at once); the others after their countdown */
+            /* every game of the lobby, ours too, says "Starting the race" for MP_COUNT_US, then goes (its LAN
+             * server, started while the lobby waited, takes the others at once) */
             g_mp.l.state = RC_LS_STARTING; g_mp.start_at = host + MP_COUNT_US;
             g_mp.tn = g_mp.l.n; memcpy(g_mp.tids, g_mp.l.ids, sizeof g_mp.tids); mp_trip_names();
-            mp_trip(host);
-            if (g_mp.st == MP_TRIP){ mp_starts(host, 3); mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host; }
+            mp_to(MP_COUNT, host);
+            mp_starts(host, 3); mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host;
             break;
         }
         if (host - g_mp.tx_at >= MP_ADVERT_US){ mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host; }
@@ -5470,6 +5470,7 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
                 break;
             }
             if (host - g_mp.tx_at >= MP_ADVERT_US){ mp_send_all(RC_LOBBY_ADVERT, 0); g_mp.tx_at = host; }
+            if (host - g_mp.up_tx >= 1000000) mp_starts(host, 1);             /* (a player who missed it) */
         }
         if (host >= g_mp.start_at) mp_trip(host);
         break;
@@ -5495,10 +5496,9 @@ static int mp_line(int64_t host, char *tx, int n){
         if (g_mp.l.away_s) snprintf(tx, (size_t)n, "%s seems away: the lobby closes in %d s", nm, g_mp.l.away_s);
         else snprintf(tx, (size_t)n, "%s's %s: %d of %d players. Waiting for %s to start", nm, race_kind(g_mp.l.race), g_mp.l.n, g_mp.l.max, nm);
         return 1;
-    case MP_COUNT: {
-        int64_t s = (g_mp.start_at - host + 999999) / 1000000;
-        snprintf(tx, (size_t)n, "The race starts in %d", (int)(s < 0 ? 0 : s));
-        return 1; }
+    case MP_COUNT:
+        snprintf(tx, (size_t)n, "Starting the race...");
+        return 1;
     case MP_IDLE: {
         const MpSpot *sp = mp_spot_here();
         MpLobby *l = mp_joinable();

@@ -242,7 +242,8 @@ export class LobbyPanel {
       case 'lobby': {
         const mine = s.me === 0;
         kids.push(...this.title(s, mine ? undefined : host), this.places(s, s.st === 'asked'), ...this.career(s));
-        if (s.st === 'count') kids.push(el('div', 'lobby-count', t('Starting in {n}', { n: s.t ?? 0 })));
+        // (every game of the lobby, the host's too, 2 s from the host's Enter: no numbers to count)
+        if (s.st === 'count') kids.push(el('div', 'lobby-count', t('Starting the race') + '…'));
         else if (s.st === 'asked') kids.push(this.act(null, t('Joining {host}\'s {kind}…', { host, kind: game(s.kind ?? 'race') })));
         else if (mine && names.length >= 2) kids.push(this.act('Enter', t('Start the race')), s.away
           ? el('div', 'lobby-warn', t('You seem away: the lobby closes in {n} s unless you press a key', { n: s.away }))

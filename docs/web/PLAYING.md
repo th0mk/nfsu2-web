@@ -576,8 +576,8 @@ Good to know:
     away (none of the game's keys or controller buttons and no driving for 2 minutes while others wait) gets a
     30-second countdown on every panel of the lobby, then it closes; one of those keys keeps it. A lobby is within
     your Room, as everything in free roam. At a race's start Enter is for the race: no outrun is offered there.
-  - **The host presses Enter** to start once another player is in. The host's game goes at once, the others after a
-    5-second countdown: every game in the lobby goes to the race by itself, behind a screen with the lobby on it and
+  - **The host presses Enter** to start once another player is in. Every panel of the lobby says "Starting the race…"
+    for 2 seconds, then every game in the lobby goes to the race by itself, behind a screen with the lobby on it and
     where the trip is ("Loading the race"). The race's LAN server starts in the host's game as soon as a player joins,
     so by the Enter it already takes the others, who connect to it the moment they reach the LAN menus. Out
     of free roam and through the LAN menus (your keys and controller do nothing meanwhile) to the race on the career
