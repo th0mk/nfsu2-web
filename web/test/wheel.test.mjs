@@ -32,7 +32,7 @@ test('wheels by their USB ids, in Chrome\'s and Firefox\'s ids, and by name', ()
   assert.equal(W.wheelOf('46d-c262-Logitech G920 Driving Force Racing Wheel').layout, 'xbox');
   assert.equal(W.wheelOf('Thrustmaster T300RS Racing wheel (Vendor: 044f Product: b66e)').layout, 'generic');
   assert.equal(W.wheelOf('Thrustmaster T300RS Racing wheel (Vendor: 044f Product: b66e)').axes, undefined);
-  assert.equal(W.wheelOf('FANATEC CSL Elite Wheel Base (Vendor: 0eb7 Product: 0e03)').degrees, 0);
+  assert.equal(W.wheelOf('FANATEC CSL Elite Wheel Base (Vendor: 0eb7 Product: 0e03)').degrees, 1080);
   assert.equal(W.wheelOf('Some USB Wheel (Vendor: 1234 Product: 5678)').layout, 'generic');
   assert.equal(W.wheelOf('Logitech Gamepad F310 (STANDARD GAMEPAD Vendor: 046d Product: c216)'), null);
   assert.equal(W.wheelOf('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)'), null);
@@ -95,6 +95,114 @@ test('other Logitech wheels\' buttons and shifters: the G25, G27 and Driving For
   assert.deepEqual(W.guessMap(W.wheelOf(G920), [0, 1, 1, 0, 0, 1, 0, 0, 0, H], 20).gears, [13, 14, 15, 16, 17, 18, 19]);
   assert.equal(W.guessMap(W.wheelOf(G920), [0, 1, 1, 0, 0, 1, 0, 0, 0, H], 11).gears, undefined);
   assert.equal(map('c26e', [0, 1, 1, 0, 0, 1, 0, 0, 0, H], 30).gears, undefined);   // the G923 for Xbox: not known
+});
+
+// A Fanatec CSL DD in PC mode under Chrome and Firefox on Windows (axes at their usage): X the wheel, Y the clutch, Z
+// the gas, Rz the brake (65535 let go: +1), Rx and Ry the rim's paddles and the Dial (8 bits, signed: 0 reads 0.004),
+// the Slider (the handbrake's port, 255), axis 8 no usage's, the hat switch let go (its 4 bits at 15)
+const CSLDD = 'FANATEC Wheel (Vendor: 0eb7 Product: 0020)';
+const HAT15 = 23 / 7;
+const DD_REST = [0.0004, 1, 1, 0.004, 0.004, 1, 1, 0.004, 0, HAT15];
+
+test('Fanatec bases by their ids and the name, and their pedals, shifters and handbrakes on their own USB no wheels', () => {
+  const dd = W.wheelOf(CSLDD);
+  assert.deepEqual([dd.layout, dd.degrees, dd.axes.gas, dd.axes.brake, dd.axes.clutch, dd.axes.listed], ['generic', 2520, 'z', 'rz', 'y', true]);
+  assert.equal(W.wheelOf('eb7-20-FANATEC Wheel').degrees, 2520);                    // Firefox's id
+  // the later bases as the CSL DD; the ClubSport V2 and the older wheels Y the gas, the Slider the clutch, no handbrake
+  for (const [product, degrees, gas, hb, gears] of [['0006', 2520, 'z', 'slider', 7], ['0007', 2520, 'z', 'slider', 7],
+    ['0e03', 1080, 'z', 'slider', 7], ['0005', 1080, 'z', 'slider', 7], ['0004', 900, 'z', 'slider', 7], ['0001', 900, 'y', undefined, 7],
+    ['038e', 900, 'y', undefined, 7], ['0197', 900, 'y', undefined, 7], ['0011', 900, 'y', undefined, undefined]]) {
+    const w = W.wheelOf(`FANATEC Wheel Base (Vendor: 0eb7 Product: ${product})`);
+    assert.deepEqual([w.degrees, w.axes.gas, w.axes.brake, w.axes.handbrake, w.axes.listed, w.gears?.length],
+      [degrees, gas, 'rz', hb, false, gears], product);
+  }
+  assert.deepEqual([W.wheelOf('FANATEC Wheel (Vendor: 0eb7 Product: 0099)').degrees, W.wheelOf('FANATEC Wheel (Vendor: 0eb7 Product: 0099)').axes],
+    [0, undefined]);                                                                // a base not known yet: by its name
+  for (const id of ['FANATEC CSL Elite Pedals (Vendor: 0eb7 Product: 6204)', 'FANATEC CSL Pedals LCK (Vendor: 0eb7 Product: 6205)',
+    'FANATEC ClubSport Pedals V3 (Vendor: 0eb7 Product: 183b)', 'eb7-6206-FANATEC CSL Elite Pedals LC V2',
+    'FANATEC ClubSport Shifter SQ (Vendor: 0eb7 Product: 1a92)', 'MOZA SR-P Pedals (Vendor: 346e Product: 0003)',
+    'MOZA HBP Handbrake (Vendor: 346e Product: 0004)'])
+    assert.equal(W.wheelOf(id), null, id);
+  assert.equal(W.wheelOf('Gudsen MOZA R9 Base (Vendor: 346e Product: 0002)').layout, 'generic');   // Moza's base still one
+  // pedals: Fanatec's known ones, others by their name
+  for (const id of ['FANATEC CSL Elite Pedals (Vendor: 0eb7 Product: 6204)', 'ClubSportPedal (Vendor: 0eb7 Product: 183b)',
+    'eb7-6205-FANATEC CSL Pedals LCK', 'ClubSport USB Pedal (Vendor: 0eb7 Product: 1a95)', 'ClubSport Pedals (Vendor: 0eb7 Product: 1839)'])
+    assert.ok(W.pedalSetOf(id) && W.isPedals(id), id);
+  assert.deepEqual([W.isPedals('MOZA SR-P Pedals (Vendor: 346e Product: 0003)'), W.pedalSetOf('MOZA SR-P Pedals (Vendor: 346e Product: 0003)')],
+    [true, null]);
+  assert.deepEqual([W.isPedals(CSLDD), W.isPedals('USB Wheel and Pedals'), W.isPedals('Thrustmaster T-LCM (Vendor: 044f Product: b371)')],
+    [false, false, false]);
+  // their gas and brake: X and Y let go at -1 (0 to 65535); the old ClubSport Pedals Rx and Ry at their usage (Chrome
+  // on Windows: six axes) or one after another (three)
+  const v3 = 'ClubSportPedal (Vendor: 0eb7 Product: 183b)';
+  assert.deepEqual(W.pedalsOf(v3, W.pedalSetOf(v3), 4),
+    { gas: { axis: 0, rest: -1, full: 1, pad: v3 }, brake: { axis: 1, rest: -1, full: 1, pad: v3 } });
+  const old = 'ClubSport Pedals (Vendor: 0eb7 Product: 1839)';
+  assert.deepEqual([W.pedalsOf(old, W.pedalSetOf(old), 6).gas, W.pedalsOf(old, W.pedalSetOf(old), 3).brake],
+    [{ axis: 3, rest: 1, full: -1, pad: old }, { axis: 1, rest: 1, full: -1, pad: old }]);
+});
+
+test('a Fanatec base\'s layout from its descriptor: Z the gas, Rz the brake, the clutch nothing (the guess took it for the gas)', () => {
+  const dd = W.wheelOf(CSLDD), m = W.guessMap(dd, DD_REST, 128);
+  assert.deepEqual([m.placed, m.steer, m.gas, m.brake], ['usage', 0, { axis: 2, rest: 1, full: -1 }, { axis: 5, rest: 1, full: -1 }]);
+  assert.equal(+m.lock.toFixed(4), +(270 / 2520).toFixed(4));
+  const generic = W.guessMap({ vendor: '0eb7', product: '0020', layout: 'generic', degrees: 0 }, DD_REST, 128);
+  assert.equal(generic.gas.axis, 1);                                              // before: the clutch was the gas
+  const hat = W.findHat(DD_REST);
+  assert.equal(hat, 9);
+  const at = (over, pressed = []) => {
+    const a = DD_REST.slice(); for (const [i, v] of Object.entries(over)) a[+i] = v;
+    const r = W.readWheel(a, Array.from({ length: 128 }, (_, j) => pressed.includes(j)), m, hat);
+    return { ...r, axes: r.axes.map(v => v + 0) };                              // -0 a pedal let go: 0
+  };
+  assert.deepEqual(at({}).axes.map(v => +v.toFixed(3)), [0.004, 0, 0, 0, 0, 0]);   // let go: nothing held
+  assert.equal(at({}).buttons, 0);
+  assert.deepEqual(at({ 1: -1 }).axes.slice(4), [0, 0]);                          // the clutch floored: nothing
+  assert.deepEqual(at({ 2: 0 }).axes.slice(4), [0, 0.5]);                         // the gas half down
+  assert.deepEqual(at({ 5: -1 }).axes.slice(4), [1, 0]);                          // the brake floored
+  assert.deepEqual(at({ 3: -1, 4: 1, 7: 1 }).axes.slice(4), [0, 0]);              // paddles, dial: none
+  // a handbrake on the base's port: the Slider, 255 let go; pulled a third of the way, the pad's X (the handbrake)
+  assert.deepEqual(m.handbrake, { axis: 6, rest: 1, full: -1 });
+  assert.deepEqual([at({ 6: 0.5 }).buttons, at({ 6: 0.3 }).buttons, at({ 6: -1 }).axes.slice(4)], [0, bit(P.PAD_X), [0, 0]]);
+  assert.equal(W.guessMap(dd, Object.assign(DD_REST.slice(), { 6: 0.2 }), 128).handbrake, undefined);   // not at an end: none
+  assert.equal(at({ 0: 270 / 2520 / 2 }).axes[0], 0.5);                           // turned right: right, half lock
+  assert.equal(at({ 0: -0.2 }).axes[0], -1);
+  assert.equal(at({ 9: -1 }).buttons, bit(P.PAD_DUP));                            // the D-pad
+  const press = (...i) => at({}, i).buttons;
+  assert.deepEqual([press(0), press(1), press(2), press(3)], [bit(P.PAD_X), bit(P.PAD_A), bit(P.PAD_B), bit(P.PAD_Y)]);
+  assert.deepEqual([press(4), press(5)], [bit(P.PAD_RB), bit(P.PAD_LB)]);          // gear up the right paddle
+  assert.deepEqual([press(8, 9), press(10, 11), press(21)], [bit(P.PAD_BACK, P.PAD_START), bit(P.PAD_RS, P.PAD_LS), bit(P.PAD_HOME)]);
+  assert.deepEqual([press(28), press(29)], [bit(P.PAD_LB), bit(P.PAD_RB)]);        // a sequential shifter on the base
+  assert.equal(press(12, 13, 14, 15, 16, 17, 18, 19, 6, 7), 0);                    // H gears, R2, L2: none of the pad's
+  assert.deepEqual(m.gears, [13, 14, 15, 16, 17, 18, 12]);
+  assert.equal(W.shifterGear(Object.assign(Array(128).fill(false), { 12: true }), m.gears), 7);   // reverse
+  assert.match(W.describeMap(m, hat), /gas axis 2 .* brake axis 5 .*shifter buttons 13 14 15 16 17 18 12, the model's own \(axes placed by usage\)$/);
+  // a twin's axes, every one 0: the model's, the pedals taken to rest at +1
+  const z = W.guessMap(dd, Array(10).fill(0), 128);
+  assert.deepEqual([z.placed, z.gas.axis, z.gas.rest, z.brake.axis], ['usage', 2, 1, 5]);
+  // the gas down when it showed up: not the model's, a guess
+  assert.equal(W.guessMap(dd, Object.assign(DD_REST.slice(), { 2: -0.2 }), 128).placed, undefined);
+  // an older base, its descriptor's order not known: by usage all the same
+  assert.equal(W.guessMap(W.wheelOf('FANATEC CSL Elite Wheel Base (Vendor: 0eb7 Product: 0e03)'), DD_REST, 32).gas.axis, 2);
+  // the ClubSport V2: Y the gas, Rz the brake, the Slider its clutch (no handbrake); its buttons the later bases'
+  const v2 = W.guessMap(W.wheelOf('ClubSport Wheel (Vendor: 0eb7 Product: 0001)'), [0, 1, 0, 0, 0, 1, 1, 0, 0, HAT15], 32);
+  assert.deepEqual([v2.placed, v2.gas.axis, v2.brake.axis, v2.handbrake, v2.buttons[4], v2.gears],
+    ['usage', 1, 5, undefined, P.PAD_RB, [13, 14, 15, 16, 17, 18, 12]]);
+  // a Porsche wheel: its paddles 8 and 9, Back and Start 10 and 11, its gears 12 to 17, reverse 18
+  const pw = W.guessMap(W.wheelOf('Fanatec Porsche 911 Turbo S Wheel (Vendor: 0eb7 Product: 0197)'), [0, 1, 0, 0, 0, 1, 1, 0, 0, HAT15], 19);
+  const pp = (...i) => W.readWheel([0, 1, 0, 0, 0, 1, 1, 0, 0, HAT15], Array.from({ length: 19 }, (_, j) => i.includes(j)), pw, 9).buttons;
+  assert.deepEqual([pp(8), pp(9), pp(10, 11), pp(5), pp(4), pw.gears], [bit(P.PAD_LB), bit(P.PAD_RB), bit(P.PAD_BACK, P.PAD_START),
+    bit(P.PAD_A), bit(P.PAD_X), [12, 13, 14, 15, 16, 17, 18]]);
+});
+
+test('a Fanatec base on Linux (hid-fanatecff, evdev): more axes than its descriptor gives, placed by usage', () => {
+  // ABS_X, Y, Z, RX, RY, RZ, THROTTLE (the slider), RUDDER (the dial), HAT0X, HAT0Y, MISC (8 of 255)
+  const rest = [0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 8 / 255 * 2 - 1];
+  const m = W.guessMap(W.wheelOf('eb7-20-Fanatec FANATEC Wheel'), rest, 128);
+  assert.deepEqual([m.placed, m.steer, m.gas.axis, m.brake.axis], ['usage', 0, 2, 5]);
+  assert.equal(W.readWheel(Object.assign(rest.slice(), { 1: -1 }), [], m, -1).axes.slice(4).join(), '0,0');   // the clutch
+  // a Logitech G29 on Linux still the kernel's (6 axes, the D-pad on two)
+  assert.equal(W.guessMap(W.wheelOf(G29), [0, 1, 1, 1, 0, 0], 25).placed, 'kernel');
 });
 
 test('the shifter: one shift a move into a gear, reverse the handbrake', () => {
@@ -372,6 +480,122 @@ test('the shifter through the poller: a move into third, the right paddle for a 
     assert.equal(W2.loadShifter(G920), 'push-up');
     p.dispose();
   });
+});
+
+test('a Fanatec base and its dead twin (its second collection, the same name): the base drives, its pedals as they are', async () => {
+  const G2 = await load('web/src/input/gamepad.ts', '\n// a page with a Fanatec base');
+  await withPads(async (pads) => {
+    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const ax = (i) => +f[P.IM_PAD_AXIS + i].toFixed(3);
+    // the twin first in Windows' order: every axis 0, never a report
+    const twin = fakePad(CSLDD, 0, '', Array(10).fill(0), 64), base = fakePad(CSLDD, 1, '', DD_REST, 128);
+    pads.push(twin, base);
+    assert.deepEqual([G2.deadTwin(twin, pads), G2.deadTwin(base, pads), G2.mayDrive(twin, pads), G2.mayDrive(twin)], [true, false, false, true]);
+    const p = new G2.PadPoller(h, new Uint8Array(buf), 0, () => {}, s => logs.push(s));
+    p.poll();
+    assert.equal(G2.drivingPad(), base);                                    // before any press: the base, not the twin
+    assert.deepEqual([h[P.IM_PAD_WHEEL], ax(P.PAD_AXIS_LT), ax(P.PAD_AXIS_RT)], [1, 0, 0]);   // no brake held: no reversing
+    base.axes[2] = -1; base.axes[0] = 0.05; p.poll();
+    assert.deepEqual([ax(P.PAD_AXIS_RT), ax(P.PAD_AXIS_LT), +ax(P.PAD_AXIS_LX).toFixed(2)], [1, 0, 0.47]);
+    base.axes[2] = 1; pressOn(twin, 1); pressOn(base, 1); p.poll();         // a press seen on both: the base's
+    assert.deepEqual([G2.drivingPad(), h[P.IM_PAD_BUTTONS]], [base, bit(P.PAD_A)]);
+    assert.match(logs.filter(s => /a steering wheel/.test(s)).at(-1), /gas axis 2 .* brake axis 5 .* the model's own \(axes placed by usage\)/);
+    p.dispose();
+  });
+  // a twin that drove once (before this page knew of twins, or alone for a moment) is no first look for the base
+  const G3 = await load('web/src/input/gamepad.ts', '\n// a page where the twin came alone');
+  await withPads(async (pads) => {
+    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf);
+    const twin = fakePad(CSLDD, 0, '', Array(10).fill(0), 64), base = fakePad(CSLDD, 1, '', DD_REST, 128);
+    pads.push(twin);
+    const p = new G3.PadPoller(h, new Uint8Array(buf), 0, () => {}, () => {});
+    p.poll();
+    assert.equal(G3.drivingPad(), twin);                                    // alone: it drives (nothing else to)
+    for (const i of [1, 2, 5]) base.axes[i] = -1;                           // its pedal ports at -1 (pedals of their own)
+    pads.push(base);
+    pressOn(base, 0); p.poll();
+    assert.equal(G3.drivingPad(), base);
+    pressOn(base, 0, false); p.poll();
+    assert.deepEqual([+f[P.IM_PAD_AXIS + P.PAD_AXIS_LT].toFixed(3), +f[P.IM_PAD_AXIS + P.PAD_AXIS_RT].toFixed(3)], [0, 0]);
+    p.dispose();
+  });
+});
+
+test('Fanatec pedals on their own USB: the wheel\'s gas and brake while connected, let go before their first report', async () => {
+  const G2 = await load('web/src/input/gamepad.ts', '\n// a page with pedals on their own');
+  await withPads(async (pads) => {
+    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf), f = new Float32Array(buf), logs = [];
+    const ax = (i) => +f[P.IM_PAD_AXIS + i].toFixed(3);
+    const LCK = 'FANATEC CSL Pedals LCK (Vendor: 0eb7 Product: 6205)';
+    // the base's own pedal ports at +1 (nothing on them), the pedals not moved yet: every axis the browser's 0
+    const ped = fakePad(LCK, 0, '', [0, 0, 0], 0), base = fakePad(CSLDD, 1, '', DD_REST, 32);
+    pads.push(ped, base);
+    const p = new G2.PadPoller(h, new Uint8Array(buf), 0, () => {}, s => logs.push(s));
+    p.poll();
+    assert.equal(G2.drivingPad(), base);                                    // the pedals connected first: never them
+    assert.deepEqual([ax(P.PAD_AXIS_LT), ax(P.PAD_AXIS_RT)], [0, 0]);       // not read yet: let go
+    assert.match(logs.filter(s => /a steering wheel/.test(s)).at(-1), /gas axis 0 of FANATEC CSL Pedals LCK \(-1.00 to 1.00\), brake axis 1 of/);
+    ped.axes = [-0.9, -1, -1]; p.poll();                                    // the gas starts down: the pedals report
+    assert.deepEqual([ax(P.PAD_AXIS_RT), ax(P.PAD_AXIS_LT)], [0.05, 0]);
+    ped.axes = [1, 0.002, -1]; p.poll();                                    // (16 bits never read exactly 0)
+    assert.deepEqual([ax(P.PAD_AXIS_RT), ax(P.PAD_AXIS_LT)], [1, 0.501]);
+    base.axes[2] = -1; p.poll();                                            // the base's own gas port: nothing now
+    assert.equal(ax(P.PAD_AXIS_RT), 1);
+    ped.axes = [-1, -1, -1]; pads.splice(0, 1, null); p.poll();             // the pedals unplugged: the base's ports again
+    assert.deepEqual([ax(P.PAD_AXIS_RT), ax(P.PAD_AXIS_LT)], [1, 0]);
+    assert.match(logs.filter(s => /a steering wheel/.test(s)).at(-1), /gas axis 2 \(1.00 to -1.00\)/);
+    p.dispose();
+  });
+  // pedals alone: no controller (a stick of theirs would be pushed all the way)
+  const G3 = await load('web/src/input/gamepad.ts', '\n// a page with pedals alone');
+  await withPads(async (pads) => {
+    const buf = new SharedArrayBuffer(4096), h = new Int32Array(buf);
+    pads.push(fakePad('FANATEC CSL Elite Pedals (Vendor: 0eb7 Product: 6204)', 0, '', [-1, -1, -1], 0));
+    const p = new G3.PadPoller(h, new Uint8Array(buf), 0, () => {}, () => {});
+    p.poll();
+    assert.deepEqual([G3.drivingPad(), h[P.IM_PAD_CONNECTED]], [null, 0]);
+    p.dispose();
+  });
+});
+
+test('the set-up with pedals on their own USB: the wheel on the wheel, the pedals on theirs, kept while connected', () => {
+  const VNM = 'VNM Simulation Pedals (Vendor: 1234 Product: 5678)';
+  const base = W.guessMap(W.wheelOf(CSLDD), DD_REST, 32);
+  const at = (over) => { const a = DD_REST.slice(); for (const [i, v] of Object.entries(over)) a[+i] = v; return a; };
+  const learner = () => {
+    const L = new W.WheelLearn(base, false, [VNM]);
+    let t = 0;
+    return { L, hold: (wheel, ped) => { for (let e = 0; e <= 800; e += 16) L.feed(wheel, t += 16, [], [ped]); },
+      once: (wheel, ped) => L.feed(wheel, t += 16, [], [ped]) };
+  };
+  // the pedals' first report while the wheel is set up (the clutch touched): every axis of theirs at once
+  const a = learner();
+  a.hold(at({}), [0, 0, 0]);                                // let go: the pedals have sent nothing yet
+  assert.equal(a.L.step, 'steer');
+  a.hold(at({}), [-1, -1, -0.5]);                           // a pedal is no wheel
+  assert.equal(a.L.step, 'steer');
+  a.hold(at({ 0: 0.11 }), [-1, -1, -1]);
+  assert.equal(a.L.step, 'gas');
+  a.hold(at({}), [1, -1, -1]);
+  assert.equal(a.L.step, 'brake');
+  a.hold(at({}), [-1, 0.9, -1]);
+  const m = a.L.map();
+  assert.deepEqual([m.steer, m.gas, m.brake], [0, { axis: 0, rest: -1, full: 1, pad: VNM }, { axis: 1, rest: -1, full: 0.9, pad: VNM }]);
+  // their first report as the gas starts down: the other pedals' rest from it, not the browser's 0 (else the
+  // clutch, as far from 0 as the gas, was as likely taken for it)
+  const b = learner();
+  b.hold(at({}), [0, 0, 0]); b.hold(at({ 0: 0.11 }), [0, 0, 0]);
+  b.once(at({}), [-0.6, -1, -1]);                           // stamped on: half way down at the first report
+  b.hold(at({}), [1, -1, -1]);
+  b.hold(at({}), [-1, -1, 1]);                              // the brake on the third axis
+  assert.deepEqual([b.L.map().gas, b.L.map().brake], [{ axis: 0, rest: -1, full: 1, pad: VNM }, { axis: 2, rest: -1, full: 1, pad: VNM }]);
+  const has = (id) => id === VNM;
+  assert.deepEqual(W.withSetUp(base, m, has).gas, m.gas);                   // connected: the pedals set up
+  assert.deepEqual(W.withSetUp(base, m, () => false).gas, base.gas);        // not: the base's own
+  const others = (id) => id === VNM ? [0.5, -1, -1] : undefined;
+  assert.equal(W.readWheel(DD_REST, [], W.withSetUp(base, m, has), 9, others).axes[5], 0.75);
+  assert.equal(W.readWheel(DD_REST, [], W.withSetUp(base, m, has), 9, () => [0, 0, 0]).axes[5], 0);   // not read yet
+  assert.match(W.describeMap(m, 9), /gas axis 0 of VNM Simulation Pedals \(-1.00 to 1.00\)/);
 });
 
 test('a controller first seen with its left stick pushed (Chrome shows one then) steers: the left stick is always one', async () => {

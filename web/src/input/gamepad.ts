@@ -11,7 +11,8 @@
 // pressed a button on drives the
 // pad, so a controller next to a wheel takes over with a press and the wheel
 // takes it back with one of its own.  Before any press, and when that one
-// goes away, the first connected of them drives (one that connects later
+// goes away, the first connected of them drives, but a wheel's dead twin
+// (deadTwin: a Fanatec base's second collection) never does (one that connects later
 // waits for a press), as gamepad.m does; without either the first
 // controller is read through its known layout (hidpad.ts: 8BitDo's), or else
 // as if it had the standard mapping, but for an axis resting at an end when
@@ -40,8 +41,8 @@ import {
   PADF_GENERIC, PADF_NINTENDO, PADF_PLAYSTATION, PADF_XBOX,
 } from './proto';
 import {
-  describeMap, findHat, guessMap, hatDirs, loadMap, loadShifter, readWheel, Shifter, shifterGear, usbIds, WHEEL_MAP_EVENT,
-  wheelOf, withSetUp, type ShifterMode, type WheelInfo, type WheelMap,
+  describeMap, findHat, guessMap, hatDirs, isPedals, loadMap, loadShifter, pedalSetOf, pedalsOf, readWheel, Shifter,
+  shifterGear, usbIds, WHEEL_MAP_EVENT, wheelOf, withSetUp, type OtherAxes, type ShifterMode, type WheelInfo, type WheelMap,
 } from './wheel';
 import { eightBitDoFace, HidPadReader } from './hidpad';
 
@@ -90,11 +91,12 @@ export function mapStandard(g: Gamepad, notStick?: ReadonlySet<number>): PadSnap
   return { connected: true, buttons, axes, family, name, index: g.index };
 }
 
-/** a steering wheel -> the virtual pad (wheel.ts): the wheel on LX, the brake and gas pedals on LT and RT; its
- *  shifter's gears through shift (the lever's state, and what the player picked for it) */
-export function mapWheel(g: Gamepad, m: WheelMap, hat: number, shift?: { shifter: Shifter; mode: ShifterMode }): PadSnapshot {
+/** a steering wheel -> the virtual pad (wheel.ts): the wheel on LX, the brake and gas pedals on LT and RT (others:
+ *  pedals on their own USB); its shifter's gears through shift (the lever's state, and what the player picked for it) */
+export function mapWheel(g: Gamepad, m: WheelMap, hat: number, shift?: { shifter: Shifter; mode: ShifterMode },
+                         others?: OtherAxes): PadSnapshot {
   const pressed = g.buttons.map(b => !!b && (b.pressed || b.value > 0.5));
-  const { buttons: own, axes } = readWheel(g.axes, pressed, m, hat);
+  const { buttons: own, axes } = readWheel(g.axes, pressed, m, hat, others);
   const buttons = own | (shift && m.gears ? shift.shifter.buttons(shifterGear(pressed, m.gears), shift.mode, performance.now()) : 0);
   const { family, name } = familyOf(g.id);
   return { connected: true, buttons, axes, family, name, index: g.index, wheel: true };
@@ -129,9 +131,23 @@ export function androidLayout(g: Gamepad): boolean {
 let driver: { index: number; id: string } | null = null;
 export const PAD_DRIVER_EVENT = 'nfsu2-pad-driver';
 /** whether a controller may drive the pad while others are connected: the standard mapping (Chrome on Android's
- *  too), a steering wheel, or an 8BitDo pad (hidpad.ts) */
-export const mayDrive = (g: Gamepad | null) => !!g &&
-  (g.mapping === 'standard' || !!wheelOf(g.id) || !!eightBitDoFace(g.id) || androidLayout(g));
+ *  too), a steering wheel, or an 8BitDo pad (hidpad.ts); with the controllers connected (pads), not a wheel's dead
+ *  twin */
+export const mayDrive = (g: Gamepad | null, pads?: readonly (Gamepad | null)[]) => !!g &&
+  (g.mapping === 'standard' || !!wheelOf(g.id) || !!eightBitDoFace(g.id) || androidLayout(g)) && !(pads && deadTwin(g, pads));
+
+/**
+ * Whether a wheel is the dead twin of another: a controller of the same id is connected too, and every axis of this
+ * one reads exactly 0, as no wheel's do once it reported (a hat switch let go reads past 1, a pedal let go at an end).
+ * A Fanatec base has a second joystick collection, which Windows makes a controller of its own with the same name,
+ * and which sends nothing: connected first, it drove before any press, and nothing steered; its axes, every one 0,
+ * were the base's first look (axesWhenSeen), and the guess from them put gas and brake on one axis, the clutch's,
+ * whose rest read as the brake held down (the car reversing at full throttle).  Such a twin never drives.
+ */
+export function deadTwin(g: Gamepad, pads: readonly (Gamepad | null)[]): boolean {
+  return g.mapping !== 'standard' && !!wheelOf(g.id) && g.axes.length > 0 && g.axes.every(v => v === 0) &&
+    pads.some(o => !!o?.connected && o.index !== g.index && o.id === g.id);
+}
 export function drivingPad(): Gamepad | null {
   if (!driver) return null;
   try { const g = navigator.getGamepads?.()[driver.index]; return g?.connected && g.id === driver.id ? g : null; }
@@ -145,6 +161,13 @@ export function drivingPad(): Gamepad | null {
 interface Seen {
   index: number; id: string; std: boolean; axes0: number[]; ends: Set<number>; wheel: WheelInfo | null; map: WheelMap | null;
   hat: number; shifter: Shifter; mode: ShifterMode; hid: HidPadReader | null;
+  others: string;            // a wheel's: the other controllers its map was made with (pedalsBeside)
+}
+
+/** the controllers besides the wheels and those with the standard mapping, which may be a wheel's pedals on their
+ *  own USB (known ones, or set up), as a key: the wheel's map is made again when it changes */
+function pedalsBeside(pads: readonly (Gamepad | null)[]): string {
+  return pads.filter(p => !!p?.connected && p.mapping !== 'standard' && !wheelOf(p.id)).map(p => p!.id).join('\n');
 }
 
 /**
@@ -152,16 +175,23 @@ interface Seen {
  * (a pedal let go rests at an end).  A wheel drives again after a controller did once a button is pressed on it,
  * perhaps with a foot on the gas already, and its axes read anew then had the gas off its rest: no pedal of the
  * model's, so the guess took the clutch for the gas until a reload (a player's report).  So a wheel keeps its first
- * look, unless that gave only a guess and a later one gives the model's own layout.
+ * look, unless a later one is better (betterLook).
  */
 const firstAxes = new Map<string, number[]>();
 function axesWhenSeen(g: Gamepad, wheel: WheelInfo | null): number[] {
   const now = Array.from(g.axes, v => typeof v === 'number' && isFinite(v) ? v : 0);
   const first = firstAxes.get(g.id);
-  if (first && first.length === now.length &&
-      !(wheel && !guessMap(wheel, first, g.buttons.length).placed && guessMap(wheel, now, g.buttons.length).placed)) return first;
+  if (first && first.length === now.length && !(wheel && betterLook(wheel, first, now, g.buttons.length))) return first;
   if (firstAxes.size < 16 || first) firstAxes.set(g.id, now);
   return now;
+}
+/** whether a wheel's look now makes a better layout than its first: the model's own where the first gave a guess, or
+ *  any that read where the first read every axis 0 (no report yet, a dead twin's), but for one losing the model's own
+ *  (a pedal held down then) */
+function betterLook(wheel: WheelInfo, first: number[], now: number[], nbuttons: number): boolean {
+  const placed = (a: number[]) => !!guessMap(wheel, a, nbuttons).placed, zero = (a: number[]) => a.every(v => v === 0);
+  if (zero(first) && !zero(now)) return placed(now) || !placed(first);
+  return !placed(first) && placed(now);
 }
 
 /** what the page itself does with the controller */
@@ -292,15 +322,19 @@ export class PadPoller {
     this.choose(pads);
     const c = this.chosen, cg = c && byIndex(c.index);
     let pick = cg?.connected && cg.id === c!.id ? c!.index : undefined;
-    if (pick === undefined) { this.chosen = null; pick = this.order.find(i => mayDrive(byIndex(i))); }
-    if (pick === undefined) pick = this.order[0];
+    if (pick === undefined) {
+      this.chosen = null;
+      pick = this.order.find(i => mayDrive(byIndex(i), pads)) ?? this.order.find(i => mayDrive(byIndex(i)));
+    }
+    // pedals on their own are no controller (released, a stick of theirs is pushed all the way)
+    if (pick === undefined) pick = this.order.find(i => !isPedals(byIndex(i)?.id ?? ''));
     const g = pick === undefined ? null : byIndex(pick);
     if (g?.index !== driver?.index || g?.id !== driver?.id) {
       if (g && driver) this.log(`[pad] ${g.id} drives now${this.chosen ? ' (a button pressed on it)' : ''}`);
       driver = g && { index: g.index, id: g.id };
       dispatchEvent(new Event(PAD_DRIVER_EVENT));
     }
-    const s: PadSnapshot = g ? this.read(g) : { connected: false, buttons: 0, axes: [0, 0, 0, 0, 0, 0], family: PADF_GENERIC, name: '', index: -1 };
+    const s: PadSnapshot = g ? this.read(g, pads) : { connected: false, buttons: 0, axes: [0, 0, 0, 0, 0, 0], family: PADF_GENERIC, name: '', index: -1 };
     this.rumble(g);
     const pressed = s.buttons & ~this.pressedBefore;
     this.pressedBefore = s.buttons;
@@ -332,7 +366,7 @@ export class PadPoller {
         if (moved) this.chosen = { index: g.index, id: g.id };
         at = !prev || moved || (driver?.index === g.index && driver.id === g.id) ? now : prev;
       }
-      if (mayDrive(g) && on.some((v, i) => v && !before[i])) this.chosen = { index: g.index, id: g.id };
+      if (mayDrive(g, pads) && on.some((v, i) => v && !before[i])) this.chosen = { index: g.index, id: g.id };
       down.set(g.index, at ? { id: g.id, on, at } : { id: g.id, on });
     }
     this.down = down;
@@ -344,8 +378,10 @@ export class PadPoller {
    *  8BitDo pad through its known layout, any other as if it had the standard mapping, but for the axes that rested at
    *  an end when it showed up, and with Chrome's hat switch as its D-pad.  The first two axes (the left stick, in
    *  every browser's placement) are always a stick: Chrome shows a controller once a stick is pushed past half way,
-   *  so it may sit at an end then, and it steered nothing until a reload. */
-  private read(g: Gamepad): PadSnapshot {
+   *  so it may sit at an end then, and it steered nothing until a reload.  A wheel's gas and brake are those of
+   *  known pedals on their own USB while they are connected (Fanatec's: pedalSetOf), unless the player set up others.
+   *  pads: the controllers connected. */
+  private read(g: Gamepad, pads: readonly (Gamepad | null)[]): PadSnapshot {
     let k = this.seen;
     if (!k || k.index !== g.index || k.id !== g.id) {
       const wheel = wheelOf(g.id), axes0 = axesWhenSeen(g, wheel), face = eightBitDoFace(g.id);
@@ -354,7 +390,7 @@ export class PadPoller {
       if (!std) axes0.forEach((v, i) => { if (i > 1 && Math.abs(v) >= 0.9 && Math.abs(v) <= 1.05) ends.add(i); });
       const hid = !wheel && face && !std ? new HidPadReader(face, axes0) : null;
       k = this.seen = { index: g.index, id: g.id, std, axes0, ends, wheel, map: null, hat: std ? -1 : findHat(axes0),
-        shifter: new Shifter(), mode: 'off', hid };
+        shifter: new Shifter(), mode: 'off', hid, others: '' };
       if (g.mapping !== 'standard') {
         this.log(`[pad] ${g.id}: no standard mapping in this browser; ${g.axes.length} axes at ` +
           `[${axes0.map(v => v.toFixed(2)).join(' ')}], ${g.buttons.length} buttons`);
@@ -371,14 +407,20 @@ export class PadPoller {
     }
     if (k.wheel && g.mapping === 'standard') return { ...mapStandard(g), wheel: true };
     if (k.wheel) {
+      const beside = k.wheel.layout === 'radio' ? '' : pedalsBeside(pads);
+      if (k.map && k.others !== beside) k.map = null;
       if (!k.map) {
-        const guess = guessMap(k.wheel, k.axes0, g.buttons.length), kept = loadMap(g.id);
-        k.map = kept ? withSetUp(guess, kept) : guess;
+        let guess = guessMap(k.wheel, k.axes0, g.buttons.length);
+        const kept = loadMap(g.id), ped = beside ? pads.find(p => !!p?.connected && !!pedalSetOf(p.id)) : undefined;
+        if (ped) guess = { ...guess, ...pedalsOf(ped.id, pedalSetOf(ped.id)!, ped.axes.length) };
+        k.map = kept ? withSetUp(guess, kept, id => pads.some(p => !!p?.connected && p.id === id)) : guess;
+        k.others = beside;
         k.mode = loadShifter(g.id);
         this.log(`[pad] ${g.id}: ${k.wheel.layout === 'radio' ? 'an RC radio' : 'a steering wheel'}, ${describeMap(k.map, k.hat)}` +
           `${k.map.gears ? `; the shifter: ${k.mode}` : ''}`);
       }
-      return mapWheel(g, k.map, k.hat, k);
+      const others: OtherAxes = id => { for (const p of pads) if (p?.connected && p.id === id) return p.axes; return undefined; };
+      return mapWheel(g, k.map, k.hat, k, others);
     }
     const s = mapStandard(g, k.std ? undefined : k.ends);
     if (!k.std && k.hat >= 0) s.buttons |= hatDirs(g.axes[k.hat]);

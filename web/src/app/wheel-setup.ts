@@ -1,6 +1,7 @@
 // The Controls sheet's steering wheel (controls.ts, the Controller tab): while a wheel is connected, what its controls
 // do in the game (runtime/dinput_pad.c g_prof_wheel, the buttons as web/src/input/wheel.ts puts them), and its
-// set-up, for a wheel the page reads wrong: let go, turn the wheel to full lock, press each pedal (WheelLearn).  The
+// set-up, for a wheel the page reads wrong: let go, turn the wheel to full lock, press each pedal (WheelLearn: on the
+// wheel or on another controller, pedals on their own USB).  The
 // set-up is kept in this browser for that model, and the game's controller follows it at once (gamepad.ts).  While a
 // game runs, the sheet is the wheel's only while the wheel drives (a controller takes over with a button pressed on it,
 // gamepad.ts), and a line says so while one is connected too.  For a wheel with a shifter, what the shifter does
@@ -8,7 +9,7 @@
 // wheel and the pedals, and its set-up goes on with a switch for nitrous, the handbrake and a respawn (Skip passes
 // one).
 
-import { drivingPad, familyOf, mayDrive, PAD_DRIVER_EVENT } from '../input/gamepad';
+import { deadTwin, drivingPad, familyOf, mayDrive, PAD_DRIVER_EVENT } from '../input/gamepad';
 import {
   guessMap, loadMap, loadShifter, saveMap, saveShifter, SHIFTER_MODES, shifterOf, WheelLearn, wheelOf, type LearnStep,
   type ShifterMode, type SwitchStep,
@@ -43,20 +44,23 @@ const RADIO_STEPS: Record<LearnStep, string> = {
 const isRadio = (g: Gamepad) => wheelOf(g.id)?.layout === 'radio';
 
 /** the wheel the sheet is about, one the browser has no standard mapping for: the one driving the game's controller
- *  while a game runs, else the first connected one; or null */
+ *  while a game runs, else the first connected one but a dead twin (gamepad.ts); or null */
 function connectedWheel(): Gamepad | null {
   const wheel = (g: Gamepad | null) => !!g?.connected && g.mapping !== 'standard' && !!wheelOf(g.id);
   try {
     const d = drivingPad();
     if (d) return wheel(d) ? d : null;
-    return navigator.getGamepads?.().find(wheel) ?? null;
+    const pads = navigator.getGamepads?.() ?? [];
+    return pads.find(g => wheel(g) && !deadTwin(g!, pads)) ?? pads.find(wheel) ?? null;
   } catch { return null; }
 }
 
 /** whether a controller besides the wheel at index is connected that could drive instead (gamepad.ts) */
 function otherPad(index: number): boolean {
-  try { return navigator.getGamepads?.().some(g => !!g?.connected && g.index !== index && mayDrive(g)) ?? false; }
-  catch { return false; }
+  try {
+    const pads = navigator.getGamepads?.() ?? [];
+    return pads.some(g => !!g?.connected && g.index !== index && mayDrive(g, pads));
+  } catch { return false; }
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -126,7 +130,11 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
     guessBtn.onclick = () => { saveMap(id, null); stateText = ''; refresh(); };
   }
 
-  let id = '', radio = false, learn: WheelLearn | null = null, raf = 0;
+  // the wheel shown: its id, and its index (a Fanatec base's twin has the same id)
+  let id = '', index = -1, radio = false, learn: WheelLearn | null = null, raf = 0;
+  // during a wheel's set-up, the other controllers that may be its pedals on their own USB, and how many axes each
+  // showed (one gone feeds as many 0s: the set-up's axes stay where they were)
+  let beside: { index: number; id: string; n: number }[] = [];
 
   /** the set-up's step as it is now, Skip only for a switch's */
   function showStep() {
@@ -141,6 +149,7 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
     if (learn) return;
     const g = connectedWheel();
     id = g?.id ?? '';
+    index = g?.index ?? -1;
     box.hidden = !g;
     for (const el of pad.children) if (el !== box) (el as HTMLElement | SVGElement).style.display = g ? 'none' : '';
     if (!g) return;
@@ -173,10 +182,15 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
   function tick() {
     // the tab or the dialog closed: no set-up behind the player's back
     if (!learn || !(box.checkVisibility?.() ?? box.offsetParent !== null)) { stop(); return; }
-    const g = navigator.getGamepads?.().find(p => !!p?.connected && p.id === id);
+    const g = navigator.getGamepads?.().find(p => !!p?.connected && p.id === id && p.index === index);
     if (!g) { stop(radio ? N('The radio went away before its set-up was done.') : N('The wheel went away before its set-up was done.')); return; }
     const pressed = radio ? g.buttons.map(b => !!b && (b.pressed || b.value > 0.5)) : undefined;
-    if (learn.feed(Array.from(g.axes), performance.now(), pressed)) showStep();
+    const pads = navigator.getGamepads?.() ?? [];
+    const more = beside.map(b => {
+      const p = pads.find(q => !!q?.connected && q.index === b.index && q.id === b.id);
+      return p && p.axes.length === b.n ? Array.from(p.axes) : Array<number>(b.n).fill(0);
+    });
+    if (learn.feed(Array.from(g.axes), performance.now(), pressed, more)) showStep();
     fill.style.width = `${Math.round(learn.progress * 100)}%`;
     if (learn.step === 'done') {
       saveMap(id, learn.map());
@@ -190,9 +204,14 @@ export function wheelSection(pad: HTMLElement, cap: (xb: string, ps: string) => 
     const g = connectedWheel();
     if (!g) { refresh(); return; }
     id = g.id;
+    index = g.index;
     radio = isRadio(g);
     const info = wheelOf(g.id)!;
-    learn = new WheelLearn(loadMap(g.id) ?? guessMap(info, Array.from(g.axes), g.buttons.length), radio);
+    // pedals may be on their own USB: the controllers besides the wheels and those with the standard mapping
+    const pads = navigator.getGamepads?.() ?? [];
+    beside = radio ? [] : pads.filter(p => !!p?.connected && p.index !== g.index && p.mapping !== 'standard' && !wheelOf(p.id))
+      .map(p => ({ index: p!.index, id: p!.id, n: p!.axes.length }));
+    learn = new WheelLearn(loadMap(g.id) ?? guessMap(info, Array.from(g.axes), g.buttons.length), radio, beside.map(b => b.id));
     stateText = '';
     showStep();
     fill.style.width = '0%';
