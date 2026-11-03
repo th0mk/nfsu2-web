@@ -186,6 +186,8 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define PL_HUD         0x9a4u
 #define VIEW_DRIFT     4u
 #define CAR_RIDE       0x10u         /* car: its ride (RideInfo) */
+#define CAR_PHYSOBJ    0x34u         /* car: its physics object (Car::SetPhysicsMode 0x5F46A0): +0x38 .. +0x44 its wheels */
+#define WH_GRIP        0x188u        /* a wheel: a factor of its tyre's force (0x59D600), 1 from its constructor (0x5A81FF) */
 #define CAR_PHYS       0x20u         /* car: its physics' values (+0x2A0 the nitrous shot's length, s) */
 #define PH_NOS_LEN     0x2a0u
 #define CAR_NOS_STATE  0x454u        /* car: its nitrous's state (+0x40 +0x414: the shot, +0x418, left, on since), 4 dwords */
@@ -375,6 +377,16 @@ static void physics_in(CPU *c){
 static void physics_out(CPU *c){
     uint32_t car = D.tuned, ride = car ? rd32(car + CAR_RIDE) : 0;
     int same = car && rd32(rd32(G_PLAYER1) + 4u) == car && ok(ride, RIDE_TUNING + SETUP_SZ);
+    /* The drift assist (0x5AC260, every physics step while the switch is on) sets the rear wheels' grip factor, and
+     * nothing puts it back: only a new car's wheels (a respawn, a reset) have 1 again.  Left as it was, the car slid
+     * more after drift mode than in it (0.86 standing still; 25 degrees of slip in a test turn against 11) */
+    if (same){
+        uint32_t po = rd32(car + CAR_PHYSOBJ);
+        for (uint32_t o = 0x40u; ok(po, 0x48) && o <= 0x44u; o += 4u){
+            uint32_t w = rd32(po + o);
+            if (ok(w, WH_GRIP + 3u)) MRF32(w + WH_GRIP) = 1.f;
+        }
+    }
     if (same && D.swapped) for (uint32_t i = 0; i < SETUP_SZ; i++) MR8(ride + RIDE_TUNING + i) = D.kept[i];
     D.tuned = 0; D.swapped = 0;
     if (!car) return;
