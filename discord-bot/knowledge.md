@@ -175,8 +175,10 @@ context lists every problem the developer has a report on, with its first thread
 
 - Free roam since the release of 2 November, 22:47 UTC: the game freezes (`[watchdog] no Present`) or stops with
   error 134 among many players, often right after another player's car opens or closes its hood, trunk or doors. The
-  logs stop in sub_00433ad0 < sub_00433d10 (a freeze's stack may start at sub_00433d10). No fix live, no workaround
-  known; thread 1566886167629144215. Not the error 134 in garages, car lots, cover shoots and race lobbies of 2
+  logs stop in sub_00433ad0 < sub_00433d10 (a freeze's stack may start at sub_00433d10). Fixed on 3 November
+  (bf4fe9f): a car that came into a slot after a car of another type shut a part that was still moving. Until that is
+  live, no workaround is known; once it is, reload the page (Ctrl+F5 on a PC), and a log from the new version is a new
+  report. Thread 1566886167629144215. Not the error 134 in garages, car lots, cover shoots and race lobbies of 2
   November (sub_004380f0 < sub_00438140), which is fixed and live since that release.
 - iPhone and iPad: the browser closes the game for memory, and the start page comes back (worst on 4 GB iPhones, 12
   to 14, but newer ones too); some logs end in `GPU-LOST` instead. Several improvements are live; it still happens.
