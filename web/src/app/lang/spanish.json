@@ -129,7 +129,7 @@
   "Open a lobby": "Abrir un punto de encuentro",
   "Join": "Unirse",
   "This lobby is full.": "Este punto de encuentro está lleno.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Una carrera del modo carrera para jugadores hasta la etapa {n} y amigos de {host}.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Una carrera del modo carrera para jugadores hasta la etapa {n} y amigos y compañeros de equipo de {host}.",
   "Open another": "Abrir otro",
   "Starting in {n}": "Empieza en {n}",
   "Joining {host}'s {kind}…": "Uniéndote a {kind} de {host}…",
@@ -1377,5 +1377,10 @@
   "Heat {k} results": "Resultados de la manga {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Carrera multijugador: puesto {n}: la victoria entra en tu modo carrera en tu próxima visita al garaje",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Carrera multijugador: puesto {n}. {name} la ganó: entra en tu modo carrera en tu próxima visita al garaje",
-  "You are not allowed to start a countdown here": "No puedes iniciar una cuenta atrás aquí"
+  "You are not allowed to start a countdown here": "No puedes iniciar una cuenta atrás aquí",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Carrera multijugador: puesto {n}, ${prize}. Solo una victoria cuenta en tu modo carrera",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Carrera multijugador: puesto {n}. Solo una victoria cuenta en tu modo carrera",
+  "crew": "equipo",
+  "A win counts in your career, and so does a crew-mate's": "Una victoria cuenta en tu modo carrera, y también la de un compañero de equipo",
+  "A win counts in your career, and so does a friend's or crew-mate's": "Una victoria cuenta en tu modo carrera, y también la de un amigo o compañero de equipo"
 }

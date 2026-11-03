@@ -128,7 +128,7 @@
   "Open a lobby": "Öppna en lobby",
   "Join": "Gå med",
   "This lobby is full.": "Den här lobbyn är full.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Ett karriärrace för spelare till och med nivå {n} och {host}s vänner.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Ett karriärrace för spelare till och med nivå {n} och {host}s vänner och crew.",
   "Open another": "Öppna en annan",
   "Starting in {n}": "Startar om {n}",
   "Joining {host}'s {kind}…": "Går med i {host}s {kind}…",
@@ -1350,5 +1350,10 @@
   "Heat {k} results": "Resultat heat {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Flerspelarrace: plats {n}: segern kommer in i din karriär vid ditt nästa garagebesök",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Flerspelarrace: plats {n}. {name} vann: det kommer in i din karriär vid ditt nästa garagebesök",
-  "You are not allowed to start a countdown here": "Du får inte starta en nedräkning här"
+  "You are not allowed to start a countdown here": "Du får inte starta en nedräkning här",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Flerspelarrace: plats {n}, ${prize}. Bara en seger räknas i din karriär",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Flerspelarrace: plats {n}. Bara en seger räknas i din karriär",
+  "crew": "crew",
+  "A win counts in your career, and so does a crew-mate's": "En seger räknas i din karriär, även en crewmedlems",
+  "A win counts in your career, and so does a friend's or crew-mate's": "En seger räknas i din karriär, även en väns eller crewmedlems"
 }

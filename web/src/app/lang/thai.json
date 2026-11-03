@@ -125,7 +125,7 @@
   "Open a lobby": "เปิดล็อบบี้",
   "Join": "เข้าร่วม",
   "This lobby is full.": "ล็อบบี้นี้เต็มแล้ว",
-  "A career race for players up to stage {n} and {host}'s friends.": "การแข่งในโหมดอาชีพสำหรับผู้เล่นถึงด่าน {n} และเพื่อนของ {host} เท่านั้น",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "การแข่งในโหมดอาชีพสำหรับผู้เล่นถึงด่าน {n} และเพื่อนกับสมาชิกทีมของ {host} เท่านั้น",
   "Open another": "เปิดล็อบบี้ใหม่",
   "Starting in {n}": "เริ่มใน {n}",
   "Joining {host}'s {kind}…": "กำลังเข้าร่วม{kind}ของ {host}…",
@@ -1269,5 +1269,10 @@
   "Heat {k} results": "ผลฮีต {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} ชัยชนะจะนับในโหมดอาชีพเมื่อคุณเข้าโรงรถครั้งถัดไป",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} {name} ชนะ: จะนับในโหมดอาชีพของคุณเมื่อเข้าโรงรถครั้งถัดไป",
-  "You are not allowed to start a countdown here": "คุณไม่สามารถเริ่มนับถอยหลังที่นี่ได้"
+  "You are not allowed to start a countdown here": "คุณไม่สามารถเริ่มนับถอยหลังที่นี่ได้",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} รางวัล ${prize} นับในโหมดอาชีพของคุณเฉพาะเมื่อชนะเท่านั้น",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} นับในโหมดอาชีพของคุณเฉพาะเมื่อชนะเท่านั้น",
+  "crew": "ทีม",
+  "A win counts in your career, and so does a crew-mate's": "ถ้าชนะจะนับในโหมดอาชีพของคุณ สมาชิกทีมชนะก็นับด้วย",
+  "A win counts in your career, and so does a friend's or crew-mate's": "ถ้าชนะจะนับในโหมดอาชีพของคุณ เพื่อนหรือสมาชิกทีมชนะก็นับด้วย"
 }

@@ -188,7 +188,7 @@
   "Open a lobby": "Lobbi nyitása",
   "Join": "Csatlakozás",
   "This lobby is full.": "Ez a lobbi megtelt.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Karrierverseny a legfeljebb {n}. szakaszban járó játékosoknak és {host} barátainak.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Karrierverseny a legfeljebb {n}. szakaszban járó játékosoknak és {host} barátainak és csapattársainak.",
   "Open another": "Új lobbi nyitása",
   "Starting in {n}": "Indulás: {n}",
   "Joining {host}'s {kind}…": "Csatlakozás {host} lobbijához ({kind})…",
@@ -1272,5 +1272,10 @@
   "Heat {k} results": "A {k}. futam eredménye",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Többjátékos verseny: {n}. hely: a győzelem a következő garázslátogatáskor kerül a karrieredbe",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Többjátékos verseny: {n}. hely. {name} nyert: a következő garázslátogatáskor kerül a karrieredbe",
-  "You are not allowed to start a countdown here": "Itt nem indíthatsz visszaszámlálást"
+  "You are not allowed to start a countdown here": "Itt nem indíthatsz visszaszámlálást",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Többjátékos verseny: {n}. hely, ${prize}. Csak a győzelem számít bele a karrieredbe",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Többjátékos verseny: {n}. hely. Csak a győzelem számít bele a karrieredbe",
+  "crew": "csapat",
+  "A win counts in your career, and so does a crew-mate's": "A győzelem beszámít a karrieredbe, egy csapattársadé is",
+  "A win counts in your career, and so does a friend's or crew-mate's": "A győzelem beszámít a karrieredbe, egy barátodé vagy csapattársadé is"
 }

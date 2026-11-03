@@ -18,7 +18,7 @@ typedef struct {
     uint32_t credit;               /* the career race's record when a win counts in this player's career (roam_game.c
                                     * mp_counts: a race of the player's stage not won yet, its own gates met), else 0 */
     int      heats;                /* the race's heats (race record +0x7E: a URL race has 1 to 3); 1 for any other */
-    int      nfriends;             /* the lobby's players who are our friends (the server's friends lists, at the */
+    int      nfriends;             /* the lobby's players who are our friends or crew-mates (the hub's marks, at the */
     char     friends[6][16];       /* trip's start): their LAN names.  Their win counts for us too (MpRace.credit) */
 } MpRace;
 enum { MPR_IDLE = 0, MPR_OUT, MPR_LAN, MPR_RACE, MPR_BACK, MPR_DONE, MPR_FAILED };
@@ -60,6 +60,7 @@ int  mprace_prize_of(int place);
 enum { MPC_NONE = 0, MPC_WON, MPC_FRIEND };
 int  mprace_credit(void);          /* MPC_* */
 int  mprace_credited(void);        /* 1 the career has the win, -1 it would not take it, 0 not yet / none */
+int  mprace_counts(void);          /* 1: a win of this race counted in our career (whether we won it or not) */
 /* the prize money paid on top of the career's own prize, where the place's (mprace_prize_of) is more */
 int  mprace_topup(void);
 /* the race's winner (its LAN name, "" none) */

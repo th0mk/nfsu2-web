@@ -812,6 +812,7 @@ static void credit_decide(void){
 }
 int mprace_credit(void){ return M.credit; }
 int mprace_credited(void){ return M.credited; }
+int mprace_counts(void){ return M.r.credit != 0; }
 int mprace_topup(void){ return M.topup; }
 const char *mprace_winner(void){ return M.winner; }
 

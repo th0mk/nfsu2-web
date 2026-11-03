@@ -22,12 +22,13 @@ interface LobbyState {
   names?: string[]; me?: number; max?: number; t?: number; closes?: number; away?: number; fee?: number; even?: number;
   why?: string; step?: string; text?: string;
   /** counts: 1 a win counts in our career (a race we could win with Solo here); c: each player's own (1 counts for
-   *  them); fr: each player our friend (their win counts for us too) */
-  counts?: number; c?: number[]; fr?: number[];
-  /** a career lobby we are kept out of (runtime mp_kept_out): it takes players up to this stage and its host's friends */
+   *  them); fr: each player our friend (their win counts for us too); cr: each player a crew-mate, not a friend (the same) */
+  counts?: number; c?: number[]; fr?: number[]; cr?: number[];
+  /** a career lobby we are kept out of (runtime mp_kept_out): it takes players up to this stage and its host's friends
+   *  and crew-mates */
   only?: number;
   /** trip, once the race's results came: their rows in order; prize: what ours won; credit: the race counts in our
-   *  career, 1 we won it, 2 a friend did; credited -1: the career did not take it (the prize money instead) */
+   *  career, 1 we won it, 2 a friend or crew-mate did; credited -1: the career did not take it (the prize money instead) */
   res?: RaceResult[]; prize?: number; credit?: number; credited?: number;
   /** a URL race of heats: how many (the race then shows no track: each heat has its own); on the trip heat: the one
    *  raced now or last (1 ..) and track its track, fin: the last heat's results are in (res is the series' standing,
@@ -78,6 +79,10 @@ function noteText(s: string): string {
       m => t('Multiplayer race: {pos} place. {name} won it: it counts in your career too, ${prize}', { pos: m[1] + m[2], n: m[1], name: m[3], prize: m[4] })],
     [/^Multiplayer race: (\d+)(st|nd|rd|th) place\. (.+) won it: it counts in your career too$/,
       m => t('Multiplayer race: {pos} place. {name} won it: it counts in your career too', { pos: m[1] + m[2], n: m[1], name: m[3] })],
+    [/^Multiplayer race: (\d+)(st|nd|rd|th) place, \$(\d+)\. Only a win counts in your career$/,
+      m => t('Multiplayer race: {pos} place, ${prize}. Only a win counts in your career', { pos: m[1] + m[2], n: m[1], prize: m[3] })],
+    [/^Multiplayer race: (\d+)(st|nd|rd|th) place\. Only a win counts in your career$/,
+      m => t('Multiplayer race: {pos} place. Only a win counts in your career', { pos: m[1] + m[2], n: m[1] })],
     [/^Multiplayer race: (\d+)(st|nd|rd|th) place, \$(\d+)$/, m => t('Multiplayer race: {pos} place, ${prize}', { pos: m[1] + m[2], n: m[1], prize: m[3] })],
     [/^Multiplayer race: (\d+)(st|nd|rd|th) place$/, m => t('Multiplayer race: {pos} place', { pos: m[1] + m[2], n: m[1] })],
     [/^Multiplayer race: you quit it, \$(\d+) fee$/, m => t('Multiplayer race: you quit it, ${fee} fee', { fee: m[1] })],
@@ -181,6 +186,7 @@ export class LobbyPanel {
       li.append(el('span', 'lobby-n', String(i + 1)));
       li.append(el('span', 'lobby-name', i < names.length ? names[i] : t('open')));
       if (i < names.length && s.fr?.[i] && i !== s.me) li.append(el('span', 'lobby-tag', t('friend')));
+      else if (i < names.length && s.cr?.[i] && i !== s.me) li.append(el('span', 'lobby-tag', t('crew')));
       if (i < names.length && (i === 0 || i === s.me)) li.append(el('span', 'lobby-tag', i === 0 ? t('host') : t('you')));
       if (i < names.length && s.c?.[i]) {
         const star = el('span', 'lobby-star', '★');
@@ -194,12 +200,14 @@ export class LobbyPanel {
     return ol;
   }
 
-  /** the race counts in our career: what a win does (and a friend's, with friends in it) */
+  /** the race counts in our career: what a win does (and a friend's or crew-mate's, with such players in it) */
   private career(s: LobbyState) {
     if (!s.counts) return [];
-    const friends = (s.fr ?? []).some(Boolean);
+    const friends = (s.fr ?? []).some(Boolean), crew = (s.cr ?? []).some(Boolean);
     const d = el('div', 'lobby-why');
-    d.append(el('span', 'lobby-star', '★ '), friends ? t('A win counts in your career, and so does a friend\'s') : t('A win counts in your career'));
+    d.append(el('span', 'lobby-star', '★ '), friends && crew ? t('A win counts in your career, and so does a friend\'s or crew-mate\'s')
+      : friends ? t('A win counts in your career, and so does a friend\'s')
+      : crew ? t('A win counts in your career, and so does a crew-mate\'s') : t('A win counts in your career'));
     return [d];
   }
 
@@ -227,7 +235,7 @@ export class LobbyPanel {
       case 'full':
         // (kept out: no other lobby opens beside it, one race at a start)
         kids.push(...this.title(s, host), this.places(s), el('div', 'lobby-why', s.only
-          ? t('A career race for players up to stage {n} and {host}\'s friends.', { n: s.only, host })
+          ? t('A career race for players up to stage {n} and {host}\'s friends and crew.', { n: s.only, host })
           : t('This lobby is full.')));
         if (!s.only) kids.push(this.act('Enter', t('Open another')));
         break;

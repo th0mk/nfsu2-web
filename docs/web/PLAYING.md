@@ -611,12 +611,13 @@ Good to know:
     Where the game would offer you its sponsors, your
     crib on the way back asks with the game's own dialog, one offer after the other ("Sponsor offer 1 of 3: ...
     Signing bonus ..., its races pay ... Sign with them?", **Yes** signs, **No** shows the next offer), and your keys, controller and taps are yours
-    until you sign. A **friend's win** (a player on your Friends list) counts for you too, when you
-    finish the race. The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
+    until you sign. A **friend's or crew-mate's win** (a player on your Friends list, or in one of your crews) counts
+    for you too, when you finish the race; any other place than 1st leaves the race to win ("Only a win counts in your
+    career", after the race). The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
     words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the
-    player who opened it takes players up to that race's stage and the opener's friends: a car of a later stage would
+    player who opened it takes players up to that race's stage and the opener's friends and crew-mates: a car of a later stage would
     win it most of the time, however the cars are evened out. Past that stage you see why at the spot ("A career race
-    for players up to stage 2 and ...'s friends"), and while it waits there no other lobby opens at that start (one
+    for players up to stage 2 and ...'s friends and crew"), and while it waits there no other lobby opens at that start (one
     race at a start; at a race open in your career its card's Accept races it Solo). Solo stays as it always was.
   - **Any other race** pays only prize money: 1st gets what a normal race of your stage pays (stages 1 to 3 $400,
     stage 4 $1,200, stage 5 $2,000), 2nd to 4th three quarters, half and a quarter of that (never less than $300, $200

@@ -130,7 +130,7 @@
   "Open a lobby": "Открыть лобби",
   "Join": "Присоединиться",
   "This lobby is full.": "Это лобби заполнено.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Гонка карьеры для игроков до этапа {n} и друзей {host}.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Гонка карьеры для игроков до этапа {n}, а также друзей и участников команды {host}.",
   "Open another": "Открыть другое",
   "Starting in {n}": "Старт через {n}",
   "Joining {host}'s {kind}…": "{kind} игрока {host}: подключение…",
@@ -1404,5 +1404,10 @@
   "Heat {k} results": "Результаты заезда {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Сетевая гонка: {n}-е место: победа засчитается в карьере при следующем заезде в гараж",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Сетевая гонка: {n}-е место. Победитель {name}: засчитается в вашей карьере при следующем заезде в гараж",
-  "You are not allowed to start a countdown here": "Здесь вы не можете начать обратный отсчёт"
+  "You are not allowed to start a countdown here": "Здесь вы не можете начать обратный отсчёт",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Сетевая гонка: {n}-е место, ${prize}. В карьере засчитывается только победа",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Сетевая гонка: {n}-е место. В карьере засчитывается только победа",
+  "crew": "команда",
+  "A win counts in your career, and so does a crew-mate's": "Победа засчитается в вашей карьере, как и победа участника команды",
+  "A win counts in your career, and so does a friend's or crew-mate's": "Победа засчитается в вашей карьере, как и победа друга или участника команды"
 }

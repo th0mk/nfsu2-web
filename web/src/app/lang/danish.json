@@ -128,7 +128,7 @@
   "Open a lobby": "Åbn en lobby",
   "Join": "Deltag",
   "This lobby is full.": "Denne lobby er fuld.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Et karriereløb for spillere op til niveau {n} og {host}s venner.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Et karriereløb for spillere op til niveau {n} og {host}s venner og crew.",
   "Open another": "Åbn en anden",
   "Starting in {n}": "Starter om {n}",
   "Joining {host}'s {kind}…": "Deltager i {host}s {kind}…",
@@ -1350,5 +1350,10 @@
   "Heat {k} results": "Resultater heat {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Flerspillerløb: {n}. plads: sejren kommer i din karriere ved dit næste besøg i garagen",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Flerspillerløb: {n}. plads. {name} vandt: det kommer i din karriere ved dit næste besøg i garagen",
-  "You are not allowed to start a countdown here": "Du må ikke starte en nedtælling her"
+  "You are not allowed to start a countdown here": "Du må ikke starte en nedtælling her",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Flerspillerløb: {n}. plads, ${prize}. Kun en sejr tæller i din karriere",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Flerspillerløb: {n}. plads. Kun en sejr tæller i din karriere",
+  "crew": "crew",
+  "A win counts in your career, and so does a crew-mate's": "En sejr tæller i din karriere, også et crewmedlems",
+  "A win counts in your career, and so does a friend's or crew-mate's": "En sejr tæller i din karriere, også en vens eller et crewmedlems"
 }

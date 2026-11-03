@@ -125,7 +125,7 @@
   "Open a lobby": "Lobi aç",
   "Join": "Katıl",
   "This lobby is full.": "Bu lobi dolu.",
-  "A career race for players up to stage {n} and {host}'s friends.": "{n}. aşamaya kadarki oyuncular ve {host} adlı oyuncunun arkadaşları için bir kariyer yarışı.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "{n}. aşamaya kadarki oyuncular ve {host} adlı oyuncunun arkadaşları ile ekibi için bir kariyer yarışı.",
   "Open another": "Başka bir tane aç",
   "Starting in {n}": "{n} içinde başlıyor",
   "Joining {host}'s {kind}…": "Katılınıyor: {host} tarafından açılan {kind}…",
@@ -1278,5 +1278,10 @@
   "Heat {k} results": "{k}. yarışın sonuçları",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Çok oyunculu yarış: {n}. sıra: zafer bir sonraki garaj ziyaretinde kariyerine geçer",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Çok oyunculu yarış: {n}. sıra. {name} kazandı: bir sonraki garaj ziyaretinde kariyerine geçer",
-  "You are not allowed to start a countdown here": "Burada geri sayım başlatamazsın"
+  "You are not allowed to start a countdown here": "Burada geri sayım başlatamazsın",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Çok oyunculu yarış: {n}. sıra, ${prize}. Kariyerinde yalnızca galibiyet sayılır",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Çok oyunculu yarış: {n}. sıra. Kariyerinde yalnızca galibiyet sayılır",
+  "crew": "ekip",
+  "A win counts in your career, and so does a crew-mate's": "Kazanırsan kariyerinde sayılır, bir ekip arkadaşın kazanırsa da",
+  "A win counts in your career, and so does a friend's or crew-mate's": "Kazanırsan kariyerinde sayılır, bir arkadaşın ya da ekip arkadaşın kazanırsa da"
 }

@@ -129,7 +129,7 @@
   "Open a lobby": "Apri una sala d'attesa",
   "Join": "Partecipa",
   "This lobby is full.": "Questa sala d'attesa è al completo.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Una gara della carriera per i giocatori fino al livello {n} e gli amici di {host}.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Una gara della carriera per i giocatori fino al livello {n} e gli amici e compagni di crew di {host}.",
   "Open another": "Aprine un'altra",
   "Starting in {n}": "Partenza tra {n}",
   "Joining {host}'s {kind}…": "{kind} di {host}: accesso in corso…",
@@ -1377,5 +1377,10 @@
   "Heat {k} results": "Risultati della manche {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Gara multigiocatore: {n}° posto: la vittoria entra nella tua carriera alla prossima visita in garage",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Gara multigiocatore: {n}° posto. {name} l'ha vinta: entra nella tua carriera alla prossima visita in garage",
-  "You are not allowed to start a countdown here": "Non puoi avviare un conto alla rovescia qui"
+  "You are not allowed to start a countdown here": "Non puoi avviare un conto alla rovescia qui",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Gara multigiocatore: {n}° posto, ${prize}. Solo una vittoria conta nella tua carriera",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Gara multigiocatore: {n}° posto. Solo una vittoria conta nella tua carriera",
+  "crew": "crew",
+  "A win counts in your career, and so does a crew-mate's": "Una vittoria conta nella tua carriera, anche quella di un compagno di crew",
+  "A win counts in your career, and so does a friend's or crew-mate's": "Una vittoria conta nella tua carriera, anche quella di un amico o di un compagno di crew"
 }

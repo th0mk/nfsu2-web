@@ -128,7 +128,7 @@
   "Open a lobby": "Lobby openen",
   "Join": "Meedoen",
   "This lobby is full.": "Deze lobby is vol.",
-  "A career race for players up to stage {n} and {host}'s friends.": "Een carrièrerace voor spelers tot en met niveau {n} en vrienden van {host}.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "Een carrièrerace voor spelers tot en met niveau {n} en vrienden en crewleden van {host}.",
   "Open another": "Een andere openen",
   "Starting in {n}": "Start over {n}",
   "Joining {host}'s {kind}…": "Aanmelden voor de {kind} van {host}…",
@@ -1350,5 +1350,10 @@
   "Heat {k} results": "Uitslag heat {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Multiplayerrace: {n}e plaats: de winst gaat bij je volgende bezoek aan de garage je carrière in",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Multiplayerrace: {n}e plaats. {name} won: het gaat bij je volgende garagebezoek je carrière in",
-  "You are not allowed to start a countdown here": "Je mag hier het aftellen niet starten"
+  "You are not allowed to start a countdown here": "Je mag hier het aftellen niet starten",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "Multiplayerrace: {n}e plaats, ${prize}. Alleen een overwinning telt in je carrière",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "Multiplayerrace: {n}e plaats. Alleen een overwinning telt in je carrière",
+  "crew": "crew",
+  "A win counts in your career, and so does a crew-mate's": "Een overwinning telt in je carrière, ook die van een crewlid",
+  "A win counts in your career, and so does a friend's or crew-mate's": "Een overwinning telt in je carrière, ook die van een vriend of crewlid"
 }

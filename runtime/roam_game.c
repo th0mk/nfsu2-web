@@ -4806,7 +4806,7 @@ static struct {
     uint32_t asked_host, asked_id; int64_t asked_at;   /* the lobby we last sent a JOIN to (its host, its id), and when */
     char     names[RC_LOBBY_MAX][RC_NAME_MAX + 1];   /* on the trip: the lobby's players' names (their links end in the menus) */
     char     lan[RC_LOBBY_MAX][13];              /* ...and their LAN names (lan_names), the race's results' */
-    uint8_t  friend_mask, trip_counts;           /* ...which are our friends (bit i), and whether a win counts in our career */
+    uint8_t  friend_mask, crew_mask, trip_counts; /* ...which are our friends (bit i), crew-mates (not friends), and whether a win counts in our career */
 } g_mp;
 static const char *race_kind(uint32_t r){
     if (!r) return "race";
@@ -4890,15 +4890,22 @@ static int mp_friend(uint32_t id){
     }
     return p->hub_friend != 0;
 }
+/* player id shares one of our crews (the hub's crew marks; a hub-less peer's HELLO): in a career race a crew-mate is
+ * as a friend, its win counts for us and a career lobby of its takes us at any stage */
+static int mp_crewmate(uint32_t id){
+    for (int i = 0; i < RC_TABLE; i++) if (g_s.peer[i].state == RC_PS_EST && g_s.peer[i].id == id) return rc_peer_crew(&g_s, i) >= 0;
+    return 0;
+}
+static int mp_mate(uint32_t id){ return mp_friend(id) || mp_crewmate(id); }
 /* A lobby whose race counts in its host's career (the host's bit of its counts: a career lobby) takes the players up
- * to that race's stage and the host's friends: a player past the stage, in a car with a later stage's parts, would
+ * to that race's stage and the host's friends and crew-mates: a player past the stage, in a car with a later stage's parts, would
  * win it most of the time however the cars are evened out, and the host's career would not get the race.  0: we may
  * join it; else the race's stage (the lobby shows as one we cannot join, as a full one).  Our game says so, not the
  * host's: a JOIN does not carry the stage, and an older game joins anyway, as before */
 static int mp_kept_out(const MpLobby *l){
     if (!l->race || !ok(l->race, RACE_SZ) || !(l->counts & 1u)) return 0;
     uint32_t st = MR8(l->race + 0x37u);
-    return st && rd32(G_CAREER + C_STAGE) > st && !mp_friend(l->host) ? (int)st : 0;
+    return st && rd32(G_CAREER + C_STAGE) > st && !mp_mate(l->host) ? (int)st : 0;
 }
 /* one message about lobby l to `to` (0: the hub); the session lock is ours */
 static void mp_send_of(const MpLobby *l, uint8_t op, uint8_t arg, uint32_t to){
@@ -5195,16 +5202,17 @@ static void mp_trip(int64_t host){
     t.mode = race_net_mode(r);
     t.track = MR16(r + 0x18u); t.reverse = MR8(r + 0x1au) & 1u; t.laps = MR8(r + 0x1bu);
     t.players = g_mp.l.n;
-    g_mp.friend_mask = 0;
+    g_mp.friend_mask = g_mp.crew_mask = 0;
     t.heats = MR8(r + 0x34u) == 2u && MR8(r + 0x7eu) >= 1u && MR8(r + 0x7eu) <= 3u ? MR8(r + 0x7eu) : 1;
     t.credit = mp_counts(r) ? r : 0;
     for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++){
         snprintf(g_mp.names[i], sizeof g_mp.names[i], "%s", mp_name(g_mp.l.ids[i]));
         memcpy(g_mp.lan[i], nm12[i], sizeof g_mp.lan[i]);
-        /* our friends among them (the hub's marks, while still linked: the links end in the menus) */
-        if (g_mp.l.ids[i] != g_s.conf.self_id && mp_friend(g_mp.l.ids[i]) && t.nfriends < 6){
+        /* our friends and crew-mates among them (the hub's marks, while still linked: the links end in the menus) */
+        if (g_mp.l.ids[i] != g_s.conf.self_id && mp_mate(g_mp.l.ids[i]) && t.nfriends < 6){
             snprintf(t.friends[t.nfriends++], sizeof t.friends[0], "%s", nm12[i]);
-            g_mp.friend_mask |= (uint8_t)(1u << i);
+            if (mp_friend(g_mp.l.ids[i])) g_mp.friend_mask |= (uint8_t)(1u << i);
+            else g_mp.crew_mask |= (uint8_t)(1u << i);
         }
     }
     g_mp.trip_counts = t.credit != 0;
@@ -5314,6 +5322,10 @@ static void mp_frame(CPU *c, int64_t host, int in_roam, int world_runs, const ui
         else if (place && waits) snprintf(t, sizeof t, "Multiplayer race: %d%s place. %s won it: into your career at your next garage visit", place, th, winner);
         else if (place && mprace_credited() > 0 && mprace_credit() == MPC_WON) snprintf(t, sizeof t, "Multiplayer race: %d%s place, won in your career%s", place, th, won);
         else if (place && mprace_credited() > 0) snprintf(t, sizeof t, "Multiplayer race: %d%s place. %s won it: it counts in your career too%s", place, th, winner, won);
+        /* a race that counted, not won (by us or a friend): the race is still to win in the career */
+        else if (place && prize && mprace_counts() && mprace_credit() == MPC_NONE)
+            snprintf(t, sizeof t, "Multiplayer race: %d%s place, $%d. Only a win counts in your career", place, th, prize);
+        else if (place && mprace_counts() && mprace_credit() == MPC_NONE) snprintf(t, sizeof t, "Multiplayer race: %d%s place. Only a win counts in your career", place, th);
         else if (place && prize) snprintf(t, sizeof t, "Multiplayer race: %d%s place, $%d", place, th, prize);
         else if (place) snprintf(t, sizeof t, "Multiplayer race: %d%s place", place, th);
         else if (mprace_quit() && mprace_fee()) snprintf(t, sizeof t, "Multiplayer race: you quit it, $%d fee", mprace_fee());
@@ -5428,7 +5440,7 @@ static int mp_line(int64_t host, char *tx, int n){
             const MpLobby *k = mp_keeps_out();
             if (k){
                 char hn[24]; snprintf(hn, sizeof hn, "%s", mp_name(k->host));
-                snprintf(tx, (size_t)n, "%s's %s is for players up to stage %d and %s's friends", hn, race_kind(k->race), mp_kept_out(k), hn);
+                snprintf(tx, (size_t)n, "%s's %s is for players up to stage %d and %s's friends and crew", hn, race_kind(k->race), mp_kept_out(k), hn);
                 return 1;
             }
             for (int i = 0; i < g_mp.nseen; i++){
@@ -5564,11 +5576,11 @@ static void js_heats(MpJs *j){
 }
 /* the lobby's players: names, the host first; me: our place (-1: none); max; counts: 1 a win counts in our career
  * (mp_counts); c: each player's (its own game's say, ours ours), fr: each one our friend (a friend's win counts for us
- * as ours does) -- c and fr only when some are */
+ * as ours does), cr: each one a crew-mate of ours, not a friend (counts the same) -- c, fr and cr only when some are */
 static void js_players(MpJs *j, const MpLobby *l){
     js_key(j, "names"); js_raw(j, "[");
     int me = -1, trip = l == &g_mp.l && g_mp.st == MP_TRIP, mine = trip ? g_mp.trip_counts : mp_counts(l->race);
-    uint32_t c = 0, fr = 0;
+    uint32_t c = 0, fr = 0, cr = 0;
     for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++){
         if (i) js_raw(j, ",");
         js_val(j, trip ? g_mp.names[i] : mp_name(l->ids[i]));
@@ -5576,15 +5588,17 @@ static void js_players(MpJs *j, const MpLobby *l){
         else {
             if (l->counts >> i & 1u) c |= 1u << i;
             if (trip ? g_mp.friend_mask >> i & 1u : mp_friend(l->ids[i])) fr |= 1u << i;
+            else if (trip ? g_mp.crew_mask >> i & 1u : mp_crewmate(l->ids[i])) cr |= 1u << i;
         }
     }
     js_raw(j, "]");
     js_int(j, "me", me); js_int(j, "max", l->max);
     if (mine && !trip) js_int(j, "counts", 1);
-    for (int pass = 0; pass < 2; pass++){
-        uint32_t m = pass ? fr : c;
+    static const char *const key[3] = { "c", "fr", "cr" };
+    for (int pass = 0; pass < 3; pass++){
+        uint32_t m = pass == 2 ? cr : pass ? fr : c;
         if (!m) continue;
-        js_key(j, pass ? "fr" : "c"); js_raw(j, "[");
+        js_key(j, key[pass]); js_raw(j, "[");
         for (int i = 0; i < l->n && i < RC_LOBBY_MAX; i++) js_raw(j, i ? (m >> i & 1u ? ",1" : ",0") : (m & 1u ? "1" : "0"));
         js_raw(j, "]");
     }
@@ -5724,51 +5738,51 @@ typedef struct {
     const char *b_solo, *b_multi, *b_join, *b_cancel;
 } MpTexts;
 static const MpTexts mp_texts[] = {
-    { "english", "Race it with other players, or on your own? A win counts in your career either way, and so does a friend's win in your race.",
+    { "english", "Race it with other players, or on your own? A win counts in your career either way, and so does a friend's or crew-mate's win in your race.",
       "Race it with other players, or on your own? With others, only the prize money goes to your career.",
       "%s is starting a multiplayer %s here. Join, or race it on your own?", " A win counts in your career either way.",
       "race", "URL race", "circuit", "sprint", "Street X", "drag", "drift", "Solo", "Multiplayer", "Join", "Cancel" },
-    { "french", "Course avec d'autres joueurs ou en solo ? Une victoire compte dans votre carrière dans les deux cas, celle d'un ami dans votre course aussi.",
+    { "french", "Course avec d'autres joueurs ou en solo ? Une victoire compte dans votre carrière dans les deux cas, celle d'un ami ou d'un coéquipier dans votre course aussi.",
       "Course avec d'autres joueurs ou en solo ? Avec d'autres, seul l'argent du prix va dans votre carrière.",
       "%s lance une course multijoueur ici (%s). Rejoindre ou courir seul ?", " Une victoire compte dans votre carrière dans les deux cas.",
       "course", "course URL", "circuit", "sprint", "Street X", "drag", "drift", "Solo", "Multijoueur", "Rejoindre", "Annuler" },
-    { "german", "Mit anderen Spielern fahren oder allein? Ein Sieg zählt so oder so in deiner Karriere, auch der Sieg eines Freundes in deinem Rennen.",
+    { "german", "Mit anderen Spielern fahren oder allein? Ein Sieg zählt so oder so in deiner Karriere, auch der Sieg eines Freundes oder Crew-Mitglieds in deinem Rennen.",
       "Mit anderen Spielern fahren oder allein? Mit anderen geht nur das Preisgeld in deine Karriere.",
       "%s startet hier ein Multiplayer-Rennen (%s). Mitmachen oder allein fahren?", " Ein Sieg zählt so oder so in deiner Karriere.",
       "Rennen", "URL-Rennen", "Rundkurs", "Sprint", "Street X", "Drag", "Drift", "Solo", "Multiplayer", "Mitmachen", "Abbrechen" },
-    { "italian", "Correre con altri giocatori o da solo? Una vittoria conta nella tua carriera in entrambi i casi, anche quella di un amico nella tua gara.",
+    { "italian", "Correre con altri giocatori o da solo? Una vittoria conta nella tua carriera in entrambi i casi, anche quella di un amico o di un compagno di crew nella tua gara.",
       "Correre con altri giocatori o da solo? Con altri, nella tua carriera va solo il premio in denaro.",
       "%s sta avviando qui una gara multigiocatore (%s). Partecipare o correre da solo?", " Una vittoria conta nella tua carriera in entrambi i casi.",
       "gara", "gara URL", "circuito", "sprint", "Street X", "drag", "drift", "Solo", "Multigiocatore", "Partecipa", "Annulla" },
-    { "spanish", "¿Correr con otros jugadores o solo? Una victoria cuenta en tu modo carrera en ambos casos, y también la de un amigo en tu carrera.",
+    { "spanish", "¿Correr con otros jugadores o solo? Una victoria cuenta en tu modo carrera en ambos casos, y también la de un amigo o compañero de equipo en tu carrera.",
       "¿Correr con otros jugadores o solo? Con otros, solo el dinero del premio va a tu modo carrera.",
       "%s está iniciando aquí una carrera multijugador (%s). ¿Unirte o correr solo?", " Una victoria cuenta en tu modo carrera en ambos casos.",
       "carrera", "carrera URL", "circuito", "sprint", "Street X", "drag", "drift", "Solo", "Multijugador", "Unirse", "Cancelar" },
-    { "portuguese", "Correr com outros jogadores ou sozinho? Uma vitória conta na sua carreira nos dois casos, e a de um amigo na sua corrida também.",
+    { "portuguese", "Correr com outros jogadores ou sozinho? Uma vitória conta na sua carreira nos dois casos, e a de um amigo ou colega de equipe na sua corrida também.",
       "Correr com outros jogadores ou sozinho? Com outros, só o dinheiro do prêmio vai para a sua carreira.",
       "%s está começando uma corrida multijogador aqui (%s). Entrar ou correr sozinho?", " Uma vitória conta na sua carreira nos dois casos.",
       "corrida", "corrida URL", "circuito", "sprint", "Street X", "drag", "drift", "Solo", "Multijogador", "Entrar", "Cancelar" },
-    { "dutch", "Met andere spelers racen of alleen? Een overwinning telt hoe dan ook in je carrière, ook die van een vriend in je race.",
+    { "dutch", "Met andere spelers racen of alleen? Een overwinning telt hoe dan ook in je carrière, ook die van een vriend of crewlid in je race.",
       "Met andere spelers racen of alleen? Met anderen gaat alleen het prijzengeld naar je carrière.",
       "%s start hier een multiplayerrace (%s). Meedoen of alleen racen?", " Een overwinning telt hoe dan ook in je carrière.",
       "race", "URL-race", "circuit", "sprint", "Street X", "drag", "drift", "Solo", "Multiplayer", "Meedoen", "Annuleren" },
-    { "swedish", "Köra med andra spelare eller själv? En seger räknas i din karriär i båda fallen, även en väns seger i ditt race.",
+    { "swedish", "Köra med andra spelare eller själv? En seger räknas i din karriär i båda fallen, även en väns eller crewmedlems seger i ditt race.",
       "Köra med andra spelare eller själv? Med andra går bara prispengarna till din karriär.",
       "%s startar ett flerspelarrace här (%s). Vara med eller köra själv?", " En seger räknas i din karriär i båda fallen.",
       "race", "URL-race", "bana", "sprint", "Street X", "drag", "drift", "Solo", "Flerspelare", "Var med", "Avbryt" },
-    { "danish", "Køre med andre spillere eller selv? En sejr tæller i din karriere i begge tilfælde, også en vens sejr i dit løb.",
+    { "danish", "Køre med andre spillere eller selv? En sejr tæller i din karriere i begge tilfælde, også en vens eller et crewmedlems sejr i dit løb.",
       "Køre med andre spillere eller selv? Med andre går kun præmiepengene til din karriere.",
       "%s starter et flerspillerløb her (%s). Være med eller køre selv?", " En sejr tæller i din karriere i begge tilfælde.",
       "løb", "URL-løb", "bane", "sprint", "Street X", "drag", "drift", "Solo", "Flerspiller", "Vær med", "Annuller" },
-    { "polish", "Jechać z innymi graczami czy samemu? Wygrana liczy się w twojej karierze w obu przypadkach, wygrana znajomego w twoim wyścigu też.",
+    { "polish", "Jechać z innymi graczami czy samemu? Wygrana liczy się w twojej karierze w obu przypadkach, wygrana znajomego lub członka ekipy w twoim wyścigu też.",
       "Jechać z innymi graczami czy samemu? Z innymi do kariery trafia tylko nagroda pieniężna.",
       "%s zaczyna tu wyścig wieloosobowy (%s). Dołączyć czy jechać samemu?", " Wygrana liczy się w twojej karierze w obu przypadkach.",
       "wyścig", "wyścig URL", "okrążenia", "sprint", "Street X", "drag", "drift", "Solo", "Wieloosobowy", "Dołącz", "Anuluj" },
-    { "turkish", "Başka oyuncularla mı, tek başına mı? Kazanırsan iki durumda da kariyerinde sayılır, yarışındaki bir arkadaşın kazanırsa da.",
+    { "turkish", "Başka oyuncularla mı, tek başına mı? Kazanırsan iki durumda da kariyerinde sayılır, yarışındaki bir arkadaşın ya da ekip arkadaşın kazanırsa da.",
       "Başka oyuncularla mı, tek başına mı? Başkalarıyla sadece para ödülü kariyerine gider.",
       "%s burada çok oyunculu bir yarış başlatıyor (%s). Katılacak mısın, tek başına mı yarışacaksın?", " Kazanırsan iki durumda da kariyerinde sayılır.",
       "yarış", "URL yarışı", "pist", "sprint", "Street X", "drag", "drift", "Solo", "Çok oyunculu", "Katıl", "İptal" },
-    { "hungarian", "Más játékosokkal versenyzel vagy egyedül? A győzelem mindkét esetben beszámít a karrieredbe, és egy barátodé is a versenyedben.",
+    { "hungarian", "Más játékosokkal versenyzel vagy egyedül? A győzelem mindkét esetben beszámít a karrieredbe, és egy barátodé vagy csapattársadé is a versenyedben.",
       "Más játékosokkal versenyzel vagy egyedül? Másokkal csak a pénzdíj kerül a karrieredbe.",
       "%s többjátékos versenyt indít itt (%s). Csatlakozol vagy egyedül versenyzel?", " A győzelem mindkét esetben beszámít a karrieredbe.",
       "verseny", "URL verseny", "kör", "sprint", "Street X", "drag", "drift", "Egyedül", "Többjátékos", "Csatlakozás", "Mégse" },
@@ -8370,7 +8384,9 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
              nm[0] ? nm : "-", g_mp.l.n, g_mp.l.max, g_mp.l.state, g_mp.l.away_s, mprace_phase(), g_mp.nseen, g_mp.opened, g_mp.joined, g_mp.trips,
              g_mp.l.race ? mp_counts(g_mp.l.race) : -1, g_mp.l.counts);
         int nf = 0;
-        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++) if (g_mp.l.ids[i] != g_s.conf.self_id && mp_friend(g_mp.l.ids[i])){ rlog(" %s", mp_name(g_mp.l.ids[i])); nf++; }
+        for (int i = 0; i < g_mp.l.n && i < RC_LOBBY_MAX; i++) if (g_mp.l.ids[i] != g_s.conf.self_id && mp_mate(g_mp.l.ids[i])){
+            rlog(" %s%s", mp_name(g_mp.l.ids[i]), mp_friend(g_mp.l.ids[i]) ? "" : " (crew)"); nf++;
+        }
         rlog("%s\n", nf ? "" : " none");
         for (int i = 0; i < g_mp.nseen; i++){
             const MpLobby *l = &g_mp.seen[i];

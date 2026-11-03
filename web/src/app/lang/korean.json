@@ -125,7 +125,7 @@
   "Open a lobby": "로비 열기",
   "Join": "참가",
   "This lobby is full.": "이 로비는 가득 찼어요.",
-  "A career race for players up to stage {n} and {host}'s friends.": "커리어 레이스예요. {n}단계까지의 플레이어와 {host}의 친구만 참가할 수 있어요.",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "커리어 레이스예요. {n}단계까지의 플레이어와 {host}의 친구, 크루원만 참가할 수 있어요.",
   "Open another": "다른 로비 열기",
   "Starting in {n}": "{n}초 후 시작",
   "Joining {host}'s {kind}…": "{host}의 {kind}에 참가하는 중…",
@@ -1269,5 +1269,10 @@
   "Heat {k} results": "히트 {k} 결과",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "멀티플레이 레이스: {n}위: 다음에 차고에 들르면 커리어에 반영돼요",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "멀티플레이 레이스: {n}위. {name} 우승: 다음에 차고에 들르면 내 커리어에 반영돼요",
-  "You are not allowed to start a countdown here": "여기서는 카운트다운을 시작할 수 없습니다"
+  "You are not allowed to start a countdown here": "여기서는 카운트다운을 시작할 수 없습니다",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "멀티플레이 레이스: {n}위, ${prize}. 커리어에는 우승만 반영돼요",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "멀티플레이 레이스: {n}위. 커리어에는 우승만 반영돼요",
+  "crew": "크루",
+  "A win counts in your career, and so does a crew-mate's": "우승하면 커리어에 반영돼요. 크루원이 우승해도 마찬가지예요",
+  "A win counts in your career, and so does a friend's or crew-mate's": "우승하면 커리어에 반영돼요. 친구나 크루원이 우승해도 마찬가지예요"
 }

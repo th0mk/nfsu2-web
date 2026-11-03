@@ -125,7 +125,7 @@
   "Open a lobby": "建立大廳",
   "Join": "加入",
   "This lobby is full.": "此大廳已滿。",
-  "A career race for players up to stage {n} and {host}'s friends.": "這是生涯賽事，僅限第 {n} 階段以內的玩家和 {host} 的好友加入。",
+  "A career race for players up to stage {n} and {host}'s friends and crew.": "這是生涯賽事，僅限第 {n} 階段以內的玩家和 {host} 的好友與隊友加入。",
   "Open another": "另建大廳",
   "Starting in {n}": "倒數 {n}",
   "Joining {host}'s {kind}…": "正在加入 {host} 的{kind}…",
@@ -1269,5 +1269,10 @@
   "Heat {k} results": "第 {k} 輪結果",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "多人比賽：第 {n} 名：下次回到車庫時計入生涯模式",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "多人比賽：第 {n} 名。{name} 獲勝：下次回到車庫時計入你的生涯模式",
-  "You are not allowed to start a countdown here": "你不能在這裡開始倒數計時"
+  "You are not allowed to start a countdown here": "你不能在這裡開始倒數計時",
+  "Multiplayer race: {pos} place, ${prize}. Only a win counts in your career": "多人比賽：第 {n} 名，${prize}。只有獲勝才會計入你的生涯模式",
+  "Multiplayer race: {pos} place. Only a win counts in your career": "多人比賽：第 {n} 名。只有獲勝才會計入你的生涯模式",
+  "crew": "車隊",
+  "A win counts in your career, and so does a crew-mate's": "獲勝會計入你的生涯模式，隊友獲勝也算",
+  "A win counts in your career, and so does a friend's or crew-mate's": "獲勝會計入你的生涯模式，好友或隊友獲勝也算"
 }
