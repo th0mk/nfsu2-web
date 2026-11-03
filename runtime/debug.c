@@ -110,6 +110,7 @@ void guest_hook(CPU *c, uint32_t ip){
     { int drift_hook(CPU *, uint32_t); if (drift_hook(c, ip)) return; }
     { int quickrace_hook(CPU *, uint32_t); if (quickrace_hook(c, ip)) return; }
     { int trafficcars_hook(CPU *, uint32_t); if (trafficcars_hook(c, ip)) return; }
+    { int damage_hook(CPU *, uint32_t); if (damage_hook(c, ip)) return; }
     if (ip == 0x0065ae25u){
         uint32_t a1=MR32(c->esp+4u), a2=MR32(c->esp+8u), a3=MR32(c->esp+12u);
         if (!g_rec_esp0) g_rec_esp0 = c->esp;

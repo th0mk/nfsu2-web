@@ -94,7 +94,7 @@ HDRSUM="$( (cat runtime/cpu.h runtime/splitscreen_mem.h runtime/web/compat/wasm_
 # load the lifted server.dll; enhance.c holds the graphics options (all off by
 # default, as on the Mac).
 RT="mem dispatch genexec heap watchdog win32 win32_ext com debug res fileio overrides d3dx_hle vsemu oracle autotest lifecycle widescreen framerate dinput_pad dikeys keyboard dinput_kbd career intro drifttest roam roam_core roam_game mprace mpcredit horn hornmenu optslider tonemenu powerunits radio drift carsfx racehorn racenet racecars winsock online netrace module modheap enhance headlights language sms sponsors lobbyclick olfilter tunegraph menusize regional garage sndlead carshadow hiddenraces visualrep carspot walls movie photo look savegame uniques showoff quickrace cameras vinylcat vinylpacks modpacks specialties lightkey trafficcars shownames hudbank engage gpsdistance"
-RT="$RT splitscreen coop"
+RT="$RT splitscreen coop damage"
 WEB="$(cd runtime/web && ls *.c | sed 's/\.c$//')"
 pids=""
 for f in $RT; do
@@ -107,6 +107,11 @@ for f in $WEB; do
   case "$f" in thread_exit) fl="$TARGET $OPT $FEAT" ;; *) fl="$CFLAGS -DNFS_ENHANCED=0" ;; esac
   $CC $fl -c -o "$OUT/rt/web_$f.o" "runtime/web/$f.c" & pids="$pids $!"
 done
+# C++ parts of the runtime (damagecore.cpp: the crash damage, the .asi's own code): libc++ without exceptions
+CXX="$WASI/bin/clang++"
+for f in damagecore; do
+  $CXX $TARGET $OPT $FEAT -std=c++17 -fno-exceptions -fno-rtti -fno-strict-aliasing -fno-delete-null-pointer-checks     -Iruntime -c -o "$OUT/rt/$f.o" "runtime/$f.cpp" & pids="$pids $!"
+done
 for p in $pids; do wait "$p" || { echo "runtime compile failed"; exit 1; }; done
 
 # ---- link ----
@@ -117,7 +122,7 @@ $CC $TARGET $OPT $FEAT -o "$OUT/nfsu2.wasm" $OBJS \
   -Wl,--import-memory,--export-memory,--shared-memory,--max-memory=4294967296 \
   -Wl,--initial-memory=$(( MIN_MB * 1048576 )),--global-base=$GUEST_END \
   -Wl,-z,stack-size=$(( 8 * 1048576 )) -Wl,--no-stack-first \
-  -lsetjmp -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks 2>&1 | \
+  -L"$WASI/share/wasi-sysroot/lib/wasm32-wasip1-threads/noeh" -lc++ -lc++abi -lsetjmp -lwasi-emulated-mman -lwasi-emulated-signal -lwasi-emulated-process-clocks 2>&1 | \
   { grep -v "^$" || true; } > "$OUT/link.log"
 if [ ! -f "$OUT/nfsu2.wasm" ]; then
   echo "link FAILED ($(grep -c "undefined symbol" "$OUT/link.log") undefined symbols):"; grep -E "error" "$OUT/link.log" | head -80; exit 1; fi

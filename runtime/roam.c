@@ -844,9 +844,10 @@ __attribute__((weak)) int roam_asipeer_frame(CPU *c){ (void)c; return 0; }
 __attribute__((weak)) int roam_asipeer_cmd(CPU *c, const char *args, long *wait_start){
     (void)c; (void)args; (void)wait_start;
     fprintf(stderr, "[roam] asi: not in this build (ASIPEER=1 ./link.sh orig makes out/nfsu2_asipeer)\n"); return 1; }
+__attribute__((weak)) void damage_frame(CPU *c);      /* damage.c: crash damage's texture pack (only where it is linked) */
 int roam_hook(CPU *c, uint32_t ip){
     switch (ip){
-    case HOOK_SITE(0x00581475): reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); engage_frame(c); roam_frame(c); return 1;
+    case HOOK_SITE(0x00581475): if (damage_frame) damage_frame(c); reads_frame(c); intro_frame(c); language_texts_frame(c); sms_frame(c); hiddenraces_frame(); visualrep_frame(); carspot_frame(); walls_frame(); mprace_frame(c); mpcredit_frame(c); if (!roam_asipeer_frame(c)) roam_game_frame(c); racehorn_frame(c); racenet_frame(c); optslider_frame(c); drift_frame(c); showoff_frame(c); lightkey_frame(c); photo_frame(c); savegame_frame(); coop_frame(c); engage_frame(c); roam_frame(c); return 1;
     /* Player::Update's HUD step (0x600590), behind its call of the HUD
      * update (0x4EC5A0), where the game places its own LAN race labels */
     case HOOK_SITE(0x006005e0): gpsdistance_hud(c); roam_game_hud(c); return 1;
