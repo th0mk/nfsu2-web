@@ -106,13 +106,14 @@ label: Controller
 label: Keys
 - **R** respawn, **T** career status, **M** map, **X** drift mode, **N** horn
 - **O** open the trunk, hood and doors (parked), **H** / **J** hydraulics
-- **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
+- **F7** next song, **F12** photo mode, **F9** the page menu: log, radio, controls, full screen
 - The whole list: start page, **Controls**.
 
 ## More
 ### Can I add mods or my own music?
 label: Mods and music
 - **Music:** F9, **Radio** plays a folder of your own songs in place of the game's (not on iPhone or iPad).
+- **The game's songs:** Settings, Game, **Songs**: Uncensored (the default, some in longer versions) or Original, as the game shipped them. **F7** plays the next song.
 - **Mods:** you can't add your own. A few come built in: Upscaled HUD (Settings, Display), English Subtitles Fixed and Show hidden races (Settings, Game).
 - **Other games:** this project is Underground 2. Nothing else has been announced.
 
