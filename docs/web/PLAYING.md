@@ -604,7 +604,7 @@ Good to know:
     trip lost its way) waits for your next crib visit, kept beside your profile, so it is still there after a reload.
     Where the game would offer you its sponsors, your
     crib on the way back asks with the game's own dialog, one offer after the other ("Sponsor offer 1 of 3: ...
-    Signing bonus ..., its races pay ...", **Sign** or **Next offer**), and your keys, controller and taps are yours
+    Signing bonus ..., its races pay ... Sign with them?", **Yes** signs, **No** shows the next offer), and your keys, controller and taps are yours
     until you sign. A **friend's win** (a player on your Friends list) counts for you too, when you
     finish the race. The panel marks each player the race counts for with ★ ("A win counts in your career"), and the
     words over such a lobby or spot and beside its world-map icon end in "- career". A lobby whose race counts for the

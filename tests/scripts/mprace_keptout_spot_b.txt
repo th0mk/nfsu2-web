@@ -11,7 +11,7 @@
 +0    careergo ${MP_RACE}
 +300  roam mp lobby
 +0    log SHOT kept_out
-+0    log LOBBY at the spot
++180  log LOBBY at the spot           # (the page's picture first: it comes a few frames late)
 +0    tap RETURN
 +120  roam mp lobby
 +0    log SHOT own_lobby

@@ -302,18 +302,18 @@ static void crib_msg(CPU *c){
  * test takes such a row for the game's text).  offer: the offer's number, how many, the sponsor, its bonus, its
  * races' prize, in that order in every language */
 static const struct { const char *lang, *offer, *sign, *next; } SP_TX[] = {
-    { "english", "Sponsor offer %d of %d: %s. Signing bonus $%d, its races pay $%u.", "Sign", "Next offer" },
-    { "french", "Offre de sponsor %d sur %d : %s. Prime de signature $%d, ses courses rapportent $%u.", "Signer", "Offre suivante" },
-    { "german", "Sponsorangebot %d von %d: %s. Unterschriftsbonus $%d, seine Rennen zahlen $%u.", "Unterschreiben", "Nächstes Angebot" },
-    { "italian", "Offerta sponsor %d di %d: %s. Bonus alla firma $%d, le sue gare pagano $%u.", "Firma", "Offerta successiva" },
-    { "spanish", "Oferta de patrocinador %d de %d: %s. Prima por firmar $%d, sus carreras pagan $%u.", "Firmar", "Siguiente oferta" },
-    { "portuguese", "Oferta de patrocinador %d de %d: %s. Bônus de assinatura $%d, as corridas dele pagam $%u.", "Assinar", "Próxima oferta" },
-    { "dutch", "Sponsoraanbod %d van %d: %s. Tekenbonus $%d, zijn races betalen $%u.", "Tekenen", "Volgend aanbod" },
-    { "swedish", "Sponsorerbjudande %d av %d: %s. Signeringsbonus $%d, dess race ger $%u.", "Skriv på", "Nästa erbjudande" },
-    { "danish", "Sponsortilbud %d af %d: %s. Underskriftsbonus $%d, dets løb giver $%u.", "Skriv under", "Næste tilbud" },
-    { "polish", "Oferta sponsora %d z %d: %s. Premia za podpisanie $%d, jego wyścigi płacą $%u.", "Podpisz", "Następna oferta" },
-    { "turkish", "Sponsor teklifi %d/%d: %s. İmza primi $%d, yarışları $%u öder.", "İmzala", "Sonraki teklif" },
-    { "hungarian", "Szponzorajánlat %d / %d: %s. Aláírási bónusz $%d, a versenyei $%u-t fizetnek.", "Aláírás", "Következő ajánlat" },
+    { "english", "Sponsor offer %d of %d: %s. Signing bonus %d, its races pay %u. Sign with them? No: the next offer.", "Sign", "Next offer" },
+    { "french", "Offre de sponsor %d sur %d : %s. Prime de signature %d, ses courses rapportent %u. Signer avec eux ? Non : l'offre suivante.", "Signer", "Offre suivante" },
+    { "german", "Sponsorangebot %d von %d: %s. Unterschriftsbonus %d, seine Rennen zahlen %u. Unterschreiben? Nein: das nächste Angebot.", "Unterschreiben", "Nächstes Angebot" },
+    { "italian", "Offerta sponsor %d di %d: %s. Bonus alla firma %d, le sue gare pagano %u. Firmi con loro? No: l'offerta successiva.", "Firma", "Offerta successiva" },
+    { "spanish", "Oferta de patrocinador %d de %d: %s. Prima por firmar %d, sus carreras pagan %u. ¿Firmar con ellos? No: la siguiente oferta.", "Firmar", "Siguiente oferta" },
+    { "portuguese", "Oferta de patrocinador %d de %d: %s. Bônus de assinatura %d, as corridas dele pagam %u. Assinar com eles? Não: a próxima oferta.", "Assinar", "Próxima oferta" },
+    { "dutch", "Sponsoraanbod %d van %d: %s. Tekenbonus %d, zijn races betalen %u. Tekenen? Nee: het volgende aanbod.", "Tekenen", "Volgend aanbod" },
+    { "swedish", "Sponsorerbjudande %d av %d: %s. Signeringsbonus %d, dess race ger %u. Skriva på? Nej: nästa erbjudande.", "Skriv på", "Nästa erbjudande" },
+    { "danish", "Sponsortilbud %d af %d: %s. Underskriftsbonus %d, dets løb giver %u. Skrive under? Nej: næste tilbud.", "Skriv under", "Næste tilbud" },
+    { "polish", "Oferta sponsora %d z %d: %s. Premia za podpisanie %d, jego wyścigi płacą %u. Podpisać? Nie: następna oferta.", "Podpisz", "Następna oferta" },
+    { "turkish", "Sponsor teklifi %d/%d: %s. İmza primi %d, yarışları %u öder. İmzalansın mı? Hayır: sonraki teklif.", "İmzala", "Sonraki teklif" },
+    { "hungarian", "Szponzorajánlat %d / %d: %s. Aláírási bónusz %d, versenyenként %u. Aláírod? Nem: a következő ajánlat.", "Aláírás", "Következő ajánlat" },
 };
 const char *language_name(void);
 void language_game_letters(const char *utf8, char *out, size_t n);
@@ -351,7 +351,10 @@ static int ui_ask(CPU *c){
     gs(dl, "GenericDialog_MED.fng", 0x38); gs(fmt, "%s", 8); gs(txt, t, 0x1c0);     /* (the front end's; IG_ is the world's) */
     uint32_t a[10] = { crib_name(), dl, g_ui.lab_sign, g_ui.lab_next, MSG_SIGN, MSG_NEXT, MSG_NEXT, 0, fmt, txt };
     call(c, FN_DIALOG2, 0, 10, a);
-    fprintf(stderr, "[mpcredit] f=%ld asked: \"%s\"%s%s\n", autotest_frame(), en, sp_tx() ? " in " : "", sp_tx() ? SP_TX[sp_tx()].lang : "");
+    uint32_t language_text(uint32_t hash);
+    fprintf(stderr, "[mpcredit] f=%ld asked: \"%s\"%s%s (its buttons' texts %s in the game's table: %08x %08x)\n", autotest_frame(), en,
+            sp_tx() ? " in " : "", sp_tx() ? SP_TX[sp_tx()].lang : "", language_text(g_ui.lab_sign) && language_text(g_ui.lab_next) ? "found" : "NOT found",
+            g_ui.lab_sign, g_ui.lab_next);
     return 1;
 }
 /* the race's movie over the crib, as 0x53D7A0 plays its own (the names, mode 5 nothing after it; 0x43B640 on
@@ -477,22 +480,33 @@ static int win_now(CPU *c, uint32_t r, float margin){
  * GARAGE.DAT there (fileio_resolve_save: the same folder on every platform; the page moves it with its profile,
  * backs it up and syncs it with the save folder, and a restore takes a profile folder's other files with it or
  * leaves them out: profilesIn).  A tab closed before the crib keeps the win: the career's next load reads the file
- * (mpcredit_frame, by the profile player 1 loaded: garage_profile_name) and the next crib gives it.  A win given (a
- * waiting one, or the trip's in the crib) stays in the file until the game writes the profile (garage_profile_written ->
- * mpcredit_profile_written): with the game's autosave off it is in no save until the player saves, and a load
- * before that gives it again (a race already won is left).  File: PEND_MAGIC, 1, the count, then a race's name hash
- * and its margin (float) each.  The profile deleted: the file goes with it (garage_profile_deleted). */
-#define PEND_MAX 8
+ * (mpcredit_frame, by the profile in play: player 1's, its name in the FEDatabase, a profile made this session too)
+ * and the next crib gives it.  A win given (a waiting one, or the trip's in the crib) stays in the file until the
+ * game writes the profile with it (garage_profile_written -> mpcredit_profile_written: a whole profile on disk whose
+ * career has the race won; one the career no longer has, gone back to a load or to the payload the game kept, waits
+ * again): with the game's autosave off it is in no save until the player saves, and a load before that (of this
+ * profile again too: each load of player 1's profile reads the file again, garage_profile_loads) gives it again (a
+ * race already won is left).  File: PEND_MAGIC, 1, the count, then a race's name hash and its margin (float) each.
+ * The profile deleted: the file goes with it (garage_profile_deleted). */
+#define PEND_MAX 32
 #define PEND_FILE       "MPWINS.DAT"
 #define PEND_MAGIC      0x574d324eu   /* "N2MW" */
+#define G_P1_NAME       0x0083a9e0u   /* player 1's profile (FEDatabase +0x10): its name, 32 bytes, first */
 int fileio_resolve_save(const char *win, char *out, size_t outsz);
 int fileio_resolve_save_w(const char *win, char *out, size_t outsz);
-const char *garage_profile_name(void);
+unsigned garage_profile_loads(void);
 static struct {
     uint32_t race[PEND_MAX]; float margin[PEND_MAX]; int n; long since;      /* waiting */
     uint32_t done[PEND_MAX]; float done_margin[PEND_MAX]; int ndone;         /* given, not saved yet (their hashes) */
     char     profile[33];                                                     /* whose file this is ("" none) */
+    unsigned loads;                                                           /* garage_profile_loads when it was read */
 } g_pend;
+/* the profile in play (player 1's name in the FEDatabase; "" none) */
+static void live_profile(char out[33]){
+    unsigned i = 0;
+    for (; i < 32u; i++){ uint8_t ch = MR8(G_P1_NAME + i); if (ch < 0x20u || ch == 0x7fu) break; out[i] = (char)ch; }
+    out[i] = 0;
+}
 static uint32_t race_by_hash(uint32_t h){
     uint32_t t = rd(G_RACES), n = rd(G_NRACES);
     for (uint32_t i = 0; t && i < n && i < 1024; i++) if (rd(t + i * RACE_SZ + 8u) == h) return t + i * RACE_SZ;
@@ -528,27 +542,40 @@ static void pend_write(void){
     fprintf(stderr, "[mpcredit] %s: " PEND_FILE " %s: %d waiting, %d given but not saved yet\n", g_pend.profile,
             ok ? "written" : "WRITE FAILED", g_pend.n, g_pend.ndone);
 }
-/* the career's profile (player 1's) changed: its file's wins wait now */
-static void pend_load(const char *name){
+static int pend_waits(uint32_t r){ for (int k = 0; k < g_pend.n; k++) if (g_pend.race[k] == r) return 1; return 0; }
+static void pend_wait(uint32_t r, float m){ if (r && !pend_waits(r) && g_pend.n < PEND_MAX){ g_pend.race[g_pend.n] = r; g_pend.margin[g_pend.n++] = m; } }
+/* the profile in play changed, or was loaded again: its file's wins wait now (given ones too: the crib gives a race
+ * the career has not won, and leaves one it has).  The same profile again keeps what waited in memory as well */
+static void pend_load(const char *name, unsigned loads){
     char path[1100];
-    memset(&g_pend, 0, sizeof g_pend);
+    int same = g_pend.profile[0] && !strcasecmp(name, g_pend.profile);
+    if (same){
+        for (int i = 0; i < g_pend.ndone; i++) pend_wait(race_by_hash(g_pend.done[i]), g_pend.done_margin[i]);
+        g_pend.ndone = 0;
+    } else memset(&g_pend, 0, sizeof g_pend);
     snprintf(g_pend.profile, sizeof g_pend.profile, "%s", name);
-    if (!pend_path(name, path, sizeof path, 0)) return;
+    g_pend.loads = loads; g_pend.since = 0;
+    if (!pend_path(name, path, sizeof path, 0)){
+        fprintf(stderr, "[mpcredit] %s: the profile in play%s, no " PEND_FILE " (%d wins wait)\n", name, same ? " (loaded again)" : "", g_pend.n);
+        if (same && g_pend.n) pend_write();
+        return;
+    }
     FILE *in = fopen(path, "rb");
-    if (!in){ fprintf(stderr, "[mpcredit] %s: the career's profile, no wins wait\n", name); return; }
+    if (!in){ fprintf(stderr, "[mpcredit] %s: the career's profile, %d wins wait\n", name, g_pend.n); if (g_pend.n) pend_write(); return; }
     uint32_t hd[3] = { 0 }, e[2];
     int ok = fread(hd, sizeof hd, 1, in) == 1 && hd[0] == PEND_MAGIC && hd[1] == 1u && hd[2] <= 64u;
     for (uint32_t i = 0; ok && i < hd[2] && fread(e, sizeof e, 1, in) == 1; i++){
-        uint32_t r = race_by_hash(e[0]); float m; memcpy(&m, &e[1], 4);
-        int dup = 0;
-        for (int k = 0; k < g_pend.n; k++) dup |= g_pend.race[k] == r;
-        if (r && !dup && g_pend.n < PEND_MAX){ g_pend.race[g_pend.n] = r; g_pend.margin[g_pend.n++] = m; }
+        float m; memcpy(&m, &e[1], 4);
+        pend_wait(race_by_hash(e[0]), m);
     }
     fclose(in);
-    fprintf(stderr, "[mpcredit] %s: " PEND_FILE "%s, %d wins wait for the crib\n", name, ok ? "" : " is not one of ours", g_pend.n);
+    fprintf(stderr, "[mpcredit] %s: " PEND_FILE "%s, %d wins wait for the crib%s\n", name, ok ? "" : " is not one of ours", g_pend.n,
+            same ? " (the profile loaded again)" : "");
+    if (same) pend_write();
 }
+/* a race waiting already (won twice before a crib): not again, the second win is the place's prize money (0) */
 static int pend_add(uint32_t r, float margin){
-    if (g_pend.n >= PEND_MAX) return 0;
+    if (g_pend.n >= PEND_MAX || pend_waits(r)) return 0;
     g_pend.race[g_pend.n] = r; g_pend.margin[g_pend.n++] = margin; g_pend.since = 0;
     pend_write();
     return 1;
@@ -561,8 +588,20 @@ static void pend_given(uint32_t r, float margin){
 /* garage.c: the game wrote a profile (its host path), or deleted one */
 static const char *profile_of(const char *path){ const char *sl = strrchr(path, '/'); return sl ? sl + 1 : path; }
 void mpcredit_profile_written(const char *path){
-    if (!g_pend.profile[0] || strcasecmp(profile_of(path), g_pend.profile) || !g_pend.ndone) return;
+    if (!g_pend.profile[0] || strcasecmp(profile_of(path), g_pend.profile) || (!g_pend.ndone && !g_pend.n)) return;
+    /* (wins waiting only: written beside it now, a profile made this session had no folder for them before) */
+    if (!g_pend.ndone){ pend_write(); return; }
+    /* the write has what the career has now: a given win it has won is saved; one it has not (it went back to a
+     * load, or to the payload the game kept, without it) waits for the next crib again */
+    int saved = 0, again = 0;
+    for (int i = 0; i < g_pend.ndone; i++){
+        if (event_won(g_pend.done[i])){ saved++; continue; }
+        uint32_t r = race_by_hash(g_pend.done[i]);
+        if (r){ pend_wait(r, g_pend.done_margin[i]); again++; }
+    }
     g_pend.ndone = 0;
+    if (again) fprintf(stderr, "[mpcredit] %s written: %d given win%s saved, %d not in the career any more: waiting again\n",
+                       g_pend.profile, saved, saved == 1 ? "" : "s", again);
     pend_write();
 }
 void mpcredit_profile_deleted(const char *path){
@@ -595,8 +634,9 @@ int mpcredit_pending(void){ return g_pend.n; }
  * dropped */
 void mpcredit_frame(CPU *c){
     if (rd(G_GAMEMODE) == 1u){
-        const char *pn = garage_profile_name();
-        if (pn[0] && strcasecmp(pn, g_pend.profile)) pend_load(pn);
+        char pn[33]; live_profile(pn);
+        unsigned loads = garage_profile_loads();
+        if (pn[0] && (strcasecmp(pn, g_pend.profile) || loads != g_pend.loads)) pend_load(pn, loads);
     }
     if (g_ui.st != UI_NONE){
         int gone = rd(G_GAMEMODE) != 1u || ((g_ui.st == UI_OFFER || g_ui.st == UI_ASKED || (g_ui.st == UI_WAIT && !g_ui.leaving))
@@ -622,9 +662,19 @@ void mpcredit_frame(CPU *c){
     if (win_now(c, r, m)) pend_given(r, m); else pend_write();
 }
 
-/* test aid (career.c "mpcredit NAME[,NAME...] [MARGIN]"): the wins of those races at the next crib, in order */
+/* test aid (career.c "mpcredit NAME[,NAME...] [MARGIN]"): the wins of those races at the next crib, in order;
+ * "mpcredit unwin:NAME": the race not won in the career any more (its event entry's won flag, as a load of an older
+ * save of the profile has it), for what a profile written then does with a win given but not saved */
 int mpcredit_test(const char *names, float margin){
     uint32_t t = rd(G_RACES), n = rd(G_NRACES); int got = 0;
+    if (!strncasecmp(names, "unwin:", 6)){
+        uint32_t r = 0, ne = rd(G_CAREER + C_NEVENTS);
+        for (uint32_t i = 0; t && i < n && i < 1024 && !r; i++) if (!strcasecmp(race_name(t + i * RACE_SZ), names + 6)) r = t + i * RACE_SZ;
+        for (uint32_t i = 0; r && i < ne && i < 384; i++)
+            if (MR32(G_CAREER + C_EVENTS + 8u * i) == MR32(r + 8u)){ MR8(G_CAREER + C_EVENTS + 8u * i + 6u) = 0; got = 1; }
+        fprintf(stderr, "[mpcredit] f=%ld test: %s %s\n", autotest_frame(), names + 6, got ? "not won in the career any more" : "has no event entry");
+        return got;
+    }
     for (const char *s = names; *s; ){
         const char *e = strchr(s, ','); size_t k = e ? (size_t)(e - s) : strlen(s);
         char nm[48]; snprintf(nm, sizeof nm, "%.*s", (int)(k < 47 ? k : 47), s);
@@ -632,7 +682,7 @@ int mpcredit_test(const char *names, float margin){
         uint32_t r = 0;
         for (uint32_t i = 0; t && i < n && i < 1024 && !r; i++) if (!strcasecmp(race_name(t + i * RACE_SZ), nm)) r = t + i * RACE_SZ;
         if (!r){ fprintf(stderr, "[mpcredit] f=%ld test: no race %s\n", autotest_frame(), nm); continue; }
-        if (!pend_add(r, margin)) break;
+        if (!pend_add(r, margin)){ fprintf(stderr, "[mpcredit] f=%ld test: %s not queued (waiting already, or %d wait)\n", autotest_frame(), nm, g_pend.n); continue; }
         got++;
         fprintf(stderr, "[mpcredit] f=%ld test: the win of %s (margin %.2f) at the next crib; open %d, won %d\n", autotest_frame(), nm,
                 (double)margin, race_open(r), event_won(MR32(r + 8u)));

@@ -1,0 +1,47 @@
+# The career's wins from multiplayer races (runtime/mpcredit.c), a win given in the crib but not saved (the game's
+# Save option Off): the career has it no more ("mpcredit unwin:", as a load of an older save of the profile has it)
+# when the profile is written (the pause menu's Save, at Prompt): the win waits again (MPWINS.DAT) and the next crib
+# gives it.  The same race queued twice waits once.
+#   run-suite --script mpcredit_unsaved.txt --marker "MPC done" (NFSU2_SAVE_SEED: a stage-2 career)
+#        --env MPC_RACE=<a normal race of its stage not won>
+0     bot on
++0    waitroam 6000
++0    bot off
++0    poke 0x00844ad8 0x00010000          # Save: Off
++60   mpcredit ${MPC_RACE},${MPC_RACE} 5
++0    shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # enter the crib
++0    waitfe UI_CareerCrib.fng 3000
++400  careerlist
++0    log MPC given
++0    tap RETURN                      # Return to Explore Mode
++150  tap LEFT
++30   tap RETURN                      # Yes
++0    waitroam 6000
++120  mpcredit unwin:${MPC_RACE}
++60   poke 0x844ad9 0 byte              # Save: Prompt
++0    poke 0x844ad8 1 byte
++0    tap ESCAPE
++0    waitfng UI_Pause.fng 600
++120  tap RIGHT                        # Save
++60   tap RETURN
++0    waitfng MC_Main.fng 600
++120  tap LEFT                          # are you sure: Yes
++30   tap RETURN
++240  tap LEFT                          # overwrite: Yes
++30   tap RETURN
++240  tap RETURN                        # "Save complete.": Continue
++0    waitexpr i:0x836514 == 0 900
++60   log MPC saved
++60   tap ESCAPE                        # (the pause menu back: on to free roam)
++0    waitroam 3000
++120  shopgo CRIB_1
++300  tapfe RETURN UI_EngageShopDialog.fng 120 2400
++120  tap LEFT
++30   tap RETURN                      # the crib again: the win waits
++0    waitfe UI_CareerCrib.fng 3000
++400  careerlist
++0    log MPC done
++10   quit

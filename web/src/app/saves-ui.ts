@@ -440,13 +440,19 @@ export function addProfiles(fs: RenameFiles, r: Restore): Promise<void> {
 async function addProfilesNow(fs: RenameFiles, r: Restore) {
   const names = new Set(r.profiles.map(lower));
   const written = new Set(r.entries.map(e => e.path.split('/')[1]));
-  const old = new Set<string>();
+  const paths = new Set(r.entries.map(e => e.path));
+  const old = new Set<string>(), stale: string[] = [];
   for (const { path } of await fs.listFiles()) {
     const s = path.split('/');
-    if (s.length >= 3 && s[0] === PROFILES_DIR && names.has(lower(coverOf(s[1])?.profile ?? s[1])) && !written.has(s[1])) old.add(s[1]);
+    if (s.length < 3 || s[0] !== PROFILES_DIR || !names.has(lower(coverOf(s[1])?.profile ?? s[1]))) continue;
+    if (!written.has(s[1])) old.add(s[1]);
+    // a folder of the same name, written over: the old profile's MPWINS.DAT goes too, if the new one brings none (the
+    // old career's wins waiting for its garage would go to the new one's; a GARAGE.DAT has its fingerprint for this)
+    else if (!paths.has(path) && lower(s[2]) === 'mpwins.dat') stale.push(path);
   }
   for (const e of r.entries) await fs.writeFile(e.path, e.data);
   for (const f of old) await fs.remove(`${PROFILES_DIR}/${f}`);
+  for (const p of stale) await fs.remove(p);
   const seen = await fs.readText(AUTOSAVE_SEEN);
   const kept = seen?.split('\n').filter(l => !names.has(lower(l.trim()))).join('\n');
   if (seen != null && kept !== seen) await fs.writeFile(AUTOSAVE_SEEN, kept!);

@@ -470,9 +470,13 @@ void sub_0052a4c0(CPU *c){
     if (differ(&g_now, &g_kept.st)){ c->eax = (c->eax & ~0xffu) | 1u; fprintf(stderr, "[garage] slots 6-10 changed: something to save\n"); }
 }
 
-/* the name of the profile player 1 loaded last ("" none yet): mpcredit.c keeps its file beside it */
+/* the name of the profile player 1 loaded last ("" none yet), and how many loads of player 1's profile there were
+ * (the game's own load, or its going back to the payload it kept, 0x5347C0): mpcredit.c reads its file beside the
+ * profile again at each */
 static char g_profile[33];
+static unsigned g_p1_loads;
 const char *garage_profile_name(void){ return g_profile; }
+unsigned garage_profile_loads(void){ return g_p1_loads; }
 
 /* fileio.c: the game has written a profile (host path): its GARAGE file beside it (and mpcredit.c's wins that
  * waited for a save of it) */
@@ -480,11 +484,11 @@ void mpcredit_profile_written(const char *path);
 void mpcredit_profile_deleted(const char *path);
 void garage_profile_written(const char *path){
     static uint8_t f[PROFILE_SIZE];
-    mpcredit_profile_written(path);
     FILE *in = fopen(path, "rb");
     if (!in) return;
     size_t n = fread(f, 1, sizeof f, in); fclose(in);
     if (n != PROFILE_SIZE || memcmp(f, "20CM", 4)) return;
+    mpcredit_profile_written(path);              /* (a whole profile on disk: a failed write leaves its wins waiting) */
     const uint8_t *pl = f + PAYLOAD_AT;
     char name[33]; unsigned i = 0;
     for (; i < 32u && pl[P_NAME + i]; i++) name[i] = (char)pl[P_NAME + i];
@@ -556,6 +560,7 @@ void sub_00516850(CPU *c){
     sub_00516850_orig(c);
     g_loads++;
     int p = player_of(db);
+    if (p == 0) g_p1_loads++;
     if (p < 0 || !ensure(c)) return;
     if (!p) g_back.on = 0;
     xinit(c, db);

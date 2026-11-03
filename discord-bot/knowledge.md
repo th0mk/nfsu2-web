@@ -302,7 +302,7 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   URL event of 2 or 3 heats races them all in one trip, with the career's points. A race that does not count pays
   by the player's stage (1st what a normal race of the stage pays, at least $400; 2nd to 4th three quarters, half,
   a quarter of that, at least $300/$200/$100). A race that counts pays the career's prize or that, whichever is more. Where the game would offer sponsors, the crib asks on the way back
-  (Sign / Next offer). A stage final won online plays the stage's movie after the crib's save. When everyone else
+  (Yes signs, No the next offer). A stage final won online plays the stage's movie after the crib's save. When everyone else
   quits a race with the pause menu's Quit ($75 each), the one who stayed wins it; a lost connection or a closed tab
   counts for nobody (on the Mac app a quit does not hand over the win). The race card's question has Solo focused.
   Races of the main menu's Online mode never count. Solo is as it always was.
