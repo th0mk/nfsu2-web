@@ -30,6 +30,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <math.h>
 
 static uint64_t g_fake_ns = 5000000000u;
 static int fake_clock_gettime(clockid_t id, struct timespec *ts){
@@ -68,11 +69,14 @@ int vlan_race_sent_to(uint32_t ip_h, uint32_t within_ms){ (void)within_ms; for (
 void sub_005f8d40_orig(CPU *c){ (void)c; }
 void sub_005f8900_orig(CPU *c){ (void)c; }
 void sub_00585d50_orig(CPU *c){ (void)c; }
+void sub_005891b0_orig(CPU *c){ (void)c; }
+void sub_005f8af0_orig(CPU *c){ (void)c; }
 /* the game's handler of the creator's messages, as dispatch_indirect calls it */
 static int g_calls; static uint32_t g_fn, g_len; static uint8_t g_bytes[64];
 void dispatch_indirect(CPU *c, uint32_t addr);
 #include "../runtime/racenet.c"
 void dispatch_indirect(CPU *c, uint32_t addr){
+    if (addr != FN_JOIN_MSG){ c->esp += 4u; return; }    /* the game's apply and the like: nothing here */
     g_calls++; g_fn = addr;
     uint32_t buf = MR32(c->esp + 4u); g_len = MR32(c->esp + 8u);
     for (uint32_t i = 0; i < g_len && i < sizeof g_bytes; i++) g_bytes[i] = MR8(buf + i);
@@ -119,7 +123,250 @@ static int list(uint8_t *m, const uint32_t *ip, int k){
     return 8 + 4 * k;
 }
 
+/* ---- the rates, the race clock, the cars where their owners have them ---- */
+static uint32_t g_lcg = 12345u;
+static float rnd01(void){ g_lcg = g_lcg * 1664525u + 1013904223u; return (float)(g_lcg >> 8) / 16777216.f; }
+/* a creator's answer as the joiner's handler gets it: a bit stream, read
+ * position at bit 8, our real-time clock echoed, its race clock */
+#define BSTREAM 0x10050000u
+static void answer(float f1, float f2){
+    union { float f; uint32_t u; } a = { f1 }, b = { f2 };
+    memset(g_mem + BSTREAM, 0, 0x410);
+    for (uint32_t i = 0; i < 32; i++){
+        uint32_t pa = 8 + i, pb = 40 + i;
+        if (a.u >> (31 - i) & 1u) g_mem[BSTREAM + (pa >> 3)] |= (uint8_t)(0x80u >> (pa & 7));
+        if (b.u >> (31 - i) & 1u) g_mem[BSTREAM + (pb >> 3)] |= (uint8_t)(0x80u >> (pb & 7));
+    }
+    MR32(BSTREAM + BS_READ) = 8;
+    g_c.esp = STACK - 0x100u; MR32(g_c.esp + 4u) = BSTREAM;
+    sub_005891b0(&g_c);
+}
+/* the wall clock (racenet.c's now_us: the fake clock) */
+static void setwall(double r){ g_fake_ns = (uint64_t)(r * 1e9 + 0.5); }
+/* a car state of ours to the creator (0x585D50's: 8 bits the message, 32 the
+ * race clock, the slot's bits, 32 our real-time stamp, 8 the flags) */
+#define BSOUT 0x10090000u
+static void sent_state(float stamp){
+    union { float f; uint32_t u; } a = { stamp };
+    uint32_t nb = MR32(G_SLOTBITS), pos = 40u + nb;
+    memset(g_mem + BSOUT, 0, 0x410);
+    g_mem[BSOUT] = MSG_CARSPAM;
+    for (uint32_t i = 0; i < 32; i++, pos++) if (a.u >> (31 - i) & 1u) g_mem[BSOUT + (pos >> 3)] |= (uint8_t)(0x80u >> (pos & 7));
+    MR32(BSOUT + BS_BYTES) = 80u + nb;
+    g_c.esp = STACK - 0x100u; MR32(g_c.esp + 4u) = MSG_CARSPAM; MR32(g_c.esp + 8u) = BSOUT; MR32(g_c.esp + 12u) = 0;
+    sub_00585d50(&g_c);
+}
+#define CTL    0x10060000u
+#define INPUT  0x10070000u
+#define STATE  0x10080000u
+static void put_state(float t, const float *p, const float *v, const float *w, const float *q, float brake){
+    memset(g_mem + STATE, 0, 0x100);
+    for (uint32_t k = 0; k < 3; k++){ MRF32(STATE + ST_POS + 4 * k) = p[k]; MRF32(STATE + ST_VEL + 4 * k) = v[k]; MRF32(STATE + ST_SPIN + 4 * k) = w[k]; }
+    for (uint32_t k = 0; k < 4; k++) MRF32(STATE + ST_QUAT + 4 * k) = q[k];
+    MRF32(STATE + ST_TIME) = t; MRF32(STATE + ST_BRAKE) = brake; MRF32(STATE + ST_GAS) = 0.9f;
+    g_c.esp = STACK - 0x100u; MR32(g_c.esp + 4u) = STATE; g_c.ecx = CTL;
+    sub_005f8900(&g_c);
+}
+static void blend(void){ g_c.esp = STACK - 0x100u; g_c.ecx = CTL; MRF32(INPUT + 0x214u) = 0.7f; sub_005f8af0(&g_c); }
+static float dist3(const float *a, const float *b){ float d = 0; for (int i = 0; i < 3; i++) d += (a[i] - b[i]) * (a[i] - b[i]); return sqrtf(d); }
+static void fidelity(void){
+    uint32_t g[] = { G_RATES, G_CLK_TARGET, G_CLK_FLAG, G_CLK_ECHO, G_REALTIME, G_WORLDTIME_S };
+    for (unsigned i = 0; i < sizeof g / sizeof g[0]; i++) commit(g[i], 32);
+    commit(BSTREAM, 0x410); commit(BSOUT, 0x410); commit(CTL, 0x200); commit(INPUT, 0x220); commit(STATE, 0x100);
+    MR32(G_NET_HOST) = 0; MR32(G_NETMODE) = 8;
+
+    /* rates: every field group at RATE_HZ in a network race, the game's back after */
+    MR32(G_NETMODE) = 1; frame(); MR32(G_NETMODE) = 8;   /* (the earlier cases raced with this page: its values back) */
+    MR32(G_RATES) = 20; MR32(G_RATES + 4) = 10; MR32(G_RATES + 8) = 5; MR32(G_RATES + 12) = 5;
+    frame();
+    int on = MR32(G_RATES) == RATE_HZ && MR32(G_RATES + 4) == RATE_HZ && MR32(G_RATES + 12) == RATE_HZ;
+    MR32(G_NETMODE) = 1; frame();
+    int back = MR32(G_RATES) == 20 && MR32(G_RATES + 4) == 10 && MR32(G_RATES + 8) == 5 && MR32(G_RATES + 12) == 5;
+    CHECK(on && back, "rates: %u a second for every field in a race (%d), the game's 20/10/5/5 after it (%d)", RATE_HZ, on, back);
+    MR32(G_NETMODE) = 8;
+
+    /* the race clock: answers whose round trips wait 0-80 ms on the way back
+     * (a queue, the creator's frame) say the clock is up to 40 ms earlier;
+     * the estimate takes the least waited ones.  Times on the wall clock;
+     * our states' real-time stamps anything (the game's clock stands through
+     * long frames): the round trip is from when the state went */
+    const double theta = 7.25;                           /* the creator's clock minus our wall clock */
+    double r = 100.0, worst_game = 0;
+    float stamp = 1000.f;
+    for (int i = 0; i < 90; i++){                        /* 3 s at 30 answers a second */
+        double extra = rnd01() < 0.2 ? 0.0 : 0.08 * rnd01();
+        double send = r - 0.1 - extra;                   /* our state left then: 50 ms up, 50 + extra down */
+        stamp += 0.5f; MRF32(G_CLK_ECHO) = stamp - 0.25f;
+        setwall(send); sent_state(stamp);
+        setwall(r); answer(stamp, (float)(r - 0.05 - extra + theta));
+        double one = (r - 0.05 - extra + theta) + 0.5 * (r - send) - r - theta;
+        if (fabs(one) > worst_game) worst_game = fabs(one);
+        r += 1.0 / 30.0;
+    }
+    CHECK(K.have && fabs(K.th - theta) < 0.004 && K.samples == 90,
+          "clock: the estimate %.1f ms off (one sample, as the game took it: up to %.1f ms off)", (K.th - theta) * 1e3, worst_game * 1e3);
+    /* an answer to a state we never sent (an older game's echo): taken by nobody */
+    uint32_t ns = K.samples; MRF32(G_CLK_ECHO) = 1.f; setwall(r); answer(3.5f, (float)(r + theta));
+    CHECK(K.samples == ns, "clock: an answer echoing no state of ours left out");
+    /* restored: the game's own target and flag stay as they were */
+    MR32(G_CLK_TARGET) = 1234u; MR8(G_CLK_FLAG) = 0;
+    stamp += 0.5f; MRF32(G_CLK_ECHO) = stamp - 0.25f; setwall(r - 0.1); sent_state(stamp); setwall(r); answer(stamp, (float)(r - 0.05 + theta));
+    CHECK(MR32(G_CLK_TARGET) == 1234u && MR8(G_CLK_FLAG) == 0, "clock: the game's target and flag untouched (%u %u)", MR32(G_CLK_TARGET), MR8(G_CLK_FLAG));
+    /* the creator's clock loses 150 ms (its stall): followed within 10 answers */
+    for (int i = 0; i < 10; i++){
+        r += 1.0 / 30.0;
+        stamp += 0.5f; MRF32(G_CLK_ECHO) = stamp - 0.25f; setwall(r - 0.1); sent_state(stamp);
+        setwall(r); answer(stamp, (float)(r - 0.05 + theta - 0.15));
+    }
+    CHECK(fabs(K.th - (theta - 0.15)) < 0.004, "clock: a 150 ms step of the creator's clock followed (%.1f ms off)", (K.th - theta + 0.15) * 1e3);
+    /* a creator (an older game) whose clock runs 7 % slow: it drifts */
+    double th2 = theta - 0.15, worst = 0;
+    for (int i = 0; i < 90; i++){
+        r += 1.0 / 30.0; th2 -= 0.07 / 30.0;
+        double extra = rnd01() < 0.2 ? 0.0 : 0.08 * rnd01();
+        stamp += 0.5f; MRF32(G_CLK_ECHO) = stamp - 0.25f; setwall(r - 0.1 - extra); sent_state(stamp);
+        setwall(r); answer(stamp, (float)(r - 0.05 - extra + th2));
+        if (i >= 45 && fabs(K.th - th2) > worst) worst = fabs(K.th - th2);
+    }
+    CHECK(worst < 0.005 && fabs(K.drift + 0.07) < 0.02, "clock: a creator 7 %% slow followed (at most %.1f ms off, drift %.3f)", worst * 1e3, K.drift);
+    K.drift = 0;
+    /* WorldTimer to it: 50 ms off, frames of 8.3 ms: never over a fifth of a frame a frame, the world's step untouched */
+    K.th = theta; K.at = r; K.frac = 0; K.irate = 0; K.wok = 0;
+    double rr = r;
+    setwall(rr);
+    MR32(G_WORLDTIME) = (uint32_t)((rr + theta - 0.05) * 4000.0 + 0.5);
+    MRF32(G_WORLDDT) = 0.0083f;
+    clock_frame();
+    int steady = 1; double left = 0; uint32_t prev = MR32(G_WORLDTIME);
+    for (int f = 0; f < 240; f++){                       /* 2 s */
+        rr += 0.0083; setwall(rr);
+        uint32_t adv = 33u;                              /* the world's step: the frame's time */
+        MR32(G_WORLDTIME) += adv; prev += adv;
+        K.at = rr;
+        clock_frame();
+        int32_t d = (int32_t)(MR32(G_WORLDTIME) - prev);
+        if (d > 7 || d < -7) steady = 0;
+        prev = MR32(G_WORLDTIME);
+        left = rr + theta - (double)MR32(G_WORLDTIME) * 0.00025;
+    }
+    CHECK(steady && fabs(left) < 0.001 && fabsf(MRF32(G_WORLDDT) - 0.0083f) < 1e-6f,
+          "clock: WorldTimer to the estimate (%.2f ms left after 2 s, at most a fifth of a frame a frame %d), the step untouched", left * 1e3, steady);
+    /* the game's catch-up: frames of 22 ms, each 0, 1 or 2 world steps of 16.7 ms
+     * one right after the other (main-loop passes), the world 1 % slower than the wall
+     * clock: WorldTimer around the wall clock, not run off (the per-pass top-up of
+     * the time missing ran it 6 % fast) */
+    {
+        double acc = 0, h1 = 0, h2 = 0, mx = 0;
+        for (int f = 0; f < 900; f++){                   /* 20 s */
+            rr += 0.022; acc += 0.022 * 0.99;
+            int steps = 0;
+            while (acc >= 1.0 / 60 && steps < 3){ acc -= 1.0 / 60; steps++; }
+            for (int k = 0; k < (steps ? steps : 1); k++){
+                setwall(rr + 0.0001 * k);
+                if (steps) MR32(G_WORLDTIME) += 67u;      /* 16.75 ms */
+                K.at = rr; clock_frame();
+            }
+            double l = rr + theta - (double)MR32(G_WORLDTIME) * 0.00025;
+            if (f >= 300 && f < 600) h1 += l / 300; else if (f >= 600) h2 += l / 300;
+            if (f >= 300 && fabs(l) > mx) mx = fabs(l);
+        }
+        CHECK(fabs(h2 - h1) < 0.002 && fabs(h2) < 0.012 && mx < 0.03,
+              "clock: through the game's catch-up steps, 1 %% slow: %.2f then %.2f ms off on average (a step's sawtooth), at most %.1f ms",
+              h1 * 1e3, h2 * 1e3, mx * 1e3);
+    }
+    double lag = 0;
+    for (int f = 0; f < 480; f++){
+        rr += 0.0083; setwall(rr);
+        MR32(G_WORLDTIME) += 31u;                        /* 7.75 ms of the frame's 8.3: 7 % short */
+        K.at = rr; clock_frame();
+        if (f > 240){ double l = fabs(rr + theta - (double)MR32(G_WORLDTIME) * 0.00025); if (l > lag) lag = l; }
+    }
+    CHECK(lag < 0.003, "clock: our own world 7 %% short of the wall clock, WorldTimer kept to it (at most %.2f ms off after 2 s)", lag * 1e3);
+    MR32(G_WORLDTIME) = (uint32_t)((rr + theta - 0.4) * 4000.0 + 0.5); K.at = rr;
+    uint32_t hard = K.hard; clock_frame();
+    CHECK(K.hard == hard + 1 && fabs(rr + theta - (double)MR32(G_WORLDTIME) * 0.00025) < 0.001, "clock: 400 ms off set at once");
+    /* the creator: its own clock on the wall clock from the race's start (its clock is everyone's) */
+    MR32(G_NET_HOST) = 1; MR32(G_WORLDTIME) = 4000u; K.wok = 0; K.frac = 0; clock_frame();
+    {
+        double hr0 = rr, hw0 = (double)MR32(G_WORLDTIME) * 0.00025, acc = 0, h1 = 0, h2 = 0, mx = 0;
+        for (int f = 0; f < 900; f++){
+            rr += 0.022; acc += 0.022 * 0.97;            /* its world 3 % slow, catch-up steps */
+            int steps = 0;
+            while (acc >= 1.0 / 60 && steps < 3){ acc -= 1.0 / 60; steps++; }
+            for (int k = 0; k < (steps ? steps : 1); k++){ setwall(rr + 0.0001 * k); if (steps) MR32(G_WORLDTIME) += 67u; clock_frame(); }
+            double o = ((double)MR32(G_WORLDTIME) * 0.00025 - hw0) - (rr - hr0);
+            if (f >= 300 && f < 600) h1 += o / 300; else if (f >= 600) h2 += o / 300;
+            if (f >= 300 && fabs(o) > mx) mx = fabs(o);
+        }
+        CHECK(fabs(h2 - h1) < 0.002 && fabs(h2) < 0.012 && mx < 0.03,
+              "clock: the creator's clock on the wall clock, its world 3 %% slow: %.2f then %.2f ms off on average, at most %.1f ms",
+              h1 * 1e3, h2 * 1e3, mx * 1e3);
+    }
+    MR32(RC) = 0; uint32_t w1 = MR32(G_WORLDTIME); rr += 0.08; setwall(rr); clock_frame();
+    CHECK(MR32(G_WORLDTIME) == w1, "clock: out of the race the game's own (untouched)");
+    MR32(RC) = RC_RACING; MR32(G_NET_HOST) = 0; K.wok = 0;
+
+    /* carried on along its curve: a car on a 100 m circle at 40 m/s, states
+     * 33 ms apart, shown 200 ms past the newest */
+    MR32(CTL + CTL_CAR) = CAR_A; MR32(CAR_A + CAR_INPUT) = INPUT; MR32(CAR_A + 0x28u) = 0;
+    const float R0 = 100.f, V0 = 40.f, om = V0 / R0;
+    float t0 = 50.f, q0[4] = { 0, 0, 0, 1 }, wz[3] = { 0, 0, om };
+    for (int i = 0; i < 2; i++){
+        float t = t0 + (float)i / 30.f, ang = om * t;
+        float p[3] = { R0 * sinf(ang), R0 * (1.f - cosf(ang)), 0 }, v[3] = { V0 * cosf(ang), V0 * sinf(ang), 0 };
+        float q[4] = { 0, 0, sinf(ang / 2), cosf(ang / 2) };
+        put_state(t, p, v, wz, q, 0.25f);
+        (void)q0;
+    }
+    Pred *pp = pred_of(CAR_A, 0);
+    float tn = t0 + 1.f / 30.f + 0.2f, ang = om * tn, truth[3] = { R0 * sinf(ang), R0 * (1.f - cosf(ang)), 0 };
+    float op[3], ov[3], oq[4];
+    pred_at(pp, tn, op, ov, oq);
+    const PState *s = &pp->s[1];
+    float line[3] = { s->p[0] + s->v[0] * 0.2f, s->p[1] + s->v[1] * 0.2f, 0 };
+    float yaw = remainderf(2.f * atan2f(oq[2], oq[3]) - ang, 2.f * (float)M_PI) + ang;
+    CHECK(pp && pp->n == 2 && dist3(op, truth) < 0.02f && fabsf(yaw - ang) < 0.01f,
+          "predict: 200 ms on along the curve %.3f m off (a straight line %.3f m), heading %.4f rad off",
+          dist3(op, truth), dist3(line, truth), yaw - ang);
+
+    /* the blend: put through the game's apply, the owner's controls kept */
+    MR32(G_WORLDTIME) = (uint32_t)((t0 + 1.f / 30.f + 0.1f) * 4000.f); MRF32(G_WORLDDT) = 0.0083f;
+    MR32(CTL + CTL_NPRED) = 3; MR32(CTL + CTL_HIT) = 0;
+    blend();
+    float bp[3]; rd3(CTL + CTL_BLEND + 0x10u, bp);
+    float tw = (float)MR32(G_WORLDTIME) * 0.00025f, a2 = om * tw, tr2[3] = { R0 * sinf(a2), R0 * (1.f - cosf(a2)), 0 };
+    CHECK(pp->steps == 1 && dist3(bp, tr2) < 0.02f && MRF32(INPUT + 0x214u) == 0.25f && MRF32(INPUT + 0x20cu) == 0.9f,
+          "blend: the car where its owner has it at the step's start (%.3f m), its brake %.2f (not the game's 0.7)", dist3(bp, tr2), MRF32(INPUT + 0x214u));
+    /* a stall: no state for STALL_S, none of the game's predictions: on its own, then a glide back */
+    MR32(G_WORLDTIME) += (uint32_t)(4000.f * (STALL_S + 0.1f)); MR32(CTL + CTL_NPRED) = 0;
+    float mark[3] = { 1.f, 2.f, 3.f };
+    for (uint32_t k = 0; k < 3; k++) MRF32(CTL + CTL_BLEND + 0x10u + 4 * k) = mark[k];
+    blend();
+    rd3(CTL + CTL_BLEND + 0x10u, bp);
+    CHECK(pp->own == 1 && dist3(bp, mark) < 1e-6f && MRF32(INPUT + 0x214u) == 0.25f, "stall: on its own physics, its brake %.2f", MRF32(INPUT + 0x214u));
+    float tnew = (float)MR32(G_WORLDTIME) * 0.00025f - 0.05f, an = om * tnew;
+    float pn[3] = { R0 * sinf(an), R0 * (1.f - cosf(an)), 0 }, vn[3] = { V0 * cosf(an), V0 * sinf(an), 0 }, qn[4] = { 0, 0, sinf(an / 2), cosf(an / 2) };
+    put_state(tnew, pn, vn, wz, qn, 0.f);
+    float tg[3], tgv[3], tgq[4];
+    pred_at(pp, (float)MR32(G_WORLDTIME) * 0.00025f, tg, tgv, tgq);
+    for (uint32_t k = 0; k < 3; k++) MRF32(CTL + CTL_BLEND + 0x10u + 4 * k) = tg[k] + (k == 0 ? 6.f : 0.f);   /* it ran 6 m off */
+    MR32(CTL + CTL_NPRED) = 1;
+    blend();
+    float e0 = len3(pp->ep);
+    for (int f = 0; f < 60; f++){ MR32(G_WORLDTIME) += 33u; blend(); }
+    float e1 = len3(pp->ep);
+    for (int f = 0; f < 120; f++){ MR32(G_WORLDTIME) += 33u; blend(); }
+    CHECK(pp->glides == 1 && e0 > 5.5f && e0 < 6.f && e1 < 1.f && len3(pp->ep) < 0.02f && pp->snaps == 0,
+          "stall: back from 6 m off gliding (%.2f m after the first step, %.2f m after 0.5 s, %.3f m after 1.5 s)", e0, e1, len3(pp->ep));
+    /* a hit of this game after its newest state: on its own until a newer state */
+    MR32(CTL + CTL_HIT) = MR32(G_WORLDTIME); uint32_t own0 = pp->own_steps;
+    MR32(G_WORLDTIME) += 33u; blend();
+    CHECK(pp->own_steps == own0 + 1, "hit: on its own after a hit here (%u)", pp->own_steps - own0);
+    MR32(CTL + CTL_HIT) = 0;
+}
+
 int main(void){
+    setenv("NFSU2_INPUT_SCRIPT", "racenet_unit", 1);   /* (the test knobs would be read; none set) */
     g_mem = mmap(0, 1ull << 32, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
     if (g_mem == MAP_FAILED){ printf("no 4 GB reservation\n"); return 1; }
     const uint32_t creator = 0x0a4d0101u, j2 = 0x0a4d0303u, j3 = 0x0a4d0404u, stranger = 0x0a4d0909u;
@@ -195,6 +442,8 @@ int main(void){
     }
     CHECK(each_other && !to_s && !named_s, "host-list: the list only to the joiners the race link sends to, naming only them "
           "(%d lists, to the stranger %d, naming it %d)", g_npl_out, to_s, named_s);
+
+    fidelity();
 
     printf(g_fail ? "racenet unit tests: FAILED\n" : "racenet unit tests: all passed\n");
     return g_fail;
