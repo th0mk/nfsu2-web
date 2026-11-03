@@ -36,6 +36,7 @@
   "the graphics stopped working": "ระบบกราฟิกหยุดทำงาน",
   "the graphics could not start": "ระบบกราฟิกเริ่มทำงานไม่ได้",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "เกมถูกหยุด: {what} ให้รีสตาร์ต {browser} แล้วกด “เล่น” หากเกิดขึ้นอีก ให้อัปเดตไดรเวอร์กราฟิก",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser} แสดงเกมด้วยไดรเวอร์กราฟิกของโทรศัพท์เครื่องนี้ไม่ได้ ไม่มีการตั้งค่าใดแก้ได้ แต่การอัปเดตระบบของโทรศัพท์อาจช่วยได้",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "เกมถูกหยุด: {what} กด “เล่น” แล้วหน้านี้จะโหลดใหม่ จากนั้นกด “เล่น” อีกครั้ง เซฟและการตั้งค่าของคุณยังอยู่",
   "Adapter with BC texture compression.": "อะแดปเตอร์รองรับการบีบอัดเท็กซ์เจอร์แบบ BC",
   "Browser storage": "พื้นที่จัดเก็บของเบราว์เซอร์",

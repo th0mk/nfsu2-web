@@ -67,8 +67,8 @@ export interface RendererOptions {
   /** the GPU device was lost (the graphics driver reset, the browser's graphics process crashed; device.lost, or
    *  in Safari every WebGPU call failing frame after frame): nothing is drawn from then on, and only a new game
    *  process can show the game again (see detach), in Safari only after a reload of the page (requestAdapter
-   *  gives no adapter until then) */
-  onLost?: () => void;
+   *  gives no adapter until then).  why: the browser's reason and message, as the log has it */
+  onLost?: (why: string) => void;
   /** every frame drawn, in the same task: quick chat's places over the cars in it (gpu_proto.h GwMarks): n marks of
    *  4 numbers in m (id, x, y as parts of the game's picture, scale; reused, read it at once) */
   onMarks?: (n: number, m: Float32Array, ids: Uint32Array) => void;
@@ -190,7 +190,7 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     if (ownDestroy || lostSaid) return;
     lostSaid = true;
     log(`[gpu] ${why}`);
-    opts.onLost?.();
+    opts.onLost?.(why);
   };
   // our own destroy() (detach, or giving up before it) says nothing, whatever reason the browser gives
   device.lost.then(i => lost(`device lost: ${i.reason} ${i.message}`));

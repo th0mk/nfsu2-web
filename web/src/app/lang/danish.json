@@ -36,6 +36,7 @@
   "the graphics stopped working": "grafikken holdt op med at virke",
   "the graphics could not start": "grafikken kunne ikke starte",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "Spillet blev stoppet: {what}. Genstart {browser}, og tryk derefter på Spil. Hvis det sker igen, skal du opdatere grafikdriveren.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser} kan ikke vise spillet med denne telefons grafikdriver. Ingen indstilling ændrer det; en systemopdatering til telefonen kan måske.",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "Spillet blev stoppet: {what}. Spil genindlæser siden; tryk derefter på Spil igen. Dine gemte spil og indstillinger bliver.",
   "Adapter with BC texture compression.": "Adapter med BC-teksturkomprimering.",
   "Browser storage": "Browserlager",

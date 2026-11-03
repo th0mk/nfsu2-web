@@ -36,6 +36,7 @@
   "the graphics stopped working": "grafik çalışmayı durdurdu",
   "the graphics could not start": "grafik başlatılamadı",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "Oyun durduruldu: {what}. {browser} tarayıcısını yeniden başlat, sonra Oyna'ya bas. Yine olursa grafik sürücüsünü güncelle.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser} tarayıcısı bu telefonun grafik sürücüsüyle oyunu gösteremiyor. Hiçbir ayar bunu değiştirmez; telefon için bir sistem güncellemesi işe yarayabilir.",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "Oyun durduruldu: {what}. Oyna sayfayı yeniden yükler; sonra Oyna'ya yeniden bas. Kayıtların ve ayarların kalır.",
   "Adapter with BC texture compression.": "BC doku sıkıştırmalı bağdaştırıcı.",
   "Browser storage": "Tarayıcı depolama alanı",

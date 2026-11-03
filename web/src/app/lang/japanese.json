@@ -36,6 +36,7 @@
   "the graphics stopped working": "グラフィックが動作しなくなりました",
   "the graphics could not start": "グラフィックを起動できませんでした",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "ゲームが停止されました: {what}。{browser}を再起動してから、「プレイ」を押してください。また同じことが起きる場合は、グラフィックドライバーを更新してください。",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser}は、このスマートフォンのグラフィックドライバーではゲームを表示できません。設定では変えられませんが、スマートフォンのシステムアップデートで直る可能性があります。",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "ゲームが停止されました: {what}。「プレイ」を押すとページを再読み込みします。そのあと、もう一度「プレイ」を押してください。セーブデータと設定はそのまま残ります。",
   "Adapter with BC texture compression.": "BCテクスチャ圧縮に対応したアダプターです。",
   "Browser storage": "ブラウザのストレージ",

@@ -36,6 +36,7 @@
   "the graphics stopped working": "圖形功能停止運作",
   "the graphics could not start": "圖形功能無法啟動",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "遊戲已被停止：{what}。請重新啟動{browser}，然後按「開始遊戲」。若再次發生，請更新顯示驅動程式。",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser}無法搭配這支手機的顯示驅動程式顯示遊戲。任何設定都改變不了這點；手機的系統更新或許可以。",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "遊戲已被停止：{what}。按「開始遊戲」會重新載入頁面；之後再按一次「開始遊戲」。你的存檔與設定會保留。",
   "Adapter with BC texture compression.": "支援 BC 材質壓縮的顯示介面卡。",
   "Browser storage": "瀏覽器儲存空間",

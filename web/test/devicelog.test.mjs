@@ -38,6 +38,13 @@ test('the desktops as before, Safari on a Mac by name', () => {
   assert.equal(browserBrief('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'), 'Chrome 155 on macOS');
   assert.equal(browserBrief('Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0'), 'Firefox 145 on Linux');
   assert.equal(browserBrief('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36'), 'Chrome 150 on Android');
+  // Chrome's user agent says "Android 10; K" on every Android: the version comes from its client hints (androidMajor),
+  // the major number only; never on another system, never more than a number
+  const reduced = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36';
+  assert.equal(browserBrief(reduced, 5, true, '11'), 'Chrome 156 on Android 11');
+  assert.equal(browserBrief(reduced, 5, true, undefined), 'Chrome 156 on Android');
+  assert.equal(browserBrief(reduced, 5, true, '11; vivo 1935'), 'Chrome 156 on Android');
+  assert.equal(browserBrief('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36', 0, false, '11'), 'Chrome 155 on Windows');
 });
 
 test('the device line: screen, cores, touch, Home Screen, a 30 Hz display before Play', () => {

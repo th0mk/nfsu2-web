@@ -25,7 +25,7 @@ import { loadGame, serverRev, type Loaded } from './loader';
 import { claimInstance } from './instance';
 import { LogRing, downloadBlob, stamp } from './logs';
 import { LastGameKeeper, lastGameEnd, lastGameLine, lastGameToOffer, type LastGame } from './lastgame';
-import { browserBrief, deviceBrief } from './devicelog';
+import { androidMajor, browserBrief, deviceBrief } from './devicelog';
 import { canFullscreen, enterFullscreen, exitFullscreen, fromHomeScreen, homeScreenInstead, isFullscreen, keepScreenOn, measureRefresh, settledSize, trackCanvasSize } from './display';
 import { deviceDefaults, isPhone, markTouch, noPinchZoom, padSeen, phoneScreen, touchFirst } from './device';
 import { phoneSeed, phoneUpgrade } from './phonegraphics';
@@ -142,6 +142,8 @@ let savesLocked = false;                 // the game about to start reads the sa
 let fatal: { what: string; code?: string } | null = null;   // why the running game had to be stopped (English, for t())
 // the last game lost its graphics (GPU-LOST): Safari's WebGPU gives this page no adapter any more, so Play reloads it
 let gpuGone = false;
+// the Android version for the log's browser line (devicelog.ts androidMajor), asked once as the page loads
+const androidVersion = androidMajor();
 let fps: FpsOverlay;
 let statusAt: { memory: WebAssembly.Memory; ptr: number } | null = null;   // the running game's status block
 let radioLink: RadioLink | null = null;  // the radio's words of the running game, once the game says it has them
@@ -640,7 +642,7 @@ async function startGame() {
   // more of this browser than its major version and system (the audit's PRIV-5).  These session lines stay when
   // a long game fills the log (logs.ts keep).
   log.keep(`=== NFSU2 web, ${new Date().toISOString()}, game ${loaded!.info.rev}, server ${serverKind()} ===`);
-  log.keep(`[app] save folder: OPFS ${SAVE} (/save); canvas ${size.w}x${size.h} device pixels, display ${displayHz} Hz; ${browserBrief(navigator.userAgent, navigator.maxTouchPoints, phoneScreen(navigator.maxTouchPoints))}; ${checks.get('gpu')?.label ?? 'WebGPU'}; movies in ${r.env.NFSU2_MOVIE_CODEC === 'av1' ? 'AV1' : 'VP6'}`);
+  log.keep(`[app] save folder: OPFS ${SAVE} (/save); canvas ${size.w}x${size.h} device pixels, display ${displayHz} Hz; ${browserBrief(navigator.userAgent, navigator.maxTouchPoints, phoneScreen(navigator.maxTouchPoints), await androidVersion)}; ${checks.get('gpu')?.label ?? 'WebGPU'}; movies in ${r.env.NFSU2_MOVIE_CODEC === 'av1' ? 'AV1' : 'VP6'}`);
   log.keep(`[app] device: ${deviceBrief({ screenW: screen.width, screenH: screen.height, dpr: devicePixelRatio, cores: navigator.hardwareConcurrency,
     memoryGB: (navigator as { deviceMemory?: number }).deviceMemory, touchPoints: navigator.maxTouchPoints, homeScreen: fromHomeScreen(), displayHz })}`);
   for (const n of r.notes) log.keep(`[app] ${n}`);
@@ -974,6 +976,9 @@ function onExit(s: GameSession, code: number) {
   // the graphics lost on the way: a reload starts them again (Safari: only a reload), at Play
   if (gpuGone) setPhase('exited', T('Stopped'), () => t('The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.',
     { what: t(f!.what) }) + ' ' + t('Download the log first if you want to keep it: the reload clears it.'), f!.code);
+  // the phone's graphics driver refused the picture at the first frame (game.ts): another Play ends the same way
+  else if (f?.code === 'GPU-ANDROID-DRIVER') setPhase('exited', T('Did not start'), () => t('{browser} cannot show the game with this phone\'s graphics driver. No setting changes that; a system update for the phone may.',
+    { browser: t(browserName()) }), f.code);
   // the graphics: a restart of the browser, then a newer driver (where to send the log is under it)
   else if (f) setPhase('exited', s.renderer ? T('Stopped') : T('Did not start'), () => t('The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.',
     { what: t(f.what), browser: t(browserName()) }), f.code);

@@ -804,6 +804,7 @@
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "A játék leállt: {what}. A „Játék” gomb újratölti az oldalt; utána nyomd meg újra a „Játék” gombot. A mentéseid és beállításaid megmaradnak.",
   "Download the log first if you want to keep it: the reload clears it.": "Ha meg akarod tartani a naplót, előbb töltsd le: az újratöltés törli.",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "A játék leállt: {what}. Indítsd újra a böngészőt ({browser}), majd nyomd meg a „Játék” gombot. Ha újra előfordul, frissítsd a videokártya illesztőprogramját.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "A böngésző ({browser}) nem tudja megjeleníteni a játékot ennek a telefonnak a grafikus illesztőprogramjával. Ezen egy beállítás sem változtat; a telefon rendszerfrissítése talán igen.",
   "The game closed normally after {time}.": "A játék {time} után rendben bezárult.",
   "The game was stopped after {time}.": "A játékot {time} után leállították.",
   "The game stopped with error code {code} after {time}.": "A játék {time} után leállt, hibakód: {code}.",

@@ -27,8 +27,8 @@ export interface RendererOptions extends CommonOptions {
   /** tests: scale of those dumps */
   dumpScale?: number;
   /** the GPU device was lost while the game ran (a graphics driver reset, the browser's graphics process
-   *  crashed): nothing is drawn from then on */
-  onLost?(): void;
+   *  crashed): nothing is drawn from then on.  why: the browser's reason and message (the log's "[gpu] device lost" line) */
+  onLost?(why: string): void;
   /** every frame drawn, in the same task: quick chat's places over the cars in it, n of { id, x, y, scale } (ids in
    *  ids[4i], the rest in m[4i + 1..3]; x, y parts of the game's image; the arrays are reused: read them at once) */
   onMarks?(n: number, m: Float32Array, ids: Uint32Array): void;

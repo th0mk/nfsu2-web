@@ -36,6 +36,7 @@
   "the graphics stopped working": "그래픽이 작동을 멈춤",
   "the graphics could not start": "그래픽을 시작할 수 없음",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "게임이 중지됐어요: {what}. {browser} 재시작 후 '플레이'를 누르세요. 다시 이런 일이 생기면 그래픽 드라이버를 업데이트하세요.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "이 휴대폰의 그래픽 드라이버로는 {browser}에서 게임을 표시할 수 없어요. 설정으로는 바꿀 수 없고, 휴대폰 시스템 업데이트로 해결될 수도 있어요.",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "게임이 중지됐어요: {what}. '플레이'를 누르면 페이지를 새로고침해요. 그다음 '플레이'를 다시 누르세요. 저장 데이터와 설정은 그대로 유지돼요.",
   "Adapter with BC texture compression.": "BC 텍스처 압축을 지원하는 어댑터예요.",
   "Browser storage": "브라우저 저장소",

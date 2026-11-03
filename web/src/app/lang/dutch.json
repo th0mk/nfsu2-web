@@ -36,6 +36,7 @@
   "the graphics stopped working": "de grafische weergave werkte niet meer",
   "the graphics could not start": "de grafische weergave kon niet starten",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "Het spel is gestopt: {what}. Start {browser} opnieuw en druk daarna op Spelen. Gebeurt het nog eens, werk dan het grafische stuurprogramma bij.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser} kan het spel niet tonen met het grafische stuurprogramma van deze telefoon. Geen instelling verandert dat; een systeemupdate van de telefoon misschien wel.",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "Het spel is gestopt: {what}. Spelen laadt de pagina opnieuw; druk daarna nog een keer op Spelen. Je opgeslagen spellen en instellingen blijven.",
   "Adapter with BC texture compression.": "Adapter met BC-textuurcompressie.",
   "Browser storage": "Browseropslag",

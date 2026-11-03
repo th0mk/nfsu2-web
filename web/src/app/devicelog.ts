@@ -3,8 +3,8 @@
 
 /** "Chrome 155 on Windows", "Safari 26 on iOS", "Safari 26 on iPadOS" (an iPad's Safari says Macintosh, but has touch),
  *  "Safari 26 on iOS (desktop website)" (an iPhone's Safari asked for desktop websites: Macintosh, touch, a phone's
- *  screen; phone: device.ts phoneScreen) */
-export function browserBrief(ua: string, touchPoints = 0, phone = false): string {
+ *  screen; phone: device.ts phoneScreen), "Chrome 156 on Android 11" (android: the major version, androidMajor) */
+export function browserBrief(ua: string, touchPoints = 0, phone = false, android?: string): string {
   const mac = /Macintosh/.test(ua) && touchPoints > 1;
   const ios = /iPhone|iPod/.test(ua) ? 'iOS' : mac && phone ? 'iOS (desktop website)' : /iPad/.test(ua) || mac ? 'iPadOS' : null;
   const os = ios ?? (/CrOS/.test(ua) ? 'ChromeOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
@@ -17,7 +17,20 @@ export function browserBrief(ua: string, touchPoints = 0, phone = false): string
     : v(/EdgiOS\/(\d+)/) ? `Edge ${v(/EdgiOS\/(\d+)/)} (WebKit)` : safari ? `Safari ${safari}` : 'another browser (WebKit)';
   else name = v(/Firefox\/(\d+)/) ? `Firefox ${v(/Firefox\/(\d+)/)}` : v(/(?:Chrome|Chromium)\/(\d+)/) ? `Chrome ${v(/(?:Chrome|Chromium)\/(\d+)/)}`
     : safari ? `Safari ${safari}` : 'another browser';
-  return `${name} on ${os}`;
+  return `${name} on ${os}${os === 'Android' && android && /^\d+$/.test(android) ? ` ${android}` : ''}`;
+}
+
+/** The Android version's major number, where the browser says it: Chrome's user agent says "Android 10" on every
+ *  version since 110 (reduced), but its client hints give the real one.  Some Adreno phones' graphics drivers fail
+ *  where others run (2026-10/11, game.ts GPU-ANDROID-DRIVER): the version tells the old ones apart.  The major
+ *  number only (the audit's PRIV-5); undefined elsewhere, or when the browser does not answer within a second. */
+export async function androidMajor(): Promise<string | undefined> {
+  const d = (navigator as { userAgentData?: { platform?: string; getHighEntropyValues?(h: string[]): Promise<{ platformVersion?: string }> } }).userAgentData;
+  if (d?.platform !== 'Android' || !d.getHighEntropyValues) return undefined;
+  try {
+    const v = await Promise.race([d.getHighEntropyValues(['platformVersion']), new Promise<undefined>(r => setTimeout(r, 1000))]);
+    return /^(\d+)/.exec(v?.platformVersion ?? '')?.[1];
+  } catch { return undefined; }
 }
 
 export interface DeviceFacts {

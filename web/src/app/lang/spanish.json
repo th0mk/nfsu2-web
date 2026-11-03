@@ -36,6 +36,7 @@
   "the graphics stopped working": "los gráficos dejaron de funcionar",
   "the graphics could not start": "los gráficos no pudieron iniciarse",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "El juego se detuvo: {what}. Reinicia {browser} y pulsa Jugar. Si vuelve a pasar, actualiza el controlador gráfico.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser} no puede mostrar el juego con el controlador gráfico de este teléfono. Ningún ajuste lo cambia; una actualización del sistema del teléfono quizá sí.",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "El juego se detuvo: {what}. Jugar recarga la página; después pulsa Jugar otra vez. Tus partidas guardadas y ajustes se conservan.",
   "Adapter with BC texture compression.": "Adaptador con compresión de texturas BC.",
   "Browser storage": "Almacenamiento del navegador",

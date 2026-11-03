@@ -36,6 +36,7 @@
   "the graphics stopped working": "графика перестала работать",
   "the graphics could not start": "не удалось запустить графику",
   "The game was stopped: {what}. Restart {browser}, then press Play. If it happens again, update the graphics driver.": "Игра остановлена: {what}. Перезапустите {browser}, затем нажмите «Играть». Если это повторится, обновите графический драйвер.",
+  "{browser} cannot show the game with this phone's graphics driver. No setting changes that; a system update for the phone may.": "{browser} не может показать игру с графическим драйвером этого телефона. Никакая настройка этого не изменит; обновление системы телефона может помочь.",
   "The game was stopped: {what}. Play reloads the page; then press Play again. Your saves and settings stay.": "Игра остановлена: {what}. «Играть» перезагрузит страницу; затем нажмите «Играть» ещё раз. Ваши сохранения и настройки останутся.",
   "Adapter with BC texture compression.": "Адаптер со сжатием текстур BC.",
   "Browser storage": "Хранилище браузера",
