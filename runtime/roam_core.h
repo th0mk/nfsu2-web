@@ -122,7 +122,10 @@ enum { RC_MSG_HELLO = 1, RC_MSG_PEERS = 2, RC_MSG_SNAP = 3, RC_MSG_CFG = 4, RC_M
        /* quick chat (roam_game.c say_*): one of the fixed phrases (a number:
         * each player reads it in their own language, nobody types), to every
         * established peer whose HELLO carries RC_HF_SAY; seq tells a repeat
-        * from a new one.  Two more bytes, 0 for now */
+        * from a new one; stay: how long the sayer has stayed near one spot, in
+        * 10 s steps (at most 255; roam_game.c say_stay: who may start a
+        * countdown at a car meet), 0 from a game before it.  One more byte, 0
+        * for now */
        RC_MSG_SAY = 15,
        /* the race's results as the reporter's game showed them (rc_raceres), only to the hub, with its RACEREP: every
         * racer's place in them, by its player's id, its time and how far it came.  The server compares the players'
@@ -377,7 +380,7 @@ typedef struct {
         rc_lobby lobby;
         struct { uint16_t req; uint8_t n; const uint8_t *data; } lobbies;   /* data: n entries */
         rc_racerep racerep;
-        struct { uint8_t phrase, seq; } say;
+        struct { uint8_t phrase, seq, stay; } say;
         rc_raceres raceres;
     } u;
 } rc_msg;
@@ -641,7 +644,7 @@ typedef struct {
     struct { int16_t x, y; uint32_t race; uint8_t n, max, state; } lobbies_e[RC_LOBBIES_MAX];
     /* SAY messages from established peers, oldest first, until the game
      * side takes them (rc_take_say) */
-    struct { uint32_t from; uint8_t phrase, seq; } say_in[RC_SAY_INBOX];
+    struct { uint32_t from; uint8_t phrase, seq, stay; } say_in[RC_SAY_INBOX];
     int       n_say_in;
     uint32_t  say_dropped;         /* the inbox was full */
 } rc_session;
@@ -712,10 +715,10 @@ int  rc_send_racerep(rc_session *s, const rc_racerep *r);
 /* the race's results to the hub (RC_MSG_RACERES), while it answers; 1 when sent */
 int  rc_send_raceres(rc_session *s, const rc_raceres *r);
 /* a quick-chat phrase to every established peer whose HELLO said it takes
- * them; how many it went to */
-int  rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq);
+ * them, with the sayer's stay (RC_MSG_SAY); how many it went to */
+int  rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq, uint8_t stay);
 /* the oldest SAY not taken yet; 1 when there was one */
-int  rc_take_say(rc_session *s, uint32_t *from, uint8_t *phrase, uint8_t *seq);
+int  rc_take_say(rc_session *s, uint32_t *from, uint8_t *phrase, uint8_t *seq, uint8_t *stay);
 const char *rc_status_name(int st);
 
 #endif

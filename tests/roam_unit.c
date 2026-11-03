@@ -253,11 +253,14 @@ static void t_roundtrip(void){
       CHECK(n == RC_HDR + 3 + 2 * RC_LOBBIES_ENTRY + RC_CRC && rc_decode(b, n, &d) == RC_OK && d.u.lobbies.req == 99 && d.u.lobbies.n == 2 &&
             !memcmp(d.u.lobbies.data, le, sizeof le), "LOBBIES round trip (%d bytes)", n);
       m.u.lobbies.n = RC_LOBBIES_MAX + 1; CHECK(rc_encode(&m, b, sizeof b) < 0, "LOBBIES of too many not encoded"); }
-    /* SAY: 4 bytes (phrase, seq, two zero); any phrase number goes through (a newer game may have more) */
-    memset(&m, 0, sizeof m); m.h.type = RC_MSG_SAY; m.h.sender = 7; m.u.say.phrase = 13; m.u.say.seq = 200;
+    /* SAY: 4 bytes (phrase, seq, stay, a zero); any phrase number goes through (a newer game may have more) */
+    memset(&m, 0, sizeof m); m.h.type = RC_MSG_SAY; m.h.sender = 7; m.u.say.phrase = 13; m.u.say.seq = 200; m.u.say.stay = 31;
     { int n = rc_encode(&m, b, sizeof b);
-      CHECK(n == RC_HDR + 4 + RC_CRC && b[RC_HDR] == 13 && b[RC_HDR + 1] == 200 && !b[RC_HDR + 2] && !b[RC_HDR + 3] &&
-            rc_decode(b, n, &d) == RC_OK && d.u.say.phrase == 13 && d.u.say.seq == 200, "SAY round trip (%d bytes)", n);
+      CHECK(n == RC_HDR + 4 + RC_CRC && b[RC_HDR] == 13 && b[RC_HDR + 1] == 200 && b[RC_HDR + 2] == 31 && !b[RC_HDR + 3] &&
+            rc_decode(b, n, &d) == RC_OK && d.u.say.phrase == 13 && d.u.say.seq == 200 && d.u.say.stay == 31, "SAY round trip (%d bytes)", n);
+      m.u.say.stay = 0; n = rc_encode(&m, b, sizeof b);              /* a game before the stay sends 0 there */
+      CHECK(rc_decode(b, n, &d) == RC_OK && d.u.say.stay == 0, "SAY of a game before the stay: 0");
+      m.u.say.stay = 31;
       m.u.say.phrase = 250; n = rc_encode(&m, b, sizeof b);
       CHECK(rc_decode(b, n, &d) == RC_OK && d.u.say.phrase == 250, "SAY with a phrase this game does not have still decodes");
       CHECK(rc_decode(b, n - 1, &d) != RC_OK, "SAY cut short refused"); }
@@ -1720,11 +1723,12 @@ static void t_say(void){
     CHECK(est(0) == 2 && p1 >= 0 && p2 >= 0 && g_n[0].peer[p1].say && !g_n[0].peer[p2].say,
           "the HELLO's flag says who takes quick chat (%d %d)", p1 >= 0 && g_n[0].peer[p1].say, p2 >= 0 && g_n[0].peer[p2].say);
     uint32_t bad2 = g_n[2].rx_bad;
-    CHECK(rc_send_say(&g_n[0], 7, 1) == 1, "SAY goes to the one peer that takes it");
+    CHECK(rc_send_say(&g_n[0], 7, 1, 42) == 1, "SAY goes to the one peer that takes it");
     net_run(g_now + 20000, 3);
-    uint32_t from = 0; uint8_t ph = 0, sq = 0;
-    CHECK(rc_take_say(&g_n[1], &from, &ph, &sq) == 1 && from == 0x500 && ph == 7 && sq == 1 && !rc_take_say(&g_n[1], &from, &ph, &sq),
-          "the phrase arrives once (from %x, phrase %d, seq %d)", from, ph, sq);
+    uint32_t from = 0; uint8_t ph = 0, sq = 0, sy = 0;
+    CHECK(rc_take_say(&g_n[1], &from, &ph, &sq, &sy) == 1 && from == 0x500 && ph == 7 && sq == 1 && sy == 42 &&
+          !rc_take_say(&g_n[1], &from, &ph, &sq, &sy),
+          "the phrase arrives once (from %x, phrase %d, seq %d, stay %d)", from, ph, sq, sy);
     CHECK(g_n[2].rx_bad == bad2 && !g_n[2].n_say_in, "the older game hears nothing it cannot read");
     /* one that reaches a game taking none (sent by hand): kept from the game side */
     rc_msg m; memset(&m, 0, sizeof m); m.h.type = RC_MSG_SAY; m.h.sender = 0x500; m.u.say.phrase = 2; m.u.say.seq = 9;
@@ -1732,13 +1736,13 @@ static void t_say(void){
     rc_receive(&g_n[2], node_ip(0), node_port(0), b, n, g_now);
     CHECK(!g_n[2].n_say_in, "a game that takes no quick chat keeps none");
     g_n[0].conf.say = 0;
-    CHECK(rc_send_say(&g_n[0], 7, 2) == 0, "a game that takes no quick chat sends none");
+    CHECK(rc_send_say(&g_n[0], 7, 2, 0) == 0, "a game that takes no quick chat sends none");
     g_n[0].conf.say = 1;
     /* the inbox holds RC_SAY_INBOX, oldest first */
-    for (int k = 0; k < RC_SAY_INBOX + 4; k++) rc_send_say(&g_n[0], (uint8_t)(k & 15), (uint8_t)(10 + k));
+    for (int k = 0; k < RC_SAY_INBOX + 4; k++) rc_send_say(&g_n[0], (uint8_t)(k & 15), (uint8_t)(10 + k), 0);
     net_run(g_now + 20000, 3);
     int kept = g_n[1].n_say_in, taken = 0; uint32_t seen = 0;
-    while (rc_take_say(&g_n[1], &from, &ph, &sq)) if (sq >= 10 && sq < 10 + RC_SAY_INBOX + 4){ taken++; seen |= 1u << (sq - 10); }
+    while (rc_take_say(&g_n[1], &from, &ph, &sq, &sy)) if (sq >= 10 && sq < 10 + RC_SAY_INBOX + 4){ taken++; seen |= 1u << (sq - 10); }
     CHECK(kept == RC_SAY_INBOX && g_n[1].say_dropped == 4 && taken == RC_SAY_INBOX && __builtin_popcount(seen) == RC_SAY_INBOX,
           "say inbox: %d kept, %u dropped, %d taken", kept, g_n[1].say_dropped, taken);
 }

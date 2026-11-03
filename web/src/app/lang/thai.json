@@ -1265,5 +1265,6 @@
   "Final standings": "อันดับสุดท้าย",
   "Heat {k} results": "ผลฮีต {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} ชัยชนะจะนับในโหมดอาชีพเมื่อคุณเข้าโรงรถครั้งถัดไป",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} {name} ชนะ: จะนับในโหมดอาชีพของคุณเมื่อเข้าโรงรถครั้งถัดไป"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "การแข่งแบบผู้เล่นหลายคน: อันดับที่ {n} {name} ชนะ: จะนับในโหมดอาชีพของคุณเมื่อเข้าโรงรถครั้งถัดไป",
+  "You are not allowed to start a countdown here": "คุณไม่สามารถเริ่มนับถอยหลังที่นี่ได้"
 }

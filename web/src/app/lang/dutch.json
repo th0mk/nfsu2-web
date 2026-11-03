@@ -1346,5 +1346,6 @@
   "Final standings": "Eindstand",
   "Heat {k} results": "Uitslag heat {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Multiplayerrace: {n}e plaats: de winst gaat bij je volgende bezoek aan de garage je carrière in",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Multiplayerrace: {n}e plaats. {name} won: het gaat bij je volgende garagebezoek je carrière in"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Multiplayerrace: {n}e plaats. {name} won: het gaat bij je volgende garagebezoek je carrière in",
+  "You are not allowed to start a countdown here": "Je mag hier het aftellen niet starten"
 }

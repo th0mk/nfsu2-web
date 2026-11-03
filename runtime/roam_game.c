@@ -2292,14 +2292,26 @@ static int hud_on_top(uint32_t pkg){
 #define SAY_WINDOW_US   6000000
 #define SAY_AGAIN_US    2000000       /* the same phrase from one friend again within this: not shown */
 #define SAY_MARKS       32
+/* the countdown at a car meet (SAY_MEET_N other players' cars within SAY_MEET_M of the one who says it): only a
+ * player who has stayed SAY_STAY_US within SAY_STAY_M of one spot starts it there.  Those who line up drive off with
+ * each race; those who start them stay (a Discord thread, 2026-11-03: players in the line-up started it before the
+ * ones running the start had everyone lined up) */
+#define SAY_MEET_M      50.f
+#define SAY_MEET_N      8
+#define SAY_STAY_M      50.f
+#define SAY_STAY_US     300000000ll   /* (NFSU2_ROAM_SAY_STAY_S: tests) */
+#define SAY_STAY_STEP   10000000ll    /* the stay on the wire (RC_MSG_SAY): in 10 s steps, at most 255 */
 /* a friend's: the last phrases shown (when), the last shown (when, until when over the car), the last heard */
 typedef struct { uint32_t id; int64_t t[SAY_BURST], at, until; uint8_t seq, phrase, heard; } SayWho;
 static struct {
     SayWho   who[RC_TABLE];                               /* by session peer */
     int64_t  mine[SAY_BURST], mine_until; uint8_t seq;
-    int      test_pick;                                   /* a script's "mp say N" (-1: none) */
+    int      test_pick, test_stay;                        /* a script's "mp say N [stay]" (-1: none) */
     uint32_t said, heard, dropped;                        /* statistics */
-} g_say = { .test_pick = -1 };
+    float    spot[2]; int64_t spot_at;                    /* where the player has stayed since when (say_stay; 0: not yet) */
+    int64_t  stay_us;                                     /* SAY_STAY_US, or a test's */
+    int      nocount, meet_logs;                          /* no countdown from the player here now (roam_game_nocount) */
+} g_say = { .test_pick = -1, .test_stay = -1 };
 static int say_live(int peer, uint32_t id, int64_t now){
     return SAYS && peer >= 0 && peer < RC_TABLE && g_say.who[peer].id == id && g_say.who[peer].until > now;
 }
@@ -6553,7 +6565,10 @@ static void room_alone(int64_t host, uint8_t st){
  * is shown when their car was within SAY_NEAR_M of ours when last seen, or they are in our race lobby, while we are
  * in free roam and not racing; not past SAY_BURST in SAY_WINDOW_US from one friend, nor the same phrase again within
  * SAY_AGAIN_US.  To the page as {"id","name","p"} (+ "me" for the player's own, "lobby" for a lobby's, "d" a
- * friend's distance in metres when last seen; the page shows the countdown big within 50 m).  With the lock held. */
+ * friend's distance in metres when last seen; the page shows the countdown big within 50 m; "no" the player's own
+ * countdown not started: not theirs to start here).  The countdown at a car meet (SAY_MEET_N): only from a player who
+ * stayed (say_stay; each phrase carries the sayer's stay, a friend's is dropped without it; the page dims it while
+ * roam_game_nocount).  With the lock held. */
 static int say_burst(const int64_t *t, int64_t host){
     int k = 0;
     for (int i = 0; i < SAY_BURST; i++) k += t[i] && host - t[i] < SAY_WINDOW_US;
@@ -6564,15 +6579,42 @@ static void say_stamp(int64_t *t, int64_t host){
     for (int i = 1; i < SAY_BURST; i++) if (t[i] < t[o]) o = i;   /* the oldest goes */
     t[o] = host;
 }
-static void say_page(uint32_t id, const char *name, int phrase, int me, int lobby, float d){
+static void say_page(uint32_t id, const char *name, int phrase, int me, int lobby, float d, int no){
     char buf[128], ids[16]; MpJs j = { buf, 0, sizeof buf };
     snprintf(ids, sizeof ids, "%u", id);
     js_raw(&j, "{"); js_key(&j, "id"); js_raw(&j, ids); js_str(&j, "name", name); js_int(&j, "p", phrase);
     if (me) js_int(&j, "me", 1);
+    if (no) js_int(&j, "no", 1);
     if (lobby) js_int(&j, "lobby", 1);
     if (d >= 0.f && d < 1e8f) js_int(&j, "d", (int)(d + 0.5f));
     js_raw(&j, "}");
     if (roam_plat_said(buf) < 0) rlog("[roam] f=%ld quick chat: the page's ring is full, a line lost\n", rh_frame());
+}
+/* the player's stay: since when the car has been within SAY_STAY_M of the spot where it was when it last went
+ * further (a jump, the trip to a race and back, too); its place not known (out of free roam): as it was */
+static void say_stay(int64_t host){
+    if (!g_lp_ok) return;
+    float dx = g_lp[0] - g_say.spot[0], dy = g_lp[1] - g_say.spot[1];
+    if (!g_say.spot_at || dx * dx + dy * dy > SAY_STAY_M * SAY_STAY_M){
+        g_say.spot[0] = g_lp[0]; g_say.spot[1] = g_lp[1]; g_say.spot_at = host; }
+}
+/* the stay as the wire has it: SAY_STAY_STEP steps, at most 255 */
+static int say_stayed(int64_t host){
+    int64_t k = g_say.spot_at ? (host - g_say.spot_at) / SAY_STAY_STEP : 0;
+    return k > 255 ? 255 : k < 0 ? 0 : (int)k;
+}
+static int say_stay_ok(int steps){ return (int64_t)steps * SAY_STAY_STEP >= g_say.stay_us; }
+/* other players in free roam (paused there too, shown or not) within SAY_MEET_M of at, as the session last had their
+ * places, but player skip */
+static int say_crowd(const float *at, uint32_t skip){
+    int n = 0;
+    for (int k = 0; k < RC_TABLE; k++){
+        const rc_peer *p = &g_s.peer[k];
+        if (p->state != RC_PS_EST || p->id == skip || !p->mo.n || (p->status != RC_ST_ROAM && p->status != RC_ST_PAUSED)) continue;
+        const float *b = p->mo.s[p->mo.n - 1].p; float dx = at[0] - b[0], dy = at[1] - b[1];
+        n += dx * dx + dy * dy < SAY_MEET_M * SAY_MEET_M;
+    }
+    return n;
 }
 static int say_in_lobby(uint32_t id){
 #if MPRACES
@@ -6582,15 +6624,23 @@ static int say_in_lobby(uint32_t id){
 #endif
 }
 static void say_send(int phrase, int64_t host, int can){
+    int forced = g_say.test_stay >= 0, stay = forced ? g_say.test_stay : say_stayed(host);    /* (a test's: "mp say N stay") */
+    g_say.test_stay = -1;
     if (!can){ rlog("[roam] f=%ld quick chat: phrase %d not said (not driving in free roam)\n", rh_frame(), phrase); return; }
     if (say_burst(g_say.mine, host)){ rlog("[roam] f=%ld quick chat: phrase %d not said (too many at once)\n", rh_frame(), phrase); return; }
+    if (phrase == SAY_COUNTDOWN && g_say.nocount && !forced){                /* (the page dims it then: a late pick) */
+        rlog("[roam] f=%ld quick chat: the countdown not started (a car meet: %d players within %.0f m, stayed %d s)\n", rh_frame(),
+             say_crowd(g_lp, 0), (double)SAY_MEET_M, say_stayed(host) * (int)(SAY_STAY_STEP / 1000000));
+        say_page(g_s.conf.self_id, g_s.conf.name, phrase, 1, 0, -1.f, 1);
+        return;
+    }
     say_stamp(g_say.mine, host);
-    int to = rc_send_say(&g_s, (uint8_t)phrase, ++g_say.seq);
+    int to = rc_send_say(&g_s, (uint8_t)phrase, ++g_say.seq, (uint8_t)stay);
     g_say.said++; g_say.mine_until = host + SAY_UNTIL(phrase);
-    say_page(g_s.conf.self_id, g_s.conf.name, phrase, 1, 0, -1.f);
+    say_page(g_s.conf.self_id, g_s.conf.name, phrase, 1, 0, -1.f, 0);
     rlog("[roam] f=%ld quick chat: said phrase %d to %d player(s)\n", rh_frame(), phrase, to);
 }
-static void say_recv(uint32_t from, int phrase, uint8_t seq, int64_t host, int can){
+static void say_recv(uint32_t from, int phrase, uint8_t seq, uint8_t stay, int64_t host, int can){
     int i = -1;
     for (int k = 0; k < RC_TABLE; k++) if (g_s.peer[k].state == RC_PS_EST && g_s.peer[k].id == from){ i = k; break; }
     if (i < 0) return;
@@ -6601,9 +6651,12 @@ static void say_recv(uint32_t from, int phrase, uint8_t seq, int64_t host, int c
     int lobby = say_in_lobby(from);
     float d = 1e9f;
     if (g_lp_ok && p->mo.n){ const float *b = p->mo.s[p->mo.n - 1].p; float dx = g_lp[0] - b[0], dy = g_lp[1] - b[1]; d = rc_sqrtf(dx * dx + dy * dy); }
+    /* a countdown: the players at the sayer's car (ours too) */
+    int meet = phrase == SAY_COUNTDOWN && p->mo.n ? say_crowd(p->mo.s[p->mo.n - 1].p, from) + (d < SAY_MEET_M) : 0;
     if (w->heard && seq == w->seq) why = "again";                                   /* the same one twice */
     else if (!can) why = "not in free roam";
     else if (!lobby && !(d <= SAY_NEAR_M)) why = "too far";
+    else if (meet >= SAY_MEET_N && !say_stay_ok(stay)) why = "a countdown at a car meet from a player who did not stay";
     else if (say_burst(w->t, host)) why = "too many at once";
     else if (w->at && phrase == w->phrase && host - w->at < SAY_AGAIN_US) why = "the same again";
     w->seq = seq; w->heard = 1;
@@ -6611,19 +6664,33 @@ static void say_recv(uint32_t from, int phrase, uint8_t seq, int64_t host, int c
     say_stamp(w->t, host);
     w->phrase = (uint8_t)phrase; w->at = host; w->until = host + SAY_UNTIL(phrase);
     g_say.heard++;
-    say_page(from, p->name, phrase, 0, lobby, d);
+    say_page(from, p->name, phrase, 0, lobby, d, 0);
     rlog("[roam] f=%ld quick chat: %s said phrase %d (%.0f m%s)\n", rh_frame(), p->name, phrase, (double)d, lobby ? ", our lobby" : "");
+    if (meet) rlog("[roam] f=%ld quick chat: (the countdown: %d players at %s's car, who stayed %d s)\n", rh_frame(), meet, p->name,
+                   stay * (int)(SAY_STAY_STEP / 1000000));
 }
 static void say_frame(int64_t host, int in_roam, uint8_t st){
     if (!g_s.conf.say) return;
+    if (!g_say.stay_us){
+        const char *scr = rh_opt("NFSU2_INPUT_SCRIPT");               /* settings.ini can't set it: an input script's run only */
+        g_say.stay_us = (int64_t)(scr && *scr ? env_int("NFSU2_ROAM_SAY_STAY_S", (int)(SAY_STAY_US / 1000000), 10, 3600)
+                                              : (int)(SAY_STAY_US / 1000000)) * 1000000;
+    }
+    /* where the player stays, and whether a countdown of theirs would start here */
+    say_stay(host);
+    int n = in_roam && g_lp_ok ? say_crowd(g_lp, 0) : 0, no = n >= SAY_MEET_N && !say_stay_ok(say_stayed(host));
+    if (no != g_say.nocount && g_say.meet_logs++ < 20)
+        rlog("[roam] f=%ld quick chat: the countdown %s (%d players within %.0f m, stayed %d s)\n", rh_frame(),
+             no ? "not the player's to start here" : "the player's again", n, (double)SAY_MEET_M, say_stayed(host) * (int)(SAY_STAY_STEP / 1000000));
+    g_say.nocount = no;
     int pick = roam_plat_say_pick();
     if (g_say.test_pick >= 0){ pick = g_say.test_pick; g_say.test_pick = -1; }
 #if MPRACES
     if (pick >= 0) g_mp.said_at = host;                 /* a host who talks is there (mp_idle) */
 #endif
     if (pick >= 0) say_send(pick, host, in_roam && st == RC_ST_ROAM && !g_racing);
-    uint32_t from; uint8_t ph, sq;
-    while (rc_take_say(&g_s, &from, &ph, &sq)) say_recv(from, ph, sq, host, in_roam && !g_racing);
+    uint32_t from; uint8_t ph, sq, sy;
+    while (rc_take_say(&g_s, &from, &ph, &sq, &sy)) say_recv(from, ph, sq, sy, host, in_roam && !g_racing);
 }
 
 /* Front bumpers (free roam's friends: the page's "Add friend", web/src/app/friends.ts): the player's car and a
@@ -8346,10 +8413,21 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
 #endif
 #if SAYS
     if (!strcasecmp(sub, "say")){
-        /* "mp say N": quick chat, the player says phrase N, as if picked on the page */
-        g_say.test_pick = atoi(a1);
+        /* "mp say N [stay]": quick chat, the player says phrase N, as if picked on the page; with a stay (10 s steps),
+         * that one on the wire, and a countdown goes even where it would not start (a game before the stay sends 0) */
+        g_say.test_pick = atoi(a1); g_say.test_stay = a2[0] ? atoi(a2) : -1;
         rlog("[roam] f=%ld mp say %d (quick chat %s)\n", f, g_say.test_pick, g_s.conf.say ? "on" : "off");
         return 1;
+    }
+    if (!strcasecmp(sub, "waitstay")){
+        /* "mp waitstay S [tmo]": the player has stayed S seconds where they are (say_stay, 10 s steps) */
+        int want = atoi(a1); long tmo = a2[0] ? atol(a2) : 0;
+        if (*wait_start < 0) *wait_start = f;
+        int64_t host = roam_plat_now_us(); int have = say_stayed(host) * (int)(SAY_STAY_STEP / 1000000);
+        if (have >= want){ rlog("[roam] f=%ld mp waitstay %d satisfied after %ld frames (stayed %d s, %s)\n", f, want, f - *wait_start, have,
+                                g_say.nocount ? "no countdown" : "countdown"); *wait_start = -1; return 1; }
+        if (tmo && f - *wait_start >= tmo){ rlog("[roam] f=%ld mp waitstay %d TIMEOUT (stayed %d s)\n", f, want, have); *wait_start = -1; return 1; }
+        return 0;
     }
     if (!strcasecmp(sub, "waitsaid")){
         /* "mp waitsaid N [tmo]": N friends' phrases shown (quick chat) */
@@ -9326,6 +9404,15 @@ int roam_game_engage(void){ return O.on && g_engage; }
 /* savegame.c, on the guest thread: in a race lobby (hosting it, asked into it, in it, its countdown, the trip): a
  * trip out of free roam (mprace.c) can start at any moment */
 int roam_game_in_lobby(void){ return g_mp.st != MP_IDLE; }
+/* status_web.c, on the guest thread: 1 while a countdown of the player's would not start here (say_frame: a car
+ * meet, and the player has not stayed), so the page's picker dims it and says so (quickchat.ts) */
+int roam_game_nocount(void){
+#if SAYS
+    return O.on && g_say.nocount;
+#else
+    return 0;
+#endif
+}
 /* status_web.c, on the guest thread: friends' cars shown within a horn's reach (SAY_NEAR_M), so the touch controls'
  * Horn and Quick chat show; once there, until none is within 50 m more (no flicker at the edge) */
 int roam_game_near(void){

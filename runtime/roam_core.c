@@ -485,7 +485,7 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         for (int i = 0; i < RC_RACEREP_NAME && r->name[i]; i++) nm[i] = (uint8_t)r->name[i];
         rc_putb(&w, nm, RC_RACEREP_NAME);
         break; }
-    case RC_MSG_SAY: rc_put8(&w, m->u.say.phrase); rc_put8(&w, m->u.say.seq); rc_put8(&w, 0); rc_put8(&w, 0); break;
+    case RC_MSG_SAY: rc_put8(&w, m->u.say.phrase); rc_put8(&w, m->u.say.seq); rc_put8(&w, m->u.say.stay); rc_put8(&w, 0); break;
     case RC_MSG_RACERES: {
         const rc_raceres *r = &m->u.raceres;
         if (!raceres_ok(r)) return -1;
@@ -661,7 +661,7 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
         break; }
     case RC_MSG_SAY:
         /* the phrase as it came: a newer game may have more of them (the game side ignores one it does not know) */
-        m->u.say.phrase = (uint8_t)rc_get8(&r); m->u.say.seq = (uint8_t)rc_get8(&r); (void)rc_get8(&r); (void)rc_get8(&r);
+        m->u.say.phrase = (uint8_t)rc_get8(&r); m->u.say.seq = (uint8_t)rc_get8(&r); m->u.say.stay = (uint8_t)rc_get8(&r); (void)rc_get8(&r);
         break;
     case RC_MSG_RACERES: {
         rc_raceres *q = &m->u.raceres;
@@ -1081,23 +1081,23 @@ int rc_take_lobby(rc_session *s, uint32_t *from, rc_lobby *l){
     s->n_lobby_in--;
     return 1;
 }
-int rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq){
+int rc_send_say(rc_session *s, uint8_t phrase, uint8_t seq, uint8_t stay){
     if (s->closed || !s->conf.say) return 0;
     int n = 0;
     for (int i = 0; i < RC_TABLE; i++){
         rc_peer *p = &s->peer[i];
         if (p->state != RC_PS_EST || !p->say) continue;
         rc_msg m; hdr(s, &m, RC_MSG_SAY);
-        m.u.say.phrase = phrase; m.u.say.seq = seq;
+        m.u.say.phrase = phrase; m.u.say.seq = seq; m.u.say.stay = stay;
         uint32_t before = s->tx;
         tx(s, p, &m);
         n += s->tx != before;
     }
     return n;
 }
-int rc_take_say(rc_session *s, uint32_t *from, uint8_t *phrase, uint8_t *seq){
+int rc_take_say(rc_session *s, uint32_t *from, uint8_t *phrase, uint8_t *seq, uint8_t *stay){
     if (!s->n_say_in) return 0;
-    *from = s->say_in[0].from; *phrase = s->say_in[0].phrase; *seq = s->say_in[0].seq;
+    *from = s->say_in[0].from; *phrase = s->say_in[0].phrase; *seq = s->say_in[0].seq; *stay = s->say_in[0].stay;
     for (int k = 1; k < s->n_say_in; k++) s->say_in[k - 1] = s->say_in[k];
     s->n_say_in--;
     return 1;
@@ -1644,7 +1644,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (p->state != RC_PS_EST || !s->conf.say) return;
         if (s->n_say_in == RC_SAY_INBOX){ s->say_dropped++; return; }
         s->say_in[s->n_say_in].from = m.h.sender; s->say_in[s->n_say_in].phrase = m.u.say.phrase;
-        s->say_in[s->n_say_in].seq = m.u.say.seq;
+        s->say_in[s->n_say_in].seq = m.u.say.seq; s->say_in[s->n_say_in].stay = m.u.say.stay;
         s->n_say_in++;
         break;
     case RC_MSG_BYE: {

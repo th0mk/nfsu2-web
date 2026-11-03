@@ -1400,5 +1400,6 @@
   "Final standings": "Итоговое положение",
   "Heat {k} results": "Результаты заезда {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Сетевая гонка: {n}-е место: победа засчитается в карьере при следующем заезде в гараж",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Сетевая гонка: {n}-е место. Победитель {name}: засчитается в вашей карьере при следующем заезде в гараж"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Сетевая гонка: {n}-е место. Победитель {name}: засчитается в вашей карьере при следующем заезде в гараж",
+  "You are not allowed to start a countdown here": "Здесь вы не можете начать обратный отсчёт"
 }

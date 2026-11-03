@@ -1373,5 +1373,6 @@
   "Final standings": "Classifica finale",
   "Heat {k} results": "Risultati della manche {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Gara multigiocatore: {n}° posto: la vittoria entra nella tua carriera alla prossima visita in garage",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Gara multigiocatore: {n}° posto. {name} l'ha vinta: entra nella tua carriera alla prossima visita in garage"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Gara multigiocatore: {n}° posto. {name} l'ha vinta: entra nella tua carriera alla prossima visita in garage",
+  "You are not allowed to start a countdown here": "Non puoi avviare un conto alla rovescia qui"
 }

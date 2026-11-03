@@ -1265,5 +1265,6 @@
   "Final standings": "최종 순위",
   "Heat {k} results": "히트 {k} 결과",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "멀티플레이 레이스: {n}위: 다음에 차고에 들르면 커리어에 반영돼요",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "멀티플레이 레이스: {n}위. {name} 우승: 다음에 차고에 들르면 내 커리어에 반영돼요"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "멀티플레이 레이스: {n}위. {name} 우승: 다음에 차고에 들르면 내 커리어에 반영돼요",
+  "You are not allowed to start a countdown here": "여기서는 카운트다운을 시작할 수 없습니다"
 }

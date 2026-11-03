@@ -1400,5 +1400,6 @@
   "Heat {k} results": "Результати заїзду {k}",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Мережева гонка: місце {n}: перемогу буде зараховано в кар'єрі під час наступного візиту в гараж",
   "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Мережева гонка: місце {n}. Переможець {name}: буде зараховано у вашій кар'єрі під час наступного візиту в гараж",
-  "A career race for players up to stage {n} and {host}'s friends.": "Гонка кар'єри для гравців до етапу {n} і друзів {host}."
+  "A career race for players up to stage {n} and {host}'s friends.": "Гонка кар'єри для гравців до етапу {n} і друзів {host}.",
+  "You are not allowed to start a countdown here": "Тут ви не можете почати зворотний відлік"
 }

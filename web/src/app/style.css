@@ -1039,6 +1039,7 @@ svg.qc-watch { width: 1em; height: 1em; flex: none; margin-right: 0.3em; vertica
   padding: 10px; border-left: 0; border-radius: 10px; font-size: 14px; pointer-events: auto;
 }
 @media (max-width: 520px) { .qc-picker[data-mode="touch"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.qc-picker[data-mode="touch"] > .qc-title, .qc-picker[data-mode="touch"] > .qc-wait { grid-column: 1 / -1; }   /* (a line, not a column) */
 .qc-group { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .qc-say {
   min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--text);

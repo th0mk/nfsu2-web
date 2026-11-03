@@ -1274,5 +1274,6 @@
   "Final standings": "Final sıralaması",
   "Heat {k} results": "{k}. yarışın sonuçları",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "Çok oyunculu yarış: {n}. sıra: zafer bir sonraki garaj ziyaretinde kariyerine geçer",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Çok oyunculu yarış: {n}. sıra. {name} kazandı: bir sonraki garaj ziyaretinde kariyerine geçer"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "Çok oyunculu yarış: {n}. sıra. {name} kazandı: bir sonraki garaj ziyaretinde kariyerine geçer",
+  "You are not allowed to start a countdown here": "Burada geri sayım başlatamazsın"
 }

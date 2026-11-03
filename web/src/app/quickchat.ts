@@ -23,7 +23,9 @@
 //          COUNTDOWN, marked as special), put in a slot as any.  Said in free roam (in a race it does nothing), then
 //          COUNT_S seconds and GO!: big in the picture's middle for the one who said it and the players within NEAR_M
 //          of them (the game's "d"), over their car for the others.  While one is on and GAP_MS after it, another
-//          player's is not shown, and the player's own waits.
+//          player's is not shown, and the player's own waits (one over a car far away holds back only far ones).  At a car meet only a player who has stayed there starts
+//          one (roam_game.c say_stay, SAY_MEET_N): the game drops the others' and refuses the player's own while its
+//          status "nocount" says so; the picker dims it then and, picked, says only that it is not allowed here.
 import type { GameSession } from './game';
 import { t } from './i18n';
 import { catName, COUNTDOWN, DEFAULT_GROUPS, DEFAULT_PHRASES, PHRASES, type CatId } from './phrases';
@@ -48,11 +50,12 @@ export const ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h1
 const WATCH = '<svg class="qc-watch" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9.2" r="5.3"/><path d="M6.2 1.6h3.6M8 1.6v2.3M8 9.2V6.4M12.3 4.4l1-1"/></svg>';
 
 /** the countdown: COUNT_S seconds, then GO! for GO_MS; big for the players within NEAR_M (m) of the one who said it;
- *  after it, GAP_MS before another */
-const COUNT_S = 5, GO_MS = 1000, NEAR_M = 50, GAP_MS = 10000;
+ *  after it, GAP_MS before another (10 s until 2026-11-03: players started one after another at a car meet) */
+const COUNT_S = 5, GO_MS = 1000, NEAR_M = 50, GAP_MS = 30000;
 
-/** what the game sends (roam_game.c say_page; racehorn.c qc_page, with race); d: a friend's distance (m) */
-interface Said { id: number; name: string; p: number; me?: number; lobby?: number; race?: number; d?: number }
+/** what the game sends (roam_game.c say_page; racehorn.c qc_page, with race); d: a friend's distance (m); no: the
+ *  player's own countdown not started (not theirs to start here) */
+interface Said { id: number; name: string; p: number; me?: number; lobby?: number; race?: number; d?: number; no?: number }
 
 export interface QuickChatDeps {
   /** a line in the chat log (the notices' place): the name, what was said, whether it is the player's own */
@@ -84,8 +87,12 @@ export class QuickChat {
    *  line over the car, the step shown (0..COUNT_S-1 the numbers, COUNT_S GO!) */
   private count: { id: number; at: number; big: HTMLElement | null; text: HTMLElement | null; step: number } | null = null;
   private countTimer = 0;
-  /** no countdown of another player shown, nor the player's own said, before this (performance.now()) */
+  /** no countdown of another player shown, nor the player's own said, before this (performance.now()): after one
+   *  big (the player's own, or one within NEAR_M) */
   private countFree = 0;
+  /** no countdown of a player past NEAR_M shown before this: after one over a car (one far away holds back no near
+   *  one, nor the player's own: a player just outside a car meet could keep its start waiting) */
+  private farFree = 0;
   /** the picker: closed (-1), a group open (0-3), all of them (4, touch) */
   private open = -1;
   private mode: Mode = 'keys';
@@ -95,6 +102,8 @@ export class QuickChat {
   /** the game's status "netrace" (runtime/racehorn.c qc_status): 1 driving in a race between players, 2 on its
    *  results, 0 not (also a game without it: no picker in races) */
   private netrace = 0;
+  /** the game's status "nocount" (runtime/web/status_web.c): 1 while the player's countdown would not start here */
+  private nocount = 0;
   private driveAt = 0;
   private armed = true;
   /** the player's sixteen: the phrase in each slot (group * 4 + place), and each group's name */
@@ -127,7 +136,7 @@ export class QuickChat {
   /** a game started: quick chat on (the setting) or off, free roam with others on or off, with the player's sixteen
    *  (phrases.ts phrasesOf, groupsOf), and the names the player blocks (settings.ts blockList) */
   start(s: GameSession, on: boolean, roam: boolean, layout: readonly number[], groups: readonly CatId[], blocked: readonly string[] = []) {
-    this.session = s; this.on = on; this.roam = roam; this.drive = 0; this.netrace = 0; this.driveAt = 0;
+    this.session = s; this.on = on; this.roam = roam; this.drive = 0; this.netrace = 0; this.nocount = 0; this.driveAt = 0;
     this.layout = layout; this.groups = groups;
     this.blocked = new Set(blocked.map(nameKey));
   }
@@ -135,7 +144,7 @@ export class QuickChat {
     this.session = null; this.on = false;
     this.close();
     this.endCount();
-    this.countFree = 0;
+    this.countFree = 0; this.farFree = 0;
     for (const l of this.lines.values()) l.el.remove();
     this.lines.clear();
   }
@@ -168,8 +177,11 @@ export class QuickChat {
     if (!s || now - this.driveAt <= 100) return;
     this.driveAt = now;
     const st = s.status?.read();
-    if (st) { this.drive = st.get('drive') ?? 0; this.netrace = st.get('netrace') ?? 0; }
+    if (st) { this.drive = st.get('drive') ?? 0; this.netrace = st.get('netrace') ?? 0; this.nocount = st.get('nocount') ?? 0; }
   }
+  /** a countdown of the player's would start now: in free roam (not in a race), and not at a car meet where the
+   *  player has not stayed */
+  private countOk(): boolean { return this.driving() && !this.nocount; }
 
   private key(e: KeyboardEvent) {
     if (!this.session || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -236,6 +248,7 @@ export class QuickChat {
     // and not while one is on near)
     const race = !this.driving() && this.racing();
     if (p === COUNTDOWN && race) { this.close(); return; }
+    if (p === COUNTDOWN && !this.countOk()) { this.refuse(); return; }
     const hold = Math.max(this.wait(now), p === COUNTDOWN ? this.countFree - now : 0);
     if (hold > 0) { this.draw(hold); return; }
     if (!s.net?.say?.(p, race)) { this.close(); return; }
@@ -246,17 +259,24 @@ export class QuickChat {
 
   /** a slot's phrase in the page's language */
   private text(slot: number): string { return t(PHRASES[this.layout[slot]]?.text ?? ''); }
-  /** a slot's phrase into el: its text, the countdown with its stopwatch (dimmed in a race: it does nothing there) */
+  /** a slot's phrase into el: its text, the countdown with its stopwatch (dimmed where it would not start: in a race,
+   *  where it does nothing, and at a car meet where the player has not stayed) */
   private slotText(el: HTMLElement, slot: number) {
     el.textContent = this.text(slot);
     if (this.layout[slot] !== COUNTDOWN) return;
     el.insertAdjacentHTML('afterbegin', WATCH);
-    if (!this.driving() && this.racing()) el.classList.add('qc-off');
+    if (!this.countOk()) el.classList.add('qc-off');
   }
 
-  private draw(hold = 0) {
+  /** the player's countdown not started here: the picker says so (not why: who stayed how long stays the game's) */
+  private refuse() {
+    this.deps.log('[chat] the countdown: not allowed here');
+    this.draw(0, t('You are not allowed to start a countdown here'));
+  }
+
+  private draw(hold = 0, no = '') {
     clearTimeout(this.closeTimer);
-    const p = this.picker, wait = Math.max(hold, this.wait(performance.now()));
+    const p = this.picker, wait = no ? 0 : Math.max(hold, this.wait(performance.now()));
     this.deps.place();
     p.dataset.mode = this.mode;
     p.hidden = false;
@@ -264,7 +284,10 @@ export class QuickChat {
     const el = (tag: string, cls: string, text?: string) => {
       const e = document.createElement(tag); e.className = cls; if (text !== undefined) e.textContent = text; return e;
     };
-    if (wait > 0) {
+    if (no) {
+      kids.push(el('div', 'qc-title', t('Quick chat')), el('div', 'qc-wait qc-no', no));
+      this.closeTimer = window.setTimeout(() => this.close(), PICK_MS);
+    } else if (wait > 0) {
       kids.push(el('div', 'qc-title', t('Quick chat')), el('div', 'qc-wait', t('Wait a moment')));
       this.closeTimer = window.setTimeout(() => this.close(), Math.min(wait, PICK_MS));
     } else if (this.open === 4) {
@@ -308,6 +331,7 @@ export class QuickChat {
     let s: Said;
     try { s = JSON.parse(json) as Said; } catch { this.deps.log(`[chat] not JSON: ${json.slice(0, 80)}`); return; }
     if (!this.on || typeof s.id !== 'number' || typeof s.p !== 'number') return;
+    if (s.p === COUNTDOWN && s.me && s.no) { this.refuse(); return; }      // (the game's: picked as the status changed)
     if (s.p === COUNTDOWN) { if (!s.race) this.counted(s); return; }       // (said in free roam only)
     if (!(s.p >= 0 && s.p < PHRASES.length)) return;
     const text = t(PHRASES[s.p].text), me = !!s.me, name = String(s.name ?? ''), where = s.race ? ', in the race' : s.lobby ? ', in our lobby' : '';
@@ -339,14 +363,18 @@ export class QuickChat {
   }
 
   /** a countdown said (the player's own, or a friend's): big for the one who said it and the players within NEAR_M,
-   *  else over the car; not while another is on near, nor GAP_MS after it */
+   *  else over the car; not while another is on, nor GAP_MS after it (a far one: after a far one only) */
   private counted(s: Said) {
     const me = !!s.me, name = String(s.name ?? ''), now = performance.now();
     if (!me && this.blocked.has(nameKey(name))) { this.deps.log(`[chat] ${name}'s countdown: not shown (blocked)`); return; }
-    if (!me && now < this.countFree) { this.deps.log(`[chat] ${name}'s countdown: not shown (one was on)`); return; }
     const near = me || (typeof s.d === 'number' && s.d <= NEAR_M);
+    if (!me && now < (near ? this.countFree : Math.max(this.countFree, this.farFree))) {
+      this.deps.log(`[chat] ${name}'s countdown: not shown (one was on)`); return; }
+    const was = this.count;                                // (a far one's number over its car: gone with it)
+    if (was?.text) { this.lines.get(was.id)?.el.remove(); this.lines.delete(was.id); }
     this.endCount();
-    this.countFree = now + COUNT_S * 1000 + GO_MS + GAP_MS;
+    if (near) this.countFree = now + COUNT_S * 1000 + GO_MS + GAP_MS;
+    else this.farFree = now + COUNT_S * 1000 + GO_MS + GAP_MS;
     this.deps.log(`[chat] ${me ? 'you' : name} started the countdown${me ? '' : ` (${s.d ?? '?'} m${near ? '' : ': over the car'})`}`);
     let big: HTMLElement | null = null, text: HTMLElement | null = null;
     if (near) {

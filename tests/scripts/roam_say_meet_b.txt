@@ -1,0 +1,30 @@
+# Quick chat's countdown at a car meet, instance B (roam_say_meet_a.txt says how to run it): shows A's first
+# countdown, sends one at the meet as a game before the stay would (stay 0: A drops it), and one once stayed (A
+# shows it).
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++0    roam mp waitsaid 1 3000          # A's countdown before the meet
++0    roam mp waitcars 9 12000
++600  roam mp say 152 0               # at the meet, as a game before the stay: A drops it
++0    roam mp waitstay 160 20000
++300  roam mp say 152                 # stayed: A shows it
++1200 roam mp status
++10   quit

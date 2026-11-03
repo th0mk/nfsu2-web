@@ -1265,5 +1265,6 @@
   "Final standings": "最終順位",
   "Heat {k} results": "ヒート{k}の結果",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "マルチプレイレース: {n}位: 次にガレージに戻ったときにキャリアに反映されます",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "マルチプレイレース: {n}位。{name}が勝利: 次にガレージに戻ったときにキャリアに反映されます"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "マルチプレイレース: {n}位。{name}が勝利: 次にガレージに戻ったときにキャリアに反映されます",
+  "You are not allowed to start a countdown here": "ここではカウントダウンを開始できません"
 }

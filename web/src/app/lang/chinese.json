@@ -1265,5 +1265,6 @@
   "Final standings": "最終排名",
   "Heat {k} results": "第 {k} 輪結果",
   "Multiplayer race: {pos} place: the win goes into your career at your next garage visit": "多人比賽：第 {n} 名：下次回到車庫時計入生涯模式",
-  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "多人比賽：第 {n} 名。{name} 獲勝：下次回到車庫時計入你的生涯模式"
+  "Multiplayer race: {pos} place. {name} won it: into your career at your next garage visit": "多人比賽：第 {n} 名。{name} 獲勝：下次回到車庫時計入你的生涯模式",
+  "You are not allowed to start a countdown here": "你不能在這裡開始倒數計時"
 }
