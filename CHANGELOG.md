@@ -10,8 +10,9 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (539cda6)
+## 2026-11-03 (237147b)
 
+- **Free roam:** among many players, the game no longer freezes or stops with error 134 when a car closes its trunk, hood or doors.
 - **Free roam:** lobby races count in your career. Win a race of your stage you haven't won yet, or finish one a friend wins, and your garage gives you the win on the way back, as with Solo: prize, rep, story, a stage's final and its movie, and any sponsor offer. A URL event races all its heats in one trip. Solo stays as it was.
 - **Free roam:** the lobby panel marks with a star whom a race counts for, and a lobby that counts for its host takes players up to that stage and the host's friends. Races that don't count pay by your stage, and one that counts never pays less. When everyone else quits a race, the one who stayed wins it.
 - **Free roam:** at a race's marker, Solo or Multiplayer? starts on Solo, or on Join where a lobby waits to be joined. While a lobby waits at a start, no second one opens beside it unless it's full.
