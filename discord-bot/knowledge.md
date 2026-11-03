@@ -308,7 +308,9 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   since 109bdcc4; Songs in Settings, Game (Uncensored or the game's Original versions) and F7 for the next song,
   since 32540c78; drift battles between players (drift mode on, then the challenge offered as for an outrun: 90 s,
   most drift points win $100 out of the loser's bank, no nitrous, the cars drive through each other), since 19dc8394;
-  the guide
+  a picture that looks stretched, cars too wide, wheels oval: the original game draws everything about 10 % too wide
+  (14 % in the garage); Settings, Display, more: 3D proportions, Corrected gives true proportions and round wheels with
+  a little more at the sides (Original, the game's own, stays the default), since 6519964e; the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
