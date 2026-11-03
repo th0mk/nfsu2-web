@@ -10,8 +10,8 @@ Mac; in the browser a worker's time origin plus its monotonic clock, so
 instances started on either side of a correction of the system clock -- WSL
 makes them -- are that far apart: a WorldTimer offset of a second or more
 in the last lines, and ~50 m errors for every pair with that instance, while
-the game's own [racenet] "their race clock ... off ours" says tens of ms),
-the frame cap, WorldTimer and every race car with a flag for the local
+the game's own [racenet] "their race clock ... off ours" says tens of ms;
+lan-pair.mjs's clock.csv next to each trace now lines them up), the frame cap, WorldTimer and every race car with a flag for the local
 player's car.  Frames whose top package is not the race HUD (pre-race
 screen, results) are left out when the trace says so.  For every pair (owner A, viewer B) this tool finds A's car in
 B's car list (the index whose positions stay closest to A's own trace) and
@@ -145,6 +145,27 @@ def main(argv):
     if len(files) < 2:
         print('need two or more traces'); return 2
     data = {os.path.basename(os.path.dirname(f)) or f: load(f) for f in files}
+    # The instances' wall clocks can differ (a page's clock is its worker's time origin + now(), the origin the wall
+    # clock as the worker started: pages started across a WSL clock step read that far apart, ~0.5 s in 2 of 3 runs
+    # on 2026-11-03).  lan-pair.mjs's clock.csv next to each trace has the trace clock of every "[ctclock]" line
+    # against when lan-pair saw it by its own monotonic clock; the least difference is the instance's offset.
+    offs = {}
+    for f in files:
+        k = os.path.basename(os.path.dirname(f)) or f
+        try:
+            with open(os.path.join(os.path.dirname(f), 'clock.csv')) as cf:
+                o = [float(r['arrived_ms']) / 1000.0 - float(r['trace_s']) for r in csv.DictReader(cf)]
+            if o: offs[k] = min(o)
+        except (OSError, ValueError, KeyError):
+            pass
+    if len(offs) == len(data):
+        ref = offs[next(iter(data))]
+        for k in data:
+            d = offs[k] - ref
+            if abs(d) > 0.002: print(f'{k}: its trace clock read {-d * 1000:+.1f} ms off the first one\'s (clock.csv): corrected')
+            data[k] = [(t + d, cap, wt, cars) for t, cap, wt, cars in data[k]]
+    elif offs:
+        print('clock.csv missing for some instance: traces lined up by their own wall clocks')
     tracks = {k: own_track(v) for k, v in data.items()}
     print('instance  rows  racing span (s)  fps   cap (fps)  own car samples')
     for k, rows in data.items():
