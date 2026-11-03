@@ -127,6 +127,7 @@ While you drive:
 | Esc or P | Pause; Esc also goes back in menus |
 | Enter | Choose (menus); in free roam, start an event at its marker or take an outrun |
 | F12 | Photo mode while you drive (see below), and in it the photo; elsewhere a screenshot. Both are PNGs kept with your saves and shown in Saves on the start page |
+| **F7** | Next song: the game's next EA Trax song, or with Radio on the folder's next track (not while the game is paused) |
 | **F8** | Frame-rate counter: off, on, detailed |
 | **F9** | The page menu: when the game last saved, full screen, counter, ghost mode (off, players, everything) and crews (in free roam), radio, controls, log, **Quit game**, and Stop waiting: play offline while you wait in line; on a controller Home, or both sticks pressed in; on a touch screen the ☰ button |
 | **Hold Esc** | Leave full screen (a short press still goes to the game) |
@@ -225,7 +226,7 @@ that room.
 |---|---|
 | Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
-| Game, Game | language, movies, subtitles, autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
+| Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus and HUD (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
 | Controls, Controller | rumble; more: controller (on, hotplug or off), menu buttons, dead zones, trigger full press |
 
@@ -246,6 +247,9 @@ that room.
   [English Subtitles Fixed](https://nfsmods.xyz/mod/5286), with who says each line, where the server has its
   language pack (without it English has none: the game's own English lines stop at their first
   apostrophe).
+- **Songs:** the EA Trax songs. Uncensored (the default) plays them unedited, some in longer versions than the
+  game's, as a soundtrack mod has them. Original plays the versions the game
+  shipped with, where the server has them. F7 skips to the next song while you play.
 - **Show hidden races:** off by default. The career has 33 hidden races (one in the prologue, then 4, 8, 10 and 10
   in the later stages) that are not on the map or the radar: in the original game one shows only when you drive near it,
   and once all the others are won the map looks empty. On, as MaxHwoy's

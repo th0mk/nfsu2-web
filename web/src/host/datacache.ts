@@ -38,15 +38,30 @@ export interface CacheFile { h: FileSystemSyncAccessHandle; have: Uint8Array; ha
 
 export const manifestFiles = (m: Manifest): DataFile[] => m.files.filter(f => !f.d).map(f => ({ path: f.p, size: f.s ?? 0, mtime: f.m ?? 0 }));
 const parts = (f: DataFile) => f.path.toLowerCase().split('/');
+/** The data the settings pick: a texture pack (TEXPACKS/<name>.pak, runtime/web/texrep_web.c; '' for none) and the
+ *  songs (settings.ini songs: 'original' reads pfdata/original's files in place of pfdata's, songsPath). */
+export interface Packs { texpack: string; songs: string }
+export const NO_PACKS: Packs = { texpack: '', songs: '' };
+/** EA's own songs (tools/musicpack.py --original) for a file of pfdata: pfdata/<name> -> pfdata/original/<name>; null
+ *  for any other path.  The folder's own are a soundtrack mod's uncensored versions. */
+export function songsPath(path: string): string | null {
+  const p = path.split('/');
+  return p.length === 2 && p[0].toLowerCase() === 'pfdata' ? [p[0], 'original', p[1]].join('/') : null;
+}
 /** The files a game in this language reads: the folder's, but where its language pack (LANGPACKS/<language>,
- *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs
- *  (TEXPACKS/<name>.pak, runtime/web/texrep_web.c) only the one picked (texpack, '' for none). */
-function gameFiles(files: DataFile[], language: string, texpack: string): DataFile[] {
+ *  runtime/language.c) has a file of the same path, that one; no other language's pack; of the texture packs only the
+ *  one picked; pfdata/original's files only with the original songs, and then in place of pfdata's. */
+function gameFiles(files: DataFile[], language: string, packs: Packs): DataFile[] {
   const own = new Set(files.filter(f => { const p = parts(f); return p[0] === 'langpacks' && p[1] === language; })
     .map(f => parts(f).slice(2).join('/')));
+  const isOriginal = (p: string[]) => p.length === 3 && p[0] === 'pfdata' && p[1] === 'original';
+  const original = packs.songs === 'original';
+  const replaced = new Set(original ? files.map(parts).filter(isOriginal).map(p => `pfdata/${p[2]}`) : []);
   return files.filter(f => {
     const p = parts(f);
-    if (p[0] === 'texpacks') return p.length === 2 && p[1] === `${texpack}.pak`;
+    if (p[0] === 'texpacks') return p.length === 2 && p[1] === `${packs.texpack}.pak`;
+    if (isOriginal(p)) return original;
+    if (replaced.has(p.join('/'))) return false;
     return p[0] === 'langpacks' ? p[1] === language : !own.has(p.join('/'));
   });
 }
@@ -61,12 +76,12 @@ export function av1Path(path: string): string | null {
 /** What "Preload the game data" fetches: all but the movies (MOVIES/, a third of the folder in VP6 video that
  *  does not compress, and their AV1 copies).  They stream as they play, and with Movies off the game never opens
  *  them. */
-export const aheadFiles = (files: DataFile[], language: string, texpack = '') =>
-  gameFiles(files, language, texpack).filter(f => !isMovie(f));
+export const aheadFiles = (files: DataFile[], language: string, packs: Packs = NO_PACKS) =>
+  gameFiles(files, language, packs).filter(f => !isMovie(f));
 /** The movies a game in this language can open: its VP6 files, or where it plays AV1 (av1) their AV1 copies, the
  *  VP6 file where a movie has none (as the I/O worker opens them, io-worker.ts dataFile). */
 export function languageMovies(files: DataFile[], language: string, av1 = false): DataFile[] {
-  const all = gameFiles(files, language, '').filter(isMovie), byPath = new Map(all.map(f => [f.path.toLowerCase(), f]));
+  const all = gameFiles(files, language, NO_PACKS).filter(isMovie), byPath = new Map(all.map(f => [f.path.toLowerCase(), f]));
   return all.filter(f => av1Path(f.path) !== null).map(f => (av1 && byPath.get(av1Path(f.path)!.toLowerCase())) || f);
 }
 export const dataUrl = (base: string, path: string) => base + path.split('/').map(encodeURIComponent).join('/');

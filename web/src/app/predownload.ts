@@ -5,7 +5,7 @@
 // goes on after the game ends.
 
 import type { FromPredownload, ToPredownload } from '../host/predownload-worker';
-import { DATA_BASE, MANIFEST_URL, aheadFiles, languageMovies, manifestFiles, scanCache, type Manifest } from '../host/datacache';
+import { DATA_BASE, MANIFEST_URL, aheadFiles, languageMovies, manifestFiles, scanCache, type Manifest, type Packs } from '../host/datacache';
 
 export type DownloadState = 'idle' | 'running' | 'paused' | 'done' | 'error';
 export interface DownloadStatus {
@@ -29,10 +29,10 @@ export async function moviesKept(language: string, av1: boolean): Promise<boolea
 }
 
 /** How much of what the download fetches (all but the movies) this browser keeps: bytes in the cache, of their total. */
-export async function gameDataKept(language: string, texpack: string): Promise<{ have: number; total: number }> {
+export async function gameDataKept(language: string, packs: Packs): Promise<{ have: number; total: number }> {
   const r = await fetch(MANIFEST_URL, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const s = await scanCache(aheadFiles(manifestFiles(await r.json() as Manifest), language, texpack));
+  const s = await scanCache(aheadFiles(manifestFiles(await r.json() as Manifest), language, packs));
   return { have: s.have, total: s.total };
 }
 
@@ -42,10 +42,10 @@ export class Predownload {
   private ended: (() => void) | null = null;
   private samples: { t: number; have: number }[] = [];
 
-  /** language: the game's language now (settings.ini): only its language pack is fetched; texpack: the texture
-   *  pack picked ('' for none), the only one fetched */
+  /** language: the game's language now (settings.ini): only its language pack is fetched; packs: the texture pack
+   *  picked ('' for none), the only one fetched, and the songs (datacache.ts Packs) */
   constructor(private onChange: (s: DownloadStatus) => void, private log: (line: string) => void, readonly language: () => string,
-              readonly texpack: () => string) {}
+              readonly packs: () => Packs) {}
 
   get running() { return this.w !== null; }
 
@@ -55,7 +55,7 @@ export class Predownload {
     this.samples = [];
     w.onmessage = (e: MessageEvent<FromPredownload>) => this.message(w, e.data);
     w.onerror = e => this.message(w, { t: 'error', msg: e.message || 'it stopped unexpectedly' });
-    w.postMessage({ t: 'start', manifestUrl: MANIFEST_URL, language: this.language(), texpack: this.texpack() } satisfies ToPredownload);
+    w.postMessage({ t: 'start', manifestUrl: MANIFEST_URL, language: this.language(), packs: this.packs() } satisfies ToPredownload);
     this.set({ state: 'running', have: 0, total: 0, rate: 0, error: undefined });     // counted again by the worker
     this.log('[app] predownload: started');
   }

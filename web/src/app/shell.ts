@@ -71,6 +71,7 @@ import { claimQuietly, NameRow, quietCheck, renamePick, settleName, type PlayNam
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
 import { moviesKept, Predownload } from './predownload';
 import { movieCodec } from '../host/movie';
+import type { Packs } from '../host/datacache';
 import { texSplit } from '../gpu/index';
 
 type Phase = 'boot' | 'ready' | 'error' | 'waiting' | 'starting' | 'playing' | 'exited';
@@ -304,6 +305,9 @@ function resolved(host: Record<string, string> = {}): Resolved { return resolveE
 const language = (r: Resolved = resolved()) => (r.env.NFSU2_LANGUAGE ?? 'english').toLowerCase();
 /** the texture pack picked (runtime/web/texrep_web.c), '' for none: the one the page fetches ahead and counts */
 const texpack = (r: Resolved = resolved()) => { const v = (r.env.NFSU2_UI_TEXTURES ?? '').toLowerCase(); return v === 'original' ? '' : v; };
+/** the data the settings pick (datacache.ts Packs): the texture pack and the songs (EA's own: io-worker.ts dataFile) */
+const packs = (r: Resolved = resolved()): Packs => ({ texpack: texpack(r), songs: (r.env.NFSU2_SONGS ?? '').trim().toLowerCase() });
+const packsKey = () => { const p = packs(); return `${language()}/${p.texpack}/${p.songs}`; };
 
 // ----------------------------------------------------------------- play --
 function stageCanvas(): HTMLCanvasElement {
@@ -1988,10 +1992,10 @@ export async function boot() {
   panelTabs($('#settings'), { store: 'nfsu2.page.tab', hash: true });
   panelTabs($('#about'));
   settings = new SettingsPanel($('#settings'), {
-    // another language or texture pack counts other files as the game data (its pack); a keyphrase sends the file
+    // another language, texture pack or songs count other files as the game data (its pack); a keyphrase sends the file
     saveDir: SAVE, environment: ENVIRONMENT, defaults: DEVICE, onSaved: text => {
-      const was = language() + '/' + texpack(); settingsText = text;
-      if (language() + '/' + texpack() !== was) void saves.refresh();
+      const was = packsKey(); settingsText = text;
+      if (packsKey() !== was) void saves.refresh();
       vault?.changed(); players?.now();
       applyLanguage();
     },
@@ -2021,7 +2025,7 @@ export async function boot() {
   window.addEventListener('online', () => players?.now());
   window.addEventListener('resize', placeNotices);
   window.addEventListener('resize', placeLobby);
-  download = new Predownload(s => saves.showData(s), logLine, () => language(), () => texpack());
+  download = new Predownload(s => saves.showData(s), logLine, () => language(), () => packs());
   saves = new SavesPanel($('#saves'), $('#game-data'), {
     saveDir: SAVE, busy: () => !!session || starting || !instance.owner, confirm: confirmBox,
     onRestored: () => { void loadSettings(); void settings.refresh(); }, download, onChanged: () => vault.changedSaves(),
@@ -2072,16 +2076,18 @@ export async function boot() {
   $('#friends-pop').addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-act="friends-done"]')) $<HTMLDialogElement>('#friends-pop').close(); });
   $('#friends-pop').addEventListener('close', () => { if ($<HTMLDialogElement>('#menu').open) $<HTMLButtonElement>('#menu [data-act="friends"]').focus(); });
 
-  // F8 / F9 belong to the page while the game runs (the game binds neither,
-  // Chrome reserves neither); caught first, so the game never sees them.  F12
-  // too: photo mode in the world, its picture while it is on, else the page's
-  // screenshot (not the game's, whose copy of the frame comes out black in
-  // this port, nor the browser's developer tools).
+  // F7 / F8 / F9 belong to the page while the game runs (the game binds none
+  // of them, Chrome reserves none); caught first, so the game never sees them,
+  // nor the browser F7 (caret browsing).  F7: the next song (RadioLink.skip,
+  // runtime/radio.c).  F12 too: photo mode in the world, its picture while it
+  // is on, else the page's screenshot (not the game's, whose copy of the frame
+  // comes out black in this port, nor the browser's developer tools).
   window.addEventListener('keydown', e => {
-    if (session && (e.code === 'F8' || e.code === 'F9' || e.code === 'F12')) {
+    if (session && (e.code === 'F7' || e.code === 'F8' || e.code === 'F9' || e.code === 'F12')) {
       e.preventDefault(); e.stopImmediatePropagation();
       if (e.repeat) return;
-      if (e.code === 'F8') toast(fpsLabel(fps.cycle()), 1500); else if (e.code === 'F9') openMenu(); else photo.f12();
+      if (e.code === 'F7') radioPort()?.skip();
+      else if (e.code === 'F8') toast(fpsLabel(fps.cycle()), 1500); else if (e.code === 'F9') openMenu(); else photo.f12();
       return;
     }
     // Enter plays only when nothing else has the focus (or Play itself does): a

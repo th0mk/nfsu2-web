@@ -155,6 +155,10 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'language', env: 'NFSU2_LANGUAGE', kind: 'enum', vals: LANGUAGES.join('|'), scope: 'web' },
   // the movies' subtitles (runtime/language.c).  Not in bundle.m's table either
   { key: 'subtitles', env: 'NFSU2_SUBTITLES', kind: 'bool', scope: 'web' },
+  // the EA Trax songs: the game folder's (a soundtrack mod's uncensored versions) or EA's own, which the I/O worker
+  // reads in their place (pfdata/original: io-worker.ts dataFile; the page fetches ahead only the ones picked:
+  // datacache.ts).  Not in bundle.m's table either
+  { key: 'songs', env: 'NFSU2_SONGS', kind: 'enum', vals: 'uncensored|original', scope: 'web' },
   // the player's horn, which the others hear too (runtime/horn.c).  Not in bundle.m's table either: NFSU2_HORN there
   { key: 'horn', env: 'NFSU2_HORN', kind: 'enum', vals: HORNS.join('|'), scope: 'web' },
   // the menus' and HUD's textures: a texture pack in place of the game's (runtime/web/texrep_web.c; the page fetches
@@ -219,6 +223,12 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # with who says each line, where the server has its language pack.
 # [NFSU2_SUBTITLES]
 #subtitles = on
+
+# The EA Trax songs: uncensored = unedited, some in longer versions than
+# the game's (a soundtrack mod's); original = the versions the game shipped
+# with, where the server has them.  F7 plays the next song while you play.
+# [NFSU2_SONGS]
+#songs = uncensored
 
 # Sound output.  [NOSOUND, inverted]
 #sound = on

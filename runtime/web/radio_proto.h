@@ -9,7 +9,7 @@
 #define RADIO_TAG    44            /* bytes of one line of text: the plaque's 40 characters and the NUL, in whole words */
 #define RADIO_RATE   44100         /* the game mixer's rate */
 #define RADIO_MAGIC  0x31444152u   /* "RAD1": a runtime with the radio writes it first in the block */
-#define RADIO_VERSION 1u           /* of the words below: a layout change raises it */
+#define RADIO_VERSION 2u           /* of the words below: a layout change raises it (2: skip) */
 
 typedef struct {
     uint32_t radio_magic;          /* RADIO_MAGIC, written when the runtime starts; the page uses nothing below without it */
@@ -34,8 +34,9 @@ typedef struct {
         uint32_t ring_frames;      /* a power of two */
         uint32_t read;             /* frames taken by the runtime */
     } rings;
+    uint32_t skip;                 /* written by the page: counts the presses of the next-song key (F7); the runtime stops the playing song once for each, radio on or off */
     char offer_text[RADIO_PLACES][3][RADIO_TAG];   /* per place: artist, title, album, NUL-padded ASCII */
 } HostStatusRadio;
 
-_Static_assert(sizeof(HostStatusRadio) == 56 + RADIO_PLACES * 3 * RADIO_TAG, "page layout (status.ts)");
+_Static_assert(sizeof(HostStatusRadio) == 60 + RADIO_PLACES * 3 * RADIO_TAG, "page layout (status.ts)");
 #endif

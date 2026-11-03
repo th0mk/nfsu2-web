@@ -10,6 +10,13 @@ writes <out folder>/MusicSFx.mus and MusicSFx.mpf (510 MB -> 235 MB, a minute
 on 12 cores).  Needs LAME 3.100 on the PATH (`apt install lame`); the same
 input and LAME give the same bytes.
 
+    tools/musicpack.py <game folder> <game folder>/pfdata/original --original
+
+writes EA's own songs instead (126 MB, no LAME): the folder's 27 EA Trax songs
+are a soundtrack mod's (the ADPCM streams below), EA's are the unused EALayer3
+copies.  The page reads them in place of pfdata/MusicSFx.* with settings.ini
+songs = original (web/src/host/io-worker.ts dataFile).
+
 What is in the original (PC):
   - MusicSFx.mpf, EA's interactive-music map (PathFinder "PFDx" version 4).
     The game's loader (0x73a7c0) finds its tables from the header; the last
@@ -308,17 +315,67 @@ def encode(job):
     return ealayer3_stream(header_tags(d[8:ch[0][2]]), decode_ea_xa(d, ch))
 
 
+def stream_ms(d, o):
+    """A stream's length in ms, as the samples table counts it."""
+    tags = header_tags(d[o + 8:o + chunks(d, o)[0][2]])
+    return tagval(tags, 0x85) * 1000 / tagval(tags, 0x84, 22050)
+
+
+def is_ealayer3(d, o):
+    return tagval(header_tags(d[o + 8:o + chunks(d, o)[0][2]]), 0xa0) == 0x17
+
+
+def original(d, m, entries, table):
+    """EA's own songs (--original).  The mod changed only the table's offsets, so an entry's length is still that of
+    EA's stream: the unnamed EALayer3 stream of the same length is the entry's.  Out: the streams in the table's
+    order, each as it is (EA's own layout: entry i is stream i), and the table (in m) pointing at them."""
+    named = {o * ALIGN for o, _ in entries}
+    spare = [o for o in chunks_all(d) if o not in named and is_ealayer3(d, o)]
+    out, new = bytearray(), []
+    for i, (o, ms) in enumerate(entries):
+        o *= ALIGN
+        if not is_ealayer3(d, o):
+            same = [s for s in spare if abs(stream_ms(d, s) - ms) < 1]
+            if len(same) != 1:
+                raise SystemExit(f'entry {i}: {len(same)} unnamed EALayer3 streams of {ms} ms, not one')
+            o = same[0]
+            spare.remove(o)
+        ch = chunks(d, o)
+        new.append(len(out) // ALIGN)
+        out += d[o:ch[-1][1] + ch[-1][2]]
+        out += bytes(-len(out) % ALIGN)
+    for i, (_, ms) in enumerate(entries):
+        struct.pack_into('<II', m, table + 8 * i, new[i], ms)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('game', help='the game folder (with pfdata/ in it)')
     ap.add_argument('out', help='where MusicSFx.mus and MusicSFx.mpf go')
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    ap.add_argument('--original', action='store_true',
+                    help="EA's own songs in place of the mod's, as they are (no LAME): pfdata/original")
     a = ap.parse_args()
     if sys.byteorder != 'little':
         raise SystemExit('a little-endian machine only (the samples go to LAME as they are in memory)')
     src = os.path.join(a.game, 'pfdata')
     names = {n.lower(): n for n in os.listdir(src)}
     mus_path, mpf_path = (os.path.join(src, names[n]) for n in ('musicsfx.mus', 'musicsfx.mpf'))
+    if a.original:
+        m = bytearray(open(mpf_path, 'rb').read())
+        with open(mus_path, 'rb') as f:
+            d = f.read()
+        table, count = samples_table(m)
+        entries = [struct.unpack_from('<II', m, table + 8 * i) for i in range(count)]
+        out = original(d, m, entries, table)
+        # the music's stream buffer (0x73aea0): from the distance between the last two entries, which must not change
+        gap = lambda es: ((es[-1][0] - es[-2][0]) * ALIGN) & 0xffffffff
+        if gap([struct.unpack_from('<II', m, table + 8 * i) for i in range(count)]) != gap(entries):
+            raise SystemExit('the last two songs moved apart: the game would size its music buffer differently')
+        write(a.out, out, m)
+        print(f'MusicSFx.mus: {count} songs, EA\'s own, {len(out)} bytes', file=sys.stderr)
+        return
     if not shutil.which('lame'):
         raise SystemExit('needs LAME 3.100 on the PATH (apt install lame)')
     version = subprocess.run(['lame', '--version'], capture_output=True, text=True).stdout.split('\n')[0]
@@ -358,13 +415,17 @@ def main():
     gap = lambda es: ((es[-1][0] - es[-2][0]) * ALIGN) & 0xffffffff
     if gap([(new[o * ALIGN], ms) for o, ms in entries]) != gap(entries):
         raise SystemExit('the last two songs moved apart: the game would size its music buffer differently')
-    os.makedirs(a.out, exist_ok=True)
-    for name, data in (('MusicSFx.mus', out), ('MusicSFx.mpf', m)):
-        tmp = os.path.join(a.out, name + '.tmp')
+    write(a.out, out, m)
+    print(f'MusicSFx.mus: {len(d)} -> {len(out)} bytes ({len(out) / len(d):.1%})', file=sys.stderr)
+
+
+def write(folder, mus, mpf):
+    os.makedirs(folder, exist_ok=True)
+    for name, data in (('MusicSFx.mus', mus), ('MusicSFx.mpf', mpf)):
+        tmp = os.path.join(folder, name + '.tmp')
         with open(tmp, 'wb') as f:
             f.write(data)
-        os.replace(tmp, os.path.join(a.out, name))
-    print(f'MusicSFx.mus: {len(d)} -> {len(out)} bytes ({len(out) / len(d):.1%})', file=sys.stderr)
+        os.replace(tmp, os.path.join(folder, name))
 
 
 def chunks_all(d):

@@ -1,11 +1,11 @@
 // The one place that knows the layout of the radio's words after the status table (HostStatusRadio in
 // runtime/web/radio_proto.h, same order): the page writes the switch, the tags and the sound, the runtime (runtime/radio.c)
 // reads them.  RadioLink.open() gives a link only to a game whose block has the radio's magic and version.
-const WORDS = ['radio_magic', 'radio_version', 'on', 'tag_seq', 'places', 'req_seq', 'req_index', 'ready_seq', 'failed_seq', 'total', 'written', 'ring', 'ring_frames', 'read'] as const;
+const WORDS = ['radio_magic', 'radio_version', 'on', 'tag_seq', 'places', 'req_seq', 'req_index', 'ready_seq', 'failed_seq', 'total', 'written', 'ring', 'ring_frames', 'read', 'skip'] as const;
 type Word = typeof WORDS[number];
 export const RADIO_WORDS: readonly string[] = WORDS;
 /** What the runtime writes into the first two words at its start (RADIO_MAGIC, RADIO_VERSION in radio_proto.h). */
-export const RADIO_MAGIC = 0x31444152, RADIO_VERSION = 1;
+export const RADIO_MAGIC = 0x31444152, RADIO_VERSION = 2;
 const W = Object.fromEntries(WORDS.map((n, i) => [n, i])) as Record<Word, number>;
 const CTL = 16 + 32 * 24,   // the status table before them (status.ts: HEAD + MAX * ITEM)
   PLACES = 2, TAG = 44, TEXT = WORDS.length * 4;
@@ -66,6 +66,11 @@ export class RadioLink {
 
   /** Ends the track where the game has read it: the runtime sees the end of the stream and the game goes on to its next song. */
   cut() { const w = this.words(), at = Atomics.load(w, W.read); Atomics.store(w, W.written, at); Atomics.store(w, W.total, at); }
+
+  /** The next-song key (F7): the runtime stops the song playing, so the game starts its next one (EA Trax's, or with the
+   *  radio on the folder's next track).  Each press counts once; with no song playing (a drift or drag race, the pause
+   *  menu) the runtime lets it go. */
+  skip() { Atomics.add(this.words(), W.skip, 1); }
 
   /** Frames the rings take now (the counters wrap at 32 bits, their difference does not). */
   room(): number {

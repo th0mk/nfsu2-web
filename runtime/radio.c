@@ -13,6 +13,8 @@
  *     blocks of the songs after it from the music's stream (the two readers of an EALayer3 song also share one
  *     decoder).  Both readers take the page's words as they were at the start of the mixer step, so they hand over
  *     the same frames and the track ends for both in the same step.
+ * The next-song key (F7 on the page), radio on or off, stops the song playing the same way, so the game starts its next
+ * one (skip_song).
  * A track the page cannot decode is skipped; a page that does not answer in 20 s gives silence, and one that stops
  * writing in the middle of a track ends it; memory that does not look right switches the radio off (radio_fail),
  * never the game.  Radio off: every wrapper calls the game's own code.  Log lines are "[radio] ...".
@@ -99,6 +101,7 @@ typedef struct {
     uint32_t text; float *ring;                    /* the tags' guest address; the rings, malloc'd outside the game's heap, in the memory the page sees */
     uint32_t native[TRAX_WORDS];                   /* the lent entry's own words */
     const char *stop;                              /* set: the game's song is stopped at the next mixer step; why */
+    uint32_t skip_seen;                            /* the page's skip count taken so far */
 } Radio;
 
 static Music g_music;
@@ -243,6 +246,19 @@ static void stop_game_song(CPU *c){
     g_radio.stopping = 0;
 }
 
+/* The next-song key (F7 on the page, RadioLink.skip), radio on or off: the song playing is stopped as at a track's end,
+ * so the game starts its next one, EA Trax's next song or, with the radio on, the folder's next track (the page offers
+ * it).  Only a song that plays: none (a drift or drag race, between two songs) or a paused one (the pause menu, where
+ * the stop would wait for the game to go on) lets the press go. */
+static void skip_song(HostStatusRadio *r){
+    follow_music_inputs(r);
+    if (!g_music.count || g_music.paused){
+        fprintf(stderr, "[radio] next song: %s, nothing to skip\n", g_music.count ? "the song is paused" : "no song plays");
+        return;
+    }
+    if (!g_radio.stop) g_radio.stop = "next song (F7)";
+}
+
 /* the radio was switched on (1), or cannot be: there is no room for the rings (0); stop: the song playing is the game's and is stopped */
 static int switch_on(HostStatusRadio *r, int stop){
     g_radio.on_seen = __atomic_load_n(&r->on, __ATOMIC_ACQUIRE);
@@ -278,7 +294,8 @@ static void ask_page_for_track(HostStatusRadio *r, unsigned place){
 
 static void start_radio_song(HostStatusRadio *r, unsigned index){
     unsigned place = place_now();
-    int going = (g_song.who == SONG_WAITING || (g_song.who == SONG_FOLDER && !g_song.over)) && g_song.place == place;
+    /* the game going on to its song's next part keeps the track; one we stopped (stop_game_song: the next-song key) does not */
+    int going = (g_song.who == SONG_WAITING || (g_song.who == SONG_FOLDER && !g_song.over)) && g_song.place == place && !g_song.ended;
     if (going){
         lend_tags(index);
         g_song.again = 1;
@@ -380,7 +397,8 @@ static unsigned ring_of_reader(uint32_t reader){ return g_music.side[g_music.rea
 void sub_007292bc(CPU *c){
     HostStatusRadio *r = host_status_radio();
     int on = radio_on(r);
-    if (!on && !g_radio.was_on && !g_radio.stop && g_radio.lent == NO_TAGS_LENT){
+    uint32_t skip = __atomic_load_n(&r->skip, __ATOMIC_ACQUIRE);
+    if (!on && !g_radio.was_on && !g_radio.stop && g_radio.lent == NO_TAGS_LENT && skip == g_radio.skip_seen){
         sub_007292bc_orig(c);
         return;
     }
@@ -389,6 +407,10 @@ void sub_007292bc(CPU *c){
     g_radio.was_on = on;
     if (on && g_song.who == SONG_SILENT && page_has_track_for(r, g_song.place)) g_radio.stop = "a track fits this place now";
     if (on && !g_radio.stop && g_song.who == SONG_FOLDER && g_song.over && !g_song.ended) g_radio.stop = "track over";
+    if (skip != g_radio.skip_seen){
+        g_radio.skip_seen = skip;
+        skip_song(r);
+    }
     if (g_radio.stop) stop_game_song(c);
     if (on){
         follow_music_inputs(r);

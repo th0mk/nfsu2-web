@@ -4,7 +4,7 @@
 // game's own addresses, which Cloudflare can keep.  The page starts it ("Download all game data")
 // and stops it before a game starts, since the I/O worker writes the same files.
 //
-// Page -> worker: { t: 'start', manifestUrl, language, texpack }, { t: 'stop' }
+// Page -> worker: { t: 'start', manifestUrl, language, packs }, { t: 'stop' }
 // Worker -> page: { t: 'progress', have, total }   (bytes in the cache; at most every 250 ms)
 //                 { t: 'done', have, total }       (all of it is in the cache)
 //                 { t: 'stopped' }                 (after 'stop')
@@ -13,11 +13,11 @@
 // stays: a stopped or failed download goes on from there the next time.
 import {
   BLOCK, CACHE_DIR, aheadFiles, blockCount, blockLen, blockRuns, manifestFiles, openCacheFile, putBlock, runUrl, scanCache,
-  type CacheFile, type DataFile, type Manifest,
+  type CacheFile, type DataFile, type Manifest, type Packs,
 } from './datacache';
 import { fmtBytes } from '../app/checks';
 
-export type ToPredownload = { t: 'start'; manifestUrl: string; language: string; texpack: string } | { t: 'stop' };
+export type ToPredownload = { t: 'start'; manifestUrl: string; language: string; packs: Packs } | { t: 'stop' };
 export type FromPredownload =
   | { t: 'progress' | 'done'; have: number; total: number }
   | { t: 'stopped' } | { t: 'error'; msg: string };
@@ -41,12 +41,12 @@ class Retry extends Error {}
 
 function closeFile(cf: CacheFile | null) { if (cf) { cf.h.flush(); cf.h.close(); cf.haveH.flush(); cf.haveH.close(); } }
 
-async function download(cfg: { manifestUrl: string; language: string; texpack: string }): Promise<{ have: number; total: number } | null> {
+async function download(cfg: { manifestUrl: string; language: string; packs: Packs }): Promise<{ have: number; total: number } | null> {
   const r = await fetch(cfg.manifestUrl, { cache: 'no-cache', signal: abort.signal });
   if (!r.ok) throw new Error(`the list of game files did not load (HTTP ${r.status})`);
   const m = await r.json() as Manifest;
   const served = blockRuns(m);
-  const scan = await scanCache(aheadFiles(manifestFiles(m), cfg.language, cfg.texpack));
+  const scan = await scanCache(aheadFiles(manifestFiles(m), cfg.language, cfg.packs));
   const total = scan.total;
   let have = scan.have, shown = 0;
   const progress = (now = false) => {

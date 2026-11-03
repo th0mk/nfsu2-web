@@ -32,7 +32,8 @@ typedef struct {
 } HostStatus;
 
 _Static_assert(sizeof(HostStatusItem) == 24, "page layout (status.ts)");
-_Static_assert(sizeof(HostStatus) == 16 + 24 * HOST_STATUS_MAX + sizeof(HostStatusRadio), "page layout (status.ts)");
+/* the radio's words right after the table (radio-link.ts); the block may end in padding, the doubles' alignment */
+_Static_assert(__builtin_offsetof(HostStatus, radio) == 16 + 24 * HOST_STATUS_MAX, "page layout (status.ts)");
 
 /* status_web.c */
 int  host_status_slot(const char *name);          /* index of a named counter (created on first use), -1 if full */

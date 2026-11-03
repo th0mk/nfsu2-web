@@ -57,7 +57,7 @@ const HELD: Record<string, number> = {
   KeyZ: HB_ZIN, KeyX: HB_ZOUT, KeyC: HB_RL, KeyV: HB_RR, ShiftLeft: HB_FAST, ShiftRight: HB_FAST,
 };
 /** the page's own keys, which stay the page's (shell.ts) */
-const PAGE_KEYS = new Set(['F8', 'F9', 'F11', 'F12']);
+const PAGE_KEYS = new Set(['F7', 'F8', 'F9', 'F11', 'F12']);
 
 /** two values of -1..1 as a photo event's int16 pair */
 const pack = (x: number, y: number) =>

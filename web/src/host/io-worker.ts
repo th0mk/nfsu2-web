@@ -15,7 +15,7 @@
 import {
   CTL_IO_BEAT, CTL_IO_DOORBELL, E, IO_SLOW_MS, MAX_THREADS, Op, opName, RPC_DONE, RPC_POSTED, RPC_SLOT, RPC_TAKEN, type BootConfig,
 } from './proto';
-import { BLOCK, CACHE_DIR, av1Path, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
+import { BLOCK, CACHE_DIR, av1Path, songsPath, blockRuns, cacheKey, cacheOpen, dataUrl, openCacheFile, putBlock, runUrl, type CacheFile, type Manifest } from './datacache';
 import { movieClose, movieDecode, movieOpen } from './movie';
 
 interface Init { memory: WebAssembly.Memory; ctl: SharedArrayBuffer; rpc: SharedArrayBuffer; cfg: BootConfig }
@@ -63,10 +63,16 @@ function dataLookup(rel: string): DNode | null {
   return cur;
 }
 /** A file the game opens: a movie's AV1 copy in its place where the page plays AV1 (NFSU2_MOVIE_CODEC = av1,
- *  movie.ts) and the folder has one (tools/movies_av1.py), else the file itself. */
+ *  movie.ts) and the folder has one (tools/movies_av1.py); EA's own songs in place of the music's files with
+ *  settings.ini songs = original (NFSU2_SONGS) where the folder has them (tools/musicpack.py --original); else the
+ *  file itself. */
 function dataFile(rel: string): DNode | null {
   const n = dataLookup(rel);
-  if (!n || n.dir || cfg.env.NFSU2_MOVIE_CODEC !== 'av1') return n;
+  if (!n || n.dir) return n;
+  const s = cfg.env.NFSU2_SONGS?.trim().toLowerCase() === 'original' ? songsPath(n.path) : null;
+  const o = s ? dataLookup(s) : null;
+  if (o && !o.dir) return o;
+  if (cfg.env.NFSU2_MOVIE_CODEC !== 'av1') return n;
   const a = av1Path(n.path);
   return (a && dataLookup(a)) || n;
 }

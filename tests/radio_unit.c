@@ -473,6 +473,58 @@ TEST(radio_off_untouched__game_runs_own_code){
     expect_game_song();
     expect(g.stops == 0 && MR32(TABLE + 16u * 3u) == NAMES, "the game's table and songs untouched");
 }
+static void next_song_key(void){ g_page.skip++; }
+TEST(next_song_key_radio_off__game_stops_song_and_starts_its_next){
+    in_main_menu();
+    game_song_starts(3);
+    steps(SETTLED);
+    next_song_key();
+    steps(SETTLED);
+    expect_game_song();
+    expect(g.stops == 1 && g.last_index == 4, "one stop, and the game starts its next song");
+    expect_plaques(2, 0);
+    expect(MR32(TABLE + 16u * 4u) == NAMES, "the game's table untouched");
+}
+TEST(next_song_key_radio_off_twice__two_songs_on){
+    in_race();
+    game_song_starts(20);
+    steps(SETTLED);
+    next_song_key();
+    steps(SETTLED);
+    next_song_key();
+    steps(SETTLED);
+    expect_game_song();
+    expect(g.stops == 2 && g.last_index == 22, "a stop for each press");
+}
+TEST(next_song_key_radio_on__next_folder_song){
+    folder_song_plays_in_main_menu();
+    next_song_key();
+    steps(SETTLED);
+    expect_folder_song(2);
+    expect_plaques(2, 2);
+}
+TEST(next_song_key_in_drift__nothing_stopped){
+    folder_song_plays_in_main_menu();
+    to_race_without_song();
+    int stops = g.stops;
+    next_song_key();
+    steps(SETTLED);
+    expect(g.stops == stops, "no song, no stop");
+    expect_no_song();
+    expect_race_sounds();
+}
+TEST(next_song_key_in_pause_menu__let_go){
+    in_race();
+    game_song_starts(17);
+    steps(SETTLED);
+    game_pauses();
+    next_song_key();
+    steps(20);
+    game_resumes();
+    steps(SETTLED);
+    expect(g.stops == 0 && g.last_index == 17, "the press in the pause menu stops nothing, then or later");
+    expect_game_song();
+}
 TEST(all_songs_racing_back_in_main_menu__silence_no_game_song){
     radio_switched_on();
     page_offers(DRIVING_ONLY);
