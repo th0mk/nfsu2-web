@@ -173,6 +173,9 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
+  // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
+  // pointTex).  Not in bundle.m's table
+  { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
 ];
 
 /** strcasecmp's and toupper's folding: ASCII letters only (String.toLowerCase would also fold the Kelvin sign to 'k') */
@@ -327,6 +330,9 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # the memory; NFSU2_MAP_TEXTURES = original keeps the game's maps).
 # [NFSU2_UI_TEXTURES]
 #ui_textures = original
+# Textures without smoothing, as dgVoodoo's point sampling; on overrides the
+# game's Texture Filtering.  [NFSU2_PIXELATED_TEXTURES]
+#pixelated_textures = off
 
 # ---- Frame rate ----------------------------------------------------------
 

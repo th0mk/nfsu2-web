@@ -121,6 +121,10 @@ export class Encoder {
   traceSeq = new Set<number>(); traceDumps = false; logShaders = false;
   /** diagnostics: log every create / upload / free of these texture ids */
   watchTex = new Set<number>();
+  /** pixelated textures (the page's pixelated_textures, NFSU2_PIXELATED_TEXTURES): the game's own textures sampled
+   *  nearest, their mip levels too, as dgVoodoo's "Point sampled", whatever filter the game asks for; its render
+   *  targets (the screen copies of the post passes, reflections, the mirror) stay as it sets them */
+  pointTex = false;
   private tr: string[] | null = null;
 
   // stats
@@ -362,6 +366,13 @@ export class Encoder {
     this.destroyLater.push(b);
     this.bufGen++;
     return this.device.createBuffer({ label, size, usage });
+  }
+
+  /** pointTex: a sampler key with nearest min, mag and mip filters (so no anisotropy) for one of the game's own
+   *  textures; a mip filter of none (the top level only) stays */
+  private pointKey(k: number, t: Tex): number {
+    if (t.rt) return k;
+    return (k & ~0x3f) | 1 | 1 << 2 | ((k >> 4) & 3 ? 1 << 4 : 0);
   }
 
   private sampler(k: number): GPUSampler {
@@ -790,8 +801,9 @@ export class Encoder {
       // group 1: textures and samplers (a texture bound as this pass's target samples white)
       const cube = psEff >= PSCUBE;
       const t1 = u32[w + D.tex1], t2 = u32[w + D.tex2], t3 = u32[w + D.tex3];
-      const s0 = u32[w + D.smp], s1 = u32[w + D.smp + 1], s2 = u32[w + D.smp + 2], s3 = u32[w + D.smp + 3];
+      let s0 = u32[w + D.smp], s1 = u32[w + D.smp + 1], s2 = u32[w + D.smp + 2], s3 = u32[w + D.smp + 3];
       const v0 = this.texFor(t0, cube, passCube), v1 = this.texFor(t1, false, passCube), v2 = this.texFor(t2, false, passCube), v3 = this.texFor(t3, false, passCube);
+      if (this.pointTex) { s0 = this.pointKey(s0, v0); s1 = this.pointKey(s1, v1); s2 = this.pointKey(s2, v2); s3 = this.pointKey(s3, v3); }
       // the same textures and samplers as the previous draw (the common case): nothing to do
       if (b1[0] !== (cube ? 1 : 0) || b1[1] !== v0.serial || b1[2] !== v1.serial || b1[3] !== v2.serial || b1[4] !== v3.serial
           || b1[5] !== s0 || b1[6] !== s1 || b1[7] !== s2 || b1[8] !== s3) {

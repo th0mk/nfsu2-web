@@ -413,6 +413,8 @@
   "Auto": "Auto",
   "Menus, HUD and maps": "Menús, HUD y mapas",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Reescalado: el Upscaled HUD de LunicAura106 y el Detailed Map de JeansBig, nítidos en resoluciones altas. Unos 25 MB de descarga y más memoria en los teléfonos.",
+  "Pixelated textures": "Texturas pixeladas",
+  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "Sin suavizado, como el point sampling de dgVoodoo. Sustituye al Filtro de texturas del juego.",
   "Upscaled HUD": "Upscaled HUD",
   "Detailed Map": "Detailed Map",
   "Upscaled": "Reescalado",

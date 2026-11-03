@@ -418,6 +418,8 @@
   "Auto": "Авто",
   "Menus, HUD and maps": "Меню, HUD і карти",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "«Покращений»: Upscaled HUD від LunicAura106 і Detailed Map від JeansBig, чіткі на високій роздільній здатності. Близько 25 MB для завантаження та більше пам'яті на телефонах.",
+  "Pixelated textures": "Піксельні текстури",
+  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "Без згладжування, як point sampling у dgVoodoo. Замінює налаштування гри «Фільтрація текстур».",
   "Detailed Map": "Detailed Map",
   "Upscaled HUD": "Upscaled HUD",
   "Upscaled": "Покращений",

@@ -623,6 +623,8 @@
   "Auto": "Automatikus",
   "Menus, HUD and maps": "Menük, HUD és térképek",
   "Upscaled: LunicAura106's Upscaled HUD and JeansBig's Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.": "Felskálázott: LunicAura106 Upscaled HUD modja és JeansBig Detailed Map modja, nagy felbontáson is élesek. Kb. 25 MB letöltés, telefonon pedig több memória.",
+  "Pixelated textures": "Pixeles textúrák",
+  "No smoothing, like dgVoodoo's point sampling. Overrides the game's Texture Filtering.": "Nincs simítás, mint a dgVoodoo point sampling módjában. Felülírja a játék „Textúra Szűrés” beállítását.",
   "Upscaled HUD": "Upscaled HUD",
   "Detailed Map": "Detailed Map",
   "Upscaled": "Felskálázott",

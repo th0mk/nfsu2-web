@@ -1,0 +1,37 @@
+# Pixelated textures (Encoder.pointTex, web/src/gpu/encoder.ts): the intro movie, the title, the menus on the way
+# to a Quick Race (Circuit, Resort Loop) and the race, each moment dumped as the game set it (<name>_px) and drawn
+# again with pixelated textures (<name>_px1; play.html pixelated=dump), and once more 20 frames later in case the
+# game replaced the frame (lockstep at 15 fps keeps the slow headless GPU up with it).
+#   node web/tools/run-page.mjs "<base>/test/play.html?wasm=/game.wasm&arg=/data/SPEED2.EXE&w=1920&h=1080&fresh&reg=/tests/web/seed/registry_perf4_native.txt&script=/tests/web/scripts/pixelated.txt&env=NFSU2_UI_TEXTURES=uhud&env=NFSU2_HFR_LOCKSTEP=1&env=NFSU2_HFR_LOCKSTEP_WALL=15&pixelated=dump&artifacts=/artifacts/px_&dumpscale=1" 1440000
+1       waitfng LS_EAlogo.fng 3000
++0      waitfng UG_LS_IntroFMV.fng 3000
++600    dump intro_px
++20     dump intro_px
++30     tapuntil RETURN UG_LS_Splash.fng 120 3000       # skip the rest of the intro
++90     dump title_px
++20     dump title_px
++1000ms tapuntil RETURN MC_Background.fng 120 3000      # title -> profile prompt
++600ms  tapuntil RETURN GarageMain.fng 120 3000         # "No" -> main menu
++120    dump main_px
++20     dump main_px
++1500ms tapuntil RETURN UI_QRModeSelect.fng 240 3000    # Quick Race
++800ms  tapuntil RETURN UI_QRTrackSelect.fng 240 3000   # Circuit
++150    dump qr_track_px
++20     dump qr_track_px
++800ms  tapuntil RETURN UI_QRModeOptions.fng 240 3000   # Resort Loop
++800ms  tapuntil RETURN UI_QRCarSelect.fng 240 3000     # options
++150    dump qr_car_px
++20     dump qr_car_px
++800ms  tapuntil RETURN GenericDialog_SMALL.fng 240 3000 # car -> transmission
++800ms  tapuntil RETURN PC_Loading.fng 240 3000         # transmission -> loading
++0      waitmem 0x8654a4 6 6000
++0      log race_loaded
++250    dump grid_px
++20     dump grid_px
++140    down UP                                         # after the intro: drive
++180    dump race_a_px
++20     dump race_a_px
++220    dump race_b_px
++20     dump race_b_px
++10     up UP
++30     quit

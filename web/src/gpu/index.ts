@@ -61,6 +61,11 @@ export interface RendererOptions {
   /** while a frame waits for a slot, poll the GPU with empty submits (default: in Firefox, whose
    *  onSubmittedWorkDone otherwise waits for its 100 ms poll timer; see pokeLoop) */
   poke?: boolean;
+  /** the game's own textures sampled nearest, without smoothing (Encoder.pointTex) */
+  pixelated?: boolean;
+  /** tests: an autotest dump labelled <name>_px also writes its frame drawn with pixelated textures, <name>_px1 (the
+   *  same moment in both looks) */
+  pixelatedDump?: boolean;
   /** diagnostics: a slower GPU, from a pass of this many iterations of busy work for each pixel
    *  of a 512x512 target in every frame (tests frame pacing on GPUs slower than this one) */
   gpuBurn?: number;
@@ -244,6 +249,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
   let enc: Encoder;
   try { enc = new Encoder(device, mem, reg.ptr, log); } catch (e) { giveUp(e); }
   enc.logShaders = !!opts.logShaders;
+  enc.pointTex = !!opts.pixelated;
+  if (enc.pointTex) log('[gpu] pixelated textures');
   for (const id of opts.watchTex ?? []) enc.watchTex.add(id);
   if (opts.trace === 'dumps') enc.traceDumps = true; else for (const f of opts.trace ?? []) enc.traceSeq.add(f);
   // pipelines of earlier sessions, created asynchronously as their shaders arrive
@@ -496,6 +503,12 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
       if (k) Atomics.store(U, (k + P.K_PHOTO + P.PHOTO_ACK) >>> 2, ((gen & 0xffff) << 16 | (n & 0xffff)) >>> 0);
     }
   };
+  // the label of frame b's autotest dump, or null without one
+  const dumpLabel = (b: number): string | null => {
+    const fw = cw + C.frame + b * (P.FRAME_BYTES >> 2);
+    if (!u32()[fw + F.dump]) return null;
+    return new TextDecoder().decode(new Uint8Array(mem.buffer).slice((fw + F.dumpLabel) * 4, (fw + F.dumpLabel) * 4 + 64)).replace(/\0.*$/s, '');
+  };
   const encodeAndSubmit = (b: number) => {
     const t0 = performance.now();
     const ce = device.createCommandEncoder();
@@ -547,11 +560,8 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     }
     // autotest dump or a dump() request: read this frame's back buffer
     const U = u32(), fw = cw + C.frame + b * (P.FRAME_BYTES >> 2);
-    let dumpName: string | null = null;
-    if (U[fw + F.dump]) {
-      const lab = new TextDecoder().decode(new Uint8Array(mem.buffer).slice((fw + F.dumpLabel) * 4, (fw + F.dumpLabel) * 4 + 64)).replace(/\0.*$/s, '');
-      dumpName = `nfsu2_g${String(U[fw + F.dumpFrame]).padStart(6, '0')}_${lab}`;
-    }
+    const lab = dumpLabel(b);
+    const dumpName = lab === null ? null : `nfsu2_g${String(U[fw + F.dumpFrame]).padStart(6, '0')}_${lab}`;
     // photo mode's picture: the first frame with the whole still picture (or one past PHOTO_WAIT_MS) keeps it, and the
     // autotest's dumps get it as kept (photo() with photo mode off: dump()'s, the next frame)
     if (!ph) dumpWaiters.push(...photoWaiters.splice(0));
@@ -573,6 +583,19 @@ export async function attachRenderer(proc: GameProcess, canvas: HTMLCanvasElemen
     const rbRead = rbTex ? copyOut(ce, rbTex) : null;
     device.queue.submit([ce.finish()]);
     enc.afterSubmit();
+    // tests (play.html pixelated=dump): an autotest dump labelled <name>_px is the frame as the game set it, and the
+    // same frame drawn again into the back buffer with pixelated textures is <name>_px1: the same moment in both looks
+    // (the next frame would not be, and the game replaces a frame the page is slow to take).  Drawn after the submit
+    // above: drawing writes the frame's constants into the queue
+    if (opts.pixelatedDump && lab?.endsWith('_px')) {
+      enc.pointTex = true;
+      const ce2 = device.createCommandEncoder();
+      enc.encodeFrame(b, ce2, undefined);
+      reads.push({ name: `${dumpName}1`, rb: copyOut(ce2, enc.screen!) });
+      device.queue.submit([ce2.finish()]);
+      enc.afterSubmit();
+      enc.pointTex = false;
+    }
     if (rbId) readForGame(rbId, rbRead, U[fw + F.rbDst], U[fw + F.rbPitch], U[fw + F.rbRows]);
     // quick chat's places over the cars in this very frame (GwMarks in its constants, from a module that writes them)
     if (opts.onMarks) {
