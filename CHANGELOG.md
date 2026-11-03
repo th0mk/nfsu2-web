@@ -10,15 +10,20 @@ change, in plain text, as `- **Area:** what changed`, written for players. Left 
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-03 (dc43540)
+## 2026-11-03 (8f16a0b)
 
-- **Graphics:** with Enhanced Contrast on, no more flickering lines along the bottom and right edges of the picture, and the picture is as sharp as in the original game.
-- **Steering wheels:** Fanatec bases get their own layouts (gas and brake on the right pedals, Fanatec's buttons, a shifter or handbrake on the base, the base's rotation), and pedals on their own USB give the wheel its gas and brake: the set-up takes pedals of any make.
-- **Quick chat:** Countdown, a new phrase with a stopwatch (in the sixteen you start with, in One more?'s place, and under Special in Choose phrases): 5, 4, 3, 2, 1 and GO!, big in the middle of the picture for you and the players within 50 m, for a start in free roam.
-- **World map:** a spot where 16 or more players have been parked for a minute is a car meet (was 24).
-- **Free roam:** no outrun is offered in a crowd (4 or more other players within 25 m, as at a car meet); a challenge already made stands.
-- **Free roam:** with Ghost mode on Everything, other players' cars stay ghosts in an outrun too, as with Players. The tuner you race in an outrun stays solid.
-- **Free roam:** a hit with another player's car that throws yours farther than a hit can (the game loading, the car gone, the view broken) is undone: the two cars pass through each other instead.
+- **Free roam:** lobby races count in your career. Win a race of your stage you haven't won yet, or finish one a friend wins, and your garage gives you the win on the way back, as with Solo: prize, rep, story, a stage's final and its movie, and any sponsor offer. A URL event races all its heats in one trip. Solo stays as it was.
+- **Free roam:** the lobby panel marks with a star whom a race counts for, and a lobby that counts for its host takes players up to that stage and the host's friends. Races that don't count pay by your stage, and one that counts never pays less. When everyone else quits a race, the one who stayed wins it.
+- **Free roam:** at a race's marker, Solo or Multiplayer? starts on Solo.
+- **Free roam:** friends' cars follow the curve they're on between updates, no longer running wide in bends.
+- **Free roam:** no outrun offers in a crowd (4 or more players within 25 m).
+- **Free roam:** with Ghost mode on Everything, other players' cars stay ghosts in outruns too.
+- **Free roam:** a hit that throws your car farther than a hit can is undone: the cars pass through each other instead.
+- **World map:** a car meet takes 16 parked players (was 24).
+- **Quick chat:** Countdown, a new phrase: 5, 4, 3, 2, 1, GO! big on screen for you and the players within 50 m.
+- **Steering wheels:** Fanatec bases get their own layouts, and pedals on their own USB, of any make, work with a wheel.
+- **Graphics:** with Enhanced Contrast on, no flickering lines along the bottom and right edges, and the picture as sharp as the original.
+- **Start page:** Safari before 26 is told to update, not stopped at Play.
 
 ## 2026-11-02 (d4fa27f)
 
