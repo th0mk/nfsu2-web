@@ -310,7 +310,18 @@ static void car_reset(Car *k){
     k->car = k->ri = k->type = 0; k->want = k->has = 0; k->live = 0;
 }
 /* the car's parts to what it wants: open those it should and has not, close those it has and should not (closing a
- * part never opened would open it: 0x433A80 makes a node opening) */
+ * part never opened would open it: 0x433A80 makes a node opening).
+ * A node is kept for the next car in its slot (car_reset), and it holds the car type it was made for (+0x20).  A part
+ * turned the other way while it opens or closes (0x433D50 from 2 to 3, or 3 to 2) is timed by its animation: 0x433D10
+ * looks up that type's bank (0x433A30) and hands it to 0x433AD0, which reads the bank's animation list with no check.
+ * With that type's animations thrown away since (a garage, shop or race lobby: 0x438140), the bank is 0, the list
+ * reads 0 and the game calls through 0 for ever: free roam froze, or stopped with error 134, in a crowd (2026-11-02
+ * 22:47 to 11-03, stack sub_00433ad0 < sub_00433d10 < car_apply).  The log of one: slot 30's trunk opened on a 350Z,
+ * the game threw the banks away, a Skyline came into the slot and opened the hood (a new node) and the trunk (the
+ * 350Z's node, which the drawing never finds on the Skyline's list, so it stayed opening), and its trunk closing was
+ * the 350Z's bank looked up.  So a node of another type is made anew when its part opens, and one whose type has no
+ * bank closes at once.  Test: tests/scripts/showoff_stale.txt (NFSU2_TEST_SHOWOFF_STALE=1, script runs only: the
+ * player's car's trunk node first made for a type with no animations, as a slot's earlier car leaves it). */
 static void car_apply(CPU *c, Car *k, int sound, const char *who){
     if (k->want == k->has || !ok(k->ri, 0x2d48)) return;
     uint32_t ti = rd32(k->ri + RI_TYPE);
@@ -322,15 +333,25 @@ static void car_apply(CPU *c, Car *k, int sound, const char *who){
     }
     if (!mem_ok(c)) return;
     int idx = (int)(k - S.car);
+    static int stale = -1;                                             /* test aid, script runs only */
+    if (stale < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_SHOWOFF_STALE"); stale = s && *s && e && *e == '1'; }
+    if (stale == 1 && idx == 0 && !k->node[1]){
+        uint32_t n = k->node[1] = S.mem + NODE_SZ, a[5] = { k->type ^ 0x5a5a5a5au, 0x3f800000u, 1u, 0u, 0u };
+        gcall(c, FN_NODE_INIT, n, 5, a);
+        MR32(n + 0x10u) = 1u; stale = 2;
+        fprintf(stderr, "[showoff] f=%ld test: my car's trunk node is one of another car type, closed\n", autotest_frame());
+    }
     for (int p = 0; p < 4; p++){
         uint8_t bit = (uint8_t)(1u << p);
         int w = (k->want & bit) != 0, h = (k->has & bit) != 0;
         if (w == h) continue;
         uint32_t mark = 0, kind = w ? so_kind(c, k->ri, p, &mark) : 0, n = k->node[p];
-        if (w && !n){
+        if (w && (!n || MR32(n + 0x20u) != k->type)){
             n = k->node[p] = S.mem + ((uint32_t)idx * 4u + (uint32_t)p) * NODE_SZ;
             uint32_t a[5] = { k->type, 0x3f800000u, (uint32_t)p, kind, mark };
             gcall(c, FN_NODE_INIT, n, 5, a);                          /* opening, from now */
+        } else if (!w && !bank_of(MR32(n + 0x20u))){
+            MR32(n + 0x10u) = 1u;                                     /* closed at once: no animation to close by */
         } else {
             if (w){ MR32(n + 8u) = 0x3f800000u; MR32(n + 0x14u) = kind; MR8(n + 0x24u) = (uint8_t)mark; }
             uint32_t a[2] = { n, w ? 2u : 3u };

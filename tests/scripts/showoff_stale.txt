@@ -1,0 +1,43 @@
+# A part's node made for another car type (showoff.c car_apply): a slot's node is kept for the next car in it, and
+# turning a part the other way while it opens or closes looks up the node's type's animations (0x433D50 -> 0x433D10
+# -> 0x433A30 -> 0x433AD0).  With that type's animations thrown away, the game called through 0 for ever (free roam's
+# freeze or error 134 in a crowd, 2026-11-02 22:47 to 11-03: sub_00433ad0 < sub_00433d10 < car_apply).  New career ->
+# prologue free roam with NFSU2_TEST_SHOWOFF_STALE=1: the player's car's trunk node is first made for a type with no
+# animations and left closed, as a slot's earlier car leaves it.  O: the trunk opens; 2 s later O three times: the
+# hood, the doors, all closed (the old way: the trunk never finished opening, so its closing looked the other type up);
+# then O four times 4 frames apart: each part turns back while it opens.  Good: "[showoff] ... test: my car's trunk node
+# is one of another car type", the trunk opens and closes, no "UNRESOLVED INDIRECT CALL", no freeze, quit at the end.
+#   node web/tools/run-suite.mjs --base <server> --script showoff_stale.txt --marker stale_end
+#     --env NFSU2_TEST_SHOWOFF_STALE=1 --env ROAM_PROFILE=<name>
+0     pad connect
++0    tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++900  log open1
++0    tap O
++2000ms log open2
++0    tap O
++500ms tap O
++500ms tap O
++2000ms log quick
++0    tap O 2
++4    tap O 2
++4    tap O 2
++4    tap O 2
++3000ms log stale_end
++10   quit
