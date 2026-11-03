@@ -606,12 +606,6 @@ void sub_005b2610(CPU *c){
     if (roam_game_ghost_pair(c->ecx)){ POP32(c->eip); return; }    /* thiscall, ret */
     roam_game_contact(c, sub_005b2610_orig);
 }
-/* The player's near miss (0x56F170, thiscall, from 0x56FF73 once a frame):
- * with Ghost mode Everything the game's cars that pass through the player's
- * car give none (roam_game.c, roam_game_near_miss) */
-void sub_0056f170_orig(CPU *c);
-void roam_game_near_miss(CPU *c, void (*orig)(CPU *));
-void sub_0056f170(CPU *c){ roam_game_near_miss(c, sub_0056f170_orig); }
 /* The race's end, for the random encounters (0x42EFB0): new goals for the AI
  * range's cars that are out, through their brains; friends' cars have none
  * to give up and are left out (roam_game.c, roam_game_goals) */
