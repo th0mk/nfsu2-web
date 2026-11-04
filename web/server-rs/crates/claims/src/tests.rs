@@ -222,3 +222,121 @@ fn a_file_edited_by_hand() {
     std::fs::write(dir.path().join("names.json"), "{not json").unwrap();
     assert_eq!(Claims::open(dir.path(), NOW).count(NOW), 0);
 }
+
+// the second form, co-op's second player's name: the Online form cut to 13, then _2, as the page's "<that> 2" is
+#[test]
+fn the_second_form() {
+    assert_eq!(second("Alex").as_deref(), Some("Alex_2"));
+    assert_eq!(second("Alex the Great").as_deref(), Some("Alex_the_Grea_2"));
+    assert_eq!(second("a").as_deref(), Some("a___2"));
+    assert_eq!(second("!!"), None);
+    // the page's name for player 2 is its Online form's first 13 and " 2": the same Online form
+    for n in ["Alex", "Alex the Great", "abcdefghijklmno", "a", "x_y", "Bob_", "Ab-c"] {
+        let base = clean(n).unwrap();
+        let page = format!("{} 2", &base[..base.len().min(SECOND_BASE)]);
+        assert_eq!(clean(&page), second(n), "{n}: {page}");
+        assert_eq!(second_base(&canonical(&page).unwrap()), Some(&base.to_ascii_lowercase()[..base.len().min(SECOND_BASE)]), "{n}");
+    }
+    assert_eq!(second_base("alex_2"), Some("alex"));
+    assert_eq!(second_base("alex"), None);
+    assert_eq!(second_base("ab_2"), None, "no Online form of two");
+    assert_eq!(second_base("alex_3"), None);
+}
+
+// the second form of a claimed name is its owner's: to it "yours" (an old name's "old"), to anyone else taken; nobody
+// else plays under it or claims it; its owner's claim of it changes nothing
+#[test]
+fn a_claimed_names_second_form_is_its_owners() {
+    let c = Claims::in_memory();
+    let (a, b) = (owner(1), owner(2));
+    assert_eq!(c.status("Alex 2", Some(&b), NOW), Status::Free, "nobody claimed Alex");
+    assert!(c.may_use("Alex 2", Some(&b), NOW));
+    c.claim("Alex", &a, NOW).unwrap();
+    let until = NOW + HOLD_DAYS * DAY_MS;
+    for n in ["Alex 2", "alex_2", "ALEX 2!"] {
+        assert_eq!(c.status(n, Some(&a), NOW), Status::Yours { until, current: true }, "{n}");
+        assert_eq!(c.status(n, Some(&b), NOW), Status::Taken, "{n}");
+        assert_eq!(c.status(n, None, NOW), Status::Taken, "{n}");
+        assert!(c.may_use(n, Some(&a), NOW), "{n}");
+        assert!(!c.may_use(n, Some(&b), NOW) && !c.may_use(n, None, NOW), "{n}");
+    }
+    assert_eq!(c.status("Alex 3", Some(&b), NOW), Status::Free, "only the second form");
+    assert_eq!(c.status("Alex 2 2", Some(&b), NOW), Status::Free, "not the second form's second");
+    assert_eq!(c.claim("Alex 2", &b, NOW), Err(Refusal::Taken));
+    let g = c.generation();
+    assert_eq!(c.claim("Alex 2", &a, NOW + 1).unwrap().name, "Alex", "its own already: no change");
+    assert_eq!(c.generation(), g);
+    assert_eq!(c.holder("Alex 2", NOW), None, "Messenger's holder: the claim of the name itself");
+    assert_eq!(c.holders("Alex 2", NOW), vec![a.clone()]);
+    assert_eq!(c.holders("Alex", NOW), vec![a.clone()]);
+    assert!(c.holders("Bob 2", NOW).is_empty());
+    // after a change, the old name's second form stays its own for the grace, and the new one's is its own too
+    c.claim("Speedy", &a, NOW + DAY_MS).unwrap();
+    let grace = NOW + DAY_MS + GRACE_DAYS * DAY_MS;
+    assert_eq!(c.status("Alex 2", Some(&a), NOW + 2 * DAY_MS), Status::Yours { until: grace, current: false });
+    assert_eq!(c.status("Speedy 2", Some(&a), NOW + 2 * DAY_MS), Status::Yours { until: NOW + DAY_MS + HOLD_DAYS * DAY_MS, current: true });
+    assert_eq!(c.claim("Alex 2", &b, NOW + 2 * DAY_MS), Err(Refusal::Taken));
+    assert_eq!(c.status("Alex 2", Some(&b), grace), Status::Free, "the grace over");
+    // a keyphrase deleted: the second forms go with its names
+    c.release(&a);
+    assert_eq!(c.status("Speedy 2", Some(&b), NOW + 2 * DAY_MS), Status::Free);
+    assert!(c.claim("Speedy 2", &b, NOW + 2 * DAY_MS).is_ok());
+}
+
+// a claim of the second form made before its name was claimed stays its claimant's: an exact claim comes first
+#[test]
+fn an_exact_claim_of_a_second_form_comes_first() {
+    let c = Claims::in_memory();
+    let (a, b) = (owner(1), owner(2));
+    c.claim("Alex_2", &b, NOW).unwrap();
+    c.claim("Alex", &a, NOW).unwrap();
+    assert_eq!(c.status("Alex 2", Some(&a), NOW), Status::Taken);
+    assert_eq!(c.status("Alex 2", Some(&b), NOW), Status::Yours { until: NOW + HOLD_DAYS * DAY_MS, current: true });
+    assert!(!c.may_use("Alex 2", Some(&a), NOW));
+    assert!(c.may_use("Alex 2", Some(&b), NOW));
+    assert_eq!(c.holders("Alex 2", NOW), vec![b.clone()]);
+    // and once it is let go, the second form is Alex's
+    c.unclaim("Alex_2");
+    assert!(c.may_use("Alex 2", Some(&a), NOW) && !c.may_use("Alex 2", Some(&b), NOW));
+}
+
+// names of 14 and 15 characters cut to the same 13: their second form is each of their owners', nobody else's; it
+// goes with the last of them (a release, the operator's unclaim, the hold's end), and holds over a restart (names.json)
+#[test]
+fn a_second_form_of_long_names_is_each_of_their_owners() {
+    let dir = tempfile::tempdir().unwrap();
+    let (a, b, x) = (owner(1), owner(2), owner(3));
+    let c = Claims::open(dir.path(), NOW);
+    c.claim("Abcdefghijklmn", &a, NOW).unwrap();
+    c.claim("ABCDEFGHIJKLMNO", &b, NOW).unwrap();
+    assert_eq!(canonical(&second("Abcdefghijklmn").unwrap()), canonical(&second("ABCDEFGHIJKLMNO").unwrap()));
+    let p2 = "Abcdefghijklm 2";
+    assert!(c.may_use(p2, Some(&a), NOW) && c.may_use(p2, Some(&b), NOW) && !c.may_use(p2, Some(&x), NOW));
+    assert_eq!(c.status(p2, Some(&a), NOW), Status::Yours { until: NOW + HOLD_DAYS * DAY_MS, current: true });
+    assert_eq!(c.status(p2, Some(&x), NOW), Status::Taken);
+    let mut both = vec![a.clone(), b.clone()];
+    both.sort_unstable();
+    assert_eq!(c.holders(p2, NOW), both);
+    assert_eq!(c.claim(p2, &a, NOW), Err(Refusal::Taken), "b's too: a claim of it would take it from b");
+    assert_eq!(c.claim(p2, &x, NOW), Err(Refusal::Taken));
+    // a name of 13 is one of them too
+    c.claim("abcdefghijklm", &x, NOW).unwrap();
+    assert!(c.may_use(p2, Some(&x), NOW));
+    c.unclaim("abcdefghijklm");
+    // over a restart
+    assert!(c.save(NOW + 1).unwrap());
+    let c = Claims::open(dir.path(), NOW + 2);
+    assert!(c.may_use(p2, Some(&a), NOW + 2) && c.may_use(p2, Some(&b), NOW + 2) && !c.may_use(p2, Some(&x), NOW + 2));
+    // b let go, then a: free
+    c.release(&b);
+    assert_eq!(c.holders(p2, NOW + 2), vec![a.clone()]);
+    assert!(!c.may_use(p2, Some(&b), NOW + 2));
+    assert_eq!(c.unclaim("abcdefghijklmn").as_deref(), Some("Abcdefghijklmn"));
+    assert_eq!(c.status(p2, Some(&x), NOW + 2), Status::Free);
+    // a claim's end lets its second form go (the prune's index)
+    c.claim("Abcdefghijklmnz", &a, NOW + 3).unwrap();
+    assert!(!c.may_use(p2, Some(&x), NOW + 3));
+    let end = NOW + 3 + HOLD_DAYS * DAY_MS;
+    assert!(c.prune(end));
+    assert!(c.may_use(p2, Some(&x), end));
+}

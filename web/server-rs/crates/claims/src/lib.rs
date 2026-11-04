@@ -16,6 +16,12 @@
 //! - The owner is a keyphrase, by a hash of its token ([`owner_of_token`]): the page sends the token where it claims
 //!   (/names) and in its hello to the switch (nfsu2-lan: a frame's `FrameCtx::owner`), never the keyphrase.  A
 //!   keyphrase deleted from the cloud lets its names go ([`Claims::release`]).
+//! - A claim of a name also holds its second form ([`second`]: "Alex" holds "Alex_2"), the name of co-op free roam's
+//!   second player beside its owner on one screen (the page names player 2 "<player 1's Online form> 2"): nobody else
+//!   plays under it ([`Claims::may_use`]) or claims it ([`Claims::claim`]) while the claim holds.  The name is cut to
+//!   [`SECOND_BASE`] characters first, so a second form may be several 14- and 15-character names' at once: then it is
+//!   each of their owners' (and nobody else's).  A claim of the second form itself, made before its name was claimed,
+//!   is its own claimant's, as any claim is: an exact claim comes first.
 //!
 //! Kept in <state>/names.json (the names, their owners' hashes, when they were made and last played), written whole
 //! to a temporary file of 0600 and renamed over the old one ([`Claims::save`]).
@@ -83,6 +89,24 @@ pub fn clean(name: &str) -> Option<String> {
 /// what a name is compared by: its Online form in lower case
 pub fn canonical(name: &str) -> Option<String> {
     clean(name).map(|s| s.to_ascii_lowercase())
+}
+
+/// the most characters of a name its second form keeps (`second`): with the "_2", 15, an Online form's most
+pub const SECOND_BASE: usize = 13;
+
+/// The second form of a name: the Online form of co-op free roam's second player's name beside a player of `name` (its
+/// page names it "<the first's Online form, cut to SECOND_BASE> 2", and `clean` makes the gap one _ while the form is
+/// under 14 characters): "Alex" -> "Alex_2", "Alex the Great" -> "Alex_the_Grea_2".  None: nothing of a name in it.
+pub fn second(name: &str) -> Option<String> {
+    let base = clean(name)?;
+    // (an Online form is ASCII: cut anywhere)
+    Some(format!("{}_2", &base[..base.len().min(SECOND_BASE)]))
+}
+
+/// The name a second form (`second`) was made of, as far as it keeps it: its first SECOND_BASE characters at most (an
+/// Online form is 3 at least).  None: `form` (an Online form, any case) is no second form.
+pub fn second_base(form: &str) -> Option<&str> {
+    form.strip_suffix("_2").filter(|b| (3..=SECOND_BASE).contains(&b.len()))
 }
 
 /// The name as typed or its Online form reads as a slur (nfsu2-names): both, since the form leaves out what is no
@@ -184,11 +208,41 @@ struct Inner {
     /// lower case -> claim (dead ones too, until `prune`)
     names: HashMap<String, Claim>,
     owners: HashMap<Owner, OwnerRec>,
+    /// the keys of `names` longer than SECOND_BASE (14 and 15 characters), by their first SECOND_BASE: the names a second
+    /// form of SECOND_BASE characters is made of besides the one of SECOND_BASE (`seconds`; dead ones too, as `names`)
+    long: HashMap<String, Vec<String>>,
 }
 
 impl Inner {
     fn live(&self, key: &str, now: i64) -> Option<&Claim> {
         self.names.get(key).filter(|c| c.live(now))
+    }
+
+    /// The live claims whose second form `key` is (an Online form in lower case: `second`), an exact claim of it aside:
+    /// the claim of its base, and of a base of SECOND_BASE characters each claim of 14 or 15 that starts with it
+    fn seconds(&self, key: &str, now: i64) -> Vec<&Claim> {
+        let Some(base) = second_base(key) else { return Vec::new() };
+        let long = self.long.get(base).filter(|_| base.len() == SECOND_BASE);
+        self.live(base, now).into_iter().chain(long.into_iter().flatten().filter_map(|k| self.live(k, now))).collect()
+    }
+
+    /// `long` with a key of `names` in it (one claimed now)
+    fn index_one(&mut self, key: &str) {
+        if key.len() > SECOND_BASE {
+            let keys = self.long.entry(key[..SECOND_BASE].to_string()).or_default();
+            if !keys.iter().any(|k| k == key) {
+                keys.push(key.to_string());
+            }
+        }
+    }
+
+    /// `long` made again from `names` (after names went: a prune, a release, the file read)
+    fn index_all(&mut self) {
+        self.long.clear();
+        let keys: Vec<String> = self.names.keys().filter(|k| k.len() > SECOND_BASE).cloned().collect();
+        for k in keys {
+            self.index_one(&k);
+        }
     }
 
     /// the owner's live current name (lower case)
@@ -216,7 +270,11 @@ impl Inner {
             // (a change within CHANGE_DAYS still counts against the next one)
             r.current.is_some() || now < r.changed + CHANGE_DAYS * DAY_MS
         });
-        self.names.len() != n
+        let gone = self.names.len() != n;
+        if gone {
+            self.index_all();
+        }
+        gone
     }
 }
 
@@ -276,25 +334,54 @@ impl Claims {
             return Status::Blocked;
         }
         let g = self.inner.read();
+        let yours = |c: &Claim| Status::Yours { until: c.end(), current: c.until == 0 };
         match g.live(&key, now) {
-            None => Status::Free,
-            Some(c) if owner.is_some_and(|o| *c.owner == *o) => Status::Yours { until: c.end(), current: c.until == 0 },
+            Some(c) if owner.is_some_and(|o| *c.owner == *o) => yours(c),
             Some(_) => Status::Taken,
+            // the second form of a claimed name: its owner's (its current name's before an old one's), nobody else's
+            None => {
+                let of = g.seconds(&key, now);
+                match owner.and_then(|o| of.iter().filter(|c| *c.owner == *o).max_by_key(|c| (c.until == 0, c.end()))) {
+                    Some(c) => yours(c),
+                    None if of.is_empty() => Status::Free,
+                    None => Status::Taken,
+                }
+            }
         }
     }
 
-    /// the keyphrase `name` is claimed by now (None: nobody's)
+    /// The keyphrase `name` is claimed by now (None: nobody's), by a claim of that name itself (a second form's owner
+    /// is no holder here: `holders`).  EA Messenger's lists and the friends' messages go by it: a persona is a claimed
+    /// name, never a second player's.
     pub fn holder(&self, name: &str, now: i64) -> Option<Owner> {
         let key = canonical(name)?;
         self.inner.read().live(&key, now).map(|c| c.owner.clone())
     }
 
-    /// whoever has `owner` may play under `name`: nobody claimed it, or that keyphrase did
-    pub fn may_use(&self, name: &str, owner: Option<&str>, now: i64) -> bool {
-        match self.holder(name, now) {
-            None => true,
-            Some(h) => owner.is_some_and(|o| *h == *o),
+    /// the keyphrases that hold `name` now: its claim's, else, for a second form (`second`), the owners of the names it
+    /// is made of (most often one); none: nobody's
+    pub fn holders(&self, name: &str, now: i64) -> Vec<Owner> {
+        let Some(key) = canonical(name) else { return Vec::new() };
+        let g = self.inner.read();
+        if let Some(c) = g.live(&key, now) {
+            return vec![c.owner.clone()];
         }
+        let mut of: Vec<Owner> = g.seconds(&key, now).iter().map(|c| c.owner.clone()).collect();
+        of.sort_unstable();
+        of.dedup();
+        of
+    }
+
+    /// whoever has `owner` may play under `name`: nobody claimed it, or that keyphrase did; or, for the second form of
+    /// claimed names (`second`), that keyphrase holds one of them
+    pub fn may_use(&self, name: &str, owner: Option<&str>, now: i64) -> bool {
+        let Some(key) = canonical(name) else { return true };
+        let g = self.inner.read();
+        if let Some(c) = g.live(&key, now) {
+            return owner.is_some_and(|o| *c.owner == *o);
+        }
+        let of = g.seconds(&key, now);
+        of.is_empty() || owner.is_some_and(|o| of.iter().any(|c| *c.owner == *o))
     }
 
     /// `owner`'s current name
@@ -332,8 +419,21 @@ impl Claims {
                 }
                 return Ok(g.mine(owner, now).expect("current"));
             }
-            // free, or the name it changed from (back to it: a change too)
-            _ => {}
+            // the name it changed from (back to it: a change too)
+            Some(_) => {}
+            // free, or the second form of claimed names (`second`): another's if any of them is another keyphrase's;
+            // its own already if they are all its own (no change: a claim of it would let its name go)
+            None => {
+                let of = g.seconds(&key, now);
+                if of.iter().any(|c| c.owner != *owner) {
+                    return Err(Refusal::Taken);
+                }
+                if !of.is_empty()
+                    && let Some(mine) = g.mine(owner, now)
+                {
+                    return Ok(mine);
+                }
+            }
         }
         if let Some(old) = g.current(owner, now).cloned() {
             let rec = g.owners.get(owner).cloned().unwrap_or_default();
@@ -353,6 +453,7 @@ impl Claims {
             }
         }
         g.names.insert(key.clone(), Claim { name: shown, owner: owner.clone(), made: now, seen: now, until: 0 });
+        g.index_one(&key);
         g.owners.entry(owner.clone()).or_default().current = Some(key);
         let mine = g.mine(owner, now).expect("just claimed");
         drop(g);
@@ -393,6 +494,9 @@ impl Claims {
         g.names.retain(|_, c| *c.owner != *owner);
         g.owners.remove(owner);
         let gone = n - g.names.len();
+        if gone > 0 {
+            g.index_all();
+        }
         drop(g);
         if gone > 0 {
             self.changed();
@@ -405,6 +509,14 @@ impl Claims {
         let key = canonical(name)?;
         let mut g = self.inner.write();
         let c = g.names.remove(&key)?;
+        if key.len() > SECOND_BASE
+            && let Some(keys) = g.long.get_mut(&key[..SECOND_BASE])
+        {
+            keys.retain(|k| *k != key);
+            if keys.is_empty() {
+                g.long.remove(&key[..SECOND_BASE]);
+            }
+        }
         if let Some(r) = g.owners.get_mut(&c.owner)
             && r.current.as_deref() == Some(key.as_str())
         {
@@ -516,6 +628,7 @@ impl Claims {
             r.prev = o.get("prev").and_then(Value::as_str).and_then(canonical);
         }
         g.prune(now);
+        g.index_all();
     }
 
     /// names.json written, when anything changed since the last time (the folder and the file made private)
