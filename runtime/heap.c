@@ -10,15 +10,22 @@
  *   VA manager   [GH_BASE, GH_LIMIT) in 64 KiB granules: VirtualAlloc with
  *                reserve/commit/decommit/release semantics, VirtualQuery,
  *                VirtualProtect.  Heap segments and large blocks are VA
- *                regions too, so freed address space is shared by everyone.
+ *                regions too, so freed address space is shared by everyone;
+ *                big blocks keep their holes (va_find).
  *   heaps        GetProcessHeap (handle 1), HeapCreate (2, 3, ...), plus two
  *                internal heaps for the COM layer (objects, Lock buffers).
  *                TLSF (two-level segregated fit): O(1) alloc/free, immediate
  *                coalescing, 16-byte aligned user pointers, in-band 16-byte
  *                headers.  Blocks >= LARGE_MIN get their own VA region and go
- *                back to the VA manager when freed.
- *   stats        always on (counts, live/peak bytes, largest allocations);
- *                NFSU2_HEAPSTAT=1 adds per-call-site live bytes.
+ *                back to the VA manager when freed; so does a segment once
+ *                all of it is free (one kept per heap).
+ *   stats        always on (counts, live/peak bytes, largest allocations, the
+ *                longest free run in the [status] line's vrun=, the address
+ *                space's map when an allocation finds no room);
+ *                NFSU2_HEAPSTAT=1 adds per-call-site live bytes;
+ *                NFSU2_HEAPMAP=1 (test runs: with NFSU2_INPUT_SCRIPT) the map
+ *                with every [status] line and each block of 8 MB or more as
+ *                it comes and goes.
  *   checking     NFSU2_HEAPCHECK=1 (test-only): tail canaries, poisoned and
  *                quarantined frees, double/invalid free and use-after-free
  *                write detection, freed VA regions made inaccessible.
@@ -117,6 +124,7 @@ typedef struct {
     int used, internal;
     const char *name;
     uint32_t flmap, slmap[FL_N], head[FL_N][SL_N];
+    uint32_t spare;                     /* a segment all free, kept for the next growth (its one block) */
     HStat st;
 } GHeap;
 #define MAXHEAP 16
@@ -125,7 +133,7 @@ int g_gh_com = 0, g_gh_gbuf = 0;       /* internal heaps (com.c) */
 
 /* ---- VA manager ---------------------------------------------------------- */
 enum { VK_NONE = 0, VK_VIRTUAL, VK_SEG, VK_LARGE };
-typedef struct { uint32_t ng; uint8_t kind, heap; uint16_t pad; uint32_t prot, aprot; } VaReg;
+typedef struct { uint32_t ng; uint8_t kind, heap; uint16_t pad; uint32_t prot, aprot, site; } VaReg;   /* site: a large block's caller */
 static uint64_t g_va_bits[VA_NG / 64];  /* 1 = granule reserved */
 static uint64_t g_va_dead[VA_NG / 64];  /* HEAPCHECK: released, not reused yet */
 static uint32_t g_va_start[VA_NG];      /* granule -> first granule of its region */
@@ -143,29 +151,79 @@ static inline int dbit(uint32_t a){ uint32_t p = (a - GH_BASE) / GPAGE; return (
 static inline void dset(uint32_t a, int v){ uint32_t p = (a - GH_BASE) / GPAGE;
     if (v) g_va_dirty[p >> 3] |= (uint8_t)(1u << (p & 7)); else g_va_dirty[p >> 3] &= (uint8_t)~(1u << (p & 7)); }
 
-/* A run of ng free granules: bottom-up for heap segments, top-down for
- * VirtualAlloc and large blocks, so the two meet in the middle.  Under
+/* Big blocks' holes (g_hint, the last NHINT freed): a block of VA_BIG or more
+ * leaves its granules here when it goes, and they are kept for the next big
+ * one (va_find) until one takes them. */
+#define VA_BIG ((16u << 20) / VA_GRAN)
+#define NHINT 8
+static struct { uint32_t g0, ng; } g_hint[NHINT];
+static uint64_t g_hintmask[VA_NG / 64];
+static void hint_mask(void){
+    memset(g_hintmask, 0, sizeof g_hintmask);
+    for (int i = 0; i < NHINT; i++)
+        for (uint32_t g = g_hint[i].g0; g < g_hint[i].g0 + g_hint[i].ng; g++) vset(g_hintmask, g, 1);
+}
+static void hint_add(uint32_t g0, uint32_t ng){
+    memmove(g_hint + 1, g_hint, (NHINT - 1) * sizeof g_hint[0]);
+    g_hint[0].g0 = g0; g_hint[0].ng = ng;
+    hint_mask();
+}
+static void hint_drop(uint32_t g0, uint32_t ng){         /* [g0, g0+ng) taken: the holes it cuts are gone */
+    int n = 0;
+    for (int i = 0; i < NHINT; i++)
+        if (g_hint[i].ng && g_hint[i].g0 < g0 + ng && g0 < g_hint[i].g0 + g_hint[i].ng){ g_hint[i].ng = 0; n++; }
+    if (n) hint_mask();
+}
+/* A run of ng free granules: bottom-up first fit for heap segments, top-down
+ * for VirtualAlloc and large blocks, so the two meet in the middle and the
+ * free space between them stays one run.  The big blocks come and go with
+ * every trip out of the world and back (the track streamer's 60000 KB, 43000
+ * or 36000 KB by track, and the car pool's extra block: the game's main pool
+ * grows by exactly what it lacks), and each needs a run that long again when
+ * it comes back.  First fit had the 1.4 MB textures and new segments of a trip
+ * cut the hole the streamer's block left, until its 60000 KB found no run
+ * (2026-11-04 reports).  So smaller requests go past the big blocks' holes
+ * while anything else fits, and a big request takes the shortest run that
+ * holds it (best fit: its own hole), the highest of runs as short.  Under
  * HEAPCHECK released granules are skipped until nothing else fits. */
 static int64_t va_find(uint32_t ng, int top, int allow_dead){
-    uint32_t run = 0;
-    if (!top){
-        for (uint32_t g = 0; g < VA_NG; g++){
-            if (!(g & 63) && g + 64 <= VA_NG && g_va_bits[g >> 6] == ~0ull){ run = 0; g += 63; continue; }
-            if (vbit(g_va_bits, g) || (!allow_dead && vbit(g_va_dead, g))) run = 0;
-            else if (++run == ng) return (int64_t)(g - ng + 1);
+    int dead = !allow_dead && g_check;
+    if (ng >= VA_BIG){
+        int64_t fit = -1; uint32_t fitlen = 0, run = 0;
+        for (uint32_t g = 0; g <= VA_NG; g++){
+            if (g < VA_NG && !(g & 63) && !(g_va_bits[g >> 6] | (dead ? g_va_dead[g >> 6] : 0ull))){ run += 64; g += 63; continue; }
+            if (g < VA_NG && !vbit(g_va_bits, g) && !(dead && vbit(g_va_dead, g))){ run++; continue; }
+            if (run >= ng && (fit < 0 || run < fitlen || (run == fitlen && top))){ fit = (int64_t)g - run; fitlen = run; }
+            run = 0;
         }
-    } else {
-        for (int64_t g = VA_NG - 1; g >= 0; g--){
-            if ((g & 63) == 63 && g_va_bits[g >> 6] == ~0ull){ run = 0; g -= 63; continue; }
-            if (vbit(g_va_bits, (uint32_t)g) || (!allow_dead && vbit(g_va_dead, (uint32_t)g))) run = 0;
-            else if (++run == ng) return g;
+        if (fit < 0) return -1;
+        return top ? fit + (int64_t)(fitlen - ng) : fit;
+    }
+    for (int pass = 0; pass < 2; pass++){                   /* past the big blocks' holes, then anywhere */
+        uint32_t run = 0;
+#define VA_BLOCKED_W(g) (g_va_bits[(g) >> 6] | (dead ? g_va_dead[(g) >> 6] : 0ull) | (pass ? 0ull : g_hintmask[(g) >> 6]))
+        if (!top){
+            for (uint32_t g = 0; g < VA_NG; g++){
+                uint64_t w = VA_BLOCKED_W(g);
+                if (!(g & 63) && w == ~0ull){ run = 0; g += 63; continue; }
+                if ((w >> (g & 63)) & 1u) run = 0;
+                else if (++run == ng) return (int64_t)(g - ng + 1);
+            }
+        } else {
+            for (int64_t g = VA_NG - 1; g >= 0; g--){
+                uint64_t w = VA_BLOCKED_W((uint32_t)g);
+                if ((g & 63) == 63 && w == ~0ull){ run = 0; g -= 63; continue; }
+                if ((w >> (g & 63)) & 1u) run = 0;
+                else if (++run == ng) return g;
+            }
         }
+#undef VA_BLOCKED_W
     }
     return -1;
 }
 static uint32_t va_take(uint32_t g0, uint32_t ng, int kind, int heap, uint32_t prot){
     for (uint32_t g = g0; g < g0 + ng; g++){ vset(g_va_bits, g, 1); vset(g_va_dead, g, 0); g_va_start[g] = g0; }
-    g_va[g0] = (VaReg){ ng, (uint8_t)kind, (uint8_t)heap, 0, prot, prot };
+    g_va[g0] = (VaReg){ ng, (uint8_t)kind, (uint8_t)heap, 0, prot, prot, 0 };
     g_va_reserved += (uint64_t)ng * VA_GRAN;
     if (g_va_reserved > g_va_peak) g_va_peak = g_va_reserved;
     return GH_BASE + g0 * VA_GRAN;
@@ -176,7 +234,25 @@ static uint32_t va_alloc(uint32_t bytes, int top, int kind, int heap, uint32_t p
     int64_t g0 = va_find(ng, top, 0);
     if (g0 < 0 && g_check){ memset(g_va_dead, 0, sizeof g_va_dead); g0 = va_find(ng, top, 1); }
     if (g0 < 0) return 0;
+    hint_drop((uint32_t)g0, ng);
     return va_take((uint32_t)g0, ng, kind, heap, prot);
+}
+/* The free address space: granules in all, the longest run, how many runs. */
+static void va_free_runs(uint32_t *free_g, uint32_t *longest_g, uint32_t *runs){
+    uint32_t fr = 0, big = 0, n = 0, run = 0;
+    for (uint32_t g = 0; g < VA_NG; g++){
+        if (!(g & 63) && g + 64 <= VA_NG){
+            uint64_t w = g_va_bits[g >> 6];
+            if (!w){ run += 64; fr += 64; g += 63; continue; }
+            if (w == ~0ull){ if (run){ n++; if (run > big) big = run; run = 0; } g += 63; continue; }
+        }
+        if (vbit(g_va_bits, g)){ if (run){ n++; if (run > big) big = run; run = 0; } }
+        else { run++; fr++; }
+    }
+    if (run){ n++; if (run > big) big = run; }
+    if (free_g) *free_g = fr;
+    if (longest_g) *longest_g = big;
+    if (runs) *runs = n;
 }
 /* Region containing a, or -1. */
 static int64_t va_region(uint32_t a){
@@ -186,6 +262,7 @@ static int64_t va_region(uint32_t a){
 }
 static void va_free_region(uint32_t g0){
     uint32_t ng = g_va[g0].ng, a = GH_BASE + g0 * VA_GRAN, len = ng * VA_GRAN;
+    if (ng >= VA_BIG) hint_add(g0, ng);                 /* a big block's hole, kept for the next big one */
     for (uint32_t g = g0; g < g0 + ng; g++){ vset(g_va_bits, g, 0); if (g_check) vset(g_va_dead, g, 1); }
     for (uint32_t p = a; p < a + len; p += GPAGE){ pcset(p, 0); dset(p, 0); }
     g_va[g0] = (VaReg){0};
@@ -325,6 +402,35 @@ static int seg_grow(int hi, uint32_t need){
     fl_insert(H, b, len - HDR);
     return 1;
 }
+/* Segment b (its first block, now free and the whole segment, size bytes up
+ * to its sentinel) is all free again: one such segment stays with its heap
+ * (H->spare, still in the free lists, for the next growth), any other goes
+ * back to the VA manager, so a heap holds address space for what it holds now
+ * rather than for its busiest moment: the COM buffers' heap kept the segments
+ * of every texture of a trip back into a crowded free roam (the world's and
+ * the friends' cars' textures coming in while the front end's go) for good.
+ * The spare is the lowest of them: segments grow from the bottom, and one left
+ * in the middle of the free space would cut its longest run in two.
+ * 1 = given back (the caller does not list it). */
+static void seg_release(GHeap *H, uint32_t size, uint32_t g0){
+    H->st.held -= (uint64_t)size + HDR;
+    va_free_region(g0);
+}
+static int seg_free_whole(GHeap *H, uint32_t b, uint32_t size){
+    int64_t g0 = va_region(b);
+    if (g0 < 0 || GH_BASE + (uint32_t)g0 * VA_GRAN != b || g_va[g0].kind != VK_SEG
+        || (uint64_t)g_va[g0].ng * VA_GRAN != (uint64_t)size + HDR) return 0;
+    if (!H->spare || H->spare == b){ H->spare = b; return 0; }
+    if (b < H->spare){                                    /* the lower one stays */
+        uint32_t o = H->spare, os = B_SIZE(o);
+        fl_remove(H, o, os);
+        H->spare = b;
+        seg_release(H, os, (o - GH_BASE) / VA_GRAN);
+        return 0;
+    }
+    seg_release(H, size, (uint32_t)g0);
+    return 1;
+}
 static uint32_t need_of(uint32_t n){
     uint64_t need = ((uint64_t)n + 15u) & ~15ull;
     need += HDR + (g_trail ? TRAIL : 0u);
@@ -346,6 +452,82 @@ static uint32_t trail_site(uint32_t b){
     return (B_SZF(b) & F_TRAIL) ? MR32(b + HDR + ((B_USIZE(b) + 15u) & ~15u) + 16u) : 0u;
 }
 
+/* What holds the address space, one line (under the lock): each heap's
+ * segments (and what of them is in use) and large blocks, VirtualAlloc's
+ * regions, and the free space with its longest run; then every large block of
+ * 8 MB or more with the call site that made it (and its frame, with
+ * NFSU2_HEAPSTAT's trailers), and the smaller ones by call site. */
+static int g_heapmap = 0;                 /* NFSU2_HEAPMAP=1 (test aid): the map with every [status] line */
+static void va_map(const char *why){
+    uint32_t fr, big, nr; va_free_runs(&fr, &big, &nr);
+    uint64_t seg[MAXHEAP] = {0}, lrg[MAXHEAP] = {0}, lrglive[MAXHEAP] = {0}, vb = 0, vc = 0;
+    uint32_t nseg[MAXHEAP] = {0}, nlrg[MAXHEAP] = {0}, nv = 0;
+    for (uint32_t g = 0; g < VA_NG; g++){
+        if (!vbit(g_va_bits, g) || g_va_start[g] != g) continue;
+        VaReg *R = &g_va[g]; uint64_t len = (uint64_t)R->ng * VA_GRAN; uint32_t a = GH_BASE + g * VA_GRAN;
+        if (R->kind == VK_SEG){ seg[R->heap] += len; nseg[R->heap]++; }
+        else if (R->kind == VK_LARGE){ lrg[R->heap] += len; nlrg[R->heap]++; lrglive[R->heap] += B_USIZE(a); }
+        else { nv++; vb += len; for (uint64_t p = 0; p < len; p += GPAGE) vc += pcbit(a + (uint32_t)p) ? GPAGE : 0; }
+        g += R->ng - 1;
+    }
+    char buf[1024];
+    int k = snprintf(buf, sizeof buf, "[heap] %s: VA %.1f of %.0f MB reserved, %.1f MB free in %u runs (longest %.1f MB);",
+                     why, g_va_reserved / 1048576.0, (GH_LIMIT - GH_BASE) / 1048576.0, fr * (VA_GRAN / 1048576.0), nr,
+                     big * (VA_GRAN / 1048576.0));
+    for (int i = 1; i < MAXHEAP && k < (int)sizeof buf; i++){
+        if (!nseg[i] && !nlrg[i]) continue;
+        GHeap *H = &g_heap[i];
+        uint64_t seglive = H->st.live >= lrglive[i] ? H->st.live - lrglive[i] : 0;
+        k += snprintf(buf + k, sizeof buf - (size_t)k, " %s(%d): %u segments %.1f MB (%.1f MB in use), %u large %.1f MB;",
+                      H->name ? H->name : "?", i, nseg[i], seg[i] / 1048576.0, seglive / 1048576.0, nlrg[i], lrg[i] / 1048576.0);
+    }
+    if (k < (int)sizeof buf)
+        k += snprintf(buf + k, sizeof buf - (size_t)k, " VirtualAlloc: %u regions %.1f MB (%.1f MB committed);", nv, vb / 1048576.0,
+                      vc / 1048576.0);
+    uint32_t rs[6] = {0}, rl[6] = {0}, run = 0;                  /* the widest free runs: where they are */
+    for (uint32_t g = 0; g <= VA_NG; g++){
+        if (g < VA_NG && !vbit(g_va_bits, g)){ run++; continue; }
+        for (int i = 0; run && i < 6; i++) if (run > rl[i]){
+            memmove(rl + i + 1, rl + i, (5u - (unsigned)i) * 4u); memmove(rs + i + 1, rs + i, (5u - (unsigned)i) * 4u);
+            rl[i] = run; rs[i] = GH_BASE + (g - run) * VA_GRAN; break; }
+        run = 0;
+    }
+    for (int i = 0; i < 6 && rl[i] && k < (int)sizeof buf; i++)
+        k += snprintf(buf + k, sizeof buf - (size_t)k, " %.1f@%08x", rl[i] * (VA_GRAN / 1048576.0), rs[i]);
+    fprintf(stderr, "%s\n", buf);
+    struct { uint32_t site, n; int heap; uint64_t bytes; } grp[24]; int ng = 0;
+    for (uint32_t g = 0; g < VA_NG; g++){                       /* the large blocks and who made them */
+        if (!vbit(g_va_bits, g) || g_va_start[g] != g) continue;
+        VaReg *R = &g_va[g]; uint32_t a = GH_BASE + g * VA_GRAN, len = R->ng * VA_GRAN;
+        g += R->ng - 1;
+        if (R->kind != VK_LARGE) continue;
+        if (len >= (8u << 20)){
+            fprintf(stderr, "[heap]   0x%08x %6.1f MB  heap %d  site 0x%08x  frame %u\n", a, len / 1048576.0, R->heap,
+                    R->site, (B_SZF(a) & F_TRAIL) ? MR32(a + HDR + ((B_USIZE(a) + 15u) & ~15u) + 20u) : 0u);
+            continue;
+        }
+        uint32_t s = R->site; int i;
+        for (i = 0; i < ng && (grp[i].site != s || grp[i].heap != R->heap); i++) ;
+        if (i == ng){ if (ng == 24) continue; grp[ng++] = (typeof(grp[0])){ s, 0, R->heap, 0 }; }
+        grp[i].n++; grp[i].bytes += len;
+    }
+    for (int j = 0; j < 8; j++){                                /* the smaller ones by site, most first */
+        int b = -1;
+        for (int i = 0; i < ng; i++) if (grp[i].n && (b < 0 || grp[i].bytes > grp[b].bytes)) b = i;
+        if (b < 0) break;
+        fprintf(stderr, "[heap]   %u blocks %6.1f MB  heap %d  site 0x%08x\n", grp[b].n, grp[b].bytes / 1048576.0, grp[b].heap, grp[b].site);
+        grp[b].n = 0;
+    }
+}
+/* An allocation found no room: the map, the first times and then now and then. */
+static void va_full(int hi, uint32_t need){
+    static unsigned n = 0;
+    if (n++ >= 6 && (n & 63)) return;
+    char why[96];
+    snprintf(why, sizeof why, "no room for %u bytes of the %s heap (%u times)", need, g_heap[hi].name ? g_heap[hi].name : "?", n);
+    va_map(why);
+}
+
 static uint32_t tlsf_alloc(int hi, uint32_t n, int zero, uint32_t site, uint32_t ra){
     GHeap *H = &g_heap[hi];
     uint32_t need = need_of(n);
@@ -353,15 +535,20 @@ static uint32_t tlsf_alloc(int hi, uint32_t n, int zero, uint32_t site, uint32_t
     uint32_t b;
     if (need >= LARGE_MIN){
         uint32_t a = va_alloc(need, 1, VK_LARGE, hi, 4u);
-        if (!a){ H->st.nfail++; return 0; }
+        if (!a){ H->st.nfail++; va_full(hi, need); return 0; }
         uint32_t len = g_va[(a - GH_BASE) / VA_GRAN].ng * VA_GRAN;
+        g_va[(a - GH_BASE) / VA_GRAN].site = site;
         mem_commit(a, len);
         H->st.held += len;
+        if (g_heapmap && len >= (8u << 20))
+            fprintf(stderr, "[heap] f=%u +%.1f MB at 0x%08x (%s heap, site 0x%08x)\n", now_frame(), len / 1048576.0, a,
+                    H->name ? H->name : "?", site);
         b = a;
         B_SZF(b) = len | F_LARGE; B_PREV(b) = 0;
     } else {
         b = fl_find(H, need);
-        if (!b){ if (!seg_grow(hi, need) || !(b = fl_find(H, need))){ H->st.nfail++; return 0; } }
+        if (!b){ if (!seg_grow(hi, need) || !(b = fl_find(H, need))){ H->st.nfail++; va_full(hi, need); return 0; } }
+        if (b == H->spare) H->spare = 0;        /* the spare segment is in use again */
         uint32_t size = B_SIZE(b);
         fl_remove(H, b, size);
         uint32_t nx = b + size;
@@ -390,6 +577,8 @@ static void tlsf_release(int hi, uint32_t b){
     if (B_SZF(b) & F_LARGE){
         uint32_t len = B_SIZE(b);
         H->st.held -= len;
+        if (g_heapmap && len >= (8u << 20))
+            fprintf(stderr, "[heap] f=%u -%.1f MB at 0x%08x (%s heap)\n", now_frame(), len / 1048576.0, b, H->name ? H->name : "?");
         va_free_region((b - GH_BASE) / VA_GRAN);
         return;
     }
@@ -411,6 +600,7 @@ static void tlsf_release(int hi, uint32_t b){
     }
     B_USIZE(b) = 0; B_MAGIC(b) = GH_FREE; B_SZF(b) = size | F_FREE;
     B_PREV(nx) = b; B_SZF(nx) |= F_PREVFREE;
+    if (!B_PREV(b) && B_MAGIC(nx) == GH_SENT && seg_free_whole(H, b, size)) return;   /* its whole segment free */
     fl_insert(H, b, size);
 }
 
@@ -609,6 +799,8 @@ void heap_init(void){
     g_sitestat = g_check || (hs && *hs && *hs != '0');
     if (g_bump) g_check = 0;
     g_trail = !g_bump && (g_check || g_sitestat);
+    const char *hm = getenv("NFSU2_HEAPMAP"), *scr = getenv("NFSU2_INPUT_SCRIPT");   /* test runs only */
+    g_heapmap = !g_bump && hm && *hm && *hm != '0' && scr && *scr;
     const char *qc = getenv("NFSU2_HEAPCHECK_QUAR");
     if (qc && *qc) g_qcap = (uint64_t)strtoull(qc, 0, 0) << 20;
     heap_new("process", 0);                     /* handle 1 = GetProcessHeap */
@@ -702,6 +894,7 @@ static uint32_t virtual_alloc(CPU *c, uint32_t addr, uint32_t size, uint32_t typ
             if (a0 < GH_BASE || end > GH_LIMIT){ win32_set_last_error(c, 487); return 0; }
             uint32_t g0 = (a0 - GH_BASE) / VA_GRAN;
             for (uint32_t g = g0; g < g0 + ng; g++) if (vbit(g_va_bits, g)){ win32_set_last_error(c, 487); return 0; }
+            hint_drop(g0, ng);
             base = va_take(g0, ng, VK_VIRTUAL, 0, prot);
         } else base = va_alloc(size, 1, VK_VIRTUAL, 0, prot);
         if (!base){ win32_set_last_error(c, 8); return 0; }
@@ -816,8 +1009,8 @@ uint32_t heap_api(CPU *c, int k){
         r = g_bump ? bump_alloc(h, n, fl & 8u, site, ra) : tlsf_alloc(h, n, fl & 8u, site, ra);
         if (!r){ win32_set_last_error(c, 8);
             static int sh = 0;
-            if (sh++ < 8) fprintf(stderr, "[heap] HeapAlloc(%d, 0x%x, %u) FAILED (caller 0x%08x)%s\n",
-                                  h, fl, n, ra, (fl & 4u) ? " -- HEAP_GENERATE_EXCEPTIONS" : ""); }
+            if (sh++ < 8) fprintf(stderr, "[heap] HeapAlloc(%d, 0x%x, %u) FAILED (caller 0x%08x, site 0x%08x)%s\n",
+                                  h, fl, n, ra, site, (fl & 4u) ? " -- HEAP_GENERATE_EXCEPTIONS" : ""); }
         break; }
     case HK_HeapFree: {
         int h = (int)ARG(c, 0); uint32_t p = ARG(c, 2);
@@ -921,13 +1114,19 @@ int  fileio_open_handles(void);
 int  win32_threads_live(void);
 int  memstat_line(char *buf, size_t n){
     uint64_t live, peak, va, held, cb = 0, bb = 0, objs = 0, ma = 0, mt = 0; unsigned lt = 0, ts = 0;
-    LOCK(); heap_totals(&live, &peak, &va, &held); UNLOCK();
+    uint32_t run = 0;
+    LOCK(); heap_totals(&live, &peak, &va, &held);
+    if (!g_bump) va_free_runs(0, &run, 0);
+    if (g_heapmap) va_map("status");
+    UNLOCK();
     com_mem_stats(&cb, &bb, &objs);
     metal_mem_stats(&ma, &lt, &ts, &mt);
-    return snprintf(buf, n, " foot=%lluMB heap=%.1f/%.1fMB va=%lluMB com=%lluKB/%llu gbuf=%.1fMB"
+    /* vrun: the longest free run of the address space (what one large block can have) */
+    return snprintf(buf, n, " foot=%lluMB heap=%.1f/%.1fMB va=%lluMB vrun=%uMB com=%lluKB/%llu gbuf=%.1fMB"
                             " mtl=%lluMB mtx=%lluMB tex=%u/%u obj=%d fh=%d thr=%d",
                     (unsigned long long)(host_footprint() >> 20), live / 1048576.0, peak / 1048576.0,
-                    (unsigned long long)(va >> 20), (unsigned long long)(cb >> 10), (unsigned long long)objs,
+                    (unsigned long long)(va >> 20), (unsigned)(((uint64_t)run * VA_GRAN) >> 20), (unsigned long long)(cb >> 10),
+                    (unsigned long long)objs,
                     bb / 1048576.0, (unsigned long long)(ma >> 20), (unsigned long long)(mt >> 20), lt, ts,
                     win32_obj_live(), fileio_open_handles(), win32_threads_live());
 }
