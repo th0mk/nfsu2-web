@@ -1,0 +1,11 @@
+# Co-op free roam online, planes, instance B (alone): A's player 2 (COOP_PEER A's name) is shown, then its car flies
+# for longer than A's game lets it (coop_online_fly_a.txt): A's page leaves the switch and both its cars go.
+0     roam fe2roam 14000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitname 6000 ${COOP_PEER} 2
++0    roam mp waitnoname 3000 ${COOP_PEER} 2
++0    roam mp waitnoname 900 ${COOP_PEER}
++0    roam mp expectcars 0
++0    status coop_fly_gone
++300  quit
