@@ -68,6 +68,9 @@ export interface SessionOptions {
   onLost?(path: string): void;
   /** the browser would not open or make a file of the save folder (process.ts onSaveTrouble) */
   onSaveTrouble?(error: string): void;
+  /** playing without saving: /save in the I/O worker's memory, with these files where the save folder has none
+   *  (proto.ts BootConfig saves, memFiles) */
+  memory?: { path: string; text: string; over?: boolean }[];
   /** tests: where frame dumps go, and their scale */
   artifacts?: string; dumpScale?: number;
   toggleFullscreen(): void;
@@ -103,7 +106,8 @@ export class GameSession {
     s.proc = await startProcess({
       module: o.module,
       initialPages: o.info.pages || undefined,
-      cfg: { args: ['nfsu2', '/data/SPEED2.EXE'], env: o.env, dataBase: DATA_BASE, manifestUrl: MANIFEST_URL, saveDir: o.saveDir },
+      cfg: { args: ['nfsu2', '/data/SPEED2.EXE'], env: o.env, dataBase: DATA_BASE, manifestUrl: MANIFEST_URL, saveDir: o.saveDir,
+        ...o.memory ? { saves: 'memory' as const, memFiles: o.memory } : {} },
       onLog: (line, fd, t) => o.log(`${tid(t, fd)} ${line}`),
       onSaved: o.onSaved,
       onSaveGone: o.onSaveGone,

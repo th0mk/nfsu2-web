@@ -10,7 +10,7 @@
 // line, so a screen reader and the keyboard get them as they are.
 
 import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type Resolved } from './settings';
-import { readText, UNREADABLE, writeFile } from './savefs';
+import { NO_SAVE, readText, UNREADABLE, writeFile, writesAreOff } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { roomHash } from './players';
@@ -455,9 +455,9 @@ export class SettingsPanel {
   private unread: unknown = null;
   /** settings.ini did not read last (load): the panel is read-only until it is read again (refresh) */
   get unreadable() { return this.unread !== null; }
-  private ro() { return !!this.deps.readOnly?.() || this.unread !== null; }
-  /** what the panel says while it is read-only */
-  private roText() { return this.unread !== null ? t(UNREADABLE, { error: String(this.unread) }) : t(READ_ONLY); }
+  private ro() { return !!this.deps.readOnly?.() || this.unread !== null || writesAreOff(); }
+  /** what the panel says while it is read-only (a game playing without saving: savefs.ts setWritesOff) */
+  private roText() { return this.unread !== null ? t(UNREADABLE, { error: String(this.unread) }) : writesAreOff() ? t(NO_SAVE) : t(READ_ONLY); }
 
   /** key's line, and also's (a row's second key: COMPANION) in the same write */
   /** Your name written (a claim made under it: claim-ui.ts) */

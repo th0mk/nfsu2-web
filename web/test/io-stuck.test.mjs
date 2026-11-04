@@ -45,7 +45,10 @@ class FFile {
     if (W.saveFail && new RegExp(W.saveFail).test(this.name)) return Promise.reject(new DOMException('Entry not found', 'NotFoundError'));
     return W.hangOpen && /\\.BIN\\./.test(this.name) ? new Promise(() => {}) : Promise.resolve(new Sync(this));
   }
-  async getFile() { const d = this.data; return { size: d.length, arrayBuffer: async () => d.slice().buffer }; }
+  async getFile() {
+    if (W.readFail === this.name) throw new DOMException('Unknown failure', 'UnknownError');
+    const d = this.data; return { size: d.length, lastModified: 0, arrayBuffer: async () => d.slice().buffer };
+  }
 }
 class FDir {
   constructor(name) { this.kind = 'directory'; this.name = name; this.kids = new Map(); }
@@ -56,7 +59,19 @@ class FDir {
   async *keys() { for (const k of [...this.kids.keys()]) yield k; }
 }
 const root = new FDir('');
-Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/156.0.0.0', storage: { getDirectory: async () => root } }, configurable: true });
+for (const [path, text] of Object.entries(W.saveFiles ?? {})) {
+  const parts = ['save', ...path.split('/')];
+  let d = root;
+  for (const x of parts.slice(0, -1)) { let k = d.kids.get(x); if (!k) { k = new FDir(x); d.kids.set(x, k); } d = k; }
+  const f = new FFile(parts[parts.length - 1]); f.data = new TextEncoder().encode(text); d.kids.set(f.name, f);
+}
+const getDirectory = async () => { if (W.noStorage) throw new DOMException('Unknown failure', 'UnknownError'); return root; };
+Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/156.0.0.0', storage: { getDirectory } }, configurable: true });
+/** the browser's storage as it is: path -> its bytes as text */
+function dump(d = root, rel = '', out = {}) {
+  for (const [n, k] of d.kids) { const r = rel ? rel + '/' + n : n; if (k.kind === 'directory') dump(k, r, out); else out[r] = new TextDecoder().decode(k.data); }
+  return out;
+}
 globalThis.fetch = async (url, o = {}) => {
   if (url === '/data-manifest') return new Response(JSON.stringify({ files: [{ p: 'CARS', d: 1 }, { p: 'CARS/A.BIN', s: SIZE, m: 7 }],
     blocks: { url: '/data-blocks/', size: ${M}, max: 4 } }), { status: 200 });
@@ -64,7 +79,7 @@ globalThis.fetch = async (url, o = {}) => {
   const b = +/[?&]b=(\\d+)/.exec(url)[1];
   return new Response(file.slice(b * ${M}, Math.min(SIZE, (b + 1) * ${M})), { status: 200 });
 };
-parentPort.on('message', m => globalThis.onmessage({ data: m }));
+parentPort.on('message', m => m && m.t === 'dump' ? parentPort.postMessage({ t: 'dumped', files: dump() }) : globalThis.onmessage({ data: m }));
 `;
 
 /** the worker, as a game process has it: its memory, control words and RPC slots; the notes it writes */
@@ -79,7 +94,8 @@ async function start(opts) {
     if (m.t === 'io-error') no(new Error(m.msg));
   }));
   w.on('error', e => notes.push(`worker error: ${e}`));
-  w.postMessage({ memory, ctl: ctlBuf, rpc, cfg: { args: [], env: {}, dataBase: '/data/', manifestUrl: '/data-manifest', saveDir: 'save' } });
+  w.postMessage({ memory, ctl: ctlBuf, rpc, cfg: { args: [], env: {}, dataBase: '/data/', manifestUrl: '/data-manifest', saveDir: 'save',
+    ...opts.memory ? { saves: 'memory', memFiles: opts.memFiles ?? [] } : {} } });
   await ready;
   const ctl = new Int32Array(ctlBuf), i32 = new Int32Array(rpc), i64 = new BigInt64Array(rpc), dv = new DataView(memory.buffer);
   /** a request from slot 0, as game-worker.ts io posts it; resolves with the WASI result when the worker answers */
@@ -108,7 +124,28 @@ async function start(opts) {
     const r = await call(OP.PathOpen, 4, 0, 1024, p.length, oflags, 0x40, 0, 0, 2048);
     return { r, fd: dv.getUint32(2048, true) };
   }
-  return { w, notes, msgs, ctl, open, openSave, call, pread, stop: () => w.terminate() };
+  const str = (at, text) => { const b = new TextEncoder().encode(text); new Uint8Array(memory.buffer).set(b, at); return b.length; };
+  /** a file of /save read whole (its first 4 KB): its text, or the WASI error of its open */
+  async function readAll(p) {
+    const { r, fd } = await openSave(p, 0);
+    if (r) return r;
+    const t = new TextDecoder().decode(await pread(fd, 0, 4096));
+    await call(1 /* FdClose */, fd);
+    return t;
+  }
+  /** a file of /save written whole, as the game's CREATE_ALWAYS does (made, emptied, written, closed) */
+  async function writeAll(p, text) {
+    const { r, fd } = await openSave(p, 1 | 8);
+    assert.equal(r, 0, `open ${p}`);
+    dv.setUint32(4096, 70000, true); dv.setUint32(4100, str(70000, text), true);
+    assert.equal(await call(4 /* FdWrite */, fd, 4096, 1, 4200), 0);
+    assert.equal(await call(1 /* FdClose */, fd), 0);
+  }
+  const mkdir = async p => call(20 /* PathCreateDirectory */, 4, 1024, str(1024, p));
+  const unlink = async p => call(22 /* PathUnlinkFile */, 4, 1024, str(1024, p));
+  const rename = async (a, b) => call(23 /* PathRename */, 4, 1024, str(1024, a), 4, 1536, str(1536, b));
+  const dump = () => new Promise(res => { const h = m => { if (m.t === 'dumped') { w.off('message', h); res(m.files); } }; w.on('message', h); w.postMessage({ t: 'dump' }); });
+  return { w, notes, msgs, ctl, open, openSave, call, pread, readAll, writeAll, mkdir, unlink, rename, dump, stop: () => w.terminate() };
 }
 const expect = (pos, n) => Uint8Array.from({ length: n }, (_, k) => ((pos + k) * 7 + ((pos + k) >> 11)) & 255);
 
@@ -157,5 +194,47 @@ test('a file of the save folder that will not open, the folder still there (Fire
     assert.equal(r, 0);
     assert.equal(await io.call(1 /* FdClose */, fd), 0);
     assert.equal(io.msgs.filter(m => m.t === 'save-trouble').length, 1);
+  } finally { await io.stop(); }
+});
+
+// Playing without saving (shell.ts askNoSave: the save folder did not answer, the player started anyway; review of
+// 2f61632b): /save is in the I/O worker's memory.  On 2f61632b both fail: the game's writes went to the browser's storage.
+const PAGE_NEWS = ['saved', 'removed', 'lost', 'save-gone', 'save-trouble'];
+
+test('playing without saving: /save in memory, the save folder\'s files that read; the game\'s writes, new folders, renames and deletes stay there, the browser\'s storage untouched', { timeout: 60_000 }, async () => {
+  const saveFiles = { 'settings.ini': '# mine\n', 'registry.txt': 'd A=1\n', 'NFS Underground 2/AAA/AAA': 'aaa', 'bad.bin': 'x' };
+  const io = await start({ memory: true, readFail: 'bad.bin', saveFiles,
+    memFiles: [{ path: 'registry.txt', text: 'd DEFAULT=1\n' }, { path: 'autotest-script.txt', text: 'quit\n', over: true }] });
+  try {
+    const before = await io.dump();
+    // reads: the save folder's own (its registry, not the page's defaults), the page's where it gave none; one that did not read is not there
+    assert.equal(await io.readAll('registry.txt'), 'd A=1\n');
+    assert.equal(await io.readAll('autotest-script.txt'), 'quit\n');
+    assert.equal(await io.readAll('NFS Underground 2/AAA/AAA'), 'aaa');
+    assert.equal(await io.readAll('bad.bin'), 44 /* E.NOENT */);
+    // the game's writes: a profile over its own, a new profile in a new folder, the registry by its .tmp, a delete
+    await io.writeAll('NFS Underground 2/AAA/AAA', 'AAA2');
+    assert.equal(await io.mkdir('NFS Underground 2/BBB'), 0);
+    await io.writeAll('NFS Underground 2/BBB/BBB', 'bbb');
+    await io.writeAll('registry.txt.tmp', 'd A=2\n');
+    assert.equal(await io.rename('registry.txt.tmp', 'registry.txt'), 0);
+    assert.equal(await io.unlink('settings.ini'), 0);
+    assert.deepEqual([await io.readAll('NFS Underground 2/AAA/AAA'), await io.readAll('NFS Underground 2/BBB/BBB'), await io.readAll('registry.txt'),
+      await io.readAll('settings.ini'), await io.readAll('registry.txt.tmp')], ['AAA2', 'bbb', 'd A=2\n', 44, 44]);
+    // the browser's storage: as before, byte for byte; the page heard of no save (no "Progress saved", nothing for the cloud)
+    assert.deepEqual(await io.dump(), before);
+    assert.deepEqual(Object.fromEntries(Object.entries(before).filter(([k]) => k.startsWith('save/')).map(([k, v]) => [k.slice(5), v])), saveFiles);
+    assert.deepEqual(io.msgs.filter(m => PAGE_NEWS.includes(m.t)), []);
+    assert.ok(io.notes.some(n => /^\[save\] playing without saving: \/save is in this game's memory, 3 files of the save folder copied in .*, 1 that did not read left out; nothing is written/.test(n)), io.notes.join('\n'));
+  } finally { await io.stop(); }
+});
+
+test('playing without saving in a browser whose storage gives nothing at all: the game starts, its /save the page\'s files alone', { timeout: 60_000 }, async () => {
+  const io = await start({ memory: true, noStorage: true, memFiles: [{ path: 'registry.txt', text: 'd DEFAULT=1\n' }] });
+  try {
+    assert.equal(await io.readAll('registry.txt'), 'd DEFAULT=1\n');
+    await io.writeAll('NFS Underground 2.txt', 'x');
+    assert.equal(await io.readAll('NFS Underground 2.txt'), 'x');
+    assert.deepEqual(io.msgs.filter(m => PAGE_NEWS.includes(m.t)), []);
   } finally { await io.stop(); }
 });

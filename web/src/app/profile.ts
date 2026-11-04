@@ -394,6 +394,8 @@ export async function renameProfile(fs: RenameFiles, profilesDir: string, from: 
     if (same(f, to)) return { refused: t('There is a profile {name} already.', { name: f }) };
     if (same(coverOf(f)?.profile ?? '', to)) return { refused: t('There is a cover shoot {name} of that name already.', { name: f }) };
   }
+  // (read before anything is written: one that does not read refuses the rename whole, never half of it)
+  const seen = await fs.readText(AUTOSAVE_SEEN);
   let files = 0;
   try {
     for (const [old, now] of moves) for (const path of folders.get(old)!) {
@@ -405,9 +407,9 @@ export async function renameProfile(fs: RenameFiles, profilesDir: string, from: 
     for (const [, now] of moves) await fs.remove(`${profilesDir}/${now}`).catch(() => {});
     throw e;
   }
-  const seen = await fs.readText(AUTOSAVE_SEEN);
   const renamed = seen?.split('\n').map(l => l.trim() === from ? to : l).join('\n');
-  if (seen !== null && renamed !== seen) await fs.writeFile(AUTOSAVE_SEEN, renamed!);
+  // (not written: the page's Autosave comes to the new name once more, at most; the rename itself goes on)
+  if (seen !== null && renamed !== seen) await fs.writeFile(AUTOSAVE_SEEN, renamed!).catch(() => {});
   for (const [old] of moves) await fs.remove(`${profilesDir}/${old}`);
   return { files };
 }

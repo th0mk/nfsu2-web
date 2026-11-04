@@ -485,6 +485,8 @@ async function addProfilesNow(fs: RenameFiles, r: Restore) {
   const written = new Set(r.entries.map(e => e.path.split('/')[1]));
   const paths = new Set(r.entries.map(e => e.path));
   const old = new Set<string>(), stale: string[] = [];
+  // (read before anything is written: one that does not read refuses the restore whole)
+  const seen = await fs.readText(AUTOSAVE_SEEN);
   for (const { path } of await fs.listFiles()) {
     const s = path.split('/');
     if (s.length < 3 || s[0] !== PROFILES_DIR || !names.has(lower(coverOf(s[1])?.profile ?? s[1]))) continue;
@@ -496,9 +498,9 @@ async function addProfilesNow(fs: RenameFiles, r: Restore) {
   for (const e of r.entries) await fs.writeFile(e.path, e.data);
   for (const f of old) await fs.remove(`${PROFILES_DIR}/${f}`);
   for (const p of stale) await fs.remove(p);
-  const seen = await fs.readText(AUTOSAVE_SEEN);
   const kept = seen?.split('\n').filter(l => !names.has(lower(l.trim()))).join('\n');
-  if (seen != null && kept !== seen) await fs.writeFile(AUTOSAVE_SEEN, kept!);
+  // (not written: the page's Autosave leaves these profiles' Save choice as it is; they are in either way)
+  if (seen != null && kept !== seen) await fs.writeFile(AUTOSAVE_SEEN, kept!).catch(() => {});
 }
 
 /** "about 3 min left" */

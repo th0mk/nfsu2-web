@@ -40,7 +40,7 @@ import { PhotoMode, photoMark } from './photo';
 import type { PadPage } from '../input/gamepad';
 import type { NetQueue, NetRaces, NetRemoved, NetRename } from '../net';
 import { blockList, changedSettings, checkSetting, HOST_FIXED, pageOnly, resolveEnv, settingsUpgrade, TEMPLATE, type Resolved } from './settings';
-import { checkSaves, exists, filesOf, listProfiles, PROFILES_DIR, readText, removeSaveDir, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
+import { checkSaves, exists, filesOf, listProfiles, NO_SAVE, PROFILES_DIR, readText, removeSaveDir, SavesOff, setWritesOff, settleStaged, UNREADABLE, writeFile, type SavesCheck } from './savefs';
 import { coverOf, newProfileName, turnOnAutosave } from './profile';
 import { crewControl, putKey, SettingsPanel, showCrewCounts } from './settings-ui';
 import { askCrews, PlayersPanel, queueText, roomHash, roomLine, roomText, serverAnswers, watchPlayers, type PlayerCounts, type Reach } from './players';
@@ -532,7 +532,7 @@ async function play() {
   starting = true; updatePlay();
   try { await startGame(); }
   catch (e) { startFailed(e); }
-  finally { starting = false; savesLocked = false; if (!session) vault.noGame(); updatePlay(); }
+  finally { starting = false; savesLocked = false; if (!session) { vault.noGame(); endNoSave(); } updatePlay(); }
 }
 
 /** the sound of a game being started, until its session has it (startFailed closes it) */
@@ -547,7 +547,7 @@ function startError(e: unknown): Msg {
 /** Play stopped by an error before the game ran (the stage is up from the click on: Play's questions show over it): the
  *  start page back, usable, with what happened */
 function startFailed(e: unknown) {
-  if (e instanceof SavesBroken) { savesBroken(e.check); return; }
+  if (e instanceof SavesBroken) { void startAudio?.close().catch(() => {}); startAudio = null; endStage(); savesBroken(e.check); return; }
   // (String(e): its name and message in every browser; Firefox's stack has neither)
   log.add(`[app] the game could not start: ${String(e)}${e instanceof Error && e.stack ? `\n${e.stack}` : ''}`);
   if (session) return;
@@ -558,43 +558,59 @@ function startFailed(e: unknown) {
   download.resume();
 }
 
-/** Play stopped before anything else: the save folder does not answer (savefs.ts checkSaves) */
+/** Play stopped: the save folder does not answer (savefs.ts checkSaves), and the player did not play without saving */
 class SavesBroken extends Error {
   constructor(readonly check: SavesCheck) { super(String(check.error)); }
 }
-const RESTART_PLAY = N('Restart the browser and press Play again.');
-const CLOUD_WAY = N('If it still fails, your cloud saves have your progress up to their last sync: remove this site\'s data in the browser\'s settings, reload, and enter your passphrase under Cloud saves.');
+const RESTART = N('Restart the browser and check that the disk has free space, then try again.');
+const CLOUD_WAY = N('If it still fails, copy or download your passphrase under Cloud saves first. Then remove this site\'s data in the browser\'s settings (its screenshots and the Put back copy go too), reload, and enter the passphrase under Cloud saves: your progress comes back as it was at {when}.');
+const UNSYNCED_WAY = N('If it still fails, don\'t remove this site\'s data: your cloud saves may not have everything from this browser. Ask for help on Discord.');
 const ALONE_WAY = N('If it still fails, don\'t remove this site\'s data: your saves are only in this browser. Ask for help on Discord.');
+const NO_SAVE_WHAT = N('Play without saving starts the game, but nothing you do in it is kept.');
 /**
- * The game not started, as its saves could neither be listed nor kept: what the browser answered, and what to do (a
- * restart of the browser first; then, with cloud saves, the site's data removed and the passphrase entered again;
- * without, the data left as it is: removing it deletes the saves).  Nothing of the saves was written or removed.
+ * What the page says of a save folder that does not answer: what the browser answered, and what to do.  A restart of
+ * the browser and free room on the disk first (Firefox gives a full disk the same "Unknown failure").  Then the site's
+ * data removed only where nothing is lost by it but the screenshots and Put back's copy: cloud saves whose last sync went
+ * through (VaultPanel.clearable, its time said), the passphrase copied first (in Firefox and Safari it is kept only in
+ * the site's data).  Anywhere else: leave the data, ask for help (removing it deletes what the cloud does not have).
  */
+function savesAdvice(error: string): string {
+  const at = vault.clearable();
+  return `${t(UNREADABLE, { error })} ${t(RESTART)} ${vault.linked() ? at !== null ? t(CLOUD_WAY, { when: when(at) }) : t(UNSYNCED_WAY) : t(ALONE_WAY)}`;
+}
+/** The game not started: the start page back with what savesAdvice says.  Nothing of the saves was written or removed. */
 function savesBroken(c: SavesCheck) {
-  const error = String(c.error);
-  log.add(`[app] problem SAVES-UNREADABLE: the save folder does not answer (${c.step}: ${error}; ${c.tries} tries): the game did not start, nothing written`);
-  setPhase('exited', T('Did not start'), () => `${t(UNREADABLE, { error })} ${t(RESTART_PLAY)} ${t(vault.linked() ? CLOUD_WAY : ALONE_WAY)}`, 'SAVES-UNREADABLE');
+  log.add('[app] the game did not start (SAVES-UNREADABLE), nothing written');
+  setPhase('exited', T('Did not start'), () => savesAdvice(String(c.error)), 'SAVES-UNREADABLE');
   $('#log-btn').hidden = $('#report').hidden = false;
 }
+/** The save folder does not answer: what savesAdvice says, and Play without saving (true) or not.  Over the stage. */
+async function askNoSave(c: SavesCheck): Promise<boolean> {
+  log.add(`[app] problem SAVES-UNREADABLE: the save folder does not answer (${c.step}: ${String(c.error)}; ${c.tries} tries)`);
+  const p = (text: string) => Object.assign(document.createElement('p'), { textContent: text });
+  const body = document.createElement('div');
+  body.append(p(savesAdvice(String(c.error))), p(t(NO_SAVE_WHAT)));
+  body.append(codeOf('SAVES-UNREADABLE'));
+  const on = await choiceBox(t('Play without saving?'), body, t('Play without saving'), t('Cancel')) === 'ok';
+  log.add(`[app] ${on ? 'playing without saving: /save in memory, nothing written to the browser\'s storage' : 'not played without saving'}`);
+  return on;
+}
+/** this game plays without saving (askNoSave): nothing the page writes, and the game's /save in memory (game.ts memory) */
+let noSave = false;
+function endNoSave() { if (noSave) { noSave = false; setWritesOff(false); } }
 
 async function startGame() {
-  // The save folder answers (savefs.ts checkSaves; asked again for a few seconds where it does not), before anything
-  // reads or writes it: a game on one that does not would list no profile and keep no save.  Then settings.ini as it
-  // is now (another tab or the raw editor may have changed it, and the Mac app reads it at every launch); a short read,
-  // well inside the click's user activation, which full screen needs (after the free-roam question, its button's click
-  // is the activation).  Beside it the server's version once more (a deploy since the page last asked): no game starts
-  // on a version it replaced.
-  const [folder, rev, counts] = await Promise.all([
-    checkSaves(SAVE).then(async c => {
-      if (c.ok) await Promise.race([loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`)), new Promise(r => setTimeout(r, 1000))]);
-      return c;
-    }),
+  // settings.ini as it is now (another tab or the raw editor may have changed it,
+  // and the Mac app reads it at every launch); a short read, well inside the click's
+  // user activation, which full screen needs (after the free-roam question, its
+  // button's click is the activation).  Beside it the server's version once more
+  // (a deploy since the page last asked): no game starts on a version it replaced.
+  // (A settings.ini that does not read is left as it is: savefs.ts missing.)
+  const [, rev, counts] = await Promise.all([
+    Promise.race([loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`)), new Promise(r => setTimeout(r, 1000))]),
     offline || testPage() ? null : serverRev(1000),
     offline || testPage() ? null : players?.fresh(1000) ?? null,
   ]);
-  if (!folder.ok) throw new SavesBroken(folder);
-  if (folder.tries > 1) log.add(`[app] the save folder answered after ${folder.tries} tries`);
-  if (settings.unreadable) void settings.refresh();         // (read-only since the page's start: it reads now)
   if (rev && rev !== loaded!.info.rev && rev !== tried) {
     newer = rev; updated = false;
     // before a game ran here nothing is lost; after one, the offer with its word on the log first (the next Play reloads)
@@ -630,18 +646,31 @@ async function startGame() {
     if (!fs.ok) fsNote = t('Full screen was not allowed here; {menu} has it.', { menu: menuName() });
     else if (!fs.locked && !touchFirst()) fsNote = t('Esc leaves full screen in this browser (no keyboard lock).');
   }
+  // The save folder answers (savefs.ts checkSaves: asked again for a few seconds where it does not, 8 s at most), over
+  // the stage once full screen is on: a game on one that does not would list no profile and keep no save.  The player
+  // then plays without saving (askNoSave: the game's /save in memory, nothing written anywhere), or not (the start
+  // page back, with what to do: startFailed).
+  const folder = await checkSaves(SAVE);
+  if (!folder.ok) {
+    if (!await askNoSave(folder)) throw new SavesBroken(folder);
+    noSave = true; setWritesOff(true);
+  } else if (folder.tries > 1) log.add(`[app] the save folder answered after ${folder.tries} tries`);
+  if (settings.unreadable && !noSave) void settings.refresh();      // (read-only since the page's start: it reads now)
   // the keyphrase's newer saves from another browser (4 s at most: what they bring may be a conflict), then a
   // cloud-saves conflict waiting (nothing syncs until it is settled): settled, or no game (the page as it was); before
   // the questions that write settings.ini, which the cloud's saves would replace.  (A first check of the server still
-  // under way: its answer first, 5 s at most, so the pull and the questions know the passphrase's sync.)
-  await vault.started();
-  const pulled = await vault.beforePlay();
-  const cloud = await vault.askAtPlay();
-  if (cloud === 'stop') { void audio?.close().catch(() => {}); startAudio = null; endStage(); return; }
-  if (cloud === 'taken' || pulled) await loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`));
+  // under way: its answer first, 5 s at most, so the pull and the questions know the passphrase's sync.)  None of it
+  // playing without saving: nothing comes in, nothing is asked.
+  if (!noSave) {
+    await vault.started();
+    const pulled = await vault.beforePlay();
+    const cloud = await vault.askAtPlay();
+    if (cloud === 'stop') { void audio?.close().catch(() => {}); startAudio = null; endStage(); return; }
+    if (cloud === 'taken' || pulled) await loadSettings().catch(e => log.add(`[app] settings.ini not read again: ${e}`));
+  }
   // (the free-roam question says when the server is full: answered, it is not asked again what to do about that)
   const roamAsked = await askRoam();
-  if (!roamAsked) await askCloud();
+  if (!roamAsked && !noSave) await askCloud();
   const alone = !roamAsked && await askFull(counts);
   // the name this game plays under, by the claims
   const playAs = alone ? null : await playName();
@@ -700,9 +729,15 @@ async function startGame() {
     memoryGB: (navigator as { deviceMemory?: number }).deviceMemory, touchPoints: navigator.maxTouchPoints, homeScreen: fromHomeScreen(), displayHz })}`);
   for (const n of r.notes) log.keep(`[app] ${n}`);
   const reg = r.env.NFSU2_REGFILE.replace(/^\/save\//, '');
+  // playing without saving: what the page would write goes into the game's /save in memory (game.ts memory) instead
+  const memory: { path: string; text: string; over?: boolean }[] = [];
+  const put = async (path: string, text: string) => { if (noSave) memory.push({ path, text, over: true }); else await writeFile(SAVE, path, text); };
   if (q.get('reg')) {
-    await writeFile(SAVE, reg, await (await fetch(q.get('reg')!, { cache: 'no-store' })).text());
+    await put(reg, await (await fetch(q.get('reg')!, { cache: 'no-store' })).text());
     log.add(`[app] registry seeded from ${q.get('reg')} (page address)`);
+  } else if (noSave) {
+    // (the save folder's registry where it read, else the built-in defaults)
+    memory.push({ path: reg, text: isPhone() ? phoneSeed(registryDefaults) : registryDefaults });
   } else if (!await exists(SAVE, reg)) {
     if (r.env.NFSU2_SEED_REGISTRY === '0') log.add('[app] no registry yet, the game will run its first-run check');
     else if (isPhone()) { await writeFile(SAVE, reg, phoneSeed(registryDefaults)); log.add(`[app] first launch, registry seeded with the built-in defaults and a phone's graphics (/save/${reg})`); }
@@ -724,6 +759,7 @@ async function startGame() {
   let autosaved: string[] = [];
   const scripted = !!q.get('script') && ENVIRONMENT.NFSU2_AUTOSAVE === undefined;
   if (scripted) log.add('[app] autosave: an input script drives this game, the profiles are left as they are');
+  else if (noSave) log.add('[app] autosave: playing without saving, the profiles are left as they are');
   else if (r.env.NFSU2_AUTOSAVE !== '0') {
     try {
       const a = await oneWriter(() => turnOnAutosave(filesOf(SAVE), PROFILES_DIR));     // (after any restore, never beside one)
@@ -732,7 +768,7 @@ async function startGame() {
     } catch (e) { log.add(`[app] autosave: the profiles were not checked: ${e}`); }
   }
   if (q.get('script')) {
-    await writeFile(SAVE, 'autotest-script.txt', await (await fetch(q.get('script')!, { cache: 'no-store' })).text());
+    await put('autotest-script.txt', await (await fetch(q.get('script')!, { cache: 'no-store' })).text());
     if (!('NFSU2_INPUT_SCRIPT' in r.env)) r.env.NFSU2_INPUT_SCRIPT = '/save/autotest-script.txt';
     log.add(`[app] input script ${q.get('script')}`);
   }
@@ -766,6 +802,7 @@ async function startGame() {
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
       netBlock: net && r.env.NFSU2_ROAM === '1' ? blockList(r.env.NFSU2_ROAM_BLOCK ?? '') : undefined,
       artifacts: q.get('artifacts') ?? undefined, dumpScale: q.get('dumpscale') ? +q.get('dumpscale')! : undefined,
+      memory: noSave ? memory : undefined,
       toggleFullscreen, padPage: PAD_PAGE, log: logLine, onFatal: stopFatal, onOtherBuild: otherBuild,
     });
   } catch (e) {
@@ -817,7 +854,8 @@ async function startGame() {
   const key = cap(menuKey());
   const hint = offlineNote + (fsNote || (full ? (touchFirst() ? t('{key} opens the menu.', { key }) : t('{key} opens the menu. Hold Esc to leave full screen.', { key }))
     : t('{key} opens the menu: full screen, controls, quit.', { key })));
-  if (autosaved.length) toast(t('Autosave is now on for {names} (Options, Gameplay, Save). {hint}', { names: listOf(autosaved), hint }), 9000);
+  if (noSave) toast(`${t(NO_SAVE)} ${hint}`, 9000);
+  else if (autosaved.length) toast(t('Autosave is now on for {names} (Options, Gameplay, Save). {hint}', { names: listOf(autosaved), hint }), 9000);
   else toast(hint, 6000);
   void st.exited.then(code => { clearInterval(waitStatus); onExit(st, code); });
   // Chrome may keep the sound off until a click or a key press (its autoplay
@@ -1064,7 +1102,8 @@ function onExit(s: GameSession, code: number) {
     });
   }
   void saves.refresh();               // new or changed profiles
-  vault.gameEnded();                  // and to the keyphrase with them
+  if (!noSave) vault.gameEnded();     // and to the keyphrase with them (none from a game that played without saving)
+  endNoSave();
   void friendsPanel.refresh(true);    // friends made in the game
   showNewer();                        // the note on the log, now that there is one
   void checkNewer();
@@ -1110,7 +1149,7 @@ function onLost(path: string) {
  *  all failed, said only in the log) */
 function onSaveTrouble(error: string) {
   log.add(`[app] the browser would not open a file of the save folder (${error}): said over the game`);
-  if (session || starting) toast(`${t(UNREADABLE, { error })} ${t(RESTART_PLAY)}`, 15000, true);
+  if (session || starting) toast(`${t(UNREADABLE, { error })} ${t(RESTART)}`, 15000, true);
 }
 
 /** the game deleted a file of the save folder: a profile's (its own Delete), which no refill brings back then */
@@ -1125,6 +1164,7 @@ function onRemoved(path: string) {
 
 /** the game finished writing a file of the save folder: a profile is the player's progress */
 function onSaved(path: string) {
+  if (noSave) return;                                      // (the I/O worker says none then: io-worker.ts inMemory)
   void snapshotFile(playStart, SAVE, path);                // what comes back if the browser deletes the folder (saveGone)
   const p = path.split('/');
   if (p.length !== 3 || p[0] !== PROFILES_DIR || p[2].toLowerCase() !== p[1].toLowerCase()) return;
@@ -1439,6 +1479,7 @@ function clearToasts() {
  *  still picture once it has all its frames, with its look and crop), as a PNG beside the saves (Saves on the start
  *  page shows it), with the site's address in a corner unless photo mode's panel turned it off */
 async function screenshot(photo = false) {
+  if (noSave) { toast(t(NO_SAVE), 4000); return; }
   const r = session?.renderer;
   if (!r?.dump) { toast(t('No screenshot: nothing on screen yet.'), 2500); return; }
   try {
@@ -1537,7 +1578,7 @@ async function menuCrews(list: Crew[], focus: (root: HTMLElement) => Element | n
     await editSettings(s => putKey(putKey(s, 'roam_crew', list.length ? crewsValue(list.map(c => c.name)) : null).text,
       'roam_crew_colours', list.length ? rgbsValue(list) : null).text);
   } catch (e) { log.add(`[app] settings.ini not written: ${e}`); }
-  log.add(`[app] crews:${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
+  log.add(`[app] crews: ${list.length ? list.map(c => `${c.name} (${c.rgb})`).join(', ') : 'none'} (the page menu)`);
 }
 
 /** The menu's Friends popup (free roam, with friends), over the menu: the friends in free roam, a Join for each one in
@@ -1635,20 +1676,26 @@ async function applyInvite(inv: Invite): Promise<Joined> {
     ` (${live ? 'the game takes it now' : 'from the next Play'})`);
   return live ? 'live' : 'next';
 }
-/** applyInvite, and what it did said to the player (a settings.ini that did not read or write: that, nothing joined);
- *  null: not joined */
-async function joinHere(inv: Invite): Promise<Joined | null> {
-  try { const how = await applyInvite(inv); tell(joinedText(how)); return how; }
-  catch (e) { log.add(`[app] invite link: not joined, settings.ini did not read or write (${e})`); tell(t(UNREADABLE, { error: String(e) })); return null; }
+/** applyInvite, and what it did said to the player (a settings.ini that did not read or write: that, nothing joined) */
+async function joinHere(inv: Invite): Promise<{ how: Joined } | { error: string }> {
+  try { const how = await applyInvite(inv); tell(joinedText(how)); return { how }; }
+  catch (e) {
+    log.add(`[app] invite link: not joined, settings.ini did not read or write (${e})`);
+    tell(e instanceof SavesOff ? t(NO_SAVE) : t(UNREADABLE, { error: String(e) }));
+    return { error: String(e) };
+  }
 }
 
-/** Join inv in the tab that owns the saves; null: no answer within 3 s (no such tab, or a page of before). */
-function relayInvite(inv: Invite): Promise<Joined | null> {
+/** Join inv in the tab that owns the saves: how, or why not (error); null: no answer within 3 s (no such tab, or a page
+ *  of before). */
+function relayInvite(inv: Invite): Promise<{ how?: Joined; error?: string } | null> {
   return new Promise(res => {
     const ch = new BroadcastChannel(INVITE_CHANNEL), id = crypto.randomUUID();
-    const done = (v: Joined | null) => { clearTimeout(timer); ch.close(); res(v); };
+    const done = (v: { how?: Joined; error?: string } | null) => { clearTimeout(timer); ch.close(); res(v); };
     const timer = setTimeout(() => done(null), 3000);
-    ch.onmessage = e => { if (e.data?.t === 'joined' && e.data.id === id) done(e.data.how as Joined); };
+    ch.onmessage = e => {
+      if (e.data?.t === 'joined' && e.data.id === id) done({ how: e.data.how as Joined | undefined, error: typeof e.data.error === 'string' ? e.data.error : undefined });
+    };
     ch.postMessage({ t: 'join', id, inv });
   });
 }
@@ -1662,8 +1709,7 @@ function hearInvites() {
     if (typeof m.inv?.room === 'string') inv.room = m.inv.room;
     if (typeof m.inv?.crew === 'string') inv.crew = m.inv.crew;
     if ((!inv.room && !inv.crew) || !checkInvite(inv).ok) return;
-    const how = await joinHere(inv);
-    if (how) ch.postMessage({ t: 'joined', id: m.id, how });
+    ch.postMessage({ t: 'joined', id: m.id, ...await joinHere(inv) });
   };
 }
 
@@ -1702,7 +1748,8 @@ async function offerInvite(inv: Invite) {
   if (session && !$<HTMLDialogElement>('#menu').open) { $('#stage').classList.remove('cursor'); $('#stage').querySelector('canvas')?.focus(); }
   if (!yes) { log.add('[app] invite link: not now'); return; }
   if (instance.owner) { await joinHere(inv); return; }
-  const how = await relayInvite(inv);
+  const r = await relayInvite(inv), how = r?.how;
+  if (r?.error) { tell(r.error.startsWith('SavesOff') ? t(NO_SAVE) : t(UNREADABLE, { error: r.error })); return; }
   if (how) { tell(how === 'full' || how === 'none' ? joinedText(how) : `${t('Joined in the other tab.')} ${t(how === 'live' ? JOINED_NOW : JOINED_NEXT)}`); return; }
   tell(t('The other tab did not answer. Close it: this tab joins when it takes over.'));
   void instance.whenOwner.then(async () => { await loadSettings().catch(() => null); await joinHere(inv); });

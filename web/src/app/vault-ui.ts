@@ -680,6 +680,17 @@ export class VaultPanel {
   }
   /** a keyphrase is linked here (before `start`: one is kept here) */
   linked(): boolean { return this.sync ? !!this.sync.link : typeof this.load()?.phrase === 'string'; }
+  /**
+   * When the cloud's version of this browser's saves was saved, where its last sync went through: linked, the server
+   * has the keyphrase, no conflict, error or work under way, no send without an answer, nothing held back (shell.ts
+   * savesAdvice: only then may the player remove the site's data and take the saves back with the passphrase).  null:
+   * not so, or not known yet (before `start`).
+   */
+  clearable(): number | null {
+    const s = this.sync, l = s?.link;
+    if (!s || !l || l.gone || l.held || l.sent?.length || s.state.s !== 'synced') return null;
+    return l.saved;
+  }
   /** the line about the name this keyphrase claims (null: none); drawn again as the section shows (the name can be
    *  known before `start` set up the sync) */
   showClaim(name: string | null) {

@@ -52,6 +52,7 @@ class FFile {
   async getFile() {
     if (!this.alive()) throw notFound();
     fault('getFile', this.path());
+    await fsx.hooks.wait?.('getFile', this.path());   // a call the browser takes long to answer, or never
     const d = this.data, m = this.mtime;
     return { size: d.length, lastModified: m, arrayBuffer: async () => d.slice().buffer, text: async () => dec.decode(d) };
   }
@@ -881,12 +882,13 @@ test('checkSaves: no new file can be made (Firefox, the day before) is not ok at
 test('checkSaves: a lock a second tab or a closing game holds for a moment, then another error as it settles: ok at the first try that answers', async () => {
   reset();
   await put(at('TOP'), profile('TOP')); await put('settings.ini', '# mine\n');
-  let n = 0;
+  // (by the check's own waits: a page an earlier test left running may list the folder meanwhile)
+  let phase = 0;
   fsx.hooks.fail = (op, p) => {
-    if (op === 'write' && p === `${SAVE}~check` && n < 2) { n++; return new DOMException('No modification allowed', 'NoModificationAllowedError'); }
-    if (op === 'getFile' && p === `${SAVE}/settings.ini` && n === 2) { n++; return unknown(); }
+    if (op === 'write' && p === `${SAVE}~check` && phase < 2) return new DOMException('No modification allowed', 'NoModificationAllowedError');
+    if (op === 'getFile' && p === `${SAVE}/settings.ini` && phase === 2) return unknown();
   };
-  const c = await SF.checkSaves(SAVE, [1, 1, 1]);
+  const c = await SF.checkSaves(SAVE, [1, 1, 1], async () => { phase++; });
   fsx.hooks = {};
   assert.deepEqual(c, { ok: true, tries: 4 });
   assert.equal(dec.decode(await bytes('settings.ini')), '# mine\n');
@@ -901,4 +903,135 @@ test('a refill whose look-ups fail (a failure during the recovery): no file ther
   assert.deepEqual([r.written, r.failed.map(f => f.path)], [1, [at('TOP')]]);
   assert.equal(moneyOf(await bytes(at('TOP'))), 9000);
   assert.equal(dec.decode(await bytes('settings.ini')), '# start\n');
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Review of 2f61632b: a NotFoundError after a look-up that found the file, older paths that took any error for "not
+// there", a rename and a restore left half done, an empty file left behind, the check with no time limit, and playing
+// without saving.  On 2f61632b each of these fails.
+
+test('a file found, then not reading with NotFoundError (Firefox\'s "Entry not found"): never "not there", the template never written over it', async () => {
+  reset();
+  const mine = '# mine\nhorn = train\n';
+  await put('settings.ini', mine); await put(at('AAA'), profile('AAA')); await put(at('BBB'), profile('BBB'));
+  fsx.hooks.fail = (op, p) => op === 'getFile' && (p === `${SAVE}/settings.ini` || p.endsWith('/BBB/BBB')) ? notFound() : undefined;
+  const loadSettings = async () => { const text = await SF.readText(SAVE, 'settings.ini'); if (text === null) await SF.writeFile(SAVE, 'settings.ini', '# the template\n'); return text; };
+  await assert.rejects(loadSettings(), { name: 'NotFoundError' });
+  // the listing does not leave BBB out quietly (a backup, a snapshot or a cloud version without it)
+  await assert.rejects(SF.listFiles(SAVE), { name: 'NotFoundError' });
+  await assert.rejects(SU.snapshotSaves(SAVE), { name: 'NotFoundError' });
+  await assert.rejects(SU.exportSaves(SAVE), { name: 'NotFoundError' });
+  const c = await SF.checkSaves(SAVE, [1, 1, 1]);
+  fsx.hooks = {};
+  assert.deepEqual([c.ok, c.step], [false, 'list']);
+  assert.equal(dec.decode(await bytes('settings.ini')), mine);
+  // one that is gone by the time its read fails is left out, as one removed meanwhile
+  fsx.hooks.fail = (op, p) => { if (op === 'getFile' && p.endsWith('/BBB/BBB')) { fsx.root.kids.get(SAVE).kids.get(DIR).kids.get('BBB').kids.delete('BBB'); return notFound(); } };
+  assert.deepEqual((await SF.listFiles(SAVE)).map(f => f.path), [at('AAA'), 'settings.ini']);
+  fsx.hooks = {};
+});
+
+/** a restore cut after it moved TOP aside (o0) and before it moved the new one in: what a closed tab leaves */
+async function cutRestore(money) {
+  const stage = await fsx.root.getDirectoryHandle(`${SAVE}~incoming`, { create: true });
+  (await stage.getFileHandle('o0', { create: true })).data = profile('TOP', money);
+  const n = profile('TOP', 1);
+  (await stage.getFileHandle('n0', { create: true })).data = n;
+  (await stage.getFileHandle('plan.json', { create: true })).data = enc.encode(JSON.stringify([{ path: at('TOP'), crc: 0, size: n.length }]));
+  const d = fsx.root.kids.get(SAVE)?.kids.get(DIR)?.kids.get('TOP');
+  d?.kids.delete('TOP');
+}
+const staged = () => [...fsx.root.kids.get(`${SAVE}~incoming`)?.kids.keys() ?? []].sort();
+
+test('the page start\'s settle of a cut restore whose plan does not answer keeps what it moved aside (it removed the profile with the staging folder)', async () => {
+  reset();
+  await put(at('TOP'), profile('TOP', 7000));
+  await cutRestore(7000);
+  fsx.hooks.fail = (op, p) => p === `${SAVE}~incoming/plan.json` ? unknown() : undefined;
+  assert.equal(await SF.settleStaged(SAVE).catch(() => false), false);
+  assert.deepEqual(staged(), ['n0', 'o0', 'plan.json']);
+  // the staging folder itself not answering: not "nothing staged" either
+  fsx.hooks.fail = (op, p) => p === `${SAVE}~incoming` ? unknown() : undefined;
+  await assert.rejects(SF.settleStaged(SAVE), { name: 'UnknownError' });
+  assert.deepEqual(staged(), ['n0', 'o0', 'plan.json']);
+  fsx.hooks = {};
+  // answered again: undone, the profile back
+  assert.equal(await SF.settleStaged(SAVE), true);
+  assert.equal(moneyOf(await bytes(at('TOP'))), 7000);
+  assert.deepEqual(staged(), []);
+});
+
+test('a restore in a browser without move(), the profile\'s look-up and write failing, its removal working: the profile stays (it was removed)', async () => {
+  reset();
+  await put(at('TOP'), profile('TOP', 7000));
+  const path = `${SAVE}/${at('TOP')}`;
+  fsx.hooks.fail = (op, p) => (op === 'file' || op === 'write') && p === path ? unknown() : undefined;
+  await assert.rejects(SF.writeTogether(SAVE, [{ path: at('TOP'), data: profile('TOP', 1) }]));
+  fsx.hooks = {};
+  assert.equal(moneyOf(await bytes(at('TOP'))), 7000);
+  assert.equal(await SF.settleStaged(SAVE), true);          // what it left staged, undone and gone at the next settle
+  assert.equal(moneyOf(await bytes(at('TOP'))), 7000);
+  assert.deepEqual(staged(), []);
+});
+
+test('a rename or a profiles restore whose autosave-profiles.txt does not read writes nothing (it left OLD and NEW, said failed)', async () => {
+  reset();
+  await put(at('OLD'), profile('OLD', 5000)); await put('autosave-profiles.txt', 'OLD\n');
+  const before = await folder();
+  fsx.hooks.fail = (op, p) => op === 'getFile' && p === `${SAVE}/autosave-profiles.txt` ? unknown() : undefined;
+  await assert.rejects(P.renameProfile(SF.filesOf(SAVE), DIR, 'OLD', 'NEW'), { name: 'UnknownError' });
+  const r = await SU.readBackup(profile('ADD', 3000), 'ADD');
+  await assert.rejects(SU.addProfiles(SF.filesOf(SAVE), r), { name: 'UnknownError' });
+  fsx.hooks = {};
+  assert.deepEqual(await folder(), before);
+  // and a seen file that cannot be written after the rename leaves the rename done, not half of it
+  fsx.hooks.fail = (op, p) => op === 'write' && p === `${SAVE}/autosave-profiles.txt` ? unknown() : undefined;
+  assert.deepEqual(await P.renameProfile(SF.filesOf(SAVE), DIR, 'OLD', 'NEW'), { files: 1 });
+  fsx.hooks = {};
+  assert.deepEqual(Object.keys(await folder()).sort(), [at('NEW'), 'autosave-profiles.txt']);
+});
+
+test('writeIfAbsent: a size that does not read after it made the file leaves no empty file (it stayed, an empty profile)', async () => {
+  reset();
+  await put('settings.ini', '# s\n');
+  fsx.hooks.fail = (op, p) => op === 'getFile' && p === `${SAVE}/${at('TOP')}` ? unknown() : undefined;
+  await assert.rejects(SF.writeIfAbsent(SAVE, at('TOP'), profile('TOP')), { name: 'UnknownError' });
+  fsx.hooks = {};
+  assert.equal(await bytes(at('TOP')), undefined);
+});
+
+test('checkSaves: a call the browser never answers is a failed check after its time (it waited for good)', { timeout: 10000 }, async () => {
+  reset();
+  await put('settings.ini', '# s\n');
+  fsx.hooks.wait = (op, p) => p === `${SAVE}/settings.ini` ? new Promise(() => {}) : undefined;
+  const t0 = performance.now();
+  const c = await SF.checkSaves(SAVE, [1, 1, 1], undefined, 300);
+  const ms = performance.now() - t0;
+  fsx.hooks = {};
+  assert.deepEqual([c.ok, c.step, c.error?.name], [false, 'list', 'TimeoutError']);
+  assert.ok(ms >= 250 && ms < 2000, `${ms} ms`);
+});
+
+test('playing without saving (setWritesOff): nothing writes, moves or removes anything; reads go on; on again, writes do', async () => {
+  reset();
+  await put(at('TOP'), profile('TOP', 7000)); await put('settings.ini', '# mine\n'); await put('autosave-profiles.txt', '');
+  const before = await folder(), beside = [...fsx.root.kids.keys()];
+  SF.setWritesOff(true);
+  try {
+    const fs = SF.filesOf(SAVE);
+    for (const [what, call] of [
+      ['writeFile', () => SF.writeFile(SAVE, 'settings.ini', '# the template\n')], ['writeIfAbsent', () => SF.writeIfAbsent(SAVE, 'new.txt', enc.encode('x'))],
+      ['writeTogether', () => SF.writeTogether(SAVE, [{ path: at('TOP'), data: profile('TOP', 1) }])], ['removePath', () => SF.removePath(SAVE, at('TOP'))],
+      ['settleStaged', () => SF.settleStaged(SAVE)], ['writeBeside', () => SF.writeBeside(`${SAVE}~mark`, 'x')], ['removeSaveDir', () => SF.removeSaveDir(SAVE)],
+      ['pruneSaveDir', () => SF.pruneSaveDir(SAVE, () => false)], ['clearSaveDir', () => SF.clearSaveDir(SAVE)],
+      ['rename', () => P.renameProfile(fs, DIR, 'TOP', 'TIP')], ['autosave', () => P.turnOnAutosave(fs, DIR)],
+      ['refill', async () => { const r = await SU.refillSaves(fs, null, [{ path: 'other.ini', data: enc.encode('x') }]); if (r.failed.length) throw r.failed[0].error; }]])
+      await assert.rejects(call(), { name: 'SavesOff' }, `${what} wrote`);
+    assert.equal(dec.decode(await bytes('settings.ini')), '# mine\n');
+    assert.equal((await SF.listFiles(SAVE)).length, 3);
+  } finally { SF.setWritesOff(false); }
+  assert.deepEqual(await folder(), before);
+  assert.deepEqual([...fsx.root.kids.keys()], beside);
+  await SF.writeFile(SAVE, 'settings.ini', '# changed\n');
+  assert.equal(dec.decode(await bytes('settings.ini')), '# changed\n');
 });

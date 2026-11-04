@@ -453,7 +453,7 @@ async function saveTrouble(what: string, err: unknown, again = false): Promise<b
   const name = (err as Error)?.name ?? 'Error';
   // whatever the call answered (Chrome: NotFoundError; Firefox: UnknownError for a create in a removed folder), the
   // folder itself is looked at: gone, it is made again
-  if (!again && await saveGone()) { await recover(); return true; }
+  if (!again && !inMemory() && await saveGone()) { await recover(); return true; }
   if (!troubleSaid.has(name)) { troubleSaid.add(name); note(`[save] ${what}: ${name}: ${(err as Error)?.message ?? err}`); }
   if (!troubleTold) { troubleTold = true; (self as unknown as Worker).postMessage({ t: 'save-trouble', error: `${name}: ${(err as Error)?.message ?? err}` }); }
   return false;
@@ -520,6 +520,100 @@ function recover(): Promise<void> {
   })().finally(() => { recovering = null; });
   return recovering;
 }
+
+// ----------------------------------------------- playing without saving ----
+// cfg.saves 'memory' (shell.ts: the save folder did not answer, and the player started the game anyway): /save is a
+// folder in this worker's memory, made of the files of the save folder that read at the start (no sync handle is opened
+// there, nothing is made, written, moved or removed), and every write of the game's goes into it alone: gone with the
+// game.  These classes answer as much of the OPFS handles' API as this worker uses, so the code above and below runs on
+// it as on the browser's; the page is told of no save (no "Progress saved", nothing for cloud saves).
+const domError = (name: string, msg = name) => new DOMException(msg, name);
+class MemSync {
+  constructor(private f: MemFile) {}
+  read(b: Uint8Array, o: { at: number }) { const d = this.f.data, n = Math.max(0, Math.min(b.length, d.length - o.at)); b.set(d.subarray(o.at, o.at + n)); return n; }
+  write(b: Uint8Array, o: { at: number }) {
+    const end = o.at + b.length;
+    if (end > this.f.data.length) { const d = new Uint8Array(end); d.set(this.f.data); this.f.data = d; }
+    this.f.data.set(b, o.at); this.f.mtime = Date.now(); return b.length;
+  }
+  getSize() { return this.f.data.length; }
+  truncate(n: number) { const d = new Uint8Array(n); d.set(this.f.data.subarray(0, n)); this.f.data = d; this.f.mtime = Date.now(); }
+  flush() {}
+  close() {}
+}
+class MemFile {
+  readonly kind = 'file';
+  data = new Uint8Array(0);
+  mtime = Date.now();
+  constructor(public name: string, public parent: MemDir) {}
+  async getFile() { const d = this.data; return { size: d.length, lastModified: this.mtime, arrayBuffer: async () => d.slice().buffer, text: async () => td.decode(d) }; }
+  async createSyncAccessHandle() { return new MemSync(this); }
+  async move(to: MemDir, name: string) { moveMem(this, to, name); }
+}
+class MemDir {
+  readonly kind = 'directory';
+  kids = new Map<string, MemDir | MemFile>();
+  constructor(public name: string, public parent: MemDir | null) {}
+  async getDirectoryHandle(n: string, o: { create?: boolean } = {}) {
+    let k = this.kids.get(n);
+    if (k?.kind === 'file') throw domError('TypeMismatchError');
+    if (!k) { if (!o.create) throw domError('NotFoundError'); k = new MemDir(n, this); this.kids.set(n, k); }
+    return k;
+  }
+  async getFileHandle(n: string, o: { create?: boolean } = {}) {
+    let k = this.kids.get(n);
+    if (k?.kind === 'directory') throw domError('TypeMismatchError');
+    if (!k) { if (!o.create) throw domError('NotFoundError'); k = new MemFile(n, this); this.kids.set(n, k); }
+    return k;
+  }
+  async removeEntry(n: string, o: { recursive?: boolean } = {}) {
+    const k = this.kids.get(n);
+    if (!k) throw domError('NotFoundError');
+    if (k.kind === 'directory' && k.kids.size && !o.recursive) throw domError('InvalidModificationError');
+    this.kids.delete(n);
+  }
+  async *entries(): AsyncIterable<[string, MemDir | MemFile]> { yield* [...this.kids]; }
+  async *keys(): AsyncIterable<string> { yield* [...this.kids.keys()]; }
+  async move(to: MemDir, name: string) { moveMem(this, to, name); }
+}
+function moveMem(e: MemDir | MemFile, to: MemDir, name: string) {
+  if (to.kids.get(name)?.kind === 'directory' && e.kind === 'file') throw domError('TypeMismatchError');
+  e.parent?.kids.delete(e.name);
+  e.name = name; e.parent = to;
+  to.kids.set(name, e);
+}
+/** the save folder's files that read, copied into dir (folders as they are); what did not read is left out */
+async function memCopy(from: FileSystemDirectoryHandle, dir: MemDir, n: { files: number; bytes: number; skipped: number }) {
+  const list: [string, FileSystemHandle][] = [];
+  try { for await (const e of (from as any).entries() as AsyncIterable<[string, FileSystemHandle]>) list.push(e); }
+  catch { n.skipped++; return; }
+  for (const [name, h] of list) {
+    if (h.kind === 'directory') { const sub = new MemDir(name, dir); dir.kids.set(name, sub); await memCopy(h as FileSystemDirectoryHandle, sub, n); continue; }
+    try {
+      const f = await (h as FileSystemFileHandle).getFile(), m = new MemFile(name, dir);
+      m.data = new Uint8Array(await f.arrayBuffer()); m.mtime = f.lastModified;
+      dir.kids.set(name, m); n.files++; n.bytes += m.data.length;
+    } catch { n.skipped++; }
+  }
+}
+/** /save in memory: the save folder's files that read, then the page's own (cfg.memFiles) */
+async function memorySaves(opfs: FileSystemDirectoryHandle | null): Promise<FileSystemDirectoryHandle> {
+  const m = new MemDir('', null), n = { files: 0, bytes: 0, skipped: 0 };
+  let real: FileSystemDirectoryHandle | null = null;
+  try { real = opfs && await opfs.getDirectoryHandle(cfg.saveDir); } catch { /* none, or it does not answer */ }
+  if (real) await memCopy(real, m, n);
+  for (const f of cfg.memFiles ?? []) {
+    const p = f.path.split('/').filter(Boolean);
+    let d = m;
+    for (const x of p.slice(0, -1)) d = await d.getDirectoryHandle(x, { create: true });
+    if (!f.over && d.kids.has(p[p.length - 1])) continue;
+    (await d.getFileHandle(p[p.length - 1], { create: true })).data = te.encode(f.text);
+  }
+  note(`[save] playing without saving: /save is in this game's memory, ${n.files} files of the save folder copied in ` +
+    `(${(n.bytes / 1024).toFixed(0)} KB)${n.skipped ? `, ${n.skipped} that did not read left out` : ''}; nothing is written to the browser's storage`);
+  return m as unknown as FileSystemDirectoryHandle;
+}
+const inMemory = () => cfg.saves === 'memory';
 
 // ------------------------------------------------------------------ fds ----
 interface Fd {
@@ -635,7 +729,8 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       fds.delete(n(0));
       // posted before the call returns, so the page hears of a save before the game can exit after it; never for one
       // that went with a deleted folder (no "Progress saved" for it)
-      if (f.wrote && !lost) (self as unknown as Worker).postMessage({ t: 'saved', path: f.path });
+      if (inMemory()) { /* playing without saving: the page has nothing to keep or send */ }
+      else if (f.wrote && !lost) (self as unknown as Worker).postMessage({ t: 'saved', path: f.path });
       else if (lost) (self as unknown as Worker).postMessage({ t: 'lost', path: f.path });
       return 0;
     }
@@ -733,7 +828,7 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       for (const [k, f] of fds) if (f.mount === 'save' && f.path === rel && f.sh) { f.sh.close(); fds.delete(k); }
       try { await e.parent.removeEntry(e.name); } catch { return E.NOTEMPTY; }
       // a profile the game deleted (its own Delete): the page's cloud saves expect one fewer
-      if (o === Op.PathUnlinkFile && isProfilePath(rel.split('/'))) (self as unknown as Worker).postMessage({ t: 'removed', path: rel });
+      if (o === Op.PathUnlinkFile && isProfilePath(rel.split('/')) && !inMemory()) (self as unknown as Worker).postMessage({ t: 'removed', path: rel });
       return 0;
     }
     case Op.PathRename: {
@@ -747,7 +842,7 @@ async function op(o: Op, a: bigint[], again = false): Promise<number> {
       const eb = await saveEntry(rb); if (eb?.kind === 'file') await eb.parent.removeEntry(eb.name);
       await (ea.h as any).move(pb, rb.split('/').pop());
       // a file written under another name and moved into place (the runtime's registry.txt.tmp): saved as that one
-      if (ea.kind === 'file') (self as unknown as Worker).postMessage({ t: 'saved', path: rb });
+      if (ea.kind === 'file' && !inMemory()) (self as unknown as Worker).postMessage({ t: 'saved', path: rb });
       return 0;
     }
     case Op.FdRenumber: { const f = fds.get(n(0)); if (!f) return E.BADF; fds.delete(n(0)); fds.set(n(1), f); return 0; }
@@ -814,9 +909,16 @@ onmessage = async (e: MessageEvent<Init | { t: 'save-ready' }>) => {
   ({ memory, cfg } = e.data);
   ctl = new Int32Array(e.data.ctl); rpcI32 = new Int32Array(e.data.rpc); rpcI64 = new BigInt64Array(e.data.rpc);
   try {
-    const opfs = await navigator.storage.getDirectory();
-    saveRoot = await opfs.getDirectoryHandle(cfg.saveDir, { create: true });
-    try { cacheDir = await opfs.getDirectoryHandle(CACHE_DIR, { create: true }); } catch { cacheDir = null; }
+    if (inMemory()) {
+      // (a browser whose storage does not answer at all still plays: the game data from the server, the saves in memory)
+      const opfs = await navigator.storage.getDirectory().catch(() => null);
+      saveRoot = await memorySaves(opfs);
+      try { cacheDir = opfs && await opfs.getDirectoryHandle(CACHE_DIR, { create: true }); } catch { cacheDir = null; }
+    } else {
+      const opfs = await navigator.storage.getDirectory();
+      saveRoot = await opfs.getDirectoryHandle(cfg.saveDir, { create: true });
+      try { cacheDir = await opfs.getDirectoryHandle(CACHE_DIR, { create: true }); } catch { cacheDir = null; }
+    }
     await loadManifest();
     fds.set(3, { mount: 'data', kind: 'dir', path: '', pos: 0, append: false, node: dataRoot, preopen: '/data' });
     fds.set(4, { mount: 'save', kind: 'dir', path: '', pos: 0, append: false, dh: saveRoot, preopen: '/save' });

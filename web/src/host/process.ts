@@ -95,7 +95,8 @@ export async function startProcess(o: ProcessOptions): Promise<GameProcess> {
   const io = new Worker(new URL('/host/io-worker.js', import.meta.url), { type: 'module', name: 'io' });
   workers.push(io);
   await new Promise<void>((res, rej) => {
-    io.onmessage = (e) => { if (e.data.t === 'io-ready') res(); else if (e.data.t === 'io-error') rej(new Error(e.data.msg)); };
+    // (its lines as it starts too: playing without saving, what it copied into memory)
+    io.onmessage = (e) => { if (e.data.t === 'io-ready') res(); else if (e.data.t === 'io-error') rej(new Error(e.data.msg)); else if (e.data.t === 'log') o.onNote?.(e.data.s); };
     io.postMessage({ memory, ctl: ctlBuf, rpc, cfg });
   });
   io.onmessage = (e) => {
