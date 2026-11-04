@@ -2,7 +2,8 @@
 // object table of runtime/win32_ext.c: a full table takes back a finished thread's slot, never one a wait or a handle
 // still names), tests/watchdog_unit.c (runtime/watchdog.c: no false stall from a stamp a little ahead of its
 // clock) and tests/racenet_unit.c (runtime/racenet.c: the creator's list only from the creator, each joiner's car
-// states for its own slot only).  Every case of theirs passes, and each one ran.
+// states for its own slot only) and tests/catchup_unit.c (runtime/catchup.c: the career's rubberbanding for each
+// setting, and the game's own outside career races).  Every case of theirs passes, and each one ran.
 //   node --test web/test/runtime-unit.test.mjs        (macOS with clang: Xcode's command line tools; about 10 s)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,4 +49,12 @@ test('racenet_unit: the creator\'s list only from the creator, a joiner\'s state
   for (const c of ['stranger', 'creator', 'second', 'direct', 'own-slot', 'taken-slot', 'rules', 'reset', 'host-list']) assert.ok(pass.includes(c), `case ${c} passed`);
   assert.ok(pass.length >= 13, `every check ran (${pass.length})`);
   assert.match(out, /racenet unit tests: all passed/);
+});
+
+test('catchup_unit: the career\'s rubberbanding as the setting says, outside career races the game\'s own', { skip }, () => {
+  const { out, pass } = run('catchup_unit', ['-O1', '-g', '-Wall', '-Wextra', '-Wno-unused-function']);
+  for (const m of ['original', 'noboost', 'off'])
+    for (const c of ['no-race', 'behind', 'ahead', 'no-car']) assert.ok(pass.includes(`${m}-${c}`), `case ${m}-${c} passed`);
+  for (const c of ['unset', 'bogus', 'case']) assert.ok(pass.includes(c), `case ${c} passed`);
+  assert.match(out, /catchup unit tests: all passed/);
 });
