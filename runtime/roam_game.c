@@ -223,7 +223,7 @@
 #define LEND_OPP        0
 #define NOPP            0
 #endif
-#define NSLOT           48            /* NOPP opponent cars + the rest of our own */
+#define NSLOT           64            /* NOPP opponent cars + the rest of our own */
 #define WORLD_INDEX     22            /* World::IndexCars' cars[] (World +0x1C; other fields follow) */
 #define KIND_OUT        4             /* a racer record kind IndexCars skips (1 human, 2 AI racer, 3 traffic) */
 #define SKIN_GAME       6             /* the game's paint slots, DUMMY_SKIN1-6 */
@@ -232,7 +232,7 @@
 #define DEF_CARS        MAX_CARS
 #else
 #define MAX_CARS        NSLOT
-#define DEF_CARS        32            /* NFSU2_ROAM_MAX_CARS unset (the Settings' Players' cars shown: 16 to 48; phones start
+#define DEF_CARS        32            /* NFSU2_ROAM_MAX_CARS unset (the Settings' Players' cars shown: 16 to 64; phones start
                                          at 16, tablets at 24) */
 #endif
 #define CARPOOL_KB_CAR  1500          /* the car pool's room for each car past DEF_CARS (NFSU2_ROAM_CARPOOL_KB unset) */
@@ -314,7 +314,7 @@ static uint32_t ai_car(uint32_t w, int i){
     return ok(car, 0x9e0) ? car : 0;
 }
 static int car_out(uint32_t car){ return __builtin_fabsf(MRF32(car + 0x68u) - PARK_Z) >= 0.001f; }   /* 0x5ED430 */
-#define RIDE_ENTRIES    160           /* the car loader's ride entries with free-roam multiplayer on (g_pools): 48 friends' cars,
+#define RIDE_ENTRIES    192           /* the car loader's ride entries with free-roam multiplayer on (g_pools): 64 friends' cars,
                                          a new look's ride beside the old one, and RIDES_FREE kept free */
 static uint32_t loader_entry(uint32_t h){
     uint32_t head = G_CARLOADER + 0x58u, e = rd32(head);
@@ -1518,8 +1518,9 @@ static int pool_room(CPU *c, const Slot *s, const char *car /* 0: a car of our o
     return 0;
 }
 /* A racer number no car of this world has and no car of ours being made
- * (a signed byte): 103 to 127, then 99 down to 66 (the player has 0, the
- * opponent cars 100 to 102, traffic from 50).  The minimap finds a car by it
+ * (a signed byte): 103 to 127, then 99 down to 66, then 49 down to 1 (the
+ * player has 0, the opponent cars 100 to 102, traffic from 50; 59 numbers
+ * before the last range, 64 cars).  The minimap finds a car by it
  * (0x5F0E30, the first on the World's list), so each must be its own. */
 static int racer_number_used(uint32_t w, int n){
     uint32_t it = rd32(w);
@@ -1530,6 +1531,7 @@ static int racer_number_used(uint32_t w, int n){
 static int racer_number(uint32_t w){
     for (int n = 103; n <= 127; n++) if (!racer_number_used(w, n)) return n;
     for (int n = 99; n >= 66; n--) if (!racer_number_used(w, n)) return n;
+    for (int n = 49; n >= 1; n--) if (!racer_number_used(w, n)) return n;
     return 127;
 }
 /* a car of our own (slots NOPP and up): a copy of the first opponent's racer
@@ -2823,7 +2825,7 @@ static void tags_update(CPU *c){
 #define FN_POOL_ALLOC   0x0043f8f0u   /* cdecl (pool) */
 #define FN_NODE_ALLOC   0x00440ec0u   /* cdecl (): a list node, +8 its data */
 #define MM_AIRACER      3u
-#define MM_POOL         384u          /* the minimap's visual and icon pools with free roam on (g_pools): the friends' cars' arrows,
+#define MM_POOL         512u          /* the minimap's visual and icon pools with free roam on (g_pools): the friends' cars' arrows,
                                          the others' (near_update) and the game's own */
 static struct { uint32_t hud, copy[NSLOT], hash[NSLOT]; int ncopy; int said, stop;
                 int32_t col[NSLOT][3];                                  /* each copy's own colour (b, g, r) */
@@ -2846,8 +2848,8 @@ static int mm_own_colour(uint32_t o, int32_t rgb[3]){
 }
 /* a visual (a free one, or one for a copy of AIRACERINDICATOR_0) in the free list */
 static int mm_visual_held(uint32_t icons, uint32_t fo){
-    for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < 256; n = rd32(n), m++) if (rd32(rd32(n + 8u)) == fo) return 1;
-    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < 256; n = rd32(n), m++) if (rd32(rd32(n + 0x1cu)) == fo) return 1;
+    for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < MM_POOL; n = rd32(n), m++) if (rd32(rd32(n + 8u)) == fo) return 1;
+    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < MM_POOL; n = rd32(n), m++) if (rd32(rd32(n + 0x1cu)) == fo) return 1;
     return 0;
 }
 /* a copy is the HUD package's object: a HUD made again (after a shop the
@@ -2860,7 +2862,7 @@ static int mm_copy_live(CPU *c, uint32_t icons, int i){
     return ok(pk, 0x54) && fe_list_of(pk + 0x4cu, g_mm.copy[i], 0) && rd32(g_mm.copy[i] + 0x10u) == g_mm.hash[i];
 }
 static int mm_visual(CPU *c, uint32_t icons){
-    for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < 256; n = rd32(n), m++){
+    for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < MM_POOL; n = rd32(n), m++){
         uint32_t v = rd32(n + 8u);
         if (ok(v, 8) && MR32(v + 4u) == MM_AIRACER) return 1;
     }
@@ -2920,7 +2922,7 @@ static void arrows_update(CPU *c, uint32_t w){
     if (g_mm.stop) return;
     uint8_t has[256] = {0};                                     /* by racer number (a signed byte): an AI racer's arrow */
     uint32_t m = 0;
-    for (uint32_t n = rd32(icons); n && n != icons && m < 256 && ok(n, 0x20); n = rd32(n), m++){
+    for (uint32_t n = rd32(icons); n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n), m++){
         uint32_t v = rd32(n + 0x1cu);
         if (ok(v, 8) && MR32(v + 4u) == MM_AIRACER) has[(uint8_t)MR32(n + 8u)] = 1;
     }
@@ -2980,7 +2982,7 @@ static void arrow_colours(CPU *c, uint32_t w){
     if (hud != g_mmc.hud){ memset(&g_mmc, 0, sizeof g_mmc); g_mmc.hud = hud; }
     if (!hud || !ok(icons, 0x1c) || !g_gmem) return;
     uint8_t used[MMC_MAX] = {0}, live[MMC_MAX] = {0};
-    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < 256 && ok(n, 0x20); n = rd32(n), m++){
+    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n), m++){
         uint32_t v = rd32(n + 0x1cu), o = ok(v, 8) && MR32(v + 4u) == MM_AIRACER ? MR32(v) : 0;
         if (!ok(o, 0x34)) continue;
         int16_t rn = (int16_t)MR32(n + 8u);
@@ -3000,7 +3002,7 @@ static void arrow_colours(CPU *c, uint32_t w){
         int32_t b = (int32_t)(rgb & 0xffu), g = (int32_t)(rgb >> 8 & 0xffu), r = (int32_t)(rgb >> 16 & 0xffu);
         if (col[0] != b || col[1] != g || col[2] != r) fe_colour_set(c, o, b, g, r, col[3]);
     }
-    for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < 256; n = rd32(n), m++){
+    for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < MM_POOL; n = rd32(n), m++){
         uint32_t v = rd32(n + 8u), o = ok(v, 8) ? MR32(v) : 0;
         for (int i = 0; o && i < g_mmc.n; i++) if (g_mmc.obj[i] == o) live[i] = 1;
     }
@@ -3788,7 +3790,7 @@ static struct { uint32_t id, gen; int horn; } g_phorn[RC_TABLE];   /* each peer'
  * roam, the frames are timed: after CUT_WINDOW_US of it with CUT_SHARE of them slow (O.cut_us: 40 fps or a frame and a
  * half of the display), the cars shown go down to DEF_CARS for the rest of the game, the hub hears it (rc_set_links),
  * and the cars past it are parked, as for a friend gone (the players they were show on the minimap: near_update).
- * Only for a device's default (O.cars_auto): a player who picked 40 or 48 keeps it.  A gap over CUT_GAP_US (a load, a
+ * Only for a device's default (O.cars_auto): a player who picked 48 or 64 keeps it.  A gap over CUT_GAP_US (a load, a
  * pause, the tab away) counts as no frame, and so does an outrun between players (du_on): its friend's car may be one
  * past DEF_CARS, and parked it would end the outrun. */
 #define CUT_FRAME_US    25000
@@ -3888,7 +3890,7 @@ static int nr_copies_live(CPU *c, uint32_t icons){
 /* each of our icons is in the icons' list as we made it (the game's own made at an old one's address have their own visual) */
 static int nr_icons_live(uint32_t icons){
     int found = 0;
-    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < 512 && ok(n, 0x20); n = rd32(n), m++)
+    for (uint32_t n = rd32(icons), m = 0; n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n), m++)
         for (int k = 0; k < g_nr.n; k++)
             if (n == g_nr.icon[k] && rd32(n + 0x1cu) == g_nr.vis[k] && rd32(n + 8u) == nr_num(k) && ok(g_nr.vis[k], 8)
                 && MR32(g_nr.vis[k]) == g_nr.copy[k] && MR32(g_nr.vis[k] + 4u) == MM_PLAYER){ found++; break; }
@@ -3899,7 +3901,7 @@ static int nr_icons_live(uint32_t icons){
 static int nr_make(CPU *c, uint32_t icons, int k){
     uint32_t pkg = rd32(icons + 0x18u), m = 0;
     /* (the icons' and visuals' pools, MM_POOL, keep room for an arrow for each friend's car: arrows_update) */
-    for (uint32_t n = rd32(icons); n && n != icons && m < 512 && ok(n, 0x20); n = rd32(n)) m++;
+    for (uint32_t n = rd32(icons); n && n != icons && m < MM_POOL && ok(n, 0x20); n = rd32(n)) m++;
     if (m + NSLOT + 16u >= MM_POOL) return 0;
     if (k >= g_nr.ncopy){
         if (!g_nr.orig){
@@ -7760,7 +7762,7 @@ static void init_once(CPU *c){
     g_mp.alone_us = (int64_t)env_int("NFSU2_ROAM_LOBBY_ALONE_S", (int)(MP_ALONE_US / 1000000), 5, 3600) * 1000000;
     g_mp.idle_us = (int64_t)env_int("NFSU2_ROAM_LOBBY_IDLE_S", (int)(MP_IDLE_US / 1000000), 10, 3600) * 1000000;
 #endif
-    /* at most 30: each snapshot goes to up to 48 friends, and 60 tripled what each of them got from that player
+    /* at most 30: each snapshot goes to up to 64 friends, and 60 tripled what each of them got from that player
      * (the server's port the limit, nfsu2.xyz 2026-10-22) for little they see: they draw a car 100 ms in the past,
      * between its snapshots */
     O.rate = env_int("NFSU2_ROAM_RATE", 20, 10, 30);
@@ -8958,7 +8960,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         }
         roam_plat_unlock();
         uint32_t icons = rd32(G_MM_ICONS); int arrows = 0, freev = 0, tinted = 0, wrong = 0, ais = 0, grey = 0, greyf = 0; uint8_t has[256] = {0};
-        for (uint32_t n = ok(icons, 0x1c) ? rd32(icons) : 0, m = 0; n && n != icons && m < 256; n = rd32(n), m++)
+        for (uint32_t n = ok(icons, 0x1c) ? rd32(icons) : 0, m = 0; n && n != icons && m < MM_POOL; n = rd32(n), m++)
             if (ok(rd32(n + 0x1cu), 8) && MR32(rd32(n + 0x1cu) + 4u) == MM_AIRACER){
                 arrows++; has[(uint8_t)MR32(n + 8u)] = 1;
                 /* (arrows in a crew's colour, and of those the ones whose car is not a crew-mate's; the AI racers'
@@ -8967,7 +8969,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
                 tinted += ct != 0; wrong += ct && !racer_crew(world(), (int16_t)MR32(n + 8u));
                 ais += ai; grey += ai && gr; greyf += !ai && gr;
             }
-        for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < 256; n = rd32(n), m++)
+        for (uint32_t n = rd32(G_MM_VISUALS), m = 0; n && n != G_MM_VISUALS && m < MM_POOL; n = rd32(n), m++)
             if (ok(rd32(n + 8u), 8) && MR32(rd32(n + 8u) + 4u) == MM_AIRACER) freev++;
         /* friends' cars shown, and of those with an arrow; hidden ones still in the world (an arrow at the parking spot) */
         int shown = 0, with = 0, stray = 0;
@@ -10218,11 +10220,11 @@ void roam_game_goals(CPU *c, void (*orig)(CPU *)){
  *  - the car loader's rides (CarLoadedRideInfoSlotPool, 22 x 0x1240 bytes):
  *    its Load (0x63AE70) waits until one is free, purging, for good when every
  *    entry is in use (the player's, the opponent cars', traffic's (up to 7), a
- *    car of our own's first ride, each friend's): RIDE_ENTRIES (160, 730 KB);
+ *    car of our own's first ride, each friend's): RIDE_ENTRIES (192, 876 KB);
  *  - the minimap's visuals and icons (MinimapEntity 102 x 8, MinimapElements
  *    102 x 0x20 bytes), taken with 0x43F8F0, which never grows a pool: a
  *    friend's arrow is one of each (minimap arrows), and an icon the pool
- *    could not give is linked in as a null pointer (0x4EC790): MM_POOL (384) each. */
+ *    could not give is linked in as a null pointer (0x4EC790): MM_POOL (512) each. */
 static struct { uint32_t name, count; const char *what; int said; } g_pools[] = {
     { 0x007a8694u, RIDE_ENTRIES, "rides the car loader holds" },   /* "CarLoadedRideInfoSlotPool" */
     { 0x00790b18u, MM_POOL, "minimap visuals" },                   /* "MinimapEntity" */

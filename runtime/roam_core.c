@@ -1752,9 +1752,11 @@ void rc_tick(rc_session *s, int64_t now){
             if (p->state != RC_PS_EST) continue;
             m.u.peers.e[n].ip = p->ip; m.u.peers.e[n].port = p->port; m.u.peers.e[n].id = p->id; n++;
         }
-        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32 (each drops a longer list) */
+        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32, one of 10 to 13 the first 48 (each
+         * drops a longer list) */
         for (int i = 0; i < RC_TABLE && n; i++) if (s->peer[i].state == RC_PS_EST){
-            int most = s->peer[i].core_ver >= 10 ? RC_MAX_PEERS : s->peer[i].core_ver >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
+            int v = s->peer[i].core_ver;
+            int most = v >= 14 ? RC_MAX_PEERS : v >= 10 ? RC_PEERS_V13 : v >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
             m.u.peers.n = (uint8_t)(n < most ? n : most);
             tx(s, &s->peer[i], &m);
         }

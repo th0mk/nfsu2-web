@@ -224,8 +224,8 @@ static const struct { const char *key, *env; int kind; const char *vals; } g_key
     { "roam_room",                "NFSU2_ROAM_ROOM",            K_ROOM  | K_IC },
     { "roam_crew",                "NFSU2_ROAM_CREW",            K_CREWS | K_IC },
     { "roam_crew_colours",        "NFSU2_ROAM_CREW_RGB",        K_RGBS  | K_IC },
-    { "roam_max_players",         "NFSU2_ROAM_MAX_PLAYERS",     K_INT   | K_IC, "2..49" },
-    { "roam_max_cars",            "NFSU2_ROAM_MAX_CARS",        K_INT   | K_IC, "0..48" },
+    { "roam_max_players",         "NFSU2_ROAM_MAX_PLAYERS",     K_INT   | K_IC, "2..65" },
+    { "roam_max_cars",            "NFSU2_ROAM_MAX_CARS",        K_INT   | K_IC, "0..64" },
     { "roam_collide",             "NFSU2_ROAM_COLLIDE",         K_ENUM  | K_IC, "on|off|none" },
     { "roam_rate",                "NFSU2_ROAM_RATE",            K_INT   | K_IC, "10..30" },
     { "roam_delay",               "NFSU2_ROAM_DELAY",           K_INT   | K_IC, "0..1000" },
@@ -441,9 +441,9 @@ static const char *const k_template =
 "#roam_port = 47210\n"
 "# Look for friends with a network broadcast every 2 s.  [NFSU2_ROAM_DISCOVERY]\n"
 "#roam_discovery = on\n"
-"# Largest group, you included (2 to 49), and friends' cars shown at once\n"
-"# (0 to 48, the nearest).  [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]\n"
-"#roam_max_players = 49\n"
+"# Largest group, you included (2 to 65), and friends' cars shown at once\n"
+"# (0 to 64, the nearest).  [NFSU2_ROAM_MAX_PLAYERS, NFSU2_ROAM_MAX_CARS]\n"
+"#roam_max_players = 65\n"
 "#roam_max_cars = 32\n"
 "# on = friends' cars are solid: drawn where they are now, and one that\n"
 "# appears on your car lets you through until you are apart.  off = ghosts,\n"

@@ -1292,8 +1292,10 @@ impl Hub {
                     p.friend_ids = friend_ids(owner, self.friends.get(&from));
                 }
                 check = true;
-                // the links it wants (core 10), the hub's most at most; a core before reads lists of 32 at most
-                p.degree = if core >= 10 && links > 0 { (links as usize).min(degree) } else { degree.min(wire::LINKS_V9) };
+                // the links it wants (core 10), the hub's most at most, and no more than its lists take: 48 for a core
+                // of versions 10 to 13, 32 for one before (which says nothing)
+                let most = if core >= 14 { degree } else { degree.min(wire::LINKS_V13) };
+                p.degree = if core >= 10 && links > 0 { (links as usize).min(most) } else { degree.min(wire::LINKS_V9) };
                 p.lobbies = lobbies;
                 p.marks = marks;
                 p.duel = duel;
@@ -2260,7 +2262,7 @@ impl Hub {
         let busy = (self.busy)();
         let old = self.cap;
         // a cut comes down from the most links any player has (32 for every core before version 10, while the hub's
-        // most is 48): from the hub's most, the first cut would have cut nobody's
+        // most is 64): from the hub's most, the first cut would have cut nobody's
         let top = self.players().map(|p| p.degree).max().unwrap_or(self.o.degree);
         let mut was = old;
         self.st.busy = js_round(busy * 100.0);

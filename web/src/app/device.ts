@@ -28,7 +28,7 @@ export function touchFirst(): boolean { return matchMedia('(pointer: coarse)').m
  *  over the game), and the game's 4:3 HUD: on a phone's long screen the wide one puts the minimap under the touch
  *  controls' steering and the speedometer under Brake, the 4:3 one between the thumbs.  Players' cars shown in free
  *  roam: 16 on phones, 24 on tablets (an iPhone was stopped for memory as 22 friends' cars loaded at once at the new
- *  career's start, 2026-10-25), the file's 32 on computers.  40 and 48 only when the player picks them: each car past
+ *  career's start, 2026-10-25), the file's 32 on computers.  48 and 64 only when the player picks them: each car past
  *  32 costs the game's thread about 0.28 ms a frame on a Ryzen 5900X (14 -> 18.5 ms with 48 in view), a laptop's
  *  several times that, and the game's own drop back to 32 (roam_game.c cars_cut) waits for frames under ~40 fps: it
  *  never helps a player who went from 144 to 100 fps (fast computers started at 48, then 40, until 2026-11-02).  The

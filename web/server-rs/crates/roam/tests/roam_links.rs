@@ -1,5 +1,6 @@
 //! How many links each player gets: what its HELLO asks for (roam_core version 10: the friends' cars its game shows,
-//! up to 48), the hub's `degree` at most; a core before version 10, which reads lists of 32 at most, gets 32.
+//! up to 64 from version 14, 48 before), the hub's `degree` at most; a core before version 10, which reads lists of 32
+//! at most, gets 32.
 
 mod kit;
 
@@ -99,4 +100,36 @@ fn link_pairs_are_the_links_once() {
     let pairs = k.hub.link_pairs();
     assert_eq!(pairs.len(), 6);
     assert!(pairs.iter().all(|&(a, b)| a != W(4) && b != W(4)));
+}
+
+// 100 players within 30 m: those of core version 14 that ask for 64 get more than 32, 64 at most and 90 % of that on the
+// whole (those in the far corner, whose farther candidates are full, 43); those of versions 10 to 13, which read lists
+// of 48 at most, get 48 at most whatever they ask for
+#[test]
+fn players_of_core_14_get_up_to_64() {
+    let mut k = Kit::new(RoamOptions { view_m: 1e-9, ..RoamOptions::default() });
+    let ask = |i: u32| -> (u16, u8) {
+        match i {
+            0..10 => (13, 64),
+            10..20 => (10, 48),
+            _ => (14, 64),
+        }
+    };
+    for i in 0..100u32 {
+        let (core, links) = ask(i);
+        k.from(W(i), &hello_with(100 + i, &HelloOpts { core, links, ..Default::default() }));
+        k.from(W(i), &snap(100 + i, [(i % 10) as f64 * 3.0 + 0.25, (i / 10) as f64 * 3.0 + 0.25, 0.0]));
+    }
+    k.hub.tick();
+    let mut many = Vec::new();
+    for i in 0..100u32 {
+        let n = links_of(&k, i);
+        if ask(i).0 < 14 {
+            assert!((33..=48).contains(&n), "player {i} ({:?}): {n}", ask(i));
+        } else {
+            assert!((33..=64).contains(&n), "player {i}: {n}");
+            many.push(n);
+        }
+    }
+    assert!(many.iter().sum::<usize>() as f64 >= 0.9 * 64.0 * many.len() as f64, "{many:?}");
 }

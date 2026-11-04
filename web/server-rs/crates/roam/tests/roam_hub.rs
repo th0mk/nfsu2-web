@@ -903,7 +903,7 @@ fn on_its_thread_busy_workers_cut_the_links() {
     hub.stop();
     assert!(cut.is_ok(), "both workers busy, and the cap stayed");
     let first = lines.lock()[0].clone();
-    assert!(first.ends_with("% busy: at most 36 links a player (was 48)"), "{first}");
+    assert!(first.ends_with("% busy: at most 48 links a player (was 64)"), "{first}");
 }
 
 #[test]

@@ -5,7 +5,7 @@
 //   node web/tools/roam-crowd.mjs [--base http://localhost:8655] [--n 62] [--seconds 120] [--room <name>] [--crew <name>]
 //        [--track <pose.csv>] [--speed 15] [--spread 20] [--car 350Z] [--cars A,B,..|all] [--parts <list>|@<file>] [--stagger 50] [--states 1]
 //        [--out <summary.json>]
-//        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 48] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
+//        [--race 1-3:60:120] [--paused 1-3] [--prefix Bot] [--links 64] [--bundle] [--first 0] [--loop-ms 10] [--hold 50] [--lobbies 7:S2_SPRINT_3,S2_URL_2]
 //        [--flags nl,br,gb-eng]
 //
 // --bundle the players send and take bundles as the page does (web/src/net/index.ts TxBundle, nfsu2-lan kind 32): what
@@ -24,7 +24,7 @@
 // --parts  the players' cars' parts instead of the stock ones, slot:key:owner in hex, comma-separated (or from a file): a
 //          record names every part (tests/scripts/roam_crowd_rims.parts: a 350Z with the rim shops' rims).
 // --states the car states in each SNAP: 1 as the browsers send them (roam_web.c), 3 as a LAN does.
-// --links  the links every player asks the hub for (1-48, as the game asks for its Players' cars shown); without it they
+// --links  the links every player asks the hub for (1-64, as the game asks for its Players' cars shown); without it they
 //          say nothing, and the hub gives them 32 (a game before core version 10)
 // --crew   every player is in this crew (the Crews setting's one name): the hub links them to the players who share it
 //          first, wherever they are, and those see them in the crew's colour.
