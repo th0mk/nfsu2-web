@@ -244,10 +244,11 @@ static int x_presses(void){
 }
 static uint32_t race(void){ uint32_t r = rd32(G_RACE); return ok(r, 0xbd4) ? r : 0; }
 static uint32_t racer(void){ uint32_t r = race(), p = r ? rd32(r + 0xbd0u) : 0; return ok(p, RC_DRIFTCAR + 4u) ? p : 0; }
-/* free roam's world: its own race, paused or not */
+/* free roam's world: its own race, paused or not; not in co-op (the switch is the world's, for both cars) */
+int coop_in(void);
 static int roam_world(void){
     uint32_t r = race(), pl = rd32(G_PLAYER1);
-    return rd32(G_FLOW) == 6u && r && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) && !rd32(G_CAREER_RACE) &&
+    return !coop_in() && rd32(G_FLOW) == 6u && r && MR32(r + 0x24u) == 1u && (MR32(r) == 4u || MR32(r) == 6u) && !rd32(G_CAREER_RACE) &&
            rd32(G_RACEKIND) == 0u && !(rd32(G_GAMEMODE) & 0x208u) && !MR8(G_DRIFTRACE) && pl && rd32(pl + 4u);
 }
 /* the HUD is the top package: no screen over it */

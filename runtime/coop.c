@@ -219,6 +219,18 @@ void coop_frame(CPU *c){
 #endif
 }
 
+/* The outrun challengers' step (0x413030): for each Player, a game tuner near it (0x40C030) lights player 1's HUD's
+ * outrun icon (0x500D20) or puts it out, and becomes the Player's +0x250; player 2's pass (no tuner near) would put
+ * player 1's offer out every frame.  In co-op the step is player 1's alone: player 2 is offered no outrun */
+void sub_00413030_orig(CPU *c);
+void sub_00413030(CPU *c){
+    if (!coop_pl || MR32(SPLIT_PLAYERS_COUNT) != 2u){ sub_00413030_orig(c); return; }
+    MR32(SPLIT_PLAYERS_COUNT) = 1u;
+    sub_00413030_orig(c);
+    MR32(SPLIT_PLAYERS_COUNT) = 2u;
+    MR32(coop_pl + 0x250u) = 0;
+}
+
 /* the markers' and triggers' step of Player::Update (0x602AD9): player 1's only */
 void sub_005eb040_orig(CPU *c);
 void sub_005eb040(CPU *c){

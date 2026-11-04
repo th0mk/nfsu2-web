@@ -190,7 +190,7 @@ static int split_pause_port = -1, split_pause_seen, split_pause_released;
  * lend it their own pad while they own the pause menu. */
 void sub_0050d2d0_orig(CPU *c);
 void sub_0050d2d0(CPU *c){
-    if (split_requested() && MR32(c->esp) == 0x4eb46eu){
+    if ((split_requested() || (coop_in() && MR32(0x850078u) != 4)) && MR32(c->esp) == 0x4eb46eu){
         unsigned port = MR32(c->esp + 4);
         if (port < 6){
             split_pause_port = (int)port;
@@ -212,7 +212,7 @@ static void split_pause_refresh(CPU *c){
         active |= !!(split_call(c, 0x52cf60u, 0, 1, &name) & 255);
     }
     if (active) split_pause_seen = 1;
-    else if (split_pause_seen || !split_racing()){
+    else if (split_pause_seen || !(split_racing() || coop_in())){
         fprintf(stderr, "[split] pause closed P%d\n", split_pause_port + 1);
         split_pause_port = -1;
     }
@@ -233,7 +233,9 @@ int split_menu_pad(PadState *pad){
         }
         return 1;
     }
-    if (split_pause_port < 0 || !split_requested()) return 0;
+    if (split_pause_port < 0 || !(split_requested() || (coop_in() && MR32(0x850078u) != 4))) return 0;
+    /* co-op: player 1's pause is the game's own (its controller already drives this pad) */
+    if (!split_requested() && split_pause_port == 0) return 0;
     split_read_local((unsigned)split_pause_port, pad);
     if (!split_pause_released){
         if (!pad->buttons) split_pause_released = 1;
@@ -1476,6 +1478,7 @@ void sub_005cfd60(CPU *c){
          * With the keyboard shared, player 1's arrows' half joins port 0's own (player 2's keys are hidden from it) */
         static uint32_t port_type;
         if (!port){
+            split_pause_refresh(c);
             sub_005cfd60_orig(c);
             uint32_t native = c->eax;
             port_type = type ? MR32(type) : 0;
