@@ -336,10 +336,16 @@ context lists every problem the developer has a report on, with its first thread
 - Rebinding: the game's own controls are set in its Options, Controls (Keyboard Configuration, Joypad Configuration).
   The site's own keys and buttons (X drift mode, O trunk/hood/doors, N horn, I message, F add friend, 1-4 quick chat;
   a controller's D-pad down held, left stick click horn, right stick click quick chat) can't be changed there. Before
-  3995e464 a game control the player put on one of them fired together with ours (D-pad down bound to something was
-  held back a second). Since 3995e464 such a key or button is left to the game, ours does nothing on it, and the log
+  abba6770 a game control the player put on one of them fired together with ours (D-pad down bound to something was
+  held back a second). Since abba6770 such a key or button is left to the game, ours does nothing on it, and the log
   says so once (`[keys] X is bound to Shift Up in the game: drift mode stays off it`, `[pad] D-pad down is bound to
   ...`). A D-pad down, left stick or right stick still on its default (Career Status, hydraulics) works as before.
+  Since a10b03d6 the site's own are set on the start page, Controls, Site: a list of them (drift mode, trunk/hood/
+  doors, horn, quick chat, message, add friend, photo mode, menu, next song, frame-rate counter) with each one's key
+  and controller button as caps; click one, then press the new key or button, or Off. Keys the game itself uses can't
+  be picked, quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
+  game control on says so there. It applies at the next Play; the touch controls' Drift and Horn work whatever is
+  picked. Until that is live, only the game's own Controls can be changed.
 
 ## Decided
 
