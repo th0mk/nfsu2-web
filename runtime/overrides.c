@@ -978,9 +978,9 @@ void sub_004e8b70(CPU *c){
  * the page may play under instead), and while no profile is loaded the box
  * starts with its letters and digits.  The other kind-6 boxes (12 at most)
  * stay as they are.
- * The default itself is no name the field makes in six of the languages: in
- * the Chinese, Japanese and Thai packs, in Korean, and in the Polish and
- * Hungarian packs (NAME with an accented letter) it has bytes of the game's font that the
+ * The default itself is no name the field makes in seven of the languages: in
+ * the Chinese, Japanese and Thai packs, in Korean, and in the Polish,
+ * Hungarian and Czech packs (NAME with an accented letter) it has bytes of the game's font that the
  * field never takes (0x4FF310: letters and digits only), and what is typed
  * goes after them.  A profile named so lives in a folder the I/O worker names
  * by the path's UTF-8, with U+FFFD for those bytes, which the game reads back

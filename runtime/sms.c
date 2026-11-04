@@ -136,6 +136,20 @@ static const Text HELLO[] = {
       "megh\u00edvhatsz egy k\u00e1v\u00e9ra a ko-fi.com/nfsu2xyz oldalon. Egy\u00e1ltal\u00e1n nem k\u00f6telez\u0151, "
       "\u00e9s a Discordon kapott szerepen k\u00edv\u00fcl semmilyen el\u0151nnyel nem j\u00e1r, de seg\u00edt abban, "
       "hogy mindenkinek tov\u00e1bb fejleszthessem a j\u00e1t\u00e9kot." },
+    { "czech", "Bav\u00ed t\u011b hra?",
+      "Douf\u00e1m, \u017ee ti b\u011b\u017e\u00ed dob\u0159e. Pokud m\u00e1\u0161 p\u0159ipom\u00ednky nebo n\u00e1pady, p\u0159idej se na n\u00e1\u0161 Discord, odkaz "
+      "najde\u0161 na \u00favodn\u00ed str\u00e1nce. Jestli t\u011b hra bav\u00ed, sd\u00edlej ji s kamar\u00e1dy! V menu F9 si taky m\u016f\u017ee\u0161 "
+      "zalo\u017eit crew, tak\u017ee sv\u00e9 par\u0165\u00e1ky z crew sn\u00e1z najde\u0161 ve voln\u00e9 j\u00edzd\u011b.^^Pokud chce\u0161 pomoct s "
+      "n\u00e1klady na hosting a v\u00fdvoj, m\u016f\u017ee\u0161 mi koupit kafe na ko-fi.com/nfsu2xyz. V\u016fbec to nen\u00ed povinn\u00e9 a "
+      "nep\u0159in\u00e1\u0161\u00ed to \u017e\u00e1dn\u00e9 v\u00fdhody krom\u011b role na Discordu, ale pom\u00e1h\u00e1 mi to d\u00e1l vylep\u0161ovat hru pro "
+      "v\u0161echny." },
+    { "slovak", "Bav\u00ed \u0165a hra?",
+      "D\u00fafam, \u017ee ti be\u017e\u00ed dobre. Ak m\u00e1\u0161 pripomienky alebo n\u00e1pady, pridaj sa na n\u00e1\u0161 Discord, odkaz "
+      "n\u00e1jde\u0161 na \u00favodnej str\u00e1nke. Ak \u0165a hra bav\u00ed, zdie\u013eaj ju s kamar\u00e1tmi! V menu F9 si m\u00f4\u017ee\u0161 aj "
+      "zalo\u017ei\u0165 crew, tak\u017ee svojich par\u0165\u00e1kov z crew \u013eah\u0161ie n\u00e1jde\u0161 vo vo\u013enej jazde.^^Ak chce\u0161 pom\u00f4c\u0165 s "
+      "n\u00e1kladmi na hosting a v\u00fdvoj, m\u00f4\u017ee\u0161 mi k\u00fapi\u0165 k\u00e1vu na ko-fi.com/nfsu2xyz. V\u00f4bec to nie je povinn\u00e9 "
+      "a neprin\u00e1\u0161a to \u017eiadne v\u00fdhody okrem role na Discorde, ale pom\u00e1ha mi to \u010falej vylep\u0161ova\u0165 hru pre "
+      "v\u0161etk\u00fdch." },
 };
 #define MSG_N 1                     /* the messages, by id 1.. */
 static const struct { const char *name; const Text *t; unsigned n; } MSGS[MSG_N] = {
