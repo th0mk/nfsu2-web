@@ -1,0 +1,50 @@
+# A car past the career's walls (runtime/walls.c), from a stage 2 career save (Coal Harbor locked; the wall across
+# the bridge south of the City Core: barrier line 203.1 -1063.6 -> 240.2 -1053.5):
+#  1. R on an open road (220.7 -1013.8): the game's own reset, no "[walls] ... past the career's walls" line;
+#  2. the car taken behind the wall, on the bridge (218.8 -1086.9): "walls" says "past the career's walls" and the
+#     car stays there; R: the game's reset puts it farther into Coal Harbor, then "[walls] ... my car is past the
+#     career's walls (..., after a reset): back to <a place on the career's roads>" and the car stands north of the
+#     wall, facing away from it;
+#  3. thrown at the wall from the open side, even 40 m up: the wall stops it (it is that tall), no "[walls]" line;
+#  4. moved across the wall's line by a few metres (a push through the wall, or a car that went round its end): the
+#     car stays behind the wall, no "[walls]" line, until R puts it back north of the wall;
+#  5. thrown 20 m up on the bridge behind the wall: it comes down there and stays, until R puts it back.
+#   node web/tools/roam-pair.mjs --solo --a Wal:walls_reset.txt --seed <a stage 2 career save tree> --env NFSU2_ROAM=0
+#   (free-roam multiplayer on works the same: --env NFSU2_ROAM=1 --env NFSU2_ROAM_WEBTEST=vlan --env NFSU2_ROAM_ROOM=<own>)
+0     bot on
++0    waitroam 6000
++0    bot off
++60   walls
++0    walls bars
++0    teleport 220.7 -1013.8 18.0 0
++400  walls
++0    tap R
++200  walls
++0    expect f:[[0x8900ac]+4]+0x64 > -1030
++0    teleport 218.8 -1086.9 21.6 0
++400  walls
++0    expect f:[[0x8900ac]+4]+0x64 < -1070
++0    tap R
++200  walls
++0    expect f:[[0x8900ac]+4]+0x64 > -1059
++0    teleport 211.5 -1025.0 18.0 0
++400  walls fling 0 -30 45
++120  walls
++1200 walls
++0    expect f:[[0x8900ac]+4]+0x64 > -1059
++0    teleport 211.5 -1053.0 18.5 0x4000
++400  walls
++0    teleport 213.0 -1066.5 19.6 0x4000
++300  walls
++0    expect f:[[0x8900ac]+4]+0x64 < -1059
++0    tap R
++200  walls
++0    expect f:[[0x8900ac]+4]+0x64 > -1059
++0    teleport 223.2 -1099.8 23.4 0x4000
++300  walls fling 0 0 20
++600  walls
++0    expect f:[[0x8900ac]+4]+0x64 < -1070
++0    tap R
++200  walls
++0    expect f:[[0x8900ac]+4]+0x64 > -1059
++30   quit

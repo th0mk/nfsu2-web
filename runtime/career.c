@@ -1082,7 +1082,7 @@ static void queue(const char *line){
 int career_is_cmd(const char *cmd){
     static const char *const k[] = { "call", "memdump", "waitx", "teleport", "autopilot", "racewin",
                                      "careerlist", "careergo", "shopgo", "peekx", "fnglist", "bot", "waitfe", "tapfe", "waitroam", "showgo", "cargo", "watchw",
-                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", 0 };
+                                     "outrun", "outrunwin", "visual", "uniques", "mpcredit", "walls", 0 };
     for (int i = 0; k[i]; i++) if (!strcasecmp(cmd, k[i])) return 1;
     return 0;
 }
@@ -1226,6 +1226,7 @@ int career_cmd(CPU *c, const char *line, long *wait_start){
     if (!strcasecmp(cmd, "fnglist")){
         fprintf(stderr, "[career] f=%ld fe packages:", f); fe_each(fe_print, a1[0] ? (void *)1 : 0); fputc('\n', stderr); return 1; }
     if (!strcasecmp(cmd, "careergo")){ career_go(a1); return 1; }
+    if (!strcasecmp(cmd, "walls")){ int walls_cmd(const char *); return walls_cmd(rest); }
     if (!strcasecmp(cmd, "mpcredit")){ int mpcredit_test(const char *, float); mpcredit_test(a1, a2[0] ? (float)atof(a2) : 100.f); return 1; }
     if (!strcasecmp(cmd, "shopgo")){
         uint32_t sh = shop_by_name(a1);

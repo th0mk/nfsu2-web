@@ -1,0 +1,11 @@
+# The career's roads and walls (runtime/walls.c) in any career save: how the roads split ("[walls] ... roads: ...
+# the start reaches N nodes, M past the career's walls"), the barrier lines on, and places on and beside the roads:
+# "[walls] ... sweep: beside the career's roads K stay, 0 would go; ..." (none of the career's roads' places moved).
+#   node web/tools/roam-pair.mjs --solo --a Wal:walls_sweep.txt --seed <a career save tree> --env NFSU2_ROAM=0
+0     bot on
++0    waitroam 6000
++0    bot off
++60   walls
++0    walls bars
++0    walls sweep
++30   quit

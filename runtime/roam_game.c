@@ -7957,6 +7957,9 @@ static void car_rescue(int64_t host){
              (double)MRF32(car + 0x74u), (double)MRF32(car + 0x78u), (double)p[0], (double)p[1], (double)p[2],
              g_lp_ok ? "where it last was" : "the new career's start (no good place this time in free roam)");
 }
+/* walls.c's jump (a car past the career's walls back on the roads it can reach): friends' cars are ghosts until
+ * they are clear of it, as after car_rescue */
+void roam_game_jumped(void){ if (g_inited && O.on) ghost_all(); }
 void roam_game_frame(CPU *c){
     if (!g_inited) init_once(c);
     if (!O.on) return;
