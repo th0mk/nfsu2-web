@@ -24,8 +24,10 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
   default: cars collide; F9 switches it), quick chat (1-4, then 1-4; a controller's right stick pressed in, then
   flicked twice; its special phrase Countdown counts 5 to GO! for the players lined up near you), horn (N).
 - Split screen (added 2026-11-03, live with the release after that): the main menu's item after Quick Race, 2 to 4
-  players on one screen, each on their own controller (one may use the keyboard: Enter to join), each with their own
-  view, HUD and minimap. Ported by BirdSentinel (Zack) from mihaits' NFSU2-SplitScreen mod. 3 or 4 players need a
+  players on one screen, each on their own controller, or two on one keyboard: Enter joins on the arrows (Right
+  Shift nitrous, Right Ctrl or / handbrake, . and , gears, L camera, ; look back), Space on WASD (Left Shift, Space,
+  E and Q, C, B); a lone keyboard player has the whole keyboard. Each player has their own view, HUD and minimap.
+  Some keyboards drop a key when two players hold many at once. Ported by BirdSentinel (Zack) from mihaits' NFSU2-SplitScreen mod. 3 or 4 players need a
   fast computer (every view is a whole scene). Not with other players over the network.
 - The game runs in 16 languages (English and 15 translations); the page too. Touch controls on phones and tablets;
   pads, wheels, 8BitDo and PS2 adapters through the browser.

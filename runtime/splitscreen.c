@@ -12,7 +12,7 @@
 #include "kbd.h"
 
 /* the labels shown (split_label_text: in the game's language) */
-enum { SL_SPLIT, SL_PLAYERS, SL_PLAYER, SL_PLAYER_UP, SL_JOIN, SL_JOIN_KB, SL_N };
+enum { SL_SPLIT, SL_PLAYERS, SL_PLAYER, SL_PLAYER_UP, SL_JOIN, SL_JOIN_KB, SL_JOIN_SP, SL_N };
 static void split_label_text(int which, unsigned n, char *out, size_t size);
 
 static int split_racing(void){
@@ -69,41 +69,67 @@ static int split_return_count;
 static uint32_t split_cars[6], split_ports[6];
 static uint8_t split_gears[6], split_picked[6];
 static int split_joined[6], split_release_pad;
-static int split_keyboard_seat = -1;
+/* The keyboard takes up to two local seats: Enter one, Space another.  A lone keyboard player drives on the
+ * whole keyboard (arrows or WASD); with two, Enter's player has the arrows' side and Space's WASD's.  Controller
+ * ownership remains in connection/Start order; a keyboard seat does not consume a pad. */
+enum { SPLIT_KB_ENTER, SPLIT_KB_SPACE };
+static int split_kb_seat[2] = { -1, -1 };
+static int split_kb_of(unsigned seat){
+    for (int k = 0; k < 2; ++k) if (split_kb_seat[k] >= 0 && seat == (unsigned)split_kb_seat[k]) return k;
+    return -1;
+}
+/* the controller of a seat that is not the keyboard's: the keyboard's seats before it skipped */
+static unsigned split_pad_of(unsigned seat){
+    unsigned pad = seat;
+    for (int k = 0; k < 2; ++k) if (split_kb_seat[k] >= 0 && seat > (unsigned)split_kb_seat[k]) --pad;
+    return pad;
+}
 void split_keyboard_device(PadState *pad){
-    if (!pad->connected && split_keyboard_seat >= 0 && MR32(0x850078u) == 4){
+    if (!pad->connected && (split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0) && MR32(0x850078u) == 4){
         memset(pad, 0, sizeof *pad);
         pad->connected = 1; pad->family = PADF_XBOX;
         strcpy(pad->name, "Split Screen keyboard");
     }
 }
-/* Keyboard claims one local seat with Enter. Controller ownership remains
- * in connection/Start order; inserting the keyboard does not consume a pad. */
+#ifdef __wasm__
+/* A race's keys as a controller's buttons (bindings still run through the game's converter): nitrous (LB),
+ * handbrake (RB), gear up (A), gear down (X), camera (Y), look back (B), up to two keys each (0 none), for the
+ * whole keyboard, Enter's side (arrows) and Space's side (WASD).  No Right Alt: Windows' AltGr also sends Left
+ * Ctrl. */
+static const uint8_t SPLIT_KB_BUTTON[6] = { PAD_LB, PAD_RB, PAD_A, PAD_X, PAD_Y, PAD_B };
+static const uint8_t SPLIT_KB_KEYS[3][6][2] = {
+    { {0x2a, 0x36}, {0x39, 0}, {0x12, 0}, {0x10, 0}, {0x2e, 0}, {0x30, 0} },  /* Shift, Space, E, Q, C, B */
+    { {0x36, 0}, {0x9d, 0x35}, {0x34, 0}, {0x33, 0}, {0x26, 0}, {0x27, 0} },  /* Right Shift, Right Ctrl or /, . , L ; */
+    { {0x2a, 0}, {0x39, 0}, {0x12, 0}, {0x10, 0}, {0x2e, 0}, {0x30, 0} },     /* Left Shift, Space, E, Q, C, B */
+};
+static void split_kb_read(int side, PadState *pad){
+    uint8_t keys[256]; kbd_state(keys, sizeof keys);
+    memset(pad, 0, sizeof *pad);
+    pad->connected = 1; pad->family = PADF_XBOX;
+    strcpy(pad->name, "Keyboard");
+    int both = split_kb_seat[0] >= 0 && split_kb_seat[1] >= 0, racing = MR32(0x8654a4u) == 6;
+    /* START: Enter (only Enter's player's while two share the keyboard), and Space's player's Space outside a
+     * race (in one it is the handbrake) */
+    if ((!both || side == SPLIT_KB_ENTER) && (keys[0x1c] || keys[0x9c])) pad->buttons |= 1u << PAD_START;
+    if (side == SPLIT_KB_SPACE && !racing && keys[0x39]) pad->buttons |= 1u << PAD_START;
+    /* Native keyboard messages handle car/menu navigation once, rather
+     * than duplicating Enter and arrows through the virtual pad. */
+    if (!racing) return;
+    int arrows = !both || side == SPLIT_KB_ENTER, wasd = !both || side == SPLIT_KB_SPACE;
+    int right = (arrows && keys[0xcd]) || (wasd && keys[0x20]), left = (arrows && keys[0xcb]) || (wasd && keys[0x1e]);
+    pad->axis[PAD_AXIS_LX] = (float)(right - left);
+    pad->axis[PAD_AXIS_RT] = (arrows && keys[0xc8]) || (wasd && keys[0x11]);
+    pad->axis[PAD_AXIS_LT] = (arrows && keys[0xd0]) || (wasd && keys[0x1f]);
+    const uint8_t (*map)[2] = SPLIT_KB_KEYS[both ? 1 + side : 0];
+    for (unsigned b = 0; b < 6; ++b)
+        if ((map[b][0] && keys[map[b][0]]) || (map[b][1] && keys[map[b][1]])) pad->buttons |= 1u << SPLIT_KB_BUTTON[b];
+}
+#endif
 int split_read_local(unsigned seat, PadState *pad){
 #ifdef __wasm__
-    if (split_keyboard_seat >= 0 && seat == (unsigned)split_keyboard_seat){
-        uint8_t keys[256]; kbd_state(keys, sizeof keys);
-        memset(pad, 0, sizeof *pad);
-        pad->connected = 1; pad->family = PADF_XBOX;
-        strcpy(pad->name, "Keyboard");
-        if (keys[0x1c] || keys[0x9c]) pad->buttons |= 1u << PAD_START;
-        /* Native keyboard messages handle car/menu navigation once, rather
-         * than duplicating Enter and arrows through the virtual pad. */
-        if (MR32(0x8654a4u) == 6){
-            pad->axis[PAD_AXIS_LX] = !!(keys[0xcd] || keys[0x20]) - !!(keys[0xcb] || keys[0x1e]);
-            pad->axis[PAD_AXIS_RT] = !!(keys[0xc8] || keys[0x11]);
-            pad->axis[PAD_AXIS_LT] = !!(keys[0xd0] || keys[0x1f]);
-            if (keys[0x39]) pad->buttons |= 1u << PAD_RB;
-            if (keys[0x2a] || keys[0x36]) pad->buttons |= 1u << PAD_LB;
-            if (keys[0x12]) pad->buttons |= 1u << PAD_A;
-            if (keys[0x10]) pad->buttons |= 1u << PAD_X;
-            if (keys[0x2e]) pad->buttons |= 1u << PAD_Y;
-            if (keys[0x30]) pad->buttons |= 1u << PAD_B;
-        }
-        return 1;
-    }
-    if (split_keyboard_seat >= 0 && seat > (unsigned)split_keyboard_seat) --seat;
-    return gamepad_read_local(seat, pad);
+    int side = split_kb_of(seat);
+    if (side >= 0){ split_kb_read(side, pad); return 1; }
+    return gamepad_read_local(split_pad_of(seat), pad);
 #else
     (void)seat; memset(pad, 0, sizeof *pad); return 0;
 #endif
@@ -111,9 +137,8 @@ int split_read_local(unsigned seat, PadState *pad){
 static uint32_t split_join_stamp;
 static uint32_t split_join_counter(unsigned seat){
 #ifdef __wasm__
-    if (split_keyboard_seat >= 0 && seat == (unsigned)split_keyboard_seat) return 0;
-    if (split_keyboard_seat >= 0 && seat > (unsigned)split_keyboard_seat) --seat;
-    return gamepad_local_join_stamp(seat);
+    if (split_kb_of(seat) >= 0) return 0;
+    return gamepad_local_join_stamp(split_pad_of(seat));
 #else
     (void)seat; return 0;
 #endif
@@ -651,31 +676,43 @@ const char *language_name(void);
 uint32_t language_text(uint32_t hash);
 void language_game_letters(const char *utf8, char *out, size_t n);
 /* a row: the language, then the texts in SL_* order */
-static const struct { const char *lang, *split, *players, *player, *player_up, *join, *join_kb; } SPLIT_TEXTS[] = {
+static const struct { const char *lang, *split, *players, *player, *player_up, *join, *join_kb, *join_sp; } SPLIT_TEXTS[] = {
     { "english",    "Split Screen", "%u Players", "Player %u", "PLAYER %u",
-                      "Player %u: press START", "Player %u: press START or Enter" },
+                      "Player %u: press START", "Player %u: press START or Enter",
+                      "Player %u: press START or Space" },
     { "french",     "Écran partagé", "%u joueurs", "Joueur %u", "JOUEUR %u",
-                      "Joueur %u : appuyer sur START", "Joueur %u : appuyer sur START ou Entrée" },
+                      "Joueur %u : appuyer sur START", "Joueur %u : appuyer sur START ou Entrée",
+                      "Joueur %u : appuyer sur START ou Espace" },
     { "german",     "Splitscreen", "%u Spieler", "Spieler %u", "SPIELER %u",
-                      "Spieler %u: START drücken", "Spieler %u: START oder Enter drücken" },
+                      "Spieler %u: START drücken", "Spieler %u: START oder Enter drücken",
+                      "Spieler %u: START oder Leertaste drücken" },
     { "italian",    "Split-screen", "%u giocatori", "Giocatore %u", "GIOCATORE %u",
-                      "Giocatore %u: premi START", "Giocatore %u: premi START o Invio" },
+                      "Giocatore %u: premi START", "Giocatore %u: premi START o Invio",
+                      "Giocatore %u: premi START o Spazio" },
     { "spanish",    "Pantalla dividida", "%u jugadores", "Jugador %u", "JUGADOR %u",
-                      "Jugador %u: pulsa START", "Jugador %u: pulsa START o Intro" },
+                      "Jugador %u: pulsa START", "Jugador %u: pulsa START o Intro",
+                      "Jugador %u: pulsa START o Espacio" },
     { "dutch",      "Gesplitst scherm", "%u spelers", "Speler %u", "SPELER %u",
-                      "Speler %u: druk op START", "Speler %u: druk op START of Enter" },
+                      "Speler %u: druk op START", "Speler %u: druk op START of Enter",
+                      "Speler %u: druk op START of de spatiebalk" },
     { "swedish",    "Delad skärm", "%u spelare", "Spelare %u", "SPELARE %u",
-                      "Spelare %u: tryck på START", "Spelare %u: tryck på START eller Enter" },
+                      "Spelare %u: tryck på START", "Spelare %u: tryck på START eller Enter",
+                      "Spelare %u: tryck på START eller mellanslag" },
     { "danish",     "Opdelt skærm", "%u spillere", "Spiller %u", "SPILLER %u",
-                      "Spiller %u: tryk på START", "Spiller %u: tryk på START eller Enter" },
+                      "Spiller %u: tryk på START", "Spiller %u: tryk på START eller Enter",
+                      "Spiller %u: tryk på START eller mellemrum" },
     { "portuguese", "Tela dividida", "%u jogadores", "Jogador %u", "JOGADOR %u",
-                      "Jogador %u: pressione START", "Jogador %u: pressione START ou Enter" },
+                      "Jogador %u: pressione START", "Jogador %u: pressione START ou Enter",
+                      "Jogador %u: pressione START ou Espaço" },
     { "polish",     "Podzielony ekran", "%u graczy", "Gracz %u", "GRACZ %u",
-                      "Gracz %u: wciśnij START", "Gracz %u: wciśnij START lub Enter" },
+                      "Gracz %u: wciśnij START", "Gracz %u: wciśnij START lub Enter",
+                      "Gracz %u: wciśnij START lub spację" },
     { "turkish",    "Bölünmüş Ekran", "%u Oyuncu", "Oyuncu %u", "OYUNCU %u",
-                      "Oyuncu %u: START'a bas", "Oyuncu %u: START'a ya da Enter'a bas" },
+                      "Oyuncu %u: START'a bas", "Oyuncu %u: START'a ya da Enter'a bas",
+                      "Oyuncu %u: START'a ya da Boşluk tuşuna bas" },
     { "hungarian",  "Osztott képernyő", "%u játékos", "%u. Játékos", "%u. JÁTÉKOS",
-                      "%u. Játékos: nyomj START gombot", "%u. Játékos: nyomj START vagy Enter gombot" },
+                      "%u. Játékos: nyomj START gombot", "%u. Játékos: nyomj START vagy Enter gombot",
+                      "%u. Játékos: nyomj START vagy Szóköz gombot" },
 };
 /* a text of the game's in its own letters (empty when it has none) */
 static int split_game_text(uint32_t hash, char *out, size_t n){
@@ -750,13 +787,14 @@ static void split_label_text(int which, unsigned n, char *out, size_t size){
         case SL_SPLIT: snprintf(out, size, "%s", k.split); break;
         case SL_PLAYERS: snprintf(out, size, "%s%u%s", k.pl_pre, n, k.pl_post); break;
         case SL_PLAYER: case SL_PLAYER_UP: snprintf(out, size, "%s%u%s", k.p_pre, n, k.p_post); break;
-        default: snprintf(out, size, "%s%u%s: %s%s", k.p_pre, n, k.p_post, k.press, which == SL_JOIN_KB ? " / Enter" : "");
+        default: snprintf(out, size, "%s%u%s: %s%s", k.p_pre, n, k.p_post, k.press,
+                         which == SL_JOIN_KB ? " / Enter" : which == SL_JOIN_SP ? " / Space" : "");
         }
         return;
     }
     char u[160];
     const typeof(SPLIT_TEXTS[0]) *r = &SPLIT_TEXTS[e ? e - 1 : 0];
-    const char *const f[SL_N] = { r->split, r->players, r->player, r->player_up, r->join, r->join_kb };
+    const char *const f[SL_N] = { r->split, r->players, r->player, r->player_up, r->join, r->join_kb, r->join_sp };
     snprintf(u, sizeof u, f[which], n);
     language_game_letters(u, out, size);
 }
@@ -821,7 +859,10 @@ static int split_popup(CPU *c){
 }
 static void split_seat_title(CPU *c){
     char title[64];
-    split_label_text(split_keyboard_seat < 0 ? SL_JOIN_KB : SL_JOIN, (unsigned)split_seat + 1, title, sizeof title);
+    /* the keyboard's join key that is still free (this seat's own taking it does not count) */
+    int enter = split_kb_seat[SPLIT_KB_ENTER] < 0 || split_kb_seat[SPLIT_KB_ENTER] == split_seat;
+    int space = split_kb_seat[SPLIT_KB_SPACE] < 0 || split_kb_seat[SPLIT_KB_SPACE] == split_seat;
+    split_label_text(enter ? SL_JOIN_KB : space ? SL_JOIN_SP : SL_JOIN, (unsigned)split_seat + 1, title, sizeof title);
     split_label(c, "2P_PressStart.fng", 0x2ebb974du, title);
     split_text(SPLIT_FE_TEXT+256, "Player_Name");
     uint32_t p = SPLIT_FE_TEXT+256;
@@ -1695,10 +1736,13 @@ int splitscreen_hook(CPU *c, uint32_t ip){
             unsigned seat = (unsigned)split_seat;
             if (msg == 0xc98356bau){
                 split_seat_title(c);
-                if (MR8(c->ecx + 0x4c) && split_keyboard_seat < 0 &&
-                    (kbd_key_down(0x1c) || kbd_key_down(0x9c))){
-                    split_keyboard_seat = (int)seat;
-                    fprintf(stderr, "[split] keyboard assigned to player %u\n", seat + 1);
+                if (MR8(c->ecx + 0x4c) && split_kb_of(seat) < 0){
+                    int side = split_kb_seat[SPLIT_KB_ENTER] < 0 && (kbd_key_down(0x1c) || kbd_key_down(0x9c)) ? SPLIT_KB_ENTER
+                             : split_kb_seat[SPLIT_KB_SPACE] < 0 && kbd_key_down(0x39) ? SPLIT_KB_SPACE : -1;
+                    if (side >= 0){
+                        split_kb_seat[side] = (int)seat;
+                        fprintf(stderr, "[split] keyboard (%s) assigned to player %u\n", side ? "Space" : "Enter", seat + 1);
+                    }
                 }
                 PadState pad;
                 split_read_local(seat, &pad);
@@ -1749,7 +1793,7 @@ int splitscreen_hook(CPU *c, uint32_t ip){
             for (unsigned i = 0; i < 13; ++i) MR8(0x83aac4u + i * 0x14u) = 2;
             MR32(0x85ad28u) = 0; MR32(0x7f4454u) = 1; MR32(0x7f4458u) = 2;
             split_seat = 0; split_carsel_active = 0;
-            split_keyboard_seat = -1;
+            split_kb_seat[0] = split_kb_seat[1] = -1;
             memset(split_picked, 0, sizeof split_picked);
             memset(split_joined, 0, sizeof split_joined);
         } else {

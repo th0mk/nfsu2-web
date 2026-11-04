@@ -1,0 +1,44 @@
+# Two players on one keyboard and no controller: Enter takes player 1 (the arrows' side), Space player 2 (WASD's).
+# Each side's gas reaches only its own car; a lone keyboard player keeps the whole keyboard (split_keyboard.txt).
+0 tapuntil RETURN MC_Background.fng 120 4000
++200 tap RETURN
++0 waitfng GarageMain.fng 3000
++300 tap RIGHT
++200 tap RETURN
++200 tap RETURN
++0 waitfng UI_QRModeSelect.fng 2000
++100 tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++100 tapuntil RETURN UI_QRModeOptions.fng 150 1500
++100 tapuntil RETURN 2P_PressStart.fng 150 1500
++150 down RETURN
++20 up RETURN
++150 dump keyboard_two_car_select
++0 tap RETURN
++200 tap RETURN
++200 dump keyboard_two_second_join
++0 down SPACE
++20 up SPACE
++150 tap RIGHT
++150 tap RETURN
++150 tap RETURN
++0 waitmem 0x8654a4 6 6000
++700 dump keyboard_two_race
++0 expect i:0xd00030 == 2
++0 down W
++100 expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0 up W
++30 expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0 down UP
++100 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0 down W
++100 dump keyboard_two_both
++0 expect f:[[[0xd00000]+4]+0x30]+0x2d4 > 0.9
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 > 0.9
++0 up UP
++0 up W
++30 expect f:[[[0xd00000]+4]+0x30]+0x2d4 < 0.01
++0 expect f:[[[0xd00004]+4]+0x30]+0x2d4 < 0.01
++0 status split_keyboard_two_complete
++60 quit

@@ -212,9 +212,23 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   gets no controller input. A stick pressed in alone reaches the game a moment later (0.12 s), so the shortcut never
   honks or works the hydraulics.
 - **Split screen:** the main menu's item after Quick Race. Pick 2, 3 or 4 players and the race, then each player
-  presses START on their own controller (one player may press Enter and drive on the keyboard) and picks a car. Every
-  player gets their own view, HUD, minimap and camera; player 1's controller works the results and Post Race menu.
-  Each view is a whole scene, so 3 or 4 players need a fast computer.
+  presses START on their own controller and picks a car. Every player gets their own view, HUD, minimap and camera;
+  player 1's controller works the results and Post Race menu. Each view is a whole scene, so 3 or 4 players need a
+  fast computer.
+- **Two players on one keyboard** (split screen): one presses Enter to join, the other Space. Alone on the keyboard,
+  a player has all of it (arrows or WASD, Shift nitrous, Space handbrake, E and Q gears, C camera, B look back).
+  With two, the keyboard is shared:
+
+  | | Enter's player | Space's player |
+  |---|---|---|
+  | Steer, gas, brake | arrows | A and D, W, S |
+  | Nitrous | Right Shift | Left Shift |
+  | Handbrake | Right Ctrl or / | Space |
+  | Gear up, gear down | . and , | E and Q |
+  | Camera, look back | L and ; | C and B |
+
+  These keys stay as they are (Options, Controls does not change them). Many laptop and cheap keyboards cannot see
+  every key two players hold at once: a key can drop out for a moment. Gaming keyboards can.
 - **Rumble:** a controller that can rumble in Chrome (Xbox, DualSense and others) shakes when you crash, scrape a
   wall or land hard. Controls, Controller, Rumble turns it off. Firefox has no rumble.
 - **Sound** starts with the Play click. If the browser still keeps it off, a note says so, and a click on the game or
