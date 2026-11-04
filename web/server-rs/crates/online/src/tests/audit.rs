@@ -621,6 +621,48 @@ fn a_car_of_edited_game_data_is_a_cheat_line() {
     );
 }
 
+// a racer whose car jumped at once by the other racers' games (the rank's code "j", its slot and the jump in 4 m steps:
+// runtime/mprace.c rank_jump_code): a line once two other games said so, or the only other one of a race of two; one
+// of two others, a jump honest races make, or a game naming its own racer: none
+#[test]
+fn a_car_that_jumped_is_a_cheat_line() {
+    use crate::aries::encode_frame;
+    let mut w = world();
+    let cheats = |w: &World| w.text().iter().filter(|l| l.starts_with("[cheat]")).cloned().collect::<Vec<_>>();
+    let race_of = |w: &mut World, name: &str, who: &[&str], codes: &[&str]| {
+        let cs: Vec<_> = (0..who.len()).map(|i| client(w, &format!("10.77.{}.{}", 8 + i, name.len()))).collect();
+        let xs: Vec<_> = cs.iter().zip(who).map(|(&c, n)| login(w, c, n)).collect();
+        let auth = race(w, name, &xs, vec![]).unwrap();
+        w.advance(61_000.0);
+        let rows: Vec<(u8, u8, f32, f32, bool)> = (0..who.len()).map(|i| (i as u8, i as u8 + 1, 56.49 + 2.0 * i as f32, 29.8, false)).collect();
+        for (&c, code) in xs.iter().zip(codes) {
+            let mut f = fields![("AUTH", auth.as_str()), ("RESU", resu_avg(1, &rows))];
+            for (i, n) in who.iter().enumerate() {
+                f.extend(fields![(format!("NAME{i}"), n.to_string())]);
+            }
+            w.send_raw(c, &encode_frame("rank", code, &f).unwrap());
+        }
+    };
+    // (0x46 steps: 280 m; 0x0a: 40 m)
+    race_of(&mut w, "self", &["Jumper1", "Slow1"], &["j046", ""]);
+    race_of(&mut w, "small", &["Jumper2", "Slow2"], &["", "j00a"]);
+    race_of(&mut w, "one", &["Jumper3", "Slow3", "Mid3"], &["", "j046", ""]);
+    race_of(&mut w, "bad", &["Jumper4", "Slow4"], &["", "jz46"]);
+    assert_eq!(cheats(&w), Vec::<String>::new());
+    race_of(&mut w, "two", &["Jumper5", "Slow5"], &["", "j046"]);
+    race_of(&mut w, "three", &["Jumper6", "Slow6", "Mid6"], &["", "j046", "j044"]);
+    assert_eq!(
+        cheats(&w),
+        [
+            "[cheat] 10.77.8.3 \"Jumper5\": its car jumped 280 m at once in the online race \"two\" (sprint, track 4102, 1 \
+             lap), as 1 other players' games had it (the largest each: 280 m; honest races' largest are under 50 m); it won",
+            "[cheat] 10.77.8.5 \"Jumper6\": its car jumped 280 m at once in the online race \"three\" (sprint, track 4102, 1 \
+             lap), as 2 other players' games had it (the largest each: 280, 272 m; honest races' largest are under 50 m); it \
+             won"
+        ]
+    );
+}
+
 /// a drift race's report: (index, place, time, points, the biggest single drift's points, top speed m/s, dropped)
 fn resu_drift(players: &[(u8, u8, f32, i32, i32, f32, bool)]) -> String {
     let mut b = vec![0u8; 8 + 55 * players.len()];

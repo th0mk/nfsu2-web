@@ -22,7 +22,10 @@ typedef struct {
 int vlan_race_links(RaceLink *o, int max, int reset);
 
 /* the largest jump of the car of the player named so (its LAN name) in the race just raced, as our game had it: a
- * frame's move that differs from the frame before's, not right after a stall of its states (m; 0: none, or no such
- * car).  Kept until the next race begins */
+ * frame's move that differs from the frame before's, right after a stall of its states less what a car drives in
+ * that time (m; 0: none, or no such car).  Kept until the next race begins */
 float racenet_jump(const char *name);
+/* of the other cars of the race just raced, the one that jumped farthest (racenet_jump): how far (m; 0 none) and its
+ * player's LAN name ("" none) */
+float racenet_farthest(char name[16]);
 #endif

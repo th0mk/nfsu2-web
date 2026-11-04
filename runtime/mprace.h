@@ -178,8 +178,10 @@ void mprace_perf_survey(struct CPU *c, uint32_t car);
 int  mprace_type_edited(int type);
 /* an Online race's rank frame's code (olfilter.c): "ed" and the type of the
  * car we drive in two hex digits when its data is edited ("edff": a type is
- * edited and we have no car now); 0 (code untouched) when not */
-int  mprace_rank_code(char code[4]);
+ * edited and we have no car now); else "j", a racer's n of the frame's NAMEn
+ * fields (body, n bytes of them) and how far its car jumped (4 m a step);
+ * 0 (code untouched) when none */
+int  mprace_rank_code(char code[4], const uint8_t *body, int n);
 /* the last trip's race, for its report to the server (roam_game.c, RC_MSG_RACEREP): the network race's type, track
  * and laps, its cars and their average rating, our place (0: not finished), whether we hosted it or quit it, our car
  * as rated in the race, its engine power's factor there and the race's time (s, 0: none) */

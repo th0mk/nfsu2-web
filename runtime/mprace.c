@@ -737,10 +737,43 @@ static void note_net_car(void){
     uint32_t pl = rd(G_PLAYER1), pi = pl ? perf_info(rd(pl + 4u)) : 0;
     if (pi) g_net_type = (int)rd(pi + PI_TYPE);
 }
-int mprace_rank_code(char code[4]){
+/* An Online race's rank (its report) has a code of 4 bytes the game leaves 0, which olfilter.c fills: "ed" and our
+ * car's type in two hex digits when its game data is edited; else, when another racer's car jumped RANK_JUMP_M or
+ * more at once as our game had it (racenet_farthest: the race's world is gone by the time the rank goes), "j", that
+ * racer's n of the rank's own NAMEn fields (its car's index is another: a test's host was NAME0, its car 4) and the
+ * jump in two hex digits, 4 m a step (1020 m at most): the farthest one.  A server before it ignores the code */
+#define RANK_JUMP_M 100.f
+/* the n (0 .. 7) of the field NAMEn whose value is `name` among a message's fields (KEY=VALUE apart by white space or
+ * control bytes, a value maybe in quotes, as the server's aries.rs parse_fields reads them); -1 none (a name with a
+ * byte the game sends %-escaped too) */
+static int rank_name_slot(const uint8_t *b, int n, const char *name){
+    size_t ln = strlen(name);
+    for (int i = 0; ln && i + 6 <= n; i++){
+        if ((i && b[i - 1] > 0x20) || strncasecmp((const char *)b + i, "NAME", 4) || b[i + 4] < '0' || b[i + 4] > '7' || b[i + 5] != '=')
+            continue;
+        int v = i + 6, q = v < n && b[v] == '"';
+        v += q;
+        if (v + (int)ln > n || strncasecmp((const char *)b + v, name, ln)) continue;
+        int e = v + (int)ln;
+        if (e >= n || (q ? b[e] == '"' : b[e] <= 0x20)) return b[i + 4] - '0';
+    }
+    return -1;
+}
+static int rank_jump_code(char code[4], const uint8_t *body, int n){
+    char who[16]; float far = racenet_farthest(who);
+    if (!who[0] || far < RANK_JUMP_M) return 0;
+    int slot = body && n > 0 ? rank_name_slot(body, n, who) : -1;
+    if (slot < 0){ fprintf(stderr, "[mprace] the Online race's report: %s's car jumped %.0f m at once, not among its names\n", who, (double)far); return 0; }
+    unsigned steps = (unsigned)(far / 4.f + 0.5f); if (steps > 255u) steps = 255u;
+    char s[6]; snprintf(s, sizeof s, "j%d%02x", slot, steps);
+    memcpy(code, s, 4);
+    fprintf(stderr, "[mprace] the Online race's report says %s's car (NAME%d) jumped %.0f m at once (%.4s)\n", who, slot, (double)far, s);
+    return 1;
+}
+int mprace_rank_code(char code[4], const uint8_t *body, int n){
     uint32_t pl = rd(G_PLAYER1), pi = pl ? perf_info(rd(pl + 4u)) : 0, mask = edited_types();
     int type = pi ? (int)rd(pi + PI_TYPE) : g_net_type;
-    if (!mask || (type >= 0 && !mprace_type_edited(type))) return 0;
+    if (!mask || (type >= 0 && !mprace_type_edited(type))) return rank_jump_code(code, body, n);
     char s[5]; snprintf(s, sizeof s, "ed%02x", type >= 0 && type < N_PLAYER_TYPES ? (unsigned)type : 0xffu);
     memcpy(code, s, 4);
     fprintf(stderr, "[cars] the Online race's report says our car's data is edited (%.4s)\n", s);

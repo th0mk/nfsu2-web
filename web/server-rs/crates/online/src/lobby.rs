@@ -286,6 +286,12 @@ const SEEN_KEPT: usize = 8;
 /// cars 377, 12 over 380 and 5 over 420 (one the racer of a circuit won at 383 km/h on average); a free-roam lobby
 /// race's edited 350Z made 444
 const CAR_MPS: f64 = 420.0 / 3.6;
+/// a car's jump at once (m) no lag makes, as the other racers' games had it (`jump_code`, `jump_lines`): a line once
+/// JUMP_SEEN of them said so, or the only other one of a race of two.  Honest races' largest are under 50 m (a reset to
+/// the road, a hit; runtime/racenet.c); nfsu2.xyz, 2026-11-04, a player said another stood still for laps and then
+/// finished at once, and the host's game had that car jump 279.9 m once (a free-roam lobby race's heat)
+const JUMP_M: f64 = 150.0;
+const JUMP_SEEN: usize = 2;
 /// the Rankings screens' six boards in their order (Circuit, Sprint, Drift, Drag, Street X, URL: SPEED2.EXE 0x58ce30,
 /// 0x582530) as race types (RACE_TYPES: drag 2, drift 3)
 const SLOT_TYPES: [u32; 6] = [0, 1, 3, 2, 4, 5];
@@ -378,6 +384,10 @@ pub struct Player {
     pub own: Option<Own>,
     /// the finish times the other racers' games showed of it, in their reports of the right shape (SEEN_KEPT at most)
     pub seen: Vec<f64>,
+    /// the other racers' games that said its car jumped at once (`jump_code`): each one's game player and how far (m);
+    /// and whether a `[cheat]` line told of it
+    pub jumped: Vec<(usize, f64)>,
+    pub jump_told: bool,
 }
 
 /// A racer's own figures (`race_cheats`): finished, its place, time (s), average and top speed (m/s), a drift race's
@@ -408,6 +418,47 @@ const CAR_TYPES: [&str; 31] = [
 fn edited_code(code: &str) -> Option<u8> {
     let hex = code.strip_prefix("ed").filter(|h| h.len() == 2)?;
     u8::from_str_radix(hex, 16).ok()
+}
+
+/// A rank's code from a game that had another racer's car jump far at once (runtime/mprace.c rank_jump_code): "j", the
+/// racer's slot (its NAMEn in the rank) and the jump in two hex digits, 4 m a step.  None for any other code
+fn jump_code(code: &str) -> Option<(usize, f64)> {
+    let rest = code.strip_prefix('j').filter(|r| r.len() == 3)?;
+    let slot = rest[..1].parse::<usize>().ok().filter(|&n| n < 8)?;
+    Some((slot, u8::from_str_radix(&rest[1..], 16).ok()? as f64 * 4.0))
+}
+
+/// The `[cheat]` lines of the racers whose car jumped JUMP_M or more at once by JUMP_SEEN of the other racers' games,
+/// or by the only other one of a race of two (`Player::jumped`), each once
+fn jump_lines(game: &str, r: &RaceReport, players: &mut [Player]) -> Vec<String> {
+    let ty = REPORT_TYPES.get(r.kind as usize).copied().unwrap_or("race");
+    let laps = if r.laps > 0 { format!(", {} lap{}", r.laps, if r.laps == 1 { "" } else { "s" }) } else { String::new() };
+    let two = players.len() == 2;
+    let mut lines = Vec::new();
+    for p in players.iter_mut() {
+        let mut far: Vec<f64> = p.jumped.iter().map(|x| x.1).filter(|&m| m >= JUMP_M).collect();
+        if p.jump_told || !(far.len() >= JUMP_SEEN || (two && far.len() == 1)) {
+            continue;
+        }
+        far.sort_by(|a, b| b.total_cmp(a));
+        p.jump_told = true;
+        let place = match p.own {
+            Some(o) if o.finished && o.place == 1 && r.kind != KIND_DRIFT => "; it won".to_string(),
+            Some(o) if o.finished && r.kind != KIND_DRIFT => format!("; it came {}", o.place),
+            _ => String::new(),
+        };
+        lines.push(format!(
+            "[cheat] {} \"{}\": its car jumped {:.0} m at once in the online race \"{game}\" ({ty}, track {}{laps}), as {} other \
+             players' games had it (the largest each: {} m; honest races' largest are under 50 m){place}",
+            vip_str(p.vip),
+            p.name,
+            far[0],
+            r.track,
+            far.len(),
+            far.iter().map(|m| format!("{m:.0}")).collect::<Vec<_>>().join(", "),
+        ));
+    }
+    lines
 }
 
 /// "SUPRA, type 15" for `edited_code`'s type; "type unknown" when the game could not tell
@@ -1826,6 +1877,18 @@ impl Core {
             names.push(f.get(&format!("NAME{i}")).unwrap_or("null").to_string());
             i += 1;
         }
+        // (another racer's car that jumped, by this game: kept whether the report is taken or not)
+        if let Some((slot, m)) = jump_code(code)
+            && let Some(want) = names.get(slot).map(|n| lower(n))
+        {
+            let players = &mut self.lobby.game_mut(g).expect("held").players;
+            if let Some(j) = players.iter().position(|x| lower(&x.name) == want)
+                && j != me
+                && !players[j].jumped.iter().any(|x| x.0 == me)
+            {
+                players[j].jumped.push((me, m));
+            }
+        }
         let mut why = self.check_report(g, r.as_ref(), &names);
         let spers = tpl(&self.lobby.s(s).persona).to_string();
         let gname = self.lobby.game(g).expect("held").name.clone();
@@ -1847,7 +1910,8 @@ impl Core {
                     Some((players.iter().position(|x| lower(&x.name) == want)?, p.time))
                 })
                 .collect();
-            let lines = race_cheats(&gname, r, me, mine, edited_code(code), &views, players);
+            let mut lines = race_cheats(&gname, r, me, mine, edited_code(code), &views, players);
+            lines.extend(jump_lines(&gname, r, players));
             for line in lines {
                 self.llog(&line, s);
             }
@@ -2517,6 +2581,8 @@ impl Core {
             results: None,
             own: None,
             seen: Vec::new(),
+            jumped: Vec::new(),
+            jump_told: false,
         }
     }
 

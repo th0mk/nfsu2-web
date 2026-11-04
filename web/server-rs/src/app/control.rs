@@ -794,6 +794,11 @@ mod tests {
                  largest are under 50 m); it won",
                 "Inv",
             ),
+            (
+                "[cheat] 10.77.1.3 \"Jo\": its car jumped 280 m at once in the online race \"two\" (sprint, track 4102, 1 lap), as \
+                 1 other players' games had it (the largest each: 280 m; honest races' largest are under 50 m); it won",
+                "Jo",
+            ),
         ] {
             assert_eq!(race_cheat(line), Some((vip, name)), "{line}");
         }

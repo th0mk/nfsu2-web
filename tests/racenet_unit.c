@@ -456,8 +456,9 @@ int main(void){
           "(%d lists, to the stranger %d, naming it %d)", g_npl_out, to_s, named_s);
 
     /* the race's report of each car's largest jump (racenet_jump): a car that moves 1 m a frame (20 ms) with a state
-     * every frame, then 280 m at once: 280; a stall of 1.5 s and a jump of 300 m as its state ends it: left out, a
-     * jump of 200 m 0.6 s later counted; a name no car has: 0 */
+     * every frame, then 280 m at once: 280; a stall of 1.5 s and a jump of 120 m as its state ends it: left out (a
+     * car drives 150 m meanwhile), a jump of 200 m 0.6 s later counted; a stall of 1.5 s and 600 m (a player who held
+     * its states back, then teleported): 450 m; a name no car has: 0 */
     {
         const uint32_t NP = 0x10050000u, CTL = 0x10060000u, ST = 0x10070000u;
         commit(NP, 0x40); commit(CTL, 0x20); commit(ST, 0x80);
@@ -475,18 +476,25 @@ int main(void){
         float j = racenet_jump("inv");
         CHECK(before == 0.f && j > 279.f && j < 281.f && racenet_jump("Nobody") == 0.f,
               "jump: 280 m at once is the car's largest (%.1f m; before it %.1f m)", (double)j, (double)before);
+        char who[16]; float far = racenet_farthest(who);
+        CHECK(!strcmp(who, "Inv") && far > 279.f && far < 281.f, "jump: the farthest: %s, %.1f m", who, (double)far);
         MR32(RC) = 0; frame(); MR32(RC) = RC_RACING; frame();        /* the next race */
         for (int i = 0; i < 60; i++) STEP(1.f, 1);
         for (int i = 0; i < 75; i++) STEP(1.f, 0);                  /* 1.5 s without its states */
-        STEP(301.f, 1);
+        STEP(121.f, 1);
         for (int i = 0; i < 10; i++) STEP(1.f, 1);
         float stalled = racenet_jump("Inv");
         for (int i = 0; i < 20; i++) STEP(1.f, 1);
         STEP(201.f, 1);
         for (int i = 0; i < 5; i++) STEP(1.f, 1);
         float later = racenet_jump("Inv");
-        CHECK(stalled < 1.f && later > 199.f && later < 201.f, "jump: after a 1.5 s stall left out (%.1f m), 200 m 0.6 s on "
-              "counted (%.1f m)", (double)stalled, (double)later);
+        CHECK(stalled < 1.f && later > 199.f && later < 201.f, "jump: 120 m after a 1.5 s stall left out (%.1f m), 200 m 0.6 s "
+              "on counted (%.1f m)", (double)stalled, (double)later);
+        for (int i = 0; i < 75; i++) STEP(1.f, 0);
+        STEP(601.f, 1);
+        for (int i = 0; i < 5; i++) STEP(1.f, 1);
+        float held = racenet_jump("Inv");
+        CHECK(held > 440.f && held < 460.f, "jump: 600 m after a 1.5 s stall counts the 450 m no car drives (%.1f m)", (double)held);
         #undef STEP
     }
 

@@ -203,9 +203,11 @@
 #define NAME_N       16
 #define NCARS        8
 /* a car's jump right after a wait of over STALL_US for its states (within STALL_AFTER_US of the state that ended it)
- * is what a stall does, not its owner: the race's report (racenet_jump) leaves it out */
+ * is what a stall does, up to what a car drives meanwhile (STALL_MPS a second of the wait): the race's report
+ * (racenet_jump) counts only the rest of it (a player who holds its states back, then teleports: still a jump) */
 #define STALL_US       1000000u
 #define STALL_AFTER_US 500000u
+#define STALL_MPS      100.f
 #define NLINKS       16
 #define SLOW_US      50000u        /* a frame longer than this is a stall */
 /* the car states (above) */
@@ -1168,7 +1170,7 @@ static void end(uint64_t t){
         double span = e->n > 1 ? (double)(e->last - e->first) / 1e6 : 0.;
         fprintf(stderr, "[racenet]   car %s: %u updates (%.1f/s, %u straight from their game), longest wait %.0f ms, "
                 "waits over 100/250/500 ms %u/%u/%u, jumps over 0.5 m %u, over 2 m %u (largest %.1f m), "
-                "as the game had them %u/%u (largest %.1f m; %.1f m not after a stall), corrections faded %u, shown %u, "
+                "as the game had them %u/%u (largest %.1f m; %.1f m past a stall's), corrections faded %u, shown %u, "
                 "far \"hits\" passed %u, its states %.0f ms old by our race clock (%.0f to %.0f)",
                 e->name[0] ? e->name : "-", e->n, span > 0 ? (e->n - 1) / span : 0., e->direct, (double)e->gap_max / 1000.0,
                 e->g100, e->g250, e->g500, e->shown.jumps, e->shown.big, (double)e->shown.max,
@@ -1261,8 +1263,10 @@ void racenet_frame(CPU *c){
         memcpy(sp, e->shown.p, sizeof sp); memcpy(gp, e->game.p, sizeof gp);
         jumps_add(&e->shown, p, dt, step);
         float x = jumps_add(&e->game, g, dt, step);
-        /* (the race's report: a jump right after a wait of over STALL_US is the car shown where it went meanwhile) */
-        if (x > e->jump && !(e->gap_last > STALL_US && t - e->gap_at < STALL_AFTER_US)) e->jump = x;
+        /* (the race's report: a jump right after a wait of over STALL_US is the car shown where it went meanwhile, as
+         * far as a car drives in that time) */
+        if (x > 0.f && e->gap_last > STALL_US && t - e->gap_at < STALL_AFTER_US) x -= STALL_MPS * (float)e->gap_last / 1e6f;
+        if (x > e->jump) e->jump = x;
         if (trace){
             float ds = 0, dg = 0, o = 0;
             for (int i = 0; i < 3; i++){ ds += (p[i] - sp[i]) * (p[i] - sp[i]); dg += (g[i] - gp[i]) * (g[i] - gp[i]); o += (p[i] - g[i]) * (p[i] - g[i]); }
@@ -1292,8 +1296,29 @@ void racenet_frame(CPU *c){
 
 /* the largest jump of the car of the player named so (its LAN name) in the race just raced, as our game had it, not
  * right after a stall (m; 0: none, or no such car) */
+/* NFSU2_TEST_JUMP=<name>:<m> or <name>/<m> (tests, with NFSU2_INPUT_SCRIPT only; roam-pair splits its options at
+ * ':'): that player's car jumped so far */
+static float test_jump(const char *name){
+    const char *tj = getenv("NFSU2_TEST_JUMP"), *sc = getenv("NFSU2_INPUT_SCRIPT"), *c = tj ? strpbrk(tj, ":/") : 0;
+    if (c && sc && sc[0] && (size_t)(c - tj) == strlen(name) && !strncasecmp(tj, name, (size_t)(c - tj))) return (float)atof(c + 1);
+    return 0.f;
+}
 float racenet_jump(const char *name){
     if (!name || !name[0]) return 0.f;
+    float t = test_jump(name);
+    if (t > 0.f) return t;
     for (int i = 0; i < NCARS; i++) if (g_car[i].car && !strcasecmp(g_car[i].name, name)) return g_car[i].jump;
     return 0.f;
+}
+float racenet_farthest(char name[16]){
+    float far = 0.f; int at = -1;
+    for (int i = 0; i < NCARS; i++){
+        Car *e = &g_car[i];
+        if (!e->car || !e->name[0]) continue;
+        float j = test_jump(e->name);
+        if (!(j > 0.f)) j = e->jump;
+        if (j > far){ far = j; at = i; }
+    }
+    if (name) snprintf(name, 16, "%s", at >= 0 ? g_car[at].name : "");
+    return at >= 0 ? far : 0.f;
 }
