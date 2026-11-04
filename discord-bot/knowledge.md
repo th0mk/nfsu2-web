@@ -405,7 +405,12 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   (14 % in the garage); the start page's Game, Display, more: 3D proportions, Corrected gives true proportions and round wheels with
   a little more at the sides (Original, the game's own, stays the default), since 6519964e; textures without
   smoothing, pixelated like dgVoodoo's point sampling: the start page's Game, Display, more: Pixelated textures (off by default;
-  on overrides the game's Texture Filtering), since 7f34eaa8; the guide
+  on overrides the game's Texture Filtering), since 7f34eaa8; C goes on from the game's four views to the drift
+  races' camera in every drive, since 0c930f2f; the Graphics Shop's vinyls have a Special category after Sponsor
+  with the game's promo vinyls (Snoop Dogg, Capone, Chingy, The Doors and others; free, no visual rating, stages 2
+  and 3), since 84c85172; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
+  changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
+  the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.
