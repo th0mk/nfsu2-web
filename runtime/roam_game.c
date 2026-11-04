@@ -649,6 +649,10 @@ static int local_state(rc_state *s){
     eng_state(car, s);
     /* the parts the player has open to show the car off (showoff.c): friends' games open them too */
     s->open = rh_showoff_mine();
+    /* the headlights (lightkey.c): off, or on high beam while the key is held */
+    int lights = rh_lights_mine();
+    if (lights == 1) s->bits |= RC_BIT_DARK;
+    s->hibeam = lights == 2;
     if (g_sync_paused > 1){ for (int i = 0; i < 3; i++){ s->v[i] = 0; s->w[i] = 0; } s->speed = 0; s->rpm = 0; for (int i = 0; i < 8; i++) s->slip[i] = 0; }
     for (int i = 0; i < 3; i++) if (!__builtin_isfinite(s->p[i]) || !__builtin_isfinite(s->v[i])) return 0;
     /* the stamp clock may run a little faster than the world (it is pulled
@@ -4225,6 +4229,22 @@ static void showoff_peers(CPU *c){
     for (int k = 0; k < NSLOT; k++){
         uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
         rh_showoff_car(c, k, ok(car, 0x9e0) ? car : 0, open[k]);
+    }
+}
+/* friends' headlights (lightkey.c): off (RC_BIT_DARK) or on high beam (the extension's RC_OPEN_HIBEAM), each shown
+ * car's from its pose; the others' as the game has them */
+static void lights_peers(void){
+    uint8_t st[NSLOT] = {0};
+    for (int i = 0; i < g_npv; i++){
+        const PeerView *v = &g_pv[i];
+        if (!v->visible || !v->have_pose) continue;
+        int s = (v->pose.bits & RC_BIT_DARK) ? 1 : v->pose.ext && v->pose.hibeam ? 2 : 0;
+        if (!s) continue;
+        for (int k = 0; k < NSLOT; k++) if (g_sl[k].st == SL_ACTIVE && g_sl[k].peer_id == v->id && !g_sl[k].hidden) st[k] = (uint8_t)s;
+    }
+    for (int k = 0; k < NSLOT; k++){
+        uint32_t car = g_sl[k].st == SL_ACTIVE && !g_sl[k].hidden ? g_sl[k].car : 0;
+        rh_lights_car(k, ok(car, 0x9e0) ? car : 0, st[k]);
     }
 }
 
@@ -8682,6 +8702,7 @@ void roam_game_frame(CPU *c){
     g_engage = in_roam && world_runs && engage_ours();
     sounds_update(have_ls ? &ls : 0, world_runs);
     showoff_peers(c);
+    lights_peers();
     if (g_poselog && have_ls){
         uint32_t me = player_car();
         rh_fprintf(g_poselog, "L,%lld,%.0f,%08x,%.4f,%.4f,%.4f,%.3f,0,0,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\n", (long long)host, g_sync, g_s.conf.self_id,

@@ -123,11 +123,6 @@ static KDev *kdev(uint32_t self){
     return d;
 }
 void dikbd_created(uint32_t self){ kdev(self); }
-/* lightkey.c: the action (its uAppData) a key has in the action map the keyboard reads now, 0xFFFFFFFF none */
-uint32_t dikbd_key_action(unsigned dik){
-    for (int i = 0; i < g_nkd && dik < 256u; i++) if (g_kd[i].fmt == FMT_ACTIONS && g_kd[i].act_of[dik] >= 0) return g_kd[i].app_of[dik];
-    return 0xFFFFFFFFu;
-}
 
 static int lg(void){ return kbd_log() || getenv("DIMAP"); }
 
@@ -294,14 +289,14 @@ static uint32_t build_map(KDev *d, uint32_t af, uint32_t flags){
 }
 /* ---- our keys ----------------------------------------------------------------
  * The keys the runtime and the page add on top of the game's: X drift mode (drift.c), O the show-off (showoff.c), N
- * the horn (horn.c), and the page's I (Message a friend: web/src/app/messages.ts), F (Add friend: friends.ts), 1 to 4
- * and Numpad 1 to 4 (quick chat: quickchat.ts).  None is one of the game's in its driving map (0x7fcac0; Numpad 1 to 4
- * are its debug camera's, which the game never reads), but a player can put any of the game's controls on any key
- * (Options > Controls > Keyboard Configuration).  Then ours leave that key to the game, for as long as the action map
- * the keyboard reads has it so: the key's action there is not its default (the action the map's semantics give it).
- * Each says so once in the log ("[keys] X is bound to Shift Up in the game: drift mode stays off it").  The page's
- * controls hear it through the status "keys" (status_web.c's block): a bit for each of PAGE_KEYS, in its order, set
- * while the game has that key.
+ * the horn (horn.c), G the headlights (lightkey.c), and the page's I (Message a friend: web/src/app/messages.ts), F
+ * (Add friend: friends.ts), 1 to 4 and Numpad 1 to 4 (quick chat: quickchat.ts).  None is one of the game's in its
+ * driving map (0x7fcac0; G and Numpad 1 to 4 are its debug camera's, which the game never reads), but a player can
+ * put any of the game's controls on any key (Options > Controls > Keyboard Configuration).  Then ours leave that key
+ * to the game, for as long as the action map the keyboard reads has it so: the key's action there is not its default
+ * (the action the map's semantics give it).  Each says so once in the log ("[keys] X is bound to Shift Up in the
+ * game: drift mode stays off it").  The page's controls hear it through the status "keys" (status_web.c's block): a
+ * bit for each of PAGE_KEYS, in its order, set while the game has that key.
  * The player may give ours other keys (the start page's Controls, Site: settings.ini key_drift ..., NFSU2_KEY_DRIFT
  * ...: dikbd_site_key).  The page offers none the game has a control on by default; one set by hand in the file is
  * left to the game the same way when its default is one of the game's live controls (not the debug camera's). */
@@ -332,8 +327,8 @@ static const struct { const char *code; uint8_t dik; } k_codes[] = {
     {"F15",0x66},{"NumpadDivide",0xB5},{"Pause",0xC5},{"Home",0xC7},{"PageUp",0xC9},{"End",0xCF},{"PageDown",0xD1},
     {"Insert",0xD2},{"Delete",0xD3},
 };
-/* drift.c, showoff.c, horn.c, page_keys: the key the variable env (NFSU2_KEY_DRIFT ...) gives one of ours: its DIK, 0
- * for off; unset, or a name it does not know (said once), dflt */
+/* drift.c, showoff.c, horn.c, lightkey.c, page_keys: the key the variable env (NFSU2_KEY_DRIFT ...) gives one of ours:
+ * its DIK, 0 for off; unset, or a name it does not know (said once), dflt */
 unsigned dikbd_site_key(const char *env, unsigned dflt){
     const char *v = getenv(env);
     if (!v || !*v) return dflt;

@@ -23,11 +23,13 @@ const K = await import('data:text/javascript;base64,' + Buffer.from(await build(
 
 test('the keys and buttons from the environment', () => {
   K.applySiteKeys({});
-  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', null, 'KeyI', 'KeyF', 'F12', 'F9', 'F7', 'F8']);
+  assert.deepEqual(K.OURS.map(o => K.siteKey(o.id)), ['KeyX', 'KeyO', 'KeyN', 'KeyG', null, 'KeyI', 'KeyF', 'F12', 'F9', 'F7', 'F8']);
   assert.deepEqual(['button_hold', 'button_horn', 'button_chat'].map(K.siteButton), ['ddown', 'ls', 'rs']);
+  assert.ok(K.SITE_KEYS.includes('key_lights'), 'the headlights\' key is one of settings.ini\'s');
   K.applySiteKeys({ NFSU2_KEY_DRIFT: 'KeyZ', NFSU2_KEY_HORN: 'off', NFSU2_KEY_MENU: 'off', NFSU2_KEY_PHOTO: 'Nonsense',
-    NFSU2_BUTTON_HOLD: 'dup', NFSU2_BUTTON_HORN: 'off', NFSU2_BUTTON_CHAT: 'ls' });
+    NFSU2_KEY_LIGHTS: 'Digit6', NFSU2_BUTTON_HOLD: 'dup', NFSU2_BUTTON_HORN: 'off', NFSU2_BUTTON_CHAT: 'ls' });
   assert.equal(K.siteKey('drift'), 'KeyZ');
+  assert.equal(K.siteKey('lights'), 'Digit6');
   assert.equal(K.siteKey('horn'), null, 'off');
   assert.equal(K.siteKey('menu'), 'F9', 'the menu is never off');
   assert.equal(K.siteKey('photo'), 'F12', 'a name it does not know: the default');
@@ -51,6 +53,12 @@ test('what may be picked', () => {
   assert.equal(K.refusal('drift', 'KeyX'), '', 'its own key');
   assert.match(K.refusal('drift', 'KeyW'), /W is one of the game's keys/);
   assert.match(K.refusal('drift', 'KeyG'), /one of the game's keys/, 'the debug camera\'s too');
+  assert.equal(K.refusal('lights', 'KeyG'), '', 'the headlights\' own G (the debug camera\'s)');
+  assert.equal(K.refusal('lights', 'Digit6'), '');
+  assert.match(K.refusal('lights', 'KeyL'), /L is one of the game's keys/);
+  assert.match(K.refusal('lights', 'KeyX'), /X is already Drift mode/);
+  assert.match(K.refusal('lights', 'Digit3'), /quick chat's/);
+  assert.equal(K.refusal('lights', 'F6'), '', 'a driving key may be an F key');
   assert.match(K.refusal('horn', 'Digit2'), /quick chat's/);
   assert.match(K.refusal('horn', 'F5'), /can't be used/);
   assert.match(K.refusal('drift', 'KeyO'), /O is already Trunk, hood, doors/);
@@ -81,7 +89,8 @@ test('the Site tab\'s rows', async () => {
     await p.addScriptTag({ content: await build('iife') });
     await p.evaluate(() => {
       const w = /** @type {any} */ (window);
-      w.file = {}; w.reg = 's DIMap.{X}.53.14=81000438 00000006 00002104\n';   // Nitrous on F
+      w.file = {}; w.reg = 's DIMap.{X}.53.14=81000438 00000006 00002104\n'     // Nitrous on F
+        + 's DIMap.{X}.53.8=8100042a 00000007 00002204\n';                      // Shift Up on G
       w.pads = [];
       navigator.getGamepads = () => w.pads;
       w.deps = { set: (k, v) => { if (v === null) delete w.file[k]; else w.file[k] = v; }, current: k => w.file[k] ?? '',
@@ -95,6 +104,9 @@ test('the Site tab\'s rows', async () => {
     assert.deepEqual(await row('drift'), { caps: ['X', 'D-pad ↓'], state: '' });
     assert.deepEqual(await row('chat'), { caps: ['1–4', 'RS'], state: '' });
     assert.match((await row('friend')).state, /One of the game's controls is on F/, 'the game has F');
+    const lights = await row('lights');
+    assert.deepEqual(lights.caps, ['G'], 'the headlights: a key, no button (the look\'s stick up)');
+    assert.match(lights.state, /One of the game's controls is on G/, 'the game has G');
     // a key: the next press
     await p.click('#box [data-our="drift"] dt > button >> nth=0');
     assert.match((await row('drift')).caps[0], /Press a key/);

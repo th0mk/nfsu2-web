@@ -185,12 +185,13 @@ export const KEYS: readonly KeyDef[] = [
   { key: 'roam_map_max', env: 'NFSU2_ROAM_MAP_MAX', kind: 'int', vals: '0..4096', ic: true, scope: 'web', device: true },
   // our own controls beside the game's (sitekeys.ts): each one's key and controller button, kept by this device (its
   // keyboard and controller).  The runtime reads those it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode, the
-  // show-off, the horn; and Message a friend's and Add friend's, whose clashes with the game's controls it tells the
-  // page; dinput_pad.c: the buttons), the page the rest.  Not in bundle.m's table: the Mac app passes them on as
-  // NFSU2_KEY_* and NFSU2_BUTTON_* all the same
+  // show-off, the horn, the headlights; and Message a friend's and Add friend's, whose clashes with the game's controls
+  // it tells the page; dinput_pad.c: the buttons), the page the rest.  Not in bundle.m's table: the Mac app passes them
+  // on as NFSU2_KEY_* and NFSU2_BUTTON_* all the same
   { key: 'key_drift', env: 'NFSU2_KEY_DRIFT', kind: 'key', scope: 'web', device: true },
   { key: 'key_showoff', env: 'NFSU2_KEY_SHOWOFF', kind: 'key', scope: 'web', device: true },
   { key: 'key_horn', env: 'NFSU2_KEY_HORN', kind: 'key', scope: 'web', device: true },
+  { key: 'key_lights', env: 'NFSU2_KEY_LIGHTS', kind: 'key', scope: 'web', device: true },
   { key: 'key_message', env: 'NFSU2_KEY_MESSAGE', kind: 'key', scope: 'web', device: true },
   { key: 'key_friend', env: 'NFSU2_KEY_FRIEND', kind: 'key', scope: 'web', device: true },
   { key: 'key_photo', env: 'NFSU2_KEY_PHOTO', kind: 'key', scope: 'web', device: true },
@@ -413,16 +414,18 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # The keys of this site's own controls, beside the game's (the start page's
 # Controls, Site, sets them by a press): the browser's name of a key (KeyX,
 # Digit5, F6, Numpad7, Backquote ...) or off.  Drift mode and the trunk,
-# hood and doors (free roam), the horn (with other players), Message a
-# friend and Add friend (free roam), photo mode, the page's menu (never
-# off), the next song and the frame-rate counter.  A key one of the game's
-# controls is on (its Options, Controls) stays the game's.
-# [NFSU2_KEY_DRIFT, NFSU2_KEY_SHOWOFF, NFSU2_KEY_HORN, NFSU2_KEY_MESSAGE,
-# NFSU2_KEY_FRIEND, NFSU2_KEY_PHOTO, NFSU2_KEY_MENU, NFSU2_KEY_SONG,
-# NFSU2_KEY_FPS]
+# hood and doors (free roam), the horn (with other players), the
+# headlights (a tap off or on, held high beam), Message a friend and Add
+# friend (free roam), photo mode, the page's menu (never off), the next
+# song and the frame-rate counter.  A key one of the game's controls is on
+# (its Options, Controls) stays the game's.
+# [NFSU2_KEY_DRIFT, NFSU2_KEY_SHOWOFF, NFSU2_KEY_HORN, NFSU2_KEY_LIGHTS,
+# NFSU2_KEY_MESSAGE, NFSU2_KEY_FRIEND, NFSU2_KEY_PHOTO, NFSU2_KEY_MENU,
+# NFSU2_KEY_SONG, NFSU2_KEY_FPS]
 #key_drift = KeyX
 #key_showoff = KeyO
 #key_horn = KeyN
+#key_lights = KeyG
 #key_message = KeyI
 #key_friend = KeyF
 #key_photo = F12

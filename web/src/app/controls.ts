@@ -184,6 +184,7 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
     pad.innerHTML = padSvg() + `<div class="pad-foot">
     <p class="hint">${menus}</p>
     ${hold === 'off' ? '' : `<p class="hint">${esc(t('Parked in free roam: hold {button} to open trunk, then hood, then doors.', { button: buttonName(hold) }))}</p>`}
+    <p class="hint">${esc(t('Right stick up: headlights off or on; hold it for high beam.'))}</p>
     <div class="seg" role="radiogroup" aria-label="${esc(t('Button names'))}">
       <label class="opt"><input type="radio" name="${id}-fam" value="xb">Xbox</label>
       <label class="opt"><input type="radio" name="${id}-fam" value="ps">PlayStation</label>

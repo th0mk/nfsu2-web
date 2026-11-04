@@ -1,10 +1,11 @@
-// This site's own controls beside the game's: drift mode, the trunk, hood and doors, the horn, quick chat, Message a
-// friend, Add friend, photo mode, the page's menu, the next song and the frame-rate counter.  Each has a key and,
-// where one goes, a controller button, which the player sets on the start page (Controls, Site) by pressing it, or
-// turns off.  settings.ini keeps them (key_*, button_*: settings.ts, this device's); the runtime reads the ones it
-// handles (runtime/dinput_kbd.c dikbd_site_key: drift mode, the trunk, the horn, and Message a friend's and Add
-// friend's, whose clashes it tells the page: gamekeys.ts; dinput_pad.c the buttons), the page the others at Play
-// (applySiteKeys with the game's environment) and on the start page as they change.
+// This site's own controls beside the game's: drift mode, the trunk, hood and doors, the horn, the headlights, quick
+// chat, Message a friend, Add friend, photo mode, the page's menu, the next song and the frame-rate counter.  Each has
+// a key and, where one goes, a controller button, which the player sets on the start page (Controls, Site) by pressing
+// it, or turns off.  settings.ini keeps them (key_*, button_*: settings.ts, this device's); the runtime reads the ones
+// it handles (runtime/dinput_kbd.c dikbd_site_key: drift mode, the trunk, the horn, the headlights, and Message a
+// friend's and Add friend's, whose clashes it tells the page: gamekeys.ts; dinput_pad.c the buttons), the page the
+// others at Play (applySiteKeys with the game's environment) and on the start page as they change.  (The headlights'
+// controller has no button to set: the look's stick pushed straight up, runtime/lightkey.c.)
 //   offered   a key the game has one of its controls on by default (its driving map's keys, its menus' for the ones
 //             that work in the menus too), the browser's F5 and F11, quick chat's 1 to 4 and another of ours are
 //             refused; the ones that work in the menus too (the page's menu, photo mode, the next song, the counter)
@@ -17,7 +18,7 @@
 import { CODE_OF_DIK, CODES } from '../input/keymap';
 import { N, t } from './i18n';
 
-export type OurId = 'drift' | 'showoff' | 'horn' | 'chat' | 'message' | 'friend' | 'photo' | 'menu' | 'song' | 'fps';
+export type OurId = 'drift' | 'showoff' | 'horn' | 'lights' | 'chat' | 'message' | 'friend' | 'photo' | 'menu' | 'song' | 'fps';
 export type ButtonKey = 'button_hold' | 'button_horn' | 'button_chat';
 
 export interface Our {
@@ -37,12 +38,13 @@ export interface Our {
   button?: ButtonKey;
 }
 
-/** ours, in the rows' order (a G for the headlights would be one more line here, and one in settings.ts) */
+/** ours, in the rows' order (each one's settings.ini key is in settings.ts too) */
 export const OURS: readonly Our[] = [
   { id: 'drift', name: N('Drift mode'), line: N('Drift mode (in free roam)'), key: 'key_drift', def: 'KeyX', button: 'button_hold' },
   { id: 'showoff', name: N('Trunk, hood, doors'), line: N('Open trunk, then hood, then doors (parked, in free roam)'), key: 'key_showoff', def: 'KeyO',
     button: 'button_hold' },
   { id: 'horn', name: N('Horn'), line: N('Horn (with other players)'), key: 'key_horn', def: 'KeyN', button: 'button_horn' },
+  { id: 'lights', name: N('Headlights'), line: N('Headlights off or on; hold for high beam'), key: 'key_lights', def: 'KeyG' },
   { id: 'chat', name: N('Quick chat'), line: N('Quick chat (with other players): group, then phrase'), fixed: '1–4', button: 'button_chat' },
   { id: 'message', name: N('Message a friend'), line: N('Message a friend (in free roam)'), key: 'key_message', def: 'KeyI' },
   { id: 'friend', name: N('Add friend'), line: N('Add a friend (front bumpers touching)'), key: 'key_friend', def: 'KeyF' },
@@ -161,7 +163,7 @@ const CHAT_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2',
 
 /** why our control cannot have this key ('' it can); others: the keys the other rows have now */
 export function refusal(id: OurId, code: string, others: (id: OurId) => string | null = siteKey): string {
-  // (its own default always may: a G for the headlights would be one of the game's debug camera's)
+  // (its own default always may: the headlights' G is one of the game's debug camera's)
   const o = OUR[id], k = keyName(code), own = code === o.def;
   if (!CODES[code] || NEVER.includes(code)) return t('{key} can\'t be used here.', { key: k });
   if (CHAT_KEYS.includes(code)) return t('{key} is quick chat\'s.', { key: k });

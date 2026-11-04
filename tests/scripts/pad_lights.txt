@@ -1,0 +1,60 @@
+# The headlights on the controller (runtime/lightkey.c): the look's stick straight up (dinput_pad.c pad_look_stick).
+# In a Quick Race: the right stick flicked up and back (off), held up (high beam, then off again), flicked (on); up and
+# to the right (a look round, 45 degrees off): nothing.  Then the steering on the right stick (Rx, as the game's
+# Joypad page binds it, pad_look_bound.txt; poked here: channel 1 0x874fb0 +0x344, the steering axis): the
+# right stick held up does nothing (the game steers with it) and the left stick's up is the lights; the steering
+# back on X.  With NFSU2_PAD_LOG=1 NFSU2_LIGHTS_LOG=1: "[lights] ... the right stick up: lights off", "held: high
+# beam", "let go: lights off", "the left stick up"; each step's expect: the car's +0x93D (0 while lightkey.c has the
+# lights off, after the world's step).  The hold is wall time (0.2 s).
+0     pad connect
++0    tappaduntil START MC_Background.fng 120 4000
++200  tappad A                                       # no profile
++0    waitfng GarageMain.fng 3000
++300  tappaduntil A UI_QRModeSelect.fng 150 3000
++200  tappaduntil A UI_QRTrackSelect.fng 150 1500
++200  tappaduntil A UI_QRModeOptions.fng 150 1500
++200  tappaduntil A UI_QRCarSelect.fng 150 1500
++200  tappaduntil A PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++600  lights report                                  # on
++0    log --- the right stick flicked up: off ---
++0    axis RY -1
++150ms axis RY 0
++400ms lights report
++0    expect b:[[0x8900ac]+4]+0x93d == 0       # the car's headlights off
++0    log --- held up: high beam, then off again ---
++0    axis RY -1
++800ms lights report
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on (high beam)
++0    axis RY 0
++400ms lights report
++0    expect b:[[0x8900ac]+4]+0x93d == 0       # the car's headlights off again
++0    log --- flicked: on ---
++0    axis RY -1
++150ms axis RY 0
++400ms lights report
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on
++0    log --- up and to the right: a look, not the lights ---
++0    axis RX 0.7
++0    axis RY -0.7
++800ms axis RX 0
++0    axis RY 0
++400ms lights report                                 # still on, taps 2, holds 1
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on
++0    log --- the steering on the right stick: its up is not the lights ---
++0    poke 0x8752f4 12
++300ms axis RY -1
++800ms axis RY 0
++400ms lights report                                 # still on, holds 1
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on
++0    log --- the left stick up is: flicked, off ---
++0    axis LY -1
++150ms axis LY 0
++400ms lights report                                 # off, taps 3
++0    expect b:[[0x8900ac]+4]+0x93d == 0       # the car's headlights off
++0    axis LY -1
++150ms axis LY 0
++400ms lights report                                 # on, taps 4
++0    expect b:[[0x8900ac]+4]+0x93d == 1       # the car's headlights on
++0    poke 0x8752f4 0
++300ms quit

@@ -1510,6 +1510,19 @@ static void t_statex(void){
     e = rc_decode(eb, en, &d);
     CHECK(e == RC_OK && !d.u.snap.s[0].open, "...and none decoded (e %d)", e);
     s->open = 0;
+    /* the high beam (lightkey.c): RC_OPEN_HIBEAM in the same byte, sent as the open parts are (a core before it reads
+     * the byte through RC_OPEN_ALL: nothing open); lights off is the state's own bit (RC_BIT_DARK) */
+    uint8_t obits = s->bits;
+    s->hibeam = 1; s->bits = RC_BIT_DARK;
+    en = rc_encode(&m, eb, sizeof eb);
+    CHECK(en == 16 + 6 + 52 + 30 + 4 && ex[29] == RC_OPEN_HIBEAM && !(ex[29] & RC_OPEN_ALL),
+          "high beam: the longest form, its bit in the open parts' byte (%d bytes)", en);
+    e = rc_decode(eb, en, &d);
+    CHECK(e == RC_OK && d.u.snap.s[0].hibeam && !d.u.snap.s[0].open && d.u.snap.s[0].bits == RC_BIT_DARK,
+          "...decode: high beam, nothing open, the lights-off bit kept (e %d)", e);
+    s->hibeam = 0; s->bits = obits;
+    en = rc_encode(&m, eb, sizeof eb); e = rc_decode(eb, en, &d);
+    CHECK(en == 16 + 6 + 52 + 12 + 4 && e == RC_OK && !d.u.snap.s[0].hibeam, "no high beam: the short form again (%d bytes)", en);
     /* a newer core's longer extension: its own fields skipped */
     uint8_t lb[RC_MAX_DGRAM]; memcpy(lb, b, (size_t)n - 4);
     lb[22 + 52] = RC_STATEX_SLIP - 1 + 3; lb[n - 4] = 0xAA; lb[n - 3] = 0xBB; lb[n - 2] = 0xCC;
@@ -1542,7 +1555,7 @@ static void t_statex(void){
             rc_state st; memset(&st, 0, sizeof st); st.q[3] = 1; st.t_us = (uint32_t)g_now; st.p[0] = (float)i;
             st.ext = 1; st.nos = 60; st.hyd = 0x36; st.thumps = 3; for (int w = 0; w < 4; w++) st.wz[w] = 0.1f * (float)(w + 1);
             st.slip[6] = 12.f; st.slip[7] = -3.5f; st.surf[3] = 15;
-            st.eng = 4000; st.eng_acc = 255; st.eng_dcl = 51; st.eng_base = 102; st.open = RC_OPEN_LDOOR | RC_OPEN_RDOOR;
+            st.eng = 4000; st.eng_acc = 255; st.eng_dcl = 51; st.eng_base = 102; st.open = RC_OPEN_LDOOR | RC_OPEN_RDOOR; st.hibeam = 1;
             rc_set_status(&g_n[i], RC_ST_ROAM); rc_push_state(&g_n[i], &st, g_now);
         }
         net_run(g_now + 10000, 3);
@@ -1563,9 +1576,9 @@ static void t_statex(void){
           "...and the wheels' slip and surfaces (%d %g %g %u)", P.slipx, (double)P.slip[6], (double)P.slip[7], P.surf[3]);
     CHECK(ok1 && P.eng == 4000.f && P.eng_acc == 1.f && fabsf(P.eng_dcl - 0.2f) < 1e-6f && fabsf(P.eng_base - 0.4f) < 1e-6f,
           "...and its engine (%g %g %g %g)", (double)P.eng, (double)P.eng_acc, (double)P.eng_dcl, (double)P.eng_base);
-    CHECK(ok1 && P.open == (RC_OPEN_LDOOR | RC_OPEN_RDOOR), "...and its open parts (%x)", P.open);
+    CHECK(ok1 && P.open == (RC_OPEN_LDOOR | RC_OPEN_RDOOR) && P.hibeam, "...and its open parts (%x) and high beam", P.open);
     int ok2 = k2 >= 0 && rc_interp_peek(&g_n[2].peer[k2].mo, g_n[2].peer[k2].mo.t[g_n[2].peer[k2].mo.n - 1], 250000, &P);
-    CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng && !P.open, "the older peer's pose has none");
+    CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng && !P.open && !P.hibeam, "the older peer's pose has none");
 }
 
 /* ---- 4f. crews: the HELLO's tail to the hub, and without a hub to a peer that reads them; the hub's marks ---- */

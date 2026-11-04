@@ -233,7 +233,7 @@ static void key_event(unsigned dik, int down){
 uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- script ----------------------------------------------------------- */
 enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_POKE, C_WAITFNG, C_TAPUNTIL,
-       C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE,
+       C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE, C_LIGHTS,
        C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL, C_LOCALPAD,
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
@@ -384,6 +384,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "texrep")) { e.cmd = C_TEXREP; e.n = !strcasecmp(a1, "off") ? 0 : !strcasecmp(a1, "on") ? 1 : -1; }
         else if (!strcasecmp(cmd, "headlights")) { e.cmd = C_HEADLIGHTS; snprintf(e.text, sizeof e.text, "%s", a1); }
         else if (!strcasecmp(cmd, "fovscale")) { e.cmd = C_FOVSCALE; snprintf(e.text, sizeof e.text, "%s", a1); }
+        else if (!strcasecmp(cmd, "lights")) { e.cmd = C_LIGHTS; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "photo")) { e.cmd = C_PHOTO; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "waitfng")){ e.cmd = C_WAITFNG;
             snprintf(e.text, sizeof e.text, "%s", a1); e.n = a2[0] ? atol(a2) : 0; }
@@ -735,6 +736,10 @@ static int fire(CPU *c, Ev *e, double tms){
     case C_PHOTO: {        /* "photo ...": photo mode as the page drives it (photo.c photo_script) */
         int photo_script(const char *s);
         fprintf(stderr, "[autotest] f=%ld t=%.0fms photo %s%s\n", g_frame, tms, e->text, photo_script(e->text) ? "" : " (not known)");
+        break; }
+    case C_LIGHTS: {       /* "lights ...": the light key's state and high beam's look (lightkey.c lightkey_script) */
+        int lightkey_script(const char *s);
+        fprintf(stderr, "[autotest] f=%ld t=%.0fms lights %s%s\n", g_frame, tms, e->text, lightkey_script(e->text) ? "" : " (not known)");
         break; }
     case C_HEADLIGHTS: {   /* "headlights MODE": the other cars' headlights (headlights.c), A/B in one run */
         int headlights_set(const char *mode);

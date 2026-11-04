@@ -279,7 +279,7 @@ static int8_t q_slip(float f){ int32_t v = f_round(f_clamp(f, -1000.f, 1000.f) /
 #define ENG_MAX 20000u
 static void put_statex(rc_w *w, const rc_state *s){
     if (!s->ext){ rc_put8(w, 0); return; }
-    int slides = 0, eng = s->eng != 0, open = (s->open & RC_OPEN_ALL) != 0;
+    int slides = 0, eng = s->eng != 0, open = (s->open & RC_OPEN_ALL) != 0 || s->hibeam;
     for (int i = 0; i < 8; i++) slides |= q_slip(s->slip[i]) != 0;
     if (open) slides = eng = 1;
     rc_put8(w, (slides ? RC_STATEX_SLIP : RC_STATEX_HYD) + (eng ? RC_STATEX_ENG : 0) + (open ? RC_STATEX_OPEN : 0) - 1);
@@ -290,7 +290,7 @@ static void put_statex(rc_w *w, const rc_state *s){
         rc_put8(w, (uint8_t)q_slip(s->slip[2 * i])); rc_put8(w, (uint8_t)q_slip(s->slip[2 * i + 1])); rc_put8(w, s->surf[i]);
     }
     if (eng){ rc_put16(w, s->eng < ENG_MAX ? s->eng : ENG_MAX); rc_put8(w, s->eng_acc); rc_put8(w, s->eng_dcl); rc_put8(w, s->eng_base); }
-    if (open) rc_put8(w, s->open & RC_OPEN_ALL);
+    if (open) rc_put8(w, (s->open & RC_OPEN_ALL) | (s->hibeam ? RC_OPEN_HIBEAM : 0u));
 }
 static int get_statex(rc_r *r, rc_state *s){
     uint32_t n = rc_get8(r);
@@ -316,7 +316,8 @@ static int get_statex(rc_r *r, rc_state *s){
         k += RC_STATEX_ENG;
     }
     if (k == RC_STATEX_FULL - 1 && n >= k + RC_STATEX_OPEN){        /* the open parts, after the longest form */
-        s->open = (uint8_t)(rc_get8(r) & RC_OPEN_ALL);
+        uint32_t b = rc_get8(r);
+        s->open = (uint8_t)(b & RC_OPEN_ALL); s->hibeam = (b & RC_OPEN_HIBEAM) != 0;
         k += RC_STATEX_OPEN;
     }
     r->n += n - k;                                                  /* a newer core's fields */
@@ -325,7 +326,7 @@ static int get_statex(rc_r *r, rc_state *s){
 }
 static int get_state(rc_r *r, rc_state *s){
     s->ext = 0; s->nos = 0; s->hyd = 0; s->thumps = 0; s->slipx = 0; s->eng = 0; s->eng_acc = 0; s->eng_dcl = 0; s->eng_base = 0;
-    s->open = 0;
+    s->open = 0; s->hibeam = 0;
     for (int i = 0; i < 4; i++){ s->wz[i] = 0; s->surf[i] = 0; }
     for (int i = 0; i < 8; i++) s->slip[i] = 0;
     s->t_us = rc_get32(r);
@@ -827,7 +828,7 @@ static void lerp_rest(const rc_state *a, const rc_state *b, float u, rc_pose *o)
     o->speed = a->speed + u * (b->speed - a->speed);
     const rc_state *n = u < 0.5f ? a : b;
     o->gear = n->gear; o->bits = n->bits;
-    o->ext = n->ext; o->nos = n->nos; o->hyd = n->hyd; o->thumps = n->thumps; o->open = n->open;
+    o->ext = n->ext; o->nos = n->nos; o->hyd = n->hyd; o->thumps = n->thumps; o->open = n->open; o->hibeam = n->hibeam;
     for (int i = 0; i < 4; i++) o->wz[i] = a->ext && b->ext ? a->wz[i] + u * (b->wz[i] - a->wz[i]) : n->wz[i];
     o->slipx = n->slipx;
     for (int i = 0; i < 4; i++) o->surf[i] = n->surf[i];
@@ -844,7 +845,7 @@ static void from_state(const rc_state *s, rc_pose *o){
     for (int i = 0; i < 4; i++){ o->q[i] = s->q[i]; o->wz[i] = s->wz[i]; }
     o->steer = s->steer; o->throttle = s->throttle; o->brake = s->brake; o->rpm = s->rpm; o->speed = s->speed;
     o->gear = s->gear; o->bits = s->bits; o->ext = s->ext; o->nos = s->nos; o->hyd = s->hyd; o->thumps = s->thumps;
-    o->open = s->open;
+    o->open = s->open; o->hibeam = s->hibeam;
     o->slipx = s->slipx;
     for (int i = 0; i < 4; i++) o->surf[i] = s->surf[i];
     for (int i = 0; i < 8; i++) o->slip[i] = s->slip[i];

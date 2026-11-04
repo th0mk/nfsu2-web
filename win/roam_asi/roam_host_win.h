@@ -59,6 +59,9 @@ uint64_t    roam_win_ns(void);
  * overrides of the cars' drawing) */
 #define rh_showoff_mine() ((uint8_t)0)
 #define rh_showoff_car(c, k, car, open) ((void)(c), (void)(k), (void)(car), (void)(open))
+/* no light key here either: the companion's lights are the game's, and friends' cars show theirs */
+#define rh_lights_mine() 0
+#define rh_lights_car(k, car, st) ((void)(k), (void)(car), (void)(st))
 /* the game's "No Profile" in English only (the port also knows the other
  * languages' names from the game's text, language.c) */
 #define rh_no_profile(name) (!strcasecmp((name), "No Profile"))

@@ -58,6 +58,9 @@
 #define RC_OPEN_LDOOR    0x04
 #define RC_OPEN_RDOOR    0x08
 #define RC_OPEN_ALL      0x0f
+/* ...and in the same byte (a core before it reads only RC_OPEN_ALL): the car's headlights are on high beam (lightkey.c),
+ * sent as the open parts are, in the longest form */
+#define RC_OPEN_HIBEAM   0x10
 #define RC_SLIP_STEP     0.5f       /* a wheel's slip on the wire: int8 steps of this (m/s), up to 63.5 */
 #define RC_BUF_STATES    32         /* jitter buffer per peer */
 #define RC_OFFWIN        64         /* clock-offset samples per peer */
@@ -186,7 +189,7 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
 #define RC_BIT_REVERSE   0x02
 #define RC_BIT_NOS       0x04       /* nitrous is on (the extension's nos says how much is left) */
 #define RC_BIT_HANDBRAKE 0x08
-#define RC_BIT_LIGHTS    0x10
+#define RC_BIT_DARK      0x10       /* the car's headlights are off (lightkey.c); older builds ignore it */
 #define RC_BIT_HORN      0x20       /* the horn sounds (horn.c); older builds ignore it */
 #define RC_BIT_PASS      0x40       /* drive through this car: its player's game lets every car through it now (near
                                        one of their open events, their cars are ghosts: roam_game.c soft_me); older
@@ -222,7 +225,7 @@ enum { RC_PLAT_MAC = 1, RC_PLAT_WIN = 2, RC_PLAT_TOOL = 3 };
  * after the engine of the longest form, and is skipped.  The first such:
  * (only while one of the car's parts is open: its hood, trunk or doors,
  * showoff.c) the longest form, its slip and engine 0 where they have none,
- * then the open parts (RC_STATEX_OPEN: RC_OPEN_* bits), 30 bytes; a core
+ * then the open parts (RC_STATEX_OPEN: RC_OPEN_* bits, and the high beam: RC_OPEN_HIBEAM), 30 bytes; a core
  * before it reads the 29 and skips the byte, so it shows the car closed.
  * Only to a peer whose HELLO carries the flag: an older core counts the
  * longer SNAP as bad */
@@ -316,6 +319,7 @@ typedef struct {
     uint8_t  eng_acc, eng_dcl, eng_base;   /* ...its voices' volumes, 255 = full: the pulling and the letting-off
                                               recordings (GIN) and the engine model under them (the AEMS bank) */
     uint8_t  open;                 /* the car's open parts (RC_OPEN_*: hood, trunk, doors), 0: none */
+    uint8_t  hibeam;               /* its headlights are on high beam (RC_OPEN_HIBEAM, in the open parts' byte) */
 } rc_state;
 
 typedef struct {
@@ -449,7 +453,7 @@ typedef struct {
     uint8_t slipx, surf[4];        /* as rc_state: slip 0 when no wheel slides */
     float   slip[8];
     float   eng, eng_acc, eng_dcl, eng_base;   /* as rc_state (the volumes 0 .. 1): eng 0 when the sender sent no engine */
-    uint8_t open;                  /* as rc_state */
+    uint8_t open, hibeam;          /* as rc_state */
     int     mode;                  /* RC_MODE_* */
 } rc_pose;
 enum { RC_MODE_NONE = 0, RC_MODE_INTERP = 1, RC_MODE_EXTRAP = 2, RC_MODE_HOLD = 3 };
