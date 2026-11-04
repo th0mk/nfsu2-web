@@ -254,11 +254,23 @@ export class Faq {
   /** the channel the FAQ is posted in on this server, or null */
   channelIn(guild) { return this.saved.posts.map(p => guild?.channels.cache.get(p.channel)).find(Boolean) ?? null; }
 
-  /** a question and its answer in this language: as it is in English, the kept translation, or one made now */
-  async localized(x, lang) {
-    if (lang === 'en' || !this.anthropic) return x;
-    const c = await this.cached(x, lang);
-    return c.kept ?? this.translated(x, lang, c);
+  /** a line made from this question's answer (help.mjs's reply) in this language, with the page's labels as the page
+   *  names them there; one short call each time (each line is new), and the English line when it fails */
+  async lineIn(x, line, lang) {
+    if (lang === 'en' || !this.anthropic) return line;
+    try {
+      const terms = await this.terms(lang, x);
+      const glossary = terms.length ? `<glossary>\n${terms.map(([k, v]) => `${k} = ${v}`).join('\n')}\n</glossary>\n` : '';
+      const res = await this.anthropic.messages.create({
+        model: MODEL, max_tokens: 1000, system: SYSTEM,
+        messages: [{ role: 'user', content: `Into: ${nameOf(lang)} (${lang})\n${glossary}${JSON.stringify({ q: x.q, a: line })}` }],
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: OUT } },
+      });
+      if (res.stop_reason !== 'end_turn') throw new Error(`the model stopped: ${res.stop_reason}`);
+      const a = JSON.parse(res.content.filter(b => b.type === 'text').map(b => b.text).join('')).a?.replace(/\s+/g, ' ').trim();
+      if (!a) throw new Error('an empty translation');
+      return a;
+    } catch (e) { console.error(`[faq] a line of ${x.id} into ${lang}: ${e.message}`); return line; }
   }
 
   /** the kept translation of a question into this language (null when there is none, or it is out of date), and what

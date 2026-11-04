@@ -40,10 +40,10 @@ and it says something only when it is worth it:
   post and Discord's count of the thread's messages and people (`votes`, `messages`, `members` in `state/threads.json`;
   the model doesn't see them).
 
-- **in #help** (a text channel named `help`): a question that one of the FAQ's answers settles gets that answer
-  within seconds, as a reply that pings the asker, in their language (`faq.md`'s text, translated once and kept, as
-  for the FAQ's buttons; never words of the model's own). The asker's lines of 8 seconds make one question; one Haiku
-  call reads them in the chat around them and names the answer, or none when unsure. Nothing for staff, chat, answers
+- **in #help** (a text channel named `help`): a question that one of the FAQ's answers settles gets a reply within
+  seconds that pings the asker: one line in their language, made only of what that answer says (the page's labels
+  as the page names them, as for the FAQ's buttons). The asker's lines of 8 seconds make one question; one Haiku
+  call reads them in the chat around them and names the answer and writes the line, or none when unsure. Nothing for staff, chat, answers
   to others, or someone already answered; the same answer to a person once a day, 5 a person a day, 60 an hour.
   Everything else in #help is as in the general channels below (it is one of them), without their fixed answers.
 

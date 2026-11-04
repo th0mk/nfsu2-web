@@ -18,7 +18,7 @@ known or decided. The code is public: https://github.com/th0mk/nfsu2-web.
   Controls; Other), not in the game's Options. Players who can't find one are looking in the game: say "on the start
   page", and that it applies at the next Play (F9, Quit game first).
 - The FAQ's answers come in the reader's Discord language (Discord's own Settings, Language), and in #help the bot
-  replies with the FAQ's answer when a question asks exactly that.
+  replies with one line from the FAQ's answer when a question asks exactly that.
 - Multiplayer: free roam with everyone on the server (Online, Free roam with others), the game's Online mode (a name,
   no EA account) and races from free roam or the Online menus, up to 6 players. Crews, rooms, ghost mode (off by
   default: cars collide; F9 switches it), quick chat (1-4, then 1-4; a controller's right stick pressed in, then
