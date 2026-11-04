@@ -256,6 +256,7 @@ pub async fn run(o: Options, cores: usize) {
     // the switch's players, every 5 minutes while any are on
     {
         let lan = lan.clone();
+        let roam = app.roam.clone();
         tokio::spawn(async move {
             let mut shown = false;
             let mut thinned = 0;
@@ -292,6 +293,10 @@ pub async fn run(o: Options, cores: usize) {
                     b.thinning,
                     b.thinned - thinned
                 ));
+                // co-op free roam's second players (nfsu2-roam `coop_seats`): one more endpoint on their page's place each
+                if let Some(n) = roam.as_ref().map(|r| r.coop_seats()).filter(|&n| n > 0) {
+                    log::line(&format!("[players] of them in free roam, {n} with a second player beside them (co-op)"));
+                }
                 // LAN broadcasts (server.dll's adverts) not sent to pages with LAN play open but no socket on their port
                 // (nfsu2-lan Peer::takes_udp)
                 let skipped = b.bcast_skipped - was.bcast_skipped;

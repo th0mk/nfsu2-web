@@ -27,6 +27,12 @@ use crate::{PeerEntry, ROAM_HUB_VIP, RoamOptions};
 /// no slot, no place in a room
 const NONE: u32 = u32::MAX;
 
+/// The most slots, and so the most players (`RoamOptions::max_players` at most): a world map's answer names each player
+/// by its slot, under wire::MAPD_PARKED (a key's bit past it says it is parked, to the game's map that asks so; a slot
+/// with that bit would be read as another one's, parked).  The slots of players gone wait for the next purge, an
+/// eighth of the players' worth at most (`drop_slots`): past SLOTS_MAX a new player has them purged first (`insert`).
+const SLOTS_MAX: usize = wire::MAPD_PARKED as usize;
+
 /// a race lobby a player hosts (roam_core.h RC_MSG_LOBBY, an advert to the hub): its id, the race, where it starts,
 /// its players (n, the host first), the most it takes and its state
 #[derive(Clone, Copy, Debug)]
@@ -241,6 +247,9 @@ const LOBBY_LAND_M: f64 = 30.0;
 /// of them named
 const NEAR_FRESH_MS: f64 = 2000.0;
 const NEAR_NAMED: usize = 3;
+/// a browser's second player's car this near its first one's (m) came there by the game's own hand (`beside_own`): the
+/// game puts it a car's length or two beside the first one, and a SNAP of the first is up to half a second old
+const BESIDE_M: f64 = 30.0;
 /// A player gone without its BYE (silent for gone_ms, or off the switch) keeps its cheat watch this long (ms): back on
 /// the hub in that time (a bad connection's page that stalled, or dropped and came again), it goes on with it, its
 /// counts and where its car was; its summary comes once that time is past.  A bad connection had its players gone
@@ -491,6 +500,9 @@ const GAME_NAME_MAX: usize = 24;
 struct Page {
     name: String,
     told: Vec<String>,
+    /// the names of its second player (co-op) the console was told of: the second form of its page's name or claim
+    /// (`name_check`), NAME_LINES at most
+    coop: Vec<String>,
     /// its game said its car flew (`flew`): told once
     flew: bool,
 }
@@ -549,6 +561,14 @@ struct Player {
     lobbies: bool,
     /// ...and reads the hub's crew marks (wire::HF_HUBCREW): its friends are marked in its lists even out of crews
     marks: bool,
+    /// Its HELLO says it is the second local player of its browser (wire::HF_SEAT2: co-op free roam, player 2 beside
+    /// player 1 on one screen, on a port of its own; the first is the browser's other endpoint).  Its page's keyphrase
+    /// is the first player's, so it is nobody's friend here (`friend_ids` none: no friend marks either way, no friend
+    /// linked first, not where its owner's friends find it), its world map and minimap questions go unanswered (the
+    /// browser's are the first player's: one answer state a browser), the console tells a known second player's name
+    /// apart (`name_check`), and its car may come to the first one's side without a teleport (`beside_own`).  It is
+    /// never linked with its browser's other endpoints, as no endpoint is (`prepare`).
+    seat2: bool,
     /// its crews as its last HELLO named them (wire::HF_CREW), each once, 0 after them: its crew-mates of its room are
     /// linked with it first (`crew_pairs`), and /players counts them (`crew_counts`)
     crews: [u32; wire::CREWS],
@@ -603,11 +623,12 @@ impl Block {
         Block { names, owners: Vec::new(), checked: u64::MAX }
     }
 
-    /// the keyphrases that hold its names now, when the claims changed since it last looked
+    /// the keyphrases that hold its names now, when the claims changed since it last looked (a second form's, "Bob 2",
+    /// the owner of "Bob": its co-op second player is its owner's, nfsu2-claims `holders`)
     fn owners_of(&mut self, claims: Option<&nfsu2_claims::Claims>, now: f64) {
         let Some(c) = claims.filter(|c| c.generation() != self.checked) else { return };
         self.checked = c.generation();
-        self.owners = self.names.iter().filter_map(|n| c.holder(n, now as i64)).collect();
+        self.owners = self.names.iter().flat_map(|n| c.holders(n, now as i64)).collect();
     }
 
     /// whether it blocks player p
@@ -650,9 +671,10 @@ fn friend_id(a: &str, b: &str) -> u32 {
     h.max(1)
 }
 
-/// a player's friendships (`friend_id`): of its owner with each of `friends` (theirs), none without an owner
-fn friend_ids(owner: Option<&Arc<str>>, friends: Option<&Vec<Arc<str>>>) -> Vec<u32> {
-    let (Some(o), Some(f)) = (owner, friends) else { return Vec::new() };
+/// a player's friendships (`friend_id`): of its owner with each of `friends` (theirs), none without an owner, nor for a
+/// browser's second player (`seat2`: the owner is its first one's, `Player::seat2`)
+fn friend_ids(owner: Option<&Arc<str>>, friends: Option<&Vec<Arc<str>>>, seat2: bool) -> Vec<u32> {
+    let (Some(o), Some(f), false) = (owner, friends, seat2) else { return Vec::new() };
     let mut ids: Vec<u32> = f.iter().filter(|x| ***x != **o).map(|x| friend_id(o, x)).collect();
     ids.sort_unstable();
     ids.dedup();
@@ -687,7 +709,7 @@ fn sanitize(o: RoamOptions) -> RoamOptions {
         keep: f(o.keep, d.keep),
         hold_ms: f(o.hold_ms, d.hold_ms),
         max_per_vip: n(o.max_per_vip, d.max_per_vip),
-        max_players: n(o.max_players, d.max_players),
+        max_players: n(o.max_players, d.max_players).min(SLOTS_MAX),
         exact_room: n(o.exact_room, d.exact_room),
         min_degree: n(o.min_degree, d.min_degree),
         busy_high: f(o.busy_high, d.busy_high),
@@ -762,6 +784,8 @@ struct Scratch {
     ahead: Vec<Place>,
     view: Vec<Place>,
     deg: Vec<usize>,
+    /// each place's virtual address: two places of one browser are never linked (`one_browser`)
+    vips: Vec<u32>,
     /// each place's crew links at most (`crew_cap`)
     ccap: Vec<u32>,
     mark: Vec<u32>,
@@ -890,8 +914,9 @@ pub struct Hub {
     /// the pairs of players kept apart at the last tick (`block_pairs`), as slots, the lower first, sorted: the world
     /// map and the lobby list read them between ticks
     apart: Vec<(u32, u32)>,
-    /// the endpoints of each virtual address (`max_per_vip`)
-    per_vip: HashMap<u32, u32>,
+    /// the endpoints of each virtual address, their slots in the order they came (`max_per_vip`; co-op's second player
+    /// beside its first one: `beside_own`)
+    per_vip: HashMap<u32, Vec<u32>>,
     /// the players whose last HELLO named a crew: with none, a tick does not look for crews at all
     crewed: usize,
     /// the cheat watches of players gone without a BYE, by endpoint, for WATCH_KEEP_MS (at most max_players of them)
@@ -1021,6 +1046,7 @@ impl Hub {
         if p.checked != g {
             p.checked = g;
             let was = p.impostor;
+            // (co-op's second player's "Bob 2" of a "Bob" taken away too: the names compare by their letters, a 2 none)
             let denied = self.o.deny.as_ref().is_some_and(|d| d.has(&p.name));
             p.impostor = denied || self.claims.as_ref().is_some_and(|c| !c.may_use(&p.name, p.owner.as_deref(), now as i64));
             if p.impostor && !was {
@@ -1079,6 +1105,11 @@ impl Hub {
                 p.watch.reset();
             }
         }
+        // (a world map's key names a slot under SLOTS_MAX: past it, the players gone out of the links now, and their
+        // slots taken again, rather than one more)
+        if self.free.is_empty() && self.slots.len() >= SLOTS_MAX {
+            self.purge();
+        }
         let slot = match self.free.pop() {
             Some(s) => s,
             None => {
@@ -1086,7 +1117,7 @@ impl Hub {
                 (self.slots.len() - 1) as u32
             }
         };
-        *self.per_vip.entry(p.vip).or_insert(0) += 1;
+        self.per_vip.entry(p.vip).or_default().push(slot);
         self.order.push(slot);
         self.slots[slot as usize] = Some(Player { at: (self.order.len() - 1) as u32, ..p });
         self.by_key.insert(k, slot);
@@ -1108,9 +1139,9 @@ impl Hub {
         }
         self.by_key.remove(&p.key());
         self.crewed -= (p.crews[0] != 0) as usize;
-        if let Some(n) = self.per_vip.get_mut(&p.vip) {
-            *n -= 1;
-            if *n == 0 {
+        if let Some(mine) = self.per_vip.get_mut(&p.vip) {
+            mine.retain(|&s| s != slot);
+            if mine.is_empty() {
                 self.per_vip.remove(&p.vip);
             }
         }
@@ -1207,8 +1238,8 @@ impl Hub {
             Some(s) => s,
             None => {
                 // a player starts with its HELLO (the room)
-                let Msg::Hello { status, room, name, .. } = m else { return };
-                let mine = self.per_vip.get(&from).copied().unwrap_or(0) as usize;
+                let Msg::Hello { status, room, name, seat2, .. } = m else { return };
+                let mine = self.per_vip.get(&from).map_or(0, Vec::len);
                 if mine >= self.o.max_per_vip || self.by_key.len() >= self.o.max_players {
                     self.st.refused += 1;
                     return;
@@ -1233,6 +1264,7 @@ impl Hub {
                     seen: 0.0,
                     lobbies: false,
                     marks: false,
+                    seat2,
                     crews: [0; wire::CREWS],
                     lobby: None,
                     join: None,
@@ -1243,7 +1275,7 @@ impl Hub {
                     watch: Watch::new((self.now)()),
                     at: 0,
                     owner: owner.cloned(),
-                    friend_ids: friend_ids(owner, self.friends.get(&from)),
+                    friend_ids: friend_ids(owner, self.friends.get(&from), seat2),
                     impostor: false,
                     checked: 0,
                     seen_claim: f64::NEG_INFINITY,
@@ -1252,6 +1284,11 @@ impl Hub {
         };
         let now = (self.now)();
         let degree = self.o.degree;
+        // (a second player's car come to its first one's side: no teleport)
+        let beside = match m {
+            Msg::Snap { p: pos, status: 2 | 5, .. } => self.beside_own(slot, &pos, now),
+            _ => false,
+        };
         let Some(Some(p)) = self.slots.get_mut(slot as usize) else { return };
         p.seen = now;
         p.hub_port = dport;
@@ -1267,7 +1304,7 @@ impl Hub {
         // (a HELLO: its name against the claims)
         let mut check = false;
         match m {
-            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel } => {
+            Msg::Hello { sender, core, status, room, name, lobbies, marks, crews, links, duel, seat2 } => {
                 // another start of the game on the same endpoint (where its car was, and its clock's epochs, start again)
                 if p.id != sender {
                     p.links.clear();
@@ -1286,10 +1323,14 @@ impl Hub {
                     p.checked = 0;
                     renamed = true;
                 }
-                if p.owner.as_ref() != owner {
+                if p.owner.as_ref() != owner || p.seat2 != seat2 {
+                    if p.seat2 != seat2 {
+                        renamed = true;
+                    }
                     p.owner = owner.cloned();
+                    p.seat2 = seat2;
                     p.checked = 0;
-                    p.friend_ids = friend_ids(owner, self.friends.get(&from));
+                    p.friend_ids = friend_ids(owner, self.friends.get(&from), seat2);
                 }
                 check = true;
                 // the links it wants (core 10), the hub's most at most; a core before reads lists of 32 at most
@@ -1313,13 +1354,14 @@ impl Hub {
                 p.pos_at = p.seen;
                 p.status = status;
                 if matches!(status, 2 | 5) {
-                    seen = p.watch.snap(now, pos, t_us, clock);
+                    seen = p.watch.snap(now, pos, t_us, clock, beside);
                 } else {
                     p.watch.reset();
                 }
             }
-            Msg::MapReq { req, max, base, flags } if sender == p.id => ask = Some((req, max, base, flags)),
-            Msg::NearReq { req, max, base, radius } if sender == p.id => ask_near = Some((req, max, base, radius)),
+            // (a browser's maps are its first player's: a second one's questions go unanswered, `Player::seat2`)
+            Msg::MapReq { req, max, base, flags } if sender == p.id && !p.seat2 => ask = Some((req, max, base, flags)),
+            Msg::NearReq { req, max, base, radius } if sender == p.id && !p.seat2 => ask_near = Some((req, max, base, radius)),
             Msg::Lobby { op, to: 0, lobby, race, x, y, n, max, state, ids } if sender == p.id => {
                 match op {
                     wire::LOBBY_ADVERT => p.lobby = Some((HubLobby { id: lobby, race, x, y, n, max, state, ids }, now)),
@@ -1465,6 +1507,27 @@ impl Hub {
         (self.log)(&line);
     }
 
+    /// Whether a SNAP of the player in `slot`, a browser's second player (`Player::seat2`), has its car at `to` beside
+    /// its first player's (an endpoint of its browser without the flag: two flagged ones excuse nothing of each
+    /// other's): within BESIDE_M of where that one's last SNAP, younger than NEAR_FRESH_MS in free roam (or paused
+    /// there) in its room, and its speed have it now.  The game puts the second player's car there when it joins and
+    /// after each world load, from wherever it was: that jump is no teleport (watch.rs `Watch::snap`).
+    fn beside_own(&self, slot: u32, to: &[f64; 3], now: f64) -> bool {
+        let Some(p) = self.player(slot).filter(|p| p.seat2) else { return false };
+        let Some(mine) = self.per_vip.get(&p.vip).filter(|m| m.len() > 1) else { return false };
+        mine.iter().filter(|&&s| s != slot).filter_map(|&s| self.player(s)).any(|o| {
+            !o.seat2
+                && !o.impostor
+                && o.room == p.room
+                && matches!(o.status, 2 | 5)
+                && now - o.pos_at <= NEAR_FRESH_MS
+                && o.p.is_some_and(|at| {
+                    let k = (now - o.pos_at).max(0.0) / 1000.0;
+                    watch::distance(&[at[0] + o.v[0] * k, at[1] + o.v[1] * k, at[2] + o.v[2] * k], to) <= BESIDE_M
+                })
+        })
+    }
+
     /// a player by its game's id, as a line names it: its address and name (one gone a while ago by its kept watch)
     fn who(&self, id: u32) -> Option<String> {
         if let Some(p) = self.players().find(|p| p.id == id) {
@@ -1496,13 +1559,13 @@ impl Hub {
         let mut links: Vec<u32> = p.links.iter().map(|l| l.slot).collect();
         links.sort_unstable();
         // (by their places in the room's list, which is by slot; past max, the nearest: each one's distance once, its
-        // square, which orders them alike)
+        // square, which orders them alike; not its browser's other endpoints, whose cars its game shows itself)
         let mut pick: Vec<u32> = (0..cands.len() as u32)
             .filter(|&i| {
                 let c = &cands[i as usize];
                 c.slot != slot
                     && links.binary_search(&c.slot).is_err()
-                    && !self.player(c.slot).is_some_and(|o| self.apart_from(slot, c.slot, p, o))
+                    && !self.player(c.slot).is_some_and(|o| o.vip == vip || self.apart_from(slot, c.slot, p, o))
             })
             .collect();
         let total = pick.len().min(u16::MAX as usize) as u16;
@@ -1584,6 +1647,8 @@ impl Hub {
             return;
         }
         let (room, vip, port, hub_port) = (p.room, p.vip, p.port, p.hub_port);
+        // (its browser has other endpoints: none of them are its answer's, their cars its game shows itself)
+        let own = self.per_vip.get(&vip).is_some_and(|m| m.len() > 1);
         if self.near_grid.as_ref().is_none_or(|g| g.at > now) {
             self.near_gens += 1;
             self.near_grid = Some(self.near_grid_of(now, self.near_gens));
@@ -1647,7 +1712,9 @@ impl Hub {
                             if d2 > k2 || mark.get(it.slot as usize) == Some(&stamp) {
                                 continue;
                             }
-                            if blocks && self.player(it.slot).is_some_and(|o| self.apart_from(slot, it.slot, p, o)) {
+                            if (blocks || own)
+                                && self.player(it.slot).is_some_and(|o| o.vip == vip || self.apart_from(slot, it.slot, p, o))
+                            {
                                 continue;
                             }
                             // (a distance's bits are in its order: it is not negative)
@@ -1703,7 +1770,8 @@ impl Hub {
                     let dt = since.min(it.left);
                     let (dx, dy) = (it.x + it.vx * dt - mx, it.y + it.vy * dt - my);
                     let d2 = dx * dx + dy * dy;
-                    if d2 <= r2 {
+                    // (a candidate's slot taken since by its browser's other endpoint: not that one)
+                    if d2 <= r2 && !(own && self.player(it.slot).is_some_and(|o| o.vip == vip)) {
                         picks.push((d2.to_bits(), it.slot, k));
                     }
                 }
@@ -1870,10 +1938,7 @@ impl Hub {
         self.pages.remove(&vip);
         self.friends.remove(&vip);
         self.room_names.remove(&vip);
-        if !self.per_vip.contains_key(&vip) {
-            return;
-        }
-        let mine: Vec<u32> = self.order.iter().copied().filter(|&s| self.player(s).is_some_and(|p| p.vip == vip)).collect();
+        let Some(mine) = self.per_vip.get(&vip).cloned() else { return };
         self.drop_slots(&mine, true);
     }
 
@@ -1908,7 +1973,7 @@ impl Hub {
         for v in std::iter::once(vip).chain(theirs) {
             let f = self.friends.get(&v);
             for p in self.slots.iter_mut().flatten().filter(|p| p.vip == v) {
-                p.friend_ids = friend_ids(p.owner.as_ref(), f);
+                p.friend_ids = friend_ids(p.owner.as_ref(), f, p.seat2);
             }
         }
     }
@@ -1952,12 +2017,9 @@ impl Hub {
     /// browser `vip`'s page goes by `name` on the switch (its hello's): its players' names are held against it
     /// (`name_check`)
     pub fn page_name(&mut self, vip: u32, name: String) {
-        self.pages.insert(vip, Page { name, told: Vec::new(), flew: false });
-        if self.per_vip.contains_key(&vip) {
-            let mine: Vec<u32> = self.order.iter().copied().filter(|&s| self.player(s).is_some_and(|p| p.vip == vip)).collect();
-            for s in mine {
-                self.name_check(s);
-            }
+        self.pages.insert(vip, Page { name, told: Vec::new(), coop: Vec::new(), flew: false });
+        for s in self.per_vip.get(&vip).cloned().unwrap_or_default() {
+            self.name_check(s);
         }
     }
 
@@ -2008,11 +2070,32 @@ impl Hub {
 
     /// The name over the car of the player in `slot` (its HELLO's) against its page's on the switch: another one is a
     /// console line, so that the operator finds the player by the name the others see (its `who` finds both).  Each
-    /// name once, NAME_LINES a page at most.  A page that is not known yet is held against it when it is.
+    /// name once, NAME_LINES a page at most.  A page that is not known yet is held against it when it is.  A browser's
+    /// second player (`Player::seat2`) under the second form of its page's name, or of its keyphrase's claimed name
+    /// (nfsu2-claims `second`: "Alex 2" beside "Alex"), is the page's own co-op player, not a game that shows another
+    /// name than its page's (an edited page's sign): a line of its own, each name once, NAME_LINES a page at most.
     fn name_check(&mut self, slot: u32) {
         let Some(Some(p)) = self.slots.get(slot as usize) else { return };
         let Some(page) = self.pages.get_mut(&p.vip) else { return };
-        if p.name.is_empty() || same_name(&page.name, &p.name) || page.told.len() >= NAME_LINES || page.told.contains(&p.name) {
+        if p.name.is_empty() || same_name(&page.name, &p.name) {
+            return;
+        }
+        let second = |n: &str| nfsu2_claims::second(n).is_some_and(|s| s.eq_ignore_ascii_case(&p.canon));
+        let now = (self.now)() as i64;
+        let claimed = || p.owner.as_deref().and_then(|o| self.claims.as_ref()?.mine(o, now)).is_some_and(|m| second(&m.name));
+        if p.seat2 && (second(&page.name) || claimed()) {
+            if page.coop.len() < NAME_LINES && !page.coop.contains(&p.name) {
+                page.coop.push(p.name.clone());
+                (self.log)(&format!(
+                    "[roam] {} \"{}\": its second player (co-op) shows \"{}\" over its car",
+                    vip_str(p.vip),
+                    js::printable(&page.name, 32),
+                    js::printable(&p.name, 32)
+                ));
+            }
+            return;
+        }
+        if page.told.len() >= NAME_LINES || page.told.contains(&p.name) {
             return;
         }
         page.told.push(p.name.clone());
@@ -2128,7 +2211,8 @@ impl Hub {
                 continue;
             }
             dueling += (p.duel != 0) as usize;
-            if let Some(o) = &p.owner {
+            // (a browser's second player is not where its owner is: its first one is, `Player::seat2`)
+            if let Some(o) = p.owner.as_ref().filter(|_| !p.seat2) {
                 self.owners_at.insert(o.clone(), slot);
             }
             let r = *s.room_of.entry(p.room).or_insert_with(|| {
@@ -2204,7 +2288,8 @@ impl Hub {
             let slots = &self.slots;
             // its crews and, a link each, which of them that player is in too: only to a player in a crew (so no crews
             // but its own go out); and which are its friends (both ways: the friendship's id is both players'), to a
-            // player with friends whose core reads it
+            // player with friends whose core reads it (a browser's second player has none, nor is it one's: its
+            // `friend_ids` are none)
             let mine = if self.crewed > 0 { &p.crews[..crews_of(p).count()] } else { &[][..] };
             let befriended = p.marks && !p.friend_ids.is_empty();
             let with = !mine.is_empty() || befriended;
@@ -2307,6 +2392,12 @@ impl Hub {
         self.players().filter(|p| matches!(p.status, 2 | 5)).map(|p| p.vip).collect::<HashSet<u32>>().len()
     }
 
+    /// how many second players of co-op free roam drive there now, or paused there (`Player::seat2`; each is one more
+    /// endpoint of a browser `in_roam()` counts once): the server's `[players]` lines
+    pub fn coop_seats(&self) -> usize {
+        self.players().filter(|p| p.seat2 && matches!(p.status, 2 | 5) && !p.impostor).count()
+    }
+
     /// `in_roam()` by room, for the rooms with a name (room 0, none, is everyone's and not here): the server's
     /// /players `room`, for the start page of a player who set one
     pub fn in_rooms(&self) -> HashMap<u32, usize> {
@@ -2385,6 +2476,7 @@ impl Hub {
             "watchesKept": self.kept.len(),
             "blocking": self.blocks.len(),
             "keptApart": self.apart.len(),
+            "coopSeats": self.coop_seats(),
         })
     }
 
@@ -2425,12 +2517,18 @@ const AGE_MAX_S: f64 = 1.0;
 /// or down the slope its car's nose is on (wire `slope`) for the way they are along it: else a car 150 m on up a hill
 /// was 20 m over the view point, and weighed as on a road above.  The "up" of a player not in free roam is a place's
 /// fourth number, apart from its height.
+///
+/// And each place's virtual address (`s.vips`): two endpoints of one browser are never linked, by any of the link
+/// functions' ways (`one_browser`).  Co-op's second player is one (`Player::seat2`), its game shows its first one's car
+/// itself; so is a game started again while its last start's endpoint lingers (a page's restart on another port, until
+/// `gone_ms`), whose car would be a ghost of its own.
 fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, now: f64, s: &mut Scratch) {
     s.pos.clear();
     s.soon.clear();
     s.ahead.clear();
     s.view.clear();
     s.deg.clear();
+    s.vips.clear();
     s.ccap.clear();
     for (i, &slot) in list.iter().enumerate() {
         let p = player(slots, slot);
@@ -2453,6 +2551,7 @@ fn prepare(slots: &[Option<Player>], list: &[u32], cap: usize, o: &RoamOptions, 
         s.view.push([soon[0] + fx * view, soon[1] + fy * view, at[2] + s1 * (along * ts + view), up]);
         // a player's links at most: its degree, under the cap
         s.deg.push(p.map_or(0, |p| p.degree.min(cap)));
+        s.vips.push(p.map_or(0, |p| p.vip));
         s.ccap.push(p.map_or(0, |p| crew_cap(p.degree)));
         s.local[slot as usize] = i as u32;
     }
@@ -2516,7 +2615,7 @@ fn duel_pairs(slots: &[Option<Player>], list: &[u32], s: &mut Scratch) {
 /// an advert says what it likes, and one placed at a crowd, or listing the ids of players anywhere in the room, had
 /// the hub link its sender with all of them first (the third security audit, 2026-10-23).
 fn lobby_pairs(slots: &[Option<Player>], list: &[u32], now: f64, s: &mut Scratch) {
-    let Scratch { pos, lpairs, lids, ljoin, lnear, lmembers, .. } = s;
+    let Scratch { pos, lpairs, lids, ljoin, lnear, lmembers, vips, .. } = s;
     lpairs.clear();
     lids.clear();
     ljoin.clear();
@@ -2550,8 +2649,9 @@ fn lobby_pairs(slots: &[Option<Player>], list: &[u32], now: f64, s: &mut Scratch
         lpairs.extend(ljoin.iter().filter(|&&(id, j)| id == l.id && j != i as u32).map(|&(_, j)| (i as u32, j)));
         lnear.clear();
         for (j, &q) in list.iter().enumerate() {
-            // in free roam or paused there (RC_ST_ROAM, RC_ST_PAUSED), as the map's
-            if j == i || !player(slots, q).is_some_and(|o| matches!(o.status, 2 | 5)) {
+            // in free roam or paused there (RC_ST_ROAM, RC_ST_PAUSED), as the map's; not of the host's own browser (no
+            // link: `one_browser`)
+            if j == i || one_browser(vips, i, j) || !player(slots, q).is_some_and(|o| matches!(o.status, 2 | 5)) {
                 continue;
             }
             let d = (pos[j][0] - x).powi(2) + (pos[j][1] - y).powi(2);
@@ -2650,6 +2750,12 @@ fn block_pairs(slots: &[Option<Player>], list: &[u32], blocks: &HashMap<u32, Blo
 #[inline]
 fn kept_apart(bstart: &[u32], bnext: &[u32], a: usize, b: usize) -> bool {
     !bstart.is_empty() && bnext[bstart[a] as usize..bstart[a + 1] as usize].contains(&(b as u32))
+}
+
+/// whether places a and b of the room are two endpoints of one browser (`prepare`: never linked)
+#[inline]
+fn one_browser(vips: &[u32], a: usize, b: usize) -> bool {
+    vips[a] == vips[b]
 }
 
 /// The crews' pairs, linked after the race lobbies' and before any other: two players of the room who share a crew
@@ -2760,6 +2866,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
         npre,
         bstart,
         bnext,
+        vips,
         ..
     } = s;
     // the outruns' links first, then the race lobbies', then the crews'
@@ -2772,6 +2879,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
             && fresh[sb as usize].len() < deg[b]
             && !linked(fresh, sa, sb)
             && !kept_apart(bstart, bnext, a, b)
+            && !one_browser(vips, a, b)
         {
             join(fresh, sa, sb, since_of(slots, sa, sb, w.now));
             if k < dpairs.len() {
@@ -2794,6 +2902,7 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
                 && fresh[sb as usize].len() < deg[b]
                 && !linked(fresh, sa, sb)
                 && !kept_apart(bstart, bnext, a, b)
+                && !one_browser(vips, a, b)
             {
                 join(fresh, sa, sb, since_of(slots, sa, sb, w.now));
                 ccount[a] += 1;
@@ -2826,6 +2935,10 @@ fn link_every_pair(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Sc
             }
         }
         for j in i + 1..m {
+            // (two endpoints of one browser: no pair)
+            if one_browser(vips, i, j) {
+                continue;
+            }
             let linked = mark[j] == stamp;
             let d = if !linked {
                 apart(soon, ahead, view, i, j, &w.level)
@@ -3071,6 +3184,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
         ccount,
         bstart,
         bnext,
+        vips,
         ..
     } = s;
     let cand = |d: f64, i: usize, j: usize, nearest: bool| Cand::new(d, i as u32, j as u32, nearest);
@@ -3107,8 +3221,9 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                 let Some(j) = local(at, l.slot) else { continue };
                 olinks.push(j as u32);
                 osince.push(l.since);
-                // each link once: by its lower end, or by the only end that lists it (j's links are in already)
-                if i < j || !has_place(&olinks[ostart[j] as usize..ostart[j + 1] as usize], i as u32) {
+                // each link once: by its lower end, or by the only end that lists it (j's links are in already); none
+                // of two endpoints of one browser (none is made)
+                if (i < j || !has_place(&olinks[ostart[j] as usize..ostart[j + 1] as usize], i as u32)) && !one_browser(vips, i, j) {
                     // a link's place in the order: younger than `hold_ms` first, older at `keep` its distance
                     let d = if w.now - l.since < w.hold_ms { -1.0 } else { apart(soon, ahead, view, i, j, &w.level) * w.keep };
                     olds.push(cand(d, i, j, false));
@@ -3136,6 +3251,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
             && room(fcount, j)
             && !has_place(&flinks[i * stride..i * stride + fcount[i] as usize], b)
             && !kept_apart(bstart, bnext, i, j)
+            && !one_browser(vips, i, j)
         {
             join(fresh, list[i], list[j], since_of(slots, list[i], list[j], w.now));
             for (a, b) in [(i, j), (j, i)] {
@@ -3161,6 +3277,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                 && room(fcount, j)
                 && !has_place(&flinks[i * stride..i * stride + fcount[i] as usize], b)
                 && !kept_apart(bstart, bnext, i, j)
+                && !one_browser(vips, i, j)
             {
                 join(fresh, list[i], list[j], since_of(slots, list[i], list[j], w.now));
                 for (a, b) in [(i, j), (j, i)] {
@@ -3175,7 +3292,8 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
     // Walk w of place i on to its next one that can still link: read ahead, or on from where the reading stopped
     // (`pre_at` counts what it gave, read ahead or not: the next tick reads that far ahead).  One that cannot link is
     // passed over at once, where the order would have taken it only to read the walk's next one: the other player
-    // full, the pair linked already, a link of the last tick (taken at its own place, `olds`) or kept apart.  None of
+    // full, the pair linked already, a link of the last tick (taken at its own place, `olds`), kept apart, or an
+    // endpoint of its own browser.  None of
     // that changes later in the tick (no player gets room back, no link goes), so the links are the same, and a
     // player looking for one more link in a crowd of full ones no longer sends each of them through the heap.
     macro_rules! advance {
@@ -3204,6 +3322,7 @@ fn link_many(slots: &[Option<Player>], list: &[u32], w: &Weigh, s: &mut Scratch)
                     || old(i, jl)
                     || has_place(&flinks[i * stride..i * stride + fcount[i] as usize], j)
                     || kept_apart(bstart, bnext, i, jl)
+                    || one_browser(vips, i, jl)
                 {
                     continue;
                 }
