@@ -3,6 +3,7 @@
 0     roam fe2roam 14000
 +0    roam smsauto on
 +120  roam coop join kb
++0    waitmem 0xd00030 2 1200
 +150  expect i:0xd00030 == 2
 +0    shopgo CRIB_1
 +300  tapfe RETURN UI_EngageShopDialog.fng 120 2400

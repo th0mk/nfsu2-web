@@ -1401,10 +1401,15 @@ void sub_005df580(CPU *c){
 }
 
 void sub_005e4e70_orig(CPU *c);
+void coop_note_pools(int big);
 void sub_005e4e70(CPU *c){
     uint32_t streamer = c->ecx;
     int n = split_requested();
-    if (n && MR32(0x89e7c0u) == 2){
+    /* co-op free roam (coop.c): two players' areas of the city, as two players' split race (the 1.5x) */
+    int coop = MR32(0x850078u) == 1 && MR32(0x89e7b0u) == 0 && coop_wanted();
+    if (coop) n = 2;
+    coop_note_pools(coop);
+    if (n && (MR32(0x89e7c0u) == 2 || coop)){
         uint64_t bytes = (uint64_t)MR32(0x79dc54u) * 512 * (n + 1);
         if (bytes > 256u * 1024 * 1024) bytes = 256u * 1024 * 1024;
         if (bytes > MR32(c->esp + 4)) MR32(c->esp + 4) = (uint32_t)bytes;
@@ -1425,6 +1430,10 @@ void sub_005e4e70(CPU *c){
 void sub_00610750_orig(CPU *c);
 void split_second_pool(CPU *c){
     int n = split_requested();
+    /* co-op free roam: room for player 2's car (another of player 1's) beside the game's 11000 KB; online free
+     * roam's own size (roam_game.c, 48000 KB and up) has it already */
+    if (MR32(0x850078u) == 1 && MR32(0x89e7b0u) == 0 && coop_wanted() && MR32(c->esp + 4) < 17000u * 1024u)
+        MR32(c->esp + 4) = 17000u * 1024u;
     if (n && MR32(0x89e7c0u) == 2){
         uint64_t bytes = (uint64_t)MR32(0x7fa9d4u) * 512 * n;
         if (bytes > 256u * 1024 * 1024) bytes = 256u * 1024 * 1024;

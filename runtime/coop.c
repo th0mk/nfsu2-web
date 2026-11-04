@@ -67,6 +67,22 @@ long autotest_frame(void);
 static int coop_want;               /* co-op is on: player 2 is in, or comes back after a world load */
 static int coop_dev = -1;           /* COOP_DEV_KB or the local pad seat 0..5 */
 static uint32_t coop_pl, coop_car, coop_world;   /* player 2's Player and car, and the World they are in */
+/* The city's memory: the streamer's pool is made at a track's load (0x57A580 -> 0x5E4E70), for one player's area;
+ * co-op needs two (splitscreen.c's sub_005e4e70 makes it 1.5x while co-op is on).  So the first join reloads free
+ * roam: player 1's place as the career's start (Career +0x8750.., the crib's and shops' exits set them), then the
+ * race status's event 10 (PostEvent 0x601020 on [0x8900D8]: SwitchTrack, the free-roam setup 0x540780 again), with
+ * the flow step 0x581820 told the track changes (the current track info [0x883DAC] another one's while it reads
+ * it) so the track loads in full and the pools are made again. */
+#define G_RACESTATUS  0x008900d8u
+#define FN_POSTEVENT  0x00601020u   /* thiscall (event, arg) */
+#define G_TRACKINFO   0x00883dacu   /* the current track's info */
+#define G_TRACKINFOS  0x00883da0u   /* the track infos (stride 0x128): entry 0 L1RA */
+#define G_START_KEEP  0x00863484u   /* byte: the next world puts player 1 at the place below */
+#define G_START_POS   0x00863490u   /* float[3] */
+#define G_START_HEAD  0x008634a0u   /* u16 */
+static int coop_pools_big;          /* the last track load made the pools for two (splitscreen.c tells) */
+static int coop_reload;             /* 1 asked (the event went), 2 the flow step saw it */
+void coop_note_pools(int big){ coop_pools_big = big; }
 static int coop_ctor;               /* player 2's Player ctor runs (splitscreen.c gives it free roam's HUD) */
 static long coop_settled;           /* frames free roam has been as roaming wants it */
 /* after a leave, in that world: player 2's car parked, and its Player's memory (ended, out of the game's lists): the
@@ -201,13 +217,23 @@ static void coop_drop(CPU *c){
  * name).  Player 2's HUD came in last, so FEng keeps it on top (it puts that order back every frame); what the game
  * and the runtime take for the screen in front (GetTopPackage 0x50C8E0: SMS, photo mode, the races' screens) is the
  * package below it then, player 1's HUD */
-static int fe_named(uint32_t node, uint32_t hud){
-    uint32_t a = node ? MR32(node + 0xcu) : 0, b = hud ? MR32(hud + 0x10u) : 0;
-    return a && b && !strcasecmp((const char *)g_mem + a, (const char *)g_mem + b);
+/* a guest string that is there (not one of memory freed at a world's end) */
+static const char *gstr_at(uint32_t p){
+    if (!p || !mem_is_committed(p) || !mem_is_committed(p + 63u)) return 0;
+    const char *q = (const char *)g_mem + p;
+    return memchr(q, 0, 64) ? q : 0;
 }
+static int fe_named(uint32_t node, uint32_t hud){
+    if (!node || !hud || !mem_is_committed(node + 0xfu) || !mem_is_committed(hud + 0x13u)) return 0;
+    const char *a = gstr_at(MR32(node + 0xcu)), *b = gstr_at(MR32(hud + 0x10u));
+    return a && b && !strcasecmp(a, b);
+}
+/* player 2's Player while the game still has it (a world's end frees it before coop_frame sees) */
+static uint32_t coop_live(void){ return coop_pl && MR32(SPLIT_PLAYERS_INDEX + 4u) == coop_pl ? coop_pl : 0; }
 uint32_t coop_fe_top(uint32_t mg){
     uint32_t top = mg ? MR32(mg + 0xe4u) : 0;
-    if (top && coop_pl && fe_named(top, MR32(coop_pl + 0x9a4u)) && MR32(top + 4u)) return MR32(top + 4u);
+    uint32_t p2 = coop_live();
+    if (top && p2 && fe_named(top, MR32(p2 + 0x9a4u)) && MR32(top + 4u)) return MR32(top + 4u);
     return top;
 }
 /* driving: player 2 in, and player 1's HUD the screen in front (no pause menu, dialog, map or SMS over it: those
@@ -222,6 +248,32 @@ void sub_0050c8e0(CPU *c){
     sub_0050c8e0_orig(c);
     uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0;
     if (mg && c->eax == MR32(mg + 0xe4u)) c->eax = coop_fe_top(mg);
+}
+
+void sub_00581820_orig(CPU *c);
+void sub_00581820(CPU *c){
+    if (coop_reload != 1){ sub_00581820_orig(c); return; }
+    coop_reload = 2;
+    uint32_t keep = MR32(G_TRACKINFO), other = MR32(G_TRACKINFOS);
+    if (other && other != keep) MR32(G_TRACKINFO) = other;   /* "another track": the full load (it writes this itself) */
+    fprintf(stderr, "[coop] f=%ld free roam loads again, with room for two\n", autotest_frame());
+    sub_00581820_orig(c);
+}
+/* the first join in a world whose pools are one player's: the reload, from player 1's place (no menu up, one racer) */
+static int coop_reload_now(CPU *c){
+    uint32_t car1 = p1_car(), rs = MR32(G_RACESTATUS), race = MR32(0x890118u);
+    if (!car1 || !rs || MR32(rs) != 4u || !race || MR32(race + 0x24u) != 1u) return 0;
+    uint32_t fe = MR32(0x8384c4u), mg = fe ? MR32(fe + 8u) : 0, p1 = MR32(SPLIT_PLAYERS_INDEX);
+    if (!mg || !p1 || !fe_named(coop_fe_top(mg), MR32(p1 + 0x9a4u))) return 0;
+    for (unsigned i = 0; i < 3; i++) MRF32(G_START_POS + 4u * i) = MRF32(car1 + 0x60u + 4u * i);
+    MR16(G_START_HEAD) = MR16(car1 + 0x40cu);
+    MR8(G_START_KEEP) = 1;
+    coop_reload = 1;
+    uint32_t a[2] = { 10u, 0u };
+    call(c, FN_POSTEVENT, rs, 0, 2, a);
+    fprintf(stderr, "[coop] f=%ld player 2 joins: free roam loads again at (%.1f, %.1f)\n", autotest_frame(),
+            MRF32(car1 + 0x60u), MRF32(car1 + 0x64u));
+    return 1;
 }
 
 /* every frame at the main-loop hook (roam.c, 0x581475) */
@@ -240,8 +292,17 @@ void coop_frame(CPU *c){
     if (coop_pl && MR32(SPLIT_PLAYERS_INDEX + 4u) != coop_pl) coop_forget("the game ended player 2's Player");
     int roaming = roam_game_roaming_now() && MR32(G_GAMEMODE) == 1u && MR32(G_RACEPARAMS + 0x10u) == 0u;
     coop_settled = roaming ? coop_settled + 1 : 0;
-    if (coop_want && !coop_pl && coop_settled >= SETTLE_FRAMES) {
-        if (!coop_make(c)) { coop_want = 0; fprintf(stderr, "[coop] player 2 could not join: co-op off\n"); }
+    static long asked_at;
+    if (coop_reload == 1 && !asked_at) asked_at = autotest_frame();
+    if (coop_reload != 1) asked_at = 0;
+    if (coop_reload == 1 && autotest_frame() - asked_at > 300){                  /* the world did not go: as it is */
+        fprintf(stderr, "[coop] f=%ld free roam did not load again: player 2 in this world\n", autotest_frame());
+        coop_reload = 0; coop_pools_big = 1;
+    }
+    if (coop_reload == 2 && MR32(G_FLOW) == 6u && coop_settled > 0) coop_reload = 0;     /* back in the world */
+    if (coop_want && !coop_pl && coop_settled >= SETTLE_FRAMES && !coop_reload){
+        if (!coop_pools_big) coop_reload_now(c);
+        else if (!coop_make(c)){ coop_want = 0; fprintf(stderr, "[coop] player 2 could not join: co-op off\n"); }
     }
     if (!coop_want && coop_pl) coop_drop(c);
     void coop_ask_frame_(CPU *c); coop_ask_frame_(c);

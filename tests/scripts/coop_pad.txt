@@ -4,6 +4,7 @@
 +0    roam smsauto on
 +120  localpad 1 connect 1
 +30   roam coop join pad 0
++0    waitmem 0xd00030 2 1200
 +150  roam coop state
 +0    expect i:0xd00030 == 2
 +0    localpad 1 RT 1

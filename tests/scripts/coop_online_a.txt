@@ -11,6 +11,7 @@
 +0    roam mp coop
 +0    status coop_online_solo
 +0    roam coop join kb
++0    waitmem 0xd00030 2 1200
 +150  roam coop state
 +0    roam mp waitpeers2 1 3000
 +120  roam mp coop

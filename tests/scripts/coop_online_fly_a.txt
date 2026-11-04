@@ -8,6 +8,7 @@
 +0    roam smsauto on
 +0    roam mp waitpeers 1 6000
 +0    roam coop join kb
++0    waitmem 0xd00030 2 1200
 +150  roam mp waitpeers2 1 3000
 +120  roam mp fly fake2 on
 +0    status coop_fly_plane
