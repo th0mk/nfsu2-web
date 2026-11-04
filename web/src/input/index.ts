@@ -36,7 +36,7 @@
 // Test:  the autotest's ns* requests become DOM events (synth.ts).
 import type { GameProcess } from '../host/process';
 import { HostKind } from '../host/abi';
-import { CODES, cp1252, isMeta, keyChars, keyVk, PAGE_CODES } from './keymap';
+import { CODES, cp1252, isMeta, altGrControl, keyChars, keyVk, PAGE_CODES } from './keymap';
 import { PadPoller, type PadPage, type TouchPad } from './gamepad';
 import { SynthDriver } from './synth';
 import {
@@ -214,6 +214,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     }
     const k = CODES[e.code];
     if (!k) return;
+    if (altGrControl(e.code, e)) return;                // AltGr's Control: the game never sees it (keymap.ts)
     if (!pass.has(e.code)) e.preventDefault();
     if (mac && e.code === 'CapsLock') { push(IEV_KEY_TAP, k.dik, k.vk, flagsOf(e)); return; }
     const { chars, dead, sys } = charsOf(e.code, e);
@@ -225,6 +226,7 @@ export function attachInput(proc: GameProcess, element: HTMLElement, opts: Input
     // ignores releases of keys the game does not hold)
     if (detached) return;
     if (isMeta(e.code) || e.key === 'Meta') return;
+    if (altGrControl(e.code, e)) return;
     const k = CODES[e.code];
     if (!k) return;
     if (!pass.has(e.code) && !ignored(e)) e.preventDefault();   // also keeps Alt from opening a menu bar

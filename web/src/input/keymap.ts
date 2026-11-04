@@ -102,6 +102,17 @@ export interface KeyEventLike {
   getModifierState(k: string): boolean;
 }
 
+/**
+ * The left Control that comes with AltGr, which is not a key of the game's: AltGr, a layout's third level, reaches the
+ * page as Control and Alt pressed together (the Ctrl+Alt pair Windows makes of it; Linux browsers report it the same
+ * way), but DirectInput, which the game reads, sees the right Alt alone.  So this Control would also fire the action
+ * bound to it (gear down, beside the Alt's nitrous: runtime/dinput_kbd.c and the game's action map).  True for the
+ * Control's down and for its up.
+ */
+export function altGrControl(code: string, e: KeyEventLike): boolean {
+  return code === 'ControlLeft' && e.getModifierState('AltGraph');
+}
+
 /** the key's own (unshifted) character on the layout, '' for a named key */
 export function baseChar(code: string, e: KeyEventLike, layout: Map<string, string> | null): string {
   return layout?.get(code) ?? US[code]?.[0] ?? (e.key.length === 1 ? e.key.toLowerCase() : '');
