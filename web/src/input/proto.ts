@@ -117,6 +117,8 @@ export const IM_LOCAL_AXIS = 4;
 export const IM_LOCAL_NAME = 10;
 export const IM_LOCAL_INDEX = 26;
 export const IM_LOCAL_JOIN = 27;
+/** wasm: 1 while this seat's controller is co-op free roam's player 2's: the page lets it drive nothing else */
+export const IM_LOCAL_COOP = 28;
 export const IM_OFF_LOCAL_PADS = 24896;
 export const IM_BYTES = 25664;
 

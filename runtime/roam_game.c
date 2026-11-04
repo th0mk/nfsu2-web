@@ -290,6 +290,7 @@ static int roaming(void){
            (MR32(race + 0x24u) == 1u || du_racing(race) || em_racing(race)) &&
            !rd32(G_CAREER_RACE) && !(rd32(G_GAMEMODE) & 0x200u) && world() && player_car();
 }
+int roam_game_roaming_now(void){ return roaming(); }   /* coop.c */
 static uint32_t encounter_mgr(void){ uint32_t r = rd32(G_RACE); return ok(r, 0xc44) ? r + RC_ENCOUNTERS : 0; }
 /* one of the game's own opponent cars: an AI racer (kind 2) whose racer
  * record is in the game's record array -- never a car of ours, whose record

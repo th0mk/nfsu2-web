@@ -10,6 +10,7 @@
 #include "splitscreen_layout.h"
 #include "gamepad.h"
 #include "kbd.h"
+#include "coop.h"
 
 /* the labels shown (split_label_text: in the game's language) */
 enum { SL_SPLIT, SL_PLAYERS, SL_PLAYER, SL_PLAYER_UP, SL_JOIN, SL_JOIN_KB, SL_JOIN_SP, SL_N };
@@ -85,7 +86,8 @@ static unsigned split_pad_of(unsigned seat){
     return pad;
 }
 void split_keyboard_device(PadState *pad){
-    if (!pad->connected && (split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0) && MR32(0x850078u) == 4){
+    int kb = MR32(0x850078u) == 4 ? split_kb_seat[0] >= 0 || split_kb_seat[1] >= 0 : coop_device() == COOP_DEV_KB;
+    if (!pad->connected && kb){
         memset(pad, 0, sizeof *pad);
         pad->connected = 1; pad->family = PADF_XBOX;
         strcpy(pad->name, "Split Screen keyboard");
@@ -102,12 +104,12 @@ static const uint8_t SPLIT_KB_KEYS[3][6][2] = {
     { {0x36, 0}, {0x9d, 0x35}, {0x34, 0}, {0x33, 0}, {0x26, 0}, {0x27, 0} },  /* Right Shift, Right Ctrl or /, . , L ; */
     { {0x2a, 0}, {0x39, 0}, {0x12, 0}, {0x10, 0}, {0x2e, 0}, {0x30, 0} },     /* Left Shift, Space, E, Q, C, B */
 };
-static void split_kb_read(int side, PadState *pad){
+static void split_kb_read(int side, int both, PadState *pad){
     uint8_t keys[256]; kbd_state(keys, sizeof keys);
     memset(pad, 0, sizeof *pad);
     pad->connected = 1; pad->family = PADF_XBOX;
     strcpy(pad->name, "Keyboard");
-    int both = split_kb_seat[0] >= 0 && split_kb_seat[1] >= 0, racing = MR32(0x8654a4u) == 6;
+    int racing = MR32(0x8654a4u) == 6;
     /* START: Enter (only Enter's player's while two share the keyboard), and Space's player's Space outside a
      * race (in one it is the handbrake) */
     if ((!both || side == SPLIT_KB_ENTER) && (keys[0x1c] || keys[0x9c])) pad->buttons |= 1u << PAD_START;
@@ -124,11 +126,33 @@ static void split_kb_read(int side, PadState *pad){
     for (unsigned b = 0; b < 6; ++b)
         if ((map[b][0] && keys[map[b][0]]) || (map[b][1] && keys[map[b][1]])) pad->buttons |= 1u << SPLIT_KB_BUTTON[b];
 }
+/* co-op free roam (coop.c, the career's game mode): seat 1 is player 2's device, a local pad's seat or the keyboard's
+ * WASD half; seat 0 the arrows' half when player 2 has the WASD's (player 1's game input is the game's own, port 0) */
+static int split_coop_seat(unsigned seat, PadState *pad){
+    int dev = coop_device();
+    memset(pad, 0, sizeof *pad);
+    if (seat == 1 && dev == COOP_DEV_KB){ split_kb_read(SPLIT_KB_SPACE, 1, pad); return 1; }
+    if (seat == 1 && dev >= 0) return gamepad_read_local((unsigned)dev, pad);
+    if (seat == 0 && dev == COOP_DEV_KB){
+        split_kb_read(SPLIT_KB_ENTER, 1, pad);
+        pad->buttons &= ~(1u << PAD_START);     /* player 1's Enter stays the game's own (Engage, the menus) */
+        return 1;
+    }
+    return 0;
+}
+/* the game's own keyboard while two share it in co-op: player 2's half is player 2's alone (dinput_kbd.c) */
+int split_kb_hidden(unsigned dik){
+    if (dik >= 256u || coop_device() != COOP_DEV_KB || !coop_in()) return 0;
+    if (dik == 0x11 || dik == 0x1e || dik == 0x1f || dik == 0x20) return 1;          /* W A S D */
+    for (unsigned b = 0; b < 6; ++b) if (SPLIT_KB_KEYS[2][b][0] == dik || SPLIT_KB_KEYS[2][b][1] == dik) return 1;
+    return 0;
+}
 #endif
 int split_read_local(unsigned seat, PadState *pad){
 #ifdef __wasm__
+    if (MR32(0x850078u) != 4 && coop_wanted()) return split_coop_seat(seat, pad);
     int side = split_kb_of(seat);
-    if (side >= 0){ split_kb_read(side, pad); return 1; }
+    if (side >= 0){ split_kb_read(side, split_kb_seat[0] >= 0 && split_kb_seat[1] >= 0, pad); return 1; }
     return gamepad_read_local(split_pad_of(seat), pad);
 #else
     (void)seat; memset(pad, 0, sizeof *pad); return 0;
@@ -1432,10 +1456,37 @@ static void split_poll(CPU *c){
 }
 #endif
 
+/* one input record into another (16 bytes: two words of actions, a bit 0 while pressed; four bytes of axes, the
+ * first two from 0, the others centred on 0x80; the time): pressed in either, each axis the further one */
+static void split_merge_input(uint32_t into, uint32_t from){
+    MR32(into) &= MR32(from); MR32(into + 4) &= MR32(from + 4);
+    for (unsigned k = 0; k < 4; ++k){
+        int a = MR8(into + 8 + k), b = MR8(from + 8 + k), mid = k < 2 ? 0 : 0x80;
+        if (abs(b - mid) > abs(a - mid)) MR8(into + 8 + k) = (uint8_t)b;
+    }
+}
 void sub_005cfd60_orig(CPU *c);
 void sub_005cfd60(CPU *c){
 #ifdef __wasm__
     uint32_t port = MR32(c->esp + 4u), type = MR32(c->esp + 8u), previous = MR32(c->esp + 12u);
+    if (MR32(0x850078u) != 4 && coop_in() && port < 2){
+        /* co-op free roam: port 0 stays the game's own (player 1's keys and controller); port 1 is player 2's seat.
+         * With the keyboard shared, player 1's arrows' half joins port 0's own (player 2's keys are hidden from it) */
+        static uint32_t port_type;
+        if (!port){
+            sub_005cfd60_orig(c);
+            uint32_t native = c->eax;
+            port_type = type ? MR32(type) : 0;
+            split_poll(c);
+            if (coop_device() == COOP_DEV_KB && native) split_merge_input(native, SPLIT_INPUT_CURRENT);
+            return;
+        }
+        POP32(c->eip);
+        if (type) MR32(type) = port_type;
+        if (previous) MR32(previous) = SPLIT_INPUT_PREVIOUS + port * 16u;
+        c->eax = SPLIT_INPUT_CURRENT + port * 16u;
+        return;
+    }
     if (MR32(0x850078u) == 4 && MR32(0x8654a4u) == 6 && port < 6){
         static uint32_t port_type;
         if (!port){

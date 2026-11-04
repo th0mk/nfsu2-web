@@ -327,8 +327,9 @@ export class PadPoller {
     const live = new Set<number>();
     for (const g of pads) if (g && g.connected) { live.add(g.index); if (!this.order.includes(g.index)) this.order.push(g.index); }
     this.order = this.order.filter(i => live.has(i));
-    const byIndex = (i: number) => pads[i] ?? null;
-    this.choose(pads);
+    const kept = this.localPads?.reserved() ?? new Set<number>();
+    const byIndex = (i: number) => kept.has(i) ? null : pads[i] ?? null;
+    this.choose(pads, kept);
     const c = this.chosen, cg = c && byIndex(c.index);
     let pick = cg?.connected && cg.id === c!.id ? c!.index : undefined;
     if (pick === undefined) {
@@ -336,7 +337,7 @@ export class PadPoller {
       pick = this.order.find(i => mayDrive(byIndex(i), pads)) ?? this.order.find(i => mayDrive(byIndex(i)));
     }
     // pedals on their own are no controller (released, a stick of theirs is pushed all the way)
-    if (pick === undefined) pick = this.order.find(i => !isPedals(byIndex(i)?.id ?? ''));
+    if (pick === undefined) pick = this.order.find(i => !kept.has(i) && !isPedals(byIndex(i)?.id ?? ''));
     const g = pick === undefined ? null : byIndex(pick);
     if (g?.index !== driver?.index || g?.id !== driver?.id) {
       if (g && driver) this.log(`[pad] ${g.id} drives now${this.chosen ? ' (a button pressed on it)' : ''}`);
@@ -362,10 +363,11 @@ export class PadPoller {
    *  with a button held was pressed (Chrome shows a controller on a press), but not one there at the first poll (a
    *  wheel's shifter left in a gear).  A radio has few buttons or none: a stick or a switch of its moved half way
    *  from where it was while it last drove (or showed up) counts as a press. */
-  private choose(pads: readonly (Gamepad | null)[]) {
+  private choose(pads: readonly (Gamepad | null)[], kept: Set<number>) {
     const down = new Map<number, { id: string; on: boolean[]; at?: number[] }>();
+    if (this.chosen && kept.has(this.chosen.index)) this.chosen = null;
     for (const g of pads) {
-      if (!g?.connected) continue;
+      if (!g?.connected || kept.has(g.index)) continue;
       const on = g.buttons.map(b => !!b && (b.pressed || b.value > 0.5));
       const was = this.down.get(g.index);
       const before = was?.id === g.id ? was.on : this.polled ? [] : on;

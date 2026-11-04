@@ -4,12 +4,12 @@
 import type { PadSnapshot } from './gamepad';
 import {
   INPUT_LOCAL_PADS, IM_LOCAL_WORDS, IM_OFF_LOCAL_PADS, IM_LOCAL_SEQ, IM_LOCAL_CONNECTED,
-  IM_LOCAL_BUTTONS, IM_LOCAL_FAMILY, IM_LOCAL_AXIS, IM_LOCAL_NAME, IM_LOCAL_INDEX, IM_LOCAL_JOIN,
+  IM_LOCAL_BUTTONS, IM_LOCAL_FAMILY, IM_LOCAL_AXIS, IM_LOCAL_NAME, IM_LOCAL_INDEX, IM_LOCAL_JOIN, IM_LOCAL_COOP,
 } from './proto';
 
 type Owner = { index: number; id: string; waiting: boolean };
 export class LocalSeats {
-  private owners: (Owner | null)[] = Array.from({ length: INPUT_LOCAL_PADS }, () => null);
+  owners: (Owner | null)[] = Array.from({ length: INPUT_LOCAL_PADS }, () => null);
   private starts = new Map<number, { id: string; down: boolean }>();
   readonly joins = Array(INPUT_LOCAL_PADS).fill(0);
 
@@ -50,6 +50,12 @@ export class LocalPadWriter {
   private ints = new Int32Array(this.bits.buffer);
   constructor(buffer: SharedArrayBuffer | ArrayBuffer, base: number) {
     this.words = new Int32Array(buffer, base + IM_OFF_LOCAL_PADS, INPUT_LOCAL_PADS * IM_LOCAL_WORDS);
+  }
+  /** the controllers (Gamepad.index) the game keeps for co-op free roam's player 2: they drive nothing else */
+  reserved(): Set<number> {
+    const out = new Set<number>();
+    this.seats.owners.forEach((o, seat) => { if (o && Atomics.load(this.words, seat * IM_LOCAL_WORDS + IM_LOCAL_COOP) === 1) out.add(o.index); });
+    return out;
   }
   poll(pads: readonly (Gamepad | null)[], read: (g: Gamepad) => PadSnapshot, muted = false) {
     this.seats.poll(pads).forEach((g, seat) => {

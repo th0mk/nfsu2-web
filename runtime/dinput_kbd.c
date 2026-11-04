@@ -340,6 +340,13 @@ static int key_by_how(const KDev *d, uint32_t obj, uint32_t how){
     return -1;
 }
 
+/* splitscreen.c: a key of co-op player 2's half of the keyboard, which the game's own keyboard does not see then */
+#ifdef __wasm__
+int split_kb_hidden(unsigned dik);
+#else
+static int split_kb_hidden(unsigned dik){ (void)dik; return 0; }
+#endif
+
 /* ---- methods ------------------------------------------------------------------- */
 uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint32_t *a){
     KDev *d = kdev(self);
@@ -356,6 +363,7 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
             if (g < 0){ r = DI_BUFFEROVERFLOW; s++; continue; }
             if (g == 0) break;
             s++;
+            if (e.down && split_kb_hidden(e.dik)) continue;     /* player 2's half in co-op (a release still goes) */
             uint32_t ofs, app = 0xFFFFFFFFu;
             if (d->fmt == FMT_RAW){
                 if (d->ofs_of[e.dik] < 0) continue;
@@ -389,7 +397,7 @@ uint32_t dikbd_call(CPU *c, uint32_t self, const char *nm, int nargs, const uint
         uint8_t st[256]; kbd_state(st, 256);
         mem_commit(p, cb); memset(g_mem + p, 0, cb);
         for (int k = 1; k < 256; k++){
-            if (!st[k]) continue;
+            if (!st[k] || split_kb_hidden((unsigned)k)) continue;
             if (d->fmt == FMT_RAW && d->ofs_of[k] >= 0 && (uint32_t)d->ofs_of[k] < cb) MR8(p + (uint32_t)d->ofs_of[k]) = 0x80;
             else if (d->fmt == FMT_ACTIONS && d->act_of[k] >= 0 && 4u * (uint32_t)d->act_of[k] + 3u < cb)
                 MR32(p + 4u * (uint32_t)d->act_of[k]) = 0x80;

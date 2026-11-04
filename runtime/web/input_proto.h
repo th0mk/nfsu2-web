@@ -130,6 +130,7 @@ typedef struct {
 #define IM_LOCAL_NAME 10u
 #define IM_LOCAL_INDEX 26u
 #define IM_LOCAL_JOIN 27u
+#define IM_LOCAL_COOP 28u   /* wasm: 1 while this seat's controller is co-op player 2's: it drives nothing else */
 typedef struct {
     _Atomic uint32_t h[IM_HDR_WORDS];
     char    pad_name[64];                         /* page: under IM_PAD_SEQ */
