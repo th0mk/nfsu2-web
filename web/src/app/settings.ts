@@ -173,6 +173,10 @@ export const KEYS: readonly KeyDef[] = [
   // the career's hidden races on the map like the others (runtime/hiddenraces.c).  Not in bundle.m's table: there a
   // lower-case key, so it reaches the runtime as NFSU2_SHOW_HIDDEN_RACES all the same
   { key: 'show_hidden_races', env: 'NFSU2_SHOW_HIDDEN_RACES', kind: 'bool', scope: 'web' },
+  // the career's rubberbanding: original, noboost (opponents ahead still wait, none behind beats its own pace) or off
+  // (runtime/catchup.c).  Not in bundle.m's table either: there a lower-case key, so it reaches the runtime as
+  // NFSU2_CATCHUP all the same
+  { key: 'catchup', env: 'NFSU2_CATCHUP', kind: 'enum', vals: 'original|noboost|off', scope: 'web' },
   // the game's own textures without smoothing (only the page's renderer reads it: subsystems.ts, gpu/encoder.ts
   // pointTex).  Not in bundle.m's table
   { key: 'pixelated_textures', env: 'NFSU2_PIXELATED_TEXTURES', kind: 'bool', scope: 'web' },
@@ -257,6 +261,14 @@ export const TEMPLATE = `# NFSU2 settings, read at every launch.
 # original game: a hidden race shows only when you drive near it.
 # [NFSU2_SHOW_HIDDEN_RACES]
 #show_hidden_races = off
+
+# The career's rubberbanding.  In a career race the game slows opponents
+# who are ahead of you and gives ones behind you more power, grip and top
+# speed (up to 37% more when they are 320 m behind).  noboost = they still
+# wait for you, but none behind ever beats its own pace; off = neither, as
+# Quick Race with Catch Up off.  original = the original game.  Quick Race
+# keeps its own Catch Up option.  [NFSU2_CATCHUP]
+#catchup = original
 
 # What the game does while this tab is hidden or another window is active:
 # "pause" freezes it and pauses its sound, like alt-tab on Windows; "run"
