@@ -137,7 +137,10 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
   Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
   button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
-  the keys for every profile. The horn stays on N (the game has no horn of its own).
+  the keys for every profile. The site's own keys and buttons are not set there (N, X, O, I, F, 1 to 4; a
+  controller's D-pad down held, the stick clicks), but one of the game's controls you put on one of them takes it:
+  the site's control leaves it to the game. D-pad down and the stick clicks with the game's own controls on them as it
+  comes (Career Status, hydraulics) are shared as before: a short press, and a car with hydraulics, stay the game's.
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
   with your car's Drift tuning from Performance Tuning / Dyno in the crib; the other modes' tuning is back when drift
   mode is off), but your nitrous stays (the drift races have none; X neither empties nor fills it). The camera is the
