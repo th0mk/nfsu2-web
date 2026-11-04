@@ -482,9 +482,12 @@ static uint32_t trunk_rec(const Car *k){
 
 /* photo.c: a car photo mode does not draw (its Cars list); none where photo mode is not built in */
 __attribute__((weak)) int photo_hides(uint32_t ri){ (void)ri; return 0; }
+/* damage.c: the crash damage's work before a car is drawn; none where it is not built in */
+__attribute__((weak)) void damage_render(CPU *c);
 void sub_00620ae0_orig(CPU *c);
 void sub_00620ae0(CPU *c){                       /* the car's drawing */
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x30u; return; }   /* (thiscall, ret 0x30) */
+    if (damage_render) damage_render(c);
     uint32_t b = 0, keep[2]; Car *k = drawn(c->ecx, &b);
     if (!k){ sub_00620ae0_orig(c); return; }
     put_on(k, b, keep);

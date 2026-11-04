@@ -7,7 +7,8 @@
  * functions and its Direct3D device, run through the dispatcher on the CPU of the
  * hook that called the core).  The .asi's own hooks, and what stands in here:
  *
- *   CarRenderInfo::Render 0x620AE0 (detour)      override: the core's frame work, then the game's
+ *   CarRenderInfo::Render 0x620AE0 (detour)      showoff.c's override calls damage_render first: the
+ *                                                  core's frame work and the bent wheels, then the game's
  *   CarCollisionBody::ApplyImpulse 0x5A0B00      override: the game's, then the impact (vtable slot
  *     (vtable slot +0x50)                          +0x50 checked, as the .asi checks the slot)
  *   CarDamage::SetDamageToZero 0x637D70 (detour) override: the repair, then the game's
@@ -32,7 +33,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void sub_00620ae0_orig(CPU *c);   /* CarRenderInfo::Render */
 void sub_00637d70_orig(CPU *c);   /* CarDamage::SetDamageToZero */
 void sub_005a0b00_orig(CPU *c);   /* CarCollisionBody::ApplyImpulse */
 uint32_t call_guest(CPU *c, uint32_t fn, int nargs, const uint32_t *args);
@@ -92,9 +92,9 @@ void dmg_free(uint32_t p){ gheap_free(1, p); }
 int dmg_committed(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n - 1u); }
 
 /* ---- overrides ------------------------------------------------------------ */
-void sub_00620ae0(CPU *c){
+/* CarRenderInfo::Render (0x620AE0), before the game's: showoff.c overrides it and calls this first */
+void damage_render(CPU *c){
     if (on()){ g_c = c; dmg_render_entry(c->ecx, c->esp + 4u); }   /* its stack arguments: the bent wheels' matrices */
-    sub_00620ae0_orig(c);
 }
 void sub_005a0b00(CPU *c){
     uint32_t body = c->ecx, impulse = MR32(c->esp + 4u), point = MR32(c->esp + 8u);
