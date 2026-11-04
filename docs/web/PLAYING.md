@@ -114,7 +114,7 @@ While you drive:
 | Alt | Nitrous |
 | Space | Handbrake |
 | Left Shift, left Ctrl | Gear up, gear down (manual gearbox) |
-| C, B | Camera, look back |
+| C, B | Camera (the game's four views, then the drift races' camera, in every drive), look back |
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
@@ -333,6 +333,13 @@ that room.
   (11 outrun wins in stage 5) comes only before the last URL race. Once you have beaten Caleb, the shops have all of
   them for every car in your career, as the original game's ending has them in Customize mode, whose cars free roam
   never drives. The unique performance parts stay one per stage.
+- **Special vinyls:** the Graphics Shop's vinyls have a Special category after Sponsor, with the game's promo vinyls
+  (Snoop Dogg, Capone, Chingy, The Doors, David Choe, D3, Japan Tuning, Shinestreet, Street Reaper), for the cars that
+  have them. The game hid them. They are free, open at the stages the game gives them (2 and 3), and add nothing to
+  the visual rating.
+- **Quick Race:** Laps go from 1 to 127 and Opponents up to 5 in every race but drags, which keep the game's 3. With
+  Lap KO on, both can still be changed: it starts at 5 laps and 5 opponents, with at least 1 opponent. In every
+  race, a race of one lap shows Completed and a percent in place of LAP 1/1, as sprints do.
 - **Power Units:** the game's Options, Gameplay (also in the pause menu's) has a row after Speedometer Units: the
   engine's power in bhp or kW wherever the game shows it (the dyno, the performance shop's parts), whatever the
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).
