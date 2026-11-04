@@ -607,12 +607,6 @@ void sub_005b2610(CPU *c){
     if (roam_game_ghost_pair(c->ecx)){ POP32(c->eip); return; }    /* thiscall, ret */
     roam_game_contact(c, sub_005b2610_orig);
 }
-/* The player's near miss (0x56F170, thiscall, from 0x56FF73 once a frame):
- * with Ghost mode Everything the game's cars that pass through the player's
- * car give none (roam_game.c, roam_game_near_miss) */
-void sub_0056f170_orig(CPU *c);
-void roam_game_near_miss(CPU *c, void (*orig)(CPU *));
-void sub_0056f170(CPU *c){ roam_game_near_miss(c, sub_0056f170_orig); }
 /* The drive camera's test for a car its eye is in (0x44AC10, thiscall, ret
  * 8, from 0x44B040 only, which lifts the eye over that car): with Ghost mode
  * Everything the game's cars that pass through the player's car pass through

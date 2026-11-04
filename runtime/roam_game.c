@@ -49,9 +49,8 @@
  *    the past (NFSU2_ROAM_DELAY), smoothed through the jitter buffer; the
  *    player's own car is then passable on every friend's screen too.  With
  *    NFSU2_ROAM_COLLIDE=none (Ghost mode: Everything) the game's traffic and
- *    tuners pass through the player's car as well (ghost_pair), with no near
- *    miss (roam_game_near_miss) and the camera going through them too
- *    (roam_game_camera_cars); the tuner of
+ *    tuners pass through the player's car as well (ghost_pair), with the
+ *    camera going through them too (roam_game_camera_cars); the tuner of
  *    an outrun stays solid (outrun_racer), and a friend in an outrun only
  *    with Ghost mode Off on both sides (du_solid).  The page's menu
  *    switches between them while the game runs (solid_follow).
@@ -510,8 +509,6 @@ static uint32_t g_hit_wild;                   /* hits that threw the player's ca
 static uint32_t g_gp_n, g_gp_said, g_gp_calls;   /* Ghost mode Everything: contacts let through, cars named in the log,
                                                     contacts looked at (ghost_pair) */
 static uint32_t g_gp_racer;                       /* ...contacts with an outrun's racer, resolved */
-static uint32_t g_nm_gone, g_nm_got;              /* near misses let go (cars passed through), and those counted in free roam
-                                                    (roam_game_near_miss) */
 static uint32_t g_gc_n;                           /* the drive camera's tests with such a car by its eye, taken out
                                                     (roam_game_camera_cars) */
 static uint64_t g_gp_ns;                          /* ...and the time that took */
@@ -8827,7 +8824,7 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
     if (!strcasecmp(sub, "traffic")){
         /* "mp traffic [racer] [jump [racer] M [TURN [LEFT]] | go V | outrun]" (free roam with others on or off): the game's cars
          * out (traffic, AI racers: ghost_pair's), the nearest, the contacts Ghost mode Everything let through and their
-         * cost, the near misses (roam_game_near_miss), the drive camera's tests with one of those cars by its eye, taken
+         * cost, the drive camera's tests with one of those cars by its eye, taken
          * out (roam_game_camera_cars), the player's car's speed; jump: the player's car M metres ahead of
          * the nearest traffic car (racer: AI racer) and LEFT metres to its left, heading its way turned by TURN degrees
          * (180: facing it); go: the player's car on at V m/s the way it faces (its momentum and velocity, as
@@ -8846,11 +8843,11 @@ int roam_game_cmd(CPU *c, const char *args, long *wait_start){
         char tn[20] = ""; if (near && !traffic_car(near, tn, sizeof tn)) cstr(rd32(near + 0xcu), tn, sizeof tn);
         rlog("[roam] f=%ld mp traffic: %d traffic car(s), %d AI racer(s) out; the nearest %s: %s %.1f m away at %.1f m/s%s; my car at %.1f m/s; "
              "Ghost mode %s, %u of %u contact(s) let through, %.2f us each looked at, %u with an outrun's racer resolved; "
-             "near misses: %u counted, %u let go; camera by a car let through %u time(s)\n", f, nt, nr,
+             "camera by a car let through %u time(s)\n", f, nt, nr,
              racer ? "AI racer" : "traffic car", near ? tn : "none", (double)nd, near ? (double)MRF32(near + 0x42cu) : 0.0,
              near && outrun_racer(near) ? " (the outrun's)" : "", me ? (double)MRF32(me + 0x42cu) : 0.0,
              !O.on ? "(free roam with others off)" : O.collide ? "off" : O.ghost_all ? "everything" : "players",
-             g_gp_n, g_gp_calls, g_gp_calls ? (double)g_gp_ns / 1e3 / g_gp_calls : 0.0, g_gp_racer, g_nm_got, g_nm_gone, g_gc_n);
+             g_gp_n, g_gp_calls, g_gp_calls ? (double)g_gp_ns / 1e3 / g_gp_calls : 0.0, g_gp_racer, g_gc_n);
         if (!strcasecmp(a1, "jump") && near){
             char a3[32] = {0}, a4[32] = {0}, a5[32] = {0}; sscanf(args + used, "%*s %*s %31s %31s %31s", a3, a4, a5);
             float ahead = (float)atof(racer ? a3 : a2), turn = (float)atof(racer ? a4 : a3), left = (float)atof(racer ? a5 : a4);
@@ -10033,56 +10030,12 @@ int roam_game_ghost_pair(uint32_t contact){
     }
     return r;
 }
-/* Ghost mode Everything: no near miss with the game's cars that pass
- * through.  The game's near miss (0x56F170, the style monitor's, racer
- * +0x1DC): the player's car, at 30 mph or more, comes within 1.5 m of
- * another (a pair of the collision step's, +0x10 the gap) at 80 mph or more
- * between the two, and counts once they are apart without touching (the
- * pair gone, or 1.9 m): style points (the near miss's moment, slot 21),
- * which fill the nitrous (0x601740).  A car the player's car drives through
- * (ghost_pair) never counts as touching it (the pair's +0x244 stays 0), so
- * driving through traffic was a near miss each time (a COUPE at a gap of 0,
- * tests/scripts/roam_ghost_nearmiss.txt), and going by one is no risk
- * anyway: the one the near miss watches (NM_STATE 1) is let go before it
- * can count (NM_STATE 2, within the same call).  The airborne kind, over a
- * car's roof (NM_OVER, slot 27), stays; so do the outrun's tuner (solid)
- * and friends' cars */
-#define NM_RACER        0x00u         /* the style monitor: its racer (+0 the car) */
-#define NM_MOMENTS      0x04u         /* ...the racer's style moments (racer +0x1D4): moment k at +4k */
-#define NM_STATE        0x1du         /* ...the near miss: 0 looking, 1 one near, 2 it counts (byte) */
-#define NM_OVER         0x1eu         /* ...1: in the air over the other car (byte) */
-#define NM_PAIR         0x20u         /* ...the pair, then its two bodies (+0x24, +0x28) */
-#define MOMENT_NEAR     21u           /* the near miss's style moment */
-#define MOMENT_AT       0x34u         /* a style moment: when it last counted (0x56EAB0, game ticks) */
-static uint32_t g_nm_car;                         /* the car let go last, and when (one count a pass: the game may */
-static long g_nm_at;                              /* take it up again a frame or two later) */
 /* a car of the game's the player's car passes through now (ghost_pair's rule) */
 static int gp_through(uint32_t car){
     uint32_t d = ok(car, 0x9e0) ? MR32(car + 0x24u) : 0;
     if (d != DRIVER_RACER && d != DRIVER_TRAFFIC) return 0;
     for (int j = 0; j < GP_N; j++) if (g_gp.car[j] == car && g_step - g_gp.step[j] <= 1u) return 1;
     return !outrun_racer(car);
-}
-void roam_game_near_miss(CPU *c, void (*orig)(CPU *)){
-    uint32_t nm = c->ecx, me = player_car();
-    if (!ok(nm, NM_PAIR + 0xc) || !me || rd32(rd32(nm + NM_RACER)) != me){ orig(c); return; }
-    uint32_t mo = rd32(MR32(nm + NM_MOMENTS) + 4u * MOMENT_NEAR), at = ok(mo, MOMENT_AT + 4) ? MR32(mo + MOMENT_AT) : 0;
-    if (O.ghost_all && MR8(nm + NM_STATE) == 1u && !MR8(nm + NM_OVER) && roaming()){
-        uint32_t a = body_car(MR32(nm + NM_PAIR + 4u)), b = body_car(MR32(nm + NM_PAIR + 8u)), theirs = a == me ? b : b == me ? a : 0;
-        if (theirs && gp_through(theirs)){
-            MR8(nm + NM_STATE) = 0; MR32(nm + NM_PAIR) = 0; MR32(nm + NM_PAIR + 4u) = 0; MR32(nm + NM_PAIR + 8u) = 0;
-            if ((theirs != g_nm_car || rh_frame() - g_nm_at > 120) && (++g_nm_gone <= 16 || g_nm_gone % 100u == 0)){
-                char tn[20] = "";
-                int traffic = traffic_car(theirs, tn, sizeof tn);
-                rlog("[roam] f=%ld Ghost mode Everything: no near miss with %s%s (%u so far)\n", rh_frame(),
-                     traffic ? "a traffic car, " : MR32(theirs + 0x24u) == DRIVER_RACER ? "a tuner" : "a car of the game's", tn, g_nm_gone);
-            }
-            g_nm_car = theirs; g_nm_at = rh_frame();
-        }
-    }
-    orig(c);
-    if (ok(mo, MOMENT_AT + 4) && MR32(mo + MOMENT_AT) != at && roaming() && (++g_nm_got <= 16 || g_nm_got % 100u == 0))
-        rlog("[roam] f=%ld a near miss in free roam (%u so far)\n", rh_frame(), g_nm_got);
 }
 /* Ghost mode Everything: the drive camera goes through the game's cars that
  * pass through the player's car.  The drive camera keeps out of other cars
