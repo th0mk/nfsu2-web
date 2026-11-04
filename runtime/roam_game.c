@@ -6656,6 +6656,8 @@ static void mp_ui_frame(CPU *c, int64_t host, int in_roam, int press, const MpSp
     if (!sp || sp->kind != MPS_ONLY) return;
     mp_engage_spot(host, sp->race);
 }
+/* the race card's Solo or Multiplayer question is up (career.c: the career bot answers Solo, its focused button) */
+int roam_game_card_question(void){ return g_mpd.dlg == MPD_CARD; }
 #endif
 
 /* ---- multiplayer races from free roam: labels over the spots ---------------------------------- */
