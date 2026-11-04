@@ -971,6 +971,9 @@ void sub_00492e10(CPU *c){
             if (dt < k) MRF32(c->esp + 4u) = dt > 0.f ? dt : 0.f;
             else MRF32(c->esp + 4u) = dt < hi ? dt : hi;
         }
+        /* photo mode's shutter (photo.c): the smoke and sparks age with the world's step of the frame, or not at all */
+        float photo_particle_step(void), ps = photo_particle_step();
+        if (ps >= 0.f) MRF32(c->esp + 4u) = ps;
         g_f.part += MRF32(c->esp + 4u);
     }
     sub_00492e10_orig(c);

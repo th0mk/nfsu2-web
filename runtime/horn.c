@@ -200,6 +200,9 @@ void horn_set_volume(float v){
     if (v > 1.f) v = 1.f;
     PUT(g_vol, fbits(v));
 }
+/* photo mode's Horns off: every horn quiet while it is on (the voices fade as the volume does) */
+static uint32_t g_mute;
+void horn_mute(int on){ PUT(g_mute, on ? 1u : 0u); }
 static void master_read(void){
     float m = horn_game_master();
     if (!(m >= 0.f)) m = 0.f;
@@ -317,7 +320,7 @@ void horn_mix(float *acc, unsigned frames, unsigned rate){
     float k_smooth = 1.f - expf(-1.f / (0.020f * fs));
     float k_hp = 1.f / (1.f + 2.f * (float)M_PI * 180.f / fs), rise = 1.f / (0.030f * fs);
     uint32_t gap = (uint32_t)(GAP_S * fs), vib_in = (uint32_t)(0.25f * fs);
-    float vol = bitsf(GET(g_vol)) * bitsf(GET(g_master));   /* in the voices' gains, smoothed with them */
+    float vol = GET(g_mute) ? 0.f : bitsf(GET(g_vol)) * bitsf(GET(g_master));   /* in the voices' gains, smoothed with them */
     for (int v = 0; v < HORN_VOICES; v++){
         float gain = bitsf(GET(g_in[v].gain));
         if (now - GET(g_in[v].stamp) > STALE_MS) gain = 0.f;

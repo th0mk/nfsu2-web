@@ -945,8 +945,8 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
  * game draws, sized with the HUD (--u, 16 units at the nearest) and scaled with the name by the line's transform
  * (quickchat.ts LINE_MIN: never below 70 %), which follows the game's marks every frame; it pops up, and fades out
  * at its end */
-/* photo mode (photo.ts): the panel, a column at the right edge (Take photo first, the keys under the buttons; it
- * scrolls on a screen too short for it), a flash at each picture, the camera's hand on the picture; the page's other
+/* photo mode (photo.ts): the panel, a column at the right edge in tabs (Take photo first under each; it scrolls on a
+ * screen too short for it), a flash at each picture, the camera's hand on the picture; the page's other
  * things on the game hidden while it is on (its toasts stay: the picture's) */
 .stage.photo :is(.touch, .qc-lines, .qc-picker, .drift-panel, .drift-pop, .pause-hint, .friend-prompt, .notices, .lobby, .lobby-cover, .hud-fps, .stage-menu) {
   display: none !important;
@@ -956,13 +956,40 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .photo-panel {
   --pe: max(16px, env(safe-area-inset-top), env(safe-area-inset-bottom));
   position: absolute; right: max(16px, env(safe-area-inset-right)); top: var(--pe); z-index: 5;
-  width: 240px; max-height: calc(100% - 2 * var(--pe)); overflow-y: auto; overscroll-behavior: contain;
+  width: 268px; max-height: calc(100% - 2 * var(--pe)); overflow-y: auto; overscroll-behavior: contain;
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start;
   padding: 12px 14px 14px; border: 1px solid var(--line); border-radius: 10px; background: rgba(0, 0, 0, 0.78);
   font: 400 14px/20px var(--font); color: var(--text);
 }
-.ph-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .ph-title { font-style: italic; font-weight: 700; text-transform: uppercase; color: var(--lime); }
+/* its tabs (Camera, Picture, Scene, Controls): the start page's underline tabs at the panel's size, each with its pane */
+.ph-tabs { display: flex; gap: 12px; box-shadow: inset 0 -1px var(--line); }
+.ph-tab { flex: none; height: 32px; padding: 0; border: 0; background: none; color: var(--muted); font: italic 700 14px/20px var(--font); cursor: pointer; }
+.ph-tab:hover { color: var(--text); }
+.ph-tab[aria-selected="true"] { color: var(--lime); box-shadow: inset 0 -3px var(--lime); }
+/* where a language's words do not fit on the line: smaller, then two rows of two, each on its own divider (photo.ts
+ * fitTabs, as the start page's tabs.ts) */
+.ph-tabs[data-fit="small"] { gap: 8px; }
+.ph-tabs[data-fit="small"] > .ph-tab { font-size: 12px; }
+.ph-tabs[data-fit="rows"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; box-shadow: none; }
+.ph-tabs[data-fit="rows"] > .ph-tab { box-shadow: inset 0 -1px var(--line); text-align: left; overflow-wrap: anywhere; }
+.ph-tabs[data-fit="rows"] > .ph-tab[aria-selected="true"] { box-shadow: inset 0 -3px var(--lime); }
+.ph-pane { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; }
+.ph-pane[hidden], .ph-check[hidden] { display: none; }
+.ph-pane > .ph-mode { justify-self: start; }
+/* a group's heading in a pane (Path, Cars), on a divider; the path's buttons (Add point and Clear, Play path under
+ * them); a line under them; two columns of boxes */
+.ph-sec { padding-top: 8px; border-top: 1px solid var(--line); font-style: italic; font-weight: 700; }
+.ph-row3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.ph-row3 > [data-act="play"] { grid-column: 1 / -1; order: 1; }
+.ph-row3 button {
+  padding: 4px 8px; border: 1px solid var(--edge); border-radius: 6px; background: var(--field);
+  font-style: italic; font-weight: 700; cursor: pointer;
+}
+.ph-row3 button:hover:not(:disabled) { border-color: var(--lime); }
+.ph-row3 button:disabled { opacity: 0.4; cursor: default; }
+.ph-note { margin-top: -6px; color: var(--muted); font-size: 12px; line-height: 18px; }
+.ph-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .ph-mode { display: inline-flex; border: 1px solid var(--edge); border-radius: 6px; overflow: hidden; }
 .ph-mode button { padding: 2px 10px; border: 0; background: none; color: var(--muted); cursor: pointer; }
 .ph-mode button.on { background: var(--lime-fill); color: var(--lime); }
@@ -970,7 +997,7 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
 .ph-slider { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
 .ph-slider input { flex: 0 1 136px; min-width: 96px; margin: 0; accent-color: var(--lime); }
 .ph-slider > span, .ph-pick > span { min-width: 0; overflow-wrap: anywhere; }
-.ph-slider:has(input:disabled) { opacity: 0.4; }
+.ph-slider:has(input:disabled), .ph-pick:has(select:disabled), .ph-check:has(input:disabled) { opacity: 0.4; }
 /* a list in the mode buttons' frame */
 .ph-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
 .ph-pick select {
@@ -999,8 +1026,9 @@ html:has(> body > .stage:not([hidden])) { overflow: hidden; }
   color: var(--muted); font-size: 12px; line-height: 18px;
 }
 .ph-hints kbd { margin-right: 6px; padding: 0 5px; border-radius: 3px; font: 700 0.9em/1.5 var(--font); }
+.ph-pane.ph-hints { padding-top: 0; border-top: 0; }
 @media (max-height: 480px) {
-  .photo-panel { width: 210px; gap: 6px; padding: 8px 10px 10px; }
+  .photo-panel { width: 240px; gap: 6px; padding: 8px 10px 10px; }
   .ph-buttons { gap: 6px; }
   .ph-buttons button { padding: 4px 12px; }
   .ph-buttons .ph-shoot { padding: 6px 12px; }

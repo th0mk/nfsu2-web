@@ -223,12 +223,23 @@ typedef struct { uint32_t magic, pad; double input_ms, handoff_ms; } GwLat;
  * ack is the page's, in both buffers' blocks (the game hands over only the
  * words before it): gen << 16 | the frames of that picture it has.  The game
  * draws frame n + 1 next, so a frame the page never encodes (a newer one
- * took its place, the GPU behind) is drawn again, and none counts twice. */
+ * took its place, the GPU behind) is drawn again, and none counts twice.
+ * want is the page's too: a picture asked for (Take photo), as a number
+ * 1 .. 0xFFFF in its low half and the most tiles a side the page can put
+ * together (1 .. 4) at 16.  tile is the game's answer, for that frame: the
+ * tile drawn (its index, left to right then top to bottom) in its low byte,
+ * the tiles a side at 8, what the game is taking at 12 (GW_CAP_*: nothing
+ * but the still picture, a bigger picture in tiles, a shutter's time) and
+ * the last picture asked for that it saw at 16.  fov: the field of view the
+ * frame is drawn with (degrees across), and lens what the page makes of it
+ * (GW_LENS_*: as drawn, a fisheye). */
 #define GW_PHOTO_MAGIC 0x544F4850u        /* "PHOT" */
 enum { GW_PHOTO_OFF = 0, GW_PHOTO_LIVE = 1, GW_PHOTO_ADD = 2, GW_PHOTO_DONE = 3, GW_PHOTO_NOW = 4 };
-typedef struct { uint32_t magic, state, n, target, gen, ack, pad[2]; } GwPhoto;
+enum { GW_CAP_NONE = 0, GW_CAP_TILES = 1, GW_CAP_SHUTTER = 2 };
+enum { GW_LENS_PLAIN = 0, GW_LENS_FISHEYE = 1 };
+typedef struct { uint32_t magic, state, n, target, gen, ack, tile, want; float fov; uint32_t lens, pad[2]; } GwPhoto;
 #define GW_K_PHOTO     1600u
-#define GW_PHOTO_BYTES 32u
+#define GW_PHOTO_BYTES 48u
 
 /* The page binds the VS constant arena (K) in windows of GW_KWIN_ROWS rows of
  * 16 bytes: 64 KB, the default maxUniformBufferBindingSize.  A draw's block
@@ -264,6 +275,7 @@ _Static_assert(GW_K_MARKS >= GW_K_HL + GW_HL_BYTES, "GwMarks after GwHL");
 _Static_assert(sizeof(GwTone) == GW_TONE_BYTES && GW_K_TONE >= GW_K_MARKS + GW_MARKS_BYTES, "GwTone after GwMarks");
 _Static_assert(sizeof(GwLat) == GW_LAT_BYTES && offsetof(GwLat, input_ms) == 8 && GW_K_LAT % 8 == 0
                && GW_K_LAT >= GW_K_TONE + GW_TONE_BYTES, "GwLat after GwTone");
-_Static_assert(sizeof(GwPhoto) == GW_PHOTO_BYTES && GW_K_PHOTO >= GW_K_LAT + GW_LAT_BYTES && offsetof(GwPhoto, ack) == 20,
+_Static_assert(sizeof(GwPhoto) == GW_PHOTO_BYTES && GW_K_PHOTO >= GW_K_LAT + GW_LAT_BYTES && offsetof(GwPhoto, ack) == 20
+               && offsetof(GwPhoto, tile) == 24 && offsetof(GwPhoto, want) == 28 && offsetof(GwPhoto, fov) == 32,
                "GwPhoto after GwLat");
 #endif

@@ -481,6 +481,7 @@ typedef struct {
     int64_t  touch_t;                         /* when the car last touched the player's car (host time; block_hit) */
     int      crew;                            /* the friend is in our crew number crew - 1 (O.crew; FRIEND_CREW: our friend
                                                  in none of them; 0: none) */
+    int      friend;                          /* a friend (in a crew of ours or not): photo mode's Friends */
 } Slot;
 static Slot g_sl[NSLOT];
 static uint32_t g_world_seen;
@@ -8532,7 +8533,7 @@ void roam_game_frame(CPU *c){
             v->cfg_gen = p->cfg_gen; v->cfg_len = 0; v->has_cfg = p->cfg_len > 0; v->err = 0;
             int slotted = -1;
             for (int k = 0; k < NSLOT; k++) if (g_sl[k].st != SL_FREE && g_sl[k].st != SL_PARKED && g_sl[k].peer == i && g_sl[k].peer_id == p->id) slotted = k;
-            if (slotted >= 0) g_sl[slotted].crew = v->crew;
+            if (slotted >= 0){ g_sl[slotted].crew = v->crew; g_sl[slotted].friend = rc_peer_friend(&g_s, i) != 0; }
             /* the record only when a slot will need it */
             if (p->cfg_len && (slotted < 0 || g_sl[slotted].cfg_gen != p->cfg_gen)){
                 memcpy(v->cfg, p->cfg, (size_t)p->cfg_len); v->cfg_len = p->cfg_len; v->look = rc_fnv1a_bytes(p->cfg, (uint32_t)p->cfg_len); }
@@ -8745,14 +8746,19 @@ void roam_game_hud(CPU *c){
 /* photo mode (photo.c): whether friends' names can show here, and the names over their cars, and the player's own over
  * theirs, placed for photo mode's camera (its frame of the front end, which draws them alone): the FE objects shown */
 int roam_game_names_here(void){ return O.on && g_net_ok && O.labels && g_in_roam && MR8(G_SHOW_NAMES); }
-/* photo mode's Cars: Friends & crews: whether the car of this render info (car +0x554) is one of ours whose player is
- * a friend or in one of the player's crews (its slot's crew, FRIEND_CREW for a friend in none) */
-int roam_game_buddy_car(uint32_t ri){
-    for (int k = 0; k < NSLOT && ri; k++){
+/* ...and whether other players' cars can be here at all (photo mode's Friends, Crews and Players boxes) */
+int roam_game_online_here(void){ return O.on && g_net_ok && g_in_roam; }
+/* photo mode's cars shown and the car its camera is on: what player this car is (the slot's car itself): -1 none of
+ * ours (the player's own, traffic, the game's racers), 0 another player, 1 a friend, 2 a crew-mate (a friend in a crew
+ * of ours: 1); name: theirs */
+int roam_game_slot_kind(uint32_t car, const char **name){
+    for (int k = 0; k < NSLOT && car; k++){
         const Slot *s = &g_sl[k];
-        if (s->st == SL_ACTIVE && s->crew && ok(s->car, 0x558) && MR32(s->car + 0x554u) == ri) return 1;
+        if (s->st != SL_ACTIVE || s->car != car) continue;
+        if (name) *name = s->name;
+        return s->friend || s->crew == FRIEND_CREW ? 1 : s->crew ? 2 : 0;
     }
-    return 0;
+    return -1;
 }
 int roam_game_names(CPU *c, uint32_t *obj, int max){
     if (!roam_game_names_here()) return 0;

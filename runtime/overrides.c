@@ -487,11 +487,41 @@ void sub_0061e380(CPU *c){
     if (fr == 1 || fr == 4) ST(0) = 1.0; else if (fr == 2 || fr == 3) ST(0) = 0.0;
 }
 void hfr_rain_update(CPU *c);          /* framerate.c: sub_0061f120_orig at any frame rate */
+/* photo mode's Weather (photo.c): -1 as the game has it, 0 dry, 1 rain; and whether its world stands.  Forced, the rain
+ * is what the photo asks at once (its strength +0x1F0 too, which only eases while the world runs).  In a world that
+ * stands the update would do nothing (a world step of 0 is under its gate), so it runs on a step so short that the
+ * drops hang where they are (framerate.c scales their moves by it) but the rain's look is made; and the first frames
+ * after rain is asked, on a 60 fps step each, so that there are drops to hang. */
+void sub_0061f120_orig(CPU *c);
+int photo_weather(void);
+int photo_stands(void);
+#define A_WORLDDT_O 0x00865154u
+#define RAIN_PRIME  40
+static void photo_rain(CPU *c, uint32_t rain){
+    static int was = -1, prime;
+    int pw = photo_weather();
+    if (pw != was){ prime = pw == 1 ? RAIN_PRIME : 0; was = pw; }
+    MRF32(rain + 0x5094u) = (float)pw; MRF32(rain + 0x1f0u) = (float)pw;
+    if (pw == 1){ MRF32(rain + 0x5098u) = 0.0f; MRF32(rain + 0x509cu) = 0.0f; }   /* an overcast sky with it */
+    if (!photo_stands()){ hfr_rain_update(c); return; }
+    float dt = MRF32(A_WORLDDT_O);
+    uint32_t ret = MR32(c->esp);
+    for (; prime > 0; prime--){                 /* (the call pops its return: pushed again for the next) */
+        MRF32(A_WORLDDT_O) = 1.f / 60.f; c->ecx = rain;
+        sub_0061f120_orig(c);
+        c->esp -= 4u; MR32(c->esp) = ret;
+        MRF32(rain + 0x1f0u) = (float)pw;
+    }
+    MRF32(A_WORLDDT_O) = 1e-4f; c->ecx = rain;
+    hfr_rain_update(c);
+    MRF32(A_WORLDDT_O) = dt;
+}
 void sub_0061f120(CPU *c){
     void split_rain_begin(CPU *); void split_rain_end(void);
     split_rain_begin(c);
     uint32_t rain = c->ecx;
     int fr = force_rain();
+    if (rain && mem_is_committed(rain + 0x50a3u) && photo_weather() >= 0){ photo_rain(c, rain); split_rain_end(); return; }
     if (fr && rain && mem_is_committed(rain + 0x50a3u))
         MRF32(rain + 0x5094u) = (fr == 1 || fr == 4) ? 1.0f : 0.0f;
     hfr_rain_update(c);
@@ -554,10 +584,18 @@ void sub_0060faa0(CPU *c){
  * and the product made again (the view times the projection).  photo.c
  * gives the lens's point as where far away lands (a part of the view's half
  * width): the eye's move a is that times F / P00, the same scale for y, so
- * the blur is round on the screen. */
+ * the blur is round on the screen.  Photo mode's lens shift moves the
+ * picture's middle (the projection's third row again, before the frame's
+ * shift), the game drawing wider for it (photo.c gives a wider field of view
+ * and how much: the projection is made that much bigger again, so what the
+ * shift brings in was not culled); a picture in tiles makes the projection N
+ * times as big and moves it so that one tile fills the screen (its x and y
+ * columns times N, then a move of the third row).  P00 for the lens's eye move
+ * is the picture's (pic_p00: the projection without the tiles'). */
 float input_view_roll(void);
 int photo_view(uint16_t *fov, float *roll, float *jit);
 void look_view(uint32_t id, uint32_t cam);  /* look.c: the right stick's look round the car turns the camera */
+static float pic_p00;                       /* the picture's P00 (without the tiles'), for the next frame's lens */
 static void photo_shear(uint32_t plat, const float *j){
     float *V = (float *)(g_mem + plat), *Pr = V + 16, *M = V + 32;
     float p00 = Pr[0], p11 = Pr[5], p23 = Pr[11];
@@ -570,6 +608,17 @@ static void photo_shear(uint32_t plat, const float *j){
         fprintf(stderr, "[photo] the view's product made again: %s (off by %g); P00 %.3f P11 %.3f P23 %.3f\n",
                 e < 1e-3f ? "as the game's" : "NOT as the game's", (double)e, (double)p00, (double)p11, (double)p23);
     }
+    /* the lens shift: the game drew j[7] times wider; the picture's middle to (j[5], j[6]) (x right, y up) */
+    float k = j[7] >= 1.f ? j[7] : 1.f, n = j[8] >= 1.f ? j[8] : 1.f;
+    float ox = -j[5], oy = -j[6];
+    /* a tile: column j[9] of n from the left, row j[10] from the top; the whole picture's x and y n times as big, moved
+     * so that the tile's middle is the screen's */
+    float tx = n > 1.f ? 2.f * j[9] + 1.f - n : 0.f, ty = n > 1.f ? n - 2.f * j[10] - 1.f : 0.f;
+    for (int r = 0; r < 4; r++){ Pr[r * 4] *= k * n; Pr[r * 4 + 1] *= k * n; }
+    Pr[8] += (n * ox - tx) * p23; Pr[12] += (n * ox - tx) * Pr[15];
+    Pr[9] += (n * oy - ty) * p23; Pr[13] += (n * oy - ty) * Pr[15];
+    pic_p00 = p00 * k;
+    p00 = Pr[0]; p11 = Pr[5];
     Pr[8] += j[0] * p23 + (j[4] > 0.f ? j[2] * p00 / j[4] : 0.f);
     Pr[9] += j[1] * p23 + (j[4] > 0.f ? j[3] * p11 / j[4] : 0.f);
     for (int r = 0; r < 4; r++) for (int k = 0; k < 4; k++)
@@ -589,7 +638,7 @@ void sub_005c7ec0(CPU *c){
     uint32_t plat = c->ecx, view = MR32(c->esp + 4u);
 #ifdef __wasm__
     uint32_t cam = 0, fcam = 0; uint8_t keep[0x40]; uint16_t fov = 0, fkeep = 0;
-    float pj[5] = { 0 };
+    float pj[11] = { 0 };
     int shift = 0;
     if (view && mem_is_committed(view + 0x43u) && (MR32(view + 4u) == 1u || MR32(view + 4u) == 4u)){
         look_view(MR32(view + 4u), MR32(view + 0x40u));     /* till after Present, for everything drawn */
@@ -599,7 +648,8 @@ void sub_005c7ec0(CPU *c){
             fcam = MR32(view + 0x40u);
             if (fcam && mem_is_committed(fcam + 0xc5u)){ fkeep = MR16(fcam + 0xc4u); MR16(fcam + 0xc4u) = fov; }
             else fcam = 0;
-            shift = (pj[0] != 0.f || pj[1] != 0.f || pj[2] != 0.f || pj[3] != 0.f) && plat && mem_is_committed(plat + 0xbfu);
+            shift = (pj[0] != 0.f || pj[1] != 0.f || pj[2] != 0.f || pj[3] != 0.f || pj[5] != 0.f || pj[6] != 0.f || pj[8] > 1.f)
+                    && plat && mem_is_committed(plat + 0xbfu);
         }
         cam = a != 0.f || shift ? MR32(view + 0x40u) : 0u;
         if (cam && mem_is_committed(cam + 0x3fu)){
@@ -608,7 +658,7 @@ void sub_005c7ec0(CPU *c){
             if (shift){
                 /* the lens's point (far away's move, in half widths) as the eye's move in metres, round in the view:
                  * times the focus distance over the projection's x scale (the view's own, as the last frame made it) */
-                float p00 = MRF32(plat + 0x40u), s = p00 > 0.05f && p00 < 50.f && pj[4] > 0.f ? pj[4] / p00 : 0.f;
+                float p00 = pic_p00 > 0.f ? pic_p00 : MRF32(plat + 0x40u), s = p00 > 0.05f && p00 < 50.f && pj[4] > 0.f ? pj[4] / p00 : 0.f;
                 pj[2] *= s; pj[3] *= s;
                 MRF32(cam + 0x30u) -= pj[2]; MRF32(cam + 0x34u) -= pj[3];
             }

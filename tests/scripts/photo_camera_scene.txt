@@ -1,0 +1,76 @@
+# Photo mode's camera and scene options (runtime/photo.c) in a Quick Race, on the play page with artifacts= for the
+# dumps: the camera gliding (Smoothing), turning by itself, the free camera keeping its height, a path played, the
+# camera on the car in the middle of the picture (a racer) with time running on, the kinds of cars shown, the other
+# cars' headlights off, rain and dry for the photo.  Steps wait long: a slow page dumps some frames late.
+0     tapuntil RETURN MC_Background.fng 120 4000
++200  tap RETURN                                   # "No" profile
++0    tapuntil RETURN UI_QRModeSelect.fng 150 3000 # main menu -> Quick Race
++200  tapuntil RETURN UI_QRTrackSelect.fng 150 1500
++200  tapuntil RETURN UI_QRModeOptions.fng 150 1500
++200  tapuntil RETURN UI_QRCarSelect.fng 150 1500
++200  tapuntil RETURN PC_Loading.fng 150 1500
++0    waitmem 0x8654a4 6 3000
++0    wzero
++0    photo hello
+7000wms autopilot on
+12000wms photo on
++300  dump base
++0    photo smooth 0.8
++0    photo drag 0.4 0
++12   dump glide_mid
++300  dump glide_end
++0    photo smooth 0
++0    photo spin 40
++90   dump spin_a
++90   dump spin_b
++0    photo spin 0
++0    photo reset
++30   photo path add
++0    photo drag -0.3 0.05
++0    photo dolly -6
++60   photo path add
++0    photo drag -0.3 -0.05
++0    photo dolly 8
++60   photo path add
++2    photo path play 3
++45   dump path_a
++60   dump path_b
++180  dump path_end
++0    photo path clear
++0    photo reset
++30   photo free
++0    photo level 1
++0    photo turn 0 -0.6
++30   photo turn 0 0
++0    photo move 0 1
++60   photo move 0 0
++60   dump level
++0    photo reset
++30   photo target 1
++300  dump target
++0    photo freeze 0
++150  dump target_live
++0    photo freeze 1
++0    photo target 0
++30   photo reset
++30   photo drag 1.35 0.03                         # round to the cars' fronts: their headlights
++0    photo dolly -4
++300  dump front
++0    photo show 1
++300  dump show_mine
++0    photo show 62
++300  dump show_others
++0    photo show 63
++0    photo lights 0
++300  dump lights_off
++0    photo lights 1
++0    photo weather 1
++300  dump rain
++0    photo weather 0
++300  dump dry
++0    photo weather -1
++0    photo horns 0
++30   photo horns 1
++0    photo off
++30   expect i:0x890084 == 0
++10   quit
