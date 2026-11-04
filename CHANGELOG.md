@@ -11,8 +11,10 @@ first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
 
-## 2026-11-04 (01e41df)
+## 2026-11-04 (91050e9)
 
+- **Races:** other players' cars come straight from their games every frame; close ones drive on the game's physics and bump back.
+- **Headlights:** G turns them off or on, hold it for high beam; friends see them.
 - **Free roam:** a country flag before your name: pick yours on the start page, in Online, Your flag.
 - **Quick Race:** up to 127 laps and 5 opponents.
 - **Split screen:** two players on one keyboard, on the arrows and WASD.
@@ -26,6 +28,7 @@ not guessed.
 - **Ghost mode:** the camera no longer hops over traffic on Everything.
 - **Horns:** follow the game's Master Volume.
 - **Start page:** plainer error messages.
+- **Free roam:** fewer error 134 crashes on the way back into a crowded free roam.
 
 ## 2026-11-03 (a5892ba)
 
