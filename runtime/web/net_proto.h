@@ -78,6 +78,10 @@
 #define NET_KIND_BATTLE   21u   /* TX ring only, never on the switch: a drift battle's scoreboard while it counts, as a
                                    JSON object {"t","me","a","vs","b"} (seconds left, our name and points, the other
                                    player's; roam_game.c db_panel), "{}" when there is none (drift.ts) */
+#define NET_KIND_COOP     22u   /* TX ring only, never on the switch: co-op free roam's player 2 online, as a JSON
+                                   object {"name"} (its name on the switch: player 1's + " 2"; roam_game.c c2_*), sent
+                                   when its endpoint starts or renames, "{}" when it ends: the page checks the name as
+                                   player 1's (a claim, the server's names) and may send another (IEV_NAME, INAME_SEAT2) */
 #define NET_BROADCAST      0xFFFFFFFFu
 #define NET_ROAM_HUB       0x0A4D00FDu  /* 10.77.0.253: the server's free-roam hub (web/server-rs/crates/roam),
                                    an address the switch never hands out */

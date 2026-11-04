@@ -66,6 +66,7 @@ export const IEV_PHOTO = 14;
 /** a new name for free roam and Online mode, in pieces of 11 bytes: dik = where the piece starts, vk = the whole
  *  length, chars[3] then a and b (little-endian) its bytes (runtime/web/input_proto.h) */
 export const IEV_NAME = 15;
+export const INAME_SEAT2 = 1;                 // IEV_NAME's flags: co-op player 2's name (runtime/web/input_proto.h)
 
 export const IKF_REPEAT = 1;
 export const IKF_ALT = 2;

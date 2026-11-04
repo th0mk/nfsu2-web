@@ -479,6 +479,7 @@ int mprace_owns_input(void);
 void sms_request(int id);
 void photo_input(int cmd, int a, int b);                 /* photo.c */
 void roam_plat_name_piece(int off, int total, const char *b, int n);    /* roam_web.c */
+void roam_plat_name2_piece(int off, int total, const char *b, int n);   /* ...player 2's (co-op) */
 static int g_muted;
 static void handle(const InEv *e){
     int mute = mprace_owns_input();
@@ -522,7 +523,8 @@ static void handle(const InEv *e){
     case IEV_NAME: {
         char b[11];
         memcpy(b, e->ch, 3); memcpy(b + 3, &e->a, 4); memcpy(b + 7, &e->b, 4);   /* (wasm is little-endian) */
-        roam_plat_name_piece(e->dik, e->vk, b, (int)sizeof b);
+        if (e->flags & INAME_SEAT2) roam_plat_name2_piece(e->dik, e->vk, b, (int)sizeof b);
+        else roam_plat_name_piece(e->dik, e->vk, b, (int)sizeof b);
         break; }
     default: break;
     }

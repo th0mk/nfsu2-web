@@ -340,14 +340,14 @@ async function pick(d: PlayNameDeps, title: string, before: Node[], alt: string,
  * The server's operator took the player's name away (net/index.ts onRename: `was`, with the operator's `msg`): a
  * question for another, the box empty and checked as it is typed (a name another player claimed, or one the server
  * does not allow, will not do; a server without claims asks nothing).  The name picked, saved as Your name; null: Not
- * now.
+ * now.  seat2: co-op player 2's name was taken (the box says so; the name is player 2's, for this game only, not saved).
  */
-export async function renamePick(d: PlayNameDeps, was: string, msg: string): Promise<string | null> {
+export async function renamePick(d: PlayNameDeps, was: string, msg: string, seat2 = false): Promise<string | null> {
   const body = document.createElement('div');
   body.append(para(t('{name} isn\'t allowed here.', { name: was })));
   if (msg) body.append(para(msg));
   const row = document.createElement('p'); row.className = 'dlg-field';
-  const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'rename-ask-name', textContent: t('Your name') });
+  const label = Object.assign(document.createElement('label'), { className: 'set-label', htmlFor: 'rename-ask-name', textContent: seat2 ? t('Player 2\'s name') : t('Your name') });
   const f = Object.assign(document.createElement('input'), { type: 'text', id: 'rename-ask-name', maxLength: 15, autocomplete: 'off', spellcheck: false });
   row.append(label, f);
   const line = Object.assign(document.createElement('p'), { className: 'hint claim-line' });
@@ -381,7 +381,7 @@ export async function renamePick(d: PlayNameDeps, was: string, msg: string): Pro
   await check();
   const name = onlineName(f.value.trim());
   if (!name || !good) return null;
-  await d.save(name);
+  if (!seat2) await d.save(name);
   return name;
 }
 

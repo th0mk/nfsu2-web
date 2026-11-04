@@ -67,7 +67,7 @@ import { changelog } from './changelog';
 import { gamesStarted, playedMs, PlayTime, SMS_AFTER_MS } from './playtime';
 import { canKeep } from './pwkeep';
 import { keepPageId, PAGE_ID_FILE, pageId, seen } from './page-id';
-import { NameClaims, onlineName } from './claim';
+import { digitsFor, NameClaims, onlineName, readsAsSlur } from './claim';
 import { claimQuietly, NameRow, quietCheck, renamePick, settleName, type PlayNameDeps } from './claim-ui';
 import { RenderCheck, RENDER_CHECK_TIMES, type RenderCheckTimes } from './rendercheck';
 import { moviesKept, Predownload } from './predownload';
@@ -705,6 +705,7 @@ async function startGame() {
   // (and a full server's player who chose to play offline: askFull)
   const net = !/^(off|0|none)$/i.test(r.env.NFSU2_NET?.trim() ?? '') && !alone;
   const netName = net ? (r.env.NFSU2_ROAM_NAME?.trim() || 'Player') : null;
+  netNameNow = netName ?? ''; coopName = null; coopChecked = '';
   hudWide = !/^(43|4:3)$/i.test(r.env.NFSU2_HUD?.trim() ?? '');
   roamCollide = net && r.env.NFSU2_ROAM === '1' ? collideOf(r.env.NFSU2_ROAM_COLLIDE) : null;
   roamCrews = net && r.env.NFSU2_ROAM === '1' ? crewsOf(r.env.NFSU2_ROAM_CREW ?? '', r.env.NFSU2_ROAM_CREW_RGB ?? '') : null;
@@ -721,7 +722,7 @@ async function startGame() {
     // scope, and with it this game, reachable
     const ids = net ? await keepPageId() : null;
     session = await GameSession.start({
-      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle,
+      module: loaded!.module, info: loaded!.info, saveDir: SAVE, env: r.env, canvas, stage, audio, displayHz, netName, notice, lobby, say, marks, bump, battle, coop: coopMsg,
       friend: friendMsg,
       netBack, netQueue, onSaved, onSaveGone: saveGone, onRemoved, onLost,
       netId: ids?.id, netWas: ids?.was, netClaim: net ? testClaim() ?? await vault.token().catch(() => null) ?? undefined : undefined, netRemoved, netRaces, netRename,
@@ -1275,20 +1276,61 @@ async function netRename(r: NetRename) {
   if (renaming) return;
   renaming = true;
   try {
-    const name = await renamePick(playDeps(), r.name, r.msg);
+    // co-op: player 2's name the one taken away (player 1's is the page's own, its hello's): the question says so, and
+    // the name picked is player 2's for this game
+    const seat2 = !!coopName && onlineName(r.name)?.toLowerCase() === onlineName(coopName)?.toLowerCase();
+    const name = await renamePick(playDeps(), r.name, r.msg, seat2);
     if (!name) {
-      log.add('[app] your name: none picked (playing with others waits for another name)');
+      log.add(`[app] ${seat2 ? 'player 2\'s' : 'your'} name: none picked (playing with others waits for another name)`);
       removedLine(t('Playing with others waits for another name: change it under Online on the start page.'));
       return;
     }
     privacy.name(name, 'you');
-    log.add(`[app] your name: another picked (${session?.input?.name?.(name) ? 'the game plays under it now' : 'the game did not take it'})`);
-    session?.net?.rename?.(name);
+    if (seat2) {
+      coopChecked = name.toLowerCase();
+      log.add(`[app] player 2's name: another picked (${session?.input?.name?.(name, true) ? 'the game plays under it now' : 'the game did not take it'})`);
+      session?.net?.rename?.(netNameNow);
+    } else {
+      log.add(`[app] your name: another picked (${session?.input?.name?.(name) ? 'the game plays under it now' : 'the game did not take it'})`);
+      netNameNow = name;
+      session?.net?.rename?.(name);
+      void settings.refresh();
+    }
     hideRemoved();
-    void settings.refresh();
   } finally {
     renaming = false;
   }
+}
+/** the name this game plays under on the switch (player 1's: the page's hello) */
+let netNameNow = '';
+/**
+ * Co-op free roam: player 2 online, its name the game's (player 1's + " 2", as the server keeps it for the owner of
+ * player 1's claimed name).  The same checks as player 1's name at Play (claim-ui.ts settleName), without a question:
+ * a name that reads as a slur or that another player claimed, or one the server does not allow, plays under this
+ * browser's digits instead (the game takes it at once).  "{}": player 2's endpoint ended.  Nothing of it for a player
+ * who never plays co-op.
+ */
+let coopName: string | null = null;
+let coopChecked = '';
+function coopMsg(json: string) {
+  let m: { name?: unknown } = {};
+  try { m = JSON.parse(json) as { name?: unknown }; } catch { return; }
+  coopName = typeof m.name === 'string' && m.name ? m.name : null;
+  if (coopName) void coopCheck(coopName);
+}
+async function coopCheck(name: string) {
+  privacy.name(name, 'you');
+  const online = onlineName(name);
+  if (!online || coopChecked === online.toLowerCase()) return;
+  coopChecked = online.toLowerCase();
+  const slur = readsAsSlur(name);
+  const info = slur || testPage() || offline ? null : await claims.check(online);
+  log.add(`[app] player 2's name: ${slur ? 'reads as a slur' : !info ? 'not checked' : info.state === 'yours' || info.state === 'old' ? 'claimed with this browser\'s keyphrase' : info.state}`);
+  if (!slur && info?.state !== 'taken' && info?.state !== 'blocked') return;
+  const alt = await digitsFor(online, pageId());
+  coopChecked = alt.toLowerCase();
+  privacy.name(alt, 'you');
+  log.add(`[app] player 2's name: this browser's digits instead (${session?.input?.name?.(alt, true) ? 'the game plays under them now' : 'the game did not take them'})`);
 }
 /** the line over the game for a player off the others, until the player plays on (an input REMOVED_MS after it came
  *  up) */

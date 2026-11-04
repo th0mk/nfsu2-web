@@ -69,6 +69,7 @@
   "Is {name} yours? Enter your passphrase under Cloud saves to get it back here.": "{name} a te neved? Add meg a jelmondatodat a Felhőmentés résznél, és itt is visszakapod.",
   "This browser's passphrase did not claim {name}: another one did, first.": "Ennek a böngészőnek a jelmondata nem foglalta le ezt a nevet: {name}. Egy másik jelmondat megelőzte.",
   "Your name": "A neved",
+  "Player 2's name": "A 2. játékos neve",
   "Another player claimed {name}.": "Egy másik játékos lefoglalta ezt a nevet: {name}.",
   "{name} is yours.": "{name} a tiéd.",
   "{name} is free.": "{name} szabad.",
