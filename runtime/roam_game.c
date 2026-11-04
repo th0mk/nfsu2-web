@@ -6452,7 +6452,7 @@ static struct {
 #define MSG_MP_MULTI    0x4d505302u
 #define MSG_MP_BACK     0x4d505303u
 /* The card's question and its buttons in the game's language: the languages whose fonts draw their own letters
- * (language_game_letters: Latin-1, Polish's, Turkish's and Hungarian's as their packs have them), as photo.c and
+ * (language_game_letters: Latin-1, Polish's, Turkish's, Hungarian's, Czech's and Slovak's as their packs have them), as photo.c and
  * sms.c do theirs; English for the others (Russian, Ukrainian, Chinese, Japanese, Korean, Thai: their fonts draw
  * ASCII only).  UTF-8 here.  q_lobby: the host's name, then the race's kind (in brackets: every language keeps that
  * order).  Each language's texts in one row of one brace (web/test/log-english.test.mjs takes such a row for the
@@ -6511,6 +6511,14 @@ static const MpTexts mp_texts[] = {
       "Más játékosokkal versenyzel vagy egyedül? Másokkal csak a pénzdíj kerül a karrieredbe.",
       "%s többjátékos versenyt indít itt (%s). Csatlakozol vagy egyedül versenyzel?", " A győzelem mindkét esetben beszámít a karrieredbe.",
       "verseny", "URL verseny", "kör", "sprint", "Street X", "drag", "drift", "Egyedül", "Többjátékos", "Csatlakozás", "Mégse" },
+    { "czech", "Závodit s dalšími hráči, nebo sám? Výhra se ti započítá do kariéry v obou případech, stejně jako výhra kamaráda nebo člena tvé party v tvém závodě.",
+      "Závodit s dalšími hráči, nebo sám? S ostatními jde do kariéry jen finanční odměna.",
+      "%s tu spouští závod více hráčů (%s). Připojit se, nebo jet sám?", " Výhra se ti započítá do kariéry v obou případech.",
+      "závod", "závod URL", "okruh", "sprint", "Street X", "tažení", "drift", "Sólo", "Více hráčů", "Připojit", "Zrušit" },
+    { "slovak", "Pretekať s ďalšími hráčmi, alebo sám? Výhra sa ti započíta do kariéry v oboch prípadoch, rovnako ako výhra kamaráta alebo člena tvojej partie v tvojom závode.",
+      "Pretekať s ďalšími hráčmi, alebo sám? S ostatnými ide do kariéry len finančná odmena.",
+      "%s tu spúšťa závod pre viac hráčov (%s). Pripojiť sa, alebo ísť sám?", " Výhra sa ti započíta do kariéry v oboch prípadoch.",
+      "závod", "závod URL", "okruh", "šprint", "Street X", "drag", "drift", "Sólo", "Viac hráčov", "Pripojiť sa", "Zrušiť" },
 };
 const char *language_name(void);
 void language_game_letters(const char *utf8, char *out, size_t n);

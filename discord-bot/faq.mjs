@@ -22,10 +22,10 @@ const MAX_COMPONENTS = 40;
 const MODEL = 'claude-haiku-5-5';                // translating an answer: the cheapest model is enough
 const GLOSSARY_MAX = 40;                         // the page's labels an answer names, with their translations
 // Discord's languages that the page has a translation of: its labels, for the answers to name them as the page does.
-// Discord has only Brazilian Portuguese; the page's Chinese is simplified (zh-CN; zh-TW gets no glossary)
+// Discord has only Brazilian Portuguese, and no Slovak; the page's Chinese is simplified (zh-CN; zh-TW gets no glossary)
 const PAGE_LANGS = { pt: 'portuguese', es: 'spanish', ru: 'russian', tr: 'turkish', pl: 'polish', hu: 'hungarian',
   uk: 'ukrainian', fr: 'french', de: 'german', it: 'italian', nl: 'dutch', sv: 'swedish', da: 'danish', zh: 'chinese',
-  ja: 'japanese', ko: 'korean', th: 'thai' };
+  ja: 'japanese', ko: 'korean', th: 'thai', cs: 'czech' };
 
 const slug = s => s.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60);
 const hashOf = s => crypto.createHash('sha1').update(s).digest('base64url').slice(0, 12);

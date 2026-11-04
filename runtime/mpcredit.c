@@ -314,6 +314,8 @@ static const struct { const char *lang, *offer, *sign, *next; } SP_TX[] = {
     { "polish", "Oferta sponsora %d z %d: %s. Premia za podpisanie %d, jego wyścigi płacą %u. Podpisać? Nie: następna oferta.", "Podpisz", "Następna oferta" },
     { "turkish", "Sponsor teklifi %d/%d: %s. İmza primi %d, yarışları %u öder. İmzalansın mı? Hayır: sonraki teklif.", "İmzala", "Sonraki teklif" },
     { "hungarian", "Szponzorajánlat %d / %d: %s. Aláírási bónusz %d, versenyenként %u. Aláírod? Nem: a következő ajánlat.", "Aláírás", "Következő ajánlat" },
+    { "czech", "Nabídka sponzora %d z %d: %s. Bonus za podpis %d, jeho závody platí %u. Podepsat s nimi? Ne: další nabídka.", "Podepsat", "Další nabídka" },
+    { "slovak", "Ponuka sponzora %d z %d: %s. Bonus za podpis %d, jeho závody platia %u. Podpísať s nimi? Nie: ďalšia ponuka.", "Podpísať", "Ďalšia ponuka" },
 };
 const char *language_name(void);
 void language_game_letters(const char *utf8, char *out, size_t n);

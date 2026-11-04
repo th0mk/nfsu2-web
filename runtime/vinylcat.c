@@ -79,6 +79,7 @@ static uint32_t label(void){
         { "french", "Sp\xc3\xa9" "ciaux" }, { "german", "Spezial" }, { "italian", "Speciali" }, { "spanish", "Especiales" },
         { "dutch", "Speciaal" }, { "swedish", "Special" }, { "danish", "Specielle" }, { "portuguese", "Especiais" },
         { "polish", "Specjalne" }, { "turkish", "Ekstra" }, { "hungarian", "Speci\xc3\xa1lis" },
+        { "czech", "Speci\xc3\xa1ln\xc3\xad" }, { "slovak", "\xc5\xa0peci\xc3\xa1lne" },
     };
     if (g_label) return g_label;
     const char *l = language_name(), *t = "Special";
