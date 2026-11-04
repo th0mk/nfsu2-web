@@ -134,6 +134,7 @@ const general = new General({
 });
 // #help (help.mjs): the FAQ's answer to a question it settles, at once
 const help = new Help({ client, anthropic, faq, general, isStaff, dryRun: CFG.dryRun, state: CFG.state });
+general.help = help;                             // the digest counts the votes on its answers
 
 // ---------------------------------------------------------------------------------------------- when to look --
 const timers = new Map();                        // thread id -> { timer, first }

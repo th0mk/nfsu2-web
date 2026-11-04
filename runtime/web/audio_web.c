@@ -651,6 +651,10 @@ static void *pump_main(void *unused){
     double t_due = 0;                           /* ring mode: when the next slice is due at the pace */
     uint32_t fill_seen = 0;                     /* the fill the last time round */
     int need_lines = 0;
+    /* NFSU2_FAST (framerate.c, tests): no output; the "wall" pacing below
+     * follows the game's clock, so the DirectSound cursors move in game time */
+    int hfr_fast(void); uint64_t vclock_peek_us(void);
+    const int ff = hfr_fast();
     for (;;){
         now = mono_s();
         double slept = (now - t_loop) * 1000.0; t_loop = now;
@@ -686,7 +690,7 @@ static void *pump_main(void *unused){
         int running = atomic_load(&RH(AR_CTX)) == AR_CTX_RUNNING;
         /* the worklet is consuming: it moved r recently (within two of its
          * longest gaps), or the ring has room it has not been asked to drain yet */
-        int consumer = g_audio_on && running &&
+        int consumer = !ff && g_audio_on && running &&
                        (now < grace_end || (now - t_r) * 1000.0 < stall_ms() || fill + SLICE <= g_target);
         if (consumer){
             if (mode != AR_MODE_RING){
@@ -770,17 +774,20 @@ static void *pump_main(void *unused){
             t_due += (double)SLICE / (OUT_RATE * PACE);
             continue;
         }
-        /* no consumer: keep the cursors moving on the wall clock */
+        /* no consumer: keep the cursors moving on the wall clock (the game's
+         * clock when fast-forwarding) */
+        double clk = ff ? (double)vclock_peek_us() * 1e-6 : now;
         if (mode != AR_MODE_WALL){
             if (mode == AR_MODE_RING) g_to_wall++;
-            fprintf(stderr, "sound: %s: the mixer runs on the wall clock (DirectSound cursors keep moving, output dropped)\n",
-                    !g_audio_on ? "sound is off (NOSOUND)" : !running ? "no running AudioContext" : "the AudioWorklet stopped consuming");
+            fprintf(stderr, "sound: %s: the mixer runs on the %s clock (DirectSound cursors keep moving, output dropped)\n",
+                    ff ? "fast-forward (NFSU2_FAST)" : !g_audio_on ? "sound is off (NOSOUND)" : !running ? "no running AudioContext" : "the AudioWorklet stopped consuming",
+                    ff ? "game's" : "wall");
             mode = AR_MODE_WALL; atomic_store(&RH(AR_MODE), AR_MODE_WALL);
-            wall_t0 = now; wall_done = 0;
+            wall_t0 = clk; wall_done = 0;
         }
-        double due = (now - wall_t0) * OUT_RATE - (double)wall_done;
+        double due = (clk - wall_t0) * OUT_RATE - (double)wall_done;
         if (due > OUT_RATE * 0.1){             /* the pump was starved: do not burst-mix the backlog */
-            wall_done = (uint64_t)((now - wall_t0) * OUT_RATE) - SLICE;
+            wall_done = (uint64_t)((clk - wall_t0) * OUT_RATE) - SLICE;
             due = SLICE;
         }
         if (due >= SLICE){
@@ -794,6 +801,7 @@ static void *pump_main(void *unused){
         }
         double sleep_s = (SLICE - due) / OUT_RATE;
         if (sleep_s > 0.005) sleep_s = 0.005;     /* notice a consumer coming back */
+        if (ff && sleep_s > 0.001) sleep_s = 0.001;   /* game time may run several times the wall clock */
         wait_word(&RH(AR_R), r, sleep_s);
     }
     return 0;

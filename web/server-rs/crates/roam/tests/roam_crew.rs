@@ -89,7 +89,7 @@ fn the_wire_a_hello_names_its_crews_after_its_ids() {
         ("crews cut short", hello_raw(HF_CREW, 2, &ids, &tail(2, &[a]))),
         ("a crew cut short", hello_raw(HF_CREW, 2, &ids, &tail(1, &[a])[..3])),
         ("ids cut short", hello_raw(HF_CREW, 3, &ids, &[])),
-        ("49 ids", hello_raw(HF_CREW, 49, &[1; 49], &tail(1, &[a]))),
+        ("65 ids", hello_raw(HF_CREW, 65, &[1; 65], &tail(1, &[a]))),
     ] {
         assert_eq!(crews_in(&h), None, "{what}: a bad HELLO");
     }

@@ -10,14 +10,16 @@
 // line, so a screen reader and the keyboard get them as they are.
 
 import { checkSetting, DEFAULTS, keyDef, resolveEnv, settingsPut, TEMPLATE, type Resolved } from './settings';
-import { readText, writeFile } from './savefs';
+import { NO_SAVE, readText, UNREADABLE, writeFile, writesAreOff } from './savefs';
 import { playHorn, stopHorn } from './horn-preview';
 import { checkCrew, CREW_BIG, CREW_COLOUR_NAMES, CREW_MAX, CREW_PALETTE, crewsOf, crewsValue, freeColour, rgbsValue, type Crew } from './crews';
 import { roomHash } from './players';
 import { checkRoom, inviteLink } from './invite';
 import { onlineName } from './claim';
 import { CATS, DEFAULT_GROUPS, DEFAULT_PHRASES, groupsOf, PHRASES, phrasesOf, SLOTS } from './phrases';
+import { flagCode, flagName, flagsByName, type FlagCode } from './flags';
 import { LANGUAGES, live, N, NATIVE, t, tn, tvars, type Language, type Msg } from './i18n';
+import { SITE_KEYS } from './sitekeys';
 
 type Control =
   | { t: 'switch' }
@@ -32,7 +34,10 @@ type Control =
   | { t: 'crews'; placeholder: string }
   /** quick chat's sixteen (phrases.ts): under "Choose phrases", four columns of a name and four phrases, each a
    *  drop-down list */
-  | { t: 'phrases' };
+  | { t: 'phrases' }
+  /** the flag before the name (flags.ts): a drop-down list of none, the country this connection comes from (the
+   *  server's /country), then every flag by its name in the page's language */
+  | { t: 'flag' };
 
 /** link: the words of help that link to a page (a mod's, say), opened in a new tab; several for help that names several */
 interface Link { text: string; href: string }
@@ -56,15 +61,16 @@ const GROUPS: Group[] = [
   { title: N('Online'), more: N('More online settings'), own: true, items: [
     { key: 'roam', label: N('Free roam with others'), help: N('See other players\' cars in career free roam, and they see yours.'), c: { t: 'switch' } },
     { key: 'roam_name', label: N('Your name'), help: N('Shown over your car and in the Online menu: 3 to 15 letters, digits, - or _.'), c: { t: 'text', placeholder: N('profile name') } },
-    { key: 'horn', label: N('Your horn'), help: N('N or the left stick click, with other players.'), c: { t: 'select', opts: [
+    { key: 'roam_flag', label: N('Your flag'), help: N('Shown before your name over your car in free roam.'), c: { t: 'flag' } },
+    { key: 'horn', label: N('Your horn'), help: N('With other players. Its key and button: Controls, Site.'), c: { t: 'select', opts: [
       ['dual', N('Dual tone')], ['single', N('Single tone')], ['truck', N('Air horn')], ['train', N('Train horn')], ['klaxon', N('Klaxon')],
       ['cucaracha', N('La Cucaracha')], ['clown', N('Clown horn')], ['trombone', N('Sad trombone')]], preview: { play: playHorn, stop: stopHorn } } },
     { key: 'roam_room', label: N('Room'), help: N('With a name, free roam shows only players in the same room.'), c: { t: 'text', placeholder: N('everyone'), invite: true } },
     { key: 'roam_block', label: N('Blocked players'), help: N('Names, separated by commas: you never see each other in free roam. The server\'s operator sees who blocks whom.'), c: { t: 'text', placeholder: N('nobody') }, more: true },
     { key: 'roam_collide', label: N('Ghost mode'), help: N('Players: drive through other players\' cars. Everything: also through traffic and the game\'s tuners in free roam, but not a tuner you race in an outrun.'),
       c: { t: 'seg', opts: [['on', N('Off')], ['off', N('Players')], ['none', N('Everything')]] } },
-    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['40', '40'], ['48', '48']] } },
-    { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press the right stick in, then flick it twice; touch: the chat button).'), c: { t: 'switch' } },
+    { key: 'roam_max_cars', label: N('Players\' cars shown'), help: N('How many of the nearest players\' cars free roam shows. More can lower the frame rate.'), c: { t: 'seg', opts: [['16', '16'], ['24', '24'], ['32', '32'], ['48', '48'], ['64', '64']] } },
+    { key: 'quick_chat', label: N('Quick chat'), help: N('Send phrases to players near you in free roam and to everyone in multiplayer races: 1 to 4, then 1 to 4 (controller: press a stick in, then flick the right stick twice; touch: the chat button).'), c: { t: 'switch' } },
     { key: 'quick_chat_phrases', label: N('Your phrases'), help: N('Four groups of four. Others read them in their own language.'), c: { t: 'phrases' } },
     { key: 'online', label: N('Online mode'), help: N('The game\'s Online menu skips the EA login: lobby, chat and races with everyone on this server.'), c: { t: 'switch' }, more: true },
   ] },
@@ -75,7 +81,7 @@ const GROUPS: Group[] = [
     { key: 'language', label: N('Language'), help: N('Menus, subtitles, dubbed voices and this page.'), c: { t: 'select', opts: LANGUAGE_OPTS } },
     { key: 'movies', label: N('Movies'), help: N('Intro and story movies.'), c: { t: 'switch' } },
     { key: 'subtitles', label: N('Subtitles'), help: N('For the movies. English uses VileStuff\'s English Subtitles Fixed.'), link: { text: N('English Subtitles Fixed'), href: 'https://nfsmods.xyz/mod/5286' }, c: { t: 'switch' } },
-    { key: 'songs', label: N('Songs'), help: N('Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them. F7 plays the next song.'), c: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] } },
+    { key: 'songs', label: N('Songs'), help: N('Uncensored: the EA Trax songs unedited, some in longer versions. Original: as the game shipped them.'), c: { t: 'seg', opts: [['uncensored', N('Uncensored')], ['original', N('Original')]] } },
     { key: 'autosave', label: N('Autosave'), help: N('Sets each profile\'s Save option to Autosave once. A later change in the game\'s Options stays.'), c: { t: 'switch' } },
     { key: 'show_hidden_races', label: N('Show hidden races'), help: N('MaxHwoy\'s Show Hidden Races Mod: the 33 hidden races show on the map and radar, with up to 8 of each kind at once (the original shows 1 to 4).'), link: { text: N('Show Hidden Races Mod'), href: 'https://nfsmods.xyz/mod/1583' }, c: { t: 'switch' }, more: true },
     { key: 'intro', label: N('Startup movies'), help: N('Logos, PSA and intro. Skippable: Enter, Esc, Space, a click, A, B or Start skips each. Original: only the intro can be skipped.'), c: { t: 'seg', opts: [['skippable', N('Skippable')], ['original', N('Original')], ['off', N('Off')]] }, more: true },
@@ -85,7 +91,7 @@ const GROUPS: Group[] = [
     { key: 'seed_registry', label: N('Highest graphics for a new save'), help: N('The game\'s graphics options at their highest, at this screen\'s resolution. Off: the game\'s own hardware check decides.'), c: { t: 'switch' }, more: true },
   ] },
   { title: N('Display'), more: N('More display settings'), items: [
-    { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu (F9) has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
+    { key: 'fullscreen', label: N('Full screen on Play'), help: N('Off: play in the window; the menu has full screen. Hold Esc to leave it.'), c: { t: 'switch' } },
     { key: 'render', label: N('Resolution scale'), help: N('Lower is faster but softer: 50% renders a quarter of the pixels. Phones start at 75%.'), c: { t: 'seg', opts: [['scale:0.5', '50%'], ['scale:0.75', '75%'], ['backing', '100%'], ['scale:1.5', '150%'], ['scale:2', '200%']] } },
     { key: 'fps', label: N('Frame rate'), help: N('Auto matches the display. 30 is steadier on slow phones and saves battery. Online and LAN races run at up to 120; cutscenes at 30.'), c: { t: 'seg', opts: [['auto', N('Auto')], ['30', '30'], ['60', '60'], ['120', '120'], ['240', '240']] } },
     { key: 'ui_textures', label: N('Menus, HUD and maps'), help: N('Upscaled: LunicAura106\'s Upscaled HUD and JeansBig\'s Detailed Map, sharp at high resolutions. About 25 MB to download, and more memory on phones.'), link: [{ text: N('Upscaled HUD'), href: 'https://nfsmods.xyz/mod/4319' }, { text: N('Detailed Map'), href: 'https://nfsmods.xyz/mod/4485' }], c: { t: 'seg', opts: [['original', N('Original')], ['uhud', N('Upscaled')]] }, more: true },
@@ -95,7 +101,7 @@ const GROUPS: Group[] = [
     { key: 'cutscene_borders', label: N('Cutscene bars'), help: N('Letterbox bars across the whole width, or none.'), c: { t: 'seg', opts: [['full', N('Full')], ['off', N('Off')]] }, more: true },
     { key: 'fov_scale', label: N('3D proportions'), help: N('Corrected: true proportions and round wheels, a little more at the sides.'), c: { t: 'seg', opts: [['original', N('Original')], ['correct', N('Corrected')]] }, more: true },
     { key: 'other_headlights', label: N('Other cars\' headlights'), help: N('Other cars light up the road like yours. Players: other players\' cars. All: AI racers and traffic too. Off: as in the original.'), c: { t: 'seg', opts: [['players', N('Players')], ['all', N('All cars')], ['off', N('Off')]] }, more: true },
-    { key: 'fps_counter', label: N('Frame-rate counter'), help: N('F8 switches it while you play.'), c: { t: 'seg', opts: [['off', N('Off')], ['on', N('On')], ['detailed', N('Detailed')]] }, more: true },
+    { key: 'fps_counter', label: N('Frame-rate counter'), help: N('Its key (Controls, Site) switches it while you play.'), c: { t: 'seg', opts: [['off', N('Off')], ['on', N('On')], ['detailed', N('Detailed')]] }, more: true },
     { key: 'resolution', label: N('Fixed render size'), help: N('Always render at this size, such as 2560x1440. Empty: the game\'s own setting.'), c: { t: 'text', placeholder: N('WxH') }, more: true },
     { key: 'max_pixels', label: N('Pixel limit'), help: N('Most pixels rendered at 100% and below (0 = no limit). 150% and 200% scale up from it.'), c: { t: 'num', min: 0, step: 100000 }, more: true },
   ] },
@@ -112,7 +118,8 @@ const GROUPS: Group[] = [
 /** a row's second key, which its control writes with its own and its Reset resets too (not listed under "Other
  *  settings in this file"): the Crews row's colours */
 const COMPANION: Record<string, string> = { roam_crew: 'roam_crew_colours', quick_chat_phrases: 'quick_chat_groups' };
-const COMPANIONS = new Set(Object.values(COMPANION));
+/** (and our controls' keys and buttons: the Controls tab's Site has their rows, sitekeys.ts SiteKeysView) */
+const COMPANIONS = new Set([...Object.values(COMPANION), ...SITE_KEYS]);
 /** the rows that do nothing while free roam with others is off (each says so then) */
 const ROAM_ROWS = ['roam_room', 'roam_crew'];
 /** Every key the panel shows (the check in app-test.mjs compares this with the template). */
@@ -313,6 +320,7 @@ function shown(it: Item, v: string): string {
   if (c.t === 'switch') return v === 'on' ? t('on') : t('off');
   if (c.t === 'seg' || c.t === 'select') { const o = c.opts.find(([x]) => x.toLowerCase() === v.toLowerCase()); return o ? optLabel(it, o[0], o[1]) : v; }
   if (c.t === 'phrases') return phrasesOf(v).map(p => t(PHRASES[p].text)).join(', ');
+  if (c.t === 'flag') { const f = flagCode(v); return f ? flagName(f) : t('No flag'); }
   if (v === '') return t('empty');
   return c.t === 'num' && c.unit ? `${v} ${c.unit}` : v;
 }
@@ -335,9 +343,9 @@ export function putKey(text: string, key: string, value: string | null): { text:
   return { text: next, removed };
 }
 
-/** What "Reset all settings" keeps: the name the other players know you by, your crews, and the language (this
+/** What "Reset all settings" keeps: the name and flag the other players know you by, your crews, and the language (this
  *  page's too). */
-const RESET_KEEPS = ['roam_name', 'roam_crew', 'roam_crew_colours', 'language'];
+const RESET_KEEPS = ['roam_name', 'roam_flag', 'roam_crew', 'roam_crew_colours', 'language'];
 
 /** "Reset all settings": the template, with the kept settings as the file has them (by their own key, also where
  *  the file sets the variable by its name, if the key reads the value the same).  One the file does not set, or
@@ -397,14 +405,19 @@ export class SettingsPanel {
   private crewCounts = new Map<number, number>();   // how many are in free roam in each crew, by hash (setCrewCounts)
   private crewDraft = '';                  // the crew name being typed, kept across re-renders
   private phrasesOpen = false;             // Your phrases' Choose phrases open, kept across re-renders
+  private country: FlagCode | '' = '';     // the country this connection comes from (/country), first in Your flag's list
+  private countryAsked = false;
   /** root: the big panel, every tab of it (index.html #settings); online: its Online tab (#online) */
   constructor(private root: HTMLElement, private deps: SettingsDeps, private online: HTMLElement) {
     root.querySelector<HTMLButtonElement>('#settings-text-save')!.onclick = () => void this.saveRaw();
     root.querySelector<HTMLButtonElement>('#settings-reset-all')!.onclick = () => void this.resetAll();
   }
 
+  /** settings.ini as read last; one that did not read (savefs.ts missing) leaves the copy before, and the panel read-only
+   *  until it reads (unread): a change made on the template's copy would be written over the player's file */
   async load(): Promise<string | null> {
-    this.text = await readText(this.deps.saveDir, 'settings.ini');
+    try { this.text = await readText(this.deps.saveDir, 'settings.ini'); this.unread = null; }
+    catch (e) { this.unread = e; }
     this.resolve(this.text);
     return this.text;
   }
@@ -429,7 +442,7 @@ export class SettingsPanel {
    *  value is read as the runtime reads it (an integer for NFSU2_ROAM, "starts with 0" for NOMOVIES). */
   current(key: string): string {
     const d = keyDef(key)!, r = this.fileOnly;
-    if (r.source[d.env] === 'settings.ini') {
+    if (r?.source[d.env] === 'settings.ini') {        // (not read yet: the defaults; the Site tab's rows ask early)
       const v = r.env[d.env];
       if (d.kind === 'bool') return parseInt(v, 10) === 1 ? 'on' : 'off';
       if (d.kind === 'boolInv') return v === '' || v.startsWith('0') ? 'on' : 'off';
@@ -438,26 +451,34 @@ export class SettingsPanel {
     return this.deps.defaults?.[key] ?? DEFAULTS.get(key) ?? '';
   }
 
-  private ro() { return !!this.deps.readOnly?.(); }
+  /** why settings.ini did not read last (load), else null */
+  private unread: unknown = null;
+  /** settings.ini did not read last (load): the panel is read-only until it is read again (refresh) */
+  get unreadable() { return this.unread !== null; }
+  private ro() { return !!this.deps.readOnly?.() || this.unread !== null || writesAreOff(); }
+  /** what the panel says while it is read-only (a game playing without saving: savefs.ts setWritesOff) */
+  private roText() { return this.unread !== null ? t(UNREADABLE, { error: String(this.unread) }) : writesAreOff() ? t(NO_SAVE) : t(READ_ONLY); }
 
   /** key's line, and also's (a row's second key: COMPANION) in the same write */
   /** Your name written (a claim made under it: claim-ui.ts) */
   async putName(name: string) { await this.put('roam_name', name); }
 
   private async put(key: string, value: string | null, also: [string, string | null][] = []) {
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }
     let next = this.text ?? TEMPLATE, removed = 0;
     for (const [k, v] of [[key, value] as [string, string | null], ...also]) { const r = putKey(next, k, v); next = r.text; removed += r.removed; }
     await writeFile(this.deps.saveDir, 'settings.ini', next);
     this.text = next;
     this.resolve(next);
     this.deps.onSaved?.(next);
-    if (removed) this.render(); else { this.rerow(key); this.syncRaw(); }
+    // (our controls' rows are the Site tab's, which draws them again itself: sitekeys.ts)
+    const site = SITE_KEYS.includes(key);
+    if (removed) this.render(); else { if (!site) this.rerow(key); this.syncRaw(); }
     // (the Room and Crews rows say whether free roam is on)
     if (key === 'roam' && !removed) for (const k of ROAM_ROWS) this.rerow(k);
     this.root.dataset.saved = String(++this.saves);
     const it = ITEMS.get(key), cur = this.current(key);
-    this.deps.say?.(() => {
+    if (!site) this.deps.say?.(() => {
       const v = { what: it ? t(it.label) : key, value: it ? shown(it, cur) : value ?? '' };
       return value === null ? t('Saved: {what}, {value} (the default). Applies the next time you press Play.', v) : t('Saved: {what}, {value}. Applies the next time you press Play.', v);
     });
@@ -467,10 +488,10 @@ export class SettingsPanel {
     if (!this.fileOnly) return;                  // not read yet (the page's language came first): load() draws it
     const ro = this.ro();
     this.root.toggleAttribute('data-readonly', ro);
-    this.root.querySelector('#settings-note')!.textContent = t(ro ? READ_ONLY : NOTE);
+    this.root.querySelector('#settings-note')!.textContent = ro ? this.roText() : t(NOTE);
     this.online.toggleAttribute('data-readonly', ro);
     const note = this.online.querySelector<HTMLElement>('#online-note')!;
-    note.textContent = ro ? t(READ_ONLY) : ''; note.hidden = !ro;
+    note.textContent = ro ? this.roText() : ''; note.hidden = !ro;
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.set')?.dataset.key;
     this.root.querySelector('#settings-body')!.replaceChildren(...GROUPS.filter(g => !g.own && !g.at).map(g => this.group(g)));
     for (const g of GROUPS.filter(g => g.at)) this.root.querySelector(`#${g.at}`)?.replaceChildren(this.group(g));
@@ -558,6 +579,18 @@ export class SettingsPanel {
   }
 
   /** One row again, after its key changed (the rest of the panel, and the focus, stay where they are). */
+  /** the country this connection comes from (the server's /country: Cloudflare's guess, for this page only), then
+   *  first in Your flag's list; nothing from a server without it */
+  private async askCountry() {
+    try {
+      const r = await fetch('/country', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      const c = r.ok ? flagCode(String((await r.json() as { country?: unknown }).country ?? '')) : '';
+      if (!c) return;
+      this.country = c;
+      if (this.find('.set[data-key="roam_flag"]')) this.rerow('roam_flag');
+    } catch { /* none */ }
+  }
+
   private rerow(key: string) {
     const old = this.find<HTMLElement>(`.set[data-key="${key}"]`);
     const it = ITEMS.get(key);
@@ -662,11 +695,27 @@ export class SettingsPanel {
         sel.before(b);                                   // the play button on the list's left
       }
       described = sel;
+    } else if (c.t === 'flag') {
+      const sel = document.createElement('select'); sel.id = id;
+      const code = flagCode(cur);
+      let picked = false;
+      const add = (v: string, label: string) => {
+        const o = document.createElement('option'); o.value = v; o.textContent = label;
+        if (!picked && v === code) { o.selected = true; picked = true; }
+        sel.append(o);
+      };
+      add('', t('No flag'));
+      if (this.country) add(this.country, flagName(this.country));
+      for (const f of flagsByName()) add(f.code, f.name);
+      sel.onchange = () => void this.put(it.key, sel.value || null);
+      ctl.append(sel);
+      described = sel;
+      if (!this.countryAsked) { this.countryAsked = true; void this.askCountry(); }
     } else if (c.t === 'crews') {
       row.classList.add('set-list');
       described = crewControl({ list: crewsOf(cur, this.current('roam_crew_colours')), id, labelId: label.id, placeholder: c.placeholder, counts: this.crewCounts,
         draft: this.crewDraft, onDraft: v => { this.crewDraft = v; }, change: (list, focus) => void this.setCrews(list, focus),
-        // with the room this file sets: crew-mates meet within one room
+        // with the room this file sets, if any: crew-mates meet within one room
         link: name => inviteLink(location.origin, { crew: name, room: this.current('roam_room') }), said: msg => this.deps.say?.(msg) }, ctl);
     } else if (c.t === 'phrases') {
       row.classList.add('set-list');
@@ -831,7 +880,7 @@ export class SettingsPanel {
   private async saveRaw() {
     const ta = this.root.querySelector<HTMLTextAreaElement>('#settings-text')!;
     const msg = this.root.querySelector('#settings-text-msg')!;
-    if (this.ro()) { msg.textContent = t(READ_ONLY); return; }
+    if (this.ro()) { msg.textContent = this.roText(); return; }
     const next = ta.value.endsWith('\n') ? ta.value : ta.value + '\n';
     const r = resolveEnv(next, this.deps.environment, {});
     const bad = r.notes.filter(n => /ignored$|only the page sets it$/.test(n) && !/is set in the environment|already set/.test(n));
@@ -841,18 +890,18 @@ export class SettingsPanel {
 
   /** "Reset all settings", once the player said yes */
   private async resetAll() {
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }
     if (this.deps.confirm && !await this.deps.confirm(t('Reset all settings?'),
       t('Every setting here goes back to its default, and other settings.ini lines are removed. Your name, crews, language and in-game options stay.'),
       t('Reset'), true)) return;
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }       // another tab took the saves meanwhile
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }       // another tab took the saves meanwhile
     await this.write(resetAll(this.text));
     this.deps.say?.(() => t('Settings are back to their defaults. Applies the next time you press Play.'));
   }
 
   /** a line of "Other settings in this file" back to its default; a keyboard's focus goes on to the next one */
   private async resetLine(phys: number, key: string, btn: HTMLButtonElement) {
-    if (this.ro()) { this.deps.say?.(t(READ_ONLY)); return; }
+    if (this.ro()) { this.deps.say?.(this.roText()); return; }
     const at = [...this.root.querySelectorAll('#settings-other .text-btn')].indexOf(btn), focused = document.activeElement === btn;
     await this.write(resetLine(this.text ?? TEMPLATE, phys));
     if (focused) {

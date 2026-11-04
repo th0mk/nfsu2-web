@@ -150,7 +150,7 @@ __attribute__((weak)) void gw_size(unsigned *w, unsigned *h){ *w = 0; *h = 0; }
 #define OB_TYPE        0x18u         /*   its type (5 a group), */
 #define OB_FLAGS       0x1cu         /*   its flags (bit 1 hidden, 0x400000 changed: the renderer looks again), */
 #define OB_CHILD       0x64u         /*   a group's first */
-#define NAMES_MAX      64
+#define NAMES_MAX      128           /* the names over friends' cars and their flags (roam_game_names) */
 #define HIDDEN_MAX     4096
 #define FN_VOLUMES     0x00469050u
 #define G_SOUND        0x0082b884u
@@ -784,9 +784,12 @@ void sub_006162e0(CPU *c){
     sub_006162e0_orig(c);
 }
 void sub_00615630_orig(CPU *c);
+void lightkey_flares(uint32_t ri);               /* lightkey.c: whose flares these are (high beam) */
 void sub_00615630(CPU *c){
     if (photo_hides(c->ecx)){ POP32(c->eip); c->esp += 0x18u; return; }
+    lightkey_flares(c->ecx);
     sub_00615630_orig(c);
+    lightkey_flares(0);
 }
 
 /* the test script's "photo ..." (autotest.c): hello, on, off, orbit, free, other (Tab), reset, names [0|1], hold MASK,

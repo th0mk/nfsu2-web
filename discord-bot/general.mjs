@@ -469,7 +469,12 @@ export class General {
     }
   }
 
-  /** once a day at DIGEST_HOUR_UTC: what the general channels kept bringing up */
+  /** the #help answers' votes for the digest (help.mjs's votes(), as `help`), or '' */
+  async helpVotes() {
+    return this.help ? this.help.votes().catch(e => { console.error(`[help] votes: ${e.message}`); return ''; }) : '';
+  }
+
+  /** once a day at DIGEST_HOUR_UTC: what the general channels kept bringing up, and the #help answers' votes */
   async digest(now) {
     const day = new Date(now).toISOString().slice(0, 10);
     if (!this.staffChannel || new Date(now).getUTCHours() !== DIGEST_HOUR_UTC || this.saved.digest === day) return;
@@ -477,7 +482,11 @@ export class General {
     const st = this.saved.stats, flagged = this.saved.flagged;
     Object.assign(this.saved, { digest: day, stats: { nudges: 0, fixes: 0, answers: 0, faq: 0, dry: 0, sorted: 0 } });
     this.save();
-    if (flagged.length < 5) return console.log(`[general] no digest: ${flagged.length} flagged messages`);
+    if (flagged.length < 5) {
+      const votes = await this.helpVotes();
+      if (votes) await this.toStaff(`#help answers, ${day}`, votes);
+      return console.log(`[general] no digest: ${flagged.length} flagged messages`);
+    }
     const counts = {};
     for (const f of flagged) for (const k of f.kinds) counts[k] = (counts[k] ?? 0) + 1;
     const input = `Counts: ${JSON.stringify(counts)}; pointers sent ${st.nudges} (${st.fixes ?? 0} of them a fix, ${st.answers ?? 0} an answer)${this.dryRun ? `, in the dry run would have sent ${st.dry}` : ''}; FAQ answers in #help ${st.faq ?? 0}.\n\n` +
@@ -491,7 +500,9 @@ export class General {
     if (!text) return console.log(`[general] no digest: the model stopped with ${res.stop_reason} and no text`);
     const hours = Math.min(24, Math.round((now - this.saved.since) / 3600_000));
     const cut = res.stop_reason === 'end_turn' ? '' : `\nCut short: ${res.stop_reason}`;
-    await this.toStaff(`General channels, ${day}`, `**General channels, last ${hours} hours** (${flagged.length} flagged messages)\n${text}${cut}`);
+    const votes = await this.helpVotes();
+    await this.toStaff(`General channels, ${day}`,
+      `**General channels, last ${hours} hours** (${flagged.length} flagged messages)\n${text}${cut}${votes ? `\n\n${votes}` : ''}`);
     console.log(`[general] digest posted (${flagged.length} messages)`);
   }
 }

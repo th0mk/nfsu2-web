@@ -190,8 +190,14 @@ static int shoot_on(void){
     return !strncasecmp(a, "UI_Showcase", 11);
 }
 
-/* O presses since the last frame (a tap between frames counts) */
+/* O presses since the last frame (a tap between frames counts): the player's key for it (O unless NFSU2_KEY_SHOWOFF:
+ * dinput_kbd.c dikbd_site_key), none while the player has one of the game's controls on it (dikbd_ours; dinput_pad.c
+ * leaves the D-pad's hold to the game the same way) */
+int dikbd_ours(unsigned dik, const char *what);
+unsigned dikbd_site_key(const char *env, unsigned dflt);
 static int o_presses(void){
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_SHOWOFF", DIK_O);
     uint32_t head = kbd_ev_head();
     if (!S.kinit){ S.kinit = 1; S.kseq = head; return 0; }
     int n = 0;
@@ -199,15 +205,15 @@ static int o_presses(void){
         KbdEv e;
         int r = kbd_ev_get(S.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_O){ if (e.down && !S.ostate) n++; S.ostate = e.down; }
+        if (r > 0 && dik && e.dik == dik){ if (e.down && !S.ostate && dikbd_ours(dik, "the show-off")) n++; S.ostate = e.down; }
     }
     return n;
 }
 
-/* the controller's buttons as the game reads them (dinput_pad.c fill_state): D-pad down kept back in free roam, held a
- * second a step (the car stood at the press) or drift mode (it drove), the game's own press when let go before */
-uint32_t showoff_pad(uint32_t b){
-    const uint32_t D = 1u << PAD_DDOWN;
+/* the controller's buttons as the game reads them (dinput_pad.c fill_state): D-pad down (the D-pad direction D the
+ * player has for it: NFSU2_BUTTON_HOLD) kept back in free roam, held a second a step (the car stood at the press) or
+ * drift mode (it drove), the game's own press when let go before */
+uint32_t showoff_pad(uint32_t b, uint32_t D){
     double t = now_s();
     int down = (b & D) != 0;
     if (down && !S.held && S.gate){ S.held = 1; S.fired = 0; S.t0 = t; S.hmove = S.moving; }

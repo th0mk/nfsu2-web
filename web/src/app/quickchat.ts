@@ -30,6 +30,7 @@
 //          one (roam_game.c say_stay, SAY_MEET_N): the game drops the others' and refuses the player's own while its
 //          status "nocount" says so; the picker dims it then and, picked, says only that it is not allowed here.
 import type { GameSession } from './game';
+import { chatBit, gameHas } from './gamekeys';
 import { t } from './i18n';
 import { catName, COUNTDOWN, DEFAULT_GROUPS, DEFAULT_PHRASES, PHRASES, type CatId } from './phrases';
 
@@ -205,9 +206,11 @@ export class QuickChat {
     const k = KEYS[e.code];
     if (k === undefined && !(e.code === 'Escape' && this.open >= 0)) return;
     if (!this.can()) { if (this.open >= 0) this.close(); return; }
-    // the game binds none of 1-4 (its driving key maps: dinput_kbd.c DIMAP=1; nor do its menus, the results': the
-    // front end's key table), and gets them all the same, so a control the player put on one still works; Esc closes
-    // the picker instead of pausing the game (or leaving the results)
+    // the game binds none of 1-4 by default (its driving key maps: dinput_kbd.c DIMAP=1; nor do its menus, the
+    // results': the front end's key table), and gets them all the same; one the player put a control of the game's on
+    // is the game's alone (its status "keys": gamekeys.ts).  Esc closes the picker instead of pausing the game (or
+    // leaving the results)
+    if (k !== undefined && gameHas(this.session, chatBit(e.code))) return;
     if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); }
     if (e.repeat) return;
     if (e.code === 'Escape') this.close();
@@ -231,7 +234,8 @@ export class QuickChat {
   }
 
   /** the right stick pressed in (gamepad.ts PadPage.click): the four groups, or the picker closed again; true: the
-   *  picker took it (where it can open), else it is the game's (also wherever the game's controls read the stick) */
+   *  picker took it (where it can open), else it is the game's (also wherever the game's controls read the stick, or
+   *  have another control than Hydraulic Bounce on its click: the game's "rstick" 2) */
   click(): boolean {
     this.readStatus();
     if (this.rstick > 0) return false;

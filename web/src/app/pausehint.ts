@@ -8,6 +8,7 @@ import type { GameSession } from './game';
 import { padSeen, touchFirst } from './device';
 import { N, t } from './i18n';
 import { pageDialog } from './padnav';
+import { keyName, siteKey } from './sitekeys';
 
 /** where the line goes, in HUD units (640x480 in the picture): its top under the middle, its widest */
 const TOP_U = 92, WIDE_U = 596;
@@ -66,7 +67,8 @@ export class PauseHint {
 
   /** what opens the menu here and what is in it, as it is when the line comes up */
   private fill() {
-    const keys = [touchFirst() ? '☰' : 'F9', ...(padSeen() ? ['Home'] : [])].map(k => {
+    // (the player's key for the menu: sitekeys.ts)
+    const keys = [touchFirst() ? '☰' : keyName(siteKey('menu') ?? 'F9'), ...(padSeen() ? ['Home'] : [])].map(k => {
       const kbd = document.createElement('kbd');
       kbd.textContent = k;
       return kbd;

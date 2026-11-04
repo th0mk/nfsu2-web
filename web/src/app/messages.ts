@@ -13,15 +13,18 @@
 //                {"op":"mail","from","body","at"} and the list's "mail" bring the friends' (friends.rs).
 //   start page   friends.ts FriendsPanel: Message on each friend, the unread ones counted on it; ChatDialog.
 import type { GameSession } from './game';
+import { gameHas, KEY_MESSAGE } from './gamekeys';
 import { t } from './i18n';
+import { siteKey } from './sitekeys';
 import { touchFirst } from './device';
 
 /** an envelope: what marks a line in the log as a friend's message (quick chat's have a speech balloon) */
 export const MSG_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 4l6.2 5 6.2-5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
-/** the key that opens the card while driving in free roam, and its label.  Not T: the game's Career Status (T and F4,
- *  its driving key map, dinput_kbd.c DIMAP=1, action 0x12; issue #52).  The game's driving map leaves E I O V Z free;
- *  I is away from W A S D and the arrows, so an accidental press (the card takes the keys) is unlikely */
-export const MSG_KEY = 'KeyI', MSG_KEY_LABEL = 'I';
+/** the key that opens the card while driving in free roam (the player's: sitekeys.ts, I by default).  Not T: the game's
+ *  Career Status (T and F4, its driving key map, dinput_kbd.c DIMAP=1, action 0x12; issue #52).  The game's driving map
+ *  leaves E I O V Z free; I is away from W A S D and the arrows, so an accidental press (the card takes the keys) is
+ *  unlikely */
+const msgKey = () => siteKey('message');
 /** a message at most (characters; the server's PAGE_MSG_LEN): three lines of the log */
 export const MSG_MAX = 120;
 /** I answers the newest message of this game when it came less than this long ago (ms); after that it asks whom */
@@ -276,10 +279,11 @@ export class FriendMessages {
   }
 
   private key(e: KeyboardEvent) {
-    if (!this.on || !this.session || e.metaKey || e.ctrlKey || e.altKey || e.code !== MSG_KEY) return;
+    if (!this.on || !this.session || e.metaKey || e.ctrlKey || e.altKey || e.code !== msgKey()) return;
     const el = e.target as HTMLElement | null;
     if (el?.closest?.('input, textarea, select, dialog[open]') || document.querySelector('dialog[open]')) return;
-    if (this.mode || !this.deps.driving()) return;
+    // (a control of the game's the player put on I: the game's alone, gamekeys.ts)
+    if (this.mode || !this.deps.driving() || gameHas(this.session, KEY_MESSAGE)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
     const n = this.newest;

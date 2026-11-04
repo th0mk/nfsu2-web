@@ -74,7 +74,7 @@ fn bench_with(
             let (c, room) = (crews(i), if rooms > 1 { 1 + i % rooms } else { 0 });
             let crews = (!c.is_empty()).then_some(&c[..]);
             let name = format!("p{i}");
-            let core = if links > 0 { 10 } else { 2 };
+            let core = if links > 0 { 14 } else { 2 };
             frame(vip(i), &hello_with(1000 + i, &HelloOpts { core, room, crews, name: name.as_bytes(), links, ..Default::default() }))
         })
         .collect();
@@ -195,12 +195,12 @@ fn bench_crews() {
     with_and_without("4000 players in one room of 3 km, 1000 crews of 2-6", 4000, 1, 3000.0, 15.0, &small_crews(1));
 }
 
-/// the links a tick makes for players that ask for 32, 40 and 48 (core version 10): a crowd's links cost the tick
+/// the links a tick makes for players that ask for 32, 48 and 64 (core version 14): a crowd's links cost the tick
 /// about their number
 #[test]
 #[ignore]
-fn bench_links_32_40_48() {
-    for links in [32u8, 40, 48] {
+fn bench_links_32_48_64() {
+    for links in [32u8, 48, 64] {
         bench_links(&format!("3000 players in one room of 4 km, 15 m/s, {links} links"), 3000, 1, 4000.0, 15.0, links);
         bench_links(&format!("3000 players in one room of 1 km, 15 m/s, {links} links"), 3000, 1, 1000.0, 15.0, links);
         bench_links(&format!("2000 players on one spot of 10 m, {links} links"), 2000, 1, 10.0, 0.5, links);

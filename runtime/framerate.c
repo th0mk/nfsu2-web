@@ -53,6 +53,16 @@
  *                               the nominal period and an arbitrary phase
  *   NOVSYNC = 1                 (metal.m) display sync off; pacing unchanged
  *   PACE60, SPINSLEEP           old limiter helpers, only used with off
+ *   NFSU2_FAST = 1              fast-forward, for tests only (read only when
+ *       NFSU2_INPUT_SCRIPT is set, never in free roam): every frame is one
+ *       slot of game time (as NFSU2_HFR_LOCKSTEP); in the front end and
+ *       racing it does not wait for the wall clock unless a file read is
+ *       under way or just ended (hfr_io_*).  Boot, loading screens, a race's
+ *       intro, reads and network races are paced at the content rate, so a
+ *       load takes as many frames as in a normal run and a script's frame
+ *       counts after it still hold.  The game's clock (win32.c vclock),
+ *       scripts' "ms" lines (autotest.c) and the headless mixer (audio_web.c)
+ *       follow game time.  web/tools/run-suite.mjs --fast.
  *
  * Fixes (each one independent):
  *   ticks      exact host ticks: 1/3600 s tick base instead of 1/1800, the
@@ -140,6 +150,7 @@ static FILE  *g_trace = 0;
 static int    g_resolved = 0;
 static int    g_lan_pc = 1;         /* NFSU2_LAN_TIMING: 1 = pc, 0 = exact */
 static double g_rt_carry = 0;       /* timer fix: RealTimer's fraction */
+static _Atomic int g_fast = 0;      /* NFSU2_FAST (resolve_once) */
 
 /* mach_absolute_time in ns: the clock of CADisplayLink / presentedTime */
 static uint64_t mono_ns(void){ return clock_gettime_nsec_np(CLOCK_UPTIME_RAW); }
@@ -255,6 +266,16 @@ static void resolve_once(void){
                                         "au_upd,au_dt,part_s,trail_n,work_ms,sleep_ms,"
                                         "c0x,c0y,c0z,c0v,c1x,c1y,c1z,c1v,c2x,c2y,c2z,c2v,c3x,c3y,c3z,c3v,streak0,trail0_m,"
                                         "fx_acid,fx_world\n"); } }
+    /* NFSU2_FAST: a test knob a player's settings.ini must not reach (it would
+     * run the game faster than the clock online): only with an input script,
+     * which the page takes from a dev server's script= alone */
+    { const char *e = getenv("NFSU2_FAST"), *s = getenv("NFSU2_INPUT_SCRIPT"), *r = getenv("NFSU2_ROAM");
+      if (e && *e == '1'){
+          if (!(s && *s)) fprintf(stderr, "[hfr] NFSU2_FAST needs an input script (NFSU2_INPUT_SCRIPT): off\n");
+          else if (r && *r && *r != '0') fprintf(stderr, "[hfr] NFSU2_FAST: not in free roam (NFSU2_ROAM): off\n");
+          else if (g_mode == M_OFF || g_mode == M_UNCAPPED) fprintf(stderr, "[hfr] NFSU2_FAST: not with NFSU2_FPS=%s: off\n", mode_name());
+          else { atomic_store(&g_fast, 1);
+                 fprintf(stderr, "[hfr] FAST-FORWARD test pacing: one slot of game time a frame, wall-clock pacing only while a file read is under way\n"); } } }
     char fs[96]; fix_str(g_fix, fs, sizeof fs);
     fprintf(stderr, "[hfr] mode %s, display %d Hz, content rate %d, fixes: %s\n",
             mode_name(), display_hz(), mode_rate(), fs);
@@ -337,6 +358,51 @@ uint64_t hfr_vclock_floor_us(void){
     if (g_mode != M_OFF && atomic_load(&g_rate_now) > 200) return 1000u;
     return 4000u;
 }
+
+/* ---- fast-forward (NFSU2_FAST, tests) -------------------------------------
+ * Only the front end (GameFlow 3) and racing (6) run ahead, and there only
+ * while no file is being read: a frame is paced when a read of fileio.c's
+ * ReadFile is under way, or one ended less than IO_HOLD_NS ago (a load reads
+ * in bursts, with the loader's own work between them), so a load takes the
+ * frames it takes in a normal run.  Measured on quickrace.txt (11-04) with the
+ * read test alone: boot took 285 frames instead of 49 and the track load 837
+ * instead of 255, and the script's first tap came too early for the title.
+ * With the flow test, 50 ms and 250 ms of hold gave the same frame for every
+ * screen; 250 ms paced 2/3 of the frames, because the music stream
+ * (MusicSFX.mus) reads all the time in the menus and races: 2.1 x vs 1.3 x.
+ * NFSU2_FAST_HOLD_MS overrides it (a desync hunt).  hfr_fast_frame_us: the
+ * game time of the last frame, the virtual clock's step (win32.c). */
+#define IO_HOLD_NS 50000000ull
+static _Atomic int g_io_busy = 0;
+static _Atomic uint64_t g_io_last_ns = 0;
+void hfr_io_begin(void){ atomic_fetch_add(&g_io_busy, 1); }
+void hfr_io_end(void){ atomic_store(&g_io_last_ns, mono_ns()); atomic_fetch_sub(&g_io_busy, 1); }
+static int io_frame(uint64_t now){
+    if (atomic_load(&g_io_busy) > 0) return 1;
+    static int64_t hold = -1;
+    if (hold < 0){ const char *e = getenv("NFSU2_FAST_HOLD_MS"); hold = e && *e ? atoll(e) * 1000000ll : (int64_t)IO_HOLD_NS; }
+    uint64_t t = atomic_load(&g_io_last_ns);
+    return t && now - t < (uint64_t)hold;
+}
+/* ...and never under a loading screen, whatever the flow: a replay's start
+ * (GameFlow 6) shows PC_Loading while the track streamer brings the start's
+ * sections in, and run ahead it reached the streamer's blocking wait for a
+ * section (0x5E6C10, which holds the GIL while it services the reads) before
+ * the section was in, and stayed there (replay_pause.txt, 11-04) */
+static int ff_flow(void){
+    uint32_t f = MR32(A_FLOW);
+    if (f != 3u && f != 6u) return 0;
+    const char *autotest_top_fng(void), *autotest_screen(void);
+    const char *t = autotest_top_fng(), *s = autotest_screen();
+    for (int i = 0; i < 2; i++){ const char *n = i ? s : t;
+        if (n && (!strcasecmp(n, "PC_Loading.fng") || !strcasecmp(n, "HUD_World_Loading.fng"))) return 0; }
+    return 1;
+}
+static _Atomic uint64_t g_fast_frame_us = 16667u;
+static uint64_t g_ff_frames = 0, g_ff_paced = 0, g_ff_t0 = 0;
+static double g_ff_game_s = 0;
+int hfr_fast(void){ resolve(); return atomic_load(&g_fast); }
+uint64_t hfr_fast_frame_us(void){ return atomic_load(&g_fast_frame_us); }
 
 /* ---- statistics --------------------------------------------------------- */
 typedef struct {
@@ -788,11 +854,22 @@ void sub_0057ead0(CPU *c){
         if (ls < 0){ const char *e = getenv("NFSU2_HFR_LOCKSTEP"); ls = e && *e == '1';
                      e = getenv("NFSU2_HFR_LOCKSTEP_WALL"); lsw = e ? atoi(e) : 0;
                      if (ls) fprintf(stderr, "[hfr] LOCKSTEP test pacing (wall %d fps)\n", lsw > 0 ? lsw : rate); }
-        slots = pace(ls && lsw > 0 ? lsw : rate, &slept, &missed);
-        slept += pre_slept;
-        g_pace_rate = ls && lsw > 0 ? lsw : rate;
-        if (ls){ slots = 1; missed = 0; }
+        int ff = atomic_load(&g_fast);
+        if (ff && ff_flow() && !io_frame(t_in) && !net_race()){
+            /* fast-forward: no wait, here or after Present; the next paced
+             * frame's slot follows this one */
+            g_last_slot = (int64_t)t_in; g_pre_target = 0; g_pre_slept = 0; g_pace_rate = 0;
+            slots = 1; g_ff_frames++;
+        } else {
+            slots = pace(ls && lsw > 0 ? lsw : rate, &slept, &missed);
+            slept += pre_slept;
+            g_pace_rate = ls && lsw > 0 ? lsw : rate;
+            if (ls || ff){ slots = 1; missed = 0; }
+            if (ff) g_ff_paced++;
+        }
         frame_s = (double)slots / rate;
+        if (ff){ atomic_store(&g_fast_frame_us, (uint64_t)llround(frame_s * 1e6)); g_ff_game_s += frame_s;
+                 if (!g_ff_t0) g_ff_t0 = t_in; }
     } else frame_s = g_f.t ? (t_in - g_f.t) / 1e9 : 1.0 / 120;
     g_sleep_all_ns += slept;
     uint64_t now = mono_ns();
@@ -1124,6 +1201,11 @@ void hfr_report(void){
     fprintf(stderr, "\n=== high frame rate (framerate.c) ===\n");
     fprintf(stderr, "  mode %s, display %d Hz, content rate %d, fixes %s\n",
             mode_name(), display_hz(), mode_rate(), fs);
+    if (atomic_load(&g_fast) && g_ff_t0){
+        double wall = (mono_ns() - g_ff_t0) / 1e9;
+        fprintf(stderr, "  fast-forward: %llu frames unpaced, %llu paced (loading, a read lately, a network race); "
+                "%.1f s of game time in %.1f s (%.2f x)\n", (unsigned long long)g_ff_frames, (unsigned long long)g_ff_paced,
+                g_ff_game_s, wall, wall > 0 ? g_ff_game_s / wall : 0.0); }
     if (g_tot.frames) stat_line(g_log == 2 ? "all" : "race", &g_tot);
     { uint64_t n = 0, acc = 0; for (int i = 0; i < WH_BINS; i++) n += g_wh[i];
       if (n){ int b[3] = {-1, -1, -1}; const uint64_t want[3] = {n / 2, n * 95 / 100, n * 99 / 100};

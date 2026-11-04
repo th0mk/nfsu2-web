@@ -1,0 +1,51 @@
+# The drift camera in every drive (runtime/cameras.c), in career free roam: C goes 0 .. 4 and round to 0 again, a
+# frame of each (cam_0 .. cam_4, cam_4 the drift camera); then drift mode (X, drift.c) from view 2 and from view 4:
+# the drift camera while it is on, the view before after it; the right stick's look and photo mode in view 4.
+# No [expect] FAIL.
+#   node web/tools/roam-pair.mjs --solo --page play --size 1280x720 --seed <a career save tree>
+#        --a Cam:cameras_views.txt:NFSU2_ROAM=0
+0     bot on
++0    waitroam 6000
++0    bot off
++600  poke 0x83aa74 4                 # player 1's view (PlayerSettings +0x10): the next C is view 0
++30   tap C
++240  expect i:0x83aa74 == 0
++0    dump cam_0
++30   tap C
++240  expect i:0x83aa74 == 1
++0    dump cam_1
++30   tap C
++240  expect i:0x83aa74 == 2
++0    dump cam_2
++30   tap C
++240  expect i:0x83aa74 == 3
++0    dump cam_3
++30   tap C
++240  expect i:0x83aa74 == 4
++0    dump cam_4
++30   tap C
++240  expect i:0x83aa74 == 0          # round again
++30   tap C
++30   tap C
++240  expect i:0x83aa74 == 2
++30   tap X                           # drift mode on from view 2: the drift camera
++240  expect i:0x83aa74 == 4
++30   tap X                           # off: view 2 back
++240  expect i:0x83aa74 == 2
++30   tap C
++30   tap C
++240  expect i:0x83aa74 == 4          # the drift camera picked
++30   tap X
++240  expect i:0x83aa74 == 4
++30   tap X                           # off: it stays
++240  expect i:0x83aa74 == 4
++0    pad connect                     # the right stick looks round (look.c)
++60   axis RX 1
++120  dump cam_4_look_right
++0    axis RX 0
++120  photo on                        # photo mode and back: the view stays
++240  photo off
++240  expect i:0x83aa74 == 4
++0    dump cam_4_after_photo
++0    log CAMERAS DONE
++120  quit

@@ -18,6 +18,7 @@ import { wheelSection } from './wheel-setup';
 import { askMotion, levelHorizon, menuSize, nitroSteerSide, onSteering, setSteering, steering, STEERING, steeringName, touchPosition,
   touchSize, type ListSetting, type Steering, type SwitchSetting } from './touch';
 import { language, N, onLanguage, t } from './i18n';
+import { buttonName, siteButton } from './sitekeys';
 
 export type Tab = 'keys' | 'pad' | 'site';
 export type Family = 'xb' | 'ps';
@@ -54,11 +55,11 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 /** a row: its middle (px), its button as Xbox and PlayStation name it (a word or a SHAPE), what it does (and a
  *  second line; English, translated where drawn), the point of the drawing its line goes to (none: its group's),
  *  and spoken names where a shape stands for a word */
-interface Row { y: number; xb: string; ps: string; does: string; sub?: string; to?: readonly [number, number]; say?: [string, string] }
+interface Row { y: number; xb: string; ps: string; does: string; sub?: string; to?: readonly [number, number]; say?: [string, string]; stick?: 'ls' | 'rs' }
 const LEFT: Row[] = [
   { y: 36, xb: 'LT', ps: 'L2', does: N('Brake'), sub: N('and reverse'), to: [30, -5] },
   { y: 64, xb: 'LB', ps: 'L1', does: N('Nitrous'), to: [20.6, 31.2] },
-  { y: 84, xb: 'LS', ps: 'L3', does: N('Steer'), sub: N('press in: horn'), to: [47, 54] },
+  { y: 84, xb: 'LS', ps: 'L3', does: N('Steer'), stick: 'ls', to: [47, 54] },
   { y: 116, xb: 'up', ps: 'up', does: N('Start event') },
   { y: 130, xb: 'left', ps: 'left', does: N('Map') },
   { y: 144, xb: 'right', ps: 'right', does: N('Messages') },
@@ -70,8 +71,13 @@ const RIGHT: Row[] = [
   { y: 90, xb: 'X', ps: 'square', does: N('Shift down') },
   { y: 104, xb: 'Y', ps: 'triangle', does: N('Camera') },
   { y: 118, xb: 'B', ps: 'circle', does: N('Look back') },
-  { y: 134, xb: 'RS', ps: 'R3', does: N('Free look'), sub: N('press in: quick chat'), to: [162, 94] },
+  { y: 134, xb: 'RS', ps: 'R3', does: N('Free look'), stick: 'rs', to: [162, 94] },
 ];
+/** a row's second line; a stick's: what its click does of ours (the player's buttons: sitekeys.ts), or none */
+function subOf(r: Row): string | undefined {
+  if (!r.stick) return r.sub;
+  return siteButton('button_horn') === r.stick ? N('press in: horn') : siteButton('button_chat') === r.stick ? N('press in: quick chat') : undefined;
+}
 /** over the middle: View and Menu, their lines straight down */
 const MIDDLE: (Row & { x: number })[] = [
   { x: 150, y: 12, xb: 'view', ps: 'view', does: N('Respawn'), to: [112, 48.5], say: ['View', 'Create'] },
@@ -115,7 +121,7 @@ function drawing(): string {
 function spoken(f: Family): string {
   const say = (r: Row) => r.say?.[f === 'xb' ? 0 : 1] ?? (SPOKEN[r[f]] ? t(SPOKEN[r[f]]) : r[f]);
   const low = (s: string) => language() === 'english' ? s.toLowerCase() : s;
-  return t('Controller: {list}', { list: [...LEFT, ...MIDDLE, ...RIGHT].map(r => `${say(r)}: ${low(t(r.does))}${r.sub ? `, ${t(r.sub)}` : ''}`).join('; ') });
+  return t('Controller: {list}', { list: [...LEFT, ...MIDDLE, ...RIGHT].map(r => `${say(r)}: ${low(t(r.does))}${subOf(r) ? `, ${t(subOf(r)!)}` : ''}`).join('; ') });
 }
 
 function padSvg(): string {
@@ -124,13 +130,15 @@ function padSvg(): string {
   for (const r of LEFT) {
     const x = 86 - chipW(r);
     s += chip(x, r) + `<text class="pad-label" x="${x - 5}" y="${r.y + 4}" text-anchor="end">${does(r)}</text>`;
-    if (r.sub) s += `<text class="pad-sub" x="${x - 5}" y="${r.y + 18}" text-anchor="end">${esc(t(r.sub))}</text>`;
+    const sub = subOf(r);
+    if (sub) s += `<text class="pad-sub" x="${x - 5}" y="${r.y + 18}" text-anchor="end">${esc(t(sub))}</text>`;
     if (r.to) s += line(89, r.y, r.to);
   }
   for (const r of RIGHT) {
     s += chip(248, r) + `<text class="pad-label" x="${248 + chipW(r) + 5}" y="${r.y + 4}">${does(r)}</text>`;
     // a second line under the last row, ending at the drawing's edge: there is room below the grip, not beside it
-    if (r.sub) s += `<text class="pad-sub" x="335" y="${r.y + 16}" text-anchor="end">${esc(t(r.sub))}</text>`;
+    const sub = subOf(r);
+    if (sub) s += `<text class="pad-sub" x="335" y="${r.y + 16}" text-anchor="end">${esc(t(sub))}</text>`;
     if (r.to) s += line(245, r.y, r.to);
   }
   for (const [i, r] of MIDDLE.entries()) {
@@ -172,9 +180,11 @@ export function controlsSheet(root: HTMLElement, id: string, opts: { tab?: Tab; 
   const kept = [...pad.querySelectorAll<HTMLElement>(':scope > [data-keep]')];
   const draw = () => {
     const menus = esc(t('In menus: D-pad and {a}, {b} goes back.')).replace('{a}', cap('A', 'cross')).replace('{b}', cap('B', 'circle'));
+    const hold = siteButton('button_hold');            // (the player's: sitekeys.ts)
     pad.innerHTML = padSvg() + `<div class="pad-foot">
     <p class="hint">${menus}</p>
-    <p class="hint">${esc(t('Parked in free roam: hold D-pad down to open trunk, then hood, then doors.'))}</p>
+    ${hold === 'off' ? '' : `<p class="hint">${esc(t('Parked in free roam: hold {button} to open trunk, then hood, then doors.', { button: buttonName(hold) }))}</p>`}
+    <p class="hint">${esc(t('Right stick up: headlights off or on; hold it for high beam.'))}</p>
     <div class="seg" role="radiogroup" aria-label="${esc(t('Button names'))}">
       <label class="opt"><input type="radio" name="${id}-fam" value="xb">Xbox</label>
       <label class="opt"><input type="radio" name="${id}-fam" value="ps">PlayStation</label>

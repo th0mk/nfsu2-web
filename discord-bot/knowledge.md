@@ -85,6 +85,23 @@ Checked against the guide or the code, and confirmed by players in threads:
   closes: it only shows the cause); then, in a normal window, turn the extensions off one by one.
 - Saves gone after closing the browser: the browser deletes site data when it closes (Chrome: `chrome://settings/content/siteData`,
   allow nfsu2.xyz to save data). Lost saves do not come back; Saves, Download backup, and cloud saves keep a copy.
+- `SAVES-UNREADABLE` ("Play without saving?" and "This browser can't read or write your saves right now (…)", on a page
+  that has it; before it, "Did not start" with `GAME-START` and `UnknownError: Unknown failure`, the log's `settings.ini
+  not read again: UnknownError`): the browser's own storage for nfsu2.xyz answers errors, so the game can neither list
+  the profiles nor keep a save; the page writes nothing. Seen in Firefox 159 on a Mac (thread 1567493118897430539),
+  still there after a Firefox restart; the game before had `[save] a file of the save folder could not be opened:
+  NotFoundError: Entry not found`. Play without saving starts the game anyway, nothing from it kept (the log: `[save]
+  playing without saving`). To fix it: restart the computer, and check the disk has free space (Firefox gives a full
+  disk the same error). Still there, the page's message says which way. Only where it says the progress "comes back as
+  it was at" a time (cloud saves whose last sync went through): first copy or download the passphrase (Cloud saves: the
+  eye shows and copies it, the arrow downloads it; Firefox and Safari keep it only in the site's data, so it goes with
+  it; Chrome and Edge may also have it in their passwords), then remove the site's data (Firefox: Settings, Privacy &
+  Security, Cookies and Site Data, Manage Data, nfsu2.xyz, Remove), reload, and enter the passphrase under Cloud saves.
+  Screenshots, covers, this device's settings (graphics, sound, controls), the Put back copy and the downloaded game
+  data go with the data, and anything played after that time. Where it says "don't remove
+  this site's data" (no cloud saves, or a last sync that did not go through): never suggest removing it; escalate with
+  the log. The same words over a running game: the browser refused a file the game saves to, so a save may not have
+  been kept; quit, restart the browser, and check the profile's last save on the start page.
 - Lost the cloud saves passphrase: since the release after 04a5c3f, Chrome and Edge offer to keep it with the browser's
   passwords (user name "Cloud saves"), which survive cleared site data. Look in the browser's password manager under
   nfsu2.xyz; a browser with no saves offers them back as the page opens, and the Cloud saves box fills it in for Load.
@@ -117,6 +134,11 @@ Checked against the guide or the code, and confirmed by players in threads:
   - "This site can't be reached" / the address can't be found (DNS) on a school, university or work network: setting
     the device's DNS to 1.1.1.1 or 9.9.9.9 fixed it.
 - Stuck behind a barrier or off the map: R respawns.
+- Stuck on the far side of a red locked-area wall (a later stage's area, e.g. Coal Harbor before stage 4), often
+  after a hard hit from another player, with R putting the car back there and reloads, the garage and races too
+  (the profile kept that spot): fixed on 4 November (0afdbb92), live with the release after that. Then R, and the
+  next Play, put the car on the open side of the wall, on the road just before it. Until then nothing in the game
+  gets the car out: ask for the log and a backup, and to keep the profile.
 - Career free roam with a black world and only the HUD (empty radar, often lower frame rate; menus and quick races
   fine), often after a hard hit from another player: the car was lost off the map and the profile kept that spot, so
   it came back at every Play. Fixed on 1 November (0f17d0a), live since the 2 November release: reload the page and
@@ -202,8 +224,8 @@ Checked against the guide or the code, and confirmed by players in threads:
   `phone graphics: the graphics options were changed in this browser, they stay`); then the game's Options, Display:
   car and road reflections, motion blur, depth of field, overbright and bleach bypass off, and the resolution on the
   row with a size such as 1916x884 (the screen's own at the page's resolution scale), not 1080p or 1440p, which draw
-  more pixels than a phone's default 75%. Players' cars shown (start page, Online) takes 16, 24, 32, 40 or 48,
-  nothing lower.
+  more pixels than a phone's default 75%. Players' cars shown (start page, Online) takes 16, 24, 32, 40 or 48
+  (since 4 November, pending release: 16, 24, 32, 48 or 64), nothing lower.
 - No sound at all on an iPhone, while the log's sound is fine: Silent mode is on, and Safari plays no page sound in
   it. Turn it off (the switch on the side; on newer iPhones the Action button or Control Center). Posters confirmed it.
   Since 4 November (pending release) the page plays its sound in Silent mode too (Safari's audio session "playback",
@@ -273,6 +295,23 @@ context lists every problem the developer has a report on, with its first thread
   (`VK_ERROR_OUT_OF_DEVICE_MEMORY` in the log); portrait works for some.
 - Black picture with sound on Intel graphics of the 9th generation (HD 510 and similar), in Chrome and Firefox: the
   log shows the game drawing with no WebGPU errors. No fix.
+- Free roam: error 134 after an hour or more among many players, with trips out of free roam and back (the crib,
+  shops, cover shoots and special events, races): the log has `[heap] HeapAlloc(...) FAILED` lines before the `TRAP`
+  (in tlsf_alloc < gbuf_alloc while friends' cars load, or in sub_00401aa0 on a race's loading screen). The game's
+  512 MB of memory runs short on the way back into a crowded free roam: its freed memory came back in pieces too
+  small for its next big load (better since d28b0b03), and the textures the game had let go waited to be released
+  while the friends' cars' new ones came in (since 8ddeacb8 they go within a few frames: the peak on a trip back
+  50-80 MB lower in tests). Since 8ddad1c9 a block freed twice no longer damages the game's memory, and since
+  216569ab a texture the memory has no room for no longer writes over other memory (`[com] no memory for ... Lock
+  buffer` and `scratch area` lines: the memory was that full). All only once the live version has those commits; no
+  setting avoids it for sure before. With them the log says what holds the memory (`[heap] no room for ...` lines)
+  and names anything freed twice (`DOUBLE FREE` lines): escalate such a log.
+  Since 4 November (pending release) a computer's browser gives the game 768 MB more of that memory, 1.25 GB in all
+  (Chrome or Edge; not Firefox, Safari, phones or tablets, nor a computer whose browser says it has less than 8 GB):
+  its log then says `[memory] 2048 MB` and `[heap] window above the runtime`. A computer's log with those lines and
+  still these failures: escalate it. `[heap] no window above the runtime` means the browser did not give the 2 GB
+  (the `[memory]` line says what it refused), and the game runs with 512 MB as before. A settings.ini line
+  `NFSU2_HEAP_WINDOW = 0` turns the extra memory off.
 - Free roam: the world's loading screen, or roads missing, while driving among many players (seconds on a PC, half a
   minute on a phone; once it never ended). Cause found on 29 October: the game loads no part of the city while it
   loads a player's car, and with players coming and going their cars load one after another, so the city waited for
@@ -288,6 +327,13 @@ context lists every problem the developer has a report on, with its first thread
 - Back to free roam after a race with other players: endless loading. Two causes are fixed: the crash on the way back
   (`INVALID FREE` and a `TRAP` after the lobby screen, 39f2ca8, 26 October) and the trip stopping after the crib's
   save went to the main menu (db3f8b5, 27 October). A report on a version with both is new: escalate it with the log.
+- Free roam: the player's own car loses its brake calipers, exhaust tips, spoiler or another shop part (rims,
+  mirrors, roof scoop, trunk audio) after entering any shop or the crib, and it stays gone, in the garage too and after
+  a car change, until the page is reloaded. One case was fixed on 30 October (d09e1439); the cause behind the reports
+  since (another car, a player's or the game's own traffic, with the same part) was fixed on 4 November (c1cd2de7).
+  Until that is live, a reload brings the parts back. On a version with it, a report is new: escalate it with the log
+  (its `HIBERNATING` lines). Threads 1565572638766796820 (earlier 1562415335540396032), 1567301375547801650 (a 240SX's
+  spoiler), 1565481947482820609, 1562624102483759234.
 - Sound on a PC that goes silent after the game was paused or its window inactive (`the AudioWorklet stopped
   consuming` in the log, on the live version). On phones, sound that chopped up got a fix on 26 October: a report
   of that after it is new.
@@ -318,6 +364,29 @@ context lists every problem the developer has a report on, with its first thread
   dead, LT reverse works; the Ultimate 2C works), and a wired pad on a Mac seen as `PS3 GamePad (054c:0268)`. No fix
   yet. Ask for the log and what Controls, Controller shows when the trigger is pressed. Threads
   1567258347940352072, 1566999852288843858.
+- Horns (yours and other players') still sounding with the game's Master Volume at 0: horns had only their own slider,
+  Horn Volume (the game's Options, Audio, also the pause menu's), 10 % to 100 %. Fixed on 4 November (47f8c0c6): horns
+  follow Master Volume as the game's own sounds do, so Master Volume at 0 silences them too; Horn Volume stays 10 % to
+  100 % (the developer's choice when it was made). Until that is live, Horn Volume at 10 % is the quietest. Thread
+  1567278200134836509.
+- Ghost mode Everything: the camera jumped up for a moment as a traffic car, a van most of all, drove through the
+  player's car, as if they had collided. Not a collision: the game's camera lifts itself over any car its eye is in,
+  and the car that passed through went on through the camera behind; nothing else changed (no slow motion, the car's
+  speed kept). Fixed on 4 November (77d744ad): the camera goes through those cars too. Until that is live there is no
+  workaround but Ghost mode Players (traffic solid). Thread 1567227790888017980.
+- Rebinding: the game's own controls are set in its Options, Controls (Keyboard Configuration, Joypad Configuration).
+  The site's own keys and buttons (X drift mode, O trunk/hood/doors, N horn, I message, F add friend, 1-4 quick chat;
+  a controller's D-pad down held, left stick click horn, right stick click quick chat) can't be changed there. Before
+  abba6770 a game control the player put on one of them fired together with ours (D-pad down bound to something was
+  held back a second). Since abba6770 such a key or button is left to the game, ours does nothing on it, and the log
+  says so once (`[keys] X is bound to Shift Up in the game: drift mode stays off it`, `[pad] D-pad down is bound to
+  ...`). A D-pad down, left stick or right stick still on its default (Career Status, hydraulics) works as before.
+  Since a10b03d6 the site's own are set on the start page, Controls, Site: a list of them (drift mode, trunk/hood/
+  doors, horn, quick chat, message, add friend, photo mode, menu, next song, frame-rate counter) with each one's key
+  and controller button as caps; click one, then press the new key or button, or Off. Keys the game itself uses can't
+  be picked, quick chat's 1-4 stay, the menu always keeps a key (and Home or both sticks), and a key the player put a
+  game control on says so there. It applies at the next Play; the touch controls' Drift and Horn work whatever is
+  picked. Until that is live, only the game's own Controls can be changed.
 
 ## Decided
 
@@ -348,7 +417,11 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   (right looks right; straight down is the game's Look Back since 77a2a706; the left stick when the game's controls
   steer or brake with the right one, since c04e9dc0) and turns it in the garage; quick chat,
   with phrases to pick in the start page's Online;
-  ghost mode in F9; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled), which since 09e907f1
+  ghost mode in F9 or the start page's Online: Players lets other players' cars pass through, and Everything (since
+  6f7bb374) also the game's traffic and its tuners, in free roam with others: the answer to "ghost mode for traffic"
+  and to disabling or removing the traffic or the tuners (NPCs) in free roam, which stay in the world as in the game
+  but no longer get in the way; Upscaled HUD in the start page's Game, Display, more: Menus, HUD and maps (Upscaled),
+  which since 09e907f1
   also shows JeansBig's Detailed Map: the minimap's, world map's and race menus' maps sharp, with the missing
   shortcuts; photo mode with F12 or the pause menu's
   Photo Mode, since a794718; Radio in F9 for the player's own music; a garage of 10 cars, 2 slots more each stage, and
@@ -366,7 +439,14 @@ performance and tuning, AI and traffic, the career's progression, races and rewa
   (14 % in the garage); the start page's Game, Display, more: 3D proportions, Corrected gives true proportions and round wheels with
   a little more at the sides (Original, the game's own, stays the default), since 6519964e; textures without
   smoothing, pixelated like dgVoodoo's point sampling: the start page's Game, Display, more: Pixelated textures (off by default;
-  on overrides the game's Texture Filtering), since 7f34eaa8; the guide
+  on overrides the game's Texture Filtering), since 7f34eaa8; C goes on from the game's four views to the drift
+  races' camera in every drive, since 0c930f2f; the Graphics Shop's vinyls have a Special category after Sponsor
+  with the game's promo vinyls (Snoop Dogg, Capone, Chingy, The Doors and others; free, no visual rating, stages 2
+  and 3), since 84c85172; Quick Race: laps 1 to 127 and up to 5 opponents (drags 3), Lap KO's laps and opponents
+  changeable (it starts at 5 and 5), and a race of one lap shows Completed % in place of LAP 1/1, since 81fad175;
+  headlights on G: a tap turns them off or back on, held is high beam (brighter, reaching farther) until let go, and
+  friends in free roam see it; on a controller the look's stick straight up; another key, or none, in Controls,
+  Site; since a64138c4; the guide
   lists them all). A feature named with a commit is there only once the live version has that commit.
 - A suggestion that would change a core mechanic: you may answer, briefly and kindly, that the project keeps the
   original game's mechanics as they are, so it won't change that. Only when it clearly is one; otherwise none.

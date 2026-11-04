@@ -618,9 +618,13 @@ int fileio_call(CPU *c, const char *n, uint32_t *out){
          * PC's disk or file thread (tests/scripts/roam_crowd_stream.txt) */
         static int read_ms = -1;
         if (read_ms < 0){ const char *e = getenv("NFSU2_TEST_READ_MS"); read_ms = e ? atoi(e) : 0; }
-#define READ_UNLOCKED(stmt) do { guest_wait_begin(); if (read_ms > 0) usleep((useconds_t)read_ms * 1000u); stmt; guest_wait_end(); } while (0)
+        /* hfr_io_*: framerate.c's fast-forward test pacing plays a frame at
+         * the content rate while a read is under way */
+        void hfr_io_begin(void); void hfr_io_end(void);
+#define READ_UNLOCKED(stmt) do { hfr_io_begin(); guest_wait_begin(); if (read_ms > 0) usleep((useconds_t)read_ms * 1000u); stmt; guest_wait_end(); hfr_io_end(); } while (0)
 #else
-#define READ_UNLOCKED(stmt) do { stmt; } while (0)
+        void hfr_io_begin(void); void hfr_io_end(void);
+#define READ_UNLOCKED(stmt) do { hfr_io_begin(); stmt; hfr_io_end(); } while (0)
 #endif
         /* (hFile, lpBuffer, nBytes, lpNumberRead, lpOverlapped)
          * With an OVERLAPPED: the offset is taken from the struct, the result

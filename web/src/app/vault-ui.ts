@@ -386,7 +386,8 @@ export class VaultPanel {
     let was: string | null = null;
     try { was = localStorage.getItem(k); } catch { /* storage off */ }
     if (s.link) { if (was !== markOf(s.link.phrase)) this.keep(s.link.phrase); return; }
-    if ((await listProfiles(this.d.saveDir)).length) return;
+    // (a save folder that does not answer, savefs.ts missing: as one with profiles, nothing offered over them)
+    if ((await listProfiles(this.d.saveDir).catch(() => null))?.length !== 0) return;
     const ask = was === null, phrase = await keptPhrase(ask), p = phrase ? readPhrase(phrase) : null;
     if (!p || 'bad' in p) {
       if (ask) { mark('asked'); this.d.log(`[app] keyphrase: the browser gave ${phrase ? 'no passphrase' : 'none'} when asked: only taken without a question from now on`); }
@@ -455,7 +456,9 @@ export class VaultPanel {
       return !still || await still();
     };
     const copy = this.copying;                         // (Use the cloud's: the saves here kept with the take)
-    try { if (!await restoreVault(this.d.saveDir, r, now, copy?.files)) return false; }
+    // a take by itself (VaultSync.pull: only while the saves here are those it synced) is the one that may follow an
+    // older page's mend with this browser's covers (saves-ui.ts renamedHere)
+    try { if (!await restoreVault(this.d.saveDir, r, now, copy?.files, !!still && !copy)) return false; }
     catch (e) { if (copy) await this.loadReplaced().catch(() => {}); throw e; }
     this.keptNow(copy);
     this.mended = r;
@@ -677,6 +680,17 @@ export class VaultPanel {
   }
   /** a keyphrase is linked here (before `start`: one is kept here) */
   linked(): boolean { return this.sync ? !!this.sync.link : typeof this.load()?.phrase === 'string'; }
+  /**
+   * When the cloud's version of this browser's saves was saved, where its last sync went through: linked, the server
+   * has the keyphrase, no conflict, error or work under way, no send without an answer, nothing held back (shell.ts
+   * savesAdvice: only then may the player remove the site's data and take the saves back with the passphrase).  null:
+   * not so, or not known yet (before `start`).
+   */
+  clearable(): number | null {
+    const s = this.sync, l = s?.link;
+    if (!s || !l || l.gone || l.held || l.sent?.length || s.state.s !== 'synced') return null;
+    return l.saved;
+  }
   /** the line about the name this keyphrase claims (null: none); drawn again as the section shows (the name can be
    *  known before `start` set up the sync) */
   showClaim(name: string | null) {
@@ -734,7 +748,7 @@ export class VaultPanel {
     p.textContent = text;
     for (const t of backupItems(r, true)) { const li = document.createElement('li'); li.textContent = t; ul.append(li); }
     body.append(p, ul);
-    if (!await this.d.confirm(title, body, ok, danger ?? (await listFiles(this.d.saveDir)).some(f => keeps(f.path)))) { this.msg(''); return false; }
+    if (!await this.d.confirm(title, body, ok, danger ?? (await listFiles(this.d.saveDir).catch(() => null))?.some(f => keeps(f.path)) ?? true)) { this.msg(''); return false; }
     if (this.d.busy()) { this.msg(() => t(QUIT_FIRST), true); return false; }
     let copy: Awaited<ReturnType<VaultPanel['replacedCopy']>>;
     try { copy = await this.replacedCopy(); }

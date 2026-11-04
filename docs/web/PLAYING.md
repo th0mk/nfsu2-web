@@ -114,7 +114,8 @@ While you drive:
 | Alt | Nitrous |
 | Space | Handbrake |
 | Left Shift, left Ctrl | Gear up, gear down (manual gearbox) |
-| C, B | Camera, look back |
+| C, B | Camera (the game's four views, then the drift races' camera, in every drive), look back |
+| G | Headlights: a tap turns them off, or back on; held, high beam (brighter, reaching farther) until you let go. Friends in free roam see it, so you can flash your lights at them. On a controller the right stick straight up (see Controller below). Another key, or none, in Controls, Site |
 | R | Respawn |
 | H, J | Hydraulics, with the Hydraulics part (Car Specialties): hold H to pressurize or J to bounce, then the arrows pick the corners; under 10 mph; on a touch screen the Pressurize and Bounce buttons |
 | N | Horn (free roam and races with other players) |
@@ -137,7 +138,14 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
 - **Change the keys:** in the game, Options, Controls. It opens on Keyboard Configuration; Up to that title, then
   Right, is Joypad Configuration, the controller's buttons. The game lists a controller once it has seen it: press a
   button on it before opening Controls. A controller's buttons are kept with the profile (leaving Options saves them),
-  the keys for every profile. The horn stays on N (the game has no horn of its own).
+  the keys for every profile. The site's own keys and buttons (drift mode, the trunk, the horn, the headlights, quick
+  chat's controller button, messages, friends, photo mode, the page menu, the next song, the counter) are set on the
+  start page, Controls, Site: click one, then press the new key or controller button, or pick Off (the page menu
+  always has a key, and Home). Keys the game itself uses can't be picked; one of the game's controls you put on one of
+  the site's keys in the game's Controls takes it: the site's control leaves it to the game, and Site says so. D-pad
+  down and the stick clicks with the game's own controls on them as it comes (Career Status, hydraulics) are shared as
+  before: a short press, and a car with hydraulics, stay the game's. The touch controls' Drift and Horn work whatever
+  keys those have.
 - **Drift mode (X):** in free roam, the car handles as in the game's drift races (their handling and drift assist,
   with your car's Drift tuning from Performance Tuning / Dyno in the crib; the other modes' tuning is back when drift
   mode is off), but your nitrous stays (the drift races have none; X neither empties nor fills it). The camera is the
@@ -176,6 +184,8 @@ The start page shows these keys under **Controls**, and F9, Controls shows them 
   game's own look back, as B (whatever button you bound to it). If you steer, accelerate or brake with the right
   stick (the game's Options, Controls, Joypad Configuration), the left stick looks round instead, as long as the game
   uses nothing of it (no steering or pedal, no direction bound to a control); if it does, neither stick looks round.
+  The stick that looks round, pushed straight up, is the headlights (G): a flick up turns them off or back on, held up
+  is high beam until you let go.
   In free roam and in races with other players a click of the right stick is quick chat, hydraulics or not (J still
   bounces): it shows the four groups, a flick picks one, another its phrase, and a second click closes it. With the
   right stick steering or on a pedal, its click stays the game's (bounce), and 1 to 4 open quick chat. In the
@@ -249,7 +259,7 @@ that room.
 
 | Where | Settings |
 |---|---|
-| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 40 or 48; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
+| Online | free roam with others, your name (in free roam and online), your horn, room, ghost mode (off, players or everything), players' cars shown (16, 24, 32, 48 or 64; computers start at 32, phones at 16, tablets at 24), quick chat and your phrases; more: the game's Online mode (on by default) |
 | Friends & crews | crews (with their colours), and your friends (once your name is claimed) |
 | Game, Game | language, movies, subtitles, songs (uncensored or original), autosave; more: show hidden races, startup movies (skippable, original or off), sound, pause or keep running in the background, sound output latency, highest graphics for a new save |
 | Game, Display | full screen on Play (off: the game plays in the browser window; on by default on phones), resolution scale (phones start at 75%, 100% once one shows it has the room), frame rate (auto follows the screen: 120 on a 120 Hz display, 240 on a 240 Hz one; 30, 60, 120 or 240, where 30 keeps a phone that cannot hold 60 steady; Online and LAN races at most 120); more: menus, HUD and maps (original or upscaled), HUD layout (wide, or 4:3 as phones start), movie framing, cutscene bars, 3D proportions (original, as the game drew them about 10 % too wide, or corrected: round wheels, a little more at the sides), other cars' headlights (players, all cars, off), frame-rate counter, fixed render size, pixel limit |
@@ -326,6 +336,13 @@ that room.
   (11 outrun wins in stage 5) comes only before the last URL race. Once you have beaten Caleb, the shops have all of
   them for every car in your career, as the original game's ending has them in Customize mode, whose cars free roam
   never drives. The unique performance parts stay one per stage.
+- **Special vinyls:** the Graphics Shop's vinyls have a Special category after Sponsor, with the game's promo vinyls
+  (Snoop Dogg, Capone, Chingy, The Doors, David Choe, D3, Japan Tuning, Shinestreet, Street Reaper), for the cars that
+  have them. The game hid them. They are free, open at the stages the game gives them (2 and 3), and add nothing to
+  the visual rating.
+- **Quick Race:** Laps go from 1 to 127 and Opponents up to 5 in every race but drags, which keep the game's 3. With
+  Lap KO on, both can still be changed: it starts at 5 laps and 5 opponents, with at least 1 opponent. In every
+  race, a race of one lap shows Completed and a percent in place of LAP 1/1, as sprints do.
 - **Power Units:** the game's Options, Gameplay (also in the pause menu's) has a row after Speedometer Units: the
   engine's power in bhp or kW wherever the game shows it (the dyno, the performance shop's parts), whatever the
   speedometer shows. Until you change it, it follows Speedometer Units, as in the original game (kW with km/h).
@@ -449,7 +466,7 @@ Good to know:
   of that game, and when the server is full as you press Play the start page asks whether to wait in line or play
   offline (or, the first time, says so in its free-roam question). The server pairs each player with the players
   nearest to them, as many as their game shows cars (fewer while it is busy, 8 at the least): 32 on computers, 24 on
-  tablets and 16 on phones, or what you pick (Online: Players' cars shown: 16, 24, 32, 40 or 48; more cars can lower
+  tablets and 16 on phones, or what you pick (Online: Players' cars shown: 16, 24, 32, 48 or 64; more cars can lower
   the frame rate). Their names show
   over the cars within 100 m, and each gets an arrow on the minimap when it is near and a marker on the world map (M),
   in the game's orange. The game's own outrun challengers are grey on both (the legend's Opponent Car too), so you can
@@ -503,7 +520,8 @@ Good to know:
   Each player's horn is also pitched a little differently by their name, so two players with the same horn sound
   apart. It sounds while the game runs, not in the pause menu or on the map. It works in Online and LAN races too.
   How loud the horns are (yours and the others'): the game's Options, Audio, Horn Volume, also in the pause menu's
-  Options, from 10 % to 100 % (the most, and the default). Moving it sounds your horn at the new volume.
+  Options, from 10 % to 100 % (the most, and the default), times the game's Master Volume, as for the game's own
+  sounds (none with Master Volume at 0). Moving it sounds your horn at the new volume.
 - **Quick chat:** say one of your sixteen set phrases to the players near you. There is no typing, so there is nothing
   to read that someone made up, and everyone reads a phrase in their own language. Press 1 to 4 for a group, then 1 to
   4 for its phrase; on a controller, press the right stick in, flick it (up, right, down, left) for a group, then
@@ -897,6 +915,7 @@ Good to know:
 | `GAME-START`: "Did not start", "The game couldn't start" | Press **Play** again; if it happens again, **Download log** (on the start page) and post the log with the message. "This device doesn't have enough free memory for the game" (the log: "could not allocate memory" in Chrome, "Out of memory" in Safari): the browser would not set aside the game's 1 GB, most often on phones with 2 to 4 GB (a 32-bit Chrome, an iPhone's Home Screen app). Close other apps and reload the page; the log's `[memory]` line says what the browser refused. |
 | `STORAGE-NONE`: "This browser window cannot store files" | A guest or private window cannot keep saves: open the page in a normal window. |
 | `STORAGE-OLD`: "This browser is too old for the game" | Safari before 26 (iOS 18 with Safari's WebGPU feature flag on, for one) cannot write the game's files. Update to iOS 26, iPadOS 26 or macOS with Safari 26 (Settings, General, Software Update). |
+| `SAVES-UNREADABLE`: "Play without saving?", "This browser can't read or write your saves right now" | The browser's storage for the site answered the page with an error (the message names it; Firefox says `UnknownError: Unknown failure`, a full disk among the causes). Nothing of the saves was written or removed. **Play without saving** starts the game anyway: it reads what it can, and nothing from that game is kept (no profile, setting or screenshot). Otherwise restart the browser, make sure the disk has free space, and press **Play** again. If it still fails and the message says your cloud saves have your progress: copy or download your passphrase first (**Cloud saves**; Firefox and Safari keep it only in the site's data), then remove this site's data in the browser's settings (Firefox: Settings, Privacy & Security, Cookies and Site Data, Manage Data; screenshots, covers, this device's settings, the Put back copy and the downloaded game data go too), reload, and enter the passphrase under **Cloud saves**. Otherwise don't remove it (that deletes what the cloud doesn't have) and ask on Discord. Shown over a game: the browser refused a file the game saves to, so a save may not have been kept. |
 | `STORAGE-ASK`: the browser asks whether the site may keep its data | Allow it, so that your saves stay when the disk runs low (section 5). |
 | `BROWSER-CHROME-OLD`, `BROWSER-FIREFOX-OLD` | A warning: the game may still play. Update the browser (Chrome 140 or newer, Firefox 145 or newer). |
 | `BROWSER-OTHER` | A warning: the page does not know this browser (it knows Chrome, Edge, Brave, Opera, Firefox and Safari). It may work when every other check passes. |

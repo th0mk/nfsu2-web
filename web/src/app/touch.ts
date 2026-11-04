@@ -395,9 +395,10 @@ export class TouchControls {
     add('reset', N('Reset'), path(ICONS.reset), { keys: ['KeyR'] }, 'small');
     add('map', N('Map'), path(ICONS.map), { keys: ['KeyM'] }, 'small roam');
     add('msgs', N('Messages'), path(ICONS.msgs), { keys: ['Tab'] }, 'small roam');
-    add('drift', N('Drift mode (in free roam)'), '<i class="drift" aria-hidden="true"></i>', { keys: ['KeyX'] }, 'small roam');
+    // (drift mode and the horn by keys of their own, whatever keys the player gave them: keymap.ts Nfsu2Drift, Nfsu2Horn)
+    add('drift', N('Drift mode (in free roam)'), '<i class="drift" aria-hidden="true"></i>', { keys: ['Nfsu2Drift'] }, 'small roam');
     add('status', N('Career status'), '<i class="status" aria-hidden="true"></i>', { bit: 1 << PAD_DDOWN }, 'small roam');
-    add('horn', N('Horn'), path(ICONS.horn), { keys: ['KeyN'] }, 'small roam');
+    add('horn', N('Horn'), path(ICONS.horn), { keys: ['Nfsu2Horn'] }, 'small roam');
     add('chat', N('Quick chat'), path(ICONS.chat), { act: () => this.deps.chat?.() }, 'small roam');
     add('lift', N('Hydraulics: pressurize'), path(ICONS.lift), { act: () => this.setHyd(this.hyd === 'lift' ? '' : 'lift') }, 'small hyd');
     add('bounce', N('Hydraulics: bounce'), path(ICONS.bounce), { act: () => this.setHyd(this.hyd === 'bounce' ? '' : 'bounce') }, 'small hyd');

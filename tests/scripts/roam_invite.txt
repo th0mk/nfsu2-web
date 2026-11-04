@@ -2,8 +2,8 @@
 # player (roam-pair --page app --solo) in no room at the new career's start facing north, with two of roam-crowd's
 # players parked 15 m in front (each roam-crowd --n 1 --track <one spot>): one in no room, one in room "Blue Room".
 # It sees the first; then opens a link to Blue Room (the question, Join): the game leaves its friend and meets the
-# other at once, without a new Play; then a crew link from a player in no room (crew=Night%20Owls&room=): out of
-# Blue Room again, the first friend back, in crew Night Owls.  mp status after each step; settings.ini has each.
+# other at once, without a new Play; then a crew link from a player in no room (crew=Night%20Owls): in crew Night
+# Owls, still in Blue Room with the second.  mp status after each step; settings.ini has each.
 #   roam-pair --page app --solo --a "Ann:roam_invite.txt"
 0     tapuntil RETURN MC_Background.fng 120 4000
 +120  tap LEFT
@@ -33,7 +33,7 @@
 +0    roam mp waitcars 1 6000
 +600  roam mp status
 +0    log SHOT blue
-+60   log INVITE crew=Night%20Owls&room=
++60   log INVITE crew=Night%20Owls
 +900  roam mp waitpeers 1 6000
 +0    roam mp waitcars 1 6000
 +600  roam mp status

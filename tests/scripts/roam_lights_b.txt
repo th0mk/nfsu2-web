@@ -1,0 +1,180 @@
+# The headlight key between players (runtime/lightkey.c), instance B (renders): new career -> prologue free roam;
+# B jumps 14 m in front of A's car (roam_lights_a.txt: it stands where it started), 3.5 m to its side, facing it (its
+# camera sees A's front past its own car), and again every 10 dumps, while A plays with its lights.
+# Every 40 frames "lights report" (what B's game shows of A's lights) and a dump of the same moment.
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++300  log (A stands: its car counts as passable, never solid)
++200  roam mp follow 0 -14 3.5 180
++60   lights report
++3    dump l00
++40   lights report
++3    dump l01
++40   lights report
++3    dump l02
++40   lights report
++3    dump l03
++40   lights report
++3    dump l04
++40   lights report
++3    dump l05
++40   lights report
++3    dump l06
++40   lights report
++3    dump l07
++40   lights report
++3    dump l08
++40   lights report
++3    dump l09
++40   lights report
++0    roam mp follow 0 -14 3.5 180
++40   lights report
++3    dump l10
++40   lights report
++3    dump l11
++40   lights report
++3    dump l12
++40   lights report
++3    dump l13
++40   lights report
++3    dump l14
++40   lights report
++3    dump l15
++40   lights report
++3    dump l16
++40   lights report
++3    dump l17
++40   lights report
++3    dump l18
++40   lights report
++3    dump l19
++40   lights report
++0    roam mp follow 0 -14 3.5 180
++40   lights report
++3    dump l20
++40   lights report
++3    dump l21
++40   lights report
++3    dump l22
++40   lights report
++3    dump l23
++40   lights report
++3    dump l24
++40   lights report
++3    dump l25
++40   lights report
++3    dump l26
++40   lights report
++3    dump l27
++40   lights report
++3    dump l28
++40   lights report
++3    dump l29
++40   lights report
++0    roam mp follow 0 -14 3.5 180
++40   lights report
++3    dump l30
++40   lights report
++3    dump l31
++40   lights report
++3    dump l32
++40   lights report
++3    dump l33
++40   lights report
++3    dump l34
++40   lights report
++3    dump l35
++40   lights report
++3    dump l36
++40   lights report
++3    dump l37
++40   lights report
++3    dump l38
++40   lights report
++3    dump l39
++40   lights report
++0    roam mp follow 0 -14 3.5 180
++40   lights report
++3    dump l40
++40   lights report
++3    dump l41
++40   lights report
++3    dump l42
++40   lights report
++3    dump l43
++40   lights report
++3    dump l44
++40   lights report
++3    dump l45
++40   lights report
++3    dump l46
++40   lights report
++3    dump l47
++40   lights report
++3    dump l48
++40   lights report
++3    dump l49
++40   lights report
++0    roam mp follow 0 -14 3.5 180
++40   lights report
++3    dump l50
++40   lights report
++3    dump l51
++40   lights report
++3    dump l52
++40   lights report
++3    dump l53
++40   lights report
++3    dump l54
++40   lights report
++3    dump l55
++40   lights report
++3    dump l56
++40   lights report
++3    dump l57
++40   lights report
++3    dump l58
++40   lights report
++3    dump l59
++40   lights report
++0    roam mp follow 0 -14 3.5 180
++40   lights report
++3    dump l60
++40   lights report
++3    dump l61
++40   lights report
++3    dump l62
++40   lights report
++3    dump l63
++40   lights report
++3    dump l64
++40   lights report
++3    dump l65
++40   lights report
++3    dump l66
++40   lights report
++3    dump l67
++40   lights report
++3    dump l68
++40   lights report
++3    dump l69
++40   lights report
++30   quit

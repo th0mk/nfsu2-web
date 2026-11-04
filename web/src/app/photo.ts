@@ -25,6 +25,7 @@ import {
 import { N, t } from './i18n';
 import { pageDialog } from './padnav';
 import { padSeen, touchFirst } from './device';
+import { keyName, menuKeyOf, siteKey } from './sitekeys';
 
 // runtime/photo.c: the events (PH_*) and the bits of PH_HOLD (HB_*)
 const PH_HELLO = 0, PH_OPEN = 1, PH_HOLD = 2, PH_MOVE = 3, PH_TURN = 4, PH_DRAG = 5, PH_PAN = 6, PH_DOLLY = 7,
@@ -56,8 +57,9 @@ const HELD: Record<string, number> = {
   ArrowLeft: HB_TL, ArrowRight: HB_TR, ArrowUp: HB_TU, ArrowDown: HB_TD,
   KeyZ: HB_ZIN, KeyX: HB_ZOUT, KeyC: HB_RL, KeyV: HB_RR, ShiftLeft: HB_FAST, ShiftRight: HB_FAST,
 };
-/** the page's own keys, which stay the page's (shell.ts) */
-const PAGE_KEYS = new Set(['F7', 'F8', 'F9', 'F11', 'F12']);
+/** the page's own keys, which stay the page's (shell.ts): the menu's, photo mode's, the next song's, the counter's (the
+ *  player's: sitekeys.ts) and F11 */
+const pageKey = (code: string) => code === 'F11' || menuKeyOf(code) !== null;
 
 /** two values of -1..1 as a photo event's int16 pair */
 const pack = (x: number, y: number) =>
@@ -390,7 +392,7 @@ export class PhotoMode {
            ['A', N('Take photo')], ['B', N('Leave')]]
         : [[t('Drag'), N('Turn')], ['W A S D', N('Move')], ['Q E', N('Down, up')], [t('Wheel'), N('Closer, farther')],
            ['Z X', N('Zoom')], ['C V', N('Tilt')], ['Tab', N('Orbit or free')], ['R', N('Reset')], ...names('N'),
-           ['H', N('Hide the panel')], ['F12', N('Take photo')], ['Esc', N('Leave')]];
+           ['H', N('Hide the panel')], [keyName(siteKey('photo') ?? 'Enter'), N('Take photo')], ['Esc', N('Leave')]];
     this.hints.replaceChildren(...list.map(([k, what]) => {
       const row = document.createElement('span'), kbd = document.createElement('kbd');
       kbd.textContent = k;
@@ -403,7 +405,7 @@ export class PhotoMode {
   private onKey(e: KeyboardEvent, down: boolean) {
     const bit = HELD[e.code];
     if (!down && bit && this.keys & bit) { this.keys &= ~bit; this.steer(); }   // let go wherever it went (a dialog, Ctrl)
-    if (!this.on || PAGE_KEYS.has(e.code) || pageDialog()) return;
+    if (!this.on || pageKey(e.code) || pageDialog()) return;
     e.stopImmediatePropagation();                   // the game gets none of them
     if (e.metaKey || e.ctrlKey) return;             // the browser's shortcuts stay the browser's
     e.preventDefault();

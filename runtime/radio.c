@@ -24,6 +24,7 @@
  * only used through the sequence locks, the ring mask, the `have` bound and the sample limit.
  * Outside the browser (the Mac port and its tests) the wrappers at the end call the game's own code. */
 #include "cpu.h"
+#include "guest_span.h"
 
 /* ---- the game's functions (sub_ names are the lifter's; tools/genstamp.sh reads the _orig ones from here) ---- */
 void sub_007292bc_orig(CPU *c);   /* the mixer step, every few ms: we find the song's two readers, stop the game's song when the track ends or the radio is switched */
@@ -114,7 +115,12 @@ _Static_assert(RADIO_TRACKS == 27, "the game's EA Trax table has 27 songs");
 
 static uint32_t trax_word(unsigned index, unsigned word){ return TRAX_TABLE + TRAX_ENTRY_SIZE * index + 4u * word; }
 static int radio_on(const HostStatusRadio *r){ return __atomic_load_n(&r->on, __ATOMIC_ACQUIRE) & 1u; }
+#ifdef __wasm__
+/* (or the guest heap's window above the runtime: guest_span.h) */
+static int in_guest(uint32_t at, uint32_t len){ return guest_span(GUEST_START, at, len); }
+#else
 static int in_guest(uint32_t at, uint32_t len){ return at >= GUEST_START && len < GUEST_END && at <= GUEST_END - len; }
+#endif
 static int page_has_track_for(const HostStatusRadio *r, unsigned place){
     return place < RADIO_PLACES && (__atomic_load_n(&r->offer.places, __ATOMIC_ACQUIRE) >> place) & 1u;
 }

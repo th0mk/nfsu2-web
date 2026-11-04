@@ -1,6 +1,7 @@
 // Invite links (a player's request: "why can't we just invite them to rooms using links?"): this server's start page
 // with a free-roam room or crew after its '#', nfsu2.xyz/#room=Blue%20Room or nfsu2.xyz/#crew=Night%20Owls (with the
-// sender's room after it when the sender is in one: crew-mates meet only within one room).  The page that opens one
+// sender's room after it when the sender is in one: crew-mates meet only within one room; a room's link never has a
+// crew).  The page that opens one
 // asks the player whether to join (shell.ts); nothing changes before Join, so a link cannot change a player's game by
 // itself (the audit's PAGE-1).  The names stay in the address's fragment, which a browser never sends: the server and
 // its logs never see them.  Pure (no DOM), so its test runs under node.
@@ -9,7 +10,8 @@ import { checkCrew } from './crews';
 import { checkSetting } from './settings';
 import { roomHash, roomText } from './players';
 
-/** what a link joins: a room, a crew, or a crew in a room ('' with a crew: in no room, everyone's) */
+/** what a link joins: a room, a crew, or a crew in a room ('' with a crew: in no room, everyone's, from the menu's
+ *  Friends; a link has no empty room) */
 export interface Invite { room?: string; crew?: string }
 
 /** Unicode's blanks (each one a blank to roomFold), and the invisible characters it leaves out too */
@@ -47,17 +49,18 @@ function enc(s: string): string {
   return out;
 }
 
-/** The link to this server (origin: 'https://nfsu2.xyz') that joins inv: the crew first, then the room (a crew's
- *  with an empty room too: its friend leaves a room of their own to meet the sender in everyone's). */
+/** The link to this server (origin: 'https://nfsu2.xyz') that joins inv: the crew first, then the room when there
+ *  is one (a crew's from a sender in no room: the crew alone, its friend's own room left as it is). */
 export function inviteLink(origin: string, inv: Invite): string {
   const p: string[] = [];
   if (inv.crew) p.push(`crew=${enc(inv.crew)}`);
-  if (inv.room || (inv.crew && inv.room !== undefined)) p.push(`room=${enc(inv.room)}`);
+  if (inv.room) p.push(`room=${enc(inv.room)}`);
   return `${origin}/#${p.join('&')}`;
 }
 
 /** The invite in a page address's fragment ('#room=...'), its names tidied; null: none (another fragment, a name
- *  that does not decode, or a room of blanks alone). */
+ *  that does not decode, or a room of blanks alone).  An empty room is no room (a crew's link of before,
+ *  '#crew=X&room=': the crew alone). */
 export function readInvite(hash: string): Invite | null {
   const inv: Invite = {};
   for (const part of hash.replace(/^#/, '').split('&')) {
@@ -68,7 +71,7 @@ export function readInvite(hash: string): Invite | null {
     inv[key] = tidyName(v);
   }
   if (!inv.crew) delete inv.crew;
-  if (inv.room === '' && !inv.crew) delete inv.room;
+  if (!inv.room) delete inv.room;
   return inv.room || inv.crew ? inv : null;
 }
 

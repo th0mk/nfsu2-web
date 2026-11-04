@@ -279,7 +279,7 @@ static int8_t q_slip(float f){ int32_t v = f_round(f_clamp(f, -1000.f, 1000.f) /
 #define ENG_MAX 20000u
 static void put_statex(rc_w *w, const rc_state *s){
     if (!s->ext){ rc_put8(w, 0); return; }
-    int slides = 0, eng = s->eng != 0, open = (s->open & RC_OPEN_ALL) != 0;
+    int slides = 0, eng = s->eng != 0, open = (s->open & RC_OPEN_ALL) != 0 || s->hibeam;
     for (int i = 0; i < 8; i++) slides |= q_slip(s->slip[i]) != 0;
     if (open) slides = eng = 1;
     rc_put8(w, (slides ? RC_STATEX_SLIP : RC_STATEX_HYD) + (eng ? RC_STATEX_ENG : 0) + (open ? RC_STATEX_OPEN : 0) - 1);
@@ -290,7 +290,7 @@ static void put_statex(rc_w *w, const rc_state *s){
         rc_put8(w, (uint8_t)q_slip(s->slip[2 * i])); rc_put8(w, (uint8_t)q_slip(s->slip[2 * i + 1])); rc_put8(w, s->surf[i]);
     }
     if (eng){ rc_put16(w, s->eng < ENG_MAX ? s->eng : ENG_MAX); rc_put8(w, s->eng_acc); rc_put8(w, s->eng_dcl); rc_put8(w, s->eng_base); }
-    if (open) rc_put8(w, s->open & RC_OPEN_ALL);
+    if (open) rc_put8(w, (s->open & RC_OPEN_ALL) | (s->hibeam ? RC_OPEN_HIBEAM : 0u));
 }
 static int get_statex(rc_r *r, rc_state *s){
     uint32_t n = rc_get8(r);
@@ -316,7 +316,8 @@ static int get_statex(rc_r *r, rc_state *s){
         k += RC_STATEX_ENG;
     }
     if (k == RC_STATEX_FULL - 1 && n >= k + RC_STATEX_OPEN){        /* the open parts, after the longest form */
-        s->open = (uint8_t)(rc_get8(r) & RC_OPEN_ALL);
+        uint32_t b = rc_get8(r);
+        s->open = (uint8_t)(b & RC_OPEN_ALL); s->hibeam = (b & RC_OPEN_HIBEAM) != 0;
         k += RC_STATEX_OPEN;
     }
     r->n += n - k;                                                  /* a newer core's fields */
@@ -325,7 +326,7 @@ static int get_statex(rc_r *r, rc_state *s){
 }
 static int get_state(rc_r *r, rc_state *s){
     s->ext = 0; s->nos = 0; s->hyd = 0; s->thumps = 0; s->slipx = 0; s->eng = 0; s->eng_acc = 0; s->eng_dcl = 0; s->eng_base = 0;
-    s->open = 0;
+    s->open = 0; s->hibeam = 0;
     for (int i = 0; i < 4; i++){ s->wz[i] = 0; s->surf[i] = 0; }
     for (int i = 0; i < 8; i++) s->slip[i] = 0;
     s->t_us = rc_get32(r);
@@ -349,8 +350,16 @@ static int get_state(rc_r *r, rc_state *s){
     q_norm(s->q);
     return RC_OK;
 }
+void rc_state_put(rc_w *w, const rc_state *s, int ext){ put_state(w, s); if (ext) put_statex(w, s); }
+int rc_state_get(rc_r *r, rc_state *s, int ext){
+    int e = get_state(r, s);
+    return e ? e : ext ? get_statex(r, s) : RC_OK;
+}
 
 /* ---- messages ------------------------------------------------------------------- */
+/* a flag's code: lower case letters and '-' (roam_game.c looks it up; one it does not have shows none) */
+static int flag_ok(const char *s, uint32_t n){ for (uint32_t i = 0; i < n; i++) if (!((s[i] >= 'a' && s[i] <= 'z') || s[i] == '-')) return 0; return 1; }
+static uint32_t flag_len(const char *s){ uint32_t n = 0; while (n <= RC_FLAG_MAX && s[n]) n++; return n; }   /* RC_FLAG_MAX + 1: too long */
 static int printable(const char *s, uint32_t n){ for (uint32_t i = 0; i < n; i++) if ((uint8_t)s[i] < 0x20 || (uint8_t)s[i] >= 0x7F) return 0; return 1; }
 
 /* a LOBBY message's fields: a known op, state and reason, an id for the
@@ -403,12 +412,15 @@ int rc_encode(const rc_msg *m, uint8_t *out, int cap){
         rc_put8(&w, nl); rc_putb(&w, m->u.hello.name, nl);
         rc_put8(&w, m->u.hello.n_seen);
         for (int i = 0; i < m->u.hello.n_seen; i++) rc_put32(&w, m->u.hello.seen[i]);
-        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel){
+        uint32_t fl = flag_len(m->u.hello.flag);
+        if (fl > RC_FLAG_MAX || !flag_ok(m->u.hello.flag, fl)) return -1;
+        if (m->u.hello.n_crews || m->u.hello.links || m->u.hello.duel || fl){
             if (!(m->h.flags & RC_HF_CREW) || m->u.hello.n_crews > RC_CREW_MAX || m->u.hello.links > RC_MAX_PEERS) return -1;
             rc_put8(&w, m->u.hello.n_crews);
             for (int i = 0; i < m->u.hello.n_crews; i++){ if (!m->u.hello.crews[i]) return -1; rc_put32(&w, m->u.hello.crews[i]); }
-            if (m->u.hello.links || m->u.hello.duel) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
-            if (m->u.hello.duel) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
+            if (m->u.hello.links || m->u.hello.duel || fl) rc_put8(&w, m->u.hello.links);   /* (a core or hub before version 10 skips it) */
+            if (m->u.hello.duel || fl) rc_put32(&w, m->u.hello.duel);                         /* (...before version 11 this) */
+            if (fl){ rc_put8(&w, fl); rc_putb(&w, m->u.hello.flag, fl); }                  /* (...before version 13 this) */
         }
         break; }
     case RC_MSG_PEERS:
@@ -546,6 +558,13 @@ int rc_decode(const uint8_t *buf, int len, rc_msg *m){
             for (int i = 0; i < m->u.hello.n_crews; i++) if (!m->u.hello.crews[i]) return RC_E_FIELD;
             if (r.n < r.len) m->u.hello.links = (uint8_t)rc_get8(&r);
             if (r.n + 4 <= r.len) m->u.hello.duel = rc_get32(&r);
+            if (r.n < r.len){                                         /* the flag (core 13): one that is not a code, none */
+                uint32_t fl = rc_get8(&r);
+                if (fl <= RC_FLAG_MAX && r.n + fl <= r.len){
+                    rc_getb(&r, m->u.hello.flag, fl); m->u.hello.flag[fl] = 0;
+                    if (!flag_ok(m->u.hello.flag, fl)) m->u.hello.flag[0] = 0;
+                }
+            }
             r.n = r.len;                                              /* (a newer core's additions) */
         }
         break; }
@@ -814,7 +833,7 @@ static void lerp_rest(const rc_state *a, const rc_state *b, float u, rc_pose *o)
     o->speed = a->speed + u * (b->speed - a->speed);
     const rc_state *n = u < 0.5f ? a : b;
     o->gear = n->gear; o->bits = n->bits;
-    o->ext = n->ext; o->nos = n->nos; o->hyd = n->hyd; o->thumps = n->thumps; o->open = n->open;
+    o->ext = n->ext; o->nos = n->nos; o->hyd = n->hyd; o->thumps = n->thumps; o->open = n->open; o->hibeam = n->hibeam;
     for (int i = 0; i < 4; i++) o->wz[i] = a->ext && b->ext ? a->wz[i] + u * (b->wz[i] - a->wz[i]) : n->wz[i];
     o->slipx = n->slipx;
     for (int i = 0; i < 4; i++) o->surf[i] = n->surf[i];
@@ -831,7 +850,7 @@ static void from_state(const rc_state *s, rc_pose *o){
     for (int i = 0; i < 4; i++){ o->q[i] = s->q[i]; o->wz[i] = s->wz[i]; }
     o->steer = s->steer; o->throttle = s->throttle; o->brake = s->brake; o->rpm = s->rpm; o->speed = s->speed;
     o->gear = s->gear; o->bits = s->bits; o->ext = s->ext; o->nos = s->nos; o->hyd = s->hyd; o->thumps = s->thumps;
-    o->open = s->open;
+    o->open = s->open; o->hibeam = s->hibeam;
     o->slipx = s->slipx;
     for (int i = 0; i < 4; i++) o->surf[i] = s->surf[i];
     for (int i = 0; i < 8; i++) o->slip[i] = s->slip[i];
@@ -848,12 +867,18 @@ int rc_extrap_arc = 1;
  * its velocity turned from the state before (what its path did), when the two are close in time and it moves; else
  * its own yaw rate, which in a slide is more than its path turns */
 #define ARC_MAX_RAD_S  3.f
+#define TURN_BASE_US   40000
 static float turn_rate(const rc_interp *ip){
     const rc_state *b = &ip->s[ip->n - 1];
     float k = b->w[2];
     if (rc_extrap_arc != 2 && ip->n >= 2){
-        const rc_state *a = &ip->s[ip->n - 2];
-        int64_t dt = ip->t[ip->n - 1] - ip->t[ip->n - 2];
+        /* the turn over the newest state at least TURN_BASE_US older: a race's car states come every frame (racecars.c,
+         * 16 ms apart), and its turn over one frame is mostly noise, carried on 150 ms.  Free roam's (50 ms apart): the
+         * state before, as ever */
+        int j = ip->n - 2;
+        while (j > 0 && ip->t[ip->n - 1] - ip->t[j] < TURN_BASE_US) j--;
+        const rc_state *a = &ip->s[j];
+        int64_t dt = ip->t[ip->n - 1] - ip->t[j];
         float sa = a->v[0] * a->v[0] + a->v[1] * a->v[1], sb = b->v[0] * b->v[0] + b->v[1] * b->v[1];
         if (dt >= 10000 && dt <= 150000 && sa > 9.f && sb > 9.f)
             k = rc_atan2f(a->v[0] * b->v[1] - a->v[1] * b->v[0], a->v[0] * b->v[0] + a->v[1] * b->v[1]) / ((float)(int32_t)dt * 1e-6f);
@@ -1355,6 +1380,11 @@ static void fill_hello(rc_session *s, rc_msg *m, const rc_peer *to, int crews){
     m->u.hello.core_ver = RC_CORE_VER; m->u.hello.platform = s->conf.platform; m->u.hello.status = s->status;
     m->u.hello.listen_port = s->conf.port; m->u.hello.cfg_rev = s->cfg_rev; m->u.hello.room = s->conf.room;
     memcpy(m->u.hello.name, s->conf.name, sizeof m->u.hello.name);
+    /* our flag to each peer (with no hub, the beacon's too); the hub reads none */
+    if (to || !s->conf.hub_ip){
+        uint32_t fl = flag_len(s->conf.flag);
+        if (fl <= RC_FLAG_MAX && flag_ok(s->conf.flag, fl)){ memcpy(m->u.hello.flag, s->conf.flag, fl); m->u.hello.flag[fl] = 0; }
+    }
     int n = 0;
     /* a peer that sees its id here takes us as established, so it is named
      * once established, or heard while the group has room (with the group full
@@ -1532,6 +1562,7 @@ void rc_receive(rc_session *s, uint32_t ip, uint16_t port, const uint8_t *buf, i
         if (m.u.hello.room != s->conf.room){ s->rx_room++; if (p->state == RC_PS_EST) drop_peer(s, i, "other room", RC_DGONE_SAID); return; }
         int first = !p->name[0];
         memcpy(p->name, m.u.hello.name, sizeof p->name);
+        memcpy(p->flag, m.u.hello.flag, sizeof p->flag);
         p->platform = m.u.hello.platform; p->status = m.u.hello.status; p->cfg_rev_seen = m.u.hello.cfg_rev;
         p->core_ver = m.u.hello.core_ver; p->duels = (m.h.flags & RC_HF_DUELS) != 0;
         p->drifts = p->duels && (m.h.flags & RC_HF_DRIFT) != 0;
@@ -1722,9 +1753,11 @@ void rc_tick(rc_session *s, int64_t now){
             if (p->state != RC_PS_EST) continue;
             m.u.peers.e[n].ip = p->ip; m.u.peers.e[n].port = p->port; m.u.peers.e[n].id = p->id; n++;
         }
-        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32 (each drops a longer list) */
+        /* a core of version 1 gets the first 7, one of versions 2 to 9 the first 32, one of 10 to 13 the first 48 (each
+         * drops a longer list) */
         for (int i = 0; i < RC_TABLE && n; i++) if (s->peer[i].state == RC_PS_EST){
-            int most = s->peer[i].core_ver >= 10 ? RC_MAX_PEERS : s->peer[i].core_ver >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
+            int v = s->peer[i].core_ver;
+            int most = v >= 14 ? RC_MAX_PEERS : v >= 10 ? RC_PEERS_V13 : v >= 2 ? RC_PEERS_V9 : RC_PEERS_V1;
             m.u.peers.n = (uint8_t)(n < most ? n : most);
             tx(s, &s->peer[i], &m);
         }

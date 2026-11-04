@@ -224,7 +224,9 @@ void racenet_heard(uint8_t *m, int n, uint32_t from);   /* racenet.c: the player
 void racenet_carspam(CPU *c, const uint8_t *m, int n, uint32_t from);   /*   a joiner's car state straight from its game, */
 void racenet_list(const uint8_t *m, int n, uint32_t from);              /*   and the creator's list of the joiners */
 void mprace_quit_heard(uint8_t *m, int n, uint32_t from);              /* mprace.c: a racer that quit the race */
+void racecars_heard(const uint8_t *m, int n, uint32_t from);           /* racecars.c: a racer's car from its game */
 static void got(CPU *c, uint8_t *m, int n, uint32_t from, uint32_t now){
+    if (n >= 4 && !memcmp(m, "N2RS", 4)){ racecars_heard(m, n, from); return; }
     if (n >= 4 && !memcmp(m, "N2FS", 4)){ racenet_heard(m, n, from); return; }
     if (n >= 4 && !memcmp(m, "N2CS", 4)){ racenet_carspam(c, m, n, from); return; }
     if (n >= 4 && !memcmp(m, "N2PL", 4)){ racenet_list(m, n, from); return; }

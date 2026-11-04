@@ -25,7 +25,11 @@ int host_status_slot(const char *name){
     int i = 0;
     for (; i < (int)g_st.count; i++) if (!strncmp(g_st.item[i].name, name, HOST_STATUS_NAME)) break;
     if (i == (int)g_st.count){
-        if (i >= HOST_STATUS_MAX){ pthread_mutex_unlock(&g_mu); return -1; }
+        if (i >= HOST_STATUS_MAX){
+            pthread_mutex_unlock(&g_mu);
+            fprintf(stderr, "[status] no room for \"%s\": all %d places taken, the page never sees it\n", name, HOST_STATUS_MAX);
+            return -1;
+        }
         __atomic_add_fetch(&g_st.seq, 1, __ATOMIC_RELEASE);
         strncpy(g_st.item[i].name, name, HOST_STATUS_NAME);
         g_st.item[i].value = 0;

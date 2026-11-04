@@ -1,0 +1,45 @@
+# The headlight key between players (runtime/lightkey.c), instance A (acts): new career -> prologue free roam; A
+# stays where it starts (B, roam_lights_b.txt, which renders, jumps in front of it), then G: tapped (off), held 5 s
+# (high beam, then off again), tapped (on), held 5 s (high beam, then on again).  B's log says what
+# its game shows of A's lights (NFSU2_LIGHTS_LOG=1: "[lights] ... slot k: the friend's lights ..."), and its dumps
+# show A's car.  The steps fit in B's 70 dumps (about 3300 frames after its waitcars, 110 s at NFSU2_FPS=30).
+#   node web/tools/roam-pair.mjs --page play --play-only Vic --size 1600x900 --env NFSU2_LIGHTS_LOG=1
+#        --a Hed:roam_lights_a.txt --b Vic:roam_lights_b.txt
+0     tapuntil RETURN MC_Background.fng 120 4000
++120  tap LEFT
++30   tap RETURN
++240  tap BACK
++8    tap BACK
++8    tap BACK
++8    tap BACK
++20   type ${ROAM_PROFILE}
++60   tap RETURN
++240  tap RETURN
++0    waitfng GarageMain.fng 3000
++300  tap LEFT
++60   tap RETURN                      # Career
++300  tap RETURN                      # Start New Career
++0    waitfng UI_EngageMessageDialog.fng 8000
++120  tap RETURN                      # SMS: Continue
++0    roam waitroam 3000
++0    roam smsauto on
++0    roam mp waitpeers 1 6000
++0    roam mp waitcars 1 3000
++1800 lights report
++0    log lights_off
++0    tap G 1
++3    lights report
++450  log lights_flash_from_off
++0    down G
++300  lights report
++0    up G
++3    lights report
++450  log lights_on
++0    tap G 1
++3    lights report
++450  log lights_flash_from_on
++0    down G
++300  lights report
++0    up G
++3    lights report
++900  quit

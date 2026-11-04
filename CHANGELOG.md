@@ -6,9 +6,31 @@ into /changelog.json).
 Each day with a release gets one section, written when its module is built: `## <date> (<commit>)`, the commit being
 the last one the day's releases bring, so the next section covers the commits after it. A second release on the same
 day adds its lines to that day's section and moves its commit on (web/build.mjs stops on a date twice). One line per
-change, in plain text, as `- **Area:** what changed`, written for players. Left out: the server's insides, the forum
+change, in plain text, as `- **Area:** what changed`, written for players: new things and noticeable improvements
+first, smaller fixes last. Left out: the server's insides, the forum
 bot, logs, tests, docs and cheat checks. A change that may or may not belong here is asked about before the release,
 not guessed.
+
+## 2026-11-04 (af448e5)
+
+- **Races:** other players' cars come straight from their games every frame; close ones drive on the game's physics and bump back.
+- **Headlights:** G turns them off or on, hold it for high beam; friends see them.
+- **Free roam:** a country flag before your name: pick yours on the start page, in Online, Your flag.
+- **Free roam:** up to 64 players' cars shown: Online, Players' cars shown.
+- **Quick Race:** up to 127 laps and 5 opponents.
+- **Split screen:** two players on one keyboard, on the arrows and WASD.
+- **Camera:** the drift races' camera in every drive (C).
+- **Vinyls:** the game's hidden Special vinyls.
+- **Controls:** this site's keys and buttons are set in Controls, Site.
+- **Saves:** Play without saving where the browser's storage stops answering.
+- **iPhone:** sound in Silent mode.
+- **Free roam:** your car keeps its brakes, exhaust tips and spoiler after a shop.
+- **Free roam:** a car reset past the career's red walls goes back on its roads.
+- **Ghost mode:** the camera no longer hops over traffic on Everything.
+- **Horns:** follow the game's Master Volume.
+- **Start page:** plainer error messages.
+- **Free roam:** fewer error 134 crashes in a crowded free roam; on a computer the game has more memory for it.
+- **Firefox:** the game no longer stops with a graphics error a few seconds after Play.
 
 ## 2026-11-03 (a5892ba)
 

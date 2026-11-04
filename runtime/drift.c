@@ -186,6 +186,7 @@ __attribute__((weak)) void host_status_set_n(const int *slot, const double *valu
 #define ST_TOTAL       0x2cu         /* points banked (float) */
 #define PL_HUD         0x9a4u
 #define VIEW_DRIFT     4u
+#define VIEW_LAST      4u            /* the last view: cameras.c puts the drift camera in every drive */
 #define CAR_RIDE       0x10u         /* car: its ride (RideInfo) */
 #define CAR_PHYSOBJ    0x34u         /* car: its physics object (Car::SetPhysicsMode 0x5F46A0): +0x38 .. +0x44 its wheels */
 #define WH_GRIP        0x188u        /* a wheel: a factor of its tyre's force (0x59D600), 1 from its constructor (0x5A81FF) */
@@ -230,8 +231,15 @@ static struct {
     uint8_t kept[SETUP_SZ];           /* ... and the setup the ride had */
 } D;
 
-/* X presses since the last frame, from the keyboard's events (a tap between frames counts) */
+/* X presses since the last frame, from the keyboard's events (a tap between frames counts): the player's key for drift
+ * mode (X unless NFSU2_KEY_DRIFT: dinput_kbd.c dikbd_site_key), none while the player has one of the game's controls
+ * on it (dikbd_ours), and the touch controls' Drift button's (DIK_TOUCH_DRIFT, none of the game's) */
+int dikbd_ours(unsigned dik, const char *what);
+unsigned dikbd_site_key(const char *env, unsigned dflt);
+#define DIK_TOUCH_DRIFT 0xF1u        /* web/src/input/keymap.ts Nfsu2Drift: no keyboard has it */
 static int x_presses(void){
+    static unsigned dik = 0x100u;
+    if (dik == 0x100u) dik = dikbd_site_key("NFSU2_KEY_DRIFT", DIK_X);
     uint32_t head = kbd_ev_head();
     if (!D.kinit){ D.kinit = 1; D.kseq = head; return 0; }
     int n = 0;
@@ -239,7 +247,7 @@ static int x_presses(void){
         KbdEv e;
         int r = kbd_ev_get(D.kseq, &e);
         if (r == 0) break;
-        if (r > 0 && e.dik == DIK_X && e.down) n++;
+        if (r > 0 && e.down && (e.dik == DIK_TOUCH_DRIFT || (dik && e.dik == dik && dikbd_ours(dik, "drift mode")))) n++;
     }
     return n;
 }
@@ -326,15 +334,15 @@ static void camera_on(CPU *c){
         MR32(va) = VIEW_DRIFT - 1u;
         uint32_t one = 1;
         gcall(c, FN_CAMERA_KEY, pl, 1, &one);
-    } else if (D.saved > 3u) D.saved = 3u;
+    } else D.saved = VIEW_DRIFT;                   /* the player's own pick (cameras.c: every drive has the view) */
     D.cam = MR32(va) == VIEW_DRIFT;
     if (!D.cam){ MR32(va) = v; fprintf(stderr, "[drift] f=%ld no drift camera (view %u)\n", autotest_frame(), v); }
 }
 /* live: the world's camera too (the camera key's way), else only the view the next one is made for */
 static void camera_off(CPU *c, int live){
-    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= 3u ? D.saved : 3u;
+    uint32_t va = view_addr(), pl = rd32(G_PLAYER1), back = D.saved <= VIEW_LAST ? D.saved : 3u;
     D.cam = 0;
-    if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE)) return;
+    if (!va || MR32(va) != VIEW_DRIFT || MR8(G_DRIFTRACE) || back == VIEW_DRIFT) return;
     if (live && pl){
         MR32(va) = back - 1u;                      /* the camera key's step wraps a -1 to 0 */
         uint32_t one = 1;

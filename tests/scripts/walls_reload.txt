@@ -1,0 +1,14 @@
+# A profile that kept a spot past the career's walls (runtime/walls.c), part 2 (part 1: walls_load.txt): its save,
+# loaded.  The crib's Return to Explore Mode puts the car where part 1's Save kept it, north of Coal Harbor's bridge
+# wall, with no "[walls] ... past the career's walls" line.
+#   node web/tools/roam-pair.mjs --solo --a Wal:walls_reload.txt --seed <part 1's save tree> --env NFSU2_ROAM=0
+0     bot on
++0    waitroam 6000
++0    bot off
++120  walls
++0    peekx *(*0x8900ac+4)+0x60 3
++0    expect f:[[0x8900ac]+4]+0x64 > -1059
++0    expect f:[[0x8900ac]+4]+0x64 < -1000
++0    expect f:[[0x8900ac]+4]+0x60 > 150
++0    expect f:[[0x8900ac]+4]+0x60 < 270
++30   quit

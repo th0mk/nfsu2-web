@@ -604,6 +604,9 @@ impl App {
         if p == "/seen" {
             return self.send_seen(q, s, &u).await;
         }
+        if p == "/country" {
+            return self.send_country(q, s).await;
+        }
         if p == "/robots.txt" {
             return self.plain(q, s, 200, ROBOTS_TXT, &[], Cache::Revalidate, false).await;
         }
@@ -721,6 +724,24 @@ impl App {
             let n = r.in_crews(&crews).into_iter().map(|n| serde_json::Value::from(n.min(players))).collect();
             m.insert("crews".into(), serde_json::Value::Array(n));
         }
+        let body = nfsu2_util::json::stringify(&serde_json::Value::Object(m));
+        let mut h = self.headers(q, Cache::Store, true);
+        h.set("content-type", "application/json");
+        h.set("content-length", body.len().to_string());
+        s.head(200, h.0);
+        if q.method != "HEAD" {
+            send(s, body.as_bytes()).await?;
+        }
+        finish(s).await
+    }
+
+    /// /country: {"country":"nl"}, the country the browser's connection comes from as Cloudflare names it (a trusted
+    /// proxy's CF-IPCountry, nfsu2_headers::client_country), lower case; null when there is none.  The start page's
+    /// Your flag list puts it first (web/src/app/flags.ts): it goes to that browser only, and nowhere else.
+    async fn send_country(&self, q: &Request, s: &mut Response) -> Res {
+        let c = nfsu2_headers::client_country(q, &self.o.trust).map(|c| String::from_utf8_lossy(&c).to_ascii_lowercase());
+        let mut m = serde_json::Map::new();
+        m.insert("country".into(), c.map_or(serde_json::Value::Null, serde_json::Value::from));
         let body = nfsu2_util::json::stringify(&serde_json::Value::Object(m));
         let mut h = self.headers(q, Cache::Store, true);
         h.set("content-type", "application/json");

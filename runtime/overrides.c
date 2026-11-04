@@ -7,6 +7,7 @@
  *   2) visited set: each node at most once per top-level walk
  * That way the walk terminates and the game can make progress.            */
 #include "cpu.h"
+#include "guest_span.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -29,10 +30,16 @@ static CPU *g_guard_cpu = 0;
 #define HEAP_HI 0x2F000000u
 #endif
 
-/* Find the heap block that contains a guest address (header: +0 size, +4 signature) */
+/* Find the heap block that contains a guest address (header: +0 size, +4 signature); on wasm also in the guest
+ * heap's window above the runtime (guest_span.h), whose blocks start in it */
 static int block_of(uint32_t addr, uint32_t *ubeg, uint32_t *uend){
+    uint32_t lo = HEAP_LO;
+#ifdef __wasm__
+    if (g_gwin_hi && addr >= g_gwin_lo && addr < g_gwin_hi) lo = g_gwin_lo;
+    else
+#endif
     if (addr < HEAP_LO || addr >= HEAP_HI) return 0;
-    for (uint32_t p = (addr & ~15u); p >= HEAP_LO; p -= 16u){
+    for (uint32_t p = (addr & ~15u); p >= lo; p -= 16u){
         if (!mem_is_committed(p+4)) return 0;
         if (MR32(p+4) == 0xA110C8EDu){
             uint32_t sz = MR32(p), beg = p + 16u, end = beg + sz;
@@ -1969,4 +1976,40 @@ void sub_00489ba0(CPU *restrict c){
 #endif
     g_shrot_lifted++;
     sub_00489ba0_orig(c);
+}
+
+/* The game releases a D3D texture it no longer wants through a list (0x8763B0:
+ * a pack's unload, 0x5CAAA0 and 0x5CE6C0, and 0x5CE170 when it makes a
+ * texture again for a TextureInfo that had one), and its main loop releases
+ * the three oldest a frame (0x5CE4C0, from 0x5CEC80).  Until then a texture
+ * keeps its Lock buffers in the guest heap (com.c), 1 MB for a 512x512 one.  A
+ * world's unload queues a thousand at once, and on the way back into a
+ * crowded free roam every car of our own made (roam_game.c begin_create, two
+ * every four frames) makes its ride's car type's textures again: the old ones
+ * waited behind the unloaded world's, 100 MB and more of them at once, and
+ * the guest heap's 512 MB ran out (2026-11-04 reports: HeapAlloc of 1398016,
+ * 0x5CE170's buffer for a 512x512 palettized texture with mips, failing).  So
+ * the list goes for up to TEXREL_MS of release work a frame (at least the
+ * game's three, at most TEXREL_A_FRAME): the game's own release, run again
+ * as often as that takes; as the game does with three or fewer, at the same
+ * point of its frame (the renderer keeps a texture a frame still draws).  A
+ * count alone made the unload hitch: 256 512x512 textures are ~24 ms of
+ * giving their Lock buffers back.  NFSU2_TEST_TEXREL_GAME=1 (test runs): the
+ * game's three. */
+#define TEXREL_LIST     0x008763b0u
+#define TEXREL_A_FRAME  256
+#define TEXREL_MS       2.0
+void sub_005ce4c0_orig(CPU *c);
+void sub_005ce4c0(CPU *c){
+    static int game = -1;
+    if (game < 0){ const char *s = getenv("NFSU2_INPUT_SCRIPT"), *e = getenv("NFSU2_TEST_TEXREL_GAME");
+                   game = s && *s && e && *e == '1'; }
+    if (game){ sub_005ce4c0_orig(c); return; }
+    uint32_t ret = MR32(c->esp);
+    double t0 = ms_now();
+    for (int n = 3; ; n += 3){
+        sub_005ce4c0_orig(c);                              /* up to three, and its ret */
+        if (n >= TEXREL_A_FRAME || MR32(TEXREL_LIST) == TEXREL_LIST || MR8(0x0087079cu) || ms_now() - t0 >= TEXREL_MS) break;
+        c->esp -= 4u; MR32(c->esp) = ret;                  /* as if called again */
+    }
 }

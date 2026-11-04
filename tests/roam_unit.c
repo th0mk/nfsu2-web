@@ -1288,6 +1288,51 @@ static void t_duel(void){
           "inbox: %d kept, %u dropped, %d taken", kept, g_n[1].duel_dropped, taken);
 }
 
+/* ---- 4d'''. flags: our flag after the outrun's player in a HELLO (core 13), to the peers; a code that is not lower
+ * case letters and '-' never sent, and heard as none; a game before 13 skips it ---- */
+static void t_flag(void){
+    uint8_t b[RC_MAX_DGRAM]; rc_msg m, d; memset(&m, 0, sizeof m);
+    m.h.type = RC_MSG_HELLO; m.h.sender = 7; m.h.flags = RC_HF_CREW; strcpy(m.u.hello.name, "Tobi");
+    int base = rc_encode(&m, b, sizeof b);
+    strcpy(m.u.hello.flag, "nl");
+    int n = rc_encode(&m, b, sizeof b);
+    CHECK(n == base + 1 + 1 + 4 + 1 + 2 && rc_decode(b, n, &d) == RC_OK && !strcmp(d.u.hello.flag, "nl") && !d.u.hello.n_crews &&
+          !d.u.hello.links && !d.u.hello.duel, "HELLO's flag after the crews, links and duel (%d bytes, '%s')", n, d.u.hello.flag);
+    strcpy(m.u.hello.flag, "gb-eng"); m.u.hello.n_crews = 1; m.u.hello.crews[0] = 0xC0FFEEu; m.u.hello.links = 24; m.u.hello.duel = 0xD0E1u;
+    n = rc_encode(&m, b, sizeof b);
+    CHECK(n > 0 && rc_decode(b, n, &d) == RC_OK && !strcmp(d.u.hello.flag, "gb-eng") && d.u.hello.n_crews == 1 && d.u.hello.crews[0] == 0xC0FFEEu &&
+          d.u.hello.links == 24 && d.u.hello.duel == 0xD0E1u, "a flag with crews, links and duel round trip ('%s')", d.u.hello.flag);
+    /* the bytes an older core reads are the same: what comes after the duel it skips (t_crews) */
+    uint8_t ob[RC_MAX_DGRAM]; int on = n - 7;                    /* the same HELLO cut after the duel */
+    memcpy(ob, b, (size_t)on - 4); ob[6] = (uint8_t)on; ob[7] = (uint8_t)(on >> 8);
+    uint32_t c = rc_crc32(ob, (uint32_t)on - 4); for (int k = 0; k < 4; k++) ob[on - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(ob, on, &d) == RC_OK && !d.u.hello.flag[0] && d.u.hello.duel == 0xD0E1u, "a HELLO without one: no flag");
+    /* never sent: upper case, digits, too long */
+    static const char *const bad[] = { "NL", "n1", "gbengla", "n l" };
+    for (int k = 0; k < 4; k++){
+        memset(m.u.hello.flag, 0, sizeof m.u.hello.flag); memcpy(m.u.hello.flag, bad[k], strlen(bad[k]) < sizeof m.u.hello.flag ? strlen(bad[k]) : sizeof m.u.hello.flag);
+        CHECK(rc_encode(&m, b, sizeof b) < 0, "flag '%s' not sent", bad[k]);
+    }
+    /* heard: a code with another character, or longer than RC_FLAG_MAX, is none (the rest of the HELLO as it is) */
+    strcpy(m.u.hello.flag, "de"); n = rc_encode(&m, b, sizeof b);
+    memcpy(ob, b, (size_t)n); ob[n - 4 - 2] = 'D'; c = rc_crc32(ob, (uint32_t)n - 4); for (int k = 0; k < 4; k++) ob[n - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(ob, n, &d) == RC_OK && !d.u.hello.flag[0] && d.u.hello.duel == 0xD0E1u && !strcmp(d.u.hello.name, "Tobi"), "a flag 'De' heard: none");
+    memcpy(ob, b, (size_t)n); ob[n - 4 - 3] = RC_FLAG_MAX + 1; c = rc_crc32(ob, (uint32_t)n - 4); for (int k = 0; k < 4; k++) ob[n - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(ob, n, &d) == RC_OK && !d.u.hello.flag[0], "a flag longer than %d heard: none", RC_FLAG_MAX);
+    memcpy(ob, b, (size_t)n); ob[n - 4 - 3] = 4; c = rc_crc32(ob, (uint32_t)n - 4); for (int k = 0; k < 4; k++) ob[n - 4 + k] = (uint8_t)(c >> (8 * k));
+    CHECK(rc_decode(ob, n, &d) == RC_OK && !d.u.hello.flag[0], "a flag past the HELLO's end: none");
+    /* sessions: each peer learns the other's flag; a game with none (or an older one) has none */
+    mesh(3, 8);
+    strcpy(g_n[0].conf.flag, "br"); strcpy(g_n[1].conf.flag, "gb-sct");
+    for (int i = 1; i < 3; i++){ rc_add_peer(&g_n[0], node_ip(i), node_port(i), 1, g_now); rc_add_peer(&g_n[i], node_ip(0), node_port(0), 1, g_now); }
+    rc_add_peer(&g_n[1], node_ip(2), node_port(2), 1, g_now); rc_add_peer(&g_n[2], node_ip(1), node_port(1), 1, g_now);
+    drive(3, g_now + 3000000);
+    int a1 = peer_of(1, 0x500), a2 = peer_of(2, 0x500), b0 = peer_of(0, 0x501), c0 = peer_of(0, 0x502);
+    CHECK(a1 >= 0 && a2 >= 0 && b0 >= 0 && c0 >= 0 && !strcmp(g_n[1].peer[a1].flag, "br") && !strcmp(g_n[2].peer[a2].flag, "br") &&
+          !strcmp(g_n[0].peer[b0].flag, "gb-sct") && !g_n[0].peer[c0].flag[0], "each peer has the other's flag (%s, %s, %s, '%s')",
+          a1 >= 0 ? g_n[1].peer[a1].flag : "?", a2 >= 0 ? g_n[2].peer[a2].flag : "?", b0 >= 0 ? g_n[0].peer[b0].flag : "?", c0 >= 0 ? g_n[0].peer[c0].flag : "?");
+}
+
 /* ---- 4d''. drift battles: a drift challenge and SCORE only to a peer whose HELLO takes them, the points through -- */
 static void t_duel_drift(void){
     mesh(3, 8);
@@ -1465,6 +1510,19 @@ static void t_statex(void){
     e = rc_decode(eb, en, &d);
     CHECK(e == RC_OK && !d.u.snap.s[0].open, "...and none decoded (e %d)", e);
     s->open = 0;
+    /* the high beam (lightkey.c): RC_OPEN_HIBEAM in the same byte, sent as the open parts are (a core before it reads
+     * the byte through RC_OPEN_ALL: nothing open); lights off is the state's own bit (RC_BIT_DARK) */
+    uint8_t obits = s->bits;
+    s->hibeam = 1; s->bits = RC_BIT_DARK;
+    en = rc_encode(&m, eb, sizeof eb);
+    CHECK(en == 16 + 6 + 52 + 30 + 4 && ex[29] == RC_OPEN_HIBEAM && !(ex[29] & RC_OPEN_ALL),
+          "high beam: the longest form, its bit in the open parts' byte (%d bytes)", en);
+    e = rc_decode(eb, en, &d);
+    CHECK(e == RC_OK && d.u.snap.s[0].hibeam && !d.u.snap.s[0].open && d.u.snap.s[0].bits == RC_BIT_DARK,
+          "...decode: high beam, nothing open, the lights-off bit kept (e %d)", e);
+    s->hibeam = 0; s->bits = obits;
+    en = rc_encode(&m, eb, sizeof eb); e = rc_decode(eb, en, &d);
+    CHECK(en == 16 + 6 + 52 + 12 + 4 && e == RC_OK && !d.u.snap.s[0].hibeam, "no high beam: the short form again (%d bytes)", en);
     /* a newer core's longer extension: its own fields skipped */
     uint8_t lb[RC_MAX_DGRAM]; memcpy(lb, b, (size_t)n - 4);
     lb[22 + 52] = RC_STATEX_SLIP - 1 + 3; lb[n - 4] = 0xAA; lb[n - 3] = 0xBB; lb[n - 2] = 0xCC;
@@ -1497,7 +1555,7 @@ static void t_statex(void){
             rc_state st; memset(&st, 0, sizeof st); st.q[3] = 1; st.t_us = (uint32_t)g_now; st.p[0] = (float)i;
             st.ext = 1; st.nos = 60; st.hyd = 0x36; st.thumps = 3; for (int w = 0; w < 4; w++) st.wz[w] = 0.1f * (float)(w + 1);
             st.slip[6] = 12.f; st.slip[7] = -3.5f; st.surf[3] = 15;
-            st.eng = 4000; st.eng_acc = 255; st.eng_dcl = 51; st.eng_base = 102; st.open = RC_OPEN_LDOOR | RC_OPEN_RDOOR;
+            st.eng = 4000; st.eng_acc = 255; st.eng_dcl = 51; st.eng_base = 102; st.open = RC_OPEN_LDOOR | RC_OPEN_RDOOR; st.hibeam = 1;
             rc_set_status(&g_n[i], RC_ST_ROAM); rc_push_state(&g_n[i], &st, g_now);
         }
         net_run(g_now + 10000, 3);
@@ -1518,9 +1576,9 @@ static void t_statex(void){
           "...and the wheels' slip and surfaces (%d %g %g %u)", P.slipx, (double)P.slip[6], (double)P.slip[7], P.surf[3]);
     CHECK(ok1 && P.eng == 4000.f && P.eng_acc == 1.f && fabsf(P.eng_dcl - 0.2f) < 1e-6f && fabsf(P.eng_base - 0.4f) < 1e-6f,
           "...and its engine (%g %g %g %g)", (double)P.eng, (double)P.eng_acc, (double)P.eng_dcl, (double)P.eng_base);
-    CHECK(ok1 && P.open == (RC_OPEN_LDOOR | RC_OPEN_RDOOR), "...and its open parts (%x)", P.open);
+    CHECK(ok1 && P.open == (RC_OPEN_LDOOR | RC_OPEN_RDOOR) && P.hibeam, "...and its open parts (%x) and high beam", P.open);
     int ok2 = k2 >= 0 && rc_interp_peek(&g_n[2].peer[k2].mo, g_n[2].peer[k2].mo.t[g_n[2].peer[k2].mo.n - 1], 250000, &P);
-    CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng && !P.open, "the older peer's pose has none");
+    CHECK(ok2 && !P.ext && !P.nos && !P.hyd && !P.thumps && !P.slipx && P.slip[6] == 0 && !P.eng && !P.open && !P.hibeam, "the older peer's pose has none");
 }
 
 /* ---- 4f. crews: the HELLO's tail to the hub, and without a hub to a peer that reads them; the hub's marks ---- */
@@ -1799,6 +1857,7 @@ int main(int argc, char **argv){
     t_hub();
     t_far();
     t_duel();
+    t_flag();
     t_duel_drift();
     t_duel_hub();
     t_lobby();

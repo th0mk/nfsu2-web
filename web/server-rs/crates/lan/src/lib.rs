@@ -347,13 +347,13 @@ pub struct LanOptions {
     /// bytes in one bundle from a client (larger ones are dropped); one to a client is at most `BUNDLE_OUT`, then the
     /// next begins
     pub max_bundle: usize,
-    /// binary frames a second per connection (a token bucket, its burst 2 s worth): 48 friends at 30 snapshots a
+    /// binary frames a second per connection (a token bucket, its burst 2 s worth): 64 friends at 30 snapshots a
     /// second, and the page's answers to stray connects (web/src/net, 32 KB/s at most)
     pub frame_rate: f64,
     /// binary bytes a second per connection (the same)
     pub byte_rate: f64,
     /// the same for all connections of one client address together (the group id the server passes): room for about
-    /// 7 players behind one address with 48 friends each
+    /// 7 players behind one address with 64 friends each
     pub group_frame_rate: f64,
     /// (the same, in bytes)
     pub group_byte_rate: f64,
@@ -373,7 +373,7 @@ pub struct LanOptions {
     /// link drops UDP: a flood never gets a slower player disconnected
     pub shed_queue: usize,
     /// the same for kind 1 (free roam's snapshots, and LAN play's broadcasts), at a much shorter queue: about a second
-    /// of free roam (a SNAP of 94 bytes, 20 a second from each of up to 48 friends).  A car's position is of no use
+    /// of free roam (a SNAP of 94 bytes, 20 a second from each of up to 64 friends).  A car's position is of no use
     /// once it is that old (the game draws friends' cars 100 ms in the past and throws late ones away), so a receiver
     /// whose link falls behind gets the newest ones as soon as it catches up, not seconds of old ones first.  The
     /// queue is the switch's own: the kernel's buffer to the receiver (or to the tunnel) comes before it.
@@ -453,15 +453,15 @@ impl Default for LanOptions {
             max_bundle: 64 << 10,
             frame_rate: 2500.0,
             byte_rate: (256 << 10) as f64,
-            group_frame_rate: 7500.0,
-            group_byte_rate: (768 << 10) as f64,
-            site_frame_rate: 15000.0,
-            site_byte_rate: (1536 << 10) as f64,
+            group_frame_rate: 10000.0,
+            group_byte_rate: (1 << 20) as f64,
+            site_frame_rate: 20000.0,
+            site_byte_rate: (2 << 20) as f64,
             text_rate: 20.0,
             max_text: 1024,
             ctl_rate: 10.0,
             shed_queue: 256 << 10,
-            roam_queue: 96 << 10,
+            roam_queue: 128 << 10,
             stream_queue: 2 << 20,
             stream_share: 1 << 20,
             stall_ms: 1000.0,

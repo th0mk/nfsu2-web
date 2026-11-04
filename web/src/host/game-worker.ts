@@ -112,6 +112,20 @@ function sleepNs(ns: bigint) {
 
 function strings(list: string[]) { return list.map(s => te.encode(s + '\0')); }
 
+// A wasm i32 comes into JS signed: a pointer at 2 GB or more (the runtime's heap past the guest heap's window above
+// it, runtime/guest_span.h) would be a negative offset.  Every WASI argument that is a number is an unsigned 32-bit
+// one (pointers, lengths, descriptors, flags), so each import takes them as such (the 64-bit ones are BigInts and
+// keep their sign: a seek's offset).  Only where the memory is 2 GB or more from its start (the window's try,
+// host/memory.ts): the runtime steps past 2 GB only with the window on (runtime/web/sbrk.c).  Elsewhere the imports
+// are taken as they are: the wrapper's two arrays a call filled WebKit's heap (an iPhone's Quick Race in WebKit:
+// 1.3 GB without them, 6 GB with them, and growing).
+type Fn = (...a: any[]) => any;
+const u32args = (f: Fn): Fn => (...a: any[]) => f(...a.map(x => typeof x === 'number' ? x >>> 0 : x));
+function unsignedAll(o: Record<string, Fn>, keep: string[] = []): Record<string, Fn> {
+  if (memory.buffer.byteLength < 2 ** 31) return o;
+  return Object.fromEntries(Object.entries(o).map(([k, f]) => [k, keep.includes(k) ? f : u32args(f)]));
+}
+
 function wasi(): Record<string, (...a: any[]) => any> {
   const argv = strings(cfg.args);
   const envv = strings(Object.entries(cfg.env).map(([k, v]) => `${k}=${v}`));
@@ -269,9 +283,9 @@ onmessage = async (e: MessageEvent<Init>) => {
   rpcI32 = new Int32Array(m.rpc); rpcI64 = new BigInt64Array(m.rpc);
   const imports: WebAssembly.Imports = {
     env: { memory },
-    wasi_snapshot_preview1: wasi(),
+    wasi_snapshot_preview1: unsignedAll(wasi(), ['proc_exit']),
     wasi: { 'thread-spawn': threadSpawn },
-    nfsu2: hostImports(),
+    nfsu2: unsignedAll(hostImports()),
   };
   // stub any import the module wants that we do not provide, loudly
   for (const im of WebAssembly.Module.imports(m.mod)) {

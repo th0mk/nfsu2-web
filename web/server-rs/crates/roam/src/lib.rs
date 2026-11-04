@@ -11,8 +11,8 @@
 //!   its car is), a BYE when it stops.
 //! - hub -> player: twice a second (`tick_ms`) a PEERS message: the players linked to it, { virtual address, port, id }, at most
 //!   its degree: what its HELLO asks for (roam_core version 10: the friends' cars its game shows, its "Players' cars shown"),
-//!   `degree` (48: roam_core's group of 49 with itself) at most; 32 for a core before version 10, which reads no longer
-//!   list; an empty one says the hub is there.  To a player in a crew the list ends in
+//!   `degree` (64: roam_core's group of 65 with itself) at most; 48 at most for a core of versions 10 to 13 and 32 for one
+//!   before, which read no longer lists; an empty one says the hub is there.  To a player in a crew the list ends in
 //!   crew marks: its own crews, then which of them each listed player is in.
 //! - player -> hub -> player: when its world map opens, and a quarter second after each answer while it is open, a
 //!   MAPREQ naming the answer it holds; the hub answers with MAPD datagrams (at most 16, 48 to a page that takes
@@ -155,7 +155,8 @@ pub const CREWS: usize = wire::CREWS;
 /// 0.5 s).  A value that is not a positive number keeps its default.
 #[derive(Clone, Debug)]
 pub struct RoamOptions {
-    /// the most links a player has (what its HELLO asks for under it; 32 at most for a core before version 10)
+    /// the most links a player has (what its HELLO asks for under it; 48 at most for a core of versions 10 to 13, 32 for
+    /// one before)
     pub degree: usize,
     pub tick_ms: u64,
     pub stale_ms: f64,
@@ -219,7 +220,7 @@ pub struct RoamOptions {
 impl Default for RoamOptions {
     fn default() -> Self {
         RoamOptions {
-            degree: 48,
+            degree: 64,
             tick_ms: 500,
             stale_ms: 60_000.0,
             gone_ms: 6_000.0,

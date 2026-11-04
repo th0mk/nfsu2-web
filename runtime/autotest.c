@@ -81,7 +81,8 @@
  *                              which takes every career command)
  *     status [label]           print a [status] line now (memory trend points)
  *     stall SECONDS            test-only: block the guest thread (GIL held) to
- *                              exercise the stall watchdog (watchdog.c)
+ *                              exercise the stall watchdog (watchdog.c); a
+ *                              fraction (0.08) is a long frame
  *     loop N                   repeat the lines up to the matching "endloop"
  *     endloop                  N times (loops may nest; N=0 means forever)
  *     trace EVERY NAME=EXPR... log the expressions every EVERY frames (one
@@ -234,7 +235,7 @@ static void key_event(unsigned dik, int down){
 uint32_t split_guest_addr(uint32_t a);   /* splitscreen.c: a script's 0x8900AC.. where this build keeps it */
 /* ---- script ----------------------------------------------------------- */
 enum { C_DOWN, C_UP, C_TAP, C_TYPE, C_DUMP, C_WAITMEM, C_LOG, C_QUIT, C_PEEK, C_POKE, C_WAITFNG, C_TAPUNTIL,
-       C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE,
+       C_CLOSE, C_BLUR, C_AUDIORESET, C_AUDIOSTALL, C_WZERO, C_DISPLAYHZ, C_TEXREP, C_HEADLIGHTS, C_FOVSCALE, C_LIGHTS,
        C_PAD, C_TAPPAD, C_AXIS, C_TAPPADUNTIL, C_LOCALPAD,
        C_NSDOWN, C_NSUP, C_NSTAP, C_NSREPEAT, C_NSTYPE, C_NSFOCUS, C_NSMOUSE, C_NSTAPUNTIL,
        C_LOOP, C_ENDLOOP, C_STATUS, C_STALL, C_CAREER,
@@ -298,7 +299,7 @@ static char  g_type_q[256]; static int g_type_h, g_type_t; static long g_type_ne
 
 static long   g_frame = 0;               /* guest Present count */
 static int    g_fng_log = 0;
-static double g_t0 = 0;                  /* ms at first Present */
+static double g_t0 = 0;                  /* script clock (ms) at first Present */
 static long   g_quit_frames = 0, g_status_every = 0;
 static int    g_inited = 0;
 
@@ -385,6 +386,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "texrep")) { e.cmd = C_TEXREP; e.n = !strcasecmp(a1, "off") ? 0 : !strcasecmp(a1, "on") ? 1 : -1; }
         else if (!strcasecmp(cmd, "headlights")) { e.cmd = C_HEADLIGHTS; snprintf(e.text, sizeof e.text, "%s", a1); }
         else if (!strcasecmp(cmd, "fovscale")) { e.cmd = C_FOVSCALE; snprintf(e.text, sizeof e.text, "%s", a1); }
+        else if (!strcasecmp(cmd, "lights")) { e.cmd = C_LIGHTS; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "photo")) { e.cmd = C_PHOTO; snprintf(e.text, sizeof e.text, "%s", rest); }
         else if (!strcasecmp(cmd, "waitfng")){ e.cmd = C_WAITFNG;
             snprintf(e.text, sizeof e.text, "%s", a1); e.n = a2[0] ? atol(a2) : 0; }
@@ -403,7 +405,7 @@ static void load_script(const char *path){
         else if (!strcasecmp(cmd, "loop")){ e.cmd = C_LOOP; e.n = atol(a1); }
         else if (!strcasecmp(cmd, "endloop")) e.cmd = C_ENDLOOP;
         else if (!strcasecmp(cmd, "status")){ e.cmd = C_STATUS; snprintf(e.text, sizeof e.text, "%s", a1); }
-        else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = atol(a1); }
+        else if (!strcasecmp(cmd, "stall")){ e.cmd = C_STALL; e.n = (long)(atof(a1) * 1000.0 + 0.5); }
         else if (!strcasecmp(cmd, "waitmem")){ e.cmd = C_WAITMEM;
             e.addr = split_guest_addr((uint32_t)strtoul(a1, 0, 0)); e.val = (uint32_t)strtoul(a2, 0, 0);
             e.n = a3[0] ? atol(a3) : 0; }
@@ -737,6 +739,10 @@ static int fire(CPU *c, Ev *e, double tms){
         int photo_script(const char *s);
         fprintf(stderr, "[autotest] f=%ld t=%.0fms photo %s%s\n", g_frame, tms, e->text, photo_script(e->text) ? "" : " (not known)");
         break; }
+    case C_LIGHTS: {       /* "lights ...": the light key's state and high beam's look (lightkey.c lightkey_script) */
+        int lightkey_script(const char *s);
+        fprintf(stderr, "[autotest] f=%ld t=%.0fms lights %s%s\n", g_frame, tms, e->text, lightkey_script(e->text) ? "" : " (not known)");
+        break; }
     case C_HEADLIGHTS: {   /* "headlights MODE": the other cars' headlights (headlights.c), A/B in one run */
         int headlights_set(const char *mode);
         fprintf(stderr, "[autotest] f=%ld t=%.0fms headlights %s%s\n", g_frame, tms, e->text,
@@ -909,8 +915,8 @@ static int fire(CPU *c, Ev *e, double tms){
         status_line(now_ms(), tms, lb);
         break; }
     case C_STALL:
-        fprintf(stderr, "[autotest] f=%ld stall %ld s (test-only)\n", g_frame, e->n);
-        sleep((unsigned)(e->n > 0 ? e->n : 1));
+        if (e->n >= 1000) fprintf(stderr, "[autotest] f=%ld stall %.3f s (test-only)\n", g_frame, e->n / 1000.0);
+        usleep((useconds_t)(e->n > 0 ? e->n : 1000) * 1000u);   /* (ms: a fraction of a second is a long frame) */
         break;
     case C_CAREER:
         if (!career_cmd(c, e->text, &g_wait_start)) return 0;
@@ -1000,10 +1006,11 @@ static void status_line(double t, double tms, const char *label){
     if (k > 0 && k < (int)sizeof ms){ int pacer_spin_status(char *, size_t); pacer_spin_status(ms + k, sizeof ms - (size_t)k); }
 #endif
 #ifdef __wasm__
-    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = the top of all the runtime heap ever took
-     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included */
-    uint64_t memory_bytes(void), heap_break(void);
-    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_break() >> 20));
+    /* no ru_maxrss: rss = the wasm memory's size (it only grows), brk = all the runtime heap ever took
+     * (runtime/web/sbrk.c): what of that memory the game has used, the guest's 640 MB included (not the guest heap's
+     * window above the runtime: what the runtime's heap stepped over it is left out) */
+    uint64_t memory_bytes(void), heap_taken(void);
+    char rss[48]; snprintf(rss, sizeof rss, "%ldMB brk=%ldMB", (long)(memory_bytes() >> 20), (long)(heap_taken() >> 20));
 #else
     char rss[24]; snprintf(rss, sizeof rss, "%ldMB", (long)(ru.ru_maxrss / (1024 * 1024)));
 #endif
@@ -1088,8 +1095,13 @@ void autotest_on_present(CPU *c){
     g_frame++;
     if (g_ctrace) car_trace();
     double t = now_ms();
-    if (g_frame == 1){ g_t0 = t; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
-    double tms = t - g_t0;
+    /* the scripts' "ms" lines: the wall clock, or the game's clock when
+     * fast-forwarding (framerate.c NFSU2_FAST), where it runs ahead of it */
+    double ts = t;
+    { static int ff = -1; if (ff < 0){ int hfr_fast(void); ff = hfr_fast(); }
+      if (ff){ uint64_t host_us(void); ts = (double)host_us() / 1e3; } }
+    if (g_frame == 1){ g_t0 = ts; g_st_t = t; g_st_cpu = proc_cpu_s(); g_st_gcpu = thread_cpu_ms(); }
+    double tms = ts - g_t0;
 
     if (g_fng_log == 2 && (g_frame == 400 || g_frame == 1500)){
         uint32_t fe = mem_is_committed(0x8384c4u) ? MR32(0x8384c4u) : 0;

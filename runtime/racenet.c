@@ -73,6 +73,10 @@
  *     game it runs on its own physics until a state from after the hit
  *     comes (as the game showed hits), and with no state for STALL_S on its
  *     own too, with its owner's last controls, then glides back.
+ * Since 2026-11-04 a game of this version sends its own car to every racer
+ * itself, every frame, and draws the others' from those (racecars.c, called
+ * from sub_005f8af0 below); the way above stays for the car of a racer whose
+ * game is older (none of those come), and the fade for every car.
  * NFSU2_RACE_SMOOTH=0 turns all of it off (the game's own, for A/B tests);
  * NFSU2_RACE_DIRECT=0 only the states straight from their games,
  * NFSU2_RACE_FADE=0 only the fading, NFSU2_RACE_RATE=0 the game's rates,
@@ -276,6 +280,11 @@ int vlan_rt_send(uint16_t port, uint32_t ip_h, const void *p, int n);
 int vlan_race_peers(uint32_t *ip_h, int max, uint32_t within_ms);
 int vlan_race_sent_to(uint32_t ip_h, uint32_t within_ms);
 __attribute__((weak)) int vlan_race_links(RaceLink *o, int max, int reset){ (void)o; (void)max; (void)reset; return 0; }
+/* racecars.c: the other cars as free roam sends and shows them, where their games send them */
+int  racecars_pre(uint32_t car);
+int  racecars_step(CPU *c, uint32_t ctl, uint32_t car);
+void racecars_frame(CPU *c);
+void racecars_log(double secs);
 
 static int ok(uint32_t a, uint32_t n){ return a && mem_is_committed(a) && mem_is_committed(a + n); }
 static uint32_t rd32(uint32_t a){ return ok(a, 3) ? MR32(a) : 0u; }
@@ -608,6 +617,21 @@ static void list_send(void){
         vlan_rt_send(HORN_PORT, peers[i], m, 8 + 4 * k);
     }
 }
+/* the other racers' addresses (racecars.c sends them our car): the creator's
+ * joiners (the race peers its race link sends to), a joiner's creator (the
+ * one its race link sends to) and the others on the creator's list */
+int racenet_race_peers(uint32_t *ip, int max){
+    uint32_t all[16];
+    int na = vlan_race_peers(all, 16, PEER_MS), n = 0;
+    for (int i = 0; i < na && n < max; i++) if (vlan_race_sent_to(all[i], PEER_MS)) ip[n++] = all[i];
+    if (!is_host() && g_pl.n && ms_now() - g_pl.at <= PL_STALE_MS)
+        for (uint32_t k = 0; k < g_pl.n && n < max; k++){
+            int dup = 0;
+            for (int j = 0; j < n; j++) dup |= ip[j] == g_pl.ip[k];
+            if (!dup) ip[n++] = g_pl.ip[k];
+        }
+    return n;
+}
 /* an N2PL from the horn's port (racehorn.c): only from the race's creator,
  * an address the game's race link sends to, and the first one in this race
  * (above) */
@@ -837,8 +861,10 @@ void sub_005f8af0_orig(CPU *c);
 void sub_005f8af0(CPU *c){
     uint32_t ctl = c->ecx, car = ok(ctl, 0x1a0u) ? rd32(ctl + CTL_CAR) : 0;
     Pred *p = car && (predict_on() || stall_s() > 0.f) && in_race() ? pred_of(car, 0) : 0;
-    int reset = p && MR8(ctl + CTL_RESET);
+    int reset = p && MR8(ctl + CTL_RESET), fed = car && racecars_pre(car);
     sub_005f8af0_orig(c);
+    /* its own game sends it (racecars.c): drawn there; this way starts anew if those stop */
+    if (fed && racecars_step(c, ctl, car)){ if (p){ p->shown = 0; p->own = 0; } return; }
     if (!p || !p->n || !ok(car, 0x9e0) || !ok(ctl + CTL_BLEND, 0x50u)) return;
     float h = MRF32(G_WORLDDT);
     if (!(h > 0.f && h < 0.25f)) h = 0.f;
@@ -1183,6 +1209,7 @@ static void end(uint64_t t){
                                f->slow, f->longest_ms, f->clock / f->n);
         else fprintf(stderr, "; their frame rate unknown (an older version)\n");
     }
+    racecars_log(s);
     R.on = 0;
 }
 
@@ -1216,6 +1243,7 @@ void racenet_frame(CPU *c){
     clock_frame();
     if (racing && !R.on) begin(t, me);
     else if (!racing && R.on) end(t);
+    racecars_frame(c);                               /* (after end: its lines first) */
     /* the creator's list of the joiners, the cars drawn (also once our own
      * player is through: the others still race) */
     if (direct_on() && is_host() && in_race() && ms_now() - g_pl_sent >= PL_MS){ g_pl_sent = ms_now(); list_send(); }

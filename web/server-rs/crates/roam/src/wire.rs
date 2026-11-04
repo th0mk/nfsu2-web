@@ -50,10 +50,12 @@ pub(crate) const MARK_FRIEND: u8 = 0x80;
 /// the most crews a player is in (roam_core.h RC_CREW_MAX: the start page's four words)
 pub(crate) const CREWS: usize = 4;
 /// the most ids a HELLO names (roam_core.h RC_MAX_PEERS: its decoder takes no more)
-const SEEN_MAX: usize = 48;
-/// the most links a player has (roam_core.h RC_MAX_PEERS, core version 10: its HELLO says how many it wants, at most
-/// this); a core before version 10 reads lists of 32 at most (RC_PEERS_V9) and says nothing
-pub(crate) const LINKS_MAX: usize = 48;
+const SEEN_MAX: usize = 64;
+/// the most links a player has (roam_core.h RC_MAX_PEERS, core version 14: its HELLO says how many it wants, at most
+/// this); a core of versions 10 to 13 reads lists of 48 at most (RC_PEERS_V13), one before version 10 lists of 32
+/// (RC_PEERS_V9) and says nothing
+pub(crate) const LINKS_MAX: usize = 64;
+pub(crate) const LINKS_V13: usize = 48;
 pub(crate) const LINKS_V9: usize = 32;
 /// a LOBBY's ops (roam_core.h RC_LOBBY_*) the hub keeps: the host's advert and its end, and a player's ask to join
 pub(crate) const LOBBY_ADVERT: u8 = 1;
@@ -521,7 +523,7 @@ pub(crate) fn peers_crew_len(n: usize, k: usize) -> usize {
 }
 
 /// Writes a PEERS datagram into `b` (exactly `peers_len(n)` bytes long, or `peers_crew_len(n, mine.len())` with marks):
-/// list = [{ vip, port, id }] (at most the receiver's degree: 48, LINKS_MAX).  With marks (`b` the longer, `marks` n bytes) the
+/// list = [{ vip, port, id }] (at most the receiver's degree: 64, LINKS_MAX).  With marks (`b` the longer, `marks` n bytes) the
 /// list ends in the receiver's crew marks (HF_CREW on it): `mine` (its crews, at most CREWS, none 0; maybe none), then
 /// a byte per entry, `marks[i]` bit c: entry i is in crew `mine[c]` too; MARK_FRIEND: entry i is its friend.  So a
 /// player learns which of its peers are in its crews, and its friends, without anyone's crews but its own going out.

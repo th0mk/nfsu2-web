@@ -78,6 +78,8 @@ const SCEN = [
   ['pad_look', 'pad_look', ['NFSU2_PAD_LOG=1'], null, null, 300],
   // with the steering on the right stick (the game's Joypad page) the left stick looks round, or none (dinput_pad.c)
   ['pad_look_bound', 'pad_look_bound', ['NFSU2_PAD_LOG=1'], null, null, 400],
+  // the headlights on the look's stick straight up (lightkey.c): a flick on or off, held high beam; never a stick the game reads
+  ['pad_lights', 'pad_lights', ['NFSU2_PAD_LOG=1', 'NFSU2_LIGHTS_LOG=1'], null, null, 300],
   ['pad_bind_save', 'pad_bind_save', [], 'pad', 'pad-rvf-bind_save', 400],
   ['pad_bind_load', 'pad_bind_load', [], 'pad', 'pad-rvf-bind_load', 300],
   ['pad_bind_pedals', 'pad_bind_pedals', ['NFSU2_PAD_LOG=1'], null, null, 400],

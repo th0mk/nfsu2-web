@@ -142,6 +142,25 @@ static void gbuf_free(uint32_t p){
     uint32_t n = gheap_usize(p);
     gheap_free_c(g_com_cpu, g_gh_gbuf, p); g_gbuf_bytes -= n;
 }
+/* A Lock whose buffer the guest heap cannot give (the window full): the game
+ * checks no Lock's result (0x5CE170's LockRect, the vertex buffer lockers'
+ * Lock at 0x5CC280: they write at the pointer at once), and with a pointer
+ * of 0 it wrote megabytes of texels and vertices at guest address 0 and up.
+ * It gets the scratch area instead (heap.c gheap_scratch), D3D_OK as before;
+ * nothing keeps the buffer, so the next Lock tries the heap again.  A
+ * texture level locked there is uploaded from it at UnlockRect if no other
+ * Lock took the area meanwhile (g_scr_slot). */
+uint32_t gheap_scratch(int lock, uint32_t n);
+static uint32_t g_scr_slot;                    /* the texture level (its slot) whose texels are in the scratch area */
+static uint64_t g_scr_locks;
+static uint32_t lock_scratch(uint32_t need, const char *what){
+    uint32_t p = gheap_scratch(1, need);
+    g_scr_locks++; g_scr_slot = 0;
+    if (g_scr_locks <= 8 || !(g_scr_locks & 255))
+        fprintf(stderr, "[com] no memory for a %s's Lock buffer of %u bytes: %s (%llu times)\n", what, need,
+                p ? "the scratch area instead" : "too big for the scratch area, pointer 0", (unsigned long long)g_scr_locks);
+    return p;
+}
 
 typedef struct { const char *name; const Method *m; unsigned n; } Iface;
 static const Iface g_if[] = {
@@ -3928,6 +3947,7 @@ int com_call(CPU *c, uint32_t magic){
                 MR32(self+48) = MR32(self+48) + 1u; MR32(self+52) = (uint32_t)g_present; }
             uint32_t base = self?MR32(self+8):0;
             if(!base){ base=gbuf_alloc(sz?sz:65536); if(self) MR32(self+8)=base; }
+            if(!base) base = lock_scratch(off + (sz?sz:65536u), iface==IF_IB ? "index buffer" : "vertex buffer");
             if(pp) MR32(pp)=base+off; r=0; }
         else if (MID(LockRect)){
             /* 2D texture  : (Level, pLockedRect, pRect, Flags)
@@ -3953,6 +3973,7 @@ int com_call(CPU *c, uint32_t magic){
                                             : (self + 32u + 4u*level)) : 0;
             uint32_t buf = slot ? MR32(slot) : 0;
             if(!buf){ buf = gbuf_alloc(pitch*rows + 64u); if(slot) MR32(slot)=buf; }
+            if(!buf){ buf = lock_scratch(pitch*rows + 64u, iface==IF_SURF ? "surface" : "texture"); if(buf) g_scr_slot = slot; }
             /* a render target the game made lockable (CreateRenderTarget):
              * what the GPU drew there, the cover shoot's picture (gpu_web.c) */
             if (iface==IF_SURF && self && MR32(self+40)==3u && MR32(self+28) && metal_available()){
@@ -3969,12 +3990,18 @@ int com_call(CPU *c, uint32_t magic){
             if(level>7) level=7;
             uint32_t w = self?MR32(self+4):0, h = self?MR32(self+8):0;
             uint32_t fmt = self?MR32(self+20):21u, mid = self?MR32(self+28):0;
-            uint32_t buf = self ? (is_cube2 ? MR32(self + 104u + 4u*(face2 & 7u))
-                                            : MR32(self + 32u + 4u*level)) : 0;
+            uint32_t uslot = self ? (is_cube2 ? self + 104u + 4u*(face2 & 7u) : self + 32u + 4u*level) : 0;
+            uint32_t buf = uslot ? MR32(uslot) : 0;
+            if (!buf && uslot && uslot == g_scr_slot){ buf = gheap_scratch(1, 0); g_scr_slot = 0; }   /* its texels in the scratch area */
             gheap_check_block(c, buf, "LOCK BUFFER OVERRUN (UnlockRect)");   /* NFSU2_HEAPCHECK only */
-            if (metal_available() && mid && buf && w && h)
-                metal_upload_texture(mid, level, g_mem+buf,
-                                     metal_level_pitch(w,level,fmt), w, h, fmt);
+            /* a cube's face goes to its own layer: the menus' car environment map (a 256-pixel cube the game
+             * fills with LockRect, face by face) had all six faces written into face 0, and the cars in the
+             * menus reflected black past it */
+            if (metal_available() && mid && buf && w && h){
+                void metal_upload_texture_face(unsigned, unsigned, unsigned, const void *, unsigned, unsigned, unsigned, unsigned);
+                metal_upload_texture_face(mid, level, is_cube2 ? (face2 < 6u ? face2 : 0u) : 0u, g_mem+buf,
+                                          metal_level_pitch(w,level,fmt), w, h, fmt);
+            }
             if (metal_available() && mid && buf && w && h && iface==IF_TEX && !is_cube2)
                 texrep_uploaded(mid, level, g_mem+buf, metal_level_pitch(w,level,fmt), metal_level_rows(h,level,fmt));
             else if (iface==IF_SURF && mid) texrep_surface_written(mid);   /* the car skin composite */
@@ -4183,6 +4210,7 @@ int com_call(CPU *c, uint32_t magic){
             uint32_t off=A(c,1), want=A(c,2), pp1=A(c,3), pn1=A(c,4),
                      pp2=A(c,5), pn2=A(c,6), fl=A(c,7);
             if(!buf){ buf=gbuf_alloc(sz?sz:65536u); if(self) MR32(self+8)=buf; }
+            if(!buf) buf = lock_scratch(sz?sz:65536u, "sound buffer");
             if(!sz) sz = 65536u;
             if (fl & 0x2u){ off = 0; want = sz; }        /* ENTIREBUFFER */
             off %= sz;
